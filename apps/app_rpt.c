@@ -513,29 +513,7 @@ enum{DAQ_TYPE_UCHAMELEON};
 #include "asterisk.h"
 #include "../astver.h"
 
-/*
- * Defines for the "old" way to manage module hooks into Asterisk
-*/
-
-#ifdef OLD_ASTERISK
-#define ast_free free
-#define ast_malloc malloc
-#define ast_strdup strdup
-#endif
-
-#ifdef OLD_ASTERISK
-#define	START_DELAY 10
-#else
 #define	START_DELAY 2
-#endif
-
-/*
- * Please change this revision number when you make a edit
- * use the simple format YYMMDD (better for sort)
-*/
-
-ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
-// ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
 
 #include <signal.h>
 #include <stdio.h>
@@ -583,9 +561,7 @@ ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
 #include "asterisk/indications.h"
 #include <termios.h>
 
-#ifdef	NEW_ASTERISK
 struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
-#endif
 
 /* Un-comment the following to include support decoding of MDC-1200 digital tone
    signalling protocol (using KA6SQG's GPL'ed implementation) */
@@ -631,11 +607,7 @@ static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, 
 #endif
 
 
-#ifdef	OLD_ASTERISK
-int reload();
-#else
 static int reload(void);
-#endif
 
 AST_MUTEX_DEFINE_STATIC(rpt_master_lock);
 
@@ -773,11 +745,6 @@ static char* dtmf_tones[] = {
 #define	IS_XPMR(x) (!strncasecmp(x->rxchanname,"rad",3))
 
 
-#ifdef	OLD_ASTERISK
-STANDARD_LOCAL_USER;
-LOCAL_USER_DECL;
-#endif
-
 #define	MSWAIT 20
 #define	HANGTIME 5000
 #define SLEEPTIME 900		/* default # of seconds for of no activity before entering sleep mode */
@@ -895,16 +862,8 @@ struct rpt_link
 	int		votewinner;		/*!< \brief set if node won the rssi competition */
 	time_t	lastkeytime;
 	time_t	lastunkeytime;
-#ifdef OLD_ASTERISK
-        AST_LIST_HEAD(, ast_frame) rxq;
-#else
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
-#endif
-#ifdef OLD_ASTERISK
-        AST_LIST_HEAD(, ast_frame) textq;
-#else
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
-#endif
 } ;
 
 /*
@@ -1376,20 +1335,10 @@ static struct rpt
 	int outstreampipe[2];
 	int outstreampid;
 	struct ast_channel *remote_webtransceiver;
-#ifndef	OLD_ASTERISK
 	struct timeval lastdtmftime;
-#endif
 	tone_detect_state_t burst_tone_state;
-#ifdef OLD_ASTERISK
-	AST_LIST_HEAD(, ast_frame) txq;
-#else
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
-#endif
-#ifdef OLD_ASTERISK
-	AST_LIST_HEAD(, ast_frame) rxq;
-#else
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
-#endif
 	char txrealkeyed;
 #ifdef	__RPT_NOTCH
 	struct rptfilter
@@ -1989,93 +1938,6 @@ static char page_usage[] =
 static char lookup_usage[] = 
 "Usage rpt lookup <nodename>\n"
 "      Look up nodes on the allstar network\n";
-
-
-#ifndef	NEW_ASTERISK
-
-static struct ast_cli_entry  cli_debug =
-        { { "rpt", "debug", "level" }, rpt_do_debug, 
-		"Enable app_rpt debugging", debug_usage };
-
-static struct ast_cli_entry  cli_dump =
-        { { "rpt", "dump" }, rpt_do_dump,
-		"Dump app_rpt structs for debugging", dump_usage };
-
-static struct ast_cli_entry  cli_stats =
-        { { "rpt", "stats" }, rpt_do_stats,
-		"Dump node statistics", dump_stats };
-
-static struct ast_cli_entry  cli_nodes =
-        { { "rpt", "nodes" }, rpt_do_nodes,
-		"Dump node list", dump_nodes };
-
-static struct ast_cli_entry  cli_xnode =
-        { { "rpt", "xnode" }, rpt_do_xnode,
-		"Dump extended info", dump_xnode };
-
-static struct ast_cli_entry  cli_local_nodes =
-        { { "rpt", "localnodes" }, rpt_do_local_nodes,
-		"Dump list of local node numbers", usage_local_nodes };
-
-static struct ast_cli_entry  cli_lstats =
-        { { "rpt", "lstats" }, rpt_do_lstats,
-		"Dump link statistics", dump_lstats };
-
-static struct ast_cli_entry  cli_reload =
-        { { "rpt", "reload" }, rpt_do_reload,
-		"Reload app_rpt config", reload_usage };
-
-static struct ast_cli_entry  cli_restart =
-        { { "rpt", "restart" }, rpt_do_restart,
-		"Restart app_rpt", restart_usage };
-
-static struct ast_cli_entry  cli_playback =
-        { { "rpt", "playback" }, rpt_do_playback,
-		"Play Back an Audio File Globally", playback_usage };
-
-static struct ast_cli_entry  cli_localplay =
-        { { "rpt", "localplay" }, rpt_do_localplay,
-                "Play Back an Audio File Locally", localplay_usage };
-
-static struct ast_cli_entry  cli_sendtext =
-        { { "rpt", "sendtext" }, rpt_do_sendtext,
-                "Send a Text message to specific node", sendtext_usage };
-
-
-static struct ast_cli_entry  cli_sendall =
-        { { "rpt", "sendall" }, rpt_do_sendall,
-                "Send a Text message to all", sendall_usage };
-
-
-static struct ast_cli_entry  cli_fun =
-        { { "rpt", "fun" }, rpt_do_fun,
-		"Execute a DTMF function", fun_usage };
-
-static struct ast_cli_entry  cli_fun1 =
-        { { "rpt", "fun1" }, rpt_do_fun1,
-		"Execute a DTMF function", fun_usage };
-
-static struct ast_cli_entry  cli_cmd =
-        { { "rpt", "cmd" }, rpt_do_cmd,
-		"Execute a DTMF function", cmd_usage };
-
-static struct ast_cli_entry  cli_setvar =
-        { { "rpt", "setvar" }, rpt_do_setvar,
-		"Set an Asterisk channel variable", setvar_usage };
-
-static struct ast_cli_entry  cli_showvars =
-        { { "rpt", "showvars" }, rpt_do_showvars,
-		"Display Asterisk channel variables", showvars_usage };
-
-static struct ast_cli_entry  cli_page =
-        { { "rpt", "page" }, rpt_do_page,
-		"Page a user on a node", page_usage };
-
-static struct ast_cli_entry cli_lookup =
-	{ { "rpt", "lookup" }, rpt_do_lookup,
-		"Look up allstar nodes", lookup_usage };
-
-#endif
 
 /*
 * Telemetry defaults
@@ -2721,11 +2583,7 @@ static int uchameleon_pin_init(struct daq_entry_tag *t)
 
 	/* Pin Initialization */
 
-	#ifdef	NEW_ASTERISK
-		ourcfg = ast_config_load("rpt.conf",config_flags);
-	#else
-		ourcfg = ast_config_load("rpt.conf");
-	#endif
+	ourcfg = ast_config_load("rpt.conf",config_flags);
 
 	if(!ourcfg)
 		return -1;
@@ -4563,11 +4421,7 @@ struct        rpt_link *l;
                        l = l->next;
                        continue;
                }
-#ifdef	NEW_ASTERISK
                if (l->chan) ast_senddigit(l->chan,c,0);
-#else
-               if (l->chan) ast_senddigit(l->chan,c);
-#endif
                l = l->next;
        }
        return;
@@ -4631,11 +4485,7 @@ char	digit;
 			rpt_mutex_unlock(&myrpt->lock);
 			if (!strncasecmp(myrpt->txchannel->name,"rtpdir",6))
 			{
-#ifdef	NEW_ASTERISK
 				ast_senddigit(myrpt->txchannel,digit,0);
-#else
-				ast_senddigit(myrpt->txchannel,digit);
-#endif
 			} 
 			else
 			{
@@ -5856,11 +5706,7 @@ struct ast_variable *vp;
 	found = 0;
 	for(i = 0; i < myrpt->p.extnodefilesn; i++)
 	{
-#ifdef	NEW_ASTERISK
 		ourcfg = ast_config_load(myrpt->p.extnodefiles[i],config_flags);
-#else
-		ourcfg = ast_config_load(myrpt->p.extnodefiles[i]);
-#endif
 		/* if file does not exist */
 		if (stat(myrpt->p.extnodefiles[i],&mystat) == -1) continue;
 		/* if file not there, try next */
@@ -5929,11 +5775,7 @@ static struct ast_config *ourcfg;
 	{
 		/* if file does not exist */
 		if (stat(strs[i],&mystat) == -1) continue;
-#ifdef	NEW_ASTERISK
 		ourcfg = ast_config_load(strs[i],config_flags);
-#else
-		ourcfg = ast_config_load(strs[i]);
-#endif
 		/* if file not there, try next */
 		if (!ourcfg) continue;
 		if (!val) val = (char *) ast_variable_retrieve(ourcfg, enod, digitbuf);
@@ -6069,7 +5911,6 @@ struct	rptfilter *f;
 
 */
 
-#ifdef	NEW_ASTERISK
 static void rpt_localtime( time_t *t, struct ast_tm *lt, char *tz)
 {
 struct timeval tv;
@@ -6087,29 +5928,6 @@ struct timeval now;
 	now = ast_mktime(tm,zone);
 	return now.tv_sec;
 }
-
-
-#else
-
-static void rpt_localtime( time_t *t, struct tm *lt, char *tz)
-{
-#ifdef OLD_ASTERISK
-	localtime_r(t, lt);
-#else
-	ast_localtime(t, lt, tz);
-#endif
-}
-
-static time_t rpt_mktime(struct tm *tm,char *zone)
-{
-#ifdef OLD_ASTERISK
-	return(mktime(tm));
-#else
-	return(ast_mktime(tm,zone));
-#endif
-}
-
-#endif
 
 /* Retrieve an int from a config file */
                                                                                 
@@ -6163,11 +5981,7 @@ static char *cs_keywords[] = {"rptena","rptdis","apena","apdis","lnkena","lnkdis
 			(init) ? "Loading initial" : "Re-Loading",rpt_vars[n].name);
 	ast_mutex_lock(&rpt_vars[n].lock);
 	if (rpt_vars[n].cfg) ast_config_destroy(rpt_vars[n].cfg);
-#ifdef	NEW_ASTERISK
 	cfg = ast_config_load("rpt.conf",config_flags);
-#else
-	cfg = ast_config_load("rpt.conf");
-#endif
 	if (!cfg) {
 		ast_mutex_unlock(&rpt_vars[n].lock);
  		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
@@ -7926,8 +7740,6 @@ static int play_tone(struct ast_channel *chan, int freq, int duration, int ampli
 	return play_tone_pair(chan, freq, 0, duration, amplitude);
 }
 
-#ifdef	NEW_ASTERISK
-
 /*
  *  Hooks for CLI functions
  */
@@ -8249,8 +8061,6 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_page,"Send a page to a user on a node"),
 	AST_CLI_DEFINE(handle_cli_lookup,"Lookup Allstar nodes")
 };
-
-#endif
 
 /*
  * End of CLI hooks
@@ -8817,11 +8627,7 @@ int	i,j,k,n,res,vmajor,vminor;
 float	f;
 time_t	t;
 unsigned int t1;
-#ifdef	NEW_ASTERISK
 struct	ast_tm localtm;
-#else
-struct	tm localtm;
-#endif
 
 	n = finddelim(varcmd,strs,100);
 	if (n < 1) return;
@@ -9147,11 +8953,7 @@ struct	ast_channel *mychannel;
 int id_malloc, vmajor, vminor, m;
 char *p,*ct,*ct_copy,*ident, *nodename;
 time_t t,t1,was;
-#ifdef	NEW_ASTERISK
 struct ast_tm localtm;
-#else
-struct tm localtm;
-#endif
 char lbuf[MAXLINKLIST],*strs[MAXLINKLIST];
 int	i,j,k,ns,rbimode;
 unsigned int u;
@@ -11478,11 +11280,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 			{
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_queue_frame(mychannel,&wf);
-#ifdef	NEW_ASTERISK
 				ast_senddigit(genchannel,myrpt->mydtmf,0);
-#else
-				ast_senddigit(genchannel,myrpt->mydtmf);
-#endif
 				rpt_mutex_lock(&myrpt->lock);
 			}
 			myrpt->mydtmf = 0;
@@ -11831,9 +11629,6 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 		if (l->chan->cdr)
 			ast_set_flag(l->chan->cdr,AST_CDR_FLAG_POST_DISABLED);
-#endif
-#ifndef	NEW_ASTERISK
-		l->chan->whentohangup = 0;
 #endif
 		l->chan->appl = "Apprpt";
 		l->chan->data = "(Remote Rx)";
@@ -18772,9 +18567,6 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	if (l->chan){
 		ast_set_read_format(l->chan, AST_FORMAT_SLINEAR);
 		ast_set_write_format(l->chan, AST_FORMAT_SLINEAR);
-#ifndef	NEW_ASTERISK
-		l->chan->whentohangup = 0;
-#endif
 		l->chan->appl = "Apprpt";
 		l->chan->data = "(Remote Rx)";
 		if (option_verbose > 2)
@@ -19052,11 +18844,7 @@ static void do_scheduler(struct rpt *myrpt)
 {
 	int i,res;
 
-#ifdef	NEW_ASTERISK
 	struct ast_tm tmnow;
-#else
-	struct tm tmnow;
-#endif
 	struct ast_variable *skedlist;
 	char *strs[5],*vp,*val,value[100];
 
@@ -19315,9 +19103,6 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		if (myrpt->rxchannel->cdr)
 			ast_set_flag(myrpt->rxchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
 #endif
-#ifndef	NEW_ASTERISK
-		myrpt->rxchannel->whentohangup = 0;
-#endif
 		myrpt->rxchannel->appl = "Apprpt";
 		myrpt->rxchannel->data = "(Repeater Rx)";
 		if (option_verbose > 2)
@@ -19372,9 +19157,6 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 			if (myrpt->txchannel->cdr)
 				ast_set_flag(myrpt->txchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
-#endif
-#ifndef	NEW_ASTERISK
-			myrpt->txchannel->whentohangup = 0;
 #endif
 			myrpt->txchannel->appl = "Apprpt";
 			myrpt->txchannel->data = "(Repeater Tx)";
@@ -21165,7 +20947,6 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					}
 				}
 			}
-#ifndef	OLD_ASTERISK
 			else if (f->frametype == AST_FRAME_DTMF_BEGIN)
 			{
 				if (myrpt->lastf1)
@@ -21175,12 +20956,10 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				dtmfed = 1;
 				myrpt->lastdtmftime = ast_tvnow();
 			}
-#endif
 			else if (f->frametype == AST_FRAME_DTMF)
 			{
 				c = (char) f->subclass; /* get DTMF char */
 				ast_frfree(f);
-#ifndef	OLD_ASTERISK
 				x = ast_tvdiff_ms(ast_tvnow(),myrpt->lastdtmftime);
 				if ((myrpt->p.litzcmd) && (x >= myrpt->p.litztime) &&
 					strchr(myrpt->p.litzchar,c))
@@ -21198,7 +20977,6 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 
 					continue;
 				}			
-#endif
 				if (myrpt->lastf1)
 					memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
 				if (myrpt->lastf2)
@@ -21896,7 +21674,6 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						ast_write(l->pchan,f);
 					}
 				}
-#ifndef	OLD_ASTERISK
 				else if (f->frametype == AST_FRAME_DTMF_BEGIN)
 				{
 					if (l->lastf1)
@@ -21905,7 +21682,6 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						memset(AST_FRAME_DATAP(l->lastf2),0,l->lastf2->datalen);
 					l->dtmfed = 1;
 				}
-#endif
 				if (f->frametype == AST_FRAME_TEXT)
 				{
 					char *tstr = ast_malloc(f->datalen + 1);
@@ -22436,16 +22212,10 @@ char *this,*val;
 	/* go thru all the specified repeaters */
 	this = NULL;
 	n = 0;
-#ifndef OLD_ASTERISK
 	/* wait until asterisk starts */
         while(!ast_test_flag(&ast_options,AST_OPT_FLAG_FULLY_BOOTED))
                 usleep(250000);
-#endif
-#ifdef	NEW_ASTERISK
 	rpt_vars[n].cfg = ast_config_load("rpt.conf",config_flags);
-#else
-	rpt_vars[n].cfg = ast_config_load("rpt.conf");
-#endif
 	cfg = rpt_vars[n].cfg;
 	if (!cfg) {
 		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
@@ -22671,9 +22441,6 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	int res=-1,i,x,rem_totx,rem_rx,remkeyed,n,phone_mode = 0;
 	int iskenwood_pci4,authtold,authreq,setting,notremming,reming;
 	int ismuted,dtmfed,phone_vox = 0, phone_monitor = 0;
-#ifdef	OLD_ASTERISK
-	struct localuser *u;
-#endif
 	char tmp[256], keyed = 0,keyed1 = 0;
 	char *options,*stringp,*callstr,*tele,c,*altp,*memp;
 	char sx[320],*sy,myfirst,*b,*b1;
@@ -22760,11 +22527,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		myadr = NULL;
 		b1 = chan->cid.cid_num;		
 		if (b1) ast_shrink_phone_number(b1);
-#ifdef	NEW_ASTERISK
 		cfg = ast_config_load("rpt.conf",config_flags);
-#else
-		cfg = ast_config_load("rpt.conf");
-#endif
 		if (cfg && ((!options) || (*options == 'X') || (*options == 'F')))
 		{
 			myadr = (char *) ast_variable_retrieve(cfg, "proxy", "ipaddr");
@@ -22859,11 +22622,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 						return -1;
 					}
 					memcpy(&ia,hp->h_addr,sizeof(in_addr_t));
-#ifdef	OLD_ASTERISK
-					ast_inet_ntoa(nodeip,sizeof(nodeip) - 1,ia);
-#else
 					strncpy(nodeip,ast_inet_ntoa(ia),sizeof(nodeip) - 1);
-#endif
 					s3 = strchr(hisip,':');
 					if (s3) *s3 = 0;
 					if (strcmp(hisip,nodeip))
@@ -22881,11 +22640,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 							return -1;
 						}
 						memcpy(&ia,hp->h_addr,sizeof(in_addr_t));
-#ifdef	OLD_ASTERISK
-						ast_inet_ntoa(nodeip,sizeof(nodeip) - 1,ia);
-#else
 						strncpy(nodeip,ast_inet_ntoa(ia),sizeof(nodeip) - 1);
-#endif
 						if (strcmp(hisip,nodeip))
 						{
 							ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n",b1,nodeip,hisip);
@@ -23147,11 +22902,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		}
 		/* At this point we have a priority and maybe an extension and a context */
 		chan->priority = atoi(priority);
-#ifdef OLD_ASTERISK
-		if(exten && strcasecmp(exten, "BYEXTENSION"))
-#else
 		if(exten)
-#endif
 			strncpy(chan->exten, exten, sizeof(chan->exten)-1);
 		if(context)
 			strncpy(chan->context, context, sizeof(chan->context)-1);
@@ -23261,11 +23012,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 				return -1;
 			}
 			memcpy(&ia,hp->h_addr,sizeof(in_addr_t));
-#ifdef	OLD_ASTERISK
-			ast_inet_ntoa(nodeip,sizeof(nodeip) - 1,ia);
-#else
 			strncpy(nodeip,ast_inet_ntoa(ia),sizeof(nodeip) - 1);
-#endif
 			s3 = strchr(hisip,':');
 			if (s3) *s3 = 0;
 			if (strcmp(hisip,nodeip))
@@ -23283,11 +23030,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 					return -1;
 				}
 				memcpy(&ia,hp->h_addr,sizeof(in_addr_t));
-#ifdef	OLD_ASTERISK
-				ast_inet_ntoa(nodeip,sizeof(nodeip) - 1,ia);
-#else
 				strncpy(nodeip,ast_inet_ntoa(ia),sizeof(nodeip) - 1);
-#endif
 				if (strcmp(hisip,nodeip))
 				{
 					ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n",b1,nodeip,hisip);
@@ -23511,11 +23254,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		usleep(500000);
 		if (myrpt->remoteon)
 		{
-#ifdef	NEW_ASTERISK
 			struct ast_tone_zone_sound *ts = NULL;
-#else
-			const struct ind_tone_zone_sound *ts = NULL;
-#endif
 
 			ast_log(LOG_WARNING, "Trying to use busy link on %s\n",tmp);
 			if (myrpt->remote_webtransceiver || (b && (*b > '9')))
@@ -23594,9 +23333,6 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		return -1;
 	}
 	myrpt->remoteon = 1;
-#ifdef	OLD_ASTERISK
-	LOCAL_USER_ADD(u);
-#endif
 	voxinit_rpt(myrpt,1);
 	rpt_mutex_unlock(&myrpt->lock);
 	/* find our index, and load the vars initially */
@@ -23628,9 +23364,6 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 		if (myrpt->rxchannel->cdr)
 			ast_set_flag(myrpt->rxchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
-#endif
-#ifndef	NEW_ASTERISK
-		myrpt->rxchannel->whentohangup = 0;
 #endif
 		myrpt->rxchannel->appl = "Apprpt";
 		myrpt->rxchannel->data = "(Link Rx)";
@@ -23670,9 +23403,6 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 			if (myrpt->txchannel->cdr)
 				ast_set_flag(myrpt->txchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
-#endif
-#ifndef	NEW_ASTERISK
-			myrpt->txchannel->whentohangup = 0;
 #endif
 			myrpt->txchannel->appl = "Apprpt";
 			myrpt->txchannel->data = "(Link Tx)";
@@ -24376,7 +24106,6 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 					ast_frfree(f1);
 				}
 			}
-#ifndef	OLD_ASTERISK
 			else if (f->frametype == AST_FRAME_DTMF_BEGIN)
 			{
 				if (myrpt->lastf1)
@@ -24385,7 +24114,6 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 					memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
 				dtmfed = 1;
 			}
-#endif
 			if (f->frametype == AST_FRAME_DTMF)
 			{
 				if (myrpt->lastf1)
@@ -24709,9 +24437,6 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 	}
-#ifdef	OLD_ASTERISK
-	LOCAL_USER_REMOVE(u);
-#endif
 	return res;
 }
 
@@ -24728,7 +24453,6 @@ static void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
         );
 }
 
-#ifndef OLD_ASTERISK
 /*!\brief callback to display list of locally configured nodes
    \addtogroup Group_AMI
  */
@@ -25502,8 +25226,6 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	return 0;
 }
 
-#endif
-
 #ifdef	_MDC_ENCODE_H_
 
 static char *mdc_app = "MDC1200Gen";
@@ -25716,17 +25438,9 @@ static int mdcgen_exec(struct ast_channel *chan, void *data)
 
 #endif
 
-#ifdef	OLD_ASTERISK
-int unload_module()
-#else
 static int unload_module(void)
-#endif
 {
 	int i, res;
-
-#ifdef	OLD_ASTERISK
-	STANDARD_HANGUP_LOCALUSERS;
-#endif
 
 	daq_uninit();
 
@@ -25740,42 +25454,15 @@ static int unload_module(void)
 	res |= ast_unregister_application(app);
 #endif
 
-#ifdef	NEW_ASTERISK
 	ast_cli_unregister_multiple(rpt_cli,sizeof(rpt_cli) / 
 		sizeof(struct ast_cli_entry));
-#else
-	/* Unregister cli extensions */
-	ast_cli_unregister(&cli_debug);
-	ast_cli_unregister(&cli_dump);
-	ast_cli_unregister(&cli_stats);
-	ast_cli_unregister(&cli_lstats);
-	ast_cli_unregister(&cli_nodes);
-	ast_cli_unregister(&cli_xnode);
-	ast_cli_unregister(&cli_local_nodes);
-	ast_cli_unregister(&cli_reload);
-	ast_cli_unregister(&cli_restart);
-	ast_cli_unregister(&cli_playback);
-	ast_cli_unregister(&cli_fun);
-	ast_cli_unregister(&cli_fun1);
-	ast_cli_unregister(&cli_setvar);
-	ast_cli_unregister(&cli_showvars);
-	ast_cli_unregister(&cli_page);
-	ast_cli_unregister(&cli_lookup);
-	res |= ast_cli_unregister(&cli_cmd);
-#endif
-#ifndef OLD_ASTERISK
 	res |= ast_manager_unregister("RptLocalNodes");
 	res |= ast_manager_unregister("RptStatus");
-#endif
 	close(nullfd);
 	return res;
 }
 
-#ifdef	OLD_ASTERISK
-int load_module()
-#else
 static int load_module(void)
-#endif
 {
 
 	int res;
@@ -25814,37 +25501,11 @@ static int load_module(void)
 	}
 	ast_pthread_create(&rpt_master_thread,NULL,rpt_master,NULL);
 
-#ifdef	NEW_ASTERISK
 	ast_cli_register_multiple(rpt_cli,sizeof(rpt_cli) / 
 		sizeof(struct ast_cli_entry));
 	res = 0;
-#else
-	/* Register cli extensions */
-	ast_cli_register(&cli_debug);
-	ast_cli_register(&cli_dump);
-	ast_cli_register(&cli_stats);
-	ast_cli_register(&cli_lstats);
-	ast_cli_register(&cli_nodes);
-	ast_cli_register(&cli_xnode);
-	ast_cli_register(&cli_local_nodes);
-	ast_cli_register(&cli_reload);
-	ast_cli_register(&cli_restart);
-	ast_cli_register(&cli_playback);
-	ast_cli_register(&cli_localplay);
-	ast_cli_register(&cli_sendtext);
-	ast_cli_register(&cli_sendall);
-	ast_cli_register(&cli_fun);
-	ast_cli_register(&cli_fun1);
-	ast_cli_register(&cli_setvar);
-	ast_cli_register(&cli_showvars);
-	ast_cli_register(&cli_page);
-	ast_cli_register(&cli_lookup);
-	res = ast_cli_register(&cli_cmd);
-#endif
-#ifndef OLD_ASTERISK
 	res |= ast_manager_register("RptLocalNodes", 0, manager_rpt_local_nodes, "List local node numbers");
 	res |= ast_manager_register("RptStatus", 0, manager_rpt_status, "Return Rpt Status for CGI");
-#endif
 	res |= ast_register_application(app, rpt_exec, synopsis, descrip);
 
 #ifdef	_MDC_ENCODE_H_
@@ -25854,39 +25515,13 @@ static int load_module(void)
 	return res;
 }
 
-#ifdef	OLD_ASTERISK
-char *description()
-{
-	return tdesc;
-}
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
-#endif
-
-#ifdef	OLD_ASTERISK
-int reload()
-#else
 static int reload(void)
-#endif
 {
 int	i,n;
 struct ast_config *cfg;
 char	*val,*this;
 
-#ifdef	NEW_ASTERISK
 	cfg = ast_config_load("rpt.conf",config_flags);
-#else
-	cfg = ast_config_load("rpt.conf");
-#endif
 	if (!cfg) {
 		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
 		pthread_exit(NULL);
@@ -25962,14 +25597,8 @@ char	*val,*this;
 	return(0);
 }
 
-/*
- * Code to handle the "old" way of registering module hooks in asterisk
-*/
-
-#ifndef	OLD_ASTERISK
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application",
 		.load = load_module,
 		.unload = unload_module,
 		.reload = reload,
 	       );
-#endif
