@@ -292,8 +292,6 @@
 
 #include "asterisk.h"
 
-#define	START_DELAY 2
-
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -345,8 +343,6 @@
 #include "asterisk/format.h"
 #include "asterisk/format_compatibility.h"
 
-struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
-
 /* Un-comment the following to include support decoding of MDC-1200 digital tone
    signalling protocol (using KA6SQG's GPL'ed implementation) */
 #include "app_rpt/mdc_decode.c"
@@ -359,41 +355,18 @@ struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
    rx audio stream (using Tony Fisher's mknotch (mkfilter) implementation) */
 /* #include "rpt_notch.c" */
 
-typedef struct {
-	int v2;
-	int v3;
-	int chunky;
-	int fac;
-	int samples;
-} goertzel_state_t;
-
-typedef struct {
-	int value;
-	int power;
-} goertzel_result_t;
-
-typedef struct
-{
-	int freq;
-	int block_size;
-	int squelch;		/* Remove (squelch) tone */
-	goertzel_state_t tone;
-	float energy;		/* Accumulated energy of the current block */
-	int samples_pending;	/* Samples remain to complete the current block */
-	int mute_samples;	/* How many additional samples needs to be muted to suppress already detected tone */
-
-	int hits_required;	/* How many successive blocks with tone we are looking for */
-	float threshold;	/* Energy of the tone relative to energy from all other signals to consider a hit */
-
-	int hit_count;		/* How many successive blocks we consider tone present */
-	int last_hit;		/* Indicates if the last processed block was a hit */
-
-} tone_detect_state_t;
+AST_MUTEX_DEFINE_STATIC(nodeloglock);
+AST_MUTEX_DEFINE_STATIC(nodelookuplock);
 
 #include "app_rpt/app_rpt.h"
+#include "app_rpt/rpt_utils.h"
+#include "app_rpt/rpt_lock.h"
+#include "app_rpt/rpt_channels.h"
+#include "app_rpt/rpt_serial.h"
+#include "app_rpt/rpt_uchameleon.h"
 #include "app_rpt/rpt_cli.h"
 
-static int reload(void);
+struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 
 AST_MUTEX_DEFINE_STATIC(rpt_master_lock);
 
@@ -461,7 +434,7 @@ static char *descrip =
 "\n";
 ;
 
-static int debug = 0;  /* Set this >0 for extra debug output */
+int debug = 0;  /* Set this >0 for extra debug output */
 static int nrpts = 0;
 
 static char remdtmfstr[] = "0123456789*#ABCD";
@@ -511,195 +484,7 @@ static char* dtmf_tones[] = {
 
 static time_t	starttime = 0;
 
-AST_MUTEX_DEFINE_STATIC(nodeloglock);
-
-AST_MUTEX_DEFINE_STATIC(nodelookuplock);
-
-#ifdef	APP_RPT_LOCK_DEBUG
-
-#warning COMPILING WITH LOCK-DEBUGGING ENABLED!!
-
-#define	MAXLOCKTHREAD 100
-
-#define rpt_mutex_lock(x) _rpt_mutex_lock(x,myrpt,__LINE__)
-#define rpt_mutex_unlock(x) _rpt_mutex_unlock(x,myrpt,__LINE__)
-
-struct lockthread
-{
-	pthread_t id;
-	int lockcount;
-	int lastlock;
-	int lastunlock;
-} lockthreads[MAXLOCKTHREAD];
-
-struct by_lightning
-{
-	int line;
-	struct timeval tv;
-	struct rpt *rpt;
-	struct lockthread lockthread;
-} lock_ring[32];
-
-int lock_ring_index = 0;
-
-AST_MUTEX_DEFINE_STATIC(locklock);
-
-static struct lockthread *get_lockthread(pthread_t id)
-{
-int	i;
-
-	for(i = 0; i < MAXLOCKTHREAD; i++)
-	{
-		if (lockthreads[i].id == id) return(&lockthreads[i]);
-	}
-	return(NULL);
-}
-
-static struct lockthread *put_lockthread(pthread_t id)
-{
-int	i;
-
-	for(i = 0; i < MAXLOCKTHREAD; i++)
-	{
-		if (lockthreads[i].id == id)
-			return(&lockthreads[i]);
-	}
-	for(i = 0; i < MAXLOCKTHREAD; i++)
-	{
-		if (!lockthreads[i].id)
-		{
-			lockthreads[i].lockcount = 0;
-			lockthreads[i].lastlock = 0;
-			lockthreads[i].lastunlock = 0;
-			lockthreads[i].id = id;
-			return(&lockthreads[i]);
-		}
-	}
-	return(NULL);
-}
-
-/*
- * Functions related to the threading used in app_rpt dealing with locking
-*/
-
-static void rpt_mutex_spew(void)
-{
-	struct by_lightning lock_ring_copy[32];
-	int lock_ring_index_copy;
-	int i,j;
-	long long diff;
-	char a[100];
-	struct timeval lasttv;
-
-	ast_mutex_lock(&locklock);
-	memcpy(&lock_ring_copy, &lock_ring, sizeof(lock_ring_copy));
-	lock_ring_index_copy = lock_ring_index;
-	ast_mutex_unlock(&locklock);
-
-	lasttv.tv_sec = lasttv.tv_usec = 0;
-	for(i = 0 ; i < 32 ; i++)
-	{
-		j = (i + lock_ring_index_copy) % 32;
-		strftime(a,sizeof(a) - 1,"%m/%d/%Y %H:%M:%S",
-			localtime(&lock_ring_copy[j].tv.tv_sec));
-		diff = 0;
-		if(lasttv.tv_sec)
-		{
-			diff = (lock_ring_copy[j].tv.tv_sec - lasttv.tv_sec)
-				* 1000000;
-			diff += (lock_ring_copy[j].tv.tv_usec - lasttv.tv_usec);
-		}
-		lasttv.tv_sec = lock_ring_copy[j].tv.tv_sec;
-		lasttv.tv_usec = lock_ring_copy[j].tv.tv_usec;
-		if (!lock_ring_copy[j].tv.tv_sec) continue;
-		if (lock_ring_copy[j].line < 0)
-		{
-			ast_log(LOG_NOTICE,"LOCKDEBUG [#%d] UNLOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n",
-				i - 31,-lock_ring_copy[j].line,lock_ring_copy[j].rpt->name,(int) lock_ring_copy[j].lockthread.id,diff,a,(int)lock_ring_copy[j].tv.tv_usec);
-		}
-		else
-		{
-			ast_log(LOG_NOTICE,"LOCKDEBUG [#%d] LOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n",
-				i - 31,lock_ring_copy[j].line,lock_ring_copy[j].rpt->name,(int) lock_ring_copy[j].lockthread.id,diff,a,(int)lock_ring_copy[j].tv.tv_usec);
-		}
-	}
-}
-
-
-static void _rpt_mutex_lock(ast_mutex_t *lockp, struct rpt *myrpt, int line)
-{
-struct lockthread *t;
-pthread_t id;
-
-	id = pthread_self();
-	ast_mutex_lock(&locklock);
-	t = put_lockthread(id);
-	if (!t)
-	{
-		ast_mutex_unlock(&locklock);
-		return;
-	}
-	if (t->lockcount)
-	{
-		int lastline = t->lastlock;
-		ast_mutex_unlock(&locklock);
-		ast_log(LOG_NOTICE,"rpt_mutex_lock: Double lock request line %d node %s pid %x, last lock was line %d\n",line,myrpt->name,(int) t->id,lastline);
-		rpt_mutex_spew();
-		return;
-	}
-	t->lastlock = line;
-	t->lockcount = 1;
-	gettimeofday(&lock_ring[lock_ring_index].tv, NULL);
-	lock_ring[lock_ring_index].rpt = myrpt;
-	memcpy(&lock_ring[lock_ring_index].lockthread,t,sizeof(struct lockthread));
-	lock_ring[lock_ring_index++].line = line;
-	if(lock_ring_index == 32)
-		lock_ring_index = 0;
-	ast_mutex_unlock(&locklock);
-	ast_mutex_lock(lockp);
-}
-
-
-static void _rpt_mutex_unlock(ast_mutex_t *lockp, struct rpt *myrpt, int line)
-{
-struct lockthread *t;
-pthread_t id;
-
-	id = pthread_self();
-	ast_mutex_lock(&locklock);
-	t = put_lockthread(id);
-	if (!t)
-	{
-		ast_mutex_unlock(&locklock);
-		return;
-	}
-	if (!t->lockcount)
-	{
-		int lastline = t->lastunlock;
-		ast_mutex_unlock(&locklock);
-		ast_log(LOG_NOTICE,"rpt_mutex_lock: Double un-lock request line %d node %s pid %x, last un-lock was line %d\n",line,myrpt->name,(int) t->id,lastline);
-		rpt_mutex_spew();
-		return;
-	}
-	t->lastunlock = line;
-	t->lockcount = 0;
-	gettimeofday(&lock_ring[lock_ring_index].tv, NULL);
-	lock_ring[lock_ring_index].rpt = myrpt;
-	memcpy(&lock_ring[lock_ring_index].lockthread,t,sizeof(struct lockthread));
-	lock_ring[lock_ring_index++].line = -line;
-	if(lock_ring_index == 32)
-		lock_ring_index = 0;
-	ast_mutex_unlock(&locklock);
-	ast_mutex_unlock(lockp);
-}
-
-#else  /* APP_RPT_LOCK_DEBUG */
-
-#define rpt_mutex_lock(x) ast_mutex_lock(x)
-#define rpt_mutex_unlock(x) ast_mutex_unlock(x)
-
-#endif  /* APP_RPT_LOCK_DEBUG */
-
+static  pthread_t rpt_master_thread;
 
 #ifdef	_MDC_DECODE_H_
 static const char *my_variable_match(const struct ast_config *config, const char *category, const char *variable)
@@ -856,116 +641,7 @@ static int dovox(struct vox *v,short *buf,int bs)
 
 }
 
-/*
- * Multi-thread safe sleep routine
-*/
-static void rpt_safe_sleep(struct rpt *rpt,struct ast_channel *chan, int ms)
-{
-	struct ast_frame *f;
-	struct ast_channel *cs[2],*w;
 
-	cs[0] = rpt->rxchannel;
-	cs[1] = chan;
-	while (ms > 0) {
-		w = ast_waitfor_n(cs,2,&ms);
-		if (!w) break;
-		f = ast_read(w);
-		if (!f) break;
-		if ((w == cs[0]) && (f->frametype != AST_FRAME_VOICE) && (f->frametype != AST_FRAME_NULL))
-		{
-			ast_queue_frame(rpt->rxchannel,f);
-			ast_frfree(f);
-			break;
-		}
-		ast_frfree(f);
-	}
-	return;
-}
-
-/*
- * Routine to forward a "call" from one channel to another
-*/
-
-static void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
-{
-
-struct ast_channel *dest,*w,*cs[2];
-struct ast_frame *f;
-int	ms;
-struct ast_format_cap *cap;
-
-	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		return;
-	}
-
-	ast_format_cap_append(cap, ast_format_slin, 0);
-
-	dest = ast_request("IAX2", cap, NULL, NULL, dialstr ,NULL);
-	if (!dest)
-	{
-		if (ast_safe_sleep(chan,150) == -1) return;
-		dest = ast_request("IAX2", cap, NULL, NULL, dialstr ,NULL);
-		if (!dest)
-		{
-			ast_log(LOG_ERROR,"Can not create channel for rpt_forward to IAX2/%s\n",dialstr);
-			return;
-		}
-	}
-	ast_set_read_format(chan, ast_format_slin);
-	ast_set_write_format(chan, ast_format_slin);
-	ast_set_read_format(dest, ast_format_slin);
-	ast_set_write_format(dest, ast_format_slin);
-	ao2_ref(cap, -1);
-
-	if (option_verbose > 2)
-		ast_verb(3, "rpt forwarding call from %s to %s on %s\n", nodefrom, dialstr, ast_channel_name(dest));
-	ast_set_callerid(dest,nodefrom,ast_channel_caller(chan)->id.name.str,nodefrom);
-	ast_call(dest,dialstr,999); 
-	cs[0] = chan;
-	cs[1] = dest;
-	for(;;)
-	{
-		if (ast_check_hangup(chan)) break;
-		if (ast_check_hangup(dest)) break;
-		ms = 100;
-		w = cs[0];
-		cs[0] = cs[1];
-		cs[1] = w;
-		w = ast_waitfor_n(cs,2,&ms);
-		if (!w) continue;
-		if (w == chan)
-		{
-			f = ast_read(chan);
-			if (!f) break;
-			if ((f->frametype == AST_FRAME_CONTROL) &&
-			    (f->subclass.integer == AST_CONTROL_HANGUP))
-			{
-				ast_frfree(f);
-				break;
-			}
-			ast_write(dest,f);
-			ast_frfree(f);
-		}
-		if (w == dest)
-		{
-			f = ast_read(dest);
-			if (!f) break;
-			if ((f->frametype == AST_FRAME_CONTROL) &&
-			    (f->subclass.integer == AST_CONTROL_HANGUP))
-			{
-				ast_frfree(f);
-				break;
-			}
-			ast_write(chan,f);
-			ast_frfree(f);
-		}
-
-	}
-	ast_hangup(dest);
-	return;
-}
 
 
 /*
@@ -1117,9 +793,17 @@ static inline void goertzel_reset(goertzel_state_t *s)
 }
 
 /*
+ * DAQ variables
+ */
+struct daq_tag daq;
+
+static struct rpt rpt_vars[MAXRPTS];
+
+static struct nodelog nodelog;
+
+/*
  * Code used to detect tones
 */
-
 
 static void tone_detect_init(tone_detect_state_t *s, int freq, int duration, int amp)
 {
@@ -1281,1101 +965,7 @@ static struct function_table_tag function_table[] = {
 	{"cmd", function_cmd}
 
 
-} ;
-
-
-/*
- * *****************************************
- * Generic serial I/O routines             *
- * *****************************************
-*/
-
-
-/*
- * Generic serial port open command 
- */
-
-static int serial_open(char *fname, int speed, int stop2)
-{
-	struct termios mode;
-	int fd;
-
-	fd = open(fname,O_RDWR);
-	if (fd == -1)
-	{
-		if(debug >= 1)
-			ast_log(LOG_WARNING,"Cannot open serial port %s\n",fname);
-		return -1;
-	}
-	
-	memset(&mode, 0, sizeof(mode));
-	if (tcgetattr(fd, &mode)) {
-		if(debug >= 1){
-			ast_log(LOG_WARNING, "Unable to get serial parameters on %s: %s\n", fname, strerror(errno));
-		}
-		return -1;
-	}
-#ifndef	SOLARIS
-	cfmakeraw(&mode);
-#else
-        mode.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP
-                        |INLCR|IGNCR|ICRNL|IXON);
-        mode.c_lflag &= ~(ECHO|ECHONL|ICANON|ISIG|IEXTEN);
-        mode.c_cflag &= ~(CSIZE|PARENB|CRTSCTS);
-        mode.c_cflag |= CS8;
-	if(stop2)
-		mode.c_cflag |= CSTOPB;
-	mode.c_cc[VTIME] = 3;
-	mode.c_cc[VMIN] = 1; 
-#endif
-
-	cfsetispeed(&mode, speed);
-	cfsetospeed(&mode, speed);
-	if (tcsetattr(fd, TCSANOW, &mode)){
-		if(debug >= 1) 
-			ast_log(LOG_WARNING, "Unable to set serial parameters on %s: %s\n", fname, strerror(errno));
-		return -1;
-	}
-	usleep(100000);
-	if (debug >= 3)
-		ast_log(LOG_NOTICE,"Opened serial port %s\n",fname);
-	return(fd);	
-}
-
-/*
- * Return receiver ready status
- *
- * Return 1 if an Rx byte is avalable
- * Return 0 if none was avaialable after a time out period
- * Return -1 if error
- */
-
-
-static int serial_rxready(int fd, int timeoutms)
-{
-int	myms = timeoutms;
-
-	return(ast_waitfor_n_fd(&fd, 1, &myms,NULL));
-}
-
-/*
-* Remove all RX characters in the receive buffer
-*
-* Return number of bytes flushed.
-* or  return -1 if error
-*
-*/
-
-static int serial_rxflush(int fd, int timeoutms)
-{
-	int res, flushed = 0;
-	char c;
-	
-	while((res = serial_rxready(fd, timeoutms)) == 1){
-		if(read(fd, &c, 1) == -1){
-			res = -1;
-			break;
-		flushed++;
-		}
-	}		
-	return (res == -1)? res : flushed;
-}
-/*
- * Receive a string from the serial device
- */
-
-static int serial_rx(int fd, char *rxbuf, int rxmaxbytes, unsigned timeoutms, char termchr)
-{
-	char c;
-	int i, j, res;
-
-	if ((!rxmaxbytes) || (rxbuf == NULL)){ 
-		return 0;
-	}
-	memset(rxbuf,0,rxmaxbytes);
-	for(i = 0; i < rxmaxbytes; i++){
-		if(timeoutms){
-			res = serial_rxready(fd, timeoutms);
-			if(res < 0)
-				return -1;
-			if(!res){
-				break;
-			}
-		}
-		j = read(fd,&c,1);
-		if(j == -1){
-			ast_log(LOG_WARNING,"read failed: %s\n", strerror(errno));
-			return -1;
-		}
-		if (j == 0) 
-			return i ;
-		rxbuf[i] = c;
-		if (termchr){
-			rxbuf[i + 1] = 0;
-			if (c == termchr) break;
-		}
-	}					
-	if(i && debug >= 6) {
-		printf("i = %d\n",i);
-		printf("String returned was:\n");
-		for(j = 0; j < i; j++)
-			printf("%02X ", (unsigned char ) rxbuf[j]);
-		printf("\n");
-	}
-	return i;
-}
-
-/*
- * Send a nul-terminated string to the serial device (without RX-flush)
- */
-
-static int serial_txstring(int fd, char *txstring)
-{
-	int txbytes;
-
-	txbytes = strlen(txstring);
-
-	if(debug > 5)
-		ast_log(LOG_NOTICE, "sending: %s\n", txstring);
-
-	if(write(fd, txstring, txbytes) != txbytes){
-		ast_log(LOG_WARNING,"write failed: %s\n", strerror(errno));
-		return -1;
-	}
-	return 0;
-}
-		
-/*
- * Write some bytes to the serial port, then optionally expect a fixed response
- */
-
-static int serial_io(int fd, char *txbuf, char *rxbuf, int txbytes, int rxmaxbytes, unsigned int timeoutms, char termchr)
-{
-	int i;
-
-	if(debug >= 7)
-		ast_log(LOG_NOTICE,"fd = %d\n",fd);
-
-	if ((rxmaxbytes) && (rxbuf != NULL)){ 
-		if((i = serial_rxflush(fd, 10)) == -1)
-			return -1;
-		if(debug >= 7)
-			ast_log(LOG_NOTICE,"%d bytes flushed prior to write\n", i);
-	}
-
-	if(write(fd, txbuf, txbytes) != txbytes){
-		ast_log(LOG_WARNING,"write failed: %s\n", strerror(errno));
-		return -1;
-	}
-
-	return serial_rx(fd, rxbuf, rxmaxbytes, timeoutms, termchr);
-}
-
-/*
- * ***********************************
- * Uchameleon specific routines      *
- * ***********************************
- */
-
-/* Forward Decl's */
-
-static int uchameleon_do_long( struct daq_entry_tag *t, int pin,
-int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2);
-static int matchkeyword(char *string, char **param, char *keywords[]);
-static int explode_string(char *str, char *strp[], int limit, char delim, char quote);
-static void *uchameleon_monitor_thread(void *this);
-static char *strupr(char *str);
-
-
-/*
- * Start the Uchameleon monitor thread
- */
-
-
-
-
-static int uchameleon_thread_start(struct daq_entry_tag *t)
-{
-	int res, tries = 50;
-	pthread_attr_t attr;
-
-
-	ast_mutex_init(&t->lock);
-
-
-	/*
- 	* Start up uchameleon monitor thread
- 	*/
-
-       	pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	res = ast_pthread_create(&t->threadid,&attr,uchameleon_monitor_thread,(void *) t);
-	if(res){
-		ast_log(LOG_WARNING, "Could not start uchameleon monitor thread\n");
-		return -1;
-	}
-
-	ast_mutex_lock(&t->lock);
-	while((!t->active)&&(tries)){
-		ast_mutex_unlock(&t->lock);
-		usleep(100*1000);
-		ast_mutex_lock(&t->lock);
-		tries--;
-	}
-	ast_mutex_unlock(&t->lock);
-
-	if(!tries)
-		return -1;
-
-
-        return 0;
-}
-
-static int uchameleon_connect(struct daq_entry_tag *t)
-{
-	int count;
-	static char *idbuf = "id\n";
-	static char *ledbuf = "led on\n";
-	static char *expect = "Chameleon";
-	char rxbuf[20];
-
-        if((t->fd = serial_open(t->dev, B115200, 0)) == -1){
-               	ast_log(LOG_WARNING, "serial_open on %s failed!\n", t->name);
-                return -1;
-        }
-        if((count = serial_io(t->fd, idbuf, rxbuf, strlen(idbuf), 14, DAQ_RX_TIMEOUT, 0x0a)) < 1){
-              	ast_log(LOG_WARNING, "serial_io on %s failed\n", t->name);
-		close(t->fd);
-		t->fd = -1;
-                return -1;
-        }
-	if(debug >= 3)
-        	ast_log(LOG_NOTICE,"count = %d, rxbuf = %s\n",count,rxbuf);
-	if((count != 13)||(strncmp(expect, rxbuf+4, sizeof(&expect)))){
-		ast_log(LOG_WARNING, "%s is not a uchameleon device\n", t->name);
-		close(t->fd);
-		t->fd = -1;
-		return -1;
-	}
-	/* uchameleon LED on solid once we communicate with it successfully */
-	
-	if(serial_io(t->fd, ledbuf, NULL, strlen(ledbuf), 0, DAQ_RX_TIMEOUT, 0) == -1){
-		ast_log(LOG_WARNING, "Can't set LED on uchameleon device\n");
-		close(t->fd);
-		t->fd= -1;
-		return -1;
-	}
-	return 0;
-}
-
-/*
- * Uchameleon alarm handler
- */
-
-
-static void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
-{
-	char *valuecopy;
-	int i, busy;
-	char *s;
-	char *argv[7];
-	int argc;
-
-
-	if(!(valuecopy = ast_strdup(p->alarmargs))){
-		ast_log(LOG_ERROR,"Out of memory\n");
-		return;
-	}
-	
-	argc = explode_string(valuecopy, argv, 6, ',', 0);
-
-	if(debug >= 3){
-		ast_log(LOG_NOTICE, "Alarm event on device %s, pin %d, state = %d\n", argv[0], p->num, p->value);
-	}
-
-	/*
- 	* Node: argv[3]
- 	* low function: argv[4]
- 	* high function: argv[5]
- 	*
- 	*/
-	i = busy = 0;
-	s = (p->value) ? argv[5]: argv[4];
-	if((argc == 6)&&(s[0] != '-')){
-		for(i = 0; i < nrpts; i++){
-			if(!strcmp(argv[3], rpt_vars[i].name)){
-
-				struct rpt *myrpt = &rpt_vars[i];
-				rpt_mutex_lock(&myrpt->lock);
-				if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(s)){
-					rpt_mutex_unlock(&myrpt->lock);
-					busy=1;
-				}
-				if(!busy){
-					myrpt->macrotimer = MACROTIME;
-					strncat(myrpt->macrobuf,s,MAXMACRO - 1);
-				}
-				rpt_mutex_unlock(&myrpt->lock);
-
-			}
-		}
-	}
-	if(argc != 6){
-		ast_log(LOG_WARNING, "Not enough arguments to process alarm\n"); 
-	}
-	else if(busy){
-		ast_log(LOG_WARNING, "Function decoder busy while processing alarm");
-	}
-	ast_free(valuecopy);
-}
-
-
-
-
-/*
- * Initialize pins
- */
-
-
-
-static int uchameleon_pin_init(struct daq_entry_tag *t)
-{
-	int i;
-	struct ast_config *ourcfg;
-	struct ast_variable *var,*var2;
-
-	/* Pin Initialization */
-
-	ourcfg = ast_config_load("rpt.conf",config_flags);
-
-	if(!ourcfg)
-		return -1;
-
-	var2 = ast_variable_browse(ourcfg, t->name);
-	while(var2){
-		unsigned int pin;
-		int x = 0;
-		static char *pin_keywords[]={"inadc","inp","in","out",NULL};
-		if((var2->name[0] < '0')||(var2->name[0] > '9')){
-			var2 = var2->next;
-			continue;
-		}
-		pin = (unsigned int) atoi(var2->name);
-		i = matchkeyword((char *)var2->value, NULL, pin_keywords);
-		if(debug >= 3)
-			ast_log(LOG_NOTICE, "Pin = %d, Pintype = %d\n", pin, i);
-		if(i && i < 5){
-			uchameleon_do_long(t, pin, DAQ_CMD_PINSET, NULL, &i, NULL);	 /* Set pin type */
-			uchameleon_do_long(t, pin, DAQ_CMD_MONITOR, NULL, &x, NULL); /* Monitor off */
-			if(i == DAQ_PT_OUT){
-				if(debug >= 3)
-					ast_log(LOG_NOTICE,"Set output pin %d low\n", pin); /* Set output pins low */
-				uchameleon_do_long(t, pin, DAQ_CMD_OUT, NULL, &x, NULL);
-			}
-		}
-		else
-			ast_log(LOG_WARNING,"Invalid pin type: %s\n", var2->value);
-		var2 = var2->next;
-	}
-
-	/*
- 	* Alarm initialization
- 	*/
-
-	var = ast_variable_browse(ourcfg,"alarms");
-	while(var){
-		int ignorefirst,pin;
-		char s[64];
-		char *argv[7];
-		struct daq_pin_entry_tag *p;
-
-
-		/* Parse alarm entry */
-
-		ast_copy_string(s,var->value,sizeof(s)-1);
-
-		if(explode_string(s, argv, 6, ',', 0) != 6){
-			ast_log(LOG_WARNING,"Alarm arguments must be 6 for %s\n", var->name);
-			var = var->next;
-			continue;
-		}
-
-		ignorefirst = atoi(argv[2]);
-
-		if(!(pin = atoi(argv[1]))){
-			ast_log(LOG_WARNING,"Pin must be greater than 0 for %s\n",var->name);
-			var = var->next;
-			continue;
-		}
-
-		/* Find the pin entry */
-		p = t->pinhead;
-		while(p){
-			if(p->num == pin)
-				break;
-			p = p->next;
-		}
-		if(!p){
-			ast_log(LOG_WARNING,"Can't find pin %d for device %s\n", pin, argv[0]);
-			var = var->next;
-			continue;
-		}
-
-		if(!strcmp(argv[0], t->name)){
-			strncpy(p->alarmargs, var->value, 64); /* Save the alarm arguments in the pin entry */
-			p->alarmargs[63] = 0;
-			ast_log(LOG_NOTICE,"Adding alarm %s on pin %d\n", var->name, pin);
-			uchameleon_do_long(t, pin, DAQ_CMD_MONITOR, uchameleon_alarm_handler, &ignorefirst, NULL);
-		}
-		var = var->next;
-	}
-
-	ast_config_destroy(ourcfg);
-	time(&t->adcacqtime); /* Start ADC Acquisition */ 
-	return -0;
-}
-
-
-/*
- * Open the serial channel and test for the uchameleon device at the end of the link
- */
-
-static int uchameleon_open(struct daq_entry_tag *t)
-{
-	int res;
-
-
-	if(!t)
-		return -1;
-
-	if(uchameleon_connect(t)){
-		ast_log(LOG_WARNING,"Cannot open device %s", t->name);
-		return -1;
-	}
-
-	res = uchameleon_thread_start(t);
-
-	if(!res)
-		res = uchameleon_pin_init(t);
-
-	return res;
-
-}
-
-/*
- * Close uchameleon
- */
-
-static int uchameleon_close(struct daq_entry_tag *t)
-{
-	int res = 0;
-	char *ledpat="led pattern 253\n";
-	struct daq_pin_entry_tag *p,*pn;
-	struct daq_tx_entry_tag *q,*qn;
-
-	if(!t)
-		return -1;
-
-	ast_mutex_lock(&t->lock);
-
-	if(t->active){
-		res = pthread_kill(t->threadid, 0);
-		if(res)
-		ast_log(LOG_WARNING, "Can't kill monitor thread");
-		ast_mutex_unlock(&t->lock);
-		return -1;
-	}
-
-	if(t->fd > 0)
-		serial_io(t->fd, ledpat, NULL, strlen(ledpat) ,0, 0, 0); /* LED back to flashing */
-
-	/* Free linked lists */
-
-	if(t->pinhead){
-		p = t->pinhead;
-		while(p){
-			pn = p->next;
-			ast_free(p);
-			p = pn;
-		}
-		t->pinhead = NULL;
-	}
-
-
-	if(t->txhead){
-		q = t->txhead;
-		while(q){
-			qn = q->next;
-			ast_free(q);
-			q = qn;
-		}
-		t->txhead = t->txtail = NULL;
-	}
-	
-	if(t->fd > 0){	
-		res = close(t->fd);
-		if(res)
-			ast_log(LOG_WARNING, "Error closing serial port");
-		t->fd = -1;
-	}
-	ast_mutex_unlock(&t->lock);
-	ast_mutex_destroy(&t->lock);
-	return res;
-}
-
-/*
- * Uchameleon generic interface which supports monitor thread
- */
-
-static int uchameleon_do_long( struct daq_entry_tag *t, int pin,
-int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2)
-{	
-	int i,j,x;
-	struct daq_pin_entry_tag *p, *listl, *listp;
-
-	if(!t)
-		return -1;
-
-	ast_mutex_lock(&t->lock);
-
-	if(!t->active){
-		/* Try to restart thread and re-open device */
-		ast_mutex_unlock(&t->lock);
-		uchameleon_close(t);
-		usleep(10*1000);
-		if(uchameleon_open(t)){
-			ast_log(LOG_WARNING,"Could not re-open Uchameleon\n");
-			return -1;
-		}
-		ast_mutex_lock(&t->lock);
-		/* We're back in business! */
-	}
-
-
-	/* Find our pin */
-
-	listp = listl = t->pinhead;
-	while(listp){
-		listl = listp;
-		if(listp->num == pin)
-			break;
-		listp = listp->next;
-	}
-	if(listp){
-		if(cmd == DAQ_CMD_PINSET){
-			if(arg1 && *arg1 && (*arg1 < 19)){
-				while(listp->state){
-					ast_mutex_unlock(&t->lock);
-					usleep(10*1000); /* Wait */
-					ast_mutex_lock(&t->lock);
-				}
-				listp->command = DAQ_CMD_PINSET;
-				listp->pintype = *arg1; /* Pin redefinition */
-				listp->valuemin = 255;
-				listp->valuemax = 0;
-				listp->state = DAQ_PS_START;
-			}
-			else{
-				ast_log(LOG_WARNING,"Invalid pin number for pinset\n");
-			}
-		}
-		else{
-			/* Return ADC value */
-
-			if(cmd == DAQ_CMD_ADC){
-				if(arg2){
-					switch(*((int *) arg2)){
-						case DAQ_SUB_CUR:
-							if(arg1)
-								*arg1 = listp->value;
-							break;
-
-						case DAQ_SUB_STAVG: /* Short term average */
-							x = 0;
-							i = listp->adcnextupdate;
-							for(j = 0 ; j < ADC_HISTORY_DEPTH; j++){
-								if(debug >= 4){
-									ast_log(LOG_NOTICE, "Sample for avg: %d\n",
-									listp->adchistory[i]);
-								}
-								x += listp->adchistory[i];
-								if(++i >= ADC_HISTORY_DEPTH)
-									i = 0;
-							}
-							x /= ADC_HISTORY_DEPTH;
-							if(debug >= 3)
-								ast_log(LOG_NOTICE, "Average: %d\n", x);
-							if(arg1)
-								*arg1 = x;
-							break;
-
-						case DAQ_SUB_STMAX: /* Short term maximum */
-							x = 0;
-							i = listp->adcnextupdate;
-							for(j = 0 ; j < ADC_HISTORY_DEPTH; j++){
-								if(debug >= 4){
-									ast_log(LOG_NOTICE, "Sample for max: %d\n",
-									listp->adchistory[i]);
-								}
-								if(listp->adchistory[i] > x)
-									x = listp->adchistory[i];
-								if(++i >= ADC_HISTORY_DEPTH)
-									i = 0;
-							}
-							if(debug >= 3)
-								ast_log(LOG_NOTICE, "Maximum: %d\n", x);
-							if(arg1)
-								*arg1 = x;
-							break;
-
-						case DAQ_SUB_STMIN: /* Short term minimum */
-							x = 255 ;
-							i = listp->adcnextupdate;
-							if(i >= ADC_HISTORY_DEPTH)
-								i = 0;
-							for(j = 0 ; j < ADC_HISTORY_DEPTH; j++){
-								if(debug >= 4){
-									ast_log(LOG_NOTICE, "Sample for min: %d\n",
-									listp->adchistory[i]);
-								}
-								if(listp->adchistory[i] < x)
-									x = listp->adchistory[i];
-								if(++i >= ADC_HISTORY_DEPTH)
-									i = 0;
-								}
-							if(debug >= 3)
-								ast_log(LOG_NOTICE, "Minimum: %d\n", x);
-							if(arg1)
-								*arg1 = x;
-							break;
-
-						case DAQ_SUB_MAX: /* Max since start or reset */
-							if(arg1)
-								*arg1 = listp->valuemax;
-							break;
-
-						case DAQ_SUB_MIN: /* Min since start or reset */
-							if(arg1)
-								*arg1 = listp->valuemin;
-							break;
-
-						default:
-							ast_mutex_unlock(&t->lock);
-							return -1;
-					}
-				}
-				else{
-					if(arg1)
-						*arg1 = listp->value;
-				}
-				ast_mutex_unlock(&t->lock);	
-				return 0;
-			}
-
-			/* Don't deadlock if monitor has been previously issued for a pin */
-
-			if(listp->state == DAQ_PS_IN_MONITOR){
-				if((cmd != DAQ_CMD_MONITOR) || (exec)){
-					ast_log(LOG_WARNING,
-						"Monitor was previously set on pin %d, command ignored\n",listp->num);
-					ast_mutex_unlock(&t->lock);
-					return -1;
-				}
-			}
-
-			/* Rest of commands are processed here */
-
-			while(listp->state){
-				ast_mutex_unlock(&t->lock);
-				usleep(10*1000); /* Wait */
-				ast_mutex_lock(&t->lock);
-			}
-
-			if(cmd == DAQ_CMD_MONITOR){
-				if(arg1)
-					listp->ignorefirstalarm = *arg1;
-				listp->monexec = exec;
-			}
-
-			listp->command = cmd;
-
-			if(cmd == DAQ_CMD_OUT){
-				if(arg1){
-					listp->value = *arg1;
-				}
-				else{
-					ast_mutex_unlock(&t->lock);
-					return 0;
-				}
-			}
-			listp->state = DAQ_PS_START;
-			if((cmd == DAQ_CMD_OUT)||(cmd == DAQ_CMD_MONITOR)){
-				ast_mutex_unlock(&t->lock);
-				return 0;
-			}
-
- 			while(listp->state){
-				ast_mutex_unlock(&t->lock);
-				usleep(10*1000); /* Wait */
-				ast_mutex_lock(&t->lock);
-			}
-			*arg1 = listp->value;
-			ast_mutex_unlock(&t->lock);
-			return 0;
-		}
-	}
-	else{ /* Pin not in list */
-		if(cmd == DAQ_CMD_PINSET){
-			if(arg1 && *arg1 && (*arg1 < 19)){
-				/* New pin definition */
-				if(!(p = (struct daq_pin_entry_tag *) ast_malloc(sizeof(struct daq_pin_entry_tag)))){
-					ast_log(LOG_ERROR,"Out of memory");
-					ast_mutex_unlock(&t->lock);
-					return -1;
-				}
-				memset(p, 0, sizeof(struct daq_pin_entry_tag));
-				p->pintype = *arg1;
-				p->command = DAQ_CMD_PINSET;
-				p->num = pin;
-				if(!listl){
-					t->pinhead = p;
-				}
-				else{
-					listl->next = p; 
-				}
-				p->state = DAQ_PS_START;
-				ast_mutex_unlock(&t->lock);
-				return 0;
-			}
-			else{
-				ast_log(LOG_WARNING,"Invalid pin number for pinset\n");
-			}
-		}
-		else{
-			ast_log(LOG_WARNING,"Invalid pin number for pin I/O command\n");
-		}
-	}
-	ast_mutex_unlock(&t->lock);
-	return -1;
-}
- 
-/*
- * Reset a minimum or maximum reading
- */
-
-static int uchameleon_reset_minmax(struct daq_entry_tag *t, int pin, int minmax)
-{
-	struct daq_pin_entry_tag *p;
-
-	/* Find the pin */
-	p = t->pinhead;
-	while(p){
-		if(p->num == pin)
-			break;
-		p = p->next;
-	}
-	if(!p)
-		return -1;
-	ast_mutex_lock(&t->lock);
-	if(minmax){
-		ast_log(LOG_NOTICE, "Resetting maximum on device %s, pin %d\n",t->name, pin);
-		p->valuemax = 0;
-	}
-	else{
-		p->valuemin = 255;
-		ast_log(LOG_NOTICE, "Resetting minimum on device %s, pin %d\n",t->name, pin);
-	}
-	ast_mutex_unlock(&t->lock);
-	return 0;
-}
-
-
-
-
-/*
- * Queue up a tx command (used exclusively by uchameleon_monitor() )
- */
-
-static void uchameleon_queue_tx(struct daq_entry_tag *t, char *txbuff)
-{
-	struct daq_tx_entry_tag *q;
-
-	if(!t)
-		return;
-		
-	if(!(q = (struct daq_tx_entry_tag *) ast_malloc(sizeof(struct daq_tx_entry_tag)))){
-		ast_log(LOG_WARNING, "Out of memory\n");
-		return;
-	}
-
-	memset(q, 0, sizeof(struct daq_tx_entry_tag));
-
-	strncpy(q->txbuff, txbuff, 32);
-	q->txbuff[31] = 0;
-
-	if(t->txtail){
-		t->txtail->next = q;
-		q->prev = t->txtail;
-		t->txtail = q;
-	}
-	else
-		t->txhead = t->txtail = q;
-	return;
-}
-
-
-/*
- * Monitor thread for Uchameleon devices
- *
- * started by uchameleon_open() and shutdown by uchameleon_close()
- *
- */
-static void *uchameleon_monitor_thread(void *this)
-{
-	int pin = 0, sample = 0;
-	int i,res,valid,adc_acquire;
-	time_t now;
-	char rxbuff[32];
-	char txbuff[32];
-	char *rxargs[4];
-	struct daq_entry_tag *t = (struct daq_entry_tag *) this;
-	struct daq_pin_entry_tag *p;
-	struct daq_tx_entry_tag *q;
-
-
-
-	if(debug)
-		ast_log(LOG_NOTICE, "DAQ: thread started\n");
-
-	ast_mutex_lock(&t->lock);
-	t->active = 1;
-	ast_mutex_unlock(&t->lock);
-
-	for(;;){
-		adc_acquire = 0;
-		 /* If receive data */
-		res = serial_rx(t->fd, rxbuff, sizeof(rxbuff), DAQ_RX_TIMEOUT, 0x0a);
-		if(res == -1){
-			ast_log(LOG_ERROR,"serial_rx failed\n");
-			close(t->fd);
-			ast_mutex_lock(&t->lock);
-			t->fd = -1;
-			t->active = 0;
-			ast_mutex_unlock(&t->lock);
-			return this; /* Now, we die */
-		}
-		if(res){
-			if(debug >= 5) 
-				ast_log(LOG_NOTICE, "Received: %s\n", rxbuff);
-			valid = 0;
-			/* Parse return string */
-			i = explode_string(rxbuff, rxargs, 3, ' ', 0);
-			if(i == 3){
-				if(!strcmp(rxargs[0],"pin")){
-					valid = 1;
-					pin = atoi(rxargs[1]);
-					sample = atoi(rxargs[2]);
-				}
-				if(!strcmp(rxargs[0],"adc")){
-					valid = 2;
-					pin = atoi(rxargs[1]);
-					sample = atoi(rxargs[2]);
-				}
-			}
-			if(valid){
-				/* Update the correct pin list entry */
-				ast_mutex_lock(&t->lock);
-				p = t->pinhead;
-				while(p){
-					if(p->num == pin){
-						if((valid == 1)&&((p->pintype == DAQ_PT_IN)||
-							(p->pintype == DAQ_PT_INP)||(p->pintype == DAQ_PT_OUT))){
-							p->value = sample ? 1 : 0;
-							if(debug >= 3)
-								ast_log(LOG_NOTICE,"Input pin %d is a %d\n",
-									p->num, p->value);
-							/* Exec monitor fun if state is monitor */
-
-							if(p->state == DAQ_PS_IN_MONITOR){
-								if(!p->alarmmask && !p->ignorefirstalarm && p->monexec){
-									(*p->monexec)(p);
-								}
-								p->ignorefirstalarm = 0;
-							}
-							else
-								p->state = DAQ_PS_IDLE;
-						}
-						if((valid == 2)&&(p->pintype == DAQ_PT_INADC)){
-							p->value = sample;
-							if(sample > p->valuemax)
-								p->valuemax = sample;
-							if(sample < p->valuemin)
-								p->valuemin = sample;
-							p->adchistory[p->adcnextupdate++] = sample;
-							if(p->adcnextupdate >= ADC_HISTORY_DEPTH)
-								p->adcnextupdate = 0;
-							p->state = DAQ_PS_IDLE;
-						}
-						break;
-					}
-					p = p->next;
-				}	 
-				ast_mutex_unlock(&t->lock);
-			}
-		}
-		
-
-		if(time(&now) >= t->adcacqtime){
-			t->adcacqtime = now + DAQ_ADC_ACQINT;
-			if(debug >= 4)
-				ast_log(LOG_NOTICE,"Acquiring analog data\n");
-			adc_acquire = 1;
-		}
-
-		/* Go through the pin linked list looking for new work */
-		ast_mutex_lock(&t->lock);		
-		p = t->pinhead;
-		while(p){
-			/* Time to acquire all ADC channels ? */
-			if((adc_acquire) && (p->pintype == DAQ_PT_INADC)){
-				p->state = DAQ_PS_START;
-				p->command = DAQ_CMD_ADC;
-			}
-			if(p->state == DAQ_PS_START){
-				p->state = DAQ_PS_BUSY; /* Assume we are busy */
-				switch(p->command){
-					case DAQ_CMD_OUT:
-						if(p->pintype == DAQ_PT_OUT){
-							snprintf(txbuff,sizeof(txbuff),"pin %d %s\n", p->num, (p->value) ?
-							"hi" : "lo");
-							if(debug >= 3)
-								ast_log(LOG_NOTICE, "DAQ_CMD_OUT: %s\n", txbuff);
-							uchameleon_queue_tx(t, txbuff);
-							p->state = DAQ_PS_IDLE; /* TX is considered done */ 
-						}
-						else{
-							ast_log(LOG_WARNING,"Wrong pin type for out command\n");
-							p->state = DAQ_PS_IDLE;
-						}
-						break;
-
-					case DAQ_CMD_MONITOR:
-						snprintf(txbuff, sizeof(txbuff), "pin %d monitor %s\n", 
-						p->num, p->monexec ? "on" : "off");
-						uchameleon_queue_tx(t, txbuff);
-						if(!p->monexec)
-							p->state = DAQ_PS_IDLE; /* Restore to idle channel */
-						else{
-							p->state = DAQ_PS_IN_MONITOR;
-						}
-						break;
-
-					case DAQ_CMD_IN:
-						if((p->pintype == DAQ_PT_IN)||
-							(p->pintype == DAQ_PT_INP)||(p->pintype == DAQ_PT_OUT)){
-							snprintf(txbuff,sizeof(txbuff),"pin %d state\n", p->num);
-							uchameleon_queue_tx(t, txbuff);
-						}
-						else{
-							ast_log(LOG_WARNING,"Wrong pin type for in or inp command\n");
-							p->state = DAQ_PS_IDLE;
-						}
-						break;
-					
-					case DAQ_CMD_ADC:
-						if(p->pintype == DAQ_PT_INADC){
-							snprintf(txbuff,sizeof(txbuff),"adc %d\n", p->num);
-							uchameleon_queue_tx(t, txbuff);
-						}
-						else{
-							ast_log(LOG_WARNING,"Wrong pin type for adc command\n");
-							p->state = DAQ_PS_IDLE;
-						}
-						break;
-
-					case DAQ_CMD_PINSET:
-						if((!p->num)||(p->num > 18)){
-							ast_log(LOG_WARNING,"Invalid pin number %d\n", p->num);
-							p->state = DAQ_PS_IDLE;
-						}
-						switch(p->pintype){
-							case DAQ_PT_IN:
-							case DAQ_PT_INADC:
-							case DAQ_PT_INP:
-								if((p->pintype == DAQ_PT_INADC) && (p->num > 8)){
-									ast_log(LOG_WARNING,
-									"Invalid ADC pin number %d\n", p->num);
-									p->state = DAQ_PS_IDLE;
-									break;
-								}					
-								if((p->pintype == DAQ_PT_INP) && (p->num < 9)){
-									ast_log(LOG_WARNING,
-									"Invalid INP pin number %d\n", p->num);
-									p->state = DAQ_PS_IDLE;
-									break;
-								}
-								snprintf(txbuff, sizeof(txbuff), "pin %d in\n", p->num);
-								uchameleon_queue_tx(t, txbuff);
-								if(p->num > 8){
-									snprintf(txbuff, sizeof(txbuff),
-									"pin %d pullup %d\n", p->num,
-									(p->pintype == DAQ_PT_INP) ? 1 : 0);
-									uchameleon_queue_tx(t, txbuff);
-								}
-								p->valuemin = 255;
-								p->valuemax = 0;
-								p->state = DAQ_PS_IDLE;
-								break;
-
-							case DAQ_PT_OUT:
-                        					snprintf(txbuff, sizeof(txbuff), "pin %d out\n", p->num);
-								uchameleon_queue_tx(t, txbuff);
-								p->state = DAQ_PS_IDLE;
-								break;
-
-							default:
-								break;
-						}
-						break;
-
-					default:
-						ast_log(LOG_WARNING,"Unrecognized uchameleon command\n");
-						p->state = DAQ_PS_IDLE;
-						break;
-				} /* switch */
-			} /* if */
-		p = p->next;
-		} /* while */
-		
-		/* Transmit queued commands */
-		while(t->txhead){
-			q = t->txhead;
-			strncpy(txbuff,q->txbuff,sizeof(txbuff));
-			txbuff[sizeof(txbuff)-1] = 0;
-			t->txhead = q->next;
-			if(t->txhead)
-				t->txhead->prev = NULL;
-			else
-				t->txtail = NULL;
-			ast_free(q);
-			ast_mutex_unlock(&t->lock);
-			if(serial_txstring(t->fd, txbuff) == -1){
-				close(t->fd);
-				ast_mutex_lock(&t->lock);
-				t->active= 0;
-				t->fd = -1;
-				ast_mutex_unlock(&t->lock);
-				ast_log(LOG_ERROR,"Tx failed, terminating monitor thread\n");
-				return this; /* Now, we die */
-			}
-				
-			ast_mutex_lock(&t->lock);
-		}/* while */
-		ast_mutex_unlock(&t->lock);
-	} /* for(;;) */
-	return this;
-}
-
+};
 
 /*
  * **************************
@@ -2983,7 +1573,7 @@ done:
 *  Playback a meter reading
 */
 
-static int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 
 	if (myrpt->remote)
@@ -3003,7 +1593,7 @@ static int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int co
 *  Set or reset a USER Output bit
 */
 
-static int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 
 	if (myrpt->remote)
@@ -3021,7 +1611,7 @@ static int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int 
 *  Execute shell command
 */
 
-static int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	char *cp;
 
@@ -3983,97 +2573,6 @@ static char d_xlat[] = {0,0,0,0,0,0,0,'S',0,'Z'};
 	return overlay;
 }
 
-static char *strupr(char *instr)
-{
-char *str = instr;
-        while (*str)
-           {
-                *str = toupper(*str);
-                str++;
-           }
-        return(instr);
-}
-
-/*
-* Break up a delimited string into a table of substrings
-*
-* str - delimited string ( will be modified )
-* strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
-* limit- maximum number of substrings to process
-* delim- user specified delimeter
-* quote- user specified quote for escaping a substring. Set to zero to escape nothing.
-*
-* Note: This modifies the string str, be suer to save an intact copy if you need it later.
-*
-* Returns number of substrings found.
-*/
-	
-
-static int explode_string(char *str, char *strp[], int limit, char delim, char quote)
-{
-int     i,l,inquo;
-
-        inquo = 0;
-        i = 0;
-        strp[i++] = str;
-        if (!*str)
-           {
-                strp[0] = 0;
-                return(0);
-           }
-        for(l = 0; *str && (l < limit) ; str++)
-        {
-		if(quote)
-		{
-                	if (*str == quote)
-                   	{	
-                        	if (inquo)
-                           	{
-                                	*str = 0;
-                                	inquo = 0;
-                           	}
-                        	else
-                           	{
-                                	strp[i - 1] = str + 1;
-                                	inquo = 1;
-                           	}
-			}
-		}	
-                if ((*str == delim) && (!inquo))
-                {
-                        *str = 0;
-			l++;
-                        strp[i++] = str + 1;
-                }
-        }
-        strp[i] = 0;
-        return(i);
-
-}
-/*
-* Break up a delimited string into a table of substrings
-*
-* str - delimited string ( will be modified )
-* strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
-* limit- maximum number of substrings to process
-*/
-	
-
-
-static int finddelim(char *str, char *strp[], int limit)
-{
-	return explode_string(str, strp, limit, DELIMCHR, QUOTECHR);
-}
-
-static char *string_toupper(char *str)
-{
-int	i;
-
-	for(i = 0; str[i]; i++)
-		if (islower(str[i])) str[i] = toupper(str[i]);
-	return str;
-}
-
 static int elink_cmd(char *cmd, char *outstr, int outlen)
 {
 FILE	*tf;
@@ -4855,84 +3354,6 @@ static struct ast_config *ourcfg;
 	ast_mutex_unlock(&nodelookuplock);
 	ast_free(efil);
 	return(val);
-}
-
-/*
-* Match a keyword in a list, and return index of string plus 1 if there was a match,* else return 0.
-* If param is passed in non-null, then it will be set to the first character past the match
-*/
-
-static int matchkeyword(char *string, char **param, char *keywords[])
-{
-int	i,ls;
-	for( i = 0 ; keywords[i] ; i++){
-		ls = strlen(keywords[i]);
-		if(!ls){
-			if(param)
-				*param = NULL;
-			return 0;
-		}
-		if(!strncmp(string, keywords[i], ls)){
-			if(param)
-				*param = string + ls;
-			return i + 1; 
-		}
-	}
-	if(param)
-		*param = NULL;
-	return 0;
-}
-
-/*
-* Skip characters in string which are in charlist, and return a pointer to the
-* first non-matching character
-*/
-
-static char *skipchars(char *string, char *charlist)
-{
-int i;	
-	while(*string){
-		for(i = 0; charlist[i] ; i++){
-			if(*string == charlist[i]){
-				string++;
-				break;
-			}
-		}
-		if(!charlist[i])
-			return string;
-	}
-	return string;
-}	
-					
-
-
-static int myatoi(char *str)
-{
-int	ret;
-
-	if (str == NULL) return -1;
-	/* leave this %i alone, non-base-10 input is useful here */
-	if (sscanf(str,"%i",&ret) != 1) return -1;
-	return ret;
-}
-
-static int mycompar(const void *a, const void *b)
-{
-char	**x = (char **) a;
-char	**y = (char **) b;
-int	xoff,yoff;
-
-	if ((**x < '0') || (**x > '9')) xoff = 1; else xoff = 0;
-	if ((**y < '0') || (**y > '9')) yoff = 1; else yoff = 0;
-	return(strcmp((*x) + xoff,(*y) + yoff));
-}
-
-static int topcompar(const void *a, const void *b)
-{
-struct rpt_topkey *x = (struct rpt_topkey *) a;
-struct rpt_topkey *y = (struct rpt_topkey *) b;
-
-	return(x->timesince - y->timesince);
 }
 
 #ifdef	__RPT_NOTCH
@@ -9793,7 +8214,7 @@ static void send_tele_link(struct rpt *myrpt,char *cmd);
  *  More repeater telemetry routines.
  */
  
-static void rpt_telemetry(struct rpt *myrpt,int mode, void *data)
+void rpt_telemetry(struct rpt *myrpt,int mode, void *data)
 {
 struct rpt_tele *tele;
 struct rpt_link *mylink = NULL;
@@ -10848,7 +9269,7 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 * Internet linking function 
 */
 
-static int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
+int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
 {
 
 	char *s1,*s2,tmp[300];
@@ -11215,7 +9636,7 @@ static int function_ilink(struct rpt *myrpt, char *param, char *digits, int comm
 * Autopatch up
 */
 
-static int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	pthread_attr_t attr;
 	int i, index, paramlength,nostar = 0;
@@ -11334,7 +9755,7 @@ static int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, 
 * Autopatch down
 */
 
-static int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
 		return DC_ERROR;
@@ -11363,7 +9784,7 @@ static int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, 
 * Status
 */
 
-static int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	struct rpt_tele *telem;
 
@@ -11444,7 +9865,7 @@ static int function_status(struct rpt *myrpt, char *param, char *digitbuf, int c
 /*
 *  Macro-oni (without Salami)
 */
-static int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 char	*val;
 int	i;
@@ -11490,7 +9911,7 @@ int	i;
 *  Playback a recording globally
 */
 
-static int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 
 	if (myrpt->remote)
@@ -11513,7 +9934,7 @@ static int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int
  * *  Playback a recording locally
  * */
 
-static int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 
         if (myrpt->remote)
@@ -11535,7 +9956,7 @@ static int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, in
 * COP - Control operator
 */
 
-static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	char string[50],fname[50];
 	char paramcopy[500];
@@ -13845,7 +12266,7 @@ int	i,j;
 	return(-1);
 }		
 
-static int setkenwood(struct rpt *myrpt)
+int setkenwood(struct rpt *myrpt)
 {
 char rxstr[RAD_SERIAL_BUFLEN],txstr[RAD_SERIAL_BUFLEN],freq[20];
 char mhz[MAXREMSTR],offset[20],band,decimals[MAXREMSTR],band1,band2;
@@ -13891,7 +12312,7 @@ int powers[] = {2,1,0};
 	return 0;
 }
 
-static int set_tmd700(struct rpt *myrpt)
+int set_tmd700(struct rpt *myrpt)
 {
 char rxstr[RAD_SERIAL_BUFLEN],txstr[RAD_SERIAL_BUFLEN],freq[20];
 char mhz[MAXREMSTR],offset[20],decimals[MAXREMSTR];
@@ -13940,7 +12361,7 @@ int band;
 	return 0;
 }
 
-static int set_tm271(struct rpt *myrpt)
+int set_tm271(struct rpt *myrpt)
 {
 char rxstr[RAD_SERIAL_BUFLEN],txstr[RAD_SERIAL_BUFLEN],freq[20];
 char mhz[MAXREMSTR],decimals[MAXREMSTR];
@@ -13971,7 +12392,7 @@ int powers[] = {2,1,0};
 	return 0;
 }
 
-static int setrbi(struct rpt *myrpt)
+int setrbi(struct rpt *myrpt)
 {
 char tmp[MAXREMSTR] = "",*s;
 unsigned char rbicmd[5];
@@ -14161,7 +12582,7 @@ double txfreq;
 	return 0;
 }
 
-static int setxpmr(struct rpt *myrpt, int dotx)
+int setxpmr(struct rpt *myrpt, int dotx)
 {
 	char rigstr[200];
 	int rxpl,txpl;
@@ -14207,7 +12628,7 @@ static int setxpmr(struct rpt *myrpt, int dotx)
 }
 
 
-static int setrbi_check(struct rpt *myrpt)
+int setrbi_check(struct rpt *myrpt)
 {
 char tmp[MAXREMSTR] = "",*s;
 int	band,txpl;
@@ -14262,7 +12683,7 @@ int	band,txpl;
 	return 0;
 }
 
-static int setrtx_check(struct rpt *myrpt)
+int setrtx_check(struct rpt *myrpt)
 {
 char tmp[MAXREMSTR] = "",*s;
 int	band,txpl,rxpl;
@@ -14639,7 +13060,7 @@ static int set_freq_ft897(struct rpt *myrpt, char *newfreq)
 
 /* ft-897 simple commands */
 
-static int simple_command_ft897(struct rpt *myrpt, char command)
+int simple_command_ft897(struct rpt *myrpt, char command)
 {
 	unsigned char cmdstr[5];
 	
@@ -14710,7 +13131,7 @@ static int set_offset_ft897(struct rpt *myrpt, char offset)
 
 /* ft-897 mode */
 
-static int set_mode_ft897(struct rpt *myrpt, char newmode)
+int set_mode_ft897(struct rpt *myrpt, char newmode)
 {
 	unsigned char cmdstr[5];
 	
@@ -14801,7 +13222,7 @@ static int set_ctcss_freq_ft897(struct rpt *myrpt, char *txtone, char *rxtone)
 
 
 
-static int set_ft897(struct rpt *myrpt)
+int set_ft897(struct rpt *myrpt)
 {
 	int res;
 	
@@ -15038,7 +13459,7 @@ static int set_freq_ft100(struct rpt *myrpt, char *newfreq)
 
 /* ft-897 simple commands */
 
-static int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1)
+int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1)
 {
 	unsigned char cmdstr[5];
 	
@@ -15079,7 +13500,7 @@ static int set_offset_ft100(struct rpt *myrpt, char offset)
 
 /* ft-897 mode */
 
-static int set_mode_ft100(struct rpt *myrpt, char newmode)
+int set_mode_ft100(struct rpt *myrpt, char newmode)
 {
 	unsigned char p1;
 	
@@ -15133,7 +13554,7 @@ static int set_ctcss_freq_ft100(struct rpt *myrpt, char *txtone, char *rxtone)
 	return simple_command_ft100(myrpt,0x90,p1);
 }	
 
-static int set_ft100(struct rpt *myrpt)
+int set_ft100(struct rpt *myrpt)
 {
 	int res;
 	
@@ -15426,7 +13847,7 @@ static int set_ctcss_freq_ft950(struct rpt *myrpt, char *txtone, char *rxtone)
 
 
 
-static int set_ft950(struct rpt *myrpt)
+int set_ft950(struct rpt *myrpt)
 {
 	int res;
 	char *cmdstr;
@@ -15942,7 +14363,7 @@ static int set_offset_ic706(struct rpt *myrpt, char offset)
 
 /* ic-706 mode */
 
-static int set_mode_ic706(struct rpt *myrpt, char newmode)
+int set_mode_ic706(struct rpt *myrpt, char newmode)
 {
 	unsigned char c;
 	
@@ -16097,7 +14518,7 @@ static int select_mem_ic706(struct rpt *myrpt, int slot)
 	return(civ_cmd(myrpt,cmdstr,8));
 }
 
-static int set_ic706(struct rpt *myrpt)
+int set_ic706(struct rpt *myrpt)
 {
 	int res = 0,i;
 	
@@ -16408,7 +14829,7 @@ static int set_ctcss_freq_xcat(struct rpt *myrpt, char *txtone, char *rxtone)
 	return(civ_cmd(myrpt,cmdstr,9));
 }	
 
-static int set_xcat(struct rpt *myrpt)
+int set_xcat(struct rpt *myrpt)
 {
 	int res = 0;
 	
@@ -16447,7 +14868,7 @@ static int set_xcat(struct rpt *myrpt)
 /*
 * Dispatch to correct I/O handler 
 */
-static int setrem(struct rpt *myrpt)
+int setrem(struct rpt *myrpt)
 {
 char	str[300];
 char	*offsets[] = {"SIMPLEX","MINUS","PLUS"};
@@ -16783,7 +15204,7 @@ static void stop_scan(struct rpt *myrpt)
 */
 
 
-static int service_scan(struct rpt *myrpt)
+int service_scan(struct rpt *myrpt)
 {
 	int res, interval;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], k10=0i, k100=0;
@@ -16862,7 +15283,7 @@ static int get_mem_set(struct rpt *myrpt, char *digitbuf)
 	steer the radio selected channel to either one programmed into the radio
 	or if the radio is VFO agile, to an rpt.conf memory location.
 */
-static int channel_steer(struct rpt *myrpt, char *data)
+int channel_steer(struct rpt *myrpt, char *data)
 {
 	int res=0;
 
@@ -16891,7 +15312,7 @@ static int channel_steer(struct rpt *myrpt, char *data)
 }
 /*
 */
-static int channel_revert(struct rpt *myrpt)
+int channel_revert(struct rpt *myrpt)
 {
 	int res=0;
 	if(debug)ast_log(LOG_NOTICE,"remoterig=%s, nowchan=%02d, waschan=%02d\n",myrpt->remoterig,myrpt->nowchan,myrpt->waschan);
@@ -16911,7 +15332,7 @@ static int channel_revert(struct rpt *myrpt)
 * Remote base function
 */
 
-static int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	char *s,*s1,*s2;
 	int i,j,p,r,ht,k,l,ls2,m,d,offset,offsave, modesave, defmode;
@@ -23634,7 +22055,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	return res;
 }
 
-static void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
+void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
 {
 	manager_event(EVENT_FLAG_CALL, event,
 		"Node: %s\r\n"
@@ -24540,7 +22961,7 @@ static struct ast_generator mdcgen = {
 	generate: mdcgen_generator,
 };
 
-static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
+int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
 {
 	struct mdcparams p;
 
@@ -24555,7 +22976,7 @@ static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, 
 	return 0;
 }
 
-static int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
+int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
 {
 
 int	res;
@@ -24708,7 +23129,7 @@ static int load_module(void)
 	return res;
 }
 
-static int reload(void)
+int reload(void)
 {
 int	i,n;
 struct ast_config *cfg;
