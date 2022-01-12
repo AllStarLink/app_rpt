@@ -511,7 +511,6 @@ enum{DAQ_TYPE_UCHAMELEON};
 #define	DEFAULT_TLB_LINK_MODE_DYNAMIC 1
 
 #include "asterisk.h"
-#include "../astver.h"
 
 #define	START_DELAY 2
 
@@ -538,6 +537,9 @@ enum{DAQ_TYPE_UCHAMELEON};
 #include <fnmatch.h>
 #include <curl/curl.h>
 
+#include <dahdi/user.h>
+#include <dahdi/tonezone.h> /* use tone_zone_set_zone */
+
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
@@ -559,17 +561,19 @@ enum{DAQ_TYPE_UCHAMELEON};
 #include "asterisk/astdb.h"
 #include "asterisk/app.h"
 #include "asterisk/indications.h"
+#include "asterisk/format.h"
+#include "asterisk/format_compatibility.h"
 #include <termios.h>
 
 struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 
 /* Un-comment the following to include support decoding of MDC-1200 digital tone
    signalling protocol (using KA6SQG's GPL'ed implementation) */
-#include "../allstar/mdc_decode.c"
+#include "app_rpt/mdc_decode.c"
 
 /* Un-comment the following to include support encoding of MDC-1200 digital tone
    signalling protocol (using KA6SQG's GPL'ed implementation) */
-#include "../allstar/mdc_encode.c"
+#include "app_rpt/mdc_encode.c"
 
 /* Un-comment the following to include support for notch filters in the
    rx audio stream (using Tony Fisher's mknotch (mkfilter) implementation) */
@@ -587,7 +591,7 @@ struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 struct mdcgen_pvt
 {
 	mdc_encoder_t *mdc;
-	int origwfmt;
+	struct ast_format *origwfmt;
 	struct ast_frame f;
 	char buf[(MDCGEN_BUFSIZE * 2) + AST_FRIENDLY_OFFSET];
 	unsigned char cbuf[MDCGEN_BUFSIZE];
@@ -1769,27 +1773,37 @@ static void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 struct ast_channel *dest,*w,*cs[2];
 struct ast_frame *f;
 int	ms;
+struct ast_format_cap *cap;
 
-	dest = ast_request("IAX2", AST_FORMAT_SLINEAR, dialstr ,NULL);
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		return;
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+
+	dest = ast_request("IAX2", cap, NULL, NULL, dialstr ,NULL);
 	if (!dest)
 	{
 		if (ast_safe_sleep(chan,150) == -1) return;
-		dest = ast_request("IAX2", AST_FORMAT_SLINEAR, dialstr ,NULL);
+		dest = ast_request("IAX2", cap, NULL, NULL, dialstr ,NULL);
 		if (!dest)
 		{
 			ast_log(LOG_ERROR,"Can not create channel for rpt_forward to IAX2/%s\n",dialstr);
 			return;
 		}
 	}
-	ast_set_read_format(chan, AST_FORMAT_SLINEAR);
-	ast_set_write_format(chan, AST_FORMAT_SLINEAR);
-	ast_set_read_format(dest, AST_FORMAT_SLINEAR);
-	ast_set_write_format(dest, AST_FORMAT_SLINEAR);
+	ast_set_read_format(chan, ast_format_slin);
+	ast_set_write_format(chan, ast_format_slin);
+	ast_set_read_format(dest, ast_format_slin);
+	ast_set_write_format(dest, ast_format_slin);
+	ao2_ref(cap, -1);
+
 	if (option_verbose > 2)
-		ast_verbose(VERBOSE_PREFIX_3 "rpt forwarding call from %s to %s on %s\n",
-			nodefrom,dialstr,dest->name);
-	ast_set_callerid(dest,nodefrom,chan->cid.cid_name,nodefrom);
-        ast_call(dest,dialstr,999); 
+		ast_verb(3, "rpt forwarding call from %s to %s on %s\n", nodefrom, dialstr, ast_channel_name(dest));
+	ast_set_callerid(dest,nodefrom,ast_channel_caller(chan)->id.name.str,nodefrom);
+	ast_call(dest,dialstr,999); 
 	cs[0] = chan;
 	cs[1] = dest;
 	for(;;)
@@ -1807,7 +1821,7 @@ int	ms;
 			f = ast_read(chan);
 			if (!f) break;
 			if ((f->frametype == AST_FRAME_CONTROL) &&
-			    (f->subclass == AST_CONTROL_HANGUP))
+			    (f->subclass.integer == AST_CONTROL_HANGUP))
 			{
 				ast_frfree(f);
 				break;
@@ -1820,7 +1834,7 @@ int	ms;
 			f = ast_read(dest);
 			if (!f) break;
 			if ((f->frametype == AST_FRAME_CONTROL) &&
-			    (f->subclass == AST_CONTROL_HANGUP))
+			    (f->subclass.integer == AST_CONTROL_HANGUP))
 			{
 				ast_frfree(f);
 				break;
@@ -1840,26 +1854,26 @@ int	ms;
 */
 
 /* Debug mode */
-static int rpt_do_debug(int fd, int argc, char *argv[]);
-static int rpt_do_dump(int fd, int argc, char *argv[]);
-static int rpt_do_stats(int fd, int argc, char *argv[]);
-static int rpt_do_lstats(int fd, int argc, char *argv[]);
-static int rpt_do_nodes(int fd, int argc, char *argv[]);
-static int rpt_do_xnode(int fd, int argc, char *argv[]);
-static int rpt_do_local_nodes(int fd, int argc, char *argv[]);
-static int rpt_do_reload(int fd, int argc, char *argv[]);
-static int rpt_do_restart(int fd, int argc, char *argv[]);
-static int rpt_do_playback(int fd, int argc, char *argv[]);
-static int rpt_do_localplay(int fd, int argc, char *argv[]);
-static int rpt_do_sendall(int fd, int argc, char *argv[]);
-static int rpt_do_sendtext(int fd, int argc, char *argv[]);
-static int rpt_do_fun(int fd, int argc, char *argv[]);
-static int rpt_do_fun1(int fd, int argc, char *argv[]);
-static int rpt_do_cmd(int fd, int argc, char *argv[]);
-static int rpt_do_setvar(int fd, int argc, char *argv[]);
-static int rpt_do_showvars(int fd, int argc, char *argv[]);
-static int rpt_do_page(int fd, int argc, char *argv[]);
-static int rpt_do_lookup(int fd, int argc, char *argv[]);
+static int rpt_do_debug(int fd, int argc, const char * const *argv);
+static int rpt_do_dump(int fd, int argc, const char * const *argv);
+static int rpt_do_stats(int fd, int argc, const char * const *argv);
+static int rpt_do_lstats(int fd, int argc, const char * const *argv);
+static int rpt_do_nodes(int fd, int argc, const char * const *argv);
+static int rpt_do_xnode(int fd, int argc, const char * const *argv);
+static int rpt_do_local_nodes(int fd, int argc, const char * const *argv);
+static int rpt_do_reload(int fd, int argc, const char * const *argv);
+static int rpt_do_restart(int fd, int argc, const char * const *argv);
+static int rpt_do_playback(int fd, int argc, const char * const *argv);
+static int rpt_do_localplay(int fd, int argc, const char * const *argv);
+static int rpt_do_sendall(int fd, int argc, const char * const *argv);
+static int rpt_do_sendtext(int fd, int argc, const char * const *argv);
+static int rpt_do_fun(int fd, int argc, const char * const *argv);
+static int rpt_do_fun1(int fd, int argc, const char * const *argv);
+static int rpt_do_cmd(int fd, int argc, const char * const *argv);
+static int rpt_do_setvar(int fd, int argc, const char * const *argv);
+static int rpt_do_showvars(int fd, int argc, const char * const *argv);
+static int rpt_do_page(int fd, int argc, const char * const *argv);
+static int rpt_do_lookup(int fd, int argc, const char * const *argv);
 
 static char debug_usage[] =
 "Usage: rpt debug level {0-7}\n"
@@ -1934,10 +1948,6 @@ static char showvars_usage[] =
 static char page_usage[] =
 "Usage: rpt page <nodename> <baud> <capcode> <[ANT]Text....>\n"
 "       Send an page to a user on a node, specifying capcode and type/text\n";
-
-static char lookup_usage[] = 
-"Usage rpt lookup <nodename>\n"
-"      Look up nodes on the allstar network\n";
 
 /*
 * Telemetry defaults
@@ -2629,7 +2639,7 @@ static int uchameleon_pin_init(struct daq_entry_tag *t)
 
 		/* Parse alarm entry */
 
-		strlcpy(s,var->value,sizeof(s)-1);
+		ast_copy_string(s,var->value,sizeof(s)-1);
 
 		if(explode_string(s, argv, 6, ',', 0) != 6){
 			ast_log(LOG_WARNING,"Alarm arguments must be 6 for %s\n", var->name);
@@ -2965,7 +2975,7 @@ int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2)
 		if(cmd == DAQ_CMD_PINSET){
 			if(arg1 && *arg1 && (*arg1 < 19)){
 				/* New pin definition */
-				if(!(p = (struct daq_pin_entry_tag *) malloc(sizeof(struct daq_pin_entry_tag)))){
+				if(!(p = (struct daq_pin_entry_tag *) ast_malloc(sizeof(struct daq_pin_entry_tag)))){
 					ast_log(LOG_ERROR,"Out of memory");
 					ast_mutex_unlock(&t->lock);
 					return -1;
@@ -3361,7 +3371,7 @@ static struct daq_entry_tag *daq_open(int type, char *name, char *dev)
 
 
 	/* Save the name*/
-	strlcpy(t->name, name, MAX_DAQ_NAME);
+	ast_copy_string(t->name, name, MAX_DAQ_NAME);
 	t->dev[MAX_DAQ_NAME - 1] = 0;
 
 
@@ -3493,7 +3503,7 @@ static void daq_init(struct ast_config *cfg)
 			ast_log(LOG_WARNING,"Error in daq_entries stanza on line %d\n", var->lineno);
 			break;
 		}
-		strlcpy(s,var->value,sizeof(s)-1); /* Make copy of device entry */
+		ast_copy_string(s,var->value,sizeof(s)-1); /* Make copy of device entry */
 		if(!(p = (char *) ast_variable_retrieve(cfg,s,"hwtype"))){
 			ast_log(LOG_WARNING,"hwtype variable required for %s stanza\n", s);
 			break;
@@ -3983,7 +3993,7 @@ static int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int comm
 			memset(cp,0,strlen(param) + 10);
 			sprintf(cp,"%s &",param);
 			ast_safe_system(cp);
-			free(cp);
+			ast_free(cp);
 		}
 	}
 	return DC_COMPLETE;
@@ -4032,8 +4042,8 @@ static int priority_jump(struct rpt *myrpt, struct ast_channel *chan)
 {
 	int res=0;
 
-	// if (ast_test_flag(&flags,OPT_JUMP) && ast_goto_if_exists(chan, chan->context, chan->exten, chan->priority + 101) == 0){
-	if (ast_goto_if_exists(chan, chan->context, chan->exten, chan->priority + 101) == 0){
+	// if (ast_test_flag(&flags,OPT_JUMP) && ast_goto_if_exists(chan, ast_channel_context(chan), ast_channel_exten(chan), ast_channel_priority(chan) + 101) == 0){
+	if (ast_goto_if_exists(chan, ast_channel_context(chan), ast_channel_exten(chan), ast_channel_priority(chan) + 101) == 0){
 		res = 0;
 	} else {
 		res = -1;
@@ -4096,8 +4106,8 @@ int	src;
 	{
 		src = LINKMODE_GUI;
 		if (mylink->phonemode) src = LINKMODE_PHONE;
-		else if (!strncasecmp(mylink->chan->name,"echolink",8)) src = LINKMODE_ECHOLINK;
-		else if (!strncasecmp(mylink->chan->name,"tlb",8)) src = LINKMODE_TLB;
+		else if (!strncasecmp(ast_channel_name(mylink->chan),"echolink",8)) src = LINKMODE_ECHOLINK;
+		else if (!strncasecmp(ast_channel_name(mylink->chan),"tlb",8)) src = LINKMODE_TLB;
 		if (myrpt->p.linkmodedynamic[src] && (mylink->linkmode >= 1) && 
 		    (mylink->linkmode < 0x7ffffffe))
 				mylink->linkmode = LINK_HANG_TIME;
@@ -4118,8 +4128,8 @@ static int altlink(struct rpt *myrpt,struct rpt_link *mylink)
 	/* if doesnt qual as a foreign link */
 	if ((mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
 	    (!mylink->phonemode) &&
-	    strncasecmp(mylink->chan->name,"echolink",8) &&
-		strncasecmp(mylink->chan->name,"tlb",3)) return(0);
+	    strncasecmp(ast_channel_name(mylink->chan),"echolink",8) &&
+		strncasecmp(ast_channel_name(mylink->chan),"tlb",3)) return(0);
 	if ((myrpt->p.duplex < 2) && (myrpt->tele.next == &myrpt->tele)) return(0);
 	if (mylink->linkmode < 2) return(0);
 	if (mylink->linkmode == 0x7fffffff) return(1);
@@ -4153,8 +4163,8 @@ int	nonlocals;
 	/* if doesnt qual as a foreign link */
 	if ((mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
 	    (!mylink->phonemode) &&
-	    strncasecmp(mylink->chan->name,"echolink",8) &&
-		strncasecmp(mylink->chan->name,"tlb",3)) return(1);
+	    strncasecmp(ast_channel_name(mylink->chan),"echolink",8) &&
+		strncasecmp(ast_channel_name(mylink->chan),"tlb",3)) return(1);
 	if (mylink->linkmode < 2) return(0);
 	if (mylink->linkmode == 0x7fffffff) return(1);
 	if (mylink->linkmode < 0x7ffffffe) return(1);
@@ -4290,9 +4300,9 @@ static int retrieve_memory(struct rpt *myrpt, char *memory)
 	s2 = strchr(s1,',');
 	if (!s2) s2 = s1;
 	else *s2++ = 0;
-	strlcpy(myrpt->freq, tmp, sizeof(myrpt->freq) - 1);
-	strlcpy(myrpt->rxpl, s, sizeof(myrpt->rxpl) - 1);
-	strlcpy(myrpt->txpl, s, sizeof(myrpt->rxpl) - 1);
+	ast_copy_string(myrpt->freq, tmp, sizeof(myrpt->freq) - 1);
+	ast_copy_string(myrpt->rxpl, s, sizeof(myrpt->rxpl) - 1);
+	ast_copy_string(myrpt->txpl, s, sizeof(myrpt->rxpl) - 1);
 	myrpt->remmode = REM_MODE_FM;
 	myrpt->offset = REM_SIMPLEX;
 	myrpt->powerlevel = REM_MEDPWR;
@@ -4483,7 +4493,7 @@ char	digit;
 			myrpt->dtmf_local_str[i - 1] = 0;
 			myrpt->dtmf_local_timer = DTMF_LOCAL_TIME;
 			rpt_mutex_unlock(&myrpt->lock);
-			if (!strncasecmp(myrpt->txchannel->name,"rtpdir",6))
+			if (!strncasecmp(ast_channel_name(myrpt->txchannel),"rtpdir",6))
 			{
 				ast_senddigit(myrpt->txchannel,digit,0);
 			} 
@@ -4499,7 +4509,7 @@ char	digit;
 					ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[15], 0);
 				else {
 					/* not handled */
-					ast_log(LOG_DEBUG, "Unable to generate DTMF tone '%c' for '%s'\n", digit, myrpt->txchannel->name);
+					ast_log(LOG_DEBUG, "Unable to generate DTMF tone '%c' for '%s'\n", digit, ast_channel_name(myrpt->txchannel));
 				}
 			}
 			rpt_mutex_lock(&myrpt->lock);
@@ -4667,10 +4677,10 @@ char	str[200];
 	sprintf(str,"I %s %s",myrpt->name,data);
 
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass = 0;
+	wf.subclass.integer = 0;
 	wf.offset = 0;
 	wf.mallocd = 0;
-	AST_FRAME_DATA(wf) = str; 
+	wf.data.ptr = str;
 	wf.datalen = strlen(str) + 1;  // Isuani, 20141001
 	wf.samples = 0;
 	wf.src = "mdc1200_send";
@@ -4681,7 +4691,7 @@ char	str[200];
 	while(l != &myrpt->links)
 	{
 		/* Dont send to IAXRPT client, unless main channel is Voter */
-		if (((l->name[0] == '0') && strncasecmp(myrpt->rxchannel->name,"voter/", 6)) || (l->phonemode))
+		if (((l->name[0] == '0') && strncasecmp(ast_channel_name(myrpt->rxchannel),"voter/", 6)) || (l->phonemode))
 		{
 			l = l->next;
 			continue;
@@ -4702,7 +4712,7 @@ static void rssi_send(struct rpt *myrpt)
         char	str[200];
 	sprintf(str,"R %i",myrpt->rxrssi);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass = 0;
+	wf.subclass.integer = 0;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -4718,7 +4728,7 @@ static void rssi_send(struct rpt *myrpt)
 			l = l->next;
 			continue;
 		}
-		wf.data = str;
+		wf.data.ptr = str;
 		if(debug>5)ast_log(LOG_NOTICE, "[%s] rssi=%i to %s\n", myrpt->name,myrpt->rxrssi,l->name);
 		if (l->chan) rpt_qwrite(l,&wf);
 		l = l->next;
@@ -5076,11 +5086,11 @@ static int send_usb_txt(struct rpt *myrpt, char *txt)
  
 	/* if (debug) */ ast_log(LOG_NOTICE, "send_usb_txt %s\n",txt);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass = 0;
+	wf.subclass.integer = 0;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(txt) + 1;
-	AST_FRAME_DATA(wf) = txt;
+	wf.data.ptr = txt;
 	wf.samples = 0;
 	wf.src = "send_usb_txt";
 	ast_write(myrpt->txchannel,&wf); 
@@ -5099,11 +5109,11 @@ static int send_link_pl(struct rpt *myrpt, char *txt)
 	snprintf(str, sizeof(str), "C %s %s %s", myrpt->name, myrpt->p.ctgroup, txt);
 /* if (debug) */ ast_log(LOG_NOTICE, "send_link_pl %s\n",str);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass = 0;
+	wf.subclass.integer = 0;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
-	AST_FRAME_DATA(wf) = str;
+	wf.data.ptr = str;
 	wf.samples = 0;
 	wf.src = "send_link_pl";
 	l = myrpt->links.next;
@@ -5319,7 +5329,7 @@ struct ast_var_t *newvariable;
 			if ((MAXMACRO - strlen(myrpt->macrobuf)) >= strlen(cmd))
 			{
 				if (option_verbose > 2)
-					ast_verbose(VERBOSE_PREFIX_3 "Event on node %s doing macro %s for condition %s\n",
+					ast_verb(3, "Event on node %s doing macro %s for condition %s\n",
 						myrpt->name,cmd,v->value);
 				myrpt->macrotimer = MACROTIME;
 				strncat(myrpt->macrobuf,cmd,MAXMACRO - 1);
@@ -5360,7 +5370,7 @@ struct ast_var_t *newvariable;
 				continue;
 			} 
 			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "Event on node %s doing rpt command %s for condition %s\n",
+				ast_verb(3, "Event on node %s doing rpt command %s for condition %s\n",
 					myrpt->name,cmd,v->value);
 			rpt_mutex_lock(&myrpt->lock);
 			if (myrpt->cmdAction.state == CMD_STATE_IDLE)
@@ -5369,10 +5379,10 @@ struct ast_var_t *newvariable;
 				myrpt->cmdAction.functionNumber = thisAction;
 				myrpt->cmdAction.param[0] = 0;
 				if (argc > 1)
-					strlcpy(myrpt->cmdAction.param, argv[1], MAXDTMF-1);
+					ast_copy_string(myrpt->cmdAction.param, argv[1], MAXDTMF-1);
 				myrpt->cmdAction.digits[0] = 0;
 				if (argc > 2)
-					strlcpy(myrpt->cmdAction.digits, argv[2], MAXDTMF-1);
+					ast_copy_string(myrpt->cmdAction.digits, argv[2], MAXDTMF-1);
 				myrpt->cmdAction.command_source = SOURCE_RPT;
 				myrpt->cmdAction.state = CMD_STATE_READY;
 			} 
@@ -5388,7 +5398,7 @@ struct ast_var_t *newvariable;
 			char *cp;
 
 			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "Event on node %s doing shell command %s for condition %s\n",
+				ast_verb(3, "Event on node %s doing shell command %s for condition %s\n",
 					myrpt->name,cmd,v->value);
 			cp = ast_malloc(strlen(cmd) + 10);
 			if (!cp)
@@ -5399,7 +5409,7 @@ struct ast_var_t *newvariable;
 			memset(cp,0,strlen(cmd) + 10);
 			sprintf(cp,"%s &",cmd);
 			ast_safe_system(cp);
-			free(cp);
+			ast_free(cp);
 			continue;
 		}
 	}
@@ -5433,7 +5443,7 @@ struct ast_var_t *newvariable;
 	i = 0;
 	ast_verbose("Node Variable dump for node %s:\n",myrpt->name);
 	ast_channel_lock(myrpt->rxchannel);
-	AST_LIST_TRAVERSE (&myrpt->rxchannel->varshead, newvariable, entries) {
+	AST_LIST_TRAVERSE (ast_channel_varshead(myrpt->rxchannel), newvariable, entries) {
 		i++;
 		ast_verbose("   %s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 	}
@@ -5516,7 +5526,7 @@ int	i;
 	sprintf(a,"%s %s %s &",myrpt->p.discpgm,
 		myrpt->name,them);
 	ast_safe_system(a);
-	free(a);
+	ast_free(a);
 	return;
 }
 
@@ -5544,6 +5554,7 @@ int	i;
 
 static void statpost(struct rpt *myrpt,char *pairs)
 {
+#define GLOBAL_USERAGENT "asterisk-libcurl-agent/1.0"
 	char *str;
 	int	pid;
 	time_t	now;
@@ -5565,7 +5576,7 @@ static void statpost(struct rpt *myrpt,char *pairs)
 		curl = curl_easy_init();
 		if(curl) {
 			curl_easy_setopt(curl, CURLOPT_URL, str);
-			curl_easy_setopt(curl, CURLOPT_USERAGENT, ASTERISK_VERSION_HTTP);
+			curl_easy_setopt(curl, CURLOPT_USERAGENT, GLOBAL_USERAGENT);
 			curl_easy_perform(curl);
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rescode);
 			curl_easy_cleanup(curl);
@@ -5593,7 +5604,7 @@ int	n;
 
 	if (!myrpt->p.outstreamcmd) return;
 	if (option_verbose > 2)
-		ast_verbose(VERBOSE_PREFIX_3 "app_rpt node %s starting output stream %s\n",
+		ast_verb(3, "app_rpt node %s starting output stream %s\n",
 			myrpt->name,myrpt->p.outstreamcmd);
 	str = ast_strdup(myrpt->p.outstreamcmd);
 	if (!str)
@@ -5669,7 +5680,8 @@ struct ast_variable *vp;
 	if (val)
 	{
 		if (str && strmax)
-			snprintf(str,strmax,val,digitbuf);
+			//snprintf(str,strmax,val,digitbuf);
+			snprintf(str, strmax, "%s%s", val, digitbuf); /*! \todo 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy. */
 		return(1);
 	}
 	if (wilds)
@@ -5680,7 +5692,8 @@ struct ast_variable *vp;
 			if (ast_extension_match(vp->name, digitbuf))
 			{
 				if (str && strmax)
-					snprintf(str,strmax,vp->value,digitbuf);
+					//snprintf(str,strmax,vp->value,digitbuf);
+					snprintf(str, strmax, "%s%s", vp->value, digitbuf); // 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
 				return(1);
 			}
 			vp = vp->next;
@@ -5727,7 +5740,8 @@ struct ast_variable *vp;
 			{
 				found = 1;
 				if (str && strmax)
-					snprintf(str,strmax,val,digitbuf);
+					//snprintf(str,strmax,val,digitbuf);
+					snprintf(str, strmax, "%s%s", val, digitbuf); // 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
 			}
 		}
 		ast_config_destroy(ourcfg);
@@ -5977,7 +5991,7 @@ static char *cs_keywords[] = {"rptena","rptdis","apena","apdis","lnkena","lnkdis
 				"ufena","ufdis","atena","atdis","noice","noicd","slpen","slpds",NULL};
 
 	if (option_verbose > 2)
-		ast_verbose(VERBOSE_PREFIX_3 "%s config for repeater %s\n",
+		ast_verb(3, "%s config for repeater %s\n",
 			(init) ? "Loading initial" : "Re-Loading",rpt_vars[n].name);
 	ast_mutex_lock(&rpt_vars[n].lock);
 	if (rpt_vars[n].cfg) ast_config_destroy(rpt_vars[n].cfg);
@@ -6602,13 +6616,13 @@ static char *cs_keywords[] = {"rptena","rptdis","apena","apdis","lnkena","lnkdis
 * Enable or disable debug output at a given level at the console
 */
                                                                                                                                  
-static int rpt_do_debug(int fd, int argc, char *argv[])
+static int rpt_do_debug(int fd, int argc, const char * const *argv)
 {
 	int newlevel;
 
         if (argc != 4)
                 return RESULT_SHOWUSAGE;
-        newlevel = myatoi(argv[3]);
+        newlevel = myatoi(ast_strdupa(argv[3]));
         if((newlevel < 0) || (newlevel > 7))
                 return RESULT_SHOWUSAGE;
         if(newlevel)
@@ -6624,7 +6638,7 @@ static int rpt_do_debug(int fd, int argc, char *argv[])
 * Dump rpt struct debugging onto console
 */
                                                                                                                                  
-static int rpt_do_dump(int fd, int argc, char *argv[])
+static int rpt_do_dump(int fd, int argc, const char * const *argv)
 {
 	int i;
 
@@ -6647,7 +6661,7 @@ static int rpt_do_dump(int fd, int argc, char *argv[])
 * Dump statistics onto console
 */
 
-static int rpt_do_stats(int fd, int argc, char *argv[])
+static int rpt_do_stats(int fd, int argc, const char * const *argv)
 {
 	int i,j,numoflinks;
 	int dailytxtime, dailykerchunks;
@@ -6904,7 +6918,7 @@ static int rpt_do_stats(int fd, int argc, char *argv[])
 * Link stats function
 */
 
-static int rpt_do_lstats(int fd, int argc, char *argv[])
+static int rpt_do_lstats(int fd, int argc, const char * const *argv)
 {
 	int i;
 	char *connstate;
@@ -6938,7 +6952,7 @@ static int rpt_do_lstats(int fd, int argc, char *argv[])
 					return RESULT_FAILURE;
 				}
 				memset(s, 0, sizeof(struct rpt_lstat));
-				strlcpy(s->name, l->name, MAXNODESTR - 1);
+				ast_copy_string(s->name, l->name, MAXNODESTR - 1);
 				if (l->chan) pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", s->peer, MAXPEERSTR - 1);
 				else strcpy(s->peer,"(none)");
 				s->mode = l->mode;
@@ -6989,7 +7003,7 @@ static int rpt_do_lstats(int fd, int argc, char *argv[])
 	return RESULT_FAILURE;
 }
 
-static int rpt_do_xnode(int fd, int argc, char *argv[])
+static int rpt_do_xnode(int fd, int argc, const char * const *argv)
 {
 	int i,j;
 	char ns;
@@ -7000,16 +7014,16 @@ static int rpt_do_xnode(int fd, int argc, char *argv[])
 	struct rpt_link *l;
 	struct rpt_lstat *s,*t;
 	struct rpt_lstat s_head;
+
+	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
+	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode; 
+
 	if(argc != 3)
 		return RESULT_SHOWUSAGE;
 
 	s = NULL;
 	s_head.next = &s_head;
 	s_head.prev = &s_head;
-
-
-	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
-	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode; 
 
 	for(i = 0; i < nrpts; i++)
 	{
@@ -7131,7 +7145,7 @@ static int rpt_do_xnode(int fd, int argc, char *argv[])
 					return RESULT_FAILURE;
 				}
 				memset(s, 0, sizeof(struct rpt_lstat));
-				strlcpy(s->name, l->name, MAXNODESTR - 1);
+				ast_copy_string(s->name, l->name, MAXNODESTR - 1);
 				if (l->chan) pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", s->peer, MAXPEERSTR - 1);
 				else strcpy(s->peer,"(none)");
 				s->mode = l->mode;
@@ -7197,7 +7211,7 @@ static int rpt_do_xnode(int fd, int argc, char *argv[])
 //### GET VARIABLES INFO ####################
 			j = 0;
 			ast_channel_lock(rpt_vars[i].rxchannel);
-			AST_LIST_TRAVERSE (&rpt_vars[i].rxchannel->varshead, newvariable, entries) {
+			AST_LIST_TRAVERSE (ast_channel_varshead(rpt_vars[i].rxchannel), newvariable, entries) {
 				j++;
 				ast_cli(fd,"%s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 			}
@@ -7229,7 +7243,7 @@ static int rpt_do_xnode(int fd, int argc, char *argv[])
 * List all nodes connected, directly or indirectly
 */
 
-static int rpt_do_nodes(int fd, int argc, char *argv[])
+static int rpt_do_nodes(int fd, int argc, const char * const *argv)
 {
 	int i,j;
 	char ns;
@@ -7279,7 +7293,7 @@ static int rpt_do_nodes(int fd, int argc, char *argv[])
 * List all locally configured nodes
 */
 
-static int rpt_do_local_nodes(int fd, int argc, char *argv[])
+static int rpt_do_local_nodes(int fd, int argc, const char * const *argv)
 {
 
     int i;
@@ -7298,7 +7312,7 @@ static int rpt_do_local_nodes(int fd, int argc, char *argv[])
 * reload vars 
 */
 
-static int rpt_do_reload(int fd, int argc, char *argv[])
+static int rpt_do_reload(int fd, int argc, const char * const *argv)
 {
         if (argc > 2) return RESULT_SHOWUSAGE;
 
@@ -7311,7 +7325,7 @@ static int rpt_do_reload(int fd, int argc, char *argv[])
 * restart app_rpt
 */
                                                                                                                                  
-static int rpt_do_restart(int fd, int argc, char *argv[])
+static int rpt_do_restart(int fd, int argc, const char * const *argv)
 {
 int	i;
 
@@ -7328,7 +7342,7 @@ int	i;
 * send an app_rpt DTMF function from the CLI
 */
                                                                                                                                  
-static int rpt_do_fun(int fd, int argc, char *argv[])
+static int rpt_do_fun(int fd, int argc, const char * const *argv)
 {
 	int	i,busy=0;
 
@@ -7358,7 +7372,7 @@ static int rpt_do_fun(int fd, int argc, char *argv[])
 * send an Audio File from the CLI
 */
                                                                                                                                  
-static int rpt_do_playback(int fd, int argc, char *argv[])
+static int rpt_do_playback(int fd, int argc, const char * const *argv)
 {
 	int	i;
 
@@ -7367,13 +7381,13 @@ static int rpt_do_playback(int fd, int argc, char *argv[])
 	for(i = 0; i < nrpts; i++){
 		if(!strcmp(argv[2], rpt_vars[i].name)){
 			struct rpt *myrpt = &rpt_vars[i];
-			rpt_telemetry(myrpt,PLAYBACK,argv[3]);			
+			rpt_telemetry(myrpt,PLAYBACK,(void*) argv[3]);			
 		}
 	}
 	return RESULT_SUCCESS;
 }
 
-static int rpt_do_localplay(int fd, int argc, char *argv[])
+static int rpt_do_localplay(int fd, int argc, const char * const *argv)
 {
         int     i;
 
@@ -7382,23 +7396,27 @@ static int rpt_do_localplay(int fd, int argc, char *argv[])
         for(i = 0; i < nrpts; i++){
                 if(!strcmp(argv[2], rpt_vars[i].name)){
                         struct rpt *myrpt = &rpt_vars[i];
-                        rpt_telemetry(myrpt,LOCALPLAY,argv[3]);
+                        rpt_telemetry(myrpt,LOCALPLAY,(void*) argv[3]);
                 }
         }
         return RESULT_SUCCESS;
 }
 
-static int rpt_do_sendtext(int fd, int argc, char *argv[])
+static int rpt_do_sendtext(int fd, int argc, const char * const *argv)
 {
         int     i;
 	struct	rpt_link *l;
 	char str[MAX_TEXTMSG_SIZE];
+	char *from, *to;
 
         if (argc < 5) return RESULT_SHOWUSAGE;
 
-	string_toupper(argv[2]);
-	string_toupper(argv[3]);
-	snprintf(str,sizeof(str) - 1,"M %s %s ",argv[2],argv[3]);
+	from = ast_strdupa(argv[2]);
+	to = ast_strdupa(argv[3]);
+
+	string_toupper(from);
+	string_toupper(to);
+	snprintf(str,sizeof(str) - 1,"M %s %s ",from,to);
 	for(i = 4; i < argc; i++)
 	{
 		if (i > 3) strncat(str," ",sizeof(str) - 1);
@@ -7406,7 +7424,7 @@ static int rpt_do_sendtext(int fd, int argc, char *argv[])
 	}	
         for(i = 0; i < nrpts; i++)
 	{
-                if(!strcmp(argv[2], rpt_vars[i].name))
+                if(!strcmp(from, rpt_vars[i].name))
 		{
                         struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
@@ -7430,19 +7448,26 @@ static int rpt_do_sendtext(int fd, int argc, char *argv[])
 
 //## Paging function
 
-static int rpt_do_page(int fd, int argc, char *argv[])
+static int rpt_do_page(int fd, int argc, const char * const *argv)
 {
         int     i;
 	char str[MAX_TEXTMSG_SIZE];
 	struct rpt_tele *telem;
+	char *nodename, *baud, *capcode, *text;
+	
 
         if (argc < 7) return RESULT_SHOWUSAGE;
 
-	string_toupper(argv[2]);
-	string_toupper(argv[3]);
-	string_toupper(argv[4]);
-	string_toupper(argv[5]);
-	snprintf(str,sizeof(str) - 1,"PAGE %s %s %s ",argv[3],argv[4],argv[5]);
+	nodename = ast_strdupa(argv[2]);
+	baud = ast_strdupa(argv[3]);
+	capcode = ast_strdupa(argv[4]);
+	text = ast_strdupa(argv[5]);
+
+	string_toupper(nodename);
+	string_toupper(baud);
+	string_toupper(capcode);
+	string_toupper(text);
+	snprintf(str,sizeof(str) - 1,"PAGE %s %s %s ",baud,capcode,text);
 	for(i = 6; i < argc; i++)
 	{
 		if (i > 5) strncat(str," ",sizeof(str) - 1);
@@ -7450,13 +7475,13 @@ static int rpt_do_page(int fd, int argc, char *argv[])
 	}	
         for(i = 0; i < nrpts; i++)
 	{
-                if(!strcmp(argv[2], rpt_vars[i].name))
+                if(!strcmp(nodename, rpt_vars[i].name))
 		{
                         struct rpt *myrpt = &rpt_vars[i];
 			/* ignore if not a USB channel */
-			if ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) &&
-			    (strncasecmp(myrpt->rxchannel->name,"voter/", 6) == 0) &&
-			    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0)) return RESULT_SUCCESS;
+			if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) &&
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"voter/", 6) == 0) &&
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0)) return RESULT_SUCCESS;
 			telem = myrpt->tele.next;
 			while(telem != &myrpt->tele)
 			{
@@ -7478,16 +7503,19 @@ static int rpt_do_page(int fd, int argc, char *argv[])
 
 //## Send to all nodes
 
-static int rpt_do_sendall(int fd, int argc, char *argv[])
+static int rpt_do_sendall(int fd, int argc, const char * const *argv)
 {
         int     i;
 	struct	rpt_link *l;
 	char str[MAX_TEXTMSG_SIZE];
+	char *nodename;
 
         if (argc < 4) return RESULT_SHOWUSAGE;
 
-	string_toupper(argv[2]);
-	snprintf(str,sizeof(str) - 1,"M %s 0 ",argv[2]);
+	nodename = ast_strdupa(argv[2]);
+
+	string_toupper(nodename);
+	snprintf(str,sizeof(str) - 1,"M %s 0 ",nodename);
 	for(i = 3; i < argc; i++)
 	{
 		if (i > 3) strncat(str," ",sizeof(str) - 1);
@@ -7495,7 +7523,48 @@ static int rpt_do_sendall(int fd, int argc, char *argv[])
 	}	
         for(i = 0; i < nrpts; i++)
 	{
-                if(!strcmp(argv[2], rpt_vars[i].name))
+                if(!strcmp(nodename, rpt_vars[i].name))
+		{
+                        struct rpt *myrpt = &rpt_vars[i];
+			rpt_mutex_lock(&myrpt->lock);
+			l = myrpt->links.next;
+			/* otherwise, send it to all of em */
+			while(l != &myrpt->links)
+			{
+				if (l->name[0] == '0') 
+				{
+					l = l->next;
+					continue;
+				}
+				if (l->chan) ast_sendtext(l->chan,str);
+				l = l->next;
+			}
+			rpt_mutex_unlock(&myrpt->lock);
+		}
+	}
+        return RESULT_SUCCESS;
+}
+static int rpt_do_sendall2(int fd, int argc, char *argv[])
+{
+        int     i;
+	struct	rpt_link *l;
+	char str[MAX_TEXTMSG_SIZE];
+	char *nodename;
+
+        if (argc < 4) return RESULT_SHOWUSAGE;
+
+	nodename = ast_strdupa(argv[2]);
+
+	string_toupper(nodename);
+	snprintf(str,sizeof(str) - 1,"M %s 0 ",nodename);
+	for(i = 3; i < argc; i++)
+	{
+		if (i > 3) strncat(str," ",sizeof(str) - 1);
+		strncat(str,argv[i],sizeof(str) - 1);
+	}	
+        for(i = 0; i < nrpts; i++)
+	{
+                if(!strcmp(nodename, rpt_vars[i].name))
 		{
                         struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
@@ -7552,7 +7621,7 @@ static int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 /*
 	allows us to test rpt() application data commands
 */
-static int rpt_do_fun1(int fd, int argc, char *argv[])
+static int rpt_do_fun1(int fd, int argc, const char * const *argv)
 {
 	int	i;
 
@@ -7561,7 +7630,7 @@ static int rpt_do_fun1(int fd, int argc, char *argv[])
 	for(i = 0; i < nrpts; i++){
 		if(!strcmp(argv[2], rpt_vars[i].name)){
 			struct rpt *myrpt = &rpt_vars[i];
-			rpt_push_alt_macro(myrpt,argv[3]);
+			rpt_push_alt_macro(myrpt,(char*) argv[3]);
 		}
 	}
 	return RESULT_FAILURE;
@@ -7570,7 +7639,7 @@ static int rpt_do_fun1(int fd, int argc, char *argv[])
 * send an app_rpt **command** from the CLI
 */
 
-static int rpt_do_cmd(int fd, int argc, char *argv[])
+static int rpt_do_cmd(int fd, int argc, const char * const *argv)
 {
 	int i, l;
 	int busy=0;
@@ -7639,9 +7708,9 @@ static int rpt_do_cmd(int fd, int argc, char *argv[])
 /*
 * set a node's main channel variable from the command line 
 */
-static int rpt_do_setvar(int fd, int argc, char *argv[])
+static int rpt_do_setvar(int fd, int argc, const char * const *argv)
 {
-	char *name, *value;
+	char *value;
 	int i,x,thisRpt = -1;
 
 	if (argc < 4) return RESULT_SHOWUSAGE;
@@ -7661,7 +7730,7 @@ static int rpt_do_setvar(int fd, int argc, char *argv[])
 	} 
 	
 	for (x = 3; x < argc; x++) {
-		name = argv[x];
+		const char *name = argv[x];
 		if ((value = strchr(name, '='))) {
 			*value++ = '\0';
 			pbx_builtin_setvar_helper(rpt_vars[thisRpt].rxchannel, name, value);
@@ -7674,7 +7743,7 @@ static int rpt_do_setvar(int fd, int argc, char *argv[])
 /*
 * Display a node's main channel variables from the command line 
 */
-static int rpt_do_showvars(int fd, int argc, char *argv[])
+static int rpt_do_showvars(int fd, int argc, const char * const *argv)
 {
 	int i,thisRpt = -1;
 	struct ast_var_t *newvariable;
@@ -7697,7 +7766,7 @@ static int rpt_do_showvars(int fd, int argc, char *argv[])
 	i = 0;
 	ast_cli(fd,"Variable listing for node %s:\n",argv[2]);
 	ast_channel_lock(rpt_vars[thisRpt].rxchannel);
-	AST_LIST_TRAVERSE (&rpt_vars[thisRpt].rxchannel->varshead, newvariable, entries) {
+	AST_LIST_TRAVERSE (ast_channel_varshead(rpt_vars[thisRpt].rxchannel), newvariable, entries) {
 		i++;
 		ast_cli(fd,"   %s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 	}
@@ -7706,7 +7775,7 @@ static int rpt_do_showvars(int fd, int argc, char *argv[])
 	return(0);
 }
 
-static int rpt_do_lookup(int fd, int argc, char *argv[])
+static int rpt_do_lookup(int fd, int argc, const char * const *argv)
 {
 	struct rpt *myrpt;
 	char tmp[300]="";
@@ -7714,7 +7783,7 @@ static int rpt_do_lookup(int fd, int argc, char *argv[])
 	if (argc != 3) return RESULT_SHOWUSAGE;
 	for( i=0; i<nrpts; i++){
 		myrpt = &rpt_vars[i];
-		node_lookup(myrpt,argv[2],tmp,sizeof(tmp) - 1,1);
+		node_lookup(myrpt,(char*) argv[2],tmp,sizeof(tmp) - 1,1);
 		if(strlen(tmp))
 			ast_cli(fd, "Node: %-10.10s Data: %-70.70s\n", myrpt->name, tmp);
 	}
@@ -7728,7 +7797,7 @@ static int play_tone_pair(struct ast_channel *chan, int f1, int f2, int duration
         if ((res = ast_tonepair_start(chan, f1, f2, duration, amplitude)))
                 return res;
                                                                                                                                             
-        while(chan->generatordata) {
+        while(ast_channel_generatordata(chan)) {
 		if (ast_safe_sleep(chan,1)) return -1;
 	}
 
@@ -7975,7 +8044,8 @@ static char *handle_cli_lookup(struct ast_cli_entry *e,
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt lookup";
-		e->usage = rpt_usage;
+		//e->usage = rpt_usage;
+		e->usage = NULL; /*! \todo 20220111 NA rpt_usage doesn't exist! */
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -8242,7 +8312,7 @@ static struct morse_bits mbits[] = {
 			ast_log(LOG_NOTICE,"Morse string: %s\n", str);
 		ast_safe_sleep(chan,100);
 		ast_playtones_start(chan, amplitude, str, 0);
-		while(chan->generatordata){
+		while(ast_channel_generatordata(chan)){
 			if(ast_safe_sleep(chan, 20)){
 				res = -1;
 				break;
@@ -8301,7 +8371,7 @@ static int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 
 	for(i = 0; i < 20 ; i++){
 		flags =  DAHDI_IOMUX_WRITEEMPTY | DAHDI_IOMUX_NOWAIT; 
-		res = ioctl(chan->fds[0], DAHDI_IOMUX, &flags);
+		res = ioctl(ast_channel_fd(chan, 0), DAHDI_IOMUX, &flags);
 		if(flags & DAHDI_IOMUX_WRITEEMPTY)
 			break;
 		if( ast_safe_sleep(chan, 50)){
@@ -8320,11 +8390,11 @@ static int sayfile(struct ast_channel *mychannel,char *fname)
 {
 int	res;
 
-	res = ast_streamfile(mychannel, fname, mychannel->language);
+	res = ast_streamfile(mychannel, fname, ast_channel_language(mychannel));
 	if (!res) 
 		res = ast_waitstream(mychannel, "");
 	else
-		 ast_log(LOG_WARNING, "ast_streamfile %s failed on %s\n", fname, mychannel->name);
+		 ast_log(LOG_WARNING, "ast_streamfile %s failed on %s\n", fname, ast_channel_name(mychannel));
 	ast_stopstream(mychannel);
 	return res;
 }
@@ -8333,11 +8403,11 @@ static int saycharstr(struct ast_channel *mychannel,char *str)
 {
 int	res;
 
-	res = ast_say_character_str(mychannel,str,NULL,mychannel->language);
+	res = ast_say_character_str(mychannel,str,NULL,ast_channel_language(mychannel),AST_SAY_CASE_NONE);
 	if (!res) 
 		res = ast_waitstream(mychannel, "");
 	else
-		 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+		 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 	ast_stopstream(mychannel);
 	return res;
 }
@@ -8347,11 +8417,11 @@ int	res;
 static int saynum(struct ast_channel *mychannel, int num)
 {
 	int res;
-	res = ast_say_number(mychannel, num, NULL, mychannel->language, NULL);
+	res = ast_say_number(mychannel, num, NULL, ast_channel_language(mychannel), NULL);
 	if(!res)
 		res = ast_waitstream(mychannel, "");
 	else
-		ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+		ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 	ast_stopstream(mychannel);
 	return res;
 }
@@ -8362,11 +8432,11 @@ static int sayphoneticstr(struct ast_channel *mychannel,char *str)
 {
 int	res;
 
-	res = ast_say_phonetic_str(mychannel,str,NULL,mychannel->language);
+	res = ast_say_phonetic_str(mychannel,str,NULL,ast_channel_language(mychannel));
 	if (!res) 
 		res = ast_waitstream(mychannel, "");
 	else
-		 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+		 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 	ast_stopstream(mychannel);
 	return res;
 }
@@ -8387,11 +8457,11 @@ char	*val,fname[300],str[100];
 		val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "nodenames");
 		if (!val) val = NODENAMES;
 		snprintf(fname,sizeof(fname) - 1,"%s/%s",val,name);
-		if (ast_fileexists(fname,NULL,mychannel->language) > 0)
+		if (ast_fileexists(fname,NULL,ast_channel_language(mychannel)) > 0)
 			return(sayfile(mychannel,fname));
 		res = sayfile(mychannel,"rpt/node");
 		if (!res) 
-			res = ast_say_character_str(mychannel,name,NULL,mychannel->language);
+			res = ast_say_character_str(mychannel,name,NULL,ast_channel_language(mychannel),AST_SAY_CASE_NONE);
 	}
 	if (tgn == 1)
 	{
@@ -8656,7 +8726,7 @@ struct	ast_tm localtm;
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
 		return;
 	}
@@ -8698,17 +8768,17 @@ struct	ast_tm localtm;
 		if (wait_interval(myrpt, DLY_TELEM,  mychannel) == -1) return;
 		res = saynode(myrpt,mychannel,strs[2]);
 		if (!res)
-		    res = ast_streamfile(mychannel, "rpt/connected", mychannel->language);
+		    res = ast_streamfile(mychannel, "rpt/connected", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
-		res = ast_streamfile(mychannel, "digits/2", mychannel->language);
+		res = ast_streamfile(mychannel, "digits/2", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
 		saynode(myrpt,mychannel,strs[1]);
 		return;
@@ -8752,7 +8822,7 @@ struct	ast_tm localtm;
 		/* Say the time is ... */		
 		if (sayfile(mychannel,"rpt/thetimeis") == -1) return;
 		/* Say the time */				
-	    	res = ast_say_time(mychannel, t1, "", mychannel->language);
+	    	res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);		
@@ -8765,19 +8835,19 @@ struct	ast_tm localtm;
     		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) return;
 		/* Say "version" */
 		if (sayfile(mychannel,"rpt/version") == -1) return;
-		res = ast_say_number(mychannel, vmajor, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, vmajor, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
 		if (saycharstr(mychannel,".") == -1) return;
 		if(!res) /* Say "Y" */
-			ast_say_number(mychannel, vminor, "", mychannel->language, (char *) NULL);
+			ast_say_number(mychannel, vminor, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res){
 			res = ast_waitstream(mychannel, "");
 			ast_stopstream(mychannel);
 		}	
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		return;
 	}		
 	if (!strcasecmp(strs[0],"STATS_GPS"))
@@ -8789,12 +8859,12 @@ struct	ast_tm localtm;
 		c = *(strs[2] + strlen(strs[2]) - 1);
 		*(strs[2] + strlen(strs[2]) - 1) = 0;
 		if (sscanf(strs[2],"%2d%d.%d",&i,&j,&k) != 3) return;
-		res = ast_say_number(mychannel, i, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
 		if (sayfile(mychannel,"degrees") == -1) return;
-		res = ast_say_number(mychannel, j, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
@@ -8805,12 +8875,12 @@ struct	ast_tm localtm;
 		c = *(strs[3] + strlen(strs[3]) - 1);
 		*(strs[3] + strlen(strs[3]) - 1) = 0;
 		if (sscanf(strs[3],"%3d%d.%d",&i,&j,&k) != 3) return;
-		res = ast_say_number(mychannel, i, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
 		if (sayfile(mychannel,"degrees") == -1) return;
-		res = ast_say_number(mychannel, j, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
@@ -8832,12 +8902,12 @@ struct	ast_tm localtm;
 		}			
 		sprintf(buf,"%0.1f",f);
 		if (sscanf(buf,"%d.%d",&i,&j) != 2) return;
-		res = ast_say_number(mychannel, i, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
 		if (saycharstr(mychannel,".") == -1) return;
-		res = ast_say_number(mychannel, j, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
@@ -8875,15 +8945,15 @@ struct	ast_tm localtm;
 		}
 		for(i=0; i<looptemp; i++) {
 			if(!strcmp(tmp[i], "PARKED")) {
-				ast_say_digits(mychannel, atoi(myparm), "", mychannel->language);
+				ast_say_digits(mychannel, atoi(myparm), "", ast_channel_language(mychannel));
 			} else if(!strcmp(tmp[i], "NODE")) {
-				ast_say_digits(mychannel, atoi(strs[1]), "", mychannel->language);
+				ast_say_digits(mychannel, atoi(strs[1]), "", ast_channel_language(mychannel));
 			} else {
-				dres = ast_streamfile(mychannel, tmp[i], mychannel->language);
+				dres = ast_streamfile(mychannel, tmp[i], ast_channel_language(mychannel));
 				if(!dres) {
 					dres = ast_waitstream(mychannel, "");
 				} else {
-					ast_log(LOG_WARNING, "ast_streamfile of %s failed on %s\n", tmp[i], mychannel->name);
+					ast_log(LOG_WARNING, "ast_streamfile of %s failed on %s\n", tmp[i], ast_channel_name(mychannel));
 					dres = 0;
 				}
 			}
@@ -8966,6 +9036,7 @@ struct dahdi_params par;
 #ifdef	_MDC_ENCODE_H_
 struct	mdcparams *mdcp;
 #endif
+struct ast_format_cap *cap;
 
 	/* get a pointer to myrpt */
 	myrpt = mytele->rpt;
@@ -9008,11 +9079,19 @@ struct	mdcparams *mdcp;
 		id_malloc = 0;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
-		
 
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		/*! \todo we should probably bail out or exit here or something... */
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	/* allocate a pseudo-channel thru asterisk */
-	mychannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	mychannel = ast_request("DAHDI",cap,NULL,NULL,"pseudo",NULL);
+	ao2_ref(cap, -1);
+
 	if (!mychannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -9069,7 +9148,7 @@ struct	mdcparams *mdcp;
 		myrpt->conf : myrpt->teleconf);
 	ci.confmode = DAHDI_CONF_CONFANN;
 	/* first put the channel on the conference in announce mode */
-	if (ioctl(mychannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(mychannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		rpt_mutex_lock(&myrpt->lock);
@@ -9116,7 +9195,7 @@ struct	mdcparams *mdcp;
 	    case TAILMSG:
 		/* wait a little bit longer */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], mychannel->language); 
+			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel)); 
 		break;
 
 	    case IDTALKOVER:
@@ -9133,7 +9212,7 @@ struct	mdcparams *mdcp;
 		if (wait_interval(myrpt, DLY_TELEM, mychannel))
 			res = telem_lookup(myrpt, mychannel, myrpt->name, "patchup");
 		if(res < 0){ /* Then default message */
-			res = ast_streamfile(mychannel, "rpt/callproceeding", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/callproceeding", ast_channel_language(mychannel));
 		}
 		break;
 	    case TERM:
@@ -9141,7 +9220,7 @@ struct	mdcparams *mdcp;
 		if (!wait_interval(myrpt, DLY_CALLTERM, mychannel))
 			res = telem_lookup(myrpt, mychannel, myrpt->name, "patchdown");
 		if(res < 0){ /* Then default message */
-			res = ast_streamfile(mychannel, "rpt/callterminated", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/callterminated", ast_channel_language(mychannel));
 		}
 		break;
 	    case COMPLETE:
@@ -9157,12 +9236,12 @@ struct	mdcparams *mdcp;
 	    case MACRO_NOTFOUND:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/macro_notfound", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/macro_notfound", ast_channel_language(mychannel));
 		break;
 	    case MACRO_BUSY:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/macro_busy", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/macro_busy", ast_channel_language(mychannel));
 		break;
 	    case PAGE:
 		if (!wait_interval(myrpt, DLY_TELEM,  mychannel))
@@ -9173,7 +9252,7 @@ struct	mdcparams *mdcp;
 			myrpt->noduck=1;
 				res = ast_playtones_start(myrpt->txchannel,0,
 					(char *) mytele->submode.p,0);
-				while(myrpt->txchannel->generatordata)
+				while(ast_channel_generatordata(myrpt->txchannel))
 				{
 					if(ast_safe_sleep(myrpt->txchannel, 50))
 					{
@@ -9181,7 +9260,7 @@ struct	mdcparams *mdcp;
 						break;
 					}
 				}
-				free((char *)mytele->submode.p);
+				ast_free((char *)mytele->submode.p);
 			}
 		}
 		imdone = 1;
@@ -9211,7 +9290,7 @@ struct	mdcparams *mdcp;
 			}
 			res = mdc1200gen_start(myrpt->txchannel,mdcp->type,mdcp->UnitID,mdcp->DestID,mdcp->subcode);
 			ast_free(mdcp);
-			while(myrpt->txchannel->generatordata)
+			while(ast_channel_generatordata(myrpt->txchannel))
 			{
 				if(ast_safe_sleep(myrpt->txchannel, 50))
 				{
@@ -9313,7 +9392,7 @@ treataslocal:
 		{
 			res = telem_lookup(myrpt,mychannel, myrpt->name, "ranger");
 			if(res)
-				ast_log(LOG_WARNING, "telem_lookup:ranger failed on %s\n", mychannel->name);
+				ast_log(LOG_WARNING, "telem_lookup:ranger failed on %s\n", ast_channel_name(mychannel));
 		}
 
 		if ((mytele->mode == LOCUNKEY) &&
@@ -9328,7 +9407,7 @@ treataslocal:
 			else
 				res = -1;
 			if(res)
-			 	ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", mychannel->name);		
+			 	ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", ast_channel_name(mychannel));		
 		}
 		haslink = 0;
 		hastx = 0;
@@ -9382,7 +9461,7 @@ treataslocal:
 			myrpt->noduck=1;
 			res = telem_lookup(myrpt,mychannel, myrpt->name, (!hastx) ? "remotemon" : "remotetx");
 			if(res)
-				ast_log(LOG_WARNING, "telem_lookup:remotexx failed on %s\n", mychannel->name);
+				ast_log(LOG_WARNING, "telem_lookup:remotexx failed on %s\n", ast_channel_name(mychannel));
 			
 		
 			/* if in remote cmd mode, indicate it */
@@ -9391,7 +9470,7 @@ treataslocal:
 				ast_safe_sleep(mychannel,200);
 				res = telem_lookup(myrpt,mychannel, myrpt->name, "cmdmode");
 				if(res)
-				 	ast_log(LOG_WARNING, "telem_lookup:cmdmode failed on %s\n", mychannel->name);
+				 	ast_log(LOG_WARNING, "telem_lookup:cmdmode failed on %s\n", ast_channel_name(mychannel));
 				ast_stopstream(mychannel);
 			}
 		}
@@ -9406,7 +9485,7 @@ treataslocal:
 			else
 				res = -1;
 			if(res)
-			 	ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", mychannel->name);		
+			 	ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", ast_channel_name(mychannel));		
 		}	
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode,"aprstt"))))
 		{
@@ -9415,7 +9494,7 @@ treataslocal:
 			ci.confno = myrpt->conf;
 			ci.confmode = DAHDI_CONF_CONFANN;
 			/* first put the channel on the conference in announce mode */
-			if (ioctl(mychannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+			if (ioctl(ast_channel_fd(mychannel, 0),DAHDI_SETCONF,&ci) == -1)
 			{
 				ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 				rpt_mutex_lock(&myrpt->lock);
@@ -9443,7 +9522,7 @@ treataslocal:
 					res = -1;
 		
 				if(res)
-				 	ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", mychannel->name);		
+				 	ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", ast_channel_name(mychannel));		
 			}	
 		}
 #if	defined(_MDC_DECODE_H_) && defined(MDC_SAY_WHEN_DOING_CT)
@@ -9457,7 +9536,7 @@ treataslocal:
 			ci.confno = myrpt->txconf;
 			ci.confmode = DAHDI_CONF_CONFANN;
 			/* first put the channel on the conference in announce mode */
-			if (ioctl(mychannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+			if (ioctl(ast_channel_fd(mychannel, 0),DAHDI_SETCONF,&ci) == -1)
 			{
 				ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 				rpt_mutex_lock(&myrpt->lock);
@@ -9474,7 +9553,7 @@ treataslocal:
 			}
 			sprintf(mystr,"%04x",myrpt->lastunit);
 			myrpt->lastunit = 0;
-			ast_say_character_str(mychannel,mystr,NULL,mychannel->language);
+			ast_say_character_str(mychannel,mystr,NULL,ast_channel_language(mychannel));
 			break;
 		}
 #endif
@@ -9640,7 +9719,7 @@ treataslocal:
 			else
 				res = -1;
 			if(res)
-			 	ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", mychannel->name);		
+			 	ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", ast_channel_name(mychannel));		
 		}	
 		imdone = 1;
 		break;
@@ -9677,39 +9756,39 @@ treataslocal:
 		res = saynode(myrpt,mychannel,mytele->mylink.name);
 		if (!res) 
 		    res = ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? 
-			"rpt/remote_disc" : "rpt/remote_busy"), mychannel->language);
+			"rpt/remote_disc" : "rpt/remote_busy"), ast_channel_language(mychannel));
 		break;
 	    case REMALREADY:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/remote_already", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/remote_already", ast_channel_language(mychannel));
 		break;
 	    case REMNOTFOUND:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/remote_notfound", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/remote_notfound", ast_channel_language(mychannel));
 		break;
 	    case REMGO:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/remote_go", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/remote_go", ast_channel_language(mychannel));
 		break;
 	    case CONNECTED:
 		/* wait a little bit */
 		if (wait_interval(myrpt, DLY_TELEM,  mychannel) == -1) break;
 		res = saynode(myrpt,mychannel,mytele->mylink.name);
 		if (!res)
-		    res = ast_streamfile(mychannel, "rpt/connected", mychannel->language);
+		    res = ast_streamfile(mychannel, "rpt/connected", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
-		res = ast_streamfile(mychannel, "digits/2", mychannel->language);
+		res = ast_streamfile(mychannel, "digits/2", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
 		res = saynode(myrpt,mychannel,myrpt->name);
 		imdone = 1;
@@ -9717,22 +9796,22 @@ treataslocal:
 	    case CONNFAIL:
 		res = saynode(myrpt,mychannel,mytele->mylink.name);
 		if (!res) 
-		    res = ast_streamfile(mychannel, "rpt/connection_failed", mychannel->language);
+		    res = ast_streamfile(mychannel, "rpt/connection_failed", ast_channel_language(mychannel));
 		break;
 	    case MEMNOTFOUND:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/memory_notfound", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/memory_notfound", ast_channel_language(mychannel));
 		break;
 	    case PLAYBACK:
             case LOCALPLAY:
 		/* wait a little bit */
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) break;
-		res = ast_streamfile(mychannel, mytele->param, mychannel->language);
+		res = ast_streamfile(mychannel, mytele->param, ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
 		imdone = 1;
 		break;
@@ -9808,7 +9887,7 @@ treataslocal:
 			if (myrpt->iofd < 0)
 			{
 				i = DAHDI_FLUSH_EVENT;
-				if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_FLUSH,&i) == -1)
+				if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_FLUSH,&i) == -1)
 				{
 					myrpt->remsetting = 0;
 					ast_mutex_unlock(&myrpt->remlock);
@@ -9816,7 +9895,7 @@ treataslocal:
 					res = -1;
 					break;
 				}
-				if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_GET_PARAMS,&par) == -1)
+				if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_GET_PARAMS,&par) == -1)
 				{
 					myrpt->remsetting = 0;
 					ast_mutex_unlock(&myrpt->remlock);
@@ -9847,7 +9926,7 @@ treataslocal:
 	    case INVFREQ:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/invalid-freq", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/invalid-freq", ast_channel_language(mychannel));
 		break;
 	    case REMMODE:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) break;
@@ -10154,7 +10233,7 @@ treataslocal:
 			l1 = ast_malloc(sizeof(struct rpt_link));
 			if (!l1)
 			{
-				ast_log(LOG_WARNING, "Cannot alloc memory on %s\n", mychannel->name);
+				ast_log(LOG_WARNING, "Cannot alloc memory on %s\n", ast_channel_name(mychannel));
 				remque((struct qelem *)mytele);
 				myrpt->active_telem = NULL;
 				rpt_mutex_unlock(&myrpt->lock);
@@ -10176,11 +10255,11 @@ treataslocal:
 		if (myrpt->callmode)
 		{
 			hastx = 1;
-			res = ast_streamfile(mychannel, "rpt/autopatch_on", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/autopatch_on", ast_channel_language(mychannel));
 			if (!res) 
 				res = ast_waitstream(mychannel, "");
 			else
-				 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+				 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 			ast_stopstream(mychannel);
 		}
 		l = linkbase.next;
@@ -10194,21 +10273,21 @@ treataslocal:
 			if (!l->mode) s = "rpt/monitor";
 			if (l->mode > 1) s = "rpt/localmonitor";
 			if (!l->thisconnected) s = "rpt/connecting";
-			res = ast_streamfile(mychannel, s, mychannel->language);
+			res = ast_streamfile(mychannel, s, ast_channel_language(mychannel));
 			if (!res) 
 				res = ast_waitstream(mychannel, "");
 			else
-				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 			ast_stopstream(mychannel);
 			l = l->next;
 		}			
 		if (!hastx)
 		{
-			res = ast_streamfile(mychannel, "rpt/repeat_only", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/repeat_only", ast_channel_language(mychannel));
 			if (!res) 
 				res = ast_waitstream(mychannel, "");
 			else
-				 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+				 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 			ast_stopstream(mychannel);
 		}
 		/* destroy our local link queue */
@@ -10252,11 +10331,11 @@ treataslocal:
 		if (myrpt->callmode)
 		{
 			hastx = 1;
-			res = ast_streamfile(mychannel, "rpt/autopatch_on", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/autopatch_on", ast_channel_language(mychannel));
 			if (!res) 
 				res = ast_waitstream(mychannel, "");
 			else
-				 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+				 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 			ast_stopstream(mychannel);
 		}
 		/* go thru all the nodes in list */
@@ -10276,20 +10355,20 @@ treataslocal:
 			s = "rpt/tranceive";
 			if (mode == 'R') s = "rpt/monitor";
 			if (mode == 'C') s = "rpt/connecting";
-			res = ast_streamfile(mychannel, s, mychannel->language);
+			res = ast_streamfile(mychannel, s, ast_channel_language(mychannel));
 			if (!res) 
 				res = ast_waitstream(mychannel, "");
 			else
-				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 			ast_stopstream(mychannel);
 		}			
 		if (!hastx)
 		{
-			res = ast_streamfile(mychannel, "rpt/repeat_only", mychannel->language);
+			res = ast_streamfile(mychannel, "rpt/repeat_only", ast_channel_language(mychannel));
 			if (!res) 
 				res = ast_waitstream(mychannel, "");
 			else
-				 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+				 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 			ast_stopstream(mychannel);
 		}
 		imdone = 1;
@@ -10320,11 +10399,11 @@ treataslocal:
 
 	    case UNAUTHTX: /* Say unauthorized transmit frequency */
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) break;
-		res = ast_streamfile(mychannel, "rpt/unauthtx", mychannel->language);
+		res = ast_streamfile(mychannel, "rpt/unauthtx", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
 		imdone = 1;
 		break;
@@ -10332,7 +10411,7 @@ treataslocal:
 	    case PARROT: /* Repeat stuff */
 
 		sprintf(mystr,PARROTFILE,myrpt->name,mytele->parrot);
-		if (ast_fileexists(mystr,NULL,mychannel->language) <= 0)
+		if (ast_fileexists(mystr,NULL,ast_channel_language(mychannel)) <= 0)
 		{
 			imdone = 1;
 			myrpt->parrotstate = 0;
@@ -10340,11 +10419,11 @@ treataslocal:
 		}
 		if (wait_interval(myrpt, DLY_PARROT, mychannel) == -1) break;
 		sprintf(mystr,PARROTFILE,myrpt->name,mytele->parrot);
-		res = ast_streamfile(mychannel, mystr, mychannel->language);
+		res = ast_streamfile(mychannel, mystr, ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
 		sprintf(mystr,PARROTFILE,myrpt->name,mytele->parrot);
 		strcat(mystr,".wav");
@@ -10357,46 +10436,46 @@ treataslocal:
 	    case TIMEOUT:
 		res = saynode(myrpt,mychannel,myrpt->name);
 		if (!res)
-		   res = ast_streamfile(mychannel, "rpt/timeout", mychannel->language);
+		   res = ast_streamfile(mychannel, "rpt/timeout", ast_channel_language(mychannel));
 		break;
 		
 	    case TIMEOUT_WARNING:
 		time(&t);
 		res = saynode(myrpt,mychannel,myrpt->name);
 		if (!res)
-		   res = ast_streamfile(mychannel, "rpt/timeout-warning", mychannel->language);
+		   res = ast_streamfile(mychannel, "rpt/timeout-warning", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		ast_stopstream(mychannel);
 		if(!res) /* Say number of seconds */
 			ast_say_number(mychannel, myrpt->p.remotetimeout - 
 			    (t - myrpt->last_activity_time), 
-				"", mychannel->language, (char *) NULL);
+				"", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
-		res = ast_streamfile(mychannel, "queue-seconds", mychannel->language);
+		res = ast_streamfile(mychannel, "queue-seconds", ast_channel_language(mychannel));
 		break;
 
 	    case ACT_TIMEOUT_WARNING:
 		time(&t);
 		res = saynode(myrpt,mychannel,myrpt->name);
 		if (!res)
-		    res = ast_streamfile(mychannel, "rpt/act-timeout-warning", mychannel->language);
+		    res = ast_streamfile(mychannel, "rpt/act-timeout-warning", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);
 		if(!res) /* Say number of seconds */
 			ast_say_number(mychannel, myrpt->p.remoteinacttimeout - 
 			    (t - myrpt->last_activity_time), 
-				"", mychannel->language, (char *) NULL);
+				"", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
 		if (!res)
-			res = ast_streamfile(mychannel, "queue-seconds", mychannel->language);
+			res = ast_streamfile(mychannel, "queue-seconds", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);		
@@ -10428,7 +10507,7 @@ treataslocal:
 			break;
 		}
 		/* Say the time */				
-	    	res = ast_say_time(mychannel, t1, "", mychannel->language);
+	    	res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);		
@@ -10448,7 +10527,7 @@ treataslocal:
 			break;
 		}
 		if(!res) /* Say "X" */
-			ast_say_number(mychannel, vmajor, "", mychannel->language, (char *) NULL);
+			ast_say_number(mychannel, vmajor, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
@@ -10458,13 +10537,13 @@ treataslocal:
 			break;
 		}
 		if(!res) /* Say "Y" */
-			ast_say_number(mychannel, vminor, "", mychannel->language, (char *) NULL);
+			ast_say_number(mychannel, vminor, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res){
 			res = ast_waitstream(mychannel, "");
 			ast_stopstream(mychannel);
 		}	
 		else
-			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			 ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		imdone = 1;
 	    	break;
 	    case STATS_GPS:
@@ -10485,12 +10564,12 @@ treataslocal:
 		c = lat[strlen(lat) - 1];
 		lat[strlen(lat) - 1] = 0;
 		if (sscanf(lat,"%2d%d.%d",&i,&j,&k) != 3) break;
-		res = ast_say_number(mychannel, i, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
 		if (sayfile(mychannel,"degrees") == -1) break;
-		res = ast_say_number(mychannel, j, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
@@ -10501,12 +10580,12 @@ treataslocal:
 		c = lon[strlen(lon) - 1];
 		lon[strlen(lon) - 1] = 0;
 		if (sscanf(lon,"%3d%d.%d",&i,&j,&k) != 3) break;
-		res = ast_say_number(mychannel, i, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
 		if (sayfile(mychannel,"degrees") == -1) break;
-		res = ast_say_number(mychannel, j, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
@@ -10528,12 +10607,12 @@ treataslocal:
 		}			
 		sprintf(mystr,"%0.1f",f);
 		if (sscanf(mystr,"%d.%d",&i,&j) != 2) break;
-		res = ast_say_number(mychannel, i, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
 		if (saycharstr(mychannel,".") == -1) break;
-		res = ast_say_number(mychannel, j, "", mychannel->language, (char *) NULL);
+		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		ast_stopstream(mychannel);	
@@ -10570,15 +10649,15 @@ treataslocal:
 
 			for(i=0; i<looptemp; i++) {
 				if(!strcmp(tmp[i], "PARKED")) {
-					ast_say_digits(mychannel, atoi(myparm), "", mychannel->language);
+					ast_say_digits(mychannel, atoi(myparm), "", ast_channel_language(mychannel));
 				} else if(!strcmp(tmp[i], "NODE")) {
-					ast_say_digits(mychannel, atoi(myrpt->name), "", mychannel->language);
+					ast_say_digits(mychannel, atoi(myrpt->name), "", ast_channel_language(mychannel));
 				} else {
-					dres = ast_streamfile(mychannel, tmp[i], mychannel->language);
+					dres = ast_streamfile(mychannel, tmp[i], ast_channel_language(mychannel));
 					if(!dres) {
 						dres = ast_waitstream(mychannel, "");
 					} else {
-						ast_log(LOG_WARNING, "ast_streamfile of %s failed on %s\n", tmp[i], mychannel->name);
+						ast_log(LOG_WARNING, "ast_streamfile of %s failed on %s\n", tmp[i], ast_channel_name(mychannel));
 						dres = 0;
 					}
 				}
@@ -10596,7 +10675,7 @@ treataslocal:
 			myrpt->stopgen = 0;
 			break;
 		}
-	        while(mychannel->generatordata && (myrpt->stopgen <= 0)) {
+	        while(ast_channel_generatordata(mychannel) && (myrpt->stopgen <= 0)) {
 			if (ast_safe_sleep(mychannel,1)) break;
 		    	imdone = 1;
 			}
@@ -10614,7 +10693,7 @@ treataslocal:
 		if (!res) 
 			res = ast_waitstream(mychannel, "");
 		else {
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", mychannel->name);
+			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 			res = 0;
 		}
 	}
@@ -10696,8 +10775,8 @@ struct rpt_link *l;
 		if ((mylink->name[0] == '3') && (!myrpt->p.eannmode)) return;
 		if ((!mylink) || (mylink->name[0] == '0')) return;
 		if ((!mylink->gott) && (!mylink->isremote) && (!mylink->outbound) &&
-		    mylink->chan && strncasecmp(mylink->chan->name,"echolink",8) &&
-			strncasecmp(mylink->chan->name,"tlb",3)) return;
+		    mylink->chan && strncasecmp(ast_channel_name(mylink->chan),"echolink",8) &&
+			strncasecmp(ast_channel_name(mylink->chan),"tlb",3)) return;
 		break;
 	    case VARCMD:
 		if (myrpt->telemmode < 2) return; 
@@ -10995,11 +11074,21 @@ struct dahdi_confinfo ci;  /* conference info */
 struct	rpt *myrpt = (struct rpt *)this;
 int	res;
 int stopped,congstarted,dialtimer,lastcidx,aborted,sentpatchconnect;
-struct ast_channel *mychannel,*genchannel,*c;
+struct ast_channel *mychannel,*genchannel;
+struct ast_format_cap *cap;
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		/*! \todo should probably bail out or something */
+	}
+	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	myrpt->mydtmf = 0;
 	/* allocate a pseudo-channel thru asterisk */
-	mychannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	mychannel = ast_request("DAHDI",cap,NULL,NULL,"pseudo",NULL);
+	
+
 	if (!mychannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -11014,7 +11103,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 	ci.confno = myrpt->conf; /* use the pseudo conference */
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
 	/* first put the channel on the conference */
-	if (ioctl(mychannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(mychannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		ast_hangup(mychannel);
@@ -11022,7 +11111,8 @@ struct ast_channel *mychannel,*genchannel,*c;
 		pthread_exit(NULL);
 	}
 	/* allocate a pseudo-channel thru asterisk */
-	genchannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	genchannel = ast_request("DAHDI",cap,NULL,NULL,"pseudo",NULL);
+	ao2_ref(cap, -1);
 	if (!genchannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -11038,7 +11128,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 	ci.confno = myrpt->conf;
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
 	/* first put the channel on the conference */
-	if (ioctl(genchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(genchannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		ast_hangup(mychannel);
@@ -11046,7 +11136,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 		myrpt->callmode = 0;
 		pthread_exit(NULL);
 	}
-	if (myrpt->p.tonezone && (tone_zone_set_zone(mychannel->fds[0],myrpt->p.tonezone) == -1))
+	if (myrpt->p.tonezone && (tone_zone_set_zone(ast_channel_fd(mychannel, 0),myrpt->p.tonezone) == -1))
 	{
 		ast_log(LOG_WARNING, "Unable to set tone zone %s\n",myrpt->p.tonezone);
 		ast_hangup(mychannel);
@@ -11054,7 +11144,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 		myrpt->callmode = 0;
 		pthread_exit(NULL);
 	}
-	if (myrpt->p.tonezone && (tone_zone_set_zone(genchannel->fds[0],myrpt->p.tonezone) == -1))
+	if (myrpt->p.tonezone && (tone_zone_set_zone(ast_channel_fd(genchannel, 0),myrpt->p.tonezone) == -1))
 	{
 		ast_log(LOG_WARNING, "Unable to set tone zone %s\n",myrpt->p.tonezone);
 		ast_hangup(mychannel);
@@ -11064,7 +11154,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 	}
 	/* start dialtone if patchquiet is 0. Special patch modes don't send dial tone */
 	if ((!myrpt->patchquiet) && (!myrpt->patchexten[0]) 
-		&& (tone_zone_play_tone(genchannel->fds[0],DAHDI_TONE_DIALTONE) < 0))
+		&& (tone_zone_play_tone(ast_channel_fd(genchannel, 0),DAHDI_TONE_DIALTONE) < 0))
 	{
 		ast_log(LOG_WARNING, "Cannot start dialtone\n");
 		ast_hangup(mychannel);
@@ -11105,7 +11195,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 		{
 			stopped = 1;
 			/* stop dial tone */
-			tone_zone_play_tone(genchannel->fds[0],-1);
+			tone_zone_play_tone(ast_channel_fd(genchannel, 0),-1);
 		}
 		if (myrpt->callmode == 1)
 		{
@@ -11123,7 +11213,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 			if(!congstarted){
 				congstarted = 1;
 				/* start congestion tone */
-				tone_zone_play_tone(genchannel->fds[0],DAHDI_TONE_CONGESTION);
+				tone_zone_play_tone(ast_channel_fd(genchannel, 0),DAHDI_TONE_CONGESTION);
 			}
 		}
 		res = ast_safe_sleep(mychannel, MSWAIT);
@@ -11141,7 +11231,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 		dialtimer += MSWAIT;
 	}
 	/* stop any tone generation */
-	tone_zone_play_tone(genchannel->fds[0],-1);
+	tone_zone_play_tone(ast_channel_fd(genchannel, 0),-1);
 	/* end if done */
 	if (!myrpt->callmode)
 	{
@@ -11164,26 +11254,17 @@ struct ast_channel *mychannel,*genchannel,*c;
 		instr = ast_strdup(myrpt->p.ourcallerid);
 		if(instr){
 			ast_callerid_parse(instr, &name, &loc);
-			if(loc){
-				if(mychannel->cid.cid_num)
-					ast_free(mychannel->cid.cid_num);
-				mychannel->cid.cid_num = ast_strdup(loc);
-			}
-			if(name){
-				if(mychannel->cid.cid_name)
-					ast_free(mychannel->cid.cid_name);
-				mychannel->cid.cid_name = ast_strdup(name);
-			}
+			ast_set_callerid(mychannel, loc, name, NULL);
 			ast_free(instr);
 		}
 	}
 
-	ast_copy_string(mychannel->exten, myrpt->exten, sizeof(mychannel->exten) - 1);
-	ast_copy_string(mychannel->context, myrpt->patchcontext, sizeof(mychannel->context) - 1);
-	
+	ast_channel_context_set(mychannel, myrpt->patchcontext);
+	ast_channel_exten_set(mychannel, myrpt->exten);
+
 	if (myrpt->p.acctcode)
-		ast_cdr_setaccount(mychannel,myrpt->p.acctcode);
-	mychannel->priority = 1;
+		ast_channel_accountcode_set(mychannel, myrpt->p.acctcode);
+	ast_channel_priority_set(mychannel, 1);
 	ast_channel_undefer_dtmf(mychannel);
 	if (ast_pbx_start(mychannel) < 0)
 	{
@@ -11203,10 +11284,10 @@ struct ast_channel *mychannel,*genchannel,*c;
 	ci.confno = myrpt->conf;
 	ci.confmode = (myrpt->p.duplex == 2) ? DAHDI_CONF_CONFANNMON :
 		(DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
-	if (mychannel->pbx)
+	if (ast_channel_pbx(mychannel))
 	{
 		/* first put the channel on the conference in announce mode */
-		if (ioctl(myrpt->pchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+		if (ioctl(ast_channel_fd(myrpt->pchannel, 0),DAHDI_SETCONF,&ci) == -1)
 		{
 			ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 			ast_hangup(mychannel);
@@ -11217,7 +11298,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 		}
 		/* get its channel number */
 		res = 0;
-		if (ioctl(mychannel->fds[0],DAHDI_CHANNO,&res) == -1)
+		if (ioctl(ast_channel_fd(mychannel, 0),DAHDI_CHANNO,&res) == -1)
 		{
 			ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
 			ast_hangup(mychannel);
@@ -11229,7 +11310,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 		ci.confno = res;
 		ci.confmode = DAHDI_CONF_MONITOR;
 		/* put vox channel monitoring on the channel  */
-		if (ioctl(myrpt->voxchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+		if (ioctl(ast_channel_fd(myrpt->voxchannel, 0),DAHDI_SETCONF,&ci) == -1)
 		{
 			ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 			ast_hangup(mychannel);
@@ -11240,7 +11321,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 	sentpatchconnect = 0;
 	while(myrpt->callmode)
 	{
-		if ((!mychannel->pbx) && (myrpt->callmode != 4))
+		if ((!ast_channel_pbx(mychannel)) && (myrpt->callmode != 4))
 		{
 		    /* If patch is setup for far end disconnect */
 			if(myrpt->patchfarenddisconnect || (myrpt->p.duplex < 2)){ 
@@ -11258,15 +11339,14 @@ struct ast_channel *mychannel,*genchannel,*c;
 				myrpt->callmode = 4;
 				rpt_mutex_unlock(&myrpt->lock);
 				/* start congestion tone */
-				tone_zone_play_tone(genchannel->fds[0],DAHDI_TONE_CONGESTION);
+				tone_zone_play_tone(ast_channel_fd(genchannel, 0),DAHDI_TONE_CONGESTION);
 				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
-		c = ast_bridged_channel(mychannel);
-		if (c && c->_state == AST_STATE_UP)
+		if (ast_channel_is_bridged(mychannel) && ast_channel_state(mychannel) == AST_STATE_UP)
 		if ((!sentpatchconnect) &&
 			myrpt->p.patchconnect && 
-			c && (c->_state == AST_STATE_UP))
+			ast_channel_is_bridged(mychannel) && (ast_channel_state(mychannel) == AST_STATE_UP))
 		{
 			sentpatchconnect = 1;			
 			rpt_telemetry(myrpt,PLAYBACK,myrpt->p.patchconnect);
@@ -11275,8 +11355,8 @@ struct ast_channel *mychannel,*genchannel,*c;
 		{
 			struct ast_frame wf = {AST_FRAME_DTMF, } ;
 
-			wf.subclass = myrpt->mydtmf;
-			if (c && c->_state == AST_STATE_UP)
+			wf.subclass.integer = myrpt->mydtmf;
+			if (ast_channel_is_bridged(mychannel) && ast_channel_state(mychannel) == AST_STATE_UP)
 			{
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_queue_frame(mychannel,&wf);
@@ -11292,8 +11372,8 @@ struct ast_channel *mychannel,*genchannel,*c;
 	if(debug)
 		ast_log(LOG_NOTICE, "exit channel loop\n");
 	rpt_mutex_unlock(&myrpt->lock);
-	tone_zone_play_tone(genchannel->fds[0],-1);
-	if (mychannel->pbx) ast_softhangup(mychannel,AST_SOFTHANGUP_DEV);
+	tone_zone_play_tone(ast_channel_fd(genchannel, 0),-1);
+	if (ast_channel_pbx(mychannel)) ast_softhangup(mychannel,AST_SOFTHANGUP_DEV);
 	ast_hangup(genchannel);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = 0;
@@ -11306,7 +11386,7 @@ struct ast_channel *mychannel,*genchannel,*c;
 	ci.confmode = ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4)) ? DAHDI_CONF_CONFANNMON :
 		(DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
 	/* first put the channel on the conference in announce mode */
-	if (ioctl(myrpt->pchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(myrpt->pchannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 	}
@@ -11322,7 +11402,7 @@ struct	rpt_link *l;
 
 	snprintf(str, sizeof(str), "D %s %s %d %c", myrpt->cmdnode, myrpt->name, ++(myrpt->dtmfidx), c);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass = 0;
+	wf.subclass.integer = 0;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -11340,7 +11420,7 @@ struct	rpt_link *l;
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name,myrpt->cmdnode))
 		{
-			AST_FRAME_DATA(wf) = str;
+			wf.data.ptr = str;
 			if (l->chan) rpt_qwrite(l,&wf);
 			return;
 		}
@@ -11350,7 +11430,7 @@ struct	rpt_link *l;
 	/* if not, give it to everyone */
 	while(l != &myrpt->links)
 	{
-		AST_FRAME_DATA(wf) = str;
+		wf.data.ptr = str;
 		if (l->chan) rpt_qwrite(l,&wf);
 		l = l->next;
 	}
@@ -11370,7 +11450,7 @@ struct	rpt_link *l;
 	rpt_mutex_unlock(&myrpt->lock);
 	snprintf(str, sizeof(str), "K? * %s 0 0", myrpt->name);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass = 0;
+	wf.subclass.integer = 0;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -11380,7 +11460,7 @@ struct	rpt_link *l;
 	/* give it to everyone */
 	while(l != &myrpt->links)
 	{
-		AST_FRAME_DATA(wf) = str;
+		wf.data.ptr = str;
 		if (l->chan) rpt_qwrite(l,&wf);
 		l = l->next;
 	}
@@ -11395,7 +11475,7 @@ struct	rpt_link *l;
 
 	snprintf(str, sizeof(str) - 1, "T %s %s", myrpt->name,cmd);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass = 0;
+	wf.subclass.integer = 0;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -11405,7 +11485,7 @@ struct	rpt_link *l;
 	/* give it to everyone */
 	while(l != &myrpt->links)
 	{
-		AST_FRAME_DATA(wf) = str;
+		wf.data.ptr = str;
 		if (l->chan && (l->mode == 1)) rpt_qwrite(l,&wf);
 		l = l->next;
 	}
@@ -11443,13 +11523,14 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 {
 	char *s, *s1, *tele,*cp;
 	char lstr[MAXLINKLIST],*strs[MAXLINKLIST];
-	char tmp[300], deststr[300] = "",modechange = 0;
+	char tmp[300], deststr[325] = "",modechange = 0;
 	char sx[320],*sy;
 	struct rpt_link *l;
 	int reconnects = 0;
 	int i,n;
 	int voterlink=0;
 	struct dahdi_confinfo ci;  /* conference info */
+	struct ast_format_cap *cap;
 
 	if (strlen(node) < 1) return 1;
 
@@ -11534,8 +11615,8 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 			rpt_mutex_unlock(&myrpt->lock);
 			return 2; /* Already linked */
 		}
-		if ((!strncasecmp(l->chan->name,"echolink",8)) ||
-			(!strncasecmp(l->chan->name,"tlb",3)))
+		if ((!strncasecmp(ast_channel_name(l->chan),"echolink",8)) ||
+			(!strncasecmp(ast_channel_name(l->chan),"tlb",3)))
 		{
 			l->mode = mode;
 			strncpy(myrpt->lastlinknode,node,MAXNODESTR - 1);
@@ -11594,7 +11675,7 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 	if ((strncasecmp(s1,"iax2/", 5) == 0) || (strncasecmp(s1,"echolink/",9) == 0) ||
 		(strncasecmp(s1,"tlb/",4) == 0))
 #endif
-        	strlcpy(deststr, s1, sizeof(deststr)-1);
+        	ast_copy_string(deststr, s1, sizeof(deststr)-1);
 	else
 	        snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
 	tele = strchr(deststr, '/');
@@ -11604,6 +11685,15 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 		return -1;
 	}
 	*tele++ = 0;
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		return -1;
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+
 	if (!strncasecmp(deststr,"echolink",8))
 	{
 		char tel1[100];
@@ -11612,32 +11702,30 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 		cp = strchr(tel1,'/');
 		if (cp) cp++; else cp = tel1;
 		strcpy(cp,node + 1);
-		l->chan = ast_request(deststr, AST_FORMAT_SLINEAR,  tel1,NULL);
+		l->chan = ast_request(deststr, cap, NULL, NULL, tel1, NULL);
 	}
 	else
 	{
-		l->chan = ast_request(deststr, AST_FORMAT_SLINEAR,tele,NULL);
+		l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 		if (!(l->chan))
 		{
 			usleep(150000);
-			l->chan = ast_request(deststr, AST_FORMAT_SLINEAR,tele,NULL);
+			l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 		}
 	}
 	if (l->chan){
-		ast_set_read_format(l->chan, AST_FORMAT_SLINEAR);
-		ast_set_write_format(l->chan, AST_FORMAT_SLINEAR);
+		ast_set_read_format(l->chan, ast_format_slin);
+		ast_set_write_format(l->chan, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 		if (l->chan->cdr)
 			ast_set_flag(l->chan->cdr,AST_CDR_FLAG_POST_DISABLED);
 #endif
-		l->chan->appl = "Apprpt";
-		l->chan->data = "(Remote Rx)";
+		ast_channel_appl_set(l->chan, "Apprpt");
+		ast_channel_data_set(l->chan, "(Remote Rx)");
 		if (debug > 3)
 			ast_log(LOG_NOTICE, "rpt (remote) initiating call to %s/%s on %s\n",
-		deststr, tele, l->chan->name);
-		if(l->chan->cid.cid_num)
-			ast_free(l->chan->cid.cid_num);
-		l->chan->cid.cid_num = ast_strdup(myrpt->name);
+		deststr, tele, ast_channel_name(l->chan));
+		ast_set_callerid(l->chan, myrpt->name, NULL, NULL);
 		ast_call(l->chan,tele,2000);
 	}
 	else
@@ -11652,18 +11740,20 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 			donodelog(myrpt,str);
 		}
 		ast_free(l);
+		ao2_ref(cap, -1);
 		return -1;
 	}
 	/* allocate a pseudo-channel thru asterisk */
-	l->pchan = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	l->pchan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	ao2_ref(cap, -1);
 	if (!l->pchan){
 		ast_log(LOG_WARNING,"rpt connect: Sorry unable to obtain pseudo channel\n");
 		ast_hangup(l->chan);
 		ast_free(l);
 		return -1;
 	}
-	ast_set_read_format(l->pchan, AST_FORMAT_SLINEAR);
-	ast_set_write_format(l->pchan, AST_FORMAT_SLINEAR);
+	ast_set_read_format(l->pchan, ast_format_slin);
+	ast_set_write_format(l->pchan, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (l->pchan->cdr)
 		ast_set_flag(l->pchan->cdr,AST_CDR_FLAG_POST_DISABLED);
@@ -11674,7 +11764,7 @@ static int connect_link(struct rpt *myrpt, char* node, int mode, int perma)
 	ci.confno = myrpt->conf;
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
 	/* first put the channel on the conference in proper mode */
-	if (ioctl(l->pchan->fds[0], DAHDI_SETCONF, &ci) == -1)
+	if (ioctl(ast_channel_fd(l->pchan, 0), DAHDI_SETCONF, &ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		ast_hangup(l->chan);
@@ -11756,7 +11846,7 @@ static int function_ilink(struct rpt *myrpt, char *param, char *digits, int comm
 					rpt_mutex_unlock(&myrpt->lock);
 					return DC_COMPLETE;
 				}
-				strlcpy(myrpt->lastlinknode,digitbuf,MAXNODESTR - 1);
+				ast_copy_string(myrpt->lastlinknode,digitbuf,MAXNODESTR - 1);
 				l->retries = l->max_retries + 1;
 				l->disced = 1;
 				l->hasconnected = 1;
@@ -11764,7 +11854,7 @@ static int function_ilink(struct rpt *myrpt, char *param, char *digits, int comm
 				memset(&wf,0,sizeof(wf));
 				wf.frametype = AST_FRAME_TEXT;
 				wf.datalen = strlen(discstr) + 1;
-				AST_FRAME_DATA(wf) = discstr;
+				wf.data.ptr = discstr;
 				wf.src = "function_ilink:1";
 				if (l->chan)
 				{
@@ -11828,8 +11918,8 @@ static int function_ilink(struct rpt *myrpt, char *param, char *digits, int comm
 				(command_source != SOURCE_ALT) &&
 				(command_source != SOURCE_DPHONE) && mylink &&
 				(!iswebtransceiver(mylink)) &&
-				strncasecmp(mylink->chan->name,"echolink",8) &&
-				strncasecmp(mylink->chan->name,"tlb",3))
+				strncasecmp(ast_channel_name(mylink->chan),"echolink",8) &&
+				strncasecmp(ast_channel_name(mylink->chan),"tlb",3))
 					return DC_COMPLETE;
 			
 			/* if already in cmd mode, or selected self, fughetabahtit */
@@ -11861,7 +11951,7 @@ static int function_ilink(struct rpt *myrpt, char *param, char *digits, int comm
 			}
 			rpt_mutex_lock(&myrpt->lock);
 			strcpy(myrpt->lastlinknode,digitbuf);
-			strlcpy(myrpt->cmdnode, digitbuf, sizeof(myrpt->cmdnode) - 1);
+			ast_copy_string(myrpt->cmdnode, digitbuf, sizeof(myrpt->cmdnode) - 1);
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telem_select(myrpt,command_source,mylink);
 			rpt_telemetry(myrpt, REMGO, NULL);	
@@ -11909,7 +11999,7 @@ static int function_ilink(struct rpt *myrpt, char *param, char *digits, int comm
 				memset(&wf,0,sizeof(wf));
                                 wf.frametype = AST_FRAME_TEXT;
                                 wf.datalen = strlen(discstr) + 1;
-                                AST_FRAME_DATA(wf) = discstr;
+                                wf.data.ptr = discstr;
 				wf.src = "function_ilink:6";
                                 if (l->chan)
                                 {
@@ -11962,7 +12052,7 @@ static int function_ilink(struct rpt *myrpt, char *param, char *digits, int comm
 					memset(&wf,0,sizeof(wf));
 	                                wf.frametype = AST_FRAME_TEXT;
 	                                wf.datalen = strlen(discstr) + 1;
-	                                AST_FRAME_DATA(wf) = discstr;
+	                                wf.data.ptr = discstr;
 					wf.src = "function_ilink:6";
 	                                if (l->chan)
 	                                {
@@ -12105,7 +12195,7 @@ static int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, 
 		myrpt->patchfarenddisconnect = 0;
 		myrpt->patchquiet = 0;
 		myrpt->patchvoxalways = 0;
-		strlcpy(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT-1);
+		ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT-1);
 		memset(myrpt->patchexten, 0, sizeof(myrpt->patchexten));
 
 	}
@@ -12356,7 +12446,7 @@ static int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int
 	if(debug) 
 		printf("@@@@ playback param = %s, digitbuf = %s\n", (param)? param : "(null)", digitbuf);
 	
-	if (ast_fileexists(param,NULL,myrpt->rxchannel->language) <= 0)
+	if (ast_fileexists(param,NULL,ast_channel_language(myrpt->rxchannel)) <= 0)
 		return DC_ERROR;
 
 	rpt_telem_select(myrpt,command_source,mylink);
@@ -12379,7 +12469,7 @@ static int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, in
         if(debug)
                 printf("@@@@ localplay param = %s, digitbuf = %s\n", (param)? param : "(null)", digitbuf);
 
-        if (ast_fileexists(param,NULL,myrpt->rxchannel->language) <= 0)
+        if (ast_fileexists(param,NULL,ast_channel_language(myrpt->rxchannel)) <= 0)
                 return DC_ERROR;
 
         rpt_telemetry(myrpt,LOCALPLAY,param);
@@ -12707,8 +12797,8 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 			src = 0;
 			if ((mylink->name[0] <= '0') || (mylink->name[0] > '9')) src = LINKMODE_GUI;
 			if (mylink->phonemode) src = LINKMODE_PHONE;
-			else if (!strncasecmp(mylink->chan->name,"echolink",8)) src = LINKMODE_ECHOLINK;
-			else if (!strncasecmp(mylink->chan->name,"tlb",3)) src = LINKMODE_TLB;
+			else if (!strncasecmp(ast_channel_name(mylink->chan),"echolink",8)) src = LINKMODE_ECHOLINK;
+			else if (!strncasecmp(ast_channel_name(mylink->chan),"tlb",3)) src = LINKMODE_TLB;
 			if (src && myrpt->p.linkmodedynamic[src])
 			{
 				set_linkmode(mylink,LINKMODE_ON);
@@ -12722,8 +12812,8 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 			src = 0;
 			if ((mylink->name[0] <= '0') || (mylink->name[0] > '9')) src = LINKMODE_GUI;
 			if (mylink->phonemode) src = LINKMODE_PHONE;
-			else if (!strncasecmp(mylink->chan->name,"echolink",8)) src = LINKMODE_ECHOLINK;
-			else if (!strncasecmp(mylink->chan->name,"tlb",3)) src = LINKMODE_TLB;
+			else if (!strncasecmp(ast_channel_name(mylink->chan),"echolink",8)) src = LINKMODE_ECHOLINK;
+			else if (!strncasecmp(ast_channel_name(mylink->chan),"tlb",3)) src = LINKMODE_TLB;
 			if (src && myrpt->p.linkmodedynamic[src])
 			{
 				set_linkmode(mylink,LINKMODE_OFF);
@@ -12737,8 +12827,8 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 			src = 0;
 			if ((mylink->name[0] <= '0') || (mylink->name[0] > '9')) src = LINKMODE_GUI;
 			if (mylink->phonemode) src = LINKMODE_PHONE;
-			else if (!strncasecmp(mylink->chan->name,"echolink",8)) src = LINKMODE_ECHOLINK;
-			else if (!strncasecmp(mylink->chan->name,"tlb",3)) src = LINKMODE_TLB;
+			else if (!strncasecmp(ast_channel_name(mylink->chan),"echolink",8)) src = LINKMODE_ECHOLINK;
+			else if (!strncasecmp(ast_channel_name(mylink->chan),"tlb",3)) src = LINKMODE_TLB;
 			if (src && myrpt->p.linkmodedynamic[src])
 			{
 				set_linkmode(mylink,LINKMODE_FOLLOW);
@@ -12752,8 +12842,8 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 			src = 0;
 			if ((mylink->name[0] <= '0') || (mylink->name[0] > '9')) src = LINKMODE_GUI;
 			if (mylink->phonemode) src = LINKMODE_PHONE;
-			else if (!strncasecmp(mylink->chan->name,"echolink",8)) src = LINKMODE_ECHOLINK;
-			else if (!strncasecmp(mylink->chan->name,"tlb",3)) src = LINKMODE_TLB;
+			else if (!strncasecmp(ast_channel_name(mylink->chan),"echolink",8)) src = LINKMODE_ECHOLINK;
+			else if (!strncasecmp(ast_channel_name(mylink->chan),"tlb",3)) src = LINKMODE_TLB;
 			if (src && myrpt->p.linkmodedynamic[src])
 			{
 				set_linkmode(mylink,LINKMODE_DEMAND);
@@ -12820,7 +12910,7 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 					argv[i] = dtmf_tones[15];
 				j += strlen(argv[i]);
 			}
-			cp = malloc(j + 100);
+			cp = ast_malloc(j + 100);
 			if (!cp)
 			{
 				ast_log(LOG_NOTICE,"cannot malloc");
@@ -12883,18 +12973,18 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 				myrpt->parrotonce = 1;
 			return DC_COMPLETE;		
 		case 56: /* RX CTCSS Enable */
-			if ((strncasecmp(myrpt->rxchannel->name,"zap/", 4) == 0) || 
-			    (strncasecmp(myrpt->rxchannel->name,"dahdi/", 6) == 0))
+			if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"zap/", 4) == 0) || 
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"dahdi/", 6) == 0))
 			{
 				struct dahdi_radio_param r;
 
 				memset(&r,0,sizeof(struct dahdi_radio_param));
 				r.radpar = DAHDI_RADPAR_IGNORECT;
 				r.data = 0;
-				ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&r);
+				ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&r);
 			}
-			if ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) || 
-			    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0))
+			if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) || 
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0))
 			{
 				ast_sendtext(myrpt->rxchannel,"RXCTCSS 1");
 
@@ -12903,19 +12993,19 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 			rpt_telemetry(myrpt, ARB_ALPHA, (void *) "RXPLENA");
 			return DC_COMPLETE;		
 		case 57: /* RX CTCSS Disable */
-			if ((strncasecmp(myrpt->rxchannel->name,"zap/", 4) == 0) || 
-			    (strncasecmp(myrpt->rxchannel->name,"dahdi/", 6) == 0))
+			if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"zap/", 4) == 0) || 
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"dahdi/", 6) == 0))
 			{
 				struct dahdi_radio_param r;
 
 				memset(&r,0,sizeof(struct dahdi_radio_param));
 				r.radpar = DAHDI_RADPAR_IGNORECT;
 				r.data = 1;
-				ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&r);
+				ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&r);
 			}
 
-			if ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) || 
-			    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0))
+			if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) || 
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0))
 			{
 				ast_sendtext(myrpt->rxchannel,"RXCTCSS 0");
 
@@ -12954,9 +13044,9 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 		case 62: /* same, without function complete (quietly, oooooooh baby!) */
 			if (argc < 1) break;
 			/* ignore if not a USB channel */
-			if ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) &&
-			    (strncasecmp(myrpt->rxchannel->name,"beagle/", 7) == 0) &&
-			    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0)) break;
+			if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) &&
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"beagle/", 7) == 0) &&
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0)) break;
 			/* go thru all the specs */
 			for(i = 1; i < argc; i++)
 			{
@@ -12993,9 +13083,9 @@ static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int comm
 		case 65: /* send POCSAG page */
 			if (argc < 3) break;
 			/* ignore if not a USB channel */
-			if ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) &&
-			    (strncasecmp(myrpt->rxchannel->name,"voter/", 6) == 0) &&
-			    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0)) break;
+			if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) &&
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"voter/", 6) == 0) &&
+			    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0)) break;
 			if (argc > 5)
 				sprintf(string,"PAGE %s %s %s %s %s",argv[1],argv[2],argv[3],argv[4],argv[5]);
 			else
@@ -13118,7 +13208,7 @@ struct rpt_link *l;
 struct	ast_frame wf;
 
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass = 0;
+	wf.subclass.integer = 0;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -13170,7 +13260,7 @@ struct	ast_frame wf;
 			}
 			/* send, but not to src */
 			if (strcmp(l->name,src)) {
-				AST_FRAME_DATA(wf)= str;
+				wf.data.ptr = str;
 				if (l->chan) rpt_qwrite(l,&wf); 
 			}
 			l = l->next;
@@ -13206,7 +13296,7 @@ struct	ast_frame wf;
 			{
 				ast_verbose("Private Text Message for %s From %s: %s\n",
 					rpt_vars[i].name,src,tmp + rest);
-				ast_log(LOG_EVENT,"Node %s Got Private Text Message From Node %s: %s\n",
+				ast_log(LOG_NOTICE,"Node %s Got Private Text Message From Node %s: %s\n",
 					rpt_vars[i].name,src,tmp + rest);
 				return;
 			}
@@ -13215,7 +13305,7 @@ struct	ast_frame wf;
 		if (!strcmp(dest,"0"))
 		{
 			ast_verbose("Text Message From %s: %s\n",src,tmp + rest);
-			ast_log(LOG_EVENT,"Node %s Got Text Message From Node %s: %s\n",
+			ast_log(LOG_NOTICE,"Node %s Got Text Message From Node %s: %s\n",
 				myrpt->name,src,tmp + rest);
 		}
 		l = myrpt->links.next;
@@ -13235,7 +13325,7 @@ struct	ast_frame wf;
 			}
 			/* send, but not to src */
 			if (strcmp(l->name,src)) {
-				AST_FRAME_DATA(wf) = str;
+				wf.data.ptr = str;
 				if (l->chan) rpt_qwrite(l,&wf); 
 			}
 			l = l->next;
@@ -13266,7 +13356,7 @@ struct	ast_frame wf;
 			}
 			/* send, but not to src */
 			if (strcmp(l->name,src)) {
-				AST_FRAME_DATA(wf) = str;
+				wf.data.ptr = str;
 				if (l->chan) rpt_qwrite(l,&wf); 
 			}
 			l = l->next;
@@ -13321,7 +13411,7 @@ struct	ast_frame wf;
 			}
 			/* send, but not to src */
 			if (strcmp(l->name,src)) {
-				AST_FRAME_DATA(wf) = str;
+				wf.data.ptr = str;
 				if (l->chan) rpt_qwrite(l,&wf); 
 			}
 			l = l->next;
@@ -13367,7 +13457,7 @@ struct	ast_frame wf;
 				{
 					/* send, but not to src */
 					if (strcmp(l->name,src)) {
-						AST_FRAME_DATA(wf) = str;
+						wf.data.ptr = str;
 						if (l->chan) rpt_qwrite(l,&wf);
 					}
 					return;
@@ -13395,7 +13485,7 @@ struct	ast_frame wf;
 				}
 				/* send, but not to src */
 				if (strcmp(l->name,src)) {
-					AST_FRAME_DATA(wf) = str;
+					wf.data.ptr = str;
 					if (l->chan) rpt_qwrite(l,&wf); 
 				}
 				l = l->next;
@@ -13414,7 +13504,7 @@ struct	ast_frame wf;
 				n = (int)(now - myrpt->lastkeyedtime);
 			}
 			sprintf(tmp1,"K %s %s %d %d",src,myrpt->name,myrpt->keyed,n);
-			AST_FRAME_DATA(wf)= tmp1;
+			wf.data.ptr= tmp1;
 			wf.datalen = strlen(tmp1) + 1;
 			if (mylink->chan) rpt_qwrite(mylink,&wf); 
 			return;
@@ -13434,7 +13524,7 @@ struct	ast_frame wf;
 		}
 		if (i < TOPKEYN)
 		{
-			strlcpy(myrpt->topkey[i].node,src,TOPKEYMAXSTR - 1);
+			ast_copy_string(myrpt->topkey[i].node,src,TOPKEYMAXSTR - 1);
 			myrpt->topkey[i].timesince = ts;
 			myrpt->topkey[i].keyed = seq;
 		}
@@ -13492,7 +13582,7 @@ struct	ast_frame wf;
 			{
 				/* send, but not to src */
 				if (strcmp(l->name,src)) {
-					AST_FRAME_DATA(wf) = str;
+					wf.data.ptr = str;
 					if (l->chan) rpt_qwrite(l,&wf);
 				}
 				return;
@@ -13516,7 +13606,7 @@ struct	ast_frame wf;
 			}
 			/* send, but not to src */
 			if (strcmp(l->name,src)) {
-				AST_FRAME_DATA(wf) = str;
+				wf.data.ptr = str;
 				if (l->chan) rpt_qwrite(l,&wf); 
 			}
 			l = l->next;
@@ -13534,7 +13624,7 @@ struct	ast_frame wf;
 	if (!c) return;
 	rpt_mutex_lock(&myrpt->lock);
 	if ((iswebtransceiver(mylink)) ||  /* if a WebTransceiver node */
-		(!strncasecmp(mylink->chan->name,"tlb",3)))  /* or a tlb node */
+		(!strncasecmp(ast_channel_name(mylink->chan),"tlb",3)))  /* or a tlb node */
 	{
 		if (c == myrpt->p.endchar) myrpt->cmdnode[0] = 0;
 		else if (myrpt->cmdnode[0])
@@ -13718,7 +13808,7 @@ int	res;
 		if (c == myrpt->p.endchar)
 		{
 			if (mylink->lastrx && 
-			    strncasecmp(mylink->chan->name,"echolink",8))
+			    strncasecmp(ast_channel_name(mylink->chan),"echolink",8))
 			{
 				mylink->lastrealrx = 0;
 				rpt_mutex_unlock(&myrpt->lock);
@@ -14100,16 +14190,16 @@ struct dahdi_radio_param r;
 	r.radpar = DAHDI_RADPAR_REMMODE;
 	r.data = DAHDI_RADPAR_REM_RBI1;
 	/* if setparam ioctl fails, its probably not a pciradio card */
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&r) == -1)
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&r) == -1)
 	{
 		rbi_out_parallel(myrpt,data);
 		return;
 	}
 	r.radpar = DAHDI_RADPAR_REMCOMMAND;
 	memcpy(&r.data,data,5);
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&r) == -1)
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&r) == -1)
 	{
-		ast_log(LOG_WARNING,"Cannot send RBI command for channel %s\n",myrpt->zaprxchannel->name);
+		ast_log(LOG_WARNING,"Cannot send RBI command for channel %s\n",ast_channel_name(myrpt->zaprxchannel));
 		return;
 	}
 }
@@ -14194,10 +14284,10 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 	if (myrpt->rxchannel != myrpt->zaprxchannel) return -1;	
 
 	prm.radpar = DAHDI_RADPAR_UIOMODE;
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_GETPARAM,&prm) == -1) return -1;
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_GETPARAM,&prm) == -1) return -1;
 	oldmode = prm.data;
 	prm.radpar = DAHDI_RADPAR_UIODATA;
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_GETPARAM,&prm) == -1) return -1;
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_GETPARAM,&prm) == -1) return -1;
 	olddata = prm.data;
         prm.radpar = DAHDI_RADPAR_REMMODE;
         if ((asciiflag & 1) &&
@@ -14205,11 +14295,11 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 	      strcmp(myrpt->remoterig, remote_rig_kenwood))
 		  prm.data = DAHDI_RADPAR_REM_SERIAL_ASCII;
         else prm.data = DAHDI_RADPAR_REM_SERIAL;
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
 	if (asciiflag & 2)
 	{
 		i = DAHDI_ONHOOK;
-		if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_HOOK,&i) == -1) return -1;
+		if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_HOOK,&i) == -1) return -1;
 		usleep(100000);
 	}
 	if ((!strcmp(myrpt->remoterig, remote_rig_tm271)) ||
@@ -14222,14 +14312,14 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 		        prm.data = 0;
 		       	prm.buf[0] = txbuf[i];
 		        prm.index = 1;
-			if (ioctl(myrpt->zaprxchannel->fds[0],
+			if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),
 				DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
 			usleep(6666);
 		}
         	prm.radpar = DAHDI_RADPAR_REMMODE;
 	        if (asciiflag & 1)  prm.data = DAHDI_RADPAR_REM_SERIAL_ASCII;
 	        else prm.data = DAHDI_RADPAR_REM_SERIAL;
-		if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
+		if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
 	        prm.radpar = DAHDI_RADPAR_REMCOMMAND;
 	        prm.data = rxmaxbytes;
 	       	prm.buf[0] = txbuf[i];
@@ -14242,7 +14332,7 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 	        memcpy(prm.buf,txbuf,txbytes);
 	        prm.index = txbytes;
 	}
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
         if (rxbuf)
         {
                 *rxbuf = 0;
@@ -14251,18 +14341,18 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 	index = prm.index;
         prm.radpar = DAHDI_RADPAR_REMMODE;
         prm.data = DAHDI_RADPAR_REM_NONE;
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
 	if (asciiflag & 2)
 	{
 		i = DAHDI_OFFHOOK;
-		if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_HOOK,&i) == -1) return -1;
+		if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_HOOK,&i) == -1) return -1;
 	}
 	prm.radpar = DAHDI_RADPAR_UIOMODE;
 	prm.data = oldmode;
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
 	prm.radpar = DAHDI_RADPAR_UIODATA;
 	prm.data = olddata;
-	if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
+	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&prm) == -1) return -1;
         return(index);
 }
 
@@ -14730,7 +14820,7 @@ int powers[] = {2,1,0};
 	}
 	sprintf(offset,"%06d000",mysplit);
 	strcpy(freq,"000000");
-	strlcpy(freq,decimals,strlen(freq)-1);
+	ast_copy_string(freq,decimals,strlen(freq)-1);
 	myrxpl = myrpt->rxplon;
 	if (IS_XPMR(myrpt)) myrxpl = 0;
 	step = 0;
@@ -14773,7 +14863,7 @@ int band;
 	}
 	sprintf(offset,"%06d000",mysplit);
 	strcpy(freq,"000000");
-	strlcpy(freq,decimals,strlen(freq)-1);
+	ast_copy_string(freq,decimals,strlen(freq)-1);
 	step = 0;
 	if ((decimals[3] != '0') || (decimals[4] != '0')) step = 1;
 	myrxpl = myrpt->rxplon;
@@ -14808,7 +14898,7 @@ int powers[] = {2,1,0};
 
 	split_freq(mhz, decimals, myrpt->freq);
 	strcpy(freq,"000000");
-	strlcpy(freq,decimals,strlen(freq)-1);
+	ast_copy_string(freq,decimals,strlen(freq)-1);
 
 	if (!myrpt->splitkhz)
 		mysplit = myrpt->p.default_split_2m;
@@ -14840,7 +14930,7 @@ int	band,txoffset = 0,txpower = 0,rxpl;
 	/* must have rbi hardware */
 	if (strncmp(myrpt->remoterig,remote_rig_rbi,3)) return(0);
 	if (setrbi_check(myrpt) == -1) return(-1);
-	strlcpy(tmp, myrpt->freq, sizeof(tmp) - 1);
+	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp,'.');
 	/* if no decimal, is invalid */
 	
@@ -14935,7 +15025,7 @@ double txfreq;
 	if (!ISRIG_RTX(myrpt->remoterig)) return(0);
 	/* must be a usbradio interface type */
 	if (!IS_XPMR(myrpt)) return(0);
-	strlcpy(tmp, myrpt->freq, sizeof(tmp) - 1);
+	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp,'.');
 	/* if no decimal, is invalid */
 	
@@ -15073,7 +15163,7 @@ int	band,txpl;
 	if (!myrpt->remote) return(0);
 	/* must have rbi hardware */
 	if (strncmp(myrpt->remoterig,remote_rig_rbi,3)) return(0);
-	strlcpy(tmp, myrpt->freq, sizeof(tmp) - 1);
+	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp,'.');
 	/* if no decimal, is invalid */
 	
@@ -15128,7 +15218,7 @@ int	band,txpl,rxpl;
 	if (!myrpt->remote) return(0);
 	/* must have rbi hardware */
 	if (strncmp(myrpt->remoterig,remote_rig_rbi,3)) return(0);
-	strlcpy(tmp, myrpt->freq, sizeof(tmp) - 1);
+	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp,'.');
 	/* if no decimal, is invalid */
 	
@@ -15331,13 +15421,13 @@ static int split_freq(char *mhz, char *decimals, char *freq)
 	char freq_copy[MAXREMSTR];
 	char *decp;
 
-	strlcpy(freq_copy, freq, MAXREMSTR-1);
+	ast_copy_string(freq_copy, freq, MAXREMSTR-1);
 	decp = strchr(freq_copy, '.');
 	if(decp){
 		*decp++ = 0;
 		strncpy(mhz, freq_copy, MAXREMSTR);
 		strcpy(decimals, "00000");
-		strlcpy(decimals, decp, strlen(decimals)-1);
+		ast_copy_string(decimals, decp, strlen(decimals)-1);
 		decimals[5] = 0;
 		return 0;
 	}
@@ -15358,8 +15448,8 @@ static int split_ctcss_freq(char *hertz, char *decimal, char *freq)
 	decp = strchr(strncpy(freq_copy, freq, MAXREMSTR-1),'.');
 	if(decp){
 		*decp++ = 0;
-		strlcpy(hertz, freq_copy, MAXREMSTR);
-		strlcpy(decimal, decp, strlen(decp));
+		ast_copy_string(hertz, freq_copy, MAXREMSTR);
+		ast_copy_string(decimal, decp, strlen(decp));
 		decimal[strlen(decp)] = '\0';
 		return 0;
 	}
@@ -17335,7 +17425,7 @@ printf("FREQ,%s,%s,%s,%s,%s,%s,%d,%d\n",myrpt->freq,
 			char myfreq[MAXREMSTR],*cp;
 			strcpy(myfreq,myrpt->freq);
 			cp = strchr(myfreq,'.');
-			for(i = strlen(myfreq) - 1; i; i--)
+			for(i = strlen(myfreq) - 1; i >= 0; i--)
 			{
 				if (myfreq[i] != '0') break;
 				myfreq[i] = 0;
@@ -17940,15 +18030,15 @@ static int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int c
 			}	
 			offsave = myrpt->offset;
 			modesave = myrpt->remmode;
-			strlcpy(savestr, myrpt->freq, sizeof(savestr) - 1);
-			strlcpy(myrpt->freq, freq, sizeof(myrpt->freq) - 1);
+			ast_copy_string(savestr, myrpt->freq, sizeof(savestr) - 1);
+			ast_copy_string(myrpt->freq, freq, sizeof(myrpt->freq) - 1);
 			myrpt->offset = offset;
 			myrpt->remmode = defmode;
 
 			if (setrem(myrpt) == -1){
 				myrpt->offset = offsave;
 				myrpt->remmode = modesave;
-				strlcpy(myrpt->freq, savestr, sizeof(myrpt->freq) - 1);
+				ast_copy_string(myrpt->freq, savestr, sizeof(myrpt->freq) - 1);
 				goto invalid_freq;
 			}
 			if (strcmp(myrpt->remoterig, remote_rig_tm271) &&
@@ -17988,15 +18078,15 @@ invalid_freq:
 			s = strchr(tmp,'*');
 			if(s)
 				*s = '.';
-			strlcpy(savestr, myrpt->rxpl, sizeof(savestr) - 1);
-			strlcpy(myrpt->rxpl, tmp, sizeof(myrpt->rxpl) - 1);
+			ast_copy_string(savestr, myrpt->rxpl, sizeof(savestr) - 1);
+			ast_copy_string(myrpt->rxpl, tmp, sizeof(myrpt->rxpl) - 1);
 			if ((!strcmp(myrpt->remoterig, remote_rig_rbi)) ||
 			  (!strcmp(myrpt->remoterig, remote_rig_ft100)))
 			{
-				strlcpy(myrpt->txpl, tmp, sizeof(myrpt->txpl) - 1);
+				ast_copy_string(myrpt->txpl, tmp, sizeof(myrpt->txpl) - 1);
 			}
 			if (setrem(myrpt) == -1){
-				strlcpy(myrpt->rxpl, savestr, sizeof(myrpt->rxpl) - 1);
+				ast_copy_string(myrpt->rxpl, savestr, sizeof(myrpt->rxpl) - 1);
 				return DC_ERROR;
 			}
 			return DC_COMPLETE;
@@ -18046,11 +18136,11 @@ invalid_freq:
 			s = strchr(tmp,'*');
 			if(s)
 				*s = '.';
-			strlcpy(savestr, myrpt->txpl, sizeof(savestr) - 1);
-			strlcpy(myrpt->txpl, tmp, sizeof(myrpt->txpl) - 1);
+			ast_copy_string(savestr, myrpt->txpl, sizeof(savestr) - 1);
+			ast_copy_string(myrpt->txpl, tmp, sizeof(myrpt->txpl) - 1);
 			
 			if (setrem(myrpt) == -1){
-				strlcpy(myrpt->txpl, savestr, sizeof(myrpt->txpl) - 1);
+				ast_copy_string(myrpt->txpl, savestr, sizeof(myrpt->txpl) - 1);
 				return DC_ERROR;
 			}
 			return DC_COMPLETE;
@@ -18115,7 +18205,7 @@ invalid_freq:
 					strncpy(myrpt->loginlevel,cp2 + 1,
 						sizeof(myrpt->loginlevel) - 1);
 				}
-				strlcpy(myrpt->loginuser,cp1 + 1,sizeof(myrpt->loginuser)-1);
+				ast_copy_string(myrpt->loginuser,cp1 + 1,sizeof(myrpt->loginuser)-1);
 				ast_mutex_unlock(&myrpt->lock);
 				if (myrpt->p.archivedir)
 				{
@@ -18231,7 +18321,7 @@ invalid_freq:
 			    (!strcmp(myrpt->remoterig, remote_rig_ft950)) || 
 				(!strcmp(myrpt->remoterig, remote_rig_ic706)) )) { 
 				myrpt->remotetx = 0;
-				if (strncasecmp(myrpt->txchannel->name,
+				if (strncasecmp(ast_channel_name(myrpt->txchannel),
 					"Zap/Pseudo",10))
 				{
 					ast_indicate(myrpt->txchannel,
@@ -18511,10 +18601,10 @@ int	res;
 static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 {
 	char *s, *s1, *tele;
-	char tmp[300], deststr[300] = "";
+	char tmp[300], deststr[325] = "";
 	char sx[320],*sy;
 	struct ast_frame *f1;
-
+	struct ast_format_cap *cap;
 
 	if (!node_lookup(myrpt,l->name,tmp,sizeof(tmp) - 1,1))
 	{
@@ -18551,12 +18641,22 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->thisconnected = 0;
 	l->iaxkey = 0;
 	l->newkey = 0;
-	l->chan = ast_request(deststr, AST_FORMAT_SLINEAR, tele,NULL);
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		return -1;
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+
+	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 	if (!(l->chan))
 	{
 		usleep(150000);
-		l->chan = ast_request(deststr, AST_FORMAT_SLINEAR, tele,NULL);
+		l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 	}
+	ao2_ref(cap, -1);
 	l->linkmode = 0;
 	l->lastrx1 = 0;
 	l->lastrealrx = 0;
@@ -18565,23 +18665,20 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->newkey = 2;
 	while((f1 = AST_LIST_REMOVE_HEAD(&l->textq,frame_list))) ast_frfree(f1);
 	if (l->chan){
-		ast_set_read_format(l->chan, AST_FORMAT_SLINEAR);
-		ast_set_write_format(l->chan, AST_FORMAT_SLINEAR);
-		l->chan->appl = "Apprpt";
-		l->chan->data = "(Remote Rx)";
+		ast_set_read_format(l->chan, ast_format_slin);
+		ast_set_write_format(l->chan, ast_format_slin);
+		ast_channel_appl_set(l->chan, "Apprpt");
+		ast_channel_data_set(l->chan, "(Remote Rx)");
 		if (option_verbose > 2)
-			ast_verbose(VERBOSE_PREFIX_3 "rpt (attempt_reconnect) initiating call to %s/%s on %s\n",
-				deststr, tele, l->chan->name);
-		if(l->chan->cid.cid_num)
-			ast_free(l->chan->cid.cid_num);
-		l->chan->cid.cid_num = ast_strdup(myrpt->name);
-                ast_call(l->chan,tele,999); 
-
+			ast_verb(3, "rpt (attempt_reconnect) initiating call to %s/%s on %s\n",
+				deststr, tele, ast_channel_name(l->chan));
+		ast_set_callerid(l->chan, myrpt->name, NULL, NULL);
+        ast_call(l->chan,tele,999); 
 	}
 	else 
 	{
 		if (option_verbose > 2)
-			ast_verbose(VERBOSE_PREFIX_3 "Unable to place call to %s/%s\n",
+			ast_verb(3, "Unable to place call to %s/%s\n",
 				deststr,tele);
 		return -1;
 	}
@@ -18771,7 +18868,7 @@ char	cmd[MAXDTMF+1] = "",c,tone[10];
 			myrpt->patchquiet = 0;
 			myrpt->patchfarenddisconnect = 0;
 			myrpt->patchdialtime = 0;
-			strlcpy(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT-1);
+			ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT-1);
 			myrpt->cidx = 0;
 			myrpt->exten[myrpt->cidx] = 0;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -19030,7 +19127,7 @@ time_t	t,was;
 struct rpt_link *l,*m;
 struct rpt_tele *telem;
 char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
-
+struct ast_format_cap *cap;
 
 	if (myrpt->p.archivedir) mkdir(myrpt->p.archivedir,0600);
 	sprintf(tmpstr,"%s/%s",myrpt->p.archivedir,myrpt->name);
@@ -19083,13 +19180,23 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		pthread_exit(NULL);
 	}
 	*tele++ = 0;
-	myrpt->rxchannel = ast_request(tmpstr,AST_FORMAT_SLINEAR,tele,NULL);
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		/*! \todo bail out or something */
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+	/*! \todo call ao2_ref(cap, -1); on all exit points? */
+
+	myrpt->rxchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
 	myrpt->zaprxchannel = NULL;
-	if (!strcasecmp(tmpstr,DAHDI_CHANNEL_NAME))
+	if (!strcasecmp(tmpstr,"DAHDI"))
 		myrpt->zaprxchannel = myrpt->rxchannel;
 	if (myrpt->rxchannel)
 	{
-		if (myrpt->rxchannel->_state == AST_STATE_BUSY)
+		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY)
 		{
 			fprintf(stderr,"rpt:Sorry unable to obtain Rx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
@@ -19097,19 +19204,19 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
-		ast_set_read_format(myrpt->rxchannel,AST_FORMAT_SLINEAR);
-		ast_set_write_format(myrpt->rxchannel,AST_FORMAT_SLINEAR);
+		ast_set_read_format(myrpt->rxchannel, ast_format_slin);
+		ast_set_write_format(myrpt->rxchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 		if (myrpt->rxchannel->cdr)
 			ast_set_flag(myrpt->rxchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
 #endif
-		myrpt->rxchannel->appl = "Apprpt";
-		myrpt->rxchannel->data = "(Repeater Rx)";
+		ast_channel_appl_set(myrpt->rxchannel, "Apprpt");
+		ast_channel_data_set(myrpt->rxchannel, "(Repeater Rx)");
 		if (option_verbose > 2)
-			ast_verbose(VERBOSE_PREFIX_3 "rpt (Rx) initiating call to %s/%s on %s\n",
-				tmpstr,tele,myrpt->rxchannel->name);
+			ast_verb(3, "rpt (Rx) initiating call to %s/%s on %s\n",
+				tmpstr,tele,ast_channel_name(myrpt->rxchannel));
 		ast_call(myrpt->rxchannel,tele,999);
-		if (myrpt->rxchannel->_state != AST_STATE_UP)
+		if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP)
 		{
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
@@ -19138,12 +19245,12 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			pthread_exit(NULL);
 		}
 		*tele++ = 0;
-		myrpt->txchannel = ast_request(tmpstr,AST_FORMAT_SLINEAR,tele,NULL);
-		if ((!strcasecmp(tmpstr,DAHDI_CHANNEL_NAME)) && strcasecmp(tele,"pseudo"))
+		myrpt->txchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
+		if ((!strcasecmp(tmpstr,"DAHDI")) && strcasecmp(tele,"pseudo"))
 			myrpt->zaptxchannel = myrpt->txchannel;
 		if (myrpt->txchannel)
 		{
-			if (myrpt->txchannel->_state == AST_STATE_BUSY)
+			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY)
 			{
 				fprintf(stderr,"rpt:Sorry unable to obtain Tx channel\n");
 				rpt_mutex_unlock(&myrpt->lock);
@@ -19152,19 +19259,19 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				myrpt->rpt_thread = AST_PTHREADT_STOP;
 				pthread_exit(NULL);
 			}			
-			ast_set_read_format(myrpt->txchannel,AST_FORMAT_SLINEAR);
-			ast_set_write_format(myrpt->txchannel,AST_FORMAT_SLINEAR);
+			ast_set_read_format(myrpt->txchannel, ast_format_slin);
+			ast_set_write_format(myrpt->txchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 			if (myrpt->txchannel->cdr)
 				ast_set_flag(myrpt->txchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
 #endif
-			myrpt->txchannel->appl = "Apprpt";
-			myrpt->txchannel->data = "(Repeater Tx)";
+			ast_channel_appl_set(myrpt->txchannel, "Apprpt");
+			ast_channel_data_set(myrpt->txchannel, "(Repeater Tx)");
 			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "rpt (Tx) initiating call to %s/%s on %s\n",
-					tmpstr,tele,myrpt->txchannel->name);
+				ast_verb(3, "rpt (Tx) initiating call to %s/%s on %s\n",
+					tmpstr,tele,ast_channel_name(myrpt->txchannel));
 			ast_call(myrpt->txchannel,tele,999);
-			if (myrpt->rxchannel->_state != AST_STATE_UP)
+			if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP)
 			{
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_hangup(myrpt->rxchannel);
@@ -19185,17 +19292,17 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 	else
 	{
 		myrpt->txchannel = myrpt->rxchannel;
-		if ((!strncasecmp(myrpt->rxchanname,DAHDI_CHANNEL_NAME,3)) && 
+		if ((!strncasecmp(myrpt->rxchanname,"DAHDI",3)) && 
 		    strcasecmp(myrpt->rxchanname,"Zap/pseudo"))
 			myrpt->zaptxchannel = myrpt->txchannel;
 	}
-	if (strncasecmp(myrpt->txchannel->name,"Zap/Pseudo",10))
+	if (strncasecmp(ast_channel_name(myrpt->txchannel),"Zap/Pseudo",10))
 	{
 		ast_indicate(myrpt->txchannel,AST_CONTROL_RADIO_KEY);
 		ast_indicate(myrpt->txchannel,AST_CONTROL_RADIO_UNKEY);
 	}
 	/* allocate a pseudo-channel thru asterisk */
-	myrpt->pchannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	myrpt->pchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->pchannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -19206,8 +19313,8 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
-	ast_set_read_format(myrpt->pchannel, AST_FORMAT_SLINEAR);
-	ast_set_write_format(myrpt->pchannel, AST_FORMAT_SLINEAR);
+	ast_set_read_format(myrpt->pchannel, ast_format_slin);
+	ast_set_write_format(myrpt->pchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->pchannel->cdr)
 		ast_set_flag(myrpt->pchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
@@ -19217,7 +19324,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 	if (!myrpt->zaptxchannel)
 	{
 		/* allocate a pseudo-channel thru asterisk */
-		myrpt->zaptxchannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+		myrpt->zaptxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 		if (!myrpt->zaptxchannel)
 		{
 			fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -19228,8 +19335,8 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
-		ast_set_read_format(myrpt->zaptxchannel,AST_FORMAT_SLINEAR);
-		ast_set_write_format(myrpt->zaptxchannel,AST_FORMAT_SLINEAR);
+		ast_set_read_format(myrpt->zaptxchannel, ast_format_slin);
+		ast_set_write_format(myrpt->zaptxchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 		if (myrpt->zaptxchannel->cdr)
 			ast_set_flag(myrpt->zaptxchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
@@ -19237,7 +19344,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		ast_answer(myrpt->zaptxchannel);
 	}
 	/* allocate a pseudo-channel thru asterisk */
-	myrpt->monchannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	myrpt->monchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->monchannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -19248,8 +19355,8 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
-	ast_set_read_format(myrpt->monchannel,AST_FORMAT_SLINEAR);
-	ast_set_write_format(myrpt->monchannel,AST_FORMAT_SLINEAR);
+	ast_set_read_format(myrpt->monchannel, ast_format_slin);
+	ast_set_write_format(myrpt->monchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->monchannel->cdr)
 		ast_set_flag(myrpt->monchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
@@ -19260,7 +19367,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 	ci.confno = -1; /* make a new conf */
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER;
 	/* first put the channel on the conference in proper mode */
-	if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		rpt_mutex_unlock(&myrpt->lock);
@@ -19280,7 +19387,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 	ci.confmode = ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4)) ? DAHDI_CONF_CONFANNMON :
 		(DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
 	/* first put the channel on the conference in announce mode */
-	if (ioctl(myrpt->pchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(myrpt->pchannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		rpt_mutex_unlock(&myrpt->lock);
@@ -19296,11 +19403,11 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 	myrpt->conf = ci.confno;
 	/* make a conference for the pseudo */
 	ci.chan = 0;
-	if ((strstr(myrpt->txchannel->name,"pseudo") == NULL) &&
+	if ((strstr(ast_channel_name(myrpt->txchannel),"pseudo") == NULL) &&
 		(myrpt->zaptxchannel == myrpt->txchannel))
 	{
 		/* get tx channel's port number */
-		if (ioctl(myrpt->txchannel->fds[0],DAHDI_CHANNO,&ci.confno) == -1)
+		if (ioctl(ast_channel_fd(myrpt->txchannel, 0),DAHDI_CHANNO,&ci.confno) == -1)
 		{
 			ast_log(LOG_WARNING, "Unable to set tx channel's chan number\n");
 			rpt_mutex_unlock(&myrpt->lock);
@@ -19321,7 +19428,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		ci.confmode = DAHDI_CONF_CONFANNMON;
 	}
 	/* first put the channel on the conference in announce mode */
-	if (ioctl(myrpt->monchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(myrpt->monchannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode for monitor\n");
 		rpt_mutex_unlock(&myrpt->lock);
@@ -19334,7 +19441,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		pthread_exit(NULL);
 	}
 	/* allocate a pseudo-channel thru asterisk */
-	myrpt->parrotchannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	myrpt->parrotchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->parrotchannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -19345,8 +19452,8 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
-	ast_set_read_format(myrpt->parrotchannel,AST_FORMAT_SLINEAR);
-	ast_set_write_format(myrpt->parrotchannel,AST_FORMAT_SLINEAR);
+	ast_set_read_format(myrpt->parrotchannel, ast_format_slin);
+	ast_set_write_format(myrpt->parrotchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->parrotchannel->cdr)
 		ast_set_flag(myrpt->parrotchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
@@ -19356,7 +19463,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 
 	/* Telemetry Channel Resources */
 	/* allocate a pseudo-channel thru asterisk */
-	myrpt->telechannel = ast_request("dahdi",AST_FORMAT_SLINEAR,"pseudo",NULL);
+	myrpt->telechannel = ast_request("dahdi", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->telechannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -19367,8 +19474,8 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
-	ast_set_read_format(myrpt->telechannel,AST_FORMAT_SLINEAR);
-	ast_set_write_format(myrpt->telechannel,AST_FORMAT_SLINEAR);
+	ast_set_read_format(myrpt->telechannel, ast_format_slin);
+	ast_set_write_format(myrpt->telechannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->telechannel->cdr)
 		ast_set_flag(myrpt->telechannel->cdr,AST_CDR_FLAG_POST_DISABLED);
@@ -19378,7 +19485,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 	ci.confno = -1; // make a new conference
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
  	/* put the channel on the conference in proper mode */
-	if (ioctl(myrpt->telechannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(myrpt->telechannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		rpt_mutex_unlock(&myrpt->lock);
@@ -19394,7 +19501,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 
 	/* make a channel to connect between the telemetry conference process
 	   and the main tx audio conference. */
-	myrpt->btelechannel = ast_request("dahdi",AST_FORMAT_SLINEAR,"pseudo",NULL);
+	myrpt->btelechannel = ast_request("dahdi", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->btelechannel)
 	{
 		fprintf(stderr,"rtp:Failed to obtain pseudo channel for btelechannel\n");
@@ -19405,8 +19512,8 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
-	ast_set_read_format(myrpt->btelechannel,AST_FORMAT_SLINEAR);
-	ast_set_write_format(myrpt->btelechannel,AST_FORMAT_SLINEAR);
+	ast_set_read_format(myrpt->btelechannel, ast_format_slin);
+	ast_set_write_format(myrpt->btelechannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->btelechannel->cdr)
 		ast_set_flag(myrpt->btelechannel->cdr,AST_CDR_FLAG_POST_DISABLED);
@@ -19416,7 +19523,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 	ci.confno = myrpt->txconf;
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
 	/* first put the channel on the conference in proper mode */
-	if (ioctl(myrpt->btelechannel->fds[0], DAHDI_SETCONF, &ci) == -1)
+	if (ioctl(ast_channel_fd(myrpt->btelechannel, 0), DAHDI_SETCONF, &ci) == -1)
 	{
 		ast_log(LOG_ERROR, "Failed to create btelechannel.\n");
 		ast_hangup(myrpt->btelechannel);
@@ -19431,7 +19538,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 
 
 	/* allocate a pseudo-channel thru asterisk */
-	myrpt->voxchannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	myrpt->voxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->voxchannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -19442,15 +19549,15 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
-	ast_set_read_format(myrpt->voxchannel,AST_FORMAT_SLINEAR);
-	ast_set_write_format(myrpt->voxchannel,AST_FORMAT_SLINEAR);
+	ast_set_read_format(myrpt->voxchannel, ast_format_slin);
+	ast_set_write_format(myrpt->voxchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->voxchannel->cdr)
 		ast_set_flag(myrpt->voxchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
 #endif
 	ast_answer(myrpt->voxchannel);
 	/* allocate a pseudo-channel thru asterisk */
-	myrpt->txpchannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	myrpt->txpchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->txpchannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -19473,7 +19580,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 	ci.confno = myrpt->txconf;
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER ;
  	/* first put the channel on the conference in proper mode */
-	if (ioctl(myrpt->txpchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(myrpt->txpchannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		rpt_mutex_unlock(&myrpt->lock);
@@ -20015,7 +20122,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			myrpt->dailykeyups++;
 			myrpt->totalkeyups++;
 			rpt_mutex_unlock(&myrpt->lock);
-			if (strncasecmp(myrpt->txchannel->name,"Zap/Pseudo",10))
+			if (strncasecmp(ast_channel_name(myrpt->txchannel),"Zap/Pseudo",10))
 			{
 				ast_indicate(myrpt->txchannel,
 					AST_CONTROL_RADIO_KEY);
@@ -20031,7 +20138,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			myrpt->txkeyed = 0;
 			time(&myrpt->lasttxkeyedtime);
 			rpt_mutex_unlock(&myrpt->lock);
-			if (strncasecmp(myrpt->txchannel->name,"Zap/Pseudo",10))
+			if (strncasecmp(ast_channel_name(myrpt->txchannel),"Zap/Pseudo",10))
 			{
 				ast_indicate(myrpt->txchannel,
 					AST_CONTROL_RADIO_UNKEY);
@@ -20076,7 +20183,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			ci.chan = 0;
 
 			/* first put the channel on the conference in announce mode */
-			if (ioctl(myrpt->parrotchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+			if (ioctl(ast_channel_fd(myrpt->parrotchannel, 0),DAHDI_SETCONF,&ci) == -1)
 			{
 				ast_log(LOG_WARNING, "Unable to set conference mode for parrot\n");
 				ast_mutex_unlock(&myrpt->lock);
@@ -20139,18 +20246,18 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			myrpt->lastitx = x;
 			if (myrpt->p.itxctcss)
 			{
-				if ((strncasecmp(myrpt->rxchannel->name,"zap/", 4) == 0) || 
-				    (strncasecmp(myrpt->rxchannel->name,"dahdi/", 6) == 0))
+				if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"zap/", 4) == 0) || 
+				    (strncasecmp(ast_channel_name(myrpt->rxchannel),"dahdi/", 6) == 0))
 				{
 					struct dahdi_radio_param r;
 
 					memset(&r,0,sizeof(struct dahdi_radio_param));
 					r.radpar = DAHDI_RADPAR_NOENCODE;
 					r.data = !x;
-					ioctl(myrpt->zaprxchannel->fds[0],DAHDI_RADIO_SETPARAM,&r);
+					ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_RADIO_SETPARAM,&r);
 				}
-				if ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) || 
-				    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0))
+				if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) || 
+				    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0))
 				{
 					sprintf(str,"TXCTCSS %d",!(!x));
 					ast_sendtext(myrpt->rxchannel,str);
@@ -20303,7 +20410,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 
 				memset(&lf,0,sizeof(lf));
 				lf.frametype = AST_FRAME_TEXT;
-				lf.subclass = 0;
+				lf.subclass.integer = 0;
 				lf.offset = 0;
 				lf.mallocd = 0;
 				lf.samples = 0;
@@ -20313,7 +20420,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				if (l->chan)
 				{
 					lf.datalen = strlen(lstr) + 1;
-					AST_FRAME_DATA(lf) = lstr;
+					lf.data.ptr = lstr;
 					rpt_qwrite(l,&lf);
 					if (debug > 6) ast_log(LOG_NOTICE,
 						"@@@@ node %s sent node string %s to node %s\n",
@@ -20380,7 +20487,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			mymaxct = MAXCONNECTTIME;
 			/* if connection has taken too long */
 			if ((l->elaptime > mymaxct) && 
-			   ((!l->chan) || (l->chan->_state != AST_STATE_UP)))
+			   ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP)))
 			{
 				l->elaptime = 0;
 				rpt_mutex_unlock(&myrpt->lock);
@@ -20629,7 +20736,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			ci.chan = 0;
 
 			/* first put the channel on the conference in announce mode */
-			if (ioctl(myrpt->parrotchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+			if (ioctl(ast_channel_fd(myrpt->parrotchannel, 0),DAHDI_SETCONF,&ci) == -1)
 			{
 				ast_log(LOG_WARNING, "Unable to set conference mode for parrot\n");
 				break;
@@ -20689,7 +20796,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			{
 				char myrxrssi[32];
 
-				if(sscanf((char *)f->data, "R %s", myrxrssi) == 1)
+				if(sscanf((char *)f->data.ptr, "R %s", myrxrssi) == 1)
 				{
 					myrpt->rxrssi=atoi(myrxrssi);
 					if(debug>7)ast_log(LOG_NOTICE,"[%s] rxchannel rssi=%i\n",
@@ -20733,7 +20840,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					}
 					else
 					{					
-						i = tone_detect(&myrpt->burst_tone_state,AST_FRAME_DATAP(f),f->samples);
+						i = tone_detect(&myrpt->burst_tone_state,f->data.ptr,f->samples);
 						ast_log(LOG_DEBUG,"Node %s got %d Hz Rx Burst\n",
 							myrpt->name,myrpt->p.rxburstfreq);
 						if ((!i) && myrpt->lastrxburst)
@@ -20767,9 +20874,9 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 #ifdef	_MDC_DECODE_H_
 				if (!myrpt->reallykeyed)
 				{
-					memset(AST_FRAME_DATAP(f),0,f->datalen);
+					memset(f->data.ptr,0,f->datalen);
 				}
-				sp = (short *) AST_FRAME_DATAP(f);
+				sp = (short *) f->data.ptr;
 				/* convert block to unsigned char */
 				for(n = 0; n < f->datalen / 2; n++)
 				{
@@ -20860,15 +20967,15 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 #endif
 #ifdef	__RPT_NOTCH
 				/* apply inbound filters, if any */
-				rpt_filter(myrpt,AST_FRAME_DATAP(f),f->datalen / 2);
+				rpt_filter(myrpt,f->data.ptr,f->datalen / 2);
 #endif
 				if ((!myrpt->localtx) && /* (!myrpt->p.linktolink) && */
 				    (!myrpt->localoverride))
 				{
-					memset(AST_FRAME_DATAP(f),0,f->datalen);
+					memset(f->data.ptr,0,f->datalen);
 				}
 
-				if (ioctl(myrpt->zaprxchannel->fds[0], DAHDI_GETCONFMUTE, &ismuted) == -1)
+				if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_GETCONFMUTE, &ismuted) == -1)
 				{
 					ismuted = 0;
 				}
@@ -20910,11 +21017,11 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				}
 				if (ismuted)
 				{
-					memset(AST_FRAME_DATAP(f),0,f->datalen);
+					memset(f->data.ptr,0,f->datalen);
 					if (myrpt->lastf1)
-						memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
+						memset(myrpt->lastf1->data.ptr,0,myrpt->lastf1->datalen);
 					if (myrpt->lastf2)
-						memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
+						memset(myrpt->lastf2->data.ptr,0,myrpt->lastf2->datalen);
 				} 
 				if (f) f2 = ast_frdup(f);
 				else f2 = NULL;
@@ -20924,9 +21031,9 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				if (ismuted)
 				{
 					if (myrpt->lastf1)
-						memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
+						memset(myrpt->lastf1->data.ptr,0,myrpt->lastf1->datalen);
 					if (myrpt->lastf2)
-						memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
+						memset(myrpt->lastf2->data.ptr,0,myrpt->lastf2->datalen);
 				}
 				if (f1)
 				{
@@ -20943,22 +21050,22 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					if ((myrpt->p.duplex < 2) && myrpt->keyed &&
 					    myrpt->p.outstreamcmd && (myrpt->outstreampipe[1] > 0))
 					{
-						write(myrpt->outstreampipe[1],AST_FRAME_DATAP(f1),f1->datalen);
+						write(myrpt->outstreampipe[1],f1->data.ptr,f1->datalen);
 					}
 				}
 			}
 			else if (f->frametype == AST_FRAME_DTMF_BEGIN)
 			{
 				if (myrpt->lastf1)
-					memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
+					memset(myrpt->lastf1->data.ptr,0,myrpt->lastf1->datalen);
 				if (myrpt->lastf2)
-					memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
+					memset(myrpt->lastf2->data.ptr,0,myrpt->lastf2->datalen);
 				dtmfed = 1;
 				myrpt->lastdtmftime = ast_tvnow();
 			}
 			else if (f->frametype == AST_FRAME_DTMF)
 			{
-				c = (char) f->subclass; /* get DTMF char */
+				c = (char) f->subclass.integer; /* get DTMF char */
 				ast_frfree(f);
 				x = ast_tvdiff_ms(ast_tvnow(),myrpt->lastdtmftime);
 				if ((myrpt->p.litzcmd) && (x >= myrpt->p.litztime) &&
@@ -20978,9 +21085,9 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					continue;
 				}			
 				if (myrpt->lastf1)
-					memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
+					memset(myrpt->lastf1->data.ptr,0,myrpt->lastf1->datalen);
 				if (myrpt->lastf2)
-					memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
+					memset(myrpt->lastf2->data.ptr,0,myrpt->lastf2->datalen);
 				dtmfed = 1;
 				if ((!myrpt->lastkeytimer) && (!myrpt->localoverride)) 
 				{
@@ -20993,14 +21100,14 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}						
 			else if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
 					break;
 				}
 				/* if RX key */
-				if (f->subclass == AST_CONTROL_RADIO_KEY)
+				if (f->subclass.integer == AST_CONTROL_RADIO_KEY)
 				{
 					if ((!lasttx) || (myrpt->p.duplex > 1) || (myrpt->p.linktolink)) 
 					{
@@ -21045,17 +21152,17 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					rpt_update_boolean(myrpt,"RPT_RXKEYED",1);
 					myrpt->elketimer = 0;
 					myrpt->localoverride = 0;
-					if (f->datalen && AST_FRAME_DATAP(f))
+					if (f->datalen && f->data.ptr)
 					{
 						char *val, busy = 0;
 
-						send_link_pl(myrpt,AST_FRAME_DATAP(f));
+						send_link_pl(myrpt,f->data.ptr);
 
 						if (myrpt->p.nlocallist)
 						{
 							for(x = 0; x < myrpt->p.nlocallist; x++)
 							{
-								if (!strcasecmp(AST_FRAME_DATAP(f),myrpt->p.locallist[x]))
+								if (!strcasecmp(f->data.ptr,myrpt->p.locallist[x]))
 								{
 									myrpt->localoverride = 1;
 									myrpt->keyed = 0;
@@ -21063,9 +21170,9 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 								}
 							}
 						} 
-						if (debug) ast_log(LOG_NOTICE,"Got PL %s on node %s\n",(char *)AST_FRAME_DATAP(f),myrpt->name);
+						if (debug) ast_log(LOG_NOTICE,"Got PL %s on node %s\n",(char *)f->data.ptr,myrpt->name);
 						// ctcss code autopatch initiate
-						if (strstr((char *)AST_FRAME_DATAP(f),"/M/")&& !myrpt->macropatch)
+						if (strstr((char *)f->data.ptr,"/M/")&& !myrpt->macropatch)
 						{
 						    char val[16];
 							strcat(val,"*6");
@@ -21078,16 +21185,16 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 							if(!busy){
 								myrpt->macrotimer = MACROTIME;
 								strncat(myrpt->macrobuf,val,MAXMACRO - 1);
-								if (!busy) strcpy(myrpt->lasttone,(char*)AST_FRAME_DATAP(f));
+								if (!busy) strcpy(myrpt->lasttone,(char*)f->data.ptr);
 							}
 							rpt_mutex_unlock(&myrpt->lock);
 						}
-						else if (strcmp((char *)AST_FRAME_DATAP(f),myrpt->lasttone))
+						else if (strcmp((char *)f->data.ptr,myrpt->lasttone))
 						{
-							val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.tonemacro, (char *)AST_FRAME_DATAP(f));
+							val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.tonemacro, (char *)f->data.ptr);
 							if (val) 
 							{
-								if (debug) ast_log(LOG_NOTICE,"Tone %s doing %s on node %s\n",(char *) AST_FRAME_DATAP(f),val,myrpt->name);
+								if (debug) ast_log(LOG_NOTICE,"Tone %s doing %s on node %s\n",(char *) f->data.ptr,val,myrpt->name);
 								rpt_mutex_lock(&myrpt->lock);
 								if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(val)){
 									rpt_mutex_unlock(&myrpt->lock);
@@ -21099,7 +21206,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 								}
 								rpt_mutex_unlock(&myrpt->lock);
 							}
-						 	if (!busy) strcpy(myrpt->lasttone,(char*)AST_FRAME_DATAP(f));
+						 	if (!busy) strcpy(myrpt->lasttone,(char*)f->data.ptr);
 						}
 					} 
 					else
@@ -21109,11 +21216,12 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					}
 				}
 				/* if RX un-key */
-				if (f->subclass == AST_CONTROL_RADIO_UNKEY)
+				if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY)
 				{
+					char asleep;
 					/* clear rx channel rssi	 */
 					myrpt->rxrssi=0;
-					char asleep = myrpt->p.s[myrpt->p.sysstate_cur].sleepena & myrpt->sleep;
+					asleep = myrpt->p.s[myrpt->p.sysstate_cur].sleepena & myrpt->sleep;
 
 					if ((!lasttx) || (myrpt->p.duplex > 1) || (myrpt->p.linktolink))
 					{
@@ -21154,64 +21262,64 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				char buf[100];
 				int j;
 				/* if is a USRP device */
-				if (strncasecmp(myrpt->rxchannel->name,"usrp/", 5) == 0)
+				if (strncasecmp(ast_channel_name(myrpt->rxchannel),"usrp/", 5) == 0)
 				{
 					char *argv[4];
 					int argc = 4;
 					argv[2] = myrpt->name;
-					argv[3] = AST_FRAME_DATAP(f);	
-					rpt_do_sendall(0,argc,argv);
+					argv[3] = f->data.ptr;	
+					rpt_do_sendall2(0,argc,argv);
 				}
 				/* if is a USB device */
-				if ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) || 
-				    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0))
+				if ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) || 
+				    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0))
 				{
 					/* if message parsable */
-					if (sscanf(AST_FRAME_DATAP(f),"GPIO%d %d",&i,&j) >= 2)
+					if (sscanf(f->data.ptr,"GPIO%d %d",&i,&j) >= 2)
 					{
 						sprintf(buf,"RPT_URI_GPIO%d",i);
 						rpt_update_boolean(myrpt,buf,j);
 					}
 					/* if message parsable */
-					else if (sscanf(AST_FRAME_DATAP(f),"PP%d %d",&i,&j) >= 2)
+					else if (sscanf(f->data.ptr,"PP%d %d",&i,&j) >= 2)
 					{
 						sprintf(buf,"RPT_PP%d",i);
 						rpt_update_boolean(myrpt,buf,j);
 					}
-					else if (!strcmp(AST_FRAME_DATAP(f),"ENDPAGE"))
+					else if (!strcmp(f->data.ptr,"ENDPAGE"))
 					{
 						myrpt->paging.tv_sec = 0;
 						myrpt->paging.tv_usec = 0;
 					}
 				}
 				/* if is a BeagleBoard device */
-				if (strncasecmp(myrpt->rxchannel->name,"beagle/", 7) == 0)
+				if (strncasecmp(ast_channel_name(myrpt->rxchannel),"beagle/", 7) == 0)
 				{
 					/* if message parsable */
-					if (sscanf(AST_FRAME_DATAP(f),"GPIO%d %d",&i,&j) >= 2)
+					if (sscanf(f->data.ptr,"GPIO%d %d",&i,&j) >= 2)
 					{
 						sprintf(buf,"RPT_BEAGLE_GPIO%d",i);
 						rpt_update_boolean(myrpt,buf,j);
 					}
 				}
 				/* if is a Voter device */
-				if (strncasecmp(myrpt->rxchannel->name,"voter/", 6) == 0)
+				if (strncasecmp(ast_channel_name(myrpt->rxchannel),"voter/", 6) == 0)
 				{
 					struct rpt_link *l;
 					struct	ast_frame wf;
 					char	str[200];
 
 
-					if (!strcmp(AST_FRAME_DATAP(f),"ENDPAGE"))
+					if (!strcmp(f->data.ptr,"ENDPAGE"))
 					{
 						myrpt->paging.tv_sec = 0;
 						myrpt->paging.tv_usec = 0;
 					}
 					else
 					{
-						sprintf(str,"V %s %s",myrpt->name,(char *)AST_FRAME_DATAP(f));
+						sprintf(str,"V %s %s",myrpt->name,(char *)f->data.ptr);
 						wf.frametype = AST_FRAME_TEXT;
-						wf.subclass = 0;
+						wf.subclass.integer = 0;
 						wf.offset = 0;
 						wf.mallocd = 0;
 						wf.datalen = strlen(str) + 1;
@@ -21229,7 +21337,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 								l = l->next;
 								continue;
 							}
-							AST_FRAME_DATA(wf) = str;
+							wf.data.ptr = str;
 							if (l->chan) rpt_qwrite(l,&wf); 
 							l = l->next;
 						}
@@ -21256,7 +21364,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -21276,7 +21384,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -21310,7 +21418,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						    for(;x < myrpt->p.simplexpatchdelay; x++)
 						    {
 								f1 = ast_frdup(f);
-								memset(AST_FRAME_DATAP(f1),0,f1->datalen);
+								memset(f1->data.ptr,0,f1->datalen);
 								memset(&f1->frame_list,0,sizeof(f1->frame_list));
 								AST_LIST_INSERT_TAIL(&myrpt->txq,f1,frame_list);
 						    }
@@ -21326,7 +21434,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						frame_list) x++;
 					if (!x)
 					{
-						memset(AST_FRAME_DATAP(f),0,f->datalen);
+						memset(f->data.ptr,0,f->datalen);
 					}
 					else
 					{
@@ -21344,7 +21452,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -21436,8 +21544,8 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					rpt_mutex_lock(&myrpt->lock);
 					__kickshort(myrpt);
 					rpt_mutex_unlock(&myrpt->lock);
-					if (strncasecmp(l->chan->name,"echolink",8) && 
-					    strncasecmp(l->chan->name,"tlb",3))
+					if (strncasecmp(ast_channel_name(l->chan),"echolink",8) && 
+					    strncasecmp(ast_channel_name(l->chan),"tlb",3))
 					{
 						if ((!l->disced) && (!l->outbound))
 						{
@@ -21517,19 +21625,19 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					   room, it increases the number of buffers to accommodate the larger number
 					   of samples (version 0.257 9/3/10) */
 					memset(&bi,0,sizeof(bi));
-					if (ioctl(l->pchan->fds[0],DAHDI_GET_BUFINFO,&bi) != -1)
+					if (ioctl(ast_channel_fd(l->pchan, 0),DAHDI_GET_BUFINFO,&bi) != -1)
 					{
 						if ((f->samples > bi.bufsize) &&
 							(bi.numbufs < ((f->samples / bi.bufsize) + 1)))
 						{
 							bi.numbufs = (f->samples / bi.bufsize) + 1;
-							ioctl(l->pchan->fds[0],DAHDI_SET_BUFINFO,&bi);
+							ioctl(ast_channel_fd(l->pchan, 0),DAHDI_SET_BUFINFO,&bi);
 						}
 					}
 					fac = 1.0;
-					if (l->chan && (!strncasecmp(l->chan->name,"echolink",8)))
+					if (l->chan && (!strncasecmp(ast_channel_name(l->chan),"echolink",8)))
 						fac = myrpt->p.erxgain;
-					if (l->chan && (!strncasecmp(l->chan->name,"tlb",3)))
+					if (l->chan && (!strncasecmp(ast_channel_name(l->chan),"tlb",3)))
 						fac = myrpt->p.trxgain;
 					if ((myrpt->p.linkmongain != 1.0) && (l->mode != 1) && (l->wouldtx))
 						fac *= myrpt->p.linkmongain;
@@ -21538,7 +21646,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						int x1;
 						short *sp;
 
-						sp = (short *)AST_FRAME_DATAP(f);
+						sp = (short *)f->data.ptr;
 						for(x1 = 0; x1 < f->datalen / 2; x1++)
 						{
 							fsamp = (float) sp[x1] * fac;
@@ -21569,13 +21677,13 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						}
 					}
 					if (((l->phonemode) && (l->phonevox)) || 
-					    (!strncasecmp(l->chan->name,"echolink",8)) ||
-					       (!strncasecmp(l->chan->name,"tlb",3)))
+					    (!strncasecmp(ast_channel_name(l->chan),"echolink",8)) ||
+					       (!strncasecmp(ast_channel_name(l->chan),"tlb",3)))
 					{
 						if (l->phonevox)
 						{
 							n1 = dovox(&l->vox,
-								AST_FRAME_DATAP(f),f->datalen / 2);
+								f->data.ptr,f->datalen / 2);
 							if (n1 != l->wasvox)
 							{
 								if (debug)ast_log(LOG_DEBUG,"Link Node %s, vox %d\n",l->name,n1);
@@ -21594,7 +21702,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 								    for(;x < myrpt->p.simplexphonedelay; x++)
 									{
 										f1 = ast_frdup(f);
-										memset(AST_FRAME_DATAP(f1),0,f1->datalen);
+										memset(f1->data.ptr,0,f1->datalen);
 										memset(&f1->frame_list,0,sizeof(f1->frame_list));
 										AST_LIST_INSERT_TAIL(&l->rxq,
 											f1,frame_list);
@@ -21609,7 +21717,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 							AST_LIST_TRAVERSE(&l->rxq, f1,frame_list) x++;
 							if (!x)
 							{
-								memset(AST_FRAME_DATAP(f),0,f->datalen);
+								memset(f->data.ptr,0,f->datalen);
 							}
 							else
 							{
@@ -21617,7 +21725,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 								f = AST_LIST_REMOVE_HEAD(&l->rxq,frame_list);
 							}
 						}
-						if (ioctl(l->chan->fds[0], DAHDI_GETCONFMUTE, &ismuted) == -1)
+						if (ioctl(ast_channel_fd(l->chan, 0), DAHDI_GETCONFMUTE, &ismuted) == -1)
 						{
 							ismuted = 0;
 						}
@@ -21625,8 +21733,8 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						ismuted |= (!l->lastrx);
 						if (l->dtmfed && 
 							(l->phonemode || 
-							    (!strncasecmp(l->chan->name,"echolink",8)) ||
-								(!strncasecmp(l->chan->name,"tlb",3)))) ismuted = 1;
+							    (!strncasecmp(ast_channel_name(l->chan),"echolink",8)) ||
+								(!strncasecmp(ast_channel_name(l->chan),"tlb",3)))) ismuted = 1;
 						l->dtmfed = 0;
 
 						/* if a voting rx link and not the winner, mute audio */
@@ -21637,11 +21745,11 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 
 						if (ismuted)
 						{
-							memset(AST_FRAME_DATAP(f),0,f->datalen);
+							memset(f->data.ptr,0,f->datalen);
 							if (l->lastf1)
-								memset(AST_FRAME_DATAP(l->lastf1),0,l->lastf1->datalen);
+								memset(l->lastf1->data.ptr,0,l->lastf1->datalen);
 							if (l->lastf2)
-								memset(AST_FRAME_DATAP(l->lastf2),0,l->lastf2->datalen);
+								memset(l->lastf2->data.ptr,0,l->lastf2->datalen);
 						} 
 						if (f) f2 = ast_frdup(f);
 						else f2 = NULL;
@@ -21651,9 +21759,9 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						if (ismuted)
 						{
 							if (l->lastf1)
-								memset(AST_FRAME_DATAP(l->lastf1),0,l->lastf1->datalen);
+								memset(l->lastf1->data.ptr,0,l->lastf1->datalen);
 							if (l->lastf2)
-								memset(AST_FRAME_DATAP(l->lastf2),0,l->lastf2->datalen);
+								memset(l->lastf2->data.ptr,0,l->lastf2->datalen);
 						}
 						if (f1)
 						{
@@ -21670,16 +21778,16 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 							ismuted=0;
 
 						if ( !l->lastrx || ismuted )
-							memset(AST_FRAME_DATAP(f),0,f->datalen);
+							memset(f->data.ptr,0,f->datalen);
 						ast_write(l->pchan,f);
 					}
 				}
 				else if (f->frametype == AST_FRAME_DTMF_BEGIN)
 				{
 					if (l->lastf1)
-						memset(AST_FRAME_DATAP(l->lastf1),0,l->lastf1->datalen);
+						memset(l->lastf1->data.ptr,0,l->lastf1->datalen);
 					if (l->lastf2)
-						memset(AST_FRAME_DATAP(l->lastf2),0,l->lastf2->datalen);
+						memset(l->lastf2->data.ptr,0,l->lastf2->datalen);
 					l->dtmfed = 1;
 				}
 				if (f->frametype == AST_FRAME_TEXT)
@@ -21687,7 +21795,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					char *tstr = ast_malloc(f->datalen + 1);
 					if (tstr) 
 					{
-						memcpy(tstr,AST_FRAME_DATAP(f),f->datalen);
+						memcpy(tstr,f->data.ptr,f->datalen);
 						tstr[f->datalen] = 0;
 						handle_link_data(myrpt,l,tstr);
 						ast_free(tstr);
@@ -21696,15 +21804,15 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				if (f->frametype == AST_FRAME_DTMF)
 				{
 					if (l->lastf1)
-						memset(AST_FRAME_DATAP(l->lastf1),0,l->lastf1->datalen);
+						memset(l->lastf1->data.ptr,0,l->lastf1->datalen);
 					if (l->lastf2)
-						memset(AST_FRAME_DATAP(l->lastf2),0,l->lastf2->datalen);
+						memset(l->lastf2->data.ptr,0,l->lastf2->datalen);
 					l->dtmfed = 1;
-					handle_link_phone_dtmf(myrpt,l,f->subclass);
+					handle_link_phone_dtmf(myrpt,l,f->subclass.integer);
 				}
 				if (f->frametype == AST_FRAME_CONTROL)
 				{
-					if (f->subclass == AST_CONTROL_ANSWER)
+					if (f->subclass.integer == AST_CONTROL_ANSWER)
 					{
 						char lconnected = l->connected;
 
@@ -21738,7 +21846,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 							l->reconnects++;
 					}
 					/* if RX key */
-					if ((f->subclass == AST_CONTROL_RADIO_KEY) && (l->newkey < 2))
+					if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->newkey < 2))
 					{
 						if (debug == 7 ) printf("@@@@ rx key\n");
 						l->lastrealrx = 1;
@@ -21758,7 +21866,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						}
 					}
 					/* if RX un-key */
-					if (f->subclass == AST_CONTROL_RADIO_UNKEY)
+					if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY)
 					{
 
 						if (debug == 7) printf("@@@@ rx un-key\n");
@@ -21780,14 +21888,14 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 								rpt_telemetry(myrpt,LINKUNKEY,l);
 						}
 					}
-					if (f->subclass == AST_CONTROL_HANGUP)
+					if (f->subclass.integer == AST_CONTROL_HANGUP)
 					{
 						ast_frfree(f);
 						rpt_mutex_lock(&myrpt->lock);
 						__kickshort(myrpt);
 						rpt_mutex_unlock(&myrpt->lock);
-						if (strncasecmp(l->chan->name,"echolink",8) && 
-							strncasecmp(l->chan->name,"tlb",3))
+						if (strncasecmp(ast_channel_name(l->chan),"echolink",8) && 
+							strncasecmp(ast_channel_name(l->chan),"tlb",3))
 						{
 							if ((!l->outbound) && (!l->disced))
 							{
@@ -21874,9 +21982,9 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					float fac,fsamp;
 
 					fac = 1.0;
-					if (l->chan && (!strncasecmp(l->chan->name,"echolink",8)))
+					if (l->chan && (!strncasecmp(ast_channel_name(l->chan),"echolink",8)))
 						fac = myrpt->p.etxgain;
-					if (l->chan && (!strncasecmp(l->chan->name,"tlb",3)))
+					if (l->chan && (!strncasecmp(ast_channel_name(l->chan),"tlb",3)))
 						fac = myrpt->p.ttxgain;
 
 					if (fac != 1.0)
@@ -21884,7 +21992,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 						int x1;
 						short *sp;
 						
-						sp = (short *) AST_FRAME_DATAP(f);
+						sp = (short *) f->data.ptr;
 						for(x1 = 0; x1 < f->datalen / 2; x1++)
 						{
 							fsamp = (float) sp[x1] * fac;
@@ -21896,12 +22004,12 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 					/* foop */
 					if (l->chan && (l->lastrx || (!altlink(myrpt,l))) && 
 					    ((l->newkey < 2) || l->lasttx ||
-						strncasecmp(l->chan->name,"IAX",3)))
+						strncasecmp(ast_channel_name(l->chan),"IAX",3)))
 							ast_write(l->chan,f);
 				}
 				if (f->frametype == AST_FRAME_CONTROL)
 				{
-					if (f->subclass == AST_CONTROL_HANGUP)
+					if (f->subclass.integer == AST_CONTROL_HANGUP)
 					{
 						if (debug) printf("@@@@ rpt:Hung Up\n");
 						ast_frfree(f);
@@ -21942,15 +22050,15 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) &&
 					myrpt->p.outstreamcmd && (myrpt->outstreampipe[1] > 0))
 				{
-					write(myrpt->outstreampipe[1],AST_FRAME_DATAP(f),f->datalen);
+					write(myrpt->outstreampipe[1],f->data.ptr,f->datalen);
 				}
 				fs = ast_frdup(f);
 				fac = 1.0;
-				if (l->chan && (!strncasecmp(l->chan->name,"echolink",8)))
+				if (l->chan && (!strncasecmp(ast_channel_name(l->chan),"echolink",8)))
 					fac = myrpt->p.etxgain;
 				if (fac != 1.0)
 				{
-					sp = (short *)AST_FRAME_DATAP(fs);
+					sp = (short *)fs->data.ptr;
 					for(x1 = 0; x1 < fs->datalen / 2; x1++)
 					{
 						fsamp = (float) sp[x1] * fac;
@@ -21965,10 +22073,10 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				{
 					/* foop */
 					if (l->chan && altlink(myrpt,l) && (!l->lastrx) && ((l->newkey < 2) || l->lasttx ||
-					    strncasecmp(l->chan->name,"IAX",3)))
+					    strncasecmp(ast_channel_name(l->chan),"IAX",3)))
 					    {
 						if (l->chan && 
-						    (!strncasecmp(l->chan->name,"irlp",4)))
+						    (!strncasecmp(ast_channel_name(l->chan),"irlp",4)))
 						{
 							ast_write(l->chan,fs);
 						} 
@@ -21983,7 +22091,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -22020,7 +22128,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -22040,7 +22148,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_VOICE)
 			{
-				n = dovox(&myrpt->vox,AST_FRAME_DATAP(f),f->datalen / 2);
+				n = dovox(&myrpt->vox,f->data.ptr,f->datalen / 2);
 				if (n != myrpt->wasvox)
 				{
 					if (debug) ast_log(LOG_DEBUG,"Node %s, vox %d\n",myrpt->name,n);
@@ -22052,7 +22160,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -22072,7 +22180,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -22109,7 +22217,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 				if(gain!=0)
 				{
 					int n,k;
-					short *sp = (short *) f->data;
+					short *sp = (short *) f->data.ptr;
 					for(n=0; n<f->datalen/2; n++)
 					{
 						k=sp[n]*gain;
@@ -22122,7 +22230,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if ( debug>5 ) ast_log(LOG_NOTICE,"node=%s telechannel Hung Up\n",myrpt->name);
 					ast_frfree(f);
@@ -22143,7 +22251,7 @@ char tmpstr[512],lstr[MAXLINKLIST],lat[100],lon[100],elev[100];
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if ( debug>5 ) ast_log(LOG_NOTICE,"node=%s btelechannel Hung Up\n",myrpt->name);
 					ast_frfree(f);
@@ -22436,7 +22544,7 @@ char *this,*val;
 	pthread_exit(NULL);
 }
 
-static int rpt_exec(struct ast_channel *chan, void *data)
+static int rpt_exec(struct ast_channel *chan, const char *data)
 {
 	int res=-1,i,x,rem_totx,rem_rx,remkeyed,n,phone_mode = 0;
 	int iskenwood_pci4,authtold,authreq,setting,notremming,reming;
@@ -22456,6 +22564,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	struct	dahdi_radio_param z;
 	struct rpt_tele *telem;
 	int	numlinks;
+	struct ast_format_cap *cap;
 
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "Rpt requires an argument (system node)\n");
@@ -22473,8 +22582,8 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		return -1;
 	}
 
-	ast_set_read_format(chan,AST_FORMAT_SLINEAR);
-	ast_set_write_format(chan,AST_FORMAT_SLINEAR);
+	ast_set_read_format(chan, ast_format_slin);
+	ast_set_write_format(chan, ast_format_slin);
 
 //	ast_log(LOG_NOTICE,"parsing argument=%s \n",tmp);
 
@@ -22525,7 +22634,8 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 
 		val = NULL;
 		myadr = NULL;
-		b1 = chan->cid.cid_num;		
+		//b1 = ast_channel_caller(chan)->id.number.str;		
+		b1 = ast_channel_caller(chan)->id.number.str;
 		if (b1) ast_shrink_phone_number(b1);
 		cfg = ast_config_load("rpt.conf",config_flags);
 		if (cfg && ((!options) || (*options == 'X') || (*options == 'F')))
@@ -22578,7 +22688,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 				memset(hisip,0,sizeof(hisip));
 #ifdef ALLOW_LOCAL_CHANNELS
 			        /* set IP address if this is a local connection*/
-			        if (strncmp(chan->name,"Local",5)==0) {
+			        if (!strncmp(ast_channel_name(chan),"Local",5)) {
 					strcpy(hisip,"127.0.0.1");
 			        } else {
 					pbx_substitute_variables_helper(chan,"${IAXPEER(CURRENTCHANNEL)}",hisip,sizeof(hisip) - 1);
@@ -22741,7 +22851,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		{
 			pbx_builtin_setvar(myrpt->rxchannel,callstr);
 			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "Set Asterisk channel variable %s for node %s\n",
+				ast_verb(3, "Set Asterisk channel variable %s for node %s\n",
 					callstr,myrpt->name);
 		}					
 		return 0;
@@ -22805,14 +22915,14 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	{
 #ifdef ALLOW_LOCAL_CHANNELS
 	        /* Check to insure the connection is IAX2 or Local*/
-	        if ( (strncmp(chan->name,"IAX2",4)) && (strncmp(chan->name,"Local",5)) &&
-		  (strncasecmp(chan->name,"echolink",8)) && (strncasecmp(chan->name,"tlb",3)) ) {
+	        if ( (strncmp(ast_channel_name(chan),"IAX2",4)) && (strncmp(ast_channel_name(chan),"Local",5)) &&
+		  (strncasecmp(ast_channel_name(chan),"echolink",8)) && (strncasecmp(ast_channel_name(chan),"tlb",3)) ) {
 	            ast_log(LOG_WARNING, "We only accept links via IAX2, Echolink, TheLinkBox or Local!!\n");
 	            return -1;
 	        }
 #else
-		if (strncmp(chan->name,"IAX2",4) && strncasecmp(chan->name,"Echolink",8) && 
-			strncasecmp(chan->name,"tlb",3))
+		if (strncmp(ast_channel_name(chan),"IAX2",4) && strncasecmp(ast_channel_name(chan),"Echolink",8) && 
+			strncasecmp(ast_channel_name(chan),"tlb",3))
 		{
 			ast_log(LOG_WARNING, "We only accept links via IAX2 or Echolink!!\n");
 			return -1;
@@ -22827,7 +22937,8 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	{
 		/* Parts of this section taken from app_parkandannounce */
 		char *return_context;
-		int l, m, lot, timeout = 0;
+		//int l, m, lot, timeout = 0;
+		int l, m, timeout = 0;
 		char tmp[256],*template;
 		char *working, *context, *exten, *priority;
 		char *s,*orig_s;
@@ -22838,7 +22949,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 
 		if ((!myrpt->p.nobusyout) && m)
 		{
-			if (chan->_state != AST_STATE_UP)
+			if (ast_channel_state(chan) != AST_STATE_UP)
 			{
 				ast_indicate(chan,AST_CONTROL_BUSY);
 			}
@@ -22846,7 +22957,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			return -1;
 		}
 
-		if (chan->_state != AST_STATE_UP)
+		if (ast_channel_state(chan) != AST_STATE_UP)
 		{
 			ast_answer(chan);
 			if (!phone_mode) send_newkey(chan);
@@ -22901,30 +23012,34 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			return -1;
 		}
 		/* At this point we have a priority and maybe an extension and a context */
-		chan->priority = atoi(priority);
+		ast_channel_priority_set(chan, atoi(priority));
 		if(exten)
-			strncpy(chan->exten, exten, sizeof(chan->exten)-1);
+			ast_channel_exten_set(chan, exten);
 		if(context)
-			strncpy(chan->context, context, sizeof(chan->context)-1);
+			ast_channel_context_set(chan, context);
 		} else {  /* increment the priority by default*/
-			chan->priority++;
+			ast_channel_priority_set(chan, ast_channel_priority(chan) + 1);
 		}
 
 		if(option_verbose > 2) {
-			ast_verbose( VERBOSE_PREFIX_3 "Return Context: (%s,%s,%d) ID: %s\n", chan->context,chan->exten, chan->priority, chan->cid.cid_num);
-			if(!ast_exists_extension(chan, chan->context, chan->exten, chan->priority, chan->cid.cid_num)) {
-				ast_verbose( VERBOSE_PREFIX_3 "Warning: Return Context Invalid, call will return to default|s\n");
+			ast_verb(3, "Return Context: (%s,%s,%d) ID: %s\n", ast_channel_context(chan),ast_channel_exten(chan), ast_channel_priority(chan), ast_channel_caller(chan)->id.number.str);
+			if(!ast_exists_extension(chan, ast_channel_context(chan), ast_channel_exten(chan), ast_channel_priority(chan), ast_channel_caller(chan)->id.number.str)) {
+				ast_verb(3, "Warning: Return Context Invalid, call will return to default|s\n");
 			}
 		}
   
 		/* we are using masq_park here to protect * from touching the channel once we park it.  If the channel comes out of timeout
 		before we are done announcing and the channel is messed with, Kablooeee.  So we use Masq to prevent this.  */
 
-		ast_masq_park_call(chan, NULL, timeout, &lot);
+		/*! \todo the parking API changed a while ago, this all needs to be completely redone here */
+		// old way: https://github.com/asterisk/asterisk/blob/1.8/apps/app_parkandannounce.c
+		// new way: https://github.com/asterisk/asterisk/blob/master/res/parking/parking_applications.c#L890
 
-		if (option_verbose > 2) ast_verbose( VERBOSE_PREFIX_3 "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context);
+		//ast_masq_park_call(chan, NULL, timeout, &lot); // commented out to avoid compiler error.
 
-		snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1);
+		//if (option_verbose > 2) ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context);
+
+		//snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1);
 
 		rpt_telemetry(myrpt,REV_PATCH,tmp);
 
@@ -22934,8 +23049,8 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 
 	}
 	i = 0;
-	if (!strncasecmp(chan->name,"echolink",8)) i = 1;
-	if (!strncasecmp(chan->name,"tlb",3)) i = 1;
+	if (!strncasecmp(ast_channel_name(chan),"echolink",8)) i = 1;
+	if (!strncasecmp(ast_channel_name(chan),"tlb",3)) i = 1;
 	if ((!options) && (!i))
 	{
 	        struct ast_hostent ahp;
@@ -22944,7 +23059,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	        char hisip[100],nodeip[100], *s, *s1, *s2, *s3;
 
 		/* look at callerid to see what node this comes from */
-		if (!chan->cid.cid_num) /* if doesn't have caller id */
+		if (!ast_channel_caller(chan)->id.number.str) /* if doesn't have caller id */
 		{
 			ast_log(LOG_WARNING, "Does not have callerid on %s\n",tmp);
 			return -1;
@@ -22953,7 +23068,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		memset(hisip,0,sizeof(hisip));
 #ifdef ALLOW_LOCAL_CHANNELS
 	        /* set IP address if this is a local connection*/
-	        if (strncmp(chan->name,"Local",5)==0) {
+	        if (strncmp(ast_channel_name(chan),"Local",5)==0) {
 	            strcpy(hisip,"127.0.0.1");
 	        } else {
 			pbx_substitute_variables_helper(chan,"${IAXPEER(CURRENTCHANNEL)}",hisip,sizeof(hisip) - 1);
@@ -22967,8 +23082,9 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			ast_log(LOG_WARNING, "Link IP address cannot be determined!!\n");
 			return -1;
 		}
-		b = chan->cid.cid_name;
-		b1 = chan->cid.cid_num;		
+		//b = chan->cid.cid_name;
+		b = ast_channel_caller(chan)->id.name.str;
+		b1 = ast_channel_caller(chan)->id.number.str;		
 		ast_shrink_phone_number(b1);
 		if (!strcmp(myrpt->name,b1))
 		{
@@ -23045,6 +23161,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	{
 		int reconnects = 0;
 		struct timeval now;
+		struct ast_format_cap *cap;
 
 		rpt_mutex_lock(&myrpt->lock);
 		i = myrpt->xlink || (!myrpt->ready);
@@ -23067,7 +23184,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		gettimeofday(&myrpt->lastlinktime,NULL);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* look at callerid to see what node this comes from */
-		if (!chan->cid.cid_num) /* if doesn't have caller id */
+		if (!ast_channel_caller(chan)->id.number.str) /* if doesn't have caller id */
 		{
 			ast_log(LOG_WARNING, "Doesnt have callerid on %s\n",tmp);
 			return -1;
@@ -23080,8 +23197,9 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		}
 		else 
 		{
-			b = chan->cid.cid_name;
-			b1 = chan->cid.cid_num;
+			//b = chan->cid.cid_name;
+			b = ast_channel_caller(chan)->id.name.str;
+			b1 = ast_channel_caller(chan)->id.number.str;
 			ast_shrink_phone_number(b1);
 			/* if is an IAX client */
 			if ((b1[0] == '0') && b && b[0] && (strlen(b) <= 8))
@@ -23154,28 +23272,38 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		l->newkey = 0;
 		l->iaxkey = 0;
 		if ((!phone_mode) && (l->name[0] != '0') &&
-		    strncasecmp(chan->name,"echolink",8) && 
-			strncasecmp(chan->name,"tlb",3)) l->newkey = 2;
+		    strncasecmp(ast_channel_name(chan),"echolink",8) && 
+			strncasecmp(ast_channel_name(chan),"tlb",3)) l->newkey = 2;
 		if (l->name[0] > '9') l->newkeytimer = 0;
 		voxinit_link(l,1);
-		if (!strncasecmp(chan->name,"echolink",8)) 
+		if (!strncasecmp(ast_channel_name(chan),"echolink",8)) 
 			init_linkmode(myrpt,l,LINKMODE_ECHOLINK);
-		else if (!strncasecmp(chan->name,"tlb",3)) 
+		else if (!strncasecmp(ast_channel_name(chan),"tlb",3)) 
 			init_linkmode(myrpt,l,LINKMODE_TLB);
 		else if (phone_mode) init_linkmode(myrpt,l,LINKMODE_PHONE);
 		else init_linkmode(myrpt,l,LINKMODE_GUI);	
-		ast_set_read_format(l->chan,AST_FORMAT_SLINEAR);
-		ast_set_write_format(l->chan,AST_FORMAT_SLINEAR);
+		ast_set_read_format(l->chan, ast_format_slin);
+		ast_set_write_format(l->chan, ast_format_slin);
 		gettimeofday(&myrpt->lastlinktime,NULL);
+
+		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+		if (!cap) {
+			ast_log(LOG_ERROR, "Failed to alloc cap\n");
+			pthread_exit(NULL);
+		}
+
+		ast_format_cap_append(cap, ast_format_slin, 0);
+
 		/* allocate a pseudo-channel thru asterisk */
-		l->pchan = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+		l->pchan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+		ao2_ref(cap, -1);
 		if (!l->pchan)
 		{
 			fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
 			pthread_exit(NULL);
 		}
-		ast_set_read_format(l->pchan,AST_FORMAT_SLINEAR);
-		ast_set_write_format(l->pchan,AST_FORMAT_SLINEAR);
+		ast_set_read_format(l->pchan, ast_format_slin);
+		ast_set_write_format(l->pchan, ast_format_slin);
 		ast_answer(l->pchan);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 		if (l->pchan->cdr)
@@ -23186,7 +23314,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		ci.confno = myrpt->conf;
 		ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
 		/* first put the channel on the conference in proper mode */
-		if (ioctl(l->pchan->fds[0],DAHDI_SETCONF,&ci) == -1)
+		if (ioctl(ast_channel_fd(l->pchan, 0),DAHDI_SETCONF,&ci) == -1)
 		{
 			ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 			pthread_exit(NULL);
@@ -23199,7 +23327,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		__kickshort(myrpt);
 		gettimeofday(&myrpt->lastlinktime,NULL);
 		rpt_mutex_unlock(&myrpt->lock);
-		if (chan->_state != AST_STATE_UP)
+		if (ast_channel_state(chan) != AST_STATE_UP)
 		{
 			ast_answer(chan);
 			if (l->name[0] > '9')
@@ -23225,22 +23353,24 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		doconpgm(myrpt,l->name);
 		if ((!phone_mode) && (l->name[0] <=  '9'))
 			send_newkey(chan);
-		if ((!strncasecmp(l->chan->name,"echolink",8)) ||
-		    (!strncasecmp(l->chan->name,"tlb",3)) ||
+		if ((!strncasecmp(ast_channel_name(l->chan),"echolink",8)) ||
+		    (!strncasecmp(ast_channel_name(l->chan),"tlb",3)) ||
 		      (l->name[0] > '9'))
 			rpt_telemetry(myrpt,CONNECTED,l);
-		return AST_PBX_KEEPALIVE;
+		//return AST_PBX_KEEPALIVE;
+		return -1; /*! \todo AST_PBX_KEEPALIVE doesn't exist anymore. Figure out what we should return here. */
 	}
 	/* well, then it is a remote */
 	rpt_mutex_lock(&myrpt->lock);
 	/* look at callerid to see what node this comes from */
-	if (!chan->cid.cid_num) /* if doesn't have caller id */
+	if (!ast_channel_caller(chan)->id.number.str) /* if doesn't have caller id */
 	{
 		b1 = "0";
 		b = NULL;
 	} else {
-		b = chan->cid.cid_name;
-		b1 = chan->cid.cid_num;
+		//b = chan->cid.cid_name;
+		b = ast_channel_caller(chan)->id.name.str;
+		b1 = ast_channel_caller(chan)->id.number.str;
 		ast_shrink_phone_number(b1);
 	}
 	/* if is an IAX client */
@@ -23259,10 +23389,10 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			ast_log(LOG_WARNING, "Trying to use busy link on %s\n",tmp);
 			if (myrpt->remote_webtransceiver || (b && (*b > '9')))
 			{
-				ts = ast_get_indication_tone(chan->zone, "busy");
+				ts = ast_get_indication_tone(ast_channel_zone(chan), "busy");
 				ast_playtones_start(chan,0,ts->data, 1);
 				i = 0;
-				while(chan->generatordata && (i < 5000))
+				while(ast_channel_generatordata(chan) && (i < 5000))
 				{
 					if(ast_safe_sleep(chan, 20)) break;
 					i += 20;
@@ -23353,23 +23483,33 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		pthread_exit(NULL);
 	}
 	*tele++ = 0;
-	myrpt->rxchannel = ast_request(myrpt->rxchanname,AST_FORMAT_SLINEAR,tele,NULL);
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		pthread_exit(NULL);
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+
+	myrpt->rxchannel = ast_request(myrpt->rxchanname, cap, NULL, NULL, tele, NULL);
+
 	myrpt->zaprxchannel = NULL;
-	if (!strcasecmp(myrpt->rxchanname,DAHDI_CHANNEL_NAME))
+	if (!strcasecmp(myrpt->rxchanname,"DAHDI"))
 		myrpt->zaprxchannel = myrpt->rxchannel;
 	if (myrpt->rxchannel)
 	{
-		ast_set_read_format(myrpt->rxchannel,AST_FORMAT_SLINEAR);
-		ast_set_write_format(myrpt->rxchannel,AST_FORMAT_SLINEAR);
+		ast_set_read_format(myrpt->rxchannel, ast_format_slin);
+		ast_set_write_format(myrpt->rxchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 		if (myrpt->rxchannel->cdr)
 			ast_set_flag(myrpt->rxchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
 #endif
-		myrpt->rxchannel->appl = "Apprpt";
-		myrpt->rxchannel->data = "(Link Rx)";
+		ast_channel_appl_set(myrpt->rxchannel, "Apprpt");
+		ast_channel_data_set(myrpt->rxchannel, "(Link Rx)");
 		if (option_verbose > 2)
-			ast_verbose(VERBOSE_PREFIX_3 "rpt (Rx) initiating call to %s/%s on %s\n",
-				myrpt->rxchanname,tele,myrpt->rxchannel->name);
+			ast_verb(3, "rpt (Rx) initiating call to %s/%s on %s\n",
+				myrpt->rxchanname,tele,ast_channel_name(myrpt->rxchannel));
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_call(myrpt->rxchannel,tele,999);
 		rpt_mutex_lock(&myrpt->lock);
@@ -23393,22 +23533,22 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			pthread_exit(NULL);
 		}
 		*tele++ = 0;
-		myrpt->txchannel = ast_request(myrpt->txchanname,AST_FORMAT_SLINEAR,tele,NULL);
-		if (!strncasecmp(myrpt->txchanname,DAHDI_CHANNEL_NAME,3))
+		myrpt->txchannel = ast_request(myrpt->txchanname, cap, NULL, NULL, tele, NULL);
+		if (!strncasecmp(myrpt->txchanname,"DAHDI",3))
 			myrpt->zaptxchannel = myrpt->txchannel;
 		if (myrpt->txchannel)
 		{
-			ast_set_read_format(myrpt->txchannel,AST_FORMAT_SLINEAR);
-			ast_set_write_format(myrpt->txchannel,AST_FORMAT_SLINEAR);
+			ast_set_read_format(myrpt->txchannel, ast_format_slin);
+			ast_set_write_format(myrpt->txchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 			if (myrpt->txchannel->cdr)
 				ast_set_flag(myrpt->txchannel->cdr,AST_CDR_FLAG_POST_DISABLED);
 #endif
-			myrpt->txchannel->appl = "Apprpt";
-			myrpt->txchannel->data = "(Link Tx)";
+			ast_channel_appl_set(myrpt->txchannel, "Apprpt");
+			ast_channel_data_set(myrpt->txchannel, "(Link Tx)");
 			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "rpt (Tx) initiating call to %s/%s on %s\n",
-					myrpt->txchanname,tele,myrpt->txchannel->name);
+				ast_verb(3, "rpt (Tx) initiating call to %s/%s on %s\n",
+					myrpt->txchanname,tele,ast_channel_name(myrpt->txchannel));
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_call(myrpt->txchannel,tele,999);
 			rpt_mutex_lock(&myrpt->lock);
@@ -23425,13 +23565,14 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	else
 	{
 		myrpt->txchannel = myrpt->rxchannel;
-		if (!strncasecmp(myrpt->rxchanname,DAHDI_CHANNEL_NAME,3))
+		if (!strncasecmp(myrpt->rxchanname,"DAHDI",3))
 			myrpt->zaptxchannel = myrpt->rxchannel;
 	}
 	i = 3;
 	ast_channel_setoption(myrpt->rxchannel,AST_OPTION_TONE_VERIFY,&i,sizeof(char),0);
 	/* allocate a pseudo-channel thru asterisk */
-	myrpt->pchannel = ast_request(DAHDI_CHANNEL_NAME,AST_FORMAT_SLINEAR,"pseudo",NULL);
+	myrpt->pchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	ao2_ref(cap, -1);
 	if (!myrpt->pchannel)
 	{
 		fprintf(stderr,"rpt:Sorry unable to obtain pseudo channel\n");
@@ -23441,8 +23582,8 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		ast_hangup(myrpt->rxchannel);
 		pthread_exit(NULL);
 	}
-	ast_set_read_format(myrpt->pchannel,AST_FORMAT_SLINEAR);
-	ast_set_write_format(myrpt->pchannel,AST_FORMAT_SLINEAR);
+	ast_set_read_format(myrpt->pchannel, ast_format_slin);
+	ast_set_write_format(myrpt->pchannel, ast_format_slin);
 	ast_answer(myrpt->pchannel);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->pchannel->cdr)
@@ -23455,7 +23596,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	ci.confno = -1; /* make a new conf */
 	ci.confmode = DAHDI_CONF_CONFANNMON ;
 	/* first put the channel on the conference in announce/monitor mode */
-	if (ioctl(myrpt->pchannel->fds[0],DAHDI_SETCONF,&ci) == -1)
+	if (ioctl(ast_channel_fd(myrpt->pchannel, 0),DAHDI_SETCONF,&ci) == -1)
 	{
 		ast_log(LOG_WARNING, "Unable to set conference mode to Announce\n");
 		rpt_mutex_unlock(&myrpt->lock);
@@ -23484,26 +23625,26 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	{
 		z.radpar = DAHDI_RADPAR_REMMODE;
 		z.data = DAHDI_RADPAR_REM_NONE;
-		res = ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z);
+		res = ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z);
 		/* if PCIRADIO and kenwood selected */
 		if ((!res) && (!strcmp(myrpt->remoterig,remote_rig_kenwood)))
 		{
 			z.radpar = DAHDI_RADPAR_UIOMODE;
 			z.data = 1;
-			if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z) == -1)
+			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z) == -1)
 			{
 				ast_log(LOG_ERROR,"Cannot set UIOMODE\n");
 				return -1;
 			}
 			z.radpar = DAHDI_RADPAR_UIODATA;
 			z.data = 3;
-			if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z) == -1)
+			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z) == -1)
 			{
 				ast_log(LOG_ERROR,"Cannot set UIODATA\n");
 				return -1;
 			}
 			i = DAHDI_OFFHOOK;
-			if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_HOOK,&i) == -1)
+			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_HOOK,&i) == -1)
 			{
 				ast_log(LOG_ERROR,"Cannot set hook\n");
 				return -1;
@@ -23514,7 +23655,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	if (myrpt->txchannel == myrpt->zaptxchannel)
 	{
 		i = DAHDI_ONHOOK;
-		ioctl(myrpt->zaptxchannel->fds[0],DAHDI_HOOK,&i);
+		ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_HOOK,&i);
 		/* if PCIRADIO and Yaesu ft897/ICOM IC-706 selected */
 		if ((myrpt->iofd < 1) && (!res) &&
 		   ((!strcmp(myrpt->remoterig,remote_rig_ft897)) ||
@@ -23526,23 +23667,23 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		{
 			z.radpar = DAHDI_RADPAR_UIOMODE;
 			z.data = 1;
-			if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z) == -1)
+			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z) == -1)
 			{
 				ast_log(LOG_ERROR,"Cannot set UIOMODE\n");
 				return -1;
 			}
 			z.radpar = DAHDI_RADPAR_UIODATA;
 			z.data = 3;
-			if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z) == -1)
+			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z) == -1)
 			{
 				ast_log(LOG_ERROR,"Cannot set UIODATA\n");
 				return -1;
 			}
 		}
 	}
-	if ((myrpt->p.nlconn) && ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) ||
-	    (strncasecmp(myrpt->rxchannel->name,"beagle/", 7) == 0) ||
-		    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0)))
+	if ((myrpt->p.nlconn) && ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) ||
+	    (strncasecmp(ast_channel_name(myrpt->rxchannel),"beagle/", 7) == 0) ||
+		    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0)))
 	{
 		/* go thru all the specs */
 		for(i = 0; i < myrpt->p.nlconn; i++)
@@ -23588,24 +23729,24 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	myrpt->tunerequest = 0;
 	myrpt->tunetx = 0;
 	rpt_mutex_unlock(&myrpt->lock);
-	ast_set_write_format(chan, AST_FORMAT_SLINEAR);
-	ast_set_read_format(chan, AST_FORMAT_SLINEAR);
+	ast_set_write_format(chan, ast_format_slin);
+	ast_set_read_format(chan, ast_format_slin);
 	rem_rx = 0;
 	remkeyed = 0;
 	/* if we are on 2w loop and are a remote, turn EC on */
 	if (myrpt->remote && (myrpt->rxchannel == myrpt->txchannel))
 	{
 		i = 128;
-		ioctl(myrpt->zaprxchannel->fds[0],DAHDI_ECHOCANCEL,&i);
+		ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_ECHOCANCEL,&i);
 	}
-	if (chan->_state != AST_STATE_UP) {
+	if (ast_channel_state(chan) != AST_STATE_UP) {
 		ast_answer(chan);
 		if (!phone_mode) send_newkey(chan);
 	}
 
 	if (myrpt->rxchannel == myrpt->zaprxchannel)
 	{
-		if (ioctl(myrpt->zaprxchannel->fds[0],DAHDI_GET_PARAMS,&par) != -1)
+		if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0),DAHDI_GET_PARAMS,&par) != -1)
 		{
 			if (par.rxisoffhook)
 			{
@@ -23616,13 +23757,13 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		}
 	}
 	/* look at callerid to see what node this comes from */
-	if (!chan->cid.cid_num) /* if doesn't have caller id */
+	if (!ast_channel_caller(chan)->id.number.str) /* if doesn't have caller id */
 	{
 		b1 = "0";
 		b = NULL;
 	} else {
-		b = chan->cid.cid_name;
-		b1 = chan->cid.cid_num;
+		b = ast_channel_caller(chan)->id.name.str;
+		b1 = ast_channel_caller(chan)->id.number.str;
 		ast_shrink_phone_number(b1);
 	}
 	/* if is an IAX client */
@@ -23641,7 +23782,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		time(&myt);
 		strftime(mydate,sizeof(mydate) - 1,"%Y%m%d%H%M%S",
 			localtime(&myt));
-		sprintf(mycmd,"mixmonitor start %s %s/%s/%s.wav49 a",chan->name,
+		sprintf(mycmd,"mixmonitor start %s %s/%s/%s.wav49 a",ast_channel_name(chan),
 			myrpt->p.archivedir,myrpt->name,mydate);
 		if (myrpt->p.monminblocks)
 		{
@@ -23935,7 +24076,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 					{
 						z.radpar = DAHDI_RADPAR_UIODATA;
 						z.data = 1;
-						if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z) == -1)
+						if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z) == -1)
 						{
 							ast_log(LOG_ERROR,"Cannot set UIODATA\n");
 							return -1;
@@ -23960,7 +24101,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			{
 				z.radpar = DAHDI_RADPAR_UIODATA;
 				z.data = 3;
-				if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z) == -1)
+				if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z) == -1)
 				{
 					ast_log(LOG_ERROR,"Cannot set UIODATA\n");
 					return -1;
@@ -24023,7 +24164,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 				if (phone_mode && phone_vox)
 				{
 					n1 = dovox(&myrpt->vox,
-						AST_FRAME_DATAP(f),f->datalen / 2);
+						f->data.ptr,f->datalen / 2);
 					if (n1 != myrpt->wasvox)
 					{
 						if (debug) ast_log(LOG_DEBUG,"Remote  vox %d\n",n1);
@@ -24042,7 +24183,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 						    for(;x < myrpt->p.simplexphonedelay; x++)
 						    {
 							f1 = ast_frdup(f);
-							memset(AST_FRAME_DATAP(f1),0,f1->datalen);
+							memset(f1->data.ptr,0,f1->datalen);
 							memset(&f1->frame_list,0,sizeof(f1->frame_list));
 							AST_LIST_INSERT_TAIL(&myrpt->rxq,
 								f1,frame_list);
@@ -24057,7 +24198,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 					AST_LIST_TRAVERSE(&myrpt->rxq, f1,frame_list) x++;
 					if (!x)
 					{
-						memset(AST_FRAME_DATAP(f),0,f->datalen);
+						memset(f->data.ptr,0,f->datalen);
 					}
 					else
 					{
@@ -24065,7 +24206,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 						f = AST_LIST_REMOVE_HEAD(&myrpt->rxq,frame_list);
 					}
 				}
-				if (ioctl(chan->fds[0], DAHDI_GETCONFMUTE, &ismuted) == -1)
+				if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONFMUTE, &ismuted) == -1)
 				{
 					ismuted = 0;
 				}
@@ -24075,11 +24216,11 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 				dtmfed = 0;
 				if (ismuted)
 				{
-					memset(AST_FRAME_DATAP(f),0,f->datalen);
+					memset(f->data.ptr,0,f->datalen);
 					if (myrpt->lastf1)
-						memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
+						memset(myrpt->lastf1->data.ptr,0,myrpt->lastf1->datalen);
 					if (myrpt->lastf2)
-						memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
+						memset(myrpt->lastf2->data.ptr,0,myrpt->lastf2->datalen);
 				} 
 				if (f) f2 = ast_frdup(f);
 				else f2 = NULL;
@@ -24089,9 +24230,9 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 				if (ismuted)
 				{
 					if (myrpt->lastf1)
-						memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
+						memset(myrpt->lastf1->data.ptr,0,myrpt->lastf1->datalen);
 					if (myrpt->lastf2)
-						memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
+						memset(myrpt->lastf2->data.ptr,0,myrpt->lastf2->datalen);
 				}
 				if (f1)
 				{
@@ -24109,19 +24250,19 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			else if (f->frametype == AST_FRAME_DTMF_BEGIN)
 			{
 				if (myrpt->lastf1)
-					memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
+					memset(myrpt->lastf1->data.ptr,0,myrpt->lastf1->datalen);
 				if (myrpt->lastf2)
-					memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
+					memset(myrpt->lastf2->data.ptr,0,myrpt->lastf2->datalen);
 				dtmfed = 1;
 			}
 			if (f->frametype == AST_FRAME_DTMF)
 			{
 				if (myrpt->lastf1)
-					memset(AST_FRAME_DATAP(myrpt->lastf1),0,myrpt->lastf1->datalen);
+					memset(myrpt->lastf1->data.ptr,0,myrpt->lastf1->datalen);
 				if (myrpt->lastf2)
-					memset(AST_FRAME_DATAP(myrpt->lastf2),0,myrpt->lastf2->datalen);
+					memset(myrpt->lastf2->data.ptr,0,myrpt->lastf2->datalen);
 				dtmfed = 1;
-				if (handle_remote_phone_dtmf(myrpt,f->subclass,&keyed,phone_mode) == -1)
+				if (handle_remote_phone_dtmf(myrpt,f->subclass.integer,&keyed,phone_mode) == -1)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -24133,7 +24274,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 				char *tstr = ast_malloc(f->datalen + 1);
 				if (tstr) 
 				{
-					memcpy(tstr,AST_FRAME_DATAP(f),f->datalen);
+					memcpy(tstr,f->data.ptr,f->datalen);
 					tstr[f->datalen] = 0;
 					if (handle_remote_data(myrpt,tstr) == -1)
 					{
@@ -24146,21 +24287,21 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			}	
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
 					break;
 				}
 				/* if RX key */
-				if ((f->subclass == AST_CONTROL_RADIO_KEY) && (myrpt->newkey < 2))
+				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (myrpt->newkey < 2))
 				{
 					if (debug == 7) printf("@@@@ rx key\n");
 					keyed = 1;
 					myrpt->rerxtimer = 0;
 				}
 				/* if RX un-key */
-				if (f->subclass == AST_CONTROL_RADIO_UNKEY)
+				if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY)
 				{
 					myrpt->rerxtimer = 0;
 					if (debug == 7) printf("@@@@ rx un-key\n");
@@ -24194,19 +24335,19 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 				((myrpt->remote) && (myrpt->remotetx)) ||
 				  ((myrpt->remmode != REM_MODE_FM) &&
 				    notremming))
-					memset(AST_FRAME_DATAP(f),0,f->datalen); 
+					memset(f->data.ptr,0,f->datalen); 
 				 ast_write(myrpt->pchannel,f);
 			}
 			else if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
 					break;
 				}
 				/* if RX key */
-				if (f->subclass == AST_CONTROL_RADIO_KEY)
+				if (f->subclass.integer == AST_CONTROL_RADIO_KEY)
 				{
 					if (debug == 7) printf("@@@@ remote rx key\n");
 					if (!myrpt->remotetx)
@@ -24215,7 +24356,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 					}
 				}
 				/* if RX un-key */
-				if (f->subclass == AST_CONTROL_RADIO_UNKEY)
+				if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY)
 				{
 					if (debug == 7) printf("@@@@ remote rx un-key\n");
 					if (!myrpt->remotetx) 
@@ -24249,7 +24390,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 				if(gain)
 				{
 					int n,k;
-					short *sp = (short *) f->data;
+					short *sp = (short *) f->data.ptr;
 					for(n=0; n<f->datalen/2; n++)
 					{
 						k=sp[n]*gain;
@@ -24262,7 +24403,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if ( debug>5 ) ast_log(LOG_NOTICE,"node=%s telechannel Hung Up\n",myrpt->name);
 					ast_frfree(f);
@@ -24283,7 +24424,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if ( debug>5 ) ast_log(LOG_NOTICE,"node=%s btelechannel Hung Up\n",myrpt->name);
 					ast_frfree(f);
@@ -24305,12 +24446,12 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			if (f->frametype == AST_FRAME_VOICE)
 			{
 				if ((myrpt->newkey < 2) || myrpt->remoterx ||
-				    strncasecmp(chan->name,"IAX",3))
+				    strncasecmp(ast_channel_name(chan),"IAX",3))
 					ast_write(chan,f);
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
-				if (f->subclass == AST_CONTROL_HANGUP)
+				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -24331,7 +24472,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 			}
 			if (f->frametype == AST_FRAME_CONTROL)
 			{
- 				if (f->subclass == AST_CONTROL_HANGUP)
+ 				if (f->subclass.integer == AST_CONTROL_HANGUP)
 				{
 					if (debug) printf("@@@@ rpt:Hung Up\n");
 					ast_frfree(f);
@@ -24347,11 +24488,11 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 		char mycmd[100];
 
 		/* look at callerid to see what node this comes from */
-		if (!chan->cid.cid_num) /* if doesn't have caller id */
+		if (!ast_channel_caller(chan)->id.number.str) /* if doesn't have caller id */
 		{
 			b1 = "0";
 		} else {
-			ast_callerid_parse(chan->cid.cid_num,&b,&b1);
+			ast_callerid_parse(ast_channel_caller(chan)->id.number.str,&b,&b1);
 			ast_shrink_phone_number(b1);
 		}
 		sprintf(mycmd,"DISCONNECT,%s",b1);
@@ -24362,7 +24503,7 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	myrpt->remote_webtransceiver = 0;
 	/* wait for telem to be done */
 	while(myrpt->tele.next != &myrpt->tele) usleep(50000);
-	sprintf(tmp,"mixmonitor stop %s",chan->name);
+	sprintf(tmp,"mixmonitor stop %s",ast_channel_name(chan));
 	ast_cli_command(nullfd,tmp);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->hfscanmode = 0;
@@ -24377,28 +24518,28 @@ static int rpt_exec(struct ast_channel *chan, void *data)
 	{
 		z.radpar = DAHDI_RADPAR_UIOMODE;
 		z.data = 3;
-		if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z) == -1)
+		if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z) == -1)
 		{
 			ast_log(LOG_ERROR,"Cannot set UIOMODE\n");
 			return -1;
 		}
 		z.radpar = DAHDI_RADPAR_UIODATA;
 		z.data = 3;
-		if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_RADIO_SETPARAM,&z) == -1)
+		if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_RADIO_SETPARAM,&z) == -1)
 		{
 			ast_log(LOG_ERROR,"Cannot set UIODATA\n");
 			return -1;
 		}
 		i = DAHDI_OFFHOOK;
-		if (ioctl(myrpt->zaptxchannel->fds[0],DAHDI_HOOK,&i) == -1)
+		if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0),DAHDI_HOOK,&i) == -1)
 		{
 			ast_log(LOG_ERROR,"Cannot set hook\n");
 			return -1;
 		}
 	}
-	if ((myrpt->p.nldisc) && ((strncasecmp(myrpt->rxchannel->name,"radio/", 6) == 0) ||
-	    (strncasecmp(myrpt->rxchannel->name,"beagle/", 7) == 0) ||
-		    (strncasecmp(myrpt->rxchannel->name,"simpleusb/", 10) == 0)))
+	if ((myrpt->p.nldisc) && ((strncasecmp(ast_channel_name(myrpt->rxchannel),"radio/", 6) == 0) ||
+	    (strncasecmp(ast_channel_name(myrpt->rxchannel),"beagle/", 7) == 0) ||
+		    (strncasecmp(ast_channel_name(myrpt->rxchannel),"simpleusb/", 10) == 0)))
 	{
 		/* go thru all the specs */
 		for(i = 0; i < myrpt->p.nldisc; i++)
@@ -24448,7 +24589,7 @@ static void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
 		"EventValue: %s\r\n"
 		"LastKeyedTime: %s\r\n"
 		"LastTxKeyedTime: %s\r\n",
-                myrpt->name, myrpt->rxchannel->name, value,
+                myrpt->name, ast_channel_name(myrpt->rxchannel), value,
                 ctime(&myrpt->lastkeyedtime), ctime(&myrpt->lasttxkeyedtime)
         );
 }
@@ -24537,13 +24678,12 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 	struct rpt_lstat s_head;
 	const char *node = astman_get_header(m, "Node");
 
+	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
+	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode; 
+
 	s = NULL;
 	s_head.next = &s_head;
 	s_head.prev = &s_head;
-
-
-	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
-	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode; 
 
 	for(i = 0; i < nrpts; i++)
 	{
@@ -24668,7 +24808,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 					return -1;
 				}
 				memset(s, 0, sizeof(struct rpt_lstat));
-				strlcpy(s->name, l->name, MAXNODESTR - 1);
+				ast_copy_string(s->name, l->name, MAXNODESTR - 1);
 				if (l->chan) pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", s->peer, MAXPEERSTR - 1);
 				else strcpy(s->peer,"(none)");
 				s->mode = l->mode;
@@ -24734,7 +24874,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 //### GET VARIABLES INFO ####################
 			j = 0;
 			ast_channel_lock(rpt_vars[i].rxchannel);
-			AST_LIST_TRAVERSE (&rpt_vars[i].rxchannel->varshead, newvariable, entries) {
+			AST_LIST_TRAVERSE (ast_channel_varshead(rpt_vars[i].rxchannel), newvariable, entries) {
 				j++;
 				astman_append(ses,"Var: %s=%s\r\n", ast_var_name(newvariable), ast_var_value(newvariable));
 			}
@@ -24873,11 +25013,11 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 						astman_append(s, "RemOffset: %c\r\n", offsetc);
 						if(rxplon && rxpl){
 							astman_append(s, "RxPl: %s\r\n",rxpl);
-							free(rxpl);
+							ast_free(rxpl);
 						}
 						if(txplon && txpl){
 							astman_append(s, "TxPl: %s\r\n",txpl);
-							free(txpl);
+							ast_free(txpl);
 						}
 					}
 					switch(powerlevel){
@@ -25249,7 +25389,7 @@ static void mdcgen_release(struct ast_channel *chan, void *params)
 		ast_set_write_format(chan, ps->origwfmt);
 	}
 	if (!ps) return;
-	if (ps->mdc) free(ps->mdc);
+	if (ps->mdc) ast_free(ps->mdc);
 	ast_free(ps);
 	return;
 }
@@ -25261,7 +25401,7 @@ static void * mdcgen_alloc(struct ast_channel *chan, void *params)
 
 	if (!(ps = ast_calloc(1, sizeof(*ps))))
 		return NULL;
-	ps->origwfmt = chan->writeformat;
+	ps->origwfmt = ast_channel_writeformat(chan); /*! \todo does this need to be freed? */
 	ps->mdc = mdc_encoder_new(8000);
 	if (!ps->mdc)
 	{
@@ -25304,8 +25444,8 @@ static void * mdcgen_alloc(struct ast_channel *chan, void *params)
 		ast_free(ps);
 		return NULL;	
 	}
-	if (ast_set_write_format(chan, AST_FORMAT_SLINEAR)) {
-		ast_log(LOG_ERROR, "Unable to set '%s' to signed linear format (write)\n", chan->name);
+	if (ast_set_write_format(chan, ast_format_slin)) {
+		ast_log(LOG_ERROR, "Unable to set '%s' to signed linear format (write)\n", ast_channel_name(chan));
 		ast_free(ps);
 		return NULL;
 	}
@@ -25330,11 +25470,11 @@ static int mdcgen_generator(struct ast_channel *chan, void *data, int len, int s
 		*sp++ = s * 81;
 	}
 	ps->f.frametype = AST_FRAME_VOICE;
-	ps->f.subclass = AST_FORMAT_SLINEAR;
+	ps->f.subclass.integer = AST_FORMAT_SLIN;
 	ps->f.datalen = n * 2;
 	ps->f.samples = n;
 	ps->f.offset = AST_FRIENDLY_OFFSET;
-	AST_FRAME_DATA(ps->f) = ps->buf + AST_FRIENDLY_OFFSET;
+	ps->f.data.ptr = ps->buf + AST_FRIENDLY_OFFSET;
 	ps->f.delivery.tv_sec = 0;
 	ps->f.delivery.tv_usec = 0;
 	ast_write(chan, &ps->f);
@@ -25352,7 +25492,7 @@ static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, 
 	struct mdcparams p;
 
 	memset(&p,0,sizeof(p));
-	strlcpy(p.type, type, sizeof(p.type));
+	ast_copy_string(p.type, type, sizeof(p.type));
 	p.UnitID = UnitID;
 	p.DestID = destID;
 	p.subcode = subcode;
@@ -25371,7 +25511,7 @@ struct ast_frame *f;
 	res = mdc1200gen_start(chan,type,UnitID,destID,subcode);
 	if (res) return res;
 
-	while (chan->generatordata)
+	while (ast_channel_generatordata(chan))
 	{
 		if (ast_check_hangup(chan)) return -1;
 		res = ast_waitfor(chan, 100);
@@ -25385,7 +25525,7 @@ struct ast_frame *f;
 	return 0;
 }
 
-static int mdcgen_exec(struct ast_channel *chan, void *data)
+static int mdcgen_exec(struct ast_channel *chan, const char *data)
 {
 	struct ast_module_user *u;
 	char *tmp;
@@ -25430,7 +25570,7 @@ static int mdcgen_exec(struct ast_channel *chan, void *data)
 	u = ast_module_user_add(chan);
 	unitid = (short) strtol(args.unit,NULL,16) & 0xffff;
 	res = mdc1200gen(chan, args.type, unitid, destid, subcode);
-	free(tmp);
+	ast_free(tmp);
 	ast_module_user_remove(u);
 	return res;
 }

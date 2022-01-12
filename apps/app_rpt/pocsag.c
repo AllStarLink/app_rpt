@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdint.h>
-#include "allstar/pocsag.h"
+#include "pocsag.h"
 
 /* String values for numeric paging */
 static char nstr[] = "0123456789*U -()";
@@ -132,7 +132,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 	int i,ii,j,k,curaddr,mylen;
 	uint32_t packed[100];
 
-	if ((cur = malloc(sizeof(struct pocsag_batch))) == NULL)
+	if ((cur = ast_malloc(sizeof(struct pocsag_batch))) == NULL)
 		return NULL;
 	memset(cur,0,sizeof(struct pocsag_batch));
 	cur->sc = SYNCH;
@@ -181,7 +181,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 				if (i == mylen) break;
 				if (j == 8)
 				{
-					if ((cur->next = malloc(sizeof(struct pocsag_batch))) == NULL)
+					if ((cur->next = ast_malloc(sizeof(struct pocsag_batch))) == NULL)
 						return NULL;
 					memset(cur->next,0,sizeof(struct pocsag_batch));
 					cur->next->sc   = SYNCH;

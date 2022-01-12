@@ -35,14 +35,14 @@
 -*/
 
 #include <stdlib.h>
-#include "allstar/mdc_decode.h"
+#include "mdc_decode.h"
 
 mdc_decoder_t * mdc_decoder_new(int sampleRate)
 {
 	mdc_decoder_t *decoder;
 	int i;
 
-	decoder = (mdc_decoder_t *)malloc(sizeof(mdc_decoder_t));
+	decoder = (mdc_decoder_t *) ast_malloc(sizeof(mdc_decoder_t));
 	if(!decoder)
 		return (mdc_decoder_t *) 0L;
 

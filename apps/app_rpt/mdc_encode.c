@@ -33,7 +33,7 @@
 -*/
 
 #include <stdlib.h>
-#include "allstar/mdc_encode.h"
+#include "mdc_encode.h"
 
 static unsigned char sin8[] = {
       127, 130, 133, 136, 139, 142, 145, 148, 151, 154, 157, 160,
@@ -99,7 +99,7 @@ mdc_encoder_t * mdc_encoder_new(int sampleRate)
 {
 	mdc_encoder_t *encoder;
 
-	encoder = (mdc_encoder_t *)malloc(sizeof(mdc_encoder_t));
+	encoder = (mdc_encoder_t *) ast_malloc(sizeof(mdc_encoder_t));
 	if(!encoder)
 		return (mdc_encoder_t *) 0L;
 
