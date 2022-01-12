@@ -40,6 +40,7 @@
 #include "asterisk/config.h"
 #include "asterisk/indications.h"
 
+#include "rpt_dsp.h" /* must come before app_rpt.h */
 #include "app_rpt.h"
 #include "rpt_utils.h"
 #include "rpt_lock.h"
@@ -47,6 +48,7 @@
 #include "rpt_channels.h"
 #include "rpt_remotedata.h"
 #include "rpt_mdc.h"
+#include "rpt_telemetry.h" /* use function_meter */
 
 extern int debug;
 extern int nrpts;

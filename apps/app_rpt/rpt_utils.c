@@ -38,17 +38,33 @@
 #include "asterisk/options.h"
 #include "asterisk/cli.h"
 #include "asterisk/config.h"
+#include "asterisk/say.h"
+#include "asterisk/localtime.h"
+#include "asterisk/cdr.h"
+#include "asterisk/options.h"
+#include "asterisk/manager.h"
+#include "asterisk/astdb.h"
+#include "asterisk/app.h"
+#include "asterisk/indications.h"
+#include "asterisk/format.h"
+#include "asterisk/format_compatibility.h"
 
+#include "rpt_dsp.h" /* must come before app_rpt.h */
 #include "app_rpt.h"
 #include "rpt_utils.h"
 #include "rpt_lock.h"
 #include "rpt_serial.h"
+#include "rpt_channels.h"
 #include "rpt_uchameleon.h"
 
 extern int debug;
 extern struct ast_flags config_flags;
 extern ast_mutex_t nodeloglock;
 extern struct nodelog nodelog;
+
+/*! \todo this should be a define? */
+extern int nullfd;
+static char *remote_rig_ppp16="ppp16";	  		// parallel port programmable 16 channels
 
 AST_MUTEX_DEFINE_STATIC(nodelookuplock);
 
@@ -457,6 +473,34 @@ struct	statfs statfsbuf;
 	return(statfsbuf.f_bavail);
 }
 
+/*
+ Get the time for the machine's time zone
+ Note: Asterisk requires a copy of localtime
+ in the /etc directory for this to work properly.
+ If /etc/localtime is not present, you will get
+ GMT time! This is especially important on systems
+ running embedded linux distributions as they don't usually
+ have support for locales. 
+*/
+
+void rpt_localtime( time_t *t, struct ast_tm *lt, char *tz)
+{
+struct timeval tv;
+
+	tv.tv_sec = *t;
+	tv.tv_usec = 0;
+	ast_localtime(&tv, lt, tz);
+
+}
+
+time_t rpt_mktime(struct ast_tm *tm,char *zone)
+{
+struct timeval now;
+
+	now = ast_mktime(tm,zone);
+	return now.tv_sec;
+}
+
 char func_xlat(struct rpt *myrpt,char c,struct rpt_xlat *xlat)
 {
 time_t	now;
@@ -508,4 +552,461 @@ int	i;
 		if (!isdigit(l->name[i])) return 1;
 	}
 	return 0;
+}
+
+/*
+*  Execute shell command
+*/
+
+int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+	char *cp;
+
+	if (myrpt->remote)
+		return DC_ERROR;
+
+	ast_log(LOG_NOTICE, "cmd param = %s, digitbuf = %s\n", (param)? param : "(null)", digitbuf);
+	
+	if (param) {
+		if (*param == '#') /* to execute asterisk cli command */
+		{
+			ast_cli_command(nullfd,param + 1);
+		}
+		else
+		{			
+			cp = ast_malloc(strlen(param) + 10);
+			if (!cp)
+			{
+				ast_log(LOG_NOTICE,"Unable to alloc");
+				return DC_ERROR;
+			}
+			memset(cp,0,strlen(param) + 10);
+			sprintf(cp,"%s &",param);
+			ast_safe_system(cp);
+			ast_free(cp);
+		}
+	}
+	return DC_COMPLETE;
+}
+
+int get_wait_interval(struct rpt *myrpt, int type)
+{
+        int interval;
+        char *wait_times;
+        char *wait_times_save;
+                                                                                                                  
+        wait_times_save = NULL;
+        wait_times = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "wait_times");
+                                                                                                                  
+        if(wait_times){
+                wait_times_save = ast_strdup(wait_times);
+                if(!wait_times_save)
+			return 0;
+                
+        }
+                                                                                                                  
+        switch(type){
+                case DLY_TELEM:
+                        if(wait_times)
+                                interval = retrieve_astcfgint(myrpt,wait_times_save, "telemwait", 500, 5000, 1000);
+                        else
+                                interval = 1000;
+                        break;
+                                                                                                                  
+                case DLY_ID:
+                        if(wait_times)
+                                interval = retrieve_astcfgint(myrpt,wait_times_save, "idwait",250,5000,500);
+                        else
+                                interval = 500;
+                        break;
+                                                                                                                  
+                case DLY_UNKEY:
+                        if(wait_times)
+                                interval = retrieve_astcfgint(myrpt,wait_times_save, "unkeywait",50,5000,1000);
+                        else
+                                interval = 1000;
+                        break;
+                                                                                                                  
+                case DLY_LINKUNKEY:
+                        if(wait_times)
+                                interval = retrieve_astcfgint(myrpt,wait_times_save, "linkunkeywait",500,5000,1000);
+                        else
+                                interval = 1000;
+                        break;
+                                                                                                                  
+                case DLY_CALLTERM:
+                        if(wait_times)
+                                interval = retrieve_astcfgint(myrpt,wait_times_save, "calltermwait",500,5000,1500);
+                        else
+                                interval = 1500;
+                        break;
+                                                                                                                  
+                case DLY_COMP:
+                        if(wait_times)
+                                interval = retrieve_astcfgint(myrpt,wait_times_save, "compwait",500,5000,200);
+                        else
+                                interval = 200;
+                        break;
+                                                                                                                  
+                case DLY_PARROT:
+                        if(wait_times)
+                                interval = retrieve_astcfgint(myrpt,wait_times_save, "parrotwait",500,5000,200);
+                        else
+                                interval = 200;
+                        break;
+                case DLY_MDC1200:
+                        if(wait_times)
+                                interval = retrieve_astcfgint(myrpt,wait_times_save, "mdc1200wait",500,5000,200);
+                        else
+                                interval = 350;
+                        break;
+                default:
+			interval = 0;
+			break;
+        }
+	if(wait_times_save)
+       		ast_free(wait_times_save);
+	return interval;
+}
+
+int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
+{
+	int interval;
+
+	do {
+		while (myrpt->p.holdofftelem && 
+			(myrpt->keyed || (myrpt->remrx && (type != DLY_ID))))
+		{
+			if (ast_safe_sleep(chan,100) < 0) return -1;
+		}
+
+		interval = get_wait_interval(myrpt, type);
+		if(debug)
+			ast_log(LOG_NOTICE,"Delay interval = %d\n", interval);
+		if(interval)
+			if (ast_safe_sleep(chan,interval) < 0) return -1;
+		if(debug)
+			ast_log(LOG_NOTICE,"Delay complete\n");
+	}
+	while (myrpt->p.holdofftelem && 
+		(myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
+	return 0;
+}
+
+int retrieve_astcfgint(struct rpt *myrpt,char *category, char *name, int min, int max, int defl)
+{
+        char *var;
+        int ret;
+	char include_zero = 0;
+
+	if(min < 0){ /* If min is negative, this means include 0 as a valid entry */
+		min = -min;
+		include_zero = 1;
+	}           
+                                                                     
+        var = (char *) ast_variable_retrieve(myrpt->cfg, category, name);
+        if(var){
+                ret = myatoi(var);
+		if(include_zero && !ret)
+			return 0;
+                if(ret < min)
+                        ret = min;
+                if(ret > max)
+                        ret = max;
+        }
+        else
+                ret = defl;
+        return ret;
+}
+
+static int elink_cmd(char *cmd, char *outstr, int outlen)
+{
+FILE	*tf;
+
+	tf = tmpfile();
+	if (!tf) return -1;
+	if (debug)  ast_log(LOG_DEBUG,"elink_cmd sent %s\n",cmd);
+	ast_cli_command(fileno(tf),cmd);
+	rewind(tf);
+	outstr[0] = 0;
+	if (!fgets(outstr,outlen,tf)) 
+	{
+		fclose(tf);
+		return 0;
+	}
+	fclose(tf);
+	if (!strlen(outstr)) return 0;
+	if (outstr[strlen(outstr) - 1] == '\n')
+		outstr[strlen(outstr) - 1] = 0;
+	if (debug)  ast_log(LOG_DEBUG,"elink_cmd ret. %s\n",outstr);
+	return(strlen(outstr));
+}
+
+int elink_db_get(char *lookup, char c, char *nodenum,char *callsign, char *ipaddr)
+{
+char	str[512],str1[100],*strs[5];
+int	n;
+
+	snprintf(str,sizeof(str) - 1,"echolink dbget %c %s",c,lookup);
+	n = elink_cmd(str,str1,sizeof(str1));
+	if (n < 1) return(n);
+	n = explode_string(str1, strs, 5, '|', '\"');
+	if (n < 3) return(0);
+	if (nodenum) strcpy(nodenum,strs[0]);
+	if (callsign) strcpy(callsign,strs[1]);
+	if (ipaddr) strcpy(ipaddr,strs[2]);
+	return(1);
+}
+
+int tlb_node_get(char *lookup, char c, char *nodenum,char *callsign, char *ipaddr, char *port)
+{
+char	str[100],str1[100],*strs[6];
+int	n;
+
+	snprintf(str,sizeof(str) - 1,"tlb nodeget %c %s",c,lookup);
+	n = elink_cmd(str,str1,sizeof(str1));
+	if (n < 1) return(n);
+	n = explode_string(str1, strs, 6, '|', '\"');
+	if (n < 4) return(0);
+	if (nodenum) strcpy(nodenum,strs[0]);
+	if (callsign) strcpy(callsign,strs[1]);
+	if (ipaddr) strcpy(ipaddr,strs[2]);
+	if (port) strcpy(port,strs[3]);
+	return(1);
+}
+
+int morse_cat(char *str, int freq, int duration)
+{
+	char *p;
+	int len;
+
+	if(!str)
+		return -1;
+
+	len = strlen(str);	
+	p = str+len;
+
+	if(len){
+		*p++ = ',';
+		*p = '\0';
+	}
+
+	snprintf(p, 62,"!%d/%d", freq, duration);
+ 
+	return 0;
+}
+
+int get_mem_set(struct rpt *myrpt, char *digitbuf)
+{
+	int res=0;
+	if(debug)ast_log(LOG_NOTICE," digitbuf=%s\n", digitbuf);
+	res = retrieve_memory(myrpt, digitbuf);
+	if(!res)res=setrem(myrpt);
+	if(debug)ast_log(LOG_NOTICE," freq=%s  res=%i\n", myrpt->freq, res);
+	return res;
+}
+
+int retrieve_memory(struct rpt *myrpt, char *memory)
+{
+	char tmp[15], *s, *s1, *s2, *val;
+
+	if (debug)ast_log(LOG_NOTICE, "memory=%s block=%s\n",memory,myrpt->p.memory);
+
+	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.memory, memory);
+	if (!val){
+		return -1;
+	}			
+	strncpy(tmp,val,sizeof(tmp) - 1);
+	tmp[sizeof(tmp)-1] = 0;
+
+	s = strchr(tmp,',');
+	if (!s)
+		return 1; 
+	*s++ = 0;
+	s1 = strchr(s,',');
+	if (!s1)
+		return 1;
+	*s1++ = 0;
+	s2 = strchr(s1,',');
+	if (!s2) s2 = s1;
+	else *s2++ = 0;
+	ast_copy_string(myrpt->freq, tmp, sizeof(myrpt->freq) - 1);
+	ast_copy_string(myrpt->rxpl, s, sizeof(myrpt->rxpl) - 1);
+	ast_copy_string(myrpt->txpl, s, sizeof(myrpt->rxpl) - 1);
+	myrpt->remmode = REM_MODE_FM;
+	myrpt->offset = REM_SIMPLEX;
+	myrpt->powerlevel = REM_MEDPWR;
+	myrpt->txplon = myrpt->rxplon = 0;
+	myrpt->splitkhz = 0;
+	if (s2 != s1) myrpt->splitkhz = atoi(s1);
+	while(*s2){
+		switch(*s2++){
+			case 'A':
+			case 'a':
+				strcpy(myrpt->rxpl, "100.0");
+				strcpy(myrpt->txpl, "100.0");
+				myrpt->remmode = REM_MODE_AM;	
+				break;
+			case 'B':
+			case 'b':
+				strcpy(myrpt->rxpl, "100.0");
+				strcpy(myrpt->txpl, "100.0");
+				myrpt->remmode = REM_MODE_LSB;
+				break;
+			case 'F':
+				myrpt->remmode = REM_MODE_FM;
+				break;
+			case 'L':
+			case 'l':
+				myrpt->powerlevel = REM_LOWPWR;
+				break;					
+			case 'H':
+			case 'h':
+				myrpt->powerlevel = REM_HIPWR;
+				break;
+					
+			case 'M':
+			case 'm':
+				myrpt->powerlevel = REM_MEDPWR;
+				break;
+						
+			case '-':
+				myrpt->offset = REM_MINUS;
+				break;
+						
+			case '+':
+				myrpt->offset = REM_PLUS;
+				break;
+						
+			case 'S':
+			case 's':
+				myrpt->offset = REM_SIMPLEX;
+				break;
+						
+			case 'T':
+			case 't':
+				myrpt->txplon = 1;
+				break;
+						
+			case 'R':
+			case 'r':
+				myrpt->rxplon = 1;
+				break;
+
+			case 'U':
+			case 'u':
+				strcpy(myrpt->rxpl, "100.0");
+				strcpy(myrpt->txpl, "100.0");
+				myrpt->remmode = REM_MODE_USB;
+				break;
+			default:
+				return 1;
+		}
+	}
+	return 0;
+}
+
+int channel_steer(struct rpt *myrpt, char *data)
+{
+	int res=0;
+
+	if(debug)ast_log(LOG_NOTICE,"remoterig=%s, data=%s\n",myrpt->remoterig,data);
+	if (!myrpt->remoterig) return(0);
+	if(data<=0)
+	{
+		res=-1;
+	}
+	else
+	{
+		myrpt->nowchan=strtod(data,NULL);
+		if(!strcmp(myrpt->remoterig, remote_rig_ppp16))
+		{
+			char string[16];
+			sprintf(string,"SETCHAN %d ",myrpt->nowchan);
+			send_usb_txt(myrpt,string);
+		}
+		else
+		{
+			if(get_mem_set(myrpt, data))res=-1;
+		}
+	}
+	if(debug)ast_log(LOG_NOTICE,"nowchan=%i  res=%i\n",myrpt->nowchan, res);
+	return res;
+}
+
+int channel_revert(struct rpt *myrpt)
+{
+	int res=0;
+	if(debug)ast_log(LOG_NOTICE,"remoterig=%s, nowchan=%02d, waschan=%02d\n",myrpt->remoterig,myrpt->nowchan,myrpt->waschan);
+	if (!myrpt->remoterig) return(0);
+	if(myrpt->nowchan!=myrpt->waschan)
+	{
+		char data[8];
+        if(debug)ast_log(LOG_NOTICE,"reverting.\n");
+		sprintf(data,"%02d",myrpt->waschan);
+		myrpt->nowchan=myrpt->waschan;
+		channel_steer(myrpt,data);
+		res=1;
+	}
+	return(res);
+}
+
+int split_freq(char *mhz, char *decimals, char *freq)
+{
+	char freq_copy[MAXREMSTR];
+	char *decp;
+
+	ast_copy_string(freq_copy, freq, MAXREMSTR-1);
+	decp = strchr(freq_copy, '.');
+	if(decp){
+		*decp++ = 0;
+		strncpy(mhz, freq_copy, MAXREMSTR);
+		strcpy(decimals, "00000");
+		ast_copy_string(decimals, decp, strlen(decimals)-1);
+		decimals[5] = 0;
+		return 0;
+	}
+	else
+		return -1;
+
+}
+
+int split_ctcss_freq(char *hertz, char *decimal, char *freq)
+{
+	char freq_copy[MAXREMSTR];
+	char *decp;
+
+	decp = strchr(strncpy(freq_copy, freq, MAXREMSTR-1),'.');
+	if(decp){
+		*decp++ = 0;
+		ast_copy_string(hertz, freq_copy, MAXREMSTR);
+		ast_copy_string(decimal, decp, strlen(decp));
+		decimal[strlen(decp)] = '\0';
+		return 0;
+	}
+	else
+		return -1;
+}
+
+int decimals2int(char *fraction)
+{
+	int i;
+	char len = strlen(fraction);
+	int multiplier = 100000;
+	int res = 0;
+
+	if(!len)
+		return 0;
+	for( i = 0 ; i < len ; i++, multiplier /= 10)
+		res += (fraction[i] - '0') * multiplier;
+	return res;
+}
+
+char is_paging(struct rpt *myrpt)
+{
+char	rv = 0;
+
+	if ((!ast_tvzero(myrpt->paging)) &&
+		(ast_tvdiff_ms(ast_tvnow(),myrpt->paging) <= 300000)) rv = 1;
+	return(rv);
 }

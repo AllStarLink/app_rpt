@@ -27,10 +27,12 @@
 #include "asterisk/cli.h"
 #include "asterisk/config.h"
 
+#include "rpt_dsp.h" /* must come before app_rpt.h */
 #include "app_rpt.h"
 #include "rpt_utils.h"
 #include "rpt_lock.h"
 #include "rpt_cli.h"
+#include "rpt_telemetry.h" /* use function_meter */
 
 extern struct rpt rpt_vars[MAXRPTS];
 extern int nrpts;

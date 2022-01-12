@@ -49,6 +49,7 @@
 #include "asterisk/format.h"
 #include "asterisk/format_compatibility.h"
 
+#include "rpt_dsp.h" /* must come before app_rpt.h */
 #include "app_rpt.h"
 #include "rpt_utils.h"
 #include "rpt_lock.h"

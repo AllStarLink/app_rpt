@@ -68,6 +68,9 @@ char *eatwhite(char *s);
 
 long diskavail(struct rpt *myrpt);
 
+void rpt_localtime( time_t *t, struct ast_tm *lt, char *tz);
+time_t rpt_mktime(struct ast_tm *tm,char *zone);
+
 /*
  * Translate function
  */
@@ -75,3 +78,62 @@ char func_xlat(struct rpt *myrpt,char c,struct rpt_xlat *xlat);
 
 /* Return 1 if a web transceiver node */
 int iswebtransceiver(struct  rpt_link *l);
+
+int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+
+/*
+* Retrieve a wait interval
+*/
+int get_wait_interval(struct rpt *myrpt, int type);
+
+/*
+* Wait a configurable interval of time 
+*/
+int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan);
+
+/* Retrieve an int from a config file */
+int retrieve_astcfgint(struct rpt *myrpt,char *category, char *name, int min, int max, int defl);
+
+int elink_db_get(char *lookup, char c, char *nodenum,char *callsign, char *ipaddr);
+int tlb_node_get(char *lookup, char c, char *nodenum,char *callsign, char *ipaddr, char *port);
+
+int morse_cat(char *str, int freq, int duration);
+
+/*
+	retrieve memory setting and set radio
+*/
+int get_mem_set(struct rpt *myrpt, char *digitbuf);
+
+/*
+ * Retrieve a memory channel
+ * Return 0 if sucessful,
+ * -1 if channel not found,
+ *  1 if parse error
+ */
+int retrieve_memory(struct rpt *myrpt, char *memory);
+
+/*
+	steer the radio selected channel to either one programmed into the radio
+	or if the radio is VFO agile, to an rpt.conf memory location.
+*/
+int channel_revert(struct rpt *myrpt);
+
+int channel_steer(struct rpt *myrpt, char *data);
+
+/*
+* Split frequency into mhz and decimals
+*/
+int split_freq(char *mhz, char *decimals, char *freq);
+
+/*
+* Split ctcss frequency into hertz and decimal
+*/
+int split_ctcss_freq(char *hertz, char *decimal, char *freq);
+
+/*
+ * Convert decimals of frequency to int
+ */
+
+int decimals2int(char *fraction);
+
+char is_paging(struct rpt *myrpt);

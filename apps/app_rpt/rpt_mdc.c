@@ -25,6 +25,7 @@
 #include "asterisk/format.h"
 #include "asterisk/format_compatibility.h"
 
+#include "rpt_dsp.h" /* must come before app_rpt.h */
 #include "app_rpt.h"
 #include "rpt_mdc.h"
 
@@ -219,4 +220,151 @@ struct	mdcparams *mdcp;
 }
 
 #endif
+#endif
+
+#ifdef	_MDC_ENCODE_H_
+
+static void mdcgen_release(struct ast_channel *chan, void *params)
+{
+	struct mdcgen_pvt *ps = params;
+	if (chan) {
+		ast_set_write_format(chan, ps->origwfmt);
+	}
+	if (!ps) return;
+	if (ps->mdc) ast_free(ps->mdc);
+	ast_free(ps);
+	return;
+}
+
+static void *mdcgen_alloc(struct ast_channel *chan, void *params)
+{
+	struct mdcgen_pvt *ps;
+	struct mdcparams *p = (struct mdcparams *)params;
+
+	if (!(ps = ast_calloc(1, sizeof(*ps))))
+		return NULL;
+	ps->origwfmt = ast_channel_writeformat(chan); /*! \todo does this need to be freed? */
+	ps->mdc = mdc_encoder_new(8000);
+	if (!ps->mdc)
+	{
+		ast_log(LOG_ERROR,"Unable to make new MDC encoder!!\n");
+		ast_free(ps);
+		return NULL;
+	}
+	if (p->type[0] == 'I')
+	{
+		mdc_encoder_set_packet(ps->mdc,1,0x80,p->UnitID);
+	}
+	else if (p->type[0] == 'E')
+	{
+		mdc_encoder_set_packet(ps->mdc,0,0x80,p->UnitID);
+	}
+	else if (p->type[0] == 'S')
+	{
+		mdc_encoder_set_packet(ps->mdc,0x46,p->type[1] - '0',p->UnitID);
+	}
+	else if (p->type[0] == 'C')
+	{
+		mdc_encoder_set_double_packet(ps->mdc,0x35,0x89,p->DestID,p->subcode >> 8,
+			p->subcode & 0xff,p->UnitID >> 8,p->UnitID & 0xff);
+	}
+	else if (p->type[0] == 'A')
+	{
+		mdc_encoder_set_packet(ps->mdc,0x23,0,p->UnitID);
+	}
+	else if (p->type[0] == 'K') // kill a unit W9CR
+	{
+		mdc_encoder_set_packet(ps->mdc,(unsigned char)0x22b,0x00,p->UnitID);
+	}
+	else if (p->type[0] == 'U') // UnKill a unit W9CR
+	{
+		mdc_encoder_set_packet(ps->mdc,0x2b,0x0c,p->UnitID);
+	}
+	else
+	{
+		ast_log(LOG_ERROR, "Dont know MDC encode type '%s'\n", p->type);
+		ast_free(ps);
+		return NULL;	
+	}
+	if (ast_set_write_format(chan, ast_format_slin)) {
+		ast_log(LOG_ERROR, "Unable to set '%s' to signed linear format (write)\n", ast_channel_name(chan));
+		ast_free(ps);
+		return NULL;
+	}
+	return ps;
+}
+
+static int mdcgen_generator(struct ast_channel *chan, void *data, int len, int samples)
+{
+	struct mdcgen_pvt *ps = data;
+	short s,*sp;
+	int i,n;
+
+	if (!samples) return 1;
+	if (samples > sizeof(ps->cbuf)) return -1;
+	if (samples < 0) samples = 160;
+	n = mdc_encoder_get_samples(ps->mdc,ps->cbuf,samples);
+	if (n < 1) return 1;
+	sp = (short *)(ps->buf + AST_FRIENDLY_OFFSET);
+	for(i = 0; i < n; i++)
+	{
+		s = ((short)ps->cbuf[i]) - 128;
+		*sp++ = s * 81;
+	}
+	ps->f.frametype = AST_FRAME_VOICE;
+	ps->f.subclass.integer = AST_FORMAT_SLIN;
+	ps->f.datalen = n * 2;
+	ps->f.samples = n;
+	ps->f.offset = AST_FRIENDLY_OFFSET;
+	ps->f.data.ptr = ps->buf + AST_FRIENDLY_OFFSET;
+	ps->f.delivery.tv_sec = 0;
+	ps->f.delivery.tv_usec = 0;
+	ast_write(chan, &ps->f);
+	return 0;
+}
+	
+static struct ast_generator mdcgen = {
+	alloc: mdcgen_alloc,
+	release: mdcgen_release,
+	generate: mdcgen_generator,
+};
+
+int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
+{
+	struct mdcparams p;
+
+	memset(&p,0,sizeof(p));
+	ast_copy_string(p.type, type, sizeof(p.type));
+	p.UnitID = UnitID;
+	p.DestID = destID;
+	p.subcode = subcode;
+	if (ast_activate_generator(chan, &mdcgen, &p)) {
+		return -1;
+	}
+	return 0;
+}
+
+int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
+{
+
+int	res;
+struct ast_frame *f;
+
+	res = mdc1200gen_start(chan,type,UnitID,destID,subcode);
+	if (res) return res;
+
+	while (ast_channel_generatordata(chan))
+	{
+		if (ast_check_hangup(chan)) return -1;
+		res = ast_waitfor(chan, 100);
+		if (res <= 0) return -1;
+		f = ast_read(chan);
+		if (f)
+			ast_frfree(f);
+		else
+			return -1;
+	}
+	return 0;
+}
+
 #endif

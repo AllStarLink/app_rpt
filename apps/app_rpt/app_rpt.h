@@ -1,69 +1,13 @@
 
-/*! \todo get rid of these duplicated dsp.c/.h things */
-typedef struct {
-	int v2;
-	int v3;
-	int chunky;
-	int fac;
-	int samples;
-} goertzel_state_t;
-
-typedef struct {
-	int value;
-	int power;
-} goertzel_result_t;
-
-typedef struct
-{
-	int freq;
-	int block_size;
-	int squelch;		/* Remove (squelch) tone */
-	goertzel_state_t tone;
-	float energy;		/* Accumulated energy of the current block */
-	int samples_pending;	/* Samples remain to complete the current block */
-	int mute_samples;	/* How many additional samples needs to be muted to suppress already detected tone */
-
-	int hits_required;	/* How many successive blocks with tone we are looking for */
-	float threshold;	/* Energy of the tone relative to energy from all other signals to consider a hit */
-
-	int hit_count;		/* How many successive blocks we consider tone present */
-	int last_hit;		/* Indicates if the last processed block was a hit */
-
-} tone_detect_state_t;
-
 #ifdef	__RPT_NOTCH
 #define	MAXFILTERS 10
 #endif
 
-#ifdef	_MDC_ENCODE_H_
-
-#define	MDCGEN_BUFSIZE 2000
-
-struct mdcgen_pvt
-{
-	mdc_encoder_t *mdc;
-	struct ast_format *origwfmt;
-	struct ast_frame f;
-	char buf[(MDCGEN_BUFSIZE * 2) + AST_FRIENDLY_OFFSET];
-	unsigned char cbuf[MDCGEN_BUFSIZE];
-} ;
-
-struct mdcparams
-{
-	char	type[10];
-	short	UnitID;
-	short	DestID;
-	short	subcode;
-} ;
-
-int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode);
-int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode);
-
-#endif
-
 #define	START_DELAY 2
 
+/* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
 #define	MAXDTMF 32
+
 #define	MAXMACRO 2048
 #define	MAXLINKLIST 5120
 #define	LINKLISTTIME 10000
@@ -898,8 +842,7 @@ int simple_command_ft897(struct rpt *myrpt, char command);
 int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1);
 int setrem(struct rpt *myrpt);
 int setrtx_check(struct rpt *myrpt);
-int channel_revert(struct rpt *myrpt);
-int channel_steer(struct rpt *myrpt, char *data);
+
 void rpt_telemetry(struct rpt *myrpt,int mode, void *data);
 void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value);
 
@@ -933,9 +876,6 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
 int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
 int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
 
 void *rpt_call(void *this);
 int reload(void);
