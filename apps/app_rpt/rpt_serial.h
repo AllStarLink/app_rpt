@@ -1,4 +1,13 @@
 
+/* 
+ * open the serial port
+ */
+int openserial(struct rpt *myrpt,char *fname);
+
+/*
+ * Routine to set the Data Terminal Ready (DTR) pin on a serial interface
+*/
+int setdtr(struct rpt *myrpt,int fd, int enable);
 
 /*
  * Generic serial port open command 

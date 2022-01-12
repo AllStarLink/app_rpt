@@ -937,4 +937,5 @@ int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
 int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
 
+void *rpt_call(void *this);
 int reload(void);

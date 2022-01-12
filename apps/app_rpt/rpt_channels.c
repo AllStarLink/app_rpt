@@ -28,6 +28,36 @@
 #include "app_rpt.h"
 #include "rpt_channels.h"
 
+extern int debug;
+
+void rpt_qwrite(struct rpt_link *l,struct ast_frame *f)
+{
+struct	ast_frame *f1;
+
+	if (!l->chan) return;
+	f1 = ast_frdup(f);
+	memset(&f1->frame_list,0,sizeof(f1->frame_list));
+	AST_LIST_INSERT_TAIL(&l->textq,f1,frame_list);
+	return;
+}
+
+int send_usb_txt(struct rpt *myrpt, char *txt) 
+{
+	struct ast_frame wf;
+ 
+	/* if (debug) */ ast_log(LOG_NOTICE, "send_usb_txt %s\n",txt);
+	wf.frametype = AST_FRAME_TEXT;
+	wf.subclass.integer = 0;
+	wf.offset = 0;
+	wf.mallocd = 0;
+	wf.datalen = strlen(txt) + 1;
+	wf.data.ptr = txt;
+	wf.samples = 0;
+	wf.src = "send_usb_txt";
+	ast_write(myrpt->txchannel,&wf); 
+	return 0;
+}
+
 /*
  * Multi-thread safe sleep routine
 */
@@ -137,4 +167,17 @@ struct ast_format_cap *cap;
 	}
 	ast_hangup(dest);
 	return;
+}
+
+void cancel_pfxtone(struct rpt *myrpt)
+{
+	struct rpt_tele *telem;
+	if(debug > 2)
+		ast_log(LOG_NOTICE, "cancel_pfxfone!!");
+	telem = myrpt->tele.next;
+	while(telem != &myrpt->tele)
+	{
+		if (telem->mode == PFXTONE) ast_softhangup(telem->chan,AST_SOFTHANGUP_DEV);
+		telem = telem->next;
+	}
 }
