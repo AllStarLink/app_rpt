@@ -3,6 +3,7 @@ Refactoring and upgrade of AllStarLink's app_rpt, etc.
 
 # Files from AllStarLink Asterisk which are in scope
 
+```
 allstar/mdc_decode.c
 allstar/mdc_encode.c
 allstar/pocsag.c
@@ -15,3 +16,4 @@ channels/chan_usrp.h
 channels/chan_voter.c
 channels/chan_simpleusb.c
 channels/chan_echolink.c
+```
