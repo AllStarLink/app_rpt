@@ -1,14 +1,22 @@
 
+/* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
+	converted to use public dsp.h API.
+	Eventually, the app_rpt DSP could should be/will be removed and NATIVE_DSP will be assumed,
+	thus the macro and any ifndef NATIVE_DSP and (NATIVE_DSP) else code will be removed.
+	However, until we're 100% ready for that, that will not be done.
+	Uncomment the following to test using native Asterisk DSP. */
+#define NATIVE_DSP
+
 /* Un-comment the following to include support for notch filters in the
 	rx audio stream (using Tony Fisher's mknotch (mkfilter) implementation) */
 /* #include "rpt_notch.c" */
 
+#ifndef NATIVE_DSP
 typedef struct {
 	int v2;
 	int v3;
 	int chunky;
 	int fac;
-	int samples;
 } goertzel_state_t;
 
 typedef struct {
@@ -32,6 +40,7 @@ typedef struct {
 	int last_hit;				/* Indicates if the last processed block was a hit */
 
 } tone_detect_state_t;
+#endif
 
 #define TONE_SAMPLE_RATE 8000
 #define TONE_SAMPLES_IN_FRAME 160
@@ -867,7 +876,11 @@ struct rpt
 	int outstreampid;
 	struct ast_channel *remote_webtransceiver;
 	struct timeval lastdtmftime;
+#ifdef NATIVE_DSP
+	struct ast_dsp *dsp;
+#else
 	tone_detect_state_t burst_tone_state;
+#endif
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
 	char txrealkeyed;

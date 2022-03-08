@@ -342,6 +342,7 @@
 #include "asterisk/indications.h"
 #include "asterisk/format.h"
 #include "asterisk/format_compatibility.h"
+#include "asterisk/dsp.h"
 
 struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 
@@ -808,6 +809,7 @@ static struct telem_defaults tele_defs[] = {
 	{ "pfxtone", "|t(350,440,30000,3072)" }
 };
 
+#ifndef NATIVE_DSP
 static inline void goertzel_sample(goertzel_state_t * s, short sample)
 {
 	int v1;
@@ -847,7 +849,6 @@ static inline void goertzel_init(goertzel_state_t * s, float freq, int samples)
 {
 	s->v2 = s->v3 = s->chunky = 0.0;
 	s->fac = (int) (32768.0 * 2.0 * cos(2.0 * M_PI * freq / TONE_SAMPLE_RATE));
-	s->samples = samples;
 }
 
 static inline void goertzel_reset(goertzel_state_t * s)
@@ -859,7 +860,7 @@ static inline void goertzel_reset(goertzel_state_t * s)
  * Code used to detect tones
 */
 
-static void tone_detect_init(tone_detect_state_t * s, int freq, int duration, int amp)
+static void tone_detect_init(tone_detect_state_t *s, int freq, int duration, int amp)
 {
 	int duration_samples;
 	float x;
@@ -874,7 +875,7 @@ static void tone_detect_init(tone_detect_state_t * s, int freq, int duration, in
 
 	/* If we want to remove tone, it is important to have block size not
 	   to exceed frame size. Otherwise by the moment tone is detected it is too late
-	   to squelch it from previous frames */
+ 	   to squelch it from previous frames */
 	s->block_size = TONE_SAMPLES_IN_FRAME;
 
 	periods_in_block = s->block_size * freq / TONE_SAMPLE_RATE;
@@ -908,16 +909,15 @@ static void tone_detect_init(tone_detect_state_t * s, int freq, int duration, in
 	   computed in frequency domain. So subtracting energy in the frequency domain (Goertzel result)
 	   from the energy in the time domain we will get energy of the remaining signal (without the tone
 	   we are detecting). We will be checking that
-	   10*log(Ew / (Et - Ew)) > amp
+		10*log(Ew / (Et - Ew)) > amp
 	   Calculate threshold so that we will be actually checking
-	   Ew > Et * threshold
-	 */
+		Ew > Et * threshold
+	*/
 
 	x = pow(10.0, amp / 10.0);
 	s->threshold = x / (x + 1);
 
-	ast_log(LOG_DEBUG, "Setup tone %d Hz, %d ms, block_size=%d, hits_required=%d\n", freq, duration, s->block_size,
-			s->hits_required);
+	ast_log(LOG_DEBUG,"Setup tone %d Hz, %d ms, block_size=%d, hits_required=%d\n", freq, duration, s->block_size, s->hits_required);
 }
 
 static int tone_detect(tone_detect_state_t * s, int16_t * amp, int samples)
@@ -1000,6 +1000,7 @@ static int tone_detect(tone_detect_state_t * s, int16_t * amp, int samples)
 
 	return res;
 }
+#endif
 
 /*
 * Function table
@@ -17626,8 +17627,18 @@ static void *rpt(void *this)
 	myrpt->rptinactwaskeyedflag = 0;
 	myrpt->rptinacttimer = 0;
 	if (myrpt->p.rxburstfreq) {
-		tone_detect_init(&myrpt->burst_tone_state, myrpt->p.rxburstfreq, myrpt->p.rxbursttime,
-						 myrpt->p.rxburstthreshold);
+#ifdef NATIVE_DSP
+		if (!(myrpt->dsp = ast_dsp_new())) {
+			ast_log(LOG_WARNING, "Unable to allocate DSP!\n");
+			ast_hangup(myrpt->rxchannel);
+			myrpt->rpt_thread = AST_PTHREADT_STOP;
+			pthread_exit(NULL);
+		}
+		ast_dsp_set_features(myrpt->dsp, DSP_FEATURE_FREQ_DETECT);
+		ast_dsp_set_freqmode(myrpt->dsp, myrpt->p.rxburstfreq, myrpt->p.rxbursttime, myrpt->p.rxburstthreshold, 0);
+#else
+		tone_detect_init(&myrpt->burst_tone_state, myrpt->p.rxburstfreq, myrpt->p.rxbursttime, myrpt->p.rxburstthreshold);
+#endif
 	}
 	if (myrpt->p.startupmacro) {
 		snprintf(myrpt->macrobuf, MAXMACRO - 1, "PPPP%s", myrpt->p.startupmacro);
@@ -18731,13 +18742,26 @@ static void *rpt(void *this)
 				if (myrpt->p.rxburstfreq) {
 					if ((!myrpt->reallykeyed) || myrpt->keyed) {
 						myrpt->lastrxburst = 0;
+#ifdef NATIVE_DSP
+						/* this zeros out energy and lasthit, but not hit_count. If this proves to be a problem, we can add API to do that. */
+						ast_dsp_digitreset(myrpt->dsp);
+#else
 						goertzel_reset(&myrpt->burst_tone_state.tone);
 						myrpt->burst_tone_state.last_hit = 0;
 						myrpt->burst_tone_state.hit_count = 0;
 						myrpt->burst_tone_state.energy = 0.0;
-
+#endif
 					} else {
+#ifdef NATIVE_DSP
+						struct ast_frame *frame = NULL;
+
+						/* leave f alone */
+						frame = ast_dsp_process(myrpt->rxchannel, myrpt->dsp, ast_frdup(f));
+						i= (frame->frametype == AST_FRAME_DTMF && frame->subclass.integer == 'q') ? 1 : 0; /* q indicates frequency hit */
+						ast_frfree(frame);
+#else
 						i = tone_detect(&myrpt->burst_tone_state, f->data.ptr, f->samples);
+#endif
 						ast_log(LOG_DEBUG, "Node %s got %d Hz Rx Burst\n", myrpt->name, myrpt->p.rxburstfreq);
 						if ((!i) && myrpt->lastrxburst) {
 							ast_log(LOG_DEBUG, "Node %s now keyed after Rx Burst\n", myrpt->name);
