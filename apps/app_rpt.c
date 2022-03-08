@@ -353,41 +353,10 @@ struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
    signalling protocol (using KA6SQG's GPL'ed implementation) */
 #include "app_rpt/mdc_encode.c"
 
-/* Un-comment the following to include support for notch filters in the
-   rx audio stream (using Tony Fisher's mknotch (mkfilter) implementation) */
-/* #include "rpt_notch.c" */
-
-typedef struct {
-	int v2;
-	int v3;
-	int chunky;
-	int fac;
-	int samples;
-} goertzel_state_t;
-
-typedef struct {
-	int value;
-	int power;
-} goertzel_result_t;
-
-typedef struct {
-	int freq;
-	int block_size;
-	int squelch;				/* Remove (squelch) tone */
-	goertzel_state_t tone;
-	float energy;				/* Accumulated energy of the current block */
-	int samples_pending;		/* Samples remain to complete the current block */
-	int mute_samples;			/* How many additional samples needs to be muted to suppress already detected tone */
-
-	int hits_required;			/* How many successive blocks with tone we are looking for */
-	float threshold;			/* Energy of the tone relative to energy from all other signals to consider a hit */
-
-	int hit_count;				/* How many successive blocks we consider tone present */
-	int last_hit;				/* Indicates if the last processed block was a hit */
-
-} tone_detect_state_t;
-
 #include "app_rpt/app_rpt.h"
+#include "app_rpt/rpt_lock.h"
+#include "app_rpt/rpt_utils.h"
+#include "app_rpt/rpt_daq.h"
 #include "app_rpt/rpt_cli.h"
 
 static int reload(void);
@@ -456,6 +425,10 @@ static char *descrip =
 	"\n" "        * - Alt Macro to execute (e.g. *7 for status)\n" "\n";
 ;
 
+pthread_t rpt_master_thread;
+struct nodelog nodelog;
+struct rpt rpt_vars[MAXRPTS];
+
 static int debug = 0;			/* Set this >0 for extra debug output */
 static int nrpts = 0;
 
@@ -492,179 +465,6 @@ static time_t starttime = 0;
 AST_MUTEX_DEFINE_STATIC(nodeloglock);
 
 AST_MUTEX_DEFINE_STATIC(nodelookuplock);
-
-#ifdef	APP_RPT_LOCK_DEBUG
-
-#warning COMPILING WITH LOCK-DEBUGGING ENABLED!!
-
-#define	MAXLOCKTHREAD 100
-
-#define rpt_mutex_lock(x) _rpt_mutex_lock(x,myrpt,__LINE__)
-#define rpt_mutex_unlock(x) _rpt_mutex_unlock(x,myrpt,__LINE__)
-
-struct lockthread {
-	pthread_t id;
-	int lockcount;
-	int lastlock;
-	int lastunlock;
-} lockthreads[MAXLOCKTHREAD];
-
-struct by_lightning {
-	int line;
-	struct timeval tv;
-	struct rpt *rpt;
-	struct lockthread lockthread;
-} lock_ring[32];
-
-int lock_ring_index = 0;
-
-AST_MUTEX_DEFINE_STATIC(locklock);
-
-static struct lockthread *get_lockthread(pthread_t id)
-{
-	int i;
-
-	for (i = 0; i < MAXLOCKTHREAD; i++) {
-		if (lockthreads[i].id == id)
-			return (&lockthreads[i]);
-	}
-	return (NULL);
-}
-
-static struct lockthread *put_lockthread(pthread_t id)
-{
-	int i;
-
-	for (i = 0; i < MAXLOCKTHREAD; i++) {
-		if (lockthreads[i].id == id)
-			return (&lockthreads[i]);
-	}
-	for (i = 0; i < MAXLOCKTHREAD; i++) {
-		if (!lockthreads[i].id) {
-			lockthreads[i].lockcount = 0;
-			lockthreads[i].lastlock = 0;
-			lockthreads[i].lastunlock = 0;
-			lockthreads[i].id = id;
-			return (&lockthreads[i]);
-		}
-	}
-	return (NULL);
-}
-
-/*
- * Functions related to the threading used in app_rpt dealing with locking
-*/
-
-static void rpt_mutex_spew(void)
-{
-	struct by_lightning lock_ring_copy[32];
-	int lock_ring_index_copy;
-	int i, j;
-	long long diff;
-	char a[100];
-	struct timeval lasttv;
-
-	ast_mutex_lock(&locklock);
-	memcpy(&lock_ring_copy, &lock_ring, sizeof(lock_ring_copy));
-	lock_ring_index_copy = lock_ring_index;
-	ast_mutex_unlock(&locklock);
-
-	lasttv.tv_sec = lasttv.tv_usec = 0;
-	for (i = 0; i < 32; i++) {
-		j = (i + lock_ring_index_copy) % 32;
-		strftime(a, sizeof(a) - 1, "%m/%d/%Y %H:%M:%S", localtime(&lock_ring_copy[j].tv.tv_sec));
-		diff = 0;
-		if (lasttv.tv_sec) {
-			diff = (lock_ring_copy[j].tv.tv_sec - lasttv.tv_sec)
-				* 1000000;
-			diff += (lock_ring_copy[j].tv.tv_usec - lasttv.tv_usec);
-		}
-		lasttv.tv_sec = lock_ring_copy[j].tv.tv_sec;
-		lasttv.tv_usec = lock_ring_copy[j].tv.tv_usec;
-		if (!lock_ring_copy[j].tv.tv_sec)
-			continue;
-		if (lock_ring_copy[j].line < 0) {
-			ast_log(LOG_NOTICE, "LOCKDEBUG [#%d] UNLOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n",
-					i - 31, -lock_ring_copy[j].line, lock_ring_copy[j].rpt->name, (int) lock_ring_copy[j].lockthread.id,
-					diff, a, (int) lock_ring_copy[j].tv.tv_usec);
-		} else {
-			ast_log(LOG_NOTICE, "LOCKDEBUG [#%d] LOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n",
-					i - 31, lock_ring_copy[j].line, lock_ring_copy[j].rpt->name, (int) lock_ring_copy[j].lockthread.id,
-					diff, a, (int) lock_ring_copy[j].tv.tv_usec);
-		}
-	}
-}
-
-static void _rpt_mutex_lock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
-{
-	struct lockthread *t;
-	pthread_t id;
-
-	id = pthread_self();
-	ast_mutex_lock(&locklock);
-	t = put_lockthread(id);
-	if (!t) {
-		ast_mutex_unlock(&locklock);
-		return;
-	}
-	if (t->lockcount) {
-		int lastline = t->lastlock;
-		ast_mutex_unlock(&locklock);
-		ast_log(LOG_NOTICE, "rpt_mutex_lock: Double lock request line %d node %s pid %x, last lock was line %d\n", line,
-				myrpt->name, (int) t->id, lastline);
-		rpt_mutex_spew();
-		return;
-	}
-	t->lastlock = line;
-	t->lockcount = 1;
-	gettimeofday(&lock_ring[lock_ring_index].tv, NULL);
-	lock_ring[lock_ring_index].rpt = myrpt;
-	memcpy(&lock_ring[lock_ring_index].lockthread, t, sizeof(struct lockthread));
-	lock_ring[lock_ring_index++].line = line;
-	if (lock_ring_index == 32)
-		lock_ring_index = 0;
-	ast_mutex_unlock(&locklock);
-	ast_mutex_lock(lockp);
-}
-
-static void _rpt_mutex_unlock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
-{
-	struct lockthread *t;
-	pthread_t id;
-
-	id = pthread_self();
-	ast_mutex_lock(&locklock);
-	t = put_lockthread(id);
-	if (!t) {
-		ast_mutex_unlock(&locklock);
-		return;
-	}
-	if (!t->lockcount) {
-		int lastline = t->lastunlock;
-		ast_mutex_unlock(&locklock);
-		ast_log(LOG_NOTICE, "rpt_mutex_lock: Double un-lock request line %d node %s pid %x, last un-lock was line %d\n",
-				line, myrpt->name, (int) t->id, lastline);
-		rpt_mutex_spew();
-		return;
-	}
-	t->lastunlock = line;
-	t->lockcount = 0;
-	gettimeofday(&lock_ring[lock_ring_index].tv, NULL);
-	lock_ring[lock_ring_index].rpt = myrpt;
-	memcpy(&lock_ring[lock_ring_index].lockthread, t, sizeof(struct lockthread));
-	lock_ring[lock_ring_index++].line = -line;
-	if (lock_ring_index == 32)
-		lock_ring_index = 0;
-	ast_mutex_unlock(&locklock);
-	ast_mutex_unlock(lockp);
-}
-
-#else							/* APP_RPT_LOCK_DEBUG */
-
-#define rpt_mutex_lock(x) ast_mutex_lock(x)
-#define rpt_mutex_unlock(x) ast_mutex_unlock(x)
-
-#endif							/* APP_RPT_LOCK_DEBUG */
 
 #ifdef	_MDC_DECODE_H_
 static const char *my_variable_match(const struct ast_config *config, const char *category, const char *variable)
@@ -1415,12 +1215,7 @@ static int serial_io(int fd, char *txbuf, char *rxbuf, int txbytes, int rxmaxbyt
 
 /* Forward Decl's */
 
-static int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *),
-							  int *arg1, void *arg2);
-static int matchkeyword(char *string, char **param, char *keywords[]);
-static int explode_string(char *str, char *strp[], int limit, char delim, char quote);
 static void *uchameleon_monitor_thread(void *this);
-static char *strupr(char *str);
 
 /*
  * Start the Uchameleon monitor thread
@@ -1654,11 +1449,7 @@ static int uchameleon_pin_init(struct daq_entry_tag *t)
 	return -0;
 }
 
-/*
- * Open the serial channel and test for the uchameleon device at the end of the link
- */
-
-static int uchameleon_open(struct daq_entry_tag *t)
+int uchameleon_open(struct daq_entry_tag *t)
 {
 	int res;
 
@@ -1679,11 +1470,7 @@ static int uchameleon_open(struct daq_entry_tag *t)
 
 }
 
-/*
- * Close uchameleon
- */
-
-static int uchameleon_close(struct daq_entry_tag *t)
+int uchameleon_close(struct daq_entry_tag *t)
 {
 	int res = 0;
 	char *ledpat = "led pattern 253\n";
@@ -1739,12 +1526,7 @@ static int uchameleon_close(struct daq_entry_tag *t)
 	return res;
 }
 
-/*
- * Uchameleon generic interface which supports monitor thread
- */
-
-static int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *),
-							  int *arg1, void *arg2)
+int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2)
 {
 	int i, j, x;
 	struct daq_pin_entry_tag *p, *listl, *listp;
@@ -1960,35 +1742,6 @@ static int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*
 	}
 	ast_mutex_unlock(&t->lock);
 	return -1;
-}
-
-/*
- * Reset a minimum or maximum reading
- */
-
-static int uchameleon_reset_minmax(struct daq_entry_tag *t, int pin, int minmax)
-{
-	struct daq_pin_entry_tag *p;
-
-	/* Find the pin */
-	p = t->pinhead;
-	while (p) {
-		if (p->num == pin)
-			break;
-		p = p->next;
-	}
-	if (!p)
-		return -1;
-	ast_mutex_lock(&t->lock);
-	if (minmax) {
-		ast_log(LOG_NOTICE, "Resetting maximum on device %s, pin %d\n", t->name, pin);
-		p->valuemax = 0;
-	} else {
-		p->valuemin = 255;
-		ast_log(LOG_NOTICE, "Resetting minimum on device %s, pin %d\n", t->name, pin);
-	}
-	ast_mutex_unlock(&t->lock);
-	return 0;
 }
 
 /*
@@ -2261,12 +2014,6 @@ static void *uchameleon_monitor_thread(void *this)
 }
 
 /*
- * **************************
- * Generic DAQ functions    *
- * **************************
- */
-
-/*
  * Forward Decl's
  */
 
@@ -2275,206 +2022,6 @@ static int sayfile(struct ast_channel *mychannel, char *fname);
 static int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan);
 static void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 static void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
-
-/*
- * Open a daq device
- */
-
-static struct daq_entry_tag *daq_open(int type, char *name, char *dev)
-{
-	int fd;
-	struct daq_entry_tag *t;
-
-	if (!name)
-		return NULL;
-
-	if ((t = ast_malloc(sizeof(struct daq_entry_tag))) == NULL) {
-		ast_log(LOG_WARNING, "daq_open out of memory\n");
-		return NULL;
-	}
-
-	memset(t, 0, sizeof(struct daq_entry_tag));
-
-	/* Save the device path for open */
-	if (dev) {
-		strncpy(t->dev, dev, MAX_DAQ_DEV);
-		t->dev[MAX_DAQ_DEV - 1] = 0;
-	}
-
-	/* Save the name */
-	ast_copy_string(t->name, name, MAX_DAQ_NAME);
-	t->dev[MAX_DAQ_NAME - 1] = 0;
-
-	switch (type) {
-	case DAQ_TYPE_UCHAMELEON:
-		if ((fd = uchameleon_open(t)) == -1) {
-			ast_free(t);
-			return NULL;
-		}
-		break;
-
-	default:
-		ast_free(t);
-		return NULL;
-	}
-	t->type = type;
-	return t;
-}
-
-/*
- * Close a daq device
- */
-
-static int daq_close(struct daq_entry_tag *t)
-{
-	int res = -1;
-
-	if (!t)
-		return res;
-
-	switch (t->type) {
-	case DAQ_TYPE_UCHAMELEON:
-		res = uchameleon_close(t);
-		break;
-	default:
-		break;
-	}
-
-	ast_free(t);
-	return res;
-}
-
-/*
- * Look up a device entry for a particular device name
- */
-
-static struct daq_entry_tag *daq_devtoentry(char *name)
-{
-	struct daq_entry_tag *e = daq.hw;
-
-	while (e) {
-		if (!strcmp(name, e->name))
-			break;
-		e = e->next;
-	}
-	return e;
-}
-
-/*
- * Do something with the daq subsystem
- */
-
-static int daq_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1,
-					   void *arg2)
-{
-	int res = -1;
-
-	switch (t->type) {
-	case DAQ_TYPE_UCHAMELEON:
-		res = uchameleon_do_long(t, pin, cmd, exec, arg1, arg2);
-		break;
-	default:
-		break;
-	}
-	return res;
-}
-
-/*
- * Short version of above
- */
-
-static int daq_do(struct daq_entry_tag *t, int pin, int cmd, int arg1)
-{
-	int a1 = arg1;
-
-	return daq_do_long(t, pin, cmd, NULL, &a1, NULL);
-}
-
-/*
- * Function to reset the long term minimum or maximum
- */
-
-static int daq_reset_minmax(char *device, int pin, int minmax)
-{
-	int res = -1;
-	struct daq_entry_tag *t;
-
-	if (!(t = daq_devtoentry(device)))
-		return -1;
-	switch (t->type) {
-	case DAQ_TYPE_UCHAMELEON:
-		res = uchameleon_reset_minmax(t, pin, minmax);
-		break;
-	default:
-		break;
-	}
-	return res;
-}
-
-/*
- * Initialize DAQ subsystem
- */
-
-static void daq_init(struct ast_config *cfg)
-{
-	struct ast_variable *var;
-	struct daq_entry_tag **t_next, *t = NULL;
-	char s[64];
-	daq.ndaqs = 0;
-	t_next = &daq.hw;
-	var = ast_variable_browse(cfg, "daq-list");
-	while (var) {
-		char *p;
-		if (strncmp("device", var->name, 6)) {
-			ast_log(LOG_WARNING, "Error in daq_entries stanza on line %d\n", var->lineno);
-			break;
-		}
-		ast_copy_string(s, var->value, sizeof(s) - 1);	/* Make copy of device entry */
-		if (!(p = (char *) ast_variable_retrieve(cfg, s, "hwtype"))) {
-			ast_log(LOG_WARNING, "hwtype variable required for %s stanza\n", s);
-			break;
-		}
-		if (strncmp(p, "uchameleon", 10)) {
-			ast_log(LOG_WARNING, "Type must be uchameleon for %s stanza\n", s);
-			break;
-		}
-		if (!(p = (char *) ast_variable_retrieve(cfg, s, "devnode"))) {
-			ast_log(LOG_WARNING, "devnode variable required for %s stanza\n", s);
-			break;
-		}
-		if (!(t = daq_open(DAQ_TYPE_UCHAMELEON, (char *) s, (char *) p))) {
-			ast_log(LOG_WARNING, "Cannot open device name %s\n", p);
-			break;
-		}
-		/* Add to linked list */
-		*t_next = t;
-		t_next = &t->next;
-
-		daq.ndaqs++;
-		if (daq.ndaqs >= MAX_DAQ_ENTRIES)
-			break;
-		var = var->next;
-	}
-
-}
-
-/*
- * Uninitialize DAQ Subsystem
- */
-
-static void daq_uninit(void)
-{
-	struct daq_entry_tag *t_next, *t;
-
-	/* Free daq memory */
-	t = daq.hw;
-	while (t) {
-		t_next = t->next;
-		daq_close(t);
-		t = t_next;
-	}
-	daq.hw = NULL;
-}
 
 /*
  * Parse a request METER request for telemetry thread
@@ -2839,7 +2386,7 @@ static int handle_userout_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 *  Playback a meter reading
 */
 
-static int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 
 	if (myrpt->remote)
@@ -2857,7 +2404,7 @@ static int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int co
 *  Set or reset a USER Output bit
 */
 
-static int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 
 	if (myrpt->remote)
@@ -2874,7 +2421,7 @@ static int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int 
 *  Execute shell command
 */
 
-static int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	char *cp;
 
@@ -3838,87 +3385,6 @@ static char aprstt_xlat(char *instr, char *outstr)
 	return overlay;
 }
 
-static char *strupr(char *instr)
-{
-	char *str = instr;
-	while (*str) {
-		*str = toupper(*str);
-		str++;
-	}
-	return (instr);
-}
-
-/*
-* Break up a delimited string into a table of substrings
-*
-* str - delimited string ( will be modified )
-* strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
-* limit- maximum number of substrings to process
-* delim- user specified delimeter
-* quote- user specified quote for escaping a substring. Set to zero to escape nothing.
-*
-* Note: This modifies the string str, be suer to save an intact copy if you need it later.
-*
-* Returns number of substrings found.
-*/
-
-static int explode_string(char *str, char *strp[], int limit, char delim, char quote)
-{
-	int i, l, inquo;
-
-	inquo = 0;
-	i = 0;
-	strp[i++] = str;
-	if (!*str) {
-		strp[0] = 0;
-		return (0);
-	}
-	for (l = 0; *str && (l < limit); str++) {
-		if (quote) {
-			if (*str == quote) {
-				if (inquo) {
-					*str = 0;
-					inquo = 0;
-				} else {
-					strp[i - 1] = str + 1;
-					inquo = 1;
-				}
-			}
-		}
-		if ((*str == delim) && (!inquo)) {
-			*str = 0;
-			l++;
-			strp[i++] = str + 1;
-		}
-	}
-	strp[i] = 0;
-	return (i);
-
-}
-
-/*
-* Break up a delimited string into a table of substrings
-*
-* str - delimited string ( will be modified )
-* strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
-* limit- maximum number of substrings to process
-*/
-
-static int finddelim(char *str, char *strp[], int limit)
-{
-	return explode_string(str, strp, limit, DELIMCHR, QUOTECHR);
-}
-
-static char *string_toupper(char *str)
-{
-	int i;
-
-	for (i = 0; str[i]; i++)
-		if (islower(str[i]))
-			str[i] = toupper(str[i]);
-	return str;
-}
-
 static int elink_cmd(char *cmd, char *outstr, int outlen)
 {
 	FILE *tf;
@@ -4682,82 +4148,6 @@ static char *forward_node_lookup(struct rpt *myrpt, char *digitbuf, struct ast_c
 	ast_mutex_unlock(&nodelookuplock);
 	ast_free(efil);
 	return (val);
-}
-
-/*
-* Match a keyword in a list, and return index of string plus 1 if there was a match,* else return 0.
-* If param is passed in non-null, then it will be set to the first character past the match
-*/
-
-static int matchkeyword(char *string, char **param, char *keywords[])
-{
-	int i, ls;
-	for (i = 0; keywords[i]; i++) {
-		ls = strlen(keywords[i]);
-		if (!ls) {
-			if (param)
-				*param = NULL;
-			return 0;
-		}
-		if (!strncmp(string, keywords[i], ls)) {
-			if (param)
-				*param = string + ls;
-			return i + 1;
-		}
-	}
-	if (param)
-		*param = NULL;
-	return 0;
-}
-
-/*
-* Skip characters in string which are in charlist, and return a pointer to the
-* first non-matching character
-*/
-
-static char *skipchars(char *string, char *charlist)
-{
-	int i;
-	while (*string) {
-		for (i = 0; charlist[i]; i++) {
-			if (*string == charlist[i]) {
-				string++;
-				break;
-			}
-		}
-		if (!charlist[i])
-			return string;
-	}
-	return string;
-}
-
-static int myatoi(char *str)
-{
-	int ret;
-
-	if (str == NULL)
-		return -1;
-	/* leave this %i alone, non-base-10 input is useful here */
-	if (sscanf(str, "%i", &ret) != 1)
-		return -1;
-	return ret;
-}
-
-static int mycompar(const void *a, const void *b)
-{
-	char **x = (char **) a;
-	char **y = (char **) b;
-	int xoff, yoff;
-
-	if ((**x < '0') || (**x > '9'))
-		xoff = 1;
-	else
-		xoff = 0;
-	if ((**y < '0') || (**y > '9'))
-		yoff = 1;
-	else
-		yoff = 0;
-	return (strcmp((*x) + xoff, (*y) + yoff));
 }
 
 static int topcompar(const void *a, const void *b)
@@ -9690,7 +9080,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd);
  *  More repeater telemetry routines.
  */
 
-static void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
+void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 {
 	struct rpt_tele *tele;
 	struct rpt_link *mylink = NULL;
@@ -10702,7 +10092,7 @@ static int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 * Internet linking function 
 */
 
-static int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
+int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
 {
 
 	char *s1, *s2, tmp[300];
@@ -11066,7 +10456,7 @@ static int function_ilink(struct rpt *myrpt, char *param, char *digits, int comm
 * Autopatch up
 */
 
-static int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source,
+int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source,
 								struct rpt_link *mylink)
 {
 	pthread_attr_t attr;
@@ -11186,7 +10576,7 @@ static int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, 
 * Autopatch down
 */
 
-static int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source,
+int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source,
 								struct rpt_link *mylink)
 {
 	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
@@ -11217,7 +10607,7 @@ static int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, 
 * Status
 */
 
-static int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	struct rpt_tele *telem;
 
@@ -11295,7 +10685,7 @@ static int function_status(struct rpt *myrpt, char *param, char *digitbuf, int c
 /*
 *  Macro-oni (without Salami)
 */
-static int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	char *val;
 	int i;
@@ -11342,7 +10732,7 @@ static int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int co
 *  Playback a recording globally
 */
 
-static int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source,
+int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source,
 							 struct rpt_link *mylink)
 {
 
@@ -11364,7 +10754,7 @@ static int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int
  * *  Playback a recording locally
  * */
 
-static int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source,
+int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source,
 							  struct rpt_link *mylink)
 {
 
@@ -11385,7 +10775,7 @@ static int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, in
 * COP - Control operator
 */
 
-static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	char string[50], fname[50];
 	char paramcopy[500];
@@ -13613,7 +13003,7 @@ static int sendrxkenwood(struct rpt *myrpt, char *txstr, char *rxstr, char *cmps
 	return (-1);
 }
 
-static int setkenwood(struct rpt *myrpt)
+int setkenwood(struct rpt *myrpt)
 {
 	char rxstr[RAD_SERIAL_BUFLEN], txstr[RAD_SERIAL_BUFLEN], freq[20];
 	char mhz[MAXREMSTR], offset[20], band, decimals[MAXREMSTR], band1, band2;
@@ -13662,7 +13052,7 @@ static int setkenwood(struct rpt *myrpt)
 	return 0;
 }
 
-static int set_tmd700(struct rpt *myrpt)
+int set_tmd700(struct rpt *myrpt)
 {
 	char rxstr[RAD_SERIAL_BUFLEN], txstr[RAD_SERIAL_BUFLEN], freq[20];
 	char mhz[MAXREMSTR], offset[20], decimals[MAXREMSTR];
@@ -13715,7 +13105,7 @@ static int set_tmd700(struct rpt *myrpt)
 	return 0;
 }
 
-static int set_tm271(struct rpt *myrpt)
+int set_tm271(struct rpt *myrpt)
 {
 	char rxstr[RAD_SERIAL_BUFLEN], txstr[RAD_SERIAL_BUFLEN], freq[20];
 	char mhz[MAXREMSTR], decimals[MAXREMSTR];
@@ -13750,7 +13140,7 @@ static int set_tm271(struct rpt *myrpt)
 	return 0;
 }
 
-static int setrbi(struct rpt *myrpt)
+int setrbi(struct rpt *myrpt)
 {
 	char tmp[MAXREMSTR] = "", *s;
 	unsigned char rbicmd[5];
@@ -13950,7 +13340,7 @@ static int setrtx(struct rpt *myrpt)
 	return 0;
 }
 
-static int setxpmr(struct rpt *myrpt, int dotx)
+int setxpmr(struct rpt *myrpt, int dotx)
 {
 	char rigstr[200];
 	int rxpl, txpl;
@@ -13995,7 +13385,7 @@ static int setxpmr(struct rpt *myrpt, int dotx)
 	return 0;
 }
 
-static int setrbi_check(struct rpt *myrpt)
+int setrbi_check(struct rpt *myrpt)
 {
 	char tmp[MAXREMSTR] = "", *s;
 	int band, txpl;
@@ -14052,7 +13442,7 @@ static int setrbi_check(struct rpt *myrpt)
 	return 0;
 }
 
-static int setrtx_check(struct rpt *myrpt)
+int setrtx_check(struct rpt *myrpt)
 {
 	char tmp[MAXREMSTR] = "", *s;
 	int band, txpl, rxpl;
@@ -14388,7 +13778,7 @@ static int set_freq_ft897(struct rpt *myrpt, char *newfreq)
 
 /* ft-897 simple commands */
 
-static int simple_command_ft897(struct rpt *myrpt, char command)
+int simple_command_ft897(struct rpt *myrpt, char command)
 {
 	unsigned char cmdstr[5];
 
@@ -14459,7 +13849,7 @@ static int set_offset_ft897(struct rpt *myrpt, char offset)
 
 /* ft-897 mode */
 
-static int set_mode_ft897(struct rpt *myrpt, char newmode)
+int set_mode_ft897(struct rpt *myrpt, char newmode)
 {
 	unsigned char cmdstr[5];
 
@@ -14547,7 +13937,7 @@ static int set_ctcss_freq_ft897(struct rpt *myrpt, char *txtone, char *rxtone)
 	return serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
 }
 
-static int set_ft897(struct rpt *myrpt)
+int set_ft897(struct rpt *myrpt)
 {
 	int res;
 
@@ -14769,7 +14159,7 @@ static int set_freq_ft100(struct rpt *myrpt, char *newfreq)
 
 /* ft-897 simple commands */
 
-static int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1)
+int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1)
 {
 	unsigned char cmdstr[5];
 
@@ -14809,7 +14199,7 @@ static int set_offset_ft100(struct rpt *myrpt, char offset)
 
 /* ft-897 mode */
 
-static int set_mode_ft100(struct rpt *myrpt, char newmode)
+int set_mode_ft100(struct rpt *myrpt, char newmode)
 {
 	unsigned char p1;
 
@@ -14862,7 +14252,7 @@ static int set_ctcss_freq_ft100(struct rpt *myrpt, char *txtone, char *rxtone)
 	return simple_command_ft100(myrpt, 0x90, p1);
 }
 
-static int set_ft100(struct rpt *myrpt)
+int set_ft100(struct rpt *myrpt)
 {
 	int res;
 
@@ -15135,7 +14525,7 @@ static int set_ctcss_freq_ft950(struct rpt *myrpt, char *txtone, char *rxtone)
 	return serial_remote_io(myrpt, (unsigned char *) cmdstr, 5, NULL, 0, 0);
 }
 
-static int set_ft950(struct rpt *myrpt)
+int set_ft950(struct rpt *myrpt)
 {
 	int res;
 	char *cmdstr;
@@ -15638,7 +15028,7 @@ static int set_offset_ic706(struct rpt *myrpt, char offset)
 
 /* ic-706 mode */
 
-static int set_mode_ic706(struct rpt *myrpt, char newmode)
+int set_mode_ic706(struct rpt *myrpt, char newmode)
 {
 	unsigned char c;
 
@@ -15796,7 +15186,7 @@ static int select_mem_ic706(struct rpt *myrpt, int slot)
 	return (civ_cmd(myrpt, cmdstr, 8));
 }
 
-static int set_ic706(struct rpt *myrpt)
+int set_ic706(struct rpt *myrpt)
 {
 	int res = 0, i;
 
@@ -16102,7 +15492,7 @@ static int set_ctcss_freq_xcat(struct rpt *myrpt, char *txtone, char *rxtone)
 	return (civ_cmd(myrpt, cmdstr, 9));
 }
 
-static int set_xcat(struct rpt *myrpt)
+int set_xcat(struct rpt *myrpt)
 {
 	int res = 0;
 
@@ -16139,7 +15529,7 @@ static int set_xcat(struct rpt *myrpt)
 /*
 * Dispatch to correct I/O handler 
 */
-static int setrem(struct rpt *myrpt)
+int setrem(struct rpt *myrpt)
 {
 	char str[300];
 	char *offsets[] = { "SIMPLEX", "MINUS", "PLUS" };
@@ -16444,7 +15834,7 @@ static void stop_scan(struct rpt *myrpt)
 * This is called periodically when in scan mode
 */
 
-static int service_scan(struct rpt *myrpt)
+int service_scan(struct rpt *myrpt)
 {
 	int res, interval;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], k10 = 0i, k100 = 0;
@@ -16528,7 +15918,7 @@ static int get_mem_set(struct rpt *myrpt, char *digitbuf)
 	steer the radio selected channel to either one programmed into the radio
 	or if the radio is VFO agile, to an rpt.conf memory location.
 */
-static int channel_steer(struct rpt *myrpt, char *data)
+int channel_steer(struct rpt *myrpt, char *data)
 {
 	int res = 0;
 
@@ -16556,7 +15946,7 @@ static int channel_steer(struct rpt *myrpt, char *data)
 
 /*
 */
-static int channel_revert(struct rpt *myrpt)
+int channel_revert(struct rpt *myrpt)
 {
 	int res = 0;
 	if (debug)
@@ -16580,7 +15970,7 @@ static int channel_revert(struct rpt *myrpt)
 * Remote base function
 */
 
-static int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
 	char *s, *s1, *s2;
 	int i, j, p, r, ht, k, l, ls2, m, d, offset, offsave, modesave, defmode;
@@ -22749,7 +22139,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	return res;
 }
 
-static void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
+void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
 {
 	manager_event(EVENT_FLAG_CALL, event,
 				  "Node: %s\r\n"
@@ -23621,7 +23011,7 @@ static struct ast_generator mdcgen = {
   generate:mdcgen_generator,
 };
 
-static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
+int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
 {
 	struct mdcparams p;
 
@@ -23636,7 +23026,7 @@ static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, 
 	return 0;
 }
 
-static int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
+int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
 {
 
 	int res;

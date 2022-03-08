@@ -1,4 +1,38 @@
 
+/* Un-comment the following to include support for notch filters in the
+	rx audio stream (using Tony Fisher's mknotch (mkfilter) implementation) */
+/* #include "rpt_notch.c" */
+
+typedef struct {
+	int v2;
+	int v3;
+	int chunky;
+	int fac;
+	int samples;
+} goertzel_state_t;
+
+typedef struct {
+	int value;
+	int power;
+} goertzel_result_t;
+
+typedef struct {
+	int freq;
+	int block_size;
+	int squelch;				/* Remove (squelch) tone */
+	goertzel_state_t tone;
+	float energy;				/* Accumulated energy of the current block */
+	int samples_pending;		/* Samples remain to complete the current block */
+	int mute_samples;			/* How many additional samples needs to be muted to suppress already detected tone */
+
+	int hits_required;			/* How many successive blocks with tone we are looking for */
+	float threshold;			/* Energy of the tone relative to energy from all other signals to consider a hit */
+
+	int hit_count;				/* How many successive blocks we consider tone present */
+	int last_hit;				/* Indicates if the last processed block was a hit */
+
+} tone_detect_state_t;
+
 #ifdef	__RPT_NOTCH
 #define	MAXFILTERS 10
 #endif
@@ -24,8 +58,8 @@ struct mdcparams
 	short	subcode;
 } ;
 
-static int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode);
-static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode);
+int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode);
+int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode);
 
 #endif
 
@@ -70,9 +104,6 @@ static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, 
 
 #define MAXPEERSTR 31
 #define	MAXREMSTR 15
-
-#define	DELIMCHR ','
-#define	QUOTECHR 34
 
 #define	MONITOR_DISK_BLOCKS_PER_MINUTE 38
 
@@ -330,8 +361,6 @@ struct rpt_xlat
 	time_t	lastone;
 };
 
-static  pthread_t rpt_master_thread;
-
 /*
  * Structure that holds information regarding app_rpt operation
 */ 
@@ -539,7 +568,7 @@ enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 /*
  * Populate rpt structure with data
 */ 
-static struct rpt
+struct rpt
 {
 	ast_mutex_t lock;
 	ast_mutex_t remlock;
@@ -866,66 +895,59 @@ static struct rpt
 	struct timeval paging;
 	char deferid;
 	struct timeval lastlinktime;
-} rpt_vars[MAXRPTS];
+};
 
 struct nodelog {
-struct nodelog *next;
-struct nodelog *prev;
-time_t	timestamp;
-char archivedir[MAXNODESTR];
-char str[MAXNODESTR * 2];
-} nodelog;
+	struct nodelog *next;
+	struct nodelog *prev;
+	time_t	timestamp;
+	char archivedir[MAXNODESTR];
+	char str[MAXNODESTR * 2];
+};
 
 /* forward declarations */
-static int service_scan(struct rpt *myrpt);
-static int set_mode_ft897(struct rpt *myrpt, char newmode);
-static int set_mode_ft100(struct rpt *myrpt, char newmode);
-static int set_mode_ic706(struct rpt *myrpt, char newmode);
-static int simple_command_ft897(struct rpt *myrpt, char command);
-static int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1);
-static int setrem(struct rpt *myrpt);
-static int setrtx_check(struct rpt *myrpt);
-static int channel_revert(struct rpt *myrpt);
-static int channel_steer(struct rpt *myrpt, char *data);
-static void rpt_telemetry(struct rpt *myrpt,int mode, void *data);
-static void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value);
-
-/*
- * DAQ variables
- */
-
-static struct daq_tag daq;
-
+int service_scan(struct rpt *myrpt);
+int set_mode_ft897(struct rpt *myrpt, char newmode);
+int set_mode_ft100(struct rpt *myrpt, char newmode);
+int set_mode_ic706(struct rpt *myrpt, char newmode);
+int simple_command_ft897(struct rpt *myrpt, char command);
+int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1);
+int setrem(struct rpt *myrpt);
+int setrtx_check(struct rpt *myrpt);
+int channel_revert(struct rpt *myrpt);
+int channel_steer(struct rpt *myrpt, char *data);
+void rpt_telemetry(struct rpt *myrpt,int mode, void *data);
+void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value);
 
 /*
 * Forward decl's - these suppress compiler warnings when funcs coded further down the file than thier invokation
 */
 
-static int setrbi(struct rpt *myrpt);
-static int set_ft897(struct rpt *myrpt);
-static int set_ft100(struct rpt *myrpt);
-static int set_ft950(struct rpt *myrpt);
-static int set_ic706(struct rpt *myrpt);
-static int set_xcat(struct rpt *myrpt);
-static int setkenwood(struct rpt *myrpt);
-static int set_tm271(struct rpt *myrpt);
-static int set_tmd700(struct rpt *myrpt);
-static int setrbi_check(struct rpt *myrpt);
-static int setxpmr(struct rpt *myrpt, int dotx);
+int setrbi(struct rpt *myrpt);
+int set_ft897(struct rpt *myrpt);
+int set_ft100(struct rpt *myrpt);
+int set_ft950(struct rpt *myrpt);
+int set_ic706(struct rpt *myrpt);
+int set_xcat(struct rpt *myrpt);
+int setkenwood(struct rpt *myrpt);
+int set_tm271(struct rpt *myrpt);
+int set_tmd700(struct rpt *myrpt);
+int setrbi_check(struct rpt *myrpt);
+int setxpmr(struct rpt *myrpt, int dotx);
 
 /*
 * Define function protos for function table here
 */
 
-static int function_ilink(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-static int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_ilink(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
