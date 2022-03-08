@@ -17634,6 +17634,8 @@ static void *rpt(void *this)
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
+		/* \todo At this point, we have a memory leak, because dsp needs to be freed. */
+		/* \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
 		ast_dsp_set_features(myrpt->dsp, DSP_FEATURE_FREQ_DETECT);
 		ast_dsp_set_freqmode(myrpt->dsp, myrpt->p.rxburstfreq, myrpt->p.rxbursttime, myrpt->p.rxburstthreshold, 0);
 #else
