@@ -18744,7 +18744,9 @@ static void *rpt(void *this)
 						myrpt->lastrxburst = 0;
 #ifdef NATIVE_DSP
 						/* this zeros out energy and lasthit, but not hit_count. If this proves to be a problem, we can add API to do that. */
-						ast_dsp_digitreset(myrpt->dsp);
+						/*! \todo we need to goertzel_reset on the tone, e.g. we need to add an ast_dsp_freqreset */
+						/*! \todo this may also fix the problem in app_sf where to be reliable we have to free on each match. Test and see */
+						ast_dsp_digitreset(myrpt->dsp); /// NOTE: THIS IS WRONG! See comment above.
 #else
 						goertzel_reset(&myrpt->burst_tone_state.tone);
 						myrpt->burst_tone_state.last_hit = 0;
