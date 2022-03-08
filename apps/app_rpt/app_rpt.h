@@ -29,6 +29,7 @@ static int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, 
 
 #endif
 
+/* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
 #define	MAXDTMF 32
 #define	MAXMACRO 2048
 #define	MAXLINKLIST 5120
@@ -293,6 +294,11 @@ struct rpt_chan_stat
 
 #define FT897_SERIAL_DELAY 75000		/* # of usec to wait between some serial commands on FT-897 */
 #define FT100_SERIAL_DELAY 75000		/* # of usec to wait between some serial commands on FT-897 */
+
+#define DISCSTR "!!DISCONNECT!!"
+#define NEWKEYSTR "!NEWKEY!"
+#define NEWKEY1STR "!NEWKEY1!"
+#define IAXKEYSTR "!IAXKEY!"
 
 struct vox {
 	float	speech_energy;

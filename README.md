@@ -1,6 +1,10 @@
 # app_rpt
 Refactoring and upgrade of AllStarLink's app_rpt, etc.
 
+## Prettifying
+
+`indent --k-and-r-style --use-tabs --tab-size4 --braces-on-if-line --cuddle-else --dont-break-function-decl-args --line-length120 --swallow-optional-blank-lines apps/app_rpt.c`
+
 ## Compiling
 
 Add this near the bottom of `apps/Makefile`:
