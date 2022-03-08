@@ -111,6 +111,16 @@ char *skipchars(char *string, char *charlist)
 	return string;
 }
 
+char *eatwhite(char *s)
+{
+	while ((*s == ' ') || (*s == 0x09)) {	/* get rid of any leading white space */
+		if (!*s)
+			break;
+		s++;
+	}
+	return s;
+}
+
 int myatoi(char *str)
 {
 	int ret;

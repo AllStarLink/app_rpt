@@ -45,6 +45,12 @@ int finddelim(char *str, char *strp[], int limit);
 
 char *skipchars(char *string, char *charlist);
 
+/*
+ * Return a pointer to the first non-whitespace character
+ */
+
+char *eatwhite(char *s);
+
 int myatoi(char *str);
 
 int mycompar(const void *a, const void *b);

@@ -33,6 +33,9 @@ typedef struct {
 
 } tone_detect_state_t;
 
+#define TONE_SAMPLE_RATE 8000
+#define TONE_SAMPLES_IN_FRAME 160
+
 #ifdef	__RPT_NOTCH
 #define	MAXFILTERS 10
 #endif
@@ -127,9 +130,6 @@ int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short d
 
 #define	DEFAULT_SPLIT_2M 600
 #define	DEFAULT_SPLIT_70CM 5000
-
-#define TONE_SAMPLE_RATE 8000
-#define TONE_SAMPLES_IN_FRAME 160
 
 #define	MAX_TEXTMSG_SIZE 160
 

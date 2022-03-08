@@ -3285,20 +3285,6 @@ static char func_xlat(struct rpt *myrpt, char c, struct rpt_xlat *xlat)
 }
 
 /*
- * Return a pointer to the first non-whitespace character
- */
-
-static char *eatwhite(char *s)
-{
-	while ((*s == ' ') || (*s == 0x09)) {	/* get rid of any leading white space */
-		if (!*s)
-			break;
-		s++;
-	}
-	return s;
-}
-
-/*
  * Function to translate characters to APRSTT data
  */
 
