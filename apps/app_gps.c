@@ -293,7 +293,7 @@ static int getserialchar(int fd)
 int	res;
 char	c;
 int	i;
-fd_set	fds;
+ast_fdset	fds;
 struct	timeval tv;
 
 
@@ -342,14 +342,11 @@ struct ast_config *cfg = NULL;
 struct ast_hostent ahp;
 struct hostent *hp;
 struct sockaddr_in servaddr;
+struct ast_flags zeroflag = {0};
 
 	call = NULL;
 	password = NULL;
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		pthread_exit(NULL);
                 return NULL;
@@ -430,18 +427,11 @@ struct ast_config *cfg = NULL;
 char *call,*comment,icon;
 char power,height,gain,dir,*val,basecall[300],buf[350],*cp;
 time_t t;
-
-#ifdef  NEW_ASTERISK
-        struct ast_flags zeroflag = {0};
-#endif
+struct ast_flags zeroflag = {0};
 
 	call = NULL;
 	comment = NULL;
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
                 return -1;
         }
@@ -518,18 +508,11 @@ char *call,*comment;
 char *val,basecall[300],buf[300],buf1[100],*cp;
 time_t t;
 struct tm *tm;
-
-#ifdef  NEW_ASTERISK
-        struct ast_flags zeroflag = {0};
-#endif
+struct ast_flags zeroflag = {0};
 
 	call = NULL;
 	comment = NULL;
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
                 return -1;
         }
@@ -752,13 +735,9 @@ float	mylat,lata,latb,latd;
 float	mylon,lona,lonb,lond;
 struct stat mystat;
 time_t	now,was,lastupdate;
+struct ast_flags zeroflag = {0};
 
-
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		pthread_exit(NULL);
 		return NULL;
@@ -846,13 +825,9 @@ float	mylon,lona,lonb,lond;
 struct stat mystat;
 time_t	now,was,lastupdate;
 struct ttentry *ttentries,ttempty;
+struct ast_flags zeroflag = {0};
 
-
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		pthread_exit(NULL);
 		return NULL;
@@ -1080,16 +1055,12 @@ struct ttentry *ttentries,ttempty;
 }
 
 
-static int gps_exec(struct ast_channel *chan, void *data)
+static int gps_exec(struct ast_channel *chan, const char *data)
 {
 	return 0;
 }
 
-#ifdef	OLD_ASTERISK
-int unload_module()
-#else
 static int unload_module(void)
-#endif
 {
 int	res;
 
@@ -1098,25 +1069,16 @@ int	res;
 	return res;
 }
 
-#ifndef	OLD_ASTERISK
-static
-#endif
-int load_module(void)
+static int load_module(void)
 {
 	struct ast_config *cfg = NULL;
         char *ctg = "general",*val;
 	int res;
 	pthread_attr_t attr;
 
-#ifdef  NEW_ASTERISK
         struct ast_flags zeroflag = {0};
-#endif
 
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
                 return AST_MODULE_LOAD_DECLINE;
         }
@@ -1178,22 +1140,4 @@ int load_module(void)
 	return res;
 }
 
-#ifdef	OLD_ASTERISK
-char *description()
-{
-	return (char *)gps_tech.description;
-}
-
-int usecount()
-{
-	return usecnt;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
-#else
 AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "GPS interface module");
-#endif
-
