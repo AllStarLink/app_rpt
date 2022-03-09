@@ -1,9 +1,19 @@
 # app_rpt
 Refactoring and upgrade of AllStarLink's app_rpt, etc.
 
+# Development
+
 ## Prettifying
 
 `indent --k-and-r-style --use-tabs --tab-size4 --braces-on-if-line --cuddle-else --dont-break-function-decl-args --line-length120 --swallow-optional-blank-lines apps/app_rpt.c`
+
+# Installing
+
+## Pre-Reqs
+
+`chan_simpleusb` requires `libusb-dev` on Debian:
+
+`apt-get install -y libusb-dev`
 
 ## Compiling
 
