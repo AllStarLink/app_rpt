@@ -1,4 +1,3 @@
-/* #define	NEW_ASTERISK */
 /*
  * Asterisk -- An open source telephony toolkit.
  * * Copyright (C) 1999 - 2005, Digium, Inc.
@@ -33,14 +32,6 @@
 
 #include "asterisk.h"
 
-/*
- * Please change this revision number when you make a edit
- * use the simple format YYMMDD
-*/
-
-ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
-// ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
-
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
@@ -60,7 +51,7 @@ ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
 #include <linux/parport.h>
 #include <linux/version.h>
 
-#include "../allstar/pocsag.c"
+#include "../apps/app_rpt/pocsag.c" /*! \todo this may need to be moved to a better place... */
 
 #define DEBUG_CAPTURES	 		1
 
@@ -121,16 +112,9 @@ ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
 #include "asterisk/abstract_jb.h"
 #include "asterisk/musiconhold.h"
 #include "asterisk/dsp.h"
-
-#ifndef	NEW_ASTERISK
-
-/* ringtones we use */
-#include "busy.h"
-#include "ringtone.h"
-#include "ring10.h"
-#include "answer.h"
-
-#endif
+#include "asterisk/format.h"
+#include "asterisk/format_cache.h"
+#include "asterisk/format_compatibility.h"
 
 #define C108_VENDOR_ID		0x0d8c
 #define C108_PRODUCT_ID  	0x000c
@@ -352,8 +336,8 @@ END_CONFIG
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #endif
 
-static char *config = "simpleusb.conf";	/* default config file */
-static char *config1 = "simpleusb_tune_%s.conf";    /* tune config file */
+#define config "simpleusb.conf"	/* default config file */
+#define config1 "simpleusb_tune_%s.conf"    /* tune config file */
 
 static FILE *frxcapraw = NULL;
 static FILE *frxcapcooked = NULL;
@@ -400,19 +384,6 @@ struct sound {
 	int repeat;
 };
 
-#ifndef	NEW_ASTERISK
-
-static struct sound sounds[] = {
-	{ AST_CONTROL_RINGING, "RINGING", ringtone, sizeof(ringtone)/2, 16000, 32000, 1 },
-	{ AST_CONTROL_BUSY, "BUSY", busy, sizeof(busy)/2, 4000, 4000, 1 },
-	{ AST_CONTROL_CONGESTION, "CONGESTION", busy, sizeof(busy)/2, 2000, 2000, 1 },
-	{ AST_CONTROL_RING, "RING10", ring10, sizeof(ring10)/2, 16000, 32000, 1 },
-	{ AST_CONTROL_ANSWER, "ANSWER", answer, sizeof(answer)/2, 2200, 0, 0 },
-	{ -1, NULL, 0, 0, 0, 0 },	/* end marker */
-};
-
-#endif
-
 struct usbecho {
 struct qelem *q_forw;
 struct qelem *q_prev;
@@ -431,20 +402,6 @@ struct chan_simpleusb_pvt {
 
 	char *name;
 	int index;
-#ifndef	NEW_ASTERISK
-	/*
-	 * cursound indicates which in struct sound we play. -1 means nothing,
-	 * any other value is a valid sound, in which case sampsent indicates
-	 * the next sample to send in [0..samplen + silencelen]
-	 * nosound is set to disable the audio data from the channel
-	 * (so we can play the tones etc.).
-	 */
-	int sndcmd[2];				/* Sound command pipe */
-	int cursound;				/* index of sound to send */
-	int sampsent;				/* # of sound samples sent  */
-	int nosound;				/* set to block audio from the PBX */
-#endif
-
 	int devtype;				/* actual type of device */
 	int pttkick[2];
 	int total_blocks;			/* total blocks in the output device */
@@ -480,9 +437,6 @@ struct chan_simpleusb_pvt {
 	int micmax;
 	int micplaymax;
 
-#ifndef	NEW_ASTERISK
-	pthread_t sthread;
-#endif
 	pthread_t hidthread;
 
 	int stophid;
@@ -505,11 +459,7 @@ struct chan_simpleusb_pvt {
 	 */
 	char simpleusb_read_buf[FRAME_SIZE * 4 * 6];
 	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET];
-#ifdef 	OLD_ASTERISK
-	AST_LIST_HEAD(, ast_frame) txq;
-#else
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
-#endif
 	ast_mutex_t  txqlock;
 	int readpos;				/* read position above */
 	struct ast_frame read_f;	/* returned by simpleusb_read */
@@ -627,9 +577,6 @@ struct chan_simpleusb_pvt {
 };
 
 static struct chan_simpleusb_pvt simpleusb_default = {
-#ifndef	NEW_ASTERISK
-	.cursound = -1,
-#endif
 	.sounddev = -1,
 	.duplex = 1,
 	.autoanswer = 1,
@@ -651,21 +598,20 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 
 static int	hidhdwconfig(struct chan_simpleusb_pvt *o);
 static void mixer_write(struct chan_simpleusb_pvt *o);
-static void tune_write(struct chan_simpleusb_pvt *o);
+//static void tune_write(struct chan_simpleusb_pvt *o); /*! \todo not used */
 
 static char *simpleusb_active;	 /* the active device */
 
 static int setformat(struct chan_simpleusb_pvt *o, int mode);
 
-static struct ast_channel *simpleusb_request(const char *type, int format, void *data
-, int *cause);
+static struct ast_channel *simpleusb_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
 static int simpleusb_digit_begin(struct ast_channel *c, char digit);
 static int simpleusb_digit_end(struct ast_channel *c, char digit, unsigned int duration);
 static int simpleusb_text(struct ast_channel *c, const char *text);
 static int simpleusb_hangup(struct ast_channel *c);
 static int simpleusb_answer(struct ast_channel *c);
 static struct ast_frame *simpleusb_read(struct ast_channel *chan);
-static int simpleusb_call(struct ast_channel *c, char *dest, int timeout);
+static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout);
 static int simpleusb_write(struct ast_channel *chan, struct ast_frame *f);
 static int simpleusb_indicate(struct ast_channel *chan, int cond, const void *data, size_t datalen);
 static int simpleusb_fixup(struct ast_channel *oldchan, struct ast_channel *newchan);
@@ -673,10 +619,9 @@ static int simpleusb_setoption(struct ast_channel *chan, int option, void *data,
 
 static char tdesc[] = "Simple USB (CM108) Radio Channel Driver";
 
-static const struct ast_channel_tech simpleusb_tech = {
+static struct ast_channel_tech simpleusb_tech = {
 	.type = "SimpleUSB",
 	.description = tdesc,
-	.capabilities = AST_FORMAT_SLINEAR,
 	.requester = simpleusb_request,
 	.send_digit_begin = simpleusb_digit_begin,
 	.send_digit_end = simpleusb_digit_end,
@@ -1307,7 +1252,7 @@ static void kickptt(struct chan_simpleusb_pvt *o)
 /*
  * returns a pointer to the descriptor with the given name
  */
-static struct chan_simpleusb_pvt *_find_desc(char *dev)
+static struct chan_simpleusb_pvt *_find_desc(const char *dev)
 {
 	struct chan_simpleusb_pvt *o = NULL;
 
@@ -1327,7 +1272,7 @@ static struct chan_simpleusb_pvt *_find_desc(char *dev)
 /*
  * returns a pointer to the descriptor with the given name
  */
-static struct chan_simpleusb_pvt *find_desc(char *dev)
+static struct chan_simpleusb_pvt *find_desc(const char *dev)
 {
 	struct chan_simpleusb_pvt *o;
 
@@ -1442,7 +1387,8 @@ static void *hidthread(void *arg)
 	struct timeval to,then;
 	struct ast_config *cfg1;
 	struct ast_variable *v;
-	fd_set rfds;
+	struct ast_flags zeroflag = {0};
+	ast_fdset rfds;
 
         usb_dev = NULL;
         usb_handle = NULL;
@@ -1615,11 +1561,7 @@ static void *hidthread(void *arg)
 		mixer_write(o);
 
 		snprintf(fname,sizeof(fname) - 1,config1,o->name);
-#ifdef	NEW_ASTERISK
 		cfg1 = ast_config_load(fname,zeroflag);
-#else
-		cfg1 = ast_config_load(fname);
-#endif
 		o->rxmixerset = 500;
 		o->txmixaset = 500;
 		o->txmixbset = 500;
@@ -1774,11 +1716,11 @@ static void *hidthread(void *arg)
 					{
 						sprintf(buf1,"GPIO%d %d\n",i + 1,(j & (1 << i)) ? 1 : 0);
 						memset(&fr,0,sizeof(fr));
-						fr.data =  buf1;
+						fr.data.ptr =  buf1;
 						fr.datalen = strlen(buf1);
 						fr.samples = 0;
 						fr.frametype = AST_FRAME_TEXT;
-						fr.subclass = 0;
+						fr.subclass.integer = 0;
 						fr.src = "chan_simpleusb";
 						fr.offset = 0;
 						fr.mallocd=0;
@@ -1819,11 +1761,11 @@ static void *hidthread(void *arg)
 					{
 						sprintf(buf1,"PP%d %d\n",i,(j & (1 << ppinshift[i])) ? 1 : 0);
 						memset(&fr,0,sizeof(fr));
-						fr.data =  buf1;
+						fr.data.ptr =  buf1;
 						fr.datalen = strlen(buf1);
 						fr.samples = 0;
 						fr.frametype = AST_FRAME_TEXT;
-						fr.subclass = 0;
+						fr.subclass.integer = 0;
 						fr.src = "chan_simpleusb";
 						fr.offset = 0;
 						fr.mallocd=0;
@@ -1992,136 +1934,6 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	return write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
 }
 
-#ifndef	NEW_ASTERISK
-
-/*
- * Handler for 'sound writable' events from the sound thread.
- * Builds a frame from the high level description of the sounds,
- * and passes it to the audio device.
- * The actual sound is made of 1 or more sequences of sound samples
- * (s->datalen, repeated to make s->samplen samples) followed by
- * s->silencelen samples of silence. The position in the sequence is stored
- * in o->sampsent, which goes between 0 .. s->samplen+s->silencelen.
- * In case we fail to write a frame, don't update o->sampsent.
- */
-static void send_sound(struct chan_simpleusb_pvt *o)
-{
-	short myframe[FRAME_SIZE];
-	int ofs, l, start;
-	int l_sampsent = o->sampsent;
-	struct sound *s;
-
-	if (o->cursound < 0)		/* no sound to send */
-		return;
-
-	s = &sounds[o->cursound];
-
-	for (ofs = 0; ofs < FRAME_SIZE; ofs += l) {
-		l = s->samplen - l_sampsent;	/* # of available samples */
-		if (l > 0) {
-			start = l_sampsent % s->datalen;	/* source offset */
-			if (l > FRAME_SIZE - ofs)	/* don't overflow the frame */
-				l = FRAME_SIZE - ofs;
-			if (l > s->datalen - start)	/* don't overflow the source */
-				l = s->datalen - start;
-			bcopy(s->data + start, myframe + ofs, l * 2);
-			if (0)
-				ast_log(LOG_WARNING, "send_sound sound %d/%d of %d into %d\n", l_sampsent, l, s->samplen, ofs);
-			l_sampsent += l;
-		} else {				/* end of samples, maybe some silence */
-			static const short silence[FRAME_SIZE] = { 0, };
-
-			l += s->silencelen;
-			if (l > 0) {
-				if (l > FRAME_SIZE - ofs)
-					l = FRAME_SIZE - ofs;
-				bcopy(silence, myframe + ofs, l * 2);
-				l_sampsent += l;
-			} else {			/* silence is over, restart sound if loop */
-				if (s->repeat == 0) {	/* last block */
-					o->cursound = -1;
-					o->nosound = 0;	/* allow audio data */
-					if (ofs < FRAME_SIZE)	/* pad with silence */
-						bcopy(silence, myframe + ofs, (FRAME_SIZE - ofs) * 2);
-				}
-				l_sampsent = 0;
-			}
-		}
-	}
-	l = soundcard_writeframe(o, myframe);
-	if (l > 0)
-		o->sampsent = l_sampsent;	/* update status */
-}
-
-static void *sound_thread(void *arg)
-{
-	char ign[4096];
-	struct chan_simpleusb_pvt *o = (struct chan_simpleusb_pvt *) arg;
-
-	/*
-	 * Just in case, kick the driver by trying to read from it.
-	 * Ignore errors - this read is almost guaranteed to fail.
-	 */
-	read(o->sounddev, ign, sizeof(ign));
-	for (;;) {
-		fd_set rfds, wfds;
-		int maxfd, res;
-
-		FD_ZERO(&rfds);
-		FD_ZERO(&wfds);
-		FD_SET(o->sndcmd[0], &rfds);
-		maxfd = o->sndcmd[0];	/* pipe from the main process */
-		if (o->cursound > -1 && o->sounddev < 0)
-			setformat(o, O_RDWR);	/* need the channel, try to reopen */
-		else if (o->cursound == -1 && o->owner == NULL)
-		{
-			setformat(o, O_CLOSE);	/* can close */
-		}
-		if (o->sounddev > -1) {
-			if (!o->owner) {	/* no one owns the audio, so we must drain it */
-				FD_SET(o->sounddev, &rfds);
-				maxfd = MAX(o->sounddev, maxfd);
-			}
-			if (o->cursound > -1) {
-				FD_SET(o->sounddev, &wfds);
-				maxfd = MAX(o->sounddev, maxfd);
-			}
-		}
-		/* ast_select emulates linux behaviour in terms of timeout handling */
-		res = ast_select(maxfd + 1, &rfds, &wfds, NULL, NULL);
-		if (res < 1) {
-			ast_log(LOG_WARNING, "select failed: %s\n", strerror(errno));
-			sleep(1);
-			continue;
-		}
-		if (FD_ISSET(o->sndcmd[0], &rfds)) {
-			/* read which sound to play from the pipe */
-			int i, what = -1;
-
-			read(o->sndcmd[0], &what, sizeof(what));
-			for (i = 0; sounds[i].ind != -1; i++) {
-				if (sounds[i].ind == what) {
-					o->cursound = i;
-					o->sampsent = 0;
-					o->nosound = 1;	/* block audio from pbx */
-					break;
-				}
-			}
-			if (sounds[i].ind == -1)
-				ast_log(LOG_WARNING, "invalid sound index: %d\n", what);
-		}
-		if (o->sounddev > -1) {
-			if (FD_ISSET(o->sounddev, &rfds))	/* read and ignore errors */
-				read(o->sounddev, ign, sizeof(ign)); 
-			if (FD_ISSET(o->sounddev, &wfds))
-				send_sound(o);
-		}
-	}
-	return NULL;				/* Never reached */
-}
-
-#endif
-
 /*
  * reset and close the device if opened,
  * then open and initialize it in the desired mode,
@@ -2150,7 +1962,7 @@ static int setformat(struct chan_simpleusb_pvt *o, int mode)
 		return -1;
 	}
 	if (o->owner)
-		o->owner->fds[0] = fd;
+		ast_channel_internal_fd_set(o->owner, 0, fd);
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 	fmt = AFMT_S16_LE;
@@ -2256,7 +2068,7 @@ int	i;
 
 static int simpleusb_text(struct ast_channel *c, const char *text)
 {
-	struct chan_simpleusb_pvt *o = c->tech_pvt;
+	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	char *cmd;
 	int cnt,i,j,audio_samples,divcnt,divdiv,audio_ptr,baud;
 	struct pocsag_batch *batch,*b;
@@ -2362,7 +2174,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			memset(&wf,0,sizeof(wf));
 			wf.frametype = AST_FRAME_TEXT;
 		        wf.datalen = strlen(cmd);
-		        wf.data = cmd;
+		        wf.data.ptr = cmd;
 			ast_queue_frame(o->owner, &wf);
 			return 0;
 		    default:
@@ -2381,7 +2193,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 		audio_samples += SAMPRATE / 4;
 		/* also pad up to FRAME_SIZE */
 		audio_samples += audio_samples % FRAME_SIZE;
-		audio = malloc((audio_samples * sizeof(short)) + 10);
+		audio = ast_malloc((audio_samples * sizeof(short)) + 10);
 		if (!audio)
 		{
 			free_batch(batch);
@@ -2413,39 +2225,31 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 		{
 			memset(&wf,0,sizeof(wf));
 			wf.frametype = AST_FRAME_VOICE;
-		        wf.subclass = AST_FORMAT_SLINEAR;
+		        wf.subclass.integer = AST_FORMAT_SLIN;
 		        wf.samples = FRAME_SIZE;
 		        wf.datalen = FRAME_SIZE * 2;
 			wf.offset = AST_FRIENDLY_OFFSET;
-		        wf.data = audio1 + AST_FRIENDLY_OFFSET;
+		        wf.data.ptr = audio1 + AST_FRIENDLY_OFFSET;
 			wf.src = PAGER_SRC;
-			memcpy(wf.data,(char *)(audio + i),FRAME_SIZE * 2);
+			memcpy(wf.data.ptr,(char *)(audio + i),FRAME_SIZE * 2);
 			f1 = ast_frdup(&wf);
 			memset(&f1->frame_list,0,sizeof(f1->frame_list));
 			ast_mutex_lock(&o->txqlock);
 			AST_LIST_INSERT_TAIL(&o->txq,f1,frame_list);
 			ast_mutex_unlock(&o->txqlock);
 		}
-		free(audio);
+		ast_free(audio);
 		return 0;
 	}
 	return 0;
 }
 
-/* Play ringtone 'x' on device 'o' */
-static void ring(struct chan_simpleusb_pvt *o, int x)
-{
-#ifndef	NEW_ASTERISK
-	write(o->sndcmd[1], &x, sizeof(x));
-#endif
-}
-
 /*
  * handler for incoming calls. Either autoanswer, or start ringing
  */
-static int simpleusb_call(struct ast_channel *c, char *dest, int timeout)
+static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 {
-	struct chan_simpleusb_pvt *o = c->tech_pvt;
+	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 
 	o->stophid = 0;
 	time(&o->lasthidtime);
@@ -2459,28 +2263,16 @@ static int simpleusb_call(struct ast_channel *c, char *dest, int timeout)
  */
 static int simpleusb_answer(struct ast_channel *c)
 {
-#ifndef	NEW_ASTERISK
-	struct chan_simpleusb_pvt *o = c->tech_pvt;
-#endif
-
 	ast_setstate(c, AST_STATE_UP);
-#ifndef	NEW_ASTERISK
-	o->cursound = -1;
-	o->nosound = 0;
-#endif
 	return 0;
 }
 
 static int simpleusb_hangup(struct ast_channel *c)
 {
-	struct chan_simpleusb_pvt *o = c->tech_pvt;
+	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 
 	//ast_log(LOG_NOTICE, "simpleusb_hangup()\n");
-#ifndef	NEW_ASTERISK
-	o->cursound = -1;
-	o->nosound = 0;
-#endif
-	c->tech_pvt = NULL;
+	ast_channel_tech_pvt_set(c, NULL);
 	o->owner = NULL;
 	ast_module_unref(ast_module_info->self);
 	if (o->hookstate) {
@@ -2488,10 +2280,10 @@ static int simpleusb_hangup(struct ast_channel *c)
 			/* Assume auto-hangup too */
 			o->hookstate = 0;
 			setformat(o, O_CLOSE);
-		} else {
-			/* Make congestion noise */
+		} /* else {
+			// Make congestion noise
 			ring(o, AST_CONTROL_CONGESTION);
-		}
+		} */ // doesn't exist in chan_oss.
 	}
 	o->stophid = 1;
 	pthread_join(o->hidthread,NULL);
@@ -2502,18 +2294,11 @@ static int simpleusb_hangup(struct ast_channel *c)
 /* used for data coming from the network */
 static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 {
-	struct chan_simpleusb_pvt *o = c->tech_pvt;
+	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f1;
 
 	traceusb2(("simpleusb_write() o->nosound= %i\n",o->nosound));
 
-#ifndef	NEW_ASTERISK
-	/* Immediately return if no sound is enabled */
-	if (o->nosound)
-		return 0;
-	/* Stop any currently playing sound */
-	o->cursound = -1;
-#endif
 	if (!o->hasusb) return 0;
 	if (o->sounddev < 0)
 		setformat(o, O_RDWR);
@@ -2532,7 +2317,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 		short i, tbuff[f->datalen];
 		for(i=0;i<f->datalen;i+=2)
 		{
-			tbuff[i]= ((short*)(f->data))[i/2];
+			tbuff[i]= ((short*)(f->data.ptr))[i/2];
 			tbuff[i+1]= o->txkeyed*0x1000;
 		}
 		fwrite(tbuff,2,f->datalen,ftxcapraw);
@@ -2558,7 +2343,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 static struct ast_frame *simpleusb_read(struct ast_channel *c)
 {
 	int res,cd,sd,src,i,n,ispager,doleft,doright; // Yes, like Dudley!!! :-)
-	struct chan_simpleusb_pvt *o = c->tech_pvt;
+	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f = &o->read_f,*f1;
 	struct ast_frame wf = { AST_FRAME_CONTROL }, wf1;
 	time_t now;
@@ -2588,7 +2373,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		{
 			o->lastrx = 0;
 			o->rxkeyed = 0;
-			wf.subclass = AST_CONTROL_RADIO_UNKEY;
+			wf.subclass.integer = AST_CONTROL_RADIO_UNKEY;
 			ast_queue_frame(o->owner, &wf);
 		}
                 return f;
@@ -2620,12 +2405,12 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			u = (struct usbecho *) o->echoq.q_forw;
 			remque((struct qelem *)u);
 		        f->frametype = AST_FRAME_VOICE;
-		        f->subclass = AST_FORMAT_SLINEAR;
+		        f->subclass.integer = AST_FORMAT_SLIN;
 		        f->samples = FRAME_SIZE;
 		        f->datalen = FRAME_SIZE * 2;
 			f->offset = AST_FRIENDLY_OFFSET;
-		        f->data = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
-			memcpy(f->data,u->data,FRAME_SIZE * 2);
+		        f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
+			memcpy(f->data.ptr,u->data,FRAME_SIZE * 2);
 			ast_free(u);
 			f1 = ast_frdup(f);
 			memset(&f1->frame_list,0,sizeof(f1->frame_list));
@@ -2692,7 +2477,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		                int l = sizeof(o->simpleusb_write_buf) - o->simpleusb_write_dst;
 
 		                if (f1->datalen - src >= l) {       /* enough to fill a frame */
-		                        memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *)f1->data + src, l);
+		                        memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *)f1->data.ptr + src, l);
 					if (o->devtype != C108_PRODUCT_ID)
 					{
 						int v;
@@ -2754,14 +2539,14 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 						memset(&wf1,0,sizeof(wf1));
 						wf1.frametype = AST_FRAME_TEXT;
 					        wf1.datalen = strlen(ENDPAGE_STR) + 1;
-					        wf1.data = ENDPAGE_STR;
+					        wf1.data.ptr = ENDPAGE_STR;
 						ast_queue_frame(o->owner, &wf1);
 					}
 					o->waspager = ispager;
 		                } else {                                /* copy residue */
 		                        l = f1->datalen - src;
 		                        memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst,
-						 (char *)f1->data + src, l);
+						 (char *)f1->data.ptr + src, l);
 		                        src += l;                       /* but really, we are done */
 		                        o->simpleusb_write_dst += l;
 		                }
@@ -2783,7 +2568,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			memset(&wf1,0,sizeof(wf1));
 			wf1.frametype = AST_FRAME_TEXT;
 		        wf1.datalen = strlen(ENDPAGE_STR) + 1;
-		        wf1.data = ENDPAGE_STR;
+		        wf1.data.ptr = ENDPAGE_STR;
 			ast_queue_frame(o->owner, &wf1);
 			o->waspager = 0;
 		}
@@ -2813,7 +2598,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	{
 		o->lastrx = 0;
 		// printf("AST_CONTROL_RADIO_UNKEY\n");
-		wf.subclass = AST_CONTROL_RADIO_UNKEY;
+		wf.subclass.integer = AST_CONTROL_RADIO_UNKEY;
 		ast_queue_frame(o->owner, &wf);
 		if (o->duplex3)
 			setamixer(o->devicenum,MIXER_PARAM_MIC_PLAYBACK_SW,0,0);
@@ -2822,7 +2607,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	{
 		o->lastrx = 1;
 		//printf("AST_CONTROL_RADIO_KEY\n");
-		wf.subclass = AST_CONTROL_RADIO_KEY;
+		wf.subclass.integer = AST_CONTROL_RADIO_KEY;
 		ast_queue_frame(o->owner, &wf);
 		if (o->duplex3)
 			setamixer(o->devicenum,MIXER_PARAM_MIC_PLAYBACK_SW,1,0);
@@ -2885,35 +2670,35 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	#endif
 	f->offset = AST_FRIENDLY_OFFSET;
         o->readpos = 0;		       /* reset read pointer for next frame */
-        if (c->_state != AST_STATE_UP)  /* drop data if frame is not up */
+        if (ast_channel_state(c) != AST_STATE_UP)  /* drop data if frame is not up */
                 return f;
         /* ok we can build and deliver the frame to the caller */
         f->frametype = AST_FRAME_VOICE;
-        f->subclass = AST_FORMAT_SLINEAR;
+        f->subclass.integer = AST_FORMAT_SLIN;
         f->samples = FRAME_SIZE;
         f->datalen = FRAME_SIZE * 2;
-        f->data = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
-	if (!o->rxkeyed) memset(f->data,0,f->datalen);
+        f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
+	if (!o->rxkeyed) memset(f->data.ptr,0,f->datalen);
 	if (o->usedtmf && o->dsp)
 	{
 	    f1 = ast_dsp_process(c,o->dsp,f);
 	    if ((f1->frametype == AST_FRAME_DTMF_END) ||
 	      (f1->frametype == AST_FRAME_DTMF_BEGIN))
 	    {
-		if ((f1->subclass == 'm') || (f1->subclass == 'u'))
+		if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u'))
 		{
 			f1->frametype = AST_FRAME_NULL;
-			f1->subclass = 0;
+			f1->subclass.integer = 0;
 			return(f1);
 		}
 		if (f1->frametype == AST_FRAME_DTMF_END)
-			ast_log(LOG_NOTICE,"Got DTMF char %c\n",f1->subclass);
+			ast_log(LOG_NOTICE,"Got DTMF char %c\n",f1->subclass.integer);
 		return(f1);
 	    }
 	}
         if (o->boost != BOOST_SCALE) {  /* scale and clip values */
                 int i, x;
-                int16_t *p = (int16_t *) f->data;
+                int16_t *p = (int16_t *) f->data.ptr;
                 for (i = 0; i < f->samples; i++) {
                         x = (p[i] * o->boost) / BOOST_SCALE;
                         if (x > 32767)
@@ -2926,7 +2711,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
         if (o->rxvoiceadj > 1.0) {  /* scale and clip values */
                 int i, x;
 		float f1;
-                int16_t *p = (int16_t *) f->data;
+                int16_t *p = (int16_t *) f->data.ptr;
 
                 for (i = 0; i < f->samples; i++) {
 			f1 = (float)p[i] * o->rxvoiceadj;
@@ -2942,7 +2727,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	{
 		int i;
 		int32_t accum;
-                int16_t *p = (int16_t *) f->data;
+                int16_t *p = (int16_t *) f->data.ptr;
 
 		for(i = 0; i < f->samples; i++)
 		{
@@ -2976,7 +2761,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 
 static int simpleusb_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
 {
-	struct chan_simpleusb_pvt *o = newchan->tech_pvt;
+	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(newchan);
 	ast_log(LOG_WARNING,"simpleusb_fixup()\n");
 	o->owner = newchan;
 	return 0;
@@ -2984,7 +2769,7 @@ static int simpleusb_fixup(struct ast_channel *oldchan, struct ast_channel *newc
 
 static int simpleusb_indicate(struct ast_channel *c, int cond, const void *data, size_t datalen)
 {
-	struct chan_simpleusb_pvt *o = c->tech_pvt;
+	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	int res = -1;
 
 	switch (cond) {
@@ -2995,10 +2780,6 @@ static int simpleusb_indicate(struct ast_channel *c, int cond, const void *data,
 			break;
 
 		case -1:
-#ifndef	NEW_ASTERISK
-			o->cursound = -1;
-			o->nosound = 0;		/* when cursound is -1 nosound must be 0 */
-#endif
 			return 0;
 
 		case AST_CONTROL_VIDUPDATE:
@@ -3031,12 +2812,13 @@ static int simpleusb_indicate(struct ast_channel *c, int cond, const void *data,
 			if(o->debuglevel)ast_verbose("chan_simpleusb ACRUK  dev=%s TX OFF >> \n",o->name);
 			break;
 		default:
-			ast_log(LOG_WARNING, "Don't know how to display condition %d on %s\n", cond, c->name);
+			ast_log(LOG_WARNING, "Don't know how to display condition %d on %s\n", cond, ast_channel_name(c));
 			return -1;
 	}
 
-	if (res > -1)
-		ring(o, res);
+	if (res > -1) {
+		//ring(o, res); /*! \todo what should this be replaced by? */
+	}
 
 	return 0;
 }
@@ -3044,7 +2826,7 @@ static int simpleusb_indicate(struct ast_channel *c, int cond, const void *data,
 static int simpleusb_setoption(struct ast_channel *chan, int option, void *data, int datalen)
 {
 	char *cp;
-	struct chan_simpleusb_pvt *o = chan->tech_pvt;
+	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(chan);
 
 	/* all supported options require data */
 	if (!data || (datalen < 1)) {
@@ -3057,19 +2839,19 @@ static int simpleusb_setoption(struct ast_channel *chan, int option, void *data,
 		cp = (char *) data;
 		switch (*cp) {
 		case 1:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n",chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n",ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		case 2:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: MUTECONF/MAX(2) on %s\n",chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: MUTECONF/MAX(2) on %s\n",ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		case 3:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: DISABLE DETECT(3) on %s\n",chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: DISABLE DETECT(3) on %s\n",ast_channel_name(chan));
 			o->usedtmf = 0;
 			break;
 		default:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n",chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n",ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		}
@@ -3082,38 +2864,42 @@ static int simpleusb_setoption(struct ast_channel *chan, int option, void *data,
 /*
  * allocate a new channel.
  */
-static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext, char *ctx, int state)
+static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext, char *ctx, int state, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor)
 {
 	struct ast_channel *c;
+	struct ast_party_dialed dialed;
 
-	c = ast_channel_alloc(1, state, o->cid_num, o->cid_name, "", ext, ctx, 0, "SimpleUSB/%s", o->name);
+	c = ast_channel_alloc(1, state, o->cid_num, o->cid_name, "", ext, ctx, assignedids, requestor, 0, "SimpleUSB/%s", o->name);
 	if (c == NULL)
 		return NULL;
-	c->tech = &simpleusb_tech;
+	ast_channel_tech_set(c, &simpleusb_tech);
 	if ((o->sounddev < 0) && o->hasusb)
 		setformat(o, O_RDWR);
-	c->fds[0] = o->sounddev;	/* -1 if device closed, override later */
-	c->nativeformats = AST_FORMAT_SLINEAR;
-	c->readformat = AST_FORMAT_SLINEAR;
-	c->writeformat = AST_FORMAT_SLINEAR;
-	c->tech_pvt = o;
+	ast_channel_internal_fd_set(c, 0, o->sounddev); /* -1 if device closed, override later */
+	ast_channel_nativeformats_set(c, simpleusb_tech.capabilities);
+	ast_channel_set_readformat(c, ast_format_slin);
+	ast_channel_set_writeformat(c, ast_format_slin);
+	ast_channel_tech_pvt_set(c, o);
 
 	if (!ast_strlen_zero(o->language))
-		ast_string_field_set(c, language, o->language);
+		ast_channel_language_set(c, o->language);
 	/* Don't use ast_set_callerid() here because it will
 	 * generate a needless NewCallerID event */
-	c->cid.cid_num = ast_strdup(o->cid_num);
-	c->cid.cid_ani = ast_strdup(o->cid_num);
-	c->cid.cid_name = ast_strdup(o->cid_name);
-	if (!ast_strlen_zero(ext))
-		c->cid.cid_dnid = ast_strdup(ext);
+	ast_channel_caller(c)->id.number.str = ast_strdup(o->cid_num);
+	ast_channel_caller(c)->ani.number.str = ast_strdup(o->cid_num);
+	ast_channel_caller(c)->id.name.str = ast_strdup(o->cid_name);
+	if (!ast_strlen_zero(ext)) {
+		dialed.number.str = ast_strdup(ext);
+		ast_trim_blanks(dialed.number.str);
+		ast_party_dialed_set(ast_channel_dialed(c), &dialed);
+	}
 
 	o->owner = c;
 	ast_module_ref(ast_module_info->self);
 	ast_jb_configure(c, &global_jbconf);
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(c)) {
-			ast_log(LOG_WARNING, "Unable to start PBX on %s\n", c->name);
+			ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(c));
 			ast_hangup(c);
 			o->owner = c = NULL;
 			/* XXX what about the channel itself ? */
@@ -3125,7 +2911,7 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext
 }
 /*
 */
-static struct ast_channel *simpleusb_request(const char *type, int format, void *data, int *cause)
+static struct ast_channel *simpleusb_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause)
 {
 	struct ast_channel *c;
 	struct chan_simpleusb_pvt *o = _find_desc(data);
@@ -3139,26 +2925,31 @@ static struct ast_channel *simpleusb_request(const char *type, int format, void 
 		/* XXX we could default to 'dsp' perhaps ? */
 		return NULL;
 	}
-	if ((format & AST_FORMAT_SLINEAR) == 0) {
-		ast_log(LOG_NOTICE, "Format 0x%x unsupported\n", format);
+
+	if (!(ast_format_cap_iscompatible(cap, simpleusb_tech.capabilities))) {
+		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n",
+			ast_format_cap_get_names(cap, &cap_buf));
 		return NULL;
 	}
+	
 	if (o->owner) {
 		ast_log(LOG_NOTICE, "Already have a call (chan %p) on the usb channel\n", o->owner);
 		*cause = AST_CAUSE_BUSY;
 		return NULL;
 	}
-	c = simpleusb_new(o, NULL, NULL, AST_STATE_DOWN);
-	if (c == NULL) {
+	c = simpleusb_new(o, NULL, NULL, AST_STATE_DOWN, assignedids, requestor);
+	if (!c) {
 		ast_log(LOG_WARNING, "Unable to create new usb channel\n");
 		return NULL;
 	}
-		
+
 	return c;
 }
+
 /*
 */
-static int console_key(int fd, int argc, char *argv[])
+static int console_key(int fd, int argc, const char *const *argv)
 {
 	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
 
@@ -3170,7 +2961,7 @@ static int console_key(int fd, int argc, char *argv[])
 }
 /*
 */
-static int console_unkey(int fd, int argc, char *argv[])
+static int console_unkey(int fd, int argc, const char *const *argv)
 {
 	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
 
@@ -3181,6 +2972,14 @@ static int console_unkey(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
+/*! \todo where the heck are these functions???? */
+static int susb_tune(int fd, int argc, const char *const *argv) { return RESULT_SHOWUSAGE; }
+static int susb_set_debug(int fd, int argc, const char *const *argv) { return RESULT_SHOWUSAGE; }
+static int susb_set_debug_off(int fd, int argc, const char *const *argv) { return RESULT_SHOWUSAGE; }
+static int susb_active(int fd, int argc, const char *const *argv) { return RESULT_SHOWUSAGE; }
+
+/*! \todo not used!!! */
+#if 0
 static int rad_rxwait(int fd,int ms)
 {
 fd_set fds;
@@ -3307,11 +3106,11 @@ int	i,ret;
 		if (fd >= 0) ast_cli(fd,"Error starting test tone on %s!!\n",simpleusb_active);
 		return -1;
 	}
-	ast_clear_flag(o->owner, AST_FLAG_WRITE_INT);
+	ast_clear_flag(ast_channel_flags(o->owner), AST_FLAG_WRITE_INT);
 	o->txtestkey = 1;	
 	i = 0;
 	ret = 0;
-        while(o->owner->generatordata && (i < ms)) 
+        while(ast_channel_generatordata(o->owner) && (i < ms)) 
 	{
 		if (happy_mswait(fd,50,intflag)) 
 		{
@@ -3321,7 +3120,7 @@ int	i,ret;
 		i += 50;
 	}
 	ast_tonepair_stop(o->owner);
- 	ast_set_flag(o->owner, AST_FLAG_WRITE_INT);
+ 	ast_clear_flag(ast_channel_flags(o->owner), AST_FLAG_WRITE_INT);
 	o->txtestkey = 0;	
 	return ret;
 }
@@ -3683,11 +3482,12 @@ static int radio_tune(int fd, int argc, char *argv[])
 	}
 	return RESULT_SUCCESS;
 }
+#endif
 
 /*
 	CLI debugging on and off
 */
-static int radio_set_debug(int fd, int argc, char *argv[])
+/*static int radio_set_debug(int fd, int argc, char *argv[])
 {
 	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
 
@@ -3703,9 +3503,9 @@ static int radio_set_debug_off(int fd, int argc, char *argv[])
 	o->debuglevel=0;
 	ast_cli(fd,"simpleusb debug off.\n");
 	return RESULT_SUCCESS;
-}
+}*/
 
-static int radio_active(int fd, int argc, char *argv[])
+/*static int radio_active(int fd, int argc, char *argv[])
 {
         if (argc == 2)
                 ast_cli(fd, "active (command) USB Radio device is [%s]\n", simpleusb_active);
@@ -3728,7 +3528,8 @@ static int radio_active(int fd, int argc, char *argv[])
 		}
         }
         return RESULT_SUCCESS;
-}
+}*/
+	/*! \todo above is never used */
 
 static char key_usage[] =
 	"Usage: susb key\n"
@@ -3743,10 +3544,13 @@ static char active_usage[] =
         "       If used without a parameter, displays which device is the current\n"
         "one being commanded.  If a device is specified, the commanded radio device is changed\n"
         "to the device specified.\n";
+
+static char susb_tune_usage[] = ""; /*! \todo couldn't find this anywhere, undefined reference */
+
 /*
 radio tune 6 3000		measured tx value
 */
-static char radio_tune_usage[] =
+/*static char radio_tune_usage[] =
 	"Usage: susb tune <function>\n"
 	"       rx [newsetting]\n"
 	"       rxdisplay\n"
@@ -3754,37 +3558,8 @@ static char radio_tune_usage[] =
 	"       txb [newsetting]\n"
 	"       save (settings to tuning file)\n"
 	"       load (tuning settings from EEPROM)\n"
-	"\n       All [newsetting]'s are values 0-999\n\n";
-					  
-#ifndef	NEW_ASTERISK
-
-static struct ast_cli_entry cli_simpleusb[] = {
-	{ { "susb", "key", NULL },
-	console_key, "Simulate Rx Signal Present",
-	key_usage, NULL, NULL},
-
-	{ { "susb", "unkey", NULL },
-	console_unkey, "Simulate Rx Signal Lusb",
-	unkey_usage, NULL, NULL },
-
-	{ { "susb", "tune", NULL },
-	radio_tune, "Radio Tune",
-	radio_tune_usage, NULL, NULL },
-
-	{ { "susb", "set", "debug", NULL },
-	radio_set_debug, "Radio Debug",
-	radio_tune_usage, NULL, NULL },
-
-	{ { "susb", "set", "debug", "off", NULL },
-	radio_set_debug_off, "Radio Debug",
-	radio_tune_usage, NULL, NULL },
-
-	{ { "susb", "active", NULL },
-	radio_active, "Change commanded device",
-	active_usage, NULL, NULL },
-
-};
-#endif
+	"\n       All [newsetting]'s are values 0-999\n\n";*/
+	/*! \todo above is never used */
 
 static void store_rxcdtype(struct chan_simpleusb_pvt *o, char *s)
 {
@@ -3853,6 +3628,7 @@ static void store_pager(struct chan_simpleusb_pvt *o, char *s)
 	//ast_log(LOG_WARNING, "set pager = %s\n", s);
 }
 
+#if 0
 static void tune_write(struct chan_simpleusb_pvt *o)
 {
 	FILE *fp;
@@ -3887,6 +3663,8 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 		ast_mutex_unlock(&o->eepromlock);
 	}
 }
+#endif
+
 //
 static void mixer_write(struct chan_simpleusb_pvt *o)
 {
@@ -3931,9 +3709,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 	struct ast_config *cfg1;
 	char fname[200],buf[100];
 	int i;
-#ifdef	NEW_ASTERISK
 	struct ast_flags zeroflag = {0};
-#endif
 	if (ctg == NULL) {
 		traceusb1((" store_config() ctg == NULL\n"));
 		o = &simpleusb_default;
@@ -3993,14 +3769,14 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 			for(i = 0; i < 32; i++)
 			{
 				sprintf(buf,"gpio%d",i + 1);
-				if (!strcmp(v->name,buf)) o->gpios[i] = strdup(v->value);
+				if (!strcmp(v->name,buf)) o->gpios[i] = ast_strdup(v->value);
 			}
 			for(i = 2; i <= 15; i++)
 			{
 				if (!((1 << i) & PP_MASK)) continue;
 				sprintf(buf,"pp%d",i);
 				if (!strcasecmp(v->name,buf)) {
-					o->pps[i] = strdup(v->value);
+					o->pps[i] = ast_strdup(v->value);
 					haspp = 1;
 				}
 			}
@@ -4024,11 +3800,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 	}
 
 	snprintf(fname,sizeof(fname) - 1,config1,o->name);
-#ifdef	NEW_ASTERISK
 	cfg1 = ast_config_load(fname,zeroflag);
-#else
-	cfg1 = ast_config_load(fname);
-#endif
 	o->rxmixerset = 500;
 	o->txmixaset = 500;
 	o->txmixbset = 500;
@@ -4063,24 +3835,10 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 	o->dsp = ast_dsp_new();
 	if (o->dsp)
 	{
-#ifdef  NEW_ASTERISK
           ast_dsp_set_features(o->dsp,DSP_FEATURE_DIGIT_DETECT);
           ast_dsp_set_digitmode(o->dsp,DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-#else
-          ast_dsp_set_features(o->dsp,DSP_FEATURE_DTMF_DETECT);
-          ast_dsp_digitmode(o->dsp,DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-#endif
 	}
 	hidhdwconfig(o);
-
-#ifndef	NEW_ASTERISK
-	if (pipe(o->sndcmd) != 0) {
-		ast_log(LOG_ERROR, "Unable to create pipe\n");
-		goto error;
-	}
-
-	ast_pthread_create_background(&o->sthread, NULL, sound_thread, o);
-#endif
 
 	/* link into list of devices */
 	if (o != &simpleusb_default) {
@@ -4089,13 +3847,11 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 	}
 	return o;
   
-  error:
+	/* error: */
 	if (o != &simpleusb_default)
-		free(o);
+		ast_free(o);
 	return NULL;
 }
-
-#ifdef	NEW_ASTERISK
 
 static char *res2cli(int r)
 
@@ -4204,8 +3960,6 @@ static struct ast_cli_entry cli_simpleusb[] = {
 	AST_CLI_DEFINE(handle_susb_active,"Change commanded device")
 };
 
-#endif
-
 
 /*
 */
@@ -4214,9 +3968,12 @@ static int load_module(void)
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL,*val;
 	int n;
-#ifdef	NEW_ASTERISK
 	struct ast_flags zeroflag = {0};
-#endif
+
+	if (!(simpleusb_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+	ast_format_cap_append(simpleusb_tech.capabilities, ast_format_slin, 0);
 
 	if (hid_device_mklist()) {
 		ast_log(LOG_NOTICE, "Unable to make hid list\n");
@@ -4234,11 +3991,7 @@ static int load_module(void)
 	hasout = 0;
 
 	/* load config file */
-#ifdef	NEW_ASTERISK
 	if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-	if (!(cfg = ast_config_load(config))) {
-#endif
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -4329,12 +4082,6 @@ static int unload_module(void)
 		#endif
 
 		close(o->sounddev);
-#ifndef	NEW_ASTERISK
-		if (o->sndcmd[0] > 0) {
-			close(o->sndcmd[0]);
-			close(o->sndcmd[1]);
-		}
-#endif
 		if (o->dsp) ast_dsp_free(o->dsp);
 		if (o->owner)
 			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
@@ -4343,6 +4090,10 @@ static int unload_module(void)
 		/* XXX what about the thread ? */
 		/* XXX what about the memory allocated ? */
 	}
+
+	ao2_cleanup(simpleusb_tech.capabilities);
+	simpleusb_tech.capabilities = NULL;
+
 	return 0;
 }
 
