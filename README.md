@@ -21,6 +21,10 @@ Add this near the bottom of `apps/Makefile`:
 
 `$(call MOD_ADD_C,app_rpt,$(wildcard app_rpt/rpt_*.c))`
 
+Add this near the bottom of `channels/Makefile`:
+
+`chan_simpleusb.so: LIBS+=-lusb -lasound`
+
 # Files from AllStarLink Asterisk which are in scope
 
 ```
