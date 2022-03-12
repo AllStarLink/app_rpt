@@ -211,7 +211,7 @@ void free_batch(struct pocsag_batch *batch)
 	if (batch != NULL)
 	{
 		free_batch(batch->next);
-		free(batch);
+		ast_free(batch);
 	}
 	return;
 }

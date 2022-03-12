@@ -9,6 +9,13 @@ Refactoring and upgrade of AllStarLink's app_rpt, etc.
 
 # Installing
 
+You can use PhreakNet to install Asterisk automatically, first. You'll need to manually add the app_rpt components afterwards.
+
+```
+cd /usr/src && wget https://docs.phreaknet.org/script/phreaknet.sh && chmod +x phreaknet.sh && ./phreaknet.sh make
+phreaknet install -s -t # install chan_sip (if you need it still) and DAHDI (required)
+```
+
 ## Pre-Reqs
 
 `chan_simpleusb` requires `libusb-dev` on Debian:
