@@ -32,6 +32,14 @@ Add this near the bottom of `channels/Makefile`:
 
 `chan_simpleusb.so: LIBS+=-lusb -lasound`
 
+## After DAHDI/Asterisk installed
+
+`/dev/dsp1` needs to exist for chan_simpleusb and chan_usbradio to work.
+
+This StackOverflow post contains the answer in an upvoted comment: https://unix.stackexchange.com/questions/103746/why-wont-linux-let-me-play-with-dev-dsp/103755#103755
+
+Run: `modprobe snd-pcm-oss` (as root/sudo)
+
 # Files from AllStarLink Asterisk which are in scope
 
 ```
