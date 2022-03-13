@@ -40,6 +40,12 @@ This StackOverflow post contains the answer in an upvoted comment: https://unix.
 
 Run: `modprobe snd-pcm-oss` (as root/sudo)
 
+## Troubleshooting
+
+One-liner to kill Asterisk if it won't cleanly stop or restart:
+
+`kill -9 $(ps -aux | grep " asterisk" | grep -v "grep" | awk '{print $2}' )`
+
 # Files from AllStarLink Asterisk which are in scope
 
 ```
