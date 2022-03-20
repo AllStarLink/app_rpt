@@ -20122,10 +20122,25 @@ static void *rpt_master(void *ignore)
 			continue;
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
-		rpt_vars[n].name = ast_strdup(this);
 		val = (char *) ast_variable_retrieve(cfg, this, "rxchannel");
-		if (val)
+		if (val) {
+			char *slash, *rxchan = ast_strdup(val);
+			slash = strchr(rxchan, '/');
+			if (!slash) {
+				ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding repeater '%s'\n", val, this);
+				ast_free(rxchan);
+				continue;
+			}
+			slash[0] = '\0';
+			if (!ast_get_channel_tech(rxchan)) {
+				ast_log(LOG_WARNING, "Channel tech '%s' is not currently loaded, not adding repeater '%s'\n", rxchan, this);
+				ast_free(rxchan);
+				continue;
+			}
+			ast_free(rxchan);
 			rpt_vars[n].rxchanname = ast_strdup(val);
+		}
+		rpt_vars[n].name = ast_strdup(this);
 		val = (char *) ast_variable_retrieve(cfg, this, "txchannel");
 		if (val)
 			rpt_vars[n].txchanname = ast_strdup(val);
@@ -23210,6 +23225,7 @@ static int reload(void)
 				break;
 			}
 		}
+		/*! \todo this logic here needs to be combined with the startup logic, as much as possible. */
 		if (n >= nrpts) {		/* no such node, yet */
 			/* find an empty hole or the next one */
 			for (n = 0; n < nrpts; n++)
@@ -23221,10 +23237,25 @@ static int reload(void)
 				continue;
 			}
 			memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
-			rpt_vars[n].name = ast_strdup(this);
 			val = (char *) ast_variable_retrieve(cfg, this, "rxchannel");
-			if (val)
+			if (val) {
+				char *slash, *rxchan = ast_strdup(val);
+				slash = strchr(rxchan, '/');
+				if (!slash) {
+					ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding repeater '%s'\n", val, this);
+					ast_free(rxchan);
+					continue;
+				}
+				slash[0] = '\0';
+				if (!ast_get_channel_tech(rxchan)) {
+					ast_log(LOG_WARNING, "Channel tech '%s' is not currently loaded, not adding repeater '%s'\n", rxchan, this);
+					ast_free(rxchan);
+					continue;
+				}
+				ast_free(rxchan);
 				rpt_vars[n].rxchanname = ast_strdup(val);
+			}
+			rpt_vars[n].name = ast_strdup(this);
 			val = (char *) ast_variable_retrieve(cfg, this, "txchannel");
 			if (val)
 				rpt_vars[n].txchanname = ast_strdup(val);
