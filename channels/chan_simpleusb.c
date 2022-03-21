@@ -1573,7 +1573,7 @@ static void *hidthread(void *arg)
 					M_END(;);
 			}
 			ast_config_destroy(cfg1);
-			ast_log(LOG_WARNING, "Loaded parameters from %s for device %s .\n", fname, o->name);
+			ast_log(LOG_NOTICE, "Loaded parameters from %s for device %s .\n", fname, o->name);
 		} else
 			ast_log(LOG_WARNING, "File %s not found, device %s using default parameters.\n", fname, o->name);
 
@@ -2831,6 +2831,7 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext
 	ast_channel_set_readformat(c, ast_format_slin);
 	ast_channel_set_writeformat(c, ast_format_slin);
 	ast_channel_tech_pvt_set(c, o);
+	ast_channel_unlock(c);
 
 	if (!ast_strlen_zero(o->language))
 		ast_channel_language_set(c, o->language);
@@ -3955,12 +3956,12 @@ static int load_module(void)
 		ast_log(LOG_NOTICE, "susb active device %s not found\n", simpleusb_active);
 		/* XXX we could default to 'dsp' perhaps ? */
 		/* XXX should cleanup allocated memory etc. */
-		return AST_MODULE_LOAD_FAILURE;
+		return AST_MODULE_LOAD_DECLINE;
 	}
 
 	if (ast_channel_register(&simpleusb_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel type 'usb'\n");
-		return AST_MODULE_LOAD_FAILURE;
+		return AST_MODULE_LOAD_DECLINE;
 	}
 
 	ast_cli_register_multiple(cli_simpleusb, sizeof(cli_simpleusb) / sizeof(struct ast_cli_entry));
