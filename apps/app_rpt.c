@@ -7466,7 +7466,7 @@ static void *rpt_tele_thread(void *this)
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		rpt_mutex_lock(&myrpt->lock);
 		remque((struct qelem *) mytele);
 		ast_log(LOG_NOTICE, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
@@ -9419,7 +9419,7 @@ static void *rpt_call(void *this)
 	mychannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 
 	if (!mychannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		pthread_exit(NULL);
 	}
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -9441,7 +9441,7 @@ static void *rpt_call(void *this)
 	genchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	ao2_ref(cap, -1);
 	if (!genchannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		ast_hangup(mychannel);
 		pthread_exit(NULL);
 	}
@@ -10030,7 +10030,7 @@ static int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	l->pchan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	ao2_ref(cap, -1);
 	if (!l->pchan) {
-		ast_log(LOG_WARNING, "rpt connect: Sorry unable to obtain pseudo channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		ast_hangup(l->chan);
 		ast_free(l);
 		return -1;
@@ -17125,7 +17125,37 @@ static void do_scheduler(struct rpt *myrpt)
 			ast_log(LOG_WARNING, "Malformed scheduler entry in rpt.conf: %s = %s\n", skedlist->name, skedlist->value);
 		}
 	}
+}
 
+/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts. This thread cannot successfully be resurrected, so don't even THINK about trying! (Maybe add a new var for this?) */
+#define FAILED_TO_OBTAIN_PSEUDO_CHANNEL() { \
+	ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n"); \
+	rpt_mutex_unlock(&myrpt->lock); \
+	if (myrpt->txchannel != myrpt->rxchannel) { \
+		ast_log(LOG_WARNING, "Terminating channel '%s'\n", ast_channel_name(myrpt->txchannel)); \
+		ast_hangup(myrpt->txchannel); \
+	} \
+	ast_log(LOG_WARNING, "Terminating channel '%s'\n", ast_channel_name(myrpt->rxchannel)); \
+	ast_hangup(myrpt->rxchannel); \
+	rpt_vars[i].deleted = 1; \
+	myrpt->rpt_thread = AST_PTHREADT_STOP; \
+	pthread_exit(NULL); \
+}
+
+#define FAILED_TO_OBTAIN_PSEUDO_CHANNEL2() { \
+	ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n"); \
+	rpt_mutex_unlock(&myrpt->lock); \
+	ast_hangup(myrpt->pchannel); \
+	ast_hangup(myrpt->monchannel); \
+	if (myrpt->txchannel != myrpt->rxchannel) { \
+		ast_log(LOG_WARNING, "Terminating up channel '%s'\n", ast_channel_name(myrpt->txchannel)); \
+		ast_hangup(myrpt->txchannel); \
+	} \
+	ast_log(LOG_WARNING, "Terminating channel '%s'\n", ast_channel_name(myrpt->rxchannel)); \
+	ast_hangup(myrpt->rxchannel); \
+	rpt_vars[i].deleted = 1; \
+	myrpt->rpt_thread = AST_PTHREADT_STOP; \
+	pthread_exit(NULL); \
 }
 
 /* single thread with one file (request) to dial */
@@ -17298,13 +17328,7 @@ static void *rpt(void *this)
 	/* allocate a pseudo-channel thru asterisk */
 	myrpt->pchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->pchannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
 	ast_set_read_format(myrpt->pchannel, ast_format_slin);
 	ast_set_write_format(myrpt->pchannel, ast_format_slin);
@@ -17319,13 +17343,7 @@ static void *rpt(void *this)
 		/* allocate a pseudo-channel thru asterisk */
 		myrpt->zaptxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 		if (!myrpt->zaptxchannel) {
-			fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
-			rpt_mutex_unlock(&myrpt->lock);
-			if (myrpt->txchannel != myrpt->rxchannel)
-				ast_hangup(myrpt->txchannel);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
+			FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 		}
 		ast_set_read_format(myrpt->zaptxchannel, ast_format_slin);
 		ast_set_write_format(myrpt->zaptxchannel, ast_format_slin);
@@ -17338,13 +17356,7 @@ static void *rpt(void *this)
 	/* allocate a pseudo-channel thru asterisk */
 	myrpt->monchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->monchannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
 	ast_set_read_format(myrpt->monchannel, ast_format_slin);
 	ast_set_write_format(myrpt->monchannel, ast_format_slin);
@@ -17426,13 +17438,7 @@ static void *rpt(void *this)
 	/* allocate a pseudo-channel thru asterisk */
 	myrpt->parrotchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->parrotchannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
 	ast_set_read_format(myrpt->parrotchannel, ast_format_slin);
 	ast_set_write_format(myrpt->parrotchannel, ast_format_slin);
@@ -17446,13 +17452,7 @@ static void *rpt(void *this)
 	/* allocate a pseudo-channel thru asterisk */
 	myrpt->telechannel = ast_request("dahdi", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->telechannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
 	ast_set_read_format(myrpt->telechannel, ast_format_slin);
 	ast_set_write_format(myrpt->telechannel, ast_format_slin);
@@ -17512,13 +17512,7 @@ static void *rpt(void *this)
 	/* allocate a pseudo-channel thru asterisk */
 	myrpt->voxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->voxchannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
 	ast_set_read_format(myrpt->voxchannel, ast_format_slin);
 	ast_set_write_format(myrpt->voxchannel, ast_format_slin);
@@ -17530,15 +17524,7 @@ static void *rpt(void *this)
 	/* allocate a pseudo-channel thru asterisk */
 	myrpt->txpchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->txpchannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		FAILED_TO_OBTAIN_PSEUDO_CHANNEL2();
 	}
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->txpchannel->cdr)
@@ -20127,13 +20113,13 @@ static void *rpt_master(void *ignore)
 			char *slash, *rxchan = ast_strdup(val);
 			slash = strchr(rxchan, '/');
 			if (!slash) {
-				ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding repeater '%s'\n", val, this);
+				ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding node '%s'\n", val, this);
 				ast_free(rxchan);
 				continue;
 			}
 			slash[0] = '\0';
 			if (!ast_get_channel_tech(rxchan)) {
-				ast_log(LOG_WARNING, "Channel tech '%s' is not currently loaded, not adding repeater '%s'\n", rxchan, this);
+				ast_log(LOG_WARNING, "Channel tech '%s' is not currently loaded, not adding node '%s'\n", rxchan, this);
 				ast_free(rxchan);
 				continue;
 			}
@@ -20230,11 +20216,11 @@ static void *rpt_master(void *ignore)
 			int rv;
 			if (rpt_vars[i].remote)
 				continue;
-			if ((rpt_vars[i].rpt_thread == AST_PTHREADT_STOP)
-				|| (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL))
+			if ((rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
 				rv = -1;
-			else
+			} else {
 				rv = pthread_kill(rpt_vars[i].rpt_thread, 0);
+			}
 			if (rv) {
 				if (rpt_vars[i].deleted) {
 					rpt_vars[i].name[0] = 0;
@@ -20258,7 +20244,6 @@ static void *rpt_master(void *ignore)
 				/* if (!rpt_vars[i].xlink) */
 				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
 			}
-
 		}
 		for (i = 0; i < nrpts; i++) {
 			if (rpt_vars[i].deleted)
@@ -20402,8 +20387,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		struct in_addr ia;
 
 		val = NULL;
-		myadr = NULL;
-		//b1 = ast_channel_caller(chan)->id.number.str;         
+		myadr = NULL;      
 		b1 = ast_channel_caller(chan)->id.number.str;
 		if (b1)
 			ast_shrink_phone_number(b1);
@@ -21028,7 +21012,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->pchan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 		ao2_ref(cap, -1);
 		if (!l->pchan) {
-			fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
+			ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 			pthread_exit(NULL);
 		}
 		ast_set_read_format(l->pchan, ast_format_slin);
@@ -21274,7 +21258,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->pchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	ao2_ref(cap, -1);
 	if (!myrpt->pchannel) {
-		fprintf(stderr, "rpt:Sorry unable to obtain pseudo channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		rpt_mutex_unlock(&myrpt->lock);
 		if (myrpt->txchannel != myrpt->rxchannel)
 			ast_hangup(myrpt->txchannel);
@@ -23242,13 +23226,13 @@ static int reload(void)
 				char *slash, *rxchan = ast_strdup(val);
 				slash = strchr(rxchan, '/');
 				if (!slash) {
-					ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding repeater '%s'\n", val, this);
+					ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding node '%s'\n", val, this);
 					ast_free(rxchan);
 					continue;
 				}
 				slash[0] = '\0';
 				if (!ast_get_channel_tech(rxchan)) {
-					ast_log(LOG_WARNING, "Channel tech '%s' is not currently loaded, not adding repeater '%s'\n", rxchan, this);
+					ast_log(LOG_WARNING, "Channel tech '%s' is not currently loaded, not adding node '%s'\n", rxchan, this);
 					ast_free(rxchan);
 					continue;
 				}
