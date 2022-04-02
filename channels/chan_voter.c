@@ -206,16 +206,6 @@ Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or 
 
 
 #include "asterisk.h"
-#include "../astver.h"
-
-/*
- * Please change this revision number when you make a edit
- * use the simple format YYMMDD
-*/
-
-ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
-// ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
-
 
 #include <stdio.h>
 #include <string.h>
@@ -253,24 +243,20 @@ ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
 #include "asterisk/ulaw.h"
 #include "asterisk/dsp.h"
 #include "asterisk/manager.h"
+#include "asterisk/format.h"
+#include "asterisk/format_cache.h"
+#include "asterisk/format_compatibility.h"
 
-
-#include "../allstar/pocsag.c"
+#include "../apps/app_rpt/pocsag.c"
 
 /* Un-comment this if you wish Digital milliwatt output rather then real audio
    when transmitting (for debugging only) */
 /* #define	DMWDIAG */
 
-#ifdef	NEW_ASTERISK
 struct ast_flags zeroflag = { 0 };
-#endif
 
 #define	XPMR_VOTER
 #include "xpmr/xpmr.h"
-
-#ifdef	OLD_ASTERISK
-#define	AST_MODULE_LOAD_DECLINE -1
-#endif
 
 #define	VOTER_CHALLENGE_LEN 10
 #define	VOTER_PASSWORD_LEN 30
@@ -536,30 +522,13 @@ struct voter_pvt {
 	char waspager;
 	float gtxgain;
 
-#ifdef 	OLD_ASTERISK
-	AST_LIST_HEAD(, ast_frame) txq;
-#else
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
-#endif
-#ifdef 	OLD_ASTERISK
-	AST_LIST_HEAD(, ast_frame) pagerq;
-#else
 	AST_LIST_HEAD_NOLOCK(, ast_frame) pagerq;
-#endif
 	ast_mutex_t  txqlock;
 	ast_mutex_t  pagerqlock;
 };
 
-#ifdef	OLD_ASTERISK
-int reload();
-#else
 static int reload(void);
-#endif
-
-#ifdef	OLD_ASTERISK
-static int usecnt;
-AST_MUTEX_DEFINE_STATIC(usecnt_lock);
-#endif
 
 int debug = 0;
 int hasmaster = 0;
@@ -588,31 +557,22 @@ FILE *fp;
 VTIME master_time = {0,0};
 VTIME mastergps_time = {0,0};
 
-#ifdef OLD_ASTERISK
-#define ast_free free
-#define ast_malloc malloc
-#endif
-
-static struct ast_channel *voter_request(const char *type, int format, void *data, int *cause);
-static int voter_call(struct ast_channel *ast, char *dest, int timeout);
+static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap,
+	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
+static int voter_call(struct ast_channel *ast, const char *dest, int timeout);
 static int voter_hangup(struct ast_channel *ast);
 static struct ast_frame *voter_read(struct ast_channel *ast);
 static int voter_write(struct ast_channel *ast, struct ast_frame *frame);
-#ifdef	OLD_ASTERISK
-static int voter_indicate(struct ast_channel *ast, int cond);
-static int voter_digit_end(struct ast_channel *c, char digit);
-#else
 static int voter_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen);
 static int voter_digit_begin(struct ast_channel *c, char digit);
 static int voter_digit_end(struct ast_channel *c, char digit, unsigned int duratiion);
-#endif
 static int voter_text(struct ast_channel *c, const char *text);
 static int voter_setoption(struct ast_channel *chan, int option, void *data, int datalen);
 
 static const struct ast_channel_tech voter_tech = {
 	.type = type,
 	.description = vdesc,
-	.capabilities = AST_FORMAT_SLINEAR,
+	//.capabilities = AST_FORMAT_SLINEAR, /*! \todo */
 	.requester = voter_request,
 	.call = voter_call,
 	.hangup = voter_hangup,
@@ -620,14 +580,9 @@ static const struct ast_channel_tech voter_tech = {
 	.write = voter_write,
 	.indicate = voter_indicate,
 	.send_text = voter_text,
-#ifdef	OLD_ASTERISK
-	.send_digit = voter_digit_end,
-#else
 	.send_digit_begin = voter_digit_begin,
 	.send_digit_end = voter_digit_end,
 	.setoption = voter_setoption,
-
-#endif
 };
 
 /*
@@ -699,37 +654,6 @@ static int voter_do_ping(int fd, int argc, char *argv[]);
 static char ping_usage[] =
 "Usage: voter ping [client] <# pings, 0 to abort>\n"
 "       Ping (check connectivity) to client\n";
-
-#ifndef	NEW_ASTERISK
-
-static struct ast_cli_entry  cli_debug =
-        { { "voter", "debug", "level" }, voter_do_debug, 
-		"Enable voter debugging", debug_usage };
-static struct ast_cli_entry  cli_test =
-        { { "voter", "test" }, voter_do_test, 
-		"Specify/Query voter instance test mode", test_usage };
-static struct ast_cli_entry  cli_prio =
-        { { "voter", "prio" }, voter_do_prio, 
-		"Specify/Query voter client priority value", prio_usage };
-static struct ast_cli_entry  cli_record =
-        { { "voter", "record" }, voter_do_record, 
-		"Enables/Specifies (or disables) voter recording file", record_usage };
-static struct ast_cli_entry  cli_tone =
-        { { "voter", "tone" }, voter_do_tone, 
-		"Sets/Queries Tx CTCSS level for specified chan_voter instance", tone_usage };
-static struct ast_cli_entry  cli_reload =
-        { { "voter", "reload" }, voter_do_reload, 
-		"Reloads chan_voter parameters", reload_usage };
-static struct ast_cli_entry  cli_display =
-        { { "voter", "display" }, voter_do_display, 
-		"Display voter (instance) clients", display_usage };
-static struct ast_cli_entry  cli_txlockout =
-        { { "voter", "txlockout" }, voter_do_txlockout, 
-		"Set Tx Lockout status for voter (instance) clients", txlockout_usage };
-static struct ast_cli_entry  cli_ping =
-        { { "voter", "ping" }, voter_do_ping, 
-		"Ping (check connectivity) to client", ping_usage };
-#endif
 
 static uint32_t crc_32_tab[] = { /* CRC polynomial 0xedb88320 */
 0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
@@ -943,27 +867,27 @@ struct voter_client *client;
 	}
 }
 
-static int voter_call(struct ast_channel *ast, char *dest, int timeout)
+static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 {
-	if ((ast->_state != AST_STATE_DOWN) && (ast->_state != AST_STATE_RESERVED)) {
-		ast_log(LOG_WARNING, "voter_call called on %s, neither down nor reserved\n", ast->name);
+	if ((ast_channel_state(ast) != AST_STATE_DOWN) && (ast_channel_state(ast) != AST_STATE_RESERVED)) {
+		ast_log(LOG_WARNING, "voter_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
 		return -1;
 	}
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
 	if (option_debug)
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast->name);
+		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_channel_name(ast));
 	ast_setstate(ast,AST_STATE_UP);
 	return 0;
 }
 
 static int voter_hangup(struct ast_channel *ast)
 {
-	struct voter_pvt *p = ast->tech_pvt,*q;
+	struct voter_pvt *q, *p = ast_channel_tech_pvt(ast);
 
 	if (option_debug)
-		ast_log(LOG_DEBUG, "voter_hangup(%s)\n", ast->name);
-	if (!ast->tech_pvt) {
+		ast_log(LOG_DEBUG, "voter_hangup(%s)\n", ast_channel_name(ast));
+	if (!p) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
@@ -984,18 +908,14 @@ static int voter_hangup(struct ast_channel *ast)
 	if (pvts == p) pvts = p->next;
 	ast_mutex_unlock(&voter_lock);
 	ast_free(p);
-	ast->tech_pvt = NULL;
+	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
 	return 0;
 }
 
-#ifdef	OLD_ASTERISK
-static int voter_indicate(struct ast_channel *ast, int cond)
-#else
 static int voter_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
-#endif
 {
-	struct voter_pvt *p = ast->tech_pvt;
+	struct voter_pvt *p = ast_channel_tech_pvt(ast);
 
 	switch (cond) {
 		case AST_CONTROL_RADIO_KEY:
@@ -1013,20 +933,12 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 	return 0;
 }
 
-#ifndef	OLD_ASTERISK
-
 static int voter_digit_begin(struct ast_channel *ast, char digit)
 {
 	return -1;
 }
 
-#endif
-
-#ifdef	OLD_ASTERISK
-static int voter_digit_end(struct ast_channel *ast, char digit)
-#else
 static int voter_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
-#endif
 {
 	return(0);
 }
@@ -1034,7 +946,7 @@ static int voter_digit_end(struct ast_channel *ast, char digit, unsigned int dur
 static int voter_setoption(struct ast_channel *chan, int option, void *data, int datalen)
 {
 	char *cp;
-	struct voter_pvt *o = chan->tech_pvt;
+	struct voter_pvt *o = ast_channel_tech_pvt(chan);
 
 	/* all supported options require data */
 	if (!data || (datalen < 1)) {
@@ -1047,19 +959,19 @@ static int voter_setoption(struct ast_channel *chan, int option, void *data, int
 		cp = (char *) data;
 		switch (*cp) {
 		case 1:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n",chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n",ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		case 2:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: MUTECONF/MAX(2) on %s\n",chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: MUTECONF/MAX(2) on %s\n",ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		case 3:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: DISABLE DETECT(3) on %s\n",chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: DISABLE DETECT(3) on %s\n",ast_channel_name(chan));
 			o->usedtmf = 0;
 			break;
 		default:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n",chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n",ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		}
@@ -1086,7 +998,7 @@ int	i;
 
 static int voter_text(struct ast_channel *ast, const char *text)
 {
-	struct voter_pvt *o = ast->tech_pvt;
+	struct voter_pvt *o = ast_channel_tech_pvt(ast);
 	int cnt,i,j,audio_samples,divcnt,divdiv,audio_ptr,baud;
 	struct pocsag_batch *batch,*b;
 	short *audio;
@@ -1102,7 +1014,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 	{
 		if (!o->pmrChan)
 		{
-			ast_log(LOG_WARNING,"Attempt to page on a non-flat-audio Voter config (%s)\n",ast->name);
+			ast_log(LOG_WARNING,"Attempt to page on a non-flat-audio Voter config (%s)\n",ast_channel_name(ast));
 			return 0;
 		}
 		cnt = sscanf(text,"%s %d %d %n",cmd,&baud,&i,&j);
@@ -1135,8 +1047,8 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			cmd = (i) ? "PAGES" : "NOPAGES" ;
 			memset(&wf,0,sizeof(wf));
 			wf.frametype = AST_FRAME_TEXT;
-		        wf.datalen = strlen(cmd);
-		        AST_FRAME_DATA(wf) = cmd;
+			wf.datalen = strlen(cmd);
+			wf.data.ptr = cmd;
 			ast_queue_frame(o->owner, &wf);
 			return 0;
 		    default:
@@ -1155,7 +1067,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 		audio_samples += SAMPRATE / 2;
 		/* also pad up to FRAME_SIZE */
 		audio_samples += audio_samples % FRAME_SIZE;
-		audio = malloc((audio_samples * sizeof(short)) + 10);
+		audio = ast_malloc((audio_samples * sizeof(short)) + 10);
 		if (!audio)
 		{
 			free_batch(batch);
@@ -1187,20 +1099,20 @@ static int voter_text(struct ast_channel *ast, const char *text)
 		{
 			memset(&wf,0,sizeof(wf));
 			wf.frametype = AST_FRAME_VOICE;
-		        wf.subclass = AST_FORMAT_SLINEAR;
+		        wf.subclass.integer = AST_FORMAT_SLIN;
 		        wf.samples = FRAME_SIZE;
 		        wf.datalen = FRAME_SIZE * 2;
 			wf.offset = AST_FRIENDLY_OFFSET;
-		        AST_FRAME_DATA(wf) = audio1 + AST_FRIENDLY_OFFSET;
+		        wf.data.ptr = audio1 + AST_FRIENDLY_OFFSET;
 			wf.src = PAGER_SRC;
-			memcpy(AST_FRAME_DATA(wf),(char *)(audio + i),FRAME_SIZE * 2);
+			memcpy(wf.data.ptr,(char *)(audio + i),FRAME_SIZE * 2);
 			f1 = ast_frdup(&wf);
 			memset(&f1->frame_list,0,sizeof(f1->frame_list));
 			ast_mutex_lock(&o->pagerqlock);
 			AST_LIST_INSERT_TAIL(&o->pagerq,f1,frame_list);
 			ast_mutex_unlock(&o->pagerqlock);
 		}
-		free(audio);
+		ast_free(audio);
 		return 0;
 	}
 
@@ -1210,7 +1122,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 
 static struct ast_frame *voter_read(struct ast_channel *ast)
 {
-	struct voter_pvt *p = ast->tech_pvt;
+	struct voter_pvt *p = ast_channel_tech_pvt(ast);
 
 	memset(&p->fr,0,sizeof(struct ast_frame));
         p->fr.frametype = AST_FRAME_NULL;
@@ -1219,7 +1131,7 @@ static struct ast_frame *voter_read(struct ast_channel *ast)
 
 static int voter_write(struct ast_channel *ast, struct ast_frame *frame)
 {
-	struct voter_pvt *p = ast->tech_pvt;
+	struct voter_pvt *p = ast_channel_tech_pvt(ast);
 	struct ast_frame *f1;
 
 	if (frame->frametype != AST_FRAME_VOICE) return 0;
@@ -1234,7 +1146,7 @@ static int voter_write(struct ast_channel *ast, struct ast_frame *frame)
 		return 0;
 	}
 
-	if (fp != NULL) fwrite(AST_FRAME_DATAP(frame),1,frame->datalen,fp);
+	if (fp != NULL) fwrite(frame->data.ptr,1,frame->datalen,fp);
 	f1 = ast_frdup(frame);
 	if (p->gtxgain != 1.0)
 	{
@@ -1242,7 +1154,7 @@ static int voter_write(struct ast_channel *ast, struct ast_frame *frame)
 		short *sp;
 		float fsamp;
 
-		sp = (short *) AST_FRAME_DATAP(f1);
+		sp = (short *) f1->data.ptr;
 		for(x1 = 0; x1 < f1->datalen / 2; x1++)
 		{
 			fsamp = (float) sp[x1] * p->gtxgain;
@@ -1266,7 +1178,7 @@ struct ast_frame *f;
 char *cp;
 int len;
 
-	if ((f1->subclass != f2->subclass) || (f1->frametype != f2->frametype))
+	if ((f1->subclass.integer != f2->subclass.integer) || (f1->frametype != f2->frametype))
 	{
 		ast_log(LOG_ERROR,"ast_frcat() called with non-matching frame types!!\n");
 		return NULL;
@@ -1279,19 +1191,19 @@ int len;
 	}
 	memset(f,0,sizeof(struct ast_frame));
 	len = f1->datalen + f2->datalen + AST_FRIENDLY_OFFSET;
-	cp = malloc(len);
+	cp = ast_malloc(len);
 	if (!cp)
 	{
 		ast_log(LOG_ERROR,"Cant malloc()\n");
 		return NULL;
 	}
-	memcpy(cp + AST_FRIENDLY_OFFSET,AST_FRAME_DATAP(f1),f1->datalen);
-	memcpy(cp + AST_FRIENDLY_OFFSET + f1->datalen,AST_FRAME_DATAP(f2),f2->datalen);
+	memcpy(cp + AST_FRIENDLY_OFFSET,f1->data.ptr,f1->datalen);
+	memcpy(cp + AST_FRIENDLY_OFFSET + f1->datalen,f2->data.ptr,f2->datalen);
 	f->frametype = f1->frametype;
-	f->subclass = f1->subclass;
+	f->subclass.integer = f1->subclass.integer;
 	f->datalen = f1->datalen + f2->datalen;
 	f->samples = f1->samples + f2->samples;
-	AST_FRAME_DATAP(f) = cp + AST_FRIENDLY_OFFSET;;
+	f->data.ptr = cp + AST_FRIENDLY_OFFSET;;
 	f->mallocd = AST_MALLOCD_HDR | AST_MALLOCD_DATA;
 	f->src = "ast_frcat";
 	f->offset = AST_FRIENDLY_OFFSET;
@@ -1312,10 +1224,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	haslastaudio = 0;
 	memset(&fr,0,sizeof(struct ast_frame));
         fr.frametype = AST_FRAME_VOICE;
-        fr.subclass = AST_FORMAT_ULAW;
+        fr.subclass.integer = AST_FORMAT_ULAW;
         fr.datalen = FRAME_SIZE;
         fr.samples = FRAME_SIZE;
-        AST_FRAME_DATA(fr) =  p->buf + AST_FRIENDLY_OFFSET;
+        fr.data.ptr =  p->buf + AST_FRIENDLY_OFFSET;
         fr.src = type;
         fr.offset = AST_FRIENDLY_OFFSET;
         fr.mallocd = 0;
@@ -1403,10 +1315,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		}
 		memset(&fr,0,sizeof(struct ast_frame));
 	        fr.frametype = AST_FRAME_VOICE;
-	        fr.subclass = AST_FORMAT_ULAW;
+	        fr.subclass.integer = AST_FORMAT_ULAW;
 	        fr.datalen = FRAME_SIZE;
 	        fr.samples = FRAME_SIZE;
-	        AST_FRAME_DATA(fr) =  p->buf + AST_FRIENDLY_OFFSET;
+	        fr.data.ptr =  p->buf + AST_FRIENDLY_OFFSET;
 	        fr.src = type;
 	        fr.offset = AST_FRIENDLY_OFFSET;
 	        fr.mallocd = 0;
@@ -1418,8 +1330,8 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			ast_log(LOG_ERROR,"Can not translate frame to send to Asterisk\n");
 			return(0);
 		}
-		sp1 = AST_FRAME_DATAP(f1);
-		sp2 = AST_FRAME_DATAP(f2);
+		sp1 = f1->data.ptr;
+		sp2 = f2->data.ptr;
 		if (!haslastaudio)
 		{
 			memcpy(p->lastaudio,sp1,FRAME_SIZE * 2);
@@ -1446,34 +1358,28 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			memset(silbuf,0,sizeof(silbuf));
 			memset(&fr,0,sizeof(struct ast_frame));
 		        fr.frametype = AST_FRAME_VOICE;
-		        fr.subclass = AST_FORMAT_SLINEAR;
+		        fr.subclass.integer = AST_FORMAT_SLIN;
 		        fr.datalen = FRAME_SIZE * 2;
 		        fr.samples = FRAME_SIZE;
-		        AST_FRAME_DATA(fr) =  silbuf;
+		        fr.data.ptr =  silbuf;
 		        fr.src = type;
 		        fr.offset = 0;
 		        fr.mallocd = 0;
 		        fr.delivery.tv_sec = 0;
 		        fr.delivery.tv_usec = 0;
 			f2 = ast_dsp_process(NULL,p->dsp,&fr);
-#ifdef	OLD_ASTERISK
-			if (f2->frametype == AST_FRAME_DTMF)
-#else
 			if ((f2->frametype == AST_FRAME_DTMF_END) ||
 				(f2->frametype == AST_FRAME_DTMF_BEGIN))
-#endif
 			{
-				if ((f2->subclass != 'm') && (f2->subclass != 'u'))
+				if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u'))
 				{
-#ifndef	OLD_ASTERISK
 					if (f2->frametype == AST_FRAME_DTMF_END)
-#endif
-						ast_log(LOG_NOTICE,"Voter %d Got DTMF char %c\n",p->nodenum,f2->subclass);
+						ast_log(LOG_NOTICE,"Voter %d Got DTMF char %c\n",p->nodenum,f2->subclass.integer);
 				}
 				else
 				{
 					f2->frametype = AST_FRAME_NULL;
-					f2->subclass = 0;
+					f2->subclass.integer = 0;
 				}
 				ast_queue_frame(p->owner,f2);
 				gettimeofday(&p->lastrxtime,NULL);
@@ -1482,10 +1388,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		memset(silbuf,0,sizeof(silbuf));
 		memset(&fr,0,sizeof(struct ast_frame));
 	        fr.frametype = AST_FRAME_VOICE;
-	        fr.subclass = AST_FORMAT_SLINEAR;
+	        fr.subclass.integer = AST_FORMAT_SLIN;
 	        fr.datalen = FRAME_SIZE * 2;
 	        fr.samples = FRAME_SIZE;
-	        AST_FRAME_DATA(fr) =  silbuf;
+	        fr.data.ptr =  silbuf;
 	        fr.src = type;
 	        fr.offset = 0;
 	        fr.mallocd = 0;
@@ -1508,8 +1414,8 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		fr.datalen = 0;
 		fr.samples = 0;
 		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass = AST_CONTROL_RADIO_KEY;
-		AST_FRAME_DATA(fr) =  0;
+		fr.subclass.integer = AST_CONTROL_RADIO_KEY;
+		fr.data.ptr =  0;
 		fr.src = type;
 		fr.offset = 0;
 		fr.mallocd=0;
@@ -1522,24 +1428,18 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	if (p->dsp && p->usedtmf)
 	{
 		f2 = ast_dsp_process(NULL,p->dsp,f1);
-#ifdef	OLD_ASTERISK
-		if (f2->frametype == AST_FRAME_DTMF)
-#else
 		if ((f2->frametype == AST_FRAME_DTMF_END) ||
 			(f2->frametype == AST_FRAME_DTMF_BEGIN))
-#endif
 		{
-			if ((f2->subclass != 'm') && (f2->subclass != 'u'))
+			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u'))
 			{
-#ifndef	OLD_ASTERISK
 				if (f2->frametype == AST_FRAME_DTMF_END)
-#endif
-					ast_log(LOG_NOTICE,"Voter %d Got DTMF char %c\n",p->nodenum,f2->subclass);
+					ast_log(LOG_NOTICE,"Voter %d Got DTMF char %c\n",p->nodenum,f2->subclass.integer);
 			}
 			else
 			{
 				f2->frametype = AST_FRAME_NULL;
-				f2->subclass = 0;
+				f2->subclass.integer = 0;
 			}
 			ast_queue_frame(p->owner,f2);
 			x = 1;
@@ -1551,10 +1451,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		memset(silbuf,0,sizeof(silbuf));
 		memset(&fr,0,sizeof(struct ast_frame));
 	        fr.frametype = AST_FRAME_VOICE;
-	        fr.subclass = AST_FORMAT_SLINEAR;
+	        fr.subclass.integer = AST_FORMAT_SLIN;
 	        fr.datalen = FRAME_SIZE * 2;
 	        fr.samples = FRAME_SIZE;
-	        AST_FRAME_DATA(fr) =  silbuf;
+	        fr.data.ptr =  silbuf;
 	        fr.src = type;
 	        fr.offset = 0;
 	        fr.mallocd = 0;
@@ -1797,7 +1697,7 @@ struct timeval tv;
 			if (p->pmrChan)
 			{
 				p->pmrChan->txPttIn = 1;
-				PmrTx(p->pmrChan,(i16*) AST_FRAME_DATAP(f2));
+				PmrTx(p->pmrChan,(i16*) f2->data.ptr);
 				ast_frfree(f2);
 			}
 		}			
@@ -1806,7 +1706,7 @@ struct timeval tv;
 		if ((!x) && (p->pmrChan)) p->pmrChan->txPttIn = 0;
 		if (x && (!p->pmrChan))
 		{
-			memcpy(xmtbuf,AST_FRAME_DATAP(f2),sizeof(xmtbuf));
+			memcpy(xmtbuf,f2->data.ptr,sizeof(xmtbuf));
 			f1 = ast_translate(p->fromast,f2,1);
 			if (!f1)
 			{
@@ -1831,7 +1731,7 @@ struct timeval tv;
 				memset(&wf1,0,sizeof(wf1));
 				wf1.frametype = AST_FRAME_TEXT;
 			        wf1.datalen = strlen(ENDPAGE_STR) + 1;
-			        AST_FRAME_DATA(wf1) = ENDPAGE_STR;
+			        wf1.data.ptr = ENDPAGE_STR;
 				ast_queue_frame(p->owner, &wf1);
 				p->waspager = 0;
 			}
@@ -1861,10 +1761,10 @@ struct timeval tv;
 				}
 				memset(&fr,0,sizeof(struct ast_frame));
 			        fr.frametype = AST_FRAME_VOICE;
-			        fr.subclass = AST_FORMAT_SLINEAR;
+			        fr.subclass.integer = AST_FORMAT_SLIN;
 			        fr.datalen = FRAME_SIZE;
 			        fr.samples = FRAME_SIZE;
-			        AST_FRAME_DATA(fr) = xmtbuf;
+			        fr.data.ptr = xmtbuf;
 			        fr.src = type;
 			        fr.offset = 0;
 			        fr.mallocd = 0;
@@ -1900,7 +1800,7 @@ struct timeval tv;
 			strcpy((char *)audiopacket.vp.challenge,challenge);
 			audiopacket.vp.payload_type = htons(1);
 			audiopacket.rssi = 0;
-			if (f1) memcpy(audiopacket.audio,AST_FRAME_DATAP(f1),FRAME_SIZE);
+			if (f1) memcpy(audiopacket.audio,f1->data.ptr,FRAME_SIZE);
 #ifdef	DMWDIAG
 			for(i = 0; i < FRAME_SIZE; i++)
 			{
@@ -1943,10 +1843,10 @@ struct timeval tv;
 					if ((!x) && (!i)) continue;
 					memset(&fr,0,sizeof(struct ast_frame));
 				        fr.frametype = AST_FRAME_VOICE;
-				        fr.subclass = AST_FORMAT_SLINEAR;
+				        fr.subclass.integer = AST_FORMAT_SLIN;
 				        fr.datalen = FRAME_SIZE;
 				        fr.samples = FRAME_SIZE;
-				        AST_FRAME_DATA(fr) = xmtbuf2;
+				        fr.data.ptr = xmtbuf2;
 				        fr.src = type;
 				        fr.offset = 0;
 				        fr.mallocd = 0;
@@ -1959,7 +1859,7 @@ struct timeval tv;
 						ast_log(LOG_ERROR,"Can not translate frame to recv from Asterisk\n");
 						continue;
 					}
-					memcpy(audiopacket.audio,AST_FRAME_DATAP(f1),FRAME_SIZE);
+					memcpy(audiopacket.audio,f1->data.ptr,FRAME_SIZE);
 				}
 				mkpucked(client,&audiopacket.vp.curtime);
 				audiopacket.vp.digest = htonl(client->respdigest);
@@ -1998,10 +1898,10 @@ struct timeval tv;
 				memset(xmtbuf,0xff,sizeof(xmtbuf));
 				memset(&fr,0,sizeof(struct ast_frame));
 			        fr.frametype = AST_FRAME_VOICE;
-			        fr.subclass = AST_FORMAT_ULAW;
+			        fr.subclass.integer = AST_FORMAT_ULAW;
 			        fr.datalen = FRAME_SIZE;
 			        fr.samples = FRAME_SIZE;
-			        AST_FRAME_DATA(fr) = xmtbuf;
+			        fr.data.ptr = xmtbuf;
 			        fr.src = type;
 			        fr.offset = 0;
 			        fr.mallocd = 0;
@@ -2011,7 +1911,7 @@ struct timeval tv;
 				ast_frfree(p->adpcmf1);
 				p->adpcmf1 = NULL;
 				f2 = ast_translate(p->adpcmout,f3,1);
-				memcpy(audiopacket.audio,AST_FRAME_DATAP(f2),f2->datalen);
+				memcpy(audiopacket.audio,f2->data.ptr,f2->datalen);
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(3);
 				for(client = clients; client; client = client->next)
@@ -2066,10 +1966,10 @@ struct timeval tv;
 				memset(xmtbuf,0xff,sizeof(xmtbuf));
 				memset(&fr,0,sizeof(struct ast_frame));
 			        fr.frametype = AST_FRAME_VOICE;
-			        fr.subclass = AST_FORMAT_ULAW;
+			        fr.subclass.integer = AST_FORMAT_ULAW;
 			        fr.datalen = FRAME_SIZE;
 			        fr.samples = FRAME_SIZE;
-			        AST_FRAME_DATA(fr) = xmtbuf;
+			        fr.data.ptr = xmtbuf;
 			        fr.src = type;
 			        fr.offset = 0;
 			        fr.mallocd = 0;
@@ -2079,7 +1979,7 @@ struct timeval tv;
 				ast_frfree(p->nulawf1);
 				p->nulawf1 = NULL;
 				f2 = ast_translate(p->nuout,f3,1);
-				sap = (short *)AST_FRAME_DATAP(f2);
+				sap = (short *)f2->data.ptr;
 				for(i = 0; i < f2->samples / 2; i++)
 				{
 					s = *sap++;
@@ -2213,7 +2113,8 @@ struct timeval tv;
 	pthread_exit(NULL);
 }
 
-static struct ast_channel *voter_request(const char *type, int format, void *data, int *cause)
+static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap,
+	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause)
 {
 	int oldformat,i,j;
 	struct voter_pvt *p,*p1;
@@ -2223,7 +2124,7 @@ static struct ast_channel *voter_request(const char *type, int format, void *dat
 	pthread_attr_t attr;
 	
 	oldformat = format;
-	format &= AST_FORMAT_SLINEAR;
+	format &= AST_FORMAT_SLIN;
 	if (!format) {
 		ast_log(LOG_ERROR, "Asked to get a channel of unsupported format '%d'\n", oldformat);
 		return NULL;
@@ -2247,13 +2148,8 @@ static struct ast_channel *voter_request(const char *type, int format, void *dat
 		ast_free(p);
 		return NULL;
 	}
-#ifdef  NEW_ASTERISK
-        ast_dsp_set_features(p->dsp,DSP_FEATURE_DIGIT_DETECT);
-        ast_dsp_set_digitmode(p->dsp,DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-#else
-        ast_dsp_set_features(p->dsp,DSP_FEATURE_DTMF_DETECT);
-        ast_dsp_digitmode(p->dsp,DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-#endif
+	ast_dsp_set_features(p->dsp,DSP_FEATURE_DIGIT_DETECT);
+	ast_dsp_set_digitmode(p->dsp,DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
 	p->usedtmf = 1;
 	p->adpcmin = ast_translator_build_path(AST_FORMAT_ULAW,AST_FORMAT_ADPCM);
 	if (!p->adpcmin)
@@ -2311,19 +2207,6 @@ static struct ast_channel *voter_request(const char *type, int format, void *dat
 		ast_free(p);
 		return NULL;
 	}
-#ifdef	OLD_ASTERISK
-	tmp = ast_channel_alloc(1);
-	if (!tmp)
-	{
-		ast_log(LOG_ERROR,"Cant alloc new asterisk channel\n");
-		ast_free(p);
-		return NULL;
-	}
-	ast_setstate(tmp,AST_STATE_DOWN);
-	ast_copy_string(tmp->context, context, sizeof(tmp->context));
-	ast_copy_string(tmp->exten, (char *)data, sizeof(tmp->exten));
-	snprintf(tmp->name, sizeof(tmp->name), "voter/%s", (char *)data);
-#else
 	tmp = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *)data, context, 0, "voter/%s", (char *)data);
 	if (!tmp)
 	{
@@ -2331,38 +2214,22 @@ static struct ast_channel *voter_request(const char *type, int format, void *dat
 		ast_free(p);
 		return NULL;
 	}
-#endif
 	ast_mutex_lock(&voter_lock);
 	if (pvts != NULL) p->next = pvts;
 	pvts = p;
 	ast_mutex_unlock(&voter_lock);
-	tmp->tech = &voter_tech;
+	ast_channel_tech_set(tmp, &voter_tech);
 	tmp->rawwriteformat = AST_FORMAT_SLINEAR;
-	tmp->writeformat = AST_FORMAT_SLINEAR;
+	ast_channel_set_writeformat(tmp, ast_format_slin);
 	tmp->rawreadformat = AST_FORMAT_SLINEAR;
-	tmp->readformat = AST_FORMAT_SLINEAR;
-	tmp->nativeformats = AST_FORMAT_SLINEAR;
+	ast_channel_set_readformat(tmp, ast_format_slin);
+	ast_channel_nativeformats_set(tmp, voter_tech.capabilities);
 //	if (state == AST_STATE_RING) tmp->rings = 1;
-	tmp->tech_pvt = p;
-#ifdef	OLD_ASTERISK
-	ast_copy_string(tmp->language, "", sizeof(tmp->language));
-#else
-	ast_string_field_set(tmp, language, "");
-#endif
+	ast_channel_tech_pvt_set(tmp, p);
+	ast_channel_language_set(tmp, "");
 	p->owner = tmp;
-#ifdef	OLD_ASTERISK
-	ast_mutex_lock(&usecnt_lock);
-	usecnt++;
-	ast_mutex_unlock(&usecnt_lock);
-	ast_update_use_count();
-#else
 	p->u = ast_module_user_add(tmp);
-#endif
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_ERROR, "Unable to load config %s\n", config);
         } else {
 	        val = (char *) ast_variable_retrieve(cfg,(char *)data,"linger"); 
@@ -3051,8 +2918,6 @@ int	npings = 8;
         return RESULT_SUCCESS;
 }
 
-#ifdef	NEW_ASTERISK
-
 static char *res2cli(int r)
 
 {
@@ -3205,9 +3070,6 @@ static struct ast_cli_entry voter_cli[] = {
 	AST_CLI_DEFINE(handle_cli_ping,"Do Pingage"),
 } ;
 
-#endif
-
-#ifndef OLD_ASTERISK
 /*
  * Append Success and ActionID to manager response message
  */
@@ -3290,35 +3152,15 @@ char *str,*strs[100];
 	return RESULT_SUCCESS;
 }
 
-#endif
-
 #include "xpmr/xpmr.c"
 
-#ifndef	OLD_ASTERISK
-static
-#endif
-int unload_module(void)
+static int unload_module(void)
 {
         run_forever = 0;
 
-#ifdef	NEW_ASTERISK
 	ast_cli_unregister_multiple(voter_cli,sizeof(voter_cli) / 
 		sizeof(struct ast_cli_entry));
-#else
-	/* Unregister cli extensions */
-	ast_cli_unregister(&cli_debug);
-	ast_cli_unregister(&cli_test);
-	ast_cli_unregister(&cli_prio);
-	ast_cli_unregister(&cli_record);
-	ast_cli_unregister(&cli_tone);
-	ast_cli_unregister(&cli_reload);
-	ast_cli_unregister(&cli_display);
-	ast_cli_unregister(&cli_txlockout);
-	ast_cli_unregister(&cli_ping);
-#endif
-#ifndef OLD_ASTERISK
 	ast_manager_unregister("VoterStatus");
-#endif
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&voter_tech);
 	if (nullfd != -1) close(nullfd);
@@ -3510,8 +3352,8 @@ static void *voter_reader(void *data)
 				fr.datalen = 0;
 				fr.samples = 0;
 				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass = AST_CONTROL_RADIO_UNKEY;
-				AST_FRAME_DATA(fr) =  0;
+				fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
+				fr.data.ptr =  0;
 				fr.src = type;
 				fr.offset = 0;
 				fr.mallocd=0;
@@ -3671,8 +3513,8 @@ static void *voter_reader(void *data)
 										fr.datalen = 0;
 										fr.samples = 0;
 										fr.frametype = AST_FRAME_CONTROL;
-										fr.subclass = AST_CONTROL_RADIO_UNKEY;
-										AST_FRAME_DATA(fr) =  0;
+										fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
+										fr.data.ptr =  0;
 										fr.src = type;
 										fr.offset = 0;
 										fr.mallocd=0;
@@ -3869,10 +3711,10 @@ static void *voter_reader(void *data)
 
 									memset(&fr,0,sizeof(struct ast_frame));
 								        fr.frametype = AST_FRAME_VOICE;
-								        fr.subclass = AST_FORMAT_ADPCM;
+								        fr.subclass.integer = AST_FORMAT_ADPCM;
 								        fr.datalen = ADPCM_FRAME_SIZE;
 								        fr.samples = FRAME_SIZE * 2;
-								        AST_FRAME_DATA(fr) =  buf + sizeof(VOTER_PACKET_HEADER) + 1;
+								        fr.data.ptr =  buf + sizeof(VOTER_PACKET_HEADER) + 1;
 								        fr.src = type;
 								        fr.offset = 0;
 								        fr.mallocd = 0;
@@ -3906,10 +3748,10 @@ static void *voter_reader(void *data)
 									}
 									memset(&fr,0,sizeof(struct ast_frame));
 								        fr.frametype = AST_FRAME_VOICE;
-								        fr.subclass = AST_FORMAT_SLINEAR;
+								        fr.subclass.integer = AST_FORMAT_SLIN;
 								        fr.datalen = FRAME_SIZE * 4;
 								        fr.samples = FRAME_SIZE * 2;
-								        AST_FRAME_DATA(fr) = xbuf;
+								        fr.data.ptr = xbuf;
 								        fr.src = type;
 								        fr.offset = 0;
 								        fr.mallocd = 0;
@@ -3926,16 +3768,16 @@ static void *voter_reader(void *data)
 								if (i >= 0)
 								{
 									memcpy(client->audio + index,
-										((f1) ? AST_FRAME_DATAP(f1) : buf + sizeof(VOTER_PACKET_HEADER) + 1),flen);
+										((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1),flen);
 									memset(client->rssi + index,buf[sizeof(VOTER_PACKET_HEADER)],flen);
 								}
 								else
 								{
 									memcpy(client->audio + index,
-										((f1) ? AST_FRAME_DATAP(f1) : buf + sizeof(VOTER_PACKET_HEADER) + 1),flen + i);
+										((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1),flen + i);
 									memset(client->rssi + index,buf[sizeof(VOTER_PACKET_HEADER)],flen + i);
 									memcpy(client->audio,
-										((f1) ? AST_FRAME_DATAP(f1) : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + i),-i);
+										((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + i),-i);
 									memset(client->rssi,buf[sizeof(VOTER_PACKET_HEADER)],-i);
 								}
 								if (f1) ast_frfree(f1);
@@ -4180,10 +4022,10 @@ static void *voter_reader(void *data)
 											memset(silbuf,0,sizeof(silbuf));
 											memset(&fr,0,sizeof(struct ast_frame));
 										        fr.frametype = AST_FRAME_VOICE;
-										        fr.subclass = AST_FORMAT_SLINEAR;
+										        fr.subclass.integer = AST_FORMAT_SLIN;
 										        fr.datalen = FRAME_SIZE * 2;
 										        fr.samples = FRAME_SIZE;
-										        AST_FRAME_DATA(fr) =  silbuf;
+										        fr.data.ptr =  silbuf;
 										        fr.src = type;
 										        fr.offset = 0;
 										        fr.mallocd = 0;
@@ -4252,10 +4094,10 @@ static void *voter_reader(void *data)
 											memset(silbuf,0,sizeof(silbuf));
 											memset(&fr,0,sizeof(struct ast_frame));
 										        fr.frametype = AST_FRAME_VOICE;
-										        fr.subclass = AST_FORMAT_SLINEAR;
+										        fr.subclass.integer = AST_FORMAT_SLIN;
 										        fr.datalen = FRAME_SIZE * 2;
 										        fr.samples = FRAME_SIZE;
-										        AST_FRAME_DATA(fr) =  silbuf;
+										        fr.data.ptr =  silbuf;
 										        fr.src = type;
 										        fr.offset = 0;
 										        fr.mallocd = 0;
@@ -4318,8 +4160,8 @@ static void *voter_reader(void *data)
 											fr.datalen = strlen(maxclient->name) + 1;
 											fr.samples = 0;
 											fr.frametype = AST_FRAME_TEXT;
-											fr.subclass = 0;
-											AST_FRAME_DATA(fr) =  maxclient->name;
+											fr.subclass.integer = 0;
+											fr.data.ptr =  maxclient->name;
 											fr.src = type;
 											fr.offset = 0;
 											fr.mallocd=0;
@@ -4336,10 +4178,10 @@ static void *voter_reader(void *data)
 										memset(silbuf,0,sizeof(silbuf));
 										memset(&fr,0,sizeof(struct ast_frame));
 									        fr.frametype = AST_FRAME_VOICE;
-									        fr.subclass = AST_FORMAT_SLINEAR;
+									        fr.subclass.integer = AST_FORMAT_SLIN;
 									        fr.datalen = FRAME_SIZE * 2;
 									        fr.samples = FRAME_SIZE;
-									        AST_FRAME_DATA(fr) =  silbuf;
+									        fr.data.ptr =  silbuf;
 									        fr.src = type;
 									        fr.offset = 0;
 									        fr.mallocd = 0;
@@ -4589,15 +4431,9 @@ process_gps:
 	return NULL;
 }
 
-#ifdef	OLD_ASTERISK
-int reload()
-#else
 static int reload(void)
-#endif
 {
-#ifdef  NEW_ASTERISK
-        struct ast_flags zeroflag = {0};
-#endif
+	struct ast_flags zeroflag = {0};
 	int i,n,instance_buflen,buflen,oldtoctype,oldlevel;
 	char *val,*ctg,*cp,*cp1,*cp2,*strs[40],newclient,data[100],oldctcss[100];
 	struct voter_pvt *p;
@@ -4613,11 +4449,7 @@ static int reload(void)
 		client->old_buflen = client->buflen;
 	}
 
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		ast_mutex_unlock(&voter_lock);
 		return -1;
@@ -4992,10 +4824,7 @@ static int reload(void)
 	return(0);
 }
 
-#ifndef	OLD_ASTERISK
-static
-#endif
-int load_module(void)
+static int load_module(void)
 {
 
 	pthread_attr_t attr;
@@ -5003,18 +4832,12 @@ int load_module(void)
 	int i,bs,utos;
 	struct ast_config *cfg = NULL;
 	char *val;
-#ifdef  NEW_ASTERISK
-        struct ast_flags zeroflag = {0};
-#endif
+	struct ast_flags zeroflag = {0};
 
 	snprintf(challenge, sizeof(challenge), "%ld", ast_random());
 	hasmaster = 0;
 
-#ifdef  NEW_ASTERISK
         if (!(cfg = ast_config_load(config,zeroflag))) {
-#else
-        if (!(cfg = ast_config_load(config))) {
-#endif
                 ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		ast_mutex_unlock(&voter_lock);
 		return 1;
@@ -5084,29 +4907,14 @@ int load_module(void)
 
 	if (reload()) return AST_MODULE_LOAD_DECLINE;
 
-#ifdef	NEW_ASTERISK
 	ast_cli_register_multiple(voter_cli,sizeof(voter_cli) / 
 		sizeof(struct ast_cli_entry));
-#else
-	/* Register cli extensions */
-	ast_cli_register(&cli_debug);
-	ast_cli_register(&cli_test);
-	ast_cli_register(&cli_prio);
-	ast_cli_register(&cli_record);
-	ast_cli_register(&cli_tone);
-	ast_cli_register(&cli_reload);
-	ast_cli_register(&cli_display);
-	ast_cli_register(&cli_txlockout);
-	ast_cli_register(&cli_ping);
-#endif
 
-#ifndef OLD_ASTERISK
 	ast_manager_register("VoterStatus", 0, manager_voter_status, "Return Voter instance(s) status");
-#endif
-        pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        ast_pthread_create(&voter_reader_thread,&attr,voter_reader,NULL);
-        ast_pthread_create(&voter_timer_thread,&attr,voter_timer,NULL);
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	ast_pthread_create(&voter_reader_thread,&attr,voter_reader,NULL);
+	ast_pthread_create(&voter_timer_thread,&attr,voter_timer,NULL);
 
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&voter_tech)) {
@@ -5118,25 +4926,9 @@ int load_module(void)
 	return 0;
 }
 
-#ifdef	OLD_ASTERISK
-char *description()
-{
-	return (char *)voter_tech.description;
-}
 
-int usecount()
-{
-	return usecnt;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
-#else
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "radio Voter channel driver",
-		.load = load_module,
-		.unload = unload_module,
-		.reload = reload,
-	       );
-#endif
+	.load = load_module,
+	.unload = unload_module,
+	.reload = reload,
+);
