@@ -590,7 +590,7 @@ static const struct ast_channel_tech voter_tech = {
 */
 
 /* Debug mode */
-static int voter_do_debug(int fd, int argc, char *argv[]);
+static int voter_do_debug(int fd, int argc, const char *const *argv);
 
 static char debug_usage[] =
 "Usage: voter debug level {0-7}\n"
@@ -598,7 +598,7 @@ static char debug_usage[] =
 
 
 /* Test */
-static int voter_do_test(int fd, int argc, char *argv[]);
+static int voter_do_test(int fd, int argc, const char *const *argv);
 
 static char test_usage[] =
 "Usage: voter test instance_id [test value]\n"
@@ -606,7 +606,7 @@ static char test_usage[] =
 
 
 /* Prio */
-static int voter_do_prio(int fd, int argc, char *argv[]);
+static int voter_do_prio(int fd, int argc, const char *const *argv);
 
 static char prio_usage[] =
 "Usage: voter prio instance_id [client_id] [priority value]\n"
@@ -614,42 +614,42 @@ static char prio_usage[] =
 
 
 /* Record */
-static int voter_do_record(int fd, int argc, char *argv[]);
+static int voter_do_record(int fd, int argc, const char *const *argv);
 
 static char record_usage[] =
 "Usage: voter record instance_id [record filename]\n"
 "       Enables/Specifies (or disables) recording file for chan_voter\n";
 
 /* Tone */
-static int voter_do_tone(int fd, int argc, char *argv[]);
+static int voter_do_tone(int fd, int argc, const char *const *argv);
 
 static char tone_usage[] =
 "Usage: voter tone instance_id [new_tone_level(0-250)]\n"
 "       Sets/Queries Tx CTCSS level for specified chan_voter instance\n";
 
 /* Reload */
-static int voter_do_reload(int fd, int argc, char *argv[]);
+static int voter_do_reload(int fd, int argc, const char *const *argv);
 
 static char reload_usage[] =
 "Usage: voter reload\n"
 "       Reload chan_voter parameters\n";
 
 /* Display */
-static int voter_do_display(int fd, int argc, char *argv[]);
+static int voter_do_display(int fd, int argc, const char *const *argv);
 
 static char display_usage[] =
 "Usage: voter display [instance]\n"
 "       Display voter instance clients\n";
 
 /* Txlockout */
-static int voter_do_txlockout(int fd, int argc, char *argv[]);
+static int voter_do_txlockout(int fd, int argc, const char *const *argv);
 
 static char txlockout_usage[] =
 "Usage: voter txlockout [instance] <client_list>\n"
 "       Set Tx Lockout for voter instance clients\n";
 
 /* Ping client */
-static int voter_do_ping(int fd, int argc, char *argv[]);
+static int voter_do_ping(int fd, int argc, const char *const *argv);
 
 static char ping_usage[] =
 "Usage: voter ping [client] <# pings, 0 to abort>\n"
@@ -2116,17 +2116,17 @@ struct timeval tv;
 static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap,
 	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause)
 {
-	int oldformat,i,j;
+	int i,j;
 	struct voter_pvt *p,*p1;
 	struct ast_channel *tmp = NULL;
 	char *val,*cp,*cp1,*cp2,*strs[MAXTHRESHOLDS],*ctg;
 	struct ast_config *cfg = NULL;
 	pthread_attr_t attr;
-	
-	oldformat = format;
-	format &= AST_FORMAT_SLIN;
-	if (!format) {
-		ast_log(LOG_ERROR, "Asked to get a channel of unsupported format '%d'\n", oldformat);
+
+	if (!(ast_format_cap_iscompatible(cap, voter_tech.capabilities))) {
+		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n",
+			ast_format_cap_get_names(cap, &cap_buf));
 		return NULL;
 	}
 	p = ast_malloc(sizeof(struct voter_pvt));
@@ -2151,7 +2151,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	ast_dsp_set_features(p->dsp,DSP_FEATURE_DIGIT_DETECT);
 	ast_dsp_set_digitmode(p->dsp,DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
 	p->usedtmf = 1;
-	p->adpcmin = ast_translator_build_path(AST_FORMAT_ULAW,AST_FORMAT_ADPCM);
+	p->adpcmin = ast_translator_build_path(ast_format_ulaw,ast_format_adpcm);
 	if (!p->adpcmin)
 	{
 		ast_log(LOG_ERROR,"Cannot get translator from adpcm to ulaw!!\n");
@@ -2159,7 +2159,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	p->adpcmout = ast_translator_build_path(AST_FORMAT_ADPCM,AST_FORMAT_ULAW);
+	p->adpcmout = ast_translator_build_path(ast_format_adpcm,ast_format_ulaw);
 	if (!p->adpcmout)
 	{
 		ast_log(LOG_ERROR,"Cannot get translator from ulaw to adpcm!!\n");
@@ -2167,7 +2167,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	p->toast = ast_translator_build_path(AST_FORMAT_SLINEAR,AST_FORMAT_ULAW);
+	p->toast = ast_translator_build_path(ast_format_slin,ast_format_ulaw);
 	if (!p->toast)
 	{
 		ast_log(LOG_ERROR,"Cannot get translator from ulaw to slinear!!\n");
@@ -2175,7 +2175,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	p->toast1 = ast_translator_build_path(AST_FORMAT_SLINEAR,AST_FORMAT_ULAW);
+	p->toast1 = ast_translator_build_path(ast_format_slin,ast_format_ulaw);
 	if (!p->toast1)
 	{
 		ast_log(LOG_ERROR,"Cannot get translator from ulaw to slinear!!\n");
@@ -2183,7 +2183,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	p->fromast = ast_translator_build_path(AST_FORMAT_ULAW,AST_FORMAT_SLINEAR);
+	p->fromast = ast_translator_build_path(ast_format_ulaw,ast_format_slin);
 	if (!p->fromast)
 	{
 		ast_log(LOG_ERROR,"Cannot get translator from slinear to ulaw!!\n");
@@ -2191,7 +2191,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	p->nuin = ast_translator_build_path(AST_FORMAT_ULAW,AST_FORMAT_SLINEAR);
+	p->nuin = ast_translator_build_path(ast_format_ulaw,ast_format_slin);
 	if (!p->nuin)
 	{
 		ast_log(LOG_ERROR,"Cannot get translator from slinear to ulaw!!\n");
@@ -2199,7 +2199,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	p->nuout = ast_translator_build_path(AST_FORMAT_SLINEAR,AST_FORMAT_ULAW);
+	p->nuout = ast_translator_build_path(ast_format_slin,ast_format_ulaw);
 	if (!p->nuout)
 	{
 		ast_log(LOG_ERROR,"Cannot get translator from ulaw to slinear!!\n");
@@ -2207,7 +2207,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	tmp = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *)data, context, 0, "voter/%s", (char *)data);
+	tmp = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *)data, context, assignedids, requestor, 0, "voter/%s", (char *)data);
 	if (!tmp)
 	{
 		ast_log(LOG_ERROR,"Cant alloc new asterisk channel\n");
@@ -2219,9 +2219,9 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	pvts = p;
 	ast_mutex_unlock(&voter_lock);
 	ast_channel_tech_set(tmp, &voter_tech);
-	tmp->rawwriteformat = AST_FORMAT_SLINEAR;
+	ast_channel_set_rawwriteformat(tmp, ast_format_slin);
 	ast_channel_set_writeformat(tmp, ast_format_slin);
-	tmp->rawreadformat = AST_FORMAT_SLINEAR;
+	ast_channel_set_rawreadformat(tmp, ast_format_slin);
 	ast_channel_set_readformat(tmp, ast_format_slin);
 	ast_channel_nativeformats_set(tmp, voter_tech.capabilities);
 //	if (state == AST_STATE_RING) tmp->rings = 1;
@@ -2384,7 +2384,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 * Enable or disable debug output at a given level at the console
 */
                                                                                                                                  
-static int voter_do_debug(int fd, int argc, char *argv[])
+static int voter_do_debug(int fd, int argc, const char *const *argv)
 {
 	int newlevel;
 
@@ -2402,7 +2402,7 @@ static int voter_do_debug(int fd, int argc, char *argv[])
         return RESULT_SUCCESS;
 }
 
-static int voter_do_test(int fd, int argc, char *argv[])
+static int voter_do_test(int fd, int argc, const char *const *argv)
 {
 	int newlevel;
 	struct voter_pvt *p;
@@ -2451,7 +2451,7 @@ static int voter_do_test(int fd, int argc, char *argv[])
         return RESULT_SUCCESS;
 }
 
-static int voter_do_prio(int fd, int argc, char *argv[])
+static int voter_do_prio(int fd, int argc, const char *const *argv)
 {
 	int newlevel,foundit;
 	struct voter_pvt *p;
@@ -2550,7 +2550,7 @@ static int voter_do_prio(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static int voter_do_record(int fd, int argc, char *argv[])
+static int voter_do_record(int fd, int argc, const char *const *argv)
 {
 	struct voter_pvt *p;
 
@@ -2585,7 +2585,7 @@ static int voter_do_record(int fd, int argc, char *argv[])
         return RESULT_SUCCESS;
 }
 
-static int voter_do_tone(int fd, int argc, char *argv[])
+static int voter_do_tone(int fd, int argc, const char *const *argv)
 {
 	int newlevel;
 	struct voter_pvt *p;
@@ -2635,7 +2635,7 @@ static int voter_do_tone(int fd, int argc, char *argv[])
         return RESULT_SUCCESS;
 }
 
-static int voter_do_reload(int fd, int argc, char *argv[])
+static int voter_do_reload(int fd, int argc, const char *const *argv)
 {
         if (argc != 2)
                 return RESULT_SHOWUSAGE;
@@ -2750,7 +2750,7 @@ static void voter_display(int fd, struct voter_pvt *p, int doips)
 	option_verbose = wasverbose;
 }
 
-static int voter_do_display(int fd, int argc, char *argv[])
+static int voter_do_display(int fd, int argc, const char *const *argv)
 {
 struct voter_pvt *p;
 
@@ -2769,7 +2769,7 @@ struct voter_pvt *p;
         return RESULT_SUCCESS;
 }
 
-static int voter_do_txlockout(int fd, int argc, char *argv[])
+static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 {
 int i,n,newval;
 char str[300],*strs[100];
@@ -2810,7 +2810,7 @@ struct voter_client *client;
 		else /* must be a comma-delimited list */
 		{
 			ast_copy_string(str,argv[3],sizeof(str) - 1);
-			n = finddelim(argv[3],strs,100);
+			n = finddelim((char*) argv[3],strs,100);
 			for(i = 0; i < n; i++)
 			{
 				if (!*strs[i]) continue;
@@ -2869,7 +2869,7 @@ struct voter_client *client;
         return RESULT_SUCCESS;
 }
 
-static int voter_do_ping(int fd, int argc, char *argv[])
+static int voter_do_ping(int fd, int argc, const char *const *argv)
 {
 struct voter_client *client;
 int	npings = 8;
