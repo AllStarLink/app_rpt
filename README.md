@@ -15,7 +15,7 @@ You can use PhreakScript to install Asterisk automatically, first. You'll need t
 
 ```
 cd /usr/src && wget https://docs.phreaknet.org/script/phreaknet.sh && chmod +x phreaknet.sh && ./phreaknet.sh make
-phreaknet install -s -t # install chan_sip (if you need it still) and DAHDI (required)
+phreaknet install -s -d # install chan_sip (if you need it still) and DAHDI (required)
 ```
 
 ## Pre-Reqs
