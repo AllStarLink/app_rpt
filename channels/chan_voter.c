@@ -3429,7 +3429,7 @@ static void *voter_reader(void *data)
 						ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW)
 					{
 						timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-						strftime(timestr,sizeof(timestr) - 1,"%D %T",localtime((time_t *)&timestuff));
+						strftime(timestr,sizeof(timestr) - 1,"%Y %T",localtime((time_t *)&timestuff));
 						ast_verbose("Time:      %s.%03d, (%s) RSSI: %d\n",timestr,ntohl(vph->curtime.vtime_nsec) / 1000000,client->name,(unsigned char)*(buf + sizeof(VOTER_PACKET_HEADER)));
 					}
 					if (client)
@@ -3674,11 +3674,11 @@ static void *voter_reader(void *data)
 								if ((debug >= 3) && ((unsigned char)*(buf + sizeof(VOTER_PACKET_HEADER)) > 0))
 								{
 									timestuff = (time_t) master_time.vtime_sec;
-									strftime(timestr,sizeof(timestr) - 1,"%D %T",localtime((time_t *)&timestuff));
+									strftime(timestr,sizeof(timestr) - 1,"%Y %T",localtime((time_t *)&timestuff));
 									ast_verbose("DrainTime: %s.%03d\n",timestr,master_time.vtime_nsec / 1000000);
 									gettimeofday(&timetv,NULL);
 									timestuff = (time_t) timetv.tv_sec;
-									strftime(timestr,sizeof(timestr) - 1,"%D %T",localtime((time_t *)&timestuff));
+									strftime(timestr,sizeof(timestr) - 1,"%Y %T",localtime((time_t *)&timestuff));
 									ast_verbose("SysTime:   %s.%03d, diff: %lld,index: %d\n",timestr,(int)timetv.tv_usec / 1000,btime - ptime,index);
 								}
 							}
@@ -4239,7 +4239,7 @@ static void *voter_reader(void *data)
 						//if (debug >= 3) 
 						{
 							timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-							strftime(timestr,sizeof(timestr) - 1,"%D %T",localtime((time_t *)&timestuff));
+							strftime(timestr,sizeof(timestr) - 1,"%Y %T",localtime((time_t *)&timestuff));
 //							ast_verbose("PING (%s):   seqno: %u  %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec));
 						}
 						check_ping_done(client);
@@ -4296,7 +4296,7 @@ process_gps:
 						{
 							gettimeofday(&timetv,NULL);
 							timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-							strftime(timestr,sizeof(timestr) - 1,"%D %T",localtime((time_t *)&timestuff));
+							strftime(timestr,sizeof(timestr) - 1,"%Y %T",localtime((time_t *)&timestuff));
 	
 
 							ast_verbose("GPSTime (%s):   %s.%09d\n",client->name,timestr,ntohl(vph->curtime.vtime_nsec));
@@ -4307,10 +4307,10 @@ process_gps:
 								timetv.tv_usec -= 1000000;
 							}
 							timestuff = (time_t) timetv.tv_sec;
-							strftime(timestr,sizeof(timestr) - 1,"%D %T",localtime((time_t *)&timestuff));
+							strftime(timestr,sizeof(timestr) - 1,"%Y %T",localtime((time_t *)&timestuff));
 							ast_verbose("SysTime:   %s.%06d\n",timestr,(int)timetv.tv_usec);
 							timestuff = (time_t) master_time.vtime_sec;
-							strftime(timestr,sizeof(timestr) - 1,"%D %T",localtime((time_t *)&timestuff));
+							strftime(timestr,sizeof(timestr) - 1,"%Y %T",localtime((time_t *)&timestuff));
 							ast_verbose("DrainTime: %s.%03d\n",timestr,master_time.vtime_nsec / 1000000);
 						}
 						if (recvlen == sizeof(VOTER_PACKET_HEADER))
