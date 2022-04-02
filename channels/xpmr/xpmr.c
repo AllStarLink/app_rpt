@@ -169,8 +169,8 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 	TRACEJ(2,(" source len = %i\n",slen));
 
 	pd=*dest;
-	if(pd) free(pd);
-    pd=calloc(slen+1,1);
+	if(pd) ast_free(pd);
+    pd=ast_calloc(slen+1,1);
 	memcpy(pd,src,slen);
 	*dest=pd;
 
@@ -198,8 +198,8 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 		TRACEJ(5,(" ptstr[%i] = %p %s\n",i,ptstr[i],ptstr[i]));
 	}
 
-	if(*ptrs)free(*ptrs);
-	*ptrs=calloc(numsub,4);
+	if(*ptrs)ast_free(*ptrs);
+	*ptrs=ast_calloc(numsub,4);
 	for(i=0;i<numsub;i++)
 	{
 		(*ptrs)[i]=ptstr[i];	
@@ -380,7 +380,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	// set x for maximum length and just change pointers
 	TRACEF(1,("code_string_parse() Filter Config \n"));
 	pSps=pChan->spsTxLsdLpf;
-	if(pSps->x)free(pSps->x);
+	if(pSps->x)ast_free(pSps->x);
 	if(maxctcsstxfreq>203.5)
 	{
 		pSps->ncoef=taps_fir_lpf_250_9_66;
@@ -388,7 +388,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->coef=(void*)coef_fir_lpf_250_9_66;
 		pSps->nx=taps_fir_lpf_250_9_66;
 		pSps->size_x=2;
-		pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		pSps->calcAdjust=gain_fir_lpf_250_9_66;
 		TRACEF(1,("code_string_parse() Tx Filter Freq High\n"));
 	}
@@ -399,7 +399,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->coef=(void*)coef_fir_lpf_215_9_88;
 		pSps->nx=taps_fir_lpf_215_9_88;
 		pSps->size_x=2;
-		pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		pSps->calcAdjust=gain_fir_lpf_215_9_88;
 		TRACEF(1,("code_string_parse() Tx Filter Freq Low\n"));
 	}
@@ -413,7 +413,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	}
 
 	pSps=pChan->spsRxLsd;
-	if(pSps->x)free(pSps->x);
+	if(pSps->x)ast_free(pSps->x);
 	if(hit)
 	{
 		pSps->ncoef=taps_fir_lpf_250_9_66;
@@ -421,7 +421,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->coef=(void*)coef_fir_lpf_250_9_66;
 		pSps->nx=taps_fir_lpf_250_9_66;
 		pSps->size_x=2;
-		pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		pSps->calcAdjust=gain_fir_lpf_250_9_66;
 		TRACEF(1,("code_string_parse() Rx Filter Freq High\n"));
 	}
@@ -432,7 +432,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->coef=(void*)coef_fir_lpf_215_9_88;
 		pSps->nx=taps_fir_lpf_215_9_88;
 		pSps->size_x=2;
-		pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		pSps->calcAdjust=gain_fir_lpf_215_9_88;
 		TRACEF(1,("code_string_parse() Rx Filter Freq Low\n"));
 	}
@@ -955,6 +955,7 @@ i16 CenterSlicer(t_pmr_sps *mySps)
 
 	for(i=0;i<npoints;i++)
 	{
+		static i32 tfx;
 		accum=input[i];
 
 		if(accum>amax)
@@ -1009,7 +1010,7 @@ i16 CenterSlicer(t_pmr_sps *mySps)
 		#if 0
 		mySps->parentChan->pRxLsdCen[i]=center;	  	// trace center ref
 		#else
-		static i32 tfx=0;
+		tfx=0;
 		if((tfx++/8)&1)				  				// trace min/max levels
 			mySps->parentChan->pRxLsdCen[i]=amax;
 		else
@@ -1665,12 +1666,12 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 {
 	i16 i, *inputTmp;
 	t_pmr_chan 	*pChan;
-	t_pmr_sps  	*pSps;;
+	t_pmr_sps  	*pSps;
 	t_dec_ctcss	*pDecCtcss;
 
 	TRACEJ(1,("createPmrChannel(%p,%i)\n",tChan,numSamples));
 
-	pChan = (t_pmr_chan *)calloc(sizeof(t_pmr_chan),1);
+	pChan = (t_pmr_chan *)ast_calloc(sizeof(t_pmr_chan),1);
 	if(pChan==NULL)
 	{
 		printf("createPmrChannel() failed\n");
@@ -1684,7 +1685,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan->index=pmrChanIndex++;
 	pChan->nSamplesTx=pChan->nSamplesRx=numSamples;
 
-	pDecCtcss = (t_dec_ctcss *)calloc(sizeof(t_dec_ctcss),1);
+	pDecCtcss = (t_dec_ctcss *)ast_calloc(sizeof(t_dec_ctcss),1);
 	pChan->rxCtcss=pDecCtcss;
 	pChan->rxctcssfreq[0]=0;
 
@@ -1812,71 +1813,71 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	TRACEF(1,("calloc buffers \n"));
 
-	pChan->pRxDemod 	= calloc(numSamples,2);
-	pChan->pRxNoise 	= calloc(numSamples,2);
-	pChan->pRxBase 		= calloc(numSamples,2);
-	pChan->pRxHpf 		= calloc(numSamples,2);
-	pChan->pRxLsd 		= calloc(numSamples,2);
-	pChan->pRxSpeaker 	= calloc(numSamples,2);
-	pChan->pRxCtcss 	= calloc(numSamples,2);
-	pChan->pRxDcTrack 	= calloc(numSamples,2);
-	pChan->pRxLsdLimit 	= calloc(numSamples,2);
+	pChan->pRxDemod 	= ast_calloc(numSamples,2);
+	pChan->pRxNoise 	= ast_calloc(numSamples,2);
+	pChan->pRxBase 		= ast_calloc(numSamples,2);
+	pChan->pRxHpf 		= ast_calloc(numSamples,2);
+	pChan->pRxLsd 		= ast_calloc(numSamples,2);
+	pChan->pRxSpeaker 	= ast_calloc(numSamples,2);
+	pChan->pRxCtcss 	= ast_calloc(numSamples,2);
+	pChan->pRxDcTrack 	= ast_calloc(numSamples,2);
+	pChan->pRxLsdLimit 	= ast_calloc(numSamples,2);
 
-	pChan->pTxInput  	= calloc(numSamples,2);
-	pChan->pTxBase  	= calloc(numSamples,2);
-	pChan->pTxHpf	 	= calloc(numSamples,2);
-	pChan->pTxPreEmp 	= calloc(numSamples,2);
-	pChan->pTxLimiter 	= calloc(numSamples,2);
-	pChan->pTxLsd	 	= calloc(numSamples,2);
-	pChan->pTxLsdLpf    = calloc(numSamples,2);
-	pChan->pTxComposite	= calloc(numSamples,2);
-	pChan->pSigGen0		= calloc(numSamples,2);
-    pChan->pSigGen1		= calloc(numSamples,2);
+	pChan->pTxInput  	= ast_calloc(numSamples,2);
+	pChan->pTxBase  	= ast_calloc(numSamples,2);
+	pChan->pTxHpf	 	= ast_calloc(numSamples,2);
+	pChan->pTxPreEmp 	= ast_calloc(numSamples,2);
+	pChan->pTxLimiter 	= ast_calloc(numSamples,2);
+	pChan->pTxLsd	 	= ast_calloc(numSamples,2);
+	pChan->pTxLsdLpf    = ast_calloc(numSamples,2);
+	pChan->pTxComposite	= ast_calloc(numSamples,2);
+	pChan->pSigGen0		= ast_calloc(numSamples,2);
+    pChan->pSigGen1		= ast_calloc(numSamples,2);
 		
-	pChan->prxMeasure	= calloc(numSamples,2);
+	pChan->prxMeasure	= ast_calloc(numSamples,2);
 
-	pChan->pTxOut		= calloc(numSamples,2*2*6);		// output buffer
+	pChan->pTxOut		= ast_calloc(numSamples,2*2*6);		// output buffer
     
 #ifdef HAVE_XPMRX
-	pChan->pLsdEnc		= calloc(sizeof(t_encLsd),1);
+	pChan->pLsdEnc		= ast_calloc(sizeof(t_encLsd),1);
 #endif
 
 	#if XPMR_DEBUG0 == 1
 	TRACEF(1,("configure tracing\n"));
 
-	pChan->pTstTxOut	= calloc(numSamples,2);
-	pChan->pRxLsdCen    = calloc(numSamples,2);
-	pChan->prxDebug0	= calloc(numSamples,2);
-	pChan->prxDebug1	= calloc(numSamples,2);
-	pChan->prxDebug2	= calloc(numSamples,2);
-	pChan->prxDebug3	= calloc(numSamples,2);
-	pChan->ptxDebug0	= calloc(numSamples,2);
-	pChan->ptxDebug1	= calloc(numSamples,2);
-	pChan->ptxDebug2	= calloc(numSamples,2);
-	pChan->ptxDebug3	= calloc(numSamples,2);
-	pChan->pNull		= calloc(numSamples,2);
+	pChan->pTstTxOut	= ast_calloc(numSamples,2);
+	pChan->pRxLsdCen    = ast_calloc(numSamples,2);
+	pChan->prxDebug0	= ast_calloc(numSamples,2);
+	pChan->prxDebug1	= ast_calloc(numSamples,2);
+	pChan->prxDebug2	= ast_calloc(numSamples,2);
+	pChan->prxDebug3	= ast_calloc(numSamples,2);
+	pChan->ptxDebug0	= ast_calloc(numSamples,2);
+	pChan->ptxDebug1	= ast_calloc(numSamples,2);
+	pChan->ptxDebug2	= ast_calloc(numSamples,2);
+	pChan->ptxDebug3	= ast_calloc(numSamples,2);
+	pChan->pNull		= ast_calloc(numSamples,2);
 
 	for(i=0;i<numSamples;i++)pChan->pNull[i]=((i%(numSamples/2))*8000)-4000;
 
-	pChan->rxCtcss->pDebug0=calloc(numSamples,2);
-	pChan->rxCtcss->pDebug1=calloc(numSamples,2);
-	pChan->rxCtcss->pDebug2=calloc(numSamples,2);
-	pChan->rxCtcss->pDebug3=calloc(numSamples,2);
+	pChan->rxCtcss->pDebug0=ast_calloc(numSamples,2);
+	pChan->rxCtcss->pDebug1=ast_calloc(numSamples,2);
+	pChan->rxCtcss->pDebug2=ast_calloc(numSamples,2);
+	pChan->rxCtcss->pDebug3=ast_calloc(numSamples,2);
 
 	for(i=0;i<CTCSS_NUM_CODES;i++)
 	{
-		pChan->rxCtcss->tdet[i].pDebug0=calloc(numSamples,2);
-		pChan->rxCtcss->tdet[i].pDebug1=calloc(numSamples,2);
-		pChan->rxCtcss->tdet[i].pDebug2=calloc(numSamples,2);
-		pChan->rxCtcss->tdet[i].pDebug3=calloc(numSamples,2);
+		pChan->rxCtcss->tdet[i].pDebug0=ast_calloc(numSamples,2);
+		pChan->rxCtcss->tdet[i].pDebug1=ast_calloc(numSamples,2);
+		pChan->rxCtcss->tdet[i].pDebug2=ast_calloc(numSamples,2);
+		pChan->rxCtcss->tdet[i].pDebug3=ast_calloc(numSamples,2);
 	}
 
 	// buffer, 2 bytes per sample, and 16 channels
-	pChan->prxDebug=calloc(numSamples*16,2);
-	pChan->ptxDebug=calloc(numSamples*16,2);
+	pChan->prxDebug=ast_calloc(numSamples*16,2);
+	pChan->ptxDebug=ast_calloc(numSamples*16,2);
 
 	// TSCOPE CONFIGURATION SETSCOPE configure debug traces and sources for each channel of the output
-	pChan->sdbg			= (t_sdbg *)calloc(sizeof(t_sdbg),1);
+	pChan->sdbg			= (t_sdbg *)ast_calloc(sizeof(t_sdbg),1);
 
 	for(i=0;i<XPMR_DEBUG_CHANS;i++)pChan->sdbg->trace[i]=-1; 	
 
@@ -2071,7 +2072,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->coef=(void*)coef_fir_lpf_215_9_88;
 	pSps->nx=taps_fir_lpf_215_9_88;
 	pSps->size_x=2;
-	pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 	pSps->calcAdjust=gain_fir_lpf_215_9_88;
 
 	pSps->inputGain=(1*M_Q8);
@@ -2100,7 +2101,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->coef=(void*)fir_rxlpf[pChan->rxlpf].coefs;
 	pSps->nx=fir_rxlpf[pChan->rxlpf].taps;
 	pSps->size_x=2;
-	pSps->x=(void*)(calloc(pSps->nx,pSps->size_coef));
+	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_coef));
 	pSps->calcAdjust=(fir_rxlpf[pChan->rxlpf].gain*256)/0x0100;
 	pSps->outputGain=(1.0*M_Q8);
 	pSps->discfactor=2;
@@ -2133,7 +2134,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->coef=(void*)coef_fir_lpf_215_9_88;
 	pSps->nx=taps_fir_lpf_215_9_88;
 	pSps->size_x=2;
-	pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 	pSps->calcAdjust=gain_fir_lpf_215_9_88;
 
 	pSps->inputGain=(1*M_Q8);
@@ -2173,7 +2174,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->coef=(void*)fir_rxhpf[pChan->rxhpf].coefs;
 	pSps->nx=fir_rxhpf[pChan->rxhpf].taps;
 	pSps->size_x=2;
-	pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 	if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
 	pSps->calcAdjust=fir_rxhpf[pChan->rxhpf].gain;
 	pSps->inputGain=(1*M_Q8);
@@ -2199,7 +2200,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 		pSps->nx=taps_int_lpf_300_1_2;
 		pSps->size_x=4;
-		pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
 		pSps->calcAdjust=gain_int_lpf_300_1_2/2;
 		pSps->inputGain=(1.0*M_Q8);
@@ -2234,7 +2235,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->outputGain=1*M_Q8;
 		pSps->nSamples=pChan->nSamplesRx;
 		pSps->buffSize=RXSQDELAYBUFSIZE;
-		pSps->buff=calloc(RXSQDELAYBUFSIZE,2);	 		 
+		pSps->buff=ast_calloc(RXSQDELAYBUFSIZE,2);	 		 
 		pSps->buffLead = pChan->rxSquelchDelay*8;  // convert ms to samples
 		pSps->buffInIndex=0;
 		pSps->buffOutIndex=0;
@@ -2243,7 +2244,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	if(pChan->rxCdType==CD_XPMR_VOX)
 	{
 		TRACEF(1,("create vox measureblock\n"));
-		pChan->prxVoxMeas=calloc(pChan->nSamplesRx,2);
+		pChan->prxVoxMeas=ast_calloc(pChan->nSamplesRx,2);
 
 		pSps=pChan->spsRxVox=pSps->nextSps=createPmrSps(pChan);
 		pSps->sigProc=MeasureBlock;
@@ -2300,7 +2301,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->coef=(void*)fir_txhpf[pChan->txhpf].coefs;
 		pSps->nx=fir_txhpf[pChan->txhpf].taps;
 		pSps->size_x=2;
-		pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
 		pSps->calcAdjust=fir_txhpf[pChan->txhpf].gain;
 		pSps->inputGain=(1*M_Q8);
@@ -2327,7 +2328,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 		pSps->nx=taps_int_hpf_4000_1_2;
 		pSps->size_x=2;
-		pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
 		 
 		pSps->calcAdjust=gain_int_hpf_4000_1_2;
@@ -2445,7 +2446,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->calcAdjust=fir_txlpf[pChan->txlpf].gain;
 #endif
 	pSps->size_x=2;
-	pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 	if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
 	pSps->inputGain=(1*M_Q8);
 	pSps->outputGain=(1*M_Q8);
@@ -2505,7 +2506,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->calcAdjust=(fir_txlpf[pChan->txlpf].gain);
 #endif
 		pSps->size_x=2;
-		pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
 		pSps->inputGain=(1*M_Q8);
 		pSps->outputGain=(1*M_Q8);
@@ -2534,65 +2535,65 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 i16 destroyPmrChannel(t_pmr_chan *pChan)
 {
 	t_pmr_sps  	*pmr_sps, *tmp_sps;
+	i16 i;
 
 	TRACEF(1,("destroyPmrChannel()\n"));
 	
-	free(pChan->pRxDemod);
-	free(pChan->pRxNoise);
-	free(pChan->pRxBase);
-	free(pChan->pRxHpf);
-	free(pChan->pRxLsd);
-	free(pChan->pRxSpeaker);
-	free(pChan->pRxDcTrack);
-	if(pChan->pRxLsdLimit)free(pChan->pRxLsdLimit);
-	free(pChan->pTxBase);
-	free(pChan->pTxHpf);
-	free(pChan->pTxPreEmp);
-	free(pChan->pTxLimiter);
-	free(pChan->pTxLsd);
-	free(pChan->pTxLsdLpf);
-	if(pChan->pTxComposite)free(pChan->pTxComposite);
-	free(pChan->pTxOut);
+	ast_free(pChan->pRxDemod);
+	ast_free(pChan->pRxNoise);
+	ast_free(pChan->pRxBase);
+	ast_free(pChan->pRxHpf);
+	ast_free(pChan->pRxLsd);
+	ast_free(pChan->pRxSpeaker);
+	ast_free(pChan->pRxDcTrack);
+	if(pChan->pRxLsdLimit)ast_free(pChan->pRxLsdLimit);
+	ast_free(pChan->pTxBase);
+	ast_free(pChan->pTxHpf);
+	ast_free(pChan->pTxPreEmp);
+	ast_free(pChan->pTxLimiter);
+	ast_free(pChan->pTxLsd);
+	ast_free(pChan->pTxLsdLpf);
+	if(pChan->pTxComposite)ast_free(pChan->pTxComposite);
+	ast_free(pChan->pTxOut);
 
-	if(pChan->prxMeasure)free(pChan->prxMeasure);
-	if(pChan->pSigGen0)free(pChan->pSigGen0);
-	if(pChan->pSigGen1)free(pChan->pSigGen1);
+	if(pChan->prxMeasure)ast_free(pChan->prxMeasure);
+	if(pChan->pSigGen0)ast_free(pChan->pSigGen0);
+	if(pChan->pSigGen1)ast_free(pChan->pSigGen1);
 	 
 
 	#if XPMR_DEBUG0 == 1
-	//if(pChan->prxDebug)free(pChan->prxDebug);
-	if(pChan->ptxDebug)free(pChan->ptxDebug);
-	free(pChan->prxDebug0);
- 	free(pChan->prxDebug1);
-	free(pChan->prxDebug2);
-	free(pChan->prxDebug3);
+	//if(pChan->prxDebug)ast_free(pChan->prxDebug);
+	if(pChan->ptxDebug)ast_free(pChan->ptxDebug);
+	ast_free(pChan->prxDebug0);
+ 	ast_free(pChan->prxDebug1);
+	ast_free(pChan->prxDebug2);
+	ast_free(pChan->prxDebug3);
 
-	free(pChan->ptxDebug0);
- 	free(pChan->ptxDebug1);
-	free(pChan->ptxDebug2);
-	free(pChan->ptxDebug3);
+	ast_free(pChan->ptxDebug0);
+ 	ast_free(pChan->ptxDebug1);
+	ast_free(pChan->ptxDebug2);
+	ast_free(pChan->ptxDebug3);
 
-	free(pChan->rxCtcss->pDebug0);
-	free(pChan->rxCtcss->pDebug1);
+	ast_free(pChan->rxCtcss->pDebug0);
+	ast_free(pChan->rxCtcss->pDebug1);
 
-	i16 i;
 	for(i=0;i<CTCSS_NUM_CODES;i++)
 	{
-		free(pChan->rxCtcss->tdet[i].pDebug0);
-		free(pChan->rxCtcss->tdet[i].pDebug1);
-		free(pChan->rxCtcss->tdet[i].pDebug2);
-		free(pChan->rxCtcss->tdet[i].pDebug3);
+		ast_free(pChan->rxCtcss->tdet[i].pDebug0);
+		ast_free(pChan->rxCtcss->tdet[i].pDebug1);
+		ast_free(pChan->rxCtcss->tdet[i].pDebug2);
+		ast_free(pChan->rxCtcss->tdet[i].pDebug3);
 	}
 	#endif
 
 	pChan->dd.option=8;
 	dedrift(pChan);
 
-	free(pChan->pRxCtcss);
+	ast_free(pChan->pRxCtcss);
 
 	pmr_sps=pChan->spsRx;
 
-	if(pChan->sdbg)free(pChan->sdbg);
+	if(pChan->sdbg)ast_free(pChan->sdbg);
 
 	while(pmr_sps)
 	{
@@ -2601,7 +2602,7 @@ i16 destroyPmrChannel(t_pmr_chan *pChan)
 		destroyPmrSps(tmp_sps);
 	}
 
-	free(pChan);
+	ast_free(pChan);
 
 	return 0;
 }
@@ -2613,14 +2614,14 @@ t_pmr_sps *createPmrSps(t_pmr_chan *pChan)
 
 	TRACEF(1,("createPmrSps()\n"));
 
-	pSps = (t_pmr_sps *)calloc(sizeof(t_pmr_sps),1);
+	pSps = (t_pmr_sps *)ast_calloc(sizeof(t_pmr_sps),1);
 
 	if(!pSps)printf("Error: createPmrSps()\n");
 
 	pSps->parentChan=pChan;
 	pSps->index=pChan->spsIndex++;
 
-	// pSps->x=calloc(pSps->nx,pSps->size_x);
+	// pSps->x=ast_calloc(pSps->nx,pSps->size_x);
 
 	return pSps;
 }
@@ -2630,8 +2631,8 @@ i16 destroyPmrSps(t_pmr_sps  *pSps)
 {
 	TRACEJ(1,("destroyPmrSps(%i)\n",pSps->index));
 
-	if(pSps->x!=NULL)free(pSps->x);
-	free(pSps);
+	if(pSps->x!=NULL)ast_free(pSps->x);
+	ast_free(pSps);
 	return 0;
 }
 /*
@@ -2907,7 +2908,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 					pSps->coef=(void*)coef_fir_lpf_250_9_66;
 					pSps->nx=taps_fir_lpf_250_9_66;
 					pSps->size_x=2;
-					pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+					pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 					pSps->calcAdjust=gain_fir_lpf_250_9_66;
 				}
 				else
@@ -2917,7 +2918,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 					pSps->coef=(void*)coef_fir_lpf_215_9_88;
 					pSps->nx=taps_fir_lpf_215_9_88;
 					pSps->size_x=2;
-					pSps->x=(void*)(calloc(pSps->nx,pSps->size_x));
+					pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 					pSps->calcAdjust=gain_fir_lpf_215_9_88;
 				}
 				#endif
@@ -3377,7 +3378,7 @@ void dedrift(t_pmr_chan *pChan)
 		pChan->dd.framesize=DDB_FRAME_SIZE;
 		pChan->dd.frames=DDB_FRAMES_IN_BUFF;
 		pChan->dd.buffersize = pChan->dd.frames * pChan->dd.framesize;
-		pChan->dd.buff=calloc(DDB_FRAME_SIZE*DDB_FRAMES_IN_BUFF,2);
+		pChan->dd.buff=ast_calloc(DDB_FRAME_SIZE*DDB_FRAMES_IN_BUFF,2);
 		pChan->dd.modulus=DDB_ERR_MODULUS;
 		pChan->dd.inputindex=0;
 		pChan->dd.outputindex=0;
@@ -3396,7 +3397,7 @@ void dedrift(t_pmr_chan *pChan)
 	}
 	else if(pChan->dd.option==8)
 	{
-		free(pChan->dd.buff);
+		ast_free(pChan->dd.buff);
 		pChan->dd.lock=0;
 		pChan->dd.b.txlock=pChan->dd.b.rxlock=0;
 		return;
@@ -3407,6 +3408,13 @@ void dedrift(t_pmr_chan *pChan)
 		i16 inputindex;
 		i16 indextweak;
 	    i32 accum;
+
+		// WinFilter, IIR Fs=50, Fc=0.1
+		const i32 a0 =  26231;
+		const i32 a1 =  26231;
+		const i32 b0 =  32768;
+		const i32 b1 = -32358;
+		const i32 dg =	128;
 
 		inputindex = pChan->dd.inputindex;
 		pChan->dd.skew = pChan->dd.txframecnt-pChan->dd.rxframecnt;
@@ -3440,12 +3448,6 @@ void dedrift(t_pmr_chan *pChan)
 		}
 		pChan->dd.err = pChan->dd.lead - (pChan->dd.buffersize/2);
 
-		// WinFilter, IIR Fs=50, Fc=0.1
-		const i32 a0 =  26231;
-		const i32 a1 =  26231;
-		const i32 b0 =  32768;
-		const i32 b1 = -32358;
-		const i32 dg =	128;
 		pChan->dd.x1 = pChan->dd.x0;
 	    pChan->dd.y1 = pChan->dd.y0;
 		pChan->dd.x0 = pChan->dd.err;
