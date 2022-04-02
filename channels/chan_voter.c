@@ -575,7 +575,7 @@ static int voter_setoption(struct ast_channel *chan, int option, void *data, int
 static const struct ast_channel_tech voter_tech = {
 	.type = type,
 	.description = vdesc,
-	//.capabilities = AST_FORMAT_SLINEAR, /*! \todo */
+	.capabilities = AST_FORMAT_SLIN,
 	.requester = voter_request,
 	.call = voter_call,
 	.hangup = voter_hangup,
