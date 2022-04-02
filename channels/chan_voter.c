@@ -27,6 +27,7 @@
  */
 
 /*** MODULEINFO
+	<depend>dahdi</depend>
  ***/
 
 /*  Basic Information On How This Works
@@ -227,6 +228,8 @@ Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or 
 #include <signal.h>
 #include <fnmatch.h>
 #include <math.h>
+
+#include <dahdi/user.h>
 
 #include "asterisk/lock.h"
 #include "asterisk/channel.h"
@@ -4885,7 +4888,7 @@ static int load_module(void)
 		}
 	}
 
-	voter_timing_fd = open(DAHDI_PSEUDO_DEV_NAME,O_RDWR);
+	voter_timing_fd = open("/dev/dahdi/pseudo",O_RDWR);
 	if (voter_timing_fd == -1)
 	{
 		ast_log(LOG_ERROR,"Cant open DAHDI timing channel\n");
