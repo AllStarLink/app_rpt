@@ -3421,7 +3421,7 @@ static int elink_db_get(char *lookup, char c, char *nodenum, char *callsign, cha
 
 static int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr, char *port)
 {
-	char str[100], str1[100], *strs[6];
+	char str[315], str1[100], *strs[6];
 	int n;
 
 	snprintf(str, sizeof(str) - 1, "tlb nodeget %c %s", c, lookup);
