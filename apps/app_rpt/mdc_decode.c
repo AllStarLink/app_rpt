@@ -50,7 +50,7 @@ mdc_decoder_t * mdc_decoder_new(int sampleRate)
 	decoder->incr = (1200.0 * TWOPI) / ((double)sampleRate);
 	decoder->good = 0;
 	decoder->level = 0;
-
+	decoder->lastv = 0;
 
 	for(i=0; i<MDC_ND; i++)
 	{
