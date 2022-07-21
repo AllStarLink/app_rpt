@@ -3421,7 +3421,7 @@ static int elink_db_get(char *lookup, char c, char *nodenum, char *callsign, cha
 
 static int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr, char *port)
 {
-	char str[315], str1[100], *strs[6];
+	char str[100], str1[100], *strs[6];
 	int n;
 
 	snprintf(str, sizeof(str) - 1, "tlb nodeget %c %s", c, lookup);
@@ -21039,7 +21039,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		insque((struct qelem *) l, (struct qelem *) myrpt->links.next);
 		__kickshort(myrpt);
 		gettimeofday(&myrpt->lastlinktime, NULL);
-		rpt_mutex_unlock(&myrpt->lock);
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_answer(chan);
 			if (l->name[0] > '9') {
@@ -21050,6 +21049,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					send_newkey(chan);
 			}
 		}
+		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
 		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
 			char str[512];
