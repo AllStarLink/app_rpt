@@ -3421,7 +3421,7 @@ static int elink_db_get(char *lookup, char c, char *nodenum, char *callsign, cha
 
 static int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr, char *port)
 {
-	char str[100], str1[100], *strs[6];
+	char str[315], str1[100], *strs[6];
 	int n;
 
 	snprintf(str, sizeof(str) - 1, "tlb nodeget %c %s", c, lookup);
@@ -4014,7 +4014,8 @@ static int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax,
 	if (val) {
 		if (str && strmax)
 			//snprintf(str,strmax,val,digitbuf);
-			snprintf(str, strmax, "%s%s", val, digitbuf);	/*! \todo 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy. */
+			//snprintf(str, strmax, "%s%s", val, digitbuf);	/*! \todo 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy. */
+			snprintf(str, strmax, "%s", val); // Indeed, generally we only want the first part so for now, ignore the second bit
 		return (1);
 	}
 	if (wilds) {
@@ -4023,7 +4024,8 @@ static int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax,
 			if (ast_extension_match(vp->name, digitbuf)) {
 				if (str && strmax)
 					//snprintf(str,strmax,vp->value,digitbuf);
-					snprintf(str, strmax, "%s%s", vp->value, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
+					//snprintf(str, strmax, "%s%s", vp->value, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
+					snprintf(str, strmax, "%s", vp->value);
 				return (1);
 			}
 			vp = vp->next;
@@ -4069,7 +4071,8 @@ static int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax,
 				found = 1;
 				if (str && strmax)
 					//snprintf(str,strmax,val,digitbuf);
-					snprintf(str, strmax, "%s%s", val, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
+					//snprintf(str, strmax, "%s%s", val, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
+					snprintf(str, strmax, "%s", val);
 			}
 		}
 		ast_config_destroy(ourcfg);
