@@ -20821,7 +20821,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		if (*b1 < '1') {
-			ast_log(LOG_WARNING, "Node %s Invalid for connection here!!\n", b1);
+			ast_log(LOG_WARNING, "Node %s invalid for connection: Caller ID is not numeric\n", b1);
 			return -1;
 		}
 
