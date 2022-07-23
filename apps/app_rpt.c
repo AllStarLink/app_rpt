@@ -6657,10 +6657,7 @@ static int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 
 	ast_stopstream(chan);
 
-	/*
-	 * Wait for the zaptel driver to physically write the tone blocks to the hardware
-	 */
-
+	/* Wait for the DAHDI driver to physically write the tone blocks to the hardware */
 	for (i = 0; i < 20; i++) {
 		flags = DAHDI_IOMUX_WRITEEMPTY | DAHDI_IOMUX_NOWAIT;
 		res = ioctl(ast_channel_fd(chan, 0), DAHDI_IOMUX, &flags);
@@ -11175,8 +11172,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			myrpt->parrotonce = 1;
 		return DC_COMPLETE;
 	case 56:					/* RX CTCSS Enable */
-		if ((strncasecmp(ast_channel_name(myrpt->rxchannel), "zap/", 4) == 0)
-			|| (strncasecmp(ast_channel_name(myrpt->rxchannel), "dahdi/", 6) == 0)) {
+		if (strncasecmp(ast_channel_name(myrpt->rxchannel), "DAHDI/", 6) == 0) {
 			struct dahdi_radio_param r;
 
 			memset(&r, 0, sizeof(struct dahdi_radio_param));
@@ -11193,8 +11189,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "RXPLENA");
 		return DC_COMPLETE;
 	case 57:					/* RX CTCSS Disable */
-		if ((strncasecmp(ast_channel_name(myrpt->rxchannel), "zap/", 4) == 0)
-			|| (strncasecmp(ast_channel_name(myrpt->rxchannel), "dahdi/", 6) == 0)) {
+		if (strncasecmp(ast_channel_name(myrpt->rxchannel), "DAHDI/", 6) == 0) {
 			struct dahdi_radio_param r;
 
 			memset(&r, 0, sizeof(struct dahdi_radio_param));
