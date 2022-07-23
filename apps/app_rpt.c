@@ -10015,7 +10015,9 @@ static int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		if (debug > 3)
 			ast_log(LOG_NOTICE, "rpt (remote) initiating call to %s/%s on %s\n", deststr, tele,
 					ast_channel_name(l->chan));
-		ast_set_callerid(l->chan, myrpt->name, NULL, NULL);
+		/* Set connected to actually set outgoing Caller ID - ast_set_callerid has no effect! */
+		ast_channel_connected(l->chan)->id.number.valid = 1;
+		ast_channel_connected(l->chan)->id.number.str = ast_strdup(myrpt->name);
 		ast_call(l->chan, tele, 2000);
 	} else {
 		if (debug > 3)
