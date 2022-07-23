@@ -22839,15 +22839,6 @@ static int mdcgen_exec(struct ast_channel *chan, const char *data)
 
 #endif
 
-#define rpt_hangup(chan) \
-	if (chan) { \
-		ast_channel_lock(chan); \
-		ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT); \
-		ast_channel_unlock(chan); \
-	} else { \
-		ast_debug(1, "No %s\n", #chan); \
-	}
-
 static int unload_module(void)
 {
 	int i, res;
@@ -22865,47 +22856,25 @@ static int unload_module(void)
 		if (!strcmp(rpt_vars[i].name, rpt_vars[i].p.nodes))
 			continue;
 		ast_verb(3, "Hanging up repeater %s\n", rpt_vars[i].name);
-		///if (!myrpt->remote) {
-		/* Hang up all the channels, so we can successfully unload the Rpt() application */
-		rpt_hangup(myrpt->rxchannel);
-#if 0
-		rpt_hangup(myrpt->txchannel);
-		rpt_hangup(myrpt->monchannel);
-		rpt_hangup(myrpt->parrotchannel);
-		rpt_hangup(myrpt->pchannel);
-		rpt_hangup(myrpt->txpchannel);
-		rpt_hangup(myrpt->zaprxchannel);
-		rpt_hangup(myrpt->zaptxchannel);
-		rpt_hangup(myrpt->telechannel);
-		rpt_hangup(myrpt->btelechannel);
-		rpt_hangup(myrpt->voxchannel);
-#endif
+		if (myrpt->rxchannel) {
+			ast_channel_lock(myrpt->rxchannel);
+			ast_softhangup(myrpt->rxchannel, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
+			ast_channel_unlock(myrpt->rxchannel);
+		}
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
 	}
 	ast_debug(1, "Waiting for master thread to exit\n");
-	pthread_join(rpt_master_thread, NULL); /* Wait for all pseudo channels to hang up */
+	pthread_join(rpt_master_thread, NULL); /* All pseudo channels need to be hung up before we can unload the Rpt() application */
 	ast_debug(1, "Master thread has now exited\n");
 	res = ast_unregister_application(app);
-	if (res) {
-		ast_log(LOG_WARNING, "Failed to unload %s() application. Clean module unload will fail.\n", app);
-	}
 #ifdef	_MDC_ENCODE_H_
 	res |= ast_unregister_application(mdc_app);
-	if (res) {
-		ast_log(LOG_WARNING, "Failed to unload %s(). Clean module unload will fail.\n", mdc_app);
-	}
 #endif
 
 	ast_cli_unregister_multiple(rpt_cli, sizeof(rpt_cli) / sizeof(struct ast_cli_entry));
 	res |= ast_manager_unregister("RptLocalNodes");
-	if (res) {
-		ast_log(LOG_WARNING, "Failed to unload. Clean module unload will fail.\n");
-	}
 	res |= ast_manager_unregister("RptStatus");
-	if (res) {
-		ast_log(LOG_WARNING, "Failed to unload. Clean module unload will fail.\n");
-	}
 	close(nullfd);
 	return res;
 }
