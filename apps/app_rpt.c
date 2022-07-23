@@ -20806,6 +20806,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			|| (!strncasecmp(ast_channel_name(l->chan), "tlb", 3)) || (l->name[0] > '9'))
 			rpt_telemetry(myrpt, CONNECTED, l);
 		//return AST_PBX_KEEPALIVE;
+		ast_channel_pbx_set(l->chan, NULL);
+		ast_debug(1, "Stopped PBX on %s\n", ast_channel_name(l->chan));
 		pthread_exit(NULL); // BUGBUG: For now, this emulates the behavior of KEEPALIVE, but this won't be a clean exit. Makes it work, but since the PBX doesn't clean up we'll leak memory. Either do what the PBX core does here or we need to somehow do KEEPALIVE handling in the core, possibly with a custom patch for now.
 		//return -1;				/*! \todo AST_PBX_KEEPALIVE doesn't exist anymore. Figure out what we should return here. */
 	}
