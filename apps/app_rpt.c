@@ -20136,9 +20136,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		char *val, *myadr, *mypfx, sx[320], *sy, *s, *s1, *s2, *s3, dstr[1024];
 		char xstr[100], hisip[100], nodeip[100], tmp1[100];
 		struct ast_config *cfg;
-		struct ast_hostent ahp;
-		struct hostent *hp;
-		struct in_addr ia;
 
 		val = NULL;
 		myadr = NULL;      
@@ -20219,13 +20216,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					return -1;
 				}
 				if (strcmp(s2, "NONE")) {
-					hp = ast_gethostbyname(s2, &ahp);
-					if (!hp) {
+					struct ast_sockaddr addr = { {0,} };
+					if (ast_sockaddr_resolve_first_af(&addr, s2, PARSE_PORT_FORBID, AF_UNSPEC)) {
 						ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s2);
 						return -1;
 					}
-					memcpy(&ia, hp->h_addr, sizeof(in_addr_t));
-					strncpy(nodeip, ast_inet_ntoa(ia), sizeof(nodeip) - 1);
+					strncpy(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip) - 1);
 					s3 = strchr(hisip, ':');
 					if (s3)
 						*s3 = 0;
@@ -20239,13 +20235,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						s3 = strchr(s1, ':');
 						if (s3)
 							*s3 = 0;
-						hp = ast_gethostbyname(s1, &ahp);
-						if (!hp) {
+						if (ast_sockaddr_resolve_first_af(&addr, s1, PARSE_PORT_FORBID, AF_UNSPEC)) {
 							ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s1);
 							return -1;
 						}
-						memcpy(&ia, hp->h_addr, sizeof(in_addr_t));
-						strncpy(nodeip, ast_inet_ntoa(ia), sizeof(nodeip) - 1);
+						strncpy(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip) - 1);
 						if (strcmp(hisip, nodeip)) {
 							ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n", b1, nodeip, hisip);
 							return -1;
@@ -20531,9 +20525,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (!strncasecmp(ast_channel_name(chan), "tlb", 3))
 		i = 1;
 	if ((!options) && (!i)) {
-		struct ast_hostent ahp;
-		struct hostent *hp;
-		struct in_addr ia;
 		char hisip[100], nodeip[100], *s, *s1, *s2, *s3;
 
 		/* look at callerid to see what node this comes from */
@@ -20591,13 +20582,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 		if (strcmp(s2, "NONE")) {
-			hp = ast_gethostbyname(s2, &ahp);
-			if (!hp) {
+			struct ast_sockaddr addr = { {0,} };
+			if (ast_sockaddr_resolve_first_af(&addr, s2, PARSE_PORT_FORBID, AF_UNSPEC)) {
 				ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s2);
 				return -1;
 			}
-			memcpy(&ia, hp->h_addr, sizeof(in_addr_t));
-			strncpy(nodeip, ast_inet_ntoa(ia), sizeof(nodeip) - 1);
+			strncpy(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip) - 1);
 			s3 = strchr(hisip, ':');
 			if (s3)
 				*s3 = 0;
@@ -20611,13 +20601,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				s3 = strchr(s1, ':');
 				if (s3)
 					*s3 = 0;
-				hp = ast_gethostbyname(s1, &ahp);
-				if (!hp) {
+				if (ast_sockaddr_resolve_first_af(&addr, s1, PARSE_PORT_FORBID, AF_UNSPEC)) {
 					ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s1);
 					return -1;
 				}
-				memcpy(&ia, hp->h_addr, sizeof(in_addr_t));
-				strncpy(nodeip, ast_inet_ntoa(ia), sizeof(nodeip) - 1);
+				strncpy(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip) - 1);
 				if (strcmp(hisip, nodeip)) {
 					ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n", b1, nodeip, hisip);
 					return -1;
