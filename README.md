@@ -5,6 +5,10 @@ ASL Grant Info: https://www.ampr.org/grants-old/grant-allstarlink-radio-over-ip-
 
 # Development
 
+## Helpful Resources
+
+AST_PBX_KEEPALIVE: https://github.com/asterisk/asterisk/commit/50a25ac8474d7900ba59a68ed4fd942074082435
+
 ## Prettifying
 
 `indent --k-and-r-style --use-tabs --tab-size4 --braces-on-if-line --cuddle-else --dont-break-function-decl-args --line-length120 --swallow-optional-blank-lines apps/app_rpt.c`
