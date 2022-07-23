@@ -430,6 +430,8 @@ pthread_t rpt_master_thread;
 struct nodelog nodelog;
 struct rpt rpt_vars[MAXRPTS];
 
+static int shutting_down = 0;
+
 static int debug = 7;			/* Set this >0 for extra debug output */
 static int nrpts = 0;
 
@@ -678,6 +680,7 @@ static void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 			return;
 		}
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(dest));
 	ast_set_read_format(chan, ast_format_slin);
 	ast_set_write_format(chan, ast_format_slin);
 	ast_set_read_format(dest, ast_format_slin);
@@ -7419,6 +7422,7 @@ static void *rpt_tele_thread(void *this)
 		ast_free(mytele);
 		pthread_exit(NULL);
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (mychannel->cdr)
 		ast_set_flag(mychannel->cdr, AST_CDR_FLAG_POST_DISABLED);
@@ -8485,7 +8489,7 @@ static void *rpt_tele_thread(void *this)
 			}
 			l1 = ast_malloc(sizeof(struct rpt_link));
 			if (!l1) {
-				ast_log(LOG_WARNING, "Cannot alloc memory on %s\n", ast_channel_name(mychannel));
+				ast_log(LOG_ERROR, "Cannot malloc memory on %s\n", ast_channel_name(mychannel));
 				remque((struct qelem *) mytele);
 				myrpt->active_telem = NULL;
 				rpt_mutex_unlock(&myrpt->lock);
@@ -9361,6 +9365,7 @@ static void *rpt_call(void *this)
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		pthread_exit(NULL);
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (mychannel->cdr)
 		ast_set_flag(mychannel->cdr, AST_CDR_FLAG_POST_DISABLED);
@@ -9384,6 +9389,7 @@ static void *rpt_call(void *this)
 		ast_hangup(mychannel);
 		pthread_exit(NULL);
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (genchannel->cdr)
 		ast_set_flag(genchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
@@ -9531,8 +9537,7 @@ static void *rpt_call(void *this)
 	/* set appropriate conference for the pseudo */
 	ci.chan = 0;
 	ci.confno = myrpt->conf;
-	ci.confmode =
-		(myrpt->p.duplex == 2) ? DAHDI_CONF_CONFANNMON : (DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
+	ci.confmode = (myrpt->p.duplex == 2) ? DAHDI_CONF_CONFANNMON : (DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
 	if (ast_channel_pbx(mychannel)) {
 		/* first put the channel on the conference in announce mode */
 		if (ioctl(ast_channel_fd(myrpt->pchannel, 0), DAHDI_SETCONF, &ci) == -1) {
@@ -9932,6 +9937,7 @@ static int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		}
 	}
 	if (l->chan) {
+		ast_debug(1, "Requested channel %s\n", ast_channel_name(l->chan));
 		ast_set_read_format(l->chan, ast_format_slin);
 		ast_set_write_format(l->chan, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -9965,6 +9971,7 @@ static int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		ast_free(l);
 		return -1;
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(l->pchan));
 	ast_set_read_format(l->pchan, ast_format_slin);
 	ast_set_write_format(l->pchan, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -16498,6 +16505,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
 		ast_frfree(f1);
 	if (l->chan) {
+		ast_debug(1, "Requested channel %s\n", ast_channel_name(l->chan));
 		ast_set_read_format(l->chan, ast_format_slin);
 		ast_set_write_format(l->chan, ast_format_slin);
 		ast_channel_appl_set(l->chan, "Apprpt");
@@ -16996,6 +17004,7 @@ static void *rpt(void *this)
 	if (!strcasecmp(tmpstr, "DAHDI"))
 		myrpt->zaprxchannel = myrpt->rxchannel;
 	if (myrpt->rxchannel) {
+		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->rxchannel));
 		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY) {
 			ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
@@ -17041,6 +17050,7 @@ static void *rpt(void *this)
 		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo"))
 			myrpt->zaptxchannel = myrpt->txchannel;
 		if (myrpt->txchannel) {
+			ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->txchannel));
 			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY) {
 				ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
 				rpt_mutex_unlock(&myrpt->lock);
@@ -17087,6 +17097,7 @@ static void *rpt(void *this)
 	if (!myrpt->pchannel) {
 		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->pchannel));
 	ast_set_read_format(myrpt->pchannel, ast_format_slin);
 	ast_set_write_format(myrpt->pchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -17102,6 +17113,7 @@ static void *rpt(void *this)
 		if (!myrpt->zaptxchannel) {
 			FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 		}
+		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->zaptxchannel));
 		ast_set_read_format(myrpt->zaptxchannel, ast_format_slin);
 		ast_set_write_format(myrpt->zaptxchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -17115,6 +17127,7 @@ static void *rpt(void *this)
 	if (!myrpt->monchannel) {
 		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->monchannel));
 	ast_set_read_format(myrpt->monchannel, ast_format_slin);
 	ast_set_write_format(myrpt->monchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -17197,6 +17210,7 @@ static void *rpt(void *this)
 	if (!myrpt->parrotchannel) {
 		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->parrotchannel));
 	ast_set_read_format(myrpt->parrotchannel, ast_format_slin);
 	ast_set_write_format(myrpt->parrotchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -17207,10 +17221,11 @@ static void *rpt(void *this)
 
 	/* Telemetry Channel Resources */
 	/* allocate a pseudo-channel thru asterisk */
-	myrpt->telechannel = ast_request("dahdi", cap, NULL, NULL, "pseudo", NULL);
+	myrpt->telechannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->telechannel) {
 		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->telechannel));
 	ast_set_read_format(myrpt->telechannel, ast_format_slin);
 	ast_set_write_format(myrpt->telechannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -17237,7 +17252,7 @@ static void *rpt(void *this)
 
 	/* make a channel to connect between the telemetry conference process
 	   and the main tx audio conference. */
-	myrpt->btelechannel = ast_request("dahdi", cap, NULL, NULL, "pseudo", NULL);
+	myrpt->btelechannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!myrpt->btelechannel) {
 		ast_log(LOG_WARNING, "Failed to obtain pseudo channel for btelechannel\n");
 		rpt_mutex_unlock(&myrpt->lock);
@@ -17247,6 +17262,7 @@ static void *rpt(void *this)
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->btelechannel));
 	ast_set_read_format(myrpt->btelechannel, ast_format_slin);
 	ast_set_write_format(myrpt->btelechannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -17271,6 +17287,7 @@ static void *rpt(void *this)
 	if (!myrpt->voxchannel) {
 		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->voxchannel));
 	ast_set_read_format(myrpt->voxchannel, ast_format_slin);
 	ast_set_write_format(myrpt->voxchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -17283,6 +17300,7 @@ static void *rpt(void *this)
 	if (!myrpt->txpchannel) {
 		FAILED_TO_OBTAIN_PSEUDO_CHANNEL2();
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->txpchannel));
 #ifdef	AST_CDR_FLAG_POST_DISABLED
 	if (myrpt->txpchannel->cdr)
 		ast_set_flag(myrpt->txpchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
@@ -19724,9 +19742,10 @@ static void *rpt(void *this)
 			continue;
 		}
 	}
-	/*
-	   terminate and cleanup app_rpt node instance
-	 */
+
+	/* Terminate and cleanup app_rpt node instance */
+	ast_debug(1, "%s disconnected, cleaning up...\n", myrpt->name);
+
 	myrpt->ready = 0;
 	usleep(100000);
 	/* wait for telem to be done */
@@ -19774,6 +19793,7 @@ static void *rpt(void *this)
 	if (myrpt->outstreampid)
 		kill(myrpt->outstreampid, SIGTERM);
 	myrpt->outstreampid = 0;
+	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	pthread_exit(NULL);
 	return NULL;
 }
@@ -19866,6 +19886,7 @@ static void *rpt_master(void *ignore)
 	}
 	nrpts = n;
 	ast_config_destroy(cfg);
+	cfg = NULL;
 
 	/* start em all */
 	for (i = 0; i < n; i++) {
@@ -19909,7 +19930,6 @@ static void *rpt_master(void *ignore)
 		}
 		if (rpt_vars[i].p.ident && (!*rpt_vars[i].p.ident)) {
 			ast_log(LOG_WARNING, "Did not specify ident for node %s\n", rpt_vars[i].name);
-			ast_config_destroy(cfg);
 			pthread_exit(NULL);
 		}
 		rpt_vars[i].ready = 0;
@@ -19935,6 +19955,9 @@ static void *rpt_master(void *ignore)
 				if (rpt_vars[i].deleted) {
 					rpt_vars[i].name[0] = 0;
 					continue;
+				}
+				if (shutting_down) {
+					continue; /* Don't restart thread if we're unloading the module */
 				}
 				if (time(NULL) - rpt_vars[i].lastthreadrestarttime <= 5) {
 					if (rpt_vars[i].threadrestarts >= 5) {
@@ -20003,11 +20026,38 @@ static void *rpt_master(void *ignore)
 			ast_free(nodep);
 		}
 		ast_mutex_unlock(&rpt_master_lock);
+		if (shutting_down) {
+			ast_debug(1, "app_rpt is unloading, master thread cleaning up %d repeaters and exiting\n", nrpts);
+			for (i = 0; i < nrpts; i++) {
+				if (rpt_vars[i].deleted) {
+					ast_debug(1, "Skipping deleted thread\n");
+					continue;
+				}
+				if (rpt_vars[i].remote) {
+					ast_debug(1, "Skipping remote thread\n");
+					continue;
+				}
+				if (rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) {
+					ast_debug(1, "Skipping stopped thread\n");
+					continue;
+				}
+				if (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL) {
+					ast_debug(1, "Skipping null thread\n");
+					continue;
+				}
+				if (!(rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
+					pthread_join(rpt_vars[i].rpt_thread, NULL);
+					ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
+				}
+			}
+			ast_mutex_lock(&rpt_master_lock);
+			break;
+		}
 		usleep(2000000);
 		ast_mutex_lock(&rpt_master_lock);
 	}
 	ast_mutex_unlock(&rpt_master_lock);
-	ast_config_destroy(cfg);
+	ast_debug(1, "app_rpt master thread exiting\n");
 	pthread_exit(NULL);
 }
 
@@ -20715,6 +20765,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 			pthread_exit(NULL);
 		}
+		ast_debug(1, "Requested channel %s\n", ast_channel_name(l->pchan));
 		ast_set_read_format(l->pchan, ast_format_slin);
 		ast_set_write_format(l->pchan, ast_format_slin);
 		ast_answer(l->pchan);
@@ -20888,11 +20939,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	myrpt->rxchannel = ast_request(myrpt->rxchanname, cap, NULL, NULL, tele, NULL);
-
 	myrpt->zaprxchannel = NULL;
 	if (!strcasecmp(myrpt->rxchanname, "DAHDI"))
 		myrpt->zaprxchannel = myrpt->rxchannel;
 	if (myrpt->rxchannel) {
+		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->rxchannel));
 		ast_set_read_format(myrpt->rxchannel, ast_format_slin);
 		ast_set_write_format(myrpt->rxchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -20925,6 +20976,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (!strncasecmp(myrpt->txchanname, "DAHDI", 3))
 			myrpt->zaptxchannel = myrpt->txchannel;
 		if (myrpt->txchannel) {
+			ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->txchannel));
 			ast_set_read_format(myrpt->txchannel, ast_format_slin);
 			ast_set_write_format(myrpt->txchannel, ast_format_slin);
 #ifdef	AST_CDR_FLAG_POST_DISABLED
@@ -20962,6 +21014,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_hangup(myrpt->rxchannel);
 		pthread_exit(NULL);
 	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->pchannel));
 	ast_set_read_format(myrpt->pchannel, ast_format_slin);
 	ast_set_write_format(myrpt->pchannel, ast_format_slin);
 	ast_answer(myrpt->pchannel);
@@ -21826,6 +21879,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 	}
+	ast_debug(1, "Finished cleaning up repeater %s, exiting with res %d\n", ast_channel_name(chan), res);
 	return res;
 }
 
@@ -22785,26 +22839,73 @@ static int mdcgen_exec(struct ast_channel *chan, const char *data)
 
 #endif
 
+#define rpt_hangup(chan) \
+	if (chan) { \
+		ast_channel_lock(chan); \
+		ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT); \
+		ast_channel_unlock(chan); \
+	} else { \
+		ast_debug(1, "No %s\n", #chan); \
+	}
+
 static int unload_module(void)
 {
 	int i, res;
 
+	shutting_down = 1;
+
 	daq_uninit();
 
 	for (i = 0; i < nrpts; i++) {
+		struct rpt *myrpt = &rpt_vars[i];
+		if (!myrpt) {
+			ast_debug(1, "No RPT at index %d?\n", i);
+			continue;
+		}
 		if (!strcmp(rpt_vars[i].name, rpt_vars[i].p.nodes))
 			continue;
+		ast_verb(3, "Hanging up repeater %s\n", rpt_vars[i].name);
+		///if (!myrpt->remote) {
+		/* Hang up all the channels, so we can successfully unload the Rpt() application */
+		rpt_hangup(myrpt->rxchannel);
+#if 0
+		rpt_hangup(myrpt->txchannel);
+		rpt_hangup(myrpt->monchannel);
+		rpt_hangup(myrpt->parrotchannel);
+		rpt_hangup(myrpt->pchannel);
+		rpt_hangup(myrpt->txpchannel);
+		rpt_hangup(myrpt->zaprxchannel);
+		rpt_hangup(myrpt->zaptxchannel);
+		rpt_hangup(myrpt->telechannel);
+		rpt_hangup(myrpt->btelechannel);
+		rpt_hangup(myrpt->voxchannel);
+#endif
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
 	}
+	ast_debug(1, "Waiting for master thread to exit\n");
+	pthread_join(rpt_master_thread, NULL); /* Wait for all pseudo channels to hang up */
+	ast_debug(1, "Master thread has now exited\n");
 	res = ast_unregister_application(app);
+	if (res) {
+		ast_log(LOG_WARNING, "Failed to unload %s() application. Clean module unload will fail.\n", app);
+	}
 #ifdef	_MDC_ENCODE_H_
-	res |= ast_unregister_application(app);
+	res |= ast_unregister_application(mdc_app);
+	if (res) {
+		ast_log(LOG_WARNING, "Failed to unload %s(). Clean module unload will fail.\n", mdc_app);
+	}
 #endif
 
 	ast_cli_unregister_multiple(rpt_cli, sizeof(rpt_cli) / sizeof(struct ast_cli_entry));
 	res |= ast_manager_unregister("RptLocalNodes");
+	if (res) {
+		ast_log(LOG_WARNING, "Failed to unload. Clean module unload will fail.\n");
+	}
 	res |= ast_manager_unregister("RptStatus");
+	if (res) {
+		ast_log(LOG_WARNING, "Failed to unload. Clean module unload will fail.\n");
+	}
 	close(nullfd);
 	return res;
 }
