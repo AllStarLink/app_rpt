@@ -4000,7 +4000,9 @@ static int unload_module(void)
 		}
 #endif
 
-		close(o->sounddev);
+		if (o->sounddev >= 0) {
+			close(o->sounddev);
+		}
 		if (o->dsp)
 			ast_dsp_free(o->dsp);
 		if (o->owner)
