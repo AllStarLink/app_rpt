@@ -4002,6 +4002,7 @@ static int unload_module(void)
 
 		if (o->sounddev >= 0) {
 			close(o->sounddev);
+			o->sounddev = -1;
 		}
 		if (o->dsp)
 			ast_dsp_free(o->dsp);
