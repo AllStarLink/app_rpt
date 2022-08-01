@@ -572,10 +572,9 @@ static int voter_digit_end(struct ast_channel *c, char digit, unsigned int durat
 static int voter_text(struct ast_channel *c, const char *text);
 static int voter_setoption(struct ast_channel *chan, int option, void *data, int datalen);
 
-static const struct ast_channel_tech voter_tech = {
+static struct ast_channel_tech voter_tech = {
 	.type = type,
 	.description = vdesc,
-	.capabilities = AST_FORMAT_SLIN,
 	.requester = voter_request,
 	.call = voter_call,
 	.hangup = voter_hangup,
@@ -3165,6 +3164,8 @@ static int unload_module(void)
 		sizeof(struct ast_cli_entry));
 	ast_manager_unregister("VoterStatus");
 	/* First, take us out of the channel loop */
+	ao2_ref(voter_tech.capabilities, -1);
+	voter_tech.capabilities = NULL;
 	ast_channel_unregister(&voter_tech);
 	if (nullfd != -1) close(nullfd);
 	return 0;
@@ -4918,6 +4919,11 @@ static int load_module(void)
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	ast_pthread_create(&voter_reader_thread,&attr,voter_reader,NULL);
 	ast_pthread_create(&voter_timer_thread,&attr,voter_timer,NULL);
+
+	if (!(voter_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+	ast_format_cap_append(voter_tech.capabilities, ast_format_slin, 0);
 
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&voter_tech)) {
