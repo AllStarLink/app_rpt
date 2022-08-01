@@ -3596,7 +3596,7 @@ static void *voter_reader(void *data)
 											(struct sockaddr *)&psin,sizeof(psin));
 										continue;
 									}
-									ast_copy_string(client->saved_challenge,proxy.challenge,sizeof(client->saved_challenge));
+									ast_copy_string(client->saved_challenge,proxy.challenge,sizeof(client->saved_challenge) - 1);
 									client->proxy_sin = psin;
 									if (proxy.flags & 32) client->mix = 1;
 									else client->mix = 0;
@@ -3611,7 +3611,7 @@ static void *voter_reader(void *data)
 									proxy.ipaddr = sin.sin_addr.s_addr;
 									proxy.port = sin.sin_port;
 									proxy.payload_type = vph->payload_type;
-									ast_copy_string(proxy.challenge,challenge,sizeof(challenge));
+									ast_copy_string(proxy.challenge,challenge,sizeof(proxy.challenge) - 1);
 									vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
 									proxy.flags = 0;
 									if (client->ismaster) proxy.flags |= 2 | 8;
