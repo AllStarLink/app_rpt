@@ -9,6 +9,8 @@ Feel free to open an issue for *any* trouble you might be experiencing with thes
 
 - Enable debug to reproduce the issue. You can do this by running `core set debug 5 app_rpt` (less than or greater than 5 depending on the issue and how chatty the debug log level is). You can also enable debug all the time in `asterisk.conf`. To get debug output on the CLI, you will need to add the `debug` level to the `console => ` log file in `logger.conf`. A debug log from the CLI in the seconds leading immediately up to the issue should be provided.
 
+- For segfault issues, a backtrace is needed. Use `ast_coredumper` to get a backtrace and post the relevant threads from `full.txt` (almost always Thread 1): https://wiki.asterisk.org/wiki/display/AST/Getting+a+Backtrace (you can also run `phreaknet backtrace` - make sure to adjust the paste duration from 24 hours if you link the paste link)
+
 - Describe what led up to the issue and how it can be reproduced on our end.
 
 - Any other context that might be helpful in fixing the issue.
@@ -31,7 +33,7 @@ You can use PhreakScript to install Asterisk automatically, first. You'll need t
 
 ```
 cd /usr/src && wget https://docs.phreaknet.org/script/phreaknet.sh && chmod +x phreaknet.sh && ./phreaknet.sh make
-phreaknet install -s -d # install chan_sip (if you need it still) and DAHDI (required)
+phreaknet install -b -s -d # enable backtraces, install chan_sip (if you need it still) and DAHDI (required)
 ```
 
 ## Pre-Reqs
