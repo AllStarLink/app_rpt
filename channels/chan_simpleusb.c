@@ -1841,7 +1841,9 @@ static void *hidthread(void *arg)
 				memcpy(bufsave, buf, sizeof(buf));
 				hid_set_outputs(usb_handle, buf);
 			}
+#if 0 /* don't unlock a lock that wasn't locked to begin with */
 			ast_mutex_unlock(&o->usblock);
+#endif
 		}
 		o->lasttx = 0;
 		buf[o->hid_gpio_loc] = 0;
