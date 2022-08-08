@@ -4867,10 +4867,10 @@ static int load_module(void)
 		sin.sin_addr.s_addr = htonl(INADDR_ANY);
         else
 		sin.sin_addr.s_addr = inet_addr(val);
-	sin.sin_port = htons(listen_port);               
+	sin.sin_port = htons(listen_port);
 	if (bind(udp_socket, &sin, sizeof(sin)) == -1) 
 	{
-		ast_log(LOG_ERROR, "Unable to bind port for voter audio connection\n");
+		ast_log(LOG_ERROR, "Unable to bind port for voter audio connection: %s\n", strerror(errno));
                 close(udp_socket);
                 return AST_MODULE_LOAD_DECLINE;
 	}
