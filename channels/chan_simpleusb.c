@@ -2200,7 +2200,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 		for (i = 0; i < audio_samples; i += FRAME_SIZE) {
 			memset(&wf, 0, sizeof(wf));
 			wf.frametype = AST_FRAME_VOICE;
-			wf.subclass.integer = AST_FORMAT_SLIN;
+			wf.subclass.format = ast_format_slin;
 			wf.samples = FRAME_SIZE;
 			wf.datalen = FRAME_SIZE * 2;
 			wf.offset = AST_FRIENDLY_OFFSET;
@@ -2371,7 +2371,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			u = (struct usbecho *) o->echoq.q_forw;
 			remque((struct qelem *) u);
 			f->frametype = AST_FRAME_VOICE;
-			f->subclass.integer = AST_FORMAT_SLIN;
+			f->subclass.format = ast_format_slin;
 			f->samples = FRAME_SIZE;
 			f->datalen = FRAME_SIZE * 2;
 			f->offset = AST_FRIENDLY_OFFSET;
@@ -2633,7 +2633,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		return f;
 	/* ok we can build and deliver the frame to the caller */
 	f->frametype = AST_FRAME_VOICE;
-	f->subclass.integer = AST_FORMAT_SLIN;
+	f->subclass.format = ast_format_slin;
 	f->samples = FRAME_SIZE;
 	f->datalen = FRAME_SIZE * 2;
 	f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;

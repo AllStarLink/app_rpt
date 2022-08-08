@@ -1101,7 +1101,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 		{
 			memset(&wf,0,sizeof(wf));
 			wf.frametype = AST_FRAME_VOICE;
-		        wf.subclass.integer = AST_FORMAT_SLIN;
+		        wf.subclass.format = ast_format_slin;
 		        wf.samples = FRAME_SIZE;
 		        wf.datalen = FRAME_SIZE * 2;
 			wf.offset = AST_FRIENDLY_OFFSET;
@@ -1226,7 +1226,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	haslastaudio = 0;
 	memset(&fr,0,sizeof(struct ast_frame));
         fr.frametype = AST_FRAME_VOICE;
-        fr.subclass.integer = AST_FORMAT_ULAW;
+        fr.subclass.format = ast_format_ulaw;
         fr.datalen = FRAME_SIZE;
         fr.samples = FRAME_SIZE;
         fr.data.ptr =  p->buf + AST_FRIENDLY_OFFSET;
@@ -1317,7 +1317,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		}
 		memset(&fr,0,sizeof(struct ast_frame));
 	        fr.frametype = AST_FRAME_VOICE;
-	        fr.subclass.integer = AST_FORMAT_ULAW;
+	        fr.subclass.format = ast_format_ulaw;
 	        fr.datalen = FRAME_SIZE;
 	        fr.samples = FRAME_SIZE;
 	        fr.data.ptr =  p->buf + AST_FRIENDLY_OFFSET;
@@ -1360,7 +1360,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			memset(silbuf,0,sizeof(silbuf));
 			memset(&fr,0,sizeof(struct ast_frame));
 		        fr.frametype = AST_FRAME_VOICE;
-		        fr.subclass.integer = AST_FORMAT_SLIN;
+		        fr.subclass.format = ast_format_slin;
 		        fr.datalen = FRAME_SIZE * 2;
 		        fr.samples = FRAME_SIZE;
 		        fr.data.ptr =  silbuf;
@@ -1390,7 +1390,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		memset(silbuf,0,sizeof(silbuf));
 		memset(&fr,0,sizeof(struct ast_frame));
 	        fr.frametype = AST_FRAME_VOICE;
-	        fr.subclass.integer = AST_FORMAT_SLIN;
+			fr.subclass.format = ast_format_slin;
 	        fr.datalen = FRAME_SIZE * 2;
 	        fr.samples = FRAME_SIZE;
 	        fr.data.ptr =  silbuf;
@@ -1453,7 +1453,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		memset(silbuf,0,sizeof(silbuf));
 		memset(&fr,0,sizeof(struct ast_frame));
 	        fr.frametype = AST_FRAME_VOICE;
-	        fr.subclass.integer = AST_FORMAT_SLIN;
+	        fr.subclass.format = ast_format_slin;
 	        fr.datalen = FRAME_SIZE * 2;
 	        fr.samples = FRAME_SIZE;
 	        fr.data.ptr =  silbuf;
@@ -1763,7 +1763,7 @@ struct timeval tv;
 				}
 				memset(&fr,0,sizeof(struct ast_frame));
 			        fr.frametype = AST_FRAME_VOICE;
-			        fr.subclass.integer = AST_FORMAT_SLIN;
+			        fr.subclass.format = ast_format_slin;
 			        fr.datalen = FRAME_SIZE;
 			        fr.samples = FRAME_SIZE;
 			        fr.data.ptr = xmtbuf;
@@ -1845,7 +1845,7 @@ struct timeval tv;
 					if ((!x) && (!i)) continue;
 					memset(&fr,0,sizeof(struct ast_frame));
 				        fr.frametype = AST_FRAME_VOICE;
-				        fr.subclass.integer = AST_FORMAT_SLIN;
+				        fr.subclass.format = ast_format_slin;
 				        fr.datalen = FRAME_SIZE;
 				        fr.samples = FRAME_SIZE;
 				        fr.data.ptr = xmtbuf2;
@@ -1900,7 +1900,7 @@ struct timeval tv;
 				memset(xmtbuf,0xff,sizeof(xmtbuf));
 				memset(&fr,0,sizeof(struct ast_frame));
 			        fr.frametype = AST_FRAME_VOICE;
-			        fr.subclass.integer = AST_FORMAT_ULAW;
+			        fr.subclass.format = ast_format_ulaw;
 			        fr.datalen = FRAME_SIZE;
 			        fr.samples = FRAME_SIZE;
 			        fr.data.ptr = xmtbuf;
@@ -1968,7 +1968,7 @@ struct timeval tv;
 				memset(xmtbuf,0xff,sizeof(xmtbuf));
 				memset(&fr,0,sizeof(struct ast_frame));
 			        fr.frametype = AST_FRAME_VOICE;
-			        fr.subclass.integer = AST_FORMAT_ULAW;
+			        fr.subclass.format = ast_format_ulaw;
 			        fr.datalen = FRAME_SIZE;
 			        fr.samples = FRAME_SIZE;
 			        fr.data.ptr = xmtbuf;
@@ -3716,7 +3716,7 @@ static void *voter_reader(void *data)
 
 									memset(&fr,0,sizeof(struct ast_frame));
 								        fr.frametype = AST_FRAME_VOICE;
-								        fr.subclass.integer = AST_FORMAT_ADPCM;
+								        fr.subclass.format = ast_format_adpcm;
 								        fr.datalen = ADPCM_FRAME_SIZE;
 								        fr.samples = FRAME_SIZE * 2;
 								        fr.data.ptr =  buf + sizeof(VOTER_PACKET_HEADER) + 1;
@@ -3753,7 +3753,7 @@ static void *voter_reader(void *data)
 									}
 									memset(&fr,0,sizeof(struct ast_frame));
 								        fr.frametype = AST_FRAME_VOICE;
-								        fr.subclass.integer = AST_FORMAT_SLIN;
+								        fr.subclass.format = ast_format_slin;
 								        fr.datalen = FRAME_SIZE * 4;
 								        fr.samples = FRAME_SIZE * 2;
 								        fr.data.ptr = xbuf;
@@ -4027,7 +4027,7 @@ static void *voter_reader(void *data)
 											memset(silbuf,0,sizeof(silbuf));
 											memset(&fr,0,sizeof(struct ast_frame));
 										        fr.frametype = AST_FRAME_VOICE;
-										        fr.subclass.integer = AST_FORMAT_SLIN;
+										        fr.subclass.format = ast_format_slin;
 										        fr.datalen = FRAME_SIZE * 2;
 										        fr.samples = FRAME_SIZE;
 										        fr.data.ptr =  silbuf;
@@ -4099,7 +4099,7 @@ static void *voter_reader(void *data)
 											memset(silbuf,0,sizeof(silbuf));
 											memset(&fr,0,sizeof(struct ast_frame));
 										        fr.frametype = AST_FRAME_VOICE;
-										        fr.subclass.integer = AST_FORMAT_SLIN;
+										        fr.subclass.format = ast_format_slin;
 										        fr.datalen = FRAME_SIZE * 2;
 										        fr.samples = FRAME_SIZE;
 										        fr.data.ptr =  silbuf;
@@ -4183,7 +4183,7 @@ static void *voter_reader(void *data)
 										memset(silbuf,0,sizeof(silbuf));
 										memset(&fr,0,sizeof(struct ast_frame));
 									        fr.frametype = AST_FRAME_VOICE;
-									        fr.subclass.integer = AST_FORMAT_SLIN;
+									        fr.subclass.format = ast_format_slin;
 									        fr.datalen = FRAME_SIZE * 2;
 									        fr.samples = FRAME_SIZE;
 									        fr.data.ptr =  silbuf;
