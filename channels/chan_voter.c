@@ -2228,6 +2228,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	ast_channel_nativeformats_set(tmp, voter_tech.capabilities);
 //	if (state == AST_STATE_RING) tmp->rings = 1;
 	ast_channel_tech_pvt_set(tmp, p);
+	ast_channel_unlock(tmp);
 	ast_channel_language_set(tmp, "");
 	p->owner = tmp;
 	p->u = ast_module_user_add(tmp);
