@@ -29,20 +29,34 @@ AST_PBX_KEEPALIVE: https://github.com/asterisk/asterisk/commit/50a25ac8474d7900b
 
 # Installing
 
-You can use PhreakScript to install Asterisk automatically, first. You'll need to manually add the app_rpt components afterwards.
+You can use PhreakScript to install Asterisk automatically, first, then use the `rpt_install.sh` script to properly install the files from this repo.
+
+## Automatic Installation
+
+Step 1: Install DAHDI and Asterisk
 
 ```
 cd /usr/src && wget https://docs.phreaknet.org/script/phreaknet.sh && chmod +x phreaknet.sh && ./phreaknet.sh make
 phreaknet install -t -s -d # install in developer mode (for backtraces and assertions), install chan_sip (if you need it still) and DAHDI (required)
 ```
 
-## Pre-Reqs
+Step 2: Install app_rpt modules
+
+- Download `rpt_install.sh` from this repo. The easiest way is to use wget, but since this repo is private, there's no default link: click on the file above, then click "Raw" in the upper right and use `wget` to download that URL. Or, you can manually get this file onto your system.
+- `chmod +x rpt_install.sh`
+- `./rpt_install.sh`
+
+## Manual Installation
+
+If you want to manually install app_rpt et al., here is how:
+
+### Pre-Reqs
 
 `chan_simpleusb` requires `libusb-dev` on Debian:
 
 `apt-get install -y libusb-dev`
 
-## Compiling
+### Compiling
 
 Add this near the bottom of `apps/Makefile`:
 
@@ -52,7 +66,7 @@ Add this near the bottom of `channels/Makefile`:
 
 `chan_simpleusb.so: LIBS+=-lusb -lasound`
 
-## After DAHDI/Asterisk installed
+### After DAHDI/Asterisk installed
 
 `/dev/dsp1` needs to exist for chan_simpleusb and chan_usbradio to work.
 
