@@ -3084,7 +3084,7 @@ static void mdc1200_send(struct rpt *myrpt, char *data)
 	sprintf(str, "I %s %s", myrpt->name, data);
 
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.integer = 0;
+	wf.subclass.format = ast_format_slin;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.data.ptr = str;
@@ -3117,7 +3117,7 @@ static void rssi_send(struct rpt *myrpt)
 	char str[200];
 	sprintf(str, "R %i", myrpt->rxrssi);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.integer = 0;
+	wf.subclass.format = ast_format_slin;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -3405,7 +3405,7 @@ static int send_usb_txt(struct rpt *myrpt, char *txt)
 
 	ast_debug(1, "send_usb_txt %s\n", txt);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.integer = 0;
+	wf.subclass.format = ast_format_slin;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(txt) + 1;
@@ -3430,7 +3430,7 @@ static int send_link_pl(struct rpt *myrpt, char *txt)
 	snprintf(str, sizeof(str), "C %s %s %s", myrpt->name, myrpt->p.ctgroup, txt);
 	ast_debug(1, "send_link_pl %s\n", str);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.integer = 0;
+	wf.subclass.format = ast_format_slin;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -9643,7 +9643,7 @@ static void send_link_dtmf(struct rpt *myrpt, char c)
 
 	snprintf(str, sizeof(str), "D %s %s %d %c", myrpt->cmdnode, myrpt->name, ++(myrpt->dtmfidx), c);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.integer = 0;
+	wf.subclass.format = ast_format_slin;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -9689,7 +9689,7 @@ static void send_link_keyquery(struct rpt *myrpt)
 	rpt_mutex_unlock(&myrpt->lock);
 	snprintf(str, sizeof(str), "K? * %s 0 0", myrpt->name);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.integer = 0;
+	wf.subclass.format = ast_format_slin;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -9714,7 +9714,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 
 	snprintf(str, sizeof(str) - 1, "T %s %s", myrpt->name, cmd);
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.integer = 0;
+	wf.subclass.format = ast_format_slin;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -11410,7 +11410,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	struct ast_frame wf;
 
 	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.integer = 0;
+	wf.subclass.format = ast_format_slin;
 	wf.offset = 0;
 	wf.mallocd = 0;
 	wf.datalen = strlen(str) + 1;
@@ -18102,7 +18102,7 @@ static void *rpt(void *this)
 
 				memset(&lf, 0, sizeof(lf));
 				lf.frametype = AST_FRAME_TEXT;
-				lf.subclass.integer = 0;
+				lf.subclass.format = ast_format_slin;
 				lf.offset = 0;
 				lf.mallocd = 0;
 				lf.samples = 0;
@@ -18915,7 +18915,7 @@ static void *rpt(void *this)
 					} else {
 						sprintf(str, "V %s %s", myrpt->name, (char *) f->data.ptr);
 						wf.frametype = AST_FRAME_TEXT;
-						wf.subclass.integer = 0;
+						wf.subclass.format = ast_format_slin;
 						wf.offset = 0;
 						wf.mallocd = 0;
 						wf.datalen = strlen(str) + 1;
