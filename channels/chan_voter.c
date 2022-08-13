@@ -1330,6 +1330,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		if (!f2)
 		{
 			ast_log(LOG_ERROR,"Can not translate frame to send to Asterisk\n");
+			ast_frfree(f1);
 			return(0);
 		}
 		sp1 = f1->data.ptr;
@@ -1386,6 +1387,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				ast_queue_frame(p->owner,f2);
 				gettimeofday(&p->lastrxtime,NULL);
 			}
+			ast_frfree(f2);
 		}
 		memset(silbuf,0,sizeof(silbuf));
 		memset(&fr,0,sizeof(struct ast_frame));
@@ -1405,6 +1407,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		p->winner = 0;
 		incr_drainindex(p);
 		ast_queue_frame(p->owner,&fr);
+		ast_frfree(f1);
 		return(0);
 	}
 	p->winner = maxclient;
@@ -1446,6 +1449,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			ast_queue_frame(p->owner,f2);
 			x = 1;
 		}
+		ast_frfree(f2);
 	}
 	if (!x) ast_queue_frame(p->owner,f1);
 	else
@@ -1464,6 +1468,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	        fr.delivery.tv_usec = 0;
 		ast_queue_frame(p->owner,&fr);
 	}
+	ast_frfree(f1);
 	return(1);
 }
 
