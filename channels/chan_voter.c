@@ -4842,6 +4842,8 @@ static int load_module(void)
 	char *val;
 	struct ast_flags zeroflag = {0};
 
+	run_forever = 1;
+
 	snprintf(challenge, sizeof(challenge), "%ld", ast_random());
 	hasmaster = 0;
 
