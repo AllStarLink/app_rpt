@@ -622,8 +622,7 @@ static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 	tsearch(node, &el_db_nodenum, compare_eldb_nodenum);
 	tsearch(node, &el_db_ipaddr, compare_eldb_ipaddr);
 	tsearch(node, &el_db_callsign, compare_eldb_callsign);
-	if (debug > 1)
-		ast_log(LOG_DEBUG, "eldb put: Node=%s, Call=%s, IP=%s\n", nodenum, callsign, ipaddr);
+	ast_debug(2, "eldb put: Node=%s, Call=%s, IP=%s\n", nodenum, callsign, ipaddr);
 	return (node);
 }
 
@@ -897,8 +896,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
-	if (option_debug)
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_channel_name(ast));
+	ast_debug(1, "Calling %s on %s\n", dest, ast_channel_name(ast));
 	if (*dest) {				/* if number specified */
 		char *str, *cp;
 
@@ -996,8 +994,7 @@ static int el_hangup(struct ast_channel *ast)
 	time_t now;
 
 	if (!instp->useless_flag_1) {
-		if (debug)
-			ast_log(LOG_DEBUG, "Sent bye to IP address %s\n", p->ip);
+		ast_debug(1, "Sent bye to IP address %s\n", p->ip);
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->el_node_test.ip, p->ip);
 		find_delete(&instp->el_node_test);
@@ -1013,8 +1010,7 @@ static int el_hangup(struct ast_channel *ast)
 		if (instp->starttime < (now - EL_APRS_START_DELAY))
 			instp->aprstime = now;
 	}
-	if (option_debug)
-		ast_log(LOG_DEBUG, "el_hangup(%s)\n", ast_channel_name(ast));
+	ast_debug(1, "el_hangup(%s)\n", ast_channel_name(ast));
 	if (!ast_channel_tech_pvt(ast)) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
@@ -1354,8 +1350,7 @@ static int find_delete(struct el_node *key)
 
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
-		if (debug)
-			ast_log(LOG_DEBUG, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
+		ast_debug(5, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
 		found = 1;
 		if (!(*found_key)->instp->useless_flag_1)
 			ast_softhangup((*found_key)->chan, AST_SOFTHANGUP_DEV);
@@ -1398,12 +1393,11 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 		if (instp->fdr >= 0) {
 			close(instp->fdr);
 			instp->fdr = -1;
-			if (debug)
-				ast_log(LOG_DEBUG, "rec stopped\n");
+			ast_debug(3, "rec stopped\n");
 		} else {
 			instp->fdr = open(instp->fdr_file, O_CREAT | O_WRONLY | O_APPEND | O_TRUNC, S_IRUSR | S_IWUSR);
-			if (debug && instp->fdr >= 0)
-				ast_log(LOG_DEBUG, "rec into %s started\n", instp->fdr_file);
+			if (instp->fdr >= 0)
+				ast_debug(3, "rec into %s started\n", instp->fdr_file);
 		}
 		return;
 	}
@@ -1439,16 +1433,15 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 			if (find_delete(&key)) {
 				for (i = 0; i < 20; i++)
 					sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
-				if (debug)
-					ast_log(LOG_DEBUG, "disconnect request sent to %s\n", key.ip);
-			} else if (debug)
-				ast_log(LOG_DEBUG, "Did not find ip=%s to request disconnect\n", key.ip);
+				ast_debug(3, "disconnect request sent to %s\n", key.ip);
+			} else {
+				ast_debug(1, "Did not find ip=%s to request disconnect\n", key.ip);
+			}
 		} else {
 			for (i = 0; i < n; i++) {
 				sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 			}
-			if (debug)
-				ast_log(LOG_DEBUG, "connect request sent to %s\n", arg1);
+			ast_debug(3, "connect request sent to %s\n", arg1);
 		}
 		return;
 	}
@@ -2025,14 +2018,11 @@ static void el_zapcall(char *call)
 {
 	struct eldb *mynode;
 
-	if (debug > 1)
-		ast_log(LOG_DEBUG, "zapcall eldb delete Attempt: Call=%s\n", call);
+	ast_debug(2, "zapcall eldb delete Attempt: Call=%s\n", call);
 	ast_mutex_lock(&el_db_lock);
 	mynode = el_db_find_callsign(call);
 	if (mynode) {
-		if (debug > 1)
-			ast_log(LOG_DEBUG, "zapcall eldb delete: Node=%s, Call=%s, IP=%s\n",
-					mynode->nodenum, mynode->callsign, mynode->ipaddr);
+		ast_debug(2, "zapcall eldb delete: Node=%s, Call=%s, IP=%s\n", mynode->nodenum, mynode->callsign, mynode->ipaddr);
 		el_db_delete(mynode);
 	}
 	ast_mutex_unlock(&el_db_lock);
@@ -2154,8 +2144,7 @@ static int do_el_directory(char *hostname)
 		return -1;
 	}
 	str[strlen(str) - 1] = 0;
-	if (debug)
-		printf("Sending: %s to %s\n", str, hostname);
+	ast_debug(5, "Sending: %s to %s\n", str, hostname);
 	if (recv(sock, str, 4, 0) != 4) {
 		ast_log(LOG_ERROR, "Error in directory download (header) on %s\n", hostname);
 		close(sock);
@@ -2273,8 +2262,8 @@ static int do_el_directory(char *hostname)
 	pp = (dir_partial) ? "partial" : "full";
 	cc = (dir_compressed) ? "compressed" : "un-compressed";
 	ast_verb(4, "Directory pgm done downloading(%s,%s), %d records\n", pp, cc, n);
-	if (debug && dir_compressed)
-		ast_log(LOG_DEBUG, "Got snapshot_id: %s\n", snapshot_id);
+	if (dir_compressed)
+		ast_debug(2, "Got snapshot_id: %s\n", snapshot_id);
 	return (dir_compressed);
 }
 
@@ -2299,8 +2288,7 @@ static void *el_directory(void *data)
 				curdir = 0;
 			continue;
 		}
-		if (debug)
-			ast_log(LOG_DEBUG, "Trying to do directory download Echolink server %s\n", instances[0]->elservers[curdir]);
+		ast_debug(2, "Trying to do directory download Echolink server %s\n", instances[0]->elservers[curdir]);
 		rc = do_el_directory(instances[0]->elservers[curdir]);
 		if (rc < 0) {
 			if (++curdir >= EL_MAX_SERVERS)
@@ -2326,8 +2314,7 @@ static void *el_register(void *data)
 	time_t then, now;
 
 	time(&then);
-	if (debug)
-		ast_log(LOG_DEBUG, "Echolink registration thread started on %s.\n", instp->name);
+	ast_debug(1, "Echolink registration thread started on %s.\n", instp->name);
 	while (run_forever) {
 		time(&now);
 		el_login_sleeptime -= (now - then);
@@ -2348,8 +2335,7 @@ static void *el_register(void *data)
 		} while (i < EL_MAX_SERVERS);
 
 		if (i < EL_MAX_SERVERS) {
-			if (debug)
-				ast_log(LOG_DEBUG, "Trying to register with Echolink server %s\n", instp->elservers[i]);
+			ast_debug(2, "Trying to register with Echolink server %s\n", instp->elservers[i]);
 			rc = sendcmd(instp->elservers[i++], instp);
 		}
 		if (rc == 0)
@@ -2534,8 +2520,7 @@ static void *el_reader(void *data)
 					instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
-			if (debug)
-				ast_log(LOG_DEBUG, "aprs out: %s\n", aprsstr);
+			ast_debug(5, "aprs out: %s\n", aprsstr);
 			sprintf(aprscall, "%s/%s", instp->mycall, instp->mycall);
 			memset(sdes_packet, 0, sizeof(sdes_packet));
 			sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
@@ -2600,8 +2585,7 @@ static void *el_reader(void *data)
 								fr.delivery.tv_sec = 0;
 								fr.delivery.tv_usec = 0;
 								ast_queue_frame((*found_key)->chan, &fr);
-								if (debug)
-									ast_log(LOG_DEBUG, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
+								ast_debug(1, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
 							}
 							(*found_key)->countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
@@ -2653,8 +2637,7 @@ static void *el_reader(void *data)
 								if (x < MAXPENDING) {
 									/* if its time, send un-auth */
 									if (ast_tvdiff_ms(ast_tvnow(), instp->pending[x].reqtime) >= AUTH_RETRY_MS) {
-										if (debug)
-											ast_log(LOG_DEBUG, "Sent bye to IP address %s\n", instp->el_node_test.ip);
+										ast_debug(1, "Sent bye to IP address %s\n", instp->el_node_test.ip);
 										j = rtcp_make_bye(bye, "UN-AUTHORIZED");
 										sin1.sin_family = AF_INET;
 										sin1.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
