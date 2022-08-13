@@ -22862,7 +22862,7 @@ static int unload_module(void)
 	res |= ast_unregister_application(mdc_app);
 #endif
 
-	ast_cli_unregister_multiple(rpt_cli, sizeof(rpt_cli) / sizeof(struct ast_cli_entry));
+	ast_cli_unregister_multiple(rpt_cli, ARRAY_LEN(rpt_cli)));
 	res |= ast_manager_unregister("RptLocalNodes");
 	res |= ast_manager_unregister("RptStatus");
 	close(nullfd);
@@ -22904,7 +22904,7 @@ static int load_module(void)
 	}
 	ast_pthread_create(&rpt_master_thread, NULL, rpt_master, NULL);
 
-	ast_cli_register_multiple(rpt_cli, sizeof(rpt_cli) / sizeof(struct ast_cli_entry));
+	ast_cli_register_multiple(rpt_cli, ARRAY_LEN(rpt_cli));
 	res = 0;
 	res |= ast_manager_register("RptLocalNodes", 0, manager_rpt_local_nodes, "List local node numbers");
 	res |= ast_manager_register("RptStatus", 0, manager_rpt_status, "Return Rpt Status for CGI");

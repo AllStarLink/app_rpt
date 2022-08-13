@@ -3966,7 +3966,7 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	ast_cli_register_multiple(cli_simpleusb, sizeof(cli_simpleusb) / sizeof(struct ast_cli_entry));
+	ast_cli_register_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
 
 	if (haspp && hasout)
 		ast_pthread_create_background(&pulserid, NULL, pulserthread, NULL);
@@ -3983,7 +3983,7 @@ static int unload_module(void)
 	ast_log(LOG_WARNING, "unload_module() called\n");
 
 	ast_channel_unregister(&simpleusb_tech);
-	ast_cli_unregister_multiple(cli_simpleusb, sizeof(cli_simpleusb) / sizeof(struct ast_cli_entry));
+	ast_cli_unregister_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
 
 	for (o = simpleusb_default.next; o; o = o->next) {
 

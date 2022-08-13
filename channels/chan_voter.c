@@ -3164,10 +3164,8 @@ char *str,*strs[100];
 
 static int unload_module(void)
 {
-        run_forever = 0;
-
-	ast_cli_unregister_multiple(voter_cli,sizeof(voter_cli) / 
-		sizeof(struct ast_cli_entry));
+	run_forever = 0;
+	ast_cli_unregister_multiple(voter_cli, ARRAY_LEN(voter_cli));
 	ast_manager_unregister("VoterStatus");
 	/* First, take us out of the channel loop */
 	ao2_ref(voter_tech.capabilities, -1);
@@ -4917,8 +4915,7 @@ static int load_module(void)
 
 	if (reload()) return AST_MODULE_LOAD_DECLINE;
 
-	ast_cli_register_multiple(voter_cli,sizeof(voter_cli) / 
-		sizeof(struct ast_cli_entry));
+	ast_cli_register_multiple(voter_cli, ARRAY_LEN(voter_cli));
 
 	ast_manager_register("VoterStatus", 0, manager_voter_status, "Return Voter instance(s) status");
 	pthread_attr_init(&attr);
