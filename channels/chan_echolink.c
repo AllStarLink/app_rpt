@@ -110,6 +110,7 @@ do not use 127.0.0.1
 #include <signal.h>
 #include <fnmatch.h>
 #include <math.h>
+
 #include "asterisk/lock.h"
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
@@ -123,6 +124,7 @@ do not use 127.0.0.1
 #include "asterisk/translate.h"
 #include "asterisk/astdb.h"
 #include "asterisk/cli.h"
+#include "asterisk/format_cache.h"
 
 #define	MAX_RXKEY_TIME 4
 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
@@ -163,7 +165,6 @@ do not use 127.0.0.1
    platforms running Linux.
 */
 static const char tdesc[] = "Echolink channel driver";
-static int prefformat = AST_FORMAT_GSM;
 static char type[] = "echolink";
 static char snapshot_id[50] = { '0', 0 };
 
@@ -384,8 +385,8 @@ static int el_login_sleeptime = 0;
 
 static char *config = "echolink.conf";
 
-static struct ast_channel *el_request(const char *type, int format, void *data, int *cause);
-static int el_call(struct ast_channel *ast, char *dest, int timeout);
+static struct ast_channel *el_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
+static int el_call(struct ast_channel *ast, const char *dest, int timeout);
 static int el_hangup(struct ast_channel *ast);
 static struct ast_frame *el_xread(struct ast_channel *ast);
 static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame);
@@ -418,10 +419,9 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 /* remove writen if Asterisk has similar functionality */
 static int writen(int fd, char *ptr, int nbytes);
 
-static const struct ast_channel_tech el_tech = {
+static struct ast_channel_tech el_tech = {
 	.type = type,
 	.description = tdesc,
-	.capabilities = AST_FORMAT_GSM,
 	.requester = el_request,
 	.call = el_call,
 	.hangup = el_hangup,
@@ -438,9 +438,9 @@ static const struct ast_channel_tech el_tech = {
 */
 
 /* Debug mode */
-static int el_do_debug(int fd, int argc, char *argv[]);
-static int el_do_dbdump(int fd, int argc, char *argv[]);
-static int el_do_dbget(int fd, int argc, char *argv[]);
+static int el_do_debug(int fd, int argc, const char *const *argv);
+static int el_do_dbdump(int fd, int argc, const char *const *argv);
+static int el_do_dbget(int fd, int argc, const char *const *argv);
 
 static char debug_usage[] = "Usage: echolink debug level {0-7}\n" "       Enables debug messages in app_rpt\n";
 
@@ -534,36 +534,36 @@ static int compare_eldb_callsign(const void *pa, const void *pb)
 	return strcmp(((struct eldb *) pa)->callsign, ((struct eldb *) pb)->callsign);
 }
 
-static struct eldb *el_db_find_nodenum(char *nodenum)
+static struct eldb *el_db_find_nodenum(const char *nodenum)
 {
 	struct eldb **found_key = NULL, key;
 
 	memset(&key, 0, sizeof(key));
-	strncpy(key.nodenum, strndup(nodenum, ELDB_NODENUMLEN), sizeof(key.nodenum) - 1);
+	strncpy(key.nodenum, ast_strndup(nodenum, ELDB_NODENUMLEN), sizeof(key.nodenum) - 1);
 	found_key = (struct eldb **) tfind(&key, &el_db_nodenum, compare_eldb_nodenum);
 	if (found_key)
 		return (*found_key);
 	return NULL;
 }
 
-static struct eldb *el_db_find_callsign(char *callsign)
+static struct eldb *el_db_find_callsign(const char *callsign)
 {
 	struct eldb **found_key = NULL, key;
 
 	memset(&key, 0, sizeof(key));
-	strncpy(key.callsign, strndup(callsign, ELDB_CALLSIGNLEN), sizeof(key.callsign) - 1);
+	strncpy(key.callsign, ast_strndup(callsign, ELDB_CALLSIGNLEN), sizeof(key.callsign) - 1);
 	found_key = (struct eldb **) tfind(&key, &el_db_callsign, compare_eldb_callsign);
 	if (found_key)
 		return (*found_key);
 	return NULL;
 }
 
-static struct eldb *el_db_find_ipaddr(char *ipaddr)
+static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 {
 	struct eldb **found_key = NULL, key;
 
 	memset(&key, 0, sizeof(key));
-	strncpy(key.ipaddr, strndup(ipaddr, ELDB_IPADDRLEN), sizeof(key.ipaddr) - 1);
+	strncpy(key.ipaddr, ast_strndup(ipaddr, ELDB_IPADDRLEN), sizeof(key.ipaddr) - 1);
 	found_key = (struct eldb **) tfind(&key, &el_db_ipaddr, compare_eldb_ipaddr);
 	if (found_key)
 		return (*found_key);
@@ -607,9 +607,9 @@ static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 		return NULL;
 	}
 	memset(node, 0, sizeof(struct eldb));
-	strncpy(node->nodenum, strndup(nodenum, ELDB_NODENUMLEN), ELDB_NODENUMLEN - 1);
-	strncpy(node->ipaddr, strndup(ipaddr, ELDB_IPADDRLEN), ELDB_IPADDRLEN - 1);
-	strncpy(node->callsign, strndup(callsign, ELDB_CALLSIGNLEN), ELDB_CALLSIGNLEN - 1);
+	strncpy(node->nodenum, ast_strndup(nodenum, ELDB_NODENUMLEN), ELDB_NODENUMLEN - 1);
+	strncpy(node->ipaddr, ast_strndup(ipaddr, ELDB_IPADDRLEN), ELDB_IPADDRLEN - 1);
+	strncpy(node->callsign, ast_strndup(callsign, ELDB_CALLSIGNLEN), ELDB_CALLSIGNLEN - 1);
 	mynode = el_db_find_nodenum(node->nodenum);
 	if (mynode)
 		el_db_delete(mynode);
@@ -885,20 +885,20 @@ static int is_rtcp_sdes(unsigned char *p, int len)
 	return sawsdes;
 }
 
-static int el_call(struct ast_channel *ast, char *dest, int timeout)
+static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 {
-	struct el_pvt *p = ast->tech_pvt;
+	struct el_pvt *p = ast_channel_tech_pvt(ast);
 	struct el_instance *instp = p->instp;
 	char buf[100];
 
-	if ((ast->_state != AST_STATE_DOWN) && (ast->_state != AST_STATE_RESERVED)) {
-		ast_log(LOG_WARNING, "el_call called on %s, neither down nor reserved\n", ast->name);
+	if ((ast_channel_state(ast) != AST_STATE_DOWN) && (ast_channel_state(ast) != AST_STATE_RESERVED)) {
+		ast_log(LOG_WARNING, "el_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
 		return -1;
 	}
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
 	if (option_debug)
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast->name);
+		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_channel_name(ast));
 	if (*dest) {				/* if number specified */
 		char *str, *cp;
 
@@ -976,7 +976,7 @@ static struct el_pvt *el_alloc(void *data)
 			}
 			ast_dsp_set_features(p->dsp, DSP_FEATURE_DIGIT_DETECT);
 			ast_dsp_set_digitmode(p->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-			p->xpath = ast_translator_build_path(AST_FORMAT_SLINEAR, AST_FORMAT_GSM);
+			p->xpath = ast_translator_build_path(ast_format_slin, ast_format_gsm);
 			if (!p->xpath) {
 				ast_log(LOG_ERROR, "Cannot get translator!!\n");
 				return NULL;
@@ -988,7 +988,7 @@ static struct el_pvt *el_alloc(void *data)
 
 static int el_hangup(struct ast_channel *ast)
 {
-	struct el_pvt *p = ast->tech_pvt;
+	struct el_pvt *p = ast_channel_tech_pvt(ast);
 	struct el_instance *instp = p->instp;
 	int i, n;
 	unsigned char bye[50];
@@ -1014,20 +1014,20 @@ static int el_hangup(struct ast_channel *ast)
 			instp->aprstime = now;
 	}
 	if (option_debug)
-		ast_log(LOG_DEBUG, "el_hangup(%s)\n", ast->name);
-	if (!ast->tech_pvt) {
+		ast_log(LOG_DEBUG, "el_hangup(%s)\n", ast_channel_name(ast));
+	if (!ast_channel_tech_pvt(ast)) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
 	el_destroy(p);
-	ast->tech_pvt = NULL;
+	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
 	return 0;
 }
 
 static int el_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
 {
-	struct el_pvt *p = ast->tech_pvt;
+	struct el_pvt *p = ast_channel_tech_pvt(ast);
 
 	switch (cond) {
 	case AST_CONTROL_RADIO_KEY:
@@ -1076,7 +1076,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 {
 #define	MAXLINKSTRS 200
 
-	struct el_pvt *p = ast->tech_pvt;
+	struct el_pvt *p = ast_channel_tech_pvt(ast);
 	char *cmd = NULL, *arg1 = NULL;
 	char delim = ' ', *saveptr, *cp, *pkt;
 	char buf[200], *ptr, str[200], *arg4 = NULL, *strs[MAXLINKSTRS];
@@ -1176,7 +1176,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 		/* if not for this one, we cant go any farther */
 		if (strcmp(arg1, str))
 			return 0;
-		ast_senddigit(ast, *arg4);
+		ast_senddigit(ast, *arg4, 0);
 		return 0;
 	}
 	return 0;
@@ -1457,14 +1457,14 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 
 static struct ast_frame *el_xread(struct ast_channel *ast)
 {
-	struct el_pvt *p = ast->tech_pvt;
+	struct el_pvt *p = ast_channel_tech_pvt(ast);
 
 	memset(&p->fr, 0, sizeof(struct ast_frame));
 	p->fr.frametype = 0;
-	p->fr.subclass = 0;
+	p->fr.subclass.integer = 0;
 	p->fr.datalen = 0;
 	p->fr.samples = 0;
-	p->fr.data = NULL;
+	p->fr.data.ptr = NULL;
 	p->fr.src = type;
 	p->fr.offset = 0;
 	p->fr.mallocd = 0;
@@ -1479,7 +1479,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	unsigned char bye[50];
 	unsigned short i;
 	struct sockaddr_in sin;
-	struct el_pvt *p = ast->tech_pvt;
+	struct el_pvt *p = ast_channel_tech_pvt(ast);
 	struct el_instance *instp = p->instp;
 	struct ast_frame fr, *f1, *f2;
 	struct el_rxqast *qpast;
@@ -1524,8 +1524,8 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				fr.datalen = 0;
 				fr.samples = 0;
 				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass = AST_CONTROL_RADIO_KEY;
-				fr.data = 0;
+				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
+				fr.data.ptr = 0;
 				fr.src = type;
 				fr.offset = 0;
 				fr.mallocd = 0;
@@ -1543,8 +1543,8 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.datalen = GSM_FRAME_SIZE;
 			fr.samples = 160;
 			fr.frametype = AST_FRAME_VOICE;
-			fr.subclass = AST_FORMAT_GSM;
-			fr.data = buf + AST_FRIENDLY_OFFSET;
+			fr.subclass.format = ast_format_gsm;
+			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
 			fr.src = type;
 			fr.offset = AST_FRIENDLY_OFFSET;
 			fr.mallocd = 0;
@@ -1558,11 +1558,11 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				ast_frfree(f2);
 				if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN))
 				{
-					if ((f1->subclass != 'm') && (f1->subclass != 'u')) {
+					if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
 						if (f1->frametype == AST_FRAME_DTMF_END)
 							if (option_verbose > 3)
 								ast_verbose(VERBOSE_PREFIX_3 "Echolink %s Got DTMF char %c from IP %s\n", p->stream,
-											f1->subclass, p->ip);
+											f1->subclass.integer, p->ip);
 						ast_queue_frame(ast, f1);
 						x = 1;
 					}
@@ -1577,8 +1577,8 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		fr.datalen = 0;
 		fr.samples = 0;
 		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass = AST_CONTROL_RADIO_UNKEY;
-		fr.data = 0;
+		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
+		fr.data.ptr = 0;
 		fr.src = type;
 		fr.offset = 0;
 		fr.mallocd = 0;
@@ -1616,13 +1616,12 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 	} else {
 		/* Asterisk to Echolink */
-		if (!(frame->subclass & (AST_FORMAT_GSM))) {
-			ast_log(LOG_WARNING, "Cannot handle frames in %d format\n", frame->subclass);
-			ast_mutex_unlock(&instp->lock);
+		if (frame->subclass.format != ast_format_gsm) {
+			ast_log(LOG_NOTICE, "Cannot handle frames in non-GSM format: '%p'\n", frame->subclass.format);
 			return 0;
 		}
 		if (p->txkey || p->txindex) {
-			memcpy(instp->audio_all.data + (GSM_FRAME_SIZE * p->txindex++), frame->data, GSM_FRAME_SIZE);
+			memcpy(instp->audio_all.data + (GSM_FRAME_SIZE * p->txindex++), frame->data.ptr, GSM_FRAME_SIZE);
 		}
 		if (p->txindex >= BLOCKING_FACTOR) {
 			ast_mutex_lock(&instp->lock);
@@ -1664,25 +1663,25 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	return 0;
 }
 
-static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int nodenum)
+static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor)
 {
 	struct ast_channel *tmp;
 	struct el_instance *instp = i->instp;
 
-	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, 0, "echolink/%s", i->stream);
+	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, assignedids, requestor, 0, "echolink/%s", i->stream);
 	if (tmp) {
-		tmp->tech = &el_tech;
-		tmp->nativeformats = prefformat;
-		tmp->rawreadformat = prefformat;
-		tmp->rawwriteformat = prefformat;
-		tmp->writeformat = prefformat;
-		tmp->readformat = prefformat;
+		ast_channel_tech_set(tmp, &el_tech);
+		ast_channel_nativeformats_set(tmp, el_tech.capabilities);
+		ast_channel_set_rawreadformat(tmp, ast_format_gsm);
+		ast_channel_set_rawwriteformat(tmp, ast_format_gsm);
+		ast_channel_set_writeformat(tmp, ast_format_gsm);
+		ast_channel_set_readformat(tmp, ast_format_gsm);
 		if (state == AST_STATE_RING)
-			tmp->rings = 1;
-		tmp->tech_pvt = i;
-		ast_copy_string(tmp->context, instp->context, sizeof(tmp->context));
-		ast_copy_string(tmp->exten, instp->astnode, sizeof(tmp->exten));
-		ast_string_field_set(tmp, language, "");
+			ast_channel_rings_set(tmp, 1);
+		ast_channel_tech_pvt_set(tmp, i);
+		ast_channel_context_set(tmp, instp->context);
+		ast_channel_exten_set(tmp, instp->astnode);
+		ast_channel_language_set(tmp, "");
 		if (nodenum > 0) {
 			char tmpstr[30];
 
@@ -1694,7 +1693,7 @@ static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int node
 		i->nodenum = nodenum;
 		if (state != AST_STATE_DOWN) {
 			if (ast_pbx_start(tmp)) {
-				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", tmp->name);
+				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
 				ast_hangup(tmp);
 			}
 		}
@@ -1703,19 +1702,19 @@ static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int node
 	return tmp;
 }
 
-static struct ast_channel *el_request(const char *type, int format, void *data, int *cause)
+static struct ast_channel *el_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause)
 {
-	int oldformat, nodenum;
+	int nodenum;
 	struct el_pvt *p;
 	struct ast_channel *tmp = NULL;
 	char *str, *cp;
 
-	oldformat = format;
-	format &= (AST_FORMAT_GSM);
-	if (!format) {
-		ast_log(LOG_ERROR, "Asked to get a channel of unsupported format '%d'\n", oldformat);
+	if (!(ast_format_cap_iscompatible(cap, el_tech.capabilities))) {
+		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n", ast_format_cap_get_names(cap, &cap_buf));
 		return NULL;
 	}
+
 	str = ast_strdup((char *) data);
 	cp = strchr(str, '/');
 	if (cp)
@@ -1726,7 +1725,7 @@ static struct ast_channel *el_request(const char *type, int format, void *data, 
 	p = el_alloc(str);
 	ast_free(str);
 	if (p) {
-		tmp = el_new(p, AST_STATE_DOWN, nodenum);
+		tmp = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
 		if (!tmp)
 			el_destroy(p);
 	}
@@ -1737,7 +1736,7 @@ static struct ast_channel *el_request(const char *type, int format, void *data, 
 * Enable or disable debug output at a given level at the console
 */
 
-static int el_do_debug(int fd, int argc, char *argv[])
+static int el_do_debug(int fd, int argc, const char *const *argv)
 {
 	int newlevel;
 
@@ -1759,7 +1758,7 @@ static int el_do_debug(int fd, int argc, char *argv[])
 * Dump entire database
 */
 
-static int el_do_dbdump(int fd, int argc, char *argv[])
+static int el_do_dbdump(int fd, int argc, const char *const *argv)
 {
 	char c;
 	if (argc < 2)
@@ -1786,7 +1785,7 @@ static int el_do_dbdump(int fd, int argc, char *argv[])
 * Get echolink db entry
 */
 
-static int el_do_dbget(int fd, int argc, char *argv[])
+static int el_do_dbget(int fd, int argc, const char *const *argv)
 {
 	char c;
 	struct eldb *mynode;
@@ -1846,7 +1845,7 @@ static char *handle_cli_dbdump(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	case CLI_GENERATE:
 		return NULL;
 	}
-	return res2cli(rpt_do_dbdump(a->fd, a->argc, a->argv));
+	return res2cli(el_do_dbdump(a->fd, a->argc, a->argv));
 }
 
 static char *handle_cli_dbget(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
@@ -1859,10 +1858,10 @@ static char *handle_cli_dbget(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	case CLI_GENERATE:
 		return NULL;
 	}
-	return res2cli(rpt_do_dbget(a->fd, a->argc, a->argv));
+	return res2cli(el_do_dbget(a->fd, a->argc, a->argv));
 }
 
-static struct ast_cli_entry rpt_cli[] = {
+static struct ast_cli_entry el_cli[] = {
 	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
 	AST_CLI_DEFINE(handle_cli_dbdump, "Dump entire echolink db"),
 	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry")
@@ -1887,6 +1886,9 @@ static int unload_module(void)
 	ast_cli_unregister_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&el_tech);
+	ao2_cleanup(el_tech.capabilities);
+	el_tech.capabilities = NULL;
+
 	for (n = 0; n < ninstances; n++)
 		ast_free(instances[n]);
 	if (nullfd != -1)
@@ -2409,7 +2411,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 					}
 					el_node_key->p = p;
 					strncpy(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE + 1);
-					el_node_key->chan = el_new(el_node_key->p, AST_STATE_RINGING, el_node_key->nodenum);
+					el_node_key->chan = el_new(el_node_key->p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 					if (!el_node_key->chan) {
 						el_destroy(el_node_key->p);
 						return -1;
@@ -2598,8 +2600,8 @@ static void *el_reader(void *data)
 								fr.datalen = 0;
 								fr.samples = 0;
 								fr.frametype = AST_FRAME_CONTROL;
-								fr.subclass = AST_CONTROL_ANSWER;
-								fr.data = 0;
+								fr.subclass.integer = AST_CONTROL_ANSWER;
+								fr.data.ptr = 0;
 								fr.src = type;
 								fr.offset = 0;
 								fr.mallocd = 0;
@@ -2607,7 +2609,7 @@ static void *el_reader(void *data)
 								fr.delivery.tv_usec = 0;
 								ast_queue_frame((*found_key)->chan, &fr);
 								if (debug)
-									ast_log(LOG_DEBUG, "Channel %s answering\n", (*found_key)->chan->name);
+									ast_log(LOG_DEBUG, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
 							}
 							(*found_key)->countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
@@ -2615,7 +2617,7 @@ static void *el_reader(void *data)
 								if (option_verbose > 3)
 									ast_verbose(VERBOSE_PREFIX_3 "Call changed from %s to %s\n",
 												(*found_key)->call, call);
-								strncpy((*found_key)->call, strndup(call, EL_CALL_SIZE), EL_CALL_SIZE);
+								strncpy((*found_key)->call, ast_strndup(call, EL_CALL_SIZE), EL_CALL_SIZE);
 							}
 							if (strncmp((*found_key)->name, name, EL_NAME_SIZE) != 0) {
 								if (option_verbose > 3)
@@ -2732,8 +2734,8 @@ static void *el_reader(void *data)
 							fr.datalen = 0;
 							fr.samples = 0;
 							fr.frametype = AST_FRAME_CONTROL;
-							fr.subclass = AST_CONTROL_ANSWER;
-							fr.data = 0;
+							fr.subclass.integer = AST_CONTROL_ANSWER;
+							fr.data.ptr = 0;
 							fr.src = type;
 							fr.offset = 0;
 							fr.mallocd = 0;
@@ -2741,7 +2743,7 @@ static void *el_reader(void *data)
 							fr.delivery.tv_usec = 0;
 							ast_queue_frame((*found_key)->chan, &fr);
 							if (option_verbose > 3)
-								ast_verbose(VERBOSE_PREFIX_3 "Channel %s answering\n", (*found_key)->chan->name);
+								ast_verbose(VERBOSE_PREFIX_3 "Channel %s answering\n", ast_channel_name((*found_key)->chan));
 						}
 						(*found_key)->countdown = instp->rtcptimeout;
 						if (recvlen == sizeof(struct gsmVoice_t)) {
@@ -2768,7 +2770,7 @@ static void *el_reader(void *data)
 								ast_log(LOG_ERROR, "Cannot malloc for qpel\n");
 							} else {
 								memcpy(qpel->buf, ((struct gsmVoice_t *) buf)->data, BLOCKING_FACTOR * GSM_FRAME_SIZE);
-								strncpy(qpel->fromip, strndup(instp->el_node_test.ip, EL_IP_SIZE), EL_IP_SIZE);
+								strncpy(qpel->fromip, ast_strndup(instp->el_node_test.ip, EL_IP_SIZE), EL_IP_SIZE);
 								insque((struct qelem *) qpel, (struct qelem *)
 									   p->rxqel.qe_back);
 							}
@@ -2916,11 +2918,11 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "deny");
 	if (val)
-		instp->ndenylist = finddelim(strdup(val), instp->denylist, EL_MAX_CALL_LIST);
+		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, EL_MAX_CALL_LIST);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "permit");
 	if (val)
-		instp->npermitlist = finddelim(strdup(val), instp->permitlist, EL_MAX_CALL_LIST);
+		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, EL_MAX_CALL_LIST);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "lat");
 	if (val)
@@ -3064,6 +3066,11 @@ static int load_module(void)
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
+
+	if (!(el_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+	ast_format_cap_append(el_tech.capabilities, ast_format_gsm, 0);
 
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL)
