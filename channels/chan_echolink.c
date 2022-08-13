@@ -1,4 +1,3 @@
-/* #define	OLD_ASTERISK */
 /*
  * Asterisk -- An open source telephony toolkit.
  *
@@ -90,13 +89,6 @@ do not use 127.0.0.1
 
 #include "asterisk.h"
 
-/*
- * Please change this revision number when you make a edit
- * use the simple format YYMMDD
-*/
-
-ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
-// ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -131,9 +123,7 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
 #include "asterisk/translate.h"
 #include "asterisk/astdb.h"
 #include "asterisk/cli.h"
-#ifdef	OLD_ASTERISK
-#define	AST_MODULE_LOAD_DECLINE -1
-#endif
+
 #define	MAX_RXKEY_TIME 4
 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
 #define	KEEPALIVE_TIME 50 * 10
@@ -369,11 +359,6 @@ struct eldb {
 AST_MUTEX_DEFINE_STATIC(el_db_lock);
 AST_MUTEX_DEFINE_STATIC(el_count_lock);
 
-#ifdef	OLD_ASTERISK
-static int usecnt;
-AST_MUTEX_DEFINE_STATIC(usecnt_lock);
-#endif
-
 int debug = 0;
 struct el_instance *instances[EL_MAX_INSTANCES];
 int ninstances = 0;
@@ -399,24 +384,14 @@ static int el_login_sleeptime = 0;
 
 static char *config = "echolink.conf";
 
-#ifdef OLD_ASTERISK
-#define ast_free free
-#define ast_malloc malloc
-#endif
-
 static struct ast_channel *el_request(const char *type, int format, void *data, int *cause);
 static int el_call(struct ast_channel *ast, char *dest, int timeout);
 static int el_hangup(struct ast_channel *ast);
 static struct ast_frame *el_xread(struct ast_channel *ast);
 static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame);
-#ifdef	OLD_ASTERISK
-static int el_indicate(struct ast_channel *ast, int cond);
-static int el_digit_end(struct ast_channel *c, char digit);
-#else
 static int el_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen);
 static int el_digit_begin(struct ast_channel *c, char digit);
 static int el_digit_end(struct ast_channel *c, char digit, unsigned int duratiion);
-#endif
 static int el_text(struct ast_channel *c, const char *text);
 
 static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call, char *name, char *astnode);
@@ -454,12 +429,8 @@ static const struct ast_channel_tech el_tech = {
 	.write = el_xwrite,
 	.indicate = el_indicate,
 	.send_text = el_text,
-#ifdef	OLD_ASTERISK
-	.send_digit = el_digit_end,
-#else
 	.send_digit_begin = el_digit_begin,
 	.send_digit_end = el_digit_end,
-#endif
 };
 
 /*
@@ -477,21 +448,6 @@ static char dbdump_usage[] = "Usage: echolink dbdump [nodename|callsign|ipaddr]\
 
 static char dbget_usage[] =
 	"Usage: echolink dbget <nodename|callsign|ipaddr> <lookup-data>\n" "       Looks up echolink db entry\n";
-
-#ifndef	NEW_ASTERISK
-
-static struct ast_cli_entry cli_debug = { { "echolink", "debug", "level" }, el_do_debug,
-"Enable echolink debugging", debug_usage
-};
-static struct ast_cli_entry cli_dbdump = { { "echolink", "dbdump" }, el_do_dbdump,
-"Dump entire echolink db", dbdump_usage
-};
-
-static struct ast_cli_entry cli_dbget = { { "echolink", "dbget" }, el_do_dbget,
-"Look up echolink db entry", dbget_usage
-};
-
-#endif
 
 static void mythread_exit(void *nothing)
 {
@@ -974,13 +930,7 @@ static void el_destroy(struct el_pvt *p)
 		ast_free(p->linkstr);
 	p->linkstr = NULL;
 	twalk(el_node_list, send_info);
-#ifdef	OLD_ASTERISK
-	ast_mutex_lock(&usecnt_lock);
-	usecnt--;
-	ast_mutex_unlock(&usecnt_lock);
-#else
 	ast_module_user_remove(p->u);
-#endif
 	ast_free(p);
 }
 
@@ -1024,13 +974,8 @@ static struct el_pvt *el_alloc(void *data)
 				ast_log(LOG_ERROR, "Cannot get DSP!!\n");
 				return NULL;
 			}
-#ifdef  NEW_ASTERISK
 			ast_dsp_set_features(p->dsp, DSP_FEATURE_DIGIT_DETECT);
 			ast_dsp_set_digitmode(p->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-#else
-			ast_dsp_set_features(p->dsp, DSP_FEATURE_DTMF_DETECT);
-			ast_dsp_digitmode(p->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-#endif
 			p->xpath = ast_translator_build_path(AST_FORMAT_SLINEAR, AST_FORMAT_GSM);
 			if (!p->xpath) {
 				ast_log(LOG_ERROR, "Cannot get translator!!\n");
@@ -1080,11 +1025,7 @@ static int el_hangup(struct ast_channel *ast)
 	return 0;
 }
 
-#ifdef	OLD_ASTERISK
-static int el_indicate(struct ast_channel *ast, int cond)
-#else
 static int el_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
-#endif
 {
 	struct el_pvt *p = ast->tech_pvt;
 
@@ -1104,20 +1045,12 @@ static int el_indicate(struct ast_channel *ast, int cond, const void *data, size
 	return 0;
 }
 
-#ifndef	OLD_ASTERISK
-
 static int el_digit_begin(struct ast_channel *ast, char digit)
 {
 	return -1;
 }
 
-#endif
-
-#ifdef	OLD_ASTERISK
-static int el_digit_end(struct ast_channel *ast, char digit)
-#else
 static int el_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
-#endif
 {
 	return -1;
 }
@@ -1623,16 +1556,10 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				f2 = ast_translate(p->xpath, &fr, 0);
 				f1 = ast_dsp_process(NULL, p->dsp, f2);
 				ast_frfree(f2);
-#ifdef	OLD_ASTERISK
-				if (f1->frametype == AST_FRAME_DTMF)
-#else
 				if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN))
-#endif
 				{
 					if ((f1->subclass != 'm') && (f1->subclass != 'u')) {
-#ifndef	OLD_ASTERISK
 						if (f1->frametype == AST_FRAME_DTMF_END)
-#endif
 							if (option_verbose > 3)
 								ast_verbose(VERBOSE_PREFIX_3 "Echolink %s Got DTMF char %c from IP %s\n", p->stream,
 											f1->subclass, p->ip);
@@ -1742,17 +1669,8 @@ static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int node
 	struct ast_channel *tmp;
 	struct el_instance *instp = i->instp;
 
-#ifdef	OLD_ASTERISK
-	tmp = ast_channel_alloc(1);
-	if (tmp) {
-		ast_setstate(tmp, state);
-		ast_copy_string(tmp->context, instp->context, sizeof(tmp->context));
-		ast_copy_string(tmp->exten, instp->astnode, sizeof(tmp->exten));
-		snprintf(tmp->name, sizeof(tmp->name), "echolink/%s", i->stream);
-#else
 	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, 0, "echolink/%s", i->stream);
 	if (tmp) {
-#endif
 		tmp->tech = &el_tech;
 		tmp->nativeformats = prefformat;
 		tmp->rawreadformat = prefformat;
@@ -1764,11 +1682,7 @@ static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int node
 		tmp->tech_pvt = i;
 		ast_copy_string(tmp->context, instp->context, sizeof(tmp->context));
 		ast_copy_string(tmp->exten, instp->astnode, sizeof(tmp->exten));
-#ifdef	OLD_ASTERISK
-		ast_copy_string(tmp->language, "", sizeof(tmp->language));
-#else
 		ast_string_field_set(tmp, language, "");
-#endif
 		if (nodenum > 0) {
 			char tmpstr[30];
 
@@ -1776,14 +1690,7 @@ static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int node
 			ast_set_callerid(tmp, tmpstr, NULL, NULL);
 		}
 		i->owner = tmp;
-#ifdef	OLD_ASTERISK
-		ast_mutex_lock(&usecnt_lock);
-		usecnt++;
-		ast_mutex_unlock(&usecnt_lock);
-		ast_update_use_count();
-#else
 		i->u = ast_module_user_add(tmp);
-#endif
 		i->nodenum = nodenum;
 		if (state != AST_STATE_DOWN) {
 			if (ast_pbx_start(tmp)) {
@@ -1904,8 +1811,6 @@ static int el_do_dbget(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-#ifdef	NEW_ASTERISK
-
 static char *res2cli(int r)
 {
 	switch (r) {
@@ -1963,12 +1868,7 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry")
 };
 
-#endif
-
-#ifndef	OLD_ASTERISK
-static
-#endif
-int unload_module(void)
+static int unload_module(void)
 {
 	int n;
 
@@ -1984,14 +1884,7 @@ int unload_module(void)
 			instances[n]->ctrl_sock = -1;
 		}
 	}
-#ifdef	NEW_ASTERISK
 	ast_cli_unregister_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
-#else
-	/* Unregister cli extensions */
-	ast_cli_unregister(&cli_debug);
-	ast_cli_unregister(&cli_dbdump);
-	ast_cli_unregister(&cli_dbget);
-#endif
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&el_tech);
 	for (n = 0; n < ninstances; n++)
@@ -2045,11 +1938,7 @@ static int sendcmd(char *server, struct el_instance *instp)
 	ahp = ast_gethostbyname(server, &ah);
 	if (ahp) {
 		memcpy(&ia, ahp->h_addr, sizeof(in_addr_t));
-#ifdef  OLD_ASTERISK
-		ast_inet_ntoa(ip, EL_IP_SIZE, ia);
-#else
 		strncpy(ip, ast_inet_ntoa(ia), EL_IP_SIZE);
-#endif
 	} else {
 		ast_log(LOG_ERROR, "Failed to resolve Echolink server %s\n", server);
 		return -1;
@@ -2684,11 +2573,7 @@ static void *el_reader(void *data)
 			recvlen = recvfrom(instp->ctrl_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
-#ifdef  OLD_ASTERISK
-				ast_inet_ntoa(instp->el_node_test.ip, EL_IP_SIZE, sin.sin_addr);
-#else
 				strncpy(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
-#endif
 				if (is_rtcp_sdes((unsigned char *) buf, recvlen)) {
 					call_name[0] = '\0';
 					items.nitems = 1;
@@ -2833,11 +2718,7 @@ static void *el_reader(void *data)
 			recvlen = recvfrom(instp->audio_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
-#ifdef  OLD_ASTERISK
-				ast_inet_ntoa(instp->el_node_test.ip, EL_IP_SIZE, sin.sin_addr);
-#else
 				strncpy(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
-#endif
 				if (buf[0] == 0x6f) {
 					process_cmd(buf, instp->el_node_test.ip, instp);
 				} else {
@@ -3172,24 +3053,14 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
-#ifndef	OLD_ASTERISK
-static
-#endif
-int load_module(void)
+static int load_module(void)
 {
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL;
 	pthread_attr_t attr;
-
-#ifdef  NEW_ASTERISK
 	struct ast_flags zeroflag = { 0 };
-#endif
 
-#ifdef  NEW_ASTERISK
 	if (!(cfg = ast_config_load(config, zeroflag))) {
-#else
-	if (!(cfg = ast_config_load(config))) {
-#endif
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -3212,14 +3083,7 @@ int load_module(void)
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	ast_pthread_create(&el_directory_thread, &attr, el_directory, NULL);
-#ifdef	NEW_ASTERISK
 	ast_cli_register_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
-#else
-	/* Register cli extensions */
-	ast_cli_register(&cli_debug);
-	ast_cli_register(&cli_dbdump);
-	ast_cli_register(&cli_dbget);
-#endif
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&el_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
@@ -3229,21 +3093,4 @@ int load_module(void)
 	return 0;
 }
 
-#ifdef	OLD_ASTERISK
-char *description()
-{
-	return (char *) el_tech.description;
-}
-
-int usecount()
-{
-	return usecnt;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
-#else
 AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "echolink channel driver");
-#endif
