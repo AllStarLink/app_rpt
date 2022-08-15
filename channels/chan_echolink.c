@@ -2529,7 +2529,15 @@ static void *el_reader(void *data)
 			el_login_sleeptime = 0;
 		}
 		ast_mutex_unlock(&instp->lock);
+#if 0
+		/*! \todo This causes gcc to complain:
+		 * cc1: error: ‘__builtin_memset’ writing 4096 bytes into a region of size 256 overflows the destination [-Werror=stringop-overflow=]
+		 * In practice, we should probably be using poll instead of select anyways, not least because of this...
+		 */
 		FD_ZERO(fds);
+#else
+		memset(&fds, 0, sizeof(fds));
+#endif
 		FD_SET(instp->audio_sock, fds);
 		FD_SET(instp->ctrl_sock, fds);
 		x = instp->audio_sock;
@@ -2712,7 +2720,7 @@ static void *el_reader(void *data)
 							fr.delivery.tv_sec = 0;
 							fr.delivery.tv_usec = 0;
 							ast_queue_frame((*found_key)->chan, &fr);
-							ast_verbose(3, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
+							ast_verb(3, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
 						}
 						(*found_key)->countdown = instp->rtcptimeout;
 						if (recvlen == sizeof(struct gsmVoice_t)) {
