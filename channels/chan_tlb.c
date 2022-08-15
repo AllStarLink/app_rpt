@@ -77,6 +77,7 @@ tlb.conf file.
 #include <pthread.h>
 #include <signal.h>
 #include <fnmatch.h>
+
 #include "asterisk/lock.h"
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
@@ -89,6 +90,7 @@ tlb.conf file.
 #include "asterisk/translate.h"
 #include "asterisk/astdb.h"
 #include "asterisk/cli.h"
+#include "asterisk/format_cache.h"
 
 #define	MAX_RXKEY_TIME 4
 #define	RTPBUF_SIZE 400			/* actually 320 would be sufficient */
@@ -97,13 +99,13 @@ enum { TLB_GSM, TLB_G726, TLB_ULAW };
 struct {
 	int blocking_factor;
 	int frame_size;
-	int format;
+	struct ast_format *format;
 	int payt;
 	char *name;
 } tlb_codecs[] = {
-	{ 4, 33, AST_FORMAT_GSM, 3, "GSM" },	/* GSM */
-	{ 2, 80, AST_FORMAT_G726, 97, "G726" },	/* G726 */
-	{ 2, 160, AST_FORMAT_ULAW, 0, "ULAW" },	/* ULAW */
+	{ 4, 33, 0, 3, "GSM" },	/* GSM */
+	{ 2, 80, 0, 97, "G726" },	/* G726 */
+	{ 2, 160, 0, 0, "ULAW" },	/* ULAW */
 	{ 0, 0, 0, 0, 0 }			/* NO MORE */
 };
 
@@ -323,8 +325,9 @@ static void *TLB_node_list = NULL;
 
 static char *config = "tlb.conf";
 
-static struct ast_channel *TLB_request(const char *type, int format, void *data, int *cause);
-static int TLB_call(struct ast_channel *ast, char *dest, int timeout);
+static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *data, int *cause);
+static int TLB_call(struct ast_channel *ast, const char *dest, int timeout);
 static int TLB_hangup(struct ast_channel *ast);
 static struct ast_frame *TLB_xread(struct ast_channel *ast);
 static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame);
@@ -348,10 +351,9 @@ static void free_node(void *nodep);
 static int find_delete(struct TLB_node *key);
 static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call, char *name, char *codec);
 
-static const struct ast_channel_tech TLB_tech = {
+static struct ast_channel_tech TLB_tech = {
 	.type = type,
 	.description = tdesc,
-	.capabilities = (AST_FORMAT_GSM | AST_FORMAT_G726 | AST_FORMAT_ULAW),
 	.requester = TLB_request,
 	.call = TLB_call,
 	.hangup = TLB_hangup,
@@ -368,9 +370,9 @@ static const struct ast_channel_tech TLB_tech = {
 */
 
 /* Debug mode */
-static int TLB_do_debug(int fd, int argc, char *argv[]);
-static int TLB_do_nodedump(int fd, int argc, char *argv[]);
-static int TLB_do_nodeget(int fd, int argc, char *argv[]);
+static int TLB_do_debug(int fd, int argc, const char *const *argv);
+static int TLB_do_nodedump(int fd, int argc, const char *const *argv);
+static int TLB_do_nodeget(int fd, int argc, const char *const *argv);
 
 static char debug_usage[] = "Usage: tlbx debug level {0-7}\n" "       Enables debug messages in chan_tlb\n";
 
@@ -697,24 +699,25 @@ static int is_rtcp_sdes(unsigned char *p, int len)
 	return sawsdes;
 }
 
-static int TLB_call(struct ast_channel *ast, char *dest, int timeout)
+static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 {
-	struct TLB_pvt *p = ast->tech_pvt;
+	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
 	struct TLB_instance *instp = p->instp;
 	unsigned char pack[256];
 	int pack_length;
 	struct sockaddr_in sin;
 	unsigned short n;
 
-	if ((ast->_state != AST_STATE_DOWN) && (ast->_state != AST_STATE_RESERVED)) {
-		ast_log(LOG_WARNING, "TLB_call called on %s, neither down nor reserved\n", ast->name);
+	if ((ast_channel_state(ast) != AST_STATE_DOWN) && (ast_channel_state(ast) != AST_STATE_RESERVED)) {
+		ast_log(LOG_WARNING, "TLB_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
 		return -1;
 	}
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
 	if (option_debug)
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast->name);
+		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_channel_name(ast));
 	if (*dest) {				/* if number specified */
+		struct ast_flags zeroflag = { 0 };
 		char *str, *cp, *val, *sval, *strs[10];
 		struct ast_config *cfg = NULL;
 
@@ -813,7 +816,7 @@ static struct TLB_pvt *TLB_alloc(void *data)
 
 static int TLB_hangup(struct ast_channel *ast)
 {
-	struct TLB_pvt *p = ast->tech_pvt;
+	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
 	struct TLB_instance *instp = p->instp;
 	int i, n;
 	unsigned char bye[50];
@@ -836,20 +839,20 @@ static int TLB_hangup(struct ast_channel *ast)
 		}
 	}
 	if (option_debug)
-		ast_log(LOG_DEBUG, "TLB_hangup(%s)\n", ast->name);
-	if (!ast->tech_pvt) {
+		ast_log(LOG_DEBUG, "TLB_hangup(%s)\n", ast_channel_name(ast));
+	if (!ast_channel_tech_pvt(ast)) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
 	TLB_destroy(p);
-	ast->tech_pvt = NULL;
+	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
 	return 0;
 }
 
 static int TLB_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
 {
-	struct TLB_pvt *p = ast->tech_pvt;
+	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
 
 	switch (cond) {
 	case AST_CONTROL_RADIO_KEY:
@@ -872,7 +875,7 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 
 	time_t now;
 	struct rtpVoice_t pkt;
-	struct TLB_pvt *p = ast->tech_pvt;
+	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
 	struct sockaddr_in sin;
 	struct TLB_node **found_key = NULL;
 	int i;
@@ -1113,14 +1116,14 @@ static int find_delete(struct TLB_node *key)
 
 static struct ast_frame *TLB_xread(struct ast_channel *ast)
 {
-	struct TLB_pvt *p = ast->tech_pvt;
+	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
 
 	memset(&p->fr, 0, sizeof(struct ast_frame));
 	p->fr.frametype = 0;
-	p->fr.subclass = 0;
+	p->fr.subclass.format = 0;
 	p->fr.datalen = 0;
 	p->fr.samples = 0;
-	p->fr.data = NULL;
+	p->fr.data.ptr = NULL;
 	p->fr.src = type;
 	p->fr.offset = 0;
 	p->fr.mallocd = 0;
@@ -1135,7 +1138,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	unsigned char bye[50];
 	unsigned short i;
 	struct sockaddr_in sin;
-	struct TLB_pvt *p = ast->tech_pvt;
+	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
 	struct TLB_instance *instp = p->instp;
 	struct ast_frame fr;
 	struct TLB_rxqast *qpast;
@@ -1180,8 +1183,8 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				fr.datalen = 0;
 				fr.samples = 0;
 				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass = AST_CONTROL_RADIO_KEY;
-				fr.data = 0;
+				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
+				fr.data.ptr = 0;
 				fr.src = type;
 				fr.offset = 0;
 				fr.mallocd = 0;
@@ -1199,8 +1202,8 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.datalen = tlb_codecs[p->rxcodec].frame_size;
 			fr.samples = 160;
 			fr.frametype = AST_FRAME_VOICE;
-			fr.subclass = tlb_codecs[p->rxcodec].format;
-			fr.data = buf + AST_FRIENDLY_OFFSET;
+			fr.subclass.format = tlb_codecs[p->rxcodec].format;
+			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
 			fr.src = type;
 			fr.offset = AST_FRIENDLY_OFFSET;
 			fr.mallocd = 0;
@@ -1217,8 +1220,8 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		fr.datalen = 0;
 		fr.samples = 0;
 		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass = AST_CONTROL_RADIO_UNKEY;
-		fr.data = 0;
+		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
+		fr.data.ptr = 0;
 		fr.src = type;
 		fr.offset = 0;
 		fr.mallocd = 0;
@@ -1259,13 +1262,19 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 	} else {
 		/* Asterisk to TheLinkBox */
-		if (!(frame->subclass & (tlb_codecs[p->txcodec].format))) {
-			ast_log(LOG_WARNING, "Cannot handle frames in %d format\n", frame->subclass);
+		if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
+			struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+			ast_log(LOG_WARNING,
+					"Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
+					ast_format_get_name(frame->subclass.format),
+					ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
+					ast_format_get_name(ast_channel_readformat(ast)),
+					ast_format_get_name(ast_channel_writeformat(ast)));
 			ast_mutex_unlock(&instp->lock);
-			return 0;
+			return -1;
 		}
 		if (p->txkey || p->txindex) {
-			memcpy(instp->audio_all.data + (tlb_codecs[p->txcodec].frame_size * p->txindex++), frame->data,
+			memcpy(instp->audio_all.data + (tlb_codecs[p->txcodec].frame_size * p->txindex++), frame->data.ptr,
 				   tlb_codecs[p->txcodec].frame_size);
 		}
 		if (p->txindex >= tlb_codecs[p->txcodec].blocking_factor) {
@@ -1315,24 +1324,34 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 {
 	struct ast_channel *tmp;
 	struct TLB_instance *instp = i->instp;
-	int prefformat;
+	struct ast_format *prefformat;
 
-	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, 0, "tlb/%s", i->stream);
+	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, NULL, NULL, 0, "tlb/%s", i->stream);
 	if (tmp) {
-		tmp->tech = &TLB_tech;
+		struct ast_format_cap *capabilities;
+		capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+
+		ast_channel_tech_set(tmp, &TLB_tech);
+
 		prefformat = tlb_codecs[i->txcodec].format;
-		tmp->rawwriteformat = prefformat;
-		tmp->writeformat = prefformat;
+		ast_format_cap_append(capabilities, prefformat, 0);
+		ast_channel_set_rawwriteformat(tmp, prefformat);
+		ast_channel_set_writeformat(tmp, prefformat);
+
 		prefformat = tlb_codecs[i->rxcodec].format;
-		tmp->nativeformats = tlb_codecs[i->txcodec].format | prefformat;
-		tmp->rawreadformat = prefformat;
-		tmp->readformat = prefformat;
+		ast_format_cap_append(capabilities, prefformat, 0);
+		ast_channel_set_rawreadformat(tmp, prefformat);
+		ast_channel_set_readformat(tmp, prefformat);
+
+		ast_channel_nativeformats_set(tmp, capabilities);
+		ao2_cleanup(capabilities);
+
 		if (state == AST_STATE_RING)
-			tmp->rings = 1;
-		tmp->tech_pvt = i;
-		ast_copy_string(tmp->context, instp->context, sizeof(tmp->context));
-		ast_copy_string(tmp->exten, instp->astnode, sizeof(tmp->exten));
-		ast_string_field_set(tmp, language, "");
+			ast_channel_rings_set(tmp, 1);
+		ast_channel_tech_pvt_set(tmp, i);
+		ast_channel_context_set(tmp, instp->context);
+		ast_channel_exten_set(tmp, instp->astnode);
+		ast_channel_language_set(tmp, "");
 		if (nodenum > 0) {
 			char tmpstr[30];
 
@@ -1344,7 +1363,7 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 		i->nodenum = nodenum;
 		if (state != AST_STATE_DOWN) {
 			if (ast_pbx_start(tmp)) {
-				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", tmp->name);
+				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
 				ast_hangup(tmp);
 			}
 		}
@@ -1353,19 +1372,20 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 	return tmp;
 }
 
-static struct ast_channel *TLB_request(const char *type, int format, void *data, int *cause)
+static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *data, int *cause)
 {
-	int oldformat, nodenum, n;
+	int nodenum, n;
 	struct TLB_pvt *p;
 	struct ast_channel *tmp = NULL;
 	char *str, *cp, *cp1;
 
-	oldformat = format;
-	format &= (AST_FORMAT_GSM | AST_FORMAT_G726 | AST_FORMAT_ULAW);
-	if (!format) {
-		ast_log(LOG_ERROR, "Asked to get a channel of unsupported format '%d'\n", oldformat);
+	if (!(ast_format_cap_iscompatible(cap, TLB_tech.capabilities))) {
+		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n", ast_format_cap_get_names(cap, &cap_buf));
 		return NULL;
 	}
+
 	cp1 = 0;
 	str = ast_strdup((char *) data);
 	cp = strchr(str, '/');
@@ -1402,7 +1422,7 @@ static struct ast_channel *TLB_request(const char *type, int format, void *data,
 * Enable or disable debug output at a given level at the console
 */
 
-static int TLB_do_debug(int fd, int argc, char *argv[])
+static int TLB_do_debug(int fd, int argc, const char *const *argv)
 {
 	int newlevel;
 
@@ -1424,10 +1444,10 @@ static int TLB_do_debug(int fd, int argc, char *argv[])
 * Dump entire node list
 */
 
-static int TLB_do_nodedump(int fd, int argc, char *argv[])
+static int TLB_do_nodedump(int fd, int argc, const char *const *argv)
 {
-
 	struct ast_config *cfg = NULL;
+	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
 	char *s, *strs[10];
 	int n;
@@ -1460,12 +1480,13 @@ static int TLB_do_nodedump(int fd, int argc, char *argv[])
 * Get tlb node entry
 */
 
-static int TLB_do_nodeget(int fd, int argc, char *argv[])
+static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 {
 
 	char c, *s, *sval, *val, *strs[10];
 	int n;
 	struct ast_config *cfg = NULL;
+	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
 
 	if (argc != 4)
@@ -1575,7 +1596,7 @@ static char *handle_cli_nodeget(struct ast_cli_entry *e, int cmd, struct ast_cli
 	return res2cli(TLB_do_nodeget(a->fd, a->argc, a->argv));
 }
 
-static struct ast_cli_entry rpt_cli[] = {
+static struct ast_cli_entry TLB_cli[] = {
 	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
 	AST_CLI_DEFINE(handle_cli_nodedump, "Dump entire tlb node list"),
 	AST_CLI_DEFINE(handle_cli_nodeget, "Look up tlb node entry"),
@@ -1604,6 +1625,23 @@ static int unload_module(void)
 		ast_free(instances[n]);
 	if (nullfd != -1)
 		close(nullfd);
+
+	ao2_cleanup(TLB_tech.capabilities);
+	TLB_tech.capabilities = NULL;
+
+	return 0;
+}
+
+static int tlb_set_nativeformats(struct ast_channel *chan, int txcodec, int rxcodec)
+{
+	struct ast_format_cap *capabilities;
+
+	capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	ast_format_cap_append(capabilities, tlb_codecs[txcodec].format, 0);
+	ast_format_cap_append(capabilities, tlb_codecs[rxcodec].format, 0);
+	ast_channel_nativeformats_set(chan, capabilities);
+	ao2_cleanup(capabilities);
+
 	return 0;
 }
 
@@ -1611,6 +1649,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 {
 	struct TLB_node *TLB_node_key = NULL;
 	struct ast_config *cfg = NULL;
+	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
 	struct ast_channel *ast;
 	char *sval, *strs[10], mycodec[20];
@@ -1713,12 +1752,10 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 		}
 		p->txcodec = i;
 	}
+
 	ast = TLB_node_key->chan;
-	ast->nativeformats = tlb_codecs[p->rxcodec].format;
-	ast_set_read_format(ast, ast->readformat);
-	ast->nativeformats = tlb_codecs[p->txcodec].format;
-	ast_set_write_format(ast, ast->writeformat);
-	ast->nativeformats = tlb_codecs[p->txcodec].format | tlb_codecs[p->rxcodec].format;
+	tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
+
 	if (option_verbose > 2)
 		ast_verbose(VERBOSE_PREFIX_3 "tlb: tx codec set to %s\n", tlb_codecs[p->txcodec].name);
 	return 0;
@@ -1748,7 +1785,15 @@ static void *TLB_reader(void *data)
 	while (run_forever) {
 
 		ast_mutex_unlock(&instp->lock);
+#if 0
+		/*! \todo This causes gcc to complain:
+		 * cc1: error: ‘__builtin_memset’ writing 4096 bytes into a region of size 256 overflows the destination [-Werror=stringop-overflow=]
+		 * In practice, we should probably be using poll instead of select anyways, not least because of this...
+		 */
 		FD_ZERO(fds);
+#else
+		memset(&fds, 0, sizeof(fds));
+#endif
 		FD_SET(instp->audio_sock, fds);
 		FD_SET(instp->ctrl_sock, fds);
 		x = instp->audio_sock;
@@ -1790,8 +1835,8 @@ static void *TLB_reader(void *data)
 								fr.datalen = 0;
 								fr.samples = 0;
 								fr.frametype = AST_FRAME_CONTROL;
-								fr.subclass = AST_CONTROL_ANSWER;
-								fr.data = 0;
+								fr.subclass.integer = AST_CONTROL_ANSWER;
+								fr.data.ptr = 0;
 								fr.src = type;
 								fr.offset = 0;
 								fr.mallocd = 0;
@@ -1799,7 +1844,7 @@ static void *TLB_reader(void *data)
 								fr.delivery.tv_usec = 0;
 								ast_queue_frame((*found_key)->chan, &fr);
 								if (debug)
-									ast_log(LOG_DEBUG, "Channel %s answering\n", (*found_key)->chan->name);
+									ast_log(LOG_DEBUG, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
 							}
 							(*found_key)->countdown = instp->rtcptimeout;
 						} else {	/* otherwise its a new request */
@@ -1872,8 +1917,8 @@ static void *TLB_reader(void *data)
 						fr.datalen = 0;
 						fr.samples = 0;
 						fr.frametype = AST_FRAME_CONTROL;
-						fr.subclass = AST_CONTROL_ANSWER;
-						fr.data = 0;
+						fr.subclass.integer = AST_CONTROL_ANSWER;
+						fr.data.ptr = 0;
 						fr.src = type;
 						fr.offset = 0;
 						fr.mallocd = 0;
@@ -1881,7 +1926,7 @@ static void *TLB_reader(void *data)
 						fr.delivery.tv_usec = 0;
 						ast_queue_frame((*found_key)->chan, &fr);
 						if (option_verbose > 2)
-							ast_verbose(VERBOSE_PREFIX_3 "tlb: Channel %s answering\n", (*found_key)->chan->name);
+							ast_verbose(VERBOSE_PREFIX_3 "tlb: Channel %s answering\n", ast_channel_name((*found_key)->chan));
 					}
 					(*found_key)->countdown = instp->rtcptimeout;
 					if (recvlen > 12) {	/* if at least a header size and some payload */
@@ -1924,10 +1969,10 @@ static void *TLB_reader(void *data)
 							/* Send DTMF (in dchar) to Asterisk */
 							memset(&fr, 0, sizeof(fr));
 							fr.datalen = strlen(dstr) + 1;
-							fr.data = dstr;
+							fr.data.ptr = dstr;
 							fr.samples = 0;
 							fr.frametype = AST_FRAME_TEXT;
-							fr.subclass = 0;
+							fr.subclass.format = 0;
 							fr.src = type;
 							fr.offset = 0;
 							fr.mallocd = 0;
@@ -1935,8 +1980,7 @@ static void *TLB_reader(void *data)
 							fr.delivery.tv_usec = 0;
 							ast_queue_frame((*found_key)->chan, &fr);
 							if (option_verbose > 2)
-								ast_verbose(VERBOSE_PREFIX_3 "tlb: Channel %s got DTMF %c\n",
-											(*found_key)->chan->name, dchar);
+								ast_verbose(VERBOSE_PREFIX_3 "tlb: Channel %s got DTMF %c\n", ast_channel_name((*found_key)->chan), dchar);
 						}
 						/* it its a voice frame */
 						else if (((struct rtpVoice_t *) buf)->version == 2) {
@@ -1950,17 +1994,15 @@ static void *TLB_reader(void *data)
 								}
 								if (!tlb_codecs[i].blocking_factor) {
 									ast_log(LOG_ERROR, "tlb:Payload type %d not recognized on channel %s\n",
-											j, ast->name);
+											j, ast_channel_name(ast));
 									continue;
 								}
 								if (option_verbose > 2)
 									ast_verbose(VERBOSE_PREFIX_3
-												"tlb: channel %s switching to codec %s from codec %s\n", ast->name,
+												"tlb: channel %s switching to codec %s from codec %s\n", ast_channel_name(ast),
 												tlb_codecs[i].name, tlb_codecs[p->rxcodec].name);
 								p->rxcodec = i;
-								ast->nativeformats = tlb_codecs[p->rxcodec].format;
-								ast_set_read_format(ast, ast->readformat);
-								ast->nativeformats = tlb_codecs[p->txcodec].format | tlb_codecs[p->rxcodec].format;
+								tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
 							}
 							if (recvlen ==
 								((tlb_codecs[p->rxcodec].frame_size * tlb_codecs[p->rxcodec].blocking_factor) + 12)) {
@@ -2078,11 +2120,11 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "deny");
 	if (val)
-		instp->ndenylist = finddelim(strdup(val), instp->denylist, TLB_MAX_CALL_LIST);
+		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, TLB_MAX_CALL_LIST);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "permit");
 	if (val)
-		instp->npermitlist = finddelim(strdup(val), instp->permitlist, TLB_MAX_CALL_LIST);
+		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, TLB_MAX_CALL_LIST);
 
 	instp->pref_rxcodec = PREF_RXCODEC;
 	instp->pref_txcodec = PREF_TXCODEC;
@@ -2157,10 +2199,22 @@ static int load_module(void)
 	char *ctg = NULL;
 	struct ast_flags zeroflag = { 0 };
 
+	/* Can't initialize with non-constant elements */
+	tlb_codecs[0].format = ast_format_gsm;
+	tlb_codecs[1].format = ast_format_g726;
+	tlb_codecs[2].format = ast_format_ulaw;
+
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
+
+	if (!(TLB_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+	ast_format_cap_append(TLB_tech.capabilities, ast_format_gsm, 0);
+	ast_format_cap_append(TLB_tech.capabilities, ast_format_g726, 0);
+	ast_format_cap_append(TLB_tech.capabilities, ast_format_ulaw, 0);
 
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL)
