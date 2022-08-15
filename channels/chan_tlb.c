@@ -1,4 +1,3 @@
-/* #define	OLD_ASTERISK */
 /*
  * Asterisk -- An open source telephony toolkit.
  *
@@ -60,8 +59,6 @@ tlb.conf file.
  * use the simple format YYMMDD
 */
 
-ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
-// ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -92,9 +89,7 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
 #include "asterisk/translate.h"
 #include "asterisk/astdb.h"
 #include "asterisk/cli.h"
-#ifdef	OLD_ASTERISK
-#define	AST_MODULE_LOAD_DECLINE -1
-#endif
+
 #define	MAX_RXKEY_TIME 4
 #define	RTPBUF_SIZE 400			/* actually 320 would be sufficient */
 enum { TLB_GSM, TLB_G726, TLB_ULAW };
@@ -319,11 +314,6 @@ struct rtcp_t {
 	} r;
 };
 
-#ifdef	OLD_ASTERISK
-static int usecnt;
-AST_MUTEX_DEFINE_STATIC(usecnt_lock);
-#endif
-
 int debug = 0;
 struct TLB_instance *instances[TLB_MAX_INSTANCES];
 int ninstances = 0;
@@ -333,24 +323,14 @@ static void *TLB_node_list = NULL;
 
 static char *config = "tlb.conf";
 
-#ifdef OLD_ASTERISK
-#define ast_free free
-#define ast_malloc malloc
-#endif
-
 static struct ast_channel *TLB_request(const char *type, int format, void *data, int *cause);
 static int TLB_call(struct ast_channel *ast, char *dest, int timeout);
 static int TLB_hangup(struct ast_channel *ast);
 static struct ast_frame *TLB_xread(struct ast_channel *ast);
 static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame);
-#ifdef	OLD_ASTERISK
-static int TLB_indicate(struct ast_channel *ast, int cond);
-static int TLB_digit_end(struct ast_channel *c, char digit);
-#else
 static int TLB_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen);
 static int TLB_digit_begin(struct ast_channel *c, char digit);
 static int TLB_digit_end(struct ast_channel *c, char digit, unsigned int duratiion);
-#endif
 static int TLB_text(struct ast_channel *c, const char *text);
 
 static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call);
@@ -379,12 +359,8 @@ static const struct ast_channel_tech TLB_tech = {
 	.write = TLB_xwrite,
 	.indicate = TLB_indicate,
 	.send_text = TLB_text,
-#ifdef	OLD_ASTERISK
-	.send_digit = TLB_digit_end,
-#else
 	.send_digit_begin = TLB_digit_begin,
 	.send_digit_end = TLB_digit_end,
-#endif
 };
 
 /*
@@ -402,22 +378,6 @@ static char nodedump_usage[] = "Usage: tlb nodedump\n" "       Dumps entire tlb 
 
 static char nodeget_usage[] =
 	"Usage: tlb nodeget <nodename|callsign|ipaddr> <lookup-data>\n" "       Looks up tlb node entry\n";
-
-#ifndef	NEW_ASTERISK
-
-static struct ast_cli_entry cli_debug = { { "tlb", "debug", "level" }, TLB_do_debug,
-"Enable TheLinkBox debugging", debug_usage
-};
-
-static struct ast_cli_entry cli_nodedump = { { "tlb", "nodedump" }, TLB_do_nodedump,
-"Dump entire tlb node list", nodedump_usage
-};
-
-static struct ast_cli_entry cli_nodeget = { { "tlb", "nodeget" }, TLB_do_nodeget,
-"Look up tlb node entry", nodeget_usage
-};
-
-#endif
 
 static uint32_t crc_32_tab[] = {	/* CRC polynomial 0xedb88320 */
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
@@ -764,11 +724,7 @@ static int TLB_call(struct ast_channel *ast, char *dest, int timeout)
 			*cp++ = 0;
 		else
 			cp = str;
-#ifdef  NEW_ASTERISK
 		if (!(cfg = ast_config_load(config, zeroflag))) {
-#else
-		if (!(cfg = ast_config_load(config))) {
-#endif
 			ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 			return -1;
 		}
@@ -810,13 +766,7 @@ static void TLB_destroy(struct TLB_pvt *p)
 	if (p->linkstr)
 		ast_free(p->linkstr);
 	p->linkstr = NULL;
-#ifdef	OLD_ASTERISK
-	ast_mutex_lock(&usecnt_lock);
-	usecnt--;
-	ast_mutex_unlock(&usecnt_lock);
-#else
 	ast_module_user_remove(p->u);
-#endif
 	ast_free(p);
 }
 
@@ -897,11 +847,7 @@ static int TLB_hangup(struct ast_channel *ast)
 	return 0;
 }
 
-#ifdef	OLD_ASTERISK
-static int TLB_indicate(struct ast_channel *ast, int cond)
-#else
 static int TLB_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
-#endif
 {
 	struct TLB_pvt *p = ast->tech_pvt;
 
@@ -975,20 +921,12 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	return (0);
 }
 
-#ifndef	OLD_ASTERISK
-
 static int TLB_digit_begin(struct ast_channel *ast, char digit)
 {
 	return -1;
 }
 
-#endif
-
-#ifdef	OLD_ASTERISK
-static int TLB_digit_end(struct ast_channel *ast, char digit)
-#else
 static int TLB_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
-#endif
 {
 	return (tlb_send_dtmf(ast, digit));
 }
@@ -1379,17 +1317,8 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 	struct TLB_instance *instp = i->instp;
 	int prefformat;
 
-#ifdef	OLD_ASTERISK
-	tmp = ast_channel_alloc(1);
-	if (tmp) {
-		ast_setstate(tmp, state);
-		ast_copy_string(tmp->context, instp->context, sizeof(tmp->context));
-		ast_copy_string(tmp->exten, instp->astnode, sizeof(tmp->exten));
-		snprintf(tmp->name, sizeof(tmp->name), "tlb/%s", i->stream);
-#else
 	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, 0, "tlb/%s", i->stream);
 	if (tmp) {
-#endif
 		tmp->tech = &TLB_tech;
 		prefformat = tlb_codecs[i->txcodec].format;
 		tmp->rawwriteformat = prefformat;
@@ -1403,11 +1332,7 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 		tmp->tech_pvt = i;
 		ast_copy_string(tmp->context, instp->context, sizeof(tmp->context));
 		ast_copy_string(tmp->exten, instp->astnode, sizeof(tmp->exten));
-#ifdef	OLD_ASTERISK
-		ast_copy_string(tmp->language, "", sizeof(tmp->language));
-#else
 		ast_string_field_set(tmp, language, "");
-#endif
 		if (nodenum > 0) {
 			char tmpstr[30];
 
@@ -1415,14 +1340,7 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 			ast_set_callerid(tmp, tmpstr, NULL, NULL);
 		}
 		i->owner = tmp;
-#ifdef	OLD_ASTERISK
-		ast_mutex_lock(&usecnt_lock);
-		usecnt++;
-		ast_mutex_unlock(&usecnt_lock);
-		ast_update_use_count();
-#else
 		i->u = ast_module_user_add(tmp);
-#endif
 		i->nodenum = nodenum;
 		if (state != AST_STATE_DOWN) {
 			if (ast_pbx_start(tmp)) {
@@ -1517,11 +1435,7 @@ static int TLB_do_nodedump(int fd, int argc, char *argv[])
 	if (argc != 2)
 		return RESULT_SHOWUSAGE;
 
-#ifdef  NEW_ASTERISK
 	if (!(cfg = ast_config_load(config, zeroflag))) {
-#else
-	if (!(cfg = ast_config_load(config))) {
-#endif
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return RESULT_FAILURE;
 	}
@@ -1558,11 +1472,7 @@ static int TLB_do_nodeget(int fd, int argc, char *argv[])
 		return RESULT_SHOWUSAGE;
 
 	c = tolower(*argv[2]);
-#ifdef  NEW_ASTERISK
 	if (!(cfg = ast_config_load(config, zeroflag))) {
-#else
-	if (!(cfg = ast_config_load(config))) {
-#endif
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return RESULT_FAILURE;
 	}
@@ -1613,8 +1523,6 @@ static int TLB_do_nodeget(int fd, int argc, char *argv[])
 		ast_cli(fd, "%s|%s|%s|%s|%s\n", s, strs[0], strs[1], strs[2], strs[3]);
 	return RESULT_SUCCESS;
 }
-
-#ifdef	NEW_ASTERISK
 
 static char *res2cli(int r)
 {
@@ -1673,12 +1581,7 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_nodeget, "Look up tlb node entry"),
 };
 
-#endif
-
-#ifndef	OLD_ASTERISK
-static
-#endif
-int unload_module(void)
+static int unload_module(void)
 {
 	int n;
 
@@ -1694,14 +1597,7 @@ int unload_module(void)
 			instances[n]->ctrl_sock = -1;
 		}
 	}
-#ifdef	NEW_ASTERISK
 	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
-#else
-	/* Unregister cli extensions */
-	ast_cli_unregister(&cli_debug);
-	ast_cli_unregister(&cli_nodedump);
-	ast_cli_unregister(&cli_nodeget);
-#endif
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&TLB_tech);
 	for (n = 0; n < ninstances; n++)
@@ -1730,11 +1626,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 		TLB_node_key->port = instp->TLB_node_test.port;
 		ast_copy_string(TLB_node_key->name, name, TLB_NAME_SIZE);
 		/* find the node that matches the ipaddr and call */
-#ifdef  NEW_ASTERISK
 		if (!(cfg = ast_config_load(config, zeroflag))) {
-#else
-		if (!(cfg = ast_config_load(config))) {
-#endif
 			ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 			ast_free(TLB_node_key);
 			return -1;
@@ -1879,11 +1771,7 @@ static void *TLB_reader(void *data)
 			recvlen = recvfrom(instp->ctrl_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
-#ifdef  OLD_ASTERISK
-				ast_inet_ntoa(instp->TLB_node_test.ip, TLB_IP_SIZE, sin.sin_addr);
-#else
 				ast_copy_string(instp->TLB_node_test.ip, ast_inet_ntoa(sin.sin_addr), TLB_IP_SIZE);
-#endif
 				instp->TLB_node_test.port = ntohs(sin.sin_port) - 1;
 				if (is_rtcp_sdes((unsigned char *) buf, recvlen)) {
 					items.nitems = 1;
@@ -1971,11 +1859,7 @@ static void *TLB_reader(void *data)
 			recvlen = recvfrom(instp->audio_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
-#ifdef  OLD_ASTERISK
-				ast_inet_ntoa(instp->TLB_node_test.ip, TLB_IP_SIZE, sin.sin_addr);
-#else
 				ast_copy_string(instp->TLB_node_test.ip, ast_inet_ntoa(sin.sin_addr), TLB_IP_SIZE);
-#endif
 				instp->TLB_node_test.port = ntohs(sin.sin_port);
 
 				found_key = (struct TLB_node **) tfind(&instp->TLB_node_test, &TLB_node_list, compare_ip);
@@ -2267,23 +2151,13 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
-#ifndef	OLD_ASTERISK
-static
-#endif
-int load_module(void)
+static int load_module(void)
 {
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL;
-
-#ifdef  NEW_ASTERISK
 	struct ast_flags zeroflag = { 0 };
-#endif
 
-#ifdef  NEW_ASTERISK
 	if (!(cfg = ast_config_load(config, zeroflag))) {
-#else
-	if (!(cfg = ast_config_load(config))) {
-#endif
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -2304,14 +2178,7 @@ int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-#ifdef	NEW_ASTERISK
 	ast_cli_register_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
-#else
-	/* Register cli extensions */
-	ast_cli_register(&cli_debug);
-	ast_cli_register(&cli_nodedump);
-	ast_cli_register(&cli_nodeget);
-#endif
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&TLB_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
@@ -2321,21 +2188,4 @@ int load_module(void)
 	return 0;
 }
 
-#ifdef	OLD_ASTERISK
-char *description()
-{
-	return (char *) TLB_tech.description;
-}
-
-int usecount()
-{
-	return usecnt;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
-#else
 AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "TheLinkBox channel driver");
-#endif
