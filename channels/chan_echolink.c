@@ -1611,6 +1611,16 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			ast_log(LOG_NOTICE, "Cannot handle frames in non-GSM format: '%p'\n", frame->subclass.format);
 			return 0;
 		}
+		if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
+			struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+			ast_log(LOG_WARNING,
+					"Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
+					ast_format_get_name(frame->subclass.format),
+					ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
+					ast_format_get_name(ast_channel_readformat(ast)),
+					ast_format_get_name(ast_channel_writeformat(ast)));
+			return 0;
+		}
 		if (p->txkey || p->txindex) {
 			memcpy(instp->audio_all.data + (GSM_FRAME_SIZE * p->txindex++), frame->data.ptr, GSM_FRAME_SIZE);
 		}
