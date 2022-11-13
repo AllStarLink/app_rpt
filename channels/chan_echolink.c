@@ -1607,8 +1607,14 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 	} else {
 		/* Asterisk to Echolink */
-		if (frame->subclass.format != ast_format_gsm) {
-			ast_log(LOG_NOTICE, "Cannot handle frames in non-GSM format: '%p'\n", frame->subclass.format);
+		if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
+			struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+			ast_log(LOG_WARNING,
+					"Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
+					ast_format_get_name(frame->subclass.format),
+					ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
+					ast_format_get_name(ast_channel_readformat(ast)),
+					ast_format_get_name(ast_channel_writeformat(ast)));
 			return 0;
 		}
 		if (p->txkey || p->txindex) {
@@ -2529,7 +2535,15 @@ static void *el_reader(void *data)
 			el_login_sleeptime = 0;
 		}
 		ast_mutex_unlock(&instp->lock);
+#if 0
+		/*! \todo This causes gcc to complain:
+		 * cc1: error: ‘__builtin_memset’ writing 4096 bytes into a region of size 256 overflows the destination [-Werror=stringop-overflow=]
+		 * In practice, we should probably be using poll instead of select anyways, not least because of this...
+		 */
 		FD_ZERO(fds);
+#else
+		memset(&fds, 0, sizeof(fds));
+#endif
 		FD_SET(instp->audio_sock, fds);
 		FD_SET(instp->ctrl_sock, fds);
 		x = instp->audio_sock;
@@ -2712,7 +2726,7 @@ static void *el_reader(void *data)
 							fr.delivery.tv_sec = 0;
 							fr.delivery.tv_usec = 0;
 							ast_queue_frame((*found_key)->chan, &fr);
-							ast_verbose(3, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
+							ast_verb(3, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
 						}
 						(*found_key)->countdown = instp->rtcptimeout;
 						if (recvlen == sizeof(struct gsmVoice_t)) {
