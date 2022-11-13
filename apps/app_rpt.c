@@ -22862,7 +22862,7 @@ static int unload_module(void)
 	res |= ast_unregister_application(mdc_app);
 #endif
 
-	ast_cli_unregister_multiple(rpt_cli, ARRAY_LEN(rpt_cli)));
+	ast_cli_unregister_multiple(rpt_cli, ARRAY_LEN(rpt_cli));
 	res |= ast_manager_unregister("RptLocalNodes");
 	res |= ast_manager_unregister("RptStatus");
 	close(nullfd);
