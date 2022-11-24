@@ -48,13 +48,6 @@ MYPORT (optional) is the UDP socket that Asterisk listens on for this channel
 
 #include "asterisk.h"
 
-/*
- * Please change this revision number when you make a edit
- * use the simple format YYMMDD
-*/
-
-ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
-// ASTERISK_FILE_VERSION(__FILE__,"$Revision$")
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -67,6 +60,7 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
 #include <search.h>
 #include <sys/ioctl.h>
 #include <ctype.h>
+
 #include "asterisk/lock.h"
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
@@ -78,16 +72,17 @@ ASTERISK_FILE_VERSION(__FILE__, "$Revision$")
 #include "asterisk/utils.h"
 #include "asterisk/app.h"
 #include "asterisk/dsp.h"
+#include "asterisk/format_cache.h"
+
 #include "chan_usrp.h"
+
 #define	MAX_RXKEY_TIME 4
 #define	KEEPALIVE_TIME 50 * 7
 #define	BLOCKING_FACTOR 4
 #define	SSO sizeof(unsigned long)
 #define QUEUE_OVERLOAD_THRESHOLD 25
-static const char tdesc[] = "USRP Driver";
 
-/* Only linear is allowed */
-static int prefformat = AST_FORMAT_SLINEAR;
+static const char tdesc[] = "USRP Driver";
 
 static char context[AST_MAX_EXTENSION] = "default";
 static char type[] = "usrp";
@@ -126,8 +121,9 @@ struct usrp_pvt {
 
 };
 
-static struct ast_channel *usrp_request(const char *type, int format, void *data, int *cause);
-static int usrp_call(struct ast_channel *ast, char *dest, int timeout);
+static struct ast_channel *usrp_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *data, int *cause);
+static int usrp_call(struct ast_channel *ast, const char *dest, int timeout);
 static int usrp_hangup(struct ast_channel *ast);
 static struct ast_frame *usrp_xread(struct ast_channel *ast);
 static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame);
@@ -137,10 +133,9 @@ static int usrp_digit_end(struct ast_channel *c, char digit, unsigned int durati
 static int usrp_text(struct ast_channel *c, const char *text);
 static int usrp_setoption(struct ast_channel *chan, int option, void *data, int datalen);
 
-static const struct ast_channel_tech usrp_tech = {
+static struct ast_channel_tech usrp_tech = {
 	.type = type,
 	.description = tdesc,
-	.capabilities = AST_FORMAT_SLINEAR,
 	.requester = usrp_request,
 	.call = usrp_call,
 	.hangup = usrp_hangup,
@@ -156,39 +151,47 @@ static const struct ast_channel_tech usrp_tech = {
 #define MAX_CHANS 16
 static struct usrp_pvt *usrp_channels[MAX_CHANS];
 
-static int handle_usrp_show(int fd, int argc, char *argv[])
+static char *handle_usrp_show(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	char s[256];
 	struct usrp_pvt *p;
 	int i;
-	// ast_cli(fd, "handle_usrp_show\n");
+
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "usrp show";
+		e->usage = "usrp show";
+		return NULL;
+	case CLI_GENERATE:
+		return NULL;
+	}
+
 	for (i = 0; i < MAX_CHANS; i++) {
 		p = usrp_channels[i];
 		if (p) {
 			sprintf(s, "%s txkey %-3s rxkey %d read %lu write %lu", p->stream, (p->txkey) ? "yes" : "no", p->rxkey,
-					p->readct, p->writect);
-			ast_cli(fd, "%s\n", s);
+				p->readct, p->writect);
+			ast_cli(a->fd, "%s\n", s);
 		}
 	}
-	return 0;
+
+	return CLI_SUCCESS;
 }
 
-static struct ast_cli_entry cli_usrp_show = {
-	{ "usrp", "show", NULL },
-	handle_usrp_show, NULL,
-	NULL
+static struct ast_cli_entry cli_usrp_show[] = {
+	AST_CLI_DEFINE(handle_usrp_show, "Simulate Rx Signal Present"),
 };
 
-static int usrp_call(struct ast_channel *ast, char *dest, int timeout)
+static int usrp_call(struct ast_channel *ast, const char *dest, int timeout)
 {
-	if ((ast->_state != AST_STATE_DOWN) && (ast->_state != AST_STATE_RESERVED)) {
-		ast_log(LOG_WARNING, "usrp_call called on %s, neither down nor reserved\n", ast->name);
+	if ((ast_channel_state(ast) != AST_STATE_DOWN) && (ast_channel_state(ast) != AST_STATE_RESERVED)) {
+		ast_log(LOG_WARNING, "usrp_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
 		return -1;
 	}
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
 	if (option_debug)
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast->name);
+		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_channel_name(ast));
 
 	ast_setstate(ast, AST_STATE_UP);
 	return 0;
@@ -288,10 +291,11 @@ static int usrp_hangup(struct ast_channel *ast)
 {
 	struct usrp_pvt *p;
 	int i;
-	p = ast->tech_pvt;
+
+	p = ast_channel_tech_pvt(ast);
 	if (option_debug)
-		ast_log(LOG_DEBUG, "usrp_hangup(%s)\n", ast->name);
-	if (!ast->tech_pvt) {
+		ast_log(LOG_DEBUG, "usrp_hangup(%s)\n", ast_channel_name(ast));
+	if (!p) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
@@ -307,14 +311,14 @@ static int usrp_hangup(struct ast_channel *ast)
 	if (i >= MAX_CHANS)
 		ast_log(LOG_WARNING, "Unable to delete usrp_channels[] entry\n");
 	usrp_destroy(p);
-	ast->tech_pvt = NULL;
+	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
 	return 0;
 }
 
 static int usrp_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
 {
-	struct usrp_pvt *p = ast->tech_pvt;
+	struct usrp_pvt *p = ast_channel_tech_pvt(ast);
 	struct _chan_usrp_bufhdr bufhdr;
 
 	switch (cond) {
@@ -367,7 +371,7 @@ static int usrp_digit_end(struct ast_channel *ast, char digit, unsigned int dura
 static struct ast_frame *usrp_xread(struct ast_channel *ast)
 {
 
-	struct usrp_pvt *p = ast->tech_pvt;
+	struct usrp_pvt *p = ast_channel_tech_pvt(ast);
 	char buf[512];
 	struct sockaddr_in si_them;
 	unsigned int themlen;
@@ -391,10 +395,10 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 		ast_log(LOG_NOTICE, "Received packet from %s, expecting it from %s\n",
 				ast_inet_ntoa(si_them.sin_addr), ast_inet_ntoa(p->si_other.sin_addr));
 		p->fr.frametype = 0;
-		p->fr.subclass = 0;
+		p->fr.subclass.integer = 0;
 		p->fr.datalen = 0;
 		p->fr.samples = 0;
-		p->fr.data = NULL;
+		p->fr.data.ptr = NULL;
 		p->fr.src = type;
 		p->fr.offset = 0;
 		p->fr.mallocd = 0;
@@ -423,15 +427,16 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 					ast_log(LOG_NOTICE, "Cannot malloc for qp\n");
 				} else {
 					if (bufhdrp->type == USRP_TYPE_TEXT) {
-						insque((struct qelem *) qp, (struct qelem *) p->rxq.qe_back);
 						char buf1[320];
+
+						insque((struct qelem *) qp, (struct qelem *) p->rxq.qe_back);
 						strcpy(buf1, bufdata);
 						memset(&fr, 0, sizeof(fr));
-						fr.data = buf1;
+						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1) + 1;
 						fr.samples = 0;
 						fr.frametype = AST_FRAME_TEXT;
-						fr.subclass = 0;
+						fr.subclass.integer = 0;
 						fr.src = "chan_usrp";
 						fr.offset = 0;
 						fr.mallocd = 0;
@@ -449,8 +454,8 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 	fr.datalen = 0;
 	fr.samples = 0;
 	fr.frametype = 0;
-	fr.subclass = 0;
-	fr.data = 0;
+	fr.subclass.integer = 0;
+	fr.data.ptr = 0;
 	fr.src = type;
 	fr.offset = 0;
 	fr.mallocd = 0;
@@ -463,7 +468,7 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 
 static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 {
-	struct usrp_pvt *p = ast->tech_pvt;
+	struct usrp_pvt *p = ast_channel_tech_pvt(ast);
 	struct ast_frame fr, *f;
 	struct usrp_rxq *qp;
 	int n;
@@ -474,7 +479,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct _chan_usrp_bufhdr *bufhdrp = (struct _chan_usrp_bufhdr *) sendbuf;
 	char *bufdata = &sendbuf[sizeof(struct _chan_usrp_bufhdr)];
 
-	if (ast->_state != AST_STATE_UP) {
+	if (ast_channel_state(ast) != AST_STATE_UP) {
 		/* Don't try tos end audio on-hook */
 		return 0;
 	}
@@ -482,8 +487,14 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (frame->frametype != AST_FRAME_VOICE)
 		return 0;
 
-	if (!(frame->subclass & (AST_FORMAT_SLINEAR))) {
-		ast_log(LOG_WARNING, "Cannot handle frames in %d format\n", frame->subclass);
+	if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
+		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+		ast_log(LOG_WARNING,
+				"Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
+				ast_format_get_name(frame->subclass.format),
+				ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
+				ast_format_get_name(ast_channel_readformat(ast)),
+				ast_format_get_name(ast_channel_writeformat(ast)));
 		return 0;
 	}
 
@@ -510,8 +521,8 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				fr.datalen = 0;
 				fr.samples = 0;
 				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass = AST_CONTROL_RADIO_KEY;
-				fr.data = 0;
+				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
+				fr.data.ptr = 0;
 				fr.src = type;
 				fr.offset = 0;
 				fr.mallocd = 0;
@@ -529,8 +540,8 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.datalen = USRP_VOICE_FRAME_SIZE;
 			fr.samples = 160;
 			fr.frametype = AST_FRAME_VOICE;
-			fr.subclass = AST_FORMAT_SLINEAR;
-			fr.data = buf + AST_FRIENDLY_OFFSET;
+			fr.subclass.format = ast_format_slin;
+			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
 			fr.src = type;
 			fr.offset = AST_FRIENDLY_OFFSET;
 			fr.mallocd = 0;
@@ -541,13 +552,13 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			if (p->usedtmf && p->dsp) {
 				f = ast_dsp_process(ast, p->dsp, &fr);
 				if ((f->frametype == AST_FRAME_DTMF_END) || (f->frametype == AST_FRAME_DTMF_BEGIN)) {
-					if ((f->subclass == 'm') || (f->subclass == 'u')) {
+					if ((f->subclass.integer == 'm') || (f->subclass.integer == 'u')) {
 						f->frametype = AST_FRAME_NULL;
-						f->subclass = 0;
+						f->subclass.integer = 0;
 						ast_queue_frame(ast, f);
 					}
 					if (f->frametype == AST_FRAME_DTMF_END)
-						ast_log(LOG_NOTICE, "Got DTMF char %c\n", f->subclass);
+						ast_log(LOG_NOTICE, "Got DTMF char %c\n", f->subclass.integer);
 					ast_queue_frame(ast, f);
 				}
 			}
@@ -558,8 +569,8 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		fr.datalen = 0;
 		fr.samples = 0;
 		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass = AST_CONTROL_RADIO_UNKEY;
-		fr.data = 0;
+		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
+		fr.data.ptr = 0;
 		fr.src = type;
 		fr.offset = 0;
 		fr.mallocd = 0;
@@ -575,7 +586,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 	p->writect++;
 	p->unkey_owed = 1;
-	memcpy(bufdata, frame->data, frame->datalen);
+	memcpy(bufdata, frame->data.ptr, frame->datalen);
 	memset(bufhdrp, 0, sizeof(struct _chan_usrp_bufhdr));
 	memcpy(bufhdrp->eye, "USRP", 4);
 	bufhdrp->seq = htonl(p->send_seqno++);
@@ -595,7 +606,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 static int usrp_setoption(struct ast_channel *chan, int option, void *data, int datalen)
 {
 	char *cp;
-	struct usrp_pvt *o = chan->tech_pvt;
+	struct usrp_pvt *o = ast_channel_tech_pvt(chan);
 
 	/* all supported options require data */
 	if (!data || (datalen < 1)) {
@@ -608,19 +619,19 @@ static int usrp_setoption(struct ast_channel *chan, int option, void *data, int 
 		cp = (char *) data;
 		switch (*cp) {
 		case 1:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n", chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n", ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		case 2:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: MUTECONF/MAX(2) on %s\n", chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: MUTECONF/MAX(2) on %s\n", ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		case 3:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: DISABLE DETECT(3) on %s\n", chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: DISABLE DETECT(3) on %s\n", ast_channel_name(chan));
 			o->usedtmf = 0;
 			break;
 		default:
-			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n", chan->name);
+			ast_log(LOG_DEBUG, "Set option TONE VERIFY, mode: OFF(0) on %s\n", ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		}
@@ -630,62 +641,57 @@ static int usrp_setoption(struct ast_channel *chan, int option, void *data, int 
 	return 0;
 }
 
-static struct ast_channel *usrp_new(struct usrp_pvt *i, int state)
+static struct ast_channel *usrp_new(struct usrp_pvt *i, int state, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor)
 {
 	struct ast_channel *tmp;
-	tmp = ast_channel_alloc(1, state, 0, 0, "", "s", context, 0, "usrp/%s", i->stream);
+	tmp = ast_channel_alloc(1, state, 0, 0, "", "s", context, assignedids, requestor, 0, "usrp/%s", i->stream);
 	if (tmp) {
-		tmp->tech = &usrp_tech;
-		tmp->fds[0] = i->usrp;
-		tmp->nativeformats = prefformat;
-		tmp->rawreadformat = prefformat;
-		tmp->rawwriteformat = prefformat;
-		tmp->writeformat = prefformat;
-		tmp->readformat = prefformat;
+		ast_channel_tech_set(tmp, &usrp_tech);
+		ast_channel_internal_fd_set(tmp, 0, i->usrp);
+		ast_channel_nativeformats_set(tmp, usrp_tech.capabilities);
+		ast_channel_set_rawreadformat(tmp, ast_format_slin);
+		ast_channel_set_rawwriteformat(tmp, ast_format_slin);
+		ast_channel_set_readformat(tmp, ast_format_slin);
+		ast_channel_set_writeformat(tmp, ast_format_slin);
 		if (state == AST_STATE_RING)
-			tmp->rings = 1;
-		tmp->tech_pvt = i;
-		ast_copy_string(tmp->context, context, sizeof(tmp->context));
-		ast_copy_string(tmp->exten, "s", sizeof(tmp->exten));
-		ast_string_field_set(tmp, language, "");
+			ast_channel_rings_set(tmp, 1);
+		ast_channel_tech_pvt_set(tmp, i);
+		ast_channel_context_set(tmp, context);
+		ast_channel_exten_set(tmp, "s");
+		ast_channel_language_set(tmp, "");
 		i->owner = tmp;
 		i->u = ast_module_user_add(tmp);
 		if (state != AST_STATE_DOWN) {
 			if (ast_pbx_start(tmp)) {
-				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", tmp->name);
+				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
 				ast_hangup(tmp);
 			}
 		}
 		i->dsp = ast_dsp_new();
 		if (i->dsp) {
-#ifdef  NEW_ASTERISK
 			ast_dsp_set_features(i->dsp, DSP_FEATURE_DIGIT_DETECT);
 			ast_dsp_set_digitmode(i->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-#else
-			ast_dsp_set_features(i->dsp, DSP_FEATURE_DTMF_DETECT);
-			ast_dsp_digitmode(i->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-#endif
 		}
 	} else
 		ast_log(LOG_WARNING, "Unable to allocate channel structure\n");
 	return tmp;
 }
 
-static struct ast_channel *usrp_request(const char *type, int format, void *data, int *cause)
+static struct ast_channel *usrp_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *data, int *cause)
 {
-	int oldformat;
 	struct usrp_pvt *p;
 	struct ast_channel *tmp = NULL;
 
-	oldformat = format;
-	format &= (AST_FORMAT_SLINEAR);
-	if (!format) {
-		ast_log(LOG_NOTICE, "Asked to get a channel of unsupported format '%d'\n", oldformat);
+	if (!(ast_format_cap_iscompatible(cap, usrp_tech.capabilities))) {
+		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n", ast_format_cap_get_names(cap, &cap_buf));
 		return NULL;
 	}
-	p = usrp_alloc(data);
+
+	p = usrp_alloc(ast_strdupa(data));
 	if (p) {
-		tmp = usrp_new(p, AST_STATE_DOWN);
+		tmp = usrp_new(p, AST_STATE_DOWN, assignedids, requestor);
 		if (!tmp)
 			usrp_destroy(p);
 	}
@@ -696,13 +702,19 @@ static int unload_module(void)
 {
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&usrp_tech);
-	ast_cli_unregister(&cli_usrp_show);
+	ast_cli_unregister_multiple(cli_usrp_show, ARRAY_LEN(cli_usrp_show));
+	ao2_cleanup(usrp_tech.capabilities);
+	usrp_tech.capabilities = NULL;
 	return 0;
 }
 
 static int load_module(void)
 {
-	ast_cli_register(&cli_usrp_show);
+	ast_cli_unregister_multiple(cli_usrp_show, ARRAY_LEN(cli_usrp_show));
+	if (!(usrp_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+	ast_format_cap_append(usrp_tech.capabilities, ast_format_slin, 0);
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&usrp_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
