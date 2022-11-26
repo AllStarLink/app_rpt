@@ -57,7 +57,7 @@ If you want to manually install app_rpt et al., here is how:
 
 ### Pre-Reqs
 
-`chan_simpleusb` requires `libusb-dev` on Debian:
+`chan_simpleusb` and `chan_usbradio` require `libusb-dev` on Debian:
 
 `apt-get install -y libusb-dev`
 
@@ -70,6 +70,8 @@ Add this near the bottom of `apps/Makefile`:
 Add this near the bottom of `channels/Makefile`:
 
 `chan_simpleusb.so: LIBS+=-lusb -lasound`
+
+`chan_usbradio.so: LIBS+=-lusb -lasound`
 
 ### After DAHDI/Asterisk installed
 

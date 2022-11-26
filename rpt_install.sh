@@ -16,10 +16,10 @@ fi
 # cd into Asterisk source directory
 cd $( ls -d -v */ | grep "^asterisk" | tail -1 )
 
-apt-get install -y libusb-dev # chan_simpleusb requires libusb-dev on Debian
+apt-get install -y libusb-dev # chan_simpleusb and chan_usbradio require libusb-dev on Debian
 modprobe snd-pcm-oss # /dev/dsp1 needs to exist for chan_simpleusb and chan_usbradio to work
 
-wget "https://code.phreaknet.org/asterisk/rpt.diff" -O /tmp/rpt.diff
+cp ../app_rpt/Makefiles.diff /tmp/rpt.diff
 git apply /tmp/rpt.diff
 
 echoerr() {
@@ -61,7 +61,7 @@ rpt_add "channels/chan_echolink.c"
 rpt_add "channels/chan_simpleusb.c"
 
 # Until we figure out the dependencies:
-#rpt_add "channels/chan_usbradio.c"
+rpt_add "channels/chan_usbradio.c"
 
 rpt_add "channels/chan_tlb.c"
 rpt_add "channels/chan_voter.c"
