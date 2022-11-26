@@ -30,6 +30,7 @@ rpt_add() {
 	if [ ! -f ../app_rpt/$1 ]; then
 		echoerr "WARNING: File $1 does not exist"
 	fi
+	printf "Adding module %s\n" "$1"
 	cp ../app_rpt/$1 $1
 }
 
@@ -58,7 +59,10 @@ rpt_add "apps/app_rpt/rpt_utils.c"
 rpt_add "apps/app_rpt/rpt_utils.h"
 rpt_add "channels/chan_echolink.c"
 rpt_add "channels/chan_simpleusb.c"
-rpt_add "channels/chan_usbradio.c"
+
+# Until we figure out the dependencies:
+#rpt_add "channels/chan_usbradio.c"
+
 rpt_add "channels/chan_tlb.c"
 rpt_add "channels/chan_voter.c"
 rpt_add "channels/chan_usrp.c"

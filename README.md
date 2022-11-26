@@ -31,6 +31,11 @@ AST_PBX_KEEPALIVE: https://github.com/asterisk/asterisk/commit/50a25ac8474d7900b
 
 You can use PhreakScript to install Asterisk automatically, first, then use the `rpt_install.sh` script to properly install the files from this repo.
 
+## Known Issues
+
+I am currently unsure how to satisfy the dependencies for `chan_usbradio`. It compiles, but since it will cause menuselect issues if dependencies are not available,
+the `rpt_install.sh` script no longer downloads this by default. Feel free to grab it manually if you think your system can support it.
+
 ## Automatic Installation
 
 Step 1: Install DAHDI and Asterisk
