@@ -59,6 +59,8 @@ rpt_add "apps/app_rpt/rpt_utils.c"
 rpt_add "apps/app_rpt/rpt_utils.h"
 rpt_add "apps/app_rpt/rpt_call.c"
 rpt_add "apps/app_rpt/rpt_call.h"
+rpt_add "apps/app_rpt/rpt_serial.c"
+rpt_add "apps/app_rpt/rpt_serial.h"
 rpt_add "channels/chan_echolink.c"
 rpt_add "channels/chan_simpleusb.c"
 

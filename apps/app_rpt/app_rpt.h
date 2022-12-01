@@ -916,6 +916,8 @@ struct nodelog {
 	char str[MAXNODESTR * 2];
 };
 
+int rpt_debug_level(void);
+
 /* forward declarations */
 int service_scan(struct rpt *myrpt);
 int set_mode_ft897(struct rpt *myrpt, char newmode);
