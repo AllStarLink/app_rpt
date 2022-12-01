@@ -1251,12 +1251,16 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 */
 static void kickptt(struct chan_simpleusb_pvt *o)
 {
+	int res;
 	char c = 0;
 	if (!o)
 		return;
 	if (!o->pttkick)
 		return;
-	write(o->pttkick[1], &c, 1);
+	res = write(o->pttkick[1], &c, 1);
+	if (res <= 0) {
+		ast_log(LOG_ERROR, "write failed: %s\n", strerror(errno));
+	}
 }
 
 /*
@@ -1601,7 +1605,10 @@ static void *hidthread(void *arg)
 			if (FD_ISSET(o->pttkick[0], &rfds)) {
 				char c;
 
-				read(o->pttkick[0], &c, 1);
+				int bytes = read(o->pttkick[0], &c, 1);
+				if (bytes <= 0) {
+					ast_log(LOG_ERROR, "read failed: %s\n", strerror(errno));
+				}
 			}
 			if (o->wanteeprom) {
 				ast_mutex_lock(&o->eepromlock);

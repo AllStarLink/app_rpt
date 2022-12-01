@@ -18594,7 +18594,10 @@ static void *rpt(void *this)
 						ast_writestream(myrpt->monstream, f1);
 					}
 					if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd && (myrpt->outstreampipe[1] > 0)) {
-						write(myrpt->outstreampipe[1], f1->data.ptr, f1->datalen);
+						int res = write(myrpt->outstreampipe[1], f1->data.ptr, f1->datalen);
+						if (res != f1->datalen) {
+							ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
+						}
 					}
 				}
 			} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
@@ -19461,7 +19464,10 @@ static void *rpt(void *this)
 				}
 				if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) && myrpt->p.outstreamcmd
 					&& (myrpt->outstreampipe[1] > 0)) {
-					write(myrpt->outstreampipe[1], f->data.ptr, f->datalen);
+					int res = write(myrpt->outstreampipe[1], f->data.ptr, f->datalen);
+					if (res != f->datalen) {
+						ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
+					}
 				}
 				fs = ast_frdup(f);
 				fac = 1.0;
