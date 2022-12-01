@@ -371,63 +371,96 @@ static char *tdesc = "Radio Repeater / Remote Base  version 2.0.0-beta 03/24/202
 
 static char *app = "Rpt";
 
-static char *synopsis = "Radio Repeater/Remote Base Control System";
-
-static char *descrip =
-	"  Rpt(nodename[|options][|M][|*]):  \n"
-	"    Radio Remote Link or Remote Base Link Endpoint Process.\n"
-	"\n"
-	"    Not specifying an option puts it in normal endpoint mode (where source\n"
-	"    IP and nodename are verified).\n"
-	"\n"
-	"    Options are as follows:\n"
-	"\n"
-	"        X - Normal endpoint mode WITHOUT security check. Only specify\n"
-	"            this if you have checked security already (like with an IAX2\n"
-	"            user/password or something).\n"
-	"\n"
-	"        Rannounce-string[|timeout[|timeout-destination]] - Amateur Radio\n"
-	"            Reverse Autopatch. Caller is put on hold, and announcement (as\n"
-	"            specified by the 'announce-string') is played on radio system.\n"
-	"            Users of radio system can access autopatch, dial specified\n"
-	"            code, and pick up call. Announce-string is list of names of\n"
-	"            recordings, or \"PARKED\" to substitute code for un-parking,\n"
-	"            or \"NODE\" to substitute node number.\n"
-	"\n"
-	"        P - Phone Control mode. This allows a regular phone user to have\n"
-	"            full control and audio access to the radio system. For the\n"
-	"            user to have DTMF control, the 'phone_functions' parameter\n"
-	"            must be specified for the node in 'rpt.conf'. An additional\n"
-	"            function (cop,6) must be listed so that PTT control is available.\n"
-	"\n"
-	"        D - Dumb Phone Control mode. This allows a regular phone user to\n"
-	"            have full control and audio access to the radio system. In this\n"
-	"            mode, the PTT is activated for the entire length of the call.\n"
-	"            For the user to have DTMF control (not generally recomended in\n"
-	"            this mode), the 'dphone_functions' parameter must be specified\n"
-	"            for the node in 'rpt.conf'. Otherwise no DTMF control will be\n"
-	"            available to the phone user.\n"
-	"\n"
-	"        S - Simplex Dumb Phone Control mode. This allows a regular phone user\n"
-	"            audio-only access to the radio system. In this mode, the\n"
-	"            transmitter is toggled on and off when the phone user presses the\n"
-	"            funcchar (*) key on the telephone set. In addition, the transmitter\n"
-	"            will turn off if the endchar (#) key is pressed. When a user first\n"
-	"            calls in, the transmitter will be off, and the user can listen for\n"
-	"            radio traffic. When the user wants to transmit, they press the *\n"
-	"            key, start talking, then press the * key again or the # key to turn\n"
-	"            the transmitter off.  No other functions can be executed by the\n"
-	"            user on the phone when this mode is selected. Note: If your\n"
-	"            radio system is full-duplex, we recommend using either P or D\n"
-	"            modes as they provide more flexibility.\n"
-	"\n"
-	"        V - Set Asterisk channel variable for specified node ( e.g. rpt(2000|V|foo=bar) ).\n"
-	"\n"
-	"        q - Query Status. Sets channel variables and returns + 101 in plan.\n"
-	"\n"
-	"        M - Memory Channel Steer as MXX where XX is the memory channel number.\n"
-	"\n" "        * - Alt Macro to execute (e.g. *7 for status)\n" "\n";
-;
+/*** DOCUMENTATION
+	<application name="Rpt" language="en_US">
+		<synopsis>
+			Radio Remote Link or Remote Base Link Endpoint Process
+		</synopsis>
+		<syntax>
+			<parameter name="nodename">
+				<para>Node name.</para>
+			</parameter>
+			<parameter name="options">
+				<optionlist>
+					<option name="X">
+						<para>Normal endpoint mode WITHOUT security check.
+						Only specify this if you have checked security already (like with an IAX2 user/password or something).</para>
+					</option>
+					<option name="R">
+						<para>announce-string[|timeout[|timeout-destination]] - Amateur Radio</para>
+						<para>Reverse Autopatch. Caller is put on hold, and announcement (as specified by the 'announce-string') is played on radio system.
+						Users of radio system can access autopatch, dial specified code, and pick up call. Announce-string is list of names of
+						recordings, or <literal>PARKED</literal> to substitute code for un-parking or <literal>NODE</literal> to substitute node number.</para>
+					</option>
+					<option name="P">
+						<para>Phone Control mode. This allows a regular phone user to have full control and audio access to the radio system. For the
+						user to have DTMF control, the 'phone_functions' parameter must be specified for the node in 'rpt.conf'. An additional
+						function (cop,6) must be listed so that PTT control is available.</para>
+					</option>
+					<option name="D">
+						<para>Dumb Phone Control mode. This allows a regular phone user to have full control and audio access to the radio system. In this
+						mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not generally recomended in
+						this mode), the 'dphone_functions' parameter must be specified for the node in 'rpt.conf'. Otherwise no DTMF control will be
+						available to the phone user.</para>
+					</option>
+					<option name="S">
+						<para>Simplex Dumb Phone Control mode. This allows a regular phone user audio-only access to the radio system. In this mode, the
+						transmitter is toggled on and off when the phone user presses the funcchar (*) key on the telephone set. In addition, the transmitter
+						will turn off if the endchar (#) key is pressed. When a user first calls in, the transmitter will be off, and the user can listen for
+						radio traffic. When the user wants to transmit, they press the * key, start talking, then press the * key again or the # key to turn
+						the transmitter off.  No other functions can be executed by the user on the phone when this mode is selected. Note: If your
+						radio system is full-duplex, we recommend using either P or D modes as they provide more flexibility.</para>
+					</option>
+					<option name="V">
+						<para>Set Asterisk channel variable for specified node (e.g. Rpt(2000|V|foo=bar))</para>
+					</option>
+					<option name="M">
+						<para>Memory Channel Steer as MXX where XX is the memory channel number.</para>
+						<para>* - Alt Macro to execute (e.g. *7 for status)</para>
+					</option>
+				</optionlist>
+			</parameter>
+		</syntax>
+		<description>
+			<para> Not specifying an option puts it in normal endpoint mode (where source IP and nodename are verified).</para>
+		</description>
+	</application>
+	<application name="MDC1200Gen" language="en_US">
+		<synopsis>
+			A Softmodem that connects the caller to a Telnet server.
+		</synopsis>
+		<syntax>
+			<parameter name="type">
+				<para>Type is 'I' for PttID, 'E' for Emergency, and 'C' for Call (SelCall or Alert), or 'SX' for STS
+				(status), where X is 0-F (indicating the status code).</para>
+				<para>DestID and subcode are only specified for the 'C' type message.</para>
+			</parameter>
+			<parameter name="unitid">
+				<para>Unit ID.</para>
+			</parameter>
+			<parameter name="destid">
+				<para>DestID is the MDC1200 ID of the radio being called.</para>
+			</parameter>
+			<parameter name="subcode">
+				<para>Subcodes are as follows:</para>
+				<enumlist>
+					<enum name="8205">
+						<para>Voice Selective Call for Spectra ('Call')</para>
+					</enum>
+					<enum name="8015">
+						<para>Voice Selective Call for Maxtrac ('SC') or Astro-Saber('Call')</para>
+					</enum>
+					<enum name="810D">
+						<para>Call Alert (like Maxtrac 'CA')</para>
+					</enum>
+				</enumlist>
+			</parameter>
+		</syntax>
+		<description>
+			<para>Generates MDC-1200 burst for given UnitID.</para>
+		</description>
+	</application>
+ ***/
 
 pthread_t rpt_master_thread;
 struct nodelog nodelog;
@@ -22305,17 +22338,6 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 #ifdef	_MDC_ENCODE_H_
 
 static char *mdc_app = "MDC1200Gen";
-static char *mdc_synopsis = "MDC1200 Generator";
-static char *mdc_descrip = "  MDC1200Gen(Type|UnitID[|DestID|SubCode]):  Generates MDC-1200\n"
-	"  burst for given UnitID. Type is 'I' for PttID, 'E' for\n"
-	"  Emergency, and 'C' for Call (SelCall or Alert), or 'SX' for STS\n"
-	"  (status), where X is 0-F (indicating the status code). DestID and\n"
-	"  subcode are only specified for the 'C' type message. DestID is\n"
-	"  The MDC1200 ID of the radio being called, and the subcodes are\n"
-	"  as follows: \n\n"
-	"     Subcode '8205' is Voice Selective Call for Spectra ('Call')\n"
-	"     Subcode '8015' is Voice Selective Call for Maxtrac ('SC') or \n"
-	"          Astro-Saber('Call')\n" "     Subcode '810D' is Call Alert (like Maxtrac 'CA')\\n\n";
 
 static void mdcgen_release(struct ast_channel *chan, void *params)
 {
@@ -22552,10 +22574,10 @@ static int load_module(void)
 	res = 0;
 	res |= ast_manager_register("RptLocalNodes", 0, manager_rpt_local_nodes, "List local node numbers");
 	res |= ast_manager_register("RptStatus", 0, manager_rpt_status, "Return Rpt Status for CGI");
-	res |= ast_register_application(app, rpt_exec, synopsis, descrip);
+	res |= ast_register_application_xml(app, rpt_exec);
 
 #ifdef	_MDC_ENCODE_H_
-	res |= ast_register_application(mdc_app, mdcgen_exec, mdc_synopsis, mdc_descrip);
+	res |= ast_register_application_xml(mdc_app, mdcgen_exec);
 #endif
 
 	return res;
