@@ -285,6 +285,7 @@
 /*** MODULEINFO
 	<depend>tonezone</depend>
 	<depend>curl</depend>
+	<depend>dahdi</depend>
 	<defaultenabled>yes</defaultenabled>
  ***/
 
@@ -22736,32 +22737,8 @@ static int unload_module(void)
 
 static int load_module(void)
 {
-
 	int res;
 
-#ifndef	HAVE_DAHDI
-	int fd;
-	struct dahdi_versioninfo zv;
-	char *cp;
-
-	fd = open("/dev/zap/ctl", O_RDWR);
-	if (fd == -1) {
-		ast_log(LOG_ERROR, "Cannot open Zap device for probe\n");
-		return -1;
-	}
-	if (ioctl(fd, DAHDI_GETVERSION, &zv) == -1) {
-		ast_log(LOG_ERROR, "Cannot get ZAPTEL version info\n");
-		close(fd);
-		return -1;
-	}
-	close(fd);
-	cp = strstr(zv.version, "RPT_");
-	if ((!cp) || (*(cp + 4) < REQUIRED_ZAPTEL_VERSION)) {
-		ast_log(LOG_ERROR, "Zaptel version %s must at least level RPT_%c to operate\n", zv.version,
-				REQUIRED_ZAPTEL_VERSION);
-		return -1;
-	}
-#endif
 	nullfd = open("/dev/null", O_RDWR);
 	if (nullfd == -1) {
 		ast_log(LOG_ERROR, "Can not open /dev/null\n");
