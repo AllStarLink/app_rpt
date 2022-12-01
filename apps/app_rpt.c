@@ -8148,14 +8148,14 @@ static void *rpt_tele_thread(void *this)
 			}
 			if (myrpt->iofd < 0) {
 				i = DAHDI_FLUSH_EVENT;
-				if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_FLUSH, &i) == -1) {
+				if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_FLUSH, &i) == -1) {
 					myrpt->remsetting = 0;
 					ast_mutex_unlock(&myrpt->remlock);
 					ast_log(LOG_ERROR, "Cant flush events");
 					res = -1;
 					break;
 				}
-				if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_GET_PARAMS, &par) == -1) {
+				if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_GET_PARAMS, &par) == -1) {
 					myrpt->remsetting = 0;
 					ast_mutex_unlock(&myrpt->remlock);
 					ast_log(LOG_ERROR, "Cant get params");
@@ -11156,7 +11156,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			memset(&r, 0, sizeof(struct dahdi_radio_param));
 			r.radpar = DAHDI_RADPAR_IGNORECT;
 			r.data = 0;
-			ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
+			ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
 		}
 		if ((strncasecmp(ast_channel_name(myrpt->rxchannel), "radio/", 6) == 0) ||
 			(strncasecmp(ast_channel_name(myrpt->rxchannel), "simpleusb/", 10) == 0)) {
@@ -11173,7 +11173,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			memset(&r, 0, sizeof(struct dahdi_radio_param));
 			r.radpar = DAHDI_RADPAR_IGNORECT;
 			r.data = 1;
-			ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
+			ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
 		}
 
 		if ((strncasecmp(ast_channel_name(myrpt->rxchannel), "radio/", 6) == 0) ||
@@ -12265,14 +12265,14 @@ static void rbi_out(struct rpt *myrpt, unsigned char *data)
 	r.radpar = DAHDI_RADPAR_REMMODE;
 	r.data = DAHDI_RADPAR_REM_RBI1;
 	/* if setparam ioctl fails, its probably not a pciradio card */
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
 		rbi_out_parallel(myrpt, data);
 		return;
 	}
 	r.radpar = DAHDI_RADPAR_REMCOMMAND;
 	memcpy(&r.data, data, 5);
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
-		ast_log(LOG_WARNING, "Cannot send RBI command for channel %s\n", ast_channel_name(myrpt->zaprxchannel));
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
+		ast_log(LOG_WARNING, "Cannot send RBI command for channel %s\n", ast_channel_name(myrpt->dahdirxchannel));
 		return;
 	}
 }
@@ -12343,16 +12343,16 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 		return (i);
 	}
 
-	/* if not a zap channel, cant use pciradio stuff */
-	if (myrpt->rxchannel != myrpt->zaprxchannel)
+	/* if not a DAHDI channel, cant use pciradio stuff */
+	if (myrpt->rxchannel != myrpt->dahdirxchannel)
 		return -1;
 
 	prm.radpar = DAHDI_RADPAR_UIOMODE;
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1)
 		return -1;
 	oldmode = prm.data;
 	prm.radpar = DAHDI_RADPAR_UIODATA;
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1)
 		return -1;
 	olddata = prm.data;
 	prm.radpar = DAHDI_RADPAR_REMMODE;
@@ -12360,11 +12360,11 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 		prm.data = DAHDI_RADPAR_REM_SERIAL_ASCII;
 	else
 		prm.data = DAHDI_RADPAR_REM_SERIAL;
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 		return -1;
 	if (asciiflag & 2) {
 		i = DAHDI_ONHOOK;
-		if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_HOOK, &i) == -1)
+		if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_HOOK, &i) == -1)
 			return -1;
 		usleep(100000);
 	}
@@ -12375,7 +12375,7 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 			prm.data = 0;
 			prm.buf[0] = txbuf[i];
 			prm.index = 1;
-			if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+			if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 				return -1;
 			usleep(6666);
 		}
@@ -12384,7 +12384,7 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 			prm.data = DAHDI_RADPAR_REM_SERIAL_ASCII;
 		else
 			prm.data = DAHDI_RADPAR_REM_SERIAL;
-		if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+		if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 			return -1;
 		prm.radpar = DAHDI_RADPAR_REMCOMMAND;
 		prm.data = rxmaxbytes;
@@ -12396,7 +12396,7 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 		memcpy(prm.buf, txbuf, txbytes);
 		prm.index = txbytes;
 	}
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 		return -1;
 	if (rxbuf) {
 		*rxbuf = 0;
@@ -12405,20 +12405,20 @@ static int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes
 	index = prm.index;
 	prm.radpar = DAHDI_RADPAR_REMMODE;
 	prm.data = DAHDI_RADPAR_REM_NONE;
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 		return -1;
 	if (asciiflag & 2) {
 		i = DAHDI_OFFHOOK;
-		if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_HOOK, &i) == -1)
+		if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_HOOK, &i) == -1)
 			return -1;
 	}
 	prm.radpar = DAHDI_RADPAR_UIOMODE;
 	prm.data = oldmode;
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 		return -1;
 	prm.radpar = DAHDI_RADPAR_UIODATA;
 	prm.data = olddata;
-	if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 		return -1;
 	return (index);
 }
@@ -16964,9 +16964,9 @@ static void *rpt(void *this)
 	/*! \todo call ao2_ref(cap, -1); on all exit points? */
 
 	myrpt->rxchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-	myrpt->zaprxchannel = NULL;
+	myrpt->dahdirxchannel = NULL;
 	if (!strcasecmp(tmpstr, "DAHDI"))
-		myrpt->zaprxchannel = myrpt->rxchannel;
+		myrpt->dahdirxchannel = myrpt->rxchannel;
 	if (myrpt->rxchannel) {
 		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY) {
 			ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
@@ -16988,7 +16988,7 @@ static void *rpt(void *this)
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
-	myrpt->zaptxchannel = NULL;
+	myrpt->dahditxchannel = NULL;
 	if (myrpt->txchanname) {
 		strncpy(tmpstr, myrpt->txchanname, sizeof(tmpstr) - 1);
 		tele = strchr(tmpstr, '/');
@@ -17002,7 +17002,7 @@ static void *rpt(void *this)
 		*tele++ = 0;
 		myrpt->txchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
 		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo"))
-			myrpt->zaptxchannel = myrpt->txchannel;
+			myrpt->dahditxchannel = myrpt->txchannel;
 		if (myrpt->txchannel) {
 			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY) {
 				ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
@@ -17030,7 +17030,7 @@ static void *rpt(void *this)
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
 		if ((!strncasecmp(myrpt->rxchanname, "DAHDI", 3)) && strcasecmp(myrpt->rxchanname, "Zap/pseudo"))
-			myrpt->zaptxchannel = myrpt->txchannel;
+			myrpt->dahditxchannel = myrpt->txchannel;
 	}
 	if (strncasecmp(ast_channel_name(myrpt->txchannel), "Zap/Pseudo", 10)) {
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
@@ -17046,19 +17046,19 @@ static void *rpt(void *this)
 	ast_set_write_format(myrpt->pchannel, ast_format_slin);
 	rpt_disable_cdr(myrpt->pchannel);
 	ast_answer(myrpt->pchannel);
-	if (!myrpt->zaprxchannel)
-		myrpt->zaprxchannel = myrpt->pchannel;
-	if (!myrpt->zaptxchannel) {
+	if (!myrpt->dahdirxchannel)
+		myrpt->dahdirxchannel = myrpt->pchannel;
+	if (!myrpt->dahditxchannel) {
 		/* allocate a pseudo-channel thru asterisk */
-		myrpt->zaptxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-		if (!myrpt->zaptxchannel) {
+		myrpt->dahditxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+		if (!myrpt->dahditxchannel) {
 			FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
 		}
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->zaptxchannel));
-		ast_set_read_format(myrpt->zaptxchannel, ast_format_slin);
-		ast_set_write_format(myrpt->zaptxchannel, ast_format_slin);
-		rpt_disable_cdr(myrpt->zaptxchannel);
-		ast_answer(myrpt->zaptxchannel);
+		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->dahditxchannel));
+		ast_set_read_format(myrpt->dahditxchannel, ast_format_slin);
+		ast_set_write_format(myrpt->dahditxchannel, ast_format_slin);
+		rpt_disable_cdr(myrpt->dahditxchannel);
+		ast_answer(myrpt->dahditxchannel);
 	}
 	/* allocate a pseudo-channel thru asterisk */
 	myrpt->monchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
@@ -17074,7 +17074,7 @@ static void *rpt(void *this)
 	/* make a conference for the tx */
 	ci.confno = -1;				/* make a new conf */
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER;
-	if (join_dahdiconf(myrpt->zaptxchannel, &ci)) {
+	if (join_dahdiconf(myrpt->dahditxchannel, &ci)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_hangup(myrpt->pchannel);
 		ast_hangup(myrpt->monchannel);
@@ -17104,7 +17104,7 @@ static void *rpt(void *this)
 	/* save pseudo channel conference number */
 	myrpt->conf = ci.confno;
 	/* make a conference for the pseudo */
-	if ((strstr(ast_channel_name(myrpt->txchannel), "pseudo") == NULL) && (myrpt->zaptxchannel == myrpt->txchannel)) {
+	if ((strstr(ast_channel_name(myrpt->txchannel), "pseudo") == NULL) && (myrpt->dahditxchannel == myrpt->txchannel)) {
 		/* get tx channel's port number */
 		if (ioctl(ast_channel_fd(myrpt->txchannel, 0), DAHDI_CHANNO, &ci.confno) == -1) {
 			ast_log(LOG_WARNING, "Unable to set tx channel's chan number\n");
@@ -17443,7 +17443,7 @@ static void *rpt(void *this)
 			break;
 		if (ast_check_hangup(myrpt->txpchannel))
 			break;
-		if (myrpt->zaptxchannel && ast_check_hangup(myrpt->zaptxchannel))
+		if (myrpt->dahditxchannel && ast_check_hangup(myrpt->dahditxchannel))
 			break;
 
 		time(&t);
@@ -17857,17 +17857,15 @@ static void *rpt(void *this)
 
 			myrpt->lastitx = x;
 			if (myrpt->p.itxctcss) {
-				if ((strncasecmp(ast_channel_name(myrpt->rxchannel), "zap/", 4) == 0) ||
-					(strncasecmp(ast_channel_name(myrpt->rxchannel), "dahdi/", 6) == 0)) {
+				if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "DAHDI")) {
 					struct dahdi_radio_param r;
 
 					memset(&r, 0, sizeof(struct dahdi_radio_param));
 					r.radpar = DAHDI_RADPAR_NOENCODE;
 					r.data = !x;
-					ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
-				}
-				if ((strncasecmp(ast_channel_name(myrpt->rxchannel), "radio/", 6) == 0) ||
-					(strncasecmp(ast_channel_name(myrpt->rxchannel), "simpleusb/", 10) == 0)) {
+					ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
+				} else if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
+					!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 					sprintf(str, "TXCTCSS %d", !(!x));
 					ast_sendtext(myrpt->rxchannel, str);
 				}
@@ -17887,8 +17885,8 @@ static void *rpt(void *this)
 		cs[n++] = myrpt->txpchannel;
 		if (myrpt->txchannel != myrpt->rxchannel)
 			cs[n++] = myrpt->txchannel;
-		if (myrpt->zaptxchannel != myrpt->txchannel)
-			cs[n++] = myrpt->zaptxchannel;
+		if (myrpt->dahditxchannel != myrpt->txchannel)
+			cs[n++] = myrpt->dahditxchannel;
 		l = myrpt->links.next;
 		while (l != &myrpt->links) {
 			if ((!l->killme) && (!l->disctime) && l->chan) {
@@ -18532,7 +18530,7 @@ static void *rpt(void *this)
 					memset(f->data.ptr, 0, f->datalen);
 				}
 
-				if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_GETCONFMUTE, &ismuted) == -1) {
+				if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_GETCONFMUTE, &ismuted) == -1) {
 					ismuted = 0;
 				}
 				if (dtmfed)
@@ -18881,8 +18879,8 @@ static void *rpt(void *this)
 			ast_frfree(f);
 			continue;
 		}
-		if (who == myrpt->zaptxchannel) {	/* if it was a read from pseudo-tx */
-			f = ast_read(myrpt->zaptxchannel);
+		if (who == myrpt->dahditxchannel) {	/* if it was a read from pseudo-tx */
+			f = ast_read(myrpt->dahditxchannel);
 			if (!f) {
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
 				break;
@@ -19666,8 +19664,8 @@ static void *rpt(void *this)
 	ast_hangup(myrpt->txpchannel);
 	if (myrpt->txchannel != myrpt->rxchannel)
 		ast_hangup(myrpt->txchannel);
-	if (myrpt->zaptxchannel != myrpt->txchannel)
-		ast_hangup(myrpt->zaptxchannel);
+	if (myrpt->dahditxchannel != myrpt->txchannel)
+		ast_hangup(myrpt->dahditxchannel);
 	if (myrpt->lastf1)
 		ast_frfree(myrpt->lastf1);
 	myrpt->lastf1 = NULL;
@@ -20818,9 +20816,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	myrpt->rxchannel = ast_request(myrpt->rxchanname, cap, NULL, NULL, tele, NULL);
-	myrpt->zaprxchannel = NULL;
+	myrpt->dahdirxchannel = NULL;
 	if (!strcasecmp(myrpt->rxchanname, "DAHDI"))
-		myrpt->zaprxchannel = myrpt->rxchannel;
+		myrpt->dahdirxchannel = myrpt->rxchannel;
 	if (myrpt->rxchannel) {
 		rpt_setup_call(myrpt->rxchannel, tele, 999, myrpt->rxchanname, "(Link Rx)", "Rx", myrpt->name);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -20832,7 +20830,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		pthread_exit(NULL);
 	}
 	*--tele = '/';
-	myrpt->zaptxchannel = NULL;
+	myrpt->dahditxchannel = NULL;
 	if (myrpt->txchanname) {
 		tele = strchr(myrpt->txchanname, '/');
 		if (!tele) {
@@ -20844,7 +20842,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		*tele++ = 0;
 		myrpt->txchannel = ast_request(myrpt->txchanname, cap, NULL, NULL, tele, NULL);
 		if (!strncasecmp(myrpt->txchanname, "DAHDI", 3))
-			myrpt->zaptxchannel = myrpt->txchannel;
+			myrpt->dahditxchannel = myrpt->txchannel;
 		if (myrpt->txchannel) {
 			rpt_setup_call(myrpt->txchannel, tele, 999, myrpt->txchanname, "(Link Tx)", "Tx", myrpt->name);
 			rpt_mutex_unlock(&myrpt->lock);
@@ -20860,7 +20858,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
 		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3))
-			myrpt->zaptxchannel = myrpt->rxchannel;
+			myrpt->dahditxchannel = myrpt->rxchannel;
 	}
 	i = 3;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &i, sizeof(char), 0);
@@ -20880,10 +20878,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	ast_set_write_format(myrpt->pchannel, ast_format_slin);
 	ast_answer(myrpt->pchannel);
 	rpt_disable_cdr(myrpt->pchannel);
-	if (!myrpt->zaprxchannel)
-		myrpt->zaprxchannel = myrpt->pchannel;
-	if (!myrpt->zaptxchannel)
-		myrpt->zaptxchannel = myrpt->pchannel;
+	if (!myrpt->dahdirxchannel)
+		myrpt->dahdirxchannel = myrpt->pchannel;
+	if (!myrpt->dahditxchannel)
+		myrpt->dahditxchannel = myrpt->pchannel;
 	/* make a conference for the pseudo */
 	ci.confno = -1;				/* make a new conf */
 	ci.confmode = DAHDI_CONF_CONFANNMON;
@@ -20910,35 +20908,35 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 	iskenwood_pci4 = 0;
 	memset(&z, 0, sizeof(z));
-	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->zaptxchannel)) {
+	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->dahditxchannel)) {
 		z.radpar = DAHDI_RADPAR_REMMODE;
 		z.data = DAHDI_RADPAR_REM_NONE;
-		res = ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z);
+		res = ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z);
 		/* if PCIRADIO and kenwood selected */
 		if ((!res) && (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 			z.radpar = DAHDI_RADPAR_UIOMODE;
 			z.data = 1;
-			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
+			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
 				ast_log(LOG_ERROR, "Cannot set UIOMODE\n");
 				return -1;
 			}
 			z.radpar = DAHDI_RADPAR_UIODATA;
 			z.data = 3;
-			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
+			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
 				ast_log(LOG_ERROR, "Cannot set UIODATA\n");
 				return -1;
 			}
 			i = DAHDI_OFFHOOK;
-			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_HOOK, &i) == -1) {
+			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_HOOK, &i) == -1) {
 				ast_log(LOG_ERROR, "Cannot set hook\n");
 				return -1;
 			}
 			iskenwood_pci4 = 1;
 		}
 	}
-	if (myrpt->txchannel == myrpt->zaptxchannel) {
+	if (myrpt->txchannel == myrpt->dahditxchannel) {
 		i = DAHDI_ONHOOK;
-		ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_HOOK, &i);
+		ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_HOOK, &i);
 		/* if PCIRADIO and Yaesu ft897/ICOM IC-706 selected */
 		if ((myrpt->iofd < 1) && (!res) &&
 			((!strcmp(myrpt->remoterig, REMOTE_RIG_FT897)) ||
@@ -20948,13 +20946,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			 (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)))) {
 			z.radpar = DAHDI_RADPAR_UIOMODE;
 			z.data = 1;
-			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
+			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
 				ast_log(LOG_ERROR, "Cannot set UIOMODE\n");
 				return -1;
 			}
 			z.radpar = DAHDI_RADPAR_UIODATA;
 			z.data = 3;
-			if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
+			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
 				ast_log(LOG_ERROR, "Cannot set UIODATA\n");
 				return -1;
 			}
@@ -21009,7 +21007,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	/* if we are on 2w loop and are a remote, turn EC on */
 	if (myrpt->remote && (myrpt->rxchannel == myrpt->txchannel)) {
 		i = 128;
-		ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_ECHOCANCEL, &i);
+		ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_ECHOCANCEL, &i);
 	}
 	if (ast_channel_state(chan) != AST_STATE_UP) {
 		ast_answer(chan);
@@ -21017,8 +21015,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			send_newkey(chan);
 	}
 
-	if (myrpt->rxchannel == myrpt->zaprxchannel) {
-		if (ioctl(ast_channel_fd(myrpt->zaprxchannel, 0), DAHDI_GET_PARAMS, &par) != -1) {
+	if (myrpt->rxchannel == myrpt->dahdirxchannel) {
+		if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_GET_PARAMS, &par) != -1) {
 			if (par.rxisoffhook) {
 				ast_indicate(chan, AST_CONTROL_RADIO_KEY);
 				myrpt->remoterx = 1;
@@ -21303,10 +21301,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						}
 						telem = telem->next;
 					}
-					if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->zaptxchannel)) {
+					if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->dahditxchannel)) {
 						z.radpar = DAHDI_RADPAR_UIODATA;
 						z.data = 1;
-						if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
+						if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
 							ast_log(LOG_ERROR, "Cannot set UIODATA\n");
 							return -1;
 						}
@@ -21324,10 +21322,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (!myrpt->remtxfreqok) {
 				rpt_telemetry(myrpt, UNAUTHTX, NULL);
 			}
-			if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->zaptxchannel)) {
+			if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->dahditxchannel)) {
 				z.radpar = DAHDI_RADPAR_UIODATA;
 				z.data = 3;
-				if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
+				if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
 					ast_log(LOG_ERROR, "Cannot set UIODATA\n");
 					return -1;
 				}
@@ -21681,21 +21679,21 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (myrpt->lastf2)
 		ast_frfree(myrpt->lastf2);
 	myrpt->lastf2 = NULL;
-	if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->zaptxchannel)) {
+	if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->dahditxchannel)) {
 		z.radpar = DAHDI_RADPAR_UIOMODE;
 		z.data = 3;
-		if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
+		if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
 			ast_log(LOG_ERROR, "Cannot set UIOMODE\n");
 			return -1;
 		}
 		z.radpar = DAHDI_RADPAR_UIODATA;
 		z.data = 3;
-		if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
+		if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
 			ast_log(LOG_ERROR, "Cannot set UIODATA\n");
 			return -1;
 		}
 		i = DAHDI_OFFHOOK;
-		if (ioctl(ast_channel_fd(myrpt->zaptxchannel, 0), DAHDI_HOOK, &i) == -1) {
+		if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_HOOK, &i) == -1) {
 			ast_log(LOG_ERROR, "Cannot set hook\n");
 			return -1;
 		}

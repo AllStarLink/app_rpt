@@ -210,8 +210,6 @@ int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short d
 #define	RX_LINGER_TIME 50
 #define	RX_LINGER_TIME_IAXKEY 150
 
-#define	REQUIRED_ZAPTEL_VERSION 'A'
-
 #define	STATPOST_PROGRAM "/usr/bin/wget,-q,--output-document=/dev/null,--no-check-certificate"
 
 #define	ALLOW_LOCAL_CHANNELS
@@ -766,7 +764,7 @@ struct rpt
 	unsigned int parrotcnt;
 	int telemmode;
 	struct ast_channel *rxchannel,*txchannel, *monchannel, *parrotchannel;
-	struct ast_channel *pchannel,*txpchannel, *zaprxchannel, *zaptxchannel;
+	struct ast_channel *pchannel,*txpchannel, *dahdirxchannel, *dahditxchannel;
 	struct ast_channel *telechannel;  	/*!< \brief pseudo channel between telemetry conference and txconf */
 	struct ast_channel *btelechannel;  	/*!< \brief pseudo channel buffer between telemetry conference and txconf */
 	struct ast_channel *voxchannel;
