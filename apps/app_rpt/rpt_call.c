@@ -26,15 +26,21 @@
 #include "app_rpt.h"
 #include "rpt_call.h"
 
+int rpt_disable_cdr(struct ast_channel *chan)
+{
+	if (ast_cdr_set_property(ast_channel_name(chan), AST_CDR_FLAG_DISABLE_ALL)) {
+		ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(chan));
+		return -1;
+	}
+	return 0;
+}
+
 int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc, const char *callerid)
 {
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(chan));
 	ast_set_read_format(chan, ast_format_slin);
 	ast_set_write_format(chan, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (chan->cdr)
-		ast_set_flag(chan->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(chan);
 	ast_channel_appl_set(chan, "Apprpt");
 	ast_channel_data_set(chan, data);
 

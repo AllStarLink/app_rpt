@@ -7424,10 +7424,7 @@ static void *rpt_tele_thread(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (mychannel->cdr)
-		ast_set_flag(mychannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(mychannel);
 	ast_answer(mychannel);
 	rpt_mutex_lock(&myrpt->lock);
 	mytele->chan = mychannel;
@@ -9367,10 +9364,7 @@ static void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (mychannel->cdr)
-		ast_set_flag(mychannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(mychannel);
 	ast_answer(mychannel);
 	ci.chan = 0;
 	ci.confno = myrpt->conf;	/* use the pseudo conference */
@@ -9391,10 +9385,7 @@ static void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (genchannel->cdr)
-		ast_set_flag(genchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(genchannel);
 	ast_answer(genchannel);
 	ci.chan = 0;
 	ci.confno = myrpt->conf;
@@ -9962,10 +9953,7 @@ static int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(l->pchan));
 	ast_set_read_format(l->pchan, ast_format_slin);
 	ast_set_write_format(l->pchan, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (l->pchan->cdr)
-		ast_set_flag(l->pchan->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(l->pchan);
 	ast_answer(l->pchan);
 	/* make a conference for the tx */
 	ci.chan = 0;
@@ -17061,10 +17049,7 @@ static void *rpt(void *this)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->pchannel));
 	ast_set_read_format(myrpt->pchannel, ast_format_slin);
 	ast_set_write_format(myrpt->pchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (myrpt->pchannel->cdr)
-		ast_set_flag(myrpt->pchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(myrpt->pchannel);
 	ast_answer(myrpt->pchannel);
 	if (!myrpt->zaprxchannel)
 		myrpt->zaprxchannel = myrpt->pchannel;
@@ -17077,10 +17062,7 @@ static void *rpt(void *this)
 		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->zaptxchannel));
 		ast_set_read_format(myrpt->zaptxchannel, ast_format_slin);
 		ast_set_write_format(myrpt->zaptxchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-		if (myrpt->zaptxchannel->cdr)
-			ast_set_flag(myrpt->zaptxchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+		rpt_disable_cdr(myrpt->zaptxchannel);
 		ast_answer(myrpt->zaptxchannel);
 	}
 	/* allocate a pseudo-channel thru asterisk */
@@ -17091,10 +17073,7 @@ static void *rpt(void *this)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->monchannel));
 	ast_set_read_format(myrpt->monchannel, ast_format_slin);
 	ast_set_write_format(myrpt->monchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (myrpt->monchannel->cdr)
-		ast_set_flag(myrpt->monchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(myrpt->monchannel);
 	ast_answer(myrpt->monchannel);
 	/* make a conference for the tx */
 	ci.chan = 0;
@@ -17174,10 +17153,7 @@ static void *rpt(void *this)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->parrotchannel));
 	ast_set_read_format(myrpt->parrotchannel, ast_format_slin);
 	ast_set_write_format(myrpt->parrotchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (myrpt->parrotchannel->cdr)
-		ast_set_flag(myrpt->parrotchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(myrpt->parrotchannel);
 	ast_answer(myrpt->parrotchannel);
 
 	/* Telemetry Channel Resources */
@@ -17189,10 +17165,7 @@ static void *rpt(void *this)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->telechannel));
 	ast_set_read_format(myrpt->telechannel, ast_format_slin);
 	ast_set_write_format(myrpt->telechannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (myrpt->telechannel->cdr)
-		ast_set_flag(myrpt->telechannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(myrpt->telechannel);
 	/* make a conference for the voice/tone telemetry */
 	ci.chan = 0;
 	ci.confno = -1;				// make a new conference
@@ -17226,10 +17199,7 @@ static void *rpt(void *this)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->btelechannel));
 	ast_set_read_format(myrpt->btelechannel, ast_format_slin);
 	ast_set_write_format(myrpt->btelechannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (myrpt->btelechannel->cdr)
-		ast_set_flag(myrpt->btelechannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(myrpt->btelechannel);
 	/* make a conference linked to the main tx conference */
 	ci.chan = 0;
 	ci.confno = myrpt->txconf;
@@ -17251,10 +17221,7 @@ static void *rpt(void *this)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->voxchannel));
 	ast_set_read_format(myrpt->voxchannel, ast_format_slin);
 	ast_set_write_format(myrpt->voxchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (myrpt->voxchannel->cdr)
-		ast_set_flag(myrpt->voxchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(myrpt->voxchannel);
 	ast_answer(myrpt->voxchannel);
 	/* allocate a pseudo-channel thru asterisk */
 	myrpt->txpchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
@@ -17262,10 +17229,7 @@ static void *rpt(void *this)
 		FAILED_TO_OBTAIN_PSEUDO_CHANNEL2();
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->txpchannel));
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (myrpt->txpchannel->cdr)
-		ast_set_flag(myrpt->txpchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(myrpt->txpchannel);
 	ast_answer(myrpt->txpchannel);
 	/* make a conference for the tx */
 	ci.chan = 0;
@@ -20718,10 +20682,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_set_read_format(l->pchan, ast_format_slin);
 		ast_set_write_format(l->pchan, ast_format_slin);
 		ast_answer(l->pchan);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-		if (l->pchan->cdr)
-			ast_set_flag(l->pchan->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+		rpt_disable_cdr(l->pchan);
 		/* make a conference for the tx */
 		ci.chan = 0;
 		ci.confno = myrpt->conf;
@@ -20808,10 +20769,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 				ast_playtones_stop(chan);
 			}
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-			if (chan->cdr)
-				ast_set_flag(chan->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+			rpt_disable_cdr(chan);
 			return -1;
 		}
 		rpt_mutex_lock(&myrpt->lock);
@@ -20829,10 +20787,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					rpt_vars[i].txkeyed || ((rpt_vars[i].lasttxkeyedtime + RPT_LOCKOUT_SECS) > now)) {
 					rpt_mutex_unlock(&myrpt->lock);
 					ast_log(LOG_WARNING, "Trying to use busy link (repeater node %s) on %s\n", rpt_vars[i].name, tmp);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-					if (chan->cdr)
-						ast_set_flag(chan->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+					rpt_disable_cdr(chan);
 					return -1;
 				}
 				while (rpt_vars[i].xlink != 3) {
@@ -20843,10 +20798,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					}
 					rpt_mutex_unlock(&myrpt->lock);
 					if (ast_safe_sleep(chan, 500) == -1) {
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-						if (chan->cdr)
-							ast_set_flag(chan->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+						rpt_disable_cdr(chan);
 						return -1;
 					}
 					rpt_mutex_lock(&myrpt->lock);
@@ -20951,10 +20903,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	ast_set_read_format(myrpt->pchannel, ast_format_slin);
 	ast_set_write_format(myrpt->pchannel, ast_format_slin);
 	ast_answer(myrpt->pchannel);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-	if (myrpt->pchannel->cdr)
-		ast_set_flag(myrpt->pchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
+	rpt_disable_cdr(myrpt->pchannel);
 	if (!myrpt->zaprxchannel)
 		myrpt->zaprxchannel = myrpt->pchannel;
 	if (!myrpt->zaptxchannel)
