@@ -8,7 +8,6 @@ static int rpt_do_lstats(int fd, int argc, const char * const *argv);
 static int rpt_do_nodes(int fd, int argc, const char * const *argv);
 static int rpt_do_xnode(int fd, int argc, const char * const *argv);
 static int rpt_do_local_nodes(int fd, int argc, const char * const *argv);
-static int rpt_do_reload(int fd, int argc, const char * const *argv);
 static int rpt_do_restart(int fd, int argc, const char * const *argv);
 static int rpt_do_playback(int fd, int argc, const char * const *argv);
 static int rpt_do_localplay(int fd, int argc, const char * const *argv);

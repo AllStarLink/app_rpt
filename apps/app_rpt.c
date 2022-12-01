@@ -754,8 +754,6 @@ static char dump_xnode[] = "Usage: rpt xnode <nodename>\n" "       Dumps extende
 static char usage_local_nodes[] =
 	"Usage: rpt localnodes\n" "       Dumps a list of the locally configured node numbers to the console.\n";
 
-static char reload_usage[] = "Usage: rpt reload\n" "       Reloads app_rpt running config parameters\n";
-
 static char restart_usage[] = "Usage: rpt restart\n" "       Restarts app_rpt\n";
 
 static char playback_usage[] =
@@ -5642,20 +5640,6 @@ static int rpt_do_local_nodes(int fd, int argc, const char *const *argv)
 }
 
 /*
-* reload vars 
-*/
-
-static int rpt_do_reload(int fd, int argc, const char *const *argv)
-{
-	if (argc > 2)
-		return RESULT_SHOWUSAGE;
-
-	reload();
-
-	return RESULT_FAILURE;
-}
-
-/*
 * restart app_rpt
 */
 
@@ -6240,19 +6224,6 @@ static char *handle_cli_lstats(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	return res2cli(rpt_do_lstats(a->fd, a->argc, a->argv));
 }
 
-static char *handle_cli_reload(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "rpt reload";
-		e->usage = reload_usage;
-		return NULL;
-	case CLI_GENERATE:
-		return NULL;
-	}
-	return res2cli(rpt_do_reload(a->fd, a->argc, a->argv));
-}
-
 static char *handle_cli_restart(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -6418,7 +6389,6 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_xnode, "Dump extended node info"),
 	AST_CLI_DEFINE(handle_cli_local_nodes, "Dump list of local node numbers"),
 	AST_CLI_DEFINE(handle_cli_lstats, "Dump link statistics"),
-	AST_CLI_DEFINE(handle_cli_reload, "Reload app_rpt config"),
 	AST_CLI_DEFINE(handle_cli_restart, "Restart app_rpt"),
 	AST_CLI_DEFINE(handle_cli_playback, "Play Back an Audio File"),
 	AST_CLI_DEFINE(handle_cli_fun, "Execute a DTMF function"),
@@ -22772,7 +22742,7 @@ static int reload(void)
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
 		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
-		pthread_exit(NULL);
+		return -1;
 	}
 
 	ast_mutex_lock(&rpt_master_lock);
