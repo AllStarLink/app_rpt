@@ -16511,7 +16511,9 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		ast_channel_appl_set(l->chan, "Apprpt");
 		ast_channel_data_set(l->chan, "(Remote Rx)");
 		ast_verb(3, "rpt (attempt_reconnect) initiating call to %s/%s on %s\n", deststr, tele, ast_channel_name(l->chan));
-		ast_set_callerid(l->chan, myrpt->name, NULL, NULL);
+		/* Set connected to actually set outgoing Caller ID - ast_set_callerid has no effect! */
+		ast_channel_connected(l->chan)->id.number.valid = 1;
+		ast_channel_connected(l->chan)->id.number.str = ast_strdup(myrpt->name);
 		ast_call(l->chan, tele, 999);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
@@ -16521,7 +16523,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	/* put back in queue */
 	insque((struct qelem *) l, (struct qelem *) myrpt->links.next);
 	rpt_mutex_unlock(&myrpt->lock);
-	ast_log(LOG_WARNING, "Reconnect Attempt to %s in process\n", l->name);
+	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in process\n", l->name);
 	return 0;
 }
 
