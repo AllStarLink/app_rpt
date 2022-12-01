@@ -363,8 +363,6 @@ struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 #include "app_rpt/rpt_call.h"
 #include "app_rpt/rpt_serial.h"
 
-static int reload(void);
-
 AST_MUTEX_DEFINE_STATIC(rpt_master_lock);
 
 static char *tdesc = "Radio Repeater / Remote Base  version 2.0.0-beta 03/24/2021";
