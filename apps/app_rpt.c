@@ -359,6 +359,7 @@ struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 #include "app_rpt/rpt_utils.h"
 #include "app_rpt/rpt_daq.h"
 #include "app_rpt/rpt_cli.h"
+#include "app_rpt/rpt_call.h"
 
 static int reload(void);
 
@@ -9937,20 +9938,7 @@ static int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		}
 	}
 	if (l->chan) {
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(l->chan));
-		ast_set_read_format(l->chan, ast_format_slin);
-		ast_set_write_format(l->chan, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-		if (l->chan->cdr)
-			ast_set_flag(l->chan->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
-		ast_channel_appl_set(l->chan, "Apprpt");
-		ast_channel_data_set(l->chan, "(Remote Rx)");
-		ast_debug(1, "rpt (remote) initiating call to %s/%s on %s\n", deststr, tele, ast_channel_name(l->chan));
-		/* Set connected to actually set outgoing Caller ID - ast_set_callerid has no effect! */
-		ast_channel_connected(l->chan)->id.number.valid = 1;
-		ast_channel_connected(l->chan)->id.number.str = ast_strdup(myrpt->name);
-		ast_call(l->chan, tele, 2000);
+		rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
 	} else {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
 		if (myrpt->p.archivedir) {
@@ -16505,16 +16493,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
 		ast_frfree(f1);
 	if (l->chan) {
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(l->chan));
-		ast_set_read_format(l->chan, ast_format_slin);
-		ast_set_write_format(l->chan, ast_format_slin);
-		ast_channel_appl_set(l->chan, "Apprpt");
-		ast_channel_data_set(l->chan, "(Remote Rx)");
-		ast_verb(3, "rpt (attempt_reconnect) initiating call to %s/%s on %s\n", deststr, tele, ast_channel_name(l->chan));
-		/* Set connected to actually set outgoing Caller ID - ast_set_callerid has no effect! */
-		ast_channel_connected(l->chan)->id.number.valid = 1;
-		ast_channel_connected(l->chan)->id.number.str = ast_strdup(myrpt->name);
-		ast_call(l->chan, tele, 999);
+		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
 		return -1;
@@ -17006,7 +16985,6 @@ static void *rpt(void *this)
 	if (!strcasecmp(tmpstr, "DAHDI"))
 		myrpt->zaprxchannel = myrpt->rxchannel;
 	if (myrpt->rxchannel) {
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->rxchannel));
 		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY) {
 			ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
@@ -17014,16 +16992,7 @@ static void *rpt(void *this)
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
-		ast_set_read_format(myrpt->rxchannel, ast_format_slin);
-		ast_set_write_format(myrpt->rxchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-		if (myrpt->rxchannel->cdr)
-			ast_set_flag(myrpt->rxchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
-		ast_channel_appl_set(myrpt->rxchannel, "Apprpt");
-		ast_channel_data_set(myrpt->rxchannel, "(Repeater Rx)");
-		ast_verb(3, "rpt (Rx) initiating call to %s/%s on %s\n", tmpstr, tele, ast_channel_name(myrpt->rxchannel));
-		ast_call(myrpt->rxchannel, tele, 999);
+		rpt_make_call(myrpt->rxchannel, tele, 999, tmpstr, "(Repeater Rx)", "Rx", myrpt->name);
 		if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP) {
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
@@ -17052,7 +17021,6 @@ static void *rpt(void *this)
 		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo"))
 			myrpt->zaptxchannel = myrpt->txchannel;
 		if (myrpt->txchannel) {
-			ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->txchannel));
 			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY) {
 				ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
 				rpt_mutex_unlock(&myrpt->lock);
@@ -17061,16 +17029,7 @@ static void *rpt(void *this)
 				myrpt->rpt_thread = AST_PTHREADT_STOP;
 				pthread_exit(NULL);
 			}
-			ast_set_read_format(myrpt->txchannel, ast_format_slin);
-			ast_set_write_format(myrpt->txchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-			if (myrpt->txchannel->cdr)
-				ast_set_flag(myrpt->txchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
-			ast_channel_appl_set(myrpt->txchannel, "Apprpt");
-			ast_channel_data_set(myrpt->txchannel, "(Repeater Tx)");
-			ast_verb(3, "rpt (Tx) initiating call to %s/%s on %s\n", tmpstr, tele, ast_channel_name(myrpt->txchannel));
-			ast_call(myrpt->txchannel, tele, 999);
+			rpt_make_call(myrpt->txchannel, tele, 999, tmpstr, "(Repeater Tx)", "Tx", myrpt->name);
 			if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP) {
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_hangup(myrpt->rxchannel);
@@ -20935,16 +20894,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (!strcasecmp(myrpt->rxchanname, "DAHDI"))
 		myrpt->zaprxchannel = myrpt->rxchannel;
 	if (myrpt->rxchannel) {
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->rxchannel));
-		ast_set_read_format(myrpt->rxchannel, ast_format_slin);
-		ast_set_write_format(myrpt->rxchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-		if (myrpt->rxchannel->cdr)
-			ast_set_flag(myrpt->rxchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
-		ast_channel_appl_set(myrpt->rxchannel, "Apprpt");
-		ast_channel_data_set(myrpt->rxchannel, "(Link Rx)");
-		ast_verb(3, "rpt (Rx) initiating call to %s/%s on %s\n", myrpt->rxchanname, tele, ast_channel_name(myrpt->rxchannel));
+		rpt_setup_call(myrpt->rxchannel, tele, 999, myrpt->rxchanname, "(Link Rx)", "Rx", myrpt->name);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_call(myrpt->rxchannel, tele, 999);
 		rpt_mutex_lock(&myrpt->lock);
@@ -20968,16 +20918,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (!strncasecmp(myrpt->txchanname, "DAHDI", 3))
 			myrpt->zaptxchannel = myrpt->txchannel;
 		if (myrpt->txchannel) {
-			ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->txchannel));
-			ast_set_read_format(myrpt->txchannel, ast_format_slin);
-			ast_set_write_format(myrpt->txchannel, ast_format_slin);
-#ifdef	AST_CDR_FLAG_POST_DISABLED
-			if (myrpt->txchannel->cdr)
-				ast_set_flag(myrpt->txchannel->cdr, AST_CDR_FLAG_POST_DISABLED);
-#endif
-			ast_channel_appl_set(myrpt->txchannel, "Apprpt");
-			ast_channel_data_set(myrpt->txchannel, "(Link Tx)");
-			ast_verb(3, "rpt (Tx) initiating call to %s/%s on %s\n", myrpt->txchanname, tele, ast_channel_name(myrpt->txchannel));
+			rpt_setup_call(myrpt->txchannel, tele, 999, myrpt->txchanname, "(Link Tx)", "Tx", myrpt->name);
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_call(myrpt->txchannel, tele, 999);
 			rpt_mutex_lock(&myrpt->lock);
