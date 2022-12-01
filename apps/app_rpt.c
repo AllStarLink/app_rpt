@@ -362,6 +362,7 @@ struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 #include "app_rpt/rpt_cli.h"
 #include "app_rpt/rpt_call.h"
 #include "app_rpt/rpt_serial.h"
+#include "app_rpt/rpt_capabilities.h"
 
 AST_MUTEX_DEFINE_STATIC(rpt_master_lock);
 
@@ -523,61 +524,6 @@ static const char *my_variable_match(const struct ast_config *config, const char
 	return NULL;
 }
 #endif
-
-/* Return 1 if a web transceiver node */
-static int iswebtransceiver(struct rpt_link *l)
-{
-	int i;
-
-	if (!l)
-		return 0;
-	for (i = 0; l->name[i]; i++) {
-		if (!isdigit(l->name[i]))
-			return 1;
-	}
-	return 0;
-}
-
-/*
-* Return 1 if rig is multimode capable
-*/
-
-static int multimode_capable(struct rpt *myrpt)
-{
-	if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT897))
-		return 1;
-	if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100))
-		return 1;
-	if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950))
-		return 1;
-	if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706))
-		return 1;
-	return 0;
-}
-
-/*
-* Return 1 if rig is narrow capable
-*/
-
-static int narrow_capable(struct rpt *myrpt)
-{
-	if (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))
-		return 1;
-	if (!strcmp(myrpt->remoterig, REMOTE_RIG_TMD700))
-		return 1;
-	if (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271))
-		return 1;
-	return 0;
-}
-
-static char is_paging(struct rpt *myrpt)
-{
-	char rv = 0;
-
-	if ((!ast_tvzero(myrpt->paging)) && (ast_tvdiff_ms(ast_tvnow(), myrpt->paging) <= 300000))
-		rv = 1;
-	return (rv);
-}
 
 static void voxinit_rpt(struct rpt *myrpt, char enable)
 {
