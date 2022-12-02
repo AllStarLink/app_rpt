@@ -365,6 +365,7 @@ struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 #include "app_rpt/rpt_vox.h"
 #include "app_rpt/rpt_serial.h" /* use serial_rxflush, serial_rxready */
 #include "app_rpt/rpt_uchameleon.h"
+#include "app_rpt/rpt_channel.h"
 
 AST_MUTEX_DEFINE_STATIC(rpt_master_lock);
 
@@ -531,33 +532,6 @@ static const char *my_variable_match(const struct ast_config *config, const char
 	return NULL;
 }
 #endif
-
-/*
- * Multi-thread safe sleep routine
-*/
-static void rpt_safe_sleep(struct rpt *rpt, struct ast_channel *chan, int ms)
-{
-	struct ast_frame *f;
-	struct ast_channel *cs[2], *w;
-
-	cs[0] = rpt->rxchannel;
-	cs[1] = chan;
-	while (ms > 0) {
-		w = ast_waitfor_n(cs, 2, &ms);
-		if (!w)
-			break;
-		f = ast_read(w);
-		if (!f)
-			break;
-		if ((w == cs[0]) && (f->frametype != AST_FRAME_VOICE) && (f->frametype != AST_FRAME_NULL)) {
-			ast_queue_frame(rpt->rxchannel, f);
-			ast_frfree(f);
-			break;
-		}
-		ast_frfree(f);
-	}
-	return;
-}
 
 /*
 * Telemetry defaults
@@ -799,8 +773,6 @@ static struct function_table_tag function_table[] = {
  * Forward Decl's
  */
 
-static int saynum(struct ast_channel *mychannel, int num);
-static int sayfile(struct ast_channel *mychannel, char *fname);
 static int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan);
 static void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 static void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
@@ -5491,102 +5463,6 @@ static int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 
 }
 
-//# Say a file - streams file to output channel
-
-static int sayfile(struct ast_channel *mychannel, char *fname)
-{
-	int res;
-
-	res = ast_streamfile(mychannel, fname, ast_channel_language(mychannel));
-	if (!res)
-		res = ast_waitstream(mychannel, "");
-	else
-		ast_log(LOG_WARNING, "ast_streamfile %s failed on %s\n", fname, ast_channel_name(mychannel));
-	ast_stopstream(mychannel);
-	return res;
-}
-
-static int saycharstr(struct ast_channel *mychannel, char *str)
-{
-	int res;
-
-	res = ast_say_character_str(mychannel, str, NULL, ast_channel_language(mychannel), AST_SAY_CASE_NONE);
-	if (!res)
-		res = ast_waitstream(mychannel, "");
-	else
-		ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-	ast_stopstream(mychannel);
-	return res;
-}
-
-//# Say a number -- streams corresponding sound file
-
-static int saynum(struct ast_channel *mychannel, int num)
-{
-	int res;
-	res = ast_say_number(mychannel, num, NULL, ast_channel_language(mychannel), NULL);
-	if (!res)
-		res = ast_waitstream(mychannel, "");
-	else
-		ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-	ast_stopstream(mychannel);
-	return res;
-}
-
-//# Say a phonetic words -- streams corresponding sound file
-
-static int sayphoneticstr(struct ast_channel *mychannel, char *str)
-{
-	int res;
-
-	res = ast_say_phonetic_str(mychannel, str, NULL, ast_channel_language(mychannel));
-	if (!res)
-		res = ast_waitstream(mychannel, "");
-	else
-		ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-	ast_stopstream(mychannel);
-	return res;
-}
-
-/* say a node and nodename. Try to look in dir referred to by nodenames in
-config, and see if there's a custom node file to play, and if so, play it */
-
-static int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
-{
-	int res = 0, tgn;
-	char *val, fname[300], str[100];
-
-	if (strlen(name) < 1)
-		return (0);
-	tgn = tlb_node_get(name, 'n', NULL, str, NULL, NULL);
-	if (((name[0] != '3') && (tgn != 1)) || ((name[0] == '3') && (myrpt->p.eannmode != 2))
-		|| ((tgn == 1) && (myrpt->p.tannmode != 2))) {
-		val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "nodenames");
-		if (!val)
-			val = NODENAMES;
-		snprintf(fname, sizeof(fname) - 1, "%s/%s", val, name);
-		if (ast_fileexists(fname, NULL, ast_channel_language(mychannel)) > 0)
-			return (sayfile(mychannel, fname));
-		res = sayfile(mychannel, "rpt/node");
-		if (!res)
-			res = ast_say_character_str(mychannel, name, NULL, ast_channel_language(mychannel), AST_SAY_CASE_NONE);
-	}
-	if (tgn == 1) {
-		if (myrpt->p.tannmode < 2)
-			return res;
-		return (sayphoneticstr(mychannel, str));
-	}
-	if (name[0] != '3')
-		return res;
-	if (myrpt->p.eannmode < 2)
-		return res;
-	sprintf(str, "%d", atoi(name + 1));
-	if (elink_db_get(str, 'n', NULL, fname, NULL) < 1)
-		return res;
-	res = sayphoneticstr(mychannel, fname);
-	return res;
-}
-
 static int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
 {
 	int res;
@@ -5752,6 +5628,45 @@ static int get_wait_interval(struct rpt *myrpt, int type)
 	if (wait_times_save)
 		ast_free(wait_times_save);
 	return interval;
+}
+
+/*! \brief Say a node and nodename. Try to look in dir referred to by nodenames in
+ * config, and see if there's a custom node file to play, and if so, play it */
+/*! \todo If tlb_node_get and elink_db_get are refactored, this should move to rpt_channel.c */
+static int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
+{
+	int res = 0, tgn;
+	char *val, fname[300], str[100];
+
+	if (strlen(name) < 1)
+		return (0);
+	tgn = tlb_node_get(name, 'n', NULL, str, NULL, NULL);
+	if (((name[0] != '3') && (tgn != 1)) || ((name[0] == '3') && (myrpt->p.eannmode != 2))
+		|| ((tgn == 1) && (myrpt->p.tannmode != 2))) {
+		val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "nodenames");
+		if (!val)
+			val = NODENAMES;
+		snprintf(fname, sizeof(fname) - 1, "%s/%s", val, name);
+		if (ast_fileexists(fname, NULL, ast_channel_language(mychannel)) > 0)
+			return (sayfile(mychannel, fname));
+		res = sayfile(mychannel, "rpt/node");
+		if (!res)
+			res = ast_say_character_str(mychannel, name, NULL, ast_channel_language(mychannel), AST_SAY_CASE_NONE);
+	}
+	if (tgn == 1) {
+		if (myrpt->p.tannmode < 2)
+			return res;
+		return (sayphoneticstr(mychannel, str));
+	}
+	if (name[0] != '3')
+		return res;
+	if (myrpt->p.eannmode < 2)
+		return res;
+	sprintf(str, "%d", atoi(name + 1));
+	if (elink_db_get(str, 'n', NULL, fname, NULL) < 1)
+		return res;
+	res = sayphoneticstr(mychannel, fname);
+	return res;
 }
 
 /*
