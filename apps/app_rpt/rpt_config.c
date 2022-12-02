@@ -10,6 +10,7 @@
 #include "asterisk/cli.h" /* use ast_cli_command */
 
 #include "app_rpt.h"
+#include "rpt_lock.h"
 #include "rpt_config.h"
 #include "rpt_utils.h" /* use myatoi */
 
@@ -1219,4 +1220,29 @@ void load_rpt_vars(int n, int init)
 		vp = vp->next;
 	}
 	ast_mutex_unlock(&rpt_vars[n].lock);
+}
+
+int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
+{
+	int busy = 0;
+
+	rpt_mutex_lock(&myrpt->lock);
+	if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(sptr)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		busy = 1;
+	}
+	if (!busy) {
+		int x;
+		ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
+		myrpt->macrotimer = MACROTIME;
+		for (x = 0; *(sptr + x); x++)
+			myrpt->macrobuf[x] = *(sptr + x) | 0x80;
+		*(sptr + x) = 0;
+	}
+	rpt_mutex_unlock(&myrpt->lock);
+
+	if (busy)
+		ast_log(LOG_WARNING, "Function decoder busy on app_rpt command macro.\n");
+
+	return busy;
 }

@@ -7,9 +7,12 @@
 #include "asterisk.h"
 
 #include "asterisk/channel.h"
+#include "asterisk/pbx.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
 
 #include "app_rpt.h"
+#include "rpt_utils.h"
+#include "rpt_manager.h"
 #include "rpt_link.h"
 
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
@@ -339,5 +342,42 @@ void __kickshort(struct rpt *myrpt)
 	}
 	myrpt->linkposttimer = LINKPOSTSHORTTIME;
 	myrpt->lastgpstime = 0;
+	return;
+}
+
+void rpt_update_links(struct rpt *myrpt)
+{
+	char buf[MAXLINKLIST], obuf[MAXLINKLIST + 20], *strs[MAXLINKLIST];
+	int n;
+
+	ast_mutex_lock(&myrpt->lock);
+	__mklinklist(myrpt, NULL, buf, 1);
+	ast_mutex_unlock(&myrpt->lock);
+	/* parse em */
+	n = finddelim(strdupa(buf), strs, MAXLINKLIST);
+	if (n)
+		snprintf(obuf, sizeof(obuf) - 1, "%d,%s", n, buf);
+	else
+		strcpy(obuf, "0");
+	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_ALINKS", obuf);
+	rpt_manager_trigger(myrpt, "RPT_ALINKS", obuf);
+	snprintf(obuf, sizeof(obuf) - 1, "%d", n);
+	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMALINKS", obuf);
+	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", obuf);
+	ast_mutex_lock(&myrpt->lock);
+	__mklinklist(myrpt, NULL, buf, 0);
+	ast_mutex_unlock(&myrpt->lock);
+	/* parse em */
+	n = finddelim(strdupa(buf), strs, MAXLINKLIST);
+	if (n)
+		snprintf(obuf, sizeof(obuf) - 1, "%d,%s", n, buf);
+	else
+		strcpy(obuf, "0");
+	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_LINKS", obuf);
+	rpt_manager_trigger(myrpt, "RPT_LINKS", obuf);
+	snprintf(obuf, sizeof(obuf) - 1, "%d", n);
+	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMLINKS", obuf);
+	rpt_manager_trigger(myrpt, "RPT_NUMLINKS", obuf);
+	rpt_event_process(myrpt);
 	return;
 }

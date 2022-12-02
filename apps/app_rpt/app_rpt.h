@@ -900,10 +900,14 @@ struct nodelog {
 	char str[MAXNODESTR * 2];
 };
 
+/* app_rpt.c functions used by other files */
 int rpt_debug_level(void);
+int rpt_set_debug_level(int newlevel);
 int rpt_num_rpts(void);
 int rpt_nullfd(void);
 time_t rpt_starttime(void);
+int function_table_index(const char *s);
+void rpt_event_process(struct rpt *myrpt);
 
 /* forward declarations */
 int service_scan(struct rpt *myrpt);

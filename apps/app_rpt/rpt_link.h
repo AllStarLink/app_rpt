@@ -29,3 +29,6 @@ void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int fla
 
 /*! \brief must be called locked */
 void __kickshort(struct rpt *myrpt);
+
+/*! \brief Updates the active links (channels) list that that the repeater has */
+void rpt_update_links(struct rpt *myrpt);

@@ -36,3 +36,11 @@ char *forward_node_lookup(struct rpt *myrpt, char *digitbuf, struct ast_config *
  * \note This is kind of a mess to read.  It uses the asterisk native function to read config files and pass back values assigned to keywords.
  */
 void load_rpt_vars(int n, int init);
+
+/*! \note the convention is that macros in the data from the rpt( application
+ * are all at the end of the data, separated by the | and start with a *
+ * when put into the macro buffer, the characters have their high bit
+ * set so the macro processor knows they came from the application data
+ * and to use the alt-functions table.
+ * sph: */
+int rpt_push_alt_macro(struct rpt *myrpt, char *sptr);
