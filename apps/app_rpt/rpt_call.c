@@ -60,3 +60,83 @@ int rpt_make_call(struct ast_channel *chan, const char *addr, int timeout, const
 	}
 	return ast_call(chan, addr, timeout);
 }
+
+void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
+{
+	struct ast_channel *dest, *w, *cs[2];
+	struct ast_frame *f;
+	int ms;
+	struct ast_format_cap *cap;
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		return;
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+
+	dest = ast_request("IAX2", cap, NULL, NULL, dialstr, NULL);
+	if (!dest) {
+		if (ast_safe_sleep(chan, 150) == -1)
+			return;
+		dest = ast_request("IAX2", cap, NULL, NULL, dialstr, NULL);
+		if (!dest) {
+			ast_log(LOG_ERROR, "Can not create channel for rpt_forward to IAX2/%s\n", dialstr);
+			return;
+		}
+	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(dest));
+	ast_set_read_format(chan, ast_format_slin);
+	ast_set_write_format(chan, ast_format_slin);
+	ast_set_read_format(dest, ast_format_slin);
+	ast_set_write_format(dest, ast_format_slin);
+	ao2_ref(cap, -1);
+
+	/* Set connected to actually set outgoing Caller ID - ast_set_callerid has no effect! */
+	ast_channel_connected(chan)->id.number.valid = 1;
+	ast_channel_connected(chan)->id.number.str = ast_strdup(nodefrom);
+
+	ast_verb(3, "rpt forwarding call from %s to %s on %s\n", nodefrom, dialstr, ast_channel_name(dest));
+	ast_call(dest, dialstr, 999);
+	cs[0] = chan;
+	cs[1] = dest;
+	for (;;) {
+		if (ast_check_hangup(chan))
+			break;
+		if (ast_check_hangup(dest))
+			break;
+		ms = 100;
+		w = cs[0];
+		cs[0] = cs[1];
+		cs[1] = w;
+		w = ast_waitfor_n(cs, 2, &ms);
+		if (!w)
+			continue;
+		if (w == chan) {
+			f = ast_read(chan);
+			if (!f)
+				break;
+			if ((f->frametype == AST_FRAME_CONTROL) && (f->subclass.integer == AST_CONTROL_HANGUP)) {
+				ast_frfree(f);
+				break;
+			}
+			ast_write(dest, f);
+			ast_frfree(f);
+		}
+		if (w == dest) {
+			f = ast_read(dest);
+			if (!f)
+				break;
+			if ((f->frametype == AST_FRAME_CONTROL) && (f->subclass.integer == AST_CONTROL_HANGUP)) {
+				ast_frfree(f);
+				break;
+			}
+			ast_write(chan, f);
+			ast_frfree(f);
+		}
+
+	}
+	ast_hangup(dest);
+	return;
+}
