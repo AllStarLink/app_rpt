@@ -554,59 +554,6 @@ static void rpt_safe_sleep(struct rpt *rpt, struct ast_channel *chan, int ms)
 }
 
 /*
-* CLI extensions
-*/
-
-static char debug_usage[] = "Usage: rpt debug level {0-7}\n" "       Enables debug messages in app_rpt\n";
-
-static char dump_usage[] = "Usage: rpt dump <nodename>\n" "       Dumps struct debug info to log\n";
-
-static char dump_stats[] = "Usage: rpt stats <nodename>\n" "       Dumps node statistics to console\n";
-
-static char dump_lstats[] = "Usage: rpt lstats <nodename>\n" "       Dumps link statistics to console\n";
-
-static char dump_nodes[] =
-	"Usage: rpt nodes <nodename>\n" "       Dumps a list of directly and indirectly connected nodes to the console\n";
-
-static char dump_xnode[] = "Usage: rpt xnode <nodename>\n" "       Dumps extended node info to the console\n";
-
-static char usage_local_nodes[] =
-	"Usage: rpt localnodes\n" "       Dumps a list of the locally configured node numbers to the console.\n";
-
-static char restart_usage[] = "Usage: rpt restart\n" "       Restarts app_rpt\n";
-
-static char playback_usage[] =
-	"Usage: rpt playback <nodename> <sound_file_base_name>\n"
-	"       Send an Audio File to a node, send to all other connected nodes (global)\n";
-
-static char localplay_usage[] =
-	"Usage: rpt localplay <nodename> <sound_file_base_name>\n"
-	"       Send an Audio File to a node, do not send to other connected nodes (local)\n";
-
-static char sendtext_usage[] =
-	"Usage: rpt sendtext <nodename> <destnodename> <Text Message>\n" "       Send a Text message to a specified node\n";
-
-static char sendall_usage[] =
-	"Usage: rpt sendall <nodename> <Text Message>\n" "       Send a Text message to all connected nodes\n";
-
-static char fun_usage[] = "Usage: rpt fun <nodename> <command>\n" "       Send a DTMF function to a node\n";
-
-static char cmd_usage[] =
-	"Usage: rpt cmd <nodename> <cmd-name> <cmd-index> <cmd-args>\n"
-	"       Send a command to a node.\n        i.e. rpt cmd 2000 ilink 3 2001\n";
-
-static char setvar_usage[] =
-	"Usage: rpt setvar <nodename> <name=value> [<name=value>...]\n"
-	"       Set an Asterisk channel variable for a node.\nNote: variable names are case-sensitive.\n";
-
-static char showvars_usage[] =
-	"Usage: rpt showvars <nodename>\n" "       Display all the Asterisk channel variables for a node.\n";
-
-static char page_usage[] =
-	"Usage: rpt page <nodename> <baud> <capcode> <[ANT]Text....>\n"
-	"       Send an page to a user on a node, specifying capcode and type/text\n";
-
-/*
 * Telemetry defaults
 */
 
@@ -5779,7 +5726,9 @@ static char *handle_cli_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt debug level";
-		e->usage = debug_usage;
+		e->usage =
+			"Usage: rpt debug level {0-7}\n"
+			"	Enables debug messages in app_rpt\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5792,7 +5741,9 @@ static char *handle_cli_dump(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt dump level";
-		e->usage = dump_usage;
+		e->usage =
+			"Usage: rpt dump <nodename>\n"
+			"	Dumps struct debug info to log\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5805,7 +5756,9 @@ static char *handle_cli_stats(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt stats";
-		e->usage = dump_stats;
+		e->usage =
+			"Usage: rpt stats <nodename>\n"
+			"	Dumps node statistics to console\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5818,7 +5771,9 @@ static char *handle_cli_nodes(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt nodes";
-		e->usage = dump_nodes;
+		e->usage =
+			"Usage: rpt nodes <nodename>\n"
+			"	Dumps a list of directly and indirectly connected nodes to the console\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5831,7 +5786,9 @@ static char *handle_cli_xnode(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt xnode";
-		e->usage = dump_xnode;
+		e->usage =
+			"Usage: rpt xnode <nodename>\n"
+			"	Dumps extended node info to the console\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5844,7 +5801,9 @@ static char *handle_cli_local_nodes(struct ast_cli_entry *e, int cmd, struct ast
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt localnodes";
-		e->usage = usage_local_nodes;
+		e->usage =
+			"Usage: rpt localnodes\n"
+			"	Dumps a list of the locally configured node numbers to the console.\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5857,7 +5816,9 @@ static char *handle_cli_lstats(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt lstats";
-		e->usage = dump_lstats;
+		e->usage =
+			"Usage: rpt lstats <nodename>\n"
+			"	Dumps link statistics to console\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5870,7 +5831,9 @@ static char *handle_cli_restart(struct ast_cli_entry *e, int cmd, struct ast_cli
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt restart";
-		e->usage = restart_usage;
+		e->usage =
+			"Usage: rpt restart\n"
+			"	Restarts app_rpt\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5883,7 +5846,9 @@ static char *handle_cli_fun(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt fun";
-		e->usage = fun_usage;
+		e->usage =
+			"Usage: rpt fun <nodename> <command>\n"
+			"	Send a DTMF function to a node\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5891,25 +5856,14 @@ static char *handle_cli_fun(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 	return res2cli(rpt_do_fun(a->fd, a->argc, a->argv));
 }
 
-static char *handle_cli_playback(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "rpt playback";
-		e->usage = playback_usage;
-		return NULL;
-	case CLI_GENERATE:
-		return NULL;
-	}
-	return res2cli(rpt_do_playback(a->fd, a->argc, a->argv));
-}
-
 static char *handle_cli_fun1(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt fun1";
-		e->usage = fun_usage;
+		e->usage =
+			"Usage: rpt fun1 <nodename> <command>\n"
+			"	Send a DTMF function to a node\n";;
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5917,12 +5871,30 @@ static char *handle_cli_fun1(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	return res2cli(rpt_do_fun1(a->fd, a->argc, a->argv));
 }
 
+static char *handle_cli_playback(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "rpt playback";
+		e->usage =
+			"Usage: rpt playback <nodename> <sound_file_base_name>\n"
+			"	Send an Audio File to a node, send to all other connected nodes (global)\n";
+		return NULL;
+	case CLI_GENERATE:
+		return NULL;
+	}
+	return res2cli(rpt_do_playback(a->fd, a->argc, a->argv));
+}
+
 static char *handle_cli_cmd(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt cmd";
-		e->usage = cmd_usage;
+		e->usage =
+			"Usage: rpt cmd <nodename> <cmd-name> <cmd-index> <cmd-args>\n"
+			"	Send a command to a node.\n"
+			"	i.e. rpt cmd 2000 ilink 3 2001\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5935,7 +5907,9 @@ static char *handle_cli_setvar(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt setvar";
-		e->usage = setvar_usage;
+		e->usage =
+			"Usage: rpt setvar <nodename> <name=value> [<name=value>...]\n"
+			"	Set an Asterisk channel variable for a node.\nNote: variable names are case-sensitive.\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5948,7 +5922,8 @@ static char *handle_cli_showvars(struct ast_cli_entry *e, int cmd, struct ast_cl
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt showvars";
-		e->usage = showvars_usage;
+		e->usage = "Usage: rpt showvars <nodename>\n"
+			"	Display all the Asterisk channel variables for a node.\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5975,7 +5950,9 @@ static char *handle_cli_localplay(struct ast_cli_entry *e, int cmd, struct ast_c
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt localplay";
-		e->usage = localplay_usage;
+		e->usage =
+			"Usage: rpt localplay <nodename> <sound_file_base_name>\n"
+			"	Send an Audio File to a node, do not send to other connected nodes (local)\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -5988,7 +5965,9 @@ static char *handle_cli_sendall(struct ast_cli_entry *e, int cmd, struct ast_cli
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt sendall";
-		e->usage = sendall_usage;
+		e->usage =
+			"Usage: rpt sendall <nodename> <Text Message>\n"
+			"	Send a Text message to all connected nodes\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -6001,7 +5980,9 @@ static char *handle_cli_sendtext(struct ast_cli_entry *e, int cmd, struct ast_cl
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt sendtext";
-		e->usage = sendtext_usage;
+		e->usage =
+			"Usage: rpt sendtext <nodename> <destnodename> <Text Message>\n"
+			"	Send a Text message to a specified node\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -6014,7 +5995,9 @@ static char *handle_cli_page(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt page";
-		e->usage = page_usage;
+		e->usage =
+			"Usage: rpt page <nodename> <baud> <capcode> <[ANT]Text....>\n"
+			"	Send an page to a user on a node, specifying capcode and type/text\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
