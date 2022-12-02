@@ -7,6 +7,7 @@
 
 #include "app_rpt.h"
 #include "rpt_channel.h"
+#include "rpt_config.h"
 
 void rpt_safe_sleep(struct rpt *rpt, struct ast_channel *chan, int ms)
 {
@@ -30,6 +31,27 @@ void rpt_safe_sleep(struct rpt *rpt, struct ast_channel *chan, int ms)
 		ast_frfree(f);
 	}
 	return;
+}
+
+int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
+{
+	int interval;
+
+	do {
+		while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID)))) {
+			if (ast_safe_sleep(chan, 100) < 0)
+				return -1;
+		}
+
+		interval = get_wait_interval(myrpt, type);
+		ast_debug(1, "Delay interval = %d\n", interval);
+		if (interval)
+			if (ast_safe_sleep(chan, interval) < 0)
+				return -1;
+		ast_debug(1, "Delay complete\n");
+	}
+	while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
+	return 0;
 }
 
 int sayfile(struct ast_channel *mychannel, char *fname)

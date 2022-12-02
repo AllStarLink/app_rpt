@@ -366,6 +366,7 @@ struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 #include "app_rpt/rpt_serial.h" /* use serial_rxflush, serial_rxready */
 #include "app_rpt/rpt_uchameleon.h"
 #include "app_rpt/rpt_channel.h"
+#include "app_rpt/rpt_config.h"
 
 AST_MUTEX_DEFINE_STATIC(rpt_master_lock);
 
@@ -773,7 +774,6 @@ static struct function_table_tag function_table[] = {
  * Forward Decl's
  */
 
-static int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan);
 static void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 static void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 
@@ -2935,33 +2935,6 @@ static time_t rpt_mktime(struct ast_tm *tm, char *zone)
 
 	now = ast_mktime(tm, zone);
 	return now.tv_sec;
-}
-
-/* Retrieve an int from a config file */
-
-static int retrieve_astcfgint(struct rpt *myrpt, char *category, char *name, int min, int max, int defl)
-{
-	char *var;
-	int ret;
-	char include_zero = 0;
-
-	if (min < 0) {				/* If min is negative, this means include 0 as a valid entry */
-		min = -min;
-		include_zero = 1;
-	}
-
-	var = (char *) ast_variable_retrieve(myrpt->cfg, category, name);
-	if (var) {
-		ret = myatoi(var);
-		if (include_zero && !ret)
-			return 0;
-		if (ret < min)
-			ret = min;
-		if (ret > max)
-			ret = max;
-	} else
-		ret = defl;
-	return ret;
 }
 
 /* 
@@ -5546,90 +5519,6 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node,
 	return res;
 }
 
-/*
-* Retrieve a wait interval
-*/
-
-static int get_wait_interval(struct rpt *myrpt, int type)
-{
-	int interval;
-	char *wait_times;
-	char *wait_times_save;
-
-	wait_times_save = NULL;
-	wait_times = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "wait_times");
-
-	if (wait_times) {
-		wait_times_save = ast_strdup(wait_times);
-		if (!wait_times_save)
-			return 0;
-
-	}
-
-	switch (type) {
-	case DLY_TELEM:
-		if (wait_times)
-			interval = retrieve_astcfgint(myrpt, wait_times_save, "telemwait", 500, 5000, 1000);
-		else
-			interval = 1000;
-		break;
-
-	case DLY_ID:
-		if (wait_times)
-			interval = retrieve_astcfgint(myrpt, wait_times_save, "idwait", 250, 5000, 500);
-		else
-			interval = 500;
-		break;
-
-	case DLY_UNKEY:
-		if (wait_times)
-			interval = retrieve_astcfgint(myrpt, wait_times_save, "unkeywait", 50, 5000, 1000);
-		else
-			interval = 1000;
-		break;
-
-	case DLY_LINKUNKEY:
-		if (wait_times)
-			interval = retrieve_astcfgint(myrpt, wait_times_save, "linkunkeywait", 500, 5000, 1000);
-		else
-			interval = 1000;
-		break;
-
-	case DLY_CALLTERM:
-		if (wait_times)
-			interval = retrieve_astcfgint(myrpt, wait_times_save, "calltermwait", 500, 5000, 1500);
-		else
-			interval = 1500;
-		break;
-
-	case DLY_COMP:
-		if (wait_times)
-			interval = retrieve_astcfgint(myrpt, wait_times_save, "compwait", 500, 5000, 200);
-		else
-			interval = 200;
-		break;
-
-	case DLY_PARROT:
-		if (wait_times)
-			interval = retrieve_astcfgint(myrpt, wait_times_save, "parrotwait", 500, 5000, 200);
-		else
-			interval = 200;
-		break;
-	case DLY_MDC1200:
-		if (wait_times)
-			interval = retrieve_astcfgint(myrpt, wait_times_save, "mdc1200wait", 500, 5000, 200);
-		else
-			interval = 350;
-		break;
-	default:
-		interval = 0;
-		break;
-	}
-	if (wait_times_save)
-		ast_free(wait_times_save);
-	return interval;
-}
-
 /*! \brief Say a node and nodename. Try to look in dir referred to by nodenames in
  * config, and see if there's a custom node file to play, and if so, play it */
 /*! \todo If tlb_node_get and elink_db_get are refactored, this should move to rpt_channel.c */
@@ -5667,30 +5556,6 @@ static int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 		return res;
 	res = sayphoneticstr(mychannel, fname);
 	return res;
-}
-
-/*
-* Wait a configurable interval of time 
-*/
-static int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
-{
-	int interval;
-
-	do {
-		while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID)))) {
-			if (ast_safe_sleep(chan, 100) < 0)
-				return -1;
-		}
-
-		interval = get_wait_interval(myrpt, type);
-		ast_debug(1, "Delay interval = %d\n", interval);
-		if (interval)
-			if (ast_safe_sleep(chan, interval) < 0)
-				return -1;
-		ast_debug(1, "Delay complete\n");
-	}
-	while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
-	return 0;
 }
 
 static int split_freq(char *mhz, char *decimals, char *freq);

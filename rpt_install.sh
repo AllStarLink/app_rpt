@@ -69,6 +69,8 @@ rpt_add "apps/app_rpt/rpt_uchameleon.c"
 rpt_add "apps/app_rpt/rpt_uchameleon.h"
 rpt_add "apps/app_rpt/rpt_channel.c"
 rpt_add "apps/app_rpt/rpt_channel.h"
+rpt_add "apps/app_rpt/rpt_config.c"
+rpt_add "apps/app_rpt/rpt_config.h"
 rpt_add "channels/chan_echolink.c"
 rpt_add "channels/chan_simpleusb.c"
 
