@@ -24,6 +24,9 @@
 
 #include "app_rpt.h"
 #include "rpt_daq.h"
+#include "rpt_uchameleon.h"
+#include "rpt_utils.h" /* use explode_string */
+#include "rpt_channel.h" /* use wait_interval, sayfile */
 
 /*
  * DAQ variables
@@ -230,4 +233,55 @@ void daq_uninit(void)
 	daq.hw = NULL;
 }
 
+int handle_userout_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *args)
+{
+	int argc, i, pin, reqstate, res;
+	char *myargs;
+	char *argv[11];
+	struct daq_entry_tag *t;
 
+	if (!(myargs = ast_strdup(args))) {	/* Make a local copy to slice and dice */
+		ast_log(LOG_WARNING, "Out of memory\n");
+		return -1;
+	}
+
+	ast_debug(3, "String: %s\n", myargs);
+
+	argc = explode_string(myargs, argv, 10, ',', 0);
+	if (argc < 4) {				/* Must have at least 4 arguments */
+		ast_log(LOG_WARNING, "Incorrect number of arguments for USEROUT function");
+		ast_free(myargs);
+		return -1;
+	}
+	ast_debug(3, "USEROUT Device: %s, Pin: %s, Requested state: %s\n", argv[0], argv[1], argv[2]);
+	pin = atoi(argv[1]);
+	reqstate = atoi(argv[2]);
+
+	/* Find our device */
+	if (!(t = daq_devtoentry(argv[0]))) {
+		ast_log(LOG_WARNING, "Cannot find device %s in daq-list\n", argv[0]);
+		ast_free(myargs);
+		return -1;
+	}
+
+	ast_debug(3, "Output to pin %d a value of %d with argc = %d\n", pin, reqstate, argc);
+
+	/* Set or reset the bit */
+
+	res = daq_do(t, pin, DAQ_CMD_OUT, reqstate);
+
+	/* Wait the normal telemetry delay time */
+
+	if (!res)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+			goto done;
+
+	/* Say the files one by one at argc index 3 */
+	for (i = 3; i < argc && !res; i++) {
+		res = sayfile(mychannel, argv[i]);	/* Say the next word in the list */
+	}
+
+done:
+	ast_free(myargs);
+	return 0;
+}

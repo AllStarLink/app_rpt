@@ -54,3 +54,5 @@ char *eatwhite(char *s);
 int myatoi(char *str);
 
 int mycompar(const void *a, const void *b);
+
+long diskavail(struct rpt *myrpt);

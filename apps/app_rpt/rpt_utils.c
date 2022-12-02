@@ -1,4 +1,6 @@
 
+#include "asterisk.h"
+
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -7,10 +9,15 @@
 #include <search.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/vfs.h> /* use statfs */
 #include <errno.h>
 #include <dirent.h>
 #include <ctype.h>
 
+#include "asterisk/channel.h" /* includes all the locking stuff needed (lock.h doesn't) */
+
+#include "app_rpt.h"
+#include "rpt_lock.h"
 #include "rpt_utils.h"
 
 int matchkeyword(char *string, char **param, char *keywords[])
@@ -148,4 +155,17 @@ int mycompar(const void *a, const void *b)
 	else
 		yoff = 0;
 	return (strcmp((*x) + xoff, (*y) + yoff));
+}
+
+long diskavail(struct rpt *myrpt)
+{
+	struct statfs statfsbuf;
+
+	if (!myrpt->p.archivedir)
+		return (0);
+	if (statfs(myrpt->p.archivedir, &statfsbuf) == -1) {
+		ast_log(LOG_WARNING, "Cannot get filesystem size for %s node %s\n", myrpt->p.archivedir, myrpt->name);
+		return (-1);
+	}
+	return (statfsbuf.f_bavail);
 }

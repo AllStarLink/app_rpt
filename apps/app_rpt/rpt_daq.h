@@ -53,22 +53,5 @@ void daq_init(struct ast_config *cfg);
 
 void daq_uninit(void);
 
-/* in app_rpt.c: */
-
-/*
- * Open the serial channel and test for the uchameleon device at the end of the link
- */
-
-int uchameleon_open(struct daq_entry_tag *t);
-
-/*
- * Close uchameleon
- */
-
-int uchameleon_close(struct daq_entry_tag *t);
-
-/*
- * Uchameleon generic interface which supports monitor thread
- */
-
-int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2);
+/*! \brief Handle USEROUT telemetry */
+int handle_userout_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *args);

@@ -111,3 +111,106 @@ int get_wait_interval(struct rpt *myrpt, int type)
 		ast_free(wait_times_save);
 	return interval;
 }
+
+int retrieve_memory(struct rpt *myrpt, char *memory)
+{
+	char tmp[15], *s, *s1, *s2, *val;
+
+	ast_debug(1, "memory=%s block=%s\n", memory, myrpt->p.memory);
+
+	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.memory, memory);
+	if (!val) {
+		return -1;
+	}
+	strncpy(tmp, val, sizeof(tmp) - 1);
+	tmp[sizeof(tmp) - 1] = 0;
+
+	s = strchr(tmp, ',');
+	if (!s)
+		return 1;
+	*s++ = 0;
+	s1 = strchr(s, ',');
+	if (!s1)
+		return 1;
+	*s1++ = 0;
+	s2 = strchr(s1, ',');
+	if (!s2)
+		s2 = s1;
+	else
+		*s2++ = 0;
+	ast_copy_string(myrpt->freq, tmp, sizeof(myrpt->freq) - 1);
+	ast_copy_string(myrpt->rxpl, s, sizeof(myrpt->rxpl) - 1);
+	ast_copy_string(myrpt->txpl, s, sizeof(myrpt->rxpl) - 1);
+	myrpt->remmode = REM_MODE_FM;
+	myrpt->offset = REM_SIMPLEX;
+	myrpt->powerlevel = REM_MEDPWR;
+	myrpt->txplon = myrpt->rxplon = 0;
+	myrpt->splitkhz = 0;
+	if (s2 != s1)
+		myrpt->splitkhz = atoi(s1);
+	while (*s2) {
+		switch (*s2++) {
+		case 'A':
+		case 'a':
+			strcpy(myrpt->rxpl, "100.0");
+			strcpy(myrpt->txpl, "100.0");
+			myrpt->remmode = REM_MODE_AM;
+			break;
+		case 'B':
+		case 'b':
+			strcpy(myrpt->rxpl, "100.0");
+			strcpy(myrpt->txpl, "100.0");
+			myrpt->remmode = REM_MODE_LSB;
+			break;
+		case 'F':
+			myrpt->remmode = REM_MODE_FM;
+			break;
+		case 'L':
+		case 'l':
+			myrpt->powerlevel = REM_LOWPWR;
+			break;
+		case 'H':
+		case 'h':
+			myrpt->powerlevel = REM_HIPWR;
+			break;
+
+		case 'M':
+		case 'm':
+			myrpt->powerlevel = REM_MEDPWR;
+			break;
+
+		case '-':
+			myrpt->offset = REM_MINUS;
+			break;
+
+		case '+':
+			myrpt->offset = REM_PLUS;
+			break;
+
+		case 'S':
+		case 's':
+			myrpt->offset = REM_SIMPLEX;
+			break;
+
+		case 'T':
+		case 't':
+			myrpt->txplon = 1;
+			break;
+
+		case 'R':
+		case 'r':
+			myrpt->rxplon = 1;
+			break;
+
+		case 'U':
+		case 'u':
+			strcpy(myrpt->rxpl, "100.0");
+			strcpy(myrpt->txpl, "100.0");
+			myrpt->remmode = REM_MODE_USB;
+			break;
+		default:
+			return 1;
+		}
+	}
+	return 0;
+}

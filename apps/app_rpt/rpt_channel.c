@@ -2,6 +2,7 @@
 #include "asterisk.h"
 
 #include "asterisk/channel.h"
+#include "asterisk/pbx.h" /* use ast_goto_if_exists */
 #include "asterisk/format_cache.h"
 #include "asterisk/say.h"
 
@@ -52,6 +53,18 @@ int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
 	}
 	while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
 	return 0;
+}
+
+int priority_jump(struct rpt *myrpt, struct ast_channel *chan)
+{
+	int res;
+
+	if (!ast_goto_if_exists(chan, ast_channel_context(chan), ast_channel_exten(chan), ast_channel_priority(chan) + 101)) {
+		res = 0;
+	} else {
+		res = -1;
+	}
+	return res;
 }
 
 int sayfile(struct ast_channel *mychannel, char *fname)

@@ -918,6 +918,7 @@ struct nodelog {
 
 int rpt_debug_level(void);
 int rpt_num_rpts(void);
+int rpt_nullfd(void);
 
 /* forward declarations */
 int service_scan(struct rpt *myrpt);
