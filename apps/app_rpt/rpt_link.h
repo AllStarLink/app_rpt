@@ -24,6 +24,12 @@ void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c);
 /*! \brief Send rx rssi out on all links. */
 void rssi_send(struct rpt *myrpt);
 
+void send_link_dtmf(struct rpt *myrpt, char c);
+
+void send_link_keyquery(struct rpt *myrpt);
+
+void send_tele_link(struct rpt *myrpt, char *cmd);
+
 /*! \brief must be called locked */
 void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int flag);
 
@@ -32,3 +38,13 @@ void __kickshort(struct rpt *myrpt);
 
 /*! \brief Updates the active links (channels) list that that the repeater has */
 void rpt_update_links(struct rpt *myrpt);
+
+/*! 
+ * \brief Connect a link 
+ * \retval -2 Attempt to connect to self 
+ * \retval -1 No such node
+ * \retval 0 Success
+ * \retval 1 No match yet
+ * \retval 2 Already connected to this node
+ */
+int connect_link(struct rpt *myrpt, char *node, int mode, int perma);

@@ -1,4 +1,8 @@
 
+#define VERSION_MAJOR 2
+#define VERSION_MINOR 0
+#define VERSION_PATCH 0
+
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
 	converted to use public dsp.h API.
 	Eventually, the app_rpt DSP could should be/will be removed and NATIVE_DSP will be assumed,
@@ -907,7 +911,11 @@ int rpt_num_rpts(void);
 int rpt_nullfd(void);
 time_t rpt_starttime(void);
 int function_table_index(const char *s);
+void donodelog(struct rpt *myrpt, char *str);
 void rpt_event_process(struct rpt *myrpt);
+int split_ctcss_freq(char *hertz, char *decimal, char *freq);
+int check_freq(struct rpt *myrpt, int m, int d, int *defmode);
+int multimode_bump_freq(struct rpt *myrpt, int interval);
 
 /* forward declarations */
 int service_scan(struct rpt *myrpt);
@@ -937,20 +945,3 @@ int set_tm271(struct rpt *myrpt);
 int set_tmd700(struct rpt *myrpt);
 int setrbi_check(struct rpt *myrpt);
 int setxpmr(struct rpt *myrpt, int dotx);
-
-/*
-* Define function protos for function table here
-*/
-
-int function_ilink(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);

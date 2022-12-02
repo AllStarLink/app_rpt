@@ -140,6 +140,39 @@ int myatoi(char *str)
 	return ret;
 }
 
+int decimals2int(char *fraction)
+{
+	int i;
+	char len = strlen(fraction);
+	int multiplier = 100000;
+	int res = 0;
+
+	if (!len)
+		return 0;
+	for (i = 0; i < len; i++, multiplier /= 10)
+		res += (fraction[i] - '0') * multiplier;
+	return res;
+}
+
+int split_freq(char *mhz, char *decimals, char *freq)
+{
+	char freq_copy[MAXREMSTR];
+	char *decp;
+
+	ast_copy_string(freq_copy, freq, MAXREMSTR - 1);
+	decp = strchr(freq_copy, '.');
+	if (decp) {
+		*decp++ = 0;
+		strncpy(mhz, freq_copy, MAXREMSTR);
+		strcpy(decimals, "00000");
+		ast_copy_string(decimals, decp, strlen(decimals) - 1);
+		decimals[5] = 0;
+		return 0;
+	} else
+		return -1;
+
+}
+
 int mycompar(const void *a, const void *b)
 {
 	char **x = (char **) a;

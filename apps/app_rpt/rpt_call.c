@@ -20,11 +20,25 @@
 
 #include "asterisk.h"
 
+#include <dahdi/user.h>
+
 #include "asterisk/channel.h"
 #include "asterisk/format_cache.h"
 
 #include "app_rpt.h"
 #include "rpt_call.h"
+
+int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci, const char *file, int line, const char *function)
+{
+	ci->chan = 0;
+
+	/* First put the channel on the conference in proper mode */
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_SETCONF, ci) == -1) {
+		ast_log(LOG_WARNING, "%s:%d (%s) Unable to set conference mode on %s\n", file, line, function, ast_channel_name(chan));
+		return -1;
+	}
+	return 0;
+}
 
 int rpt_disable_cdr(struct ast_channel *chan)
 {

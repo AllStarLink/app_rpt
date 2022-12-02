@@ -53,6 +53,12 @@ char *eatwhite(char *s);
 
 int myatoi(char *str);
 
+/*! \brief Convert decimals of frequency to int */
+int decimals2int(char *fraction);
+
+/*! \brief Split frequency into mhz and decimals */
+int split_freq(char *mhz, char *decimals, char *freq);
+
 int mycompar(const void *a, const void *b);
 
 long diskavail(struct rpt *myrpt);

@@ -13,6 +13,9 @@ int get_wait_interval(struct rpt *myrpt, int type);
  */
 int retrieve_memory(struct rpt *myrpt, char *memory);
 
+/*! \brief retrieve memory setting and set radio */
+int get_mem_set(struct rpt *myrpt, char *digitbuf);
+
 /*! \brief Process DTMF keys passed */
 void local_dtmfkey_helper(struct rpt *myrpt, char c);
 
@@ -44,3 +47,6 @@ void load_rpt_vars(int n, int init);
  * and to use the alt-functions table.
  * sph: */
 int rpt_push_alt_macro(struct rpt *myrpt, char *sptr);
+
+/*! \brief Update boolean values used in currently referenced rpt structure */
+void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval);

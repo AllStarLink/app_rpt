@@ -25,3 +25,21 @@ void birdbath(struct rpt *myrpt);
 
 /*! \note must be called locked */
 void cancel_pfxtone(struct rpt *myrpt);
+
+/*! Send telemetry tones */
+int send_tone_telemetry(struct ast_channel *chan, char *tonestring);
+
+int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry);
+
+/*! \brief This function looks up a telemetry name in the config file, and does a telemetry response as configured.
+ * 4 types of telemtry are handled: Morse ID, Morse Message, Tone Sequence, and a File containing a recording. */
+int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node, char *name);
+
+/*! \brief Routine to process various telemetry commands that are in the myrpt structure
+ * Used extensively when links and built/torn down and other events are processed by the rpt_master threads. */
+void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd);
+
+void *rpt_tele_thread(void *this);
+
+/*! \brief More repeater telemetry routines. */
+void rpt_telemetry(struct rpt *myrpt, int mode, void *data);

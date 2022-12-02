@@ -12,6 +12,7 @@
 #include "app_rpt.h"
 #include "rpt_lock.h"
 #include "rpt_config.h"
+#include "rpt_manager.h"
 #include "rpt_utils.h" /* use myatoi */
 
 extern struct rpt rpt_vars[MAXRPTS];
@@ -226,6 +227,17 @@ int retrieve_memory(struct rpt *myrpt, char *memory)
 		}
 	}
 	return 0;
+}
+
+int get_mem_set(struct rpt *myrpt, char *digitbuf)
+{
+	int res = 0;
+	ast_debug(1, " digitbuf=%s\n", digitbuf);
+	res = retrieve_memory(myrpt, digitbuf);
+	if (!res)
+		res = setrem(myrpt);
+	ast_debug(1, " freq=%s  res=%i\n", myrpt->freq, res);
+	return res;
 }
 
 void local_dtmfkey_helper(struct rpt *myrpt, char c)
@@ -1245,4 +1257,21 @@ int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 		ast_log(LOG_WARNING, "Function decoder busy on app_rpt command macro.\n");
 
 	return busy;
+}
+
+void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
+{
+	char buf[10];
+
+	if ((!varname) || (!*varname))
+		return;
+	buf[0] = '0';
+	buf[1] = 0;
+	if (newval > 0)
+		buf[0] = '1';
+	pbx_builtin_setvar_helper(myrpt->rxchannel, varname, buf);
+	rpt_manager_trigger(myrpt, varname, buf);
+	if (newval >= 0)
+		rpt_event_process(myrpt);
+	return;
 }
