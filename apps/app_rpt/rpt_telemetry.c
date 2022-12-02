@@ -390,3 +390,29 @@ void flush_telem(struct rpt *myrpt)
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 }
+
+void birdbath(struct rpt *myrpt)
+{
+	struct rpt_tele *telem;
+	ast_debug(3, "birdbath!!");
+	rpt_mutex_lock(&myrpt->lock);
+	telem = myrpt->tele.next;
+	while (telem != &myrpt->tele) {
+		if (telem->mode == PARROT)
+			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+		telem = telem->next;
+	}
+	rpt_mutex_unlock(&myrpt->lock);
+}
+
+void cancel_pfxtone(struct rpt *myrpt)
+{
+	struct rpt_tele *telem;
+	ast_debug(3, "cancel_pfxfone!!");
+	telem = myrpt->tele.next;
+	while (telem != &myrpt->tele) {
+		if (telem->mode == PFXTONE)
+			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+		telem = telem->next;
+	}
+}

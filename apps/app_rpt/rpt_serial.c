@@ -155,3 +155,65 @@ int serial_io(int fd, char *txbuf, char *rxbuf, int txbytes, int rxmaxbytes, uns
 
 	return serial_rx(fd, rxbuf, rxmaxbytes, timeoutms, termchr);
 }
+
+int setdtr(struct rpt *myrpt, int fd, int enable)
+{
+	struct termios mode;
+
+	if (fd < 0)
+		return -1;
+	if (tcgetattr(fd, &mode)) {
+		ast_log(LOG_WARNING, "Unable to get serial parameters for dtr: %s\n", strerror(errno));
+		return -1;
+	}
+	if (enable) {
+		cfsetspeed(&mode, myrpt->p.iospeed);
+	} else {
+		cfsetspeed(&mode, B0);
+		usleep(100000);
+	}
+	if (tcsetattr(fd, TCSADRAIN, &mode)) {
+		ast_log(LOG_WARNING, "Unable to set serial parameters for dtr: %s\n", strerror(errno));
+		return -1;
+	}
+	if (enable)
+		usleep(100000);
+	return 0;
+}
+
+int openserial(struct rpt *myrpt, char *fname)
+{
+	struct termios mode;
+	int fd;
+
+	fd = open(fname, O_RDWR);
+	if (fd == -1) {
+		ast_log(LOG_WARNING, "Cannot open serial port %s\n", fname);
+		return -1;
+	}
+	memset(&mode, 0, sizeof(mode));
+	if (tcgetattr(fd, &mode)) {
+		ast_log(LOG_WARNING, "Unable to get serial parameters on %s: %s\n", fname, strerror(errno));
+		return -1;
+	}
+#ifndef	SOLARIS
+	cfmakeraw(&mode);
+#else
+	mode.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+	mode.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+	mode.c_cflag &= ~(CSIZE | PARENB | CRTSCTS);
+	mode.c_cflag |= CS8;
+	mode.c_cc[VTIME] = 3;
+	mode.c_cc[VMIN] = 1;
+#endif
+
+	cfsetispeed(&mode, myrpt->p.iospeed);
+	cfsetospeed(&mode, myrpt->p.iospeed);
+	if (tcsetattr(fd, TCSANOW, &mode))
+		ast_log(LOG_WARNING, "Unable to set serial parameters on %s: %s\n", fname, strerror(errno));
+	if (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))
+		setdtr(myrpt, fd, 0);
+	usleep(100000);
+	ast_debug(1, "Opened serial port %s\n", fname);
+	return (fd);
+}

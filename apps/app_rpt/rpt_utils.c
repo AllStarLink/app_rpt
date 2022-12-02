@@ -169,3 +169,30 @@ long diskavail(struct rpt *myrpt)
 	}
 	return (statfsbuf.f_bavail);
 }
+
+/*
+ Get the time for the machine's time zone
+ Note: Asterisk requires a copy of localtime
+ in the /etc directory for this to work properly.
+ If /etc/localtime is not present, you will get
+ GMT time! This is especially important on systems
+ running embedded linux distributions as they don't usually
+ have support for locales. 
+*/
+void rpt_localtime(time_t * t, struct ast_tm *lt, char *tz)
+{
+	struct timeval tv;
+
+	tv.tv_sec = *t;
+	tv.tv_usec = 0;
+	ast_localtime(&tv, lt, tz);
+
+}
+
+time_t rpt_mktime(struct ast_tm *tm, char *zone)
+{
+	struct timeval now;
+
+	now = ast_mktime(tm, zone);
+	return now.tv_sec;
+}

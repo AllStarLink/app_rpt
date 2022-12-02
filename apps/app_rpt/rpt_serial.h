@@ -40,3 +40,9 @@ int serial_txstring(int fd, char *txstring);
  * Write some bytes to the serial port, then optionally expect a fixed response
  */
 int serial_io(int fd, char *txbuf, char *rxbuf, int txbytes, int rxmaxbytes, unsigned int timeoutms, char termchr);
+
+/*! \brief Set the Data Terminal Ready (DTR) pin on a serial interface */
+int setdtr(struct rpt *myrpt, int fd, int enable);
+
+/*! \brief open the serial port */
+int openserial(struct rpt *myrpt, char *fname);

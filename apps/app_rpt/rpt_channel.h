@@ -18,3 +18,12 @@ int sayphoneticstr(struct ast_channel *mychannel, char *str);
 
 /*! \brief Say a number -- streams corresponding sound file */
 int saynum(struct ast_channel *mychannel, int num);
+
+/*! \note must be called locked */
+void do_dtmf_local(struct rpt *myrpt, char c);
+
+/*! \brief send asterisk frame text message on the current tx channel */
+int send_usb_txt(struct rpt *myrpt, char *txt);
+
+/*! \brief send asterisk frame text message on the current tx channel */
+int send_link_pl(struct rpt *myrpt, char *txt);

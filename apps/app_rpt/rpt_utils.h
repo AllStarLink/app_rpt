@@ -56,3 +56,7 @@ int myatoi(char *str);
 int mycompar(const void *a, const void *b);
 
 long diskavail(struct rpt *myrpt);
+
+void rpt_localtime(time_t * t, struct ast_tm *lt, char *tz);
+
+time_t rpt_mktime(struct ast_tm *tm, char *zone);

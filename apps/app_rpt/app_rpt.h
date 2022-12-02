@@ -919,6 +919,7 @@ struct nodelog {
 int rpt_debug_level(void);
 int rpt_num_rpts(void);
 int rpt_nullfd(void);
+time_t rpt_starttime(void);
 
 /* forward declarations */
 int service_scan(struct rpt *myrpt);
@@ -932,7 +933,6 @@ int setrtx_check(struct rpt *myrpt);
 int channel_revert(struct rpt *myrpt);
 int channel_steer(struct rpt *myrpt, char *data);
 void rpt_telemetry(struct rpt *myrpt,int mode, void *data);
-void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value);
 
 /*
 * Forward decl's - these suppress compiler warnings when funcs coded further down the file than thier invokation

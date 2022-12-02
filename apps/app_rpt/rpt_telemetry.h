@@ -19,3 +19,9 @@ int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command
 int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
 
 void flush_telem(struct rpt *myrpt);
+
+/*! \brief Routine that hangs up all links and frees all threads related to them hence taking a "bird bath".  Makes a lot of noise/cleans up the mess */
+void birdbath(struct rpt *myrpt);
+
+/*! \note must be called locked */
+void cancel_pfxtone(struct rpt *myrpt);
