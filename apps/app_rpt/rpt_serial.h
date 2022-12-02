@@ -46,3 +46,13 @@ int setdtr(struct rpt *myrpt, int fd, int enable);
 
 /*! \brief open the serial port */
 int openserial(struct rpt *myrpt, char *fname);
+
+int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsigned char *rxbuf, int rxmaxbytes, int asciiflag);
+
+int setrbi(struct rpt *myrpt);
+int setrtx(struct rpt *myrpt);
+int setxpmr(struct rpt *myrpt, int dotx);
+int setrbi_check(struct rpt *myrpt);
+int setrtx_check(struct rpt *myrpt);
+
+int civ_cmd(struct rpt *myrpt, unsigned char *cmd, int cmdlen);

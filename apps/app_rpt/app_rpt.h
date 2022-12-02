@@ -926,7 +926,6 @@ int set_mode_ic706(struct rpt *myrpt, char newmode);
 int simple_command_ft897(struct rpt *myrpt, char command);
 int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1);
 int setrem(struct rpt *myrpt);
-int setrtx_check(struct rpt *myrpt);
 int channel_revert(struct rpt *myrpt);
 int channel_steer(struct rpt *myrpt, char *data);
 void rpt_telemetry(struct rpt *myrpt,int mode, void *data);
@@ -935,14 +934,10 @@ void rpt_telemetry(struct rpt *myrpt,int mode, void *data);
 * Forward decl's - these suppress compiler warnings when funcs coded further down the file than thier invokation
 */
 
-int setrbi(struct rpt *myrpt);
 int set_ft897(struct rpt *myrpt);
 int set_ft100(struct rpt *myrpt);
 int set_ft950(struct rpt *myrpt);
 int set_ic706(struct rpt *myrpt);
-int set_xcat(struct rpt *myrpt);
 int setkenwood(struct rpt *myrpt);
 int set_tm271(struct rpt *myrpt);
 int set_tmd700(struct rpt *myrpt);
-int setrbi_check(struct rpt *myrpt);
-int setxpmr(struct rpt *myrpt, int dotx);
