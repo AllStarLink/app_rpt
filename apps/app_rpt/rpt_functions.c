@@ -6,9 +6,12 @@
 
 #include "asterisk.h"
 
+#include <dahdi/user.h>
 
-
+#include "asterisk/app.h" /* use ast_safe_system */
 #include "asterisk/channel.h"
+#include "asterisk/file.h"
+#include "asterisk/cli.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
@@ -19,7 +22,31 @@
 #include "rpt_channel.h"
 #include "rpt_telemetry.h"
 #include "rpt_link.h"
+#include "rpt_daq.h"
 #include "rpt_functions.h"
+
+/*!
+ * \brief DTMF Tones - frequency pairs used to generate them along with the required timings
+ * \note not static because used extern by rpt_channel.c
+ */
+char *dtmf_tones[] = {
+	"!941+1336/200,!0/200",		/* 0 */
+	"!697+1209/200,!0/200",		/* 1 */
+	"!697+1336/200,!0/200",		/* 2 */
+	"!697+1477/200,!0/200",		/* 3 */
+	"!770+1209/200,!0/200",		/* 4 */
+	"!770+1336/200,!0/200",		/* 5 */
+	"!770+1477/200,!0/200",		/* 6 */
+	"!852+1209/200,!0/200",		/* 7 */
+	"!852+1336/200,!0/200",		/* 8 */
+	"!852+1477/200,!0/200",		/* 9 */
+	"!697+1633/200,!0/200",		/* A */
+	"!770+1633/200,!0/200",		/* B */
+	"!852+1633/200,!0/200",		/* C */
+	"!941+1633/200,!0/200",		/* D */
+	"!941+1209/200,!0/200",		/* * */
+	"!941+1477/200,!0/200"		/* # */
+};
 
 static char remdtmfstr[] = "0123456789*#ABCD";
 
@@ -854,4 +881,967 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 		break;
 	}
 	return DC_INDETERMINATE;
+}
+
+int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+	pthread_attr_t attr;
+	int i, index, paramlength, nostar = 0;
+	char *lparam;
+	char *value = NULL;
+	char *paramlist[20];
+
+	static char *keywords[] = {
+		"context",
+		"dialtime",
+		"farenddisconnect",
+		"noct",
+		"quiet",
+		"voxalways",
+		"exten",
+		"nostar",
+		NULL
+	};
+
+	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
+		return DC_ERROR;
+
+	ast_debug(1, "@@@@ Autopatch up\n");
+
+	if (!myrpt->callmode) {
+		/* Set defaults */
+		myrpt->patchnoct = 0;
+		myrpt->patchdialtime = 0;
+		myrpt->patchfarenddisconnect = 0;
+		myrpt->patchquiet = 0;
+		myrpt->patchvoxalways = 0;
+		ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT - 1);
+		memset(myrpt->patchexten, 0, sizeof(myrpt->patchexten));
+
+	}
+	if (param) {
+		/* Process parameter list */
+		lparam = ast_strdup(param);
+		if (!lparam) {
+			ast_log(LOG_ERROR, "App_rpt out of memory on line %d\n", __LINE__);
+			return DC_ERROR;
+		}
+		paramlength = finddelim(lparam, paramlist, 20);
+		for (i = 0; i < paramlength; i++) {
+			index = matchkeyword(paramlist[i], &value, keywords);
+			if (value)
+				value = skipchars(value, "= ");
+			if (!myrpt->callmode) {
+				switch (index) {
+				case 1:		/* context */
+					strncpy(myrpt->patchcontext, value, MAXPATCHCONTEXT - 1);
+					break;
+
+				case 2:		/* dialtime */
+					myrpt->patchdialtime = atoi(value);
+					break;
+
+				case 3:		/* farenddisconnect */
+					myrpt->patchfarenddisconnect = atoi(value);
+					break;
+
+				case 4:		/* noct */
+					myrpt->patchnoct = atoi(value);
+					break;
+
+				case 5:		/* quiet */
+					myrpt->patchquiet = atoi(value);
+					break;
+
+				case 6:		/* voxalways */
+					myrpt->patchvoxalways = atoi(value);
+					break;
+
+				case 7:		/* exten */
+					strncpy(myrpt->patchexten, value, AST_MAX_EXTENSION - 1);
+					break;
+
+				default:
+					break;
+				}
+			} else {
+				switch (index) {
+				case 8:		/* nostar */
+					nostar = 1;
+					break;
+				}
+			}
+		}
+		ast_free(lparam);
+	}
+
+	rpt_mutex_lock(&myrpt->lock);
+
+	/* if on call, force * into current audio stream */
+
+	if ((myrpt->callmode == 2) || (myrpt->callmode == 3)) {
+		if (!nostar)
+			myrpt->mydtmf = myrpt->p.funcchar;
+	}
+	if (myrpt->callmode) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return DC_COMPLETE;
+	}
+	myrpt->callmode = 1;
+	myrpt->cidx = 0;
+	myrpt->exten[myrpt->cidx] = 0;
+	rpt_mutex_unlock(&myrpt->lock);
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	ast_pthread_create(&myrpt->rpt_call_thread, &attr, rpt_call, (void *) myrpt);
+	return DC_COMPLETE;
+}
+
+int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
+		return DC_ERROR;
+
+	ast_debug(1, "@@@@ Autopatch down\n");
+
+	rpt_mutex_lock(&myrpt->lock);
+
+	myrpt->macropatch = 0;
+
+	if (!myrpt->callmode) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return DC_COMPLETE;
+	}
+
+	myrpt->callmode = 0;
+	channel_revert(myrpt);
+	rpt_mutex_unlock(&myrpt->lock);
+	rpt_telem_select(myrpt, command_source, mylink);
+	if (!myrpt->patchquiet)
+		rpt_telemetry(myrpt, TERM, NULL);
+	return DC_COMPLETE;
+}
+
+int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+	struct rpt_tele *telem;
+
+	if (!param)
+		return DC_ERROR;
+
+	if ((myrpt->p.s[myrpt->p.sysstate_cur].txdisable) || (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable))
+		return DC_ERROR;
+
+	ast_debug(1, "@@@@ status param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
+
+	switch (myatoi(param)) {
+	case 1:					/* System ID */
+		if (myrpt->p.idtime) {	/* ID time must be non-zero */
+			myrpt->mustid = myrpt->tailid = 0;
+			myrpt->idtimer = myrpt->p.idtime;
+		}
+		telem = myrpt->tele.next;
+		while (telem != &myrpt->tele) {
+			if (((telem->mode == ID) || (telem->mode == ID1)) && (!telem->killed)) {
+				if (telem->chan)
+					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+				telem->killed = 1;
+			}
+			telem = telem->next;
+		}
+		rpt_telemetry(myrpt, ID1, NULL);
+		return DC_COMPLETE;
+	case 2:					/* System Time */
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, STATS_TIME, NULL);
+		return DC_COMPLETE;
+	case 3:					/* app_rpt.c version */
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, STATS_VERSION, NULL);
+		return DC_COMPLETE;
+	case 4:					/* GPS data */
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, STATS_GPS, NULL);
+		return DC_COMPLETE;
+	case 5:					/* Identify last node which keyed us up */
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, LASTUSER, NULL);
+		return DC_COMPLETE;
+	case 11:					/* System ID (local only) */
+		if (myrpt->p.idtime) {	/* ID time must be non-zero */
+			myrpt->mustid = myrpt->tailid = 0;
+			myrpt->idtimer = myrpt->p.idtime;
+		}
+		telem = myrpt->tele.next;
+		while (telem != &myrpt->tele) {
+			if (((telem->mode == ID) || (telem->mode == ID1)) && (!telem->killed)) {
+				if (telem->chan)
+					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+				telem->killed = 1;
+			}
+			telem = telem->next;
+		}
+		rpt_telemetry(myrpt, ID, NULL);
+		return DC_COMPLETE;
+	case 12:					/* System Time (local only) */
+		rpt_telemetry(myrpt, STATS_TIME_LOCAL, NULL);
+		return DC_COMPLETE;
+	case 99:					/* GPS data announced locally */
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, STATS_GPS_LEGACY, NULL);
+		return DC_COMPLETE;
+	default:
+		return DC_ERROR;
+	}
+	return DC_INDETERMINATE;
+}
+
+int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+	char *val;
+	int i;
+	if (myrpt->remote)
+		return DC_ERROR;
+
+	ast_debug(1, "@@@@ macro-oni param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
+
+	if (strlen(digitbuf) < 1)	/* needs 1 digit */
+		return DC_INDETERMINATE;
+
+	for (i = 0; i < digitbuf[i]; i++) {
+		if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+			return DC_ERROR;
+	}
+
+	if (*digitbuf == '0')
+		val = myrpt->p.startupmacro;
+	else
+		val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.macro, digitbuf);
+	/* param was 1 for local buf */
+	if (!val) {
+		if (strlen(digitbuf) < myrpt->macro_longest)
+			return DC_INDETERMINATE;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, MACRO_NOTFOUND, NULL);
+		return DC_COMPLETE;
+	}
+	rpt_mutex_lock(&myrpt->lock);
+	if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(val)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, MACRO_BUSY, NULL);
+		return DC_ERROR;
+	}
+	myrpt->macrotimer = MACROTIME;
+	strncat(myrpt->macrobuf, val, MAXMACRO - 1);
+	rpt_mutex_unlock(&myrpt->lock);
+	return DC_COMPLETE;
+}
+
+int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+	if (myrpt->remote)
+		return DC_ERROR;
+
+	ast_debug(1, "@@@@ playback param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
+
+	if (ast_fileexists(param, NULL, ast_channel_language(myrpt->rxchannel)) <= 0)
+		return DC_ERROR;
+
+	rpt_telem_select(myrpt, command_source, mylink);
+	rpt_telemetry(myrpt, PLAYBACK, param);
+	return DC_COMPLETE;
+}
+
+int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+
+	if (myrpt->remote)
+		return DC_ERROR;
+
+	ast_debug(1, "@@@@ localplay param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
+
+	if (ast_fileexists(param, NULL, ast_channel_language(myrpt->rxchannel)) <= 0)
+		return DC_ERROR;
+
+	rpt_telemetry(myrpt, LOCALPLAY, param);
+	return DC_COMPLETE;
+}
+
+int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+	char string[50], fname[50];
+	char paramcopy[500];
+	int argc;
+	FILE *fp;
+	char *argv[101], *cp;
+	int i, j, k, r, src;
+	struct rpt_tele *telem;
+#ifdef	_MDC_ENCODE_H_
+	struct mdcparams *mdcp;
+#endif
+
+	if (!param)
+		return DC_ERROR;
+
+	strncpy(paramcopy, param, sizeof(paramcopy) - 1);
+	paramcopy[sizeof(paramcopy) - 1] = 0;
+	argc = explode_string(paramcopy, argv, 100, ',', 0);
+
+	if (!argc)
+		return DC_ERROR;
+
+	switch (myatoi(argv[0])) {
+	case 1:					/* System reset */
+		i = system("killall -9 asterisk");
+		return DC_COMPLETE;
+
+	case 2:
+		myrpt->p.s[myrpt->p.sysstate_cur].txdisable = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "RPTENA");
+		return DC_COMPLETE;
+
+	case 3:
+		myrpt->p.s[myrpt->p.sysstate_cur].txdisable = 1;
+		return DC_COMPLETE;
+
+	case 4:					/* test tone on */
+		if (myrpt->stopgen < 0) {
+			myrpt->stopgen = 1;
+		} else {
+			myrpt->stopgen = 0;
+			rpt_telemetry(myrpt, TEST_TONE, NULL);
+		}
+		if (!myrpt->remote)
+			return DC_COMPLETE;
+		if (myrpt->remstopgen < 0) {
+			myrpt->remstopgen = 1;
+		} else {
+			if (myrpt->remstopgen)
+				break;
+			myrpt->remstopgen = -1;
+			if (ast_tonepair_start(myrpt->txchannel, 1000.0, 0, 99999999, 7200.0)) {
+				myrpt->remstopgen = 0;
+				break;
+			}
+		}
+		return DC_COMPLETE;
+
+	case 5:					/* Disgorge variables to log for debug purposes */
+		myrpt->disgorgetime = time(NULL) + 10;	/* Do it 10 seconds later */
+		return DC_COMPLETE;
+
+	case 6:					/* Simulate COR being activated (phone only) */
+		if (command_source != SOURCE_PHONE)
+			return DC_INDETERMINATE;
+		return DC_DOKEY;
+
+	case 7:					/* Time out timer enable */
+		myrpt->p.s[myrpt->p.sysstate_cur].totdisable = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TOTENA");
+		return DC_COMPLETE;
+
+	case 8:					/* Time out timer disable */
+		myrpt->p.s[myrpt->p.sysstate_cur].totdisable = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TOTDIS");
+		return DC_COMPLETE;
+
+	case 9:					/* Autopatch enable */
+		myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "APENA");
+		return DC_COMPLETE;
+
+	case 10:					/* Autopatch disable */
+		myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "APDIS");
+		return DC_COMPLETE;
+
+	case 11:					/* Link Enable */
+		myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "LNKENA");
+		return DC_COMPLETE;
+
+	case 12:					/* Link Disable */
+		myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "LNKDIS");
+		return DC_COMPLETE;
+
+	case 13:					/* Query System State */
+		string[0] = string[1] = 'S';
+		string[2] = myrpt->p.sysstate_cur + '0';
+		string[3] = '\0';
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) string);
+		return DC_COMPLETE;
+
+	case 14:					/* Change System State */
+		if (strlen(digitbuf) == 0)
+			break;
+		if ((digitbuf[0] < '0') || (digitbuf[0] > '9'))
+			return DC_ERROR;
+		myrpt->p.sysstate_cur = digitbuf[0] - '0';
+		string[0] = string[1] = 'S';
+		string[2] = myrpt->p.sysstate_cur + '0';
+		string[3] = '\0';
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) string);
+		return DC_COMPLETE;
+
+	case 15:					/* Scheduler Enable */
+		myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "SKENA");
+		return DC_COMPLETE;
+
+	case 16:					/* Scheduler Disable */
+		myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "SKDIS");
+		return DC_COMPLETE;
+
+	case 17:					/* User functions Enable */
+		myrpt->p.s[myrpt->p.sysstate_cur].userfundisable = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "UFENA");
+		return DC_COMPLETE;
+
+	case 18:					/* User Functions Disable */
+		myrpt->p.s[myrpt->p.sysstate_cur].userfundisable = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "UFDIS");
+		return DC_COMPLETE;
+
+	case 19:					/* Alternate Tail Enable */
+		myrpt->p.s[myrpt->p.sysstate_cur].alternatetail = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "ATENA");
+		return DC_COMPLETE;
+
+	case 20:					/* Alternate Tail Disable */
+		myrpt->p.s[myrpt->p.sysstate_cur].alternatetail = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "ATDIS");
+		return DC_COMPLETE;
+
+	case 21:					/* Parrot Mode Enable */
+		birdbath(myrpt);
+		if (myrpt->p.parrotmode < 2) {
+			myrpt->parrotonce = 0;
+			myrpt->p.parrotmode = 1;
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 22:					/* Parrot Mode Disable */
+		birdbath(myrpt);
+		if (myrpt->p.parrotmode < 2) {
+			myrpt->p.parrotmode = 0;
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 23:					/* flush parrot in progress */
+		birdbath(myrpt);
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+	case 24:					/* flush all telemetry */
+		flush_telem(myrpt);
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+	case 25:					/* request keying info (brief) */
+		send_link_keyquery(myrpt);
+		myrpt->topkeylong = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+	case 26:					/* request keying info (full) */
+		send_link_keyquery(myrpt);
+		myrpt->topkeylong = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+
+	case 27:					/* Reset DAQ minimum */
+		if (argc != 3)
+			return DC_ERROR;
+		if (!(daq_reset_minmax(argv[1], atoi(argv[2]), 0))) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		return DC_ERROR;
+
+	case 28:					/* Reset DAQ maximum */
+		if (argc != 3)
+			return DC_ERROR;
+		if (!(daq_reset_minmax(argv[1], atoi(argv[2]), 1))) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		return DC_ERROR;
+
+	case 30:					/* recall memory location on programmable radio */
+
+		if (strlen(digitbuf) < 2)	/* needs 2 digits */
+			break;
+
+		for (i = 0; i < 2; i++) {
+			if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+				return DC_ERROR;
+		}
+
+		r = retrieve_memory(myrpt, digitbuf);
+		if (r < 0) {
+			rpt_telemetry(myrpt, MEMNOTFOUND, NULL);
+			return DC_COMPLETE;
+		}
+		if (r > 0) {
+			return DC_ERROR;
+		}
+		if (setrem(myrpt) == -1)
+			return DC_ERROR;
+		return DC_COMPLETE;
+
+	case 31:
+		/* set channel. note that it's going to change channel 
+		   then confirm on the new channel! */
+		if (strlen(digitbuf) < 2)	/* needs 2 digits */
+			break;
+
+		for (i = 0; i < 2; i++) {
+			if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+				return DC_ERROR;
+		}
+		channel_steer(myrpt, digitbuf);
+		return DC_COMPLETE;
+
+	case 32:					/* Touch Tone Pad Test */
+		i = strlen(digitbuf);
+		if (!i) {
+			ast_debug(5, "Padtest entered");
+			myrpt->inpadtest = 1;
+			break;
+		} else {
+			ast_debug(5, "Padtest len= %d digits=%s", i, digitbuf);
+			if (digitbuf[i - 1] != myrpt->p.endchar)
+				break;
+			rpt_telemetry(myrpt, ARB_ALPHA, digitbuf);
+			myrpt->inpadtest = 0;
+			ast_debug(5, "Padtest exited");
+			return DC_COMPLETE;
+		}
+	case 33:					/* Local Telem mode Enable */
+		if (myrpt->p.telemdynamic) {
+			myrpt->telemmode = 0x7fffffff;
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 34:					/* Local Telem mode Disable */
+		if (myrpt->p.telemdynamic) {
+			myrpt->telemmode = 0;
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 35:					/* Local Telem mode Normal */
+		if (myrpt->p.telemdynamic) {
+			myrpt->telemmode = 1;
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 36:					/* Link Output Enable */
+		if (!mylink)
+			return DC_ERROR;
+		src = 0;
+		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
+			src = LINKMODE_GUI;
+		if (mylink->phonemode)
+			src = LINKMODE_PHONE;
+		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+			src = LINKMODE_ECHOLINK;
+		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+			src = LINKMODE_TLB;
+		if (src && myrpt->p.linkmodedynamic[src]) {
+			set_linkmode(mylink, LINKMODE_ON);
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 37:					/* Link Output Disable */
+		if (!mylink)
+			return DC_ERROR;
+		src = 0;
+		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
+			src = LINKMODE_GUI;
+		if (mylink->phonemode)
+			src = LINKMODE_PHONE;
+		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+			src = LINKMODE_ECHOLINK;
+		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+			src = LINKMODE_TLB;
+		if (src && myrpt->p.linkmodedynamic[src]) {
+			set_linkmode(mylink, LINKMODE_OFF);
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 38:					/* Gui Link Output Follow */
+		if (!mylink)
+			return DC_ERROR;
+		src = 0;
+		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
+			src = LINKMODE_GUI;
+		if (mylink->phonemode)
+			src = LINKMODE_PHONE;
+		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+			src = LINKMODE_ECHOLINK;
+		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+			src = LINKMODE_TLB;
+		if (src && myrpt->p.linkmodedynamic[src]) {
+			set_linkmode(mylink, LINKMODE_FOLLOW);
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 39:					/* Link Output Demand */
+		if (!mylink)
+			return DC_ERROR;
+		src = 0;
+		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
+			src = LINKMODE_GUI;
+		if (mylink->phonemode)
+			src = LINKMODE_PHONE;
+		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+			src = LINKMODE_ECHOLINK;
+		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+			src = LINKMODE_TLB;
+		if (src && myrpt->p.linkmodedynamic[src]) {
+			set_linkmode(mylink, LINKMODE_DEMAND);
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+			return DC_COMPLETE;
+		}
+		break;
+	case 42:					/* Echolink announce node # only */
+		myrpt->p.eannmode = 1;
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+	case 43:					/* Echolink announce node Callsign only */
+		myrpt->p.eannmode = 2;
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+	case 44:					/* Echolink announce node # & Callsign */
+		myrpt->p.eannmode = 3;
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+	case 45:					/* Link activity timer enable */
+		if (myrpt->p.lnkacttime && myrpt->p.lnkactmacro) {
+			myrpt->linkactivitytimer = 0;
+			myrpt->linkactivityflag = 0;
+			myrpt->p.lnkactenable = 1;
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, ARB_ALPHA, (void *) "LATENA");
+		}
+		return DC_COMPLETE;
+
+	case 46:					/* Link activity timer disable */
+		if (myrpt->p.lnkacttime && myrpt->p.lnkactmacro) {
+			myrpt->linkactivitytimer = 0;
+			myrpt->linkactivityflag = 0;
+			myrpt->p.lnkactenable = 0;
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, ARB_ALPHA, (void *) "LATDIS");
+		}
+		return DC_COMPLETE;
+
+	case 47:					/* Link activity flag kill */
+		myrpt->linkactivitytimer = 0;
+		myrpt->linkactivityflag = 0;
+		return DC_COMPLETE;		/* Silent for a reason (only used in macros) */
+
+	case 48:					/* play page sequence */
+		j = 0;
+		for (i = 1; i < argc; i++) {
+			k = strlen(argv[i]);
+			if (k != 1) {
+				j += k + 1;
+				continue;
+			}
+			if (*argv[i] >= '0' && *argv[i] <= '9')
+				argv[i] = dtmf_tones[*argv[i] - '0'];
+			else if (*argv[i] >= 'A' && (*argv[i]) <= 'D')
+				argv[i] = dtmf_tones[*argv[i] - 'A' + 10];
+			else if (*argv[i] == '*')
+				argv[i] = dtmf_tones[14];
+			else if (*argv[i] == '#')
+				argv[i] = dtmf_tones[15];
+			j += strlen(argv[i]);
+		}
+		cp = ast_malloc(j + 100);
+		if (!cp) {
+			ast_log(LOG_WARNING, "cannot malloc");
+			return DC_ERROR;
+		}
+		memset(cp, 0, j + 100);
+		for (i = 1; i < argc; i++) {
+			if (i != 1)
+				strcat(cp, ",");
+			strcat(cp, argv[i]);
+		}
+		rpt_telemetry(myrpt, PAGE, cp);
+		return DC_COMPLETE;
+
+	case 49:					/* Disable Incoming connections */
+		myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "NOICE");
+		return DC_COMPLETE;
+
+	case 50:					/*Enable Incoming connections */
+		myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "NOICD");
+		return DC_COMPLETE;
+
+	case 51:					/* Enable Sleep Mode */
+		myrpt->sleeptimer = myrpt->p.sleeptime;
+		myrpt->p.s[myrpt->p.sysstate_cur].sleepena = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "SLPEN");
+		return DC_COMPLETE;
+
+	case 52:					/* Disable Sleep Mode */
+		myrpt->p.s[myrpt->p.sysstate_cur].sleepena = 0;
+		myrpt->sleep = myrpt->sleepreq = 0;
+		myrpt->sleeptimer = myrpt->p.sleeptime;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "SLPDS");
+		return DC_COMPLETE;
+
+	case 53:					/* Wake up from Sleep Mode */
+		myrpt->sleep = myrpt->sleepreq = 0;
+		myrpt->sleeptimer = myrpt->p.sleeptime;
+		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, ARB_ALPHA, (void *) "AWAKE");
+		}
+		return DC_COMPLETE;
+	case 54:					/* Go to sleep */
+		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, ARB_ALPHA, (void *) "SLEEP");
+			myrpt->sleepreq = 1;
+			myrpt->sleeptimer = 0;
+		}
+		return DC_COMPLETE;
+	case 55:					/* Parrot Once if parrot mode is disabled */
+		if (!myrpt->p.parrotmode)
+			myrpt->parrotonce = 1;
+		return DC_COMPLETE;
+	case 56:					/* RX CTCSS Enable */
+		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "DAHDI")) {
+			struct dahdi_radio_param r;
+
+			memset(&r, 0, sizeof(struct dahdi_radio_param));
+			r.radpar = DAHDI_RADPAR_IGNORECT;
+			r.data = 0;
+			ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
+		}
+		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
+			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+			ast_sendtext(myrpt->rxchannel, "RXCTCSS 1");
+		}
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "RXPLENA");
+		return DC_COMPLETE;
+	case 57:					/* RX CTCSS Disable */
+		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "DAHDI")) {
+			struct dahdi_radio_param r;
+
+			memset(&r, 0, sizeof(struct dahdi_radio_param));
+			r.radpar = DAHDI_RADPAR_IGNORECT;
+			r.data = 1;
+			ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
+		}
+
+		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
+			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+			ast_sendtext(myrpt->rxchannel, "RXCTCSS 0");
+		}
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "RXPLDIS");
+		return DC_COMPLETE;
+	case 58:					/* TX CTCSS on input only Enable */
+		myrpt->p.itxctcss = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TXIPLENA");
+		return DC_COMPLETE;
+	case 59:					/* TX CTCSS on input only Disable */
+		myrpt->p.itxctcss = 0;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TXIPLDIS");
+		return DC_COMPLETE;
+#ifdef	_MDC_ENCODE_H_
+	case 60:					/* play MDC1200 burst */
+		if (argc < 3)
+			break;
+		mdcp = ast_calloc(1, sizeof(struct mdcparams));
+		if (!mdcp)
+			return DC_ERROR;
+		memset(mdcp, 0, sizeof(*mdcp));
+		if (*argv[1] == 'C') {
+			if (argc < 5)
+				return DC_ERROR;
+			mdcp->DestID = (short) strtol(argv[3], NULL, 16);
+			mdcp->subcode = (short) strtol(argv[4], NULL, 16);
+		}
+		strncpy(mdcp->type, argv[1], sizeof(mdcp->type) - 1);
+		mdcp->UnitID = (short) strtol(argv[2], NULL, 16);
+		rpt_telemetry(myrpt, MDC1200, (void *) mdcp);
+		return DC_COMPLETE;
+#endif
+	case 61:					/* send GPIO change */
+	case 62:					/* same, without function complete (quietly, oooooooh baby!) */
+		if (argc < 1)
+			break;
+		/* ignore if not a USB channel */
+		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
+			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") &&
+			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))
+			break;
+		/* go thru all the specs */
+		for (i = 1; i < argc; i++) {
+			if (sscanf(argv[i], "GPIO%d=%d", &j, &k) == 2) {
+				sprintf(string, "GPIO %d %d", j, k);
+				ast_sendtext(myrpt->rxchannel, string);
+			} else if (sscanf(argv[i], "PP%d=%d", &j, &k) == 2) {
+				sprintf(string, "PP %d %d", j, k);
+				ast_sendtext(myrpt->rxchannel, string);
+			}
+		}
+		if (myatoi(argv[0]) == 61)
+			rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+	case 63:					/* send pre-configured APRSTT notification */
+	case 64:
+		if (argc < 2)
+			break;
+		if (!myrpt->p.aprstt)
+			break;
+		if (!myrpt->p.aprstt[0])
+			ast_copy_string(fname, APRSTT_PIPE, sizeof(fname) - 1);
+		else
+			snprintf(fname, sizeof(fname) - 1, APRSTT_SUB_PIPE, myrpt->p.aprstt);
+		fp = fopen(fname, "w");
+		if (!fp) {
+			ast_log(LOG_WARNING, "Can not open APRSTT pipe %s\n", fname);
+			break;
+		}
+		if (argc > 2)
+			fprintf(fp, "%s %c\n", argv[1], *argv[2]);
+		else
+			fprintf(fp, "%s\n", argv[1]);
+		fclose(fp);
+		if (myatoi(argv[0]) == 63)
+			rpt_telemetry(myrpt, ARB_ALPHA, (void *) argv[1]);
+		return DC_COMPLETE;
+	case 65:					/* send POCSAG page */
+		if (argc < 3)
+			break;
+		/* ignore if not a USB channel */
+		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
+			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") &&
+			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))
+			break;
+		if (argc > 5)
+			sprintf(string, "PAGE %s %s %s %s %s", argv[1], argv[2], argv[3], argv[4], argv[5]);
+		else
+			sprintf(string, "PAGE %s %s %s", argv[1], argv[2], argv[3]);
+		telem = myrpt->tele.next;
+		k = 0;
+		while (telem != &myrpt->tele) {
+			if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
+				if (telem->chan)
+					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+				telem->killed = 1;
+				myrpt->deferid = 1;
+			}
+			telem = telem->next;
+		}
+		gettimeofday(&myrpt->paging, NULL);
+		ast_sendtext(myrpt->rxchannel, string);
+		return DC_COMPLETE;
+	}
+	return DC_INDETERMINATE;
+}
+
+int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+
+	if (myrpt->remote)
+		return DC_ERROR;
+
+	ast_debug(1, "meter param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
+
+	rpt_telem_select(myrpt, command_source, mylink);
+	rpt_telemetry(myrpt, METER, param);
+	return DC_COMPLETE;
+}
+
+int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+
+	if (myrpt->remote)
+		return DC_ERROR;
+
+	ast_debug(1, "userout param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
+
+	rpt_telem_select(myrpt, command_source, mylink);
+	rpt_telemetry(myrpt, USEROUT, param);
+	return DC_COMPLETE;
+}
+
+int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+{
+	char *cp;
+
+	if (myrpt->remote)
+		return DC_ERROR;
+
+	ast_debug(1, "cmd param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
+
+	if (param) {
+		if (*param == '#') {	/* to execute asterisk cli command */
+			ast_cli_command(rpt_nullfd(), param + 1);
+		} else {
+			cp = ast_malloc(strlen(param) + 10);
+			if (!cp) {
+				ast_log(LOG_WARNING, "Unable to malloc");
+				return DC_ERROR;
+			}
+			memset(cp, 0, strlen(param) + 10);
+			sprintf(cp, "%s &", param);
+			ast_safe_system(cp);
+			ast_free(cp);
+		}
+	}
+	return DC_COMPLETE;
 }

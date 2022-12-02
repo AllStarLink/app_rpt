@@ -10,7 +10,6 @@
 
 #include <dahdi/user.h>
 
-#include "asterisk/app.h" /* use ast_safe_system */
 #include "asterisk/channel.h"
 #include "asterisk/cli.h"
 #include "asterisk/say.h"
@@ -342,59 +341,6 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 	ast_free(myargs);
 	ast_free(meter_face);
 	return 0;
-}
-
-int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
-{
-
-	if (myrpt->remote)
-		return DC_ERROR;
-
-	ast_debug(1, "meter param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
-
-	rpt_telem_select(myrpt, command_source, mylink);
-	rpt_telemetry(myrpt, METER, param);
-	return DC_COMPLETE;
-}
-
-int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
-{
-
-	if (myrpt->remote)
-		return DC_ERROR;
-
-	ast_debug(1, "userout param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
-
-	rpt_telem_select(myrpt, command_source, mylink);
-	rpt_telemetry(myrpt, USEROUT, param);
-	return DC_COMPLETE;
-}
-
-int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
-{
-	char *cp;
-
-	if (myrpt->remote)
-		return DC_ERROR;
-
-	ast_debug(1, "cmd param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
-
-	if (param) {
-		if (*param == '#') {	/* to execute asterisk cli command */
-			ast_cli_command(rpt_nullfd(), param + 1);
-		} else {
-			cp = ast_malloc(strlen(param) + 10);
-			if (!cp) {
-				ast_log(LOG_WARNING, "Unable to malloc");
-				return DC_ERROR;
-			}
-			memset(cp, 0, strlen(param) + 10);
-			sprintf(cp, "%s &", param);
-			ast_safe_system(cp);
-			ast_free(cp);
-		}
-	}
-	return DC_COMPLETE;
 }
 
 void flush_telem(struct rpt *myrpt)

@@ -9,15 +9,6 @@ void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *my
 
 int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *args);
 
-/*! \brief Playback a meter reading */
-int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-
-/*! \brief Set or reset a USER Output bit */
-int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-
-/*! \brief Execute shell command */
-int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
-
 void flush_telem(struct rpt *myrpt);
 
 /*! \brief Routine that hangs up all links and frees all threads related to them hence taking a "bird bath".  Makes a lot of noise/cleans up the mess */

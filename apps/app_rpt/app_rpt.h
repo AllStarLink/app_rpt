@@ -916,6 +916,7 @@ void rpt_event_process(struct rpt *myrpt);
 int split_ctcss_freq(char *hertz, char *decimal, char *freq);
 int check_freq(struct rpt *myrpt, int m, int d, int *defmode);
 int multimode_bump_freq(struct rpt *myrpt, int interval);
+void *rpt_call(void *this);
 
 /* forward declarations */
 int service_scan(struct rpt *myrpt);
