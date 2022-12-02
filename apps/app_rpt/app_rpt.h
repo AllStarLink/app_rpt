@@ -7,6 +7,16 @@
 	Uncomment the following to test using native Asterisk DSP. */
 #define NATIVE_DSP
 
+/* Un-comment the following to include support decoding of MDC-1200 digital tone
+ signalling protocol (using KA6SQG's GPL'ed implementation) */
+#define USE_MDC1200
+
+#ifdef USE_MDC1200
+/* Start from the include directory, so that it works for both apps/app_rpt.c and files in apps/app_rpt */
+#include "../apps/app_rpt/mdc_encode.h"
+#include "../apps/app_rpt/mdc_decode.h"
+#endif
+
 /* Un-comment the following to include support for notch filters in the
 	rx audio stream (using Tony Fisher's mknotch (mkfilter) implementation) */
 /* #include "rpt_notch.c" */
@@ -47,32 +57,6 @@ typedef struct {
 
 #ifdef	__RPT_NOTCH
 #define	MAXFILTERS 10
-#endif
-
-#ifdef	_MDC_ENCODE_H_
-
-#define	MDCGEN_BUFSIZE 2000
-
-struct mdcgen_pvt
-{
-	mdc_encoder_t *mdc;
-	struct ast_format *origwfmt;
-	struct ast_frame f;
-	char buf[(MDCGEN_BUFSIZE * 2) + AST_FRIENDLY_OFFSET];
-	unsigned char cbuf[MDCGEN_BUFSIZE];
-} ;
-
-struct mdcparams
-{
-	char	type[10];
-	short	UnitID;
-	short	DestID;
-	short	subcode;
-} ;
-
-int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode);
-int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode);
-
 #endif
 
 /* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
