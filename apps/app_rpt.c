@@ -2911,12 +2911,6 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
  GMT time! This is especially important on systems
  running embedded linux distributions as they don't usually
  have support for locales. 
-
- If OLD_ASTERISK is defined, then the older localtime_r
- function will be used. The /etc/localtime file is not
- required in this case. This provides backward compatibility
- with Asterisk 1.2 systems.
-
 */
 
 static void rpt_localtime(time_t * t, struct ast_tm *lt, char *tz)
