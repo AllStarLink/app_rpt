@@ -1,26 +1,11 @@
 
 #include "asterisk.h"
 
-#include <signal.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-#include <search.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <dirent.h>
-#include <ctype.h>
-
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
 #include "asterisk/logger.h"
 #include "asterisk/channel.h"
-#include "asterisk/pbx.h"
-#include "asterisk/module.h"
-#include "asterisk/options.h"
 
 #include "app_rpt.h"
 #include "rpt_daq.h"

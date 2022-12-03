@@ -1,18 +1,7 @@
 
 #include "asterisk.h"
 
-#include <signal.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-#include <search.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/vfs.h> /* use statfs */
-#include <errno.h>
-#include <dirent.h>
-#include <ctype.h>
 
 #include "asterisk/channel.h" /* includes all the locking stuff needed (lock.h doesn't) */
 

@@ -302,14 +302,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <dirent.h>
 #include <ctype.h>
-#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/io.h>
-#include <math.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fnmatch.h>
@@ -333,15 +330,9 @@
 #include "asterisk/cli.h"
 #include "asterisk/config.h"
 #include "asterisk/say.h"
-#include "asterisk/localtime.h"
-#include "asterisk/cdr.h"
-#include "asterisk/options.h"
-#include "asterisk/manager.h"
-#include "asterisk/astdb.h"
 #include "asterisk/app.h"
 #include "asterisk/indications.h"
 #include "asterisk/format.h"
-#include "asterisk/format_compatibility.h"
 #include "asterisk/dsp.h"
 
 #include "app_rpt/app_rpt.h"
