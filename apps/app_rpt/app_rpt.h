@@ -904,7 +904,6 @@ struct nodelog {
 	char str[MAXNODESTR * 2];
 };
 
-/* app_rpt.c functions used by other files */
 int rpt_debug_level(void);
 int rpt_set_debug_level(int newlevel);
 int rpt_num_rpts(void);
@@ -914,6 +913,3 @@ int function_table_index(const char *s);
 void donodelog(struct rpt *myrpt, char *str);
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
-
-/* forward declarations */
-void rpt_telemetry(struct rpt *myrpt,int mode, void *data);

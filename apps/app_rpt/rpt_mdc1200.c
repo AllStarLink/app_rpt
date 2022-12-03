@@ -22,6 +22,7 @@
 #include "rpt_config.h"
 #include "rpt_link.h"
 #include "rpt_manager.h"
+#include "rpt_telemetry.h"
 
 #ifdef USE_MDC1200
 /* Include support decoding of MDC-1200 digital tone

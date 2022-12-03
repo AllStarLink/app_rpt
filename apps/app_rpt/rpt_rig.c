@@ -16,6 +16,7 @@
 #include "rpt_xcat.h"
 #include "rpt_config.h" /* use get_mem_set */
 #include "rpt_utils.h"
+#include "rpt_telemetry.h"
 
 static int sendkenwood(struct rpt *myrpt, char *txstr, char *rxstr)
 {

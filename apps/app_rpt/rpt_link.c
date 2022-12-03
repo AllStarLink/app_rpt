@@ -22,6 +22,7 @@
 #include "rpt_call.h"
 #include "rpt_vox.h"
 #include "rpt_link.h"
+#include "rpt_telemetry.h"
 
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 {

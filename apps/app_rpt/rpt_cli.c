@@ -20,6 +20,7 @@
 #include "rpt_utils.h"
 #include "rpt_config.h"
 #include "rpt_manager.h"
+#include "rpt_telemetry.h"
 
 extern struct rpt rpt_vars[MAXRPTS];
 

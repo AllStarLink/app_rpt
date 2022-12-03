@@ -20,6 +20,7 @@
 #include "rpt_serial.h"
 #include "rpt_channel.h" /* use send_usb_txt */
 #include "rpt_xcat.h"
+#include "rpt_telemetry.h"
 
 int serial_open(char *fname, int speed, int stop2)
 {
