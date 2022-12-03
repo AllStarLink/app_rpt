@@ -30,6 +30,7 @@
 
 /*** MODULEINFO
 	<depend>zlib</depend>
+	<support_level>extended</support_level>
  ***/
 
 /*

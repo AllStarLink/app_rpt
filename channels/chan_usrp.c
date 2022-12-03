@@ -33,6 +33,7 @@
  */
 
 /*** MODULEINFO
+	<support_level>extended</support_level>
  ***/
 
 /* Version 0.1.1, 11/15/2019

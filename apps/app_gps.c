@@ -27,6 +27,7 @@
  */
 
 /*** MODULEINFO
+	<support_level>extended</support_level>
  ***/
 
 /* The following are the recognized APRS icon codes: 

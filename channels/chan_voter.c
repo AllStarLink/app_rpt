@@ -28,6 +28,7 @@
 
 /*** MODULEINFO
 	<depend>dahdi</depend>
+	<support_level>extended</support_level>
  ***/
 
 /*  Basic Information On How This Works
@@ -1365,7 +1366,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 				if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
 					if (f2->frametype == AST_FRAME_DTMF_END)
-						ast_log(LOG_NOTICE, "Voter %d Got DTMF char %c\n", p->nodenum, f2->subclass.integer);
+						ast_debug(1, "Voter %d Got DTMF char %c\n", p->nodenum, f2->subclass.integer);
 				} else {
 					f2->frametype = AST_FRAME_NULL;
 					f2->subclass.integer = 0;
@@ -1421,7 +1422,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
 				if (f2->frametype == AST_FRAME_DTMF_END)
-					ast_log(LOG_NOTICE, "Voter %d Got DTMF char %c\n", p->nodenum, f2->subclass.integer);
+					ast_debug(1, "Voter %d Got DTMF char %c\n", p->nodenum, f2->subclass.integer);
 			} else {
 				f2->frametype = AST_FRAME_NULL;
 				f2->subclass.integer = 0;
