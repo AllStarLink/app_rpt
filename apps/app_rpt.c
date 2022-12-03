@@ -5689,21 +5689,20 @@ static void *rpt_master(void *ignore)
 		pthread_exit(NULL);
 	}
 
-	/*
-	 * If there are daq devices present, open and initialize them
-	 */
+	/* If there are daq devices present, open and initialize them */
 	daq_init(cfg);
 
 	while ((this = ast_category_browse(cfg, this)) != NULL) {
 		for (i = 0; i < strlen(this); i++) {
-			if ((this[i] < '0') || (this[i] > '9'))
+			if ((this[i] < '0') || (this[i] > '9')) {
 				break;
+			}
 		}
-		if (i != strlen(this))
-			continue;			/* Not a node defn */
+		if (i != strlen(this)) {
+			continue; /* Not a node defn */
+		}
 		if (n >= MAXRPTS) {
-			ast_log(LOG_ERROR, "Attempting to add repeater node %s would exceed max. number of repeaters (%d)\n", this,
-					MAXRPTS);
+			ast_log(LOG_ERROR, "Attempting to add repeater node %s would exceed max. number of repeaters (%d)\n", this, MAXRPTS);
 			continue;
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
@@ -5727,8 +5726,9 @@ static void *rpt_master(void *ignore)
 		}
 		rpt_vars[n].name = ast_strdup(this);
 		val = (char *) ast_variable_retrieve(cfg, this, "txchannel");
-		if (val)
+		if (val) {
 			rpt_vars[n].txchanname = ast_strdup(val);
+		}
 		rpt_vars[n].remote = 0;
 		rpt_vars[n].remoterig = "";
 		rpt_vars[n].p.iospeed = B9600;
@@ -5739,8 +5739,9 @@ static void *rpt_master(void *ignore)
 			rpt_vars[n].remote = 1;
 		}
 		val = (char *) ast_variable_retrieve(cfg, this, "radiotype");
-		if (val)
+		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
+		}
 		ast_mutex_init(&rpt_vars[n].lock);
 		ast_mutex_init(&rpt_vars[n].remlock);
 		ast_mutex_init(&rpt_vars[n].statpost_lock);
@@ -5764,39 +5765,32 @@ static void *rpt_master(void *ignore)
 		/* if is a remote, dont start one for it */
 		if (rpt_vars[i].remote) {
 			if (retrieve_memory(&rpt_vars[i], "init")) {	/* Try to retrieve initial memory channel */
-				if ((!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX450))
-					|| (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_XCAT)))
+				if ((!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX450)) || (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_XCAT))) {
 					strncpy(rpt_vars[i].freq, "446.500", sizeof(rpt_vars[i].freq) - 1);
-
-				else
+				} else {
 					strncpy(rpt_vars[i].freq, "145.000", sizeof(rpt_vars[i].freq) - 1);
-				strncpy(rpt_vars[i].rxpl, "100.0", sizeof(rpt_vars[i].rxpl) - 1);
-
-				strncpy(rpt_vars[i].txpl, "100.0", sizeof(rpt_vars[i].txpl) - 1);
-				rpt_vars[i].remmode = REM_MODE_FM;
-				rpt_vars[i].offset = REM_SIMPLEX;
-				rpt_vars[i].powerlevel = REM_LOWPWR;
-				rpt_vars[i].splitkhz = 0;
+				}
 			}
 			continue;
-		} else {				/* is a normal repeater */
+		} else { /* is a normal repeater */
 			rpt_vars[i].p.memory = rpt_vars[i].name;
 			if (retrieve_memory(&rpt_vars[i], "radiofreq")) {	/* Try to retrieve initial memory channel */
-				if (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX450))
+				if (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX450)) {
 					strncpy(rpt_vars[i].freq, "446.500", sizeof(rpt_vars[i].freq) - 1);
-				else if (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX150))
+				} else if (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX150)) {
 					strncpy(rpt_vars[i].freq, "146.580", sizeof(rpt_vars[i].freq) - 1);
-				strncpy(rpt_vars[i].rxpl, "100.0", sizeof(rpt_vars[i].rxpl) - 1);
-
-				strncpy(rpt_vars[i].txpl, "100.0", sizeof(rpt_vars[i].txpl) - 1);
-				rpt_vars[i].remmode = REM_MODE_FM;
-				rpt_vars[i].offset = REM_SIMPLEX;
-				rpt_vars[i].powerlevel = REM_LOWPWR;
-				rpt_vars[i].splitkhz = 0;
+				}
 			}
-			ast_log(LOG_NOTICE, "Normal Repeater Init  %s  %s  %s\n", rpt_vars[i].name, rpt_vars[i].remoterig,
-					rpt_vars[i].freq);
+			ast_log(LOG_NOTICE, "Normal Repeater Init  %s  %s  %s\n", rpt_vars[i].name, rpt_vars[i].remoterig, rpt_vars[i].freq);
 		}
+
+		strncpy(rpt_vars[i].rxpl, "100.0", sizeof(rpt_vars[i].rxpl) - 1);
+		strncpy(rpt_vars[i].txpl, "100.0", sizeof(rpt_vars[i].txpl) - 1);
+		rpt_vars[i].remmode = REM_MODE_FM;
+		rpt_vars[i].offset = REM_SIMPLEX;
+		rpt_vars[i].powerlevel = REM_LOWPWR;
+		rpt_vars[i].splitkhz = 0;
+
 		if (rpt_vars[i].p.ident && (!*rpt_vars[i].p.ident)) {
 			ast_log(LOG_WARNING, "Did not specify ident for node %s\n", rpt_vars[i].name);
 			pthread_exit(NULL);
