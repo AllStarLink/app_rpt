@@ -1033,22 +1033,19 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			return 0;
 		switch (text[j]) {
 		case 'T':				/* Tone only */
-			if (option_verbose > 2)
-				ast_verb(3, "POCSAG page (%d baud, capcode=%d) TONE ONLY\n", baud, i);
+			ast_verb(3, "POCSAG page (%d baud, capcode=%d) TONE ONLY\n", baud, i);
 			batch = make_pocsag_batch(i, NULL, 0, TONE, 0);
 			break;
 		case 'N':				/* Numeric */
 			if (!text[j + 1])
 				return 0;
-			if (option_verbose > 2)
-				ast_verb(3, "POCSAG page (%d baud, capcode=%d) NUMERIC (%s)\n", baud, i, text + j + 1);
+			ast_verb(3, "POCSAG page (%d baud, capcode=%d) NUMERIC (%s)\n", baud, i, text + j + 1);
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), NUMERIC, 0);
 			break;
 		case 'A':				/* Alpha */
 			if (!text[j + 1])
 				return 0;
-			if (option_verbose > 2)
-				ast_verb(3, "POCSAG page (%d baud, capcode=%d) ALPHA (%s)\n", baud, i, text + j + 1);
+			ast_verb(3, "POCSAG page (%d baud, capcode=%d) ALPHA (%s)\n", baud, i, text + j + 1);
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), ALPHA, 0);
 			break;
 		case '?':				/* Query Page Status */
@@ -1527,8 +1524,7 @@ static void *voter_primary_client(void *data)
 			p->priconn = 0;
 			digest = 0;
 			p->primary_challenge[0] = 0;
-			if (option_verbose >= 3)
-				ast_verb(3, "Primary client for %d  Lost connection!!!\n", p->nodenum);
+			ast_verb(3, "Primary client for %d  Lost connection!!!\n", p->nodenum);
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum)
 					continue;
@@ -1560,9 +1556,9 @@ static void *voter_primary_client(void *data)
 						mydigest = crc32_bufs(challenge, password);
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
-							if ((!p->priconn) && (option_verbose >= 3))
-								ast_verb(3, "Primary client for %d connected (with challenge=%s)\n",
-											p->nodenum, p->primary_challenge);
+							if (!p->priconn) {
+								ast_verb(3, "Primary client for %d connected (with challenge=%s)\n", p->nodenum, p->primary_challenge);
+							}
 							p->priconn = 1;
 							lastrx = tv;
 						} else {
@@ -2695,22 +2691,29 @@ static void voter_display(int fd, struct voter_pvt *p, int doips)
 		}
 	}
 
-	for (j = 0; j < ncols; j++)
+	for (j = 0; j < ncols; j++) {
 		str[j] = ' ';
+	}
 	str[j] = 0;
 	ast_cli(fd, " %s \r", str);
 
+	/* Temporarily disable other verbose messages as long as we're running.
+	 * XXX This should probably be done for just *THIS* console, not all of them. */
 	wasverbose = option_verbose;
 	option_verbose = 0;
 
 	for (;;) {
-		if (rad_rxwait(fd, 100))
+		/* Repeat every 100ms */
+		if (rad_rxwait(fd, 100)) {
 			break;
-		if (vt100compat)
-			ast_cli(fd, "\033[2J\033[H");
+		}
+		if (vt100compat) {
+			ast_cli(fd, "\033[2J\033[H"); /* Clear the screen */
+		}
 		ast_cli(fd, "VOTER INSTANCE %d DISPLAY:\n\n", p->nodenum);
-		if (hasmaster && (!master_time.vtime_sec))
+		if (hasmaster && (!master_time.vtime_sec)) {
 			ast_cli(fd, "*** WARNING -- LOSS OF MASTER TIMING SOURCE ***\n\n");
+		}
 		hasdyn = 0;
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum)
@@ -3224,8 +3227,7 @@ static void voter_xmit_master(void)
 		if (ast_tvzero(client->lastdyntime))
 			continue;
 		if (voter_tvdiff_ms(tv, client->lastdyntime) > dyntime) {
-			if (option_verbose >= 3)
-				ast_verb(3, "DYN client %s past lease time\n", client->name);
+			ast_verb(3, "DYN client %s past lease time\n", client->name);
 			memset(&client->lastdyntime, 0, sizeof(client->lastheardtime));
 			memset(&client->sin, 0, sizeof(client->sin));
 		}
@@ -3266,8 +3268,7 @@ static void *voter_timer(void *data)
 				if (!ast_tvzero(client->lastheardtime)
 					&& (voter_tvdiff_ms(tv, client->lastheardtime) >
 						((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
-					if (option_verbose >= 3)
-						ast_verb(3, "Voter client %s disconnect (timeout)\n", client->name);
+					ast_verb(3, "Voter client %s disconnect (timeout)\n", client->name);
 					client->heardfrom = 0;
 					client->respdigest = 0;
 					client->lastheardtime.tv_sec = client->lastheardtime.tv_usec = 0;
@@ -3343,8 +3344,7 @@ static void *voter_reader(void *data)
 	} pingpacket;
 #pragma pack(pop)
 
-	if (option_verbose > 2)
-		ast_verb(3, "voter: reader thread started.\n");
+	ast_verb(3, "voter: reader thread started.\n");
 	ast_mutex_lock(&voter_lock);
 	master_port = 0;
 	while (run_forever && (!ast_shutting_down())) {
@@ -3409,8 +3409,7 @@ static void *voter_reader(void *data)
 							if (ast_tvzero(client->lastdyntime))
 								continue;
 							if (voter_tvdiff_ms(tv, client->lastdyntime) > dyntime) {
-								if (option_verbose >= 3)
-									ast_verb(3, "DYN client %s past lease time\n", client->name);
+								ast_verb(3, "DYN client %s past lease time\n", client->name);
 								memset(&client->lastdyntime, 0, sizeof(client->lastheardtime));
 								memset(&client->sin, 0, sizeof(client->sin));
 								continue;
@@ -3421,8 +3420,7 @@ static void *voter_reader(void *data)
 								continue;
 							if (client->sin.sin_port != sin.sin_port)
 								continue;
-							if (option_verbose > 4)
-								ast_verb(3, "Using existing Dynamic client %s for %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
+							ast_verb(3, "Using existing Dynamic client %s for %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
 							break;
 						}
 					}
@@ -3438,8 +3436,7 @@ static void *voter_reader(void *data)
 							/* okay, we found an empty dynamic slot with proper digest */
 							gettimeofday(&client->lastdyntime, NULL);
 							client->sin = sin;
-							if (option_verbose >= 3)
-								ast_verb(3, "Bound new Dynamic client %s to %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
+							ast_verb(3, "Bound new Dynamic client %s to %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
 							break;
 						}
 					}
@@ -3808,9 +3805,7 @@ static void *voter_reader(void *data)
 									if (!ast_tvzero(client->lastheardtime)
 										&& (voter_tvdiff_ms(tv, client->lastheardtime) >
 											((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
-										if (option_verbose >= 3)
-											ast_verb(3, "Voter client %s disconnect (timeout)\n",
-														client->name);
+										ast_verb(3, "Voter client %s disconnect (timeout)\n", client->name);
 										client->heardfrom = 0;
 										client->respdigest = 0;
 									}
@@ -4424,8 +4419,7 @@ static void *voter_reader(void *data)
 		}
 	}
 	ast_mutex_unlock(&voter_lock);
-	if (option_verbose > 2)
-		ast_verb(3, "voter: read thread exited.\n");
+	ast_verb(3, "voter: read thread exited.\n");
 	return NULL;
 }
 
