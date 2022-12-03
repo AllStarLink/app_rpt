@@ -29,19 +29,9 @@
  * the threaded routines, which do the actual work <behind the scenes> of keeping multiple
  * connections open, passing telemetry, etc.  rpt_master handles the management of the threaded
  * routines used (rpt_master_thread is the p_thread structure).
- *
- * Having gone through this code during an attempt at porting to this Asterisk 1.8, I recommend
- * that anyone who is serious about trying to understand this code, to liberally sprinkle
- * debugging statements throughout it and run it.  The program flow may surprise you.
- *
- * Note that due changes in later versions of asterisk, you cannot simply drop this module into
- * the build tree and expect it to work.  There has been some significant renaming of
- * key variables and structures between 1.4 and later versions of Asterisk.  Additionally,
- * the changes to how the pbx module passes calls off to applications has changed as well,
- * which causes app_rpt to fail without a modification of the base Asterisk code in these
- * later versions.
  * --------------------------------------
  */
+
 /*! \file
  *
  * \brief Radio Repeater / Remote Base program
@@ -53,6 +43,7 @@
  * \note contributions by Steven Henke, W9SH, <w9sh@arrl.net>
  * \note contributions by Mike Zingman, N4IRR
  * \note contributions by Steve Zingman, N4IRS
+ * \note significant rewrite for modern Asterisk by Naveen Albert <asterisk@phreaknet.org>
  *
  * \note Allison ducking code by W9SH
  * \ported by Adam KC1KCC
@@ -70,16 +61,15 @@
  *
  * context=string		:	Override default context with "string"
  * dialtime=ms			:	Specify the max number of milliseconds between phone number digits (1000 milliseconds = 1 second)
- * farenddisconnect=1		:	Automatically disconnect when called party hangs up
- * noct=1			:	Don't send repeater courtesy tone during autopatch calls
- * quiet=1			:	Don't send dial tone, or connect messages. Do not send patch down message when called party hangs up
+ * farenddisconnect=1	:	Automatically disconnect when called party hangs up
+ * noct=1				:	Don't send repeater courtesy tone during autopatch calls
+ * quiet=1				:	Don't send dial tone, or connect messages. Do not send patch down message when called party hangs up
  *
  *
  * Example: 123=autopatchup,dialtime=20000,noct=1,farenddisconnect=1
  *
  *  To send an asterisk (*) while dialing or talking on phone,
- *  use the autopatch acess code.
- *
+ *  use the autopatch access code.
  *
  * status cmds:
  *
@@ -280,7 +270,7 @@
  * to connect to another node
  *
  *
-*/
+ */
 
 /*** MODULEINFO
 	<depend>tonezone</depend>
@@ -1116,10 +1106,6 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
  *  This is the main entry point from the Asterisk call handler to app_rpt when a new "call" is detected and passed off
  *  This code sets up all the necessary variables for the rpt_master threads to take over handling/processing anything
  *  related to this call.  Calls are actually channels that are passed from the pbx application to app_rpt.
- *  
- *  NOTE: DUE TO THE WAY LATER VERSIONS OF ASTERISK PASS CALLS, ANY ATTEMPTS TO USE APP_RPT.C WITHOUT ADDING BACK IN THE
- *        "MISSING" PIECES TO THE ASTERISK CALL HANDLER WILL RESULT IN APP_RPT DROPPING ALL CALLS (CHANNELS) PASSED TO IT
- *        IMMEDIATELY AFTER THIS ROUTINE ATTEMPTS TO PASS IT TO RPT_MASTER'S THREADS.
  */
 
 void *rpt_call(void *this)
@@ -1134,7 +1120,7 @@ void *rpt_call(void *this)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		/*! \todo should probably bail out or something */
+		pthread_exit(NULL);
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
@@ -2938,7 +2924,9 @@ static void *rpt(void *this)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		/*! \todo bail out or something */
+		rpt_mutex_unlock(&myrpt->lock);
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		pthread_exit(NULL);
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
