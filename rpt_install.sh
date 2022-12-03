@@ -86,6 +86,8 @@ rpt_add "apps/app_rpt/rpt_manager.c"
 rpt_add "apps/app_rpt/rpt_manager.h"
 rpt_add "apps/app_rpt/rpt_translate.c"
 rpt_add "apps/app_rpt/rpt_translate.h"
+rpt_add "apps/app_rpt/rpt_rig.c"
+rpt_add "apps/app_rpt/rpt_rig.h"
 rpt_add "channels/chan_echolink.c"
 rpt_add "channels/chan_simpleusb.c"
 

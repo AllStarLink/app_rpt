@@ -913,31 +913,7 @@ time_t rpt_starttime(void);
 int function_table_index(const char *s);
 void donodelog(struct rpt *myrpt, char *str);
 void rpt_event_process(struct rpt *myrpt);
-int split_ctcss_freq(char *hertz, char *decimal, char *freq);
-int check_freq(struct rpt *myrpt, int m, int d, int *defmode);
-int multimode_bump_freq(struct rpt *myrpt, int interval);
 void *rpt_call(void *this);
 
 /* forward declarations */
-int service_scan(struct rpt *myrpt);
-int set_mode_ft897(struct rpt *myrpt, char newmode);
-int set_mode_ft100(struct rpt *myrpt, char newmode);
-int set_mode_ic706(struct rpt *myrpt, char newmode);
-int simple_command_ft897(struct rpt *myrpt, char command);
-int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1);
-int setrem(struct rpt *myrpt);
-int channel_revert(struct rpt *myrpt);
-int channel_steer(struct rpt *myrpt, char *data);
 void rpt_telemetry(struct rpt *myrpt,int mode, void *data);
-
-/*
-* Forward decl's - these suppress compiler warnings when funcs coded further down the file than thier invokation
-*/
-
-int set_ft897(struct rpt *myrpt);
-int set_ft100(struct rpt *myrpt);
-int set_ft950(struct rpt *myrpt);
-int set_ic706(struct rpt *myrpt);
-int setkenwood(struct rpt *myrpt);
-int set_tm271(struct rpt *myrpt);
-int set_tmd700(struct rpt *myrpt);

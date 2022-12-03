@@ -18,6 +18,7 @@
 #include "rpt_utils.h" /* use split_freq */
 #include "rpt_serial.h"
 #include "rpt_xcat.h"
+#include "rpt_rig.h"
 
 int check_freq_xcat(int m, int d, int *defmode)
 {
@@ -29,7 +30,7 @@ int check_freq_xcat(int m, int d, int *defmode)
 	}
 	if (m == 29) {				/* 10 meters */
 		if (d > 70000)
-			return -1;
+		return -1;
 	} else if ((m >= 28) && (m < 30)) {
 		;
 	} else if ((m >= 50) && (m < 54)) {

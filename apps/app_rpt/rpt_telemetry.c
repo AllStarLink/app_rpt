@@ -29,6 +29,7 @@
 #include "rpt_telemetry.h"
 #include "rpt_capabilities.h"
 #include "rpt_xcat.h"
+#include "rpt_rig.h"
 
 extern struct rpt rpt_vars[MAXRPTS];
 

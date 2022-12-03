@@ -14,6 +14,7 @@
 #include "rpt_config.h"
 #include "rpt_manager.h"
 #include "rpt_utils.h" /* use myatoi */
+#include "rpt_rig.h" /* use setrem */
 
 extern struct rpt rpt_vars[MAXRPTS];
 

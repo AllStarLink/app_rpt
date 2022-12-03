@@ -24,6 +24,7 @@
 #include "rpt_link.h"
 #include "rpt_daq.h"
 #include "rpt_functions.h"
+#include "rpt_rig.h"
 
 /*!
  * \brief DTMF Tones - frequency pairs used to generate them along with the required timings
