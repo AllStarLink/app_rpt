@@ -808,8 +808,9 @@ void rpt_event_process(struct rpt *myrpt)
 			continue;
 		}
 		/* if not command to execute, go to next one */
-		if (!cmd)
+		if (!cmd) {
 			continue;
+		}
 		if (action == 'F') {	/* excecute a function */
 			rpt_mutex_lock(&myrpt->lock);
 			if ((MAXMACRO - strlen(myrpt->macrobuf)) >= strlen(cmd)) {
@@ -961,43 +962,58 @@ static void doconpgm(struct rpt *myrpt, char *them)
 	return;
 }
 
+static void *perform_statpost(void *stats_url)
+{
+	char *str;
+	long rescode = 0;
+	CURL *curl = curl_easy_init();
+
+	if (!curl) {
+		return NULL;
+	}
+
+	str = (char *) stats_url;
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
+	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+	curl_easy_setopt(curl, CURLOPT_URL, str);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
+	curl_easy_perform(curl);
+	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rescode);
+	curl_easy_cleanup(curl);
+
+	if (rescode != 200) {
+		ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld\n", (char *) stats_url, rescode);
+	}
+	ast_free(stats_url); /* Free here since parent is not responsible for it. */
+	return NULL;
+}
+
 static void statpost(struct rpt *myrpt, char *pairs)
 {
 	char *str;
-	int pid;
 	time_t now;
 	unsigned int seq;
-	CURL *curl;
-	int *rescode;
+	int len;
+	pthread_t statpost_thread;
 
-	if (!myrpt->p.statpost_url)
+	if (!myrpt->p.statpost_url) {
 		return;
-	str = ast_malloc(strlen(pairs) + strlen(myrpt->p.statpost_url) + 200);
+	}
+
+	len = strlen(pairs) + strlen(myrpt->p.statpost_url) + 200;
+	str = ast_malloc(len);
+
 	ast_mutex_lock(&myrpt->statpost_lock);
 	seq = ++myrpt->statpost_seqno;
 	ast_mutex_unlock(&myrpt->statpost_lock);
+
 	time(&now);
-	sprintf(str, "%s?node=%s&time=%u&seqno=%u", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq);
-	if (pairs)
-		sprintf(str + strlen(str), "&%s", pairs);
-	if (!(pid = fork())) {
-		curl = curl_easy_init();
-		if (curl) {
-			curl_easy_setopt(curl, CURLOPT_URL, str);
-			curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
-			curl_easy_perform(curl);
-			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rescode);
-			curl_easy_cleanup(curl);
-			curl_global_cleanup();
-		}
-		if (*rescode == 200)
-			return;
-		ast_log(LOG_ERROR, "statpost failed\n");
-		perror("asterisk");
-		exit(0);
+	snprintf(str, len, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int)now, seq, pairs ? "&" : "", S_OR(pairs, ""));
+
+	/* Make the actual cURL call in a separate thread, so the channel can continue. */
+	if (ast_pthread_create(&statpost_thread, NULL, perform_statpost, (void *)str)) {
+		ast_log(LOG_ERROR, "Error creating statpost thread\n");
 	}
-	ast_free(str);
-	return;
 }
 
 /* 
@@ -3294,9 +3310,11 @@ static void *rpt(void *this)
 	if (myrpt->remoterig && !ISRIG_RTX(myrpt->remoterig))
 		setrem(myrpt);
 	/* wait for telem to be done */
-	while ((ms >= 0) && (myrpt->tele.next != &myrpt->tele))
-		if (ast_safe_sleep(myrpt->rxchannel, 50) == -1)
+	while ((ms >= 0) && (myrpt->tele.next != &myrpt->tele)) {
+		if (ast_safe_sleep(myrpt->rxchannel, 50) == -1) {
 			ms = -1;
+		}
+	}
 	lastmyrx = 0;
 	myfirst = 0;
 	myrpt->lastitx = -1;
@@ -3340,8 +3358,7 @@ static void *rpt(void *this)
 			ast_debug(2, "myrpt->linkactivityflag = %d\n", (int) myrpt->linkactivityflag);
 			ast_debug(2, "myrpt->rptinacttimer = %d\n", myrpt->rptinacttimer);
 			ast_debug(2, "myrpt->rptinactwaskeyedflag = %d\n", (int) myrpt->rptinactwaskeyedflag);
-			ast_debug(2, "myrpt->p.s[myrpt->p.sysstate_cur].sleepena = %d\n",
-					myrpt->p.s[myrpt->p.sysstate_cur].sleepena);
+			ast_debug(2, "myrpt->p.s[myrpt->p.sysstate_cur].sleepena = %d\n", myrpt->p.s[myrpt->p.sysstate_cur].sleepena);
 			ast_debug(2, "myrpt->sleeptimer = %d\n", (int) myrpt->sleeptimer);
 			ast_debug(2, "myrpt->sleep = %d\n", (int) myrpt->sleep);
 			ast_debug(2, "myrpt->sleepreq = %d\n", (int) myrpt->sleepreq);
@@ -3882,8 +3899,9 @@ static void *rpt(void *this)
 		}
 		myrpt->scram++;
 		who = ast_waitfor_n(cs1, n, &ms);
-		if (who == NULL)
+		if (who == NULL) {
 			ms = 0;
+		}
 		elap = MSWAIT - ms;
 		/* @@@@@@ LOCK @@@@@@@ */
 		rpt_mutex_lock(&myrpt->lock);
@@ -5830,8 +5848,9 @@ static void *rpt_master(void *ignore)
 						ast_log(LOG_WARNING, "RPT thread restarted on %s\n", rpt_vars[i].name);
 						rpt_vars[i].threadrestarts++;
 					}
-				} else
+				} else {
 					rpt_vars[i].threadrestarts = 0;
+				}
 
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
 				pthread_attr_init(&attr);
@@ -5842,14 +5861,12 @@ static void *rpt_master(void *ignore)
 			}
 		}
 		for (i = 0; i < nrpts; i++) {
-			if (rpt_vars[i].deleted)
+			if (rpt_vars[i].deleted || rpt_vars[i].remote || !rpt_vars[i].p.outstreamcmd) {
 				continue;
-			if (rpt_vars[i].remote)
+			}
+			if (rpt_vars[i].outstreampid && (kill(rpt_vars[i].outstreampid, 0) != -1)) {
 				continue;
-			if (!rpt_vars[i].p.outstreamcmd)
-				continue;
-			if (rpt_vars[i].outstreampid && (kill(rpt_vars[i].outstreampid, 0) != -1))
-				continue;
+			}
 			rpt_vars[i].outstreampid = 0;
 			startoutstream(&rpt_vars[i]);
 		}
