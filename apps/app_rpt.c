@@ -962,6 +962,12 @@ static void doconpgm(struct rpt *myrpt, char *them)
 	return;
 }
 
+/*! \brief Waste the output of libcurl (the OK is sent to stdout) */
+static size_t writefunction(void *ptr, size_t size, size_t nmemb, void *stream)
+{
+	return (nmemb*size);
+}
+
 static void *perform_statpost(void *stats_url)
 {
 	char *str;
@@ -1010,7 +1016,7 @@ static void statpost(struct rpt *myrpt, char *pairs)
 	time(&now);
 	snprintf(str, len, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int)now, seq, pairs ? "&" : "", S_OR(pairs, ""));
 
-	/* Make the actual cURL call in a separate thread, so the channel can continue. */
+	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
 	if (ast_pthread_create(&statpost_thread, NULL, perform_statpost, (void *)str)) {
 		ast_log(LOG_ERROR, "Error creating statpost thread\n");
 	}
