@@ -42,6 +42,10 @@ int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci, const 
 
 int rpt_disable_cdr(struct ast_channel *chan)
 {
+	if (!ast_channel_cdr(chan)) {
+		ast_debug(4, "No CDR present on %s\n", ast_channel_name(chan));
+		return 0;
+	}
 	if (ast_cdr_set_property(ast_channel_name(chan), AST_CDR_FLAG_DISABLE_ALL)) {
 		ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(chan));
 		return -1;
