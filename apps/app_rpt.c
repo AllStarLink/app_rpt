@@ -999,7 +999,7 @@ static void statpost(struct rpt *myrpt, char *pairs)
 	char *str;
 	time_t now;
 	unsigned int seq;
-	int len;
+	int res, len;
 	pthread_t statpost_thread;
 
 	if (!myrpt->p.statpost_url) {
@@ -1017,8 +1017,11 @@ static void statpost(struct rpt *myrpt, char *pairs)
 	snprintf(str, len, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int)now, seq, pairs ? "&" : "", S_OR(pairs, ""));
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
-	if (ast_pthread_create(&statpost_thread, NULL, perform_statpost, (void *)str)) {
-		ast_log(LOG_ERROR, "Error creating statpost thread\n");
+	ast_debug(4, "Making statpost to %s\n", str);
+	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, (void *) str);
+	if (res) {
+		ast_log(LOG_ERROR, "Error creating statpost thread: %d\n", res);
+		ast_free(str);
 	}
 }
 
