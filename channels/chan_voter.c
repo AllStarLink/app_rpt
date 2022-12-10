@@ -1217,7 +1217,6 @@ static struct ast_frame *ast_frcat(struct ast_frame *f1, struct ast_frame *f2)
 /* must be called with voter_lock locked */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
-
 	int i, j, k, x, maxprio, haslastaudio;
 	struct ast_frame fr, *f1, *f2;
 	struct voter_client *client;
@@ -1346,6 +1345,13 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	if (p->priconn)
 		maxclient = NULL;
 	if (!maxclient) {			/* if nothing there */
+		/* XXX p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
+		 * For now, this prevents a crash from queuing a frame to a NULL channel. */
+		if (!p->owner) {
+			ast_log(LOG_WARNING, "Cannot queue frame, %p has no owner\n", p);
+			ast_frfree(f1);
+			return 0;
+		}
 		if (p->rxkey && p->dsp && p->usedtmf) {
 			memset(silbuf, 0, sizeof(silbuf));
 			memset(&fr, 0, sizeof(struct ast_frame));
@@ -1429,9 +1435,9 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		}
 		ast_frfree(f2);
 	}
-	if (!x)
+	if (!x) {
 		ast_queue_frame(p->owner, f1);
-	else {
+	} else {
 		memset(silbuf, 0, sizeof(silbuf));
 		memset(&fr, 0, sizeof(struct ast_frame));
 		fr.frametype = AST_FRAME_VOICE;
@@ -3344,7 +3350,7 @@ static void *voter_reader(void *data)
 	} pingpacket;
 #pragma pack(pop)
 
-	ast_verb(3, "voter: reader thread started.\n");
+	ast_debug(1, "voter: reader thread started.\n");
 	ast_mutex_lock(&voter_lock);
 	master_port = 0;
 	while (run_forever && (!ast_shutting_down())) {
@@ -4419,7 +4425,7 @@ static void *voter_reader(void *data)
 		}
 	}
 	ast_mutex_unlock(&voter_lock);
-	ast_verb(3, "voter: read thread exited.\n");
+	ast_debug(1, "voter: read thread exited.\n");
 	return NULL;
 }
 
