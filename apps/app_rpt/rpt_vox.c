@@ -71,10 +71,10 @@ int dovox(struct vox *v, short *buf, int bs)
 	if (v->voxena)
 		threshold = v->speech_energy / 8;
 	else {
-		threshold = mymax(v->speech_energy / 16, v->noise_energy * 2);
-		threshold = mymin(threshold, VOX_MAX_THRESHOLD);
+		threshold = MAX(v->speech_energy / 16, v->noise_energy * 2);
+		threshold = MIN(threshold, VOX_MAX_THRESHOLD);
 	}
-	threshold = mymax(threshold, VOX_MIN_THRESHOLD);
+	threshold = MAX(threshold, VOX_MIN_THRESHOLD);
 	if (energy > threshold) {
 		if (v->voxena)
 			v->noise_energy *= 0.75;

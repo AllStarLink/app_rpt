@@ -3023,11 +3023,11 @@ static void *rpt(void *this)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3) && strcasecmp(myrpt->rxchanname, "DAHDI/pseudo")) {
+		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3) && !IS_PSEUDO_NAME(myrpt->rxchanname)) {
 			myrpt->dahditxchannel = myrpt->txchannel;
 		}
 	}
-	if (strncasecmp(ast_channel_name(myrpt->txchannel), "DAHDI/pseudo", 12)) {
+	if (!IS_PSEUDO(myrpt->txchannel)) {
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
 	}
@@ -3746,7 +3746,7 @@ static void *rpt(void *this)
 			myrpt->dailykeyups++;
 			myrpt->totalkeyups++;
 			rpt_mutex_unlock(&myrpt->lock);
-			if (strncasecmp(ast_channel_name(myrpt->txchannel), "DAHDI/pseudo", 12)) {
+			if (!IS_PSEUDO(myrpt->txchannel)) {
 				ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
 			}
 			rpt_mutex_lock(&myrpt->lock);
@@ -3760,7 +3760,7 @@ static void *rpt(void *this)
 			myrpt->txkeyed = 0;
 			time(&myrpt->lasttxkeyedtime);
 			rpt_mutex_unlock(&myrpt->lock);
-			if (strncasecmp(ast_channel_name(myrpt->txchannel), "DAHDI/pseudo", 12)) {
+			if (!IS_PSEUDO(myrpt->txchannel)) {
 				ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
 			}
 			rpt_mutex_lock(&myrpt->lock);

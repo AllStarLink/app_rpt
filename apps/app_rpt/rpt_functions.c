@@ -845,7 +845,7 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 			 (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) ||
 			 (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)))) {
 			myrpt->remotetx = 0;
-			if (strncasecmp(ast_channel_name(myrpt->txchannel), "DAHDI/pseudo", 12)) {
+			if (!IS_PSEUDO(myrpt->txchannel)) {
 				ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
 			}
 			myrpt->tunetx = 0;

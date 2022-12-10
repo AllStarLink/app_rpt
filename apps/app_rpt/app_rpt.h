@@ -1,5 +1,5 @@
 
-#define VERSION_MAJOR 2
+#define VERSION_MAJOR 3
 #define VERSION_MINOR 0
 #define VERSION_PATCH 0
 
@@ -336,9 +336,6 @@ struct vox {
 	int	ondebcnt;
 } ;
 
-#define	mymax(x,y) ((x > y) ? x : y)
-#define	mymin(x,y) ((x < y) ? x : y)
-
 struct rpt_topkey
 {
 	char	node[TOPKEYMAXSTR];
@@ -356,16 +353,11 @@ struct rpt_xlat
 	time_t	lastone;
 };
 
-/*
- * Structure that holds information regarding app_rpt operation
-*/ 
+/*! \brief Structure that holds information regarding app_rpt operation */
 struct rpt;
 
-/*
- * Structure used to manage links 
-*/
-struct rpt_link
-{
+/*! \brief Structure used to manage links */
+struct rpt_link {
 	struct rpt_link *next;
 	struct rpt_link *prev;
 	char	mode;			/* 1 if in tx mode */
@@ -423,13 +415,10 @@ struct rpt_link
 	time_t	lastunkeytime;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
-} ;
+};
 
-/*
- * Structure used to manage link status
-*/
-struct rpt_lstat
-{
+/*! \brief Structure used to manage link status */
+struct rpt_lstat {
 	struct	rpt_lstat *next;
 	struct	rpt_lstat *prev;
 	char	peer[MAXPEERSTR];
@@ -440,10 +429,9 @@ struct rpt_lstat
 	char	thisconnected;
 	long long	connecttime;
 	struct	rpt_chan_stat chan_stat[NRPTSTAT];
-} ;
+};
 
-struct rpt_tele
-{
+struct rpt_tele {
 	struct rpt_tele *next;
 	struct rpt_tele *prev;
 	struct rpt *rpt;
@@ -459,25 +447,23 @@ struct rpt_tele
 	unsigned int parrot;
 	char killed;
 	pthread_t threadid;
-} ;
+};
 
-struct function_table_tag
-{
+struct function_table_tag {
 	char action[ACTIONSIZE];
-	int (*function)(struct rpt *myrpt, char *param, char *digitbuf, 
-		int command_source, struct rpt_link *mylink);
-} ;
+	int (*function)(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+};
 
 /*
  * Structs used in the DAQ code
  */
-struct daq_tx_entry_tag{
+struct daq_tx_entry_tag {
 	char txbuff[32];
 	struct daq_tx_entry_tag *prev;
 	struct daq_tx_entry_tag *next;
 };
 
-struct daq_pin_entry_tag{
+struct daq_pin_entry_tag {
 	int num;
 	int pintype;
 	int command;
@@ -494,7 +480,7 @@ struct daq_pin_entry_tag{
 	struct daq_pin_entry_tag *next;
 };
 
-struct daq_entry_tag{
+struct daq_entry_tag {
 	char name[MAX_DAQ_NAME];
 	char dev[MAX_DAQ_DEV];
 	int type;
@@ -509,28 +495,24 @@ struct daq_entry_tag{
 	struct daq_entry_tag *next;
 };
 
-struct daq_tag{
+struct daq_tag {
 	int ndaqs;
 	struct daq_entry_tag *hw;
 };
 
 
-/* Used to store the morse code patterns */
-
-struct morse_bits
-{		  
+/*! \brief Used to store the morse code patterns */
+struct morse_bits {
 	int len;
 	int ddcomb;
-} ;
+};
 
-struct telem_defaults
-{
+struct telem_defaults {
 	char name[20];
 	char value[200];
-} ;
+};
 
-struct sysstate
-{
+struct sysstate {
 	char txdisable;
 	char totdisable;
 	char linkfundisable;
@@ -549,8 +531,7 @@ struct sysstate
 #define CMD_STATE_READY 2
 #define CMD_STATE_EXECUTING 3
 
-struct rpt_cmd_struct
-{
+struct rpt_cmd_struct {
     int state;
     int functionNumber;
     char param[MAXDTMF];
@@ -563,8 +544,7 @@ enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 /*
  * Populate rpt structure with data
 */ 
-struct rpt
-{
+struct rpt {
 	ast_mutex_t lock;
 	ast_mutex_t remlock;
 	ast_mutex_t statpost_lock;
@@ -737,10 +717,10 @@ struct rpt
 	char rem_dtmfbuf[MAXDTMF];
 	char lastdtmfcommand[MAXDTMF];
 	char cmdnode[50];
-	char nowchan;						// channel now
-	char waschan;						// channel selected initially or by command
-	char bargechan;						// barge in channel
-	char macropatch;					// autopatch via tonemacro state
+	char nowchan;						/*!< channel now */
+	char waschan;						/*!< channel selected initially or by command */
+	char bargechan;						/*!< barge in channel */
+	char macropatch;					/*!< autopatch via tonemacro state */
 	char parrotstate;
 	char parrotonce;
 	char linkactivityflag;
@@ -903,6 +883,9 @@ struct nodelog {
 	char archivedir[MAXNODESTR];
 	char str[MAXNODESTR * 2];
 };
+
+#define IS_PSEUDO(c) (!strncasecmp(ast_channel_name(c), "DAHDI/pseudo", 12))
+#define IS_PSEUDO_NAME(c) (!strncasecmp(c, "DAHDI/pseudo", 12))
 
 int rpt_debug_level(void);
 int rpt_set_debug_level(int newlevel);
