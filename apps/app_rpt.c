@@ -2485,7 +2485,6 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 {
 	int res;
-	pthread_attr_t attr;
 	char cmd[MAXDTMF + 1] = "", c, tone[10];
 
 	c = c_in & 0x7f;
@@ -2641,9 +2640,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			myrpt->cidx = 0;
 			myrpt->exten[myrpt->cidx] = 0;
 			rpt_mutex_unlock(&myrpt->lock);
-			pthread_attr_init(&attr);
-			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-			ast_pthread_create(&myrpt->rpt_call_thread, &attr, rpt_call, (void *) myrpt);
+			ast_pthread_create_detached(&myrpt->rpt_call_thread, NULL, rpt_call, (void *) myrpt);
 			return;
 		}
 	}
@@ -5698,7 +5695,6 @@ static void *rpt(void *this)
 static void *rpt_master(void *ignore)
 {
 	int i, n;
-	pthread_attr_t attr;
 	struct ast_config *cfg;
 	char *this, *val;
 
@@ -5824,9 +5820,7 @@ static void *rpt_master(void *ignore)
 			pthread_exit(NULL);
 		}
 		rpt_vars[i].ready = 0;
-		pthread_attr_init(&attr);
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-		ast_pthread_create(&rpt_vars[i].rpt_thread, &attr, rpt, (void *) &rpt_vars[i]);
+		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
 	}
 	usleep(500000);
 	time(&starttime);
@@ -5863,9 +5857,7 @@ static void *rpt_master(void *ignore)
 				}
 
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
-				pthread_attr_init(&attr);
-				pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-				ast_pthread_create(&rpt_vars[i].rpt_thread, &attr, rpt, (void *) &rpt_vars[i]);
+				ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
 				/* if (!rpt_vars[i].xlink) */
 				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
 			}
