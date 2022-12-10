@@ -3023,8 +3023,9 @@ static void *rpt(void *this)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		if ((!strncasecmp(myrpt->rxchanname, "DAHDI", 3)) && strcasecmp(myrpt->rxchanname, "Zap/pseudo"))
+		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3) && strcasecmp(myrpt->rxchanname, "DAHDI/pseudo")) {
 			myrpt->dahditxchannel = myrpt->txchannel;
+		}
 	}
 	if (strncasecmp(ast_channel_name(myrpt->txchannel), "DAHDI/pseudo", 12)) {
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
@@ -3759,7 +3760,7 @@ static void *rpt(void *this)
 			myrpt->txkeyed = 0;
 			time(&myrpt->lasttxkeyedtime);
 			rpt_mutex_unlock(&myrpt->lock);
-			if (strncasecmp(ast_channel_name(myrpt->txchannel), "DAHDI/Pseudo", 12)) {
+			if (strncasecmp(ast_channel_name(myrpt->txchannel), "DAHDI/pseudo", 12)) {
 				ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
 			}
 			rpt_mutex_lock(&myrpt->lock);
@@ -5414,9 +5415,9 @@ static void *rpt(void *this)
 						}
 					}
 					/* foop */
-					if (l->chan && (l->lastrx || (!altlink(myrpt, l))) &&
-						((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX")))
+					if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
 						ast_write(l->chan, f);
+					}
 				}
 				if (f->frametype == AST_FRAME_CONTROL) {
 					if (f->subclass.integer == AST_CONTROL_HANGUP) {
@@ -5479,7 +5480,7 @@ static void *rpt(void *this)
 				/* go thru all the links */
 				while (l != &myrpt->links) {
 					/* foop */
-					if (l->chan && altlink(myrpt, l) && (!l->lastrx) && ((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX"))) {
+					if (l->chan && altlink(myrpt, l) && (!l->lastrx) && ((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
 						if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "irlp"))) {
 							ast_write(l->chan, fs);
 						} else {
@@ -6847,8 +6848,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		*--tele = '/';
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3))
+		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3)) {
 			myrpt->dahditxchannel = myrpt->rxchannel;
+		}
 	}
 	i = 3;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &i, sizeof(char), 0);
@@ -7605,8 +7607,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				break;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
-				if ((myrpt->newkey < 2) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX"))
+				if ((myrpt->newkey < 2) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX2")) {
 					ast_write(chan, f);
+				}
 			}
 			if (f->frametype == AST_FRAME_CONTROL) {
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {

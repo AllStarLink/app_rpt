@@ -887,10 +887,12 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
 			/* ignore if not a USB channel */
-			if (strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
-				strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "voter") &&
-				strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))
+			/* BUGBUG XXX This looks wrong to me... won't it always be false? */
+			if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
+				!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "voter") &&
+				!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 				return RESULT_SUCCESS;
+			}
 			telem = myrpt->tele.next;
 			while (telem != &myrpt->tele) {
 				if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
