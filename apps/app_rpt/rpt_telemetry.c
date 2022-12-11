@@ -884,13 +884,21 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	return;
 }
 
-/*! \brief Try to catch setting active_telem NULL when we weren't what it was set to */
+/*! \brief Try to catch setting active_telem NULL when we weren't what it was set to
+ * If somebody sets active_telem to NULL when it wasn't the current telem, then
+ * that can cause a queued telemetry to think the current telem is done when it isn't,
+ * and things will get doubled up.
+ * This isn't really a proper fix (see comment below about using a mutex instead),
+ * but it does avoid this issue until rpt_tele_thread is potentially refactored
+ * to use a mutex instead of using a flag, which is just not a very robust way of serialization.
+ */
 #define telem_done(myrpt) { \
 	if (myrpt->active_telem != mytele) { \
 		ast_log(LOG_WARNING, "Setting active_telem NULL from %p, but mytele was %p?\n", myrpt->active_telem, mytele); \
+	} else { \
+		ast_debug(2, "Set active_telem to NULL (was %p)\n", myrpt->active_telem); \
+		myrpt->active_telem = NULL; \
 	} \
-	ast_debug(2, "Set active_telem to NULL (was %p)\n", myrpt->active_telem); \
-	myrpt->active_telem = NULL; \
 }
 
 /*
