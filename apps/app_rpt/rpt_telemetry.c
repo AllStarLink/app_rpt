@@ -915,8 +915,8 @@ void *rpt_tele_thread(void *this)
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
 	struct rpt_link *l, *l1, linkbase;
-	struct ast_channel *mychannel;
-	int id_malloc, m;
+	struct ast_channel *mychannel = NULL;
+	int id_malloc = 0, m;
 	char *p, *ct, *ct_copy, *ident, *nodename;
 	time_t t, t1, was;
 	struct ast_tm localtm;
@@ -941,26 +941,18 @@ void *rpt_tele_thread(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	nodename = ast_strdup(myrpt->name);
 	if (!nodename) {
-		ast_log(LOG_ERROR, "rpt:Sorry unable strdup nodename\n");
+		ast_log(LOG_ERROR, "Unable to strdup nodename (mode: %d)\n", mytele->mode);
 		rpt_mutex_lock(&myrpt->lock);
-		remque((struct qelem *) mytele);
-		ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_free(mytele);
-		pthread_exit(NULL);
+		goto abort3;
 	}
 
 	if (myrpt->p.ident) {
 		ident = ast_strdup(myrpt->p.ident);
 		if (!ident) {
-			ast_log(LOG_ERROR, "rpt:Sorry unable strdup ident\n");
+			ast_log(LOG_ERROR, "Unable to strdup ident (mode: %d)\n", mytele->mode);
+			id_malloc = 0;
 			rpt_mutex_lock(&myrpt->lock);
-			remque((struct qelem *) mytele);
-			ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_free(nodename);
-			ast_free(mytele);
-			pthread_exit(NULL);
+			goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 		} else {
 			id_malloc = 1;
 		}
@@ -973,7 +965,8 @@ void *rpt_tele_thread(void *this)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		/*! \todo we should probably bail out or exit here or something... */
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
@@ -983,16 +976,9 @@ void *rpt_tele_thread(void *this)
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain pseudo channel (mode: %d)\n", mytele->mode);
 		rpt_mutex_lock(&myrpt->lock);
-		remque((struct qelem *) mytele);
-		ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_free(nodename);
-		if (id_malloc)
-			ast_free(ident);
-		ast_free(mytele);
-		pthread_exit(NULL);
+		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	rpt_disable_cdr(mychannel);
@@ -1038,17 +1024,9 @@ void *rpt_tele_thread(void *this)
 	ci.confmode = DAHDI_CONF_CONFANN;
 	/* first put the channel on the conference in announce mode */
 	if (join_dahdiconf(mychannel, &ci)) {
+		ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mytele->mode);
 		rpt_mutex_lock(&myrpt->lock);
-		telem_done(myrpt);
-		remque((struct qelem *) mytele);
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
-		ast_free(nodename);
-		if (id_malloc)
-			ast_free(ident);
-		ast_free(mytele);
-		ast_hangup(mychannel);
-		pthread_exit(NULL);
+		goto abort;
 	}
 	ast_stopstream(mychannel);
 	res = 0;
@@ -1353,17 +1331,9 @@ void *rpt_tele_thread(void *this)
 			ci.confmode = DAHDI_CONF_CONFANN;
 			/* first put the channel on the conference in announce mode */
 			if (join_dahdiconf(mychannel, &ci)) {
+				ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mytele->mode);
 				rpt_mutex_lock(&myrpt->lock);
-				telem_done(myrpt);
-				remque((struct qelem *) mytele);
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
-				ast_free(nodename);
-				if (id_malloc)
-					ast_free(ident);
-				ast_free(mytele);
-				ast_hangup(mychannel);
-				pthread_exit(NULL);
+				goto abort;
 			}
 			if ((ct = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "remotect"))) {	/* Unlinked Courtesy Tone */
 				ast_safe_sleep(mychannel, 200);
@@ -1389,17 +1359,9 @@ void *rpt_tele_thread(void *this)
 			ci.confmode = DAHDI_CONF_CONFANN;
 			/* first put the channel on the conference in announce mode */
 			if (join_dahdiconf(mychannel, &ci)) {
+				ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mytele->mode);
 				rpt_mutex_lock(&myrpt->lock);
-				telem_done(myrpt);
-				remque((struct qelem *) mytele);
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
-				ast_free(nodename);
-				if (id_malloc)
-					ast_free(ident);
-				ast_free(mytele);
-				ast_hangup(mychannel);
-				pthread_exit(NULL);
+				goto abort;
 			}
 			sprintf(mystr, "%04x", myrpt->lastunit);
 			myrpt->lastunit = 0;
@@ -2062,17 +2024,8 @@ void *rpt_tele_thread(void *this)
 			}
 			l1 = ast_malloc(sizeof(struct rpt_link));
 			if (!l1) {
-				ast_log(LOG_ERROR, "Cannot malloc memory on %s\n", ast_channel_name(mychannel));
-				remque((struct qelem *) mytele);
-				telem_done(myrpt);
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
-				ast_free(nodename);
-				if (id_malloc)
-					ast_free(ident);
-				ast_free(mytele);
-				ast_hangup(mychannel);
-				pthread_exit(NULL);
+				ast_log(LOG_ERROR, "Cannot malloc memory on %s (mode: %d)\n", ast_channel_name(mychannel), mytele->mode);
+				goto abort;
 			}
 			memcpy(l1, l, sizeof(struct rpt_link));
 			l1->next = l1->prev = NULL;
@@ -2571,6 +2524,20 @@ void *rpt_tele_thread(void *this)
 	}
 #endif
 	myrpt->noduck = 0;
+	pthread_exit(NULL);
+abort:
+	telem_done(myrpt);
+abort2:
+	ast_free(nodename);
+abort3:
+	remque((struct qelem *) mytele);
+	rpt_mutex_unlock(&myrpt->lock);
+	if (id_malloc)
+		ast_free(ident);
+	ast_free(mytele);
+	if (mychannel) {
+		ast_hangup(mychannel);
+	}
 	pthread_exit(NULL);
 }
 
