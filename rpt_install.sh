@@ -112,3 +112,16 @@ nproc
 make -j$(nproc) apps
 make -j$(nproc) channels
 make install
+
+# If the rpt sounds don't exist yet, add them
+if [ ! -d /var/lib/asterisk/sounds/en/rpt ]; then
+	printf "RPT sounds don't exist yet, adding them now...\n"
+	mkdir /var/lib/asterisk/sounds/en/rpt
+	# We need subversion, if we don't already have it.
+	if ! which subversion > /dev/null; then
+		apt-get install -y subversion
+	fi
+	# use svn to only check out a single folder, see https://stackoverflow.com/questions/7106012/download-a-single-folder-or-directory-from-a-github-repo/18194523#18194523
+	svn checkout https://github.com/AllStarLink/ASL-Asterisk/trunk/allstar/sounds/rpt
+	mv rpt /var/lib/asterisk/sounds/en/
+fi
