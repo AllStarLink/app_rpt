@@ -3192,8 +3192,12 @@ static int unload_module(void)
 	ao2_ref(voter_tech.capabilities, -1);
 	voter_tech.capabilities = NULL;
 	ast_channel_unregister(&voter_tech);
-	if (nullfd != -1)
+	if (nullfd != -1) {
 		close(nullfd);
+	}
+	if (voter_timing_fd != -1) {
+		close(voter_timing_fd);
+	}
 	return 0;
 }
 
@@ -4871,7 +4875,6 @@ static int reload(void)
 
 static int load_module(void)
 {
-
 	pthread_attr_t attr;
 	struct sockaddr_in sin;
 	int i, bs, utos;
