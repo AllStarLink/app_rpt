@@ -42,6 +42,10 @@ int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
 {
 	int interval;
 
+	/* This code does NOT wait for previous telemetry to complete!
+	 * (that happens at the beginning of rpt_tele_thread).
+	 * We only get here after it's our turn in the first place. */
+
 	do {
 		while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID)))) {
 			if (ast_safe_sleep(chan, 100) < 0)
@@ -50,12 +54,12 @@ int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
 
 		interval = get_wait_interval(myrpt, type);
 		ast_debug(1, "Delay interval = %d\n", interval);
-		if (interval)
-			if (ast_safe_sleep(chan, interval) < 0)
-				return -1;
+		if (interval && ast_safe_sleep(chan, interval) < 0) {
+			return -1;
+		}
 		ast_debug(1, "Delay complete\n");
-	}
-	while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
+	/* This is not superflous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
+	} while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
 	return 0;
 }
 

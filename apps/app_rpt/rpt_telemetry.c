@@ -982,6 +982,10 @@ void *rpt_tele_thread(void *this)
 	ast_answer(mychannel);
 	rpt_mutex_lock(&myrpt->lock);
 	mytele->chan = mychannel;
+
+	/* Wait for previous telemetry to finish before we start so we're not speaking on top of each other.
+	 * XXX This would probably be better implemented using a mutex to serialize than waiting for
+	 * active_telem to be NULL... which isn't super robust with race conditions, etc. */
 	while (myrpt->active_telem && ((myrpt->active_telem->mode == PAGE) || (myrpt->active_telem->mode == MDC1200))) {
 		rpt_mutex_unlock(&myrpt->lock);
 		usleep(100000);
@@ -999,6 +1003,13 @@ void *rpt_tele_thread(void *this)
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		usleep(100000);
+	}
+
+	/* XXX Should never happen, make an assertion? */
+	if (!myrpt->active_telem) {
+		ast_log(LOG_WARNING, "active_telem is NULL, telemetry messages may not be queued properly!\n");
+	} else if (myrpt->active_telem != mytele) {
+		ast_log(LOG_WARNING, "active_telem = %p but mytele = %p?\n", myrpt->active_telem, mytele);
 	}
 
 	/* make a conference for the tx */
@@ -1564,9 +1575,7 @@ void *rpt_tele_thread(void *this)
 		}
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 		if (!res)
-			res =
-				ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? "rpt/remote_disc" : "rpt/remote_busy"),
-							   ast_channel_language(mychannel));
+			res = ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? "rpt/remote_disc" : "rpt/remote_busy"), ast_channel_language(mychannel));
 		break;
 	case REMALREADY:
 		/* wait a little bit */
