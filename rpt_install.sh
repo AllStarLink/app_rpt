@@ -2,24 +2,29 @@
 
 cd /usr/src
 
+# Directory of the repo.
+# If we need to test old versions, easiest to clone this dir, then change this to the new name for testing.
+MYDIR=app_rpt
+
 # Download app_rpt repo if not present already
-if [ ! -d app_rpt ]; then
+if [ ! -d $MYDIR ]; then
 	git clone https://github.com/InterLinked1/app_rpt.git
 else
 	# else, update it
-	cd app_rpt
+	cd $MYDIR
 	git checkout master
 	git pull
 	cd ..
 fi
 
 # cd into Asterisk source directory
+ls -d -v */ | grep "^asterisk" | tail -1
 cd $( ls -d -v */ | grep "^asterisk" | tail -1 )
 
 apt-get install -y libusb-dev # chan_simpleusb and chan_usbradio require libusb-dev on Debian
 modprobe snd-pcm-oss # /dev/dsp1 needs to exist for chan_simpleusb and chan_usbradio to work
 
-cp ../app_rpt/Makefiles.diff /tmp/rpt.diff
+cp ../$MYDIR/Makefiles.diff /tmp/rpt.diff
 git apply /tmp/rpt.diff
 
 echoerr() {
@@ -27,11 +32,11 @@ echoerr() {
 }
 
 rpt_add() {
-	if [ ! -f ../app_rpt/$1 ]; then
+	if [ ! -f ../$MYDIR/$1 ]; then
 		echoerr "WARNING: File $1 does not exist"
 	fi
 	printf "Adding module %s\n" "$1"
-	cp ../app_rpt/$1 $1
+	cp ../$MYDIR/$1 $1
 }
 
 if [ ! -d apps/app_rpt ]; then
@@ -40,6 +45,9 @@ fi
 if [ ! -d channels/xpmr ]; then
 	mkdir channels/xpmr
 fi
+
+# Remove anything that may have been there before (mainly relevant for testing older HEADs)
+rm -f apps/app_rpt/*
 
 rpt_add "apps/app_rpt.c"
 rpt_add "apps/app_gps.c"
@@ -90,10 +98,7 @@ rpt_add "apps/app_rpt/rpt_rig.c"
 rpt_add "apps/app_rpt/rpt_rig.h"
 rpt_add "channels/chan_echolink.c"
 rpt_add "channels/chan_simpleusb.c"
-
-# Until we figure out the dependencies:
 rpt_add "channels/chan_usbradio.c"
-
 rpt_add "channels/chan_tlb.c"
 rpt_add "channels/chan_voter.c"
 rpt_add "channels/chan_usrp.c"
@@ -103,6 +108,7 @@ rpt_add "channels/xpmr/xpmr.c"
 rpt_add "channels/xpmr/xpmr.h"
 rpt_add "channels/xpmr/xpmr_coef.h"
 
-make apps
-make channels
+nproc
+make -j$(nproc) apps
+make -j$(nproc) channels
 make install
