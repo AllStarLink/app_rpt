@@ -59,7 +59,7 @@ int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, cons
 	ast_set_read_format(chan, ast_format_slin);
 	ast_set_write_format(chan, ast_format_slin);
 	rpt_disable_cdr(chan);
-	ast_channel_appl_set(chan, "Apprpt");
+	ast_channel_appl_set(chan, "Rpt");
 	ast_channel_data_set(chan, data);
 
 	/* Set connected to actually set outgoing Caller ID - ast_set_callerid has no effect! */
