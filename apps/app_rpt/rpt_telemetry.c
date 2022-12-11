@@ -884,6 +884,15 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	return;
 }
 
+/*! \brief Try to catch setting active_telem NULL when we weren't what it was set to */
+#define telem_done(myrpt) { \
+	if (myrpt->active_telem != mytele) { \
+		ast_log(LOG_WARNING, "Setting active_telem NULL from %p, but mytele was %p?\n", myrpt->active_telem, mytele); \
+	} \
+	ast_debug(2, "Set active_telem to NULL (was %p)\n", myrpt->active_telem); \
+	myrpt->active_telem = NULL; \
+}
+
 /*
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
  * This routine does a lot of processing of what you "hear" when app_rpt is running.
@@ -1022,7 +1031,7 @@ void *rpt_tele_thread(void *this)
 	/* first put the channel on the conference in announce mode */
 	if (join_dahdiconf(mychannel, &ci)) {
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->active_telem = NULL;
+		telem_done(myrpt);
 		remque((struct qelem *) mytele);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
@@ -1337,7 +1346,7 @@ void *rpt_tele_thread(void *this)
 			/* first put the channel on the conference in announce mode */
 			if (join_dahdiconf(mychannel, &ci)) {
 				rpt_mutex_lock(&myrpt->lock);
-				myrpt->active_telem = NULL;
+				telem_done(myrpt);
 				remque((struct qelem *) mytele);
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
@@ -1373,7 +1382,7 @@ void *rpt_tele_thread(void *this)
 			/* first put the channel on the conference in announce mode */
 			if (join_dahdiconf(mychannel, &ci)) {
 				rpt_mutex_lock(&myrpt->lock);
-				myrpt->active_telem = NULL;
+				telem_done(myrpt);
 				remque((struct qelem *) mytele);
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
@@ -2047,7 +2056,7 @@ void *rpt_tele_thread(void *this)
 			if (!l1) {
 				ast_log(LOG_ERROR, "Cannot malloc memory on %s\n", ast_channel_name(mychannel));
 				remque((struct qelem *) mytele);
-				myrpt->active_telem = NULL;
+				telem_done(myrpt);
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_log(LOG_WARNING, "Telemetry thread aborted at line %d, mode: %d\n", __LINE__, mytele->mode);	/*@@@@@@@@@@@ */
 				ast_free(nodename);
@@ -2534,7 +2543,7 @@ void *rpt_tele_thread(void *this)
 		}
 	}
 	remque((struct qelem *) mytele);
-	myrpt->active_telem = NULL;
+	telem_done(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_free(nodename);
 	if (id_malloc)
