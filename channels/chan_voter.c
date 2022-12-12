@@ -2670,32 +2670,59 @@ static int rad_rxwait(int fd, int ms)
 	return 0;
 }
 
-static void voter_display(int fd, struct voter_pvt *p, int doips)
+/*! \brief I think it's reasonable to assume everyone has a VT100 compatible console these days...
+ * This must be enabled if the screen should clear automatically for remote consoles too
+ * (and you probably want that to work!) */
+#define ASSUME_CONSOLES_SUPPORT_CLEAR
+
+#ifndef ASSUME_CONSOLES_SUPPORT_CLEAR
+/*! \note This only works if Asterisk is running in foreground console (-c option when starting).
+ * This is because this function is checking the TERM of the process, and if Asterisk forked and
+ * is daemonized, then TERM is not the TERM type of the connecting remote console user.
+ * Yet another reason that trying to check the TERM type is a big no-no and shouldn't be done. */
+static int term_supports_clear(void)
 {
-	int j, rssi, thresh, ncols = 56, wasverbose, vt100compat;
-	char str[256], *term, c, hasdyn;
-	struct voter_client *client;
+	char *term;
 
 	term = getenv("TERM");
-	vt100compat = 0;
+	/* XXX We should probably query ncurses/termcap DB to be more complete, instead of checking just common TERM types */
+
+	ast_debug(2, "Terminal type: %s\n", S_OR(term, ""));
 
 	if (term) {
 		if (!strcmp(term, "linux")) {
-			vt100compat = 1;
+			return 1;
 		} else if (!strcmp(term, "xterm")) {
-			vt100compat = 1;
+			return 1;
 		} else if (!strcmp(term, "xterm-color")) {
-			vt100compat = 1;
+			return 1;
+		} else if (!strcmp(term, "xterm-256color")) {
+			return 1;
 		} else if (!strncmp(term, "Eterm", 5)) {
 			/* Both entries which start with Eterm support color */
-			vt100compat = 1;
+			return 1;
 		} else if (!strcmp(term, "vt100")) {
-			vt100compat = 1;
+			return 1;
 		} else if (!strncmp(term, "crt", 3)) {
 			/* Both crt terminals support color */
-			vt100compat = 1;
+			return 1;
 		}
 	}
+	return 0;
+}
+#endif
+
+static void voter_display(int fd, struct voter_pvt *p, int doips)
+{
+	int j, rssi, thresh, ncols = 56, wasverbose, vt100compat;
+	char str[256], c, hasdyn;
+	struct voter_client *client;
+
+#ifdef ASSUME_CONSOLES_SUPPORT_CLEAR
+	vt100compat = 1;
+#else
+	vt100compat = term_supports_clear();
+#endif
 
 	for (j = 0; j < ncols; j++) {
 		str[j] = ' ';
