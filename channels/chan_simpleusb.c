@@ -597,15 +597,12 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 
 static int hidhdwconfig(struct chan_simpleusb_pvt *o);
 static void mixer_write(struct chan_simpleusb_pvt *o);
-//static void tune_write(struct chan_simpleusb_pvt *o); /*! \todo not used */
-
 static char *simpleusb_active;	/* the active device */
 
 static int setformat(struct chan_simpleusb_pvt *o, int mode);
 
 static struct ast_channel *simpleusb_request(const char *type, struct ast_format_cap *cap,
-											 const struct ast_assigned_ids *assignedids,
-											 const struct ast_channel *requestor, const char *data, int *cause);
+	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
 static int simpleusb_digit_begin(struct ast_channel *c, char digit);
 static int simpleusb_digit_end(struct ast_channel *c, char digit, unsigned int duration);
 static int simpleusb_text(struct ast_channel *c, const char *text);
@@ -2936,35 +2933,61 @@ static int console_unkey(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*! \todo where the heck are these functions???? */
-static int susb_tune(int fd, int argc, const char *const *argv)
-{
-	return RESULT_SHOWUSAGE;
-}
-
+/*! \brief CLI debugging on and off */
 static int susb_set_debug(int fd, int argc, const char *const *argv)
 {
-	return RESULT_SHOWUSAGE;
+	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
+	o->debuglevel = 1;
+	ast_cli(fd,"simpleusb debug on.\n");
+	return RESULT_SUCCESS;
 }
 
 static int susb_set_debug_off(int fd, int argc, const char *const *argv)
 {
-	return RESULT_SHOWUSAGE;
+	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
+	o->debuglevel = 0;
+	ast_cli(fd,"simpleusb debug off.\n");
+	return RESULT_SUCCESS;
 }
 
 static int susb_active(int fd, int argc, const char *const *argv)
 {
-	return RESULT_SHOWUSAGE;
+	if (argc == 2) {
+		ast_cli(fd, "active (command) USB Radio device is [%s]\n", simpleusb_active);
+	} else if (argc != 3) {
+		return RESULT_SHOWUSAGE;
+	} else {
+		struct chan_simpleusb_pvt *o;
+		if (!strcmp(argv[2], "show")) {
+			for (o = simpleusb_default.next; o; o = o->next) {
+				ast_cli(fd, "device [%s] exists as device=%s card=%d\n", o->name,o->devstr,usb_get_usbdev(o->devstr));
+			}
+			return RESULT_SUCCESS;
+		}
+		o = _find_desc(argv[2]);
+		if (o == NULL) {
+			ast_cli(fd, "No device [%s] exists\n", argv[2]);
+		} else {
+			simpleusb_active = o->name;
+		}
+	}
+	return RESULT_SUCCESS;
 }
 
-/*! \todo not used!!! */
-#if 0
 static int rad_rxwait(int fd, int ms)
 {
 	fd_set fds;
 	struct timeval tv;
 
+#if 0
+	/*! \todo This causes gcc to complain:
+	 * ‘__builtin_memset’ forming offset [128, 4095] is out of the bounds [0, 128] of object ‘fds’ with type ‘fd_set’
+	 * In practice, we should probably be using poll instead of select anyways, not least because of this...
+	 */
 	FD_ZERO(&fds);
+#else
+	memset(&fds, 0, sizeof(fds));
+#endif
 	FD_SET(fd, &fds);
 	tv.tv_usec = ms * 1000;
 	tv.tv_sec = 0;
@@ -3022,7 +3045,7 @@ static void tune_rxdisplay(int fd, struct chan_simpleusb_pvt *o)
 	option_verbose = wasverbose;
 }
 
-static int usb_device_swap(int fd, char *other)
+static int usb_device_swap(int fd, const char *other)
 {
 
 	int d;
@@ -3119,7 +3142,7 @@ static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 	return;
 }
 
-static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, char *str)
+static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, const char *str)
 {
 	int i, x;
 
@@ -3141,7 +3164,7 @@ static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, char *str)
 	return;
 }
 
-static void _menu_txa(int fd, struct chan_simpleusb_pvt *o, char *str)
+static void _menu_txa(int fd, struct chan_simpleusb_pvt *o, const char *str)
 {
 	int i, dokey;
 
@@ -3171,7 +3194,7 @@ static void _menu_txa(int fd, struct chan_simpleusb_pvt *o, char *str)
 	return;
 }
 
-static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, char *str)
+static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
 {
 	int i, dokey;
 
@@ -3221,7 +3244,40 @@ static void tune_flash(int fd, struct chan_simpleusb_pvt *o, int intflag)
 	return;
 }
 
-static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, char *cmd)
+static void tune_write(struct chan_simpleusb_pvt *o)
+{
+	FILE *fp;
+	char fname[200];
+
+	snprintf(fname, sizeof(fname) - 1, "/etc/asterisk/simpleusb_tune_%s.conf", o->name);
+	fp = fopen(fname, "w");
+
+	fprintf(fp, "[%s]\n", o->name);
+
+	fprintf(fp, "; name=%s\n", o->name);
+	fprintf(fp, "; devicenum=%i\n", o->devicenum);
+	fprintf(fp, "devstr=%s\n", o->devstr);
+	fprintf(fp, "rxmixerset=%i\n", o->rxmixerset);
+	fprintf(fp, "txmixaset=%i\n", o->txmixaset);
+	fprintf(fp, "txmixbset=%i\n", o->txmixbset);
+	fclose(fp);
+
+	if (o->wanteeprom) {
+		ast_mutex_lock(&o->eepromlock);
+		while (o->eepromctl) {
+			ast_mutex_unlock(&o->eepromlock);
+			usleep(10000);
+			ast_mutex_lock(&o->eepromlock);
+		}
+		o->eeprom[EEPROM_RXMIXERSET] = o->rxmixerset;
+		o->eeprom[EEPROM_TXMIXASET] = o->txmixaset;
+		o->eeprom[EEPROM_TXMIXBSET] = o->txmixbset;
+		o->eepromctl = 2;		/* request a write */
+		ast_mutex_unlock(&o->eepromlock);
+	}
+}
+
+static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *cmd)
 {
 	int x, oldverbose;
 	struct chan_simpleusb_pvt *oy = NULL;
@@ -3311,7 +3367,7 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, char *cmd)
 	return;
 }
 
-static int radio_tune(int fd, int argc, char *argv[])
+static int susb_tune(int fd, int argc, const char *const *argv)
 {
 	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
 	int i = 0;
@@ -3433,54 +3489,6 @@ static int radio_tune(int fd, int argc, char *argv[])
 	}
 	return RESULT_SUCCESS;
 }
-#endif
-
-/*
-	CLI debugging on and off
-*/
-/*static int radio_set_debug(int fd, int argc, char *argv[])
-{
-	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
-
-	o->debuglevel=1;
-	ast_cli(fd,"simpleusb debug on.\n");
-	return RESULT_SUCCESS;
-}
-
-static int radio_set_debug_off(int fd, int argc, char *argv[])
-{
-	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
-
-	o->debuglevel=0;
-	ast_cli(fd,"simpleusb debug off.\n");
-	return RESULT_SUCCESS;
-}*/
-
-/*static int radio_active(int fd, int argc, char *argv[])
-{
-        if (argc == 2)
-                ast_cli(fd, "active (command) USB Radio device is [%s]\n", simpleusb_active);
-        else if (argc != 3)
-                return RESULT_SHOWUSAGE;
-        else {
-                struct chan_simpleusb_pvt *o;
-                if (strcmp(argv[2], "show") == 0) {
-                        for (o = simpleusb_default.next; o; o = o->next)
-                                ast_cli(fd, "device [%s] exists as device=%s card=%d\n", 
-					o->name,o->devstr,usb_get_usbdev(o->devstr));
-                        return RESULT_SUCCESS;
-                }
-                o = _find_desc(argv[2]);
-                if (o == NULL)
-                        ast_cli(fd, "No device [%s] exists\n", argv[2]);
-                else
-		{
-                    simpleusb_active = o->name;
-		}
-        }
-        return RESULT_SUCCESS;
-}*/
-	/*! \todo above is never used */
 
 static char key_usage[] = "Usage: susb key\n" "       Simulates COR active.\n";
 
@@ -3492,12 +3500,10 @@ static char active_usage[] =
 	"one being commanded.  If a device is specified, the commanded radio device is changed\n"
 	"to the device specified.\n";
 
-static char susb_tune_usage[] = "";	/*! \todo couldn't find this anywhere, undefined reference */
-
 /*
 radio tune 6 3000		measured tx value
 */
-/*static char radio_tune_usage[] =
+static char susb_tune_usage[] =
 	"Usage: susb tune <function>\n"
 	"       rx [newsetting]\n"
 	"       rxdisplay\n"
@@ -3505,8 +3511,7 @@ radio tune 6 3000		measured tx value
 	"       txb [newsetting]\n"
 	"       save (settings to tuning file)\n"
 	"       load (tuning settings from EEPROM)\n"
-	"\n       All [newsetting]'s are values 0-999\n\n";*/
-	/*! \todo above is never used */
+	"\n       All [newsetting]'s are values 0-999\n\n";
 
 static void store_rxcdtype(struct chan_simpleusb_pvt *o, char *s)
 {
@@ -3523,8 +3528,7 @@ static void store_rxcdtype(struct chan_simpleusb_pvt *o, char *s)
 	} else {
 		ast_log(LOG_WARNING, "Unrecognized rxcdtype parameter: %s\n", s);
 	}
-
-	//ast_log(LOG_WARNING, "set rxcdtype = %s\n", s);
+	ast_debug(1, "set rxcdtype = %s\n", s);
 }
 
 /*
@@ -3544,8 +3548,7 @@ static void store_rxsdtype(struct chan_simpleusb_pvt *o, char *s)
 	} else {
 		ast_log(LOG_WARNING, "Unrecognized rxsdtype parameter: %s\n", s);
 	}
-
-	//ast_log(LOG_WARNING, "set rxsdtype = %s\n", s);
+	ast_debug(1, "set rxsdtype = %s\n", s);
 }
 
 static void store_pager(struct chan_simpleusb_pvt *o, char *s)
@@ -3559,46 +3562,9 @@ static void store_pager(struct chan_simpleusb_pvt *o, char *s)
 	} else {
 		ast_log(LOG_WARNING, "Unrecognized pager parameter: %s\n", s);
 	}
-
-	//ast_log(LOG_WARNING, "set pager = %s\n", s);
+	ast_debug(1, "set pager = %s\n", s);
 }
 
-#if 0
-static void tune_write(struct chan_simpleusb_pvt *o)
-{
-	FILE *fp;
-	char fname[200];
-
-	snprintf(fname, sizeof(fname) - 1, "/etc/asterisk/simpleusb_tune_%s.conf", o->name);
-	fp = fopen(fname, "w");
-
-	fprintf(fp, "[%s]\n", o->name);
-
-	fprintf(fp, "; name=%s\n", o->name);
-	fprintf(fp, "; devicenum=%i\n", o->devicenum);
-	fprintf(fp, "devstr=%s\n", o->devstr);
-	fprintf(fp, "rxmixerset=%i\n", o->rxmixerset);
-	fprintf(fp, "txmixaset=%i\n", o->txmixaset);
-	fprintf(fp, "txmixbset=%i\n", o->txmixbset);
-	fclose(fp);
-
-	if (o->wanteeprom) {
-		ast_mutex_lock(&o->eepromlock);
-		while (o->eepromctl) {
-			ast_mutex_unlock(&o->eepromlock);
-			usleep(10000);
-			ast_mutex_lock(&o->eepromlock);
-		}
-		o->eeprom[EEPROM_RXMIXERSET] = o->rxmixerset;
-		o->eeprom[EEPROM_TXMIXASET] = o->txmixaset;
-		o->eeprom[EEPROM_TXMIXBSET] = o->txmixbset;
-		o->eepromctl = 2;		/* request a write */
-		ast_mutex_unlock(&o->eepromlock);
-	}
-}
-#endif
-
-//
 static void mixer_write(struct chan_simpleusb_pvt *o)
 {
 	int x;
