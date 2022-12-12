@@ -31,11 +31,6 @@ AST_PBX_KEEPALIVE: https://github.com/asterisk/asterisk/commit/50a25ac8474d7900b
 
 You can use PhreakScript to install Asterisk automatically, first, then use the `rpt_install.sh` script to properly install the files from this repo.
 
-## Known Issues
-
-I am currently unsure how to satisfy the dependencies for `chan_usbradio`. It compiles, but since it will cause menuselect issues if dependencies are not available,
-the `rpt_install.sh` script no longer downloads this by default. Feel free to grab it manually if you think your system can support it.
-
 ## Automatic Installation
 
 Step 1: Install DAHDI and Asterisk
@@ -47,11 +42,12 @@ phreaknet install -t -s -d # install in developer mode (for backtraces and asser
 
 Step 2: Install app_rpt modules
 
-- Download `rpt_install.sh` from this repo. The easiest way is to use wget, but since this repo is private, there's no default link: click on the file above, then click "Raw" in the upper right and use `wget` to download that URL. Or, you can manually get this file onto your system.
+- Download `rpt_install.sh` from this repo. The easiest way is to use wget, but since this repo is private, there's no default link: click on the file above, then click "Raw" in the upper right and use `wget` to download that URL. Or, you can manually get this file onto your system. Or, you can clone the repo using Git and run it from there.
+
 - `chmod +x rpt_install.sh`
 - `./rpt_install.sh`
 
-## Manual Installation
+## Manual Installation (not recommended)
 
 If you want to manually install app_rpt et al., here is how:
 
@@ -86,6 +82,8 @@ Run: `modprobe snd-pcm-oss` (as root/sudo)
 One-liner to kill Asterisk if it won't cleanly stop or restart:
 
 `kill -9 $(ps -aux | grep " asterisk" | grep -v "grep" | awk '{print $2}' )`
+
+Alternately you can simply run `phreaknet kill` or `phreaknet restart`
 
 # Files from AllStarLink Asterisk which are in scope
 
