@@ -278,8 +278,7 @@ enum{DAQ_TYPE_UCHAMELEON};
 
 #define NRPTSTAT 7
 
-struct rpt_chan_stat
-{
+struct rpt_chan_stat {
 	struct timeval last;
 	long long total;
 	unsigned long count;
@@ -336,15 +335,13 @@ struct vox {
 	int	ondebcnt;
 } ;
 
-struct rpt_topkey
-{
+struct rpt_topkey {
 	char	node[TOPKEYMAXSTR];
 	int	timesince;
 	int	keyed;
 };
 
-struct rpt_xlat
-{
+struct rpt_xlat {
 	char	funccharseq[MAXXLAT];
 	char	endcharseq[MAXXLAT];
 	char	passchars[MAXXLAT];

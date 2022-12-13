@@ -413,7 +413,6 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax, int wi
 
 char *forward_node_lookup(struct rpt *myrpt, char *digitbuf, struct ast_config *cfg)
 {
-
 	char *val, *efil, *enod, *strs[100];
 	int i, n;
 	struct stat mystat;

@@ -1510,7 +1510,9 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	wf.samples = 0;
 	wf.src = "handle_link_data";
 	/* put string in our buffer */
-	strncpy(tmp, str, sizeof(tmp) - 1);
+	ast_copy_string(tmp, str, sizeof(tmp) - 1);
+
+	ast_debug(5, "Sending text '%s'\n", str);
 
 	if (!strcmp(tmp, DISCSTR)) {
 		mylink->disced = 1;
@@ -3935,8 +3937,9 @@ static void *rpt(void *this)
 
 			if ((x > 0) && (!l->newkeytimer)) {
 				if (l->thisconnected) {
-					if (l->newkey == 2)
+					if (l->newkey == 2) {
 						l->newkey = 0;
+					}
 				} else {
 					l->newkeytimer = NEWKEYTIME;
 				}
@@ -3947,6 +3950,7 @@ static void *rpt(void *this)
 					l->linkmode = 1;
 			}
 			if ((l->newkey == 2) && l->lastrealrx && (!l->rxlingertimer)) {
+				ast_debug(7, "@@@@ rx un-key\n");
 				l->lastrealrx = 0;
 				l->rerxtimer = 0;
 				if (l->lastrx1) {
@@ -5104,6 +5108,7 @@ static void *rpt(void *this)
 					l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 
 					if ((l->newkey == 2) && (!l->lastrealrx)) {
+						ast_debug(7, "@@@@ rx key\n");
 						l->lastrealrx = 1;
 						l->rerxtimer = 0;
 						if (!l->lastrx1) {
@@ -6604,11 +6609,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->newkeytimer = NEWKEYTIME;
 		l->newkey = 0;
 		l->iaxkey = 0;
-		if ((!phone_mode) && (l->name[0] != '0') &&
-			strcasecmp(ast_channel_tech(chan)->type, "echolink") && strcasecmp(ast_channel_tech(chan)->type, "tlb"))
+		if ((!phone_mode) && (l->name[0] != '0') && strcasecmp(ast_channel_tech(chan)->type, "echolink") && strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
 			l->newkey = 2;
-		if (l->name[0] > '9')
+		}
+		ast_debug(7, "newkey: %d\n", l->newkey);
+		if (l->name[0] > '9') {
 			l->newkeytimer = 0;
+		}
 		voxinit_link(l, 1);
 		if (!strcasecmp(ast_channel_tech(chan)->type, "echolink"))
 			init_linkmode(myrpt, l, LINKMODE_ECHOLINK);
@@ -6660,30 +6667,29 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_answer(chan);
 			if (l->name[0] > '9') {
-				if (ast_safe_sleep(chan, 500) == -1)
+				if (ast_safe_sleep(chan, 500) == -1) {
 					return -1;
+				}
 			} else {
-				if (!phone_mode)
+				if (!phone_mode) {
 					send_newkey(chan);
+				}
 			}
 		}
 		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
 		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
 			char str[512];
-
-			if (l->phonemode)
-				sprintf(str, "LINK(P),%s", l->name);
-			else
-				sprintf(str, "LINK,%s", l->name);
+			sprintf(str, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 			donodelog(myrpt, str);
 		}
 		doconpgm(myrpt, l->name);
-		if ((!phone_mode) && (l->name[0] <= '9'))
+		if ((!phone_mode) && (l->name[0] <= '9')) {
 			send_newkey(chan);
-		if ((!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
-			|| (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")) || (l->name[0] > '9'))
+		}
+		if ((!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")) || (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")) || (l->name[0] > '9')) {
 			rpt_telemetry(myrpt, CONNECTED, l);
+		}
 		//return AST_PBX_KEEPALIVE;
 		ast_channel_pbx_set(l->chan, NULL);
 		ast_debug(1, "Stopped PBX on %s\n", ast_channel_name(l->chan));

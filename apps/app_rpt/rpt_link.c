@@ -528,12 +528,11 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		}
 	}
 
-	if (!strcmp(myrpt->name, node))	/* Do not allow connections to self */
+	if (!strcmp(myrpt->name, node)) {	/* Do not allow connections to self */
 		return -2;
+	}
 
-	ast_debug(4, "Connect attempt to node %s\n", node);
-	ast_debug(4, "Mode: %s\n", (mode) ? "Transceive" : "Monitor");
-	ast_debug(4, "Connection type: %s\n", (perma) ? "Permalink" : "Normal");
+	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node, mode ? "Transceive" : "Monitor", perma ? "Permalink" : "Normal");
 
 	s = NULL;
 	s1 = tmp;
@@ -620,18 +619,18 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	l->iaxkey = 0;
 	l->newkey = 2;
 	l->voterlink = voterlink;
-	if (strncasecmp(s1, "echolink/", 9) == 0)
+	if (strncasecmp(s1, "echolink/", 9) == 0) {
 		l->newkey = 0;
+	}
+	if (!strncasecmp(s1, "iax2/", 5) || !strncasecmp(s1, "echolink/", 9) || !strncasecmp(s1, "tlb/", 4)
 #ifdef ALLOW_LOCAL_CHANNELS
-	if ((strncasecmp(s1, "iax2/", 5) == 0) || (strncasecmp(s1, "local/", 6) == 0) ||
-		(strncasecmp(s1, "echolink/", 9) == 0) || (strncasecmp(s1, "tlb/", 4) == 0))
-#else
-	if ((strncasecmp(s1, "iax2/", 5) == 0) || (strncasecmp(s1, "echolink/", 9) == 0)
-		|| (strncasecmp(s1, "tlb/", 4) == 0))
+		|| !strncasecmp(s1, "local/", 6)
 #endif
+		) {
 		ast_copy_string(deststr, s1, sizeof(deststr) - 1);
-	else
+	} else {
 		snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
+	}
 	tele = strchr(deststr, '/');
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
@@ -643,6 +642,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		ast_free(l);
 		return -1;
 	}
 
@@ -653,22 +653,22 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 
 		strncpy(tel1, tele, sizeof(tel1) - 1);
 		cp = strchr(tel1, '/');
-		if (cp)
+		if (cp) {
 			cp++;
-		else
+		} else {
 			cp = tel1;
+		}
 		strcpy(cp, node + 1);
 		l->chan = ast_request(deststr, cap, NULL, NULL, tel1, NULL);
 	} else {
 		l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 		if (!(l->chan)) {
+			ast_log(LOG_WARNING, "Failed to request channel the first time\n"); /* XXX This retry should just be removed entirely. */
 			usleep(150000);
 			l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 		}
 	}
-	if (l->chan) {
-		rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
-	} else {
+	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
 		if (myrpt->p.archivedir) {
 			char str[512];
@@ -679,6 +679,9 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		ao2_ref(cap, -1);
 		return -1;
 	}
+
+	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
+
 	/* allocate a pseudo-channel thru asterisk */
 	l->pchan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	ao2_ref(cap, -1);
