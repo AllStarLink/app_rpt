@@ -460,11 +460,12 @@ void rpt_update_links(struct rpt *myrpt)
 	__mklinklist(myrpt, NULL, buf, 1);
 	ast_mutex_unlock(&myrpt->lock);
 	/* parse em */
-	n = finddelim(strdupa(buf), strs, MAXLINKLIST);
-	if (n)
+	n = finddelim(ast_strdupa(buf), strs, MAXLINKLIST);
+	if (n) {
 		snprintf(obuf, sizeof(obuf) - 1, "%d,%s", n, buf);
-	else
+	} else {
 		strcpy(obuf, "0");
+	}
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_ALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_ALINKS", obuf);
 	snprintf(obuf, sizeof(obuf) - 1, "%d", n);
@@ -474,11 +475,12 @@ void rpt_update_links(struct rpt *myrpt)
 	__mklinklist(myrpt, NULL, buf, 0);
 	ast_mutex_unlock(&myrpt->lock);
 	/* parse em */
-	n = finddelim(strdupa(buf), strs, MAXLINKLIST);
-	if (n)
+	n = finddelim(ast_strdupa(buf), strs, MAXLINKLIST);
+	if (n) {
 		snprintf(obuf, sizeof(obuf) - 1, "%d,%s", n, buf);
-	else
+	} else {
 		strcpy(obuf, "0");
+	}
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_LINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_LINKS", obuf);
 	snprintf(obuf, sizeof(obuf) - 1, "%d", n);
