@@ -459,12 +459,16 @@ int send_link_pl(struct rpt *myrpt, char *txt)
 
 void send_newkey(struct ast_channel *chan)
 {
+	ast_channel_lock(chan);
 	ast_sendtext(chan, NEWKEY1STR);
+	ast_channel_unlock(chan);
 	return;
 }
 
 void send_old_newkey(struct ast_channel *chan)
 {
+	ast_channel_lock(chan);
 	ast_sendtext(chan, NEWKEYSTR);
+	ast_channel_unlock(chan);
 	return;
 }
