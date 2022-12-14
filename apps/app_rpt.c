@@ -1512,7 +1512,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	/* put string in our buffer */
 	ast_copy_string(tmp, str, sizeof(tmp) - 1);
 
-	ast_debug(5, "Sending text '%s'\n", str);
+	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(tmp, DISCSTR)) {
 		mylink->disced = 1;
@@ -3929,18 +3929,68 @@ static void *rpt(void *this)
 			if (l->rxlingertimer < 0)
 				l->rxlingertimer = 0;
 
+			/* Update the timer, checking if it expired just now. */
 			x = l->newkeytimer;
 			if (l->newkeytimer)
 				l->newkeytimer -= elap;
 			if (l->newkeytimer < 0)
 				l->newkeytimer = 0;
 
-			if ((x > 0) && (!l->newkeytimer)) {
+			/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
+			 * This if statement executes if the timer just expired.
+			 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey to 1 or 2 (because then x == 0 here)
+			 */
+			if (x > 0 && !l->newkeytimer) {
+				/* Issue #46 background:
+				 *
+				 * There is a kind of "handshake" that happens when setting up the IAX2 trunk between two nodes,
+				 * using text frames. NEWKEY1 is part of the handshake (it does not, as the name might imply, indicate that the other
+				 * side should consider either side "keyed" and transmitting... but as I explain below, the lack of sending/receiving
+				 * this can actually lead to a node being improperly keyed).
+				 *
+				 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be superflous)
+				 * The calling node calls this function once. What this function does is send the text frame NEWKEY1STR to the other side.
+				 * Issue #46 was concerned with a case where this was slightly broken, and the below happened:
+				 * (A = calling node, B = called node)
+				 *
+				 * A									B
+				 *		<- send_newkey
+				 *		<- send_newkey
+				 *		send_newkey ->
+				 *
+				 *		<-- receive !NEWKEY1!
+				 *		<-- receive !NEWKEY1!
+				 *		(MISSING) received !NEWKEY1! ->
+				 *
+				 * Note that the above depiction separates the TX and RX, but there are only 3 text frames involved.
+				 * In issue #46, 3 text frames are sent, but only 2 are really "received".
+				 * And it so happens that the text frame that B doesn't get from A is exactly the text frame
+				 * that is responsible for setting newkeytimer=0 and newkey=2, i.e. if this doesn't happen, then we'll hit the WARNING case in the below if statement.
+				 *
+				 * Note that all of these comments are from spending hours debugging this issue and reverse-engineering, but at this point I'm pretty confident
+				 * about these parts of the code, even though I'm not Jim Dixon and he didn't comment any of this code originally.
+				 *
+				 * The issue was resolvable by setting jitterbuffer=no in iax.conf. It seems the jitterbuffer was holding received text frames in the JB queue
+				 * until it got something "important" like a voice frame. This is because chan_iax2's jitter buffer was stalling improperly
+				 * until it received a voice frame, because only at that point would it try to begin reading from the jitterbuffer queue. This was fixed
+				 * by falling back to the format negotiated during call setup prior to receiving audio.
+				 */
 				if (l->thisconnected) {
+					/* We're connected, but haven't received a NEWKEY1STR text frame yet...
+					 * The newkeytimer expired on a connected (~answered?) node, i.e. handle_link_data hasn't yet gotten called
+					 * to set newkeytimer = 0 and newkey to non-zero, i.e. we haven't received a text frame with NEWKEY1STR over the IAX2 channel yet.
+					 */
 					if (l->newkey == 2) {
+						/* This can ripple to have consequences down the line, namely we might start writing voice frames
+						 * across the IAX2 link because of this, basically causing us to be transmitting (keyed).
+						 * If this happens, this indicates a problem upstream, and we should emit a warning here
+						 * since undesired behavior will likely ensue.
+						 */
+						ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from 2 to 0.\n", l);
 						l->newkey = 0;
 					}
 				} else {
+					/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms */
 					l->newkeytimer = NEWKEYTIME;
 				}
 			}
@@ -5227,6 +5277,8 @@ static void *rpt(void *this)
 						tstr[f->datalen] = 0;
 						handle_link_data(myrpt, l, tstr);
 						ast_free(tstr);
+					} else {
+						ast_log(LOG_WARNING, "malloc failure\n");
 					}
 				}
 				if (f->frametype == AST_FRAME_DTMF) {
@@ -5418,6 +5470,12 @@ static void *rpt(void *this)
 					}
 					/* foop */
 					if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+						/* Reverse-engineering comments from NA debugging issue #46:
+						 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey hasn't been set to 2 yet.
+						 * Of course if handle_link_data is never called to set newkey to 2 and stop newkeytimer, then at some point, we'll
+						 * set newkey = 0 forcibly (see comments in that part of the code for more info), which will cause us to start passing on the voice frames here.
+						 * If this happens, then we're passing voice frames so we're keyed up and transmitting, essentially.
+						 */
 						ast_write(l->chan, f);
 					}
 				}
@@ -6687,7 +6745,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if ((!phone_mode) && (l->name[0] <= '9')) {
 			send_newkey(chan);
 		}
-		if ((!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")) || (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")) || (l->name[0] > '9')) {
+		if (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink") || !strcasecmp(ast_channel_tech(l->chan)->type, "tlb") || (l->name[0] > '9')) {
 			rpt_telemetry(myrpt, CONNECTED, l);
 		}
 		//return AST_PBX_KEEPALIVE;
