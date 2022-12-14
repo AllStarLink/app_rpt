@@ -622,11 +622,6 @@ static char tone_usage[] =
 	"Usage: voter tone instance_id [new_tone_level(0-250)]\n"
 	"       Sets/Queries Tx CTCSS level for specified chan_voter instance\n";
 
-/* Reload */
-static int voter_do_reload(int fd, int argc, const char *const *argv);
-
-static char reload_usage[] = "Usage: voter reload\n" "       Reload chan_voter parameters\n";
-
 /* Display */
 static int voter_do_display(int fd, int argc, const char *const *argv);
 
@@ -2650,14 +2645,6 @@ static int voter_do_tone(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-static int voter_do_reload(int fd, int argc, const char *const *argv)
-{
-	if (argc != 2)
-		return RESULT_SHOWUSAGE;
-	reload();
-	return RESULT_SUCCESS;
-}
-
 static int rad_rxwait(int fd, int ms)
 {
 	int myms = ms, x;
@@ -3051,19 +3038,6 @@ static char *handle_cli_tone(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	return res2cli(voter_do_tone(a->fd, a->argc, a->argv));
 }
 
-static char *handle_cli_reload(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter reload";
-		e->usage = reload_usage;
-		return NULL;
-	case CLI_GENERATE:
-		return NULL;
-	}
-	return res2cli(voter_do_reload(a->fd, a->argc, a->argv));
-}
-
 static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -3109,7 +3083,6 @@ static struct ast_cli_entry voter_cli[] = {
 	AST_CLI_DEFINE(handle_cli_prio, "Specify/Query voter client priority value"),
 	AST_CLI_DEFINE(handle_cli_record, "Enable/Specify (or disable) voter recording file"),
 	AST_CLI_DEFINE(handle_cli_tone, "Sets/Queries Tx CTCSS level for specified chan_voter instance"),
-	AST_CLI_DEFINE(handle_cli_reload, "Reloads chan_voter parameters"),
 	AST_CLI_DEFINE(handle_cli_display, "Displays voter (instance) clients"),
 	AST_CLI_DEFINE(handle_cli_txlockout, "Set Tx Lockout for voter (instance) clients"),
 	AST_CLI_DEFINE(handle_cli_ping, "Do Pingage"),
