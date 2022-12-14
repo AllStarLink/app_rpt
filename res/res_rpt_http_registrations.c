@@ -79,6 +79,7 @@ struct http_registry {
 	struct ast_sockaddr us;			/*!< Who the server thinks we are */
 	struct ast_dnsmgr_entry *dnsmgr;	/*!< DNS refresh manager */
 	char perceived[80];
+	int perceived_port;
 	AST_LIST_ENTRY(http_registry) entry;
 	int port;
 	char hostname[];
@@ -233,6 +234,7 @@ static int http_register(struct http_registry *reg)
 			refresh = ast_json_integer_get(ast_json_object_get(json, "refresh"));
 			data = ast_json_dump_string(ast_json_object_get(json, "data"));
 			ast_copy_string(reg->perceived, ipaddr, sizeof(reg->perceived));
+			reg->perceived_port = port;
 			reg->refresh = refresh;
 			ast_debug(2, "Response: ipaddr=%s, port=%d, refresh=%d, data=%s\n", ipaddr, port, refresh, data);
 			if (data) {
@@ -288,25 +290,28 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 
 	struct http_registry *reg = NULL;
 	char host[80];
+	char perceived[95];
 	int counter = 0;
 
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "rpt show registry";
+		e->command = "rpt show registrations";
 		e->usage =
-			"Usage: rpt show registry\n"
+			"Usage: rpt show registrations\n"
 			"       Lists all registration requests and status.\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
 	}
-	if (a->argc != 3)
+	if (a->argc != 3) {
 		return CLI_SHOWUSAGE;
+	}
 	ast_cli(a->fd, FORMAT2, "Host", "Username", "Perceived", "Refresh", "State");
 	AST_RWLIST_RDLOCK(&registrations);
 	AST_RWLIST_TRAVERSE(&registrations, reg, entry) {
+		snprintf(perceived, sizeof(perceived), "%s:%d", reg->perceived, reg->perceived_port);
 		snprintf(host, sizeof(host), "%s", ast_sockaddr_stringify(&reg->addr));
-		ast_cli(a->fd, FORMAT, host, reg->username, S_OR(reg->perceived, "<Unregistered>"), reg->refresh, reg->refresh ? "Registered" : "Not Registered");
+		ast_cli(a->fd, FORMAT, host, reg->username, reg->perceived_port ? perceived : "<Unregistered>", reg->refresh, reg->refresh ? "Registered" : "Not Registered");
 		counter++;
 	}
 	AST_RWLIST_UNLOCK(&registrations);
