@@ -4916,7 +4916,6 @@ static int load_module(void)
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
-		ast_mutex_unlock(&voter_lock);
 		return 1;
 	}
 
