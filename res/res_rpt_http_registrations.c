@@ -18,7 +18,7 @@
 
 /*! \file
  *
- * \brief RPT HTTP Registrations (~DDNS Functionality)
+ * \brief RPT HTTP Registrations
  *
  * \author Naveen Albert <asterisk@phreaknet.org>
  *
@@ -46,7 +46,7 @@
 
 /*** DOCUMENTATION
 	<configInfo name="res_rpt_http_registrations" language="en_US">
-		<synopsis>George, the Interactive Answering Machine</synopsis>
+		<synopsis>Periodic HTTP registrations (DDNS-like functionality)</synopsis>
 		<configFile name="rpt_http_registrations.conf">
 			<configObject name="general">
 				<configOption name="register_interval" default="60">
