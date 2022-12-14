@@ -107,6 +107,8 @@ rpt_add "channels/xpmr/sinetabx.h"
 rpt_add "channels/xpmr/xpmr.c"
 rpt_add "channels/xpmr/xpmr.h"
 rpt_add "channels/xpmr/xpmr_coef.h"
+rpt_add "res/res_rpt_http_registrations.c"
+rpt_add "configs/samples/rpt_http_registrations.conf"
 
 nproc
 make -j$(nproc) apps
