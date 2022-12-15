@@ -42,10 +42,9 @@ phreaknet install -t -s -d # install in developer mode (for backtraces and asser
 
 Step 2: Install app_rpt modules
 
-- Download `rpt_install.sh` from this repo. The easiest way is to use wget, but since this repo is private, there's no default link: click on the file above, then click "Raw" in the upper right and use `wget` to download that URL. Or, you can manually get this file onto your system. Or, you can clone the repo using Git and run it from there.
+- Clone this repo into `/usr/src` on your system: `cd /usr/src; git clone https://github.com/InterLinked1/app_rpt.git`
 
-- `chmod +x rpt_install.sh`
-- `./rpt_install.sh`
+- Then, run: `./rpt_install.sh`
 
 ## Manual Installation (not recommended)
 
