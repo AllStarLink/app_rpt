@@ -193,7 +193,7 @@ static char *build_request_data(struct http_registry *reg)
 		return NULL;
 	}
 	if (reg->port) {
-		ast_json_object_set(json, "port", ast_json_integer_create(reg->port));
+		ast_json_object_set(json, "port", ast_json_integer_create(reg->port)); /* Our IAX2 port */
 	}
 	if (ast_json_object_set(json, "data", nodes)) {
 		return NULL;
@@ -213,7 +213,7 @@ static int http_register(struct http_registry *reg)
 	}
 
 	if (reg->port) {
-		snprintf(url, sizeof(url), "https://%s:%d/", reg->hostname, reg->port);
+		snprintf(url, sizeof(url), "https://%s:%d/", reg->hostname, reg->port); /* Registrar's HTTPS port */
 	} else {
 		snprintf(url, sizeof(url), "https://%s/", reg->hostname);
 	}
@@ -351,12 +351,12 @@ static int append_register(const char *hostname, const char *username, const cha
 	reg->port = 0;
 
 	if (!porta && !reg->port) {
-		reg->port = 443; /* HTTPS */
+		reg->port = 0; /* Our IAX port (default 4569) */
 	} else if (porta) {
 		sscanf(porta, "%5d", &reg->port);
 	}
 
-	ast_sockaddr_set_port(&reg->addr, reg->port);
+	ast_sockaddr_set_port(&reg->addr, 443); /* Registrar's HTTPS port */
 
 	AST_RWLIST_WRLOCK(&registrations);
 	AST_LIST_INSERT_HEAD(&registrations, reg, entry);
