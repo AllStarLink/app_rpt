@@ -2935,7 +2935,16 @@ static void *rpt(void *this)
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
-	strncpy(tmpstr, myrpt->rxchanname, sizeof(tmpstr) - 1);
+
+	if (ast_strlen_zero(myrpt->rxchanname)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_log(LOG_WARNING, "No rxchannel specified\n");
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		pthread_exit(NULL);
+	}
+
+	ast_copy_string(tmpstr, myrpt->rxchanname, sizeof(tmpstr));
+
 	tele = strchr(tmpstr, '/');
 	if (!tele) {
 		ast_log(LOG_WARNING, "Rxchannel Dial number (%s) must be in format tech/number\n", myrpt->rxchanname);
