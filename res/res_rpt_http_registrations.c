@@ -21,8 +21,6 @@
  * \brief RPT HTTP Registrations
  *
  * \author Naveen Albert <asterisk@phreaknet.org>
- *
- * \ingroup applications
  */
 
 /*** MODULEINFO
