@@ -175,31 +175,44 @@ static struct ast_json *register_to_json(struct http_registry *reg)
 
 static char *build_request_data(struct http_registry *reg)
 {
-	RAII_VAR(struct ast_json *, json, NULL, ast_json_unref);
-	RAII_VAR(struct ast_json *, nodes, NULL, ast_json_unref);
-	RAII_VAR(struct ast_json *, node, NULL, ast_json_unref);
+	char *str;
+	struct ast_json *json, *nodes, *node;
 
-	json = ast_json_object_create();
-	nodes = ast_json_object_create();
 	node = ast_json_object_create();
-	if (!json || !nodes || !node) {
+	if (!node) {
 		return NULL;
 	}
 
+	/* ast_json_object_set steals references (even on errors), so no need to free what we set */
 	if (ast_json_object_set(node, reg->username, register_to_json(reg))) {
+		return NULL;
+	}
+	nodes = ast_json_object_create();
+	if (!nodes) {
+		ast_json_unref(node);
 		return NULL;
 	}
 	if (ast_json_object_set(nodes, "nodes", node)) {
 		return NULL;
 	}
+
+	json = ast_json_object_create();
+	if (!json) {
+		ast_json_unref(nodes); /* includes nodes, plus stolen reference to node */
+		return NULL;
+	}
+
 	if (reg->port) {
 		ast_json_object_set(json, "port", ast_json_integer_create(reg->port)); /* Our IAX2 port */
 	}
 	if (ast_json_object_set(json, "data", nodes)) {
+		ast_json_unref(json); /* Includes json, plus stolen references to nodes + node */
 		return NULL;
 	}
 
-	return ast_json_dump_string(json);
+	str = ast_json_dump_string(json);
+	ast_json_unref(json); /* Includes json, plus stolen references to nodes + node */
+	return str;
 }
 
 static int http_register(struct http_registry *reg)
@@ -227,6 +240,7 @@ static int http_register(struct http_registry *reg)
 		char *data;
 		int port, refresh;
 		struct ast_json *json = ast_json_load_string(ast_str_buffer(str), NULL);
+		ast_debug(3, "Received response data: %s\n", ast_str_buffer(str));
 		ast_free(str);
 		if (json) {
 			ipaddr = ast_json_object_string_get(json, "ipaddr");
