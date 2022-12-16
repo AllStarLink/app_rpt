@@ -2243,4 +2243,4 @@ static int load_module(void)
 	return 0;
 }
 
-AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "TheLinkBox channel driver");
+AST_MODULE_INFO_STANDARD_EXTENDED(ASTERISK_GPL_KEY, "TheLinkBox Channel Driver");

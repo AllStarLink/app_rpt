@@ -3953,8 +3953,6 @@ static int unload_module(void)
 {
 	struct chan_simpleusb_pvt *o;
 
-	ast_log(LOG_WARNING, "unload_module() called\n");
-
 	ast_channel_unregister(&simpleusb_tech);
 	ast_cli_unregister_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
 
@@ -3995,4 +3993,4 @@ static int unload_module(void)
 	return 0;
 }
 
-AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "simple usb Radio Interface Channel Driver");
+AST_MODULE_INFO_STANDARD_EXTENDED(ASTERISK_GPL_KEY, "SimpleUSB Radio Interface Channel Driver");
