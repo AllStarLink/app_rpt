@@ -3188,16 +3188,21 @@ static int unload_module(void)
 	run_forever = 0;
 	ast_cli_unregister_multiple(voter_cli, ARRAY_LEN(voter_cli));
 	ast_manager_unregister("VoterStatus");
+
 	/* First, take us out of the channel loop */
-	ao2_ref(voter_tech.capabilities, -1);
-	voter_tech.capabilities = NULL;
+	pthread_join(voter_timer_thread, NULL);
+	pthread_join(voter_reader_thread, NULL);
 	ast_channel_unregister(&voter_tech);
+
 	if (nullfd != -1) {
 		close(nullfd);
 	}
 	if (voter_timing_fd != -1) {
 		close(voter_timing_fd);
 	}
+
+	ao2_ref(voter_tech.capabilities, -1);
+	voter_tech.capabilities = NULL;
 	return 0;
 }
 
@@ -4875,7 +4880,6 @@ static int reload(void)
 
 static int load_module(void)
 {
-	pthread_attr_t attr;
 	struct sockaddr_in sin;
 	int i, bs, utos;
 	struct ast_config *cfg = NULL;
@@ -4956,10 +4960,8 @@ static int load_module(void)
 	ast_cli_register_multiple(voter_cli, ARRAY_LEN(voter_cli));
 
 	ast_manager_register("VoterStatus", 0, manager_voter_status, "Return Voter instance(s) status");
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&voter_reader_thread, &attr, voter_reader, NULL);
-	ast_pthread_create(&voter_timer_thread, &attr, voter_timer, NULL);
+	ast_pthread_create(&voter_reader_thread, NULL, voter_reader, NULL);
+	ast_pthread_create(&voter_timer_thread, NULL, voter_timer, NULL);
 
 	if (!(voter_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
 		return AST_MODULE_LOAD_DECLINE;
