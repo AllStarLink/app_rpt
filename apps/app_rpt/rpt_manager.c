@@ -120,7 +120,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 	s_head.prev = &s_head;
 
 	for (i = 0; i < nrpts; i++) {
-		if ((node) && (!strcmp(node, rpt_vars[i].name))) {
+		if (node && !strcmp(node, rpt_vars[i].name)) {
 			rpt_manager_success(ses, m);
 			astman_append(ses, "Node: %s\r\n", node);
 
@@ -128,51 +128,16 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
 
-//### GET RPT STATUS STATES WHILE LOCKED ########################
-			if (myrpt->p.parrotmode)
-				parrot_ena = "1";	//"ENABLED";
-			else
-				parrot_ena = "0";	//"DISABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable)
-				sys_ena = "0";	//"DISABLED";
-			else
-				sys_ena = "1";	//"ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable)
-				tot_ena = "0";	//"DISABLED";
-			else
-				tot_ena = "1";	//"ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable)
-				link_ena = "0";	//"DISABLED";
-			else
-				link_ena = "1";	//"ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
-				patch_ena = "0";	//"DISABLED";
-			else
-				patch_ena = "1";	//"ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable)
-				sch_ena = "0";	//"DISABLED";
-			else
-				sch_ena = "1";	//"ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable)
-				user_funs = "0";	//"DISABLED";
-			else
-				user_funs = "1";	//"ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail)
-				tail_type = "1";	//"ALTERNATE";
-			else
-				tail_type = "0";	//"STANDARD";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns)
-				iconns = "0";	//"DISABLED";
-			else
-				iconns = "1";	//"ENABLED";
+			/* Get RPT status states while locked */
+			parrot_ena = myrpt->p.parrotmode ? "1" : "0";
+			sys_ena = myrpt->p.s[myrpt->p.sysstate_cur].txdisable ? "1" : "0";
+			tot_ena = myrpt->p.s[myrpt->p.sysstate_cur].totdisable ? "1" : "0";
+			link_ena = myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable ? "1" : "0";
+			patch_ena = myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable ? "1" : "0";
+			sch_ena = myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable ? "1" : "0";
+			user_funs = myrpt->p.s[myrpt->p.sysstate_cur].userfundisable ? "1" : "0";
+			tail_type = myrpt->p.s[myrpt->p.sysstate_cur].alternatetail ? "1" : "0";
+			iconns = myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns ? "1" : "0";
 
 			if (!myrpt->totimer)
 				tot_state = "0";	//"TIMED OUT!";
@@ -218,21 +183,21 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				tel_mode = "3";
 			}
 
-//### GET CONNECTED NODE INFO ####################
-			// Traverse the list of connected nodes 
+			/* Get connected node info */
+			/* Traverse the list of connected nodes */
 
 			__mklinklist(myrpt, NULL, lbuf, 0);
 
 			j = 0;
 			l = myrpt->links.next;
 			while (l && (l != &myrpt->links)) {
-				if (l->name[0] == '0') {	// Skip '0' nodes 
+				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					l = l->next;
 					continue;
 				}
-				if ((s = (struct rpt_lstat *) ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
+				if (!(s = (struct rpt_lstat *) ast_malloc(sizeof(struct rpt_lstat)))) {
 					ast_log(LOG_ERROR, "Malloc failed in rpt_do_lstats\r\n");
-					rpt_mutex_unlock(&myrpt->lock);	// UNLOCK 
+					rpt_mutex_unlock(&myrpt->lock);
 					return -1;
 				}
 				memset(s, 0, sizeof(struct rpt_lstat));
@@ -251,7 +216,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				l = l->next;
 			}
-			rpt_mutex_unlock(&myrpt->lock);	// UNLOCK 
+			rpt_mutex_unlock(&myrpt->lock);
 			for (s = s_head.next; s != &s_head; s = s->next) {
 				int hours, minutes, seconds;
 				long long connecttime = s->connecttime;
@@ -271,7 +236,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				astman_append(ses, "Conn: %-10s%-20s%-12d%-11s%-20s%-20s\r\n",
 							  s->name, s->peer, s->reconnects, (s->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
-			// destroy our local link queue 
+			/* destroy our local link queue */
 			s = s_head.next;
 			while (s != &s_head) {
 				t = s;
@@ -281,12 +246,15 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			}
 
 			astman_append(ses, "LinkedNodes: ");
-//### GET ALL LINKED NODES INFO ####################
+
+			/* Get all linked nodes info */
+
 			/* parse em */
 			ns = finddelim(lbuf, strs, MAXLINKLIST);
 			/* sort em */
-			if (ns)
+			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
+			}
 			for (j = 0;; j++) {
 				if (!strs[j]) {
 					if (!j) {
@@ -295,13 +263,13 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 					break;
 				}
 				astman_append(ses, "%s", strs[j]);
-				if (strs[j + 1])
+				if (strs[j + 1]) {
 					astman_append(ses, ", ");
-
+				}
 			}
 			astman_append(ses, "\r\n");
 
-//### GET VARIABLES INFO ####################
+			/* Get variables info */
 			j = 0;
 			ast_channel_lock(rpt_vars[i].rxchannel);
 			AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[i].rxchannel), newvariable, entries) {
@@ -310,7 +278,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			}
 			ast_channel_unlock(rpt_vars[i].rxchannel);
 
-//### OUTPUT RPT STATUS STATES ##############
+			/* Output RPT status states */
 			astman_append(ses, "parrot_ena: %s\r\n", parrot_ena);
 			astman_append(ses, "sys_ena: %s\r\n", sys_ena);
 			astman_append(ses, "tot_ena: %s\r\n", tot_ena);
@@ -332,10 +300,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 	return 0;
 }
 
-/*
-* Dump statistics to manager session
-*/
-
+/*! \brief Dump statistics to manager session */
 static int rpt_manager_do_stats(struct mansession *s, const struct message *m, char *str)
 {
 	int i, j, numoflinks;
