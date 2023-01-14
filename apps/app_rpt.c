@@ -686,10 +686,12 @@ void donodelog(struct rpt *myrpt, char *str)
 	struct nodelog *nodep;
 	char datestr[100];
 
-	if (!myrpt->p.archivedir)
+	if (!myrpt->p.archivedir) {
 		return;
+	}
+
 	nodep = (struct nodelog *) ast_malloc(sizeof(struct nodelog));
-	if (nodep == NULL) {
+	if (!nodep) {
 		ast_log(LOG_ERROR, "Cannot get memory for node log");
 		return;
 	}
@@ -700,6 +702,22 @@ void donodelog(struct rpt *myrpt, char *str)
 	ast_mutex_lock(&nodeloglock);
 	insque((struct qelem *) nodep, (struct qelem *) nodelog.prev);
 	ast_mutex_unlock(&nodeloglock);
+}
+
+void __attribute__ ((format (gnu_printf, 5, 6))) __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func, const char *fmt, ...)
+{
+	va_list ap;
+	char *buf;
+	int len;
+
+	va_start(ap, fmt);
+	len = ast_vasprintf(&buf, fmt, ap);
+	va_end(ap);
+
+	if (len > 0) {
+		donodelog(myrpt, buf);
+		ast_free(buf);
+	}
 }
 
 /*! \brief Routine to process events for rpt_master threads */
@@ -1868,10 +1886,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (myrpt->p.archivedir) {
-		char str[512];
-
-		sprintf(str, "DTMF,%s,%c", mylink->name, c);
-		donodelog(myrpt, str);
+		donodelog_fmt(myrpt, "DTMF,%s,%c", mylink->name, c);
 	}
 	c = func_xlat(myrpt, c, &myrpt->p.outxlat);
 	if (!c)
@@ -2013,10 +2028,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 	int res;
 
 	if (myrpt->p.archivedir) {
-		char str[512];
-
-		sprintf(str, "DTMF(P),%s,%c", mylink->name, c);
-		donodelog(myrpt, str);
+		donodelog_fmt(myrpt, "DTMF(P),%s,%c", mylink->name, c);
 	}
 	if (mylink->phonemonitor)
 		return;
@@ -2351,10 +2363,7 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 	if (strcmp(dest, myrpt->name))
 		return 0;
 	if (myrpt->p.archivedir) {
-		char str[100];
-
-		sprintf(str, "DTMF,%c", c);
-		donodelog(myrpt, str);
+		donodelog_fmt(myrpt, "DTMF,%c", c);
 	}
 	c = func_xlat(myrpt, c, &myrpt->p.outxlat);
 	if (!c)
@@ -2388,10 +2397,7 @@ static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *keyed, int 
 		}
 	}
 	if (myrpt->p.archivedir) {
-		char str[100];
-
-		sprintf(str, "DTMF(P),%c", c);
-		donodelog(myrpt, str);
+		donodelog_fmt(myrpt, "DTMF(P),%c", c);
 	}
 	res = handle_remote_dtmf_digit(myrpt, c, keyed, phonemode);
 	if (res != 1)
@@ -2495,10 +2501,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 	rpt_manager_trigger(myrpt, "DTMF", tone);
 
 	if (myrpt->p.archivedir) {
-		char str[100];
-
-		sprintf(str, "DTMF,MAIN,%c", c);
-		donodelog(myrpt, str);
+		donodelog_fmt(myrpt, "DTMF,MAIN,%c", c);
 	}
 	if (c == myrpt->p.endchar) {
 		/* if in simple mode, kill autopatch */
@@ -3742,10 +3745,12 @@ static void *rpt(void *this)
 				myrpt->monstream = ast_writefile(myfname, "wav49", "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0600);
 				if (myrpt->p.monminblocks) {
 					blocksleft = diskavail(myrpt);
-					if (blocksleft >= myrpt->p.monminblocks)
+					if (blocksleft >= myrpt->p.monminblocks) {
 						donodelog(myrpt, "TXKEY,MAIN");
-				} else
+					}
+				} else {
 					donodelog(myrpt, "TXKEY,MAIN");
+				}
 			}
 			rpt_update_boolean(myrpt, "RPT_TXKEYED", 1);
 			lasttx = 1;
@@ -4014,9 +4019,7 @@ static void *rpt(void *this)
 				l->rerxtimer = 0;
 				if (l->lastrx1) {
 					if (myrpt->p.archivedir) {
-						char str[512];
-						sprintf(str, "RXUNKEY,%s", l->name);
-						donodelog(myrpt, str);
+						donodelog_fmt(myrpt, "RXUNKEY,%s", l->name);
 					}
 					l->lastrx1 = 0;
 					rpt_update_links(myrpt);
@@ -4092,10 +4095,7 @@ static void *rpt(void *this)
 					l->rerxtimer = 0;
 					if (l->lastrx1) {
 						if (myrpt->p.archivedir) {
-							char str[512];
-
-							sprintf(str, "RXUNKEY(T),%s", l->name);
-							donodelog(myrpt, str);
+							donodelog_fmt(myrpt, "RXUNKEY(T),%s", l->name);
 						}
 						if (myrpt->p.duplex)
 							rpt_telemetry(myrpt, LINKUNKEY, l);
@@ -4166,14 +4166,7 @@ static void *rpt(void *this)
 				if (l->hasconnected)
 					rpt_update_links(myrpt);
 				if (myrpt->p.archivedir) {
-					char str[512];
-
-					if (!l->hasconnected)
-						sprintf(str, "LINKFAIL,%s", l->name);
-					else {
-						sprintf(str, "LINKDISC,%s", l->name);
-					}
-					donodelog(myrpt, str);
+					donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 				}
 				/* hang-up on call to device */
 				ast_hangup(l->pchan);
@@ -4195,9 +4188,7 @@ static void *rpt(void *this)
 				}
 				rpt_update_links(myrpt);
 				if (myrpt->p.archivedir) {
-					char str[512];
-					sprintf(str, "LINKDISC,%s", l->name);
-					donodelog(myrpt, str);
+					donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
 				}
 				dodispgm(myrpt, l->name);
 				/* hang-up on call to device */
@@ -4403,10 +4394,7 @@ static void *rpt(void *this)
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
 			if (myrpt->p.archivedir) {
-				char str[100];
-
-				sprintf(str, "DTMF(M),MAIN,%c", cin);
-				donodelog(myrpt, str);
+				donodelog_fmt(myrpt, "DTMF(M),MAIN,%c", cin);
 			}
 			local_dtmf_helper(myrpt, c);
 		} else
@@ -5037,13 +5025,7 @@ static void *rpt(void *this)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
 					}
 					if (myrpt->p.archivedir) {
-						char str[512];
-
-						if (totx)
-							sprintf(str, "TXKEY,%s", l->name);
-						else
-							sprintf(str, "TXUNKEY,%s", l->name);
-						donodelog(myrpt, str);
+						donodelog_fmt(myrpt, totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
 					}
 				}
 				l->lasttx = totx;
@@ -5102,13 +5084,7 @@ static void *rpt(void *this)
 					if (l->hasconnected)
 						rpt_update_links(myrpt);
 					if (myrpt->p.archivedir) {
-						char str[512];
-
-						if (!l->hasconnected)
-							sprintf(str, "LINKFAIL,%s", l->name);
-						else
-							sprintf(str, "LINKDISC,%s", l->name);
-						donodelog(myrpt, str);
+						donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 					}
 					dodispgm(myrpt, l->name);
 					if (l->lastf1)
@@ -5172,10 +5148,7 @@ static void *rpt(void *this)
 						l->rerxtimer = 0;
 						if (!l->lastrx1) {
 							if (myrpt->p.archivedir) {
-								char str[512];
-
-								sprintf(str, "RXKEY,%s", l->name);
-								donodelog(myrpt, str);
+								donodelog_fmt(myrpt, "RXKEY,%s", l->name);
 							}
 							l->lastrx1 = 1;
 							rpt_update_links(myrpt);
@@ -5315,15 +5288,13 @@ static void *rpt(void *this)
 						if (!lconnected) {
 							rpt_telemetry(myrpt, CONNECTED, l);
 							if (myrpt->p.archivedir) {
-								char str[512];
-
-								if (l->mode == 1)
-									sprintf(str, "LINKTRX,%s", l->name);
-								else if (l->mode > 1)
-									sprintf(str, "LINKLOCALMONITOR,%s", l->name);
-								else
-									sprintf(str, "LINKMONITOR,%s", l->name);
-								donodelog(myrpt, str);
+								if (l->mode == 1) {
+									donodelog_fmt(myrpt, "LINKTRX,%s", l->name);
+								} else if (l->mode > 1) {
+									donodelog_fmt(myrpt, "LINKLOCALMONITOR,%s", l->name);
+								} else {
+									donodelog_fmt(myrpt, "LINKMONITOR,%s", l->name);
+								}
 							}
 							rpt_update_links(myrpt);
 							doconpgm(myrpt, l->name);
@@ -5337,10 +5308,7 @@ static void *rpt(void *this)
 						l->rerxtimer = 0;
 						if (!l->lastrx1) {
 							if (myrpt->p.archivedir) {
-								char str[512];
-
-								sprintf(str, "RXKEY,%s", l->name);
-								donodelog(myrpt, str);
+								donodelog_fmt(myrpt, "RXKEY,%s", l->name);
 							}
 							l->lastrx1 = 1;
 							rpt_update_links(myrpt);
@@ -5354,10 +5322,7 @@ static void *rpt(void *this)
 						l->rerxtimer = 0;
 						if (l->lastrx1) {
 							if (myrpt->p.archivedir) {
-								char str[512];
-
-								sprintf(str, "RXUNKEY,%s", l->name);
-								donodelog(myrpt, str);
+								donodelog_fmt(myrpt, "RXUNKEY,%s", l->name);
 							}
 							l->lastrx1 = 0;
 							time(&l->lastunkeytime);
@@ -5417,13 +5382,7 @@ static void *rpt(void *this)
 						if (l->hasconnected)
 							rpt_update_links(myrpt);
 						if (myrpt->p.archivedir) {
-							char str[512];
-
-							if (!l->hasconnected)
-								sprintf(str, "LINKFAIL,%s", l->name);
-							else
-								sprintf(str, "LINKDISC,%s", l->name);
-							donodelog(myrpt, str);
+							donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 						}
 						if (l->hasconnected)
 							dodispgm(myrpt, l->name);
@@ -6746,9 +6705,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
 		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
-			char str[512];
-			sprintf(str, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
-			donodelog(myrpt, str);
+			donodelog_fmt(myrpt,"LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		}
 		doconpgm(myrpt, l->name);
 		if ((!phone_mode) && (l->name[0] <= '9')) {
@@ -7368,8 +7325,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
 					}
 					rpt_update_boolean(myrpt, "RPT_TXKEYED", 1);
-					if (myrpt->p.archivedir)
+					if (myrpt->p.archivedir) {
 						donodelog(myrpt, "TXKEY");
+					}
 				}
 			}
 		}
@@ -7411,9 +7369,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
 			if (myrpt->p.archivedir) {
-				char str[100];
-				sprintf(str, "DTMF(M),%c", c);
-				donodelog(myrpt, str);
+				donodelog_fmt(myrpt, "DTMF(M),%c", c);
 			}
 			if (handle_remote_dtmf_digit(myrpt, c, &keyed, 0) == -1)
 				break;
@@ -7715,8 +7671,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		sprintf(mycmd, "DISCONNECT,%s", b1);
 		rpt_update_links(myrpt);
-		if (myrpt->p.archivedir)
+		if (myrpt->p.archivedir) {
 			donodelog(myrpt, mycmd);
+		}
 		dodispgm(myrpt, b1);
 	}
 	myrpt->remote_webtransceiver = 0;

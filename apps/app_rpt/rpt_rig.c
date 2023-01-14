@@ -2276,11 +2276,10 @@ int setrem(struct rpt *myrpt)
 		   myrpt->rxplon);
 #endif
 	if (myrpt->p.archivedir) {
-		sprintf(str, "FREQ,%s,%s,%s,%s,%s,%s,%d,%d", myrpt->freq,
+		donodelog_fmt(myrpt, "FREQ,%s,%s,%s,%s,%s,%s,%d,%d", myrpt->freq,
 				modes[(int) myrpt->remmode],
 				myrpt->txpl, myrpt->rxpl, offsets[(int) myrpt->offset], powerlevels[(int) myrpt->powerlevel],
 				myrpt->txplon, myrpt->rxplon);
-		donodelog(myrpt, str);
 	}
 	if (myrpt->remote && myrpt->remote_webtransceiver) {
 		if (myrpt->remmode == REM_MODE_FM) {

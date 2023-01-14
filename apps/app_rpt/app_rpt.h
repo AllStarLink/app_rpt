@@ -333,7 +333,7 @@ struct vox {
 	char	lastvox;
 	int	offdebcnt;
 	int	ondebcnt;
-} ;
+};
 
 struct rpt_topkey {
 	char	node[TOPKEYMAXSTR];
@@ -890,6 +890,10 @@ int rpt_num_rpts(void);
 int rpt_nullfd(void);
 time_t rpt_starttime(void);
 int function_table_index(const char *s);
+
 void donodelog(struct rpt *myrpt, char *str);
+#define donodelog_fmt(myrpt, fmt, ...) __donodelog_fmt(myrpt, __FILE__, __LINE__, __FUNCTION__, fmt, __VA_ARGS__)
+void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func, const char *fmt, ...);
+
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
