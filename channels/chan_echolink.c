@@ -1666,36 +1666,40 @@ static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int node
 	struct el_instance *instp = i->instp;
 
 	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, assignedids, requestor, 0, "echolink/%s", i->stream);
-	if (tmp) {
-		ast_channel_tech_set(tmp, &el_tech);
-		ast_channel_nativeformats_set(tmp, el_tech.capabilities);
-		ast_channel_set_rawreadformat(tmp, ast_format_gsm);
-		ast_channel_set_rawwriteformat(tmp, ast_format_gsm);
-		ast_channel_set_writeformat(tmp, ast_format_gsm);
-		ast_channel_set_readformat(tmp, ast_format_gsm);
-		if (state == AST_STATE_RING)
-			ast_channel_rings_set(tmp, 1);
-		ast_channel_tech_pvt_set(tmp, i);
-		ast_channel_context_set(tmp, instp->context);
-		ast_channel_exten_set(tmp, instp->astnode);
-		ast_channel_language_set(tmp, "");
-		if (nodenum > 0) {
-			char tmpstr[30];
-
-			sprintf(tmpstr, "3%06u", nodenum);
-			ast_set_callerid(tmp, tmpstr, NULL, NULL);
-		}
-		i->owner = tmp;
-		i->u = ast_module_user_add(tmp);
-		i->nodenum = nodenum;
-		if (state != AST_STATE_DOWN) {
-			if (ast_pbx_start(tmp)) {
-				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
-				ast_hangup(tmp);
-			}
-		}
-	} else
+	if (!tmp) {
 		ast_log(LOG_WARNING, "Unable to allocate channel structure\n");
+		return NULL;
+	}
+
+	ast_channel_tech_set(tmp, &el_tech);
+	ast_channel_nativeformats_set(tmp, el_tech.capabilities);
+	ast_channel_set_rawreadformat(tmp, ast_format_gsm);
+	ast_channel_set_rawwriteformat(tmp, ast_format_gsm);
+	ast_channel_set_writeformat(tmp, ast_format_gsm);
+	ast_channel_set_readformat(tmp, ast_format_gsm);
+	if (state == AST_STATE_RING)
+		ast_channel_rings_set(tmp, 1);
+	ast_channel_tech_pvt_set(tmp, i);
+	ast_channel_context_set(tmp, instp->context);
+	ast_channel_exten_set(tmp, instp->astnode);
+	ast_channel_language_set(tmp, "");
+	ast_channel_unlock(tmp);
+
+	if (nodenum > 0) {
+		char tmpstr[30];
+
+		sprintf(tmpstr, "3%06u", nodenum);
+		ast_set_callerid(tmp, tmpstr, NULL, NULL);
+	}
+	i->owner = tmp;
+	i->u = ast_module_user_add(tmp);
+	i->nodenum = nodenum;
+	if (state != AST_STATE_DOWN) {
+		if (ast_pbx_start(tmp)) {
+			ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
+			ast_hangup(tmp);
+		}
+	}
 	return tmp;
 }
 
