@@ -538,18 +538,17 @@ struct rpt_cmd_struct {
 
 enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 
-/*
- * Populate rpt structure with data
-*/ 
+/*! \brief Populate rpt structure with data */
 struct rpt {
 	ast_mutex_t lock;
 	ast_mutex_t remlock;
 	ast_mutex_t statpost_lock;
+	ast_mutex_t blocklock;	/*!< Lock added to prevent multiple threads from performing blocking operations simultaneously */
 	struct ast_config *cfg;
 	char reload;
 	char reload1;
 	char deleted;
-	char xlink;		 							// cross link state of a share repeater/remote radio
+	char xlink; /*!< cross link state of a share repeater/remote radio */
 	unsigned int statpost_seqno;
 
 	char *name;

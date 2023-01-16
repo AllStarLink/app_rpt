@@ -767,8 +767,9 @@ void rpt_event_process(struct rpt *myrpt)
 			snprintf(valbuf, sizeof(valbuf) - 1, "$[ %s ]", argv[2]);
 			buf[0] = 0;
 			pbx_substitute_variables_helper(myrpt->rxchannel, valbuf, buf, sizeof(buf) - 1);
-			if (pbx_checkcondition(buf))
+			if (pbx_checkcondition(buf)) {
 				cmd = "TRUE";
+			}
 		} else {
 			var = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, argv[2]);
 			if (!var) {
@@ -820,8 +821,7 @@ void rpt_event_process(struct rpt *myrpt)
 		if (action == 'V') {	/* set a variable */
 			pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, (cmd) ? "1" : "0");
 			continue;
-		}
-		if (action == 'G') {	/* set a global variable */
+		} else if (action == 'G') {	/* set a global variable */
 			pbx_builtin_setvar_helper(NULL, v->name, (cmd) ? "1" : "0");
 			continue;
 		}
@@ -839,8 +839,7 @@ void rpt_event_process(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Could not execute event %s for %s: Macro buffer overflow\n", cmd, argv[1]);
 			}
 			rpt_mutex_unlock(&myrpt->lock);
-		}
-		if (action == 'C') {	/* excecute a command */
+		} else if (action == 'C') {	/* excecute a command */
 			/* make a local copy of the value of this entry */
 			myval = ast_strdupa(cmd);
 			/* separate out specification into comma-delimited fields */
@@ -880,9 +879,7 @@ void rpt_event_process(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Could not execute event %s for %s: Command buffer in use\n", cmd, argv[1]);
 			}
 			rpt_mutex_unlock(&myrpt->lock);
-			continue;
-		}
-		if (action == 'S') {	/* excecute a shell command */
+		} else if (action == 'S') {	/* excecute a shell command */
 			char *cp;
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
@@ -895,7 +892,6 @@ void rpt_event_process(struct rpt *myrpt)
 			sprintf(cp, "%s &", cmd);
 			ast_safe_system(cp);
 			ast_free(cp);
-			continue;
 		}
 	}
 	for (v = ast_variable_browse(myrpt->cfg, myrpt->p.events); v; v = v->next) {
@@ -1276,7 +1272,9 @@ void *rpt_call(void *this)
 				tone_zone_play_tone(ast_channel_fd(genchannel, 0), DAHDI_TONE_CONGESTION);
 			}
 		}
+		rpt_mutex_lock(&myrpt->blocklock);
 		res = ast_safe_sleep(mychannel, MSWAIT);
+		rpt_mutex_unlock(&myrpt->blocklock);
 		if (res < 0) {
 			ast_debug(1, "ast_safe_sleep=%i\n", res);
 			ast_hangup(mychannel);
@@ -3332,9 +3330,11 @@ static void *rpt(void *this)
 		setrem(myrpt);
 	/* wait for telem to be done */
 	while ((ms >= 0) && (myrpt->tele.next != &myrpt->tele)) {
+		rpt_mutex_lock(&myrpt->blocklock);
 		if (ast_safe_sleep(myrpt->rxchannel, 50) == -1) {
 			ms = -1;
 		}
+		rpt_mutex_unlock(&myrpt->blocklock);
 	}
 	lastmyrx = 0;
 	myfirst = 0;
@@ -3921,7 +3921,9 @@ static void *rpt(void *this)
 			cs1[x] = cs[s];
 		}
 		myrpt->scram++;
+		rpt_mutex_lock(&myrpt->blocklock);
 		who = ast_waitfor_n(cs1, n, &ms);
+		rpt_mutex_unlock(&myrpt->blocklock);
 		if (who == NULL) {
 			ms = 0;
 		}
@@ -5281,8 +5283,11 @@ static void *rpt(void *this)
 						l->hasconnected = 1;
 						l->thisconnected = 1;
 						l->elaptime = -1;
-						if (!l->phonemode)
+						if (!l->phonemode) {
+							rpt_mutex_lock(&myrpt->blocklock);
 							send_newkey(l->chan);
+							rpt_mutex_unlock(&myrpt->blocklock);
+						}
 						if (!l->isremote)
 							l->retries = 0;
 						if (!lconnected) {
@@ -5800,6 +5805,7 @@ static void *rpt_master(void *ignore)
 		ast_mutex_init(&rpt_vars[n].lock);
 		ast_mutex_init(&rpt_vars[n].remlock);
 		ast_mutex_init(&rpt_vars[n].statpost_lock);
+		ast_mutex_init(&rpt_vars[n].blocklock);
 		rpt_vars[n].tele.next = &rpt_vars[n].tele;
 		rpt_vars[n].tele.prev = &rpt_vars[n].tele;
 		rpt_vars[n].rpt_thread = AST_PTHREADT_NULL;
@@ -6336,15 +6342,20 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (ast_channel_state(chan) != AST_STATE_UP) {
 				ast_indicate(chan, AST_CONTROL_BUSY);
 			}
+			rpt_mutex_lock(&myrpt->blocklock);
 			while (ast_safe_sleep(chan, 10000) != -1);
+			rpt_mutex_unlock(&myrpt->blocklock);
 			return -1;
 		}
 
+		rpt_mutex_lock(&myrpt->blocklock);
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_answer(chan);
-			if (!phone_mode)
+			if (!phone_mode) {
 				send_newkey(chan);
+			}
 		}
+		rpt_mutex_unlock(&myrpt->blocklock);
 
 		l = strlen(options) + 2;
 		orig_s = ast_malloc(l);
@@ -6546,10 +6557,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		gettimeofday(&now, NULL);
 		while ((!ast_tvzero(myrpt->lastlinktime)) && (ast_tvdiff_ms(now, myrpt->lastlinktime) < 250)) {
 			rpt_mutex_unlock(&myrpt->lock);
-			if (ast_check_hangup(myrpt->rxchannel))
+			if (ast_check_hangup(myrpt->rxchannel)) {
 				return -1;
-			if (ast_safe_sleep(myrpt->rxchannel, 100) == -1)
+			}
+			rpt_mutex_lock(&myrpt->blocklock);
+			if (ast_safe_sleep(myrpt->rxchannel, 100) == -1) {
+				rpt_mutex_unlock(&myrpt->blocklock);
 				return -1;
+			}
+			rpt_mutex_unlock(&myrpt->blocklock);
 			rpt_mutex_lock(&myrpt->lock);
 			gettimeofday(&now, NULL);
 		}
@@ -6690,6 +6706,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		insque((struct qelem *) l, (struct qelem *) myrpt->links.next);
 		__kickshort(myrpt);
 		gettimeofday(&myrpt->lastlinktime, NULL);
+		rpt_mutex_lock(&myrpt->blocklock);
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_answer(chan);
 			if (l->name[0] > '9') {
@@ -6702,6 +6719,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 			}
 		}
+		rpt_mutex_unlock(&myrpt->blocklock);
 		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
 		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
@@ -6709,7 +6727,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		doconpgm(myrpt, l->name);
 		if ((!phone_mode) && (l->name[0] <= '9')) {
+			rpt_mutex_lock(&myrpt->blocklock);
 			send_newkey(chan);
+			rpt_mutex_unlock(&myrpt->blocklock);
 		}
 		if (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink") || !strcasecmp(ast_channel_tech(l->chan)->type, "tlb") || (l->name[0] > '9')) {
 			rpt_telemetry(myrpt, CONNECTED, l);
@@ -6750,8 +6770,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				ast_playtones_start(chan, 0, ts->data, 1);
 				i = 0;
 				while (ast_channel_generatordata(chan) && (i < 5000)) {
-					if (ast_safe_sleep(chan, 20))
+					rpt_mutex_lock(&myrpt->blocklock);
+					if (ast_safe_sleep(chan, 20)) {
+						rpt_mutex_unlock(&myrpt->blocklock);
 						break;
+					}
+					rpt_mutex_unlock(&myrpt->blocklock);
 					i += 20;
 				}
 				ast_playtones_stop(chan);
@@ -6784,10 +6808,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						killedit = 1;
 					}
 					rpt_mutex_unlock(&myrpt->lock);
+					rpt_mutex_lock(&myrpt->blocklock);
 					if (ast_safe_sleep(chan, 500) == -1) {
+						rpt_mutex_unlock(&myrpt->blocklock);
 						rpt_disable_cdr(chan);
 						return -1;
 					}
+					rpt_mutex_unlock(&myrpt->blocklock);
 					rpt_mutex_lock(&myrpt->lock);
 				}
 				break;
@@ -7022,11 +7049,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		i = 128;
 		ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_ECHOCANCEL, &i);
 	}
+
+	rpt_mutex_lock(&myrpt->blocklock);
 	if (ast_channel_state(chan) != AST_STATE_UP) {
 		ast_answer(chan);
-		if (!phone_mode)
+		if (!phone_mode) {
 			send_newkey(chan);
+		}
 	}
+	rpt_mutex_unlock(&myrpt->blocklock);
 
 	if (myrpt->rxchannel == myrpt->dahdirxchannel) {
 		if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_GET_PARAMS, &par) != -1) {
@@ -7096,8 +7127,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	cs[n++] = myrpt->btelechannel;
 	if (myrpt->rxchannel != myrpt->txchannel)
 		cs[n++] = myrpt->txchannel;
-	if (!phone_mode)
+
+	rpt_mutex_lock(&myrpt->blocklock);
+	if (!phone_mode) {
 		send_newkey(chan);
+	}
+	rpt_mutex_unlock(&myrpt->blocklock);
+
 	myfirst = 0;
 	/* start un-locked */
 	for (;;) {
@@ -7179,7 +7215,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		}
 		ms = MSWAIT;
+		rpt_mutex_lock(&myrpt->blocklock);
 		who = ast_waitfor_n(cs, n, &ms);
+		rpt_mutex_unlock(&myrpt->blocklock);
 		if (who == NULL)
 			ms = 0;
 		elap = MSWAIT - ms;
@@ -7774,6 +7812,7 @@ static int unload_module(void)
 		}
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
+		ast_mutex_destroy(&rpt_vars[i].blocklock);
 	}
 	ast_debug(1, "Waiting for master thread to exit\n");
 	pthread_join(rpt_master_thread, NULL); /* All pseudo channels need to be hung up before we can unload the Rpt() application */
@@ -7890,6 +7929,7 @@ static int reload(void)
 			ast_mutex_init(&rpt_vars[n].lock);
 			ast_mutex_init(&rpt_vars[n].remlock);
 			ast_mutex_init(&rpt_vars[n].statpost_lock);
+			ast_mutex_init(&rpt_vars[n].blocklock);
 			rpt_vars[n].tele.next = &rpt_vars[n].tele;
 			rpt_vars[n].tele.prev = &rpt_vars[n].tele;
 			rpt_vars[n].rpt_thread = AST_PTHREADT_NULL;

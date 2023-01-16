@@ -114,8 +114,7 @@ static void _rpt_mutex_lock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	if (t->lockcount) {
 		int lastline = t->lastlock;
 		ast_mutex_unlock(&locklock);
-		ast_log(LOG_NOTICE, "rpt_mutex_lock: Double lock request line %d node %s pid %x, last lock was line %d\n", line,
-				myrpt->name, (int) t->id, lastline);
+		ast_log(LOG_ERROR, "rpt_mutex_lock: Double lock request line %d node %s pid %x, last lock was line %d\n", line, myrpt->name, (int) t->id, lastline);
 		rpt_mutex_spew();
 		return;
 	}
@@ -146,8 +145,7 @@ static void _rpt_mutex_unlock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	if (!t->lockcount) {
 		int lastline = t->lastunlock;
 		ast_mutex_unlock(&locklock);
-		ast_log(LOG_NOTICE, "rpt_mutex_lock: Double un-lock request line %d node %s pid %x, last un-lock was line %d\n",
-				line, myrpt->name, (int) t->id, lastline);
+		ast_log(LOG_ERROR, "rpt_mutex_lock: Double un-lock request line %d node %s pid %x, last un-lock was line %d\n", line, myrpt->name, (int) t->id, lastline);
 		rpt_mutex_spew();
 		return;
 	}
