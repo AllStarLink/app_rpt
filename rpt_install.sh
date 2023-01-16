@@ -6,6 +6,10 @@ cd /usr/src
 # If we need to test old versions, easiest to clone this dir, then change this to the new name for testing.
 MYDIR=app_rpt
 
+FILE_DIR="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+FILE_NAME=$( basename $0 ) # grr... why is realpath not in the POSIX standard?
+FILE_PATH="$FILE_DIR/$FILE_NAME"
+
 # Download app_rpt repo if not present already
 if [ ! -d $MYDIR ]; then
 	git clone https://github.com/InterLinked1/app_rpt.git
@@ -16,6 +20,15 @@ else
 	git pull
 	cd ..
 fi
+
+# It's possible this script itself (if run outside of the repo) is obsolete. Make sure we only run the latest one.
+if [ "$1" != "updated" ]; then
+	printf "Updating ourself\n"
+	cp /usr/src/app_rpt/$FILE_NAME $FILE_PATH && exec $FILE_PATH "updated" # Replace and exec, all in one shot (important!)
+fi
+
+printf "Script is now the latest version\n"
+sleep 1
 
 # cd into Asterisk source directory
 ls -d -v */ | grep "^asterisk" | tail -1
