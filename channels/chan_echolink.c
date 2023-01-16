@@ -708,6 +708,8 @@ static int rtcp_make_el_sdes(unsigned char *pkt, int pktLen, char *cname, char *
 	unsigned char *ap;
 	int l, hl, pl;
 
+	memset(zp, 0, sizeof(zp)); /* Not really needed since pkt has been memset already by the caller, but prevents valgrind complaining about it */
+
 	hl = 0;
 	*p++ = 2 << 6;
 	*p++ = 201;
