@@ -2882,6 +2882,27 @@ static void do_scheduler(struct rpt *myrpt)
 	pthread_exit(NULL); \
 }
 
+#define load_rpt_vars_by_rpt(myrpt, force) _load_rpt_vars_by_rpt(myrpt, force);
+
+static void _load_rpt_vars_by_rpt(struct rpt *myrpt, int force)
+{
+	int i;
+
+	/* find our index, and load the vars initially */
+	for (i = 0; i < nrpts; i++) {
+		if (&rpt_vars[i] == myrpt) {
+			if (rpt_vars[i].cfg && !force) {
+				/* On startup, previously load_rpt_vars was getting called twice for
+				 * every node. Avoid this by not if we already loaded the config on startup. */
+				ast_debug(1, "Already have a config for %s, skipping\n", rpt_vars[i].name);
+				break;
+			}
+			load_rpt_vars(i, 0);
+			break;
+		}
+	}
+}
+
 /* single thread with one file (request) to dial */
 static void *rpt(void *this)
 {
@@ -2915,13 +2936,8 @@ static void *rpt(void *this)
 		telem = telem->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
-	/* find our index, and load the vars initially */
-	for (i = 0; i < nrpts; i++) {
-		if (&rpt_vars[i] == myrpt) {
-			load_rpt_vars(i, 0);
-			break;
-		}
-	}
+
+	load_rpt_vars_by_rpt(myrpt, 0);
 
 	rpt_mutex_lock(&myrpt->lock);
 	while (myrpt->xlink) {
@@ -3427,13 +3443,7 @@ static void *rpt(void *this)
 			myrpt->reload = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			usleep(10000);
-			/* find our index, and load the vars */
-			for (i = 0; i < nrpts; i++) {
-				if (&rpt_vars[i] == myrpt) {
-					load_rpt_vars(i, 0);
-					break;
-				}
-			}
+			load_rpt_vars_by_rpt(myrpt, 1);
 		}
 
 		if (ast_check_hangup(myrpt->rxchannel))
@@ -5739,9 +5749,12 @@ static void *rpt_master(void *ignore)
 	/* go thru all the specified repeaters */
 	this = NULL;
 	n = 0;
+
 	/* wait until asterisk starts */
-	while (!ast_test_flag(&ast_options, AST_OPT_FLAG_FULLY_BOOTED))
+	while (!ast_test_flag(&ast_options, AST_OPT_FLAG_FULLY_BOOTED)) {
 		usleep(250000);
+	}
+
 	rpt_vars[n].cfg = ast_config_load("rpt.conf", config_flags);
 	cfg = rpt_vars[n].cfg;
 	if (!cfg) {
@@ -5821,7 +5834,7 @@ static void *rpt_master(void *ignore)
 
 	/* start em all */
 	for (i = 0; i < n; i++) {
-		load_rpt_vars(i, 1);
+		load_rpt_vars(i, 1); /* Load initial config */
 
 		/* if is a remote, dont start one for it */
 		if (rpt_vars[i].remote) {
@@ -6831,13 +6844,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->remoteon = 1;
 	voxinit_rpt(myrpt, 1);
 	rpt_mutex_unlock(&myrpt->lock);
-	/* find our index, and load the vars initially */
-	for (i = 0; i < nrpts; i++) {
-		if (&rpt_vars[i] == myrpt) {
-			load_rpt_vars(i, 0);
-			break;
-		}
-	}
+
+	load_rpt_vars_by_rpt(myrpt, 1);
+
 	rpt_mutex_lock(&myrpt->lock);
 	tele = strchr(myrpt->rxchanname, '/');
 	if (!tele) {
@@ -7156,13 +7165,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		if (myrpt->reload) {
 			myrpt->reload = 0;
-			/* find our index, and load the vars */
-			for (i = 0; i < nrpts; i++) {
-				if (&rpt_vars[i] == myrpt) {
-					load_rpt_vars(i, 0);
-					break;
-				}
-			}
+			load_rpt_vars_by_rpt(myrpt, 1);
 		}
 		time(&t);
 		if (myrpt->p.remotetimeout) {
