@@ -2861,6 +2861,7 @@ static void do_scheduler(struct rpt *myrpt)
 	} \
 	ast_log(LOG_WARNING, "Terminating channel '%s'\n", ast_channel_name(myrpt->rxchannel)); \
 	ast_hangup(myrpt->rxchannel); \
+	myrpt->rxchannel = NULL; \
 	rpt_vars[i].deleted = 1; \
 	myrpt->rpt_thread = AST_PTHREADT_STOP; \
 	pthread_exit(NULL); \
@@ -2877,6 +2878,7 @@ static void do_scheduler(struct rpt *myrpt)
 	} \
 	ast_log(LOG_WARNING, "Terminating channel '%s'\n", ast_channel_name(myrpt->rxchannel)); \
 	ast_hangup(myrpt->rxchannel); \
+	myrpt->rxchannel = NULL; \
 	rpt_vars[i].deleted = 1; \
 	myrpt->rpt_thread = AST_PTHREADT_STOP; \
 	pthread_exit(NULL); \
@@ -2991,6 +2993,7 @@ static void *rpt(void *this)
 			ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
+			myrpt->rxchannel = NULL;
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
@@ -2998,6 +3001,7 @@ static void *rpt(void *this)
 		if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP) {
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
+			myrpt->rxchannel = NULL;
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
@@ -3015,6 +3019,7 @@ static void *rpt(void *this)
 			ast_log(LOG_WARNING, "Txchannel Dial number (%s) must be in format tech/number\n", myrpt->txchanname);
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
+			myrpt->rxchannel = NULL;
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
@@ -3028,6 +3033,8 @@ static void *rpt(void *this)
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_hangup(myrpt->txchannel);
 				ast_hangup(myrpt->rxchannel);
+				myrpt->rxchannel = NULL;
+				myrpt->txchannel = NULL;
 				myrpt->rpt_thread = AST_PTHREADT_STOP;
 				pthread_exit(NULL);
 			}
@@ -3035,7 +3042,9 @@ static void *rpt(void *this)
 			if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP) {
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_hangup(myrpt->rxchannel);
+				myrpt->rxchannel = NULL;
 				ast_hangup(myrpt->txchannel);
+				myrpt->txchannel = NULL;
 				myrpt->rpt_thread = AST_PTHREADT_STOP;
 				pthread_exit(NULL);
 			}
@@ -3043,6 +3052,7 @@ static void *rpt(void *this)
 			ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
+			myrpt->rxchannel = NULL;
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
@@ -3101,6 +3111,7 @@ static void *rpt(void *this)
 		if (myrpt->txchannel != myrpt->rxchannel)
 			ast_hangup(myrpt->txchannel);
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
@@ -3118,6 +3129,7 @@ static void *rpt(void *this)
 		if (myrpt->txchannel != myrpt->rxchannel)
 			ast_hangup(myrpt->txchannel);
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
@@ -3131,9 +3143,12 @@ static void *rpt(void *this)
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->pchannel);
 			ast_hangup(myrpt->monchannel);
-			if (myrpt->txchannel != myrpt->rxchannel)
+			if (myrpt->txchannel != myrpt->rxchannel) {
 				ast_hangup(myrpt->txchannel);
+				myrpt->txchannel = NULL;
+			}
 			ast_hangup(myrpt->rxchannel);
+			myrpt->rxchannel = NULL;
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
@@ -3148,9 +3163,12 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_hangup(myrpt->pchannel);
 		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
+		if (myrpt->txchannel != myrpt->rxchannel) {
 			ast_hangup(myrpt->txchannel);
+			myrpt->txchannel = NULL;
+		}
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
@@ -3182,9 +3200,12 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_hangup(myrpt->txpchannel);
 		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
+		if (myrpt->txchannel != myrpt->rxchannel) {
 			ast_hangup(myrpt->txchannel);
+			myrpt->txchannel = NULL;
+		}
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
@@ -3196,9 +3217,12 @@ static void *rpt(void *this)
 	if (!myrpt->btelechannel) {
 		ast_log(LOG_WARNING, "Failed to obtain pseudo channel for btelechannel\n");
 		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel)
+		if (myrpt->txchannel != myrpt->rxchannel) {
 			ast_hangup(myrpt->txchannel);
+			myrpt->txchannel = NULL;
+		}
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
@@ -3243,9 +3267,12 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_hangup(myrpt->txpchannel);
 		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
+		if (myrpt->txchannel != myrpt->rxchannel) {
 			ast_hangup(myrpt->txchannel);
+			myrpt->txchannel = NULL;
+		}
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
@@ -3255,9 +3282,12 @@ static void *rpt(void *this)
 		ast_log(LOG_ERROR, "Unable to open %s\n", myrpt->p.ioport);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
+		if (myrpt->txchannel != myrpt->rxchannel) {
 			ast_hangup(myrpt->txchannel);
+			myrpt->txchannel = NULL;
+		}
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		pthread_exit(NULL);
 	}
 	/* Now, the idea here is to copy from the physical rx channel buffer
@@ -3319,6 +3349,7 @@ static void *rpt(void *this)
 		if (!(myrpt->dsp = ast_dsp_new())) {
 			ast_log(LOG_WARNING, "Unable to allocate DSP!\n");
 			ast_hangup(myrpt->rxchannel);
+			myrpt->rxchannel = NULL;
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
@@ -5712,6 +5743,8 @@ static void *rpt(void *this)
 		ast_frfree(myrpt->lastf2);
 	myrpt->lastf2 = NULL;
 	ast_hangup(myrpt->rxchannel);
+	myrpt->rxchannel = NULL;
+
 	rpt_mutex_lock(&myrpt->lock);
 	l = myrpt->links.next;
 	while (l != &myrpt->links) {
@@ -5728,6 +5761,7 @@ static void *rpt(void *this)
 	if (myrpt->xlink == 1)
 		myrpt->xlink = 2;
 	rpt_mutex_unlock(&myrpt->lock);
+
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	myrpt->rpt_thread = AST_PTHREADT_STOP;
 	if (myrpt->outstreampid)
@@ -5737,6 +5771,9 @@ static void *rpt(void *this)
 	pthread_exit(NULL);
 	return NULL;
 }
+
+/* Forward declaration */
+static int stop_repeaters(void);
 
 static void *rpt_master(void *ignore)
 {
@@ -5896,8 +5933,13 @@ static void *rpt_master(void *ignore)
 				}
 				if (time(NULL) - rpt_vars[i].lastthreadrestarttime <= 5) {
 					if (rpt_vars[i].threadrestarts >= 5) {
-						ast_log(LOG_ERROR, "Continual RPT thread restarts, killing Asterisk\n");
-						exit(1);	/* Stuck in a restart loop, kill Asterisk and start over */
+						/* This is way off-nominal here. The original code just called exit(1) which
+						 * is totally not cool... so this is a little bit saner. */
+						ast_log(LOG_ERROR, "Continual RPT thread restarts, stopping repeaters\n");
+						stop_repeaters();
+						/* Not necessary to set shutting_down to 1, since we're the only thread that uses that, and we're exiting */
+						ast_mutex_unlock(&rpt_master_lock);
+						return NULL; /* The module will have to be unloaded and loaded again to start the repeaters */
 					} else {
 						ast_log(LOG_WARNING, "RPT thread restarted on %s\n", rpt_vars[i].name);
 						rpt_vars[i].threadrestarts++;
@@ -6886,6 +6928,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_log(LOG_WARNING, "Dial number must be in format tech/number\n");
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
+			myrpt->rxchannel = NULL;
 			pthread_exit(NULL);
 		}
 		*tele++ = 0;
@@ -6901,6 +6944,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
+			myrpt->rxchannel = NULL;
 			pthread_exit(NULL);
 		}
 		*--tele = '/';
@@ -6918,9 +6962,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (!myrpt->pchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel)
+		if (myrpt->txchannel != myrpt->rxchannel) {
 			ast_hangup(myrpt->txchannel);
+			myrpt->txchannel = NULL;
+		}
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->pchannel));
@@ -6939,9 +6986,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (join_dahdiconf(myrpt->pchannel, &ci)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
+		if (myrpt->txchannel != myrpt->rxchannel) {
 			ast_hangup(myrpt->txchannel);
+			myrpt->txchannel = NULL;
+		}
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		pthread_exit(NULL);
 	}
 	/* save pseudo channel conference number */
@@ -6951,9 +7001,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (myrpt->p.ioport && ((myrpt->iofd = openserial(myrpt, myrpt->p.ioport)) == -1)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
+		if (myrpt->txchannel != myrpt->rxchannel) {
 			ast_hangup(myrpt->txchannel);
+			myrpt->txchannel = NULL;
+		}
 		ast_hangup(myrpt->rxchannel);
+		myrpt->rxchannel = NULL;
 		pthread_exit(NULL);
 	}
 	iskenwood_pci4 = 0;
@@ -7773,9 +7826,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		close(myrpt->iofd);
 	myrpt->iofd = -1;
 	ast_hangup(myrpt->pchannel);
-	if (myrpt->rxchannel != myrpt->txchannel)
+	if (myrpt->rxchannel != myrpt->txchannel) {
 		ast_hangup(myrpt->txchannel);
+		myrpt->txchannel = NULL;
+	}
 	ast_hangup(myrpt->rxchannel);
+	myrpt->rxchannel = NULL;
 	closerem(myrpt);
 	if (myrpt->p.rptnode) {
 		rpt_mutex_lock(&myrpt->lock);
@@ -7791,6 +7847,31 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	return res;
 }
 
+static int stop_repeaters(void)
+{
+	int i;
+
+	for (i = 0; i < nrpts; i++) {
+		struct rpt *myrpt = &rpt_vars[i];
+		if (!myrpt) {
+			ast_debug(1, "No RPT at index %d?\n", i);
+			continue;
+		}
+		if (!strcmp(rpt_vars[i].name, rpt_vars[i].p.nodes)) {
+			continue;
+		}
+		ast_verb(3, "Hanging up repeater %s\n", rpt_vars[i].name);
+		if (myrpt->rxchannel) {
+			ast_verb(4, "Hanging up channel %s\n", ast_channel_name(myrpt->rxchannel));
+			ast_channel_lock(myrpt->rxchannel);
+			ast_softhangup(myrpt->rxchannel, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
+			ast_channel_unlock(myrpt->rxchannel);
+			myrpt->rxchannel = NULL; /* If we aborted the repeater but haven't unloaded, this channel handle is not valid anymore in a future call to stop_repeaters() */
+		}
+	}
+	return 0;
+}
+
 static int unload_module(void)
 {
 	int i, res;
@@ -7799,27 +7880,30 @@ static int unload_module(void)
 
 	daq_uninit();
 
-	for (i = 0; i < nrpts; i++) {
-		struct rpt *myrpt = &rpt_vars[i];
-		if (!myrpt) {
-			ast_debug(1, "No RPT at index %d?\n", i);
-			continue;
-		}
-		if (!strcmp(rpt_vars[i].name, rpt_vars[i].p.nodes))
-			continue;
-		ast_verb(3, "Hanging up repeater %s\n", rpt_vars[i].name);
-		if (myrpt->rxchannel) {
-			ast_channel_lock(myrpt->rxchannel);
-			ast_softhangup(myrpt->rxchannel, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
-			ast_channel_unlock(myrpt->rxchannel);
-		}
-		ast_mutex_destroy(&rpt_vars[i].lock);
-		ast_mutex_destroy(&rpt_vars[i].remlock);
-		ast_mutex_destroy(&rpt_vars[i].blocklock);
-	}
+	stop_repeaters();
+
 	ast_debug(1, "Waiting for master thread to exit\n");
 	pthread_join(rpt_master_thread, NULL); /* All pseudo channels need to be hung up before we can unload the Rpt() application */
 	ast_debug(1, "Master thread has now exited\n");
+
+	/* Destroy the locks subsequently, after repeater threads have exited. Otherwise they will still be in use. */
+	for (i = 0; i < nrpts; i++) {
+		struct rpt *myrpt = &rpt_vars[i];
+		if (!myrpt) {
+			continue;
+		}
+		if (!strcmp(rpt_vars[i].name, rpt_vars[i].p.nodes)) {
+			continue;
+		}
+		ast_debug(3, "Destroying locks for repeater %s\n", rpt_vars[i].name);
+		ast_mutex_destroy(&rpt_vars[i].lock);
+		ast_mutex_destroy(&rpt_vars[i].remlock);
+		/* Lock and unlock in case somebody had the lock */
+		ast_mutex_lock(&rpt_vars[i].blocklock);
+		ast_mutex_unlock(&rpt_vars[i].blocklock);
+		ast_mutex_destroy(&rpt_vars[i].blocklock);
+	}
+
 	res = ast_unregister_application(app);
 #ifdef	_MDC_ENCODE_H_
 	res |= mdc1200_unload();

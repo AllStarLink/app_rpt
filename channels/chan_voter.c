@@ -1706,6 +1706,7 @@ static void *voter_xmit(void *data)
 				f3 = AST_LIST_REMOVE_HEAD(&p->pagerq, frame_list);
 				f1 = ast_translate(p->fromast, f3, 0);
 				if (!f1) {
+					ast_mutex_unlock(&p->pagerqlock);
 					ast_log(LOG_ERROR, "Can not translate frame to recv from Asterisk\n");
 					continue;
 				}
@@ -3264,13 +3265,14 @@ static void *voter_timer(void *data)
 	while (run_forever && (!ast_shutting_down())) {
 		i = read(voter_timing_fd, buf, sizeof(buf));
 		if (i != FRAME_SIZE) {
-			ast_log(LOG_ERROR, "error in read() for voter timer\n");
+			ast_log(LOG_ERROR, "error in read() for voter timer: %s\n", strerror(errno));
 			pthread_exit(NULL);
 		}
 		ast_mutex_lock(&voter_lock);
 		time(&t);
-		if (!hasmaster)
+		if (!hasmaster) {
 			master_time.vtime_sec = (uint32_t) t;
+		}
 		voter_timing_count++;
 		if (!hasmaster) {
 			for (p = pvts; p; p = p->next) {
@@ -3291,13 +3293,15 @@ static void *voter_timer(void *data)
 			}
 			if (check_client_sanity) {
 				for (client = clients; client; client = client->next) {
-					if (!client->respdigest)
+					if (!client->respdigest) {
 						continue;
+					}
 					for (client1 = client->next; client1; client1 = client1->next) {
 						if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) &&
 							(client1->sin.sin_port == client->sin.sin_port)) {
-							if (!client1->respdigest)
+							if (!client1->respdigest) {
 								continue;
+							}
 							client->respdigest = 0;
 							client->heardfrom = 0;
 							client1->respdigest = 0;
