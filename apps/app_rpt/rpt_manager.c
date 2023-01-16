@@ -101,7 +101,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m, char *str)
 {
 	int i, j;
-	char ns;
+	unsigned int ns;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;

@@ -414,7 +414,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 {
 	int i, j;
-	char ns;
+	unsigned int ns;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
@@ -652,7 +652,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 {
 	int i, j;
-	char ns;
+	unsigned int ns;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	struct rpt *myrpt;
 	int nrpts = rpt_num_rpts();

@@ -308,7 +308,7 @@ struct rpt_chan_stat {
 #define	TOTIME 180000
 #define	IDTIME 300000
 #define	MAXRPTS 500
-#define MAX_STAT_LINKS 32
+#define MAX_STAT_LINKS 256
 #define POLITEID 30000
 #define FUNCTDELAY 1500
 
