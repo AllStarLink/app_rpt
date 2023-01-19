@@ -4446,7 +4446,9 @@ static void *rpt(void *this)
 		if (who == myrpt->rxchannel) {	/* if it was a read from rx */
 			int ismuted;
 
+			rpt_mutex_lock(&myrpt->blocklock);
 			f = ast_read(myrpt->rxchannel);
+			rpt_mutex_unlock(&myrpt->blocklock);
 			if (!f) {
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
 				break;
@@ -5003,7 +5005,9 @@ static void *rpt(void *this)
 					while ((f1 = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list)))
 						ast_frfree(f1);
 				}
+				rpt_mutex_lock(&myrpt->blocklock);
 				ast_write(myrpt->txchannel, f);
+				rpt_mutex_unlock(&myrpt->blocklock);
 			}
 			if (f->frametype == AST_FRAME_CONTROL) {
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {
@@ -5040,7 +5044,6 @@ static void *rpt(void *this)
 			rpt_mutex_unlock(&myrpt->lock);
 			now = ast_tvnow();
 			if ((who == l->chan) || (!l->lastlinktv.tv_sec) || (ast_tvdiff_ms(now, l->lastlinktv) >= 19)) {
-
 				char mycalltx;
 
 				l->lastlinktv = now;
