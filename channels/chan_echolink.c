@@ -21,7 +21,7 @@
 /*! \file
  *
  * \brief Echolink channel driver for Asterisk
- * 
+ *
  * \author Scott Lawson/KI4LKF <ham44865@yahoo.com>
  * \author Jim Dixon, WB6NIL <jim@lambdatel.com>
  *
@@ -450,7 +450,9 @@ static char dbdump_usage[] = "Usage: echolink dbdump [nodename|callsign|ipaddr]\
 static char dbget_usage[] =
 	"Usage: echolink dbget <nodename|callsign|ipaddr> <lookup-data>\n" "       Looks up echolink db entry\n";
 
-static void mythread_exit(void *nothing)
+#define mythread_exit(nothing) __mythread_exit(nothing, __LINE__)
+
+static void __mythread_exit(void *nothing, int line)
 {
 	int i;
 
@@ -466,7 +468,7 @@ static void mythread_exit(void *nothing)
 		pthread_kill(el_register_thread, SIGTERM);
 	if (el_directory_thread)
 		pthread_kill(el_directory_thread, SIGTERM);
-	ast_log(LOG_ERROR, "Exiting chan_echolink, FATAL ERROR!!\n");
+	ast_log(LOG_ERROR, "Exiting chan_echolink, FATAL ERROR at line %d!!\n", line);
 	ast_cli_command(nullfd, "rpt restart");
 	pthread_exit(NULL);
 }
@@ -1870,35 +1872,6 @@ static struct ast_cli_entry el_cli[] = {
 	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry")
 };
 
-static int unload_module(void)
-{
-	int n;
-
-	run_forever = 0;
-	tdestroy(el_node_list, free_node);
-	for (n = 0; n < ninstances; n++) {
-		if (instances[n]->audio_sock != -1) {
-			close(instances[n]->audio_sock);
-			instances[n]->audio_sock = -1;
-		}
-		if (instances[n]->ctrl_sock != -1) {
-			close(instances[n]->ctrl_sock);
-			instances[n]->ctrl_sock = -1;
-		}
-	}
-	ast_cli_unregister_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
-	/* First, take us out of the channel loop */
-	ast_channel_unregister(&el_tech);
-	ao2_cleanup(el_tech.capabilities);
-	el_tech.capabilities = NULL;
-
-	for (n = 0; n < ninstances; n++)
-		ast_free(instances[n]);
-	if (nullfd != -1)
-		close(nullfd);
-	return 0;
-}
-
 /* 
    If asterisk has a function that writes at least n bytes to a TCP socket,
    remove writen function and use the one provided by Asterisk
@@ -2314,8 +2287,7 @@ static void *el_directory(void *data)
 		else if (rc == 0)
 			el_sleeptime = 1800;
 	}
-	ast_log(LOG_WARNING, "Echolink directory thread exited.\n");
-	mythread_exit(NULL);
+	ast_debug(1, "Echolink directory thread exited.\n");
 	return NULL;
 }
 
@@ -2356,12 +2328,8 @@ static void *el_register(void *data)
 		else
 			el_login_sleeptime = 20;
 	}
-	/* 
-	   Send a de-register message, but what is the point,
-	   Echolink deactivates this node within 6 minutes
-	 */
-	ast_log(LOG_WARNING, "Echolink registration thread exited.\n");
-	mythread_exit(NULL);
+	/* Send a de-register message, but what is the point, Echolink deactivates this node within 6 minutes */
+	ast_debug(1, "Echolink registration thread exited.\n");
 	return NULL;
 }
 
@@ -2771,8 +2739,7 @@ static void *el_reader(void *data)
 		}
 	}
 	ast_mutex_unlock(&instp->lock);
-	ast_verb(4, "Echolink read thread exited.\n");
-	mythread_exit(NULL);
+	ast_debug(1, "Echolink read thread exited.\n");
 	return NULL;
 }
 
@@ -2783,7 +2750,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	struct ast_hostent ah;
 	struct el_instance *instp;
 	struct sockaddr_in si_me;
-	pthread_attr_t attr;
 
 	if (ninstances >= EL_MAX_INSTANCES) {
 		ast_log(LOG_ERROR, "Too many instances specified\n");
@@ -3023,10 +2989,8 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		return -1;
 	}
 	memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&el_register_thread, &attr, el_register, (void *) instp);
-	ast_pthread_create(&instp->el_reader_thread, &attr, el_reader, (void *) instp);
+	ast_pthread_create(&el_register_thread, NULL, el_register, (void *) instp);
+	ast_pthread_create_detached(&instp->el_reader_thread, NULL, el_reader, (void *) instp);
 	instances[ninstances++] = instp;
 
 	ast_debug(1, "Echolink/%s listening on %s port %s\n", instp->name, instp->ipaddr, instp->port);
@@ -3041,11 +3005,52 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
+static int unload_module(void)
+{
+	int n;
+
+	run_forever = 0;
+	if (el_node_list) {
+		tdestroy(el_node_list, free_node);
+	}
+
+	ast_debug(1, "We have %d Echolink instance%s\n", ninstances, ESS(ninstances));
+	for (n = 0; n < ninstances; n++) {
+		ast_debug(2, "Closing Echolink instance %d\n", n);
+		if (instances[n]->audio_sock != -1) {
+			close(instances[n]->audio_sock);
+			instances[n]->audio_sock = -1;
+		}
+		if (instances[n]->ctrl_sock != -1) {
+			close(instances[n]->ctrl_sock);
+			instances[n]->ctrl_sock = -1;
+		}
+		if (instances[n]->el_reader_thread) {
+			pthread_join(instances[n]->el_reader_thread, NULL);
+		}
+	}
+
+	/* Wait for all threads to exit */
+	pthread_join(el_directory_thread, NULL);
+	pthread_join(el_register_thread, NULL);
+
+	ast_cli_unregister_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
+	/* First, take us out of the channel loop */
+	ast_channel_unregister(&el_tech);
+	ao2_cleanup(el_tech.capabilities);
+	el_tech.capabilities = NULL;
+
+	for (n = 0; n < ninstances; n++)
+		ast_free(instances[n]);
+	if (nullfd != -1)
+		close(nullfd);
+	return 0;
+}
+
 static int load_module(void)
 {
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL;
-	pthread_attr_t attr;
 	struct ast_flags zeroflag = { 0 };
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
@@ -3072,9 +3077,7 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&el_directory_thread, &attr, el_directory, NULL);
+	ast_pthread_create(&el_directory_thread, NULL, el_directory, NULL);
 	ast_cli_register_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&el_tech)) {
