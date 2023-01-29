@@ -8,6 +8,7 @@
 #include "asterisk/channel.h"
 #include "asterisk/pbx.h"
 #include "asterisk/cli.h" /* use ast_cli_command */
+#include "asterisk/module.h" /* use ast_module_check */
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
@@ -266,8 +267,9 @@ static int elink_cmd(char *cmd, char *outstr, int outlen)
 	FILE *tf;
 
 	tf = tmpfile();
-	if (!tf)
+	if (!tf) {
 		return -1;
+	}
 	ast_debug(1, "elink_cmd sent %s\n", cmd);
 	ast_cli_command(fileno(tf), cmd);
 	rewind(tf);
@@ -289,6 +291,15 @@ int elink_db_get(char *lookup, char c, char *nodenum, char *callsign, char *ipad
 {
 	char str[512], str1[100], *strs[5];
 	int n;
+	static int echolink_available = -1;
+
+	if (echolink_available == -1) {
+		echolink_available = ast_module_check("chan_echolink.so"); /* First time, do the check. Subsequently, use the cached result. */
+	}
+	if (!echolink_available) {
+		ast_debug(5, "chan_echolink not loaded, skipping\n");
+		return 0; /* If echolink isn't loaded, avoid unnecessarily sending a CLI command that will fail anyways */
+	}
 
 	snprintf(str, sizeof(str) - 1, "echolink dbget %c %s", c, lookup);
 	n = elink_cmd(str, str1, sizeof(str1));
@@ -310,6 +321,15 @@ int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipad
 {
 	char str[315], str1[100], *strs[6];
 	int n;
+	static int tlb_available = -1;
+
+	if (tlb_available == -1) {
+		tlb_available = ast_module_check("chan_tlb.so"); /* First time, do the check. Subsequently, use the cached result. */
+	}
+	if (!tlb_available) {
+		ast_debug(5, "chan_tlb not loaded, skipping\n");
+		return 0; /* If chan_tlb isn't loaded, avoid unnecessarily sending a CLI command that will fail anyways */
+	}
 
 	snprintf(str, sizeof(str) - 1, "tlb nodeget %c %s", c, lookup);
 	n = elink_cmd(str, str1, sizeof(str1));
