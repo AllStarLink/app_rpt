@@ -211,6 +211,9 @@ static char *synopsis = "GPS Device Interface Module";
 static char *descrip = "Interfaces app_rpt to a NMEA 0183 (GGA records) compliant GPS device\n";
 
 static pthread_t gps_thread = 0;
+static pthread_t gps_section_thread = 0;
+static pthread_t gps_subthread = 0;
+static pthread_t gps_ttthread = 0;
 static pthread_t aprs_thread = 0;
 static int run_forever = 1;
 static char *comport, *server, *port;
@@ -361,9 +364,11 @@ static void *aprsthread(void *data)
 	cfg = NULL;
 	while (run_forever) {
 		ast_mutex_lock(&gps_lock);
-		if (sockfd < 0)
+		if (sockfd < 0) {
 			close(sockfd);
+		}
 		sockfd = socket(AF_INET, SOCK_STREAM, 0);
+		pthread_testcancel();
 		if (sockfd < 0) {
 			ast_log(LOG_ERROR, "Error opening socket\n");
 			sockfd = -1;
@@ -405,13 +410,12 @@ static void *aprsthread(void *data)
 		ast_mutex_unlock(&gps_lock);
 		while (recv(sockfd, buf, sizeof(buf) - 1, 0) > 0);
 	}
-	pthread_exit(NULL);
+	ast_debug(2, "%s has exited\n", __FUNCTION__);
 	return NULL;
 }
 
 static int report_aprs(char *ctg, char *lat, char *lon)
 {
-
 	struct ast_config *cfg = NULL;
 	char *call, *comment, icon;
 	char power, height, gain, dir, *val, basecall[300], buf[350], *cp;
@@ -721,8 +725,8 @@ static void *gpsthread(void *data)
 		ast_safe_system(buf);
 	}
 	close(fd);
-  err:
-	pthread_exit(NULL);
+err:
+	ast_debug(2, "%s has exited\n", __FUNCTION__);
 	return NULL;
 }
 
@@ -816,7 +820,7 @@ static void *gps_sub_thread(void *data)
 			fclose(fp);
 		sleep(10);
 	}
-	pthread_exit(NULL);
+	ast_debug(2, "%s has exited\n", __FUNCTION__);
 	return NULL;
 }
 
@@ -1047,12 +1051,13 @@ static void *gps_tt_thread(void *data)
 	munmap(ttentries, mystat.st_size);
 	if (mfp)
 		fclose(mfp);
-	pthread_exit(NULL);
+	ast_debug(2, "%s has exited\n", __FUNCTION__);
 	return NULL;
 }
 
 static int gps_exec(struct ast_channel *chan, const char *data)
 {
+	/*! \todo ??? Why does this even exist? */
 	return 0;
 }
 
@@ -1061,6 +1066,23 @@ static int unload_module(void)
 	int res;
 
 	run_forever = 0;
+	ast_debug(2, "Waiting for general threads to exit\n");
+	if (sockfd != -1) {
+		shutdown(sockfd, SHUT_RDWR);
+	}
+	pthread_cancel(aprs_thread);
+	ast_debug(2, "Waiting for aprs_thread to exit\n");
+	pthread_join(aprs_thread, NULL);
+	if (comport) {
+		ast_debug(2, "Waiting for gps_thread to exit\n");
+		pthread_join(gps_thread, NULL);
+	}
+	ast_debug(2, "Waiting for gps_subthread to exit\n");
+	pthread_join(gps_subthread, NULL);
+	pthread_cancel(gps_ttthread);
+	ast_debug(2, "Waiting for gps_ttthread to exit\n");
+	pthread_join(gps_ttthread, NULL);
+	ast_debug(1, "General threads have exited\n");
 	res = ast_unregister_application(app);
 	return res;
 }
@@ -1070,7 +1092,6 @@ static int load_module(void)
 	struct ast_config *cfg = NULL;
 	char *ctg = "general", *val;
 	int res;
-	pthread_attr_t attr;
 
 	struct ast_flags zeroflag = { 0 };
 
@@ -1136,18 +1157,17 @@ static int load_module(void)
 	if (val)
 		debug = ast_true(val);
 
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&aprs_thread, &attr, aprsthread, NULL);
+	ast_pthread_create(&aprs_thread, NULL, aprsthread, NULL);
 	if (comport)
-		ast_pthread_create(&gps_thread, &attr, gpsthread, NULL);
-	ast_pthread_create(&gps_thread, &attr, gps_sub_thread, ast_strdup("general"));
-	ast_pthread_create(&gps_thread, &attr, gps_tt_thread, ast_strdup("general"));
+		ast_pthread_create(&gps_thread, NULL, gpsthread, NULL);
+	ast_pthread_create(&gps_subthread, NULL, gps_sub_thread, ast_strdup("general"));
+	ast_pthread_create(&gps_ttthread, NULL, gps_tt_thread, ast_strdup("general"));
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL)
 			continue;
-		ast_pthread_create(&gps_thread, &attr, gps_sub_thread, ast_strdup(ctg));
-		ast_pthread_create(&gps_thread, &attr, gps_tt_thread, ast_strdup(ctg));
+		/* Don't clobber gps_thread */
+		ast_pthread_create_detached(&gps_section_thread, NULL, gps_sub_thread, ast_strdup(ctg));
+		ast_pthread_create_detached(&gps_section_thread, NULL, gps_tt_thread, ast_strdup(ctg));
 	}
 	ast_config_destroy(cfg);
 	cfg = NULL;
