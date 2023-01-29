@@ -199,10 +199,10 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 	}
 
 	if(*ptrs)ast_free(*ptrs);
-	*ptrs=ast_calloc(numsub,4);
+	*ptrs=ast_calloc(numsub, sizeof(char*));
 	for(i=0;i<numsub;i++)
 	{
-		(*ptrs)[i]=ptstr[i];	
+		(*ptrs)[i]=ptstr[i];
 		TRACEJ(5,(" %i = %s\n",i,(*ptrs)[i]));
 	}
 	TRACEJ(5,("string_parse()=%i\n\n",numsub));
