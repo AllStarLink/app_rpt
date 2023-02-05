@@ -16,6 +16,10 @@
  * This program is free software, distributed under the terms of
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
+ * Changes:
+ * --------
+ * 02/05/23 - Danny Lloyd, KB4MDD <kb4mdd@arrl.net>
+ * corrected memory leaks
  */
 
 /*! \file
@@ -540,9 +544,14 @@ static int compare_eldb_callsign(const void *pa, const void *pb)
 static struct eldb *el_db_find_nodenum(const char *nodenum)
 {
 	struct eldb **found_key = NULL, key;
+	char *findNodeNum;
 
 	memset(&key, 0, sizeof(key));
-	strncpy(key.nodenum, ast_strndup(nodenum, ELDB_NODENUMLEN), sizeof(key.nodenum) - 1);
+
+	findNodeNum = ast_strndup(nodenum, ELDB_NODENUMLEN);
+	strncpy(key.nodenum, findNodeNum, sizeof(key.nodenum) - 1);
+	ast_free(findNodeNum);
+
 	found_key = (struct eldb **) tfind(&key, &el_db_nodenum, compare_eldb_nodenum);
 	if (found_key)
 		return (*found_key);
@@ -552,9 +561,14 @@ static struct eldb *el_db_find_nodenum(const char *nodenum)
 static struct eldb *el_db_find_callsign(const char *callsign)
 {
 	struct eldb **found_key = NULL, key;
+	char *findCallSign;
 
 	memset(&key, 0, sizeof(key));
-	strncpy(key.callsign, ast_strndup(callsign, ELDB_CALLSIGNLEN), sizeof(key.callsign) - 1);
+
+	findCallSign = ast_strndup(callsign, ELDB_CALLSIGNLEN); 
+	strncpy(key.callsign, findCallSign, sizeof(key.callsign) - 1);
+	ast_free(findCallSign);
+
 	found_key = (struct eldb **) tfind(&key, &el_db_callsign, compare_eldb_callsign);
 	if (found_key)
 		return (*found_key);
@@ -564,9 +578,14 @@ static struct eldb *el_db_find_callsign(const char *callsign)
 static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 {
 	struct eldb **found_key = NULL, key;
+	char *findIpAddr;
 
 	memset(&key, 0, sizeof(key));
-	strncpy(key.ipaddr, ast_strndup(ipaddr, ELDB_IPADDRLEN), sizeof(key.ipaddr) - 1);
+
+	findIpAddr = ast_strndup(ipaddr, ELDB_IPADDRLEN);
+	strncpy(key.ipaddr, findIpAddr, sizeof(key.ipaddr) - 1);
+	ast_free(findIpAddr);
+
 	found_key = (struct eldb **) tfind(&key, &el_db_ipaddr, compare_eldb_ipaddr);
 	if (found_key)
 		return (*found_key);
@@ -603,6 +622,7 @@ static void el_db_delete(struct eldb *node)
 static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 {
 	struct eldb *node, *mynode;
+	char *newValue;
 
 	node = (struct eldb *) ast_malloc(sizeof(struct eldb));
 	if (!node) {
@@ -610,9 +630,19 @@ static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 		return NULL;
 	}
 	memset(node, 0, sizeof(struct eldb));
-	strncpy(node->nodenum, ast_strndup(nodenum, ELDB_NODENUMLEN), ELDB_NODENUMLEN - 1);
-	strncpy(node->ipaddr, ast_strndup(ipaddr, ELDB_IPADDRLEN), ELDB_IPADDRLEN - 1);
-	strncpy(node->callsign, ast_strndup(callsign, ELDB_CALLSIGNLEN), ELDB_CALLSIGNLEN - 1);
+
+	newValue = ast_strndup(nodenum, ELDB_NODENUMLEN); 
+	strncpy(node->nodenum, newValue, ELDB_NODENUMLEN - 1);
+	ast_free(newValue);
+
+	newValue = ast_strndup(ipaddr, ELDB_IPADDRLEN); 
+	strncpy(node->ipaddr, newValue, ELDB_IPADDRLEN - 1);
+	ast_free(newValue);
+
+	newValue = ast_strndup(callsign, ELDB_CALLSIGNLEN); 
+	strncpy(node->callsign, newValue, ELDB_CALLSIGNLEN - 1);
+	ast_free(newValue);
+
 	mynode = el_db_find_nodenum(node->nodenum);
 	if (mynode)
 		el_db_delete(mynode);
@@ -622,10 +652,13 @@ static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 	mynode = el_db_find_callsign(node->callsign);
 	if (mynode)
 		el_db_delete(mynode);
+
 	tsearch(node, &el_db_nodenum, compare_eldb_nodenum);
 	tsearch(node, &el_db_ipaddr, compare_eldb_ipaddr);
 	tsearch(node, &el_db_callsign, compare_eldb_callsign);
+
 	ast_debug(2, "eldb put: Node=%s, Call=%s, IP=%s\n", nodenum, callsign, ipaddr);
+
 	return (node);
 }
 
@@ -2580,7 +2613,9 @@ static void *el_reader(void *data)
 							/* different callsigns behind a NAT router, running -L, -R, ... */
 							if (strncmp((*found_key)->call, call, EL_CALL_SIZE) != 0) {
 								ast_verb(4, "Call changed from %s to %s\n", (*found_key)->call, call);
-								strncpy((*found_key)->call, ast_strndup(call, EL_CALL_SIZE), EL_CALL_SIZE);
+								ptr = ast_strndup(call, EL_CALL_SIZE); 
+								strncpy((*found_key)->call, ptr, EL_CALL_SIZE);
+								ast_free(ptr);
 							}
 							if (strncmp((*found_key)->name, name, EL_NAME_SIZE) != 0) {
 								ast_verb(4, "Name changed from %s to %s\n", (*found_key)->name, name);
@@ -2728,7 +2763,9 @@ static void *el_reader(void *data)
 								ast_log(LOG_ERROR, "Cannot malloc for qpel\n");
 							} else {
 								memcpy(qpel->buf, ((struct gsmVoice_t *) buf)->data, BLOCKING_FACTOR * GSM_FRAME_SIZE);
-								strncpy(qpel->fromip, ast_strndup(instp->el_node_test.ip, EL_IP_SIZE), EL_IP_SIZE);
+								ptr = ast_strndup(instp->el_node_test.ip, EL_IP_SIZE); 
+								strncpy(qpel->fromip, ptr, EL_IP_SIZE);
+								ast_free(ptr);
 								insque((struct qelem *) qpel, (struct qelem *)
 									   p->rxqel.qe_back);
 							}
