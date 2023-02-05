@@ -2031,7 +2031,7 @@ static void *TLB_reader(void *data)
 		}
 	}
 	ast_mutex_unlock(&instp->lock);
-	ast_debug(1 "tlb: read thread exited.\n");
+	ast_debug(1, "tlb: read thread exited.\n");
 	mythread_exit(NULL);
 	return NULL;
 }
