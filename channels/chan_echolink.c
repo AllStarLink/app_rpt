@@ -1641,7 +1641,10 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			ast_mutex_unlock(&instp->lock);
 
 			if (instp->fdr >= 0)
-				write(instp->fdr, instp->audio_all_but_one.data, BLOCKING_FACTOR * GSM_FRAME_SIZE);
+				int res = write(instp->fdr, instp->audio_all_but_one.data, BLOCKING_FACTOR * GSM_FRAME_SIZE);
+				if (res <= 0) {
+					ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
+				}
 		}
 	} else {
 		/* Asterisk to Echolink */

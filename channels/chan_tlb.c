@@ -1257,8 +1257,10 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			ast_mutex_unlock(&instp->lock);
 
 			if (instp->fdr >= 0)
-				write(instp->fdr, instp->audio_all_but_one.data,
-					  tlb_codecs[p->txcodec].blocking_factor * tlb_codecs[p->txcodec].frame_size);
+				int res = write(instp->fdr, instp->audio_all_but_one.data, tlb_codecs[p->txcodec].blocking_factor * tlb_codecs[p->txcodec].frame_size);
+				if (res <= 0) {
+					ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
+				}
 		}
 	} else {
 		/* Asterisk to TheLinkBox */
