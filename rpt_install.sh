@@ -40,6 +40,9 @@ modprobe snd-pcm-oss # /dev/dsp1 needs to exist for chan_simpleusb and chan_usbr
 cp ../$MYDIR/Makefiles.diff /tmp/rpt.diff
 git apply /tmp/rpt.diff
 
+cp ../$MYDIR/utils/Makefile.diff /tmp/utils_makefile.diff
+git apply /tmp/utils_makefile.diff
+
 echoerr() {
 	printf "\e[31;1m%s\e[0m\n" "$*" >&2;
 }
@@ -122,6 +125,10 @@ rpt_add "channels/xpmr/xpmr.h"
 rpt_add "channels/xpmr/xpmr_coef.h"
 rpt_add "res/res_rpt_http_registrations.c"
 rpt_add "configs/samples/rpt_http_registrations.conf"
+
+rpt_add "utils/pi-tune-menu.c"
+rpt_add "utils/radio-tune-menu.c"
+rpt_add "utils/simpleusb-tune-menu.c"
 
 nproc
 make -j$(nproc) apps
