@@ -18,7 +18,7 @@
  * at the top of the source tree.
  * Changes:
  * --------
- * 02/05/23 - Danny Lloyd, KB4MDD <kb4mdd@arrl.net>
+ * 02/5/23 - Danny Lloyd, KB4MDD <kb4mdd@arrl.net>
  * corrected memory leaks
  */
 
@@ -544,51 +544,42 @@ static int compare_eldb_callsign(const void *pa, const void *pb)
 static struct eldb *el_db_find_nodenum(const char *nodenum)
 {
 	struct eldb **found_key = NULL, key;
-	char *findNodeNum;
-
 	memset(&key, 0, sizeof(key));
 
-	findNodeNum = ast_strndup(nodenum, ELDB_NODENUMLEN);
-	strncpy(key.nodenum, findNodeNum, sizeof(key.nodenum) - 1);
-	ast_free(findNodeNum);
+	ast_copy_string(key.nodenum, nodenum, sizeof(key.nodenum));
 
 	found_key = (struct eldb **) tfind(&key, &el_db_nodenum, compare_eldb_nodenum);
 	if (found_key)
 		return (*found_key);
+
 	return NULL;
 }
 
 static struct eldb *el_db_find_callsign(const char *callsign)
 {
 	struct eldb **found_key = NULL, key;
-	char *findCallSign;
-
 	memset(&key, 0, sizeof(key));
 
-	findCallSign = ast_strndup(callsign, ELDB_CALLSIGNLEN); 
-	strncpy(key.callsign, findCallSign, sizeof(key.callsign) - 1);
-	ast_free(findCallSign);
+	ast_copy_string(key.callsign, callsign, sizeof(key.callsign) - 1);
 
 	found_key = (struct eldb **) tfind(&key, &el_db_callsign, compare_eldb_callsign);
 	if (found_key)
 		return (*found_key);
+
 	return NULL;
 }
 
 static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 {
 	struct eldb **found_key = NULL, key;
-	char *findIpAddr;
-
 	memset(&key, 0, sizeof(key));
 
-	findIpAddr = ast_strndup(ipaddr, ELDB_IPADDRLEN);
-	strncpy(key.ipaddr, findIpAddr, sizeof(key.ipaddr) - 1);
-	ast_free(findIpAddr);
+	ast_copy_string(key.ipaddr, ipaddr, sizeof(key.ipaddr) - 1);
 
 	found_key = (struct eldb **) tfind(&key, &el_db_ipaddr, compare_eldb_ipaddr);
 	if (found_key)
 		return (*found_key);
+
 	return NULL;
 }
 
@@ -598,15 +589,19 @@ static void el_db_delete_indexes(struct eldb *node)
 
 	if (!node)
 		return;
+
 	mynode = el_db_find_nodenum(node->nodenum);
 	if (mynode)
 		tdelete(mynode, &el_db_nodenum, compare_eldb_nodenum);
+
 	mynode = el_db_find_ipaddr(node->ipaddr);
 	if (mynode)
 		tdelete(mynode, &el_db_ipaddr, compare_eldb_ipaddr);
+
 	mynode = el_db_find_callsign(node->callsign);
 	if (mynode)
 		tdelete(mynode, &el_db_callsign, compare_eldb_callsign);
+
 	return;
 }
 
@@ -622,33 +617,24 @@ static void el_db_delete(struct eldb *node)
 static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 {
 	struct eldb *node, *mynode;
-	char *newValue;
 
-	node = (struct eldb *) ast_malloc(sizeof(struct eldb));
+	node = (struct eldb *) ast_calloc(1, sizeof(struct eldb));
 	if (!node) {
-		ast_log(LOG_NOTICE, "Caannot malloc!!\n");
 		return NULL;
 	}
-	memset(node, 0, sizeof(struct eldb));
 
-	newValue = ast_strndup(nodenum, ELDB_NODENUMLEN); 
-	strncpy(node->nodenum, newValue, ELDB_NODENUMLEN - 1);
-	ast_free(newValue);
-
-	newValue = ast_strndup(ipaddr, ELDB_IPADDRLEN); 
-	strncpy(node->ipaddr, newValue, ELDB_IPADDRLEN - 1);
-	ast_free(newValue);
-
-	newValue = ast_strndup(callsign, ELDB_CALLSIGNLEN); 
-	strncpy(node->callsign, newValue, ELDB_CALLSIGNLEN - 1);
-	ast_free(newValue);
+	ast_copy_string(node->nodenum, nodenum, ELDB_NODENUMLEN);
+	ast_copy_string(node->ipaddr, ipaddr, ELDB_IPADDRLEN);
+	ast_copy_string(node->callsign, callsign, ELDB_CALLSIGNLEN);
 
 	mynode = el_db_find_nodenum(node->nodenum);
 	if (mynode)
 		el_db_delete(mynode);
+
 	mynode = el_db_find_ipaddr(node->ipaddr);
 	if (mynode)
 		el_db_delete(mynode);
+
 	mynode = el_db_find_callsign(node->callsign);
 	if (mynode)
 		el_db_delete(mynode);
@@ -685,7 +671,7 @@ static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call, char *name
 	rp->r.sdes.src = htonl(0);
 	ap = (unsigned char *) rp->r.sdes.item;
 
-	strncpy(line, "CALLSIGN", EL_CALL_SIZE + EL_NAME_SIZE);
+	ast_copy_string(line, "CALLSIGN", EL_CALL_SIZE + EL_NAME_SIZE);
 	*ap++ = 1;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
@@ -989,10 +975,8 @@ static struct el_pvt *el_alloc(void *data)
 		return NULL;
 	}
 
-	p = ast_malloc(sizeof(struct el_pvt));
+	p = ast_calloc(1, sizeof(struct el_pvt));
 	if (p) {
-		memset(p, 0, sizeof(struct el_pvt));
-
 		sprintf(stream, "%s-%lu", (char *) data, instances[n]->seqno++);
 		strcpy(p->stream, stream);
 		p->rxqast.qe_forw = &p->rxqast;
@@ -1116,7 +1100,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 	char buf[200], *ptr, str[200], *arg4 = NULL, *strs[MAXLINKSTRS];
 	int i, j, k, x;
 
-	strncpy(buf, text, sizeof(buf) - 1);
+	ast_copy_string(buf, text, sizeof(buf));
 	ptr = strchr(buf, (int) '\r');
 	if (ptr)
 		*ptr = '\0';
@@ -1145,12 +1129,10 @@ static int el_text(struct ast_channel *ast, const char *text)
 		i = finddelim(cp, strs, MAXLINKSTRS);
 		if (i) {
 			qsort((void *) strs, i, sizeof(char *), mycompar);
-			pkt = ast_malloc((i * 10) + 50);
+			pkt = ast_calloc(1, (i * 10) + 50);
 			if (!pkt) {
-				ast_log(LOG_ERROR, "Couldnt alloc");
 				return -1;
 			}
-			memset(pkt, 0, (i * 10) + 50);
 			j = 0;
 			k = 0;
 			for (x = 0; x < i; x++) {
@@ -1363,8 +1345,8 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 			(*(struct el_node **) nodep)->countdown--;
 
 		if ((*(struct el_node **) nodep)->countdown < 0) {
-			strncpy(instp->el_node_test.ip, (*(struct el_node **) nodep)->ip, EL_IP_SIZE + 1);
-			strncpy(instp->el_node_test.call, (*(struct el_node **) nodep)->call, EL_CALL_SIZE + 1);
+			ast_copy_string(instp->el_node_test.ip, (*(struct el_node **) nodep)->ip, EL_IP_SIZE);
+			ast_copy_string(instp->el_node_test.call, (*(struct el_node **) nodep)->call, EL_CALL_SIZE);
 			ast_log(LOG_WARNING, "countdown for %s(%s) negative\n", instp->el_node_test.call, instp->el_node_test.ip);
 		}
 		memset(sdes_packet, 0, sizeof(sdes_packet));
@@ -1467,7 +1449,7 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 		sin.sin_addr.s_addr = inet_addr(arg1);
 
 		if (strcmp(cmd, "o.dconip") == 0) {
-			strncpy(key.ip, arg1, EL_IP_SIZE);
+			ast_copy_string(key.ip, arg1, EL_IP_SIZE);
 			if (find_delete(&key)) {
 				for (i = 0; i < 20; i++)
 					sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
@@ -1633,7 +1615,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			remque((struct qelem *) qpel);
 
 			memcpy(instp->audio_all_but_one.data, qpel->buf, BLOCKING_FACTOR * GSM_FRAME_SIZE);
-			strncpy(instp->el_node_test.ip, qpel->fromip, EL_IP_SIZE + 1);
+			ast_copy_string(instp->el_node_test.ip, qpel->fromip, EL_IP_SIZE);
 
 			ast_free(qpel);
 			ast_mutex_lock(&instp->lock);
@@ -1953,7 +1935,7 @@ static int sendcmd(char *server, struct el_instance *instp)
 	ahp = ast_gethostbyname(server, &ah);
 	if (ahp) {
 		memcpy(&ia, ahp->h_addr, sizeof(in_addr_t));
-		strncpy(ip, ast_inet_ntoa(ia), EL_IP_SIZE);
+		ast_copy_string(ip, ast_inet_ntoa(ia), EL_IP_SIZE);
 	} else {
 		ast_log(LOG_ERROR, "Failed to resolve Echolink server %s\n", server);
 		return -1;
@@ -2240,7 +2222,7 @@ static int do_el_directory(char *hostname)
 		}
 		if (str[strlen(str) - 1] == '\n')
 			str[strlen(str) - 1] = 0;
-		strncpy(call, str, sizeof(call));
+		ast_copy_string(call, str, sizeof(call));
 		if (dir_partial) {
 			el_zapcall(call);
 			if (delmode)
@@ -2262,7 +2244,7 @@ static int do_el_directory(char *hostname)
 		}
 		if (str[strlen(str) - 1] == '\n')
 			str[strlen(str) - 1] = 0;
-		strncpy(nodenum, str, sizeof(nodenum));
+		ast_copy_string(nodenum, str, sizeof(nodenum));
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
 			el_zapem();
@@ -2272,7 +2254,7 @@ static int do_el_directory(char *hostname)
 		}
 		if (str[strlen(str) - 1] == '\n')
 			str[strlen(str) - 1] = 0;
-		strncpy(ipaddr, str, sizeof(ipaddr));
+		ast_copy_string(ipaddr, str, sizeof(ipaddr));
 		if (!(n % 10))
 			usleep(2000);		/* To get to dry land */
 		ast_mutex_lock(&el_db_lock);
@@ -2377,12 +2359,11 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 	char nodestr[30];
 	time_t now;
 
-	el_node_key = (struct el_node *) ast_malloc(sizeof(struct el_node));
+	el_node_key = (struct el_node *) ast_calloc(1, sizeof(struct el_node));
 	if (el_node_key) {
-		memset(el_node_key, 0, sizeof(struct el_node));
-		strncpy(el_node_key->call, call, EL_CALL_SIZE);
-		strncpy(el_node_key->ip, instp->el_node_test.ip, EL_IP_SIZE + 1);
-		strncpy(el_node_key->name, name, EL_NAME_SIZE);
+		ast_copy_string(el_node_key->call, call, EL_CALL_SIZE);
+		ast_copy_string(el_node_key->ip, instp->el_node_test.ip, EL_IP_SIZE);
+		ast_copy_string(el_node_key->name, name, EL_NAME_SIZE);
 
 		mynode = el_db_find_ipaddr(el_node_key->ip);
 		if (!mynode) {
@@ -2390,7 +2371,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 			ast_free(el_node_key);
 			return 1;
 		}
-		strncpy(nodestr, mynode->nodenum, sizeof(nodestr) - 1);
+		ast_copy_string(nodestr, mynode->nodenum, sizeof(nodestr));
 		el_node_key->nodenum = atoi(nodestr);
 		el_node_key->countdown = instp->rtcptimeout;
 		el_node_key->seqnum = 1;
@@ -2407,7 +2388,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 						return -1;
 					}
 					el_node_key->p = p;
-					strncpy(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE + 1);
+					ast_copy_string(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE);
 					el_node_key->chan = el_new(el_node_key->p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 					if (!el_node_key->chan) {
 						el_destroy(el_node_key->p);
@@ -2420,7 +2401,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 					ast_mutex_unlock(&instp->lock);
 				} else {
 					el_node_key->p = p;
-					strncpy(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE + 1);
+					ast_copy_string(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE);
 					el_node_key->chan = p->owner;
 					el_node_key->outbound = 1;
 					ast_mutex_lock(&instp->lock);
@@ -2441,7 +2422,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 			return -1;
 		}
 	} else {
-		ast_log(LOG_ERROR, "malloc() failed for new CALL=%s, ip=%s\n", call, instp->el_node_test.ip);
+		ast_log(LOG_ERROR, "calloc() failed for new CALL=%s, ip=%s\n", call, instp->el_node_test.ip);
 		return -1;
 	}
 	return 0;
@@ -2549,7 +2530,7 @@ static void *el_reader(void *data)
 		ast_mutex_unlock(&instp->lock);
 #if 0
 		/*! \todo This causes gcc to complain:
-		 * cc1: error: ‘__builtin_memset’ writing 4096 bytes into a region of size 256 overflows the destination [-Werror=stringop-overflow=]
+		 * cc1: error: '__builtin_memset' writing 4096 bytes into a region of size 256 overflows the destination [-Werror=stringop-overflow=]
 		 * In practice, we should probably be using poll instead of select anyways, not least because of this...
 		 */
 		FD_ZERO(fds);
@@ -2578,7 +2559,7 @@ static void *el_reader(void *data)
 			recvlen = recvfrom(instp->ctrl_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
-				strncpy(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
+				ast_copy_string(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
 				if (is_rtcp_sdes((unsigned char *) buf, recvlen)) {
 					call_name[0] = '\0';
 					items.nitems = 1;
@@ -2617,13 +2598,11 @@ static void *el_reader(void *data)
 							/* different callsigns behind a NAT router, running -L, -R, ... */
 							if (strncmp((*found_key)->call, call, EL_CALL_SIZE) != 0) {
 								ast_verb(4, "Call changed from %s to %s\n", (*found_key)->call, call);
-								ptr = ast_strndup(call, EL_CALL_SIZE); 
-								strncpy((*found_key)->call, ptr, EL_CALL_SIZE);
-								ast_free(ptr);
+								ast_copy_string((*found_key)->call, call, EL_CALL_SIZE);
 							}
 							if (strncmp((*found_key)->name, name, EL_NAME_SIZE) != 0) {
 								ast_verb(4, "Name changed from %s to %s\n", (*found_key)->name, name);
-								strncpy((*found_key)->name, name, EL_NAME_SIZE);
+								ast_copy_string((*found_key)->name, name, EL_NAME_SIZE);
 							}
 						} else {	/* otherwise its a new request */
 							i = 0;	/* default authorized */
@@ -2718,7 +2697,7 @@ static void *el_reader(void *data)
 			recvlen = recvfrom(instp->audio_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
-				strncpy(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
+				ast_copy_string(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
 				if (buf[0] == 0x6f) {
 					process_cmd(buf, instp->el_node_test.ip, instp);
 				} else {
@@ -2749,7 +2728,6 @@ static void *el_reader(void *data)
 								for (i = 0; i < BLOCKING_FACTOR; i++) {
 									qpast = ast_malloc(sizeof(struct el_rxqast));
 									if (!qpast) {
-										ast_log(LOG_ERROR, "Cannot malloc for qpast\n");
 										ast_mutex_unlock(&instp->lock);
 										mythread_exit(NULL);
 									}
@@ -2763,13 +2741,9 @@ static void *el_reader(void *data)
 								continue;
 							/* need complete packet and IP address for Echolink */
 							qpel = ast_malloc(sizeof(struct el_rxqel));
-							if (!qpel) {
-								ast_log(LOG_ERROR, "Cannot malloc for qpel\n");
-							} else {
+							if (qpel) {
 								memcpy(qpel->buf, ((struct gsmVoice_t *) buf)->data, BLOCKING_FACTOR * GSM_FRAME_SIZE);
-								ptr = ast_strndup(instp->el_node_test.ip, EL_IP_SIZE); 
-								strncpy(qpel->fromip, ptr, EL_IP_SIZE);
-								ast_free(ptr);
+								ast_copy_string(qpel->fromip, instp->el_node_test.ip, EL_IP_SIZE);
 								insque((struct qelem *) qpel, (struct qelem *)
 									   p->rxqel.qe_back);
 							}
@@ -2797,12 +2771,10 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		return -1;
 	}
 
-	instp = ast_malloc(sizeof(struct el_instance));
+	instp = ast_calloc(1, sizeof(struct el_instance));
 	if (!instp) {
-		ast_log(LOG_ERROR, "Cannot malloc\n");
 		return -1;
 	}
-	memset(instp, 0, sizeof(struct el_instance));
 
 	ast_mutex_init(&instp->lock);
 	instp->audio_sock = -1;
@@ -2811,14 +2783,14 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "ipaddr");
 	if (val) {
-		strncpy(instp->ipaddr, val, EL_IP_SIZE);
+		ast_copy_string(instp->ipaddr, val, EL_IP_SIZE);
 	} else {
 		strcpy(instp->ipaddr, "0.0.0.0");
 	}
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "port");
 	if (val) {
-		strncpy(instp->port, val, EL_IP_SIZE);
+		ast_copy_string(instp->port, val, EL_IP_SIZE);
 	} else {
 		strcpy(instp->port, "5198");
 	}
@@ -2842,21 +2814,21 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "astnode");
 	if (val) {
-		strncpy(instp->astnode, val, EL_NAME_SIZE);
+		ast_copy_string(instp->astnode, val, EL_NAME_SIZE);
 	} else {
 		strcpy(instp->astnode, "1999");
 	}
 	val = (char *) ast_variable_retrieve(cfg, ctg, "context");
 	if (val) {
-		strncpy(instp->context, val, EL_NAME_SIZE);
+		ast_copy_string(instp->context, val, EL_NAME_SIZE);
 	} else {
 		strcpy(instp->context, "echolink-in");
 	}
 	val = (char *) ast_variable_retrieve(cfg, ctg, "call");
 	if (!val)
-		strncpy(instp->mycall, "INVALID", EL_CALL_SIZE);
+		ast_copy_string(instp->mycall, "INVALID", EL_CALL_SIZE);
 	else
-		strncpy(instp->mycall, val, EL_CALL_SIZE);
+		ast_copy_string(instp->mycall, val, EL_CALL_SIZE);
 
 	if (strcmp(instp->mycall, "INVALID") == 0) {
 		ast_log(LOG_ERROR, "INVALID Echolink call");
@@ -2864,33 +2836,33 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 	val = (char *) ast_variable_retrieve(cfg, ctg, "name");
 	if (!val)
-		strncpy(instp->myname, instp->mycall, EL_NAME_SIZE);
+		ast_copy_string(instp->myname, instp->mycall, EL_NAME_SIZE);
 	else
-		strncpy(instp->myname, val, EL_NAME_SIZE);
+		ast_copy_string(instp->myname, val, EL_NAME_SIZE);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "recfile");
 	if (!val)
-		strncpy(instp->fdr_file, "/tmp/echolink_recorded.gsm", FILENAME_MAX - 1);
+		ast_copy_string(instp->fdr_file, "/tmp/echolink_recorded.gsm", FILENAME_MAX - 1);
 	else
-		strncpy(instp->fdr_file, val, FILENAME_MAX - 1);
+		ast_copy_string(instp->fdr_file, val, FILENAME_MAX);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "pwd");
 	if (!val)
-		strncpy(instp->mypwd, "INVALID", EL_PWD_SIZE);
+		ast_copy_string(instp->mypwd, "INVALID", EL_PWD_SIZE);
 	else
-		strncpy(instp->mypwd, val, EL_PWD_SIZE);
+		ast_copy_string(instp->mypwd, val, EL_PWD_SIZE);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "qth");
 	if (!val)
-		strncpy(instp->myqth, "INVALID", EL_QTH_SIZE);
+		ast_copy_string(instp->myqth, "INVALID", EL_QTH_SIZE);
 	else
-		strncpy(instp->myqth, val, EL_QTH_SIZE);
+		ast_copy_string(instp->myqth, val, EL_QTH_SIZE);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "email");
 	if (!val)
-		strncpy(instp->myemail, "INVALID", EL_EMAIL_SIZE);
+		ast_copy_string(instp->myemail, "INVALID", EL_EMAIL_SIZE);
 	else
-		strncpy(instp->myemail, val, EL_EMAIL_SIZE);
+		ast_copy_string(instp->myemail, val, EL_EMAIL_SIZE);
 
 	instp->useless_flag_1 = 0;
 
@@ -2898,19 +2870,19 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	if (!val)
 		instp->elservers[0][0] = '\0';
 	else
-		strncpy(instp->elservers[0], val, EL_SERVERNAME_SIZE);
+		ast_copy_string(instp->elservers[0], val, EL_SERVERNAME_SIZE);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "server2");
 	if (!val)
 		instp->elservers[1][0] = '\0';
 	else
-		strncpy(instp->elservers[1], val, EL_SERVERNAME_SIZE);
+		ast_copy_string(instp->elservers[1], val, EL_SERVERNAME_SIZE);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "server3");
 	if (!val)
 		instp->elservers[2][0] = '\0';
 	else
-		strncpy(instp->elservers[2], val, EL_SERVERNAME_SIZE);
+		ast_copy_string(instp->elservers[2], val, EL_SERVERNAME_SIZE);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "deny");
 	if (val)
@@ -3017,7 +2989,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
 	fcntl(instp->ctrl_sock, F_SETFL, O_NONBLOCK);
-	strncpy(instp->name, ctg, EL_NAME_SIZE);
+	ast_copy_string(instp->name, ctg, EL_NAME_SIZE);
 	sin_aprs.sin_family = AF_INET;
 	sin_aprs.sin_port = htons(5199);
 	ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
