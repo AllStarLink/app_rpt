@@ -2877,11 +2877,11 @@ static struct ast_channel *simpleusb_request(const char *type, struct ast_format
 	struct ast_channel *c;
 	struct chan_simpleusb_pvt *o = _find_desc(data);
 
-	if (0) {
-		ast_log(LOG_WARNING, "simpleusb_request type <%s> data 0x%p <%s>\n", type, data, (char *) data);
-	}
-	if (o == NULL) {
-		ast_log(LOG_NOTICE, "Device %s not found\n", (char *) data);
+#if 0
+	ast_log(LOG_WARNING, "simpleusb_request type <%s> data 0x%p <%s>\n", type, data, (char *) data);
+#endif
+	if (!o) {
+		ast_log(LOG_WARNING, "Device %s not found\n", (char *) data);
 		/* XXX we could default to 'dsp' perhaps ? */
 		return NULL;
 	}

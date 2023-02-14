@@ -3477,6 +3477,11 @@ static void *rpt(void *this)
 			load_rpt_vars_by_rpt(myrpt, 1);
 		}
 
+		if (!myrpt->rxchannel) {
+			ast_debug(1, "RPT rxchannel disappeared?\n"); /* This could happen if we call stop_repeaters() */
+			break;
+		}
+
 		if (ast_check_hangup(myrpt->rxchannel))
 			break;
 		if (ast_check_hangup(myrpt->txchannel))
