@@ -3391,7 +3391,8 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_ETXKEYED", -1);
 	rpt_update_boolean(myrpt, "RPT_AUTOPATCHUP", -1);
 	rpt_update_boolean(myrpt, "RPT_NUMLINKS", -1);
-	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
+	rpt_update_boolean(myrpt, "RPT_NUMALINKS", -1);
+    rpt_update_boolean(myrpt, "RPT_LINKS", -1);
 	myrpt->ready = 1;
 	while (ms >= 0) {
 		struct ast_frame *f, *f1, *f2;
