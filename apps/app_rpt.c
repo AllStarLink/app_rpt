@@ -524,7 +524,7 @@ static void tone_detect_init(tone_detect_state_t *s, int freq, int duration, int
 
 	/* If we want to remove tone, it is important to have block size not
 	   to exceed frame size. Otherwise by the moment tone is detected it is too late
- 	   to squelch it from previous frames */
+	   to squelch it from previous frames */
 	s->block_size = TONE_SAMPLES_IN_FRAME;
 
 	periods_in_block = s->block_size * freq / TONE_SAMPLE_RATE;
@@ -3391,6 +3391,7 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_ETXKEYED", -1);
 	rpt_update_boolean(myrpt, "RPT_AUTOPATCHUP", -1);
 	rpt_update_boolean(myrpt, "RPT_NUMLINKS", -1);
+	rpt_update_boolean(myrpt, "RPT_NUMALINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
 	myrpt->ready = 1;
 	while (ms >= 0) {
