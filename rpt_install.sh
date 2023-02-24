@@ -36,6 +36,7 @@ cd $( ls -d -v */ | grep "^asterisk" | tail -1 )
 
 apt-get install -y libusb-dev # chan_simpleusb and chan_usbradio require libusb-dev on Debian
 modprobe snd-pcm-oss # /dev/dsp1 needs to exist for chan_simpleusb and chan_usbradio to work
+echo "snd-pcm-oss" >> /etc/modules # load module at startup for USB
 
 cp ../$MYDIR/Makefiles.diff /tmp/rpt.diff
 git apply /tmp/rpt.diff
