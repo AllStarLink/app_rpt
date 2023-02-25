@@ -1559,11 +1559,9 @@ static void *hidthread(void *arg)
 		else
 			o->devtype = usb_dev->descriptor.idProduct;
 		traceusb1(("hidthread: Starting normally on %s!!\n", o->name));
-		if (option_verbose > 1) {
-			ast_mutex_lock(&usb_dev_lock);
-			ast_verbose(VERBOSE_PREFIX_2 "Set device %s to %s\n", o->devstr, o->name);
-			ast_mutex_unlock(&usb_dev_lock);
-		}
+		ast_mutex_lock(&usb_dev_lock);
+		ast_verb(3, "Set device %s to %s\n", o->devstr, o->name);
+		ast_mutex_unlock(&usb_dev_lock);
 		if (o->pmrChan == NULL) {
 			t_pmr_chan tChan;
 
@@ -2186,8 +2184,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 	cmd = alloca(strlen(text) + 10);
 
 	/* print received messages */
-	if (o->debuglevel)
-		ast_verbose(" << Console Received usbradio text %s >> \n", text);
+	ast_debug(o->debuglevel, " << Console Received usbradio text %s >> \n", text);
 
 	cnt = sscanf(text, "%s %s %s %s %s %c", cmd, rxs, txs, rxpl, txpl, &pwr);
 
@@ -2277,8 +2274,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 		ast_log(LOG_ERROR, "Cannot parse usbradio text: %s\n", text);
 		return 0;
 	} else {
-		if (o->debuglevel)
-			ast_verbose(" << %s %s %s %s %s %c >> \n", cmd, rxs, txs, rxpl, txpl, pwr);
+		ast_debug(o->debuglevel, " << %s %s %s %s %s %c >> \n", cmd, rxs, txs, rxpl, txpl, pwr);
 	}
 
 	if (strcmp(cmd, "SETFREQ") == 0) {
@@ -2891,8 +2887,7 @@ static int usbradio_indicate(struct ast_channel *c, int cond, const void *data, 
 		break;
 	case AST_CONTROL_RADIO_KEY:
 		o->txkeyed = 1;
-		if (o->debuglevel)
-			ast_verbose("chan_usbradio ACRK  dev=%s  code=%s TX ON \n", o->name, (char *) data);
+		ast_debug(o->debuglevel, "chan_usbradio ACRK  dev=%s  code=%s TX ON \n", o->name, (char *) data);
 		if (datalen && ((char *) (data))[0] != '0') {
 			o->b.forcetxcode = 1;
 			memset(o->set_txctcssfreq, 0, 16);
@@ -2903,13 +2898,11 @@ static int usbradio_indicate(struct ast_channel *c, int cond, const void *data, 
 		break;
 	case AST_CONTROL_RADIO_UNKEY:
 		o->txkeyed = 0;
-		if (o->debuglevel)
-			ast_verbose("chan_usbradio ACRUK  dev=%s TX OFF >> \n", o->name);
+		ast_debug(o->debuglevel, "chan_usbradio ACRUK  dev=%s TX OFF >> \n", o->name);
 		if (o->b.forcetxcode) {
 			o->b.forcetxcode = 0;
 			o->pmrChan->pTxCodeDefault = o->txctcssdefault;
-			if (o->debuglevel)
-				ast_verbose("chan_usbradio dev=%s Forced Tx Squelch Code CLEARED\n", o->name);
+			ast_debug(o->debuglevel, "chan_usbradio dev=%s Forced Tx Squelch Code CLEARED\n", o->name);
 		}
 		break;
 	default:
@@ -4755,8 +4748,7 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
 
 	if (o->b.forcetxcode) {
 		o->pmrChan->pTxCodeDefault = o->set_txctcssfreq;
-		if (o->debuglevel)
-			ast_verbose("chan_usbradio dev=%s Forced Tx Squelch Code code=%s\n", o->name, o->pmrChan->pTxCodeDefault);
+		ast_debug(o->debuglevel, "chan_usbradio dev=%s Forced Tx Squelch Code code=%s\n", o->name, o->pmrChan->pTxCodeDefault);
 	}
 
 	code_string_parse(o->pmrChan);
@@ -5297,31 +5289,20 @@ static struct ast_cli_entry cli_usbradio[] = {
 #include "./xpmrx/xpmrx.c"
 #endif
 
-/*
-*/
-static int load_module(void)
+static int load_config(int reload)
 {
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL, *val;
 	int n;
-	struct ast_flags zeroflag = { 0 };
-
-	if (hid_device_mklist()) {
-		ast_log(LOG_NOTICE, "Unable to make hid list\n");
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	usb_list_check("");
-
-	usbradio_active = NULL;
-
-	/* Copy the default jb config over global_jbconf */
-	memcpy(&global_jbconf, &default_jbconf, sizeof(struct ast_jb_conf));
+	struct ast_flags zeroflag = { reload ? CONFIG_FLAG_FILEUNCHANGED : 0 };
 
 	/* load config file */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
+	} else if (cfg == CONFIG_STATUS_FILEUNCHANGED) {
+		ast_debug(1, "Config file %s unchanged, skipping\n", config);
+		return 0;
 	}
 
 	pp_val = 0;
@@ -5335,17 +5316,24 @@ static int load_module(void)
 	ppfd = -1;
 	pbase = 0;
 	val = (char *) ast_variable_retrieve(cfg, "general", "pport");
-	if (val)
+	if (val) {
 		ast_copy_string(pport, val, sizeof(pport) - 1);
-	else
+	} else {
 		strcpy(pport, PP_PORT);
+	}
 	val = (char *) ast_variable_retrieve(cfg, "general", "pbase");
-	if (val)
+	if (val) {
 		pbase = strtoul(val, NULL, 0);
-	if (!pbase)
+	}
+	if (!pbase) {
 		pbase = PP_IOPORT;
-	if (haspp) {				/* if is to use parallel port */
+	}
+	if (haspp) { /* if is to use parallel port */
 		if (pport[0]) {
+			if (reload && ppfd != -1) {
+				close(ppfd);
+				ppfd = -1;
+			}
 			ppfd = open(pport, O_RDWR);
 			if (ppfd != -1) {
 				if (ioctl(ppfd, PPCLAIM)) {
@@ -5359,20 +5347,42 @@ static int load_module(void)
 					haspp = 0;
 				}
 				haspp = 2;
-				if (option_verbose > 2)
-					ast_verbose(VERBOSE_PREFIX_3
-								"Using direct IO port for pp support, since parport driver not available.\n");
+				ast_verb(3, "Using direct IO port for pp support, since parport driver not available.\n");
 			}
 		}
 	}
-	if (option_verbose > 2) {
-		if (haspp == 1)
-			ast_verbose(VERBOSE_PREFIX_3 "Parallel port is %s\n", pport);
-		else if (haspp == 2)
-			ast_verbose(VERBOSE_PREFIX_3 "Parallel port is at %04x hex\n", pbase);
+	if (haspp == 1) {
+		ast_verb(3, "Parallel port is %s\n", pport);
+	} else if (haspp == 2) {
+		ast_verb(3, "Parallel port is at %04x hex\n", pbase);
 	}
 
 	ast_config_destroy(cfg);
+	return 0;
+}
+
+static int reload_module(void)
+{
+	return load_config(1);
+}
+
+static int load_module(void)
+{
+	if (hid_device_mklist()) {
+		ast_log(LOG_NOTICE, "Unable to make hid list\n");
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	usb_list_check("");
+
+	usbradio_active = NULL;
+
+	/* Copy the default jb config over global_jbconf */
+	memcpy(&global_jbconf, &default_jbconf, sizeof(struct ast_jb_conf));
+
+	if (load_config(0)) {
+		return AST_MODULE_LOAD_FAILURE;
+	}
 
 	if (find_desc(usbradio_active) == NULL) {
 		ast_log(LOG_NOTICE, "radio active device %s not found\n", usbradio_active);
@@ -5399,8 +5409,6 @@ static int load_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
-/*
-*/
 static int unload_module(void)
 {
 	struct chan_usbradio_pvt *o;
@@ -5462,4 +5470,9 @@ static int unload_module(void)
 	return 0;
 }
 
-AST_MODULE_INFO_STANDARD_EXTENDED(ASTERISK_GPL_KEY, "USB Console Channel Driver");
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "USB Console Channel Driver",
+	.support_level = AST_MODULE_SUPPORT_EXTENDED,
+	.load = load_module,
+	.unload = unload_module,
+	.reload = reload_module,
+);

@@ -1555,8 +1555,7 @@ static void *hidthread(void *arg)
 		else
 			o->devtype = usb_dev->descriptor.idProduct;
 		traceusb1(("hidthread: Starting normally on %s!!\n", o->name));
-		if (option_verbose > 1)
-			ast_verbose(VERBOSE_PREFIX_2 "Set device %s to %s\n", o->devstr, o->name);
+		ast_verb(3, "Set device %s to %s\n", o->devstr, o->name);
 		mixer_write(o);
 
 		snprintf(fname, sizeof(fname) - 1, config1, o->name);
@@ -2130,22 +2129,19 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			return 0;
 		switch (text[j]) {
 		case 'T':				/* Tone only */
-			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "POCSAG page (%d baud, capcode=%d) TONE ONLY\n", baud, i);
+			ast_verb(3, "POCSAG page (%d baud, capcode=%d) TONE ONLY\n", baud, i);
 			batch = make_pocsag_batch(i, NULL, 0, TONE, 0);
 			break;
 		case 'N':				/* Numeric */
 			if (!text[j + 1])
 				return 0;
-			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "POCSAG page (%d baud, capcode=%d) NUMERIC (%s)\n", baud, i, text + j + 1);
+			ast_verb(3, "POCSAG page (%d baud, capcode=%d) NUMERIC (%s)\n", baud, i, text + j + 1);
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), NUMERIC, 0);
 			break;
 		case 'A':				/* Alpha */
 			if (!text[j + 1])
 				return 0;
-			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "POCSAG page (%d baud, capcode=%d) ALPHA (%s)\n", baud, i, text + j + 1);
+			ast_verb(3, "POCSAG page (%d baud, capcode=%d) ALPHA (%s)\n", baud, i, text + j + 1);
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), ALPHA, 0);
 			break;
 		case '?':				/* Query Page Status */
@@ -3844,39 +3840,20 @@ static struct ast_cli_entry cli_simpleusb[] = {
 	AST_CLI_DEFINE(handle_susb_active, "Change commanded device")
 };
 
-/*
-*/
-static int load_module(void)
+static int load_config(int reload)
 {
+	int n;
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL, *val;
-	int n;
-	struct ast_flags zeroflag = { 0 };
-
-	if (!(simpleusb_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
-		return AST_MODULE_LOAD_DECLINE;
-	}
-	ast_format_cap_append(simpleusb_tech.capabilities, ast_format_slin, 0);
-
-	if (hid_device_mklist()) {
-		ast_log(LOG_NOTICE, "Unable to make hid list\n");
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	usb_list_check("");
-
-	simpleusb_active = NULL;
-
-	/* Copy the default jb config over global_jbconf */
-	memcpy(&global_jbconf, &default_jbconf, sizeof(struct ast_jb_conf));
-
-	pp_val = 0;
-	hasout = 0;
+	struct ast_flags zeroflag = { reload ? CONFIG_FLAG_FILEUNCHANGED : 0 };
 
 	/* load config file */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
+	} else if (cfg == CONFIG_STATUS_FILEUNCHANGED) {
+		ast_debug(1, "Config file %s unchanged, skipping\n", config);
+		return 0;
 	}
 
 	n = 0;
@@ -3887,17 +3864,24 @@ static int load_module(void)
 	ppfd = -1;
 	pbase = 0;
 	val = (char *) ast_variable_retrieve(cfg, "general", "pport");
-	if (val)
+	if (val) {
 		ast_copy_string(pport, val, sizeof(pport) - 1);
-	else
+	} else {
 		strcpy(pport, PP_PORT);
+	}
 	val = (char *) ast_variable_retrieve(cfg, "general", "pbase");
-	if (val)
+	if (val) {
 		pbase = strtoul(val, NULL, 0);
-	if (!pbase)
+	}
+	if (!pbase) {
 		pbase = PP_IOPORT;
-	if (haspp) {				/* if is to use parallel port */
+	}
+	if (haspp) { /* if is to use parallel port */
 		if (pport[0]) {
+			if (reload && ppfd != -1) {
+				close(ppfd);
+				ppfd = -1;
+			}
 			ppfd = open(pport, O_RDWR);
 			if (ppfd != -1) {
 				if (ioctl(ppfd, PPCLAIM)) {
@@ -3911,21 +3895,51 @@ static int load_module(void)
 					haspp = 0;
 				}
 				haspp = 2;
-				if (option_verbose > 2)
-					ast_verbose(VERBOSE_PREFIX_3
-								"Using direct IO port for pp support, since parport driver not available.\n");
+				ast_verb(3, "Using direct IO port for pp support, since parport driver not available.\n");
 			}
 		}
 	}
 
-	if (option_verbose > 2) {
-		if (haspp == 1)
-			ast_verbose(VERBOSE_PREFIX_3 "Parallel port is %s\n", pport);
-		else if (haspp == 2)
-			ast_verbose(VERBOSE_PREFIX_3 "Parallel port is at %04x hex\n", pbase);
+	if (haspp == 1) {
+		ast_verb(3, "Parallel port is %s\n", pport);
+	} else if (haspp == 2) {
+		ast_verb(3, "Parallel port is at %04x hex\n", pbase);
 	}
 
 	ast_config_destroy(cfg);
+	return 0;
+}
+
+static int reload_module(void)
+{
+	return load_config(1);
+}
+
+static int load_module(void)
+{
+	if (!(simpleusb_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+	ast_format_cap_append(simpleusb_tech.capabilities, ast_format_slin, 0);
+
+	if (hid_device_mklist()) {
+		ast_log(LOG_ERROR, "Unable to make hid list\n");
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	usb_list_check("");
+
+	simpleusb_active = NULL;
+
+	/* Copy the default jb config over global_jbconf */
+	memcpy(&global_jbconf, &default_jbconf, sizeof(struct ast_jb_conf));
+
+	pp_val = 0;
+	hasout = 0;
+
+	if (load_config(0)) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
 
 	if (_find_desc(simpleusb_active) == NULL) {
 		ast_log(LOG_NOTICE, "susb active device %s not found\n", simpleusb_active);
@@ -3947,8 +3961,6 @@ static int load_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
-/*
-*/
 static int unload_module(void)
 {
 	struct chan_simpleusb_pvt *o;
@@ -3993,4 +4005,9 @@ static int unload_module(void)
 	return 0;
 }
 
-AST_MODULE_INFO_STANDARD_EXTENDED(ASTERISK_GPL_KEY, "SimpleUSB Radio Interface Channel Driver");
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "SimpleUSB Radio Interface Channel Driver",
+	.support_level = AST_MODULE_SUPPORT_EXTENDED,
+	.load = load_module,
+	.unload = unload_module,
+	.reload = reload_module,
+);
