@@ -79,7 +79,8 @@ struct http_registry {
 	char perceived[80];
 	int perceived_port;
 	AST_LIST_ENTRY(http_registry) entry;
-	int port;
+	int port;					/*!< Port of server for registration */
+	int iaxport;				/*!< Our IAX2 bindport */
 	char hostname[];
 };
 
@@ -200,8 +201,8 @@ static char *build_request_data(struct http_registry *reg)
 		return NULL;
 	}
 
-	if (reg->port) {
-		ast_json_object_set(json, "port", ast_json_integer_create(reg->port)); /* Our IAX2 port */
+	if (reg->iaxport) {
+		ast_json_object_set(json, "port", ast_json_integer_create(reg->iaxport)); /* Our IAX2 port */
 	}
 	if (ast_json_object_set(json, "data", nodes)) {
 		ast_json_unref(json); /* Includes json, plus stolen references to nodes + node */
@@ -337,10 +338,43 @@ static struct ast_cli_entry rpt_http_cli[] = {
 	AST_CLI_DEFINE(handle_show_registrations, "Display status of registrations"),
 };
 
+#define IAX_CONFIG_FILE "iax.conf"
+
+/*! \brief Query iax.conf for the current bindport */
+static int get_bindport(void)
+{
+	struct ast_config *cfg;
+	struct ast_flags config_flags = { 0 };
+	const char *varval;
+
+	if (!(cfg = ast_config_load(IAX_CONFIG_FILE, config_flags))) {
+		ast_log(LOG_WARNING, "Config file %s not found, declining to load\n", IAX_CONFIG_FILE);
+		return -1;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format. Aborting.\n", IAX_CONFIG_FILE);
+		return -1;
+	}
+
+	/* general section */
+	if ((varval = ast_variable_retrieve(cfg, "general", "bindport")) && !ast_strlen_zero(varval)) {
+		int tmp;
+		if (ast_str_to_int(varval, &tmp)) {
+			ast_log(LOG_WARNING, "Invalid request interval, defaulting to %d\n", register_interval);
+		} else {
+			ast_config_destroy(cfg);
+			ast_debug(2, "Our IAX2 bindport is %d\n", tmp);
+			return tmp;
+		}
+	}
+	ast_config_destroy(cfg);
+	return -1;
+}
+
 /*! \brief Based on iax2_append_register from chan_iax2 */
 static int append_register(const char *hostname, const char *username, const char *secret, const char *porta)
 {
 	struct http_registry *reg;
+	static int iaxport = 0;
 
 	if (!(reg = ast_calloc(1, sizeof(*reg) + strlen(hostname) + 1))) {
 		return -1;
@@ -369,6 +403,14 @@ static int append_register(const char *hostname, const char *username, const cha
 	}
 
 	ast_sockaddr_set_port(&reg->addr, 443); /* Registrar's HTTPS port */
+
+	if (!iaxport) {
+		iaxport = get_bindport();
+	}
+
+	if (iaxport > 0) {
+		reg->iaxport = iaxport;
+	}
 
 	AST_RWLIST_WRLOCK(&registrations);
 	AST_LIST_INSERT_HEAD(&registrations, reg, entry);
@@ -483,6 +525,8 @@ static int load_config(int reload)
 			var = var->next;
 		}
 	}
+
+	ast_config_destroy(cfg);
 
 	if (reload) {
 		ast_cond_signal(&refresh_condition);
