@@ -4,11 +4,16 @@
 #include <sys/stat.h>
 #include <math.h>
 #include <termios.h>
+#include <assert.h>
 
 #include "asterisk/channel.h"
 #include "asterisk/pbx.h"
 #include "asterisk/cli.h" /* use ast_cli_command */
 #include "asterisk/module.h" /* use ast_module_check */
+#include "asterisk/dns_core.h" /* use for dns lookup */
+#include "asterisk/dns_resolver.h" /* use for dns lookup */
+#include "asterisk/dns_txt.h" /* user for dns lookup */
+#include "asterisk/vector.h" /* required for dns */
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
@@ -16,6 +21,7 @@
 #include "rpt_manager.h"
 #include "rpt_utils.h" /* use myatoi */
 #include "rpt_rig.h" /* use setrem */
+#include <arpa/nameser.h> /* needed for dns - must be after app_rpt.h */
 
 extern struct rpt rpt_vars[MAXRPTS];
 
@@ -349,7 +355,94 @@ int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipad
 	return (1);
 }
 
-int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax, int wilds)
+/*!
+ * \brief AllStar Network node lookup by dns.
+ * calling routine should pass a buffer for nodedata and nodedatalength
+ * of sufficient length. A typical response is 
+ * "radio@123.123.123.123:4569/50000,123.123.123.123
+ * This routine uses the TXT records provided by AllStarLink
+ * \param node			Node number to lookup
+ * \param nodedata		Buffer to hold the matching node information
+ * \param nodedatalength	Length of the nodedata buffer
+ * \retval 0 			if not successful
+ * \retval 1 			if successful
+ */
+static int node_lookup_bydns(char *node, char *nodedata, int nodedatalength)
+{
+	struct ast_dns_result *result;
+	const struct ast_dns_record *record;
+	struct ast_vector_string *txtrecords;
+
+	char domain[50];
+	char tmp[100];
+	int txtcount = 0;
+
+	char actualnode[10];
+	char ipaddress[20];
+	char iaxport[10];
+
+	/* will will require at least a node length of 4 digits */
+	if(strlen(node) < 4) {
+		return 0;
+	}
+
+	/* make sure we have buffers to return the data */
+	assert(nodedata != NULL);
+	assert(nodedatalength > 0);
+
+	/* setup the domain to lookup */
+	memset(domain, 0, sizeof(domain));
+	snprintf(domain, sizeof(domain), "%s.nodes.allstarlink.org", node);
+
+	ast_verb(4, "Resolving DNS TXT records for: %s\n", domain);
+
+	/* resolve the domain name */
+	if (ast_dns_resolve(domain, T_TXT, C_IN, &result)) {
+		ast_log(LOG_ERROR, "DNS request failed\n");
+		return 0;
+	}
+	if (!result) {
+		return 0;
+	}
+
+	/* get the response */
+	record = ast_dns_result_get_records(result);
+	
+	if(!record) {
+		ast_dns_result_free(result);
+		return 0;
+	}
+
+	/* process the text records 
+	   text records are in the format 
+	   "NN=2530" "RT=2023-02-21 17:33:07" "RB=0" "IP=104.153.109.212" "PIP=0" "PT=4569" "RH=register-west"
+	*/
+	txtrecords = ast_dns_txt_get_strings( record);
+
+	for(txtcount = 0; txtcount < AST_VECTOR_SIZE(txtrecords); txtcount++)
+	{
+		ast_copy_string(tmp, AST_VECTOR_GET(txtrecords, txtcount), sizeof(tmp));
+		if(ast_begins_with(tmp,"NN=")) {
+			ast_copy_string(actualnode,tmp+3,sizeof(actualnode));
+		}
+		if(ast_begins_with(tmp,"IP=")) {
+			ast_copy_string(ipaddress,tmp+3,sizeof(ipaddress));
+		}
+		if(ast_begins_with(tmp,"PT=")) {
+			ast_copy_string(iaxport,tmp+3,sizeof(iaxport));
+		}
+	}
+
+	/* format the response */
+	snprintf(nodedata, nodedatalength, "radio@%s:%s/%s,%s", ipaddress, iaxport, actualnode, ipaddress);
+
+	ast_dns_txt_free_strings(txtrecords);
+	ast_dns_result_free(result);
+
+	return 1;
+}
+
+int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, int nodedatalength, int wilds)
 {
 
 	char *val;
@@ -361,30 +454,44 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax, int wi
 	/* try to look it up locally first */
 	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.nodes, digitbuf);
 	if (val) {
-		if (str && strmax)
+		if (nodedata && nodedatalength) {
 			//snprintf(str,strmax,val,digitbuf);
 			//snprintf(str, strmax, "%s%s", val, digitbuf);	/*! \todo 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy. */
-			snprintf(str, strmax, "%s", val); // Indeed, generally we only want the first part so for now, ignore the second bit
+			snprintf(nodedata, nodedatalength, "%s", val); // Indeed, generally we only want the first part so for now, ignore the second bit
+			ast_verb(4, "Resolved by internal: node %s to %s\n", digitbuf, nodedata);
+		}
 		return (1);
 	}
 	if (wilds) {
 		vp = ast_variable_browse(myrpt->cfg, myrpt->p.nodes);
 		while (vp) {
 			if (ast_extension_match(vp->name, digitbuf)) {
-				if (str && strmax)
+				if (nodedata && nodedatalength) {
 					//snprintf(str,strmax,vp->value,digitbuf);
 					//snprintf(str, strmax, "%s%s", vp->value, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
-					snprintf(str, strmax, "%s", vp->value);
+					snprintf(nodedata, nodedatalength, "%s", vp->value);
+					ast_verb(4, "Resolved by internal/wild: node %s to %s\n", digitbuf, nodedata);
+				}
 				return (1);
 			}
 			vp = vp->next;
 		}
 	}
+
+	/* try to look up the node using dns */
+	/* add a if statement here to test the dns lookup option */
+	if(node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
+		ast_verb(4, "Resolved by DNS: node %s to %s\n", digitbuf, nodedata);
+		return (1);
+	}
+
+	/* prepare to lookup using the external file(s) */
 	ast_mutex_lock(&nodelookuplock);
 	if (!myrpt->p.extnodefilesn) {
 		ast_mutex_unlock(&nodelookuplock);
 		return (0);
 	}
+
 	/* determine longest node length again */
 	longestnode = 0;
 	vp = ast_variable_browse(myrpt->cfg, myrpt->p.nodes);
@@ -397,14 +504,21 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax, int wi
 		vp = vp->next;
 	}
 	found = 0;
+
+	/* process each external node file */
 	for (i = 0; i < myrpt->p.extnodefilesn; i++) {
-		ourcfg = ast_config_load(myrpt->p.extnodefiles[i], config_flags);
-		/* if file does not exist */
+
+		/* see if the external node file exists */
 		if (stat(myrpt->p.extnodefiles[i], &mystat) == -1)
 			continue;
-		/* if file not there, try next */
+
+		ourcfg = ast_config_load(myrpt->p.extnodefiles[i], config_flags);
+
+		/* if file is not there, try the next one */
 		if (!ourcfg)
 			continue;
+
+		/* determine the longest node */
 		vp = ast_variable_browse(ourcfg, myrpt->p.extnodes);
 		while (vp) {
 			j = strlen(vp->name);
@@ -414,78 +528,99 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax, int wi
 				longestnode = j;
 			vp = vp->next;
 		}
+
+		/* if we have not found a match, attempt to load a matching node */
 		if (!found) {
 			val = (char *) ast_variable_retrieve(ourcfg, myrpt->p.extnodes, digitbuf);
 			if (val) {
 				found = 1;
-				if (str && strmax)
+				if (nodedata && nodedatalength) {
 					//snprintf(str,strmax,val,digitbuf);
 					//snprintf(str, strmax, "%s%s", val, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
-					snprintf(str, strmax, "%s", val);
+					snprintf(nodedata, nodedatalength, "%s", val);
+					ast_verb(4, "Resolved from file: node %s to %s\n", digitbuf, nodedata);
+				}
 			}
 		}
 		ast_config_destroy(ourcfg);
 	}
 	myrpt->longestnode = longestnode;
 	ast_mutex_unlock(&nodelookuplock);
+
 	return (found);
 }
 
-char *forward_node_lookup(struct rpt *myrpt, char *digitbuf, struct ast_config *cfg)
+int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, int nodedatalength)
 {
 	char *val, *efil, *enod, *strs[100];
 	int i, n;
 	struct stat mystat;
-	static struct ast_config *ourcfg;
+	struct ast_config *ourcfg;
 
+	memset(nodedata, 0, nodedatalength);
+
+	/* try to look up the node using dns */
+	/* add a if statement here to test the dns lookup option */
+	if(node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
+		ast_verb(4, "Forward lookup resolved by DNS: node %s to %s\n", digitbuf, nodedata);
+		return 1;
+	}
+
+	/* see if we have extnodefile setup in the proxy section - if not use the default name */
 	val = (char *) ast_variable_retrieve(cfg, "proxy", "extnodefile");
 	if (!val)
 		val = EXTNODEFILE;
+
+	/* see if we have an override for the extnodes section in the proxy section */
 	enod = (char *) ast_variable_retrieve(cfg, "proxy", "extnodes");
 	if (!enod)
 		enod = EXTNODES;
+
+	/* prepare to lookup using the external file(s) */
 	ast_mutex_lock(&nodelookuplock);
 	efil = ast_strdup(val);
 	if (!efil) {
-		ast_config_destroy(ourcfg);
-		if (ourcfg)
-			ast_config_destroy(ourcfg);
-		ourcfg = NULL;
 		ast_mutex_unlock(&nodelookuplock);
-		return NULL;
+		return 0;
 	}
+
+	/* parse the external node file name(s) - we allow for multiple files */
 	n = finddelim(efil, strs, 100);
 	if (n < 1) {
 		ast_free(efil);
-		ast_config_destroy(ourcfg);
-		if (ourcfg)
-			ast_config_destroy(ourcfg);
-		ourcfg = NULL;
 		ast_mutex_unlock(&nodelookuplock);
-		return NULL;
+		return 0;
 	}
-	if (ourcfg)
-		ast_config_destroy(ourcfg);
 	val = NULL;
+
+	/* process each external node file */
 	for (i = 0; i < n; i++) {
-		/* if file does not exist */
+
+		/* see if the external node file exists */
 		if (stat(strs[i], &mystat) == -1)
 			continue;
+
 		ourcfg = ast_config_load(strs[i], config_flags);
-		/* if file not there, try next */
+		/* if file is not there, try the next one */
 		if (!ourcfg)
 			continue;
-		if (!val)
+
+		/* if we have not found a match, attempt to load a matching node */
+		if (!val) {
 			val = (char *) ast_variable_retrieve(ourcfg, enod, digitbuf);
+		}
+		ast_config_destroy(ourcfg);
 	}
-	if (!val) {
-		if (ourcfg)
-			ast_config_destroy(ourcfg);
-		ourcfg = NULL;
+
+	if(val) {
+		ast_copy_string(nodedata, val, nodedatalength);
+		ast_verb(4, "Forward lookup resolved from file: node %s to %s\n", digitbuf, nodedata);
 	}
+
 	ast_mutex_unlock(&nodelookuplock);
 	ast_free(efil);
-	return (val);
+
+	return (val ? 1 : 0);
 }
 
 void load_rpt_vars(int n, int init)

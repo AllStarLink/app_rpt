@@ -27,10 +27,29 @@ int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipad
  * \brief AllStar Network node lookup function.  This function will take the nodelist that has been read into memory
  * and try to match the node number that was passed to it.  If it is found, the function requested will succeed.
  * If not, it will fail.  Called when a connection to a remote node is requested.
+ * \param  myrpt		Calling repeater structure
+ * \param  digitbuf		The node number of match
+ * \param  nodedata		A buffer to hold the matching node information
+ * \param  nodedatalength	The length of the str buffer
+ * \param  wilds		Set to 1 to perform a wild card lookup
+ * \retval 0 			If not successful
+ * \retval 1 			If successful
  */
-int node_lookup(struct rpt *myrpt, char *digitbuf, char *str, int strmax, int wilds);
+int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, int nodedatalength, int wilds);
 
-char *forward_node_lookup(struct rpt *myrpt, char *digitbuf, struct ast_config *cfg);
+/*!
+ * \brief AllStar Network forwarde node lookup function.  This function will take the nodelist 
+ * and try to match the node number that was passed to it.  If it is found, the function requested will succeed.
+ * If not, it will fail.  Called when a connection to a remote node is requested.
+ * \param  digitbuf		The node number of match
+ * \param  cfg			Asterisk configuration file pointer
+ * \param  nodedata		A buffer to hold the matching node information
+ * \param  nodedatalength	The length of the str buffer
+ * \retval 0 			If not successful
+ * \retval 1 			If successful
+ */
+
+int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, int nodedatalength);
 
 /*! 
  * \brief This is the initialization function.  This routine takes the data in rpt.conf and setup up the variables needed for each of
