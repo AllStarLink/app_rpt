@@ -2948,6 +2948,7 @@ static void *rpt(void *this)
 		usleep(100000);
 		rpt_mutex_lock(&myrpt->lock);
 	}
+/*! \todo XXX <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
 #if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__) || defined(__arm__)
 	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_RBI)) && (ioperm(myrpt->p.iobase, 1, 1) == -1)) {
 		rpt_mutex_unlock(&myrpt->lock);
@@ -5796,7 +5797,7 @@ static int load_config(int reload)
 	struct ast_config *cfg;
 	char *val, *this = NULL;
 
-	cfg = rpt_vars[n].cfg = ast_config_load("rpt.conf", config_flags);
+	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
 		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
 		return -1;
@@ -5807,6 +5808,7 @@ static int load_config(int reload)
 			rpt_vars[n].reload1 = 0;
 		}
 	} else {
+		rpt_vars[n].cfg = cfg;
 		/* If there are daq devices present, open and initialize them */
 		daq_init(cfg);
 	}
@@ -5893,10 +5895,14 @@ static int load_config(int reload)
 #endif
 		if (reload) {
 			rpt_vars[n].reload1 = 1;
+			if (n >= nrpts) {
+				nrpts = n + 1;
+			}
+		} else {
+			n++;
+			nrpts = n;
 		}
-		n++;
 	}
-	nrpts = n;
 	ast_config_destroy(cfg);
 	cfg = NULL;
 
