@@ -15,12 +15,12 @@
 #include "asterisk/vector.h" /* required for dns */
 
 #include "app_rpt.h"
+#include <arpa/nameser.h> /* needed for dns - must be after app_rpt.h */
 #include "rpt_lock.h"
 #include "rpt_config.h"
 #include "rpt_manager.h"
 #include "rpt_utils.h" /* use myatoi */
 #include "rpt_rig.h" /* use setrem */
-#include <arpa/nameser.h> /* needed for dns - must be after app_rpt.h */
 
 extern struct rpt rpt_vars[MAXRPTS];
 
