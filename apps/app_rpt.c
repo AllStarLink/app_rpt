@@ -2415,7 +2415,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
 
-	if (!node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
+	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
 		return -1;
 	}
@@ -6155,7 +6155,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
 			}
 		}
-		if (b1 && strlen(nodedata) && myadr && cfg) {
+		if (b1 && !ast_strlen_zero(nodedata) && myadr && cfg) {
 			ast_copy_string(xstr, nodedata, sizeof(xstr));
 			if (!options) {
 				if (*b1 < '1') {
@@ -6180,7 +6180,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 				/* look for his reported node string */
 				forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
-				if (!strlen(nodedata)) {
+				if (ast_strlen_zero(nodedata)) {
 					ast_log(LOG_WARNING, "Reported node %s cannot be found!!\n", b1);
 					return -1;
 				}
@@ -6554,7 +6554,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		/* look for his reported node string */
-		if (!node_lookup(myrpt, b1, tmp, sizeof(tmp) - 1, 0)) {
+		if (node_lookup(myrpt, b1, tmp, sizeof(tmp) - 1, 0)) {
 			ast_log(LOG_WARNING, "Reported node %s cannot be found!!\n", b1);
 			return -1;
 		}
