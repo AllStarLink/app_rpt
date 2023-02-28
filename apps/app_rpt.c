@@ -2948,9 +2948,15 @@ static void *rpt(void *this)
 		usleep(100000);
 		rpt_mutex_lock(&myrpt->lock);
 	}
+#if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__) || defined(__arm__)
 	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_RBI)) && (ioperm(myrpt->p.iobase, 1, 1) == -1)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_log(LOG_WARNING, "Can't get io permission on IO port %x hex\n", myrpt->p.iobase);
+#else
+	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_RBI))) {
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_log(LOG_ERROR, "ioperm(%x) not supported on this architecture\n", myrpt->p.iobase);
+#endif
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
@@ -5784,34 +5790,29 @@ static void *rpt(void *this)
 /* Forward declaration */
 static int stop_repeaters(void);
 
-static void *rpt_master(void *ignore)
+static int load_config(int reload)
 {
-	int i, n;
+	int i, n = 0;
 	struct ast_config *cfg;
-	char *this, *val;
+	char *val, *this = NULL;
 
-	/* init nodelog queue */
-	nodelog.next = nodelog.prev = &nodelog;
-	/* go thru all the specified repeaters */
-	this = NULL;
-	n = 0;
-
-	/* wait until asterisk starts */
-	while (!ast_test_flag(&ast_options, AST_OPT_FLAG_FULLY_BOOTED)) {
-		usleep(250000);
-	}
-
-	rpt_vars[n].cfg = ast_config_load("rpt.conf", config_flags);
-	cfg = rpt_vars[n].cfg;
+	cfg = rpt_vars[n].cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
 		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
-		pthread_exit(NULL);
+		return -1;
 	}
 
-	/* If there are daq devices present, open and initialize them */
-	daq_init(cfg);
+	if (reload) {
+		for (n = 0; n < nrpts; n++) {
+			rpt_vars[n].reload1 = 0;
+		}
+	} else {
+		/* If there are daq devices present, open and initialize them */
+		daq_init(cfg);
+	}
 
 	while ((this = ast_category_browse(cfg, this)) != NULL) {
+		/* Node name must be fully numeric */
 		for (i = 0; i < strlen(this); i++) {
 			if ((this[i] < '0') || (this[i] > '9')) {
 				break;
@@ -5819,6 +5820,23 @@ static void *rpt_master(void *ignore)
 		}
 		if (i != strlen(this)) {
 			continue; /* Not a node defn */
+		}
+		if (reload) {
+			for (n = 0; n < nrpts; n++) {
+				if (!strcmp(this, rpt_vars[n].name)) {
+					rpt_vars[n].reload1 = 1;
+					break;
+				}
+			}
+			if (n < nrpts) {
+				continue; /* Node already exists. */
+			}
+			/* No such node yet, find an empty hole or the next one */
+			for (n = 0; n < nrpts; n++) {
+				if (rpt_vars[n].deleted) {
+					break;
+				}
+			}
 		}
 		if (n >= MAXRPTS) {
 			ast_log(LOG_ERROR, "Attempting to add repeater node %s would exceed max. number of repeaters (%d)\n", this, MAXRPTS);
@@ -5861,6 +5879,7 @@ static void *rpt_master(void *ignore)
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
 		}
+
 		ast_mutex_init(&rpt_vars[n].lock);
 		ast_mutex_init(&rpt_vars[n].remlock);
 		ast_mutex_init(&rpt_vars[n].statpost_lock);
@@ -5872,14 +5891,36 @@ static void *rpt_master(void *ignore)
 #ifdef	_MDC_DECODE_H_
 		rpt_vars[n].mdc = mdc_decoder_new(8000);
 #endif
+		if (reload) {
+			rpt_vars[n].reload1 = 1;
+		}
 		n++;
 	}
 	nrpts = n;
 	ast_config_destroy(cfg);
 	cfg = NULL;
 
+	return 0;
+}
+
+static void *rpt_master(void *ignore)
+{
+	int i;
+	/* init nodelog queue */
+	nodelog.next = nodelog.prev = &nodelog;
+	/* go thru all the specified repeaters */
+
+	/* wait until asterisk starts */
+	while (!ast_test_flag(&ast_options, AST_OPT_FLAG_FULLY_BOOTED)) {
+		usleep(250000);
+	}
+
+	if (load_config(0)) {
+		return NULL;
+	}
+
 	/* start em all */
-	for (i = 0; i < n; i++) {
+	for (i = 0; i < nrpts; i++) {
 		load_rpt_vars(i, 1); /* Load initial config */
 
 		/* if is a remote, dont start one for it */
@@ -7949,95 +7990,10 @@ static int load_module(void)
 
 static int reload(void)
 {
-	int i, n;
-	struct ast_config *cfg;
-	char *val, *this;
-
-	cfg = ast_config_load("rpt.conf", config_flags);
-	if (!cfg) {
-		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
-		return -1;
-	}
+	int n;
 
 	ast_mutex_lock(&rpt_master_lock);
-	for (n = 0; n < nrpts; n++)
-		rpt_vars[n].reload1 = 0;
-	this = NULL;
-	while ((this = ast_category_browse(cfg, this)) != NULL) {
-		for (i = 0; i < strlen(this); i++) {
-			if ((this[i] < '0') || (this[i] > '9'))
-				break;
-		}
-		if (i != strlen(this))
-			continue;			/* Not a node defn */
-		for (n = 0; n < nrpts; n++) {
-			if (!strcmp(this, rpt_vars[n].name)) {
-				rpt_vars[n].reload1 = 1;
-				break;
-			}
-		}
-		/*! \todo this logic here needs to be combined with the startup logic, as much as possible. */
-		if (n >= nrpts) {		/* no such node, yet */
-			/* find an empty hole or the next one */
-			for (n = 0; n < nrpts; n++)
-				if (rpt_vars[n].deleted)
-					break;
-			if (n >= MAXRPTS) {
-				ast_log(LOG_ERROR, "Attempting to add repeater node %s would exceed max. number of repeaters (%d)\n",
-						this, MAXRPTS);
-				continue;
-			}
-			memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
-			val = (char *) ast_variable_retrieve(cfg, this, "rxchannel");
-			if (val) {
-				char *slash, *rxchan = ast_strdup(val);
-				slash = strchr(rxchan, '/');
-				if (!slash) {
-					ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding node '%s'\n", val, this);
-					ast_free(rxchan);
-					continue;
-				}
-				slash[0] = '\0';
-				if (!ast_get_channel_tech(rxchan)) {
-					ast_log(LOG_WARNING, "Channel tech '%s' is not currently loaded, not adding node '%s'\n", rxchan, this);
-					ast_free(rxchan);
-					continue;
-				}
-				ast_free(rxchan);
-				rpt_vars[n].rxchanname = ast_strdup(val);
-			}
-			rpt_vars[n].name = ast_strdup(this);
-			val = (char *) ast_variable_retrieve(cfg, this, "txchannel");
-			if (val)
-				rpt_vars[n].txchanname = ast_strdup(val);
-			rpt_vars[n].remote = 0;
-			rpt_vars[n].remoterig = "";
-			rpt_vars[n].p.iospeed = B9600;
-			rpt_vars[n].ready = 0;
-			val = (char *) ast_variable_retrieve(cfg, this, "remote");
-			if (val) {
-				rpt_vars[n].remoterig = ast_strdup(val);
-				rpt_vars[n].remote = 1;
-			}
-			val = (char *) ast_variable_retrieve(cfg, this, "radiotype");
-			if (val)
-				rpt_vars[n].remoterig = ast_strdup(val);
-			ast_mutex_init(&rpt_vars[n].lock);
-			ast_mutex_init(&rpt_vars[n].remlock);
-			ast_mutex_init(&rpt_vars[n].statpost_lock);
-			ast_mutex_init(&rpt_vars[n].blocklock);
-			rpt_vars[n].tele.next = &rpt_vars[n].tele;
-			rpt_vars[n].tele.prev = &rpt_vars[n].tele;
-			rpt_vars[n].rpt_thread = AST_PTHREADT_NULL;
-			rpt_vars[n].tailmessagen = 0;
-#ifdef	_MDC_DECODE_H_
-			rpt_vars[n].mdc = mdc_decoder_new(8000);
-#endif
-			rpt_vars[n].reload1 = 1;
-			if (n >= nrpts)
-				nrpts = n + 1;
-		}
-	}
+	load_config(1);
 	for (n = 0; n < nrpts; n++) {
 		if (rpt_vars[n].reload1)
 			continue;
