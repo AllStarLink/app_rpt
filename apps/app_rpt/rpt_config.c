@@ -502,9 +502,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 			if (*vp->name == '_') {
 				j--;
 			}
-			if (j > longestnode) {
-				longestnode = j;
-			}
+			longestnode = MAX(longestnode, j);
 			vp = vp->next;
 		}
 		found = 0;
@@ -531,9 +529,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 				if (*vp->name == '_') {
 					j--;
 				}
-				if (j > longestnode) {
-					longestnode = j;
-				}
+				longestnode = MAX(longestnode, j);
 				vp = vp->next;
 			}
 
@@ -1241,8 +1237,7 @@ void load_rpt_vars(int n, int init)
 
 	while (vp) {
 		j = strlen(vp->name);
-		if (j > longestnode)
-			longestnode = j;
+		longestnode = MAX(longestnode, j);
 		vp = vp->next;
 	}
 

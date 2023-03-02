@@ -268,7 +268,7 @@ enum  rpt_dns_method {
 	LOOKUP_BOTH,
 	LOOKUP_DNS,
 	LOOKUP_FILE
-	};
+};
 
 #define DEFAULT_NODE_LOOKUP_METHOD LOOKUP_BOTH
 #define DEFAULT_TELEMDUCKDB "-9"
