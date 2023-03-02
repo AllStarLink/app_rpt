@@ -419,6 +419,9 @@ static int shutting_down = 0;
 static int debug = 7;			/* Set this >0 for extra debug output */
 static int nrpts = 0;
 
+/* general settings */
+enum rpt_dns_method rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
+
 int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
 
 int nullfd = -1;
@@ -2415,7 +2418,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
 
-	if (!node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
+	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
 		return -1;
 	}
@@ -5813,6 +5816,22 @@ static int load_config(int reload)
 		daq_init(cfg);
 	}
 
+	/* load the general settings */
+	val = (char *) ast_variable_retrieve(cfg, "general", "node_lookup_method");
+	if (val) {
+		if (!strcasecmp(val, "both")) {
+			rpt_node_lookup_method = LOOKUP_BOTH;
+		} else if (!strcasecmp(val, "dns")) {
+			rpt_node_lookup_method = LOOKUP_DNS;
+		} else if (!strcasecmp(val, "file")) {
+			rpt_node_lookup_method = LOOKUP_FILE;
+		} else {
+			ast_log(LOG_WARNING,"Configuration error: node_lookup_method, %s, is not valid", val);
+			rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
+		}
+	}
+	
+	/* process the sections looking for the nodes */
 	while ((this = ast_category_browse(cfg, this)) != NULL) {
 		/* Node name must be fully numeric */
 		for (i = 0; i < strlen(this); i++) {
@@ -6163,12 +6182,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	pbx_builtin_setvar_helper(chan, "RPT_STAT_ERR", "");
 
 	if (myrpt == NULL) {
-		char *val, *myadr, *mypfx, sx[320], *sy, *s, *s1, *s2, *s3, dstr[1024];
-		char xstr[100], hisip[100], nodeip[100], tmp1[100];
+		char *myadr, *mypfx, sx[320], *sy, *s, *s1, *s2, *s3, dstr[1024];
+		char nodedata[100], xstr[100], hisip[100], nodeip[100], tmp1[100];
 		struct ast_config *cfg;
 
-		val = NULL;
-		myadr = NULL;      
+		myadr = NULL; 
 		b1 = ast_channel_caller(chan)->id.number.str;
 		if (b1)
 			ast_shrink_phone_number(b1);
@@ -6177,8 +6195,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			myadr = (char *) ast_variable_retrieve(cfg, "proxy", "ipaddr");
 			if (options && (*options == 'F')) {
 				if (b1 && myadr) {
-					val = forward_node_lookup(myrpt, b1, cfg);
-					strncpy(xstr, val, sizeof(xstr) - 1);
+					forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
+					ast_copy_string(xstr, nodedata, sizeof(xstr));
 					s = xstr;
 					s1 = strsep(&s, ",");
 					if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
@@ -6189,21 +6207,22 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					}
 					s2 = strsep(&s, ",");
 					if (!s2) {
-						ast_log(LOG_WARNING, "Sepcified node %s not in correct format!!\n", val);
+						ast_log(LOG_WARNING, "Specified node %s not in correct format!!\n", nodedata);
 						ast_config_destroy(cfg);
 						return -1;
 					}
-					val = NULL;
-					if (!strcmp(s2, myadr))
-						val = forward_node_lookup(myrpt, tmp, cfg);
+					nodedata[0] = '\0';
+					if (!strcmp(s2, myadr)) {
+						forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
+					}
 				}
 
 			} else {
-				val = forward_node_lookup(myrpt, tmp, cfg);
+				forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
 			}
 		}
-		if (b1 && val && myadr && cfg) {
-			strncpy(xstr, val, sizeof(xstr) - 1);
+		if (b1 && !ast_strlen_zero(nodedata) && myadr && cfg) {
+			ast_copy_string(xstr, nodedata, sizeof(xstr));
 			if (!options) {
 				if (*b1 < '1') {
 					ast_log(LOG_WARNING, "Connect Attempt from invalid node number!!\n");
@@ -6226,12 +6245,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					return -1;
 				}
 				/* look for his reported node string */
-				val = forward_node_lookup(myrpt, b1, cfg);
-				if (!val) {
+				forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
+				if (ast_strlen_zero(nodedata)) {
 					ast_log(LOG_WARNING, "Reported node %s cannot be found!!\n", b1);
 					return -1;
 				}
-				strncpy(tmp1, val, sizeof(tmp1) - 1);
+				ast_copy_string(tmp1, nodedata, sizeof(tmp1));
 				s = tmp1;
 				s1 = strsep(&s, ",");
 				if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
@@ -6287,7 +6306,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 			s2 = strsep(&s, ",");
 			if (!s2) {
-				ast_log(LOG_WARNING, "Sepcified node %s not in correct format!!\n", val);
+				ast_log(LOG_WARNING, "Specified node %s not in correct format!!\n", nodedata);
 				ast_config_destroy(cfg);
 				return -1;
 			}
@@ -6601,7 +6620,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		/* look for his reported node string */
-		if (!node_lookup(myrpt, b1, tmp, sizeof(tmp) - 1, 0)) {
+		if (node_lookup(myrpt, b1, tmp, sizeof(tmp) - 1, 0)) {
 			ast_log(LOG_WARNING, "Reported node %s cannot be found!!\n", b1);
 			return -1;
 		}

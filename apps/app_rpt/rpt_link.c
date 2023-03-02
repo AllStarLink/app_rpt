@@ -510,7 +510,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		sprintf(tmp, "tlb/%s/%s", node, myrpt->name);
 	} else {
 		if (node[0] != '3') {
-			if (!node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1)) {
+			if (node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1)) {
 				if (strlen(node) >= myrpt->longestnode)
 					return -1;	/* No such node */
 				return 1;		/* No match yet */
