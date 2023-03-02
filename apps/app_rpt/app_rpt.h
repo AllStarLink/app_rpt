@@ -264,7 +264,11 @@ enum{DAQ_PT_INADC = 1, DAQ_PT_INP, DAQ_PT_IN, DAQ_PT_OUT};
 enum{DAQ_TYPE_UCHAMELEON};
 
 /* general setting - rpt_node_lookup */
-enum {LOOKUP_BOTH, LOOKUP_DNS, LOOKUP_FILE};
+enum  rpt_dns_method {
+	LOOKUP_BOTH,
+	LOOKUP_DNS,
+	LOOKUP_FILE
+	};
 
 #define DEFAULT_NODE_LOOKUP_METHOD LOOKUP_BOTH
 #define DEFAULT_TELEMDUCKDB "-9"

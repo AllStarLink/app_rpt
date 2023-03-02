@@ -420,7 +420,7 @@ static int debug = 7;			/* Set this >0 for extra debug output */
 static int nrpts = 0;
 
 /* general settings */
-int rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
+enum rpt_dns_method rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
 
 int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
 
@@ -5818,15 +5818,16 @@ static int load_config(int reload)
 
 	/* load the general settings */
 	val = (char *) ast_variable_retrieve(cfg, "general", "node_lookup_method");
-	if(val) {
-		if(!strcasecmp(val, "both")) {
+	if (val) {
+		if (!strcasecmp(val, "both")) {
 			rpt_node_lookup_method = LOOKUP_BOTH;
-		}
-		else if(!strcasecmp(val, "dns")) {
+		} else if (!strcasecmp(val, "dns")) {
 			rpt_node_lookup_method = LOOKUP_DNS;
-		}
-		else if(!strcasecmp(val, "file")) {
+		} else if (!strcasecmp(val, "file")) {
 			rpt_node_lookup_method = LOOKUP_FILE;
+		} else {
+			ast_log(LOG_WARNING,"Configuration error: node_lookup_method, %s, is not valid", val);
+			rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
 		}
 	}
 	
