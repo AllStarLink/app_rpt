@@ -23,6 +23,7 @@
 #include "rpt_rig.h" /* use setrem */
 
 extern struct rpt rpt_vars[MAXRPTS];
+extern int rpt_node_lookup_method;
 
 static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 
@@ -442,9 +443,8 @@ static int node_lookup_bydns(char *node, char *nodedata, size_t nodedatalength)
 
 int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodedatalength, int wilds)
 {
-
 	char *val;
-	int longestnode, i, j, found;
+	int longestnode, i, j, found = 0;
 	struct stat mystat;
 	struct ast_config *ourcfg;
 	struct ast_variable *vp;
@@ -477,47 +477,26 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 	}
 
 	/* try to look up the node using dns */
-	/* add a if statement here to test the dns lookup option */
-	if(!node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
-		ast_debug(4, "Resolved by DNS: node %s to %s\n", digitbuf, nodedata);
-		return 0;
+	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_DNS) {
+		if(!node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
+			ast_debug(4, "Resolved by DNS: node %s to %s\n", digitbuf, nodedata);
+			return 0;
+		}
 	}
 
-	/* prepare to lookup using the external file(s) */
-	ast_mutex_lock(&nodelookuplock);
-	if (!myrpt->p.extnodefilesn) {
-		ast_mutex_unlock(&nodelookuplock);
-		return -1;
-	}
+	/* try to lookup using the external file(s) */
+	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
+		
+		/* lock the node lookup */
+		ast_mutex_lock(&nodelookuplock);
+		if (!myrpt->p.extnodefilesn) {
+			ast_mutex_unlock(&nodelookuplock);
+			return -1;
+		}
 
-	/* determine longest node length again */
-	longestnode = 0;
-	vp = ast_variable_browse(myrpt->cfg, myrpt->p.nodes);
-	while (vp) {
-		j = strlen(vp->name);
-		if (*vp->name == '_')
-			j--;
-		if (j > longestnode)
-			longestnode = j;
-		vp = vp->next;
-	}
-	found = 0;
-
-	/* process each external node file */
-	for (i = 0; i < myrpt->p.extnodefilesn; i++) {
-
-		/* see if the external node file exists */
-		if (stat(myrpt->p.extnodefiles[i], &mystat) == -1)
-			continue;
-
-		ourcfg = ast_config_load(myrpt->p.extnodefiles[i], config_flags);
-
-		/* if file is not there, try the next one */
-		if (!ourcfg)
-			continue;
-
-		/* determine the longest node */
-		vp = ast_variable_browse(ourcfg, myrpt->p.extnodes);
+		/* determine longest node length again */
+		longestnode = 0;
+		vp = ast_variable_browse(myrpt->cfg, myrpt->p.nodes);
 		while (vp) {
 			j = strlen(vp->name);
 			if (*vp->name == '_')
@@ -526,24 +505,50 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 				longestnode = j;
 			vp = vp->next;
 		}
+		found = 0;
 
-		/* if we have not found a match, attempt to load a matching node */
-		if (!found) {
-			val = (char *) ast_variable_retrieve(ourcfg, myrpt->p.extnodes, digitbuf);
-			if (val) {
-				found = 1;
-				if (nodedata && nodedatalength) {
-					//snprintf(str,strmax,val,digitbuf);
-					//snprintf(str, strmax, "%s%s", val, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
-					snprintf(nodedata, nodedatalength, "%s", val);
-					ast_debug(4, "Resolved from file: node %s to %s\n", digitbuf, nodedata);
+		/* process each external node file */
+		for (i = 0; i < myrpt->p.extnodefilesn; i++) {
+
+			/* see if the external node file exists */
+			if (stat(myrpt->p.extnodefiles[i], &mystat) == -1)
+				continue;
+
+			ourcfg = ast_config_load(myrpt->p.extnodefiles[i], config_flags);
+
+			/* if file is not there, try the next one */
+			if (!ourcfg)
+				continue;
+
+			/* determine the longest node */
+			vp = ast_variable_browse(ourcfg, myrpt->p.extnodes);
+			while (vp) {
+				j = strlen(vp->name);
+				if (*vp->name == '_')
+					j--;
+				if (j > longestnode)
+					longestnode = j;
+				vp = vp->next;
+			}
+
+			/* if we have not found a match, attempt to load a matching node */
+			if (!found) {
+				val = (char *) ast_variable_retrieve(ourcfg, myrpt->p.extnodes, digitbuf);
+				if (val) {
+					found = 1;
+					if (nodedata && nodedatalength) {
+						//snprintf(str,strmax,val,digitbuf);
+						//snprintf(str, strmax, "%s%s", val, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
+						snprintf(nodedata, nodedatalength, "%s", val);
+						ast_debug(4, "Resolved from file: node %s to %s\n", digitbuf, nodedata);
+					}
 				}
 			}
+			ast_config_destroy(ourcfg);
 		}
-		ast_config_destroy(ourcfg);
+		myrpt->longestnode = longestnode;
+		ast_mutex_unlock(&nodelookuplock);
 	}
-	myrpt->longestnode = longestnode;
-	ast_mutex_unlock(&nodelookuplock);
 
 	return (found ? 0 : -1);
 }
@@ -556,67 +561,72 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 	struct ast_config *ourcfg;
 
 	memset(nodedata, 0, nodedatalength);
-
-	/* try to look up the node using dns */
-	/* add a if statement here to test the dns lookup option */
-	if(!node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
-		ast_debug(4, "Forward lookup resolved by DNS: node %s to %s\n", digitbuf, nodedata);
-		return 0;
-	}
-
-	/* see if we have extnodefile setup in the proxy section - if not use the default name */
-	val = (char *) ast_variable_retrieve(cfg, "proxy", "extnodefile");
-	if (!val)
-		val = EXTNODEFILE;
-
-	/* see if we have an override for the extnodes section in the proxy section */
-	enod = (char *) ast_variable_retrieve(cfg, "proxy", "extnodes");
-	if (!enod)
-		enod = EXTNODES;
-
-	/* prepare to lookup using the external file(s) */
-	ast_mutex_lock(&nodelookuplock);
-	efil = ast_strdup(val);
-	if (!efil) {
-		ast_mutex_unlock(&nodelookuplock);
-		return -1;
-	}
-
-	/* parse the external node file name(s) - we allow for multiple files */
-	n = finddelim(efil, strs, 100);
-	if (n < 1) {
-		ast_free(efil);
-		ast_mutex_unlock(&nodelookuplock);
-		return -1;
-	}
 	val = NULL;
 
-	/* process each external node file */
-	for (i = 0; i < n; i++) {
-
-		/* see if the external node file exists */
-		if (stat(strs[i], &mystat) == -1)
-			continue;
-
-		ourcfg = ast_config_load(strs[i], config_flags);
-		/* if file is not there, try the next one */
-		if (!ourcfg)
-			continue;
-
-		/* if we have not found a match, attempt to load a matching node */
-		if (!val) {
-			val = (char *) ast_variable_retrieve(ourcfg, enod, digitbuf);
+	/* try to look up the node using dns */
+	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_DNS) {
+		if(!node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
+			ast_debug(4, "Forward lookup resolved by DNS: node %s to %s\n", digitbuf, nodedata);
+			return 0;
 		}
-		ast_config_destroy(ourcfg);
 	}
 
-	if(val) {
-		ast_copy_string(nodedata, val, nodedatalength);
-		ast_debug(4, "Forward lookup resolved from file: node %s to %s\n", digitbuf, nodedata);
-	}
+	/* try to lookup using the external file(s) */
+	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
+		/* see if we have extnodefile setup in the proxy section - if not use the default name */
+		val = (char *) ast_variable_retrieve(cfg, "proxy", "extnodefile");
+		if (!val)
+			val = EXTNODEFILE;
 
-	ast_mutex_unlock(&nodelookuplock);
-	ast_free(efil);
+		/* see if we have an override for the extnodes section in the proxy section */
+		enod = (char *) ast_variable_retrieve(cfg, "proxy", "extnodes");
+		if (!enod)
+			enod = EXTNODES;
+
+		/* prepare to lookup using the external file(s) */
+		ast_mutex_lock(&nodelookuplock);
+		efil = ast_strdup(val);
+		if (!efil) {
+			ast_mutex_unlock(&nodelookuplock);
+			return -1;
+		}
+
+		/* parse the external node file name(s) - we allow for multiple files */
+		n = finddelim(efil, strs, 100);
+		if (n < 1) {
+			ast_free(efil);
+			ast_mutex_unlock(&nodelookuplock);
+			return -1;
+		}
+		val = NULL;
+
+		/* process each external node file */
+		for (i = 0; i < n; i++) {
+
+			/* see if the external node file exists */
+			if (stat(strs[i], &mystat) == -1)
+				continue;
+
+			ourcfg = ast_config_load(strs[i], config_flags);
+			/* if file is not there, try the next one */
+			if (!ourcfg)
+				continue;
+
+			/* if we have not found a match, attempt to load a matching node */
+			if (!val) {
+				val = (char *) ast_variable_retrieve(ourcfg, enod, digitbuf);
+			}
+			ast_config_destroy(ourcfg);
+		}
+
+		if(val) {
+			ast_copy_string(nodedata, val, nodedatalength);
+			ast_debug(4, "Forward lookup resolved from file: node %s to %s\n", digitbuf, nodedata);
+		}
+
+		ast_mutex_unlock(&nodelookuplock);
+		ast_free(efil);
+	}
 
 	return (val ? 0 : -1);
 }
