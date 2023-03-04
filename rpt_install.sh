@@ -130,6 +130,7 @@ rpt_add "configs/samples/rpt_http_registrations.conf"
 rpt_add "include/asterisk/res_usbradio.h"
 rpt_add "res/res_rpt_http_registrations.c"
 rpt_add "res/res_usbradio.c"
+rpt_add "res/res_usbradio.exports.in"
 
 rpt_add "utils/pi-tune-menu.c"
 rpt_add "utils/radio-tune-menu.c"
