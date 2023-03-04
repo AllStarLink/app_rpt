@@ -42,7 +42,6 @@
 #include <math.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/io.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <sys/time.h>
@@ -54,6 +53,17 @@
 #include <linux/parport.h>
 #include <linux/version.h>
 #include <alsa/asoundlib.h>
+
+/*! \note <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
+#if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__) || defined(__arm__) || defined(__aarch64__)
+#define HAVE_SYS_IO
+#else
+#warning sys.io is not available on this architecture and some functionality will be disabled
+#endif
+
+#ifdef HAVE_SYS_IO
+#include <sys/io.h>
+#endif
 
 #ifdef RADIO_XPMRX
 #define HAVE_XPMRX				1
@@ -817,6 +827,7 @@ static unsigned char ppread(void)
 
 static void ppwrite(unsigned char c)
 {
+#ifdef HAVE_SYS_IO
 	if (haspp == 1) {			/* if its a pp dev */
 		if (ioctl(ppfd, PPWDATA, &c) == -1) {
 			ast_log(LOG_ERROR, "Unable to write pp dev %s\n", pport);
@@ -825,6 +836,9 @@ static void ppwrite(unsigned char c)
 	if (haspp == 2) {			/* if its a direct I/O */
 		outb(c, pbase);
 	}
+#else
+	ast_log(LOG_ERROR, "pp IO not supported on this architecture\n");
+#endif
 	return;
 }
 
@@ -858,8 +872,9 @@ static int amixer_max(int devnum, char *param)
 	snd_ctl_elem_info_t *info;
 
 	sprintf(str, "hw:%d", devnum);
-	if (snd_hctl_open(&hctl, str, 0))
+	if (snd_hctl_open(&hctl, str, 0)) {
 		return (-1);
+	}
 	snd_hctl_load(hctl);
 	snd_ctl_elem_id_alloca(&id);
 	snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
@@ -1383,8 +1398,11 @@ static void *pulserthread(void *arg)
 	struct timeval now, then;
 	int i, j, k;
 
-	if (haspp == 2)
+#ifdef HAVE_SYS_IO
+	if (haspp == 2) {
 		ioperm(pbase, 2, 1);
+	}
+#endif
 	stoppulser = 0;
 	pp_lastmask = 0;
 	ast_mutex_lock(&pp_lock);
@@ -1439,8 +1457,11 @@ static void *hidthread(void *arg)
 	usb_dev = NULL;
 	usb_handle = NULL;
 
-	if (haspp == 2)
+#ifdef HAVE_SYS_IO
+	if (haspp == 2) {
 		ioperm(pbase, 2, 1);
+	}
+#endif
 	while (!o->stophid) {
 		time(&o->lasthidtime);
 		ast_mutex_lock(&usb_dev_lock);
@@ -2178,8 +2199,11 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 	char cnt, rxs[16], txs[16], txpl[16], rxpl[16];
 	char pwr, *cmd;
 
-	if (haspp == 2)
+#ifdef HAVE_SYS_IO
+	if (haspp == 2) {
 		ioperm(pbase, 2, 1);
+	}
+#endif
 
 	cmd = alloca(strlen(text) + 10);
 
@@ -5342,12 +5366,16 @@ static int load_config(int reload)
 					haspp = 0;
 				}
 			} else {
+#ifdef HAVE_SYS_IO
 				if (ioperm(pbase, 2, 1) == -1) {
 					ast_log(LOG_ERROR, "Cant get io permission on IO port %04x hex, disabling pp support\n", pbase);
 					haspp = 0;
 				}
 				haspp = 2;
 				ast_verb(3, "Using direct IO port for pp support, since parport driver not available.\n");
+#else
+				ast_log(LOG_ERROR, "pp IO not supported on this architecture\n");
+#endif
 			}
 		}
 	}

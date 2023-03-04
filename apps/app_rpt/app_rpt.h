@@ -21,6 +21,13 @@
 #include "../apps/app_rpt/mdc_decode.h"
 #endif
 
+/*! \note <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
+#if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__) || defined(__arm__) || defined(__aarch64__)
+#define HAVE_SYS_IO
+#else
+#warning sys.io is not available on this architecture and some functionality will be disabled
+#endif
+
 /* Un-comment the following to include support for notch filters in the
 	rx audio stream (using Tony Fisher's mknotch (mkfilter) implementation) */
 /* #include "rpt_notch.c" */

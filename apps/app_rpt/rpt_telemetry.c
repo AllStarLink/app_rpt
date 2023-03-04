@@ -6,7 +6,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <sys/io.h> /* use ioperm */
 
 #include <dahdi/user.h>
 
@@ -17,6 +16,11 @@
 #include "asterisk/format_cache.h" /* use ast_format_slin */
 
 #include "app_rpt.h"
+
+#ifdef HAVE_SYS_IO
+#include <sys/io.h> /* use ioperm */
+#endif
+
 #include "rpt_lock.h"
 #include "rpt_utils.h"
 #include "rpt_daq.h"
@@ -995,8 +999,7 @@ void *rpt_tele_thread(void *this)
 		rpt_mutex_lock(&myrpt->lock);
 	}
 	rpt_mutex_unlock(&myrpt->lock);
-	while ((mytele->mode != SETREMOTE) && (mytele->mode != UNKEY) &&
-		   (mytele->mode != LINKUNKEY) && (mytele->mode != LOCUNKEY) &&
+	while ((mytele->mode != SETREMOTE) && (mytele->mode != UNKEY) && (mytele->mode != LINKUNKEY) && (mytele->mode != LOCUNKEY) &&
 		   (mytele->mode != COMPLETE) && (mytele->mode != REMGO) && (mytele->mode != REMCOMPLETE)) {
 		rpt_mutex_lock(&myrpt->lock);
 		if ((!myrpt->active_telem) && (myrpt->tele.prev == mytele)) {
@@ -1019,8 +1022,7 @@ void *rpt_tele_thread(void *this)
 	/* If the telemetry is only intended for a local audience, */
 	/* only connect the ID audio to the local tx conference so */
 	/* linked systems can't hear it */
-	ci.confno = (((mytele->mode == ID1) || (mytele->mode == PLAYBACK) ||
-				  (mytele->mode == TEST_TONE) || (mytele->mode == STATS_GPS_LEGACY)) ? myrpt->conf : myrpt->teleconf);
+	ci.confno = (((mytele->mode == ID1) || (mytele->mode == PLAYBACK) || (mytele->mode == TEST_TONE) || (mytele->mode == STATS_GPS_LEGACY)) ? myrpt->conf : myrpt->teleconf);
 	ci.confmode = DAHDI_CONF_CONFANN;
 	/* first put the channel on the conference in announce mode */
 	if (join_dahdiconf(mychannel, &ci)) {
@@ -1655,12 +1657,18 @@ void *rpt_tele_thread(void *this)
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_XCAT)) {
 			res = set_xcat(myrpt);
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_RBI) || !strcmp(myrpt->remoterig, REMOTE_RIG_PPP16)) {
+#ifdef HAVE_SYS_IO
 			if (ioperm(myrpt->p.iobase, 1, 1) == -1) {
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_log(LOG_WARNING, "Cant get io permission on IO port %x hex\n", myrpt->p.iobase);
 				res = -1;
-			} else
+			} else {
 				res = setrbi(myrpt);
+			}
+#else
+			ast_log(LOG_ERROR, "IO not supported on this architecture\n");
+			res = -1;
+#endif
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
 			if (myrpt->iofd >= 0)
 				setdtr(myrpt, myrpt->iofd, 1);
