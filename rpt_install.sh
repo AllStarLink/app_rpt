@@ -36,9 +36,15 @@ cd $( ls -d -v */ | grep "^asterisk" | tail -1 )
 
 apt-get install -y libusb-dev # chan_simpleusb and chan_usbradio require libusb-dev on Debian
 modprobe snd-pcm-oss # /dev/dsp1 needs to exist for chan_simpleusb and chan_usbradio to work
+echo "snd-pcm-oss" >> /etc/modules # load module at startup for USB
 
 cp ../$MYDIR/Makefiles.diff /tmp/rpt.diff
 git apply /tmp/rpt.diff
+
+cp ../$MYDIR/utils/Makefile.diff /tmp/utils_makefile.diff
+git apply /tmp/utils_makefile.diff
+
+git apply ../$MYDIR/res/Makefile.diff
 
 echoerr() {
 	printf "\e[31;1m%s\e[0m\n" "$*" >&2;
@@ -120,8 +126,15 @@ rpt_add "channels/xpmr/sinetabx.h"
 rpt_add "channels/xpmr/xpmr.c"
 rpt_add "channels/xpmr/xpmr.h"
 rpt_add "channels/xpmr/xpmr_coef.h"
-rpt_add "res/res_rpt_http_registrations.c"
 rpt_add "configs/samples/rpt_http_registrations.conf"
+rpt_add "include/asterisk/res_usbradio.h"
+rpt_add "res/res_rpt_http_registrations.c"
+rpt_add "res/res_usbradio.c"
+rpt_add "res/res_usbradio.exports.in"
+
+rpt_add "utils/pi-tune-menu.c"
+rpt_add "utils/radio-tune-menu.c"
+rpt_add "utils/simpleusb-tune-menu.c"
 
 nproc
 make -j$(nproc) apps

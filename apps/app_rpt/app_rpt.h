@@ -21,6 +21,13 @@
 #include "../apps/app_rpt/mdc_decode.h"
 #endif
 
+/*! \note <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
+#if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__) || defined(__arm__)
+#define HAVE_SYS_IO
+#else
+#warning sys.io is not available on this architecture and some functionality will be disabled
+#endif
+
 /* Un-comment the following to include support for notch filters in the
 	rx audio stream (using Tony Fisher's mknotch (mkfilter) implementation) */
 /* #include "rpt_notch.c" */
@@ -263,7 +270,14 @@ enum{DAQ_SUB_CUR = 0, DAQ_SUB_MIN, DAQ_SUB_MAX, DAQ_SUB_STMIN, DAQ_SUB_STMAX, DA
 enum{DAQ_PT_INADC = 1, DAQ_PT_INP, DAQ_PT_IN, DAQ_PT_OUT};
 enum{DAQ_TYPE_UCHAMELEON};
 
+/* general setting - rpt_node_lookup */
+enum  rpt_dns_method {
+	LOOKUP_BOTH,
+	LOOKUP_DNS,
+	LOOKUP_FILE
+};
 
+#define DEFAULT_NODE_LOOKUP_METHOD LOOKUP_BOTH
 #define DEFAULT_TELEMDUCKDB "-9"
 #define	DEFAULT_RPT_TELEMDEFAULT 1
 #define	DEFAULT_RPT_TELEMDYNAMIC 1

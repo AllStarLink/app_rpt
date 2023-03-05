@@ -121,7 +121,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 
 	for (i = 0; i < nrpts; i++) {
 		if (node && !strcmp(node, rpt_vars[i].name)) {
-			struct ast_channel *rxchan;
+			struct ast_channel *rxchan = NULL;
 			char rxchanname[128];
 			rpt_manager_success(ses, m);
 			astman_append(ses, "Node: %s\r\n", node);
@@ -279,7 +279,11 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* rxchan might've disappeared in the meantime. Verify it still exists before we try to lock it.
 			 * XXX This was added to address assertions due to bad locking, but app_rpt should probably
 			 * be globally ref'ing the channel and holding it until it unloads. Should be investigated. */
-			rxchan = ast_channel_get_by_name(rxchanname);
+			if (strcasecmp(rxchanname, "DAHDI/pseudo")) {
+				/* DAHDI/pseudo isn't a real channel name, calling ast_channel_get_by_name
+				 * will always fail, so avoid an unnecessary traversal of the channels container for nothing. */
+				rxchan = ast_channel_get_by_name(rxchanname);
+			}
 			if (rxchan) {
 				ast_assert(rxchan == rpt_vars[i].rxchannel);
 				ast_channel_lock(rpt_vars[i].rxchannel);
@@ -290,7 +294,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				ast_channel_unlock(rpt_vars[i].rxchannel);
 				ast_channel_unref(rxchan);
 			} else {
-				ast_debug(1, "Channel %s has disappeared, cannot access variables\n", rxchanname);
+				ast_debug(1, "Channel %s does not exist, cannot access variables\n", rxchanname);
 			}
 
 			/* Output RPT status states */
@@ -346,6 +350,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 			rpt_manager_success(s, m);
 
 			myrpt = &rpt_vars[i];
+			ast_assert(myrpt != NULL);
 
 			if (myrpt->remote) {	/* Remote base ? */
 				char *loginuser, *loginlevel, *freq, *rxpl, *txpl, *modestr;

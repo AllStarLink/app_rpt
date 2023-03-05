@@ -756,8 +756,7 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 		sin.sin_port = htons(atoi(strs[2]) + 1);
 		sin.sin_addr.s_addr = inet_addr(strs[1]);
 		sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
-		if (option_verbose > 2)
-			ast_verbose(VERBOSE_PREFIX_3 "tlb: Connect request sent to %s (%s:%s)\n", str, strs[1], strs[2]);
+		ast_debug(1, "tlb: Connect request sent to %s (%s:%s)\n", str, strs[1], strs[2]);
 		ast_mutex_unlock(&instp->lock);
 		ast_free(str);
 	}
@@ -920,8 +919,7 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 		sendto(p->instp->audio_sock, (char *) &pkt, strlen((char *) pkt.data) + 12,
 			   0, (struct sockaddr *) &sin, sizeof(sin));
 	}
-	if (option_verbose > 2)
-		ast_verbose(VERBOSE_PREFIX_3 "tlb: Sent DTMF digit %c to IP %s, port %u\n", digit, p->ip, p->port & 0xffff);
+	ast_debug(1, "tlb: Sent DTMF digit %c to IP %s, port %u\n", digit, p->ip, p->port & 0xffff);
 	return (0);
 }
 
@@ -1096,6 +1094,7 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 
 static void free_node(void *nodep)
 {
+
 }
 
 static int find_delete(struct TLB_node *key)
@@ -1257,9 +1256,12 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			twalk(TLB_node_list, send_audio_all_but_one);
 			ast_mutex_unlock(&instp->lock);
 
-			if (instp->fdr >= 0)
-				write(instp->fdr, instp->audio_all_but_one.data,
-					  tlb_codecs[p->txcodec].blocking_factor * tlb_codecs[p->txcodec].frame_size);
+			if (instp->fdr >= 0) {
+				int res = write(instp->fdr, instp->audio_all_but_one.data, tlb_codecs[p->txcodec].blocking_factor * tlb_codecs[p->txcodec].frame_size);
+				if (res <= 0) {
+					ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
+				}
+			}
 		}
 	} else {
 		/* Asterisk to TheLinkBox */
@@ -1311,8 +1313,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			for (i = 0; i < 20; i++)
 				sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 			ast_mutex_unlock(&instp->lock);
-			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "tlb: call=%s RTCP timeout, removing\n", instp->TLB_node_test.call);
+			ast_debug(1, "tlb: call=%s RTCP timeout, removing\n", instp->TLB_node_test.call);
 		}
 		instp->TLB_node_test.ip[0] = '\0';
 		instp->TLB_node_test.port = 0;
@@ -1702,9 +1703,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 		TLB_node_key->seqnum = 1;
 		TLB_node_key->instp = instp;
 		if (tsearch(TLB_node_key, &TLB_node_list, compare_ip)) {
-			if (option_verbose > 2)
-				ast_verbose(VERBOSE_PREFIX_3 "tlb: new CALL = %s, ip = %s, port = %u\n",
-							TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
+			ast_debug(1, "tlb: new CALL = %s, ip = %s, port = %u\n", TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
 			if (instp->confmode) {
 				TLB_node_key->p = instp->confp;
 			} else {
@@ -1757,8 +1756,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 	ast = TLB_node_key->chan;
 	tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
 
-	if (option_verbose > 2)
-		ast_verbose(VERBOSE_PREFIX_3 "tlb: tx codec set to %s\n", tlb_codecs[p->txcodec].name);
+	ast_debug(1, "tlb: tx codec set to %s\n", tlb_codecs[p->txcodec].name);
 	return 0;
 }
 
@@ -1780,8 +1778,7 @@ static void *TLB_reader(void *data)
 	fd_set fds[2];
 	struct timeval tmout;
 
-	if (option_verbose > 2)
-		ast_verbose(VERBOSE_PREFIX_3 "tlb: reader thread started on %s.\n", instp->name);
+	ast_debug(1, "tlb: reader thread started on %s.\n", instp->name);
 	ast_mutex_lock(&instp->lock);
 	while (run_forever) {
 
@@ -1893,9 +1890,9 @@ static void *TLB_reader(void *data)
 					}
 				} else {
 					if (is_rtcp_bye((unsigned char *) buf, recvlen)) {
-						if (find_delete(&instp->TLB_node_test))
-							if (option_verbose > 2)
-								ast_verbose(VERBOSE_PREFIX_3 "tlb: Disconnect from ip %s\n", instp->TLB_node_test.ip);
+						if (find_delete(&instp->TLB_node_test)) {
+							ast_verb(4, "tlb: Disconnect from IP %s\n", instp->TLB_node_test.ip);
+						}
 					}
 				}
 			}
@@ -1926,8 +1923,7 @@ static void *TLB_reader(void *data)
 						fr.delivery.tv_sec = 0;
 						fr.delivery.tv_usec = 0;
 						ast_queue_frame((*found_key)->chan, &fr);
-						if (option_verbose > 2)
-							ast_verbose(VERBOSE_PREFIX_3 "tlb: Channel %s answering\n", ast_channel_name((*found_key)->chan));
+						ast_debug(1, "tlb: Channel %s answering\n", ast_channel_name((*found_key)->chan));
 					}
 					(*found_key)->countdown = instp->rtcptimeout;
 					if (recvlen > 12) {	/* if at least a header size and some payload */
@@ -1980,8 +1976,7 @@ static void *TLB_reader(void *data)
 							fr.delivery.tv_sec = 0;
 							fr.delivery.tv_usec = 0;
 							ast_queue_frame((*found_key)->chan, &fr);
-							if (option_verbose > 2)
-								ast_verbose(VERBOSE_PREFIX_3 "tlb: Channel %s got DTMF %c\n", ast_channel_name((*found_key)->chan), dchar);
+							ast_debug(1, "tlb: Channel %s got DTMF %c\n", ast_channel_name((*found_key)->chan), dchar);
 						}
 						/* it its a voice frame */
 						else if (((struct rtpVoice_t *) buf)->version == 2) {
@@ -1998,10 +1993,7 @@ static void *TLB_reader(void *data)
 											j, ast_channel_name(ast));
 									continue;
 								}
-								if (option_verbose > 2)
-									ast_verbose(VERBOSE_PREFIX_3
-												"tlb: channel %s switching to codec %s from codec %s\n", ast_channel_name(ast),
-												tlb_codecs[i].name, tlb_codecs[p->rxcodec].name);
+								ast_debug(1, "tlb: channel %s switching to codec %s from codec %s\n", ast_channel_name(ast), tlb_codecs[i].name, tlb_codecs[p->rxcodec].name);
 								p->rxcodec = i;
 								tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
 							}
@@ -2042,8 +2034,7 @@ static void *TLB_reader(void *data)
 		}
 	}
 	ast_mutex_unlock(&instp->lock);
-	if (option_verbose > 2)
-		ast_verbose(VERBOSE_PREFIX_3 "tlb: read thread exited.\n");
+	ast_debug(1, "tlb: read thread exited.\n");
 	mythread_exit(NULL);
 	return NULL;
 }
@@ -2187,10 +2178,8 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	ast_pthread_create(&instp->TLB_reader_thread, &attr, TLB_reader, (void *) instp);
 	instances[ninstances++] = instp;
 
-	if (option_verbose > 2) {
-		ast_verbose(VERBOSE_PREFIX_3 "tlb: tlb/%s listening on %s port %s\n", instp->name, instp->ipaddr, instp->port);
-		ast_verbose(VERBOSE_PREFIX_3 "tlb: tlb/%s call set to %s\n", instp->name, instp->mycall);
-	}
+	ast_debug(1, "tlb: tlb/%s listening on %s port %s\n", instp->name, instp->ipaddr, instp->port);
+	ast_debug(1, "tlb: tlb/%s call set to %s\n", instp->name, instp->mycall);
 	return 0;
 }
 

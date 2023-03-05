@@ -1,0 +1,13 @@
+diff --git a/res/Makefile b/res/Makefile
+index 0987f43a43..2f18773cba 100644
+--- a/res/Makefile
++++ b/res/Makefile
+@@ -79,6 +79,8 @@ res_parking.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
+ snmp/agent.o: _ASTCFLAGS+=-fPIC
+ res_snmp.o: _ASTCFLAGS+=-fPIC
+ 
++res_usbradio.so: LIBS+=-lusb -lasound
++
+ # Dependencies for res_ari_*.so are generated, so they're in this file
+ include ari.make
+ 
