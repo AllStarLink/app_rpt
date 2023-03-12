@@ -52,12 +52,15 @@ void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *my
 		if (myrpt->p.linkmodedynamic[src] && (mylink->linkmode >= 1) && (mylink->linkmode < 0x7ffffffe))
 			mylink->linkmode = LINK_HANG_TIME;
 	}
-	if (!myrpt->p.telemdynamic)
+	if (!myrpt->p.telemdynamic) {
 		return;
-	if (myrpt->telemmode == 0)
+	}
+	if (myrpt->telemmode == 0) {
 		return;
-	if (myrpt->telemmode == 0x7fffffff)
+	}
+	if (myrpt->telemmode == 0x7fffffff) {
 		return;
+	}
 	myrpt->telemmode = TELEM_HANG_TIME;
 	return;
 }
@@ -143,7 +146,6 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 	   batvolts=scale(0,12.8,0),thevoltage,is,volts
 	   winddir=range(0-33:north,34-96:west,97-160:south,161-224:east,225-255:north),thewindis,?
 	   door=bit(closed,open),thedooris,?
-
 	 */
 
 	if (!(p = ast_variable_retrieve(myrpt->cfg, "meter-faces", argv[2]))) {
@@ -180,7 +182,6 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 			ast_free(myargs);
 			ast_free(meter_face);
 			return -1;
-
 		}
 	} else if (!strncmp("range", meter_face, 5)) {	/* range function */
 		metertype = 2;
@@ -227,15 +228,13 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 		return -1;
 	}
 
-	/*
-	 * Acquire 
-	 */
-
+	/* Acquire */
 	val = 0;
 	if (pintype == 1) {
 		res = daq_do_long(entry, pin, DAQ_CMD_ADC, NULL, &val, &filter);
-		if (!res)
+		if (!res) {
 			scaledval = ((val + scalepre) / scalediv) + scalepost;
+		}
 	} else {
 		res = daq_do_long(entry, pin, DAQ_CMD_IN, NULL, &val, NULL);
 	}
@@ -246,10 +245,7 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 		return res;
 	}
 
-	/*
-	 * Select Range
-	 */
-
+	/* Select Range */
 	if (metertype == 2) {
 		for (i = 0; i < numranges; i++) {
 			if (2 != sscanf(range_strings[i], "%u-%u:", &rangemin, &rangemax)) {
@@ -292,12 +288,11 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 	}
 
 	/* Wait the normal telemetry delay time */
-
-	if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+	if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 		goto done;
+	}
 
 	/* Split up the sounds string */
-
 	files = explode_string(sounds, sound_files, MAX_METER_FILES, ',', 0);
 	if (files == 0) {
 		ast_log(LOG_WARNING, "No sound files to say for meter %s\n", argv[2]);
@@ -311,10 +306,11 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 		if (sound_files[i][0] == '?') {	/* Insert sample */
 			if (metertype == 1) {
 				int integer, decimal, precision = 0;
-				if ((scalediv >= 10) && (scalediv < 100))	/* Adjust precision of decimal places */
+				if ((scalediv >= 10) && (scalediv < 100)) {	/* Adjust precision of decimal places */
 					precision = 10;
-				else if (scalediv >= 100)
+				} else if (scalediv >= 100) {
 					precision = 100;
+				}
 				integer = (int) scaledval;
 				valtoround = ((scaledval - integer) * precision);
 				/* grrr.. inline lroundf doesn't work with uClibc! */
@@ -327,8 +323,9 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 				res = saynum(mychannel, integer);
 				if (!res && precision && decimal) {
 					res = sayfile(mychannel, "point");
-					if (!res)
+					if (!res) {
 						res = saynum(mychannel, decimal);
+					}
 				}
 			}
 			if (metertype == 2) {
@@ -342,7 +339,7 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 			res = sayfile(mychannel, sound_files[i]);	/* Say the next word in the list */
 		}
 	}
-  done:
+done:
 	/* Done */
 	ast_free(myargs);
 	ast_free(meter_face);
@@ -356,8 +353,9 @@ void flush_telem(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		if (telem->mode != SETREMOTE)
+		if (telem->mode != SETREMOTE) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+		}
 		telem = telem->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
@@ -370,8 +368,9 @@ void birdbath(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		if (telem->mode == PARROT)
+		if (telem->mode == PARROT) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+		}
 		telem = telem->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
@@ -383,8 +382,9 @@ void cancel_pfxtone(struct rpt *myrpt)
 	ast_debug(3, "cancel_pfxfone!!");
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		if (telem->mode == PFXTONE)
+		if (telem->mode == PFXTONE) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+		}
 		telem = telem->next;
 	}
 }
@@ -402,28 +402,35 @@ int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 
 	res = 0;
 
-	if (!tonestring)
+	if (!tonestring) {
 		return res;
+	}
 
 	p = stringp = ast_strdup(tonestring);
 
 	for (; tonestring;) {
 		tonesubset = strsep(&stringp, ")");
-		if (!tonesubset)
+		if (!tonesubset) {
 			break;
-		if (sscanf(tonesubset, "(%d,%d,%d,%d", &f1, &f2, &duration, &amplitude) != 4)
+		}
+		if (sscanf(tonesubset, "(%d,%d,%d,%d", &f1, &f2, &duration, &amplitude) != 4) {
 			break;
+		}
 		res = play_tone_pair(chan, f1, f2, duration, amplitude);
-		if (res)
+		if (res) {
 			break;
+		}
 	}
-	if (p)
+	if (p) {
 		ast_free(p);
-	if (!res)
+	}
+	if (!res) {
 		res = play_tone_pair(chan, 0, 0, 100, 0);	/* This is needed to ensure the last tone segment is timed correctly */
+	}
 
-	if (!res)
+	if (!res) {
 		res = ast_waitstream(chan, "");
+	}
 
 	ast_stopstream(chan);
 
@@ -431,8 +438,9 @@ int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 	for (i = 0; i < 20; i++) {
 		flags = DAHDI_IOMUX_WRITEEMPTY | DAHDI_IOMUX_NOWAIT;
 		res = ioctl(ast_channel_fd(chan, 0), DAHDI_IOMUX, &flags);
-		if (flags & DAHDI_IOMUX_WRITEEMPTY)
+		if (flags & DAHDI_IOMUX_WRITEEMPTY) {
 			break;
+		}
 		if (ast_safe_sleep(chan, 50)) {
 			res = -1;
 			break;
@@ -465,26 +473,26 @@ int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
 
 	if (entry[0] == '|') {
 		c = entry[1];
-		if ((c >= 'a') && (c <= 'z'))
+		if ((c >= 'a') && (c <= 'z')) {
 			c -= 0x20;
+		}
 
 		switch (c) {
 		case 'I':				/* Morse ID */
 			res = send_morse(chan, entry + 2, morsespeed, morseidfreq, morseidampl);
 			break;
-
 		case 'M':				/* Morse Message */
 			res = send_morse(chan, entry + 2, morsespeed, morsefreq, morseampl);
 			break;
-
 		case 'T':				/* Tone sequence */
 			res = send_tone_telemetry(chan, entry + 2);
 			break;
 		default:
 			res = -1;
 		}
-	} else
+	} else {
 		res = sayfile(chan, entry);	/* File */
+	}
 	return res;
 }
 
@@ -526,14 +534,15 @@ int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node, char *
 	if (!entry) {
 		/* Telemetry name wasn't found in the config file, use the default */
 		for (i = 0; i < sizeof(tele_defs) / sizeof(struct telem_defaults); i++) {
-			if (!strcasecmp(tele_defs[i].name, name))
+			if (!strcasecmp(tele_defs[i].name, name)) {
 				entry = tele_defs[i].value;
+			}
 		}
 	}
 	if (entry) {
-		if (strlen(entry))
-			if (chan)
-				telem_any(myrpt, chan, entry);
+		if (!ast_strlen_zero(entry) && chan) {
+			telem_any(myrpt, chan, entry);
+		}
 	} else {
 		res = -1;
 	}
@@ -550,31 +559,37 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	struct ast_tm localtm;
 
 	n = finddelim(varcmd, strs, 100);
-	if (n < 1)
+	if (n < 1) {
 		return;
+	}
 	if (!strcasecmp(strs[0], "REMGO")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/remote_go");
+		}
 		return;
 	}
 	if (!strcasecmp(strs[0], "REMALREADY")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/remote_already");
+		}
 		return;
 	}
 	if (!strcasecmp(strs[0], "REMNOTFOUND")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/remote_notfound");
+		}
 		return;
 	}
 	if (!strcasecmp(strs[0], "COMPLETE")) {
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
-		else
+		} else {
 			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+		}
 		ast_stopstream(mychannel);
 		return;
 	}
@@ -588,8 +603,9 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	}
 	if (!strcasecmp(strs[0], "TERM")) {
 		/* wait a little bit longer */
-		if (wait_interval(myrpt, DLY_CALLTERM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_CALLTERM, mychannel) == -1) {
 			return;
+		}
 		res = telem_lookup(myrpt, mychannel, myrpt->name, "patchdown");
 		if (res < 0) {			/* Then default message */
 			sayfile(mychannel, "rpt/callterminated");
@@ -597,47 +613,43 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		return;
 	}
 	if (!strcasecmp(strs[0], "MACRO_NOTFOUND")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/macro_notfound");
+		}
 		return;
 	}
 	if (!strcasecmp(strs[0], "MACRO_BUSY")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/macro_busy");
+		}
 		return;
 	}
 	if (!strcasecmp(strs[0], "CONNECTED")) {
-
-		if (n < 3)
+		if (n < 3) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		res = saynode(myrpt, mychannel, strs[2]);
-		if (!res)
-			res = ast_streamfile(mychannel, "rpt/connected", ast_channel_language(mychannel));
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		else
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		ast_stopstream(mychannel);
-		res = ast_streamfile(mychannel, "digits/2", ast_channel_language(mychannel));
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		else
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		ast_stopstream(mychannel);
+		if (!res) {
+			res = ast_stream_and_wait(mychannel, "rpt/connected", "");
+		}
+		res = ast_stream_and_wait(mychannel, "digits/2", "");
 		saynode(myrpt, mychannel, strs[1]);
 		return;
 	}
 	if (!strcasecmp(strs[0], "CONNFAIL")) {
-
-		if (n < 2)
+		if (n < 2) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		res = saynode(myrpt, mychannel, strs[1]);
-		if (!res)
+		if (!res) {
 			sayfile(mychannel, "rpt/connection_failed");
+		}
 		return;
 	}
 	if (!strcasecmp(strs[0], "REMDISC")) {
@@ -652,150 +664,197 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		return;
 	}
 	if (!strcasecmp(strs[0], "STATS_TIME")) {
-		if (n < 2)
+		if (n < 2) {
 			return;
-		if (sscanf(strs[1], "%u", &t1) != 1)
+		}
+		if (sscanf(strs[1], "%u", &t1) != 1) {
 			return;
+		}
 		t = t1;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		rpt_localtime(&t, &localtm, myrpt->p.timezone);
 		t1 = rpt_mktime(&localtm, NULL);
 		/* Say the phase of the day is before the time */
-		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12))
+		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
 			p = "rpt/goodmorning";
-		else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18))
+		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
 			p = "rpt/goodafternoon";
-		else
+		} else {
 			p = "rpt/goodevening";
-		if (sayfile(mychannel, p) == -1)
+		}
+		if (sayfile(mychannel, p) == -1) {
 			return;
+		}
 		/* Say the time is ... */
-		if (sayfile(mychannel, "rpt/thetimeis") == -1)
+		if (sayfile(mychannel, "rpt/thetimeis") == -1) {
 			return;
+		}
 		/* Say the time */
 		res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
 		return;
 	}
 	if (!strcasecmp(strs[0], "STATS_VERSION")) {
-		if (n < 2)
+		if (n < 2) {
 			return;
-		if (sscanf(strs[1], "%d.%d", &vmajor, &vminor) != 2)
+		}
+		if (sscanf(strs[1], "%d.%d", &vmajor, &vminor) != 2) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		/* Say "version" */
-		if (sayfile(mychannel, "rpt/version") == -1)
+		if (sayfile(mychannel, "rpt/version") == -1) {
 			return;
+		}
 		res = ast_say_number(mychannel, vmajor, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (saycharstr(mychannel, ".") == -1)
+		if (saycharstr(mychannel, ".") == -1) {
 			return;
-		if (!res)				/* Say "Y" */
+		}
+		if (!res) {				/* Say "Y" */
 			ast_say_number(mychannel, vminor, "", ast_channel_language(mychannel), (char *) NULL);
+		}
 		if (!res) {
 			res = ast_waitstream(mychannel, "");
 			ast_stopstream(mychannel);
-		} else
+		} else {
 			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+		}
 		return;
 	}
 	if (!strcasecmp(strs[0], "STATS_GPS")) {
-		if (n < 5)
+		if (n < 5) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
-		if (saynode(myrpt, mychannel, strs[1]) == -1)
+		}
+		if (saynode(myrpt, mychannel, strs[1]) == -1) {
 			return;
-		if (sayfile(mychannel, "location") == -1)
+		}
+		if (sayfile(mychannel, "location") == -1) {
 			return;
+		}
 		c = *(strs[2] + strlen(strs[2]) - 1);
 		*(strs[2] + strlen(strs[2]) - 1) = 0;
-		if (sscanf(strs[2], "%2d%d.%d", &i, &j, &k) != 3)
+		if (sscanf(strs[2], "%2d%d.%d", &i, &j, &k) != 3) {
 			return;
+		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (sayfile(mychannel, "degrees") == -1)
+		if (sayfile(mychannel, "degrees") == -1) {
 			return;
+		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (saycharstr(mychannel, strs[2] + 4) == -1)
+		if (saycharstr(mychannel, strs[2] + 4) == -1) {
 			return;
-		if (sayfile(mychannel, "minutes") == -1)
+		}
+		if (sayfile(mychannel, "minutes") == -1) {
 			return;
-		if (sayfile(mychannel, (c == 'N') ? "north" : "south") == -1)
+		}
+		if (sayfile(mychannel, (c == 'N') ? "north" : "south") == -1) {
 			return;
-		if (sayfile(mychannel, "rpt/latitude") == -1)
+		}
+		if (sayfile(mychannel, "rpt/latitude") == -1) {
 			return;
+		}
 		c = *(strs[3] + strlen(strs[3]) - 1);
 		*(strs[3] + strlen(strs[3]) - 1) = 0;
-		if (sscanf(strs[3], "%3d%d.%d", &i, &j, &k) != 3)
+		if (sscanf(strs[3], "%3d%d.%d", &i, &j, &k) != 3) {
 			return;
+		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (sayfile(mychannel, "degrees") == -1)
+		if (sayfile(mychannel, "degrees") == -1) {
 			return;
+		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (saycharstr(mychannel, strs[3] + 5) == -1)
+		if (saycharstr(mychannel, strs[3] + 5) == -1) {
 			return;
-		if (sayfile(mychannel, "minutes") == -1)
+		}
+		if (sayfile(mychannel, "minutes") == -1) {
 			return;
-		if (sayfile(mychannel, (c == 'E') ? "east" : "west") == -1)
+		}
+		if (sayfile(mychannel, (c == 'E') ? "east" : "west") == -1) {
 			return;
-		if (sayfile(mychannel, "rpt/longitude") == -1)
+		}
+		if (sayfile(mychannel, "rpt/longitude") == -1) {
 			return;
-		if (!*strs[4])
+		}
+		if (!*strs[4]) {
 			return;
+		}
 		c = *(strs[4] + strlen(strs[4]) - 1);
 		*(strs[4] + strlen(strs[4]) - 1) = 0;
-		if (sscanf(strs[4], "%f", &f) != 1)
+		if (sscanf(strs[4], "%f", &f) != 1) {
 			return;
+		}
 		if (myrpt->p.gpsfeet) {
-			if (c == 'M')
+			if (c == 'M') {
 				f *= 3.2808399;
+			}
 		} else {
-			if (c != 'M')
+			if (c != 'M') {
 				f /= 3.2808399;
+			}
 		}
 		sprintf(buf, "%0.1f", f);
-		if (sscanf(buf, "%d.%d", &i, &j) != 2)
+		if (sscanf(buf, "%d.%d", &i, &j) != 2) {
 			return;
+		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (saycharstr(mychannel, ".") == -1)
+		if (saycharstr(mychannel, ".") == -1) {
 			return;
+		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (sayfile(mychannel, (myrpt->p.gpsfeet) ? "feet" : "meters") == -1)
+		if (sayfile(mychannel, (myrpt->p.gpsfeet) ? "feet" : "meters") == -1) {
 			return;
-		if (saycharstr(mychannel, "AMSL") == -1)
+		}
+		if (saycharstr(mychannel, "AMSL") == -1) {
 			return;
+		}
 		ast_stopstream(mychannel);
 		return;
 	}
 	if (!strcasecmp(strs[0], "ARB_ALPHA")) {
-		if (n < 2)
+		if (n < 2) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		saycharstr(mychannel, strs[1]);
 		return;
 	}
@@ -805,10 +864,12 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		char *tmp[100], *myparm;
 		int looptemp = 0, i = 0, dres = 0;
 
-		if (n < 3)
+		if (n < 3) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 
 		tpl_working = ast_strdup(strs[2]);
 		tpl_copy = tpl_working;
@@ -838,49 +899,58 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		return;
 	}
 	if (!strcasecmp(strs[0], "LASTNODEKEY")) {
-		if (n < 2)
+		if (n < 2) {
 			return;
-		if (!atoi(strs[1]))
+		}
+		if (!atoi(strs[1])) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		saynode(myrpt, mychannel, strs[1]);
 		return;
 	}
 	if (!strcasecmp(strs[0], "LASTUSER")) {
-		if (n < 2)
+		if (n < 2) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		sayphoneticstr(mychannel, strs[1]);
-		if (n < 3)
+		if (n < 3) {
 			return;
+		}
 		sayfile(mychannel, "and");
 		sayphoneticstr(mychannel, strs[2]);
 		return;
 	}
 	if (!strcasecmp(strs[0], "STATUS")) {
-		if (n < 3)
+		if (n < 3) {
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
 		saynode(myrpt, mychannel, strs[1]);
-		if (atoi(strs[2]) > 0)
+		if (atoi(strs[2]) > 0) {
 			sayfile(mychannel, "rpt/autopatch_on");
-		else if (n == 3) {
+		} else if (n == 3) {
 			sayfile(mychannel, "rpt/repeat_only");
 			return;
 		}
 		for (i = 3; i < n; i++) {
 			saynode(myrpt, mychannel, strs[i] + 1);
-			if (*strs[i] == 'T')
+			if (*strs[i] == 'T') {
 				sayfile(mychannel, "rpt/tranceive");
-			else if (*strs[i] == 'R')
+			} else if (*strs[i] == 'R') {
 				sayfile(mychannel, "rpt/monitor");
-			else if (*strs[i] == 'L')
+			} else if (*strs[i] == 'L') {
 				sayfile(mychannel, "rpt/localmonitor");
-			else
+			} else {
 				sayfile(mychannel, "rpt/connecting");
+			}
 		}
 		return;
 	}
@@ -1037,12 +1107,10 @@ void *rpt_tele_thread(void *this)
 		handle_userout_tele(myrpt, mychannel, mytele->param);
 		imdone = 1;
 		break;
-
 	case METER:
 		handle_meter_tele(myrpt, mychannel, mytele->param);
 		imdone = 1;
 		break;
-
 	case VARCMD:
 		handle_varcmd_tele(myrpt, mychannel, mytele->param);
 		imdone = 1;
@@ -1056,14 +1124,12 @@ void *rpt_tele_thread(void *this)
 		}
 		imdone = 1;
 		break;
-
 	case TAILMSG:
 		/* wait a little bit longer */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
 			res =
 				ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
 		break;
-
 	case IDTALKOVER:
 		ast_debug(7, "Tracepoint IDTALKOVER: in rpt_tele_thread()\n");
 		p = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "idtalkover");
@@ -1071,7 +1137,6 @@ void *rpt_tele_thread(void *this)
 			res = telem_any(myrpt, mychannel, p);
 		imdone = 1;
 		break;
-
 	case PROC:
 		/* wait a little bit longer */
 		if (wait_interval(myrpt, DLY_TELEM, mychannel))
@@ -1161,26 +1226,21 @@ void *rpt_tele_thread(void *this)
 			break;
 		}
 
-		/*
-		 * Reset the Unkey to CT timer
-		 */
-
+		/* Reset the Unkey to CT timer */
 		x = get_wait_interval(myrpt, DLY_UNKEY);
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->unkeytocttimer = x;	/* Must be protected as it is changed below */
 		rpt_mutex_unlock(&myrpt->lock);
 
-		/*
-		 * If there's one already queued, don't do another
-		 */
-
+		/* If there's one already queued, don't do another */
 		tlist = myrpt->tele.next;
 		unkeys_queued = 0;
 		if (tlist != &myrpt->tele) {
 			rpt_mutex_lock(&myrpt->lock);
 			while (tlist != &myrpt->tele) {
-				if ((tlist->mode == UNKEY) || (tlist->mode == LOCUNKEY))
+				if ((tlist->mode == UNKEY) || (tlist->mode == LOCUNKEY)) {
 					unkeys_queued++;
+				}
 				tlist = tlist->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
@@ -1194,16 +1254,18 @@ void *rpt_tele_thread(void *this)
 		/* Periodically check the timer since it can be re-initialized above */
 		while (myrpt->unkeytocttimer) {
 			int ctint;
-			if (myrpt->unkeytocttimer > 100)
+			if (myrpt->unkeytocttimer > 100) {
 				ctint = 100;
-			else
+			} else {
 				ctint = myrpt->unkeytocttimer;
+			}
 			ast_safe_sleep(mychannel, ctint);
 			rpt_mutex_lock(&myrpt->lock);
-			if (myrpt->unkeytocttimer < ctint)
+			if (myrpt->unkeytocttimer < ctint) {
 				myrpt->unkeytocttimer = 0;
-			else
+			} else {
 				myrpt->unkeytocttimer -= ctint;
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 
@@ -1221,7 +1283,7 @@ void *rpt_tele_thread(void *this)
 		myrpt->totalkerchunks++;
 		rpt_mutex_unlock(&myrpt->lock);
 
-	  treataslocal:
+treataslocal:
 
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
@@ -1242,7 +1304,7 @@ void *rpt_tele_thread(void *this)
 		if (haslink) {
 			res = telem_lookup(myrpt, mychannel, myrpt->name, "ranger");
 			if (res)
-				ast_log(LOG_WARNING, "telem_lookup:ranger failed on %s\n", ast_channel_name(mychannel));
+				ast_log(LOG_WARNING, "telem_lookup: ranger failed on %s\n", ast_channel_name(mychannel));
 		}
 
 		if ((mytele->mode == LOCUNKEY) && ((ct = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "localct")))) {	/* Local override ct */
@@ -1251,10 +1313,12 @@ void *rpt_tele_thread(void *this)
 				myrpt->noduck = 1;
 				res = telem_lookup(myrpt, mychannel, myrpt->name, ct_copy);
 				ast_free(ct_copy);
-			} else
+			} else {
 				res = -1;
-			if (res)
-				ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", ast_channel_name(mychannel));
+			}
+			if (res) {
+				ast_log(LOG_WARNING, "telem_lookup: ctx failed on %s\n", ast_channel_name(mychannel));
+			}
 		}
 		haslink = 0;
 		hastx = 0;
@@ -1273,30 +1337,34 @@ void *rpt_tele_thread(void *this)
 				if (myrpt->p.nolocallinkct) {
 					int nrpts = rpt_num_rpts();
 					for (v = 0; v < nrpts; v++) {
-						if (&rpt_vars[v] == myrpt)
+						if (&rpt_vars[v] == myrpt) {
 							continue;
-						if (rpt_vars[v].remote)
+						} else if (rpt_vars[v].remote) {
 							continue;
-						if (strcmp(rpt_vars[v].name, l->name))
+						} else if (strcmp(rpt_vars[v].name, l->name)) {
 							continue;
+						}
 						w = 0;
 						break;
 					}
 				}
 				if (myrpt->p.locallinknodesn) {
 					for (v = 0; v < myrpt->p.locallinknodesn; v++) {
-						if (strcmp(l->name, myrpt->p.locallinknodes[v]))
+						if (strcmp(l->name, myrpt->p.locallinknodes[v])) {
 							continue;
+						}
 						w = 0;
 						break;
 					}
 				}
-				if (w)
+				if (w) {
 					haslink = 1;
+				}
 				if (l->mode == 1) {
 					hastx++;
-					if (l->isremote)
+					if (l->isremote) {
 						hasremote++;
+					}
 				}
 				l = l->next;
 			}
@@ -1305,15 +1373,17 @@ void *rpt_tele_thread(void *this)
 		if (haslink) {
 			myrpt->noduck = 1;
 			res = telem_lookup(myrpt, mychannel, myrpt->name, (!hastx) ? "remotemon" : "remotetx");
-			if (res)
-				ast_log(LOG_WARNING, "telem_lookup:remotexx failed on %s\n", ast_channel_name(mychannel));
+			if (res) {
+				ast_log(LOG_WARNING, "telem_lookup: remotexx failed on %s\n", ast_channel_name(mychannel));
+			}
 
 			/* if in remote cmd mode, indicate it */
 			if (myrpt->cmdnode[0] && strcmp(myrpt->cmdnode, "aprstt")) {
 				ast_safe_sleep(mychannel, 200);
 				res = telem_lookup(myrpt, mychannel, myrpt->name, "cmdmode");
-				if (res)
-					ast_log(LOG_WARNING, "telem_lookup:cmdmode failed on %s\n", ast_channel_name(mychannel));
+				if (res) {
+					ast_log(LOG_WARNING, "telem_lookup: cmdmode failed on %s\n", ast_channel_name(mychannel));
+				}
 				ast_stopstream(mychannel);
 			}
 		} else if ((ct = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "unlinkedct"))) {	/* Unlinked Courtesy Tone */
@@ -1322,10 +1392,12 @@ void *rpt_tele_thread(void *this)
 				myrpt->noduck = 1;
 				res = telem_lookup(myrpt, mychannel, myrpt->name, ct_copy);
 				ast_free(ct_copy);
-			} else
+			} else {
 				res = -1;
-			if (res)
-				ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", ast_channel_name(mychannel));
+			}
+			if (res) {
+				ast_log(LOG_WARNING, "telem_lookup: ctx failed on %s\n", ast_channel_name(mychannel));
+			}
 		}
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt")))) {
 			/* set for all to hear */
@@ -1344,11 +1416,13 @@ void *rpt_tele_thread(void *this)
 					myrpt->noduck = 1;
 					res = telem_lookup(myrpt, mychannel, myrpt->name, ct_copy);
 					ast_free(ct_copy);
-				} else
+				} else {
 					res = -1;
+				}
 
-				if (res)
-					ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", ast_channel_name(mychannel));
+				if (res) {
+					ast_log(LOG_WARNING, "telem_lookup: ctx failed on %s\n", ast_channel_name(mychannel));
+				}
 			}
 		}
 #if	defined(_MDC_DECODE_H_) && defined(MDC_SAY_WHEN_DOING_CT)
@@ -1388,23 +1462,22 @@ void *rpt_tele_thread(void *this)
 
 			w = 0;
 			for (v = 0; v < myrpt->p.locallinknodesn; v++) {
-				if (strcmp(mytele->mylink.name, myrpt->p.locallinknodes[v]))
+				if (strcmp(mytele->mylink.name, myrpt->p.locallinknodes[v])) {
 					continue;
+				}
 				w = 1;
 				break;
 			}
 			if (w) {
-				/*
-				 * If there's one already queued, don't do another
-				 */
-
+				/* If there's one already queued, don't do another */
 				tlist = myrpt->tele.next;
 				unkeys_queued = 0;
 				if (tlist != &myrpt->tele) {
 					rpt_mutex_lock(&myrpt->lock);
 					while (tlist != &myrpt->tele) {
-						if ((tlist->mode == UNKEY) || (tlist->mode == LOCUNKEY))
+						if ((tlist->mode == UNKEY) || (tlist->mode == LOCUNKEY)) {
 							unkeys_queued++;
+						}
 						tlist = tlist->next;
 					}
 					rpt_mutex_unlock(&myrpt->lock);
@@ -1423,16 +1496,18 @@ void *rpt_tele_thread(void *this)
 				/* Periodically check the timer since it can be re-initialized above */
 				while (myrpt->unkeytocttimer) {
 					int ctint;
-					if (myrpt->unkeytocttimer > 100)
+					if (myrpt->unkeytocttimer > 100) {
 						ctint = 100;
-					else
+					} else {
 						ctint = myrpt->unkeytocttimer;
+					}
 					ast_safe_sleep(mychannel, ctint);
 					rpt_mutex_lock(&myrpt->lock);
-					if (myrpt->unkeytocttimer < ctint)
+					if (myrpt->unkeytocttimer < ctint) {
 						myrpt->unkeytocttimer = 0;
-					else
+					} else {
 						myrpt->unkeytocttimer -= ctint;
+					}
 					rpt_mutex_unlock(&myrpt->lock);
 				}
 			}
@@ -1443,12 +1518,13 @@ void *rpt_tele_thread(void *this)
 			int nrpts = rpt_num_rpts();
 			w = 0;
 			for (v = 0; v < nrpts; v++) {
-				if (&rpt_vars[v] == myrpt)
+				if (&rpt_vars[v] == myrpt) {
 					continue;
-				if (rpt_vars[v].remote)
+				} else if (rpt_vars[v].remote) {
 					continue;
-				if (strcmp(rpt_vars[v].name, mytele->mylink.name))
+				} else if (strcmp(rpt_vars[v].name, mytele->mylink.name)) {
 					continue;
+				}
 				w = 1;
 				break;
 			}
@@ -1457,24 +1533,20 @@ void *rpt_tele_thread(void *this)
 				break;
 			}
 		}
-		/*
-		 * Reset the Unkey to CT timer
-		 */
 
+		/* Reset the Unkey to CT timer */
 		x = get_wait_interval(myrpt, DLY_LINKUNKEY);
 		mytele->mylink.linkunkeytocttimer = x;	/* Must be protected as it is changed below */
 
-		/*
-		 * If there's one already queued, don't do another
-		 */
-
+		/* If there's one already queued, don't do another */
 		tlist = myrpt->tele.next;
 		unkeys_queued = 0;
 		if (tlist != &myrpt->tele) {
 			rpt_mutex_lock(&myrpt->lock);
 			while (tlist != &myrpt->tele) {
-				if (tlist->mode == LINKUNKEY)
+				if (tlist->mode == LINKUNKEY) {
 					unkeys_queued++;
+				}
 				tlist = tlist->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
@@ -1488,16 +1560,18 @@ void *rpt_tele_thread(void *this)
 		/* Periodically check the timer since it can be re-initialized above */
 		while (mytele->mylink.linkunkeytocttimer) {
 			int ctint;
-			if (mytele->mylink.linkunkeytocttimer > 100)
+			if (mytele->mylink.linkunkeytocttimer > 100) {
 				ctint = 100;
-			else
+			} else {
 				ctint = mytele->mylink.linkunkeytocttimer;
+			}
 			ast_safe_sleep(mychannel, ctint);
 			rpt_mutex_lock(&myrpt->lock);
-			if (mytele->mylink.linkunkeytocttimer < ctint)
+			if (mytele->mylink.linkunkeytocttimer < ctint) {
 				mytele->mylink.linkunkeytocttimer = 0;
-			else
+			} else {
 				mytele->mylink.linkunkeytocttimer -= ctint;
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		l = myrpt->links.next;
@@ -1521,17 +1595,20 @@ void *rpt_tele_thread(void *this)
 			if (ct_copy) {
 				res = telem_lookup(myrpt, mychannel, myrpt->name, ct_copy);
 				ast_free(ct_copy);
-			} else
+			} else {
 				res = -1;
-			if (res)
-				ast_log(LOG_WARNING, "telem_lookup:ctx failed on %s\n", ast_channel_name(mychannel));
+			}
+			if (res) {
+				ast_log(LOG_WARNING, "telem_lookup: ctx failed on %s\n", ast_channel_name(mychannel));
+			}
 		}
 		imdone = 1;
 		break;
 	case REMDISC:
 		/* wait a little bit */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		l = myrpt->links.next;
 		haslink = 0;
 		/* dont report if a link for this one still on system */
@@ -1555,66 +1632,62 @@ void *rpt_tele_thread(void *this)
 			break;
 		}
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
-		if (!res)
+		if (!res) {
 			res = ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? "rpt/remote_disc" : "rpt/remote_busy"), ast_channel_language(mychannel));
+		}
 		break;
 	case REMALREADY:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			res = ast_streamfile(mychannel, "rpt/remote_already", ast_channel_language(mychannel));
+		}
 		break;
 	case REMNOTFOUND:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			res = ast_streamfile(mychannel, "rpt/remote_notfound", ast_channel_language(mychannel));
+		}
 		break;
 	case REMGO:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			res = ast_streamfile(mychannel, "rpt/remote_go", ast_channel_language(mychannel));
+		}
 		break;
 	case CONNECTED:
 		/* wait a little bit */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
-		if (!res)
-			res = ast_streamfile(mychannel, "rpt/connected", ast_channel_language(mychannel));
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		else
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		ast_stopstream(mychannel);
-		res = ast_streamfile(mychannel, "digits/2", ast_channel_language(mychannel));
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		else
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		ast_stopstream(mychannel);
+		if (!res) {
+			res = ast_stream_and_wait(mychannel, "rpt/connected", "");
+		}
+		if (!res) {
+			res = ast_stream_and_wait(mychannel, "digits/2", "");
+		}
 		res = saynode(myrpt, mychannel, myrpt->name);
 		imdone = 1;
 		break;
 	case CONNFAIL:
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
-		if (!res)
+		if (!res) {
 			res = ast_streamfile(mychannel, "rpt/connection_failed", ast_channel_language(mychannel));
+		}
 		break;
 	case MEMNOTFOUND:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			res = ast_streamfile(mychannel, "rpt/memory_notfound", ast_channel_language(mychannel));
+		}
 		break;
 	case PLAYBACK:
 	case LOCALPLAY:
 		/* wait a little bit */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
-		res = ast_streamfile(mychannel, mytele->param, ast_channel_language(mychannel));
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		else
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		ast_stopstream(mychannel);
+		}
+		res = ast_stream_and_wait(mychannel, mytele->param, "");
 		imdone = 1;
 		break;
 	case TOPKEY:
@@ -1622,19 +1695,24 @@ void *rpt_tele_thread(void *this)
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
 			break;
 		for (i = 0; i < TOPKEYN; i++) {
-			if (!myrpt->topkey[i].node[0])
+			if (!myrpt->topkey[i].node[0]) {
 				continue;
-			if ((!myrpt->topkeylong) && (myrpt->topkey[i].keyed))
+			} else if ((!myrpt->topkeylong) && (myrpt->topkey[i].keyed)) {
 				continue;
+			}
 			res = saynode(myrpt, mychannel, myrpt->topkey[i].node);
-			if (!res)
+			if (!res) {
 				res = sayfile(mychannel, (myrpt->topkey[i].keyed) ? "rpt/keyedfor" : "rpt/unkeyedfor");
-			if (!res)
+			}
+			if (!res) {
 				res = saynum(mychannel, myrpt->topkey[i].timesince);
-			if (!res)
+			}
+			if (!res) {
 				res = sayfile(mychannel, "rpt/seconds");
-			if (!myrpt->topkeylong)
+			}
+			if (!myrpt->topkeylong) {
 				break;
+			}
 		}
 		imdone = 1;
 		break;
@@ -1670,11 +1748,13 @@ void *rpt_tele_thread(void *this)
 			res = -1;
 #endif
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
-			if (myrpt->iofd >= 0)
+			if (myrpt->iofd >= 0) {
 				setdtr(myrpt, myrpt->iofd, 1);
+			}
 			res = setkenwood(myrpt);
-			if (myrpt->iofd >= 0)
+			if (myrpt->iofd >= 0) {
 				setdtr(myrpt, myrpt->iofd, 0);
+			}
 			setxpmr(myrpt, 0);
 			if (ast_safe_sleep(mychannel, 200) == -1) {
 				myrpt->remsetting = 0;
@@ -1715,12 +1795,14 @@ void *rpt_tele_thread(void *this)
 		/* fall thru to invalid freq */
 	case INVFREQ:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			res = ast_streamfile(mychannel, "rpt/invalid-freq", ast_channel_language(mychannel));
+		}
 		break;
 	case REMMODE:
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		switch (myrpt->remmode) {
 		case REM_MODE_FM:
 			saycharstr(mychannel, "FM");
@@ -1735,28 +1817,34 @@ void *rpt_tele_thread(void *this)
 			saycharstr(mychannel, "AM");
 			break;
 		}
-		if (!wait_interval(myrpt, DLY_COMP, mychannel))
-			if (!res)
+		if (!wait_interval(myrpt, DLY_COMP, mychannel) && !res) {
+			if (!res) {
 				res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+			}
+		}
 		break;
 	case LOGINREQ:
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		sayfile(mychannel, "rpt/login");
 		saycharstr(mychannel, myrpt->name);
 		break;
 	case REMLOGIN:
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		saycharstr(mychannel, myrpt->loginuser);
 		saynode(myrpt, mychannel, myrpt->name);
 		wait_interval(myrpt, DLY_COMP, mychannel);
-		if (!res)
+		if (!res) {
 			res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+		}
 		break;
 	case REMXXX:
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		res = 0;
 		switch (mytele->submode.i) {
 		case 100:				/* RX PL Off */
@@ -1812,9 +1900,11 @@ void *rpt_tele_thread(void *this)
 			res = -1;
 		}
 		if (strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
-			if (!wait_interval(myrpt, DLY_COMP, mychannel))
-				if (!res)
+			if (!wait_interval(myrpt, DLY_COMP, mychannel)) {
+				if (!res) {
 					res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+				}
+			}
 		}
 		break;
 	case SCAN:
@@ -1825,31 +1915,36 @@ void *rpt_tele_thread(void *this)
 			myrpt->hfscanstop = 0;
 			mytele->mode = SCANSTAT;
 			ast_mutex_unlock(&myrpt->remlock);
-			if (ast_safe_sleep(mychannel, 1000) == -1)
+			if (ast_safe_sleep(mychannel, 1000) == -1) {
 				break;
+			}
 			sayfile(mychannel, "rpt/stop");
 			imdone = 1;
 			break;
 		}
-		if (myrpt->hfscanstatus > -2)
+		if (myrpt->hfscanstatus > -2) {
 			service_scan(myrpt);
+		}
 		i = myrpt->hfscanstatus;
 		myrpt->hfscanstatus = 0;
-		if (i)
+		if (i) {
 			mytele->mode = SCANSTAT;
+		}
 		ast_mutex_unlock(&myrpt->remlock);
-		if (i < 0)
+		if (i < 0) {
 			sayfile(mychannel, "rpt/stop");
-		else if (i > 0)
+		} else if (i > 0) {
 			saynum(mychannel, i);
+		}
 		imdone = 1;
 		break;
 	case TUNE:
 		ast_mutex_lock(&myrpt->remlock);
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) {
 			set_mode_ic706(myrpt, REM_MODE_AM);
-			if (play_tone(mychannel, 800, 6000, 8192) == -1)
+			if (play_tone(mychannel, 800, 6000, 8192) == -1) {
 				break;
+			}
 			ast_safe_sleep(mychannel, 500);
 			set_mode_ic706(myrpt, myrpt->remmode);
 			myrpt->tunerequest = 0;
@@ -1860,8 +1955,9 @@ void *rpt_tele_thread(void *this)
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) {
 			set_mode_ft100(myrpt, REM_MODE_AM);
 			simple_command_ft100(myrpt, 0x0f, 1);
-			if (play_tone(mychannel, 800, 6000, 8192) == -1)
+			if (play_tone(mychannel, 800, 6000, 8192) == -1) {
 				break;
+			}
 			simple_command_ft100(myrpt, 0x0f, 0);
 			ast_safe_sleep(mychannel, 500);
 			set_mode_ft100(myrpt, myrpt->remmode);
@@ -1874,8 +1970,9 @@ void *rpt_tele_thread(void *this)
 		set_mode_ft897(myrpt, REM_MODE_AM);
 		ast_safe_sleep(mychannel, 500);
 		myrpt->tunetx = 1;
-		if (play_tone(mychannel, 800, 6000, 8192) == -1)
+		if (play_tone(mychannel, 800, 6000, 8192) == -1) {
 			break;
+		}
 		myrpt->tunetx = 0;
 		ast_safe_sleep(mychannel, 500);
 		set_mode_ft897(myrpt, myrpt->remmode);
@@ -1887,8 +1984,9 @@ void *rpt_tele_thread(void *this)
 #if 0
 		set_mode_ft897(myrpt, REM_MODE_AM);
 		simple_command_ft897(myrpt, 8);
-		if (play_tone(mychannel, 800, 6000, 8192) == -1)
+		if (play_tone(mychannel, 800, 6000, 8192) == -1) {
 			break;
+		}
 		simple_command_ft897(myrpt, 0x88);
 		ast_safe_sleep(mychannel, 500);
 		set_mode_ft897(myrpt, myrpt->remmode);
@@ -1899,86 +1997,88 @@ void *rpt_tele_thread(void *this)
 #endif
 	case REMSHORTSTATUS:
 	case REMLONGSTATUS:
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		res = saynode(myrpt, mychannel, myrpt->name);
-		if (!res)
+		if (!res) {
 			res = sayfile(mychannel, "rpt/frequency");
-		if (!res)
+		}
+		if (!res) {
 			res = split_freq(mhz, decimals, myrpt->freq);
+		}
 		if (!multimode_capable(myrpt)) {
 			if (decimals[4] == '0') {
 				decimals[4] = 0;
-				if (decimals[3] == '0')
+				if (decimals[3] == '0') {
 					decimals[3] = 0;
+				}
 			}
 			decimals[5] = 0;
 		}
 		if (!res) {
 			m = atoi(mhz);
-			if (m < 100)
+			if (m < 100) {
 				res = saynum(mychannel, m);
-			else
+			} else {
 				res = saycharstr(mychannel, mhz);
+			}
 		}
-		if (!res)
+		if (!res) {
 			res = sayfile(mychannel, "letters/dot");
-		if (!res)
+		}
+		if (!res) {
 			res = saycharstr(mychannel, decimals);
+		}
 
-		if (res)
+		if (res) {
 			break;
+		}
 		if (myrpt->remmode == REM_MODE_FM) {	/* Mode FM? */
 			switch (myrpt->offset) {
-
 			case REM_MINUS:
 				res = sayfile(mychannel, "rpt/minus");
 				break;
-
 			case REM_SIMPLEX:
 				res = sayfile(mychannel, "rpt/simplex");
 				break;
-
 			case REM_PLUS:
 				res = sayfile(mychannel, "rpt/plus");
 				break;
-
 			default:
 				break;
 			}
 		} else {				/* Must be USB, LSB, or AM */
 			switch (myrpt->remmode) {
-
 			case REM_MODE_USB:
 				res = saycharstr(mychannel, "USB");
 				break;
-
 			case REM_MODE_LSB:
 				res = saycharstr(mychannel, "LSB");
 				break;
-
 			case REM_MODE_AM:
 				res = saycharstr(mychannel, "AM");
 				break;
-
 			default:
 				break;
 			}
 		}
 
-		if (res == -1)
+		if (res == -1) {
 			break;
+		}
 
 		if (mytele->mode == REMSHORTSTATUS) {	/* Short status? */
-			if (!wait_interval(myrpt, DLY_COMP, mychannel))
-				if (!res)
+			if (!wait_interval(myrpt, DLY_COMP, mychannel)) {
+				if (!res) {
 					res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+				}
+			}
 			break;
 		}
 
 		if (strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) {
 			switch (myrpt->powerlevel) {
-
 			case REM_LOWPWR:
 				res = sayfile(mychannel, "rpt/lopwr");
 				break;
@@ -1994,16 +2094,16 @@ void *rpt_tele_thread(void *this)
 		rbimode = ((!strncmp(myrpt->remoterig, REMOTE_RIG_RBI, 3))
 				   || (!strncmp(myrpt->remoterig, REMOTE_RIG_FT100, 3))
 				   || (!strncmp(myrpt->remoterig, REMOTE_RIG_IC706, 3)));
-		if (res || (sayfile(mychannel, "rpt/rxpl") == -1))
+		if (res || (sayfile(mychannel, "rpt/rxpl") == -1)) {
 			break;
-		if (rbimode && (sayfile(mychannel, "rpt/txpl") == -1))
+		} else if (rbimode && (sayfile(mychannel, "rpt/txpl") == -1)) {
 			break;
-		if ((sayfile(mychannel, "rpt/frequency") == -1) || (saycharstr(mychannel, myrpt->rxpl) == -1))
+		} else if ((sayfile(mychannel, "rpt/frequency") == -1) || (saycharstr(mychannel, myrpt->rxpl) == -1)) {
 			break;
-		if ((!rbimode) && ((sayfile(mychannel, "rpt/txpl") == -1) ||
-						   (sayfile(mychannel, "rpt/frequency") == -1) || (saycharstr(mychannel, myrpt->txpl) == -1)))
+		} else if ((!rbimode) && ((sayfile(mychannel, "rpt/txpl") == -1) ||
+						   (sayfile(mychannel, "rpt/frequency") == -1) || (saycharstr(mychannel, myrpt->txpl) == -1))) {
 			break;
-		if (myrpt->remmode == REM_MODE_FM) {	/* Mode FM? */
+		} else if (myrpt->remmode == REM_MODE_FM) {	/* Mode FM? */
 			if ((sayfile(mychannel, "rpt/rxpl") == -1) ||
 				(sayfile(mychannel, ((myrpt->rxplon) ? "rpt/on" : "rpt/off")) == -1) ||
 				(sayfile(mychannel, "rpt/txpl") == -1)
@@ -2011,14 +2111,17 @@ void *rpt_tele_thread(void *this)
 				break;
 			}
 		}
-		if (!wait_interval(myrpt, DLY_COMP, mychannel))
-			if (!res)
+		if (!wait_interval(myrpt, DLY_COMP, mychannel)) {
+			if (!res) {
 				res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+			}
+		}
 		break;
 	case STATUS:
 		/* wait a little bit */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		hastx = 0;
 		linkbase.next = &linkbase;
 		linkbase.prev = &linkbase;
@@ -2045,10 +2148,11 @@ void *rpt_tele_thread(void *this)
 		if (myrpt->callmode) {
 			hastx = 1;
 			res = ast_streamfile(mychannel, "rpt/autopatch_on", ast_channel_language(mychannel));
-			if (!res)
+			if (!res) {
 				res = ast_waitstream(mychannel, "");
-			else
+			} else {
 				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+			}
 			ast_stopstream(mychannel);
 		}
 		l = linkbase.next;
@@ -2058,27 +2162,20 @@ void *rpt_tele_thread(void *this)
 			hastx = 1;
 			res = saynode(myrpt, mychannel, l->name);
 			s = "rpt/tranceive";
-			if (!l->mode)
+			if (!l->mode) {
 				s = "rpt/monitor";
-			if (l->mode > 1)
+			}
+			if (l->mode > 1) {
 				s = "rpt/localmonitor";
-			if (!l->thisconnected)
+			}
+			if (!l->thisconnected) {
 				s = "rpt/connecting";
-			res = ast_streamfile(mychannel, s, ast_channel_language(mychannel));
-			if (!res)
-				res = ast_waitstream(mychannel, "");
-			else
-				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-			ast_stopstream(mychannel);
+			}
+			res = ast_stream_and_wait(mychannel, s, "");
 			l = l->next;
 		}
 		if (!hastx) {
-			res = ast_streamfile(mychannel, "rpt/repeat_only", ast_channel_language(mychannel));
-			if (!res)
-				res = ast_waitstream(mychannel, "");
-			else
-				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-			ast_stopstream(mychannel);
+			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
 		/* destroy our local link queue */
 		l = linkbase.next;
@@ -2095,8 +2192,9 @@ void *rpt_tele_thread(void *this)
 			sayphoneticstr(mychannel, myrpt->curdtmfuser);
 		}
 		if (myrpt->lastdtmfuser[0] && strcmp(myrpt->lastdtmfuser, myrpt->curdtmfuser)) {
-			if (myrpt->curdtmfuser[0])
+			if (myrpt->curdtmfuser[0]) {
 				sayfile(mychannel, "and");
+			}
 			sayphoneticstr(mychannel, myrpt->lastdtmfuser);
 		}
 		imdone = 1;
@@ -2118,12 +2216,7 @@ void *rpt_tele_thread(void *this)
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (myrpt->callmode) {
 			hastx = 1;
-			res = ast_streamfile(mychannel, "rpt/autopatch_on", ast_channel_language(mychannel));
-			if (!res)
-				res = ast_waitstream(mychannel, "");
-			else
-				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-			ast_stopstream(mychannel);
+			res = ast_stream_and_wait(mychannel, "rpt/autopatch_on", "");
 		}
 		/* go thru all the nodes in list */
 		for (i = 0; i < ns; i++) {
@@ -2138,79 +2231,60 @@ void *rpt_tele_thread(void *this)
 			hastx = 1;
 			res = saynode(myrpt, mychannel, strs[i]);
 			s = "rpt/tranceive";
-			if (mode == 'R')
+			if (mode == 'R') {
 				s = "rpt/monitor";
-			if (mode == 'C')
+			}
+			if (mode == 'C') {
 				s = "rpt/connecting";
-			res = ast_streamfile(mychannel, s, ast_channel_language(mychannel));
-			if (!res)
-				res = ast_waitstream(mychannel, "");
-			else
-				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-			ast_stopstream(mychannel);
+			}
+			res = ast_stream_and_wait(mychannel, s, "");
 		}
 		if (!hastx) {
-			res = ast_streamfile(mychannel, "rpt/repeat_only", ast_channel_language(mychannel));
-			if (!res)
-				res = ast_waitstream(mychannel, "");
-			else
-				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-			ast_stopstream(mychannel);
+			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
 		imdone = 1;
 		break;
-
 	case LASTNODEKEY:			/* Identify last node which keyed us up */
 		rpt_mutex_lock(&myrpt->lock);
 		if (myrpt->lastnodewhichkeyedusup) {
 			p = ast_strdup(myrpt->lastnodewhichkeyedusup);	/* Make a local copy of the node name */
 			if (!p) {
-				ast_log(LOG_WARNING, "ast_strdup failed in telemetery LASTNODEKEY");
 				imdone = 1;
 				break;
 			}
-		} else
+		} else {
 			p = NULL;
+		}
 		rpt_mutex_unlock(&myrpt->lock);
 		if (!p) {
 			imdone = 1;			/* no node previously keyed us up, or the node which did has been disconnected */
 			break;
 		}
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			res = saynode(myrpt, mychannel, p);
+		}
 		ast_free(p);
 		imdone = 1;
 		break;
-
 	case UNAUTHTX:				/* Say unauthorized transmit frequency */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
-		res = ast_streamfile(mychannel, "rpt/unauthtx", ast_channel_language(mychannel));
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		else
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		ast_stopstream(mychannel);
+		}
+		res = ast_stream_and_wait(mychannel, "rpt/unauthtx", "");
 		imdone = 1;
 		break;
-
 	case PARROT:				/* Repeat stuff */
-
 		sprintf(mystr, PARROTFILE, myrpt->name, mytele->parrot);
 		if (ast_fileexists(mystr, NULL, ast_channel_language(mychannel)) <= 0) {
 			imdone = 1;
 			myrpt->parrotstate = 0;
 			break;
 		}
-		if (wait_interval(myrpt, DLY_PARROT, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_PARROT, mychannel) == -1) {
 			break;
+		}
 		sprintf(mystr, PARROTFILE, myrpt->name, mytele->parrot);
-		res = ast_streamfile(mychannel, mystr, ast_channel_language(mychannel));
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		else
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		ast_stopstream(mychannel);
+		res = ast_stream_and_wait(mychannel, mystr, "");
 		sprintf(mystr, PARROTFILE, myrpt->name, mytele->parrot);
 		strcat(mystr, ".wav");
 		unlink(mystr);
@@ -2218,68 +2292,61 @@ void *rpt_tele_thread(void *this)
 		myrpt->parrotstate = 0;
 		myrpt->parrotonce = 0;
 		break;
-
 	case TIMEOUT:
 		res = saynode(myrpt, mychannel, myrpt->name);
-		if (!res)
+		if (!res) {
 			res = ast_streamfile(mychannel, "rpt/timeout", ast_channel_language(mychannel));
+		}
 		break;
-
 	case TIMEOUT_WARNING:
 		time(&t);
 		res = saynode(myrpt, mychannel, myrpt->name);
-		if (!res)
-			res = ast_streamfile(mychannel, "rpt/timeout-warning", ast_channel_language(mychannel));
-		if (!res)
+		if (!res) {
+			res = ast_stream_and_wait(mychannel, "rpt/timeout-warning", "");
+		}
+		if (!res) {				/* Say number of seconds */
+			ast_say_number(mychannel, myrpt->p.remotetimeout - (t - myrpt->last_activity_time), "", ast_channel_language(mychannel), (char *) NULL);
+		}
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
-		else
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		ast_stopstream(mychannel);
-		if (!res)				/* Say number of seconds */
-			ast_say_number(mychannel, myrpt->p.remotetimeout - (t - myrpt->last_activity_time), "",
-						   ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
-			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
 		res = ast_streamfile(mychannel, "queue-seconds", ast_channel_language(mychannel));
 		break;
-
 	case ACT_TIMEOUT_WARNING:
 		time(&t);
 		res = saynode(myrpt, mychannel, myrpt->name);
-		if (!res)
-			res = ast_streamfile(mychannel, "rpt/act-timeout-warning", ast_channel_language(mychannel));
-		if (!res)
+		if (!res) {
+			res = ast_stream_and_wait(mychannel, "rpt/act-timeout-warning", "");
+		}
+		if (!res) {				/* Say number of seconds */
+			ast_say_number(mychannel, myrpt->p.remoteinacttimeout - (t - myrpt->last_activity_time), "", ast_channel_language(mychannel), (char *) NULL);
+		}
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (!res)				/* Say number of seconds */
-			ast_say_number(mychannel, myrpt->p.remoteinacttimeout -
-						   (t - myrpt->last_activity_time), "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		ast_stopstream(mychannel);
-		if (!res)
-			res = ast_streamfile(mychannel, "queue-seconds", ast_channel_language(mychannel));
-		if (!res)
-			res = ast_waitstream(mychannel, "");
-		ast_stopstream(mychannel);
+		if (!res) {
+			res = ast_stream_and_wait(mychannel, "queue-seconds", "");
+		}
 		imdone = 1;
 		break;
-
 	case STATS_TIME:
 	case STATS_TIME_LOCAL:
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		t = time(NULL);
 		rpt_localtime(&t, &localtm, myrpt->p.timezone);
 		t1 = rpt_mktime(&localtm, NULL);
 		/* Say the phase of the day is before the time */
-		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12))
+		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
 			p = "rpt/goodmorning";
-		else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18))
+		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
 			p = "rpt/goodafternoon";
-		else
+		} else {
 			p = "rpt/goodevening";
+		}
 		if (sayfile(mychannel, p) == -1) {
 			imdone = 1;
 			break;
@@ -2291,23 +2358,27 @@ void *rpt_tele_thread(void *this)
 		}
 		/* Say the time */
 		res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
 		imdone = 1;
 		break;
 	case STATS_VERSION:
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		/* Say "version" */
 		if (sayfile(mychannel, "rpt/version") == -1) {
 			imdone = 1;
 			break;
 		}
-		if (!res)				/* Say "X" */
+		if (!res) {				/* Say "X" */
 			ast_say_number(mychannel, VERSION_MAJOR, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		}
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
 		if (saycharstr(mychannel, ".") == -1) {
 			imdone = 1;
@@ -2318,121 +2389,152 @@ void *rpt_tele_thread(void *this)
 		if (!res) {
 			res = ast_waitstream(mychannel, "");
 			ast_stopstream(mychannel);
-		} else
+		} else {
 			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+		}
 		imdone = 1;
 		break;
 	case STATS_GPS:
 	case STATS_GPS_LEGACY:
 		fp = fopen(GPSFILE, "r");
-		if (!fp)
+		if (!fp) {
 			break;
-		if (fstat(fileno(fp), &mystat) == -1)
+		}
+		if (fstat(fileno(fp), &mystat) == -1) {
 			break;
-		if (mystat.st_size >= 100)
+		}
+		if (mystat.st_size >= 100) {
 			break;
+		}
 		elev[0] = 0;
-		if (fscanf(fp, "%u %s %s %s", &u, lat, lon, elev) < 3)
+		if (fscanf(fp, "%u %s %s %s", &u, lat, lon, elev) < 3) {
 			break;
+		}
 		fclose(fp);
 		was = (time_t) u;
 		time(&t);
-		if ((was + GPS_VALID_SECS) < t)
+		if ((was + GPS_VALID_SECS) < t) {
 			break;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		} else if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
-		if (saynode(myrpt, mychannel, myrpt->name) == -1)
+		} else if (saynode(myrpt, mychannel, myrpt->name) == -1) {
 			break;
-		if (sayfile(mychannel, "location") == -1)
+		} else if (sayfile(mychannel, "location") == -1) {
 			break;
+		}
 		c = lat[strlen(lat) - 1];
 		lat[strlen(lat) - 1] = 0;
-		if (sscanf(lat, "%2d%d.%d", &i, &j, &k) != 3)
+		if (sscanf(lat, "%2d%d.%d", &i, &j, &k) != 3) {
 			break;
+		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (sayfile(mychannel, "degrees") == -1)
+		if (sayfile(mychannel, "degrees") == -1) {
 			break;
+		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (saycharstr(mychannel, lat + 4) == -1)
+		if (saycharstr(mychannel, lat + 4) == -1) {
 			break;
-		if (sayfile(mychannel, "minutes") == -1)
+		} else if (sayfile(mychannel, "minutes") == -1) {
 			break;
-		if (sayfile(mychannel, (c == 'N') ? "north" : "south") == -1)
+		} else if (sayfile(mychannel, (c == 'N') ? "north" : "south") == -1) {
 			break;
-		if (sayfile(mychannel, "rpt/latitude") == -1)
+		} else if (sayfile(mychannel, "rpt/latitude") == -1) {
 			break;
+		}
 		c = lon[strlen(lon) - 1];
 		lon[strlen(lon) - 1] = 0;
-		if (sscanf(lon, "%3d%d.%d", &i, &j, &k) != 3)
+		if (sscanf(lon, "%3d%d.%d", &i, &j, &k) != 3) {
 			break;
+		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (sayfile(mychannel, "degrees") == -1)
+		if (sayfile(mychannel, "degrees") == -1) {
 			break;
+		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (saycharstr(mychannel, lon + 5) == -1)
+		if (saycharstr(mychannel, lon + 5) == -1) {
 			break;
-		if (sayfile(mychannel, "minutes") == -1)
+		}
+		if (sayfile(mychannel, "minutes") == -1) {
 			break;
-		if (sayfile(mychannel, (c == 'E') ? "east" : "west") == -1)
+		}
+		if (sayfile(mychannel, (c == 'E') ? "east" : "west") == -1) {
 			break;
-		if (sayfile(mychannel, "rpt/longitude") == -1)
+		}
+		if (sayfile(mychannel, "rpt/longitude") == -1) {
 			break;
-		if (!elev[0])
+		}
+		if (!elev[0]) {
 			break;
+		}
 		c = elev[strlen(elev) - 1];
 		elev[strlen(elev) - 1] = 0;
-		if (sscanf(elev, "%f", &f) != 1)
+		if (sscanf(elev, "%f", &f) != 1) {
 			break;
+		}
 		if (myrpt->p.gpsfeet) {
-			if (c == 'M')
+			if (c == 'M') {
 				f *= 3.2808399;
+			}
 		} else {
-			if (c != 'M')
+			if (c != 'M') {
 				f /= 3.2808399;
+			}
 		}
 		sprintf(mystr, "%0.1f", f);
-		if (sscanf(mystr, "%d.%d", &i, &j) != 2)
+		if (sscanf(mystr, "%d.%d", &i, &j) != 2) {
 			break;
+		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (saycharstr(mychannel, ".") == -1)
+		if (saycharstr(mychannel, ".") == -1) {
 			break;
+		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
+		}
 		ast_stopstream(mychannel);
-		if (sayfile(mychannel, (myrpt->p.gpsfeet) ? "feet" : "meters") == -1)
+		if (sayfile(mychannel, (myrpt->p.gpsfeet) ? "feet" : "meters") == -1) {
 			break;
-		if (saycharstr(mychannel, "AMSL") == -1)
+		}
+		if (saycharstr(mychannel, "AMSL") == -1) {
 			break;
+		}
 		ast_stopstream(mychannel);
 		imdone = 1;
 		break;
 	case ARB_ALPHA:
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			if (mytele->param)
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
+			if (mytele->param) {
 				saycharstr(mychannel, mytele->param);
+			}
+		}
 		imdone = 1;
 		break;
 	case REV_PATCH:
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
 		if (mytele->param) {
-
 			/* Parts of this section taken from app_parkandannounce */
 			char *tpl_working, *tpl_current;
 			char *tmp[100], *myparm;
@@ -2458,8 +2560,7 @@ void *rpt_tele_thread(void *this)
 					if (!dres) {
 						dres = ast_waitstream(mychannel, "");
 					} else {
-						ast_log(LOG_WARNING, "ast_streamfile of %s failed on %s\n", tmp[i],
-								ast_channel_name(mychannel));
+						ast_log(LOG_WARNING, "ast_streamfile of %s failed on %s\n", tmp[i], ast_channel_name(mychannel));
 						dres = 0;
 					}
 				}
@@ -2470,21 +2571,24 @@ void *rpt_tele_thread(void *this)
 		break;
 	case TEST_TONE:
 		imdone = 1;
-		if (myrpt->stopgen)
+		if (myrpt->stopgen) {
 			break;
+		}
 		myrpt->stopgen = -1;
 		if ((res = ast_tonepair_start(mychannel, 1000.0, 0, 99999999, 7200.0))) {
 			myrpt->stopgen = 0;
 			break;
 		}
 		while (ast_channel_generatordata(mychannel) && (myrpt->stopgen <= 0)) {
-			if (ast_safe_sleep(mychannel, 1))
+			if (ast_safe_sleep(mychannel, 1)) {
 				break;
+			}
 			imdone = 1;
 		}
 		myrpt->stopgen = 0;
-		if (myrpt->remote && (myrpt->remstopgen < 0))
+		if (myrpt->remote && (myrpt->remstopgen < 0)) {
 			myrpt->remstopgen = 1;
+		}
 		break;
 	case PFXTONE:
 		res = telem_lookup(myrpt, mychannel, myrpt->name, "pfxtone");
@@ -2493,9 +2597,9 @@ void *rpt_tele_thread(void *this)
 		break;
 	}
 	if (!imdone) {
-		if (!res)
+		if (!res) {
 			res = ast_waitstream(mychannel, "");
-		else {
+		} else {
 			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 			res = 0;
 		}
@@ -2505,8 +2609,9 @@ void *rpt_tele_thread(void *this)
 	if (mytele->mode == TAILMSG) {
 		if (!res) {
 			myrpt->tailmessagen++;
-			if (myrpt->tailmessagen >= myrpt->p.tailmessagemax)
+			if (myrpt->tailmessagen >= myrpt->p.tailmessagemax) {
 				myrpt->tailmessagen = 0;
+			}
 		} else {
 			myrpt->tmsgtimer = myrpt->p.tailsquashedtime;
 		}
@@ -2515,8 +2620,9 @@ void *rpt_tele_thread(void *this)
 	telem_done(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_free(nodename);
-	if (id_malloc)
+	if (id_malloc) {
 		ast_free(ident);
+	}
 	ast_free(mytele);
 	ast_hangup(mychannel);
 #ifdef  APP_RPT_LOCK_DEBUG
@@ -2540,8 +2646,9 @@ abort2:
 abort3:
 	remque((struct qelem *) mytele);
 	rpt_mutex_unlock(&myrpt->lock);
-	if (id_malloc)
+	if (id_malloc) {
 		ast_free(ident);
+	}
 	ast_free(mytele);
 	if (mychannel) {
 		ast_hangup(mychannel);
@@ -2573,23 +2680,26 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	switch (mode) {
 	case CONNECTED:
 		mylink = (struct rpt_link *) data;
-		if ((mylink->name[0] == '3') && (!myrpt->p.eannmode))
+		if ((mylink->name[0] == '3') && (!myrpt->p.eannmode)) {
 			return;
+		}
 		break;
 	case REMDISC:
 		mylink = (struct rpt_link *) data;
-		if ((mylink->name[0] == '3') && (!myrpt->p.eannmode))
+		if ((mylink->name[0] == '3') && (!myrpt->p.eannmode)) {
 			return;
-		if ((!mylink) || (mylink->name[0] == '0'))
+		} else if ((!mylink) || (mylink->name[0] == '0')) {
 			return;
-		if ((!mylink->gott) && (!mylink->isremote) && (!mylink->outbound) &&
+		} else if ((!mylink->gott) && (!mylink->isremote) && (!mylink->outbound) &&
 			mylink->chan && strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink")
-			&& strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+			&& strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb")) {
 			return;
+		}
 		break;
 	case VARCMD:
-		if (myrpt->telemmode < 2)
+		if (myrpt->telemmode < 2) {
 			return;
+		}
 		break;
 	case UNKEY:
 	case LOCUNKEY:
@@ -2597,8 +2707,9 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 		if (myrpt->p.votertype == 1 && (myrpt->rxchankeyed || myrpt->voteremrx)) {
 			return;
 		}
-		if (myrpt->p.nounkeyct)
+		if (myrpt->p.nounkeyct) {
 			return;
+		}
 		/* if any of the following are defined, go ahead and do it,
 		   otherwise, dont bother */
 		v1 = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "unlinkedct");
@@ -2606,8 +2717,9 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 		if (telem_lookup(myrpt, NULL, myrpt->name, "remotemon") &&
 			telem_lookup(myrpt, NULL, myrpt->name, "remotetx") &&
 			telem_lookup(myrpt, NULL, myrpt->name, "cmdmode") && (!(v1 && telem_lookup(myrpt, NULL, myrpt->name, v1)))
-			&& (!(v2 && telem_lookup(myrpt, NULL, myrpt->name, v2))))
+			&& (!(v2 && telem_lookup(myrpt, NULL, myrpt->name, v2)))) {
 			return;
+		}
 		break;
 	case LINKUNKEY:
 		mylink = (struct rpt_link *) data;
@@ -2616,16 +2728,19 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 
 			w = 0;
 			for (v = 0; v < myrpt->p.locallinknodesn; v++) {
-				if (strcmp(mylink->name, myrpt->p.locallinknodes[v]))
+				if (strcmp(mylink->name, myrpt->p.locallinknodes[v])) {
 					continue;
+				}
 				w = 1;
 				break;
 			}
-			if (w)
+			if (w) {
 				break;
+			}
 		}
-		if (!ast_variable_retrieve(myrpt->cfg, myrpt->name, "linkunkeyct"))
+		if (!ast_variable_retrieve(myrpt->cfg, myrpt->name, "linkunkeyct")) {
 			return;
+		}
 		break;
 	default:
 		break;
@@ -2633,7 +2748,6 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	if (!myrpt->remote) {		/* dont do if we are a remote */
 		/* send appropriate commands to everyone on link(s) */
 		switch (mode) {
-
 		case REMGO:
 			send_tele_link(myrpt, "REMGO");
 			return;
@@ -2660,22 +2774,25 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			return;
 		case CONNECTED:
 			mylink = (struct rpt_link *) data;
-			if ((!mylink) || (mylink->name[0] == '0'))
+			if ((!mylink) || (mylink->name[0] == '0')) {
 				return;
+			}
 			sprintf(mystr, "CONNECTED,%s,%s", myrpt->name, mylink->name);
 			send_tele_link(myrpt, mystr);
 			return;
 		case CONNFAIL:
 			mylink = (struct rpt_link *) data;
-			if ((!mylink) || (mylink->name[0] == '0'))
+			if ((!mylink) || (mylink->name[0] == '0')) {
 				return;
+			}
 			sprintf(mystr, "CONNFAIL,%s", mylink->name);
 			send_tele_link(myrpt, mystr);
 			return;
 		case REMDISC:
 			mylink = (struct rpt_link *) data;
-			if ((!mylink) || (mylink->name[0] == '0'))
+			if ((!mylink) || (mylink->name[0] == '0')) {
 				return;
+			}
 			l = myrpt->links.next;
 			haslink = 0;
 			/* dont report if a link for this one still on system */
@@ -2694,8 +2811,9 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 				}
 				rpt_mutex_unlock(&myrpt->lock);
 			}
-			if (haslink)
+			if (haslink) {
 				return;
+			}
 			sprintf(mystr, "REMDISC,%s", mylink->name);
 			send_tele_link(myrpt, mystr);
 			return;
@@ -2710,20 +2828,28 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			return;
 		case STATS_GPS:
 			fp = fopen(GPSFILE, "r");
-			if (!fp)
+			if (!fp) {
 				break;
-			if (fstat(fileno(fp), &mystat) == -1)
+			}
+			if (fstat(fileno(fp), &mystat) == -1) {
+				fclose(fp);
 				break;
-			if (mystat.st_size >= 100)
+			}
+			if (mystat.st_size >= 100) {
+				fclose(fp);
 				break;
+			}
 			elev[0] = 0;
-			if (fscanf(fp, "%u %s %s %s", &k, lat, lon, elev) < 3)
+			if (fscanf(fp, "%u %s %s %s", &k, lat, lon, elev) < 3) {
+				fclose(fp);
 				break;
+			}
 			fclose(fp);
 			was = (time_t) k;
 			time(&t);
-			if ((was + GPS_VALID_SECS) < t)
+			if ((was + GPS_VALID_SECS) < t) {
 				break;
+			}
 			sprintf(mystr, "STATS_GPS,%s,%s,%s,%s", myrpt->name, lat, lon, elev);
 			send_tele_link(myrpt, mystr);
 			return;
@@ -2733,30 +2859,34 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			return;
 		case REV_PATCH:
 			p = (char *) data;
-			for (i = 0; p[i]; i++)
-				if (p[i] == ',')
+			for (i = 0; p[i]; i++) {
+				if (p[i] == ',') {
 					p[i] = '^';
+				}
+			}
 			sprintf(mystr, "REV_PATCH,%s,%s", myrpt->name, p);
 			send_tele_link(myrpt, mystr);
 			return;
 		case LASTNODEKEY:
-			if (!myrpt->lastnodewhichkeyedusup[0])
+			if (!myrpt->lastnodewhichkeyedusup[0]) {
 				return;
+			}
 			sprintf(mystr, "LASTNODEKEY,%s", myrpt->lastnodewhichkeyedusup);
 			send_tele_link(myrpt, mystr);
 			return;
 		case LASTUSER:
-			if ((!myrpt->lastdtmfuser[0]) && (!myrpt->curdtmfuser[0]))
+			if ((!myrpt->lastdtmfuser[0]) && (!myrpt->curdtmfuser[0])) {
 				return;
-			else if (myrpt->lastdtmfuser[0] && (!myrpt->curdtmfuser[0]))
+			} else if (myrpt->lastdtmfuser[0] && (!myrpt->curdtmfuser[0])) {
 				sprintf(mystr, "LASTUSER,%s", myrpt->lastdtmfuser);
-			else if ((!myrpt->lastdtmfuser[0]) && myrpt->curdtmfuser[0])
+			} else if ((!myrpt->lastdtmfuser[0]) && myrpt->curdtmfuser[0]) {
 				sprintf(mystr, "LASTUSER,%s", myrpt->curdtmfuser);
-			else {
-				if (strcmp(myrpt->curdtmfuser, myrpt->lastdtmfuser))
+			} else {
+				if (strcmp(myrpt->curdtmfuser, myrpt->lastdtmfuser)) {
 					sprintf(mystr, "LASTUSER,%s,%s", myrpt->curdtmfuser, myrpt->lastdtmfuser);
-				else
+				} else {
 					sprintf(mystr, "LASTUSER,%s", myrpt->curdtmfuser);
+				}
 			}
 			send_tele_link(myrpt, mystr);
 			return;
@@ -2773,12 +2903,15 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 					continue;
 				}
 				s = 'T';
-				if (!l->mode)
+				if (!l->mode) {
 					s = 'R';
-				if (l->mode > 1)
+				}
+				if (l->mode > 1) {
 					s = 'L';
-				if (!l->thisconnected)
+				}
+				if (!l->thisconnected) {
 					s = 'C';
+				}
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
 				l = l->next;
 			}
@@ -2806,10 +2939,12 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 					strs[i]++;
 				}
 				s = 'T';
-				if (m == 'R')
+				if (m == 'R') {
 					s = 'R';
-				if (m == 'C')
+				}
+				if (m == 'C') {
 					s = 'C';
+				}
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, strs[i]);
 			}
 			send_tele_link(myrpt, mystr);
@@ -2830,8 +2965,9 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 		tele->submode.p = data;
 		tele->parrot = (unsigned int) tele->submode.i;
 		tele->submode.p = 0;
-	} else
+	} else {
 		mylink = (struct rpt_link *) (void *) data;
+	}
 	rpt_mutex_lock(&myrpt->lock);
 	if ((mode == CONNFAIL) || (mode == REMDISC) || (mode == CONNECTED) || (mode == LINKUNKEY)) {
 		memset(&tele->mylink, 0, sizeof(struct rpt_link));
@@ -2843,8 +2979,9 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 		strncpy(tele->param, (char *) data, TELEPARAMSIZE - 1);
 		tele->param[TELEPARAMSIZE - 1] = 0;
 	}
-	if ((mode == REMXXX) || (mode == PAGE) || (mode == MDC1200))
+	if ((mode == REMXXX) || (mode == PAGE) || (mode == MDC1200)) {
 		tele->submode.p = data;
+	}
 	insque((struct qelem *) tele, (struct qelem *) myrpt->tele.next);
 	rpt_mutex_unlock(&myrpt->lock);
 	pthread_attr_init(&attr);
@@ -2857,6 +2994,4 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 		ast_log(LOG_WARNING, "Could not create telemetry thread: %s", strerror(res));
 	}
 	ast_debug(6, "Tracepoint rpt_telemetry() exit\n");
-
-	return;
 }
