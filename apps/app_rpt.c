@@ -2998,9 +2998,7 @@ static void *rpt(void *this)
 	/*! \todo call ao2_ref(cap, -1); on all exit points? */
 
 	myrpt->rxchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-	myrpt->dahdirxchannel = NULL;
-	if (!strcasecmp(tmpstr, "DAHDI"))
-		myrpt->dahdirxchannel = myrpt->rxchannel;
+	myrpt->dahdirxchannel = !strcasecmp(tmpstr, "DAHDI") ? myrpt->rxchannel : NULL;
 	if (myrpt->rxchannel) {
 		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY) {
 			ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
@@ -3038,8 +3036,9 @@ static void *rpt(void *this)
 		}
 		*tele++ = 0;
 		myrpt->txchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo"))
+		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo")) {
 			myrpt->dahditxchannel = myrpt->txchannel;
+		}
 		if (myrpt->txchannel) {
 			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY) {
 				ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
@@ -5908,6 +5907,7 @@ static int load_config(int reload)
 		ast_mutex_init(&rpt_vars[n].remlock);
 		ast_mutex_init(&rpt_vars[n].statpost_lock);
 		ast_mutex_init(&rpt_vars[n].blocklock);
+		ast_mutex_init(&rpt_vars[n].telem_lock);
 		rpt_vars[n].tele.next = &rpt_vars[n].tele;
 		rpt_vars[n].tele.prev = &rpt_vars[n].tele;
 		rpt_vars[n].rpt_thread = AST_PTHREADT_NULL;
@@ -7980,6 +7980,7 @@ static int unload_module(void)
 		ast_mutex_lock(&rpt_vars[i].blocklock);
 		ast_mutex_unlock(&rpt_vars[i].blocklock);
 		ast_mutex_destroy(&rpt_vars[i].blocklock);
+		ast_mutex_destroy(&rpt_vars[i].telem_lock);
 	}
 
 	res = ast_unregister_application(app);

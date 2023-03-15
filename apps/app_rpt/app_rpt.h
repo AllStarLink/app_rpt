@@ -558,6 +558,7 @@ struct rpt {
 	ast_mutex_t remlock;
 	ast_mutex_t statpost_lock;
 	ast_mutex_t blocklock;	/*!< Lock added to prevent multiple threads from performing blocking operations simultaneously */
+	ast_mutex_t telem_lock; /*!< Lock for serializing telemetry operations */
 	struct ast_config *cfg;
 	char reload;
 	char reload1;
