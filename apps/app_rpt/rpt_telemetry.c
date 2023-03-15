@@ -964,21 +964,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
  * and things will get doubled up.
  * Should never happen since we now use a mutex to serialize telemetry.
  */
-#define telem_done(myrpt) { \
-	if (locked) { \
-		ast_debug(5, "Releasing telemetry lock, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele); \
-	} \
-	if (myrpt->active_telem != mytele) { \
-		ast_log(LOG_WARNING, "Setting active_telem NULL from %p, but mytele was %p?\n", myrpt->active_telem, mytele); \
-		myrpt->active_telem = NULL; \
-	} else { \
-		ast_debug(2, "Set active_telem to NULL (was %p)\n", myrpt->active_telem); \
-		myrpt->active_telem = NULL; \
-	} \
-	if (locked) { \
-		ast_mutex_unlock(&myrpt->telem_lock); \
-	} \
-}
+#define telem_done(myrpt) ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 
 /*
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
@@ -1012,7 +998,6 @@ void *rpt_tele_thread(void *this)
 	struct mdcparams *mdcp;
 #endif
 	struct ast_format_cap *cap;
-	int locked = 0;
 
 	/* get a pointer to myrpt */
 	myrpt = mytele->rpt;
@@ -1068,6 +1053,7 @@ void *rpt_tele_thread(void *this)
 	mytele->chan = mychannel;
 
 	/* Wait for previous telemetry to finish before we start so we're not speaking on top of each other. */
+	ast_debug(5, "Queued telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 	while (myrpt->active_telem && ((myrpt->active_telem->mode == PAGE) || (myrpt->active_telem->mode == MDC1200))) {
 		rpt_mutex_unlock(&myrpt->lock);
 		usleep(100000);
@@ -1077,35 +1063,17 @@ void *rpt_tele_thread(void *this)
 
 	while ((mytele->mode != SETREMOTE) && (mytele->mode != UNKEY) && (mytele->mode != LINKUNKEY) && (mytele->mode != LOCUNKEY) &&
 		   (mytele->mode != COMPLETE) && (mytele->mode != REMGO) && (mytele->mode != REMCOMPLETE)) {
-		/* Must lock telem_lock BEFORE myrpt->lock, since if we grab lock but can't grab telem_lock, we hold other parts of app_rpt up */
-		ast_mutex_lock(&myrpt->telem_lock); /* If we have to wait on this lock, then myrpt->active_telem can't be NULL anyways. */
-		rpt_mutex_lock(&myrpt->lock); /* XXX This lock may not even be necessary here, telem_lock is sufficient */
+		rpt_mutex_lock(&myrpt->lock);
 		if ((!myrpt->active_telem) && (myrpt->tele.prev == mytele)) {
 			myrpt->active_telem = mytele;
 			rpt_mutex_unlock(&myrpt->lock);
-			locked = 1; /* Keep telem_lock locked. */
 			break;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_mutex_unlock(&myrpt->telem_lock);
 		usleep(100000);
 	}
 
-	/* Hopefully at this point, it can just grab the lock right away.
-	 * We should NOT hold myrpt->lock here. */
-	if (!locked) {
-		ast_mutex_lock(&myrpt->telem_lock); /* Grab the mutex to serialize telemetry announcements so they're not on top of each other */
-		myrpt->active_telem = mytele;
-		locked = 1;
-	}
-	ast_debug(5, "Acquired telemetry lock, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
-
-	/* XXX Should never happen, make an assertion? */
-	if (!myrpt->active_telem) {
-		ast_log(LOG_WARNING, "active_telem is NULL, telemetry messages may not be queued properly!\n");
-	} else if (myrpt->active_telem != mytele) {
-		ast_log(LOG_WARNING, "active_telem = %p but mytele = %p?\n", myrpt->active_telem, mytele);
-	}
+	ast_debug(5, "Beginning telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 
 	/* make a conference for the tx */
 	/* If the telemetry is only intended for a local audience, */
