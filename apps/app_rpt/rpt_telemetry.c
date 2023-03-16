@@ -964,7 +964,9 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
  * and things will get doubled up.
  * Should never happen since we now use a mutex to serialize telemetry.
  */
-#define telem_done(myrpt) ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
+#define telem_done(myrpt) \
+	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele); \
+	myrpt->active_telem = NULL;
 
 /*
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
