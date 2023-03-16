@@ -92,6 +92,89 @@ do not use 127.0.0.1
 
 */
 
+/*
+ * Echolink protocol information
+ * RTP voice data is passed on port 5198 UDP
+ * RTCP data is passed on port 5199 UDP
+ * The directory server information is downloaded on port 5200 TCP
+ *
+ * The RTP channel contains voice and text messages.  Text messages begin with 0x6f.
+ * We send a text message with our connections each time we get or release a
+ * connection.  The format is:
+ *	oNDATA0x0dMESSAGE0x0d
+ *
+ * The RTCP channel is used for connections requests to and from our module.
+ * The packets are in RTCP format using SDES.
+ * There are two types of packets: a user information packet, which is considered 
+ * the connection request, and a bye packet, that is the disconnection request.
+ *
+ * The directory server requires the user login information / registration.
+ * To login, send the string:
+ * 	lCCC0xac0xacPPP0x0dONLINEVVV(HH:DD)0x0dLLL0x0dEEE0x0d
+ *  where 'l' is a literal
+ *  CCC is the callsign
+ *  0xac is the character 0xac
+ *  0xac is the character 0xac
+ *  PPP is the password
+ *  0x0d is the character 0x0d
+ *  ONLINE is a literal
+ *  VVV is the echolink version we are sending '1.00B'
+ *  ( is a literal
+ *  HH is the hours since midnight
+ *	DD is the day of the month
+ *	) is a literal
+ *	0x0d is the character 0x0d
+ *	LLL is the login name or QTH
+ *	0x0d is the character 0x0d
+ *	EEE is the Email address
+ *	0x0d is the character 0x0d
+ *
+ * If the login was successful, the directory server will respond with 'ok' any other 
+ * response should be considered failure or not authorized.  The connection can be closed.
+ *
+ * Registration with the directory server is required once every 360 seconds. 
+ *
+ * To request a directory list, register as described above and start a new TCP connection.
+ * The server can return the directory list as a full list or differential.  The directory
+ * data can be compressed or uncompressed.
+ * To request a differential compressed directory send:
+ *	FSSS0x0d
+ *	Where F is a literal
+ *	SSS is the last snap shot id received.  This will initally be a zero length string.
+ *
+ * The first 4 bytes of the returned data determine if the download is full or compressed.
+ * @@@ indicates an uncompressed list, while DDD indicates an uncompressed differential.
+ * Anything else will indicate that the stream is compressed and will need to be deflated.
+ * 
+ * The deflated stream will start with @@@ or DDD as described above.  Each line is terminated 
+ * with 0x0a.
+ * Here is an example:
+ *DDD
+ *482:687993635
+ *E25HL-L
+ *.                          [BUSY 02:18]
+ *541765
+ *137.226.114.63
+ *VE3ABZ-L
+ *.                          [ON 14:09]
+ *549404
+ *148.170.130.43
+ *K1JTV
+ *.       
+ * The line following the DDD has two formats - for uncompressed files, there is a single number
+ * that represents the number of lines.  For compressed formats, the first number is the number of
+ * lines, a colon, followed by the snapshot id. 
+ * The remaining data repeats for each registration entry. 
+ * An entry is composed of:
+ *	Callsign
+ *	Location [Status xx:xx]
+ *	Node number
+ *	IP address
+ *
+ * A line that starts with +++ indicates the end of entries.  When first encountered, the 
+ * entries following +++ are to be deleted.
+*/
+
 #include "asterisk.h"
 
 #include <stdio.h>
@@ -141,6 +224,7 @@ do not use 127.0.0.1
 #define QUEUE_OVERLOAD_THRESHOLD_AST 75
 #define QUEUE_OVERLOAD_THRESHOLD_EL 30
 #define	MAXPENDING 20
+
 #define EL_IP_SIZE 16
 #define EL_CALL_SIZE 16
 #define EL_NAME_SIZE 32
@@ -155,11 +239,14 @@ do not use 127.0.0.1
 #define	EL_APRS_SERVER "aprs.echolink.org"
 #define	EL_APRS_INTERVAL 600
 #define	EL_APRS_START_DELAY 10
+
 #define	GPSFILE "/tmp/gps.dat"
 #define	GPS_VALID_SECS 60
+
 #define	ELDB_NODENUMLEN 8
 #define	ELDB_CALLSIGNLEN 20
 #define	ELDB_IPADDRLEN 18
+
 #define	DELIMCHR ','
 #define	QUOTECHR 34
 /* 
@@ -179,7 +266,10 @@ static int nodeoutfd = -1;
 
 struct sockaddr_in sin_aprs;
 
-/* Echolink audio packet heafer */
+/*!
+ * \brief Echolink audio packet header.
+ * This is the standard RTP packet format.
+ */
 struct gsmVoice_t {
 #ifdef RTP_BIG_ENDIAN
 	uint8_t version:2;
@@ -202,11 +292,14 @@ struct gsmVoice_t {
 	unsigned char data[BLOCKING_FACTOR * GSM_FRAME_SIZE];
 };
 
+/* forward definitions */
 struct el_instance;
 struct el_pvt;
 
-/* Echolink node details */
-/* Also each node in binary tree in memory */
+/*!
+ * \brief Echolink connected node struct.
+ * These are stored internally in a binary tree.
+ */
 struct el_node {
 	char ip[EL_IP_SIZE + 1];
 	char call[EL_CALL_SIZE + 1];
@@ -220,11 +313,18 @@ struct el_node {
 	char outbound;
 };
 
+/*!
+ * \brief Pending connections struct.
+ * This holds the incoming connection that is not authorized.
+ */
 struct el_pending {
 	char fromip[EL_IP_SIZE + 1];
 	struct timeval reqtime;
 };
 
+/*!
+ * \brief Echolink instance struct.
+ */
 struct el_instance {
 	ast_mutex_t lock;
 	char name[EL_NAME_SIZE + 1];
@@ -276,12 +376,18 @@ struct el_instance {
 	pthread_t el_reader_thread;
 };
 
+/*!
+ * \brief Echolink receive queue struct from asterisk.
+ */
 struct el_rxqast {
 	struct el_rxqast *qe_forw;
 	struct el_rxqast *qe_back;
 	char buf[GSM_FRAME_SIZE];
 };
 
+/*!
+ * \brief Echolink receive queue struct from echolink.
+ */
 struct el_rxqel {
 	struct el_rxqel *qe_forw;
 	struct el_rxqel *qe_back;
@@ -289,6 +395,10 @@ struct el_rxqel {
 	char fromip[EL_IP_SIZE + 1];
 };
 
+/*!
+ * \brief Echolink private information.
+ * This is stored in the asterisk channel private technology for reference.
+ */
 struct el_pvt {
 	struct ast_channel *owner;
 	struct el_instance *instp;
@@ -311,17 +421,26 @@ struct el_pvt {
 	char *linkstr;
 };
 
+/*!
+ * \brief RTP Control Packet SDES request item.
+ */
 struct rtcp_sdes_request_item {
 	unsigned char r_item;
 	char *r_text;
 };
 
+/*!
+ * \brief RTP Control Packet SDES request items.
+ */
 struct rtcp_sdes_request {
 	int nitems;
 	unsigned char ssrc[4];
 	struct rtcp_sdes_request_item item[10];
 };
 
+/*!
+ * \brief RTP Control Packet common header word.
+ */
 struct rtcp_common_t {
 #ifdef RTP_BIG_ENDIAN
 	uint8_t version:2;
@@ -336,12 +455,18 @@ struct rtcp_common_t {
 	uint16_t length;
 };
 
+/*!
+ * \brief RTP Control Packet SDES item detail.
+ */
 struct rtcp_sdes_item_t {
 	uint8_t type;
 	uint8_t length;
 	char data[1];
 };
 
+/*!
+ * \brief RTP Control Packet for SDES.
+ */
 struct rtcp_t {
 	struct rtcp_common_t common;
 	union {
@@ -356,6 +481,9 @@ struct rtcp_t {
 	} r;
 };
 
+/*!
+ * \brief Echolink internal directory database entry.
+ */
 struct eldb {
 	char nodenum[ELDB_NODENUMLEN];
 	char callsign[ELDB_CALLSIGNLEN];
@@ -424,6 +552,11 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 /* remove writen if Asterisk has similar functionality */
 static int writen(int fd, char *ptr, int nbytes);
 
+/*!
+ * \brief Asterisk channel technology struct.
+ * This tells Asterisk the functions to call when
+ * it needs to interact with our module.
+ */
 static struct ast_channel_tech el_tech = {
 	.type = type,
 	.description = tdesc,
@@ -456,6 +589,11 @@ static char dbget_usage[] =
 
 #define mythread_exit(nothing) __mythread_exit(nothing, __LINE__)
 
+/*!
+ * \brief Cleans up the application when the main thread exits.
+ * \param nothing	Pointer to NULL (NULL is passed from all routines)
+ * \param line		Line where the exit originated
+ */
 static void __mythread_exit(void *nothing, int line)
 {
 	int i;
@@ -477,13 +615,13 @@ static void __mythread_exit(void *nothing, int line)
 	pthread_exit(NULL);
 }
 
-/*
-* Break up a delimited string into a table of substrings
-*
-* str - delimited string ( will be modified )
-* strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
-* limit- maximum number of substrings to process
-*/
+/*!
+ * \brief Break up a delimited string into a table of substrings.
+ * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
+ * \param str		Pointer to string to process (it will be modified).
+ * \param strp		Pointer to a list of substrings created, NULL will be placed at the end of the list.
+ * \param limit		Maximum number of substrings to process.
+ */
 
 static int finddelim(char *str, char *strp[], int limit)
 {
@@ -514,9 +652,14 @@ static int finddelim(char *str, char *strp[], int limit)
 	}
 	strp[i] = 0;
 	return (i);
-
 }
 
+/*!
+ * \brief Print the echolink internal user list to the cli.
+ * \param nodep		Pointer to eldb struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree. 
+ */
 static void print_nodes(const void *nodep, const VISIT which, const int depth)
 {
 	if ((which == leaf) || (which == postorder)) {
@@ -526,21 +669,51 @@ static void print_nodes(const void *nodep, const VISIT which, const int depth)
 	}
 }
 
+/*!
+ * \brief Compare two eldb struct by nodenum.
+ * \param pa		Pointer to first eldb struct.
+ * \param pb		Pointer to second eldb struct.
+ * \retval 0		If equal.
+ * \retval -1		If less than.
+ * \retval 1		If greater than.
+ */
 static int compare_eldb_nodenum(const void *pa, const void *pb)
 {
 	return strcmp(((struct eldb *) pa)->nodenum, ((struct eldb *) pb)->nodenum);
 }
 
+/*!
+ * \brief Compare two eldb struct by IP address.
+ * \param pa		Pointer to first eldb struct.
+ * \param pb		Pointer to second eldb struct.
+ * \retval 0		If equal.
+ * \retval -1		If less than.
+ * \retval 1		If greater than.
+ */
 static int compare_eldb_ipaddr(const void *pa, const void *pb)
 {
 	return strcmp(((struct eldb *) pa)->ipaddr, ((struct eldb *) pb)->ipaddr);
 }
 
+/*!
+ * \brief Compare two eldb struct by callsign.
+ * \param pa		Pointer to first eldb struct.
+ * \param pb		Pointer to second eldb struct.
+ * \retval 0		If equal.
+ * \retval -1		If less than.
+ * \retval 1		If greater than.
+ */
 static int compare_eldb_callsign(const void *pa, const void *pb)
 {
 	return strcmp(((struct eldb *) pa)->callsign, ((struct eldb *) pb)->callsign);
 }
 
+/*!
+ * \brief Find an echolink node from the internal user database by nodenum.
+ * \param nodenum	Pointer to node number to find.
+ * \retval NULL		If the IP address was not found.
+ * \return If found returns an eldb struct.
+ */
 static struct eldb *el_db_find_nodenum(const char *nodenum)
 {
 	struct eldb **found_key = NULL, key;
@@ -555,6 +728,12 @@ static struct eldb *el_db_find_nodenum(const char *nodenum)
 	return NULL;
 }
 
+/*!
+ * \brief Find an echolink node from the internal user database by callsign.
+ * \param callsign	Pointer to callsign to find.
+ * \retval NULL		If the callsign was not found.
+ * \return If found returns an eldb struct.
+ */
 static struct eldb *el_db_find_callsign(const char *callsign)
 {
 	struct eldb **found_key = NULL, key;
@@ -569,6 +748,12 @@ static struct eldb *el_db_find_callsign(const char *callsign)
 	return NULL;
 }
 
+/*!
+ * \brief Find an echolink node from the internal user database by ip address.
+ * \param ipaddr	IP address to find.
+ * \retval NULL		If the IP address was not found.
+ * \return If found returns an eldb struct.
+ */
 static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 {
 	struct eldb **found_key = NULL, key;
@@ -583,6 +768,11 @@ static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 	return NULL;
 }
 
+/*!
+ * \brief Delete a node from the internal echolink users database.
+ * This removes the node from the three internal binary trees.
+ * \param node		Pointer to node to delete.
+ */
 static void el_db_delete_indexes(struct eldb *node)
 {
 	struct eldb *mynode;
@@ -605,6 +795,10 @@ static void el_db_delete_indexes(struct eldb *node)
 	return;
 }
 
+/*!
+ * \brief Delete a node from the internal echolink users database.
+ * \param nodenum		Pointer to node to delete.
+ */
 static void el_db_delete(struct eldb *node)
 {
 	if (!node)
@@ -614,6 +808,14 @@ static void el_db_delete(struct eldb *node)
 	return;
 }
 
+/*!
+ * \brief Add a node to the internal echolink users database.
+ * The node is added to the three internal indexes.
+ * \param nodenum		Buffer to node number.
+ * \param ipaddr		Buffer to ip address.
+ * \param callsign		Buffer to callsign.
+ * \return Returns struct eldb for the entry created.
+ */
 static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 {
 	struct eldb *node, *mynode;
@@ -648,6 +850,17 @@ static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 	return (node);
 }
 
+/*!
+ * \brief Make a sdes packet with our nodes information.
+ * The RTP version = 3, RTP packet type = 201.
+ * The RTCP: version = 2, packet type = 202.
+ * \param pkt			Pointer to buffer for sdes packet
+ * \param pktLen		Length of packet buffer
+ * \param call			Pointer to callsign
+ * \param name			Pointer to node name
+ * \param astnode		Pointer to AllstarLink node number
+ * \retval 1 			Successful
+ */
 static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call, char *name, char *astnode)
 {
 	unsigned char zp[1500];
@@ -721,6 +934,16 @@ static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call, char *name
 	return l;
 }
 
+/*!
+ * \brief Make a sdes packet for APRS
+ * The RTP version = 2, RTP packet type = 201.
+ * The RTCP: version = 2, packet type = 202.
+ * \param pkt			Pointer to buffer for sdes packet
+ * \param pktLen		Length of packet buffer
+ * \param cname			Pointer to aprs name
+ * \param loc			Pointer to aprs location
+ * \retval 1 			Successful
+ */
 static int rtcp_make_el_sdes(unsigned char *pkt, int pktLen, char *cname, char *loc)
 {
 	unsigned char zp[1500];
@@ -779,6 +1002,14 @@ static int rtcp_make_el_sdes(unsigned char *pkt, int pktLen, char *cname, char *
 	return l;
 }
 
+/*!
+ * \brief Make a rtcp bye packet
+ * The RTP version = 3, RTP packet type = 201.
+ * The RTCP: version = 3, packet type = 203.
+ * \param p				Pointer to buffer for bye packet
+ * \param reason		Pointer to reason for the bye packet
+ * \retval 1 			Successful
+ */
 static int rtcp_make_bye(unsigned char *p, char *reason)
 {
 	struct rtcp_t *rp;
@@ -827,6 +1058,11 @@ static int rtcp_make_bye(unsigned char *p, char *reason)
 	return l;
 }
 
+/*!
+ * \brief Parse a sdes packet
+ * \param packet		Pointer to packet to parse
+ * \param r				Pointer to sdes structure to receive parsed data
+ */
 static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 {
 	int i;
@@ -835,6 +1071,10 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 	for (i = 0; i < r->nitems; i++)
 		r->item[i].r_text = NULL;
 
+	/* 	the RTP version must be 3 or 1 
+		the payload type must be 202
+		the CSRC must be greater than zero
+	*/
 	while ((p[0] >> 6 & 3) == 3 || (p[0] >> 6 & 3) == 1) {
 		if ((p[1] == 202) && ((p[0] & 0x1F) > 0)) {
 			unsigned char *cp = p + 8, *lp = cp + (ntohs(*((short *) (p + 2))) + 1) * 4;
@@ -859,6 +1099,12 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 	return;
 }
 
+/*!
+ * \brief Copy a sdes item to a buffer
+ * \param source		Pointer to source buffer to copy
+ * \param dest			Pointer to destination buffer
+ * \param destlen		Length of the destination buffer
+ */
 static void copy_sdes_item(char *source, char *dest, int destlen)
 {
 	int len = source[1] & 0xFF;
@@ -869,16 +1115,30 @@ static void copy_sdes_item(char *source, char *dest, int destlen)
 	return;
 }
 
+/*!
+ * \brief Determine if the packet is of type rtcp bye.
+ * The RTP packet type must be 200 or 201.
+ * The RTCP packet type must be 203.
+ * \param p				Pointer to buffer of packet to test.
+ * \param len			Buffer length.
+ * \retval 1 			Is a bye packet.
+ * \retval 0 			Not bye packet.
+ */
 static int is_rtcp_bye(unsigned char *p, int len)
 {
 	unsigned char *end;
 	int sawbye = 0;
 
+	/* 	the RTP version must be 3 or 1 
+		the padding bit must not be set
+		the payload type must be 200 or 201
+	*/
 	if ((((p[0] >> 6) & 3) != 3 && ((p[0] >> 6) & 3) != 1) || ((p[0] & 0x20) != 0) || ((p[1] != 200) && (p[1] != 201)))
 		return 0;
 
 	end = p + len;
 
+	/* 	see if this packet contains a RTCP packet type 203 */
 	do {
 		if (p[1] == 203)
 			sawbye = 1;
@@ -889,15 +1149,30 @@ static int is_rtcp_bye(unsigned char *p, int len)
 	return sawbye;
 }
 
+/*!
+ * \brief Determine if the packet is of type sdes.
+ * The RTP packet type must be 200 or 201.
+ * The RTCP packet type must be 203.
+ * \param p				Buffer of packet to test.
+ * \param len			Buffer length.
+ * \retval 1 			Is a sdes packet.
+ * \retval 0 			Not sdes packet.
+ */
 static int is_rtcp_sdes(unsigned char *p, int len)
 {
 	unsigned char *end;
 	int sawsdes = 0;
-
+	
+	/* 	the RTP version must be 3 or 1 
+		the padding bit must not be set
+		the payload type must be 200 or 201
+	*/
 	if ((((p[0] >> 6) & 3) != 3 && ((p[0] >> 6) & 3) != 1) || ((p[0] & 0x20) != 0) || ((p[1] != 200) && (p[1] != 201)))
 		return 0;
 
 	end = p + len;
+	
+	/* 	see if this packet contains RTCP packet type 202 */
 	do {
 		if (p[1] == 202)
 			sawsdes = 1;
@@ -908,6 +1183,14 @@ static int is_rtcp_sdes(unsigned char *p, int len)
 	return sawsdes;
 }
 
+/*!
+ * \brief Echolink call.
+ * \param ast			Pointer to Asterisk channel.
+ * \param dest			Pointer to Destination.
+ * \param timeout		Timeout.
+ * \retval -1 			if not successful.
+ * \retval 0 			if successful.
+ */
 static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
@@ -942,6 +1225,10 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	return 0;
 }
 
+/*!
+ * \brief Destroy and free an echolink instance.
+ * \param p			Pointer to el_pvt struct to release.
+ */
 static void el_destroy(struct el_pvt *p)
 {
 	if (p->dsp)
@@ -956,6 +1243,11 @@ static void el_destroy(struct el_pvt *p)
 	ast_free(p);
 }
 
+/*!
+ * \brief Allocate and initialize an echolink private structure.
+ * \param data			Pointer to echolink instance name to initialize.
+ * \retval 				el_pvt structure.		
+ */
 static struct el_pvt *el_alloc(void *data)
 {
 	struct el_pvt *p;
@@ -1006,6 +1298,11 @@ static struct el_pvt *el_alloc(void *data)
 	return p;
 }
 
+/*!
+ * \brief Asterisk hangup function.
+ * \param ast			Pointer to Asterisk channel.
+ * \retval 0			If successful.			
+ */
 static int el_hangup(struct ast_channel *ast)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
@@ -1025,6 +1322,7 @@ static int el_hangup(struct ast_channel *ast)
 		sin.sin_family = AF_INET;
 		sin.sin_addr.s_addr = inet_addr(p->ip);
 		sin.sin_port = htons(instp->ctrl_port);
+		/* send 20 bye packets to insure that they receive this disconnect */
 		for (i = 0; i < 20; i++) {
 			sendto(instp->ctrl_sock, bye, n, 0, (struct sockaddr *) &sin, sizeof(sin));
 		}
@@ -1043,6 +1341,16 @@ static int el_hangup(struct ast_channel *ast)
 	return 0;
 }
 
+/*!
+ * \brief Asterisk indicate function.
+ * This is used to indicate tx key / unkey.
+ * \param ast			Pointer to Asterisk channel.
+ * \param cond			Condition.
+ * \param data			Pointer to data.
+ * \param datalen		Pointer to data length.
+ * \retval 0			If successful.
+ * \retval -1			For hangup.
+ */
 static int el_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
@@ -1063,16 +1371,37 @@ static int el_indicate(struct ast_channel *ast, int cond, const void *data, size
 	return 0;
 }
 
+/*!
+ * \brief Asterisk digit begin function.
+ * \param ast			Pointer to Asterisk channel.
+ * \param digit			Digit processed.
+ * \retval -1			
+ */
 static int el_digit_begin(struct ast_channel *ast, char digit)
 {
 	return -1;
 }
 
+/*!
+ * \brief Asterisk digit end function.
+ * \param ast			Pointer to Asterisk channel.
+ * \param digit			Digit processed.
+ * \param duration		Duration of the digit.
+ * \retval -1			
+ */
 static int el_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
 {
 	return -1;
 }
 
+/*!
+ * \brief Compare for qsort - sorts nodes.
+ * \param a			Pointer to first string.
+ * \param b			Pointer to second string.
+ * \retval 0		If equal.
+ * \retval -1		If less than.
+ * \retval 1		If greater than.
+ */
 static int mycompar(const void *a, const void *b)
 {
 	char **x = (char **) a;
@@ -1090,6 +1419,13 @@ static int mycompar(const void *a, const void *b)
 	return (strcmp((*x) + xoff, (*y) + yoff));
 }
 
+/*!
+ * \brief Asterisk text function.
+ * \param ast			Pointer to Asterisk channel.
+ * \param text			Pointer to text message to process.
+ * \retval 0			If successful.
+ * \retval -1			If unsuccessful.
+ */
 static int el_text(struct ast_channel *ast, const char *text)
 {
 #define	MAXLINKSTRS 200
@@ -1198,12 +1534,26 @@ static int el_text(struct ast_channel *ast, const char *text)
 	return 0;
 }
 
+/*!
+ * \brief Compare two el_node struct by ip address.
+ * \param pa		Pointer to first el_node struct.
+ * \param pb		Pointer to second el_node struct.
+ * \retval 0		If equal.
+ * \retval -1		If less than.
+ * \retval 1		If greater than.
+ */
 static int compare_ip(const void *pa, const void *pb)
 {
 	return strncmp(((struct el_node *) pa)->ip, ((struct el_node *) pb)->ip, EL_IP_SIZE);
 }
 
 /* Echolink ---> Echolink */
+/*!
+ * \brief Send audio from echolink to echolink to all but connectly connecting node.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree. 
+ */
 void send_audio_all_but_one(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1231,6 +1581,12 @@ void send_audio_all_but_one(const void *nodep, const VISIT which, const int dept
 	}
 }
 
+/*!
+ * \brief Send audio from asterisk to echolink to one node (currently connecting node).
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 static void send_audio_only_one(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1259,6 +1615,12 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 }
 
 /* Asterisk ---> Echolink */
+/*!
+ * \brief Send audio from asterisk to echolink to all connected nodes.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 void send_audio_all(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1284,6 +1646,12 @@ void send_audio_all(const void *nodep, const VISIT which, const int depth)
 	}
 }
 
+/*!
+ * \brief Print connected users using ast_verbose.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 static void print_users(const void *nodep, const VISIT which, const int depth)
 {
 	if ((which == leaf) || (which == postorder)) {
@@ -1293,6 +1661,12 @@ static void print_users(const void *nodep, const VISIT which, const int depth)
 	}
 }
 
+/*!
+ * \brief Count connected nodes.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 static void count_users(const void *nodep, const VISIT which, const int depth)
 {
 	if ((which == leaf) || (which == postorder)) {
@@ -1304,6 +1678,12 @@ static void count_users(const void *nodep, const VISIT which, const int depth)
 	}
 }
 
+/*!
+ * \brief Send connection information to connected nodes.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 static void send_info(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1332,6 +1712,12 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 	return;
 }
 
+/*!
+ * \brief Send a heartbeat packet to connected nodes.
+ * \param nodep		Pointer to eldb struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 static void send_heartbeat(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1359,10 +1745,20 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 	}
 }
 
+/*!
+ * \brief Free node.  Empty routine.
+ */
 static void free_node(void *nodep)
 {
 }
 
+/*!
+ * \brief Find and delete a node from our internal node list.
+ * Will perform a softhangup if the useless_flag_1 is zero.
+ * \param key			Poitner to Echolink node struct to delete.
+ * \retval 0			If node not found.
+ * \retval 1			If node found.
+ */
 static int find_delete(struct el_node *key)
 {
 	int found = 0;
@@ -1379,6 +1775,13 @@ static int find_delete(struct el_node *key)
 	return found;
 }
 
+/*!
+ * \brief Process commands received from our local tcp port.
+ * List commands:
+ * \param buf			Pointer to buffer with command data.
+ * \param fromip		Pointer to ip address that sent the command.
+ * \param instp			Poiner to Echolink instance.
+ */
 static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 {
 	char *cmd = NULL;
@@ -1468,6 +1871,11 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 	return;
 }
 
+/*!
+ * \brief Asterisk read function.
+ * \param ast			Pointer to Asterisk channel.
+ * \retval 				Asterisk frame.
+ */
 static struct ast_frame *el_xread(struct ast_channel *ast)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
@@ -1486,6 +1894,13 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 	return &p->fr;
 }
 
+/*!
+ * \brief Asterisk write function.
+ * This routine handles echolink to asterisk and asterisk to echolink.
+ * \param ast			Pointer to Asterisk channel.
+ * \param frame			Pointer to Asterisk frame to process.
+ * \retval 0			Successful.
+ */
 static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 {
 	int bye_length;
@@ -1683,6 +2098,15 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	return 0;
 }
 
+/*!
+ * \brief Start a new Echolink call.
+ * \param i				Pointer to echolink private.
+ * \param state			State.
+ * \param nodenum		Node number to call.
+ * \param assignedids	Pointer to unique ID string assigned to the channel.
+ * \param requestor		Pointer to Asterisk channel.
+ * \return 				Asterisk channel.
+ */
 static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor)
 {
 	struct ast_channel *tmp;
@@ -1726,6 +2150,19 @@ static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int node
 	return tmp;
 }
 
+/*!
+ * \brief Echolink request from Asterisk.
+ * This is a standard Asterisk function - requester.
+ * Asterisk calls this function to to setup proivate data structures.
+ * \param type			Pointer to type of channel to request.
+ * \param cap			Pointer to format capabilities for the channel.
+ * \param assignedids	Pointer to unique ID string to assign to the channel.
+ * \param requestor		Pointer to channel asking for data. 
+ * \param data			Pointer to destination of the call.
+ * \param cause			Pointer to cause of failure.
+ * \retval NULL			Failure
+ * \return				ast_channel if successful
+ */
 static struct ast_channel *el_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause)
 {
 	int nodenum;
@@ -1759,7 +2196,13 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 /*
 * Enable or disable debug output at a given level at the console
 */
-
+/*!
+ * \brief Process asterisk cli request to enable or disable debug for this module.
+ * \param fd			Asterisk cli file descriptor.
+ * \param argc			Number of arguments.
+ * \param argv			Pointer to arguments.
+ * \retval 				Cli success, showusage, or failure.
+ */
 static int el_do_debug(int fd, int argc, const char *const *argv)
 {
 	int newlevel;
@@ -1778,10 +2221,13 @@ static int el_do_debug(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*
-* Dump entire database
-*/
-
+/*!
+ * \brief Process asterisk cli request to dump internal database entries.
+ * \param fd			Asterisk cli fd
+ * \param argc			Number of arguments
+ * \param argv			Pointer to arguments
+ * \return	Cli success, showusage, or failure.
+ */
 static int el_do_dbdump(int fd, int argc, const char *const *argv)
 {
 	char c;
@@ -1805,10 +2251,14 @@ static int el_do_dbdump(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*
-* Get echolink db entry
-*/
-
+/*!
+ * \brief Process asterisk cli request for internal user database entry.
+ * Lookup can be for ip address, callsign, or nodenumber
+ * \param fd			Asterisk cli file descriptor.
+ * \param argc			Number of arguments.
+ * \param argv			Pointer to asterisk cli arguments.
+ * \return 	Cli success, showusage, or failure.
+ */
 static int el_do_dbget(int fd, int argc, const char *const *argv)
 {
 	char c;
@@ -1834,6 +2284,11 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
+/*!
+ * \brief Turns integer response to char cli response
+ * \param r				Response.
+ * \return	Cli success, showusage, or failure.
+ */
 static char *res2cli(int r)
 {
 	switch (r) {
@@ -1846,6 +2301,13 @@ static char *res2cli(int r)
 	}
 }
 
+/*!
+ * \brief Handle asterisk cli request for debug
+ * \param e				Asterisk cli entry.
+ * \param cmd			Cli command type.
+ * \param a				Pointer to asterisk cli arguments.
+ * \retval 				Cli success or failure.
+ */
 static char *handle_cli_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -1859,6 +2321,13 @@ static char *handle_cli_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	return res2cli(el_do_debug(a->fd, a->argc, a->argv));
 }
 
+/*!
+ * \brief Handle asterisk cli request for dbdump
+ * \param e				Asterisk cli entry.
+ * \param cmd			Cli command type.
+ * \param a				Pointer to asterisk cli arguments.
+ * \return	Cli success or failure.
+ */
 static char *handle_cli_dbdump(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -1872,6 +2341,13 @@ static char *handle_cli_dbdump(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	return res2cli(el_do_dbdump(a->fd, a->argc, a->argv));
 }
 
+/*!
+ * \brief Handle asterisk cli request for dbget
+ * \param e				Asterisk cli entry.
+ * \param cmd			Cli command type.
+ * \param a				Pointer to asterisk cli arguments.
+ * \retval 				Cli success or failure.
+ */
 static char *handle_cli_dbget(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -1885,6 +2361,9 @@ static char *handle_cli_dbget(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	return res2cli(el_do_dbget(a->fd, a->argc, a->argv));
 }
 
+/*!
+ * \brief Define cli entries for this module
+ */
 static struct ast_cli_entry el_cli[] = {
 	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
 	AST_CLI_DEFINE(handle_cli_dbdump, "Dump entire echolink db"),
@@ -1895,6 +2374,15 @@ static struct ast_cli_entry el_cli[] = {
    If asterisk has a function that writes at least n bytes to a TCP socket,
    remove writen function and use the one provided by Asterisk
 */
+/*!
+ * \brief Write a buffer to a socket.  Ensures that all bytes are written.
+ * This routine will send the number of bytes specified in nbytes,
+ * unless an error occurs.
+ * \param fd			Socket to write data.
+ * \param ptr			Pointer to the data to be written.
+ * \param nbytes		Number of bytes to write.
+ * \return	Number of bytes written or -1 if the write fails.
+ */
 static int writen(int fd, char *ptr, int nbytes)
 {
 	int nleft, nwritten;
@@ -1914,6 +2402,15 @@ static int writen(int fd, char *ptr, int nbytes)
 }
 
 /* Feel free to make this code smaller, I know it works, so I use it */
+/*!
+ * \brief Send echolink registration command for this instance.
+ * Each instance could have a different user name, password, or
+ * other parameters.
+ * \param server		Pointer to echolink server name.
+ * \param instp			The interna echo link instance.
+ * \retval -1			If registration failed.
+ * \retval 0			If registration was successful.
+ */
 static int sendcmd(char *server, struct el_instance *instp)
 {
 	struct hostent *ahp;
@@ -2004,14 +2501,22 @@ static int sendcmd(char *server, struct el_instance *instp)
 	return 0;
 }
 
+/*! \brief Echolink directory server port number */
 #define	EL_DIRECTORY_PORT 5200
 
+/*!
+ * \brief Frees pointer from interal list.
+ * \param ptr			Pointer to free.	
+ */
 static void my_stupid_free(void *ptr)
 {
 	ast_free(ptr);
 	return;
 }
 
+/*!
+ * \brief Delete entire echolink node list.
+ */
 static void el_zapem(void)
 {
 	ast_mutex_lock(&el_db_lock);
@@ -2019,6 +2524,10 @@ static void el_zapem(void)
 	ast_mutex_unlock(&el_db_lock);
 }
 
+/*!
+ * \brief Delete callsign from internal directory.
+ * \param call			Pointer to callsign to delete.	
+ */
 static void el_zapcall(char *call)
 {
 	struct eldb *mynode;
@@ -2033,6 +2542,17 @@ static void el_zapcall(char *call)
 	ast_mutex_unlock(&el_db_lock);
 }
 
+/*!
+ * \brief Reads a line from the passed socket and uncompresses if needed.
+ * The routine will continue to read data until it fills the passed buffer.
+ * \param sock			Socket to read data.	
+ * \param buf1			Pointer to buffer to hold the received data.
+ * \param bufllen		Buffer length
+ * \param compressed	Compressed data indicator - 1=compressed
+ * \param z				Pointer to struct z_stream_s 
+ * \retval -1			If read is not successful
+ * \retval 				Number of bytes read.
+ */
 static int el_net_read(int sock, unsigned char *buf1, int buf1len, int compressed, struct z_stream_s *z)
 {
 	unsigned char buf[512];
@@ -2069,6 +2589,15 @@ static int el_net_read(int sock, unsigned char *buf1, int buf1len, int compresse
 	return (buf1len - z->avail_out);
 }
 
+/*!
+ * \brief Read and process a line from the echolink directory server.
+ * \param s				Socket to read data.	
+ * \param str			Pointer to buffer to hold the received line.
+ * \param max			Maximum number of characters to read
+ * \param compressed	Compressed data indicator - 1=compressed
+ * \param z				Pointer to struct z_stream_s 
+ * \return	Number of bytes read.
+ */
 static int el_net_get_line(int s, char *str, int max, int compressed, struct z_stream_s *z)
 {
 	int nstr;
@@ -2096,6 +2625,13 @@ static int el_net_get_line(int s, char *str, int max, int compressed, struct z_s
 	return (nstr);
 }
 
+/*!
+ * \brief Echolink directory retriever.
+ * \param hostname		Pointer to echolink server name to process.
+ * \retval -1			Download failed.
+ * \retval 0			Download was successful - received directory not compressed.
+ * \retval 1			Download was successful - received directory was compressed.
+ */
 static int do_el_directory(char *hostname)
 {
 	struct ast_hostent ah;
@@ -2158,6 +2694,11 @@ static int do_el_directory(char *hostname)
 	}
 	dir_compressed = 1;
 	dir_partial = 0;
+	/* Determine if the response is full, partial or the stream is compressed.
+	   @@@ indicates a full directory, DDD indicates a partial directory.
+	   If we don't find one of these indicates, the stream is compressed.
+	   We will decompress the stream and test again.
+	*/
 	if (!strncmp(str, "@@@", 3)) {
 		dir_partial = 0;
 		dir_compressed = 0;
@@ -2205,6 +2746,9 @@ static int do_el_directory(char *hostname)
 		}
 	}
 	delmode = 0;
+	/* if the returned directory is not partial - we should
+	   delete all existing directory messages
+	*/
 	if (!dir_partial)
 		el_zapem();
 	for (;;) {
@@ -2272,6 +2816,22 @@ static int do_el_directory(char *hostname)
 	return (dir_compressed);
 }
 
+/*!
+ * \brief Echolink directory retriever thread.
+ * This thread is responsible for retreiving a directory of user registrations from
+ * the echolink servers.  This is necessary to validate connecting users and
+ * have the ip address available for outbound connections.
+ *
+ * It sequentially processes the echolink server list with each request cycle.
+ * If the directory download fails, the routine waits 20 seconds and
+ * moves to the next server.
+ *
+ * If a compressed directory was received, the routine will wait 240 seconds
+ * before retrieving the directory again.  If the received directory
+ * was not compressed, the routine will wait 1800 seconds before retrieving
+ * the directory again.
+ * \param data		Data passed to this thread.  (NULL is passed for all calls).
+ */
 static void *el_directory(void *data)
 {
 	int rc = 0, curdir;
@@ -2310,6 +2870,13 @@ static void *el_directory(void *data)
 	return NULL;
 }
 
+/*!
+ * \brief Echolink registration thread.
+ * This thread is responsible for registering an instance with
+ * the echolink servers.
+ * This routine generally runs every 360 seconds.
+ * \param data		Pointer to struct el_instance data passsed to this thread.
+ */
 static void *el_register(void *data)
 {
 	short i = 0;
@@ -2352,6 +2919,16 @@ static void *el_register(void *data)
 	return NULL;
 }
 
+/*!
+ * \brief Process a new echolink call.
+ * \param instp			Pointer to echolink instance.
+ * \param p				Pointer to echolink private data.
+ * \param call			Pointer to callsign.
+ * \param name			Pointer to name associated with the callsign.
+ * \retval 1 			if not successful.
+ * \retval 0 			if successful.
+ * \retval -1			if memory allocation error.
+ */
 static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, char *name)
 {
 	struct el_node *el_node_key = NULL;
@@ -2428,6 +3005,14 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 	return 0;
 }
 
+/*!
+ * \brief This routine watches the udp/tcp ports for activity.
+ * It runs it its own thread and processes RTP packets as they arrive.
+ * One thread is required for each echolink instance.
+ * It receives data from the audio socket and control socket.
+ * Connection requests arrive over the control socket.
+ * \param data		Pointer to struct el_instance data passed this this thread
+ */
 static void *el_reader(void *data)
 {
 	struct el_instance *instp = (struct el_instance *) data;
@@ -2459,6 +3044,7 @@ static void *el_reader(void *data)
 	ast_mutex_lock(&instp->lock);
 	while (run_forever) {
 
+		/* Send aprs information every EL_APRS_INTERVAL */
 		time(&now);
 		if (instp->aprstime <= now) {
 			char aprsstr[512], aprscall[256], latc, lonc;
@@ -2633,7 +3219,7 @@ static void *el_reader(void *data)
 									mythread_exit(NULL);
 								}
 							}
-							if (i) {	/* if not authorized */
+							if (i) {	/* if not authorized or do_new_call failed*/
 								/* first, see if we have one that is ours and not abandoned */
 								for (x = 0; x < MAXPENDING; x++) {
 									if (strcmp(instp->pending[x].fromip, instp->el_node_test.ip))
@@ -2758,6 +3344,14 @@ static void *el_reader(void *data)
 	return NULL;
 }
 
+/*!
+ * \brief Stores the information from the configuration file to memory.
+ * It starts a backgound thread for processing connections for this instance.
+ * \param cfg		Pointer to struct ast_config.
+ * \param ctg		Pointer to category to load.
+ * \retval 0		If configuration load is successful.
+ * \retval -1		If configuration load fails.
+ */
 static int store_config(struct ast_config *cfg, char *ctg)
 {
 	char *val;
@@ -3018,6 +3612,11 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
+/*!
+ * \brief Unloads this module.
+ * This is a standard Asterisk function.
+ * \retval 0		Always returns zero.
+ */
 static int unload_module(void)
 {
 	int n;
@@ -3060,7 +3659,13 @@ static int unload_module(void)
 	return 0;
 }
 
-static int load_module(void)
+/*!
+ * \brief Loads this module.
+ * This is a standard Asterisk function.
+ * \retval AST_MODULE_LOAD_DECLINE	If module load is unsuccessful.
+ * \retval 0						if module load is successful.
+ */
+ static int load_module(void)
 {
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL;
