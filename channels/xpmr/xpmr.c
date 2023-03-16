@@ -70,12 +70,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <sys/io.h>
 #include <fcntl.h>
 #include <sys/time.h>
 #include <stdlib.h>
 #include <errno.h>
-	   
+   
 #include "xpmr.h"
 #include "xpmr_coef.h"
 #include "sinetabx.h"

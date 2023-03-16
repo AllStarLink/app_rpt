@@ -1432,7 +1432,8 @@ static int el_text(struct ast_channel *ast, const char *text)
 
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
 	char *cmd = NULL, *arg1 = NULL;
-	char delim = ' ', *saveptr, *cp, *pkt;
+	const char *delim = " ";
+	char *saveptr, *cp, *pkt;
 	char buf[200], *ptr, str[200], *arg4 = NULL, *strs[MAXLINKSTRS];
 	int i, j, k, x;
 
@@ -1513,21 +1514,22 @@ static int el_text(struct ast_channel *ast, const char *text)
 		return 0;
 	}
 
-	cmd = strtok_r(buf, &delim, &saveptr);
+	cmd = strtok_r(buf, delim, &saveptr);
 	if (!cmd) {
 		return 0;
 	}
 
-	arg1 = strtok_r(NULL, &delim, &saveptr);
-	strtok_r(NULL, &delim, &saveptr);
-	strtok_r(NULL, &delim, &saveptr);
-	arg4 = strtok_r(NULL, &delim, &saveptr);
+	arg1 = strtok_r(NULL, delim, &saveptr);
+	strtok_r(NULL, delim, &saveptr);
+	strtok_r(NULL, delim, &saveptr);
+	arg4 = strtok_r(NULL, delim, &saveptr);
 
 	if (!strcasecmp(cmd, "D")) {
 		sprintf(str, "3%06u", p->nodenum);
 		/* if not for this one, we cant go any farther */
-		if (strcmp(arg1, str))
+		if (strcmp(arg1, str)) {
 			return 0;
+		}
 		ast_senddigit(ast, *arg4, 0);
 		return 0;
 	}

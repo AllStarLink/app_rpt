@@ -122,7 +122,8 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 	for (i = 0; i < nrpts; i++) {
 		if (node && !strcmp(node, rpt_vars[i].name)) {
 			struct ast_channel *rxchan = NULL;
-			char rxchanname[128];
+			char rxchanname[256];
+			int pseudo = 0;
 			rpt_manager_success(ses, m);
 			astman_append(ses, "Node: %s\r\n", node);
 
@@ -275,26 +276,32 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 
 			/* Get variables info */
 			j = 0;
-
-			/* rxchan might've disappeared in the meantime. Verify it still exists before we try to lock it.
-			 * XXX This was added to address assertions due to bad locking, but app_rpt should probably
-			 * be globally ref'ing the channel and holding it until it unloads. Should be investigated. */
-			if (strcasecmp(rxchanname, "DAHDI/pseudo")) {
+			if (!strcasecmp(rxchanname, "DAHDI/pseudo")) {
 				/* DAHDI/pseudo isn't a real channel name, calling ast_channel_get_by_name
 				 * will always fail, so avoid an unnecessary traversal of the channels container for nothing. */
+				pseudo = 1;
+			} else {
 				rxchan = ast_channel_get_by_name(rxchanname);
 			}
-			if (rxchan) {
-				ast_assert(rxchan == rpt_vars[i].rxchannel);
+			/* rxchan might've disappeared in the meantime. Verify it still exists before we try to lock it,
+			 * at least unless it's a DAHDI pseudo channel.
+			 * XXX This was added to address assertions due to bad locking, but app_rpt should probably
+			 * be globally ref'ing the channel and holding it until it unloads. Should be investigated. */
+			if (rxchan || pseudo) {
+				if (rxchan) {
+					ast_assert(rxchan == rpt_vars[i].rxchannel);
+				}
 				ast_channel_lock(rpt_vars[i].rxchannel);
 				AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[i].rxchannel), newvariable, entries) {
 					j++;
 					astman_append(ses, "Var: %s=%s\r\n", ast_var_name(newvariable), ast_var_value(newvariable));
 				}
 				ast_channel_unlock(rpt_vars[i].rxchannel);
-				ast_channel_unref(rxchan);
+				if (rxchan) {
+					ast_channel_unref(rxchan);
+				}
 			} else {
-				ast_debug(1, "Channel %s does not exist, cannot access variables\n", rxchanname);
+				ast_log(LOG_WARNING, "Channel %s does not exist, cannot access variables\n", rxchanname);
 			}
 
 			/* Output RPT status states */

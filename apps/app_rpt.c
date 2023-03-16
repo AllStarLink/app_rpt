@@ -274,6 +274,7 @@
 
 /*** MODULEINFO
 	<depend>tonezone</depend>
+	<depend>res_curl</depend>
 	<depend>curl</depend>
 	<depend>dahdi</depend>
 	<support_level>extended</support_level>
@@ -296,7 +297,6 @@
 #include <sys/time.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
-#include <sys/io.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fnmatch.h>
@@ -326,6 +326,10 @@
 #include "asterisk/dsp.h"
 
 #include "app_rpt/app_rpt.h"
+
+#ifdef HAVE_SYS_IO
+#include <sys/io.h>
+#endif
 
 #include "app_rpt/rpt_mdc1200.h"
 
@@ -2951,8 +2955,7 @@ static void *rpt(void *this)
 		usleep(100000);
 		rpt_mutex_lock(&myrpt->lock);
 	}
-/*! \todo XXX <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
-#if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__) || defined(__arm__)
+#ifdef HAVE_SYS_IO
 	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_RBI)) && (ioperm(myrpt->p.iobase, 1, 1) == -1)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_log(LOG_WARNING, "Can't get io permission on IO port %x hex\n", myrpt->p.iobase);
@@ -2995,9 +2998,7 @@ static void *rpt(void *this)
 	/*! \todo call ao2_ref(cap, -1); on all exit points? */
 
 	myrpt->rxchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-	myrpt->dahdirxchannel = NULL;
-	if (!strcasecmp(tmpstr, "DAHDI"))
-		myrpt->dahdirxchannel = myrpt->rxchannel;
+	myrpt->dahdirxchannel = !strcasecmp(tmpstr, "DAHDI") ? myrpt->rxchannel : NULL;
 	if (myrpt->rxchannel) {
 		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY) {
 			ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
@@ -3035,8 +3036,9 @@ static void *rpt(void *this)
 		}
 		*tele++ = 0;
 		myrpt->txchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo"))
+		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo")) {
 			myrpt->dahditxchannel = myrpt->txchannel;
+		}
 		if (myrpt->txchannel) {
 			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY) {
 				ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
@@ -8038,4 +8040,5 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Ba
 	.load = load_module,
 	.unload = unload_module,
 	.reload = reload,
+	.requires = "res_curl",
 );
