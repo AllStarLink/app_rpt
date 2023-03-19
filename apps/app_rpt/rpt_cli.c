@@ -1068,6 +1068,47 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 	return (0);
 }
 
+static int rpt_show_channels(int fd, int argc, const char *const *argv)
+{
+	int i, this_rpt = -1;
+	int nrpts = rpt_num_rpts();
+
+	if (argc != 4) {
+		return RESULT_SHOWUSAGE;
+	}
+
+	for (i = 0; i < nrpts; i++) {
+		if (!strcmp(argv[3], rpt_vars[i].name)) {
+			this_rpt = i;
+			break;
+		}
+	}
+
+	if (this_rpt < 0) {
+		ast_cli(fd, "Unknown node number %s.\n", argv[3]);
+		return RESULT_FAILURE;
+	}
+
+#define DUMP_CHANNEL(name) ast_cli(fd, "%-25s: %s\n", #name, rpt_vars[this_rpt].name ? ast_channel_name(rpt_vars[this_rpt].name) : "")
+	rpt_mutex_lock(&rpt_vars[this_rpt].lock);
+	ast_cli(fd, "RPT channels for node %s\n", argv[3]);
+	DUMP_CHANNEL(rxchannel);
+	DUMP_CHANNEL(txchannel);
+	DUMP_CHANNEL(monchannel);
+	DUMP_CHANNEL(parrotchannel);
+	DUMP_CHANNEL(pchannel);
+	DUMP_CHANNEL(txpchannel);
+	DUMP_CHANNEL(dahdirxchannel);
+	DUMP_CHANNEL(dahditxchannel);
+	DUMP_CHANNEL(telechannel);
+	DUMP_CHANNEL(btelechannel);
+	DUMP_CHANNEL(voxchannel);
+	rpt_mutex_unlock(&rpt_vars[this_rpt].lock);
+#undef DUMP_CHANNEL
+
+	return (0);
+}
+
 /*
 * Display a node's main channel variables from the command line 
 */
@@ -1351,6 +1392,20 @@ static char *handle_cli_showvars(struct ast_cli_entry *e, int cmd, struct ast_cl
 	return res2cli(rpt_do_showvars(a->fd, a->argc, a->argv));
 }
 
+static char *handle_cli_show_channels(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "rpt show channels";
+		e->usage = "Usage: rpt show channels <nodename>\n"
+			"	Display all the Asterisk channels for a node.\n";
+		return NULL;
+	case CLI_GENERATE:
+		return NULL;
+	}
+	return res2cli(rpt_show_channels(a->fd, a->argc, a->argv));
+}
+
 static char *handle_cli_lookup(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -1440,6 +1495,7 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_cmd, "Execute a DTMF function"),
 	AST_CLI_DEFINE(handle_cli_setvar, "Set an Asterisk channel variable"),
 	AST_CLI_DEFINE(handle_cli_showvars, "Display Asterisk channel variables"),
+	AST_CLI_DEFINE(handle_cli_show_channels, "Display Asterisk channels for a node"),
 	AST_CLI_DEFINE(handle_cli_localplay, "Playback an audio file (local)"),
 	AST_CLI_DEFINE(handle_cli_sendall, "Send a Text message to all connected nodes"),
 	AST_CLI_DEFINE(handle_cli_sendtext, "Send a Text message to a specified nodes"),
