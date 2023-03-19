@@ -883,7 +883,6 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 
 int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
-	pthread_attr_t attr;
 	int i, index, paramlength, nostar = 0;
 	char *lparam;
 	char *value = NULL;
@@ -915,13 +914,11 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 		myrpt->patchvoxalways = 0;
 		ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT - 1);
 		memset(myrpt->patchexten, 0, sizeof(myrpt->patchexten));
-
 	}
 	if (param) {
 		/* Process parameter list */
 		lparam = ast_strdup(param);
 		if (!lparam) {
-			ast_log(LOG_ERROR, "App_rpt out of memory on line %d\n", __LINE__);
 			return DC_ERROR;
 		}
 		paramlength = finddelim(lparam, paramlist, 20);
@@ -934,31 +931,24 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 				case 1:		/* context */
 					strncpy(myrpt->patchcontext, value, MAXPATCHCONTEXT - 1);
 					break;
-
 				case 2:		/* dialtime */
 					myrpt->patchdialtime = atoi(value);
 					break;
-
 				case 3:		/* farenddisconnect */
 					myrpt->patchfarenddisconnect = atoi(value);
 					break;
-
 				case 4:		/* noct */
 					myrpt->patchnoct = atoi(value);
 					break;
-
 				case 5:		/* quiet */
 					myrpt->patchquiet = atoi(value);
 					break;
-
 				case 6:		/* voxalways */
 					myrpt->patchvoxalways = atoi(value);
 					break;
-
 				case 7:		/* exten */
 					strncpy(myrpt->patchexten, value, AST_MAX_EXTENSION - 1);
 					break;
-
 				default:
 					break;
 				}
@@ -989,9 +979,7 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 	myrpt->cidx = 0;
 	myrpt->exten[myrpt->cidx] = 0;
 	rpt_mutex_unlock(&myrpt->lock);
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&myrpt->rpt_call_thread, &attr, rpt_call, (void *) myrpt);
+	ast_pthread_create_detached(&myrpt->rpt_call_thread, NULL, rpt_call, (void *) myrpt);
 	return DC_COMPLETE;
 }
 
