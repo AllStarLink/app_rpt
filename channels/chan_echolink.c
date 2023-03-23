@@ -94,9 +94,9 @@ do not use 127.0.0.1
 
 /*
  * Echolink protocol information
- * RTP voice data is passed on port 5198 UDP
- * RTCP data is passed on port 5199 UDP
- * The directory server information is downloaded on port 5200 TCP
+ * RTP voice data is passed on port 5198 UDP.
+ * RTCP data is passed on port 5199 UDP.
+ * The directory server information is downloaded on port 5200 TCP.
  *
  * The RTP channel contains voice and text messages.  Text messages begin with 0x6f.
  * We send a text message with our connections each time we get or release a
@@ -439,7 +439,7 @@ struct rtcp_sdes_request {
 };
 
 /*!
- * \brief RTP Control Packet common header word.
+ * \brief RTCP Control Packet common header word.
  */
 struct rtcp_common_t {
 #ifdef RTP_BIG_ENDIAN
@@ -575,7 +575,6 @@ static struct ast_channel_tech el_tech = {
 * CLI extensions
 */
 
-/* Debug mode */
 static int el_do_debug(int fd, int argc, const char *const *argv);
 static int el_do_dbdump(int fd, int argc, const char *const *argv);
 static int el_do_dbget(int fd, int argc, const char *const *argv);
@@ -590,7 +589,8 @@ static char dbget_usage[] =
 #define mythread_exit(nothing) __mythread_exit(nothing, __LINE__)
 
 /*!
- * \brief Cleans up the application when the main thread exits.
+ * \brief Cleans up the application when a serious internal error occurs.
+ * It forces app_rpt to restart.
  * \param nothing	Pointer to NULL (NULL is passed from all routines)
  * \param line		Line where the exit originated
  */
@@ -853,7 +853,7 @@ static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 /*!
  * \brief Make a sdes packet with our nodes information.
  * The RTP version = 3, RTP packet type = 201.
- * The RTCP: version = 2, packet type = 202.
+ * The RTCP: version = 3, packet type = 202.
  * \param pkt			Pointer to buffer for sdes packet
  * \param pktLen		Length of packet buffer
  * \param call			Pointer to callsign
@@ -1152,7 +1152,7 @@ static int is_rtcp_bye(unsigned char *p, int len)
 /*!
  * \brief Determine if the packet is of type sdes.
  * The RTP packet type must be 200 or 201.
- * The RTCP packet type must be 203.
+ * The RTCP packet type must be 202.
  * \param p				Buffer of packet to test.
  * \param len			Buffer length.
  * \retval 1 			Is a sdes packet.
@@ -1551,7 +1551,7 @@ static int compare_ip(const void *pa, const void *pb)
 
 /* Echolink ---> Echolink */
 /*!
- * \brief Send audio from echolink to echolink to all but connectly connecting node.
+ * \brief Send audio from echolink to echolink to all but current node.
  * \param nodep		Pointer to el_node struct.
  * \param which		Enum for VISIT used by twalk.
  * \param depth		Level of the node in the tree. 
@@ -1778,8 +1778,11 @@ static int find_delete(struct el_node *key)
 }
 
 /*!
- * \brief Process commands received from our local tcp port.
- * List commands:
+ * \brief Process commands received from our local machine.
+ * Commands: 
+ *	o.conip <IPaddress>    (request a connect)
+ *	o.dconip <IPaddress>   (request a disconnect)
+ *	o.rec                  (turn on/off recording)
  * \param buf			Pointer to buffer with command data.
  * \param fromip		Pointer to ip address that sent the command.
  * \param instp			Poiner to Echolink instance.
@@ -2155,7 +2158,7 @@ static struct ast_channel *el_new(struct el_pvt *i, int state, unsigned int node
 /*!
  * \brief Echolink request from Asterisk.
  * This is a standard Asterisk function - requester.
- * Asterisk calls this function to to setup proivate data structures.
+ * Asterisk calls this function to to setup private data structures.
  * \param type			Pointer to type of channel to request.
  * \param cap			Pointer to format capabilities for the channel.
  * \param assignedids	Pointer to unique ID string to assign to the channel.
@@ -2726,6 +2729,7 @@ static int do_el_directory(char *hostname)
 			return -1;
 		}
 	}
+	/* read the header line with the line count and possibly the snapshot id */
 	if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 		ast_log(LOG_ERROR, "Error in directory download (header) on %s\n", hostname);
 		close(sock);
@@ -2753,11 +2757,18 @@ static int do_el_directory(char *hostname)
 	*/
 	if (!dir_partial)
 		el_zapem();
+	/* 
+		process the directory entries 
+	*/
 	for (;;) {
+		/* read the callsign line 
+		   this line could also contain the end of list identicator
+		*/
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1)
 			break;
 		if (*str <= ' ')
 			break;
+		/* see if we are at the end of the current list */
 		if (!strncmp(str, "+++", 3)) {
 			if (delmode)
 				break;
@@ -2774,6 +2785,7 @@ static int do_el_directory(char *hostname)
 			if (delmode)
 				continue;
 		}
+		/* read the location / status line (we will not use this line) */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
 			el_zapem();
@@ -2781,6 +2793,7 @@ static int do_el_directory(char *hostname)
 			inflateEnd(&z);
 			return -1;
 		}
+		/* read the node number line */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
 			el_zapem();
@@ -2791,6 +2804,7 @@ static int do_el_directory(char *hostname)
 		if (str[strlen(str) - 1] == '\n')
 			str[strlen(str) - 1] = 0;
 		ast_copy_string(nodenum, str, sizeof(nodenum));
+		/* read the ip address line */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
 			el_zapem();
@@ -2801,8 +2815,10 @@ static int do_el_directory(char *hostname)
 		if (str[strlen(str) - 1] == '\n')
 			str[strlen(str) - 1] = 0;
 		ast_copy_string(ipaddr, str, sizeof(ipaddr));
+		/* every 10 records, sleep for a short time */
 		if (!(n % 10))
 			usleep(2000);		/* To get to dry land */
+		/* add this entry to our table */
 		ast_mutex_lock(&el_db_lock);
 		el_db_put(nodenum, ipaddr, call);
 		ast_mutex_unlock(&el_db_lock);
@@ -3008,8 +3024,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 }
 
 /*!
- * \brief This routine watches the udp/tcp ports for activity.
- * It runs it its own thread and processes RTP packets as they arrive.
+ * \brief This routine watches the udp ports for activity.
+ * It runs it its own thread and processes RTP / RTCP packets as they arrive.
  * One thread is required for each echolink instance.
  * It receives data from the audio socket and control socket.
  * Connection requests arrive over the control socket.
@@ -3286,6 +3302,7 @@ static void *el_reader(void *data)
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
 				ast_copy_string(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
+				/* packets that start with 0x6f are text packets */
 				if (buf[0] == 0x6f) {
 					process_cmd(buf, instp->el_node_test.ip, instp);
 				} else {
@@ -3348,7 +3365,8 @@ static void *el_reader(void *data)
 
 /*!
  * \brief Stores the information from the configuration file to memory.
- * It starts a backgound thread for processing connections for this instance.
+ * It setup up udp sockets for the echolink ports and starts background 
+ * threads for processing connections for this instance and registration.
  * \param cfg		Pointer to struct ast_config.
  * \param ctg		Pointer to category to load.
  * \retval 0		If configuration load is successful.
