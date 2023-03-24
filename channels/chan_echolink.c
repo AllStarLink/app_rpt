@@ -149,18 +149,18 @@ do not use 127.0.0.1
  * The deflated stream will start with @@@ or DDD as described above.  Each line is terminated 
  * with 0x0a.
  * Here is an example:
- *DDD
- *482:687993635
- *E25HL-L
- *.                          [BUSY 02:18]
- *541765
- *137.226.114.63
- *VE3ABZ-L
- *.                          [ON 14:09]
- *549404
- *148.170.130.43
- *K1JTV
- *.       
+ *  DDD
+ *  482:687993635
+ *  E25HL-L
+ *  .                          [BUSY 02:18]
+ *  541765
+ *  137.226.114.63
+ *  VE3ABZ-L
+ *  .                          [ON 14:09]
+ *  549404
+ *  148.170.130.43
+ *  K1JTV
+ *  .       
  * The line following the DDD has two formats - for uncompressed files, there is a single number
  * that represents the number of lines.  For compressed formats, the first number is the number of
  * lines, a colon, followed by the snapshot id. 
@@ -250,11 +250,11 @@ do not use 127.0.0.1
 #define	DELIMCHR ','
 #define	QUOTECHR 34
 /* 
-   If you want to compile/link this code
-   on "BIG-ENDIAN" platforms, then
-   use this: #define RTP_BIG_ENDIAN
-   Have only tested this code on "little-endian"
-   platforms running Linux.
+ * If you want to compile/link this code
+ * on "BIG-ENDIAN" platforms, then
+ * use this: #define RTP_BIG_ENDIAN
+ * Have only tested this code on "little-endian"
+ * platforms running Linux.
 */
 static const char tdesc[] = "Echolink channel driver";
 static char type[] = "echolink";
@@ -1072,8 +1072,8 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 		r->item[i].r_text = NULL;
 
 	/* 	the RTP version must be 3 or 1 
-		the payload type must be 202
-		the CSRC must be greater than zero
+	 *	the payload type must be 202
+	 *	the CSRC must be greater than zero
 	*/
 	while ((p[0] >> 6 & 3) == 3 || (p[0] >> 6 & 3) == 1) {
 		if ((p[1] == 202) && ((p[0] & 0x1F) > 0)) {
@@ -1130,8 +1130,8 @@ static int is_rtcp_bye(unsigned char *p, int len)
 	int sawbye = 0;
 
 	/* 	the RTP version must be 3 or 1 
-		the padding bit must not be set
-		the payload type must be 200 or 201
+	 *	the padding bit must not be set
+	 *	the payload type must be 200 or 201
 	*/
 	if ((((p[0] >> 6) & 3) != 3 && ((p[0] >> 6) & 3) != 1) || ((p[0] & 0x20) != 0) || ((p[1] != 200) && (p[1] != 201)))
 		return 0;
@@ -1164,8 +1164,8 @@ static int is_rtcp_sdes(unsigned char *p, int len)
 	int sawsdes = 0;
 	
 	/* 	the RTP version must be 3 or 1 
-		the padding bit must not be set
-		the payload type must be 200 or 201
+	 *	the padding bit must not be set
+	 *	the payload type must be 200 or 201
 	*/
 	if ((((p[0] >> 6) & 3) != 3 && ((p[0] >> 6) & 3) != 1) || ((p[0] & 0x20) != 0) || ((p[1] != 200) && (p[1] != 201)))
 		return 0;
@@ -1202,7 +1202,8 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 		return -1;
 	}
 	/* When we call, it just works, really, there's no destination...  Just
-	   ring the phone and wait for someone to answer */
+	 * ring the phone and wait for someone to answer 
+	*/
 	ast_debug(1, "Calling %s on %s\n", dest, ast_channel_name(ast));
 	if (*dest) {				/* if number specified */
 		char *str, *cp;
@@ -1300,8 +1301,8 @@ static struct el_pvt *el_alloc(void *data)
 
 /*!
  * \brief Asterisk hangup function.
- * \param ast			Pointer to Asterisk channel.
- * \retval 0			If successful.			
+ * \param ast			Asterisk channel.
+ * \retval 0			Always returns 0.			
  */
 static int el_hangup(struct ast_channel *ast)
 {
@@ -2700,9 +2701,9 @@ static int do_el_directory(char *hostname)
 	dir_compressed = 1;
 	dir_partial = 0;
 	/* Determine if the response is full, partial or the stream is compressed.
-	   @@@ indicates a full directory, DDD indicates a partial directory.
-	   If we don't find one of these indicates, the stream is compressed.
-	   We will decompress the stream and test again.
+	 * @@@ indicates a full directory, DDD indicates a partial directory.
+	 * If we don't find one of these indicates, the stream is compressed.
+	 * We will decompress the stream and test again.
 	*/
 	if (!strncmp(str, "@@@", 3)) {
 		dir_partial = 0;
@@ -2753,16 +2754,16 @@ static int do_el_directory(char *hostname)
 	}
 	delmode = 0;
 	/* if the returned directory is not partial - we should
-	   delete all existing directory messages
+	 * delete all existing directory messages
 	*/
 	if (!dir_partial)
 		el_zapem();
 	/* 
-		process the directory entries 
+	 *	process the directory entries 
 	*/
 	for (;;) {
 		/* read the callsign line 
-		   this line could also contain the end of list identicator
+		 * this line could also contain the end of list identicator
 		*/
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1)
 			break;
@@ -3024,8 +3025,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 }
 
 /*!
- * \brief This routine watches the udp ports for activity.
- * It runs it its own thread and processes RTP / RTCP packets as they arrive.
+ * \brief This routine watches the UDP ports for activity.
+ * It runs in its own thread and processes RTP / RTCP packets as they arrive.
  * One thread is required for each echolink instance.
  * It receives data from the audio socket and control socket.
  * Connection requests arrive over the control socket.
@@ -3062,7 +3063,7 @@ static void *el_reader(void *data)
 	ast_mutex_lock(&instp->lock);
 	while (run_forever) {
 
-		/* Send aprs information every EL_APRS_INTERVAL */
+		/* Send APRS information every EL_APRS_INTERVAL */
 		time(&now);
 		if (instp->aprstime <= now) {
 			char aprsstr[512], aprscall[256], latc, lonc;
@@ -3632,11 +3633,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
-/*!
- * \brief Unloads this module.
- * This is a standard Asterisk function.
- * \retval 0		Always returns zero.
- */
 static int unload_module(void)
 {
 	int n;
@@ -3679,12 +3675,6 @@ static int unload_module(void)
 	return 0;
 }
 
-/*!
- * \brief Loads this module.
- * This is a standard Asterisk function.
- * \retval AST_MODULE_LOAD_DECLINE	If module load is unsuccessful.
- * \retval 0						if module load is successful.
- */
  static int load_module(void)
 {
 	struct ast_config *cfg = NULL;
