@@ -1239,6 +1239,20 @@ void *rpt_call(void *this)
 	myrpt->calldigittimer = 0;
 	aborted = 0;
 
+	/* Reverse engineering of callmode Mar 2023 NA
+	 * XXX These should be converted to enums once we're sure about these, for programmer sanity.
+	 *
+	 * If 1 or 4, then we wait.
+	 * 0 = abort this call
+	 * 1 = no auto patch extension
+	 * 2 = auto patch extension exists
+	 * 3 = ?
+	 * 4 = congestion
+	 *
+	 * We wait up to patchdialtime for digits to be received.
+	 * If there's no auto patch extension, then we'll wait for PATCH_DIALPLAN_TIMEOUT ms and then play an announcement.
+	 */
+
 	if (myrpt->patchexten[0]) {
 		strcpy(myrpt->exten, myrpt->patchexten);
 		myrpt->callmode = 2;
@@ -1279,9 +1293,7 @@ void *rpt_call(void *this)
 				tone_zone_play_tone(ast_channel_fd(genchannel, 0), DAHDI_TONE_CONGESTION);
 			}
 		}
-		rpt_mutex_lock(&myrpt->blocklock);
 		res = ast_safe_sleep(mychannel, MSWAIT);
-		rpt_mutex_unlock(&myrpt->blocklock);
 		if (res < 0) {
 			ast_debug(1, "ast_safe_sleep=%i\n", res);
 			ast_hangup(mychannel);
