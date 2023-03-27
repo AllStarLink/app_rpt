@@ -28,11 +28,11 @@ recfile = /tmp/echolink_recorded.gsm	;
 astnode = 1999						; Change this!
 context = radio-secure				; Default in code is echolink-in
 
-; Max 3 servers
+; Max 4 servers
 server1 = nasouth.echolink.org
 server2 = naeast.echolink.org
-server3 = server3.echolink.org
-;server4 = backup.echolink.org
+server3 = servers.echolink.org
+server4 = backup.echolink.org
 
 ; To deny w6xxx you would add the statement: deny = w6xxx
 ; To prohibit computer-based connections you would write: permit = *-*

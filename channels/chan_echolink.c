@@ -232,7 +232,7 @@ do not use 127.0.0.1
 #define EL_PWD_SIZE 16
 #define EL_EMAIL_SIZE 32
 #define EL_QTH_SIZE 32
-#define EL_MAX_SERVERS 3
+#define EL_MAX_SERVERS 4
 #define EL_SERVERNAME_SIZE 63
 #define	EL_MAX_INSTANCES 100
 #define	EL_MAX_CALL_LIST 60
@@ -3380,6 +3380,8 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	struct ast_hostent ah;
 	struct el_instance *instp;
 	struct sockaddr_in si_me;
+	int serverindex;
+	char servername[9];
 
 	if (ninstances >= EL_MAX_INSTANCES) {
 		ast_log(LOG_ERROR, "Too many instances specified\n");
@@ -3480,24 +3482,17 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		ast_copy_string(instp->myemail, val, EL_EMAIL_SIZE);
 
 	instp->useless_flag_1 = 0;
-
-	val = (char *) ast_variable_retrieve(cfg, ctg, "server1");
-	if (!val)
-		instp->elservers[0][0] = '\0';
-	else
-		ast_copy_string(instp->elservers[0], val, EL_SERVERNAME_SIZE);
-
-	val = (char *) ast_variable_retrieve(cfg, ctg, "server2");
-	if (!val)
-		instp->elservers[1][0] = '\0';
-	else
-		ast_copy_string(instp->elservers[1], val, EL_SERVERNAME_SIZE);
-
-	val = (char *) ast_variable_retrieve(cfg, ctg, "server3");
-	if (!val)
-		instp->elservers[2][0] = '\0';
-	else
-		ast_copy_string(instp->elservers[2], val, EL_SERVERNAME_SIZE);
+	
+	for (serverindex = 0; serverindex < EL_MAX_SERVERS; serverindex++) {
+		snprintf(servername,sizeof(servername), "server%i", serverindex + 1);
+		val = (char *) ast_variable_retrieve(cfg, ctg, servername);
+		if (!val) {
+			instp->elservers[serverindex][0] = '\0';
+		}
+		else {
+			ast_copy_string(instp->elservers[serverindex], val, EL_SERVERNAME_SIZE);
+		}
+	}
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "deny");
 	if (val)
