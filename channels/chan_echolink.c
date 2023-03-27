@@ -3484,12 +3484,11 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	instp->useless_flag_1 = 0;
 	
 	for (serverindex = 0; serverindex < EL_MAX_SERVERS; serverindex++) {
-		snprintf(servername,sizeof(servername), "server%i", serverindex + 1);
+		snprintf(servername, sizeof(servername), "server%i", serverindex + 1);
 		val = (char *) ast_variable_retrieve(cfg, ctg, servername);
 		if (!val) {
 			instp->elservers[serverindex][0] = '\0';
-		}
-		else {
+		} else {
 			ast_copy_string(instp->elservers[serverindex], val, EL_SERVERNAME_SIZE);
 		}
 	}
