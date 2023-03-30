@@ -635,7 +635,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		if (!res) {
 			res = ast_stream_and_wait(mychannel, "rpt/connected", "");
 		}
-		res = ast_stream_and_wait(mychannel, "digits/2", "");
+		res = ast_stream_and_wait(mychannel, "rpt/to", "");
 		saynode(myrpt, mychannel, strs[1]);
 		return;
 	}
@@ -1653,7 +1653,7 @@ treataslocal:
 			res = ast_stream_and_wait(mychannel, "rpt/connected", "");
 		}
 		if (!res) {
-			res = ast_stream_and_wait(mychannel, "digits/2", "");
+			res = ast_stream_and_wait(mychannel, "rpt/to", "");
 		}
 		res = saynode(myrpt, mychannel, myrpt->name);
 		imdone = 1;
