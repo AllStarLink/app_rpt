@@ -493,7 +493,6 @@ struct eldb {
 AST_MUTEX_DEFINE_STATIC(el_db_lock);
 AST_MUTEX_DEFINE_STATIC(el_count_lock);
 
-int debug = 0;
 struct el_instance *instances[EL_MAX_INSTANCES];
 int ninstances = 0;
 
@@ -578,8 +577,6 @@ static struct ast_channel_tech el_tech = {
 static int el_do_debug(int fd, int argc, const char *const *argv);
 static int el_do_dbdump(int fd, int argc, const char *const *argv);
 static int el_do_dbget(int fd, int argc, const char *const *argv);
-
-static char debug_usage[] = "Usage: echolink debug level {0-7}\n" "       Enables debug messages in app_rpt\n";
 
 static char dbdump_usage[] = "Usage: echolink dbdump [nodename|callsign|ipaddr]\n" "       Dumps entire echolink db\n";
 
@@ -2198,34 +2195,6 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	return tmp;
 }
 
-/*
-* Enable or disable debug output at a given level at the console
-*/
-/*!
- * \brief Process asterisk cli request to enable or disable debug for this module.
- * \param fd			Asterisk cli file descriptor.
- * \param argc			Number of arguments.
- * \param argv			Pointer to arguments.
- * \retval 				Cli success, showusage, or failure.
- */
-static int el_do_debug(int fd, int argc, const char *const *argv)
-{
-	int newlevel;
-
-	if (argc != 4)
-		return RESULT_SHOWUSAGE;
-	newlevel = atoi(argv[3]);
-	if ((newlevel < 0) || (newlevel > 7))
-		return RESULT_SHOWUSAGE;
-	if (newlevel)
-		ast_cli(fd, "echolink Debugging enabled, previous level: %d, new level: %d\n", debug, newlevel);
-	else
-		ast_cli(fd, "echolink Debugging disabled\n");
-
-	debug = newlevel;
-	return RESULT_SUCCESS;
-}
-
 /*!
  * \brief Process asterisk cli request to dump internal database entries.
  * \param fd			Asterisk cli fd
@@ -2307,26 +2276,6 @@ static char *res2cli(int r)
 }
 
 /*!
- * \brief Handle asterisk cli request for debug
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \retval 				Cli success or failure.
- */
-static char *handle_cli_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "echolink debug level";
-		e->usage = debug_usage;
-		return NULL;
-	case CLI_GENERATE:
-		return NULL;
-	}
-	return res2cli(el_do_debug(a->fd, a->argc, a->argv));
-}
-
-/*!
  * \brief Handle asterisk cli request for dbdump
  * \param e				Asterisk cli entry.
  * \param cmd			Cli command type.
@@ -2370,7 +2319,6 @@ static char *handle_cli_dbget(struct ast_cli_entry *e, int cmd, struct ast_cli_a
  * \brief Define cli entries for this module
  */
 static struct ast_cli_entry el_cli[] = {
-	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
 	AST_CLI_DEFINE(handle_cli_dbdump, "Dump entire echolink db"),
 	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry")
 };
