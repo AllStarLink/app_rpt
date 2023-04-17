@@ -574,7 +574,6 @@ static struct ast_channel_tech el_tech = {
 * CLI extensions
 */
 
-static int el_do_debug(int fd, int argc, const char *const *argv);
 static int el_do_dbdump(int fd, int argc, const char *const *argv);
 static int el_do_dbget(int fd, int argc, const char *const *argv);
 
