@@ -361,8 +361,6 @@ struct el_instance {
 	uint16_t ctrl_port;
 	int fdr;
 	unsigned long seqno;
-	int useless_flag_1;
-	struct el_pvt *confp;
 	struct gsmVoice_t audio_all_but_one;
 	struct gsmVoice_t audio_all;
 	struct el_node el_node_test;
@@ -536,8 +534,6 @@ static int is_rtcp_bye(unsigned char *p, int len);
 static int is_rtcp_sdes(unsigned char *p, int len);
  /* remove binary tree functions if Asterisk has similar functionality */
 static int compare_ip(const void *pa, const void *pb);
-static void send_audio_all_but_one(const void *nodep, const VISIT which, const int depth);
-static void send_audio_all(const void *nodep, const VISIT which, const int depth);
 static void send_heartbeat(const void *nodep, const VISIT which, const int depth);
 static void send_info(const void *nodep, const VISIT which, const int depth);
 static void print_users(const void *nodep, const VISIT which, const int depth);
@@ -1276,20 +1272,17 @@ static struct el_pvt *el_alloc(void *data)
 
 		p->keepalive = KEEPALIVE_TIME;
 		p->instp = instances[n];
-		p->instp->confp = p;	/* save for conference mode */
-		if (!p->instp->useless_flag_1) {
-			p->dsp = ast_dsp_new();
-			if (!p->dsp) {
-				ast_log(LOG_ERROR, "Cannot get DSP!!\n");
-				return NULL;
-			}
-			ast_dsp_set_features(p->dsp, DSP_FEATURE_DIGIT_DETECT);
-			ast_dsp_set_digitmode(p->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
-			p->xpath = ast_translator_build_path(ast_format_slin, ast_format_gsm);
-			if (!p->xpath) {
-				ast_log(LOG_ERROR, "Cannot get translator!!\n");
-				return NULL;
-			}
+		p->dsp = ast_dsp_new();
+		if (!p->dsp) {
+			ast_log(LOG_ERROR, "Cannot get DSP!!\n");
+			return NULL;
+		}
+		ast_dsp_set_features(p->dsp, DSP_FEATURE_DIGIT_DETECT);
+		ast_dsp_set_digitmode(p->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
+		p->xpath = ast_translator_build_path(ast_format_slin, ast_format_gsm);
+		if (!p->xpath) {
+			ast_log(LOG_ERROR, "Cannot get translator!!\n");
+			return NULL;
 		}
 	}
 	return p;
@@ -1309,23 +1302,22 @@ static int el_hangup(struct ast_channel *ast)
 	struct sockaddr_in sin;
 	time_t now;
 
-	if (!instp->useless_flag_1) {
-		ast_debug(1, "Sent bye to IP address %s\n", p->ip);
-		ast_mutex_lock(&instp->lock);
-		strcpy(instp->el_node_test.ip, p->ip);
-		find_delete(&instp->el_node_test);
-		ast_mutex_unlock(&instp->lock);
-		n = rtcp_make_bye(bye, "disconnected");
-		sin.sin_family = AF_INET;
-		sin.sin_addr.s_addr = inet_addr(p->ip);
-		sin.sin_port = htons(instp->ctrl_port);
-		/* send 20 bye packets to insure that they receive this disconnect */
-		for (i = 0; i < 20; i++) {
-			sendto(instp->ctrl_sock, bye, n, 0, (struct sockaddr *) &sin, sizeof(sin));
-		}
-		time(&now);
-		if (instp->starttime < (now - EL_APRS_START_DELAY))
-			instp->aprstime = now;
+	ast_debug(1, "Sent bye to IP address %s\n", p->ip);
+	ast_mutex_lock(&instp->lock);
+	strcpy(instp->el_node_test.ip, p->ip);
+	find_delete(&instp->el_node_test);
+	ast_mutex_unlock(&instp->lock);
+	n = rtcp_make_bye(bye, "disconnected");
+	sin.sin_family = AF_INET;
+	sin.sin_addr.s_addr = inet_addr(p->ip);
+	sin.sin_port = htons(instp->ctrl_port);
+	/* send 20 bye packets to insure that they receive this disconnect */
+	for (i = 0; i < 20; i++) {
+		sendto(instp->ctrl_sock, bye, n, 0, (struct sockaddr *) &sin, sizeof(sin));
+	}
+	time(&now);
+	if (instp->starttime < (now - EL_APRS_START_DELAY)) {
+		instp->aprstime = now;
 	}
 	ast_debug(1, "el_hangup(%s)\n", ast_channel_name(ast));
 	if (!ast_channel_tech_pvt(ast)) {
@@ -1442,7 +1434,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 	if (ptr)
 		*ptr = '\0';
 
-	if (p->instp && (!p->instp->useless_flag_1) && (text[0] == 'L')) {
+	if (p->instp && (text[0] == 'L')) {
 		if (strlen(text) < 3) {
 			if (p->linkstr) {
 				ast_free(p->linkstr);
@@ -1546,40 +1538,6 @@ static int compare_ip(const void *pa, const void *pb)
 	return strncmp(((struct el_node *) pa)->ip, ((struct el_node *) pb)->ip, EL_IP_SIZE);
 }
 
-/* Echolink ---> Echolink */
-/*!
- * \brief Send audio from echolink to echolink to all but current node.
- * \param nodep		Pointer to el_node struct.
- * \param which		Enum for VISIT used by twalk.
- * \param depth		Level of the node in the tree. 
- */
-void send_audio_all_but_one(const void *nodep, const VISIT which, const int depth)
-{
-	struct sockaddr_in sin;
-	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
-
-	if ((which == leaf) || (which == postorder)) {
-		if (strncmp((*(struct el_node **) nodep)->ip, instp->el_node_test.ip, EL_IP_SIZE) != 0) {
-			sin.sin_family = AF_INET;
-			sin.sin_port = htons(instp->audio_port);
-			sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
-
-			instp->audio_all_but_one.version = 3;
-			instp->audio_all_but_one.pad = 0;
-			instp->audio_all_but_one.ext = 0;
-			instp->audio_all_but_one.csrc = 0;
-			instp->audio_all_but_one.marker = 0;
-			instp->audio_all_but_one.payt = 3;
-			instp->audio_all_but_one.seqnum = htons((*(struct el_node **) nodep)->seqnum++);
-			instp->audio_all_but_one.time = htonl(0);
-			instp->audio_all_but_one.ssrc = htonl(instp->mynode);
-
-			sendto(instp->audio_sock, (char *) &instp->audio_all_but_one, sizeof(instp->audio_all_but_one),
-				   0, (struct sockaddr *) &sin, sizeof(sin));
-		}
-	}
-}
-
 /*!
  * \brief Send audio from asterisk to echolink to one node (currently connecting node).
  * \param nodep		Pointer to el_node struct.
@@ -1610,38 +1568,6 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 			sendto(instp->audio_sock, (char *) &instp->audio_all, sizeof(instp->audio_all),
 				   0, (struct sockaddr *) &sin, sizeof(sin));
 		}
-	}
-}
-
-/* Asterisk ---> Echolink */
-/*!
- * \brief Send audio from asterisk to echolink to all connected nodes.
- * \param nodep		Pointer to el_node struct.
- * \param which		Enum for VISIT used by twalk.
- * \param depth		Level of the node in the tree.
- */
-void send_audio_all(const void *nodep, const VISIT which, const int depth)
-{
-	struct sockaddr_in sin;
-	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
-
-	if ((which == leaf) || (which == postorder)) {
-		sin.sin_family = AF_INET;
-		sin.sin_port = htons(instp->audio_port);
-		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
-
-		instp->audio_all.version = 3;
-		instp->audio_all.pad = 0;
-		instp->audio_all.ext = 0;
-		instp->audio_all.csrc = 0;
-		instp->audio_all.marker = 0;
-		instp->audio_all.payt = 3;
-		instp->audio_all.seqnum = htons((*(struct el_node **) nodep)->seqnum++);
-		instp->audio_all.time = htonl(0);
-		instp->audio_all.ssrc = htonl(instp->mynode);
-
-		sendto(instp->audio_sock, (char *) &instp->audio_all, sizeof(instp->audio_all),
-			   0, (struct sockaddr *) &sin, sizeof(sin));
 	}
 }
 
@@ -1753,7 +1679,6 @@ static void free_node(void *nodep)
 
 /*!
  * \brief Find and delete a node from our internal node list.
- * Will perform a softhangup if the useless_flag_1 is zero.
  * \param key			Poitner to Echolink node struct to delete.
  * \retval 0			If node not found.
  * \retval 1			If node found.
@@ -1767,8 +1692,7 @@ static int find_delete(struct el_node *key)
 	if (found_key) {
 		ast_debug(5, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
 		found = 1;
-		if (!(*found_key)->instp->useless_flag_1)
-			ast_softhangup((*found_key)->chan, AST_SOFTHANGUP_DEV);
+		ast_softhangup((*found_key)->chan, AST_SOFTHANGUP_DEV);
 		tdelete(key, &el_node_list, compare_ip);
 	}
 	return found;
@@ -1913,8 +1837,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct el_instance *instp = p->instp;
 	struct ast_frame fr, *f1, *f2;
 	struct el_rxqast *qpast;
-	int n, m, x;
-	struct el_rxqel *qpel;
+	int n, x;
 	char buf[GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET];
 
 	if (frame->frametype != AST_FRAME_VOICE)
@@ -1982,7 +1905,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.delivery.tv_usec = 0;
 
 			x = 0;
-			if (p->dsp && (!instp->useless_flag_1)) {
+			if (p->dsp) {
 				f2 = ast_translate(p->xpath, &fr, 0);
 				f1 = ast_dsp_process(NULL, p->dsp, f2);
 				if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN))
@@ -2013,68 +1936,35 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		fr.delivery.tv_usec = 0;
 		ast_queue_frame(ast, &fr);
 	}
-	if (p->rxkey)
+	if (p->rxkey) {
 		p->rxkey--;
-
-	if (instp->useless_flag_1 && (p->rxqel.qe_forw != &p->rxqel)) {
-		for (m = 0, qpel = p->rxqel.qe_forw; qpel != &p->rxqel; qpel = qpel->qe_forw)
-			m++;
-
-		if (m > QUEUE_OVERLOAD_THRESHOLD_EL) {
-			while (p->rxqel.qe_forw != &p->rxqel) {
-				qpel = p->rxqel.qe_forw;
-				remque((struct qelem *) qpel);
-				ast_free(qpel);
-			}
-		} else {
-			qpel = p->rxqel.qe_forw;
-			remque((struct qelem *) qpel);
-
-			memcpy(instp->audio_all_but_one.data, qpel->buf, BLOCKING_FACTOR * GSM_FRAME_SIZE);
-			ast_copy_string(instp->el_node_test.ip, qpel->fromip, EL_IP_SIZE);
-
-			ast_free(qpel);
-			ast_mutex_lock(&instp->lock);
-			twalk(el_node_list, send_audio_all_but_one);
-			ast_mutex_unlock(&instp->lock);
-
-			if (instp->fdr >= 0) {
-				int res = write(instp->fdr, instp->audio_all_but_one.data, BLOCKING_FACTOR * GSM_FRAME_SIZE);
-				if (res <= 0) {
-					ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
-				}
-			}
-		}
-	} else {
-		/* Asterisk to Echolink */
-		if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
-			struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-			ast_log(LOG_WARNING,
-					"Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
-					ast_format_get_name(frame->subclass.format),
-					ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
-					ast_format_get_name(ast_channel_readformat(ast)),
-					ast_format_get_name(ast_channel_writeformat(ast)));
-			return 0;
-		}
-		if (p->txkey || p->txindex) {
-			memcpy(instp->audio_all.data + (GSM_FRAME_SIZE * p->txindex++), frame->data.ptr, GSM_FRAME_SIZE);
-		}
-		if (p->txindex >= BLOCKING_FACTOR) {
-			ast_mutex_lock(&instp->lock);
-			if (instp->useless_flag_1) {
-				twalk(el_node_list, send_audio_all);
-			} else {
-				strcpy(instp->el_node_test.ip, p->ip);
-				twalk(el_node_list, send_audio_only_one);
-			}
-			ast_mutex_unlock(&instp->lock);
-			p->txindex = 0;
-		}
 	}
 
-	if (p->keepalive--)
+	/* Asterisk to Echolink */
+	if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
+		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+		ast_log(LOG_WARNING,
+				"Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
+				ast_format_get_name(frame->subclass.format),
+				ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
+				ast_format_get_name(ast_channel_readformat(ast)),
+				ast_format_get_name(ast_channel_writeformat(ast)));
 		return 0;
+		}
+	if (p->txkey || p->txindex) {
+		memcpy(instp->audio_all.data + (GSM_FRAME_SIZE * p->txindex++), frame->data.ptr, GSM_FRAME_SIZE);
+	}
+	if (p->txindex >= BLOCKING_FACTOR) {
+		ast_mutex_lock(&instp->lock);
+		strcpy(instp->el_node_test.ip, p->ip);
+		twalk(el_node_list, send_audio_only_one);
+		ast_mutex_unlock(&instp->lock);
+		p->txindex = 0;
+	}
+
+	if (p->keepalive--) {
+		return 0;
+	}
 	p->keepalive = KEEPALIVE_TIME;
 
 	/* Echolink: send heartbeats and drop dead stations */
@@ -2920,42 +2810,39 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 		el_node_key->instp = instp;
 		if (tsearch(el_node_key, &el_node_list, compare_ip)) {
 			ast_debug(1, "new CALL=%s,ip=%s,name=%s\n", el_node_key->call, el_node_key->ip, el_node_key->name);
-			if (instp->useless_flag_1) {
-				el_node_key->p = instp->confp;
-			} else {
-				if (p == NULL) {	/* if a new inbound call */
-					p = el_alloc((void *) instp->name);
-					if (!p) {
-						ast_log(LOG_ERROR, "Cannot alloc el channel\n");
-						return -1;
-					}
-					el_node_key->p = p;
-					ast_copy_string(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE);
-					el_node_key->chan = el_new(el_node_key->p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
-					if (!el_node_key->chan) {
-						el_destroy(el_node_key->p);
-						return -1;
-					}
-					ast_mutex_lock(&instp->lock);
-					time(&now);
-					if (instp->starttime < (now - EL_APRS_START_DELAY))
-						instp->aprstime = now;
-					ast_mutex_unlock(&instp->lock);
-				} else {
-					el_node_key->p = p;
-					ast_copy_string(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE);
-					el_node_key->chan = p->owner;
-					el_node_key->outbound = 1;
-					ast_mutex_lock(&instp->lock);
-					strcpy(instp->lastcall, mynode->callsign);
-					time(&instp->lasttime);
-					ast_mutex_unlock(&instp->lock);
-					time(&now);
-					instp->lasttime = now;
-					if (instp->starttime < (now - EL_APRS_START_DELAY))
-						instp->aprstime = now;
-					ast_mutex_unlock(&instp->lock);
+			if (p == NULL) {	/* if a new inbound call */
+				p = el_alloc((void *) instp->name);
+				if (!p) {
+					ast_log(LOG_ERROR, "Cannot alloc el channel\n");
+					return -1;
 				}
+				el_node_key->p = p;
+				ast_copy_string(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE);
+				el_node_key->chan = el_new(el_node_key->p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
+				if (!el_node_key->chan) {
+					el_destroy(el_node_key->p);
+					return -1;
+				}
+				ast_mutex_lock(&instp->lock);
+				time(&now);
+				if (instp->starttime < (now - EL_APRS_START_DELAY))
+					instp->aprstime = now;
+				ast_mutex_unlock(&instp->lock);
+			} else {
+				el_node_key->p = p;
+				ast_copy_string(el_node_key->p->ip, instp->el_node_test.ip, EL_IP_SIZE);
+				el_node_key->chan = p->owner;
+				el_node_key->outbound = 1;
+				ast_mutex_lock(&instp->lock);
+				strcpy(instp->lastcall, mynode->callsign);
+				time(&instp->lasttime);
+				ast_mutex_unlock(&instp->lock);
+				time(&now);
+				instp->lasttime = now;
+				if (instp->starttime < (now - EL_APRS_START_DELAY)) {
+					instp->aprstime = now;
+				}
+				ast_mutex_unlock(&instp->lock);
 			}
 		} else {
 			ast_log(LOG_ERROR, "tsearch() failed to add CALL=%s,ip=%s,name=%s\n",
@@ -2986,7 +2873,6 @@ static void *el_reader(void *data)
 	struct sockaddr_in sin, sin1;
 	int i, j, x;
 	struct el_rxqast *qpast;
-	struct el_rxqel *qpel;
 	struct ast_frame fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -3289,16 +3175,6 @@ static void *el_reader(void *data)
 										   p->rxqast.qe_back);
 								}
 							}
-							if (!instp->useless_flag_1)
-								continue;
-							/* need complete packet and IP address for Echolink */
-							qpel = ast_malloc(sizeof(struct el_rxqel));
-							if (qpel) {
-								memcpy(qpel->buf, ((struct gsmVoice_t *) buf)->data, BLOCKING_FACTOR * GSM_FRAME_SIZE);
-								ast_copy_string(qpel->fromip, instp->el_node_test.ip, EL_IP_SIZE);
-								insque((struct qelem *) qpel, (struct qelem *)
-									   p->rxqel.qe_back);
-							}
 						}
 					}
 				}
@@ -3427,8 +3303,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	else
 		ast_copy_string(instp->myemail, val, EL_EMAIL_SIZE);
 
-	instp->useless_flag_1 = 0;
-	
 	for (serverindex = 0; serverindex < EL_MAX_SERVERS; serverindex++) {
 		snprintf(servername, sizeof(servername), "server%i", serverindex + 1);
 		val = (char *) ast_variable_retrieve(cfg, ctg, servername);
