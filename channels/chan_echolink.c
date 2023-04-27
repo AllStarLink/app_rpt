@@ -1218,13 +1218,13 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 		/* get the ip address for the node */
 		ast_mutex_lock(&el_db_lock);
 		foundnode = el_db_find_nodenum(cp);
-		if(foundnode) {
+		if (foundnode) {
 			ast_copy_string(ipaddr, foundnode->ipaddr, sizeof(ipaddr));
 		}
 		ast_mutex_unlock(&el_db_lock);
 		ast_free(str);
 
-		if(!foundnode) {
+		if (!foundnode) {
 			ast_debug(1, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
 			return -1;
 		}

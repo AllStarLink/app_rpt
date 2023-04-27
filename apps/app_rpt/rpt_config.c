@@ -22,6 +22,7 @@
 #include "rpt_utils.h" /* use myatoi */
 #include "rpt_rig.h" /* use setrem */
 
+/*! \brief Echolink queryoption for retrieving call sign */ 
 #define ECHOLINK_QUERY_CALLSIGN 2
 
 extern struct rpt rpt_vars[MAXRPTS];
@@ -303,7 +304,7 @@ int elink_query_callsign(char *node, char *callsign, int callsignlen)
 	/* get the echolink technology */
 	chan_tech = ast_get_channel_tech("echolink");
 
-	if(!chan_tech) {
+	if (!chan_tech) {
 		ast_log(LOG_WARNING, "chan_echolink not loaded.  Cannot query callsign.\n");
 		return res;
 	}
