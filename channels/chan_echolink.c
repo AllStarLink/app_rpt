@@ -1195,53 +1195,55 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	struct eldb *foundnode;
 	char ipaddr[EL_IP_SIZE];
 	char buf[100];
+	char *str, *cp;
 
 	if ((ast_channel_state(ast) != AST_STATE_DOWN) && (ast_channel_state(ast) != AST_STATE_RESERVED)) {
 		ast_log(LOG_WARNING, "el_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
 		return -1;
 	}
+	
+	/* Make sure we have a destination */
+	if(!*dest) {
+		ast_log(LOG_WARNING, "Call on %s failed - no destination.\n", ast_channel_name(ast));
+		return -1;
+	}
 	/* When we call, it just works, really, there's no destination...  Just
 	 * ring the phone and wait for someone to answer 
 	*/
-	if (*dest) {				/* if number specified */
-		char *str, *cp;
 
-		/* get the node number in cp */
-		str = ast_strdup(dest);
-		cp = strchr(str, '/');
-		if (cp) {
-			*cp++ = 0;
-		} else {
-			cp = str;
-		}
-	
-		/* get the ip address for the node */
-		ast_mutex_lock(&el_db_lock);
-		foundnode = el_db_find_nodenum(cp);
-		if (foundnode) {
-			ast_copy_string(ipaddr, foundnode->ipaddr, sizeof(ipaddr));
-		}
-		ast_mutex_unlock(&el_db_lock);
-		ast_free(str);
-
-		if (!foundnode) {
-			ast_verb(3, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
-			return -1;
-		}
-			
-		snprintf(buf, sizeof(buf) - 1, "o.conip %s", ipaddr);
-		
-		ast_debug(1, "Calling %s/%s on %s\n", dest, ipaddr, ast_channel_name(ast));
-		
-		/* make the call */
-		ast_mutex_lock(&instp->lock);
-		strcpy(instp->el_node_test.ip, ipaddr);
-		do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
-		process_cmd(buf, "127.0.0.1", instp);
-		ast_mutex_unlock(&instp->lock);
+	/* get the node number in cp */
+	str = ast_strdup(dest);
+	cp = strchr(str, '/');
+	if (cp) {
+		*cp++ = 0;
 	} else {
-		ast_log(LOG_WARNING, "Call on %s failed - no destination.\n", ast_channel_name(ast));
+		cp = str;
 	}
+	
+	/* get the ip address for the node */
+	ast_mutex_lock(&el_db_lock);
+	foundnode = el_db_find_nodenum(cp);
+	if (foundnode) {
+		ast_copy_string(ipaddr, foundnode->ipaddr, sizeof(ipaddr));
+	}
+	ast_mutex_unlock(&el_db_lock);
+	ast_free(str);
+
+	if (!foundnode) {
+		ast_verb(3, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
+		return -1;
+	}
+			
+	snprintf(buf, sizeof(buf) - 1, "o.conip %s", ipaddr);
+		
+	ast_debug(1, "Calling %s/%s on %s\n", dest, ipaddr, ast_channel_name(ast));
+		
+	/* make the call */
+	ast_mutex_lock(&instp->lock);
+	strcpy(instp->el_node_test.ip, ipaddr);
+	do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
+	process_cmd(buf, "127.0.0.1", instp);
+	ast_mutex_unlock(&instp->lock);
 	
 	ast_setstate(ast, AST_STATE_RINGING);
 	
@@ -1432,7 +1434,7 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 	char *node = data;
 	
 	/* Make sure that we got a node number to query */
-	if (!data) {
+	if (ast_strlen_zero(data)) {
 		ast_log(LOG_ERROR, "Node number not supplied.");
 		return res;
 	}
@@ -1444,7 +1446,6 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 		case EL_QUERY_IPADDR:
 			foundnode = el_db_find_nodenum(node);
 			if (foundnode) {
-				memset(data, '\0', *datalen);
 				ast_copy_string(data, foundnode->ipaddr, *datalen);
 				res = 0;
 			}
@@ -1452,14 +1453,12 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 		case EL_QUERY_CALLSIGN:
 			foundnode = el_db_find_nodenum(node);
 			if (foundnode) {
-				memset(data, '\0', *datalen);
 				ast_copy_string(data, foundnode->callsign, *datalen);
 				res = 0;
 			}
 			break;
 		default:
 			ast_log(LOG_ERROR, "Option %i is not valid.", option);
-			memset(data, '\0', *datalen);
 			break;
 	}
 
