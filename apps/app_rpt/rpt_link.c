@@ -516,12 +516,14 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 				return 1;		/* No match yet */
 			}
 		} else {
-			if (strlen(node) < 7)
+			if (strlen(node) < 7) {
 				return 1;
-			if (myrpt->p.eloutbound)
-				sprintf(tmp, "echolink/%s/%d,%d", myrpt->p.eloutbound, atoi(node + 1), atoi(node + 1));
-			else
-				sprintf(tmp, "echolink/el0/%d,%d", atoi(node + 1), atoi(node + 1));
+			}
+			if (myrpt->p.eloutbound) {
+				snprintf(tmp, sizeof(tmp), "echolink/%s/%d,%d", myrpt->p.eloutbound, atoi(node + 1), atoi(node + 1));
+			} else {
+				snprintf(tmp, sizeof(tmp), "echolink/el0/%d,%d", atoi(node + 1), atoi(node + 1));
+			}
 		}
 	}
 
