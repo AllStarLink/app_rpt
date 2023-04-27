@@ -1225,7 +1225,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 		ast_free(str);
 
 		if (!foundnode) {
-			ast_debug(1, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
+			ast_verb(3, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
 			return -1;
 		}
 			
@@ -1240,7 +1240,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 		process_cmd(buf, "127.0.0.1", instp);
 		ast_mutex_unlock(&instp->lock);
 	} else {
-		ast_debug(1, "Call on %s failed - no destination.\n", ast_channel_name(ast));
+		ast_log(LOG_WARNING, "Call on %s failed - no destination.\n", ast_channel_name(ast));
 	}
 	
 	ast_setstate(ast, AST_STATE_RINGING);
@@ -1429,10 +1429,10 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 {
 	struct eldb *foundnode = NULL;
 	int res = -1;
-	char *node = (char *) data;
+	char *node = data;
 	
 	/* Make sure that we got a node number to query */
-	if(!data) {
+	if (!data) {
 		ast_log(LOG_ERROR, "Node number not supplied.");
 		return res;
 	}
@@ -1443,7 +1443,7 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 	switch (option) {
 		case EL_QUERY_IPADDR:
 			foundnode = el_db_find_nodenum(node);
-			if(foundnode) {
+			if (foundnode) {
 				memset(data, '\0', *datalen);
 				ast_copy_string(data, foundnode->ipaddr, *datalen);
 				res = 0;
@@ -1451,7 +1451,7 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 			break;
 		case EL_QUERY_CALLSIGN:
 			foundnode = el_db_find_nodenum(node);
-			if(foundnode) {
+			if (foundnode) {
 				memset(data, '\0', *datalen);
 				ast_copy_string(data, foundnode->callsign, *datalen);
 				res = 0;
@@ -1465,7 +1465,7 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 
 	ast_mutex_unlock(&el_db_lock);
 	
-	if(res) {
+	if (res) {
 		memset(data, '\0', *datalen);
 		ast_debug(2, "Node %s was not found, query failed.", node);
 	}

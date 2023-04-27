@@ -516,15 +516,15 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 				return 1;		/* No match yet */
 			}
 		} else {
-			char str2[15];
+			char nodenumber[15];
 
 			if (strlen(node) < 7)
 				return 1;
-			sprintf(str2, "%d", atoi(node + 1));
+			sprintf(nodenumber, "%d", atoi(node + 1));
 			if (myrpt->p.eloutbound)
-				sprintf(tmp, "echolink/%s/%s,%s", myrpt->p.eloutbound, str2, str2);
+				sprintf(tmp, "echolink/%s/%s,%s", myrpt->p.eloutbound, nodenumber, nodenumber);
 			else
-				sprintf(tmp, "echolink/el0/%s,%s", str2, str2);
+				sprintf(tmp, "echolink/el0/%s,%s", nodenumber, nodenumber);
 		}
 	}
 

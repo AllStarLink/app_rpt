@@ -301,7 +301,6 @@ int elink_query_callsign(char *node, char *callsign, int callsignlen)
 	const struct ast_channel_tech *chan_tech = NULL;
 	int res = -1;
 
-	/* get the echolink technology */
 	chan_tech = ast_get_channel_tech("echolink");
 
 	if (!chan_tech) {
@@ -312,9 +311,6 @@ int elink_query_callsign(char *node, char *callsign, int callsignlen)
 	/* data is passed to and from the query option using the callsign field */
 	ast_copy_string(callsign, node, callsignlen);
 
-	/* query the channel 
-	   option 1 = query_callsign
-	*/
 	res = chan_tech->queryoption(NULL, ECHOLINK_QUERY_CALLSIGN, callsign, &callsignlen);
 
 	return res;
