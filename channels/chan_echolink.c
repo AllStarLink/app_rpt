@@ -1203,7 +1203,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 	
 	/* Make sure we have a destination */
-	if(!*dest) {
+	if (!*dest) {
 		ast_log(LOG_WARNING, "Call on %s failed - no destination.\n", ast_channel_name(ast));
 		return -1;
 	}
