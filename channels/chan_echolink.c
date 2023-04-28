@@ -1465,7 +1465,6 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 	ast_mutex_unlock(&el_db_lock);
 	
 	if (res) {
-		memset(data, '\0', *datalen);
 		ast_debug(2, "Node %s was not found, query failed.", node);
 	}
 
