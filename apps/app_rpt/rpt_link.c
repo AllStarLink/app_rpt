@@ -519,11 +519,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 			if (strlen(node) < 7) {
 				return 1;
 			}
-			if (myrpt->p.eloutbound) {
-				snprintf(tmp, sizeof(tmp), "echolink/%s/%d,%d", myrpt->p.eloutbound, atoi(node + 1), atoi(node + 1));
-			} else {
-				snprintf(tmp, sizeof(tmp), "echolink/el0/%d,%d", atoi(node + 1), atoi(node + 1));
-			}
+			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);		
 		}
 	}
 
