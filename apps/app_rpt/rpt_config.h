@@ -19,7 +19,15 @@ int get_mem_set(struct rpt *myrpt, char *digitbuf);
 /*! \brief Process DTMF keys passed */
 void local_dtmfkey_helper(struct rpt *myrpt, char c);
 
-int elink_db_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr);
+/*!
+ * \brief Query echolink channel for a node's callsign
+ * \param	node		pointer to node to lookup
+ * \param	callsign	pointer to buffer to hold callsign
+ * \param	callsignlen	length of callsign buffer
+ * \retval 0 if successful
+ * \retval -1 if not successful
+ */
+int elink_query_callsign(char *node, char *callsign, int callsignlen);
 
 int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr, char *port);
 

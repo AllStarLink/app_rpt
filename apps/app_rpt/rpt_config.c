@@ -22,6 +22,9 @@
 #include "rpt_utils.h" /* use myatoi */
 #include "rpt_rig.h" /* use setrem */
 
+/*! \brief Echolink queryoption for retrieving call sign */ 
+#define ECHOLINK_QUERY_CALLSIGN 2
+
 extern struct rpt rpt_vars[MAXRPTS];
 extern enum rpt_dns_method rpt_node_lookup_method;
 
@@ -293,34 +296,24 @@ static int elink_cmd(char *cmd, char *outstr, int outlen)
 	return (strlen(outstr));
 }
 
-int elink_db_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr)
+int elink_query_callsign(char *node, char *callsign, int callsignlen)
 {
-	char str[512], str1[100], *strs[5];
-	int n;
-	static int echolink_available = -1;
+	const struct ast_channel_tech *chan_tech = NULL;
+	int res = -1;
 
-	if (echolink_available == -1) {
-		echolink_available = ast_module_check("chan_echolink.so"); /* First time, do the check. Subsequently, use the cached result. */
-	}
-	if (!echolink_available) {
-		ast_debug(5, "chan_echolink not loaded, skipping\n");
-		return 0; /* If echolink isn't loaded, avoid unnecessarily sending a CLI command that will fail anyways */
-	}
+	chan_tech = ast_get_channel_tech("echolink");
 
-	snprintf(str, sizeof(str) - 1, "echolink dbget %c %s", c, lookup);
-	n = elink_cmd(str, str1, sizeof(str1));
-	if (n < 1)
-		return (n);
-	n = explode_string(str1, strs, 5, '|', '\"');
-	if (n < 3)
-		return (0);
-	if (nodenum)
-		strcpy(nodenum, strs[0]);
-	if (callsign)
-		strcpy(callsign, strs[1]);
-	if (ipaddr)
-		strcpy(ipaddr, strs[2]);
-	return (1);
+	if (!chan_tech) {
+		ast_log(LOG_WARNING, "chan_echolink not loaded.  Cannot query callsign.\n");
+		return res;
+	}
+	
+	/* data is passed to and from the query option using the callsign field */
+	ast_copy_string(callsign, node, callsignlen);
+
+	res = chan_tech->queryoption(NULL, ECHOLINK_QUERY_CALLSIGN, callsign, &callsignlen);
+
+	return res;
 }
 
 int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr, char *port)

@@ -240,6 +240,9 @@ do not use 127.0.0.1
 #define	EL_APRS_INTERVAL 600
 #define	EL_APRS_START_DELAY 10
 
+#define EL_QUERY_IPADDR 1
+#define EL_QUERY_CALLSIGN 2
+
 #define	GPSFILE "/tmp/gps.dat"
 #define	GPS_VALID_SECS 60
 
@@ -524,6 +527,7 @@ static int el_indicate(struct ast_channel *ast, int cond, const void *data, size
 static int el_digit_begin(struct ast_channel *c, char digit);
 static int el_digit_end(struct ast_channel *c, char digit, unsigned int duratiion);
 static int el_text(struct ast_channel *c, const char *text);
+static int el_queryoption(struct ast_channel *chan, int option, void *data, int *datalen);
 
 static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call, char *name, char *astnode);
 static int rtcp_make_el_sdes(unsigned char *pkt, int pktLen, char *cname, char *loc);
@@ -564,6 +568,7 @@ static struct ast_channel_tech el_tech = {
 	.send_text = el_text,
 	.send_digit_begin = el_digit_begin,
 	.send_digit_end = el_digit_end,
+	.queryoption = el_queryoption,
 };
 
 /*
@@ -1178,7 +1183,7 @@ static int is_rtcp_sdes(unsigned char *p, int len)
 /*!
  * \brief Echolink call.
  * \param ast			Pointer to Asterisk channel.
- * \param dest			Pointer to Destination.
+ * \param dest			Pointer to Destination (echolink node number).
  * \param timeout		Timeout.
  * \retval -1 			if not successful.
  * \retval 0 			if successful.
@@ -1187,34 +1192,61 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
 	struct el_instance *instp = p->instp;
+	struct eldb *foundnode;
+	char ipaddr[EL_IP_SIZE];
 	char buf[100];
+	char *str, *cp;
 
 	if ((ast_channel_state(ast) != AST_STATE_DOWN) && (ast_channel_state(ast) != AST_STATE_RESERVED)) {
 		ast_log(LOG_WARNING, "el_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
 		return -1;
 	}
+	
+	/* Make sure we have a destination */
+	if (!*dest) {
+		ast_log(LOG_WARNING, "Call on %s failed - no destination.\n", ast_channel_name(ast));
+		return -1;
+	}
 	/* When we call, it just works, really, there's no destination...  Just
 	 * ring the phone and wait for someone to answer 
 	*/
-	ast_debug(1, "Calling %s on %s\n", dest, ast_channel_name(ast));
-	if (*dest) {				/* if number specified */
-		char *str, *cp;
 
-		str = ast_strdup(dest);
-		cp = strchr(str, '/');
-		if (cp)
-			*cp++ = 0;
-		else
-			cp = str;
-		snprintf(buf, sizeof(buf) - 1, "o.conip %s", cp);
-		ast_free(str);
-		ast_mutex_lock(&instp->lock);
-		strcpy(instp->el_node_test.ip, cp);
-		do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
-		process_cmd(buf, "127.0.0.1", instp);
-		ast_mutex_unlock(&instp->lock);
+	/* get the node number in cp */
+	str = ast_strdup(dest);
+	cp = strchr(str, '/');
+	if (cp) {
+		*cp++ = 0;
+	} else {
+		cp = str;
 	}
+	
+	/* get the ip address for the node */
+	ast_mutex_lock(&el_db_lock);
+	foundnode = el_db_find_nodenum(cp);
+	if (foundnode) {
+		ast_copy_string(ipaddr, foundnode->ipaddr, sizeof(ipaddr));
+	}
+	ast_mutex_unlock(&el_db_lock);
+	ast_free(str);
+
+	if (!foundnode) {
+		ast_verb(3, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
+		return -1;
+	}
+			
+	snprintf(buf, sizeof(buf) - 1, "o.conip %s", ipaddr);
+		
+	ast_debug(1, "Calling %s/%s on %s\n", dest, ipaddr, ast_channel_name(ast));
+		
+	/* make the call */
+	ast_mutex_lock(&instp->lock);
+	strcpy(instp->el_node_test.ip, ipaddr);
+	do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
+	process_cmd(buf, "127.0.0.1", instp);
+	ast_mutex_unlock(&instp->lock);
+	
 	ast_setstate(ast, AST_STATE_RINGING);
+	
 	return 0;
 }
 
@@ -1381,6 +1413,62 @@ static int el_digit_begin(struct ast_channel *ast, char digit)
 static int el_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
 {
 	return -1;
+}
+
+/*!
+ * \brief Asterisk queryoption function.
+ * The calling application should populate the data buffer with the node number
+ * to query information. 
+ * \param chan			Pointer to Asterisk channel.
+ * \param option		Query option to be performed.
+ *						1 = query ipaddress, 2 = query callsign
+ * \param data			Point to buffer to exchange data.
+ * \param datalen		Length of the data buffer.
+ * \retval 0			If successful.
+ * \retval -1			Query failed.
+ */
+static int el_queryoption(struct ast_channel *chan, int option, void *data, int *datalen)
+{
+	struct eldb *foundnode = NULL;
+	int res = -1;
+	char *node = data;
+	
+	/* Make sure that we got a node number to query */
+	if (ast_strlen_zero(data)) {
+		ast_log(LOG_ERROR, "Node number not supplied.");
+		return res;
+	}
+
+	ast_mutex_lock(&el_db_lock);
+
+	/* Process the requested query option */
+	switch (option) {
+		case EL_QUERY_IPADDR:
+			foundnode = el_db_find_nodenum(node);
+			if (foundnode) {
+				ast_copy_string(data, foundnode->ipaddr, *datalen);
+				res = 0;
+			}
+			break;
+		case EL_QUERY_CALLSIGN:
+			foundnode = el_db_find_nodenum(node);
+			if (foundnode) {
+				ast_copy_string(data, foundnode->callsign, *datalen);
+				res = 0;
+			}
+			break;
+		default:
+			ast_log(LOG_ERROR, "Option %i is not valid.", option);
+			break;
+	}
+
+	ast_mutex_unlock(&el_db_lock);
+	
+	if (res) {
+		ast_debug(2, "Node %s was not found, query failed.", node);
+	}
+
+	return res;
 }
 
 /*!
@@ -2836,7 +2924,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 				ast_mutex_lock(&instp->lock);
 				strcpy(instp->lastcall, mynode->callsign);
 				time(&instp->lasttime);
-				ast_mutex_unlock(&instp->lock);
 				time(&now);
 				instp->lasttime = now;
 				if (instp->starttime < (now - EL_APRS_START_DELAY)) {
