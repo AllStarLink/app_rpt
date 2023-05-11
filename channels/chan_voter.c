@@ -1655,7 +1655,7 @@ static void *voter_xmit(void *data)
 			continue;
 		}
 		n = x = 0;
-		f2 = 0;
+		f2 = NULL;
 		ast_mutex_lock(&p->txqlock);
 		AST_LIST_TRAVERSE(&p->txq, f1, frame_list) n++;
 		ast_mutex_unlock(&p->txqlock);
@@ -1679,6 +1679,7 @@ static void *voter_xmit(void *data)
 			f1 = ast_translate(p->fromast, f2, 1);
 			if (!f1) {
 				ast_log(LOG_ERROR, "Can not translate frame to recv from Asterisk\n");
+				ast_frfree(f2);
 				continue;
 			}
 		}
@@ -1708,6 +1709,7 @@ static void *voter_xmit(void *data)
 				if (!f1) {
 					ast_mutex_unlock(&p->pagerqlock);
 					ast_log(LOG_ERROR, "Can not translate frame to recv from Asterisk\n");
+					ast_frfree(f3);
 					continue;
 				}
 				ast_frfree(f3);
@@ -1898,6 +1900,7 @@ static void *voter_xmit(void *data)
 				ast_frfree(p->adpcmf1);
 				p->adpcmf1 = NULL;
 				f2 = ast_translate(p->adpcmout, f3, 1);
+				ast_frfree(f3);
 				memcpy(audiopacket.audio, f2->data.ptr, f2->datalen);
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(3);
@@ -1976,6 +1979,7 @@ static void *voter_xmit(void *data)
 				ast_frfree(p->nulawf1);
 				p->nulawf1 = NULL;
 				f2 = ast_translate(p->nuout, f3, 1);
+				ast_frfree(f3);
 				sap = (short *) f2->data.ptr;
 				for (i = 0; i < f2->samples / 2; i++) {
 					s = *sap++;
