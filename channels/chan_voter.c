@@ -895,7 +895,7 @@ static int voter_hangup(struct ast_channel *ast)
 		ast_translator_free_path(p->adpcmout);
 	if (p->toast)
 		ast_translator_free_path(p->toast);
-	if (p->toast)
+	if (p->toast1)
 		ast_translator_free_path(p->toast1);
 	if (p->fromast)
 		ast_translator_free_path(p->fromast);
