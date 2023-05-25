@@ -317,7 +317,6 @@ struct rtcp_t {
 	} r;
 };
 
-int debug = 0;
 struct TLB_instance *instances[TLB_MAX_INSTANCES];
 int ninstances = 0;
 
@@ -371,11 +370,8 @@ static struct ast_channel_tech TLB_tech = {
 */
 
 /* Debug mode */
-static int TLB_do_debug(int fd, int argc, const char *const *argv);
 static int TLB_do_nodedump(int fd, int argc, const char *const *argv);
 static int TLB_do_nodeget(int fd, int argc, const char *const *argv);
-
-static char debug_usage[] = "Usage: tlbx debug level {0-7}\n" "       Enables debug messages in chan_tlb\n";
 
 static char nodedump_usage[] = "Usage: tlb nodedump\n" "       Dumps entire tlb node list\n";
 
@@ -715,8 +711,7 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
-	if (option_debug)
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_channel_name(ast));
+	ast_debug(1, "Calling %s on %s\n", dest, ast_channel_name(ast));
 	if (*dest) {				/* if number specified */
 		struct ast_flags zeroflag = { 0 };
 		char *str, *cp, *val, *sval, *strs[10];
@@ -823,8 +818,7 @@ static int TLB_hangup(struct ast_channel *ast)
 	struct sockaddr_in sin;
 
 	if (!instp->confmode) {
-		if (debug)
-			ast_log(LOG_DEBUG, "Sent bye to IP address %s\n", p->ip);
+		ast_debug(1, "Sent bye to IP address %s\n", p->ip);
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->TLB_node_test.ip, p->ip);
 		instp->TLB_node_test.port = p->port;
@@ -838,8 +832,7 @@ static int TLB_hangup(struct ast_channel *ast)
 			sendto(instp->ctrl_sock, bye, n, 0, (struct sockaddr *) &sin, sizeof(sin));
 		}
 	}
-	if (option_debug)
-		ast_log(LOG_DEBUG, "TLB_hangup(%s)\n", ast_channel_name(ast));
+	ast_debug(1, "TLB_hangup(%s)\n", ast_channel_name(ast));
 	if (!ast_channel_tech_pvt(ast)) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
@@ -1104,8 +1097,7 @@ static int find_delete(struct TLB_node *key)
 
 	found_key = (struct TLB_node **) tfind(key, &TLB_node_list, compare_ip);
 	if (found_key) {
-		if (debug)
-			ast_log(LOG_DEBUG, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
+		ast_debug(1, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
 		found = 1;
 		if (!(*found_key)->instp->confmode)
 			ast_softhangup((*found_key)->chan, AST_SOFTHANGUP_DEV);
@@ -1421,28 +1413,6 @@ static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *
 }
 
 /*
-* Enable or disable debug output at a given level at the console
-*/
-
-static int TLB_do_debug(int fd, int argc, const char *const *argv)
-{
-	int newlevel;
-
-	if (argc != 4)
-		return RESULT_SHOWUSAGE;
-	newlevel = atoi(argv[3]);
-	if ((newlevel < 0) || (newlevel > 7))
-		return RESULT_SHOWUSAGE;
-	if (newlevel)
-		ast_cli(fd, "TheLinkBox Debugging enabled, previous level: %d, new level: %d\n", debug, newlevel);
-	else
-		ast_cli(fd, "TheLinkBox Debugging disabled\n");
-
-	debug = newlevel;
-	return RESULT_SUCCESS;
-}
-
-/*
 * Dump entire node list
 */
 
@@ -1559,19 +1529,6 @@ static char *res2cli(int r)
 	}
 }
 
-static char *handle_cli_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "tlb debug level";
-		e->usage = debug_usage;
-		return NULL;
-	case CLI_GENERATE:
-		return NULL;
-	}
-	return res2cli(TLB_do_debug(a->fd, a->argc, a->argv));
-}
-
 static char *handle_cli_nodedump(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -1599,7 +1556,6 @@ static char *handle_cli_nodeget(struct ast_cli_entry *e, int cmd, struct ast_cli
 }
 
 static struct ast_cli_entry TLB_cli[] = {
-	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
 	AST_CLI_DEFINE(handle_cli_nodedump, "Dump entire tlb node list"),
 	AST_CLI_DEFINE(handle_cli_nodeget, "Look up tlb node entry"),
 };
@@ -1841,8 +1797,7 @@ static void *TLB_reader(void *data)
 								fr.delivery.tv_sec = 0;
 								fr.delivery.tv_usec = 0;
 								ast_queue_frame((*found_key)->chan, &fr);
-								if (debug)
-									ast_log(LOG_DEBUG, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
+								ast_debug(1, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
 							}
 							(*found_key)->countdown = instp->rtcptimeout;
 						} else {	/* otherwise its a new request */
@@ -1875,8 +1830,7 @@ static void *TLB_reader(void *data)
 								}
 							}
 							if (i) {	/* if not authorized */
-								if (debug)
-									ast_log(LOG_DEBUG, "Sent bye to IP address %s\n", instp->TLB_node_test.ip);
+								ast_debug(1, "Sent bye to IP address %s\n", instp->TLB_node_test.ip);
 								x = rtcp_make_bye(bye, "UN-AUTHORIZED");
 								sin1.sin_family = AF_INET;
 								sin1.sin_addr.s_addr = inet_addr(instp->TLB_node_test.ip);
