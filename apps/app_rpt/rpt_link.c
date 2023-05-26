@@ -506,7 +506,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (strlen(node) < 1)
 		return 1;
 
-	if (tlb_node_get(node, 'n', NULL, NULL, NULL, NULL) == 1) {
+	if (tlb_query_node_exists(node) == 0) {
 		sprintf(tmp, "tlb/%s/%s", node, myrpt->name);
 	} else {
 		if (node[0] != '3') {
@@ -699,7 +699,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		return -1;
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	if (tlb_node_get(node, 'n', NULL, NULL, NULL, NULL) == 1)
+	if (tlb_query_node_exists(node) == 0)
 		init_linkmode(myrpt, l, LINKMODE_TLB);
 	else if (node[0] == '3')
 		init_linkmode(myrpt, l, LINKMODE_ECHOLINK);
