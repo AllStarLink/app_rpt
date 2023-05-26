@@ -633,9 +633,8 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		}
 		res = saynode(myrpt, mychannel, strs[2]);
 		if (!res) {
-			res = ast_stream_and_wait(mychannel, "rpt/connected", "");
+			res = ast_stream_and_wait(mychannel, "rpt/connected-to", "");
 		}
-		res = ast_stream_and_wait(mychannel, "digits/2", "");
 		saynode(myrpt, mychannel, strs[1]);
 		return;
 	}
@@ -1650,10 +1649,7 @@ treataslocal:
 		}
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 		if (!res) {
-			res = ast_stream_and_wait(mychannel, "rpt/connected", "");
-		}
-		if (!res) {
-			res = ast_stream_and_wait(mychannel, "digits/2", "");
+			res = ast_stream_and_wait(mychannel, "rpt/connected-to", "");
 		}
 		res = saynode(myrpt, mychannel, myrpt->name);
 		imdone = 1;
