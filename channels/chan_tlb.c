@@ -133,6 +133,9 @@ struct {
 #define	TLB_MAX_INSTANCES 100
 #define	TLB_MAX_CALL_LIST 30
 
+#define TLB_QUERY_NODE_EXISTS 1
+#define TLB_QUERY_GET_CALLSIGN 2
+
 #define	DELIMCHR ','
 #define	QUOTECHR 34
 
@@ -335,6 +338,7 @@ static int TLB_indicate(struct ast_channel *ast, int cond, const void *data, siz
 static int TLB_digit_begin(struct ast_channel *c, char digit);
 static int TLB_digit_end(struct ast_channel *c, char digit, unsigned int duratiion);
 static int TLB_text(struct ast_channel *c, const char *text);
+static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int *datalen);
 
 static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call);
 static int rtcp_make_bye(unsigned char *p, char *reason);
@@ -363,6 +367,7 @@ static struct ast_channel_tech TLB_tech = {
 	.send_text = TLB_text,
 	.send_digit_begin = TLB_digit_begin,
 	.send_digit_end = TLB_digit_end,
+	.queryoption = TLB_queryoption,
 };
 
 /*
@@ -954,6 +959,69 @@ static int TLB_text(struct ast_channel *ast, const char *text)
 		tlb_send_dtmf(ast, *arg4);
 	}
 	return 0;
+}
+
+/*!
+ * \brief Asterisk queryoption function.
+ * The calling application should populate the data buffer with the node number
+ * to query information. 
+ * \param chan			Pointer to Asterisk channel.
+ * \param option		Query option to be performed.
+ *						1 = query node exists, 2 = query callsign for node
+ * \param data			Point to buffer to exchange data.
+ * \param datalen		Length of the data buffer.
+ * \retval 0			If successful.
+ * \retval -1			Query failed.
+ */
+static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int *datalen)
+{
+	int result = -1;
+	struct ast_config *cfg = NULL;
+	struct ast_flags zeroflag = { 0 };
+	char *val, *sval, *strs[10];
+	int num_substrings;
+	
+	/* Make sure that we got a node number to query */
+	if (ast_strlen_zero(data)) {
+		ast_log(LOG_ERROR, "Node number not supplied.");
+		return result;
+	}
+	
+	/* Load the config file */
+	if (!(cfg = ast_config_load(config, zeroflag))) {
+		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		return result;
+	}
+	
+	/* Get the node information from the config */
+	val = (char *) ast_variable_retrieve(cfg, "nodes", data);
+	if (!val) {
+		ast_config_destroy(cfg);
+		return result;
+	}
+	
+	/* parse the comma delimited returned data 
+	 * format: W1XYZ,192.168.1.1,1234,G726
+	*/
+	sval = ast_strdupa(val);
+	strupr(sval);
+	num_substrings = finddelim(sval, strs, 10);
+	
+	if (num_substrings < 3) {
+		ast_config_destroy(cfg);
+		return result;
+	}
+	
+	if (option == TLB_QUERY_GET_CALLSIGN) {
+		ast_copy_string(data, strs[1], *datalen);
+	}
+	
+	result = 0;
+
+	/* clean up */
+	ast_config_destroy(cfg);
+
+	return result;
 }
 
 static int compare_ip(const void *pa, const void *pb)
