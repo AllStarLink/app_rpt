@@ -321,7 +321,7 @@ int tlb_query_callsign(char *node, char *callsign, int callsignlen)
 	chan_tech = ast_get_channel_tech("tlb");
 
 	if (!chan_tech) {
-		ast_log(LOG_WARNING, "chan_tlb not loaded. Cannot query callsign.\n");
+		ast_debug(5, "chan_tlb not loaded. Cannot query callsign.\n");
 		return res;
 	}
 	

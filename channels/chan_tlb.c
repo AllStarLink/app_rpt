@@ -967,7 +967,7 @@ static int TLB_text(struct ast_channel *ast, const char *text)
  * to query information. 
  * \param chan			Pointer to Asterisk channel.
  * \param option		Query option to be performed.
- *						1 = query node exists, 2 = query callsign for node
+ *                      1 = query node exists, 2 = query callsign for node
  * \param data			Point to buffer to exchange data.
  * \param datalen		Length of the data buffer.
  * \retval 0			If successful.
