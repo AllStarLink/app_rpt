@@ -987,6 +987,12 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 		return result;
 	}
 	
+	/* Make sure that we have a valid query option */
+	if (option != TLB_QUERY_NODE_EXISTS && option != TLB_QUERY_GET_CALLSIGN) {
+		ast_log(LOG_ERROR, "Invalid query option - %i.\n", option);
+		return result;
+	}
+	
 	/* Load the config file */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
@@ -1008,6 +1014,7 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 	num_substrings = finddelim(sval, strs, 10);
 	
 	if (num_substrings < 3) {
+		ast_log(LOG_WARNING, "TLB node configuration is not in the correct format - %s.\n", sval);
 		ast_config_destroy(cfg);
 		return result;
 	}

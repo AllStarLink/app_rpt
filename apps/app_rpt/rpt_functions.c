@@ -185,7 +185,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
 			strcpy(digitbuf, myrpt->lastlinknode);
 		/* node must at least exist in list */
-		if (tlb_query_node_exists(digitbuf) !=0)  {
+		if (!tlb_query_node_exists(digitbuf))  {
 			if (digitbuf[0] != '3') {
 				if (node_lookup(myrpt, digitbuf, NULL, 0, 1)) {
 					if (strlen(digitbuf) >= myrpt->longestnode)

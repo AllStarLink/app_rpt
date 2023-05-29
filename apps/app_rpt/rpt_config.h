@@ -42,8 +42,8 @@ int tlb_query_node_exists(char *node);
  * \param	node		pointer to node to lookup
  * \param	callsign	pointer to buffer to hold callsign
  * \param	callsignlen	length of callsign buffer
- * \retval 0 if successful
- * \retval -1 if not successful
+ * \retval 1 if successful
+ * \retval 0 if not successful
  */
 int tlb_query_callsign(char *node, char *callsign, int callsignlen);
 

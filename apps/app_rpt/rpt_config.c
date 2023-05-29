@@ -299,7 +299,7 @@ int elink_query_callsign(char *node, char *callsign, int callsignlen)
 int tlb_query_node_exists(char *node)
 {
 	const struct ast_channel_tech *chan_tech = NULL;
-	int res = -1;
+	int res = 0;
 
 	chan_tech = ast_get_channel_tech("tlb");
 
@@ -308,7 +308,9 @@ int tlb_query_node_exists(char *node)
 		return res;
 	}
 	
-	res = chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, node, 0);
+	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, node, 0)) {
+		res = 1;
+	}
 	
 	return res;
 }
