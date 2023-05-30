@@ -133,7 +133,7 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 
 	if (strlen(name) < 1)
 		return (0);
-	if (tlb_query_callsign(name, str, sizeof(str)) == 0) {
+	if (!tlb_query_callsign(name, str, sizeof(str))) {
 		tgn = 1;
 	}
 	if (((name[0] != '3') && (tgn != 1)) || ((name[0] == '3') && (myrpt->p.eannmode != 2))
