@@ -25,6 +25,11 @@
 /*! \brief Echolink queryoption for retrieving call sign */ 
 #define ECHOLINK_QUERY_CALLSIGN 2
 
+/*! \brief The Link Box queryoptions */
+#define TLB_QUERY_NODE_EXISTS 1
+#define TLB_QUERY_GET_CALLSIGN 2
+
+
 extern struct rpt rpt_vars[MAXRPTS];
 extern enum rpt_dns_method rpt_node_lookup_method;
 
@@ -271,31 +276,6 @@ void local_dtmfkey_helper(struct rpt *myrpt, char c)
 	return;
 }
 
-static int elink_cmd(char *cmd, char *outstr, int outlen)
-{
-	FILE *tf;
-
-	tf = tmpfile();
-	if (!tf) {
-		return -1;
-	}
-	ast_debug(1, "elink_cmd sent %s\n", cmd);
-	ast_cli_command(fileno(tf), cmd);
-	rewind(tf);
-	outstr[0] = 0;
-	if (!fgets(outstr, outlen, tf)) {
-		fclose(tf);
-		return 0;
-	}
-	fclose(tf);
-	if (!strlen(outstr))
-		return 0;
-	if (outstr[strlen(outstr) - 1] == '\n')
-		outstr[strlen(outstr) - 1] = 0;
-	ast_debug(1, "elink_cmd ret. %s\n", outstr);
-	return (strlen(outstr));
-}
-
 int elink_query_callsign(char *node, char *callsign, int callsignlen)
 {
 	const struct ast_channel_tech *chan_tech = NULL;
@@ -316,36 +296,43 @@ int elink_query_callsign(char *node, char *callsign, int callsignlen)
 	return res;
 }
 
-int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr, char *port)
+int tlb_query_node_exists(const char *node)
 {
-	char str[315], str1[100], *strs[6];
-	int n;
-	static int tlb_available = -1;
+	const struct ast_channel_tech *chan_tech = NULL;
+	int res = 0;
 
-	if (tlb_available == -1) {
-		tlb_available = ast_module_check("chan_tlb.so"); /* First time, do the check. Subsequently, use the cached result. */
-	}
-	if (!tlb_available) {
-		ast_debug(5, "chan_tlb not loaded, skipping\n");
-		return 0; /* If chan_tlb isn't loaded, avoid unnecessarily sending a CLI command that will fail anyways */
-	}
+	chan_tech = ast_get_channel_tech("tlb");
 
-	snprintf(str, sizeof(str) - 1, "tlb nodeget %c %s", c, lookup);
-	n = elink_cmd(str, str1, sizeof(str1));
-	if (n < 1)
-		return (n);
-	n = explode_string(str1, strs, 6, '|', '\"');
-	if (n < 4)
-		return (0);
-	if (nodenum)
-		strcpy(nodenum, strs[0]);
-	if (callsign)
-		strcpy(callsign, strs[1]);
-	if (ipaddr)
-		strcpy(ipaddr, strs[2]);
-	if (port)
-		strcpy(port, strs[3]);
-	return (1);
+	if (!chan_tech) {
+		ast_debug(5, "chan_tlb not loaded.\n");
+		return res;
+	}
+	
+	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, (void *) node, 0)) {
+		res = 1;
+	}
+	
+	return res;
+}
+
+int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
+{
+	const struct ast_channel_tech *chan_tech = NULL;
+	int res = -1;
+
+	chan_tech = ast_get_channel_tech("tlb");
+
+	if (!chan_tech) {
+		ast_debug(5, "chan_tlb not loaded. Cannot query callsign.\n");
+		return res;
+	}
+	
+	/* data is passed to and from the query option using the callsign field */
+	ast_copy_string(callsign, node, callsignlen);
+
+	res = chan_tech->queryoption(NULL, TLB_QUERY_GET_CALLSIGN, callsign, &callsignlen);
+
+	return res;
 }
 
 /*!

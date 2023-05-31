@@ -133,7 +133,9 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 
 	if (strlen(name) < 1)
 		return (0);
-	tgn = tlb_node_get(name, 'n', NULL, str, NULL, NULL);
+	if (!tlb_query_callsign(name, str, sizeof(str))) {
+		tgn = 1;
+	}
 	if (((name[0] != '3') && (tgn != 1)) || ((name[0] == '3') && (myrpt->p.eannmode != 2))
 		|| ((tgn == 1) && (myrpt->p.tannmode != 2))) {
 		val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "nodenames");

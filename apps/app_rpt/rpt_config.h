@@ -29,7 +29,23 @@ void local_dtmfkey_helper(struct rpt *myrpt, char c);
  */
 int elink_query_callsign(char *node, char *callsign, int callsignlen);
 
-int tlb_node_get(char *lookup, char c, char *nodenum, char *callsign, char *ipaddr, char *port);
+/*!
+ * \brief Query the link box channel to see if node exists
+ * \param	node		pointer to node to lookup
+ * \retval 1 if node exists
+ * \retval 0 if node does not exist
+ */
+int tlb_query_node_exists(const char *node);
+
+/*!
+ * \brief Query the link box channel for a node's callsign
+ * \param	node		pointer to node to lookup
+ * \param	callsign	pointer to buffer to hold callsign
+ * \param	callsignlen	length of callsign buffer
+ * \retval 0 if successful
+ * \retval -1 if not successful
+ */
+int tlb_query_callsign(const char *node, char *callsign, int callsignlen);
 
 /*!
  * \brief Node lookup function.  This function will take the nodelist that has been read into memory
