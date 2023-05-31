@@ -296,7 +296,7 @@ int elink_query_callsign(char *node, char *callsign, int callsignlen)
 	return res;
 }
 
-int tlb_query_node_exists(char *node)
+int tlb_query_node_exists(const char *node)
 {
 	const struct ast_channel_tech *chan_tech = NULL;
 	int res = 0;
@@ -308,14 +308,14 @@ int tlb_query_node_exists(char *node)
 		return res;
 	}
 	
-	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, node, 0)) {
+	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, (void *)node, 0)) {
 		res = 1;
 	}
 	
 	return res;
 }
 
-int tlb_query_callsign(char *node, char *callsign, int callsignlen)
+int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
 {
 	const struct ast_channel_tech *chan_tech = NULL;
 	int res = -1;
