@@ -308,7 +308,7 @@ int tlb_query_node_exists(const char *node)
 		return res;
 	}
 	
-	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, (void *)node, 0)) {
+	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, (void *) node, 0)) {
 		res = 1;
 	}
 	
