@@ -1340,6 +1340,7 @@ static int el_hangup(struct ast_channel *ast)
 	find_delete(&instp->el_node_test);
 	ast_mutex_unlock(&instp->lock);
 	n = rtcp_make_bye(bye, "disconnected");
+	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = inet_addr(p->ip);
 	sin.sin_port = htons(instp->ctrl_port);
@@ -1639,6 +1640,7 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 
 	if ((which == leaf) || (which == postorder)) {
 		if (strncmp((*(struct el_node **) nodep)->ip, instp->el_node_test.ip, EL_IP_SIZE) == 0) {
+			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons(instp->audio_port);
 			sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
@@ -1706,6 +1708,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 
 	if ((which == leaf) || (which == postorder)) {
 
+		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
@@ -1751,6 +1754,7 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 		memset(sdes_packet, 0, sizeof(sdes_packet));
 		sdes_length = rtcp_make_sdes(sdes_packet, sizeof(sdes_packet), instp->mycall, instp->myname, instp->astnode);
 
+		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->ctrl_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
@@ -1861,6 +1865,7 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 			pack_length = rtcp_make_bye(pack, "bye");
 			n = 20;
 		}
+		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->ctrl_port);
 		sin.sin_addr.s_addr = inet_addr(arg1);
@@ -1932,7 +1937,6 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		return 0;
 
 	if (!p->firstsent) {
-		struct sockaddr_in sin;
 		unsigned char sdes_packet[256];
 		int sdes_length;
 
@@ -1940,6 +1944,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		memset(sdes_packet, 0, sizeof(sdes_packet));
 		sdes_length = rtcp_make_sdes(sdes_packet, sizeof(sdes_packet), instp->mycall, instp->myname, instp->astnode);
 
+		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->ctrl_port);
 		sin.sin_addr.s_addr = inet_addr(p->ip);
@@ -2063,6 +2068,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (instp->el_node_test.ip[0] != '\0') {
 		if (find_delete(&instp->el_node_test)) {
 			bye_length = rtcp_make_bye(bye, "rtcp timeout");
+			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
 			sin.sin_port = htons(instp->ctrl_port);
@@ -2369,7 +2375,7 @@ static int sendcmd(char *server, struct el_instance *instp)
 		return -1;
 	}
 
-	memset(&el, 0, sizeof(struct sockaddr_in));
+	memset(&el, 0, sizeof(el));
 	el.sin_family = AF_INET;
 	el.sin_port = htons(5200);
 	el.sin_addr.s_addr = inet_addr(ip);
@@ -3171,6 +3177,7 @@ static void *el_reader(void *data)
 									if (ast_tvdiff_ms(ast_tvnow(), instp->pending[x].reqtime) >= AUTH_RETRY_MS) {
 										ast_debug(1, "Sent bye to IP address %s\n", instp->el_node_test.ip);
 										j = rtcp_make_bye(bye, "UN-AUTHORIZED");
+										memset(&sin1, 0, sizeof(sin1));
 										sin1.sin_family = AF_INET;
 										sin1.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
 										sin1.sin_port = htons(instp->ctrl_port);
@@ -3478,7 +3485,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->audio_sock = -1;
 		return -1;
 	}
-	memset((char *) &si_me, 0, sizeof(si_me));
+	memset(&si_me, 0, sizeof(si_me));
 	si_me.sin_family = AF_INET;
 	if (strcmp(instp->ipaddr, "0.0.0.0") == 0)
 		si_me.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -3507,6 +3514,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
 	fcntl(instp->ctrl_sock, F_SETFL, O_NONBLOCK);
 	ast_copy_string(instp->name, ctg, EL_NAME_SIZE);
+	memset(&sin_aprs, 0, sizeof(sin_aprs));
 	sin_aprs.sin_family = AF_INET;
 	sin_aprs.sin_port = htons(5199);
 	ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
