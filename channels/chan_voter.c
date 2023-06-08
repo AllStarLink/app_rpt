@@ -895,7 +895,7 @@ static int voter_hangup(struct ast_channel *ast)
 		ast_translator_free_path(p->adpcmout);
 	if (p->toast)
 		ast_translator_free_path(p->toast);
-	if (p->toast)
+	if (p->toast1)
 		ast_translator_free_path(p->toast1);
 	if (p->fromast)
 		ast_translator_free_path(p->fromast);
@@ -1655,7 +1655,7 @@ static void *voter_xmit(void *data)
 			continue;
 		}
 		n = x = 0;
-		f2 = 0;
+		f2 = NULL;
 		ast_mutex_lock(&p->txqlock);
 		AST_LIST_TRAVERSE(&p->txq, f1, frame_list) n++;
 		ast_mutex_unlock(&p->txqlock);
@@ -1679,6 +1679,7 @@ static void *voter_xmit(void *data)
 			f1 = ast_translate(p->fromast, f2, 1);
 			if (!f1) {
 				ast_log(LOG_ERROR, "Can not translate frame to recv from Asterisk\n");
+				ast_frfree(f2);
 				continue;
 			}
 		}
@@ -1704,13 +1705,13 @@ static void *voter_xmit(void *data)
 			if (n) {
 				ast_mutex_lock(&p->pagerqlock);
 				f3 = AST_LIST_REMOVE_HEAD(&p->pagerq, frame_list);
-				f1 = ast_translate(p->fromast, f3, 0);
+				f1 = ast_translate(p->fromast, f3, 1);
 				if (!f1) {
 					ast_mutex_unlock(&p->pagerqlock);
 					ast_log(LOG_ERROR, "Can not translate frame to recv from Asterisk\n");
+					ast_frfree(f3);
 					continue;
 				}
-				ast_frfree(f3);
 				ast_mutex_unlock(&p->pagerqlock);
 				x = 1;
 				p->waspager = 1;
