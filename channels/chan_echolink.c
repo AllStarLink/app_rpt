@@ -842,7 +842,7 @@ static struct eldb *el_db_put(char *nodenum, char *ipaddr, char *callsign)
 	tsearch(node, &el_db_ipaddr, compare_eldb_ipaddr);
 	tsearch(node, &el_db_callsign, compare_eldb_callsign);
 
-	ast_debug(2, "eldb put: Node=%s, Call=%s, IP=%s\n", nodenum, callsign, ipaddr);
+	ast_debug(5, "eldb put: Node=%s, Call=%s, IP=%s\n", nodenum, callsign, ipaddr);
 
 	return (node);
 }
@@ -1782,7 +1782,7 @@ static int find_delete(struct el_node *key)
 
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
-		ast_debug(5, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
+		ast_debug(3, "...removing from node list %s(%s)\n", (*found_key)->call, (*found_key)->ip);
 		found = 1;
 		ast_softhangup((*found_key)->chan, AST_SOFTHANGUP_DEV);
 		tdelete(key, &el_node_list, compare_ip);
@@ -1834,11 +1834,11 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 		if (instp->fdr >= 0) {
 			close(instp->fdr);
 			instp->fdr = -1;
-			ast_debug(3, "rec stopped\n");
+			ast_debug(3, "recording stopped\n");
 		} else {
 			instp->fdr = open(instp->fdr_file, O_CREAT | O_WRONLY | O_APPEND | O_TRUNC, S_IRUSR | S_IWUSR);
 			if (instp->fdr >= 0)
-				ast_debug(3, "rec into %s started\n", instp->fdr_file);
+				ast_debug(3, "recording into %s started\n", instp->fdr_file);
 		}
 		return;
 	}
@@ -1875,7 +1875,7 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 			if (find_delete(&key)) {
 				for (i = 0; i < 20; i++)
 					sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
-				ast_debug(3, "disconnect request sent to %s\n", key.ip);
+				ast_debug(1, "Disconnect request sent to %s\n", key.ip);
 			} else {
 				ast_debug(1, "Did not find ip=%s to request disconnect\n", key.ip);
 			}
@@ -1883,7 +1883,7 @@ static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
 			for (i = 0; i < n; i++) {
 				sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 			}
-			ast_debug(3, "connect request sent to %s\n", arg1);
+			ast_debug(3, "Connect request sent to %s\n", arg1);
 		}
 		return;
 	}
@@ -2233,12 +2233,13 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 		mynode = el_db_find_callsign(argv[3]);
 	else
 		mynode = el_db_find_nodenum(argv[3]);
-	ast_mutex_unlock(&el_db_lock);
 	if (!mynode) {
 		ast_cli(fd, "Error: Entry for %s not found!\n", argv[3]);
+		ast_mutex_unlock(&el_db_lock);
 		return RESULT_FAILURE;
 	}
 	ast_cli(fd, "%s|%s|%s\n", mynode->nodenum, mynode->callsign, mynode->ipaddr);
+	ast_mutex_unlock(&el_db_lock);
 	return RESULT_SUCCESS;
 }
 
@@ -2469,11 +2470,11 @@ static void el_zapcall(char *call)
 {
 	struct eldb *mynode;
 
-	ast_debug(2, "zapcall eldb delete Attempt: Call=%s\n", call);
+	ast_debug(5, "zapcall eldb delete Attempt: Call=%s\n", call);
 	ast_mutex_lock(&el_db_lock);
 	mynode = el_db_find_callsign(call);
 	if (mynode) {
-		ast_debug(2, "zapcall eldb delete: Node=%s, Call=%s, IP=%s\n", mynode->nodenum, mynode->callsign, mynode->ipaddr);
+		ast_debug(5, "zapcall eldb delete: Node=%s, Call=%s, IP=%s\n", mynode->nodenum, mynode->callsign, mynode->ipaddr);
 		el_db_delete(mynode);
 	}
 	ast_mutex_unlock(&el_db_lock);
@@ -2622,7 +2623,7 @@ static int do_el_directory(char *hostname)
 		return -1;
 	}
 	str[strlen(str) - 1] = 0;
-	ast_debug(5, "Sending: %s to %s\n", str, hostname);
+	ast_debug(4, "Sending: %s to %s\n", str, hostname);
 	if (recv(sock, str, 4, 0) != 4) {
 		ast_log(LOG_ERROR, "Error in directory download (header) on %s\n", hostname);
 		close(sock);
@@ -2762,7 +2763,7 @@ static int do_el_directory(char *hostname)
 	cc = (dir_compressed) ? "compressed" : "un-compressed";
 	ast_verb(4, "Directory pgm done downloading(%s,%s), %d records\n", pp, cc, n);
 	if (dir_compressed)
-		ast_debug(2, "Got snapshot_id: %s\n", snapshot_id);
+		ast_debug(4, "Got snapshot_id: %s\n", snapshot_id);
 	return (dir_compressed);
 }
 
@@ -2881,7 +2882,7 @@ static void *el_register(void *data)
  */
 static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, char *name)
 {
-	struct el_node *el_node_key = NULL;
+	struct el_node *el_node_key;
 	struct eldb *mynode;
 	char nodestr[30];
 	time_t now;
@@ -2892,10 +2893,12 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 		ast_copy_string(el_node_key->ip, instp->el_node_test.ip, EL_IP_SIZE);
 		ast_copy_string(el_node_key->name, name, EL_NAME_SIZE);
 
+		ast_mutex_lock(&el_db_lock);
 		mynode = el_db_find_ipaddr(el_node_key->ip);
 		if (!mynode) {
-			ast_log(LOG_ERROR, "Cannot find DB entry for IP addr %s\n", el_node_key->ip);
+			ast_log(LOG_ERROR, "Cannot find DB entry for IP addr %s - Callsign %s\n", el_node_key->ip, call);
 			ast_free(el_node_key);
+			ast_mutex_unlock(&el_db_lock);
 			return 1;
 		}
 		ast_copy_string(nodestr, mynode->nodenum, sizeof(nodestr));
@@ -2904,11 +2907,13 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 		el_node_key->seqnum = 1;
 		el_node_key->instp = instp;
 		if (tsearch(el_node_key, &el_node_list, compare_ip)) {
-			ast_debug(1, "new CALL=%s,ip=%s,name=%s\n", el_node_key->call, el_node_key->ip, el_node_key->name);
+			ast_debug(1, "New CALL=%s,ip=%s,node=%i, name=%s\n", el_node_key->call, el_node_key->ip, el_node_key->nodenum, el_node_key->name);
 			if (p == NULL) {	/* if a new inbound call */
 				p = el_alloc((void *) instp->name);
 				if (!p) {
-					ast_log(LOG_ERROR, "Cannot alloc el channel\n");
+					ast_log(LOG_ERROR, "Cannot alloc el channel %s\n", instp->name);
+					ast_free(el_node_key);
+					ast_mutex_unlock(&el_db_lock);
 					return -1;
 				}
 				el_node_key->p = p;
@@ -2916,6 +2921,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 				el_node_key->chan = el_new(el_node_key->p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 				if (!el_node_key->chan) {
 					el_destroy(el_node_key->p);
+					ast_free(el_node_key);
+					ast_mutex_unlock(&el_db_lock);
 					return -1;
 				}
 				ast_mutex_lock(&instp->lock);
@@ -2942,8 +2949,10 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 			ast_log(LOG_ERROR, "tsearch() failed to add CALL=%s,ip=%s,name=%s\n",
 					el_node_key->call, el_node_key->ip, el_node_key->name);
 			ast_free(el_node_key);
+			ast_mutex_unlock(&el_db_lock);
 			return -1;
 		}
+		ast_mutex_unlock(&el_db_lock);
 	} else {
 		ast_log(LOG_ERROR, "calloc() failed for new CALL=%s, ip=%s\n", call, instp->el_node_test.ip);
 		return -1;
@@ -3050,7 +3059,7 @@ static void *el_reader(void *data)
 					instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
-			ast_debug(5, "aprs out: %s\n", aprsstr);
+			ast_debug(4, "aprs out: %s\n", aprsstr);
 			sprintf(aprscall, "%s/%s", instp->mycall, instp->mycall);
 			memset(sdes_packet, 0, sizeof(sdes_packet));
 			sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
