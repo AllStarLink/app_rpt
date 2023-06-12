@@ -577,11 +577,14 @@ static struct ast_channel_tech el_tech = {
 
 static int el_do_dbdump(int fd, int argc, const char *const *argv);
 static int el_do_dbget(int fd, int argc, const char *const *argv);
+static int el_do_show_nodes(int fd, int argc, const char *const *argv);
 
 static char dbdump_usage[] = "Usage: echolink dbdump [nodename|callsign|ipaddr]\n" "       Dumps entire echolink db\n";
 
 static char dbget_usage[] =
 	"Usage: echolink dbget <nodename|callsign|ipaddr> <lookup-data>\n" "       Looks up echolink db entry\n";
+	
+static char show_nodes_usage[] = "Usage: echolink show nodes\n";	
 
 #define mythread_exit(nothing) __mythread_exit(nothing, __LINE__)
 
@@ -663,6 +666,23 @@ static void print_nodes(const void *nodep, const VISIT which, const int depth)
 		ast_cli(nodeoutfd, "%s|%s|%s\n",
 				(*(struct eldb **) nodep)->nodenum,
 				(*(struct eldb **) nodep)->callsign, (*(struct eldb **) nodep)->ipaddr);
+	}
+}
+
+/*!
+ * \brief Print the echolink internal connected node list to the cli.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree. 
+ */
+static void print_connected_nodes(const void *nodep, const VISIT which, const int depth)
+{
+	if ((which == leaf) || (which == postorder)) {
+		ast_cli(nodeoutfd, "%6i  %-10s %-15s   %-32s\n",
+				(*(struct el_node **) nodep)->nodenum,
+				(*(struct el_node **) nodep)->call, 
+				(*(struct el_node **) nodep)->ip,
+				(*(struct el_node **) nodep)->name);
 	}
 }
 
@@ -2244,6 +2264,26 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 }
 
 /*!
+ * \brief Process asterisk cli request to show connected nodes.
+ * \param fd			Asterisk cli fd
+ * \param argc			Number of arguments
+ * \param argv			Pointer to arguments
+ * \return	Cli success, showusage, or failure.
+ */
+static int el_do_show_nodes(int fd, int argc, const char *const *argv)
+{
+	nodeoutfd = fd;
+	
+	ast_cli(nodeoutfd, "  Node  Call Sign  Ip Address        Name\n");
+	
+	twalk(el_node_list, print_connected_nodes);
+	
+	nodeoutfd = -1;
+	
+	return RESULT_SUCCESS;
+}
+
+/*!
  * \brief Turns integer response to char cli response
  * \param r				Response.
  * \return	Cli success, showusage, or failure.
@@ -2301,11 +2341,32 @@ static char *handle_cli_dbget(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 }
 
 /*!
+ * \brief Handle asterisk cli request for show nodes
+ * \param e				Asterisk cli entry.
+ * \param cmd			Cli command type.
+ * \param a				Pointer to asterisk cli arguments.
+ * \retval 				Cli success or failure.
+ */
+static char *handle_cli_show_nodes(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "echolink show nodes";
+		e->usage = show_nodes_usage;
+		return NULL;
+	case CLI_GENERATE:
+		return NULL;
+	}
+	return res2cli(el_do_show_nodes(a->fd, a->argc, a->argv));
+}
+
+/*!
  * \brief Define cli entries for this module
  */
 static struct ast_cli_entry el_cli[] = {
 	AST_CLI_DEFINE(handle_cli_dbdump, "Dump entire echolink db"),
-	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry")
+	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry"),
+	AST_CLI_DEFINE(handle_cli_show_nodes, "Show connected nodes")
 };
 
 /* 
@@ -3115,6 +3176,7 @@ static void *el_reader(void *data)
 						if (ptr) {
 							*ptr = '\0';
 							name = ptr + 1;
+							name = ast_strip(name);
 						}
 						found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
 						if (found_key) {
