@@ -662,10 +662,12 @@ static int finddelim(char *str, char *strp[], int limit)
  */
 static void print_nodes(const void *nodep, const VISIT which, const int depth)
 {
+	struct eldb *node = *(struct eldb **) nodep;
+	
 	if ((which == leaf) || (which == postorder)) {
 		ast_cli(nodeoutfd, "%s|%s|%s\n",
-				(*(struct eldb **) nodep)->nodenum,
-				(*(struct eldb **) nodep)->callsign, (*(struct eldb **) nodep)->ipaddr);
+				node->nodenum,
+				node->callsign, (*(struct eldb **) nodep)->ipaddr);
 	}
 }
 
@@ -677,12 +679,14 @@ static void print_nodes(const void *nodep, const VISIT which, const int depth)
  */
 static void print_connected_nodes(const void *nodep, const VISIT which, const int depth)
 {
+	struct el_node *node = *(struct el_node **) nodep;
+	
 	if ((which == leaf) || (which == postorder)) {
 		ast_cli(nodeoutfd, "%6i  %-10s %-15s   %-32s\n",
-				(*(struct el_node **) nodep)->nodenum,
-				(*(struct el_node **) nodep)->call, 
-				(*(struct el_node **) nodep)->ip,
-				(*(struct el_node **) nodep)->name);
+				node->nodenum,
+				node->call, 
+				node->ip,
+				node->name);
 	}
 }
 
@@ -2274,7 +2278,7 @@ static int el_do_show_nodes(int fd, int argc, const char *const *argv)
 {
 	nodeoutfd = fd;
 	
-	ast_cli(nodeoutfd, "  Node  Call Sign  Ip Address        Name\n");
+	ast_cli(nodeoutfd, "  Node  Call Sign  IP Address        Name\n");
 	
 	twalk(el_node_list, print_connected_nodes);
 	
