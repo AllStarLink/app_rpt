@@ -667,7 +667,8 @@ static void print_nodes(const void *nodep, const VISIT which, const int depth)
 	if ((which == leaf) || (which == postorder)) {
 		ast_cli(nodeoutfd, "%s|%s|%s\n",
 				node->nodenum,
-				node->callsign, (*(struct eldb **) nodep)->ipaddr);
+				node->callsign, 
+				node->ipaddr);
 	}
 }
 
