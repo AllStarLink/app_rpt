@@ -295,6 +295,66 @@ struct gsmVoice_t {
 	unsigned char data[BLOCKING_FACTOR * GSM_FRAME_SIZE];
 };
 
+/*!
+ * \brief RTP Control Packet SDES request item.
+ */
+struct rtcp_sdes_request_item {
+	unsigned char r_item;
+	char *r_text;
+};
+
+/*!
+ * \brief RTP Control Packet SDES request items.
+ */
+struct rtcp_sdes_request {
+	int nitems;
+	unsigned char ssrc[4];
+	struct rtcp_sdes_request_item item[10];
+};
+
+/*!
+ * \brief RTCP Control Packet common header word.
+ */
+struct rtcp_common_t {
+#ifdef RTP_BIG_ENDIAN
+	uint8_t version:2;
+	uint8_t p:1;
+	uint8_t count:5;
+#else
+	uint8_t count:5;
+	uint8_t p:1;
+	uint8_t version:2;
+#endif
+	uint8_t pt:8;
+	uint16_t length;
+};
+
+/*!
+ * \brief RTP Control Packet SDES item detail.
+ */
+struct rtcp_sdes_item_t {
+	uint8_t type;
+	uint8_t length;
+	char data[1];
+};
+
+/*!
+ * \brief RTP Control Packet for SDES.
+ */
+struct rtcp_t {
+	struct rtcp_common_t common;
+	union {
+		struct {
+			uint32_t src[1];
+		} bye;
+
+		struct rtcp_sdes_t {
+			uint32_t src;
+			struct rtcp_sdes_item_t item[1];
+		} sdes;
+	} r;
+};
+
 /* forward definitions */
 struct el_instance;
 struct el_pvt;
@@ -423,66 +483,6 @@ struct el_pvt {
 };
 
 /*!
- * \brief RTP Control Packet SDES request item.
- */
-struct rtcp_sdes_request_item {
-	unsigned char r_item;
-	char *r_text;
-};
-
-/*!
- * \brief RTP Control Packet SDES request items.
- */
-struct rtcp_sdes_request {
-	int nitems;
-	unsigned char ssrc[4];
-	struct rtcp_sdes_request_item item[10];
-};
-
-/*!
- * \brief RTCP Control Packet common header word.
- */
-struct rtcp_common_t {
-#ifdef RTP_BIG_ENDIAN
-	uint8_t version:2;
-	uint8_t p:1;
-	uint8_t count:5;
-#else
-	uint8_t count:5;
-	uint8_t p:1;
-	uint8_t version:2;
-#endif
-	uint8_t pt:8;
-	uint16_t length;
-};
-
-/*!
- * \brief RTP Control Packet SDES item detail.
- */
-struct rtcp_sdes_item_t {
-	uint8_t type;
-	uint8_t length;
-	char data[1];
-};
-
-/*!
- * \brief RTP Control Packet for SDES.
- */
-struct rtcp_t {
-	struct rtcp_common_t common;
-	union {
-		struct {
-			uint32_t src[1];
-		} bye;
-
-		struct rtcp_sdes_t {
-			uint32_t src;
-			struct rtcp_sdes_item_t item[1];
-		} sdes;
-	} r;
-};
-
-/*!
  * \brief Echolink internal directory database entry.
  */
 struct eldb {
@@ -529,27 +529,10 @@ static int el_digit_end(struct ast_channel *c, char digit, unsigned int duratiio
 static int el_text(struct ast_channel *c, const char *text);
 static int el_queryoption(struct ast_channel *chan, int option, void *data, int *datalen);
 
-static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call, char *name, char *astnode);
-static int rtcp_make_el_sdes(unsigned char *pkt, int pktLen, char *cname, char *loc);
-static int rtcp_make_bye(unsigned char *p, char *reason);
-static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r);
-static void copy_sdes_item(char *source, char *dest, int destlen);
-static int is_rtcp_bye(unsigned char *p, int len);
-static int is_rtcp_sdes(unsigned char *p, int len);
- /* remove binary tree functions if Asterisk has similar functionality */
-static int compare_ip(const void *pa, const void *pb);
-static void send_heartbeat(const void *nodep, const VISIT which, const int depth);
 static void send_info(const void *nodep, const VISIT which, const int depth);
-static void print_users(const void *nodep, const VISIT which, const int depth);
-static void count_users(const void *nodep, const VISIT which, const int depth);
-static void free_node(void *nodep);
 static void process_cmd(char *buf, char *fromip, struct el_instance *instp);
 static int find_delete(struct el_node *key);
-static int sendcmd(char *server, struct el_instance *instp);
 static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, char *name);
-
-/* remove writen if Asterisk has similar functionality */
-static int writen(int fd, char *ptr, int nbytes);
 
 /*!
  * \brief Asterisk channel technology struct.
@@ -1803,14 +1786,17 @@ static void free_node(void *nodep)
 static int find_delete(struct el_node *key)
 {
 	int found = 0;
-	struct el_node **found_key = NULL;
+	struct el_node **found_key;
+	struct el_node *node ;
 
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
-		ast_debug(3, "...removing from node list %s(%s)\n", (*found_key)->call, (*found_key)->ip);
+		node = *found_key;
+		ast_debug(3, "Removing from node list %s(%s)\n", node->call, node->ip);
 		found = 1;
-		ast_softhangup((*found_key)->chan, AST_SOFTHANGUP_DEV);
-		tdelete(key, &el_node_list, compare_ip);
+		ast_softhangup(node->chan, AST_SOFTHANGUP_DEV);
+		tdelete(node, &el_node_list, compare_ip);
+		ast_free(node);
 	}
 	return found;
 }
@@ -2509,23 +2495,23 @@ static int sendcmd(char *server, struct el_instance *instp)
 #define	EL_DIRECTORY_PORT 5200
 
 /*!
- * \brief Frees pointer from interal list.
- * \param ptr			Pointer to free.	
+ * \brief Delete entire echolink directory node list.
+ * Delete all nodes from the three binary trees that
+ * index the eldb structure.
  */
-static void my_stupid_free(void *ptr)
+static void el_db_delete_all_nodes(void)
 {
-	ast_free(ptr);
-	return;
-}
-
-/*!
- * \brief Delete entire echolink node list.
- */
-static void el_zapem(void)
-{
+	struct eldb *node;
+	
 	ast_mutex_lock(&el_db_lock);
-	tdestroy(el_node_list, my_stupid_free);
+	while(el_db_nodenum != NULL) {
+		node = *(struct eldb **) el_db_nodenum;
+		el_db_delete_indexes(node);
+		ast_free(node);
+	}
 	ast_mutex_unlock(&el_db_lock);
+	
+	ast_assert((el_db_nodenum == NULL && el_db_callsign == NULL && el_db_ipaddr == NULL));
 }
 
 /*!
@@ -2754,8 +2740,10 @@ static int do_el_directory(char *hostname)
 	/* if the returned directory is not partial - we should
 	 * delete all existing directory messages
 	*/
-	if (!dir_partial)
-		el_zapem();
+	if (!dir_partial) {
+		ast_debug(4, "Full directory received, deleting all nodes.");
+		el_db_delete_all_nodes();
+	}
 	/* 
 	 *	process the directory entries 
 	*/
@@ -2787,7 +2775,7 @@ static int do_el_directory(char *hostname)
 		/* read the location / status line (we will not use this line) */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
-			el_zapem();
+			el_db_delete_all_nodes();
 			close(sock);
 			inflateEnd(&z);
 			return -1;
@@ -2795,7 +2783,7 @@ static int do_el_directory(char *hostname)
 		/* read the node number line */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
-			el_zapem();
+			el_db_delete_all_nodes();
 			close(sock);
 			inflateEnd(&z);
 			return -1;
@@ -2806,7 +2794,7 @@ static int do_el_directory(char *hostname)
 		/* read the ip address line */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
-			el_zapem();
+			el_db_delete_all_nodes();
 			close(sock);
 			inflateEnd(&z);
 			return -1;
