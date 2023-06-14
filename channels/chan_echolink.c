@@ -2504,7 +2504,7 @@ static void el_db_delete_all_nodes(void)
 	struct eldb *node;
 	
 	ast_mutex_lock(&el_db_lock);
-	while( el_db_nodenum != NULL ) {
+	while (el_db_nodenum) {
 		node = *(struct eldb **) el_db_nodenum;
 		el_db_delete_indexes(node);
 		ast_free(node);
