@@ -2504,14 +2504,14 @@ static void el_db_delete_all_nodes(void)
 	struct eldb *node;
 	
 	ast_mutex_lock(&el_db_lock);
-	while(el_db_nodenum != NULL) {
+	while( el_db_nodenum != NULL ) {
 		node = *(struct eldb **) el_db_nodenum;
 		el_db_delete_indexes(node);
 		ast_free(node);
 	}
 	ast_mutex_unlock(&el_db_lock);
 	
-	ast_assert((el_db_nodenum == NULL && el_db_callsign == NULL && el_db_ipaddr == NULL));
+	ast_assert((!el_db_nodenum && !el_db_callsign && !el_db_ipaddr));
 }
 
 /*!
