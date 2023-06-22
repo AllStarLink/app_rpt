@@ -335,19 +335,19 @@ struct el_node {
 	char ip[EL_IP_SIZE + 1];
 	char call[EL_CALL_SIZE + 1];
 	char name[EL_NAME_SIZE + 1];
+	char outbound;
 	unsigned int nodenum;		/* not used yet */
 	short countdown;
 	uint16_t seqnum;
+	float jitter;
 	struct el_instance *instp;
 	struct el_pvt *p;
 	struct ast_channel *chan;
-	char outbound;
 	struct timeval last_packet_time;
 	uint32_t rx_audio_packets;
 	uint32_t tx_audio_packets;
 	uint32_t rx_ctrl_packets;
 	uint32_t tx_ctrl_packets;
-	float jitter;
 
 };
 
@@ -376,6 +376,8 @@ struct el_instance {
 	char port[EL_IP_SIZE + 1];
 	char astnode[EL_NAME_SIZE + 1];
 	char context[EL_NAME_SIZE + 1];
+	/* missed 10 heartbeats, you're out */
+	short rtcptimeout;
 	float lat;
 	float lon;
 	float freq;
@@ -385,19 +387,17 @@ struct el_instance {
 	char gain;
 	char dir;
 	int maxstns;
-	char *denylist[EL_MAX_CALL_LIST];
 	int ndenylist;
+	char *denylist[EL_MAX_CALL_LIST];
 	char *permitlist[EL_MAX_CALL_LIST];
 	int npermitlist;
-	/* missed 10 heartbeats, you're out */
-	short rtcptimeout;
+	int fdr;
 	unsigned int mynode;
 	char fdr_file[FILENAME_MAX];
 	int audio_sock;
 	int ctrl_sock;
 	uint16_t audio_port;
 	uint16_t ctrl_port;
-	int fdr;
 	unsigned long seqno;
 	struct gsmVoice_t audio_all;
 	struct el_node el_node_test;
@@ -405,15 +405,17 @@ struct el_instance {
 	time_t aprstime;
 	time_t starttime;
 	char lastcall[EL_CALL_SIZE + 1];
+	int text_packet_len;
+	char *text_packet;
 	time_t lasttime;
 	char login_display[EL_NAME_SIZE + EL_CALL_SIZE + 1];
 	char aprs_display[EL_APRS_SIZE + 1];
-	pthread_t el_reader_thread;
 	uint32_t rx_audio_packets;
 	uint32_t tx_audio_packets;
 	uint32_t rx_ctrl_packets;
 	uint32_t tx_ctrl_packets;
 	uint32_t rx_bad_packets;
+	pthread_t el_reader_thread;
 };
 
 /*!
@@ -445,15 +447,15 @@ struct el_pvt {
 	char app[16];
 	char stream[80];
 	char ip[EL_IP_SIZE + 1];
+	char firstsent;
+	char firstheard;
 	char txkey;
 	int rxkey;
 	int keepalive;
-	struct ast_frame fr;
 	int txindex;
+	struct ast_frame fr;
 	struct el_rxqast rxqast;
 	struct el_rxqel rxqel;
-	char firstsent;
-	char firstheard;
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
 	struct ast_trans_pvt *xpath;
@@ -509,7 +511,7 @@ static int el_text(struct ast_channel *c, const char *text);
 static int el_queryoption(struct ast_channel *chan, int option, void *data, int *datalen);
 
 static void send_info(const void *nodep, const VISIT which, const int depth);
-static void process_cmd(char *buf, char *fromip, struct el_instance *instp);
+static void process_cmd(char *buf, int buf_len, char *fromip, struct el_instance *instp);
 static int find_delete(struct el_node *key);
 static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, char *name);
 
@@ -1252,7 +1254,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	ast_mutex_lock(&instp->lock);
 	strcpy(instp->el_node_test.ip, ipaddr);
 	do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
-	process_cmd(buf, "127.0.0.1", instp);
+	process_cmd(buf, sizeof(buf), "127.0.0.1", instp);
 	ast_mutex_unlock(&instp->lock);
 	
 	ast_setstate(ast, AST_STATE_RINGING);
@@ -1783,6 +1785,34 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 }
 
 /*!
+ * \brief Send text message to connected nodes except sender.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
+static void send_text(const void *nodep, const VISIT which, const int depth)
+{
+	struct sockaddr_in sin;
+	struct el_node *node = *(struct el_node **) nodep;
+
+	if ((which == leaf) || (which == postorder)) {
+		if (strncmp(node->ip, node->instp->el_node_test.ip, EL_IP_SIZE)) {
+
+			memset(&sin, 0, sizeof(sin));
+			sin.sin_family = AF_INET;
+			sin.sin_port = htons(node->instp->audio_port);
+			sin.sin_addr.s_addr = inet_addr(node->ip);
+		
+			sendto(node->instp->audio_sock, node->instp->text_packet, node->instp->text_packet_len, 0, (struct sockaddr *) &sin, sizeof(sin));
+		
+			node->instp->tx_audio_packets++;
+			node->tx_audio_packets++;
+		}
+	}
+	return;
+}
+
+/*!
  * \brief Free node.  Empty routine.
  */
 static void free_node(void *nodep)
@@ -1814,7 +1844,7 @@ static int find_delete(struct el_node *key)
 }
 
 /*!
- * \brief Process commands received from our local machine.
+ * \brief Process commands and text messages.
  * Commands: 
  *	o.conip <IPaddress>    (request a connect)
  *	o.dconip <IPaddress>   (request a disconnect)
@@ -1823,20 +1853,46 @@ static int find_delete(struct el_node *key)
  * \param fromip		Pointer to ip address that sent the command.
  * \param instp			Poiner to Echolink instance.
  */
-static void process_cmd(char *buf, char *fromip, struct el_instance *instp)
+static void process_cmd(char *buf, int buf_len, char *fromip, struct el_instance *instp)
 {
 	char *cmd = NULL;
 	char *arg1 = NULL;
 
 	char delim = ' ';
-	char *saveptr;
-	char *ptr;
+	char *ptr, *saveptr, *textptr;
 	struct sockaddr_in sin;
 	unsigned char pack[256];
 	int pack_length;
 	unsigned short i, n;
 	struct el_node key;
+	
+	/*
+	* see if this is a text packet
+	* text and data messages start with the preamble oNDATA
+	* it should be in the format "callsign>text message\r"
+	*/
+	ptr = buf + 6;	
+	if (!memcmp(buf, "oNDATA", 6) && *ptr != '\r' && (textptr = strchr(ptr, '>')) != NULL) {
+		if ((textptr - ptr) < EL_CALL_SIZE) {
+			
+			instp->text_packet = buf;
+			instp->text_packet_len = buf_len;
+			twalk(el_node_list, send_text);
+			instp->text_packet = NULL;
+			instp->text_packet_len = 0;
+			
+			textptr = strchr(textptr, '\r');
+			if (textptr) {
+				*textptr = '\0';
+				ast_debug(3, "Sent text: %s", ptr);
+			}
+			return;
+		}
+	}
 
+	/*
+	* process commands received from the loopback
+	*/
 	if (strncmp(fromip, "127.0.0.1", EL_IP_SIZE) != 0) {
 		return;
 	}
@@ -3398,7 +3454,7 @@ static void *el_reader(void *data)
 				gsmPacket = (struct gsmVoice_t *)&buf;
 				/* packets that start with 0x6f are text packets */
 				if (buf[0] == 0x6f) {
-					process_cmd(buf, instp->el_node_test.ip, instp);
+					process_cmd(buf, recvlen, instp->el_node_test.ip, instp);
 				} else {
 					found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
 					if (found_key) {
