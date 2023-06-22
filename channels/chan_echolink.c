@@ -335,19 +335,19 @@ struct el_node {
 	char ip[EL_IP_SIZE + 1];
 	char call[EL_CALL_SIZE + 1];
 	char name[EL_NAME_SIZE + 1];
+	char outbound;
 	unsigned int nodenum;		/* not used yet */
 	short countdown;
 	uint16_t seqnum;
+	float jitter;
 	struct el_instance *instp;
 	struct el_pvt *p;
 	struct ast_channel *chan;
-	char outbound;
 	struct timeval last_packet_time;
 	uint32_t rx_audio_packets;
 	uint32_t tx_audio_packets;
 	uint32_t rx_ctrl_packets;
 	uint32_t tx_ctrl_packets;
-	float jitter;
 
 };
 
@@ -376,6 +376,8 @@ struct el_instance {
 	char port[EL_IP_SIZE + 1];
 	char astnode[EL_NAME_SIZE + 1];
 	char context[EL_NAME_SIZE + 1];
+	/* missed 10 heartbeats, you're out */
+	short rtcptimeout;
 	float lat;
 	float lon;
 	float freq;
@@ -385,19 +387,17 @@ struct el_instance {
 	char gain;
 	char dir;
 	int maxstns;
-	char *denylist[EL_MAX_CALL_LIST];
 	int ndenylist;
+	char *denylist[EL_MAX_CALL_LIST];
 	char *permitlist[EL_MAX_CALL_LIST];
 	int npermitlist;
-	/* missed 10 heartbeats, you're out */
-	short rtcptimeout;
+	int fdr;
 	unsigned int mynode;
 	char fdr_file[FILENAME_MAX];
 	int audio_sock;
 	int ctrl_sock;
 	uint16_t audio_port;
 	uint16_t ctrl_port;
-	int fdr;
 	unsigned long seqno;
 	struct gsmVoice_t audio_all;
 	struct el_node el_node_test;
@@ -405,17 +405,17 @@ struct el_instance {
 	time_t aprstime;
 	time_t starttime;
 	char lastcall[EL_CALL_SIZE + 1];
+	int text_packet_len;
+	char *text_packet;
 	time_t lasttime;
 	char login_display[EL_NAME_SIZE + EL_CALL_SIZE + 1];
 	char aprs_display[EL_APRS_SIZE + 1];
-	char *text_packet;
-	int text_packet_len;
-	pthread_t el_reader_thread;
 	uint32_t rx_audio_packets;
 	uint32_t tx_audio_packets;
 	uint32_t rx_ctrl_packets;
 	uint32_t tx_ctrl_packets;
 	uint32_t rx_bad_packets;
+	pthread_t el_reader_thread;
 };
 
 /*!
@@ -447,15 +447,15 @@ struct el_pvt {
 	char app[16];
 	char stream[80];
 	char ip[EL_IP_SIZE + 1];
+	char firstsent;
+	char firstheard;
 	char txkey;
 	int rxkey;
 	int keepalive;
-	struct ast_frame fr;
 	int txindex;
+	struct ast_frame fr;
 	struct el_rxqast rxqast;
 	struct el_rxqel rxqel;
-	char firstsent;
-	char firstheard;
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
 	struct ast_trans_pvt *xpath;
