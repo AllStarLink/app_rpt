@@ -171,6 +171,7 @@ do not use 127.0.0.1
 #include <search.h>
 #include <zlib.h>
 #include <fnmatch.h>
+#include <fcntl.h>
 
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
