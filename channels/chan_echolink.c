@@ -2809,23 +2809,18 @@ static int do_el_directory(char *hostname)
 	/* Establish connection */
 	if (connect(sock, (struct sockaddr *) &dirserver, sizeof(dirserver)) < 0) {
 		ast_log(LOG_ERROR, "Unable to connect to directory server %s\n", hostname);
-		inflateEnd(&z);
-		return -1;
+		goto cleanup;
 	}
 	sprintf(str, "F%s\r", snapshot_id);
 	if (send(sock, str, strlen(str), 0) < 0) {
 		ast_log(LOG_ERROR, "Unable to send to directory server %s\n", hostname);
-		close(sock);
-		inflateEnd(&z);
-		return -1;
+		goto cleanup;
 	}
 	str[strlen(str) - 1] = 0;
 	ast_debug(4, "Sending: %s to %s\n", str, hostname);
 	if (recv(sock, str, 4, 0) != 4) {
 		ast_log(LOG_ERROR, "Error in directory download (header) on %s\n", hostname);
-		close(sock);
-		inflateEnd(&z);
-		return -1;
+		goto cleanup;
 	}
 	dir_compressed = 1;
 	dir_partial = 0;
@@ -2844,9 +2839,7 @@ static int do_el_directory(char *hostname)
 	if (dir_compressed) {
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download (header) on %s\n", hostname);
-			close(sock);
-			inflateEnd(&z);
-			return -1;
+			goto cleanup;
 		}
 		if (!strncmp(str, "@@@", 3)) {
 			dir_partial = 0;
@@ -2854,31 +2847,23 @@ static int do_el_directory(char *hostname)
 			dir_partial = 1;
 		} else {
 			ast_log(LOG_ERROR, "Error in header on %s\n", hostname);
-			close(sock);
-			inflateEnd(&z);
-			return -1;
+			goto cleanup;
 		}
 	}
 	/* read the header line with the line count and possibly the snapshot id */
 	if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 		ast_log(LOG_ERROR, "Error in directory download (header) on %s\n", hostname);
-		close(sock);
-		inflateEnd(&z);
-		return -1;
+		goto cleanup;
 	}
 	if (dir_compressed) {
 		if (sscanf(str, "%d:%s", &rep_lines, snapshot_id) < 2) {
 			ast_log(LOG_ERROR, "Error in parsing header on %s\n", hostname);
-			close(sock);
-			inflateEnd(&z);
-			return -1;
+			goto cleanup;
 		}
 	} else {
 		if (sscanf(str, "%d", &rep_lines) < 1) {
 			ast_log(LOG_ERROR, "Error in parsing header on %s\n", hostname);
-			close(sock);
-			inflateEnd(&z);
-			return -1;
+			goto cleanup;
 		}
 	}
 	delmode = 0;
@@ -2921,17 +2906,13 @@ static int do_el_directory(char *hostname)
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
 			el_db_delete_all_nodes();
-			close(sock);
-			inflateEnd(&z);
-			return -1;
+			goto cleanup;
 		}
 		/* read the node number line */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
 			el_db_delete_all_nodes();
-			close(sock);
-			inflateEnd(&z);
-			return -1;
+			goto cleanup;
 		}
 		if (str[strlen(str) - 1] == '\n')
 			str[strlen(str) - 1] = 0;
@@ -2940,9 +2921,7 @@ static int do_el_directory(char *hostname)
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s\n", hostname);
 			el_db_delete_all_nodes();
-			close(sock);
-			inflateEnd(&z);
-			return -1;
+			goto cleanup;
 		}
 		if (str[strlen(str) - 1] == '\n')
 			str[strlen(str) - 1] = 0;
@@ -2964,6 +2943,11 @@ static int do_el_directory(char *hostname)
 	if (dir_compressed)
 		ast_debug(4, "Got snapshot_id: %s\n", snapshot_id);
 	return (dir_compressed);
+
+cleanup:
+	close(sock);
+	inflateEnd(&z);
+	return -1;
 }
 
 /*!
