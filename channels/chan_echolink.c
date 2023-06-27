@@ -238,7 +238,6 @@ static char snapshot_id[50] = { '0', 0 };
 
 static int el_net_get_index = 0;
 static int el_net_get_nread = 0;
-static int nodeoutfd = -1;
 
 struct sockaddr_in sin_aprs;
 
@@ -341,7 +340,7 @@ struct el_node {
 	char call[EL_CALL_SIZE + 1];
 	char name[EL_NAME_SIZE + 1];
 	char outbound;
-	unsigned int nodenum;		/* not used yet */
+	unsigned int nodenum;
 	short countdown;
 	uint16_t seqnum;
 	float jitter;
@@ -364,6 +363,25 @@ struct el_pending {
 	char fromip[EL_IP_SIZE + 1];
 	struct timeval reqtime;
 };
+
+/*!
+ * \brief Count of connections struct.
+ * This is used by twalk_r to count the connections.
+ */
+ struct el_node_count {
+	struct el_instance *instp;
+	int inbound;
+	int outbound;
+ };
+ 
+ /*!
+ * \brief Lookup for el_node callsign.
+ * This is used by twalk_r to look up a node.
+ */
+ struct el_node_lookup_callsign {
+	int nodenum;
+	char callsign[EL_CALL_SIZE + 1];
+ };
 
 /*!
  * \brief Echolink instance struct.
@@ -478,14 +496,10 @@ struct eldb {
 };
 
 AST_MUTEX_DEFINE_STATIC(el_db_lock);
-AST_MUTEX_DEFINE_STATIC(el_count_lock);
+AST_MUTEX_DEFINE_STATIC(el_nodelist_lock);
 
 struct el_instance *instances[EL_MAX_INSTANCES];
 int ninstances = 0;
-
-int count_n = 0;
-int count_outbound_n = 0;
-struct el_instance *count_instp;
 
 /* binary search tree in memory, root node */
 static void *el_node_list = NULL;
@@ -519,6 +533,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth);
 static void process_cmd(char *buf, int buf_len, char *fromip, struct el_instance *instp);
 static int find_delete(struct el_node *key);
 static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, char *name);
+static void lookup_node_callsign(const void *nodep, const VISIT which, void *closure);
 
 /*!
  * \brief Asterisk channel technology struct.
@@ -629,14 +644,16 @@ static int finddelim(char *str, char *strp[], int limit)
  * \brief Print the echolink internal user list to the cli.
  * \param nodep		Pointer to eldb struct.
  * \param which		Enum for VISIT used by twalk.
- * \param depth		Level of the node in the tree. 
+ * \param closure	Pointer to int 'fd' for the ast_cli 
  */
-static void print_nodes(const void *nodep, const VISIT which, const int depth)
+static void print_nodes(const void *nodep, const VISIT which, void *closure)
 {
 	struct eldb *node = *(struct eldb **) nodep;
+	int *fd;
 	
 	if ((which == leaf) || (which == postorder)) {
-		ast_cli(nodeoutfd, "%s|%s|%s\n",
+		fd = closure;
+		ast_cli(*fd, "%s|%s|%s\n",
 				node->nodenum,
 				node->callsign, 
 				node->ipaddr);
@@ -647,14 +664,16 @@ static void print_nodes(const void *nodep, const VISIT which, const int depth)
  * \brief Print the echolink internal connected node list to the cli.
  * \param nodep		Pointer to el_node struct.
  * \param which		Enum for VISIT used by twalk.
- * \param depth		Level of the node in the tree. 
+ * \param closure	Pointer to int 'fd' for the ast_cli 
  */
-static void print_connected_nodes(const void *nodep, const VISIT which, const int depth)
+static void print_connected_nodes(const void *nodep, const VISIT which, void *closure)
 {
 	struct el_node *node = *(struct el_node **) nodep;
+	int *fd;
 	
 	if ((which == leaf) || (which == postorder)) {
-		ast_cli(nodeoutfd, "%6i  %-10s %-15s   %-32s\n",
+		fd = closure;
+		ast_cli(*fd, "%7i  %-10s %-15s   %-32s\n",
 				node->nodenum,
 				node->call, 
 				node->ip,
@@ -666,14 +685,16 @@ static void print_connected_nodes(const void *nodep, const VISIT which, const in
  * \brief Print the echolink internal connected node list stats to the cli.
  * \param nodep		Pointer to el_node struct.
  * \param which		Enum for VISIT used by twalk.
- * \param depth		Level of the node in the tree. 
+ * \param closure	Pointer to int 'fd' for the ast_cli 
  */
-static void print_node_stats(const void *nodep, const VISIT which, const int depth)
+static void print_node_stats(const void *nodep, const VISIT which, void *closure)
 {
 	struct el_node *node = *(struct el_node **) nodep;
+	int *fd;
 	
 	if ((which == leaf) || (which == postorder)) {
-		ast_cli(nodeoutfd, "%7i  %10i %10i %10i %10i %7.2f\n",
+		fd = closure;
+		ast_cli(*fd, "%7i  %10i %10i %10i %10i %7.2f\n",
 				node->nodenum,
 				node->rx_ctrl_packets, 
 				node->tx_ctrl_packets,
@@ -1451,6 +1472,7 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 	struct eldb *foundnode = NULL;
 	int res = -1;
 	char *node = data;
+	struct el_node_lookup_callsign node_lookup;
 	
 	/* Make sure that we got a node number to query */
 	if (ast_strlen_zero(data)) {
@@ -1470,10 +1492,23 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 			}
 			break;
 		case EL_QUERY_CALLSIGN:
-			foundnode = el_db_find_nodenum(node);
-			if (foundnode) {
-				ast_copy_string(data, foundnode->callsign, *datalen);
+			/* first lookup in the currently connected nodes tree */
+			memset(&node_lookup, 0, sizeof(node_lookup));
+			node_lookup.nodenum = atoi(node);
+			ast_mutex_lock(&el_nodelist_lock);
+			twalk_r(el_node_list, lookup_node_callsign, &node_lookup);
+			ast_mutex_unlock(&el_nodelist_lock);
+			
+			if (node_lookup.callsign[0]) {
+				ast_copy_string(data, node_lookup.callsign, *datalen);
 				res = 0;
+			} else {
+				/* was not found - now lookup in our internal directory */
+				foundnode = el_db_find_nodenum(node);
+				if (foundnode) {
+					ast_copy_string(data, foundnode->callsign, *datalen);
+					res = 0;
+				}
 			}
 			break;
 		default:
@@ -1701,19 +1736,42 @@ static void print_users(const void *nodep, const VISIT which, const int depth)
  * \brief Count connected nodes.
  * \param nodep		Pointer to el_node struct.
  * \param which		Enum for VISIT used by twalk.
- * \param depth		Level of the node in the tree.
+ * \param closure	Points to el_node_count struct used to count the nodes.
  */
-static void count_users(const void *nodep, const VISIT which, const int depth)
+static void count_users(const void *nodep, const VISIT which, void *closure)
 {
+	struct el_node_count *count;
+	
 	if ((which == leaf) || (which == postorder)) {
-		if ((*(struct el_node **) nodep)->instp == count_instp) {
-			count_n++;
-			if ((*(struct el_node **) nodep)->outbound)
-				count_outbound_n++;
+		count = closure;
+		if ((*(struct el_node **) nodep)->instp == count->instp) {
+			count->inbound++;
+			if ((*(struct el_node **) nodep)->outbound) {
+				count->outbound++;
+			}
 		}
 	}
 }
 
+/*!
+ * \brief Lookup callsign for a connected node.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param closure	Points to el_node_lookup_callsign struct used to search for the node.
+ */
+static void lookup_node_callsign(const void *nodep, const VISIT which, void *closure)
+{
+	struct el_node *node;
+	struct el_node_lookup_callsign *lookup;
+	
+	if ((which == leaf) || (which == postorder)) {
+		node = *(struct el_node **) nodep;
+		lookup = closure;
+		if (node->nodenum == lookup->nodenum) {
+			ast_copy_string(lookup->callsign, node->call, EL_CALL_SIZE);
+		}
+	}
+}
 /*!
  * \brief Send connection information to connected nodes.
  * \param nodep		Pointer to el_node struct.
@@ -2289,14 +2347,12 @@ static int el_do_dbdump(int fd, int argc, const char *const *argv)
 		c = tolower(*argv[2]);
 	}
 	ast_mutex_lock(&el_db_lock);
-	nodeoutfd = fd;
 	if (c == 'i')
-		twalk(el_db_ipaddr, print_nodes);
+		twalk_r(el_db_ipaddr, print_nodes, &fd);
 	else if (c == 'c')
-		twalk(el_db_callsign, print_nodes);
+		twalk_r(el_db_callsign, print_nodes, &fd);
 	else
-		twalk(el_db_nodenum, print_nodes);
-	nodeoutfd = -1;
+		twalk_r(el_db_nodenum, print_nodes, &fd);
 	ast_mutex_unlock(&el_db_lock);
 	return RESULT_SUCCESS;
 }
@@ -2344,13 +2400,9 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
  */
 static int el_do_show_nodes(int fd, int argc, const char *const *argv)
 {
-	nodeoutfd = fd;
+	ast_cli(fd, "   Node  Call Sign  IP Address        Name\n");
 	
-	ast_cli(nodeoutfd, "  Node  Call Sign  IP Address        Name\n");
-	
-	twalk(el_node_list, print_connected_nodes);
-	
-	nodeoutfd = -1;
+	twalk_r(el_node_list, print_connected_nodes, &fd);
 	
 	return RESULT_SUCCESS;
 }
@@ -2364,8 +2416,7 @@ static int el_do_show_nodes(int fd, int argc, const char *const *argv)
  */
 static int el_do_show_stats(int fd, int argc, const char *const *argv)
 {
-	int in_bound;
-	int out_bound;
+	struct el_node_count count;
 	
 	/* make sure we have an instance */
 	if (!instances[0]) {
@@ -2374,16 +2425,14 @@ static int el_do_show_stats(int fd, int argc, const char *const *argv)
 	}
 
 	/* count the inbound and outbound nodes */
-	ast_mutex_lock(&el_count_lock);
-	count_instp = instances[0];
-	count_n = count_outbound_n = 0;
-	twalk(el_node_list, count_users);
-	in_bound = count_n;
-	out_bound = count_outbound_n;
-	ast_mutex_unlock(&el_count_lock);
+	memset(&count, 0, sizeof(count));
+	count.instp = instances[0];
+	ast_mutex_lock(&el_nodelist_lock);
+	twalk_r(el_node_list, count_users, &count);
+	ast_mutex_unlock(&el_nodelist_lock);
 	
-	ast_cli(fd, "Inbound connections  %i\n", in_bound);
-	ast_cli(fd, "Outbound connections %i\n\n", out_bound);
+	ast_cli(fd, "Inbound connections  %i\n", count.inbound);
+	ast_cli(fd, "Outbound connections %i\n\n", count.outbound);
 	
 	ast_cli(fd, "   Node     Rx Ctrl    Tx Ctrl   Rx Audio   Tx Audio Jitter(ms) Bad Packets\n");
 	ast_cli(fd, " System  %10i %10i %10i %10i           %10i\n",
@@ -2391,9 +2440,9 @@ static int el_do_show_stats(int fd, int argc, const char *const *argv)
 		instances[0]->rx_audio_packets, instances[0]->tx_audio_packets,
 		instances[0]->rx_bad_packets);
 	
-	nodeoutfd = fd;
-	twalk(el_node_list, print_node_stats);
-	nodeoutfd = -1;
+	ast_mutex_lock(&el_nodelist_lock);
+	twalk_r(el_node_list, print_node_stats, &fd);
+	ast_mutex_unlock(&el_nodelist_lock);
 		
 	return RESULT_SUCCESS;
 }
@@ -3201,21 +3250,20 @@ static void *el_reader(void *data)
 			unsigned int u;
 			float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
 			int sdes_length;
+			struct el_node_count count;
 
 			instp->aprstime = now + EL_APRS_INTERVAL;
-			ast_mutex_lock(&el_count_lock);
-			count_instp = instp;
-			count_n = count_outbound_n = 0;
-			twalk(el_node_list, count_users);
-			i = count_n;
-			j = count_outbound_n;
-			ast_mutex_unlock(&el_count_lock);
+			memset(&count, 0, sizeof(count));
+			count.instp = instp;
+			ast_mutex_lock(&el_nodelist_lock);
+			twalk_r(el_node_list, count_users, &count);
+			ast_mutex_unlock(&el_nodelist_lock);
 			tm = gmtime(&now);
-			if (!j) {			/* if no outbound users */
+			if (!count.outbound) {			/* if no outbound users */
 				snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE,
-						 "%s [%d/%d]", instp->myqth, i, instp->maxstns);
+						 "%s [%d/%d]", instp->myqth, count.inbound, instp->maxstns);
 				snprintf(instp->aprs_display, EL_APRS_SIZE,
-						 " On @ %02d%02d [%d/%d]", tm->tm_hour, tm->tm_min, i, instp->maxstns);
+						 " On @ %02d%02d [%d/%d]", tm->tm_hour, tm->tm_min, count.inbound, instp->maxstns);
 			} else {
 				snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE, "In Conference %s", instp->lastcall);
 				snprintf(instp->aprs_display, EL_APRS_SIZE,
