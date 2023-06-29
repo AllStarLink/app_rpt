@@ -53,14 +53,11 @@ Steve, N4IRS
 A lot more has to be added,
 Here is what comes to mind first:
 
----> does not process chat text.
 ---> recognizes a few remote text commands.
 ---> no busy, deaf or mute.
 ---> no admin list, only local 127.0.0.1 access.
----> no max TX time limit.
 ---> no event notififications.
 ---> no loop detection.
----> allows "doubles"
 
 Default ports are 5198,5199.
 
@@ -197,6 +194,7 @@ do not use 127.0.0.1
 #define QUEUE_OVERLOAD_THRESHOLD_AST 75
 #define QUEUE_OVERLOAD_THRESHOLD_EL 30
 #define	MAXPENDING 20
+#define AUDIO_TIMEOUT 800	/*Audio timeout in milliseconds */
 
 #define EL_IP_SIZE 16
 #define EL_CALL_SIZE 16
@@ -352,6 +350,9 @@ struct el_node {
 	uint32_t tx_audio_packets;
 	uint32_t rx_ctrl_packets;
 	uint32_t tx_ctrl_packets;
+	char istimedout;
+	char isdoubling;
+	
 
 };
 
@@ -430,7 +431,6 @@ struct el_instance {
 	char lastcall[EL_CALL_SIZE + 1];
 	int text_packet_len;
 	char *text_packet;
-	time_t lasttime;
 	char login_display[EL_NAME_SIZE + EL_CALL_SIZE + 1];
 	char aprs_display[EL_APRS_SIZE + 1];
 	uint32_t rx_audio_packets;
@@ -438,6 +438,10 @@ struct el_instance {
 	uint32_t rx_ctrl_packets;
 	uint32_t tx_ctrl_packets;
 	uint32_t rx_bad_packets;
+	int timeout_time;
+	struct el_node *current_talker;
+	struct timeval current_talker_start_time;
+	struct timeval current_talker_last_time;
 	pthread_t el_reader_thread;
 };
 
@@ -516,7 +520,8 @@ static int nullfd = -1;
 static int el_sleeptime = 0;
 static int el_login_sleeptime = 0;
 
-static char *config = "echolink.conf";
+static char *el_config = "echolink.conf";
+static char *rpt_config = "rpt.conf";
 
 static struct ast_channel *el_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
 static int el_call(struct ast_channel *ast, const char *dest, int timeout);
@@ -3171,9 +3176,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, char *call, 
 				el_node_key->rx_ctrl_packets++;
 				ast_mutex_lock(&instp->lock);
 				strcpy(instp->lastcall, mynode->callsign);
-				time(&instp->lasttime);
 				time(&now);
-				instp->lasttime = now;
 				if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 					instp->aprstime = now;
 				}
@@ -3521,6 +3524,34 @@ static void *el_reader(void *data)
 							node->jitter = (time_difference + node->jitter) / 2;
 						}
 						node->last_packet_time = current_packet_time;
+						/*
+						* see if we have a new talker
+						*/
+						if (!instp->current_talker) {
+							instp->current_talker = node;
+							instp->current_talker_start_time = current_packet_time;
+							node->istimedout = 0;
+							node->isdoubling = 0;
+							ast_debug(3, "Station %s started talking.\n", node->call);
+						} else {
+							/* see if this is a double - two stations talking at the same time */
+							if (node->nodenum != instp->current_talker->nodenum) {
+								if (!node->isdoubling) {
+									ast_debug(3, "Station %s is doubling with %s.\n", node->call, instp->current_talker->call);
+								}
+								node->isdoubling = 1;
+								continue;
+							}
+						}
+						instp->current_talker_last_time = current_packet_time;
+						/* see if they have timed out */
+						if (ast_tvdiff_ms(current_packet_time, instp->current_talker_start_time) > instp->timeout_time) {
+							if (!node->istimedout) {
+								ast_debug(1, "Station %s timed out.\n", node->call);
+							}
+							node->istimedout = 1;
+							continue;
+						}
 						/* queue the gsm packets */
 						if (recvlen == sizeof(struct gsmVoice_t)) {
 							if (gsmPacket->version == 3 && gsmPacket->payt == 3) {
@@ -3547,6 +3578,19 @@ static void *el_reader(void *data)
 				}
 			}
 		}
+		/*
+		* check current talker (see if they have stopped talking)
+		*/
+		if (instp->current_talker) {
+			if (ast_tvdiff_ms(ast_tvnow(), instp->current_talker_last_time) > AUDIO_TIMEOUT) {
+				ast_debug(3, "Station %s stopped talking.\n", instp->current_talker->call);
+				instp->current_talker->istimedout = 0;
+				instp->current_talker->isdoubling = 0;
+				instp->current_talker = NULL;
+				instp->current_talker_start_time = (struct timeval){0};
+				instp->current_talker_last_time = (struct timeval){0};
+			}
+		}
 	}
 	ast_mutex_unlock(&instp->lock);
 	ast_debug(1, "Echolink read thread exited.\n");
@@ -3564,6 +3608,8 @@ static void *el_reader(void *data)
  */
 static int store_config(struct ast_config *cfg, char *ctg)
 {
+	struct ast_config *rpt_cfg = NULL;
+	struct ast_flags zeroflag = { 0 };
 	char *val;
 	struct hostent *ahp;
 	struct ast_hostent ah;
@@ -3586,6 +3632,8 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	instp->audio_sock = -1;
 	instp->ctrl_sock = -1;
 	instp->fdr = -1;
+	
+	ast_copy_string(instp->name, ctg, EL_NAME_SIZE);
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "ipaddr");
 	if (val) {
@@ -3735,9 +3783,27 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->dir = (char) strtol(val, NULL, 0);
 	else
 		instp->dir = 0;
+	
+	/*
+	* load settings from app_rpt rpt.conf
+	*/
+	if (!(rpt_cfg = ast_config_load(rpt_config, zeroflag))) {
+		ast_log(LOG_ERROR, "Unable to load config %s\n", rpt_config);
+		return -1;
+	}
+	val = (char *) ast_variable_retrieve(rpt_cfg, instp->astnode, "totime");
+	if (val) {
+		instp->timeout_time = atoi(val);
+	}
+	else {
+		instp->timeout_time = 180000;
+	}
 
-	instp->audio_sock = -1;
-	instp->ctrl_sock = -1;
+	ast_config_destroy(rpt_cfg);
+
+	/*
+	* validate settings
+	*/
 
 	if ((strncmp(instp->mypwd, "INVALID", EL_PWD_SIZE) == 0) || (strncmp(instp->mycall, "INVALID", EL_CALL_SIZE) == 0)) {
 		ast_log(LOG_ERROR, "Your Echolink call or password is not right\n");
@@ -3747,6 +3813,9 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		ast_log(LOG_ERROR, "One of the Echolink servers missing\n");
 		return -1;
 	}
+	/*
+	* start up the socket listeners
+	*/
 	if ((instp->audio_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		ast_log(LOG_WARNING, "Unable to create new socket for echolink audio connection\n");
 		return -1;
@@ -3757,6 +3826,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->audio_sock = -1;
 		return -1;
 	}
+	/* audio channel */
 	memset(&si_me, 0, sizeof(si_me));
 	si_me.sin_family = AF_INET;
 	if (strcmp(instp->ipaddr, "0.0.0.0") == 0)
@@ -3773,6 +3843,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->audio_sock = -1;
 		return -1;
 	}
+	/* control channel */
 	instp->ctrl_port = instp->audio_port + 1;
 	si_me.sin_port = htons(instp->ctrl_port);
 	if (bind(instp->ctrl_sock, &si_me, sizeof(si_me)) == -1) {
@@ -3785,7 +3856,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
 	fcntl(instp->ctrl_sock, F_SETFL, O_NONBLOCK);
-	ast_copy_string(instp->name, ctg, EL_NAME_SIZE);
+	/* aprs channel */
 	memset(&sin_aprs, 0, sizeof(sin_aprs));
 	sin_aprs.sin_family = AF_INET;
 	sin_aprs.sin_port = htons(5199);
@@ -3799,6 +3870,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		return -1;
 	}
 	memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
+	/* start the registration thread */
 	ast_pthread_create(&el_register_thread, NULL, el_register, (void *) instp);
 	ast_pthread_create_detached(&instp->el_reader_thread, NULL, el_reader, (void *) instp);
 	instances[ninstances++] = instp;
@@ -3812,6 +3884,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	ast_debug(1, "Echolink/%s file for recording set to %s\n", instp->name, instp->fdr_file);
 	ast_debug(1, "Echolink/%s  qth set to %s\n", instp->name, instp->myqth);
 	ast_debug(1, "Echolink/%s emailID set to %s\n", instp->name, instp->myemail);
+	
 	return 0;
 }
 
@@ -3863,8 +3936,8 @@ static int unload_module(void)
 	char *ctg = NULL;
 	struct ast_flags zeroflag = { 0 };
 
-	if (!(cfg = ast_config_load(config, zeroflag))) {
-		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+	if (!(cfg = ast_config_load(el_config, zeroflag))) {
+		ast_log(LOG_ERROR, "Unable to load config %s\n", el_config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -3887,7 +3960,9 @@ static int unload_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
+	/* start the directory thread */
 	ast_pthread_create(&el_directory_thread, NULL, el_directory, NULL);
+	
 	ast_cli_register_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&el_tech)) {
