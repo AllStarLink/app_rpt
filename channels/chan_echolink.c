@@ -1885,12 +1885,11 @@ static void send_text(const void *nodep, const VISIT which, const int depth)
  * \param node		Pointer to el_node struct.
  * \param message	Pointer to message to send.
  */
-static void send_text_one(struct el_node *node, char *message)
+static void send_text_one(struct el_node *node, const char *message)
 {
 	struct sockaddr_in sin;
 	char text[1024];
 	int length;
-	int res;
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
@@ -1899,14 +1898,11 @@ static void send_text_one(struct el_node *node, char *message)
 	
 	length = snprintf(text, sizeof(text), "oNDATA%s>%s\r\n", node->instp->mycall, message);
 		
-	res = sendto(node->instp->audio_sock, text, length, 0, (struct sockaddr *) &sin, sizeof(sin));
-	
-	ast_debug(1, "Sent %i  %s", res, text);
+	sendto(node->instp->audio_sock, text, length, 0, (struct sockaddr *) &sin, sizeof(sin));
 	
 	node->instp->tx_audio_packets++;
 	node->tx_audio_packets++;
 
-	return;
 }
 
 /*!
