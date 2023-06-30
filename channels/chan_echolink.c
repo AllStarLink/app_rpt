@@ -1881,6 +1881,35 @@ static void send_text(const void *nodep, const VISIT which, const int depth)
 }
 
 /*!
+ * \brief Send text message to one node
+ * \param node		Pointer to el_node struct.
+ * \param message	Pointer to message to send.
+ */
+static void send_text_one(struct el_node *node, char *message)
+{
+	struct sockaddr_in sin;
+	char text[1024];
+	int length;
+	int res;
+
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(node->instp->audio_port);
+	sin.sin_addr.s_addr = inet_addr(node->ip);
+	
+	length = snprintf(text, sizeof(text), "oNDATA%s>%s\r\n", node->instp->mycall, message);
+		
+	res = sendto(node->instp->audio_sock, text, length, 0, (struct sockaddr *) &sin, sizeof(sin));
+	
+	ast_debug(1, "Sent %i  %s", res, text);
+	
+	node->instp->tx_audio_packets++;
+	node->tx_audio_packets++;
+
+	return;
+}
+
+/*!
  * \brief Free node.  Empty routine.
  */
 static void free_node(void *nodep)
@@ -3538,6 +3567,7 @@ static void *el_reader(void *data)
 							if (node->nodenum != instp->current_talker->nodenum) {
 								if (!node->isdoubling) {
 									ast_debug(3, "Station %s is doubling with %s.\n", node->call, instp->current_talker->call);
+									send_text_one(node, "You are doubling.");
 								}
 								node->isdoubling = 1;
 								continue;
@@ -3548,6 +3578,7 @@ static void *el_reader(void *data)
 						if (ast_tvdiff_ms(current_packet_time, instp->current_talker_start_time) > instp->timeout_time) {
 							if (!node->istimedout) {
 								ast_debug(1, "Station %s timed out.\n", node->call);
+								send_text_one(node, "You have timed out.");
 							}
 							node->istimedout = 1;
 							continue;
