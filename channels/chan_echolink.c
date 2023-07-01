@@ -3605,9 +3605,7 @@ static void *el_reader(void *data)
 				}
 			}
 		}
-		/*
-		* check current talker (see if they have stopped talking)
-		*/
+		/* check current talker (see if they have stopped talking) */
 		if (instp->current_talker) {
 			if (ast_tvdiff_ms(ast_tvnow(), instp->current_talker_last_time) > AUDIO_TIMEOUT) {
 				ast_debug(3, "Station %s stopped talking.\n", instp->current_talker->call);
@@ -3635,7 +3633,7 @@ static void *el_reader(void *data)
  */
 static int store_config(struct ast_config *cfg, char *ctg)
 {
-	struct ast_config *rpt_cfg = NULL;
+	struct ast_config *rpt_cfg;
 	struct ast_flags zeroflag = { 0 };
 	char *val;
 	struct hostent *ahp;
@@ -3811,9 +3809,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	else
 		instp->dir = 0;
 	
-	/*
-	* load settings from app_rpt rpt.conf
-	*/
+	/* load settings from app_rpt rpt.conf */
 	if (!(rpt_cfg = ast_config_load(rpt_config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", rpt_config);
 		return -1;
@@ -3821,16 +3817,13 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	val = (char *) ast_variable_retrieve(rpt_cfg, instp->astnode, "totime");
 	if (val) {
 		instp->timeout_time = atoi(val);
-	}
-	else {
+	} else {
 		instp->timeout_time = 180000;
 	}
 
 	ast_config_destroy(rpt_cfg);
 
-	/*
-	* validate settings
-	*/
+	/* validate settings */
 
 	if ((strncmp(instp->mypwd, "INVALID", EL_PWD_SIZE) == 0) || (strncmp(instp->mycall, "INVALID", EL_CALL_SIZE) == 0)) {
 		ast_log(LOG_ERROR, "Your Echolink call or password is not right\n");
@@ -3840,9 +3833,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		ast_log(LOG_ERROR, "One of the Echolink servers missing\n");
 		return -1;
 	}
-	/*
-	* start up the socket listeners
-	*/
+	/* start up the socket listeners */
 	if ((instp->audio_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		ast_log(LOG_WARNING, "Unable to create new socket for echolink audio connection\n");
 		return -1;
@@ -3883,7 +3874,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
 	fcntl(instp->ctrl_sock, F_SETFL, O_NONBLOCK);
-	/* aprs channel */
+	/* APRS channel */
 	memset(&sin_aprs, 0, sizeof(sin_aprs));
 	sin_aprs.sin_family = AF_INET;
 	sin_aprs.sin_port = htons(5199);
@@ -3959,7 +3950,7 @@ static int unload_module(void)
 
  static int load_module(void)
 {
-	struct ast_config *cfg = NULL;
+	struct ast_config *cfg;
 	char *ctg = NULL;
 	struct ast_flags zeroflag = { 0 };
 
