@@ -1607,7 +1607,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 			j = 0;
 			k = 0;
 			for (x = 0; x < i; x++) {
-				if ((*(strs[x] + 1) < '3') || (*(strs[x] + 1) > '4')) {
+				if ((*(strs[x] + 1) != '3')) {
 					if (strlen(pkt + k) >= 32) {
 						k = strlen(pkt);
 						strncat(pkt, "\r    ", pkt_len - k);
