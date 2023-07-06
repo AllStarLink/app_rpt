@@ -3401,7 +3401,7 @@ static void *el_reader(void *data)
 			continue;
 		}
 		if (i < 0) {
-			ast_log(LOG_ERROR, "Fatal error in poll!  errno %i.\n", errno);
+			ast_log(LOG_ERROR, "Fatal error, poll returned %d: %s\n", i, strerror(errno));
 			run_forever = 0;
 			break;
 		}
@@ -3492,7 +3492,7 @@ static void *el_reader(void *data)
 								i = do_new_call(instp, NULL, call, name);
 								if (i < 0) {
 									/* we failed to create a new call - error reported by do_new_call */
-									i=0;
+									i = 0;
 								}
 							}
 							if (i) {	/* if not authorized or do_new_call failed*/
