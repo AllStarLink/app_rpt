@@ -507,7 +507,6 @@ static void *el_db_ipaddr = NULL;
 static pthread_t el_register_thread = 0;
 static pthread_t el_directory_thread = 0;
 static int run_forever = 1;
-static int killing = 0;
 static int el_sleeptime = 0;
 static int el_login_sleeptime = 0;
 
@@ -568,47 +567,6 @@ static char show_nodes_usage[] = "Usage: echolink show nodes\n";
 
 static char show_stats_usage[] = "Usage: echolink show stats\n";	
 
-#define mythread_exit(nothing) __mythread_exit(nothing, __LINE__)
-
-/*!
- * \brief Cleans up the application when a serious internal error occurs.
- * It forces app_rpt to restart.
- * \param nothing	Pointer to NULL (NULL is passed from all routines)
- * \param line		Line where the exit originated
- */
-static void __mythread_exit(void *nothing, int line)
-{
-	int i;
-	int nullfd;
-
-	if (killing) {
-		pthread_exit(NULL);
-	}
-	killing = 1;
-	run_forever = 0;
-	for (i = 0; i < ninstances; i++) {
-		if (instances[i]->el_reader_thread) {
-			pthread_kill(instances[i]->el_reader_thread, SIGTERM);
-		}
-	}
-	if (el_register_thread) {
-		pthread_kill(el_register_thread, SIGTERM);
-	}
-	if (el_directory_thread) {
-		pthread_kill(el_directory_thread, SIGTERM);
-	}
-	ast_log(LOG_ERROR, "Exiting chan_echolink, FATAL ERROR at line %d!\n", line);
-
-	/* restart app_rpt */
-	nullfd = open("/dev/null", O_RDWR);
-	if (nullfd != -1) {
-		ast_cli_command(nullfd, "rpt restart");
-		close(nullfd);
-	}
-
-	pthread_exit(NULL);
-}
-
 /*!
  * \brief Break up a delimited string into a table of substrings.
  * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
@@ -656,7 +614,7 @@ static int finddelim(char *str, char *strp[], int limit)
  */
 static void print_nodes(const void *nodep, const VISIT which, void *closure)
 {
-	const struct eldb *node = *(struct eldb **) nodep;
+	const struct eldb *node = *(const struct eldb **) nodep;
 	int *fd;
 	
 	if ((which == leaf) || (which == postorder)) {
@@ -676,7 +634,7 @@ static void print_nodes(const void *nodep, const VISIT which, void *closure)
  */
 static void print_connected_nodes(const void *nodep, const VISIT which, void *closure)
 {
-	const struct el_node *node = *(struct el_node **) nodep;
+	const struct el_node *node = *(const struct el_node **) nodep;
 	int *fd;
 	
 	if ((which == leaf) || (which == postorder)) {
@@ -697,7 +655,7 @@ static void print_connected_nodes(const void *nodep, const VISIT which, void *cl
  */
 static void print_node_stats(const void *nodep, const VISIT which, void *closure)
 {
-	const struct el_node *node = *(struct el_node **) nodep;
+	const struct el_node *node = *(const struct el_node **) nodep;
 	int *fd;
 	
 	if ((which == leaf) || (which == postorder)) {
@@ -1353,7 +1311,7 @@ static struct el_pvt *el_alloc(const char *data)
 	struct el_pvt *pvt;
 	int n;
 	/* int flags = 0; */
-	char stream[256];
+	char stream[80];
 
 	if (ast_strlen_zero(data)) {
 		return NULL;
@@ -1371,7 +1329,7 @@ static struct el_pvt *el_alloc(const char *data)
 
 	pvt = ast_calloc(1, sizeof(struct el_pvt));
 	if (pvt) {
-		sprintf(stream, "%s-%lu", data, instances[n]->seqno++);
+		snprintf(stream, sizeof(stream) - 1, "%s-%lu", data, instances[n]->seqno++);
 		strcpy(pvt->stream, stream);
 		pvt->rxqast.qe_forw = &pvt->rxqast;
 		pvt->rxqast.qe_back = &pvt->rxqast;
@@ -1603,35 +1561,36 @@ static int el_text(struct ast_channel *ast, const char *text)
 {
 #define	MAXLINKSTRS 200
 
-	struct el_pvt *p = ast_channel_tech_pvt(ast);
+	struct el_pvt *pvt = ast_channel_tech_pvt(ast);
 	const char *delim = " ";
 	char *cmd, *arg1, *arg4;
 	char *ptr,*saveptr, *cp, *pkt;
-	char buf[200], str[200], *strs[MAXLINKSTRS];
-	int i, j, k, x;
+	char buf[5120], str[200], *strs[MAXLINKSTRS];
+	int i, j, k, x, pkt_len, pkt_actual_len;
 
 	ast_copy_string(buf, text, sizeof(buf));
-	ptr = strchr(buf, (int) '\r');
+	ptr = strchr(buf, '\r');
 	if (ptr) {
 		*ptr = '\0';
 	}
-	ptr = strchr(buf, (int) '\n');
+	ptr = strchr(buf, '\n');
 	if (ptr) {
 		*ptr = '\0';
 	}
 
-	if (p->instp && (text[0] == 'L')) {
+	/* see if we are receiving a link text message */
+	if (pvt->instp && (text[0] == 'L')) {
 		if (strlen(text) < 3) {
-			if (p->linkstr) {
-				ast_free(p->linkstr);
-				p->linkstr = NULL;
+			if (pvt->linkstr) {
+				ast_free(pvt->linkstr);
+				pvt->linkstr = NULL;
 				twalk(el_node_list, send_info);
 			}
 			return 0;
 		}
-		if (p->linkstr) {
-			ast_free(p->linkstr);
-			p->linkstr = NULL;
+		if (pvt->linkstr) {
+			ast_free(pvt->linkstr);
+			pvt->linkstr = NULL;
 		}
 		cp = ast_strdup(text + 2);
 		if (!cp) {
@@ -1640,7 +1599,8 @@ static int el_text(struct ast_channel *ast, const char *text)
 		i = finddelim(cp, strs, MAXLINKSTRS);
 		if (i) {
 			qsort(strs, i, sizeof(char *), mycompar);
-			pkt = ast_calloc(1, (i * 10) + 50);
+			pkt_len = (i * 10) + 50;
+			pkt = ast_calloc(1, pkt_len);
 			if (!pkt) {
 				return -1;
 			}
@@ -1650,42 +1610,44 @@ static int el_text(struct ast_channel *ast, const char *text)
 				if ((*(strs[x] + 1) < '3') || (*(strs[x] + 1) > '4')) {
 					if (strlen(pkt + k) >= 32) {
 						k = strlen(pkt);
-						strcat(pkt, "\r    ");
+						strncat(pkt, "\r    ", pkt_len - k);
 					}
 					if (!j++) {
-						strcat(pkt, "Allstar:");
+						strncat(pkt, "Allstar:", pkt_len - strlen(pkt));
 					}
-					if (*strs[x] == 'T'){
-						sprintf(pkt + strlen(pkt), " %s", strs[x] + 1);
+					pkt_actual_len = strlen(pkt);
+					if (*strs[x] == 'T') {
+						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %s", strs[x] + 1);
 					} else {
-						sprintf(pkt + strlen(pkt), " %s(M)", strs[x] + 1);
+						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %s(M)", strs[x] + 1);
 					}
 				}
 			}
-			strcat(pkt, "\r");
+			strncat(pkt, "\r", pkt_len - strlen(pkt));
 			j = 0;
 			k = strlen(pkt);
 			for (x = 0; x < i; x++) {
 				if (*(strs[x] + 1) == '3') {
 					if (strlen(pkt + k) >= 32) {
 						k = strlen(pkt);
-						strcat(pkt, "\r    ");
+						strncat(pkt, "\r    ", pkt_len - k);
 					}
 					if (!j++) {
-						strcat(pkt, "Echolink: ");
+						strncat(pkt, "Echolink: ", pkt_len - strlen(pkt));
 					}
+					pkt_actual_len = strlen(pkt);
 					if (*strs[x] == 'T') {
-						sprintf(pkt + strlen(pkt), " %d", atoi(strs[x] + 2));
+						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %d", atoi(strs[x] + 2));
 					} else {
-						sprintf(pkt + strlen(pkt), " %d(M)", atoi(strs[x] + 2));
+						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %d(M)", atoi(strs[x] + 2));
 					}
 				}
 			}
-			strcat(pkt, "\r");
-			if (p->linkstr && pkt && (!strcmp(p->linkstr, pkt))) {
+			strncat(pkt, "\r", pkt_len - strlen(pkt));
+			if (pvt->linkstr && pkt && (!strcmp(pvt->linkstr, pkt))) {
 				ast_free(pkt);
 			} else {
-				p->linkstr = pkt;
+				pvt->linkstr = pkt;
 			}
 		}
 		ast_free(cp);
@@ -1704,7 +1666,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 	arg4 = strtok_r(NULL, delim, &saveptr);
 
 	if (!strcasecmp(cmd, "D")) {
-		sprintf(str, "3%06u", p->nodenum);
+		snprintf(str, sizeof(str), "3%06u", pvt->nodenum);
 		/* if not for this one, we cant go any farther */
 		if (strcmp(arg1, str)) {
 			return 0;
@@ -2354,7 +2316,7 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 	if (nodenum > 0) {
 		char tmpstr[30];
 
-		sprintf(tmpstr, "3%06u", nodenum);
+		snprintf(tmpstr, sizeof(tmpstr), "3%06u", nodenum);
 		ast_set_callerid(tmp, tmpstr, NULL, NULL);
 	}
 	pvt->owner = tmp;
@@ -2919,7 +2881,7 @@ static int do_el_directory(const char *hostname)
 	struct sockaddr_in dirserver;
 	char str[200], ipaddr[200], nodenum[200], call[200];
 	char *pp, *cc;
-	int n = 0, rep_lines, delmode;
+	int n = 0, rep_lines, delmode, str_len;
 	int dir_compressed, dir_partial;
 	struct z_stream_s z;
 	int sock;
@@ -2957,7 +2919,7 @@ static int do_el_directory(const char *hostname)
 		ast_log(LOG_ERROR, "Unable to connect to directory server %s.\n", hostname);
 		goto cleanup;
 	}
-	sprintf(str, "F%s\r", snapshot_id);
+	snprintf(str, sizeof(str), "F%s\r", snapshot_id);
 	if (send(sock, str, strlen(str), 0) < 0) {
 		ast_log(LOG_ERROR, "Unable to send to directory server %s.\n", hostname);
 		goto cleanup;
@@ -3044,8 +3006,9 @@ static int do_el_directory(const char *hostname)
 			delmode = 1;
 			continue;
 		}
-		if (str[strlen(str) - 1] == '\n') {
-			str[strlen(str) - 1] = 0;
+		str_len = strlen(str);
+		if (str[str_len - 1] == '\n') {
+			str[str_len - 1] = 0;
 		}
 		ast_copy_string(call, str, sizeof(call));
 		if (dir_partial) {
@@ -3066,8 +3029,9 @@ static int do_el_directory(const char *hostname)
 			el_db_delete_all_nodes();
 			goto cleanup;
 		}
-		if (str[strlen(str) - 1] == '\n') {
-			str[strlen(str) - 1] = 0;
+		str_len = strlen(str);
+		if (str[str_len - 1] == '\n') {
+			str[str_len - 1] = 0;
 		}
 		ast_copy_string(nodenum, str, sizeof(nodenum));
 		/* read the ip address line */
@@ -3076,8 +3040,9 @@ static int do_el_directory(const char *hostname)
 			el_db_delete_all_nodes();
 			goto cleanup;
 		}
-		if (str[strlen(str) - 1] == '\n') {
-			str[strlen(str) - 1] = 0;
+		str_len = strlen(str);
+		if (str[str_len - 1] == '\n') {
+			str[str_len - 1] = 0;
 		}
 		ast_copy_string(ipaddr, str, sizeof(ipaddr));
 		/* every 10 records, sleep for a short time */
@@ -3096,7 +3061,7 @@ static int do_el_directory(const char *hostname)
 	cc = (dir_compressed) ? "compressed" : "un-compressed";
 	ast_verb(4, "Directory completed downloading(%s,%s), %d records.\n", pp, cc, n);
 	if (dir_compressed) {
-		ast_debug(4, "Got snapshot_id: %s.\n", snapshot_id);
+		ast_debug(4, "Got snapshot_id: %s\n", snapshot_id);
 	}
 	return (dir_compressed);
 
@@ -3410,14 +3375,14 @@ static void *el_reader(void *data)
 			latd = (latb - floor(latb)) * 100 + 0.5;
 			lonb = (lona - floor(lona)) * 60;
 			lond = (lonb - floor(lonb)) * 100 + 0.5;
-			sprintf(aprsstr, ")EL-%-6.6s!%02d%02d.%02d%cE%03d%02d.%02d%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
+			snprintf(aprsstr, sizeof(aprsstr), ")EL-%-6.6s!%02d%02d.%02d%cE%03d%02d.%02d%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
 					(int) lata, (int) latb, (int) latd, latc,
 					(int) lona, (int) lonb, (int) lond, lonc,
 					instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
 			ast_debug(4, "APRS out: %s.\n", aprsstr);
-			sprintf(aprscall, "%s/%s", instp->mycall, instp->mycall);
+			snprintf(aprscall, sizeof(aprscall), "%s/%s", instp->mycall, instp->mycall);
 			memset(sdes_packet, 0, sizeof(sdes_packet));
 			sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
 			sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin_aprs, sizeof(sin_aprs));
@@ -3436,8 +3401,9 @@ static void *el_reader(void *data)
 			continue;
 		}
 		if (i < 0) {
-			ast_log(LOG_ERROR, "Error in select().\n");
-			mythread_exit(NULL);
+			ast_log(LOG_ERROR, "Fatal error in poll!  errno %i.\n", errno);
+			run_forever = 0;
+			break;
 		}
 		ast_mutex_lock(&instp->lock);
 		/*
@@ -3462,7 +3428,7 @@ static void *el_reader(void *data)
 					}
 					if (call_name[0] != '\0') {
 						call = call_name;
-						nameptr = strchr(call_name, (int) ' ');
+						nameptr = strchr(call_name, ' ');
 						name = "UNKNOWN";
 						if (nameptr) {
 							*nameptr = '\0';
@@ -3525,8 +3491,8 @@ static void *el_reader(void *data)
 							if (!i) {	/* if authorized */
 								i = do_new_call(instp, NULL, call, name);
 								if (i < 0) {
-									ast_mutex_unlock(&instp->lock);
-									mythread_exit(NULL);
+									/* we failed to create a new call - error reported by do_new_call */
+									i=0;
 								}
 							}
 							if (i) {	/* if not authorized or do_new_call failed*/
@@ -3681,13 +3647,10 @@ static void *el_reader(void *data)
 								/* break them up for Asterisk */
 								for (i = 0; i < BLOCKING_FACTOR; i++) {
 									qpast = ast_malloc(sizeof(struct el_rxqast));
-									if (!qpast) {
-										ast_mutex_unlock(&instp->lock);
-										mythread_exit(NULL);
+									if (qpast) {
+										memcpy(qpast->buf, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
+										insque((struct qelem *) qpast, (struct qelem *) node->pvt->rxqast.qe_back);
 									}
-									memcpy(qpast->buf, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
-									insque((struct qelem *) qpast, (struct qelem *)
-										   node->pvt->rxqast.qe_back);
 								}
 							} else {
 								instp->rx_bad_packets++;
@@ -3708,8 +3671,8 @@ static void *el_reader(void *data)
 				instp->current_talker->istimedout = 0;
 				instp->current_talker->isdoubling = 0;
 				instp->current_talker = NULL;
-				instp->current_talker_start_time = (struct timeval){0};
-				instp->current_talker_last_time = (struct timeval){0};
+				instp->current_talker_start_time = (struct timeval) {0};
+				instp->current_talker_last_time = (struct timeval) {0};
 			}
 		}
 	}
