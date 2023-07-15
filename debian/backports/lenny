@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Backport current Asterisk to  (Lenny + pkg-voip packages):
+
+sed -i -e 's#^ libcap-dev# libcap2-dev#' debian/control
+sed -i -e '/libresample1-dev/d' debian/control
+sed -i -e '/libsrtp0-dev/d' debian/control
+
+# Remove any trace for Multi-Arch:
+sed -i -e 's/ \?\[linux-any\]//g' -e 's/linux-any/any/' debian/control
+
+exit 0

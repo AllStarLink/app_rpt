@@ -1,0 +1,193 @@
+#!/usr/bin/make -f
+
+# resolve DEB_VERSION_UPSTREAM DEB_VERSION_UPSTREAM_REVISION DEB_DISTRIBUTION
+include /usr/share/dpkg/pkg-info.mk
+
+# resolve DEB_BUILD_ARCH_OS DEB_HOST_MULTIARCH
+include /usr/share/dpkg/architecture.mk
+
+# generate documentation unless nodoc requested
+CHANGELOGS_stem = ChangeLogs/ChangeLog-$(firstword $(subst ~, ,$(DEB_VERSION_UPSTREAM)))
+DOCS_stem = README SECURITY
+ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
+CHANGELOGS = $(CHANGELOGS_stem:=.html) $(CHANGELOGS_stem:=.txt)
+DOCS = $(DOCS_stem:=.html) $(DOCS_stem:=.txt)
+MANPAGES = debian/build/dh_asterisk.1
+endif
+
+# enable hardening compiler options
+# see <https://wiki.debian.org/Hardening#Using_Hardening_Options>
+# revive upstream optimization flags unless DEB_BUILD_OPTIONS=noopt
+# code allegedly fails partial-inlining optimization with GCC >= 8.2.1,
+# see <Makefile.rules> and upstream git commit 449dff9
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+ifeq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
+DEB_CFLAGS_MAINT_STRIP = -O2
+DEB_CFLAGS_MAINT_APPEND = -O3 -fno-partial-inlining
+endif
+include /usr/share/dpkg/buildflags.mk
+
+# Pass CPPFLAGS in the CFLAGS as otherwise the build system will
+# ignore them.
+CFLAGS += $(CPPFLAGS)
+
+LDFLAGS += -Wl,--as-needed
+
+# Sanity check for a stable release:
+SAVED_ABI_HASH = 1fb7f5c06d7a2052e38d021b3d8ca151
+
+# don't let asterisk mess with build flags
+BUILDFLAGS += AST_FORTIFY_SOURCE= DEBUG= OPTIMIZE=
+
+# show full gcc arguments unless DEB_BUILD_OPTIONS=terse
+ifeq (,$(filter terse,$(DEB_BUILD_OPTIONS)))
+BUILDFLAGS += NOISY_BUILD=yes
+endif
+
+BUILDFLAGS += ASTDATADIR=/usr/share/asterisk ASTVARRUNDIR=/var/run/asterisk
+
+ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
+	INSTALL_PROGRAM += -s
+endif
+
+ADDONS_ENABLE = app_macro app_voicemail_imap app_voicemail_odbc
+ADDONS_ENABLE += app_meetme app_flash app_adsiprog app_getcpeid
+ADDONS_ENABLE += res_config_mysql res_adsi
+ADDONS_ENABLE += chan_mobile chan_ooh323 chan_sip
+ADDONS_ENABLE += aelparse format_mp3 smsq
+ADDONS_ENABLE += app_memory res_cliexec chan_dahdi
+ADDONS_DISABLE = BUILD_NATIVE chan_skinny chan_mgcp app_osplookup
+CATEGORY_DISABLE = MENUSELECT_MOH MENUSELECT_CORE_SOUNDS MENUSELECT_EXTRA_SOUNDS
+ifneq (,$(findstring debug,$(DEB_BUILD_OPTIONS)))
+ADDONS_ENABLE += BETTER_BACKTRACES DEBUG_THREADS DONT_OPTIMIZE
+endif
+
+
+# make sure we have 'fetch' . We need to have either wget or fetch
+# on the system. However it is generally not a good idea to actually
+# get remote tarballs at build time. So if neither wget nor fetch
+# happen to be installed, the configure script will find a dummy
+# fetch script that always returns an error.
+FETCH_ENV = PATH=$$PATH:$(CURDIR)/debian/dummyprogs
+
+# resolve if release is experimental
+EXP_RELEASE = $(filter experimental% UNRELEASED,$(DEB_DISTRIBUTION))
+
+%:
+	dh $@
+
+%.html: %.md
+	cmark-gfm $< > $@
+
+%.txt: %.md
+	cmark-gfm --to plaintext $< > $@
+
+override_dh_autoreconf:
+	if [ ! -r configure.debian_sav ]; then cp -a configure configure.debian_sav; fi
+	[ -f .version.debian_sav ] || cp -a .version .version.debian_sav
+	echo $(DEB_VERSION_UPSTREAM_REVISION) > .version
+	dh_autoreconf -- ./bootstrap.sh
+
+execute_before_dh_auto_configure:
+	chmod 755 debian/dummyprogs/fetch
+
+override_dh_auto_configure:
+	TMPDIR="$(CURDIR)" $(FETCH_ENV) dh_auto_configure -- \
+		--disable-asteriskssl \
+		--with-gsm \
+		--with-imap=system \
+		--without-pwlib \
+		$(if $(EXP_RELEASE),,--without-sdl) \
+		$(if $(findstring debug,$(DEB_BUILD_OPTIONS)),--enable-dev-mode) \
+		|| { cat config.log; exit 1; }
+
+#		--with-cap \
+
+execute_before_dh_auto_build:
+	$(MAKE) menuselect.makeopts BUILD_CFLAGS="$(CFLAGS)" BUILD_LDFLAGS="$(LDFLAGS)"
+	for module in $(ADDONS_ENABLE); do menuselect/menuselect --enable $$module menuselect.makeopts; done
+	for module in $(CATEGORY_DISABLE); do menuselect/menuselect --disable-category $$module menuselect.makeopts; done
+	for module in $(ADDONS_DISABLE); do menuselect/menuselect --disable $$module menuselect.makeopts; done
+
+override_dh_auto_build:
+	$(FETCH_ENV) dh_auto_build -- $(BUILDFLAGS)
+
+execute_after_dh_auto_build: $(DOCS) $(CHANGELOGS) $(MANPAGES)
+	# Sanity check: don't break the ABI for modules:
+	@abi_hash=$$(awk -F'"' '/AST_BUILDOPT_SUM/ {print $$2}' \
+	  include/asterisk/buildopts.h); \
+	  if [ "$$abi_hash" != "$(SAVED_ABI_HASH)" ]; then \
+	    echo "Debian packaging problem: ABI checksum changed."; \
+	    echo "  Was: $(SAVED_ABI_HASH)"; \
+	    echo "  Now: $$abi_hash"; \
+	    echo "Check include/asterisk/buildopts.h"; \
+	    [ -n "$(EXP_RELEASE)" ] || exit 1; \
+	  fi
+
+execute_before_dh_clean:
+	GREP=grep AWK=awk $(MAKE) distclean
+
+	[ ! -f .version.debian_sav ] || mv .version.debian_sav .version
+	[ ! -f configure.debian_sav ] || mv configure.debian_sav configure
+	[ ! -f third-party/pjproject/pjproject-${PJVER}.tar.bz2.md5.debian_sav ] \
+	  || mv third-party/pjproject/pjproject-${PJVER}.tar.bz2.md5.debian_sav \
+	  third-party/pjproject/pjproject-${PJVER}.tar.bz2.md5
+
+override_dh_gencontrol:
+	AST_BUILDOPT_SUM=$$(grep AST_BUILDOPT_SUM include/asterisk/buildopts.h  \
+		| sed -e 's/.\+ "\(.\+\)\"/\1/g'); \
+		dh_gencontrol -- -Vasterisk:ABI=$$AST_BUILDOPT_SUM
+
+REMOVED_PROTO_CONFS = dundi mgcp skinny unistim
+REMOVED_PROTO_FILES = $(REMOVED_PROTO_CONFS:%=debian/tmp/etc/asterisk/%.conf)
+SUBPACKS_EXTRA = ooh323 mysql mp3
+ifeq (linux,$(DEB_BUILD_ARCH_OS))
+SUBPACKS_EXTRA += dahdi mobile tests
+endif
+SUBPACKS_EXTRA_DIRS = $(SUBPACKS_EXTRA:%=debian/asterisk-%)
+SUBPACKS_EXTRA_DIRS_MOD = $(SUBPACKS_EXTRA_DIRS:%=%/usr/lib/$(DEB_HOST_MULTIARCH)/asterisk/modules)
+
+override_dh_auto_install:
+	$(FETCH_ENV) dh_auto_install -- $(BUILDFLAGS) -j1 config samples install-headers
+
+execute_after_dh_auto_install:
+	cp -a configs debian/tmp/usr/share/asterisk/conf
+	$(RM) -f $(REMOVED_PROTO_FILES)
+	mkdir -p debian/tmp/usr/bin/
+	mkdir -p debian/tmp/usr/share/man/man1
+	mkdir -p debian/tmp/usr/share/dahdi/span_config.d
+	cp -a debian/asterisk-config-custom debian/tmp/usr/bin/
+	cp -a debian/asterisk-config-custom.1 debian/tmp/usr/share/man/man1/
+	cp -a debian/50-asterisk debian/tmp/usr/share/dahdi/span_config.d/
+	$(RM) -f debian/tmp/usr/sbin/conf2ael
+	$(RM) -f debian/tmp/usr/sbin/muted
+	$(RM) -f debian/tmp/usr/sbin/streamplayer
+	$(RM) -f debian/tmp/usr/sbin/stereorize
+	$(RM) -f debian/tmp/usr/sbin/hashtest*
+	$(RM) -f debian/tmp/usr/sbin/refcounter
+
+execute_after_dh_install-arch:
+	extra_packs=$$(find $(SUBPACKS_EXTRA_DIRS_MOD) -name '*.so' -printf '%f\n');\
+	  cd debian/asterisk-modules/usr/lib/$(DEB_HOST_MULTIARCH)/asterisk/modules \
+	  && rm -f $$extra_packs
+
+override_dh_installdocs:
+	dh_installdocs --all -- $(DOCS)
+
+override_dh_installchangelogs:
+	dh_installchangelogs -- $(CHANGELOGS)
+
+execute_after_dh_fixperms:
+	# should follow dh_fixperms; asterisk configurations may contain
+	# sensitive information, such as passwords
+	if [ -d debian/asterisk-config ]; then \
+		chmod o-rwx debian/asterisk-config/etc/asterisk/*; \
+		chmod o+rx  debian/asterisk-config/etc/asterisk/manager.d; \
+	fi
+
+# build manpages
+debian/build/dh_asterisk.1: debian/build/%.1: debian/debhelper/dh_asterisk
+	mkdir --parents debian/build
+	pod2man --center="Asterisk packaging helper tools" \
+		--release="asterisk $(DEB_VERSION_UPSTREAM_REVISION)" \
+		$< $@

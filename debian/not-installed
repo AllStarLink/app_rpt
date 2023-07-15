@@ -1,0 +1,12 @@
+# are these used anywhere?
+usr/share/asterisk/images/asterisk-intro.jpg
+usr/share/asterisk/images/kpad2.jpg
+
+# maybe useful - grows a dependency on python, and need patch for shebang
+usr/share/asterisk/scripts/*
+
+# uses old JavaScript
+usr/share/asterisk/static-http/*
+
+# broken (repeats itself), and changing 50 -> 40 maybe an issue
+usr/share/dahdi/span_config.d/40-asterisk

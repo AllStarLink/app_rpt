@@ -1,0 +1,15 @@
+Description: allow building non-NCS variation of driver chan_mgcp
+Author: Tzafrir Cohen <tzafrir.cohen@xorcom.com>
+Last-Update: 2022-02-12
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/channels/chan_mgcp.c
++++ b/channels/chan_mgcp.c
+@@ -34,7 +34,6 @@
+  */
+ 
+ /*** MODULEINFO
+-        <use type="module">res_pktccops</use>
+ 	<defaultenabled>no</defaultenabled>
+ 	<support_level>deprecated</support_level>
+ 	<deprecated_in>19</deprecated_in>

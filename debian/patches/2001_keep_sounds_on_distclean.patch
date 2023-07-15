@@ -1,0 +1,35 @@
+Description: Don't remove sounds on dist-clean
+ Upstream build system may optionally download some extra sound files.
+ Thus those sound files are deleted on dist-clean.
+ The tarballs include some soundfiles tarballs by default.
+ Thus the normal procedure of running 'make dist-clean'
+ before building the package would delete them.
+ .
+ Not used ATM as we ship a tarball with the sound files stripped out.
+ May be re-used in the future.
+Author: Faidon Liambotis <paravoid@debian.org>
+Forwarded: not-needed
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/Makefile
++++ b/Makefile
+@@ -442,7 +442,6 @@
+ 
+ distclean: $(SUBDIRS_DIST_CLEAN) _clean
+ 	@$(MAKE) -C menuselect dist-clean
+-	@$(MAKE) -C sounds dist-clean
+ 	rm -f menuselect.makeopts makeopts menuselect-tree menuselect.makedeps
+ 	rm -f makeopts.embed_rules
+ 	rm -f config.log config.status config.cache
+@@ -452,6 +451,10 @@
+ 	rm -rf doc/api
+ 	rm -f build_tools/menuselect-deps
+ 
++# tarballs distributed by Digium include sounds
++all-clean: distclean
++	@$(MAKE) -C sounds dist-clean
++
+ datafiles: _all doc/core-en_US.xml
+ 	CFLAGS="$(_ASTCFLAGS) $(ASTCFLAGS)" build_tools/mkpkgconfig "$(DESTDIR)$(libdir)/pkgconfig";
+ # Should static HTTP be installed during make samples or even with its own target ala

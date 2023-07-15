@@ -1,0 +1,151 @@
+Description: A systemd service
+ Do away with safe_asterisk,
+ but try very hard to let live_ast work with it.
+Author: Tzafrir Cohen <tzafrir@debian.org>
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/contrib/scripts/live_ast
++++ b/contrib/scripts/live_ast
+@@ -175,6 +175,43 @@
+   | sed  -e '/^#* \(Begin\|End\) Samples/d' >"$LIVE_CONF"
+ }
+ 
++# (re?)generate a unit file that could be installed on the system to use
++# this copy of Asterisk.
++gen_ast_live_service() {
++  local service_file="$BASE_DIR/asterisk-live.service"
++  local included_dir='lib'
++  local included_dir_remmed='etc'
++  if [ -f /etc/systemd/system/asterisk.service ]; then
++    included_dir='etc'
++    included_dir_remmed='lib'
++  fi
++  local varlibdir=`awk '/astvarlibdir/ {print $3}' "$AST_CONF" | head -n1`
++  cat <<EOF >"$service_file"
++# This file is based on your existing asterisk systemd service unit, and
++# overrides some fields. If you have an overriding unit in /etc, you
++# need to include it, rather than the one in /lib:
++.include /$included_dir/systemd/system/asterisk.service
++#.include /$included_dir_remmed/systemd/system/asterisk.service
++
++# This file is not installed. If you want to use it, you need to copy it
++# to /etc/systemd/system and run 'systemctl daemon-reload'. You'll then
++# need to be able to start this manually (note that it will not be
++# enabled and thus the standard bash completion will not complete it).
++# If you have multiple live asterisk instances you want to run on the
++# same system, be sure to give each one a unique name.
++
++[Unit]
++Description = Asterisk PBX (Live Asterisk)
++
++# Note: if you changed the parameters passed in the command-line (ExecStart)
++# be sure to copy them over here as well.
++[Service]
++ExecStart = $BASE_DIR/asterisk g -f -p -U asterisk
++ExecReload = $BASE_DIR/asterisk -rx 'core reload'
++WorkingDirectory = $varlibdir
++EOF
++}
++
+ # (re?)generate the ./live/asterisk wrapper script
+ gen_live_asterisk() {
+   cat <<EOF >"$BASE_DIR/asterisk"
+@@ -244,6 +281,7 @@
+   chmod +x "$BASE_DIR/asterisk"
+   # Generate a sample config file for live_ast itself:
+   gen_live_conf
++  gen_ast_live_service
+   ;;
+ conf-file)
+   # Just regenerate live.conf from the sample if it does not already exist:
+--- /dev/null
++++ b/contrib/scripts/asterisk_cleanup
+@@ -0,0 +1,18 @@
++#!/bin/sh
++
++# asterisk_cleanup: A script intended to optionally be run when Asterisk
++# has exited. This example script is used to move core files.
++
++VARLIBDIR=${VARLIBDIR:/var/lib/asterisk}
++RUNDIR=${VARRUNDIR:/var/run/asterisk}
++DUMPDROP=${DUMPDROP:-/var/spool/asterisk/cores}
++ASTPIDFILE=${ASTVARRUNDIR}/asterisk.pid
++PID=`cat ${ASTPIDFILE}`
++DATE=`date "+%Y-%m-%dT%H:%M:%S%z"`
++if test -f ${RUNDIR}/core.${PID} ; then
++	mkdir -p "${DUMPDROP}"
++	mv ${RUNDIR}/core.${PID} ${DUMPDROP}/core.`hostname`-$DATE &
++elif test -f ${RUNDIR}/core ; then
++	mkdir -p "${DUMPDROP}"
++	mv ${RUNDIR}/core ${DUMPDROP}/core.`hostname`-$DATE &
++fi
+--- /dev/null
++++ b/contrib/asterisk.service
+@@ -0,0 +1,55 @@
++[Unit]
++Description=Asterisk PBX
++Documentation=man:asterisk(8)
++Wants=network-online.target
++After=network-online.target
++
++[Service]
++Type=notify
++ExecStart=__ASTERISK_SBIN_DIR__/asterisk -g -f -p -U asterisk
++ExecReload=__ASTERISK_SBIN_DIR__/asterisk -rx 'core reload'
++Restart=on-failure
++RestartSec=1
++WorkingDirectory=__ASTERISK_VARLIB_DIR__
++
++# The following two lines are by default set to null so as to avoid
++# unnecessary console output to syslog. However, if you to, you can
++# further edit /etc/asterisk/logger.conf to log output to syslog.
++StandardOutput=null
++StandardError=null
++
++# Extra settings:
++# If you want to set them, you can add them to a file in the directory
++# /lib/systemd/system/asterisk.service.d/ with the extension .conf.
++# Example content:
++#[Service]
++#
++# and following those two lines add directives or override existing
++# directives. Some extra directives that may be useful:
++
++# You can run a script to clean up after asterisk. An example script is
++# included in contrib/scripts/asterisk_cleanup.
++#ExecStopPost=/path/to/script
++
++#Nice=0
++#UMask=0002
++#LimitCORE=infinity
++#LimitNOFILE=
++
++# safe_asterisk runs Asterisk in a virtual console. This allows easy
++# access to the asterisk command-line without logging it. on the other
++# hand, it allows anyone with physical access to the console full access
++# to Asterisk. To enable this console, unrem the following lines and add
++# '-c' to the ExecStart line above:
++#TTYPath=/dev/tty9
++#StandardInput=tty
++#StandardOutput=tty
++#StandardError=tty
++
++# For more information on what these parameters mean see:
++#
++# http://0pointer.de/public/systemd-man/systemd.service.html
++# http://0pointer.de/public/systemd-man/systemd.exec.html
++
++[Install]
++WantedBy=multi-user.target
+--- a/Makefile
++++ b/Makefile
+@@ -914,6 +914,8 @@
+ 	rm -f contrib/scripts/asterisk.logrotate.tmp
+ 
+ config:
++	$(INSTALL) -d $(DESTDIR)/lib/systemd/system
++	./build_tools/install_subst -d contrib/asterisk.service $(DESTDIR)/lib/systemd/system/asterisk.service
+ 	@if [ -f /etc/redhat-release -o -f /etc/fedora-release ]; then \
+ 		./build_tools/install_subst contrib/init.d/rc.redhat.asterisk  "$(DESTDIR)/etc/rc.d/init.d/asterisk"; \
+ 		if [ ! -f "$(DESTDIR)/etc/sysconfig/asterisk" ] ; then \

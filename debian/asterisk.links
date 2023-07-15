@@ -1,0 +1,4 @@
+usr/local/share/asterisk/sounds		usr/share/asterisk/sounds/custom
+usr/share/man/man8/asterisk.8		usr/share/man/man8/rasterisk.8
+var/lib/asterisk/priv-callerintros	usr/share/asterisk/sounds/priv-callerintros
+var/lib/asterisk/sounds/custom		usr/share/asterisk/sounds/recordings

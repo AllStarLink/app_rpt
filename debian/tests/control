@@ -1,0 +1,14 @@
+Tests: asttestmods
+Restrictions: needs-root, isolation-container, allow-stderr
+Depends:
+ asterisk,
+ asterisk-core-sounds-en-gsm,
+ asterisk-tests,
+ libxml2-utils,
+
+Tests: amr
+Restrictions: needs-root
+Depends:
+ asterisk,
+ asterisk-modules,
+ grep,

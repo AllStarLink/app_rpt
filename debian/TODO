@@ -1,0 +1,15 @@
+* Some man pages to write.
+* Rewrite embedded mpglib code to instead link against libmpg123
+  <https://www.mpg123.de/asterisk.shtml>
+* Get libilbc packages instead of the built-in libilbc.
+* Maybe install phoneprov files below /etc - they seem use editable
+* install upstream dahdi span_config file
+  * add patch to un-duplicate file
+  * verify that switching execution 50 -> 40 is not a problem
+* Patch upstream to install missed manpages:
+  * doc/aelparse.8
+  * doc/smsq.8
+  * utils/astman.1
+* maybe use configure option --disable-binary-modules
+  instead of custom download avoidance
+* maybe set configure environment variable LUA_VERSIONS

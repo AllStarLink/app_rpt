@@ -1,0 +1,61 @@
+Description: integrate opus module with asterisk build routines
+ Original patch adapted by Jonas Smedegaard to fit Debian packaging,
+ and to remove original patch file to help detect later upstream changes.
+Author: Sean Bright <sean@callshaper.com>
+Author: Alexander Traud <pabstraud@compuserve.com>
+Author: Jonas Smedegaard <dr@jones.dk>
+Source: https://github.com/traud/asterisk-opus/blob/asterisk-13.7/asterisk.patch
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/build_tools/menuselect-deps.in
++++ b/build_tools/menuselect-deps.in
+@@ -44,6 +44,7 @@
+ NEON29=@PBX_NEON29@
+ OGG=@PBX_OGG@
+ OPUS=@PBX_OPUS@
++OPUSENC=@PBX_OPUSENC@
+ OPUSFILE=@PBX_OPUSFILE@
+ OSPTK=@PBX_OSPTK@
+ PGSQL=@PBX_PGSQL@
+--- a/configure.ac
++++ b/configure.ac
+@@ -570,6 +570,7 @@
+ AST_EXT_LIB_SETUP([OGG], [OGG], [ogg])
+ AST_EXT_LIB_SETUP([OPENR2], [MFR2], [openr2])
+ AST_EXT_LIB_SETUP([OPUS], [Opus], [opus])
++AST_EXT_LIB_SETUP([OPUSENC], [Opusenc], [opusenc])
+ AST_EXT_LIB_SETUP([OPUSFILE], [Opusfile], [opusfile])
+ AST_EXT_LIB_SETUP([OSPTK], [OSP Toolkit], [osptk])
+ AST_EXT_LIB_SETUP([PGSQL], [PostgreSQL], [postgres])
+@@ -2621,6 +2622,7 @@
+ if test -z "$__opus_include" -o x"$__opus_include" = x" " ; then
+ 	__opus_include=-I/usr/include/opus
+ fi
++AST_PKG_CONFIG_CHECK(OPUSENC, libopusenc)
+ AST_EXT_LIB_CHECK([OPUSFILE], [opusfile], [op_open_callbacks], [opus/opusfile.h], [], [$__opus_include])
+ 
+ for ver in ${LUA_VERSIONS:-5.4 5.3 5.2 5.1}; do
+--- a/makeopts.in
++++ b/makeopts.in
+@@ -228,6 +228,9 @@
+ OPUS_INCLUDE=@OPUS_INCLUDE@
+ OPUS_LIB=@OPUS_LIB@
+ 
++OPUSENC_INCLUDE=@OPUSENC_INCLUDE@
++OPUSENC_LIB=@OPUSENC_LIB@
++
+ OPUSFILE_INCLUDE=@OPUSFILE_INCLUDE@
+ OPUSFILE_LIB=@OPUSFILE_LIB@
+ 
+--- a/formats/Makefile
++++ b/formats/Makefile
+@@ -11,6 +11,8 @@
+ 
+ -include $(ASTTOPDIR)/menuselect.makeopts $(ASTTOPDIR)/menuselect.makedeps
+ 
++_ASTCFLAGS+=-DASTERISK_VERSION_NUM=${ASTERISKVERSIONNUM}
++
+ MODULE_PREFIX=format
+ MENUSELECT_CATEGORY=FORMATS
+ MENUSELECT_DESCRIPTION=Format Interpreters

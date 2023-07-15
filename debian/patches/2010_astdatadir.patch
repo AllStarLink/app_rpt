@@ -1,0 +1,22 @@
+Description: place asterisk read-only data files under /usr/share
+ On Debian read-only resources belong under /usr.
+ The space taken from the writable /var should be minimized.
+ .
+ Upstream prefers defaults to have those files under /var/lib,
+ though supports a separate datadir.
+Author: Tzafrir Cohen <tzafrir@debian.org>
+Forwarded: no
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/configure.ac
++++ b/configure.ac
+@@ -41,7 +41,7 @@
+ AC_SUBST([astmoddir],         ['${libdir}/asterisk/modules'])dnl
+ AC_SUBST([astmandir],         ['${mandir}'])dnl
+ AC_SUBST([astvarlibdir],      ['${localstatedir}/lib/asterisk'])dnl
+-AC_SUBST([astdatadir],        ['${astvarlibdir}'])dnl
++AC_SUBST([astdatadir],        ['${datadir}/asterisk'])dnl
+ AC_SUBST([astdbdir],          ['${astvarlibdir}'])dnl
+ AC_SUBST([astkeydir],         ['${astvarlibdir}'])dnl
+ AC_SUBST([astspooldir],       ['${localstatedir}/spool/asterisk'])dnl

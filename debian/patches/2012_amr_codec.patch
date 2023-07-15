@@ -1,0 +1,157 @@
+Description: integrate amr module with asterisk
+ Original patch adapted by Jonas Smedegaard to fit Debian packaging,
+ and to remove original patch file to help detect later upstream changes.
+Author: Alexander Traud <pabstraud@compuserve.com>
+Author: Jonas Smedegaard <dr@jones.dk>
+Source: https://github.com/traud/asterisk-amr/blob/master/codec_amr.patch
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/include/asterisk/format_cache.h
++++ b/include/asterisk/format_cache.h
+@@ -247,6 +247,16 @@
+ extern struct ast_format *ast_format_silk24;
+ 
+ /*!
++ * \brief Built-in cached AMR format.
++ */
++extern struct ast_format *ast_format_amr;
++
++/*!
++ * \brief Built-in cached AMR-WB format.
++ */
++extern struct ast_format *ast_format_amrwb;
++
++/*!
+  * \brief Initialize format cache support within the core.
+  *
+  * \retval 0 success
+--- a/main/codec_builtin.c
++++ b/main/codec_builtin.c
+@@ -925,6 +925,54 @@
+ 	.samples_count = silk_samples
+ };
+ 
++static int amr_samples(struct ast_frame *frame)
++{
++	return 160;
++}
++
++static int amr_length(unsigned int samples)
++{
++	ast_log(LOG_NOTICE, "untested; please report failure or success: %u\n", samples); return samples / 8;
++}
++
++static struct ast_codec amr = {
++	.name = "amr",
++	.description = "AMR",
++	.type = AST_MEDIA_TYPE_AUDIO,
++	.sample_rate = 8000,
++	.minimum_ms = 20,
++	.maximum_ms = 20,
++	.default_ms = 20,
++	.minimum_bytes = 0, /* no smooth */
++	.samples_count = amr_samples,
++	.get_length = amr_length,
++	.smooth = 0,
++};
++
++static int amrwb_samples(struct ast_frame *frame)
++{
++	return 320;
++}
++
++static int amrwb_length(unsigned int samples)
++{
++	ast_log(LOG_NOTICE, "untested; please report failure or success: %u\n", samples); return samples / 16;
++}
++
++static struct ast_codec amrwb = {
++	.name = "amrwb",
++	.description = "AMR-WB",
++	.type = AST_MEDIA_TYPE_AUDIO,
++	.sample_rate = 16000,
++	.minimum_ms = 20,
++	.maximum_ms = 20,
++	.default_ms = 20,
++	.minimum_bytes = 0, /* no smooth */
++	.samples_count = amrwb_samples,
++	.get_length = amrwb_length,
++	.smooth = 0,
++};
++
+ #define CODEC_REGISTER_AND_CACHE(codec) \
+ 	({ \
+ 		int __res_ ## __LINE__ = 0; \
+@@ -957,6 +1005,9 @@
+ {
+ 	int res = 0;
+ 
++	res |= CODEC_REGISTER_AND_CACHE(amr);
++	res |= CODEC_REGISTER_AND_CACHE(amrwb);
++
+ 	res |= CODEC_REGISTER_AND_CACHE(codec2);
+ 	res |= CODEC_REGISTER_AND_CACHE(g723);
+ 	res |= CODEC_REGISTER_AND_CACHE(ulaw);
+--- a/main/format_cache.c
++++ b/main/format_cache.c
+@@ -226,6 +226,16 @@
+ struct ast_format *ast_format_codec2;
+ 
+ /*!
++ * \brief Built-in cached AMR format.
++ */
++struct ast_format *ast_format_amr;
++
++/*!
++ * \brief Built-in cached AMR-WB format.
++ */
++struct ast_format *ast_format_amrwb;
++
++/*!
+  * \brief Built-in cached t140 format.
+  */
+ struct ast_format *ast_format_t140;
+@@ -313,6 +323,9 @@
+ 	ao2_cleanup(formats);
+ 	formats = NULL;
+ 
++	ao2_replace(ast_format_amr, NULL);
++	ao2_replace(ast_format_amrwb, NULL);
++
+ 	ao2_replace(ast_format_g723, NULL);
+ 	ao2_replace(ast_format_ulaw, NULL);
+ 	ao2_replace(ast_format_alaw, NULL);
+@@ -432,6 +445,10 @@
+ 		ao2_replace(ast_format_g719, format);
+ 	} else if (!strcmp(name, "opus")) {
+ 		ao2_replace(ast_format_opus, format);
++	} else if (!strcmp(name, "amr")) {
++		ao2_replace(ast_format_amr, format);
++	} else if (!strcmp(name, "amrwb")) {
++		ao2_replace(ast_format_amrwb, format);
+ 	} else if (!strcmp(name, "jpeg")) {
+ 		ao2_replace(ast_format_jpeg, format);
+ 	} else if (!strcmp(name, "png")) {
+--- a/main/rtp_engine.c
++++ b/main/rtp_engine.c
+@@ -3721,6 +3721,9 @@
+ 	set_next_mime_type(ast_format_vp8, 0,  "video", "VP8", 90000);
+ 	set_next_mime_type(ast_format_vp9, 0, "video", "VP9", 90000);
+ 
++	set_next_mime_type(ast_format_amr, 0,  "audio", "AMR", 8000);
++	set_next_mime_type(ast_format_amrwb, 0,  "audio", "AMR-WB", 16000);
++
+ 	/* Define the static rtp payload mappings */
+ 	add_static_payload(0, ast_format_ulaw, 0);
+ 	#ifdef USE_DEPRECATED_G726
+@@ -3764,6 +3767,9 @@
+ 	add_static_payload(109, ast_format_h265, 0);
+ 
+ 	add_static_payload(110, ast_format_speex, 0);
++
++	add_static_payload(-1, ast_format_amr, 0);
++	add_static_payload(-1, ast_format_amrwb, 0);
+ 	add_static_payload(111, ast_format_g726, 0);
+ 	add_static_payload(112, ast_format_g726_aal2, 0);
+ 

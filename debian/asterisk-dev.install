@@ -1,0 +1,4 @@
+debian/debhelper/asterisk.pm usr/share/perl5/Debian/Debhelper/Sequence
+debian/debhelper/dh_asterisk usr/bin
+usr/include/asterisk
+usr/include/asterisk.h

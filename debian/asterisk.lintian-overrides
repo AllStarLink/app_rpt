@@ -1,0 +1,8 @@
+package-contains-empty-directory
+
+# astcanary is not supposed to be invoked manually
+no-manual-page [usr/sbin/astcanary]
+
+# private copy of pjproject
+package-name-doesnt-match-sonames libasteriskpj2
+link-to-shared-library-in-wrong-package usr/lib/*/libasteriskpj.so.2 [usr/lib/*/libasteriskpj.so]

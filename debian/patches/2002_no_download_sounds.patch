@@ -1,0 +1,32 @@
+Description: Avoid downloading extra sound files
+ Asterisk configures several sound files to be installed
+ that are not included in the distribution tarball.
+ Those files are downloaded by the 'install' target.
+ .
+ The exact files to be downloaded is configurable.
+ Here we change the default to avoid downloading any.
+ We believe those should be part of a separate source package
+ (as they rarely change, and have their own versioning).
+Author: Tzafrir Cohen <tzafrir.cohen@xorcom.com>
+Forwarded: no
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/sounds/sounds.xml
++++ b/sounds/sounds.xml
+@@ -10,7 +10,6 @@
+ 		</member>
+ 		<member name="CORE-SOUNDS-EN-GSM" displayname="English, GSM format" >
+ 			<support_level>core</support_level>
+-			<defaultenabled>yes</defaultenabled>
+ 		</member>
+ 		<member name="CORE-SOUNDS-EN-G729" displayname="English, G.729 format">
+ 			<support_level>core</support_level>
+@@ -273,7 +272,6 @@
+ 	</category>
+ 	<category name="MENUSELECT_MOH" displayname="Music On Hold File Packages" positive_output="yes">
+ 		<member name="MOH-OPSOUND-WAV" displayname="opsound.org Music On Hold Files, WAV format" >
+-			<defaultenabled>yes</defaultenabled>
+ 			<support_level>core</support_level>
+ 		</member>
+ 		<member name="MOH-OPSOUND-ULAW" displayname="opsound.org Music On Hold Files, mu-Law format" >

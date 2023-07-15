@@ -1,0 +1,2 @@
+# Plugins
+shared-library-lacks-prerequisites [usr/lib/*/asterisk/modules/*]

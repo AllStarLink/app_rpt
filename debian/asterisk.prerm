@@ -1,0 +1,8 @@
+#! /bin/sh
+
+set -e
+
+rmdir /usr/local/share/asterisk/sounds 2>/dev/null || true
+rmdir /usr/local/share/asterisk        2>/dev/null || true
+
+#DEBHELPER#

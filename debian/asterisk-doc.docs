@@ -1,0 +1,6 @@
+Zaptel-to-DAHDI.txt
+configs
+contrib/ast-db-manage/
+contrib/realtime/
+doc/*.pdf
+doc/*.txt

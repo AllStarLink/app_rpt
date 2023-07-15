@@ -1,0 +1,14 @@
+1004_astgenkey-security.patch
+1006_systemd.patch
+1007_ffmpeg_detect.patch
+1008_ffmpeg_include.patch
+1009_build_reproducibly.patch
+#2001_keep_sounds_on_distclean.patch
+2002_no_download_sounds.patch
+2004_mgcp.patch
+2006_enable_test_framework.patch
+2010_astdatadir.patch
+2011_amr_build_tools.patch
+2012_amr_codec.patch
+2015_opus.patch
+2016_opus_plc.patch

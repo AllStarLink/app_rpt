@@ -1,0 +1,113 @@
+asterisk (1:20.0.1~dfsg+~cs6.12.40431414-1) unstable; urgency=high
+
+  Asterisk Manager Interface (AMI) now restricts access
+  for functions GetConfig and UpdateConfig.
+  New option "live_dangerously" relaxes that restriction.
+
+ -- Jonas Smedegaard <dr@jones.dk>  Thu, 08 Dec 2022 09:51:21 +0100
+
+asterisk (1:18.11.1~dfsg+~cs6.10.40431413-1) unstable; urgency=medium
+
+  Asterisk no longer provides the module chan_vpb,
+  and corresponding binary package asterisk-vpb is dropped.
+
+ -- Jonas Smedegaard <dr@jones.dk>  Wed, 06 Apr 2022 15:16:07 +0200
+
+asterisk (1:16.16.1~dfsg+~2.10-2) unstable; urgency=medium
+
+  Asterisk now include all voicemail modules, under different names.
+  If you previously used either of the packages
+  asterisk-voicemail-imapstorage or asterisk-voicemail-odbcstorage
+  then make sure to change configuration to now instead enable
+  module app_voicemail_imap or app_voicemail_odbc, correspondingly.
+
+ -- Jonas Smedegaard <dr@jones.dk>  Fri, 04 Feb 2022 21:59:09 +0100
+
+asterisk (1:16.16.1~dfsg+~2.10-2) unstable; urgency=medium
+
+  Asterisk modules are now stored in multiarch-compatible paths.
+
+  If you use only Debian-provided Asterisk packages, including the
+  asterisk-config package, just make sure to accept package changes if
+  asked during package upgrade.
+  Otherwise make sure setting "astmoddir" in /etc/asterisk/asterisk.conf
+  matches the location of installed modules
+  (e.g. "/usr/lib/x86_64-linux-gnu/asterisk/modules" on amd64 systems),
+  and rebuild/move custom-built modules to use same location.
+
+ -- Jonas Smedegaard <dr@jones.dk>  Thu, 20 Jan 2022 10:33:17 +0100
+
+asterisk (1:11.6.0~dfsg-3) unstable; urgency=medium
+
+  The cdr_radius.so and cel_radius.so modules are now linked against
+  libfreeradius-client2 instead of libradiusclient-ng2 so the default RADIUS
+  configuration file has changed to /etc/radiusclient/radiusclient.conf.
+
+  If you use a custom RADIUS configuration file, please update it so that it
+  is compatible with libfreeradius-client2 by adding:
+
+  radius_deadtime 0
+
+  If you do not take this step you are likely to encounter a SEGFAULT when
+  asterisk starts up.
+
+ -- Jeremy Lainé <jeremy.laine@m4x.org>  Fri, 13 Dec 2013 10:10:50 +0100
+
+asterisk (1:11.6.0~dfsg-2) unstable; urgency=medium
+
+  A number of Asterisk modules have been moved to their own packages:
+  * asterisk-dahdi: chan_dahdi and other modules that depend on DAHDI.
+  * asterisk-vpb: chan_vpb.
+
+  If you have DAHDI devices or VoiceTronix devices that use chan_vpb, you
+  need one of those two respective packagees installed.
+
+ -- Tzafrir Cohen <tzafrir@debian.org>  Wed, 11 Dec 2013 18:11:16 +0200
+
+asterisk (1:1.6.2.0~dfsg~rc1-1) unstable; urgency=low
+
+  The fix for AST-2009-006 breaks IAX2 line protocol by adding an extra
+  step in the IAX2 handshaking. To allow working with unmodified IAX2
+  implementations, add the following two lines under [general] in iax.conf:
+ 
+  calltokenoptional = 0.0.0.0/0.0.0.0
+  maxcallnumbers = 16382
+
+ -- Tzafrir Cohen <tzafrir.cohen@xorcom.com>  Sun, 13 Sep 2009 00:25:09 +0300
+
+asterisk (1:1.4.13~dfsg-1) unstable; urgency=medium
+
+  Since this version, ODBC and IMAP storage for Voicemail are provided.
+  As this could not be done as a runtime option, app_voicemail_odbc.so and
+  app_voicemail_imap.so are provided. However, these conflict app_voicemail.so
+  and each other.
+  If you use a modified modules.conf and you have autoload enabled, you *must*
+  add explicit noload entries for two of the three voicemail modules.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Mon, 03 Dec 2007 18:36:55 +0200
+
+asterisk (1:1.4.2~dfsg-5) unstable; urgency=low
+
+  There are significant configuration differences between
+  asterisk 1.2.x & 1.4.x, please refer to the file 
+  /usr/share/doc/asterisk/UPGRADE.txt.gz for details.
+
+ -- Mark Purcell <msp@debian.org>  Sat, 14 Apr 2007 16:44:18 +0100
+
+asterisk (1:1.2.10.dfsg-1) unstable; urgency=low
+
+  The iLBC codec library code has been removed from the Debian asterisk
+  package as it does not conform with the DFSG.
+
+ -- Mark Purcell <msp@debian.org>  Mon, 17 Jul 2006 21:15:50 +0100
+
+asterisk (1:1.0.7.dfsg.1-1) unstable; urgency=low
+
+  The Debian version of the upstream asterisk source has had the fpm Music on Hold
+  removed as this music has only been licenced for use within asterisk which is
+  incompatible with the Debian Free Software Guildlines 
+  <http://www.debian.org/social_contract#guidelines>. Please drop your alternative
+  Music on Hold into the directory /usr/share/asterisk/mohmp3/
+
+ -- Mark Purcell <msp@debian.org>  Sun, 20 Mar 2005 10:30:44 +0000
+

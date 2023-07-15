@@ -1,0 +1,58 @@
+Description: integrate amr module with asterisk build routines
+ Original patch adapted by Jonas Smedegaard to fit Debian packaging,
+ and to remove original patch file to help detect later upstream changes.
+Author: Alexander Traud <pabstraud@compuserve.com>
+Author: Jonas Smedegaard <dr@jones.dk>
+Source: https://github.com/traud/asterisk-amr/blob/master/build_tools.patch
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/build_tools/menuselect-deps.in
++++ b/build_tools/menuselect-deps.in
+@@ -1,4 +1,7 @@
+ ALSA=@PBX_ALSA@
++AMR_NB=@PBX_AMR_NB@
++AMR_WB_DECODER=@PBX_AMR_WB_DECODER@
++AMR_WB_ENCODER=@PBX_AMR_WB_ENCODER@
+ BLUETOOTH=@PBX_BLUETOOTH@
+ BEANSTALK=@PBX_BEANSTALK@
+ COROSYNC=@PBX_COROSYNC@
+--- a/configure.ac
++++ b/configure.ac
+@@ -522,6 +522,9 @@
+ # to make things easier for the users.
+ 
+ AST_EXT_LIB_SETUP([ALSA], [Advanced Linux Sound Architecture], [asound])
++AST_EXT_LIB_SETUP([AMR_NB], [AMR Audio Codec (Narrowband) Decoder/Encoder], [opencore-amrnb])
++AST_EXT_LIB_SETUP([AMR_WB_DECODER], [AMR-WB Audio Codec (Wideband) Decoder], [opencore-amrwb])
++AST_EXT_LIB_SETUP([AMR_WB_ENCODER], [AMR-WB Audio Codec (Wideband) Encoder], [vo-amrwbenc])
+ AST_EXT_LIB_SETUP([BFD], [Debug symbol decoding], [bfd])
+ 
+ # BKTR is used for backtrace support on platforms that do not
+@@ -1618,6 +1621,10 @@
+ 
+ AST_EXT_LIB_CHECK([ALSA], [asound], [snd_pcm_open], [alsa/asoundlib.h])
+ 
++AST_EXT_LIB_CHECK([AMR_NB], [opencore-amrnb], [Encoder_Interface_init], [opencore-amrnb/interf_enc.h])
++AST_EXT_LIB_CHECK([AMR_WB_DECODER], [opencore-amrwb], [D_IF_init], [opencore-amrwb/dec_if.h])
++AST_EXT_LIB_CHECK([AMR_WB_ENCODER], [vo-amrwbenc], [E_IF_init], [vo-amrwbenc/enc_if.h])
++
+ AST_EXT_LIB_CHECK([BFD], [bfd], [bfd_openr], [bfd.h])
+ # Fedora/RedHat/CentOS require extra libraries
+ AST_EXT_LIB_CHECK([BFD], [bfd], [bfd_openr], [bfd.h], [-ldl -liberty])
+--- a/makeopts.in
++++ b/makeopts.in
+@@ -133,6 +133,13 @@
+ ALSA_INCLUDE=@ALSA_INCLUDE@
+ ALSA_LIB=@ALSA_LIB@
+ 
++AMR_NB_INCLUDE=@AMR_NB_INCLUDE@
++AMR_NB_LIB=@AMR_NB_LIB@
++AMR_WB_DECODER_INCLUDE=@AMR_WB_DECODER_INCLUDE@
++AMR_WB_DECODER_LIB=@AMR_WB_DECODER_LIB@
++AMR_WB_ENCODER_INCLUDE=@AMR_WB_ENCODER_INCLUDE@
++AMR_WB_ENCODER_LIB=@AMR_WB_ENCODER_LIB@
++
+ BFD_INCLUDE=@BFD_INCLUDE@
+ BFD_LIB=@BFD_LIB@
+ 

@@ -1,0 +1,364 @@
+#!/bin/sh
+#
+# asterisk-config-custom
+# script to help creating a 'asterisk-config-custom' .deb package
+#
+#
+# Created by: Geert Stappers <stappers@stappers.it>
+# And distributed under the terms of the GPL
+#
+#
+acc_usage ()
+{
+cat << HERE
+
+asterisk-config-custom {command}
+
+Where 'command' is 'init', 'next', 'sync' or 'help'
+
+  init: Creates directory 'my-asterisk-config' with content
+
+  next: Provides instruction for next step
+
+  sync: Mostly \`rsync --archive /etc/asterisk etc_asterisk\`
+
+  help: Prints _another_ help text
+
+HERE
+}
+
+acc_help ()
+{
+cat << HERE
+
+Program 'asterisk-config-custom' is for helping you making
+your 'asterisk-config-custom' .deb package.
+
+Typical work flow is running
+ asterisk-config-custom init
+only once.
+
+Now you have a directory named
+ my-asterisk-config
+feel free to rename it
+Important is that it has a debian/ directory
+and an etc_asterisk/ directory
+
+Change working directory with
+ cd my-asterisk-config # or to what you renamed it.
+Edit files in etc_asterisk. You may use
+ asterisk-config-custom sync
+to get you a starting point.
+Create the actual package with
+ dpkg-buildpackge -uc -us
+
+And install with
+ sudo dpkg -i ../asterisk-config-custom_*_all.deb
+
+This package will be considered as an upgrade to the default
+\`asterisk-config\` package and hence that package will will be removed
+upon isntalling the custom package. However, it will not be purged and
+hence all configuration files in \`/etc/asterisk\` from it will remain
+installed. In order to remove them, you'll need to purge the package
+\`asterisk-config\'.
+
+Alternatively, you can install the custom package before installing
+Asterisk.
+
+HERE
+}
+
+acc_init ()
+{
+# Creates a diretory and puts files in it,
+# including the Debian packaging files.
+
+mkdir --parents my-asterisk-config/debian/source
+
+cat << HERE > my-asterisk-config/README
+
+In this directory you can / should run
+
+  dpkg-buildpackage -uc -us
+
+to get your 'asterisk-config-custom' package build.
+
+If you don't have this package installed, install the package dpkg-dev .
+
+HERE
+
+cat << LastLine > my-asterisk-config/Makefile
+#
+# Makefile
+#
+all: etc_asterisk/asterisk.conf \
+ usr/share/doc/asterisk-config/examples/configs/modules.conf.sample
+	@echo "FYI: (minimal set of) configuration files are available"
+
+etc_asterisk/asterisk.conf:
+	@mkdir --parents etc_asterisk
+	echo "; only a place holder" > etc_asterisk/asterisk.conf
+
+usr/share/doc/asterisk-config/examples/configs/modules.conf.sample:
+	@mkdir --parents usr/share/doc/asterisk-config/examples/configs
+	echo "; place holder" \\
+	> usr/share/doc/asterisk-config/examples/configs/modules.conf.sample
+
+
+install:
+	install --directory \$(DESTDIR)/usr
+	install --directory \$(DESTDIR)/etc/asterisk
+	rsync --archive --delete usr/* \$(DESTDIR)/usr
+	rsync --archive --delete etc_asterisk/* \$(DESTDIR)/etc/asterisk
+
+# l l
+LastLine
+
+cat << LastLine > my-asterisk-config/acc.config
+# This file will be read during \`asterisk-config-custom sync\`
+#
+ACC_SYNC_CONFIG_EXAMPLES=Yes
+# another value as 'Yes' wouldn't sync the configuration examples
+#
+#
+# l l
+LastLine
+
+##--------------------------------------------
+
+# Those who are familiar with Debian packaging
+# can consider the rest of this function as a dedicated `dh_make`.
+
+cat << LastLine > my-asterisk-config/debian/control
+Source: asterisk-config-custom
+Section: comm
+Priority: optional
+Maintainer: Me Myself <${LOGNAME}@$( hostname --fqdn )>
+Build-Depends: debhelper (>= 9)
+Standards-Version: 3.9.5
+Homepage: <insert the upstream URL, if relevant>
+#Vcs-Git: git://anonscm.debian.org/collab-maint/asterisk-config-custom.git
+#Vcs-Browser: http://anonscm.debian.org/?p=collab-maint/asterisk-config-custom.git;a=summary
+
+Package: asterisk-config-custom
+Architecture: all
+Depends: \${misc:Depends}
+Recommends: asterisk
+Conflicts: asterisk-config
+Replaces: asterisk-config
+Description: Custom configuration files for Asterisk
+ Package that contains custom configuration files for Asterisk.
+ .
+ It is to keep _your_ config files while upgrading Asterisk.
+ .
+ The trick is that Asterisk depends
+ on asterisk-config OR asterisk-config-custom
+LastLine
+
+cat << LastLine > my-asterisk-config/debian/changelog
+asterisk-config-custom (0.6) unstable; urgency=medium
+
+  * Created with \`asterisk-config-custom init\`
+
+ -- Me Myself <${LOGNAME}@$( hostname --fqdn )>  $( date --rfc-2822 )
+
+asterisk-config-custom (0.4) unstable; urgency=low
+
+  * Initial release (Closes: #760032).
+
+ -- Geert Stappers <stappers@stappers.it>  Fri, 29 Aug 2014 16:25:44 +0200
+LastLine
+
+cat << LastLine > my-asterisk-config/debian/copyright
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: asterisk-config-custom
+Source: <url://example.com>
+
+Files: *
+Copyright: <years> <put author's name and email here>
+           <years> <likewise for another author>
+License: <special license>
+ <Put the license of the package here indented by 1 space>
+ <This follows the format of Description: lines in control file>
+ .
+ <Including paragraphs>
+LastLine
+
+cat << LastLine > my-asterisk-config/debian/rules
+#!/usr/bin/make -f
+# See debhelper(7)
+#
+# output every command that modifies files on the build system.
+#DH_VERBOSE = 1
+
+# main packaging script based on dh7 syntax
+%:
+	dh \$@
+
+# l l
+LastLine
+chmod a+x my-asterisk-config/debian/rules
+
+cat << LastLine > my-asterisk-config/debian/preinst
+#! /bin/sh
+# preinst script
+#
+# see: dh_installdeb(1)
+
+set -e
+
+# summary of how this script can be called:
+#        * <new-preinst> \`install'
+#        * <new-preinst> \`install' <old-version>
+#        * <new-preinst> \`upgrade' <old-version>
+#        * <old-preinst> \`abort-upgrade' <new-version>
+#
+# for details, see http://www.debian.org/doc/debian-policy/ or
+# the debian-policy package
+
+case "\$1" in
+    install|upgrade)
+	# chan_modem was removed on 1.4+
+    ;;
+
+    abort-upgrade)
+    ;;
+
+    *)
+        echo "preinst called with unknown argument \\\`\$1'" >&2
+        exit 1
+    ;;
+esac
+
+# dh_installdeb will replace this with shell code automatically
+# generated by other debhelper scripts.
+
+#DEBHELPER#
+
+exit 0
+LastLine
+
+cat << LastLine > my-asterisk-config/debian/postinst
+#! /bin/sh
+
+set -e
+
+# summary of how this script can be called:
+#        * <postinst> \`configure' <most-recently-configured-version>
+#        * <old-postinst> \`abort-upgrade' <new version>
+#        * <conflictor's-postinst> \`abort-remove' \`in-favour' <package>
+#          <new-version>
+#        * <deconfigured's-postinst> \`abort-deconfigure' \`in-favour'
+#          <failed-install-package> <version> \`removing'
+#          <conflicting-package> <version>
+
+case "\$1" in
+    configure)
+	set +e # ignore errors temporarily
+
+	# find conffiles under /etc/asterisk belonging to asterisk-config-custom
+	# and chown them to user asterisk.
+	dpkg-query -W -f='\${Conffiles}\n' asterisk-config-custom 2>/dev/null | \\
+	  sed -nr -e 's; (/etc/asterisk/.*) [0-9a-f]*;\1;p' | \\
+	while read conffile; do
+		chown asterisk: \${conffile} 2>/dev/null
+	done
+
+	# handle them in the end with a glob since it's way faster
+	dpkg-statoverride --quiet --list '/etc/asterisk/*' | while read STAT; do
+		chown \`echo \$STAT | cut -d' ' -f 1,2,4 | sed 's/ /:/'\` \\
+			2>/dev/null
+	done
+
+	set -e
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \\\`\$1'" >&2
+        exit 1
+    ;;
+esac
+
+# dh_installdeb will replace this with shell code automatically
+# generated by other debhelper scripts.
+
+#DEBHELPER#
+
+exit 0
+
+LastLine
+
+cat << LastLine > my-asterisk-config/debian/lintian-overrides
+asterisk-config-custom: non-standard-file-perm
+LastLine
+
+echo 9 > my-asterisk-config/debian/compat
+
+echo '3.0 (native)' > my-asterisk-config/debian/source/format
+
+}
+
+acc_sync ()
+{
+  mkdir --parents etc_asterisk
+  # assuming there are files in /etc/asterisk/
+  rsync --archive --delete /etc/asterisk/* etc_asterisk/
+  if [ -r ./acc.config ] ; then
+    . ./acc.config
+  else
+    echo 'E: file "./acc.config" not readable'
+    echo "I: Are you in the directory that \`${0} init\` created?"
+    exit 1
+  fi
+  if [ x${ACC_SYNC_CONFIG_EXAMPLES} = xYes ] ; then
+    ACC_EX=usr/share/doc/asterisk-config/examples
+    # using asterisk-config directory
+    mkdir --parents ${ACC_EX}
+    rsync --archive --delete /${ACC_EX}/* ${ACC_EX}
+  fi
+}
+
+acc_next ()
+{
+  if ! which dpkg-buildpackage > /dev/null ; then
+    echo 'E: Program `dpkg-buildpackage` is not installed.'
+    echo 'I: It is in the Debian package `dpkg-dev`.'
+    echo 'I: Installing it with `apt-get install build-essential`,'
+    echo 'I: will also install the program `make` that is also needed.'
+    exit 1
+  fi
+  if grep --quiet 'Package: asterisk-config-custom' debian/control ; then
+    echo 'dpkg-buildpackage -uc -us # Running this now'
+    dpkg-buildpackage -uc -us
+  else
+    echo 'E: debian/control file for package asterisk-config-custom not found'
+    echo "I: Are you in the directory that \`${0} init\` created?"
+    exit 1
+  fi
+}
+
+
+# main()
+
+case $1 in
+init)
+  acc_init
+  ;;
+next)
+  acc_next
+  ;;
+sync)
+  acc_sync
+  ;;
+help)
+  acc_help
+  ;;
+*)
+  acc_usage
+  ;;
+esac
+
+# l l

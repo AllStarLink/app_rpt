@@ -1,0 +1,1701 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Asterisk
+Source: https://downloads.asterisk.org/pub/telephony/asterisk/releases/
+ https://github.com/traud/asterisk-amr
+ https://svn.digium.com/svn/thirdparty/mp3/trunk/
+ https://github.com/traud/asterisk-opus
+ https://github.com/asterisk/pjproject
+ .
+ Excluded files:
+ * codecs/ilbc: due to patent issues
+ * sounds tarballs: convenience code copies
+ Excluded pjproject files:
+  * Copyright-protected code without DFSG-free license
+    (g7221 ilbc milenage s60_g729_bitstream.h BaseClasses ApiLock.* *bdimad*)
+  * Copyright-protected graphics ICC profiles without DFSG-free license
+    (*.png)
+  * Binary Java files potentially with non-free parts
+    (*.jar)
+  * Convenience code copies
+    (gsm resample speex srtp)
+Files-Excluded:
+ codecs/ilbc
+ sounds/*.tar.gz
+Files-Excluded-Xpjproject:
+ third_party/g7221
+ third_party/gsm
+ third_party/ilbc
+ third_party/milenage
+ third_party/resample
+ third_party/speex
+ third_party/srtp
+ third_party/yuv
+ third_party/webrtc
+ third_party/BaseClasses
+ pjmedia/src/pjmedia-audiodev/bdimad_dev.c
+ pjmedia/src/pjmedia-audiodev/s60_g729_bitstream.h
+ pjsip-apps/src/pjsua/bb10/assets/images/teluu-logo.png
+ pjsip-apps/src/pjsua/android/gradle/wrapper/gradle-wrapper.jar
+ pjsip-apps/src/pjsua/ios/ipjsua/Default@2x.png
+ pjsip-apps/src/pjsua/ios/ipjsua/Default-568h@2x.png
+ pjsip-apps/src/pjsua/ios/ipjsua/Default.png
+ pjsip-apps/src/pjsua/winrt/cli/uwp/Assets/teluu-logo.png
+ pjsip-apps/src/pjsua/winrt/cli/wp8/Assets/teluu-logo.png
+ pjsip-apps/src/pjsua/winrt/gui/uwp/VoipBackEnd/ApiLock.cpp
+ pjsip-apps/src/pjsua/winrt/gui/uwp/VoipBackEnd/ApiLock.h
+ pjsip-apps/src/swig/java/android/gradle/wrapper/gradle-wrapper.jar
+ third_party/bdsound/include/bdimad.h
+
+Files: *
+Copyright:
+  2003-2006         Aheeva Technology
+  2015-2016         Alexander Traud <pabstraud@compuserve.com>
+  2019              Alexei Gradinari <alex2grad@gmail.com>
+  2004-2006         Andy Powell
+  1999-2010         Anthony Minessale II <anthmct@yahoo.com>
+  2009              Attila Domjan <attila.domjan.hu@gmail.com>
+  2005              Attractel OOD
+  2004-2006         Ben Kramer <ben@voicetronix.com.au>
+  1999-2006         Brett Bryant <bbryant@digium.com>
+  2005-2007         Cedric Hans <cedric.hans@mlkj.net>
+  2015-2018         CFWare, LLC
+  2004-2006         Christian Richter <crich@beronet.com>
+  2002, 2004        Christos Ricudis <ricudis@itc.auth.gr>
+  2005-2006         Claude Patry
+  2022              Commend International
+  2004              Constantine Filin <cf@intermedia.net>
+  2019              CyCore Systems, Inc
+  2012              David M. Lee, II <dlee@digium.com>
+  2016              Dennis Guse <dennis.guse@alumni.tu-berlin.de>
+  1999-2019         Digium, Inc.
+  2008-2009         Eliel C. Sardanons (LU1ALY) <eliels@gmail.com>
+  2013-2016         Fairview 5 Engineering, LLC.
+  2016              Frank Haase <fra.haase@gmail.com>
+  2008              Gary Cook
+  2016              George Joseph <gjoseph@digium.com>
+  2017              Greenfield Technologies Ltd.
+  2004-2005         Holger Schurig <hs4233@mail.mn-solutions.de>
+  2004-2005         Horizon Wimba, Inc.
+  2004-2005         inAccess Networks
+  2003              Jefferson Noxon <jeff@debian.org>
+  2005              Jeff Ollie
+  2014              Jonathan R. Rose <jrose@digium.com>
+  2005              Joseph Benden <joe@thrallingpenguin.com>
+  2005              Joshua Colp <jcolp@digium.com>
+  1999-2010         Kevin P. Fleming <kpfleming@digium.com>
+  2005-2006         Kevin P. Fleming <kpfleming@digium.com>
+  2014              Kinsey Moore <kmoore@digium.com>
+  2007-2008         Luigi Rizzo <rizzo@icir.org>
+  2009              malleable, LLC.
+  2009, 2015        Mark Michelson <mmmichelson@digium.com>
+  1999-2006         Mark Spencer <markster@digium.com>
+  2007-2008         Marta Carbone
+  2006              Martin Portmann <map@infinitum.ch>
+  2003-2012         Matthew D. Hardeman <mhardemn@papersoft.com>
+  2012, 2015        Matt Jordan <mjordan@digium.com>
+  2022              Michael Kuron
+  2005              Mikael Magnusson <mikma@users.sourceforge.net>
+  2021-2022         Naveen Albert <asterisk@phreaknet.org>
+  1999-2006         Oleksiy Krivoshey <oleksiyk@gmail.com>
+  2005, 2009        Olle E. Johansson <oej@edvina.net>
+  2005              Oxymium sarl
+  2003              Paul Bagyenda <bagyenda@dsmagic.com>
+  2002              Pauline Middelink <middelink@polyware.nl>
+  2010              Precise Networks, Inc. <http://precisenetworksinc.com/>
+  2006              Proformatique
+  2007              Redfish Solutions
+  2014-2015         Richard Mudgett <rmudgett@digium.com>
+  2008              Roberto Casas <roberto.casas@diaple.com>
+  1999-2006         Russell Bryant <russelb@clemson.edu>
+  2005-2008, 2012   Russell Bryant <russell@digium.com>
+  2019-2022         Sangoma Technologies Corporation
+  2014              Schmooze Com, Inc.
+  2008, 2017, 2020  Sean Bright <sean.bright@gmail.com>
+  2006              Sergey Basmanov <sergey_basmanov@mail.ru>
+  2007-2008         Sergio Fadda
+  2008              Steve Murphy <murf@digium.com>
+  2004-2005         Steve Rodgers <hwstar@rodgers.sdcoxmail.com>
+  2001, 2005        Steve Underwood <steveu@coppice.org>
+  2005-2007         Sven Slezak <sunny@mezzo.net>
+  2011-2012         Terry Wilson <twilson@digium.com>
+  2004              The Internet Society
+  1999-2006         Thorsten Lockert <tholo@trollphone.org>
+  2003, 2005-2007   Tilghman Lesher
+  2011-2016         Timo Teräs
+  2007-2008         Trinity College Computing Center
+  2006              Voop as
+License-Grant:
+ This program is free software,
+ distributed under the terms
+ of the GNU General Public License Version 2.
+ See the <LICENSE> file at the top of the source tree.
+License: GPL-2-Asterisk
+Comment:
+ This specifies the license used for most of Asterisk's files.
+ Informally: GPL-2 with exceptions
+ for linking with OpenSSL, OpenH323 and UW-Imap.
+
+Files:
+ Xpjproject/*
+Copyright:
+  2003-2008  Benny Prijono <benny@prijono.org>
+  2011       Dan Arrhenius <dan@keystream.se>
+  1993-2006  Douglas C. Schmidt <d.schmidt@vanderbilt.edu>
+  2017       George Joseph <gjoseph@digium.com>
+  2007-2009  Keystream AB
+  2007-2009  Konftel AB
+  2010-2012  Regis Montoya (r3gis) <http://www.r3gis.fr/>
+  2014-2017  Savoir-faire Linux
+  2008-2022  Teluu Inc. <http://www.teluu.com/>
+  2012-2015  Zaark Technology AB
+License-Grant:
+ This program is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation;
+ either version 2 of the License,
+ or (at your option) any later version.
+License: GPL-2+
+Comment:
+ Some files has additional alternative licensing ignored as irrelevant
+ for our redistribution.
+
+Files:
+ Xpjproject/third_party/webrtc_aec3/*
+Copyright:
+  1996-2001             Takuya OOURA
+  2004-2006, 2011-2021  The WebRTC project authors
+License-Grant:
+ Use of this source code is governed by a BSD-style license
+ that can be found in the <LICENSE> file
+ in the root of the source tree.
+License: BSD-3-clause~Google
+
+Files:
+ Xpjproject/third_party/webrtc_aec3/src/absl/*
+Copyright:
+  2017-2019  The Abseil Authors
+License-Grant:
+ Licensed under the Apache License,
+ Version 2.0 (the "License");
+ you may not use this file
+ except in compliance with the License.
+ You may obtain a copy of the License
+ at <https://www.apache.org/licenses/LICENSE-2.0>
+License: Apache-2.0
+
+Files:
+ Xpjproject/third_party/webrtc_aec3/src/third_party/pffft/*
+Copyright:
+  2013  Julien Pommier <pommier@modartt.com>
+  2004  the University Corporation for Atmospheric Research ("UCAR")
+License: BSD-3-clause~NCAR
+
+Files:
+ Xpjproject/third_party/webrtc_aec3/src/third_party/rnnoise/*
+Copyright:
+  2012-2017  Jean-Marc Valin
+  2008-2011  Octasic Inc.
+License: BSD-2-clause
+
+Files:
+ Xamr/*
+Copyright: none (Public Domain)
+License: public-domain
+ This is free and unencumbered software
+ released into the public domain.
+Reference:
+ Xamr/LICENSE
+
+Files:
+ Xmp3/*
+Copyright:
+  1995-1997  Michael Hipp
+License-Grant:
+ you may use this source under GPL terms!
+License: GPL-1+
+Reference:
+ Xmp3/layer3.c
+ Xmp3/MPGLIB_README
+Comment:
+ Version of license not mentioned.
+ License dictates that to mean any version of the license.
+
+Files:
+ Xopus/*
+Copyright:
+  2013,2016  Digium, Inc.
+  2014  Lorenzo Miniero <lorenzo@meetecho.com>
+License-Grant:
+ This program is free software, distributed
+ under the terms of the GNU General Public License Version 2.
+ See the <LICENSE> file at the top of the source tree.
+License: GPL-2
+Reference:
+ Xopus/LICENSE
+
+Files:
+ Xpjproject/pjsip-apps/src/pjsua/ios/*
+Copyright:
+  2016  Apple Inc.
+License-Grant:
+ See LICENSE.txt for this sample’s licensing information
+License: AML
+Reference:
+ Xpjproject/pjsip-apps/src/pjsua/ios/ipjsua/Reachability.h
+ <https://github.com/GyazSquare/Reachability/blob/master/LICENSE.txt>
+Comment:
+ Copyright holder is mentioned in only one file.
+ Copyright assumed to apply generally.
+ .
+ License is stated only by refrencing file <LICENSE.txt>
+ which is missing.
+ License assumed to be same as for a similar project at Github:
+ <https://github.com/GyazSquare/Reachability>
+
+Files:
+ include/solaris-compat/sys/queue.h
+ utils/db1-ast/*
+Copyright:
+  1989-1994  The Regents of the University of California
+License: BSD-4-Clause-UC
+
+Files:
+ addons/chan_ooh323.*
+ addons/ooh323cDriver.*
+ addons/ooh323c/*
+Copyright:
+  2004-2005  Objective Systems, Inc.
+  2005       Page Iberica, S.A.
+License-Grant:
+ This software is furnished under an open source license
+ and may be used and copied
+ only in accordance with the terms of this license.
+ The text of the license may generally be found
+ in the root directory of this installation in the <COPYING> file.
+License: GPL-2
+
+Files:
+ codecs/speex/*
+Copyright:
+  2002-2003, 2007-2008  Jean-Marc Valin
+  2008                  Thorvald Natvig
+License: BSD-3-Clause~Xiph
+
+Files:
+ */configure
+ Xpjproject/aconfigure
+Copyright:
+  1992-1996, 1998-2017, 2020-2021  Free Software Foundation, Inc.
+License: FSFUL
+
+Files:
+ */config.guess
+ */config.sub
+Copyright:
+  1992-2018  Free Software Foundation, Inc.
+License-Grant:
+ This file is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation;
+ either version 3 of the License,
+ or (at your option) any later version.
+License: GPL-3+ with Autoconf exception
+ As a special exception to the GNU General Public License,
+ if you distribute this file as part of a program
+ that contains a configuration script generated by Autoconf,
+ you may include it under the same distribution terms
+ that you use for the rest of that program.
+ This Exception is an additional permission under section 7
+ of the GNU General Public License, version 3 ("GPLv3").
+
+Files:
+ */missing
+Copyright:
+  1996-1997, 1999-2005  Free Software Foundation, Inc.
+License-Grant:
+ This program is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation;
+ either version 2,
+ or (at your option) any later version.
+License: GPL-2+ with Autoconf exception
+ As a special exception to the GNU General Public License,
+ if you distribute this file as part of a program
+ that contains a configuration script generated by Autoconf,
+ you may include it under the same distribution terms
+ that you use for the rest of that program.
+
+Files:
+ */install-sh
+Copyright:
+  1994  X Consortium
+License: X11
+
+Files:
+ */Makefile
+ Makefile.moddir_rules
+ Makefile.rules
+ apps/app_fax.c
+ channels/iax2/include/iax2.h
+ channels/iax2/include/parser.h
+ channels/misdn/chan_misdn_config.h
+ channels/misdn/ie.c
+ channels/misdn/isdn_lib.c
+ channels/misdn/isdn_lib.h
+ channels/misdn/isdn_msg_parser.c
+ codecs/log2comp.h
+ include/asterisk.h
+ include/asterisk/compat.h
+ include/asterisk/paths.h
+ include/asterisk/udptl.h
+ res/ari.make
+ rest-api-templates/ari.make.mustache
+Copyright:
+  2004-2005  Christian Richter <crich@beronet.com>
+  1999-2014  Digium, Inc.
+  2007-2008  Dmitry Andrianov <asterisk@dima.spb.ru>
+  2005       Steve Underwood
+License-Grant:
+ This program is free software,
+ distributed under the terms of the GNU General Public License
+License: GPL-1+
+Comment:
+ Version of license not mentioned.
+ License dictates that to mean any version of the license.
+
+Files:
+ codecs/gsm/*
+ codecs/gsm/Makefile
+Copyright:
+  1992-1996  Carsten Bormann <cabo@cs.tu-berlin.de>
+  1992-1996  Jutta Degener <jutta@cs.tu-berlin.de>
+  1999       Stanley J. Brooks <stabro@megsinet.net>
+License: TU-Berlin-1.0
+Comment:
+ Makefile listed explicitly to counteract */Makefile elsewhere.
+
+Files:
+ apps/enter.h
+ apps/leave.h
+ channels/chan_phone.h
+ codecs/ex_adpcm.h
+ codecs/ex_alaw.h
+ codecs/ex_g722.h
+ codecs/ex_g726.h
+ codecs/ex_gsm.h
+ codecs/ex_ilbc.h
+ codecs/ex_lpc10.h
+ codecs/ex_speex.h
+ codecs/ex_ulaw.h
+ contrib/scripts/astversion
+ contrib/scripts/vmail.cgi
+Copyright:
+  2008, 2015  Digium, Inc.
+  1999, 2002  Linux Support Services, LLC.
+  1999        Mark Spencer
+License-Grant:
+ Distributed under the terms of the GNU General Public License
+License: GPL-1+
+Comment:
+ Version of license not mentioned.
+ License dictates that to mean any version of the license.
+
+Files:
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/Voip/Helpers/AppServiceHelper.cs
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/Voip/Helpers/VoipCallHelper.cs
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/Voip/MainPage.xaml.cs
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/VoipBackEnd/pch.cpp
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/VoipBackEnd/pch.h
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/VoipHost/VoipHost.cpp
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/VoipTasks/AppService.cs
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/VoipTasks/BackgroundOperations/BackgroundOperations.cs
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/VoipTasks/CallRtcTask.cs
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/VoipTasks/Helpers/Current.cs
+ Xpjproject/pjsip-apps/src/pjsua/winrt/gui/uwp/VoipTasks/Helpers/VccCallHelper.cs
+Copyright:
+  Microsoft
+License-Grant:
+ This code is licensed under the MIT License (MIT).
+License: Expat
+Comment:
+ Assuming the Expat flavor of the MIT family of licenses.
+
+Files:
+ channels/misdn/Makefile
+ codecs/lpc10/Makefile
+ doc/Makefile
+ main/stdtime/Makefile
+ third-party/Makefile
+ third-party/pjproject/Makefile
+ utils/db1-ast/Makefile
+Copyright: None
+License: None
+Comment:
+ Makefiles listed explicitly to counteract */Makefile elsewhere.
+
+Files:
+ codecs/speex/resample.c
+ codecs/speex/speex_resampler.h
+Copyright:
+  2007-2008  Jean-Marc Valin
+  2008       Thorvald Natvig
+  1998       Todd C. Miller <Todd.Miller@courtesan.com>
+License: BSD-3-Clause
+
+Files:
+ contrib/scripts/live_ast
+ contrib/scripts/sip_nat_settings
+ menuselect/contrib/menuselect-dummy
+Copyright:
+  2005, 2007-2008  Tzafrir Cohen <tzafrir.cohen@xorcom.com>
+License: GPL-2+
+
+Files:
+ Xpjproject/pjlib/src/pj/compat/longjmp_i386.S
+ Xpjproject/pjlib-util/src/pjlib-util/getopt.c
+Copyright:
+  1987-1998  Free Software Foundation, Inc.
+             Mike Borella <mike_borella@mw.3com.com>
+License-Grant:
+ The GNU C Library is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU Library General Public License
+ as published by the Free Software Foundation;
+ either version 2 of the License,
+ or (at your option) any later version.
+License: LGPL-2+
+Comment:
+ <pjlib-util/include/pjlib-util/getopt.h>
+ has the same license boilerplate,
+ only it has a comment
+ "this file has now become GPL"
+ on top (comment removed by Upstream).
+
+Files:
+ Xpjproject/third_party/threademulation/include/ThreadEmulation.h
+ Xpjproject/third_party/threademulation/src/ThreadEmulation.cpp
+Copyright:
+  Microsoft Corporation
+License: Ms-PL
+Reference:
+ <third_party/threademulation/Microsoft%20Permissive%20License.txt>
+Comment:
+ Code lack licensing (contains only a standard disclaimer).
+ File <third_party/threademulation/Microsoft Permissive License.txt>
+ is assumed to apply.
+
+Files:
+ main/stdtime/private.h
+ main/stdtime/tzfile.h
+Copyright: None
+License: public-domain
+ This file is in the public domain,
+ so clarified as of 1996-06-05 by Arthur David Olson.
+
+Files:
+ formats/msgsm.h
+Copyright: None
+License: None
+Comment:
+ File lacks copyright and licensing,
+ but contains the comment
+ "Conversion routines derived from code by guido@sienanet.it"
+ which might be interpreted as
+ a copyright holder not granting a license.
+ More likely, however,
+ the header file is considered non-copyrightable header
+ with merely a remark about origin of inspiration:
+ .
+   * File was introduced in Asterisk 0.1.1
+     (according to git sources),
+     together with file format_wav_gsm.c containing same comment
+     but also explicit copyright and licensing:
+     <https://github.com/asterisk/asterisk/commit/0ed94773>.
+ .
+   * Asterisk 0.1.1 was released in 1999
+     (according to git sources),
+     at about which time Guido Giorgetti <guido@sienanet.it>
+     released audio-related Delphi 3 code as "Freeware":
+     <http://delphi.icm.edu.pl/authors/a0002451.htm>
+     <http://delphi.icm.edu.pl/ftp/d30free/tmsgvoc.zip>
+     <http://torry.net/vcl/comms/voice/tmsgvoc.zip>.
+ .
+ See also <https://issues.asterisk.org/jira/browse/ASTERISK-24172>.
+
+Files:
+ utils/frame.c
+ utils/frame.h
+ utils/stereorize.c
+Copyright:
+  Mark Roberts <mark@manumark.de>
+  Michael Labuschke <michael@labuschke.de>
+License-Grant:
+ > Have you intended for that package to be released
+ > under a Free Software license
+ > (basically: one that allows distribution and modification)?
+ > If so, could you please provide a version of that source package
+ > licensed under some standard free software license
+ > (GPL? LGPL? MIT?)
+ .
+ Thank you for your trouble.
+ I intended the software to be free.
+ GPL is fine.
+ Please add the appropriate text to the file for me,
+ in my name.
+License: GPL-1+
+Comment:
+ stereorize.c, frame.c and frame.h:
+ originally from markdsp:
+ <http://web.archive.org/web/20060525134915/http://www.manumark.de/markdsp.html>
+ .
+ Code lacks explicit licensing,
+ but author notified by private mail
+ the license grant included here.
+
+Files:
+ agi/eagi-sphinx-test.c agi/eagi-test.c
+Copyright: None
+License: public-domain
+ This code is released into public domain
+ without any warranty of any kind.
+
+Files:
+ apps/app_exec.c
+ apps/app_followme.c
+ apps/app_morsecode.c
+ apps/app_sayunixtime.c
+ apps/app_stack.c
+ apps/app_verbose.c
+ funcs/func_cut.c
+ funcs/func_realtime.c
+ res/res_limit.c
+Copyright:
+  2005-2006  BJ Weschke <bweschke@btwtech.com>
+  2006       Digium, Inc.
+  2006       Philipp Dunkel <philipp.dunkel@ebox.at>
+  2003-2006  Tilghman Lesher
+License: Unrestricted~author
+ This code is released by the author
+ with no restrictions on usage.
+
+Files:
+ Xpjproject/pjsip-apps/src/pjsua/bb10/bar-descriptor.xml
+Copyright:
+  2011-2013  Research In Motion Limited
+License-Grant:
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License
+ at <http://www.apache.org/licenses/LICENSE-2.0>
+License: Apache-2.0
+
+Files:
+ Xpjproject/pjlib/src/pj/sock_linux_kernel.c
+Copyright:
+  2003-2008   Benny Prijono <benny@prijono.org>
+  2008-2011   Teluu Inc. <http://www.teluu.com/>
+  1983, 1993  The Regents of the University of California.
+License-Grant:
+ This program is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation;
+ either version 2 of the License,
+ or (at your option) any later version.
+License: BSD-4-clause-UC and GPL-2+
+
+Files:
+ rest-api-templates/odict.py
+Copyright:
+  2009  Raymond Hettinger
+License: Expat
+Reference:
+ <https://code.activestate.com/recipes/576693/>
+Comment:
+ File contains no copyright statement.
+ Copyright holder assumed from "Created by" listing
+ at referenced URI.
+
+Files:
+ main/utf8.c
+Copyright:
+Copyright:
+  2008-2010  Björn Höhrmann <bjoern@hoehrmann.de>
+  2020       Sean Bright
+License: Expat and GPL-2-Asterisk
+
+Files:
+ main/config.c
+Copyright:
+  1999-2010  Digium, Inc.
+  2001       Simon Tatham
+License: Expat and GPL-2-Asterisk
+
+Files: contrib/scripts/managerproxy.pl
+Copyright:
+  2004  David C. Troy <dave@popvox.com>
+  2004  Nicolás Gudiño <nicolas@house.com.ar>
+License-Grant:
+ This program is free software,
+ distributed under the terms
+ of the GNU General Public License.
+License: GPL-1+
+Comment:
+ Version of license not mentioned.
+ License dictates that to mean any version of the license.
+
+Files:
+ contrib/scripts/retrieve_extensions_from_sql.pl
+Copyright:
+  2004  Peter Nixon <codemonkey@peternixon.net>
+License-Grant:
+ This program is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation;
+ either version 2 of the License,
+ or (at your option) any later version.
+License: GPL-2+
+
+Files:
+ contrib/scripts/clang-scan-build
+Copyright:
+  2015  Diederik de Groot <dddegroot@users.sf.net>
+License-Grant:
+ This program is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation;
+ either version 2 of the License,
+ or (at your option) any later version.
+License: GPL-2+
+
+Files:
+ funcs/func_curl.c
+Copyright:
+  2004-2006  Tilghman Lesher
+License: Unrestricted~app_curl
+ app_curl.c is distributed
+ with no restrictions on usage or redistribution.
+
+Files:
+ main/dns.c
+Copyright:
+  1993              Digital Equipment Corporation
+  1983, 1989, 1993  The Regents of the University of California
+  1999-2006         Thorsten Lockert
+License-Grant:
+ This program is free software,
+ distributed under the terms
+ of the GNU General Public License Version 2.
+ See the <LICENSE> file at the top of the source tree.
+License: BSD-4-Clause-UC and ISC and GPL-2-Asterisk
+
+Files:
+ main/ast_expr2.c
+ main/ast_expr2.h
+ res/ael/ael.tab.h
+Copyright:
+  1984, 1989-1990, 2000-2011  Free Software Foundation, Inc.
+License-Grant:
+ This program is free software:
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation,
+ either version 3 of the License,
+ or (at your option) any later version.
+License: GPL-3+ with bison exception
+ As a special exception,
+ you may create a larger work
+ that contains part or all of the Bison parser skeleton
+ and distribute that work under terms of your choice,
+ so long as that work isn't itself a parser generator
+ using the skeleton or a modified version thereof
+ as a parser skeleton.
+ Alternatively,
+ if you modify or redistribute the parser skeleton itself,
+ you may (at your option) remove this special exception,
+ which will cause the skeleton and the resulting Bison output files
+ to be licensed
+ under the GNU General Public License
+ without this special exception.
+
+Files:
+ res/ael/ael.tab.c
+Copyright:
+  2006                        Digium, Inc.
+  1984, 1989-1990, 2000-2011  Free Software Foundation, Inc.
+License-Grant:
+ This program is free software:
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation,
+ either version 3 of the License,
+ or (at your option) any later version.
+License: GPL-2 and GPL-3+ with bison exception
+ As a special exception,
+ you may create a larger work
+ that contains part or all of the Bison parser skeleton
+ and distribute that work under terms of your choice,
+ so long as that work isn't itself a parser generator
+ using the skeleton or a modified version thereof
+ as a parser skeleton.
+ Alternatively,
+ if you modify or redistribute the parser skeleton itself,
+ you may (at your option) remove this special exception,
+ which will cause the skeleton and the resulting Bison output files
+ to be licensed
+ under the GNU General Public License
+ without this special exception.
+
+Files:
+ include/asterisk/sha1.h
+ main/sha1.c
+Copyright:
+  2011  IETF Trust and the persons identified as authors of the code
+License: BSD-3-Clause~IETF
+
+Files:
+ funcs/func_pitchshift.c
+Copyright:
+  2010       Digium, Inc.
+  1999-2009  Stephan M. Bernsee <smb@dspdimension.com>
+License-Grant:
+ This program is free software,
+ distributed under the terms
+ of the GNU General Public License Version 2.
+ See the <LICENSE> file at the top of the source tree.
+License: WOL and GPL-2-Asterisk
+
+Files:
+ main/plc.c
+Copyright:
+  2004  Steve Underwood <steveu@coppice.org>
+License-Grant:
+ This program is free software,
+ distributed under the terms
+ of the GNU General Public License Version 2.
+ See the <LICENSE> file at the top of the source tree.
+ .
+ This version may be optionally licenced
+ under the GNU LGPL licence.
+License: LGPL-2+ or GPL-2-Asterisk
+Comment:
+ Version of LGPL license not mentioned.
+ License dictates that to mean any version of the license.
+
+Files:
+ main/md5.c
+Copyright: None
+License: public-domain
+ This code was written by Colin Plumb in 1993,
+ no copyright is claimed.
+ This code is in the public domain;
+ do with it what you wish.
+
+Files:
+ Xpjproject/pjlib/src/pj/compat/setjmp_i386.S
+Copyright:
+  1995-1997, 2000-2001  Free Software Foundation, Inc.
+License-Grant:
+ The GNU C Library is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU Lesser General Public License
+ as published by the Free Software Foundation;
+ either version 2.1 of the License,
+ or (at your option) any later version.
+License: LGPL-2.1+
+
+Files:
+ main/strcompat.c
+ menuselect/strcompat.c
+Copyright:
+  1999-2006       Digium, Inc.
+  2004            Darren Tucker
+  1996-1998, 2008 Theo de Raadt
+  1997, 2008-2009 Todd C. Miller <Todd.Miller@courtesan.com>
+License: GPL-2-Asterisk and ISC
+
+Files:
+ include/asterisk/poll-compat.h
+ main/poll.c
+Copyright:
+  1995-2002  Brian M. Clapper
+License: BSD-4-Clause~Clapper
+
+Files: codecs/ex_opus.h
+Copyright:
+  2014  Lorenzo Miniero <lorenzo@meetecho.com>
+License-Grant:
+ Distributed under the terms of the GNU General Public License
+License: GPL-1+
+Comment:
+ Version of license not mentioned.
+ License dictates that to mean any version of the license.
+
+Files:
+ autoconf/ax_pthread.m4
+Copyright:
+  2011  Daniel Richard G. <skunk@iSKUNK.ORG>
+  2008  Steven G. Johnson <stevenj@alum.mit.edu>
+License-Grant:
+ This program is free software:
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation,
+ either version 3 of the License,
+ or (at your option) any later version.
+License: GPL-3+ with Autoconf-2.0~Archive exception
+ As a special exception,
+ the respective Autoconf Macro's copyright owner
+ gives unlimited permission
+ to copy, distribute and modify the configure scripts
+ that are the output of Autoconf when processing the Macro.
+ You need not follow the terms of the GNU General Public License
+ when using or distributing such scripts,
+ even though portions of the text of the Macro appear in them.
+ The GNU General Public License (GPL) does govern
+ all other use of the material
+ that constitutes the Autoconf Macro.
+
+Files:
+ Xpjproject/third_party/mp3/BladeMP3EncDLL.h
+Copyright:
+  1999-2002  A.L. Faber
+License-Grant:
+ This library is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU Lesser General Public License
+ as published by the Free Software Foundation;
+ either version 2 of the License,
+ or (at your option) any later version.
+License: LGPL-2.1+
+
+Files:
+ include/jitterbuf.h
+Copyright:
+  2004-2005  Horizon Wimba, Inc.
+License-Grant:
+ This program is free software, distributed under the terms of
+ the GNU Lesser (Library) General Public License
+License: LGPL-2.1+
+Comment:
+ Version of license not mentioned.
+ License dictates that to mean any version of the license.
+ .
+ Copyright is stated as being "disclaimed to Digium"
+ which may mean that only Digium holds copyright
+ and that only Digium default licensing applies.
+ Explicitly stated copyright holder and license
+ assumed to apply.
+
+Files:
+ autoconf/libcurl.m4
+Copyright:
+  2006  David Shaw <dshaw@jabberwocky.com>
+License-Grant:
+ This software is licensed as described in the file <COPYING>,
+ which you should have received as part of this distribution.
+ The terms are also available
+ at <https://curl.haxx.se/docs/copyright.html>.
+License: curl
+Reference:
+ <https://curl.haxx.se/docs/copyright.html>
+
+Files:
+ static-http/prototype.js
+Copyright:
+  2005-2008  Sam Stephenson
+License-Grant:
+ Prototype is freely distributable
+ under the terms of an MIT-style license.
+ .
+ For details,
+ see the Prototype web site: <http://www.prototypejs.org/>
+License: MIT-0~subject-to-nothing
+Comment:
+ The web page <http://prototypejs.org/license.html>
+ contains (as of 2016-07-31) the referenced license.
+
+Files:
+ Xpjproject/install-sh
+Copyright:
+  1991  the Massachusetts Institute of Technology
+License: HPND-sell-variant
+
+Files:
+ menuselect/menuselect_gtk.c
+Copyright:
+  2007  Russell Bryant <russell@digium.com>
+License: GPL-2-Asterisk
+Comment:
+ File lacks copyright and licensing,
+ but contains UI dialogue string
+ "Russell Bryant <russell@digium.com> Copyright (C) 2007"
+ which may seem like a copyright holder not granting a license.
+ We instead assume
+ that the file has same licensing as the project generally.
+ .
+ See <https://issues.asterisk.org/jira/browse/ASTERISK-24173>
+
+Files:
+ Xpjproject/pjmedia/src/pjmedia/alaw_ulaw.c
+Copyright:
+  Sun Microsystems, Inc.
+License: Rdisc~code
+
+Files:
+ Xpjproject/pjlib-util/src/pjlib-util/crc32.c
+Copyright: None
+License: public-domain
+ This file is partly taken from Crypto++ library
+ (<http://www.cryptopp.com/>) and
+ <http://www.di-mgt.com.au/crypto.html#CRC>.
+ .
+ Since the original version of the code is put in public domain,
+ this file is put on public domain as well.
+
+Files:
+ Xpjproject/pjlib-util/src/pjlib-util/md5.c
+Copyright: None
+License: public-domain
+ This code is in the public domain;
+ do with it what you wish.
+
+Files:
+ Xpjproject/pjlib-util/src/pjlib-util/sha1.c
+Copyright: None
+License: public-domain
+ Still 100% public domain
+
+Files: debian/*
+Copyright:
+  2016, 2023  Jonas Smedegaard <dr@jones.dk>
+License-Grant:
+ This packaging is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation;
+ either version 3, or (at your option) any later version.
+License: GPL-3+
+Reference: debian/copyright
+
+Files: debian/asterisk.init
+Copyright:
+  Faidon Liambotis <paravoid@debian.org>
+  Mark Purcell <msp@debian.org>
+  Tzafrir Cohen <tzafrir.cohen@xorcom.com>
+License-Grant:
+ This package is free software;
+ you can redistribute it and/or modify it
+ under the terms of the GNU General Public License
+ as published by the Free Software Foundation;
+ either version 2 of the License,
+ or (at your option) any later version.
+License: GPL-2+
+
+License: AML
+ IMPORTANT: This Apple software is supplied to you
+ by Apple Computer, Inc. ("Apple")
+ in consideration of your agreement to the following terms,
+ and your use, installation, modification or redistribution
+ of this Apple software
+ constitutes acceptance of these terms.
+ If you do not agree with these terms,
+ please do not use, install, modify or redistribute
+ this Apple software.
+ .
+ In consideration of your agreement to abide by the following terms,
+ and subject to these terms,
+ Apple grants you a personal, non-exclusive license,
+ under Apple's copyrights
+ in this original Apple software (the "Apple Software"),
+ to use, reproduce, modify and redistribute the Apple Software,
+ with or without modifications,
+ in source and/or binary forms;
+ provided that if you redistribute the Apple Software
+ in its entirety and without modifications,
+ you must retain this notice and the following text and disclaimers
+ in all such redistributions of the Apple Software.
+ Neither the name, trademarks, service marks or logos
+ of Apple Computer, Inc.
+ may be used to endorse or promote products
+ derived from the Apple Software
+ without specific prior written permission from Apple.
+ Except as expressly stated in this notice,
+ no other rights or licenses, express or implied,
+ are granted by Apple herein,
+ including but not limited to any patent rights
+ that may be infringed by your derivative works
+ or by other works in which the Apple Software
+ may be incorporated.
+ .
+ The Apple Software is provided by Apple on an "AS IS" basis.
+ APPLE MAKES NO WARRANTIES, EXPRESS OR IMPLIED,
+ INCLUDING WITHOUT LIMITATION THE IMPLIED WARRANTIES
+ OF NON-INFRINGEMENT, MERCHANTABILITY AND FITNESS
+ FOR A PARTICULAR PURPOSE,
+ REGARDING THE APPLE SOFTWARE OR ITS USE AND OPERATION
+ ALONE OR IN COMBINATION WITH YOUR PRODUCTS.
+ .
+ IN NO EVENT SHALL APPLE BE LIABLE
+ FOR ANY SPECIAL, INDIRECT, INCIDENTAL OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS;
+ OR BUSINESS INTERRUPTION)
+ ARISING IN ANY WAY
+ OUT OF THE USE, REPRODUCTION, MODIFICATION AND/OR DISTRIBUTION
+ OF THE APPLE SOFTWARE, HOWEVER CAUSED
+ AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE),
+ STRICT LIABILITY OR OTHERWISE,
+ EVEN IF APPLE HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: Apache-2.0
+Reference: /usr/share/common-licenses/Apache-2.0
+
+License: BSD-2-clause
+ Redistribution and use in source and binary forms,
+ with or without modification,
+ are permitted
+ provided that the following conditions are met:
+   - Redistributions of source code must retain
+     the above copyright notice, this list of conditions
+     and the following disclaimer.
+   - Redistributions in binary form must reproduce
+     the above copyright notice, this list of conditions
+     and the following disclaimer
+     in the documentation and/or other materials
+     provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED
+ BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO,
+ THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.
+ IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS;
+ OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-Clause
+ Redistribution and use in source and binary forms,
+ with or without modification,
+ are permitted
+ provided that the following conditions are met:
+  1. Redistributions of source code must retain
+     the above copyright notice, this list of conditions
+     and the following disclaimer.
+  2. Redistributions in binary form must reproduce
+     the above copyright notice, this list of conditions
+     and the following disclaimer
+     in the documentation and/or other materials
+     provided with the distribution.
+  3. The name of the author may not be used
+     to endorse or promote products
+     derived from this software
+     without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO,
+ THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.
+ IN NO EVENT SHALL THE AUTHOR BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS;
+ OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-clause~Google
+ Redistribution and use in source and binary forms,
+ with or without modification, are permitted
+ provided that the following conditions are met:
+  1) Redistributions of source code must retain
+     the above copyright notice, this list of conditions
+     and the following disclaimer.
+  2) Redistributions in binary form must reproduce
+     the above copyright notice, this list of conditions
+     and the following disclaimer
+     in the documentation and/or other materials
+     provided with the distribution.
+  3) Neither the name of Google nor the names of its contributors
+     may be used to endorse or promote products
+     derived from this software
+     without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED
+ BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO,
+ THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS;
+ OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-Clause~IETF
+ Redistribution and use in source and binary forms,
+ with or without modification,
+ are permitted
+ provided that the following conditions are met:
+   * Redistributions of source code must retain
+     the above copyright notice, this list of conditions
+     and the following disclaimer.
+   * Redistributions in binary form must reproduce
+     the above copyright notice, this list of conditions
+     and the following disclaimer
+     in the documentation and/or other materials
+     provided with the distribution.
+   * Neither the name of Internet Society, IETF or IETF Trust,
+     nor the names of specific contributors,
+     may be used to endorse or promote products
+     derived from this software
+     without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED
+ BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO,
+ THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.
+ IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS;
+ OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-clause~NCAR
+ Redistribution and use of the Software in source and binary forms,
+ with or without modification, is permitted provided that the
+ following conditions are met:
+   - Neither the names
+     of NCAR's Computational and Information Systems Laboratory,
+     the University Corporation for Atmospheric Research,
+     nor the names of its sponsors or contributors
+     may be used to endorse or promote
+     products derived from this Software
+     without specific prior written permission.
+   - Redistributions of source code must retain
+     the above copyright notices, this list of conditions,
+     and the disclaimer below.
+   - Redistributions in binary form must reproduce
+     the above copyright notice, this list of conditions,
+     and the disclaimer below
+     in the documentation and/or other materials
+     provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED "AS IS",
+ WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO
+ THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+ AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE
+ FOR ANY CLAIM, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ OR CONSEQUENTIAL DAMAGES OR OTHER LIABILITY,
+ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+ OR THE USE OR OTHER DEALINGS WITH THE SOFTWARE.
+
+License: BSD-3-Clause~Xiph
+ Redistribution and use in source and binary forms,
+ with or without modification, are permitted
+ provided that the following conditions are met:
+   * Redistributions of source code must retain
+     the above copyright notice, this list of conditions
+     and the following disclaimer.
+   * Redistributions in binary form must reproduce
+     the above copyright notice, this list of conditions
+     and the following disclaimer
+     in the documentation and/or other materials
+     provided with the distribution.
+   * Neither the name of the Xiph.org Foundation
+     nor the names of its contributors
+     may be used to endorse or promote products
+     derived from this software
+     without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED
+ BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO,
+ THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-4-Clause~Clapper
+ Redistribution and use in source and binary forms are permitted
+ provided that:
+  1. source distributions retain
+     this entire copyright notice and comment;
+  2. modifications made to the software are prominently mentioned,
+     and a copy of the original software
+     (or a pointer to its location)
+     are included; and
+  3. distributions including binaries display
+     the following acknowledgement:
+     "This product includes software
+     developed by Brian M. Clapper <bmc@clapper.org>"
+     in the documentation or other materials
+     provided with the distribution.
+ .
+ The name of the author may not be used
+ to endorse or promote products derived from this software
+ without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED "AS IS"
+ AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, WITHOUT LIMITATION,
+ THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ AND FITNESS FOR A PARTICULAR PURPOSE.
+
+License: BSD-4-Clause-UC
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+  1. Redistributions of source code must retain
+     the above copyright notice, this list of conditions
+     and the following disclaimer.
+  2. Redistributions in binary form must reproduce
+     the above copyright notice, this list of conditions
+     and the following disclaimer
+     in the documentation and/or other materials
+     provided with the distribution.
+  3. All advertising materials
+     mentioning features or use of this software
+     must display the following acknowledgement:
+     This product includes software
+     developed by the University of California, Berkeley
+     and its contributors.
+  4. Neither the name of the University
+     nor the names of its contributors
+     may be used to endorse or promote
+     products derived from this software
+     without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO,
+ THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.
+ IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: curl
+ Permission to use, copy, modify, and distribute this software
+ for any purpose with or without fee
+ is hereby granted,
+ provided that the above copyright notice and this permission notice
+ appear in all copies.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS",
+ WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+ AND NONINFRINGEMENT OF THIRD PARTY RIGHTS.
+ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+ FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ .
+ Except as contained in this notice,
+ the name of a copyright holder shall not be used
+ in advertising or otherwise to promote
+ the sale, use or other dealings in this Software
+ without prior written authorization of the copyright holder.
+
+License: Expat
+ Permission is hereby granted, free of charge,
+ to any person obtaining a copy
+ of this software and associated documentation files
+ (the "Software"),
+ to deal in the Software without restriction,
+ including without limitation
+ the rights to use, copy, modify, merge, publish, distribute,
+ sublicense, and/or sell copies of the Software,
+ and to permit persons
+ to whom the Software is furnished to do so,
+ subject to the following conditions:
+ .
+ The above copyright notice and this permission notice
+ shall be included
+ in all copies or substantial portions of the Software.
+
+License: FSFUL
+ This configure script is free software;
+ the Free Software Foundation gives unlimited permission
+ to copy, distribute and modify it.
+
+License: GPL-1+
+Reference: /usr/share/common-licenses/GPL-1
+
+License: GPL-2
+Reference: /usr/share/common-licenses/GPL-2
+
+License: GPL-2-Asterisk
+ Asterisk is distributed
+ under the GNU General Public License version 2
+ and is also available under alternative licenses
+ negotiated directly with Digium, Inc.
+ If you obtained Asterisk under the GPL,
+ then the GPL applies to all loadable Asterisk modules
+ used on your system as well,
+ except as defined below.
+ The GPL (version 2) is included in this source tree
+ in the file <COPYING>.
+ .
+ This package also includes various components
+ that are not part of Asterisk itself;
+ these components are in the 'contrib' directory
+ and its subdirectories.
+ These components are also distributed
+ under the GPL version 2 as well.
+ .
+ Digium, Inc. (formerly Linux Support Services)
+ holds copyright and/or sufficient licenses
+ to all components of the Asterisk package,
+ and therefore can grant, at its sole discretion, the ability
+ for companies, individuals, or organizations
+ to create proprietary or Open Source (even if not GPL) modules
+ which may be dynamically linked at runtime
+ with the portions of Asterisk which fall
+ under our copyright/license umbrella,
+ or are distributed under more flexible licenses than GPL.
+ .
+ If you wish to use our code in other GPL programs,
+ don't worry -- there is no requirement
+ that you provide the same exception in your GPL'd products
+ (although if you've written a module for Asterisk
+ we would strongly encourage you
+ to make the same exception that we do).
+ .
+ Specific permission is also granted
+ to link Asterisk with OpenSSL, OpenH323
+ and/or the UW IMAP Toolkit
+ and distribute the resulting binary files.
+ .
+ In addition,
+ Asterisk implements two management/control protocols:
+ the Asterisk Manager Interface (AMI)
+ and the Asterisk Gateway Interface (AGI).
+ It is our belief that applications using these protocols
+ to manage or control an Asterisk instance
+ do not have to be licensed
+ under the GPL or a compatible license,
+ as we believe these protocols do not create a 'derivative work'
+ as referred to in the GPL.
+ However, should any court or other judiciary body find
+ that these protocols do fall under the terms of the GPL,
+ then we hereby grant you a license
+ to use these protocols in combination
+ with Asterisk in external applications
+ licensed under any license you wish.
+ .
+ The 'Asterisk' name and logos are trademarks
+ owned by Digium, Inc.,
+ and use of them is subject to our trademark licensing policies.
+ If you wish to use these trademarks
+ for purposes other than simple redistribution
+ of Asterisk source code obtained from Digium,
+ you should contact our licensing department
+ to determine the necessary steps you must take.
+ For more information on this policy, please read:
+ .
+ <http://www.digium.com/en/company/profile/trademarkpolicy.php>
+Reference: /usr/share/common-licenses/GPL-2
+
+License: GPL-2+
+Reference: /usr/share/common-licenses/GPL-2
+
+License: GPL-3+
+Reference: /usr/share/common-licenses/GPL-3
+
+License: HPND-sell-variant
+ Permission to use, copy, modify, distribute, and sell
+ this software and its documentation
+ for any purpose
+ is hereby granted without fee,
+ provided that the above copyright notice appear in all copies
+ and that both that copyright notice and this permission notice appear
+ in supporting documentation,
+ and that the name of M.I.T. not be used
+ in advertising or publicity
+ pertaining to distribution of the software
+ without specific, written prior permission.
+ M.I.T. makes no representations
+ about the suitability of this software for any purpose.
+ It is provided "as is" without express or implied warranty.
+
+License: ISC
+ Permission to use, copy, modify, and distribute this software
+ for any purpose with or without fee
+ is hereby granted,
+ provided that the above copyright notice and this permission notice appear
+ in all copies.
+
+License: LGPL-2+
+Reference: /usr/share/common-licenses/LGPL-2
+
+License: LGPL-2.1+
+Reference: /usr/share/common-licenses/LGPL-2.1
+
+License: MIT
+ Permission to use, copy, modify, distribute, and sell
+ this software and its documentation
+ for any purpose
+ is hereby granted without fee,
+ provided that the above copyright notice appear
+ in all copies
+ and that both that copyright notice and this permission notice appear
+ in supporting documentation,
+ and that the name of M.I.T. not be used
+ in advertising or publicity
+ pertaining to distribution of the software
+ without specific, written prior permission.
+ M.I.T. makes no representations
+ about the suitability of this software for any purpose.
+ It is provided "as is" without express or implied warranty.
+
+License: MIT-0~subject-to-nothing
+ Permission is hereby granted, free of charge,
+ to any person obtaining a copy
+ of this software and associated documentation files (the "Software"),
+ to deal in the Software without restriction,
+ including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense,
+ and/or sell copies of the Software,
+ and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+ .
+ THE SOFTWARE IS PROVIDED "AS IS",
+ WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO
+ THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+ AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+ FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+License: Ms-PL
+ Microsoft Permissive License (Ms-PL)
+ .
+ This license governs use of the accompanying software.
+ If you use the software, you accept this license.
+ If you do not accept the license, do not use the software.
+ .
+  1. Definitions
+     The terms 'reproduce,' 'reproduction,'
+     'derivative works,' and 'distribution'
+     have the same meaning here
+     as under U.S. copyright law.
+     A 'contribution' is the original software,
+     or any additions or changes to the software.
+     A 'contributor' is any person
+     that distributes its contribution
+     under this license.
+     'Licensed patents' are a contributor's patent claims
+     that read directly on its contribution.
+  2. Grant of Rights
+     (A) Copyright Grant
+         Subject to the terms of this license,
+         including the license conditions
+         and limitations in section 3,
+         each contributor grants you
+         a non-exclusive, worldwide, royalty-free copyright license
+         to reproduce its contribution,
+         prepare derivative works of its contribution,
+         and distribute its contribution
+         or any derivative works that you create.
+     (B) Patent Grant
+         Subject to the terms of this license,
+         including the license conditions
+         and limitations in section 3,
+         each contributor grants you
+         a non-exclusive, worldwide, royalty-free license
+         under its licensed patents
+         to make, have made, use, sell, offer for sale, import,
+         and/or otherwise dispose of its contribution
+         in the software
+         or derivative works of the contribution in the software.
+  3. Conditions and Limitations
+     (A) No Trademark License
+         This license does not grant you rights
+         to use any contributors' name, logo, or trademarks.
+     (B) If you bring a patent claim against any contributor
+         over patents that you claim are infringed by the software,
+         your patent license from such contributor to the software
+         ends automatically.
+     (C) If you distribute any portion of the software,
+         you must retain all copyright, patent, trademark,
+         and attribution notices
+         that are present in the software.
+     (D) If you distribute any portion of the software
+         in source code form,
+         you may do so only under this license
+         by including a complete copy of this license
+         with your distribution.
+         If you distribute any portion of the software
+         in compiled or object code form,
+         you may only do so under a license
+         that complies with this license.
+     (E) The software is licensed "as-is."
+         You bear the risk of using it.
+         The contributors give no express warranties,
+         guarantees or conditions.
+          You may have additional consumer rights
+         under your local laws
+         which this license cannot change.
+         To the extent permitted under your local laws,
+         the contributors exclude the implied warranties
+         of merchantability, fitness for a particular purpose
+         and non-infringement.
+
+License: Rdisc~code
+ This source code is a product of Sun Microsystems, Inc.
+ and is provided for unrestricted use.
+ Users may copy or modify this source code without charge.
+ .
+ SUN SOURCE CODE IS PROVIDED AS IS
+ WITH NO WARRANTIES OF ANY KIND
+ INCLUDING THE WARRANTIES OF DESIGN, MERCHANTIBILITY
+ AND FITNESS FOR A PARTICULAR PURPOSE,
+ OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
+ .
+ Sun source code is provided
+ with no support and without any obligation
+ on the part of Sun Microsystems, Inc.
+ to assist in its use, correction, modification or enhancement.
+ .
+ SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY
+ WITH RESPECT TO THE INFRINGEMENT
+ OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS
+ BY THIS SOFTWARE OR ANY PART THEREOF.
+ .
+ In no event will Sun Microsystems, Inc. be liable
+ for any lost revenue or profits
+ or other special, indirect and consequential damages,
+ even if Sun has been advised of the possibility of such damages.
+
+License: TU-Berlin-1.0
+ Any use of this software is permitted
+ provided that this notice is not removed
+ and that neither the authors
+ nor the Technische Universitaet Berlin
+ are deemed to have made any representations
+ as to the suitability of this software for any purpose
+ nor are held responsible for any defects of this software.
+ THERE IS ABSOLUTELY NO WARRANTY FOR THIS SOFTWARE.
+ .
+ As a matter of courtesy,
+ the authors request to be informed
+ about uses this software has found,
+ about bugs in this software,
+ and about any improvements
+ that may be of general interest.
+
+License: WOL
+ The Wide Open License (WOL)
+ .
+ Permission to use, copy, modify, distribute and sell
+ this software and its documentation
+ for any purpose
+ is hereby granted without fee,
+ provided that the above copyright notice and this license appear
+ in all source copies.
+ THIS SOFTWARE IS PROVIDED "AS IS"
+ WITHOUT EXPRESS OR IMPLIED WARRANTY OF ANY KIND.
+ See <http://www.dspguru.com/wol.htm> for more information.
+
+License: X11
+ Permission is hereby granted, free of charge,
+ to any person obtaining a copy
+ of this software and associated documentation files (the "Software"),
+ to deal in the Software without restriction,
+ including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense,
+ and/or sell copies of the Software,
+ and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+ .
+ The above copyright notice and this permission notice
+ shall be included in all copies or substantial portions
+ of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS",
+ WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+ AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE X CONSORTIUM BE LIABLE
+ FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ ARISING FROM, OUT OF OR IN CONNECTION WITH
+ THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ .
+ Except as contained in this notice,
+ the name of the X Consortium shall not be used
+ in advertising or otherwise to promote the sale,
+ use or other dealings in this Software
+ without prior written authorization from the X Consortium.

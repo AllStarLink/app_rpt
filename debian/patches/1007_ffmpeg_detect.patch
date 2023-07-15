@@ -1,0 +1,45 @@
+Description: Modernize autotools FFmpeg linking
+ FFmpeg is a _family_ of libraries sharing an optional base subdir.
+ That is not properly reflected in the autoconf detection logic,
+ and makes it impossible to handle alternate location -
+ e.g. when using Libav.
+ .
+ This patch queries pkg-config, used with recent FFmpeg,
+ for files "libavcodec" and "libswscale",
+ the family members currently used.
+Author: Jonas Smedegaard <dr@jones.dk>
+Bug-Debian: https://bugs.debian.org/531728
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/configure.ac
++++ b/configure.ac
+@@ -534,7 +534,7 @@
+ AST_EXT_LIB_SETUP_OPTIONAL([COROSYNC_CFG_STATE_TRACK], [A callback only in corosync 1.x], [COROSYNC], [cfg])
+ AST_EXT_LIB_SETUP([CRYPT], [password and data encryption], [crypt])
+ AST_EXT_LIB_SETUP([DAHDI], [DAHDI], [dahdi])
+-AST_EXT_LIB_SETUP([FFMPEG], [Ffmpeg and avcodec], [avcodec])
++AST_EXT_LIB_SETUP([FFMPEG], [FFmpeg (avcodec and swscale)], [ffmpeg])
+ AST_EXT_LIB_SETUP([GSM], [External GSM], [gsm], [, use 'internal' GSM otherwise])
+ AST_EXT_LIB_SETUP([ILBC], [System iLBC], [ilbc], [, use 'internal' iLBC otherwise])
+ AST_EXT_LIB_SETUP([GTK2], [gtk2], [gtk2])
+@@ -2815,7 +2815,18 @@
+ 
+ AST_EXT_TOOL_CHECK([SDL], [sdl-config])
+ AST_EXT_LIB_CHECK([SDL_IMAGE], [SDL_image], [IMG_Load], [SDL_image.h], [${SDL_LIB}], [${SDL_INCLUDE}])
+-AST_EXT_LIB_CHECK([FFMPEG], [avcodec], [sws_getContext], [ffmpeg/avcodec.h], [${PTHREAD_LIBS} -lz -lm], [${PTHREAD_CFLAGS}])
++
++PBX_FFMPEG=0
++AC_CHECK_TOOL(PKGCONFIG, pkg-config, No)
++if test ! "x${PKGCONFIG}" = xNo; then
++   FFMPEG_INCLUDE=$(${PKGCONFIG} libavcodec libswscale --cflags 2>/dev/null)
++   FFMPEG_LIB=$(${PKGCONFIG} libavcodec libswscale --libs)
++   PBX_FFMPEG=1
++   AC_DEFINE([HAVE_FFMPEG], 1, [Define if your system has the FFmpeg libraries.])
++fi
++AC_SUBST(PBX_FFMPEG)
++AC_SUBST(FFMPEG_INCLUDE)
++AC_SUBST(FFMPEG_LIB)
+ 
+ # possible places for video4linux version 1
+ AC_CHECK_HEADER([linux/videodev.h],

@@ -1,0 +1,22 @@
+Description: Include subdirs (not main dir) for FFmpeg paths
+ Fix include FFmpeg headers from below /usr/include/ffmpeg/<libname>
+ (this change requires -I/usr/include/ffmpeg).
+Author: Jonas Smedegaard <dr@jones.dk>
+Bug-Debian: https://bugs.debian.org/531728
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/channels/console_video.h
++++ b/channels/console_video.h
+@@ -28,9 +28,9 @@
+ 		"console {device}"
+ #else
+ 
+-#include <ffmpeg/avcodec.h>
++#include <libavcodec/avcodec.h>
+ #ifndef OLD_FFMPEG
+-#include <ffmpeg/swscale.h>     /* requires a recent ffmpeg */
++#include <libswscale/swscale.h>     /* requires a recent ffmpeg */
+ #endif
+ 
+ #define CONSOLE_VIDEO_CMDS			\

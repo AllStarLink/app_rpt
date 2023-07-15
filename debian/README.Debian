@@ -1,0 +1,325 @@
+Welcome to the world of telephone switch owners. Asterisk is a quite powerful
+and probably one of the feature-richest open-source PBXes out there. To get you
+a brief impression where to start tweaking, we've included this doc. (Thanks to
+Tzafrir Cohen for a proposal of this)
+
+File Locations
+==============
+See /etc/asterisk/asterisk.conf for pathnames. All the configuration is done
+from the *.conf files there.
+
+The astdatadir defaults to /usr/share/asterisk . This means that sounds
+reside at /usr/share/asterisk/sounds , music-on-hold files default to
+/usr/share/asterisk/moh ("directory=moh" in musiconhold.conf is relative to
+the astdatadir) and likewise for images.
+
+
+User, Groups, Permissions
+=========================
+By default the package will create user and group 'asterisk' and will run as
+them. It will run with real-time priority (-p) by default. It will also add
+itself to the group audio to enable the daemon to access sound cards and to
+the group dialout to access Zaptel devices. Running as root is disabled in
+/etc/init.d/asterisk for security reasons.
+
+To change those values you can edit /etc/default/asterisk.
+
+Alternatively, edit /etc/asterisk/asterisk.conf .
+
+init.d Script Commands
+======================
+In addition to reload, that runs the asterisk CLI command 'reload' there
+are also extensions-reload ('extensions reload') and logger-reload
+('logger-reload') to load only parts of the configuration file.
+
+Asterisk supports a number of non-default parameters at startup.  For debugging
+it is often useful to run 'asterisk -U asterisk -vvvgc' from the console.  Add
+more -v for even higher verbosity. You can attach a remote console to a running
+asterisk daemon with 'asterisk -vcr'.  When testing, make sure to use the "-U
+asterisk", or asterisk may write files with root ownership. In that case you
+might not be able to restart the daemon without altering permissions to the
+files first.
+
+Alternatively use '/etc/init.d/asterisk debug'.
+
+Asterisk is run with a umask of 007 by default, to allow writing
+group-owned voicemail files. To change this value, set the value if 'UMASK'
+in /etc/default/asterisk .
+
+Getting started with config and more features
+=============================================
+Of course the default config is far from a plug'n'play for every environment.
+You need to setup a proper dialplan in extensions.conf, remove the demo entries
+and maybe remove FreeWorldDialup too in case you don't participate there. For
+more info on how to setup a proper dialplan, fax, enum and configuration of
+asterisk, please checkout
+	http://www.voip-info.org/wiki-Asterisk+quickstart
+	http://www.voip-info.org/wiki-Asterisk+config+files
+or the larger HowTos at:
+	http://www.automated.it/guidetoasterisk.htm
+or
+	http://www.asteriskdocs.org/ (Asterisk Handbook)
+
+
+Open Files Limit
+================
+Asterisk uses one file-handle (and sometimes more) per call. Hence if you
+have many simultaneous calls, you often bump into the per-process limit
+of 1024 file handles, and get the error: "Too man open files".
+
+To enlarge that limit, set: MAXFILES in /etc/default/asterisk .
+As all settings from there, apply it with:
+
+  /etc/init.d/asterisk restart
+
+
+International Sound Files
+=========================
+This section is for those who use an alternative set of sound files
+rather than the default English ones recorded by Allison Smith. If you
+use those, and never needed to set LANGUAGE/language and such - all
+should work just fine.
+
+When Asterisk is asked to play 'some/file' it will search in the
+following places on a Debian system (in wish the datadir is set to
+/usr/share/asterisk)
+
+  /usr/share/sounds/${LANG_FULL}/some/file.TYPE
+  /usr/share/sounds/${LANG}/some/file.TYPE
+  /usr/share/sounds/some/file.TYPE
+  /usr/share/sounds/en/some/file.TYPE
+
+TYPE is "the best available type" - the one that will take least
+encoding/decoding effort. This is why you normally don't specify the
+type of file to play.
+
+LANG_FULL is a complete name of a language. For instance "fr_FR",
+"de_CH" or "en_US".
+
+LANG is just the "major language" part of FULL_LANG -- only up to the
+first "_", if any. So in the above examples we would get "fr", "de" and
+"en".
+
+If the language is not set, only the last two are searched.
+
+Thus various sound file packages place their files under
+/usr/share/sounds/asterisk/xx_YY_g_Foobar,
+for sound files of set Foobar of language 'xx' and country 'YY',
+being voices of gender g ('m' for male and 'f' for female).
+They also provide the alternatives 'asterisk-prompt-xx' and
+'asterisk-prompt-xx-yy' for the symlinks
+/usr/share/asterisk/sounds/xx and /usr/share/asterisk/sounds/xx_YY .
+
+If you have multiple such packages and want to change that selection, use:
+
+  update-alternatives --config asterisk-prompt-xx
+
+Or:
+
+  update-alternatives --config asterisk-prompt-xx-yy
+
+(TODO: document using an empty alternative directory for 'en' to have no
+fallback sounds)
+
+
+Voicemail
+=========
+Asterisk has two separate implementations of the voicemail system: the
+original app_voicemail, and the newer minivm. Minivm is more modular (you
+can define your own voicemail IVRs). Though it only supports the simple
+files-backed voicemail storage.
+
+Voicemail has three separate backends: the simple files-based storage,
+a database storage ("ODBC") and a mail-server-backed one (IMAP). The
+latter two have some advantages of their own, but are more complicated
+to set up. Originally those three were three build-time variants. One of
+them had to be selected at build time.
+
+As of Wheezy (1.8), Debian provides those variants as three separate
+and conflicting sub-packages: astrisk-voicemail,
+astrisk-voicemail-imapstorage and asterisk-voicemail-odbcstorage. Each
+of them includes app_voicemail.so, though built with different options.
+
+Note that some previous versions (specifically the Squeeze 1.6.2 versions)
+included all three modules in the main package with different names.
+This required explicit 'noload' lines in /etc/asterisk/modules.conf .
+Those are no longer needed. Though you should make sure you have no
+leftover line 'noload => app_voicemail.so'.
+
+Also note that the debug information for the IMAP and ODBC voicemail
+modules has an incorrect name. This may mean that traces using them may
+have invalid information.
+
+
+Recommended and Suggested
+=========================
+Asterisk includes various optional modules. The package asterisk-modules
+includes most of them (you can disable their load using noload in
+/etc/asterisk/modules.conf) yet some are still in their own
+sub-packages.
+
+Recommended
+-----------
+* sox:
+Recommended as it is used by MoxMonitor - the default command for mixing
+the two recorded streams to a single audio file, and by
+app_voicemail/app_minivm to change gains of a mail message.
+
+* asterisk-voicemail:
+Seprated out to sub-packages as there are several implementations of
+app_voicemail (plain files storage, ODBC-interfaced database storage,
+IMAP-interfaced mail storage). Only one of those three could be
+installed. app_voicemail is normally expected to exist on an
+installation of Asterisk and hence it is recommended to include one of
+them. The simple file-based stoorage requires no extra setup, and hence
+is the default.
+
+* asterisk-moh-opsound-gsm:
+Some relatively long and not too annoying music files in a format
+readable to Asterisk should reside in /usr/share/asterisk/moh . Asterisk
+will then play them when putting a call on hold for whatever reason
+(extra tuning: musiconhold.conf). This package is one such example
+sounds set. It is recommended in order for Asterisk to properly function
+as an elevator.
+
+Suggested
+---------
+* asterisk-doc:
+Extra documentation. Including the sample config files.
+
+* asterisk-dev:
+Can be used to build external modules.
+
+* asterisk-ooh323:
+chan_ooh323c.so. A module for support of the H.323 protocol. An
+alternative to chan_h323.so. Seems to be in better shape and has a much
+smaller dependency set.
+
+* asterisk-dahdi:
+chan_dahdi.so and anything else that depends on DAHDI (MeetMe,
+res_timing_dahdi, codec_dahdi, and such). You should install this if you
+have DAHDI support (kernel-level) on your system.
+
+
+Others
+------
+* asterisk-h323:
+chan_h323.so. Maybe consider this instead of asterisk-ooh323, which
+upstream seems to prefer.
+
+* asterisk-mysql:
+Direct (non-ODBC) support for MySQL.
+
+* asterisk-mp3:
+Support for playing mp3 files
+
+* asterisk-mobile:
+chan_mobile: support for interfacing with bluetooth headsets/phones. Has
+its limitations.
+
+
+Missing Modules
+===============
+The following modules are included in the source tree of Asterisk but
+were not built:
+
+* apps/app_fax.c: Disabled by default. Obsolete. res_fax does this now.
+* apps/app_ivrdemo.c: Disabled by default. Demo code.
+* apps/app_osplookup.c: osptk needed.
+* apps/app_rpt.c: Disabled by default. Not popular. Potential quality issues.
+* apps/app_saycounted.c: Disabled by default.
+* apps/app_skel.c: Disabled by default. Demo code.
+* channels/chan_misdn.c: mISDN (1.x) only included in Experimental. See
+  package misdn-user.
+* channels/chan_nbs: NBS not included. Never packaged. Looks quite Asterisk
+  specific and not really useful.
+* channels/chan_usbradio: Disabled by default. Not popular. Potential
+  quality issues.
+* codecs/codec_ilbc.c: Disabled by default. Patent issues.
+* res/res_pktccops.c: Disabled by default.
+* res/res_timing_kqueue.c: Wrong kernel.
+
+You can compare that to the list of modules disabled by the Asterisk build
+system at build time, that is copied to
+/usr/share/doc/asterisk/menuselect.makeopts .
+
+
+Extra Channels
+==============
+This package includes and enables by default a number of rather not so
+popular protocols. Having them enabled by default means that any
+security volnurability in them (such as CVE-2017-17090 / AST-2017-013 in
+chan_skinny) may open your system to attacks for no good reason.
+
+Thus the following configuration files have been removed from the default
+set of configuration files installed to /etc/asterisk:
+* dundi.conf (DUNDi call routing, UDP port 4520)
+* mgcp.conf (chan_mgcp: MGCP voip protocol, UDP port 2727)
+* skinny.conf (chan_skinny: SCCP voip protocol, TCP port 2000)
+* unistim.conf (chan_unistim: UNISTIM voip protocol, UDP port 5000)
+
+If you do need any of those protocols, copy the sample file from
+/usr/share/asterisk/conf/samples/FILE.conf.sample to
+/etc/asterisk/FILE.conf and restart asterisk (or the specific module).
+
+
+Missing Documentation
+=====================
+AST.pdf and AST.txt cannot be included due to incompatible license.
+You can get their content from http://wiki.asterisk.org . The standard
+reference is included, as always in the "sample" configuration files and
+in the help from the Asterisk command-line prompt.
+
+
+DAHDI PtMP NT
+=============
+Short version: it doesn't work.
+
+This package includes an experimental patch to test the support for PtMP
+NT in chan_dahdi. This is needed to e.g. connect ISDN phones. Originally
+the code merely printed out "How cool would it be if someone implemented
+this mode!" and bailed out. This patch merely overrides it.
+
+At the moment it seems to provide at least basic support of ISDN phones
+(that is: of dialing out from a single ISDN phone). Likewise, on a
+loopback connection you can call from a TE port to the NT port but not
+vice versa.
+
+I figure that this would still be useful enough for some people, though.
+But in any case, please see http://bugs.digium.com/view.php?id=15048 .
+
+
+A Separate Instance
+===================
+Upstream maintainers are not always so keen on helping users of binary
+packages. Sometimes a source build can be handy. However a simplistic
+'make install' from a source distribution may not play along nicely
+with your existing packages. As a workaround for that, Asterisk includes
+a script called 'live_ast' to "install" Asterisk under the build root
+itself.
+
+  # For the sake of this example, I assume you work under /home/getafisk .
+  # get a version of asterisk: tarball, svn, whatever
+  svn co http://svn.asterisk.org/svn/asterisk/trunk asterisk-svn
+  cd asterisk-svn
+
+  # grab the script. It's already in 1.6.2 and trunk, but let's get the
+  # latest:
+  wget http://svn.asterisk.org/svn/asterisk/trunk/contrib/scripts/live_ast
+  chmod +x live_ast
+  ./live_ast conf-file
+  # edit live/live.conf . Unrem 'LIVE_AST_FOR_SYSTEM=yes'
+  ./live_ast configure # ./configure
+  ./live_ast install   # make; make install DESTDIR=$PWD/live
+  ./live_ast samples
+
+  # As root:
+  echo "DAEMON=/home/getafisk/live/asterisk" >> /etc/default/asterisk
+
+The last line makes your private copy the actual one to use. The magic
+is in /home/getafisk/live/etc/asterisk/asterisk.conf . If you need to
+update something in the source, just re-run the 'install' command.
+live/asterisk is a wrapper to that private copy of Asterisk.
+
+
+Enjoy your PBX!

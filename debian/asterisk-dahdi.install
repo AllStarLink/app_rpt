@@ -1,0 +1,4 @@
+usr/lib/${DEB_HOST_MULTIARCH}/asterisk/modules/app_flash.so
+usr/lib/${DEB_HOST_MULTIARCH}/asterisk/modules/chan_dahdi.so
+usr/lib/${DEB_HOST_MULTIARCH}/asterisk/modules/codec_dahdi.so
+usr/lib/${DEB_HOST_MULTIARCH}/asterisk/modules/res_timing_dahdi.so

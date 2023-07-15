@@ -1,0 +1,2 @@
+# needed for dh_asterisk helper script
+binary-package-depends-on-toolchain-package Depends: debhelper

@@ -1,0 +1,3 @@
+# Plugins
+library-not-linked-against-libc [usr/lib/*/asterisk/modules/*]
+shared-library-lacks-prerequisites [usr/lib/*/asterisk/modules/*]

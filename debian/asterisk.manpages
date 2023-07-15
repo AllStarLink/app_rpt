@@ -1,0 +1,5 @@
+doc/aelparse.8
+doc/smsq.8
+utils/astman.1
+usr/share/man/man1/*.1
+usr/share/man/man8/*.8

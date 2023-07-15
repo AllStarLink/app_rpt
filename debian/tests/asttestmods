@@ -1,0 +1,70 @@
+#!/bin/sh
+
+base_dir="debian/tests/testmods"
+asterisk="$base_dir/asterisk"
+output_dir="$base_dir/output" # Writable by Asterisk
+conf_dir="$output_dir/conf"
+results_file="$PWD/$output_dir/results.txt"
+multiarch=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+# test_message: some tests still fail. See
+#   https://issues.asterisk.org/jira/browse/ASTERISK-27172
+disable_mods='
+	test_message
+	test_cel
+'
+
+setup() {
+	service asterisk stop
+
+	rm -rf "$output_dir"
+	mkdir -p "$output_dir/lib" "$output_dir/logs" \
+		"$output_dir/spool/voicemail/default/1234/INBOX"
+	cp -a configs/samples "$output_dir/conf"
+	for file in "$output_dir/conf/"*.conf.sample; do
+		new_name=${file%.sample}
+		mv "$file" "$new_name"
+	done
+	sed -i -e '/;enabled=/s/^;//' "$conf_dir/http.conf"
+	cat <<EOF >>"$conf_dir/sorcery.conf"
+[res_pjsip_pubsub]
+resource_list=memory
+EOF
+	for mod in $disable_mods; do
+		sed -i -e "/^\[modules\]/anoload => $mod.so" "$conf_dir/modules.conf"
+	done
+	chown -R asterisk "$output_dir"
+	$asterisk -U asterisk
+	sleep 1
+	$asterisk -rx 'core waitfullybooted'
+}
+
+run() {
+	$asterisk -rx 'test execute all' 2>&1
+	$asterisk -rx "test generate results xml $results_file"
+	$asterisk -rx 'module show like test_' | awk '/Running/ {print $1}' \
+		| sort  > "$output_dir/mods_loaded"
+	ls /usr/lib/$multiarch/asterisk/modules/ | sort | grep ^test_ > "$output_dir/mods_all"
+	if ! cmp -s "$output_dir/mods_loaded" "$output_dir/mods_all"; then
+		echo "Some test modules were not loaded:"
+		diff "$output_dir/mods_loaded" "$output_dir/mods_all"
+		echo "Manually disabled: $disable_mods"
+	fi
+	failed=`xmllint --xpath 'string(//testsuite/@errors)' $results_file`
+	test_in_source=`grep AST_TEST_REGISTER tests/test_*.c | wc -l`
+	if [ "$failed" != '0' ]; then
+		echo >&2 "Some tests failed:"
+		echo >&2 "$results_file"
+		$asterisk -rx "test show results failed" >&2
+	fi
+}
+
+teardown() {
+	$asterisk -rx 'core stop now'
+	service asterisk stop
+}
+
+setup
+run
+teardown
+

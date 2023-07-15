@@ -1,0 +1,9 @@
+/var/log/asterisk/debug /var/log/asterisk/messages /var/log/asterisk/full /var/log/asterisk/*_log {
+        weekly
+        missingok
+        rotate 4
+        sharedscripts
+        postrotate
+                /usr/sbin/invoke-rc.d asterisk logger-reload > /dev/null 2> /dev/null
+        endscript
+}

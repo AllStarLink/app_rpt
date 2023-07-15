@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -e
+
+# Veryfy amr support is enabled as per
+# https://www.mail-archive.com/asterisk-dev@lists.digium.com/msg45213.html
+# by verifying if the amr codecs are listed and by checking if amr transcoding
+# is available
+
+asterisk -x 'core show codecs audio' | grep -E '\bamr\b'
+asterisk -x 'core show codecs audio' | grep -E '\bamrwb\b'
+
+asterisk -x 'core show translation' | grep -E '\bamr\b'
+asterisk -x 'core show translation' | grep -E '\bamrwb\b'

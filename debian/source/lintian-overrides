@@ -1,0 +1,15 @@
+# License is in Reference field (see bug#786450)
+missing-license-paragraph-in-dep5-copyright apache-2\.0 *
+missing-license-paragraph-in-dep5-copyright gpl-1\+ *
+missing-license-paragraph-in-dep5-copyright gpl-2 *
+missing-license-paragraph-in-dep5-copyright gpl-2\+ *
+missing-license-paragraph-in-dep5-copyright gpl-3\+ *
+missing-license-paragraph-in-dep5-copyright lgpl-2\+ *
+missing-license-paragraph-in-dep5-copyright lgpl-2\.1\+ *
+missing-license-text-in-dep5-copyright Apache-2\.0 *
+missing-license-text-in-dep5-copyright GPL-1\+ *
+missing-license-text-in-dep5-copyright GPL-2 *
+missing-license-text-in-dep5-copyright GPL-2\+ *
+missing-license-text-in-dep5-copyright GPL-3\+ *
+missing-license-text-in-dep5-copyright LGPL-2\+ *
+missing-license-text-in-dep5-copyright LGPL-2\.1\+ *

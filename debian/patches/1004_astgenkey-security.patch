@@ -1,0 +1,22 @@
+Description: astgenkey should generate a private key that is not world-readable
+ Upstream has not accepted this patch
+ and chose instead to document this as a known minor issue.
+Author: Lionel Elie Mamane <lionel@mamane.lu>
+Bug: https://issues.asterisk.org/jira/browse/ASTERISK-11788
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/contrib/scripts/astgenkey
++++ b/contrib/scripts/astgenkey
+@@ -47,7 +47,11 @@
+ rm -f ${KEY}.key ${KEY}.pub
+ 
+ echo "Generating SSL key '$KEY': "
++oldumask="`umask`"
++umask 0077
+ openssl genrsa -out ${KEY}.key ${DES3} 1024
++[ "$(id -u)" = 0 ] && chown asterisk: ${KEY}.key
++umask $oldumask
+ openssl rsa -in ${KEY}.key -pubout -out ${KEY}.pub
+ 
+ if [ -f "${KEY}.key" ] && [ -f "${KEY}.pub" ]; then

@@ -1,0 +1,5 @@
+Description: avoid non-free PJPROJECT audio device driver bdimad
+Author: Jonas Smedegaard <dr@jones.dk>
+Last-Update: 2022-01-22
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/

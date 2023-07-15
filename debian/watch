@@ -1,0 +1,40 @@
+version=4
+# check: uscan --report
+# update: gbp import-orig --uscan
+
+opts=\
+repacksuffix=~dfsg,\
+pgpmode=auto,\
+uversionmangle=s/\d\K-(rc)/~~$1/,\
+dversionmangle=auto \
+https://downloads.asterisk.org/pub/telephony/asterisk/releases/ \
+asterisk-(20(?:\.\d+)+(?:-rc\d)?)@ARCHIVE_EXT@ group
+
+opts=\
+component=Xamr,\
+mode=git,pgpmode=none,pretty=4.0.%cd,\
+dversionmangle=auto \
+https://github.com/traud/asterisk-amr.git \
+HEAD checksum
+
+opts=\
+component=Xmp3,\
+mode=svn,pgpmode=none,\
+uversionmangle=s/~svn/./,\
+dversionmangle=auto \
+https://svn.digium.com/svn/thirdparty/mp3/trunk/ \
+HEAD checksum
+
+opts=\
+component=Xopus,\
+mode=git,pgpmode=none,pretty=0.0.%cd,\
+dversionmangle=auto \
+https://github.com/traud/asterisk-opus.git \
+HEAD checksum
+
+opts=\
+component=Xpjproject,\
+filenamemangle=s/.*?(@ANY_VERSION@@ARCHIVE_EXT@)/@PACKAGE@-Xpjproject-$1/,\
+dversionmangle=auto \
+https://github.com/pjsip/pjproject/tags \
+.*?(2\.13)@ARCHIVE_EXT@ checksum

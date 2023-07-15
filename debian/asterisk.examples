@@ -1,0 +1,4 @@
+contrib/scripts/asterisk_cleanup
+contrib/scripts/vmail.cgi
+debian/asterisk.startup.conf
+sample.call

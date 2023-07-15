@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# a dummy script that can serve as 'fetch' to pass for autoconf tests
+# but always returns false to make sure it is never used.
+#
+# Note: the configure script will look for wget first. If you actually 
+# want to download sound tarballs or whatever at build time, make sure
+# you have wget installed, and this script should cause you no problems.
+
+exit 1

@@ -1,0 +1,90 @@
+#!/usr/bin/perl -w
+
+=head1 NAME
+
+dh_asterisk - Add dependency on the ABI version of Asterisk
+
+=cut
+
+use strict;
+use warnings;
+use Debian::Debhelper::Dh_Lib;
+
+=head1 SYNOPSIS
+
+B<dh_asterisk> [S<I<debhelper options>>]
+
+=head1 DESCRIPTION
+
+dh_asterisk is a debhelper program that is responsible for correctly
+setting the dependency on asterisk-abi-I<asterisk-ABI-version> for a package.
+
+When writing a package that builds an Asterisk module and is not built
+with Asterisk itself (and hence depends on the exact binary version),
+add ${asterisk:Depends} to the package's Depends: field in debian control
+and run dh_asterisk.
+
+A debhelper addon is also provided.
+This makes it possible to just use
+
+  #!/usr/bin/make -f
+  %:
+          dh $@ --with asterisk
+
+for F<debian/rules>.
+
+Alternatively, you can just build-depend on B<dh-sequence-asterisk>
+and omit the C<--with asterisk> part.
+
+=cut
+
+init();
+
+my $BUILD_OPTS_FILE = '/usr/include/asterisk/buildopts.h';
+
+my ( $fh, $abi );
+open( $fh, '<', $BUILD_OPTS_FILE ) || do {
+	warning("failed to open Asterisk opts file $BUILD_OPTS_FILE: $!");
+	exit 0;
+};
+while(<$fh>) {
+	if (/^#define\s+AST_BUILDOPT_SUM\s+"\K[0-9a-f]+/) {
+		$abi = $&;
+		last;
+	}
+}
+if ($abi) {
+	verbose_print("resolved Asterisk ABI: $abi");
+}
+else {
+	warning('failed to resolve Asterisk ABI');
+	exit 0;
+}
+
+foreach my $package (@{$dh{DOPACKAGES}}) {
+	addsubstvar($package, "asterisk:Depends", "asterisk-abi-$abi");
+}
+
+=head1 SEE ALSO
+
+L<debhelper(7)>
+
+This program is part of the Debian Asterisk package.
+
+L<asterisk(8)>
+
+=head1 AUTHOR
+
+Tzafrir Cohen <tzafrir@debian.org>
+
+Jonas Smedegaard <dr@jones.dk>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2022, Jonas Smedegaard <dr@jones.dk>
+
+This packaging is free software;
+you can redistribute it and/or modify it
+under the terms of the GNU General Public License
+as published by the Free Software Foundation;
+either version 3, or (at your option) any later version.
