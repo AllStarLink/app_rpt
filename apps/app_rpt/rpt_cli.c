@@ -1201,7 +1201,7 @@ static char *handle_cli_dump(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "rpt dump level";
+		e->command = "rpt dump";
 		e->usage =
 			"Usage: rpt dump <nodename>\n"
 			"	Dumps struct debug info to log\n";
