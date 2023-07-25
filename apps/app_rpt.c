@@ -2810,7 +2810,7 @@ static void do_scheduler(struct rpt *myrpt)
 		return;
 	}
 
-	if (!myrpt->p.skedstanzaname) {	/* No stanza means we do nothing */
+	if (ast_strlen_zero(myrpt->p.skedstanzaname)) {	/* No stanza means we do nothing */
 		ast_debug(7, "No stanza for scheduler in rpt.conf\n");
 		return;
 	}
@@ -2941,6 +2941,7 @@ static void *rpt(void *this)
 	struct rpt_tele *telem;
 	char tmpstr[512], lstr[MAXLINKLIST], lat[100], lon[100], elev[100];
 	struct ast_format_cap *cap;
+	struct timeval looptimestart;
 
 	if (myrpt->p.archivedir)
 		mkdir(myrpt->p.archivedir, 0600);
@@ -3418,10 +3419,13 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_NUMALINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
 	myrpt->ready = 1;
+	looptimestart = ast_tvnow();
+	
 	while (ms >= 0) {
 		struct ast_frame *f, *f1, *f2;
 		struct ast_channel *cs[300], *cs1[300];
 		int totx = 0, elap = 0, n, x, toexit = 0;
+		struct timeval looptimenow;
 
 		/* DEBUG Dump */
 		if ((myrpt->disgorgetime) && (time(NULL) >= myrpt->disgorgetime)) {
@@ -3998,7 +4002,12 @@ static void *rpt(void *this)
 		if (who == NULL) {
 			ms = 0;
 		}
-		elap = MSWAIT - ms;
+		/* calculate loop time */
+		looptimenow = ast_tvnow();
+		elap = ast_tvdiff_ms(looptimenow, looptimestart);
+		if (elap != 0) {
+			looptimestart = looptimenow;
+		}
 		/* @@@@@@ LOCK @@@@@@@ */
 		rpt_mutex_lock(&myrpt->lock);
 		l = myrpt->links.next;
@@ -6145,6 +6154,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct rpt_tele *telem;
 	int numlinks;
 	struct ast_format_cap *cap;
+	struct timeval looptimestart;
+	struct timeval looptimenow;
 
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "Rpt requires an argument (system node)\n");
@@ -7286,6 +7297,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rpt_mutex_unlock(&myrpt->blocklock);
 
 	myfirst = 0;
+	looptimestart = ast_tvnow();
 	/* start un-locked */
 	for (;;) {
 		if (ast_check_hangup(chan))
@@ -7363,9 +7375,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->blocklock);
 		who = ast_waitfor_n(cs, n, &ms);
 		rpt_mutex_unlock(&myrpt->blocklock);
-		if (who == NULL)
+		if (who == NULL) {
 			ms = 0;
-		elap = MSWAIT - ms;
+		}
+		/* calculate loop time */
+		looptimenow = ast_tvnow();
+		elap = ast_tvdiff_ms(looptimenow, looptimestart);
+		if (elap != 0) {
+			looptimestart = looptimenow;
+		}
 		if (myrpt->macrotimer)
 			myrpt->macrotimer -= elap;
 		if (myrpt->macrotimer < 0)

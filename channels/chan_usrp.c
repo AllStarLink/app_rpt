@@ -519,6 +519,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				p->rxkey = 1;
 		} else {
 			if (!p->rxkey) {
+				memset(&fr, 0, sizeof(fr));
 				fr.datalen = 0;
 				fr.samples = 0;
 				fr.frametype = AST_FRAME_CONTROL;
@@ -661,6 +662,7 @@ static struct ast_channel *usrp_new(struct usrp_pvt *i, int state, const struct 
 		ast_channel_context_set(tmp, context);
 		ast_channel_exten_set(tmp, "s");
 		ast_channel_language_set(tmp, "");
+		ast_channel_unlock(tmp);
 		i->owner = tmp;
 		i->u = ast_module_user_add(tmp);
 		if (state != AST_STATE_DOWN) {
@@ -712,7 +714,7 @@ static int unload_module(void)
 
 static int load_module(void)
 {
-	ast_cli_unregister_multiple(cli_usrp_show, ARRAY_LEN(cli_usrp_show));
+	ast_cli_register_multiple(cli_usrp_show, ARRAY_LEN(cli_usrp_show));
 	if (!(usrp_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
 		return AST_MODULE_LOAD_DECLINE;
 	}
