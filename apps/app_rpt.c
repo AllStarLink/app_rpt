@@ -699,7 +699,6 @@ void donodelog(struct rpt *myrpt, char *str)
 
 	nodep = (struct nodelog *) ast_malloc(sizeof(struct nodelog));
 	if (!nodep) {
-		ast_log(LOG_ERROR, "Cannot get memory for node log");
 		return;
 	}
 	time(&nodep->timestamp);
@@ -892,7 +891,6 @@ void rpt_event_process(struct rpt *myrpt)
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
 			cp = ast_malloc(strlen(cmd) + 10);
 			if (!cp) {
-				ast_log(LOG_ERROR, "Unable to malloc");
 				return;
 			}
 			memset(cp, 0, strlen(cmd) + 10);
@@ -921,7 +919,6 @@ void rpt_event_process(struct rpt *myrpt)
 		varp = ((pbx_checkcondition(var) > 0));
 		cmpvar = (char *) ast_malloc(strlen(argv[2]) + 10);
 		if (!cmpvar) {
-			ast_log(LOG_ERROR, "Cannot malloc()\n");
 			return;
 		}
 		sprintf(cmpvar, "XX_%s", argv[2]);
@@ -953,7 +950,6 @@ static void dodispgm(struct rpt *myrpt, char *them)
 	i = strlen(them) + strlen(myrpt->p.discpgm) + 100;
 	a = ast_malloc(i);
 	if (!a) {
-		ast_log(LOG_ERROR, "Unable to malloc");
 		return;
 	}
 	memset(a, 0, i);
@@ -973,7 +969,6 @@ static void doconpgm(struct rpt *myrpt, char *them)
 	i = strlen(them) + strlen(myrpt->p.connpgm) + +100;
 	a = ast_malloc(i);
 	if (!a) {
-		ast_log(LOG_ERROR, "Unable to malloc");
 		return;
 	}
 	memset(a, 0, i);
@@ -1041,7 +1036,7 @@ static void statpost(struct rpt *myrpt, char *pairs)
 	ast_debug(4, "Making statpost to %s\n", str);
 	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, (void *) str);
 	if (res) {
-		ast_log(LOG_ERROR, "Error creating statpost thread: %d\n", res);
+		ast_log(LOG_ERROR, "Error creating statpost thread: %s\n", strerror(res));
 		ast_free(str);
 	}
 }
@@ -1056,54 +1051,52 @@ static void startoutstream(struct rpt *myrpt)
 	char *strs[100];
 	int n;
 
-	if (!myrpt->p.outstreamcmd)
+	if (!myrpt->p.outstreamcmd) {
 		return;
+	}
 	ast_verb(3, "app_rpt node %s starting output stream %s\n", myrpt->name, myrpt->p.outstreamcmd);
 	str = ast_strdup(myrpt->p.outstreamcmd);
 	if (!str) {
-		ast_log(LOG_ERROR, "Malloc Failed!\n");
 		return;
 	}
 	n = finddelim(str, strs, 100);
-	if (n < 1)
+	if (n < 1) {
 		return;
+	}
 	if (pipe(myrpt->outstreampipe) == -1) {
-		ast_log(LOG_ERROR, "pipe() failed!\n");
+		ast_log(LOG_ERROR, "pipe() failed: %s\n", strerror(errno));
 		ast_free(str);
 		return;
 	}
 	if (fcntl(myrpt->outstreampipe[1], F_SETFL, O_NONBLOCK) == -1) {
-		ast_log(LOG_ERROR, "Error: cannot set pipe to NONBLOCK");
+		ast_log(LOG_ERROR, "Cannot set pipe to NONBLOCK: %s", strerror(errno));
 		ast_free(str);
 		return;
 	}
 	if (!(myrpt->outstreampid = fork())) {
 		close(myrpt->outstreampipe[1]);
 		if (dup2(myrpt->outstreampipe[0], fileno(stdin)) == -1) {
-			ast_log(LOG_ERROR, "Error: cannot dup2() stdin");
+			ast_log(LOG_ERROR, "Cannot dup2() stdin: %s", strerror(errno));
 			exit(0);
 		}
 		if (dup2(nullfd, fileno(stdout)) == -1) {
-			ast_log(LOG_ERROR, "Error: cannot dup2() stdout");
+			ast_log(LOG_ERROR, "Cannot dup2() stdout: %s", strerror(errno));
 			exit(0);
 		}
 		if (dup2(nullfd, fileno(stderr)) == -1) {
-			ast_log(LOG_ERROR, "Error: cannot dup2() stderr");
+			ast_log(LOG_ERROR, "Cannot dup2() stderr: %s", strerror(errno));
 			exit(0);
 		}
 		execv(strs[0], strs);
-		ast_log(LOG_ERROR, "exec of %s failed.\n", strs[0]);
-		perror("asterisk");
+		ast_log(LOG_ERROR, "exec of %s failed: %s\n", strs[0], strerror(errno));
 		exit(0);
 	}
 	ast_free(str);
 	close(myrpt->outstreampipe[0]);
 	if (myrpt->outstreampid == -1) {
-		ast_log(LOG_ERROR, "fork() failed!!\n");
+		ast_log(LOG_ERROR, "fork() failed: %s\n", strerror(errno));
 		close(myrpt->outstreampipe[1]);
-		return;
 	}
-	return;
 }
 
 static int topcompar(const void *a, const void *b)
@@ -1929,7 +1922,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 						snprintf(fname, sizeof(fname) - 1, APRSTT_SUB_PIPE, myrpt->p.aprstt);
 					fp = fopen(fname, "w");
 					if (!fp) {
-						ast_log(LOG_WARNING, "Can not open APRSTT pipe %s\n", fname);
+						ast_log(LOG_WARNING, "Can not open APRSTT pipe %s: %s\n", fname, strerror(errno));
 					} else {
 						fprintf(fp, "%s %c\n", aprscall, overlay);
 						fclose(fp);
@@ -2088,7 +2081,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 							snprintf(fname, sizeof(fname) - 1, APRSTT_SUB_PIPE, myrpt->p.aprstt);
 						fp = fopen(fname, "w");
 						if (!fp) {
-							ast_log(LOG_WARNING, "Can not open APRSTT pipe %s\n", fname);
+							ast_log(LOG_WARNING, "Can not open APRSTT pipe %s: %s\n", fname, strerror(errno));
 						} else {
 							fprintf(fp, "%s %c\n", aprscall, overlay);
 							fclose(fp);
@@ -2550,7 +2543,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 						snprintf(fname, sizeof(fname) - 1, APRSTT_SUB_PIPE, myrpt->p.aprstt);
 					fp = fopen(fname, "w");
 					if (!fp) {
-						ast_log(LOG_WARNING, "Can not open APRSTT pipe %s\n", fname);
+						ast_log(LOG_WARNING, "Can not open APRSTT pipe %s: %s\n", fname, strerror(errno));
 					} else {
 						fprintf(fp, "%s %c\n", aprscall, overlay);
 						fclose(fp);
@@ -2753,8 +2746,7 @@ static void do_scheduler(struct rpt *myrpt)
 		if (myrpt->linkactivitytimer >= myrpt->p.lnkacttime) {
 			/* Execute lnkactmacro */
 			if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(myrpt->p.lnkactmacro)) {
-				ast_log(LOG_WARNING, "Link Activity timer could not execute macro %s: Macro buffer full\n",
-						myrpt->p.lnkactmacro);
+				ast_log(LOG_WARNING, "Link Activity timer could not execute macro %s: Macro buffer full\n", myrpt->p.lnkactmacro);
 			} else {
 				ast_debug(5, "Executing link activity timer macro %s\n", myrpt->p.lnkactmacro);
 				myrpt->macrotimer = MACROTIME;
@@ -2772,8 +2764,7 @@ static void do_scheduler(struct rpt *myrpt)
 			myrpt->rptinacttimer = 0;
 			myrpt->rptinactwaskeyedflag = 0;
 			if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(myrpt->p.rptinactmacro)) {
-				ast_log(LOG_WARNING, "Rpt inactivity timer could not execute macro %s: Macro buffer full\n",
-						myrpt->p.rptinactmacro);
+				ast_log(LOG_WARNING, "Rpt inactivity timer could not execute macro %s: Macro buffer full\n", myrpt->p.rptinactmacro);
 			} else {
 				ast_debug(5, "Executing rpt inactivity timer macro %s\n", myrpt->p.rptinactmacro);
 				myrpt->macrotimer = MACROTIME;
@@ -3014,7 +3005,7 @@ static void *rpt(void *this)
 	myrpt->dahdirxchannel = !strcasecmp(tmpstr, "DAHDI") ? myrpt->rxchannel : NULL;
 	if (myrpt->rxchannel) {
 		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY) {
-			ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
+			ast_log(LOG_WARNING, "Unable to obtain Rx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
 			myrpt->rxchannel = NULL;
@@ -3030,7 +3021,7 @@ static void *rpt(void *this)
 			pthread_exit(NULL);
 		}
 	} else {
-		ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain Rx channel\n");
 		rpt_mutex_unlock(&myrpt->lock);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
@@ -3054,7 +3045,7 @@ static void *rpt(void *this)
 		}
 		if (myrpt->txchannel) {
 			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY) {
-				ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
+				ast_log(LOG_WARNING, "Unable to obtain Tx channel\n");
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_hangup(myrpt->txchannel);
 				ast_hangup(myrpt->rxchannel);
@@ -3074,7 +3065,7 @@ static void *rpt(void *this)
 				pthread_exit(NULL);
 			}
 		} else {
-			ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
+			ast_log(LOG_WARNING, "Unable to obtain Tx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
 			myrpt->rxchannel = NULL;
@@ -4301,7 +4292,6 @@ static void *rpt(void *this)
 			}
 			str = ast_malloc(nstr + 256);
 			if (!str) {
-				ast_log(LOG_ERROR, "Cannot ast_malloc()\n");
 				ast_mutex_unlock(&myrpt->lock);
 				break;
 			}
@@ -5344,8 +5334,6 @@ static void *rpt(void *this)
 						tstr[f->datalen] = 0;
 						handle_link_data(myrpt, l, tstr);
 						ast_free(tstr);
-					} else {
-						ast_log(LOG_WARNING, "malloc failure\n");
 					}
 				}
 				if (f->frametype == AST_FRAME_DTMF) {
@@ -6085,12 +6073,12 @@ static void *rpt_master(void *ignore)
 			sprintf(fname, "%s/%s/%s.txt", nodep->archivedir, nodep->str, datestr);
 			fd = open(fname, O_WRONLY | O_CREAT | O_APPEND, 0600);
 			if (fd == -1) {
-				ast_log(LOG_ERROR, "Cannot open node log file %s for write", space + 1);
+				ast_log(LOG_ERROR, "Cannot open node log file %s for write: %s", space + 1, strerror(errno));
 				ast_free(nodep);
 				continue;
 			}
 			if (write(fd, space + 1, strlen(space + 1)) != strlen(space + 1)) {
-				ast_log(LOG_ERROR, "Cannot write node log file %s for write", space + 1);
+				ast_log(LOG_ERROR, "Cannot write node log file %s for write: %s", space + 1, strerror(errno));
 				ast_free(nodep);
 				continue;
 			}
@@ -6232,7 +6220,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					}
 					s2 = strsep(&s, ",");
 					if (!s2) {
-						ast_log(LOG_WARNING, "Specified node %s not in correct format!!\n", nodedata);
+						ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 						ast_config_destroy(cfg);
 						return -1;
 					}
@@ -6250,7 +6238,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_copy_string(xstr, nodedata, sizeof(xstr));
 			if (!options) {
 				if (*b1 < '1') {
-					ast_log(LOG_WARNING, "Connect Attempt from invalid node number!!\n");
+					ast_log(LOG_WARNING, "Connect attempt from invalid node number\n");
 					return -1;
 				}
 				/* get his IP from IAX2 module */
@@ -6515,7 +6503,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l = strlen(options) + 2;
 		orig_s = ast_malloc(l);
 		if (!orig_s) {
-			ast_log(LOG_WARNING, "Out of memory\n");
 			return -1;
 		}
 		s = orig_s;
@@ -6575,7 +6562,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (!ast_exists_extension
 			(chan, ast_channel_context(chan), ast_channel_exten(chan), ast_channel_priority(chan),
 			 ast_channel_caller(chan)->id.number.str)) {
-			ast_log(LOG_WARNING, "Warning: Return Context Invalid, call will return to default|s\n");
+			ast_log(LOG_WARNING, "Return Context Invalid, call will return to default|s\n");
 		}
 
 		/* we are using masq_park here to protect * from touching the channel once we park it.  If the channel comes out of timeout
@@ -6635,7 +6622,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		b1 = ast_channel_caller(chan)->id.number.str;
 		ast_shrink_phone_number(b1);
 		if (!strcmp(myrpt->name, b1)) {
-			ast_log(LOG_WARNING, "Trying to link to self!!\n");
+			ast_log(LOG_WARNING, "Trying to link to self?\n");
 			return -1;
 		}
 
@@ -6728,7 +6715,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_unlock(&myrpt->lock);
 		/* look at callerid to see what node this comes from */
 		if (!ast_channel_caller(chan)->id.number.str) {	/* if doesn't have caller id */
-			ast_log(LOG_WARNING, "Doesnt have callerid on %s\n", tmp);
+			ast_log(LOG_WARNING, "Doesn't have callerid on %s\n", tmp);
 			return -1;
 		}
 		if (phone_mode) {
@@ -6746,7 +6733,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				b1 = b;
 		}
 		if (!strcmp(myrpt->name, b1)) {
-			ast_log(LOG_WARNING, "Trying to link to self!!\n");
+			ast_log(LOG_WARNING, "Trying to link to self?\n");
 			return -1;
 		}
 		for (i = 0; b1[i]; i++) {
@@ -6782,7 +6769,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* establish call in tranceive mode */
 		l = ast_malloc(sizeof(struct rpt_link));
 		if (!l) {
-			ast_log(LOG_WARNING, "Unable to malloc\n");
 			pthread_exit(NULL);
 		}
 		/* zero the silly thing */
@@ -7016,7 +7002,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_call(myrpt->rxchannel, tele, 999);
 		rpt_mutex_lock(&myrpt->lock);
 	} else {
-		ast_log(LOG_WARNING, "Sorry unable to obtain Rx channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain Rx channel\n");
 		rpt_mutex_unlock(&myrpt->lock);
 		pthread_exit(NULL);
 	}
@@ -7041,7 +7027,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_call(myrpt->txchannel, tele, 999);
 			rpt_mutex_lock(&myrpt->lock);
 		} else {
-			ast_log(LOG_WARNING, "Sorry unable to obtain Tx channel\n");
+			ast_log(LOG_WARNING, "Unable to obtain Tx channel\n");
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_hangup(myrpt->rxchannel);
 			myrpt->rxchannel = NULL;
@@ -7120,18 +7106,18 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			z.radpar = DAHDI_RADPAR_UIOMODE;
 			z.data = 1;
 			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-				ast_log(LOG_ERROR, "Cannot set UIOMODE\n");
+				ast_log(LOG_ERROR, "Cannot set UIOMODE: %s\n", strerror(errno));
 				return -1;
 			}
 			z.radpar = DAHDI_RADPAR_UIODATA;
 			z.data = 3;
 			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-				ast_log(LOG_ERROR, "Cannot set UIODATA\n");
+				ast_log(LOG_ERROR, "Cannot set UIODATA: %s\n", strerror(errno));
 				return -1;
 			}
 			i = DAHDI_OFFHOOK;
 			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_HOOK, &i) == -1) {
-				ast_log(LOG_ERROR, "Cannot set hook\n");
+				ast_log(LOG_ERROR, "Cannot set hook: %s\n", strerror(errno));
 				return -1;
 			}
 			iskenwood_pci4 = 1;
@@ -7150,13 +7136,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			z.radpar = DAHDI_RADPAR_UIOMODE;
 			z.data = 1;
 			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-				ast_log(LOG_ERROR, "Cannot set UIOMODE\n");
+				ast_log(LOG_ERROR, "Cannot set UIOMODE: %s\n", strerror(errno));
 				return -1;
 			}
 			z.radpar = DAHDI_RADPAR_UIODATA;
 			z.data = 3;
 			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-				ast_log(LOG_ERROR, "Cannot set UIODATA\n");
+				ast_log(LOG_ERROR, "Cannot set UIODATA: %s\n", strerror(errno));
 				return -1;
 			}
 		}
@@ -7519,7 +7505,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						z.radpar = DAHDI_RADPAR_UIODATA;
 						z.data = 1;
 						if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-							ast_log(LOG_ERROR, "Cannot set UIODATA\n");
+							ast_log(LOG_ERROR, "Cannot set UIODATA: %s\n",, strerror(errno));
 							return -1;
 						}
 					} else {
@@ -7541,7 +7527,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				z.radpar = DAHDI_RADPAR_UIODATA;
 				z.data = 3;
 				if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-					ast_log(LOG_ERROR, "Cannot set UIODATA\n");
+					ast_log(LOG_ERROR, "Cannot set UIODATA: %s\n", strerror(errno));
 					return -1;
 				}
 			} else {
@@ -7898,18 +7884,18 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		z.radpar = DAHDI_RADPAR_UIOMODE;
 		z.data = 3;
 		if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-			ast_log(LOG_ERROR, "Cannot set UIOMODE\n");
+			ast_log(LOG_ERROR, "Cannot set UIOMODE: %s\n", strerror(errno));
 			return -1;
 		}
 		z.radpar = DAHDI_RADPAR_UIODATA;
 		z.data = 3;
 		if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-			ast_log(LOG_ERROR, "Cannot set UIODATA\n");
+			ast_log(LOG_ERROR, "Cannot set UIODATA: %s\n", strerror(errno));
 			return -1;
 		}
 		i = DAHDI_OFFHOOK;
 		if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_HOOK, &i) == -1) {
-			ast_log(LOG_ERROR, "Cannot set hook\n");
+			ast_log(LOG_ERROR, "Cannot set hook: %s\n", strerror(errno));
 			return -1;
 		}
 	}
@@ -8028,7 +8014,7 @@ static int load_module(void)
 
 	nullfd = open("/dev/null", O_RDWR);
 	if (nullfd == -1) {
-		ast_log(LOG_ERROR, "Can not open /dev/null\n");
+		ast_log(LOG_ERROR, "Can not open /dev/null: %s\n", strerror(errno));
 		return -1;
 	}
 	ast_pthread_create(&rpt_master_thread, NULL, rpt_master, NULL);
