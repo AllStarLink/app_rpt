@@ -569,7 +569,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		if ((!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
 			|| (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb"))) {
 			l->mode = mode;
-			strncpy(myrpt->lastlinknode, node, MAXNODESTR - 1);
+			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
 			return 0;
 		}
@@ -592,11 +592,10 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 			}
 		}
 	}
-	strncpy(myrpt->lastlinknode, node, MAXNODESTR - 1);
+	ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 	/* establish call */
 	l = ast_malloc(sizeof(struct rpt_link));
 	if (!l) {
-		ast_log(LOG_WARNING, "Unable to malloc\n");
 		return -1;
 	}
 	/* zero the silly thing */
@@ -605,7 +604,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	l->outbound = 1;
 	l->thisconnected = 0;
 	voxinit_link(l, 1);
-	strncpy(l->name, node, MAXNODESTR - 1);
+	ast_copy_string(l->name, node, sizeof(l->name));
 	l->isremote = (s && ast_true(s));
 	if (modechange)
 		l->connected = 1;
@@ -646,7 +645,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (!strncasecmp(deststr, "echolink", 8)) {
 		char tel1[100];
 
-		strncpy(tel1, tele, sizeof(tel1) - 1);
+		ast_copy_string(tel1, tele, sizeof(tel1));
 		cp = strchr(tel1, '/');
 		if (cp) {
 			cp++;

@@ -42,13 +42,11 @@ struct daq_entry_tag *daq_open(int type, char *name, char *dev)
 
 	/* Save the device path for open */
 	if (dev) {
-		strncpy(t->dev, dev, MAX_DAQ_DEV);
-		t->dev[MAX_DAQ_DEV - 1] = 0;
+		ast_copy_string(t->dev, dev, sizeof(t->dev));
 	}
 
 	/* Save the name */
 	ast_copy_string(t->name, name, MAX_DAQ_NAME);
-	t->dev[MAX_DAQ_NAME - 1] = 0;
 
 	switch (type) {
 	case DAQ_TYPE_UCHAMELEON:

@@ -65,7 +65,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable)
 		return DC_ERROR;
 
-	strncpy(digitbuf, digits, MAXNODESTR - 1);
+	ast_copy_string(digitbuf, digits, sizeof(digitbuf));
 
 	ast_debug(7, "@@@@ ilink param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 
@@ -487,7 +487,7 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 
 		/* We have a frequency */
 
-		strncpy(tmp, digitbuf, sizeof(tmp) - 1);
+		ast_copy_string(tmp, digitbuf, sizeof(tmp));
 
 		s = tmp;
 		s1 = strsep(&s, "*");	/* Pick off MHz */
@@ -610,7 +610,7 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 			break;				/* Not yet */
 		ast_debug(1, "PL digits entered %s\n", digitbuf);
 
-		strncpy(tmp, digitbuf, sizeof(tmp) - 1);
+		ast_copy_string(tmp, digitbuf, sizeof(tmp));
 		/* see if we have at least 1 */
 		s = strchr(tmp, '*');
 		if (s)
@@ -663,7 +663,7 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 			break;				/* Not yet */
 		ast_debug(1, "PL digits entered %s\n", digitbuf);
 
-		strncpy(tmp, digitbuf, sizeof(tmp) - 1);
+		ast_copy_string(tmp, digitbuf, sizeof(tmp));
 		/* see if we have at least 1 */
 		s = strchr(tmp, '*');
 		if (s)
@@ -731,7 +731,7 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 			cp2 = strchr(cp1 + 1, ',');
 			if (cp2) {
 				*cp2 = 0;
-				strncpy(myrpt->loginlevel, cp2 + 1, sizeof(myrpt->loginlevel) - 1);
+				ast_copy_string(myrpt->loginlevel, cp2 + 1, sizeof(myrpt->loginlevel));
 			}
 			ast_copy_string(myrpt->loginuser, cp1 + 1, sizeof(myrpt->loginuser) - 1);
 			ast_mutex_unlock(&myrpt->lock);
@@ -912,7 +912,7 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 		myrpt->patchfarenddisconnect = 0;
 		myrpt->patchquiet = 0;
 		myrpt->patchvoxalways = 0;
-		ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT - 1);
+		ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, sizeof(myrpt->patchcontext));
 		memset(myrpt->patchexten, 0, sizeof(myrpt->patchexten));
 	}
 	if (param) {
@@ -929,7 +929,7 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 			if (!myrpt->callmode) {
 				switch (index) {
 				case 1:		/* context */
-					strncpy(myrpt->patchcontext, value, MAXPATCHCONTEXT - 1);
+					ast_copy_string(myrpt->patchcontext, value, sizeof(myrpt->patchcontext));
 					break;
 				case 2:		/* dialtime */
 					myrpt->patchdialtime = atoi(value);
@@ -947,7 +947,7 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 					myrpt->patchvoxalways = atoi(value);
 					break;
 				case 7:		/* exten */
-					strncpy(myrpt->patchexten, value, AST_MAX_EXTENSION - 1);
+					ast_copy_string(myrpt->patchexten, value, sizeof(myrpt->patchexten));
 					break;
 				default:
 					break;
@@ -1170,8 +1170,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 	if (!param)
 		return DC_ERROR;
 
-	strncpy(paramcopy, param, sizeof(paramcopy) - 1);
-	paramcopy[sizeof(paramcopy) - 1] = 0;
+	ast_copy_string(paramcopy, param, sizeof(paramcopy));
 	argc = explode_string(paramcopy, argv, 100, ',', 0);
 
 	if (!argc)
@@ -1699,7 +1698,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			mdcp->DestID = (short) strtol(argv[3], NULL, 16);
 			mdcp->subcode = (short) strtol(argv[4], NULL, 16);
 		}
-		strncpy(mdcp->type, argv[1], sizeof(mdcp->type) - 1);
+		ast_copy_string(mdcp->type, argv[1], sizeof(mdcp->type));
 		mdcp->UnitID = (short) strtol(argv[2], NULL, 16);
 		rpt_telemetry(myrpt, MDC1200, (void *) mdcp);
 		return DC_COMPLETE;

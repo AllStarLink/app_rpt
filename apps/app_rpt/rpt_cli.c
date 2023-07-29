@@ -998,7 +998,7 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_BUSY;
 		rpt_vars[thisRpt].cmdAction.functionNumber = thisAction;
 		snprintf(rpt_vars[thisRpt].cmdAction.param, MAXDTMF, "%s,%s", argv[4], argv[5]);
-		strncpy(rpt_vars[thisRpt].cmdAction.digits, argv[5], MAXDTMF);
+		ast_copy_string(rpt_vars[thisRpt].cmdAction.digits, argv[5], MAXDTMF);
 		rpt_vars[thisRpt].cmdAction.command_source = SOURCE_RPT;
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_READY;
 	}							/* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */

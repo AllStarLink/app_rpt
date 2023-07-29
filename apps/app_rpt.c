@@ -702,7 +702,7 @@ void donodelog(struct rpt *myrpt, char *str)
 		return;
 	}
 	time(&nodep->timestamp);
-	strncpy(nodep->archivedir, myrpt->p.archivedir, sizeof(nodep->archivedir) - 1);
+	ast_copy_string(nodep->archivedir, myrpt->p.archivedir, sizeof(nodep->archivedir));
 	strftime(datestr, sizeof(datestr) - 1, "%Y%m%d%H%M%S", localtime(&nodep->timestamp));
 	snprintf(nodep->str, sizeof(nodep->str) - 1, "%s %s,%s\n", myrpt->name, datestr, str);
 	ast_mutex_lock(&nodeloglock);
@@ -1457,19 +1457,20 @@ static int collect_function_digits(struct rpt *myrpt, char *digits, int command_
 	if (command_source == SOURCE_DPHONE) {
 		if (!myrpt->p.dphone_functions)
 			return DC_INDETERMINATE;
-		strncpy(function_table_name, myrpt->p.dphone_functions, sizeof(function_table_name) - 1);
+		ast_copy_string(function_table_name, myrpt->p.dphone_functions, sizeof(function_table_name));
 	} else if (command_source == SOURCE_ALT) {
 		if (!myrpt->p.alt_functions)
 			return DC_INDETERMINATE;
-		strncpy(function_table_name, myrpt->p.alt_functions, sizeof(function_table_name) - 1);
+		ast_copy_string(function_table_name, myrpt->p.alt_functions, sizeof(function_table_name));
 	} else if (command_source == SOURCE_PHONE) {
 		if (!myrpt->p.phone_functions)
 			return DC_INDETERMINATE;
-		strncpy(function_table_name, myrpt->p.phone_functions, sizeof(function_table_name) - 1);
-	} else if (command_source == SOURCE_LNK)
-		strncpy(function_table_name, myrpt->p.link_functions, sizeof(function_table_name) - 1);
-	else
-		strncpy(function_table_name, myrpt->p.functions, sizeof(function_table_name) - 1);
+		ast_copy_string(function_table_name, myrpt->p.phone_functions, sizeof(function_table_name));
+	} else if (command_source == SOURCE_LNK) {
+		ast_copy_string(function_table_name, myrpt->p.link_functions, sizeof(function_table_name));
+	} else {
+		ast_copy_string(function_table_name, myrpt->p.functions, sizeof(function_table_name));
+	}
 	/* find context for function table in rpt.conf file */
 	vp = ast_variable_browse(myrpt->cfg, function_table_name);
 	while (vp) {
@@ -1497,7 +1498,7 @@ static int collect_function_digits(struct rpt *myrpt, char *digits, int command_
 			return DC_INDETERMINATE;
 	}
 	/* Found a match, retrieve value part and parse */
-	strncpy(workstring, vp->value, sizeof(workstring) - 1);
+	ast_copy_string(workstring, vp->value, sizeof(workstring));
 	stringp = workstring;
 	action = strsep(&stringp, ",");
 	param = stringp;
@@ -1992,7 +1993,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			myrpt->rem_dtmfbuf[myrpt->rem_dtmfidx] = 0;
 
 			rpt_mutex_unlock(&myrpt->lock);
-			strncpy(cmd, myrpt->rem_dtmfbuf, sizeof(cmd) - 1);
+			ast_copy_string(cmd, myrpt->rem_dtmfbuf, sizeof(cmd));
 			res = collect_function_digits(myrpt, cmd, SOURCE_LNK, mylink);
 			rpt_mutex_lock(&myrpt->lock);
 
@@ -2010,7 +2011,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			case DC_COMPLETEQUIET:
 				myrpt->totalexecdcommands++;
 				myrpt->dailyexecdcommands++;
-				strncpy(myrpt->lastdtmfcommand, cmd, MAXDTMF - 1);
+				ast_copy_string(myrpt->lastdtmfcommand, cmd, MAXDTMF);
 				myrpt->lastdtmfcommand[MAXDTMF - 1] = '\0';
 				myrpt->rem_dtmfbuf[0] = 0;
 				myrpt->rem_dtmfidx = -1;
@@ -2156,7 +2157,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 			myrpt->rem_dtmfbuf[myrpt->rem_dtmfidx] = 0;
 
 			rpt_mutex_unlock(&myrpt->lock);
-			strncpy(cmd, myrpt->rem_dtmfbuf, sizeof(cmd) - 1);
+			ast_copy_string(cmd, myrpt->rem_dtmfbuf, sizeof(cmd));
 			switch (mylink->phonemode) {
 			case 1:
 				res = collect_function_digits(myrpt, cmd, SOURCE_PHONE, mylink);
@@ -2192,7 +2193,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 			case DC_COMPLETEQUIET:
 				myrpt->totalexecdcommands++;
 				myrpt->dailyexecdcommands++;
-				strncpy(myrpt->lastdtmfcommand, cmd, MAXDTMF - 1);
+				ast_copy_string(myrpt->lastdtmfcommand, cmd, MAXDTMF);
 				myrpt->lastdtmfcommand[MAXDTMF - 1] = '\0';
 				myrpt->rem_dtmfbuf[0] = 0;
 				myrpt->rem_dtmfidx = -1;
@@ -2302,7 +2303,7 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 	case DC_COMPLETEQUIET:
 		myrpt->totalexecdcommands++;
 		myrpt->dailyexecdcommands++;
-		strncpy(myrpt->lastdtmfcommand, myrpt->dtmfbuf, MAXDTMF - 1);
+		ast_copy_string(myrpt->lastdtmfcommand, myrpt->dtmfbuf, MAXDTMF);
 		myrpt->lastdtmfcommand[MAXDTMF - 1] = '\0';
 		myrpt->dtmfbuf[0] = 0;
 		myrpt->dtmfidx = -1;
@@ -2327,7 +2328,7 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 	int seq, res;
 
 	/* put string in our buffer */
-	strncpy(tmp, str, sizeof(tmp) - 1);
+	ast_copy_string(tmp, str, sizeof(tmp));
 	if (!strcmp(tmp, DISCSTR))
 		return 0;
 	if (!strcmp(tmp, NEWKEYSTR)) {
@@ -2603,7 +2604,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 				myrpt->dtmfbuf[myrpt->dtmfidx++] = c;
 				myrpt->dtmfbuf[myrpt->dtmfidx] = 0;
 
-				strncpy(cmd, myrpt->dtmfbuf, sizeof(cmd) - 1);
+				ast_copy_string(cmd, myrpt->dtmfbuf, sizeof(cmd));
 
 				rpt_mutex_unlock(&myrpt->lock);
 				if (myrpt->cmdnode[0])
@@ -2624,7 +2625,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 				case DC_COMPLETEQUIET:
 					myrpt->totalexecdcommands++;
 					myrpt->dailyexecdcommands++;
-					strncpy(myrpt->lastdtmfcommand, cmd, MAXDTMF - 1);
+					ast_copy_string(myrpt->lastdtmfcommand, cmd, MAXDTMF);
 					myrpt->lastdtmfcommand[MAXDTMF - 1] = '\0';
 					myrpt->dtmfbuf[0] = 0;
 					myrpt->dtmfidx = -1;
@@ -2813,8 +2814,7 @@ static void do_scheduler(struct rpt *myrpt)
 	/* walk the list */
 	for (; skedlist; skedlist = skedlist->next) {
 		ast_debug(7, "Scheduler entry %s = %s being considered\n", skedlist->name, skedlist->value);
-		strncpy(value, skedlist->value, 99);
-		value[99] = 0;
+		ast_copy_string(value, skedlist->value, sizeof(value));
 		/* point to the substrings for minute, hour, dom, month, and dow */
 		for (i = 0, vp = value; i < 5; i++) {
 			if (!*vp)
@@ -3028,7 +3028,7 @@ static void *rpt(void *this)
 	}
 	myrpt->dahditxchannel = NULL;
 	if (myrpt->txchanname) {
-		strncpy(tmpstr, myrpt->txchanname, sizeof(tmpstr) - 1);
+		ast_copy_string(tmpstr, myrpt->txchanname, sizeof(tmpstr));
 		tele = strchr(tmpstr, '/');
 		if (!tele) {
 			ast_log(LOG_WARNING, "Txchannel Dial number (%s) must be in format tech/number\n", myrpt->txchanname);
@@ -5963,9 +5963,9 @@ static void *rpt_master(void *ignore)
 		if (rpt_vars[i].remote) {
 			if (retrieve_memory(&rpt_vars[i], "init")) {	/* Try to retrieve initial memory channel */
 				if ((!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX450)) || (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_XCAT))) {
-					strncpy(rpt_vars[i].freq, "446.500", sizeof(rpt_vars[i].freq) - 1);
+					ast_copy_string(rpt_vars[i].freq, "446.500", sizeof(rpt_vars[i].freq));
 				} else {
-					strncpy(rpt_vars[i].freq, "145.000", sizeof(rpt_vars[i].freq) - 1);
+					ast_copy_string(rpt_vars[i].freq, "145.000", sizeof(rpt_vars[i].freq));
 				}
 			}
 			continue;
@@ -5973,16 +5973,16 @@ static void *rpt_master(void *ignore)
 			rpt_vars[i].p.memory = rpt_vars[i].name;
 			if (retrieve_memory(&rpt_vars[i], "radiofreq")) {	/* Try to retrieve initial memory channel */
 				if (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX450)) {
-					strncpy(rpt_vars[i].freq, "446.500", sizeof(rpt_vars[i].freq) - 1);
+					ast_copy_string(rpt_vars[i].freq, "446.500", sizeof(rpt_vars[i].freq));
 				} else if (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX150)) {
-					strncpy(rpt_vars[i].freq, "146.580", sizeof(rpt_vars[i].freq) - 1);
+					ast_copy_string(rpt_vars[i].freq, "146.580", sizeof(rpt_vars[i].freq));
 				}
 			}
 			ast_log(LOG_NOTICE, "Normal Repeater Init  %s  %s  %s\n", rpt_vars[i].name, rpt_vars[i].remoterig, rpt_vars[i].freq);
 		}
 
-		strncpy(rpt_vars[i].rxpl, "100.0", sizeof(rpt_vars[i].rxpl) - 1);
-		strncpy(rpt_vars[i].txpl, "100.0", sizeof(rpt_vars[i].txpl) - 1);
+		ast_copy_string(rpt_vars[i].rxpl, "100.0", sizeof(rpt_vars[i].rxpl));
+		ast_copy_string(rpt_vars[i].txpl, "100.0", sizeof(rpt_vars[i].txpl));
 		rpt_vars[i].remmode = REM_MODE_FM;
 		rpt_vars[i].offset = REM_SIMPLEX;
 		rpt_vars[i].powerlevel = REM_LOWPWR;
@@ -6150,7 +6150,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		return -1;
 	}
 
-	strncpy(tmp, (char *) data, sizeof(tmp) - 1);
+	ast_copy_string(tmp, data, sizeof(tmp));
 	time(&t);
 	/* if time has externally shifted negative, screw it */
 	if (t < starttime)
@@ -6283,7 +6283,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s2);
 						return -1;
 					}
-					strncpy(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip) - 1);
+					ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
 					s3 = strchr(hisip, ':');
 					if (s3)
 						*s3 = 0;
@@ -6301,7 +6301,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 							ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s1);
 							return -1;
 						}
-						strncpy(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip) - 1);
+						ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
 						if (strcmp(hisip, nodeip)) {
 							ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n", b1, nodeip, hisip);
 							return -1;
@@ -6655,7 +6655,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s2);
 				return -1;
 			}
-			strncpy(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip) - 1);
+			ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
 			s3 = strchr(hisip, ':');
 			if (s3)
 				*s3 = 0;
@@ -6673,7 +6673,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s1);
 					return -1;
 				}
-				strncpy(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip) - 1);
+				ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
 				if (strcmp(hisip, nodeip)) {
 					ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n", b1, nodeip, hisip);
 					return -1;
@@ -6774,7 +6774,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* zero the silly thing */
 		memset((char *) l, 0, sizeof(struct rpt_link));
 		l->mode = 1;
-		strncpy(l->name, b1, MAXNODESTR - 1);
+		ast_copy_string(l->name, b1, MAXNODESTR);
 		l->isremote = 0;
 		l->chan = chan;
 		l->connected = 1;
@@ -7505,7 +7505,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						z.radpar = DAHDI_RADPAR_UIODATA;
 						z.data = 1;
 						if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
-							ast_log(LOG_ERROR, "Cannot set UIODATA: %s\n",, strerror(errno));
+							ast_log(LOG_ERROR, "Cannot set UIODATA: %s\n", strerror(errno));
 							return -1;
 						}
 					} else {

@@ -150,16 +150,15 @@ int split_freq(char *mhz, char *decimals, char *freq)
 
 	ast_copy_string(freq_copy, freq, MAXREMSTR - 1);
 	decp = strchr(freq_copy, '.');
-	if (decp) {
-		*decp++ = 0;
-		strncpy(mhz, freq_copy, MAXREMSTR);
-		strcpy(decimals, "00000");
-		ast_copy_string(decimals, decp, strlen(decimals) - 1);
-		decimals[5] = 0;
-		return 0;
-	} else
+	if (!decp) {
 		return -1;
+	}
 
+	*decp++ = 0;
+	ast_copy_string(mhz, freq_copy, MAXREMSTR);
+	strcpy(decimals, "00000");
+	ast_copy_string(decimals, decp, strlen(decimals) - 1);
+	return 0;
 }
 
 int mycompar(const void *a, const void *b)

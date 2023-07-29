@@ -477,7 +477,7 @@ static int report_aprs(char *ctg, char *lat, char *lon)
 	ast_config_destroy(cfg);
 	cfg = NULL;
 
-	strncpy(basecall, call, sizeof(basecall) - 1);
+	ast_copy_string(basecall, call, sizeof(basecall));
 	cp = strchr(basecall, '-');
 	if (cp)
 		*cp = 0;
@@ -554,7 +554,7 @@ static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char 
 	ast_config_destroy(cfg);
 	cfg = NULL;
 
-	strncpy(basecall, call, sizeof(basecall) - 1);
+	ast_copy_string(basecall, call, sizeof(basecall));
 	cp = strchr(basecall, '-');
 	if (cp)
 		*cp = 0;

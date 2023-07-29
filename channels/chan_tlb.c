@@ -937,7 +937,7 @@ static int TLB_text(struct ast_channel *ast, const char *text)
 	char *arg4 = NULL, *ptr, *saveptr;
 	char delim = ' ', *cmd;
 
-	strncpy(buf, text, sizeof(buf) - 1);
+	ast_copy_string(buf, text, sizeof(buf));
 	ptr = strchr(buf, (int) '\r');
 	if (ptr)
 		*ptr = '\0';

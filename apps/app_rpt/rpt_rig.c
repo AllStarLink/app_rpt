@@ -671,15 +671,16 @@ int split_ctcss_freq(char *hertz, char *decimal, char *freq)
 	char freq_copy[MAXREMSTR];
 	char *decp;
 
-	decp = strchr(strncpy(freq_copy, freq, MAXREMSTR - 1), '.');
-	if (decp) {
-		*decp++ = 0;
-		ast_copy_string(hertz, freq_copy, MAXREMSTR);
-		ast_copy_string(decimal, decp, strlen(decp));
-		decimal[strlen(decp)] = '\0';
-		return 0;
-	} else
+	ast_copy_string(freq_copy, freq, sizeof(freq_copy));
+	decp = strchr(freq_copy, '.');
+	if (!decp) {
 		return -1;
+	}
+
+	*decp++ = 0;
+	ast_copy_string(hertz, freq_copy, MAXREMSTR);
+	ast_copy_string(decimal, decp, sizeof(decimal));
+	return 0;
 }
 
 /*
@@ -2442,14 +2443,12 @@ char check_tx_freq(struct rpt *myrpt)
 
 	/* Parse the limits */
 
-	strncpy(limits, limitlist->value, 256);
-	limits[255] = 0;
+	ast_copy_string(limits, limitlist->value, sizeof(limits));
 	finddelim(limits, limit_ranges, 40);
 	for (i = 0; i < 40 && limit_ranges[i]; i++) {
 		char range[40];
 		char *r, *s;
-		strncpy(range, limit_ranges[i], 40);
-		range[39] = 0;
+		ast_copy_string(range, limit_ranges[i], sizeof(range));
 		ast_debug(4, "Check %s within %s\n", myrpt->freq, range);
 
 		r = strchr(range, '-');

@@ -152,8 +152,7 @@ int retrieve_memory(struct rpt *myrpt, char *memory)
 	if (!val) {
 		return -1;
 	}
-	strncpy(tmp, val, sizeof(tmp) - 1);
-	tmp[sizeof(tmp) - 1] = 0;
+	ast_copy_string(tmp, val, sizeof(tmp));
 
 	s = strchr(tmp, ',');
 	if (!s)
@@ -270,7 +269,7 @@ void local_dtmfkey_helper(struct rpt *myrpt, char c)
 	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.dtmfkeys, myrpt->dtmfkeybuf);
 	if (!val)
 		return;
-	strncpy(myrpt->curdtmfuser, val, MAXNODESTR - 1);
+	ast_copy_string(myrpt->curdtmfuser, val, sizeof(myrpt->curdtmfuser));
 	myrpt->dtmfkeyed = 1;
 	myrpt->dtmfkeybuf[0] = 0;
 	return;
@@ -1129,20 +1128,21 @@ void load_rpt_vars(int n, int init)
 
 	val = (char *) ast_variable_retrieve(cfg, this, "ctgroup");
 	if (val) {
-		strncpy(rpt_vars[n].p.ctgroup, val, sizeof(rpt_vars[n].p.ctgroup) - 1);
-	} else
+		ast_copy_string(rpt_vars[n].p.ctgroup, val, sizeof(rpt_vars[n].p.ctgroup));
+	} else {
 		strcpy(rpt_vars[n].p.ctgroup, "0");
+	}
 
 	val = (char *) ast_variable_retrieve(cfg, this, "inxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.inxlat, 0, sizeof(struct rpt_xlat));
 		i = finddelim(val, strs, 3);
 		if (i)
-			strncpy(rpt_vars[n].p.inxlat.funccharseq, strs[0], MAXXLAT - 1);
+			ast_copy_string(rpt_vars[n].p.inxlat.funccharseq, strs[0], sizeof(rpt_vars[n].p.inxlat.funccharseq));
 		if (i > 1)
-			strncpy(rpt_vars[n].p.inxlat.endcharseq, strs[1], MAXXLAT - 1);
+			ast_copy_string(rpt_vars[n].p.inxlat.endcharseq, strs[1], sizeof(rpt_vars[n].p.inxlat.endcharseq));
 		if (i > 2)
-			strncpy(rpt_vars[n].p.inxlat.passchars, strs[2], MAXXLAT - 1);
+			ast_copy_string(rpt_vars[n].p.inxlat.passchars, strs[2], sizeof(rpt_vars[n].p.inxlat.passchars));
 		if (i > 3)
 			rpt_vars[n].p.dopfxtone = ast_true(strs[3]);
 	}
@@ -1151,11 +1151,11 @@ void load_rpt_vars(int n, int init)
 		memset(&rpt_vars[n].p.outxlat, 0, sizeof(struct rpt_xlat));
 		i = finddelim(val, strs, 3);
 		if (i)
-			strncpy(rpt_vars[n].p.outxlat.funccharseq, strs[0], MAXXLAT - 1);
+			ast_copy_string(rpt_vars[n].p.outxlat.funccharseq, strs[0], sizeof(rpt_vars[n].p.outxlat.funccharseq));
 		if (i > 1)
-			strncpy(rpt_vars[n].p.outxlat.endcharseq, strs[1], MAXXLAT - 1);
+			ast_copy_string(rpt_vars[n].p.outxlat.endcharseq, strs[1], sizeof(rpt_vars[n].p.outxlat.endcharseq));
 		if (i > 2)
-			strncpy(rpt_vars[n].p.outxlat.passchars, strs[2], MAXXLAT - 1);
+			ast_copy_string(rpt_vars[n].p.outxlat.passchars, strs[2], sizeof(rpt_vars[n].p.outxlat.passchars));
 	}
 	val = (char *) ast_variable_retrieve(cfg, this, "sleeptime");
 	if (val)
@@ -1292,8 +1292,7 @@ void load_rpt_vars(int n, int init)
 	for (i = 0; vp && (i < MAX_SYSSTATES); i++) {	/* Iterate over the number of control state lines in the stanza */
 		int k, nukw, statenum;
 		statenum = atoi(vp->name);
-		strncpy(s1, vp->value, 255);
-		s1[255] = 0;
+		ast_copy_string(s1, vp->value, sizeof(s1));
 		nukw = finddelim(s1, strs, 32);
 
 		for (k = 0; k < nukw; k++) {	/* for each user specified keyword */

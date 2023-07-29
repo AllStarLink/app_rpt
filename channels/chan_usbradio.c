@@ -1680,8 +1680,8 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 		o->set_txfreq = round(tx * (double) 1000000);
 		o->set_rxfreq = round(rx * (double) 1000000);
 		o->pmrChan->txpower = (pwr == 'H');
-		strcpy(o->set_rxctcssfreqs, rxpl);
-		strcpy(o->set_txctcssfreqs, txpl);
+		strcpy(o->set_rxctcssfreqs, rxpl); /* Safe */
+		strcpy(o->set_txctcssfreqs, txpl); /* Safe */
 
 		o->b.remoted = 1;
 		xpmr_config(o);
@@ -2285,9 +2285,8 @@ static int usbradio_indicate(struct ast_channel *c, int cond, const void *data, 
 		ast_debug(o->debuglevel, "chan_usbradio ACRK  dev=%s  code=%s TX ON \n", o->name, (char *) data);
 		if (datalen && ((char *) (data))[0] != '0') {
 			o->b.forcetxcode = 1;
-			memset(o->set_txctcssfreq, 0, 16);
-			strncpy(o->set_txctcssfreq, data, 16);
-			o->set_txctcssfreq[15] = 0;
+			memset(o->set_txctcssfreq, 0, sizeof(o->set_txctcssfreq)); /* XXX Possibly unnecessary, if this is used as a string? */
+			ast_copy_string(o->set_txctcssfreq, data, sizeof(o->set_txctcssfreq));
 			xpmr_config(o);
 		}
 		break;

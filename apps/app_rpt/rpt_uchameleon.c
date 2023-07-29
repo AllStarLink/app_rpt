@@ -97,7 +97,6 @@ void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 	int nrpts = rpt_num_rpts();
 
 	if (!(valuecopy = ast_strdup(p->alarmargs))) {
-		ast_log(LOG_ERROR, "Out of memory\n");
 		return;
 	}
 
@@ -220,8 +219,7 @@ int uchameleon_pin_init(struct daq_entry_tag *t)
 		}
 
 		if (!strcmp(argv[0], t->name)) {
-			strncpy(p->alarmargs, var->value, 64);	/* Save the alarm arguments in the pin entry */
-			p->alarmargs[63] = 0;
+			ast_copy_string(p->alarmargs, var->value, sizeof(p->alarmargs));	/* Save the alarm arguments in the pin entry */
 			ast_debug(1, "Adding alarm %s on pin %d\n", var->name, pin);
 			uchameleon_do_long(t, pin, DAQ_CMD_MONITOR, uchameleon_alarm_handler, &ignorefirst, NULL);
 		}
@@ -533,8 +531,7 @@ void uchameleon_queue_tx(struct daq_entry_tag *t, char *txbuff)
 
 	memset(q, 0, sizeof(struct daq_tx_entry_tag));
 
-	strncpy(q->txbuff, txbuff, 32);
-	q->txbuff[31] = 0;
+	ast_copy_string(q->txbuff, txbuff, sizeof(q->txbuff));
 
 	if (t->txtail) {
 		t->txtail->next = q;
@@ -747,8 +744,7 @@ void *uchameleon_monitor_thread(void *this)
 		/* Transmit queued commands */
 		while (t->txhead) {
 			q = t->txhead;
-			strncpy(txbuff, q->txbuff, sizeof(txbuff));
-			txbuff[sizeof(txbuff) - 1] = 0;
+			ast_copy_string(txbuff, q->txbuff, sizeof(txbuff));
 			t->txhead = q->next;
 			if (t->txhead)
 				t->txhead->prev = NULL;
