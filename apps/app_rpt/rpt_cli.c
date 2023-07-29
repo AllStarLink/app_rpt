@@ -1097,7 +1097,7 @@ static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 	}
 
 	for (i = 0; i < nrpts; i++) {
-		if (!strcmp(argv[2], rpt_vars[i].name)) {
+		if (!strcmp(argv[3], rpt_vars[i].name)) {
 			thisRpt = i;
 			break;
 		}
