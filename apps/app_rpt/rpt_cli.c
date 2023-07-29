@@ -68,10 +68,7 @@ static int rpt_do_dump(int fd, int argc, const char *const *argv)
 	return RESULT_FAILURE;
 }
 
-/*
-* Dump statistics onto console
-*/
-
+/*! \brief Dump statistics to console */
 static int rpt_do_stats(int fd, int argc, const char *const *argv)
 {
 	int i, j, numoflinks;
@@ -304,7 +301,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "User linking commands............................: %s\n", link_ena);
 			ast_cli(fd, "User functions...................................: %s\n\n", user_funs);
 
-			for (j = 0; j < numoflinks; j++) {	/* ast_free() all link names */
+			for (j = 0; j < numoflinks; j++) {	/* Free all link names */
 				ast_free(listoflinks[j]);
 			}
 			if (called_number) {
@@ -319,10 +316,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 	return RESULT_FAILURE;
 }
 
-/*
-* Link stats function
-*/
-
+/*! \brief Link stats function */
 static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 {
 	int i;
@@ -645,10 +639,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 	return RESULT_FAILURE;
 }
 
-/*
-* List all nodes connected, directly or indirectly
-*/
-
+/*! \brief List all nodes connected, directly or indirectly */
 static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 {
 	int i, j;
@@ -697,10 +688,7 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 	return RESULT_FAILURE;
 }
 
-/*
-* List all locally configured nodes
-*/
-
+/*! \brief List all locally configured nodes */
 static int rpt_do_local_nodes(int fd, int argc, const char *const *argv)
 {
 	int i;
@@ -716,10 +704,7 @@ static int rpt_do_local_nodes(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*
-* restart app_rpt
-*/
-
+/*! \brief Restart app_rpt */
 static int rpt_do_restart(int fd, int argc, const char *const *argv)
 {
 	int i;
@@ -736,10 +721,7 @@ static int rpt_do_restart(int fd, int argc, const char *const *argv)
 	return RESULT_FAILURE;
 }
 
-/*
-* send an app_rpt DTMF function from the CLI
-*/
-
+/*! \brief Send an app_rpt DTMF function from the CLI */
 static int rpt_do_fun(int fd, int argc, const char *const *argv)
 {
 	int i, busy = 0;
@@ -770,10 +752,7 @@ static int rpt_do_fun(int fd, int argc, const char *const *argv)
 	return RESULT_FAILURE;
 }
 
-/*
-* send an Audio File from the CLI
-*/
-
+/*! \brief Send an Audio File from the CLI */
 static int rpt_do_playback(int fd, int argc, const char *const *argv)
 {
 	int i;
@@ -854,8 +833,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-//## Paging function
-
+/*! \brief Paging function */
 static int rpt_do_page(int fd, int argc, const char *const *argv)
 {
 	int i;
@@ -1032,21 +1010,19 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	return (busy ? RESULT_FAILURE : RESULT_SUCCESS);
 }								/* rpt_do_cmd() */
 
-/*
-* set a node's main channel variable from the command line 
-*/
+/*! \brief Set a node's main channel variable from the command line */
 static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 {
 	char *value;
 	int i, x, thisRpt = -1;
 	int nrpts = rpt_num_rpts();
 
-	if (argc < 4) {
+	if (argc < 5) {
 		return RESULT_SHOWUSAGE;
 	}
 
 	for (i = 0; i < nrpts; i++) {
-		if (!strcmp(argv[2], rpt_vars[i].name)) {
+		if (!strcmp(argv[3], rpt_vars[i].name)) {
 			thisRpt = i;
 			break;
 		}
@@ -1057,7 +1033,7 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 		return RESULT_FAILURE;
 	}
 
-	for (x = 3; x < argc; x++) {
+	for (x = 4; x < argc; x++) {
 		const char *name = argv[x];
 		if ((value = strchr(name, '='))) {
 			*value++ = '\0';
@@ -1065,7 +1041,7 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 		} else
 			ast_log(LOG_WARNING, "Ignoring entry '%s' with no = \n", name);
 	}
-	return (0);
+	return 0;
 }
 
 static int rpt_show_channels(int fd, int argc, const char *const *argv)
@@ -1106,19 +1082,17 @@ static int rpt_show_channels(int fd, int argc, const char *const *argv)
 	rpt_mutex_unlock(&rpt_vars[this_rpt].lock);
 #undef DUMP_CHANNEL
 
-	return (0);
+	return 0;
 }
 
-/*
-* Display a node's main channel variables from the command line 
-*/
+/*! \brief Display a node's main channel variables from the command line */
 static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 {
 	int i, thisRpt = -1;
 	struct ast_var_t *newvariable;
 	int nrpts = rpt_num_rpts();
 
-	if (argc != 3) {
+	if (argc != 4) {
 		return RESULT_SHOWUSAGE;
 	}
 
@@ -1130,11 +1104,11 @@ static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 	}
 
 	if (thisRpt < 0) {
-		ast_cli(fd, "Unknown node number %s.\n", argv[2]);
+		ast_cli(fd, "Unknown node number %s.\n", argv[3]);
 		return RESULT_FAILURE;
 	}
 	i = 0;
-	ast_cli(fd, "Variable listing for node %s:\n", argv[2]);
+	ast_cli(fd, "Variable listing for node %s:\n", argv[3]);
 	ast_channel_lock(rpt_vars[thisRpt].rxchannel);
 	AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[thisRpt].rxchannel), newvariable, entries) {
 		i++;
@@ -1142,7 +1116,7 @@ static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 	}
 	ast_channel_unlock(rpt_vars[thisRpt].rxchannel);
 	ast_cli(fd, "    -- %d variables\n", i);
-	return (0);
+	return 0;
 }
 
 static int rpt_do_lookup(int fd, int argc, const char *const *argv)
@@ -1166,10 +1140,7 @@ static int rpt_do_lookup(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*
- *  Hooks for CLI functions
- */
-
+/*! \brief Hooks for CLI functions */
 static char *res2cli(int r)
 {
 	switch (r) {
@@ -1367,10 +1338,11 @@ static char *handle_cli_setvar(struct ast_cli_entry *e, int cmd, struct ast_cli_
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "rpt setvar";
+		e->command = "rpt set variable";
 		e->usage =
-			"Usage: rpt setvar <nodename> <name=value> [<name=value>...]\n"
-			"	Set an Asterisk channel variable for a node.\nNote: variable names are case-sensitive.\n";
+			"Usage: rpt set variable <nodename> <name=value> [<name=value>...]\n"
+			"	Set an Asterisk channel variable for a node.\n"
+			"   Note: variable names are case-sensitive.\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -1382,8 +1354,8 @@ static char *handle_cli_showvars(struct ast_cli_entry *e, int cmd, struct ast_cl
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "rpt showvars";
-		e->usage = "Usage: rpt showvars <nodename>\n"
+		e->command = "rpt show variables";
+		e->usage = "Usage: rpt show variables <nodename>\n"
 			"	Display all the Asterisk channel variables for a node.\n";
 		return NULL;
 	case CLI_GENERATE:
@@ -1427,7 +1399,7 @@ static char *handle_cli_localplay(struct ast_cli_entry *e, int cmd, struct ast_c
 		e->command = "rpt localplay";
 		e->usage =
 			"Usage: rpt localplay <nodename> <sound_file_base_name>\n"
-			"	Send an Audio File to a node, do not send to other connected nodes (local)\n";
+			"	Send an audio file to a node, do not send to other connected nodes (local)\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -1472,7 +1444,7 @@ static char *handle_cli_page(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 		e->command = "rpt page";
 		e->usage =
 			"Usage: rpt page <nodename> <baud> <capcode> <[ANT]Text....>\n"
-			"	Send an page to a user on a node, specifying capcode and type/text\n";
+			"	Send a page to a user on a node, specifying capcode and type/text\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -1493,8 +1465,8 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_fun, "Execute a DTMF function"),
 	AST_CLI_DEFINE(handle_cli_fun1, "Execute a DTMF function"),
 	AST_CLI_DEFINE(handle_cli_cmd, "Execute a DTMF function"),
-	AST_CLI_DEFINE(handle_cli_setvar, "Set an Asterisk channel variable"),
-	AST_CLI_DEFINE(handle_cli_showvars, "Display Asterisk channel variables"),
+	AST_CLI_DEFINE(handle_cli_setvar, "Set an Asterisk channel variable for a node"),
+	AST_CLI_DEFINE(handle_cli_showvars, "Display Asterisk channel variables for a node"),
 	AST_CLI_DEFINE(handle_cli_show_channels, "Display Asterisk channels for a node"),
 	AST_CLI_DEFINE(handle_cli_localplay, "Playback an audio file (local)"),
 	AST_CLI_DEFINE(handle_cli_sendall, "Send a Text message to all connected nodes"),
