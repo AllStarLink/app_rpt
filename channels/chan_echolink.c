@@ -779,7 +779,7 @@ static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 static void el_db_delete_entries(struct eldb *node)
 {
 	const struct eldb *mynode_num, *mynode_ip, *mynode_call;
-		
+
 	if (!node) {
 		return;
 	}
@@ -800,7 +800,7 @@ static void el_db_delete_entries(struct eldb *node)
 	}
 	
 	if (!(mynode_num == mynode_ip && mynode_ip == mynode_call)) {
-		ast_log(LOG_WARNING, "Echolink internal database corruption removing callsign %s node number=%p node ip=%p node call=%p", node->callsign, mynode_num, mynode_ip, mynode_call);
+		ast_log(LOG_ERROR, "Echolink internal database corruption removing callsign %s node number=%p node ip=%p node call=%p", node->callsign, mynode_num, mynode_ip, mynode_call);
 	}
 
 	ast_free(node);
