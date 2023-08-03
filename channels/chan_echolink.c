@@ -328,9 +328,9 @@ struct el_pvt;
  * These are stored internally in a binary tree.
  */
 struct el_node {
-	char ip[EL_IP_SIZE + 1];
-	char call[EL_CALL_SIZE + 1];
-	char name[EL_NAME_SIZE + 1];
+	char ip[EL_IP_SIZE];
+	char call[EL_CALL_SIZE];
+	char name[EL_NAME_SIZE];
 	char outbound;
 	unsigned int nodenum;
 	short countdown;
@@ -353,7 +353,7 @@ struct el_node {
  * This holds the incoming connection that is not authorized.
  */
 struct el_pending {
-	char fromip[EL_IP_SIZE + 1];
+	char fromip[EL_IP_SIZE];
 	struct timeval reqtime;
 };
 
@@ -373,7 +373,7 @@ struct el_pending {
  */
  struct el_node_lookup_callsign {
 	int nodenum;
-	char callsign[EL_CALL_SIZE + 1];
+	char callsign[EL_CALL_SIZE];
  };
 
 /*!
@@ -381,17 +381,17 @@ struct el_pending {
  */
 struct el_instance {
 	ast_mutex_t lock;
-	char name[EL_NAME_SIZE + 1];
-	char mycall[EL_CALL_SIZE + 1];
-	char myname[EL_NAME_SIZE + 1];
-	char mypwd[EL_PWD_SIZE + 1];
-	char myemail[EL_EMAIL_SIZE + 1];
-	char myqth[EL_QTH_SIZE + 1];
-	char elservers[EL_MAX_SERVERS][EL_SERVERNAME_SIZE + 1];
-	char ipaddr[EL_IP_SIZE + 1];
-	char port[EL_IP_SIZE + 1];
-	char astnode[EL_NAME_SIZE + 1];
-	char context[EL_NAME_SIZE + 1];
+	char name[EL_NAME_SIZE];
+	char mycall[EL_CALL_SIZE];
+	char myname[EL_NAME_SIZE];
+	char mypwd[EL_PWD_SIZE];
+	char myemail[EL_EMAIL_SIZE];
+	char myqth[EL_QTH_SIZE];
+	char elservers[EL_MAX_SERVERS][EL_SERVERNAME_SIZE];
+	char ipaddr[EL_IP_SIZE];
+	char port[EL_IP_SIZE];
+	char astnode[EL_NAME_SIZE];
+	char context[EL_NAME_SIZE];
 	/* missed 10 heartbeats, you're out */
 	short rtcptimeout;
 	float lat;
@@ -420,11 +420,11 @@ struct el_instance {
 	struct el_pending pending[MAXPENDING];
 	time_t aprstime;
 	time_t starttime;
-	char lastcall[EL_CALL_SIZE + 1];
+	char lastcall[EL_CALL_SIZE];
 	int text_packet_len;
 	char *text_packet;
-	char login_display[EL_NAME_SIZE + EL_CALL_SIZE + 1];
-	char aprs_display[EL_APRS_SIZE + 1];
+	char login_display[EL_NAME_SIZE + EL_CALL_SIZE];
+	char aprs_display[EL_APRS_SIZE];
 	uint32_t rx_audio_packets;
 	uint32_t tx_audio_packets;
 	uint32_t rx_ctrl_packets;
@@ -453,7 +453,7 @@ struct el_rxqel {
 	struct el_rxqel *qe_forw;
 	struct el_rxqel *qe_back;
 	char buf[BLOCKING_FACTOR * GSM_FRAME_SIZE];
-	char fromip[EL_IP_SIZE + 1];
+	char fromip[EL_IP_SIZE];
 };
 
 /*!
@@ -465,7 +465,7 @@ struct el_pvt {
 	struct el_instance *instp;
 	char app[16];
 	char stream[80];
-	char ip[EL_IP_SIZE + 1];
+	char ip[EL_IP_SIZE];
 	char firstsent;
 	char firstheard;
 	char txkey;
@@ -607,7 +607,7 @@ static int finddelim(char *str, char *strp[], int limit)
 }
 
 /*!
- * \brief Print the echolink internal user list to the cli.
+ * \brief Print the echolink internal user database list to the cli.
  * \param nodep		Pointer to eldb struct.
  * \param which		Enum for VISIT used by twalk.
  * \param closure	Pointer to int 'fd' for the ast_cli 
@@ -741,7 +741,7 @@ static struct eldb *el_db_find_callsign(const char *callsign)
 	struct eldb **found_key, key;
 	memset(&key, 0, sizeof(key));
 
-	ast_copy_string(key.callsign, callsign, sizeof(key.callsign) - 1);
+	ast_copy_string(key.callsign, callsign, sizeof(key.callsign));
 
 	found_key = (struct eldb **) tfind(&key, &el_db_callsign, compare_eldb_callsign);
 	if (found_key) {
@@ -762,7 +762,7 @@ static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 	struct eldb **found_key, key;
 	memset(&key, 0, sizeof(key));
 
-	ast_copy_string(key.ipaddr, ipaddr, sizeof(key.ipaddr) - 1);
+	ast_copy_string(key.ipaddr, ipaddr, sizeof(key.ipaddr));
 
 	found_key = (struct eldb **) tfind(&key, &el_db_ipaddr, compare_eldb_ipaddr);
 	if (found_key) {
@@ -774,46 +774,36 @@ static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 
 /*!
  * \brief Delete a node from the internal echolink users database.
- * This removes the node from the three internal binary trees.
- * \param node		Pointer to node to delete.
- */
-static void el_db_delete_indexes(const struct eldb *node)
-{
-	const struct eldb *mynode;
-
-	if (!node)
-		return;
-
-	mynode = el_db_find_nodenum(node->nodenum);
-	if (mynode) {
-		tdelete(mynode, &el_db_nodenum, compare_eldb_nodenum);
-	}
-
-	mynode = el_db_find_ipaddr(node->ipaddr);
-	if (mynode) {
-		tdelete(mynode, &el_db_ipaddr, compare_eldb_ipaddr);
-	}
-
-	mynode = el_db_find_callsign(node->callsign);
-	if (mynode) {
-		tdelete(mynode, &el_db_callsign, compare_eldb_callsign);
-	}
-
-	return;
-}
-
-/*!
- * \brief Delete a node from the internal echolink users database.
  * \param nodenum		Pointer to node to delete.
  */
-static void el_db_delete(struct eldb *node)
+static void el_db_delete_entries(struct eldb *node)
 {
+	const struct eldb *mynode_num, *mynode_ip, *mynode_call;
+		
 	if (!node) {
 		return;
 	}
-	el_db_delete_indexes(node);
+
+	mynode_num = el_db_find_nodenum(node->nodenum);
+	if (mynode_num) {
+		tdelete(mynode_num, &el_db_nodenum, compare_eldb_nodenum);
+	}
+
+	mynode_ip = el_db_find_ipaddr(node->ipaddr);
+	if (mynode_ip) {
+		tdelete(mynode_ip, &el_db_ipaddr, compare_eldb_ipaddr);
+	}
+
+	mynode_call = el_db_find_callsign(node->callsign);
+	if (mynode_call) {
+		tdelete(mynode_call, &el_db_callsign, compare_eldb_callsign);
+	}
+	
+	if (!(mynode_num == mynode_ip && mynode_ip == mynode_call)) {
+		ast_log(LOG_WARNING, "Echolink internal database corruption removing callsign %s node number=%p node ip=%p node call=%p", node->callsign, mynode_num, mynode_ip, mynode_call);
+	}
+
 	ast_free(node);
-	return;
 }
 
 /*!
@@ -833,23 +823,23 @@ static struct eldb *el_db_put(const char *nodenum, const char *ipaddr, const cha
 		return NULL;
 	}
 
-	ast_copy_string(node->nodenum, nodenum, ELDB_NODENUMLEN);
-	ast_copy_string(node->ipaddr, ipaddr, ELDB_IPADDRLEN);
-	ast_copy_string(node->callsign, callsign, ELDB_CALLSIGNLEN);
+	ast_copy_string(node->nodenum, nodenum, sizeof(node->nodenum));
+	ast_copy_string(node->ipaddr, ipaddr, sizeof(node->ipaddr));
+	ast_copy_string(node->callsign, callsign, sizeof(node->callsign));
 
 	mynode = el_db_find_nodenum(node->nodenum);
 	if (mynode) {
-		el_db_delete(mynode);
+		el_db_delete_entries(mynode);
 	}
 
 	mynode = el_db_find_ipaddr(node->ipaddr);
 	if (mynode) {
-		el_db_delete(mynode);
+		el_db_delete_entries(mynode);
 	}
 
 	mynode = el_db_find_callsign(node->callsign);
 	if (mynode) {
-		el_db_delete(mynode);
+		el_db_delete_entries(mynode);
 	}
 
 	tsearch(node, &el_db_nodenum, compare_eldb_nodenum);
@@ -879,7 +869,7 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call, con
 	unsigned char *p = zp;
 	struct rtcp_t *rp;
 	unsigned char *ap;
-	char line[EL_CALL_SIZE + EL_NAME_SIZE + 1];
+	char line[EL_CALL_SIZE + EL_NAME_SIZE];
 	int l, hl, pl;
 
 	hl = 0;
@@ -1784,7 +1774,7 @@ static void lookup_node_callsign(const void *nodep, const VISIT which, void *clo
 		node = *(struct el_node **) nodep;
 		lookup = closure;
 		if (node->nodenum == lookup->nodenum) {
-			ast_copy_string(lookup->callsign, node->call, EL_CALL_SIZE);
+			ast_copy_string(lookup->callsign, node->call, sizeof(lookup->callsign));
 		}
 	}
 }
@@ -1876,7 +1866,7 @@ static void send_text(const void *nodep, const VISIT which, const int depth)
 	struct el_node *node = *(struct el_node **) nodep;
 
 	if ((which == leaf) || (which == postorder)) {
-		if (strncmp(node->ip, node->instp->el_node_test.ip, EL_IP_SIZE)) {
+		if (strncmp(node->ip, node->instp->el_node_test.ip, sizeof(node->ip))) {
 
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
@@ -2059,7 +2049,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 		sin.sin_addr.s_addr = inet_addr(arg1);
 
 		if (strcmp(cmd, "o.dconip") == 0) {
-			ast_copy_string(key.ip, arg1, EL_IP_SIZE);
+			ast_copy_string(key.ip, arg1, sizeof(key.ip));
 			if (find_delete(&key)) {
 				for (i = 0; i < 20; i++) {
 					sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
@@ -2651,7 +2641,7 @@ static int sendcmd(const char *server, const struct el_instance *instp)
 	struct ast_hostent ah;
 	struct in_addr ia;
 
-	char ip[EL_IP_SIZE + 1];
+	char ip[EL_IP_SIZE];
 	struct sockaddr_in el;
 	int el_len;
 	int sd;
@@ -2666,7 +2656,7 @@ static int sendcmd(const char *server, const struct el_instance *instp)
 	ahp = ast_gethostbyname(server, &ah);
 	if (ahp) {
 		memcpy(&ia, ahp->h_addr, sizeof(in_addr_t));
-		ast_copy_string(ip, ast_inet_ntoa(ia), EL_IP_SIZE);
+		ast_copy_string(ip, ast_inet_ntoa(ia), sizeof(ip));
 	} else {
 		ast_log(LOG_ERROR, "Failed to resolve Echolink server %s.\n", server);
 		return -1;
@@ -2748,10 +2738,9 @@ static void el_db_delete_all_nodes(void)
 	struct eldb *node;
 	
 	ast_mutex_lock(&el_db_lock);
-	while (el_db_nodenum) {
-		node = *(struct eldb **) el_db_nodenum;
-		el_db_delete_indexes(node);
-		ast_free(node);
+	while (el_db_callsign) {
+		node = *(struct eldb **) el_db_callsign;
+		el_db_delete_entries(node);
 	}
 	ast_mutex_unlock(&el_db_lock);
 	
@@ -2762,7 +2751,7 @@ static void el_db_delete_all_nodes(void)
  * \brief Delete callsign from internal directory.
  * \param call			Pointer to callsign to delete.	
  */
-static void el_zapcall(const char *call)
+static void el_db_delete_call(const char *call)
 {
 	struct eldb *mynode;
 
@@ -2771,7 +2760,7 @@ static void el_zapcall(const char *call)
 	mynode = el_db_find_callsign(call);
 	if (mynode) {
 		ast_debug(5, "Directory - Deleted: Node=%s, Call=%s, IP=%s.\n", mynode->nodenum, mynode->callsign, mynode->ipaddr);
-		el_db_delete(mynode);
+		el_db_delete_entries(mynode);
 	}
 	ast_mutex_unlock(&el_db_lock);
 }
@@ -3012,7 +3001,7 @@ static int do_el_directory(const char *hostname)
 		}
 		ast_copy_string(call, str, sizeof(call));
 		if (dir_partial) {
-			el_zapcall(call);
+			el_db_delete_call(call);
 			if (delmode) {
 				continue;
 			}
@@ -3717,20 +3706,20 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	instp->ctrl_sock = -1;
 	instp->fdr = -1;
 	
-	ast_copy_string(instp->name, ctg, EL_NAME_SIZE);
+	ast_copy_string(instp->name, ctg, sizeof(instp->name));
 
 	val = ast_variable_retrieve(cfg, ctg, "ipaddr");
 	if (!val) {
 		strcpy(instp->ipaddr, "0.0.0.0");
 	} else {
-		ast_copy_string(instp->ipaddr, val, EL_IP_SIZE);
+		ast_copy_string(instp->ipaddr, val, sizeof(instp->ipaddr));
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "port");
 	if (!val) {
 		strcpy(instp->port, "5198");
 	} else {
-		ast_copy_string(instp->port, val, EL_IP_SIZE);
+		ast_copy_string(instp->port, val, sizeof(instp->port));
 	}
 	
 	val = ast_variable_retrieve(cfg, ctg, "maxstns");
@@ -3758,21 +3747,21 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	if (!val) {
 		strcpy(instp->astnode, "1999");
 	} else {
-		ast_copy_string(instp->astnode, val, EL_NAME_SIZE);
+		ast_copy_string(instp->astnode, val, sizeof(instp->astnode));
 	}
 	
 	val = ast_variable_retrieve(cfg, ctg, "context");
 	if (!val) {
 		strcpy(instp->context, "radio-secure");
 	} else {
-		ast_copy_string(instp->context, val, EL_NAME_SIZE);
+		ast_copy_string(instp->context, val, sizeof(instp->context));
 	}
 	
 	val = ast_variable_retrieve(cfg, ctg, "call");
 	if (!val) {
-		ast_copy_string(instp->mycall, "INVALID", EL_CALL_SIZE);
+		ast_copy_string(instp->mycall, "INVALID", sizeof(instp->mycall));
 	} else {
-		ast_copy_string(instp->mycall, val, EL_CALL_SIZE);
+		ast_copy_string(instp->mycall, val, sizeof(instp->mycall));
 	}
 
 	if (!strcmp(instp->mycall, "INVALID")) {
@@ -3782,9 +3771,9 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	
 	val = ast_variable_retrieve(cfg, ctg, "name");
 	if (!val) {
-		ast_copy_string(instp->myname, instp->mycall, EL_NAME_SIZE);
+		ast_copy_string(instp->myname, instp->mycall, sizeof(instp->myname));
 	} else {
-		ast_copy_string(instp->myname, val, EL_NAME_SIZE);
+		ast_copy_string(instp->myname, val, sizeof(instp->myname));
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "recfile");
@@ -3796,23 +3785,23 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = ast_variable_retrieve(cfg, ctg, "pwd");
 	if (!val) {
-		ast_copy_string(instp->mypwd, "INVALID", EL_PWD_SIZE);
+		ast_copy_string(instp->mypwd, "INVALID", sizeof(instp->mypwd));
 	} else {
-		ast_copy_string(instp->mypwd, val, EL_PWD_SIZE);
+		ast_copy_string(instp->mypwd, val, sizeof(instp->mypwd));
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "qth");
 	if (!val) {
-		ast_copy_string(instp->myqth, "INVALID", EL_QTH_SIZE);
+		ast_copy_string(instp->myqth, "INVALID", sizeof(instp->myqth));
 	} else {
-		ast_copy_string(instp->myqth, val, EL_QTH_SIZE);
+		ast_copy_string(instp->myqth, val, sizeof(instp->myqth));
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "email");
 	if (!val) {
-		ast_copy_string(instp->myemail, "INVALID", EL_EMAIL_SIZE);
+		ast_copy_string(instp->myemail, "INVALID", sizeof(instp->myemail));
 	} else {
-		ast_copy_string(instp->myemail, val, EL_EMAIL_SIZE);
+		ast_copy_string(instp->myemail, val, sizeof(instp->myemail));
 	}
 
 	for (serverindex = 0; serverindex < EL_MAX_SERVERS; serverindex++) {
@@ -3907,7 +3896,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	/* validate settings */
 
-	if ((!strncmp(instp->mypwd, "INVALID", EL_PWD_SIZE)) || (!strncmp(instp->mycall, "INVALID", EL_CALL_SIZE))) {
+	if ((!strncmp(instp->mypwd, "INVALID", sizeof(instp->mypwd))) || (!strncmp(instp->mycall, "INVALID", sizeof(instp->mycall)))) {
 		ast_log(LOG_ERROR, "Your Echolink call or password is not correct.\n");
 		return -1;
 	}
