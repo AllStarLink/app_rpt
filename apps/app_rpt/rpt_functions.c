@@ -1704,17 +1704,19 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		return DC_COMPLETE;
 #endif
 	case 61:					/* send GPIO change */
-	case 62:					/* same, without function complete (quietly, oooooooh baby!) */
+	case 62:					/* same, without function complete (quietly) */
 		if (argc < 1)
 			break;
 		/* ignore if not a USB channel */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
-			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") &&
-			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))
-			break;
+		if (strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
+			strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") &&
+			strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+				break;
+			}
 		/* go thru all the specs */
 		for (i = 1; i < argc; i++) {
-			if (sscanf(argv[i], "GPIO%d=%d", &j, &k) == 2) {
+			if (sscanf(argv[i], "GPIO%d=%d", &j, &k) == 2 ||
+				sscanf(argv[i], "GPIO%d:%d", &j, &k) == 2) {
 				sprintf(string, "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else if (sscanf(argv[i], "PP%d=%d", &j, &k) == 2) {
@@ -1722,8 +1724,9 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 				ast_sendtext(myrpt->rxchannel, string);
 			}
 		}
-		if (myatoi(argv[0]) == 61)
+		if (myatoi(argv[0]) == 61) {
 			rpt_telemetry(myrpt, COMPLETE, NULL);
+		}
 		return DC_COMPLETE;
 	case 63:					/* send pre-configured APRSTT notification */
 	case 64:

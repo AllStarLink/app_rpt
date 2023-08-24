@@ -877,8 +877,10 @@ void rpt_event_process(struct rpt *myrpt)
 				if (argc > 1)
 					ast_copy_string(myrpt->cmdAction.param, argv[1], MAXDTMF - 1);
 				myrpt->cmdAction.digits[0] = 0;
-				if (argc > 2)
+				if (argc > 2) {
 					ast_copy_string(myrpt->cmdAction.digits, argv[2], MAXDTMF - 1);
+					snprintf(myrpt->cmdAction.param, MAXDTMF - 1, "%s,%s", argv[1], argv[2]);
+				}
 				myrpt->cmdAction.command_source = SOURCE_RPT;
 				myrpt->cmdAction.state = CMD_STATE_READY;
 			} else {
@@ -7154,7 +7156,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			int j, k;
 			char string[100];
 
-			if (sscanf(myrpt->p.lconn[i], "GPIO%d=%d", &j, &k) == 2) {
+			if (sscanf(myrpt->p.lconn[i], "GPIO%d=%d", &j, &k) == 2 ||
+				sscanf(myrpt->p.lconn[i], "GPIO%d:%d", &j, &k) == 2) {
 				sprintf(string, "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else if (sscanf(myrpt->p.lconn[i], "PP%d=%d", &j, &k) == 2) {
@@ -7906,7 +7909,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			int j, k;
 			char string[100];
 
-			if (sscanf(myrpt->p.ldisc[i], "GPIO%d=%d", &j, &k) == 2) {
+			if (sscanf(myrpt->p.ldisc[i], "GPIO%d=%d", &j, &k) == 2 ||
+				sscanf(myrpt->p.ldisc[i], "GPIO%d:%d", &j, &k) == 2) {
 				sprintf(string, "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else if (sscanf(myrpt->p.ldisc[i], "PP%d=%d", &j, &k) == 2) {
