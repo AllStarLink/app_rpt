@@ -759,11 +759,13 @@ static void kickptt(struct chan_usbradio_pvt *o)
 {
 	char c = 0;
 	int res;
-	//printf("kickptt  %i  %i  %i\n",o->txkeyed,o->txchankey,o->txtestkey);
-	if (!o)
+
+	if (!o) {
 		return;
-	if (!o->pttkick)
+	}
+	if (o->pttkick[1] < 1) {
 		return;
+	}
 	res = write(o->pttkick[1], &c, 1);
 	if (res <= 0) {
 		ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
