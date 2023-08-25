@@ -763,7 +763,7 @@ static void kickptt(struct chan_usbradio_pvt *o)
 	if (!o) {
 		return;
 	}
-	if (o->pttkick[1] < 1) {
+	if (o->pttkick[1] == -1) {
 		return;
 	}
 	res = write(o->pttkick[1], &c, 1);
