@@ -724,12 +724,15 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 */
 static void kickptt(struct chan_simpleusb_pvt *o)
 {
-	int res;
 	char c = 0;
-	if (!o)
+	int res;
+
+	if (!o) {
 		return;
-	if (!o->pttkick)
+	}
+	if (o->pttkick[1] == -1) {
 		return;
+	}
 	res = write(o->pttkick[1], &c, 1);
 	if (res <= 0) {
 		ast_log(LOG_ERROR, "write failed: %s\n", strerror(errno));
