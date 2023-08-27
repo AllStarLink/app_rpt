@@ -4286,7 +4286,7 @@ static void *rpt(void *this)
 
 			myrpt->linkposttimer = LINKPOSTTIME;
 			nstr = 0;
-			for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+			for (l = myrpt->links.next; l && l != &myrpt->links; l = l->next) {
 				/* if is not a real link, ignore it */
 				if (l->name[0] == '0')
 					continue;
@@ -4299,7 +4299,7 @@ static void *rpt(void *this)
 			}
 			nstr = 0;
 			strcpy(str, "nodes=");
-			for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+			for (l = myrpt->links.next; l && l != &myrpt->links; l = l->next) {
 				/* if is not a real link, ignore it */
 				if (l->name[0] == '0')
 					continue;

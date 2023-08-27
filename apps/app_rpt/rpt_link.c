@@ -390,7 +390,7 @@ void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int fla
 	if (myrpt->remote)
 		return;
 	/* go thru all links */
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+	for (l = myrpt->links.next; l && l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0')
 			continue;
@@ -440,7 +440,7 @@ void __kickshort(struct rpt *myrpt)
 {
 	struct rpt_link *l;
 
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+	for (l = myrpt->links.next; l && l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0')
 			continue;
