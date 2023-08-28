@@ -2695,11 +2695,9 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	{
 		//if(pChan->prxDebug)memset((void *)pChan->prxDebug,0,pChan->nSamplesRx*XPMR_DEBUG_CHANS*2);
 		if(pChan->ptxDebug)memset((void *)pChan->ptxDebug,0,pChan->nSamplesRx*XPMR_DEBUG_CHANS*2);
-		if(pChan->sdbg->buffer)
-		{
-			memset((void *)pChan->sdbg->buffer,0,pChan->nSamplesRx*XPMR_DEBUG_CHANS*2);
-			pChan->prxDebug=pChan->sdbg->buffer;
-		}
+
+		memset((void *)pChan->sdbg->buffer,0,pChan->nSamplesRx*XPMR_DEBUG_CHANS*2);
+		pChan->prxDebug=pChan->sdbg->buffer;
 	}
 	#endif
 

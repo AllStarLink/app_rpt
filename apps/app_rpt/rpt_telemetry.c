@@ -2231,7 +2231,7 @@ treataslocal:
 		break;
 	case LASTNODEKEY:			/* Identify last node which keyed us up */
 		rpt_mutex_lock(&myrpt->lock);
-		if (myrpt->lastnodewhichkeyedusup) {
+		if (!ast_strlen_zero(myrpt->lastnodewhichkeyedusup)) {
 			p = ast_strdup(myrpt->lastnodewhichkeyedusup);	/* Make a local copy of the node name */
 			if (!p) {
 				imdone = 1;
@@ -2509,7 +2509,7 @@ treataslocal:
 		break;
 	case ARB_ALPHA:
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			if (mytele->param) {
+			if (!ast_strlen_zero(mytele->param)) {
 				saycharstr(mychannel, mytele->param);
 			}
 		}
@@ -2519,7 +2519,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		if (mytele->param) {
+		if (!ast_strlen_zero(mytele->param)) {
 			/* Parts of this section taken from app_parkandannounce */
 			char *tpl_working, *tpl_current;
 			char *tmp[100], *myparm;
