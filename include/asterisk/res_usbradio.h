@@ -22,7 +22,10 @@
 #if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__)
 #define HAVE_SYS_IO
 #else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning "-Wcpp"
 #warning sys.io is not available on this architecture and some functionality will be disabled
+#pragma GCC diagnostic pop
 #endif
 
 #define	MIXER_PARAM_MIC_PLAYBACK_SW "Mic Playback Switch"

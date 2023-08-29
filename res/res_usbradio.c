@@ -436,6 +436,7 @@ int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *
 
 unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport)
 {
+#ifdef HAVE_SYS_IO
 	unsigned char c;
 
 	c = 0;
@@ -449,6 +450,10 @@ unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase,
 		c = inb(pbase + 1);
 	}
 	return (c);
+#else
+	ast_log(LOG_ERROR, "pp IO not supported on this architecture\n");
+	return 0;
+#endif
 }
 
 void ast_radio_ppwrite(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport, unsigned char c)

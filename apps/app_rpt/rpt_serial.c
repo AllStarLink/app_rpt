@@ -386,6 +386,7 @@ static int rbi_pltocode(char *str)
 
 static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 {
+#ifdef HAVE_SYS_IO
 #ifdef __i386__
 	int i, j;
 	unsigned char od, d;
@@ -409,7 +410,8 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 	}
 	/* >= 50 us */
 	for (delayvar = 1; delayvar < 50000; delayvar++);
-#endif
+#endif /* __i386__ */
+#endif /* HAVE_SYS_IO */
 }
 
 static void rbi_out(struct rpt *myrpt, unsigned char *data)
