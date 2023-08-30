@@ -4722,7 +4722,7 @@ static void *rpt(void *this)
 						/* if the write fails report the error one time
 						 * if it is not resolved in 60 seconds kill
 						 * the outstream process
-						*/
+						 */
 						if (res != f1->datalen) {
 							time_t now;
 							if (!myrpt->outstreamlasterror) {
@@ -5595,7 +5595,7 @@ static void *rpt(void *this)
 					/* if the write fails report the error one time
 					 * if it is not resolved in 60 seconds kill
 					 * the outstream process
-					*/
+					 */
 					if (res != f->datalen) {
 						time_t now;
 						if (!myrpt->outstreamlasterror) {
