@@ -1065,6 +1065,10 @@ static void startoutstream(struct rpt *myrpt)
 	if (n < 1) {
 		return;
 	}
+	if (myrpt->outstreampipe[1]) {
+		close(myrpt->outstreampipe[1]);
+		myrpt->outstreamlasterror = 0;
+	}
 	if (pipe(myrpt->outstreampipe) == -1) {
 		ast_log(LOG_ERROR, "pipe() failed: %s\n", strerror(errno));
 		ast_free(str);
@@ -4709,10 +4713,29 @@ static void *rpt(void *this)
 					if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
 						ast_writestream(myrpt->monstream, f1);
 					}
-					if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd && (myrpt->outstreampipe[1] > 0)) {
+					if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd && 
+						(myrpt->outstreampipe[1] > 0)) {
 						int res = write(myrpt->outstreampipe[1], f1->data.ptr, f1->datalen);
+						/* if the write fails report the error one time
+						   if it is not resolved in 60 seconds kill
+						   the outstream process
+						*/
 						if (res != f1->datalen) {
-							ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
+							time_t now;
+							if (!myrpt->outstreamlasterror) {
+								ast_log(LOG_WARNING, "Outstream write failed for node %s: %s\n", myrpt->name, strerror(errno));
+								time(&myrpt->outstreamlasterror);
+							}
+							time(&now);
+							if (myrpt->outstreampid && (now - myrpt->outstreamlasterror) > 59) {
+								kill(myrpt->outstreampid, SIGTERM);
+								myrpt->outstreampid = 0;
+							}
+						} else {
+							if (myrpt->outstreamlasterror) {
+								ast_log(LOG_NOTICE, "Outstream resumed on node %s\n", myrpt->name);
+								myrpt->outstreamlasterror = 0;
+							}
 						}
 					}
 				}
@@ -5563,8 +5586,26 @@ static void *rpt(void *this)
 				if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) && myrpt->p.outstreamcmd
 					&& (myrpt->outstreampipe[1] > 0)) {
 					int res = write(myrpt->outstreampipe[1], f->data.ptr, f->datalen);
+					/* if the write fails report the error one time
+					   if it is not resolved in 60 seconds kill
+					   the outstream process
+					*/
 					if (res != f->datalen) {
-						ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
+						time_t now;
+						if (!myrpt->outstreamlasterror) {
+							ast_log(LOG_WARNING, "Outstream write failed on node %s: %s\n", myrpt->name, strerror(errno));
+							time(&myrpt->outstreamlasterror);
+						}
+						time(&now);
+						if (myrpt->outstreampid && (now - myrpt->outstreamlasterror) > 59) {
+							kill(myrpt->outstreampid, SIGTERM);
+							myrpt->outstreampid = 0;
+						}
+					} else {
+						if (myrpt->outstreamlasterror) {
+							ast_log(LOG_NOTICE, "Outstream resumed on node %s\n", myrpt->name);
+							myrpt->outstreamlasterror = 0;
+						}
 					}
 				}
 				fs = ast_frdup(f);

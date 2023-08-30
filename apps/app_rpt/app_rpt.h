@@ -850,6 +850,7 @@ struct rpt {
 	time_t lastgpstime;
 	int outstreampipe[2];
 	int outstreampid;
+	time_t outstreamlasterror;
 	struct ast_channel *remote_webtransceiver;
 	struct timeval lastdtmftime;
 #ifdef NATIVE_DSP
