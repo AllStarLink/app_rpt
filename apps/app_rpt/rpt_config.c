@@ -652,6 +652,8 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].tele.prev = &rpt_vars[n].tele;
 		rpt_vars[n].rpt_thread = AST_PTHREADT_NULL;
 		rpt_vars[n].tailmessagen = 0;
+		rpt_vars[n].outstreampipe[0] = -1;
+		rpt_vars[n].outstreampipe[1] = -1;
 	}
 #ifdef	__RPT_NOTCH
 	/* zot out filters stuff */
