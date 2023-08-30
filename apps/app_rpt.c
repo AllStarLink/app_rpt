@@ -1065,8 +1065,9 @@ static void startoutstream(struct rpt *myrpt)
 	if (n < 1) {
 		return;
 	}
-	if (myrpt->outstreampipe[1]) {
+	if (myrpt->outstreampipe[1] != -1) {
 		close(myrpt->outstreampipe[1]);
+		myrpt->outstreampipe[1] = -1;
 		myrpt->outstreamlasterror = 0;
 	}
 	if (pipe(myrpt->outstreampipe) == -1) {
@@ -1099,9 +1100,11 @@ static void startoutstream(struct rpt *myrpt)
 	}
 	ast_free(str);
 	close(myrpt->outstreampipe[0]);
+	myrpt->outstreampipe[0] = -1;
 	if (myrpt->outstreampid == -1) {
 		ast_log(LOG_ERROR, "fork() failed: %s\n", strerror(errno));
 		close(myrpt->outstreampipe[1]);
+		myrpt->outstreampipe[1] = -1;
 	}
 }
 
@@ -4714,11 +4717,11 @@ static void *rpt(void *this)
 						ast_writestream(myrpt->monstream, f1);
 					}
 					if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd && 
-						(myrpt->outstreampipe[1] > 0)) {
+						(myrpt->outstreampipe[1] != -1)) {
 						int res = write(myrpt->outstreampipe[1], f1->data.ptr, f1->datalen);
 						/* if the write fails report the error one time
-						   if it is not resolved in 60 seconds kill
-						   the outstream process
+						 * if it is not resolved in 60 seconds kill
+						 * the outstream process
 						*/
 						if (res != f1->datalen) {
 							time_t now;
@@ -4728,7 +4731,10 @@ static void *rpt(void *this)
 							}
 							time(&now);
 							if (myrpt->outstreampid && (now - myrpt->outstreamlasterror) > 59) {
-								kill(myrpt->outstreampid, SIGTERM);
+								res = kill(myrpt->outstreampid, SIGTERM);
+								if (res) {
+									ast_log(LOG_ERROR, "Cannot kill outstream process for node %s: %s\n", myrpt->name, strerror(errno));
+								}
 								myrpt->outstreampid = 0;
 							}
 						} else {
@@ -5584,11 +5590,11 @@ static void *rpt(void *this)
 						ast_writestream(myrpt->monstream, f);
 				}
 				if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) && myrpt->p.outstreamcmd
-					&& (myrpt->outstreampipe[1] > 0)) {
+					&& (myrpt->outstreampipe[1] != -1)) {
 					int res = write(myrpt->outstreampipe[1], f->data.ptr, f->datalen);
 					/* if the write fails report the error one time
-					   if it is not resolved in 60 seconds kill
-					   the outstream process
+					 * if it is not resolved in 60 seconds kill
+					 * the outstream process
 					*/
 					if (res != f->datalen) {
 						time_t now;
@@ -5598,7 +5604,10 @@ static void *rpt(void *this)
 						}
 						time(&now);
 						if (myrpt->outstreampid && (now - myrpt->outstreamlasterror) > 59) {
-							kill(myrpt->outstreampid, SIGTERM);
+							res = kill(myrpt->outstreampid, SIGTERM);
+							if (res) {
+								ast_log(LOG_ERROR, "Cannot kill outstream process for node %s: %s\n", myrpt->name, strerror(errno));
+							}
 							myrpt->outstreampid = 0;
 						}
 					} else {

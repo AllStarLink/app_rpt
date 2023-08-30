@@ -850,7 +850,7 @@ struct rpt {
 	time_t lastgpstime;
 	int outstreampipe[2];
 	int outstreampid;
-	time_t outstreamlasterror;
+	time_t outstreamlasterror;	/*!< \brief set when there is an outstream error and is reset when error cleared */
 	struct ast_channel *remote_webtransceiver;
 	struct timeval lastdtmftime;
 #ifdef NATIVE_DSP
