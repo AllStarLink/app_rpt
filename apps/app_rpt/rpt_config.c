@@ -346,13 +346,13 @@ int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
  * \retval -1 			if not successful
  * \retval 0 			if successful
  */
-static int node_lookup_bydns(char *node, char *nodedata, size_t nodedatalength)
+static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatalength)
 {
 	struct ast_dns_result *result;
 	const struct ast_dns_record *record;
 	struct ast_vector_string *txtrecords;
 
-	char domain[50];
+	char domain[256];
 	char tmp[100];
 	int txtcount = 0;
 
