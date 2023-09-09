@@ -37,9 +37,9 @@ static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 
 AST_MUTEX_DEFINE_STATIC(nodelookuplock);
 
-int retrieve_astcfgint(struct rpt *myrpt, char *category, char *name, int min, int max, int defl)
+int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name, int min, int max, int defl)
 {
-	char *var;
+	const char *var;
 	int ret;
 	char include_zero = 0;
 
@@ -48,17 +48,21 @@ int retrieve_astcfgint(struct rpt *myrpt, char *category, char *name, int min, i
 		include_zero = 1;
 	}
 
-	var = (char *) ast_variable_retrieve(myrpt->cfg, category, name);
+	var = ast_variable_retrieve(myrpt->cfg, category, name);
 	if (var) {
 		ret = myatoi(var);
-		if (include_zero && !ret)
+		if (include_zero && !ret) {
 			return 0;
-		if (ret < min)
+		}
+		if (ret < min) {
 			ret = min;
-		if (ret > max)
+		}
+		if (ret > max) {
 			ret = max;
-	} else
+		}
+	} else {
 		ret = defl;
+	}
 	return ret;
 }
 
@@ -618,7 +622,7 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 
 void load_rpt_vars(int n, int init)
 {
-	char *this, *val;
+	const char *cat, *val;
 	int i, j, longestnode;
 	struct ast_variable *vp;
 	struct ast_config *cfg;
@@ -631,8 +635,9 @@ void load_rpt_vars(int n, int init)
 
 	ast_verb(3, "%s config for repeater %s\n", (init) ? "Loading initial" : "Re-Loading", rpt_vars[n].name);
 	ast_mutex_lock(&rpt_vars[n].lock);
-	if (rpt_vars[n].cfg)
+	if (rpt_vars[n].cfg) {
 		ast_config_destroy(rpt_vars[n].cfg);
+	}
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
 		ast_mutex_unlock(&rpt_vars[n].lock);
@@ -640,7 +645,7 @@ void load_rpt_vars(int n, int init)
 		pthread_exit(NULL);
 	}
 	rpt_vars[n].cfg = cfg;
-	this = rpt_vars[n].name;
+	cat = rpt_vars[n].name;
 	memset(&rpt_vars[n].p, 0, sizeof(rpt_vars[n].p));
 	if (init) {
 		char *cp;
@@ -659,375 +664,263 @@ void load_rpt_vars(int n, int init)
 	/* zot out filters stuff */
 	memset(&rpt_vars[n].filters, 0, sizeof(rpt_vars[n].filters));
 #endif
-	val = (char *) ast_variable_retrieve(cfg, this, "context");
-	if (val)
-		rpt_vars[n].p.ourcontext = val;
-	else
-		rpt_vars[n].p.ourcontext = this;
-	val = (char *) ast_variable_retrieve(cfg, this, "callerid");
-	if (val)
-		rpt_vars[n].p.ourcallerid = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "accountcode");
-	if (val)
-		rpt_vars[n].p.acctcode = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "idrecording");
-	if (val)
-		rpt_vars[n].p.ident = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "hangtime");
-	if (val)
-		rpt_vars[n].p.hangtime = atoi(val);
-	else
+
+#define RPT_CONFIG_VAR(var, name) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (val) { \
+		rpt_vars[n].p.var = val; \
+	}
+
+#define RPT_CONFIG_VAR_DEFAULT(var, name, default) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (val) { \
+		rpt_vars[n].p.var = val; \
+	} else { \
+		rpt_vars[n].p.var = default; \
+	}
+
+#define RPT_CONFIG_VAR_COND_DEFAULT(var, name, cond, default) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (val) { \
+		rpt_vars[n].p.var = val; \
+	} else if ((cond)) { \
+		rpt_vars[n].p.var = default; \
+	}
+
+#define RPT_CONFIG_VAR_CHAR_DEFAULT(var, name, default) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (val) { \
+		rpt_vars[n].p.var = *val; \
+	} else { \
+		rpt_vars[n].p.var = default; \
+	}
+
+#define RPT_CONFIG_VAR_INT(var, name) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (!ast_strlen_zero(val)) { \
+		rpt_vars[n].p.var = atoi(val); \
+	}
+
+#define RPT_CONFIG_VAR_INT_DEFAULT(var, name, default) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (!ast_strlen_zero(val)) { \
+		rpt_vars[n].p.var = atoi(val); \
+	} else { \
+		rpt_vars[n].p.var = default; \
+	}
+
+#define RPT_CONFIG_VAR_BOOL(var, name) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (!ast_strlen_zero(val)) { \
+		rpt_vars[n].p.var = ast_true(val); \
+	}
+
+#define RPT_CONFIG_VAR_BOOL_DEFAULT(var, name, default) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (!ast_strlen_zero(val)) { \
+		rpt_vars[n].p.var = ast_true(val); \
+	} else { \
+		rpt_vars[n].p.var = default; \
+	}
+
+	RPT_CONFIG_VAR(ourcontext, "context");
+	if (!val) {
+		rpt_vars[n].p.ourcontext = cat;
+	}
+
+	RPT_CONFIG_VAR(ourcallerid, "callerid");
+	RPT_CONFIG_VAR(acctcode, "accountcode");
+	RPT_CONFIG_VAR(ident, "idrecording");
+
+	RPT_CONFIG_VAR_INT(hangtime, "hangtime");
+	if (!val) {
 		rpt_vars[n].p.hangtime = (ISRANGER(rpt_vars[n].name) ? 1 : HANGTIME);
-	if (rpt_vars[n].p.hangtime < 1)
+	}
+	if (rpt_vars[n].p.hangtime < 1) {
 		rpt_vars[n].p.hangtime = 1;
-	val = (char *) ast_variable_retrieve(cfg, this, "althangtime");
-	if (val)
-		rpt_vars[n].p.althangtime = atoi(val);
-	else
+	}
+
+	RPT_CONFIG_VAR_INT(althangtime, "althangtime");
+	if (!val) {
 		rpt_vars[n].p.althangtime = (ISRANGER(rpt_vars[n].name) ? 1 : HANGTIME);
-	if (rpt_vars[n].p.althangtime < 1)
+	}
+	if (rpt_vars[n].p.althangtime < 1) {
 		rpt_vars[n].p.althangtime = 1;
-	val = (char *) ast_variable_retrieve(cfg, this, "totime");
-	if (val)
-		rpt_vars[n].p.totime = atoi(val);
-	else
-		rpt_vars[n].p.totime = (ISRANGER(rpt_vars[n].name) ? 9999999 : TOTIME);
-	val = (char *) ast_variable_retrieve(cfg, this, "voxtimeout");
-	if (val)
-		rpt_vars[n].p.voxtimeout_ms = atoi(val);
-	else
-		rpt_vars[n].p.voxtimeout_ms = VOX_TIMEOUT_MS;
-	val = (char *) ast_variable_retrieve(cfg, this, "voxrecover");
-	if (val)
-		rpt_vars[n].p.voxrecover_ms = atoi(val);
-	else
-		rpt_vars[n].p.voxrecover_ms = VOX_RECOVER_MS;
-	val = (char *) ast_variable_retrieve(cfg, this, "simplexpatchdelay");
-	if (val)
-		rpt_vars[n].p.simplexpatchdelay = atoi(val);
-	else
-		rpt_vars[n].p.simplexpatchdelay = SIMPLEX_PATCH_DELAY;
-	val = (char *) ast_variable_retrieve(cfg, this, "simplexphonedelay");
-	if (val)
-		rpt_vars[n].p.simplexphonedelay = atoi(val);
-	else
-		rpt_vars[n].p.simplexphonedelay = SIMPLEX_PHONE_DELAY;
-	val = (char *) ast_variable_retrieve(cfg, this, "statpost_program");
-	if (val)
-		rpt_vars[n].p.statpost_program = val;
-	else
-		rpt_vars[n].p.statpost_program = STATPOST_PROGRAM;
-	rpt_vars[n].p.statpost_url = (char *) ast_variable_retrieve(cfg, this, "statpost_url");
-	rpt_vars[n].p.tailmessagetime = retrieve_astcfgint(&rpt_vars[n], this, "tailmessagetime", 0, 200000000, 0);
-	rpt_vars[n].p.tailsquashedtime = retrieve_astcfgint(&rpt_vars[n], this, "tailsquashedtime", 0, 200000000, 0);
-	rpt_vars[n].p.duplex = retrieve_astcfgint(&rpt_vars[n], this, "duplex", 0, 4, (ISRANGER(rpt_vars[n].name) ? 0 : 2));
-	rpt_vars[n].p.idtime = retrieve_astcfgint(&rpt_vars[n], this, "idtime", -60000, 2400000, IDTIME);	/* Enforce a min max including zero */
-	rpt_vars[n].p.politeid = retrieve_astcfgint(&rpt_vars[n], this, "politeid", 30000, 300000, POLITEID);	/* Enforce a min max */
-	j = retrieve_astcfgint(&rpt_vars[n], this, "elke", 0, 40000000, 0);
+	}
+
+	RPT_CONFIG_VAR_INT_DEFAULT(totime, "totime", (ISRANGER(rpt_vars[n].name) ? 9999999 : TOTIME));
+	RPT_CONFIG_VAR_INT_DEFAULT(voxtimeout_ms, "voxtimeout", VOX_TIMEOUT_MS);
+	RPT_CONFIG_VAR_INT_DEFAULT(voxrecover_ms, "voxrecover", VOX_RECOVER_MS);
+	RPT_CONFIG_VAR_INT_DEFAULT(simplexpatchdelay, "simplexpatchdelay", SIMPLEX_PATCH_DELAY);
+	RPT_CONFIG_VAR_INT_DEFAULT(simplexphonedelay, "simplexphonedelay", SIMPLEX_PHONE_DELAY);
+	RPT_CONFIG_VAR_DEFAULT(statpost_program, "statpost_program", STATPOST_PROGRAM);
+	RPT_CONFIG_VAR(statpost_url, "statpost_url");
+
+	rpt_vars[n].p.tailmessagetime = retrieve_astcfgint(&rpt_vars[n], cat, "tailmessagetime", 0, 200000000, 0);
+	rpt_vars[n].p.tailsquashedtime = retrieve_astcfgint(&rpt_vars[n], cat, "tailsquashedtime", 0, 200000000, 0);
+	rpt_vars[n].p.duplex = retrieve_astcfgint(&rpt_vars[n], cat, "duplex", 0, 4, (ISRANGER(rpt_vars[n].name) ? 0 : 2));
+	rpt_vars[n].p.idtime = retrieve_astcfgint(&rpt_vars[n], cat, "idtime", -60000, 2400000, IDTIME);	/* Enforce a min max including zero */
+	rpt_vars[n].p.politeid = retrieve_astcfgint(&rpt_vars[n], cat, "politeid", 30000, 300000, POLITEID);	/* Enforce a min max */
+
+	j = retrieve_astcfgint(&rpt_vars[n], cat, "elke", 0, 40000000, 0);
 	rpt_vars[n].p.elke = j * 1210;
-	val = (char *) ast_variable_retrieve(cfg, this, "tonezone");
-	if (val)
-		rpt_vars[n].p.tonezone = val;
+
+	RPT_CONFIG_VAR(tonezone, "tonezone");
+
 	rpt_vars[n].p.tailmessages[0] = 0;
 	rpt_vars[n].p.tailmessagemax = 0;
-	val = (char *) ast_variable_retrieve(cfg, this, "tailmessagelist");
-	if (val)
-		rpt_vars[n].p.tailmessagemax = finddelim(val, rpt_vars[n].p.tailmessages, 500);
-	rpt_vars[n].p.aprstt = (char *) ast_variable_retrieve(cfg, this, "aprstt");
-	val = (char *) ast_variable_retrieve(cfg, this, "memory");
-	if (!val)
-		val = MEMORY;
-	rpt_vars[n].p.memory = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "morse");
-	if (!val)
-		val = MORSE;
-	rpt_vars[n].p.morse = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "telemetry");
-	if (!val)
-		val = TELEMETRY;
-	rpt_vars[n].p.telemetry = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "macro");
-	if (!val)
-		val = MACRO;
-	rpt_vars[n].p.macro = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "tonemacro");
-	if (!val)
-		val = TONEMACRO;
-	rpt_vars[n].p.tonemacro = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "mdcmacro");
-	if (!val)
-		val = MDCMACRO;
-	rpt_vars[n].p.mdcmacro = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "startup_macro");
-	if (val)
-		rpt_vars[n].p.startupmacro = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "iobase");
+
+	val = ast_variable_retrieve(cfg, cat, "tailmessagelist");
+	if (val) {
+		rpt_vars[n].p.tailmessagemax = finddelim((char*) val, (char**) rpt_vars[n].p.tailmessages, 500); /*! \todo This is illegal, cannot cast the const away */
+	}
+
+	RPT_CONFIG_VAR(aprstt, "aprstt");
+	RPT_CONFIG_VAR_DEFAULT(memory, "memory", MEMORY);
+	RPT_CONFIG_VAR_DEFAULT(morse, "morse", MORSE);
+	RPT_CONFIG_VAR_DEFAULT(telemetry, "telemetry", TELEMETRY);
+	RPT_CONFIG_VAR_DEFAULT(macro, "macro", MACRO);
+	RPT_CONFIG_VAR_DEFAULT(tonemacro, "tonemacro", TONEMACRO);
+	RPT_CONFIG_VAR_DEFAULT(mdcmacro, "mdcmacro", MDCMACRO);
+	RPT_CONFIG_VAR(startupmacro, "startup_macro");
+
+	val = ast_variable_retrieve(cfg, cat, "iobase");
 	/* do not use atoi() here, we need to be able to have
 	   the input specified in hex or decimal so we use
 	   sscanf with a %i */
-	if ((!val) || (sscanf(val, "%i", &rpt_vars[n].p.iobase) != 1))
+	if ((!val) || (sscanf(val, "%i", &rpt_vars[n].p.iobase) != 1)) {
 		rpt_vars[n].p.iobase = DEFAULT_IOBASE;
-	val = (char *) ast_variable_retrieve(cfg, this, "ioport");
-	rpt_vars[n].p.ioport = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "functions");
+	}
+
+	RPT_CONFIG_VAR(ioport, "ioport");
+
+	RPT_CONFIG_VAR(functions, "functions");
 	if (!val) {
-		val = FUNCTIONS;
+		rpt_vars[n].p.functions = FUNCTIONS;
 		rpt_vars[n].p.simple = 1;
 	}
-	rpt_vars[n].p.functions = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "link_functions");
-	if (val)
-		rpt_vars[n].p.link_functions = val;
-	else
-		rpt_vars[n].p.link_functions = rpt_vars[n].p.functions;
-	val = (char *) ast_variable_retrieve(cfg, this, "phone_functions");
-	if (val)
-		rpt_vars[n].p.phone_functions = val;
-	else if (ISRANGER(rpt_vars[n].name))
-		rpt_vars[n].p.phone_functions = rpt_vars[n].p.functions;
-	val = (char *) ast_variable_retrieve(cfg, this, "dphone_functions");
-	if (val)
-		rpt_vars[n].p.dphone_functions = val;
-	else if (ISRANGER(rpt_vars[n].name))
-		rpt_vars[n].p.dphone_functions = rpt_vars[n].p.functions;
-	val = (char *) ast_variable_retrieve(cfg, this, "alt_functions");
-	if (val)
-		rpt_vars[n].p.alt_functions = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "funcchar");
-	if (!val)
-		rpt_vars[n].p.funcchar = FUNCCHAR;
-	else
-		rpt_vars[n].p.funcchar = *val;
-	val = (char *) ast_variable_retrieve(cfg, this, "endchar");
-	if (!val)
-		rpt_vars[n].p.endchar = ENDCHAR;
-	else
-		rpt_vars[n].p.endchar = *val;
-	val = (char *) ast_variable_retrieve(cfg, this, "nobusyout");
-	if (val)
-		rpt_vars[n].p.nobusyout = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "notelemtx");
-	if (val)
-		rpt_vars[n].p.notelemtx = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "propagate_dtmf");
-	if (val)
-		rpt_vars[n].p.propagate_dtmf = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "propagate_phonedtmf");
-	if (val)
-		rpt_vars[n].p.propagate_phonedtmf = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "linktolink");
-	if (val)
-		rpt_vars[n].p.linktolink = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "nodes");
-	if (!val)
-		val = NODES;
-	rpt_vars[n].p.nodes = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "extnodes");
-	if (!val)
-		val = EXTNODES;
-	rpt_vars[n].p.extnodes = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "extnodefile");
-	if (!val)
-		val = EXTNODEFILE;
-	rpt_vars[n].p.extnodefilesn = explode_string(val, rpt_vars[n].p.extnodefiles, MAX_EXTNODEFILES, ',', 0);
-	val = (char *) ast_variable_retrieve(cfg, this, "locallinknodes");
-	if (val)
-		rpt_vars[n].p.locallinknodesn =
-			explode_string(ast_strdup(val), rpt_vars[n].p.locallinknodes, MAX_LOCALLINKNODES, ',', 0);
-	val = (char *) ast_variable_retrieve(cfg, this, "lconn");
-	if (val)
-		rpt_vars[n].p.nlconn = explode_string(strupr(ast_strdup(val)), rpt_vars[n].p.lconn, MAX_LSTUFF, ',', 0);
-	val = (char *) ast_variable_retrieve(cfg, this, "ldisc");
-	if (val)
-		rpt_vars[n].p.nldisc = explode_string(strupr(ast_strdup(val)), rpt_vars[n].p.ldisc, MAX_LSTUFF, ',', 0);
-	val = (char *) ast_variable_retrieve(cfg, this, "patchconnect");
-	rpt_vars[n].p.patchconnect = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "archivedir");
-	if (val)
-		rpt_vars[n].p.archivedir = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "authlevel");
-	if (val)
-		rpt_vars[n].p.authlevel = atoi(val);
-	else
-		rpt_vars[n].p.authlevel = 0;
-	val = (char *) ast_variable_retrieve(cfg, this, "parrot");
-	if (val)
+
+	RPT_CONFIG_VAR_DEFAULT(link_functions, "link_functions", rpt_vars[n].p.functions);
+	RPT_CONFIG_VAR_COND_DEFAULT(phone_functions, "phone_functions", ISRANGER(rpt_vars[n].name), rpt_vars[n].p.functions);
+	RPT_CONFIG_VAR_COND_DEFAULT(dphone_functions, "dphone_functions", ISRANGER(rpt_vars[n].name), rpt_vars[n].p.functions);
+	RPT_CONFIG_VAR(alt_functions, "alt_functions");
+	RPT_CONFIG_VAR_CHAR_DEFAULT(funcchar, "funcchar", FUNCCHAR);
+	RPT_CONFIG_VAR_CHAR_DEFAULT(endchar, "endchar", ENDCHAR);
+	RPT_CONFIG_VAR_BOOL(nobusyout, "nobusyout");
+	RPT_CONFIG_VAR_BOOL(notelemtx, "notelemtx");
+	RPT_CONFIG_VAR_BOOL(propagate_dtmf, "propagate_dtmf");
+	RPT_CONFIG_VAR_BOOL(propagate_phonedtmf, "propagate_phonedtmf");
+	RPT_CONFIG_VAR_BOOL(linktolink, "linktolink");
+	RPT_CONFIG_VAR_DEFAULT(nodes, "nodes", NODES);
+	RPT_CONFIG_VAR_DEFAULT(extnodes, "extnodes", EXTNODES);
+
+	val = ast_variable_retrieve(cfg, cat, "extnodefile");
+	rpt_vars[n].p.extnodefilesn = explode_string((char*) S_OR(val, EXTNODEFILE), (char**) rpt_vars[n].p.extnodefiles, MAX_EXTNODEFILES, ',', 0); /*! \todo Illegal cast */
+
+	/*! \todo Is this memory properly freed? */
+	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
+	if (val) {
+		rpt_vars[n].p.locallinknodesn = explode_string(ast_strdup(val), (char**) rpt_vars[n].p.locallinknodes, MAX_LOCALLINKNODES, ',', 0);
+	}
+
+	val = ast_variable_retrieve(cfg, cat, "lconn");
+	if (val) {
+		rpt_vars[n].p.nlconn = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.lconn, MAX_LSTUFF, ',', 0);
+	}
+
+	val = ast_variable_retrieve(cfg, cat, "ldisc");
+	if (val) {
+		rpt_vars[n].p.nldisc = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.ldisc, MAX_LSTUFF, ',', 0);
+	}
+
+	RPT_CONFIG_VAR(patchconnect, "patchconnect");
+	RPT_CONFIG_VAR(archivedir, "archivedir");
+	RPT_CONFIG_VAR_INT(authlevel, "authlevel");
+
+	val = ast_variable_retrieve(cfg, cat, "parrot");
+	if (val) {
 		rpt_vars[n].p.parrotmode = (ast_true(val)) ? 2 : 0;
-	else
+	} else {
 		rpt_vars[n].p.parrotmode = 0;
-	val = (char *) ast_variable_retrieve(cfg, this, "parrottime");
-	if (val)
-		rpt_vars[n].p.parrottime = atoi(val);
-	else
-		rpt_vars[n].p.parrottime = PARROTTIME;
-	val = (char *) ast_variable_retrieve(cfg, this, "rptnode");
-	rpt_vars[n].p.rptnode = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "mars");
-	if (val)
-		rpt_vars[n].p.remote_mars = atoi(val);
-	else
-		rpt_vars[n].p.remote_mars = 0;
-	val = (char *) ast_variable_retrieve(cfg, this, "monminblocks");
-	if (val)
-		rpt_vars[n].p.monminblocks = atol(val);
-	else
-		rpt_vars[n].p.monminblocks = DEFAULT_MONITOR_MIN_DISK_BLOCKS;
-	val = (char *) ast_variable_retrieve(cfg, this, "remote_inact_timeout");
-	if (val)
-		rpt_vars[n].p.remoteinacttimeout = atoi(val);
-	else
-		rpt_vars[n].p.remoteinacttimeout = DEFAULT_REMOTE_INACT_TIMEOUT;
-	val = (char *) ast_variable_retrieve(cfg, this, "civaddr");
-	if (val)
-		rpt_vars[n].p.civaddr = atoi(val);
-	else
-		rpt_vars[n].p.civaddr = DEFAULT_CIV_ADDR;
-	val = (char *) ast_variable_retrieve(cfg, this, "remote_timeout");
-	if (val)
-		rpt_vars[n].p.remotetimeout = atoi(val);
-	else
-		rpt_vars[n].p.remotetimeout = DEFAULT_REMOTE_TIMEOUT;
-	val = (char *) ast_variable_retrieve(cfg, this, "remote_timeout_warning");
-	if (val)
-		rpt_vars[n].p.remotetimeoutwarning = atoi(val);
-	else
-		rpt_vars[n].p.remotetimeoutwarning = DEFAULT_REMOTE_TIMEOUT_WARNING;
-	val = (char *) ast_variable_retrieve(cfg, this, "remote_timeout_warning_freq");
-	if (val)
-		rpt_vars[n].p.remotetimeoutwarningfreq = atoi(val);
-	else
-		rpt_vars[n].p.remotetimeoutwarningfreq = DEFAULT_REMOTE_TIMEOUT_WARNING_FREQ;
-	val = (char *) ast_variable_retrieve(cfg, this, "erxgain");
-	if (!val)
-		val = DEFAULT_ERXGAIN;
-	rpt_vars[n].p.erxgain = pow(10.0, atof(val) / 20.0);
-	val = (char *) ast_variable_retrieve(cfg, this, "etxgain");
-	if (!val)
-		val = DEFAULT_ETXGAIN;
-	rpt_vars[n].p.etxgain = pow(10.0, atof(val) / 20.0);
-	val = (char *) ast_variable_retrieve(cfg, this, "eannmode");
-	if (val)
-		rpt_vars[n].p.eannmode = atoi(val);
-	else
-		rpt_vars[n].p.eannmode = DEFAULT_EANNMODE;
-	if (rpt_vars[n].p.eannmode < 0)
+	}
+
+	RPT_CONFIG_VAR_INT_DEFAULT(parrottime, "parrottime", PARROTTIME);
+	RPT_CONFIG_VAR(rptnode, "rptnode");
+	RPT_CONFIG_VAR_INT(remote_mars, "mars");
+	RPT_CONFIG_VAR_INT_DEFAULT(monminblocks, "monminblocks", DEFAULT_MONITOR_MIN_DISK_BLOCKS);
+	RPT_CONFIG_VAR_INT_DEFAULT(remoteinacttimeout, "remote_inact_timeout", DEFAULT_REMOTE_INACT_TIMEOUT);
+	RPT_CONFIG_VAR_INT_DEFAULT(civaddr, "civaddr", DEFAULT_CIV_ADDR);
+	RPT_CONFIG_VAR_INT_DEFAULT(remotetimeout, "remote_timeout", DEFAULT_REMOTE_TIMEOUT);
+	RPT_CONFIG_VAR_INT_DEFAULT(remotetimeoutwarning, "remote_timeout_warning", DEFAULT_REMOTE_TIMEOUT_WARNING);
+	RPT_CONFIG_VAR_INT_DEFAULT(remotetimeoutwarningfreq, "remote_timeout_warning_freq", DEFAULT_REMOTE_TIMEOUT_WARNING_FREQ);
+
+	val = ast_variable_retrieve(cfg, cat, "erxgain");
+	rpt_vars[n].p.erxgain = pow(10.0, atof(S_OR(val, DEFAULT_ERXGAIN)) / 20.0);
+
+	val = ast_variable_retrieve(cfg, cat, "etxgain");
+	rpt_vars[n].p.etxgain = pow(10.0, atof(S_OR(val, DEFAULT_ETXGAIN)) / 20.0);
+
+	RPT_CONFIG_VAR_INT_DEFAULT(eannmode, "eannmode", DEFAULT_EANNMODE);
+	if (rpt_vars[n].p.eannmode < 0) {
 		rpt_vars[n].p.eannmode = 0;
-	if (rpt_vars[n].p.eannmode > 3)
+	} else if (rpt_vars[n].p.eannmode > 3) {
 		rpt_vars[n].p.eannmode = 3;
-	val = (char *) ast_variable_retrieve(cfg, this, "trxgain");
-	if (!val)
-		val = DEFAULT_TRXGAIN;
-	rpt_vars[n].p.trxgain = pow(10.0, atof(val) / 20.0);
-	val = (char *) ast_variable_retrieve(cfg, this, "ttxgain");
-	if (!val)
-		val = DEFAULT_TTXGAIN;
-	rpt_vars[n].p.ttxgain = pow(10.0, atof(val) / 20.0);
-	val = (char *) ast_variable_retrieve(cfg, this, "tannmode");
-	if (val)
-		rpt_vars[n].p.tannmode = atoi(val);
-	else
-		rpt_vars[n].p.tannmode = DEFAULT_TANNMODE;
-	if (rpt_vars[n].p.tannmode < 1)
+	}
+
+	val = ast_variable_retrieve(cfg, cat, "trxgain");
+	rpt_vars[n].p.trxgain = pow(10.0, atof(S_OR(val, DEFAULT_TRXGAIN)) / 20.0);
+
+	val = ast_variable_retrieve(cfg, cat, "ttxgain");
+	rpt_vars[n].p.ttxgain = pow(10.0, atof(S_OR(val, DEFAULT_TTXGAIN)) / 20.0);
+
+	RPT_CONFIG_VAR_INT_DEFAULT(tannmode, "tannmode", DEFAULT_TANNMODE);
+	if (rpt_vars[n].p.tannmode < 1) {
 		rpt_vars[n].p.tannmode = 1;
-	if (rpt_vars[n].p.tannmode > 3)
+	} else if (rpt_vars[n].p.tannmode > 3) {
 		rpt_vars[n].p.tannmode = 3;
-	val = (char *) ast_variable_retrieve(cfg, this, "linkmongain");
-	if (!val)
-		val = DEFAULT_LINKMONGAIN;
-	rpt_vars[n].p.linkmongain = pow(10.0, atof(val) / 20.0);
-	val = (char *) ast_variable_retrieve(cfg, this, "discpgm");
-	rpt_vars[n].p.discpgm = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "connpgm");
-	rpt_vars[n].p.connpgm = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "mdclog");
-	rpt_vars[n].p.mdclog = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "lnkactenable");
-	if (val)
-		rpt_vars[n].p.lnkactenable = ast_true(val);
-	else
-		rpt_vars[n].p.lnkactenable = 0;
-	rpt_vars[n].p.lnkacttime = retrieve_astcfgint(&rpt_vars[n], this, "lnkacttime", -120, 90000, 0);	/* Enforce a min max including zero */
-	val = (char *) ast_variable_retrieve(cfg, this, "lnkactmacro");
-	rpt_vars[n].p.lnkactmacro = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "lnkacttimerwarn");
-	rpt_vars[n].p.lnkacttimerwarn = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "nolocallinkct");
-	rpt_vars[n].p.nolocallinkct = ast_true(val);
-	rpt_vars[n].p.rptinacttime = retrieve_astcfgint(&rpt_vars[n], this, "rptinacttime", -120, 90000, 0);	/* Enforce a min max including zero */
-	val = (char *) ast_variable_retrieve(cfg, this, "rptinactmacro");
-	rpt_vars[n].p.rptinactmacro = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "nounkeyct");
-	rpt_vars[n].p.nounkeyct = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "holdofftelem");
-	rpt_vars[n].p.holdofftelem = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "beaconing");
-	rpt_vars[n].p.beaconing = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "rxburstfreq");
-	if (val)
-		rpt_vars[n].p.rxburstfreq = atoi(val);
-	else
-		rpt_vars[n].p.rxburstfreq = 0;
-	val = (char *) ast_variable_retrieve(cfg, this, "rxbursttime");
-	if (val)
-		rpt_vars[n].p.rxbursttime = atoi(val);
-	else
-		rpt_vars[n].p.rxbursttime = DEFAULT_RXBURST_TIME;
-	val = (char *) ast_variable_retrieve(cfg, this, "rxburstthreshold");
-	if (val)
-		rpt_vars[n].p.rxburstthreshold = atoi(val);
-	else
-		rpt_vars[n].p.rxburstthreshold = DEFAULT_RXBURST_THRESHOLD;
-	val = (char *) ast_variable_retrieve(cfg, this, "litztime");
-	if (val)
-		rpt_vars[n].p.litztime = atoi(val);
-	else
-		rpt_vars[n].p.litztime = DEFAULT_LITZ_TIME;
-	val = (char *) ast_variable_retrieve(cfg, this, "litzchar");
-	if (!val)
-		val = DEFAULT_LITZ_CHAR;
-	rpt_vars[n].p.litzchar = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "litzcmd");
-	rpt_vars[n].p.litzcmd = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "itxctcss");
-	if (val)
-		rpt_vars[n].p.itxctcss = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "gpsfeet");
-	if (val)
-		rpt_vars[n].p.gpsfeet = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "split2m");
-	if (val)
-		rpt_vars[n].p.default_split_2m = atoi(val);
-	else
-		rpt_vars[n].p.default_split_2m = DEFAULT_SPLIT_2M;
-	val = (char *) ast_variable_retrieve(cfg, this, "split70cm");
-	if (val)
-		rpt_vars[n].p.default_split_70cm = atoi(val);
-	else
-		rpt_vars[n].p.default_split_70cm = DEFAULT_SPLIT_70CM;
-	val = (char *) ast_variable_retrieve(cfg, this, "dtmfkey");
-	if (val)
-		rpt_vars[n].p.dtmfkey = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "dtmfkeys");
-	if (!val)
-		val = DTMFKEYS;
-	rpt_vars[n].p.dtmfkeys = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "outstreamcmd");
-	rpt_vars[n].p.outstreamcmd = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "eloutbound");
-	rpt_vars[n].p.eloutbound = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "events");
-	if (!val)
-		val = "events";
-	rpt_vars[n].p.events = val;
-	val = (char *) ast_variable_retrieve(cfg, this, "timezone");
-	rpt_vars[n].p.timezone = val;
+	}
+
+	val = ast_variable_retrieve(cfg, cat, "linkmongain");
+	rpt_vars[n].p.linkmongain = pow(10.0, atof(S_OR(val, DEFAULT_LINKMONGAIN)) / 20.0);
+
+	RPT_CONFIG_VAR(discpgm, "discpgm");
+	RPT_CONFIG_VAR(mdclog, "mdclog");
+	RPT_CONFIG_VAR_BOOL(lnkactenable, "lnkactenable");
+
+	rpt_vars[n].p.lnkacttime = retrieve_astcfgint(&rpt_vars[n], cat, "lnkacttime", -120, 90000, 0);	/* Enforce a min max including zero */
+
+	RPT_CONFIG_VAR(lnkactmacro, "lnkactmacro");
+	RPT_CONFIG_VAR_BOOL(nolocallinkct, "nolocallinkct");
+
+	rpt_vars[n].p.rptinacttime = retrieve_astcfgint(&rpt_vars[n], cat, "rptinacttime", -120, 90000, 0);	/* Enforce a min max including zero */
+
+	RPT_CONFIG_VAR(rptinactmacro, "rptinactmacro");
+	RPT_CONFIG_VAR_BOOL(nounkeyct, "nounkeyct");
+	RPT_CONFIG_VAR_BOOL(holdofftelem, "holdofftelem");
+	RPT_CONFIG_VAR_BOOL(beaconing, "beaconing");
+	RPT_CONFIG_VAR_INT(rxburstfreq, "rxburstfreq");
+	RPT_CONFIG_VAR_INT_DEFAULT(rxbursttime, "rxbursttime", DEFAULT_RXBURST_TIME);
+	RPT_CONFIG_VAR_INT_DEFAULT(rxburstthreshold, "rxburstthreshold", DEFAULT_RXBURST_THRESHOLD);
+	RPT_CONFIG_VAR_INT_DEFAULT(litztime, "litztime", DEFAULT_LITZ_TIME);
+	RPT_CONFIG_VAR_DEFAULT(litzchar, "litzchar", DEFAULT_LITZ_CHAR);
+	RPT_CONFIG_VAR(litzcmd, "litzcmd");
+	RPT_CONFIG_VAR_BOOL(itxctcss, "itxctcss");
+	RPT_CONFIG_VAR_BOOL(gpsfeet, "gpsfeet");
+	RPT_CONFIG_VAR_INT_DEFAULT(default_split_2m, "split2m", DEFAULT_SPLIT_2M);
+	RPT_CONFIG_VAR_INT_DEFAULT(default_split_70cm, "split70cm", DEFAULT_SPLIT_70CM);
+	RPT_CONFIG_VAR_BOOL(dtmfkey, "dtmfkey");
+	RPT_CONFIG_VAR(dtmfkeys, "dtmfkeys");
+	RPT_CONFIG_VAR(outstreamcmd, "outstreamcmd");
+	RPT_CONFIG_VAR(eloutbound, "eloutbound");
+	RPT_CONFIG_VAR_DEFAULT(events, "events", "events");
+	RPT_CONFIG_VAR(timezone, "timezone");
 
 #ifdef	__RPT_NOTCH
-	val = (char *) ast_variable_retrieve(cfg, this, "rxnotch");
+	val = ast_variable_retrieve(cfg, this, "rxnotch");
 	if (val) {
-		i = finddelim(val, strs, MAXFILTERS * 2);
+		i = finddelim((char*) val, strs, MAXFILTERS * 2); /*! \todo Illegal cast away of const */
 		i &= ~1;				/* force an even number, rounded down */
-		if (i >= 2)
+		if (i >= 2) {
 			for (j = 0; j < i; j += 2) {
 				rpt_mknotch(atof(strs[j]), atof(strs[j + 1]),
 							&rpt_vars[n].filters[j >> 1].gain,
@@ -1035,161 +928,99 @@ void load_rpt_vars(int n, int init)
 							&rpt_vars[n].filters[j >> 1].const2);
 				sprintf(rpt_vars[n].filters[j >> 1].desc, "%s Hz, BW = %s", strs[j], strs[j + 1]);
 			}
-
+		}
 	}
 #endif
-	val = (char *) ast_variable_retrieve(cfg, this, "votertype");
-	if (!val)
-		val = "0";
-	rpt_vars[n].p.votertype = atoi(val);
 
-	val = (char *) ast_variable_retrieve(cfg, this, "votermode");
-	if (!val)
-		val = "0";
-	rpt_vars[n].p.votermode = atoi(val);
+	RPT_CONFIG_VAR_INT(votertype, "votertype");
+	RPT_CONFIG_VAR_INT_DEFAULT(votermargin, "votermargin", 10);
+	RPT_CONFIG_VAR_INT(votertype, "votertype");
 
-	val = (char *) ast_variable_retrieve(cfg, this, "votermargin");
-	if (!val)
-		val = "10";
-	rpt_vars[n].p.votermargin = atoi(val);
+	val = ast_variable_retrieve(cfg, cat, "telemnomdb");
+	rpt_vars[n].p.telemnomgain = pow(10.0, atof(S_OR(val, "0")) / 20.0);
 
-	val = (char *) ast_variable_retrieve(cfg, this, "telemnomdb");
-	if (!val)
-		val = "0";
-	rpt_vars[n].p.telemnomgain = pow(10.0, atof(val) / 20.0);
-	val = (char *) ast_variable_retrieve(cfg, this, "telemduckdb");
-	if (!val)
-		val = DEFAULT_TELEMDUCKDB;
-	rpt_vars[n].p.telemduckgain = pow(10.0, atof(val) / 20.0);
-	val = (char *) ast_variable_retrieve(cfg, this, "telemdefault");
-	if (val)
-		rpt_vars[n].p.telemdefault = atoi(val);
-	else
-		rpt_vars[n].p.telemdefault = DEFAULT_RPT_TELEMDEFAULT;
-	val = (char *) ast_variable_retrieve(cfg, this, "telemdynamic");
-	if (val)
-		rpt_vars[n].p.telemdynamic = ast_true(val);
-	else
-		rpt_vars[n].p.telemdynamic = DEFAULT_RPT_TELEMDYNAMIC;
-	if (!rpt_vars[n].p.telemdefault)
+	val = ast_variable_retrieve(cfg, cat, "telemduckdb");
+	rpt_vars[n].p.telemduckgain = pow(10.0, atof(S_OR(val, DEFAULT_TELEMDUCKDB)) / 20.0);
+
+	RPT_CONFIG_VAR_INT_DEFAULT(telemdefault, "telemdefault", DEFAULT_RPT_TELEMDEFAULT);
+	RPT_CONFIG_VAR_INT_DEFAULT(telemdynamic, "telemdynamic", DEFAULT_RPT_TELEMDYNAMIC);
+
+	if (!rpt_vars[n].p.telemdefault) {
 		rpt_vars[n].telemmode = 0;
-	else if (rpt_vars[n].p.telemdefault == 2)
+	} else if (rpt_vars[n].p.telemdefault == 2) {
 		rpt_vars[n].telemmode = 1;
-	else
+	} else {
 		rpt_vars[n].telemmode = 0x7fffffff;
-
-	val = (char *) ast_variable_retrieve(cfg, this, "guilinkdefault");
-	if (val)
-		rpt_vars[n].p.linkmode[LINKMODE_GUI] = atoi(val);
-	else
-		rpt_vars[n].p.linkmode[LINKMODE_GUI] = DEFAULT_GUI_LINK_MODE;
-	val = (char *) ast_variable_retrieve(cfg, this, "guilinkdynamic");
-	if (val)
-		rpt_vars[n].p.linkmodedynamic[LINKMODE_GUI] = ast_true(val);
-	else
-		rpt_vars[n].p.linkmodedynamic[LINKMODE_GUI] = DEFAULT_GUI_LINK_MODE_DYNAMIC;
-
-	val = (char *) ast_variable_retrieve(cfg, this, "phonelinkdefault");
-	if (val)
-		rpt_vars[n].p.linkmode[LINKMODE_PHONE] = atoi(val);
-	else
-		rpt_vars[n].p.linkmode[LINKMODE_PHONE] = DEFAULT_PHONE_LINK_MODE;
-	val = (char *) ast_variable_retrieve(cfg, this, "phonelinkdynamic");
-	if (val)
-		rpt_vars[n].p.linkmodedynamic[LINKMODE_PHONE] = ast_true(val);
-	else
-		rpt_vars[n].p.linkmodedynamic[LINKMODE_PHONE] = DEFAULT_PHONE_LINK_MODE_DYNAMIC;
-
-	val = (char *) ast_variable_retrieve(cfg, this, "echolinkdefault");
-	if (val)
-		rpt_vars[n].p.linkmode[LINKMODE_ECHOLINK] = atoi(val);
-	else
-		rpt_vars[n].p.linkmode[LINKMODE_ECHOLINK] = DEFAULT_ECHOLINK_LINK_MODE;
-	val = (char *) ast_variable_retrieve(cfg, this, "echolinkdynamic");
-	if (val)
-		rpt_vars[n].p.linkmodedynamic[LINKMODE_ECHOLINK] = ast_true(val);
-	else
-		rpt_vars[n].p.linkmodedynamic[LINKMODE_ECHOLINK] = DEFAULT_ECHOLINK_LINK_MODE_DYNAMIC;
-
-	val = (char *) ast_variable_retrieve(cfg, this, "tlbdefault");
-	if (val)
-		rpt_vars[n].p.linkmode[LINKMODE_TLB] = atoi(val);
-	else
-		rpt_vars[n].p.linkmode[LINKMODE_TLB] = DEFAULT_TLB_LINK_MODE;
-	val = (char *) ast_variable_retrieve(cfg, this, "tlbdynamic");
-	if (val)
-		rpt_vars[n].p.linkmodedynamic[LINKMODE_TLB] = ast_true(val);
-	else
-		rpt_vars[n].p.linkmodedynamic[LINKMODE_TLB] = DEFAULT_TLB_LINK_MODE_DYNAMIC;
-
-	val = (char *) ast_variable_retrieve(cfg, this, "locallist");
-	if (val) {
-		memset(rpt_vars[n].p.locallist, 0, sizeof(rpt_vars[n].p.locallist));
-		rpt_vars[n].p.nlocallist = finddelim(val, rpt_vars[n].p.locallist, 16);
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, this, "ctgroup");
+	RPT_CONFIG_VAR_INT_DEFAULT(linkmode[LINKMODE_GUI], "guilinkdefault", DEFAULT_GUI_LINK_MODE);
+	RPT_CONFIG_VAR_BOOL_DEFAULT(linkmodedynamic[LINKMODE_GUI], "guilinkdynamic", DEFAULT_GUI_LINK_MODE_DYNAMIC);
+	RPT_CONFIG_VAR_INT_DEFAULT(linkmode[LINKMODE_PHONE], "phonelinkdefault", DEFAULT_PHONE_LINK_MODE);
+	RPT_CONFIG_VAR_BOOL_DEFAULT(linkmodedynamic[LINKMODE_PHONE], "guilinkdynamic", DEFAULT_PHONE_LINK_MODE_DYNAMIC);
+	RPT_CONFIG_VAR_INT_DEFAULT(linkmode[LINKMODE_ECHOLINK], "echolinkdefault", DEFAULT_ECHOLINK_LINK_MODE);
+	RPT_CONFIG_VAR_BOOL_DEFAULT(linkmodedynamic[LINKMODE_ECHOLINK], "echolinkdynamic", DEFAULT_ECHOLINK_LINK_MODE_DYNAMIC);
+	RPT_CONFIG_VAR_INT_DEFAULT(linkmode[LINKMODE_TLB], "tlbdefault", DEFAULT_TLB_LINK_MODE);
+	RPT_CONFIG_VAR_BOOL_DEFAULT(linkmodedynamic[LINKMODE_TLB], "tlbdynamic", DEFAULT_TLB_LINK_MODE_DYNAMIC);
+
+	val = ast_variable_retrieve(cfg, cat, "locallist");
+	if (val) {
+		memset(rpt_vars[n].p.locallist, 0, sizeof(rpt_vars[n].p.locallist));
+		rpt_vars[n].p.nlocallist = finddelim((char*) val, (char**) rpt_vars[n].p.locallist, 16); /*! \todo Illegal cast */
+	}
+
+	val = ast_variable_retrieve(cfg, cat, "ctgroup");
 	if (val) {
 		ast_copy_string(rpt_vars[n].p.ctgroup, val, sizeof(rpt_vars[n].p.ctgroup));
 	} else {
 		strcpy(rpt_vars[n].p.ctgroup, "0");
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, this, "inxlat");
+	val = ast_variable_retrieve(cfg, cat, "inxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.inxlat, 0, sizeof(struct rpt_xlat));
-		i = finddelim(val, strs, 3);
-		if (i)
-			ast_copy_string(rpt_vars[n].p.inxlat.funccharseq, strs[0], sizeof(rpt_vars[n].p.inxlat.funccharseq));
-		if (i > 1)
-			ast_copy_string(rpt_vars[n].p.inxlat.endcharseq, strs[1], sizeof(rpt_vars[n].p.inxlat.endcharseq));
-		if (i > 2)
-			ast_copy_string(rpt_vars[n].p.inxlat.passchars, strs[2], sizeof(rpt_vars[n].p.inxlat.passchars));
-		if (i > 3)
+		i = finddelim((char*) val, strs, 3); /*! \todo Illegal cast */
+		if (i > 3) {
 			rpt_vars[n].p.dopfxtone = ast_true(strs[3]);
+		} else if (i > 2) {
+			ast_copy_string(rpt_vars[n].p.inxlat.passchars, strs[2], sizeof(rpt_vars[n].p.inxlat.passchars));
+		} else if (i > 1) {
+			ast_copy_string(rpt_vars[n].p.inxlat.endcharseq, strs[1], sizeof(rpt_vars[n].p.inxlat.endcharseq));
+		} else if (i) {
+			ast_copy_string(rpt_vars[n].p.inxlat.funccharseq, strs[0], sizeof(rpt_vars[n].p.inxlat.funccharseq));
+		}
 	}
-	val = (char *) ast_variable_retrieve(cfg, this, "outxlat");
+
+	val = ast_variable_retrieve(cfg, cat, "outxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.outxlat, 0, sizeof(struct rpt_xlat));
-		i = finddelim(val, strs, 3);
-		if (i)
-			ast_copy_string(rpt_vars[n].p.outxlat.funccharseq, strs[0], sizeof(rpt_vars[n].p.outxlat.funccharseq));
-		if (i > 1)
-			ast_copy_string(rpt_vars[n].p.outxlat.endcharseq, strs[1], sizeof(rpt_vars[n].p.outxlat.endcharseq));
-		if (i > 2)
+		i = finddelim((char*) val, strs, 3); /*! \todo Illegal cast */
+		if (i > 2) {
 			ast_copy_string(rpt_vars[n].p.outxlat.passchars, strs[2], sizeof(rpt_vars[n].p.outxlat.passchars));
+		} else if (i > 1) {
+			ast_copy_string(rpt_vars[n].p.outxlat.endcharseq, strs[1], sizeof(rpt_vars[n].p.outxlat.endcharseq));
+		} else if (i) {
+			ast_copy_string(rpt_vars[n].p.outxlat.funccharseq, strs[0], sizeof(rpt_vars[n].p.outxlat.funccharseq));
+		}
 	}
-	val = (char *) ast_variable_retrieve(cfg, this, "sleeptime");
-	if (val)
-		rpt_vars[n].p.sleeptime = atoi(val);
-	else
-		rpt_vars[n].p.sleeptime = SLEEPTIME;
-	/* retrieve the stanza name for the control states if there is one */
-	val = (char *) ast_variable_retrieve(cfg, this, "controlstates");
-	rpt_vars[n].p.csstanzaname = val;
 
-	/* retrieve the stanza name for the scheduler if there is one */
-	val = (char *) ast_variable_retrieve(cfg, this, "scheduler");
-	rpt_vars[n].p.skedstanzaname = val;
-
-	/* retrieve the stanza name for the txlimits */
-	val = (char *) ast_variable_retrieve(cfg, this, "txlimits");
-	rpt_vars[n].p.txlimitsstanzaname = val;
+	RPT_CONFIG_VAR_INT_DEFAULT(sleeptime, "sleeptime", SLEEPTIME);
+	RPT_CONFIG_VAR(csstanzaname, "controlstates"); /* stanza name for control states */
+	RPT_CONFIG_VAR(skedstanzaname, "scheduler"); /* stanza name for scheduler */
+	RPT_CONFIG_VAR(txlimitsstanzaname, "txlimits"); /* stanza name for txlimits */
 
 	rpt_vars[n].p.iospeed = B9600;
-	if (!strcasecmp(rpt_vars[n].remoterig, REMOTE_RIG_FT950))
+	if (!strcasecmp(rpt_vars[n].remoterig, REMOTE_RIG_FT950)) {
 		rpt_vars[n].p.iospeed = B38400;
-	if (!strcasecmp(rpt_vars[n].remoterig, REMOTE_RIG_FT100))
+	} else if (!strcasecmp(rpt_vars[n].remoterig, REMOTE_RIG_FT100)) {
 		rpt_vars[n].p.iospeed = B4800;
-	if (!strcasecmp(rpt_vars[n].remoterig, REMOTE_RIG_FT897))
+	} else if (!strcasecmp(rpt_vars[n].remoterig, REMOTE_RIG_FT897)) {
 		rpt_vars[n].p.iospeed = B4800;
-	val = (char *) ast_variable_retrieve(cfg, this, "dias");
-	if (val)
-		rpt_vars[n].p.dias = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "dusbabek");
-	if (val)
-		rpt_vars[n].p.dusbabek = ast_true(val);
-	val = (char *) ast_variable_retrieve(cfg, this, "iospeed");
+	}
+
+	RPT_CONFIG_VAR_BOOL(dias, "dias");
+	RPT_CONFIG_VAR_BOOL(dusbabek, "dusbabek");
+
+	val = ast_variable_retrieve(cfg, cat, "iospeed");
 	if (val) {
 		switch (atoi(val)) {
 		case 2400:
@@ -1225,26 +1056,25 @@ void load_rpt_vars(int n, int init)
 
 	rpt_vars[n].longestnode = longestnode;
 
-	/*
-	 * For this repeater, Determine the length of the longest function 
-	 */
+	/* For this repeater, Determine the length of the longest function */
 	rpt_vars[n].longestfunc = 0;
 	vp = ast_variable_browse(cfg, rpt_vars[n].p.functions);
 	while (vp) {
 		j = strlen(vp->name);
-		if (j > rpt_vars[n].longestfunc)
+		if (j > rpt_vars[n].longestfunc) {
 			rpt_vars[n].longestfunc = j;
+		}
 		vp = vp->next;
 	}
-	/*
-	 * For this repeater, Determine the length of the longest function 
-	 */
+
+	/* For this repeater, Determine the length of the longest function */
 	rpt_vars[n].link_longestfunc = 0;
 	vp = ast_variable_browse(cfg, rpt_vars[n].p.link_functions);
 	while (vp) {
 		j = strlen(vp->name);
-		if (j > rpt_vars[n].link_longestfunc)
+		if (j > rpt_vars[n].link_longestfunc) {
 			rpt_vars[n].link_longestfunc = j;
+		}
 		vp = vp->next;
 	}
 	rpt_vars[n].phone_longestfunc = 0;
@@ -1252,8 +1082,9 @@ void load_rpt_vars(int n, int init)
 		vp = ast_variable_browse(cfg, rpt_vars[n].p.phone_functions);
 		while (vp) {
 			j = strlen(vp->name);
-			if (j > rpt_vars[n].phone_longestfunc)
+			if (j > rpt_vars[n].phone_longestfunc) {
 				rpt_vars[n].phone_longestfunc = j;
+			}
 			vp = vp->next;
 		}
 	}
@@ -1262,8 +1093,9 @@ void load_rpt_vars(int n, int init)
 		vp = ast_variable_browse(cfg, rpt_vars[n].p.dphone_functions);
 		while (vp) {
 			j = strlen(vp->name);
-			if (j > rpt_vars[n].dphone_longestfunc)
+			if (j > rpt_vars[n].dphone_longestfunc) {
 				rpt_vars[n].dphone_longestfunc = j;
+			}
 			vp = vp->next;
 		}
 	}
@@ -1272,8 +1104,9 @@ void load_rpt_vars(int n, int init)
 		vp = ast_variable_browse(cfg, rpt_vars[n].p.alt_functions);
 		while (vp) {
 			j = strlen(vp->name);
-			if (j > rpt_vars[n].alt_longestfunc)
+			if (j > rpt_vars[n].alt_longestfunc) {
 				rpt_vars[n].alt_longestfunc = j;
+			}
 			vp = vp->next;
 		}
 	}
@@ -1281,16 +1114,19 @@ void load_rpt_vars(int n, int init)
 	vp = ast_variable_browse(cfg, rpt_vars[n].p.macro);
 	while (vp) {
 		j = strlen(vp->name);
-		if (j > rpt_vars[n].macro_longest)
+		if (j > rpt_vars[n].macro_longest) {
 			rpt_vars[n].macro_longest = j;
+		}
 		vp = vp->next;
 	}
 
 	/* Browse for control states */
-	if (rpt_vars[n].p.csstanzaname)
+	if (rpt_vars[n].p.csstanzaname) {
 		vp = ast_variable_browse(cfg, rpt_vars[n].p.csstanzaname);
-	else
+	} else {
 		vp = NULL;
+	}
+
 	for (i = 0; vp && (i < MAX_SYSSTATES); i++) {	/* Iterate over the number of control state lines in the stanza */
 		int k, nukw, statenum;
 		statenum = atoi(vp->name);
@@ -1397,31 +1233,37 @@ int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 		int x;
 		ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
 		myrpt->macrotimer = MACROTIME;
-		for (x = 0; *(sptr + x); x++)
+		for (x = 0; *(sptr + x); x++) {
 			myrpt->macrobuf[x] = *(sptr + x) | 0x80;
+		}
 		*(sptr + x) = 0;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 
-	if (busy)
+	if (busy) {
 		ast_log(LOG_WARNING, "Function decoder busy on app_rpt command macro.\n");
+	}
 
 	return busy;
 }
 
 void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 {
-	char buf[10];
+	char buf[2];
 
-	if ((!varname) || (!*varname))
+	if (!varname || !*varname) {
 		return;
+	}
+
 	buf[0] = '0';
-	buf[1] = 0;
-	if (newval > 0)
+	buf[1] = '\0';
+	if (newval > 0) {
 		buf[0] = '1';
+	}
+
 	pbx_builtin_setvar_helper(myrpt->rxchannel, varname, buf);
 	rpt_manager_trigger(myrpt, varname, buf);
-	if (newval >= 0)
+	if (newval >= 0) {
 		rpt_event_process(myrpt);
-	return;
+	}
 }

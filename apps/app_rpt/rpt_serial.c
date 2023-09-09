@@ -186,7 +186,7 @@ int setdtr(struct rpt *myrpt, int fd, int enable)
 	return 0;
 }
 
-int openserial(struct rpt *myrpt, char *fname)
+int openserial(struct rpt *myrpt, const char *fname)
 {
 	struct termios mode;
 	int fd;

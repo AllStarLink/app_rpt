@@ -1211,14 +1211,7 @@ void *rpt_call(void *this)
 		myrpt->callmode = 0;
 		pthread_exit(NULL);
 	}
-	if (myrpt->p.tonezone && (tone_zone_set_zone(ast_channel_fd(mychannel, 0), myrpt->p.tonezone) == -1)) {
-		ast_log(LOG_WARNING, "Unable to set tone zone %s\n", myrpt->p.tonezone);
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = 0;
-		pthread_exit(NULL);
-	}
-	if (myrpt->p.tonezone && (tone_zone_set_zone(ast_channel_fd(genchannel, 0), myrpt->p.tonezone) == -1)) {
+	if (myrpt->p.tonezone && (tone_zone_set_zone(ast_channel_fd(mychannel, 0), (char*) myrpt->p.tonezone) == -1)) {
 		ast_log(LOG_WARNING, "Unable to set tone zone %s\n", myrpt->p.tonezone);
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
@@ -1409,7 +1402,7 @@ void *rpt_call(void *this)
 			if ((!sentpatchconnect) && myrpt->p.patchconnect && ast_channel_is_bridged(mychannel)
 				&& (ast_channel_state(mychannel) == AST_STATE_UP)) {
 				sentpatchconnect = 1;
-				rpt_telemetry(myrpt, PLAYBACK, myrpt->p.patchconnect);
+				rpt_telemetry(myrpt, PLAYBACK, (char*) myrpt->p.patchconnect);
 			}
 		if (myrpt->mydtmf) {
 			struct ast_frame wf = { AST_FRAME_DTMF, };
@@ -2751,7 +2744,7 @@ static void do_scheduler(struct rpt *myrpt)
 		/* 30 second warn */
 		if ((myrpt->p.lnkacttime - myrpt->linkactivitytimer == 30) && myrpt->p.lnkacttimerwarn) {
 			ast_debug(5, "Warning user of activity timeout\n");
-			rpt_telemetry(myrpt, LOCALPLAY, myrpt->p.lnkacttimerwarn);
+			rpt_telemetry(myrpt, LOCALPLAY, (char*) myrpt->p.lnkacttimerwarn);
 		}
 		if (myrpt->linkactivitytimer >= myrpt->p.lnkacttime) {
 			/* Execute lnkactmacro */

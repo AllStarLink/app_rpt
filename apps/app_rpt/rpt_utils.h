@@ -51,7 +51,7 @@ char *skipchars(char *string, char *charlist);
 
 char *eatwhite(char *s);
 
-int myatoi(char *str);
+int myatoi(const char *str);
 
 /*! \brief Convert decimals of frequency to int */
 int decimals2int(char *fraction);
@@ -63,6 +63,6 @@ int mycompar(const void *a, const void *b);
 
 long diskavail(struct rpt *myrpt);
 
-void rpt_localtime(time_t * t, struct ast_tm *lt, char *tz);
+void rpt_localtime(time_t * t, struct ast_tm *lt, const char *tz);
 
-time_t rpt_mktime(struct ast_tm *tm, char *zone);
+time_t rpt_mktime(struct ast_tm *tm, const char *zone);

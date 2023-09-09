@@ -1084,7 +1084,7 @@ int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_
 
 int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
-	char *val;
+	const char *val;
 	int i;
 	if (myrpt->remote)
 		return DC_ERROR;
@@ -1099,14 +1099,16 @@ int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 			return DC_ERROR;
 	}
 
-	if (*digitbuf == '0')
+	if (*digitbuf == '0') {
 		val = myrpt->p.startupmacro;
-	else
-		val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.macro, digitbuf);
+	} else {
+		val = ast_variable_retrieve(myrpt->cfg, myrpt->p.macro, digitbuf);
+	}
 	/* param was 1 for local buf */
 	if (!val) {
-		if (strlen(digitbuf) < myrpt->macro_longest)
+		if (strlen(digitbuf) < myrpt->macro_longest) {
 			return DC_INDETERMINATE;
+		}
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, MACRO_NOTFOUND, NULL);
 		return DC_COMPLETE;

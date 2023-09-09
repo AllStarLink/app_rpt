@@ -117,15 +117,18 @@ char *eatwhite(char *s)
 	return s;
 }
 
-int myatoi(char *str)
+int myatoi(const char *str)
 {
 	int ret;
 
-	if (str == NULL)
+	if (ast_strlen_zero(str)) {
 		return -1;
+	}
+
 	/* leave this %i alone, non-base-10 input is useful here */
-	if (sscanf(str, "%i", &ret) != 1)
+	if (sscanf(str, "%i", &ret) != 1) {
 		return -1;
+	}
 	return ret;
 }
 
@@ -200,7 +203,7 @@ long diskavail(struct rpt *myrpt)
  running embedded linux distributions as they don't usually
  have support for locales. 
 */
-void rpt_localtime(time_t * t, struct ast_tm *lt, char *tz)
+void rpt_localtime(time_t * t, struct ast_tm *lt, const char *tz)
 {
 	struct timeval tv;
 
@@ -210,7 +213,7 @@ void rpt_localtime(time_t * t, struct ast_tm *lt, char *tz)
 
 }
 
-time_t rpt_mktime(struct ast_tm *tm, char *zone)
+time_t rpt_mktime(struct ast_tm *tm, const char *zone)
 {
 	struct timeval now;
 

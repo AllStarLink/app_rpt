@@ -45,7 +45,7 @@ int serial_io(int fd, char *txbuf, char *rxbuf, int txbytes, int rxmaxbytes, uns
 int setdtr(struct rpt *myrpt, int fd, int enable);
 
 /*! \brief open the serial port */
-int openserial(struct rpt *myrpt, char *fname);
+int openserial(struct rpt *myrpt, const char *fname);
 
 int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsigned char *rxbuf, int rxmaxbytes, int asciiflag);
 
