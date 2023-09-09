@@ -943,7 +943,7 @@ void load_rpt_vars(int n, int init)
 	rpt_vars[n].p.telemduckgain = pow(10.0, atof(S_OR(val, DEFAULT_TELEMDUCKDB)) / 20.0);
 
 	RPT_CONFIG_VAR_INT_DEFAULT(telemdefault, "telemdefault", DEFAULT_RPT_TELEMDEFAULT);
-	RPT_CONFIG_VAR_INT_DEFAULT(telemdynamic, "telemdynamic", DEFAULT_RPT_TELEMDYNAMIC);
+	RPT_CONFIG_VAR_BOOL_DEFAULT(telemdynamic, "telemdynamic", DEFAULT_RPT_TELEMDYNAMIC);
 
 	if (!rpt_vars[n].p.telemdefault) {
 		rpt_vars[n].telemmode = 0;

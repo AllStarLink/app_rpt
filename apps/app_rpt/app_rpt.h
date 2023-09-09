@@ -625,11 +625,11 @@ struct rpt {
 		int iospeed;
 		char funcchar;
 		char endchar;
-		char nobusyout;
-		char notelemtx;
-		char propagate_dtmf;
-		char propagate_phonedtmf;
-		char linktolink;
+		unsigned int nobusyout:1;
+		unsigned int notelemtx:1;
+		unsigned int propagate_dtmf:1;
+		unsigned int propagate_phonedtmf:1;
+		unsigned int linktolink:1;
 		unsigned char civaddr;
 		struct rpt_xlat inxlat;
 		struct rpt_xlat outxlat;
@@ -654,8 +654,8 @@ struct rpt {
 		int simplexpatchdelay;
 		int simplexphonedelay;
 		char telemdefault;
-		char telemdynamic;		
-		char lnkactenable;
+		unsigned int telemdynamic:1;
+		unsigned int lnkactenable:1;
 		const char *statpost_program;
 		const char *statpost_url;
 		char linkmode[10];
@@ -675,24 +675,24 @@ struct rpt {
 		const char *discpgm;
 		const char *connpgm;
 		const char *mdclog;
-		char nolocallinkct;
-		char nounkeyct;
-		char holdofftelem;
-		char beaconing;
+		unsigned int nolocallinkct:1;
+		unsigned int nounkeyct:1;
+		unsigned int holdofftelem:1;
+		unsigned int beaconing:1;
 		int rxburstfreq;
 		int rxbursttime;
 		int rxburstthreshold;
 		int litztime;
 		const char *litzchar;
 		const char *litzcmd;
-		int itxctcss;		
-		int gpsfeet;
+		unsigned int itxctcss:1;
+		unsigned int gpsfeet:1;
 		int default_split_2m;
 		int default_split_70cm;
 		int votertype;                                  /*!< \brief 0 none, 1 repeater, 2 voter rx      */
 		int votermode;                                  /*!< \brief 0 none, 1 one shot, 2 continuous    */
 		int votermargin;                                /*!< \brief rssi margin to win a vote           */
-		int dtmfkey;
+		unsigned int dtmfkey:1;
 		char dias;
 		char dusbabek;
 		const char *outstreamcmd;
