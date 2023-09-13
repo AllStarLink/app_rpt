@@ -86,11 +86,6 @@
 #define	PP_PORT "/dev/parport0"
 #define	PP_IOPORT 0x378
 
-/* Previous versions of this driver assumed 32 gpio pins
- * the current and prior cm-xxx devices only support 8 gpio lines.
- */
-#define GPIO_PINCOUNT 8
-
 #include "./xpmr/xpmr.h"
 #ifdef HAVE_XPMRX
 #include "./xpmrx/xpmrx.h"
@@ -879,7 +874,7 @@ static void *pulserthread(void *arg)
  * kill the node and restart everything.  This helps to detect problems with a
  * hung USB device.
  *
- * \param argv		Pointer to chan_simpleusb_pvt structure associated with this thread.
+ * \param argv		Pointer to chan_usbradio_pvt structure associated with this thread.
  */
 static void *hidthread(void *arg)
 {
@@ -888,7 +883,7 @@ static void *hidthread(void *arg)
 	int i, j, k, res;
 	struct usb_device *usb_dev;
 	struct usb_dev_handle *usb_handle;
-	struct chan_usbradio_pvt *o = (struct chan_usbradio_pvt *) arg, *ao;
+	struct chan_usbradio_pvt *o = arg, *ao;
 	struct timeval then;
 	struct ast_config *cfg1;
 	struct ast_variable *v;

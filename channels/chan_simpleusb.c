@@ -108,11 +108,6 @@
 #define	PP_PORT "/dev/parport0"
 #define	PP_IOPORT 0x378
 
-/* Previous versions of this driver assumed 32 gpio pins
- * the current and prior cm-xxx devices only support 8 gpio lines.
- */
-#define GPIO_PINCOUNT 8
-
 #define	PAGER_SRC "PAGER"
 #define	ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 12000
@@ -869,7 +864,7 @@ static void *hidthread(void *arg)
 	int i, j, k, res;
 	struct usb_device *usb_dev;
 	struct usb_dev_handle *usb_handle;
-	struct chan_simpleusb_pvt *o = (struct chan_simpleusb_pvt *) arg, *ao;
+	struct chan_simpleusb_pvt *o = arg, *ao;
 	struct timeval then;
 	struct ast_config *cfg1;
 	struct ast_variable *v;

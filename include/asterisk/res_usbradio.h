@@ -81,6 +81,12 @@
 #define	EEPROM_TXCTCSSADJ	15
 #define	EEPROM_RXSQUELCHADJ	16
 
+/* Previous versions of this driver assumed 32 gpio pins
+ * the current and prior cm-xxx devices only support 8 gpio lines.
+ */
+#define GPIO_PINCOUNT 8
+
+
 /*
  * Helper macros to parse config arguments. They will go in a common
  * header file if their usage is globally accepted. In the meantime,
