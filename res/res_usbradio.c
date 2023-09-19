@@ -81,12 +81,29 @@
 #include "asterisk/dsp.h"
 #include "asterisk/format_cache.h"
 
-/*! \brief lround for uClibc - wrapper for lround(x) */
+/*! \brief Round double number to a long
+ *
+ * \note lround for uClibc - wrapper for lround(x) 
+ *
+ * \param x			Double number to round.
+ *
+ * \retval 			Rounded number as a long.
+*/
 long ast_radio_lround(double x)
 {
 	return (long) ((x - ((long) x) >= 0.5f) ? (((long) x) + 1) : ((long) x));
 }
 
+/*!
+ * \brief Calculate the speaker playback volume value.
+ * 	Calculates the speaker playback volume.
+ *
+ * \param spkrmax		Speaker maximum value.
+ * \param val			Requested value.
+ * \param devtype		USB device type.
+ *
+ * \retval 				The calculated volume value.
+ */
 int ast_radio_make_spkr_playback_value(int spkrmax, int val, int devtype)
 {
 	int v, rv;
@@ -103,6 +120,15 @@ int ast_radio_make_spkr_playback_value(int spkrmax, int val, int devtype)
 	return rv;
 }
 
+/*!
+ * \brief Get mixer max value
+ * 	Gets the mixer max value for the specified device and control.
+ *
+ * \param devnum		The sound device number to update.
+ * \param param			Pointer to the string mixer device name (control) to retrieve.
+ * 
+ * \retval 				The maximum value.
+ */
 int ast_radio_amixer_max(int devnum, char *param)
 {
 	int rv, type;
@@ -141,6 +167,15 @@ int ast_radio_amixer_max(int devnum, char *param)
 	return rv;
 }
 
+/*!
+ * \brief Set mixer
+ * 	Sets the mixer values for the specified device and control.
+ *
+ * \param devnum		The sound device number to update.
+ * \param param			Pointer to the string mixer device name (control) to update.
+ * \param v1			Value 1 to set.
+ * \param v2			Value 2 to set.
+ */
 int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 {
 	int type;
@@ -188,18 +223,55 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 	return 0;
 }
 
+/*!
+ * \brief Set USB HID outputs
+ * 	This routine, depending on the outputs passed can set the GPIO states 
+ *	and/or setup the chip to read/write the eeprom.
+ *
+ *	The passed outputs should be 4 bytes.
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param outputs		Pointer to buffer that contains the data to send to the HID.
+ */
 void ast_radio_hid_set_outputs(struct usb_dev_handle *handle, unsigned char *outputs)
 {
 	usleep(1500);
-	usb_control_msg(handle, USB_ENDPOINT_OUT + USB_TYPE_CLASS + USB_RECIP_INTERFACE, HID_REPORT_SET, 0 + (HID_RT_OUTPUT << 8), C108_HID_INTERFACE, (char *) outputs, 4, 5000);
+	usb_control_msg(handle, USB_ENDPOINT_OUT + USB_TYPE_CLASS + USB_RECIP_INTERFACE, 
+		HID_REPORT_SET, 0 + (HID_RT_OUTPUT << 8), C108_HID_INTERFACE, (char *) outputs, 4, 5000);
 }
 
+/*!
+ * \brief Get USB HID inputs
+ * 	This routine will retrieve the GPIO states or data the eeprom.
+ *
+ *	The passed inputs should be 4 bytes.
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param inputs		Pointer to buffer that will contain the data received from the HID.
+ */
 void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inputs)
 {
 	usleep(1500);
-	usb_control_msg(handle, USB_ENDPOINT_IN + USB_TYPE_CLASS + USB_RECIP_INTERFACE, HID_REPORT_GET, 0 + (HID_RT_INPUT << 8), C108_HID_INTERFACE, (char *) inputs, 4, 5000);
+	usb_control_msg(handle, USB_ENDPOINT_IN + USB_TYPE_CLASS + USB_RECIP_INTERFACE, 
+		HID_REPORT_GET, 0 + (HID_RT_INPUT << 8), C108_HID_INTERFACE, (char *) inputs, 4, 5000);
 }
 
+/*!
+ * \brief Read CM-xxx EEPROM
+ * 	Read a memory position from the EEPROM attached to the CM-XXX device.
+ *	One memory position is two bytes.
+ *
+ *	Four bytes are passed to the device to configure it for an EEPROM read.
+ *	The first byte should be 0x80, the fourth byte should be 0x80 or'd with
+ *	the address to read.  
+ *
+ *	After the address has been set, a get input is done to read the returned
+ *	bytes.
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param addr			Integer address to read from the EEPROM.  The valid
+ *						range is 0 to 63.
+ */
 static unsigned short read_eeprom(struct usb_dev_handle *handle, int addr)
 {
 	unsigned char buf[4];
@@ -208,12 +280,34 @@ static unsigned short read_eeprom(struct usb_dev_handle *handle, int addr)
 	buf[1] = 0;
 	buf[2] = 0;
 	buf[3] = 0x80 | (addr & 0x3f);
+	
+	usleep(500);
 	ast_radio_hid_set_outputs(handle, buf);
+	
 	memset(buf, 0, sizeof(buf));
+	usleep(500);
 	ast_radio_hid_get_inputs(handle, buf);
 	return (buf[1] + (buf[2] << 8));
 }
 
+/*!
+ * \brief Write CM-xxx EEPROM
+ * 	Write a memory position in the EEPROM attached to the CM-XXX device.
+ *	One memory position is two bytes.
+ *
+ *	Four bytes are passed to the device to write the value.  The first byte 
+ *	should be 0x80, the second byte should be the lsb of the data, the third
+ *	byte is the msb of the data, the fourth byte should be 0xC0 or'd with
+ *	the address to write.
+ *
+ * \note This routine will write to any valid memory address.  Never write
+ *	to address 0 to 50.  These are reserved for manufacturer data.
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param addr			Integer address to read from the EEPROM.  The valid
+ *						range is 0 to 63.
+ * \param data			Unsigned short data to store.
+ */
 static void write_eeprom(struct usb_dev_handle *handle, int addr, unsigned short data)
 {
 	unsigned char buf[4];
@@ -222,37 +316,78 @@ static void write_eeprom(struct usb_dev_handle *handle, int addr, unsigned short
 	buf[1] = data & 0xff;
 	buf[2] = data >> 8;
 	buf[3] = 0xc0 | (addr & 0x3f);
+	
+	usleep(2000);
 	ast_radio_hid_set_outputs(handle, buf);
 }
 
+/*!
+ * \brief Read user memory segment from the CM-XXX EEPROM.
+ * 	Reads the memory range associated with user data from the EEPROM.
+ *
+ *	The user memory segment is from address position 51 to 63.
+ *	Memory positions 0 to 50 are reserved for manufacturer's data.
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param buf			Pointer to buffer to receive the EEPROM data.  The buffer
+ *						must be an array of 13 unsigned shorts.
+ *
+ * \retval				Checksum of the received data.  If the check sum is correct,
+ *						the calculated checksum will be zero.  This indicates valid data..
+ *						Any	other value indicates bad EEPROM data.
+ */
 unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
 {
 	int i;
 	unsigned short cs;
 
 	cs = 0xffff;
-	for (i = EEPROM_START_ADDR; i < EEPROM_END_ADDR; i++) {
-		cs += buf[i] = read_eeprom(handle, i);
+	for (i = EEPROM_START_ADDR; i <= EEPROM_START_ADDR + EEPROM_USER_CS_ADDR; i++) {
+		cs += buf[i - EEPROM_START_ADDR] = read_eeprom(handle, i);
 	}
+
 	return (cs);
 }
 
+/*!
+ * \brief Write user memory segment to the CM-XXX EEPROM.
+ * 	Writes the memory range associated with user data to the EEPROM.
+ *
+ *	The user memory segment is from address position 51 to 63.
+ *	
+ *  \note Memory positions 0 to 50 are reserved for manufacturer's data.  Do not
+ *	write into this segment!
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param buf			Pointer to buffer that contains the the EEPROM data.  
+ *						The buffer must be an array of 13 unsigned shorts.
+ */
 void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
 {
 	int i;
 	unsigned short cs;
 
 	cs = 0xffff;
-	buf[EEPROM_MAGIC_ADDR] = EEPROM_MAGIC;
-	for (i = EEPROM_START_ADDR; i < EEPROM_CS_ADDR; i++) {
-		write_eeprom(handle, i, buf[i]);
-		cs += buf[i];
+	buf[EEPROM_USER_MAGIC_ADDR] = EEPROM_MAGIC;
+	for (i = EEPROM_START_ADDR; i < EEPROM_START_ADDR + EEPROM_USER_CS_ADDR; i++) {
+		write_eeprom(handle, i, buf[i - EEPROM_START_ADDR]);
+		cs += buf[i - EEPROM_START_ADDR];
 	}
-	buf[EEPROM_CS_ADDR] = (65535 - cs) + 1;
-	write_eeprom(handle, i, buf[EEPROM_CS_ADDR]);
+	buf[EEPROM_USER_CS_ADDR] = (65535 - cs) + 1;
+	write_eeprom(handle, i, buf[EEPROM_USER_CS_ADDR]);
 }
 
-struct usb_device *ast_radio_hid_device_init(char *desired_device)
+/*!
+ * \brief Initialize a USB device.
+ * 	Searches for a USB device that matches the passed device string.
+ *
+ * \note It will only evaluate USB devices known to work with this application.
+ *
+ * \param desired_device	Pointer to a string that contains the device string to find.
+ * \retval 					Returns a usb_device structure with the found device.
+ *							If the device was not found, it returns null.
+ */
+struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 {
 	struct usb_bus *usb_bus;
 	struct usb_device *dev;
@@ -343,7 +478,15 @@ struct usb_device *ast_radio_hid_device_init(char *desired_device)
 	return NULL;
 }
 
-int ast_radio_usb_get_usbdev(char *devstr)
+/*!
+ * \brief Get USB device number from device string
+ * 	Checks the symbolic links to see if the device string exists.
+ *
+ * \param devstr		Pointer to a string that contains the device string to find.
+ * \retval 				Returns an index for the found device number.
+ * \retval -1			If the device was not found.
+ */
+int ast_radio_usb_get_usbdev(const char *devstr)
 {
 	int i;
 	char str[200], desdev[200], *cp;
@@ -396,6 +539,20 @@ int ast_radio_usb_get_usbdev(char *devstr)
 	return i;
 }
 
+/*!
+ * \brief Open the specified parallel port
+ * 	Opens the parallel port if is exists.
+ *
+ * \note The parallel port subsystem may not be available on all systems.
+ *
+ * \param haspp		Pointer to an integer that indicates the type of parallel port.
+ *					0 = no parallel port, 1 = use open, 2 = use ioctl.
+ * \param ppfd		Pointer to opened parallel port file descriptor.
+ * \param pbase		Pointer to parallel port base address.
+ * \param pport		Pointer to parallel port port number.
+ * \param reload	Integer flag to indicate if the port should be closed and reopened.
+ * \retval 	0		Always returns zero.
+ */
 int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *pport, int reload)
 {
 	if (*haspp) { /* if is to use parallel port */
@@ -434,6 +591,19 @@ int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *
 	return 0;
 }
 
+/*!
+ * \brief Read a character from the specified parallel port
+ * 	Reads a character from the parallel port
+ *
+ * \note The parallel port subsystem may not be available on all systems.
+ *
+ * \param haspp		Pointer to an integer that indicates the type of parallel port.
+ *					0 = no parallel port, 1 = use open, 2 = use ioctl.
+ * \param ppfd		Parallel port file descriptor.
+ * \param pbase		Parallel port base address.
+ * \param pport		Pointer to parallel port port number.
+ * \retval 			Character that was read.
+ */
 unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport)
 {
 #ifdef HAVE_SYS_IO
@@ -456,6 +626,19 @@ unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase,
 #endif
 }
 
+/*!
+ * \brief Write a character to the specified parallel port
+ * 	Writes a character to the parallel port
+ *
+ * \note The parallel port subsystem may not be available on all systems.
+ *
+ * \param haspp		Pointer to an integer that indicates the type of parallel port.
+ *					0 = no parallel port, 1 = use open, 2 = use ioctl.
+ * \param ppfd		Parallel port file descriptor.
+ * \param pbase		Parallel port base address.
+ * \param pport		Pointer to parallel port port number.
+ * \param c			Character to write.
+ */
 void ast_radio_ppwrite(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport, unsigned char c)
 {
 #ifdef HAVE_SYS_IO

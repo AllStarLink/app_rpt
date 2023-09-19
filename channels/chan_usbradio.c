@@ -406,7 +406,7 @@ struct chan_usbradio_pvt {
 		unsigned loopback:1;
 		unsigned radioactive:1;
 	} b;
-	unsigned short eeprom[EEPROM_PHYSICAL_LEN];
+	unsigned short eeprom[EEPROM_USER_LEN];
 	char eepromctl;
 	ast_mutex_t eepromlock;
 
@@ -1232,16 +1232,16 @@ static void *hidthread(void *arg)
 				if (o->eepromctl == 1) {	/* to read */
 					/* if CS okay */
 					if (!ast_radio_get_eeprom(usb_handle, o->eeprom)) {
-						if (o->eeprom[EEPROM_MAGIC_ADDR] != EEPROM_MAGIC) {
+						if (o->eeprom[EEPROM_USER_MAGIC_ADDR] != EEPROM_MAGIC) {
 							ast_log(LOG_ERROR, "Channel %s: EEPROM bad magic number\n", o->name);
 						} else {
-							o->rxmixerset = o->eeprom[EEPROM_RXMIXERSET];
-							o->txmixaset = o->eeprom[EEPROM_TXMIXASET];
-							o->txmixbset = o->eeprom[EEPROM_TXMIXBSET];
-							memcpy(&o->rxvoiceadj, &o->eeprom[EEPROM_RXVOICEADJ], sizeof(float));
-							memcpy(&o->rxctcssadj, &o->eeprom[EEPROM_RXCTCSSADJ], sizeof(float));
-							o->txctcssadj = o->eeprom[EEPROM_TXCTCSSADJ];
-							o->rxsquelchadj = o->eeprom[EEPROM_RXSQUELCHADJ];
+							o->rxmixerset = o->eeprom[EEPROM_USER_RXMIXERSET];
+							o->txmixaset = o->eeprom[EEPROM_USER_TXMIXASET];
+							o->txmixbset = o->eeprom[EEPROM_USER_TXMIXBSET];
+							memcpy(&o->rxvoiceadj, &o->eeprom[EEPROM_USER_RXVOICEADJ], sizeof(float));
+							memcpy(&o->rxctcssadj, &o->eeprom[EEPROM_USER_RXCTCSSADJ], sizeof(float));
+							o->txctcssadj = o->eeprom[EEPROM_USER_TXCTCSSADJ];
+							o->rxsquelchadj = o->eeprom[EEPROM_USER_RXSQUELCHADJ];
 							ast_log(LOG_NOTICE, "Channel %s: EEPROM Loaded\n", o->name);
 							mixer_write(o);
 							mult_set(o);
@@ -3927,13 +3927,14 @@ static void tune_write(struct chan_usbradio_pvt *o)
 			usleep(10000);
 			ast_mutex_lock(&o->eepromlock);
 		}
-		o->eeprom[EEPROM_RXMIXERSET] = o->rxmixerset;
-		o->eeprom[EEPROM_TXMIXASET] = o->txmixaset;
-		o->eeprom[EEPROM_TXMIXBSET] = o->txmixbset;
-		memcpy(&o->eeprom[EEPROM_RXVOICEADJ], &o->rxvoiceadj, sizeof(float));
-		memcpy(&o->eeprom[EEPROM_RXCTCSSADJ], &o->rxctcssadj, sizeof(float));
-		o->eeprom[EEPROM_TXCTCSSADJ] = o->txctcssadj;
-		o->eeprom[EEPROM_RXSQUELCHADJ] = o->rxsquelchadj;
+		memset(o->eeprom, 0, sizeof(o->eeprom));
+		o->eeprom[EEPROM_USER_RXMIXERSET] = o->rxmixerset;
+		o->eeprom[EEPROM_USER_TXMIXASET] = o->txmixaset;
+		o->eeprom[EEPROM_USER_TXMIXBSET] = o->txmixbset;
+		memcpy(&o->eeprom[EEPROM_USER_RXVOICEADJ], &o->rxvoiceadj, sizeof(float));
+		memcpy(&o->eeprom[EEPROM_USER_RXCTCSSADJ], &o->rxctcssadj, sizeof(float));
+		o->eeprom[EEPROM_USER_TXCTCSSADJ] = o->txctcssadj;
+		o->eeprom[EEPROM_USER_RXSQUELCHADJ] = o->rxsquelchadj;
 		o->eepromctl = 2;		/* request a write */
 		ast_mutex_unlock(&o->eepromlock);
 	}
