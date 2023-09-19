@@ -324,7 +324,7 @@ struct chan_simpleusb_pvt {
 		unsigned txcapraw:1;
 		unsigned measure_enabled:1;
 	} b;
-	unsigned short eeprom[EEPROM_PHYSICAL_LEN];
+	unsigned short eeprom[EEPROM_USER_LEN];
 	char eepromctl;
 	ast_mutex_t eepromlock;
 
@@ -1107,14 +1107,16 @@ static void *hidthread(void *arg)
 			if (o->wanteeprom) {
 				ast_mutex_lock(&o->eepromlock);
 				if (o->eepromctl == 1) {	/* to read */
+					unsigned short checksum;
 					/* if CS okay */
+					checksum = ast_radio_get_eeprom(usb_handle, o->eeprom);
 					if (!ast_radio_get_eeprom(usb_handle, o->eeprom)) {
-						if (o->eeprom[EEPROM_MAGIC_ADDR] != EEPROM_MAGIC) {
+						if (o->eeprom[EEPROM_USER_MAGIC_ADDR] != EEPROM_MAGIC) {
 							ast_log(LOG_ERROR, "Channel %s: EEPROM bad magic number\n", o->name);
 						} else {
-							o->rxmixerset = o->eeprom[EEPROM_RXMIXERSET];
-							o->txmixaset = o->eeprom[EEPROM_TXMIXASET];
-							o->txmixbset = o->eeprom[EEPROM_TXMIXBSET];
+							o->rxmixerset = o->eeprom[EEPROM_USER_RXMIXERSET];
+							o->txmixaset = o->eeprom[EEPROM_USER_TXMIXASET];
+							o->txmixbset = o->eeprom[EEPROM_USER_TXMIXBSET];
 							ast_log(LOG_NOTICE, "Channel %s: EEPROM Loaded\n", o->name);
 							mixer_write(o);
 						}
@@ -2803,9 +2805,10 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 			usleep(10000);
 			ast_mutex_lock(&o->eepromlock);
 		}
-		o->eeprom[EEPROM_RXMIXERSET] = o->rxmixerset;
-		o->eeprom[EEPROM_TXMIXASET] = o->txmixaset;
-		o->eeprom[EEPROM_TXMIXBSET] = o->txmixbset;
+		memset(o->eeprom, 0, sizeof(o->eeprom));
+		o->eeprom[EEPROM_USER_RXMIXERSET] = o->rxmixerset;
+		o->eeprom[EEPROM_USER_TXMIXASET] = o->txmixaset;
+		o->eeprom[EEPROM_USER_TXMIXBSET] = o->txmixbset;
 		o->eepromctl = 2;		/* request a write */
 		ast_mutex_unlock(&o->eepromlock);
 	}

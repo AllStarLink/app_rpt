@@ -17,6 +17,10 @@
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
  */
+ 
+ /*! \file
+ * \brief USB sound card resources.
+ */
 
 /*! \note <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
 #if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__)
@@ -28,6 +32,9 @@
 #pragma GCC diagnostic pop
 #endif
 
+/*!
+ * \brief Defines for interacting with ALSA
+ */
 #define	MIXER_PARAM_MIC_PLAYBACK_SW "Mic Playback Switch"
 #define MIXER_PARAM_MIC_PLAYBACK_VOL "Mic Playback Volume"
 #define	MIXER_PARAM_MIC_CAPTURE_SW "Mic Capture Switch"
@@ -50,6 +57,9 @@
 #define traceusb2(a)
 #endif
 
+/*!
+ * \brief CMxxx usb device identifiers
+ */
 #define C108_VENDOR_ID		0x0d8c
 #define C108_PRODUCT_ID  	0x000c
 #define C108B_PRODUCT_ID  	0x0012
@@ -57,7 +67,7 @@
 #define N1KDO_PRODUCT_ID  	0x6a00
 #define C119_PRODUCT_ID  	0x0008
 #define C119A_PRODUCT_ID  	0x013a
-#define C119B_PRODUCT_ID        0x0013
+#define C119B_PRODUCT_ID    0x0013
 #define C108_HID_INTERFACE	3
 
 #define HID_REPORT_GET		0x01
@@ -66,20 +76,39 @@
 #define HID_RT_INPUT		0x01
 #define HID_RT_OUTPUT		0x02
 
-#define	EEPROM_START_ADDR	6
-#define	EEPROM_END_ADDR		63
-#define	EEPROM_PHYSICAL_LEN	64
-#define EEPROM_TEST_ADDR	EEPROM_END_ADDR
-#define	EEPROM_MAGIC_ADDR	6
-#define	EEPROM_MAGIC		34329
-#define	EEPROM_CS_ADDR		62
-#define	EEPROM_RXMIXERSET	8
-#define	EEPROM_TXMIXASET	9
-#define	EEPROM_TXMIXBSET	10
-#define	EEPROM_RXVOICEADJ	11
-#define	EEPROM_RXCTCSSADJ	13
-#define	EEPROM_TXCTCSSADJ	15
-#define	EEPROM_RXSQUELCHADJ	16
+/*!
+ * \brief EEPROM memory layout
+ *	The AT93C46 eeprom has 64 addresses that contain 2 bytes (one word).
+ *	The CMxxx sound card device will use this eeprom to read manuafacturer
+ *	specific configuration data.
+ *	The CM108 and CM119 reserves memory addresses 0 to 6.
+ *	The CM119A reserves memory addresses 0 to 44.
+ *	The CM119B reserves memory addresses 0 to 50.
+ *
+ *	The usb channel drivers store user configuration information
+ *	in addresses 51 to 63.
+ *
+ *	The user data is zero indexed to the EEPROM_START_ADDR.
+ *
+ *	chan_simpleusb radio does not populate all of the available fields.
+ *
+ * \note Some USB devices are not manufacturered with an eeprom.
+ *	Never overwrite the manufacture stored information.
+ */
+#define	EEPROM_START_ADDR		51	/* Start after the manufacturer info */
+#define	EEPROM_USER_LEN			13
+#define	EEPROM_MAGIC			34329
+#define	EEPROM_USER_MAGIC_ADDR	 0
+#define	EEPROM_USER_RXMIXERSET	 1
+#define	EEPROM_USER_TXMIXASET	 2
+#define	EEPROM_USER_TXMIXBSET	 3
+#define	EEPROM_USER_RXVOICEADJ	 4	/* Requires 2 memory slots, stored as a float */
+#define	EEPROM_USER_RXCTCSSADJ	 6	/* Requires 2 memory slots, stored as a float */
+#define	EEPROM_USER_TXCTCSSADJ	 8
+#define	EEPROM_USER_RXSQUELCHADJ 9
+#define EEPROM_USER_TXDSPLVL	10
+#define EEPROM_USER_SPARE		11	/* Reserved for future use */
+#define	EEPROM_USER_CS_ADDR		12
 
 /* Previous versions of this driver assumed 32 gpio pins
  * the current and prior cm-xxx devices only support 8 gpio lines.
@@ -219,10 +248,10 @@ unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned shor
 
 void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
 
-struct usb_device *ast_radio_hid_device_init(char *desired_device);
+struct usb_device *ast_radio_hid_device_init(const char *desired_device);
 
 /*! \brief Get internal formatted string from external one */
-int ast_radio_usb_get_usbdev(char *devstr);
+int ast_radio_usb_get_usbdev(const char *devstr);
 
 int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *pport, int reload);
 
