@@ -98,33 +98,50 @@ long ast_radio_lround(double x)
  * \brief Calculate the speaker playback volume value.
  * 	Calculates the speaker playback volume.
  *
+ *	The calling routine passes the maximum setting for
+ *	for the speaker output.  This routine scales the
+ *	requested value against the maximum.
+ *
+ *	Some devices may require a different scaling divisor.
+ *	This routine can be customized for the requirements
+ *	for new devices.
+ *
+ *	In some implementations, the scaling factor has been
+ *	determined by spkrmax - 20 * log(ratio) or spkrmax - 10 * log(ratio).
+ *	Discussions with radio engineers indicate that we should
+ *	be using a linear scale.  FM deviation is linear.
+ *
  * \param spkrmax		Speaker maximum value.
- * \param val			Requested value.
+ * \param request_value	Requested volume value.
  * \param devtype		USB device type.
  *
  * \retval 				The calculated volume value.
  */
-int ast_radio_make_spkr_playback_value(int spkrmax, int val, int devtype)
+int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype)
 {
-	int v, rv;
-
-	v = (val * spkrmax) / 1000;
-	/* if just the old one, do it the old way */
-	if (devtype == C108_PRODUCT_ID) {
-		return v;
+	int v;
+	
+	switch (devtype)
+	{
+		case C108_PRODUCT_ID:
+			v = (request_value * spkrmax) / 1000;
+			return v;
+			
+		case C119B_PRODUCT_ID:
+			v = (request_value * spkrmax) / C119B_ADJUSTMENT;
+			return v;
+			
+		default:
+			v = (request_value * spkrmax) / 1000;
+			return v;
 	}
-	rv = (spkrmax + ast_radio_lround(20.0 * log10((float) (v + 1) / (float) (spkrmax + 1)) / 0.25));
-	if (rv < 0) {
-		rv = 0;
-	}
-	return rv;
 }
 
 /*!
  * \brief Get mixer max value
- * 	Gets the mixer max value for the specified device and control.
+ * 	Gets the mixer max value from ALSA for the specified device and control.
  *
- * \param devnum		The sound device number to update.
+ * \param devnum		The ALSA major device number to update.
  * \param param			Pointer to the string mixer device name (control) to retrieve.
  * 
  * \retval 				The maximum value.
@@ -171,10 +188,10 @@ int ast_radio_amixer_max(int devnum, char *param)
  * \brief Set mixer
  * 	Sets the mixer values for the specified device and control.
  *
- * \param devnum		The sound device number to update.
+ * \param devnum		The ALSA major device number to update.
  * \param param			Pointer to the string mixer device name (control) to update.
  * \param v1			Value 1 to set.
- * \param v2			Value 2 to set.
+ * \param v2			Value 2 to set or zero if only one value.
  */
 int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 {
@@ -577,7 +594,7 @@ int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *
 				*haspp = 2;
 				ast_verb(3, "Using direct IO port for pp support, since parport driver not available.\n");
 #else
-				ast_log(LOG_ERROR, "pp IO not supported on this architecture\n");
+				ast_log(LOG_ERROR, "Parallel port I/O is not supported on this architecture\n");
 #endif
 			}
 		}
@@ -621,7 +638,7 @@ unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase,
 	}
 	return (c);
 #else
-	ast_log(LOG_ERROR, "pp IO not supported on this architecture\n");
+	ast_log(LOG_ERROR, "Parallel port I/O is not supported on this architecture\n");
 	return 0;
 #endif
 }
@@ -651,7 +668,7 @@ void ast_radio_ppwrite(int haspp, unsigned int ppfd, unsigned int pbase, const c
 		outb(c, pbase);
 	}
 #else
-	ast_log(LOG_ERROR, "pp IO not supported on this architecture\n");
+	ast_log(LOG_ERROR, "Parallel port I/O is not supported on this architecture\n");
 #endif
 	return;
 }

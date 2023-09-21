@@ -131,7 +131,7 @@ static struct ast_jb_conf global_jbconf;
 #define	QUEUE_SIZE	2
 
 #define CONFIG	"usbradio.conf"	/* default config file */
-#define CONFIG1	"usbradio_tune_%s.conf"	/* tune config file */
+#define CONFIG_TUNE	"usbradio_tune_%s.conf"	/* tune config file */
 
 static FILE *frxcapraw = NULL, *frxcaptrace = NULL, *frxoutraw = NULL;
 static FILE *ftxcapraw = NULL, *ftxcaptrace = NULL, *ftxoutraw = NULL;
@@ -153,11 +153,6 @@ static int pbase;
 static char stoppulser;
 static char hasout;
 pthread_t pulserid;
-
-static int usbradio_debug;
-#if 0							//maw asdf sph
-static int usbradio_debug_level = 0;
-#endif
 
 enum { RX_AUDIO_NONE, RX_AUDIO_SPEAKER, RX_AUDIO_FLAT };
 enum { CD_IGNORE, CD_XPMR_NOISE, CD_XPMR_VOX, CD_HID, CD_HID_INVERT, CD_PP, CD_PP_INVERT };
@@ -194,10 +189,7 @@ struct chan_usbradio_pvt {
 #define WARN_used_blocks	1
 #define WARN_speed		2
 #define WARN_frag		4
-	int w_errors;				/* overfull in the write path */
-	struct timeval lastopen;
 
-	int overridecontext;
 	int mute;
 
 	/* boost support. BOOST_SCALE * 10 ^(BOOST_MAX/20) must
@@ -435,7 +427,6 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.ext = "s",
 	.ctx = "default",
 	.readpos = AST_FRIENDLY_OFFSET,	/* start here on reads */
-	.lastopen = { 0, 0 },
 	.boost = BOOST_SCALE,
 	.wanteeprom = 1,
 	.area = 0,
@@ -885,7 +876,7 @@ static void *hidthread(void *arg)
 	struct usb_dev_handle *usb_handle;
 	struct chan_usbradio_pvt *o = arg, *ao;
 	struct timeval then;
-	struct ast_config *cfg1;
+	struct ast_config *cfg_tune;
 	struct ast_variable *v;
 	struct ast_flags zeroflag = { 0 };
 	struct pollfd rfds[1];
@@ -1116,8 +1107,18 @@ static void *hidthread(void *arg)
 			o->pmrChan->txrxblankingtime = o->txrxblankingtime;
 			o->pmrChan->rxCpuSaver = o->rxcpusaver;
 			o->pmrChan->txCpuSaver = o->txcpusaver;
-
-			*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / 1000;
+			
+			/* adjust settings based on the device */
+			switch (o->devtype)
+			{
+				case C119B_PRODUCT_ID:
+					*(o->pmrChan->prxSquelchAdjust) =
+						((999 - o->rxsquelchadj) * 32767) / C119B_ADJUSTMENT;
+					break;
+				default:
+					*(o->pmrChan->prxSquelchAdjust) = 
+						((999 - o->rxsquelchadj) * 32767) / 1000;
+			}
 
 			*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
 			*(o->pmrChan->prxCtcssAdjust) = o->rxctcssadj * M_Q8;
@@ -1132,7 +1133,7 @@ static void *hidthread(void *arg)
 			if ((o->txmixa != TX_OUT_VOICE) && (o->txmixb != TX_OUT_VOICE) &&
 				(o->txmixa != TX_OUT_COMPOSITE) && (o->txmixb != TX_OUT_COMPOSITE)
 				) {
-				ast_log(LOG_ERROR, "No txvoice output configured.\n");
+				ast_log(LOG_ERROR, "Channel %s: No txvoice output configured.\n", o->name);
 			}
 
 			if (o->txctcssfreq[0] &&
@@ -1155,8 +1156,8 @@ static void *hidthread(void *arg)
 		mult_set(o);
 
 		/* reload the settings from the tune file */
-		snprintf(fname, sizeof(fname) - 1, CONFIG1, o->name);
-		cfg1 = ast_config_load(fname, zeroflag);
+		snprintf(fname, sizeof(fname) - 1, CONFIG_TUNE, o->name);
+		cfg_tune = ast_config_load(fname, zeroflag);
 		o->rxmixerset = 500;
 		o->txmixaset = 500;
 		o->txmixbset = 500;
@@ -1164,8 +1165,8 @@ static void *hidthread(void *arg)
 		o->rxctcssadj = 0.5;
 		o->txctcssadj = 200;
 		o->rxsquelchadj = 500;
-		if (cfg1) {
-			for (v = ast_variable_browse(cfg1, o->name); v; v = v->next) {
+		if (cfg_tune) {
+			for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
 
 				M_START((char *) v->name, (char *) v->value);
 				M_UINT("rxmixerset", o->rxmixerset)
@@ -1178,7 +1179,7 @@ static void *hidthread(void *arg)
 				M_UINT("fever", o->fever)
 				M_END(;);
 			}
-			ast_config_destroy(cfg1);
+			ast_config_destroy(cfg_tune);
 			ast_log(LOG_NOTICE, "Channel %s: Loaded parameters from %s .\n", o->name, fname);
 		} else {
 			ast_log(LOG_WARNING, "Channel %s: File %s not found, using default parameters.\n", o->name, fname);
@@ -1556,12 +1557,10 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	 */
 	res = used_blocks(o);
 	if (res > o->queuesize) {	/* no room to write a block */
-		// ast_log(LOG_WARNING, "sound device write buffer overflow\n");
-		if (o->w_errors++ == 0 && (usbradio_debug & 0x4))
-			ast_log(LOG_WARNING, "write: used %d blocks (%d)\n", res, o->w_errors);
+		ast_log(LOG_WARNING, "Channel %s: Sound device write buffer overflow - used %d blocks\n",
+			o->name, res);
 		return 0;
 	}
-	o->w_errors = 0;
 
 	return write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 12);
 }
@@ -1584,7 +1583,6 @@ static int setformat(struct chan_usbradio_pvt *o, int mode)
 	}
 	if (mode == O_CLOSE)		/* we are done */
 		return 0;
-	o->lastopen = ast_tvnow();
 	strcpy(device, "/dev/dsp");
 	if (o->devicenum)
 		sprintf(device, "/dev/dsp%d", o->devicenum);
@@ -2660,13 +2658,22 @@ static void tune_flash(int fd, struct chan_usbradio_pvt *o, int intflag)
 	o->txtestkey = 0;
 }
 
+/*!
+ * \brief Process asterisk cli request radio tune.
+ * \param fd			Asterisk cli fd
+ * \param argc			Number of arguments
+ * \param argv			Pointer to arguments
+ * \return	Cli success, showusage, or failure.
+ */
 static int radio_tune(int fd, int argc, const char *const *argv)
 {
 	struct chan_usbradio_pvt *o = find_desc(usbradio_active);
 	int i = 0;
+	int adjustment;
 
-	if ((argc < 2) || (argc > 4))
+	if ((argc < 2) || (argc > 4)) {
 		return RESULT_SHOWUSAGE;
+	}
 
 	if (argc == 2) {			/* just show stuff */
 		ast_cli(fd, "Active radio interface is [%s]\n", usbradio_active);
@@ -2675,28 +2682,30 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		ast_mutex_unlock(&usb_dev_lock);
 		ast_cli(fd, "Card is %i\n", ast_radio_usb_get_usbdev(o->devstr));
 		ast_cli(fd, "Output A is currently set to ");
-		if (o->txmixa == TX_OUT_COMPOSITE)
+		if (o->txmixa == TX_OUT_COMPOSITE) {
 			ast_cli(fd, "composite.\n");
-		else if (o->txmixa == TX_OUT_VOICE)
+		} else if (o->txmixa == TX_OUT_VOICE) {
 			ast_cli(fd, "voice.\n");
-		else if (o->txmixa == TX_OUT_LSD)
+		} else if (o->txmixa == TX_OUT_LSD) {
 			ast_cli(fd, "tone.\n");
-		else if (o->txmixa == TX_OUT_AUX)
+		} else if (o->txmixa == TX_OUT_AUX) {
 			ast_cli(fd, "auxvoice.\n");
-		else
+		} else {
 			ast_cli(fd, "off.\n");
+		}
 
 		ast_cli(fd, "Output B is currently set to ");
-		if (o->txmixb == TX_OUT_COMPOSITE)
+		if (o->txmixb == TX_OUT_COMPOSITE) {
 			ast_cli(fd, "composite.\n");
-		else if (o->txmixb == TX_OUT_VOICE)
+		} else if (o->txmixb == TX_OUT_VOICE) {
 			ast_cli(fd, "voice.\n");
-		else if (o->txmixb == TX_OUT_LSD)
+		} else if (o->txmixb == TX_OUT_LSD) {
 			ast_cli(fd, "tone.\n");
-		else if (o->txmixb == TX_OUT_AUX)
+		} else if (o->txmixb == TX_OUT_AUX) {
 			ast_cli(fd, "auxvoice.\n");
-		else
+		} else {
 			ast_cli(fd, "off.\n");
+		}
 
 		ast_cli(fd, "Tx Voice Level currently set to %d\n", o->txmixaset);
 		ast_cli(fd, "Tx Tone Level currently set to %d\n", o->txctcssadj);
@@ -2706,8 +2715,9 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 
 	o->pmrChan->b.tuning = 1;
 
-	if (!strcasecmp(argv[2], "dump"))
+	if (!strcasecmp(argv[2], "dump")) {
 		pmrdump(o);
+	}
 	else if (!strcasecmp(argv[2], "swap")) {
 		if (argc > 3) {
 			usb_device_swap(fd, argv[3]);
@@ -2715,8 +2725,9 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		}
 		return RESULT_SHOWUSAGE;
 	} else if (!strcasecmp(argv[2], "menu-support")) {
-		if (argc > 3)
+		if (argc > 3) {
 			tune_menusupport(fd, o, argv[3]);
+		}
 		return RESULT_SUCCESS;
 	}
 
@@ -2725,13 +2736,13 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		return RESULT_SUCCESS;
 	}
 
-	if (!strcasecmp(argv[2], "rxnoise"))
+	if (!strcasecmp(argv[2], "rxnoise")) {
 		tune_rxinput(fd, o, 0, 0);
-	else if (!strcasecmp(argv[2], "rxvoice"))
+	} else if (!strcasecmp(argv[2], "rxvoice")) {
 		tune_rxvoice(fd, o, 0);
-	else if (!strcasecmp(argv[2], "rxtone"))
+	} else if (!strcasecmp(argv[2], "rxtone")) {
 		tune_rxctcss(fd, o, 0);
-	else if (!strcasecmp(argv[2], "flash")) {
+	} else if (!strcasecmp(argv[2], "flash")) {
 		tune_flash(fd, o, 0);
 	} else if (!strcasecmp(argv[2], "rxsquelch")) {
 		if (argc == 3) {
@@ -2741,11 +2752,21 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 			//ast_cli(fd,"Current (real) Squelch setting is %d\n",*(o->pmrChan->prxSquelchAdjust));
 		} else {
 			i = atoi(argv[3]);
-			if ((i < 0) || (i > 999))
+			if ((i < 0) || (i > 999)) {
 				return RESULT_SHOWUSAGE;
+			}
 			ast_cli(fd, "Changed Squelch setting to %d\n", i);
 			o->rxsquelchadj = i;
-			*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / 1000;
+			/* adjust settings based on the device */
+			switch (o->devtype)
+			{
+				case C119B_PRODUCT_ID:
+					adjustment = C119B_ADJUSTMENT;
+					break;
+				default:
+					adjustment = 1000;
+			}
+			*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / adjustment;
 		}
 	} else if (!strcasecmp(argv[2], "txvoice")) {
 		i = 0;
@@ -2761,8 +2782,9 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 				ast_cli(fd, "Current txvoice setting on Channel B is %d\n", o->txmixbset);
 		} else {
 			i = atoi(argv[3]);
-			if ((i < 0) || (i > 999))
+			if ((i < 0) || (i > 999)) {
 				return RESULT_SHOWUSAGE;
+			}
 
 			if ((o->txmixa == TX_OUT_VOICE) || (o->txmixa == TX_OUT_COMPOSITE)) {
 				o->txmixaset = i;
@@ -2782,18 +2804,19 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		i = 0;
 
 		if ((o->txmixa != TX_OUT_VOICE) && (o->txmixb != TX_OUT_VOICE) &&
-			(o->txmixa != TX_OUT_COMPOSITE) && (o->txmixb != TX_OUT_COMPOSITE)
-			) {
+			(o->txmixa != TX_OUT_COMPOSITE) && (o->txmixb != TX_OUT_COMPOSITE)) {
 			ast_log(LOG_ERROR, "No txvoice output configured.\n");
 		} else if (argc == 3) {
-			if ((o->txmixa == TX_OUT_VOICE) || (o->txmixa == TX_OUT_COMPOSITE))
+			if ((o->txmixa == TX_OUT_VOICE) || (o->txmixa == TX_OUT_COMPOSITE)) {
 				ast_cli(fd, "Current txvoice setting on Channel A is %d\n", o->txmixaset);
-			else
+			} else {
 				ast_cli(fd, "Current txvoice setting on Channel B is %d\n", o->txmixbset);
+			}
 		} else {
 			i = atoi(argv[3]);
-			if ((i < 0) || (i > 999))
+			if ((i < 0) || (i > 999)) {
 				return RESULT_SHOWUSAGE;
+			}
 
 			if ((o->txmixa == TX_OUT_VOICE) || (o->txmixa == TX_OUT_COMPOSITE)) {
 				o->txmixaset = i;
@@ -2812,14 +2835,16 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		if ((o->txmixa != TX_OUT_AUX) && (o->txmixb != TX_OUT_AUX)) {
 			ast_log(LOG_WARNING, "No auxvoice output configured.\n");
 		} else if (argc == 3) {
-			if (o->txmixa == TX_OUT_AUX)
+			if (o->txmixa == TX_OUT_AUX) {
 				ast_cli(fd, "Current auxvoice setting on Channel A is %d\n", o->txmixaset);
-			else
+			} else {
 				ast_cli(fd, "Current auxvoice setting on Channel B is %d\n", o->txmixbset);
+			}
 		} else {
 			i = atoi(argv[3]);
-			if ((i < 0) || (i > 999))
+			if ((i < 0) || (i > 999)) {
 				return RESULT_SHOWUSAGE;
+			}
 			if (o->txmixa == TX_OUT_AUX) {
 				o->txmixbset = i;
 				ast_cli(fd, "Changed auxvoice setting on Channel A to %d\n", o->txmixaset);
@@ -2832,12 +2857,13 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		}
 		//tune_auxoutput(o,i);
 	} else if (!strcasecmp(argv[2], "txtone")) {
-		if (argc == 3)
+		if (argc == 3) {
 			ast_cli(fd, "Current Tx CTCSS modulation setting = %d\n", o->txctcssadj);
-		else {
+		} else {
 			i = atoi(argv[3]);
-			if ((i < 0) || (i > 999))
+			if ((i < 0) || (i > 999)) {
 				return RESULT_SHOWUSAGE;
+			}
 			o->txctcssadj = i;
 			set_txctcss_level(o);
 			ast_cli(fd, "Changed Tx CTCSS modulation setting to %i\n", i);
@@ -2875,23 +2901,27 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 			ftxoutraw = NULL;
 		}
 	} else if (!strcasecmp(argv[2], "rxtracecap")) {
-		if (!frxcaptrace)
+		if (!frxcaptrace) {
 			frxcaptrace = fopen(RX_CAP_TRACE_FILE, "w");
+		}
 		ast_cli(fd, "Trace rx on.\n");
 		o->b.rxcap2 = o->pmrChan->b.rxCapture = 1;
 	} else if (!strcasecmp(argv[2], "txtracecap")) {
-		if (!ftxcaptrace)
+		if (!ftxcaptrace) {
 			ftxcaptrace = fopen(TX_CAP_TRACE_FILE, "w");
+		}
 		ast_cli(fd, "Trace tx on.\n");
 		o->b.txcap2 = o->pmrChan->b.txCapture = 1;
 	} else if (!strcasecmp(argv[2], "rxcap")) {
-		if (!frxcapraw)
+		if (!frxcapraw) {
 			frxcapraw = fopen(RX_CAP_RAW_FILE, "w");
+		}
 		ast_cli(fd, "cap rx raw on.\n");
 		o->b.rxcapraw = 1;
 	} else if (!strcasecmp(argv[2], "txcap")) {
-		if (!ftxcapraw)
+		if (!ftxcapraw) {
 			ftxcapraw = fopen(TX_CAP_RAW_FILE, "w");
+		}
 		ast_cli(fd, "cap tx raw on.\n");
 		o->b.txcapraw = 1;
 	} else if (!strcasecmp(argv[2], "save")) {
@@ -2916,13 +2946,19 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*
-	set transmit ctcss modulation level
-	adjust mixer output or internal gain depending on output type
-	setting range is 0.0 to 0.9
-*/
+/*!
+ * \brief Set transmit CTCSS modulation level.
+ *	Set the transmit CTCSS modulation level.  Adjust the mixer output or
+ *	internal gain depending on the output type.
+ *	Setting ranges is 0.0 to 0.9.
+ *
+ * \param o				Pointer to chan_usbradio structure.
+ * \return	0			Always returns zero.
+ */
 static int set_txctcss_level(struct chan_usbradio_pvt *o)
 {
+	int adjustment;
+	
 	if (o->txmixa == TX_OUT_LSD) {
 //      o->txmixaset=(151*o->txctcssadj) / 1000;
 		o->txmixaset = o->txctcssadj;
@@ -2935,7 +2971,16 @@ static int set_txctcss_level(struct chan_usbradio_pvt *o)
 		mult_set(o);
 	} else {
 		if (o->pmrChan->ptxCtcssAdjust) {	/* Ignore if ptr not defined */
-			*o->pmrChan->ptxCtcssAdjust = (o->txctcssadj * M_Q8) / 1000;
+			/* adjust settings based on the device */
+			switch (o->devtype)
+			{
+				case C119B_PRODUCT_ID:
+					adjustment = C119B_ADJUSTMENT;
+					break;
+				default:
+					adjustment = 1000;
+			}
+			*o->pmrChan->ptxCtcssAdjust = (o->txctcssadj * M_Q8) / adjustment;
 		}
 	}
 	return 0;
@@ -3187,9 +3232,14 @@ static void tune_txoutput(struct chan_usbradio_pvt *o, int value, int fd, int in
 	o->txtestkey = 0;
 }
 
-/*
-	Adjust Input Attenuator with maximum signal input
-*/
+/*!
+ * \brief Adjust input attenuator with maximum signal input.
+ *
+ * \param fd			Asterisk cli fd
+ * \param o				Pointer to chan_usbradio structure.
+ * \param setsql		Setting for squelch.
+ * \param intflag		Flag to indicate how happy_mswait waits.
+ */
 static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int intflag)
 {
 	const int settingmin = 1;
@@ -3200,15 +3250,17 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 	int tolerance = 2750;
 	int setting = 0, tries = 0, tmpdiscfactor, meas, measnoise;
 	float settingmax, f;
+	int adjustment;
 
 	if (o->rxdemod == RX_AUDIO_SPEAKER && o->rxcdtype == CD_XPMR_NOISE) {
 		ast_cli(fd, "ERROR: usbradio.conf rxdemod=speaker vs. carrierfrom=dsp \n");
 	}
 
-	if (o->rxdemod == RX_AUDIO_FLAT)
+	if (o->rxdemod == RX_AUDIO_FLAT) {
 		target = 27000;
-	else
+	} else {
 		target = 23000;
+	}
 
 	settingmax = o->micmax;
 
@@ -3240,8 +3292,9 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		meas = o->pmrChan->spsMeasure->apeak;
 		o->pmrChan->spsMeasure->enabled = 0;
 
-		if (!meas)
+		if (!meas) {
 			meas++;
+		}
 		ast_cli(fd, "tries=%i, setting=%i, meas=%i\n", tries, setting, meas);
 
 		if ((meas < (target - tolerance) || meas > (target + tolerance)) && tries <= 2) {
@@ -3255,10 +3308,11 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 			break;
 		}
 
-		if (setting < settingmin)
+		if (setting < settingmin) {
 			setting = settingmin;
-		else if (setting > settingmax)
+		} else if (setting > settingmax) {
 			setting = settingmax;
+		}
 
 		tries++;
 	}
@@ -3292,8 +3346,18 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		ast_cli(fd, "INFO: RX INPUT ADJUST SUCCESS.\n");
 		o->rxmixerset = ((setting * 1000) + (o->micmax / 2)) / o->micmax;
 
+		/* adjust settings based on the device */
+		switch (o->devtype)
+		{
+			case C119B_PRODUCT_ID:
+				adjustment = C119B_ADJUSTMENT;
+				break;
+			default:
+				adjustment = 1000;
+		}
+
 		if (o->rxcdtype == CD_XPMR_NOISE) {
-			int normRssi = ((32767 - o->pmrChan->rxRssi) * 1000 / 32767);
+			int normRssi = ((32767 - o->pmrChan->rxRssi) * adjustment / 32767);
 
 			if ((meas / (measnoise / 10)) > 26) {
 				ast_cli(fd, "WARNING: Insufficient high frequency noise from receiver.\n");
@@ -3306,7 +3370,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 				o->rxsquelchadj = normRssi + 150;
 				if (o->rxsquelchadj > 999)
 					o->rxsquelchadj = 999;
-				*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / 1000;
+				*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / adjustment;
 				ast_cli(fd, "Rx Squelch set to %d (RSSI=%d).\n", o->rxsquelchadj, normRssi);
 			} else {
 				if (o->rxsquelchadj < normRssi) {
@@ -3376,10 +3440,17 @@ static void do_rxdisplay(int fd, struct chan_usbradio_pvt *o)
 	o->pmrChan->spsMeasure->enabled = 0;
 }
 
+/*!
+ * \brief Set received voice level.
+ * \param fd			Asterisk cli fd.
+ * \param o				Pointer to chan_usbradio structure.
+ * \param str			Pointer to new voice level.
+ */
 static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 {
 	int i, x;
 	float f, f1;
+	int adjustment;
 
 	if (!str[0]) {
 		if (o->rxdemod == RX_AUDIO_FLAT)
@@ -3400,10 +3471,22 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 		o->rxvoiceadj = (float) i / 200.0;
 	} else {
 		o->rxmixerset = i;
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, o->rxmixerset * o->micmax / 1000, 0);
+		/* adjust settings based on the device */
+		switch (o->devtype)
+		{
+			case C119B_PRODUCT_ID:
+				adjustment = o->rxmixerset * o->micmax / C119B_ADJUSTMENT;
+				/* get interval step size */
+	            f = C119B_ADJUSTMENT / (float) o->micmax;
+				o->rxboostset = 1;	/*rxboost is always set for this device */
+				break;
+			default:
+				adjustment = o->rxmixerset * o->micmax / 1000;
+                /* get interval step size */
+                f = 1000.0 / (float) o->micmax;
+		}
+		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, adjustment, 0);
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboostset, 0);
-		/* get interval step size */
-		f = 1000.0 / (float) o->micmax;
 		o->rxvoiceadj = 0.5 + (modff(((float) i) / f, &f1) * .093981);
 	}
 	*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
@@ -3448,9 +3531,15 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 	return;
 }
 
+/*!
+ * \brief Set squelch level.
+ * \param fd			Asterisk cli fd.
+ * \param o				Pointer to chan_usbradio structure.
+ * \param str			Pointer to new squelch level.
+ */
 static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str)
 {
-	int i, x;
+	int i, x, adjustment;
 
 	if (!str[0]) {
 		ast_cli(fd, "Current Signal Strength is %d\n", ((32767 - o->pmrChan->rxRssi) * 1000 / 32767));
@@ -3458,8 +3547,9 @@ static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str
 		return;
 	}
 	for (x = 0; str[x]; x++) {
-		if (!isdigit(str[x]))
+		if (!isdigit(str[x])) {
 			break;
+		}
 	}
 	if (str[x] || (sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
 		ast_cli(fd, "Entry Error, Rx Squelch Level setting not changed\n");
@@ -3467,7 +3557,16 @@ static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str
 	}
 	ast_cli(fd, "Changed Rx Squelch Level setting to %d\n", i);
 	o->rxsquelchadj = i;
-	*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / 1000;
+	/* adjust settings based on the device */
+	switch (o->devtype)
+	{
+		case C119B_PRODUCT_ID:
+			adjustment = C119B_ADJUSTMENT;
+			break;
+		default:
+			adjustment = 1000;
+	}
+	*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / adjustment;
 	return;
 }
 
@@ -3816,6 +3915,12 @@ static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
 	o->pmrChan->b.tuning = 0;
 }
 
+/*!
+ * \brief Determine the receive CTCSS level.
+ * \param fd			Asterisk cli fd.
+ * \param o				Pointer to chan_usbradio structure.
+ * \param intflag		Flag to indicate how happy_mswait waits.
+ */
 static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 {
 	const int target = 2400;	// was 4096 pre 20080205
@@ -3827,6 +3932,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 
 	float setting;
 	int tries = 0, meas;
+	int adjustment;
 
 	ast_cli(fd, "INFO: RX CTCSS ADJUST START.\n");
 	ast_cli(fd, "target=%i tolerance=%i \n", target, tolerance);
@@ -3880,7 +3986,16 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
-		normRssi = ((32767 - o->pmrChan->rxRssi) * 1000 / 32767);
+		/* adjust settings based on the device */
+		switch (o->devtype)
+		{
+			case C119B_PRODUCT_ID:
+				adjustment = C119B_ADJUSTMENT;
+				break;
+			default:
+				adjustment = 1000;
+		}
+		normRssi = ((32767 - o->pmrChan->rxRssi) * adjustment / 32767);
 
 		if (o->rxsquelchadj > normRssi)
 			ast_cli(fd, "WARNING: RSSI=%i SQUELCH=%i and is too tight. Use 'radio tune rxsquelch'.\n", normRssi,
@@ -3940,36 +4055,67 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	}
 }
 
-//
+/*!
+ * \brief Update the ALSA mixer settings
+ * Update the ALSA mixer settings.
+ *
+ * \param		Pointer to chan_simpleusb structure.
+ */
 static void mixer_write(struct chan_usbradio_pvt *o)
 {
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
+	int mic_setting;
+	
 	if (o->duplex3) {
-		if (o->duplex3 > o->micplaymax)
+		if (o->duplex3 > o->micplaymax) {
 			o->duplex3 = o->micplaymax;
+		}
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, o->duplex3, 0);
 	} else {
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, 0, 0);
 	}
+	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
 			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype), ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, o->rxmixerset * o->micmax / 1000, 0);
+	/* adjust settings based on the device */
+	switch (o->devtype)
+	{
+		case C119B_PRODUCT_ID:
+			mic_setting = o->rxmixerset * o->micmax / C119B_ADJUSTMENT;
+			o->rxboostset = 1;	/*rxboost is always set for this device */
+			break;
+		default:
+			mic_setting = o->rxmixerset * o-> micmax / 1000;
+	}
+	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboostset, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
 }
 
-/*
-	adjust dsp multiplier to add resolution to tx level adjustment
-*/
+/*!
+ * \brief Adjust DSP multiplier 
+ * Adjusts the DSP multiplier to add resolution to the tx level adjustment
+ *
+ * \param		Pointer to chan_usbradio structure.
+ */
 static void mult_set(struct chan_usbradio_pvt *o)
 {
-
+	int adjustment;
+	
+	/* adjust settings based on the device */
+	switch (o->devtype)
+	{
+		case C119B_PRODUCT_ID:
+			adjustment = C119B_ADJUSTMENT;
+			break;
+		default:
+			adjustment = 1000;
+	}
 	if (o->pmrChan->spsTxOutA) {
-		o->pmrChan->spsTxOutA->outputGain = mult_calc((o->txmixaset * 152) / 1000);
+		o->pmrChan->spsTxOutA->outputGain = mult_calc((o->txmixaset * 152) / adjustment);
 	}
 	if (o->pmrChan->spsTxOutB) {
-		o->pmrChan->spsTxOutB->outputGain = mult_calc((o->txmixbset * 152) / 1000);
+		o->pmrChan->spsTxOutB->outputGain = mult_calc((o->txmixbset * 152) / adjustment);
 	}
 }
 
@@ -4237,14 +4383,18 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
 	return 0;
 }
 
-/*
- * grab fields from the config file, init the descriptor and open the device.
+/*!
+ * \brief Store configuration.
+ *	Initializes chan_usbradio and loads it with the configuration data.
+ * \param cfg			Pointer to ast_config structure.
+ * \param ctg			Pointer to category.
+ * \return				Pointer to chan_usbradio_pvt.
  */
-static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg, int *indexp)
+static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, const char *ctg)
 {
-	struct ast_variable *v;
+	const struct ast_variable *v;
 	struct chan_usbradio_pvt *o;
-	struct ast_config *cfg1;
+	struct ast_config *cfg_tune;
 	char fname[200], buf[100];
 	int i;
 	struct ast_flags zeroflag = { 0 };
@@ -4258,16 +4408,15 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 		if (strcmp(ctg, "general") == 0) {
 			o = &usbradio_default;
 		} else {
-			// ast_log(LOG_NOTICE,"ast_calloc for chan_usbradio_pvt of %s\n",ctg);
 			if (!(o = ast_calloc(1, sizeof(*o))))
 				return NULL;
 			*o = usbradio_default;
 			o->name = ast_strdup(ctg);
-#ifdef PROBABLY_OLD_ASTERISK
-			o->index = (*indexp)++;
-#endif
-			if (!usbradio_active)
+			o->pttkick[0] = -1;
+			o->pttkick[1] = -1;
+			if (!usbradio_active) {
 				usbradio_active = o->name;
+			}
 		}
 	}
 	ast_mutex_init(&o->eepromlock);
@@ -4277,91 +4426,89 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 		M_START((char *) v->name, (char *) v->value);
 
 		/* handle jb conf */
-		if (!ast_jb_read_conf(&global_jbconf, v->name, v->value))
+		if (!ast_jb_read_conf(&global_jbconf, v->name, v->value)) {
 			continue;
+		}
 
 #if	0
 		M_BOOL("autoanswer", o->autoanswer)
-			M_BOOL("autohangup", o->autohangup)
-			M_BOOL("overridecontext", o->overridecontext)
-			M_STR("context", o->ctx)
-			M_STR("language", o->language)
-			M_STR("mohinterpret", o->mohinterpret)
-			M_STR("extension", o->ext)
-			M_F("callerid", store_callerid(o, v->value))
+		M_BOOL("autohangup", o->autohangup)
+		M_STR("context", o->ctx)
+		M_STR("language", o->language)
+		M_STR("mohinterpret", o->mohinterpret)
+		M_STR("extension", o->ext)
+		M_F("callerid", store_callerid(o, v->value))
 #endif
-			M_UINT("frags", o->frags)
-			M_UINT("queuesize", o->queuesize)
+		M_UINT("frags", o->frags)
+		M_UINT("queuesize", o->queuesize)
 #if 0
-			M_UINT("devicenum", o->devicenum)
+		M_UINT("devicenum", o->devicenum)
 #endif
-			M_UINT("debug", usbradio_debug)
-			M_BOOL("rxcpusaver", o->rxcpusaver)
-			M_BOOL("txcpusaver", o->txcpusaver)
-			M_BOOL("invertptt", o->invertptt)
-			M_F("rxdemod", store_rxdemod(o, (char *) v->value))
-			M_BOOL("txlimonly", o->txlimonly);
+		M_BOOL("rxcpusaver", o->rxcpusaver)
+		M_BOOL("txcpusaver", o->txcpusaver)
+		M_BOOL("invertptt", o->invertptt)
+		M_F("rxdemod", store_rxdemod(o, (char *) v->value))
+		M_BOOL("txlimonly", o->txlimonly);
 		M_BOOL("txprelim", o->txprelim);
 		M_F("txmixa", store_txmixa(o, (char *) v->value))
-			M_F("txmixb", store_txmixb(o, (char *) v->value))
-			M_F("carrierfrom", store_rxcdtype(o, (char *) v->value))
-			M_F("ctcssfrom", store_rxsdtype(o, (char *) v->value))
-			M_UINT("rxsqvox", o->rxsqvoxadj)
-			M_UINT("rxsqhyst", o->rxsqhyst)
-			M_UINT("rxnoisefiltype", o->rxnoisefiltype)
-			M_UINT("rxsquelchdelay", o->rxsquelchdelay)
-			M_STR("txctcssdefault", o->txctcssdefault)
-			M_STR("rxctcssfreqs", o->rxctcssfreqs)
-			M_STR("txctcssfreqs", o->txctcssfreqs)
-			M_BOOL("rxctcssoverride", o->rxctcssoverride);
+		M_F("txmixb", store_txmixb(o, (char *) v->value))
+		M_F("carrierfrom", store_rxcdtype(o, (char *) v->value))
+		M_F("ctcssfrom", store_rxsdtype(o, (char *) v->value))
+		M_UINT("rxsqvox", o->rxsqvoxadj)
+		M_UINT("rxsqhyst", o->rxsqhyst)
+		M_UINT("rxnoisefiltype", o->rxnoisefiltype)
+		M_UINT("rxsquelchdelay", o->rxsquelchdelay)
+		M_STR("txctcssdefault", o->txctcssdefault)
+		M_STR("rxctcssfreqs", o->rxctcssfreqs)
+		M_STR("txctcssfreqs", o->txctcssfreqs)
+		M_BOOL("rxctcssoverride", o->rxctcssoverride);
 		M_UINT("rxfreq", o->rxfreq)
-			M_UINT("txfreq", o->txfreq)
-			M_F("rxgain", store_rxgain(o, (char *) v->value))
-			M_BOOL("rxboost", o->rxboostset)
-			M_BOOL("txboost", o->txboostset)
-			M_UINT("rxctcssrelax", o->rxctcssrelax)
-			M_F("txtoctype", store_txtoctype(o, (char *) v->value))
-			M_UINT("hdwtype", o->hdwtype)
-			M_UINT("eeprom", o->wanteeprom)
-			M_UINT("duplex", o->radioduplex)
-			M_UINT("txsettletime", o->txsettletime)
-			M_UINT("txrxblankingtime", o->txrxblankingtime)
-			M_BOOL("rxpolarity", o->b.rxpolarity)
-			M_BOOL("txpolarity", o->b.txpolarity)
-			M_BOOL("dcsrxpolarity", o->b.dcsrxpolarity)
-			M_BOOL("dcstxpolarity", o->b.dcstxpolarity)
-			M_BOOL("lsdrxpolarity", o->b.lsdrxpolarity)
-			M_BOOL("lsdtxpolarity", o->b.lsdtxpolarity)
-			M_BOOL("loopback", o->b.loopback)
-			M_BOOL("radioactive", o->b.radioactive)
-			M_UINT("rptnum", o->rptnum)
-			M_UINT("idleinterval", o->idleinterval)
-			M_UINT("turnoffs", o->turnoffs)
-			M_UINT("tracetype", o->tracetype)
-			M_UINT("tracelevel", o->tracelevel)
-			M_UINT("rxondelay", o->rxondelay);
+		M_UINT("txfreq", o->txfreq)
+		M_F("rxgain", store_rxgain(o, (char *) v->value))
+		M_BOOL("rxboost", o->rxboostset)
+		M_BOOL("txboost", o->txboostset)
+		M_UINT("rxctcssrelax", o->rxctcssrelax)
+		M_F("txtoctype", store_txtoctype(o, (char *) v->value))
+		M_UINT("hdwtype", o->hdwtype)
+		M_UINT("eeprom", o->wanteeprom)
+		M_UINT("duplex", o->radioduplex)
+		M_UINT("txsettletime", o->txsettletime)
+		M_UINT("txrxblankingtime", o->txrxblankingtime)
+		M_BOOL("rxpolarity", o->b.rxpolarity)
+		M_BOOL("txpolarity", o->b.txpolarity)
+		M_BOOL("dcsrxpolarity", o->b.dcsrxpolarity)
+		M_BOOL("dcstxpolarity", o->b.dcstxpolarity)
+		M_BOOL("lsdrxpolarity", o->b.lsdrxpolarity)
+		M_BOOL("lsdtxpolarity", o->b.lsdtxpolarity)
+		M_BOOL("loopback", o->b.loopback)
+		M_BOOL("radioactive", o->b.radioactive)
+		M_UINT("rptnum", o->rptnum)
+		M_UINT("idleinterval", o->idleinterval)
+		M_UINT("turnoffs", o->turnoffs)
+		M_UINT("tracetype", o->tracetype)
+		M_UINT("tracelevel", o->tracelevel)
+		M_UINT("rxondelay", o->rxondelay);
 		M_UINT("txoffdelay", o->txoffdelay);
 		M_UINT("area", o->area)
-			M_STR("ukey", o->ukey)
-			M_UINT("duplex3", o->duplex3)
-			M_UINT("rxlpf", o->rxlpf)
-			M_UINT("rxhpf", o->rxhpf)
-			M_UINT("txlpf", o->txlpf)
-			M_UINT("txhpf", o->txhpf)
-//            ast_log(LOG_NOTICE,"rxlpf: %d\n",o->rxlpf);
-//            ast_log(LOG_NOTICE,"rxhpf: %d\n",o->rxhpf);
-//            ast_log(LOG_NOTICE,"txlpf: %d\n",o->txlpf);
-//            ast_log(LOG_NOTICE,"txhpf: %d\n",o->txhpf);
-			M_UINT("sendvoter", o->sendvoter)
-			M_END(;);
+		M_STR("ukey", o->ukey)
+		M_UINT("duplex3", o->duplex3)
+		M_UINT("rxlpf", o->rxlpf)
+		M_UINT("rxhpf", o->rxhpf)
+		M_UINT("txlpf", o->txlpf)
+		M_UINT("txhpf", o->txhpf)
+		M_UINT("sendvoter", o->sendvoter)
+		M_END(;);
+		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			sprintf(buf, "gpio%d", i + 1);
-			if (!strcmp(v->name, buf))
+			if (!strcmp(v->name, buf)) {
 				o->gpios[i] = ast_strdup(v->value);
+			}
 		}
 		for (i = 2; i <= 15; i++) {
-			if (!((1 << i) & PP_MASK))
+			if (!((1 << i) & PP_MASK)) {
 				continue;
+			}
 			sprintf(buf, "pp%d", i);
 			if (!strcmp(v->name, buf)) {
 				o->pps[i] = ast_strdup(v->value);
@@ -4377,32 +4524,36 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 	}
 
 	if ((o->txmixa == TX_OUT_COMPOSITE) && (o->txmixb == TX_OUT_VOICE)) {
-		ast_log(LOG_WARNING,
+		ast_log(LOG_ERROR,
 				"Invalid Configuration: Can not have B channel be Voice with A channel being Composite!!\n");
 	}
 	if ((o->txmixb == TX_OUT_COMPOSITE) && (o->txmixa == TX_OUT_VOICE)) {
-		ast_log(LOG_WARNING,
+		ast_log(LOG_ERROR,
 				"Invalid Configuration: Can not have A channel be Voice with B channel being Composite!!\n");
 	}
 
-	if (o == &usbradio_default)	/* we are done with the default */
+	if (o == &usbradio_default) {	/* we are done with the default */
 		return NULL;
+	}
 
 	for (i = 2; i <= 9; i++) {
 		/* skip if this one not specified */
-		if (!o->pps[i])
+		if (!o->pps[i]) {
 			continue;
-		/* skip if not out */
-		if (strncasecmp(o->pps[i], "out", 3))
+		}
+		/* skip if not out or PTT*/
+		if (strncasecmp(o->pps[i], "out", 3) && strcasecmp(o->pps[i], "ptt")) {
 			continue;
+		}
 		/* if default value is 1, set it */
-		if (!strcasecmp(o->pps[i], "out1"))
+		if (!strcasecmp(o->pps[i], "out1")) {
 			pp_val |= (1 << (i - 2));
+		}
 		hasout = 1;
 	}
 
-	snprintf(fname, sizeof(fname) - 1, CONFIG1, o->name);
-	cfg1 = ast_config_load(fname, zeroflag);
+	snprintf(fname, sizeof(fname) - 1, CONFIG_TUNE, o->name);
+	cfg_tune = ast_config_load(fname, zeroflag);
 
 	o->rxmixerset = 500;
 	o->txmixaset = 500;
@@ -4412,25 +4563,29 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 	o->txctcssadj = 200;
 	o->rxsquelchadj = 725;
 	o->devstr[0] = 0;
-	if (cfg1) {
-		for (v = ast_variable_browse(cfg1, o->name); v; v = v->next) {
+	
+	/* load the tune file settings */
+	if (cfg_tune) {
+		for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
 
 			M_START((char *) v->name, (char *) v->value);
 			M_UINT("rxmixerset", o->rxmixerset)
-				M_UINT("txmixaset", o->txmixaset)
-				M_UINT("txmixbset", o->txmixbset)
-				M_F("rxvoiceadj", store_rxvoiceadj(o, (char *) v->value))
-				M_F("rxctcssadj", store_rxctcssadj(o, (char *) v->value))
-				M_UINT("txctcssadj", o->txctcssadj);
+			M_UINT("txmixaset", o->txmixaset)
+			M_UINT("txmixbset", o->txmixbset)
+			M_F("rxvoiceadj", store_rxvoiceadj(o, (char *) v->value))
+			M_F("rxctcssadj", store_rxctcssadj(o, (char *) v->value))
+			M_UINT("txctcssadj", o->txctcssadj);
 			M_UINT("rxsquelchadj", o->rxsquelchadj)
-				M_UINT("fever", o->fever)
-				M_STR("devstr", o->devstr)
-				M_END(;);
+			M_UINT("fever", o->fever)
+			M_STR("devstr", o->devstr)
+			M_END(;);
 		}
-		ast_config_destroy(cfg1);
-	} else
-		ast_log(LOG_WARNING, "File %s not found, using default parameters.\n", fname);
+		ast_config_destroy(cfg_tune);
+	} else {
+		ast_log(LOG_WARNING, "Channel %s: File %s not found, using default parameters.\n", o->name, fname);
+	}
 
+	/* if we are using the EEPROM, request hidthread load the EEPROM */
 	if (o->wanteeprom) {
 		ast_mutex_lock(&o->eepromlock);
 		while (o->eepromctl) {
@@ -4441,7 +4596,6 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 		o->eepromctl = 1;		/* request a load */
 		ast_mutex_unlock(&o->eepromlock);
 	}
-	o->lastopen = ast_tvnow();	/* don't leave it 0 or tvdiff may wrap */
 	o->dsp = ast_dsp_new();
 	if (o->dsp) {
 		ast_dsp_set_features(o->dsp, DSP_FEATURE_DIGIT_DETECT);
@@ -4471,10 +4625,12 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 		tChan.rxSqVoxAdj = o->rxsqvoxadj;
 		tChan.rxSquelchDelay = o->rxsquelchdelay;
 
-		if (o->txlimonly)
+		if (o->txlimonly) {
 			tChan.txMod = 1;
-		if (o->txprelim)
+		}
+		if (o->txprelim) {
 			tChan.txMod = 2;
+		}
 
 		tChan.txMixA = o->txmixa;
 		tChan.txMixB = o->txmixb;
@@ -4518,7 +4674,17 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 		o->pmrChan->rxCpuSaver = o->rxcpusaver;
 		o->pmrChan->txCpuSaver = o->txcpusaver;
 
-		*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / 1000;
+		/* adjust settings based on the device */
+		switch (o->devtype)
+		{
+			case C119B_PRODUCT_ID:
+	            *(o->pmrChan->prxSquelchAdjust) =
+					((999 - o->rxsquelchadj) * 32767) / C119B_ADJUSTMENT;
+				break;
+			default:
+				*(o->pmrChan->prxSquelchAdjust) = 
+					((999 - o->rxsquelchadj) * 32767) / 1000;
+		}
 
 		*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
 		*(o->pmrChan->prxCtcssAdjust) = o->rxctcssadj * M_Q8;
@@ -4532,8 +4698,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 		}
 #endif
 		if ((o->txmixa != TX_OUT_VOICE) && (o->txmixb != TX_OUT_VOICE) &&
-			(o->txmixa != TX_OUT_COMPOSITE) && (o->txmixb != TX_OUT_COMPOSITE)
-			) {
+			(o->txmixa != TX_OUT_COMPOSITE) && (o->txmixb != TX_OUT_COMPOSITE)) {
 			ast_log(LOG_ERROR, "No txvoice output configured.\n");
 		}
 
@@ -4545,8 +4710,9 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 
 		if (o->b.radioactive) {
 			struct chan_usbradio_pvt *ao;
-			for (ao = usbradio_default.next; ao && ao->name; ao = ao->next)
+			for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
 				ao->pmrChan->b.radioactive = 0;
+			}
 			usbradio_active = o->name;
 			o->pmrChan->b.radioactive = 1;
 			ast_log(LOG_NOTICE, "radio active set to [%s]\n", o->name);
@@ -4561,17 +4727,14 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, char *ctg,
 	TRACEO(1, ("store_config() 130\n"));
 	mult_set(o);
 #endif
-	TRACEO(1, ("store_config() 140\n"));
+	
 	hidhdwconfig(o);
-
-	TRACEO(1, ("store_config() 200\n"));
 
 	/* link into list of devices */
 	if (o != &usbradio_default) {
 		o->next = usbradio_default.next;
 		usbradio_default.next = o;
 	}
-	TRACEO(1, ("store_config() complete\n"));
 	return o;
 }
 
@@ -4772,7 +4935,6 @@ static int load_config(int reload)
 {
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL, *val;
-	int n;
 	struct ast_flags zeroflag = { reload ? CONFIG_FLAG_FILEUNCHANGED : 0 };
 
 	/* load config file */
@@ -4787,9 +4949,9 @@ static int load_config(int reload)
 	pp_val = 0;
 	hasout = 0;
 
-	n = 0;
+	/* store the configuration */
 	do {
-		store_config(cfg, ctg, &n);
+		store_config(cfg, ctg);
 	} while ((ctg = ast_category_browse(cfg, ctg)) != NULL);
 
 	ppfd = -1;
