@@ -1107,9 +1107,7 @@ static void *hidthread(void *arg)
 			if (o->wanteeprom) {
 				ast_mutex_lock(&o->eepromlock);
 				if (o->eepromctl == 1) {	/* to read */
-					unsigned short checksum;
 					/* if CS okay */
-					checksum = ast_radio_get_eeprom(usb_handle, o->eeprom);
 					if (!ast_radio_get_eeprom(usb_handle, o->eeprom)) {
 						if (o->eeprom[EEPROM_USER_MAGIC_ADDR] != EEPROM_MAGIC) {
 							ast_log(LOG_ERROR, "Channel %s: EEPROM bad magic number\n", o->name);
