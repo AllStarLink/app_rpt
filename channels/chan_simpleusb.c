@@ -200,7 +200,7 @@ struct chan_simpleusb_pvt {
 	int boost;					/* input boost, scaled by BOOST_SCALE */
 	char devicenum;
 	char devstr[128];
-	char device_error;			/* this is set to 1 when we cannot find the USB device */
+	unsigned int device_error : 1;	/* this is set when we cannot find the USB device */
 	int spkrmax;
 	int micmax;
 	int micplaymax;
