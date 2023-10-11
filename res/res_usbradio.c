@@ -121,8 +121,7 @@ int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devty
 {
 	int v;
 	
-	switch (devtype)
-	{
+	switch (devtype) {
 		case C108_PRODUCT_ID:
 			v = (request_value * spkrmax) / 1000;
 			return v;
