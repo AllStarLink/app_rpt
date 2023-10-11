@@ -33,7 +33,7 @@
 #endif
 
 /*!
- * \brief Defines for interacting with ALSA
+ * \brief Defines for interacting with ALSA controls.
  */
 #define	MIXER_PARAM_MIC_PLAYBACK_SW "Mic Playback Switch"
 #define MIXER_PARAM_MIC_PLAYBACK_VOL "Mic Playback Volume"
@@ -58,7 +58,7 @@
 #endif
 
 /*!
- * \brief CMxxx usb device identifiers
+ * \brief CMxxx USB device identifiers.
  */
 #define C108_VENDOR_ID		0x0d8c
 #define C108_PRODUCT_ID  	0x000c
@@ -70,6 +70,9 @@
 #define C119B_PRODUCT_ID    0x0013
 #define C108_HID_INTERFACE	3
 
+/*!
+ * \brief CMxxx USB HID device access values.
+ */
 #define HID_REPORT_GET		0x01
 #define HID_REPORT_SET		0x09
 
@@ -77,10 +80,29 @@
 #define HID_RT_OUTPUT		0x02
 
 /*!
+ * \brief CM-119B audio adjustment factor
+ *	At the time of this documentation, DMK Engineering
+ *	produces a sound card device that uses the CM-119B chip.
+ *	They produced a couple of variations of the URIxB device.
+ *	Although the CM-119B was supposed to be the same as the
+ *	CM-119A, it did not function the same. As a result the 
+ *	early production models required a different adjustment
+ *	factor than the current production models.
+ *
+ *	Users with the early production units may need an
+ *	adjustment factor of 750 or 870.
+ *
+ *	This adjustment factor is used for both microphone and
+ *	speaker calcuations.
+ */
+#define C119B_ADJUSTMENT	1000
+
+/*!
  * \brief EEPROM memory layout
  *	The AT93C46 eeprom has 64 addresses that contain 2 bytes (one word).
  *	The CMxxx sound card device will use this eeprom to read manuafacturer
  *	specific configuration data.
+ *
  *	The CM108 and CM119 reserves memory addresses 0 to 6.
  *	The CM119A reserves memory addresses 0 to 44.
  *	The CM119B reserves memory addresses 0 to 50.
@@ -110,8 +132,10 @@
 #define EEPROM_USER_SPARE		11	/* Reserved for future use */
 #define	EEPROM_USER_CS_ADDR		12
 
-/* Previous versions of this driver assumed 32 gpio pins
- * the current and prior cm-xxx devices only support 8 gpio lines.
+/*	Previous versions of this driver assumed 32 gpio pins
+ *	the current and prior cm-xxx devices support a maximum of 8 gpio lines.
+ *	In some hardware implementations, not all 8 gpio lines are available 
+ *	to the user.
  */
 #define GPIO_PINCOUNT 8
 
@@ -200,21 +224,6 @@
 #define DEV_DSP "/dev/dsp"
 #endif
 
-/*
- * Each sound is made of 'datalen' samples of sound, repeated as needed to
- * generate 'samplen' samples of data, then followed by 'silencelen' samples
- * of silence. The loop is repeated if 'repeat' is set.
- */
-struct sound {
-	int ind;
-	char *desc;
-	short *data;
-	int datalen;
-	int samplen;
-	int silencelen;
-	int repeat;
-};
-
 struct usbecho {
 	struct qelem *q_forw;
 	struct qelem *q_prev;
@@ -223,7 +232,7 @@ struct usbecho {
 
 long ast_radio_lround(double x);
 
-int ast_radio_make_spkr_playback_value(int spkrmax, int val, int devtype);
+int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype);
 
 
 // Note: must add -lasound to end of linkage

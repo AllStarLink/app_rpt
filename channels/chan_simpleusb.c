@@ -132,7 +132,7 @@ static struct ast_jb_conf global_jbconf;
 #define	QUEUE_SIZE	5
 
 #define CONFIG	"simpleusb.conf"	/* default config file */
-#define CONFIG1	"simpleusb_tune_%s.conf"	/* tune config file */
+#define CONFIG_TUNE	"simpleusb_tune_%s.conf"	/* tune config file */
 
 static FILE *frxcapraw = NULL;
 static FILE *frxcapcooked = NULL;
@@ -156,8 +156,6 @@ static char stoppulser;
 static char hasout;
 pthread_t pulserid;
 
-static int simpleusb_debug;
-
 enum { CD_IGNORE, CD_HID, CD_HID_INVERT, CD_PP, CD_PP_INVERT };
 enum { SD_IGNORE, SD_HID, SD_HID_INVERT, SD_PP, SD_PP_INVERT };	// no,external,externalinvert,software
 enum { PAGER_NONE, PAGER_A, PAGER_B };
@@ -173,7 +171,6 @@ struct chan_simpleusb_pvt {
 	struct chan_simpleusb_pvt *next;
 
 	char *name;
-	int index;
 	int devtype;				/* actual type of device */
 	int pttkick[2];
 	int total_blocks;			/* total blocks in the output device */
@@ -191,8 +188,6 @@ struct chan_simpleusb_pvt {
 #define WARN_used_blocks	1
 #define WARN_speed		2
 #define WARN_frag		4
-	int w_errors;				/* overfull in the write path */
-	struct timeval lastopen;
 
 	int overridecontext;
 	int mute;
@@ -358,7 +353,6 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.ext = "s",
 	.ctx = "default",
 	.readpos = 0,				/* start here on reads */
-	.lastopen = { 0, 0 },
 	.boost = BOOST_SCALE,
 	.wanteeprom = 1,
 	.usedtmf = 1,
@@ -866,7 +860,7 @@ static void *hidthread(void *arg)
 	struct usb_dev_handle *usb_handle;
 	struct chan_simpleusb_pvt *o = arg, *ao;
 	struct timeval then;
-	struct ast_config *cfg1;
+	struct ast_config *cfg_tune;
 	struct ast_variable *v;
 	struct ast_flags zeroflag = { 0 };
 	struct pollfd rfds[1];
@@ -1043,13 +1037,13 @@ static void *hidthread(void *arg)
 		mixer_write(o);
 
 		/* reload the settings from the tune file */
-		snprintf(fname, sizeof(fname) - 1, CONFIG1, o->name);
-		cfg1 = ast_config_load(fname, zeroflag);
+		snprintf(fname, sizeof(fname) - 1, CONFIG_TUNE, o->name);
+		cfg_tune = ast_config_load(fname, zeroflag);
 		o->rxmixerset = 500;
 		o->txmixaset = 500;
 		o->txmixbset = 500;
-		if (cfg1) {
-			for (v = ast_variable_browse(cfg1, o->name); v; v = v->next) {
+		if (cfg_tune) {
+			for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
 
 				M_START((char *) v->name, (char *) v->value);
 				M_UINT("rxmixerset", o->rxmixerset)
@@ -1057,7 +1051,7 @@ static void *hidthread(void *arg)
 				M_UINT("txmixbset", o->txmixbset)
 				M_END(;);
 			}
-			ast_config_destroy(cfg1);
+			ast_config_destroy(cfg_tune);
 			ast_log(LOG_NOTICE, "Channel %s: Loaded parameters from %s .\n", o->name, fname);
 		} else {
 			ast_log(LOG_WARNING, "Channel %s: File %s not found, using default parameters.\n", o->name, fname);
@@ -1441,12 +1435,10 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	 */
 	res = used_blocks(o);
 	if (res > o->queuesize) {	/* no room to write a block */
-		ast_log(LOG_WARNING, "sound device write buffer overflow\n");
-		if (o->w_errors++ == 0 && (simpleusb_debug & 0x4))
-			ast_log(LOG_WARNING, "write: used %d blocks (%d)\n", res, o->w_errors);
+		ast_log(LOG_WARNING, "Channel %s: Sound device write buffer overflow - used %d blocks\n",
+			o->name, res);
 		return 0;
 	}
-	o->w_errors = 0;
 
 	return write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
 }
@@ -1469,7 +1461,6 @@ static int setformat(struct chan_simpleusb_pvt *o, int mode)
 	}
 	if (mode == O_CLOSE)		/* we are done */
 		return 0;
-	o->lastopen = ast_tvnow();
 	strcpy(device, "/dev/dsp");
 	if (o->devicenum)
 		sprintf(device, "/dev/dsp%d", o->devicenum);
@@ -2902,17 +2893,26 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 	return;
 }
 
+/*!
+ * \brief Process asterisk cli request susb tune.
+ * \param fd			Asterisk cli fd
+ * \param argc			Number of arguments
+ * \param argv			Pointer to arguments
+ * \return	Cli success, showusage, or failure.
+ */
 static int susb_tune(int fd, int argc, const char *const *argv)
 {
 	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
 	int i = 0;
 
-	if ((argc < 2) || (argc > 4))
+	if ((argc < 2) || (argc > 4)) {
 		return RESULT_SHOWUSAGE;
+	}
 
 	if (argc == 2) {			/* just show stuff */
 		ast_cli(fd, "Active radio interface is [%s]\n", simpleusb_active);
 		ast_cli(fd, "Device String is %s\n", o->devstr);
+		ast_cli(fd, "Card is %i\n", ast_radio_usb_get_usbdev(o->devstr));
 		ast_cli(fd, "Rx Level currently set to %d\n", o->rxmixerset);
 		ast_cli(fd, "Tx Output A Level currently set to %d\n", o->txmixaset);
 		ast_cli(fd, "Tx Output B Level currently set to %d\n", o->txmixbset);
@@ -2926,8 +2926,9 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 		}
 		return RESULT_SHOWUSAGE;
 	} else if (!strcasecmp(argv[2], "menu-support")) {
-		if (argc > 3)
+		if (argc > 3) {
 			tune_menusupport(fd, o, argv[3]);
+		}
 		return RESULT_SUCCESS;
 	}
 	if (!o->hasusb) {
@@ -2942,8 +2943,9 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "Current setting on Rx Channel is %d\n", o->rxmixerset);
 		} else {
 			i = atoi(argv[3]);
-			if ((i < 0) || (i > 999))
+			if ((i < 0) || (i > 999)) {
 				return RESULT_SHOWUSAGE;
+			}
 			o->rxmixerset = i;
 			ast_cli(fd, "Changed setting on RX Channel to %d\n", o->rxmixerset);
 			mixer_write(o);
@@ -2957,8 +2959,9 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "Current setting on Tx Channel A is %d\n", o->txmixaset);
 		} else {
 			i = atoi(argv[3]);
-			if ((i < 0) || (i > 999))
+			if ((i < 0) || (i > 999)) {
 				return RESULT_SHOWUSAGE;
+			}
 			o->txmixaset = i;
 			ast_cli(fd, "Changed setting on TX Channel A to %d\n", o->txmixaset);
 			mixer_write(o);
@@ -2967,13 +2970,14 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 		i = 0;
 
 		if (argc == 3) {
-			ast_cli(fd, "Current setting on Tx Channel A is %d\n", o->txmixbset);
+			ast_cli(fd, "Current setting on Tx Channel B is %d\n", o->txmixbset);
 		} else {
 			i = atoi(argv[3]);
-			if ((i < 0) || (i > 999))
+			if ((i < 0) || (i > 999)) {
 				return RESULT_SHOWUSAGE;
+			}
 			o->txmixbset = i;
-			ast_cli(fd, "Changed setting on TX Channel A to %d\n", o->txmixbset);
+			ast_cli(fd, "Changed setting on TX Channel B to %d\n", o->txmixbset);
 			mixer_write(o);
 		}
 	} else if (!strcasecmp(argv[2], "flash")) {
@@ -2994,15 +2998,18 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 			ftxcapraw = NULL;
 		}
 	} else if (!strcasecmp(argv[2], "rxcap")) {
-		if (!frxcapraw)
+		if (!frxcapraw) {
 			frxcapraw = fopen(RX_CAP_RAW_FILE, "w");
-		if (!frxcapcooked)
+		}
+		if (!frxcapcooked) {
 			frxcapcooked = fopen(RX_CAP_COOKED_FILE, "w");
+		}
 		ast_cli(fd, "cap rx raw on.\n");
 		o->b.rxcapraw = 1;
 	} else if (!strcasecmp(argv[2], "txcap")) {
-		if (!ftxcapraw)
+		if (!ftxcapraw) {
 			ftxcapraw = fopen(TX_CAP_RAW_FILE, "w");
+		}
 		ast_cli(fd, "cap tx raw on.\n");
 		o->b.txcapraw = 1;
 	} else if (!strcasecmp(argv[2], "save")) {
@@ -3100,14 +3107,21 @@ static void store_pager(struct chan_simpleusb_pvt *o, char *s)
 	ast_debug(1, "set pager = %s\n", s);
 }
 
+/*!
+ * \brief Update the ALSA mixer settings
+ * Update the ALSA mixer settings.
+ *
+ * \param		Pointer to chan_simpleusb structure.
+ */
 static void mixer_write(struct chan_simpleusb_pvt *o)
 {
-	int x;
+	int mic_setting;
 	float f, f1;
 
 	if (o->duplex3) {
-		if (o->duplex3 > o->micplaymax)
+		if (o->duplex3 > o->micplaymax) {
 			o->duplex3 = o->micplaymax;
+		}
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, o->duplex3, 0);
 	} else {
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, 0, 0);
@@ -3116,30 +3130,42 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
 			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype), ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
-	x = o->rxmixerset * o->micmax / 1000;
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, x, 0);
-	/* get interval step size */
-	f = 1000.0 / (float) o->micmax;
-	o->rxvoiceadj = 1.0 + (modff(((float) o->rxmixerset) / f, &f1) * .187962);
+	/* adjust settings based on the device */
+	switch (o->devtype) {
+		case C119B_PRODUCT_ID:
+			mic_setting =  o->rxmixerset * o->micmax / C119B_ADJUSTMENT;
+			/* get interval step size */
+			f = C119B_ADJUSTMENT / (float) o->micmax;
+			o->rxboostset = 1;	/*rxboost is always set for this device */
+			break;
+		default:
+			mic_setting =  o->rxmixerset * o->micmax / 1000;
+			/* get interval step size */
+			f = 1000.0 / (float) o->micmax;
+	}
+	ast_radio_setamixer(o->devicenum,MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboostset, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
+	/* set the received voice adjustment factor */
+	o->rxvoiceadj = 1.0 + (modff(((float) o->rxmixerset) / f, &f1) * .187962);
 }
 
-/*
-	adjust dsp multiplier to add resolution to tx level adjustment
-*/
-
-/*
- * grab fields from the config file, init the descriptor and open the device.
+/*!
+ * \brief Store configuration.
+ *	Initializes chan_usbradio and loads it with the configuration data.
+ * \param cfg			Pointer to ast_config structure.
+ * \param ctg			Pointer to category.
+ * \return				Pointer to chan_usbradio_pvt.
  */
-static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg, int *indexp)
+static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, const char *ctg)
 {
-	struct ast_variable *v;
+	const struct ast_variable *v;
 	struct chan_simpleusb_pvt *o;
-	struct ast_config *cfg1;
+	struct ast_config *cfg_tune;
 	char fname[200], buf[100];
 	int i;
 	struct ast_flags zeroflag = { 0 };
+	
 	if (ctg == NULL) {
 		traceusb1((" store_config() ctg == NULL\n"));
 		o = &simpleusb_default;
@@ -3149,16 +3175,15 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 		if (strcmp(ctg, "general") == 0) {
 			o = &simpleusb_default;
 		} else {
-			// ast_log(LOG_NOTICE,"ast_calloc for chan_simpleusb_pvt of %s\n",ctg);
 			if (!(o = ast_calloc(1, sizeof(*o))))
 				return NULL;
 			*o = simpleusb_default;
 			o->name = ast_strdup(ctg);
-			o->index = (*indexp)++;
 			o->pttkick[0] = -1;
 			o->pttkick[1] = -1;
-			if (!simpleusb_active)
+			if (!simpleusb_active) {
 				simpleusb_active = o->name;
+			}
 		}
 	}
 	o->echoq.q_forw = o->echoq.q_back = &o->echoq;
@@ -3173,36 +3198,39 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 		M_START((char *) v->name, (char *) v->value);
 
 		/* handle jb conf */
-		if (!ast_jb_read_conf(&global_jbconf, v->name, v->value))
+		if (!ast_jb_read_conf(&global_jbconf, v->name, v->value)) {
 			continue;
+		}
 
 		M_UINT("frags", o->frags)
-			M_UINT("queuesize", o->queuesize)
-			M_UINT("debug", simpleusb_debug)
-			M_BOOL("rxcpusaver", o->rxcpusaver)
-			M_BOOL("txcpusaver", o->txcpusaver)
-			M_BOOL("invertptt", o->invertptt)
-			M_F("carrierfrom", store_rxcdtype(o, (char *) v->value))
-			M_F("ctcssfrom", store_rxsdtype(o, (char *) v->value))
-			M_BOOL("rxboost", o->rxboostset)
-			M_UINT("hdwtype", o->hdwtype)
-			M_UINT("eeprom", o->wanteeprom)
-			M_UINT("duplex", o->radioduplex)
-			M_UINT("rxondelay", o->rxondelay)
-			M_F("pager", store_pager(o, (char *) v->value))
-			M_BOOL("plfilter", o->plfilter)
-			M_BOOL("deemphasis", o->deemphasis)
-			M_BOOL("preemphasis", o->preemphasis)
-			M_UINT("duplex3", o->duplex3)
-			M_END(;);
+		M_UINT("queuesize", o->queuesize)
+		M_BOOL("rxcpusaver", o->rxcpusaver)
+		M_BOOL("txcpusaver", o->txcpusaver)
+		M_BOOL("invertptt", o->invertptt)
+		M_F("carrierfrom", store_rxcdtype(o, (char *) v->value))
+		M_F("ctcssfrom", store_rxsdtype(o, (char *) v->value))
+		M_BOOL("rxboost", o->rxboostset)
+		M_UINT("hdwtype", o->hdwtype)
+		M_UINT("eeprom", o->wanteeprom)
+		M_UINT("duplex", o->radioduplex)
+		M_UINT("rxondelay", o->rxondelay)
+		M_F("pager", store_pager(o, (char *) v->value))
+		M_BOOL("plfilter", o->plfilter)
+		M_BOOL("deemphasis", o->deemphasis)
+		M_BOOL("preemphasis", o->preemphasis)
+		M_UINT("duplex3", o->duplex3)
+		M_END(;);
+		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			sprintf(buf, "gpio%d", i + 1);
-			if (!strcmp(v->name, buf))
+			if (!strcmp(v->name, buf)) {
 				o->gpios[i] = ast_strdup(v->value);
+			}
 		}
 		for (i = 2; i <= 15; i++) {
-			if (!((1 << i) & PP_MASK))
+			if (!((1 << i) & PP_MASK)) {
 				continue;
+			}
 			sprintf(buf, "pp%d", i);
 			if (!strcasecmp(v->name, buf)) {
 				o->pps[i] = ast_strdup(v->value);
@@ -3213,42 +3241,50 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 
 	o->debuglevel = 0;
 
-	if (o == &simpleusb_default)	/* we are done with the default */
+	if (o == &simpleusb_default) {	/* we are done with the default */
 		return NULL;
+	}
 
 	for (i = 2; i <= 9; i++) {
 		/* skip if this one not specified */
-		if (!o->pps[i])
+		if (!o->pps[i]) {
 			continue;
+		}
 		/* skip if not out or PTT */
-		if (strncasecmp(o->pps[i], "out", 3) && strcasecmp(o->pps[i], "ptt"))
+		if (strncasecmp(o->pps[i], "out", 3) && strcasecmp(o->pps[i], "ptt")) {
 			continue;
+		}
 		/* if default value is 1, set it */
-		if (!strcasecmp(o->pps[i], "out1"))
+		if (!strcasecmp(o->pps[i], "out1")) {
 			pp_val |= (1 << (i - 2));
+		}
 		hasout = 1;
 	}
 
-	snprintf(fname, sizeof(fname) - 1, CONFIG1, o->name);
-	cfg1 = ast_config_load(fname, zeroflag);
+	snprintf(fname, sizeof(fname) - 1, CONFIG_TUNE, o->name);
+	cfg_tune = ast_config_load(fname, zeroflag);
 	o->rxmixerset = 500;
 	o->txmixaset = 500;
 	o->txmixbset = 500;
 	o->devstr[0] = 0;
-	if (cfg1) {
-		for (v = ast_variable_browse(cfg1, o->name); v; v = v->next) {
+	
+	/* load the tune file settings */
+	if (cfg_tune) {
+		for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
 
 			M_START((char *) v->name, (char *) v->value);
 			M_UINT("rxmixerset", o->rxmixerset)
-				M_UINT("txmixaset", o->txmixaset)
-				M_UINT("txmixbset", o->txmixbset)
-				M_STR("devstr", o->devstr)
-				M_END(;);
+			M_UINT("txmixaset", o->txmixaset)
+			M_UINT("txmixbset", o->txmixbset)
+			M_STR("devstr", o->devstr)
+			M_END(;);
 		}
-		ast_config_destroy(cfg1);
-	} else
-		ast_log(LOG_WARNING, "File %s not found, using default parameters.\n", fname);
+		ast_config_destroy(cfg_tune);
+	} else {
+		ast_log(LOG_WARNING, "Channel %s: File %s not found, using default parameters.\n", o->name, fname);
+	}
 
+	/* if we are using the EEPROM, request hidthread load the EEPROM */
 	if (o->wanteeprom) {
 		ast_mutex_lock(&o->eepromlock);
 		while (o->eepromctl) {
@@ -3259,12 +3295,12 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 		o->eepromctl = 1;		/* request a load */
 		ast_mutex_unlock(&o->eepromlock);
 	}
-	o->lastopen = ast_tvnow();	/* don't leave it 0 or tvdiff may wrap */
 	o->dsp = ast_dsp_new();
 	if (o->dsp) {
 		ast_dsp_set_features(o->dsp, DSP_FEATURE_DIGIT_DETECT);
 		ast_dsp_set_digitmode(o->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
 	}
+	
 	hidhdwconfig(o);
 
 	/* link into list of devices */
@@ -3273,11 +3309,6 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, char *ctg
 		simpleusb_default.next = o;
 	}
 	return o;
-
-	/* error: */
-	if (o != &simpleusb_default)
-		ast_free(o);
-	return NULL;
 }
 
 static char *res2cli(int r)
@@ -3381,7 +3412,6 @@ static struct ast_cli_entry cli_simpleusb[] = {
 
 static int load_config(int reload)
 {
-	int n;
 	struct ast_config *cfg = NULL;
 	char *ctg = NULL, *val;
 	struct ast_flags zeroflag = { reload ? CONFIG_FLAG_FILEUNCHANGED : 0 };
@@ -3395,9 +3425,9 @@ static int load_config(int reload)
 		return 0;
 	}
 
-	n = 0;
+	/* store the configuration */
 	do {
-		store_config(cfg, ctg, &n);
+		store_config(cfg, ctg);
 	} while ((ctg = ast_category_browse(cfg, ctg)) != NULL);
 
 	ppfd = -1;
