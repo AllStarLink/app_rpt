@@ -200,6 +200,7 @@ struct chan_simpleusb_pvt {
 	int boost;					/* input boost, scaled by BOOST_SCALE */
 	char devicenum;
 	char devstr[128];
+	unsigned char device_error;
 	int spkrmax;
 	int micmax;
 	int micplaymax;
@@ -911,7 +912,9 @@ static void *hidthread(void *arg)
 				}
 			}
 			if (!*s) {
-				ast_log(LOG_ERROR, "Channel %s: Device string %s was not found\n",  o->name, o->devstr);
+				if (o->device_error++ == 0) {
+					ast_log(LOG_ERROR, "Channel %s: Device string %s was not found.\n",  o->name, o->devstr);
+				}
 				ast_mutex_unlock(&usb_dev_lock);
 				usleep(500000);
 				continue;
@@ -967,6 +970,7 @@ static void *hidthread(void *arg)
 			break;
 		}
 #endif
+		o->device_error = 0;
 		time(&o->lasthidtime);
 		o->usbass = 1;
 		ast_mutex_unlock(&usb_dev_lock);
