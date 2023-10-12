@@ -27,7 +27,6 @@
  */
 
 /*** MODULEINFO
-	<depend>dahdi</depend>
 	<support_level>extended</support_level>
  ***/
 
@@ -226,8 +225,6 @@ Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or 
 #include <fnmatch.h>
 #include <math.h>
 
-#include <dahdi/user.h>
-
 #include "asterisk/lock.h"
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
@@ -246,6 +243,7 @@ Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or 
 #include "asterisk/format.h"
 #include "asterisk/format_cache.h"
 #include "asterisk/format_compatibility.h"
+#include "asterisk/timing.h"
 
 #include "../apps/app_rpt/pocsag.c"
 
@@ -322,7 +320,8 @@ AST_MUTEX_DEFINE_STATIC(voter_lock);
 int16_t listen_port = 667;		/* port to listen to UDP packets on */
 int udp_socket = -1;
 
-int voter_timing_fd = -1;
+struct ast_timer *voter_thread_timer = NULL;
+
 int voter_timing_count = 0;
 int last_master_count = 0;
 int dyntime = DEFAULT_DYNTIME;
@@ -3199,8 +3198,9 @@ static int unload_module(void)
 	if (nullfd != -1) {
 		close(nullfd);
 	}
-	if (voter_timing_fd != -1) {
-		close(voter_timing_fd);
+	if (voter_thread_timer) {
+		ast_timer_close(voter_thread_timer);
+		voter_thread_timer = NULL;
 	}
 
 	ao2_ref(voter_tech.capabilities, -1);
@@ -3252,23 +3252,23 @@ static void voter_xmit_master(void)
 	return;
 }
 
-/* Maintain a relative time source that is *not* dependent on system time of day */
-
+/*! \brief Maintain a relative time source that is *not* dependent on system time of day */
 static void *voter_timer(void *data)
 {
-	char buf[FRAME_SIZE];
-	int i;
 	time_t t;
 	struct voter_pvt *p;
 	struct voter_client *client, *client1;
 	struct timeval tv;
+	int timingfd = ast_timer_fd(voter_thread_timer);
 
 	while (run_forever && (!ast_shutting_down())) {
-		i = read(voter_timing_fd, buf, sizeof(buf));
-		if (i != FRAME_SIZE) {
-			ast_log(LOG_ERROR, "error in read() for voter timer: %s\n", strerror(errno));
-			pthread_exit(NULL);
+		int timeout = -1;
+		ast_waitfor_n_fd(&timingfd, 1, &timeout, NULL);
+		if (ast_timer_ack(voter_thread_timer, 1) < 0) {
+			ast_log(LOG_ERROR, "Failed to acknowledge timer\n");
+			break;
 		}
+
 		ast_mutex_lock(&voter_lock);
 		time(&t);
 		if (!hasmaster) {
@@ -4886,7 +4886,7 @@ static int reload(void)
 static int load_module(void)
 {
 	struct sockaddr_in sin;
-	int i, bs, utos;
+	int i, utos;
 	struct ast_config *cfg = NULL;
 	const char *val;
 	struct ast_flags zeroflag = { 0 };
@@ -4934,25 +4934,19 @@ static int load_module(void)
 	if (utos) {
 		i = 0xc0;
 		if (setsockopt(udp_socket, IPPROTO_IP, IP_TOS, &i, sizeof(i))) {
-			ast_log(LOG_ERROR, "Can't setsockopt:IP_TOS:%s\n", strerror(errno));
+			ast_log(LOG_ERROR, "Can't setsockopt: IP_TOS: %s\n", strerror(errno));
 			close(udp_socket);
 			return AST_MODULE_LOAD_DECLINE;
 		}
 	}
 
-	voter_timing_fd = open("/dev/dahdi/pseudo", O_RDWR);
-	if (voter_timing_fd == -1) {
-		ast_log(LOG_ERROR, "Cant open DAHDI timing channel\n");
+	voter_thread_timer = ast_timer_open();
+	if (!voter_thread_timer) {
+		ast_log(LOG_ERROR, "Failed to open timer\n");
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
-	bs = FRAME_SIZE;
-	if (ioctl(voter_timing_fd, DAHDI_SET_BLOCKSIZE, &bs) == -1) {
-		ast_log(LOG_WARNING, "Unable to set blocksize '%d': %s\n", bs, strerror(errno));
-		close(voter_timing_fd);
-		close(udp_socket);
-		return AST_MODULE_LOAD_DECLINE;
-	}
+	ast_timer_set_rate(voter_thread_timer, 50); /* 50 ticks per second = every 20ms */
 
 	if (reload()) {
 		return AST_MODULE_LOAD_DECLINE;
@@ -4965,7 +4959,7 @@ static int load_module(void)
 	ast_pthread_create(&voter_timer_thread, NULL, voter_timer, NULL);
 
 	if (!(voter_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
-		close(voter_timing_fd);
+		ast_timer_close(voter_thread_timer);
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -4974,7 +4968,7 @@ static int load_module(void)
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&voter_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
-		close(voter_timing_fd);
+		ast_timer_close(voter_thread_timer);
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
