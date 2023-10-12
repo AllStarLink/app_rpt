@@ -4888,7 +4888,7 @@ static int load_module(void)
 	struct sockaddr_in sin;
 	int i, bs, utos;
 	struct ast_config *cfg = NULL;
-	char *val;
+	const char *val;
 	struct ast_flags zeroflag = { 0 };
 
 	run_forever = 1;
@@ -4906,32 +4906,30 @@ static int load_module(void)
 		ast_config_destroy(cfg);
 		return AST_MODULE_LOAD_DECLINE;
 	}
-	memset((char *) &sin, 0, sizeof(sin));
+
+	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
-	val = (char *) ast_variable_retrieve(cfg, "general", "port");
-	if (val)
+	val = ast_variable_retrieve(cfg, "general", "port");
+	if (val) {
 		listen_port = (uint16_t) strtoul(val, NULL, 0);
+	}
 
-	val = (char *) ast_variable_retrieve(cfg, "general", "utos");
-	if (val)
-		utos = ast_true(val);
-	else
-		utos = 0;
-
-	val = (char *) ast_variable_retrieve(cfg, "general", "bindaddr");
-	if (!val)
-		sin.sin_addr.s_addr = htonl(INADDR_ANY);
-	else
-		sin.sin_addr.s_addr = inet_addr(val);
+	val = ast_variable_retrieve(cfg, "general", "utos");
+	utos = val ? ast_true(val) : 0;
+	val = ast_variable_retrieve(cfg, "general", "bindaddr");
+	sin.sin_addr.s_addr = val ? inet_addr(val) : htonl(INADDR_ANY);
 	sin.sin_port = htons(listen_port);
+
+	ast_config_destroy(cfg);
+
 	if (bind(udp_socket, &sin, sizeof(sin)) == -1) {
 		ast_log(LOG_ERROR, "Unable to bind port for voter audio connection: %s\n", strerror(errno));
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	i = fcntl(udp_socket, F_GETFL, 0);	// Get socket flags
-	fcntl(udp_socket, F_SETFL, i | O_NONBLOCK);	// Add non-blocking flag
+	i = fcntl(udp_socket, F_GETFL, 0);	/* Get socket flags */
+	fcntl(udp_socket, F_SETFL, i | O_NONBLOCK);	/* Add non-blocking flag */
 
 	if (utos) {
 		i = 0xc0;
@@ -4946,7 +4944,6 @@ static int load_module(void)
 	if (voter_timing_fd == -1) {
 		ast_log(LOG_ERROR, "Cant open DAHDI timing channel\n");
 		close(udp_socket);
-		ast_config_destroy(cfg);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	bs = FRAME_SIZE;
@@ -4954,13 +4951,12 @@ static int load_module(void)
 		ast_log(LOG_WARNING, "Unable to set blocksize '%d': %s\n", bs, strerror(errno));
 		close(voter_timing_fd);
 		close(udp_socket);
-		ast_config_destroy(cfg);
 		return AST_MODULE_LOAD_DECLINE;
 	}
-	ast_config_destroy(cfg);
 
-	if (reload())
+	if (reload()) {
 		return AST_MODULE_LOAD_DECLINE;
+	}
 
 	ast_cli_register_multiple(voter_cli, ARRAY_LEN(voter_cli));
 
@@ -4969,6 +4965,8 @@ static int load_module(void)
 	ast_pthread_create(&voter_timer_thread, NULL, voter_timer, NULL);
 
 	if (!(voter_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		close(voter_timing_fd);
+		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_format_cap_append(voter_tech.capabilities, ast_format_slin, 0);
@@ -4976,10 +4974,14 @@ static int load_module(void)
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&voter_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
+		close(voter_timing_fd);
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	nullfd = open("/dev/null", O_RDWR);
+	if (nullfd < 0) {
+		ast_log(LOG_ERROR, "Failed to open null fd: %s\n", strerror(errno));
+	}
 	return 0;
 }
 
