@@ -23,7 +23,12 @@
 
 ; duplex3 = 0		; duplex 3 gain setting (0 to disable)
 
-; rxondelay = 0		  ; number of 20ms intervals to hold off receiver turn-on indication
+; rxondelay = 0		; number of 20ms intervals to hold off receiver turn-on indication
+
+; txoffdelay = 0    ; Ignore the reciever for a specified number of 20 millisecond
+					; intervals after the transmitter unkeys.
+					; This is useful when setting up a half-duplex link with an existing
+					; repeater, where you need to ignore the repeater's hangtime.
 
 ; eeprom = no		; no eeprom installed
 
