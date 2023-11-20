@@ -414,7 +414,7 @@ static int rad_rxwait(int fd, int ms)
 }
 
 /*!
- * \brief Wait on the specified fd for the specified milliseconds.
+ * \brief Wait a fixed amount or on the specified fd for the specified milliseconds.
  * \param fd			File descriptor.
  * \param ms			Milliseconds to wait.
  * \param flag			0=use usleep, !0=use select/poll on the fd.
@@ -449,7 +449,7 @@ static int wait_or_poll(int fd, int ms, int flag)
  * \brief FIR Low pass filter.
  * 2900 Hz passband with 0.5 db ripple, 6300 Hz stopband at 60db.
  * \param input		Audio value to filter.
- * \param z			Pointer to delay line.
+ * \param z			Delay line.
  * \return 			Filtered value.
  * \todo	This filter needs more documentation.
  */
@@ -482,12 +482,12 @@ static short lpass(short input, short *z)
  * \brief IIR High pass filter.
  * IIR 6 pole High pass filter, 300 Hz corner with 0.5 db ripple
  * \param input		Audio value to filter.
- * \param xv		Pointer to delay line.
- * \param yv		Pointer to delay line.
+ * \param xv		Delay line.
+ * \param yv		Delay line.
  * \return 			Filtered value.
  * \todo	This filter needs more documentation.
  */
-static int16_t hpass6(int16_t input, float *xv, float *yv)
+static int16_t hpass6(int16_t input, float* restrict xv, float* restrict yv)
 {
 	xv[0] = xv[1];
 	xv[1] = xv[2];
@@ -514,7 +514,7 @@ static int16_t hpass6(int16_t input, float *xv, float *yv)
  * \brief Deemphasis filter.
  * Perform standard 6db/octave de-emphasis.
  * \param input		Audio value to filter.
- * \param state		Pointer to state variable.
+ * \param state		State variable.
  * \return 			Filtered value.
  * \todo	This filter needs more documentation.
  */
@@ -536,7 +536,7 @@ static int16_t deemph(int16_t input, int32_t * state)
  * \brief Preemphasis filter.
  * Perform standard 6db/octave pre-emphasis.
  * \param input		Audio value to filter.
- * \param state		Pointer to state variable.
+ * \param state		State variable.
  * \return 			Filtered value.
  * \todo	This filter needs more documentation.
  */
@@ -562,12 +562,12 @@ static int16_t preemph(int16_t input, int32_t * state)
  * \brief IIR High pass filter.
  * IIR 3 pole High pass filter, 300 Hz corner with 0.5 db ripple
  * \param input		Audio value to filter.
- * \param xv		Pointer to delay line.
- * \param yv		Pointer to delay line.
+ * \param xv		Delay line.
+ * \param yv		Delay line.
  * \return 			Filtered value.
  * \todo	This filter needs more documentation.
  */
-static int16_t hpass(int16_t input, float *xv, float *yv)
+static int16_t hpass(int16_t input, float* restrict xv, float* restrict yv)
 {
 #define GAIN   1.280673652e+00
 
@@ -707,7 +707,7 @@ static int hid_device_mklist(void)
 /*!
  * \brief See if the internal usb_device_list contains the
  * specified device string.
- * \param devstr	Pointer to device string to check.
+ * \param devstr	Device string to check.
  * \retval 0		Device string was not found.
  * \retval 1		Device string was found.
  */
@@ -838,8 +838,8 @@ static void kickptt(struct chan_simpleusb_pvt *o)
 /*!
  * \brief Search our configured channels to find the
  *	one with the matching USB descriptor.
- * \param o		Pointer chan_usbradio_pvt.
- * \returns		Pointer to private structure that matches or NULL if not found.
+ * \param o		chan_usbradio_pvt.
+ * \returns		Private structure that matches or NULL if not found.
  */
 static struct chan_simpleusb_pvt *find_desc(const char *dev)
 {
@@ -857,8 +857,8 @@ static struct chan_simpleusb_pvt *find_desc(const char *dev)
 /*!
  * \brief Search our configured channels to find the
  *	one with the matching USB descriptor.
- * \param o		Pointer chan_usbradio_pvt.
- * \returns		Pointer to private structure that matches or NULL if not found.
+ * \param o		chan_usbradio_pvt.
+ * \returns		Private structure that matches or NULL if not found.
  */
 static struct chan_simpleusb_pvt *find_desc_usb(char *devstr)
 {
@@ -877,7 +877,7 @@ static struct chan_simpleusb_pvt *find_desc_usb(char *devstr)
  * \brief Parallel port processing thread.
  *	This thread evaluates the timers configured for each
  *  configured parallel port pin.
- * \param arg	Pointer to arguments - this is always NULL.
+ * \param arg	Arguments - this is always NULL.
  */
 static void *pulserthread(void *arg)
 {
@@ -954,7 +954,7 @@ static void *pulserthread(void *arg)
  * kill the node and restart everything.  This helps to detect problems with a
  * hung USB device.
  *
- * \param argv		Pointer to chan_simpleusb_pvt structure associated with this thread.
+ * \param argv		chan_simpleusb_pvt structure associated with this thread.
  */
 static void *hidthread(void *arg)
 {
@@ -1142,7 +1142,7 @@ static void *hidthread(void *arg)
 		} else {
 			o->devtype = usb_dev->descriptor.idProduct;
 		}
-		ast_debug(5, "Channel %s: hidthread: Starting normally.\n", o->name);
+		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
 		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
 		mixer_write(o);
 
@@ -1241,13 +1241,13 @@ static void *hidthread(void *arg)
 			/* See if we are keyed */
 			keyed = !(buf[o->hid_io_cor_loc] & o->hid_io_cor);
 			if (keyed != o->rxhidsq) {
-				ast_debug(2, "Channel %s: chan_simpleusb update rxhidsq = %d\n", o->name, keyed);
+				ast_debug(2, "Channel %s: Update rxhidsq = %d\n", o->name, keyed);
 				o->rxhidsq = keyed;
 			}
 			/* See if we are receiving ctcss */
 			ctcssed = !(buf[o->hid_io_ctcss_loc] & o->hid_io_ctcss);
 			if (ctcssed != o->rxhidctcss) {
-				ast_debug(2, "Channel %s: chan_simpleusb update rxhidctcss = %d\n", o->name, ctcssed);
+				ast_debug(2, "Channel %s: Update rxhidctcss = %d\n", o->name, ctcssed);
 				o->rxhidctcss = ctcssed;
 			}
 			ast_mutex_lock(&o->txqlock);
@@ -1524,7 +1524,7 @@ static int used_blocks(struct chan_simpleusb_pvt *o)
  * \note The input data must be formatted as stereo at 48000 samples per second.
  *		 FRAME_SIZE * 2 * 2 * 6 (2 bytes per sample, 2 channels, 6 for upsample to 48K)
  * \param o		Pointer chan_usbradio_pvt.
- * \param data	Pointer to audio data to write.
+ * \param data	Audio data to write.
  * \returns		Number bytes written.
  */
 static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
@@ -1559,7 +1559,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
  * and open it again.
  * It initializes the device based on our requirements and triggers
  * reads and writes.
- * \param o		Pointer chan_usbradio_pvt.
+ * \param o		chan_usbradio_pvt.
  * \param mode	The mode to open the file.  This is the flags argument to open.
  * \retval 0	Success.
  * \retval -1	Failed.
@@ -1687,14 +1687,14 @@ static int simpleusb_digit_end(struct ast_channel *c, char digit, unsigned int d
 
 /*!
  * \brief Make paging audio samples.
- * \param audio			Pointer to audio buffer.
+ * \param audio			Audio buffer.
  * \param data			Data to encode into audio.
- * \param audio_ptr		Pointer to audio buffer.
+ * \param audio_ptr		Audio buffer pointer.
  * \param divcnt		The running count of the number of samples encoded per bit.
  *						This tracks our samples as we create the wave form.
  * \param divdiv		The number of samples to encode per bit.
  */
-static void mkpsamples(short *audio, uint32_t data, int *audio_ptr, int *divcnt, int divdiv)
+static void mkpsamples(short *audio, uint32_t data, int* restrict audio_ptr, int* restrict divcnt, int divdiv)
 {
 	register int i;
 	register short value;
@@ -2504,8 +2504,8 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 
 /*!
  * \brief Asterisk fixup function.
- * \param oldchan		Pointer to old asterisk channel.
- * \param newchan		Pointer to new asterisk channel.
+ * \param oldchan		Old asterisk channel.
+ * \param newchan		New asterisk channel.
  * \retval 0			Always returns 0.			
  */
 static int simpleusb_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
@@ -2521,8 +2521,8 @@ static int simpleusb_fixup(struct ast_channel *oldchan, struct ast_channel *newc
  * This is used to indicate tx key / unkey.
  * \param c				Asterisk channel.
  * \param cond			Condition.
- * \param data			Pointer to data.
- * \param datalen		Pointer to data length.
+ * \param data			Data.
+ * \param datalen		Data length.
  * \retval 0			If successful.
  * \retval -1			For hangup.
  */
@@ -2670,12 +2670,12 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext
  * \brief SimpleUSB request from Asterisk.
  * This is a standard Asterisk function - requester.
  * Asterisk calls this function to to setup private data structures.
- * \param type			Pointer to type of channel to request.
- * \param cap			Pointer to format capabilities for the channel.
- * \param assignedids	Pointer to unique ID string to assign to the channel.
- * \param requestor		Pointer to channel asking for data. 
- * \param data			Pointer to destination of the call.
- * \param cause			Pointer to cause of failure.
+ * \param type			Type of channel to request.
+ * \param cap			Format capabilities for the channel.
+ * \param assignedids	Unique ID string to assign to the channel.
+ * \param requestor		Channel asking for data. 
+ * \param data			Destination of the call.
+ * \param cause			Cause of failure.
  * \retval NULL			Failure
  * \return				ast_channel if successful
  */
@@ -2717,7 +2717,7 @@ static struct ast_channel *simpleusb_request(const char *type, struct ast_format
  * \brief Process Asterisk CLI request to key radio.
  * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
+ * \param argv			Arguments
  * \return	CLI success, showusage, or failure.
  */
 static int console_key(int fd, int argc, const char *const *argv)
@@ -2755,7 +2755,7 @@ static int console_unkey(int fd, int argc, const char *const *argv)
  * \brief Process asterisk cli request to show or set active USB device.
  * \param fd			Asterisk cli fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
+ * \param argv			Arguments
  * \return	Cli success, showusage, or failure.
  */
 static int susb_active(int fd, int argc, const char *const *argv)
@@ -2788,7 +2788,7 @@ static int susb_active(int fd, int argc, const char *const *argv)
 /*!
  * \brief Process asterisk cli request for receiver deviation display.
  * \param fd			Asterisk cli fd
- * \param o				Pointer to private struct
+ * \param o				Private struct
  * \return	Cli success, showusage, or failure.
  */
 static void tune_rxdisplay(int fd, struct chan_simpleusb_pvt *o)
@@ -3056,7 +3056,7 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 /*!
  * \brief Send test tone for the specified interval.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  * \param ms			Milliseconds of test tone.
  * \param intflag		Flag to indicate the type of wait.
  * \retval -1			If failure.
@@ -3092,7 +3092,7 @@ static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int 
 /*!
  * \brief Print settings.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  */
 static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 {
@@ -3110,7 +3110,7 @@ static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 /*!
  * \brief Set receive level.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  * \param str			New value.
  */
 static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, const char *str)
@@ -3138,8 +3138,8 @@ static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, const char *str)
 /*!
  * \brief Set transmit A level.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
- * \param str			Pointer to new level.
+ * \param o				Private struct.
+ * \param str			New level.
  */
 static void _menu_txa(int fd, struct chan_simpleusb_pvt *o, const char *str)
 {
@@ -3175,8 +3175,8 @@ static void _menu_txa(int fd, struct chan_simpleusb_pvt *o, const char *str)
 /*!
  * \brief Set transmit B level.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
- * \param str			Pointer to new level.
+ * \param o				Private struct.
+ * \param str			New level.
  */
 static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
 {
@@ -3215,7 +3215,7 @@ static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
  *	xxx is the node number.
  *	If the device EEPROM is enabled, the settings are 
  *	saved to EEPROM.
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  */
 static void tune_write(struct chan_simpleusb_pvt *o)
 {
@@ -3254,8 +3254,8 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 /*!
  * \brief Process tune menu commands.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
- * \param cmd			Pointer to command to process.
+ * \param o				Private struct.
+ * \param cmd			Command to process.
  */
 static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *cmd)
 {
@@ -3353,8 +3353,8 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 /*!
  * \brief Store receive carrier detect.
  *	This is the carrier operated relay (COR).
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_rxcdtype(struct chan_simpleusb_pvt *o, char *s)
 {
@@ -3377,8 +3377,8 @@ static void store_rxcdtype(struct chan_simpleusb_pvt *o, char *s)
 /*!
  * \brief Store receive CTCSS detect.
  *	This is the CTCSS or PL input.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_rxsdtype(struct chan_simpleusb_pvt *o, char *s)
 {
@@ -3401,8 +3401,8 @@ static void store_rxsdtype(struct chan_simpleusb_pvt *o, char *s)
 /*!
  * \brief Store pager transmit channel.
  *	This is left or right channel.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_pager(struct chan_simpleusb_pvt *o, char *s)
 {
@@ -3422,7 +3422,7 @@ static void store_pager(struct chan_simpleusb_pvt *o, char *s)
  * \brief Update the ALSA mixer settings
  * Update the ALSA mixer settings.
  *
- * \param		Pointer to chan_simpleusb structure.
+ * \param		chan_simpleusb structure.
  */
 static void mixer_write(struct chan_simpleusb_pvt *o)
 {

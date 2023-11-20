@@ -505,7 +505,7 @@ static int rad_rxwait(int fd, int ms)
 }
 
 /*!
- * \brief Wait a fixed amount or one the specified fd for the specified milliseconds.
+ * \brief Wait a fixed amount or on the specified fd for the specified milliseconds.
  * \param fd			File descriptor.
  * \param ms			Milliseconds to wait.
  * \param flag			0=use usleep, !0=use select/poll on the fd.
@@ -659,7 +659,7 @@ static int hid_device_mklist(void)
 /*!
  * \brief See if the internal usb_device_list contains the
  * specified device string.
- * \param devstr	Pointer to device string to check.
+ * \param devstr	Device string to check.
  * \retval 0		Device string was not found.
  * \retval 1		Device string was found.
  */
@@ -790,8 +790,8 @@ static void kickptt(struct chan_usbradio_pvt *o)
 /*!
  * \brief Search our configured channels to find the
  *	one with the matching USB descriptor.
- * \param o		Pointer chan_usbradio_pvt.
- * \returns		Pointer to private structure that matches or NULL if not found.
+ * \param o		chan_usbradio_pvt.
+ * \returns		Private structure that matches or NULL if not found.
  */
 static struct chan_usbradio_pvt *find_desc(const char *dev)
 {
@@ -808,8 +808,8 @@ static struct chan_usbradio_pvt *find_desc(const char *dev)
 /*!
  * \brief Search our configured channels to find the
  *	one with the matching USB descriptor.
- * \param o		Pointer chan_usbradio_pvt.
- * \returns		Pointer to private structure that matches or NULL if not found.
+ * \param o		chan_usbradio_pvt.
+ * \returns		Private structure that matches or NULL if not found.
  */
 static struct chan_usbradio_pvt *find_desc_usb(const char *devstr)
 {
@@ -828,7 +828,7 @@ static struct chan_usbradio_pvt *find_desc_usb(const char *devstr)
  * \brief Parallel port processing thread.
  *	This thread evaluates the timers configured for each
  *  configured parallel port pin.
- * \param arg	Pointer to arguments - this is always NULL.
+ * \param arg	Arguments - this is always NULL.
  */
 static void *pulserthread(void *arg)
 {
@@ -905,7 +905,7 @@ static void *pulserthread(void *arg)
  * kill the node and restart everything.  This helps to detect problems with a
  * hung USB device.
  *
- * \param argv		Pointer to chan_usbradio_pvt structure associated with this thread.
+ * \param argv		chan_usbradio_pvt structure associated with this thread.
  */
 static void *hidthread(void *arg)
 {
@@ -1092,7 +1092,7 @@ static void *hidthread(void *arg)
 		} else {
 			o->devtype = usb_dev->descriptor.idProduct;
 		}
-		ast_debug(5, "Channel %s: hidthread: Starting normally.\n", o->name);
+		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
 		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
 		/* setup the xmpr subsystem */
 		if (o->pmrChan == NULL) {
@@ -1312,13 +1312,13 @@ static void *hidthread(void *arg)
 			/* See if we are keyed */
 			keyed = !(buf[o->hid_io_cor_loc] & o->hid_io_cor);
 			if (keyed != o->rxhidsq) {
-				ast_debug(2, "Channel %s: chan_usbradio update rxhidsq = %d\n", o->name, keyed);
+				ast_debug(2, "Channel %s: Update rxhidsq = %d\n", o->name, keyed);
 				o->rxhidsq = keyed;
 			}
 			/* See if we are receiving ctcss */
 			ctcssed = !(buf[o->hid_io_ctcss_loc] & o->hid_io_ctcss);
 			if (ctcssed != o->rxhidctcss) {
-				ast_debug(2, "Channel %s: chan_usbradio update rxhidctcss = %d\n", o->name, ctcssed);
+				ast_debug(2, "Channel %s: Update rxhidctcss = %d\n", o->name, ctcssed);
 				o->rxhidctcss = ctcssed;
 			}
 			/* Get the GPIO information */
@@ -1578,8 +1578,8 @@ static int used_blocks(struct chan_usbradio_pvt *o)
  * \brief Write a full frame of audio data to the sound card device.
  * \note The input data must be formatted as stereo at 48000 samples per second.
  *		 FRAME_SIZE * 2 * 2 * 6 (2 bytes per sample, 2 channels, 6 for upsample to 48K)
- * \param o		Pointer chan_usbradio_pvt.
- * \param data	Pointer to audio data to write.
+ * \param o		chan_usbradio_pvt.
+ * \param data	Audio data to write.
  * \returns		Number bytes written.
  */
 static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
@@ -1752,7 +1752,7 @@ static int usbradio_digit_end(struct ast_channel *c, char digit, unsigned int du
  * \note SETFREQ - sets spi programmable transceiver
  *  	 SETCHAN - sets binary parallel transceiver
  * \param c				Asterisk channel.
- * \param text			Pointer to text message to process.
+ * \param text			Text message to process.
  * \retval 0			If successful.
  * \retval -1			If unsuccessful.
  */
@@ -2492,8 +2492,8 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 /*!
  * \brief Asterisk fixup function.
- * \param oldchan		Pointer to old asterisk channel.
- * \param newchan		Pointer to new asterisk channel.
+ * \param oldchan		Old asterisk channel.
+ * \param newchan		New asterisk channel.
  * \retval 0			Always returns 0.			
  */
 static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
@@ -2509,8 +2509,8 @@ static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newch
  * This is used to indicate tx key / unkey.
  * \param c				Asterisk channel.
  * \param cond			Condition.
- * \param data			Pointer to data.
- * \param datalen		Pointer to data length.
+ * \param data			Data.
+ * \param datalen		Data length.
  * \retval 0			If successful.
  * \retval -1			For hangup.
  */
@@ -2669,12 +2669,12 @@ static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, 
  * \brief USBRadio request from Asterisk.
  * This is a standard Asterisk function - requester.
  * Asterisk calls this function to to setup private data structures.
- * \param type			Pointer to type of channel to request.
- * \param cap			Pointer to format capabilities for the channel.
- * \param assignedids	Pointer to unique ID string to assign to the channel.
- * \param requestor		Pointer to channel asking for data. 
- * \param data			Pointer to destination of the call.
- * \param cause			Pointer to cause of failure.
+ * \param type			Type of channel to request.
+ * \param cap			Format capabilities for the channel.
+ * \param assignedids	Unique ID string to assign to the channel.
+ * \param requestor		Channel asking for data. 
+ * \param data			Destination of the call.
+ * \param cause			Cause of failure.
  * \retval NULL			Failure
  * \return				ast_channel if successful
  */
@@ -2719,7 +2719,7 @@ static struct ast_channel *usbradio_request(const char *type, struct ast_format_
  * \brief Process Asterisk CLI request to key radio.
  * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
+ * \param argv			Arguments
  * \return	CLI success, showusage, or failure.
  */
 static int console_key(int fd, int argc, const char *const *argv)
@@ -2738,7 +2738,7 @@ static int console_key(int fd, int argc, const char *const *argv)
  * \brief Process Asterisk CLI request to unkey radio.
  * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
+ * \param argv			Arguments
  * \return	CLI success, showusage, or failure.
  */
 static int console_unkey(int fd, int argc, const char *const *argv)
@@ -2838,7 +2838,7 @@ static int usb_device_swap(int fd, const char *other)
 /*!
  * \brief Send 3 second test tone.
  * \param fd			Asterisk cli fd
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  * \param intflag		Flag to indicate the type of wait.
  */
 static void tune_flash(int fd, struct chan_usbradio_pvt *o, int intflag)
@@ -3180,7 +3180,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
  *	internal gain depending on the output type.
  *	Setting ranges is 0.0 to 0.9.
  *
- * \param o				Pointer to chan_usbradio structure.
+ * \param o				chan_usbradio structure.
  * \return	0			Always returns zero.
  */
 static int set_txctcss_level(struct chan_usbradio_pvt *o)
@@ -3240,8 +3240,8 @@ static int radio_set_xpmr_debug(int fd, int argc, const char *const *argv)
 
 /*!
  * \brief Store receive demodulator setting.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_rxdemod(struct chan_usbradio_pvt *o, char *s)
 {
@@ -3258,8 +3258,8 @@ static void store_rxdemod(struct chan_usbradio_pvt *o, char *s)
 
 /*!
  * \brief Store tx mixer A setting.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_txmixa(struct chan_usbradio_pvt *o, char *s)
 {
@@ -3280,8 +3280,8 @@ static void store_txmixa(struct chan_usbradio_pvt *o, char *s)
 
 /*!
  * \brief Store tx mixer B setting.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_txmixb(struct chan_usbradio_pvt *o, char *s)
 {
@@ -3302,8 +3302,8 @@ static void store_txmixb(struct chan_usbradio_pvt *o, char *s)
 
 /*!
  * \brief Store receive carrier detect type.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_rxcdtype(struct chan_usbradio_pvt *o, char *s)
 {
@@ -3347,8 +3347,8 @@ static void store_rxsdtype(struct chan_usbradio_pvt *o, char *s)
 
 /*!
  * \brief Store receiver gain setting.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_rxgain(struct chan_usbradio_pvt *o, char *s)
 {
@@ -3359,8 +3359,8 @@ static void store_rxgain(struct chan_usbradio_pvt *o, char *s)
 
 /*!
  * \brief Store receive voice adjusment.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_rxvoiceadj(struct chan_usbradio_pvt *o, char *s)
 {
@@ -3371,8 +3371,8 @@ static void store_rxvoiceadj(struct chan_usbradio_pvt *o, char *s)
 
 /*!
  * \brief Store receiver ctcss adjustment.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_rxctcssadj(struct chan_usbradio_pvt *o, char *s)
 {
@@ -3383,8 +3383,8 @@ static void store_rxctcssadj(struct chan_usbradio_pvt *o, char *s)
 
 /*!
  * \brief Store transmit output tone turn off type.
- * \param o				Pointer to private struct.
- * \param s				Pointer to new setting.
+ * \param o				Private struct.
+ * \param s				New setting.
  */
 static void store_txtoctype(struct chan_usbradio_pvt *o, char *s)
 {
@@ -3402,7 +3402,7 @@ static void store_txtoctype(struct chan_usbradio_pvt *o, char *s)
 /*!
  * \brief Send test tone.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  * \param intflag		Flag to indicate the type of wait.
  */
 static void tune_txoutput(struct chan_usbradio_pvt *o, int value, int fd, int intflag)
@@ -3429,7 +3429,7 @@ static void tune_txoutput(struct chan_usbradio_pvt *o, int value, int fd, int in
  * \brief Adjust input attenuator with maximum signal input.
  *
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to chan_usbradio structure.
+ * \param o				chan_usbradio structure.
  * \param setsql		Setting for squelch.
  * \param intflag		Flag to indicate how wait_or_poll waits.
  */
@@ -3580,7 +3580,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 /*!
  * \brief Process Asterisk CLI request for receiver deviation display.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct
+ * \param o				Private struct
  * \return	CLI success, showusage, or failure.
  */
 static void do_rxdisplay(int fd, struct chan_usbradio_pvt *o)
@@ -3644,8 +3644,8 @@ static void do_rxdisplay(int fd, struct chan_usbradio_pvt *o)
 /*!
  * \brief Set received voice level.
  * \param fd			Asterisk CLI fd.
- * \param o				Pointer to chan_usbradio structure.
- * \param str			Pointer to new voice level.
+ * \param o				chan_usbradio structure.
+ * \param str			New voice level.
  */
 static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 {
@@ -3700,7 +3700,7 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 /*!
  * \brief Print settings.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  */
 static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 {
@@ -3744,8 +3744,8 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 /*!
  * \brief Set squelch level.
  * \param fd			Asterisk CLI fd.
- * \param o				Pointer to chan_usbradio structure.
- * \param str			Pointer to new squelch level.
+ * \param o				chan_usbradio structure.
+ * \param str			New squelch level.
  */
 static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str)
 {
@@ -3783,8 +3783,8 @@ static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str
 /*!
  * \brief Set tx voice level.
  * \param fd			Asterisk CLI fd.
- * \param o				Pointer to chan_usbradio structure.
- * \param str			Pointer to new voice level.
+ * \param o				chan_usbradio structure.
+ * \param str			New voice level.
  */
 static void _menu_txvoice(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 {
@@ -3862,8 +3862,8 @@ static void _menu_txvoice(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 /*!
  * \brief Set aux voice level.
  * \param fd			Asterisk CLI fd.
- * \param o				Pointer to chan_usbradio structure.
- * \param str			Pointer to new voice level.
+ * \param o				chan_usbradio structure.
+ * \param str			New voice level.
  */
 static void _menu_auxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 {
@@ -3905,8 +3905,8 @@ static void _menu_auxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 /*!
  * \brief Set tx tone level.
  * \param fd			Asterisk CLI fd.
- * \param o				Pointer to chan_usbradio structure.
- * \param str			Pointer to new voice level.
+ * \param o				chan_usbradio structure.
+ * \param str			New voice level.
  */
 static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 {
@@ -3949,8 +3949,8 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 /*!
  * \brief Process tune menu commands.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
- * \param cmd			Pointer to command to process.
+ * \param o				Private struct.
+ * \param cmd			Command to process.
  */
 static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cmd)
 {
@@ -4093,7 +4093,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 /*!
  * \brief Tune receive voice level.
  * \param fd			Asterisk CLI fd
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  * \param intflag		Flag to indicate the type of wait.
  */
 static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
@@ -4172,7 +4172,7 @@ static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
 /*!
  * \brief Determine the receive CTCSS level.
  * \param fd			Asterisk CLI fd.
- * \param o				Pointer to chan_usbradio structure.
+ * \param o				chan_usbradio structure.
  * \param intflag		Flag to indicate how wait_or_poll waits.
  */
 static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
@@ -4269,7 +4269,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
  *	xxx is the node number.
  *	If the device EEPROM is enabled, the settings are 
  *	saved to EEPROM.
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  */
 static void tune_write(struct chan_usbradio_pvt *o)
 {
@@ -4320,7 +4320,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
  * \brief Update the ALSA mixer settings
  * Update the ALSA mixer settings.
  *
- * \param		Pointer to chan_simpleusb structure.
+ * \param		chan_usbradio structure.
  */
 static void mixer_write(struct chan_usbradio_pvt *o)
 {
@@ -4356,7 +4356,7 @@ static void mixer_write(struct chan_usbradio_pvt *o)
  * \brief Adjust DSP multiplier 
  * Adjusts the DSP multiplier to add resolution to the tx level adjustment
  *
- * \param		Pointer to chan_usbradio structure.
+ * \param		chan_usbradio structure.
  */
 static void mult_set(struct chan_usbradio_pvt *o)
 {
@@ -4468,7 +4468,7 @@ static int usbhider(struct chan_usbradio_pvt *o, int opt)
 #endif
 /*!
  * \brief Dump pmr settings.
- * \param o				Pointer to private struct.
+ * \param o				Private struct.
  */
 static void pmrdump(struct chan_usbradio_pvt *o)
 {
@@ -4601,7 +4601,7 @@ static void pmrdump(struct chan_usbradio_pvt *o)
 */
 /*!
  * \brief Configure xpmr (DSP radio) subsystem.
- * \param o			Pointer to private struct.
+ * \param o			Private struct.
  * \retval 0		Success.
  * \retval 1		Failure.
  */
