@@ -64,7 +64,7 @@
 #define HAVE_XPMRX				1
 #endif
 
-#define CHAN_USBRADIO           1				/*Used in xpmr.h to configure that module */
+#define CHAN_USBRADIO           1			/* Used in xpmr.h to configure that module */
 #define DEBUG_USBRADIO          0
 #define DEBUG_CAPTURES	 		1
 #define DEBUG_CAP_RX_OUT		0
@@ -501,39 +501,39 @@ static int rad_rxwait(int fd, int ms)
 	fds[0].fd = fd;
 	fds[0].events = POLLIN;
 	
-	return (ast_poll(fds, 1, ms));
+	return ast_poll(fds, 1, ms);
 }
 
 /*!
- * \brief Wait on the specified fd for the specified milliseconds.
+ * \brief Wait a fixed amount or one the specified fd for the specified milliseconds.
  * \param fd			File descriptor.
  * \param ms			Milliseconds to wait.
  * \param flag			0=use usleep, !0=use select/poll on the fd.
  * \retval 0			Timer expired.
  * \retval 1			Activity occurred on the fd.
  */
-static int happy_mswait(int fd, int ms, int flag)
+static int wait_or_poll(int fd, int ms, int flag)
 {
 	int i;
 
 	if (!flag) {
 		usleep(ms * 1000);
-		return (0);
+		return 0;
 	}
 	i = 0;
 	if (ms >= 100) {
 		for (i = 0; i < ms; i += 100) {
 			ast_cli(fd, "\r");
 			if (rad_rxwait(fd, 100)) {
-				return (1);
+				return 1;
 			}
 		}
 	}
 	if (rad_rxwait(fd, ms - i)) {
-		return (1);
+		return 1;
 	}
 	ast_cli(fd, "\r");
-	return (0);
+	return 0;
 }
 
 /*!
@@ -1092,8 +1092,8 @@ static void *hidthread(void *arg)
 		} else {
 			o->devtype = usb_dev->descriptor.idProduct;
 		}
-		ast_debug(1, "Channel %s: hidthread: Starting normally.\n", o->name);
-		ast_verb(1, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
+		ast_debug(5, "Channel %s: hidthread: Starting normally.\n", o->name);
+		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
 		/* setup the xmpr subsystem */
 		if (o->pmrChan == NULL) {
 			t_pmr_chan tChan;
@@ -1312,13 +1312,13 @@ static void *hidthread(void *arg)
 			/* See if we are keyed */
 			keyed = !(buf[o->hid_io_cor_loc] & o->hid_io_cor);
 			if (keyed != o->rxhidsq) {
-				ast_debug(2, "Channel %s: chan_usbradio hidthread: update rxhidsq = %d\n", o->name, keyed);
+				ast_debug(2, "Channel %s: chan_usbradio update rxhidsq = %d\n", o->name, keyed);
 				o->rxhidsq = keyed;
 			}
 			/* See if we are receiving ctcss */
 			ctcssed = !(buf[o->hid_io_ctcss_loc] & o->hid_io_ctcss);
 			if (ctcssed != o->rxhidctcss) {
-				ast_debug(2, "Channel %s: chan_usbradio hidthread: update rxhidctcss = %d\n", o->name, ctcssed);
+				ast_debug(2, "Channel %s: chan_usbradio update rxhidctcss = %d\n", o->name, ctcssed);
 				o->rxhidctcss = ctcssed;
 			}
 			/* Get the GPIO information */
@@ -1430,7 +1430,7 @@ static void *hidthread(void *arg)
 					if ((o->pps[i]) && (!strcasecmp(o->pps[i], "cor")) && (PP_MASK & (1 << i))) {
 						j = k & (1 << ppinshift[i]);	/* set the bit accordingly */
 						if (j != o->rxppsq) {
-							ast_debug(2, "Channel %s: hidthread: update rxppsq = %d\n", o->name, j);
+							ast_debug(2, "Channel %s: update rxppsq = %d\n", o->name, j);
 							o->rxppsq = j;
 						}
 					} else if ((o->pps[i]) && (!strcasecmp(o->pps[i], "ctcss")) && (PP_MASK & (1 << i))) {
@@ -1485,7 +1485,7 @@ static void *hidthread(void *arg)
 			}
 			if (o->lasttx != lasttxtmp) {
 				o->pmrChan->txPttHid = o->lasttx = lasttxtmp;
-				ast_debug(2, "Channel %s: hidthread: tx set to %d\n", o->name, o->lasttx);
+				ast_debug(2, "Channel %s: tx set to %d\n", o->name, o->lasttx);
 				o->hid_gpio_val &= ~o->hid_io_ptt;
 				ast_mutex_lock(&pp_lock);
 				if (k) {
@@ -1724,7 +1724,7 @@ static int setformat(struct chan_usbradio_pvt *o, int mode)
 
 /*!
  * \brief Asterisk digit begin function.
- * \param c				Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \param digit			Digit processed.
  * \retval 0			
  */
@@ -1735,7 +1735,7 @@ static int usbradio_digit_begin(struct ast_channel *c, char digit)
 
 /*!
  * \brief Asterisk digit end function.
- * \param c				Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \param digit			Digit processed.
  * \param duration		Duration of the digit.
  * \retval -1			
@@ -1751,7 +1751,7 @@ static int usbradio_digit_end(struct ast_channel *c, char digit, unsigned int du
  * \brief Asterisk text function.
  * \note SETFREQ - sets spi programmable transceiver
  *  	 SETCHAN - sets binary parallel transceiver
- * \param c			Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \param text			Pointer to text message to process.
  * \retval 0			If successful.
  * \retval -1			If unsuccessful.
@@ -1896,8 +1896,8 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 /*!
  * \brief USBRadio call.
- * \param c				Pointer to Asterisk channel.
- * \param dest			Pointer to Destination (echolink node number).
+ * \param c				Asterisk channel.
+ * \param dest			Destination.
  * \param timeout		Timeout.
  * \retval -1 			if not successful.
  * \retval 0 			if successful.
@@ -1915,7 +1915,7 @@ static int usbradio_call(struct ast_channel *c, const char *dest, int timeout)
 
 /*!
  * \brief Answer the call.
- * \param c				Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \retval 0 			If successful.
  */
 static int usbradio_answer(struct ast_channel *c)
@@ -1948,8 +1948,8 @@ static int usbradio_hangup(struct ast_channel *c)
 /*!
  * \brief Asterisk write function.
  * This routine handles asterisk to radio frames.
- * \param ast			Pointer to Asterisk channel.
- * \param frame			Pointer to Asterisk frame to process.
+ * \param ast			Asterisk channel.
+ * \param frame			Asterisk frame to process.
  * \retval 0			Successful.
  */
 static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
@@ -1986,7 +1986,7 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 	}
 #endif
 
-	//take the data from the network and save it for PmrTx processing
+	/* take the data from the network and save it for PmrTx processing */
 	if (!o->echoing) {
 		PmrTx(o->pmrChan, (short *) f->data.ptr);
 		o->didpmrtx = 1;
@@ -1997,7 +1997,7 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 
 /*!
  * \brief Asterisk read function.
- * \param ast			Pointer to Asterisk channel.
+ * \param ast			Asterisk channel.
  * \retval 				Asterisk frame.
  */
 static struct ast_frame *usbradio_read(struct ast_channel *c)
@@ -2507,7 +2507,7 @@ static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newch
 /*!
  * \brief Asterisk indicate function.
  * This is used to indicate tx key / unkey.
- * \param c			Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \param cond			Condition.
  * \param data			Pointer to data.
  * \param datalen		Pointer to data length.
@@ -2574,10 +2574,10 @@ static int usbradio_indicate(struct ast_channel *c, int cond, const void *data, 
 
 /*!
  * \brief Asterisk setoption function.
- * \param chan			Pointer to Asterisk channel.
+ * \param chan			Asterisk channel.
  * \param option		Option.
- * \param data			Pointer to data.
- * \param datalen		Pointer to data length.
+ * \param data			Data.
+ * \param datalen		Data length.
  * \retval 0			If successful.
  * \retval -1			If failed.
  */
@@ -2594,7 +2594,7 @@ static int usbradio_setoption(struct ast_channel *chan, int option, void *data, 
 
 	switch (option) {
 	case AST_OPTION_TONE_VERIFY:
-		cp = (char *) data;
+		cp = data;
 		switch (*cp) {
 		case 1:
 			ast_log(LOG_NOTICE, "Channel %s: Set option TONE VERIFY, mode: OFF(0).\n", o->name);
@@ -2621,12 +2621,12 @@ static int usbradio_setoption(struct ast_channel *chan, int option, void *data, 
 
 /*!
  * \brief Start a new usbradio call.
- * \param o				Pointer to private structure.
- * \param ext			Pointer to extension.
- * \param ctx			Pointer to context.
+ * \param o				Private structure.
+ * \param ext			Extension.
+ * \param ctx			Context.
  * \param state			State.
- * \param assignedids	Pointer to unique ID string assigned to the channel.
- * \param requestor		Pointer to Asterisk channel.
+ * \param assignedids	Unique ID string assigned to the channel.
+ * \param requestor		Asterisk channel.
  * \return 				Asterisk channel.
  */
 static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, char *ctx, int state,
@@ -2716,11 +2716,11 @@ static struct ast_channel *usbradio_request(const char *type, struct ast_format_
 }
 
 /*!
- * \brief Process asterisk cli request to key radio.
- * \param fd			Asterisk cli fd
+ * \brief Process Asterisk CLI request to key radio.
+ * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
  * \param argv			Pointer to arguments
- * \return	Cli success, showusage, or failure.
+ * \return	CLI success, showusage, or failure.
  */
 static int console_key(int fd, int argc, const char *const *argv)
 {
@@ -2735,11 +2735,11 @@ static int console_key(int fd, int argc, const char *const *argv)
 }
 
 /*!
- * \brief Process asterisk cli request to unkey radio.
- * \param fd			Asterisk cli fd
+ * \brief Process Asterisk CLI request to unkey radio.
+ * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
  * \param argv			Pointer to arguments
- * \return	Cli success, showusage, or failure.
+ * \return	CLI success, showusage, or failure.
  */
 static int console_unkey(int fd, int argc, const char *const *argv)
 {
@@ -2754,10 +2754,10 @@ static int console_unkey(int fd, int argc, const char *const *argv)
 }
 
 /*!
- * \brief Process asterisk cli request to show or set active USB device.
- * \param fd			Asterisk cli fd
+ * \brief Process Asterisk CLI request to show or set active USB device.
+ * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
+ * \param argv			Arguments
  * \return	Cli success, showusage, or failure.
  */
 static int radio_active(int fd, int argc, const char *const *argv)
@@ -2793,9 +2793,9 @@ static int radio_active(int fd, int argc, const char *const *argv)
 }
 
 /*!
- * \brief Process asterisk cli request to swap usb devices
- * \param fd			Asterisk cli fd
- * \param other			Pointer to other device.
+ * \brief Process Asterisk CLI request to swap usb devices
+ * \param fd			Asterisk CLI fd
+ * \param other			Other device.
  * \return	Cli success, showusage, or failure.
  */
 static int usb_device_swap(int fd, const char *other)
@@ -2855,7 +2855,7 @@ static void tune_flash(int fd, struct chan_usbradio_pvt *o, int intflag)
 		o->pmrChan->txPttIn = 1;
 		TxTestTone(o->pmrChan, 1);	// generate 1KHz tone at 7200 peak
 		if ((fd > 0) && intflag) {
-			if (happy_mswait(fd, 1000, intflag)) {
+			if (wait_or_poll(fd, 1000, intflag)) {
 				o->pmrChan->txPttIn = 0;
 				o->txtestkey = 0;
 				break;
@@ -2870,7 +2870,7 @@ static void tune_flash(int fd, struct chan_usbradio_pvt *o, int intflag)
 			break;
 		}
 		if ((fd > 0) && intflag) {
-			if (happy_mswait(fd, 1500, intflag)) {
+			if (wait_or_poll(fd, 1500, intflag)) {
 				o->pmrChan->txPttIn = 0;
 				o->txtestkey = 0;
 				break;
@@ -2887,11 +2887,11 @@ static void tune_flash(int fd, struct chan_usbradio_pvt *o, int intflag)
 }
 
 /*!
- * \brief Process asterisk cli request radio tune.
- * \param fd			Asterisk cli fd
+ * \brief Process asterisk CLI request radio tune.
+ * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
- * \return	Cli success, showusage, or failure.
+ * \param argv			Arguments
+ * \return	CLI success, showusage, or failure.
  */
 static int radio_tune(int fd, int argc, const char *const *argv)
 {
@@ -2938,7 +2938,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "Tx Voice Level currently set to %d\n", o->txmixaset);
 		ast_cli(fd, "Tx Tone Level currently set to %d\n", o->txctcssadj);
 		ast_cli(fd, "Rx Squelch currently set to %d\n", o->rxsquelchadj);
-		return RESULT_SHOWUSAGE;
+		return RESULT_SUCCESS;
 	}
 
 	o->pmrChan->b.tuning = 1;
@@ -3215,11 +3215,11 @@ static int set_txctcss_level(struct chan_usbradio_pvt *o)
 }
 
 /*!
- * \brief Process asterisk cli request to set xpmr debug level.
- * \param fd			Asterisk cli fd
+ * \brief Process Asterisk CLI request to set xpmr debug level.
+ * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
- * \return	Cli success, showusage, or failure.
+ * \param argv			Arguments
+ * \return	CLI success, showusage, or failure.
  */
 static int radio_set_xpmr_debug(int fd, int argc, const char *const *argv)
 {
@@ -3401,7 +3401,7 @@ static void store_txtoctype(struct chan_usbradio_pvt *o, char *s)
 
 /*!
  * \brief Send test tone.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  * \param intflag		Flag to indicate the type of wait.
  */
@@ -3412,7 +3412,7 @@ static void tune_txoutput(struct chan_usbradio_pvt *o, int value, int fd, int in
 	TxTestTone(o->pmrChan, 1);	// generate 1KHz tone at 7200 peak
 	if (fd > 0) {
 		ast_cli(fd, "Tone output starting on channel %s...\n", o->name);
-		if (happy_mswait(fd, 5000, intflag)) {
+		if (wait_or_poll(fd, 5000, intflag)) {
 			o->pmrChan->txPttIn = 0;
 			o->txtestkey = 0;
 		}
@@ -3428,10 +3428,10 @@ static void tune_txoutput(struct chan_usbradio_pvt *o, int value, int fd, int in
 /*!
  * \brief Adjust input attenuator with maximum signal input.
  *
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to chan_usbradio structure.
  * \param setsql		Setting for squelch.
- * \param intflag		Flag to indicate how happy_mswait waits.
+ * \param intflag		Flag to indicate how wait_or_poll waits.
  */
 static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int intflag)
 {
@@ -3470,7 +3470,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, setting, 0);
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboostset, 0);
 
-		if (happy_mswait(fd, 100, intflag)) {
+		if (wait_or_poll(fd, 100, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
@@ -3478,7 +3478,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		o->pmrChan->spsMeasure->discfactor = 2000;
 		o->pmrChan->spsMeasure->enabled = 1;
 		o->pmrChan->spsMeasure->amax = o->pmrChan->spsMeasure->amin = 0;
-		if (happy_mswait(fd, 400, intflag)) {
+		if (wait_or_poll(fd, 400, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
@@ -3515,7 +3515,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 	o->pmrChan->spsRx->discfactor = (i16) 2000;
 	o->pmrChan->spsRx->discounteru = o->pmrChan->spsRx->discounterl = 0;
 	o->pmrChan->spsRx->amax = o->pmrChan->spsRx->amin = 0;
-	if (happy_mswait(fd, 200, intflag)) {
+	if (wait_or_poll(fd, 200, intflag)) {
 		o->pmrChan->b.tuning = 0;
 		return;
 	}
@@ -3525,7 +3525,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 	o->pmrChan->spsRx->discfactor = tmpdiscfactor;
 	o->pmrChan->spsRx->discounteru = o->pmrChan->spsRx->discounterl = 0;
 	o->pmrChan->spsRx->amax = o->pmrChan->spsRx->amin = 0;
-	if (happy_mswait(fd, 200, intflag)) {
+	if (wait_or_poll(fd, 200, intflag)) {
 		o->pmrChan->b.tuning = 0;
 		return;
 	}
@@ -3578,10 +3578,10 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 }
 
 /*!
- * \brief Process asterisk cli request for receiver deviation display.
- * \param fd			Asterisk cli fd
+ * \brief Process Asterisk CLI request for receiver deviation display.
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct
- * \return	Cli success, showusage, or failure.
+ * \return	CLI success, showusage, or failure.
  */
 static void do_rxdisplay(int fd, struct chan_usbradio_pvt *o)
 {
@@ -3643,7 +3643,7 @@ static void do_rxdisplay(int fd, struct chan_usbradio_pvt *o)
 
 /*!
  * \brief Set received voice level.
- * \param fd			Asterisk cli fd.
+ * \param fd			Asterisk CLI fd.
  * \param o				Pointer to chan_usbradio structure.
  * \param str			Pointer to new voice level.
  */
@@ -3699,7 +3699,7 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 
 /*!
  * \brief Print settings.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  */
 static void _menu_print(int fd, struct chan_usbradio_pvt *o)
@@ -3743,7 +3743,7 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 
 /*!
  * \brief Set squelch level.
- * \param fd			Asterisk cli fd.
+ * \param fd			Asterisk CLI fd.
  * \param o				Pointer to chan_usbradio structure.
  * \param str			Pointer to new squelch level.
  */
@@ -3782,7 +3782,7 @@ static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str
 
 /*!
  * \brief Set tx voice level.
- * \param fd			Asterisk cli fd.
+ * \param fd			Asterisk CLI fd.
  * \param o				Pointer to chan_usbradio structure.
  * \param str			Pointer to new voice level.
  */
@@ -3861,7 +3861,7 @@ static void _menu_txvoice(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 
 /*!
  * \brief Set aux voice level.
- * \param fd			Asterisk cli fd.
+ * \param fd			Asterisk CLI fd.
  * \param o				Pointer to chan_usbradio structure.
  * \param str			Pointer to new voice level.
  */
@@ -3904,7 +3904,7 @@ static void _menu_auxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 
 /*!
  * \brief Set tx tone level.
- * \param fd			Asterisk cli fd.
+ * \param fd			Asterisk CLI fd.
  * \param o				Pointer to chan_usbradio structure.
  * \param str			Pointer to new voice level.
  */
@@ -3939,7 +3939,7 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 	if (dokey) {
 		ast_cli(fd, "Keying Radio and sending CTCSS tone for 5 seconds...\n");
 		o->txtestkey = 1;
-		happy_mswait(fd, 5000, 1);
+		wait_or_poll(fd, 5000, 1);
 		o->txtestkey = 0;
 		ast_cli(fd, "DONE.\n");
 	}
@@ -3948,7 +3948,7 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 
 /*!
  * \brief Process tune menu commands.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  * \param cmd			Pointer to command to process.
  */
@@ -4092,7 +4092,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 
 /*!
  * \brief Tune receive voice level.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  * \param intflag		Flag to indicate the type of wait.
  */
@@ -4131,12 +4131,12 @@ static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
 
 	while (tries < maxtries) {
 		*(o->pmrChan->prxVoiceAdjust) = setting * M_Q8;
-		if (happy_mswait(fd, 10, intflag)) {
+		if (wait_or_poll(fd, 10, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
 		o->pmrChan->spsMeasure->amax = o->pmrChan->spsMeasure->amin = 0;
-		if (happy_mswait(fd, 1000, intflag)) {
+		if (wait_or_poll(fd, 1000, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
@@ -4171,9 +4171,9 @@ static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
 
 /*!
  * \brief Determine the receive CTCSS level.
- * \param fd			Asterisk cli fd.
+ * \param fd			Asterisk CLI fd.
  * \param o				Pointer to chan_usbradio structure.
- * \param intflag		Flag to indicate how happy_mswait waits.
+ * \param intflag		Flag to indicate how wait_or_poll waits.
  */
 static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 {
@@ -4200,12 +4200,12 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 
 	while (tries < maxtries) {
 		*(o->pmrChan->prxCtcssAdjust) = setting * M_Q8;
-		if (happy_mswait(fd, 10, intflag)) {
+		if (wait_or_poll(fd, 10, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
 		o->pmrChan->spsMeasure->amax = o->pmrChan->spsMeasure->amin = 0;
-		if (happy_mswait(fd, 500, intflag)) {
+		if (wait_or_poll(fd, 500, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
@@ -4237,7 +4237,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 	if (o->rxcdtype == CD_XPMR_NOISE) {
 		int normRssi;
 
-		if (happy_mswait(fd, 200, intflag)) {
+		if (wait_or_poll(fd, 200, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
@@ -4653,9 +4653,9 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
 /*!
  * \brief Store configuration.
  *	Initializes chan_usbradio and loads it with the configuration data.
- * \param cfg			Pointer to ast_config structure.
- * \param ctg			Pointer to category.
- * \return				Pointer to chan_usbradio_pvt.
+ * \param cfg			ast_config structure.
+ * \param ctg			Category.
+ * \return				chan_usbradio_pvt.
  */
 static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, const char *ctg)
 {
@@ -5069,9 +5069,9 @@ int RxTestIt(struct chan_usbradio_pvt *o)
 #endif
 
 /*!
- * \brief Turns integer response to char cli response
+ * \brief Turns integer response to char CLI response
  * \param r				Response.
- * \return	Cli success, showusage, or failure.
+ * \return	CLI success, showusage, or failure.
  */
 static char *res2cli(int r)
 {
@@ -5086,11 +5086,11 @@ static char *res2cli(int r)
 }
 
 /*!
- * \brief Handle asterisk cli request to key transmitter.
- * \param e				Asterisk cli entry.
+ * \brief Handle Asterisk CLI request to key transmitter.
+ * \param e				Asterisk CLI entry.
  * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_console_key(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -5107,11 +5107,11 @@ static char *handle_console_key(struct ast_cli_entry *e, int cmd, struct ast_cli
 }
 
 /*!
- * \brief Handle asterisk cli request to unkey transmitter.
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \brief Handle Asterisk CLI request to unkey transmitter.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_console_unkey(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -5128,11 +5128,11 @@ static char *handle_console_unkey(struct ast_cli_entry *e, int cmd, struct ast_c
 }
 
 /*!
- * \brief Handle asterisk cli request for usb tune command.
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \brief Handle Asterisk CLI request for usb tune command.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_radio_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -5159,11 +5159,11 @@ static char *handle_radio_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_
 }
 
 /*!
- * \brief Handle asterisk cli request active device command.
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \brief Handle Asterisk CLI request active device command.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_radio_active(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -5182,11 +5182,11 @@ static char *handle_radio_active(struct ast_cli_entry *e, int cmd, struct ast_cl
 }
 
 /*!
- * \brief Handle asterisk cli request to set xdebug.
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \brief Handle Asterisk CLI request to set xdebug.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_set_xdebug(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -5203,9 +5203,6 @@ static char *handle_set_xdebug(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	return res2cli(radio_set_xpmr_debug(a->fd, a->argc, a->argv));
 }
 
-/*!
- * \brief Define cli entries for this module
- */
 static struct ast_cli_entry cli_usbradio[] = {
 	AST_CLI_DEFINE(handle_console_key, "Simulate Rx Signal Present"),
 	AST_CLI_DEFINE(handle_console_unkey, "Simulate Rx Signal Loss"),
@@ -5265,10 +5262,6 @@ static int load_config(int reload)
 	return 0;
 }
 
-/*!
- * \brief Asterisk function to reload module settings.
- * \return				Success or failure.
- */
 static int reload_module(void)
 {
 	return load_config(1);

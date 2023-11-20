@@ -410,7 +410,7 @@ static int rad_rxwait(int fd, int ms)
 	fds[0].fd = fd;
 	fds[0].events = POLLIN;
 	
-	return (ast_poll(fds, 1, ms));
+	return ast_poll(fds, 1, ms);
 }
 
 /*!
@@ -421,28 +421,28 @@ static int rad_rxwait(int fd, int ms)
  * \retval 0			Timer expired.
  * \retval 1			Activity occurred on the fd.
  */
-static int happy_mswait(int fd, int ms, int flag)
+static int wait_or_poll(int fd, int ms, int flag)
 {
 	int i;
 
 	if (!flag) {
 		usleep(ms * 1000);
-		return (0);
+		return 0;
 	}
 	i = 0;
 	if (ms >= 100) {
 		for (i = 0; i < ms; i += 100) {
 			ast_cli(fd, "\r");
 			if (rad_rxwait(fd, 100)) {
-				return (1);
+				return 1;
 			}
 		}
 	}	
 	if (rad_rxwait(fd, ms - i)) {
-		return (1);
+		return 1;
 	}
 	ast_cli(fd, "\r");
-	return (0);
+	return 0;
 }
 
 /*!
@@ -1142,8 +1142,8 @@ static void *hidthread(void *arg)
 		} else {
 			o->devtype = usb_dev->descriptor.idProduct;
 		}
-		ast_debug(1, "Channel %s: hidthread: Starting normally.\n", o->name);
-		ast_verb(1, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
+		ast_debug(5, "Channel %s: hidthread: Starting normally.\n", o->name);
+		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
 		mixer_write(o);
 
 		/* reload the settings from the tune file */
@@ -1241,13 +1241,13 @@ static void *hidthread(void *arg)
 			/* See if we are keyed */
 			keyed = !(buf[o->hid_io_cor_loc] & o->hid_io_cor);
 			if (keyed != o->rxhidsq) {
-				ast_debug(2, "Channel %s: chan_simpleusb hidthread: update rxhidsq = %d\n", o->name, keyed);
+				ast_debug(2, "Channel %s: chan_simpleusb update rxhidsq = %d\n", o->name, keyed);
 				o->rxhidsq = keyed;
 			}
 			/* See if we are receiving ctcss */
 			ctcssed = !(buf[o->hid_io_ctcss_loc] & o->hid_io_ctcss);
 			if (ctcssed != o->rxhidctcss) {
-				ast_debug(2, "Channel %s: chan_simpleusb hidthread: update rxhidctcss = %d\n", o->name, ctcssed);
+				ast_debug(2, "Channel %s: chan_simpleusb update rxhidctcss = %d\n", o->name, ctcssed);
 				o->rxhidctcss = ctcssed;
 			}
 			ast_mutex_lock(&o->txqlock);
@@ -1261,7 +1261,7 @@ static void *hidthread(void *arg)
 				}
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
-				ast_debug(2, "Channel %s: hidthread: update PTT = %d on channel.\n", o->name, txreq);
+				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", o->name, txreq);
 			} else if ((!txreq) && o->lasttx) {
 				buf[o->hid_gpio_loc] = 0;
 				if (o->invertptt) {
@@ -1269,7 +1269,7 @@ static void *hidthread(void *arg)
 				}
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
-				ast_debug(2, "Channel %s: hidthread: update PTT = %d.\n", o->name, txreq);
+				ast_debug(2, "Channel %s: update PTT = %d.\n", o->name, txreq);
 			}
 			lasttxtmp = o->lasttx;
 			o->lasttx = txreq;
@@ -1383,7 +1383,7 @@ static void *hidthread(void *arg)
 					if ((o->pps[i]) && (!strcasecmp(o->pps[i], "cor")) && (PP_MASK & (1 << i))) {
 						j = k & (1 << ppinshift[i]);	/* set the bit accordingly */
 						if (j != o->rxppsq) {
-							ast_debug(2, "Channel %s: hidthread: update rxppsq = %d\n", o->name, j);
+							ast_debug(2, "Channel %s: update rxppsq = %d\n", o->name, j);
 							o->rxppsq = j;
 						}
 					} else if ((o->pps[i]) && (!strcasecmp(o->pps[i], "ctcss")) && (PP_MASK & (1 << i))) {
@@ -1434,7 +1434,7 @@ static void *hidthread(void *arg)
 				}
 			}
 			if (o->lasttx != lasttxtmp) {
-				ast_debug(2, "Channel %s: hidthread: tx set to %d\n", o->name, o->lasttx);
+				ast_debug(2, "Channel %s: tx set to %d\n", o->name, o->lasttx);
 				o->hid_gpio_val &= ~o->hid_io_ptt;
 				ast_mutex_lock(&pp_lock);
 				if (k) {
@@ -1662,7 +1662,7 @@ static int setformat(struct chan_simpleusb_pvt *o, int mode)
 
 /*!
  * \brief Asterisk digit begin function.
- * \param c				Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \param digit			Digit processed.
  * \retval 0			
  */
@@ -1673,7 +1673,7 @@ static int simpleusb_digit_begin(struct ast_channel *c, char digit)
 
 /*!
  * \brief Asterisk digit end function.
- * \param c			Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \param digit			Digit processed.
  * \param duration		Duration of the digit.
  * \retval -1			
@@ -1688,19 +1688,19 @@ static int simpleusb_digit_end(struct ast_channel *c, char digit, unsigned int d
 /*!
  * \brief Make paging audio samples.
  * \param audio			Pointer to audio buffer.
- * \param x				Data to encode into audio.
+ * \param data			Data to encode into audio.
  * \param audio_ptr		Pointer to audio buffer.
  * \param divcnt		The running count of the number of samples encoded per bit.
  *						This tracks our samples as we create the wave form.
  * \param divdiv		The number of samples to encode per bit.
  */
-static void mkpsamples(short *audio, uint32_t x, int *audio_ptr, int *divcnt, int divdiv)
+static void mkpsamples(short *audio, uint32_t data, int *audio_ptr, int *divcnt, int divdiv)
 {
 	register int i;
 	register short value;
 
 	for (i = 31; i >= 0; i--) {
-		value = (x & (1 << i)) ? ONEVAL : ZEROVAL;
+		value = (data & (1 << i)) ? ONEVAL : ZEROVAL;
 		while (*divcnt < divdiv) {
 			audio[(*audio_ptr)++] = value;
 			*divcnt += DIVSAMP;
@@ -1713,8 +1713,8 @@ static void mkpsamples(short *audio, uint32_t x, int *audio_ptr, int *divcnt, in
 
 /*!
  * \brief Asterisk text function.
- * \param c				Pointer to Asterisk channel.
- * \param text			Pointer to text message to process.
+ * \param c				Asterisk channel.
+ * \param text			Text message to process.
  * \retval 0			If successful.
  * \retval -1			If unsuccessful.
  */
@@ -1919,8 +1919,8 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 /*!
  * \brief Simpleusb call.
- * \param c				Pointer to Asterisk channel.
- * \param dest			Pointer to Destination (echolink node number).
+ * \param c				Asterisk channel.
+ * \param dest			Destination.
  * \param timeout		Timeout.
  * \retval -1 			if not successful.
  * \retval 0 			if successful.
@@ -1938,7 +1938,7 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 
 /*!
  * \brief Answer the call.
- * \param c				Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \retval 0 			If successful.
  */
 static int simpleusb_answer(struct ast_channel *c)
@@ -1971,8 +1971,8 @@ static int simpleusb_hangup(struct ast_channel *c)
 /*!
  * \brief Asterisk write function.
  * This routine handles asterisk to radio frames.
- * \param ast			Pointer to Asterisk channel.
- * \param frame			Pointer to Asterisk frame to process.
+ * \param ast			Asterisk channel.
+ * \param frame			Asterisk frame to process.
  * \retval 0			Successful.
  */
 static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
@@ -2030,7 +2030,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 
 /*!
  * \brief Asterisk read function.
- * \param ast			Pointer to Asterisk channel.
+ * \param ast			Asterisk channel.
  * \retval 				Asterisk frame.
  */
 static struct ast_frame *simpleusb_read(struct ast_channel *c)
@@ -2519,7 +2519,7 @@ static int simpleusb_fixup(struct ast_channel *oldchan, struct ast_channel *newc
 /*!
  * \brief Asterisk indicate function.
  * This is used to indicate tx key / unkey.
- * \param c			Pointer to Asterisk channel.
+ * \param c				Asterisk channel.
  * \param cond			Condition.
  * \param data			Pointer to data.
  * \param datalen		Pointer to data length.
@@ -2575,10 +2575,10 @@ static int simpleusb_indicate(struct ast_channel *c, int cond, const void *data,
 
 /*!
  * \brief Asterisk setoption function.
- * \param chan			Pointer to Asterisk channel.
+ * \param chan			Asterisk channel.
  * \param option		Option.
- * \param data			Pointer to data.
- * \param datalen		Pointer to data length.
+ * \param data			Data.
+ * \param datalen		Data length.
  * \retval 0			If successful.
  * \retval -1			If failed.
  */
@@ -2595,7 +2595,7 @@ static int simpleusb_setoption(struct ast_channel *chan, int option, void *data,
 
 	switch (option) {
 	case AST_OPTION_TONE_VERIFY:
-		cp = (char *) data;
+		cp = data;
 		switch (*cp) {
 		case 1:
 			ast_log(LOG_NOTICE, "Channel %s: Set option TONE VERIFY, mode: OFF(0).\n", o->name);
@@ -2622,12 +2622,12 @@ static int simpleusb_setoption(struct ast_channel *chan, int option, void *data,
 
 /*!
  * \brief Start a new simpleusb call.
- * \param o				Pointer to private structure.
- * \param ext			Pointer to extension.
- * \param ctx			Pointer to context.
+ * \param o				Private structure.
+ * \param ext			Extension.
+ * \param ctx			Context.
  * \param state			State.
- * \param assignedids	Pointer to unique ID string assigned to the channel.
- * \param requestor		Pointer to Asterisk channel.
+ * \param assignedids	Unique ID string assigned to the channel.
+ * \param requestor		Asterisk channel.
  * \return 				Asterisk channel.
  */
 static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext, char *ctx, int state,
@@ -2714,11 +2714,11 @@ static struct ast_channel *simpleusb_request(const char *type, struct ast_format
 }
 
 /*!
- * \brief Process asterisk cli request to key radio.
- * \param fd			Asterisk cli fd
+ * \brief Process Asterisk CLI request to key radio.
+ * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
  * \param argv			Pointer to arguments
- * \return	Cli success, showusage, or failure.
+ * \return	CLI success, showusage, or failure.
  */
 static int console_key(int fd, int argc, const char *const *argv)
 {
@@ -2733,11 +2733,11 @@ static int console_key(int fd, int argc, const char *const *argv)
 }
 
 /*!
- * \brief Process asterisk cli request to unkey radio.
- * \param fd			Asterisk cli fd
+ * \brief Process Asterisk CLI request to unkey radio.
+ * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
- * \return	Cli success, showusage, or failure.
+ * \param argv			Arguments
+ * \return	CLI success, showusage, or failure.
  */
 static int console_unkey(int fd, int argc, const char *const *argv)
 {
@@ -2847,10 +2847,10 @@ static void tune_rxdisplay(int fd, struct chan_simpleusb_pvt *o)
 }
 
 /*!
- * \brief Process asterisk cli request to swap usb devices
- * \param fd			Asterisk cli fd
- * \param other			Pointer to other device.
- * \return	Cli success, showusage, or failure.
+ * \brief Process Asterisk CLI request to swap usb devices
+ * \param fd			Asterisk CLI fd
+ * \param other			Other device.
+ * \return	CLI success, showusage, or failure.
  */
 static int usb_device_swap(int fd, const char *other)
 {
@@ -2891,8 +2891,8 @@ static int usb_device_swap(int fd, const char *other)
 
 /*!
  * \brief Send 3 second test tone.
- * \param fd			Asterisk cli fd
- * \param o				Pointer to private struct.
+ * \param fd			Asterisk CLI fd
+ * \param o				Private struct.
  * \param intflag		Flag to indicate the type of wait.
  */
 static void tune_flash(int fd, struct chan_simpleusb_pvt *o, int intflag)
@@ -2908,7 +2908,7 @@ static void tune_flash(int fd, struct chan_simpleusb_pvt *o, int intflag)
 		if (_send_tx_test_tone(fd, o, 1000, intflag)) {
 			break;
 		}
-		if (happy_mswait(fd, 1000, intflag)) {
+		if (wait_or_poll(fd, 1000, intflag)) {
 			break;
 		}
 	}
@@ -2919,11 +2919,11 @@ static void tune_flash(int fd, struct chan_simpleusb_pvt *o, int intflag)
 }
 
 /*!
- * \brief Process asterisk cli request susb tune.
- * \param fd			Asterisk cli fd
+ * \brief Process Asterisk CLI request susb tune.
+ * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
- * \param argv			Pointer to arguments
- * \return	Cli success, showusage, or failure.
+ * \param argv			Arguments
+ * \return	CLI success, showusage, or failure.
  */
 static int susb_tune(int fd, int argc, const char *const *argv)
 {
@@ -2941,10 +2941,8 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "Rx Level currently set to %d\n", o->rxmixerset);
 		ast_cli(fd, "Tx Output A Level currently set to %d\n", o->txmixaset);
 		ast_cli(fd, "Tx Output B Level currently set to %d\n", o->txmixbset);
-		return RESULT_SHOWUSAGE;
-	}
-
-	else if (!strcasecmp(argv[2], "swap")) {
+		return RESULT_SUCCESS;
+	} else if (!strcasecmp(argv[2], "swap")) {
 		if (argc > 3) {
 			usb_device_swap(fd, argv[3]);
 			return RESULT_SUCCESS;
@@ -2959,9 +2957,7 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 	if (!o->hasusb) {
 		ast_cli(fd, "Device %s currently not active\n", o->name);
 		return RESULT_SUCCESS;
-	}
-
-	else if (!strcasecmp(argv[2], "rx")) {
+	} else if (!strcasecmp(argv[2], "rx")) {
 		i = 0;
 
 		if (argc == 3) {
@@ -3059,7 +3055,7 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 
 /*!
  * \brief Send test tone for the specified interval.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  * \param ms			Milliseconds of test tone.
  * \param intflag		Flag to indicate the type of wait.
@@ -3081,7 +3077,7 @@ static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int 
 	i = 0;
 	ret = 0;
 	while (ast_channel_generatordata(o->owner) && (i < ms)) {
-		if (happy_mswait(fd, 50, intflag)) {
+		if (wait_or_poll(fd, 50, intflag)) {
 			ret = 1;
 			break;
 		}
@@ -3095,7 +3091,7 @@ static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int 
 
 /*!
  * \brief Print settings.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  */
 static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
@@ -3113,7 +3109,7 @@ static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 
 /*!
  * \brief Set receive level.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  * \param str			New value.
  */
@@ -3141,7 +3137,7 @@ static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, const char *str)
 
 /*!
  * \brief Set transmit A level.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  * \param str			Pointer to new level.
  */
@@ -3178,7 +3174,7 @@ static void _menu_txa(int fd, struct chan_simpleusb_pvt *o, const char *str)
 
 /*!
  * \brief Set transmit B level.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  * \param str			Pointer to new level.
  */
@@ -3257,7 +3253,7 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 
 /*!
  * \brief Process tune menu commands.
- * \param fd			Asterisk cli fd
+ * \param fd			Asterisk CLI fd
  * \param o				Pointer to private struct.
  * \param cmd			Pointer to command to process.
  */
@@ -3468,9 +3464,9 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 /*!
  * \brief Store configuration.
  *	Initializes chan_usbradio and loads it with the configuration data.
- * \param cfg			Pointer to ast_config structure.
- * \param ctg			Pointer to category.
- * \return				Pointer to chan_usbradio_pvt.
+ * \param cfg			ast_config structure.
+ * \param ctg			Category.
+ * \return				chan_usbradio_pvt.
  */
 static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, const char *ctg)
 {
@@ -3623,9 +3619,9 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 }
 
 /*!
- * \brief Turns integer response to char cli response
+ * \brief Turns integer response to char CLI response
  * \param r				Response.
- * \return	Cli success, showusage, or failure.
+ * \return	CLI success, showusage, or failure.
  */
 static char *res2cli(int r)
 {
@@ -3640,11 +3636,11 @@ static char *res2cli(int r)
 }
 
 /*!
- * \brief Handle asterisk cli request to key transmitter.
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \brief Handle Asterisk CLI request to key transmitter.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_console_key(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -3661,11 +3657,11 @@ static char *handle_console_key(struct ast_cli_entry *e, int cmd, struct ast_cli
 }
 
 /*!
- * \brief Handle asterisk cli request to unkey transmitter.
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \brief Handle Asterisk CLI request to unkey transmitter.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_console_unkey(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -3682,11 +3678,11 @@ static char *handle_console_unkey(struct ast_cli_entry *e, int cmd, struct ast_c
 }
 
 /*!
- * \brief Handle asterisk cli request for usb tune command.
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \brief Handle Asterisk CLI request for usb tune command.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_susb_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -3709,11 +3705,11 @@ static char *handle_susb_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 }
 
 /*!
- * \brief Handle asterisk cli request active device command.
- * \param e				Asterisk cli entry.
- * \param cmd			Cli command type.
- * \param a				Pointer to asterisk cli arguments.
- * \return	Cli success or failure.
+ * \brief Handle Asterisk CLI request active device command.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
  */
 static char *handle_susb_active(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
@@ -3731,9 +3727,6 @@ static char *handle_susb_active(struct ast_cli_entry *e, int cmd, struct ast_cli
 	return res2cli(susb_active(a->fd, a->argc, a->argv));
 }
 
-/*!
- * \brief Define cli entries for this module
- */
 static struct ast_cli_entry cli_simpleusb[] = {
 	AST_CLI_DEFINE(handle_console_key, "Simulate Rx Signal Present"),
 	AST_CLI_DEFINE(handle_console_unkey, "Simulate Rx Signal Loss"),
@@ -3787,10 +3780,6 @@ static int load_config(int reload)
 	return 0;
 }
 
-/*!
- * \brief Asterisk function to reload module settings.
- * \return				Success or failure.
- */
 static int reload_module(void)
 {
 	return load_config(1);
