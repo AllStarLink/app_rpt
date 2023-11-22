@@ -276,7 +276,7 @@ static struct usrp_pvt *usrp_alloc(void *data)
 			ast_free(pvt);
 			return NULL;
 		}
-		memset((char *) &pvt->si_other, 0, sizeof(pvt->si_other));
+		memset(&pvt->si_other, 0, sizeof(pvt->si_other));
 		pvt->si_other.sin_addr = *(struct in_addr *) host->h_addr;
 		pvt->si_other.sin_family = AF_INET;
 		pvt->si_other.sin_port = htons(atoi(args.hisport));
