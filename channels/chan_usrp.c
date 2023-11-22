@@ -36,7 +36,7 @@
 	<support_level>extended</support_level>
  ***/
 
-/* Version 0.1.1, 11/15/2019
+/* Version 0.1.2, 11/22/2023
  *
  * Channel connection for Asterisk to GNU Radio/USRP
  *
@@ -86,7 +86,7 @@ static const char tdesc[] = "USRP Driver";
 static char context[AST_MAX_EXTENSION] = "default";
 static char type[] = "usrp";
 
-/* usrp creates private structures on demand */
+/* USRP creates private structures on demand */
 
 struct usrp_rxq {
 	struct usrp_rxq *qe_forw;
@@ -194,7 +194,7 @@ static struct ast_cli_entry cli_usrp[] = {
 };
 
 /*!
- * \brief usrp call.
+ * \brief USRP call.
  * \param ast			Asterisk channel.
  * \param dest			Destination.
  * \param timeout		Timeout.
@@ -209,16 +209,14 @@ static int usrp_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
-	if (option_debug) {
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_channel_name(ast));
-	}
+	ast_debug(1, "Calling %s on %s\n", dest, ast_channel_name(ast));
 
 	ast_setstate(ast, AST_STATE_UP);
 	return 0;
 }
 
 /*!
- * \brief Destroy this usrp connection.
+ * \brief Destroy this USRP connection.
  * \param pvt		Private structure.
  */
 static void usrp_destroy(struct usrp_pvt *pvt)
@@ -231,7 +229,7 @@ static void usrp_destroy(struct usrp_pvt *pvt)
 }
 
 /*!
- * \brief Allocate a usrp private structure.
+ * \brief Allocate a USRP private structure.
  * \param data		Arguments for creating the stream.
  * \return			Private structure.
  */
@@ -253,13 +251,13 @@ static struct usrp_pvt *usrp_alloc(void *data)
 
 	AST_NONSTANDARD_APP_ARGS(args, data, ':');
 
-	if ((!args.hisip) || (!args.hisip[0])) {
+	if (ast_strlen_zero(args.hisip)) {
 		args.hisip = "127.0.0.1";
 	}
-	if ((!args.hisport) || (!args.hisport[0])) {
+	if (ast_strlen_zero(args.hisport)) {
 		args.hisport = "1234";
 	}
-	if ((!args.myport) || (!args.myport[0])) {
+	if (ast_strlen_zero(args.myport)) {
 		args.myport = args.hisport;
 	}
 
@@ -267,8 +265,7 @@ static struct usrp_pvt *usrp_alloc(void *data)
 	if (pvt) {
 		memset(pvt, 0, sizeof(struct usrp_pvt));
 
-		sprintf(stream, "%s:%d", args.hisip, atoi(args.hisport));
-		strcpy(pvt->stream, stream);
+		snprintf(pvt->stream, sizeof(pvt->stream), "%s:%d", args.hisip, atoi(args.hisport));
 		pvt->rxq.qe_forw = &pvt->rxq;
 		pvt->rxq.qe_back = &pvt->rxq;
 
@@ -285,9 +282,9 @@ static struct usrp_pvt *usrp_alloc(void *data)
 		pvt->si_other.sin_port = htons(atoi(args.hisport));
 
 		if ((pvt->usrp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-			ast_log(LOG_WARNING, "Unable to create new socket for usrp connection %s.\n", stream);
+			ast_log(LOG_WARNING, "Unable to create new socket for USRP connection %s\n", stream);
 			ast_free(pvt);
-			return (NULL);
+			return NULL;
 		}
 
 		memset((char *) &si_me, 0, sizeof(si_me));
@@ -297,12 +294,12 @@ static struct usrp_pvt *usrp_alloc(void *data)
 		if (!strncmp(ast_inet_ntoa(pvt->si_other.sin_addr), "127.", 4))
 			si_me.sin_addr.s_addr = inet_addr("127.0.0.1");
 		if (bind(pvt->usrp, &si_me, sizeof(si_me)) == -1) {
-			ast_log(LOG_WARNING, "Unable to bind port for usrp connection %s.\n", stream);
+			ast_log(LOG_WARNING, "Unable to bind port for USRP connection %s\n", stream);
 			ast_free(pvt);
-			return (NULL);
+			return NULL;
 		}
 		if (!pvt->usrp) {
-			ast_log(LOG_WARNING, "Unable to allocate usrp stream '%s' with flags %d\n", stream, flags);
+			ast_log(LOG_WARNING, "Unable to allocate USRP stream '%s' with flags %d\n", stream, flags);
 			ast_free(pvt);
 			return NULL;
 		}
@@ -312,7 +309,7 @@ static struct usrp_pvt *usrp_alloc(void *data)
 				break;
 		}
 		if (o_slot >= MAX_CHANS) {
-			ast_log(LOG_WARNING, "Unable to find empty usrp_channels[] entry.\n");
+			ast_log(LOG_WARNING, "Unable to find empty usrp_channels[] entry\n");
 			return NULL;
 		}
 		usrp_channels[o_slot] = pvt;
@@ -334,7 +331,7 @@ static int usrp_hangup(struct ast_channel *ast)
 	ast_debug(1, "usrp hangup(%s)\n", ast_channel_name(ast));
 	
 	if (!p) {
-		ast_log(LOG_WARNING, "Asked to hangup channel not connected.\n");
+		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
 	if (p->dsp) {
@@ -385,7 +382,7 @@ static int usrp_indicate(struct ast_channel *ast, int cond, const void *data, si
 	}
 	if (p->unkey_owed) {
 		p->unkey_owed = 0;
-		// tx was unkeyed - notify remote end
+		/* tx was unkeyed - notify remote end */
 		memset(&bufhdr, 0, sizeof(struct _chan_usrp_bufhdr));
 		memcpy(bufhdr.eye, "USRP", 4);
 		bufhdr.seq = htonl(p->txseq++);
@@ -487,7 +484,7 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 	} else {
 		datalen = n - sizeof(struct _chan_usrp_bufhdr);
 		if (memcmp(bufhdrp->eye, "USRP", 4)) {
-			ast_log(LOG_NOTICE, "Channel %s: Received packet from %s with invalid data.\n", ast_channel_name(ast), ast_inet_ntoa(si_them.sin_addr));
+			ast_log(LOG_NOTICE, "Channel %s: Received packet from %s with invalid data\n", ast_channel_name(ast), ast_inet_ntoa(si_them.sin_addr));
 		} else {
 			seq = ntohl(bufhdrp->seq);
 			if (seq != pvt->rxseq && seq != 0 && pvt->rxseq != 0) {
@@ -581,7 +578,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 
 	if (frame->datalen > USRP_VOICE_FRAME_SIZE) {
-		ast_log(LOG_WARNING, "Channel %s: Frame datalen %d exceeds limit.\n", ast_channel_name(ast), frame->datalen);
+		ast_log(LOG_WARNING, "Channel %s: Frame datalen %d exceeds limit\n", ast_channel_name(ast), frame->datalen);
 		return 0;
 	}
 
@@ -667,7 +664,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		ast_queue_frame(ast, &fr);
 	}
 	/* Decrement the receive key counter.
-	 * This insures that we do not get stuck in receive mode.
+	 * This ensures that we do not get stuck in receive mode.
 	 * The maximum is set in MAX_RXKEY_TIME.
 	 */
 	if (pvt->rxkey) {
@@ -678,14 +675,14 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		return 0;
 	}
 	
-	/* Send a usrp voice packet to the remote app */
+	/* Send a USRP voice packet to the remote app */
 	pvt->writect++;
 	pvt->unkey_owed = 1;
 	memcpy(bufdata, frame->data.ptr, frame->datalen);
 	memset(bufhdrp, 0, sizeof(struct _chan_usrp_bufhdr));
 	memcpy(bufhdrp->eye, "USRP", 4);
 	bufhdrp->seq = htonl(pvt->txseq++);
-	bufhdrp->keyup = htonl(1);	/*indicates key up */
+	bufhdrp->keyup = htonl(1);	/* indicates key up */
 	if (sendto(pvt->usrp, &sendbuf, frame->datalen + sizeof(struct _chan_usrp_bufhdr),
 			   0, &pvt->si_other, sizeof(pvt->si_other)) == -1) {
 		if (!pvt->warned) {
@@ -723,19 +720,19 @@ static int usrp_setoption(struct ast_channel *chan, int option, void *data, int 
 		cp = (char *) data;
 		switch (*cp) {
 		case 1:
-			ast_log(LOG_DEBUG, "Channel %s: Set option TONE VERIFY, mode: OFF(0).\n", ast_channel_name(chan));
+			ast_debug(1, "Channel %s: Set option TONE VERIFY, mode: OFF(0)\n", ast_channel_name(chan));
 			pvt->usedtmf = 1;
 			break;
 		case 2:
-			ast_log(LOG_DEBUG, "Channel %s: Set option TONE VERIFY, mode: MUTECONF/MAX(2).\n", ast_channel_name(chan));
+			ast_debug(1, "Channel %s: Set option TONE VERIFY, mode: MUTECONF/MAX(2)\n", ast_channel_name(chan));
 			pvt->usedtmf = 1;
 			break;
 		case 3:
-			ast_log(LOG_DEBUG, "Channel %s: Set option TONE VERIFY, mode: DISABLE DETECT(3).\n", ast_channel_name(chan));
+			ast_debug(1, "Channel %s: Set option TONE VERIFY, mode: DISABLE DETECT(3)\n", ast_channel_name(chan));
 			pvt->usedtmf = 0;
 			break;
 		default:
-			ast_log(LOG_DEBUG, "Channel %s: Set option TONE VERIFY, mode: OFF(0).\n", ast_channel_name(chan));
+			ast_debug(1, "Channel %s: Set option TONE VERIFY, mode: OFF(0)\n", ast_channel_name(chan));
 			pvt->usedtmf = 1;
 			break;
 		}
@@ -746,7 +743,7 @@ static int usrp_setoption(struct ast_channel *chan, int option, void *data, int 
 }
 
 /*!
- * \brief Start a new usrp call.
+ * \brief Start a new USRP call.
  * \param i				Private structure.
  * \param state			State.
  * \param assignedids	Unique ID string assigned to the channel.
@@ -778,7 +775,7 @@ static struct ast_channel *usrp_new(struct usrp_pvt *i, int state, const struct 
 		i->u = ast_module_user_add(tmp);
 		if (state != AST_STATE_DOWN) {
 			if (ast_pbx_start(tmp)) {
-				ast_log(LOG_WARNING, "Channel %s: Unable to start PBX.\n", ast_channel_name(tmp));
+				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
 				ast_hangup(tmp);
 			}
 		}
@@ -794,7 +791,7 @@ static struct ast_channel *usrp_new(struct usrp_pvt *i, int state, const struct 
 }
 
 /*!
- * \brief usrp request from Asterisk.
+ * \brief USRP request from Asterisk.
  * This is a standard Asterisk function - requester.
  * Asterisk calls this function to to setup private data structures.
  * \param type			Type of channel to request.
