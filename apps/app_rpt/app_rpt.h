@@ -564,7 +564,7 @@ struct rpt {
 	struct ast_config *cfg;
 	char reload;
 	char reload1;
-	char deleted;
+	unsigned int deleted:1;
 	char xlink; /*!< cross link state of a share repeater/remote radio */
 	unsigned int statpost_seqno;
 
@@ -744,18 +744,22 @@ struct rpt {
 	int  parrottimer;
 	unsigned int parrotcnt;
 	int telemmode;
-	struct ast_channel *rxchannel,*txchannel, *monchannel, *parrotchannel;
-	struct ast_channel *pchannel,*txpchannel, *dahdirxchannel, *dahditxchannel;
+
+	/* Bridging */
+	struct ast_channel *rxchannel, *txchannel, *monchannel, *parrotchannel;
+	struct ast_channel *pchannel, *txpchannel, *dahdirxchannel, *dahditxchannel;
 	struct ast_channel *telechannel;  	/*!< \brief pseudo channel between telemetry conference and txconf */
 	struct ast_channel *btelechannel;  	/*!< \brief pseudo channel buffer between telemetry conference and txconf */
 	struct ast_channel *voxchannel;
+	int conf;	/*!< DAHDI conf number */
+
 	struct ast_frame *lastf1,*lastf2;
 	struct rpt_tele tele;
 	struct timeval lasttv,curtv;
 	pthread_t rpt_call_thread,rpt_thread;
 	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
 	int calldigittimer;
-	int tailtimer,totimer,idtimer,txconf,conf,callmode,cidx,scantimer,tmsgtimer,skedtimer,linkactivitytimer,elketimer;
+	int tailtimer,totimer,idtimer,txconf,callmode,cidx,scantimer,tmsgtimer,skedtimer,linkactivitytimer,elketimer;
 	int mustid,tailid;
 	int rptinacttimer;
 	int tailevent;

@@ -303,8 +303,8 @@
 #include <curl/curl.h>
 #include <termios.h>
 
+/*! \todo remove */
 #include <dahdi/user.h>
-#include <dahdi/tonezone.h>		/* use tone_zone_set_zone */
 
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
@@ -338,6 +338,7 @@
 #include "app_rpt/rpt_daq.h"
 #include "app_rpt/rpt_cli.h"
 #include "app_rpt/rpt_call.h"
+#include "app_rpt/rpt_bridging.h"
 #include "app_rpt/rpt_capabilities.h"
 #include "app_rpt/rpt_vox.h"
 #include "app_rpt/rpt_serial.h" /* use serial_rxflush, serial_rxready */
@@ -1158,303 +1159,26 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
 
 void *rpt_call(void *this)
 {
-	struct dahdi_confinfo ci;	/* conference info */
-	struct rpt *myrpt = (struct rpt *) this;
-	int res;
-	int stopped, congstarted, dialtimer, lastcidx, aborted, sentpatchconnect;
-	struct ast_channel *mychannel, *genchannel;
-	struct ast_format_cap *cap;
-
-	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		pthread_exit(NULL);
-	}
-	ast_format_cap_append(cap, ast_format_slin, 0);
+	struct rpt *myrpt = this;
 
 	myrpt->mydtmf = 0;
-	/* allocate a pseudo-channel thru asterisk */
-	mychannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-
-	if (!mychannel) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
-		pthread_exit(NULL);
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-	rpt_disable_cdr(mychannel);
-	ast_answer(mychannel);
-	ci.confno = myrpt->conf;	/* use the pseudo conference */
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
-	/* first put the channel on the conference */
-	if (join_dahdiconf(mychannel, &ci)) {
-		ast_hangup(mychannel);
-		myrpt->callmode = 0;
-		pthread_exit(NULL);
-	}
-	/* allocate a pseudo-channel thru asterisk */
-	genchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	ao2_ref(cap, -1);
-	if (!genchannel) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
-		ast_hangup(mychannel);
-		pthread_exit(NULL);
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
-	rpt_disable_cdr(genchannel);
-	ast_answer(genchannel);
-	ci.confno = myrpt->conf;
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
-	/* first put the channel on the conference */
-	if (join_dahdiconf(genchannel, &ci)) {
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = 0;
-		pthread_exit(NULL);
-	}
-	if (myrpt->p.tonezone && (tone_zone_set_zone(ast_channel_fd(mychannel, 0), (char*) myrpt->p.tonezone) == -1)) {
-		ast_log(LOG_WARNING, "Unable to set tone zone %s\n", myrpt->p.tonezone);
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = 0;
-		pthread_exit(NULL);
-	}
-	/* start dialtone if patchquiet is 0. Special patch modes don't send dial tone */
-	if ((!myrpt->patchquiet) && (!myrpt->patchexten[0])
-		&& (tone_zone_play_tone(ast_channel_fd(genchannel, 0), DAHDI_TONE_DIALTONE) < 0)) {
-		ast_log(LOG_WARNING, "Cannot start dialtone\n");
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = 0;
-		pthread_exit(NULL);
-	}
-	stopped = 0;
-	congstarted = 0;
-	dialtimer = 0;
-	lastcidx = 0;
 	myrpt->calldigittimer = 0;
-	aborted = 0;
 
-	/* Reverse engineering of callmode Mar 2023 NA
-	 * XXX These should be converted to enums once we're sure about these, for programmer sanity.
-	 *
-	 * If 1 or 4, then we wait.
-	 * 0 = abort this call
-	 * 1 = no auto patch extension
-	 * 2 = auto patch extension exists
-	 * 3 = ?
-	 * 4 = congestion
-	 *
-	 * We wait up to patchdialtime for digits to be received.
-	 * If there's no auto patch extension, then we'll wait for PATCH_DIALPLAN_TIMEOUT ms and then play an announcement.
-	 */
+	rpt_run(myrpt);
 
-	if (myrpt->patchexten[0]) {
-		strcpy(myrpt->exten, myrpt->patchexten);
-		myrpt->callmode = 2;
-	}
-	while ((myrpt->callmode == 1) || (myrpt->callmode == 4)) {
-		if ((myrpt->patchdialtime) && (myrpt->callmode == 1) && (myrpt->cidx != lastcidx)) {
-			dialtimer = 0;
-			lastcidx = myrpt->cidx;
-		}
-
-		if ((myrpt->patchdialtime) && (dialtimer >= myrpt->patchdialtime)) {
-			ast_debug(1, "dialtimer %i > patchdialtime %i\n", dialtimer, myrpt->patchdialtime);
-			rpt_mutex_lock(&myrpt->lock);
-			aborted = 1;
-			myrpt->callmode = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			break;
-		}
-
-		if ((!myrpt->patchquiet) && (!stopped) && (myrpt->callmode == 1) && (myrpt->cidx > 0)) {
-			stopped = 1;
-			/* stop dial tone */
-			tone_zone_play_tone(ast_channel_fd(genchannel, 0), -1);
-		}
-		if (myrpt->callmode == 1) {
-			if (myrpt->calldigittimer > PATCH_DIALPLAN_TIMEOUT) {
-				myrpt->callmode = 2;
-				break;
-			}
-			/* bump timer if active */
-			if (myrpt->calldigittimer)
-				myrpt->calldigittimer += MSWAIT;
-		}
-		if (myrpt->callmode == 4) {
-			if (!congstarted) {
-				congstarted = 1;
-				/* start congestion tone */
-				tone_zone_play_tone(ast_channel_fd(genchannel, 0), DAHDI_TONE_CONGESTION);
-			}
-		}
-		res = ast_safe_sleep(mychannel, MSWAIT);
-		if (res < 0) {
-			ast_debug(1, "ast_safe_sleep=%i\n", res);
-			ast_hangup(mychannel);
-			ast_hangup(genchannel);
-			rpt_mutex_lock(&myrpt->lock);
-			myrpt->callmode = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			pthread_exit(NULL);
-		}
-		dialtimer += MSWAIT;
-	}
-	/* stop any tone generation */
-	tone_zone_play_tone(ast_channel_fd(genchannel, 0), -1);
-	/* end if done */
-	if (!myrpt->callmode) {
-		ast_debug(1, "callmode==0\n");
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		rpt_mutex_lock(&myrpt->lock);
-		myrpt->callmode = 0;
-		myrpt->macropatch = 0;
-		channel_revert(myrpt);
-		rpt_mutex_unlock(&myrpt->lock);
-		if ((!myrpt->patchquiet) && aborted)
-			rpt_telemetry(myrpt, TERM, NULL);
-		pthread_exit(NULL);
-	}
-
-	if (myrpt->p.ourcallerid && *myrpt->p.ourcallerid) {
-		char *name, *loc, *instr;
-		instr = ast_strdup(myrpt->p.ourcallerid);
-		if (instr) {
-			ast_callerid_parse(instr, &name, &loc);
-			ast_set_callerid(mychannel, loc, name, NULL);
-			ast_free(instr);
-		}
-	}
-
-	ast_channel_context_set(mychannel, myrpt->patchcontext);
-	ast_channel_exten_set(mychannel, myrpt->exten);
-
-	if (myrpt->p.acctcode)
-		ast_channel_accountcode_set(mychannel, myrpt->p.acctcode);
-	ast_channel_priority_set(mychannel, 1);
-	ast_channel_undefer_dtmf(mychannel);
-	if (ast_pbx_start(mychannel) < 0) {
-		ast_log(LOG_WARNING, "Unable to start PBX!!\n");
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		rpt_mutex_lock(&myrpt->lock);
-		myrpt->callmode = 0;
-		rpt_mutex_unlock(&myrpt->lock);
-		pthread_exit(NULL);
-	}
-	usleep(10000);
-	rpt_mutex_lock(&myrpt->lock);
-	myrpt->callmode = 3;
-	/* set appropriate conference for the pseudo */
-	ci.confno = myrpt->conf;
-	ci.confmode = (myrpt->p.duplex == 2) ? DAHDI_CONF_CONFANNMON : (DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
-	if (ast_channel_pbx(mychannel)) {
-		/* first put the channel on the conference in announce mode */
-		if (join_dahdiconf(myrpt->pchannel, &ci)) {
-			ast_hangup(mychannel);
-			ast_hangup(genchannel);
-			myrpt->callmode = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			pthread_exit(NULL);
-		}
-		/* get its channel number */
-		res = 0;
-		if (ioctl(ast_channel_fd(mychannel, 0), DAHDI_CHANNO, &res) == -1) {
-			ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
-			ast_hangup(mychannel);
-			myrpt->callmode = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			pthread_exit(NULL);
-		}
-		ci.confno = res;
-		ci.confmode = DAHDI_CONF_MONITOR;
-		/* put vox channel monitoring on the channel  */
-		if (join_dahdiconf(myrpt->voxchannel, &ci)) {
-			ast_hangup(mychannel);
-			myrpt->callmode = 0;
-			pthread_exit(NULL);
-		}
-	}
-	sentpatchconnect = 0;
-	while (myrpt->callmode) {
-		if ((!ast_channel_pbx(mychannel)) && (myrpt->callmode != 4)) {
-			/* If patch is setup for far end disconnect */
-			if (myrpt->patchfarenddisconnect || (myrpt->p.duplex < 2)) {
-				ast_debug(1, "callmode=%i, patchfarenddisconnect=%i, duplex=%i\n",
-					myrpt->callmode, myrpt->patchfarenddisconnect, myrpt->p.duplex);
-				myrpt->callmode = 0;
-				myrpt->macropatch = 0;
-				if (!myrpt->patchquiet) {
-					rpt_mutex_unlock(&myrpt->lock);
-					rpt_telemetry(myrpt, TERM, NULL);
-					rpt_mutex_lock(&myrpt->lock);
-				}
-			} else {			/* Send congestion until patch is downed by command */
-				myrpt->callmode = 4;
-				rpt_mutex_unlock(&myrpt->lock);
-				/* start congestion tone */
-				tone_zone_play_tone(ast_channel_fd(genchannel, 0), DAHDI_TONE_CONGESTION);
-				rpt_mutex_lock(&myrpt->lock);
-			}
-		}
-		if (ast_channel_is_bridged(mychannel) && ast_channel_state(mychannel) == AST_STATE_UP)
-			if ((!sentpatchconnect) && myrpt->p.patchconnect && ast_channel_is_bridged(mychannel)
-				&& (ast_channel_state(mychannel) == AST_STATE_UP)) {
-				sentpatchconnect = 1;
-				rpt_telemetry(myrpt, PLAYBACK, (char*) myrpt->p.patchconnect);
-			}
-		if (myrpt->mydtmf) {
-			struct ast_frame wf = { AST_FRAME_DTMF, };
-
-			wf.subclass.integer = myrpt->mydtmf;
-			if (ast_channel_is_bridged(mychannel) && ast_channel_state(mychannel) == AST_STATE_UP) {
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_queue_frame(mychannel, &wf);
-				ast_senddigit(genchannel, myrpt->mydtmf, 0);
-				rpt_mutex_lock(&myrpt->lock);
-			}
-			myrpt->mydtmf = 0;
-		}
-		rpt_mutex_unlock(&myrpt->lock);
-		usleep(MSWAIT * 1000);
-		rpt_mutex_lock(&myrpt->lock);
-	}
-	ast_debug(1, "exit channel loop\n");
-	rpt_mutex_unlock(&myrpt->lock);
-	tone_zone_play_tone(ast_channel_fd(genchannel, 0), -1);
-	if (ast_channel_pbx(mychannel))
-		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
-	ast_hangup(genchannel);
-	rpt_mutex_lock(&myrpt->lock);
-	myrpt->callmode = 0;
-	myrpt->macropatch = 0;
-	channel_revert(myrpt);
-	rpt_mutex_unlock(&myrpt->lock);
-	/* set appropriate conference for the pseudo */
-	ci.confno = myrpt->conf;
-	ci.confmode = ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4)) ? DAHDI_CONF_CONFANNMON :
-		(DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
-	/* first put the channel on the conference in announce mode */
-	join_dahdiconf(myrpt->pchannel, &ci);
-	pthread_exit(NULL);
+	return NULL;
 }
 
-/*
-* Collect digits one by one until something matches
-*/
+/*! \brief Collect digits one by one until something matches */
 static int collect_function_digits(struct rpt *myrpt, char *digits, int command_source, struct rpt_link *mylink)
 {
 	int i, rv;
 	char *stringp, *action, *param, *functiondigits;
 	char function_table_name[30] = "";
 	char workstring[200];
-
 	struct ast_variable *vp;
 
 	ast_debug(7, "digits=%s  source=%d\n", digits, command_source);
-   
-	//ast_debug(1, "@@@@ Digits collected: %s, source: %d\n", digits, command_source);
 
 	if (command_source == SOURCE_DPHONE) {
 		if (!myrpt->p.dphone_functions)
@@ -2502,7 +2226,11 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	return 0;
 }
 
-/* 0 return=continue, 1 return = break, -1 return = error */
+/*!
+ * \retval 0 continue
+ * \retval 1 break
+ * \retval -1 error
+ */
 static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 {
 	int res;
@@ -2917,27 +2645,85 @@ static void _load_rpt_vars_by_rpt(struct rpt *myrpt, int force)
 	}
 }
 
+static void rpt_dump(struct rpt *myrpt)
+{
+	struct rpt_link *zl;
+	struct rpt_tele *zt;
+
+	ast_debug(2, "myrpt->remrx = %d\n", myrpt->remrx);
+
+	ast_debug(2, "myrpt->keyed = %d\n", myrpt->keyed);
+	ast_debug(2, "myrpt->localtx = %d\n", myrpt->localtx);
+	ast_debug(2, "myrpt->callmode = %d\n", myrpt->callmode);
+	ast_debug(2, "myrpt->mustid = %d\n", myrpt->mustid);
+	ast_debug(2, "myrpt->tounkeyed = %d\n", myrpt->tounkeyed);
+	ast_debug(2, "myrpt->tonotify = %d\n", myrpt->tonotify);
+	ast_debug(2, "myrpt->retxtimer = %ld\n", myrpt->retxtimer);
+	ast_debug(2, "myrpt->totimer = %d\n", myrpt->totimer);
+	ast_debug(2, "myrpt->tailtimer = %d\n", myrpt->tailtimer);
+	ast_debug(2, "myrpt->tailevent = %d\n", myrpt->tailevent);
+	ast_debug(2, "myrpt->linkactivitytimer = %d\n", myrpt->linkactivitytimer);
+	ast_debug(2, "myrpt->linkactivityflag = %d\n", (int) myrpt->linkactivityflag);
+	ast_debug(2, "myrpt->rptinacttimer = %d\n", myrpt->rptinacttimer);
+	ast_debug(2, "myrpt->rptinactwaskeyedflag = %d\n", (int) myrpt->rptinactwaskeyedflag);
+	ast_debug(2, "myrpt->p.s[myrpt->p.sysstate_cur].sleepena = %d\n", myrpt->p.s[myrpt->p.sysstate_cur].sleepena);
+	ast_debug(2, "myrpt->sleeptimer = %d\n", (int) myrpt->sleeptimer);
+	ast_debug(2, "myrpt->sleep = %d\n", (int) myrpt->sleep);
+	ast_debug(2, "myrpt->sleepreq = %d\n", (int) myrpt->sleepreq);
+	ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
+	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
+
+	zl = myrpt->links.next;
+	while (zl != &myrpt->links) {
+		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
+		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
+		ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
+		ast_debug(2, "        link->connected %d\n", zl->connected);
+		ast_debug(2, "        link->hasconnected %d\n", zl->hasconnected);
+		ast_debug(2, "        link->outbound %d\n", zl->outbound);
+		ast_debug(2, "        link->disced %d\n", zl->disced);
+		ast_debug(2, "        link->killme %d\n", zl->killme);
+		ast_debug(2, "        link->disctime %ld\n", zl->disctime);
+		ast_debug(2, "        link->retrytimer %ld\n", zl->retrytimer);
+		ast_debug(2, "        link->retries = %d\n", zl->retries);
+		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
+		ast_debug(2, "        link->newkey = %d\n", zl->newkey);
+		zl = zl->next;
+	}
+
+	zt = myrpt->tele.next;
+	if (zt != &myrpt->tele) {
+		ast_debug(2, "*** Telemetry Queue ***\n");
+	}
+	while (zt != &myrpt->tele) {
+		ast_debug(2, "        Telemetry mode: %d\n", zt->mode);
+		zt = zt->next;
+	}
+}
+
 /* single thread with one file (request) to dial */
 static void *rpt(void *this)
 {
-	struct rpt *myrpt = (struct rpt *) this;
-	char *tele, *idtalkover, c, myfirst;
+	struct rpt *myrpt = this;
+	char *idtalkover, c, myfirst;
 	int ms = MSWAIT, i, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, dtmfed, lastmyrx, localmsgqueued;
 	unsigned int u;
 	FILE *fp;
 	struct stat mystat;
 	struct ast_channel *who;
-	struct dahdi_confinfo ci;	/* conference info */
 	time_t t, was;
 	struct rpt_link *l, *m;
 	struct rpt_tele *telem;
-	char tmpstr[512], lstr[MAXLINKLIST], lat[100], lon[100], elev[100];
+	char tmpstr[512];
 	struct ast_format_cap *cap;
+	char lstr[MAXLINKLIST], lat[100], lon[100], elev[100];
 	struct timeval looptimestart;
+	int res;
 
-	if (myrpt->p.archivedir)
+	if (!ast_strlen_zero(myrpt->p.archivedir)) {
 		mkdir(myrpt->p.archivedir, 0600);
+	}
 	sprintf(tmpstr, "%s/%s", myrpt->p.archivedir, myrpt->name);
 	mkdir(tmpstr, 0600);
 	myrpt->ready = 0;
@@ -2971,343 +2757,36 @@ static void *rpt(void *this)
 		ast_log(LOG_ERROR, "ioperm(%x) not supported on this architecture\n", myrpt->p.iobase);
 #endif
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		return NULL;
 	}
-
-	if (ast_strlen_zero(myrpt->rxchanname)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_log(LOG_WARNING, "No rxchannel specified\n");
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-
-	ast_copy_string(tmpstr, myrpt->rxchanname, sizeof(tmpstr));
-
-	tele = strchr(tmpstr, '/');
-	if (!tele) {
-		ast_log(LOG_WARNING, "Rxchannel Dial number (%s) must be in format tech/number\n", myrpt->rxchanname);
-		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-	*tele++ = 0;
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		ast_log(LOG_ERROR, "Failed to alloc capabilities\n");
 		rpt_mutex_unlock(&myrpt->lock);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		return NULL;
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
-	/*! \todo call ao2_ref(cap, -1); on all exit points? */
-
-	myrpt->rxchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-	myrpt->dahdirxchannel = !strcasecmp(tmpstr, "DAHDI") ? myrpt->rxchannel : NULL;
-	if (myrpt->rxchannel) {
-		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY) {
-			ast_log(LOG_WARNING, "Unable to obtain Rx channel\n");
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
-		}
-		rpt_make_call(myrpt->rxchannel, tele, 999, tmpstr, "(Repeater Rx)", "Rx", myrpt->name);
-		if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP) {
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
-		}
-	} else {
-		ast_log(LOG_WARNING, "Unable to obtain Rx channel\n");
+	res = rpt_setup_channels(myrpt, cap);
+	ao2_ref(cap, -1);
+	if (res) {
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup_all(myrpt);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-	myrpt->dahditxchannel = NULL;
-	if (myrpt->txchanname) {
-		ast_copy_string(tmpstr, myrpt->txchanname, sizeof(tmpstr));
-		tele = strchr(tmpstr, '/');
-		if (!tele) {
-			ast_log(LOG_WARNING, "Txchannel Dial number (%s) must be in format tech/number\n", myrpt->txchanname);
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
-		}
-		*tele++ = 0;
-		myrpt->txchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo")) {
-			myrpt->dahditxchannel = myrpt->txchannel;
-		}
-		if (myrpt->txchannel) {
-			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY) {
-				ast_log(LOG_WARNING, "Unable to obtain Tx channel\n");
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_hangup(myrpt->txchannel);
-				ast_hangup(myrpt->rxchannel);
-				myrpt->rxchannel = NULL;
-				myrpt->txchannel = NULL;
-				myrpt->rpt_thread = AST_PTHREADT_STOP;
-				pthread_exit(NULL);
-			}
-			rpt_make_call(myrpt->txchannel, tele, 999, tmpstr, "(Repeater Tx)", "Tx", myrpt->name);
-			if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP) {
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_hangup(myrpt->rxchannel);
-				myrpt->rxchannel = NULL;
-				ast_hangup(myrpt->txchannel);
-				myrpt->txchannel = NULL;
-				myrpt->rpt_thread = AST_PTHREADT_STOP;
-				pthread_exit(NULL);
-			}
-		} else {
-			ast_log(LOG_WARNING, "Unable to obtain Tx channel\n");
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
-		}
-	} else {
-		myrpt->txchannel = myrpt->rxchannel;
-		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3) && !IS_PSEUDO_NAME(myrpt->rxchanname)) {
-			myrpt->dahditxchannel = myrpt->txchannel;
-		}
-	}
-	if (!IS_PSEUDO(myrpt->txchannel)) {
-		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
-		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
-	}
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->pchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->pchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->pchannel));
-	ast_set_read_format(myrpt->pchannel, ast_format_slin);
-	ast_set_write_format(myrpt->pchannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->pchannel);
-	ast_answer(myrpt->pchannel);
-	if (!myrpt->dahdirxchannel)
-		myrpt->dahdirxchannel = myrpt->pchannel;
-	if (!myrpt->dahditxchannel) {
-		/* allocate a pseudo-channel thru asterisk */
-		myrpt->dahditxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-		if (!myrpt->dahditxchannel) {
-			FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
-		}
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->dahditxchannel));
-		ast_set_read_format(myrpt->dahditxchannel, ast_format_slin);
-		ast_set_write_format(myrpt->dahditxchannel, ast_format_slin);
-		rpt_disable_cdr(myrpt->dahditxchannel);
-		ast_answer(myrpt->dahditxchannel);
-	}
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->monchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->monchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->monchannel));
-	ast_set_read_format(myrpt->monchannel, ast_format_slin);
-	ast_set_write_format(myrpt->monchannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->monchannel);
-	ast_answer(myrpt->monchannel);
-
-	/* make a conference for the tx */
-	ci.confno = -1;				/* make a new conf */
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER;
-	if (join_dahdiconf(myrpt->dahditxchannel, &ci)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-	/* save tx conference number */
-	myrpt->txconf = ci.confno;
-	/* make a conference for the pseudo */
-	ci.confno = -1;				/* make a new conf */
-	ci.confmode = ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4)) ? DAHDI_CONF_CONFANNMON :
-		(DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
-	/* first put the channel on the conference in announce mode */
-	if (join_dahdiconf(myrpt->pchannel, &ci)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-	/* save pseudo channel conference number */
-	myrpt->conf = ci.confno;
-	/* make a conference for the pseudo */
-	if ((strstr(ast_channel_name(myrpt->txchannel), "pseudo") == NULL) && (myrpt->dahditxchannel == myrpt->txchannel)) {
-		/* get tx channel's port number */
-		if (ioctl(ast_channel_fd(myrpt->txchannel, 0), DAHDI_CHANNO, &ci.confno) == -1) {
-			ast_log(LOG_WARNING, "Unable to set tx channel's chan number\n");
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->pchannel);
-			ast_hangup(myrpt->monchannel);
-			if (myrpt->txchannel != myrpt->rxchannel) {
-				ast_hangup(myrpt->txchannel);
-				myrpt->txchannel = NULL;
-			}
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
-		}
-		ci.confmode = DAHDI_CONF_MONITORTX;
-	} else {
-		ci.confno = myrpt->txconf;
-		ci.confmode = DAHDI_CONF_CONFANNMON;
-	}
-	/* first put the channel on the conference in announce mode */
-	if (join_dahdiconf(myrpt->monchannel, &ci)) {
-		ast_log(LOG_WARNING, "Unable to set conference mode for monitor\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->parrotchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->parrotchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->parrotchannel));
-	ast_set_read_format(myrpt->parrotchannel, ast_format_slin);
-	ast_set_write_format(myrpt->parrotchannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->parrotchannel);
-	ast_answer(myrpt->parrotchannel);
-
-	/* Telemetry Channel Resources */
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->telechannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->telechannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->telechannel));
-	ast_set_read_format(myrpt->telechannel, ast_format_slin);
-	ast_set_write_format(myrpt->telechannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->telechannel);
-	/* make a conference for the voice/tone telemetry */
-	ci.confno = -1;				/* make a new conference */
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
-	if (join_dahdiconf(myrpt->telechannel, &ci)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->txpchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-	myrpt->teleconf = ci.confno;
-
-	/* make a channel to connect between the telemetry conference process
-	   and the main tx audio conference. */
-	myrpt->btelechannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->btelechannel) {
-		ast_log(LOG_WARNING, "Failed to obtain pseudo channel for btelechannel\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->btelechannel));
-	ast_set_read_format(myrpt->btelechannel, ast_format_slin);
-	ast_set_write_format(myrpt->btelechannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->btelechannel);
-	/* make a conference linked to the main tx conference */
-	ci.confno = myrpt->txconf;
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
-	/* first put the channel on the conference in proper mode */
-	if (join_dahdiconf(myrpt->btelechannel, &ci)) {
-		ast_hangup(myrpt->btelechannel);
-		ast_hangup(myrpt->btelechannel);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		return NULL;
 	}
 
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->voxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->voxchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->voxchannel));
-	ast_set_read_format(myrpt->voxchannel, ast_format_slin);
-	ast_set_write_format(myrpt->voxchannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->voxchannel);
-	ast_answer(myrpt->voxchannel);
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->txpchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->txpchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL2();
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->txpchannel));
-	rpt_disable_cdr(myrpt->txpchannel);
-	ast_answer(myrpt->txpchannel);
-	/* make a conference for the tx */
-	ci.confno = myrpt->txconf;
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER;
-	/* first put the channel on the conference in proper mode */
-	if (join_dahdiconf(myrpt->txpchannel, &ci)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->txpchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
 	/* if serial io port, open it */
 	myrpt->iofd = -1;
 	if (myrpt->p.ioport && ((myrpt->iofd = openserial(myrpt, myrpt->p.ioport)) == -1)) {
 		ast_log(LOG_ERROR, "Unable to open %s\n", myrpt->p.ioport);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
-		pthread_exit(NULL);
+		rpt_hangup_all(myrpt);
+		return NULL;
 	}
+
 	/* Now, the idea here is to copy from the physical rx channel buffer
 	   into the pseudo tx buffer, and from the pseudo rx buffer into the 
 	   tx channel buffer */
@@ -3366,10 +2845,9 @@ static void *rpt(void *this)
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
 			ast_log(LOG_WARNING, "Unable to allocate DSP!\n");
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
+			rpt_hangup_all(myrpt);
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
+			return NULL;
 		}
 		/* \todo At this point, we have a memory leak, because dsp needs to be freed. */
 		/* \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
@@ -3384,15 +2862,19 @@ static void *rpt(void *this)
 	}
 	/* @@@@@@@ UNLOCK @@@@@@@ */
 	rpt_mutex_unlock(&myrpt->lock);
+
 	val = 1;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_RELAXDTMF, &val, sizeof(char), 0);
 	val = 1;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &val, sizeof(char), 0);
-	if (myrpt->p.archivedir)
+
+	if (myrpt->p.archivedir) {
 		donodelog(myrpt, "STARTUP");
+	}
 	dtmfed = 0;
-	if (myrpt->remoterig && !ISRIG_RTX(myrpt->remoterig))
+	if (myrpt->remoterig && !ISRIG_RTX(myrpt->remoterig)) {
 		setrem(myrpt);
+	}
 	/* wait for telem to be done */
 	while ((ms >= 0) && (myrpt->tele.next != &myrpt->tele)) {
 		rpt_mutex_lock(&myrpt->blocklock);
@@ -3413,7 +2895,7 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
 	myrpt->ready = 1;
 	looptimestart = ast_tvnow();
-	
+
 	while (ms >= 0) {
 		struct ast_frame *f, *f1, *f2;
 		struct ast_channel *cs[300], *cs1[300];
@@ -3421,67 +2903,16 @@ static void *rpt(void *this)
 		struct timeval looptimenow;
 
 		/* DEBUG Dump */
-		if ((myrpt->disgorgetime) && (time(NULL) >= myrpt->disgorgetime)) {
-			struct rpt_link *zl;
-			struct rpt_tele *zt;
-
+		if (myrpt->disgorgetime && time(NULL) >= myrpt->disgorgetime) {
 			myrpt->disgorgetime = 0;
 			ast_debug(2, "********** Variable Dump Start (app_rpt) **********\n");
 			ast_debug(2, "totx = %d\n", totx);
-			ast_debug(2, "myrpt->remrx = %d\n", myrpt->remrx);
 			ast_debug(2, "lasttx = %d\n", lasttx);
 			ast_debug(2, "lastexttx = %d\n", lastexttx);
 			ast_debug(2, "elap = %d\n", elap);
 			ast_debug(2, "toexit = %d\n", toexit);
-
-			ast_debug(2, "myrpt->keyed = %d\n", myrpt->keyed);
-			ast_debug(2, "myrpt->localtx = %d\n", myrpt->localtx);
-			ast_debug(2, "myrpt->callmode = %d\n", myrpt->callmode);
-			ast_debug(2, "myrpt->mustid = %d\n", myrpt->mustid);
-			ast_debug(2, "myrpt->tounkeyed = %d\n", myrpt->tounkeyed);
-			ast_debug(2, "myrpt->tonotify = %d\n", myrpt->tonotify);
-			ast_debug(2, "myrpt->retxtimer = %ld\n", myrpt->retxtimer);
-			ast_debug(2, "myrpt->totimer = %d\n", myrpt->totimer);
-			ast_debug(2, "myrpt->tailtimer = %d\n", myrpt->tailtimer);
-			ast_debug(2, "myrpt->tailevent = %d\n", myrpt->tailevent);
-			ast_debug(2, "myrpt->linkactivitytimer = %d\n", myrpt->linkactivitytimer);
-			ast_debug(2, "myrpt->linkactivityflag = %d\n", (int) myrpt->linkactivityflag);
-			ast_debug(2, "myrpt->rptinacttimer = %d\n", myrpt->rptinacttimer);
-			ast_debug(2, "myrpt->rptinactwaskeyedflag = %d\n", (int) myrpt->rptinactwaskeyedflag);
-			ast_debug(2, "myrpt->p.s[myrpt->p.sysstate_cur].sleepena = %d\n", myrpt->p.s[myrpt->p.sysstate_cur].sleepena);
-			ast_debug(2, "myrpt->sleeptimer = %d\n", (int) myrpt->sleeptimer);
-			ast_debug(2, "myrpt->sleep = %d\n", (int) myrpt->sleep);
-			ast_debug(2, "myrpt->sleepreq = %d\n", (int) myrpt->sleepreq);
-			ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
-			ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
-
-			zl = myrpt->links.next;
-			while (zl != &myrpt->links) {
-				ast_debug(2, "*** Link Name: %s ***\n", zl->name);
-				ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
-				ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
-				ast_debug(2, "        link->connected %d\n", zl->connected);
-				ast_debug(2, "        link->hasconnected %d\n", zl->hasconnected);
-				ast_debug(2, "        link->outbound %d\n", zl->outbound);
-				ast_debug(2, "        link->disced %d\n", zl->disced);
-				ast_debug(2, "        link->killme %d\n", zl->killme);
-				ast_debug(2, "        link->disctime %ld\n", zl->disctime);
-				ast_debug(2, "        link->retrytimer %ld\n", zl->retrytimer);
-				ast_debug(2, "        link->retries = %d\n", zl->retries);
-				ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
-				ast_debug(2, "        link->newkey = %d\n", zl->newkey);
-				zl = zl->next;
-			}
-
-			zt = myrpt->tele.next;
-			if (zt != &myrpt->tele)
-				ast_debug(2, "*** Telemetry Queue ***\n");
-			while (zt != &myrpt->tele) {
-				ast_debug(2, "        Telemetry mode: %d\n", zt->mode);
-				zt = zt->next;
-			}
+			rpt_dump(myrpt);
 			ast_debug(2, "******* Variable Dump End (app_rpt) *******\n");
-
 		}
 
 		if (myrpt->reload) {
@@ -3872,14 +3303,10 @@ static void *rpt(void *this)
 			myrpt->rem_dtmfbuf[0] = 0;
 		}
 
-		if (myrpt->exttx && myrpt->parrotchannel && (myrpt->p.parrotmode || myrpt->parrotonce) && (!myrpt->parrotstate)) {
+		if (myrpt->exttx && myrpt->parrotchannel && (myrpt->p.parrotmode || myrpt->parrotonce) && !myrpt->parrotstate) {
 			char myfname[300];
 
-			ci.confno = myrpt->conf;
-			ci.confmode = DAHDI_CONF_CONFANNMON;
-
-			/* first put the channel on the conference in announce mode */
-			if (join_dahdiconf(myrpt->parrotchannel, &ci)) {
+			if (rpt_add_parrot_chan(myrpt)) {
 				ast_mutex_unlock(&myrpt->lock);
 				break;
 			}
@@ -4424,18 +3851,14 @@ static void *rpt(void *this)
 			continue;
 		}
 		if ((myrpt->p.parrotmode || myrpt->parrotonce) && (myrpt->parrotstate == 1) && (myrpt->parrottimer <= 0)) {
-
 			union {
 				int i;
 				void *p;
 				char _filler[8];
 			} pu;
 
-			ci.confno = 0;
-			ci.confmode = 0;
-
-			/* first put the channel on the conference in announce mode */
-			if (join_dahdiconf(myrpt->parrotchannel, &ci)) {
+			if (rpt_add_chan(myrpt, myrpt->parrotchannel)) {
+				ast_mutex_unlock(&myrpt->lock);
 				break;
 			}
 			if (myrpt->parrotstream)
@@ -6179,8 +5602,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct ast_channel *who;
 	struct ast_channel *cs[20];
 	struct rpt_link *l;
-	struct dahdi_confinfo ci;	/* conference info */
-	struct dahdi_params par;
 	int ms, elap, n1, myrx;
 	time_t t, last_timeout_warning;
 	struct dahdi_radio_param z;
@@ -6817,7 +6238,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			pthread_exit(NULL);
 		}
 		/* zero the silly thing */
-		memset((char *) l, 0, sizeof(struct rpt_link));
+		memset(l, 0, sizeof(struct rpt_link));
 		l->mode = 1;
 		ast_copy_string(l->name, b1, MAXNODESTR);
 		l->isremote = 0;
@@ -6853,8 +6274,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			init_linkmode(myrpt, l, LINKMODE_PHONE);
 		else
 			init_linkmode(myrpt, l, LINKMODE_GUI);
-		ast_set_read_format(l->chan, ast_format_slin);
-		ast_set_write_format(l->chan, ast_format_slin);
 		gettimeofday(&myrpt->lastlinktime, NULL);
 
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
@@ -6864,29 +6283,16 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		ast_format_cap_append(cap, ast_format_slin, 0);
-
-		/* allocate a pseudo-channel thru asterisk */
-		l->pchan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+		l->pchan = rpt_channel_new(myrpt, cap, "pchan");
 		ao2_ref(cap, -1);
 		if (!l->pchan) {
-			ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 			pthread_exit(NULL);
 		}
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(l->pchan));
-		ast_set_read_format(l->pchan, ast_format_slin);
-		ast_set_write_format(l->pchan, ast_format_slin);
-		ast_answer(l->pchan);
-		rpt_disable_cdr(l->pchan);
-		/* make a conference for the tx */
-		ci.confno = myrpt->conf;
-		ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
-		/* first put the channel on the conference in proper mode */
-		if (join_dahdiconf(l->pchan, &ci)) {
-			pthread_exit(NULL);
-		}
+
 		rpt_mutex_lock(&myrpt->lock);
-		if ((phone_mode == 2) && (!phone_vox))
+		if (phone_mode == 2 && !phone_vox) {
 			l->lastrealrx = 1;
+		}
 		l->max_retries = MAX_RETRIES;
 		/* insert at end of queue */
 		insque((struct qelem *) l, (struct qelem *) myrpt->links.next);
@@ -6926,6 +6332,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		pthread_exit(NULL); // BUGBUG: For now, this emulates the behavior of KEEPALIVE, but this won't be a clean exit. Makes it work, but since the PBX doesn't clean up we'll leak memory. Either do what the PBX core does here or we need to somehow do KEEPALIVE handling in the core, possibly with a custom patch for now.
 		//return -1;				/*! \todo AST_PBX_KEEPALIVE doesn't exist anymore. Figure out what we should return here. */
 	}
+
 	/* well, then it is a remote */
 	rpt_mutex_lock(&myrpt->lock);
 	/* look at callerid to see what node this comes from */
@@ -7094,67 +6501,37 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 	i = 3;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &i, sizeof(char), 0);
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->pchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+
+	myrpt->conf = -1; /* Make a new conf */
+	myrpt->pchannel = __rpt_channel_new(myrpt, cap, "pchannel", DAHDI_CONF_CONFANNMON);
 	ao2_ref(cap, -1);
 	if (!myrpt->pchannel) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup_all(myrpt);
 		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->pchannel));
-	ast_set_read_format(myrpt->pchannel, ast_format_slin);
-	ast_set_write_format(myrpt->pchannel, ast_format_slin);
-	ast_answer(myrpt->pchannel);
-	rpt_disable_cdr(myrpt->pchannel);
-	if (!myrpt->dahdirxchannel)
+	if (!myrpt->dahdirxchannel) {
 		myrpt->dahdirxchannel = myrpt->pchannel;
-	if (!myrpt->dahditxchannel)
-		myrpt->dahditxchannel = myrpt->pchannel;
-	/* make a conference for the pseudo */
-	ci.confno = -1;				/* make a new conf */
-	ci.confmode = DAHDI_CONF_CONFANNMON;
-	/* first put the channel on the conference in announce/monitor mode */
-	if (join_dahdiconf(myrpt->pchannel, &ci)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
-		pthread_exit(NULL);
 	}
-	/* save pseudo channel conference number */
-	myrpt->conf = myrpt->txconf = ci.confno;
+	if (!myrpt->dahditxchannel) {
+		myrpt->dahditxchannel = myrpt->pchannel;
+	}
+
 	/* if serial io port, open it */
 	myrpt->iofd = -1;
 	if (myrpt->p.ioport && ((myrpt->iofd = openserial(myrpt, myrpt->p.ioport)) == -1)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup_all(myrpt);
 		pthread_exit(NULL);
 	}
 	iskenwood_pci4 = 0;
 	memset(&z, 0, sizeof(z));
-	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->dahditxchannel)) {
+	if (myrpt->iofd < 1 && myrpt->txchannel == myrpt->dahditxchannel) {
 		z.radpar = DAHDI_RADPAR_REMMODE;
 		z.data = DAHDI_RADPAR_REM_NONE;
 		res = ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z);
 		/* if PCIRADIO and kenwood selected */
-		if ((!res) && (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
+		if (!res && !strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
 			z.radpar = DAHDI_RADPAR_UIOMODE;
 			z.data = 1;
 			if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_RADIO_SETPARAM, &z) == -1) {
@@ -7261,6 +6638,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rpt_mutex_unlock(&myrpt->blocklock);
 
 	if (myrpt->rxchannel == myrpt->dahdirxchannel) {
+		struct dahdi_params par;
 		if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_GET_PARAMS, &par) != -1) {
 			if (par.rxisoffhook) {
 				ast_indicate(chan, AST_CONTROL_RADIO_KEY);
