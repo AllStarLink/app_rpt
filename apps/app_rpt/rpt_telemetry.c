@@ -26,7 +26,6 @@
 #include "rpt_daq.h"
 #include "rpt_channel.h"
 #include "rpt_config.h"
-#include "rpt_call.h"
 #include "rpt_link.h"
 #include "rpt_serial.h"
 #include "rpt_mdc1200.h"
@@ -34,6 +33,9 @@
 #include "rpt_capabilities.h"
 #include "rpt_xcat.h"
 #include "rpt_rig.h"
+
+#define RPT_EXPOSE_DAHDI
+#include "rpt_call.h"
 
 extern struct rpt rpt_vars[MAXRPTS];
 

@@ -26,6 +26,8 @@
 #include "asterisk/format_cache.h"
 
 #include "app_rpt.h"
+
+#define RPT_EXPOSE_DAHDI
 #include "rpt_call.h"
 
 int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci, const char *file, int line, const char *function)

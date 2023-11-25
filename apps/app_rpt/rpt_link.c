@@ -19,10 +19,12 @@
 #include "rpt_manager.h"
 #include "rpt_lock.h"
 #include "rpt_config.h"
-#include "rpt_call.h"
 #include "rpt_vox.h"
 #include "rpt_link.h"
 #include "rpt_telemetry.h"
+
+#define RPT_EXPOSE_DAHDI
+#include "rpt_call.h"
 
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 {

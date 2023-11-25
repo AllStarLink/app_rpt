@@ -24,12 +24,18 @@
 #include <dahdi/tonezone.h>		/* use tone_zone_set_zone */
 
 #include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/callerid.h"
 #include "asterisk/format_cache.h"
 
 #define RPT_EXPOSE_DAHDI
 
 #include "app_rpt.h"
+#include "rpt_bridging.h"
 #include "rpt_call.h"
+#include "rpt_lock.h"
+#include "rpt_telemetry.h"
+#include "rpt_rig.h" /* use channel_revert */
 
 #define DESTROY_CHANNEL(chan) \
 	if (chan) { \
@@ -37,7 +43,7 @@
 		chan = NULL; \
 	}
 
-void rpt_hangup_all(struct rpt *rpt)
+void rpt_hangup_all(struct rpt *myrpt)
 {
 	DESTROY_CHANNEL(myrpt->pchannel);
 	DESTROY_CHANNEL(myrpt->monchannel);
@@ -86,9 +92,9 @@ struct ast_channel *__rpt_channel_new(struct rpt *myrpt, struct ast_format_cap *
 	return chan;
 }
 
-struct ast_channel *rpt_request(const char *type, struct ast_format_cap *request_cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *addr, int *cause)
+static struct ast_channel *rpt_request(const char *type, struct ast_format_cap *request_cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *addr, int *cause)
 {
-	struct ast_channel *chan = ast_request(type, cap, assignedids, requestor, addr, cause);
+	struct ast_channel *chan = ast_request(type, request_cap, assignedids, requestor, addr, cause);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Unable to obtain channel\n");
 	} else if (ast_channel_state(chan) == AST_STATE_BUSY) {
@@ -151,7 +157,7 @@ int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	myrpt->rxchannel = rpt_request(chan_tech, cap, NULL, NULL, chan_device, NULL);
-	myrpt->dahdirxchannel = !strcasecmp(tmpstr, "DAHDI") ? myrpt->rxchannel : NULL;
+	myrpt->dahdirxchannel = !strcasecmp(chan_tech, "DAHDI") ? myrpt->rxchannel : NULL;
 	if (!myrpt->rxchannel) {
 		return -1;
 	}
@@ -225,7 +231,7 @@ int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	/* save pseudo channel conference number */
 	myrpt->conf = ci.confno;
 	/* make a conference for the pseudo */
-	if (!IS_PSEUDO_NAME(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
+	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
 		/* get tx channel's port number */
 		if (ioctl(ast_channel_fd(myrpt->txchannel, 0), DAHDI_CHANNO, &ci.confno) == -1) {
 			ast_log(LOG_WARNING, "Unable to set tx channel's chan number\n");
@@ -334,6 +340,7 @@ int rpt_run(struct rpt *myrpt)
 	struct ast_format_cap *cap;
 	int stopped = 0, congstarted = 0, dialtimer = 0, lastcidx = 0, aborted = 0;
 	int sentpatchconnect;
+	struct dahdi_confinfo ci;
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
@@ -426,9 +433,8 @@ int rpt_run(struct rpt *myrpt)
 				rpt_play_congestion(myrpt, genchannel, 1); /* start congestion tone */
 			}
 		}
-		res = ast_safe_sleep(mychannel, MSWAIT);
-		if (res < 0) {
-			ast_debug(1, "ast_safe_sleep=%i\n", res);
+		if (ast_safe_sleep(mychannel, MSWAIT) < 0) {
+			ast_debug(1, "ast_safe_sleep returned nonzero\n");
 			ast_hangup(mychannel);
 			ast_hangup(genchannel);
 			rpt_mutex_lock(&myrpt->lock);
@@ -491,9 +497,11 @@ int rpt_run(struct rpt *myrpt)
 	myrpt->callmode = 3;
 
 	/* set appropriate conference for the pseudo */
+	memset(&ci, 0, sizeof(ci));
 	ci.confno = myrpt->conf;
 	ci.confmode = (myrpt->p.duplex == 2) ? DAHDI_CONF_CONFANNMON : (DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
 	if (ast_channel_pbx(mychannel)) {
+		int res;
 		/* first put the channel on the conference in announce mode */
 		if (join_dahdiconf(myrpt->pchannel, &ci)) {
 			ast_hangup(mychannel);
