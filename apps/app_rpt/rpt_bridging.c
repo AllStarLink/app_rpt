@@ -28,6 +28,7 @@
 
 #define RPT_EXPOSE_DAHDI
 
+#include "app_rpt.h"
 #include "rpt_call.h"
 
 #define DESTROY_CHANNEL(chan) \
