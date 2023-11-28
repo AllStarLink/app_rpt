@@ -45,18 +45,6 @@
 #define	MIXER_PARAM_SPKR_PLAYBACK_SW_NEW "Headphone Playback Switch"
 #define	MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW "Headphone Playback Volume"
 
-#if 0
-#define traceusb1(a) {printf a;}
-#else
-#define traceusb1(a)
-#endif
-
-#if 0
-#define traceusb2(a) {printf a;}
-#else
-#define traceusb2(a)
-#endif
-
 /*!
  * \brief CMxxx USB device identifiers.
  */
@@ -213,11 +201,8 @@
  */
 #define TEXT_SIZE	256
 
-#if 0
-#define	TRYOPEN	1				/* try to open on startup */
-#endif
 #define	O_CLOSE	0x444			/* special 'close' mode for device */
-/* Which device to use */
+/* Which sound device to use */
 #if defined( __OpenBSD__ ) || defined( __NetBSD__ )
 #define DEV_DSP "/dev/audio"
 #else
@@ -233,7 +218,6 @@ struct usbecho {
 long ast_radio_lround(double x);
 
 int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype);
-
 
 // Note: must add -lasound to end of linkage
 
@@ -257,13 +241,21 @@ unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned shor
 
 void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
 
+int ast_radio_hid_device_mklist(void);
+
 struct usb_device *ast_radio_hid_device_init(const char *desired_device);
 
 /*! \brief Get internal formatted string from external one */
 int ast_radio_usb_get_usbdev(const char *devstr);
+
+int ast_radio_usb_list_check(char *devstr);
 
 int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *pport, int reload);
 
 unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport);
 
 void ast_radio_ppwrite(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport, unsigned char c);
+
+int ast_radio_poll_input(int fd, int ms);
+
+int ast_radio_wait_or_poll(int fd, int ms, int flag);

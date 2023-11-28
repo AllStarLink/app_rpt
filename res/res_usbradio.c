@@ -43,7 +43,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <usb.h>
-#include <search.h>
 #include <linux/ppdev.h>
 #include <linux/parport.h>
 #include <linux/version.h>
@@ -62,24 +61,17 @@
 #else
 #include <soundcard.h>
 #endif
-#include "asterisk/lock.h"
-#include "asterisk/frame.h"
+
+#include "asterisk/lock.h"			/* Used for mutex */
 #include "asterisk/logger.h"
-#include "asterisk/callerid.h"
-#include "asterisk/channel.h"
 #include "asterisk/module.h"
-#include "asterisk/options.h"
-#include "asterisk/pbx.h"
-#include "asterisk/config.h"
-#include "asterisk/cli.h"
-#include "asterisk/utils.h"
-#include "asterisk/causes.h"
-#include "asterisk/endian.h"
-#include "asterisk/stringfields.h"
-#include "asterisk/abstract_jb.h"
-#include "asterisk/musiconhold.h"
-#include "asterisk/dsp.h"
-#include "asterisk/format_cache.h"
+#include "asterisk/cli.h"			/* Used to send cli messages */
+#include "asterisk/poll-compat.h" 	/* Used for polling */
+
+AST_MUTEX_DEFINE_STATIC(usb_list_lock);
+static char *usb_device_list = NULL;
+static int usb_device_list_size = 0;
+
 
 /*! \brief Round double number to a long
  *
@@ -394,6 +386,125 @@ void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
 }
 
 /*!
+ * \brief Make a list of HID devices.
+ * Populates usb_device_list with a list of devices that we
+ * know that are compatible.
+ * \retval 0	List was created.
+ * \retval -1	List was not created.
+ */
+int ast_radio_hid_device_mklist(void)
+{
+	struct usb_bus *usb_bus;
+	struct usb_device *dev;
+	char devstr[10000], str[200], desdev[200], *cp;
+	int i;
+	FILE *fp;
+
+	ast_mutex_lock(&usb_list_lock);
+	if (usb_device_list) {
+		ast_free(usb_device_list);
+	}
+	usb_device_list = ast_calloc(1, 2);
+	if (!usb_device_list) {
+		ast_mutex_unlock(&usb_list_lock);
+		return -1;
+	}
+
+	usb_init();
+	usb_find_busses();
+	usb_find_devices();
+	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
+		for (dev = usb_bus->devices; dev; dev = dev->next) {
+			if ((dev->descriptor.idVendor
+				 == C108_VENDOR_ID) &&
+				(((dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) ||
+				 (dev->descriptor.idProduct == C108B_PRODUCT_ID) ||
+				 (dev->descriptor.idProduct == C108AH_PRODUCT_ID) ||
+				 (dev->descriptor.idProduct == C119A_PRODUCT_ID) ||
+				 (dev->descriptor.idProduct == C119B_PRODUCT_ID) ||
+				 ((dev->descriptor.idProduct & 0xff00) == N1KDO_PRODUCT_ID) ||
+				 (dev->descriptor.idProduct == C119_PRODUCT_ID))) {
+				sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
+				for (i = 0; i < 32; i++) {
+					sprintf(str, "/proc/asound/card%d/usbbus", i);
+					fp = fopen(str, "r");
+					if (!fp) {
+						continue;
+					}
+					if ((!fgets(desdev, sizeof(desdev) - 1, fp)) || (!desdev[0])) {
+						fclose(fp);
+						continue;
+					}
+					fclose(fp);
+					if (desdev[strlen(desdev) - 1] == '\n') {
+						desdev[strlen(desdev) - 1] = 0;
+					}
+					if (strcasecmp(desdev, devstr)) {
+						continue;
+					}
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)) && !defined(AST_BUILDOPT_LIMEY)
+					sprintf(str, "/sys/class/sound/card%d/device", i);
+					memset(desdev, 0, sizeof(desdev));
+					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+						continue;
+					}
+					cp = strrchr(desdev, '/');
+					if (!cp) {
+						continue;
+					}
+					cp++;
+#else
+					if (i) {
+						sprintf(str, "/sys/class/sound/dsp%d/device", i);
+					} else {
+						strcpy(str, "/sys/class/sound/dsp/device");
+					}
+					memset(desdev, 0, sizeof(desdev));
+					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+						sprintf(str, "/sys/class/sound/controlC%d/device", i);
+						memset(desdev, 0, sizeof(desdev));
+						if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+							continue;
+						}
+					}
+					cp = strrchr(desdev, '/');
+					if (cp) {
+						*cp = 0;
+					} else {
+						continue;
+					}
+					cp = strrchr(desdev, '/');
+					if (!cp) {
+						continue;
+					}
+					cp++;
+#endif
+					break;
+				}
+				if (i >= 32) {
+					ast_mutex_unlock(&usb_list_lock);
+					return -1;
+				}
+				usb_device_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
+				if (!usb_device_list) {
+					ast_mutex_unlock(&usb_list_lock);
+					return -1;
+				}
+				usb_device_list_size += strlen(cp) + 2;
+				i = 0;
+				while (usb_device_list[i]) {
+					i += strlen(usb_device_list + i) + 1;
+				}
+				strcat(usb_device_list + i, cp);
+				usb_device_list[strlen(cp) + i + 1] = 0;
+			}
+		}
+	}
+	ast_mutex_unlock(&usb_list_lock);
+	return 0;
+}
+
+/*!
  * \brief Initialize a USB device.
  * 	Searches for a USB device that matches the passed device string.
  *
@@ -556,6 +667,36 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 }
 
 /*!
+ * \brief See if the internal usb_device_list contains the
+ * specified device string.
+ * \param devstr	Device string to check.
+ * \retval 0		Device string was not found.
+ * \retval 1		Device string was found.
+ */
+int ast_radio_usb_list_check(char *devstr)
+{
+	char *s = usb_device_list;
+	int res = 0;
+
+	if (!s) {
+		return 0;
+	}
+	
+	ast_mutex_lock(&usb_list_lock);
+
+	while (*s) {
+		if (!strcasecmp(s, devstr)) {
+			res = 1;
+			break;
+		}
+		s += strlen(s) + 1;
+	}
+	
+	ast_mutex_unlock(&usb_list_lock);
+	
+	return res;
+}
+/*!
  * \brief Open the specified parallel port
  * 	Opens the parallel port if is exists.
  *
@@ -671,6 +812,56 @@ void ast_radio_ppwrite(int haspp, unsigned int ppfd, unsigned int pbase, const c
 #endif
 	return;
 }
+
+/*!
+ * \brief Poll the specified fd for input for the specified milliseconds.
+ * \param fd			File descriptor.
+ * \param ms			Milliseconds to wait.
+ * \return Result from the select.
+ */
+int ast_radio_poll_input(int fd, int ms)
+{
+	struct pollfd fds[1];
+
+	memset(&fds, 0, sizeof(fds));
+	fds[0].fd = fd;
+	fds[0].events = POLLIN;
+	
+	return ast_poll(fds, 1, ms);
+}
+
+/*!
+ * \brief Wait a fixed amount or on the specified fd for the specified milliseconds.
+ * \param fd			File descriptor.
+ * \param ms			Milliseconds to wait.
+ * \param flag			0=use usleep, !0=use select/poll on the fd.
+ * \retval 0			Timer expired.
+ * \retval 1			Activity occurred on the fd.
+ */
+int ast_radio_wait_or_poll(int fd, int ms, int flag)
+{
+	int i;
+
+	if (!flag) {
+		usleep(ms * 1000);
+		return 0;
+	}
+	i = 0;
+	if (ms >= 100) {
+		for (i = 0; i < ms; i += 100) {
+			ast_cli(fd, "\r");
+			if (ast_radio_poll_input(fd, 100)) {
+				return 1;
+			}
+		}
+	}
+	if (ast_radio_poll_input(fd, ms - i)) {
+		return 1;
+	}
+	ast_cli(fd, "\r");
+	return 0;
+}
+
 
 static int load_module(void)
 {
