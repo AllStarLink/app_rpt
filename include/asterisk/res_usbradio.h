@@ -45,18 +45,6 @@
 #define	MIXER_PARAM_SPKR_PLAYBACK_SW_NEW "Headphone Playback Switch"
 #define	MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW "Headphone Playback Volume"
 
-#if 0
-#define traceusb1(a) {printf a;}
-#else
-#define traceusb1(a)
-#endif
-
-#if 0
-#define traceusb2(a) {printf a;}
-#else
-#define traceusb2(a)
-#endif
-
 /*!
  * \brief CMxxx USB device identifiers.
  */
@@ -213,11 +201,8 @@
  */
 #define TEXT_SIZE	256
 
-#if 0
-#define	TRYOPEN	1				/* try to open on startup */
-#endif
 #define	O_CLOSE	0x444			/* special 'close' mode for device */
-/* Which device to use */
+/* Which sound device to use */
 #if defined( __OpenBSD__ ) || defined( __NetBSD__ )
 #define DEV_DSP "/dev/audio"
 #else
@@ -230,40 +215,220 @@ struct usbecho {
 	short data[FRAME_SIZE];
 };
 
+/*! \brief Round double number to a long
+ *
+ * \note lround for uClibc - wrapper for lround(x) 
+ *
+ * \param x			Double number to round.
+ *
+ * \retval 			Rounded number as a long.
+*/
 long ast_radio_lround(double x);
 
+/*!
+ * \brief Calculate the speaker playback volume value.
+ * 	Calculates the speaker playback volume.
+ *
+ *	The calling routine passes the maximum setting for
+ *	for the speaker output.  This routine scales the
+ *	requested value against the maximum.
+ *
+ *	Some devices may require a different scaling divisor.
+ *	This routine can be customized for the requirements
+ *	for new devices.
+ *
+ *	In some implementations, the scaling factor has been
+ *	determined by spkrmax - 20 * log(ratio) or spkrmax - 10 * log(ratio).
+ *	Discussions with radio engineers indicate that we should
+ *	be using a linear scale.  FM deviation is linear.
+ *
+ * \param spkrmax		Speaker maximum value.
+ * \param request_value	Requested volume value.
+ * \param devtype		USB device type.
+ *
+ * \retval 				The calculated volume value.
+ */
 int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype);
-
 
 // Note: must add -lasound to end of linkage
 
 /*!
- * \param devnum alsa major device number
- * \param ascii Formal Parameter Name, val1, first or only value, val2 second value, or 0 if only 1 value. Values: 0-99 (percent) or 0-1 for baboon.
+ * \brief Get mixer max value
+ * 	Gets the mixer max value from ALSA for the specified device and control.
+ *
+ * \param devnum		The ALSA major device number to update.
+ * \param param			Pointer to the string mixer device name (control) to retrieve.
+ * 
+ * \retval 				The maximum value.
  */
 int ast_radio_amixer_max(int devnum, char *param);
 
 /*!
- * \param devnum alsa major device number
- * \param ascii Formal Parameter Name, val1, first or only value, val2 second value, or 0 if only 1 value. Values: 0-99 (percent) or 0-1 for baboon.
+ * \brief Set mixer
+ * 	Sets the mixer values for the specified device and control.
+ *
+ * \param devnum		The ALSA major device number to update.
+ * \param param			Pointer to the string mixer device name (control) to update.
+ * \param v1			Value 1 to set.  Values: 0-99 (percent) or 0-1 for baboon.
+ * \param v2			Value 2 to set or zero if only one value.
  */
 int ast_radio_setamixer(int devnum, char *param, int v1, int v2);
 
+/*!
+ * \brief Set USB HID outputs
+ * 	This routine, depending on the outputs passed can set the GPIO states 
+ *	and/or setup the chip to read/write the eeprom.
+ *
+ *	The passed outputs should be 4 bytes.
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param outputs		Pointer to buffer that contains the data to send to the HID.
+ */
 void ast_radio_hid_set_outputs(struct usb_dev_handle *handle, unsigned char *outputs);
 
+/*!
+ * \brief Get USB HID inputs
+ * 	This routine will retrieve the GPIO states or data the eeprom.
+ *
+ *	The passed inputs should be 4 bytes.
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param inputs		Pointer to buffer that will contain the data received from the HID.
+ */
 void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inputs);
 
+/*!
+ * \brief Read user memory segment from the CM-XXX EEPROM.
+ * 	Reads the memory range associated with user data from the EEPROM.
+ *
+ *	The user memory segment is from address position 51 to 63.
+ *	Memory positions 0 to 50 are reserved for manufacturer's data.
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param buf			Pointer to buffer to receive the EEPROM data.  The buffer
+ *						must be an array of 13 unsigned shorts.
+ *
+ * \retval				Checksum of the received data.  If the check sum is correct,
+ *						the calculated checksum will be zero.  This indicates valid data..
+ *						Any	other value indicates bad EEPROM data.
+ */
 unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
 
+/*!
+ * \brief Write user memory segment to the CM-XXX EEPROM.
+ * 	Writes the memory range associated with user data to the EEPROM.
+ *
+ *	The user memory segment is from address position 51 to 63.
+ *	
+ *  \note Memory positions 0 to 50 are reserved for manufacturer's data.  Do not
+ *	write into this segment!
+ *
+ * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param buf			Pointer to buffer that contains the the EEPROM data.  
+ *						The buffer must be an array of 13 unsigned shorts.
+ */
 void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
 
+/*!
+ * \brief Make a list of HID devices.
+ * Populates usb_device_list with a list of devices that we
+ * know that are compatible.
+ * \retval 0	List was created.
+ * \retval -1	List was not created.
+ */
+int ast_radio_hid_device_mklist(void);
+
+/*!
+ * \brief Initialize a USB device.
+ * 	Searches for a USB device that matches the passed device string.
+ *
+ * \note It will only evaluate USB devices known to work with this application.
+ *
+ * \param desired_device	Pointer to a string that contains the device string to find.
+ * \retval 					Returns a usb_device structure with the found device.
+ *							If the device was not found, it returns null.
+ */
 struct usb_device *ast_radio_hid_device_init(const char *desired_device);
 
-/*! \brief Get internal formatted string from external one */
+/*!
+ * \brief Get USB device number from device string
+ * 	Checks the symbolic links to see if the device string exists.
+ *
+ * \param devstr		Pointer to a string that contains the device string to find.
+ * \retval 				Returns an index for the found device number.
+ * \retval -1			If the device was not found.
+ */
 int ast_radio_usb_get_usbdev(const char *devstr);
 
+/*!
+ * \brief See if the internal usb_device_list contains the
+ * specified device string.
+ * \param devstr	Device string to check.
+ * \retval 0		Device string was not found.
+ * \retval 1		Device string was found.
+ */
+int ast_radio_usb_list_check(char *devstr);
+
+/*!
+ * \brief Open the specified parallel port
+ * 	Opens the parallel port if is exists.
+ *
+ * \note The parallel port subsystem may not be available on all systems.
+ *
+ * \param haspp		Pointer to an integer that indicates the type of parallel port.
+ *					0 = no parallel port, 1 = use open, 2 = use ioctl.
+ * \param ppfd		Pointer to opened parallel port file descriptor.
+ * \param pbase		Pointer to parallel port base address.
+ * \param pport		Pointer to parallel port port number.
+ * \param reload	Integer flag to indicate if the port should be closed and reopened.
+ * \retval 	0		Always returns zero.
+ */
 int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *pport, int reload);
 
+/*!
+ * \brief Read a character from the specified parallel port
+ * 	Reads a character from the parallel port
+ *
+ * \note The parallel port subsystem may not be available on all systems.
+ *
+ * \param haspp		Pointer to an integer that indicates the type of parallel port.
+ *					0 = no parallel port, 1 = use open, 2 = use ioctl.
+ * \param ppfd		Parallel port file descriptor.
+ * \param pbase		Parallel port base address.
+ * \param pport		Pointer to parallel port port number.
+ * \retval 			Character that was read.
+ */
 unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport);
 
+/*!
+ * \brief Write a character to the specified parallel port
+ * 	Writes a character to the parallel port
+ *
+ * \note The parallel port subsystem may not be available on all systems.
+ *
+ * \param haspp		Pointer to an integer that indicates the type of parallel port.
+ *					0 = no parallel port, 1 = use open, 2 = use ioctl.
+ * \param ppfd		Parallel port file descriptor.
+ * \param pbase		Parallel port base address.
+ * \param pport		Pointer to parallel port port number.
+ * \param c			Character to write.
+ */
 void ast_radio_ppwrite(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport, unsigned char c);
+
+/*!
+ * \brief Poll the specified fd for input for the specified milliseconds.
+ * \param fd			File descriptor.
+ * \param ms			Milliseconds to wait.
+ * \return Result from the select.
+ */
+int ast_radio_poll_input(int fd, int ms);
+
+/*!
+ * \brief Wait a fixed amount or on the specified fd for the specified milliseconds.
+ * \param fd			File descriptor.
+ * \param ms			Milliseconds to wait.
+ * \param flag			0=use usleep, !0=use select/poll on the fd.
+ * \retval 0			Timer expired.
+ * \retval 1			Activity occurred on the fd.
+ */
+int ast_radio_wait_or_poll(int fd, int ms, int flag);
