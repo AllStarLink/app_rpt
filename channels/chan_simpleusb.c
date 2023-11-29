@@ -838,7 +838,7 @@ static void *hidthread(void *arg)
 			 * configured channels.
 			 */
 			s = find_installed_usb_match();
-			if (!*s) {
+			if (ast_strlen_zero(s)) {
 				if (!o->device_error) {
 					ast_log(LOG_ERROR, "Channel %s: Device string %s was not found.\n",  o->name, o->devstr);
 					o->device_error = 1;
