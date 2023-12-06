@@ -971,7 +971,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
  * This routine does a lot of processing of what you "hear" when app_rpt is running.
  * Note that this routine could probably benefit from an overhaul to make it easier to read/debug. 
- * Many of the items here seem to have been bolted onto this routine as it app_rpt has evolved.
+ * Many of the items here seem to have been bolted onto this routine as app_rpt has evolved.
  */
 void *rpt_tele_thread(void *this)
 {
@@ -1007,17 +1007,13 @@ void *rpt_tele_thread(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	nodename = ast_strdup(myrpt->name);
 	if (!nodename) {
-		ast_log(LOG_ERROR, "Unable to strdup nodename (mode: %d)\n", mytele->mode);
-		rpt_mutex_lock(&myrpt->lock);
 		goto abort3;
 	}
 
 	if (myrpt->p.ident) {
 		ident = ast_strdup(myrpt->p.ident);
 		if (!ident) {
-			ast_log(LOG_ERROR, "Unable to strdup ident (mode: %d)\n", mytele->mode);
 			id_malloc = 0;
-			rpt_mutex_lock(&myrpt->lock);
 			goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 		} else {
 			id_malloc = 1;
