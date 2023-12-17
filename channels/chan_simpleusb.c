@@ -2583,7 +2583,7 @@ static int console_unkey(int fd, int argc, const char *const *argv)
 static int susb_active(int fd, int argc, const char *const *argv)
 {
 	if (argc == 2) {
-		ast_cli(fd, "active (command) USB Radio device is [%s]\n", simpleusb_active);
+		ast_cli(fd, "Active (command) Simple USB Radio device is [%s]\n", simpleusb_active);
 	} else if (argc != 3) {
 		return RESULT_SHOWUSAGE;
 	} else {
