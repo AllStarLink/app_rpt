@@ -16,7 +16,8 @@ if [ ! -d $MYDIR ]; then
 else
 	# else, update it
 	cd $MYDIR
-	git checkout master
+	# Stick to whatever branch we're on
+	#git checkout master
 	git pull
 	cd ..
 fi
