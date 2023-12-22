@@ -337,6 +337,7 @@
 #include "app_rpt/rpt_utils.h"
 #include "app_rpt/rpt_daq.h"
 #include "app_rpt/rpt_cli.h"
+#include "app_rpt/rpt_bridging.h"
 #include "app_rpt/rpt_call.h"
 #include "app_rpt/rpt_capabilities.h"
 #include "app_rpt/rpt_vox.h"
@@ -2863,39 +2864,6 @@ static void do_scheduler(struct rpt *myrpt)
 	}
 }
 
-/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts. This thread cannot successfully be resurrected, so don't even THINK about trying! (Maybe add a new var for this?) */
-#define FAILED_TO_OBTAIN_PSEUDO_CHANNEL() { \
-	ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n"); \
-	rpt_mutex_unlock(&myrpt->lock); \
-	if (myrpt->txchannel != myrpt->rxchannel) { \
-		ast_log(LOG_WARNING, "Terminating channel '%s'\n", ast_channel_name(myrpt->txchannel)); \
-		ast_hangup(myrpt->txchannel); \
-	} \
-	ast_log(LOG_WARNING, "Terminating channel '%s'\n", ast_channel_name(myrpt->rxchannel)); \
-	ast_hangup(myrpt->rxchannel); \
-	myrpt->rxchannel = NULL; \
-	rpt_vars[i].deleted = 1; \
-	myrpt->rpt_thread = AST_PTHREADT_STOP; \
-	pthread_exit(NULL); \
-}
-
-#define FAILED_TO_OBTAIN_PSEUDO_CHANNEL2() { \
-	ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n"); \
-	rpt_mutex_unlock(&myrpt->lock); \
-	ast_hangup(myrpt->pchannel); \
-	ast_hangup(myrpt->monchannel); \
-	if (myrpt->txchannel != myrpt->rxchannel) { \
-		ast_log(LOG_WARNING, "Terminating up channel '%s'\n", ast_channel_name(myrpt->txchannel)); \
-		ast_hangup(myrpt->txchannel); \
-	} \
-	ast_log(LOG_WARNING, "Terminating channel '%s'\n", ast_channel_name(myrpt->rxchannel)); \
-	ast_hangup(myrpt->rxchannel); \
-	myrpt->rxchannel = NULL; \
-	rpt_vars[i].deleted = 1; \
-	myrpt->rpt_thread = AST_PTHREADT_STOP; \
-	pthread_exit(NULL); \
-}
-
 #define load_rpt_vars_by_rpt(myrpt, force) _load_rpt_vars_by_rpt(myrpt, force);
 
 static void _load_rpt_vars_by_rpt(struct rpt *myrpt, int force)
@@ -2927,7 +2895,7 @@ void rpt_links_init(struct rpt_link *l)
 static void *rpt(void *this)
 {
 	struct rpt *myrpt = (struct rpt *) this;
-	char *tele, *idtalkover, c, myfirst;
+	char *idtalkover, c, myfirst;
 	int ms = MSWAIT, i, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, dtmfed, lastmyrx, localmsgqueued;
 	unsigned int u;
@@ -2980,24 +2948,6 @@ static void *rpt(void *this)
 		pthread_exit(NULL);
 	}
 
-	if (ast_strlen_zero(myrpt->rxchanname)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_log(LOG_WARNING, "No rxchannel specified\n");
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-
-	ast_copy_string(tmpstr, myrpt->rxchanname, sizeof(tmpstr));
-
-	tele = strchr(tmpstr, '/');
-	if (!tele) {
-		ast_log(LOG_WARNING, "Rxchannel Dial number (%s) must be in format tech/number\n", myrpt->rxchanname);
-		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-	*tele++ = 0;
-
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
@@ -3009,136 +2959,94 @@ static void *rpt(void *this)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 	/*! \todo call ao2_ref(cap, -1); on all exit points? */
 
-	myrpt->rxchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-	myrpt->dahdirxchannel = !strcasecmp(tmpstr, "DAHDI") ? myrpt->rxchannel : NULL;
-	if (myrpt->rxchannel) {
-		if (ast_channel_state(myrpt->rxchannel) == AST_STATE_BUSY) {
-			ast_log(LOG_WARNING, "Unable to obtain Rx channel\n");
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
-		}
-		rpt_make_call(myrpt->rxchannel, tele, 999, tmpstr, "(Repeater Rx)", "Rx", myrpt->name);
-		if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP) {
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
-		}
-	} else {
-		ast_log(LOG_WARNING, "Unable to obtain Rx channel\n");
+	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
 		pthread_exit(NULL);
 	}
-	myrpt->dahditxchannel = NULL;
+
 	if (myrpt->txchanname) {
-		ast_copy_string(tmpstr, myrpt->txchanname, sizeof(tmpstr));
-		tele = strchr(tmpstr, '/');
-		if (!tele) {
-			ast_log(LOG_WARNING, "Txchannel Dial number (%s) must be in format tech/number\n", myrpt->txchanname);
+		if (rpt_request(myrpt, cap, RPT_TXCHAN)) {
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
+			rpt_hangup(myrpt, RPT_RXCHAN);
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
-		}
-		*tele++ = 0;
-		myrpt->txchannel = ast_request(tmpstr, cap, NULL, NULL, tele, NULL);
-		if ((!strcasecmp(tmpstr, "DAHDI")) && strcasecmp(tele, "pseudo")) {
-			myrpt->dahditxchannel = myrpt->txchannel;
-		}
-		if (myrpt->txchannel) {
-			if (ast_channel_state(myrpt->txchannel) == AST_STATE_BUSY) {
-				ast_log(LOG_WARNING, "Unable to obtain Tx channel\n");
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_hangup(myrpt->txchannel);
-				ast_hangup(myrpt->rxchannel);
-				myrpt->rxchannel = NULL;
-				myrpt->txchannel = NULL;
-				myrpt->rpt_thread = AST_PTHREADT_STOP;
-				pthread_exit(NULL);
-			}
-			rpt_make_call(myrpt->txchannel, tele, 999, tmpstr, "(Repeater Tx)", "Tx", myrpt->name);
-			if (ast_channel_state(myrpt->rxchannel) != AST_STATE_UP) {
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_hangup(myrpt->rxchannel);
-				myrpt->rxchannel = NULL;
-				ast_hangup(myrpt->txchannel);
-				myrpt->txchannel = NULL;
-				myrpt->rpt_thread = AST_PTHREADT_STOP;
-				pthread_exit(NULL);
-			}
-		} else {
-			ast_log(LOG_WARNING, "Unable to obtain Tx channel\n");
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
+			/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+			 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+			 * (Maybe add a new var for this?) */
+			rpt_vars[i].deleted = 1;
 			pthread_exit(NULL);
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3) && !IS_PSEUDO_NAME(myrpt->rxchanname)) {
-			myrpt->dahditxchannel = myrpt->txchannel;
-		}
+		myrpt->dahditxchannel = !strncasecmp(myrpt->rxchanname, "DAHDI", 5) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 	}
 	if (!IS_PSEUDO(myrpt->txchannel)) {
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
 	}
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->pchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->pchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
+
+	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
+		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->pchannel));
-	ast_set_read_format(myrpt->pchannel, ast_format_slin);
-	ast_set_write_format(myrpt->pchannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->pchannel);
-	ast_answer(myrpt->pchannel);
-	if (!myrpt->dahdirxchannel)
-		myrpt->dahdirxchannel = myrpt->pchannel;
+
 	if (!myrpt->dahditxchannel) {
-		/* allocate a pseudo-channel thru asterisk */
-		myrpt->dahditxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-		if (!myrpt->dahditxchannel) {
-			FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
+		if (rpt_request_pseudo(myrpt, cap, RPT_DAHDITXCHAN)) {
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup(myrpt, RPT_RXCHAN);
+			rpt_hangup(myrpt, RPT_TXCHAN);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			myrpt->rpt_thread = AST_PTHREADT_STOP;
+			/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+			 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+			 * (Maybe add a new var for this?) */
+			rpt_vars[i].deleted = 1;
+			pthread_exit(NULL);
 		}
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->dahditxchannel));
-		ast_set_read_format(myrpt->dahditxchannel, ast_format_slin);
-		ast_set_write_format(myrpt->dahditxchannel, ast_format_slin);
-		rpt_disable_cdr(myrpt->dahditxchannel);
-		ast_answer(myrpt->dahditxchannel);
 	}
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->monchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->monchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
+
+	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
+		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->monchannel));
-	ast_set_read_format(myrpt->monchannel, ast_format_slin);
-	ast_set_write_format(myrpt->monchannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->monchannel);
-	ast_answer(myrpt->monchannel);
 
 	/* make a conference for the tx */
 	ci.confno = -1;				/* make a new conf */
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER;
 	if (join_dahdiconf(myrpt->dahditxchannel, &ci)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
 		pthread_exit(NULL);
 	}
+
 	/* save tx conference number */
 	myrpt->txconf = ci.confno;
 	/* make a conference for the pseudo */
@@ -3148,15 +3056,18 @@ static void *rpt(void *this)
 	/* first put the channel on the conference in announce mode */
 	if (join_dahdiconf(myrpt->pchannel, &ci)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel)
-			ast_hangup(myrpt->txchannel);
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
 		pthread_exit(NULL);
 	}
+
 	/* save pseudo channel conference number */
 	myrpt->conf = ci.confno;
 	/* make a conference for the pseudo */
@@ -3165,15 +3076,15 @@ static void *rpt(void *this)
 		if (ioctl(ast_channel_fd(myrpt->txchannel, 0), DAHDI_CHANNO, &ci.confno) == -1) {
 			ast_log(LOG_WARNING, "Unable to set tx channel's chan number\n");
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->pchannel);
-			ast_hangup(myrpt->monchannel);
-			if (myrpt->txchannel != myrpt->rxchannel) {
-				ast_hangup(myrpt->txchannel);
-				myrpt->txchannel = NULL;
-			}
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
+			rpt_hangup(myrpt, RPT_RXCHAN);
+			rpt_hangup(myrpt, RPT_TXCHAN);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
+			/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+			 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+			 * (Maybe add a new var for this?) */
+			rpt_vars[i].deleted = 1;
 			pthread_exit(NULL);
 		}
 		ci.confmode = DAHDI_CONF_MONITORTX;
@@ -3185,104 +3096,142 @@ static void *rpt(void *this)
 	if (join_dahdiconf(myrpt->monchannel, &ci)) {
 		ast_log(LOG_WARNING, "Unable to set conference mode for monitor\n");
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
 		pthread_exit(NULL);
 	}
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->parrotchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->parrotchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
+
+	if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
+		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->parrotchannel));
-	ast_set_read_format(myrpt->parrotchannel, ast_format_slin);
-	ast_set_write_format(myrpt->parrotchannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->parrotchannel);
-	ast_answer(myrpt->parrotchannel);
 
 	/* Telemetry Channel Resources */
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->telechannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->telechannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
+	if (rpt_request_pseudo(myrpt, cap, RPT_TELECHAN)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_PARROTCHAN);
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
+		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->telechannel));
-	ast_set_read_format(myrpt->telechannel, ast_format_slin);
-	ast_set_write_format(myrpt->telechannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->telechannel);
+
 	/* make a conference for the voice/tone telemetry */
 	ci.confno = -1;				/* make a new conference */
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
 	if (join_dahdiconf(myrpt->telechannel, &ci)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->txpchannel);
-		ast_hangup(myrpt->monchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_PARROTCHAN);
+		rpt_hangup(myrpt, RPT_TELECHAN);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
 		pthread_exit(NULL);
 	}
 	myrpt->teleconf = ci.confno;
 
 	/* make a channel to connect between the telemetry conference process
 	   and the main tx audio conference. */
-	myrpt->btelechannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->btelechannel) {
-		ast_log(LOG_WARNING, "Failed to obtain pseudo channel for btelechannel\n");
+	if (rpt_request_pseudo(myrpt, cap, RPT_BTELECHAN)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_PARROTCHAN);
+		rpt_hangup(myrpt, RPT_TELECHAN);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
 		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->btelechannel));
-	ast_set_read_format(myrpt->btelechannel, ast_format_slin);
-	ast_set_write_format(myrpt->btelechannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->btelechannel);
+
 	/* make a conference linked to the main tx conference */
 	ci.confno = myrpt->txconf;
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
 	/* first put the channel on the conference in proper mode */
 	if (join_dahdiconf(myrpt->btelechannel, &ci)) {
-		ast_hangup(myrpt->btelechannel);
-		ast_hangup(myrpt->btelechannel);
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_PARROTCHAN);
+		rpt_hangup(myrpt, RPT_TELECHAN);
+		rpt_hangup(myrpt, RPT_BTELECHAN);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
 		pthread_exit(NULL);
 	}
 
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->voxchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->voxchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL();
+	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_PARROTCHAN);
+		rpt_hangup(myrpt, RPT_TELECHAN);
+		rpt_hangup(myrpt, RPT_BTELECHAN);
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
+		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->voxchannel));
-	ast_set_read_format(myrpt->voxchannel, ast_format_slin);
-	ast_set_write_format(myrpt->voxchannel, ast_format_slin);
-	rpt_disable_cdr(myrpt->voxchannel);
-	ast_answer(myrpt->voxchannel);
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->txpchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!myrpt->txpchannel) {
-		FAILED_TO_OBTAIN_PSEUDO_CHANNEL2();
+
+	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_PARROTCHAN);
+		rpt_hangup(myrpt, RPT_TELECHAN);
+		rpt_hangup(myrpt, RPT_BTELECHAN);
+		rpt_hangup(myrpt, RPT_VOXCHAN);
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
+		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+		 * (Maybe add a new var for this?) */
+		rpt_vars[i].deleted = 1;
+		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->txpchannel));
-	rpt_disable_cdr(myrpt->txpchannel);
-	ast_answer(myrpt->txpchannel);
+
 	/* make a conference for the tx */
 	ci.confno = myrpt->txconf;
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER;
