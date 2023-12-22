@@ -2442,7 +2442,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		return 0;
 	rpt_mutex_lock(&myrpt->lock);
 	/* remove from queue */
-	remque((struct qelem *) l);
+	rpt_link_remove(myrpt, l);
 	rpt_mutex_unlock(&myrpt->lock);
 	s = tmp;
 	s1 = strsep(&s, ",");
@@ -2496,7 +2496,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	/* put back in queue */
-	insque((struct qelem *) l, (struct qelem *) myrpt->links.next);
+	rpt_link_add(myrpt, l);
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in process\n", l->name);
 	return 0;
@@ -2917,6 +2917,12 @@ static void _load_rpt_vars_by_rpt(struct rpt *myrpt, int force)
 	}
 }
 
+void rpt_links_init(struct rpt_link *l)
+{
+	l->next = l;
+	l->prev = l;
+}
+
 /* single thread with one file (request) to dial */
 static void *rpt(void *this)
 {
@@ -3311,8 +3317,7 @@ static void *rpt(void *this)
 	/* Now, the idea here is to copy from the physical rx channel buffer
 	   into the pseudo tx buffer, and from the pseudo rx buffer into the 
 	   tx channel buffer */
-	myrpt->links.next = &myrpt->links;
-	myrpt->links.prev = &myrpt->links;
+	rpt_links_init(&myrpt->links);
 	myrpt->tailtimer = 0;
 	myrpt->totimer = myrpt->p.totime;
 	myrpt->tmsgtimer = myrpt->p.tailmessagetime;
@@ -3912,7 +3917,7 @@ static void *rpt(void *this)
 		while (l != &myrpt->links) {
 			if (l->killme) {
 				/* remove from queue */
-				remque((struct qelem *) l);
+				rpt_link_remove(myrpt, l);
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				rpt_mutex_unlock(&myrpt->lock);
@@ -4228,7 +4233,7 @@ static void *rpt(void *this)
 			}
 			if ((!l->chan) && (!l->retrytimer) && l->outbound && (l->retries >= l->max_retries)) {
 				/* remove from queue */
-				remque((struct qelem *) l);
+				rpt_link_remove(myrpt, l);
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				rpt_mutex_unlock(&myrpt->lock);
@@ -4252,7 +4257,7 @@ static void *rpt(void *this)
 			if ((!l->chan) && (!l->disctime) && (!l->outbound)) {
 				ast_debug(1, "LINKDISC AA\n");
 				/* remove from queue */
-				remque((struct qelem *) l);
+				rpt_link_remove(myrpt, l);
 				if (myrpt->links.next == &myrpt->links)
 					channel_revert(myrpt);
 				if (!strcmp(myrpt->cmdnode, l->name))
@@ -5171,7 +5176,7 @@ static void *rpt(void *this)
 					}
 					rpt_mutex_lock(&myrpt->lock);
 					/* remove from queue */
-					remque((struct qelem *) l);
+					rpt_link_remove(myrpt, l);
 					if (!strcmp(myrpt->cmdnode, l->name))
 						myrpt->cmdnode[0] = 0;
 					__kickshort(myrpt);
@@ -5470,7 +5475,7 @@ static void *rpt(void *this)
 						}
 						rpt_mutex_lock(&myrpt->lock);
 						/* remove from queue */
-						remque((struct qelem *) l);
+						rpt_link_remove(myrpt, l);
 						if (!strcmp(myrpt->cmdnode, l->name))
 							myrpt->cmdnode[0] = 0;
 						__kickshort(myrpt);
@@ -5825,7 +5830,7 @@ static void *rpt(void *this)
 	while (l != &myrpt->links) {
 		struct rpt_link *ll = l;
 		/* remove from queue */
-		remque((struct qelem *) l);
+		rpt_link_remove(myrpt, l);
 		/* hang-up on call to device */
 		if (l->chan)
 			ast_hangup(l->chan);
@@ -6812,12 +6817,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_mutex_unlock(&myrpt->lock);
 		}
 		/* establish call in tranceive mode */
-		l = ast_malloc(sizeof(struct rpt_link));
+		l = ast_calloc(1, sizeof(struct rpt_link));
 		if (!l) {
 			pthread_exit(NULL);
 		}
-		/* zero the silly thing */
-		memset((char *) l, 0, sizeof(struct rpt_link));
 		l->mode = 1;
 		ast_copy_string(l->name, b1, MAXNODESTR);
 		l->isremote = 0;
@@ -6860,7 +6863,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 		if (!cap) {
 			ast_log(LOG_ERROR, "Failed to alloc cap\n");
-			pthread_exit(NULL);
+			pthread_exit(NULL); /*! \todo This and all subsequent pthread_exit's do not clean up properly */
 		}
 
 		ast_format_cap_append(cap, ast_format_slin, 0);
@@ -6889,7 +6892,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
 		/* insert at end of queue */
-		insque((struct qelem *) l, (struct qelem *) myrpt->links.next);
+		rpt_link_add(myrpt, l);
 		__kickshort(myrpt);
 		gettimeofday(&myrpt->lastlinktime, NULL);
 		rpt_mutex_lock(&myrpt->blocklock);

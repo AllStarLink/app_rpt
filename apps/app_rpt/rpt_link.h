@@ -30,6 +30,20 @@ void send_link_keyquery(struct rpt *myrpt);
 
 void send_tele_link(struct rpt *myrpt, char *cmd);
 
+/*!
+ * \brief Add an rpt_link to a rpt
+ * \param myrpt
+ * \param l Link to insert into the repeater's linked list of links
+ */
+void rpt_link_add(struct rpt *myrpt, struct rpt_link *l);
+
+/*!
+ * \brief Remove an rpt_link from a rpt
+ * \param myrpt
+ * \param l Link to remove from the repeater's linked list of links
+ */
+void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l);
+
 /*! \brief must be called locked */
 void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int flag);
 

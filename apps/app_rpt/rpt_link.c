@@ -380,6 +380,34 @@ void send_tele_link(struct rpt *myrpt, char *cmd)
 	return;
 }
 
+static void check_link_list(struct rpt *myrpt, struct rpt_link *l)
+{
+	/* This is supposed to be a doubly linked list,
+	 * so make sure it's not corrupted.
+	 * If it is, that should trigger the assertion.
+	 * This is temporary, for troubleshooting issue #217.
+	 * Once that is fixed, this should be removed.
+	 */
+	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+		if (!l) {
+			ast_log(LOG_ERROR, "Link linked list is corrupted (not properly doubly linked)\n");
+		}
+		ast_assert(l != NULL);
+	}
+}
+
+void rpt_link_add(struct rpt *myrpt, struct rpt_link *l)
+{
+	insque(l, myrpt->links.next);
+	check_link_list(myrpt, l);
+}
+
+void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
+{
+	remque(l);
+	check_link_list(myrpt, l);
+}
+
 void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int flag)
 {
 	struct rpt_link *l;
@@ -594,12 +622,10 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	}
 	ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 	/* establish call */
-	l = ast_malloc(sizeof(struct rpt_link));
+	l = ast_calloc(1, sizeof(struct rpt_link));
 	if (!l) {
 		return -1;
 	}
-	/* zero the silly thing */
-	memset((char *) l, 0, sizeof(struct rpt_link));
 	l->mode = mode;
 	l->outbound = 1;
 	l->thisconnected = 0;
@@ -712,7 +738,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (l->isremote)
 		l->retries = l->max_retries + 1;
 	l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
-	insque((struct qelem *) l, (struct qelem *) myrpt->links.next);
+	rpt_link_add(myrpt, l);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	return 0;

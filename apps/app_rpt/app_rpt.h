@@ -431,6 +431,11 @@ struct rpt_link {
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
 
+/*!
+ * \brief Initialize doubly linked list of RPT links
+ */
+void rpt_links_init(struct rpt_link *l);
+
 /*! \brief Structure used to manage link status */
 struct rpt_lstat {
 	struct	rpt_lstat *next;

@@ -2104,8 +2104,7 @@ treataslocal:
 			break;
 		}
 		hastx = 0;
-		linkbase.next = &linkbase;
-		linkbase.prev = &linkbase;
+		rpt_links_init(&linkbase);
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
 		l = myrpt->links.next;
@@ -2116,11 +2115,10 @@ treataslocal:
 			}
 			l1 = ast_malloc(sizeof(struct rpt_link));
 			if (!l1) {
-				ast_log(LOG_ERROR, "Cannot malloc memory on %s (mode: %d)\n", ast_channel_name(mychannel), mytele->mode);
 				goto abort;
 			}
 			memcpy(l1, l, sizeof(struct rpt_link));
-			l1->next = l1->prev = NULL;
+			l1->next = l1->prev = NULL; /* Don't carry over next/prev pointers from the original list we're duplicating */
 			insque((struct qelem *) l1, (struct qelem *) linkbase.next);
 			l = l->next;
 		}
