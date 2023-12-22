@@ -61,29 +61,38 @@ static const char *rpt_chan_name(struct rpt *myrpt, enum rpt_chan_type chantype)
 	return NULL;
 }
 
-static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, enum rpt_chan_type chantype)
+static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link *link, enum rpt_chan_type chantype)
 {
-	switch (chantype) {
-	case RPT_RXCHAN:
-		return &myrpt->rxchannel;
-	case RPT_TXCHAN:
-		return &myrpt->txchannel;
-	case RPT_PCHAN:
-		return &myrpt->pchannel;
-	case RPT_DAHDITXCHAN:
-		return &myrpt->dahditxchannel;
-	case RPT_MONCHAN:
-		return &myrpt->monchannel;
-	case RPT_PARROTCHAN:
-		return &myrpt->parrotchannel;
-	case RPT_TELECHAN:
-		return &myrpt->telechannel;
-	case RPT_BTELECHAN:
-		return &myrpt->btelechannel;
-	case RPT_VOXCHAN:
-		return &myrpt->voxchannel;
-	case RPT_TXPCHAN:
-		return &myrpt->txpchannel;
+	if (myrpt) {
+		switch (chantype) {
+		case RPT_RXCHAN:
+			return &myrpt->rxchannel;
+		case RPT_TXCHAN:
+			return &myrpt->txchannel;
+		case RPT_PCHAN:
+			return &myrpt->pchannel;
+		case RPT_DAHDITXCHAN:
+			return &myrpt->dahditxchannel;
+		case RPT_MONCHAN:
+			return &myrpt->monchannel;
+		case RPT_PARROTCHAN:
+			return &myrpt->parrotchannel;
+		case RPT_TELECHAN:
+			return &myrpt->telechannel;
+		case RPT_BTELECHAN:
+			return &myrpt->btelechannel;
+		case RPT_VOXCHAN:
+			return &myrpt->voxchannel;
+		case RPT_TXPCHAN:
+			return &myrpt->txpchannel;
+		}
+	} else if (link) {
+		switch (chantype) {
+		case RPT_PCHAN:
+			return &link->pchan;
+		default:
+			break;
+		}
 	}
 	ast_assert(0);
 	return NULL;
@@ -93,7 +102,7 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, enum rpt_chan_ty
 
 void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 {
-	struct ast_channel **chanptr = rpt_chan_channel(myrpt, chantype);
+	struct ast_channel **chanptr = rpt_chan_channel(myrpt, NULL, chantype);
 
 	if (!*chanptr) {
 		ast_log(LOG_WARNING, "No %s channel to hang up\n", rpt_chan_type_str(chantype));
@@ -124,13 +133,13 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 	*chanptr = NULL;
 }
 
-static const char *rpt_chan_app(enum rpt_chan_type chantype)
+static const char *rpt_chan_app(enum rpt_chan_type chantype, enum rpt_chan_flags flags)
 {
 	switch (chantype) {
 	case RPT_RXCHAN:
-		return "(Repeater Rx)";
+		return flags & RPT_LINK_CHAN ? "(Link Rx)" : "(Repeater Rx)";
 	case RPT_TXCHAN:
-		return "(Repeater Tx)";
+		return flags & RPT_LINK_CHAN ? "(Link Tx)" : "(Repeater Tx)";
 	case RPT_PCHAN:
 	case RPT_DAHDITXCHAN:
 	case RPT_MONCHAN:
@@ -166,12 +175,13 @@ static const char *rpt_chan_app_data(enum rpt_chan_type chantype)
 	return NULL;
 }
 
-int rpt_request(struct rpt *myrpt, struct ast_format_cap *cap, enum rpt_chan_type chantype)
+int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags)
 {
 	char chanstr[256];
 	const char *channame;
 	struct ast_channel *chan, **chanptr;
 	char *tech, *device;
+	struct rpt *myrpt = data;
 
 	channame = rpt_chan_name(myrpt, chantype);
 
@@ -202,14 +212,24 @@ int rpt_request(struct rpt *myrpt, struct ast_format_cap *cap, enum rpt_chan_typ
 		return -1;
 	}
 
-	rpt_make_call(chan, device, RPT_DIAL_TIME, tech, rpt_chan_app(chantype), rpt_chan_app_data(chantype), myrpt->name);
+	/* XXX
+	 * Note: Removed in refactoring:
+	 * inside rpt_make_call, we should rpt_mutex_unlock(&myrpt->lock);
+	 * before ast_call
+	 * and
+	 * rpt_mutex_lock(&myrpt->lock);
+	 * afterwards,
+	 * if flags & RPT_LINK_CHAN.
+	 * This might not be necessary, but if it is, this should be readded. */
+
+	rpt_make_call(chan, device, RPT_DIAL_TIME, tech, rpt_chan_app(chantype, flags), rpt_chan_app_data(chantype), myrpt->name);
 	if (ast_channel_state(chan) != AST_STATE_UP) {
 		ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
 		ast_hangup(chan);
 		return -1;
 	}
 
-	chanptr = rpt_chan_channel(myrpt, chantype);
+	chanptr = rpt_chan_channel(myrpt, NULL, chantype);
 	*chanptr = chan;
 
 	switch (chantype) {
@@ -217,7 +237,12 @@ int rpt_request(struct rpt *myrpt, struct ast_format_cap *cap, enum rpt_chan_typ
 		myrpt->dahdirxchannel = !strcasecmp(tech, "DAHDI") ? chan : NULL;
 		break;
 	case RPT_TXCHAN:
-		myrpt->dahditxchannel = !strcasecmp(tech, "DAHDI") && strcasecmp(device, "pseudo") ? chan : NULL;
+		if (flags & RPT_LINK_CHAN) {
+			/* XXX Dunno if this difference is really necessary, but this is a literal refactor of existing logic... */
+			myrpt->dahditxchannel = !strcasecmp(tech, "DAHDI") ? chan : NULL;
+		} else {
+			myrpt->dahditxchannel = !strcasecmp(tech, "DAHDI") && strcasecmp(device, "pseudo") ? chan : NULL;
+		}
 		break;
 	default:
 		break;
@@ -226,9 +251,17 @@ int rpt_request(struct rpt *myrpt, struct ast_format_cap *cap, enum rpt_chan_typ
 	return 0;
 }
 
-int rpt_request_pseudo(struct rpt *myrpt, struct ast_format_cap *cap, enum rpt_chan_type chantype)
+int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags)
 {
+	struct rpt *myrpt = NULL;
+	struct rpt_link *link = NULL;
 	struct ast_channel *chan, **chanptr;
+
+	if (flags & RPT_LINK_CHAN) {
+		link = data;
+	} else {
+		myrpt = data;
+	}
 
 	chan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
 	if (!chan) {
@@ -244,7 +277,7 @@ int rpt_request_pseudo(struct rpt *myrpt, struct ast_format_cap *cap, enum rpt_c
 	rpt_disable_cdr(chan);
 	ast_answer(chan);
 
-	chanptr = rpt_chan_channel(myrpt, chantype);
+	chanptr = rpt_chan_channel(myrpt, link, chantype);
 	*chanptr = chan;
 
 	switch (chantype) {
@@ -259,5 +292,3 @@ int rpt_request_pseudo(struct rpt *myrpt, struct ast_format_cap *cap, enum rpt_c
 
 	return 0;
 }
-
-// todo: remove FAILED_TO_OBTAIN_PSEUDO_CHANNEL

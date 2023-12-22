@@ -6050,7 +6050,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	int iskenwood_pci4, authtold, authreq, setting, notremming, reming;
 	int ismuted, dtmfed, phone_vox = 0, phone_monitor = 0;
 	char tmp[256], keyed = 0, keyed1 = 0;
-	char *options, *stringp, *callstr, *tele, c, *altp, *memp;
+	char *options, *stringp, *callstr, c, *altp, *memp;
 	char sx[320], *sy, myfirst, *b, *b1;
 	struct rpt *myrpt;
 	struct ast_frame *f, *f1, *f2;
@@ -6742,17 +6742,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_format_cap_append(cap, ast_format_slin, 0);
 
 		/* allocate a pseudo-channel thru asterisk */
-		l->pchan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-		ao2_ref(cap, -1);
-		if (!l->pchan) {
-			ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
+		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
+			ao2_ref(cap, -1);
 			pthread_exit(NULL);
 		}
-		ast_debug(1, "Requested channel %s\n", ast_channel_name(l->pchan));
-		ast_set_read_format(l->pchan, ast_format_slin);
-		ast_set_write_format(l->pchan, ast_format_slin);
-		ast_answer(l->pchan);
-		rpt_disable_cdr(l->pchan);
+
+		ao2_ref(cap, -1);
+
 		/* make a conference for the tx */
 		ci.confno = myrpt->conf;
 		ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
@@ -6904,13 +6900,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	load_rpt_vars_by_rpt(myrpt, 1);
 
 	rpt_mutex_lock(&myrpt->lock);
-	tele = strchr(myrpt->rxchanname, '/');
-	if (!tele) {
-		ast_log(LOG_WARNING, "Dial number must be in format tech/number\n");
-		rpt_mutex_unlock(&myrpt->lock);
-		pthread_exit(NULL);
-	}
-	*tele++ = 0;
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
@@ -6920,75 +6909,40 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
-	myrpt->rxchannel = ast_request(myrpt->rxchanname, cap, NULL, NULL, tele, NULL);
-	myrpt->dahdirxchannel = NULL;
-	if (!strcasecmp(myrpt->rxchanname, "DAHDI"))
-		myrpt->dahdirxchannel = myrpt->rxchannel;
-	if (myrpt->rxchannel) {
-		rpt_setup_call(myrpt->rxchannel, tele, 999, myrpt->rxchanname, "(Link Rx)", "Rx", myrpt->name);
+	if (__rpt_request(myrpt, cap, RPT_RXCHAN, RPT_LINK_CHAN)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_call(myrpt->rxchannel, tele, 999);
-		rpt_mutex_lock(&myrpt->lock);
-	} else {
-		ast_log(LOG_WARNING, "Unable to obtain Rx channel\n");
-		rpt_mutex_unlock(&myrpt->lock);
+		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
-	*--tele = '/';
+
 	myrpt->dahditxchannel = NULL;
 	if (myrpt->txchanname) {
-		tele = strchr(myrpt->txchanname, '/');
-		if (!tele) {
-			ast_log(LOG_WARNING, "Dial number must be in format tech/number\n");
+		if (__rpt_request(myrpt, cap, RPT_TXCHAN, RPT_LINK_CHAN)) {
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
+			rpt_hangup(myrpt, RPT_RXCHAN);
+			ao2_ref(cap, -1);
 			pthread_exit(NULL);
 		}
-		*tele++ = 0;
-		myrpt->txchannel = ast_request(myrpt->txchanname, cap, NULL, NULL, tele, NULL);
-		if (!strncasecmp(myrpt->txchanname, "DAHDI", 3))
-			myrpt->dahditxchannel = myrpt->txchannel;
-		if (myrpt->txchannel) {
-			rpt_setup_call(myrpt->txchannel, tele, 999, myrpt->txchanname, "(Link Tx)", "Tx", myrpt->name);
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_call(myrpt->txchannel, tele, 999);
-			rpt_mutex_lock(&myrpt->lock);
-		} else {
-			ast_log(LOG_WARNING, "Unable to obtain Tx channel\n");
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_hangup(myrpt->rxchannel);
-			myrpt->rxchannel = NULL;
-			pthread_exit(NULL);
-		}
-		*--tele = '/';
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
 		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3)) {
 			myrpt->dahditxchannel = myrpt->rxchannel;
 		}
 	}
+
 	i = 3;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &i, sizeof(char), 0);
-	/* allocate a pseudo-channel thru asterisk */
-	myrpt->pchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	ao2_ref(cap, -1);
-	if (!myrpt->pchannel) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
+
+	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(myrpt->pchannel));
-	ast_set_read_format(myrpt->pchannel, ast_format_slin);
-	ast_set_write_format(myrpt->pchannel, ast_format_slin);
-	ast_answer(myrpt->pchannel);
-	rpt_disable_cdr(myrpt->pchannel);
+
+	ao2_ref(cap, -1);
+
 	if (!myrpt->dahdirxchannel)
 		myrpt->dahdirxchannel = myrpt->pchannel;
 	if (!myrpt->dahditxchannel)
@@ -6999,30 +6953,26 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	/* first put the channel on the conference in announce/monitor mode */
 	if (join_dahdiconf(myrpt->pchannel, &ci)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
 		pthread_exit(NULL);
 	}
+
 	/* save pseudo channel conference number */
 	myrpt->conf = myrpt->txconf = ci.confno;
+
 	/* if serial io port, open it */
 	myrpt->iofd = -1;
 	if (myrpt->p.ioport && ((myrpt->iofd = openserial(myrpt, myrpt->p.ioport)) == -1)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
+
 	iskenwood_pci4 = 0;
 	memset(&z, 0, sizeof(z));
 	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->dahditxchannel)) {
