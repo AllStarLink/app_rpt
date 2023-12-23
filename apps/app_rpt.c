@@ -2946,10 +2946,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the pseudo */
-	if (!strstr(ast_channel_name(myrpt->txchannel), "pseudo") && myrpt->dahditxchannel == myrpt->txchannel) {
+	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
 		int confno = dahdi_conf_fd_confno(myrpt->txchannel); /* get tx channel's port number */
 		if (confno < 0) {
-			ast_log(LOG_WARNING, "Unable to set tx channel's chan number\n");
 			rpt_hangup(myrpt, RPT_RXCHAN);
 			rpt_hangup(myrpt, RPT_TXCHAN);
 			rpt_hangup(myrpt, RPT_PCHAN);

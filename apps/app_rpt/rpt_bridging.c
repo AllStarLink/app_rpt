@@ -296,6 +296,20 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 	return 0;
 }
 
+#define join_dahdiconf(chan, ci) __join_dahdiconf(chan, ci, __FILE__, __LINE__, __PRETTY_FUNCTION__)
+
+static int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci, const char *file, int line, const char *function)
+{
+	ci->chan = 0;
+
+	/* First put the channel on the conference in proper mode */
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_SETCONF, ci) == -1) {
+		ast_log(LOG_WARNING, "%s:%d (%s) Unable to set conference mode on %s\n", file, line, function, ast_channel_name(chan));
+		return -1;
+	}
+	return 0;
+}
+
 /*! \todo eventually make this static */
 int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode)
 {

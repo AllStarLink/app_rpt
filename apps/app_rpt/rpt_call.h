@@ -18,10 +18,6 @@
  * \author Naveen Albert <asterisk@phreaknet.org>
  */
 
-#define join_dahdiconf(chan, ci) __join_dahdiconf(chan, ci, __FILE__, __LINE__, __PRETTY_FUNCTION__)
-
-int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci, const char *file, int line, const char *function);
-
 /*! \brief Disable CDR for a call */
 int rpt_disable_cdr(struct ast_channel *chan);
 
