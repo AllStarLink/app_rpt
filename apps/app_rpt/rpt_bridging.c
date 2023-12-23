@@ -282,8 +282,11 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 
 	switch (chantype) {
 	case RPT_PCHAN:
-		if (!myrpt->dahdirxchannel) {
-			myrpt->dahdirxchannel = chan;
+		if (!(flags & RPT_LINK_CHAN)) {
+			ast_assert(myrpt != NULL);
+			if (!myrpt->dahdirxchannel) {
+				myrpt->dahdirxchannel = chan;
+			}
 		}
 		break;
 	default:
