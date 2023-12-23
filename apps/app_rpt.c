@@ -304,7 +304,6 @@
 #include <termios.h>
 
 #include <dahdi/user.h>
-#include <dahdi/tonezone.h>		/* use tone_zone_set_zone */
 
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
@@ -1209,17 +1208,14 @@ void *rpt_call(void *this)
 		myrpt->callmode = 0;
 		pthread_exit(NULL);
 	}
-	if (myrpt->p.tonezone && (tone_zone_set_zone(ast_channel_fd(mychannel, 0), (char*) myrpt->p.tonezone) == -1)) {
-		ast_log(LOG_WARNING, "Unable to set tone zone %s\n", myrpt->p.tonezone);
+	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
 		myrpt->callmode = 0;
 		pthread_exit(NULL);
 	}
 	/* start dialtone if patchquiet is 0. Special patch modes don't send dial tone */
-	if ((!myrpt->patchquiet) && (!myrpt->patchexten[0])
-		&& (tone_zone_play_tone(ast_channel_fd(genchannel, 0), DAHDI_TONE_DIALTONE) < 0)) {
-		ast_log(LOG_WARNING, "Cannot start dialtone\n");
+	if (!myrpt->patchquiet && !myrpt->patchexten[0] && rpt_play_dialtone(genchannel) < 0) {
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
 		myrpt->callmode = 0;
@@ -1268,7 +1264,7 @@ void *rpt_call(void *this)
 		if ((!myrpt->patchquiet) && (!stopped) && (myrpt->callmode == 1) && (myrpt->cidx > 0)) {
 			stopped = 1;
 			/* stop dial tone */
-			tone_zone_play_tone(ast_channel_fd(genchannel, 0), -1);
+			rpt_stop_tone(genchannel);
 		}
 		if (myrpt->callmode == 1) {
 			if (myrpt->calldigittimer > PATCH_DIALPLAN_TIMEOUT) {
@@ -1283,7 +1279,7 @@ void *rpt_call(void *this)
 			if (!congstarted) {
 				congstarted = 1;
 				/* start congestion tone */
-				tone_zone_play_tone(ast_channel_fd(genchannel, 0), DAHDI_TONE_CONGESTION);
+				rpt_play_congestion(genchannel);
 			}
 		}
 		res = ast_safe_sleep(mychannel, MSWAIT);
@@ -1298,8 +1294,10 @@ void *rpt_call(void *this)
 		}
 		dialtimer += MSWAIT;
 	}
+
 	/* stop any tone generation */
-	tone_zone_play_tone(ast_channel_fd(genchannel, 0), -1);
+	rpt_stop_tone(genchannel);
+
 	/* end if done */
 	if (!myrpt->callmode) {
 		ast_debug(1, "callmode==0\n");
@@ -1390,7 +1388,7 @@ void *rpt_call(void *this)
 				myrpt->callmode = 4;
 				rpt_mutex_unlock(&myrpt->lock);
 				/* start congestion tone */
-				tone_zone_play_tone(ast_channel_fd(genchannel, 0), DAHDI_TONE_CONGESTION);
+				rpt_play_congestion(genchannel);
 				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
@@ -1418,7 +1416,7 @@ void *rpt_call(void *this)
 	}
 	ast_debug(1, "exit channel loop\n");
 	rpt_mutex_unlock(&myrpt->lock);
-	tone_zone_play_tone(ast_channel_fd(genchannel, 0), -1);
+	rpt_stop_tone(genchannel);
 	if (ast_channel_pbx(mychannel))
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
 	ast_hangup(genchannel);

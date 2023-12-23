@@ -2,6 +2,7 @@
 #include "asterisk.h"
 
 #include <dahdi/user.h>
+#include <dahdi/tonezone.h>		/* use tone_zone_set_zone */
 
 #include "asterisk/channel.h"
 #include "asterisk/indications.h"
@@ -354,4 +355,42 @@ int dahdi_conf_fd_confno(struct ast_channel *chan)
 	}
 
 	return ci.confno;
+}
+
+/*!
+ * \param chan
+ * \param tone 0 = congestion, 1 = dialtone
+ * \note Only used in 3 places in app_rpt.c
+ */
+static int dahdi_play_tone(struct ast_channel *chan, int tone)
+{
+	if (tone_zone_play_tone(ast_channel_fd(chan, 0), tone)) {
+		ast_log(LOG_WARNING, "Cannot start tone on %s\n", ast_channel_name(chan));
+		return -1;
+	}
+	return 0;
+}
+
+int rpt_play_dialtone(struct ast_channel *chan)
+{
+	return dahdi_play_tone(chan, DAHDI_TONE_DIALTONE);
+}
+
+int rpt_play_congestion(struct ast_channel *chan)
+{
+	return dahdi_play_tone(chan, DAHDI_TONE_DIALTONE);
+}
+
+int rpt_stop_tone(struct ast_channel *chan)
+{
+	return dahdi_play_tone(chan, -1);
+}
+
+int rpt_set_tone_zone(struct ast_channel *chan, const char *tz)
+{
+	if (tone_zone_set_zone(ast_channel_fd(chan, 0), (char*) tz) == -1) {
+		ast_log(LOG_WARNING, "Unable to set tone zone %s on %s\n", tz, ast_channel_name(chan));
+		return -1;
+	}
+	return 0;
 }

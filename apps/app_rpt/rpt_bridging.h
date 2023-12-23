@@ -58,3 +58,31 @@ int dahdi_conf_add(struct ast_channel *chan, int confno, int mode);
  * \retval -1 on failure, conference number on success
  */
 int dahdi_conf_fd_confno(struct ast_channel *chan);
+
+/*!
+ * \brief Play dialtone on a channel
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+int rpt_play_dialtone(struct ast_channel *chan);
+
+/*!
+ * \brief Play congestion tone on a channel
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+int rpt_play_congestion(struct ast_channel *chan);
+
+/*!
+ * \brief Stop playing tones on a channel
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+int rpt_stop_tone(struct ast_channel *chan);
+
+/*!
+ * \brief Set the tone zone on a channel
+ * \param chan
+ * \retval -1 on failure, 0 on success
+ */
+int rpt_set_tone_zone(struct ast_channel *chan, const char *tz);
