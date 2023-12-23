@@ -47,3 +47,14 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags);
 
 #define rpt_request_pseudo(data, cap, chantype) __rpt_request_pseudo(data, cap, chantype, 0)
+
+int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode);
+
+int dahdi_conf_add(struct ast_channel *chan, int confno, int mode);
+
+/*!
+ * \brief Get the conference number of a DAHDI channel
+ * \param chan DAHDI channel
+ * \retval -1 on failure, conference number on success
+ */
+int dahdi_conf_fd_confno(struct ast_channel *chan);

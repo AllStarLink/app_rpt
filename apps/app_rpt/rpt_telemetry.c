@@ -26,6 +26,7 @@
 #include "rpt_daq.h"
 #include "rpt_channel.h"
 #include "rpt_config.h"
+#include "rpt_bridging.h"
 #include "rpt_call.h"
 #include "rpt_link.h"
 #include "rpt_serial.h"
@@ -974,7 +975,6 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
  */
 void *rpt_tele_thread(void *this)
 {
-	struct dahdi_confinfo ci;	/* conference info */
 	int res = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x;
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
@@ -1075,11 +1075,8 @@ void *rpt_tele_thread(void *this)
 	/* If the telemetry is only intended for a local audience, */
 	/* only connect the ID audio to the local tx conference so */
 	/* linked systems can't hear it */
-	ci.confno = (((mytele->mode == ID1) || (mytele->mode == PLAYBACK) || (mytele->mode == TEST_TONE) || (mytele->mode == STATS_GPS_LEGACY)) ? myrpt->conf : myrpt->teleconf);
-	ci.confmode = DAHDI_CONF_CONFANN;
 	/* first put the channel on the conference in announce mode */
-	if (join_dahdiconf(mychannel, &ci)) {
-		ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mytele->mode);
+	if (dahdi_conf_add(mychannel, mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE || mytele->mode == STATS_GPS_LEGACY ? myrpt->conf : myrpt->teleconf, DAHDI_CONF_CONFANN)) {
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
@@ -1384,11 +1381,8 @@ treataslocal:
 		}
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt")))) {
 			/* set for all to hear */
-			ci.confno = myrpt->conf;
-			ci.confmode = DAHDI_CONF_CONFANN;
 			/* first put the channel on the conference in announce mode */
-			if (join_dahdiconf(mychannel, &ci)) {
-				ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mytele->mode);
+			if (dahdi_conf_add(mychannel, myrpt->conf, DAHDI_CONF_CONFANN)) {
 				rpt_mutex_lock(&myrpt->lock);
 				goto abort;
 			}
@@ -1414,11 +1408,8 @@ treataslocal:
 
 			ast_safe_sleep(mychannel, 200);
 			/* set for all to hear */
-			ci.confno = myrpt->txconf;
-			ci.confmode = DAHDI_CONF_CONFANN;
 			/* first put the channel on the conference in announce mode */
-			if (join_dahdiconf(mychannel, &ci)) {
-				ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mytele->mode);
+			if (dahdi_conf_add(mychannel, myrpt->txconf, DAHDI_CONF_CONFANN)) {
 				rpt_mutex_lock(&myrpt->lock);
 				goto abort;
 			}

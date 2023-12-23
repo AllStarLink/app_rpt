@@ -1159,7 +1159,6 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
 
 void *rpt_call(void *this)
 {
-	struct dahdi_confinfo ci;	/* conference info */
 	struct rpt *myrpt = (struct rpt *) this;
 	int res;
 	int stopped, congstarted, dialtimer, lastcidx, aborted, sentpatchconnect;
@@ -1184,10 +1183,9 @@ void *rpt_call(void *this)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	rpt_disable_cdr(mychannel);
 	ast_answer(mychannel);
-	ci.confno = myrpt->conf;	/* use the pseudo conference */
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
+	/* use the pseudo conference */
 	/* first put the channel on the conference */
-	if (join_dahdiconf(mychannel, &ci)) {
+	if (dahdi_conf_add(mychannel, myrpt->conf, DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER)) {
 		ast_hangup(mychannel);
 		myrpt->callmode = 0;
 		pthread_exit(NULL);
@@ -1203,10 +1201,9 @@ void *rpt_call(void *this)
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
 	rpt_disable_cdr(genchannel);
 	ast_answer(genchannel);
-	ci.confno = myrpt->conf;
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
+
 	/* first put the channel on the conference */
-	if (join_dahdiconf(genchannel, &ci)) {
+	if (dahdi_conf_add(genchannel, myrpt->conf, DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER)) {
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
 		myrpt->callmode = 0;
@@ -1347,12 +1344,11 @@ void *rpt_call(void *this)
 	usleep(10000);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = 3;
-	/* set appropriate conference for the pseudo */
-	ci.confno = myrpt->conf;
-	ci.confmode = (myrpt->p.duplex == 2) ? DAHDI_CONF_CONFANNMON : (DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
+
 	if (ast_channel_pbx(mychannel)) {
+		/* set appropriate conference for the pseudo */
 		/* first put the channel on the conference in announce mode */
-		if (join_dahdiconf(myrpt->pchannel, &ci)) {
+		if (dahdi_conf_add(myrpt->pchannel, myrpt->conf, myrpt->p.duplex == 2 ? DAHDI_CONF_CONFANNMON : DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER)) {
 			ast_hangup(mychannel);
 			ast_hangup(genchannel);
 			myrpt->callmode = 0;
@@ -1368,10 +1364,9 @@ void *rpt_call(void *this)
 			rpt_mutex_unlock(&myrpt->lock);
 			pthread_exit(NULL);
 		}
-		ci.confno = res;
-		ci.confmode = DAHDI_CONF_MONITOR;
+
 		/* put vox channel monitoring on the channel  */
-		if (join_dahdiconf(myrpt->voxchannel, &ci)) {
+		if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
 			ast_hangup(mychannel);
 			myrpt->callmode = 0;
 			pthread_exit(NULL);
@@ -1433,11 +1428,9 @@ void *rpt_call(void *this)
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	/* set appropriate conference for the pseudo */
-	ci.confno = myrpt->conf;
-	ci.confmode = ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4)) ? DAHDI_CONF_CONFANNMON :
-		(DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
 	/* first put the channel on the conference in announce mode */
-	join_dahdiconf(myrpt->pchannel, &ci);
+	dahdi_conf_add(myrpt->pchannel, myrpt->conf,
+		myrpt->p.duplex == 2 || myrpt->p.duplex == 4 ? DAHDI_CONF_CONFANNMON : DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
 	pthread_exit(NULL);
 }
 
@@ -2889,7 +2882,7 @@ void rpt_links_init(struct rpt_link *l)
 
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
-	struct dahdi_confinfo ci;	/* conference info */
+	int res;
 
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
@@ -2933,9 +2926,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the tx */
-	ci.confno = -1;				/* make a new conf */
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER;
-	if (join_dahdiconf(myrpt->dahditxchannel, &ci)) {
+	if (dahdi_conf_create(myrpt->dahditxchannel, &myrpt->txconf, DAHDI_CONF_CONF | DAHDI_CONF_LISTENER)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
 		rpt_hangup(myrpt, RPT_TXCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
@@ -2943,14 +2934,10 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	/* save tx conference number */
-	myrpt->txconf = ci.confno;
 	/* make a conference for the pseudo */
-	ci.confno = -1;				/* make a new conf */
-	ci.confmode = ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4)) ? DAHDI_CONF_CONFANNMON :
-		(DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER);
 	/* first put the channel on the conference in announce mode */
-	if (join_dahdiconf(myrpt->pchannel, &ci)) {
+	if (dahdi_conf_create(myrpt->pchannel, &myrpt->conf,
+		myrpt->p.duplex == 2 || myrpt->p.duplex == 4 ? DAHDI_CONF_CONFANNMON : DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
 		rpt_hangup(myrpt, RPT_TXCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
@@ -2958,12 +2945,10 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	/* save pseudo channel conference number */
-	myrpt->conf = ci.confno;
 	/* make a conference for the pseudo */
 	if (!strstr(ast_channel_name(myrpt->txchannel), "pseudo") && myrpt->dahditxchannel == myrpt->txchannel) {
-		/* get tx channel's port number */
-		if (ioctl(ast_channel_fd(myrpt->txchannel, 0), DAHDI_CHANNO, &ci.confno) == -1) {
+		int confno = dahdi_conf_fd_confno(myrpt->txchannel); /* get tx channel's port number */
+		if (confno < 0) {
 			ast_log(LOG_WARNING, "Unable to set tx channel's chan number\n");
 			rpt_hangup(myrpt, RPT_RXCHAN);
 			rpt_hangup(myrpt, RPT_TXCHAN);
@@ -2971,15 +2956,13 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 			rpt_hangup(myrpt, RPT_MONCHAN);
 			return -1;
 		}
-		ci.confmode = DAHDI_CONF_MONITORTX;
+		res = dahdi_conf_add(myrpt->monchannel, confno, DAHDI_CONF_MONITORTX);
 	} else {
-		ci.confno = myrpt->txconf;
-		ci.confmode = DAHDI_CONF_CONFANNMON;
+		/* first put the channel on the conference in announce mode */
+		res = dahdi_conf_add(myrpt->monchannel, myrpt->txconf, DAHDI_CONF_CONFANNMON);
 	}
 
-	/* first put the channel on the conference in announce mode */
-	if (join_dahdiconf(myrpt->monchannel, &ci)) {
-		ast_log(LOG_WARNING, "Unable to set conference mode for monitor\n");
+	if (res) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
 		rpt_hangup(myrpt, RPT_TXCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
@@ -3006,9 +2989,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the voice/tone telemetry */
-	ci.confno = -1;				/* make a new conference */
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER;
-	if (join_dahdiconf(myrpt->telechannel, &ci)) {
+	if (dahdi_conf_create(myrpt->telechannel, &myrpt->teleconf, DAHDI_CONF_CONF | DAHDI_CONF_TALKER | DAHDI_CONF_LISTENER)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
 		rpt_hangup(myrpt, RPT_TXCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
@@ -3017,7 +2998,6 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup(myrpt, RPT_TELECHAN);
 		return -1;
 	}
-	myrpt->teleconf = ci.confno;
 
 	/* make a channel to connect between the telemetry conference process
 	   and the main tx audio conference. */
@@ -3032,10 +3012,8 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference linked to the main tx conference */
-	ci.confno = myrpt->txconf;
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
 	/* first put the channel on the conference in proper mode */
-	if (join_dahdiconf(myrpt->btelechannel, &ci)) {
+	if (dahdi_conf_add(myrpt->btelechannel, myrpt->txconf, DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
 		rpt_hangup(myrpt, RPT_TXCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
@@ -3070,10 +3048,8 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the tx */
-	ci.confno = myrpt->txconf;
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_TALKER;
 	/* first put the channel on the conference in proper mode */
-	if (join_dahdiconf(myrpt->txpchannel, &ci)) {
+	if (dahdi_conf_add(myrpt->txpchannel, myrpt->txconf, DAHDI_CONF_CONF | DAHDI_CONF_TALKER)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
 		rpt_hangup(myrpt, RPT_TXCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
@@ -3747,13 +3723,9 @@ static void *rpt(void *this)
 
 		if (myrpt->exttx && myrpt->parrotchannel && (myrpt->p.parrotmode || myrpt->parrotonce) && (!myrpt->parrotstate)) {
 			char myfname[300];
-			struct dahdi_confinfo ci;
-
-			ci.confno = myrpt->conf;
-			ci.confmode = DAHDI_CONF_CONFANNMON;
 
 			/* first put the channel on the conference in announce mode */
-			if (join_dahdiconf(myrpt->parrotchannel, &ci)) {
+			if (dahdi_conf_add(myrpt->parrotchannel, myrpt->conf, DAHDI_CONF_CONFANNMON)) {
 				ast_mutex_unlock(&myrpt->lock);
 				break;
 			}
@@ -4298,18 +4270,14 @@ static void *rpt(void *this)
 			continue;
 		}
 		if ((myrpt->p.parrotmode || myrpt->parrotonce) && (myrpt->parrotstate == 1) && (myrpt->parrottimer <= 0)) {
-			struct dahdi_confinfo ci;
 			union {
 				int i;
 				void *p;
 				char _filler[8];
 			} pu;
 
-			ci.confno = 0;
-			ci.confmode = 0;
-
 			/* first put the channel on the conference in announce mode */
-			if (join_dahdiconf(myrpt->parrotchannel, &ci)) {
+			if (dahdi_conf_add(myrpt->parrotchannel, 0, 0)) {
 				break;
 			}
 			if (myrpt->parrotstream)
@@ -6053,7 +6021,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct ast_channel *who;
 	struct ast_channel *cs[20];
 	struct rpt_link *l;
-	struct dahdi_confinfo ci;	/* conference info */
 	struct dahdi_params par;
 	int ms, elap, n1, myrx;
 	time_t t, last_timeout_warning;
@@ -6746,10 +6713,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ao2_ref(cap, -1);
 
 		/* make a conference for the tx */
-		ci.confno = myrpt->conf;
-		ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
 		/* first put the channel on the conference in proper mode */
-		if (join_dahdiconf(l->pchan, &ci)) {
+		if (dahdi_conf_add(l->pchan, myrpt->conf, DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER)) {
 			pthread_exit(NULL);
 		}
 		rpt_mutex_lock(&myrpt->lock);
@@ -6943,11 +6908,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		myrpt->dahdirxchannel = myrpt->pchannel;
 	if (!myrpt->dahditxchannel)
 		myrpt->dahditxchannel = myrpt->pchannel;
+
 	/* make a conference for the pseudo */
-	ci.confno = -1;				/* make a new conf */
-	ci.confmode = DAHDI_CONF_CONFANNMON;
 	/* first put the channel on the conference in announce/monitor mode */
-	if (join_dahdiconf(myrpt->pchannel, &ci)) {
+	if (dahdi_conf_create(myrpt->pchannel, &myrpt->txconf, DAHDI_CONF_CONFANNMON)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup(myrpt, RPT_RXCHAN);
 		rpt_hangup(myrpt, RPT_TXCHAN);
@@ -6956,7 +6920,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 
 	/* save pseudo channel conference number */
-	myrpt->conf = myrpt->txconf = ci.confno;
+	myrpt->conf = myrpt->txconf;
 
 	/* if serial io port, open it */
 	myrpt->iofd = -1;

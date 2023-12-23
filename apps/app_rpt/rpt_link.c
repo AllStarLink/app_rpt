@@ -529,7 +529,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	int reconnects = 0;
 	int i, n;
 	int voterlink = 0;
-	struct dahdi_confinfo ci;	/* conference info */
 	struct ast_format_cap *cap;
 
 	if (strlen(node) < 1)
@@ -706,9 +705,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	ao2_ref(cap, -1);
 
 	/* make a conference for the tx */
-	ci.confno = myrpt->conf;
-	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;
-	if (join_dahdiconf(l->pchan, &ci)) {
+	if (dahdi_conf_add(l->pchan, myrpt->conf, DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		ast_free(l);
