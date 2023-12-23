@@ -705,7 +705,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	ao2_ref(cap, -1);
 
 	/* make a conference for the tx */
-	if (dahdi_conf_add(l->pchan, myrpt->conf, DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER)) {
+	if (dahdi_conf_add(l->pchan, myrpt->rptconf.conf, DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		ast_free(l);

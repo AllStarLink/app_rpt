@@ -1076,7 +1076,7 @@ void *rpt_tele_thread(void *this)
 	/* only connect the ID audio to the local tx conference so */
 	/* linked systems can't hear it */
 	/* first put the channel on the conference in announce mode */
-	if (dahdi_conf_add(mychannel, mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE || mytele->mode == STATS_GPS_LEGACY ? myrpt->conf : myrpt->teleconf, DAHDI_CONF_CONFANN)) {
+	if (dahdi_conf_add(mychannel, mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE || mytele->mode == STATS_GPS_LEGACY ? myrpt->rptconf.conf : myrpt->teleconf, DAHDI_CONF_CONFANN)) {
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
@@ -1382,7 +1382,7 @@ treataslocal:
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt")))) {
 			/* set for all to hear */
 			/* first put the channel on the conference in announce mode */
-			if (dahdi_conf_add(mychannel, myrpt->conf, DAHDI_CONF_CONFANN)) {
+			if (dahdi_conf_add(mychannel, myrpt->rptconf.conf, DAHDI_CONF_CONFANN)) {
 				rpt_mutex_lock(&myrpt->lock);
 				goto abort;
 			}

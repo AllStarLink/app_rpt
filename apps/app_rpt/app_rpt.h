@@ -560,6 +560,10 @@ struct rpt_cmd_struct {
 
 enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 
+struct rpt_conf {
+	int conf;
+};
+
 /*! \brief Populate rpt structure with data */
 struct rpt {
 	ast_mutex_t lock;
@@ -760,7 +764,8 @@ struct rpt {
 	pthread_t rpt_call_thread,rpt_thread;
 	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
 	int calldigittimer;
-	int tailtimer,totimer,idtimer,txconf,conf,callmode,cidx,scantimer,tmsgtimer,skedtimer,linkactivitytimer,elketimer;
+	struct rpt_conf rptconf;
+	int tailtimer,totimer,idtimer,txconf,callmode,cidx,scantimer,tmsgtimer,skedtimer,linkactivitytimer,elketimer;
 	int mustid,tailid;
 	int rptinacttimer;
 	int tailevent;
