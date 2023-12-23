@@ -2476,10 +2476,6 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
-	if (!(l->chan)) {
-		usleep(150000);
-		l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
-	}
 	ao2_ref(cap, -1);
 	l->linkmode = 0;
 	l->lastrx1 = 0;
@@ -2499,7 +2495,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	/* put back in queue */
 	rpt_link_add(myrpt, l);
 	rpt_mutex_unlock(&myrpt->lock);
-	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in process\n", l->name);
+	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 	return 0;
 }
 

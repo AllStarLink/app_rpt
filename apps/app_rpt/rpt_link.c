@@ -19,6 +19,7 @@
 #include "rpt_manager.h"
 #include "rpt_lock.h"
 #include "rpt_config.h"
+#include "rpt_bridging.h"
 #include "rpt_call.h"
 #include "rpt_vox.h"
 #include "rpt_link.h"
@@ -682,11 +683,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->chan = ast_request(deststr, cap, NULL, NULL, tel1, NULL);
 	} else {
 		l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
-		if (!(l->chan)) {
-			ast_log(LOG_WARNING, "Failed to request channel the first time\n"); /* XXX This retry should just be removed entirely. */
-			usleep(150000);
-			l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
-		}
 	}
 	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
@@ -700,20 +696,15 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 
 	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
 
-	/* allocate a pseudo-channel thru asterisk */
-	l->pchan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	ao2_ref(cap, -1);
-	if (!l->pchan) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
+	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
+		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		ast_free(l);
 		return -1;
 	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(l->pchan));
-	ast_set_read_format(l->pchan, ast_format_slin);
-	ast_set_write_format(l->pchan, ast_format_slin);
-	rpt_disable_cdr(l->pchan);
-	ast_answer(l->pchan);
+
+	ao2_ref(cap, -1);
+
 	/* make a conference for the tx */
 	ci.confno = myrpt->conf;
 	ci.confmode = DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER;

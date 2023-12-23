@@ -961,7 +961,6 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
  * If somebody sets active_telem to NULL when it wasn't the current telem, then
  * that can cause a queued telemetry to think the current telem is done when it isn't,
  * and things will get doubled up.
- * Should never happen since we now use a mutex to serialize telemetry.
  */
 #define telem_done(myrpt) \
 	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele); \
