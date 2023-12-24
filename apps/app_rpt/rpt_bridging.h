@@ -90,6 +90,14 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 #define rpt_tx_conf_add_announcer(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_TXCONF, RPT_CONF_CONFANN)
 
 /*!
+ * \brief Get if channel is muted in conference
+ * \param chan
+ * \param myrpt
+ * \retval 0 if not muted, 1 if muted
+ */
+int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt);
+
+/*!
  * \brief Get the conference number of a DAHDI channel
  * \param chan DAHDI channel
  * \retval -1 on failure, conference number on success
@@ -132,3 +140,50 @@ int rpt_set_tone_zone(struct ast_channel *chan, const char *tz);
  * \retval 0 on success, -1 on failure
  */
 int dahdi_write_wait(struct ast_channel *chan);
+
+/*!
+ * \brief Flush events on a DAHDI channel
+ * \note Only use with DAHDI channels!
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+int dahdi_flush(struct ast_channel *chan);
+
+/*!
+ * \brief Increase buffer space on DAHDI channel, if needed to accomodate samples
+ * \note Only use with DAHDI channels!
+ * \param chan
+ * \param samples
+ * \retval 0 on success, -1 on failure
+ */
+int dahdi_bump_buffers(struct ast_channel *chan, int samples);
+
+/*!
+ * \brief Get value of rxisoffhook
+ * \note Only use with DAHDI channels!
+ * \param chan
+ * \retval -1 on failure
+ * \retval 0 if on hook, 1 if off hook
+ */
+int dahdi_rx_offhook(struct ast_channel *chan);
+
+/*!
+ * \brief Set on/off hook state
+ * \note Only use with DAHDI channels!
+ * \param chan
+ * \param offhook 1 for off hook, 0 for on hook
+ * \retval -1 on failure
+ * \retval 0 if on hook, 1 if off hook
+ */
+int dahdi_set_hook(struct ast_channel *chan, int offhook);
+
+#define dahdi_set_offhook(chan) dahdi_set_hook(chan, 1)
+#define dahdi_set_onhook(chan) dahdi_set_hook(chan, 0)
+
+/*!
+ * \brief Set echo cancellation on DAHDI channel
+ * \param chan
+ * \param ec 0 to disable, non-zero to enable
+ * \retval 0 on success, -1 on failure
+ */
+int dahdi_set_echocancel(struct ast_channel *chan, int ec);

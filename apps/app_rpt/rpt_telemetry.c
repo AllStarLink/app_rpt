@@ -7,8 +7,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <dahdi/user.h>
-
 #include "asterisk/channel.h"
 #include "asterisk/cli.h"
 #include "asterisk/say.h"
@@ -980,7 +978,6 @@ void *rpt_tele_thread(void *this)
 	FILE *fp;
 	float f;
 	struct stat mystat;
-	struct dahdi_params par;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
@@ -1717,22 +1714,14 @@ treataslocal:
 				break;
 			}
 			if (myrpt->iofd < 0) {
-				i = DAHDI_FLUSH_EVENT;
-				if (ioctl(ast_channel_fd(myrpt->dahditxchannel, 0), DAHDI_FLUSH, &i) == -1) {
+				int rxisoffhook;
+				if (dahdi_flush(myrpt->dahditxchannel) || ((rxisoffhook = dahdi_rx_offhook(myrpt->dahdirxchannel)) < 0)) {
 					myrpt->remsetting = 0;
 					ast_mutex_unlock(&myrpt->remlock);
-					ast_log(LOG_ERROR, "Cant flush events");
 					res = -1;
 					break;
 				}
-				if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_GET_PARAMS, &par) == -1) {
-					myrpt->remsetting = 0;
-					ast_mutex_unlock(&myrpt->remlock);
-					ast_log(LOG_ERROR, "Cant get params");
-					res = -1;
-					break;
-				}
-				myrpt->remoterx = (par.rxisoffhook || (myrpt->tele.next != &myrpt->tele));
+				myrpt->remoterx = rxisoffhook || myrpt->tele.next != &myrpt->tele;
 			}
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_TMD700)) {
 			res = set_tmd700(myrpt);

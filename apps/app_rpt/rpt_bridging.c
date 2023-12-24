@@ -411,6 +411,21 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 	return 0;
 }
 
+static int dahdi_conf_get_muted(struct ast_channel *chan)
+{
+	int muted;
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONFMUTE, &muted) == -1) {
+		ast_log(LOG_WARNING, "Couldn't get mute status on %s: %s\n", ast_channel_name(chan), strerror(errno));
+		muted = 0;
+	}
+	return muted;
+}
+
+int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
+{
+	return dahdi_conf_get_muted(chan);
+}
+
 int dahdi_conf_fd_confno(struct ast_channel *chan)
 {
 	struct dahdi_confinfo ci;
@@ -481,4 +496,69 @@ int dahdi_write_wait(struct ast_channel *chan)
 		}
 	}
 	return res;
+}
+
+int dahdi_flush(struct ast_channel *chan)
+{
+	int i = DAHDI_FLUSH_EVENT;
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_FLUSH, &i) == -1) {
+		ast_log(LOG_ERROR, "Can't flush events on %s: %s", ast_channel_name(chan), strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+int dahdi_bump_buffers(struct ast_channel *chan, int samples)
+{
+	struct dahdi_bufferinfo bi;
+
+	/* This is a miserable kludge. For some unknown reason, which I dont have
+	   time to properly research, buffer settings do not get applied to dahdi
+	   pseudo-channels. So, if we have a need to fit more then 1 160 sample
+	   buffer into the psuedo-channel at a time, and there currently is not
+	   room, it increases the number of buffers to accommodate the larger number
+	   of samples (version 0.257 9/3/10) */
+	memset(&bi, 0, sizeof(bi));
+
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GET_BUFINFO, &bi) == -1) {
+		ast_log(LOG_ERROR, "Failed to get buffer info on %s: %s\n", ast_channel_name(chan), strerror(errno));
+		return -1;
+	}
+	if (samples > bi.bufsize && (bi.numbufs < ((samples / bi.bufsize) + 1))) {
+		bi.numbufs = (samples / bi.bufsize) + 1;
+		if (ioctl(ast_channel_fd(chan, 0), DAHDI_SET_BUFINFO, &bi)) {
+			ast_log(LOG_ERROR, "Failed to set buffer info on %s: %s\n", ast_channel_name(chan), strerror(errno));
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int dahdi_rx_offhook(struct ast_channel *chan)
+{
+	struct dahdi_params par;
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GET_PARAMS, &par) == -1) {
+		ast_log(LOG_ERROR, "Can't get params on %s: %s", ast_channel_name(chan), strerror(errno));
+		return -1;
+	}
+	return par.rxisoffhook;
+}
+
+int dahdi_set_hook(struct ast_channel *chan, int offhook)
+{
+	int i = DAHDI_OFFHOOK;
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_HOOK, &i) == -1) {
+		ast_log(LOG_ERROR, "Can't set hook on %s: %s\n", ast_channel_name(chan), strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+int dahdi_set_echocancel(struct ast_channel *chan, int ec)
+{
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_ECHOCANCEL, &ec)) {
+		ast_log(LOG_ERROR, "Can't set echocancel on %s: %s\n", ast_channel_name(chan), strerror(errno));
+		return -1;
+	}
+	return 0;
 }

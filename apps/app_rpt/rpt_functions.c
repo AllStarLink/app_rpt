@@ -1643,7 +1643,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			myrpt->parrotonce = 1;
 		return DC_COMPLETE;
 	case 56:					/* RX CTCSS Enable */
-		rpt_radio_rx_set_ctcss(myrpt, 0);
+		rpt_radio_rx_set_ctcss_decode(myrpt, 0);
 		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
 			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 			ast_sendtext(myrpt->rxchannel, "RXCTCSS 1");
@@ -1652,7 +1652,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "RXPLENA");
 		return DC_COMPLETE;
 	case 57:					/* RX CTCSS Disable */
-		rpt_radio_rx_set_ctcss(myrpt, 1);
+		rpt_radio_rx_set_ctcss_decode(myrpt, 1);
 		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
 			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 			ast_sendtext(myrpt->rxchannel, "RXCTCSS 0");
