@@ -2909,14 +2909,18 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		return -1;
 	}
 
 	if (!myrpt->dahditxchannel) {
 		if (rpt_request_pseudo(myrpt, cap, RPT_DAHDITXCHAN)) {
 			rpt_hangup(myrpt, RPT_RXCHAN);
-			rpt_hangup(myrpt, RPT_TXCHAN);
+			if (myrpt->txchannel) {
+				rpt_hangup(myrpt, RPT_TXCHAN);
+			}
 			rpt_hangup(myrpt, RPT_PCHAN);
 			return -1;
 		}
@@ -2924,7 +2928,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
 		return -1;
@@ -2933,20 +2939,24 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	/* make a conference for the tx */
 	if (rpt_conf_create(myrpt->dahditxchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
 
 	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
-		res = rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
+		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
 	} else {
-		res = rpt_conf_add_speaker(myrpt->pchannel, myrpt);
+		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | DAHDI_CONF_TALKER);
 	}
 	if (res) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
@@ -2957,7 +2967,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		int confno = dahdi_conf_fd_confno(myrpt->txchannel); /* get tx channel's port number */
 		if (confno < 0) {
 			rpt_hangup(myrpt, RPT_RXCHAN);
-			rpt_hangup(myrpt, RPT_TXCHAN);
+			if (myrpt->txchannel) {
+				rpt_hangup(myrpt, RPT_TXCHAN);
+			}
 			rpt_hangup(myrpt, RPT_PCHAN);
 			rpt_hangup(myrpt, RPT_MONCHAN);
 			return -1;
@@ -2965,12 +2977,14 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		res = dahdi_conf_add(myrpt->monchannel, confno, DAHDI_CONF_MONITORTX);
 	} else {
 		/* first put the channel on the conference in announce mode */
-		res = rpt_tx_conf_add_announcer(myrpt->monchannel, myrpt);
+		res = rpt_conf_add(myrpt->monchannel, myrpt, RPT_TXCONF, RPT_CONF_CONFANNMON);
 	}
 
 	if (res) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
@@ -2978,7 +2992,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
@@ -2987,7 +3003,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	/* Telemetry Channel Resources */
 	if (rpt_request_pseudo(myrpt, cap, RPT_TELECHAN)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
@@ -2997,7 +3015,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	/* make a conference for the voice/tone telemetry */
 	if (rpt_conf_create(myrpt->telechannel, myrpt, RPT_TELECONF, RPT_CONF_CONF | RPT_CONF_TALKER | RPT_CONF_LISTENER)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
@@ -3009,7 +3029,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	   and the main tx audio conference. */
 	if (rpt_request_pseudo(myrpt, cap, RPT_BTELECHAN)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
@@ -3020,7 +3042,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	/* make a conference linked to the main tx conference */
 	if (rpt_tx_conf_add_speaker(myrpt->btelechannel, myrpt)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
@@ -3031,7 +3055,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
@@ -3042,7 +3068,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
@@ -3055,7 +3083,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	/* make a conference for the tx */
 	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_TALKER)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
-		rpt_hangup(myrpt, RPT_TXCHAN);
+		if (myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_TXCHAN);
+		}
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
@@ -3079,6 +3109,7 @@ static int disable_rpt(struct rpt *myrpt)
 	for (n = 0; n < nrpts; n++) {
 		if (!strcmp(myrpt->name, rpt_vars[n].name)) {
 			rpt_vars[n].deleted = 1;
+			ast_log(LOG_WARNING, "Disabled broken repeater %s\n", myrpt->name);
 			return 0;
 		}
 	}
@@ -3167,13 +3198,9 @@ static void *rpt(void *this)
 	if (myrpt->p.ioport && ((myrpt->iofd = openserial(myrpt, myrpt->p.ioport)) == -1)) {
 		ast_log(LOG_ERROR, "Unable to open %s\n", myrpt->p.ioport);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(myrpt->pchannel);
-		if (myrpt->txchannel != myrpt->rxchannel) {
-			ast_hangup(myrpt->txchannel);
-			myrpt->txchannel = NULL;
-		}
-		ast_hangup(myrpt->rxchannel);
-		myrpt->rxchannel = NULL;
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_RXCHAN);
+		rpt_hangup(myrpt, RPT_TXCHAN);
 		pthread_exit(NULL);
 	}
 	/* Now, the idea here is to copy from the physical rx channel buffer
@@ -3743,7 +3770,7 @@ static void *rpt(void *this)
 			char myfname[300];
 
 			/* first put the channel on the conference in announce mode */
-			if (rpt_conf_add_announcer(myrpt->parrotchannel, myrpt)) {
+			if (rpt_conf_add_announcer_monitor(myrpt->parrotchannel, myrpt)) {
 				ast_mutex_unlock(&myrpt->lock);
 				break;
 			}
