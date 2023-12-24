@@ -381,7 +381,7 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
 	return NULL;
 }
 
-int rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags)
+int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line)
 {
 	/* Convert RPT conf flags to DAHDI conf flags... for now. */
 	int *confno, dflags;
@@ -390,13 +390,13 @@ int rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_t
 	confno = dahdi_confno(myrpt, type);
 
 	if (dahdi_conf_create(chan, confno, dflags)) {
-		ast_log(LOG_ERROR, "Failed to create conference using chan type %d\n", type);
+		ast_log(LOG_ERROR, "%s:%d: Failed to create conference using chan type %d\n", file, line, type);
 		return -1;
 	}
 	return 0;
 }
 
-int rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags)
+int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line)
 {
 	/* Convert RPT conf flags to DAHDI conf flags... for now. */
 	int *confno, dflags;
@@ -405,7 +405,7 @@ int rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type
 	confno = dahdi_confno(myrpt, type);
 
 	if (dahdi_conf_add(chan, *confno, dflags)) {
-		ast_log(LOG_ERROR, "Failed to add to conference using chan type %d\n", type);
+		ast_log(LOG_ERROR, "%s:%d: Failed to add to conference using chan type %d\n", file, line, type);
 		return -1;
 	}
 	return 0;

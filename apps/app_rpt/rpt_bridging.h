@@ -72,9 +72,12 @@ int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode);
 
 int dahdi_conf_add(struct ast_channel *chan, int confno, int mode);
 
-int rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags);
+int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
 
-int rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags);
+int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
+
+#define rpt_conf_create(chan, myrpt, type, flags) __rpt_conf_create(chan, myrpt, type, flags, __FILE__, __LINE__)
+#define rpt_conf_add(chan, myrpt, type, flags) __rpt_conf_add(chan, myrpt, type, flags, __FILE__, __LINE__)
 
 #define rpt_conf_add_speaker(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER)
 
