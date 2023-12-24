@@ -12,6 +12,26 @@ enum rpt_chan_type {
 	RPT_TXPCHAN,
 };
 
+/* Each of these corresponds to a member of the rpt_conf structure in app_rpt.h */
+enum rpt_conf_type {
+	RPT_CONF,
+	RPT_TXCONF,
+	RPT_TELECONF,
+};
+
+/* Uses same flag name style as DAHDI_CONF flags, since that's what these are based on */
+enum rpt_conf_flags {
+	RPT_CONF_NORMAL = (1 << 0),
+	RPT_CONF_MONITOR = (1 << 1),
+	RPT_CONF_MONITORTX = (1 << 2),
+	RPT_CONF_CONF = (1 << 3),
+	RPT_CONF_CONFANN = (1 << 4),
+	RPT_CONF_CONFMON = (1 << 5),
+	RPT_CONF_CONFANNMON = (1 << 6),
+	RPT_CONF_LISTENER = (1 << 7),
+	RPT_CONF_TALKER = (1 << 8),
+};
+
 enum rpt_chan_flags {
 	RPT_LINK_CHAN = (1 << 0),
 };
@@ -51,6 +71,20 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode);
 
 int dahdi_conf_add(struct ast_channel *chan, int confno, int mode);
+
+int rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags);
+
+int rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags);
+
+#define rpt_conf_add_speaker(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER)
+
+#define rpt_tx_conf_add_speaker(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER)
+
+#define rpt_conf_add_announcer(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_CONF, RPT_CONF_CONFANN)
+
+#define rpt_conf_add_announcer_monitor(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_CONF, RPT_CONF_CONFANNMON)
+
+#define rpt_tx_conf_add_announcer(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_TXCONF, RPT_CONF_CONFANN)
 
 /*!
  * \brief Get the conference number of a DAHDI channel

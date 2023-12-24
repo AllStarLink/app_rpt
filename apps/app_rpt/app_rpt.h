@@ -561,7 +561,10 @@ struct rpt_cmd_struct {
 enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 
 struct rpt_conf {
+	/* DAHDI conference numbers */
 	int conf;
+	int txconf;
+	int teleconf; /*!< \brief telemetry conference id */
 };
 
 /*! \brief Populate rpt structure with data */
@@ -765,11 +768,10 @@ struct rpt {
 	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
 	int calldigittimer;
 	struct rpt_conf rptconf;
-	int tailtimer,totimer,idtimer,txconf,callmode,cidx,scantimer,tmsgtimer,skedtimer,linkactivitytimer,elketimer;
+	int tailtimer,totimer,idtimer,callmode,cidx,scantimer,tmsgtimer,skedtimer,linkactivitytimer,elketimer;
 	int mustid,tailid;
 	int rptinacttimer;
 	int tailevent;
-	int teleconf;								/*!< \brief telemetry conference id */
 	int telemrefcount;
 	int dtmfidx,rem_dtmfidx;
 	int dailytxtime,dailykerchunks,totalkerchunks,dailykeyups,totalkeyups,timeouts;

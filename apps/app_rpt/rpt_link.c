@@ -8,8 +8,6 @@
 
 #include <search.h>
 
-#include <dahdi/user.h>
-
 #include "asterisk/channel.h"
 #include "asterisk/pbx.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
@@ -705,7 +703,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	ao2_ref(cap, -1);
 
 	/* make a conference for the tx */
-	if (dahdi_conf_add(l->pchan, myrpt->rptconf.conf, DAHDI_CONF_CONF | DAHDI_CONF_LISTENER | DAHDI_CONF_TALKER)) {
+	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		ast_free(l);

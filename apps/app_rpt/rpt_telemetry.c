@@ -1072,11 +1072,9 @@ void *rpt_tele_thread(void *this)
 	ast_debug(5, "Beginning telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 
 	/* make a conference for the tx */
-	/* If the telemetry is only intended for a local audience, */
-	/* only connect the ID audio to the local tx conference so */
-	/* linked systems can't hear it */
+	/* If the telemetry is only intended for a local audience, only connect the ID audio to the local tx conference so linked systems can't hear it */
 	/* first put the channel on the conference in announce mode */
-	if (dahdi_conf_add(mychannel, mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE || mytele->mode == STATS_GPS_LEGACY ? myrpt->rptconf.conf : myrpt->teleconf, DAHDI_CONF_CONFANN)) {
+	if (rpt_conf_add(mychannel, myrpt, mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE || mytele->mode == STATS_GPS_LEGACY ? RPT_CONF : RPT_TELECONF, RPT_CONF_CONFANN)) {
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
@@ -1381,8 +1379,7 @@ treataslocal:
 		}
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt")))) {
 			/* set for all to hear */
-			/* first put the channel on the conference in announce mode */
-			if (dahdi_conf_add(mychannel, myrpt->rptconf.conf, DAHDI_CONF_CONFANN)) {
+			if (rpt_conf_add_announcer(mychannel, myrpt)) {
 				rpt_mutex_lock(&myrpt->lock);
 				goto abort;
 			}
@@ -1408,8 +1405,7 @@ treataslocal:
 
 			ast_safe_sleep(mychannel, 200);
 			/* set for all to hear */
-			/* first put the channel on the conference in announce mode */
-			if (dahdi_conf_add(mychannel, myrpt->txconf, DAHDI_CONF_CONFANN)) {
+			if (rpt_tx_conf_add_announcer(mychannel, myrpt)) {
 				rpt_mutex_lock(&myrpt->lock);
 				goto abort;
 			}

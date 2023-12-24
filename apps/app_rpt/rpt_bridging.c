@@ -311,7 +311,7 @@ static int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci,
 	return 0;
 }
 
-/*! \todo eventually make this static */
+/*! \todo Make static */
 int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode)
 {
 	int res;
@@ -343,6 +343,64 @@ int dahdi_conf_add(struct ast_channel *chan, int confno, int mode)
 		ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mode);
 	}
 	return res;
+}
+
+#define RPT_DAHDI_FLAG(r, d) \
+	if (rflags & r) { \
+		dflags |= d; \
+	}
+
+static int dahdi_conf_flags(enum rpt_conf_flags rflags)
+{
+	int dflags = 0;
+
+	RPT_DAHDI_FLAG(RPT_CONF_NORMAL, DAHDI_CONF_NORMAL);
+	RPT_DAHDI_FLAG(RPT_CONF_MONITOR, DAHDI_CONF_MONITOR);
+	RPT_DAHDI_FLAG(RPT_CONF_MONITORTX, DAHDI_CONF_MONITORTX);
+	RPT_DAHDI_FLAG(RPT_CONF_CONF, DAHDI_CONF_CONF);
+	RPT_DAHDI_FLAG(RPT_CONF_CONFANN, DAHDI_CONF_CONFANN);
+	RPT_DAHDI_FLAG(RPT_CONF_CONFMON, DAHDI_CONF_CONFMON);
+	RPT_DAHDI_FLAG(RPT_CONF_CONFANNMON, DAHDI_CONF_CONFANNMON);
+	RPT_DAHDI_FLAG(RPT_CONF_LISTENER, DAHDI_CONF_LISTENER);
+	RPT_DAHDI_FLAG(RPT_CONF_TALKER, DAHDI_CONF_TALKER);
+
+	return dflags;
+}
+
+static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
+{
+	switch (type) {
+	case RPT_CONF:
+		return &myrpt->rptconf.conf;
+	case RPT_TXCONF:
+		return &myrpt->rptconf.txconf;
+	case RPT_TELECONF:
+		return &myrpt->rptconf.teleconf;
+	}
+	ast_assert(0);
+	return NULL;
+}
+
+int rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags)
+{
+	/* Convert RPT conf flags to DAHDI conf flags... for now. */
+	int *confno, dflags;
+
+	dflags = dahdi_conf_flags(flags);
+	confno = dahdi_confno(myrpt, type);
+
+	return dahdi_conf_create(chan, confno, dflags);
+}
+
+int rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags)
+{
+	/* Convert RPT conf flags to DAHDI conf flags... for now. */
+	int *confno, dflags;
+
+	dflags = dahdi_conf_flags(flags);
+	confno = dahdi_confno(myrpt, type);
+
+	return dahdi_conf_add(chan, *confno, dflags);
 }
 
 int dahdi_conf_fd_confno(struct ast_channel *chan)
