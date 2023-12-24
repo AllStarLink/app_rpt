@@ -389,7 +389,11 @@ int rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_t
 	dflags = dahdi_conf_flags(flags);
 	confno = dahdi_confno(myrpt, type);
 
-	return dahdi_conf_create(chan, confno, dflags);
+	if (dahdi_conf_create(chan, confno, dflags)) {
+		ast_log(LOG_ERROR, "Failed to create conference using chan type %d\n", type);
+		return -1;
+	}
+	return 0;
 }
 
 int rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags)
@@ -400,7 +404,11 @@ int rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type
 	dflags = dahdi_conf_flags(flags);
 	confno = dahdi_confno(myrpt, type);
 
-	return dahdi_conf_add(chan, *confno, dflags);
+	if (dahdi_conf_add(chan, *confno, dflags)) {
+		ast_log(LOG_ERROR, "Failed to add to conference using chan type %d\n", type);
+		return -1;
+	}
+	return 0;
 }
 
 int dahdi_conf_fd_confno(struct ast_channel *chan)

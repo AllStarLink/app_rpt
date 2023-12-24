@@ -3069,10 +3069,27 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	return 0;
 }
 
+/*! \brief Permanently disable a repeater */
+static int disable_rpt(struct rpt *myrpt)
+{
+	int n;
+	/* setting rpt_vars[n].deleted = 1 is a slight hack that prevents continual thread restarts.
+	 * This thread cannot successfully be resurrected, so don't even THINK about trying!
+	 * (Maybe add a new var for this?) */
+	for (n = 0; n < nrpts; n++) {
+		if (!strcmp(myrpt->name, rpt_vars[n].name)) {
+			rpt_vars[n].deleted = 1;
+			return 0;
+		}
+	}
+	ast_log(LOG_ERROR, "Couldn't find repeater %s\n", myrpt->name);
+	return -1;
+}
+
 /* single thread with one file (request) to dial */
 static void *rpt(void *this)
 {
-	struct rpt *myrpt = (struct rpt *) this;
+	struct rpt *myrpt = this;
 	char *idtalkover, c, myfirst;
 	int ms = MSWAIT, i, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, dtmfed, lastmyrx, localmsgqueued;
@@ -3138,10 +3155,7 @@ static void *rpt(void *this)
 	if (rpt_setup_channels(myrpt, cap)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		/* setting rpt_vars[i].deleted = 1 is a slight hack that prevents continual thread restarts.
-		 * This thread cannot successfully be resurrected, so don't even THINK about trying!
-		 * (Maybe add a new var for this?) */
-		rpt_vars[i].deleted = 1;
+		disable_rpt(myrpt); /* Disable repeater */
 		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
