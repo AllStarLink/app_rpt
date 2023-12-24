@@ -311,8 +311,7 @@ static int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci,
 	return 0;
 }
 
-/*! \todo Make static */
-int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode)
+static int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode)
 {
 	int res;
 	struct dahdi_confinfo ci;	/* conference info */
@@ -330,7 +329,7 @@ int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode)
 }
 
 /*! \todo eventually make this static */
-int dahdi_conf_add(struct ast_channel *chan, int confno, int mode)
+static int dahdi_conf_add(struct ast_channel *chan, int confno, int mode)
 {
 	int res;
 	struct dahdi_confinfo ci;	/* conference info */
@@ -406,6 +405,63 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 
 	if (dahdi_conf_add(chan, *confno, dflags)) {
 		ast_log(LOG_ERROR, "%s:%d: Failed to add to conference using chan type %d\n", file, line, type);
+		return -1;
+	}
+	return 0;
+}
+
+int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, struct ast_channel *genchannel)
+{
+	int res;
+
+	/* first put the channel on the conference in announce mode */
+	if (myrpt->p.duplex == 2) {
+		res = rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
+	} else {
+		res = rpt_conf_add_speaker(myrpt->pchannel, myrpt);
+	}
+	if (res) {
+		ast_hangup(mychannel);
+		ast_hangup(genchannel);
+		return -1;
+	}
+	/* get its channel number */
+	res = dahdi_conf_fd_confno(mychannel);
+	if (res < 0) {
+		ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
+		ast_hangup(mychannel);
+		return -1;
+	}
+
+	/* put vox channel monitoring on the channel  */
+	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
+		ast_hangup(mychannel);
+		return -1;
+	}
+	return 0;
+}
+
+int rpt_mon_setup(struct rpt *myrpt)
+{
+	int res;
+	/* make a conference for the pseudo */
+	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
+		int confno = dahdi_conf_fd_confno(myrpt->txchannel); /* get tx channel's port number */
+		if (confno < 0) {
+			return -1;
+		}
+		res = dahdi_conf_add(myrpt->monchannel, confno, DAHDI_CONF_MONITORTX);
+	} else {
+		/* first put the channel on the conference in announce mode */
+		res = rpt_conf_add(myrpt->monchannel, myrpt, RPT_TXCONF, RPT_CONF_CONFANNMON);
+	}
+	return res;
+}
+
+int rpt_parrot_add(struct rpt *myrpt)
+{
+	/* first put the channel on the conference in announce mode */
+	if (dahdi_conf_add(myrpt->parrotchannel, 0, DAHDI_CONF_NORMAL)) {
 		return -1;
 	}
 	return 0;

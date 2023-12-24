@@ -8,8 +8,6 @@
 
 #include <termios.h>
 
-#include <dahdi/user.h>
-
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
@@ -418,23 +416,17 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 
 static void rbi_out(struct rpt *myrpt, unsigned char *data)
 {
-	struct dahdi_radio_param r;
 	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_RBI1)) {
 		/* if setparam ioctl fails, its probably not a pciradio card */
 		rbi_out_parallel(myrpt, data);
 		return;
 	}
-	r.radpar = DAHDI_RADPAR_REMCOMMAND;
-	memcpy(&r.data, data, 5);
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
-		ast_log(LOG_WARNING, "Cannot send RBI command for channel %s\n", ast_channel_name(myrpt->dahdirxchannel));
-	}
+	rpt_radio_set_remcommand_data(myrpt->dahdirxchannel, myrpt, data, 5);
 }
 
 int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsigned char *rxbuf, int rxmaxbytes, int asciiflag)
 {
-	int i, j, index, oldmode, olddata;
-	struct dahdi_radio_param prm;
+	int i, j;
 	char c;
 
 #ifdef	FAKE_SERIAL_RESPONSE
@@ -496,86 +488,12 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 		return (i);
 	}
 
-	/* if not a DAHDI channel, cant use pciradio stuff */
+	/* if not a DAHDI channel, can't use pciradio stuff */
 	if (myrpt->rxchannel != myrpt->dahdirxchannel) {
 		return -1;
 	}
 
-	prm.radpar = DAHDI_RADPAR_UIOMODE;
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1)
-		return -1;
-	oldmode = prm.data;
-	prm.radpar = DAHDI_RADPAR_UIODATA;
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1)
-		return -1;
-	olddata = prm.data;
-	prm.radpar = DAHDI_RADPAR_REMMODE;
-	if ((asciiflag & 1) && strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
-		if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL_ASCII)) {
-			return -1;
-		}
-	} else {
-		if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL)) {
-			return -1;
-		}
-	}
-
-	if (asciiflag & 2) {
-		if (dahdi_set_onhook(myrpt->dahdirxchannel)) {
-			return -1;
-		}
-		usleep(100000);
-	}
-	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
-		for (i = 0; i < txbytes - 1; i++) {
-
-			prm.radpar = DAHDI_RADPAR_REMCOMMAND;
-			prm.data = 0;
-			prm.buf[0] = txbuf[i];
-			prm.index = 1;
-			if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
-				return -1;
-			usleep(6666);
-		}
-		prm.radpar = DAHDI_RADPAR_REMMODE;
-		if (asciiflag & 1)
-			prm.data = DAHDI_RADPAR_REM_SERIAL_ASCII;
-		else
-			prm.data = DAHDI_RADPAR_REM_SERIAL;
-		if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
-			return -1;
-		prm.radpar = DAHDI_RADPAR_REMCOMMAND;
-		prm.data = rxmaxbytes;
-		prm.buf[0] = txbuf[i];
-		prm.index = 1;
-	} else {
-		prm.radpar = DAHDI_RADPAR_REMCOMMAND;
-		prm.data = rxmaxbytes;
-		memcpy(prm.buf, txbuf, txbytes);
-		prm.index = txbytes;
-	}
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
-		return -1;
-	if (rxbuf) {
-		*rxbuf = 0;
-		memcpy(rxbuf, prm.buf, prm.index);
-	}
-	index = prm.index;
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE)) {
-		return -1;
-	}
-	if (asciiflag & 2) {
-		if (dahdi_set_offhook(myrpt->dahdirxchannel)) {
-			return -1;
-		}
-	}
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_UIOMODE, oldmode)) {
-		return -1;
-	}
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_UIODATA, olddata)) {
-		return -1;
-	}
-	return (index);
+	return rpt_pciradio_serial_remote_io(myrpt, txbuf, txbytes, rxbuf, rxmaxbytes, asciiflag);
 }
 
 int setrbi(struct rpt *myrpt)

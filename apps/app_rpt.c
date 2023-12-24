@@ -303,8 +303,6 @@
 #include <curl/curl.h>
 #include <termios.h>
 
-#include <dahdi/user.h>
-
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
@@ -1331,7 +1329,7 @@ void *rpt_call(void *this)
 	ast_channel_priority_set(mychannel, 1);
 	ast_channel_undefer_dtmf(mychannel);
 	if (ast_pbx_start(mychannel) < 0) {
-		ast_log(LOG_WARNING, "Unable to start PBX!!\n");
+		ast_log(LOG_ERROR, "Unable to start PBX!\n");
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
 		rpt_mutex_lock(&myrpt->lock);
@@ -1344,37 +1342,16 @@ void *rpt_call(void *this)
 	myrpt->callmode = 3;
 
 	if (ast_channel_pbx(mychannel)) {
-		/* first put the channel on the conference in announce mode */
-		if (myrpt->p.duplex == 2) {
-			res = rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
-		} else {
-			res = rpt_conf_add_speaker(myrpt->pchannel, myrpt);
-		}
-		if (res) {
-			ast_hangup(mychannel);
-			ast_hangup(genchannel);
+		if (rpt_call_bridge_setup(myrpt, mychannel, genchannel)) {
 			myrpt->callmode = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			pthread_exit(NULL);
 		}
-		/* get its channel number */
-		res = dahdi_conf_fd_confno(mychannel);
-		if (res < 0) {
-			ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
-			ast_hangup(mychannel);
-			myrpt->callmode = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			pthread_exit(NULL);
-		}
-
-		/* put vox channel monitoring on the channel  */
-		if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
-			ast_hangup(mychannel);
-			myrpt->callmode = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			pthread_exit(NULL);
-		}
+	} else {
+		/* XXX Can this ever happen (since we exit if ast_pbx_start fails)? */
+		ast_log(LOG_WARNING, "%s has no PBX?\n", ast_channel_name(mychannel));
 	}
+
 	sentpatchconnect = 0;
 	while (myrpt->callmode) {
 		if ((!ast_channel_pbx(mychannel)) && (myrpt->callmode != 4)) {
@@ -2963,25 +2940,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	/* make a conference for the pseudo */
-	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
-		int confno = dahdi_conf_fd_confno(myrpt->txchannel); /* get tx channel's port number */
-		if (confno < 0) {
-			rpt_hangup(myrpt, RPT_RXCHAN);
-			if (myrpt->txchannel) {
-				rpt_hangup(myrpt, RPT_TXCHAN);
-			}
-			rpt_hangup(myrpt, RPT_PCHAN);
-			rpt_hangup(myrpt, RPT_MONCHAN);
-			return -1;
-		}
-		res = dahdi_conf_add(myrpt->monchannel, confno, DAHDI_CONF_MONITORTX);
-	} else {
-		/* first put the channel on the conference in announce mode */
-		res = rpt_conf_add(myrpt->monchannel, myrpt, RPT_TXCONF, RPT_CONF_CONFANNMON);
-	}
-
-	if (res) {
+	if (rpt_mon_setup(myrpt)) {
 		rpt_hangup(myrpt, RPT_RXCHAN);
 		if (myrpt->txchannel) {
 			rpt_hangup(myrpt, RPT_TXCHAN);
@@ -4317,10 +4276,10 @@ static void *rpt(void *this)
 				char _filler[8];
 			} pu;
 
-			/* first put the channel on the conference in announce mode */
-			if (dahdi_conf_add(myrpt->parrotchannel, 0, DAHDI_CONF_NORMAL)) {
+			if (rpt_parrot_add(myrpt)) {
 				break;
 			}
+
 			if (myrpt->parrotstream)
 				ast_closestream(myrpt->parrotstream);
 			myrpt->parrotstream = NULL;
@@ -6046,7 +6005,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct rpt_link *l;
 	int ms, elap, n1, myrx;
 	time_t t, last_timeout_warning;
-	struct dahdi_radio_param z;
 	struct rpt_tele *telem;
 	int numlinks;
 	struct ast_format_cap *cap;
@@ -6954,7 +6912,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 
 	iskenwood_pci4 = 0;
-	memset(&z, 0, sizeof(z));
 	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->dahditxchannel)) {
 		res = rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE);
 		/* if PCIRADIO and kenwood selected */

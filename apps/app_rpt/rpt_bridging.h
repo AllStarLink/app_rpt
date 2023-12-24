@@ -68,10 +68,6 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 
 #define rpt_request_pseudo(data, cap, chantype) __rpt_request_pseudo(data, cap, chantype, 0)
 
-int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode);
-
-int dahdi_conf_add(struct ast_channel *chan, int confno, int mode);
-
 int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
 
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
@@ -88,6 +84,15 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 #define rpt_conf_add_announcer_monitor(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_CONF, RPT_CONF_CONFANNMON)
 
 #define rpt_tx_conf_add_announcer(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_TXCONF, RPT_CONF_CONFANN)
+
+/*! \note Used in app_rpt.c */
+int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, struct ast_channel *genchannel);
+
+/*! \note Used in app_rpt.c */
+int rpt_mon_setup(struct rpt *myrpt);
+
+/*! \note Used in app_rpt.c */
+int rpt_parrot_add(struct rpt *myrpt);
 
 /*!
  * \brief Get if channel is muted in conference
