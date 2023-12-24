@@ -120,3 +120,12 @@ int rpt_stop_tone(struct ast_channel *chan);
  * \retval -1 on failure, 0 on success
  */
 int rpt_set_tone_zone(struct ast_channel *chan, const char *tz);
+
+/*!
+ * \brief Wait for the DAHDI driver to physically write all audio to the hardware
+ * \note Up to a max of 1 second
+ * \note Only use with DAHDI channels!
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+int dahdi_write_wait(struct ast_channel *chan);

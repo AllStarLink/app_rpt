@@ -398,8 +398,6 @@ int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 	int duration;
 	int amplitude;
 	int res;
-	int i;
-	int flags;
 
 	res = 0;
 
@@ -436,18 +434,7 @@ int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 	ast_stopstream(chan);
 
 	/* Wait for the DAHDI driver to physically write the tone blocks to the hardware */
-	for (i = 0; i < 20; i++) {
-		flags = DAHDI_IOMUX_WRITEEMPTY | DAHDI_IOMUX_NOWAIT;
-		res = ioctl(ast_channel_fd(chan, 0), DAHDI_IOMUX, &flags);
-		if (flags & DAHDI_IOMUX_WRITEEMPTY) {
-			break;
-		}
-		if (ast_safe_sleep(chan, 50)) {
-			res = -1;
-			break;
-		}
-	}
-
+	res = dahdi_write_wait(chan);
 	return res;
 }
 

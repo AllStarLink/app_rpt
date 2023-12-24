@@ -6,8 +6,6 @@
 
 #include "asterisk.h"
 
-#include <dahdi/user.h>
-
 #include "asterisk/app.h" /* use ast_safe_system */
 #include "asterisk/channel.h"
 #include "asterisk/file.h"
@@ -25,6 +23,7 @@
 #include "rpt_daq.h"
 #include "rpt_functions.h"
 #include "rpt_rig.h"
+#include "rpt_radio.h"
 
 /*!
  * \brief DTMF Tones - frequency pairs used to generate them along with the required timings
@@ -1644,14 +1643,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			myrpt->parrotonce = 1;
 		return DC_COMPLETE;
 	case 56:					/* RX CTCSS Enable */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "DAHDI")) {
-			struct dahdi_radio_param r;
-
-			memset(&r, 0, sizeof(struct dahdi_radio_param));
-			r.radpar = DAHDI_RADPAR_IGNORECT;
-			r.data = 0;
-			ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
-		}
+		rpt_radio_rx_set_ctcss(myrpt, 0);
 		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
 			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 			ast_sendtext(myrpt->rxchannel, "RXCTCSS 1");
@@ -1660,15 +1652,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "RXPLENA");
 		return DC_COMPLETE;
 	case 57:					/* RX CTCSS Disable */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "DAHDI")) {
-			struct dahdi_radio_param r;
-
-			memset(&r, 0, sizeof(struct dahdi_radio_param));
-			r.radpar = DAHDI_RADPAR_IGNORECT;
-			r.data = 1;
-			ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r);
-		}
-
+		rpt_radio_rx_set_ctcss(myrpt, 1);
 		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
 			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 			ast_sendtext(myrpt->rxchannel, "RXCTCSS 0");

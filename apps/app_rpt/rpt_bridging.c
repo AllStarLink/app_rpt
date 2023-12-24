@@ -452,3 +452,25 @@ int rpt_set_tone_zone(struct ast_channel *chan, const char *tz)
 	}
 	return 0;
 }
+
+int dahdi_write_wait(struct ast_channel *chan)
+{
+	int res, i, flags;
+
+	for (i = 0; i < 20; i++) {
+		flags = DAHDI_IOMUX_WRITEEMPTY | DAHDI_IOMUX_NOWAIT;
+		res = ioctl(ast_channel_fd(chan, 0), DAHDI_IOMUX, &flags);
+		if (res) {
+			ast_log(LOG_WARNING, "DAHDI_IOMUX failed: %s\n", strerror(errno));
+			break;
+		}
+		if (flags & DAHDI_IOMUX_WRITEEMPTY) {
+			break;
+		}
+		if (ast_safe_sleep(chan, 50)) {
+			res = -1;
+			break;
+		}
+	}
+	return res;
+}
