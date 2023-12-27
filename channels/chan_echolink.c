@@ -1233,6 +1233,9 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 
 	/* get the node number in cp */
 	str = ast_strdup(dest);
+	if (!str) {
+		return -1;
+	}
 	cp = strchr(str, '/');
 	if (cp) {
 		*cp++ = 0;
@@ -1800,17 +1803,18 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
 		
-		snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
-		i = strlen(pkt);
+		i = snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
 		snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
 		
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
 			i = strlen(pkt);
 			strncat(pkt + i, "Systems Linked:\r", sizeof(pkt) - i);
 			cp = ast_strdup((*(struct el_node **) nodep)->pvt->linkstr);
-			i = strlen(pkt);
-			strncat(pkt + i, cp, sizeof(pkt) - i);
-			ast_free(cp);
+			if (cp) {
+				i = strlen(pkt);
+				strncat(pkt + i, cp, sizeof(pkt) - i);
+				ast_free(cp);
+			}
 		}
 		sendto(instp->audio_sock, pkt, strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
 		
@@ -2352,6 +2356,9 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	}
 
 	str = ast_strdupa((char *) data);
+	if (!str) {
+		return NULL;
+	}
 	cp = strchr(str, '/');
 	if (cp) {
 		*cp++ = 0;
@@ -3688,6 +3695,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	struct ast_config *rpt_cfg;
 	struct ast_flags zeroflag = { 0 };
 	const char *val;
+	char *str;
 	struct hostent *ahp;
 	struct ast_hostent ah;
 	struct el_instance *instp;
@@ -3820,12 +3828,18 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = ast_variable_retrieve(cfg, ctg, "deny");
 	if (val) {
-		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, EL_MAX_CALL_LIST);
+		str = ast_strdup(val);
+		if (str) {
+			instp->ndenylist = finddelim(str, instp->denylist, EL_MAX_CALL_LIST);
+		}
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "permit");
 	if (val) {
-		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, EL_MAX_CALL_LIST);
+		str = ast_strdup(val);
+		if (str) {	
+			instp->npermitlist = finddelim(str, instp->permitlist, EL_MAX_CALL_LIST);
+		}
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "lat");
@@ -4007,6 +4021,12 @@ static int unload_module(void)
 		}
 		if (instances[n]->el_reader_thread) {
 			pthread_join(instances[n]->el_reader_thread, NULL);
+		}
+		if (instances[n]->denylist[0]) {
+			ast_free(instances[n]->denylist[0]);
+		}
+		if (instances[n]->permitlist[0]) {
+			ast_free(instances[n]->permitlist[0]);
 		}
 	}
 
