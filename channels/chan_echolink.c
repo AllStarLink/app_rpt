@@ -1300,8 +1300,6 @@ static struct el_pvt *el_alloc(const char *data)
 {
 	struct el_pvt *pvt;
 	int n;
-	/* int flags = 0; */
-	char stream[80];
 
 	if (ast_strlen_zero(data)) {
 		return NULL;
@@ -1319,8 +1317,7 @@ static struct el_pvt *el_alloc(const char *data)
 
 	pvt = ast_calloc(1, sizeof(struct el_pvt));
 	if (pvt) {
-		snprintf(stream, sizeof(stream) - 1, "%s-%lu", data, instances[n]->seqno++);
-		strcpy(pvt->stream, stream);
+		snprintf(pvt->stream, sizeof(pvt->stream), "%s-%lu", data, instances[n]->seqno++);
 		pvt->rxqast.qe_forw = &pvt->rxqast;
 		pvt->rxqast.qe_back = &pvt->rxqast;
 
@@ -1549,7 +1546,7 @@ static int mycompar(const void *a, const void *b)
  */
 static int el_text(struct ast_channel *ast, const char *text)
 {
-#define	MAXLINKSTRS 200
+#define	MAXLINKSTRS 250
 
 	struct el_pvt *pvt = ast_channel_tech_pvt(ast);
 	const char *delim = " ";
@@ -1557,16 +1554,6 @@ static int el_text(struct ast_channel *ast, const char *text)
 	char *ptr,*saveptr, *cp, *pkt;
 	char buf[5120], str[200], *strs[MAXLINKSTRS];
 	int i, j, k, x, pkt_len, pkt_actual_len;
-
-	ast_copy_string(buf, text, sizeof(buf));
-	ptr = strchr(buf, '\r');
-	if (ptr) {
-		*ptr = '\0';
-	}
-	ptr = strchr(buf, '\n');
-	if (ptr) {
-		*ptr = '\0';
-	}
 
 	/* see if we are receiving a link text message */
 	if (pvt->instp && (text[0] == 'L')) {
@@ -1589,14 +1576,22 @@ static int el_text(struct ast_channel *ast, const char *text)
 		i = finddelim(cp, strs, MAXLINKSTRS);
 		if (i) {
 			qsort(strs, i, sizeof(char *), mycompar);
-			pkt_len = (i * 10) + 50;
+			/* get size of largest string (node number) */
+			j = 0;
+			for (x =0; x < i; x++) {
+			    j = MAX(strlen(strs[x]), j);
+			}
+			/* allocate a string for all of the links */
+			pkt_len = (i * (j + 3)) + 50;
 			pkt = ast_calloc(1, pkt_len);
 			if (!pkt) {
+				ast_free(cp);
 				return -1;
 			}
 			j = 0;
 			k = 0;
 			for (x = 0; x < i; x++) {
+				/* Process allstar node numbers - skip over those that begin with '3' which are echolink */
 				if ((*(strs[x] + 1) != '3')) {
 					if (strlen(pkt + k) >= 32) {
 						k = strlen(pkt);
@@ -1617,6 +1612,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 			j = 0;
 			k = strlen(pkt);
 			for (x = 0; x < i; x++) {
+				/* Process echolink node numbers - they start with 3 */
 				if (*(strs[x] + 1) == '3') {
 					if (strlen(pkt + k) >= 32) {
 						k = strlen(pkt);
@@ -1634,15 +1630,21 @@ static int el_text(struct ast_channel *ast, const char *text)
 				}
 			}
 			strncat(pkt, "\r", pkt_len - strlen(pkt));
-			if (pvt->linkstr && pkt && (!strcmp(pvt->linkstr, pkt))) {
-				ast_free(pkt);
-			} else {
-				pvt->linkstr = pkt;
-			}
+			pvt->linkstr = pkt;
 		}
 		ast_free(cp);
 		twalk(el_node_list, send_info);
 		return 0;
+	}
+	
+	ast_copy_string(buf, text, sizeof(buf));
+	ptr = strchr(buf, '\r');
+	if (ptr) {
+		*ptr = '\0';
+	}
+	ptr = strchr(buf, '\n');
+	if (ptr) {
+		*ptr = '\0';
 	}
 
 	cmd = strtok_r(buf, delim, &saveptr);
@@ -1787,7 +1789,7 @@ static void lookup_node_callsign(const void *nodep, const VISIT which, void *clo
 static void send_info(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
-	char pkt[2500], *cp;
+	char pkt[5120], *cp;
 	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 	int i;
 
@@ -1797,15 +1799,17 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
-		snprintf(pkt, sizeof(pkt) - 1, "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
+		
+		snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
 		i = strlen(pkt);
-		snprintf(pkt + i, sizeof(pkt) - (i + 1), "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
+		snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
+		
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
 			i = strlen(pkt);
-			strncat(pkt + i, "Systems Linked:\r", sizeof(pkt) - (i + 1));
+			strncat(pkt + i, "Systems Linked:\r", sizeof(pkt) - i);
 			cp = ast_strdup((*(struct el_node **) nodep)->pvt->linkstr);
 			i = strlen(pkt);
-			strncat(pkt + i, cp, sizeof(pkt) - (i + 1));
+			strncat(pkt + i, cp, sizeof(pkt) - i);
 			ast_free(cp);
 		}
 		sendto(instp->audio_sock, pkt, strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
@@ -1891,16 +1895,15 @@ static void send_text_one(struct el_node *node, const char *message)
 {
 	struct sockaddr_in sin;
 	char text[1024];
-	int length;
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(node->instp->audio_port);
 	sin.sin_addr.s_addr = inet_addr(node->ip);
 	
-	length = snprintf(text, sizeof(text), "oNDATA%s>%s\r\n", node->instp->mycall, message);
+	snprintf(text, sizeof(text), "oNDATA%s>%s\r\n", node->instp->mycall, message);
 		
-	sendto(node->instp->audio_sock, text, length, 0, (struct sockaddr *) &sin, sizeof(sin));
+	sendto(node->instp->audio_sock, text, strlen(text), 0, (struct sockaddr *) &sin, sizeof(sin));
 	
 	node->instp->tx_audio_packets++;
 	node->tx_audio_packets++;
@@ -2256,6 +2259,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
 			sin.sin_port = htons(instp->ctrl_port);
 			ast_mutex_lock(&instp->lock);
+			/* send 20 bye packets to insure that they receive this disconnect */
 			for (i = 0; i < 20; i++) {
 				sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 				instp->tx_ctrl_packets++;
@@ -3985,6 +3989,9 @@ static int unload_module(void)
 	run_forever = 0;
 	if (el_node_list) {
 		tdestroy(el_node_list, free_node);
+	}
+	if (el_db_callsign) {
+		el_db_delete_all_nodes();
 	}
 
 	ast_debug(1, "We have %d Echolink instance%s.\n", ninstances, ESS(ninstances));
