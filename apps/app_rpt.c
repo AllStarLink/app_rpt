@@ -3884,10 +3884,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			if (myrpt->lastf2)
 				memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
 		}
-		if (f)
-			f2 = ast_frdup(f);
-		else
-			f2 = NULL;
+		f2 = f ? ast_frdup(f) : NULL;
 		f1 = myrpt->lastf2;
 		myrpt->lastf2 = myrpt->lastf1;
 		myrpt->lastf1 = f2;
@@ -3898,10 +3895,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
 		}
 		if (f1) {
-			if (myrpt->localoverride)
-				ast_write(myrpt->txpchannel, f1);
-			else
-				ast_write(myrpt->pchannel, f1);
+			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
 			ast_frfree(f1);
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
 				ast_writestream(myrpt->monstream, f1);
@@ -4033,7 +4027,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					}
 				}
 				ast_debug(1, "Got PL %s on node %s\n", (char *) f->data.ptr, myrpt->name);
-				// ctcss code autopatch initiate
+				/* ctcss code autopatch initiate */
 				if (strstr((char *) f->data.ptr, "/M/") && !myrpt->macropatch) {
 					char val[16];
 					strcpy(val, "*6");
@@ -4076,7 +4070,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		/* if RX un-key */
 		if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY) {
 			char asleep;
-			/* clear rx channel rssi         */
+			/* clear rx channel rssi */
 			myrpt->rxrssi = 0;
 			asleep = myrpt->p.s[myrpt->p.sysstate_cur].sleepena & myrpt->sleep;
 
@@ -5689,66 +5683,51 @@ static void *rpt(void *this)
 				break;
 			}
 			continue;
-		}
-		if (who == myrpt->pchannel) {	/* if it was a read from pseudo */
+		} else if (who == myrpt->pchannel) {	/* if it was a read from pseudo */
 			if (pchannel_read(myrpt)) {
 				break;
 			}
 			continue;
-		}
-		if (who == myrpt->txchannel) {	/* if it was a read from tx */
+		} else if (who == myrpt->txchannel) {	/* if it was a read from tx */
 			if (txchannel_read(myrpt)) {
 				break;
 			}
 			continue;
-		}
-		if (who == myrpt->dahditxchannel) {	/* if it was a read from pseudo-tx */
+		} else if (who == myrpt->dahditxchannel) {	/* if it was a read from pseudo-tx */
 			if (dahditxchannel_read(myrpt, &myfirst)) {
 				break;
 			}
 			continue;
 		}
+
 		if (process_link_channels(myrpt, who, &totx, &myfirst)) {
 			break;
 		}
+
 		if (who == myrpt->monchannel) {
 			if (monchannel_read(myrpt)) {
 				break;
 			}
-			continue;
-		}
-		if (myrpt->parrotchannel && who == myrpt->parrotchannel) {
+		} else if (myrpt->parrotchannel && who == myrpt->parrotchannel) {
 			if (parrotchannel_read(myrpt)) {
 				break;
 			}
-			continue;
-		}
-		if (myrpt->voxchannel && who == myrpt->voxchannel) {
+		} else if (myrpt->voxchannel && who == myrpt->voxchannel) {
 			if (voxchannel_read(myrpt)) {
 				break;
 			}
-			continue;
-		}
-		if (who == myrpt->txpchannel) {	/* if it was a read from remote tx */
+		} else if (who == myrpt->txpchannel) {	/* if it was a read from remote tx */
 			if (txpchannel_read(myrpt)) {
 				break;
 			}
-			continue;
-		}
-
-		/* Handle telemetry conference output */
-		if (who == myrpt->telechannel) {	/* if is telemetry conference output */
+		} else if (who == myrpt->telechannel) {	/* if is telemetry conference output */
 			if (telechannel_read(myrpt)) {
 				break;
 			}
-			continue;
-		}
-		/* if is btelemetry conference output */
-		if (who == myrpt->btelechannel) {
+		} else if (who == myrpt->btelechannel) { /* if is btelemetry conference output */
 			if (btelechannel_read(myrpt)) {
 				break;
 			}
-			continue;
 		}
 	}
 
