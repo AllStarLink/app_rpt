@@ -1794,7 +1794,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 	struct sockaddr_in sin;
 	char pkt[5120], *cp;
 	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
-	int i;
+	int i, j;
 
 	if ((which == leaf) || (which == postorder)) {
 
@@ -1804,7 +1804,15 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
 		
 		i = snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
-		snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
+		if (i >= sizeof(pkt)) {
+			ast_log(LOG_WARNING, "Exceeded buffer size");
+			return;
+		}
+		j = snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
+		if (j >= sizeof(pkt) - i) {
+			ast_log(LOG_WARNING, "Exceeded buffer size");
+			return;
+		}
 		
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
 			i = strlen(pkt);
