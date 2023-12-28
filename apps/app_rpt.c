@@ -2368,7 +2368,7 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 	return 0;
 }
 
-static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *keyed, int phonemode)
+static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict keyed, int phonemode)
 {
 	int res;
 
@@ -3531,6 +3531,50 @@ static inline int do_link_post(struct rpt *myrpt)
 	return 0;
 }
 
+/*! \brief Do macro timers */
+static inline void update_macrotimer(struct rpt *myrpt, int elap)
+{
+	if (myrpt->macrotimer) {
+		myrpt->macrotimer -= elap;
+	}
+	if (myrpt->macrotimer < 0) {
+		myrpt->macrotimer = 0;
+	}
+}
+
+/*! \brief Do local DTMF timer */
+static inline void update_dtmf_local_timer(struct rpt *myrpt, int elap)
+{
+	if (myrpt->dtmf_local_timer) {
+		if (myrpt->dtmf_local_timer > 1) {
+			myrpt->dtmf_local_timer -= elap;
+		}
+		if (myrpt->dtmf_local_timer < 1) {
+			myrpt->dtmf_local_timer = 1;
+		}
+	}
+}
+
+static inline void update_voxtimer(struct rpt *myrpt, int elap)
+{
+	if (myrpt->voxtotimer) {
+		myrpt->voxtotimer -= elap;
+	}
+	if (myrpt->voxtotimer < 0) {
+		myrpt->voxtotimer = 0;
+	}
+}
+
+static inline void update_rxlingertimer(struct rpt *myrpt, int elap)
+{
+	if (myrpt->rxlingertimer) {
+		myrpt->rxlingertimer -= elap;
+	}
+	if (myrpt->rxlingertimer < 0) {
+		myrpt->rxlingertimer = 0;
+	}
+}
+
 static inline int update_timers(struct rpt *myrpt, const int elap, const int totx)
 {
 	int i;
@@ -3589,10 +3633,7 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		myrpt->tmsgtimer -= elap;
 	if (myrpt->tmsgtimer < 0)
 		myrpt->tmsgtimer = 0;
-	if (myrpt->voxtotimer)
-		myrpt->voxtotimer -= elap;
-	if (myrpt->voxtotimer < 0)
-		myrpt->voxtotimer = 0;
+	update_voxtimer(myrpt, elap);
 	if (myrpt->keyed)
 		myrpt->lastkeytimer = KEYTIMERTIME;
 	else {
@@ -3615,18 +3656,8 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		if (myrpt->parrottimer < 0)
 			myrpt->parrottimer = 0;
 	}
-	/* do macro timers */
-	if (myrpt->macrotimer)
-		myrpt->macrotimer -= elap;
-	if (myrpt->macrotimer < 0)
-		myrpt->macrotimer = 0;
-	/* do local dtmf timer */
-	if (myrpt->dtmf_local_timer) {
-		if (myrpt->dtmf_local_timer > 1)
-			myrpt->dtmf_local_timer -= elap;
-		if (myrpt->dtmf_local_timer < 1)
-			myrpt->dtmf_local_timer = 1;
-	}
+	update_macrotimer(myrpt, elap);
+	update_dtmf_local_timer(myrpt, elap);
 
 	do_dtmf_local(myrpt, 0);
 	/* Execute scheduler appx. every 2 tenths of a second */
@@ -6107,20 +6138,356 @@ static void *rpt_master(void *ignore)
 	pthread_exit(NULL);
 }
 
+static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed, const int phone_mode, const int phone_vox, char *restrict myfirst, int *restrict dtmfed)
+{
+	struct ast_frame *f = ast_read(chan);
+	if (!f) {
+		ast_debug(1, "@@@@ link:Hung Up\n");
+		return -1;
+	}
+	if (f->frametype == AST_FRAME_VOICE) {
+		struct ast_frame *f1, *f2;
+		int ismuted;
+		if (myrpt->newkey == 2) {
+			myrpt->rxlingertimer = ((myrpt->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
+			if (!*keyed) {
+				*keyed = 1;
+				myrpt->rerxtimer = 0;
+			}
+		}
+		if (phone_mode && phone_vox) {
+			int x;
+			int n1 = dovox(&myrpt->vox, f->data.ptr, f->datalen / 2);
+			if (n1 != myrpt->wasvox) {
+				ast_debug(1, "Remote  vox %d\n", n1);
+				myrpt->wasvox = n1;
+				myrpt->voxtostate = 0;
+				if (n1)
+					myrpt->voxtotimer = myrpt->p.voxtimeout_ms;
+				else
+					myrpt->voxtotimer = 0;
+			}
+			if (n1) {
+				if (!*myfirst) {
+					x = 0;
+					AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
+					for (; x < myrpt->p.simplexphonedelay; x++) {
+						f1 = ast_frdup(f);
+						memset(f1->data.ptr, 0, f1->datalen);
+						memset(&f1->frame_list, 0, sizeof(f1->frame_list));
+						AST_LIST_INSERT_TAIL(&myrpt->rxq, f1, frame_list);
+					}
+					*myfirst = 1;
+				}
+				f1 = ast_frdup(f);
+				memset(&f1->frame_list, 0, sizeof(f1->frame_list));
+				AST_LIST_INSERT_TAIL(&myrpt->rxq, f1, frame_list);
+			} else
+				*myfirst = 0;
+			x = 0;
+			AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
+			if (!x) {
+				memset(f->data.ptr, 0, f->datalen);
+			} else {
+				ast_frfree(f);
+				f = AST_LIST_REMOVE_HEAD(&myrpt->rxq, frame_list);
+			}
+		}
+		ismuted = rpt_conf_get_muted(chan, myrpt);
+		/* if not transmitting, zero-out audio */
+		ismuted |= (!myrpt->remotetx);
+		if (*dtmfed && phone_mode)
+			ismuted = 1;
+		*dtmfed = 0;
+		if (ismuted) {
+			memset(f->data.ptr, 0, f->datalen);
+			if (myrpt->lastf1)
+				memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
+			if (myrpt->lastf2)
+				memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		}
+		if (f)
+			f2 = ast_frdup(f);
+		else
+			f2 = NULL;
+		f1 = myrpt->lastf2;
+		myrpt->lastf2 = myrpt->lastf1;
+		myrpt->lastf1 = f2;
+		if (ismuted) {
+			if (myrpt->lastf1)
+				memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
+			if (myrpt->lastf2)
+				memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		}
+		if (f1) {
+			if (!myrpt->remstopgen) {
+				if (phone_mode)
+					ast_write(myrpt->txchannel, f1);
+				else
+					ast_write(myrpt->txchannel, f);
+			}
+
+			ast_frfree(f1);
+		}
+	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
+		if (myrpt->lastf1)
+			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
+		if (myrpt->lastf2)
+			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		*dtmfed = 1;
+	}
+	if (f->frametype == AST_FRAME_DTMF) {
+		if (myrpt->lastf1)
+			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
+		if (myrpt->lastf2)
+			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		*dtmfed = 1;
+		if (handle_remote_phone_dtmf(myrpt, f->subclass.integer, keyed, phone_mode) == -1) {
+			ast_debug(1, "@@@@ rpt:Hung Up\n");
+			ast_frfree(f);
+			return -1;
+		}
+	}
+	if (f->frametype == AST_FRAME_TEXT) {
+		char *tstr = ast_malloc(f->datalen + 1);
+		if (tstr) {
+			memcpy(tstr, f->data.ptr, f->datalen);
+			tstr[f->datalen] = 0;
+			if (handle_remote_data(myrpt, tstr) == -1) {
+				ast_debug(1, "@@@@ rpt:Hung Up\n");
+				ast_frfree(f);
+				return -1;
+			}
+			ast_free(tstr);
+		}
+	}
+	if (f->frametype == AST_FRAME_CONTROL) {
+		if (f->subclass.integer == AST_CONTROL_HANGUP) {
+			ast_debug(1, "@@@@ rpt:Hung Up\n");
+			ast_frfree(f);
+			return -1;
+		}
+		/* if RX key */
+		if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (myrpt->newkey < 2)) {
+			ast_debug(7, "@@@@ rx key\n");
+			*keyed = 1;
+			myrpt->rerxtimer = 0;
+		}
+		/* if RX un-key */
+		if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY) {
+			myrpt->rerxtimer = 0;
+			ast_debug(7, "@@@@ rx un-key\n");
+			*keyed = 0;
+		}
+	}
+	ast_frfree(f);
+	return 0;
+}
+
+static inline int exec_rxchannel_read(struct rpt *myrpt, const int reming, const int notremming, int *restrict remkeyed)
+{
+	struct ast_frame *f = ast_read(myrpt->rxchannel);
+	if (!f) {
+		ast_debug(1, "@@@@ link:Hung Up\n");
+		return -1;
+	}
+	if (f->frametype == AST_FRAME_VOICE) {
+		int myreming = 0;
+
+		if (myrpt->remstopgen > 0) {
+			ast_tonepair_stop(myrpt->txchannel);
+			myrpt->remstopgen = 0;
+		}
+		if (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
+			myreming = reming;
+		}
+		if (myreming || !*remkeyed || (myrpt->remote && myrpt->remotetx) || (myrpt->remmode != REM_MODE_FM && notremming)) {
+			memset(f->data.ptr, 0, f->datalen);
+		}
+		ast_write(myrpt->pchannel, f);
+	} else if (f->frametype == AST_FRAME_CONTROL) {
+		if (f->subclass.integer == AST_CONTROL_HANGUP) {
+			ast_debug(1, "@@@@ rpt:Hung Up\n");
+			ast_frfree(f);
+			return -1;
+		}
+		/* if RX key */
+		if (f->subclass.integer == AST_CONTROL_RADIO_KEY) {
+			ast_debug(7, "@@@@ remote rx key\n");
+			if (!myrpt->remotetx) {
+				*remkeyed = 1;
+			}
+		}
+		/* if RX un-key */
+		if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY) {
+			ast_debug(7, "@@@@ remote rx un-key\n");
+			if (!myrpt->remotetx) {
+				*remkeyed = 0;
+			}
+		}
+	}
+	ast_frfree(f);
+	return 0;
+}
+
+static inline int exec_telechannel_read(struct rpt *myrpt)
+{
+	struct ast_frame *f = ast_read(myrpt->telechannel);
+	if (!f) {
+		ast_debug(1, "node=%s telechannel Hung Up implied\n", myrpt->name);
+		return -1;
+	}
+	if (f->frametype == AST_FRAME_VOICE) {
+		float gain = myrpt->keyed ? myrpt->p.telemduckgain : myrpt->p.telemnomgain;
+		if (gain) {
+			int n, k;
+			short *sp = (short *) f->data.ptr;
+			for (n = 0; n < f->datalen / 2; n++) {
+				k = sp[n] * gain;
+				if (k > 32767)
+					k = 32767;
+				else if (k < -32767)
+					k = -32767;
+				sp[n] = k;
+			}
+		}
+		ast_write(myrpt->btelechannel, f);
+	}
+	if (f->frametype == AST_FRAME_CONTROL) {
+		if (f->subclass.integer == AST_CONTROL_HANGUP) {
+			ast_debug(6, "node=%s telechannel Hung Up\n", myrpt->name);
+			ast_frfree(f);
+			return -1;
+		}
+	}
+	ast_frfree(f);
+	return 0;
+}
+
+static inline int exec_btelechannel_read(struct rpt *myrpt)
+{
+	struct ast_frame *f = ast_read(myrpt->btelechannel);
+	if (!f) {
+		ast_debug(1, "node=%s btelechannel Hung Up implied\n", myrpt->name);
+		return -1;
+	}
+	if (f->frametype == AST_FRAME_CONTROL) {
+		if (f->subclass.integer == AST_CONTROL_HANGUP) {
+			ast_debug(6, "node=%s btelechannel Hung Up\n", myrpt->name);
+			ast_frfree(f);
+			return -1;
+		}
+	}
+	ast_frfree(f);
+	return 0;
+}
+
+static inline int exec_pchannel_read(struct rpt *myrpt, struct ast_channel *chan)
+{
+	struct ast_frame *f = ast_read(myrpt->pchannel);
+	if (!f) {
+		ast_debug(1, "@@@@ link:Hung Up\n");
+		return -1;
+	}
+	if (f->frametype == AST_FRAME_VOICE) {
+		if ((myrpt->newkey < 2) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX2")) {
+			ast_write(chan, f);
+		}
+	}
+	if (f->frametype == AST_FRAME_CONTROL) {
+		if (f->subclass.integer == AST_CONTROL_HANGUP) {
+			ast_debug(1, "@@@@ rpt:Hung Up\n");
+			ast_frfree(f);
+			return -1;
+		}
+	}
+	ast_frfree(f);
+	return 0;
+}
+
+static inline int exec_txchannel_read(struct rpt *myrpt)
+{
+	struct ast_frame *f = ast_read(myrpt->txchannel);
+	if (!f) {
+		ast_debug(1, "@@@@ link:Hung Up\n");
+		return -1;
+	}
+	if (f->frametype == AST_FRAME_CONTROL) {
+		if (f->subclass.integer == AST_CONTROL_HANGUP) {
+			ast_debug(1, "@@@@ rpt:Hung Up\n");
+			ast_frfree(f);
+			return -1;
+		}
+	}
+	ast_frfree(f);
+	return 0;
+}
+
+static int parse_caller(const char *b1, const char *hisip, char *s)
+{
+	char sx[320];
+	char *s1, *s2, *s3, *sy;
+
+	s1 = strsep(&s, ",");
+	if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
+		sy = strchr(s1, '/');
+		*sy = 0;
+		sprintf(sx, "%s:4569/%s", s1, sy + 1);
+		s1 = sx;
+	}
+	s2 = strsep(&s, ",");
+	if (!s2) {
+		ast_log(LOG_WARNING, "Reported node %s not in correct format!!\n", b1);
+		return -1;
+	}
+	if (strcmp(s2, "NONE")) {
+		char nodeip[100];
+		struct ast_sockaddr addr = { {0,} };
+		if (ast_sockaddr_resolve_first_af(&addr, s2, PARSE_PORT_FORBID, AF_UNSPEC)) {
+			ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s2);
+			return -1;
+		}
+		ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
+		s3 = strchr(hisip, ':');
+		if (s3)
+			*s3 = 0;
+		if (strcmp(hisip, nodeip)) {
+			s3 = strchr(s1, '@');
+			if (s3)
+				s1 = s3 + 1;
+			s3 = strchr(s1, '/');
+			if (s3)
+				*s3 = 0;
+			s3 = strchr(s1, ':');
+			if (s3)
+				*s3 = 0;
+			if (ast_sockaddr_resolve_first_af(&addr, s1, PARSE_PORT_FORBID, AF_UNSPEC)) {
+				ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s1);
+				return -1;
+			}
+			ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
+			if (strcmp(hisip, nodeip)) {
+				ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n", b1, nodeip, hisip);
+				return -1;
+			}
+		}
+	}
+	return 0;
+}
+
 static int rpt_exec(struct ast_channel *chan, const char *data)
 {
-	int res = -1, i, x, rem_totx, rem_rx, remkeyed, n, phone_mode = 0;
+	int res = -1, i, rem_totx, rem_rx, remkeyed, n, phone_mode = 0;
 	int iskenwood_pci4, authtold, authreq, setting, notremming, reming;
-	int ismuted, dtmfed, phone_vox = 0, phone_monitor = 0;
+	int dtmfed, phone_vox = 0, phone_monitor = 0;
 	char tmp[256], keyed = 0, keyed1 = 0;
 	char *options, *stringp, *callstr, c, *altp, *memp;
 	char sx[320], *sy, myfirst, *b, *b1;
 	struct rpt *myrpt;
-	struct ast_frame *f, *f1, *f2;
 	struct ast_channel *who;
 	struct ast_channel *cs[20];
 	struct rpt_link *l;
-	int ms, elap, n1, myrx;
+	int ms, elap, myrx;
 	time_t t, last_timeout_warning;
 	struct rpt_tele *telem;
 	int numlinks;
@@ -6178,8 +6545,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	pbx_builtin_setvar_helper(chan, "RPT_STAT_ERR", "");
 
 	if (myrpt == NULL) {
-		char *myadr, *mypfx, sx[320], *sy, *s, *s1, *s2, *s3, dstr[1024];
-		char nodedata[100], xstr[100], hisip[100], nodeip[100], tmp1[100];
+		char *myadr, *mypfx, dstr[1024];
+		char *s, *s1, *s2;
+		char nodedata[100], xstr[100], tmp1[100];
 		struct ast_config *cfg;
 
 		myadr = NULL; 
@@ -6220,12 +6588,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (b1 && !ast_strlen_zero(nodedata) && myadr && cfg) {
 			ast_copy_string(xstr, nodedata, sizeof(xstr));
 			if (!options) {
+				char hisip[100] = "";
 				if (*b1 < '1') {
 					ast_log(LOG_WARNING, "Connect attempt from invalid node number\n");
 					return -1;
 				}
 				/* get his IP from IAX2 module */
-				memset(hisip, 0, sizeof(hisip));
 #ifdef ALLOW_LOCAL_CHANNELS
 				/* set IP address if this is a local connection */
 				if (!strncmp(ast_channel_name(chan), "Local", 5)) {
@@ -6247,49 +6615,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					return -1;
 				}
 				ast_copy_string(tmp1, nodedata, sizeof(tmp1));
-				s = tmp1;
-				s1 = strsep(&s, ",");
-				if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
-					sy = strchr(s1, '/');
-					*sy = 0;
-					sprintf(sx, "%s:4569/%s", s1, sy + 1);
-					s1 = sx;
-				}
-				s2 = strsep(&s, ",");
-				if (!s2) {
-					ast_log(LOG_WARNING, "Reported node %s not in correct format!!\n", b1);
+				if (parse_caller(b1, hisip, tmp1)) {
 					return -1;
-				}
-				if (strcmp(s2, "NONE")) {
-					struct ast_sockaddr addr = { {0,} };
-					if (ast_sockaddr_resolve_first_af(&addr, s2, PARSE_PORT_FORBID, AF_UNSPEC)) {
-						ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s2);
-						return -1;
-					}
-					ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
-					s3 = strchr(hisip, ':');
-					if (s3)
-						*s3 = 0;
-					if (strcmp(hisip, nodeip)) {
-						s3 = strchr(s1, '@');
-						if (s3)
-							s1 = s3 + 1;
-						s3 = strchr(s1, '/');
-						if (s3)
-							*s3 = 0;
-						s3 = strchr(s1, ':');
-						if (s3)
-							*s3 = 0;
-						if (ast_sockaddr_resolve_first_af(&addr, s1, PARSE_PORT_FORBID, AF_UNSPEC)) {
-							ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s1);
-							return -1;
-						}
-						ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
-						if (strcmp(hisip, nodeip)) {
-							ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n", b1, nodeip, hisip);
-							return -1;
-						}
-					}
 				}
 			}
 			s = xstr;
@@ -6575,16 +6902,14 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (!strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
 		i = 1;
 	}
-	if ((!options) && (!i)) {
-		char hisip[100], nodeip[100], *s, *s1, *s2, *s3;
-
+	if (!options && !i) {
+		char hisip[100] = "";
 		/* look at callerid to see what node this comes from */
 		if (!ast_channel_caller(chan)->id.number.str) {	/* if doesn't have caller id */
 			ast_log(LOG_WARNING, "Does not have callerid on %s\n", tmp);
 			return -1;
 		}
 		/* get his IP from IAX2 module */
-		memset(hisip, 0, sizeof(hisip));
 #ifdef ALLOW_LOCAL_CHANNELS
 		/* set IP address if this is a local connection */
 		if (strncmp(ast_channel_name(chan), "Local", 5) == 0) {
@@ -6619,49 +6944,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_log(LOG_WARNING, "Reported node %s cannot be found!!\n", b1);
 			return -1;
 		}
-		s = tmp;
-		s1 = strsep(&s, ",");
-		if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
-			sy = strchr(s1, '/');
-			*sy = 0;
-			sprintf(sx, "%s:4569/%s", s1, sy + 1);
-			s1 = sx;
-		}
-		s2 = strsep(&s, ",");
-		if (!s2) {
-			ast_log(LOG_WARNING, "Reported node %s not in correct format!!\n", b1);
+		if (parse_caller(b1, hisip, tmp)) {
 			return -1;
-		}
-		if (strcmp(s2, "NONE")) {
-			struct ast_sockaddr addr = { {0,} };
-			if (ast_sockaddr_resolve_first_af(&addr, s2, PARSE_PORT_FORBID, AF_UNSPEC)) {
-				ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s2);
-				return -1;
-			}
-			ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
-			s3 = strchr(hisip, ':');
-			if (s3)
-				*s3 = 0;
-			if (strcmp(hisip, nodeip)) {
-				s3 = strchr(s1, '@');
-				if (s3)
-					s1 = s3 + 1;
-				s3 = strchr(s1, '/');
-				if (s3)
-					*s3 = 0;
-				s3 = strchr(s1, ':');
-				if (s3)
-					*s3 = 0;
-				if (ast_sockaddr_resolve_first_af(&addr, s1, PARSE_PORT_FORBID, AF_UNSPEC)) {
-					ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s1);
-					return -1;
-				}
-				ast_copy_string(nodeip, ast_sockaddr_stringify_addr(&addr), sizeof(nodeip));
-				if (strcmp(hisip, nodeip)) {
-					ast_log(LOG_WARNING, "Node %s IP %s does not match link IP %s!!\n", b1, nodeip, hisip);
-					return -1;
-				}
-			}
 		}
 	}
 
@@ -7199,10 +7483,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	looptimestart = ast_tvnow();
 	/* start un-locked */
 	for (;;) {
-		if (ast_check_hangup(chan))
+		if (ast_check_hangup(chan) || ast_check_hangup(myrpt->rxchannel)) {
 			break;
-		if (ast_check_hangup(myrpt->rxchannel))
-			break;
+		}
 		notremming = 0;
 		setting = 0;
 		reming = 0;
@@ -7283,23 +7566,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (elap != 0) {
 			looptimestart = looptimenow;
 		}
-		if (myrpt->macrotimer)
-			myrpt->macrotimer -= elap;
-		if (myrpt->macrotimer < 0)
-			myrpt->macrotimer = 0;
-		if (!ms)
+		update_macrotimer(myrpt, elap);
+		if (!ms) {
+			/* No channels had activity. Loop again. */
 			continue;
-		/* do local dtmf timer */
-		if (myrpt->dtmf_local_timer) {
-			if (myrpt->dtmf_local_timer > 1)
-				myrpt->dtmf_local_timer -= elap;
-			if (myrpt->dtmf_local_timer < 1)
-				myrpt->dtmf_local_timer = 1;
 		}
-		if (myrpt->voxtotimer)
-			myrpt->voxtotimer -= elap;
-		if (myrpt->voxtotimer < 0)
-			myrpt->voxtotimer = 0;
+		update_dtmf_local_timer(myrpt, elap);
+		update_voxtimer(myrpt, elap);
 		myrx = keyed;
 		if (phone_mode && phone_vox) {
 			myrx = (!AST_LIST_EMPTY(&myrpt->rxq));
@@ -7316,11 +7589,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				myrx = myrx || myrpt->wasvox;
 		}
 		keyed = myrx;
-		if (myrpt->rxlingertimer)
-			myrpt->rxlingertimer -= elap;
-		if (myrpt->rxlingertimer < 0)
-			myrpt->rxlingertimer = 0;
-
+		update_rxlingertimer(myrpt, elap);
 		if ((myrpt->newkey == 2) && keyed && (!myrpt->rxlingertimer)) {
 			myrpt->rerxtimer = 0;
 			keyed = 0;
@@ -7328,7 +7597,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->lock);
 		do_dtmf_local(myrpt, 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		//
 		rem_totx = myrpt->dtmf_local_timer && (!phone_mode);
 		rem_totx |= keyed && (!myrpt->tunerequest);
 		rem_rx = (remkeyed && (!setting)) || (myrpt->tele.next != &myrpt->tele);
@@ -7340,16 +7608,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rem_totx = 1;
 		if (myrpt->remsetting)
 			rem_totx = 0;
-		//
 		if (rem_totx) {
 			ast_debug(7, "Set rem_totx=%i.  dtmf_local_timer=%i phone_mode=%i keyed=%i tunerequest=%i\n",
 					rem_totx, myrpt->dtmf_local_timer, phone_mode, keyed, myrpt->tunerequest);
 		}
-		if (keyed && (!keyed1)) {
+		if (keyed && !keyed1) {
 			keyed1 = 1;
-		}
-
-		if (!keyed && (keyed1)) {
+		} else if (!keyed && keyed1) {
 			time_t myt;
 
 			keyed1 = 0;
@@ -7362,24 +7627,23 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		}
 
-		if (rem_rx && (!myrpt->remoterx)) {
+		if (rem_rx && !myrpt->remoterx) {
 			myrpt->remoterx = 1;
 			if (myrpt->newkey < 2)
 				ast_indicate(chan, AST_CONTROL_RADIO_KEY);
 		}
-		if ((!rem_rx) && (myrpt->remoterx)) {
+		if (!rem_rx && myrpt->remoterx) {
 			myrpt->remoterx = 0;
 			ast_indicate(chan, AST_CONTROL_RADIO_UNKEY);
 		}
 		/* if auth requested, and not authed yet */
 		if (authreq && (!myrpt->loginlevel[0])) {
-			if ((!authtold) && ((myrpt->authtelltimer += elap)
-								>= AUTHTELLTIME)) {
+			if ((!authtold) && ((myrpt->authtelltimer += elap) >= AUTHTELLTIME)) {
 				authtold = 1;
 				rpt_telemetry(myrpt, LOGINREQ, NULL);
 			}
 			if ((myrpt->authtimer += elap) >= AUTHLOGOUTTIME) {
-				break;			/* if not logged in, hang up after a time */
+				break; /* if not logged in, hang up after a time */
 			}
 		}
 		if (myrpt->newkey == 1) {
@@ -7429,7 +7693,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 			}
 		}
-		if ((!rem_totx) && myrpt->remotetx) {	/* Remote base radio TX unkey */
+		if (!rem_totx && myrpt->remotetx) {	/* Remote base radio TX unkey */
 			myrpt->remotetx = 0;
 			if (!myrpt->remtxfreqok) {
 				rpt_telemetry(myrpt, UNAUTHTX, NULL);
@@ -7458,7 +7722,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		c = myrpt->macrobuf[0];
-		if (c && (!myrpt->macrotimer)) {
+		if (c && !myrpt->macrotimer) {
 			myrpt->macrotimer = MACROTIME;
 			memmove(myrpt->macrobuf, myrpt->macrobuf + 1, MAXMACRO - 1);
 			if ((c == 'p') || (c == 'P'))
@@ -7470,287 +7734,34 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (handle_remote_dtmf_digit(myrpt, c, &keyed, 0) == -1)
 				break;
 			continue;
-		} else
+		} else {
 			rpt_mutex_unlock(&myrpt->lock);
-		if (who == chan) {		/* if it was a read from incomming */
-			f = ast_read(chan);
-			if (!f) {
-				ast_debug(1, "@@@@ link:Hung Up\n");
-				break;
-			}
-			if (f->frametype == AST_FRAME_VOICE) {
-				if (myrpt->newkey == 2) {
-					myrpt->rxlingertimer = ((myrpt->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
-					if (!keyed) {
-						keyed = 1;
-						myrpt->rerxtimer = 0;
-					}
-				}
-				if (phone_mode && phone_vox) {
-					n1 = dovox(&myrpt->vox, f->data.ptr, f->datalen / 2);
-					if (n1 != myrpt->wasvox) {
-						ast_debug(1, "Remote  vox %d\n", n1);
-						myrpt->wasvox = n1;
-						myrpt->voxtostate = 0;
-						if (n1)
-							myrpt->voxtotimer = myrpt->p.voxtimeout_ms;
-						else
-							myrpt->voxtotimer = 0;
-					}
-					if (n1) {
-						if (!myfirst) {
-							x = 0;
-							AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
-							for (; x < myrpt->p.simplexphonedelay; x++) {
-								f1 = ast_frdup(f);
-								memset(f1->data.ptr, 0, f1->datalen);
-								memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-								AST_LIST_INSERT_TAIL(&myrpt->rxq, f1, frame_list);
-							}
-							myfirst = 1;
-						}
-						f1 = ast_frdup(f);
-						memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-						AST_LIST_INSERT_TAIL(&myrpt->rxq, f1, frame_list);
-					} else
-						myfirst = 0;
-					x = 0;
-					AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
-					if (!x) {
-						memset(f->data.ptr, 0, f->datalen);
-					} else {
-						ast_frfree(f);
-						f = AST_LIST_REMOVE_HEAD(&myrpt->rxq, frame_list);
-					}
-				}
-				ismuted = rpt_conf_get_muted(chan, myrpt);
-				/* if not transmitting, zero-out audio */
-				ismuted |= (!myrpt->remotetx);
-				if (dtmfed && phone_mode)
-					ismuted = 1;
-				dtmfed = 0;
-				if (ismuted) {
-					memset(f->data.ptr, 0, f->datalen);
-					if (myrpt->lastf1)
-						memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-					if (myrpt->lastf2)
-						memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-				}
-				if (f)
-					f2 = ast_frdup(f);
-				else
-					f2 = NULL;
-				f1 = myrpt->lastf2;
-				myrpt->lastf2 = myrpt->lastf1;
-				myrpt->lastf1 = f2;
-				if (ismuted) {
-					if (myrpt->lastf1)
-						memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-					if (myrpt->lastf2)
-						memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-				}
-				if (f1) {
-					if (!myrpt->remstopgen) {
-						if (phone_mode)
-							ast_write(myrpt->txchannel, f1);
-						else
-							ast_write(myrpt->txchannel, f);
-					}
-
-					ast_frfree(f1);
-				}
-			} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
-				if (myrpt->lastf1)
-					memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-				if (myrpt->lastf2)
-					memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-				dtmfed = 1;
-			}
-			if (f->frametype == AST_FRAME_DTMF) {
-				if (myrpt->lastf1)
-					memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-				if (myrpt->lastf2)
-					memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-				dtmfed = 1;
-				if (handle_remote_phone_dtmf(myrpt, f->subclass.integer, &keyed, phone_mode) == -1) {
-					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					ast_frfree(f);
-					break;
-				}
-			}
-			if (f->frametype == AST_FRAME_TEXT) {
-				char *tstr = ast_malloc(f->datalen + 1);
-				if (tstr) {
-					memcpy(tstr, f->data.ptr, f->datalen);
-					tstr[f->datalen] = 0;
-					if (handle_remote_data(myrpt, tstr) == -1) {
-						ast_debug(1, "@@@@ rpt:Hung Up\n");
-						ast_frfree(f);
-						break;
-					}
-					ast_free(tstr);
-				}
-			}
-			if (f->frametype == AST_FRAME_CONTROL) {
-				if (f->subclass.integer == AST_CONTROL_HANGUP) {
-					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					ast_frfree(f);
-					break;
-				}
-				/* if RX key */
-				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (myrpt->newkey < 2)) {
-					ast_debug(7, "@@@@ rx key\n");
-					keyed = 1;
-					myrpt->rerxtimer = 0;
-				}
-				/* if RX un-key */
-				if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY) {
-					myrpt->rerxtimer = 0;
-					ast_debug(7, "@@@@ rx un-key\n");
-					keyed = 0;
-				}
-			}
-			ast_frfree(f);
-			continue;
-		}
-		if (who == myrpt->rxchannel) {	/* if it was a read from radio */
-			f = ast_read(myrpt->rxchannel);
-			if (!f) {
-				ast_debug(1, "@@@@ link:Hung Up\n");
-				break;
-			}
-			if (f->frametype == AST_FRAME_VOICE) {
-				int myreming = 0;
-
-				if (myrpt->remstopgen > 0) {
-					ast_tonepair_stop(myrpt->txchannel);
-					myrpt->remstopgen = 0;
-				}
-				if (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))
-					myreming = reming;
-
-				if (myreming || (!remkeyed) || ((myrpt->remote) && (myrpt->remotetx))
-					|| ((myrpt->remmode != REM_MODE_FM) && notremming))
-					memset(f->data.ptr, 0, f->datalen);
-				ast_write(myrpt->pchannel, f);
-			} else if (f->frametype == AST_FRAME_CONTROL) {
-				if (f->subclass.integer == AST_CONTROL_HANGUP) {
-					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					ast_frfree(f);
-					break;
-				}
-				/* if RX key */
-				if (f->subclass.integer == AST_CONTROL_RADIO_KEY) {
-					ast_debug(7, "@@@@ remote rx key\n");
-					if (!myrpt->remotetx) {
-						remkeyed = 1;
-					}
-				}
-				/* if RX un-key */
-				if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY) {
-					ast_debug(7, "@@@@ remote rx un-key\n");
-					if (!myrpt->remotetx) {
-						remkeyed = 0;
-					}
-				}
-			}
-			ast_frfree(f);
-			continue;
 		}
 
-		/* Handle telemetry conference output */
-		if (who == myrpt->telechannel) {	/* if is telemetry conference output */
-			f = ast_read(myrpt->telechannel);
-			if (!f) {
-				ast_debug(1, "node=%s telechannel Hung Up implied\n", myrpt->name);
+		if (who == chan) {		/* if it was a read from incoming */
+			if (exec_chan_read(myrpt, chan, &keyed, phone_mode, phone_vox, &myfirst, &dtmfed)) {
 				break;
 			}
-			if (f->frametype == AST_FRAME_VOICE) {
-				float gain;
-
-				if (myrpt->keyed)
-					gain = myrpt->p.telemduckgain;
-				else
-					gain = myrpt->p.telemnomgain;
-
-				if (gain) {
-					int n, k;
-					short *sp = (short *) f->data.ptr;
-					for (n = 0; n < f->datalen / 2; n++) {
-						k = sp[n] * gain;
-						if (k > 32767)
-							k = 32767;
-						else if (k < -32767)
-							k = -32767;
-						sp[n] = k;
-					}
-				}
-				ast_write(myrpt->btelechannel, f);
-			}
-			if (f->frametype == AST_FRAME_CONTROL) {
-				if (f->subclass.integer == AST_CONTROL_HANGUP) {
-					ast_debug(6, "node=%s telechannel Hung Up\n", myrpt->name);
-					ast_frfree(f);
-					break;
-				}
-			}
-			ast_frfree(f);
-			continue;
-		}
-		/* if is btelemetry conference output */
-		if (who == myrpt->btelechannel) {
-			f = ast_read(myrpt->btelechannel);
-			if (!f) {
-				ast_debug(1, "node=%s btelechannel Hung Up implied\n", myrpt->name);
+		} else if (who == myrpt->rxchannel) {	/* if it was a read from radio */
+			if (exec_rxchannel_read(myrpt, reming, notremming, &remkeyed)) {
 				break;
 			}
-			if (f->frametype == AST_FRAME_CONTROL) {
-				if (f->subclass.integer == AST_CONTROL_HANGUP) {
-					ast_debug(6, "node=%s btelechannel Hung Up\n", myrpt->name);
-					ast_frfree(f);
-					break;
-				}
-			}
-			ast_frfree(f);
-			continue;
-		}
-
-		if (who == myrpt->pchannel) {	/* if is remote mix output */
-			f = ast_read(myrpt->pchannel);
-			if (!f) {
-				ast_debug(1, "@@@@ link:Hung Up\n");
+		} else if (who == myrpt->telechannel) {	/* if is telemetry conference output */
+			if (exec_telechannel_read(myrpt)) {
 				break;
 			}
-			if (f->frametype == AST_FRAME_VOICE) {
-				if ((myrpt->newkey < 2) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX2")) {
-					ast_write(chan, f);
-				}
-			}
-			if (f->frametype == AST_FRAME_CONTROL) {
-				if (f->subclass.integer == AST_CONTROL_HANGUP) {
-					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					ast_frfree(f);
-					break;
-				}
-			}
-			ast_frfree(f);
-			continue;
-		}
-		if ((myrpt->rxchannel != myrpt->txchannel) && (who == myrpt->txchannel)) {	/* do this cuz you have to */
-			f = ast_read(myrpt->txchannel);
-			if (!f) {
-				ast_debug(1, "@@@@ link:Hung Up\n");
+		} else if (who == myrpt->btelechannel) { /* if is btelemetry conference output */
+			if (exec_btelechannel_read(myrpt)) {
 				break;
 			}
-			if (f->frametype == AST_FRAME_CONTROL) {
-				if (f->subclass.integer == AST_CONTROL_HANGUP) {
-					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					ast_frfree(f);
-					break;
-				}
+		} else if (who == myrpt->pchannel) {	/* if is remote mix output */
+			if (exec_pchannel_read(myrpt, chan)) {
+				break;
 			}
-			ast_frfree(f);
-			continue;
+		} else if (myrpt->rxchannel != myrpt->txchannel && who == myrpt->txchannel) {	/* do this cuz you have to */
+			if (exec_txchannel_read(myrpt)) {
+				break;
+			}
 		}
 	}
 	if (myrpt->p.archivedir || myrpt->p.discpgm) {
