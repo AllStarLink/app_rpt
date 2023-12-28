@@ -1,3 +1,28 @@
+/*
+ * Asterisk -- An open source telephony toolkit.
+ *
+ * Copyright (C) 2023, Naveen Albert
+ *
+ * Naveen Albert <asterisk@phreaknet.org>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
+ * This program is free software, distributed under the terms of
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief Repeater bridging and conferencing functions
+ *
+ * \author Naveen Albert <asterisk@phreaknet.org>
+ *
+ */
 
 #include "asterisk.h"
 
@@ -328,7 +353,6 @@ static int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode)
 	return res;
 }
 
-/*! \todo eventually make this static */
 static int dahdi_conf_add(struct ast_channel *chan, int confno, int mode)
 {
 	int res;
@@ -370,28 +394,50 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
 {
 	switch (type) {
 	case RPT_CONF:
-		return &myrpt->rptconf.conf;
+		return &myrpt->rptconf.dahdiconf.conf;
 	case RPT_TXCONF:
-		return &myrpt->rptconf.txconf;
+		return &myrpt->rptconf.dahdiconf.txconf;
 	case RPT_TELECONF:
-		return &myrpt->rptconf.teleconf;
+		return &myrpt->rptconf.dahdiconf.teleconf;
 	}
 	ast_assert(0);
 	return NULL;
 }
 
+/*!
+ * \brief Get the conference number of a DAHDI channel
+ * \param chan DAHDI channel
+ * \retval -1 on failure, conference number on success
+ */
+static int dahdi_conf_fd_confno(struct ast_channel *chan)
+{
+	struct dahdi_confinfo ci;
+
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.confno) == -1) {
+		ast_log(LOG_WARNING, "DAHDI_CHANNO failed: %s\n", strerror(errno));
+		return -1;
+	}
+
+	return ci.confno;
+}
+
 int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line)
 {
-	/* Convert RPT conf flags to DAHDI conf flags... for now. */
 	int *confno, dflags;
-
+	/* Convert RPT conf flags to DAHDI conf flags... for now. */
 	dflags = dahdi_conf_flags(flags);
 	confno = dahdi_confno(myrpt, type);
-
 	if (dahdi_conf_create(chan, confno, dflags)) {
 		ast_log(LOG_ERROR, "%s:%d: Failed to create conference using chan type %d\n", file, line, type);
 		return -1;
 	}
+	return 0;
+}
+
+int rpt_equate_tx_conf(struct rpt *myrpt)
+{
+	/* save pseudo channel conference number */
+	myrpt->rptconf.dahdiconf.conf = myrpt->rptconf.dahdiconf.txconf;
 	return 0;
 }
 
@@ -425,6 +471,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 		ast_hangup(genchannel);
 		return -1;
 	}
+
 	/* get its channel number */
 	res = dahdi_conf_fd_confno(mychannel);
 	if (res < 0) {
@@ -444,7 +491,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 int rpt_mon_setup(struct rpt *myrpt)
 {
 	int res;
-	/* make a conference for the pseudo */
+
 	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
 		int confno = dahdi_conf_fd_confno(myrpt->txchannel); /* get tx channel's port number */
 		if (confno < 0) {
@@ -482,25 +529,13 @@ int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
 	return dahdi_conf_get_muted(chan);
 }
 
-int dahdi_conf_fd_confno(struct ast_channel *chan)
-{
-	struct dahdi_confinfo ci;
-
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.confno) == -1) {
-		ast_log(LOG_WARNING, "DAHDI_CHANNO failed: %s\n", strerror(errno));
-		return -1;
-	}
-
-	return ci.confno;
-}
-
 /*!
  * \param chan
  * \param tone 0 = congestion, 1 = dialtone
- * \note Only used in 3 places in app_rpt.c
  */
-static int dahdi_play_tone(struct ast_channel *chan, int tone)
+static int rpt_play_tone(struct ast_channel *chan, int tone)
 {
+	tone = tone ? DAHDI_TONE_DIALTONE : DAHDI_TONE_CONGESTION;
 	if (tone_zone_play_tone(ast_channel_fd(chan, 0), tone)) {
 		ast_log(LOG_WARNING, "Cannot start tone on %s\n", ast_channel_name(chan));
 		return -1;
@@ -510,17 +545,17 @@ static int dahdi_play_tone(struct ast_channel *chan, int tone)
 
 int rpt_play_dialtone(struct ast_channel *chan)
 {
-	return dahdi_play_tone(chan, DAHDI_TONE_DIALTONE);
+	return rpt_play_tone(chan, 1);
 }
 
 int rpt_play_congestion(struct ast_channel *chan)
 {
-	return dahdi_play_tone(chan, DAHDI_TONE_DIALTONE);
+	return rpt_play_tone(chan, 0);
 }
 
 int rpt_stop_tone(struct ast_channel *chan)
 {
-	return dahdi_play_tone(chan, -1);
+	return rpt_play_tone(chan, -1);
 }
 
 int rpt_set_tone_zone(struct ast_channel *chan, const char *tz)

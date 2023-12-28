@@ -72,6 +72,8 @@ int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf
 
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
 
+int rpt_equate_tx_conf(struct rpt *myrpt);
+
 #define rpt_conf_create(chan, myrpt, type, flags) __rpt_conf_create(chan, myrpt, type, flags, __FILE__, __LINE__)
 #define rpt_conf_add(chan, myrpt, type, flags) __rpt_conf_add(chan, myrpt, type, flags, __FILE__, __LINE__)
 
@@ -101,13 +103,6 @@ int rpt_parrot_add(struct rpt *myrpt);
  * \retval 0 if not muted, 1 if muted
  */
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt);
-
-/*!
- * \brief Get the conference number of a DAHDI channel
- * \param chan DAHDI channel
- * \retval -1 on failure, conference number on success
- */
-int dahdi_conf_fd_confno(struct ast_channel *chan);
 
 /*!
  * \brief Play dialtone on a channel

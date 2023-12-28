@@ -7033,7 +7033,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		pthread_exit(NULL);
 	}
 
-	myrpt->rptconf.conf = myrpt->rptconf.txconf;
+	rpt_equate_tx_conf(myrpt);
 
 	/* if serial io port, open it */
 	myrpt->iofd = -1;

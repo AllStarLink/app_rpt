@@ -562,9 +562,11 @@ enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 
 struct rpt_conf {
 	/* DAHDI conference numbers */
-	int conf;
-	int txconf;
-	int teleconf; /*!< \brief telemetry conference id */
+	struct {
+		int conf;
+		int txconf;
+		int teleconf; /*!< \brief telemetry conference id */
+	} dahdiconf;
 };
 
 /*! \brief Populate rpt structure with data */
