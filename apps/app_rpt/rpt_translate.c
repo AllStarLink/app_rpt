@@ -52,7 +52,7 @@ char func_xlat(struct rpt *myrpt, char c, struct rpt_xlat *xlat)
 	return (0);
 }
 
-char aprstt_xlat(char *instr, char *outstr)
+char aprstt_xlat(const char *instr, char *outstr)
 {
 	int i, j;
 	char b, c, lastnum, overlay, cksum;

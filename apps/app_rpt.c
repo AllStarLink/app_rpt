@@ -1642,18 +1642,23 @@ static int funcchar_common(struct rpt *myrpt, char c)
 	return 0;
 }
 
+static inline void init_text_frame(struct ast_frame *wf)
+{
+	wf->frametype = AST_FRAME_TEXT;
+	wf->subclass.format = ast_format_slin;
+	wf->offset = 0;
+	wf->mallocd = 0;
+	wf->samples = 0;
+}
+
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
 {
 	char tmp[512], tmp1[512], cmd[300] = "", dest[300], src[30], c;
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf);
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
 	wf.src = "handle_link_data";
 	/* put string in our buffer */
 	ast_copy_string(tmp, str, sizeof(tmp) - 1);
@@ -1918,6 +1923,17 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	return;
 }
 
+static inline void cmdnode_helper(struct rpt *myrpt, char *cmd)
+{
+	cmd[0] = 0;
+	if (!strcmp(myrpt->cmdnode, "aprstt")) {
+		do_aprstt(myrpt);
+	}
+	myrpt->cmdnode[0] = 0;
+	myrpt->dtmfidx = -1;
+	myrpt->dtmfbuf[0] = 0;
+}
+
 static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, char c)
 {
 
@@ -1953,13 +1969,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 			}
 			myrpt->stopgen = 1;
 			if (myrpt->cmdnode[0]) {
-				cmd[0] = 0;
-				if (!strcmp(myrpt->cmdnode, "aprstt")) {
-					do_aprstt(myrpt);
-				}
-				myrpt->cmdnode[0] = 0;
-				myrpt->dtmfidx = -1;
-				myrpt->dtmfbuf[0] = 0;
+				cmdnode_helper(myrpt, cmd);
 				rpt_mutex_unlock(&myrpt->lock);
 				rpt_telemetry(myrpt, COMPLETE, NULL);
 				return;
@@ -2322,13 +2332,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->stopgen = 1;
 		if (myrpt->cmdnode[0]) {
-			cmd[0] = 0;
-			if (!strcmp(myrpt->cmdnode, "aprstt")) {
-				do_aprstt(myrpt);
-			}
-			myrpt->cmdnode[0] = 0;
-			myrpt->dtmfidx = -1;
-			myrpt->dtmfbuf[0] = 0;
+			cmdnode_helper(myrpt, cmd);
 			rpt_mutex_unlock(&myrpt->lock);
 			if (!cmd[0])
 				rpt_telemetry(myrpt, COMPLETE, NULL);
@@ -2998,6 +3002,25 @@ static inline void log_unkeyed(struct rpt *myrpt)
 	}
 }
 
+static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
+{
+	ast_debug(7, "@@@@ rx un-key\n");
+	l->lastrealrx = 0;
+	l->rerxtimer = 0;
+	if (l->lastrx1) {
+		if (myrpt->p.archivedir) {
+			donodelog_fmt(myrpt, "RXUNKEY,%s", l->name);
+		}
+		l->lastrx1 = 0;
+		/* XXX Note in first usage, rpt_update_links is first,
+		 * but in second, time was first. Don't think it matters though. */
+		rpt_update_links(myrpt);
+		time(&l->lastunkeytime);
+		if (myrpt->p.duplex)
+			rpt_telemetry(myrpt, LINKUNKEY, l);
+	}
+}
+
 static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;
@@ -3088,19 +3111,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				l->linkmode = 1;
 		}
 		if ((l->newkey == 2) && l->lastrealrx && (!l->rxlingertimer)) {
-			ast_debug(7, "@@@@ rx un-key\n");
-			l->lastrealrx = 0;
-			l->rerxtimer = 0;
-			if (l->lastrx1) {
-				if (myrpt->p.archivedir) {
-					donodelog_fmt(myrpt, "RXUNKEY,%s", l->name);
-				}
-				l->lastrx1 = 0;
-				rpt_update_links(myrpt);
-				time(&l->lastunkeytime);
-				if (myrpt->p.duplex)
-					rpt_telemetry(myrpt, LINKUNKEY, l);
-			}
+			rxunkey_helper(myrpt, l);
 		}
 
 		if (l->voxtotimer)
@@ -3502,10 +3513,60 @@ static inline void process_command(struct rpt *myrpt)
 	myrpt->cmdAction.state = CMD_STATE_IDLE;
 }
 
+static inline void outstream_write(struct rpt *myrpt, struct ast_frame *f)
+{
+	int res = write(myrpt->outstreampipe[1], f->data.ptr, f->datalen);
+	/* if the write fails report the error one time
+	 * if it is not resolved in 60 seconds kill
+	 * the outstream process
+	 */
+	if (res != f->datalen) {
+		time_t now;
+		if (!myrpt->outstreamlasterror) {
+			ast_log(LOG_WARNING, "Outstream write failed for node %s: %s\n", myrpt->name, strerror(errno));
+			time(&myrpt->outstreamlasterror);
+		}
+		time(&now);
+		if (myrpt->outstreampid && (now - myrpt->outstreamlasterror) > 59) {
+			res = kill(myrpt->outstreampid, SIGTERM);
+			if (res) {
+				ast_log(LOG_ERROR, "Cannot kill outstream process for node %s: %s\n", myrpt->name, strerror(errno));
+			}
+			myrpt->outstreampid = 0;
+		}
+	} else {
+		if (myrpt->outstreamlasterror) {
+			ast_log(LOG_NOTICE, "Outstream resumed on node %s\n", myrpt->name);
+			myrpt->outstreamlasterror = 0;
+		}
+	}
+}
+
+static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int ismuted)
+{
+	struct ast_frame *f2;
+	if (ismuted) {
+		memset(f->data.ptr, 0, f->datalen);
+		if (myrpt->lastf1)
+			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
+		if (myrpt->lastf2)
+			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+	}
+	f2 = f ? ast_frdup(f) : NULL;
+	myrpt->lastf2 = myrpt->lastf1;
+	myrpt->lastf1 = f2;
+	if (ismuted) {
+		if (myrpt->lastf1)
+			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
+		if (myrpt->lastf2)
+			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+	}
+}
+
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
 	int ismuted;
-	struct ast_frame *f, *f1, *f2;
+	struct ast_frame *f, *f1;
 	int i, dtmfed = 0;
 
 	rpt_mutex_lock(&myrpt->blocklock);
@@ -3707,23 +3768,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if (myrpt->p.votertype == 1 && myrpt->voted_link != NULL) {
 			ismuted = 1;
 		}
-		if (ismuted) {
-			memset(f->data.ptr, 0, f->datalen);
-			if (myrpt->lastf1)
-				memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-			if (myrpt->lastf2)
-				memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-		}
-		f2 = f ? ast_frdup(f) : NULL;
+		mute_frame_helper(myrpt, f, ismuted);
 		f1 = myrpt->lastf2;
-		myrpt->lastf2 = myrpt->lastf1;
-		myrpt->lastf1 = f2;
-		if (ismuted) {
-			if (myrpt->lastf1)
-				memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-			if (myrpt->lastf2)
-				memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-		}
 		if (f1) {
 			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
 			ast_frfree(f1);
@@ -3732,31 +3778,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			}
 			if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd && 
 				(myrpt->outstreampipe[1] != -1)) {
-				int res = write(myrpt->outstreampipe[1], f1->data.ptr, f1->datalen);
-				/* if the write fails report the error one time
-				 * if it is not resolved in 60 seconds kill
-				 * the outstream process
-				 */
-				if (res != f1->datalen) {
-					time_t now;
-					if (!myrpt->outstreamlasterror) {
-						ast_log(LOG_WARNING, "Outstream write failed for node %s: %s\n", myrpt->name, strerror(errno));
-						time(&myrpt->outstreamlasterror);
-					}
-					time(&now);
-					if (myrpt->outstreampid && (now - myrpt->outstreamlasterror) > 59) {
-						res = kill(myrpt->outstreampid, SIGTERM);
-						if (res) {
-							ast_log(LOG_ERROR, "Cannot kill outstream process for node %s: %s\n", myrpt->name, strerror(errno));
-						}
-						myrpt->outstreampid = 0;
-					}
-				} else {
-					if (myrpt->outstreamlasterror) {
-						ast_log(LOG_NOTICE, "Outstream resumed on node %s\n", myrpt->name);
-						myrpt->outstreamlasterror = 0;
-					}
-				}
+				outstream_write(myrpt, f1);
 			}
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
@@ -3978,12 +4000,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->paging.tv_usec = 0;
 			} else {
 				sprintf(str, "V %s %s", myrpt->name, (char *) f->data.ptr);
-				wf.frametype = AST_FRAME_TEXT;
-				wf.subclass.format = ast_format_slin;
-				wf.offset = 0;
-				wf.mallocd = 0;
+				init_text_frame(&wf);
 				wf.datalen = strlen(str) + 1;
-				wf.samples = 0;
 				wf.src = "voter_text_send";
 
 				l = myrpt->links.next;
@@ -4029,13 +4047,8 @@ static inline int pchannel_read(struct rpt *myrpt)
 	return 0;
 }
 
-static inline int wait_for_hangup_helper(struct ast_channel *chan, const char *chantype)
+static inline int hangup_frame_helper(struct ast_channel *chan, const char *chantype, struct ast_frame *f)
 {
-	struct ast_frame *f = ast_read(chan);
-	if (!f) {
-		ast_debug(1, "No frame returned by ast_read, %s (%s) hung up\n", ast_channel_name(chan), chantype);
-		return -1;
-	}
 	if (f->frametype == AST_FRAME_CONTROL) {
 		if (f->subclass.integer == AST_CONTROL_HANGUP) {
 			ast_debug(1, "%s (%s) received hangup frame\n", ast_channel_name(chan), chantype);
@@ -4045,6 +4058,16 @@ static inline int wait_for_hangup_helper(struct ast_channel *chan, const char *c
 	}
 	ast_frfree(f);
 	return 0;
+}
+
+static inline int wait_for_hangup_helper(struct ast_channel *chan, const char *chantype)
+{
+	struct ast_frame *f = ast_read(chan);
+	if (!f) {
+		ast_debug(1, "No frame returned by ast_read, %s (%s) hung up\n", ast_channel_name(chan), chantype);
+		return -1;
+	}
+	return hangup_frame_helper(chan, chantype, f);
 }
 
 static inline int txchannel_read(struct rpt *myrpt)
@@ -4098,15 +4121,7 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 		ast_write(myrpt->txchannel, f);
 		rpt_mutex_unlock(&myrpt->blocklock);
 	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "@@@@ rpt:Hung Up\n");
-			ast_frfree(f);
-			return -1;
-		}
-	}
-	ast_frfree(f);
-	return 0;
+	return hangup_frame_helper(myrpt->dahditxchannel, "dahditxchannel", f);
 }
 
 static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
@@ -4204,6 +4219,21 @@ static inline void fac_frame(struct ast_frame *restrict f, float fac)
 	}
 }
 
+static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
+{
+	ast_debug(7, "@@@@ rx key\n");
+	l->lastrealrx = 1;
+	l->rerxtimer = 0;
+	if (!l->lastrx1) {
+		if (myrpt->p.archivedir) {
+			donodelog_fmt(myrpt, "RXKEY,%s", l->name);
+		}
+		l->lastrx1 = 1;
+		rpt_update_links(myrpt);
+		time(&l->lastkeytime);
+	}
+}
+
 static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx, char *restrict myfirst)
 {
 	int toexit = 0;
@@ -4294,17 +4324,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 
 				if ((l->newkey == 2) && (!l->lastrealrx)) {
-					ast_debug(7, "@@@@ rx key\n");
-					l->lastrealrx = 1;
-					l->rerxtimer = 0;
-					if (!l->lastrx1) {
-						if (myrpt->p.archivedir) {
-							donodelog_fmt(myrpt, "RXKEY,%s", l->name);
-						}
-						l->lastrx1 = 1;
-						rpt_update_links(myrpt);
-						time(&l->lastkeytime);
-					}
+					rxkey_helper(myrpt, l);
 				}
 				if (((l->phonemode) && (l->phonevox)) || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
 					|| (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb"))) {
@@ -4456,33 +4476,11 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				}
 				/* if RX key */
 				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->newkey < 2)) {
-					ast_debug(7, "@@@@ rx key\n");
-					l->lastrealrx = 1;
-					l->rerxtimer = 0;
-					if (!l->lastrx1) {
-						if (myrpt->p.archivedir) {
-							donodelog_fmt(myrpt, "RXKEY,%s", l->name);
-						}
-						l->lastrx1 = 1;
-						rpt_update_links(myrpt);
-						time(&l->lastkeytime);
-					}
+					rxkey_helper(myrpt, l);
 				}
 				/* if RX un-key */
 				if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY) {
-					ast_debug(7, "@@@@ rx un-key\n");
-					l->lastrealrx = 0;
-					l->rerxtimer = 0;
-					if (l->lastrx1) {
-						if (myrpt->p.archivedir) {
-							donodelog_fmt(myrpt, "RXUNKEY,%s", l->name);
-						}
-						l->lastrx1 = 0;
-						time(&l->lastunkeytime);
-						rpt_update_links(myrpt);
-						if (myrpt->p.duplex)
-							rpt_telemetry(myrpt, LINKUNKEY, l);
-					}
+					rxunkey_helper(myrpt, l);
 				}
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {
 					ast_frfree(f);
@@ -4552,9 +4550,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 	}
 	if (f->frametype == AST_FRAME_VOICE) {
 		struct ast_frame *fs;
-		short *sp;
-		int x1;
-		float fac, fsamp;
+		float fac;
 		struct rpt_link *l = &myrpt->links;
 
 		if ((myrpt->p.duplex > 1) || (myrpt->txkeyed)) {
@@ -4563,46 +4559,14 @@ static inline int monchannel_read(struct rpt *myrpt)
 		}
 		if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) && myrpt->p.outstreamcmd
 			&& (myrpt->outstreampipe[1] != -1)) {
-			int res = write(myrpt->outstreampipe[1], f->data.ptr, f->datalen);
-			/* if the write fails report the error one time
-			 * if it is not resolved in 60 seconds kill
-			 * the outstream process
-			 */
-			if (res != f->datalen) {
-				time_t now;
-				if (!myrpt->outstreamlasterror) {
-					ast_log(LOG_WARNING, "Outstream write failed on node %s: %s\n", myrpt->name, strerror(errno));
-					time(&myrpt->outstreamlasterror);
-				}
-				time(&now);
-				if (myrpt->outstreampid && (now - myrpt->outstreamlasterror) > 59) {
-					res = kill(myrpt->outstreampid, SIGTERM);
-					if (res) {
-						ast_log(LOG_ERROR, "Cannot kill outstream process for node %s: %s\n", myrpt->name, strerror(errno));
-					}
-					myrpt->outstreampid = 0;
-				}
-			} else {
-				if (myrpt->outstreamlasterror) {
-					ast_log(LOG_NOTICE, "Outstream resumed on node %s\n", myrpt->name);
-					myrpt->outstreamlasterror = 0;
-				}
-			}
+			outstream_write(myrpt, f);
 		}
 		fs = ast_frdup(f);
 		fac = 1.0;
 		if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")))
 			fac = myrpt->p.etxgain;
 		if (fac != 1.0) {
-			sp = (short *) fs->data.ptr;
-			for (x1 = 0; x1 < fs->datalen / 2; x1++) {
-				fsamp = (float) sp[x1] * fac;
-				if (fsamp > 32765.0)
-					fsamp = 32765.0;
-				if (fsamp < -32765.0)
-					fsamp = -32765.0;
-				sp[x1] = (int) fsamp;
-			}
+			fac_frame(fs, fac);
 		}
 		l = myrpt->links.next;
 		/* go thru all the links */
@@ -4619,15 +4583,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 		}
 		ast_frfree(fs);
 	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "@@@@ rpt:Hung Up\n");
-			ast_frfree(f);
-			return -1;
-		}
-	}
-	ast_frfree(f);
-	return 0;
+	return hangup_frame_helper(myrpt->monchannel, "monchannel", f);
 }
 
 static inline int parrotchannel_read(struct rpt *myrpt)
@@ -4651,15 +4607,7 @@ static inline int parrotchannel_read(struct rpt *myrpt)
 		if (myrpt->parrotstream)
 			ast_writestream(myrpt->parrotstream, f);
 	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "@@@@ rpt:Hung Up\n");
-			ast_frfree(f);
-			return -1;
-		}
-	}
-	ast_frfree(f);
-	return 0;
+	return hangup_frame_helper(myrpt->parrotchannel, "parrotchannel", f);
 }
 
 static inline int voxchannel_read(struct rpt *myrpt)
@@ -4681,15 +4629,7 @@ static inline int voxchannel_read(struct rpt *myrpt)
 				myrpt->voxtotimer = 0;
 		}
 	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "@@@@ rpt:Hung Up\n");
-			ast_frfree(f);
-			return -1;
-		}
-	}
-	ast_frfree(f);
-	return 0;
+	return hangup_frame_helper(myrpt->voxchannel, "voxchannel", f);
 }
 
 static inline int txpchannel_read(struct rpt *myrpt)
@@ -4750,6 +4690,17 @@ static inline int telechannel_read(struct rpt *myrpt, int complexcondition)
 static inline int btelechannel_read(struct rpt *myrpt)
 {
 	return wait_for_hangup_helper(myrpt->btelechannel, "btelechannel");
+}
+
+static inline void voxtostate_to_voxtotimer(struct rpt *myrpt)
+{
+	if (myrpt->voxtostate) {
+		myrpt->voxtotimer = myrpt->p.voxtimeout_ms;
+		myrpt->voxtostate = 0;
+	} else {
+		myrpt->voxtotimer = myrpt->p.voxrecover_ms;
+		myrpt->voxtostate = 1;
+	}
 }
 
 /* single thread with one file (request) to dial */
@@ -5060,13 +5011,7 @@ static void *rpt(void *this)
 			}
 			totx = 0;
 			if (myrpt->callmode && (myrpt->voxtotimer <= 0)) {
-				if (myrpt->voxtostate) {
-					myrpt->voxtotimer = myrpt->p.voxtimeout_ms;
-					myrpt->voxtostate = 0;
-				} else {
-					myrpt->voxtotimer = myrpt->p.voxrecover_ms;
-					myrpt->voxtostate = 1;
-				}
+				voxtostate_to_voxtotimer(myrpt);
 			}
 			if (!myrpt->voxtostate)
 				totx = myrpt->callmode && myrpt->wasvox;
@@ -5872,7 +5817,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 		return -1;
 	}
 	if (f->frametype == AST_FRAME_VOICE) {
-		struct ast_frame *f1, *f2;
+		struct ast_frame *f1;
 		int ismuted;
 		if (myrpt->newkey == 2) {
 			myrpt->rxlingertimer = ((myrpt->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
@@ -5925,26 +5870,8 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 		if (*dtmfed && phone_mode)
 			ismuted = 1;
 		*dtmfed = 0;
-		if (ismuted) {
-			memset(f->data.ptr, 0, f->datalen);
-			if (myrpt->lastf1)
-				memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-			if (myrpt->lastf2)
-				memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-		}
-		if (f)
-			f2 = ast_frdup(f);
-		else
-			f2 = NULL;
+		mute_frame_helper(myrpt, f, ismuted);
 		f1 = myrpt->lastf2;
-		myrpt->lastf2 = myrpt->lastf1;
-		myrpt->lastf1 = f2;
-		if (ismuted) {
-			if (myrpt->lastf1)
-				memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-			if (myrpt->lastf2)
-				memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-		}
 		if (f1) {
 			if (!myrpt->remstopgen) {
 				if (phone_mode)
@@ -6068,50 +5995,40 @@ static inline int exec_pchannel_read(struct rpt *myrpt, struct ast_channel *chan
 			ast_write(chan, f);
 		}
 	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "@@@@ rpt:Hung Up\n");
-			ast_frfree(f);
-			return -1;
-		}
-	}
-	ast_frfree(f);
-	return 0;
+	return hangup_frame_helper(myrpt->pchannel, "pchannel", f);
 }
 
 static inline int exec_txchannel_read(struct rpt *myrpt)
 {
-	struct ast_frame *f = ast_read(myrpt->txchannel);
-	if (!f) {
-		ast_debug(1, "@@@@ link:Hung Up\n");
-		return -1;
+	return wait_for_hangup_helper(myrpt->txchannel, "txchannel");
+}
+
+static char *parse_node_format(char *s, char **restrict s1, char *sx)
+{
+	char *s2;
+
+	*s1 = strsep(&s, ",");
+	if (!strchr(*s1, ':') && strchr(*s1, '/') && strncasecmp(*s1, "local/", 6)) {
+		char *sy = strchr(*s1, '/');
+		*sy = 0;
+		sprintf(sx, "%s:4569/%s", *s1, sy + 1);
+		*s1 = sx;
 	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "@@@@ rpt:Hung Up\n");
-			ast_frfree(f);
-			return -1;
-		}
+	s2 = strsep(&s, ",");
+	if (!s2) {
+		return NULL;
 	}
-	ast_frfree(f);
-	return 0;
+	return s2;
 }
 
 static int parse_caller(const char *b1, const char *hisip, char *s)
 {
 	char sx[320];
-	char *s1, *s2, *s3, *sy;
+	char *s1, *s2, *s3;
 
-	s1 = strsep(&s, ",");
-	if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
-		sy = strchr(s1, '/');
-		*sy = 0;
-		sprintf(sx, "%s:4569/%s", s1, sy + 1);
-		s1 = sx;
-	}
-	s2 = strsep(&s, ",");
+	s2 = parse_node_format(s, &s1, sx);
 	if (!s2) {
-		ast_log(LOG_WARNING, "Reported node %s not in correct format!!\n", b1);
+		ast_log(LOG_WARNING, "Reported node %s not in correct format\n", b1);
 		return -1;
 	}
 	if (strcmp(s2, "NONE")) {
@@ -6149,6 +6066,54 @@ static int parse_caller(const char *b1, const char *hisip, char *s)
 	return 0;
 }
 
+static int get_his_ip(struct ast_channel *chan, char *buf, size_t len)
+{
+	/* get his IP from IAX2 module */
+#ifdef ALLOW_LOCAL_CHANNELS
+	/* set IP address if this is a local connection */
+	if (!strncmp(ast_channel_name(chan), "Local", 5)) {
+		strcpy(buf, "127.0.0.1");
+	} else {
+		pbx_substitute_variables_helper(chan, "${IAXPEER(CURRENTCHANNEL)}", buf, len - 1);
+	}
+#else
+	pbx_substitute_variables_helper(chan, "${IAXPEER(CURRENTCHANNEL)}", buf, len - 1);
+#endif
+	if (ast_strlen_zero(buf)) {
+		ast_log(LOG_WARNING, "Link IP address cannot be determined\n");
+		return -1;
+	}
+	return 0;
+}
+
+static inline int kenwood_uio_helper(struct rpt *myrpt)
+{
+	if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 3)) {
+		ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+		return -1;
+	}
+	if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
+		ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+		return -1;
+	}
+	if (dahdi_set_offhook(myrpt->dahditxchannel)) {
+		return -1;
+	}
+	return 0;
+}
+
+static void answer_newkey_helper(struct rpt *myrpt, struct ast_channel *chan, int phone_mode)
+{
+	rpt_mutex_lock(&myrpt->blocklock);
+	if (ast_channel_state(chan) != AST_STATE_UP) {
+		ast_answer(chan);
+		if (!phone_mode) {
+			send_newkey(chan);
+		}
+	}
+	rpt_mutex_unlock(&myrpt->blocklock);
+}
+
 static int rpt_exec(struct ast_channel *chan, const char *data)
 {
 	int res = -1, i, rem_totx, rem_rx, remkeyed, n, phone_mode = 0;
@@ -6156,7 +6121,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	int dtmfed, phone_vox = 0, phone_monitor = 0;
 	char tmp[256], keyed = 0, keyed1 = 0;
 	char *options, *stringp, *callstr, c, *altp, *memp;
-	char sx[320], *sy, myfirst, *b, *b1;
+	char sx[320], myfirst, *b, *b1;
 	struct rpt *myrpt;
 	struct ast_channel *who;
 	struct ast_channel *cs[20];
@@ -6220,7 +6185,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 	if (myrpt == NULL) {
 		char *myadr, *mypfx, dstr[1024];
-		char *s, *s1, *s2;
+		char *s1, *s2;
 		char nodedata[100], xstr[100], tmp1[100];
 		struct ast_config *cfg;
 
@@ -6235,15 +6200,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				if (b1 && myadr) {
 					forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
 					ast_copy_string(xstr, nodedata, sizeof(xstr));
-					s = xstr;
-					s1 = strsep(&s, ",");
-					if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
-						sy = strchr(s1, '/');
-						*sy = 0;
-						sprintf(sx, "%s:4569/%s", s1, sy + 1);
-						s1 = sx;
-					}
-					s2 = strsep(&s, ",");
+					s2 = parse_node_format(xstr, &s1, sx);
 					if (!s2) {
 						ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 						ast_config_destroy(cfg);
@@ -6267,19 +6224,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					ast_log(LOG_WARNING, "Connect attempt from invalid node number\n");
 					return -1;
 				}
-				/* get his IP from IAX2 module */
-#ifdef ALLOW_LOCAL_CHANNELS
-				/* set IP address if this is a local connection */
-				if (!strncmp(ast_channel_name(chan), "Local", 5)) {
-					strcpy(hisip, "127.0.0.1");
-				} else {
-					pbx_substitute_variables_helper(chan, "${IAXPEER(CURRENTCHANNEL)}", hisip, sizeof(hisip) - 1);
-				}
-#else
-				pbx_substitute_variables_helper(chan, "${IAXPEER(CURRENTCHANNEL)}", hisip, sizeof(hisip) - 1);
-#endif
-				if (!hisip[0]) {
-					ast_log(LOG_WARNING, "Link IP address cannot be determined!!\n");
+				if (get_his_ip(chan, hisip, sizeof(hisip))) {
 					return -1;
 				}
 				/* look for his reported node string */
@@ -6293,17 +6238,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					return -1;
 				}
 			}
-			s = xstr;
-			s1 = strsep(&s, ",");
-			if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
-				sy = strchr(s1, '/');
-				*sy = 0;
-				sprintf(sx, "%s:4569/%s", s1, sy + 1);
-				s1 = sx;
-			}
-			s2 = strsep(&s, ",");
+			s2 = parse_node_format(xstr, &s1, sx);
 			if (!s2) {
-				ast_log(LOG_WARNING, "Specified node %s not in correct format!!\n", nodedata);
+				ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 				ast_config_destroy(cfg);
 				return -1;
 			}
@@ -6475,14 +6412,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 
-		rpt_mutex_lock(&myrpt->blocklock);
-		if (ast_channel_state(chan) != AST_STATE_UP) {
-			ast_answer(chan);
-			if (!phone_mode) {
-				send_newkey(chan);
-			}
-		}
-		rpt_mutex_unlock(&myrpt->blocklock);
+		answer_newkey_helper(myrpt, chan, phone_mode);
 
 		l = strlen(options) + 2;
 		orig_s = ast_malloc(l);
@@ -6583,23 +6513,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_log(LOG_WARNING, "Does not have callerid on %s\n", tmp);
 			return -1;
 		}
-		/* get his IP from IAX2 module */
-#ifdef ALLOW_LOCAL_CHANNELS
-		/* set IP address if this is a local connection */
-		if (strncmp(ast_channel_name(chan), "Local", 5) == 0) {
-			strcpy(hisip, "127.0.0.1");
-		} else {
-			pbx_substitute_variables_helper(chan, "${IAXPEER(CURRENTCHANNEL)}", hisip, sizeof(hisip) - 1);
-		}
-#else
-		pbx_substitute_variables_helper(chan, "${IAXPEER(CURRENTCHANNEL)}", hisip, sizeof(hisip) - 1);
-#endif
-
-		if (!hisip[0]) {
-			ast_log(LOG_WARNING, "Link IP address cannot be determined!!\n");
+		if (get_his_ip(chan, hisip, sizeof(hisip))) {
 			return -1;
 		}
-		//b = chan->cid.cid_name;
 		b = ast_channel_caller(chan)->id.name.str;
 		b1 = ast_channel_caller(chan)->id.number.str;
 		ast_shrink_phone_number(b1);
@@ -6987,15 +6903,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		res = rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE);
 		/* if PCIRADIO and kenwood selected */
 		if ((!res) && (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
-			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 1)) {
-				ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
-				return -1;
-			}
-			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
-				ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
-				return -1;
-			}
-			if (dahdi_set_offhook(myrpt->dahditxchannel)) {
+			if (kenwood_uio_helper(myrpt)) {
 				return -1;
 			}
 			iskenwood_pci4 = 1;
@@ -7071,14 +6979,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		dahdi_set_echocancel(myrpt->dahdirxchannel, 128);
 	}
 
-	rpt_mutex_lock(&myrpt->blocklock);
-	if (ast_channel_state(chan) != AST_STATE_UP) {
-		ast_answer(chan);
-		if (!phone_mode) {
-			send_newkey(chan);
-		}
-	}
-	rpt_mutex_unlock(&myrpt->blocklock);
+	answer_newkey_helper(myrpt, chan, phone_mode);
 
 	if (myrpt->rxchannel == myrpt->dahdirxchannel) {
 		if (dahdi_rx_offhook(myrpt->dahdirxchannel) == 1) {
@@ -7251,13 +7152,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (phone_mode && phone_vox) {
 			myrx = (!AST_LIST_EMPTY(&myrpt->rxq));
 			if (myrpt->voxtotimer <= 0) {
-				if (myrpt->voxtostate) {
-					myrpt->voxtotimer = myrpt->p.voxtimeout_ms;
-					myrpt->voxtostate = 0;
-				} else {
-					myrpt->voxtotimer = myrpt->p.voxrecover_ms;
-					myrpt->voxtostate = 1;
-				}
+				voxtostate_to_voxtotimer(myrpt);
 			}
 			if (!myrpt->voxtostate)
 				myrx = myrx || myrpt->wasvox;
@@ -7473,15 +7368,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_frfree(myrpt->lastf2);
 	myrpt->lastf2 = NULL;
 	if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->dahditxchannel)) {
-		if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 3)) {
-			ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
-			return -1;
-		}
-		if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
-			ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
-			return -1;
-		}
-		if (dahdi_set_offhook(myrpt->dahditxchannel)) {
+		if (kenwood_uio_helper(myrpt)) {
 			return -1;
 		}
 	}
