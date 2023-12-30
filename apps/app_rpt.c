@@ -1176,6 +1176,7 @@ void *rpt_call(void *this)
 
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
+		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
@@ -1185,6 +1186,7 @@ void *rpt_call(void *this)
 	if (rpt_conf_add_speaker(mychannel, myrpt)) {
 		ast_hangup(mychannel);
 		myrpt->callmode = 0;
+		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
 	/* allocate a pseudo-channel thru asterisk */
