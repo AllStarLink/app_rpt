@@ -397,12 +397,14 @@ static void check_link_list(struct rpt *myrpt, struct rpt_link *l)
 
 void rpt_link_add(struct rpt *myrpt, struct rpt_link *l)
 {
+	check_link_list(myrpt, l);
 	insque(l, myrpt->links.next);
 	check_link_list(myrpt, l);
 }
 
 void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 {
+	check_link_list(myrpt, l);
 	remque(l);
 	check_link_list(myrpt, l);
 }

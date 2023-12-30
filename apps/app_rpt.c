@@ -3775,6 +3775,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if (f1) {
 			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
 			ast_frfree(f1);
+			myrpt->lastf2 = NULL; /* Now invalid since aliased with f1 */
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
 				ast_writestream(myrpt->monstream, f1);
 			}
@@ -4126,6 +4127,19 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 	return hangup_frame_helper(myrpt->dahditxchannel, "dahditxchannel", f);
 }
 
+/*!
+ * \internal
+ * \brief Free a frame if it exists
+ */
+static inline void free_frame(struct ast_frame **f)
+{
+	if (!*f) {
+		return;
+	}
+	ast_frfree(*f);
+	*f = NULL;
+}
+
 static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	rpt_mutex_lock(&myrpt->lock);
@@ -4188,14 +4202,8 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	if (l->hasconnected) {
 		dodispgm(myrpt, l->name);
 	}
-	if (l->lastf1) {
-		ast_frfree(l->lastf1);
-	}
-	l->lastf1 = NULL;
-	if (l->lastf2) {
-		ast_frfree(l->lastf2);
-	}
-	l->lastf2 = NULL;
+	free_frame(&l->lastf1);
+	free_frame(&l->lastf2);
 	/* hang-up on call to device */
 	ast_hangup(l->chan);
 	ast_hangup(l->pchan);
@@ -5459,12 +5467,8 @@ static void *rpt(void *this)
 		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
 	}
 	rpt_hangup_rx_tx(myrpt);
-	if (myrpt->lastf1)
-		ast_frfree(myrpt->lastf1);
-	myrpt->lastf1 = NULL;
-	if (myrpt->lastf2)
-		ast_frfree(myrpt->lastf2);
-	myrpt->lastf2 = NULL;
+	free_frame(&myrpt->lastf1);
+	free_frame(&myrpt->lastf2);
 
 	rpt_mutex_lock(&myrpt->lock);
 	l = myrpt->links.next;
@@ -5881,8 +5885,8 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 				else
 					ast_write(myrpt->txchannel, f);
 			}
-
 			ast_frfree(f1);
+			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
@@ -7363,12 +7367,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->hfscanstatus = 0;
 	myrpt->remoteon = 0;
 	rpt_mutex_unlock(&myrpt->lock);
-	if (myrpt->lastf1)
-		ast_frfree(myrpt->lastf1);
-	myrpt->lastf1 = NULL;
-	if (myrpt->lastf2)
-		ast_frfree(myrpt->lastf2);
-	myrpt->lastf2 = NULL;
+	free_frame(&myrpt->lastf1);
+	free_frame(&myrpt->lastf2);
 	if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->dahditxchannel)) {
 		if (kenwood_uio_helper(myrpt)) {
 			return -1;
