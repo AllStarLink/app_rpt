@@ -277,6 +277,16 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	return 0;
 }
 
+struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap)
+{
+	struct ast_channel *chan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	if (!chan) {
+		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
+		return NULL;
+	}
+	return chan;
+}
+
 int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags)
 {
 	struct rpt *myrpt = NULL;

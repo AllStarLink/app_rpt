@@ -1171,8 +1171,7 @@ void *rpt_call(void *this)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	myrpt->mydtmf = 0;
-	/* allocate a pseudo-channel thru asterisk */
-	mychannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	mychannel = rpt_request_pseudo_chan(cap);
 
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -1189,8 +1188,7 @@ void *rpt_call(void *this)
 		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
-	/* allocate a pseudo-channel thru asterisk */
-	genchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	genchannel = rpt_request_pseudo_chan(cap);
 	ao2_ref(cap, -1);
 	if (!genchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -2674,6 +2672,9 @@ void rpt_links_init(struct rpt_link *l)
 		rpt_hangup(myrpt, RPT_TXCHAN); \
 	}
 
+#define IS_DAHDI_CHAN(c) (!strcasecmp(ast_channel_tech(c)->type, "DAHDI"))
+#define IS_DAHDI_CHAN_NAME(s) (!strncasecmp(s, "DAHDI", 5))
+
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
 	int res;
@@ -2689,7 +2690,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		myrpt->dahditxchannel = !strncasecmp(myrpt->rxchanname, "DAHDI", 5) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
+		myrpt->dahditxchannel = IS_DAHDI_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 	}
 	if (!IS_PSEUDO(myrpt->txchannel)) {
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
@@ -5289,7 +5290,7 @@ static void *rpt(void *this)
 
 			myrpt->lastitx = x;
 			if (myrpt->p.itxctcss) {
-				if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "DAHDI")) {
+				if (IS_DAHDI_CHAN(myrpt->rxchannel)) {
 					dahdi_radio_set_ctcss_encode(myrpt->dahdirxchannel, !x);
 				} else if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
 					!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
@@ -6862,7 +6863,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		if (!strncasecmp(myrpt->rxchanname, "DAHDI", 3)) {
+		if (IS_DAHDI_CHAN_NAME(myrpt->rxchanname)) {
 			myrpt->dahditxchannel = myrpt->rxchannel;
 		}
 	}
