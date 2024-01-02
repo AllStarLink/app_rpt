@@ -97,6 +97,33 @@ int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 	return (0);
 }
 
+static void check_tlink_list(struct rpt *myrpt)
+{
+	struct rpt_tele *tlist;
+
+	/* This is supposed to be a doubly linked list,
+	 * so make sure it's not corrupted.
+	 * If it is, that should trigger the assertion.
+	 * This is temporary, for troubleshooting issue #261.
+	 * Once that is fixed, this should be removed.
+	 */
+	tlist = myrpt->tele.next;
+	for (; (tlist = myrpt->tele.next); tlist = tlist->next) {
+		if (!tlist) {
+			ast_log(LOG_ERROR, "tlist linked list is corrupted (not properly doubly linked)\n");
+		}
+		ast_assert(tlist != NULL);
+	}
+}
+
+void tele_link_add(struct rpt *myrpt, struct rpt_tele *t)
+{
+	ast_assert(t != NULL);
+	check_tlink_list(myrpt);
+	insque(t, myrpt->links.next);
+	check_tlink_list(myrpt);
+}
+
 int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 {
 	struct rpt_tele *tlist;
@@ -110,6 +137,7 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 		return (0);
 	nonlocals = 0;
 	tlist = myrpt->tele.next;
+	check_tlink_list(myrpt);
 	if (tlist != &myrpt->tele) {
 		while (tlist != &myrpt->tele) {
 			if ((tlist->mode == PLAYBACK) || (tlist->mode == STATS_GPS_LEGACY) || (tlist->mode == ID1)
@@ -379,14 +407,17 @@ void send_tele_link(struct rpt *myrpt, char *cmd)
 	return;
 }
 
-static void check_link_list(struct rpt *myrpt, struct rpt_link *l)
+static void check_link_list(struct rpt *myrpt)
 {
+	struct rpt_link *l;
+
 	/* This is supposed to be a doubly linked list,
 	 * so make sure it's not corrupted.
 	 * If it is, that should trigger the assertion.
 	 * This is temporary, for troubleshooting issue #217.
 	 * Once that is fixed, this should be removed.
 	 */
+	l = myrpt->links.next;
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		if (!l) {
 			ast_log(LOG_ERROR, "Link linked list is corrupted (not properly doubly linked)\n");
@@ -397,16 +428,18 @@ static void check_link_list(struct rpt *myrpt, struct rpt_link *l)
 
 void rpt_link_add(struct rpt *myrpt, struct rpt_link *l)
 {
-	check_link_list(myrpt, l);
+	ast_assert(l != NULL);
+	check_link_list(myrpt);
 	insque(l, myrpt->links.next);
-	check_link_list(myrpt, l);
+	check_link_list(myrpt);
 }
 
 void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 {
-	check_link_list(myrpt, l);
+	ast_assert(l != NULL);
+	check_link_list(myrpt);
 	remque(l);
-	check_link_list(myrpt, l);
+	check_link_list(myrpt);
 }
 
 void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int flag)

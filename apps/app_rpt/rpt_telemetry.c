@@ -2923,7 +2923,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	if ((mode == REMXXX) || (mode == PAGE) || (mode == MDC1200)) {
 		tele->submode.p = data;
 	}
-	insque((struct qelem *) tele, (struct qelem *) myrpt->tele.next);
+	tele_link_add(myrpt, tele);
 	rpt_mutex_unlock(&myrpt->lock);
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
