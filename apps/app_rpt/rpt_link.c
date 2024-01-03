@@ -120,7 +120,15 @@ void tele_link_add(struct rpt *myrpt, struct rpt_tele *t)
 {
 	ast_assert(t != NULL);
 	check_tlink_list(myrpt);
-	insque(t, myrpt->links.next);
+	insque(t, myrpt->tele.next);
+	check_tlink_list(myrpt);
+}
+
+void tele_link_remove(struct rpt *myrpt, struct rpt_tele *t)
+{
+	ast_assert(t != NULL);
+	check_tlink_list(myrpt);
+	remque(t);
 	check_tlink_list(myrpt);
 }
 

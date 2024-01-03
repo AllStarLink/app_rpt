@@ -2557,7 +2557,7 @@ treataslocal:
 			myrpt->tmsgtimer = myrpt->p.tailsquashedtime;
 		}
 	}
-	remque((struct qelem *) mytele);
+	tele_link_remove(myrpt, mytele);
 	telem_done(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_free(nodename);
@@ -2585,7 +2585,7 @@ abort:
 abort2:
 	ast_free(nodename);
 abort3:
-	remque((struct qelem *) mytele);
+	tele_link_remove(myrpt, mytele);
 	rpt_mutex_unlock(&myrpt->lock);
 	if (id_malloc) {
 		ast_free(ident);
@@ -2892,14 +2892,10 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			return;
 		}
 	}
-	tele = ast_malloc(sizeof(struct rpt_tele));
+	tele = ast_calloc(1, sizeof(struct rpt_tele));
 	if (!tele) {
-		ast_log(LOG_WARNING, "Unable to allocate memory\n");
-		pthread_exit(NULL);
-		return;
+		return NULL;
 	}
-	/* zero it out */
-	memset((char *) tele, 0, sizeof(struct rpt_tele));
 	tele->rpt = myrpt;
 	tele->mode = mode;
 	if (mode == PARROT) {
@@ -2930,7 +2926,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	res = ast_pthread_create(&tele->threadid, &attr, rpt_tele_thread, (void *) tele);
 	if (res < 0) {
 		rpt_mutex_lock(&myrpt->lock);
-		remque((struct qlem *) tele);	/* We don't like stuck transmitters, remove it from the queue */
+		tele_link_remove(myrpt, tele); /* We don't like stuck transmitters, remove it from the queue */
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_log(LOG_WARNING, "Could not create telemetry thread: %s", strerror(res));
 	}

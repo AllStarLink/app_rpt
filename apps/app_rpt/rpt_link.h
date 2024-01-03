@@ -17,6 +17,13 @@ int altlink(struct rpt *myrpt, struct rpt_link *mylink);
  */
 void tele_link_add(struct rpt *myrpt, struct rpt_tele *t);
 
+/*!
+ * \brief Remove an rpt_tele from a rpt
+ * \param myrpt
+ * \param t Telemetry to remove from the repeater's linked list of telemetries
+ */
+void tele_link_remove(struct rpt *myrpt, struct rpt_tele *t);
+
 int altlink1(struct rpt *myrpt, struct rpt_link *mylink);
 
 void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
