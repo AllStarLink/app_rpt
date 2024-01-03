@@ -2602,7 +2602,6 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	struct rpt_tele *tele;
 	struct rpt_link *mylink = NULL;
 	int res, i, ns;
-	pthread_attr_t attr;
 	char *v1, *v2, mystr[1024], *p, haslink, lat[100], lon[100], elev[100];
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	time_t t, was;
@@ -2921,9 +2920,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	}
 	tele_link_add(myrpt, tele);
 	rpt_mutex_unlock(&myrpt->lock);
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	res = ast_pthread_create(&tele->threadid, &attr, rpt_tele_thread, (void *) tele);
+	res = ast_pthread_create(&tele->threadid, NULL, rpt_tele_thread, (void *) tele);
 	if (res < 0) {
 		rpt_mutex_lock(&myrpt->lock);
 		tele_link_remove(myrpt, tele); /* We don't like stuck transmitters, remove it from the queue */

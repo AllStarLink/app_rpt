@@ -22,15 +22,12 @@ static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 int uchameleon_thread_start(struct daq_entry_tag *t)
 {
 	int res, tries = 50;
-	pthread_attr_t attr;
 
 	ast_mutex_init(&t->lock);
 
 	/* Start up uchameleon monitor thread */
 
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	res = ast_pthread_create(&t->threadid, &attr, uchameleon_monitor_thread, (void *) t);
+	res = ast_pthread_create_detached(&t->threadid, NULL, uchameleon_monitor_thread, (void *) t);
 	if (res) {
 		ast_log(LOG_WARNING, "Could not start uchameleon monitor thread\n");
 		return -1;
