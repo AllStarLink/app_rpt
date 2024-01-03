@@ -108,7 +108,7 @@ static void check_tlink_list(struct rpt *myrpt)
 	 * Once that is fixed, this should be removed.
 	 */
 	tlist = myrpt->tele.next;
-	for (; (tlist = myrpt->tele.next); tlist = tlist->next) {
+	for (tlist = myrpt->tele.next; tlist != &myrpt->tele; tlist = tlist->next) {
 		if (!tlist) {
 			ast_log(LOG_ERROR, "tlist linked list is corrupted (not properly doubly linked)\n");
 		}
