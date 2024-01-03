@@ -2705,7 +2705,7 @@ static int usb_device_swap(int fd, const char *other)
 	o->hasusb = 0;
 	o->usbass = 0;
 	p->hasusb = 0;
-	o->usbass = 0;
+	p->usbass = 0;
 	ast_cli(fd, "USB Devices successfully swapped.\n");
 	ast_mutex_unlock(&usb_dev_lock);
 	return 0;
@@ -2777,7 +2777,7 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 		return RESULT_SUCCESS;
 	}
 	if (!o->hasusb) {
-		ast_cli(fd, "Device %s currently not active\n", o->name);
+		ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 		return RESULT_SUCCESS;
 	} else if (!strcasecmp(argv[2], "rx")) {
 		i = 0;
@@ -3117,28 +3117,28 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 		break;
 	case 'b':					/* receiver tune display */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		tune_rxdisplay(fd, o);
 		break;
 	case 'c':					/* receive menu */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		_menu_rx(fd, o, cmd + 1);
 		break;
 	case 'f':					/* tx A menu */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		_menu_txa(fd, o, cmd + 1);
 		break;
 	case 'g':					/* tx B menu */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		_menu_txb(fd, o, cmd + 1);
@@ -3159,7 +3159,7 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 		break;
 	case 'l':					/* send test tone */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		tune_flash(fd, o, 1);

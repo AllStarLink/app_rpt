@@ -2650,7 +2650,7 @@ static int usb_device_swap(int fd, const char *other)
 	o->hasusb = 0;
 	o->usbass = 0;
 	p->hasusb = 0;
-	o->usbass = 0;
+	p->usbass = 0;
 	ast_cli(fd, "USB Devices successfully swapped.\n");
 	ast_mutex_unlock(&usb_dev_lock);
 	return 0;
@@ -2781,7 +2781,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 	}
 
 	if (!o->hasusb) {
-		ast_cli(fd, "Device %s currently not active\n", o->name);
+		ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 		return RESULT_SUCCESS;
 	}
 
@@ -3820,63 +3820,63 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		break;
 	case 'a':					/* receive tune */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		tune_rxinput(fd, o, 1, 1);
 		break;
 	case 'b':					/* receive tune display */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		do_rxdisplay(fd, o);
 		break;
 	case 'c':					/* set receive voice level */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		_menu_rxvoice(fd, o, cmd + 1);
 		break;
 	case 'd':					/* set receive ctcss level */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		tune_rxctcss(fd, o, 1);
 		break;
 	case 'e':					/* set squelch level */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		_menu_rxsquelch(fd, o, cmd + 1);
 		break;
 	case 'f':					/* set voice transmit level */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		_menu_txvoice(fd, o, cmd + 1);
 		break;
 	case 'g':					/* set aux transmit level */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		_menu_auxvoice(fd, o, cmd + 1);
 		break;
 	case 'h':					/* transmit a test tone */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		_menu_txtone(fd, o, cmd + 1);
 		break;
 	case 'i':					/* tune receive level */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		tune_rxvoice(fd, o, 1);
@@ -3897,7 +3897,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		break;
 	case 'l':					/* transmit test tone */
 		if (!o->hasusb) {
-			ast_cli(fd, "Device %s currently not active\n", o->name);
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
 		tune_flash(fd, o, 1);

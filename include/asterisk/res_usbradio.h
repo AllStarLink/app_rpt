@@ -214,6 +214,10 @@ struct usbecho {
 	struct qelem *q_prev;
 	short data[FRAME_SIZE];
 };
+/*
+ * Message definition used in usb channel drivers.
+ */
+#define USB_UNASSIGNED_FMT	"Device %s is selected, the associated USB device string %s was not found\n"
 
 /*! \brief Round double number to a long
  *
