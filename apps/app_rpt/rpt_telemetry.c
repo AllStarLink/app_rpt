@@ -2920,7 +2920,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	}
 	tele_link_add(myrpt, tele);
 	rpt_mutex_unlock(&myrpt->lock);
-	res = ast_pthread_create(&tele->threadid, NULL, rpt_tele_thread, (void *) tele);
+	res = ast_pthread_create_detached(&tele->threadid, NULL, rpt_tele_thread, (void *) tele);
 	if (res < 0) {
 		rpt_mutex_lock(&myrpt->lock);
 		tele_link_remove(myrpt, tele); /* We don't like stuck transmitters, remove it from the queue */
