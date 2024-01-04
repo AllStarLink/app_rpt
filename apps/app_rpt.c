@@ -5781,36 +5781,53 @@ static void *rpt_master(void *ignore)
 			ast_free(nodep);
 		}
 		ast_mutex_unlock(&rpt_master_lock);
-		if (shutting_down) {
-			ast_debug(1, "app_rpt is unloading, master thread cleaning up %d repeaters and exiting\n", nrpts);
+		while (shutting_down) {
+			int done = 0;
+			ast_debug(1, "app_rpt is unloading, master thread cleaning up %d repeater%s and exiting\n", nrpts, ESS(nrpts));
 			for (i = 0; i < nrpts; i++) {
 				if (rpt_vars[i].deleted) {
-					ast_debug(1, "Skipping deleted thread\n");
+					ast_debug(1, "Skipping deleted thread %s\n", rpt_vars[i].name);
+					done++;
 					continue;
 				}
 				if (rpt_vars[i].remote) {
-					ast_debug(1, "Skipping remote thread\n");
+					ast_debug(1, "Skipping remote thread %s\n", rpt_vars[i].name);
+					done++;
 					continue;
 				}
 				if (rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) {
-					ast_debug(1, "Skipping stopped thread\n");
+					ast_debug(1, "Skipping stopped thread %s\n", rpt_vars[i].name);
+					done++;
 					continue;
 				}
 				if (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL) {
-					ast_debug(1, "Skipping null thread\n");
+					ast_debug(1, "Skipping null thread %s\n", rpt_vars[i].name);
+					done++;
 					continue;
 				}
 				if (!(rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
-					pthread_join(rpt_vars[i].rpt_thread, NULL);
-					ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
+					if (pthread_join(rpt_vars[i].rpt_thread, NULL)) {
+						ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(errno));
+					} else {
+						ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
+						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+						done++;
+					}
 				}
 			}
 			ast_mutex_lock(&rpt_master_lock);
-			break;
+			ast_debug(1, "Joined %d/%d repeater%s so far\n", done, nrpts, ESS(nrpts));
+			if (done >= nrpts) {
+				goto done; /* Break out of outer loop */
+			}
+			ast_mutex_unlock(&rpt_master_lock);
+			usleep(200000);
 		}
 		usleep(2000000);
 		ast_mutex_lock(&rpt_master_lock);
 	}
+
+done:
 	ast_mutex_unlock(&rpt_master_lock);
 	ast_debug(1, "app_rpt master thread exiting\n");
 	pthread_exit(NULL);
