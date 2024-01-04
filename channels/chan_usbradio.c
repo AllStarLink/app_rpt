@@ -2720,46 +2720,8 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 	int i = 0;
 	int adjustment;
 
-	if ((argc < 2) || (argc > 4)) {
+	if ((argc < 3) || (argc > 4)) {
 		return RESULT_SHOWUSAGE;
-	}
-
-	if (argc == 2) {			/* just show stuff */
-		ast_cli(fd, "Active radio interface is [%s]\n", usbradio_active);
-		ast_mutex_lock(&usb_dev_lock);
-		ast_cli(fd, "Device String is %s\n", o->devstr);
-		ast_mutex_unlock(&usb_dev_lock);
-		ast_cli(fd, "Card is %i\n", ast_radio_usb_get_usbdev(o->devstr));
-		ast_cli(fd, "Output A is currently set to ");
-		if (o->txmixa == TX_OUT_COMPOSITE) {
-			ast_cli(fd, "composite.\n");
-		} else if (o->txmixa == TX_OUT_VOICE) {
-			ast_cli(fd, "voice.\n");
-		} else if (o->txmixa == TX_OUT_LSD) {
-			ast_cli(fd, "tone.\n");
-		} else if (o->txmixa == TX_OUT_AUX) {
-			ast_cli(fd, "auxvoice.\n");
-		} else {
-			ast_cli(fd, "off.\n");
-		}
-
-		ast_cli(fd, "Output B is currently set to ");
-		if (o->txmixb == TX_OUT_COMPOSITE) {
-			ast_cli(fd, "composite.\n");
-		} else if (o->txmixb == TX_OUT_VOICE) {
-			ast_cli(fd, "voice.\n");
-		} else if (o->txmixb == TX_OUT_LSD) {
-			ast_cli(fd, "tone.\n");
-		} else if (o->txmixb == TX_OUT_AUX) {
-			ast_cli(fd, "auxvoice.\n");
-		} else {
-			ast_cli(fd, "off.\n");
-		}
-
-		ast_cli(fd, "Tx Voice Level currently set to %d\n", o->txmixaset);
-		ast_cli(fd, "Tx Tone Level currently set to %d\n", o->txctcssadj);
-		ast_cli(fd, "Rx Squelch currently set to %d\n", o->rxsquelchadj);
-		return RESULT_SUCCESS;
 	}
 
 	o->pmrChan->b.tuning = 1;
@@ -4959,7 +4921,7 @@ static char *handle_radio_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "radio tune {auxvoice|dump|swap|rxnoise|rxvoice|rxtone|txvoice|txtone|txall|flash|rxsquelch|nocap|rxtracecap|txtracecap|rxcap|txcap|save|load}";
+		e->command = "radio tune {auxvoice|dump|swap|rxnoise|rxvoice|rxtone|txvoice|txtone|txall|flash|rxsquelch|nocap|rxtracecap|txtracecap|rxcap|txcap|save|load|menu-support}";
 		e->usage =	"Usage: radio tune <function>\n"
 					"       rxnoise\n"
 					"       rxvoice\n"
@@ -5003,6 +4965,33 @@ static char *handle_radio_active(struct ast_cli_entry *e, int cmd, struct ast_cl
 }
 
 /*!
+ * \brief Handle Asterisk CLI request for radio show settings.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
+ */
+static char *handle_show_settings(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	struct chan_usbradio_pvt *o;
+	
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "radio show settings";
+		e->usage = 	"Usage: radio show settings\n";
+		return NULL;
+	case CLI_GENERATE:
+		return NULL;
+	}
+	//show the settings
+	o = find_desc(usbradio_active);
+	if (o) {
+		_menu_print(a->fd, o);
+	}
+	return RESULT_SUCCESS;
+}
+
+/*!
  * \brief Handle Asterisk CLI request to set xdebug.
  * \param e				Asterisk CLI entry.
  * \param cmd			CLI command type.
@@ -5029,7 +5018,8 @@ static struct ast_cli_entry cli_usbradio[] = {
 	AST_CLI_DEFINE(handle_console_unkey, "Simulate Rx Signal Loss"),
 	AST_CLI_DEFINE(handle_radio_tune, "Change radio settings"),
 	AST_CLI_DEFINE(handle_radio_active, "Change commanded device"),
-	AST_CLI_DEFINE(handle_set_xdebug, "Radio set xpmr debug level")
+	AST_CLI_DEFINE(handle_set_xdebug, "Radio set xpmr debug level"),
+	AST_CLI_DEFINE(handle_show_settings, "Show device settings")
 };
 
 #include "./xpmr/xpmr.c"

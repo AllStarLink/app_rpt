@@ -2752,19 +2752,11 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 	struct chan_simpleusb_pvt *o = find_desc(simpleusb_active);
 	int i = 0;
 
-	if ((argc < 2) || (argc > 4)) {
+	if ((argc < 3) || (argc > 4)) {
 		return RESULT_SHOWUSAGE;
 	}
 
-	if (argc == 2) {			/* just show stuff */
-		ast_cli(fd, "Active radio interface is [%s]\n", simpleusb_active);
-		ast_cli(fd, "Device String is %s\n", o->devstr);
-		ast_cli(fd, "Card is %i\n", ast_radio_usb_get_usbdev(o->devstr));
-		ast_cli(fd, "Rx Level currently set to %d\n", o->rxmixerset);
-		ast_cli(fd, "Tx Output A Level currently set to %d\n", o->txmixaset);
-		ast_cli(fd, "Tx Output B Level currently set to %d\n", o->txmixbset);
-		return RESULT_SUCCESS;
-	} else if (!strcasecmp(argv[2], "swap")) {
+	if (!strcasecmp(argv[2], "swap")) {
 		if (argc > 3) {
 			usb_device_swap(fd, argv[3]);
 			return RESULT_SUCCESS;
@@ -3510,7 +3502,7 @@ static char *handle_susb_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "susb tune {rx|rxd|txa|txb|flash|swap|load|save|nocap|rxcap|txcap}";
+		e->command = "susb tune {rx|rxd|txa|txb|flash|swap|load|save|nocap|rxcap|txcap|menu-support}";
 		e->usage = 	"Usage: susb tune <function>\n"
 					"       rx [newsetting]\n"
 					"       rxdisplay\n"
@@ -3549,11 +3541,39 @@ static char *handle_susb_active(struct ast_cli_entry *e, int cmd, struct ast_cli
 	return res2cli(susb_active(a->fd, a->argc, a->argv));
 }
 
+/*!
+ * \brief Handle Asterisk CLI request for susb show settings.
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return	CLI success or failure.
+ */
+static char *handle_susb_show_settings(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	struct chan_simpleusb_pvt *o;
+	
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "susb show settings";
+		e->usage = 	"Usage: susb show settings\n";
+		return NULL;
+	case CLI_GENERATE:
+		return NULL;
+	}
+	//show the settings
+	o = find_desc(simpleusb_active);
+	if (o) {
+		_menu_print(a->fd, o);
+	}
+	return RESULT_SUCCESS;
+}
+
 static struct ast_cli_entry cli_simpleusb[] = {
 	AST_CLI_DEFINE(handle_console_key, "Simulate Rx Signal Present"),
 	AST_CLI_DEFINE(handle_console_unkey, "Simulate Rx Signal Loss"),
 	AST_CLI_DEFINE(handle_susb_tune, "Change susb settings"),
-	AST_CLI_DEFINE(handle_susb_active, "Change commanded device")
+	AST_CLI_DEFINE(handle_susb_active, "Change commanded device"),
+	AST_CLI_DEFINE(handle_susb_show_settings, "Show device settings")
 };
 
 /*!
