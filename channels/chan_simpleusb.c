@@ -3560,7 +3560,7 @@ static char *handle_susb_show_settings(struct ast_cli_entry *e, int cmd, struct 
 	case CLI_GENERATE:
 		return NULL;
 	}
-	//show the settings
+	
 	o = find_desc(simpleusb_active);
 	if (o) {
 		_menu_print(a->fd, o);

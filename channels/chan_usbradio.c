@@ -4983,7 +4983,7 @@ static char *handle_show_settings(struct ast_cli_entry *e, int cmd, struct ast_c
 	case CLI_GENERATE:
 		return NULL;
 	}
-	//show the settings
+	
 	o = find_desc(usbradio_active);
 	if (o) {
 		_menu_print(a->fd, o);
