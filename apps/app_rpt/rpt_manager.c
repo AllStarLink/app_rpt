@@ -288,17 +288,30 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			 * XXX This was added to address assertions due to bad locking, but app_rpt should probably
 			 * be globally ref'ing the channel and holding it until it unloads. Should be investigated. */
 			if (rxchan || pseudo) {
-				if (rxchan) {
-					ast_assert(rxchan == rpt_vars[i].rxchannel);
-				}
-				ast_channel_lock(rpt_vars[i].rxchannel);
-				AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[i].rxchannel), newvariable, entries) {
-					j++;
-					astman_append(ses, "Var: %s=%s\r\n", ast_var_name(newvariable), ast_var_value(newvariable));
-				}
-				ast_channel_unlock(rpt_vars[i].rxchannel);
-				if (rxchan) {
-					ast_channel_unref(rxchan);
+				struct varshead *v;
+				/* If the module is unloading,
+				 * then rpt_vars[i].rxchannel could become NULL in the middle of all this,
+				 * since this isn't protected by the rpt lock.
+				 * It doesn't need to be either, just save the channel pointer and we're fine.
+				 * The channel itself won't go away since we referred it via ast_channel_get_by_name. */
+				struct ast_channel *rxchannel = rpt_vars[i].rxchannel;
+				if (!rxchannel) {
+					ast_log(LOG_WARNING, "Channel disappeared while trying to access\n");
+				} else {
+					if (rxchan) {
+						ast_assert(rxchan == rxchannel);
+					}
+					ast_channel_lock(rxchannel);
+					ast_assert(ast_channel_varshead(rxchannel) != NULL);
+					v = ast_channel_varshead(rxchannel);
+					AST_LIST_TRAVERSE(v, newvariable, entries) {
+						j++;
+						astman_append(ses, "Var: %s=%s\r\n", ast_var_name(newvariable), ast_var_value(newvariable));
+					}
+					ast_channel_unlock(rpt_vars[i].rxchannel);
+					if (rxchan) {
+						ast_channel_unref(rxchan);
+					}
 				}
 			} else {
 				ast_log(LOG_WARNING, "Channel %s does not exist, cannot access variables\n", rxchanname);
