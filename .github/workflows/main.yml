@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  vm:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Runs a set of commands using the runners shell
+      - name: Start build
+        run: echo Beginning build
+  container:
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - name: Build Asterisk
+        run: |
+          cd /usr/src
+          apt-get update -y
+          apt-get install -y wget
+          wget https://docs.phreaknet.org/script/phreaknet.sh
+          chmod +x phreaknet.sh
+          ./phreaknet.sh make
+          phreaknet update
+          phreaknet install --dahdi --lightweight
+          /etc/init.d/asterisk restart
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build app_rpt
+        run: |
+          pwd
+          ls -la ..
+          ls -la
+          cp -r ../app_rpt /usr/src
+          ls -la /usr/src
+          cd /usr/src/app_rpt
+          ./rpt_install.sh

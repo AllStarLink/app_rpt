@@ -144,9 +144,26 @@ rpt_add "utils/radio-tune-menu.c"
 rpt_add "utils/simpleusb-tune-menu.c"
 
 nproc
+
+# XXX: For now
+#menuselect/menuselect --disable res_usbradio --disable chan_simpleusb --disable chan_usbradio
+rm menuselect.makeopts
+
 make -j$(nproc) apps
 make -j$(nproc) channels
+make -j$(nproc) res
+
+# Compilation failed
+if [ $? -ne 0 ]; then
+	exit $?
+fi
+
 make install
+
+# Compilation failed
+if [ $? -ne 0 ]; then
+	exit $?
+fi
 
 # If the rpt sounds don't exist yet, add them
 if [ ! -d /var/lib/asterisk/sounds/en/rpt ]; then
