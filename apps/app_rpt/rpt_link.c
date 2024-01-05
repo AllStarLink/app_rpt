@@ -111,6 +111,7 @@ static void check_tlink_list(struct rpt *myrpt)
 	for (tlist = myrpt->tele.next; tlist != &myrpt->tele; tlist = tlist->next) {
 		if (!tlist) {
 			ast_log(LOG_ERROR, "tlist linked list is corrupted (not properly doubly linked)\n");
+			usleep(100000);
 		}
 		ast_assert(tlist != NULL);
 	}
@@ -426,10 +427,14 @@ static void check_link_list(struct rpt *myrpt)
 	 * Once that is fixed, this should be removed.
 	 */
 	l = myrpt->links.next;
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+	ast_assert(l != NULL);
+	while (l != &myrpt->links) {
 		if (!l) {
 			ast_log(LOG_ERROR, "Link linked list is corrupted (not properly doubly linked)\n");
+			usleep(100000);
 		}
+		ast_assert(l != NULL);
+		l = l->next;
 		ast_assert(l != NULL);
 	}
 }

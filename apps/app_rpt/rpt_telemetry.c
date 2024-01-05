@@ -1017,7 +1017,7 @@ void *rpt_tele_thread(void *this)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	/* allocate a pseudo-channel thru asterisk */
-	mychannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	mychannel = rpt_request_pseudo_chan(cap, "mychannel");
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {

@@ -335,6 +335,7 @@
 #include "app_rpt/rpt_daq.h"
 #include "app_rpt/rpt_cli.h"
 #include "app_rpt/rpt_bridging.h"
+#include "app_rpt/rpt_conf.h"
 #include "app_rpt/rpt_call.h"
 #include "app_rpt/rpt_capabilities.h"
 #include "app_rpt/rpt_vox.h"
@@ -1011,7 +1012,7 @@ static void *perform_statpost(void *stats_url)
 	return NULL;
 }
 
-static void statpost(struct rpt *myrpt, char *pairs)
+static void statpost(struct rpt *myrpt, const char *pairs)
 {
 	char *str;
 	time_t now;
@@ -1171,7 +1172,7 @@ void *rpt_call(void *this)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	myrpt->mydtmf = 0;
-	mychannel = rpt_request_pseudo_chan(cap);
+	mychannel = rpt_request_pseudo_chan(cap, "mychannel");
 
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -1188,7 +1189,7 @@ void *rpt_call(void *this)
 		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
-	genchannel = rpt_request_pseudo_chan(cap);
+	genchannel = rpt_request_pseudo_chan(cap, "genchannel");
 	ao2_ref(cap, -1);
 	if (!genchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -2666,8 +2667,12 @@ void rpt_links_init(struct rpt_link *l)
 	l->prev = l;
 }
 
+/* rxchannel is sometimes hung up to disconnect a node
+ * and txchannel isn't guaranteed to be set either */
 #define rpt_hangup_rx_tx(myrpt) \
-	rpt_hangup(myrpt, RPT_RXCHAN); \
+	if (myrpt->rxchannel) { \
+		rpt_hangup(myrpt, RPT_RXCHAN); \
+	} \
 	if (myrpt->txchannel) { \
 		rpt_hangup(myrpt, RPT_TXCHAN); \
 	}
@@ -3592,9 +3597,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	}
 
 	/* if out voted drop DTMF frames */
-	if (myrpt->p.votermode && !myrpt->votewinner
-		&& (f->frametype == AST_FRAME_DTMF_BEGIN || f->frametype == AST_FRAME_DTMF_END)
-		) {
+	if (myrpt->p.votermode && !myrpt->votewinner && (f->frametype == AST_FRAME_DTMF_BEGIN || f->frametype == AST_FRAME_DTMF_END)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_frfree(f);
 		return 0;
@@ -3758,8 +3761,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		}
 
 		if (myrpt->p.votertype == 1 && myrpt->vote_counter && (myrpt->rxchankeyed || myrpt->voteremrx)
-			&& (myrpt->p.votermode == 2 || (myrpt->p.votermode == 1 && !myrpt->voter_oneshot))
-			) {
+			&& (myrpt->p.votermode == 2 || (myrpt->p.votermode == 1 && !myrpt->voter_oneshot))) {
 			if (--myrpt->vote_counter <= 0) {
 				myrpt->vote_counter = 10;
 				ast_debug(7, "[%s] vote rxrssi=%i\n", myrpt->name, myrpt->rxrssi);
@@ -5489,10 +5491,11 @@ static void *rpt(void *this)
 	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
-	myrpt->rpt_thread = AST_PTHREADT_STOP;
 	if (myrpt->outstreampid)
 		kill(myrpt->outstreampid, SIGTERM);
 	myrpt->outstreampid = 0;
+	rpt_bridge_cleanup(myrpt);
+	myrpt->rpt_thread = AST_PTHREADT_STOP;
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
 }
@@ -5504,7 +5507,8 @@ static int load_config(int reload)
 {
 	int i, n = 0;
 	struct ast_config *cfg;
-	char *val, *this = NULL;
+	const char *val;
+	char *this = NULL;
 
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
@@ -5523,7 +5527,7 @@ static int load_config(int reload)
 	}
 
 	/* load the general settings */
-	val = (char *) ast_variable_retrieve(cfg, "general", "node_lookup_method");
+	val = ast_variable_retrieve(cfg, "general", "node_lookup_method");
 	if (val) {
 		if (!strcasecmp(val, "both")) {
 			rpt_node_lookup_method = LOOKUP_BOTH;
@@ -5536,7 +5540,21 @@ static int load_config(int reload)
 			rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
 		}
 	}
-	
+
+	val = ast_variable_retrieve(cfg, "general", "conf_tech");
+	if (val) {
+		if (!strcasecmp(val, "dahdi")) {
+			rpt_set_bridging_subsystem(1);
+		} else if (!strcasecmp(val, "asterisk")) {
+			rpt_set_bridging_subsystem(0);
+		} else {
+			ast_log(LOG_ERROR, "Unknown value '%s' for setting 'conf_tech'\n", val);
+			ast_config_destroy(cfg);
+			cfg = NULL;
+			return -1;
+		}
+	}
+
 	/* process the sections looking for the nodes */
 	while ((this = ast_category_browse(cfg, this)) != NULL) {
 		/* Node name must be fully numeric */
@@ -5570,7 +5588,7 @@ static int load_config(int reload)
 			continue;
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
-		val = (char *) ast_variable_retrieve(cfg, this, "rxchannel");
+		val = ast_variable_retrieve(cfg, this, "rxchannel");
 		if (val) {
 			char *slash, *rxchan = ast_strdup(val);
 			slash = strchr(rxchan, '/');
@@ -5589,7 +5607,7 @@ static int load_config(int reload)
 			rpt_vars[n].rxchanname = ast_strdup(val);
 		}
 		rpt_vars[n].name = ast_strdup(this);
-		val = (char *) ast_variable_retrieve(cfg, this, "txchannel");
+		val = ast_variable_retrieve(cfg, this, "txchannel");
 		if (val) {
 			rpt_vars[n].txchanname = ast_strdup(val);
 		}
@@ -5597,12 +5615,12 @@ static int load_config(int reload)
 		rpt_vars[n].remoterig = "";
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
-		val = (char *) ast_variable_retrieve(cfg, this, "remote");
+		val = ast_variable_retrieve(cfg, this, "remote");
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
 		}
-		val = (char *) ast_variable_retrieve(cfg, this, "radiotype");
+		val = ast_variable_retrieve(cfg, this, "radiotype");
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
 		}
@@ -5709,7 +5727,7 @@ static void *rpt_master(void *ignore)
 					rpt_vars[i].name[0] = 0;
 					continue;
 				}
-				if (shutting_down) {
+				if (shutting_down || ast_shutting_down()) {
 					continue; /* Don't restart thread if we're unloading the module */
 				}
 				if (time(NULL) - rpt_vars[i].lastthreadrestarttime <= 5) {
@@ -5806,8 +5824,9 @@ static void *rpt_master(void *ignore)
 					continue;
 				}
 				if (!(rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
-					if (pthread_join(rpt_vars[i].rpt_thread, NULL)) {
-						ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(errno));
+					int err = pthread_join(rpt_vars[i].rpt_thread, NULL);
+					if (err) {
+						ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(err));
 					} else {
 						ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
 						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
@@ -7494,6 +7513,9 @@ static int unload_module(void)
 	rpt_cli_unload();
 	res |= rpt_manager_unload();
 	close(nullfd);
+
+	rpt_unregister_pseudo_channel_tech();
+
 	return res;
 }
 
@@ -7504,6 +7526,10 @@ static int load_module(void)
 	nullfd = open("/dev/null", O_RDWR);
 	if (nullfd == -1) {
 		ast_log(LOG_ERROR, "Can not open /dev/null: %s\n", strerror(errno));
+		return -1;
+	}
+	if (rpt_register_pseudo_channel_tech()) {
+		close(nullfd);
 		return -1;
 	}
 	ast_pthread_create(&rpt_master_thread, NULL, rpt_master, NULL);

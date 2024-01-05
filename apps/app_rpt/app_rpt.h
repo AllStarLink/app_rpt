@@ -560,13 +560,27 @@ struct rpt_cmd_struct {
 
 enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 
+/* Faciliates conferencing using either
+ * DAHDI or native Asterisk bridging.
+ * Depending on what type of bridging is used,
+ * one or the other is used, but never both simultaneously.
+ * See comments at top of rpt_bridging.c. */
 struct rpt_conf {
+	/*! \todo Since dahdiconf and astconf
+	 * are not used simultaneously,
+	 * they should be moved inside a union. */
 	/* DAHDI conference numbers */
 	struct {
 		int conf;
 		int txconf;
 		int teleconf; /*!< \brief telemetry conference id */
 	} dahdiconf;
+	/* Asterisk conference bridges */
+	struct {
+		struct ast_bridge *conf;
+		struct ast_bridge *txconf;
+		struct ast_bridge *teleconf;
+	} astconf;
 };
 
 /*! \brief Populate rpt structure with data */

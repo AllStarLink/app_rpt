@@ -21,20 +21,31 @@ enum rpt_conf_type {
 
 /* Uses same flag name style as DAHDI_CONF flags, since that's what these are based on */
 enum rpt_conf_flags {
-	RPT_CONF_NORMAL = (1 << 0),
-	RPT_CONF_MONITOR = (1 << 1),
-	RPT_CONF_MONITORTX = (1 << 2),
-	RPT_CONF_CONF = (1 << 3),
-	RPT_CONF_CONFANN = (1 << 4),
-	RPT_CONF_CONFMON = (1 << 5),
-	RPT_CONF_CONFANNMON = (1 << 6),
-	RPT_CONF_LISTENER = (1 << 7),
-	RPT_CONF_TALKER = (1 << 8),
+	RPT_CONF_NORMAL = 0,
+	RPT_CONF_MONITOR = 1,
+	RPT_CONF_MONITORTX = 2,
+	RPT_CONF_CONF = 4,
+	RPT_CONF_CONFANN = 5,
+	RPT_CONF_CONFMON = 6,
+	RPT_CONF_CONFANNMON = 7,
+	RPT_CONF_LISTENER = 0x100,
+	RPT_CONF_TALKER = 0x200,
 };
 
 enum rpt_chan_flags {
 	RPT_LINK_CHAN = (1 << 0),
 };
+
+/*!
+ * \brief Set the bridging technology to use
+ * \param usedahdi 1 to use DAHDI pseudo channels and conferencing,
+ *                 0 to use softmix Asterisk bridges
+ * \note This setting MUST NOT be changed at runtime.
+ *       It should only be set once when app_rpt loads.
+ *       Completely unload the module and load it again to load new setting.
+ * \retval 0 on success, -1 on failure
+ */
+int rpt_set_bridging_subsystem(int usedahdi);
 
 /*!
  * \brief Hang up an Asterisk channel belonging to a repeater
@@ -59,10 +70,11 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 /*!
  * \brief Request a pseudo channel
  * \param cap
+ * \param name
  * \return channel on success
  * \return NULL on failure
  */
-struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap);
+struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *name);
 
 /*!
  * \brief Request a repeater channel not associated with a real device
@@ -79,6 +91,12 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
 
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
+
+/*!
+ * \brief Clean up any bridge state for a repeater
+ * \param myrpt
+ */
+void rpt_bridge_cleanup(struct rpt *myrpt);
 
 int rpt_equate_tx_conf(struct rpt *myrpt);
 
