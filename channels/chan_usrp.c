@@ -265,7 +265,7 @@ static struct usrp_pvt *usrp_alloc(void *data)
 	if (pvt) {
 		memset(pvt, 0, sizeof(struct usrp_pvt));
 
-		snprintf(pvt->stream, sizeof(pvt->stream), "%s:%d", args.hisip, atoi(args.hisport));
+		snprintf(pvt->stream, sizeof(pvt->stream), "%s:%d:%d", args.hisip, atoi(args.hisport), atoi(args.myport));
 		pvt->rxq.qe_forw = &pvt->rxq;
 		pvt->rxq.qe_back = &pvt->rxq;
 
