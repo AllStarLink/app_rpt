@@ -2893,7 +2893,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	}
 	tele = ast_calloc(1, sizeof(struct rpt_tele));
 	if (!tele) {
-		return NULL;
+		return;
 	}
 	tele->rpt = myrpt;
 	tele->mode = mode;
