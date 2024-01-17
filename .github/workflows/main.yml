@@ -34,7 +34,7 @@ jobs:
           chmod +x phreaknet.sh
           ./phreaknet.sh make
           phreaknet update
-          phreaknet install --dahdi --lightweight
+          phreaknet install --dahdi --lightweight --alsa --fast
           /etc/init.d/asterisk restart
       - name: Checkout
         uses: actions/checkout@v2

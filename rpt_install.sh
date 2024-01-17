@@ -145,10 +145,6 @@ rpt_add "utils/simpleusb-tune-menu.c"
 
 nproc
 
-# XXX: For now
-#menuselect/menuselect --disable res_usbradio --disable chan_simpleusb --disable chan_usbradio
-rm menuselect.makeopts
-
 make -j$(nproc) apps
 make -j$(nproc) channels
 make -j$(nproc) res
