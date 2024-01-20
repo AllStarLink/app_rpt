@@ -128,7 +128,7 @@ static struct ast_jb_conf default_jbconf = {
 
 static struct ast_jb_conf global_jbconf;
 
-#define	QUEUE_SIZE	2
+#define	QUEUE_SIZE	20			/* 400 milliseconds of sound card output buffer */
 
 #define CONFIG	"usbradio.conf"				/* default config file */
 #define CONFIG_TUNE	"usbradio_tune_%s.conf"	/* tune config file */
@@ -202,11 +202,9 @@ struct chan_usbradio_pvt {
 
 	struct ast_channel *owner;
 
-	/* buffers used in usbradio_write, 2 per int by 2 channels by 6 times oversampling (48KS/s) */
+	/* buffer used in usbradio_write, 2 per int by 2 channels by 6 times oversampling (48KS/s) */
 	char usbradio_write_buf[FRAME_SIZE * 2 * 2 * 6];
-	char usbradio_write_buf_1[FRAME_SIZE * 2 * 2 * 6];
 
-	int usbradio_write_dst;
 	/* buffers used in usbradio_read - AST_FRIENDLY_OFFSET space for headers
 	 * plus enough room for a full frame
 	 */
@@ -1385,11 +1383,19 @@ static int used_blocks(struct chan_usbradio_pvt *o)
 		return 1;
 	}
 
+	/* Set the total blocks */
 	if (o->total_blocks == 0) {
-		if (0) {					/* debugging */
-			ast_log(LOG_WARNING, "fragtotal %d size %d avail %d\n", info.fragstotal, info.fragsize, info.fragments);
-		}
+		ast_debug(1, "Channel %s: fragment total %d, size %d, available %d, bytes %d\n", 
+			o->name, info.fragstotal, info.fragsize, info.fragments, info.bytes);
 		o->total_blocks = info.fragments;
+		/* Check the queue size, it cannot exceed the total fragments */
+		if (info.fragstotal >= o->queuesize) {
+			o->queuesize = info.fragstotal - 1;
+			if (o->queuesize < 2) {
+				o->queuesize = QUEUE_SIZE;
+			}
+			ast_debug(1, "Channel %s: Queue size reset to %d\n", o->name, o->queuesize);
+		}
 	}
 
 	return o->total_blocks - info.fragments;
@@ -1407,6 +1413,7 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 {
 	int res;
 
+	/* If the sound device is not open, setformat will open the device */
 	if (o->sounddev < 0) {
 		setformat(o, O_RDWR);
 	}
@@ -1433,7 +1440,15 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 		return 0;
 	}
 
-	return write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 12);
+	res = write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
+	if (res < 0) {
+		ast_log(LOG_ERROR, "Channel %s: Sound card write error %s\n", o->name, strerror(errno));
+	} else if (res != FRAME_SIZE * 2 * 2 * 6) {
+		ast_log(LOG_ERROR, "Channel %s: Sound card wrote %d bytes of %d\n", 
+			o->name, res, (FRAME_SIZE * 2 * 2 * 6));
+	}
+	
+	return res;
 }
 
 /*!
@@ -1823,7 +1838,7 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
  */
 static struct ast_frame *usbradio_read(struct ast_channel *c)
 {
-	int res, src, datalen, oldpttout;
+	int res, oldpttout;
 	int cd, sd;
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f = &o->read_f, *f1;
@@ -1956,8 +1971,8 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 	if (oldpttout && (!o->didpmrtx)) {
 		if (o->notxcnt > 1) {
-			memset(o->usbradio_write_buf_1, 0, sizeof(o->usbradio_write_buf_1));
-			PmrTx(o->pmrChan, (i16 *) o->usbradio_write_buf_1);
+			memset(o->usbradio_write_buf, 0, sizeof(o->usbradio_write_buf));
+			PmrTx(o->pmrChan, (i16 *) o->usbradio_write_buf);
 		} else {
 			o->notxcnt++;
 		}
@@ -1968,7 +1983,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 	PmrRx(o->pmrChan,
 		  (i16 *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET),
-		  (i16 *) (o->usbradio_read_buf_8k + AST_FRIENDLY_OFFSET), (i16 *) (o->usbradio_write_buf_1));
+		  (i16 *) (o->usbradio_read_buf_8k + AST_FRIENDLY_OFFSET), (i16 *) (o->usbradio_write_buf));
 
 	if (oldpttout != o->pmrChan->txPttOut) {
 		ast_debug(3, "Channel %s: txPttOut = %i.\n", o->name, o->pmrChan->txPttOut);
@@ -1980,7 +1995,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		ftxoutraw = fopen(TX_CAP_OUT_FILE, "w");
 	}
 	if (ftxoutraw) {
-		fwrite(o->usbradio_write_buf_1, 1, FRAME_SIZE * 2 * 6, ftxoutraw);
+		fwrite(o->usbradio_write_buf, 1, FRAME_SIZE * 2 * 6, ftxoutraw);
 	}
 #endif
 
@@ -1990,43 +2005,25 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 #endif
 
-	// 160 samples * 2 bytes/sample * 2 chan * 6x oversampling to 48KS/s
-	datalen = FRAME_SIZE * 24;
-	src = 0;					/* read position into f->data */
-	while (src < datalen) {
-		/* Compute spare room in the buffer */
-		int l = sizeof(o->usbradio_write_buf) - o->usbradio_write_dst;
+	/* For the CM108 adjust the audio level */
+	if (o->devtype != C108_PRODUCT_ID) {
+		register short *sp = (short *) o->usbradio_write_buf;
+		register float v;
+		register int i;
 
-		if (datalen - src >= l) {
-			/* enough to fill a frame */
-			memcpy(o->usbradio_write_buf + o->usbradio_write_dst, o->usbradio_write_buf_1 + src, l);
-			/* Adjust the audio level for CM119 A/B devices */
-			if (o->devtype != C108_PRODUCT_ID) {
-				register short *sp = (short *) o->usbradio_write_buf;
-				register float v;
-				register int i;
-
-				for (i = 0; i < l / 2; i++) {
-					v = ((float) *sp) * 1.10;
-					if (v > 32765.0) {
-						v = 32765.0;
-					} else if (v < -32765.0) {
-						v = -32765.0;
-					}
-					*sp++ = (int) v;
-				}
+		for (i = 0; i < sizeof(o->usbradio_write_buf) / 2; i++) {
+			v = ((float) *sp) * 1.10;
+			if (v > 32765.0) {
+				v = 32765.0;
+			} else if (v < -32765.0) {
+				v = -32765.0;
 			}
-			soundcard_writeframe(o, (short *) o->usbradio_write_buf);
-			src += l;
-			o->usbradio_write_dst = 0;
-		} else {
-			/* copy residue */
-			l = datalen - src;
-			memcpy(o->usbradio_write_buf + o->usbradio_write_dst, o->usbradio_write_buf_1 + src, l);
-			src += l;			/* but really, we are done */
-			o->usbradio_write_dst += l;
+			*sp++ = (int) v;
 		}
 	}
+	/* Write the received audio to the sound card */
+	soundcard_writeframe(o, (short *) o->usbradio_write_buf);
+
 #else
 	static FILE *hInput;
 	i16 iBuff[FRAME_SIZE * 2 * 6];
