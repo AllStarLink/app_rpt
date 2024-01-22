@@ -1389,7 +1389,7 @@ static int used_blocks(struct chan_usbradio_pvt *o)
 			o->name, info.fragstotal, info.fragsize, info.fragments, info.bytes);
 		o->total_blocks = info.fragments;
 		/* Check the queue size, it cannot exceed the total fragments */
-		if (info.fragstotal >= o->queuesize) {
+		if (o->queuesize >= info.fragstotal) {
 			o->queuesize = info.fragstotal - 1;
 			if (o->queuesize < 2) {
 				o->queuesize = QUEUE_SIZE;
@@ -1435,8 +1435,11 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	 */
 	res = used_blocks(o);
 	if (res > o->queuesize) {	/* no room to write a block */
-		ast_log(LOG_WARNING, "Channel %s: Sound device write buffer overflow - used %d blocks\n",
-			o->name, res);
+		/* Only report a buffer overflow when we are transmitting */
+		if (o->pmrChan->txPttIn || o->pmrChan->txPttOut) {
+			ast_log(LOG_WARNING, "Channel %s: Sound device write buffer overflow - used %d blocks\n",
+				o->name, res);
+		}
 		return 0;
 	}
 
