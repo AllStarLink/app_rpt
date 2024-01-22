@@ -1337,7 +1337,7 @@ static int used_blocks(struct chan_simpleusb_pvt *o)
 			o->name, info.fragstotal, info.fragsize, info.fragments, info.bytes);
 		o->total_blocks = info.fragments;
 		/* Check the queue size, it cannot exceed the total fragments */
-		if (info.fragstotal >= o->queuesize) {
+		if (o->queuesize >= info.fragstotal) {
 			o->queuesize = info.fragstotal - 1;
 			if (o->queuesize < 2) {
 				o->queuesize = QUEUE_SIZE;
