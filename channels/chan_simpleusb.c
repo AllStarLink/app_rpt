@@ -124,7 +124,7 @@ static struct ast_jb_conf global_jbconf;
 #define ZEROVAL AMPVAL
 #define	DIVSAMP (DIVLCM / SAMPRATE)
 
-#define	QUEUE_SIZE	5
+#define	QUEUE_SIZE	5			/* 100 milliseconds of sound card output buffer */
 
 #define CONFIG	"simpleusb.conf"				/* default config file */
 #define CONFIG_TUNE	"simpleusb_tune_%s.conf"	/* tune config file */
@@ -1331,11 +1331,19 @@ static int used_blocks(struct chan_simpleusb_pvt *o)
 		return 1;
 	}
 
+	/* Set the total blocks */
 	if (o->total_blocks == 0) {
-		if (0) {		/* debugging */
-			ast_log(LOG_WARNING, "fragtotal %d size %d avail %d\n", info.fragstotal, info.fragsize, info.fragments);
-		}
+		ast_debug(1, "Channel %s: fragment total %d, size %d, available %d, bytes %d\n", 
+			o->name, info.fragstotal, info.fragsize, info.fragments, info.bytes);
 		o->total_blocks = info.fragments;
+		/* Check the queue size, it cannot exceed the total fragments */
+		if (o->queuesize >= info.fragstotal) {
+			o->queuesize = info.fragstotal - 1;
+			if (o->queuesize < 2) {
+				o->queuesize = QUEUE_SIZE;
+			}
+			ast_debug(1, "Channel %s: Queue size reset to %d\n", o->name, o->queuesize);
+		}
 	}
 
 	return o->total_blocks - info.fragments;
@@ -1353,6 +1361,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 {
 	int res;
 
+	/* If the sound device is not open, setformat will open the device */
 	if (o->sounddev < 0) {
 		setformat(o, O_RDWR);
 	}
@@ -1372,7 +1381,15 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 		return 0;
 	}
 
-	return write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
+	res = write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
+	if (res < 0) {
+		ast_log(LOG_ERROR, "Channel %s: Sound card write error %s\n", o->name, strerror(errno));
+	} else if (res != FRAME_SIZE * 2 * 2 * 6) {
+		ast_log(LOG_ERROR, "Channel %s: Sound card wrote %d bytes of %d\n", 
+			o->name, res, (FRAME_SIZE * 2 * 2 * 6));
+	}
+	
+	return res;
 }
 
 /*!
