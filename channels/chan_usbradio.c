@@ -1032,16 +1032,16 @@ static void *hidthread(void *arg)
 		if (cfg_tune) {
 			for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
 
-				M_START((char *) v->name, (char *) v->value);
-				M_UINT("rxmixerset", o->rxmixerset)
-				M_UINT("txmixaset", o->txmixaset)
-				M_UINT("txmixbset", o->txmixbset)
-				M_F("rxvoiceadj", store_rxvoiceadj(o, (char *) v->value))
-				M_F("rxctcssadj", store_rxctcssadj(o, (char *) v->value))
-				M_UINT("txctcssadj", o->txctcssadj);
-				M_UINT("rxsquelchadj", o->rxsquelchadj)
-				M_UINT("fever", o->fever)
-				M_END(;);
+				CV_START((char *) v->name, (char *) v->value);
+				CV_UINT("rxmixerset", o->rxmixerset);
+				CV_UINT("txmixaset", o->txmixaset);
+				CV_UINT("txmixbset", o->txmixbset);
+				CV_F("rxvoiceadj", store_rxvoiceadj(o, (char *) v->value));
+				CV_F("rxctcssadj", store_rxctcssadj(o, (char *) v->value));
+				CV_UINT("txctcssadj", o->txctcssadj);
+				CV_UINT("rxsquelchadj", o->rxsquelchadj);
+				CV_UINT("fever", o->fever);
+				CV_END;
 			}
 			ast_config_destroy(cfg_tune);
 			ast_log(LOG_NOTICE, "Channel %s: Loaded parameters from %s .\n", o->name, fname);
@@ -4476,68 +4476,68 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 	o->echomax = DEFAULT_ECHO_MAX;
 	/* fill other fields from configuration */
 	for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
-		M_START((char *) v->name, (char *) v->value);
+		CV_START((char *) v->name, (char *) v->value);
 
 		/* handle jb conf */
 		if (!ast_jb_read_conf(&global_jbconf, v->name, v->value)) {
 			continue;
 		}
 
-		M_UINT("frags", o->frags)
-		M_UINT("queuesize", o->queuesize)
-		M_BOOL("rxcpusaver", o->rxcpusaver)
-		M_BOOL("txcpusaver", o->txcpusaver)
-		M_BOOL("invertptt", o->invertptt)
-		M_F("rxdemod", store_rxdemod(o, (char *) v->value))
-		M_BOOL("txlimonly", o->txlimonly);
-		M_BOOL("txprelim", o->txprelim);
-		M_F("txmixa", store_txmixa(o, (char *) v->value))
-		M_F("txmixb", store_txmixb(o, (char *) v->value))
-		M_F("carrierfrom", store_rxcdtype(o, (char *) v->value))
-		M_F("ctcssfrom", store_rxsdtype(o, (char *) v->value))
-		M_UINT("rxsqvox", o->rxsqvoxadj)
-		M_UINT("rxsqhyst", o->rxsqhyst)
-		M_UINT("rxnoisefiltype", o->rxnoisefiltype)
-		M_UINT("rxsquelchdelay", o->rxsquelchdelay)
-		M_STR("txctcssdefault", o->txctcssdefault)
-		M_STR("rxctcssfreqs", o->rxctcssfreqs)
-		M_STR("txctcssfreqs", o->txctcssfreqs)
-		M_BOOL("rxctcssoverride", o->rxctcssoverride);
-		M_UINT("rxfreq", o->rxfreq)
-		M_UINT("txfreq", o->txfreq)
-		M_F("rxgain", store_rxgain(o, (char *) v->value))
-		M_BOOL("rxboost", o->rxboostset)
-		M_BOOL("txboost", o->txboostset)
-		M_UINT("rxctcssrelax", o->rxctcssrelax)
-		M_F("txtoctype", store_txtoctype(o, (char *) v->value))
-		M_UINT("hdwtype", o->hdwtype)
-		M_UINT("eeprom", o->wanteeprom)
-		M_UINT("duplex", o->radioduplex)
-		M_UINT("txsettletime", o->txsettletime)
-		M_UINT("txrxblankingtime", o->txrxblankingtime)
-		M_BOOL("rxpolarity", o->rxpolarity)
-		M_BOOL("txpolarity", o->txpolarity)
-		M_BOOL("dcsrxpolarity", o->dcsrxpolarity)
-		M_BOOL("dcstxpolarity", o->dcstxpolarity)
-		M_BOOL("lsdrxpolarity", o->lsdrxpolarity)
-		M_BOOL("lsdtxpolarity", o->lsdtxpolarity)
-		M_BOOL("radioactive", o->radioactive)
-		M_UINT("rptnum", o->rptnum)
-		M_UINT("idleinterval", o->idleinterval)
-		M_UINT("turnoffs", o->turnoffs)
-		M_UINT("tracetype", o->tracetype)
-		M_UINT("tracelevel", o->tracelevel)
-		M_UINT("rxondelay", o->rxondelay);
-		M_UINT("txoffdelay", o->txoffdelay);
-		M_UINT("area", o->area)
-		M_STR("ukey", o->ukey)
-		M_UINT("duplex3", o->duplex3)
-		M_UINT("rxlpf", o->rxlpf)
-		M_UINT("rxhpf", o->rxhpf)
-		M_UINT("txlpf", o->txlpf)
-		M_UINT("txhpf", o->txhpf)
-		M_UINT("sendvoter", o->sendvoter)
-		M_END(;);
+		CV_UINT("frags", o->frags);
+		CV_UINT("queuesize", o->queuesize);
+		CV_BOOL("rxcpusaver", o->rxcpusaver);
+		CV_BOOL("txcpusaver", o->txcpusaver);
+		CV_BOOL("invertptt", o->invertptt);
+		CV_F("rxdemod", store_rxdemod(o, (char *) v->value));
+		CV_BOOL("txlimonly", o->txlimonly);
+		CV_BOOL("txprelim", o->txprelim);
+		CV_F("txmixa", store_txmixa(o, (char *) v->value));
+		CV_F("txmixb", store_txmixb(o, (char *) v->value));
+		CV_F("carrierfrom", store_rxcdtype(o, (char *) v->value));
+		CV_F("ctcssfrom", store_rxsdtype(o, (char *) v->value));
+		CV_UINT("rxsqvox", o->rxsqvoxadj);
+		CV_UINT("rxsqhyst", o->rxsqhyst);
+		CV_UINT("rxnoisefiltype", o->rxnoisefiltype);
+		CV_UINT("rxsquelchdelay", o->rxsquelchdelay);
+		CV_STR("txctcssdefault", o->txctcssdefault);
+		CV_STR("rxctcssfreqs", o->rxctcssfreqs);
+		CV_STR("txctcssfreqs", o->txctcssfreqs);
+		CV_BOOL("rxctcssoverride", o->rxctcssoverride);
+		CV_UINT("rxfreq", o->rxfreq);
+		CV_UINT("txfreq", o->txfreq);
+		CV_F("rxgain", store_rxgain(o, (char *) v->value));
+		CV_BOOL("rxboost", o->rxboostset);
+		CV_BOOL("txboost", o->txboostset);
+		CV_UINT("rxctcssrelax", o->rxctcssrelax);
+		CV_F("txtoctype", store_txtoctype(o, (char *) v->value));
+		CV_UINT("hdwtype", o->hdwtype);
+		CV_UINT("eeprom", o->wanteeprom);
+		CV_UINT("duplex", o->radioduplex);
+		CV_UINT("txsettletime", o->txsettletime);
+		CV_UINT("txrxblankingtime", o->txrxblankingtime);
+		CV_BOOL("rxpolarity", o->rxpolarity);
+		CV_BOOL("txpolarity", o->txpolarity);
+		CV_BOOL("dcsrxpolarity", o->dcsrxpolarity);
+		CV_BOOL("dcstxpolarity", o->dcstxpolarity);
+		CV_BOOL("lsdrxpolarity", o->lsdrxpolarity);
+		CV_BOOL("lsdtxpolarity", o->lsdtxpolarity);
+		CV_BOOL("radioactive", o->radioactive);
+		CV_UINT("rptnum", o->rptnum);
+		CV_UINT("idleinterval", o->idleinterval);
+		CV_UINT("turnoffs", o->turnoffs);
+		CV_UINT("tracetype", o->tracetype);
+		CV_UINT("tracelevel", o->tracelevel);
+		CV_UINT("rxondelay", o->rxondelay);
+		CV_UINT("txoffdelay", o->txoffdelay);
+		CV_UINT("area", o->area);
+		CV_STR("ukey", o->ukey);
+		CV_UINT("duplex3", o->duplex3);
+		CV_UINT("rxlpf", o->rxlpf);
+		CV_UINT("rxhpf", o->rxhpf);
+		CV_UINT("txlpf", o->txlpf);
+		CV_UINT("txhpf", o->txhpf);
+		CV_UINT("sendvoter", o->sendvoter);
+		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			sprintf(buf, "gpio%d", i + 1);
@@ -4606,17 +4606,17 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 	if (cfg_tune) {
 		for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
 
-			M_START((char *) v->name, (char *) v->value);
-			M_UINT("rxmixerset", o->rxmixerset)
-			M_UINT("txmixaset", o->txmixaset)
-			M_UINT("txmixbset", o->txmixbset)
-			M_F("rxvoiceadj", store_rxvoiceadj(o, (char *) v->value))
-			M_F("rxctcssadj", store_rxctcssadj(o, (char *) v->value))
-			M_UINT("txctcssadj", o->txctcssadj);
-			M_UINT("rxsquelchadj", o->rxsquelchadj)
-			M_UINT("fever", o->fever)
-			M_STR("devstr", o->devstr)
-			M_END(;);
+			CV_START((char *) v->name, (char *) v->value);
+			CV_UINT("rxmixerset", o->rxmixerset);
+			CV_UINT("txmixaset", o->txmixaset);
+			CV_UINT("txmixbset", o->txmixbset);
+			CV_F("rxvoiceadj", store_rxvoiceadj(o, (char *) v->value));
+			CV_F("rxctcssadj", store_rxctcssadj(o, (char *) v->value));
+			CV_UINT("txctcssadj", o->txctcssadj);
+			CV_UINT("rxsquelchadj", o->rxsquelchadj);
+			CV_UINT("fever", o->fever);
+			CV_STR("devstr", o->devstr);
+			CV_END;
 		}
 		ast_config_destroy(cfg_tune);
 	} else {

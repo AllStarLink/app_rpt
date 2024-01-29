@@ -977,11 +977,11 @@ static void *hidthread(void *arg)
 		if (cfg_tune) {
 			for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
 
-				M_START((char *) v->name, (char *) v->value);
-				M_UINT("rxmixerset", o->rxmixerset)
-				M_UINT("txmixaset", o->txmixaset)
-				M_UINT("txmixbset", o->txmixbset)
-				M_END(;);
+				CV_START((char *) v->name, (char *) v->value);
+				CV_UINT("rxmixerset", o->rxmixerset);
+				CV_UINT("txmixaset", o->txmixaset);
+				CV_UINT("txmixbset", o->txmixbset);
+				CV_END;
 			}
 			ast_config_destroy(cfg_tune);
 			ast_log(LOG_NOTICE, "Channel %s: Loaded parameters from %s .\n", o->name, fname);
@@ -3336,29 +3336,29 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 	o->echomax = DEFAULT_ECHO_MAX;
 	/* fill other fields from configuration */
 	for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
-		M_START((char *) v->name, (char *) v->value);
+		CV_START((char *) v->name, (char *) v->value);
 
 		/* handle jb conf */
 		if (!ast_jb_read_conf(&global_jbconf, v->name, v->value)) {
 			continue;
 		}
 
-		M_UINT("frags", o->frags)
-		M_UINT("queuesize", o->queuesize)
-		M_BOOL("invertptt", o->invertptt)
-		M_F("carrierfrom", store_rxcdtype(o, (char *) v->value))
-		M_F("ctcssfrom", store_rxsdtype(o, (char *) v->value))
-		M_BOOL("rxboost", o->rxboostset)
-		M_UINT("hdwtype", o->hdwtype)
-		M_UINT("eeprom", o->wanteeprom)
-		M_UINT("rxondelay", o->rxondelay)
-		M_UINT("txoffdelay", o->txoffdelay);
-		M_F("pager", store_pager(o, (char *) v->value))
-		M_BOOL("plfilter", o->plfilter)
-		M_BOOL("deemphasis", o->deemphasis)
-		M_BOOL("preemphasis", o->preemphasis)
-		M_UINT("duplex3", o->duplex3)
-		M_END(;);
+		CV_UINT("frags", o->frags);
+		CV_UINT("queuesize", o->queuesize);
+		CV_BOOL("invertptt", o->invertptt);
+		CV_F("carrierfrom", store_rxcdtype(o, (char *) v->value));
+		CV_F("ctcssfrom", store_rxsdtype(o, (char *) v->value));
+		CV_BOOL("rxboost", o->rxboostset);
+		CV_UINT("hdwtype", o->hdwtype);
+		CV_UINT("eeprom", o->wanteeprom);
+		CV_UINT("rxondelay", o->rxondelay);
+		CV_UINT("txoffdelay", o->txoffdelay);
+		CV_F("pager", store_pager(o, (char *) v->value));
+		CV_BOOL("plfilter", o->plfilter);
+		CV_BOOL("deemphasis", o->deemphasis);
+		CV_BOOL("preemphasis", o->preemphasis);
+		CV_UINT("duplex3", o->duplex3);
+		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			sprintf(buf, "gpio%d", i + 1);
@@ -3410,12 +3410,12 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 	if (cfg_tune) {
 		for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
 
-			M_START((char *) v->name, (char *) v->value);
-			M_UINT("rxmixerset", o->rxmixerset)
-			M_UINT("txmixaset", o->txmixaset)
-			M_UINT("txmixbset", o->txmixbset)
-			M_STR("devstr", o->devstr)
-			M_END(;);
+			CV_START((char *) v->name, (char *) v->value);
+			CV_UINT("rxmixerset", o->rxmixerset);
+			CV_UINT("txmixaset", o->txmixaset);
+			CV_UINT("txmixbset", o->txmixbset);
+			CV_STR("devstr", o->devstr);
+			CV_END;
 		}
 		ast_config_destroy(cfg_tune);
 	} else {
