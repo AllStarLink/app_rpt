@@ -127,35 +127,6 @@
  */
 #define GPIO_PINCOUNT 8
 
-
-/*
- * Helper macros to parse config arguments. They will go in a common
- * header file if their usage is globally accepted. In the meantime,
- * we define them here. Typical usage is as below.
- * Remember to open a block right before M_START (as it declares
- * some variables) and use the M_* macros WITHOUT A SEMICOLON:
- *
- *	{
- *		M_START(v->name, v->value) 
- *
- *		M_BOOL("dothis", x->flag1)
- *		M_STR("name", x->somestring)
- *		M_F("bar", some_c_code)
- *		M_END(some_final_statement)
- *		... other code in the block
- *	}
- *
- * XXX NOTE these macros should NOT be replicated in other parts of asterisk. 
- * Likely we will come up with a better way of doing config file parsing.
- */
-#define M_START(var, val) \
-        char *__s = var; char *__val = val;
-#define M_END(x)   x;
-#define M_F(tag, f)			if (!strcasecmp((__s), tag)) { f; } else
-#define M_BOOL(tag, dst)	M_F(tag, (dst) = ast_true(__val) )
-#define M_UINT(tag, dst)	M_F(tag, (dst) = strtoul(__val, NULL, 0) )
-#define M_STR(tag, dst)		M_F(tag, ast_copy_string(dst, __val, sizeof(dst)))
-
 /*
  * The following parameters are used in the driver:
  *
