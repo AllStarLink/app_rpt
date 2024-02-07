@@ -131,7 +131,6 @@ static struct ast_jb_conf global_jbconf;
 #define	QUEUE_SIZE	20			/* 400 milliseconds of sound card output buffer */
 
 #define CONFIG	"usbradio.conf"				/* default config file */
-#define CONFIG_TUNE	"usbradio_tune_%s.conf"	/* tune config file */
 
 /* file handles for writing debug audio packets */
 static FILE *frxcapraw = NULL, *frxcaptrace = NULL, *frxoutraw = NULL;
@@ -702,6 +701,72 @@ static void *pulserthread(void *arg)
 }
 
 /*!
+ * \brief Load settings for a specific node
+ * \param o
+ * \param cfg If provided, will use the provided config. If NULL, cfg will be opened automatically.
+ * \param reload 0 for first load, 1 for reload
+ */
+static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config *cfg, int reload)
+{
+	struct ast_variable *v;
+	struct ast_config *cfg2;
+	int opened = 0;
+	int configured = 0;
+	char devstr[sizeof(o->devstr)];
+
+	o->rxmixerset = 500;
+	o->txmixaset = 500;
+	o->txmixbset = 500;
+	o->rxvoiceadj = 0.5;
+	o->rxctcssadj = 0.5;
+	o->txctcssadj = 200;
+	o->rxsquelchadj = 500;
+
+	devstr[0] = '\0';
+	if (!reload) {
+		o->devstr[0] = 0;
+	}
+
+	if (!cfg) {
+		struct ast_flags zeroflag = { 0 };
+		cfg2 = ast_config_load(CONFIG, zeroflag);
+		if (!cfg2) {
+			ast_log(LOG_WARNING, "Can't %sload settings for %s, using default parameters\n", reload ? "re": "", o->name);
+			return -1;
+		}
+		opened = 1;
+		cfg = cfg2;
+	}
+
+	for (v = ast_variable_browse(cfg, o->name); v; v = v->next) {
+		configured = 1;
+		CV_START(v->name, v->value);
+		CV_UINT("rxmixerset", o->rxmixerset);
+		CV_UINT("txmixaset", o->txmixaset);
+		CV_UINT("txmixbset", o->txmixbset);
+		CV_F("rxvoiceadj", store_rxvoiceadj(o, v->value));
+		CV_F("rxctcssadj", store_rxctcssadj(o, v->value));
+		CV_UINT("txctcssadj", o->txctcssadj);
+		CV_UINT("rxsquelchadj", o->rxsquelchadj);
+		CV_UINT("fever", o->fever);
+		CV_STR("devstr", devstr);
+		CV_END;
+	}
+	if (!reload) {
+		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
+		strcpy(o->devstr, devstr); /* Safe */
+	}
+	if (opened) {
+		ast_config_destroy(cfg2);
+	}
+	if (!configured) {
+		ast_log(LOG_WARNING, "Can't %sload settings for %s (no section available), using default parameters\n", reload ? "re": "", o->name);
+		return -1;
+	}
+	return 0;
+}
+
+/*!
  * \brief USB sound device GPIO processing thread
  * This thread is responsible for finding and associating the node with the
  * associated usb sound card device.  It performs setup and initialization of
@@ -733,16 +798,13 @@ static void *pulserthread(void *arg)
 static void *hidthread(void *arg)
 {
 	unsigned char buf[4], bufsave[4], keyed, ctcssed;
-	char fname[200], *s, lasttxtmp;
+	char *s, lasttxtmp;
 	register int i, j, k;
 	int res;
 	struct usb_device *usb_dev;
 	struct usb_dev_handle *usb_handle;
 	struct chan_usbradio_pvt *o = arg, *ao;
 	struct timeval then;
-	struct ast_config *cfg_tune;
-	struct ast_variable *v;
-	struct ast_flags zeroflag = { 0 };
 	struct pollfd rfds[1];
 
 	usb_dev = NULL;
@@ -814,7 +876,7 @@ static void *hidthread(void *arg)
 				continue;
 			}
 			ast_log(LOG_NOTICE, "Channel %s: Assigned USB device %s to usbradio channel\n", o->name, s);
-			strcpy(o->devstr, s);
+			ast_copy_string(o->devstr, s, sizeof(o->devstr));
 		}
 		/* Double check to see if the device string is assigned to another usb channel */
 		for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
@@ -1020,34 +1082,7 @@ static void *hidthread(void *arg)
 		mult_set(o);
 
 		/* reload the settings from the tune file */
-		snprintf(fname, sizeof(fname) - 1, CONFIG_TUNE, o->name);
-		cfg_tune = ast_config_load(fname, zeroflag);
-		o->rxmixerset = 500;
-		o->txmixaset = 500;
-		o->txmixbset = 500;
-		o->rxvoiceadj = 0.5;
-		o->rxctcssadj = 0.5;
-		o->txctcssadj = 200;
-		o->rxsquelchadj = 500;
-		if (cfg_tune) {
-			for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
-
-				CV_START((char *) v->name, (char *) v->value);
-				CV_UINT("rxmixerset", o->rxmixerset);
-				CV_UINT("txmixaset", o->txmixaset);
-				CV_UINT("txmixbset", o->txmixbset);
-				CV_F("rxvoiceadj", store_rxvoiceadj(o, (char *) v->value));
-				CV_F("rxctcssadj", store_rxctcssadj(o, (char *) v->value));
-				CV_UINT("txctcssadj", o->txctcssadj);
-				CV_UINT("rxsquelchadj", o->rxsquelchadj);
-				CV_UINT("fever", o->fever);
-				CV_END;
-			}
-			ast_config_destroy(cfg_tune);
-			ast_log(LOG_NOTICE, "Channel %s: Loaded parameters from %s .\n", o->name, fname);
-		} else {
-			ast_log(LOG_WARNING, "Channel %s: File %s not found, using default parameters.\n", o->name, fname);
-		}
+		load_tune_config(o, NULL, 1);
 
 		mixer_write(o);
 		mult_set(o);
@@ -2645,7 +2680,7 @@ static int usb_device_swap(int fd, const char *other)
 	d = p->devicenum;
 	strcpy(p->devstr, o->devstr);
 	p->devicenum = o->devicenum;
-	strcpy(o->devstr, tmp);
+	ast_copy_string(o->devstr, tmp, sizeof(o->devstr));
 	o->devicenum = d;
 	o->hasusb = 0;
 	o->usbass = 0;
@@ -4047,37 +4082,66 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 }
 
 /*!
- * \brief Write tune settings to the configuration file.
- *	File file name is "usbradio_tune_xxx.conf", where 
- *	xxx is the node number.
- *	If the device EEPROM is enabled, the settings are 
- *	saved to EEPROM.
- * \param o				Private struct.
+ * \brief Write tune settings to the configuration file. If the device EEPROM is enabled, the settings are  saved to EEPROM.
+ * \param o Channel private.
  */
 static void tune_write(struct chan_usbradio_pvt *o)
 {
-	FILE *fp;
-	char fname[200];
+	struct ast_config *cfg;
+	struct ast_category *category = NULL;
+	struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS | CONFIG_FLAG_NOCACHE };
 
-	snprintf(fname, sizeof(fname) - 1, "/etc/asterisk/usbradio_tune_%s.conf", o->name);
-	fp = fopen(fname, "w");
+	if (!(cfg = ast_config_load2(CONFIG, "chan_usbradio", config_flags))) {
+		ast_log(LOG_ERROR, "Config file not found: %s\n", CONFIG);
+		return;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file has invalid format: %s\n", CONFIG);
+		return;
+	}
 
-	fprintf(fp, "[%s]\n", o->name);
+#define CONFIG_UPDATE_STR(field) \
+	if (ast_variable_update(category, #field, o->field, NULL, 0)) { \
+		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
+	}
 
-	fprintf(fp, "; name=%s\n", o->name);
-	fprintf(fp, "; devicenum=%i\n", o->devicenum);
-	ast_mutex_lock(&usb_dev_lock);
-	fprintf(fp, "devstr=%s\n", o->devstr);
-	ast_mutex_unlock(&usb_dev_lock);
-	fprintf(fp, "rxmixerset=%i\n", o->rxmixerset);
-	fprintf(fp, "txmixaset=%i\n", o->txmixaset);
-	fprintf(fp, "txmixbset=%i\n", o->txmixbset);
-	fprintf(fp, "rxvoiceadj=%f\n", o->rxvoiceadj);
-	fprintf(fp, "rxctcssadj=%f\n", o->rxctcssadj);
-	fprintf(fp, "txctcssadj=%i\n", o->txctcssadj);
-	fprintf(fp, "rxsquelchadj=%i\n", o->rxsquelchadj);
-	fprintf(fp, "fever=%i\n", o->fever);
-	fclose(fp);
+#define CONFIG_UPDATE_INT(field) { \
+	char _buf[15]; \
+	snprintf(_buf, sizeof(_buf), "%d", o->field); \
+	if (ast_variable_update(category, #field, _buf, NULL, 0)) { \
+		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
+	} \
+}
+
+#define CONFIG_UPDATE_FLOAT(field) { \
+	char _buf[15]; \
+	snprintf(_buf, sizeof(_buf), "%f", o->field); \
+	if (ast_variable_update(category, #field, _buf, NULL, 0)) { \
+		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
+	} \
+}
+
+	category = ast_category_get(cfg, o->name, NULL);
+	if (!category) {
+		ast_log(LOG_ERROR, "No category '%s' exists?\n", o->name);
+	} else {
+		CONFIG_UPDATE_STR(devstr);
+		CONFIG_UPDATE_INT(rxmixerset);
+		CONFIG_UPDATE_INT(txmixaset);
+		CONFIG_UPDATE_INT(txmixbset);
+		CONFIG_UPDATE_FLOAT(rxvoiceadj);
+		CONFIG_UPDATE_FLOAT(rxctcssadj);
+		CONFIG_UPDATE_INT(txctcssadj);
+		CONFIG_UPDATE_INT(rxsquelchadj);
+		CONFIG_UPDATE_INT(fever);
+		if (ast_config_text_file_save2(CONFIG, cfg, "chan_usbradio", 0)) {
+			ast_log(LOG_WARNING, "Failed to save config\n");
+		}
+	}
+
+	ast_config_destroy(cfg);
+#undef CONFIG_UPDATE_STR
+#undef CONFIG_UPDATE_INT
+#undef CONFIG_UPDATE_FLOAT
 
 	if (o->wanteeprom) {
 		ast_mutex_lock(&o->eepromlock);
@@ -4444,10 +4508,8 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 {
 	const struct ast_variable *v;
 	struct chan_usbradio_pvt *o;
-	struct ast_config *cfg_tune;
-	char fname[200], buf[100];
+	char  buf[100];
 	int i;
-	struct ast_flags zeroflag = { 0 };
 
 	if (ctg == NULL) {
 		o = &usbradio_default;
@@ -4590,38 +4652,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		hasout = 1;
 	}
 
-	snprintf(fname, sizeof(fname) - 1, CONFIG_TUNE, o->name);
-	cfg_tune = ast_config_load(fname, zeroflag);
-
-	o->rxmixerset = 500;
-	o->txmixaset = 500;
-	o->txmixbset = 500;
-	o->rxvoiceadj = 0.5;
-	o->rxctcssadj = 0.5;
-	o->txctcssadj = 200;
-	o->rxsquelchadj = 725;
-	o->devstr[0] = 0;
-	
-	/* load the tune file settings */
-	if (cfg_tune) {
-		for (v = ast_variable_browse(cfg_tune, o->name); v; v = v->next) {
-
-			CV_START((char *) v->name, (char *) v->value);
-			CV_UINT("rxmixerset", o->rxmixerset);
-			CV_UINT("txmixaset", o->txmixaset);
-			CV_UINT("txmixbset", o->txmixbset);
-			CV_F("rxvoiceadj", store_rxvoiceadj(o, (char *) v->value));
-			CV_F("rxctcssadj", store_rxctcssadj(o, (char *) v->value));
-			CV_UINT("txctcssadj", o->txctcssadj);
-			CV_UINT("rxsquelchadj", o->rxsquelchadj);
-			CV_UINT("fever", o->fever);
-			CV_STR("devstr", o->devstr);
-			CV_END;
-		}
-		ast_config_destroy(cfg_tune);
-	} else {
-		ast_log(LOG_WARNING, "Channel %s: File %s not found, using default parameters.\n", o->name, fname);
-	}
+	load_tune_config(o, NULL, 0);
 
 	/* if we are using the EEPROM, request hidthread load the EEPROM */
 	if (o->wanteeprom) {
