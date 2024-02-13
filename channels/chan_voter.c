@@ -398,7 +398,7 @@ typedef struct {
 #define	VOTER_PAYLOAD_PROXY	0xf000
 
 /*!
- * \brief Descriptor for one of our clients.
+ * \brief Structure for one of our clients.
  */
 struct voter_client {
 	uint32_t nodenum;
@@ -462,7 +462,7 @@ struct voter_client {
 };
 
 /*!
- * \brief Descriptor for one of our channels.
+ * \brief Structure for one of our channels.
  */
 struct voter_pvt {
 	struct ast_channel *owner;
@@ -1065,19 +1065,19 @@ static int voter_setoption(struct ast_channel *chan, int option, void *data, int
 		cp = (char *) data;
 		switch (*cp) {
 		case 1:
-			ast_log(LOG_NOTICE, "Channel %s: Set option TONE VERIFY, mode: OFF(0)\n", ast_channel_name(chan));
+			ast_debug(1, "Channel %s: Set option TONE VERIFY, mode: OFF(0)\n", ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		case 2:
-			ast_log(LOG_NOTICE, "Channel %s: Set option TONE VERIFY, mode: MUTECONF/MAX(2)\n", ast_channel_name(chan));
+			ast_debug(1, "Channel %s: Set option TONE VERIFY, mode: MUTECONF/MAX(2)\n", ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		case 3:
-			ast_log(LOG_NOTICE, "Channel %s: Set option TONE VERIFY, mode: DISABLE DETECT(3)\n", ast_channel_name(chan));
+			ast_debug(1, "Channel %s: Set option TONE VERIFY, mode: DISABLE DETECT(3)\n", ast_channel_name(chan));
 			o->usedtmf = 0;
 			break;
 		default:
-			ast_log(LOG_NOTICE, "Channel %s: Set option TONE VERIFY, mode: OFF(0)\n", ast_channel_name(chan));
+			ast_debug(1, "Channel %s: Set option TONE VERIFY, mode: OFF(0)\n", ast_channel_name(chan));
 			o->usedtmf = 1;
 			break;
 		}
