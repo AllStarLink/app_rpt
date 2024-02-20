@@ -2,6 +2,7 @@
  * Asterisk -- An open source telephony toolkit.
  *
  * Copyright (C) 2022, Naveen Albert
+ * Copyright (C) 2024, Allstarlink, Inc
  *
  * Naveen Albert <asterisk@phreaknet.org>
  *
