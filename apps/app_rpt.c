@@ -4899,8 +4899,8 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_NUMLINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_NUMALINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
-	rpt_update_boolean(myrpt,"RPT_ALINKS",-1);
- 	rpt_update_boolean(myrpt,"RPT_NUMALINKS",-1);
+	rpt_update_boolean(myrpt, "RPT_ALINKS",-1);
+ 	rpt_update_boolean(myrpt, "RPT_NUMALINKS",-1);
 	myrpt->ready = 1;
 	looptimestart = ast_tvnow();
 
