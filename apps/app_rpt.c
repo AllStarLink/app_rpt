@@ -102,7 +102,7 @@
  *  17 - User functions (time, id, etc) enable
  *  18 - User functions (time, id, etc) disable
  *  19 - Select alternate hang timer
- *  20 - Select standard hang timer 
+ *  20 - Select standard hang timer
  *  21 - Enable Parrot Mode
  *  22 - Disable Parrot Mode
  *  23 - Birdbath (Current Parrot Cleanup/Flush)
@@ -126,7 +126,7 @@
  *  44 - Echolink announce node # & Callsign
  *  45 - Link Activity timer enable
  *  46 - Link Activity timer disable
- *  47 - Reset "Link Config Changed" Flag 
+ *  47 - Reset "Link Config Changed" Flag
  *  48 - Send Page Tone (Tone specs separated by parenthesis)
  *  49 - Disable incoming connections (control state noice)
  *  50 - Enable incoming connections (control state noicd)
@@ -140,11 +140,11 @@
  *  58 - Tx CTCSS On Input only Enable
  *  59 - Tx CTCSS On Input only Disable
  *  60 - Send MDC-1200 Burst (cop,60,type,UnitID[,DestID,SubCode])
- *     Type is 'I' for PttID, 'E' for Emergency, and 'C' for Call 
+ *     Type is 'I' for PttID, 'E' for Emergency, and 'C' for Call
  *     (SelCall or Alert), or 'SX' for STS (ststus), where X is 0-F.
  *     DestID and subcode are only specified for  the 'C' type message.
  *     UnitID is the local systems UnitID. DestID is the MDC1200 ID of
- *     the radio being called, and the subcodes are as follows: 
+ *     the radio being called, and the subcodes are as follows:
  *          Subcode '8205' is Voice Selective Call for Spectra ('Call')
  *          Subcode '8015' is Voice Selective Call for Maxtrac ('SC') or
  *             Astro-Saber('Call')
@@ -152,7 +152,7 @@
  *  61 - Send Message to USB to control GPIO pins (cop,61,GPIO1=0[,GPIO4=1].....)
  *  62 - Send Message to USB to control GPIO pins, quietly (cop,62,GPIO1=0[,GPIO4=1].....)
  *  63 - Send pre-configred APRSTT notification (cop,63,CALL[,OVERLAYCHR])
- *  64 - Send pre-configred APRSTT notification, quietly (cop,64,CALL[,OVERLAYCHR]) 
+ *  64 - Send pre-configred APRSTT notification, quietly (cop,64,CALL[,OVERLAYCHR])
  *  65 - Send POCSAG page (equipped channel types only)
  *
  * ilink cmds:
@@ -225,13 +225,13 @@
  *
  * "events" subsystem:
  *
- * in the "events" section of the rpt.conf file (if any), the user may 
- * specify actions to take place when ceratin events occur. 
+ * in the "events" section of the rpt.conf file (if any), the user may
+ * specify actions to take place when ceratin events occur.
  *
  * It is implemented as acripting, based heavily upon expression evaluation built
  * into Asterisk. Each line of the section contains an action, a type, and variable info.
  * Each line either sets a variable, or executes an action based on a transitional state
- * of a specified (already defined) variable (such as going true, going false, no change, 
+ * of a specified (already defined) variable (such as going true, going false, no change,
  * or getting set initially).
  *
  * The syntax for each line is as follows:
@@ -256,7 +256,7 @@
  * "RANGER" mode configuration:
  * in the node stanza in rpt.conf ONLY the following need be specified for a RANGER node:
  *
- * 
+ *
  *
  * [90101]
  *
@@ -1042,8 +1042,8 @@ static void statpost(struct rpt *myrpt, char *pairs)
 	}
 }
 
-/* 
- * Function stream data 
+/*
+ * Function stream data
  */
 
 static void startoutstream(struct rpt *myrpt)
@@ -1144,12 +1144,12 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
  /*
   *
   * WARNING:  YOU ARE NOW HEADED INTO ONE GIANT MAZE OF SWITCH STATEMENTS THAT DO MOST OF THE WORK FOR
-  *           APP_RPT.  THE MAJORITY OF THIS IS VERY UNDOCUMENTED CODE AND CAN BE VERY HARD TO READ. 
+  *           APP_RPT.  THE MAJORITY OF THIS IS VERY UNDOCUMENTED CODE AND CAN BE VERY HARD TO READ.
   *           IT IS ALSO PROBABLY THE MOST ERROR PRONE PART OF THE CODE, ESPECIALLY THE PORTIONS
   *           RELATED TO THREADED OPERATIONS.
   */
 
-/* 
+/*
  *  This is the main entry point from the Asterisk call handler to app_rpt when a new "call" is detected and passed off
  *  This code sets up all the necessary variables for the rpt_master threads to take over handling/processing anything
  *  related to this call.  Calls are actually channels that are passed from the pbx application to app_rpt.
@@ -1430,7 +1430,7 @@ static int collect_function_digits(struct rpt *myrpt, char *digits, int command_
 	struct ast_variable *vp;
 
 	ast_debug(7, "digits=%s  source=%d\n", digits, command_source);
-   
+
 	//ast_debug(1, "@@@@ Digits collected: %s, source: %d\n", digits, command_source);
 
 	if (command_source == SOURCE_DPHONE) {
@@ -3780,7 +3780,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
 				ast_writestream(myrpt->monstream, f1);
 			}
-			if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd && 
+			if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd &&
 				(myrpt->outstreampipe[1] != -1)) {
 				outstream_write(myrpt, f1);
 			}
@@ -4800,7 +4800,7 @@ static void *rpt(void *this)
 		pthread_exit(NULL);
 	}
 	/* Now, the idea here is to copy from the physical rx channel buffer
-	   into the pseudo tx buffer, and from the pseudo rx buffer into the 
+	   into the pseudo tx buffer, and from the pseudo rx buffer into the
 	   tx channel buffer */
 	rpt_links_init(&myrpt->links);
 	myrpt->tailtimer = 0;
@@ -4899,6 +4899,8 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_NUMLINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_NUMALINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
+	rpt_update_boolean(myrpt,"RPT_ALINKS",-1);
+ 	rpt_update_boolean(myrpt,"RPT_NUMALINKS",-1);
 	myrpt->ready = 1;
 	looptimestart = ast_tvnow();
 
@@ -5536,7 +5538,7 @@ static int load_config(int reload)
 			rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
 		}
 	}
-	
+
 	/* process the sections looking for the nodes */
 	while ((this = ast_category_browse(cfg, this)) != NULL) {
 		/* Node name must be fully numeric */
@@ -6213,7 +6215,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		char nodedata[100], xstr[100], tmp1[100];
 		struct ast_config *cfg;
 
-		myadr = NULL; 
+		myadr = NULL;
 		b1 = ast_channel_caller(chan)->id.number.str;
 		if (b1)
 			ast_shrink_phone_number(b1);
