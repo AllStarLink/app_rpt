@@ -513,7 +513,7 @@ static int load_config(int reload)
 
 		/* registrations is the only remaining section */
 		if (strcasecmp(cat, "registrations")) {
-			ast_log(LOG_WARNING, "Line %d: Invalid config section: %s\n", var->lineno, var->name);
+			ast_log(LOG_WARNING, "Invalid config section: %s\n", cat);
 			continue;
 		}
 
