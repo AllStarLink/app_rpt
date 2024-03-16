@@ -2972,7 +2972,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		o->txcapraw = 1;
 	} else if (!strcasecmp(argv[2], "save")) {
 		tune_write(o);
-		ast_cli(fd, "Saved radio tuning settings to usbradio_tune_%s.conf\n", o->name);
+		ast_cli(fd, "Saved radio tuning settings to usbradio.conf\n");
 	} else if (!strcasecmp(argv[2], "load")) {
 		ast_mutex_lock(&o->eepromlock);
 		while (o->eepromctl) {
@@ -3880,7 +3880,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		break;
 	case 'j':					/* save tune settings */
 		tune_write(o);
-		ast_cli(fd, "Saved radio tuning settings to usbradio_tune_%s.conf\n", o->name);
+		ast_cli(fd, "Saved radio tuning settings to usbradio.conf\n");
 		break;
 	case 'k':					/* change echo mode */
 		if (cmd[1]) {
@@ -5076,6 +5076,9 @@ static int load_config(int reload)
 	} else if (cfg == CONFIG_STATUS_FILEUNCHANGED) {
 		ast_log(LOG_NOTICE, "Config file %s unchanged, skipping.\n", CONFIG);
 		return 0;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format. Aborting.\n", CONFIG);
+		return -1;
 	}
 
 	/* store the configuration */
