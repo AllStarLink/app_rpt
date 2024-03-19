@@ -1460,7 +1460,7 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	 *  filling the buffer when asterisk clock > usb sound clock
 	 */
 	if (!o->pmrChan->txPttIn && !o->pmrChan->txPttOut) {
-		//return 0;
+		return 0;
 	}
 	/*
 	 * Nothing complex to manage the audio device queue.
