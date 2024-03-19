@@ -37,12 +37,12 @@ Step 1: Install DAHDI and Asterisk
 
 ```
 cd /usr/src && wget https://docs.phreaknet.org/script/phreaknet.sh && chmod +x phreaknet.sh && ./phreaknet.sh make
-phreaknet install -t -s -d # install in developer mode (for backtraces and assertions), install chan_sip (if you need it still) and DAHDI (required)
+phreaknet install -d -b -v 20 # install in developer mode (for backtraces and assertions),  add -s for chan_sip (if you need it still) and DAHDI (required)
 ```
 
 Step 2: Install app_rpt modules
 
-- Clone this repo into `/usr/src` on your system: `cd /usr/src; git clone https://github.com/InterLinked1/app_rpt.git`
+- Clone this repo into `/usr/src` on your system: `cd /usr/src; git clone https://github.com/AllStarLink/app_rpt.git`
 
 - Then, run: `./rpt_install.sh`
 
