@@ -839,8 +839,48 @@ static void *hidthread(void *arg)
 		/* Check to see if our specified device string 
 		 * matches to a device that is attached to this system, or exists 
 		 * in our channel configuration.
+		 *
+		 * If no device string is specified, attempt to assign the first
+		 * found device.
 		 */
 		time(&o->lasthidtime);
+						
+		/* Automatically assign a devstr if one was not specified in the configuration. */
+		if (ast_strlen_zero(o->devstr)) {
+			int index = 0;
+			char *index_devstr = NULL;
+			
+			while(1) {
+				index_devstr = ast_radio_usb_get_devstr(index);
+				if (ast_strlen_zero(index_devstr)) {
+					if (!o->device_error) {
+						ast_log(LOG_ERROR, "Channel %s: No USB devices are available for assignment.\n",  o->name);
+						o->device_error = 1;
+					}
+					ast_mutex_unlock(&usb_dev_lock);
+					usleep(500000);
+					break;
+				}
+				/* We found an available device - see if it already in use */
+				for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
+					if (ao->usbass && (!strcmp(ao->devstr, index_devstr))) {
+						break;
+					}
+				}
+				if (ao) {
+					index++;
+					continue;
+				}
+				/* We found an unused device assign it to our node */
+				ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
+				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to usbradio channel\n", o->name, o->devstr);
+				break;
+			}
+			if (ast_strlen_zero(o->devstr)) {
+				continue;
+			}
+		}
+
 		if ((!ast_radio_usb_list_check(o->devstr)) || (!find_desc_usb(o->devstr))) {
 			/* The device string did not match.
 			 * Now look through the attached devices and see 

@@ -568,6 +568,27 @@ int ast_radio_usb_list_check(char *devstr)
 	
 	return res;
 }
+
+char* ast_radio_usb_get_devstr(int index)
+{
+	char *s = usb_device_list;
+	int devstr_index = 0;
+	
+	ast_mutex_lock(&usb_list_lock);
+
+	while (*s) {
+		if (index == devstr_index) {
+			break;
+		}
+		devstr_index++;
+		s += strlen(s) + 1;
+	}
+	
+	ast_mutex_unlock(&usb_list_lock);
+	
+	return s;
+}
+
 int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *pport, int reload)
 {
 	if (*haspp) { /* if is to use parallel port */

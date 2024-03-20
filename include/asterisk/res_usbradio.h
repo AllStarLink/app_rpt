@@ -345,6 +345,12 @@ int ast_radio_usb_get_usbdev(const char *devstr);
 int ast_radio_usb_list_check(char *devstr);
 
 /*!
+ * \brief Get a device string at the specified index.
+ * \returns			Device string or null if not found.
+ */
+char* ast_radio_usb_get_devstr(int index);
+
+/*!
  * \brief Open the specified parallel port
  * 	Opens the parallel port if is exists.
  *
