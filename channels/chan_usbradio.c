@@ -850,7 +850,7 @@ static void *hidthread(void *arg)
 			int index = 0;
 			char *index_devstr = NULL;
 			
-			while(1) {
+			for (;;) {
 				index_devstr = ast_radio_usb_get_devstr(index);
 				if (ast_strlen_zero(index_devstr)) {
 					if (!o->device_error) {
@@ -873,7 +873,7 @@ static void *hidthread(void *arg)
 				}
 				/* We found an unused device assign it to our node */
 				ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
-				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to usbradio channel\n", o->name, o->devstr);
+				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to USBRadio channel\n", o->name, o->devstr);
 				break;
 			}
 			if (ast_strlen_zero(o->devstr)) {
