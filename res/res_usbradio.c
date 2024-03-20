@@ -69,6 +69,12 @@
 #include "asterisk/poll-compat.h" 	/* Used for polling */
 
 AST_MUTEX_DEFINE_STATIC(usb_list_lock);
+
+/*! 
+ * \var usb_device_list
+ * \brief Each device string in usb_device_list is delimited with zero.  The
+ * final element is zero.
+ */
 static char *usb_device_list = NULL;
 static int usb_device_list_size = 0;
 
@@ -298,6 +304,7 @@ int ast_radio_hid_device_mklist(void)
 	FILE *fp;
 
 	ast_mutex_lock(&usb_list_lock);
+	/* See usb_device_list definition for the format */
 	if (usb_device_list) {
 		ast_free(usb_device_list);
 	}
@@ -547,6 +554,7 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 
 int ast_radio_usb_list_check(char *devstr)
 {
+	/* See usb_device_list definition for the format */
 	char *s = usb_device_list;
 	int res = 0;
 
@@ -571,6 +579,7 @@ int ast_radio_usb_list_check(char *devstr)
 
 char* ast_radio_usb_get_devstr(int index)
 {
+	/* See usb_device_list definition for the format */
 	char *s = usb_device_list;
 	int devstr_index = 0;
 	
