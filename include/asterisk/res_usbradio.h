@@ -308,6 +308,10 @@ void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
  * \brief Make a list of HID devices.
  * Populates usb_device_list with a list of devices that we
  * know that are compatible.
+ *
+ * Each device string in usb_device_list is delimited with zero.  The
+ * final element is zero.
+ *
  * \retval 0	List was created.
  * \retval -1	List was not created.
  */
@@ -343,6 +347,13 @@ int ast_radio_usb_get_usbdev(const char *devstr);
  * \retval 1		Device string was found.
  */
 int ast_radio_usb_list_check(char *devstr);
+
+/*!
+ * \brief Get a device string at the specified index
+ * from usb_device_list.
+ * \returns			Device string or null if not found.
+ */
+char* ast_radio_usb_get_devstr(int index);
 
 /*!
  * \brief Open the specified parallel port
