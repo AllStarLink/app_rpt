@@ -14,14 +14,14 @@
  * This program is free software, distributed under the terms of
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
- */  
-	
+ */
+
 /*
  *
  * Simplesusb tune menu program
  *
  * This program communicates with Asterisk by sending commands to retrieve and set values
- * for the simpleusb channel driver.  
+ * for the simpleusb channel driver.
  *
  * The following 'menu-support' commands are used:
  *
@@ -35,13 +35,13 @@
  *		f - txa level
  *		g - txb level
  *		j - save current settings for the selected node
- *		k - change echo mode 
+ *		k - change echo mode
  *		l - generate test tone
  *
  * Some of these commands take optional parameters to set values.
  *
- */ 
-	
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -49,20 +49,20 @@
 #include <string.h>
 #include <ctype.h>
 #include <signal.h>
-#include <errno.h>  
+#include <errno.h>
 #include <sys/wait.h>
 
 /*!
  * \brief Signal handler
  * \param sig		Signal to watch.
  */
-static void ourhandler(int sig)  
-{ 
+static void ourhandler(int sig)
+{
 	int i;
-	
+
 	signal(sig, ourhandler);
 	while (waitpid(-1, &i, WNOHANG) > 0);
-	
+
 	return;
 }
 
@@ -74,12 +74,12 @@ static void ourhandler(int sig)
  * \retval -1		If less than.
  * \retval 1		If greater than.
  */
-  static int qcompar(const void *a, const void *b) 
-{ 
+  static int qcompar(const void *a, const void *b)
+{
 	char **sa = (char **) a, **sb = (char **) b;
 	return (strcmp(*sa, *sb));
 }
- 
+
 /*!
  * \brief Break up a delimited string into a table of substrings
  *
@@ -92,15 +92,15 @@ static void ourhandler(int sig)
  * \param quote		User specified quote for escaping a substring. Set to zero to escape nothing.
  *
  * \retval 			Returns number of substrings found.
- */ 
-static int explode_string(char *str, char *strp[], int limit, char delim, char quote) 
-{ 
+ */
+static int explode_string(char *str, char *strp[], int limit, char delim, char quote)
+{
 	int i, l, inquo;
-	
+
 	inquo = 0;
 	i = 0;
 	strp[i++] = str;
-	
+
 	if (!*str) {
 		strp[0] = 0;
 		return (0);
@@ -127,7 +127,7 @@ static int explode_string(char *str, char *strp[], int limit, char delim, char q
 	strp[i] = 0;
 	return (i);
  }
- 
+
 /*!
  * \brief Execute an asterisk command.
  *
@@ -137,9 +137,9 @@ static int explode_string(char *str, char *strp[], int limit, char delim, char q
  * \returns			Pipe FD or -1 on failure.
  */
 static int doastcmd(char *cmd)
-{ 
+{
 	int pfd[2], pid, nullfd;
-	
+
 	 if (pipe(pfd) == -1) {
 		perror("Error: cannot open pipe");
 		return -1;
@@ -148,13 +148,13 @@ static int doastcmd(char *cmd)
 		perror("Error: cannot set pipe to NONBLOCK");
 		return -1;
 	}
-	
+
 	nullfd = open("/dev/null", O_RDWR);
 	if (nullfd == -1) {
 		perror("Error: cannot open /dev/null");
 		return -1;
 	}
-	
+
 	pid = fork();
 	if (pid == -1) {
 		perror("Error: cannot fork");
@@ -165,7 +165,7 @@ static int doastcmd(char *cmd)
 		return (pfd[0]);
 	}
 	close(pfd[0]);
-	
+
 	if (dup2(nullfd, fileno(stdin)) == -1) {
 		perror("Error: cannot dup2() stdin");
 		exit(0);
@@ -180,10 +180,10 @@ static int doastcmd(char *cmd)
 	}
 	/* Execute the asterisk command */
 	execl("/usr/sbin/asterisk", "asterisk", "-rx", cmd, NULL);
-	
+
 	exit(0);
 }
- 
+
 /*!
  * \brief Wait on one or two fd's.
  *
@@ -191,35 +191,35 @@ static int doastcmd(char *cmd)
  * returns -1 if error, 0 if nothing ready, or ready fd + 1
  *
  * akward, but needed to support having an fd of 0, which
- * is likely, since thats most likely stdin 
+ * is likely, since thats most likely stdin
  *
- * specify fd2 as -1 if not used 
+ * specify fd2 as -1 if not used
  *
  * \param fd1		First fd to poll.
  * \param fd2		Second fd to poll.  Specify -1 if not used.
  * \param ms		Milliseconds to wait.
  * \returns			-1 on error, 0 if nothing ready, or fd+1.
  */
-static int waitfds(int fd1, int fd2, int ms)  
-{ 
+static int waitfds(int fd1, int fd2, int ms)
+{
 	fd_set fds;
 	struct timeval tv;
 	int i, r;
-	
+
 	FD_ZERO(&fds);
 	FD_SET(fd1, &fds);
-	
+
 	if (fd2 >= 0) {
 		FD_SET(fd2, &fds);
 	}
 	tv.tv_usec = ms * 1000;
 	tv.tv_sec = 0;
-	
+
 	i = fd1;
 	if (fd2 > fd1) {
 		i = fd2;
 	}
-	
+
 	r = select(i + 1, &fds, NULL, NULL, &tv);
 	if (r < 1) {
 		return (r);
@@ -232,23 +232,23 @@ static int waitfds(int fd1, int fd2, int ms)
 	}
 	return (0);
 }
- 
+
 /*!
  * \brief Wait for a character.
  *
  * \param fd		fd to read.
  * \returns			-1 nothing read, or character read.
  */
-static int getcharfd(int fd)  
-{ 
+static int getcharfd(int fd)
+{
 	char c;
-	
+
 	if (read(fd, &c, 1) != 1) {
 		return -1;
 	}
 	return (c);
 }
- 
+
 /*!
  * \brief Wait for string of characters.
  *
@@ -258,10 +258,10 @@ static int getcharfd(int fd)
  * \returns			Number of characters read.
  */
 static int getstrfd(int fd, char *str, int max)
-{ 
+{
 	int i, j;
 	char c;
-	
+
 	i = 0;
 	for (i = 0; (i < max) || (!max); i++) {
 		do {
@@ -273,7 +273,7 @@ static int getstrfd(int fd, char *str, int max)
 				j = 0;
 			}
 		} while (!j);
-		
+
 		j = read(fd, &c, 1);
 		if (j == 0) {
 			break;
@@ -296,8 +296,8 @@ static int getstrfd(int fd, char *str, int max)
 	}
 	return (i);
 }
- 
-/* get 1 line of data from Asterisk */ 
+
+/* get 1 line of data from Asterisk */
 /*!
  * \brief Get one line of data from Asterisk.
  *
@@ -308,27 +308,23 @@ static int getstrfd(int fd, char *str, int max)
  * \param max		Size of string buffer.
  * \returns			-1 on error, 0 if successful, 1 if nothing was returned.
  */
-static int astgetline(char *cmd, char *str, int max)  
-{ 
-		int fd, rv;
-	
+static int astgetline(char *cmd, char *str, int max)
+{
+	int fd, rv;
+
 	/* Send the command to Asterisk */
 	fd = doastcmd(cmd);
 	if (fd == -1) {
 		perror("Error getting data from Asterisk");
 		return -1;
 	}
-	
+
 	rv = getstrfd(fd, str, max);
 	close(fd);
-	
-	if (rv > 0) {
-		return 0;
-	}
-	return 1;
+
+	return rv > 0 ? 0 : 1;
 }
 
- 
 /*!
  * \brief Get a response from Asterisk and send to stdout.
  *
@@ -337,18 +333,18 @@ static int astgetline(char *cmd, char *str, int max)
  * \param cmd		Pointer to command to send to asterisk.
  * \returns			-1 on error, 0 if successful.
  */
-static int astgetresp(char *cmd)  
-{ 
+static int astgetresp(char *cmd)
+{
 	int i, w, fd;
 	char str[256];
-	
+
 	/* Send the command to Asterisk */
 	fd = doastcmd(cmd);
 	if (fd == -1) {
 		perror("Error getting response from Asterisk");
 		return -1;
 	}
-	
+
 	/* Wait and process the response */
 	for (;;) {
 		w = waitfds(fileno(stdin), fd, 100);
@@ -363,14 +359,14 @@ static int astgetresp(char *cmd)
 		if (!w) {
 			continue;
 		}
-		
-		/* if its our console */ 
+
+		/* if it's our console */
 		if (w == (fileno(stdin) + 1)) {
 			getstrfd(fileno(stdin), str, sizeof(str) - 1);
 			break;
 		}
-		
-		/* if its Asterisk */ 
+
+		/* if it's Asterisk */
 		if (w == (fd + 1)) {
 			i = getcharfd(fd);
 			if (i == -1) {
@@ -388,19 +384,19 @@ static int astgetresp(char *cmd)
 /*!
  * \brief Menu option to select the usb device.
  */
- static void menu_selectusb(void)  
- { 
+ static void menu_selectusb(void)
+ {
 	int i, n, x;
 	char str[100], buf[256], *strs[100];
-	
+
 	printf("\n");
-	
-	/* print selected USB device */ 
+
+	/* print selected USB device */
 	if (astgetresp("susb active")) {
 		return;
 	}
-	
-	/* get device list from Asterisk */ 
+
+	/* get device list from Asterisk */
 	if (astgetline("susb tune menu-support 1", buf, sizeof(buf) - 1)) {
 		exit(255);
 	}
@@ -410,12 +406,12 @@ static int astgetresp(char *cmd)
 		return;
 	}
 	qsort(strs, n, sizeof(char *), qcompar);
-	
+
 	printf("Please select from the following USB devices:\n");
 	for (x = 0; x < n; x++) {
 		printf("%d) Device [%s]\n", x + 1, strs[x]);
 	}
-	
+
 	printf("0) Exit Selection\n");
 	printf("Enter make your selection now: ");
 	if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
@@ -440,26 +436,26 @@ static int astgetresp(char *cmd)
 	}
 	snprintf(str, sizeof(str) - 1, "susb active %s", strs[i - 1]);
 	astgetresp(str);
-	
+
 	return;
 }
 
 /*!
  * \brief Menu option to swap the usb device.
  */
- static void menu_swapusb(void)  
- { 
+ static void menu_swapusb(void)
+ {
 	int i, n, x;
 	char str[100], buf[256], *strs[100];
-	
+
 	printf("\n");
-	
-	/* print selected USB device */ 
+
+	/* print selected USB device */
 	if (astgetresp("susb active")) {
 		return;
 	}
-	
-	/* get device list from Asterisk */ 
+
+	/* get device list from Asterisk */
 	if (astgetline("susb tune menu-support 3", buf, sizeof(buf) - 1)) {
 		exit(255);
 	}
@@ -469,7 +465,7 @@ static int astgetresp(char *cmd)
 		return;
 	}
 	qsort(strs, n, sizeof(char *), qcompar);
-	
+
 	printf("Please select from the following USB devices:\n");
 	for (x = 0; x < n; x++) {
 		printf("%d) Device [%s]\n", x + 1, strs[x]);
@@ -498,18 +494,18 @@ static int astgetresp(char *cmd)
 	}
 	snprintf(str, sizeof(str) - 1, "susb tune swap %s", strs[i - 1]);
 	astgetresp(str);
-	
+
 	return;
 }
 
 /*!
  * \brief Menu option to set rxvoice level.
  */
- static void menu_rxvoice(void)  
- { 
+ static void menu_rxvoice(void)
+ {
 	int i, x;
 	char str[100];
-	
+
 	for (;;) {
 		if (astgetresp("susb tune menu-support b")) {
 			break;
@@ -517,7 +513,7 @@ static int astgetresp(char *cmd)
 		if (astgetresp("susb tune menu-support c")) {
 			break;
 		}
-		
+
 		printf("Enter new value (0-999, or CR for none): ");
 		if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
 			printf("Rx voice setting not changed\n");
@@ -544,7 +540,7 @@ static int astgetresp(char *cmd)
 			break;
 		}
 	}
-	
+
 	return;
 }
 
@@ -552,15 +548,15 @@ static int astgetresp(char *cmd)
 /*!
  * \brief Menu option to set txa level.
  */
- static void menu_txa(int keying)  
- { 
+ static void menu_txa(int keying)
+ {
 	char str[100];
 	int i, x;
-	
+
 	if (astgetresp("susb tune menu-support f")) {
 		return;
 	}
-	
+
 	printf("Enter new Tx A Level setting (0-999, or C/R for none): ");
 	if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
 		printf("Tx A Level setting not changed\n");
@@ -594,22 +590,22 @@ static int astgetresp(char *cmd)
 		sprintf(str, "susb tune menu-support f%d", i);
 	}
 	astgetresp(str);
-	
+
 	return;
 }
 
 /*!
  * \brief Menu option to set txb level.
  */
- static void menu_txb(int keying)  
-{ 
+ static void menu_txb(int keying)
+{
 	char str[100];
 	int i, x;
-	
+
 	if (astgetresp("susb tune menu-support g")) {
 		return;
 	}
-	
+
 	printf("Enter new Tx B Level setting (0-999, or C/R for none): ");
 	if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
 		printf("Tx B Level setting not changed\n");
@@ -643,23 +639,23 @@ static int astgetresp(char *cmd)
 		sprintf(str, "susb tune menu-support g%d", i);
 	}
 	astgetresp(str);
-	
+
 	return;
 }
 
 /*!
  * \brief Main program entry point.
  */
- int main(int argc, char *argv[]) 
-{ 
+ int main(int argc, char *argv[])
+{
 	int flatrx = 0, txhasctcss = 0, keying = 0, echomode = 0;
 	char str[256];
-	
+
 	signal(SIGCHLD, ourhandler);
-	
+
 	for (;;) {
-		
-		/* get device parameters from Asterisk */ 
+
+		/* get device parameters from Asterisk */
 		if (astgetline("susb tune menu-support 0", str, sizeof(str) - 1)) {
 			exit(255);
 		}
@@ -668,12 +664,12 @@ static int astgetresp(char *cmd)
 			exit(255);
 		}
 		printf("\n");
-	
-		/* print selected USB device */ 
+
+		/* print selected USB device */
 		if (astgetresp("susb active")) {
 			break;
 		}
-		
+
 		printf("1) Select USB device\n");
 		printf("2) Set Rx Voice Level (using display)\n");
 		if (keying) {
@@ -694,20 +690,20 @@ static int astgetresp(char *cmd)
 		printf("W) Write (Save) Current Parameter Values\n");
 		printf("0) Exit Menu\n");
 		printf("\nPlease enter your selection now: ");
-		
+
 		if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
 			break;
 		}
-		if (strlen(str) != 2) {	/* its 2 because of \n at end */
+		if (strlen(str) != 2) {	/* it's 2 because of \n at end */
 			printf("Invalid Entry, try again\n");
 			continue;
 		}
-		
-		/* if to exit */ 
+
+		/* if to exit */
 		if (str[0] == '0') {
 			break;
 		}
-		
+
 		switch (str[0]) {
 		case '1':
 			menu_selectusb();
@@ -765,7 +761,7 @@ static int astgetresp(char *cmd)
 			break;
 		}
 	}
-	
+
 	exit(0);
 }
 
