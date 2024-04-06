@@ -4294,7 +4294,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			if (l->mode != 1)
 				*totx = 0;
 			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx)) {
-				if (totx && !l->voterlink) {
+				if (*totx && !l->voterlink) {
 					if (l->newkey < 2)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
