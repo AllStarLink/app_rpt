@@ -527,6 +527,11 @@ int rpt_parrot_add(struct rpt *myrpt)
 static int dahdi_conf_get_muted(struct ast_channel *chan)
 {
 	int muted;
+	
+	if (strcasecmp(ast_channel_tech(chan)->type, "DAHDI")) {
+		return 0;
+	}
+	
 	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONFMUTE, &muted) == -1) {
 		ast_log(LOG_WARNING, "Couldn't get mute status on %s: %s\n", ast_channel_name(chan), strerror(errno));
 		muted = 0;
@@ -647,8 +652,7 @@ int dahdi_rx_offhook(struct ast_channel *chan)
 
 int dahdi_set_hook(struct ast_channel *chan, int offhook)
 {
-	int i = DAHDI_OFFHOOK;
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_HOOK, &i) == -1) {
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_HOOK, &offhook) == -1) {
 		ast_log(LOG_ERROR, "Can't set hook on %s: %s\n", ast_channel_name(chan), strerror(errno));
 		return -1;
 	}
