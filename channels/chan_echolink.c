@@ -3398,14 +3398,14 @@ static void *el_reader(void *data)
 				sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
 				sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin_aprs, sizeof(sin_aprs));
 				instp->tx_ctrl_packets++;
-			} else {		/* we were unable to resolve the host name - attempt to resolve it now */
+			} else {		/* we were unable to resolve the APRS host name - attempt to resolve it now */
 				struct hostent *ahp;
 				struct ast_hostent ah;
 				sin_aprs.sin_family = AF_INET;
 				sin_aprs.sin_port = htons(5199);
 				ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
 				if (!ahp) {
-					ast_log(LOG_WARNING, "Unable to resolve echolink APRS server IP address.\n");
+					ast_log(LOG_WARNING, "Unable to resolve echolink APRS server IP address %s.\n", EL_APRS_SERVER);
 					memset(&sin_aprs, 0, sizeof(sin_aprs));
 				} else {
 					memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
@@ -3994,9 +3994,9 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
 	if (!ahp) {
 		/* We could not resolve the host name.  This will be attempted again 
-		 * when we need to send an aprs packet 
+		 * when we need to send an APRS packet 
 		 */
-		ast_log(LOG_WARNING, "Unable to resolve echolink APRS server IP address.\n");
+		ast_log(LOG_WARNING, "Unable to resolve echolink APRS server IP address %s.\n", EL_APRS_SERVER);
 		memset(&sin_aprs, 0, sizeof(sin_aprs));
 	} else {
 		memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
