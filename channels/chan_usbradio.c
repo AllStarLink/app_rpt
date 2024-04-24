@@ -159,6 +159,16 @@ enum { RX_KEY_CARRIER, RX_KEY_CARRIER_CODE };
 enum { TX_OUT_OFF, TX_OUT_VOICE, TX_OUT_LSD, TX_OUT_COMPOSITE, TX_OUT_AUX };
 enum { TOC_NONE, TOC_PHASE, TOC_NOTONE };
 
+/*! \brief type of signal detection used for carrier (cd) or ctcss (sd) */
+static const char * const cd_signal_type[] = {"no", "dsp", "vox", "usb", "usbinvert", "pp", "ppinvert"};
+static const char * const sd_signal_type[] = {"no", "usb", "usbinvert", "dsp", "pp", "ppinvert"};
+
+/*! \brief demodulation type */
+static const char * const demodulation_type[] = {"no", "speaker", "flat"};
+
+/*! \brief mixer type */
+static const char * const mixer_type[] = {"no", "voice", "tone", "composite", "auxvoice"};
+
 /*!
  * \brief Descriptor for one of our channels.
  * There is one used for 'default' values (from the [general] entry in
@@ -254,10 +264,10 @@ struct chan_usbradio_pvt {
 
 	t_pmr_chan *pmrChan;
 
-	char rxdemod;
+	int rxdemod;
 	float rxgain;
-	char rxcdtype;
-	char rxsdtype;
+	int rxcdtype;
+	int rxsdtype;
 	int rxsquelchadj;			/* this copy needs to be here for initialization */
 	int rxsqhyst;
 	int rxsqvoxadj;
@@ -266,8 +276,8 @@ struct chan_usbradio_pvt {
 	char txtoctype;
 
 	float txctcssgain;
-	char txmixa;
-	char txmixb;
+	int txmixa;
+	int txmixb;
 	int rxlpf;
 	int rxhpf;
 	int txlpf;
@@ -312,7 +322,7 @@ struct chan_usbradio_pvt {
 	//      end remote operation info
 
 	int rxmixerset;
-	int txboostset;
+	int txboost;
 	float rxvoiceadj;
 	float rxctcssadj;
 	int txmixaset;
@@ -370,12 +380,14 @@ struct chan_usbradio_pvt {
 	unsigned int wanteeprom:1;		/* indicator if we should use EEPROM */
 	unsigned int usedtmf:1;			/* indicator is we should decode DTMF */
 	unsigned int invertptt:1;		/* indicator if we need to invert ptt */
-	unsigned int rxboostset:1;		/* indicator if receive boost is needed */
+	unsigned int rxboost:1;			/* indicator if receive boost is needed */
 	unsigned int rxcpusaver:1;		/* indicator if receive cpu save is enabled */
 	unsigned int txcpusaver:1;		/* indicator if transmit cpu save is enabled */
 	unsigned int txprelim:1;		/* indicator if tx pre lim is enabled */
 	unsigned int txlimonly:1;		/* indicator if tx lim only is enabled */
 	unsigned int rxctcssoverride:1;	/* indicator if receive ctcss override is enabled */
+	unsigned int rx_cos_active:1;	/* indicator if cos is active - active state after processing */
+	unsigned int rx_ctcss_active:1;	/* indicator if ctcss is active - active state after processing */
 
 	/* EEPROM access variables */
 	unsigned short eeprom[EEPROM_USER_LEN];
@@ -1061,7 +1073,7 @@ static void *hidthread(void *arg)
 			tChan.area = o->area;
 			tChan.ukey = o->ukey;
 			tChan.name = o->name;
-			tChan.b.txboost = o->txboostset;
+			tChan.b.txboost = o->txboost;
 			tChan.fever = o->fever;
 
 			o->pmrChan = createPmrChannel(&tChan, FRAME_SIZE);
@@ -2162,6 +2174,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		o->rxcarrierdetect = cd;
 		ast_debug(3, "Channel %s: rxcarrierdetect = %i.\n", o->name, cd);
 	}
+	o->rx_cos_active = cd;
 
 	if (o->pmrChan->b.ctcssRxEnable && o->pmrChan->rxCtcss->decode != o->rxctcssdecode) {
 		ast_debug(3, "Channel %s: rxctcssdecode = %i.\n", o->name, o->pmrChan->rxCtcss->decode);
@@ -2220,6 +2233,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	if (o->rxctcssoverride) {
 		sd = 1;
 	}
+	o->rx_ctcss_active = sd;
 	/* Timer for how long TX has been unkeyed - used with txoffdelay */
 	if (o->txoffdelay) {
 		if (o->txkeyed == 1) {
@@ -2659,7 +2673,7 @@ static int console_unkey(int fd, int argc, const char *const *argv)
 static int radio_active(int fd, int argc, const char *const *argv)
 {
 	if (argc == 2) {
-		ast_cli(fd, "Active (command) USB Radio device is [%s]\n", usbradio_active);
+		ast_cli(fd, "Active USB Radio device is [%s].\n", usbradio_active);
 	} else if (argc != 3) {
 		return RESULT_SHOWUSAGE;
 	} else {
@@ -3326,7 +3340,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 
 	while (tries < maxtries) {
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, setting, 0);
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboostset, 0);
+		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 
 		if (ast_radio_wait_or_poll(fd, 100, intflag)) {
 			o->pmrChan->b.tuning = 0;
@@ -3441,7 +3455,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
  * \param o				Private struct
  * \return	CLI success, showusage, or failure.
  */
-static void do_rxdisplay(int fd, struct chan_usbradio_pvt *o)
+static void tune_rxdisplay(int fd, struct chan_usbradio_pvt *o)
 {
 	int j, waskeyed, meas, ncols = 75;
 	char str[256];
@@ -3500,6 +3514,39 @@ static void do_rxdisplay(int fd, struct chan_usbradio_pvt *o)
 }
 
 /*!
+ * \brief Process asterisk cli request for cos, ctcss, and ptt live display.
+ * \param fd			Asterisk cli fd
+ * \param o				Private struct
+ * \return	Cli success, showusage, or failure.
+ */
+static void tune_rxtx_status(int fd, struct chan_usbradio_pvt *o)
+{
+	int wasverbose;
+
+	ast_cli(fd, "Receiver/Transmitter Status Display:\n");
+	ast_cli(fd, "  COS   | CTCSS  | COS   | PTT\n");
+	ast_cli(fd, " Input  | Input  | Out   | Out\n");
+
+	wasverbose = option_verbose;
+	option_verbose = 0;
+
+	for (;;) {
+		/* If they press any key, exit live display */
+		if (ast_radio_poll_input(fd, 200)) {
+			break;
+		}
+		ast_cli(fd, " %s  | %s  | %s | %s\r", 
+			o->rxcdtype ? (o->rx_cos_active ? "Keyed" : "Clear") : "Off  ", 
+			o->rxsdtype ? (o->rx_ctcss_active ? "Keyed" : "Clear") : "Off  ", 
+			o->rxkeyed ? "Keyed" : "Clear",
+			(o->txkeyed || o->txtestkey) ? "Keyed" : "Clear");
+	}
+	
+	option_verbose = wasverbose;
+}
+
+
+/*!
  * \brief Set received voice level.
  * \param fd			Asterisk CLI fd.
  * \param o				chan_usbradio structure.
@@ -3539,7 +3586,7 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 				adjustment = o->rxmixerset * o->micmax / C119B_ADJUSTMENT;
 				/* get interval step size */
 	            f = C119B_ADJUSTMENT / (float) o->micmax;
-				o->rxboostset = 1;	/*rxboost is always set for this device */
+				o->rxboost = 1;		/*rxboost is always set for this device */
 				break;
 			default:
 				adjustment = o->rxmixerset * o->micmax / 1000;
@@ -3547,7 +3594,7 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
                 f = 1000.0 / (float) o->micmax;
 		}
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, adjustment, 0);
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboostset, 0);
+		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 		o->rxvoiceadj = 0.5 + (modff(((float) i) / f, &f1) * .093981);
 	}
 	*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
@@ -3806,6 +3853,37 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 
 /*!
  * \brief Process tune menu commands.
+ *
+ * susb tune menusupport X - where X is one of the following:
+ *		0 - get flatrx, ctcssenable, echomode
+ *		1 - get node names that are configured in simpleusb.conf
+ *		2 - print parameters
+ *		3 - get node names that are configured in simpleusb.conf, except current device
+ *		a - receive rx level
+ *		b - receiver tune display
+ *		c - receive level
+ *		d - receive ctcss level
+ *		e - squelch level
+ *		f - voice level
+ *		g - aux level
+ *		h - transmit a test tone
+ *		i - tune receive level
+ *		j - save current settings for the selected node
+ *		k - change echo mode
+ *		l - generate test tone
+ *		m - change rxboost
+ *		n - change txboost
+ *		o - change carrier from
+ *		p - change ctcss from
+ *		q - change rx on delay
+ *		r - change tx off delay
+ *		s - change tx pre limiting
+ *		t - change tx limiting only
+ *		u - change rx demodulation
+ *		v - view cos, ctcss and ptt status
+ *		w - change tx mixer a
+ *		x - change tx mixer b
+ *
  * \param fd			Asterisk CLI fd
  * \param o				Private struct.
  * \param cmd			Command to process.
@@ -3828,7 +3906,10 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		}
 	switch (cmd[0]) {
 	case '0':					/* return audio processing configuration */
-		ast_cli(fd, "%d,%d,%d\n", flatrx, txhasctcss, o->echomode);
+		ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", 
+			flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
+			o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
+			o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb);
 		break;
 	case '1':					/* return usb device name list */
 		for (x = 0, oy = usbradio_default.next; oy && oy->name; oy = oy->next, x++) {
@@ -3867,7 +3948,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
-		do_rxdisplay(fd, o);
+		tune_rxdisplay(fd, o);
 		break;
 	case 'c':					/* set receive voice level */
 		if (!o->hasusb) {
@@ -3924,13 +4005,15 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		break;
 	case 'k':					/* change echo mode */
 		if (cmd[1]) {
-			if (cmd[1] > '0')
+			if (cmd[1] > '0') {
 				o->echomode = 1;
-			else
+			} else {
 				o->echomode = 0;
+			}
 			ast_cli(fd, "Echo Mode changed to %s\n", (o->echomode) ? "Enabled" : "Disabled");
-		} else
+		} else {
 			ast_cli(fd, "Echo Mode is currently %s\n", (o->echomode) ? "Enabled" : "Disabled");
+		}
 		break;
 	case 'l':					/* transmit test tone */
 		if (!o->hasusb) {
@@ -3938,6 +4021,117 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			break;
 		}
 		tune_flash(fd, o, 1);
+		break;
+	case 'm':					/* change rxboost */
+		if (cmd[1]) {
+			if (cmd[1] > '0') {
+				o->rxboost = 1;
+			} else {
+				o->rxboost = 0;
+			}
+			ast_cli(fd, "RxBoost changed to %s\n", (o->rxboost) ? "Enabled" : "Disabled");
+		} else {
+			ast_cli(fd, "RxBoost is currently %s\n", (o->rxboost) ? "Enabled" : "Disabled");
+		}
+		break;
+	case 'n':					/* change txboost */
+		if (cmd[1]) {
+			if (cmd[1] > '0') {
+				o->txboost = 1;
+			} else {
+				o->txboost = 0;
+			}
+			ast_cli(fd, "TxBoost changed to %s\n", (o->txboost) ? "Enabled" : "Disabled");
+		} else {
+			ast_cli(fd, "TxBoost is currently %s\n", (o->txboost) ? "Enabled" : "Disabled");
+		}
+		break;
+	case 'o':					/* change carrier from */
+		if (cmd[1]) {
+			o->rxcdtype = atoi(&cmd[1]);
+			ast_cli(fd, "Carrier From changed to %s\n", cd_signal_type[o->rxcdtype]);
+		} else {
+			ast_cli(fd, "Carrier From is currently %s\n", cd_signal_type[o->rxcdtype]);
+		}
+		break;
+	case 'p':					/* change ctcss from */
+		if (cmd[1]) {
+			o->rxsdtype = atoi(&cmd[1]);
+			ast_cli(fd, "CTCSS From changed to %s\n", sd_signal_type[o->rxsdtype]);
+		} else {
+			ast_cli(fd, "CTCSS From is currently %s\n", sd_signal_type[o->rxsdtype]);
+		}
+		break;
+	case 'q':					/* change rx on delay */
+		if (cmd[1]) {
+			o->rxondelay = atoi(&cmd[1]);
+			ast_cli(fd, "RX On Delay From changed to %d\n", o->rxondelay);
+		} else {
+			ast_cli(fd, "RX On Delay is currently %d\n", o->rxondelay);
+		}
+		break;
+	case 'r':					/* change tx off delay */
+		if (cmd[1]) {
+			o->txoffdelay = atoi(&cmd[1]);
+			ast_cli(fd, "TX Off Delay From changed to %d\n", o->txoffdelay);
+		} else {
+			ast_cli(fd, "TX Off Delay is currently %d\n", o->txoffdelay);
+		}
+		break;
+	case 's':					/* change txprelim */
+		if (cmd[1]) {
+			if (cmd[1] > '0') {
+				o->txprelim = 1;
+			} else {
+				o->txprelim = 0;
+			}
+			ast_cli(fd, "TxPrelim changed to %s\n", (o->txprelim) ? "Enabled" : "Disabled");
+		} else {
+			ast_cli(fd, "TxPrelim is currently %s\n", (o->txprelim) ? "Enabled" : "Disabled");
+		}
+		break;
+	case 't':					/* change txlimonly */
+		if (cmd[1]) {
+			if (cmd[1] > '0') {
+				o->txlimonly = 1;
+			} else {
+				o->txlimonly = 0;
+			}
+			ast_cli(fd, "TxLimonly changed to %s\n", (o->txlimonly) ? "Enabled" : "Disabled");
+		} else {
+			ast_cli(fd, "TxLimonly is currently %s\n", (o->txlimonly) ? "Enabled" : "Disabled");
+		}
+		break;
+	case 'u':					/* change rxdemod */
+		if (cmd[1]) {
+			o->rxdemod = atoi(&cmd[1]);
+			ast_cli(fd, "RX Demodulation changed to %d\n", o->rxdemod);
+		} else {
+			ast_cli(fd, "RX Demodulation is currently %d\n", o->rxdemod);
+		}
+		break;
+	case 'v':					/* receiver/transmitter status display */
+		if (!o->hasusb) {
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
+			break;
+		}
+		tune_rxtx_status(fd, o);
+		break;
+	case 'w':					/* change txmixa */
+		if (cmd[1]) {
+			o->txmixa = atoi(&cmd[1]);
+			ast_cli(fd, "TX Mixer A changed to %d\n", o->txmixa);
+		} else {
+			ast_cli(fd, "TX Mixer A is currently %d\n", o->txmixa);
+		}
+		break;
+	case 'x':					/* change txmixb */
+		if (cmd[1]) {
+			o->txmixb = atoi(&cmd[1]);
+			ast_cli(fd, "TX Mixer B changed to %d\n", o->txmixb);
+		} else {
+			ast_cli(fd, "TX Mixer B is currently %d\n", o->txmixb);
+		}
 		break;
 	default:
 		ast_cli(fd, "Invalid Command\n");
@@ -4152,6 +4346,11 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	} \
 }
 
+#define CONFIG_UPDATE_BOOL(field) \
+	if (ast_variable_update(category, #field, o->field ? "true" : "false", NULL, 0)) { \
+		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
+	}
+
 #define CONFIG_UPDATE_FLOAT(field) { \
 	char _buf[15]; \
 	snprintf(_buf, sizeof(_buf), "%f", o->field); \
@@ -4159,6 +4358,12 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	} \
 }
+	
+#define CONFIG_UPDATE_SIGNAL(key, field, signal_type) \
+	if (ast_variable_update(category, #key, signal_type[o->field], NULL, 0)) { \
+		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
+	}
+
 
 	category = ast_category_get(cfg, o->name, NULL);
 	if (!category) {
@@ -4173,6 +4378,17 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		CONFIG_UPDATE_INT(txctcssadj);
 		CONFIG_UPDATE_INT(rxsquelchadj);
 		CONFIG_UPDATE_INT(fever);
+		CONFIG_UPDATE_BOOL(rxboost);
+		CONFIG_UPDATE_BOOL(txboost);
+		CONFIG_UPDATE_SIGNAL(carrierfrom, rxcdtype, cd_signal_type);
+		CONFIG_UPDATE_SIGNAL(ctcssfrom, rxsdtype, sd_signal_type);
+		CONFIG_UPDATE_INT(rxondelay);
+		CONFIG_UPDATE_INT(txoffdelay);
+		CONFIG_UPDATE_BOOL(txprelim);
+		CONFIG_UPDATE_BOOL(txlimonly);
+		CONFIG_UPDATE_SIGNAL(rxdemod, rxdemod, demodulation_type);
+		CONFIG_UPDATE_SIGNAL(txmixa, txmixa, mixer_type);
+		CONFIG_UPDATE_SIGNAL(txmixb, txmixb, mixer_type);
 		if (ast_config_text_file_save2(CONFIG, cfg, "chan_usbradio", 0)) {
 			ast_log(LOG_WARNING, "Failed to save config\n");
 		}
@@ -4181,7 +4397,9 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	ast_config_destroy(cfg);
 #undef CONFIG_UPDATE_STR
 #undef CONFIG_UPDATE_INT
+#undef CONFIG_UPDATE_BOOL
 #undef CONFIG_UPDATE_FLOAT
+#undef CONFIG_UPDATE_SIGNAL
 
 	if (o->wanteeprom) {
 		ast_mutex_lock(&o->eepromlock);
@@ -4229,13 +4447,13 @@ static void mixer_write(struct chan_usbradio_pvt *o)
 	switch (o->devtype)	{
 		case C119B_PRODUCT_ID:
 			mic_setting = o->rxmixerset * o->micmax / C119B_ADJUSTMENT;
-			o->rxboostset = 1;	/*rxboost is always set for this device */
+			o->rxboost = 1;		/*rxboost is always set for this device */
 			break;
 		default:
 			mic_setting = o->rxmixerset * o-> micmax / 1000;
 	}
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboostset, 0);
+	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
 }
 
@@ -4380,8 +4598,8 @@ static void pmrdump(struct chan_usbradio_pvt *o)
 	pd(o->txtoctype);
 
 	pd(o->rxmixerset);
-	pd(o->rxboostset);
-	pd(o->txboostset);
+	pd(o->rxboost);
+	pd(o->txboost);
 
 	pf(o->rxvoiceadj);
 	pf(o->rxctcssadj);
@@ -4608,8 +4826,8 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_UINT("rxfreq", o->rxfreq);
 		CV_UINT("txfreq", o->txfreq);
 		CV_F("rxgain", store_rxgain(o, (char *) v->value));
-		CV_BOOL("rxboost", o->rxboostset);
-		CV_BOOL("txboost", o->txboostset);
+		CV_BOOL("rxboost", o->rxboost);
+		CV_BOOL("txboost", o->txboost);
 		CV_UINT("rxctcssrelax", o->rxctcssrelax);
 		CV_F("txtoctype", store_txtoctype(o, (char *) v->value));
 		CV_UINT("hdwtype", o->hdwtype);
@@ -4756,7 +4974,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		tChan.b.lsdrxpolarity = o->lsdrxpolarity;
 		tChan.b.lsdtxpolarity = o->lsdtxpolarity;
 
-		tChan.b.txboost = o->txboostset;
+		tChan.b.txboost = o->txboost;
 		tChan.tracetype = o->tracetype;
 		tChan.tracelevel = o->tracelevel;
 

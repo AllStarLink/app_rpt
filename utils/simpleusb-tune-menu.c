@@ -26,7 +26,7 @@
  * The following 'menu-support' commands are used:
  *
  * susb tune menusupport X - where X is one of the following:
- *		0 - get echomode
+ *		0 - get current settings
  *		1 - get node names that are configured in simpleusb.conf
  *		2 - print parameters
  *		3 - get node names that are configured in simpleusb.conf, except current device
@@ -37,8 +37,18 @@
  *		j - save current settings for the selected node
  *		k - change echo mode
  *		l - generate test tone
+ *		m - change rxboost
+ *		n - change pre-emphasis
+ *		o - change de-emphasis
+ *		p - change plfilter
+ *		q - change ptt keying mode 
+ *		r - change carrierfrom setting
+ *		s - change ctcss from setting
+ *		t - change rx on delay
+ *		u - change tx off delay
+ *		v - view cos, ctcss and ptt status
  *
- * Some of these commands take optional parameters to set values.
+ * Most of these commands take optional parameters to set values.
  *
  */
 
@@ -51,6 +61,12 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/wait.h>
+
+/*! \brief type of signal detection used for carrier (cos) or ctcss */
+static const char * const signal_type[] = {"no", "usb", "usbinvert", "pp", "ppinvert"};
+
+/*! \brief command prefix for Asterisk - simpleusb channel driver access */
+#define COMMAND_PREFIX "susb "
 
 /*!
  * \brief Signal handler
@@ -392,12 +408,12 @@ static int astgetresp(char *cmd)
 	printf("\n");
 
 	/* print selected USB device */
-	if (astgetresp("susb active")) {
+	if (astgetresp(COMMAND_PREFIX "active")) {
 		return;
 	}
 
 	/* get device list from Asterisk */
-	if (astgetline("susb tune menu-support 1", buf, sizeof(buf) - 1)) {
+	if (astgetline(COMMAND_PREFIX "tune menu-support 1", buf, sizeof(buf) - 1)) {
 		exit(255);
 	}
 	n = explode_string(buf, strs, 100, ',', 0);
@@ -434,7 +450,7 @@ static int astgetresp(char *cmd)
 		printf("USB device not changed\n");
 		return;
 	}
-	snprintf(str, sizeof(str) - 1, "susb active %s", strs[i - 1]);
+	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "active %s", strs[i - 1]);
 	astgetresp(str);
 
 	return;
@@ -451,12 +467,12 @@ static int astgetresp(char *cmd)
 	printf("\n");
 
 	/* print selected USB device */
-	if (astgetresp("susb active")) {
+	if (astgetresp(COMMAND_PREFIX "active")) {
 		return;
 	}
 
 	/* get device list from Asterisk */
-	if (astgetline("susb tune menu-support 3", buf, sizeof(buf) - 1)) {
+	if (astgetline(COMMAND_PREFIX "tune menu-support 3", buf, sizeof(buf) - 1)) {
 		exit(255);
 	}
 	n = explode_string(buf, strs, 100, ',', 0);
@@ -492,7 +508,7 @@ static int astgetresp(char *cmd)
 		printf("USB device not swapped\n");
 		return;
 	}
-	snprintf(str, sizeof(str) - 1, "susb tune swap %s", strs[i - 1]);
+	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune swap %s", strs[i - 1]);
 	astgetresp(str);
 
 	return;
@@ -507,10 +523,10 @@ static int astgetresp(char *cmd)
 	char str[100];
 
 	for (;;) {
-		if (astgetresp("susb tune menu-support b")) {
+		if (astgetresp(COMMAND_PREFIX "tune menu-support b")) {
 			break;
 		}
-		if (astgetresp("susb tune menu-support c")) {
+		if (astgetresp(COMMAND_PREFIX "tune menu-support c")) {
 			break;
 		}
 
@@ -535,7 +551,7 @@ static int astgetresp(char *cmd)
 			printf("Entry Error, Rx voice setting not changed\n");
 			continue;
 		}
-		sprintf(str, "susb tune menu-support c%d", i);
+		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support c%d", i);
 		if (astgetresp(str)) {
 			break;
 		}
@@ -547,13 +563,14 @@ static int astgetresp(char *cmd)
 
 /*!
  * \brief Menu option to set txa level.
+ * \param keying	Boolean to indicate if we are currently keying.
  */
  static void menu_txa(int keying)
  {
 	char str[100];
 	int i, x;
 
-	if (astgetresp("susb tune menu-support f")) {
+	if (astgetresp(COMMAND_PREFIX "tune menu-support f")) {
 		return;
 	}
 
@@ -561,7 +578,7 @@ static int astgetresp(char *cmd)
 	if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
 		printf("Tx A Level setting not changed\n");
 		if (keying) {
-			astgetresp("susb tune menu-support fK");
+			astgetresp(COMMAND_PREFIX "tune menu-support fK");
 		}
 		return;
 	}
@@ -571,7 +588,7 @@ static int astgetresp(char *cmd)
 	if (!str[0]) {
 		printf("Tx A Level setting not changed\n");
 		if (keying) {
-			astgetresp("susb tune menu-support fK");
+			astgetresp(COMMAND_PREFIX "tune menu-support fK");
 		}
 		return;
 	}
@@ -585,9 +602,9 @@ static int astgetresp(char *cmd)
 		return;
 	}
 	if (keying) {
-		sprintf(str, "susb tune menu-support fK%d", i);
+		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support fK%d", i);
 	} else {
-		sprintf(str, "susb tune menu-support f%d", i);
+		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support f%d", i);
 	}
 	astgetresp(str);
 
@@ -596,13 +613,14 @@ static int astgetresp(char *cmd)
 
 /*!
  * \brief Menu option to set txb level.
- */
+ * \param keying	Boolean to indicate if we are currently keying.
+*/
  static void menu_txb(int keying)
 {
 	char str[100];
 	int i, x;
 
-	if (astgetresp("susb tune menu-support g")) {
+	if (astgetresp(COMMAND_PREFIX "tune menu-support g")) {
 		return;
 	}
 
@@ -610,7 +628,7 @@ static int astgetresp(char *cmd)
 	if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
 		printf("Tx B Level setting not changed\n");
 		if (keying) {
-			astgetresp("susb tune menu-support gK");
+			astgetresp(COMMAND_PREFIX "tune menu-support gK");
 		}
 		return;
 	}
@@ -620,7 +638,7 @@ static int astgetresp(char *cmd)
 	if (!str[0]) {
 		printf("Tx B Level setting not changed\n");
 		if (keying) {
-			astgetresp("susb tune menu-support gK");
+			astgetresp(COMMAND_PREFIX "tune menu-support gK");
 		}
 		return;
 	}
@@ -634,11 +652,94 @@ static int astgetresp(char *cmd)
 		return;
 	}
 	if (keying) {
-		sprintf(str, "susb tune menu-support gK%d", i);
+		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support gK%d", i);
 	} else {
-		sprintf(str, "susb tune menu-support g%d", i);
+		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support g%d", i);
 	}
 	astgetresp(str);
+
+	return;
+}
+
+/*!
+ * \brief Menu option to select signal type.
+ * \param signal		Pointer to signal description.
+ * \param selection		Current signal selection.
+ */
+ static int menu_signal_type(const char *signal, int selection)
+{
+	char str[100];
+	
+	printf("\nPlease select from the following methods for %s:\n", signal);
+	printf("1) no %s\n", selection == 0 ? "- Current" : "");
+	printf("2) usb %s\n", selection == 1 ? "- Current" : "");
+	printf("3) usbinvert %s\n", selection == 2 ? "- Current" : "");
+	printf("4) pp %s\n", selection == 3 ? "- Current" : "");
+	printf("5) ppinvert %s\n", selection == 4 ? "- Current" : "");
+
+	printf("Select new %s or C/R for current): ", signal);
+	if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
+		printf("Method not changed\n");
+		return 0;
+	}
+	if (str[0] && (str[strlen(str) - 1] == '\n')) {
+		str[strlen(str) - 1] = 0;
+	}
+	if (!str[0] || (str[0] < '1' || str[0] > '5') || strlen(str) > 1) {
+		printf("Method not changed\n");
+		return 0;
+	}
+	return atoi(str);
+}
+
+/*!
+ * \brief Menu option to set delay value.
+ * \param delay_type	Pointer to the description of the delay type.
+ * \param menu_option	Pointer to the menusupport option to update.
+ * \param delay			The current delay setting.
+ */
+ static int menu_get_delay(const char *delay_type, const char *menu_option, int delay)
+{
+	char str[100];
+	int value, x;
+	
+	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support %s", menu_option);
+	if (astgetresp(str)) {
+		return delay;
+	}
+
+	printf("Enter new %s setting (0-999, or C/R for '%d'): ", delay_type, delay);
+	if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
+		printf("Setting not changed\n");
+		return delay;
+	}
+	if (str[0] && (str[strlen(str) - 1] == '\n')) {
+		str[strlen(str) - 1] = 0;
+	}
+	if (!str[0]) {
+		printf("Setting not changed\n");
+		return delay;
+	}
+	for (x = 0; str[x]; x++) {
+		if (!isdigit(str[x])) {
+			break;
+		}
+	}
+	if (str[x] || (sscanf(str, "%d", &value) < 1) || (value < 0) || (value > 999)) {
+		printf("Entry Error, setting not changed\n");
+		return delay;
+	}
+
+	return value;
+}
+
+/*!
+ * \brief Menu option view cos, ctcss and ptt status.
+ */
+ static void menu_view_status(void)
+ {
+
+	astgetresp(COMMAND_PREFIX "tune menu-support v");
 
 	return;
 }
@@ -648,7 +749,11 @@ static int astgetresp(char *cmd)
  */
  int main(int argc, char *argv[])
 {
-	int flatrx = 0, txhasctcss = 0, keying = 0, echomode = 0;
+	int txmixaset = 0, txmixbset = 0, keying = 0, echomode = 0;
+	int rxboost = 0, preemphasis = 0, deemphasis = 0;
+	int plfilter = 0, pttmode = 0, carrierfrom = 0, ctcssfrom = 0;
+	int rxondelay = 0, txoffdelay = 0;
+	int result;
 	char str[256];
 
 	signal(SIGCHLD, ourhandler);
@@ -656,37 +761,51 @@ static int astgetresp(char *cmd)
 	for (;;) {
 
 		/* get device parameters from Asterisk */
-		if (astgetline("susb tune menu-support 0", str, sizeof(str) - 1)) {
+		if (astgetline(COMMAND_PREFIX "tune menu-support 0", str, sizeof(str) - 1)) {
+			printf("The setup information for chan_simpleusb could not be retrieved!\n\n");
+			printf("Verify that Asterisk is running and chan_simpleusb is loaded.\n\n");
 			exit(255);
 		}
-		if (sscanf(str, "%d,%d,%d", &flatrx, &txhasctcss, &echomode) != 3) {
-			fprintf(stderr, "Error parsing device parameters\n");
+		if (sscanf(str, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", 
+			&txmixaset, &txmixbset, &echomode, &rxboost, &preemphasis, &deemphasis, 
+			&plfilter, &pttmode, &carrierfrom, &ctcssfrom, &rxondelay, &txoffdelay) != 12) {
+			fprintf(stderr, "Error parsing device parameters: %s\n", str);
 			exit(255);
 		}
 		printf("\n");
 
-		/* print selected USB device */
-		if (astgetresp("susb active")) {
+		/* print selected USB device at the top of our menu*/
+		if (astgetresp(COMMAND_PREFIX "active")) {
 			break;
 		}
 
-		printf("1) Select USB device\n");
+		printf("1) Select active USB device\n");
 		printf("2) Set Rx Voice Level (using display)\n");
 		if (keying) {
-			printf("3) Set Transmit A Level and send test tone\n");
+			printf("3) Set Transmit A Level (currently '%d') and send test tone\n", txmixaset);
 		} else {
-			printf("3) Set Transmit A Level\n");
+			printf("3) Set Transmit A Level (currently '%d')\n", txmixaset);
 		}
 		if (keying) {
-			printf("4) Set Transmit B Level and send test tone\n");
+			printf("4) Set Transmit B Level (currently '%d') and send test tone\n", txmixbset);
 		} else {
-			printf("4) Set Transmit B Level\n");
+			printf("4) Set Transmit B Level (currently '%d')\n", txmixbset);
 		}
-		printf("E) Toggle Echo Mode (currently %s)\n", (echomode) ? "Enabled" : "Disabled");
+		printf("B) Toggle RX Boost (currently '%s')\n", rxboost ? "enabled" : "disabled");
+		printf("C) Toggle Pre-emphasis (currently '%s')\n", preemphasis ? "enabled" : "disabled");
+		printf("D) Toggle De-emphasis (currently '%s')\n", deemphasis ? "enabled" : "disabled");
+		printf("E) Toggle Echo Mode (currently '%s')\n", echomode ? "enabled" : "disabled");
 		printf("F) Flash (Toggle PTT and Tone output several times)\n");
+		printf("G) Toggle PL Filter (currently '%s')\n", plfilter ? "enabled" : "disabled");
+		printf("H) Toggle PTT mode (currently '%s')\n", pttmode ? "open" : "ground");
+		printf("I) Change Carrier From (currently '%s')\n", signal_type[carrierfrom]);
+		printf("J) Change CTCSS From (currently '%s')\n", signal_type[ctcssfrom]);
+		printf("K) Change RX On Delay (currently '%d')\n", rxondelay);
+		printf("L) Change TX Off Delay (currently '%d')\n", txoffdelay);
 		printf("P) Print Current Parameter Values\n");
 		printf("S) Swap Current USB device with another USB device\n");
-		printf("T) Toggle Transmit Test Tone/Keying (currently %s)\n", (keying) ? "Enabled" : "Disabled");
+		printf("T) Toggle Transmit Test Tone/Keying (currently '%s')\n", keying ? "enabled" : "disabled");
+		printf("V) View COS, CTCSS and PTT Status\n");
 		printf("W) Write (Save) Current Parameter Values\n");
 		printf("0) Exit Menu\n");
 		printf("\nPlease enter your selection now: ");
@@ -705,56 +824,148 @@ static int astgetresp(char *cmd)
 		}
 
 		switch (str[0]) {
-		case '1':
+		case '1':				/* select active usb device */
 			menu_selectusb();
 			break;
-		case '2':
+		case '2':				/* set receive level using display */
 			menu_rxvoice();
 			break;
-		case '3':
+		case '3':				/* set transmit level a */
 			menu_txa(keying);
 			break;
-		case '4':
+		case '4':				/* set transmit level b */
 			menu_txb(keying);
 			break;
-		case 'e':
-		case 'E':
-			if (echomode) {
-				if (astgetresp("susb tune menu-support k0")) {
+		case 'b':				/* toggle rxboost */
+		case 'B':
+			if (rxboost) {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support m0")) {
 					exit(255);
 				}
 			} else {
-				if (astgetresp("susb tune menu-support k1")) {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support m1")) {
 					exit(255);
 				}
 			}
 			break;
-		case 'f':
+		case 'c':				/* toggle pre-emphasis */
+		case 'C':
+			if (preemphasis) {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support n0")) {
+					exit(255);
+				}
+			} else {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support n1")) {
+					exit(255);
+				}
+			}
+			break;
+		case 'd':				/* toggle de-emphasis */
+		case 'D':
+			if (deemphasis) {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support o0")) {
+					exit(255);
+				}
+			} else {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support o1")) {
+					exit(255);
+				}
+			}
+			break;
+		case 'e':				/* toggle echo mode */
+		case 'E':
+			if (echomode) {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support k0")) {
+					exit(255);
+				}
+			} else {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support k1")) {
+					exit(255);
+				}
+			}
+			break;
+		case 'f':				/* flash - toggle ptt and tone */
 		case 'F':
-			if (astgetresp("susb tune menu-support l")) {
+			if (astgetresp(COMMAND_PREFIX "tune menu-support l")) {
 				exit(255);
 			}
 			break;
-		case 'p':
+		case 'g':				/* toggle pl filter */
+		case 'G':
+			if (plfilter) {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support p0")) {
+					exit(255);
+				}
+			} else {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support p1")) {
+					exit(255);
+				}
+			}
+			break;
+		case 'h':				/* toggle ptt mode */
+		case 'H':
+			if (pttmode) {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support q0")) {
+					exit(255);
+				}
+			} else {
+				if (astgetresp(COMMAND_PREFIX "tune menu-support q1")) {
+					exit(255);
+				}
+			}
+			break;
+		case 'i':				/* select carrier from */
+		case 'I':
+			result = menu_signal_type("Carrier From", carrierfrom);
+			if (result > 0) {
+				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support r%d", result - 1);
+				astgetresp(str);
+			}
+			break;
+		case 'j':				/* select ctcss from */
+		case 'J':
+			result = menu_signal_type("CTCSS From", ctcssfrom);
+			if (result > 0) {
+				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support s%d", result - 1);
+				astgetresp(str);
+			}
+			break;
+		case 'k':				/* set rx on delay */
+		case 'K':
+			result = menu_get_delay("RX On Delay", "t", rxondelay);
+			snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support t%d", result);
+			astgetresp(str);
+			break;
+		case 'l':				/* set tx off delay */
+		case 'L':
+			result = menu_get_delay("TX Off Delay", "u", txoffdelay);
+			snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support u%d", result);
+			astgetresp(str);
+			break;
+		case 'p':				/* print current values */
 		case 'P':
-			if (astgetresp("susb tune menu-support 2")) {
+			if (astgetresp(COMMAND_PREFIX "tune menu-support 2")) {
 				exit(255);
 			}
 			break;
-		case 's':
+		case 's':				/* swap usb device with another device */
 		case 'S':
 			menu_swapusb();
 			break;
-		case 'w':
-		case 'W':
-			if (astgetresp("susb tune menu-support j")) {
-				exit(255);
-			}
-			break;
-		case 't':
+		case 't':				/* toggle test tone */
 		case 'T':
 			keying = !keying;
 			printf("Transmit Test Tone/Keying is now %s\n", (keying) ? "Enabled" : "Disabled");
+			break;
+		case 'v':				/* view cos, ctcss, and ptt status - live */
+		case 'V':
+			menu_view_status();
+			break;
+		case 'w':				/* write settings to configuration file */
+		case 'W':
+			if (astgetresp(COMMAND_PREFIX "tune menu-support j")) {
+				exit(255);
+			}
 			break;
 		default:
 			printf("Invalid Entry, try again\n");
