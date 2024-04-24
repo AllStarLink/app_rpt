@@ -93,7 +93,6 @@ static void ourhandler(int sig)
 	signal(sig, ourhandler);
 	while (waitpid(-1, &i, WNOHANG) > 0);
 
-	return;
 }
 
 /*!
@@ -468,7 +467,6 @@ static int astgetresp(char *cmd)
 	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "active %s", strs[i - 1]);
 	astgetresp(str);
 
-	return;
 }
 
  /*!
@@ -526,7 +524,6 @@ static void menu_swapusb(void)
 	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune swap %s", strs[i - 1]);
 	astgetresp(str);
 
-	return;
 }
 
 /*!
@@ -572,7 +569,6 @@ static void menu_swapusb(void)
 		}
 	}
 
-	return;
 }
 
 /*!
@@ -611,7 +607,6 @@ static void menu_swapusb(void)
 	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support e%d", i);
 	astgetresp(str);
 
-	return;
 }
 
 /*!
@@ -661,7 +656,6 @@ static void menu_swapusb(void)
 	}
 	astgetresp(str);
 
-	return;
 }
 
 /*!
@@ -700,7 +694,6 @@ static void menu_swapusb(void)
 	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support g%d", i);
 	astgetresp(str);
 
-	return;
 }
 
 /*!
@@ -751,7 +744,6 @@ static void menu_swapusb(void)
 	}
 	astgetresp(str);
 
-	return; 
 }
 
 /*!
@@ -762,7 +754,6 @@ static void menu_swapusb(void)
 
 	astgetresp(COMMAND_PREFIX "tune menu-support v");
 
-	return;
 }
 
 /*!
