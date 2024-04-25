@@ -5,7 +5,9 @@
  * Author: Matthew Kaufman (matthew@eeph.com)
  *
  * Copyright (c) 2005  Matthew Kaufman  All rights reserved.
- * 
+ * Copyright (C) 2020-2024 AllStarLink, Inc., Naveen Albert, 
+ *    Danny Lloyd KB4MDD, and contributors.
+ *
  *  This file is part of Matthew Kaufman's MDC Encoder/Decoder Library
  *
  *  The MDC Encoder/Decoder Library is free software; you can

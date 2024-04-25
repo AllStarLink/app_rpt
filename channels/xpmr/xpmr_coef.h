@@ -2,6 +2,8 @@
  * xpmr_coef.h - for Xelatec Private Mobile Radio Processes
  * 
  * All Rights Reserved. Copyright (C)2007, Xelatec, LLC
+ * Copyright (C) 2020-2024 AllStarLink, Inc., Naveen Albert, 
+ *    Danny Lloyd KB4MDD, and contributors.
  * 
  * 20070808 1235 Steven Henke, W9SH, sph@xelatec.com
  * 

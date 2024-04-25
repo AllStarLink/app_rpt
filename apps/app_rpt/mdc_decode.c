@@ -1,5 +1,5 @@
-/*-
- * mdc_decode.c
+/*
+  * mdc_decode.c
  *   Decodes a specific format of 1200 BPS MSK data burst
  *   from input audio samples.
  *
@@ -8,6 +8,9 @@
  * Author: Matthew Kaufman (matthew@eeph.com)
  *
  * Copyright (c) 2005, 2010  Matthew Kaufman  All rights reserved.
+ * Copyright (C) 2020-2024 AllStarLink, Inc., Naveen Albert, 
+ *    Danny Lloyd KB4MDD, and contributors.
+ *
  * 
  *  This file is part of Matthew Kaufman's MDC Encoder/Decoder Library
  *
