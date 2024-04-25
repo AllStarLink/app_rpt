@@ -3332,70 +3332,85 @@ static void *el_reader(void *data)
 		/* Send APRS information every EL_APRS_INTERVAL */
 		time(&now);
 		if (instp->aprstime <= now) {
-			char aprsstr[512], aprscall[256], latc, lonc;
-			unsigned char sdes_packet[256];
-			unsigned int u;
-			float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
-			int sdes_length;
-			struct el_node_count count;
-
 			instp->aprstime = now + EL_APRS_INTERVAL;
-			memset(&count, 0, sizeof(count));
-			count.instp = instp;
-			ast_mutex_lock(&el_nodelist_lock);
-			twalk_r(el_node_list, count_users, &count);
-			ast_mutex_unlock(&el_nodelist_lock);
-			tm = gmtime(&now);
-			if (!count.outbound) {			/* if no outbound users */
-				snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE,
-						 "%s [%d/%d]", instp->myqth, count.inbound, instp->maxstns);
-				snprintf(instp->aprs_display, EL_APRS_SIZE,
-						 " On @ %02d%02d [%d/%d]", tm->tm_hour, tm->tm_min, count.inbound, instp->maxstns);
-			} else {
-				snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE, "In Conference %s", instp->lastcall);
-				snprintf(instp->aprs_display, EL_APRS_SIZE,
-						 "=N%s @ %02d%02d", instp->lastcall, tm->tm_hour, tm->tm_min);
-			}
-			mylat = instp->lat;
-			mylon = instp->lon;
-			fp = fopen(GPSFILE, "r");
-			if (fp && (fstat(fileno(fp), &mystat) != -1) && (mystat.st_size < 100)) {
-				if (fscanf(fp, "%u %f%c %f%c", &u, &lat, &latc, &lon, &lonc) == 5) {
-					was = (time_t) u;
-					if ((was + GPS_VALID_SECS) >= now) {
-						mylat = floor(lat / 100.0);
-						mylat += (lat - (mylat * 100)) / 60.0;
-						mylon = floor(lon / 100.0);
-						mylon += (lon - (mylon * 100)) / 60.0;
-						if (latc == 'S')
-							mylat = -mylat;
-						if (lonc == 'W')
-							mylon = -mylon;
-					}
+			if (sin_aprs.sin_port) {	/* a zero port indicates that we never resolved the host name */
+				char aprsstr[512], aprscall[256], latc, lonc;
+				unsigned char sdes_packet[256];
+				unsigned int u;
+				float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
+				int sdes_length;
+				struct el_node_count count;
+
+				memset(&count, 0, sizeof(count));
+				count.instp = instp;
+				ast_mutex_lock(&el_nodelist_lock);
+				twalk_r(el_node_list, count_users, &count);
+				ast_mutex_unlock(&el_nodelist_lock);
+				tm = gmtime(&now);
+				if (!count.outbound) {			/* if no outbound users */
+					snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE,
+						"%s [%d/%d]", instp->myqth, count.inbound, instp->maxstns);
+					snprintf(instp->aprs_display, EL_APRS_SIZE,
+						" On @ %02d%02d [%d/%d]", tm->tm_hour, tm->tm_min, count.inbound, instp->maxstns);
+				} else {
+					snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE, "In Conference %s", instp->lastcall);
+					snprintf(instp->aprs_display, EL_APRS_SIZE,
+						"=N%s @ %02d%02d", instp->lastcall, tm->tm_hour, tm->tm_min);
 				}
-				fclose(fp);
-			}
-			latc = (mylat >= 0.0) ? 'N' : 'S';
-			lonc = (mylon >= 0.0) ? 'E' : 'W';
-			lata = fabs(mylat);
-			lona = fabs(mylon);
-			latb = (lata - floor(lata)) * 60;
-			latd = (latb - floor(latb)) * 100 + 0.5;
-			lonb = (lona - floor(lona)) * 60;
-			lond = (lonb - floor(lonb)) * 100 + 0.5;
-			snprintf(aprsstr, sizeof(aprsstr), ")EL-%-6.6s!%02d%02d.%02d%cE%03d%02d.%02d%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
+				mylat = instp->lat;
+				mylon = instp->lon;
+				fp = fopen(GPSFILE, "r");
+				if (fp && (fstat(fileno(fp), &mystat) != -1) && (mystat.st_size < 100)) {
+					if (fscanf(fp, "%u %f%c %f%c", &u, &lat, &latc, &lon, &lonc) == 5) {
+						was = (time_t) u;
+						if ((was + GPS_VALID_SECS) >= now) {
+							mylat = floor(lat / 100.0);
+							mylat += (lat - (mylat * 100)) / 60.0;
+							mylon = floor(lon / 100.0);
+							mylon += (lon - (mylon * 100)) / 60.0;
+							if (latc == 'S') {
+								mylat = -mylat;
+							}
+							if (lonc == 'W') {
+								mylon = -mylon;
+							}
+						}
+					}
+					fclose(fp);
+				}
+				latc = (mylat >= 0.0) ? 'N' : 'S';
+				lonc = (mylon >= 0.0) ? 'E' : 'W';
+				lata = fabs(mylat);
+				lona = fabs(mylon);
+				latb = (lata - floor(lata)) * 60;
+				latd = (latb - floor(latb)) * 100 + 0.5;
+				lonb = (lona - floor(lona)) * 60;
+				lond = (lonb - floor(lonb)) * 100 + 0.5;
+				snprintf(aprsstr, sizeof(aprsstr), ")EL-%-6.6s!%02d%02d.%02d%cE%03d%02d.%02d%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
 					(int) lata, (int) latb, (int) latd, latc,
 					(int) lona, (int) lonb, (int) lond, lonc,
 					instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
-			ast_debug(4, "APRS out: %s.\n", aprsstr);
-			snprintf(aprscall, sizeof(aprscall), "%s/%s", instp->mycall, instp->mycall);
-			memset(sdes_packet, 0, sizeof(sdes_packet));
-			sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
-			sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin_aprs, sizeof(sin_aprs));
-			instp->tx_ctrl_packets++;
-			
+				ast_debug(4, "APRS out: %s.\n", aprsstr);
+				snprintf(aprscall, sizeof(aprscall), "%s/%s", instp->mycall, instp->mycall);
+				memset(sdes_packet, 0, sizeof(sdes_packet));
+				sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
+				sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin_aprs, sizeof(sin_aprs));
+				instp->tx_ctrl_packets++;
+			} else {		/* we were unable to resolve the APRS host name - attempt to resolve it now */
+				struct hostent *ahp;
+				struct ast_hostent ah;
+				sin_aprs.sin_family = AF_INET;
+				sin_aprs.sin_port = htons(5199);
+				ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
+				if (!ahp) {
+					ast_log(LOG_WARNING, "Unable to resolve echolink APRS server IP address %s.\n", EL_APRS_SERVER);
+					memset(&sin_aprs, 0, sizeof(sin_aprs));
+				} else {
+					memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
+				}
+			}
 			el_sleeptime = 0;
 			el_login_sleeptime = 0;
 		}
@@ -3978,14 +3993,14 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	sin_aprs.sin_port = htons(5199);
 	ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
 	if (!ahp) {
-		ast_log(LOG_ERROR, "Unable to resolve echolink APRS server IP address.\n");
-		close(instp->ctrl_sock);
-		instp->ctrl_sock = -1;
-		close(instp->audio_sock);
-		instp->audio_sock = -1;
-		return -1;
+		/* We could not resolve the host name.  This will be attempted again 
+		 * when we need to send an APRS packet 
+		 */
+		ast_log(LOG_WARNING, "Unable to resolve echolink APRS server IP address %s.\n", EL_APRS_SERVER);
+		memset(&sin_aprs, 0, sizeof(sin_aprs));
+	} else {
+		memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
 	}
-	memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
 	/* start the registration thread */
 	ast_pthread_create(&el_register_thread, NULL, el_register, instp);
 	ast_pthread_create_detached(&instp->el_reader_thread, NULL, el_reader, instp);
