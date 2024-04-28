@@ -33,6 +33,8 @@ You can use PhreakScript to install Asterisk automatically, first, then use the 
 
 ## Automatic Installation
 
+Updated instructions are in the ASL3-Manual repo at https://github.com/AllStarLink/ASL3-Manual/blob/main/docs/user-guide/install.md
+
 Step 1: Install DAHDI and Asterisk
 
 ```
