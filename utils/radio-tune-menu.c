@@ -767,12 +767,11 @@ static void menu_swapusb(void)
 {
 	char str[100];
 	int i;
-	
+
 	printf("\nPlease select from the following methods for %s:\n", value_name);
-	
+
 	for (i = 0; i < max_items; i++) {
-		snprintf(str, sizeof(str) - 1, "%d) %s %s\n", i + 1, items[i], selection == i ? "- Current" : "");
-		printf(str);
+		printf("%d) %s %s\n", i + 1, items[i], selection == i ? "- Current" : "");
 	}
 
 	printf("Select new %s or C/R for current): ", value_name);
