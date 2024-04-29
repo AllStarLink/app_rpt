@@ -12,7 +12,7 @@ FILE_PATH="$FILE_DIR/$FILE_NAME"
 
 # Download app_rpt repo if not present already
 if [ ! -d $MYDIR ]; then
-	git clone https://github.com/InterLinked1/app_rpt.git
+	git clone https://github.com/AllStarLink/app_rpt.git
 else
 	# else, update it
 	cd $MYDIR
