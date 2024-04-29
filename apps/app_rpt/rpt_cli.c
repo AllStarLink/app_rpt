@@ -1452,6 +1452,22 @@ static char *handle_cli_page(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	return res2cli(rpt_do_page(a->fd, a->argc, a->argv));
 }
 
+static char *handle_cli_show_version(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "rpt show version";
+		e->usage =
+			"Usage: rpt show version\n"
+			"	Show the current version of the app_rpt module\n";
+		return NULL;
+	case CLI_GENERATE:
+		return NULL;
+	}
+	ast_cli(a->fd, "app_rpt version: %d.%d.%d\n", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
+	return CLI_SUCCESS;
+}
+
 static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
 	AST_CLI_DEFINE(handle_cli_dump, "Dump app_rpt structs for debugging"),
@@ -1472,7 +1488,8 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_sendall, "Send a Text message to all connected nodes"),
 	AST_CLI_DEFINE(handle_cli_sendtext, "Send a Text message to a specified nodes"),
 	AST_CLI_DEFINE(handle_cli_page, "Send a page to a user on a node"),
-	AST_CLI_DEFINE(handle_cli_lookup, "Lookup Allstar nodes")
+	AST_CLI_DEFINE(handle_cli_lookup, "Lookup Allstar nodes"),
+	AST_CLI_DEFINE(handle_cli_show_channels, "Show app_rpt version")
 };
 
 int rpt_cli_load(void)
