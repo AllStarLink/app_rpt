@@ -1,0 +1,16 @@
+;
+; Asterisk Call Management support
+;
+
+; By default asterisk will listen on localhost only. 
+[general]
+enabled = yes
+port = 5038
+bindaddr = 127.0.0.1				; Comment when not localhost access
+									
+[admin]
+secret = make4An1ce-secret
+read = all,system,call,log,verbose,command,agent,user,config
+write = all,system,call,log,verbose,command,agent,user,config
+;deny = 0.0.0.0/0.0.0.0				; Uncomment when not localhost
+;permit=1.2.3.4/255.255.255.255     ; Uncomment when not localhost

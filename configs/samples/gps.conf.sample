@@ -1,0 +1,35 @@
+; Configuration for app_gps
+;
+[general]
+; See https://wiki.allstarlink.org/wiki/Gps.conf
+call = W1AW-1               ; callsign (including SSID) for APRS purposes
+password = 12345            ; Password for APRS-IS server for above callsign
+comment = AllStar Node 1999 ; Text to be displayed associated with this station
+server = rotate.aprs2.net   ; APRS-IS server to report information to
+port = 14580                ; port on server to send data
+interval = 600              ; Beacon interval in seconds
+icon = r                    ; A CAR (default) Icon to be displayed for station on APRS display
+comport = /dev/ttyS0        ; Serial port for GPS receiver (specify this only if using GPS receiver)
+baudrate = 4800             ; Baud rate for GPS receiver (specify this only if using GPS receiver)
+debug = n                   ; set this for debug output
+freq = 145.000              ; Display Frequency of station
+tone = 100.0                ; CTCSS tone of station (0.0 for none)
+lat = 12.3456               ; Fixed (default) latitude in decimal degrees
+lon = -123.4567             ; Fixed (default) longitude in decimal degrees
+elev = 123.4                ; Elevation of Antenna in Meters (*NOT* HAAT)
+power = 1                   ; Power level
+height = 2                  ; Antenna Height in HAAT
+gain = 3                    ; Antenna Gain
+dir = 0                     ; Antenna Direction
+
+; ehlert =
+; interval =
+; ttcomment =
+; ttlat =
+; ttlist =
+; ttlon =
+; ttoffset =
+; ttsplit =
+
+#tryinclude custom/gps.conf
+

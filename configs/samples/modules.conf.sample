@@ -1,0 +1,213 @@
+;
+; Asterisk configuration file
+;
+; Module Loader configuration file
+;
+; By default DIAL does NOT load every module, only what is needed
+
+; You can enable or disable any of the asterisk modules
+; All modules are compiled and installed.
+
+; To enable a module: load => module_name.so
+; To disable a module: noload => module_name.so
+
+; You will want to enable the channel driver modules you will be using.
+; There are below in the Channel Driver section
+; The most common Channel drivers for app_rpt are:
+; chan_echolink.so   echolink channel driver
+; chan_simpleusb.so  Simple USB Radio Interface Channel Drive
+; chan_usbradio.so   USB Console Channel Driver
+; chan_usrp.so       USRP Channel Module
+; chan_voter.so      radio Voter channel driver
+
+[modules]
+autoload=no
+
+;load => func_frame_trace            ; Debug
+
+; Applications
+noload => app_adsiprog.so           ; Asterisk ADSI Programming Application
+noload => app_alarmreceiver.so      ; Alarm Receiver for Asterisk
+noload => app_amd.so                ; Answering Machine Detection Application
+load => app_authenticate.so         ; Authentication Application
+noload => app_cdr.so                ; Tell Asterisk to not maintain a CDR for
+noload => app_chanisavail.so        ; Check channel availability
+noload => app_channelredirect.so    ; Channel Redirect
+noload => app_chanspy.so            ; Listen to the audio of an active channel
+noload => app_controlplayback.so    ; Control Playback Application
+noload => app_dahdibarge.so         ; Barge in on channel application
+noload => app_dahdiras.so           ; DAHDI RAS Application
+noload => app_dahdiscan.so          ; Scan Zap channels application
+noload => app_db.so                 ; Database Access Functions
+load => app_dial.so                 ; Dialing Application
+noload => app_dictate.so            ; Virtual Dictation Machine
+noload => app_directed_pickup.so    ; Directed Call Pickup Application
+noload => app_directory.so          ; Extension Directory
+noload => app_disa.so               ; DISA (Direct Inward System Access) Appli
+noload => app_dumpchan.so           ; Dump Info About The Calling Channel
+noload => app_echo.so               ; Simple Echo Application
+load => app_exec.so                 ; Executes dialplan applications
+noload => app_externalivr.so        ; External IVR Interface Application
+noload => app_festival.so           ; Simple Festival Interface
+noload => app_flash.so              ; Flash channel application
+noload => app_followme.so           ; Find-Me/Follow-Me Application
+noload => app_forkcdr.so            ; Fork The CDR into 2 separate entities
+noload => app_getcpeid.so           ; Get ADSI CPE ID
+noload => app_gps.so                ; GPS interface module
+noload => app_hasnewvoicemail.so    ; Indicator for whether a voice mailbox ha
+noload => app_ices.so               ; Encode and Stream via icecast and ices
+noload => app_image.so              ; Image Transmission Application
+noload => app_lookupblacklist.so    ; Look up Caller*ID name/number from black
+noload => app_lookupcidname.so      ; Look up CallerID Name from local databas
+noload => app_macro.so              ; Extension Macros
+noload => app_meetme.so             ; MeetMe conference bridge
+noload => app_milliwatt.so          ; Digital Milliwatt (mu-law) Test Applicat
+noload => app_mixmonitor.so         ; Mixed Audio Monitoring Application
+noload => app_morsecode.so          ; Morse code
+noload => app_mp3.so                ; Silly MP3 Application
+noload => app_nbscat.so             ; Silly NBS Stream Application
+noload => app_page.so               ; Page Multiple Phones
+noload => app_parkandannounce.so    ; Call Parking and Announce Application
+load => app_playback.so             ; Sound File Playback Application
+noload => app_privacy.so            ; Require phone number to be entered, if n
+noload => app_queue.so              ; True Call Queueing
+noload => app_radbridge.so          ; Radio Bridging interface module
+noload => app_random.so             ; Random goto
+noload => app_readfile.so           ; Stores output of file into a variable
+noload => app_read.so               ; Read Variable Application
+noload => app_realtime.so           ; Realtime Data Lookup/Rewrite
+noload => app_record.so             ; Trivial Record Application
+load => app_rpt.so                  ; Radio Repeater/Remote Base Application
+noload => app_sayunixtime.so        ; Say time
+noload => app_senddtmf.so           ; Send DTMF digits Application
+load => app_sendtext.so             ; Send Text Applications
+noload => app_setcallerid.so        ; Set CallerID Application
+noload => app_setcdruserfield.so    ; CDR user field apps
+noload => app_settransfercapability.so   ; Set ISDN Transfer Capability
+noload => app_sms.so                ; SMS/PSTN handler
+noload => app_softhangup.so         ; Hangs up the requested channel
+noload => app_speech_utils.so       ; Dialplan Speech Applications
+noload => app_stack.so              ; Stack Routines
+load => app_system.so               ; Generic System() application
+noload => app_talkdetect.so         ; Playback with Talk Detection
+noload => app_test.so               ; Interface Test Application
+load => app_transfer.so             ; Transfer
+noload => app_url.so                ; Send URL Applications
+noload => app_userevent.so          ; Custom User Event Application
+noload => app_verbose.so            ; Send verbose output
+noload => app_voicemail.so          ; Comedian Mail (Voicemail System)
+noload => app_waitforring.so        ; Waits until first ring after time
+noload => app_waitforsilence.so     ; Wait For Silence
+noload => app_while.so              ; While Loops and Conditional Execution
+noload => app_zapateller.so         ; Block Telemarketers with Special Informa
+
+; CDR
+noload => cdr_csv.so                ; Comma Separated Values CDR Backend
+noload => cdr_custom.so             ; Customizable Comma Separated Values CDR
+noload => cdr_manager.so            ; Asterisk Manager Interface CDR Backend
+
+; Channels
+noload => chan_agent.so             ; Agent Proxy Channel
+noload => chan_alsa.so              ; ALSA Console Channel Driver
+noload => chan_beagle.so            ; Beagleboard Radio Interface Channel Driver
+load => chan_dahdi.so               ; DAHDI Telephony
+noload => chan_echolink.so          ; echolink Channel Driver
+noload => chan_features.so          ; Feature Proxy Channel
+noload => chan_gtalk.so             ; Gtalk Channel Driver
+load => chan_iax2.so                ; Inter Asterisk eXchange (Ver 2)
+noload => chan_local.so             ; Local Proxy Channel (Note: used internal
+noload => chan_oss.so               ; Channel driver for OSS sound cards
+noload => chan_phone.so             ; Generic Linux Telephony Interface driver
+noload => chan_pi.so                ; DMK Engineering "PITA" Board on Rpi2/3 Channel Driver
+load => chan_simpleusb.so           ; CM1xx USB Cards with Radio Interface Channel Driver (No DSP)
+noload => chan_sip.so               ; Session Initiation Protocol (SIP)
+noload => chan_tlb.so               ; TheLinkBox Channel Driver
+noload => chan_usbradio.so          ; CM1xx USB Cards with Radio Interface Channel Driver (DSP)
+noload => chan_usrp.so              ; GNU Radio interface USRP Channel Driver
+noload => chan_voter.so             ; Radio Voter Channel Driver
+
+; Codecs
+; CODEC          AUDIO QUALITY   BANDWIDTH (including IP and Ethernet headers)
+; ULAW           best            87 kilobits per second (kbps)
+; ADPCM          good            55 kbps
+; GSM            mediocre        36 kbps
+; g726aal2
+; ilbc
+
+load => codec_adpcm.so              ; Adaptive Differential PCM Coder/Decoder
+load => codec_alaw.so               ; A-law Coder/Decoder
+load => codec_a_mu.so               ; A-law and Mulaw direct Coder/Decoder
+noload => codec_dahdi.so            ; Generic DAHDI Transcoder Codec Translato
+load => codec_g726.so               ; ITU G.726-32kbps G726 Transcoder
+load => codec_gsm.so                ; GSM Coder/Decoder
+load => codec_ulaw.so               ; mu-Law Coder/Decoder
+noload => codec_ilbc.so             ; http://en.wikipedia.org/wiki/Internet_Low_Bitrate_Codec
+
+; Formats
+load => format_g723.so              ; G.723.1 Simple Timestamp File Format
+load => format_g726.so              ; Raw G.726 (16/24/32/40kbps) data
+load => format_g729.so              ; Raw G729 data
+load => format_gsm.so               ; Raw GSM data
+load => format_h263.so              ; Raw H.263 data
+load => format_h264.so              ; Raw H.264 data
+load => format_ilbc.so              ; Raw iLBC data
+noload => format_jpeg.so            ; JPEG (Joint Picture Experts Group) Image
+load => format_pcm.so               ; Raw/Sun uLaw/ALaw 8KHz (PCM,PCMA,AU), G.
+load => format_sln.so               ; Raw Signed Linear Audio support (SLN)
+load => format_vox.so               ; Dialogic VOX (ADPCM) File Format
+load => format_wav_gsm.so           ; Microsoft WAV format (Proprietary GSM)
+load => format_wav.so               ; Microsoft WAV format (8000Hz Signed Line
+
+; Functions
+load => func_base64.so              ; base64 encode/decode dialplan functions
+load => func_callerid.so            ; Caller ID related dialplan function
+load => func_cdr.so                 ; CDR dialplan function
+load => func_channel.so             ; Channel information dialplan function
+load => res_curl.so                 ; Required for ASL3
+load => func_curl.so                ; Load external URL
+load => func_cut.so                 ; Cut out information from a string
+load => func_db.so                  ; Database (astdb) related dialplan functi
+load => func_enum.so                ; ENUM related dialplan functions
+load => func_env.so                 ; Environment/filesystem dialplan function
+load => func_global.so              ; Global variable dialplan functions
+load => func_groupcount.so          ; Channel group dialplan functions
+noload => func_language.so          ; Channel language dialplan function
+load => func_logic.so               ; Logical dialplan functions
+load => func_math.so                ; Mathematical dialplan function
+load => func_md5.so                 ; MD5 digest dialplan functions
+noload => func_moh.so               ; Music-on-hold dialplan function
+load => func_rand.so                ; Random number dialplan function
+load => func_realtime.so            ; Read/Write values from a RealTime reposi
+noload => func_sha1.so              ; SHA-1 computation dialplan function
+noload => func_strings.so           ; String handling dialplan functions
+noload => func_timeout.so           ; Channel timeout dialplan functions
+noload => func_uri.so               ; URI encode/decode dialplan functions
+
+; PBX
+noload => pbx_ael.so                ; Asterisk Extension Language Compiler
+load => pbx_config.so               ; Text Extension Configuration
+noload => pbx_dundi.so              ; Distributed Universal Number Discovery (
+noload => pbx_loopback.so           ; Loopback Switch
+noload => pbx_realtime.so           ; Realtime Switch
+noload => pbx_spool.so              ; Outgoing Spool Support
+
+; Resources
+load => res_adsi.so                 ; ADSI Resource
+noload => res_agi.so                ; Asterisk Gateway Interface (AGI)
+noload => res_clioriginate.so       ; Call origination from the CLI
+noload => res_convert.so            ; File format conversion CLI command
+load => res_crypto.so               ; Cryptographic Digital Signatures
+noload => res_features.so           ; Call Features Resource
+load => res_rpt_http_registrations.so   ; ASL3 app_rpt http registrations
+noload => res_indications.so        ; Indications Resource
+noload => res_jabber.so             ; AJI - Asterisk Jabber Interface
+noload => res_monitor.so            ; Call Monitoring Resource
+noload => res_musiconhold.so        ; Music On Hold Resource
+load => res_smdi.so                 ; Simplified Message Desk Interface (SMDI)
+noload => res_snmp.so               ; SNMP [Sub]Agent for Asterisk
+noload => res_speech.so             ; Generic Speech Recognition API
+load => res_timing_dahdi.so         ; DAHDI Timing Interface
+load => res_timing_timerfd.so       ; Timerfd Timing Interface is preferred for ASL3
+load => res_usbradio.so             ; ASL3 required for both simpleusb and usbradio
+
+[global]

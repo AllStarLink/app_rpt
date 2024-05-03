@@ -1,0 +1,53 @@
+; If you are going to use this channel driver, you MUST enable it in modules.conf
+; change:
+; noload => chan_echolink.so 		; echolink Channel Driver
+; to:
+; load => chan_echolink 			; echolink Channel Driver
+
+[el0]
+call = INVALID						; Change this!
+pwd = INVALID						; Change this!
+name = YOUR NAME					; Change this!
+qth = INVALID						; Change this!
+email = INVALID						; Change this!
+node = 000000                       ; Change this!
+; Data for EchoLink Status Page
+lat = 0.0							; Latitude in decimal degrees
+lon = 0.0							; Longitude in decimal degrees
+freq = 0.0                          ; not mandatory Frequency in MHz
+tone = 0.0                          ; not mandatory CTCSS Tone (0 for none)
+power = 0							; 0=0W, 1=1W, 2=4W, 3=9W, 4=16W, 5=25W, 6=36W, 7=49W, 8=64W, 9=81W (Power in Watts)
+height = 0							; 0=10 1=20 2=40 3=80 4=160 5=320 6=640 7=1280 8=2560 9=5120 (AMSL in Feet)
+gain = 0							; Gain in db (0-9)
+dir = 0								; 0=omni 1=45deg 2=90deg 3=135deg 4=180deg 5=225deg 6=270deg 7=315deg 8=360deg (Direction)
+
+maxstns = 20						; Max Stations
+
+rtcptimeout = 10					; Max number of missed heartbeats from EL
+recfile = /tmp/echolink_recorded.gsm	;
+astnode = 1999						; Change this!
+context = radio-secure				; Default in code is echolink-in
+
+; Max 4 servers
+server1 = nasouth.echolink.org
+server2 = naeast.echolink.org
+server3 = servers.echolink.org
+server4 = backup.echolink.org
+
+; To deny w6xxx you would add the statement: deny = w6xxx
+; To prohibit computer-based connections you would write: permit = *-*
+; To allow access to only a select group of callsigns: permit = w6abc,w6def,...
+
+; permit							; comma delimited list of callsign, type (-r)
+; deny
+
+
+; Remote text commands thru netcat:
+; o.conip <IPaddress>    (request a connect)
+; o.dconip <IPaddress>   (request a disconnect)
+; o.rec                  (turn on/off recording)
+
+; ipaddr
+; port
+
+#tryinclude custom/echolink.conf
