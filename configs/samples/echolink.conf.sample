@@ -1,9 +1,3 @@
-; If you are going to use this channel driver, you MUST enable it in modules.conf
-; change:
-; noload => chan_echolink.so 		; echolink Channel Driver
-; to:
-; load => chan_echolink 			; echolink Channel Driver
-
 [el0]
 call = INVALID						; Change this!
 pwd = INVALID						; Change this!
@@ -46,8 +40,3 @@ server4 = backup.echolink.org
 ; o.conip <IPaddress>    (request a connect)
 ; o.dconip <IPaddress>   (request a disconnect)
 ; o.rec                  (turn on/off recording)
-
-; ipaddr
-; port
-
-#tryinclude custom/echolink.conf

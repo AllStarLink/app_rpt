@@ -1,10 +1,3 @@
-; If you are going to use this channel driver, you MUST enable it in modules.conf
-; enable it in modules.conf
-; change:
-; noload => chan_beagle.so ;                      Beagleboard Radio Interface Channel Driver
-; to:
-; load => chan_beagle.so ;                      Beagleboard Radio Interface Channel Driver
-
 [general]
 
 [1]
@@ -22,4 +15,3 @@ invertptt = 0
 duplex = 1
 rxondelay = 0
 eeprom = 0
-

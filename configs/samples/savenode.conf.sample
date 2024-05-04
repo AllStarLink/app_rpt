@@ -1,4 +1,0 @@
-# config file for /usr/sbin/savenode
-NODE=1999
-PASSWORD=12345
-ENABLE=0
