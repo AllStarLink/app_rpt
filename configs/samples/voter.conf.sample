@@ -15,15 +15,15 @@ utos = y                        ; Turn on IP TOS for Ubiquiti (ToS is enable by 
 
 [1999]                          ; define the 1999 instance stanza
 Main = secret,transmit,master   ; master,transmit,adpcm,nulaw,nodeemp,noplfilter,buflen=value,gpsid[=value],prio=value
-                                ; 
+                                ;
                                 ; master - this client is the Master Timing source (the RTCM client that is on the same LAN as the Asterisk server.)
                                 ; There can only be 1 Master Timing source per ENTIRE Asterisk server.
-                                ; 
+                                ;
                                 ; secret - password unique to this client
                                 ; transmit - this client is intended to have transmit audio sent to it and will have a transmitter connected to it.
                                 ; adpcm - this client is to be sent audio in 8000 samples/sec, 4-bit, IMA ADPCM format, rather than default G.711 Mulaw (aka ulaw).
                                 ; nulaw - this client is to be sent audio in 4000 samples/second Mulaw (Nulaw, as we call it), rather than the standard 8000 samples/second.
-                                ; nodeemp - this client is not to perform de-emphasis of the receiver audio  (This is only to be used with non-voting clients). Switches 
+                                ; nodeemp - this client is not to perform de-emphasis of the receiver audio  (This is only to be used with non-voting clients). Switches
                                 ; the hardware de-emphasis filter OUT on the client
                                 ; noplfilter - this client is to not to perform hardware pl filtering of the audio. Switches the hardware PL filter OUT on the client.
                                 ; buflen=value - receive buffer length override for this client only.
@@ -49,7 +49,7 @@ thresholds = 255,110=5          ;
 ; primary = 10.20.20.1:667,mypaswd  ; used in redundant server applications only. must be ONLY set on the secondary server to point to the primary
 
 [1998]                          ; define another voting instance on this server (for another node). Three simulcast transmitters and four receivers.
-                                ; NOTE: there is NO "master" in this instance, since we already have a master timing source on this server defined above 
+                                ; NOTE: there is NO "master" in this instance, since we already have a master timing source on this server defined above
 
 NORTH = password_1,transmit     ; transmit/receive site
 SOUTH = Password_2,transmit     ; transmit/receive site

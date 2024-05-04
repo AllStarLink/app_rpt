@@ -1,10 +1,10 @@
 [el0]
-call = INVALID						; Change this!
-pwd = INVALID						; Change this!
-name = YOUR NAME					; Change this!
-qth = INVALID						; Change this!
-email = INVALID						; Change this!
-node = 000000                       ; Change this!
+call = Your Echolink callsign		; Change this!
+pwd = Your Echolink password		; Change this!
+name = Yout name					; Change this!
+qth = Your Location					; Change this!
+email = Your email address			; Change this!
+node = Your Allstar node number     ; Change this!
 ; Data for EchoLink Status Page
 lat = 0.0							; Latitude in decimal degrees
 lon = 0.0							; Longitude in decimal degrees
