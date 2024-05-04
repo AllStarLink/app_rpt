@@ -1,7 +1,6 @@
 ; Configuration for app_gps
 ;
 [general]
-; See https://wiki.allstarlink.org/wiki/Gps.conf
 call = W1AW-1               ; callsign (including SSID) for APRS purposes
 password = 12345            ; Password for APRS-IS server for above callsign
 comment = AllStar Node 1999 ; Text to be displayed associated with this station
@@ -30,6 +29,3 @@ dir = 0                     ; Antenna Direction
 ; ttlon =
 ; ttoffset =
 ; ttsplit =
-
-#tryinclude custom/gps.conf
-
