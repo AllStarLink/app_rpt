@@ -1489,7 +1489,7 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_sendtext, "Send a Text message to a specified nodes"),
 	AST_CLI_DEFINE(handle_cli_page, "Send a page to a user on a node"),
 	AST_CLI_DEFINE(handle_cli_lookup, "Lookup Allstar nodes"),
-	AST_CLI_DEFINE(handle_cli_show_channels, "Show app_rpt version")
+	AST_CLI_DEFINE(handle_cli_show_version, "Show app_rpt version")
 };
 
 int rpt_cli_load(void)
