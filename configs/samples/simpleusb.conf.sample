@@ -56,7 +56,7 @@
 							; 3 is for a custom interface.
 
 ; Receiver parameters
-;rxboost = 0                ; 0 = 20db attenuator inserted, 1= 20db attenuator removed
+;rxboost = false            ; false = 20db attenuator inserted, true = 20db attenuator removed
 
 ;carrierfrom = usbinvert    ; no,usb,usbinvert
                             ; no - no carrier detection at all
@@ -68,9 +68,9 @@
                             ; usb - CTCSS decoding using input from USB sound fob (Active high)
                             ; usbinvert - from the inverted CTCSS line on the USB sound fob (Active low)
 
-;deemphasis = no            ; enable de-emphasis (input from discriminator)
+;deemphasis = false         ; enable de-emphasis (input from discriminator)
 
-;plfilter = yes             ; enable PL filter
+;plfilter = true            ; enable PL filter
 
 ;rxondelay = 0              ; Number of 20mSec intervals following the release of PTT.
 							; Uncomment and/or adjust for simplex nodes to eliminate "Ping Ponging"
@@ -93,11 +93,11 @@
                             ; no - Do not output anything
                             ; voice - output voice only
 
-;invertptt = 0              ; Invert PTT: 0,1
-                            ; 0 - ground to transmit
-                            ; 1 - open to transmit
+;invertptt = false          ; Invert PTT: false,true
+                            ; false - ground to transmit
+                            ; true  - open to transmit
 
-;preemphasis = 0            ; Perform standard 6db/octave pre-emphasis
+;preemphasis = false        ; Perform standard 6db/octave pre-emphasis
 
 ;pager = no                 ; no,a,b (e.g. pager = b means "put the normal repeat audio on channel A, and the pager audio on channel B")
 
