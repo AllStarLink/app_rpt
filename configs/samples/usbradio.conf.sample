@@ -55,9 +55,9 @@
                             ; the instructions from usbfob.pdf. Use a setting of
                             ; 1 is for Dingotel/Sph interfaces.
 
-;rxboost = true             ; false - 20db attenuator inserted
-                            ; true  - 20db attenuator removed
-                            ; Set to true for additonal gain if using a low-level receiver output
+;rxboost = yes              ; no  - 20db attenuator inserted
+                            ; yes - 20db attenuator removed
+                            ; Set to yes for additonal gain if using a low-level receiver output
 
 ;rxctcssrelax = 1           ; reduce talkoff from radios w/o CTCSS TX HPF
                             ; Do not change this, leave this as a 1
@@ -71,7 +71,7 @@
 ;txctcssdefault = 100.0     ; default TX CTCSS frequency, any frequency permitted
 ;rxctcssfreqs = 100.0,91.5  ; RX CTCSS frequencies list in floating point. must be in table
 ;txctcssfreqs = 100.0,91.5  ; TX CTCSS frequencies list. any frequency permitted. will follow RX CTCSS frequency
-;rxctcssoverride = false    ; Set to true to start out in carrier squelch mode
+;rxctcssoverride = no       ; Set to yes to start out in carrier squelch mode
 
 ;carrierfrom = dsp          ; no,usb,usbinvert,dsp,vox
                             ; no - no carrier detection at all
@@ -106,17 +106,17 @@
                             ; This is useful when setting up a half-duplex link with an existing
                             ; repeater, where you need to ignore the repeater's hangtime.
 
-;txboost = false            ; Add transmitter audio gain boost: false,true
+;txboost = no               ; Add transmitter audio gain boost: no,yes
 
-;txprelim = true            ; Audio processing on left output channel: false,true
-                            ; false - Audio is not pre-emphasized and limited.
+;txprelim = yes             ; Audio processing on left output channel: no,yes
+                            ; no  - Audio is not pre-emphasized and limited.
                             ;   (suitable for use on a microphone input)
-                            ; true  - Audio is pre-emphasized and limited.
+                            ; yes - Audio is pre-emphasized and limited.
                             ;   (suitable for direct connection to an FM modulator)
 
-;txlimonly = true           ; Audio limiting with no pre-emphasis on output channel: false,true
-                            ; false - Audio is not limited.
-                            ; true  - Audio is  limited.
+;txlimonly = yes            ; Audio limiting with no pre-emphasis on output channel: no,yes
+                            ; no  - Audio is not limited.
+                            ; yes - Audio is  limited.
                             ;   (suitable for transmitters with no limiting but with pre-emphasis)
 
 ;txtoctype = notone         ; Transmit tone control type: no,phase,notone
@@ -158,9 +158,9 @@
                             ; 2 - 120 Hz cutoff for special applications requiring additional bass response in transmitted audio.
                             ; Not recommended due to the increased possibility of voice energy interfering with sub-audible signaling
 
-;invertptt = true           ; Invert PTT: false,true
-                            ; false - ground to transmit
-                            ; true  - open to transmit
+;invertptt = yes            ; Invert PTT: no,yes
+                            ; no  - ground to transmit
+                            ; yes - open to transmit
 
 ;duplex = 0                 ; Duplex 0,1
                             ; 0 - half duplex

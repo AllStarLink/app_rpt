@@ -4347,7 +4347,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 }
 
 #define CONFIG_UPDATE_BOOL(field) \
-	if (ast_variable_update(category, #field, o->field ? "true" : "false", NULL, 0)) { \
+	if (ast_variable_update(category, #field, o->field ? "yes" : "no", NULL, 0)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
