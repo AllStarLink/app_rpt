@@ -6,10 +6,6 @@
 ;
 ; USBRadio channel driver Configuration File
 ;
-;;;;;                 New to ASL3                 ;;;;;
-;;;;; The USBRadio "tune" settings have moved to  ;;;;;
-;;;;; this file. The usbradio_tune_usb_1999.conf  ;;;;;
-;;;;; file is no longer used.                     ;;;;;
 
 [general]
 ; General config options that apply to entire channel driver.
@@ -193,7 +189,6 @@
 ; First channel unique configuration
 ;[1999](node-main)
 
-;;;;; ASL3 Tune settings ;;;;;
 ;;;;; Tune settings ;;;;;
 ;devstr=
 ;rxmixerset=500
@@ -207,9 +202,7 @@
 ; Second channel unique configuration
 ;[1998](node-main)
 
-;;;;; ASL3 Tune settings ;;;;;
 ;;;;; Tune settings ;;;;;
-
 ;devstr=
 ;rxmixerset=500
 ;txmixaset=500
