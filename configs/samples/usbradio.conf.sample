@@ -1,13 +1,9 @@
-;**************************************************
-;********   Template-tized usbradio.conf   ********
-;**************************************************
-; Note to editors: set tabs to 4 space characters. No wrap to keep comments neat.
-; vim: tabstop=4
 ;
 ; USBRadio channel driver Configuration File
 ;
 
 [general]
+
 ; General config options that apply to entire channel driver.
 
 ;------------------------------ JITTER BUFFER CONFIGURATION --------------------------
@@ -32,11 +28,6 @@
 
 ;jblog = no                 ; Enables jitterbuffer frame logging. Defaults to "no".
 ;-----------------------------------------------------------------------------------
-
-[node-main](!)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;; Template for all your USBRadio nodes ;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; Channel config options, with
 ; default values shown. You may have as many devices as the
@@ -171,23 +162,8 @@
 ;ppX=out0					; printer port pin(x) [x is 2-9] initial output state [out0,out1] or 'ptt' (for output pins)
 ;ppX=in					; printer port pin(x) [x is 10,12,13,15] input pin [in,cor,ctcss]
 
-;;; End of node-main template
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;; Configure your nodes here ;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;
-; Note: there is no need to duplicate entire settings. Only
-;       place settings that are different than the template.
-;
-; Note: the device string is automatically found when the
-;       USB setting "devstr=" is empty.
-;
-; Note: the interface "tune" settings will be added to the
-;       per-node settings (below).
-
+;[usb]
 ; First channel unique configuration
-;[1999](node-main)
 
 ;;;;; Tune settings ;;;;;
 ;devstr=
@@ -199,16 +175,6 @@
 ;txctcssadj=200
 ;rxsquelchadj=500
 
-; Second channel unique configuration
-;[1998](node-main)
-
-;;;;; Tune settings ;;;;;
-;devstr=
-;rxmixerset=500
-;txmixaset=500
-;txmixbset=500
-;rxvoiceadj=0.5
-;rxctcssadj=0.5
-;txctcssadj=200
-;rxsquelchadj=500
+;[usb1]
+; Second channel unique configuration 
 
