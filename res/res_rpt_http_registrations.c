@@ -76,6 +76,7 @@ struct http_registry {
 	char username[80];
 	char secret[80];			/*!< Password or key name in []'s */
 	int refresh;				/*!< How often to refresh */
+	char registered;			/*!< Registered==1 */
 	struct ast_sockaddr us;			/*!< Who the server thinks we are */
 	struct ast_dnsmgr_entry *dnsmgr;	/*!< DNS refresh manager */
 	char perceived[80];
@@ -248,10 +249,15 @@ static int http_register(struct http_registry *reg)
 			port = ast_json_integer_get(ast_json_object_get(json, "port"));
 			refresh = ast_json_integer_get(ast_json_object_get(json, "refresh"));
 			data = ast_json_dump_string(ast_json_object_get(json, "data"));
-			ast_copy_string(reg->perceived, ipaddr, sizeof(reg->perceived));
-			reg->perceived_port = port;
-			reg->refresh = refresh;
 			ast_debug(2, "Response: ipaddr=%s, port=%d, refresh=%d, data=%s\n", ipaddr, port, refresh, data);
+			if (strstr(data, "successfully registered")) {
+				ast_copy_string(reg->perceived, ipaddr, sizeof(reg->perceived));
+				reg->perceived_port = port;
+				reg->refresh = refresh;
+				reg->registered = 1;
+			} else {
+				reg->registered = 0;
+			}
 			if (data) {
 				ast_json_free(data);
 			}
@@ -324,9 +330,13 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 	ast_cli(a->fd, FORMAT2, "Host", "Username", "Perceived", "Refresh", "State");
 	AST_RWLIST_RDLOCK(&registrations);
 	AST_RWLIST_TRAVERSE(&registrations, reg, entry) {
-		snprintf(perceived, sizeof(perceived), "%s:%d", reg->perceived, reg->perceived_port);
+		if (!ast_sockaddr_isnull(&reg->addr)) {
+			snprintf(perceived, sizeof(perceived), "%s:%d", reg->perceived, reg->perceived_port);
+		} else {
+			ast_copy_string(perceived, "<Unregistered>", sizeof(perceived));
+		}
 		snprintf(host, sizeof(host), "%s", ast_sockaddr_stringify(&reg->addr));
-		ast_cli(a->fd, FORMAT, host, reg->username, reg->perceived_port ? perceived : "<Unregistered>", reg->refresh, reg->refresh ? "Registered" : "Not Registered");
+		ast_cli(a->fd, FORMAT, host, reg->username, reg->perceived_port ? perceived : "<Unregistered>", reg->refresh, reg->registered ? "Registered" : "Not Registered");
 		counter++;
 	}
 	AST_RWLIST_UNLOCK(&registrations);
