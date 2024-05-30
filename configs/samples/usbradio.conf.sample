@@ -1,132 +1,126 @@
 ;
-; Usbradio channel driver Configuration File
+; USBRadio channel driver Configuration File
 ;
+
 [general]
 
 ; General config options that apply to entire channel driver.
-;
+
 ;------------------------------ JITTER BUFFER CONFIGURATION --------------------------
-; jbenable = yes            ; Enables the use of a jitterbuffer on the receiving side of an
+;jbenable = yes             ; Enables the use of a jitterbuffer on the receiving side of an
 							; USBRADIO channel. Defaults to "no". An enabled jitterbuffer will
 							; be used only if the sending side can create and the receiving
 							; side can not accept jitter. The USBRADIO channel can't accept jitter,
 							; thus an enabled jitterbuffer on the receive USBRADIO side will always
 							; be used if the sending side can create jitter.
 
-; jbmaxsize = 200           ; Max length of the jitterbuffer in milliseconds.
+;jbmaxsize = 200            ; Max length of the jitterbuffer in milliseconds.
 
-; jbresyncthreshold = 1000  ; Jump in the frame timestamps over which the jitterbuffer is
+;jbresyncthreshold = 1000   ; Jump in the frame timestamps over which the jitterbuffer is
 							; resynchronized. Useful to improve the quality of the voice, with
 							; big jumps in/broken timestamps, usualy sent from exotic devices
 							; and programs. Defaults to 1000.
 
-; jbimpl = fixed            ; Jitterbuffer implementation, used on the receiving side of an USBRADIO
+;jbimpl = fixed             ; Jitterbuffer implementation, used on the receiving side of an USBRADIO
 							; channel. Two implementations are currenlty available - "fixed"
 							; (with size always equals to jbmax-size) and "adaptive" (with
 							; variable size, actually the new jb of IAX2). Defaults to fixed.
 
-; jblog = no                ; Enables jitterbuffer frame logging. Defaults to "no".
+;jblog = no                 ; Enables jitterbuffer frame logging. Defaults to "no".
 ;-----------------------------------------------------------------------------------
-
-; pport=/dev/parport0		; Specify parport device (optional)
-; pbase=0x378				; Specify printer port I/O address (if not using parport driver) (optional)
-
-;[usb]
-; First channel unique config
 
 ; Channel config options, with
 ; default values shown. You may have as many devices as the
 ; system will allow. You must use one section per device, with
 ; [usb] generally (although its up to you) being the first device.
 
-
-eeprom = 0                  ; EEPROM installed: 0,1
+;eeprom = 0                 ; EEPROM installed: 0,1
                             ; 0 = no (default)
                             ; 1 = yes
 
-hdwtype = 0                 ; Leave this set to 0 for USB sound fobs modified using
+;hdwtype = 0                ; Leave this set to 0 for USB sound fobs modified using
                             ; the instructions from usbfob.pdf. Use a setting of
                             ; 1 is for Dingotel/Sph interfaces.
 
-rxboost = 1                 ; 0 - 20db attenuator inserted
-                            ; 1 - 20db attenuator removed
-                            ; Set to 1 for additonal gain if using a low-level receiver output
+;rxboost = yes              ; no  - 20db attenuator inserted
+                            ; yes - 20db attenuator removed
+                            ; Set to yes for additonal gain if using a low-level receiver output
 
-rxctcssrelax = 1            ; reduce talkoff from radios w/o CTCSS TX HPF
+;rxctcssrelax = 1           ; reduce talkoff from radios w/o CTCSS TX HPF
                             ; Do not change this, leave this as a 1
 
-rxsqhyst = 3000             ; Setting Squelch Hysteresis
+;rxsqhyst = 3000            ; Setting Squelch Hysteresis
                             ; 3000 is the default amount.
                             ; An amount of 500 seems good.
                             ; Then set the squelch to the highest number revealed when doing a "radio
                             ; tune rxsquelch" - running the command multiple (like 20) times in a row.
 
-txctcssdefault = 100.0      ; default TX CTCSS frequency, any frequency permitted
-rxctcssfreqs = 100.0,91.5   ; RX CTCSS frequencies list in floating point. must be in table
-txctcssfreqs = 100.0,91.5   ; TX CTCSS frequencies list. any frequency permitted. will follow RX CTCSS frequency
-rxctcssoverride = 0         ; Set to 1 to start out in carrier squelch mode
+;txctcssdefault = 100.0     ; default TX CTCSS frequency, any frequency permitted
+;rxctcssfreqs = 100.0,91.5  ; RX CTCSS frequencies list in floating point. must be in table
+;txctcssfreqs = 100.0,91.5  ; TX CTCSS frequencies list. any frequency permitted. will follow RX CTCSS frequency
+;rxctcssoverride = no       ; Set to yes to start out in carrier squelch mode
 
-carrierfrom = dsp           ; no,usb,usbinvert,dsp,vox
+;carrierfrom = dsp          ; no,usb,usbinvert,dsp,vox
                             ; no - no carrier detection at all
                             ; usb - from the COR line on the USB sound fob (Active high)
                             ; usbinvert - from the inverted COR line on the USB sound fob (Active low)
                             ; dsp - from RX noise using DSP techniques
                             ; vox - voice activated from RX audio
 
-ctcssfrom = dsp             ; no,usb,usbinvert,dsp
+;ctcssfrom = dsp            ; no,usb,usbinvert,dsp
                             ; no - no CTCSS decoding, system will be carrier squelch
                             ; usb - from the CTCSS line on the USB sound fob (Active high)
                             ; usbinvert - from the inverted CTCSS line on the USB sound fob (Active low)
                             ; dsp - CTCSS decoding using RX audio in DSP.
                             ; rxdemod option must be set to flat for this to work.
 
-rxdemod = flat              ; input type from radio: no,speaker,flat
+;rxdemod = flat             ; input type from radio: no,speaker,flat
                             ; no - RX audio input not used
                             ; flat - Use RX audio from discriminator (before de-emphasis)
                             ; speaker - use de-emphasized audio
 
-rxsquelchdelay = 30         ; delayline in ms carrier squelch tail eliminator
+;rxsquelchdelay = 30        ; delayline in ms carrier squelch tail eliminator
 
-rxondelay = 0               ; Number of 20mSec intervals following the release of PTT.
+;rxondelay = 0              ; Number of 20mSec intervals following the release of PTT.
                             ; Uncomment and/or adjust for simplex nodes to eliminate "Ping Ponging"
                             ; or "Relay Racing". A positive value here will instruct the usbradio
                             ; driver to ignore the COR line for a specified number of 20mSec
                             ; intervals following the release of PTT. Use this ONLY on simplex
                             ; nodes, and leave commented out for repeaters or other full duplex nodes.
 
-txoffdelay = 0              ; Ignore the reciever for a specified number of 20 millisecond
+;txoffdelay = 0             ; Ignore the reciever for a specified number of 20 millisecond
                             ; intervals after the transmitter unkeys.
                             ; This is useful when setting up a half-duplex link with an existing
                             ; repeater, where you need to ignore the repeater's hangtime.
 
-txboost = 0                 ; Add transmitter audio gain boost: 0,1
+;txboost = no               ; Add transmitter audio gain boost: no,yes
 
-txprelim = yes              ; Audio processing on left output channel: no,yes
-                            ; no - Audio is not pre-emphasized and limited.
-                            ; Suitable for use on a microphone input
+;txprelim = yes             ; Audio processing on left output channel: no,yes
+                            ; no  - Audio is not pre-emphasized and limited.
+                            ;   (suitable for use on a microphone input)
                             ; yes - Audio is pre-emphasized and limited.
-                            ; Suitable for direct connection to an FM modulator
+                            ;   (suitable for direct connection to an FM modulator)
 
-txlimonly = yes             ; Audio limiting with no pre-emphasis on output channel: no,yes
-                            ; no - Audio is not limited.
+;txlimonly = yes            ; Audio limiting with no pre-emphasis on output channel: no,yes
+                            ; no  - Audio is not limited.
                             ; yes - Audio is  limited.
-                            ; Suitable for transmitters with no limiting but with pre-emphasis.
+                            ;   (suitable for transmitters with no limiting but with pre-emphasis)
 
-txtoctype = notone          ; Transmit tone control type: no,phase,notone
+;txtoctype = notone         ; Transmit tone control type: no,phase,notone
                             ; no - CTCSS tone encoding with no hang time
                             ; phase - encode CTCSS and reverse phase
                             ; AKA ("reverse burst") before unkeying TX
                             ; notone - encode CTCSS and stop sending tone before unkeying TX
                             ; AKA ("chicken burst")
 
-txmixa = composite          ; Left channel output: no,voice,tone,composite,auxvoice
+;txmixa = composite         ; Left channel output: no,voice,tone,composite,auxvoice
                             ; no - Do not output anything
                             ; voice - output voice only
                             ; tone - CTCSS tone only
                             ; composite - voice and tone
                             ; auxvoice - auxiliary voice output at headphone level for monitoring
 
-txmixb = no                 ; Right channel output: no,voice,tone,composite, auxvoice
+;txmixb = no                ; Right channel output: no,voice,tone,composite, auxvoice
                             ; no - Do not output anything
                             ; voice - output voice only
                             ; tone - CTCSS tone only
@@ -134,48 +128,53 @@ txmixb = no                 ; Right channel output: no,voice,tone,composite, aux
                             ; auxvoice - auxiliary voice output at headphone level for monitoring
 
 ; Audio filters 
-rxlpf = 0                   ; Receiver Audio Low Pass Filter 0,1 2
+;rxlpf = 0                  ; Receiver Audio Low Pass Filter 0,1 2
                             ; 0 - 3.0 kHz cutoff (Default) value for reduced noise and increased intelligibility.
                             ; 1 - 3.3 kHz cutoff for increased high end, sibilance and brightness.
                             ; 2 - 3.5 kHz cutoff for even more high end, sibilance and brightness.
-rxhpf = 0                   ; Receiver Audio High Pass Filter 0,1
+;rxhpf = 0                  ; Receiver Audio High Pass Filter 0,1
                             ; 0 - 300 Hz cutoff. (Default) value to reduce sub-audible signals for retransmission and in the receiver speaker.
                             ; 1 - 250 Hz cutoff for additional received and retransmitted bass response.
                             ; recommend using this filter with a CTCSS tone no higher than 186.2 Hz.
-txlpf = 0                   ; Transmitter Audio Low Pass Filter 0,1
+;txlpf = 0                  ; Transmitter Audio Low Pass Filter 0,1
                             ; 0 - 3.0 kHz cutoff. (Default) value.
                             ; 1 - 3.3 kHz cutoff for increased high end, sibilance and brightness.
-txhpf = 0                   ; Transmitter Audio High Pass Filter 0,1,2
+;txhpf = 0                  ; Transmitter Audio High Pass Filter 0,1,2
                             ; 0 - 300 Hz cutoff. (Default) value to reduce interference between voice and sub-audible signaling tones and codes.
                             ; 1 - 250 Hz cutoff for increased bass response in transmitted audio.
                             ; 2 - 120 Hz cutoff for special applications requiring additional bass response in transmitted audio.
                             ; Not recommended due to the increased possibility of voice energy interfering with sub-audible signaling
 
-invertptt = 1               ; Invert PTT: 0,1
-                            ; 0 - ground to transmit
-                            ; 1 - open to transmit
+;invertptt = yes            ; Invert PTT: no,yes
+                            ; no  - ground to transmit
+                            ; yes - open to transmit
 
-duplex = 0                  ; Duplex 0,1
+;duplex = 0                 ; Duplex 0,1
                             ; 0 - half duplex
                             ; 1 - full duplex
-duplex3 = 0                 ; duplex 3 gain setting (0 to disable) ???
+;duplex3 = 0                ; duplex 3 gain setting (0 to disable) ???
 
-; gpioX=in		; define input/output pin GPIO(x) in,out0,out1 (where X {1..8}) (optional)
+;gpioX=in					; define input/output pin GPIO(x) in,out0,out1 (where X {1..8}) (optional)
 
-; ppX=out0		; printer port pin(x) [x is 2-9] initial output state [out0,out1] or 'ptt' (for output pins)
-; ppX=in		; printer port pin(x) [x is 10,12,13,15] input pin [in,cor,ctcss]
+;pport=/dev/parport0		; Specify parport device (optional)
+;pbase=0x378				; Specify printer port I/O address (if not using parport driver) (optional)
 
-;;;;; ASL3 Tune settings ;;;;;
-; name=1999
-; devicenum=1
-devstr=
-rxmixerset=500
-txmixaset=500
-txmixbset=500
-rxvoiceadj=0.5
-rxctcssadj=0.5
-txctcssadj=200
-rxsquelchadj=500
+;ppX=out0					; printer port pin(x) [x is 2-9] initial output state [out0,out1] or 'ptt' (for output pins)
+;ppX=in					; printer port pin(x) [x is 10,12,13,15] input pin [in,cor,ctcss]
+
+;[usb]
+; First channel unique configuration
+
+;;;;; Tune settings ;;;;;
+;devstr=
+;rxmixerset=500
+;txmixaset=500
+;txmixbset=500
+;rxvoiceadj=0.5
+;rxctcssadj=0.5
+;txctcssadj=200
+;rxsquelchadj=500
 
 ;[usb1]
-; Second channel config
+; Second channel unique configuration 
+

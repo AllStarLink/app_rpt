@@ -1,117 +1,112 @@
 ;
 ; SimpleUSB channel driver Configuration File
 ;
+
 [general]
 
 ;------------------------------ JITTER BUFFER CONFIGURATION --------------------------
-; jbenable = yes              ; Enables the use of a jitterbuffer on the receiving side of an
-							  ; simpleusb channel. Defaults to "no". An enabled jitterbuffer will
-							  ; be used only if the sending side can create and the receiving
-							  ; side can not accept jitter. The simpleusb channel can't accept jitter,
-							  ; thus an enabled jitterbuffer on the receive simpleusb side will always
-							  ; be used if the sending side can create jitter.
+;jbenable = yes             ; Enables the use of a jitterbuffer on the receiving side of an
+							; simpleusb channel. Defaults to "no". An enabled jitterbuffer will
+							; be used only if the sending side can create and the receiving
+							; side can not accept jitter. The simpleusb channel can't accept jitter,
+							; thus an enabled jitterbuffer on the receive simpleusb side will always
+							; be used if the sending side can create jitter.
 
-; jbmaxsize = 200             ; Max length of the jitterbuffer in milliseconds.
+;jbmaxsize = 200            ; Max length of the jitterbuffer in milliseconds.
 
-; jbresyncthreshold = 1000    ; Jump in the frame timestamps over which the jitterbuffer is
-							  ; resynchronized. Useful to improve the quality of the voice, with
-							  ; big jumps in/broken timestamps, usualy sent from exotic devices
-							  ; and programs. Defaults to 1000.
+;jbresyncthreshold = 1000   ; Jump in the frame timestamps over which the jitterbuffer is
+							; resynchronized. Useful to improve the quality of the voice, with
+							; big jumps in/broken timestamps, usualy sent from exotic devices
+							; and programs. Defaults to 1000.
 
-; jbimpl = fixed              ; Jitterbuffer implementation, used on the receiving side of an simpleusb
-							  ; channel. Two implementations are currenlty available - "fixed"
-							  ; (with size always equals to jbmax-size) and "adaptive" (with
-							  ; variable size, actually the new jb of IAX2). Defaults to fixed.
+;jbimpl = fixed             ; Jitterbuffer implementation, used on the receiving side of an simpleusb
+							; channel. Two implementations are currenlty available - "fixed"
+							; (with size always equals to jbmax-size) and "adaptive" (with
+							; variable size, actually the new jb of IAX2). Defaults to fixed.
 
-; jblog = no                  ; Enables jitterbuffer frame logging. Defaults to "no".
+;jblog = no                 ; Enables jitterbuffer frame logging. Defaults to "no".
 ;-----------------------------------------------------------------------------------
-
-; pport=/dev/parport0		; Specify parport device (optional)
-; pbase=0x378				; Specify printer port I/O address (if not using parport driver) (optional)
 
 ; General config options which propagate to all devices, with
 ; default values shown. You may have as many devices as the
 ; system will allow. You must use one section per device, with
 ; [usb] generally (although its up to you) being the first device.
-;
 
+;eeprom = 0                 ; EEPROM installed: 0,1
+                            ; 0 = no (default)
+                            ; 1 = yes
 
-;eeprom = 0                     ; EEPROM installed: 0,1
-                                ; 0 = no (default)
-                                ; 1 = yes
-
-;hdwtype = 0                    ; Leave this set to 0 for USB sound fobs designed for app_rpt
-                                ; or modified cmxxx sound fobs.
-                                ; 1 is for Dingotel/Sph interfaces.
-								; 2 is for NHC interfaces.
-								; 3 is for a custom interface.
+;hdwtype = 0                ; Leave this set to 0 for USB sound fobs designed for app_rpt
+                            ; or modified cmxxx sound fobs.
+                            ; 1 is for Dingotel/Sph interfaces.
+							; 2 is for NHC interfaces.
+							; 3 is for a custom interface.
 
 ; Receiver parameters
-;rxboost = 0                    ; 0 = 20db attenuator inserted, 1= 20db attenuator removed
+;rxboost = no               ; no = 20db attenuator inserted, yes = 20db attenuator removed
 
-;carrierfrom = usbinvert        ; no,usb,usbinvert
-                                ; no - no carrier detection at all
-                                ; usb - from the COR line on the USB sound fob (Active high)
-                                ; usbinvert - from the inverted COR line on the USB sound fob (Active low)
+;carrierfrom = usbinvert    ; no,usb,usbinvert
+                            ; no - no carrier detection at all
+                            ; usb - from the COR line on the USB sound fob (Active high)
+                            ; usbinvert - from the inverted COR line on the USB sound fob (Active low)
 								
-;ctcssfrom = usbinvert          ; no,usb,usbinvert
-                                ; no - CTCSS decoding, system will be carrier squelch
-                                ; usb - CTCSS decoding using input from USB sound fob (Active high)
-                                ; usbinvert - from the inverted CTCSS line on the USB sound fob (Active low)
+;ctcssfrom = usbinvert      ; no,usb,usbinvert
+                            ; no - CTCSS decoding, system will be carrier squelch
+                            ; usb - CTCSS decoding using input from USB sound fob (Active high)
+                            ; usbinvert - from the inverted CTCSS line on the USB sound fob (Active low)
 
-;deemphasis = no                ; enable de-emphasis (input from discriminator)
+;deemphasis = no            ; enable de-emphasis (input from discriminator)
 
-;plfilter = yes                 ; enable PL filter
+;plfilter = yes             ; enable PL filter
 
-;rxondelay = 0                  ; Number of 20mSec intervals following the release of PTT.
-								; Uncomment and/or adjust for simplex nodes to eliminate "Ping Ponging"
-								; or "Relay Racing". A positive value here will instruct the usbradio
-								; driver to ignore the COR line for a specified number of 20mSec
-								; intervals following the release of PTT. Use this ONLY on simplex
-								; nodes, and leave commented out for repeaters or other full duplex nodes.
+;rxondelay = 0              ; Number of 20mSec intervals following the release of PTT.
+							; Uncomment and/or adjust for simplex nodes to eliminate "Ping Ponging"
+							; or "Relay Racing". A positive value here will instruct the usbradio
+							; driver to ignore the COR line for a specified number of 20mSec
+							; intervals following the release of PTT. Use this ONLY on simplex
+							; nodes, and leave commented out for repeaters or other full duplex nodes.
 
-;txoffdelay = 0                 ; Ignore the reciever for a specified number of 20 millisecond
-								; intervals after the transmitter unkeys.
-								; This is useful when setting up a half-duplex link with an existing
-								; repeater, where you need to ignore the repeater's hangtime.
+;txoffdelay = 0             ; Ignore the reciever for a specified number of 20 millisecond
+							; intervals after the transmitter unkeys.
+							; This is useful when setting up a half-duplex link with an existing
+							; repeater, where you need to ignore the repeater's hangtime.
 
 ; Transmitter parameters
-;txmixa = voice                 ; Left channel output (A): no,voice
-                                ; no - Do not output anything
-                                ; voice - output voice only
+;txmixa = voice             ; Left channel output (A): no,voice
+                            ; no - Do not output anything
+                            ; voice - output voice only
 
-;txmixb = no                    ; Right channel output (B): no,voice
-                                ; no - Do not output anything
-                                ; voice - output voice only
+;txmixb = no                ; Right channel output (B): no,voice
+                            ; no - Do not output anything
+                            ; voice - output voice only
 
-;invertptt = 0                  ; Invert PTT: 0,1
-                                ; 0 - ground to transmit
-                                ; 1 - open to transmit
+;invertptt = no             ; Invert PTT: no,yes
+                            ; no  - ground to transmit
+                            ; yes - open to transmit
 
-;preemphasis = 0                ; Perform standard 6db/octave pre-emphasis
+;preemphasis = no           ; Perform standard 6db/octave pre-emphasis
 
-; pager = no                    ; no,a,b (e.g. pager = b means "put the normal repeat audio on channel A, and the pager audio on channel B")
+;pager = no                 ; no,a,b (e.g. pager = b means "put the normal repeat audio on channel A, and the pager audio on channel B")
 
-; duplex3 = 0                   ; duplex 3 gain setting (0 to disable)
+;duplex3 = 0                ; duplex 3 gain setting (0 to disable)
 
-; gpioX=in						; define input/output pin GPIO(x) in,out0,out1 (where X {1..8}) (optional)
+;gpioX=in					; define input/output pin GPIO(x) in,out0,out1 (where X {1..8}) (optional)
 
-; ppX=out0						; printer port pin(x) [x is 2-9] initial output state [out0,out1] or 'ptt' (for output pins)
-; ppX=in						; printer port pin(x) [x is 10,12,13,15] input pin [in,cor,ctcss]
+;pport=/dev/parport0		; Specify parport device (optional)
+;pbase=0x378				; Specify printer port I/O address (if not using parport driver) (optional)
+
+;ppX=out0					; printer port pin(x) [x is 2-9] initial output state [out0,out1] or 'ptt' (for output pins)
+;ppX=in						; printer port pin(x) [x is 10,12,13,15] input pin [in,cor,ctcss]
+
+;[usb]
+; First channel unique configuration
 
 ;;;;; Tune settings ;;;;;
-; name=1999
-; devicenum=1
 ;devstr=
 ;rxmixerset=500
 ;txmixaset=500
 ;txmixbset=500
 
+;[usb1]
+; Second channel unique configuration 
 
-[usb]
-
-; First channel unique configuration
-
-[usb1]
-
-; Second channel unique configuration
