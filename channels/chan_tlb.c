@@ -1389,55 +1389,68 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	return 0;
 }
 
-static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int nodenum)
+/*!
+ * \brief Start a new Echolink call.
+ * \param pvt			Pointer to echolink private.
+ * \param state			State.
+ * \param nodenum		Node number to call.
+ * \param assignedids	Pointer to unique ID string assigned to the channel.
+ * \param requestor		Pointer to Asterisk channel.
+ * \return 				Asterisk channel.
+ */
+static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor)
 {
 	struct ast_channel *tmp;
 	struct TLB_instance *instp = i->instp;
 	struct ast_format *prefformat;
+	struct ast_format_cap *capabilities;
 
-	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, NULL, NULL, 0, "tlb/%s", i->stream);
-	if (tmp) {
-		struct ast_format_cap *capabilities;
-		capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	tmp = ast_channel_alloc(1, state, 0, 0, "", instp->astnode, instp->context, assignedids, requestor, 0, "tlb/%s", i->stream);
+	if (!tmp) {
+		ast_log(LOG_WARNING, "Unable to allocate channel structure.\n");
+		return NULL;
+	}
+	
+	capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 
-		ast_channel_tech_set(tmp, &TLB_tech);
+	ast_channel_tech_set(tmp, &TLB_tech);
 
-		prefformat = tlb_codecs[i->txcodec].format;
-		ast_format_cap_append(capabilities, prefformat, 0);
-		ast_channel_set_rawwriteformat(tmp, prefformat);
-		ast_channel_set_writeformat(tmp, prefformat);
+	prefformat = tlb_codecs[i->txcodec].format;
+	ast_format_cap_append(capabilities, prefformat, 0);
+	ast_channel_set_rawwriteformat(tmp, prefformat);
+	ast_channel_set_writeformat(tmp, prefformat);
 
-		prefformat = tlb_codecs[i->rxcodec].format;
-		ast_format_cap_append(capabilities, prefformat, 0);
-		ast_channel_set_rawreadformat(tmp, prefformat);
-		ast_channel_set_readformat(tmp, prefformat);
+	prefformat = tlb_codecs[i->rxcodec].format;
+	ast_format_cap_append(capabilities, prefformat, 0);
+	ast_channel_set_rawreadformat(tmp, prefformat);
+	ast_channel_set_readformat(tmp, prefformat);
 
-		ast_channel_nativeformats_set(tmp, capabilities);
-		ao2_cleanup(capabilities);
+	ast_channel_nativeformats_set(tmp, capabilities);
+	ao2_cleanup(capabilities);
 
-		if (state == AST_STATE_RING)
+	if (state == AST_STATE_RING) {
 			ast_channel_rings_set(tmp, 1);
-		ast_channel_tech_pvt_set(tmp, i);
-		ast_channel_context_set(tmp, instp->context);
-		ast_channel_exten_set(tmp, instp->astnode);
-		ast_channel_language_set(tmp, "");
-		if (nodenum > 0) {
-			char tmpstr[30];
+	}
+	ast_channel_tech_pvt_set(tmp, i);
+	ast_channel_context_set(tmp, instp->context);
+	ast_channel_exten_set(tmp, instp->astnode);
+	ast_channel_language_set(tmp, "");
+	ast_channel_unlock(tmp);
+	if (nodenum > 0) {
+		char tmpstr[30];
 
-			sprintf(tmpstr, "%u", nodenum);
-			ast_set_callerid(tmp, tmpstr, NULL, NULL);
+		sprintf(tmpstr, "%u", nodenum);
+		ast_set_callerid(tmp, tmpstr, NULL, NULL);
+	}
+	i->owner = tmp;
+	i->u = ast_module_user_add(tmp);
+	i->nodenum = nodenum;
+	if (state != AST_STATE_DOWN) {
+		if (ast_pbx_start(tmp)) {
+			ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
+			ast_hangup(tmp);
 		}
-		i->owner = tmp;
-		i->u = ast_module_user_add(tmp);
-		i->nodenum = nodenum;
-		if (state != AST_STATE_DOWN) {
-			if (ast_pbx_start(tmp)) {
-				ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
-				ast_hangup(tmp);
-			}
-		}
-	} else
-		ast_log(LOG_WARNING, "Unable to allocate channel structure\n");
+	}
 	return tmp;
 }
 
@@ -1480,7 +1493,7 @@ static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *
 	p = TLB_alloc(instances[n]->name);
 	ast_free(str);
 	if (p) {
-		tmp = TLB_new(p, AST_STATE_DOWN, nodenum);
+		tmp = TLB_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
 		if (!tmp)
 			TLB_destroy(p);
 	}
@@ -1747,7 +1760,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 					TLB_node_key->p = p;
 					ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
 					TLB_node_key->p->port = instp->TLB_node_test.port;
-					TLB_node_key->chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum);
+					TLB_node_key->chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum, NULL, NULL);
 					if (!TLB_node_key->chan) {
 						TLB_destroy(TLB_node_key->p);
 						return -1;
