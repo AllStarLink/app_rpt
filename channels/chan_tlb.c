@@ -1390,8 +1390,8 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 }
 
 /*!
- * \brief Start a new Echolink call.
- * \param pvt			Pointer to echolink private.
+ * \brief Start a new TLB call.
+ * \param pvt			Pointer to TLB private.
  * \param state			State.
  * \param nodenum		Node number to call.
  * \param assignedids	Pointer to unique ID string assigned to the channel.
