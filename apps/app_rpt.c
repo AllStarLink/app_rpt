@@ -4735,7 +4735,7 @@ static void *rpt(void *this)
 	if (myrpt->p.archivedir)
 		mkdir(myrpt->p.archivedir, 0700);
 	sprintf(tmpstr, "%s/%s", myrpt->p.archivedir, myrpt->name);
-	mkdir(tmpstr, 0755);
+	mkdir(tmpstr, 0775);
 	myrpt->ready = 0;
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->remrx = 0;
@@ -7032,7 +7032,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		mkdir(myrpt->p.archivedir, 0700);
 		sprintf(mycmd, "%s/%s", myrpt->p.archivedir, myrpt->name);
-		mkdir(mycmd, 0755);
+		mkdir(mycmd, 0775);
 		time(&myt);
 		strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
 		sprintf(mycmd, "mixmonitor start %s %s/%s/%s.wav49 a", ast_channel_name(chan), myrpt->p.archivedir, myrpt->name,
