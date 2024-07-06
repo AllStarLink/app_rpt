@@ -16,7 +16,11 @@
  * This program is free software, distributed under the terms of
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
- */
+  * Changes:
+ * --------
+ * 07/3/24 - Danny Lloyd, KB4MDD <kb4mdd@arrl.net>
+ * added documentation
+*/
 
 /*! \file
  *
@@ -79,17 +83,14 @@ tlb.conf file.
 #include <signal.h>
 #include <fnmatch.h>
 
-#include "asterisk/lock.h"
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
 #include "asterisk/logger.h"
 #include "asterisk/module.h"
 #include "asterisk/pbx.h"
-#include "asterisk/options.h"
 #include "asterisk/utils.h"
 #include "asterisk/app.h"
 #include "asterisk/translate.h"
-#include "asterisk/astdb.h"
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
 
@@ -97,6 +98,9 @@ tlb.conf file.
 #define	RTPBUF_SIZE 400			/* actually 320 would be sufficient */
 enum { TLB_GSM, TLB_G726, TLB_ULAW };
 
+/*!
+ * \brief TLB supported CODECs
+ */
 struct {
 	int blocking_factor;
 	int frame_size;
@@ -104,7 +108,7 @@ struct {
 	int payt;
 	char *name;
 } tlb_codecs[] = {
-	{ 4, 33, 0, 3, "GSM" },	/* GSM */
+	{ 4, 33, 0, 3, "GSM" },		/* GSM */
 	{ 2, 80, 0, 97, "G726" },	/* G726 */
 	{ 2, 160, 0, 0, "ULAW" },	/* ULAW */
 	{ 0, 0, 0, 0, 0 }			/* NO MORE */
@@ -113,14 +117,12 @@ struct {
 #define	PREF_RXCODEC TLB_GSM
 #define	PREF_TXCODEC TLB_ULAW
 
-/* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
-#define	KEEPALIVE_TIME 50 * 10
+#define	KEEPALIVE_TIME 50 * 10	/* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
 #define	AUTH_RETRY_MS 5000
 #define	AUTH_ABANDONED_MS 15000
 
 #define QUEUE_OVERLOAD_THRESHOLD_AST 25
 #define QUEUE_OVERLOAD_THRESHOLD_EL 20
-#define	MAXPENDING 20
 #define DTMF_NPACKETS 5
 
 #define TLB_IP_SIZE 16
@@ -151,10 +153,11 @@ static const char tdesc[] = "TheLinkBox channel driver";
 static char type[] = "tlb";
 
 int run_forever = 1;
-static int killing = 0;
-static int nullfd = -1;
 
-/* TheLinkBox audio packet heafer */
+/*!
+ * \brief The Link Box audio packet header.
+ * This is the standard RTP packet format.
+ */
 struct rtpVoice_t {
 #ifdef RTP_BIG_ENDIAN
 	uint8_t version:2;
@@ -177,17 +180,80 @@ struct rtpVoice_t {
 	unsigned char data[RTPBUF_SIZE];
 };
 
+/*!
+ * \brief RTP Control Packet SDES request item.
+ */
+struct rtcp_sdes_request_item {
+	unsigned char r_item;
+	char *r_text;
+};
+
+/*!
+ * \brief RTP Control Packet SDES request items.
+ */
+ struct rtcp_sdes_request {
+	int nitems;
+	unsigned char ssrc[4];
+	struct rtcp_sdes_request_item item[10];
+};
+
+/*!
+ * \brief RTCP Control Packet common header word.
+ */
+struct rtcp_common_t {
+#ifdef RTP_BIG_ENDIAN
+	uint8_t version:2;
+	uint8_t p:1;
+	uint8_t count:5;
+#else
+	uint8_t count:5;
+	uint8_t p:1;
+	uint8_t version:2;
+#endif
+	uint8_t pt:8;
+	uint16_t length;
+};
+
+/*!
+ * \brief RTP Control Packet SDES item detail.
+ */
+struct rtcp_sdes_item_t {
+	uint8_t type;
+	uint8_t length;
+	char data[1];
+};
+
+/*!
+ * \brief RTP Control Packet for SDES.
+ */
+struct rtcp_t {
+	struct rtcp_common_t common;
+	union {
+		struct {
+			uint32_t src[1];
+		} bye;
+
+		struct rtcp_sdes_t {
+			uint32_t src;
+			struct rtcp_sdes_item_t item[1];
+		} sdes;
+	} r;
+};
+
+/* forward definitions */
 struct TLB_instance;
 struct TLB_pvt;
 
-/* TheLinkBox node details */
-/* Also each node in binary tree in memory */
+/*!
+ * \brief Echolink connected node struct.
+ * These are stored internally in a binary tree.
+ */
 struct TLB_node {
 	char ip[TLB_IP_SIZE + 1];
 	uint16_t port;
 	char call[TLB_CALL_SIZE + 1];
 	char name[TLB_NAME_SIZE + 1];
-	unsigned int nodenum;		/* not used yet */
+	unsigned int nodenum;
 	short countdown;
 	uint16_t seqnum;
 	struct TLB_instance *instp;
@@ -195,11 +261,9 @@ struct TLB_node {
 	struct ast_channel *chan;
 };
 
-struct TLB_pending {
-	char fromip[TLB_IP_SIZE + 1];
-	struct timeval reqtime;
-};
-
+/*!
+ * \brief The Link Box instance struct.
+ */
 struct TLB_instance {
 	ast_mutex_t lock;
 	char name[TLB_NAME_SIZE + 1];
@@ -213,8 +277,7 @@ struct TLB_instance {
 	int ndenylist;
 	char *permitlist[TLB_MAX_CALL_LIST];
 	int npermitlist;
-	/* missed 10 heartbeats, you're out */
-	short rtcptimeout;
+	short rtcptimeout;				/* missed 10 heartbeats, you're out */
 	char fdr_file[FILENAME_MAX];
 	int audio_sock;
 	int ctrl_sock;
@@ -227,18 +290,23 @@ struct TLB_instance {
 	struct rtpVoice_t audio_all_but_one;
 	struct rtpVoice_t audio_all;
 	struct TLB_node TLB_node_test;
-	struct TLB_pending pending[MAXPENDING];
 	pthread_t TLB_reader_thread;
 	int pref_rxcodec;
 	int pref_txcodec;
 };
 
+/*!
+ * \brief TLB receive queue struct from asterisk.
+ */
 struct TLB_rxqast {
 	struct TLB_rxqast *qe_forw;
 	struct TLB_rxqast *qe_back;
 	char buf[RTPBUF_SIZE];
 };
 
+/*!
+ * \brief Echolink receive queue struct from TLB.
+ */
 struct TLB_rxqel {
 	struct TLB_rxqel *qe_forw;
 	struct TLB_rxqel *qe_back;
@@ -247,6 +315,10 @@ struct TLB_rxqel {
 	uint16_t fromport;
 };
 
+/*!
+ * \brief Echolink private information.
+ * This is stored in the asterisk channel private technology for reference.
+ */
 struct TLB_pvt {
 	ast_mutex_t lock;
 	struct ast_channel *owner;
@@ -275,51 +347,6 @@ struct TLB_pvt {
 	int txcodec;
 };
 
-struct rtcp_sdes_request_item {
-	unsigned char r_item;
-	char *r_text;
-};
-
-struct rtcp_sdes_request {
-	int nitems;
-	unsigned char ssrc[4];
-	struct rtcp_sdes_request_item item[10];
-};
-
-struct rtcp_common_t {
-#ifdef RTP_BIG_ENDIAN
-	uint8_t version:2;
-	uint8_t p:1;
-	uint8_t count:5;
-#else
-	uint8_t count:5;
-	uint8_t p:1;
-	uint8_t version:2;
-#endif
-	uint8_t pt:8;
-	uint16_t length;
-};
-
-struct rtcp_sdes_item_t {
-	uint8_t type;
-	uint8_t length;
-	char data[1];
-};
-
-struct rtcp_t {
-	struct rtcp_common_t common;
-	union {
-		struct {
-			uint32_t src[1];
-		} bye;
-
-		struct rtcp_sdes_t {
-			uint32_t src;
-			struct rtcp_sdes_item_t item[1];
-		} sdes;
-	} r;
-};
-
 struct TLB_instance *instances[TLB_MAX_INSTANCES];
 int ninstances = 0;
 
@@ -328,8 +355,7 @@ static void *TLB_node_list = NULL;
 
 static char *config = "tlb.conf";
 
-static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
-	const struct ast_channel *requestor, const char *data, int *cause);
+static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
 static int TLB_call(struct ast_channel *ast, const char *dest, int timeout);
 static int TLB_hangup(struct ast_channel *ast);
 static struct ast_frame *TLB_xread(struct ast_channel *ast);
@@ -340,21 +366,16 @@ static int TLB_digit_end(struct ast_channel *c, char digit, unsigned int duratii
 static int TLB_text(struct ast_channel *c, const char *text);
 static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int *datalen);
 
-static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call);
-static int rtcp_make_bye(unsigned char *p, char *reason);
-static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r);
-static void copy_sdes_item(char *source, char *dest, int destlen);
-static int is_rtcp_bye(unsigned char *p, int len);
-static int is_rtcp_sdes(unsigned char *p, int len);
- /* remove binary tree functions if Asterisk has similar functionality */
-static int compare_ip(const void *pa, const void *pb);
 static void send_audio_all_but_one(const void *nodep, const VISIT which, const int depth);
 static void send_audio_all(const void *nodep, const VISIT which, const int depth);
-static void send_heartbeat(const void *nodep, const VISIT which, const int depth);
-static void free_node(void *nodep);
 static int find_delete(struct TLB_node *key);
-static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call, char *name, char *codec);
+static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char *call, const char *name, const char *codec);
 
+/*!
+ * \brief Asterisk channel technology struct.
+ * This tells Asterisk the functions to call when
+ * it needs to interact with our module.
+ */
 static struct ast_channel_tech TLB_tech = {
 	.type = type,
 	.description = tdesc,
@@ -374,7 +395,6 @@ static struct ast_channel_tech TLB_tech = {
 * CLI extensions
 */
 
-/* Debug mode */
 static int TLB_do_nodedump(int fd, int argc, const char *const *argv);
 static int TLB_do_nodeget(int fd, int argc, const char *const *argv);
 
@@ -383,7 +403,11 @@ static char nodedump_usage[] = "Usage: tlb nodedump\n" "       Dumps entire tlb 
 static char nodeget_usage[] =
 	"Usage: tlb nodeget <nodename|callsign|ipaddr> <lookup-data>\n" "       Looks up tlb node entry\n";
 
-static uint32_t crc_32_tab[] = {	/* CRC polynomial 0xedb88320 */
+/*!
+ * \brief CRC32 table
+ * CRC polynomial 0xedb88320
+ */
+static uint32_t crc_32_tab[] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
 	0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
 	0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91, 0x1db71064, 0x6ab020f2,
@@ -429,10 +453,17 @@ static uint32_t crc_32_tab[] = {	/* CRC polynomial 0xedb88320 */
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
-static int32_t crc32_buf(char *buf, int len)
+/*!
+ * \brief Calculate CRC32
+ * \param buf		Pointer to buffer to process 
+ * \param len		Length of the buffer
+ * \param limit		Maximum number of substrings to process.
+ * \retval			Calculated CRC32.
+ */
+static int32_t crc32_buf(const char* restrict buf, int len)
 {
-	int32_t oldcrc32;
-	int x = len;
+	register int32_t oldcrc32;
+	register int x = len;
 
 	oldcrc32 = 0xFFFFFFFF;
 	for (; x; x--, ++buf) {
@@ -441,24 +472,11 @@ static int32_t crc32_buf(char *buf, int len)
 	return ~oldcrc32;
 }
 
-static void mythread_exit(void *nothing)
-{
-	int i;
-
-	if (killing)
-		pthread_exit(NULL);
-	killing = 1;
-	run_forever = 0;
-	for (i = 0; i < ninstances; i++) {
-		if (instances[i]->TLB_reader_thread)
-			pthread_kill(instances[i]->TLB_reader_thread, SIGTERM);
-	}
-	ast_log(LOG_ERROR, "Exiting chan_tlb, FATAL ERROR!!\n");
-	ast_cli_command(nullfd, "rpt restart");
-	pthread_exit(NULL);
-}
-
-static void strupr(char *str)
+/*!
+ * \brief Make string uppercase
+ * \param str		Pointer to string to process 
+ */
+static void strupr(char* restrict str)
 {
 	while (*str) {
 		*str = toupper(*str);
@@ -467,13 +485,13 @@ static void strupr(char *str)
 	return;
 }
 
-/*
-* Break up a delimited string into a table of substrings
-*
-* str - delimited string ( will be modified )
-* strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
-* limit- maximum number of substrings to process
-*/
+/*!
+ * \brief Break up a delimited string into a table of substrings.
+ * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
+ * \param str		Pointer to string to process (it will be modified).
+ * \param strp		Pointer to a list of substrings created, NULL will be placed at the end of the list.
+ * \param limit		Maximum number of substrings to process.
+ */
 
 static int finddelim(char *str, char *strp[], int limit)
 {
@@ -484,7 +502,7 @@ static int finddelim(char *str, char *strp[], int limit)
 	strp[i++] = str;
 	if (!*str) {
 		strp[0] = 0;
-		return (0);
+		return 0;
 	}
 	for (l = 0; *str && (l < limit); str++) {
 		if (*str == QUOTECHR) {
@@ -503,11 +521,23 @@ static int finddelim(char *str, char *strp[], int limit)
 		}
 	}
 	strp[i] = 0;
-	return (i);
+	return i;
 
 }
 
-static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call)
+/*!
+ * \brief Make a sdes packet with our nodes information.
+ * The RTP version = 3, RTP packet type = 201.
+ * The RTCP: version = 3, packet type = 202.
+ * \param pkt			Pointer to buffer for sdes packet
+ * \param pkt_len		Length of packet buffer
+ * \param call			Pointer to callsign
+ * \param name			Pointer to node name
+ * \param astnode		Pointer to AllstarLink node number
+ * \retval 0			Unsuccessful - pkt to small
+ * \retval  			Successful length
+ */
+static int rtcp_make_sdes(unsigned char *pkt, int pktLen, const char *call)
 {
 	unsigned char zp[1500];
 	unsigned char *p = zp;
@@ -566,13 +596,22 @@ static int rtcp_make_sdes(unsigned char *pkt, int pktLen, char *call)
 		l = pl;
 	}
 
-	if (l > pktLen)
+	if (l > pktLen) {
 		return 0;
+	}
 	memcpy(pkt, zp, l);
 	return l;
 }
 
-static int rtcp_make_bye(unsigned char *p, char *reason)
+/*!
+ * \brief Make a rtcp bye packet
+ * The RTP version = 3, RTP packet type = 201.
+ * The RTCP: version = 3, packet type = 203.
+ * \param pkt			Pointer to buffer for bye packet
+ * \param reason		Pointer to reason for the bye packet
+ * \retval  			Successful length
+ */
+static int rtcp_make_bye(unsigned char *p, const char *reason)
 {
 	struct rtcp_t *rp;
 	unsigned char *ap, *zp;
@@ -602,8 +641,9 @@ static int rtcp_make_bye(unsigned char *p, char *reason)
 			ap += l;
 		}
 	}
-	while ((ap - p) & 3)
+	while ((ap - p) & 3) {
 		*ap++ = 0;
+	}
 	l = ap - p;
 	rp->common.length = htons((l / 4) - 1);
 	l = hl + ((ntohs(rp->common.length) + 1) * 4);
@@ -620,13 +660,19 @@ static int rtcp_make_bye(unsigned char *p, char *reason)
 	return l;
 }
 
+/*!
+ * \brief Parse a sdes packet
+ * \param packet		Pointer to packet to parse
+ * \param r				Pointer to sdes structure to receive parsed data
+ */
 static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 {
 	int i;
 	unsigned char *p = packet;
 
-	for (i = 0; i < r->nitems; i++)
+	for (i = 0; i < r->nitems; i++) {
 		r->item[i].r_text = NULL;
+	}
 
 	while ((p[0] >> 6 & 3) == 2 || (p[0] >> 6 & 3) == 1) {
 		if ((p[1] == 202) && ((p[0] & 0x1F) > 0)) {
@@ -634,9 +680,10 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 			memcpy(r->ssrc, p + 4, 4);
 			while (cp < lp) {
 				unsigned char itype = *cp;
-				if (itype == 0)
+				if (itype == 0) {
 					break;
-
+				}
+				
 				for (i = 0; i < r->nitems; i++) {
 					if (r->item[i].r_item == itype && r->item[i].r_text == NULL) {
 						r->item[i].r_text = (char *) cp;
@@ -652,29 +699,47 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 	return;
 }
 
-static void copy_sdes_item(char *source, char *dest, int destlen)
+/*!
+ * \brief Copy a sdes item to a buffer
+ * \param source		Pointer to source buffer to copy
+ * \param dest			Pointer to destination buffer
+ * \param destlen		Length of the destination buffer
+ */
+static void copy_sdes_item(const char *source, char *dest, int destlen)
 {
 	int len = source[1] & 0xFF;
-	if (len > destlen)
+	if (len > destlen) {
 		len = destlen;
+	}
 	memcpy(dest, source + 2, len);
 	dest[len] = 0;
 	return;
 }
 
-static int is_rtcp_bye(unsigned char *p, int len)
+/*!
+ * \brief Determine if the packet is of type rtcp bye.
+ * The RTP packet type must be 200 or 201.
+ * The RTCP packet type must be 203.
+ * \param pkt			Pointer to buffer of packet to test.
+ * \param len			Buffer length.
+ * \retval 1 			Is a bye packet.
+ * \retval 0 			Not bye packet.
+ */
+static int is_rtcp_bye(const unsigned char *p, int len)
 {
-	unsigned char *end;
+	const unsigned char *end;
 	int sawbye = 0;
 
-	if ((((p[0] >> 6) & 3) != 2 && ((p[0] >> 6) & 3) != 1) || ((p[0] & 0x20) != 0) || ((p[1] != 200) && (p[1] != 201)))
+	if ((((p[0] >> 6) & 3) != 2 && ((p[0] >> 6) & 3) != 1) || ((p[0] & 0x20) != 0) || ((p[1] != 200) && (p[1] != 201))) {
 		return 0;
+	}
 
 	end = p + len;
 
 	do {
-		if (p[1] == 203)
+		if (p[1] == 203) {
 			sawbye = 1;
+		}
 
 		p += (ntohs(*((short *) (p + 2))) + 1) * 4;
 	} while (p < end && (((p[0] >> 6) & 3) == 2));
@@ -682,18 +747,29 @@ static int is_rtcp_bye(unsigned char *p, int len)
 	return sawbye;
 }
 
-static int is_rtcp_sdes(unsigned char *p, int len)
+/*!
+ * \brief Determine if the packet is of type sdes.
+ * The RTP packet type must be 200 or 201.
+ * The RTCP packet type must be 202.
+ * \param pkt			Buffer of packet to test.
+ * \param len			Buffer length.
+ * \retval 1 			Is a sdes packet.
+ * \retval 0 			Not sdes packet.
+ */
+static int is_rtcp_sdes(const unsigned char *p, int len)
 {
-	unsigned char *end;
+	const unsigned char *end;
 	int sawsdes = 0;
 
-	if ((((p[0] >> 6) & 3) != 2 && ((p[0] >> 6) & 3) != 1) || ((p[0] & 0x20) != 0) || ((p[1] != 200) && (p[1] != 201)))
+	if ((((p[0] >> 6) & 3) != 2 && ((p[0] >> 6) & 3) != 1) || ((p[0] & 0x20) != 0) || ((p[1] != 200) && (p[1] != 201))) {
 		return 0;
+	}
 
 	end = p + len;
 	do {
-		if (p[1] == 202)
+		if (p[1] == 202) {
 			sawsdes = 1;
+		}
 
 		p += (ntohs(*((short *) (p + 2))) + 1) * 4;
 	} while (p < end && (((p[0] >> 6) & 3) == 2));
@@ -701,6 +777,27 @@ static int is_rtcp_sdes(unsigned char *p, int len)
 	return sawsdes;
 }
 
+/*!
+ * \brief Compare two el_node struct by ip address.
+ * \param pa		Pointer to first el_node struct.
+ * \param pb		Pointer to second el_node struct.
+ * \retval 0		If equal.
+ * \retval -1		If less than.
+ * \retval 1		If greater than.
+ */
+static int compare_ip(const void *pa, const void *pb)
+{
+	return strncmp(((struct TLB_node *) pa)->ip, ((struct TLB_node *) pb)->ip, TLB_IP_SIZE);
+}
+
+/*!
+ * \brief TLB call.
+ * \param ast			Pointer to Asterisk channel.
+ * \param dest			Pointer to Destination (TLB node number).
+ * \param timeout		Timeout.
+ * \retval -1 			if not successful.
+ * \retval 0 			if successful.
+ */
 static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
@@ -709,6 +806,9 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	int pack_length;
 	struct sockaddr_in sin;
 	unsigned short n;
+	struct ast_flags zeroflag = { 0 };
+	char *str, *cp, *val, *sval, *strs[10];
+	struct ast_config *cfg = NULL;
 
 	if ((ast_channel_state(ast) != AST_STATE_DOWN) && (ast_channel_state(ast) != AST_STATE_RESERVED)) {
 		ast_log(LOG_WARNING, "TLB_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
@@ -717,53 +817,65 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
 	ast_debug(1, "Calling %s on %s\n", dest, ast_channel_name(ast));
-	if (*dest) {				/* if number specified */
-		struct ast_flags zeroflag = { 0 };
-		char *str, *cp, *val, *sval, *strs[10];
-		struct ast_config *cfg = NULL;
-
-		str = ast_strdup(dest);
-		cp = strchr(str, '/');
-		if (cp)
-			*cp++ = 0;
-		else
-			cp = str;
-		if (!(cfg = ast_config_load(config, zeroflag))) {
-			ast_log(LOG_ERROR, "Unable to load config %s\n", config);
-			return -1;
-		}
-		val = (char *) ast_variable_retrieve(cfg, "nodes", str);
-		if (!val) {
-			ast_log(LOG_ERROR, "Node %s not found!\n", str);
-			ast_config_destroy(cfg);
-			return -1;
-		}
-		sval = ast_strdupa(val);
-		ast_config_destroy(cfg);
-		strupr(sval);
-		strs[3] = NULL;
-		n = finddelim(sval, strs, 10);
-		if (n < 3) {
-			ast_log(LOG_ERROR, "Node %s not found!\n", str);
-			return -1;
-		}
-		ast_mutex_lock(&instp->lock);
-		strcpy(instp->TLB_node_test.ip, strs[1]);
-		instp->TLB_node_test.port = strtoul(strs[2], NULL, 0);
-		do_new_call(instp, p, "OUTBOUND", "OUTBOUND", strs[3]);
-		pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall);
-		sin.sin_family = AF_INET;
-		sin.sin_port = htons(atoi(strs[2]) + 1);
-		sin.sin_addr.s_addr = inet_addr(strs[1]);
-		sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
-		ast_debug(1, "tlb: Connect request sent to %s (%s:%s)\n", str, strs[1], strs[2]);
-		ast_mutex_unlock(&instp->lock);
-		ast_free(str);
+	
+	/* Make sure we have a destination */
+	if (!*dest) {
+		ast_log(LOG_WARNING, "Call on %s failed - no destination.\n", ast_channel_name(ast));
+		return -1;
 	}
+
+	/* get the node number in cp */
+	str = ast_strdup(dest);
+	cp = strchr(str, '/');
+	if (cp) {
+		*cp++ = 0;
+	} else {
+		cp = str;
+	}
+	if (!(cfg = ast_config_load(config, zeroflag))) {
+		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		return -1;
+	}
+	val = (char *) ast_variable_retrieve(cfg, "nodes", str);
+	if (!val) {
+		ast_log(LOG_ERROR, "Node %s not found!\n", str);
+		ast_config_destroy(cfg);
+		return -1;
+	}
+	sval = ast_strdupa(val);
+	ast_config_destroy(cfg);
+	strupr(sval);
+	strs[3] = NULL;
+	n = finddelim(sval, strs, 10);
+	if (n < 3) {
+		ast_verb(3, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
+		return -1;
+	}
+	
+	ast_mutex_lock(&instp->lock);
+	strcpy(instp->TLB_node_test.ip, strs[1]);
+	instp->TLB_node_test.port = strtoul(strs[2], NULL, 0);
+	do_new_call(instp, p, "OUTBOUND", "OUTBOUND", strs[3]);
+		
+	pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall);
+	
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(atoi(strs[2]) + 1);
+	sin.sin_addr.s_addr = inet_addr(strs[1]);
+	sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
+	ast_mutex_unlock(&instp->lock);
+	ast_free(str);
+	ast_debug(1, "tlb: Connect request sent to %s (%s:%s)\n", str, strs[1], strs[2]);
+
 	ast_setstate(ast, AST_STATE_RINGING);
+	
 	return 0;
 }
 
+/*!
+ * \brief Destroy and free a TLB instance.
+ * \param pvt		Pointer to el_pvt struct to release.
+ */
 static void TLB_destroy(struct TLB_pvt *p)
 {
 	if (p->linkstr)
@@ -773,47 +885,58 @@ static void TLB_destroy(struct TLB_pvt *p)
 	ast_free(p);
 }
 
-static struct TLB_pvt *TLB_alloc(void *data)
+/*!
+ * \brief Allocate and initialize a TLB private structure.
+ * \param data			Pointer to echolink instance name to initialize.
+ * \retval 				el_pvt structure.		
+ */
+static struct TLB_pvt *TLB_alloc(const char *data)
 {
-	struct TLB_pvt *p;
+	struct TLB_pvt *pvt;
 	int n;
-	/* int flags = 0; */
 	char stream[256];
 
-	if (ast_strlen_zero(data))
+	if (ast_strlen_zero(data)) {
 		return NULL;
+	}
 
 	for (n = 0; n < ninstances; n++) {
-		if (!strcmp(instances[n]->name, (char *) data))
+		if (!strcmp(instances[n]->name, (char *) data)) {
 			break;
+		}
 	}
 	if (n >= ninstances) {
 		ast_log(LOG_ERROR, "Cannot find TheLinkBox channel %s\n", (char *) data);
 		return NULL;
 	}
 
-	p = ast_malloc(sizeof(struct TLB_pvt));
-	if (p) {
-		memset(p, 0, sizeof(struct TLB_pvt));
+	pvt = ast_malloc(sizeof(struct TLB_pvt));
+	if (pvt) {
+		memset(pvt, 0, sizeof(struct TLB_pvt));
 
-		ast_mutex_init(&p->lock);
+		ast_mutex_init(&pvt->lock);
 		sprintf(stream, "%s-%lu", (char *) data, instances[n]->seqno++);
-		strcpy(p->stream, stream);
-		p->rxqast.qe_forw = &p->rxqast;
-		p->rxqast.qe_back = &p->rxqast;
+		strcpy(pvt->stream, stream);
+		pvt->rxqast.qe_forw = &pvt->rxqast;
+		pvt->rxqast.qe_back = &pvt->rxqast;
 
-		p->rxqel.qe_forw = &p->rxqel;
-		p->rxqel.qe_back = &p->rxqel;
+		pvt->rxqel.qe_forw = &pvt->rxqel;
+		pvt->rxqel.qe_back = &pvt->rxqel;
 
-		p->keepalive = KEEPALIVE_TIME;
-		p->instp = instances[n];
-		p->instp->confp = p;	/* save for conference mode */
-		p->rxcodec = instances[n]->pref_rxcodec;
-		p->txcodec = instances[n]->pref_txcodec;
+		pvt->keepalive = KEEPALIVE_TIME;
+		pvt->instp = instances[n];
+		pvt->instp->confp = pvt;	/* save for conference mode */
+		pvt->rxcodec = instances[n]->pref_rxcodec;
+		pvt->txcodec = instances[n]->pref_txcodec;
 	}
-	return p;
+	return pvt;
 }
 
+/*!
+ * \brief Asterisk hangup function.
+ * \param ast			Asterisk channel.
+ * \retval 0			Always returns 0.			
+ */
 static int TLB_hangup(struct ast_channel *ast)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
@@ -824,11 +947,13 @@ static int TLB_hangup(struct ast_channel *ast)
 
 	if (!instp->confmode) {
 		ast_debug(1, "Sent bye to IP address %s\n", p->ip);
+		
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->TLB_node_test.ip, p->ip);
 		instp->TLB_node_test.port = p->port;
 		find_delete(&instp->TLB_node_test);
 		ast_mutex_unlock(&instp->lock);
+		
 		n = rtcp_make_bye(bye, "disconnected");
 		sin.sin_family = AF_INET;
 		sin.sin_addr.s_addr = inet_addr(p->ip);
@@ -837,7 +962,7 @@ static int TLB_hangup(struct ast_channel *ast)
 			sendto(instp->ctrl_sock, bye, n, 0, (struct sockaddr *) &sin, sizeof(sin));
 		}
 	}
-	ast_debug(1, "TLB_hangup(%s)\n", ast_channel_name(ast));
+	ast_debug(1, "Hanging up (%s)\n", ast_channel_name(ast));
 	if (!ast_channel_tech_pvt(ast)) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
@@ -848,6 +973,16 @@ static int TLB_hangup(struct ast_channel *ast)
 	return 0;
 }
 
+/*!
+ * \brief Asterisk indicate function.
+ * This is used to indicate tx key / unkey.
+ * \param ast			Pointer to Asterisk channel.
+ * \param cond			Condition.
+ * \param data			Pointer to data.
+ * \param datalen		Pointer to data length.
+ * \retval 0			If successful.
+ * \retval -1			For hangup.
+ */
 static int TLB_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
@@ -868,9 +1003,18 @@ static int TLB_indicate(struct ast_channel *ast, int cond, const void *data, siz
 	return 0;
 }
 
+/*!
+ * \brief Send DTMF
+ * This is used to indicate tx key / unkey.
+ * \param ast			Pointer to Asterisk channel.
+ * \param digit			Digit to send.
+ * \param data			Pointer to data.
+ * \param datalen		Pointer to data length.
+ * \retval 0			If successful.
+ * \retval -1			For error.
+ */
 static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 {
-
 	time_t now;
 	struct rtpVoice_t pkt;
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
@@ -881,8 +1025,9 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	/* set all packet contents to zero */
 	memset(&pkt, 0, sizeof(pkt));
 
-	/* get a pointer to the TLB_Node entry and get and
-	   increment the seqno for the RTP packet */
+	/* Get a pointer to the TLB_Node entry and get and
+	 *  increment the seqno for the RTP packet 
+	 */
 	ast_mutex_lock(&p->instp->lock);
 	strcpy(p->instp->TLB_node_test.ip, p->ip);
 	p->instp->TLB_node_test.port = p->port;
@@ -892,7 +1037,7 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	}
 	ast_mutex_unlock(&p->instp->lock);
 	if (!found_key) {
-		ast_log(LOG_ERROR, "Unable to find node refernce for IP addr %s, port %u\n", p->ip, p->port & 0xffff);
+		ast_log(LOG_ERROR, "Unable to find node reference for IP addr %s, port %u\n", p->ip, p->port & 0xffff);
 		return -1;
 	}
 
@@ -921,16 +1066,36 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	return (0);
 }
 
+/*!
+ * \brief Asterisk digit begin function.
+ * \param ast			Pointer to Asterisk channel.
+ * \param digit			Digit processed.
+ * \retval -1			
+ */
 static int TLB_digit_begin(struct ast_channel *ast, char digit)
 {
 	return -1;
 }
 
+/*!
+ * \brief Asterisk digit end function.
+ * \param ast			Pointer to Asterisk channel.
+ * \param digit			Digit processed.
+ * \param duration		Duration of the digit.
+ * \retval -1			
+ */
 static int TLB_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
 {
 	return (tlb_send_dtmf(ast, digit));
 }
 
+/*!
+ * \brief Asterisk text function.
+ * \param ast			Pointer to Asterisk channel.
+ * \param text			Pointer to text message to process.
+ * \retval 0			If successful.
+ * \retval -1			If unsuccessful.
+ */
 static int TLB_text(struct ast_channel *ast, const char *text)
 {
 	char buf[200];
@@ -939,11 +1104,13 @@ static int TLB_text(struct ast_channel *ast, const char *text)
 
 	ast_copy_string(buf, text, sizeof(buf));
 	ptr = strchr(buf, (int) '\r');
-	if (ptr)
+	if (ptr) {
 		*ptr = '\0';
+	}
 	ptr = strchr(buf, (int) '\n');
-	if (ptr)
+	if (ptr) {
 		*ptr = '\0';
+	}
 
 	cmd = strtok_r(buf, &delim, &saveptr);
 	if (!cmd) {
@@ -1031,12 +1198,13 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 	return result;
 }
 
-static int compare_ip(const void *pa, const void *pb)
-{
-	return strncmp(((struct TLB_node *) pa)->ip, ((struct TLB_node *) pb)->ip, TLB_IP_SIZE);
-}
-
 /* TheLinkBox ---> TheLinkBox */
+/*!
+ * \brief Send audio from the link box to the link box.
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 void send_audio_all_but_one(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1069,6 +1237,12 @@ void send_audio_all_but_one(const void *nodep, const VISIT which, const int dept
 	}
 }
 
+/*!
+ * \brief Send audio from asterisk to the link box to one node (currently connecting node).
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 static void send_audio_only_one(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1102,7 +1276,12 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 	}
 }
 
-/* Asterisk ---> TheLinkBox */
+/*!
+ * \brief Send audio from asterisk to the link box to one node (currently connecting node).
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 void send_audio_all(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1132,6 +1311,12 @@ void send_audio_all(const void *nodep, const VISIT which, const int depth)
 	}
 }
 
+/*!
+ * \brief Send a heartbeat packet to connected nodes.
+ * \param nodep		Pointer to eldb struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param depth		Level of the node in the tree.
+ */
 static void send_heartbeat(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
@@ -1141,8 +1326,9 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 
 	if ((which == leaf) || (which == postorder)) {
 
-		if ((*(struct TLB_node **) nodep)->countdown >= 0)
+		if ((*(struct TLB_node **) nodep)->countdown >= 0) {
 			(*(struct TLB_node **) nodep)->countdown--;
+		}
 
 		if ((*(struct TLB_node **) nodep)->countdown < 0) {
 			ast_copy_string(instp->TLB_node_test.ip, (*(struct TLB_node **) nodep)->ip, TLB_IP_SIZE);
@@ -1160,11 +1346,20 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 	}
 }
 
+/*!
+ * \brief Free node.  Empty routine.
+ */
 static void free_node(void *nodep)
 {
 
 }
 
+/*!
+ * \brief Find and delete a node from our internal node list.
+ * \param key			Poitner to Echolink node struct to delete.
+ * \retval 0			If node not found.
+ * \retval 1			If node found.
+ */
 static int find_delete(struct TLB_node *key)
 {
 	int found = 0;
@@ -1174,13 +1369,19 @@ static int find_delete(struct TLB_node *key)
 	if (found_key) {
 		ast_debug(1, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
 		found = 1;
-		if (!(*found_key)->instp->confmode)
+		if (!(*found_key)->instp->confmode) {
 			ast_softhangup((*found_key)->chan, AST_SOFTHANGUP_DEV);
+		}
 		tdelete(key, &TLB_node_list, compare_ip);
 	}
 	return found;
 }
 
+/*!
+ * \brief Asterisk read function.
+ * \param ast			Pointer to Asterisk channel.
+ * \retval 				Asterisk frame.
+ */
 static struct ast_frame *TLB_xread(struct ast_channel *ast)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
@@ -1199,6 +1400,13 @@ static struct ast_frame *TLB_xread(struct ast_channel *ast)
 	return &p->fr;
 }
 
+/*!
+ * \brief Asterisk write function.
+ * This routine handles echolink to asterisk and asterisk to echolink.
+ * \param ast			Pointer to Asterisk channel.
+ * \param frame			Pointer to Asterisk frame to process.
+ * \retval 0			Successful.
+ */
 static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 {
 	int bye_length;
@@ -1213,8 +1421,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct TLB_rxqel *qpel;
 	char buf[RTPBUF_SIZE + AST_FRIENDLY_OFFSET];
 
-	if (frame->frametype != AST_FRAME_VOICE)
+	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
+	}
 
 	if (!p->firstsent) {
 		struct sockaddr_in sin;
@@ -1242,8 +1451,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				remque((struct qelem *) qpast);
 				ast_free(qpast);
 			}
-			if (p->rxkey)
+			if (p->rxkey) {
 				p->rxkey = 1;
+			}
 		} else {
 			if (!p->rxkey) {
 				memset(&fr, 0, sizeof(fr));
@@ -1278,8 +1488,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.delivery.tv_usec = 0;
 
 			x = 0;
-			if (!x)
+			if (!x) {
 				ast_queue_frame(ast, &fr);
+			}
 		}
 	}
 	if (p->rxkey == 1) {
@@ -1296,12 +1507,14 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		fr.delivery.tv_usec = 0;
 		ast_queue_frame(ast, &fr);
 	}
-	if (p->rxkey)
+	if (p->rxkey) {
 		p->rxkey--;
+	}
 
 	if (instp->confmode && (p->rxqel.qe_forw != &p->rxqel)) {
-		for (m = 0, qpel = p->rxqel.qe_forw; qpel != &p->rxqel; qpel = qpel->qe_forw)
+		for (m = 0, qpel = p->rxqel.qe_forw; qpel != &p->rxqel; qpel = qpel->qe_forw) {
 			m++;
+		}
 
 		if (m > QUEUE_OVERLOAD_THRESHOLD_EL) {
 			while (p->rxqel.qe_forw != &p->rxqel) {
@@ -1361,8 +1574,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 	}
 
-	if (p->keepalive--)
+	if (p->keepalive--) {
 		return 0;
+	}
 	p->keepalive = KEEPALIVE_TIME;
 
 	/* TheLinkBox: send heartbeats and drop dead stations */
@@ -1377,8 +1591,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			sin.sin_addr.s_addr = inet_addr(instp->TLB_node_test.ip);
 			sin.sin_port = htons(instp->TLB_node_test.port + 1);
 			ast_mutex_lock(&instp->lock);
-			for (i = 0; i < 20; i++)
+			for (i = 0; i < 20; i++) {
 				sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
+			}
 			ast_mutex_unlock(&instp->lock);
 			ast_debug(1, "tlb: call=%s RTCP timeout, removing\n", instp->TLB_node_test.call);
 		}
@@ -1454,6 +1669,19 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 	return tmp;
 }
 
+/*!
+ * \brief TLB request from Asterisk.
+ * This is a standard Asterisk function - requester.
+ * Asterisk calls this function to to setup private data structures.
+ * \param type			Pointer to type of channel to request.
+ * \param cap			Pointer to format capabilities for the channel.
+ * \param assignedids	Pointer to unique ID string to assign to the channel.
+ * \param requestor		Pointer to channel asking for data. 
+ * \param data			Pointer to destination of the call.
+ * \param cause			Pointer to cause of failure.
+ * \retval NULL			Failure
+ * \return				ast_channel if successful
+ */
 static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
 	const struct ast_channel *requestor, const char *data, int *cause)
 {
@@ -1471,39 +1699,48 @@ static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *
 	cp1 = 0;
 	str = ast_strdup((char *) data);
 	cp = strchr(str, '/');
-	if (cp)
+	if (cp) {
 		*cp++ = 0;
+	}
 	nodenum = 0;
 	if (*cp && *++cp) {
 		cp1 = strchr(cp, '/');
-		if (cp1)
+		if (cp1) {
 			*cp1++ = 0;
+		}
 		nodenum = atoi(cp);
 	}
 	/* find instance name from AST node number */
 	if (cp1) {
 		for (n = 0; n < ninstances; n++) {
-			if (!strcmp(instances[n]->astnode, cp1))
+			if (!strcmp(instances[n]->astnode, cp1)) {
 				break;
+			}
 		}
-		if (n >= ninstances)
+		if (n >= ninstances) {
 			n = 0;
-	} else
+		}
+	} else {
 		n = 0;
+	}
 	p = TLB_alloc(instances[n]->name);
 	ast_free(str);
 	if (p) {
 		tmp = TLB_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
-		if (!tmp)
+		if (!tmp) {
 			TLB_destroy(p);
+		}
 	}
 	return tmp;
 }
 
-/*
-* Dump entire node list
-*/
-
+/*!
+ * \brief Process asterisk cli request to dump internal database entries.
+ * \param fd			Asterisk cli fd
+ * \param argc			Number of arguments
+ * \param argv			Pointer to arguments
+ * \return	Cli success, showusage, or failure.
+ */
 static int TLB_do_nodedump(int fd, int argc, const char *const *argv)
 {
 	struct ast_config *cfg = NULL;
@@ -1512,45 +1749,53 @@ static int TLB_do_nodedump(int fd, int argc, const char *const *argv)
 	char *s, *strs[10];
 	int n;
 
-	if (argc != 2)
+	if (argc != 2) {
 		return RESULT_SHOWUSAGE;
+	}
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return RESULT_FAILURE;
 	}
 	for (v = ast_variable_browse(cfg, "nodes"); v; v = v->next) {
-		if (!v->value)
+		if (!v->value) {
 			continue;
+		}
 		s = ast_strdupa(v->value);
 		strupr(s);
 		n = finddelim(s, strs, 10);
-		if (n < 3)
+		if (n < 3) {
 			continue;
-		if (n < 4)
+		}
+		if (n < 4) {
 			ast_cli(fd, "%s|%s|%s|%s\n", v->name, strs[0], strs[1], strs[2]);
-		else
+		} else {
 			ast_cli(fd, "%s|%s|%s|%s|%s\n", v->name, strs[0], strs[1], strs[2], strs[3]);
+		}
 	}
 	ast_config_destroy(cfg);
 	return RESULT_SUCCESS;
 }
 
-/*
-* Get tlb node entry
-*/
-
+/*!
+ * \brief Process asterisk cli request for internal node database entry.
+ * Lookup can be for ip address, callsign, or nodenumber
+ * \param fd			Asterisk cli file descriptor.
+ * \param argc			Number of arguments.
+ * \param argv			Pointer to asterisk cli arguments.
+ * \return 	Cli success, showusage, or failure.
+ */
 static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 {
-
 	char c, *s, *sval, *val, *strs[10];
 	int n;
 	struct ast_config *cfg = NULL;
 	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
 
-	if (argc != 4)
+	if (argc != 4) {
 		return RESULT_SHOWUSAGE;
+	}
 
 	c = tolower(*argv[2]);
 	if (!(cfg = ast_config_load(config, zeroflag))) {
@@ -1576,15 +1821,18 @@ static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 		}
 	} else if ((c == 'i') || (c == 'c')) {
 		for (v = ast_variable_browse(cfg, "nodes"); v; v = v->next) {
-			if (!v->value)
+			if (!v->value) {
 				continue;
+			}
 			sval = ast_strdupa(v->value);
 			strupr(sval);
 			n = finddelim(sval, strs, 10);
-			if (n < 3)
+			if (n < 3) {
 				continue;
-			if (!strcmp(s, strs[(c == 'i') ? 0 : 1]))
+			}
+			if (!strcmp(s, strs[(c == 'i') ? 0 : 1])) {
 				break;
+			}
 		}
 		if (!v) {
 			ast_cli(fd, "Error: Entry for %s not found!\n", s);
@@ -1598,13 +1846,19 @@ static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 		return RESULT_FAILURE;
 	}
 	ast_config_destroy(cfg);
-	if (n < 4)
+	if (n < 4) {
 		ast_cli(fd, "%s|%s|%s|%s\n", s, strs[0], strs[1], strs[2]);
-	else
+	} else {
 		ast_cli(fd, "%s|%s|%s|%s|%s\n", s, strs[0], strs[1], strs[2], strs[3]);
+	}
 	return RESULT_SUCCESS;
 }
 
+/*!
+ * \brief Turns integer response to char cli response
+ * \param r				Response.
+ * \return	Cli success, showusage, or failure.
+ */
 static char *res2cli(int r)
 {
 	switch (r) {
@@ -1617,6 +1871,13 @@ static char *res2cli(int r)
 	}
 }
 
+/*!
+ * \brief Handle asterisk cli request for dbdump
+ * \param e				Asterisk cli entry.
+ * \param cmd			Cli command type.
+ * \param a				Pointer to asterisk cli arguments.
+ * \return	Cli success or failure.
+ */
 static char *handle_cli_nodedump(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -1630,6 +1891,13 @@ static char *handle_cli_nodedump(struct ast_cli_entry *e, int cmd, struct ast_cl
 	return res2cli(TLB_do_nodedump(a->fd, a->argc, a->argv));
 }
 
+/*!
+ * \brief Handle asterisk cli request for dbget
+ * \param e				Asterisk cli entry.
+ * \param cmd			Cli command type.
+ * \param a				Pointer to asterisk cli arguments.
+ * \retval 				Cli success or failure.
+ */
 static char *handle_cli_nodeget(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -1643,41 +1911,21 @@ static char *handle_cli_nodeget(struct ast_cli_entry *e, int cmd, struct ast_cli
 	return res2cli(TLB_do_nodeget(a->fd, a->argc, a->argv));
 }
 
+/*!
+ * \brief Define cli entries for this module
+ */
 static struct ast_cli_entry TLB_cli[] = {
 	AST_CLI_DEFINE(handle_cli_nodedump, "Dump entire tlb node list"),
 	AST_CLI_DEFINE(handle_cli_nodeget, "Look up tlb node entry"),
 };
 
-static int unload_module(void)
-{
-	int n;
-
-	run_forever = 0;
-	tdestroy(TLB_node_list, free_node);
-	for (n = 0; n < ninstances; n++) {
-		if (instances[n]->audio_sock != -1) {
-			close(instances[n]->audio_sock);
-			instances[n]->audio_sock = -1;
-		}
-		if (instances[n]->ctrl_sock != -1) {
-			close(instances[n]->ctrl_sock);
-			instances[n]->ctrl_sock = -1;
-		}
-	}
-	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
-	/* First, take us out of the channel loop */
-	ast_channel_unregister(&TLB_tech);
-	for (n = 0; n < ninstances; n++)
-		ast_free(instances[n]);
-	if (nullfd != -1)
-		close(nullfd);
-
-	ao2_cleanup(TLB_tech.capabilities);
-	TLB_tech.capabilities = NULL;
-
-	return 0;
-}
-
+/*!
+ * \brief Set channel native formats
+ * \param chan			Pointer to asterisk channel.
+ * \param txcodec		Index of the tx CODEC.
+ * \param rxcodec		Index of the rx CODEC.
+ * \retval 0			Always returns 0.
+ */
 static int tlb_set_nativeformats(struct ast_channel *chan, int txcodec, int rxcodec)
 {
 	struct ast_format_cap *capabilities;
@@ -1691,7 +1939,18 @@ static int tlb_set_nativeformats(struct ast_channel *chan, int txcodec, int rxco
 	return 0;
 }
 
-static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call, char *name, char *codec)
+/*!
+ * \brief Process a new TLB call.
+ * \param instp			Pointer to TLB instance.
+ * \param pvt			Pointer to TLB private data.
+ * \param call			Pointer to callsign.
+ * \param name			Pointer to name associated with the callsign.
+ * \param codec			Pointer to CODEC to use.
+ * \retval 1 			if not successful.
+ * \retval 0 			if successful.
+ * \retval -1			if memory allocation error.
+ */
+static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char *call, const char *name, const char *codec)
 {
 	struct TLB_node *TLB_node_key = NULL;
 	struct ast_config *cfg = NULL;
@@ -1702,8 +1961,9 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 	int i, n;
 
 	mycodec[0] = 0;
-	if (codec)
+	if (codec) {
 		ast_copy_string(mycodec, codec, sizeof(mycodec) - 1);
+	}
 	TLB_node_key = (struct TLB_node *) ast_malloc(sizeof(struct TLB_node));
 	if (TLB_node_key) {
 		ast_copy_string(TLB_node_key->call, call, TLB_CALL_SIZE);
@@ -1718,16 +1978,19 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 		}
 		if (strcmp(call, "OUTBOUND")) {
 			for (v = ast_variable_browse(cfg, "nodes"); v; v = v->next) {
-				if (!v->value)
+				if (!v->value) {
 					continue;
+				}
 				sval = ast_strdupa(v->value);
 				strupr(sval);
 				n = finddelim(sval, strs, 10);
-				if (n < 3)
+				if (n < 3) {
 					continue;
+				}
 				if ((!strcmp(TLB_node_key->ip, strs[1])) &&
-					(TLB_node_key->port == (unsigned short) strtoul(strs[2], NULL, 0)) && (!strcmp(call, strs[0])))
+					(TLB_node_key->port == (unsigned short) strtoul(strs[2], NULL, 0)) && (!strcmp(call, strs[0]))) {
 					break;
+				}
 			}
 			if (!v) {
 				ast_log(LOG_ERROR, "Cannot find node entry for %s IP addr %s port %u\n",
@@ -1737,8 +2000,9 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 				return 1;
 			}
 			TLB_node_key->nodenum = atoi(v->name);
-			if (n > 3)
+			if (n > 3) {
 				ast_copy_string(mycodec, strs[3], sizeof(mycodec) - 1);
+			}
 		} else {
 			TLB_node_key->nodenum = 0;
 		}
@@ -1754,7 +2018,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 				if (p == NULL) {	/* if a new inbound call */
 					p = TLB_alloc((void *) instp->name);
 					if (!p) {
-						ast_log(LOG_ERROR, "Cannot alloc el channel\n");
+						ast_log(LOG_ERROR, "Cannot alloc TLB channel\n");
 						return -1;
 					}
 					TLB_node_key->p = p;
@@ -1804,6 +2068,14 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, char *call
 	return 0;
 }
 
+/*!
+ * \brief This routine watches the UDP ports for activity.
+ * It runs in its own thread and processes RTP / RTCP packets as they arrive.
+ * One thread is required for each TLB instance.
+ * It receives data from the audio socket and control socket.
+ * Connection requests arrive over the control socket.
+ * \param data		Pointer to struct el_instance data passed this this thread
+ */
 static void *TLB_reader(void *data)
 {
 	struct TLB_instance *instp = (struct TLB_instance *) data;
@@ -1819,41 +2091,36 @@ static void *TLB_reader(void *data)
 	struct TLB_node **found_key = NULL;
 	struct rtcp_sdes_request items;
 	char call[128];
-	fd_set fds[2];
-	struct timeval tmout;
+	struct pollfd fds[2];
 
 	ast_debug(1, "tlb: reader thread started on %s.\n", instp->name);
 	ast_mutex_lock(&instp->lock);
+	
+	memset(&fds, 0, sizeof(fds));
+	fds[0].fd = instp->ctrl_sock;
+	fds[0].events = POLLIN;
+	fds[1].fd = instp->audio_sock;
+	fds[1].events = POLLIN;
+
 	while (run_forever) {
 
 		ast_mutex_unlock(&instp->lock);
-#if 0
-		/*! \todo This causes gcc to complain:
-		 * cc1: error: ‘__builtin_memset’ writing 4096 bytes into a region of size 256 overflows the destination [-Werror=stringop-overflow=]
-		 * In practice, we should probably be using poll instead of select anyways, not least because of this...
-		 */
-		FD_ZERO(fds);
-#else
-		memset(&fds, 0, sizeof(fds));
-#endif
-		FD_SET(instp->audio_sock, fds);
-		FD_SET(instp->ctrl_sock, fds);
-		x = instp->audio_sock;
-		if (instp->ctrl_sock > x)
-			x = instp->ctrl_sock;
-		tmout.tv_sec = 0;
-		tmout.tv_usec = 50000;
-		i = select(x + 1, fds, NULL, NULL, &tmout);
+		/*
+		* poll for activity
+		*/
+		i = ast_poll(fds, 2, 50);
 		if (i == 0) {
 			ast_mutex_lock(&instp->lock);
 			continue;
 		}
 		if (i < 0) {
-			ast_log(LOG_ERROR, "Error in select()\n");
-			mythread_exit(NULL);
+			ast_log(LOG_ERROR, "Fatal error, poll returned %d: %s\n", i, strerror(errno));
+			run_forever = 0;
+			break;
 		}
 		ast_mutex_lock(&instp->lock);
-		if (FD_ISSET(instp->ctrl_sock, fds)) {	/* if a ctrl packet */
+		if (fds[0].revents) {	/* if a ctrl packet */
+			fds[0].revents = 0;
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(instp->ctrl_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
@@ -1866,8 +2133,9 @@ static void *TLB_reader(void *data)
 					items.item[0].r_text = NULL;
 					parse_sdes((unsigned char *) buf, &items);
 					call[0] = 0;
-					if (items.item[0].r_text != NULL)
+					if (items.item[0].r_text != NULL) {
 						copy_sdes_item(items.item[0].r_text, call, 127);
+					}
 					if (call[0] != '\0') {
 						found_key = (struct TLB_node **) tfind(&instp->TLB_node_test, &TLB_node_list, compare_ip);
 						if (found_key) {
@@ -1913,8 +2181,7 @@ static void *TLB_reader(void *data)
 							if (!i) {	/* if authorized */
 								i = do_new_call(instp, NULL, call, "UNKNOWN", NULL);
 								if (i < 0) {
-									ast_mutex_unlock(&instp->lock);
-									mythread_exit(NULL);
+									i = 0;
 								}
 							}
 							if (i) {	/* if not authorized */
@@ -1926,7 +2193,6 @@ static void *TLB_reader(void *data)
 								for (i = 0; i < 20; i++) {
 									sendto(instp->ctrl_sock, bye, x, 0, (struct sockaddr *) &sin1, sizeof(sin1));
 								}
-								instp->pending[x].fromip[0] = 0;
 							}
 						}
 					}
@@ -1939,7 +2205,8 @@ static void *TLB_reader(void *data)
 				}
 			}
 		}
-		if (FD_ISSET(instp->audio_sock, fds)) {	/* if an audio packet */
+		if (fds[1].revents) {	/* if an audio packet */
+			fds[1].revents = 0;
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(instp->audio_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
@@ -1983,21 +2250,20 @@ static void *TLB_reader(void *data)
 
 							/* parse the packet. If not parseable, throw away */
 							if (sscanf((char *) ((struct rtpVoice_t *) buf)->data,
-									   "DTMF%c %u %u", &dchar, &dseq, &dtime) < 3)
+									   "DTMF%c %u %u", &dchar, &dseq, &dtime) < 3) {
 								continue;
+							}
 							ast_mutex_lock(&p->lock);
 							/* if we had a packet before, and this one is before last one,
 							   throw away */
 							if (p->dtmflasttime && (dtime < p->dtmflasttime)) {
 								ast_mutex_unlock(&p->lock);
 								continue;
-
 							}
 							/* if we get one out of sequence, or the same one again throw away */
 							if (dseq <= p->dtmflastseq) {
 								ast_mutex_unlock(&p->lock);
 								continue;
-
 							}
 							/* okay, this one is for real!!! */
 							/* save lastdtmftime and lastdtmfseq */
@@ -2044,19 +2310,17 @@ static void *TLB_reader(void *data)
 								/* break them up for Asterisk */
 								for (i = 0; i < tlb_codecs[p->rxcodec].blocking_factor; i++) {
 									qpast = ast_malloc(sizeof(struct TLB_rxqast));
-									if (!qpast) {
-										ast_log(LOG_ERROR, "Cannot malloc for qpast\n");
-										ast_mutex_unlock(&instp->lock);
-										mythread_exit(NULL);
+									if (qpast) {
+										memcpy(qpast->buf, ((struct rtpVoice_t *) buf)->data +
+											(tlb_codecs[p->rxcodec].frame_size * i), tlb_codecs[p->rxcodec].frame_size);
+										insque((struct qelem *) qpast, (struct qelem *)
+											p->rxqast.qe_back);
 									}
-									memcpy(qpast->buf, ((struct rtpVoice_t *) buf)->data +
-										   (tlb_codecs[p->rxcodec].frame_size * i), tlb_codecs[p->rxcodec].frame_size);
-									insque((struct qelem *) qpast, (struct qelem *)
-										   p->rxqast.qe_back);
 								}
 							}
-							if (!instp->confmode)
+							if (!instp->confmode) {
 								continue;
+							}
 							/* need complete packet and IP address for TheLinkBox */
 							qpel = ast_malloc(sizeof(struct TLB_rxqel));
 							if (!qpel) {
@@ -2076,11 +2340,19 @@ static void *TLB_reader(void *data)
 		}
 	}
 	ast_mutex_unlock(&instp->lock);
-	ast_debug(1, "tlb: read thread exited.\n");
-	mythread_exit(NULL);
+	ast_debug(1, "TLB read thread exited.\n");
 	return NULL;
 }
 
+/*!
+ * \brief Stores the information from the configuration file to memory.
+ * It setup up udp sockets for the TLB ports and starts background 
+ * threads for processing connections for this instance and registration.
+ * \param cfg		Pointer to struct ast_config.
+ * \param ctg		Pointer to category to load.
+ * \retval 0		If configuration load is successful.
+ * \retval -1		If configuration load fails.
+ */
 static int store_config(struct ast_config *cfg, char *ctg)
 {
 	char *val;
@@ -2120,29 +2392,33 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "rtcptimeout");
-	if (!val)
+	if (!val) {
 		instp->rtcptimeout = 15;
-	else
+	} else {
 		instp->rtcptimeout = atoi(val);
-
+	}
+	
 	val = (char *) ast_variable_retrieve(cfg, ctg, "astnode");
 	if (val) {
 		ast_copy_string(instp->astnode, val, TLB_NAME_SIZE);
 	} else {
 		strcpy(instp->astnode, "1999");
 	}
+	
 	val = (char *) ast_variable_retrieve(cfg, ctg, "context");
 	if (val) {
 		ast_copy_string(instp->context, val, TLB_NAME_SIZE);
 	} else {
 		strcpy(instp->context, "tlb-in");
 	}
+	
 	val = (char *) ast_variable_retrieve(cfg, ctg, "call");
-	if (!val)
+	if (!val) {
 		ast_copy_string(instp->mycall, "INVALID", TLB_CALL_SIZE);
-	else
+	} else {
 		ast_copy_string(instp->mycall, val, TLB_CALL_SIZE);
-
+	}
+	
 	if (strcmp(instp->mycall, "INVALID") == 0) {
 		ast_log(LOG_ERROR, "INVALID TheLinkBox call");
 		return -1;
@@ -2153,24 +2429,25 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	instp->confmode = 0;
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "deny");
-	if (val)
+	if (val) {
 		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, TLB_MAX_CALL_LIST);
-
+	}
 	val = (char *) ast_variable_retrieve(cfg, ctg, "permit");
-	if (val)
+	if (val) {
 		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, TLB_MAX_CALL_LIST);
-
+	}
 	instp->pref_rxcodec = PREF_RXCODEC;
 	instp->pref_txcodec = PREF_TXCODEC;
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "codec");
 	if (val) {
-		if (!strcasecmp(val, "GSM"))
+		if (!strcasecmp(val, "GSM")) {
 			instp->pref_txcodec = TLB_GSM;
-		else if (!strcasecmp(val, "G726"))
+		} else if (!strcasecmp(val, "G726")) {
 			instp->pref_txcodec = TLB_G726;
-		else if (!strcasecmp(val, "ULAW"))
+		} else if (!strcasecmp(val, "ULAW")) {
 			instp->pref_txcodec = TLB_ULAW;
+		}	
 	}
 
 	instp->audio_sock = -1;
@@ -2225,6 +2502,35 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
+static int unload_module(void)
+{
+	int n;
+
+	run_forever = 0;
+	tdestroy(TLB_node_list, free_node);
+	for (n = 0; n < ninstances; n++) {
+		if (instances[n]->audio_sock != -1) {
+			close(instances[n]->audio_sock);
+			instances[n]->audio_sock = -1;
+		}
+		if (instances[n]->ctrl_sock != -1) {
+			close(instances[n]->ctrl_sock);
+			instances[n]->ctrl_sock = -1;
+		}
+	}
+	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
+	/* First, take us out of the channel loop */
+	ast_channel_unregister(&TLB_tech);
+	for (n = 0; n < ninstances; n++) {
+		ast_free(instances[n]);
+	}
+
+	ao2_cleanup(TLB_tech.capabilities);
+	TLB_tech.capabilities = NULL;
+
+	return 0;
+}
+
 static int load_module(void)
 {
 	struct ast_config *cfg = NULL;
@@ -2249,12 +2555,15 @@ static int load_module(void)
 	ast_format_cap_append(TLB_tech.capabilities, ast_format_ulaw, 0);
 
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
-		if (ctg == NULL)
+		if (ctg == NULL) {
 			continue;
-		if (!strcmp(ctg, "nodes"))
+		}
+		if (!strcmp(ctg, "nodes")) {
 			continue;
-		if (store_config(cfg, ctg) < 0)
+		}
+		if (store_config(cfg, ctg) < 0) {
 			return AST_MODULE_LOAD_DECLINE;
+		}
 	}
 	ast_config_destroy(cfg);
 	cfg = NULL;
@@ -2270,7 +2579,6 @@ static int load_module(void)
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
 		return AST_MODULE_LOAD_DECLINE;
 	}
-	nullfd = open("/dev/null", O_RDWR);
 	return 0;
 }
 
