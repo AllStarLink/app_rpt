@@ -883,6 +883,7 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "linkmongain");
 	rpt_vars[n].p.linkmongain = pow(10.0, atof(S_OR(val, DEFAULT_LINKMONGAIN)) / 20.0);
 
+	RPT_CONFIG_VAR(connpgm, "connpgm");
 	RPT_CONFIG_VAR(discpgm, "discpgm");
 	RPT_CONFIG_VAR(mdclog, "mdclog");
 	RPT_CONFIG_VAR_BOOL(lnkactenable, "lnkactenable");
