@@ -2958,7 +2958,7 @@ static inline void log_keyed(struct rpt *myrpt)
 		time(&myt);
 		strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
 		sprintf(myfname, "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
-		myrpt->monstream = ast_writefile(myfname, "wav49", "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0600);
+		myrpt->monstream = ast_writefile(myfname, "wav49", "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
 		if (myrpt->p.monminblocks) {
 			blocksleft = diskavail(myrpt);
 			if (blocksleft >= myrpt->p.monminblocks) {
@@ -4733,9 +4733,9 @@ static void *rpt(void *this)
 	struct timeval looptimestart;
 
 	if (myrpt->p.archivedir)
-		mkdir(myrpt->p.archivedir, 0600);
+		mkdir(myrpt->p.archivedir, 0700);
 	sprintf(tmpstr, "%s/%s", myrpt->p.archivedir, myrpt->name);
-	mkdir(tmpstr, 0600);
+	mkdir(tmpstr, 0775);
 	myrpt->ready = 0;
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->remrx = 0;
@@ -5767,14 +5767,14 @@ static void *rpt_master(void *ignore)
 			*space = 0;
 			strftime(datestr, sizeof(datestr) - 1, "%Y%m%d", localtime(&nodep->timestamp));
 			sprintf(fname, "%s/%s/%s.txt", nodep->archivedir, nodep->str, datestr);
-			fd = open(fname, O_WRONLY | O_CREAT | O_APPEND, 0600);
+			fd = open(fname, O_WRONLY | O_CREAT | O_APPEND, 0644);
 			if (fd == -1) {
-				ast_log(LOG_ERROR, "Cannot open node log file %s for write: %s", space + 1, strerror(errno));
+				ast_log(LOG_ERROR, "Cannot open node log file %s for write: %s", fname, strerror(errno));
 				ast_free(nodep);
 				continue;
 			}
 			if (write(fd, space + 1, strlen(space + 1)) != strlen(space + 1)) {
-				ast_log(LOG_ERROR, "Cannot write node log file %s for write: %s", space + 1, strerror(errno));
+				ast_log(LOG_ERROR, "Cannot write node log file %s for write: %s", fname, strerror(errno));
 				ast_free(nodep);
 				continue;
 			}
@@ -7030,9 +7030,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		time_t myt;
 		long blocksleft;
 
-		mkdir(myrpt->p.archivedir, 0600);
+		mkdir(myrpt->p.archivedir, 0700);
 		sprintf(mycmd, "%s/%s", myrpt->p.archivedir, myrpt->name);
-		mkdir(mycmd, 0600);
+		mkdir(mycmd, 0775);
 		time(&myt);
 		strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
 		sprintf(mycmd, "mixmonitor start %s %s/%s/%s.wav49 a", ast_channel_name(chan), myrpt->p.archivedir, myrpt->name,
