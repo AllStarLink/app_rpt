@@ -1203,7 +1203,7 @@ static int is_rtcp_sdes(const unsigned char *pkt, int len)
 /*!
  * \brief Echolink call.
  * \param ast			Pointer to Asterisk channel.
- * \param dest			Pointer to Destination (echolink node number).
+ * \param dest			Pointer to Destination (echolink node number - format 'el0/009999').
  * \param timeout		Timeout.
  * \retval -1 			if not successful.
  * \retval 0 			if successful.
@@ -1241,6 +1241,13 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 		*cp++ = 0;
 	} else {
 		cp = str;
+	}
+	/* Advance the pointer past the leading zeros */
+	while (*cp) {
+		if(*cp != '0') {
+			break;
+		}
+		cp++;
 	}
 	
 	/* get the ip address for the node */
