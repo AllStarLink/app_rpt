@@ -710,6 +710,27 @@ int ast_radio_wait_or_poll(int fd, int ms, int flag)
 	return 0;
 }
 
+void ast_radio_time(time_t *second)
+{
+	struct timespec ts;
+	
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	
+	*second = ts.tv_sec;
+}
+
+struct timeval ast_radio_tvnow(void)
+{
+	struct timeval tv;
+	struct timespec ts;
+	
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	
+	tv.tv_sec = ts.tv_sec;
+	tv.tv_usec = ts.tv_nsec / 1000;
+	
+	return tv;
+}
 
 static int load_module(void)
 {
