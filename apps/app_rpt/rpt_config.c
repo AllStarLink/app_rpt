@@ -11,6 +11,7 @@
 #include "asterisk/module.h" /* use ast_module_check */
 #include "asterisk/dns_core.h" /* use for dns lookup */
 #include "asterisk/dns_resolver.h" /* use for dns lookup */
+#include "asterisk/dns_srv.h"	/* use for srv dns lookup */
 #include "asterisk/dns_txt.h" /* user for dns lookup */
 #include "asterisk/vector.h" /* required for dns */
 
@@ -343,7 +344,7 @@ int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
  * calling routine should pass a buffer for nodedata and nodedatalength
  * of sufficient length. A typical response is 
  * "radio@123.123.123.123:4569/50000,123.123.123.123
- * This routine uses the TXT records provided by AllStarLink
+ * This routine uses the SRV or TXT records provided by AllStarLink
  * \param node			Node number to lookup
  * \param nodedata		Buffer to hold the matching node information
  * \param nodedatalength	Length of the nodedata buffer
@@ -354,15 +355,8 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 {
 	struct ast_dns_result *result;
 	const struct ast_dns_record *record;
-	struct ast_vector_string *txtrecords;
 
 	char domain[256];
-	char tmp[100];
-	int txtcount = 0;
-
-	char actualnode[10];
-	char ipaddress[20];
-	char iaxport[10];
 
 	/* will will require at least a node length of 4 digits */
 	if (strlen(node) < 4) {
@@ -373,53 +367,133 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 	ast_assert(nodedata != NULL);
 	ast_assert(nodedatalength > 0);
 
-	/* setup the domain to lookup */
-	memset(domain, 0, sizeof(domain));
-	snprintf(domain, sizeof(domain), "%s.nodes.allstarlink.org", node);
+	/* AllStarLink supports two mechanisms to resolve node information.
+	 * You can use the SRV record followed by resolving the node name or
+	 * look up the information in the text record.
+	 */
+#if 1
+	/* Resolve the node by using SRV record */
+	{
+		char *hostname;
+		const char *ipaddress;
+		unsigned short iaxport;
+		
+		/* setup the domain to lookup */
+		memset(domain,0, sizeof(domain));
+		snprintf(domain, sizeof(domain), "_iax._udp.%s.nodes.allstarlink.org", node);
 
-	ast_debug(4, "Resolving DNS TXT records for: %s\n", domain);
+		ast_debug(4, "Resolving DNS SRV records for: %s\n", domain);
 
-	/* resolve the domain name */
-	if (ast_dns_resolve(domain, T_TXT, C_IN, &result)) {
-		ast_log(LOG_ERROR, "DNS request failed\n");
-		return -1;
-	}
-	if (!result) {
-		return -1;
-	}
+		if (ast_dns_resolve(domain, T_SRV, C_IN, &result)) {
+			ast_log(LOG_ERROR, "DNS SRV request failed\n");
+			return -1;
+		}
+		if (!result) {
+			ast_log(LOG_ERROR, "DNS SRV request failed\n");
+			return -1;
+		}
 
-	/* get the response */
-	record = ast_dns_result_get_records(result);
+		/* get the response */
+		record = ast_dns_result_get_records(result);
 	
-	if(!record) {
+		if(!record) {
+			ast_log(LOG_ERROR, "Resolving DNS did not return results for: %s\n", domain);
+			ast_dns_result_free(result);
+			return -1;
+		}
+
+		hostname = ast_strdupa(ast_dns_srv_get_host(record));
+		iaxport = ast_dns_srv_get_port(record);
+
+		ast_debug(4, "Resolving A record for host: %s, port: %d\n", hostname, iaxport);
+
 		ast_dns_result_free(result);
-		return -1;
+
+		if (ast_dns_resolve(hostname, T_A, C_IN, &result)) {
+			ast_log(LOG_ERROR, "DNS resolve request failed\n");
+			return -1;
+		}
+		if (!result) {
+			ast_log(LOG_ERROR, "Resolving A did not return results\n");
+			return -1;
+		}
+
+		/* get the response */
+		record = ast_dns_result_get_records(result);
+		if (!record) {
+			ast_log(LOG_ERROR, "Resolving A did not return results\n");
+			return -1;
+		}
+
+		ipaddress = ast_inet_ntoa(*(struct in_addr*)ast_dns_record_get_data(record));
+
+		ast_dns_result_free(result);
+
+		/* format the response */
+		memset(nodedata, 0, nodedatalength);
+		snprintf(nodedata, nodedatalength, "radio@%s:%d/%s,%s", ipaddress, iaxport, node, ipaddress);
 	}
+#else
+	/* Resolve the node by using the TXT record */
+	{
+		char actualnode[10];
+		char ipaddress[20];
+		char iaxport[10];
+		char tmp[100];
 
-	/* process the text records 
-	   text records are in the format 
-	   "NN=2530" "RT=2023-02-21 17:33:07" "RB=0" "IP=104.153.109.212" "PIP=0" "PT=4569" "RH=register-west"
-	*/
-	txtrecords = ast_dns_txt_get_strings( record);
+		struct ast_vector_string *txtrecords;
+		int txtcount = 0;
 
-	for (txtcount = 0; txtcount < AST_VECTOR_SIZE(txtrecords); txtcount++) {
-		ast_copy_string(tmp, AST_VECTOR_GET(txtrecords, txtcount), sizeof(tmp));
-		if (ast_begins_with(tmp, "NN=")) {
-			ast_copy_string(actualnode,tmp + 3, sizeof(actualnode));
+		/* setup the domain to lookup */
+		memset(domain, 0, sizeof(domain));
+		snprintf(domain, sizeof(domain), "%s.nodes.allstarlink.org", node);
+
+		ast_debug(4, "Resolving DNS TXT records for: %s\n", domain);
+	
+		/* resolve the domain name */
+		if (ast_dns_resolve(domain, T_TXT, C_IN, &result)) {
+			ast_log(LOG_ERROR, "DNS request failed\n");
+			return -1;
 		}
-		if (ast_begins_with(tmp, "IP=")) {
-			ast_copy_string(ipaddress,tmp + 3, sizeof(ipaddress));
+		if (!result) {
+			return -1;
 		}
-		if (ast_begins_with(tmp, "PT=")) {
-			ast_copy_string(iaxport,tmp + 3, sizeof(iaxport));
+
+		/* get the response */
+		record = ast_dns_result_get_records(result);
+	
+		if(!record) {
+			ast_dns_result_free(result);
+			return -1;
 		}
+
+		/* process the text records 
+		text records are in the format 
+		"NN=2530" "RT=2023-02-21 17:33:07" "RB=0" "IP=104.153.109.212" "PIP=0" "PT=4569" "RH=register-west"
+		*/
+		txtrecords = ast_dns_txt_get_strings( record);
+
+		for (txtcount = 0; txtcount < AST_VECTOR_SIZE(txtrecords); txtcount++) {
+			ast_copy_string(tmp, AST_VECTOR_GET(txtrecords, txtcount), sizeof(tmp));
+			if (ast_begins_with(tmp, "NN=")) {
+				ast_copy_string(actualnode,tmp + 3, sizeof(actualnode));
+			}
+			if (ast_begins_with(tmp, "IP=")) {
+				ast_copy_string(ipaddress,tmp + 3, sizeof(ipaddress));
+			}
+			if (ast_begins_with(tmp, "PT=")) {
+				ast_copy_string(iaxport,tmp + 3, sizeof(iaxport));
+			}
+		}
+	
+		/* format the response */
+		memset(nodedata, 0, nodedatalength);
+		snprintf(nodedata, nodedatalength, "radio@%s:%s/%s,%s", ipaddress, iaxport, actualnode, ipaddress);
+
+		ast_dns_txt_free_strings(txtrecords);
+		ast_dns_result_free(result);
 	}
-
-	/* format the response */
-	snprintf(nodedata, nodedatalength, "radio@%s:%s/%s,%s", ipaddress, iaxport, actualnode, ipaddress);
-
-	ast_dns_txt_free_strings(txtrecords);
-	ast_dns_result_free(result);
+#endif
 
 	return 0;
 }
