@@ -341,15 +341,21 @@ int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
 
 /*!
  * \brief AllStar Network node lookup by dns.
- * calling routine should pass a buffer for nodedata and nodedatalength
+ * Calling routine should pass a buffer for nodedata and nodedatalength
  * of sufficient length. A typical response is 
  * "radio@123.123.123.123:4569/50000,123.123.123.123
  * This routine uses the SRV or TXT records provided by AllStarLink
- * \param node			Node number to lookup
- * \param nodedata		Buffer to hold the matching node information
+ *
+ * \note This routine can be called by app_rpt multiple times as 
+ * it constructs the node number.  The routine will only perform a 
+ * lookup after it receives 4 digits.  The actual node number may be
+ * longer than 4 digits.
+ *
+ * \param node				Node number to lookup
+ * \param nodedata			Buffer to hold the matching node information
  * \param nodedatalength	Length of the nodedata buffer
- * \retval -1 			if not successful
- * \retval 0 			if successful
+ * \retval -1 				if not successful
+ * \retval 0 				if successful
  */
 static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatalength)
 {
@@ -389,7 +395,6 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 			return -1;
 		}
 		if (!result) {
-			ast_log(LOG_ERROR, "DNS SRV request failed\n");
 			return -1;
 		}
 
@@ -397,7 +402,6 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		record = ast_dns_result_get_records(result);
 	
 		if(!record) {
-			ast_log(LOG_ERROR, "Resolving DNS did not return results for: %s\n", domain);
 			ast_dns_result_free(result);
 			return -1;
 		}
@@ -414,7 +418,6 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 			return -1;
 		}
 		if (!result) {
-			ast_log(LOG_ERROR, "Resolving A did not return results\n");
 			return -1;
 		}
 
