@@ -424,7 +424,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		/* get the response */
 		record = ast_dns_result_get_records(result);
 		if (!record) {
-			ast_log(LOG_ERROR, "Resolving A did not return results\n");
+			ast_dns_result_free(result);
 			return -1;
 		}
 
