@@ -492,37 +492,6 @@ static struct ast_channel_tech usbradio_tech = {
 	.setoption = usbradio_setoption,
 };
 
-/*!
- * \brief Get system monotonic 
- * This returns the CLOCK_MONOTONIC time
- * \param second	Pointer to time_t to receive the time.
- */
-static void rpt_time(time_t *second)
-{
-	struct timespec ts;
-	
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	
-	*second = ts.tv_sec;
-}
-
-/*!
- * \brief Get system monotonic timeval
- * This returns the CLOCK_MONOTONIC time as a timeval
- * \retval 	timval structure with the current monotonic time.
- */
-static struct timeval rpt_tvnow(void)
-{
-	struct timeval tv;
-	struct timespec ts;
-	
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	
-	tv.tv_sec = ts.tv_sec;
-	tv.tv_usec = ts.tv_nsec / 1000;
-	
-	return tv;
-}
 
 /*!
  * \brief Configure our private structure based on the
@@ -711,12 +680,12 @@ static void *pulserthread(void *arg)
 	ast_mutex_lock(&pp_lock);
 	ast_radio_ppwrite(haspp, ppfd, pbase, pport, pp_val);
 	ast_mutex_unlock(&pp_lock);
-	then = rpt_tvnow();
+	then = ast_radio_tvnow();
 	
 	while (!stoppulser) {
 		usleep(50000);
 		ast_mutex_lock(&pp_lock);
-		now = rpt_tvnow();
+		now = ast_radio_tvnow();
 		j = ast_tvdiff_ms(now, then);
 		then = now;
 		/* make output inversion mask (for pulseage) */
@@ -868,7 +837,7 @@ static void *hidthread(void *arg)
 	 * with the usb hid device
 	 */
 	while (!o->stophid) {
-		rpt_time(&o->lasthidtime);
+		ast_radio_time(&o->lasthidtime);
 		ast_mutex_lock(&usb_dev_lock);
 		o->hasusb = 0;
 		o->usbass = 0;
@@ -887,7 +856,7 @@ static void *hidthread(void *arg)
 		 * If no device string is specified, attempt to assign the first
 		 * found device.
 		 */
-		rpt_time(&o->lasthidtime);
+		ast_radio_time(&o->lasthidtime);
 						
 		/* Automatically assign a devstr if one was not specified in the configuration. */
 		if (ast_strlen_zero(o->devstr)) {
@@ -993,7 +962,7 @@ static void *hidthread(void *arg)
 		}
 #endif
 		o->device_error = 0;
-		rpt_time(&o->lasthidtime);
+		ast_radio_time(&o->lasthidtime);
 		o->usbass = 1;
 		ast_mutex_unlock(&usb_dev_lock);
 		/* set the audio mixer values */
@@ -1186,7 +1155,7 @@ static void *hidthread(void *arg)
 		rfds[0].fd = o->pttkick[1];
 		rfds[0].events = POLLIN;
 		
-		rpt_time(&o->lasthidtime);
+		ast_radio_time(&o->lasthidtime);
 		/* Main processing loop for GPIO 
 		 * This loop process every 50 milliseconds.
 		 * The timer can be interupted by writing to 
@@ -1194,7 +1163,7 @@ static void *hidthread(void *arg)
 		 */
 		while ((!o->stophid) && o->hasusb) {
 			
-			then = rpt_tvnow();
+			then = ast_radio_tvnow();
 			/* poll the pttkick pipe - timeout after 50 milliseconds */
 			res = ast_poll(rfds, 1, 50);
 			if (res < 0) {
@@ -1376,7 +1345,7 @@ static void *hidthread(void *arg)
 					}
 				}
 			}
-			j = ast_tvdiff_ms(rpt_tvnow(), then);
+			j = ast_tvdiff_ms(ast_radio_tvnow(), then);
 			/* make output inversion mask (for pulseage) */
 			o->hid_gpio_lastmask = o->hid_gpio_pulsemask;
 			o->hid_gpio_pulsemask = 0;
@@ -1453,7 +1422,7 @@ static void *hidthread(void *arg)
 				memcpy(bufsave, buf, sizeof(buf));
 				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
-			rpt_time(&o->lasthidtime);
+			ast_radio_time(&o->lasthidtime);
 			ast_mutex_unlock(&o->usblock);
 		}
 		lasttxtmp = o->pmrChan->txPttOut = 0;
@@ -1865,7 +1834,7 @@ static int usbradio_call(struct ast_channel *c, const char *dest, int timeout)
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
 
 	o->stophid = 0;
-	rpt_time(&o->lasthidtime);
+	ast_radio_time(&o->lasthidtime);
 	ast_pthread_create_background(&o->hidthread, NULL, hidthread, o);
 	ast_setstate(c, AST_STATE_UP);
 	return 0;
@@ -1969,7 +1938,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 	/* check to the if the hid thread is still processing */
 	if (o->lasthidtime) {
-		rpt_time(&now);
+		ast_radio_time(&now);
 		if ((now - o->lasthidtime) > 3) {
 			ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
 			return NULL;
@@ -2366,7 +2335,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 				return (f1);
 			}
 			if (f1->frametype == AST_FRAME_DTMF_END) {
-				f1->len = ast_tvdiff_ms(rpt_tvnow(), o->tonetime);
+				f1->len = ast_tvdiff_ms(ast_radio_tvnow(), o->tonetime);
 				if (option_verbose) {
 					ast_log(LOG_NOTICE, "Channel %s: Got DTMF char %c duration %ld ms\n", o->name, f1->subclass.integer, f1->len);
 				}
@@ -2376,7 +2345,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 					ast_frfree(f1);
 					f1 = NULL;
 				} else {
-					o->tonetime = rpt_tvnow();
+					o->tonetime = ast_radio_tvnow();
 					o->toneflag = 1;
 				}
 			}

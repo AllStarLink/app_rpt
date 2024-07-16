@@ -418,3 +418,18 @@ int ast_radio_poll_input(int fd, int ms);
  * \retval 1			Activity occurred on the fd.
  */
 int ast_radio_wait_or_poll(int fd, int ms, int flag);
+
+/*!
+ * \brief Get system monotonic 
+ * This returns the CLOCK_MONOTONIC time
+ * \param second	Pointer to time_t to receive the time.
+ */
+void ast_radio_time(time_t *second);
+
+/*!
+ * \brief Get system monotonic timeval
+ * This returns the CLOCK_MONOTONIC time as a timeval
+ * \retval 	timval structure with the current monotonic time.
+ */
+struct timeval ast_radio_tvnow(void);
+
