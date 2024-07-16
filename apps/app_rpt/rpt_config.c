@@ -363,6 +363,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 	const struct ast_dns_record *record;
 
 	char domain[256];
+	int res;
 
 	/* will will require at least a node length of 4 digits */
 	if (strlen(node) < 4) {
@@ -386,7 +387,10 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		
 		/* setup the domain to lookup */
 		memset(domain,0, sizeof(domain));
-		snprintf(domain, sizeof(domain), "_iax._udp.%s.nodes.allstarlink.org", node);
+		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.nodes.allstarlink.org", node);
+		if (res < 0) {
+			return -1;
+		}
 
 		ast_debug(4, "Resolving DNS SRV records for: %s\n", domain);
 
@@ -449,7 +453,10 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 		/* setup the domain to lookup */
 		memset(domain, 0, sizeof(domain));
-		snprintf(domain, sizeof(domain), "%s.nodes.allstarlink.org", node);
+		res = snprintf(domain, sizeof(domain), "%s.nodes.allstarlink.org", node);
+		if (res < 0) {
+			return -1;
+		}
 
 		ast_debug(4, "Resolving DNS TXT records for: %s\n", domain);
 	
