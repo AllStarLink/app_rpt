@@ -249,8 +249,9 @@ static int http_register(struct http_registry *reg)
 			port = ast_json_integer_get(ast_json_object_get(json, "port"));
 			refresh = ast_json_integer_get(ast_json_object_get(json, "refresh"));
 			data = ast_json_dump_string(ast_json_object_get(json, "data"));
-			ast_debug(2, "Response: ipaddr=%s, port=%d, refresh=%d, data=%s\n", ipaddr, port, refresh, data);
-			if (strstr(data, "successfully registered")) {
+			ast_debug(2, "Response: ipaddr=%s, port=%d, refresh=%d, data=%s\n",
+				ipaddr, port, refresh, data);
+			if (data && strstr(data, "successfully registered")) {
 				ast_copy_string(reg->perceived, ipaddr, sizeof(reg->perceived));
 				reg->perceived_port = port;
 				reg->refresh = refresh;
@@ -336,7 +337,12 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 			ast_copy_string(perceived, "<Unregistered>", sizeof(perceived));
 		}
 		snprintf(host, sizeof(host), "%s", ast_sockaddr_stringify(&reg->addr));
-		ast_cli(a->fd, FORMAT, host, reg->username, reg->perceived_port ? perceived : "<Unregistered>", reg->refresh, reg->registered ? "Registered" : "Not Registered");
+		ast_cli(a->fd, FORMAT,
+			host,
+			reg->username,
+			reg->perceived_port ? perceived : "<Unregistered>",
+			reg->refresh,
+			reg->registered ? "Registered" : "Not Registered");
 		counter++;
 	}
 	AST_RWLIST_UNLOCK(&registrations);
