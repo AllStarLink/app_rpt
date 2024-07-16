@@ -2235,6 +2235,13 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		sd = 1;
 	}
 	o->rx_ctcss_active = sd;
+		
+	/* Special case where cd and sd have been configured for no */
+	if (o->rxcdtype == CD_IGNORE && o->rxsdtype == SD_IGNORE) {
+		cd = 0;
+		sd = 0;
+	}
+
 	/* Timer for how long TX has been unkeyed - used with txoffdelay */
 	if (o->txoffdelay) {
 		if (o->txkeyed == 1) {
@@ -2246,6 +2253,8 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			}
 		}
 	}
+	
+	/* Check conditions and set receiver active */
 	if (cd && sd) {
 		//if(!o->rxkeyed)o->pmrChan->dd.b.doitnow=1;
 		if (o->rxkeyed || ((o->txoffcnt >= o->txoffdelay) && (o->rxoncnt >= o->rxondelay))) {
