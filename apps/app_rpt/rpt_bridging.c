@@ -370,6 +370,8 @@ static int dahdi_conf_add(struct ast_channel *chan, int confno, int mode)
 
 	ci.confno = confno;
 	ci.confmode = mode;
+	
+	ast_debug(2, "Channel %s joining conference %i", ast_channel_name(chan), confno);
 
 	res = join_dahdiconf(chan, &ci);
 	if (res) {
@@ -426,6 +428,12 @@ static int dahdi_conf_fd_confno(struct ast_channel *chan)
 	ci.confno = 0;
 	ci.confmode = 0;
 
+	/* This routine previously called DAHDI_CHANNO.  After testing, we 
+	 * determined that DAHDI_CHANNO is actually returning the channel number, 
+	 * instead of the conference number.  In some cases the channel number
+	 * was same as the conference number.  Since it was not accurate in
+	 * all cases, it was switched to DAHDI_GETCONF.
+	 */
 	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONF, &ci)) {
 		ast_log(LOG_WARNING, "DAHDI_GETCONF failed: %s\n", strerror(errno));
 		return -1;
@@ -493,7 +501,13 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 		return -1;
 	}
 
-	/* put vox channel monitoring on the channel  */
+	/* put vox channel monitoring on the channel  
+	 *
+	 * The conference flags were originally DAHDI_CONF_MONITOR.  This 
+	 * setting caused dahdi_conf_add to return EINVAL.  The  flags
+	 * RPT_CONF_CONF | RPT_CONF_LISTENER permits the vox channel to 
+	 * join the conference.
+	 */
 	if (dahdi_conf_add(myrpt->voxchannel, res, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
 		ast_hangup(mychannel);
 		return -1;
