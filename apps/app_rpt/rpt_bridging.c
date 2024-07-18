@@ -422,9 +422,12 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
 static int dahdi_conf_fd_confno(struct ast_channel *chan)
 {
 	struct dahdi_confinfo ci;
+	ci.chan = 0;
+	ci.confno = 0;
+	ci.confmode = 0;
 
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.confno) == -1) {
-		ast_log(LOG_WARNING, "DAHDI_CHANNO failed: %s\n", strerror(errno));
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONF, &ci)) {
+		ast_log(LOG_WARNING, "DAHDI_GETCONF failed: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -482,7 +485,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 		return -1;
 	}
 
-	/* get its channel number */
+	/* get its conference number */
 	res = dahdi_conf_fd_confno(mychannel);
 	if (res < 0) {
 		ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
@@ -491,7 +494,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 	}
 
 	/* put vox channel monitoring on the channel  */
-	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
+	if (dahdi_conf_add(myrpt->voxchannel, res, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
 		ast_hangup(mychannel);
 		return -1;
 	}
