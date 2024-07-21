@@ -5129,9 +5129,8 @@ static void *rpt(void *this)
 			myrpt->macropatch = 0;
 			channel_revert(myrpt);
 		}
-		/* get rid of tail if timed out */
-		if (!myrpt->totimer)
-			myrpt->tailtimer = 0;
+		/* get rid of tail if timed out or beaconing */
+		if (!myrpt->totimer || (!myrpt->mustid && myrpt->p.beaconing)) myrpt->tailtimer = 0;
 		/* if not timed-out, add in tail */
 		if (myrpt->totimer)
 			totx = totx || myrpt->tailtimer;
