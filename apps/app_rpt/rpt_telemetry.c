@@ -449,7 +449,7 @@ int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
 
 	res = 0;
 
-	morsespeed = retrieve_astcfgint(myrpt, myrpt->p.morse, "speed", 5, 20, 20);
+	morsespeed = retrieve_astcfgint(myrpt, myrpt->p.morse, "speed", 5, 35, 20);
 	morsefreq = retrieve_astcfgint(myrpt, myrpt->p.morse, "frequency", 300, 3000, 800);
 	morseampl = retrieve_astcfgint(myrpt, myrpt->p.morse, "amplitude", 200, 8192, 4096);
 	morseidampl = retrieve_astcfgint(myrpt, myrpt->p.morse, "idamplitude", 200, 8192, 2048);
