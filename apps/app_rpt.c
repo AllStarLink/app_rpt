@@ -5544,6 +5544,9 @@ static int load_config(int reload)
 		if (i < 4) {
 			i = 4;
 		}
+		if (i > 63) {
+			i = 63;
+		}
 		rpt_maximum_node_length = i;
 	}
 
