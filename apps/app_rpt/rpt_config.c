@@ -33,7 +33,7 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 extern enum rpt_dns_method rpt_node_lookup_method;
-extern int rpt_maximum_node_length;
+extern int rpt_max_dns_node_length;
 
 static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 
@@ -616,7 +616,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 			}
 			ast_config_destroy(ourcfg);
 		}
-		myrpt->longestnode = MAX(longestnode, rpt_maximum_node_length);
+		myrpt->longestnode = MAX(longestnode, rpt_max_dns_node_length);
 		ast_mutex_unlock(&nodelookuplock);
 	}
 
@@ -1140,7 +1140,7 @@ void load_rpt_vars(int n, int init)
 		vp = vp->next;
 	}
 
-	rpt_vars[n].longestnode = MAX(longestnode, rpt_maximum_node_length);
+	rpt_vars[n].longestnode = MAX(longestnode, rpt_max_dns_node_length);
 
 	/* For this repeater, Determine the length of the longest function */
 	rpt_vars[n].longestfunc = 0;
