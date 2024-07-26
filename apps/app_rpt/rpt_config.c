@@ -615,7 +615,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 			}
 			ast_config_destroy(ourcfg);
 		}
-		myrpt->longestnode = longestnode;
+		myrpt->longestnode = MAX(longestnode, MIN_NODE_LENGTH);
 		ast_mutex_unlock(&nodelookuplock);
 	}
 
@@ -1139,7 +1139,7 @@ void load_rpt_vars(int n, int init)
 		vp = vp->next;
 	}
 
-	rpt_vars[n].longestnode = longestnode;
+	rpt_vars[n].longestnode = MAX(longestnode, MIN_NODE_LENGTH);
 
 	/* For this repeater, Determine the length of the longest function */
 	rpt_vars[n].longestfunc = 0;
