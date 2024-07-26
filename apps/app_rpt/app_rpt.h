@@ -143,7 +143,6 @@ typedef struct {
 #define	MAX_EXTNODEFILES 50
 #define	MAX_LOCALLINKNODES 50
 #define	MAX_LSTUFF 20
-#define MIN_NODE_LENGTH 6		
 
 #define ISRANGER(name) (name[0] == '9')
 
