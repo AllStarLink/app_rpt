@@ -1378,7 +1378,9 @@ void *rpt_call(void *this)
 			if ((!sentpatchconnect) && myrpt->p.patchconnect && ast_channel_is_bridged(mychannel)
 				&& (ast_channel_state(mychannel) == AST_STATE_UP)) {
 				sentpatchconnect = 1;
+				rpt_mutex_unlock(&myrpt->lock);
 				rpt_telemetry(myrpt, PLAYBACK, (char*) myrpt->p.patchconnect);
+				rpt_mutex_lock(&myrpt->lock);
 			}
 		if (myrpt->mydtmf) {
 			struct ast_frame wf = { AST_FRAME_DTMF, };
