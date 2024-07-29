@@ -400,6 +400,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 			return -1;
 		}
 		if (!result) {
+			ast_debug(4, "No SRV results returned for %s\n", domain);
 			return -1;
 		}
 
@@ -407,6 +408,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		record = ast_dns_result_get_records(result);
 	
 		if(!record) {
+			ast_debug(4, "No SRV records returned for %s\n", domain);
 			ast_dns_result_free(result);
 			return -1;
 		}
@@ -423,12 +425,14 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 			return -1;
 		}
 		if (!result) {
+			ast_debug(4, "No A results returned for %s\n", hostname);
 			return -1;
 		}
 
 		/* get the response */
 		record = ast_dns_result_get_records(result);
 		if (!record) {
+			ast_debug(4, "No A records returned for %s\n", hostname);
 			ast_dns_result_free(result);
 			return -1;
 		}
