@@ -138,8 +138,8 @@ static struct ast_str *curl_post(const char *url, const char *header, const char
 	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, -1L);
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
 	curl_easy_setopt(curl, CURLOPT_POST, 1L); /* CURLOPT_HEADER and CURLOPT_NOBODY are implicit */
-	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1000L);
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_errbuf);
 
 	if (curl_easy_perform(curl) != CURLE_OK) {
