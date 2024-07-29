@@ -33,6 +33,7 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 extern enum rpt_dns_method rpt_node_lookup_method;
+extern int rpt_max_dns_node_length;
 
 static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 
@@ -399,6 +400,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 			return -1;
 		}
 		if (!result) {
+			ast_debug(4, "No SRV results returned for %s\n", domain);
 			return -1;
 		}
 
@@ -406,6 +408,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		record = ast_dns_result_get_records(result);
 	
 		if(!record) {
+			ast_debug(4, "No SRV records returned for %s\n", domain);
 			ast_dns_result_free(result);
 			return -1;
 		}
@@ -422,12 +425,14 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 			return -1;
 		}
 		if (!result) {
+			ast_debug(4, "No A results returned for %s\n", hostname);
 			return -1;
 		}
 
 		/* get the response */
 		record = ast_dns_result_get_records(result);
 		if (!record) {
+			ast_debug(4, "No A records returned for %s\n", hostname);
 			ast_dns_result_free(result);
 			return -1;
 		}
@@ -615,7 +620,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 			}
 			ast_config_destroy(ourcfg);
 		}
-		myrpt->longestnode = longestnode;
+		myrpt->longestnode = MAX(longestnode, rpt_max_dns_node_length);
 		ast_mutex_unlock(&nodelookuplock);
 	}
 
@@ -1139,7 +1144,7 @@ void load_rpt_vars(int n, int init)
 		vp = vp->next;
 	}
 
-	rpt_vars[n].longestnode = longestnode;
+	rpt_vars[n].longestnode = MAX(longestnode, rpt_max_dns_node_length);
 
 	/* For this repeater, Determine the length of the longest function */
 	rpt_vars[n].longestfunc = 0;

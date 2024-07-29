@@ -424,6 +424,7 @@ static int nrpts = 0;
 
 /* general settings */
 enum rpt_dns_method rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
+int rpt_max_dns_node_length = 6;
 
 int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
 
@@ -5538,6 +5539,17 @@ static int load_config(int reload)
 			ast_log(LOG_WARNING,"Configuration error: node_lookup_method, %s, is not valid", val);
 			rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
 		}
+	}
+	val = (char *) ast_variable_retrieve(cfg, "general", "max_dns_node_length");
+	if (val) {
+		i = atoi(val);
+		if (i < 4) {
+			i = 4;
+		}
+		if (i > 63) {
+			i = 63;
+		}
+		rpt_max_dns_node_length = i;
 	}
 
 	/* process the sections looking for the nodes */
