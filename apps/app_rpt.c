@@ -3861,7 +3861,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						if (blocksleft >= myrpt->p.monminblocks) {
 							myrpt->monstream =
 								ast_writefile(myfname, "wav49", "app_rpt Air Archive", O_CREAT | O_APPEND, 0,
-											  0600);
+											  0644);
 						}
 					}
 				}
