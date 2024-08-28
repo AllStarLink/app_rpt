@@ -677,7 +677,7 @@ static int get_usb_serial(char *devstr, char *serial)
     struct usb_dev_handle *usb_handle;
     int length;
 
-    usb_dev = hid_device_init(devstr);
+    usb_dev = ast_radio_hid_device_init(devstr);
     usb_handle = usb_open(usb_dev);
     length = usb_get_string_simple(usb_handle, usb_dev->descriptor.iSerialNumber, serial, sizeof(serial));
     usb_close(usb_handle);
@@ -890,18 +890,25 @@ static void *hidthread(void *arg)
 		if (strlen(o->serial) > 0)
 		{
 			ast_log(LOG_NOTICE, "Checking for USB device with serial %s\n", o->serial);
-			for(s = usb_device_list; *s; s += strlen(s) + 1)
+			int index = 0;
+			char *index_devstr = NULL;
+			for(;;)
 			{
+				index_devstr = ast_radio_usb_get_devstr(index);
+				if (ast_strlen_zero(index_devstr)) {
+					/* No more devices, so break out of the loop */
+					break;
+				}
 				/* Go through the list of usb devices, and get the serial numbers */
-				if (get_usb_serial(s, serial) == 0) continue;
+				if (get_usb_serial(index_devstr, serial) == 0) continue;
 				ast_log(LOG_NOTICE, "Device Serial %s vs %s\n", o->serial, serial);
 				if (strcmp(o->serial, serial) == 0)
 				{
 					/* We found a device with the matching serial number
 					 * Set the devstr to the matching device
 					 */
-					ast_log(LOG_NOTICE, "Found device serial %s at %s for %s\n",o->serial, s, o->name);
-					ast_copy_strin(o->devstr, s, sizeof(o->devstr));
+					ast_log(LOG_NOTICE, "Found device serial %s at %s for %s\n",o->serial, index_devstr, o->name);
+					ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
 					break;
 				}
 			}
