@@ -202,6 +202,7 @@ struct chan_usbradio_pvt {
 	int boost;					/* input boost, scaled by BOOST_SCALE */
 	char devicenum;
 	char devstr[128];
+	char serial[14];
 	int spkrmax;
 	int micmax;
 	int micplaymax;
@@ -425,6 +426,7 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.usedtmf = 1,
 	.rxondelay = 0,
 	.txoffdelay = 0,
+	.serial = "",
 	.area = 0,
 	.rptnum = 0,
 };
@@ -660,6 +662,32 @@ static char *find_installed_usb_match(void)
 }
 
 /*!
+ * \brief Get serial number from device if available
+ *	This function will attempt to get the serial number from a media device
+ *
+ * \param devstr	The USB device string
+ * \param serial	Buffer to return the serial number
+ *
+ * \retval		Length of found serial number
+ */
+
+static int get_usb_serial(char *devstr, char *serial)
+{
+    struct usb_device *usb_dev;
+    struct usb_dev_handle *usb_handle;
+    int length;
+
+    usb_dev = hid_device_init(devstr);
+    usb_handle = usb_open(usb_dev);
+    length = usb_get_string_simple(usb_handle, usb_dev->descriptor.iSerialNumber, serial, sizeof(serial));
+    usb_close(usb_handle);
+    usb_handle = NULL;
+    usb_dev = NULL;
+
+    return length;
+}
+
+/*!
  * \brief Parallel port processing thread.
  *	This thread evaluates the timers configured for each
  *  configured parallel port pin.
@@ -811,7 +839,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 static void *hidthread(void *arg)
 {
 	unsigned char buf[4], bufsave[4], keyed, ctcssed;
-	char *s, lasttxtmp;
+	char *s, lasttxtmp, serial[14];
 	register int i, j, k;
 	int res;
 	struct usb_device *usb_dev;
@@ -858,6 +886,26 @@ static void *hidthread(void *arg)
 		 */
 		ast_radio_time(&o->lasthidtime);
 						
+		/* If configuration has a serial number defined, find the device */
+		if (strlen(o->serial) > 0)
+		{
+			ast_log(LOG_NOTICE, "Checking for USB device with serial %s\n", o->serial);
+			for(s = usb_device_list; *s; s += strlen(s) + 1)
+			{
+				/* Go through the list of usb devices, and get the serial numbers */
+				if (get_usb_serial(s, serial) == 0) continue;
+				ast_log(LOG_NOTICE, "Device Serial %s vs %s\n", o->serial, serial);
+				if (strcmp(o->serial, serial) == 0)
+				{
+					/* We found a device with the matching serial number
+					 * Set the devstr to the matching device
+					 */
+					ast_log(LOG_NOTICE, "Found device serial %s at %s for %s\n",o->serial, s, o->name);
+					ast_copy_strin(o->devstr, s, sizeof(o->devstr));
+					break;
+				}
+			}
+		}
 		/* Automatically assign a devstr if one was not specified in the configuration. */
 		if (ast_strlen_zero(o->devstr)) {
 			int index = 0;
@@ -929,6 +977,11 @@ static void *hidthread(void *arg)
 				continue;
 			}
 			ast_log(LOG_NOTICE, "Channel %s: Assigned USB device %s to usbradio channel\n", o->name, s);
+			/* Check if the device has a serial number, and add it to the config file */
+			if (get_usb_serial(s, serial) > 0) 
+			{
+				ast_copy_string(o->serial, serial, sizeof(o->serial));
+			}
 			ast_copy_string(o->devstr, s, sizeof(o->devstr));
 		}
 		/* Double check to see if the device string is assigned to another usb channel */
@@ -3622,6 +3675,7 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 	ast_cli(fd, "Active radio interface is [%s]\n", usbradio_active);
 	ast_mutex_lock(&usb_dev_lock);
 	ast_cli(fd, "Device String is %s\n", o->devstr);
+	ast_cli(fd, "Device Serial is %s\n", o->serial);
 	ast_mutex_unlock(&usb_dev_lock);
 	ast_cli(fd, "Card is %i\n", ast_radio_usb_get_usbdev(o->devstr));
 	ast_cli(fd, "Output A is currently set to ");
@@ -4380,6 +4434,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		ast_log(LOG_ERROR, "No category '%s' exists?\n", o->name);
 	} else {
 		CONFIG_UPDATE_STR(devstr);
+		CONFIG_UPDATE_STR(serial);
 		CONFIG_UPDATE_INT(rxmixerset);
 		CONFIG_UPDATE_INT(txmixaset);
 		CONFIG_UPDATE_INT(txmixbset);
@@ -4867,6 +4922,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_UINT("txlpf", o->txlpf);
 		CV_UINT("txhpf", o->txhpf);
 		CV_UINT("sendvoter", o->sendvoter);
+		CV_STR("serial", o->serial);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
