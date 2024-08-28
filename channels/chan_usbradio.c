@@ -897,6 +897,7 @@ static void *hidthread(void *arg)
 				index_devstr = ast_radio_usb_get_devstr(index);
 				if (ast_strlen_zero(index_devstr)) {
 					/* No more devices, so break out of the loop */
+					ast_log(LOG_NOTICE, "USB Device with serial %s not found.\n", o->serial);
 					break;
 				}
 				/* Go through the list of usb devices, and get the serial numbers */
@@ -911,6 +912,7 @@ static void *hidthread(void *arg)
 					ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
 					break;
 				}
+				index++;
 			}
 		}
 		/* Automatically assign a devstr if one was not specified in the configuration. */
