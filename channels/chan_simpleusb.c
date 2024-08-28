@@ -799,7 +799,6 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		CV_UINT("rxmixerset", o->rxmixerset);
 		CV_UINT("txmixaset", o->txmixaset);
 		CV_UINT("txmixbset", o->txmixbset);
-		CV_STR("serial", o->serial);
 		CV_STR("devstr", devstr);
 		CV_END;
 	}
@@ -957,6 +956,7 @@ static void *hidthread(void *arg)
 				/* Check if the device has a serial number, and add it to the config file */
 				if (ast_radio_get_usb_serial(o->devstr, serial) > 0) {
 					ast_copy_string(o->serial, serial, sizeof(o->serial));
+					ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device has serial %s\n", o->name, o->serial);
 				}
 				break;
 			}
@@ -3681,6 +3681,7 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_BOOL("rxboost", o->rxboost);
 		CV_UINT("hdwtype", o->hdwtype);
 		CV_UINT("eeprom", o->wanteeprom);
+		CV_STR("serial", o->serial);
 		CV_UINT("rxondelay", o->rxondelay);
 		CV_UINT("txoffdelay", o->txoffdelay);
 		CV_F("pager", store_pager(o, (char *) v->value));

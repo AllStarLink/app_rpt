@@ -921,6 +921,7 @@ static void *hidthread(void *arg)
 				/* Check if the device has a serial number, and add it to the config file */
 				if (ast_radio_get_usb_serial(o->devstr, serial) > 0) {
 					ast_copy_string(o->serial, serial, sizeof(o->serial));
+					ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device has serial %s\n", o->name, o->serial);
 				}
 				break;
 			}
