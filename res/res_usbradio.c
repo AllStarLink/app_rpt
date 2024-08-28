@@ -719,6 +719,33 @@ void ast_radio_time(time_t *second)
 	*second = ts.tv_sec;
 }
 
+/*!
+ * \brief Get serial number from device if available
+ *<---->This function will attempt to get the serial number from a media device
+ *
+ * \param devstr<------>The USB device string
+ * \param serial<------>Buffer to return the serial number
+ *
+ * \retval<----><------>Length of found serial number
+ */
+
+int ast_radio_get_usb_serial(char *devstr, char *serial)
+{
+    struct usb_device *usb_dev;
+    struct usb_dev_handle *usb_handle;
+    int length;
+
+    usb_dev = ast_radio_hid_device_init(devstr);
+    usb_handle = usb_open(usb_dev);
+    length = usb_get_string_simple(usb_handle, usb_dev->descriptor.iSerialNumber, serial, sizeof(serial));
+    usb_close(usb_handle);
+    usb_handle = NULL;
+    usb_dev = NULL;
+
+    return length;
+}
+
+
 struct timeval ast_radio_tvnow(void)
 {
 	struct timeval tv;

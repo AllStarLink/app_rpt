@@ -433,3 +433,13 @@ void ast_radio_time(time_t *second);
  */
 struct timeval ast_radio_tvnow(void);
 
+/*!
+ * \brief Get serial number from device if available
+ *	This function will attempt to get the serial number from a media device
+ *
+ * \param devstr	The USB device string
+ * \param serial	Buffer to return the serial number
+ *
+ * \retval		Length of found serial number
+ */
+int ast_radio_get_usb_serial(char *devstr, char *serial);

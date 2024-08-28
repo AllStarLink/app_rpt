@@ -662,32 +662,6 @@ static char *find_installed_usb_match(void)
 }
 
 /*!
- * \brief Get serial number from device if available
- *	This function will attempt to get the serial number from a media device
- *
- * \param devstr	The USB device string
- * \param serial	Buffer to return the serial number
- *
- * \retval		Length of found serial number
- */
-
-static int get_usb_serial(char *devstr, char *serial)
-{
-    struct usb_device *usb_dev;
-    struct usb_dev_handle *usb_handle;
-    int length;
-
-    usb_dev = ast_radio_hid_device_init(devstr);
-    usb_handle = usb_open(usb_dev);
-    length = usb_get_string_simple(usb_handle, usb_dev->descriptor.iSerialNumber, serial, sizeof(serial));
-    usb_close(usb_handle);
-    usb_handle = NULL;
-    usb_dev = NULL;
-
-    return length;
-}
-
-/*!
  * \brief Parallel port processing thread.
  *	This thread evaluates the timers configured for each
  *  configured parallel port pin.
@@ -901,7 +875,7 @@ static void *hidthread(void *arg)
 					break;
 				}
 				/* Go through the list of usb devices, and get the serial numbers */
-				if (get_usb_serial(index_devstr, serial) == 0) continue;
+				if (ast_radio_get_usb_serial(index_devstr, serial) == 0) continue;
 				ast_log(LOG_NOTICE, "Device Serial %s vs %s\n", o->serial, serial);
 				if (strcmp(o->serial, serial) == 0)
 				{
@@ -945,7 +919,7 @@ static void *hidthread(void *arg)
 				ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
 				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to USBRadio channel\n", o->name, o->devstr);
 				/* Check if the device has a serial number, and add it to the config file */
-				if (get_usb_serial(o->devstr, serial) > 0) {
+				if (ast_radio_get_usb_serial(o->devstr, serial) > 0) {
 					ast_copy_string(o->serial, serial, sizeof(o->serial));
 				}
 				break;
