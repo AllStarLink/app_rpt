@@ -942,6 +942,10 @@ static void *hidthread(void *arg)
 				/* We found an unused device assign it to our node */
 				ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
 				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to USBRadio channel\n", o->name, o->devstr);
+				/* Check if the device has a serial number, and add it to the config file */
+				if (get_usb_serial(o->devstr, serial) > 0) {
+					ast_copy_string(o->serial, serial, sizeof(o->serial));
+				}
 				break;
 			}
 			if (ast_strlen_zero(o->devstr)) {
@@ -984,11 +988,6 @@ static void *hidthread(void *arg)
 				continue;
 			}
 			ast_log(LOG_NOTICE, "Channel %s: Assigned USB device %s to usbradio channel\n", o->name, s);
-			/* Check if the device has a serial number, and add it to the config file */
-			if (get_usb_serial(s, serial) > 0) 
-			{
-				ast_copy_string(o->serial, serial, sizeof(o->serial));
-			}
 			ast_copy_string(o->devstr, s, sizeof(o->devstr));
 		}
 		/* Double check to see if the device string is assigned to another usb channel */
