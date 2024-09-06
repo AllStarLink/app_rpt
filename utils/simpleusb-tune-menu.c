@@ -30,6 +30,7 @@
  *		1 - get node names that are configured in simpleusb.conf
  *		2 - print parameters
  *		3 - get node names that are configured in simpleusb.conf, except current device
+ *		a - receive audio statistics display
  *		b - receiver tune display
  *		c - receive level
  *		f - txa level
@@ -796,6 +797,7 @@ static int astgetresp(char *cmd)
 		printf("K) Change RX On Delay (currently '%d')\n", rxondelay);
 		printf("L) Change TX Off Delay (currently '%d')\n", txoffdelay);
 		printf("P) Print Current Parameter Values\n");
+		printf("R) View Rx Audio Statistics\n");
 		printf("S) Swap Current USB device with another USB device\n");
 		printf("T) Toggle Transmit Test Tone/Keying (currently '%s')\n", keying ? "enabled" : "disabled");
 		printf("V) View COS, CTCSS and PTT Status\n");
@@ -940,6 +942,10 @@ static int astgetresp(char *cmd)
 			if (astgetresp(COMMAND_PREFIX "tune menu-support 2")) {
 				exit(255);
 			}
+			break;
+		case 'r':				/* display receive audio statistics */
+		case 'R':
+			astgetresp(COMMAND_PREFIX "tune menu-support a");
 			break;
 		case 's':				/* swap usb device with another device */
 		case 'S':
