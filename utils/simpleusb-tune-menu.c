@@ -30,7 +30,6 @@
  *		1 - get node names that are configured in simpleusb.conf
  *		2 - print parameters
  *		3 - get node names that are configured in simpleusb.conf, except current device
- *		a - receive audio statistics display
  *		b - receiver tune display
  *		c - receive level
  *		f - txa level
@@ -48,6 +47,7 @@
  *		t - change rx on delay
  *		u - change tx off delay
  *		v - view cos, ctcss and ptt status
+ *		y - receive audio statistics display
  *
  * Most of these commands take optional parameters to set values.
  *
@@ -945,7 +945,7 @@ static int astgetresp(char *cmd)
 			break;
 		case 'r':				/* display receive audio statistics */
 		case 'R':
-			astgetresp(COMMAND_PREFIX "tune menu-support a");
+			astgetresp(COMMAND_PREFIX "tune menu-support y");
 			break;
 		case 's':				/* swap usb device with another device */
 		case 'S':

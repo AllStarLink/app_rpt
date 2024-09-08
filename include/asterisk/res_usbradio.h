@@ -456,15 +456,15 @@ struct timeval ast_radio_tvnow(void);
  * enables the raw ADC data to be checked. Clipping is detected by looking for
  * large amplitude square waves (min. 3 samples in a row > 99% FS).
  *
- * Data collected can be displayed from the simpleusb-tune-menu 'R' option or AMI
- * "susb tune menu-support a" function. This also shows average power levels which
- * can be of further use in optimizing audio levels, compression, limiting, etc.
- * In general, peak levels should be within 6-10dB of full-scale (0dBFS) and
- * average signal power levels should be 6-12dB below peak levels.
+ * Data collected can be displayed from the tune-menu 'R' option or AMI
+ * "[susb/radio] tune menu-support y" function. This also shows average power levels
+ * which can be useful for optimizing audio levels and compression/limiting.
+ * In general, peak levels should be within 3-10dB of full-scale (0dBFS) and
+ * average signal power levels should be 10-20dB below full-scale.
  *
- * Should be passed the raw 48Ksps stereo USB frame read buffer before any
- * filtering or downsampling has been done. Extracts the 48K mono channel and
- * downsamples to 8Ksps (as is done in simpleusb_read() but without filtering).
+ * Should be passed the raw 48Ksps stereo USB frame read buffer before any filtering
+ * or downsampling has been done. Extracts the 48K mono channel and downsamples to
+ * 8Ksps (as is done in [simpleusb/usbradio]_read() but without filtering).
  * Signal power calculation takes the square of each sample to measure RMS power.
  * For CPU efficiency no scaling is done here. (When stats data is printed the
  * values are scaled to dBFS.)

@@ -430,6 +430,8 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.txoffdelay = 0,
 	.area = 0,
 	.rptnum = 0,
+	.checkrxaudio = 0,
+	.rxaudiostats.index = 0
 };
 
 /*	DECLARE FUNCTION PROTOTYPES	*/
@@ -551,6 +553,19 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 		o->hid_io_ptt = 4;			/* GPIO 3 is PTT */
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 1;			/* for GPIO 1 */
+	}
+	/* validate checkrxaudio setting (Clip LED GPIO#) */
+	if (o->checkrxaudio)
+	{
+		if (o->checkrxaudio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->checkrxaudio - 1))))
+		{
+			ast_log(LOG_ERROR, "Channel %s: checkrxaudio = GPIO%d not supported\n", o->name, o->checkrxaudio);
+			o->checkrxaudio = 0;
+		}
+		else
+		{
+			o->hid_gpio_ctl |= 1 << (o->checkrxaudio - 1); /* confirm Clip LED GPIO set to output mode */
+		}
 	}
 	o->hid_gpio_val = 0;
 	for (i = 0; i < GPIO_PINCOUNT; i++) {
@@ -2034,8 +2049,15 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	if (o->readerrs) {
 		ast_log(LOG_WARNING, "USB read channel [%s] was not stuck.\n", o->name);
 	}
+
+	/* TBR - below appears to be an attempt to match levels to the original CM108
+	 * IC which has been out of production for over 10 years. Scaling all rx audio to 
+	 * 80% would result in a 20% loss in dynamic range, added quantization noise, and 
+	 * outgoing IAX audio reduced by 2dB. Any adjustments for CM1xxx IC gain differences
+	 * should be made in the mixer settings, not in the audio stream itself.
+	 */
 	/* Decrease the audio level for CM119 A/B devices */
-	if (o->devtype != C108_PRODUCT_ID) {
+	if (o->devtype != C108_PRODUCT_ID && !o->checkrxaudio) {
 		register short *sp = (short *) (o->usbradio_read_buf + o->readpos);
 		register float v;
 		register int i;
@@ -2045,6 +2067,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			*sp++ = (int) v;
 		}
 	}
+
 	o->readerrs = 0;
 	o->readpos += res;
 	if (o->readpos < sizeof(o->usbradio_read_buf)) {	/* not enough samples */
@@ -2075,6 +2098,24 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 	o->didpmrtx = 0;
 
+	/* Check for ADC clipping and input audio statistics before any filtering is done.
+	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
+	 * ast_radio_check_rx_audio() takes the read buffer as received (48K stereo),
+	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+	 * and returns true if clipping was detected.
+	 */
+	if(o->checkrxaudio)
+	{
+		if (ast_radio_check_rx_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE))
+		{
+			/* Set Clip LED GPIO pulsetimer if not already set */
+			if (!o->hid_gpio_pulsetimer[o->checkrxaudio - 1])
+			{
+				o->hid_gpio_pulsetimer[o->checkrxaudio - 1] = CLIP_LED_HOLD_TIME_MS;
+			}
+		}
+	}
+
 	PmrRx(o->pmrChan,
 		  (i16 *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET),
 		  (i16 *) (o->usbradio_read_buf_8k + AST_FRIENDLY_OFFSET), (i16 *) (o->usbradio_write_buf));
@@ -2099,8 +2140,13 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 #endif
 
+	/* TBR - below appears to be an attempt to match levels to the original CM108
+	 * IC which has been out of production for over 10 years. Scaling audio to 110%
+	 * will result in clipping! Any adjustments for CM1xxx IC gain differences
+	 * should be made in the mixer settings, not in the audio stream itself.
+	 */
 	/* For the CM108 adjust the audio level */
-	if (o->devtype != C108_PRODUCT_ID) {
+	if (o->devtype != C108_PRODUCT_ID && !o->checkrxaudio) {
 		register short *sp = (short *) o->usbradio_write_buf;
 		register float v;
 		register int i;
@@ -2115,6 +2161,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			*sp++ = (int) v;
 		}
 	}
+
 	/* Write the received audio to the sound card */
 	soundcard_writeframe(o, (short *) o->usbradio_write_buf);
 
@@ -3896,6 +3943,7 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
  *		v - view cos, ctcss and ptt status
  *		w - change tx mixer a
  *		x - change tx mixer b
+ *		y - receive audio statistics display
  *
  * \param fd			Asterisk CLI fd
  * \param o				Private struct.
@@ -4144,6 +4192,24 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			ast_cli(fd, "TX Mixer B changed to %d\n", o->txmixb);
 		} else {
 			ast_cli(fd, "TX Mixer B is currently %d\n", o->txmixb);
+		}
+		break;
+	case 'y':					/* display receive audio statistics (interactive) */
+	case 'Y':					/* display receive audio statistics (once only) */
+		if (!o->hasusb) {
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
+			break;
+		}
+		if (!o->checkrxaudio) {
+			ast_cli(fd, "checkrxaudio is currently Disabled in usbradio.conf\n");
+			break;
+		}
+		for (;;) {
+			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
+			if (cmd[0] == 'Y')
+				break;
+			if (ast_radio_poll_input(fd, 1000))
+				break;
 		}
 		break;
 	default:
@@ -4870,6 +4936,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_UINT("txlpf", o->txlpf);
 		CV_UINT("txhpf", o->txhpf);
 		CV_UINT("sendvoter", o->sendvoter);
+		CV_UINT("checkrxaudio", o->checkrxaudio);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {

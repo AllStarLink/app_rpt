@@ -598,10 +598,17 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->valid_gpios = 1;			/* for GPIO 1 */
 	}
 	/* validate checkrxaudio setting (Clip LED GPIO#) */
-	if (o->checkrxaudio && (o->checkrxaudio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->checkrxaudio - 1)))))
+	if (o->checkrxaudio)
 	{
-		ast_log(LOG_ERROR, "Channel %s: checkrxaudio = GPIO%d not supported\n", o->name, o->checkrxaudio);
-		o->checkrxaudio = 0;
+		if (o->checkrxaudio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->checkrxaudio - 1))))
+		{
+			ast_log(LOG_ERROR, "Channel %s: checkrxaudio = GPIO%d not supported\n", o->name, o->checkrxaudio);
+			o->checkrxaudio = 0;
+		}
+		else
+		{
+			o->hid_gpio_ctl |= 1 << (o->checkrxaudio - 1); /* confirm Clip LED GPIO set to output mode */
+		}
 	}
 	o->hid_gpio_val = 0;
 	for (i = 0; i < GPIO_PINCOUNT; i++) {
@@ -2101,8 +2108,14 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 				if (f1->datalen - src >= l) {	
 					/* enough to fill a frame */
 					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
+
+					/* TBR - below appears to be an attempt to match levels to the original CM108
+					 * IC which has been out of production for over 10 years. Scaling audio to 
+					 * 109.375% will result in clipping! Any adjustments for CM1xxx gain differences
+					 * should be made in the mixer settings, not in the audio stream itself.
+					 */
 					/* Adjust the audio level for CM119 A/B devices */
-					if (o->devtype != C108_PRODUCT_ID) {
+					if (o->devtype != C108_PRODUCT_ID && !o->checkrxaudio) {
 						register int v;
 
 						sp = (short *) o->simpleusb_write_buf;
@@ -2118,6 +2131,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 							*sp++ = v;
 						}
 					}
+
 					sp = (short *) o->simpleusb_write_buf;
 					sp1 = outbuf;
 					doright = 1;
@@ -3285,7 +3299,6 @@ static void tune_write(struct chan_simpleusb_pvt *o)
  *		1 - get node names that are configured in simpleusb.conf
  *		2 - print parameters
  *		3 - get node names that are configured in simpleusb.conf, except current device
- *		a - receive audio statistics display
  *		b - receiver tune display
  *		c - receive level
  *		f - txa level
@@ -3303,6 +3316,7 @@ static void tune_write(struct chan_simpleusb_pvt *o)
  *		t - change rx on delay
  *		u - change tx off delay
  *		v - view cos, ctcss and ptt status
+ *		y - receive audio statistics display
  *
  * \param fd			Asterisk CLI fd
  * \param o				Private struct.
@@ -3346,24 +3360,6 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 			x++;
 		}
 		ast_cli(fd, "\n");
-		break;
-	case 'a':					/* display receive audio statistics (interactive) */
-	case 'A':					/* display receive audio statistics (once only) */
-		if (!o->hasusb) {
-			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
-			break;
-		}
-		if (!o->checkrxaudio) {
-			ast_cli(fd, "checkrxaudio is currently Disabled in simpleusb.conf\n");
-			break;
-		}
-		for (;;) {
-			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
-			if (cmd[0] == 'A')
-				break;
-			if (ast_radio_poll_input(fd, 1000))
-				break;
-		}
 		break;
 	case 'b':					/* receiver tune display */
 		if (!o->hasusb) {
@@ -3514,6 +3510,24 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 			break;
 		}
 		tune_rxtx_status(fd, o);
+		break;
+	case 'y':					/* display receive audio statistics (interactive) */
+	case 'Y':					/* display receive audio statistics (once only) */
+		if (!o->hasusb) {
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
+			break;
+		}
+		if (!o->checkrxaudio) {
+			ast_cli(fd, "checkrxaudio is currently Disabled in simpleusb.conf\n");
+			break;
+		}
+		for (;;) {
+			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
+			if (cmd[0] == 'Y')
+				break;
+			if (ast_radio_poll_input(fd, 1000))
+				break;
+		}
 		break;
 	default:
 		ast_cli(fd, "Invalid Command\n");
