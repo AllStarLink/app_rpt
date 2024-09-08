@@ -272,7 +272,6 @@ struct chan_simpleusb_pvt {
 	int hid_io_ctcss;
 	int hid_io_ctcss_loc;
 	int hid_io_ptt;
-	int hid_io_clip_led;			/* indicator to alert user of ADC clipping */
 	int hid_gpio_loc;
 	int32_t hid_gpio_val;
 	int32_t valid_gpios;
@@ -315,7 +314,7 @@ struct chan_simpleusb_pvt {
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
-	int rxaudiostats;
+	int checkrxaudio;
 	
 	int32_t discfactor;
 	int32_t discounterl;
@@ -328,14 +327,7 @@ struct chan_simpleusb_pvt {
 	char *gpios[GPIO_PINCOUNT];
 	char *pps[32];
 
-	/* Rx audio (ADC) statistics variables. susb tune-menu "R" command displays
-	 * stats data (peak, average, min, max levels and clipped sample count).
-	 */
-#define AUDIO_STATS_LEN 50 			/* number of 20mS frames. 50 => 1 second buf len */
-	unsigned short maxbuf[AUDIO_STATS_LEN];		/* peak sample value per frame */
-	unsigned short clipbuf[AUDIO_STATS_LEN];	/* number of clipped samples per frame */
-	unsigned int pwrbuf[AUDIO_STATS_LEN];		/* total RMS power per frame */
-	short rxaudiostats_index;					/* Index within buffers, updated as frames received */
+	struct rxaudiostatistics rxaudiostats;
 	
 	ast_mutex_t usblock;
 };
@@ -355,8 +347,8 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.rxondelay = 0,
 	.txoffdelay = 0,
 	.pager = PAGER_NONE,
-	.rxaudiostats = 1,
-	.rxaudiostats_index = 0
+	.checkrxaudio = 1,
+	.rxaudiostats.index = 0
 };
 
 /*	DECLARE FUNCTION PROTOTYPES	*/
@@ -380,8 +372,6 @@ static int simpleusb_setoption(struct ast_channel *chan, int option, void *data,
 static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *cmd);
 static void tune_write(struct chan_simpleusb_pvt *o);
 static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int intflag);
-static void check_rx_audio(struct chan_simpleusb_pvt *o, short len);
-static void print_rx_audio_stats(int fd, struct chan_simpleusb_pvt *o);
 
 static char *simpleusb_active;	/* the active device */
 
@@ -574,7 +564,6 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->hid_io_ctcss = 2;		/* GPIO 2 is External CTCSS */
 		o->hid_io_ctcss_loc = 1;	/* is GPIO 2 */
 		o->hid_io_ptt = 8;			/* GPIO 4 is PTT */
-		o->hid_io_clip_led = 0;		/* No Clip LED on this HW */
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 1;			/* for GPIO 1 */
 	} else if (o->hdwtype == 0) {	//dudeusb
@@ -585,7 +574,6 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->hid_io_ctcss = 1;		/* VOL UP External CTCSS */
 		o->hid_io_ctcss_loc = 0;	/* VOL UP External CTCSS */
 		o->hid_io_ptt = 4;			/* GPIO 3 is PTT */
-		o->hid_io_clip_led = 3;		/* GPIO 4 is Clip LED */
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 0xfb;		/* for GPIO 1,2,4,5,6,7,8 (5,6,7,8 for CM-119 only) */
 	} else if (o->hdwtype == 2) {	//NHRC (N1KDO) (dudeusb w/o user GPIO)
@@ -596,7 +584,6 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->hid_io_ctcss = 1;		/* VOL UP is External CTCSS */
 		o->hid_io_ctcss_loc = 0;	/* VOL UP CTCSS */
 		o->hid_io_ptt = 4;			/* GPIO 3 is PTT */
-		o->hid_io_clip_led = 3;		/* GPIO 4 is Clip LED */
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 0;			/* for GPIO 1,2,4 */
 	} else if (o->hdwtype == 3) {	// custom version
@@ -607,9 +594,14 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->hid_io_ctcss = 2;		/* GPIO 2 is External CTCSS */
 		o->hid_io_ctcss_loc = 1;	/* is GPIO 2 */
 		o->hid_io_ptt = 4;			/* GPIO 3 is PTT */
-		o->hid_io_clip_led = 3;		/* GPIO 4 is Clip LED */
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 1;			/* for GPIO 1 */
+	}
+	/* validate checkrxaudio setting (Clip LED GPIO#) */
+	if (o->checkrxaudio && (o->checkrxaudio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->checkrxaudio - 1)))))
+	{
+		ast_log(LOG_ERROR, "Channel %s: checkrxaudio = GPIO%d not supported\n", o->name, o->checkrxaudio);
+		o->checkrxaudio = 0;
 	}
 	o->hid_gpio_val = 0;
 	for (i = 0; i < GPIO_PINCOUNT; i++) {
@@ -2288,12 +2280,20 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 
 	/* Check for ADC clipping and input audio statistics before any filtering is done.
 	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
-	 * check_rx_audio() takes the read buffer as received (48K stereo), extracts the
-	 * mono 48K channel and checks amplitude and distortion characteristics.
+	 * ast_radio_check_rx_audio() takes the read buffer as received (48K stereo),
+	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+	 * and returns true if clipping was detected.
 	 */
-	if(o->rxaudiostats)
+	if(o->checkrxaudio)
 	{
-		check_rx_audio(o, 12 * FRAME_SIZE);
+		if (ast_radio_check_rx_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE))
+		{
+			/* Set Clip LED GPIO pulsetimer if not already set */
+			if (!o->hid_gpio_pulsetimer[o->checkrxaudio - 1])
+			{
+				o->hid_gpio_pulsetimer[o->checkrxaudio - 1] = CLIP_LED_HOLD_TIME_MS;
+			}
+		}
 	}
 
 	/* Downsample received audio from 48000 stereo to 8000 mono */
@@ -3353,12 +3353,12 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
-		if (!o->rxaudiostats) {
-			ast_cli(fd, "rxaudiostats is currently Disabled in simpleusb.conf\n");
+		if (!o->checkrxaudio) {
+			ast_cli(fd, "checkrxaudio is currently Disabled in simpleusb.conf\n");
 			break;
 		}
 		for (;;) {
-			print_rx_audio_stats(fd, o);
+			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
 			if (cmd[0] == 'A')
 				break;
 			if (ast_radio_poll_input(fd, 1000))
@@ -3698,7 +3698,7 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_BOOL("deemphasis", o->deemphasis);
 		CV_BOOL("preemphasis", o->preemphasis);
 		CV_UINT("duplex3", o->duplex3);
-		CV_BOOL("rxaudiostats", o->rxaudiostats);
+		CV_UINT("checkrxaudio", o->checkrxaudio);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
@@ -4059,157 +4059,6 @@ static int unload_module(void)
 	simpleusb_tech.capabilities = NULL;
 
 	return 0;
-}
-
-/*!
- * \brief Detect ADC clipping, collect Rx audio statistics.
- *
- * If enabled by conf settings will set GPIO4 high for 500mS when clipping is
- * detected. Nodes/URIs/audio interfaces can then light a Clip LED to alert users
- * of excessive audio input levels. Because CM1xxx USB audio interface ICs have an
- * internal mixer ahead of the ADC it is not possible within the interface board
- * analog circuitry to detect clipping at the ADC input point, thus this function
- * enables the raw ADC data to be checked. Clipping is detected by looking for
- * large amplitude square waves (min. 3 samples in a row > 99% FS).
- *
- * Data collected can be displayed from the simpleusb-tune-menu 'R' option or AMI
- * "susb tune menu-support a" function. This also shows average power levels which
- * can be of further use in optimizing audio levels, compression, limiting, etc.
- * In general, peak levels should be within 6-10dB of full-scale (0dBFS) and
- * average signal power levels should be 6-12dB below peak levels.
- *
- * Should be passed the raw 48Ksps stereo USB frame read buffer before any
- * filtering or downsampling has been done. Extracts the 48K mono channel and
- * downsamples to 8Ksps (as is done in simpleusb_read() but without filtering).
- * Signal power calculation takes the square of each sample to measure RMS power.
- * For CPU efficiency no scaling is done here. (When stats data is printed the
- * values are scaled to dBFS.)
- *
- * Audio parameters of interest include:
- * - Peak signal level over a longer time period eg. 1+ seconds (dBFS)
- *   This defines headroom (dB) and potential for clipping
- * - Min and max signal power levels averaged within each USB frame (dBFS)
- *   These define average dynamic range (dB)
- * - Min and max signal power averaged over a longer time period (dBFS)
- *   These define total signal power and peak-to-average power ratio
- *
- * \author			NR9V
- * \param o			Channel data structure
- * \param len		Length of data within o->simpleusb_read_buf
- * \return 			None
- */
-#define CLIP_SAMP_THRESH       0x7eb0
-#define CLIP_EVENT_MIN_SAMPLES 3
-#define CLIP_LED_HOLD_TIME_MS  500
-static void check_rx_audio(struct chan_simpleusb_pvt *o, short len)
-{
-	short *sbuf = (short *) o->simpleusb_read_buf;
-	unsigned short i, j, val, max=0, clip_cnt=0, seq_clips=0, last_clip=-1;
-	double pwr=0.0;
-	short buf[FRAME_SIZE];
-
-	if(len > 12 * FRAME_SIZE)
-		len = 12 * FRAME_SIZE;
-	if(o->rxaudiostats_index >= AUDIO_STATS_LEN)
-		o->rxaudiostats_index = 0;
-	/* Downsample from 48000 stereo to 8000 mono */
-	for(i=10, j=0; i < len; i += 12)
-	{
-		buf[j++] = sbuf[i];
-	}
-	len /= 12;
-	/* len should now be 160 */
-	for(i=0; i < len; i++)
-	{
-		val = abs(buf[i]);
-		if(val)
-		{
-			if(val > max)
-				max = val;
-			pwr += (double) (val * val);
-			if(val > CLIP_SAMP_THRESH)
-			{
-				clip_cnt++;
-				if(last_clip >= 0 && last_clip + 1 == i)
-					seq_clips++;
-				last_clip = i;
-			}
-		}
-	}
-	o->maxbuf[o->rxaudiostats_index] = max;
-	o->pwrbuf[o->rxaudiostats_index] = (unsigned int) (pwr / (double)len);
-	o->clipbuf[o->rxaudiostats_index] = seq_clips;
-	/* Set Clip LED if clipping detected and LED not already set */
-	if(seq_clips >= CLIP_EVENT_MIN_SAMPLES && o->hid_io_clip_led &&
-			!o->hid_gpio_pulsetimer[o->hid_io_clip_led])
-	{
-		o->hid_gpio_pulsetimer[o->hid_io_clip_led] = CLIP_LED_HOLD_TIME_MS;
-	}
-	if(++o->rxaudiostats_index >= AUDIO_STATS_LEN)
-	{
-		o->rxaudiostats_index = 0;
-	}
-}
-
-/*!
- * \brief Display receive audio statistics.
- *
- * Display the audio stats buffer data in normalized units. Peak value is the largest
- * sample value seen in the past AUDIO_STATS_LEN audio frames (1 second default).
- * Average, min, and max signal power levels are calculated from the total signal
- * power buffer which contains total RMS power per 20mS frame. Avg Pwr is the average
- * of the power values in the buffer, min and max are the lowest and highest average
- * power levels within the buffer. ClipCnt is the count of audio clipping events
- * detected.
- *
- * Example output message:
- *   RxAudioStats: Pk -2.1  Avg Pwr -32  Min -60  Max -12  dBFS  ClipCnt 0
- *
- * Results are scaled to double precision 0.0-1.0 and converted to log (dB)
- * ie. 10*log10(scaledVal) for power levels.
- *
- * \author			NR9V
- * \param fd		File descriptor to print to, or if 0 print using ast_verbose()
- * \param o			Channel data structure
- * \return 			None
- */
-static void print_rx_audio_stats(int fd, struct chan_simpleusb_pvt *o)
-{
-	unsigned int pk=0, pwr=0, i, minpwr=0x40000000, maxpwr=0, clipcnt=0;
-	double tpwr=0.0, dpk, dmin, dmax, scale;
-	char s1[100];
-
-	/* Peak    = max(maxbuf)^2
-	 * Avg Pwr = avg(pwrbuf)
-	 *     Min = min(pwrbuf)
-	 *     Max = max(pwrbuf)
-	 */
-	for(i=0; i < AUDIO_STATS_LEN; i++)
-	{
-		if(o->maxbuf[i] > pk)
-			pk = o->maxbuf[i];
-		pwr = o->pwrbuf[i];
-		if(pwr < minpwr)
-			minpwr = pwr;
-		if(pwr > maxpwr)
-			maxpwr = pwr;
-		tpwr += pwr;
-		clipcnt += o->clipbuf[i];
-	}
-	tpwr /= AUDIO_STATS_LEN;
-	/* Convert to dBFS / dB */
-	scale = 1.0 / (double) (1 << 30);
-	dpk =  (pk > 0.0) ? 10 * log10(pk * pk * scale) : -96.0;
-	tpwr = (tpwr > 0.0) ? 10 * log10(tpwr * scale) : -96.0;
-	dmin = minpwr ? 10 * log10(minpwr * scale) : -96.0;
-	dmax = maxpwr ? 10 * log10(maxpwr * scale) : -96.0;
-	/* Print stats */
-	sprintf(s1, "RxAudioStats: Pk %5.1f  Avg Pwr %3.0f  Min %3.0f  Max %3.0f  dBFS  ClipCnt %u",
-			dpk, tpwr, dmin, dmax, clipcnt);
-	if(fd)
-		ast_cli(fd, "%s\n", s1);
-	else
-		ast_verbose("%s\n", s1);
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "SimpleUSB Radio Interface Channel Driver",

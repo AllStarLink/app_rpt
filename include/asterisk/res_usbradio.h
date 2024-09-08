@@ -185,6 +185,18 @@ struct usbecho {
 	struct qelem *q_prev;
 	short data[FRAME_SIZE];
 };
+
+/* Rx audio (ADC) statistics variables. tune-menu "R" command displays
+ * stats data (peak, average, min, max levels and clipped sample count).
+ */
+#define AUDIO_STATS_LEN 50 			/* number of 20mS frames. 50 => 1 second buf len */
+struct rxaudiostatistics {
+	unsigned short maxbuf[AUDIO_STATS_LEN];		/* peak sample value per frame */
+	unsigned short clipbuf[AUDIO_STATS_LEN];	/* number of clipped samples per frame */
+	unsigned int pwrbuf[AUDIO_STATS_LEN];		/* total RMS power per frame */
+	short index;								/* Index within buffers, updated as frames received */
+};
+
 /*
  * Message definition used in usb channel drivers.
  */
@@ -433,3 +445,67 @@ void ast_radio_time(time_t *second);
  */
 struct timeval ast_radio_tvnow(void);
 
+/*!
+ * \brief Detect ADC clipping, collect Rx audio statistics.
+ *
+ * If enabled by conf settings will set a GPIO high for 500mS when clipping is
+ * detected. Nodes/URIs/audio interfaces can then light a Clip LED to alert users
+ * of excessive audio input levels. Because CM1xxx USB audio interface ICs have an
+ * internal mixer ahead of the ADC it is not possible within the interface board
+ * analog circuitry to detect clipping at the ADC input point, thus this function
+ * enables the raw ADC data to be checked. Clipping is detected by looking for
+ * large amplitude square waves (min. 3 samples in a row > 99% FS).
+ *
+ * Data collected can be displayed from the simpleusb-tune-menu 'R' option or AMI
+ * "susb tune menu-support a" function. This also shows average power levels which
+ * can be of further use in optimizing audio levels, compression, limiting, etc.
+ * In general, peak levels should be within 6-10dB of full-scale (0dBFS) and
+ * average signal power levels should be 6-12dB below peak levels.
+ *
+ * Should be passed the raw 48Ksps stereo USB frame read buffer before any
+ * filtering or downsampling has been done. Extracts the 48K mono channel and
+ * downsamples to 8Ksps (as is done in simpleusb_read() but without filtering).
+ * Signal power calculation takes the square of each sample to measure RMS power.
+ * For CPU efficiency no scaling is done here. (When stats data is printed the
+ * values are scaled to dBFS.)
+ *
+ * Audio parameters of interest include:
+ * - Peak signal level over a longer time period eg. 1+ seconds (dBFS)
+ *   This defines headroom (dB) and potential for clipping
+ * - Min and max signal power levels averaged within each USB frame (dBFS)
+ *   These define average dynamic range (dB)
+ * - Min and max signal power averaged over a longer time period (dBFS)
+ *   These define total signal power and peak-to-average power ratio
+ *
+ * \author			NR9V
+ * \param sbuf		Rx audio sample buffer
+ * \param o			Rx Audio Stats data structure
+ * \param len		Length of data in sbuf
+ * \return 			None
+ */
+#define CLIP_LED_HOLD_TIME_MS  500
+int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len);
+
+/*!
+ * \brief Display receive audio statistics.
+ *
+ * Display the audio stats buffer data in normalized units. Peak value is the largest
+ * sample value seen in the past AUDIO_STATS_LEN audio frames (1 second default).
+ * Average, min, and max signal power levels are calculated from the total signal
+ * power buffer which contains total RMS power per 20mS frame. Avg Pwr is the average
+ * of the power values in the buffer, min and max are the lowest and highest average
+ * power levels within the buffer. ClipCnt is the count of audio clipping events
+ * detected.
+ *
+ * Example output message:
+ *   RxAudioStats: Pk -2.1  Avg Pwr -32  Min -60  Max -12  dBFS  ClipCnt 0
+ *
+ * Results are scaled to double precision 0.0-1.0 and converted to log (dB)
+ * ie. 10*log10(scaledVal) for power levels.
+ *
+ * \author			NR9V
+ * \param fd		File descriptor to print to, or if 0 print using ast_verbose()
+ * \param o			Channel data structure
+ * \return 			None
+ */
+void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o);

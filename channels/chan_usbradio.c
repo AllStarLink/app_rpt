@@ -399,6 +399,7 @@ struct chan_usbradio_pvt {
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
+	int checkrxaudio;
 	
 	int fever;
 	int count_rssi_update;
@@ -407,7 +408,9 @@ struct chan_usbradio_pvt {
 	char *gpios[GPIO_PINCOUNT];
 	char *pps[32];
 	int sendvoter;
-	
+
+	struct rxaudiostatistics rxaudiostats;
+
 	ast_mutex_t usblock;
 };
 
