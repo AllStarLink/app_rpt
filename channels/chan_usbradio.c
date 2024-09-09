@@ -2104,7 +2104,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
 	 * and returns true if clipping was detected.
 	 */
-	if(o->checkrxaudio)
+	if (o->checkrxaudio)
 	{
 		if (ast_radio_check_rx_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE))
 		{

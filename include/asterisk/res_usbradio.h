@@ -189,12 +189,12 @@ struct usbecho {
 /* Rx audio (ADC) statistics variables. tune-menu "R" command displays
  * stats data (peak, average, min, max levels and clipped sample count).
  */
-#define AUDIO_STATS_LEN 50 			/* number of 20mS frames. 50 => 1 second buf len */
+#define AUDIO_STATS_LEN 50 	                	/* number of 20mS frames. 50 => 1 second buf len */
 struct rxaudiostatistics {
-	unsigned short maxbuf[AUDIO_STATS_LEN];		/* peak sample value per frame */
+	unsigned short maxbuf[AUDIO_STATS_LEN]; 	/* peak sample value per frame */
 	unsigned short clipbuf[AUDIO_STATS_LEN];	/* number of clipped samples per frame */
-	unsigned int pwrbuf[AUDIO_STATS_LEN];		/* total RMS power per frame */
-	short index;								/* Index within buffers, updated as frames received */
+	unsigned int pwrbuf[AUDIO_STATS_LEN];   	/* total RMS power per frame */
+	short index;                            	/* Index within buffers, updated as frames received */
 };
 
 /*
@@ -477,11 +477,11 @@ struct timeval ast_radio_tvnow(void);
  * - Min and max signal power averaged over a longer time period (dBFS)
  *   These define total signal power and peak-to-average power ratio
  *
- * \author			NR9V
+ * \author    		NR9V
  * \param sbuf		Rx audio sample buffer
- * \param o			Rx Audio Stats data structure
- * \param len		Length of data in sbuf
- * \return 			None
+ * \param o	  		Rx Audio Stats data structure
+ * \param len 		Length of data in sbuf
+ * \return 	  		None
  */
 #define CLIP_LED_HOLD_TIME_MS  500
 int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len);
@@ -503,9 +503,9 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
  * Results are scaled to double precision 0.0-1.0 and converted to log (dB)
  * ie. 10*log10(scaledVal) for power levels.
  *
- * \author			NR9V
+ * \author  		NR9V
  * \param fd		File descriptor to print to, or if 0 print using ast_verbose()
- * \param o			Channel data structure
- * \return 			None
+ * \param o 		Channel data structure
+ * \return  		None
  */
 void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o);

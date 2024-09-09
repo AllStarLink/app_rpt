@@ -736,9 +736,9 @@ struct timeval ast_radio_tvnow(void)
 #define CLIP_EVENT_MIN_SAMPLES 3
 int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len)
 {
-	unsigned short i, j, val, max = 0, clip_cnt = 0, seq_clips = 0, last_clip = -1;
+	unsigned short i, j, val, max = 0, clip_cnt = 0, seq_clips = 0;
 	double pwr = 0.0;
-	short buf[FRAME_SIZE];
+	short buf[FRAME_SIZE], last_clip = -1;
 
 	/* validate len and index */
 	if (len > 12 * FRAME_SIZE)
@@ -806,7 +806,7 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
 	tpwr /= AUDIO_STATS_LEN;
 	/* Convert to dBFS / dB */
 	scale = 1.0 / (double) (1 << 30);
-	dpk =  (pk > 0.0) ? 10 * log10(pk * pk * scale) : -96.0;
+	dpk = (pk > 0.0) ? 10 * log10(pk * pk * scale) : -96.0;
 	tpwr = (tpwr > 0.0) ? 10 * log10(tpwr * scale) : -96.0;
 	dmin = minpwr ? 10 * log10(minpwr * scale) : -96.0;
 	dmax = maxpwr ? 10 * log10(maxpwr * scale) : -96.0;
