@@ -418,6 +418,9 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
 
 /*!
  * \brief Get the conference number of a DAHDI channel
+ * This actually gets the internal DAHDI channel number.
+ * The channel number is used by the DAHDI monitor functions
+ * to create a monitor only conference.
  * \param chan DAHDI channel
  * \retval -1 on failure, conference number on success
  */
@@ -428,13 +431,7 @@ static int dahdi_conf_fd_confno(struct ast_channel *chan)
 	ci.confno = 0;
 	ci.confmode = 0;
 
-	/* This routine previously called DAHDI_CHANNO.  After testing, we 
-	 * determined that DAHDI_CHANNO is actually returning the channel number, 
-	 * instead of the conference number.  In some cases the channel number
-	 * was same as the conference number.  Since it was not accurate in
-	 * all cases, it was switched to DAHDI_GETCONF.
-	 */
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONF, &ci)) {
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci)) {
 		ast_log(LOG_WARNING, "DAHDI_GETCONF failed: %s\n", strerror(errno));
 		return -1;
 	}
@@ -503,12 +500,13 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 
 	/* put vox channel monitoring on the channel  
 	 *
-	 * The conference flags were originally DAHDI_CONF_MONITOR.  This 
-	 * setting caused dahdi_conf_add to return EINVAL.  The  flags
-	 * RPT_CONF_CONF | RPT_CONF_LISTENER permits the vox channel to 
-	 * join the conference.
+	 * This uses the internal DAHDI channel number to create the 
+	 * monitor conference.  It requires the ASL version of DAHDI
+	 * that contains changes for this to work properly.  
+	 * If the standard Asterisk DAHDI driver is used, this
+	 * code will hang here when trying to join the conference.
 	 */
-	if (dahdi_conf_add(myrpt->voxchannel, res, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
+	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
 		ast_hangup(mychannel);
 		return -1;
 	}
