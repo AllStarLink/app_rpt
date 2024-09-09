@@ -736,7 +736,7 @@ struct timeval ast_radio_tvnow(void)
 #define CLIP_EVENT_MIN_SAMPLES 3
 int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len)
 {
-	unsigned short i, j, val, max = 0, clip_cnt = 0, seq_clips = 0;
+	unsigned short i, j, val, max = 0, seq_clips = 0;
 	double pwr = 0.0;
 	short buf[FRAME_SIZE], last_clip = -1;
 
@@ -762,7 +762,6 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
 			pwr += (double) (val * val);
 			if (val > CLIP_SAMP_THRESH)
 			{
-				clip_cnt++;
 				if (last_clip >= 0 && last_clip + 1 == i)
 					seq_clips++;
 				last_clip = i;

@@ -477,11 +477,11 @@ struct timeval ast_radio_tvnow(void);
  * - Min and max signal power averaged over a longer time period (dBFS)
  *   These define total signal power and peak-to-average power ratio
  *
- * \author    		NR9V
- * \param sbuf		Rx audio sample buffer
- * \param o	  		Rx Audio Stats data structure
- * \param len 		Length of data in sbuf
- * \return 	  		None
+ * \author      	NR9V
+ * \param sbuf  	Rx audio sample buffer
+ * \param o	    	Rx Audio Stats data structure
+ * \param len   	Length of data in sbuf
+ * \return 	    	None
  */
 #define CLIP_LED_HOLD_TIME_MS  500
 int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len);
