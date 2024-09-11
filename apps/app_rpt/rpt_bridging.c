@@ -431,7 +431,7 @@ static int dahdi_conf_fd_confno(struct ast_channel *chan)
 	ci.confno = 0;
 	ci.confmode = 0;
 
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci)) {
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.confno)) {
 		ast_log(LOG_WARNING, "DAHDI_GETCONF failed: %s\n", strerror(errno));
 		return -1;
 	}
