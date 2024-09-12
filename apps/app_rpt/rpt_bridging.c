@@ -426,13 +426,10 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
  */
 static int dahdi_conf_fd_confno(struct ast_channel *chan)
 {
-	struct dahdi_confinfo ci;
-	ci.chan = 0;
-	ci.confno = 0;
-	ci.confmode = 0;
+	struct dahdi_confinfo ci = {0};
 
 	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.confno)) {
-		ast_log(LOG_WARNING, "DAHDI_GETCONF failed: %s\n", strerror(errno));
+		ast_log(LOG_WARNING, "DAHDI_CHANNO failed: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -501,10 +498,10 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 	/* put vox channel monitoring on the channel  
 	 *
 	 * This uses the internal DAHDI channel number to create the 
-	 * monitor conference.  It requires the ASL version of DAHDI
+	 * monitor conference.  It requires a patched version of DAHDI
 	 * that contains changes for this to work properly.  
-	 * If the standard Asterisk DAHDI driver is used, this
-	 * code will hang here when trying to join the conference.
+	 * Without the patch, this code will hang here when trying to 
+	 * join the conference.
 	 */
 	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
 		ast_hangup(mychannel);
