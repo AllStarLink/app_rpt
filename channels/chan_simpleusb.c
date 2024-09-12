@@ -602,8 +602,7 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		if (o->clipledgpio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->clipledgpio - 1)))) {
 			ast_log(LOG_ERROR, "Channel %s: clipledgpio = GPIO%d not supported\n", o->name, o->clipledgpio);
 			o->clipledgpio = 0;
-		}
-		else {
+		} else {
 			o->hid_gpio_ctl |= 1 << (o->clipledgpio - 1); /* confirm Clip LED GPIO set to output mode */
 		}
 	}
