@@ -314,7 +314,7 @@ struct chan_simpleusb_pvt {
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
-	int checkrxaudio;           /* enables RxAudioStats feature & Clip LED output on specified GPIO# */
+	int clipledgpio;           /* enables ADC Clip Detect feature to output on a specified GPIO# */
 	
 	int32_t discfactor;
 	int32_t discounterl;
@@ -347,7 +347,7 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.rxondelay = 0,
 	.txoffdelay = 0,
 	.pager = PAGER_NONE,
-	.checkrxaudio = 1,
+	.clipledgpio = 0,
 	.rxaudiostats.index = 0
 };
 
@@ -597,14 +597,14 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 1;			/* for GPIO 1 */
 	}
-	/* validate checkrxaudio setting (Clip LED GPIO#) */
-	if (o->checkrxaudio) {
-		if (o->checkrxaudio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->checkrxaudio - 1)))) {
-			ast_log(LOG_ERROR, "Channel %s: checkrxaudio = GPIO%d not supported\n", o->name, o->checkrxaudio);
-			o->checkrxaudio = 0;
+	/* validate clipledgpio setting (Clip LED GPIO#) */
+	if (o->clipledgpio) {
+		if (o->clipledgpio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->clipledgpio - 1)))) {
+			ast_log(LOG_ERROR, "Channel %s: clipledgpio = GPIO%d not supported\n", o->name, o->clipledgpio);
+			o->clipledgpio = 0;
 		}
 		else {
-			o->hid_gpio_ctl |= 1 << (o->checkrxaudio - 1); /* confirm Clip LED GPIO set to output mode */
+			o->hid_gpio_ctl |= 1 << (o->clipledgpio - 1); /* confirm Clip LED GPIO set to output mode */
 		}
 	}
 	o->hid_gpio_val = 0;
@@ -2111,8 +2111,9 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 					 * 109.375% will result in clipping! Any adjustments for CM1xxx gain differences
 					 * should be made in the mixer settings, not in the audio stream itself.
 					 */
+#if 0
 					/* Adjust the audio level for CM119 A/B devices */
-					if (o->devtype != C108_PRODUCT_ID && !o->checkrxaudio) {
+					if (o->devtype != C108_PRODUCT_ID) {
 						register int v;
 
 						sp = (short *) o->simpleusb_write_buf;
@@ -2128,6 +2129,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 							*sp++ = v;
 						}
 					}
+#endif
 
 					sp = (short *) o->simpleusb_write_buf;
 					sp1 = outbuf;
@@ -2295,11 +2297,11 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
 	 * and returns true if clipping was detected.
 	 */
-	if (o->checkrxaudio) {
-		if (ast_radio_check_rx_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+	if (ast_radio_check_rx_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+		if (o->clipledgpio) {
 			/* Set Clip LED GPIO pulsetimer if not already set */
-			if (!o->hid_gpio_pulsetimer[o->checkrxaudio - 1]) {
-				o->hid_gpio_pulsetimer[o->checkrxaudio - 1] = CLIP_LED_HOLD_TIME_MS;
+			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
+				o->hid_gpio_pulsetimer[o->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
 			}
 		}
 	}
@@ -3511,10 +3513,6 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
-		if (!o->checkrxaudio) {
-			ast_cli(fd, "checkrxaudio is currently Disabled in simpleusb.conf\n");
-			break;
-		}
 		for (;;) {
 			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
 			if (cmd[0] == 'Y') {
@@ -3708,7 +3706,7 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_BOOL("deemphasis", o->deemphasis);
 		CV_BOOL("preemphasis", o->preemphasis);
 		CV_UINT("duplex3", o->duplex3);
-		CV_UINT("checkrxaudio", o->checkrxaudio);
+		CV_UINT("clipledgpio", o->clipledgpio);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {

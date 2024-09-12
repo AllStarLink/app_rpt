@@ -90,10 +90,9 @@
 
 ;duplex3 = 0                ; duplex 3 gain setting (0 to disable)
 
-;checkrxaudio = 1           ; Enable receive audio statistics and ADC clip detection (0 to disable).
-                            ; Enables tune-menu 'R' function. Supports audio interface Clip LED by
-                            ; setting a GPIO (if available) high for 500mS when clipping detected.
-                            ; parameter value = GPIO# to use, eg. checkrxaudio = 1 will use GPIO1.
+;clipledgpio = 1            ; Enable ADC Clip Detect feature to use a GPIO output (0 to disable).
+                            ; Supports URI Clip LED by setting a GPIO (if available) high for 500mS
+                            ; when clipping detected. Value = GPIO# to use (GPIO1 recommended)
 
 ;gpioX=in					; define input/output pin GPIO(x) in,out0,out1 (where X {1..8}) (optional)
 
