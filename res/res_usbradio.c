@@ -815,8 +815,7 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
 			dpk, tpwr, dmin, dmax, clipcnt);
 	if (fd) {
 		ast_cli(fd, "%s\n", s1);
-	}
-	else {
+	} else {
 		ast_verbose("%s\n", s1);
 	}
 }
