@@ -314,7 +314,7 @@ struct chan_simpleusb_pvt {
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
-	int checkrxaudio;
+	int checkrxaudio;           /* enables RxAudioStats feature & Clip LED output on specified GPIO# */
 	
 	int32_t discfactor;
 	int32_t discounterl;
@@ -598,15 +598,12 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->valid_gpios = 1;			/* for GPIO 1 */
 	}
 	/* validate checkrxaudio setting (Clip LED GPIO#) */
-	if (o->checkrxaudio)
-	{
-		if (o->checkrxaudio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->checkrxaudio - 1))))
-		{
+	if (o->checkrxaudio) {
+		if (o->checkrxaudio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->checkrxaudio - 1)))) {
 			ast_log(LOG_ERROR, "Channel %s: checkrxaudio = GPIO%d not supported\n", o->name, o->checkrxaudio);
 			o->checkrxaudio = 0;
 		}
-		else
-		{
+		else {
 			o->hid_gpio_ctl |= 1 << (o->checkrxaudio - 1); /* confirm Clip LED GPIO set to output mode */
 		}
 	}
@@ -2298,13 +2295,10 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
 	 * and returns true if clipping was detected.
 	 */
-	if (o->checkrxaudio)
-	{
-		if (ast_radio_check_rx_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE))
-		{
+	if (o->checkrxaudio) {
+		if (ast_radio_check_rx_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
 			/* Set Clip LED GPIO pulsetimer if not already set */
-			if (!o->hid_gpio_pulsetimer[o->checkrxaudio - 1])
-			{
+			if (!o->hid_gpio_pulsetimer[o->checkrxaudio - 1]) {
 				o->hid_gpio_pulsetimer[o->checkrxaudio - 1] = CLIP_LED_HOLD_TIME_MS;
 			}
 		}

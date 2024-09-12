@@ -746,22 +746,18 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
 	if (o->index >= AUDIO_STATS_LEN)
 		o->index = 0;
 	/* Downsample from 48000 stereo to 8000 mono */
-	for (i = 10, j = 0; i < len; i += 12)
-	{
+	for (i = 10, j = 0; i < len; i += 12) {
 		buf[j++] = sbuf[i];
 	}
 	len /= 12;
 	/* len should now be 160 */
-	for (i = 0; i < len; i++)
-	{
+	for (i = 0; i < len; i++) {
 		val = abs(buf[i]);
-		if (val)
-		{
+		if (val) {
 			if (val > max)
 				max = val;
 			pwr += (double) (val * val);
-			if (val > CLIP_SAMP_THRESH)
-			{
+			if (val > CLIP_SAMP_THRESH) {
 				if (last_clip >= 0 && last_clip + 1 == i)
 					seq_clips++;
 				last_clip = i;
@@ -771,8 +767,7 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
 	o->maxbuf[o->index] = max;
 	o->pwrbuf[o->index] = (unsigned int) (pwr / (double)len);
 	o->clipbuf[o->index] = seq_clips;
-	if (++o->index >= AUDIO_STATS_LEN)
-	{
+	if (++o->index >= AUDIO_STATS_LEN) {
 		o->index = 0;
 	}
 	/* return 1 if clipping was detected */
@@ -790,8 +785,7 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
 	 *     Min = min(pwrbuf)
 	 *     Max = max(pwrbuf)
 	 */
-	for (i = 0; i < AUDIO_STATS_LEN; i++)
-	{
+	for (i = 0; i < AUDIO_STATS_LEN; i++) {
 		if (o->maxbuf[i] > pk)
 			pk = o->maxbuf[i];
 		pwr = o->pwrbuf[i];

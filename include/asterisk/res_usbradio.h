@@ -481,7 +481,7 @@ struct timeval ast_radio_tvnow(void);
  * \param sbuf  	Rx audio sample buffer
  * \param o	    	Rx Audio Stats data structure
  * \param len   	Length of data in sbuf
- * \return 	    	None
+ * \return 	    	1 if clipping detected, 0 otherwise
  */
 #define CLIP_LED_HOLD_TIME_MS  500
 int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len);
