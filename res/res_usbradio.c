@@ -741,10 +741,12 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
 	short buf[FRAME_SIZE], last_clip = -1;
 
 	/* validate len and index */
-	if (len > 12 * FRAME_SIZE)
+	if (len > 12 * FRAME_SIZE) {
 		len = 12 * FRAME_SIZE;
-	if (o->index >= AUDIO_STATS_LEN)
+	}
+	if (o->index >= AUDIO_STATS_LEN) {
 		o->index = 0;
+	}
 	/* Downsample from 48000 stereo to 8000 mono */
 	for (i = 10, j = 0; i < len; i += 12) {
 		buf[j++] = sbuf[i];
@@ -754,12 +756,14 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
 	for (i = 0; i < len; i++) {
 		val = abs(buf[i]);
 		if (val) {
-			if (val > max)
+			if (val > max) {
 				max = val;
+			}
 			pwr += (double) (val * val);
 			if (val > CLIP_SAMP_THRESH) {
-				if (last_clip >= 0 && last_clip + 1 == i)
+				if (last_clip >= 0 && last_clip + 1 == i) {
 					seq_clips++;
+				}
 				last_clip = i;
 			}
 		}
@@ -786,13 +790,16 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
 	 *     Max = max(pwrbuf)
 	 */
 	for (i = 0; i < AUDIO_STATS_LEN; i++) {
-		if (o->maxbuf[i] > pk)
+		if (o->maxbuf[i] > pk) {
 			pk = o->maxbuf[i];
+		}
 		pwr = o->pwrbuf[i];
-		if (pwr < minpwr)
+		if (pwr < minpwr) {
 			minpwr = pwr;
-		if (pwr > maxpwr)
+		}
+		if (pwr > maxpwr) {
 			maxpwr = pwr;
+		}
 		tpwr += pwr;
 		clipcnt += o->clipbuf[i];
 	}
@@ -806,10 +813,12 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
 	/* Print stats */
 	sprintf(s1, "RxAudioStats: Pk %5.1f  Avg Pwr %3.0f  Min %3.0f  Max %3.0f  dBFS  ClipCnt %u",
 			dpk, tpwr, dmin, dmax, clipcnt);
-	if (fd)
+	if (fd) {
 		ast_cli(fd, "%s\n", s1);
-	else
+	}
+	else {
 		ast_verbose("%s\n", s1);
+	}
 }
 
 static int load_module(void)

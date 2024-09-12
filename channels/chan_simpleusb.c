@@ -3517,10 +3517,12 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 		}
 		for (;;) {
 			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
-			if (cmd[0] == 'Y')
+			if (cmd[0] == 'Y') {
 				break;
-			if (ast_radio_poll_input(fd, 1000))
+			}
+			if (ast_radio_poll_input(fd, 1000)) {
 				break;
+			}
 		}
 		break;
 	default:
