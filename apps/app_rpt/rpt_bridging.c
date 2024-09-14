@@ -417,29 +417,20 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
 }
 
 /*!
- * \brief Get the conference number of a DAHDI channel
+ * \brief Get the channel number of a DAHDI channel
  * \param chan DAHDI channel
  * \retval -1 on failure, conference number on success
  */
-static int dahdi_conf_fd_confno(struct ast_channel *chan)
+static int dahdi_conf_get_channo(struct ast_channel *chan)
 {
-	struct dahdi_confinfo ci;
-	ci.chan = 0;
-	ci.confno = 0;
-	ci.confmode = 0;
+	struct dahdi_confinfo ci = {0};
 
-	/* This routine previously called DAHDI_CHANNO.  After testing, we 
-	 * determined that DAHDI_CHANNO is actually returning the channel number, 
-	 * instead of the conference number.  In some cases the channel number
-	 * was same as the conference number.  Since it was not accurate in
-	 * all cases, it was switched to DAHDI_GETCONF.
-	 */
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONF, &ci)) {
-		ast_log(LOG_WARNING, "DAHDI_GETCONF failed: %s\n", strerror(errno));
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.chan)) {
+		ast_log(LOG_WARNING, "DAHDI_CHANNO failed: %s\n", strerror(errno));
 		return -1;
 	}
 
-	return ci.confno;
+	return ci.chan;
 }
 
 int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line)
@@ -494,7 +485,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 	}
 
 	/* get its conference number */
-	res = dahdi_conf_fd_confno(mychannel);
+	res = dahdi_conf_get_channo(mychannel);
 	if (res < 0) {
 		ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
 		ast_hangup(mychannel);
@@ -503,12 +494,16 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 
 	/* put vox channel monitoring on the channel  
 	 *
-	 * The conference flags were originally DAHDI_CONF_MONITOR.  This 
-	 * setting caused dahdi_conf_add to return EINVAL.  The  flags
-	 * RPT_CONF_CONF | RPT_CONF_LISTENER permits the vox channel to 
-	 * join the conference.
+	 * This uses the internal DAHDI channel number to create the 
+	 * monitor conference.  This code will hang here when trying to 
+	 * join the conference when the underlying version of DAHDI in use
+	 * is missing a patch that allows the DAHDI_CONF_MONITOR option
+	 * to monitor a pseudo channel.  This patch prevents the hardware
+	 * pre-echo routines from acting on a pseudo channel.  It also
+	 * prevents the DAHDI check conference routine from acting
+	 * on a channel number being used as a conference.
 	 */
-	if (dahdi_conf_add(myrpt->voxchannel, res, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
+	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
 		ast_hangup(mychannel);
 		return -1;
 	}
@@ -520,7 +515,7 @@ int rpt_mon_setup(struct rpt *myrpt)
 	int res;
 
 	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
-		int confno = dahdi_conf_fd_confno(myrpt->txchannel); /* get tx channel's port number */
+		int confno = dahdi_conf_get_channo(myrpt->txchannel); /* get tx channel's port number */
 		if (confno < 0) {
 			return -1;
 		}
