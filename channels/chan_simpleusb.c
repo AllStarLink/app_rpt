@@ -2105,12 +2105,12 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 					/* enough to fill a frame */
 					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
 
-					/* TBR - below appears to be an attempt to match levels to the original CM108
-					 * IC which has been out of production for over 10 years. Scaling audio to 
-					 * 109.375% will result in clipping! Any adjustments for CM1xxx gain differences
-					 * should be made in the mixer settings, not in the audio stream itself.
+					/* TBR - below is an attempt to match levels to the original CM108 IC which has
+					 * been out of production for over 10 years. Scaling audio to 109.375% will
+					 * result in clipping! Any adjustments for CM1xxx gain differences should be
+					 * made in the mixer settings, not in the audio stream.
 					 */
-#if 0
+#if 1
 					/* Adjust the audio level for CM119 A/B devices */
 					if (o->devtype != C108_PRODUCT_ID) {
 						register int v;

@@ -2046,13 +2046,34 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		ast_log(LOG_WARNING, "USB read channel [%s] was not stuck.\n", o->name);
 	}
 
-	/* TBR - below appears to be an attempt to match levels to the original CM108
-	 * IC which has been out of production for over 10 years. Scaling all rx audio to 
-	 * 80% would result in a 20% loss in dynamic range, added quantization noise, and 
-	 * outgoing IAX audio reduced by 2dB. Any adjustments for CM1xxx IC gain differences
-	 * should be made in the mixer settings, not in the audio stream itself.
+	o->readerrs = 0;
+	o->readpos += res;
+	if (o->readpos < sizeof(o->usbradio_read_buf)) {	/* not enough samples */
+		return &ast_null_frame;
+	}
+
+	/* Check for ADC clipping and input audio statistics before any filtering is done.
+	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
+	 * ast_radio_check_rx_audio() takes the read buffer as received (48K stereo),
+	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+	 * and returns true if clipping was detected.
 	 */
-#if 0
+	if (ast_radio_check_rx_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+		if (o->clipledgpio) {
+			/* Set Clip LED GPIO pulsetimer if not already set */
+			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
+				o->hid_gpio_pulsetimer[o->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
+			}
+		}
+	}
+
+	/* TBR - below is an attempt to match levels to the original CM108 IC which has been
+	 * out of production for over 10 years. Scaling all rx audio to 80% results in a 20%
+	 * loss in dynamic range, added quantization noise, a 2dB reduction in outgoing IAX
+	 * audio levels, and inconsistency with Simpleusb. Adjustments for CM1xxx IC gain
+	 * differences should be made in the mixer settings, not in the audio stream.
+	 */
+#if 1
 	/* Decrease the audio level for CM119 A/B devices */
 	if (o->devtype != C108_PRODUCT_ID) {
 		register short *sp = (short *) (o->usbradio_read_buf + o->readpos);
@@ -2065,12 +2086,6 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		}
 	}
 #endif
-
-	o->readerrs = 0;
-	o->readpos += res;
-	if (o->readpos < sizeof(o->usbradio_read_buf)) {	/* not enough samples */
-		return &ast_null_frame;
-	}
 
 #if 1
 	if (o->txkeyed || o->txtestkey || o->echoing) {
@@ -2096,21 +2111,6 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 	o->didpmrtx = 0;
 
-	/* Check for ADC clipping and input audio statistics before any filtering is done.
-	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
-	 * ast_radio_check_rx_audio() takes the read buffer as received (48K stereo),
-	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
-	 * and returns true if clipping was detected.
-	 */
-	if (ast_radio_check_rx_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
-		if (o->clipledgpio) {
-			/* Set Clip LED GPIO pulsetimer if not already set */
-			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
-				o->hid_gpio_pulsetimer[o->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
-			}
-		}
-	}
-
 	PmrRx(o->pmrChan,
 		  (i16 *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET),
 		  (i16 *) (o->usbradio_read_buf_8k + AST_FRIENDLY_OFFSET), (i16 *) (o->usbradio_write_buf));
@@ -2135,12 +2135,12 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 #endif
 
-	/* TBR - below appears to be an attempt to match levels to the original CM108
-	 * IC which has been out of production for over 10 years. Scaling audio to 110%
-	 * will result in clipping! Any adjustments for CM1xxx IC gain differences
-	 * should be made in the mixer settings, not in the audio stream itself.
+	/* TBR - below is an attempt to match levels to the original CM108 IC which has been
+	 * out of production for over 10 years. Scaling audio to 110% will result in clipping!
+	 * Any adjustments for CM1xxx IC gain differences should be made in the mixer
+	 * settings, not in the audio stream.
 	 */
-#if 0
+#if 1
 	/* For the CM108 adjust the audio level */
 	if (o->devtype != C108_PRODUCT_ID) {
 		register short *sp = (short *) o->usbradio_write_buf;
