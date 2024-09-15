@@ -813,7 +813,7 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
 	/* Print stats */
 	sprintf(s1, "RxAudioStats: Pk %5.1f  Avg Pwr %3.0f  Min %3.0f  Max %3.0f  dBFS  ClipCnt %u",
 			dpk, tpwr, dmin, dmax, clipcnt);
-	if (fd) {
+	if (fd >= 0) {
 		ast_cli(fd, "%s\n", s1);
 	} else {
 		ast_verbose("%s\n", s1);

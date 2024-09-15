@@ -504,7 +504,7 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
  * ie. 10*log10(scaledVal) for power levels.
  *
  * \author  		NR9V
- * \param fd		File descriptor to print to, or if 0 print using ast_verbose()
+ * \param fd		File descriptor to print to, or if -1 print using ast_verbose()
  * \param o 		Channel data structure
  * \return  		None
  */
