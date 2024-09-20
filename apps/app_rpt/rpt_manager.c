@@ -18,6 +18,21 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 
+static char *ctime_no_newline(const time_t *clock)
+{
+	static char buf[32];
+	const char *cp;
+	size_t len;
+
+	cp = ctime_r(clock, buf);
+	len = strnlen(buf, sizeof(buf));
+	if ((len > 0) && (buf[--len] == '\n')) {
+		buf[len] = '\0';
+	}
+
+	return cp;
+}
+
 void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
 {
 	manager_event(EVENT_FLAG_CALL, event,
@@ -26,8 +41,9 @@ void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
 		"EventValue: %s\r\n"
 		"LastKeyedTime: %s\r\n"
 		"LastTxKeyedTime: %s\r\n",
-		myrpt->name, ast_channel_name(myrpt->rxchannel), value, ctime(&myrpt->lastkeyedtime),
-		ctime(&myrpt->lasttxkeyedtime)
+		myrpt->name, ast_channel_name(myrpt->rxchannel), value,
+		ctime_no_newline(&myrpt->lastkeyedtime),
+		ctime_no_newline(&myrpt->lasttxkeyedtime)
 	);
 }
 
@@ -80,7 +96,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 
 			l = rpt_vars[i].links.next;
 			while (l && (l != &rpt_vars[i].links)) {
-				if (l->name[0] == '0') {	// Skip '0' nodes 
+				if (l->name[0] == '0') {	// Skip '0' nodes
 					l = l->next;
 					continue;
 				}
@@ -89,7 +105,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 							  (l->lastunkeytime) ? (int) (now - l->lastunkeytime) : -1);
 				l = l->next;
 			}
-			rpt_mutex_unlock(&rpt_vars[i].lock);	// UNLOCK 
+			rpt_mutex_unlock(&rpt_vars[i].lock);	// UNLOCK
 			astman_append(ses, "\r\n");
 			return (0);
 		}
@@ -330,7 +346,8 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			astman_append(ses, "iconns: %s\r\n", iconns);
 			astman_append(ses, "tot_state: %s\r\n", tot_state);
 			astman_append(ses, "ider_state: %s\r\n", ider_state);
-			astman_append(ses, "tel_mode: %s\r\n\r\n", tel_mode);
+			astman_append(ses, "tel_mode: %s\r\n", tel_mode);
+			astman_append(ses, "\r\n");
 
 			return 0;
 		}
@@ -617,13 +634,13 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 			astman_append(s, "DtmfCommandsSinceSystemInitialization: %d\r\n", totalexecdcommands);
 			astman_append(s, "LastDtmfCommandExecuted: %s\r\n",
 						  (lastdtmfcommand && strlen(lastdtmfcommand)) ? lastdtmfcommand : not_applicable);
+
 			hours = dailytxtime / 3600000;
 			dailytxtime %= 3600000;
 			minutes = dailytxtime / 60000;
 			dailytxtime %= 60000;
 			seconds = dailytxtime / 1000;
 			dailytxtime %= 1000;
-
 			astman_append(s, "TxTimeToday: %02d:%02d:%02d:%02d\r\n", hours, minutes, seconds, dailytxtime);
 
 			hours = (int) totaltxtime / 3600000;
@@ -632,7 +649,6 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 			totaltxtime %= 60000;
 			seconds = (int) totaltxtime / 1000;
 			totaltxtime %= 1000;
-
 			astman_append(s, "TxTimeSinceSystemInitialization: %02d:%02d:%02d:%02d\r\n", hours, minutes, seconds,
 						  (int) totaltxtime);
 
