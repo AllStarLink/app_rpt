@@ -314,6 +314,7 @@ struct chan_simpleusb_pvt {
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
+	int clipledgpio;           /* enables ADC Clip Detect feature to output on a specified GPIO# */
 	
 	int32_t discfactor;
 	int32_t discounterl;
@@ -325,6 +326,8 @@ struct chan_simpleusb_pvt {
 	int32_t cur_gpios;
 	char *gpios[GPIO_PINCOUNT];
 	char *pps[32];
+
+	struct rxaudiostatistics rxaudiostats;
 	
 	ast_mutex_t usblock;
 };
@@ -344,6 +347,8 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.rxondelay = 0,
 	.txoffdelay = 0,
 	.pager = PAGER_NONE,
+	.clipledgpio = 0,
+	.rxaudiostats.index = 0
 };
 
 /*	DECLARE FUNCTION PROTOTYPES	*/
@@ -591,6 +596,15 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->hid_io_ptt = 4;			/* GPIO 3 is PTT */
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 1;			/* for GPIO 1 */
+	}
+	/* validate clipledgpio setting (Clip LED GPIO#) */
+	if (o->clipledgpio) {
+		if (o->clipledgpio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->clipledgpio - 1)))) {
+			ast_log(LOG_ERROR, "Channel %s: clipledgpio = GPIO%d not supported\n", o->name, o->clipledgpio);
+			o->clipledgpio = 0;
+		} else {
+			o->hid_gpio_ctl |= 1 << (o->clipledgpio - 1); /* confirm Clip LED GPIO set to output mode */
+		}
 	}
 	o->hid_gpio_val = 0;
 	for (i = 0; i < GPIO_PINCOUNT; i++) {
@@ -2090,6 +2104,13 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 				if (f1->datalen - src >= l) {	
 					/* enough to fill a frame */
 					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
+
+					/* TBR - below is an attempt to match levels to the original CM108 IC which has
+					 * been out of production for over 10 years. Scaling audio to 109.375% will
+					 * result in clipping! Any adjustments for CM1xxx gain differences should be
+					 * made in the mixer settings, not in the audio stream.
+					 */
+#if 1
 					/* Adjust the audio level for CM119 A/B devices */
 					if (o->devtype != C108_PRODUCT_ID) {
 						register int v;
@@ -2107,6 +2128,8 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 							*sp++ = v;
 						}
 					}
+#endif
+
 					sp = (short *) o->simpleusb_write_buf;
 					sp1 = outbuf;
 					doright = 1;
@@ -2264,6 +2287,21 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		ast_queue_frame(o->owner, &wf);
 		if (o->duplex3) {
 			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
+		}
+	}
+
+	/* Check for ADC clipping and input audio statistics before any filtering is done.
+	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
+	 * ast_radio_check_rx_audio() takes the read buffer as received (48K stereo),
+	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+	 * and returns true if clipping was detected.
+	 */
+	if (ast_radio_check_rx_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+		if (o->clipledgpio) {
+			/* Set Clip LED GPIO pulsetimer if not already set */
+			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
+				o->hid_gpio_pulsetimer[o->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
+			}
 		}
 	}
 
@@ -3273,6 +3311,7 @@ static void tune_write(struct chan_simpleusb_pvt *o)
  *		t - change rx on delay
  *		u - change tx off delay
  *		v - view cos, ctcss and ptt status
+ *		y - receive audio statistics display
  *
  * \param fd			Asterisk CLI fd
  * \param o				Private struct.
@@ -3467,6 +3506,22 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 		}
 		tune_rxtx_status(fd, o);
 		break;
+	case 'y':					/* display receive audio statistics (interactive) */
+	case 'Y':					/* display receive audio statistics (once only) */
+		if (!o->hasusb) {
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
+			break;
+		}
+		for (;;) {
+			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
+			if (cmd[0] == 'Y') {
+				break;
+			}
+			if (ast_radio_poll_input(fd, 1000)) {
+				break;
+			}
+		}
+		break;
 	default:
 		ast_cli(fd, "Invalid Command\n");
 		break;
@@ -3650,6 +3705,7 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_BOOL("deemphasis", o->deemphasis);
 		CV_BOOL("preemphasis", o->preemphasis);
 		CV_UINT("duplex3", o->duplex3);
+		CV_UINT("clipledgpio", o->clipledgpio);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {

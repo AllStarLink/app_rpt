@@ -94,6 +94,10 @@
 
 ;duplex3 = 0                ; duplex 3 gain setting (0 to disable)
 
+;clipledgpio = 0            ; Enable ADC Clip Detect feature to use a GPIO output (0 to disable).
+                            ; Supports URI Clip LED by setting a GPIO (if available) high for 500mS
+                            ; when clipping detected. Value = GPIO# to use (GPIO1 recommended)
+
 ;gpioX=in					; define input/output pin GPIO(x) in,out0,out1 (where X {1..8}) (optional)
 
 ;pport=/dev/parport0		; Specify parport device (optional)

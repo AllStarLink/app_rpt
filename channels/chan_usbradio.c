@@ -399,6 +399,7 @@ struct chan_usbradio_pvt {
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
+	int clipledgpio;           /* enables ADC Clip Detect feature to output on a specified GPIO# */
 	
 	int fever;
 	int count_rssi_update;
@@ -407,7 +408,9 @@ struct chan_usbradio_pvt {
 	char *gpios[GPIO_PINCOUNT];
 	char *pps[32];
 	int sendvoter;
-	
+
+	struct rxaudiostatistics rxaudiostats;
+
 	ast_mutex_t usblock;
 };
 
@@ -427,6 +430,8 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.txoffdelay = 0,
 	.area = 0,
 	.rptnum = 0,
+	.clipledgpio = 0,
+	.rxaudiostats.index = 0
 };
 
 /*	DECLARE FUNCTION PROTOTYPES	*/
@@ -548,6 +553,15 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 		o->hid_io_ptt = 4;			/* GPIO 3 is PTT */
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 1;			/* for GPIO 1 */
+	}
+	/* validate clipledgpio setting (Clip LED GPIO#) */
+	if (o->clipledgpio) {
+		if (o->clipledgpio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->clipledgpio - 1)))) {
+			ast_log(LOG_ERROR, "Channel %s: clipledgpio = GPIO%d not supported\n", o->name, o->clipledgpio);
+			o->clipledgpio = 0;
+		} else {
+			o->hid_gpio_ctl |= 1 << (o->clipledgpio - 1); /* confirm Clip LED GPIO set to output mode */
+		}
 	}
 	o->hid_gpio_val = 0;
 	for (i = 0; i < GPIO_PINCOUNT; i++) {
@@ -2031,6 +2045,35 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	if (o->readerrs) {
 		ast_log(LOG_WARNING, "USB read channel [%s] was not stuck.\n", o->name);
 	}
+
+	o->readerrs = 0;
+	o->readpos += res;
+	if (o->readpos < sizeof(o->usbradio_read_buf)) {	/* not enough samples */
+		return &ast_null_frame;
+	}
+
+	/* Check for ADC clipping and input audio statistics before any filtering is done.
+	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
+	 * ast_radio_check_rx_audio() takes the read buffer as received (48K stereo),
+	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+	 * and returns true if clipping was detected.
+	 */
+	if (ast_radio_check_rx_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+		if (o->clipledgpio) {
+			/* Set Clip LED GPIO pulsetimer if not already set */
+			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
+				o->hid_gpio_pulsetimer[o->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
+			}
+		}
+	}
+
+	/* TBR - below is an attempt to match levels to the original CM108 IC which has been
+	 * out of production for over 10 years. Scaling all rx audio to 80% results in a 20%
+	 * loss in dynamic range, added quantization noise, a 2dB reduction in outgoing IAX
+	 * audio levels, and inconsistency with Simpleusb. Adjustments for CM1xxx IC gain
+	 * differences should be made in the mixer settings, not in the audio stream.
+	 */
+#if 1
 	/* Decrease the audio level for CM119 A/B devices */
 	if (o->devtype != C108_PRODUCT_ID) {
 		register short *sp = (short *) (o->usbradio_read_buf + o->readpos);
@@ -2042,11 +2085,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			*sp++ = (int) v;
 		}
 	}
-	o->readerrs = 0;
-	o->readpos += res;
-	if (o->readpos < sizeof(o->usbradio_read_buf)) {	/* not enough samples */
-		return &ast_null_frame;
-	}
+#endif
 
 #if 1
 	if (o->txkeyed || o->txtestkey || o->echoing) {
@@ -2096,6 +2135,12 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 #endif
 
+	/* TBR - below is an attempt to match levels to the original CM108 IC which has been
+	 * out of production for over 10 years. Scaling audio to 110% will result in clipping!
+	 * Any adjustments for CM1xxx IC gain differences should be made in the mixer
+	 * settings, not in the audio stream.
+	 */
+#if 1
 	/* For the CM108 adjust the audio level */
 	if (o->devtype != C108_PRODUCT_ID) {
 		register short *sp = (short *) o->usbradio_write_buf;
@@ -2112,6 +2157,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			*sp++ = (int) v;
 		}
 	}
+#endif
 	/* Write the received audio to the sound card */
 	soundcard_writeframe(o, (short *) o->usbradio_write_buf);
 
@@ -3893,6 +3939,7 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
  *		v - view cos, ctcss and ptt status
  *		w - change tx mixer a
  *		x - change tx mixer b
+ *		y - receive audio statistics display
  *
  * \param fd			Asterisk CLI fd
  * \param o				Private struct.
@@ -4141,6 +4188,22 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			ast_cli(fd, "TX Mixer B changed to %d\n", o->txmixb);
 		} else {
 			ast_cli(fd, "TX Mixer B is currently %d\n", o->txmixb);
+		}
+		break;
+	case 'y':					/* display receive audio statistics (interactive) */
+	case 'Y':					/* display receive audio statistics (once only) */
+		if (!o->hasusb) {
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
+			break;
+		}
+		for (;;) {
+			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
+			if (cmd[0] == 'Y') {
+				break;
+			}
+			if (ast_radio_poll_input(fd, 1000)) {
+				break;
+			}
 		}
 		break;
 	default:
@@ -4867,6 +4930,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_UINT("txlpf", o->txlpf);
 		CV_UINT("txhpf", o->txhpf);
 		CV_UINT("sendvoter", o->sendvoter);
+		CV_UINT("clipledgpio", o->clipledgpio);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {

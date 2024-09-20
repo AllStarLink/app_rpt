@@ -54,6 +54,7 @@
  *		v - view cos, ctcss and ptt status
  *		w - change tx mixer a
  *		x - change tx mixer b
+ *		y - receive audio statistics display
  *
  * Most of these commands take optional parameters to set values.
  *
@@ -1043,6 +1044,7 @@ static void options_menu(void)
 		printf("H) Change CTCSS From (currently '%s')\n", sd_signal_type[ctcssfrom]);
 		printf("P) Print Current Parameter Values\n");
 		printf("O) Options Menu\n");
+		printf("R) View Rx Audio Statistics\n");
 		printf("S) Swap Current USB device with another USB device\n");
 		printf("T) Toggle Transmit Test Tone/Keying (currently '%s')\n", (keying) ? "enabled" : "disabled");
 		printf("V) View COS, CTCSS and PTT Status\n");
@@ -1155,6 +1157,10 @@ static void options_menu(void)
 			if (astgetresp(COMMAND_PREFIX "tune menu-support 2")) {
 				exit(255);
 			}
+			break;
+		case 'r':				/* display receive audio statistics */
+		case 'R':
+			astgetresp(COMMAND_PREFIX "tune menu-support y");
 			break;
 		case 's':				/* swap usb device with another device */
 		case 'S':
