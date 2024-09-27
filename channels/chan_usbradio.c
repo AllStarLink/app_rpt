@@ -3696,9 +3696,14 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 		ast_cli(fd, "off.\n");
 	}
 
+	if (o->rxdemod == RX_AUDIO_FLAT) {
+		ast_cli(fd, "Rx Level currently set to %d\n", (int) ((o->rxvoiceadj * 200.0) + .5));
+	} else {
+		ast_cli(fd, "Rx Level currently set to %d\n", o->rxmixerset);
+	}
+	ast_cli(fd, "Rx Squelch currently set to %d\n", o->rxsquelchadj);
 	ast_cli(fd, "Tx Voice Level currently set to %d\n", o->txmixaset);
 	ast_cli(fd, "Tx Tone Level currently set to %d\n", o->txctcssadj);
-	ast_cli(fd, "Rx Squelch currently set to %d\n", o->rxsquelchadj);
 	return;
 }
 
@@ -3963,10 +3968,24 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		}
 	switch (cmd[0]) {
 	case '0':					/* return audio processing configuration */
-		ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", 
-			flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
-			o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
-			o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb);
+		/* note: to maintain backward compatibility for those expecting a specific # of
+		   values to be returned (and in a specific order).  So, we only add to the end
+		   of the returned list.  Also, once an update has been released we can't change
+		   the format/content of any previously returned string */
+		if (!strcmp(cmd, "0+9")) {
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d\n", 
+				flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
+				o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
+				o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
+				o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
+				o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax,
+				o->micmax);
+		} else {
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", 
+				flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
+				o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
+				o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb);
+		}
 		break;
 	case '1':					/* return usb device name list */
 		for (x = 0, oy = usbradio_default.next; oy && oy->name; oy = oy->next, x++) {
