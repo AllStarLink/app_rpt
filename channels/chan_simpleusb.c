@@ -3198,6 +3198,36 @@ static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
 }
 
 /*!
+ * \brief Update the tune settings to the configuration file.
+ * \param filename	The configuration file being updated (e.g. "simpleusb.conf").
+ * \param category	The category being updated (e.g. "12345").
+ * \param variable	The variable being updated (e.g. "rxboost").
+ * \param value		The value being updated (e.g. "yes").
+ */
+static int tune_variable_update(const char *filename, struct ast_category *category,
+								const char *variable, const char *value)
+{
+	int	res;
+
+	res = ast_variable_update(category, variable, value, NULL, 0);
+	if (res != 0) {
+		struct ast_variable *var;
+
+		/* if we could not find/update the variable, create new */
+		var = ast_variable_new(variable, value, filename);
+		if (var != NULL) {
+			/* and append */
+			ast_variable_append(category, var);
+			return 0;
+		}
+
+		return -1;
+	}
+
+	return 0;
+}
+
+/*!
  * \brief Write tune settings to the configuration file. If the device EEPROM is enabled, the settings are  saved to EEPROM.
  * \param o Channel private.
  */
@@ -3216,25 +3246,25 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 	}
 
 #define CONFIG_UPDATE_STR(field) \
-	if (ast_variable_update(category, #field, o->field, NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, o->field)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
 #define CONFIG_UPDATE_INT(field) { \
 	char _buf[15]; \
 	snprintf(_buf, sizeof(_buf), "%d", o->field); \
-	if (ast_variable_update(category, #field, _buf, NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, _buf)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	} \
 }
 
 #define CONFIG_UPDATE_BOOL(field) \
-	if (ast_variable_update(category, #field, o->field ? "yes" : "no", NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, o->field ? "yes" : "no")) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 	
 #define CONFIG_UPDATE_SIGNAL(key, field) \
-	if (ast_variable_update(category, #key, signal_type[o->field], NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #key, signal_type[o->field])) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
@@ -3258,7 +3288,7 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 		CONFIG_UPDATE_INT(rxondelay);
 		CONFIG_UPDATE_INT(txoffdelay);
 		if (ast_config_text_file_save2(CONFIG, cfg, "chan_simpleusb", 0)) {
-			ast_log(LOG_WARNING, "Failed to save config\n");
+			ast_log(LOG_WARNING, "Failed to save config %s.\n", CONFIG);
 		}
 	}
 
