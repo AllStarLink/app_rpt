@@ -4400,7 +4400,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 static int tune_variable_update(const char *filename, struct ast_category *category,
 								const char *variable, const char *value)
 {
-	int	res;
+	int res;
 	struct ast_variable *var;
 
 	res = ast_variable_update(category, variable, value, NULL, 0);
@@ -4408,16 +4408,16 @@ static int tune_variable_update(const char *filename, struct ast_category *categ
 		return 0;
 	}
 
-		/* if we could not find/update the variable, create new */
-		var = ast_variable_new(variable, value, filename);
+	/* if we could not find/update the variable, create new */
+	var = ast_variable_new(variable, value, filename);
 	if (var == NULL) {
 		return -1;
 	}
 
-			/* and append */
-			ast_variable_append(category, var);
-			return 0;
-		}
+	/* and append */
+	ast_variable_append(category, var);
+	return 0;
+}
 
 /*!
  * \brief Write tune settings to the configuration file. If the device EEPROM is enabled, the settings are  saved to EEPROM.
