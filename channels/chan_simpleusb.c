@@ -3203,29 +3203,30 @@ static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
  * \param category	The category being updated (e.g. "12345").
  * \param variable	The variable being updated (e.g. "rxboost").
  * \param value		The value being updated (e.g. "yes").
+ * \retval 0		If successful.
+ * \retval -1		If unsuccessful.
  */
 static int tune_variable_update(const char *filename, struct ast_category *category,
 								const char *variable, const char *value)
 {
 	int	res;
+	struct ast_variable *var;
 
 	res = ast_variable_update(category, variable, value, NULL, 0);
-	if (res != 0) {
-		struct ast_variable *var;
+	if (res == 0) {
+		return 0;
+	}
 
 		/* if we could not find/update the variable, create new */
 		var = ast_variable_new(variable, value, filename);
-		if (var != NULL) {
+	if (var == NULL) {
+		return -1;
+	}
+
 			/* and append */
 			ast_variable_append(category, var);
 			return 0;
 		}
-
-		return -1;
-	}
-
-	return 0;
-}
 
 /*!
  * \brief Write tune settings to the configuration file. If the device EEPROM is enabled, the settings are  saved to EEPROM.
@@ -3288,7 +3289,7 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 		CONFIG_UPDATE_INT(rxondelay);
 		CONFIG_UPDATE_INT(txoffdelay);
 		if (ast_config_text_file_save2(CONFIG, cfg, "chan_simpleusb", 0)) {
-			ast_log(LOG_WARNING, "Failed to save config %s.\n", CONFIG);
+			ast_log(LOG_WARNING, "Failed to save config %s\n", CONFIG);
 		}
 	}
 
