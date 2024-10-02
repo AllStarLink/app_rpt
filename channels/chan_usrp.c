@@ -371,9 +371,11 @@ static int usrp_indicate(struct ast_channel *ast, int cond, const void *data, si
 	switch (cond) {
 	case AST_CONTROL_RADIO_KEY:
 		p->txkey = 1;
+		ast_debug(1, "Channel %s: ACRK TX ON.\n", ast_channel_name(ast));
 		break;
 	case AST_CONTROL_RADIO_UNKEY:
 		p->txkey = 0;
+		ast_debug(1, "Channel %s: ACRUK TX OFF.\n", ast_channel_name(ast));
 		break;
 	case AST_CONTROL_HANGUP:
 		return -1;
@@ -593,6 +595,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				remque((struct qelem *) qp);
 				ast_free(qp);
 			}
+			ast_log(LOG_WARNING, "Channel %s: Receive queue exceeds threshold\n", ast_channel_name(ast));
 			if (pvt->rxkey) {
 				pvt->rxkey = 1;
 			}
@@ -610,6 +613,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				fr.delivery.tv_sec = 0;
 				fr.delivery.tv_usec = 0;
 				ast_queue_frame(ast, &fr);
+				ast_debug(1, "Channel %s: RX ON\n", ast_channel_name(ast));
 			}
 			pvt->rxkey = MAX_RXKEY_TIME;
 			qp = pvt->rxq.qe_forw;
@@ -662,6 +666,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		fr.delivery.tv_sec = 0;
 		fr.delivery.tv_usec = 0;
 		ast_queue_frame(ast, &fr);
+		ast_debug(1, "Channel %s: RX OFF\n", ast_channel_name(ast));
 	}
 	/* Decrement the receive key counter.
 	 * This ensures that we do not get stuck in receive mode.
