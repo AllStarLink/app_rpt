@@ -857,32 +857,36 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	string_toupper(text);
 	snprintf(str, sizeof(str) - 1, "PAGE %s %s %s ", baud, capcode, text);
 	for (i = 6; i < argc; i++) {
-		if (i > 5)
+		if (i > 5) {
 			strncat(str, " ", sizeof(str) - 1);
+		}
 		strncat(str, argv[i], sizeof(str) - 1);
 	}
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
-			/* ignore if not a USB channel */
-			/* BUGBUG XXX This looks wrong to me... won't it always be false? */
-			if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
-				!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "voter") &&
-				!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+			/* ignore if not a channel that can accept the paging command */
+			if (strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "voter") &&
+				strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 				return RESULT_SUCCESS;
 			}
+			/* if we are playing telemetry, stop it now */
 			telem = myrpt->tele.next;
 			while (telem != &myrpt->tele) {
 				if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
-					if (telem->chan)
+					if (telem->chan) {
 						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+					}
 					telem->killed = 1;
 					myrpt->deferid = 1;
 				}
 				telem = telem->next;
 			}
 			gettimeofday(&myrpt->paging, NULL);
+			rpt_mutex_lock(&myrpt->blocklock);
 			ast_sendtext(myrpt->rxchannel, str);
+			rpt_mutex_unlock(&myrpt->blocklock);
+			break;
 		}
 	}
 	return RESULT_SUCCESS;
