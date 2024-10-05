@@ -2076,7 +2076,9 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 #if 1
 	/* Decrease the audio level for CM119 A/B devices */
 	if (o->devtype != C108_PRODUCT_ID) {
-		register short *sp = (short *) (o->usbradio_read_buf + o->readpos);
+		/* Subtract res from o->readpos in below assignment (o->readpos was incremented
+		   above prior to check of if enough samples were received) */
+		register short *sp = (short *) (o->usbradio_read_buf + (o->readpos - res));
 		register float v;
 		register int i;
 
