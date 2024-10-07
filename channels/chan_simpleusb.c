@@ -181,12 +181,6 @@ struct chan_simpleusb_pvt {
 #define WARN_speed			2
 #define WARN_frag			4
 
-	/* boost support. BOOST_SCALE * 10 ^(BOOST_MAX/20) must
-	 * be representable in 16 bits to avoid overflows.
-	 */
-#define	BOOST_SCALE	(1<<9)
-#define	BOOST_MAX	40			/* slightly less than 7 bits */
-	int boost;					/* input boost, scaled by BOOST_SCALE */
 	char devicenum;
 	char devstr[128];
 	int spkrmax;
@@ -343,7 +337,6 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.queuesize = QUEUE_SIZE,
 	.frags = FRAGS,
 	.readpos = 0,				/* start here on reads */
-	.boost = BOOST_SCALE,
 	.wanteeprom = 1,
 	.usedtmf = 1,
 	.rxondelay = 0,
@@ -351,6 +344,9 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.pager = PAGER_NONE,
 	.clipledgpio = 0,
 	.rxaudiostats.index = 0,
+	/* After the vast majority of existing installs have had a chance to review their
+	   audio settings and the associated old scaling/clipping hacks are no longer in
+	   significant use the following cfg and all related code should be deleted. */
 	.legacyaudioscaling = 1,
 };
 
@@ -2108,12 +2104,14 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 					/* enough to fill a frame */
 					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
 
-					/* TBR - below is an attempt to match levels to the original CM108 IC which has
+					/* Below is an attempt to match levels to the original CM108 IC which has
 					 * been out of production for over 10 years. Scaling audio to 109.375% will
 					 * result in clipping! Any adjustments for CM1xxx gain differences should be
 					 * made in the mixer settings, not in the audio stream.
+					 * TODO: After the vast majority of existing installs have had a chance to review their
+					 * audio settings and these old scaling/clipping hacks are no longer in significant use
+					 * the legacyaudioscaling cfg and related code should be deleted.
 					 */
-#if 1
 					/* Adjust the audio level for CM119 A/B devices */
 					if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
 						register int v;
@@ -2131,7 +2129,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 							*sp++ = v;
 						}
 					}
-#endif
 
 					sp = (short *) o->simpleusb_write_buf;
 					sp1 = outbuf;
@@ -2408,34 +2405,13 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		}
 	}
 
-	/* Scale the input audio.
-	 * o->boost is hardcoded to equal BOOST_SCALE.
-	 * This code is not executed.
-	 * TBR: The below should be removed. Raw audio samples should never be clipped or scaled
-	 * for any reason. Adjustments to audio levels should be made only in the USB interface
-	 * mixer settings.
+	/* Raw audio samples should never be clipped or scaled for any reason. Adjustments to 
+	 * audio levels should be made only in the USB interface mixer settings.
+	 * TODO: After the vast majority of existing installs have had a chance to review their
+	 * audio settings and these old scaling/clipping hacks are no longer in significant use
+	 * the legacyaudioscaling cfg and related code should be deleted.
 	 */
-#if 0
-	if (o->boost != BOOST_SCALE) {	/* scale and clip values */
-		register int i, x;
-		register int16_t *p = (int16_t *) f->data.ptr;
-		for (i = 0; i < f->samples; i++) {
-			x = (p[i] * o->boost) / BOOST_SCALE;
-			if (x > 32767) {
-				x = 32767;
-			} else if (x < -32768) {
-				x = -32768;
-			}
-			p[i] = x;
-		}
-	}
-#endif
-
 	/* scale and clip values */
-	/* TBR: The below should be phased out asap. Raw audio samples should never be clipped
-	 * or scaled for any reason. Adjustments to audio levels should be made only in the
-	 * USB interface mixer settings. */
-#if 1
 	if (o->legacyaudioscaling && o->rxvoiceadj > 1.0) {
 		register int i, x;
 		register float f1;
@@ -2452,7 +2428,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			p[i] = x;
 		}
 	}
-#endif
 
 	/* Compute the peak signal if requested */
 	if (o->measure_enabled) {
@@ -3108,8 +3083,9 @@ static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 	ast_cli(fd, "Rx Level currently set to %d\n", o->rxmixerset);
 	ast_cli(fd, "Tx A Level currently set to %d\n", o->txmixaset);
 	ast_cli(fd, "Tx B Level currently set to %d\n", o->txmixbset);
-	if(o->legacyaudioscaling)
-		ast_cli(fd, "legacyaudioscaling is enabled (not recommended)\n");
+	if(o->legacyaudioscaling) {
+		ast_cli(fd, "legacyaudioscaling is enabled\n");
+	}
 	return;
 }
 
@@ -3638,7 +3614,8 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
-			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype), ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
+			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
+			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
 	/* adjust settings based on the device */
 	switch (o->devtype) {
 		case C119B_PRODUCT_ID:
@@ -3652,7 +3629,7 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 			/* get interval step size */
 			f = 1000.0 / (float) o->micmax;
 	}
-	ast_radio_setamixer(o->devicenum,MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
+	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
 	/* set the received voice adjustment factor */
