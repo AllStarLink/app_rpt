@@ -411,6 +411,8 @@ struct chan_usbradio_pvt {
 
 	struct rxaudiostatistics rxaudiostats;
 
+	int legacyaudioscaling;
+
 	ast_mutex_t usblock;
 };
 
@@ -431,7 +433,8 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.area = 0,
 	.rptnum = 0,
 	.clipledgpio = 0,
-	.rxaudiostats.index = 0
+	.rxaudiostats.index = 0,
+	.legacyaudioscaling = 1,
 };
 
 /*	DECLARE FUNCTION PROTOTYPES	*/
@@ -2075,7 +2078,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	 */
 #if 1
 	/* Decrease the audio level for CM119 A/B devices */
-	if (o->devtype != C108_PRODUCT_ID) {
+	if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
 		/* Subtract res from o->readpos in below assignment (o->readpos was incremented
 		   above prior to check of if enough samples were received) */
 		register short *sp = (short *) (o->usbradio_read_buf + (o->readpos - res));
@@ -2144,7 +2147,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	 */
 #if 1
 	/* For the CM108 adjust the audio level */
-	if (o->devtype != C108_PRODUCT_ID) {
+	if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
 		register short *sp = (short *) o->usbradio_write_buf;
 		register float v;
 		register int i;
@@ -3701,6 +3704,8 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 	ast_cli(fd, "Tx Voice Level currently set to %d\n", o->txmixaset);
 	ast_cli(fd, "Tx Tone Level currently set to %d\n", o->txctcssadj);
 	ast_cli(fd, "Rx Squelch currently set to %d\n", o->rxsquelchadj);
+	if(o->legacyaudioscaling)
+		ast_cli(fd, "legacyaudioscaling is enabled (not recommended)\n");
 	return;
 }
 
@@ -4933,6 +4938,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_UINT("txhpf", o->txhpf);
 		CV_UINT("sendvoter", o->sendvoter);
 		CV_UINT("clipledgpio", o->clipledgpio);
+		CV_BOOL("legacyaudioscaling", o->legacyaudioscaling);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {

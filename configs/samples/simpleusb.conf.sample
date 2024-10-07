@@ -106,6 +106,11 @@
 ;ppX=out0					; printer port pin(x) [x is 2-9] initial output state [out0,out1] or 'ptt' (for output pins)
 ;ppX=in						; printer port pin(x) [x is 10,12,13,15] input pin [in,cor,ctcss]
 
+legacyaudioscaling = no     ; If yes, continue to do raw audio sample scaling and clipping, resulting in Tx audio levels increasing
+                            ; by 0.78dB and Rx audio levels increasing by 0-1.5dB. This should be set to no unless you have an
+                            ; existing node with precisely adjusted audio levels but are unable to adjust them. If set to
+                            ; yes, degraded audio quality will result
+
 ;[usb]
 ; First channel unique configuration
 

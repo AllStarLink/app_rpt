@@ -329,6 +329,8 @@ struct chan_simpleusb_pvt {
 
 	struct rxaudiostatistics rxaudiostats;
 	
+	int legacyaudioscaling;
+
 	ast_mutex_t usblock;
 };
 
@@ -348,7 +350,8 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.txoffdelay = 0,
 	.pager = PAGER_NONE,
 	.clipledgpio = 0,
-	.rxaudiostats.index = 0
+	.rxaudiostats.index = 0,
+	.legacyaudioscaling = 1,
 };
 
 /*	DECLARE FUNCTION PROTOTYPES	*/
@@ -2112,7 +2115,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 					 */
 #if 1
 					/* Adjust the audio level for CM119 A/B devices */
-					if (o->devtype != C108_PRODUCT_ID) {
+					if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
 						register int v;
 
 						sp = (short *) o->simpleusb_write_buf;
@@ -2404,10 +2407,15 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			}
 		}
 	}
+
 	/* Scale the input audio.
 	 * o->boost is hardcoded to equal BOOST_SCALE.
 	 * This code is not executed.
+	 * TBR: The below should be removed. Raw audio samples should never be clipped or scaled
+	 * for any reason. Adjustments to audio levels should be made only in the USB interface
+	 * mixer settings.
 	 */
+#if 0
 	if (o->boost != BOOST_SCALE) {	/* scale and clip values */
 		register int i, x;
 		register int16_t *p = (int16_t *) f->data.ptr;
@@ -2421,8 +2429,14 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			p[i] = x;
 		}
 	}
+#endif
+
 	/* scale and clip values */
-	if (o->rxvoiceadj > 1.0) {	
+	/* TBR: The below should be phased out asap. Raw audio samples should never be clipped
+	 * or scaled for any reason. Adjustments to audio levels should be made only in the
+	 * USB interface mixer settings. */
+#if 1
+	if (o->legacyaudioscaling && o->rxvoiceadj > 1.0) {
 		register int i, x;
 		register float f1;
 		register int16_t *p = (int16_t *) f->data.ptr;
@@ -2438,6 +2452,8 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			p[i] = x;
 		}
 	}
+#endif
+
 	/* Compute the peak signal if requested */
 	if (o->measure_enabled) {
 		register int i;
@@ -3092,6 +3108,8 @@ static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 	ast_cli(fd, "Rx Level currently set to %d\n", o->rxmixerset);
 	ast_cli(fd, "Tx A Level currently set to %d\n", o->txmixaset);
 	ast_cli(fd, "Tx B Level currently set to %d\n", o->txmixbset);
+	if(o->legacyaudioscaling)
+		ast_cli(fd, "legacyaudioscaling is enabled (not recommended)\n");
 	return;
 }
 
@@ -3706,6 +3724,7 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_BOOL("preemphasis", o->preemphasis);
 		CV_UINT("duplex3", o->duplex3);
 		CV_UINT("clipledgpio", o->clipledgpio);
+		CV_BOOL("legacyaudioscaling", o->legacyaudioscaling);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
