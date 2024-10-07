@@ -3083,7 +3083,7 @@ static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 	ast_cli(fd, "Rx Level currently set to %d\n", o->rxmixerset);
 	ast_cli(fd, "Tx A Level currently set to %d\n", o->txmixaset);
 	ast_cli(fd, "Tx B Level currently set to %d\n", o->txmixbset);
-	if(o->legacyaudioscaling) {
+	if (o->legacyaudioscaling) {
 		ast_cli(fd, "legacyaudioscaling is enabled\n");
 	}
 	return;
@@ -3614,8 +3614,8 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
-			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
-			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
+		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
+		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
 	/* adjust settings based on the device */
 	switch (o->devtype) {
 		case C119B_PRODUCT_ID:
