@@ -749,8 +749,34 @@ static int astgetresp(char *cmd)
 	int rxondelay = 0, txoffdelay = 0;
 	int result;
 	char str[256];
+	int opt;
+	const char *device = NULL;
 
 	signal(SIGCHLD, ourhandler);
+
+	while ((opt = getopt(argc, argv, "n:")) != -1) {
+		switch (opt) {
+		case 'n':
+			device = optarg;
+			break;
+		default: /* '?' */
+			fprintf(stderr, "Usage: %s [-n node#]\n", argv[0]);
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	if ((device != NULL) && (strlen(device) > 0)) {
+		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "active %s", device);
+		if (astgetline(str, str, sizeof(str) - 1)) {
+			printf("The chan_simpleusb active device could not be set!\n\n");
+			printf("Verify that Asterisk is running and chan_simpleusb is loaded.\n\n");
+			exit(EXIT_FAILURE);
+		}
+		if (strstr(str, "Active (command) Simple USB Radio device set to ") != str) {
+			printf("%s\n", str);
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	for (;;) {
 
