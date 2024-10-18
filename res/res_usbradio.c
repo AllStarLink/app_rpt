@@ -759,6 +759,94 @@ struct timeval ast_radio_tvnow(void)
 	return tv;
 }
 
+#define CLIP_SAMP_THRESH       0x7eb0
+#define CLIP_EVENT_MIN_SAMPLES 3
+int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len)
+{
+	unsigned short i, j, val, max = 0, seq_clips = 0;
+	double pwr = 0.0;
+	short buf[FRAME_SIZE], last_clip = -1;
+
+	/* validate len and index */
+	if (len > 12 * FRAME_SIZE) {
+		len = 12 * FRAME_SIZE;
+	}
+	if (o->index >= AUDIO_STATS_LEN) {
+		o->index = 0;
+	}
+	/* Downsample from 48000 stereo to 8000 mono */
+	for (i = 10, j = 0; i < len; i += 12) {
+		buf[j++] = sbuf[i];
+	}
+	len /= 12;
+	/* len should now be 160 */
+	for (i = 0; i < len; i++) {
+		val = abs(buf[i]);
+		if (val) {
+			if (val > max) {
+				max = val;
+			}
+			pwr += (double) (val * val);
+			if (val > CLIP_SAMP_THRESH) {
+				if (last_clip >= 0 && last_clip + 1 == i) {
+					seq_clips++;
+				}
+				last_clip = i;
+			}
+		}
+	}
+	o->maxbuf[o->index] = max;
+	o->pwrbuf[o->index] = (unsigned int) (pwr / (double)len);
+	o->clipbuf[o->index] = seq_clips;
+	if (++o->index >= AUDIO_STATS_LEN) {
+		o->index = 0;
+	}
+	/* return 1 if clipping was detected */
+	return (seq_clips >= CLIP_EVENT_MIN_SAMPLES);
+}
+
+void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
+{
+	unsigned int i, pk = 0, pwr = 0, minpwr = 0x40000000, maxpwr = 0, clipcnt = 0;
+	double dpk, dmin, dmax, scale, tpwr = 0.0;
+	char s1[100];
+
+	/* Peak    = max(maxbuf)^2
+	 * Avg Pwr = avg(pwrbuf)
+	 *     Min = min(pwrbuf)
+	 *     Max = max(pwrbuf)
+	 */
+	for (i = 0; i < AUDIO_STATS_LEN; i++) {
+		if (o->maxbuf[i] > pk) {
+			pk = o->maxbuf[i];
+		}
+		pwr = o->pwrbuf[i];
+		if (pwr < minpwr) {
+			minpwr = pwr;
+		}
+		if (pwr > maxpwr) {
+			maxpwr = pwr;
+		}
+		tpwr += pwr;
+		clipcnt += o->clipbuf[i];
+	}
+	tpwr /= AUDIO_STATS_LEN;
+	/* Convert to dBFS / dB */
+	scale = 1.0 / (double) (1 << 30);
+	dpk = (pk > 0.0) ? 10 * log10(pk * pk * scale) : -96.0;
+	tpwr = (tpwr > 0.0) ? 10 * log10(tpwr * scale) : -96.0;
+	dmin = minpwr ? 10 * log10(minpwr * scale) : -96.0;
+	dmax = maxpwr ? 10 * log10(maxpwr * scale) : -96.0;
+	/* Print stats */
+	sprintf(s1, "RxAudioStats: Pk %5.1f  Avg Pwr %3.0f  Min %3.0f  Max %3.0f  dBFS  ClipCnt %u",
+			dpk, tpwr, dmin, dmax, clipcnt);
+	if (fd >= 0) {
+		ast_cli(fd, "%s\n", s1);
+	} else {
+		ast_verbose("%s\n", s1);
+	}
+}
+
 static int load_module(void)
 {
 	return 0;

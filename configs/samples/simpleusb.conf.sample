@@ -49,11 +49,15 @@
                             ; no - no carrier detection at all
                             ; usb - from the COR line on the USB sound fob (Active high)
                             ; usbinvert - from the inverted COR line on the USB sound fob (Active low)
+                            ; pp - from parallel port (Active high)
+                            ; ppinvert - from the inverted parallel port (Active low)
 								
 ;ctcssfrom = usbinvert      ; no,usb,usbinvert
                             ; no - CTCSS decoding, system will be carrier squelch
                             ; usb - CTCSS decoding using input from USB sound fob (Active high)
                             ; usbinvert - from the inverted CTCSS line on the USB sound fob (Active low)
+                            ; pp - from parallel port (Active high)
+                            ; ppinvert - from the inverted parallel port (Active low)
 
 ;deemphasis = no            ; enable de-emphasis (input from discriminator)
 
@@ -89,6 +93,10 @@
 ;pager = no                 ; no,a,b (e.g. pager = b means "put the normal repeat audio on channel A, and the pager audio on channel B")
 
 ;duplex3 = 0                ; duplex 3 gain setting (0 to disable)
+
+;clipledgpio = 0            ; Enable ADC Clip Detect feature to use a GPIO output (0 to disable).
+                            ; Supports URI Clip LED by setting a GPIO (if available) high for 500mS
+                            ; when clipping detected. Value = GPIO# to use (GPIO1 recommended)
 
 ;gpioX=in					; define input/output pin GPIO(x) in,out0,out1 (where X {1..8}) (optional)
 
