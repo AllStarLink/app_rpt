@@ -747,6 +747,7 @@ static int astgetresp(char *cmd)
 	int rxboost = 0, preemphasis = 0, deemphasis = 0;
 	int plfilter = 0, pttmode = 0, carrierfrom = 0, ctcssfrom = 0;
 	int rxondelay = 0, txoffdelay = 0;
+	int rxmixerset = 0, micplaymax = 0, spkrmax = 0, micmax = 0;
 	int result;
 	char str[256];
 	int opt;
@@ -781,14 +782,15 @@ static int astgetresp(char *cmd)
 	for (;;) {
 
 		/* get device parameters from Asterisk */
-		if (astgetline(COMMAND_PREFIX "tune menu-support 0", str, sizeof(str) - 1)) {
-			printf("The setup information for chan_simpleusb could not be retrieved!\n\n");
+		if (astgetline(COMMAND_PREFIX "tune menu-support 0+4", str, sizeof(str) - 1)) {
+			printf("The chan_simpleusb setup information could not be retrieved!\n\n");
 			printf("Verify that Asterisk is running and chan_simpleusb is loaded.\n\n");
 			exit(255);
 		}
-		if (sscanf(str, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", 
+		if (sscanf(str, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", 
 			&txmixaset, &txmixbset, &echomode, &rxboost, &preemphasis, &deemphasis, 
-			&plfilter, &pttmode, &carrierfrom, &ctcssfrom, &rxondelay, &txoffdelay) != 12) {
+			&plfilter, &pttmode, &carrierfrom, &ctcssfrom, &rxondelay, &txoffdelay,
+			&rxmixerset, &micplaymax, &spkrmax, &micmax) != 16) {
 			fprintf(stderr, "Error parsing device parameters: %s\n", str);
 			exit(255);
 		}
@@ -800,7 +802,7 @@ static int astgetresp(char *cmd)
 		}
 
 		printf("1) Select active USB device\n");
-		printf("2) Set Rx Voice Level (using display)\n");
+		printf("2) Set Rx Voice Level using display (currently '%d')\n", rxmixerset);
 		if (keying) {
 			printf("3) Set Transmit A Level (currently '%d') and send test tone\n", txmixaset);
 		} else {

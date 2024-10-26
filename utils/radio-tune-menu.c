@@ -78,6 +78,7 @@ static const char * const sd_signal_type[] = {"no", "usb", "usbinvert", "dsp", "
 static const char * const demodulation_type[] = {"no", "speaker", "flat"};
 
 /*! \brief mixer type */
+enum { TX_OUT_OFF, TX_OUT_VOICE, TX_OUT_LSD, TX_OUT_COMPOSITE, TX_OUT_AUX };
 static const char * const mixer_type[] = {"no", "voice", "tone", "composite", "auxvoice"};
 
 /*! \brief command prefix for Asterisk - simpleusb channel driver access */
@@ -975,6 +976,10 @@ static void options_menu(void)
 	int rxboost = 0, txboost = 0, carrierfrom = 0, ctcssfrom = 0;
 	int rxondelay = 0, txoffdelay = 0, txprelim = 0, txlimonly = 0;
 	int rxdemod = 0, txmixa = 0, txmixb = 0;
+	int rxmixerset = 0, rxsquelchadj = 0;
+	float rxvoiceadj = 0;
+	int txmixaset = 0, txmixbset = 0, txctcssadj = 0;
+	int micplaymax = 0, spkrmax = 0, micmax = 0;
 	char str[256];
 	int result;
 	int opt;
@@ -1009,15 +1014,17 @@ static void options_menu(void)
 	for (;;) {
 
 		/* get device parameters from Asterisk */
-		if (astgetline(COMMAND_PREFIX "tune menu-support 0", str, sizeof(str) - 1)) {
+		if (astgetline(COMMAND_PREFIX "tune menu-support 0+9", str, sizeof(str) - 1)) {
 			printf("The setup information for chan_usbradio could not be retrieved!\n\n");
 			printf("Verify that Asterisk is running and chan_usbradio is loaded.\n\n");
 			exit(255);
 		}
-		if (sscanf(str, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", 
+		if (sscanf(str, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d", 
 			&flatrx, &txhasctcss, &echomode, &rxboost, &txboost,
 			&carrierfrom, &ctcssfrom, &rxondelay, &txoffdelay,
-			&txprelim, & txlimonly, &rxdemod, &txmixa, &txmixb) != 14) {
+			&txprelim, &txlimonly, &rxdemod, &txmixa, &txmixb,
+			&rxmixerset, &rxvoiceadj, &rxsquelchadj, &txmixaset,
+			&txmixbset, &txctcssadj, &micplaymax, &spkrmax, &micmax) != 23) {
 			fprintf(stderr, "Error parsing device parameters: %s\n", str);
 			exit(255);
 		}
@@ -1031,38 +1038,59 @@ static void options_menu(void)
 		if (flatrx) {
 			printf("2) Auto-Detect Rx Noise Level Value (with no carrier)\n");
 		} else {
-			printf("2) Does not apply to this USB device configuration\n");
+			printf("2) Auto-Detect Rx Noise Level does not apply to this devices configuration\n");
 		}
-		printf("3) Set Rx Voice Level (using display)\n");
+		if (flatrx) {
+			printf("3) Set Rx Voice Level using display (currently '%d')\n", (int) ((rxvoiceadj * 200.0) + .5));
+		} else {
+			printf("3) Set Rx Voice Level using display (currently '%d')\n", rxmixerset);
+		}
 		if (flatrx) {
 			printf("4) Auto-Detect Rx CTCSS Level Value (with carrier + CTCSS)\n");
 		} else {
-			printf("4) Does not apply to this USB device configuration\n");
+			printf("4) Auto-Detect Rx CTCSS Level does not apply to this devices configuration\n");
 		}
 		if (flatrx) {
-			printf("5) Set Rx Squelch Level\n");
+			printf("5) Set Rx Squelch Level (currently '%d')\n", rxsquelchadj);
 		} else {
-			printf("5) Does not apply to this USB device configuration\n");
+			printf("5) Set Rx Squelch Level does not apply to this devices configuration\n");
 		}
-		if (keying) {
-			printf("6) Set Transmit Voice Level and send test tone (no CTCSS)\n");
+		if ((txmixa == TX_OUT_VOICE) || (txmixa == TX_OUT_COMPOSITE) ||
+		    (txmixb == TX_OUT_VOICE) || (txmixb == TX_OUT_COMPOSITE)) {
+			if (keying) {
+				printf("6) Set Transmit Voice Level and send test tone (no CTCSS)\n");
+			} else {
+				if ((txmixa == TX_OUT_VOICE) || (txmixa == TX_OUT_COMPOSITE)) {
+					printf("6) Set Transmit Voice Level (currently '%d')\n", txmixaset);
+				} else {
+					printf("6) Set Transmit Voice Level (currently '%d')\n", txmixbset);
+				}
+			}
 		} else {
-			printf("6) Set Transmit Voice Level\n");
+			printf("7) Set Transmit Voice Level not available as configured\n");
 		}
-		printf("7) Set Transmit Aux Voice Level\n");
+		if ((txmixa == TX_OUT_AUX) || (txmixb == TX_OUT_AUX)) {
+		        if (txmixa == TX_OUT_AUX) {
+				printf("7) Set Transmit Aux Voice Level (currently '%d')\n", txmixaset);
+		        } else {
+				printf("7) Set Transmit Aux Voice Level (currently '%d')\n", txmixbset);
+		        }
+		} else {
+			printf("7) Set Transmit Aux Voice Level not available as configured\n");
+		}
 		if (txhasctcss) {
 			if (keying) {
 				printf("8) Set Transmit CTCSS Level and send CTCSS tone\n");
 			} else {
-				printf("8) Set Transmit CTCSS Level\n");
+				printf("8) Set Transmit CTCSS Level (currently '%d')\n", txctcssadj);
 			}
 		} else {
-			printf("8) Does not apply to this USB device configuration\n");
+			printf("8) Set Transmit CTCSS Level does not apply to this devices configuration\n");
 		}
 		if (flatrx) {
 			printf("9) Auto-Detect Rx Voice Level Value (with carrier + 1KHz @ 3KHz Dev)\n");
 		} else {
-			printf("9) Does not apply to this USB device configuration\n");
+			printf("9) Auto-Detect Rx Voice Level does not apply to this devices configuration\n");
 		}
 		printf("E) Toggle Echo Mode (currently '%s')\n", (echomode) ? "enabled" : "disabled");
 		printf("F) Flash (Toggle PTT and Tone output several times)\n");

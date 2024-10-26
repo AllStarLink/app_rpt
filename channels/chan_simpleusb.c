@@ -3326,10 +3326,22 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 	option_verbose = 0;
 	switch (cmd[0]) {
 	case '0':					/* return audio processing configuration */
-		ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", 
-			o->txmixaset, o->txmixbset, o->echomode, o->rxboost, o->preemphasis, 
-			o->deemphasis, o->plfilter, o->invertptt, o->rxcdtype, o->rxsdtype, 
-			o->rxondelay, o->txoffdelay);
+		/* note: to maintain backward compatibility for those expecting a specific # of
+		   values to be returned (and in a specific order).  So, we only add to the end
+		   of the returned list.  Also, once an update has been released we can't change
+		   the format/content of any previously returned string */
+		if (!strcmp(cmd, "0+4")) {
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", 
+				o->txmixaset, o->txmixbset, o->echomode, o->rxboost, o->preemphasis, 
+				o->deemphasis, o->plfilter, o->invertptt, o->rxcdtype, o->rxsdtype, 
+				o->rxondelay, o->txoffdelay, o->rxmixerset,
+				o->micplaymax, o->spkrmax, o->micmax);
+		} else {
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", 
+				o->txmixaset, o->txmixbset, o->echomode, o->rxboost, o->preemphasis, 
+				o->deemphasis, o->plfilter, o->invertptt, o->rxcdtype, o->rxsdtype, 
+				o->rxondelay, o->txoffdelay);
+		}
 		break;
 	case '1':					/* return usb device name list */
 		for (x = 0, oy = simpleusb_default.next; oy && oy->name; oy = oy->next, x++) {
