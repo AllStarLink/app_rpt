@@ -181,12 +181,6 @@ struct chan_simpleusb_pvt {
 #define WARN_speed			2
 #define WARN_frag			4
 
-	/* boost support. BOOST_SCALE * 10 ^(BOOST_MAX/20) must
-	 * be representable in 16 bits to avoid overflows.
-	 */
-#define	BOOST_SCALE	(1<<9)
-#define	BOOST_MAX	40			/* slightly less than 7 bits */
-	int boost;					/* input boost, scaled by BOOST_SCALE */
 	char devicenum;
 	char devstr[128];
 	int spkrmax;
@@ -329,6 +323,8 @@ struct chan_simpleusb_pvt {
 
 	struct rxaudiostatistics rxaudiostats;
 	
+	int legacyaudioscaling;
+
 	ast_mutex_t usblock;
 };
 
@@ -341,14 +337,17 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.queuesize = QUEUE_SIZE,
 	.frags = FRAGS,
 	.readpos = 0,				/* start here on reads */
-	.boost = BOOST_SCALE,
 	.wanteeprom = 1,
 	.usedtmf = 1,
 	.rxondelay = 0,
 	.txoffdelay = 0,
 	.pager = PAGER_NONE,
 	.clipledgpio = 0,
-	.rxaudiostats.index = 0
+	.rxaudiostats.index = 0,
+	/* After the vast majority of existing installs have had a chance to review their
+	   audio settings and the associated old scaling/clipping hacks are no longer in
+	   significant use the following cfg and all related code should be deleted. */
+	.legacyaudioscaling = 1,
 };
 
 /*	DECLARE FUNCTION PROTOTYPES	*/
@@ -2105,14 +2104,16 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 					/* enough to fill a frame */
 					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
 
-					/* TBR - below is an attempt to match levels to the original CM108 IC which has
+					/* Below is an attempt to match levels to the original CM108 IC which has
 					 * been out of production for over 10 years. Scaling audio to 109.375% will
 					 * result in clipping! Any adjustments for CM1xxx gain differences should be
 					 * made in the mixer settings, not in the audio stream.
+					 * TODO: After the vast majority of existing installs have had a chance to review their
+					 * audio settings and these old scaling/clipping hacks are no longer in significant use
+					 * the legacyaudioscaling cfg and related code should be deleted.
 					 */
-#if 1
 					/* Adjust the audio level for CM119 A/B devices */
-					if (o->devtype != C108_PRODUCT_ID) {
+					if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
 						register int v;
 
 						sp = (short *) o->simpleusb_write_buf;
@@ -2128,7 +2129,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 							*sp++ = v;
 						}
 					}
-#endif
 
 					sp = (short *) o->simpleusb_write_buf;
 					sp1 = outbuf;
@@ -2404,25 +2404,15 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			}
 		}
 	}
-	/* Scale the input audio.
-	 * o->boost is hardcoded to equal BOOST_SCALE.
-	 * This code is not executed.
+
+	/* Raw audio samples should never be clipped or scaled for any reason. Adjustments to 
+	 * audio levels should be made only in the USB interface mixer settings.
+	 * TODO: After the vast majority of existing installs have had a chance to review their
+	 * audio settings and these old scaling/clipping hacks are no longer in significant use
+	 * the legacyaudioscaling cfg and related code should be deleted.
 	 */
-	if (o->boost != BOOST_SCALE) {	/* scale and clip values */
-		register int i, x;
-		register int16_t *p = (int16_t *) f->data.ptr;
-		for (i = 0; i < f->samples; i++) {
-			x = (p[i] * o->boost) / BOOST_SCALE;
-			if (x > 32767) {
-				x = 32767;
-			} else if (x < -32768) {
-				x = -32768;
-			}
-			p[i] = x;
-		}
-	}
 	/* scale and clip values */
-	if (o->rxvoiceadj > 1.0) {	
+	if (o->legacyaudioscaling && o->rxvoiceadj > 1.0) {
 		register int i, x;
 		register float f1;
 		register int16_t *p = (int16_t *) f->data.ptr;
@@ -2438,6 +2428,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			p[i] = x;
 		}
 	}
+
 	/* Compute the peak signal if requested */
 	if (o->measure_enabled) {
 		register int i;
@@ -3092,6 +3083,9 @@ static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 	ast_cli(fd, "Rx Level currently set to %d\n", o->rxmixerset);
 	ast_cli(fd, "Tx A Level currently set to %d\n", o->txmixaset);
 	ast_cli(fd, "Tx B Level currently set to %d\n", o->txmixbset);
+	if (o->legacyaudioscaling) {
+		ast_cli(fd, "legacyaudioscaling is enabled\n");
+	}
 	return;
 }
 
@@ -3198,6 +3192,37 @@ static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
 }
 
 /*!
+ * \brief Update the tune settings to the configuration file.
+ * \param filename	The configuration file being updated (e.g. "simpleusb.conf").
+ * \param category	The category being updated (e.g. "12345").
+ * \param variable	The variable being updated (e.g. "rxboost").
+ * \param value		The value being updated (e.g. "yes").
+ * \retval 0		If successful.
+ * \retval -1		If unsuccessful.
+ */
+static int tune_variable_update(const char *filename, struct ast_category *category,
+								const char *variable, const char *value)
+{
+	int res;
+	struct ast_variable *var;
+
+	res = ast_variable_update(category, variable, value, NULL, 0);
+	if (res == 0) {
+		return 0;
+	}
+
+	/* if we could not find/update the variable, create new */
+	var = ast_variable_new(variable, value, filename);
+	if (var == NULL) {
+		return -1;
+	}
+
+	/* and append */
+	ast_variable_append(category, var);
+	return 0;
+}
+
+/*!
  * \brief Write tune settings to the configuration file. If the device EEPROM is enabled, the settings are  saved to EEPROM.
  * \param o Channel private.
  */
@@ -3216,25 +3241,25 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 	}
 
 #define CONFIG_UPDATE_STR(field) \
-	if (ast_variable_update(category, #field, o->field, NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, o->field)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
 #define CONFIG_UPDATE_INT(field) { \
 	char _buf[15]; \
 	snprintf(_buf, sizeof(_buf), "%d", o->field); \
-	if (ast_variable_update(category, #field, _buf, NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, _buf)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	} \
 }
 
 #define CONFIG_UPDATE_BOOL(field) \
-	if (ast_variable_update(category, #field, o->field ? "yes" : "no", NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, o->field ? "yes" : "no")) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 	
 #define CONFIG_UPDATE_SIGNAL(key, field) \
-	if (ast_variable_update(category, #key, signal_type[o->field], NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #key, signal_type[o->field])) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
@@ -3258,7 +3283,7 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 		CONFIG_UPDATE_INT(rxondelay);
 		CONFIG_UPDATE_INT(txoffdelay);
 		if (ast_config_text_file_save2(CONFIG, cfg, "chan_simpleusb", 0)) {
-			ast_log(LOG_WARNING, "Failed to save config\n");
+			ast_log(LOG_WARNING, "Failed to save config %s\n", CONFIG);
 		}
 	}
 
@@ -3632,7 +3657,8 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
-			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype), ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
+		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
+		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
 	/* adjust settings based on the device */
 	switch (o->devtype) {
 		case C119B_PRODUCT_ID:
@@ -3646,7 +3672,7 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 			/* get interval step size */
 			f = 1000.0 / (float) o->micmax;
 	}
-	ast_radio_setamixer(o->devicenum,MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
+	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
 	/* set the received voice adjustment factor */
@@ -3718,6 +3744,7 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_BOOL("preemphasis", o->preemphasis);
 		CV_UINT("duplex3", o->duplex3);
 		CV_UINT("clipledgpio", o->clipledgpio);
+		CV_BOOL("legacyaudioscaling", o->legacyaudioscaling);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {

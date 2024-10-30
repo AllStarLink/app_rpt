@@ -194,12 +194,6 @@ struct chan_usbradio_pvt {
 #define WARN_speed			2
 #define WARN_frag			4
 
-	/* boost support. BOOST_SCALE * 10 ^(BOOST_MAX/20) must
-	 * be representable in 16 bits to avoid overflows.
-	 */
-#define	BOOST_SCALE	(1<<9)
-#define	BOOST_MAX	40			/* slightly less than 7 bits */
-	int boost;					/* input boost, scaled by BOOST_SCALE */
 	char devicenum;
 	char devstr[128];
 	int spkrmax;
@@ -411,6 +405,8 @@ struct chan_usbradio_pvt {
 
 	struct rxaudiostatistics rxaudiostats;
 
+	int legacyaudioscaling;
+
 	ast_mutex_t usblock;
 };
 
@@ -423,7 +419,6 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.queuesize = QUEUE_SIZE,
 	.frags = FRAGS,
 	.readpos = AST_FRIENDLY_OFFSET,	/* start here on reads */
-	.boost = BOOST_SCALE,
 	.wanteeprom = 1,
 	.usedtmf = 1,
 	.rxondelay = 0,
@@ -431,7 +426,11 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.area = 0,
 	.rptnum = 0,
 	.clipledgpio = 0,
-	.rxaudiostats.index = 0
+	.rxaudiostats.index = 0,
+	/* After the vast majority of existing installs have had a chance to review their
+	   audio settings and the associated old scaling/clipping hacks are no longer in
+	   significant use the following cfg and all related code should be deleted. */
+	.legacyaudioscaling = 1,
 };
 
 /*	DECLARE FUNCTION PROTOTYPES	*/
@@ -2067,16 +2066,20 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		}
 	}
 
-	/* TBR - below is an attempt to match levels to the original CM108 IC which has been
+	/* Below is an attempt to match levels to the original CM108 IC which has been
 	 * out of production for over 10 years. Scaling all rx audio to 80% results in a 20%
 	 * loss in dynamic range, added quantization noise, a 2dB reduction in outgoing IAX
 	 * audio levels, and inconsistency with Simpleusb. Adjustments for CM1xxx IC gain
 	 * differences should be made in the mixer settings, not in the audio stream.
+	 * TODO: After the vast majority of existing installs have had a chance to review their
+	 * audio settings and these old scaling/clipping hacks are no longer in significant use
+	 * the legacyaudioscaling cfg and related code should be deleted.
 	 */
-#if 1
 	/* Decrease the audio level for CM119 A/B devices */
-	if (o->devtype != C108_PRODUCT_ID) {
-		register short *sp = (short *) (o->usbradio_read_buf + o->readpos);
+	if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
+		/* Subtract res from o->readpos in below assignment (o->readpos was incremented
+		   above prior to check of if enough samples were received) */
+		register short *sp = (short *) (o->usbradio_read_buf + (o->readpos - res));
 		register float v;
 		register int i;
 
@@ -2085,7 +2088,6 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			*sp++ = (int) v;
 		}
 	}
-#endif
 
 #if 1
 	if (o->txkeyed || o->txtestkey || o->echoing) {
@@ -2135,14 +2137,16 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 #endif
 
-	/* TBR - below is an attempt to match levels to the original CM108 IC which has been
+	/* Below is an attempt to match levels to the original CM108 IC which has been
 	 * out of production for over 10 years. Scaling audio to 110% will result in clipping!
 	 * Any adjustments for CM1xxx IC gain differences should be made in the mixer
 	 * settings, not in the audio stream.
+	 * TODO: After the vast majority of existing installs have had a chance to review their
+	 * audio settings and these old scaling/clipping hacks are no longer in significant use
+	 * the legacyaudioscaling cfg and related code should be deleted.
 	 */
-#if 1
 	/* For the CM108 adjust the audio level */
-	if (o->devtype != C108_PRODUCT_ID) {
+	if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
 		register short *sp = (short *) o->usbradio_write_buf;
 		register float v;
 		register int i;
@@ -2157,7 +2161,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			*sp++ = (int) v;
 		}
 	}
-#endif
+
 	/* Write the received audio to the sound card */
 	soundcard_writeframe(o, (short *) o->usbradio_write_buf);
 
@@ -2409,23 +2413,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			}
 		}
 	}
-	/* Scale the input audio.
-	 * o->boost is hardcoded to equal BOOST_SCALE.
-	 * This code is not executed.
-	 */
-	if (o->boost != BOOST_SCALE) {	/* scale and clip values */
-		register int i, x;
-		register int16_t *p = (int16_t *) f->data.ptr;
-		for (i = 0; i < f->samples; i++) {
-			x = (p[i] * o->boost) / BOOST_SCALE;
-			if (x > 32767) {
-				x = 32767;
-			} else if (x < -32768) {
-				x = -32768;
-			}
-			p[i] = x;
-		}
-	}
+
 	if (o->pmrChan->b.txCtcssReady) {
 		struct ast_frame wf = { AST_FRAME_TEXT };
 		char msg[32];
@@ -3704,6 +3692,9 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 	ast_cli(fd, "Rx Squelch currently set to %d\n", o->rxsquelchadj);
 	ast_cli(fd, "Tx Voice Level currently set to %d\n", o->txmixaset);
 	ast_cli(fd, "Tx Tone Level currently set to %d\n", o->txctcssadj);
+	if (o->legacyaudioscaling) {
+		ast_cli(fd, "legacyaudioscaling is enabled\n");
+	}
 	return;
 }
 
@@ -4408,6 +4399,37 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 }
 
 /*!
+ * \brief Update the tune settings to the configuration file.
+ * \param filename	The configuration file being updated (e.g. "usbradio.conf").
+ * \param category	The category being updated (e.g. "12345").
+ * \param variable	The variable being updated (e.g. "rxboost").
+ * \param value		The value being updated (e.g. "yes").
+ * \retval 0		If successful.
+ * \retval -1		If unsuccessful.
+ */
+static int tune_variable_update(const char *filename, struct ast_category *category,
+								const char *variable, const char *value)
+{
+	int res;
+	struct ast_variable *var;
+
+	res = ast_variable_update(category, variable, value, NULL, 0);
+	if (res == 0) {
+		return 0;
+	}
+
+	/* if we could not find/update the variable, create new */
+	var = ast_variable_new(variable, value, filename);
+	if (var == NULL) {
+		return -1;
+	}
+
+	/* and append */
+	ast_variable_append(category, var);
+	return 0;
+}
+
+/*!
  * \brief Write tune settings to the configuration file. If the device EEPROM is enabled, the settings are  saved to EEPROM.
  * \param o Channel private.
  */
@@ -4426,33 +4448,33 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	}
 
 #define CONFIG_UPDATE_STR(field) \
-	if (ast_variable_update(category, #field, o->field, NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, o->field)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
 #define CONFIG_UPDATE_INT(field) { \
 	char _buf[15]; \
 	snprintf(_buf, sizeof(_buf), "%d", o->field); \
-	if (ast_variable_update(category, #field, _buf, NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, _buf)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	} \
 }
 
 #define CONFIG_UPDATE_BOOL(field) \
-	if (ast_variable_update(category, #field, o->field ? "yes" : "no", NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, o->field ? "yes" : "no")) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
 #define CONFIG_UPDATE_FLOAT(field) { \
 	char _buf[15]; \
 	snprintf(_buf, sizeof(_buf), "%f", o->field); \
-	if (ast_variable_update(category, #field, _buf, NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #field, _buf)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	} \
 }
 	
 #define CONFIG_UPDATE_SIGNAL(key, field, signal_type) \
-	if (ast_variable_update(category, #key, signal_type[o->field], NULL, 0)) { \
+	if (tune_variable_update(CONFIG, category, #key, signal_type[o->field])) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
@@ -4482,7 +4504,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		CONFIG_UPDATE_SIGNAL(txmixa, txmixa, mixer_type);
 		CONFIG_UPDATE_SIGNAL(txmixb, txmixb, mixer_type);
 		if (ast_config_text_file_save2(CONFIG, cfg, "chan_usbradio", 0)) {
-			ast_log(LOG_WARNING, "Failed to save config\n");
+			ast_log(LOG_WARNING, "Failed to save config %s\n", CONFIG);
 		}
 	}
 
@@ -4534,7 +4556,8 @@ static void mixer_write(struct chan_usbradio_pvt *o)
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
 	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
-			  ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype), ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
+		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
+		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
 	/* adjust settings based on the device */
 	switch (o->devtype)	{
 		case C119B_PRODUCT_ID:
@@ -4950,6 +4973,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_UINT("txhpf", o->txhpf);
 		CV_UINT("sendvoter", o->sendvoter);
 		CV_UINT("clipledgpio", o->clipledgpio);
+		CV_BOOL("legacyaudioscaling", o->legacyaudioscaling);
 		CV_END;
 		
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
