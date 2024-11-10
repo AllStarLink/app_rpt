@@ -730,7 +730,11 @@ void load_rpt_vars(int n, int init)
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
 		ast_mutex_unlock(&rpt_vars[n].lock);
-		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
+		ast_log(LOG_ERROR, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
+		pthread_exit(NULL);
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_mutex_unlock(&rpt_vars[n].lock);
+		ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
 		pthread_exit(NULL);
 	}
 	rpt_vars[n].cfg = cfg;
