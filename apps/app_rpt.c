@@ -5511,7 +5511,10 @@ static int load_config(int reload)
 
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
-		ast_log(LOG_NOTICE, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
+		ast_log(LOG_ERROR, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
+		return -1;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
 		return -1;
 	}
 
@@ -6232,6 +6235,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (b1)
 			ast_shrink_phone_number(b1);
 		cfg = ast_config_load("rpt.conf", config_flags);
+		if (cfg == CONFIG_STATUS_FILEINVALID) {
+			cfg = NULL;
+		}
 		if (cfg && ((!options) || (*options == 'X') || (*options == 'F'))) {
 			myadr = (char *) ast_variable_retrieve(cfg, "proxy", "ipaddr");
 			if (options && (*options == 'F')) {
