@@ -631,6 +631,9 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 			o->hid_gpio_val |= (1 << i);
 		}
 	}
+	if (o->invertptt) {
+		o->hid_gpio_val |= o->hid_io_ptt;
+	}
 	return 0;
 }
 
@@ -1168,17 +1171,17 @@ static void *hidthread(void *arg)
 			ast_mutex_unlock(&o->txqlock);
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
 			if (txreq && (!o->lasttx)) {
-				buf[o->hid_gpio_loc] = o->hid_io_ptt;
+				buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
 				if (o->invertptt) {
-					buf[o->hid_gpio_loc] = 0;
+					buf[o->hid_gpio_loc] = o->hid_gpio_val &= ~o->hid_io_ptt;
 				}
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
 				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", o->name, txreq);
 			} else if ((!txreq) && o->lasttx) {
-				buf[o->hid_gpio_loc] = 0;
+				buf[o->hid_gpio_loc] = o->hid_gpio_val &= ~o->hid_io_ptt;
 				if (o->invertptt) {
-					buf[o->hid_gpio_loc] = o->hid_io_ptt;
+					buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
 				}
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
@@ -1382,10 +1385,11 @@ static void *hidthread(void *arg)
 		}
 		o->lasttx = 0;
 		ast_mutex_lock(&o->usblock);
-		buf[o->hid_gpio_loc] = 0;
+		o->hid_gpio_val &= ~o->hid_io_ptt;
 		if (o->invertptt) {
-			buf[o->hid_gpio_loc] = o->hid_io_ptt;
+			o->hid_gpio_val |= o->hid_io_ptt;
 		}
+		buf[o->hid_gpio_loc] = o->hid_gpio_val;
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
@@ -1394,10 +1398,11 @@ static void *hidthread(void *arg)
 	o->lasttx = 0;
 	if (usb_handle) {
 		ast_mutex_lock(&o->usblock);
-		buf[o->hid_gpio_loc] = 0;
+		o->hid_gpio_val &= ~o->hid_io_ptt;
 		if (o->invertptt) {
-			buf[o->hid_gpio_loc] = o->hid_io_ptt;
+			o->hid_gpio_val |= o->hid_io_ptt;
 		}
+		buf[o->hid_gpio_loc] = o->hid_gpio_val;
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_lock(&o->usblock);
