@@ -2695,14 +2695,6 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		myrpt->txchannel = myrpt->rxchannel;
 		myrpt->dahditxchannel = IS_DAHDI_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 	}
-	/* If the TX channel is not a pseudo channel, toggle the PTT line */
-	if (!IS_PSEUDO(myrpt->txchannel)) {
-		/* Wait for the driver to finish initialization */
-		usleep(250000);
-		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
-		usleep(50000);
-		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
-	}
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN)) {
 		rpt_hangup_rx_tx(myrpt);
