@@ -47,6 +47,7 @@
 #include <linux/parport.h>
 #include <linux/version.h>
 #include <alsa/asoundlib.h>
+#include "asterisk/config.h"
 
 #include "asterisk/res_usbradio.h"
 
@@ -68,6 +69,8 @@
 #include "asterisk/cli.h"			
 #include "asterisk/poll-compat.h" 	/* Used for polling */
 
+#define CONFIG_FILE "res_usbradio.conf"
+
 AST_MUTEX_DEFINE_STATIC(usb_list_lock);
 
 /*! 
@@ -77,6 +80,17 @@ AST_MUTEX_DEFINE_STATIC(usb_list_lock);
  */
 static char *usb_device_list = NULL;
 static int usb_device_list_size = 0;
+
+/*! 
+ * \brief Structure for user defined usb devices.
+ */
+struct user_usb_device {
+	ushort idVendor;
+	ushort idProduct;
+	AST_LIST_ENTRY(user_usb_device) entry;
+};
+
+static AST_RWLIST_HEAD_STATIC(user_devices, user_usb_device);
 
 
 long ast_radio_lround(double x)
@@ -294,6 +308,30 @@ void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
 	buf[EEPROM_USER_CS_ADDR] = (65535 - cs) + 1;
 	write_eeprom(handle, i, buf[EEPROM_USER_CS_ADDR]);
 }
+/*!
+ * \brief See if the passed device matches one of our user defined devices.
+ *
+ * \param dev	usb device
+ * \return 0	does not matches
+ * \return 1	matches
+ */
+static int is_user_device(struct usb_device *dev)
+{
+	struct user_usb_device *device;
+	int match_found = 0;
+	
+	AST_RWLIST_RDLOCK(&user_devices);
+	AST_LIST_TRAVERSE(&user_devices, device, entry) {
+		if(dev->descriptor.idVendor == device->idVendor && 
+			dev->descriptor.idProduct == device->idProduct) {
+			match_found = 1;
+			break;
+		};
+	}
+	AST_RWLIST_UNLOCK(&user_devices);
+
+	return match_found;
+}
 
 int ast_radio_hid_device_mklist(void)
 {
@@ -319,15 +357,15 @@ int ast_radio_hid_device_mklist(void)
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			if ((dev->descriptor.idVendor
-				 == C108_VENDOR_ID) &&
+			if (((dev->descriptor.idVendor == C108_VENDOR_ID) &&
 				(((dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) ||
 				 (dev->descriptor.idProduct == C108B_PRODUCT_ID) ||
 				 (dev->descriptor.idProduct == C108AH_PRODUCT_ID) ||
 				 (dev->descriptor.idProduct == C119A_PRODUCT_ID) ||
 				 (dev->descriptor.idProduct == C119B_PRODUCT_ID) ||
 				 ((dev->descriptor.idProduct & 0xff00) == N1KDO_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C119_PRODUCT_ID))) {
+				 (dev->descriptor.idProduct == C119_PRODUCT_ID))) ||
+				 is_user_device(dev)) {
 				sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
 				for (i = 0; i < 32; i++) {
 					sprintf(str, "/proc/asound/card%d/usbbus", i);
@@ -421,15 +459,15 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			if ((dev->descriptor.idVendor
-				 == C108_VENDOR_ID) &&
+			if (((dev->descriptor.idVendor == C108_VENDOR_ID) &&
 				(((dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) ||
 				 (dev->descriptor.idProduct == C108B_PRODUCT_ID) ||
 				 (dev->descriptor.idProduct == C108AH_PRODUCT_ID) ||
 				 (dev->descriptor.idProduct == C119A_PRODUCT_ID) ||
 				 (dev->descriptor.idProduct == C119B_PRODUCT_ID) ||
 				 ((dev->descriptor.idProduct & 0xff00) == N1KDO_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C119_PRODUCT_ID))) {
+				 (dev->descriptor.idProduct == C119_PRODUCT_ID))) ||
+				 is_user_device(dev)) {
 				sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
 				for (i = 0; i < 32; i++) {
 					sprintf(str, "/proc/asound/card%d/usbbus", i);
@@ -820,13 +858,101 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
 	}
 }
 
+/*!
+ * \brief Remove and free up all user devices.
+ */
+static void cleanup_user_devices(void)
+{
+	struct user_usb_device *device;
+	/* Remove all existing devices */
+	AST_RWLIST_WRLOCK(&user_devices);
+	AST_LIST_TRAVERSE_SAFE_BEGIN(&user_devices, device, entry) {
+		AST_LIST_REMOVE_CURRENT(entry);
+		ast_free(device);
+	}
+	AST_LIST_TRAVERSE_SAFE_END;
+	AST_RWLIST_UNLOCK(&user_devices);
+}
+
+/* Load our configuration */
+static int load_config(int reload)
+{
+	struct ast_config *cfg;
+	struct ast_flags config_flags = { reload ? CONFIG_FLAG_FILEUNCHANGED : 0 };
+	const char *varval;
+
+	if (!(cfg = ast_config_load(CONFIG_FILE, config_flags))) {
+		ast_log(LOG_WARNING, "Config file %s not found\n", CONFIG_FILE);
+		return 0;
+	} else if (cfg == CONFIG_STATUS_FILEUNCHANGED) {
+		ast_debug(1, "Config file %s unchanged, skipping\n", CONFIG_FILE);
+		return 0;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format. Aborting.\n", CONFIG_FILE);
+		return -1;
+	}
+	
+	if (reload) {
+		cleanup_user_devices();
+	}
+	
+	/* general section 
+	 * usb_devices format vvvv:pppp,vvvv:pppp where vvvv is usb vendor id and pppp is usb product id
+	 */
+	if ((varval = ast_variable_retrieve(cfg, "general", "usb_devices")) && !ast_strlen_zero(varval)) {
+		struct user_usb_device *device;
+		char *item;
+		char *value;
+		int idVendor;
+		int idProduct;
+		
+		value = ast_strdupa(varval);
+		
+		/* process the delimited list */
+		while ((item = ast_strsep(&value, ',', AST_STRSEP_STRIP))) {
+			
+			if(sscanf(item, "%04x:%04x", &idVendor, &idProduct) == 2) {
+				/* allocate space for our device */
+				if(!(device = ast_calloc(1, sizeof(*device)))) {
+					break;
+				}
+				device->idVendor = idVendor;
+				device->idProduct = idProduct;
+				/*Add it to our list */
+				AST_RWLIST_WRLOCK(&user_devices);
+				AST_LIST_INSERT_HEAD(&user_devices, device, entry);
+				AST_RWLIST_UNLOCK(&user_devices);
+				
+				ast_debug(1, "Loaded user defined usb device %s", item);
+			} else {
+				ast_log(LOG_WARNING,"USB Device descriptor '%s' is in the wrong format", item);
+			}
+		}
+	}
+	
+	ast_config_destroy(cfg);
+
+	return 0;
+}
+
+static int reload_module(void)
+{
+	return load_config(1);
+}
+
 static int load_module(void)
 {
+	if (load_config(0)) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
 	return 0;
 }
 
 static int unload_module(void)
 {
+	cleanup_user_devices();
+	
 	return 0;
 }
 
@@ -834,5 +960,6 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_
 	.support_level = AST_MODULE_SUPPORT_EXTENDED,
 	.load = load_module,
 	.unload = unload_module,
+	.reload = reload_module,
 	.load_pri = AST_MODPRI_CHANNEL_DEPEND - 5,
 );
