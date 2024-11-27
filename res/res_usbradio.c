@@ -939,7 +939,7 @@ static int load_config(int reload)
 				}
 				device->idVendor = idVendor;
 				device->idProduct = idProduct;
-				device->idMask = 0xfff;
+				device->idMask = 0xffff;
 				/* Add it to our list */
 				AST_RWLIST_WRLOCK(&user_devices);
 				AST_LIST_INSERT_HEAD(&user_devices, device, entry);
