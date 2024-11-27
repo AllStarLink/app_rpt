@@ -82,16 +82,32 @@ static char *usb_device_list = NULL;
 static int usb_device_list_size = 0;
 
 /*! 
- * \brief Structure for user defined usb devices.
+ * \brief Structure for defined usb devices.
  */
-struct user_usb_device {
+struct usb_device_entry {
 	ushort idVendor;
 	ushort idProduct;
-	AST_LIST_ENTRY(user_usb_device) entry;
+	ushort idMask;
+	AST_LIST_ENTRY(usb_device_entry) entry;
 };
 
-static AST_RWLIST_HEAD_STATIC(user_devices, user_usb_device);
+/*! 
+ * \brief Array of known compatible usb devices.
+ */
+const struct usb_device_entry known_devices[] = {
+	{ C108_VENDOR_ID, C108_PRODUCT_ID,   0xfffc, {NULL} },
+	{ C108_VENDOR_ID, C108B_PRODUCT_ID,  0xffff, {NULL} },
+	{ C108_VENDOR_ID, C108AH_PRODUCT_ID, 0xffff, {NULL} },
+	{ C108_VENDOR_ID, C119A_PRODUCT_ID,  0xffff, {NULL} },
+	{ C108_VENDOR_ID, C119B_PRODUCT_ID,  0xffff, {NULL} },
+	{ C108_VENDOR_ID, N1KDO_PRODUCT_ID,  0xff00, {NULL} },
+	{ C108_VENDOR_ID, C119_PRODUCT_ID,   0xffff, {NULL} },
+};
 
+/*! 
+ * \brief Linked list of user defined usb devices.
+ */
+static AST_RWLIST_HEAD_STATIC(user_devices, usb_device_entry);
 
 long ast_radio_lround(double x)
 {
@@ -308,6 +324,31 @@ void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
 	buf[EEPROM_USER_CS_ADDR] = (65535 - cs) + 1;
 	write_eeprom(handle, i, buf[EEPROM_USER_CS_ADDR]);
 }
+
+/*!
+ * \brief See if the passed device matches one of our known devices.
+ *
+ * \param dev	usb device
+ * \return 0	does not matches
+ * \return 1	matches
+ */
+static int is_known_device(struct usb_device *dev)
+{
+	int index;
+	int max_entries = sizeof(known_devices) / sizeof(known_devices[0]);
+	int matched_entry = 0;
+	
+	for (index = 0; index < max_entries; index++) {
+		if (dev->descriptor.idVendor == known_devices[index].idVendor && 
+			dev->descriptor.idProduct == (known_devices[index].idProduct & known_devices[index].idMask)) {
+			matched_entry = 1;
+			break;
+		};
+	}
+
+	return matched_entry;
+}
+
 /*!
  * \brief See if the passed device matches one of our user defined devices.
  *
@@ -317,20 +358,18 @@ void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
  */
 static int is_user_device(struct usb_device *dev)
 {
-	struct user_usb_device *device;
-	int match_found = 0;
+	struct usb_device_entry *device;
 	
 	AST_RWLIST_RDLOCK(&user_devices);
 	AST_LIST_TRAVERSE(&user_devices, device, entry) {
-		if(dev->descriptor.idVendor == device->idVendor && 
+		if (dev->descriptor.idVendor == device->idVendor && 
 			dev->descriptor.idProduct == device->idProduct) {
-			match_found = 1;
 			break;
 		};
 	}
 	AST_RWLIST_UNLOCK(&user_devices);
 
-	return match_found;
+	return device ? 1 : 0;
 }
 
 int ast_radio_hid_device_mklist(void)
@@ -357,15 +396,7 @@ int ast_radio_hid_device_mklist(void)
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			if (((dev->descriptor.idVendor == C108_VENDOR_ID) &&
-				(((dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C108B_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C108AH_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C119A_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C119B_PRODUCT_ID) ||
-				 ((dev->descriptor.idProduct & 0xff00) == N1KDO_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C119_PRODUCT_ID))) ||
-				 is_user_device(dev)) {
+			if (is_known_device(dev) || is_user_device(dev)) {
 				sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
 				for (i = 0; i < 32; i++) {
 					sprintf(str, "/proc/asound/card%d/usbbus", i);
@@ -459,15 +490,7 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			if (((dev->descriptor.idVendor == C108_VENDOR_ID) &&
-				(((dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C108B_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C108AH_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C119A_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C119B_PRODUCT_ID) ||
-				 ((dev->descriptor.idProduct & 0xff00) == N1KDO_PRODUCT_ID) ||
-				 (dev->descriptor.idProduct == C119_PRODUCT_ID))) ||
-				 is_user_device(dev)) {
+			if (is_known_device(dev) || is_user_device(dev)) {
 				sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
 				for (i = 0; i < 32; i++) {
 					sprintf(str, "/proc/asound/card%d/usbbus", i);
@@ -863,14 +886,12 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
  */
 static void cleanup_user_devices(void)
 {
-	struct user_usb_device *device;
+	struct usb_device_entry *device;
 	/* Remove all existing devices */
 	AST_RWLIST_WRLOCK(&user_devices);
-	AST_LIST_TRAVERSE_SAFE_BEGIN(&user_devices, device, entry) {
-		AST_LIST_REMOVE_CURRENT(entry);
+	while ((device = AST_LIST_REMOVE_HEAD(&user_devices, entry))) {
 		ast_free(device);
 	}
-	AST_LIST_TRAVERSE_SAFE_END;
 	AST_RWLIST_UNLOCK(&user_devices);
 }
 
@@ -900,7 +921,7 @@ static int load_config(int reload)
 	 * usb_devices format vvvv:pppp,vvvv:pppp where vvvv is usb vendor id and pppp is usb product id
 	 */
 	if ((varval = ast_variable_retrieve(cfg, "general", "usb_devices")) && !ast_strlen_zero(varval)) {
-		struct user_usb_device *device;
+		struct usb_device_entry *device;
 		char *item;
 		char *value;
 		int idVendor;
@@ -909,16 +930,17 @@ static int load_config(int reload)
 		value = ast_strdupa(varval);
 		
 		/* process the delimited list */
-		while ((item = ast_strsep(&value, ',', AST_STRSEP_STRIP))) {
+		while ((item = strsep(&value, ","))) {
 			
-			if(sscanf(item, "%04x:%04x", &idVendor, &idProduct) == 2) {
+			if (sscanf(item, "%04x:%04x", &idVendor, &idProduct) == 2) {
 				/* allocate space for our device */
 				if(!(device = ast_calloc(1, sizeof(*device)))) {
 					break;
 				}
 				device->idVendor = idVendor;
 				device->idProduct = idProduct;
-				/*Add it to our list */
+				device->idMask = 0xfff;
+				/* Add it to our list */
 				AST_RWLIST_WRLOCK(&user_devices);
 				AST_LIST_INSERT_HEAD(&user_devices, device, entry);
 				AST_RWLIST_UNLOCK(&user_devices);
