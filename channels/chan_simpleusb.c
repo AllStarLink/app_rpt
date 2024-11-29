@@ -1171,18 +1171,20 @@ static void *hidthread(void *arg)
 			ast_mutex_unlock(&o->txqlock);
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
 			if (txreq && (!o->lasttx)) {
-				buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
+				o->hid_gpio_val |= o->hid_io_ptt;
 				if (o->invertptt) {
-					buf[o->hid_gpio_loc] = o->hid_gpio_val &= ~o->hid_io_ptt;
+					o->hid_gpio_val &= ~o->hid_io_ptt;
 				}
+				buf[o->hid_gpio_loc] = o->hid_gpio_val;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
 				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", o->name, txreq);
 			} else if ((!txreq) && o->lasttx) {
-				buf[o->hid_gpio_loc] = o->hid_gpio_val &= ~o->hid_io_ptt;
+				o->hid_gpio_val &= ~o->hid_io_ptt;
 				if (o->invertptt) {
-					buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
+					o->hid_gpio_val |= o->hid_io_ptt;
 				}
+				buf[o->hid_gpio_loc] = o->hid_gpio_val;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
 				ast_debug(2, "Channel %s: update PTT = %d.\n", o->name, txreq);
@@ -1358,14 +1360,14 @@ static void *hidthread(void *arg)
 				}
 				if (!o->invertptt) {
 					if (o->lasttx) {
-						buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
+						o->hid_gpio_val |= o->hid_io_ptt;
 						if (k) {
 							pp_val |= k;
 						}
 					}
 				} else {
 					if (!o->lasttx) {
-						buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
+						o->hid_gpio_val |= o->hid_io_ptt;
 						if (k) {
 							pp_val |= k;
 						}

@@ -1416,14 +1416,14 @@ static void *hidthread(void *arg)
 				}
 				if (!o->invertptt) {
 					if (lasttxtmp) {
-						buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
+						o->hid_gpio_val |= o->hid_io_ptt;
 						if (k) {
 							pp_val |= k;
 						}
 					}
 				} else {
 					if (!lasttxtmp) {
-						buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
+						o->hid_gpio_val |= o->hid_io_ptt;
 						if (k) {
 							pp_val |= k;
 						}
