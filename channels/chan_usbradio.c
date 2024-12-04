@@ -588,6 +588,9 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 			o->hid_gpio_val |= (1 << i);
 		}
 	}
+	if (o->invertptt) {
+		o->hid_gpio_val |= o->hid_io_ptt;
+	}
 	return 0;
 }
 
@@ -1413,14 +1416,14 @@ static void *hidthread(void *arg)
 				}
 				if (!o->invertptt) {
 					if (lasttxtmp) {
-						buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
+						o->hid_gpio_val |= o->hid_io_ptt;
 						if (k) {
 							pp_val |= k;
 						}
 					}
 				} else {
 					if (!lasttxtmp) {
-						buf[o->hid_gpio_loc] = o->hid_gpio_val |= o->hid_io_ptt;
+						o->hid_gpio_val |= o->hid_io_ptt;
 						if (k) {
 							pp_val |= k;
 						}
@@ -1441,7 +1444,7 @@ static void *hidthread(void *arg)
 		lasttxtmp = o->pmrChan->txPttOut = 0;
 		o->lasttx = 0;
 		ast_mutex_lock(&o->usblock);
-		o->hid_gpio_val = ~o->hid_io_ptt;
+		o->hid_gpio_val &= ~o->hid_io_ptt;
 		if (o->invertptt) {
 			o->hid_gpio_val |= o->hid_io_ptt;
 		}
@@ -1455,7 +1458,7 @@ static void *hidthread(void *arg)
 	o->lasttx = 0;
 	if (usb_handle) {
 		ast_mutex_lock(&o->usblock);
-		o->hid_gpio_val = ~o->hid_io_ptt;
+		o->hid_gpio_val &= ~o->hid_io_ptt;
 		if (o->invertptt) {
 			o->hid_gpio_val |= o->hid_io_ptt;
 		}
