@@ -261,6 +261,7 @@ struct chan_usbradio_pvt {
 	int rxdemod;
 	float rxgain;
 	int rxcdtype;
+	int voxhangtime;			/* if rxcdtype=vox, ms to wait detecting RX audio before setting CD=0 */
 	int rxsdtype;
 	int rxsquelchadj;			/* this copy needs to be here for initialization */
 	int rxsqhyst;
@@ -423,6 +424,7 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.usedtmf = 1,
 	.rxondelay = 0,
 	.txoffdelay = 0,
+	.voxhangtime = 2000,
 	.area = 0,
 	.rptnum = 0,
 	.clipledgpio = 0,
@@ -1057,6 +1059,7 @@ static void *hidthread(void *arg)
 
 			tChan.rxDemod = o->rxdemod;
 			tChan.rxCdType = o->rxcdtype;
+			tChan.voxHangTime = o->voxhangtime;
 			tChan.rxSqVoxAdj = o->rxsqvoxadj;
 
 			if (o->txlimonly) {
@@ -4712,6 +4715,9 @@ static void pmrdump(struct chan_usbradio_pvt *o)
 
 	pd(o->rxdemod);
 	pd(o->rxcdtype);
+	if (o->rxcdtype == CD_XPMR_VOX) {
+		pd(o->voxhangtime);
+	}
 	pd(o->rxsdtype);
 	pd(o->txtoctype);
 
@@ -4932,6 +4938,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_F("txmixa", store_txmixa(o, (char *) v->value));
 		CV_F("txmixb", store_txmixb(o, (char *) v->value));
 		CV_F("carrierfrom", store_rxcdtype(o, (char *) v->value));
+		CV_UINT("voxhangtime", o->voxhangtime);
 		CV_F("ctcssfrom", store_rxsdtype(o, (char *) v->value));
 		CV_UINT("rxsqvox", o->rxsqvoxadj);
 		CV_UINT("rxsqhyst", o->rxsqhyst);
@@ -5068,6 +5075,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 
 		tChan.rxDemod = o->rxdemod;
 		tChan.rxCdType = o->rxcdtype;
+		tChan.voxHangTime = o->voxhangtime;
 		tChan.rxCarrierHyst = o->rxsqhyst;
 		tChan.rxSqVoxAdj = o->rxsqvoxadj;
 		tChan.rxSquelchDelay = o->rxsquelchdelay;
