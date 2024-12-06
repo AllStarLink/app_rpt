@@ -1,0 +1,56 @@
+[general]
+; General config options which propigate to all devices, with
+; default values shown. You may have as many devices as the
+; system will allow. You must use one section per device, with
+; [usb] generally (although its up to you) being the first device.
+;
+;
+; debug = 0x0		; misc debug flags, default is 0
+
+; Set the device to use for I/O
+; devicenum = 0
+; Set hardware type here
+; hdwtype = 0               ; 0=limey, 1=sph
+
+; rxboost = 0          ; no rx gain boost
+; carrierfrom = hw   ;no,hw,hwinvert
+; ctcssfrom = uw      ;no,hw,hwinvert
+
+; invertptt = 0
+
+; duplex = 1		; duplex mode    
+
+; rxondelay = 0		  ; number of 20ms intervals to hold off receiver turn-on indication
+
+; eeprom = no		; no eeprom installed
+
+;------------------------------ JITTER BUFFER CONFIGURATION --------------------------
+; jbenable = yes              ; Enables the use of a jitterbuffer on the receiving side of an
+							  ; beagle channel. Defaults to "no". An enabled jitterbuffer will
+							  ; be used only if the sending side can create and the receiving
+							  ; side can not accept jitter. The beagle channel can't accept jitter,
+							  ; thus an enabled jitterbuffer on the receive beagle side will always
+							  ; be used if the sending side can create jitter.
+
+; jbmaxsize = 200             ; Max length of the jitterbuffer in milliseconds.
+
+; jbresyncthreshold = 1000    ; Jump in the frame timestamps over which the jitterbuffer is
+							  ; resynchronized. Useful to improve the quality of the voice, with
+							  ; big jumps in/broken timestamps, usualy sent from exotic devices
+							  ; and programs. Defaults to 1000.
+
+; jbimpl = fixed              ; Jitterbuffer implementation, used on the receiving side of an beagle
+							  ; channel. Two implementations are currenlty available - "fixed"
+							  ; (with size always equals to jbmax-size) and "adaptive" (with
+							  ; variable size, actually the new jb of IAX2). Defaults to fixed.
+
+; jblog = no                  ; Enables jitterbuffer frame logging. Defaults to "no".
+;-----------------------------------------------------------------------------------
+
+[usb]
+
+; First channel unique config
+
+[usb1]
+
+; Second channel config
