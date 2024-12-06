@@ -47,7 +47,6 @@
 #include <linux/parport.h>
 #include <linux/version.h>
 #include <alsa/asoundlib.h>
-#include "asterisk/config.h"
 
 #include "asterisk/res_usbradio.h"
 
@@ -68,6 +67,7 @@
 #include "asterisk/module.h"
 #include "asterisk/cli.h"			
 #include "asterisk/poll-compat.h" 	/* Used for polling */
+#include "asterisk/config.h"
 
 #define CONFIG_FILE "res_usbradio.conf"
 
@@ -85,9 +85,9 @@ static int usb_device_list_size = 0;
  * \brief Structure for defined usb devices.
  */
 struct usb_device_entry {
-	ushort idVendor;
-	ushort idProduct;
-	ushort idMask;
+	unsigned short idVendor;
+	unsigned short idProduct;
+	unsigned short idMask;
 	AST_LIST_ENTRY(usb_device_entry) entry;
 };
 
@@ -335,10 +335,9 @@ void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
 static int is_known_device(struct usb_device *dev)
 {
 	int index;
-	int max_entries = sizeof(known_devices) / sizeof(known_devices[0]);
 	int matched_entry = 0;
 	
-	for (index = 0; index < max_entries; index++) {
+	for (index = 0; index < ARRAY_LEN(known_devices); index++) {
 		if (dev->descriptor.idVendor == known_devices[index].idVendor && 
 			dev->descriptor.idProduct == (known_devices[index].idProduct & known_devices[index].idMask)) {
 			matched_entry = 1;
