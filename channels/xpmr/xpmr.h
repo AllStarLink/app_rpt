@@ -615,6 +615,7 @@ typedef struct	t_pmr_chan
 	i16 rxQuality;			// signal quality metric
 	i16 rxCarrierDetect;    // carrier detect
 	i16 rxCdType;
+	i16 voxHangTime;		// if rxCdType=CD_XPMR_VOX, time to wait for RX audio before setting CD=0
 	i16 rxSqVoxAdj;
 	i16 rxExtCarrierDetect; 
 	i32 inputBlanking;  	// Tx pulse eliminator
