@@ -20,6 +20,9 @@
  * --------
  * 02/5/23 - Danny Lloyd, KB4MDD <kb4mdd@arrl.net>
  * corrected memory leaks
+ * --------
+ * 12/7/24 - Caleb, K4PHP <caleb.k4php@gmail.com>
+ * Added support for a info message on the echolink connection page
  */
 
 /*! \file
@@ -190,6 +193,7 @@ do not use 127.0.0.1
 #define EL_IP_SIZE 16
 #define EL_CALL_SIZE 12
 #define EL_NAME_SIZE 32
+#define EL_MESSAGE_SIZE 256
 #define EL_APRS_SIZE 200
 #define EL_PWD_SIZE 16
 #define EL_EMAIL_SIZE 32
@@ -384,6 +388,7 @@ struct el_instance {
 	char name[EL_NAME_SIZE];
 	char mycall[EL_CALL_SIZE];
 	char myname[EL_NAME_SIZE];
+	char mymessage[EL_MESSAGE_SIZE];
 	char mypwd[EL_PWD_SIZE];
 	char myemail[EL_EMAIL_SIZE];
 	char myqth[EL_QTH_SIZE];
@@ -1819,6 +1824,23 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		if (j >= sizeof(pkt) - i) {
 			ast_log(LOG_WARNING, "Exceeded buffer size");
 			return;
+		}
+
+		if (instp->mymessage[0] != '\0') {
+			char *p = instp->mymessage;
+			while ((p = strstr(p, "\\n")) != NULL) {
+				*p = '\n'; 
+				memmove(p + 1, p + 2, strlen(p + 2) + 1);
+				p++;
+			}
+
+			i += j;
+
+			j = snprintf(pkt + i, sizeof(pkt) - i, "%s\n\n", instp->mymessage);
+			if (j >= sizeof(pkt) - i) {
+				ast_log(LOG_WARNING, "Exceeded buffer size");
+				return;
+			}
 		}
 		
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
@@ -3816,6 +3838,13 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		ast_copy_string(instp->myname, instp->mycall, sizeof(instp->myname));
 	} else {
 		ast_copy_string(instp->myname, val, sizeof(instp->myname));
+	}
+
+	val = ast_variable_retrieve(cfg, ctg, "message");
+	if (!val) {
+		ast_copy_string(instp->mymessage, "\0", sizeof(instp->mymessage));
+	} else {
+		ast_copy_string(instp->mymessage, val, sizeof(instp->mymessage));
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "recfile");
