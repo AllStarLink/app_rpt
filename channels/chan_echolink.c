@@ -20,9 +20,6 @@
  * --------
  * 02/5/23 - Danny Lloyd, KB4MDD <kb4mdd@arrl.net>
  * corrected memory leaks
- * --------
- * 12/7/24 - Caleb, K4PHP <caleb.k4php@gmail.com>
- * Added support for a info message on the echolink connection page
  */
 
 /*! \file
