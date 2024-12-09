@@ -1823,21 +1823,23 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			return;
 		}
 
+		i += j;
+
 		if (instp->mymessage[0] != '\0') {
 			char *p = instp->mymessage;
 			while ((p = strstr(p, "\\n")) != NULL) {
-				*p = '\n'; 
-				memmove(p + 1, p + 2, strlen(p + 2) + 1);
-				p++;
+				*p = '\n';  // Replace the literal \n with a newline character
+				memmove(p + 1, p + 2, strlen(p + 2) + 1);  // Shift the string to remove the \n
+				p++; 
 			}
-
-			i += j;
 
 			j = snprintf(pkt + i, sizeof(pkt) - i, "%s\n\n", instp->mymessage);
 			if (j >= sizeof(pkt) - i) {
 				ast_log(LOG_WARNING, "Exceeded buffer size");
 				return;
 			}
+
+			i += j;
 		}
 		
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
