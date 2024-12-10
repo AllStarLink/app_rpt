@@ -1828,8 +1828,8 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		if (instp->mymessage[0] != '\0') {
 			char *p = instp->mymessage;
 			while ((p = strstr(p, "\\n")) != NULL) {
-				*p = '\n';  // Replace the literal \n with a newline character
-				memmove(p + 1, p + 2, strlen(p + 2) + 1);  // Shift the string to remove the \n
+				*p = '\n'; /* Replace the literal \n with a newline character */
+				memmove(p + 1, p + 2, strlen(p + 2) + 1); /* Shift the string to remove the \n */
 				p++; 
 			}
 
