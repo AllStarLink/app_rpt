@@ -341,9 +341,9 @@ int send_morse(struct ast_channel *chan, char *string, int speed, int freq, int 
 
 	/* Establish timing releationships */
 
-	dashtime = 3 * dottime;
+	dashtime = dottime * 3;
 	intralettertime = dottime;
-	interlettertime = dottime * 4;
+	interlettertime = dottime * 3;
 	interwordtime = dottime * 7;
 
 	for (; (*string) && (!res); string++) {
