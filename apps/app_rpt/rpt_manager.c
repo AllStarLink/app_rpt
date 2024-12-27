@@ -21,7 +21,7 @@ extern struct rpt rpt_vars[MAXRPTS];
 static char *ctime_no_newline(const time_t *clock)
 {
 	static char buf[32];
-	const char *cp;
+	char *cp;
 	size_t len;
 
 	cp = ctime_r(clock, buf);
