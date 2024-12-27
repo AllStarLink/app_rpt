@@ -1,0 +1,13 @@
+diff --git a/apps/Makefile b/apps/Makefile
+index 50b3fccc8f..207a568933 100644
+--- a/apps/Makefile
++++ b/apps/Makefile
+@@ -49,6 +49,8 @@ include $(ASTTOPDIR)/Makefile.moddir_rules
+ 
+ $(call MOD_ADD_C,app_confbridge,$(wildcard confbridge/*.c))
+ 
++$(call MOD_ADD_C,app_rpt,$(wildcard app_rpt/rpt_*.c))
++
+ app_confbridge.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
+ app_meetme.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
+ app_minivm.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
