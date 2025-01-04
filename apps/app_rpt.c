@@ -1108,6 +1108,47 @@ static void startoutstream(struct rpt *myrpt)
 	}
 }
 
+/*
+ * terminate things started in startoutstream()
+ */
+static void killpidtree(const int pid_int){
+	pid_t pid = (pid_t)pid_int; // Convert integer to pid_t
+
+    char path[256];
+    snprintf(path, sizeof(path), "/proc/%d/task/%d/children", pid, pid);
+
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+		ast_log(LOG_ERROR, "killpidtree failed to read /proc/%d/task/%d/children", pid, pid);
+        return;
+    }
+
+    char buffer[1024];
+    if (fgets(buffer, sizeof(buffer), file) != NULL) {
+        char *child_pid_str = strtok(buffer, " ");
+        while (child_pid_str != NULL) {
+            int child_pid_int = atoi(child_pid_str);
+            kill_process_and_children(child_pid_int);
+            child_pid_str = strtok(NULL, " ");
+        }
+    }
+    fclose(file);
+
+    // Kill the current process
+    if (kill(pid, SIGKILL) == -1) {
+		ast_log(LOG_ERROR, "killpidtree failed to terminate child pid %d", pid);
+    } else {
+		ast_log(LOG_NOTICE, "killpidtree killed process %d", pid);
+    }
+}
+
+static void stopoutstream(struct rpt *myrpt)
+{
+	if (myrpt->outstreampid != -1) {
+		killpidtree(rpt->outstreampid);
+	}
+}
+
 static int topcompar(const void *a, const void *b)
 {
 	struct rpt_topkey *x = (struct rpt_topkey *) a;
@@ -7477,6 +7518,8 @@ static int unload_module(void)
 	shutting_down = 1;
 
 	daq_uninit();
+
+	stopoutstream(&rpt_vars[i]);
 
 	stop_repeaters();
 
