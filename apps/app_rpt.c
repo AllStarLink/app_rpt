@@ -1126,11 +1126,12 @@ static void killpidtree(const int pid_int){
     }
 
     if (fgets(buffer, sizeof(buffer), file) != NULL) {
-        char *child_pid_str = strtok_r(buffer, " ");
+		char *saveptr;
+        char *child_pid_str = strtok_r(buffer, " ", &saveptr);
         while (child_pid_str != NULL) {
             int child_pid_int = atoi(child_pid_str);
             killpidtree(child_pid_int);
-            child_pid_str = strtok_r(NULL, " ");
+            child_pid_str = strtok_r(NULL, " ", &saveptr);
         }
     }
     fclose(file);
@@ -7520,7 +7521,6 @@ static int unload_module(void)
 
 	daq_uninit();
 
-	stopoutstream(&rpt_vars[i]);
 
 	stop_repeaters();
 
@@ -7544,6 +7544,9 @@ static int unload_module(void)
 		ast_mutex_lock(&rpt_vars[i].blocklock);
 		ast_mutex_unlock(&rpt_vars[i].blocklock);
 		ast_mutex_destroy(&rpt_vars[i].blocklock);
+
+		/* Also kill any outstreamcmd fork()s */
+		stopoutstream(&rpt_vars[i]);
 	}
 
 	res = ast_unregister_application(app);
