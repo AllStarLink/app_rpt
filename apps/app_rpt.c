@@ -1129,7 +1129,7 @@ static void killpidtree(const int pid_int){
         char *child_pid_str = strtok_r(buffer, " ");
         while (child_pid_str != NULL) {
             int child_pid_int = atoi(child_pid_str);
-            kill_process_and_children(child_pid_int);
+            killpidtree(child_pid_int);
             child_pid_str = strtok_r(NULL, " ");
         }
     }
