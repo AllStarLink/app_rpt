@@ -1112,24 +1112,25 @@ static void startoutstream(struct rpt *myrpt)
  * terminate things started in startoutstream()
  */
 static void killpidtree(const int pid_int){
-	pid_t pid = (pid_t)pid_int; // Convert integer to pid_t
-
+	pid_t pid;
     char path[256];
-    snprintf(path, sizeof(path), "/proc/%d/task/%d/children", pid, pid);
+    char buffer[1024];
+	FILE *file;
 
-    FILE *file = fopen(path, "r");
+	pid = (pid_t)pid_int; // Convert integer to pid_t
+    snprintf(path, sizeof(path), "/proc/%d/task/%d/children", pid, pid);
+    file = fopen(path, "r");
     if (file == NULL) {
 		ast_log(LOG_ERROR, "killpidtree failed to read /proc/%d/task/%d/children", pid, pid);
         return;
     }
 
-    char buffer[1024];
     if (fgets(buffer, sizeof(buffer), file) != NULL) {
-        char *child_pid_str = strtok(buffer, " ");
+        char *child_pid_str = strtok_r(buffer, " ");
         while (child_pid_str != NULL) {
             int child_pid_int = atoi(child_pid_str);
             kill_process_and_children(child_pid_int);
-            child_pid_str = strtok(NULL, " ");
+            child_pid_str = strtok_r(NULL, " ");
         }
     }
     fclose(file);
@@ -1145,7 +1146,7 @@ static void killpidtree(const int pid_int){
 static void stopoutstream(struct rpt *myrpt)
 {
 	if (myrpt->outstreampid != -1) {
-		killpidtree(rpt->outstreampid);
+		killpidtree(myrpt->outstreampid);
 	}
 }
 
