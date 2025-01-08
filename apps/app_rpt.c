@@ -6742,11 +6742,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				if (ast_safe_sleep(chan, 500) == -1) {
 					return -1;
 				}
-			} else {
-				if (!phone_mode) {
-					send_newkey(chan);
-				}
-			}
+			} 
 		}
 		rpt_mutex_unlock(&myrpt->blocklock);
 		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
@@ -6755,7 +6751,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			donodelog_fmt(myrpt,"LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		}
 		doconpgm(myrpt, l->name);
-		if ((!phone_mode) && (l->name[0] <= '9')) {
+		if ((!phone_mode) && (l->name[0] <= '9') && (ast_channel_state(chan) == AST_STATE_UP)) {
 			rpt_mutex_lock(&myrpt->blocklock);
 			send_newkey(chan);
 			rpt_mutex_unlock(&myrpt->blocklock);
