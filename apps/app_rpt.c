@@ -6751,11 +6751,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			donodelog_fmt(myrpt,"LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		}
 		doconpgm(myrpt, l->name);
-		if ((!phone_mode) && (l->name[0] <= '9') && (ast_channel_state(chan) == AST_STATE_UP)) {
-			rpt_mutex_lock(&myrpt->blocklock);
-			send_newkey(chan);
-			rpt_mutex_unlock(&myrpt->blocklock);
-		}
 		if (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink") || !strcasecmp(ast_channel_tech(l->chan)->type, "tlb") || (l->name[0] > '9')) {
 			rpt_telemetry(myrpt, CONNECTED, l);
 		}
