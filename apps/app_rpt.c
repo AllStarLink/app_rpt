@@ -6144,7 +6144,7 @@ static void answer_newkey_helper(struct rpt *myrpt, struct ast_channel *chan, in
 	rpt_mutex_lock(&myrpt->blocklock);
 	if (ast_channel_state(chan) != AST_STATE_UP) {
 		ast_answer(chan);
-		if (!phone_mode) {
+		if (!phone_mode && (ast_channel_state(chan) == AST_STATE_UP)) {
 			send_newkey(chan);
 		}
 	}
@@ -6743,7 +6743,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					return -1;
 				}
 			} else {
-				if (!phone_mode) {
+				if (!phone_mode && (ast_channel_state(chan) == AST_STATE_UP)) {
 					send_newkey(chan);
 				}
 			}
@@ -6755,7 +6755,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			donodelog_fmt(myrpt,"LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		}
 		doconpgm(myrpt, l->name);
-		if ((!phone_mode) && (l->name[0] <= '9')) {
+		if ((!phone_mode) && (l->name[0] <= '9') && (ast_channel_state(chan) == AST_STATE_UP)) {
 			rpt_mutex_lock(&myrpt->blocklock);
 			send_newkey(chan);
 			rpt_mutex_unlock(&myrpt->blocklock);
@@ -7089,7 +7089,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		cs[n++] = myrpt->txchannel;
 
 	rpt_mutex_lock(&myrpt->blocklock);
-	if (!phone_mode) {
+	if (!phone_mode && (ast_channel_state(chan) == AST_STATE_UP)) {
 		send_newkey(chan);
 	}
 	rpt_mutex_unlock(&myrpt->blocklock);
