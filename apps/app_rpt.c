@@ -1146,7 +1146,7 @@ static void killpidtree(const int pid_int){
 
 static void stopoutstream(struct rpt *myrpt)
 {
-	if (myrpt->outstreampid != -1) {
+	if (myrpt->p.outstreamcmd && myrpt->outstreampid >= 2) {
 		killpidtree(myrpt->outstreampid);
 	}
 }
