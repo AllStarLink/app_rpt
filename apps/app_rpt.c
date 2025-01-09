@@ -4495,6 +4495,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {
 					ast_frfree(f);
 					remote_hangup_helper(myrpt, l);
+					break;
 				}
 			}
 			ast_frfree(f);
