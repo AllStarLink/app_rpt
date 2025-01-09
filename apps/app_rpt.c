@@ -7507,6 +7507,11 @@ static int stop_repeaters(void)
 			ast_channel_lock(myrpt->rxchannel);
 			ast_softhangup(myrpt->rxchannel, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
 			ast_channel_unlock(myrpt->rxchannel);
+
+			/* Also kill any outstreamcmd fork()s */
+			ast_debug(1,"trying to stopoutstream %s", rpt_vars[i].name);
+			stopoutstream(&rpt_vars[i]);
+
 			myrpt->rxchannel = NULL; /* If we aborted the repeater but haven't unloaded, this channel handle is not valid anymore in a future call to stop_repeaters() */
 		}
 	}
@@ -7545,9 +7550,7 @@ static int unload_module(void)
 		ast_mutex_unlock(&rpt_vars[i].blocklock);
 		ast_mutex_destroy(&rpt_vars[i].blocklock);
 
-		/* Also kill any outstreamcmd fork()s */
-		stopoutstream(&rpt_vars[i]);
-	}
+			}
 
 	res = ast_unregister_application(app);
 #ifdef	_MDC_ENCODE_H_
