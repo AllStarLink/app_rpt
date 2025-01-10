@@ -6737,7 +6737,17 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		gettimeofday(&myrpt->lastlinktime, NULL);
 		rpt_mutex_lock(&myrpt->blocklock);
 		if (ast_channel_state(chan) != AST_STATE_UP) {
-			ast_answer(chan);
+			if (ast_answer(chan)){
+				ast_debug(1, "Stopped PBX on %s, state: %i :Could not answer\n", ast_channel_name(chan),ast_channel_state(chan));
+				l->connected = 0;
+				l->thisconnected = 0;
+				l->newkey = 0;
+				l->newkeytimer = 0;
+				rpt_mutex_unlock(&myrpt->blocklock);
+				rpt_mutex_unlock(&myrpt->lock);
+				ast_channel_pbx_set(chan, NULL);
+				pthread_exit(NULL); 
+
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					return -1;
