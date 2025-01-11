@@ -164,7 +164,7 @@ fi
 if [ ! -d /var/lib/asterisk/sounds/en/rpt ]; then
 	printf "RPT sounds don't exist yet, adding them now...\n"
 	mkdir /var/lib/asterisk/sounds/en/rpt
-	cd rpt
+	cd /var/lib/asterisk/sounds/en/rpt
 	wget "http://downloads.allstarlink.org/asterisk-asl-sounds-en-ulaw.tar.gz"
 	# Sounds are extracted directly into the dir
 	tar -xvzf asterisk-asl-sounds-en-ulaw.tar.gz
