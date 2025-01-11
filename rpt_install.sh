@@ -39,8 +39,11 @@ apt-get install -y libusb-dev # chan_simpleusb and chan_usbradio require libusb-
 modprobe snd-pcm-oss # /dev/dsp1 needs to exist for chan_simpleusb and chan_usbradio to work
 echo "snd-pcm-oss" >> /etc/modules # load module at startup for USB
 
-cp ../$MYDIR/Makefiles.diff /tmp/rpt.diff
-git apply /tmp/rpt.diff
+cp ../$MYDIR/apps/Makefile.diff /tmp/app_Makefile.diff
+git apply /tmp/app_Makefile.diff
+
+cp ../$MYDIR/channels/Makefile.diff /tmp/channels_Makefile.diff
+git apply /tmp/channels_Makefile.diff
 
 cp ../$MYDIR/utils/Makefile.diff /tmp/utils_makefile.diff
 git apply /tmp/utils_makefile.diff
