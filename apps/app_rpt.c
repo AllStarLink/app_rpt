@@ -3226,7 +3226,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		if ((!l->chan) && (!l->retrytimer) && l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
 			if (l->chan)
 				ast_hangup(l->chan);
-			l->chan = 0;
+			l->chan = NULL;
 			rpt_mutex_unlock(&myrpt->lock);
 			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
 				if (attempt_reconnect(myrpt, l) == -1) {
@@ -4140,46 +4140,73 @@ static inline void free_frame(struct ast_frame **f)
 	*f = NULL;
 }
 
+/*! \brief Safely hang up any channel, even if a PBX could be running on it */
+static inline void safe_hangup(struct ast_channel *chan)
+{
+	/* myrpt is locked here, so we can trust this will be an atomic operation,
+	 * since we also lock before setting the pbx to NULL */
+	if (ast_channel_pbx(chan)) {
+		ast_log(LOG_WARNING, "Channel %s still has a PBX, requesting hangup for it\n", ast_channel_name(chan));
+		ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT);
+	} else {
+		ast_debug(3, "Hard hanging up channel %s\n", ast_channel_name(chan));
+		ast_hangup(chan);
+	}
+}
+
+/*! \note myrpt->lock must be held when calling */
+static inline void hangup_link_chan(struct rpt_link *l)
+{
+	if (l->chan) {
+		safe_hangup(l->chan);
+		l->chan = NULL;
+	}
+}
+
+/*! \brief Whether a channel is using a specified technology */
+#define CHAN_TECH(c, s) (!strcasecmp(ast_channel_tech(c)->type, s))
+
+/*!
+ * \internal
+ * \brief Final cleanup of link prior to node termination
+ */
 static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	rpt_mutex_lock(&myrpt->lock);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
-	if (strcasecmp(ast_channel_tech(l->chan)->type, "echolink")
-		&& strcasecmp(ast_channel_tech(l->chan)->type, "tlb")) {
+
+	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) { /* If neither echolink nor tlb */
 		if ((!l->disced) && (!l->outbound)) {
 			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote)
 				l->disctime = 1;
 			else
 				l->disctime = DISC_TIME;
 			rpt_mutex_lock(&myrpt->lock);
-			ast_hangup(l->chan);
-			l->chan = 0;
+			hangup_link_chan(l);
+			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
 
 		if (l->retrytimer) {
-			if (l->chan) {
-				ast_hangup(l->chan);
-			}
-			l->chan = NULL;
 			rpt_mutex_lock(&myrpt->lock);
+			hangup_link_chan(l);
+			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
 		if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
 			rpt_mutex_lock(&myrpt->lock);
-			if (l->chan) {
-				ast_hangup(l->chan);
-			}
-			l->chan = NULL;
-			l->hasconnected = 1;
+			hangup_link_chan(l);
+			l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
 			l->retrytimer = RETRY_TIMER_MS;
 			l->elaptime = 0;
 			l->connecttime = 0;
 			l->thisconnected = 0;
+			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
 	}
+
 	rpt_mutex_lock(&myrpt->lock);
 	/* remove from queue */
 	rpt_link_remove(myrpt, l);
@@ -4188,6 +4215,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
+
 	if (!l->hasconnected) {
 		rpt_telemetry(myrpt, CONNFAIL, l);
 	} else if (l->disced != 2) {
@@ -4204,11 +4232,14 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 	free_frame(&l->lastf1);
 	free_frame(&l->lastf2);
+
+	rpt_mutex_lock(&myrpt->lock);
 	/* hang-up on call to device */
-	ast_hangup(l->chan);
+	hangup_link_chan(l);
+	rpt_mutex_unlock(&myrpt->lock);
+
 	ast_hangup(l->pchan);
 	ast_free(l);
-	rpt_mutex_lock(&myrpt->lock);
 }
 
 static inline void fac_frame(struct ast_frame *restrict f, float fac)
@@ -4244,9 +4275,9 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 }
 
+/*! \retval -1 to exit and terminate the node, 0 to continue */
 static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx, char *restrict myfirst)
 {
-	int toexit = 0;
 	struct rpt_link *l, *m;
 
 	/* @@@@@ LOCK @@@@@ */
@@ -4271,6 +4302,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			m = m->next;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
+
 		now = ast_tvnow();
 		if ((who == l->chan) || (!l->lastlinktv.tv_sec) || (ast_tvdiff_ms(now, l->lastlinktv) >= 19)) {
 			char mycalltx;
@@ -4305,14 +4337,16 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			}
 			l->lasttx = *totx;
 		}
+
 		rpt_mutex_lock(&myrpt->lock);
 		if (who == l->chan) {	/* if it was a read from rx */
 			struct ast_frame *f;
 			rpt_mutex_unlock(&myrpt->lock);
 			f = ast_read(l->chan);
 			if (!f) {
+				ast_debug(3, "Failed to read frame on %s, must've hung up\n", ast_channel_name(l->chan));
 				remote_hangup_helper(myrpt, l);
-				break;
+				return 0;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				int ismuted, n1;
@@ -4433,8 +4467,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				if (l->lastf2)
 					memset(l->lastf2->data.ptr, 0, l->lastf2->datalen);
 				l->dtmfed = 1;
-			}
-			if (f->frametype == AST_FRAME_TEXT) {
+			} else if (f->frametype == AST_FRAME_TEXT) {
 				char *tstr = ast_malloc(f->datalen + 1);
 				if (tstr) {
 					memcpy(tstr, f->data.ptr, f->datalen);
@@ -4442,16 +4475,14 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					handle_link_data(myrpt, l, tstr);
 					ast_free(tstr);
 				}
-			}
-			if (f->frametype == AST_FRAME_DTMF) {
+			} else if (f->frametype == AST_FRAME_DTMF) {
 				if (l->lastf1)
 					memset(l->lastf1->data.ptr, 0, l->lastf1->datalen);
 				if (l->lastf2)
 					memset(l->lastf2->data.ptr, 0, l->lastf2->datalen);
 				l->dtmfed = 1;
 				handle_link_phone_dtmf(myrpt, l, f->subclass.integer);
-			}
-			if (f->frametype == AST_FRAME_CONTROL) {
+			} else if (f->frametype == AST_FRAME_CONTROL) {
 				if (f->subclass.integer == AST_CONTROL_ANSWER) {
 					char lconnected = l->connected;
 
@@ -4494,22 +4525,20 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				}
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {
 					ast_frfree(f);
+					ast_debug(3, "Received hangup frame on %s\n", ast_channel_name(l->chan));
 					remote_hangup_helper(myrpt, l);
-					break;
+					return 0;
 				}
 			}
 			ast_frfree(f);
-			rpt_mutex_lock(&myrpt->lock);
-			break;
+			return 0;
 		} else if (who == l->pchan) {
 			struct ast_frame *f;
 			rpt_mutex_unlock(&myrpt->lock);
 			f = ast_read(l->pchan);
 			if (!f) {
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
-				toexit = 1;
-				rpt_mutex_lock(&myrpt->lock);
-				break;
+				return -1;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				float fac = 1.0;
@@ -4532,24 +4561,19 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					ast_write(l->chan, f);
 				}
 			}
-			if (f->frametype == AST_FRAME_CONTROL) {
-				if (f->subclass.integer == AST_CONTROL_HANGUP) {
-					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					ast_frfree(f);
-					toexit = 1;
-					rpt_mutex_lock(&myrpt->lock);
-					break;
-				}
+			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
+				ast_debug(1, "@@@@ rpt:Hung Up\n");
+				ast_frfree(f);
+				return -1;
 			}
 			ast_frfree(f);
-			rpt_mutex_lock(&myrpt->lock);
-			break;
+			return 0;
 		}
 		l = l->next;
 	}
 	/* @@@@@ UNLOCK @@@@@ */
 	rpt_mutex_unlock(&myrpt->lock);
-	return toexit;
+	return 0;
 }
 
 static inline int monchannel_read(struct rpt *myrpt)
@@ -6728,6 +6752,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 			pthread_exit(NULL);
 		}
+
 		rpt_mutex_lock(&myrpt->lock);
 		if ((phone_mode == 2) && (!phone_vox))
 			l->lastrealrx = 1;
@@ -6737,10 +6762,19 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		__kickshort(myrpt);
 		gettimeofday(&myrpt->lastlinktime, NULL);
 		rpt_mutex_lock(&myrpt->blocklock);
+
+		/* Since we've added l to the list, the node thread can now
+		 * start using it, and potentially set l->chan to NULL.
+		 * Therefore, we have to be careful when using it
+		 * (lock and check for NULL). */
+
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_answer(chan);
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
+					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
+					rpt_mutex_unlock(&myrpt->blocklock);
+					rpt_mutex_unlock(&myrpt->lock);
 					return -1;
 				}
 			} else {
@@ -6751,6 +6785,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		rpt_mutex_unlock(&myrpt->blocklock);
 		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
+
 		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
 			donodelog_fmt(myrpt,"LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
@@ -6761,12 +6796,45 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			send_newkey(chan);
 			rpt_mutex_unlock(&myrpt->blocklock);
 		}
-		if (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink") || !strcasecmp(ast_channel_tech(l->chan)->type, "tlb") || (l->name[0] > '9')) {
-			rpt_telemetry(myrpt, CONNECTED, l);
+
+		/* Be extra careful here.
+		 * Since above we impart this into the list of links (rpt_link_add),
+		 * it is possible that this node's thread (started at rpt() - the C function, not the dialplan one),
+		 * has already requested this channel be hungup.
+		 * We take care to not use ast_hangup if we detect the channel has a PBX,
+		 * so this channel won't have the rug pulled out from underneath it.
+		 * However, l->chan could still be set to NULL. Thus, if it's NULL here,
+		 * that means we're going to get hung up and should just abort, no point in doing telemetry.
+		 * For that reason, even though l->chan is chan if l->chan isn't NULL,
+		 * we always use chan here, rather than l->chan, since l->chan could be NULL.
+		 * This way, even if l->chan isn't NULL when we check but becomes NULL later, we're still safe. */
+		rpt_mutex_lock(&myrpt->lock);
+		if (l->chan) {
+			rpt_mutex_unlock(&myrpt->lock);
+			if (!strcasecmp(ast_channel_tech(chan)->type, "echolink") || !strcasecmp(ast_channel_tech(chan)->type, "tlb") || (l->name[0] > '9')) {
+				rpt_telemetry(myrpt, CONNECTED, l);
+			}
+		} else {
+			rpt_mutex_unlock(&myrpt->lock);
 		}
+
+		/* In theory, both these conditions should be true if one is, since the node thread will queue a soft hangup on this channel and then set l->chan to NULL */
+		if (!l->chan || ast_check_hangup(chan)) {
+			/* This connection is already toast, just return -1 as normal and let the core kill the channel off */
+			ast_debug(3, "Channel %s is a dead link\n", ast_channel_name(chan));
+			return -1;
+		}
+
+		/* Set the PBX to NULL to avoid a warning in channel.c about a PBX remaining on the channel when it gets destroyed.
+		 * This goes hand in hand with mirroring the old "KEEPALIVE" behavior. Past this point, there is no PBX for this channel.
+		 * We don't do this until the very end, because the node thread will check if this channel has a PBX to determine
+		 * if it's still "owned" by the PBX thread, as opposed to by an app_rpt thread. */
+		rpt_mutex_lock(&myrpt->lock);
+		ast_debug(1, "Stopping PBX on %s\n", ast_channel_name(chan));
+		ast_channel_pbx_set(chan, NULL);
+		rpt_mutex_unlock(&myrpt->lock);
+
 		//return AST_PBX_KEEPALIVE;
-		ast_channel_pbx_set(l->chan, NULL);
-		ast_debug(1, "Stopped PBX on %s\n", ast_channel_name(l->chan));
 		pthread_exit(NULL); // BUGBUG: For now, this emulates the behavior of KEEPALIVE, but this won't be a clean exit. Makes it work, but since the PBX doesn't clean up we'll leak memory. Either do what the PBX core does here or we need to somehow do KEEPALIVE handling in the core, possibly with a custom patch for now.
 		//return -1;				/*! \todo AST_PBX_KEEPALIVE doesn't exist anymore. Figure out what we should return here. */
 	}
