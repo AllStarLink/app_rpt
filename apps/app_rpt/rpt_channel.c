@@ -472,7 +472,7 @@ void send_newkey(struct ast_channel *chan)
 	return;
 }
 
-void send_old_newkey(struct ast_channel *chan)
+void send_newkey_redundant(struct ast_channel *chan)
 {
 	ast_channel_lock(chan);
 	if (ast_sendtext(chan, NEWKEYSTR)) {
