@@ -42,4 +42,4 @@ int send_link_pl(struct rpt *myrpt, char *txt);
 /*! \brief send newkey request */
 void send_newkey(struct ast_channel *chan);
 
-void send_old_newkey(struct ast_channel *chan);
+void send_newkey_redundant(struct ast_channel *chan);
