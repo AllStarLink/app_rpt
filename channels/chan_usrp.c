@@ -595,7 +595,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				remque((struct qelem *) qp);
 				ast_free(qp);
 			}
-			ast_log(LOG_WARNING, "Channel %s: Receive queue exceeds the threshold of %lu\n", ast_channel_name(ast), USRP_VOICE_FRAME_SIZE);
+			ast_debug(1, "Channel %s: Receive queue exceeds the threshold of %d\n", ast_channel_name(ast), QUEUE_OVERLOAD_THRESHOLD);
 			if (pvt->rxkey) {
 				pvt->rxkey = 1;
 			}
