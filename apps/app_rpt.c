@@ -3023,6 +3023,21 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 }
 
+/*! \brief Do timer value update, limit to end_val */
+static inline void update_timer(int *timer_ptr, int elap, int end_val)
+{
+	if (!timer_ptr){
+		return;
+	}
+	if (*timer_ptr > end_val) {
+		*timer_ptr -= elap;
+	}
+	if (*timer_ptr < end_val) {
+		*timer_ptr = end_val;
+	}
+}
+
+
 static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;
@@ -3036,18 +3051,11 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			ast_write(l->chan, f);
 			ast_frfree(f);
 		}
-
-		if (l->rxlingertimer)
-			l->rxlingertimer -= elap;
-		if (l->rxlingertimer < 0)
-			l->rxlingertimer = 0;
+		update_timer(&l->rxlingertimer, elap, 0);
 
 		/* Update the timer, checking if it expired just now. */
 		x = l->newkeytimer;
-		if (l->newkeytimer)
-			l->newkeytimer -= elap;
-		if (l->newkeytimer < 0)
-			l->newkeytimer = 0;
+		update_timer(&l->newkeytimer, elap, 0);
 
 		/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
 		 * This if statement executes if the timer just expired.
@@ -3107,19 +3115,14 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				l->newkeytimer = NEWKEYTIME;
 			}
 		}
-		if ((l->linkmode > 1) && (l->linkmode < 0x7ffffffe)) {
-			l->linkmode -= elap;
-			if (l->linkmode < 1)
-				l->linkmode = 1;
+		if ((l->linkmode >1) && (l->linkmode < 0x7ffffffe)) {
+			update_timer(&l->linkmode, elap, 1);
 		}
 		if ((l->newkey == 2) && l->lastrealrx && (!l->rxlingertimer)) {
 			rxunkey_helper(myrpt, l);
 		}
 
-		if (l->voxtotimer)
-			l->voxtotimer -= elap;
-		if (l->voxtotimer < 0)
-			l->voxtotimer = 0;
+		update_timer(&l->voxtotimer, elap, 0);
 
 		if (l->lasttx != l->lasttx1) {
 			if ((!l->phonemode) || (!l->phonevox))
@@ -3142,11 +3145,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				myrx = myrx || l->wasvox;
 		}
 		l->lastrx = myrx;
-		if (l->linklisttimer) {
-			l->linklisttimer -= elap;
-			if (l->linklisttimer < 0)
-				l->linklisttimer = 0;
-		}
+
+		update_timer(&l->linklisttimer,elap, 0);
+
 		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 			struct ast_frame lf;
 			char lstr[MAXLINKLIST];
@@ -3192,17 +3193,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				}
 			}
 		}
-		if (l->disctime) {	/* Disconnect timer active on a channel ? */
-			l->disctime -= elap;
-			if (l->disctime <= 0)	/* Disconnect timer expired on inbound channel ? */
-				l->disctime = 0;	/* Yep */
-		}
+		update_timer(&l->disctime, elap, 0);
 
-		if (l->retrytimer) {
-			l->retrytimer -= elap;
-			if (l->retrytimer < 0)
-				l->retrytimer = 0;
-		}
+		update_timer(&l->retrytimer, elap, 0);
 
 		/* Tally connect time */
 		l->connecttime += elap;
@@ -3343,58 +3336,10 @@ static inline int do_link_post(struct rpt *myrpt)
 	return 0;
 }
 
-/*! \brief Do macro timers */
-static inline void update_macrotimer(struct rpt *myrpt, int elap)
-{
-	if (myrpt->macrotimer) {
-		myrpt->macrotimer -= elap;
-	}
-	if (myrpt->macrotimer < 0) {
-		myrpt->macrotimer = 0;
-	}
-}
-
-/*! \brief Do local DTMF timer */
-static inline void update_dtmf_local_timer(struct rpt *myrpt, int elap)
-{
-	if (myrpt->dtmf_local_timer) {
-		if (myrpt->dtmf_local_timer > 1) {
-			myrpt->dtmf_local_timer -= elap;
-		}
-		if (myrpt->dtmf_local_timer < 1) {
-			myrpt->dtmf_local_timer = 1;
-		}
-	}
-}
-
-static inline void update_voxtimer(struct rpt *myrpt, int elap)
-{
-	if (myrpt->voxtotimer) {
-		myrpt->voxtotimer -= elap;
-	}
-	if (myrpt->voxtotimer < 0) {
-		myrpt->voxtotimer = 0;
-	}
-}
-
-static inline void update_rxlingertimer(struct rpt *myrpt, int elap)
-{
-	if (myrpt->rxlingertimer) {
-		myrpt->rxlingertimer -= elap;
-	}
-	if (myrpt->rxlingertimer < 0) {
-		myrpt->rxlingertimer = 0;
-	}
-}
-
 static inline int update_timers(struct rpt *myrpt, const int elap, const int totx)
 {
 	int i;
-	if (myrpt->linkposttimer) {
-		myrpt->linkposttimer -= elap;
-		if (myrpt->linkposttimer < 0)
-			myrpt->linkposttimer = 0;
-	}
+	update_timer(&myrpt->linkposttimer, elap, 0);
 	if (myrpt->linkposttimer <= 0 && do_link_post(myrpt)) {
 		return -1;
 	}
@@ -3402,11 +3347,9 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		myrpt->deferid = 0;
 		queue_id(myrpt);
 	}
-	if (myrpt->keyposttimer) {
-		myrpt->keyposttimer -= elap;
-		if (myrpt->keyposttimer < 0)
-			myrpt->keyposttimer = 0;
-	}
+
+	update_timer(&myrpt->keyposttimer, elap, 0);
+
 	if (myrpt->keyposttimer <= 0) {
 		char str[100];
 		int n = 0;
@@ -3427,49 +3370,33 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		myrpt->totaltxtime += elap;
 	}
 	i = myrpt->tailtimer;
-	if (myrpt->tailtimer)
-		myrpt->tailtimer -= elap;
-	if (myrpt->tailtimer < 0)
-		myrpt->tailtimer = 0;
+
+	update_timer(&myrpt->tailtimer, elap, 0);
+
 	if ((i) && (myrpt->tailtimer == 0))
 		myrpt->tailevent = 1;
-	if ((!myrpt->p.s[myrpt->p.sysstate_cur].totdisable) && myrpt->totimer)
-		myrpt->totimer -= elap;
-	if (myrpt->totimer < 0)
-		myrpt->totimer = 0;
-	if (myrpt->idtimer)
-		myrpt->idtimer -= elap;
-	if (myrpt->idtimer < 0)
-		myrpt->idtimer = 0;
-	if (myrpt->tmsgtimer)
-		myrpt->tmsgtimer -= elap;
-	if (myrpt->tmsgtimer < 0)
-		myrpt->tmsgtimer = 0;
-	update_voxtimer(myrpt, elap);
+	if (!myrpt->p.s[myrpt->p.sysstate_cur].totdisable) {
+		update_timer(&myrpt->totimer, elap, 0);
+	}
+	update_timer(&myrpt->idtimer, elap, 0);
+	update_timer(&myrpt->tmsgtimer, elap, 0);
+	update_timer(&myrpt->voxtotimer, elap, 0);
 	if (myrpt->keyed)
 		myrpt->lastkeytimer = KEYTIMERTIME;
 	else {
-		if (myrpt->lastkeytimer)
-			myrpt->lastkeytimer -= elap;
-		if (myrpt->lastkeytimer < 0)
-			myrpt->lastkeytimer = 0;
+		update_timer(&myrpt->lastkeytimer, elap, 0);
 	}
 	myrpt->elketimer += elap;
-	if ((myrpt->telemmode != 0x7fffffff) && (myrpt->telemmode > 1)) {
-		myrpt->telemmode -= elap;
-		if (myrpt->telemmode < 1)
-			myrpt->telemmode = 1;
+	if (myrpt->telemmode != 0x7fffffff) {
+		update_timer(&myrpt->telemmode, elap, 1);
 	}
 	if (myrpt->exttx) {
 		myrpt->parrottimer = myrpt->p.parrottime;
 	} else {
-		if (myrpt->parrottimer)
-			myrpt->parrottimer -= elap;
-		if (myrpt->parrottimer < 0)
-			myrpt->parrottimer = 0;
+		update_timer(&myrpt->parrottimer, elap, 0);
 	}
-	update_macrotimer(myrpt, elap);
-	update_dtmf_local_timer(myrpt, elap);
+	update_timer(&myrpt->macrotimer, elap, 0);
+	update_timer(&myrpt->dtmf_local_timer, elap, 1);
 
 	do_dtmf_local(myrpt, 0);
 	/* Execute scheduler appx. every 2 tenths of a second */
@@ -7182,13 +7109,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (elap != 0) {
 			looptimestart = looptimenow;
 		}
-		update_macrotimer(myrpt, elap);
+		update_timer(&myrpt->macrotimer, elap, 0);
 		if (!ms) {
 			/* No channels had activity. Loop again. */
 			continue;
 		}
-		update_dtmf_local_timer(myrpt, elap);
-		update_voxtimer(myrpt, elap);
+		update_timer(&myrpt->dtmf_local_timer, elap, 1);
+		update_timer(&myrpt->voxtotimer, elap, 0);
 		myrx = keyed;
 		if (phone_mode && phone_vox) {
 			myrx = (!AST_LIST_EMPTY(&myrpt->rxq));
@@ -7199,7 +7126,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				myrx = myrx || myrpt->wasvox;
 		}
 		keyed = myrx;
-		update_rxlingertimer(myrpt, elap);
+		update_timer(&myrpt->rxlingertimer, elap, 0);
 		if ((myrpt->newkey == 2) && keyed && (!myrpt->rxlingertimer)) {
 			myrpt->rerxtimer = 0;
 			keyed = 0;
