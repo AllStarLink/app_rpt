@@ -6969,6 +6969,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
+		rpt_mutex_unlock(&myrpt->lock);
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		pthread_exit(NULL);
 	}
@@ -7039,6 +7040,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* if PCIRADIO and kenwood selected */
 		if ((!res) && (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 			if (kenwood_uio_helper(myrpt)) {
+				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
 			iskenwood_pci4 = 1;
@@ -7055,10 +7057,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			 (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)))) {
 			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 1)) {
 				ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
 			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
 				ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
 		}
