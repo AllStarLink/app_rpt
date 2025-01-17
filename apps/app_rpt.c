@@ -1063,37 +1063,46 @@ static void startoutstream(struct rpt *myrpt)
 	}
 	n = finddelim(str, strs, 100);
 	if (n < 1) {
+		ast_log(LOG_ERROR, "Could not parse string '%s'\n", myrpt->p.outstreamcmd);
+		ast_free(str);
 		return;
-	}
-	if (myrpt->outstreampipe[1] != -1) {
+	} else if (myrpt->outstreampipe[1] != -1) {
+		ast_log(LOG_ERROR, "Outstream pipe already exists? (fd %d)\n", myrpt->outstreampipe[1]);
+		ast_free(str);
 		close(myrpt->outstreampipe[1]);
 		myrpt->outstreampipe[1] = -1;
 		myrpt->outstreamlasterror = 0;
 	}
+
 	if (pipe(myrpt->outstreampipe) == -1) {
 		ast_log(LOG_ERROR, "pipe() failed: %s\n", strerror(errno));
 		ast_free(str);
 		return;
-	}
-	if (fcntl(myrpt->outstreampipe[1], F_SETFL, O_NONBLOCK) == -1) {
+	} else if (fcntl(myrpt->outstreampipe[1], F_SETFL, O_NONBLOCK) == -1) {
 		ast_log(LOG_ERROR, "Cannot set pipe to NONBLOCK: %s", strerror(errno));
 		ast_free(str);
 		return;
 	}
-	if (!(myrpt->outstreampid = fork())) {
+	myrpt->outstreampid = ast_safe_fork(0);
+	if (myrpt->outstreampid == -1) {
+		ast_log(LOG_ERROR, "fork() failed: %s\n", strerror(errno));
+		ast_free(str);
+		close(myrpt->outstreampipe[1]);
+		myrpt->outstreampipe[1] = -1;
+		return;
+	} else if (!myrpt->outstreampid) {
 		close(myrpt->outstreampipe[1]);
 		if (dup2(myrpt->outstreampipe[0], fileno(stdin)) == -1) {
 			ast_log(LOG_ERROR, "Cannot dup2() stdin: %s", strerror(errno));
 			exit(0);
-		}
-		if (dup2(nullfd, fileno(stdout)) == -1) {
+		} else if (dup2(nullfd, fileno(stdout)) == -1) {
 			ast_log(LOG_ERROR, "Cannot dup2() stdout: %s", strerror(errno));
 			exit(0);
-		}
-		if (dup2(nullfd, fileno(stderr)) == -1) {
+		} else if (dup2(nullfd, fileno(stderr)) == -1) {
 			ast_log(LOG_ERROR, "Cannot dup2() stderr: %s", strerror(errno));
 			exit(0);
 		}
+		ast_close_fds_above_n(STDERR_FILENO);
 		execv(strs[0], strs);
 		ast_log(LOG_ERROR, "exec of %s failed: %s\n", strs[0], strerror(errno));
 		exit(0);
@@ -1101,11 +1110,7 @@ static void startoutstream(struct rpt *myrpt)
 	ast_free(str);
 	close(myrpt->outstreampipe[0]);
 	myrpt->outstreampipe[0] = -1;
-	if (myrpt->outstreampid == -1) {
-		ast_log(LOG_ERROR, "fork() failed: %s\n", strerror(errno));
-		close(myrpt->outstreampipe[1]);
-		myrpt->outstreampipe[1] = -1;
-	}
+	ast_debug(3, "Forked child %d\n", (int) myrpt->outstreampid);
 }
 
 static int topcompar(const void *a, const void *b)
@@ -3515,6 +3520,18 @@ static inline void process_command(struct rpt *myrpt)
 	myrpt->cmdAction.state = CMD_STATE_IDLE;
 }
 
+static inline void stop_outstream(struct rpt *myrpt)
+{
+	if (myrpt->outstreampid > 0) {
+		int res = kill(myrpt->outstreampid, SIGTERM);
+		if (res) {
+			ast_log(LOG_ERROR, "Cannot kill outstream process %d for node %s: %s\n", (int) myrpt->outstreampid, myrpt->name, strerror(errno));
+		} else {
+			ast_debug(3, "Sent SIGTERM to process %d\n", (int) myrpt->outstreampid);
+		}
+	}
+}
+
 static inline void outstream_write(struct rpt *myrpt, struct ast_frame *f)
 {
 	int res = write(myrpt->outstreampipe[1], f->data.ptr, f->datalen);
@@ -3529,12 +3546,8 @@ static inline void outstream_write(struct rpt *myrpt, struct ast_frame *f)
 			time(&myrpt->outstreamlasterror);
 		}
 		time(&now);
-		if (myrpt->outstreampid && (now - myrpt->outstreamlasterror) > 59) {
-			res = kill(myrpt->outstreampid, SIGTERM);
-			if (res) {
-				ast_log(LOG_ERROR, "Cannot kill outstream process for node %s: %s\n", myrpt->name, strerror(errno));
-			}
-			myrpt->outstreampid = 0;
+		if ((now - myrpt->outstreamlasterror) > 59) {
+			stop_outstream(myrpt);
 		}
 	} else {
 		if (myrpt->outstreamlasterror) {
@@ -5514,9 +5527,7 @@ static void *rpt(void *this)
 
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	myrpt->rpt_thread = AST_PTHREADT_STOP;
-	if (myrpt->outstreampid)
-		kill(myrpt->outstreampid, SIGTERM);
-	myrpt->outstreampid = 0;
+	stop_outstream(myrpt);
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
 }
@@ -5777,7 +5788,22 @@ static void *rpt_master(void *ignore)
 			if (rpt_vars[i].deleted || rpt_vars[i].remote || !rpt_vars[i].p.outstreamcmd) {
 				continue;
 			}
-			if (rpt_vars[i].outstreampid && (kill(rpt_vars[i].outstreampid, 0) != -1)) {
+			if (!rpt_vars[i].outstreampid) {
+				ast_debug(3, "No outstreampid exists yet\n");
+			} else if (kill(rpt_vars[i].outstreampid, 0) == -1) {
+				ast_debug(3, "PID %d not currently running\n", (int) rpt_vars[i].outstreampid);
+				/* The outstreamcmd has exited (probably because it failed).
+				 * Clean up the child before moving on, and don't reattempt if we fail twice. */
+				time(&rpt_vars[i].outstreamlasterror); /* Keep track that it just exited */
+				rpt_vars[i].outstreampid = 0; /* In case we continue, reset */
+			} else {
+				continue;
+			}
+			if (rpt_vars[i].outstreamlasterror && time(NULL) < rpt_vars[i].outstreamlasterror + 1) {
+				/* Command exited immediately. It probably doesn't work, no point in continously
+				 * restarting it in a loop. */
+				ast_log(LOG_ERROR, "outstreamcmd '%s' appears to be broken, disabling\n", rpt_vars[i].p.outstreamcmd);
+				rpt_vars[i].p.outstreamcmd = NULL;
 				continue;
 			}
 			rpt_vars[i].outstreampid = 0;
