@@ -39,7 +39,7 @@ Step 1: Install DAHDI and Asterisk
 
 ```
 cd /usr/src && wget https://docs.phreaknet.org/script/phreaknet.sh && chmod +x phreaknet.sh && ./phreaknet.sh make
-phreaknet install --alsa --d -b -v 20` # install in developer mode (for backtraces and assertions),  add -s for chan_sip (if you need it still) and DAHDI (required)
+phreaknet install --alsa -d -b -v 20` # install in developer mode (for backtraces and assertions),  add -s for chan_sip (if you need it still) and DAHDI (required)
 ```
 
 The critical flags here are `--alsa`, which adds ALSA support to the build system (required for `chan_simpleusb` and `chan_usbradio` to build) and `-d`, to install DAHDI.
