@@ -4154,7 +4154,7 @@ static inline void free_frame(struct ast_frame **f)
 }
 
 /*! \brief Safely hang up any channel, even if a PBX could be running on it */
-static inline void safe_hangup(struct ast_channel *chan)
+static inline void safe_hangup(struct rpt *myrpt, struct ast_channel *chan)
 {
 	/* myrpt is locked here, so we can trust this will be an atomic operation,
 	 * since we also lock before setting the pbx to NULL */
@@ -4163,15 +4163,19 @@ static inline void safe_hangup(struct ast_channel *chan)
 		ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT);
 	} else {
 		ast_debug(3, "Hard hanging up channel %s\n", ast_channel_name(chan));
+		/* Another thread could be servicing the channel right now...
+		 * so acquire the block lock to ensure we have exclusive control first. */
+		rpt_mutex_lock(&myrpt->blocklock);
 		ast_hangup(chan);
+		rpt_mutex_unlock(&myrpt->blocklock);
 	}
 }
 
 /*! \note myrpt->lock must be held when calling */
-static inline void hangup_link_chan(struct rpt_link *l)
+static inline void hangup_link_chan(struct rpt *myrpt, struct rpt_link *l)
 {
 	if (l->chan) {
-		safe_hangup(l->chan);
+		safe_hangup(myrpt, l->chan);
 		l->chan = NULL;
 	}
 }
@@ -4196,20 +4200,20 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 			else
 				l->disctime = DISC_TIME;
 			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
+			hangup_link_chan(myrpt, l);
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
 
 		if (l->retrytimer) {
 			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
+			hangup_link_chan(myrpt, l);
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
 		if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
 			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
+			hangup_link_chan(myrpt, l);
 			l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
 			l->retrytimer = RETRY_TIMER_MS;
 			l->elaptime = 0;
@@ -4248,7 +4252,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	rpt_mutex_lock(&myrpt->lock);
 	/* hang-up on call to device */
-	hangup_link_chan(l);
+	hangup_link_chan(myrpt, l);
 	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_hangup(l->pchan);
