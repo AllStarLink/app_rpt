@@ -246,7 +246,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	 * rpt_mutex_lock(&myrpt->lock);
 	 * afterwards,
 	 * if flags & RPT_LINK_CHAN.
-	 * This might not be necessary, but if it is, this should be readded. */
+	 * This might not be necessary, but if it is, this should be re-added. */
 
 	rpt_make_call(chan, device, RPT_DIAL_TIME, tech, rpt_chan_app(chantype, flags), rpt_chan_app_data(chantype), myrpt->name);
 	if (ast_channel_state(chan) != AST_STATE_UP) {

@@ -119,7 +119,7 @@ static void ourhandler(int sig)
  * \param str		Pointer to string to process (it will be modified).
  * \param strp		Pointer to a list of substrings created, NULL will be placed at the end of the list.
  * \param limit		Maximum number of substrings to process.
- * \param delim		Specified delimeter
+ * \param delim		Specified delimiter
  * \param quote		User specified quote for escaping a substring. Set to zero to escape nothing.
  *
  * \retval 			Returns number of substrings found.
@@ -222,8 +222,8 @@ static int doastcmd(char *cmd)
  * Check to see if fd1 or fd2, if specified, is ready to read.
  * returns -1 if error, 0 if nothing ready, or ready fd + 1
  *
- * akward, but needed to support having an fd of 0, which
- * is likely, since thats most likely stdin
+ * awkward, but needed to support having an fd of 0, which
+ * is likely, since that's most likely stdin
  *
  * specify fd2 as -1 if not used
  *

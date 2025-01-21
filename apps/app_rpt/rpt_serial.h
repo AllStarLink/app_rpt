@@ -10,8 +10,8 @@ int serial_open(char *fname, int speed, int stop2);
 /*
  * Return receiver ready status
  *
- * Return 1 if an Rx byte is avalable
- * Return 0 if none was avaialable after a time out period
+ * Return 1 if an Rx byte is available
+ * Return 0 if none was available after a time out period
  * Return -1 if error
  */
 
