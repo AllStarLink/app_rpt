@@ -120,7 +120,7 @@ do not use 127.0.0.1
  * To request a differential compressed directory send:
  *	FSSS0x0d
  *	Where F is a literal
- *	SSS is the last snap shot id received.  This will initally be a zero length string.
+ *	SSS is the last snap shot id received.  This will initially be a zero length string.
  *
  * The first 4 bytes of the returned data determine if the download is full or compressed.
  * @@@ indicates an uncompressed list, while DDD indicates an uncompressed differential.
@@ -1752,7 +1752,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 
 	if (!strcasecmp(cmd, "D")) {
 		snprintf(str, sizeof(str), "3%06u", pvt->nodenum);
-		/* if not for this one, we cant go any farther */
+		/* if not for this one, we can't go any farther */
 		if (strcmp(arg1, str)) {
 			return 0;
 		}
@@ -2044,7 +2044,7 @@ static void free_node(void *nodep)
 
 /*!
  * \brief Find and delete a node from our internal node list.
- * \param key			Poitner to Echolink node struct to delete.
+ * \param key			Pointer to Echolink node struct to delete.
  * \retval 0			If node not found.
  * \retval 1			If node found.
  */
@@ -2074,7 +2074,7 @@ static int find_delete(const struct el_node *key)
  *	o.rec                  (turn on/off recording)
  * \param buf			Pointer to buffer with command data.
  * \param fromip		Pointer to ip address that sent the command.
- * \param instp			Poiner to Echolink instance.
+ * \param instp			Pointer to Echolink instance.
  */
 static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_instance *instp)
 {
@@ -3204,7 +3204,7 @@ cleanup:
 
 /*!
  * \brief Echolink directory retriever thread.
- * This thread is responsible for retreiving a directory of user registrations from
+ * This thread is responsible for retrieving a directory of user registrations from
  * the echolink servers.  This is necessary to validate connecting users and
  * have the ip address available for outbound connections.
  *
@@ -3265,7 +3265,7 @@ static void *el_directory(void *data)
  * This thread is responsible for registering an instance with
  * the echolink servers.
  * This routine generally runs every 360 seconds.
- * \param data		Pointer to struct el_instance data passsed to this thread.
+ * \param data		Pointer to struct el_instance data passed to this thread.
  */
 static void *el_register(void *data)
 {

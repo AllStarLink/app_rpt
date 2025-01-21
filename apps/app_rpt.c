@@ -226,7 +226,7 @@
  * "events" subsystem:
  *
  * in the "events" section of the rpt.conf file (if any), the user may
- * specify actions to take place when ceratin events occur.
+ * specify actions to take place when certain events occur.
  *
  * It is implemented as acripting, based heavily upon expression evaluation built
  * into Asterisk. Each line of the section contains an action, a type, and variable info.
@@ -247,11 +247,11 @@
  * if type is 'E' (for "evaluate statement" (or perhaps "equals") ) then the var-spec is a full statement containing
  *    expressions, variables and operators per the expression evaluation built into Asterisk.
  * if type is 'T' (for "going True"), var-spec is a single (already-defined) variable name, and the result will be 1
- *    if the varible has just gone from 0 to 1.
+ *    if the variable has just gone from 0 to 1.
  * if type is 'F' (for "going False"), var-spec is a single (already-defined) variable name, and the result will be 1
- *    if the varible has just gone from 1 to 0.
+ *    if the variable has just gone from 1 to 0.
  * if type is 'N' (for "no change"), var-spec is a single (already-defined) variable name, and the result will be 1
- *    if the varible has not changed.
+ *    if the variable has not changed.
  *
  * "RANGER" mode configuration:
  * in the node stanza in rpt.conf ONLY the following need be specified for a RANGER node:
@@ -265,7 +265,7 @@
  * litzcmd=*32008
  *
  * This example given would be for node "90101" (note ALL RANGER nodes MUST begin with '9'.
- * litzcmd specifes the function that LiTZ inititiates to cause a connection
+ * litzcmd specifies the function that LiTZ inititiates to cause a connection
  * "rangerfunctions" in this example, is a function stanza that AT LEAST has the *3 command
  * to connect to another node
  *
@@ -379,7 +379,7 @@
 					</option>
 					<option name="D">
 						<para>Dumb Phone Control mode. This allows a regular phone user to have full control and audio access to the radio system. In this
-						mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not generally recomended in
+						mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not generally recommended in
 						this mode), the 'dphone_functions' parameter must be specified for the node in 'rpt.conf'. Otherwise no DTMF control will be
 						available to the phone user.</para>
 					</option>
@@ -536,7 +536,7 @@ static void tone_detect_init(tone_detect_state_t *s, int freq, int duration, int
 
 	periods_in_block = s->block_size * freq / TONE_SAMPLE_RATE;
 
-	/* Make sure we will have at least 5 periods at target frequency for analisys.
+	/* Make sure we will have at least 5 periods at target frequency for analysis.
 	   This may make block larger than expected packet and will make squelching impossible
 	   but at least we will be detecting the tone */
 	if (periods_in_block < 5)
@@ -809,7 +809,7 @@ void rpt_event_process(struct rpt *myrpt)
 					if (var1 && (varp == var1p))
 						cmd = (char *) v->name;
 					break;
-				case 'I':		/* if didnt exist (initial state) */
+				case 'I':		/* if didn't exist (initial state) */
 					if (!var1)
 						cmd = (char *) v->name;
 					break;
@@ -835,7 +835,7 @@ void rpt_event_process(struct rpt *myrpt)
 		if (!cmd) {
 			continue;
 		}
-		if (action == 'F') {	/* excecute a function */
+		if (action == 'F') {	/* execute a function */
 			rpt_mutex_lock(&myrpt->lock);
 			if ((MAXMACRO - strlen(myrpt->macrobuf)) >= strlen(cmd)) {
 				ast_verb(3, "Event on node %s doing macro %s for condition %s\n", myrpt->name, cmd, v->value);
@@ -845,7 +845,7 @@ void rpt_event_process(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Could not execute event %s for %s: Macro buffer overflow\n", cmd, argv[1]);
 			}
 			rpt_mutex_unlock(&myrpt->lock);
-		} else if (action == 'C') {	/* excecute a command */
+		} else if (action == 'C') {	/* execute a command */
 			/* make a local copy of the value of this entry */
 			myval = ast_strdupa(cmd);
 			/* separate out specification into comma-delimited fields */
@@ -887,7 +887,7 @@ void rpt_event_process(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Could not execute event %s for %s: Command buffer in use\n", cmd, argv[1]);
 			}
 			rpt_mutex_unlock(&myrpt->lock);
-		} else if (action == 'S') {	/* excecute a shell command */
+		} else if (action == 'S') {	/* execute a shell command */
 			char *cp;
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
@@ -1625,7 +1625,7 @@ static inline void handle_callmode_1(struct rpt *myrpt, char c)
 				rpt_telemetry(myrpt, PROC, NULL);
 				rpt_mutex_lock(&myrpt->lock);
 			}
-		} else {			/* othewise, reset timer */
+		} else {			/* otherwise, reset timer */
 			myrpt->calldigittimer = 1;
 		}
 	}
@@ -1715,7 +1715,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		strcpy(mylink->linklist, tmp + 2);
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_debug(7, "@@@@ node %s recieved node list %s from node %s\n", myrpt->name, tmp, mylink->name);
+		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, tmp, mylink->name);
 		return;
 	}
 	if (tmp[0] == 'M') {
@@ -2467,7 +2467,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 				if (!myrpt->patchquiet)
 					rpt_telemetry(myrpt, PROC, NULL);
 				return;
-			} else {			/* othewise, reset timer */
+			} else {			/* otherwise, reset timer */
 				myrpt->calldigittimer = 1;
 			}
 		}
@@ -3083,7 +3083,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			 * side should consider either side "keyed" and transmitting... but as I explain below, the lack of sending/receiving
 			 * this can actually lead to a node being improperly keyed).
 			 *
-			 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be superflous)
+			 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be superfluous)
 			 * The calling node calls this function once. What this function does is send the text frame NEWKEY1STR to the other side.
 			 * Issue #46 was concerned with a case where this was slightly broken, and the below happened:
 			 * (A = calling node, B = called node)
@@ -5740,7 +5740,7 @@ static void *rpt_master(void *ignore)
 				continue;
 			}
 			if (rpt_vars[i].outstreamlasterror && time(NULL) < rpt_vars[i].outstreamlasterror + 1) {
-				/* Command exited immediately. It probably doesn't work, no point in continously
+				/* Command exited immediately. It probably doesn't work, no point in continuously
 				 * restarting it in a loop. */
 				ast_log(LOG_ERROR, "outstreamcmd '%s' appears to be broken, disabling\n", rpt_vars[i].p.outstreamcmd);
 				rpt_vars[i].p.outstreamcmd = NULL;
