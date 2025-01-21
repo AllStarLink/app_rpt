@@ -3229,9 +3229,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			break;
 		}
 		if ((!l->chan) && (!l->retrytimer) && l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
-			if (l->chan)
-				ast_hangup(l->chan);
-			l->chan = NULL;
 			rpt_mutex_unlock(&myrpt->lock);
 			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
 				if (attempt_reconnect(myrpt, l) == -1) {
