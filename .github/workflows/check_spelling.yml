@@ -1,0 +1,23 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+   codespell:
+    name: Check for spelling errors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: codespell-project/actions-codespell@master
+        with:
+          check_filenames: true
+          skip: ./include/
+          ignore_words_file: .codespellignore
+          # When using this Action in other repos, the --skip option below can be removed
+          
