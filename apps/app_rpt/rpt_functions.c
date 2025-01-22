@@ -1724,7 +1724,6 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			ast_log(LOG_WARNING, "app_gps is not loaded.  APRSTT failed\n");
 			return DC_COMPLETE;
 		}
-		memset(func, 0, sizeof(func));
 		snprintf(func, sizeof(func) -1, "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt ? "general" : myrpt->p.aprstt, 
 			argc > 2 ? argv[2][0] : ' ');
 		/* execute the APRS_SENDTT function in app_gps*/
