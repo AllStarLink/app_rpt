@@ -9,6 +9,7 @@
 
 #include "asterisk/channel.h"
 #include "asterisk/cli.h"
+#include "asterisk/pbx.h"		/* functions */
 #include "asterisk/say.h"
 #include "asterisk/indications.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
@@ -972,12 +973,11 @@ void *rpt_tele_thread(void *this)
 	struct ast_tm localtm;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	int i, j, k, ns, rbimode;
-	unsigned int u;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
-	char lat[100], lon[100], elev[100], c;
-	FILE *fp;
 	float f;
-	struct stat mystat;
+	unsigned long long u;
+	char gps_data[100];
+	char lat[100], lon[100], elev[100], c;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
@@ -2337,21 +2337,19 @@ treataslocal:
 		break;
 	case STATS_GPS:
 	case STATS_GPS_LEGACY:
-		fp = fopen(GPSFILE, "r");
-		if (!fp) {
+		
+		/* If the app_gps custom function GPS_READ exists, read the GPS position */
+		if (!ast_custom_function_find("GPS_READ")) {
+			break;
+		}				
+		if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 			break;
 		}
-		if (fstat(fileno(fp), &mystat) == -1) {
+
+		if (sscanf(gps_data, "%llu %s %s %s", &u, lat, lon, elev) != 4) {
 			break;
 		}
-		if (mystat.st_size >= 100) {
-			break;
-		}
-		elev[0] = 0;
-		if (fscanf(fp, "%u %s %s %s", &u, lat, lon, elev) < 3) {
-			break;
-		}
-		fclose(fp);
+		
 		was = (time_t) u;
 		time(&t);
 		if ((was + GPS_VALID_SECS) < t) {
@@ -2602,14 +2600,13 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	struct rpt_tele *tele;
 	struct rpt_link *mylink = NULL;
 	int res, i, ns;
-	char *v1, *v2, mystr[1024], *p, haslink, lat[100], lon[100], elev[100];
+	char *v1, *v2, mystr[1024], *p, haslink;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
-	time_t t, was;
-	unsigned int k;
-	FILE *fp;
-	struct stat mystat;
 	struct rpt_link *l;
-
+	time_t t, was;
+	unsigned long long u;
+	char gps_data[100], lat[100], lon[100], elev[100];
+	
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 
 	if ((mode == ID) && is_paging(myrpt)) {
@@ -2767,25 +2764,20 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			send_tele_link(myrpt, mystr);
 			return;
 		case STATS_GPS:
-			fp = fopen(GPSFILE, "r");
-			if (!fp) {
+			
+			/* If the app_gps custom function GPS_READ exists, read the GPS position */
+			if (!ast_custom_function_find("GPS_READ")) {
+				break;
+			}				
+			if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 				break;
 			}
-			if (fstat(fileno(fp), &mystat) == -1) {
-				fclose(fp);
+
+			if (sscanf(gps_data, "%llu %s %s %s", &u, lat, lon, elev) != 4) {
 				break;
 			}
-			if (mystat.st_size >= 100) {
-				fclose(fp);
-				break;
-			}
-			elev[0] = 0;
-			if (fscanf(fp, "%u %s %s %s", &k, lat, lon, elev) < 3) {
-				fclose(fp);
-				break;
-			}
-			fclose(fp);
-			was = (time_t) k;
+
+			was = (time_t) u;
 			time(&t);
 			if ((was + GPS_VALID_SECS) < t) {
 				break;

@@ -208,7 +208,6 @@ do not use 127.0.0.1
 /*! \brief Echolink directory server port number */
 #define	EL_DIRECTORY_PORT 5200
 
-#define	GPSFILE "/tmp/gps.dat"
 #define	GPS_VALID_SECS 60
 
 #define	ELDB_NODENUMLEN 8
@@ -3318,8 +3317,6 @@ static void *el_reader(void *data)
 	char *nameptr;
 	struct pollfd fds[2];
 	struct timeval current_packet_time;
-	FILE *fp;
-	struct stat mystat;
 	struct gsmVoice_t *gsmPacket;
 	uint32_t time_difference;
 
@@ -3341,11 +3338,11 @@ static void *el_reader(void *data)
 		if (instp->aprstime <= now) {
 			instp->aprstime = now + EL_APRS_INTERVAL;
 			if (sin_aprs.sin_port) {	/* a zero port indicates that we never resolved the host name */
-				char aprsstr[512], aprscall[256], latc, lonc;
+				char aprsstr[512], aprscall[256], gps_data[100], latc, lonc;
 				unsigned char sdes_packet[256];
-				unsigned int u;
+				unsigned long long u;
 				float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
-				int sdes_length;
+				int sdes_length, from_GPS = 0;
 				struct el_node_count count;
 
 				memset(&count, 0, sizeof(count));
@@ -3366,9 +3363,8 @@ static void *el_reader(void *data)
 				}
 				mylat = instp->lat;
 				mylon = instp->lon;
-				fp = fopen(GPSFILE, "r");
-				if (fp && (fstat(fileno(fp), &mystat) != -1) && (mystat.st_size < 100)) {
-					if (fscanf(fp, "%u %f%c %f%c", &u, &lat, &latc, &lon, &lonc) == 5) {
+				if (ast_custom_function_find("GPS_READ") && !ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
+					if (sscanf(gps_data, "%llu %f%c %f%c", &u, &lat, &latc, &lon, &lonc) == 5) {
 						was = (time_t) u;
 						if ((was + GPS_VALID_SECS) >= now) {
 							mylat = floor(lat / 100.0);
@@ -3381,9 +3377,9 @@ static void *el_reader(void *data)
 							if (lonc == 'W') {
 								mylon = -mylon;
 							}
+							from_GPS = 1;
 						}
-					}
-					fclose(fp);
+					}					
 				}
 				latc = (mylat >= 0.0) ? 'N' : 'S';
 				lonc = (mylon >= 0.0) ? 'E' : 'W';
@@ -3399,7 +3395,7 @@ static void *el_reader(void *data)
 					instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
-				ast_debug(4, "APRS out: %s.\n", aprsstr);
+				ast_debug(4, "APRS out%s: %s.\n", from_GPS ? " (GPS)" : "", aprsstr);
 				snprintf(aprscall, sizeof(aprscall), "%s/%s", instp->mycall, instp->mycall);
 				memset(sdes_packet, 0, sizeof(sdes_packet));
 				sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
