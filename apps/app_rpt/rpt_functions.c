@@ -1726,7 +1726,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		}
 		memset(func, 0, sizeof(func));
 		snprintf(func, sizeof(func) -1, "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt ? "general" : myrpt->p.aprstt, 
-			argc > 2 ? argv[3][0] : ' ');
+			argc > 2 ? argv[2][0] : ' ');
 		/* execute the APRS_SENDTT function in app_gps*/
 		if (!ast_func_write(NULL, func, argv[1])) {
 			if (myatoi(argv[0]) == 63) {
