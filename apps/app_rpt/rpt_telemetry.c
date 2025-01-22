@@ -2341,7 +2341,7 @@ treataslocal:
 		/* If the app_gps custom function GPS_READ exists, read the GPS position */
 		if (!ast_custom_function_find("GPS_READ")) {
 			break;
-		}				
+		}
 		if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 			break;
 		}
