@@ -106,7 +106,7 @@
  * -     House QTH
  * .     X
  * /     Dot
- * 0-8   Numeral Circle     Numbered Circle
+ * 0-8   Numbered Circle    Numbered Circle
  * 9     Numeral Circle     Gas Station
  * :     FIRE               Hail
  * ?     Campground         Park/Picnic area (note different then standard ';' * )
@@ -1525,13 +1525,14 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
  */
 static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, char *data, const char *value)
 {
-		char *parse;
-		struct aprs_sender_info *sender_entry;
-		
-		AST_DECLARE_APP_ARGS(args,
-			AST_APP_ARG(stanza);
-			AST_APP_ARG(overlay);
+	char *parse;
+	struct aprs_sender_info *sender_entry;
+	
+	AST_DECLARE_APP_ARGS(args,
+		AST_APP_ARG(stanza);
+		AST_APP_ARG(overlay);
 	);
+	
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_ERROR, "APRS_SENDTT requires arguments\n");
 		return -1;
@@ -1579,8 +1580,6 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
  */
 static struct ast_custom_function gps_read_function = {
 	.name = "GPS_READ",
-	.synopsis = "Read GPS position",
-	.desc = "Read current or default GPS position.",
 	.read = gps_read_helper,
 };
 
@@ -1589,8 +1588,6 @@ static struct ast_custom_function gps_read_function = {
  */
 static struct ast_custom_function aprs_sendtt_function = {
 	.name = "APRS_SENDTT",
-	.synopsis = "Send APRStt",
-	.desc = "Sends an APRStt position report.",
 	.write = aprs_sendtt_helper,
 };
 
@@ -1605,9 +1602,9 @@ static char *handle_cli_status(struct ast_cli_entry *e, int cmd, struct ast_cli_
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "gps status";
+		e->command = "gps show status";
 		e->usage =
-			"Usage: gps status\n"
+			"Usage: gps show status\n"
 			"       Displays the GPS status.\n";
 		return NULL;
 	case CLI_GENERATE:
@@ -1663,15 +1660,13 @@ static int unload_module(void)
 	}
 	
 	/* Shutdown and clean up sender threads */
-	AST_LIST_TRAVERSE_SAFE_BEGIN(&aprs_sender_list, sender_entry, list) {
-		AST_LIST_REMOVE_CURRENT(list);
+	while ((sender_entry = AST_LIST_REMOVE_HEAD(&aprs_sender_list, list))) {
 		ast_debug(2, "Waiting for %s sender thread %s to exit\n", sender_entry->type == APRS ? "aprs" : "aprstt", sender_entry->stanza);
 		pthread_join(sender_entry->thread_id, NULL);
 		ast_mutex_destroy(&sender_entry->lock);
 		ast_cond_destroy(&sender_entry->condition);
 		ast_free(sender_entry);
 	}
-	AST_LIST_TRAVERSE_SAFE_END;
 
 	ast_debug(1, "Threads have exited\n");
 	
@@ -1771,8 +1766,6 @@ static int load_module(void)
 		baudrate = GPS_DEFAULT_BAUDRATE;
 	}
 	
-	memset(&current_gps_position, 0, sizeof(current_gps_position));
-	memset(&general_def_position, 0, sizeof(general_def_position));
 	/* 
 	 * Setup the general default position.
 	 * This is used when the GPS device is not available.

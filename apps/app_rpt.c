@@ -1565,13 +1565,12 @@ static void do_aprstt(struct rpt *myrpt)
 	 */
 	overlay = aprstt_xlat(cmd, aprscall);
 	if (overlay) {
-		ast_log(LOG_NOTICE, "APRStt got string %s callsign %s overlay %c\n", cmd, aprscall, overlay);
+		ast_debug(1, "APRStt got string %s callsign %s overlay %c\n", cmd, aprscall, overlay);
 		
 		if (!ast_custom_function_find("APRS_SENDTT")) {
 			ast_log(LOG_WARNING, "app_gps is not loaded.  APRSTT failed\n");
 		} else {
-			memset(func, 0, sizeof(func));
-			snprintf(func, sizeof(func) -1, "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt[0] ? "general" : myrpt->p.aprstt, overlay);
+			snprintf(func, sizeof(func), "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt[0] ? "general" : myrpt->p.aprstt, overlay);
 			/* execute the APRS_SENDTT function in app_gps*/
 			if (!ast_func_write(NULL, func, aprscall)) {
 				rpt_telemetry(myrpt, ARB_ALPHA, (void *) aprscall);
