@@ -1722,17 +1722,17 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		
 		if (!ast_custom_function_find("APRS_SENDTT")) {
 			ast_log(LOG_WARNING, "app_gps is not loaded.  APRSTT failed\n");
-		} else {
-			memset(func, 0, sizeof(func));
-			snprintf(func, sizeof(func) -1, "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt ? "general" : myrpt->p.aprstt, 
-				argc > 2 ? argv[2][0] : ' ');
-			/* execute the APRS_SENDTT function in app_gps*/
-			if (!ast_func_write(NULL, func, argv[1])) {
-				if (myatoi(argv[0]) == 63) {
-					rpt_telemetry(myrpt, ARB_ALPHA, (void *) argv[1]);
-				}
+			return DC_COMPLETE;
+		}
+		memset(func, 0, sizeof(func));
+		snprintf(func, sizeof(func) -1, "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt ? "general" : myrpt->p.aprstt, 
+			argc > 2 ? argv[3][0] : ' ');
+		/* execute the APRS_SENDTT function in app_gps*/
+		if (!ast_func_write(NULL, func, argv[1])) {
+			if (myatoi(argv[0]) == 63) {
+				rpt_telemetry(myrpt, ARB_ALPHA, (void *) argv[1]);
 			}
-		} 
+		}
 		return DC_COMPLETE;
 	case 65:					/* send POCSAG page */
 		if (argc < 3)
