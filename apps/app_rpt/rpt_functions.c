@@ -1721,7 +1721,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		}
 		
 		if (!ast_custom_function_find("APRS_SENDTT")) {
-			ast_log(LOG_WARNING, "app_gps is not loaded.  APRSTT failed\n");
+			ast_log(LOG_WARNING, "app_gps is not loaded.  APRStt failed\n");
 			return DC_COMPLETE;
 		}
 		snprintf(func, sizeof(func) -1, "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt ? "general" : myrpt->p.aprstt, 

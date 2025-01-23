@@ -238,8 +238,8 @@
 /*! Defines */
 #define	APRS_DEFAULT_SERVER "rotate.aprs.net"
 #define	APRS_DEFAULT_PORT "14580"
-#define	APRS_DEFAULT_COMMENT "AllStar Link Node"
-#define	APRSTT_DEFAULT_COMMENT "AllStar Link TT Report"
+#define	APRS_DEFAULT_COMMENT "Asterisk/app_rpt Node"
+#define	APRSTT_DEFAULT_COMMENT "Asterisk/app_rpt TT Report"
 #define	APRSTT_DEFAULT_OVERLAY '0'
 #define APRS_DEFAULT_ICON_TABLE '/'		/* primary table */
 #define	APRS_DEFAULT_ICON '-'			/* house */
@@ -283,11 +283,11 @@ static int gps_unlock_shown = 0;
  * \brief Position information structure
  */
 struct position_info {
-	int is_valid:1;			/* contains valid values indicator */
-	char latitude[25];		/* latitude format DDMM.SSS */
-	char longitude[25];		/* longitude format DDDMM.SSS */
-	char elevation[25];		/* elevation format VVVV.V */
-	time_t last_updated;	/* the time these values were last updated */
+	unsigned int is_valid:1;	/* contains valid values indicator */
+	char latitude[25];			/* latitude format DDMM.SSS */
+	char longitude[25];			/* longitude format DDDMM.SSS */
+	char elevation[25];			/* elevation format VVVV.V */
+	time_t last_updated;		/* the time these values were last updated */
 };
 
 static struct position_info current_gps_position;
@@ -296,7 +296,7 @@ static struct position_info general_def_position;
 /*!
  *\brief Enum for aprs sender info type.
  */
-enum Sender_Type {
+enum APRS_Sender_Type {
 	APRS,
 	APRSTT
 };
@@ -306,7 +306,7 @@ enum Sender_Type {
  */
 struct aprs_sender_info {
 	AST_LIST_ENTRY(aprs_sender_info) list;
-	enum Sender_Type type;					/* sender type enum */
+	enum APRS_Sender_Type type;					/* sender type enum */
 	char stanza[50]; 						/* stanza associated with this aprs thread */
 	pthread_t thread_id;					/* thread id for this sender */
 	ast_cond_t condition;					/* condition indicator for this sender */
@@ -496,7 +496,7 @@ static void *aprs_connection_thread(void *data)
 		}
 		sockfd = socket(AF_INET, SOCK_STREAM, 0);
 		if (sockfd < 0) {
-			ast_log(LOG_ERROR, "Error opening socket. Error: %s\n", strerror(errno));
+			ast_log(LOG_ERROR, "Error opening socket: %s\n", strerror(errno));
 			ast_mutex_unlock(&aprs_socket_lock);
 			/* Wait 500ms before trying again. */
 			usleep(500000);
@@ -524,9 +524,7 @@ static void *aprs_connection_thread(void *data)
 		sprintf(buf, "user %s pass %s vers Asterisk app_gps_V3\n", call, password);
 		
 		if (send(sockfd, buf, strlen(buf), 0) < 0) {
-			ast_log(LOG_WARNING, "Can not send sign on to server. Error: %s\n", strerror(errno));
-			close(sockfd);
-			sockfd = -1;
+			ast_log(LOG_WARNING, "Can not send sign on to server: %s\n", strerror(errno));
 			ast_mutex_unlock(&aprs_socket_lock);
 			continue;
 		}
@@ -553,7 +551,6 @@ static void *aprs_connection_thread(void *data)
 				break;
 			}
 			if (fds[0].revents & POLLIN) {
-				memset(buf, 0, sizeof(buf));
 				if (recv(sockfd, buf, sizeof(buf) - 1, 0) > 0) {
 					ast_debug(4, "APRS-IS: %s\n", buf);
 				}
@@ -588,7 +585,7 @@ static int report_aprs(char *ctg, char *lat, char *lon, char *elev)
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment, icon, icon_table;
-	char power, height, gain, dir, *val, servercall[200], buf[350], *cp;
+	char power, height, gain, dir, *val, servercall[20], buf[350], *cp;
 	struct ast_flags zeroflag = { 0 };
 	char elev_str[25];
 	float elev_f;
@@ -680,8 +677,8 @@ static int report_aprs(char *ctg, char *lat, char *lon, char *elev)
 	/* Reduce the precision of latitude and longitude
 	 *
 	 * Latitude is expressed as a fixed 8-character field, in degrees and decimal
-     * minutes (to two decimal places), followed by the letter N for north or 
-     * S for south.
+	 * minutes (to two decimal places), followed by the letter N for north or 
+	 * S for south.
 	 * Longitude is expressed as a fixed 9-character field, in degrees and decimal
 	 * minutes (to two decimal places), followed by the letter E for east or 
 	 * W for west.
@@ -698,11 +695,12 @@ static int report_aprs(char *ctg, char *lat, char *lon, char *elev)
 	}
 	
 	/* Setup optional elevation */
-	memset(elev_str, 0, sizeof(elev_str));
 	elev_f = 0;
 	sscanf(elev, "%f", &elev_f);
 	if (elev_f > 0) {
 		snprintf(elev_str, sizeof(elev_str), "/A=%06.0f", elev_f * 3.28);
+	} else {
+		elev_str[0] = '\0';
 	}
 
 	snprintf(buf, sizeof(buf), "%s>APSTAR,TCPIP*,qAC,%s:!%s%c%s%cPHG%d%d%d%d%s%s\r\n",
@@ -716,7 +714,7 @@ static int report_aprs(char *ctg, char *lat, char *lon, char *elev)
 		return -1;
 	}
 	if (send(sockfd, buf, strlen(buf), 0) < 0) {
-		ast_log(LOG_WARNING, "Can not send APRS (GPS) data. Error: %s\n", strerror(errno));
+		ast_log(LOG_WARNING, "Can not send APRS (GPS) data: %s\n", strerror(errno));
 		ast_mutex_unlock(&aprs_socket_lock);
 		return -1;
 	}
@@ -749,7 +747,7 @@ static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char 
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment;
-	char *val, basecall[300], buf[300], buf1[100], *cp;
+	char *val, basecall[20], buf[300], buf1[100], *cp;
 	time_t t;
 	struct tm *tm;
 	struct ast_flags zeroflag = { 0 };
@@ -793,8 +791,8 @@ static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char 
 	/* Reduce the precision of latitude and longitude
 	 *
 	 * Latitude is expressed as a fixed 8-character field, in degrees and decimal
-     * minutes (to two decimal places), followed by the letter N for north or 
-     * S for south.
+	 * minutes (to two decimal places), followed by the letter N for north or 
+	 * S for south.
 	 * Longitude is expressed as a fixed 9-character field, in degrees and decimal
 	 * minutes (to two decimal places), followed by the letter E for east or 
 	 * W for west.
@@ -826,7 +824,7 @@ static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char 
 	}
 	
 	if (send(sockfd, buf, strlen(buf), 0) < 0) {
-		ast_log(LOG_WARNING, "Can not send APRS (APSTAR) data. Error: %s\n", strerror(errno));
+		ast_log(LOG_WARNING, "Can not send APRS (APSTAR) data: %s\n", strerror(errno));
 		ast_mutex_unlock(&aprs_socket_lock);
 		return -1;
 	}
@@ -899,14 +897,14 @@ static void *gps_reader(void *data)
 	/* Open the serial port configured for the GPS device */
 	fd = open(comport, O_RDWR);
 	if (fd == -1) {
-		ast_log(LOG_WARNING, "Cannot open serial port %s: Error %s\n", comport, strerror(errno));
+		ast_log(LOG_WARNING, "Cannot open serial port %s: %s\n", comport, strerror(errno));
 		goto err;
 	}
 
 	if (has_comport) {
 		memset(&mode, 0, sizeof(mode));
 		if (tcgetattr(fd, &mode)) {
-			ast_log(LOG_WARNING, "Unable to get serial parameters on %s: Error %s\n", comport, strerror(errno));
+			ast_log(LOG_WARNING, "Unable to get serial parameters on %s: %s\n", comport, strerror(errno));
 			close(fd);
 			goto err;
 		}
@@ -924,7 +922,7 @@ static void *gps_reader(void *data)
 		cfsetispeed(&mode, baudrate);
 		cfsetospeed(&mode, baudrate);
 		if (tcsetattr(fd, TCSANOW, &mode)) {
-			ast_log(LOG_WARNING, "Unable to set serial parameters on %s: Error %s\n", comport, strerror(errno));
+			ast_log(LOG_WARNING, "Unable to set serial parameters on %s: %s\n", comport, strerror(errno));
 			close(fd);
 			goto err;
 		}
@@ -933,7 +931,7 @@ static void *gps_reader(void *data)
 	/* Give the device a few milliseconds to come on-line */
 	usleep(100000);
 
-	/*! \todo we need to detail with someone unplugging the device */
+	/*! \todo we need to deal with someone unplugging the device */
 	
 	while (run_forever) {
 		
@@ -1063,7 +1061,7 @@ static void *aprs_sender_thread(void *data)
 	time_t now, lastupdate;
 	struct ast_flags zeroflag = { 0 };
 	struct position_info this_def_position, selected_position;
-	struct aprs_sender_info *sender_entry = (struct aprs_sender_info *) data;
+	struct aprs_sender_info *sender_entry = data;
 	
 	ctg = ast_strdupa(sender_entry->stanza);
 	
@@ -1185,7 +1183,7 @@ static void *aprstt_sender_thread(void *data)
 	int i, j, ttlist, ttoffset, ttslot, myoffset;
 	char *ctg, c;
 	char *val, *deflat, *deflon, *defelev, ttsplit, *ttlat, *ttlon;
-	char fname[200], lat[100], theircall[100], overlay;
+	char fname[200], lat[25], theircall[20], overlay;
 	FILE *mfp;
 	struct stat mystat;
 	time_t now, lastupdate;
@@ -1193,7 +1191,7 @@ static void *aprstt_sender_thread(void *data)
 	struct position_info this_def_position, selected_position;
 	struct timeval tv;
 	struct timespec ts = {0};
-	struct aprs_sender_info *sender_entry = (struct aprs_sender_info *) data;
+	struct aprs_sender_info *sender_entry = data;
 	
 	ctg = ast_strdupa(sender_entry->stanza);
 	
@@ -1292,55 +1290,55 @@ static void *aprstt_sender_thread(void *data)
 	if (stat(fname, &mystat) == -1) {
 		mfp = fopen(fname, "w");
 		if (!mfp) {
-			ast_log(LOG_ERROR, "Can not create aprstt common block file %s. Error: %s\n", fname, strerror(errno));
+			ast_log(LOG_ERROR, "Can not create aprstt common block file %s: %s\n", fname, strerror(errno));
 			pthread_exit(NULL);
 		}
 		memset(&ttempty, 0, sizeof(ttempty));
 		for (i = 0; i < ttlist; i++) {
 			if (fwrite(&ttempty, 1, sizeof(ttempty), mfp) != sizeof(ttempty)) {
-				ast_log(LOG_ERROR, "Error initializing aprtss common block file %s. Error: %s\n", fname, strerror(errno));
+				ast_log(LOG_ERROR, "Error initializing aprtss common block file %s: %s\n", fname, strerror(errno));
 				fclose(mfp);
 				pthread_exit(NULL);
 			}
 		}
 		fclose(mfp);
 		if (stat(fname, &mystat) == -1) {
-			ast_log(LOG_ERROR, "Unable to stat new aprstt common block file %s: Error: %s\n", fname, strerror(errno));
+			ast_log(LOG_ERROR, "Unable to stat new aprstt common block file %s: %s\n", fname, strerror(errno));
 			pthread_exit(NULL);
 		}
 	}
 	if (mystat.st_size < (sizeof(struct ttentry) * ttlist)) {
 		mfp = fopen(fname, "r+");
 		if (!mfp) {
-			ast_log(LOG_ERROR, "Can not open aprstt common block file %s. Error: %s\n", fname, strerror(errno));
+			ast_log(LOG_ERROR, "Can not open aprstt common block file %s: %s\n", fname, strerror(errno));
 			pthread_exit(NULL);
 		}
 		memset(&ttempty, 0, sizeof(ttempty));
 		if (fseek(mfp, 0, SEEK_END)) {
-			ast_log(LOG_ERROR, "Can not seek aprstt common block file %s. Error: %s\n", fname, strerror(errno));
+			ast_log(LOG_ERROR, "Can not seek aprstt common block file %s: %s\n", fname, strerror(errno));
 			pthread_exit(NULL);
 		}
 		for (i = mystat.st_size; i < (sizeof(struct ttentry) * ttlist); i += sizeof(struct ttentry)) {
 			if (fwrite(&ttempty, 1, sizeof(ttempty), mfp) != sizeof(ttempty)) {
-				ast_log(LOG_ERROR, "Error growing aprtss common block file %s. Error: %s\n", fname, strerror(errno));
+				ast_log(LOG_ERROR, "Error growing aprtss common block file %s: %s\n", fname, strerror(errno));
 				fclose(mfp);
 				pthread_exit(NULL);
 			}
 		}
 		fclose(mfp);
 		if (stat(fname, &mystat) == -1) {
-			ast_log(LOG_ERROR, "Unable to stat updated aprstt common block file %s. Error: %s\n", fname, strerror(errno));
+			ast_log(LOG_ERROR, "Unable to stat updated aprstt common block file %s: %s\n", fname, strerror(errno));
 			pthread_exit(NULL);
 		}
 	}
 	mfp = fopen(fname, "r+");
 	if (!mfp) {
-		ast_log(LOG_ERROR, "Can not open aprstt common block file %s. Error: %s\n", fname, strerror(errno));
+		ast_log(LOG_ERROR, "Can not open aprstt common block file %s: %s\n", fname, strerror(errno));
 		pthread_exit(NULL);
 	}
 	ttentries = mmap(NULL, mystat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(mfp), 0);
 	if (ttentries == NULL) {
-		ast_log(LOG_ERROR, "Cannot map aprtss common file %s. Error: %s\n", fname, strerror(errno));
+		ast_log(LOG_ERROR, "Cannot map aprtss common file %s: %s\n", fname, strerror(errno));
 		pthread_exit(NULL);
 	}
 	
@@ -1483,8 +1481,6 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
 {
 	struct position_info selected_position;
 	
-	memset(buf, 0, len);
-	
 	ast_mutex_lock(&position_update_lock);
 	selected_position.is_valid = 0;
 	/* See if we need to send live GPS or the default */
@@ -1506,6 +1502,7 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
 		return 0;
 	}
 
+	*buf = '\0';
 	return -1;
 }
 /*!

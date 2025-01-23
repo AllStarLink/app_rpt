@@ -1568,7 +1568,7 @@ static void do_aprstt(struct rpt *myrpt)
 		ast_debug(1, "APRStt got string %s callsign %s overlay %c\n", cmd, aprscall, overlay);
 		
 		if (!ast_custom_function_find("APRS_SENDTT")) {
-			ast_log(LOG_WARNING, "app_gps is not loaded.  APRSTT failed\n");
+			ast_log(LOG_WARNING, "app_gps is not loaded.  APRStt failed\n");
 		} else {
 			snprintf(func, sizeof(func), "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt[0] ? "general" : myrpt->p.aprstt, overlay);
 			/* execute the APRS_SENDTT function in app_gps*/
@@ -4984,7 +4984,7 @@ static void *rpt(void *this)
 		while (t >= (myrpt->lastgpstime + GPS_UPDATE_SECS)) {
 			unsigned long long u;
 			char gps_data[100];
-			char lat[100], lon[100], elev[100];
+			char lat[25], lon[25], elev[25];
 
 			myrpt->lastgpstime = t;
 			

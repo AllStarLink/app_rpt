@@ -976,8 +976,7 @@ void *rpt_tele_thread(void *this)
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
 	unsigned long long u;
-	char gps_data[100];
-	char lat[100], lon[100], elev[100], c;
+	char gps_data[100], lat[25], lon[25], elev[25], c;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
@@ -2338,8 +2337,10 @@ treataslocal:
 	case STATS_GPS:
 	case STATS_GPS_LEGACY:
 		
-		/* If the app_gps custom function GPS_READ exists, read the GPS position */
+		/* If the app_gps custom function GPS_READ does not exist, let them know */
 		if (!ast_custom_function_find("GPS_READ")) {
+			saycharstr(mychannel, "GPS");
+			sayfile(mychannel, "rpt/off");
 			break;
 		}
 		if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
@@ -2605,7 +2606,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	struct rpt_link *l;
 	time_t t, was;
 	unsigned long long u;
-	char gps_data[100], lat[100], lon[100], elev[100];
+	char gps_data[100], lat[25], lon[25], elev[25];
 	
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 
