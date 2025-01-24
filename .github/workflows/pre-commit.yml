@@ -13,6 +13,25 @@ jobs:
       - uses: codespell-project/actions-codespell@master
         with:
           check_filenames: true
+          skip: "./configs"
           ignore_words_file: ./.dev/.codespellignore
-          # When using this Action in other repos, the --skip option below can be removed
-          
+
+   format:
+    name: "Clang format"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.head_ref }}
+          fetch-depth: 2
+
+      - name: Run clang-format check
+        id: clang_check
+        uses: mkmer/clang-format-action@v1.2
+        with:
+          check: true
+          style: file:./.dev/
+          extensions: h,c
+          clang-version: latest
