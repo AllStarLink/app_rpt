@@ -219,8 +219,8 @@
 			Report a callsign to APRS.
 		</synopsis>
 		<syntax>
-			<parameter name="stanza" required="true">
-				<para>Stanza to use.</para>
+			<parameter name="section" required="true">
+				<para>Section in gps.conf to use.</para>
 			</parameter>
 			<parameter name="overlay" required="true">
 				<para>Overlay to report. Number 1 to 9.</para>
@@ -228,9 +228,9 @@
 		</syntax>
 		<description>
 			<para>Nothing is returned.</para>
-		    <example title="Sending a report.">
-				exten => s,1,APRS_SENDTT(general,1)=WB6NIL
- 		    </example>
+				<example title="Sending a report.">
+					exten => s,1,Set(APRS_SENDTT(general,1)=WB6NIL)
+				</example>
 		</description>
 	</function>
  ***/
@@ -296,7 +296,7 @@ static struct position_info general_def_position;
 /*!
  *\brief Enum for aprs sender info type.
  */
-enum APRS_Sender_Type {
+enum aprs_sender_type {
 	APRS,
 	APRSTT
 };
@@ -306,8 +306,8 @@ enum APRS_Sender_Type {
  */
 struct aprs_sender_info {
 	AST_LIST_ENTRY(aprs_sender_info) list;
-	enum APRS_Sender_Type type;					/* sender type enum */
-	char stanza[50]; 						/* stanza associated with this aprs thread */
+	enum aprs_sender_type type;					/* sender type enum */
+	char section[50]; 						/* section associated with this aprs thread */
 	pthread_t thread_id;					/* thread id for this sender */
 	ast_cond_t condition;					/* condition indicator for this sender */
 	ast_mutex_t lock;						/* lock for condition */
@@ -573,7 +573,7 @@ static void *aprs_connection_thread(void *data)
  * Data extension PHG 'Station Power and Effective Antenna Height/Gain/Directivity'
  * Optionally includes elevation.
  *
- * \param ctg		Pointer to configuration stanza to process
+ * \param ctg		Pointer to configuration section to process
  * \param lat		Pointer to latitude to report
  * \param lon		Pointer to longitude to report
  * \param elev		Pointer to elevation to report
@@ -593,7 +593,7 @@ static int report_aprs(char *ctg, char *lat, char *lon, char *elev)
 	call = NULL;
 	comment = NULL;
 	
-	/* Load the configuration settings for the stanza requested */
+	/* Load the configuration settings for the section requested */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return -1;
@@ -733,7 +733,7 @@ static int report_aprs(char *ctg, char *lat, char *lon, char *elev)
  * The call sign being reported is shown in APRS as an object with
  * a SSID of '-12'.
  *
- * \param ctg		Pointer to configuration stanza to process
+ * \param ctg		Pointer to configuration section to process
  * \param lat		Pointer to latitude to report
  * \param lon		Pointer to longitude to report
  * \param theircall	Pointer to the received callsign to report
@@ -755,7 +755,7 @@ static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char 
 	call = NULL;
 	comment = NULL;
 	
-	/* Load the configuration settings for the stanza requested */
+	/* Load the configuration settings for the section requested */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return -1;
@@ -808,7 +808,7 @@ static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char 
 		*(cp + 4) = 0;
 	}
 	
-	time(&t);
+	t = time(NULL);
 	tm = gmtime(&t);
 	
 	sprintf(buf1, "%s-12", theircall);
@@ -959,7 +959,7 @@ static void *gps_reader(void *data)
 			selected_info = &general_def_position;
 			
 		} else {
-			time(&now);
+			now = time(NULL);
 			/* Check for no data receiption */
 			if (current_gps_position.last_updated + GPS_VALID_SECS < now) {
 				ast_mutex_lock(&position_update_lock);
@@ -1020,7 +1020,7 @@ static void *gps_reader(void *data)
 			snprintf(current_gps_position.latitude, sizeof(current_gps_position.latitude) - 1, "%s%s", strs[2], strs[3]);
 			snprintf(current_gps_position.longitude, sizeof(current_gps_position.longitude) - 1, "%s%s", strs[4], strs[5]);
 			snprintf(current_gps_position.elevation, sizeof(current_gps_position.elevation) - 1, "%s%s", strs[9], strs[10]);
-			time(&current_gps_position.last_updated);
+			current_gps_position.last_updated = time(NULL);
 			ast_mutex_unlock(&position_update_lock);
 			
 			selected_info = & current_gps_position;
@@ -1031,7 +1031,7 @@ static void *gps_reader(void *data)
 			(selected_info == &current_gps_position) ? "GPS" : "Default");
 	}
 	
-	if (fd) {
+	if (fd != -1) {
 		close(fd);
 	}
 	
@@ -1045,10 +1045,10 @@ err:
  * The routine sends the packet report based on the configured
  * interval (beacon time).
  *
- * This thread is setup initially for the [general] stanza.
- * If other stanzas are present in the configuration file,
+ * This thread is setup initially for the [general] section.
+ * If other sections are present in the configuration file,
  * additional threads will be created passing in the name
- * of the respective stanza.
+ * of the respective section.
  *
  * \param data		Pointer to aprs_sender_info struct.
  */
@@ -1063,7 +1063,7 @@ static void *aprs_sender_thread(void *data)
 	struct position_info this_def_position, selected_position;
 	struct aprs_sender_info *sender_entry = data;
 	
-	ctg = ast_strdupa(sender_entry->stanza);
+	ctg = ast_strdupa(sender_entry->section);
 	
 	ast_debug(2, "Starting aprs sender thread: %s\n", ctg);
 
@@ -1105,10 +1105,10 @@ static void *aprs_sender_thread(void *data)
 	ast_config_destroy(cfg);
 	cfg = NULL;
 	/*
-	 * Set the default position for this stanza
+	 * Set the default position for this section
 	 * If it is [general], we already have the defaults
 	 * otherwise, we need to build the specific defaults
-	 * for this stanza.
+	 * for this section.
 	 */
 	 if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
 		 this_def_position = general_def_position;
@@ -1128,11 +1128,11 @@ static void *aprs_sender_thread(void *data)
 	 }
 	
 	memset(&selected_position, 0, sizeof(selected_position));
-	time(&lastupdate);
+	lastupdate = time(NULL);
 	my_update_secs = GPS_UPDATE_SECS;
 	
 	while (run_forever) {
-		time(&now);
+		now = time(NULL);
 		
 		ast_mutex_lock(&position_update_lock);
 		selected_position.is_valid = 0;
@@ -1169,10 +1169,10 @@ static void *aprs_sender_thread(void *data)
  * \brief APRStt (touch tone) processing thread.
  * The routine sends the touch tone packet report.
  *
- * This thread is setup initially for the [general] stanza.
- * If other stanzas are present in the configuration file,
+ * This thread is setup initially for the [general] section.
+ * If other sections are present in the configuration file,
  * additional threads will be created passing in the name
- * of the respective stanza.
+ * of the respective section.
  *
  * \param data		Pointer to aprs_sender_info struct.
  */
@@ -1186,14 +1186,14 @@ static void *aprstt_sender_thread(void *data)
 	char fname[200], lat[25], theircall[20], overlay;
 	FILE *mfp;
 	struct stat mystat;
-	time_t now, lastupdate;
+	time_t now;
 	struct ttentry *ttentries, ttempty;
 	struct position_info this_def_position, selected_position;
 	struct timeval tv;
 	struct timespec ts = {0};
 	struct aprs_sender_info *sender_entry = data;
 	
-	ctg = ast_strdupa(sender_entry->stanza);
+	ctg = ast_strdupa(sender_entry->section);
 	
 	ast_debug(2, "Starting aprstt sender thread: %s\n", ctg);
 
@@ -1255,10 +1255,10 @@ static void *aprstt_sender_thread(void *data)
 	cfg = NULL;
 
 	/*
-	 * Set the default position for this stanza
+	 * Set the default position for this section
 	 * If it is [general], we already have the defaults
 	 * otherwise, we need to build the specific defaults
-	 * for this stanza.
+	 * for this section.
 	 */
 	 if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
 		 this_def_position = general_def_position;
@@ -1278,14 +1278,14 @@ static void *aprstt_sender_thread(void *data)
 	 }
 
 	/*
-	 * Open the common block file for this stanza.
+	 * Open the common block file for this section.
 	 * We will store the callsign and last update time.
 	 */
 	mfp = NULL;
-	if (!strcmp(sender_entry->stanza, "general")) {
+	if (!strcmp(sender_entry->section, "general")) {
 		strcpy(fname, TT_COMMON);
 	} else { 
-		snprintf(fname, sizeof(fname) - 1, TT_SUB_COMMON, sender_entry->stanza);
+		snprintf(fname, sizeof(fname) - 1, TT_SUB_COMMON, sender_entry->section);
 	}
 	if (stat(fname, &mystat) == -1) {
 		mfp = fopen(fname, "w");
@@ -1342,8 +1342,6 @@ static void *aprstt_sender_thread(void *data)
 		pthread_exit(NULL);
 	}
 	
-	time(&lastupdate);
-	
 	while (run_forever) {
 		/* Wait for the aprs_sendtt function to give us data or time out after 500ms */
 		ast_mutex_lock(&sender_entry->lock);
@@ -1369,7 +1367,7 @@ static void *aprstt_sender_thread(void *data)
 			overlay = APRSTT_DEFAULT_OVERLAY;
 		}
 		
-		time(&now);
+		now = time(NULL);
 		
 		/* if we already have it, just update time */
 		for (ttslot = 0; ttslot < ttlist; ttslot++) {
@@ -1378,7 +1376,7 @@ static void *aprstt_sender_thread(void *data)
 			}
 		}
 		if (ttslot < ttlist) {
-			time(&ttentries[ttslot].last_updated);
+			ttentries[ttslot].last_updated = time(NULL);
 		} else {				
 			/* otherwise, look for empty or timed-out */
 			for (ttslot = 0; ttslot < ttlist; ttslot++) {
@@ -1393,7 +1391,7 @@ static void *aprstt_sender_thread(void *data)
 			}
 			if (ttslot < ttlist) {
 				ast_copy_string(ttentries[ttslot].call, theircall, sizeof(ttentries[ttslot].call) - 1);
-				time(&ttentries[ttslot].last_updated);
+				ttentries[ttslot].last_updated = time(NULL);
 			} else {
 				ast_log(LOG_WARNING, "APRStt attempting to add call %s to full list (%d items)\n", theircall, ttlist);
 				continue;
@@ -1489,7 +1487,7 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
 	} else {
 		if (general_def_position.is_valid) {
 			selected_position = general_def_position;
-			time(&selected_position.last_updated);
+			selected_position.last_updated = time(NULL);
 		}
 	}
 	ast_mutex_unlock(&position_update_lock);
@@ -1508,9 +1506,9 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
 /*!
  * \brief Send APRStt (touch tone) position report function.
  * The write function "APRS_SENDTT" sends an APRS position report
- * for the specified stanza, overlay and callsign.
+ * for the specified section, overlay and callsign.
  *
- * APRS_SENDTT(stanza, overlay) = callsign
+ * APRS_SENDTT(section, overlay) = callsign
  *
  * \param	chan	Pointer to the asterisk channel struct.
  * \param	cmd		Pointer to the command passed to the function.
@@ -1526,7 +1524,7 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
 	struct aprs_sender_info *sender_entry;
 	
 	AST_DECLARE_APP_ARGS(args,
-		AST_APP_ARG(stanza);
+		AST_APP_ARG(section);
 		AST_APP_ARG(overlay);
 	);
 	
@@ -1538,8 +1536,8 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
 	parse = ast_strdupa(data);
 	AST_STANDARD_APP_ARGS(args, parse);
 
-	if (ast_strlen_zero(args.stanza)) {
-		ast_log(LOG_ERROR, "APRS_SENDTT requires a stanza\n");
+	if (ast_strlen_zero(args.section)) {
+		ast_log(LOG_ERROR, "APRS_SENDTT requires a section\n");
 		return -1;
 	}
 	if (ast_strlen_zero(args.overlay)) {
@@ -1550,14 +1548,14 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
 		ast_log(LOG_ERROR, "APRS_SENDTT requires a callsign\n");
 		return -1;
 	}
-	/* Find the stanza */
+	/* Find the section */
 	AST_LIST_TRAVERSE(&aprs_sender_list, sender_entry, list) {
-		if (!strcasecmp(sender_entry->stanza, args.stanza) && sender_entry->type == APRSTT) {
+		if (!strcasecmp(sender_entry->section, args.section) && sender_entry->type == APRSTT) {
 			break;
 		}
 	}
 	if (!sender_entry) {
-		ast_log(LOG_WARNING, "APRS_SENDTT cannot find associated stanza: %s\n", args.stanza);
+		ast_log(LOG_WARNING, "APRS_SENDTT cannot find associated section: %s\n", args.section);
 		return -1;
 	}
 
@@ -1658,7 +1656,7 @@ static int unload_module(void)
 	
 	/* Shutdown and clean up sender threads */
 	while ((sender_entry = AST_LIST_REMOVE_HEAD(&aprs_sender_list, list))) {
-		ast_debug(2, "Waiting for %s sender thread %s to exit\n", sender_entry->type == APRS ? "aprs" : "aprstt", sender_entry->stanza);
+		ast_debug(2, "Waiting for %s sender thread %s to exit\n", sender_entry->type == APRS ? "aprs" : "aprstt", sender_entry->section);
 		pthread_join(sender_entry->thread_id, NULL);
 		ast_mutex_destroy(&sender_entry->lock);
 		ast_cond_destroy(&sender_entry->condition);
@@ -1783,31 +1781,52 @@ static int load_module(void)
 	}
 
 	/* Create the aprs connection thread */
-	ast_pthread_create(&aprs_connection_thread_id, NULL, aprs_connection_thread, NULL);
+	if (ast_pthread_create(&aprs_connection_thread_id, NULL, aprs_connection_thread, NULL)) {
+		ast_log(LOG_ERROR, "Cannot create APRS connection thread");
+		return -1;
+	}
 	/* If we have a comport specified, start the GPS processing thread */
 	if (comport) {
-		ast_pthread_create(&gps_reader_thread_id, NULL, gps_reader, NULL);
+		if (ast_pthread_create(&gps_reader_thread_id, NULL, gps_reader, NULL)) {
+			ast_log(LOG_ERROR, "Cannot create APRS reader thread");
+			return -1;
+		}
 	}
 	/* Create the aprs sender thread for 'general' */
 	sender_entry = ast_calloc(1, sizeof(*sender_entry));
+	if (!sender_entry) {
+		return -1;
+	}
 	sender_entry->type = APRS;
-	strcpy(sender_entry->stanza, "general");
+	strcpy(sender_entry->section, "general");
 	ast_mutex_init(&sender_entry->lock);
 	ast_cond_init(&sender_entry->condition, 0);
 	AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
-	ast_pthread_create(&sender_entry->thread_id, NULL, aprs_sender_thread, sender_entry);
+	if (ast_pthread_create(&sender_entry->thread_id, NULL, aprs_sender_thread, sender_entry)) {
+		ast_log(LOG_ERROR, "Cannot create APRS sender thread %s", sender_entry->section);
+		return -1;
+	}
 	
 	/* Create the aprs tt sender thread for 'general' */
 	sender_entry = ast_calloc(1, sizeof(*sender_entry));
+	if (!sender_entry) {
+		return -1;
+	}
 	sender_entry->type = APRSTT;
-	strcpy(sender_entry->stanza, "general");
+	strcpy(sender_entry->section, "general");
 	ast_mutex_init(&sender_entry->lock);
 	ast_cond_init(&sender_entry->condition, 0);
 	AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
-	ast_pthread_create(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry);
-	/* 
-	 * See if we have stanzas other than general. 
-	 * If present, create aprs processing threads for those stanzas 
+	if (ast_pthread_create(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry)) {
+		ast_log(LOG_ERROR, "Cannot create APRStt sender thread %s", sender_entry->section);
+		return -1;
+	}
+	/* 	if (!sender_entry) {
+		return -1;
+	}
+
+	 * See if we have sections other than general. 
+	 * If present, create aprs processing threads for those sections 
 	 */
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL) {
@@ -1815,21 +1834,33 @@ static int load_module(void)
 		}
 		/* Create the aprs sender thread for this category */
 		sender_entry = ast_calloc(1, sizeof(*sender_entry));
+		if (!sender_entry) {
+			return -1;
+		}
 		sender_entry->type = APRS;
-		ast_copy_string(sender_entry->stanza, ctg, sizeof(sender_entry->stanza));
+		ast_copy_string(sender_entry->section, ctg, sizeof(sender_entry->section));
 		ast_mutex_init(&sender_entry->lock);
 		ast_cond_init(&sender_entry->condition, 0);
 		AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
-		ast_pthread_create(&sender_entry->thread_id, NULL, aprs_sender_thread, sender_entry);
+		if (ast_pthread_create(&sender_entry->thread_id, NULL, aprs_sender_thread, sender_entry)) {
+			ast_log(LOG_ERROR, "Cannot create APRS sender thread %s", sender_entry->section);
+			return -1;
+		}
 		
 		/* Create the aprs tt sender thread for this category */
 		sender_entry = ast_calloc(1, sizeof(*sender_entry));
+		if (!sender_entry) {
+			return -1;
+		}
 		sender_entry->type = APRSTT;
-		ast_copy_string(sender_entry->stanza, ctg, sizeof(sender_entry));
+		ast_copy_string(sender_entry->section, ctg, sizeof(sender_entry));
 		ast_mutex_init(&sender_entry->lock);
 		ast_cond_init(&sender_entry->condition, 0);
 		AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
-		ast_pthread_create_detached(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry->stanza);
+		if (ast_pthread_create_detached(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry->section)) {
+			ast_log(LOG_ERROR, "Cannot create APRStt sender thread %s", sender_entry->section);
+			return -1;
+		}
 	}
 	ast_config_destroy(cfg);
 	cfg = NULL;

@@ -1552,7 +1552,7 @@ static inline void collect_function_digits_post(struct rpt *myrpt, int res, cons
  * sent to app_gps using the APRS_SENDTT function for 
  * processing and posting to the APRS-IS server.
  *
- * \param rpt		pointer to repeater struct.
+ * \param myrpt		pointer to repeater struct.
  */
 static void do_aprstt(struct rpt *myrpt)
 {
