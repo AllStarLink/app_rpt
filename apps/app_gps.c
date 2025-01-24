@@ -319,6 +319,21 @@ AST_LIST_HEAD_NOLOCK_STATIC(aprs_sender_list, aprs_sender_info);
 
 
 /*!
+ * \brief Get system monotonic 
+ * This returns the CLOCK_MONOTONIC time
+ * \retval		Monotonic seconds.
+ */
+static int time_monotonic(void)
+{
+	struct timespec ts;
+	
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	
+	return ts.tv_sec;
+}
+
+
+/*!
  * \brief Break up a delimited string into a table of substrings
  *
  * \note This modifies the string str, be sure to save an intact copy if you need it later.
@@ -959,7 +974,7 @@ static void *gps_reader(void *data)
 			selected_info = &general_def_position;
 			
 		} else {
-			now = time(NULL);
+			now = time_monotonic();
 			/* Check for no data receiption */
 			if (current_gps_position.last_updated + GPS_VALID_SECS < now) {
 				ast_mutex_lock(&position_update_lock);
@@ -1128,11 +1143,11 @@ static void *aprs_sender_thread(void *data)
 	 }
 	
 	memset(&selected_position, 0, sizeof(selected_position));
-	lastupdate = time(NULL);
+	lastupdate = time_monotonic();
 	my_update_secs = GPS_UPDATE_SECS;
 	
 	while (run_forever) {
-		now = time(NULL);
+		now = time_monotonic();
 		
 		ast_mutex_lock(&position_update_lock);
 		selected_position.is_valid = 0;
@@ -1142,7 +1157,7 @@ static void *aprs_sender_thread(void *data)
 		} else {
 			if (this_def_position.is_valid && !ehlert) {
 				selected_position = this_def_position;
-				selected_position.last_updated = now;
+				selected_position.last_updated = time(NULL);
 			}
 		}
 		ast_mutex_unlock(&position_update_lock);
@@ -1151,7 +1166,7 @@ static void *aprs_sender_thread(void *data)
 		 * The last_updated time must be current so that
 		 * we know we are getting good GPS information.
 		 */
-		if (selected_position.is_valid && (selected_position.last_updated + GPS_VALID_SECS) >= now) {
+		if (selected_position.is_valid && (selected_position.last_updated + GPS_VALID_SECS) >= time(NULL)) {
 			if (now >= (lastupdate + my_update_secs)) {
 				report_aprs(ctg, selected_position.latitude, selected_position.longitude, selected_position.elevation);
 				lastupdate = now;
@@ -1376,7 +1391,7 @@ static void *aprstt_sender_thread(void *data)
 			}
 		}
 		if (ttslot < ttlist) {
-			ttentries[ttslot].last_updated = time(NULL);
+			ttentries[ttslot].last_updated = now;
 		} else {				
 			/* otherwise, look for empty or timed-out */
 			for (ttslot = 0; ttslot < ttlist; ttslot++) {
@@ -1391,7 +1406,7 @@ static void *aprstt_sender_thread(void *data)
 			}
 			if (ttslot < ttlist) {
 				ast_copy_string(ttentries[ttslot].call, theircall, sizeof(ttentries[ttslot].call) - 1);
-				ttentries[ttslot].last_updated = time(NULL);
+				ttentries[ttslot].last_updated = now;
 			} else {
 				ast_log(LOG_WARNING, "APRStt attempting to add call %s to full list (%d items)\n", theircall, ttlist);
 				continue;
