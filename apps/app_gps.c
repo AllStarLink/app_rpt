@@ -1821,10 +1821,7 @@ static int load_module(void)
 		ast_log(LOG_ERROR, "Cannot create APRStt sender thread %s", sender_entry->section);
 		return -1;
 	}
-	/* 	if (!sender_entry) {
-		return -1;
-	}
-
+	/* 
 	 * See if we have sections other than general. 
 	 * If present, create aprs processing threads for those sections 
 	 */
