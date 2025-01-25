@@ -1616,7 +1616,7 @@ static char *handle_cli_status(struct ast_cli_entry *e, int cmd, struct ast_cli_
 		return NULL;
 	}
 
-	if (a->argc > 2) {
+	if (a->argc > 3) {
 		return CLI_SHOWUSAGE;
 	}
 
