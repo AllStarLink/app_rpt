@@ -513,16 +513,16 @@ static void *aprs_connection_thread(void *data)
 		if (sockfd < 0) {
 			ast_log(LOG_ERROR, "Error opening socket: %s\n", strerror(errno));
 			ast_mutex_unlock(&aprs_socket_lock);
-			/* Wait 500ms before trying again. */
-			usleep(500000);
+			/* Wait 1 second before trying again. */
+			sleep(1);
 			continue;
 		}
 		
 		if (ast_sockaddr_resolve_first_af(&addr, server, PARSE_PORT_IGNORE, AST_AF_INET)) {
 			ast_log(LOG_WARNING, "Server %s cannot be found!\n", server);
 			ast_mutex_unlock(&aprs_socket_lock);
-			/* Wait 500ms before trying again. */
-			usleep(500000);
+			/* Wait 1 second before trying again. */
+			sleep(1);
 			continue;
 		}
 		ast_sockaddr_set_port(&addr, atoi(port));
@@ -530,8 +530,8 @@ static void *aprs_connection_thread(void *data)
 		if (ast_connect(sockfd, &addr) < 0) {
 			ast_log(LOG_WARNING, "Cannot connect to server %s. Error: %s\n", server, strerror(errno));
 			ast_mutex_unlock(&aprs_socket_lock);
-			/* Wait 500ms before trying again. */
-			usleep(500000);
+			/* Wait 1 second before trying again. */
+			sleep(1);
 			continue;
 		}
 
@@ -1154,11 +1154,9 @@ static void *aprs_sender_thread(void *data)
 		/* See if we need to send live GPS or the default */
 		if (current_gps_position.is_valid) {
 			selected_position = current_gps_position;
-		} else {
-			if (this_def_position.is_valid && !ehlert) {
+		} else if (this_def_position.is_valid && !ehlert) {
 				selected_position = this_def_position;
 				selected_position.last_updated = time(NULL);
-			}
 		}
 		ast_mutex_unlock(&position_update_lock);
 		/* 
@@ -1166,12 +1164,11 @@ static void *aprs_sender_thread(void *data)
 		 * The last_updated time must be current so that
 		 * we know we are getting good GPS information.
 		 */
-		if (selected_position.is_valid && (selected_position.last_updated + GPS_VALID_SECS) >= time(NULL)) {
-			if (now >= (lastupdate + my_update_secs)) {
-				report_aprs(ctg, selected_position.latitude, selected_position.longitude, selected_position.elevation);
-				lastupdate = now;
-				my_update_secs = interval;
-			}
+		if (selected_position.is_valid && (selected_position.last_updated + GPS_VALID_SECS) >= time(NULL) &&
+			now >= (lastupdate + my_update_secs)) {
+			report_aprs(ctg, selected_position.latitude, selected_position.longitude, selected_position.elevation);
+			lastupdate = now;
+			my_update_secs = interval;
 		}
 		/* wait 1 second */
 		sleep(1);
@@ -1499,11 +1496,9 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
 	/* See if we need to send live GPS or the default */
 	if (current_gps_position.is_valid) {
 		selected_position = current_gps_position;
-	} else {
-		if (general_def_position.is_valid) {
+	} else if (general_def_position.is_valid) {
 			selected_position = general_def_position;
 			selected_position.last_updated = time(NULL);
-		}
 	}
 	ast_mutex_unlock(&position_update_lock);
 	/* 
