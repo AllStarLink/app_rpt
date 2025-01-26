@@ -975,7 +975,7 @@ void *rpt_tele_thread(void *this)
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
-	unsigned long long u;
+	unsigned long long u_mono, u_epoch;
 	char gps_data[100], lat[25], lon[25], elev[25], c;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -2347,11 +2347,11 @@ treataslocal:
 			break;
 		}
 
-		if (sscanf(gps_data, "%llu %s %s %s", &u, lat, lon, elev) != 4) {
+		if (sscanf(gps_data, "%llu %llu %s %s %s", &u_mono, &u_epoch, lat, lon, elev) != 5) {
 			break;
 		}
 		
-		was = (time_t) u;
+		was = (time_t) u_epoch;
 		time(&t);
 		if ((was + GPS_VALID_SECS) < t) {
 			break;
@@ -2605,7 +2605,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	struct rpt_link *l;
 	time_t t, was;
-	unsigned long long u;
+	unsigned long long u_mono, u_epoch;
 	char gps_data[100], lat[25], lon[25], elev[25];
 	
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
@@ -2774,11 +2774,11 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 				break;
 			}
 
-			if (sscanf(gps_data, "%llu %s %s %s", &u, lat, lon, elev) != 4) {
+			if (sscanf(gps_data, "%llu %llu %s %s %s", &u_mono, &u_epoch, lat, lon, elev) != 5) {
 				break;
 			}
 
-			was = (time_t) u;
+			was = (time_t) u_epoch;
 			time(&t);
 			if ((was + GPS_VALID_SECS) < t) {
 				break;

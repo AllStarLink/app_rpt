@@ -4982,7 +4982,7 @@ static void *rpt(void *this)
 
 		time(&t);
 		while (t >= (myrpt->lastgpstime + GPS_UPDATE_SECS)) {
-			unsigned long long u;
+			unsigned long long u_mono, u_epoch;
 			char gps_data[100];
 			char lat[25], lon[25], elev[25];
 
@@ -4996,10 +4996,10 @@ static void *rpt(void *this)
 				break;
 			}
 
-			if (sscanf(gps_data, "%llu %s %s %s", &u, lat, lon, elev) != 4) {
+			if (sscanf(gps_data, "%llu %llu %s %s %s", &u_mono, &u_epoch, lat, lon, elev) != 5) {
 				break;
 			}
-			was = (time_t) u;
+			was = (time_t) u_epoch;
 			if ((was + GPS_VALID_SECS) < t) {
 				break;
 			}

@@ -210,7 +210,7 @@
 		</synopsis>
 		<description>
 			<para>Read current or default GPS position.
-			Returns a string in the format epoch, space, latitude, spaces,
+			Returns a string in the format monotonic time, space, epoch time, space, latitude, spaces,
 			longitude, spaces, and elevation.</para>
 		</description>
 	</function>
@@ -238,6 +238,7 @@
 /*! Defines */
 #define	APRS_DEFAULT_SERVER "rotate.aprs.net"
 #define	APRS_DEFAULT_PORT "14580"
+#define APRS_IS_VERSION "Asterisk app_gps_V3"
 #define	APRS_DEFAULT_COMMENT "Asterisk/app_rpt Node"
 #define	APRSTT_DEFAULT_COMMENT "Asterisk/app_rpt TT Report"
 #define	APRSTT_DEFAULT_OVERLAY '0'
@@ -287,7 +288,8 @@ struct position_info {
 	char latitude[25];			/* latitude format DDMM.SSS */
 	char longitude[25];			/* longitude format DDDMM.SSS */
 	char elevation[25];			/* elevation format VVVV.V */
-	time_t last_updated;		/* the time these values were last updated */
+	time_t last_updated;		/* the ephoh time these values were last updated */
+	time_t last_updated_mono;	/* the monotonic time these values were last updated */
 };
 
 static struct position_info current_gps_position;
@@ -536,7 +538,7 @@ static void *aprs_connection_thread(void *data)
 		}
 
 		/* Log into the APRS-IS server */
-		sprintf(buf, "user %s pass %s vers Asterisk app_gps_V3\n", call, password);
+		snprintf(buf, sizeof(buf), "user %s pass %s vers " APRS_IS_VERSION "\n", call, password);
 		
 		if (send(sockfd, buf, strlen(buf), 0) < 0) {
 			ast_log(LOG_WARNING, "Can not send sign on to server: %s\n", strerror(errno));
@@ -762,7 +764,7 @@ static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char 
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment;
-	char *val, basecall[20], buf[300], buf1[100], *cp;
+	char *val, basecall[20], buf[300], buf1[20], *cp;
 	time_t t;
 	struct tm *tm;
 	struct ast_flags zeroflag = { 0 };
@@ -826,8 +828,8 @@ static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char 
 	t = time(NULL);
 	tm = gmtime(&t);
 	
-	sprintf(buf1, "%s-12", theircall);
-	sprintf(buf, "%s>APSTAR:;%-9s*%02d%02d%02dz%s%c%sA%s\r\n",
+	snprintf(buf1, sizeof(buf1), "%s-12", theircall);
+	snprintf(buf, sizeof(buf), "%s>APSTAR:;%-9s*%02d%02d%02dz%s%c%sA%s\r\n",
 			call, buf1, tm->tm_hour, tm->tm_min, tm->tm_sec, lat, overlay, lon, comment);
 	
 	ast_mutex_lock(&aprs_socket_lock);
@@ -901,7 +903,7 @@ static void *gps_reader(void *data)
 	int res, i, n, fd, has_comport = 0;
 	struct termios mode;
 	struct position_info *selected_info;
-	time_t now;
+	time_t now_mono;
 
 	if (comport) {
 		has_comport = 1;
@@ -974,9 +976,9 @@ static void *gps_reader(void *data)
 			selected_info = &general_def_position;
 			
 		} else {
-			now = time_monotonic();
+			now_mono = time_monotonic();
 			/* Check for no data receiption */
-			if (current_gps_position.last_updated + GPS_VALID_SECS < now) {
+			if (current_gps_position.last_updated_mono + GPS_VALID_SECS < now_mono) {
 				ast_mutex_lock(&position_update_lock);
 				current_gps_position.is_valid = 0;
 				ast_mutex_unlock(&position_update_lock);
@@ -1036,6 +1038,7 @@ static void *gps_reader(void *data)
 			snprintf(current_gps_position.longitude, sizeof(current_gps_position.longitude) - 1, "%s%s", strs[4], strs[5]);
 			snprintf(current_gps_position.elevation, sizeof(current_gps_position.elevation) - 1, "%s%s", strs[9], strs[10]);
 			current_gps_position.last_updated = time(NULL);
+			current_gps_position.last_updated_mono = now_mono;
 			ast_mutex_unlock(&position_update_lock);
 			
 			selected_info = & current_gps_position;
@@ -1073,7 +1076,7 @@ static void *aprs_sender_thread(void *data)
 	char *ctg;
 	char *val, *deflat, *deflon, *defelev;
 	int interval, my_update_secs, ehlert;
-	time_t now, lastupdate;
+	time_t now_mono, lastupdate_mono;
 	struct ast_flags zeroflag = { 0 };
 	struct position_info this_def_position, selected_position;
 	struct aprs_sender_info *sender_entry = data;
@@ -1143,11 +1146,11 @@ static void *aprs_sender_thread(void *data)
 	 }
 	
 	memset(&selected_position, 0, sizeof(selected_position));
-	lastupdate = time_monotonic();
+	lastupdate_mono = time_monotonic();
 	my_update_secs = GPS_UPDATE_SECS;
 	
 	while (run_forever) {
-		now = time_monotonic();
+		now_mono = time_monotonic();
 		
 		ast_mutex_lock(&position_update_lock);
 		selected_position.is_valid = 0;
@@ -1157,6 +1160,7 @@ static void *aprs_sender_thread(void *data)
 		} else if (this_def_position.is_valid && !ehlert) {
 				selected_position = this_def_position;
 				selected_position.last_updated = time(NULL);
+				selected_position.last_updated_mono = now_mono;
 		}
 		ast_mutex_unlock(&position_update_lock);
 		/* 
@@ -1164,10 +1168,10 @@ static void *aprs_sender_thread(void *data)
 		 * The last_updated time must be current so that
 		 * we know we are getting good GPS information.
 		 */
-		if (selected_position.is_valid && (selected_position.last_updated + GPS_VALID_SECS) >= time(NULL) &&
-			now >= (lastupdate + my_update_secs)) {
+		if (selected_position.is_valid && (selected_position.last_updated_mono + GPS_VALID_SECS) >= now_mono &&
+			now_mono >= (lastupdate_mono + my_update_secs)) {
 			report_aprs(ctg, selected_position.latitude, selected_position.longitude, selected_position.elevation);
-			lastupdate = now;
+			lastupdate_mono = now_mono;
 			my_update_secs = interval;
 		}
 		/* wait 1 second */
@@ -1431,6 +1435,7 @@ static void *aprstt_sender_thread(void *data)
 			if (this_def_position.is_valid) {
 				selected_position = this_def_position;
 				selected_position.last_updated = now;
+				selected_position.last_updated_mono = time_monotonic();
 			}
 		}
 		ast_mutex_unlock(&position_update_lock);
@@ -1448,9 +1453,9 @@ static void *aprstt_sender_thread(void *data)
 				}
 				i += (j / 60);
 				if (j < 0){
-					sprintf(lat, "%04d.%02d%c", (i >= 0) ? i : -i, -j % 60, (i >= 0) ? 'N' : 'S');
+					snprintf(lat, sizeof(lat), "%04d.%02d%c", (i >= 0) ? i : -i, -j % 60, (i >= 0) ? 'N' : 'S');
 				} else {
-					sprintf(lat, "%04d.%02d%c", (i >= 0) ? i : -i, j % 60, (i >= 0) ? 'N' : 'S');
+					snprintf(lat, sizeof(lat), "%04d.%02d%c", (i >= 0) ? i : -i, j % 60, (i >= 0) ? 'N' : 'S');
 				}
 				/* If our last position update is good, send an update */
 				if ((selected_position.last_updated + GPS_VALID_SECS) >= now) {
@@ -1473,6 +1478,7 @@ static void *aprstt_sender_thread(void *data)
  * The function "GPS_READ" responds with current GPS information.
  *
  * The response is in the format, with each element delimited by a space:
+ *	unix time (MONOTONIC) format %llu
  *	unix time (EPOCH) format %llu
  *  latitude DDMM.SSX		(degrees, minutes, seconds, direction)
  *  longitude DDMM.SSX		(degrees, minutes, seconds, direction)
@@ -1505,8 +1511,9 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
 	 * Format the response if we have a valid position
 	 */
 	if (selected_position.is_valid ) {
-		snprintf(buf, len, "%llu %s %s %s", (unsigned long long) selected_position.last_updated, 
-			selected_position.latitude, selected_position.longitude, selected_position.elevation);
+		snprintf(buf, len, "%llu %llu %s %s %s", (unsigned long long) selected_position.last_updated_mono, 
+			(unsigned long long) selected_position.last_updated, selected_position.latitude, 
+			selected_position.longitude, selected_position.elevation);
 		return 0;
 	}
 

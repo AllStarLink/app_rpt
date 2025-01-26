@@ -3340,7 +3340,7 @@ static void *el_reader(void *data)
 			if (sin_aprs.sin_port) {	/* a zero port indicates that we never resolved the host name */
 				char aprsstr[512], aprscall[256], gps_data[100], latc, lonc;
 				unsigned char sdes_packet[256];
-				unsigned long long u;
+				unsigned long long u_mono, u_epoch;
 				float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
 				int sdes_length, from_GPS = 0;
 				struct el_node_count count;
@@ -3364,8 +3364,8 @@ static void *el_reader(void *data)
 				mylat = instp->lat;
 				mylon = instp->lon;
 				if (ast_custom_function_find("GPS_READ") && !ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
-					if (sscanf(gps_data, "%llu %f%c %f%c", &u, &lat, &latc, &lon, &lonc) == 5) {
-						was = (time_t) u;
+					if (sscanf(gps_data, "%llu %llu %f%c %f%c", &u_mono, &u_epoch, &lat, &latc, &lon, &lonc) == 6) {
+						was = (time_t) u_epoch;
 						if ((was + GPS_VALID_SECS) >= now) {
 							mylat = floor(lat / 100.0);
 							mylat += (lat - (mylat * 100)) / 60.0;
