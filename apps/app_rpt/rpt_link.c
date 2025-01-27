@@ -485,6 +485,13 @@ void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int fla
 		if (flag) {
 			snprintf(buf + spos, MAXLINKLIST - spos, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
 		} else {
+			
+			/* l->linklist and buff have a size of MAXLINKLIST.  We will have a problem with large networks where this exceeds MAXLINKLIST
+			 * worst case(ish) The message looks like this "<network size>, 6 digit node + T + ,"  
+			 * With MAXLINKLIST = 5120, 5120 - 4 / 8 = 638 nodes.  We can have smaller node values but generally we 
+			 * will have problems on networks > 638 nodes as is.
+			 */
+		
 			/* add nodes into buffer */
 			if (l->linklist[0]) {
 				snprintf(buf + spos, MAXLINKLIST - spos, "%c%s,%s", mode, l->name, l->linklist);
