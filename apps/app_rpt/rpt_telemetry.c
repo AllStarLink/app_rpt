@@ -969,13 +969,13 @@ void *rpt_tele_thread(void *this)
 	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ct, *ct_copy, *ident, *nodename;
-	time_t t, t1, was;
+	time_t t, t1, t_mono, was_mono;
 	struct ast_tm localtm;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
-	unsigned long long u_mono, u_epoch;
+	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25], c;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -2347,13 +2347,14 @@ treataslocal:
 			break;
 		}
 
-		if (sscanf(gps_data, "%llu %llu %s %s %s", &u_mono, &u_epoch, lat, lon, elev) != 5) {
+		/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+		if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
 			break;
 		}
 		
-		was = (time_t) u_epoch;
-		time(&t);
-		if ((was + GPS_VALID_SECS) < t) {
+		was_mono = (time_t) u_mono;
+		t_mono = rpt_time_monotonic();
+		if ((was_mono + GPS_VALID_SECS) < t_mono) {
 			break;
 		} else if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
@@ -2604,8 +2605,8 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	char *v1, *v2, mystr[1024], *p, haslink;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	struct rpt_link *l;
-	time_t t, was;
-	unsigned long long u_mono, u_epoch;
+	time_t t, t_mono, was_mono;
+	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
 	
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
@@ -2774,13 +2775,14 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 				break;
 			}
 
-			if (sscanf(gps_data, "%llu %llu %s %s %s", &u_mono, &u_epoch, lat, lon, elev) != 5) {
+			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
 				break;
 			}
 
-			was = (time_t) u_epoch;
-			time(&t);
-			if ((was + GPS_VALID_SECS) < t) {
+			was_mono = (time_t) u_mono;
+			t_mono = rpt_time_monotonic();
+			if ((was_mono + GPS_VALID_SECS) < t_mono) {
 				break;
 			}
 			sprintf(mystr, "STATS_GPS,%s,%s,%s,%s", myrpt->name, lat, lon, elev);

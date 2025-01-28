@@ -567,6 +567,20 @@ static char show_nodes_usage[] = "Usage: echolink show nodes\n";
 static char show_stats_usage[] = "Usage: echolink show stats\n";	
 
 /*!
+ * \brief Get system monotonic 
+ * This returns the CLOCK_MONOTONIC time
+ * \retval		Monotonic seconds.
+ */
+static time_t time_monotonic(void)
+{
+	struct timespec ts;
+	
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	
+	return ts.tv_sec;
+}
+
+/*!
  * \brief Break up a delimited string into a table of substrings.
  * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
  * \param str		Pointer to string to process (it will be modified).
@@ -3306,7 +3320,7 @@ static void *el_reader(void *data)
 	struct ast_frame fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
-	time_t now, was;
+	time_t now;
 	struct tm *tm;
 	struct el_node **found_key;
 	struct el_node *node;
@@ -3340,10 +3354,11 @@ static void *el_reader(void *data)
 			if (sin_aprs.sin_port) {	/* a zero port indicates that we never resolved the host name */
 				char aprsstr[512], aprscall[256], gps_data[100], latc, lonc;
 				unsigned char sdes_packet[256];
-				unsigned long long u_mono, u_epoch;
+				unsigned long long u_mono;
 				float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
 				int sdes_length, from_GPS = 0;
 				struct el_node_count count;
+				time_t now_mono, was_mono;
 
 				memset(&count, 0, sizeof(count));
 				count.instp = instp;
@@ -3364,9 +3379,11 @@ static void *el_reader(void *data)
 				mylat = instp->lat;
 				mylon = instp->lon;
 				if (ast_custom_function_find("GPS_READ") && !ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
-					if (sscanf(gps_data, "%llu %llu %f%c %f%c", &u_mono, &u_epoch, &lat, &latc, &lon, &lonc) == 6) {
-						was = (time_t) u_epoch;
-						if ((was + GPS_VALID_SECS) >= now) {
+					/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+					if (sscanf(gps_data, "%llu %*u %f%c %f%c", &u_mono, &lat, &latc, &lon, &lonc) == 5) {
+						now_mono = time_monotonic();
+						was_mono = (time_t) u_mono;
+						if ((was_mono + GPS_VALID_SECS) >= now_mono) {
 							mylat = floor(lat / 100.0);
 							mylat += (lat - (mylat * 100)) / 60.0;
 							mylon = floor(lon / 100.0);

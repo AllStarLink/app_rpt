@@ -860,7 +860,7 @@ struct rpt {
 	char lastdtmfuser[MAXNODESTR];
 	char curdtmfuser[MAXNODESTR];
 	int  sleeptimer;
-	time_t lastgpstime;
+	time_t lastgpstime;			/* monotonic time */
 	int outstreampipe[2];
 	int outstreampid;
 	time_t outstreamlasterror;	/*!< \brief set when there is an outstream error and is reset when error cleared */

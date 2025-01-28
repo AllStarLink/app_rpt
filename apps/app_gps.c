@@ -325,7 +325,7 @@ AST_LIST_HEAD_NOLOCK_STATIC(aprs_sender_list, aprs_sender_info);
  * This returns the CLOCK_MONOTONIC time
  * \retval		Monotonic seconds.
  */
-static int time_monotonic(void)
+static time_t time_monotonic(void)
 {
 	struct timespec ts;
 	

@@ -4768,7 +4768,7 @@ static void *rpt(void *this)
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
 	struct ast_channel *who;
-	time_t t, was;
+	time_t t, t_mono;
 	struct rpt_link *l;
 	struct rpt_tele *telem;
 	char tmpstr[512];
@@ -4980,13 +4980,14 @@ static void *rpt(void *this)
 			break;
 		}
 
-		time(&t);
-		while (t >= (myrpt->lastgpstime + GPS_UPDATE_SECS)) {
-			unsigned long long u_mono, u_epoch;
+		t_mono = rpt_time_monotonic();
+		while (t_mono >= (myrpt->lastgpstime + GPS_UPDATE_SECS)) {
+			unsigned long long u_mono;
+			time_t was_mono;
 			char gps_data[100];
 			char lat[25], lon[25], elev[25];
 
-			myrpt->lastgpstime = t;
+			myrpt->lastgpstime = t_mono;
 			
 			/* If the app_gps custom function GPS_READ exists, read the GPS position */
 			if (!ast_custom_function_find("GPS_READ")) {
@@ -4996,11 +4997,12 @@ static void *rpt(void *this)
 				break;
 			}
 
-			if (sscanf(gps_data, "%llu %llu %s %s %s", &u_mono, &u_epoch, lat, lon, elev) != 5) {
+			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
 				break;
 			}
-			was = (time_t) u_epoch;
-			if ((was + GPS_VALID_SECS) < t) {
+			was_mono = (time_t) u_mono;
+			if ((was_mono + GPS_VALID_SECS) < t_mono) {
 				break;
 			}
 			sprintf(tmpstr, "G %s %s %s %s", myrpt->name, lat, lon, elev);
