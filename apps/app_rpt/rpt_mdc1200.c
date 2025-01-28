@@ -206,7 +206,7 @@ void mdc1200_ack_status(struct rpt *myrpt, short UnitID)
 		ast_log(LOG_ERROR, "Cannot alloc!!\n");
 		return;
 	}
-	memset(mdcp, 0, sizeof(&mdcp));
+	memset(mdcp, 0, sizeof(*mdcp));
 	mdcp->type[0] = 'A';
 	mdcp->UnitID = UnitID;
 	rpt_telemetry(myrpt, MDC1200, (void *) mdcp);
