@@ -1356,7 +1356,7 @@ static void free_node(void *nodep)
 
 /*!
  * \brief Find and delete a node from our internal node list.
- * \param key			Poitner to Echolink node struct to delete.
+ * \param key			Pointer to Echolink node struct to delete.
  * \retval 0			If node not found.
  * \retval 1			If node found.
  */
@@ -2244,7 +2244,7 @@ static void *TLB_reader(void *data)
 							/* The DTMF sequence numbers are a 32 bit number. I guess to be
 							 *really* pedantic, there should be code to handle a roll-over
 							 in the sequence counter, but really, I don't think there is even
-							 a remote possiblity of sending over 4 BILLION DTMF messages
+							 a remote possibility of sending over 4 BILLION DTMF messages
 							 in a lifetime, much less during a single connection, so
 							 we're not going to worry about it here. */
 

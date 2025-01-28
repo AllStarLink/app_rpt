@@ -676,7 +676,7 @@ int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *
 			} else {
 #ifdef HAVE_SYS_IO
 				if (ioperm(*pbase, 2, 1) == -1) {
-					ast_log(LOG_ERROR, "Cant get io permission on IO port %04x hex, disabling pp support\n", *pbase);
+					ast_log(LOG_ERROR, "Can't get io permission on IO port %04x hex, disabling pp support\n", *pbase);
 					*haspp = 0;
 				}
 				*haspp = 2;

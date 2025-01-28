@@ -79,7 +79,7 @@ int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 		return (0);
 	if ((myrpt->p.duplex == 3) && mylink->phonemode && myrpt->keyed)
 		return (0);
-	/* if doesnt qual as a foreign link */
+	/* if doesn't qual as a foreign link */
 	if ((mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
 		(!mylink->phonemode) && strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink")
 		&& strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
@@ -156,7 +156,7 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	}
 	if ((!myrpt->p.duplex) || (!nonlocals))
 		return (0);
-	/* if doesnt qual as a foreign link */
+	/* if doesn't qual as a foreign link */
 	if ((mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
 		(!mylink->phonemode) && strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink")
 		&& strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))

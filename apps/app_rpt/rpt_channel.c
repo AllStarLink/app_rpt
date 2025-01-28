@@ -58,7 +58,7 @@ int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
 			return -1;
 		}
 		ast_debug(1, "Delay complete\n");
-	/* This is not superflous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
+	/* This is not superfluous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
 	} while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
 	return 0;
 }
@@ -339,7 +339,7 @@ int send_morse(struct ast_channel *chan, char *string, int speed, int freq, int 
 
 	dottime = 900 / speed;
 
-	/* Establish timing releationships */
+	/* Establish timing relationships */
 
 	dashtime = dottime * 3;
 	intralettertime = dottime;

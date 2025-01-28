@@ -54,7 +54,7 @@ $ - SUN (always yellow)
 - - QTH
 . - X
 / - Dot
-0-9 Numerial Boxes
+0-9 Numbered Boxes
 : - FIRE
 ? - Portable tent (note different then standard ';')
 < - Advisory flag
@@ -72,7 +72,7 @@ G - Snow Shower
 H - Haze
 
 I - Rain Shower   (Also TCP-IP)
-J - Lightening
+J - Lightning
 K - School
 L - Lighthouse
 M - MacAPRS
@@ -228,7 +228,7 @@ static int sockfd = -1;
 * str - delimited string ( will be modified )
 * strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
 * limit- maximum number of substrings to process
-* delim- user specified delimeter
+* delim- user specified delimiter
 * quote- user specified quote for escaping a substring. Set to zero to escape nothing.
 *
 * Note: This modifies the string str, be suer to save an intact copy if you need it later.

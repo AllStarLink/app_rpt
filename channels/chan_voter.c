@@ -33,7 +33,7 @@
 /*  Basic Information On How This Works
 Each node has a number of potential "clients" associated with it. In the voter.conf file, each stanza (category)
 is named by the node number that the clients specified within the stanza are to be associated with. Each entry
-consists of an arbitrary (realtively meaningless, just included for easy identification putposes within this
+consists of an arbitrary (relatively meaningless, just included for easy identification purposes within this
 channel driver, and has nothing to do with its operation) identifier equated to a unique password. This password
 is programmed into the client. All clients must have unique passwords, as that is what is used by this channel
 driver to identify them.
@@ -43,7 +43,7 @@ is directly associated with the node that opened it.
 
 Each client has a pair of circular buffers, one for mu-law audio data, and one for RSSI value. The allocated buffer
 length in all clients is determined by the 'buflen' parameter, which is specified in the "global" stanza in the
-voter.conf file in milliseconds, and represnted in the channel driver as number of samples (actual buffer length,
+voter.conf file in milliseconds, and represented in the channel driver as number of samples (actual buffer length,
 which is 8 * milliseconds).
 
 Every channel instance has a index ("drainindex"), indicating the next position within the physical buffer(s) where
@@ -64,7 +64,7 @@ doesn't this sound like a scene from "Spaceballs"??.. I too always drink coffee 
 During the processing of an audio frame to be presented to Asterisk, all client's buffers that are associated with
 a channel instance (node) are examined by taking an average of the RSSI value for each sample in the associated
 time period (the first 160 samples of the abstracted buffer (which is the physical buffer from drainindex to
-drainindex + 159) and whichever one, if any that has the largest RSSI average greather then zero is selected
+drainindex + 159) and whichever one, if any that has the largest RSSI average greater then zero is selected
 as the audio source for that frame. The corresponding audio buffer's contents (in the corresponding offsets)
 are presented to Asterisk, then ALL the clients corresponding RSSI data is set to 0, ALL the clients corresponding
 audio is set to quiet (0x7f). The overwriting of the buffers after their use/examination is done so that the
@@ -76,7 +76,7 @@ Voter Channel test modes:
 
 0 - Normal voting operation
 1 - Randomly pick which client of all that
-    are receving at the max rssi value to use.
+    are receiving at the max rssi value to use.
 > 1 - Cycle thru all the clients that are receiving
     at the max rssi value with a cycle time of (test mode - 1)
     frames. In other words, if you set it to 2, it will
@@ -88,7 +88,7 @@ The original intent was to change this driver to use signed linear internally,
 but after some thought, it was determined that it was prudent to continue using
 mulaw as the "standard" internal audio format (with the understanding of the slight
 degradation in dynamic range when using ADPCM resulting in doing so).  This was
-done becuase existing external entities (such as the recording files and the streaming
+done because existing external entities (such as the recording files and the streaming
 stuff) use mulaw as their transport, and changing all of that to signed linear would
 be cumbersome, inefficient and undesirable.
 
@@ -143,10 +143,10 @@ list (parameters, etc) *MUST* be identical.
 In addition, the following things must be added uniquely on each server:
 
 In the "primary" server, there needs to be a "primary connectivity" client specified for each
-"secondary" server for which it is "primary". Basicaly, this is a client that does NOTHING other
+"secondary" server for which it is "primary". Basically, this is a client that does NOTHING other
 then providing a means by which the "secondary" can determine whether the "primary" is on line.
-It is a stanard chan_voter client, with nothing else specified other then its password. Again,
-although it is a "legitmate" client (technically), its only purpose *MUST* be to allow the secondary
+It is a standard chan_voter client, with nothing else specified other then its password. Again,
+although it is a "legitimate" client (technically), its only purpose *MUST* be to allow the secondary
 server to connect to it.
 
 The "primary" server also needs to have the following in all of its instances that require redundancy:
@@ -178,7 +178,7 @@ audio directly itself, and app_rpt simply "adds" all of the other audio as appro
 
 The Voter board (RTCM) now has an option to do the same functionality itself, for a case where local repeat audio
 is desired without the "network audio delay" normally associated with Voter board (RTCM) operation, and for a radio
-that doesnt have the option of providing "in cabinet" repeat audio (along with externally provided audio) itself.
+that doesn't have the option of providing "in cabinet" repeat audio (along with externally provided audio) itself.
 
 Because of limitations with the Voter board (RTCM) hardware (being that there is only 1 audio path into the processor,
 and it either has de-emphasis in its "hardware path" of not), it is necessary if you:
@@ -1705,7 +1705,7 @@ static void *voter_primary_client(void *data)
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(pri_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 
-			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) {	/* if set got something worthwile */
+			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) {	/* if set got something worthwhile */
 				vph = (VOTER_PACKET_HEADER *) buf;
 				ast_debug(3, "Voter %i: Got primary client rx packet, len %d payload %d challenge %s digest %08x\n", p->nodenum, (int) recvlen,
 					ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
@@ -3844,7 +3844,7 @@ static void *voter_reader(void *data)
 		if (i == udp_socket) {	
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
-			/* if set got something worthwile */
+			/* if set got something worthwhile */
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) {	
 				vph = (VOTER_PACKET_HEADER *) buf;
 				ast_debug(4, "Got rx packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
@@ -4461,7 +4461,7 @@ static void *voter_reader(void *data)
 													/* at the same threshold still, if count is enabled and is met */
 													else if (p->count_thresh[i]
 															 && (p->threshcount++ >= p->count_thresh[i])) {
-														ast_debug(3, "Threshold %d time (%d) excedded, client %s, rssi %d\n",
+														ast_debug(3, "Threshold %d time (%d) exceeded, client %s, rssi %d\n",
 																 p->threshold, p->count_thresh[i], p->lastwon->name,
 																 p->lastwon->lastrssi);
 														p->threshold = 0;
@@ -4474,7 +4474,7 @@ static void *voter_reader(void *data)
 													maxrssi = maxclient->lastrssi;
 													break;
 												}
-												/* if doesnt match any criteria */
+												/* if doesn't match any criteria */
 												if (i == (p->nthresholds - 1)) {
 													if (DEBUG_ATLEAST(3) && p->threshold) {
 														ast_debug(3, "Nothing matches criteria any more\n");
@@ -5353,7 +5353,7 @@ static int reload(void)
 			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
 				client->audio = (uint8_t *) ast_realloc(client->audio, client->buflen);
 				if (!client->audio) {
-					ast_log(LOG_ERROR, "Cant realloc()\n");
+					ast_log(LOG_ERROR, "Can't realloc()\n");
 					close(udp_socket);
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
@@ -5373,7 +5373,7 @@ static int reload(void)
 			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
 				client->rssi = (uint8_t *) ast_realloc(client->rssi, client->buflen);
 				if (!client->rssi) {
-					ast_log(LOG_ERROR, "Cant realloc()\n");
+					ast_log(LOG_ERROR, "Can't realloc()\n");
 					close(udp_socket);
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);

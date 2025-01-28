@@ -24,7 +24,7 @@
  * A license has been granted to Digium (via disclaimer) for the use of
  * this code.
  *
- * Some filter coeficients via 'WinFilter' http://www.winfilter.20m.com.
+ * Some filter coefficients via 'WinFilter' http://www.winfilter.20m.com.
  *
  * 20160829      inad            added rxlpf rxhpf txlpf txhpf
  */
@@ -334,7 +334,7 @@ Filter model: Butterworth
 Filter order: 9
 Sampling Frequency: 8 KHz
 Cut Frequency: 0.250000 KHz
-Coefficents Quantization: 16-bit
+Coefficients Quantization: 16-bit
 ***************************************************************/
 static const int16_t taps_fir_lpf_250_11_64 = 64;
 static const int32_t gain_fir_lpf_250_11_64 = 262144;
@@ -438,7 +438,7 @@ Filter model: Butterworth
 Filter order: 9
 Sampling Frequency: 8 KHz
 Cut Frequency: 0.250000 KHz
-Coefficents Quantization: 16-bit
+Coefficients Quantization: 16-bit
 ***************************************************************/
 static const int16_t taps_fir_lpf_250_9_66 = 66;
 static const int32_t gain_fir_lpf_250_9_66 = 262144;
@@ -517,7 +517,7 @@ Filter model: Butterworth
 Filter order: 9
 Sampling Frequency: 8 KHz
 Cut Frequency: 0.215 KHz
-Coefficents Quantization: 16-bit
+Coefficients Quantization: 16-bit
 ***************************************************************/
 static const int16_t taps_fir_lpf_215_9_88 = 88;
 static const int32_t gain_fir_lpf_215_9_88 = 524288;
