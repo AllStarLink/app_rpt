@@ -2869,7 +2869,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->mustid = %d\n", myrpt->mustid);
 	ast_debug(2, "myrpt->tounkeyed = %d\n", myrpt->tounkeyed);
 	ast_debug(2, "myrpt->tonotify = %d\n", myrpt->tonotify);
-	ast_debug(2, "myrpt->retxtimer = %ld\n", myrpt->retxtimer);
+	ast_debug(2, "myrpt->retxtimer = %d\n", myrpt->retxtimer);
 	ast_debug(2, "myrpt->totimer = %d\n", myrpt->totimer);
 	ast_debug(2, "myrpt->tailtimer = %d\n", myrpt->tailtimer);
 	ast_debug(2, "myrpt->tailevent = %d\n", myrpt->tailevent);
@@ -2894,8 +2894,8 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->outbound %d\n", zl->outbound);
 		ast_debug(2, "        link->disced %d\n", zl->disced);
 		ast_debug(2, "        link->killme %d\n", zl->killme);
-		ast_debug(2, "        link->disctime %ld\n", zl->disctime);
-		ast_debug(2, "        link->retrytimer %ld\n", zl->retrytimer);
+		ast_debug(2, "        link->disctime %d\n", zl->disctime);
+		ast_debug(2, "        link->retrytimer %d\n", zl->retrytimer);
 		ast_debug(2, "        link->retries = %d\n", zl->retries);
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
 		ast_debug(2, "        link->newkey = %d\n", zl->newkey);
