@@ -1249,7 +1249,7 @@ treataslocal:
 
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, 0);
+		__mklinklist(myrpt, NULL, lbuf,MAXLINKLIST, 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
 		ns = finddelim(lbuf, strs, MAXLINKLIST);
@@ -2143,7 +2143,7 @@ treataslocal:
 	case FULLSTATUS:
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, 0);
+		__mklinklist(myrpt, NULL, lbuf, MAXLINKLIST, 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
 		ns = finddelim(lbuf, strs, MAXLINKLIST);
@@ -2862,7 +2862,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			sprintf(mystr, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* get all the nodes */
-			__mklinklist(myrpt, NULL, lbuf, 0);
+			__mklinklist(myrpt, NULL, lbuf, MAXLINKLIST, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 			/* parse em */
 			ns = finddelim(lbuf, strs, MAXLINKLIST);

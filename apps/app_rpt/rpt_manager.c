@@ -207,7 +207,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
 
-			__mklinklist(myrpt, NULL, lbuf, 0);
+			__mklinklist(myrpt, NULL, lbuf, MAXLINKLIST, 0);
 
 			j = 0;
 			l = myrpt->links.next;

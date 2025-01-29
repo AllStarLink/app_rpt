@@ -3154,8 +3154,16 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 			struct ast_frame lf;
-			char lstr[MAXLINKLIST];
-
+			int buffer_size;
+			char *lstr;
+			
+			ast_mutex_lock(&myrpt->lock);
+			buffer_size = __get_nodelist_size(myrpt) + 2;
+			ast_mutex_unlock(&myrpt->lock);
+			lstr = ast_calloc(1, BUFSIZE(buffer_size));
+			if (!lstr) {
+				return;
+			}
 			memset(&lf, 0, sizeof(lf));
 			lf.frametype = AST_FRAME_TEXT;
 			lf.subclass.format = ast_format_slin;
@@ -3164,13 +3172,14 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			lf.samples = 0;
 			l->linklisttimer = LINKLISTTIME;
 			strcpy(lstr, "L ");
-			__mklinklist(myrpt, l, lstr + 2, 0);
+			__mklinklist(myrpt, l, lstr + 2, buffer_size, 0);
 			if (l->chan) {
 				lf.datalen = strlen(lstr) + 1;
 				lf.data.ptr = lstr;
 				rpt_qwrite(l, &lf);
 				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, lstr, l->name);
 			}
+			ast_free(lstr);
 		}
 		if (l->newkey == 1) {
 			if ((l->retxtimer += elap) >= REDUNDANT_TX_TIME) {
