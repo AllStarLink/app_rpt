@@ -1093,7 +1093,7 @@ static void startoutstream(struct rpt *myrpt)
 	if (!str) {
 		return;
 	}
-	n = finddelim(str, strs, 100);
+	n = finddelim(str, strs, ARRAY_LEN(strs));
 	if (n < 1) {
 		ast_log(LOG_ERROR, "Could not parse string '%s'\n", myrpt->p.outstreamcmd);
 		ast_free(str);
@@ -1581,7 +1581,7 @@ static inline void collect_function_digits_post(struct rpt *myrpt, int res, cons
  * \brief Send APRStt (Touchtone) to app_gps for processing.
  * This routine takes the received APRStt touchtone digits
  * and translates them to a callsign.  The results are
- * sent to app_gps using the APRS_SENDTT function for 
+ * sent to app_gps using the APRS_SENDTT function for
  * processing and posting to the APRS-IS server.
  *
  * \param myrpt		pointer to repeater struct.
@@ -1592,13 +1592,13 @@ static void do_aprstt(struct rpt *myrpt)
 	char overlay, aprscall[100], func[100];
 
 	snprintf(cmd, sizeof(cmd) - 1, "A%s", myrpt->dtmfbuf);
-	/*! \todo we need to support all 4 types of APRStt 
+	/*! \todo we need to support all 4 types of APRStt
 	 * we only support the 'A' type for call sign
 	 */
 	overlay = aprstt_xlat(cmd, aprscall);
 	if (overlay) {
 		ast_debug(1, "APRStt got string %s callsign %s overlay %c\n", cmd, aprscall, overlay);
-		
+
 		if (!ast_custom_function_find("APRS_SENDTT")) {
 			ast_log(LOG_WARNING, "app_gps is not loaded.  APRStt failed\n");
 		} else {
@@ -1607,7 +1607,7 @@ static void do_aprstt(struct rpt *myrpt)
 			if (!ast_func_write(NULL, func, aprscall)) {
 				rpt_telemetry(myrpt, ARB_ALPHA, (void *) aprscall);
 			}
-		} 
+		}
 	}
 }
 
@@ -1702,25 +1702,26 @@ static inline void init_text_frame(struct ast_frame *wf)
 
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
 {
-	char tmp[512], tmp1[512], cmd[300] = "", dest[300], src[30], c;
+	/* XXX cmd, dst, and src should be validated. Why is remote_data src[300] in other locations?
+	* Is this a typo here?  Why would dest be any bigger than src?
+	*/
+	char tmp1[512], cmd[300] = "", dest[300], src[30], c;
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
 	init_text_frame(&wf);
 	wf.datalen = strlen(str) + 1;
 	wf.src = "handle_link_data";
-	/* put string in our buffer */
-	ast_copy_string(tmp, str, sizeof(tmp) - 1);
 
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
-	if (!strcmp(tmp, DISCSTR)) {
+	if (!strcmp(str, DISCSTR)) {
 		mylink->disced = 1;
 		mylink->retries = mylink->max_retries + 1;
 		ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
 		return;
 	}
-	if (!strcmp(tmp, NEWKEYSTR)) {
+	if (!strcmp(str, NEWKEYSTR)) {
 		if ((!mylink->newkey) || mylink->newkeytimer) {
 			mylink->newkeytimer = 0;
 			mylink->newkey = 1;
@@ -1728,37 +1729,40 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		}
 		return;
 	}
-	if (!strcmp(tmp, NEWKEY1STR)) {
+	if (!strcmp(str, NEWKEY1STR)) {
 		mylink->newkeytimer = 0;
 		mylink->newkey = 2;
 		return;
 	}
-	if (!strncmp(tmp, IAXKEYSTR, strlen(IAXKEYSTR))) {
+	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
 		mylink->iaxkey = 1;
 		return;
 	}
-	if (tmp[0] == 'G') {		/* got GPS data */
+	if (*str == 'G') {		/* got GPS data */
 		/* re-distribute it to attached nodes */
 		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
 		return;
 	}
-	if (tmp[0] == 'L') {
+	if (*str == 'L') {
 		rpt_mutex_lock(&myrpt->lock);
-		strcpy(mylink->linklist, tmp + 2);
+		if (strlen(str + 2) > sizeof(mylink->linklist) - 1) {
+			ast_log(LOG_WARNING, "Link list too long: buffer size: %ld, link size: %ld linklist: %s\n", sizeof(mylink->linklist) - 1, strlen(str + 2), str + 2);
+		}
+		ast_copy_string(mylink->linklist, str + 2, sizeof(mylink->linklist));
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, tmp, mylink->name);
+		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
 		return;
 	}
-	if (tmp[0] == 'M') {
+	if (*str == 'M') {
 		rest = 0;
-		if (sscanf(tmp, "%s %s %s %n", cmd, src, dest, &rest) < 3) {
+		if (sscanf(str, "%s %s %s %n", cmd, src, dest, &rest) < 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
 		}
 		if (!rest)
 			return;
-		if (strlen(tmp + rest) < 2)
+		if (strlen(str + rest) < 2)
 			return;
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
@@ -1766,21 +1770,21 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		/* if is for one of my nodes, dont do too much! */
 		for (i = 0; i < nrpts; i++) {
 			if (!strcmp(dest, rpt_vars[i].name)) {
-				ast_verb(3, "Private Text Message for %s From %s: %s\n", rpt_vars[i].name, src, tmp + rest);
-				ast_debug(1, "Node %s Got Private Text Message From Node %s: %s\n", rpt_vars[i].name, src, tmp + rest);
+				ast_verb(3, "Private Text Message for %s From %s: %s\n", rpt_vars[i].name, src, str + rest);
+				ast_debug(1, "Node %s Got Private Text Message From Node %s: %s\n", rpt_vars[i].name, src, str + rest);
 				return;
 			}
 		}
 		/* if is for everyone, at least log it */
 		if (!strcmp(dest, "0")) {
-			ast_verb(3, "Text Message From %s: %s\n", src, tmp + rest);
-			ast_debug(1, "Node %s Got Text Message From Node %s: %s\n", myrpt->name, src, tmp + rest);
+			ast_verb(3, "Text Message From %s: %s\n", src, str + rest);
+			ast_debug(1, "Node %s Got Text Message From Node %s: %s\n", myrpt->name, src, str + rest);
 		}
 		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
 		return;
 	}
-	if (tmp[0] == 'T') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'T') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse telem string %s\n", str);
 			return;
 		}
@@ -1811,8 +1815,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 
-	if (tmp[0] == 'C') {
-		if (sscanf(tmp, "%s %s %s %s", cmd, src, tmp1, dest) != 4) {
+	if (*str == 'C') {
+		if (sscanf(str, "%s %s %s %s", cmd, src, tmp1, dest) != 4) { /*! \todo We should limit to sizeof(cmd, src, tmp1, dest) */
 			ast_log(LOG_WARNING, "Unable to parse ctcss string %s\n", str);
 			return;
 		}
@@ -1830,8 +1834,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 
-	if (tmp[0] == 'K') {
-		if (sscanf(tmp, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) {
+	if (*str == 'K') {
+		if (sscanf(str, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) { /*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse keying string %s\n", str);
 			return;
 		}
@@ -1859,7 +1863,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			if (myrpt->lastkeyedtime) {
 				n = (int) (now - myrpt->lastkeyedtime);
 			}
-			sprintf(tmp1, "K %s %s %d %d", src, myrpt->name, myrpt->keyed, n);
+			snprintf(tmp1, sizeof(tmp1), "K %s %s %d %d", src, myrpt->name, myrpt->keyed, n);
 			wf.data.ptr = tmp1;
 			wf.datalen = strlen(tmp1) + 1;
 			if (mylink->chan)
@@ -1887,15 +1891,15 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
-	if (tmp[0] == 'I') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'I') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return;
 		}
 		mdc1200_notify(myrpt, src, dest);
 		strcpy(dest, "*");
 	} else {
-		if (sscanf(tmp, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+		if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {/*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 			return;
 		}
@@ -2178,37 +2182,37 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 	return res;
 }
 
-static int handle_remote_data(struct rpt *myrpt, char *str)
+static int handle_remote_data(struct rpt *myrpt, const char *str)
 {
-	char tmp[300], cmd[300], dest[300], src[300], c;
+	/* Should src[300] be src[30] as in handle_link_data?*/
+	char cmd[300], dest[300], src[300], c;
 	int seq, res;
 
 	/* put string in our buffer */
-	ast_copy_string(tmp, str, sizeof(tmp));
-	if (!strcmp(tmp, DISCSTR))
+	if (!strcmp(str, DISCSTR))
 		return 0;
-	if (!strcmp(tmp, NEWKEYSTR)) {
+	if (!strcmp(str, NEWKEYSTR)) {
 		if (!myrpt->newkey) {
 			send_old_newkey(myrpt->rxchannel);
 			myrpt->newkey = 1;
 		}
 		return 0;
 	}
-	if (!strcmp(tmp, NEWKEY1STR)) {
+	if (!strcmp(str, NEWKEY1STR)) {
 		myrpt->newkey = 2;
 		return 0;
 	}
-	if (!strncmp(tmp, IAXKEYSTR, strlen(IAXKEYSTR))) {
+	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
 		myrpt->iaxkey = 1;
 		return 0;
 	}
 
-	if (tmp[0] == 'T')
+	if (*str == 'T')
 		return 0;
 
 #ifndef	DO_NOT_NOTIFY_MDC1200_ON_REMOTE_BASES
-	if (tmp[0] == 'I') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'I') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return 0;
 		}
@@ -2216,9 +2220,10 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 		return 0;
 	}
 #endif
-	if (tmp[0] == 'L')
+	if (*str == 'L') {
 		return 0;
-	if (sscanf(tmp, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+	}
+	if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
 		ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 		return 0;
 	}
@@ -2234,7 +2239,7 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 	}
 	c = func_xlat(myrpt, c, &myrpt->p.outxlat);
 	if (!c)
-		return (0);
+		return 0;
 	res = handle_remote_dtmf_digit(myrpt, c, NULL, 0);
 	if (res != 1)
 		return res;
@@ -3200,7 +3205,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 			struct ast_frame lf;
 			char lstr[MAXLINKLIST];
-
 			memset(&lf, 0, sizeof(lf));
 			lf.frametype = AST_FRAME_TEXT;
 			lf.subclass.format = ast_format_slin;
@@ -3209,7 +3213,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			lf.samples = 0;
 			l->linklisttimer = LINKLISTTIME;
 			strcpy(lstr, "L ");
-			__mklinklist(myrpt, l, lstr + 2, 0);
+			__mklinklist(myrpt, l, lstr + 2, sizeof(lstr) - 2, 0);
 			if (l->chan) {
 				lf.datalen = strlen(lstr) + 1;
 				lf.data.ptr = lstr;
@@ -4863,8 +4867,8 @@ static void *rpt(void *this)
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
-		/* \todo At this point, we have a memory leak, because dsp needs to be freed. */
-		/* \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
+		/*! \todo At this point, we have a memory leak, because dsp needs to be freed. */
+		/*! \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
 		ast_dsp_set_features(myrpt->dsp, DSP_FEATURE_FREQ_DETECT);
 		ast_dsp_set_freqmode(myrpt->dsp, myrpt->p.rxburstfreq, myrpt->p.rxbursttime, myrpt->p.rxburstthreshold, 0);
 #else
@@ -4948,11 +4952,11 @@ static void *rpt(void *this)
 			char lat[25], lon[25], elev[25];
 
 			myrpt->lastgpstime = t_mono;
-			
+
 			/* If the app_gps custom function GPS_READ exists, read the GPS position */
 			if (!ast_custom_function_find("GPS_READ")) {
 				break;
-			}				
+			}
 			if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 				break;
 			}
@@ -4966,7 +4970,7 @@ static void *rpt(void *this)
 				break;
 			}
 			sprintf(tmpstr, "G %s %s %s %s", myrpt->name, lat, lon, elev);
-			
+
 			rpt_mutex_lock(&myrpt->lock);
 			l = myrpt->links.next;
 			myrpt->voteremrx = 0;	/* no voter remotes keyed */

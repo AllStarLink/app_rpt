@@ -23,7 +23,7 @@ int matchkeyword(char *string, char **param, char *keywords[]);
 * Returns number of substrings found.
 */
 
-int explode_string(char *str, char *strp[], int limit, char delim, char quote);
+int explode_string(char *str, char *strp[], size_t limit, char delim, char quote);
 
 char *strupr(char *instr);
 
@@ -36,7 +36,7 @@ char *string_toupper(char *str);
 * strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
 * limit- maximum number of substrings to process
 */
-int finddelim(char *str, char *strp[], int limit);
+int finddelim(char *str, char *strp[], size_t limit);
 
 /*
 * Skip characters in string which are in charlist, and return a pointer to the

@@ -59,7 +59,10 @@ void rpt_link_add(struct rpt *myrpt, struct rpt_link *l);
 void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l);
 
 /*! \brief must be called locked */
-void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int flag);
+int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t bufsize, int flag);
+
+/*! \brief must be called locked */
+int __get_nodelist_size (struct rpt *myrpt);
 
 /*! \brief must be called locked */
 void __kickshort(struct rpt *myrpt);
