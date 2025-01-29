@@ -23,6 +23,9 @@
 #include "rpt_link.h"
 #include "rpt_telemetry.h"
 
+#define OBUFSIZE(size) (size + 21)
+#define BUFSIZE(size) (size + 1)
+
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 {
 
@@ -450,15 +453,42 @@ void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 	check_link_list(myrpt);
 }
 
-void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int flag)
+/*!
+ * \brief Get required buffer size for link message. 
+ * \retval		buffer size.
+ */
+
+int __get_buffer_size (struct rpt *myrpt)
+{
+	struct rpt_link *l;
+	int buffer_size;
+	buffer_size = 0;
+	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+		/* if is not a real link, ignore it */
+		if (l->name[0] == '0')
+			continue;
+		if (l->mode > 1)
+			continue;			/* dont report local modes */
+		if (l->linklist[0]) {
+			buffer_size += (strlen(l->linklist) + strlen(l->name) + 3); /*+3: 2 for the commas, 1 for mode, 1 extra as the first pass has no comma*/
+		} else {			/* if no nodes, add this node into buffer */
+			buffer_size += (strlen(l->name) + 2); /*+2: 1 for the commas, 1 for mode, 1 extra as the first pass has no comma*/
+		}
+
+	}
+	return buffer_size;
+}
+
+int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int flag)
 {
 	struct rpt_link *l;
 	char mode;
-	int i, spos;
+	int i, spos, link_count;
 
 	buf[0] = 0;					/* clear output buffer */
+	link_count = 0;
 	if (myrpt->remote)
-		return;
+		return 0;
 	/* go thru all links */
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
@@ -482,9 +512,9 @@ void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int fla
 			strcat(buf, ",");
 			spos++;
 		}
-		if (flag) {
+		if (flag) { /* RPT_ALINK format - only show adjacent nodes*/
 			snprintf(buf + spos, MAXLINKLIST - spos, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
-		} else {
+		} else { /* RPT_LINK format - show all nodes*/
 			/* add nodes into buffer */
 			if (l->linklist[0]) {
 				snprintf(buf + spos, MAXLINKLIST - spos, "%c%s,%s", mode, l->name, l->linklist);
@@ -503,7 +533,12 @@ void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int fla
 				buf[i] = mode;
 		}
 	}
-	return;
+	/*Afer building the string, count number of nodes (commas) in buffer string. The first
+	* node doesn't have a comma thus link_count = 1 to start. The first char is 'mode' so
+	* we can skip it, it will never be a comma.  
+	*/
+	for (link_count = 1; buf[link_count]; buf[link_count]==',' ? link_count++: *buf++);
+	return link_count;
 }
 
 void __kickshort(struct rpt *myrpt)
@@ -523,40 +558,57 @@ void __kickshort(struct rpt *myrpt)
 
 void rpt_update_links(struct rpt *myrpt)
 {
-	char buf[MAXLINKLIST], obuf[MAXLINKLIST + 20], *strs[MAXLINKLIST];
-	int n;
+	char *buf, *obuf;
+	int buffer_size, n;
+	/* figure out the RPT_LINK string size - this will be the largest size
+	 * RPT_ALINK is always a subset of RPT_LINK
+	 */
+	ast_mutex_lock(&myrpt->lock);
+	buffer_size = __get_buffer_size(myrpt);
+	ast_mutex_unlock(&myrpt->lock);
+	
+	buf = ast_calloc(1, BUFSIZE(buffer_size));
+	if (!buf) {
+		return;
+	}
+
+	obuf = ast_calloc(1, OBUFSIZE(buffer_size));
+	if (!obuf) {
+		return;
+	}
 
 	ast_mutex_lock(&myrpt->lock);
-	__mklinklist(myrpt, NULL, buf, 1);
+	n = __mklinklist(myrpt, NULL, buf, 1);
 	ast_mutex_unlock(&myrpt->lock);
 	/* parse em */
-	n = finddelim(ast_strdupa(buf), strs, MAXLINKLIST);
 	if (n) {
-		snprintf(obuf, sizeof(obuf) - 1, "%d,%s", n, buf);
+		snprintf(obuf, OBUFSIZE(buffer_size) - 1, "%d,%s", n, buf);
 	} else {
 		strcpy(obuf, "0");
 	}
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_ALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_ALINKS", obuf);
-	snprintf(obuf, sizeof(obuf) - 1, "%d", n);
+	snprintf(obuf, OBUFSIZE(buffer_size) - 1, "%d", n);
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", obuf);
 	ast_mutex_lock(&myrpt->lock);
-	__mklinklist(myrpt, NULL, buf, 0);
+	n = __mklinklist(myrpt, NULL, buf, 0);
 	ast_mutex_unlock(&myrpt->lock);
 	/* parse em */
-	n = finddelim(ast_strdupa(buf), strs, MAXLINKLIST);
 	if (n) {
-		snprintf(obuf, sizeof(obuf) - 1, "%d,%s", n, buf);
+		snprintf(obuf, OBUFSIZE(buffer_size) - 1, "%d,%s", n, buf);
 	} else {
 		strcpy(obuf, "0");
 	}
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_LINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_LINKS", obuf);
-	snprintf(obuf, sizeof(obuf) - 1, "%d", n);
+	snprintf(obuf, OBUFSIZE(buffer_size) - 1, "%d", n);
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMLINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_NUMLINKS", obuf);
 	rpt_event_process(myrpt);
+
+	ast_free(buf);
+	ast_free(obuf);
 	return;
 }
 

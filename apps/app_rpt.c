@@ -1660,26 +1660,25 @@ static inline void init_text_frame(struct ast_frame *wf)
 }
 
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
-{
-	char tmp[512], tmp1[512], cmd[300] = "", dest[300], src[30], c;
+{/* I think cmd[32] is big enough? Why is remote_data src[300] Is this a typo here?
+  * Why would dest be any bigger than src? Due to */
+	char tmp1[512], cmd[300] = "", dest[300], src[30], c;
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
 	init_text_frame(&wf);
 	wf.datalen = strlen(str) + 1;
 	wf.src = "handle_link_data";
-	/* put string in our buffer */
-	ast_copy_string(tmp, str, sizeof(tmp) - 1);
-
+	
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
-	if (!strcmp(tmp, DISCSTR)) {
+	if (!strcmp(str, DISCSTR)) {
 		mylink->disced = 1;
 		mylink->retries = mylink->max_retries + 1;
 		ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
 		return;
 	}
-	if (!strcmp(tmp, NEWKEYSTR)) {
+	if (!strcmp(str, NEWKEYSTR)) {
 		if ((!mylink->newkey) || mylink->newkeytimer) {
 			mylink->newkeytimer = 0;
 			mylink->newkey = 1;
@@ -1687,37 +1686,37 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		}
 		return;
 	}
-	if (!strcmp(tmp, NEWKEY1STR)) {
+	if (!strcmp(str, NEWKEY1STR)) {
 		mylink->newkeytimer = 0;
 		mylink->newkey = 2;
 		return;
 	}
-	if (!strncmp(tmp, IAXKEYSTR, strlen(IAXKEYSTR))) {
+	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
 		mylink->iaxkey = 1;
 		return;
 	}
-	if (tmp[0] == 'G') {		/* got GPS data */
+	if (*str == 'G') {		/* got GPS data */
 		/* re-distribute it to attached nodes */
 		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
 		return;
 	}
-	if (tmp[0] == 'L') {
+	if (*str == 'L') {
 		rpt_mutex_lock(&myrpt->lock);
-		strcpy(mylink->linklist, tmp + 2);
+		ast_copy_string(mylink->linklist, (str + 2), MAXLINKLIST);
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_debug(7, "@@@@ node %s recieved node list %s from node %s\n", myrpt->name, tmp, mylink->name);
+		ast_debug(7, "@@@@ node %s recieved node list %s from node %s\n", myrpt->name, str, mylink->name);
 		return;
 	}
-	if (tmp[0] == 'M') {
+	if (*str == 'M') {
 		rest = 0;
-		if (sscanf(tmp, "%s %s %s %n", cmd, src, dest, &rest) < 3) {
+		if (sscanf(str, "%s %s %s %n", cmd, src, dest, &rest) < 3) {
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
 		}
 		if (!rest)
 			return;
-		if (strlen(tmp + rest) < 2)
+		if (strlen(str + rest) < 2)
 			return;
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
@@ -1725,21 +1724,21 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		/* if is for one of my nodes, dont do too much! */
 		for (i = 0; i < nrpts; i++) {
 			if (!strcmp(dest, rpt_vars[i].name)) {
-				ast_verb(3, "Private Text Message for %s From %s: %s\n", rpt_vars[i].name, src, tmp + rest);
-				ast_debug(1, "Node %s Got Private Text Message From Node %s: %s\n", rpt_vars[i].name, src, tmp + rest);
+				ast_verb(3, "Private Text Message for %s From %s: %s\n", rpt_vars[i].name, src, str + rest);
+				ast_debug(1, "Node %s Got Private Text Message From Node %s: %s\n", rpt_vars[i].name, src, str + rest);
 				return;
 			}
 		}
 		/* if is for everyone, at least log it */
 		if (!strcmp(dest, "0")) {
-			ast_verb(3, "Text Message From %s: %s\n", src, tmp + rest);
-			ast_debug(1, "Node %s Got Text Message From Node %s: %s\n", myrpt->name, src, tmp + rest);
+			ast_verb(3, "Text Message From %s: %s\n", src, str + rest);
+			ast_debug(1, "Node %s Got Text Message From Node %s: %s\n", myrpt->name, src, str + rest);
 		}
 		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
 		return;
 	}
-	if (tmp[0] == 'T') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'T') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse telem string %s\n", str);
 			return;
 		}
@@ -1770,8 +1769,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 
-	if (tmp[0] == 'C') {
-		if (sscanf(tmp, "%s %s %s %s", cmd, src, tmp1, dest) != 4) {
+	if (*str == 'C') {
+		if (sscanf(str, "%s %s %s %s", cmd, src, tmp1, dest) != 4) {
 			ast_log(LOG_WARNING, "Unable to parse ctcss string %s\n", str);
 			return;
 		}
@@ -1789,8 +1788,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 
-	if (tmp[0] == 'K') {
-		if (sscanf(tmp, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) {
+	if (*str == 'K') {
+		if (sscanf(str, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) {
 			ast_log(LOG_WARNING, "Unable to parse keying string %s\n", str);
 			return;
 		}
@@ -1818,7 +1817,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			if (myrpt->lastkeyedtime) {
 				n = (int) (now - myrpt->lastkeyedtime);
 			}
-			sprintf(tmp1, "K %s %s %d %d", src, myrpt->name, myrpt->keyed, n);
+			snprintf(tmp1, sizeof(tmp1), "K %s %s %d %d", src, myrpt->name, myrpt->keyed, n);
 			wf.data.ptr = tmp1;
 			wf.datalen = strlen(tmp1) + 1;
 			if (mylink->chan)
@@ -1846,15 +1845,15 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
-	if (tmp[0] == 'I') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'I') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return;
 		}
 		mdc1200_notify(myrpt, src, dest);
 		strcpy(dest, "*");
 	} else {
-		if (sscanf(tmp, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+		if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
 			ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 			return;
 		}
@@ -2139,35 +2138,35 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 
 static int handle_remote_data(struct rpt *myrpt, char *str)
 {
-	char tmp[300], cmd[300], dest[300], src[300], c;
+	/* Should src[300] be src[30] as in handle_link_data?*/
+	char cmd[300], dest[300], src[300], c;
 	int seq, res;
 
 	/* put string in our buffer */
-	ast_copy_string(tmp, str, sizeof(tmp));
-	if (!strcmp(tmp, DISCSTR))
+	if (!strcmp(str, DISCSTR))
 		return 0;
-	if (!strcmp(tmp, NEWKEYSTR)) {
+	if (!strcmp(str, NEWKEYSTR)) {
 		if (!myrpt->newkey) {
 			send_old_newkey(myrpt->rxchannel);
 			myrpt->newkey = 1;
 		}
 		return 0;
 	}
-	if (!strcmp(tmp, NEWKEY1STR)) {
+	if (!strcmp(str, NEWKEY1STR)) {
 		myrpt->newkey = 2;
 		return 0;
 	}
-	if (!strncmp(tmp, IAXKEYSTR, strlen(IAXKEYSTR))) {
+	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
 		myrpt->iaxkey = 1;
 		return 0;
 	}
 
-	if (tmp[0] == 'T')
+	if (*str == 'T')
 		return 0;
 
 #ifndef	DO_NOT_NOTIFY_MDC1200_ON_REMOTE_BASES
-	if (tmp[0] == 'I') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'I') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return 0;
 		}
@@ -2175,9 +2174,9 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 		return 0;
 	}
 #endif
-	if (tmp[0] == 'L')
+	if (*str == 'L')
 		return 0;
-	if (sscanf(tmp, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+	if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
 		ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 		return 0;
 	}
@@ -2193,7 +2192,7 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 	}
 	c = func_xlat(myrpt, c, &myrpt->p.outxlat);
 	if (!c)
-		return (0);
+		return 0;
 	res = handle_remote_dtmf_digit(myrpt, c, NULL, 0);
 	if (res != 1)
 		return res;
