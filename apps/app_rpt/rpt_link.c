@@ -6,6 +6,7 @@
 
 #include "asterisk.h"
 
+#include <asterisk/lock.h>
 #include <search.h>
 
 #include "asterisk/channel.h"
@@ -571,10 +572,13 @@ void rpt_update_links(struct rpt *myrpt)
 	buffer_size = __get_nodelist_size(myrpt);
 	buf = ast_calloc(1, BUFSIZE(buffer_size));
 	if (!buf) {
+		ast_mutext_unlock(&myrpt->lock);
 		return;
 	}
 	obuf = ast_calloc(1, OBUFSIZE(buffer_size));
 	if (!obuf) {
+		ast_mutex_unlock(&myrpt->lock);
+		aast_free(buf);
 		return;
 	}
 	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 1);

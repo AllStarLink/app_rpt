@@ -1249,7 +1249,7 @@ treataslocal:
 
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf,sizeof(lbuf), 0);
+		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
 		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
