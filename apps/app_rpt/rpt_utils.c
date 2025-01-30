@@ -32,7 +32,7 @@ int matchkeyword(char *string, char **param, char *keywords[])
 
 int explode_string(char *str, char *strp[], size_t limit, char delim, char quote)
 {
-	int i, l, inquo;
+	int i, inquo;
 
 	inquo = 0;
 	i = 0;
@@ -41,7 +41,7 @@ int explode_string(char *str, char *strp[], size_t limit, char delim, char quote
 		strp[0] = 0;
 		return (0);
 	}
-	for (l = 0; *str; str++) {
+	for (; *str && (i < (limit - 1)); str++) {
 		if (quote) {
 			if (*str == quote) {
 				if (inquo) {
@@ -55,15 +55,11 @@ int explode_string(char *str, char *strp[], size_t limit, char delim, char quote
 		}
 		if ((*str == delim) && (!inquo)) {
 			*str = 0;
-			l++;
 			strp[i++] = str + 1;
-		}
-		if (i >= (limit - 1)) {
-			break;
 		}
 	}
 	strp[i] = 0;
-	return (i);
+	return i;
 
 }
 
