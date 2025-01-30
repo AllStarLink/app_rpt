@@ -517,9 +517,9 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t *
 		} else { /* RPT_LINK format - show all nodes*/
 			/* add nodes into buffer */
 			if (l->linklist[0]) {
-				snprintf(buf + spos, MAXLINKLIST - spos, "%c%s,%s", mode, l->name, l->linklist);
+				snprintf(buf + spos, bufsize - spos, "%c%s,%s", mode, l->name, l->linklist);
 			} else {			/* if no nodes, add this node into buffer */
-				snprintf(buf + spos, MAXLINKLIST - spos, "%c%s", mode, l->name);
+				snprintf(buf + spos, bufsize - spos, "%c%s", mode, l->name);
 			}
 		}
 		/* if we are in tranceive mode, let all modes stand */
@@ -578,7 +578,7 @@ void rpt_update_links(struct rpt *myrpt)
 	}
 
 	ast_mutex_lock(&myrpt->lock);
-	n = __mklinklist(myrpt, NULL, buf, MAXLINKLIST, 1);
+	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 1);
 	ast_mutex_unlock(&myrpt->lock);
 	/* parse em */
 	if (n) {
@@ -588,21 +588,20 @@ void rpt_update_links(struct rpt *myrpt)
 	}
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_ALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_ALINKS", obuf);
-	snprintf(obuf, OBUFSIZE(buffer_size) - 1, "%d", n);
+	snprintf(obuf, OBUFSIZE(buffer_size), "%d", n);
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", obuf);
 	ast_mutex_lock(&myrpt->lock);
-	n = __mklinklist(myrpt, NULL, buf, MAXLINKLIST, 0);
+	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 0);
 	ast_mutex_unlock(&myrpt->lock);
-	/* parse em */
 	if (n) {
-		snprintf(obuf, OBUFSIZE(buffer_size) - 1, "%d,%s", n, buf);
+		snprintf(obuf, OBUFSIZE(buffer_size), "%d,%s", n, buf);
 	} else {
 		strcpy(obuf, "0");
 	}
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_LINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_LINKS", obuf);
-	snprintf(obuf, OBUFSIZE(buffer_size) - 1, "%d", n);
+	snprintf(obuf, OBUFSIZE(buffer_size), "%d", n);
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMLINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_NUMLINKS", obuf);
 	rpt_event_process(myrpt);
@@ -702,9 +701,9 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->disced = 2;
 		modechange = 1;
 	} else {
-		__mklinklist(myrpt, NULL, lstr, MAXLINKLIST, 0);
+		__mklinklist(myrpt, NULL, lstr, sizeof(lstr), 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		n = finddelim(lstr, strs, MAXLINKLIST);
+		n = finddelim(lstr, strs, sizeof(lstr));
 		for (i = 0; i < n; i++) {
 			if ((*strs[i] < '0') || (*strs[i] > '9'))
 				strs[i]++;

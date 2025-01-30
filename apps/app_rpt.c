@@ -1702,7 +1702,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'L') {
 		rpt_mutex_lock(&myrpt->lock);
-		ast_copy_string(mylink->linklist, (str + 2), MAXLINKLIST);
+		ast_copy_string(mylink->linklist, (str + 2), sizeof(mylink->linklist));
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(7, "@@@@ node %s recieved node list %s from node %s\n", myrpt->name, str, mylink->name);
@@ -3156,7 +3156,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			struct ast_frame lf;
 			int buffer_size;
 			char *lstr;
-			
+
 			ast_mutex_lock(&myrpt->lock);
 			buffer_size = __get_nodelist_size(myrpt) + 2;
 			ast_mutex_unlock(&myrpt->lock);
