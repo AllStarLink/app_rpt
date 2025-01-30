@@ -1172,7 +1172,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		return DC_ERROR;
 
 	ast_copy_string(paramcopy, param, sizeof(paramcopy));
-	argc = explode_string(paramcopy, argv, 100, ',', 0);
+	argc = explode_string(paramcopy, argv, ARRAY_LEN(argv), ',', 0);
 
 	if (!argc)
 		return DC_ERROR;
