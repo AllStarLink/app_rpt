@@ -702,7 +702,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	} else {
 		__mklinklist(myrpt, NULL, lstr, sizeof(lstr), 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		n = finddelim(lstr, strs, sizeof(strs));
+		n = finddelim(lstr, strs, ARRAY_LEN(strs));
 		for (i = 0; i < n; i++) {
 			if ((*strs[i] < '0') || (*strs[i] > '9'))
 				strs[i]++;

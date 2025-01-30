@@ -544,7 +544,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	unsigned int t1;
 	struct ast_tm localtm;
 
-	n = finddelim(varcmd, strs, sizeof(strs));
+	n = finddelim(varcmd, strs, ARRAY_LEN(strs));
 	if (n < 1) {
 		return;
 	}
@@ -1252,7 +1252,7 @@ treataslocal:
 		__mklinklist(myrpt, NULL, lbuf,sizeof(lbuf), 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
-		ns = finddelim(lbuf, strs, sizeof(strs));
+		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 		haslink = 0;
 		for (i = 0; i < ns; i++) {
 			char *cpr = strs[i] + 1;
@@ -2146,7 +2146,7 @@ treataslocal:
 		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
-		ns = finddelim(lbuf, strs, sizeof(strs));
+		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 		/* sort em */
 		if (ns)
 			qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -2865,7 +2865,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 			rpt_mutex_unlock(&myrpt->lock);
 			/* parse em */
-			ns = finddelim(lbuf, strs, sizeof(strs));
+			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);

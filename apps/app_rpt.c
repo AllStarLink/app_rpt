@@ -1061,7 +1061,7 @@ static void startoutstream(struct rpt *myrpt)
 	if (!str) {
 		return;
 	}
-	n = finddelim(str, strs, 100);
+	n = finddelim(str, strs, ARRAY_LEN(strs));
 	if (n < 1) {
 		ast_log(LOG_ERROR, "Could not parse string '%s'\n", myrpt->p.outstreamcmd);
 		ast_free(str);
