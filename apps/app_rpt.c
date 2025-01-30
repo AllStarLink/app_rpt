@@ -1702,6 +1702,9 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'L') {
 		rpt_mutex_lock(&myrpt->lock);
+		if (strlen(str + 2) > sizeof(mylink->linklist)) {
+			ast_log(LOG_WARNING, "Link list too long: %s\n", str + 2);
+		}
 		ast_copy_string(mylink->linklist, (str + 2), sizeof(mylink->linklist));
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -2174,8 +2177,9 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 		return 0;
 	}
 #endif
-	if (*str == 'L')
+	if (*str == 'L') {
 		return 0;
+	}
 	if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
 		ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 		return 0;
