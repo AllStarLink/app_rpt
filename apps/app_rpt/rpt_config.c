@@ -1,6 +1,7 @@
 
 #include "asterisk.h"
 
+#include <asterisk/utils.h>
 #include <sys/stat.h>
 #include <math.h>
 #include <termios.h>
@@ -908,22 +909,22 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(extnodes, "extnodes", EXTNODES);
 
 	val = ast_variable_retrieve(cfg, cat, "extnodefile");
-	rpt_vars[n].p.extnodefilesn = explode_string((char*) S_OR(val, EXTNODEFILE), (char**) rpt_vars[n].p.extnodefiles, MAX_EXTNODEFILES, ',', 0); /*! \todo Illegal cast */
+	rpt_vars[n].p.extnodefilesn = explode_string((char*) S_OR(val, EXTNODEFILE), (char**) rpt_vars[n].p.extnodefiles, ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0); /*! \todo Illegal cast */
 
 	/*! \todo Is this memory properly freed? */
 	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
 	if (val) {
-		rpt_vars[n].p.locallinknodesn = explode_string(ast_strdup(val), (char**) rpt_vars[n].p.locallinknodes, MAX_LOCALLINKNODES, ',', 0);
+		rpt_vars[n].p.locallinknodesn = explode_string(ast_strdup(val), (char**) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "lconn");
 	if (val) {
-		rpt_vars[n].p.nlconn = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.lconn, MAX_LSTUFF, ',', 0);
+		rpt_vars[n].p.nlconn = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "ldisc");
 	if (val) {
-		rpt_vars[n].p.nldisc = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.ldisc, MAX_LSTUFF, ',', 0);
+		rpt_vars[n].p.nldisc = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
 	}
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
