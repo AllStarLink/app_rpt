@@ -58,7 +58,7 @@ int explode_string(char *str, char *strp[], size_t limit, char delim, char quote
 			l++;
 			strp[i++] = str + 1;
 		}
-		if (i > limit) {
+		if (i >= limit) {
 			break;
 		}
 	}
