@@ -575,9 +575,9 @@ static char show_stats_usage[] = "Usage: echolink show stats\n";
  * \param limit		Maximum number of substrings to process.
  */
 
-static int finddelim(char *str, char *strp[], int limit)
+static int finddelim(char *str, char *strp[], size_t limit)
 {
-	int i, l, inquo;
+	int i, inquo;
 
 	inquo = 0;
 	i = 0;
@@ -586,7 +586,7 @@ static int finddelim(char *str, char *strp[], int limit)
 		strp[0] = 0;
 		return (0);
 	}
-	for (l = 0; *str && (l < limit); str++) {
+	for (; *str && (i < (limit - 1)); str++) {
 		if (*str == QUOTECHR) {
 			if (inquo) {
 				*str = 0;
@@ -598,7 +598,6 @@ static int finddelim(char *str, char *strp[], int limit)
 		}
 		if ((*str == DELIMCHR) && (!inquo)) {
 			*str = 0;
-			l++;
 			strp[i++] = str + 1;
 		}
 	}
@@ -1583,7 +1582,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 		if (!cp) {
 			return -1;
 		}
-		i = finddelim(cp, strs, MAXLINKSTRS);
+		i = finddelim(cp, strs, ARRAY_LEN(strs));
 		if (i) {
 			qsort(strs, i, sizeof(char *), mycompar);
 			/* get size of largest string (node number) */
@@ -3860,15 +3859,15 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	if (val) {
 		str = ast_strdup(val);
 		if (str) {
-			instp->ndenylist = finddelim(str, instp->denylist, EL_MAX_CALL_LIST);
+			instp->ndenylist = finddelim(str, instp->denylist, ARRAY_LEN(instp->denylist));
 		}
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "permit");
 	if (val) {
 		str = ast_strdup(val);
-		if (str) {	
-			instp->npermitlist = finddelim(str, instp->permitlist, EL_MAX_CALL_LIST);
+		if (str) {
+			instp->npermitlist = finddelim(str, instp->permitlist, ARRAY_LEN(instp->permitlist));
 		}
 	}
 
