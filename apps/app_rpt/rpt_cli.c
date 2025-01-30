@@ -590,7 +590,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 //### GET ALL LINKED NODES INFO ####################
 			/* parse em */
-			ns = finddelim(lbuf, strs, sizeof(lbuf));
+			ns = finddelim(lbuf, strs, sizeof(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -660,7 +660,7 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 			/* parse em */
-			ns = finddelim(lbuf, strs, sizeof(lbuf));
+			ns = finddelim(lbuf, strs, sizeof(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);

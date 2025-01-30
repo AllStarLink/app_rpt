@@ -591,7 +591,7 @@ void rpt_update_links(struct rpt *myrpt)
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", obuf);
 	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 0);
-	
+
 	ast_mutex_unlock(&myrpt->lock);
 	if (n) {
 		snprintf(obuf, OBUFSIZE(buffer_size), "%d,%s", n, buf);
@@ -702,7 +702,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	} else {
 		__mklinklist(myrpt, NULL, lstr, sizeof(lstr), 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		n = finddelim(lstr, strs, sizeof(lstr));
+		n = finddelim(lstr, strs, sizeof(strs));
 		for (i = 0; i < n; i++) {
 			if ((*strs[i] < '0') || (*strs[i] > '9'))
 				strs[i]++;

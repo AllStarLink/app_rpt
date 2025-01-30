@@ -30,7 +30,7 @@ int matchkeyword(char *string, char **param, char *keywords[])
 	return 0;
 }
 
-int explode_string(char *str, char *strp[], int limit, char delim, char quote)
+int explode_string(char *str, char *strp[], size_t limit, char delim, char quote)
 {
 	int i, l, inquo;
 
@@ -41,7 +41,7 @@ int explode_string(char *str, char *strp[], int limit, char delim, char quote)
 		strp[0] = 0;
 		return (0);
 	}
-	for (l = 0; *str && (l < limit); str++) {
+	for (l = 0; *str; str++) {
 		if (quote) {
 			if (*str == quote) {
 				if (inquo) {
@@ -57,6 +57,9 @@ int explode_string(char *str, char *strp[], int limit, char delim, char quote)
 			*str = 0;
 			l++;
 			strp[i++] = str + 1;
+		}
+		if (i > limit) {
+			break;
 		}
 	}
 	strp[i] = 0;
@@ -86,7 +89,7 @@ char *string_toupper(char *str)
 	return str;
 }
 
-int finddelim(char *str, char *strp[], int limit)
+int finddelim(char *str, char *strp[], size_t limit)
 {
 	return explode_string(str, strp, limit, DELIMCHR, QUOTECHR);
 }

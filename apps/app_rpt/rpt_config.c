@@ -668,7 +668,7 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 		}
 
 		/* parse the external node file name(s) - we allow for multiple files */
-		n = finddelim(efil, strs, 100);
+		n = finddelim(efil, strs, sizeof(strs));
 		if (n < 1) {
 			ast_free(efil);
 			ast_mutex_unlock(&nodelookuplock);
@@ -1072,7 +1072,7 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "inxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.inxlat, 0, sizeof(struct rpt_xlat));
-		i = finddelim((char*) val, strs, 3); /*! \todo Illegal cast */
+		i = finddelim((char*) val, strs, sizeof(strs)); /*! \todo Illegal cast */
 		if (i > 3) {
 			rpt_vars[n].p.dopfxtone = ast_true(strs[3]);
 		} else if (i > 2) {
@@ -1087,7 +1087,7 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "outxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.outxlat, 0, sizeof(struct rpt_xlat));
-		i = finddelim((char*) val, strs, 3); /*! \todo Illegal cast */
+		i = finddelim((char*) val, strs, sizeof(strs)); /*! \todo Illegal cast */
 		if (i > 2) {
 			ast_copy_string(rpt_vars[n].p.outxlat.passchars, strs[2], sizeof(rpt_vars[n].p.outxlat.passchars));
 		} else if (i > 1) {
@@ -1225,7 +1225,7 @@ void load_rpt_vars(int n, int init)
 		int k, nukw, statenum;
 		statenum = atoi(vp->name);
 		ast_copy_string(s1, vp->value, sizeof(s1));
-		nukw = finddelim(s1, strs, 32);
+		nukw = finddelim(s1, strs, sizeof(strs));
 
 		for (k = 0; k < nukw; k++) {	/* for each user specified keyword */
 			for (j = 0; cs_keywords[j] != NULL; j++) {	/* try to match to one in our internal table */

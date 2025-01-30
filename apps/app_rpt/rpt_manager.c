@@ -271,7 +271,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Get all linked nodes info */
 
 			/* parse em */
-			ns = finddelim(lbuf, strs, MAXLINKLIST);
+			ns = finddelim(lbuf, strs, sizeof(strs));
 			/* sort em */
 			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
