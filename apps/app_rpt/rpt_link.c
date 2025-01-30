@@ -570,21 +570,15 @@ void rpt_update_links(struct rpt *myrpt)
 	 */
 	ast_mutex_lock(&myrpt->lock);
 	buffer_size = __get_nodelist_size(myrpt);
-	ast_mutex_unlock(&myrpt->lock);
-	
 	buf = ast_calloc(1, BUFSIZE(buffer_size));
 	if (!buf) {
 		return;
 	}
-
 	obuf = ast_calloc(1, OBUFSIZE(buffer_size));
 	if (!obuf) {
 		return;
 	}
-
-	ast_mutex_lock(&myrpt->lock);
 	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 1);
-	ast_mutex_unlock(&myrpt->lock);
 	/* parse em */
 	if (n) {
 		snprintf(obuf, OBUFSIZE(buffer_size), "%d,%s", n, buf);
@@ -596,8 +590,8 @@ void rpt_update_links(struct rpt *myrpt)
 	snprintf(obuf, OBUFSIZE(buffer_size), "%d", n);
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", obuf);
-	ast_mutex_lock(&myrpt->lock);
 	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 0);
+	
 	ast_mutex_unlock(&myrpt->lock);
 	if (n) {
 		snprintf(obuf, OBUFSIZE(buffer_size), "%d,%s", n, buf);
