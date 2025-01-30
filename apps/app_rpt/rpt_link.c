@@ -536,11 +536,10 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t *
 		}
 	}
 	/*Afer building the string, count number of nodes (commas) in buffer string. The first
-	* node doesn't have a comma thus link_count = 1 to start. The first char is 'mode' so
-	* we can skip it, it will never be a comma.  
+	* node doesn't have a comma, so we need to add 1 if there is at least one_link.  
 	*/
 	for (link_count = 0; buf[link_count]; buf[link_count]==',' ? link_count++: *buf++);
-	if (one_link) { /* The first link in the list has no comma*/
+	if (one_link) { /* The first link in the list has no comma but we have 1 link*/
 		link_count++;
 	}
 	return link_count;
