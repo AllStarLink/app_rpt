@@ -59,7 +59,7 @@
  * Most of these commands take optional parameters to set values.
  *
  */
-
+#include "asterisk.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -69,6 +69,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <asterisk/utils.h>
 
 /*! \brief type of signal detection used for carrier (cd) or ctcss (sd) */
 static const char * const cd_signal_type[] = {"no", "dsp", "vox", "usb", "usbinvert", "pp", "ppinvert"};
@@ -124,9 +125,9 @@ static void ourhandler(int sig)
  *
  * \retval 			Returns number of substrings found.
  */
-static int explode_string(char *str, char *strp[], int limit, char delim, char quote)
+static int explode_string(char *str, char *strp[], size_t limit, char delim, char quote)
 {
-	int i, l, inquo;
+	int i, inquo;
 
 	inquo = 0;
 	i = 0;
@@ -136,7 +137,7 @@ static int explode_string(char *str, char *strp[], int limit, char delim, char q
 		strp[0] = 0;
 		return (0);
 	}
-	for (l = 0; *str && (l < limit); str++) {
+	for (; *str && (i < (limit - 1)); str++) {
 		if (quote) {
 			if (*str == quote) {
 				if (inquo) {
@@ -151,7 +152,6 @@ static int explode_string(char *str, char *strp[], int limit, char delim, char q
 		}
 		if ((*str == delim) && (!inquo)) {
 			*str = 0;
-			l++;
 			strp[i++] = str + 1;
 		}
 	}
@@ -432,7 +432,7 @@ static int astgetresp(char *cmd)
 	if (astgetline(COMMAND_PREFIX "tune menu-support 1", buf, sizeof(buf) - 1)) {
 		exit(255);
 	}
-	n = explode_string(buf, strs, 100, ',', 0);
+	n = explode_string(buf, strs, ARRAY_LEN(strs), ',', 0);
 	if (n < 1) {
 		fprintf(stderr, "Error parsing USB device information\n");
 		return;
@@ -490,7 +490,7 @@ static void menu_swapusb(void)
 	if (astgetline(COMMAND_PREFIX "tune menu-support 3", buf, sizeof(buf) - 1)) {
 		exit(255);
 	}
-	n = explode_string(buf, strs, 100, ',', 0);
+	n = explode_string(buf, strs, ARRAY_LEN(strs), ',', 0);
 	if ((n < 1) || (!*strs[0])) {
 		fprintf(stderr, "No additional USB devices found\n");
 		return;
