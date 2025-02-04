@@ -1660,8 +1660,13 @@ static inline void init_text_frame(struct ast_frame *wf)
 }
 
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
-{
-	char tmp[512], tmp1[512], cmd[300] = "", dest[300], src[30], c;
+{    
+	/* These temporary var sizes are a bit tricky:
+	 * tmp is a copy of a string that can be MAXLINKLIST (or larger)
+	 * when we recieve an 'L' it copies tmp into l->linklist which is
+	 * MAXLINKLIST long. 
+	 */
+	char tmp[MAXLINKLIST], tmp1[512], cmd[300] = "", dest[300], src[30], c;
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
@@ -1669,7 +1674,10 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	wf.datalen = strlen(str) + 1;
 	wf.src = "handle_link_data";
 	/* put string in our buffer */
-	ast_copy_string(tmp, str, sizeof(tmp) - 1);
+	if (strlen(str) > sizeof(tmp)) {
+		ast_log(LOG_WARNING, "Link text message data has exceeded tmp buffer size");
+	}
+	ast_copy_string(tmp, str, sizeof(tmp));
 
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
@@ -1703,7 +1711,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (tmp[0] == 'L') {
 		rpt_mutex_lock(&myrpt->lock);
-		strcpy(mylink->linklist, tmp + 2);
+		strcpy(mylink->linklist, tmp + 2); /* MAXLINKLIST - 2 is placed in mylink->linklist*/
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(7, "@@@@ node %s recieved node list %s from node %s\n", myrpt->name, tmp, mylink->name);
@@ -1711,7 +1719,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (tmp[0] == 'M') {
 		rest = 0;
-		if (sscanf(tmp, "%s %s %s %n", cmd, src, dest, &rest) < 3) {
+		if (sscanf(tmp, "%s %s %s %n", cmd, src, dest, &rest) < 3) { /*TODO: We should limit to sizeof(cmd, src, dest)*/
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
 		}
@@ -1739,7 +1747,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (tmp[0] == 'T') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) { /*TODO: We should limit to sizeof(cmd, src, dest)*/
 			ast_log(LOG_WARNING, "Unable to parse telem string %s\n", str);
 			return;
 		}
@@ -1771,7 +1779,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 
 	if (tmp[0] == 'C') {
-		if (sscanf(tmp, "%s %s %s %s", cmd, src, tmp1, dest) != 4) {
+		if (sscanf(tmp, "%s %s %s %s", cmd, src, tmp1, dest) != 4) { /*TODO: We should limit to sizeof(cmd, src, dest, tmp1)*/
 			ast_log(LOG_WARNING, "Unable to parse ctcss string %s\n", str);
 			return;
 		}
@@ -1790,7 +1798,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 
 	if (tmp[0] == 'K') {
-		if (sscanf(tmp, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) {
+		if (sscanf(tmp, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) { /*TODO: We should limit to sizeof(cmd, src, dest)*/
 			ast_log(LOG_WARNING, "Unable to parse keying string %s\n", str);
 			return;
 		}
@@ -2139,10 +2147,16 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 
 static int handle_remote_data(struct rpt *myrpt, char *str)
 {
-	char tmp[300], cmd[300], dest[300], src[300], c;
+	/* These temporary var sizes are a bit tricky: 
+	 * tmp is a copy of a string that can be MAXLINKLIST (or larger)
+	 */
+	char tmp[MAXLINKLIST], cmd[300], dest[300], src[300], c;
 	int seq, res;
 
 	/* put string in our buffer */
+	if (strlen(str) > sizeof(tmp)) {
+		ast_log(LOG_WARNING, "Remove link text message data has exceeded tmp buffer size");
+	}
 	ast_copy_string(tmp, str, sizeof(tmp));
 	if (!strcmp(tmp, DISCSTR))
 		return 0;
@@ -2167,7 +2181,7 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 
 #ifndef	DO_NOT_NOTIFY_MDC1200_ON_REMOTE_BASES
 	if (tmp[0] == 'I') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) { /*TODO: these should be limited to sizeof(cmd,dest,src)*/
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return 0;
 		}
@@ -2177,7 +2191,7 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 #endif
 	if (tmp[0] == 'L')
 		return 0;
-	if (sscanf(tmp, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+	if (sscanf(tmp, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) { /*TODO: these should be limited to sizeof(cmd,dest,src)*/
 		ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 		return 0;
 	}
