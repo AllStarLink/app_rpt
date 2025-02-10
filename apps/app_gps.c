@@ -348,7 +348,7 @@ static time_t time_monotonic(void)
  *
  * \retval 			Returns number of substrings found.
  */
-static int explode_string(char *str, char *strp[], int limit, char delim, char quote)
+static int explode_string(char *str, char *strp[], int limit, const char delim, const char quote)
 {
 	int i, l, inquo;
 
@@ -598,7 +598,7 @@ static void *aprs_connection_thread(void *data)
  * \retval 0		Success
  * \retval -1		Failure
  */
-static int report_aprs(char *ctg, char *lat, char *lon, char *elev)
+static int report_aprs(const char *ctg, const char *lat, const char *lon, const char *elev)
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment, icon, icon_table;
@@ -760,7 +760,7 @@ static int report_aprs(char *ctg, char *lat, char *lon, char *elev)
  * \retval -1		Failure
  */
 
-static int report_aprstt(char *ctg, char *lat, char *lon, char *theircall, char overlay)
+static int report_aprstt(const char *ctg, const char *lat, const char *lon, const char *theircall, const char overlay)
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment;
