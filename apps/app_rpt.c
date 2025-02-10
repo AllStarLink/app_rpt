@@ -1660,8 +1660,9 @@ static inline void init_text_frame(struct ast_frame *wf)
 }
 
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
-{/* I think cmd[32] is big enough? Why is remote_data src[300] Is this a typo here?
-  * Why would dest be any bigger than src? Due to */
+{ /* I think cmd[32] is big enough (same as others)? Why is remote_data src[300] in other locations?
+   * Is this a typo here?  Why would dest be any bigger than src?
+   */
 	char tmp1[512], cmd[300] = "", dest[300], src[30], c;
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
