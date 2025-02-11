@@ -490,10 +490,11 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t b
 {
 	struct rpt_link *l;
 	char mode;
-	int i, spos, link_count;
+	int i, spos, link_count, one_link;
 
 	buf[0] = 0;					/* clear output buffer */
 	link_count = 0;
+	one_link = 0;
 	if (myrpt->remote)
 		return 0;
 	/* go thru all links */
@@ -519,7 +520,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t b
 			strcat(buf, ",");
 			spos++;
 		}
-		link_count++;
+	    one_link = 1;
 		if (flag) { /* RPT_ALINK format - only show adjacent nodes*/
 			snprintf(buf + spos, bufsize - spos, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
 		} else { /* RPT_LINK format - show all nodes*/
@@ -541,6 +542,14 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t b
 				buf[i] = mode;
 		}
 	}
+	/*Afer building the string, count number of nodes (commas) in buffer string. The first
+	 * node doesn't have a comma, so we need to add 1 if there is at least one_link.  
+	 */
+	for (link_count = 0; buf[link_count]; buf[link_count]==',' ? link_count++: *buf++);
+	if (one_link) { /* The first link in the list has no comma but we have 1 link*/
+		link_count++;
+	}
+
 	return link_count;
 }
 
