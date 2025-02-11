@@ -24,7 +24,7 @@
 #include "rpt_link.h"
 #include "rpt_telemetry.h"
 
-#define OBUFSIZE(size) (size + sizeof("1234567890123456789,")) /*size of buffer + room for node count + comma*/
+#define OBUFSIZE(size) (size + sizeof("123456,")) /*size of buffer + room for node count + comma*/
 #define BUFSIZE(size) (size)
 
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
@@ -470,10 +470,16 @@ int __get_nodelist_size (struct rpt *myrpt)
 			continue;
 		if (l->mode > 1)
 			continue;			/* dont report local modes */
-		if (l->linklist[0]) {
-			buffer_size += (strlen(l->linklist) + strlen(l->name) + 3); /*+3: 2 for the commas, 1 for mode, 1 extra as the first pass has no comma*/
+
+		/* Calculate size of buffer required to build the list of linked repeaters.
+		 * RPT_ALINKS format = <count>,1234TU,4321TK,2233RU
+		 * RPT_LINKS format = <count>,T1234,R4321,T2233
+		 * Buffer size ALINKS = LINKS with additional U/K characters for each.
+		 */
+		if (l->linklist[0]) {	
+			buffer_size += (strlen(l->linklist) + strlen(l->name) + 3); /* +3: 1 for the comma, 1 for mode, 1 for mode in ALINKS*/
 		} else {			/* if no nodes, add this node into buffer */
-			buffer_size += (strlen(l->name) + 2); /*+2: 1 for the commas, 1 for mode, 1 extra as the first pass has no comma*/
+			buffer_size += (strlen(l->name) + 3); 
 		}
 
 	}
