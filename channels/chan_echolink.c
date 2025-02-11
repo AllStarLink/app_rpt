@@ -863,6 +863,62 @@ static struct eldb *el_db_put(const char *nodenum, const char *ipaddr, const cha
 }
 
 /*!
+ * \brief Lookup node by callsign
+ * This looks up a node by callsign first in the connected entries and
+ * if not found in the echolink database.
+ * \param callsign		Pointer to callsign.
+ * \return Returns struct eldb if found or null if not found .
+ */
+static const struct eldb *lookup_node_by_callsign(const char *callsign) 
+{
+    struct el_node_lookup_callsign node_lookup = {0};
+	
+    ast_copy_string(node_lookup.callsign, callsign, sizeof(node_lookup.callsign));
+
+    ast_mutex_lock(&el_nodelist_lock);
+    twalk_r(el_node_list, lookup_node_callsign, &node_lookup);
+    ast_mutex_unlock(&el_nodelist_lock);
+
+    if (node_lookup.nodenum) {
+        static struct eldb connected_node;
+        snprintf(connected_node.nodenum, sizeof(connected_node.nodenum), "%d", node_lookup.nodenum);
+        ast_copy_string(connected_node.callsign, node_lookup.callsign, sizeof(connected_node.callsign));
+        ast_copy_string(connected_node.ipaddr, node_lookup.ipaddr, sizeof(connected_node.ipaddr));
+        return &connected_node;
+    } else {
+        return el_db_find_callsign(callsign);
+    }
+}
+
+/*!
+ * \brief Lookup node by nodenum
+ * This looks up a node by node number first in the connected entries and
+ * if not found in the echolink database.
+ * \param nodenum		Pointer to node number.
+ * \return Returns struct eldb if found or null if not found .
+ */
+static const struct eldb *lookup_node_by_nodenum(const char *nodenum) 
+{
+    struct el_node_lookup_callsign node_lookup = {0};
+	
+    node_lookup.nodenum = atoi(nodenum);
+
+    ast_mutex_lock(&el_nodelist_lock);
+    twalk_r(el_node_list, lookup_node_nodenum, &node_lookup);
+    ast_mutex_unlock(&el_nodelist_lock);
+
+    if (node_lookup.callsign[0]) {
+        static struct eldb connected_node;
+        ast_copy_string(connected_node.nodenum, nodenum, sizeof(connected_node.nodenum));
+        ast_copy_string(connected_node.callsign, node_lookup.callsign, sizeof(connected_node.callsign));
+        ast_copy_string(connected_node.ipaddr, node_lookup.ipaddr, sizeof(connected_node.ipaddr));
+        return &connected_node;
+    } else {
+        return el_db_find_nodenum(nodenum);
+    }
+}
+
+/*!
  * \brief Make a sdes packet with our nodes information.
  * The RTP version = 3, RTP packet type = 201.
  * The RTCP: version = 3, packet type = 202.
@@ -1478,7 +1534,6 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 	const struct eldb *foundnode = NULL;
 	int res = -1;
 	char *node = data;
-	struct el_node_lookup_callsign node_lookup;
 	
 	/* Make sure that we got a node number to query */
 	if (ast_strlen_zero(data)) {
@@ -1498,23 +1553,11 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 			}
 			break;
 		case EL_QUERY_CALLSIGN:
-			/* first lookup in the currently connected nodes tree */
-			memset(&node_lookup, 0, sizeof(node_lookup));
-			node_lookup.nodenum = atoi(node);
-			ast_mutex_lock(&el_nodelist_lock);
-			twalk_r(el_node_list, lookup_node_nodenum, &node_lookup);
-			ast_mutex_unlock(&el_nodelist_lock);
-			
-			if (node_lookup.callsign[0]) {
-				ast_copy_string(data, node_lookup.callsign, *datalen);
+			/* lookup first in connected table, then echolink database */
+			foundnode = lookup_node_by_nodenum(node);
+			if (foundnode) {
+				ast_copy_string(data, foundnode->callsign, *datalen);
 				res = 0;
-			} else {
-				/* was not found - now lookup in our internal directory */
-				foundnode = el_db_find_nodenum(node);
-				if (foundnode) {
-					ast_copy_string(data, foundnode->callsign, *datalen);
-					res = 0;
-				}
 			}
 			break;
 		default:
@@ -2468,7 +2511,6 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 {
 	char c;
 	const struct eldb *mynode;
-	struct eldb connected_node;		
 
 	if (argc != 4) {
 		return RESULT_SHOWUSAGE;
@@ -2482,45 +2524,11 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 		
 	} else if (c == 'c') {
 		/* Lookup node data by callsign */
-		struct el_node_lookup_callsign node_lookup;
-		
-		/* first lookup in the currently connected nodes tree */
-		memset(&node_lookup, 0, sizeof(node_lookup));
-		ast_copy_string(node_lookup.callsign, argv[3], sizeof(node_lookup.callsign));
-		ast_mutex_lock(&el_nodelist_lock);
-		twalk_r(el_node_list, lookup_node_callsign, &node_lookup);
-		ast_mutex_unlock(&el_nodelist_lock);
-			
-		if (node_lookup.nodenum) {
-			snprintf(connected_node.nodenum, sizeof(connected_node.nodenum), "%d", node_lookup.nodenum);
-			ast_copy_string(connected_node.callsign, node_lookup.callsign, sizeof(connected_node.callsign));
-			ast_copy_string(connected_node.ipaddr, node_lookup.ipaddr, sizeof(connected_node.ipaddr));
-			mynode = &connected_node;
-		} else {
-			/* was not found - now lookup in our internal directory */
-			mynode = el_db_find_callsign(argv[3]);
-		}
+		mynode = lookup_node_by_callsign(argv[3]);
 		
 	} else {
 		/* Lookup node data by node number */
-		struct el_node_lookup_callsign node_lookup;
-		
-		/* first lookup in the currently connected nodes tree */
-		memset(&node_lookup, 0, sizeof(node_lookup));
-		node_lookup.nodenum = atoi(argv[3]);
-		ast_mutex_lock(&el_nodelist_lock);
-		twalk_r(el_node_list, lookup_node_nodenum, &node_lookup);
-		ast_mutex_unlock(&el_nodelist_lock);
-			
-		if (node_lookup.callsign[0]) {
-			ast_copy_string(connected_node.nodenum, argv[3], sizeof(connected_node.nodenum));
-			ast_copy_string(connected_node.callsign, node_lookup.callsign, sizeof(connected_node.callsign));
-			ast_copy_string(connected_node.ipaddr, node_lookup.ipaddr, sizeof(connected_node.ipaddr));
-			mynode = &connected_node;
-		} else {
-			/* was not found - now lookup in our internal directory */
-			mynode = el_db_find_nodenum(argv[3]);
-		}
+		mynode = lookup_node_by_nodenum(argv[3]);
 	}
 	/* Report failure to find node */
 	if (!mynode) {
