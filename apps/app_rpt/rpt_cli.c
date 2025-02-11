@@ -525,8 +525,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				tel_mode = "3";
 			}
 
-//### GET CONNECTED NODE INFO ####################
-			// Traverse the list of connected nodes 
+			/* ### GET CONNECTED NODE INFO ####################
+			 * Traverse the list of connected nodes
+			 */
 
 			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 

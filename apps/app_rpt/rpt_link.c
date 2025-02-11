@@ -480,7 +480,7 @@ int __get_nodelist_size (struct rpt *myrpt)
 	return buffer_size;
 }
 
-int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t *bufsize, int flag)
+int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t bufsize, int flag)
 {
 	struct rpt_link *l;
 	char mode;
@@ -564,13 +564,13 @@ void rpt_update_links(struct rpt *myrpt)
 	buffer_size = __get_nodelist_size(myrpt);
 	buf = ast_calloc(1, BUFSIZE(buffer_size));
 	if (!buf) {
-		ast_mutext_unlock(&myrpt->lock);
+		ast_mutex_unlock(&myrpt->lock);
 		return;
 	}
 	obuf = ast_calloc(1, OBUFSIZE(buffer_size));
 	if (!obuf) {
 		ast_mutex_unlock(&myrpt->lock);
-		aast_free(buf);
+		ast_free(buf);
 		return;
 	}
 	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 1);
