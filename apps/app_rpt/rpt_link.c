@@ -462,8 +462,10 @@ void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 int __get_nodelist_size (struct rpt *myrpt)
 {
 	struct rpt_link *l;
-	int buffer_size;
-	buffer_size = 0;
+	int buffer_size_links, buffer_size_alinks, link_size;
+	buffer_size_links = 0;
+	buffer_size_alinks = 0;
+
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0')
@@ -476,14 +478,15 @@ int __get_nodelist_size (struct rpt *myrpt)
 		 * RPT_LINKS format = <count>,T1234,R4321,T2233
 		 * Buffer size ALINKS = LINKS with additional U/K characters for each.
 		 */
-		if (l->linklist[0]) {	
-			buffer_size += (strlen(l->linklist) + strlen(l->name) + 3); /* +3: 1 for the comma, 1 for mode, 1 for mode in ALINKS*/
-		} else {			/* if no nodes, add this node into buffer */
-			buffer_size += (strlen(l->name) + 3); 
+		if (l->linklist[0]) {
+			buffer_size_links += (strlen(l->linklist) + 1); /* +1: 1 for comma */
 		}
-
+		link_size = strlen(l->name);
+		buffer_size_links += (link_size + 2);  /* +2: 1 for comma, 1 form mode (T/R) */
+		buffer_size_alinks += (link_size + 3); /* +3: 1 for comma, 2 for mode (TU/TK/etc) */
 	}
-	return buffer_size;
+
+	return (buffer_size_links > buffer_size_alinks) ? buffer_size_links : buffer_size_alinks;
 }
 
 int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t bufsize, int flag)
