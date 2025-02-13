@@ -190,6 +190,7 @@ do not use 127.0.0.1
 #define EL_IP_SIZE 16
 #define EL_CALL_SIZE 12
 #define EL_NAME_SIZE 32
+#define EL_WELMSG_SIZE 1024
 #define EL_APRS_SIZE 200
 #define EL_PWD_SIZE 16
 #define EL_EMAIL_SIZE 32
@@ -392,6 +393,7 @@ struct el_instance {
 	char port[EL_IP_SIZE];
 	char astnode[EL_NAME_SIZE];
 	char context[EL_NAME_SIZE];
+        char welmsg[EL_WELMSG_SIZE + 1];
 	/* missed 10 heartbeats, you're out */
 	short rtcptimeout;
 	float lat;
@@ -1815,7 +1817,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_log(LOG_WARNING, "Exceeded buffer size");
 			return;
 		}
-		j = snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
+		j = snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r%s\r", instp->mycall, instp->mynode,instp->welmsg);
 		if (j >= sizeof(pkt) - i) {
 			ast_log(LOG_WARNING, "Exceeded buffer size");
 			return;
@@ -3845,6 +3847,14 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	} else {
 		ast_copy_string(instp->myemail, val, sizeof(instp->myemail));
 	}
+
+
+	val = ast_variable_retrieve(cfg,ctg,"welcomemessage");
+        if (!val)
+           ast_copy_string(instp->welmsg, "INVALID", sizeof(instp->welmsg));
+        else
+           ast_copy_string(instp->welmsg, val, sizeof(instp->welmsg));
+
 
 	for (serverindex = 0; serverindex < EL_MAX_SERVERS; serverindex++) {
 		snprintf(servername, sizeof(servername), "server%i", serverindex + 1);
