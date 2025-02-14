@@ -153,7 +153,7 @@
                             ; 2 - 120 Hz cutoff for special applications requiring additional bass response in transmitted audio.
                             ; Not recommended due to the increased possibility of voice energy interfering with sub-audible signaling
 
-;invertptt = yes            ; Invert PTT: no,yes
+;invertptt = no             ; Invert PTT: no,yes
                             ; no  - ground to transmit
                             ; yes - open to transmit
 
