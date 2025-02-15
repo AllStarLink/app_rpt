@@ -929,7 +929,7 @@ static int lookup_node_by_nodenum(const char *nodenum, struct eldb *result)
 			memcpy(result, found_node, sizeof(*result));
 			return 1;
 		}
-    }
+	}
 
 	return 0;
 }
@@ -2538,13 +2538,11 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 	if (c == 'i') {
 		/* Lookup node data by IP address */
 		mynode = el_db_find_ipaddr(argv[3]);
-
 	} else if (c == 'c') {
 		/* Lookup node data by callsign */
 		if (lookup_node_by_callsign(argv[3], &found_node)) {
 			mynode = &found_node;
 		}
-
 	} else {
 		/* Lookup node data by node number */
 		if (lookup_node_by_nodenum(argv[3], &found_node)) {
