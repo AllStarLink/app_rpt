@@ -318,6 +318,7 @@ struct aprs_sender_info {
 };
 
 AST_LIST_HEAD_NOLOCK_STATIC(aprs_sender_list, aprs_sender_info);
+AST_MUTEX_DEFINE_STATIC(aprs_sender_list_lock);
 
 
 /*!
@@ -1566,11 +1567,13 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
 		return -1;
 	}
 	/* Find the section */
+	ast_mutex_lock(&aprs_sender_list_lock);
 	AST_LIST_TRAVERSE(&aprs_sender_list, sender_entry, list) {
 		if (!strcasecmp(sender_entry->section, args.section) && sender_entry->type == APRSTT) {
 			break;
 		}
 	}
+	ast_mutex_unlock(&aprs_sender_list_lock);
 	if (!sender_entry) {
 		ast_log(LOG_WARNING, "APRS_SENDTT cannot find associated section: %s\n", args.section);
 		return -1;
