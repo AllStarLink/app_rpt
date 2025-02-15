@@ -317,8 +317,7 @@ struct aprs_sender_info {
 	char overlay;							/* the overlay to use with the callsign */
 };
 
-AST_LIST_HEAD_NOLOCK_STATIC(aprs_sender_list, aprs_sender_info);
-AST_MUTEX_DEFINE_STATIC(aprs_sender_list_lock);
+AST_RWLIST_HEAD_STATIC(aprs_sender_list, aprs_sender_info);
 
 
 /*!
@@ -1567,13 +1566,13 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
 		return -1;
 	}
 	/* Find the section */
-	ast_mutex_lock(&aprs_sender_list_lock);
+	AST_RWLIST_RDLOCK(&aprs_sender_list);
 	AST_LIST_TRAVERSE(&aprs_sender_list, sender_entry, list) {
 		if (!strcasecmp(sender_entry->section, args.section) && sender_entry->type == APRSTT) {
 			break;
 		}
 	}
-	ast_mutex_unlock(&aprs_sender_list_lock);
+	AST_RWLIST_UNLOCK(&aprs_sender_list);
 	if (!sender_entry) {
 		ast_log(LOG_WARNING, "APRS_SENDTT cannot find associated section: %s\n", args.section);
 		return -1;
@@ -1675,6 +1674,7 @@ static int unload_module(void)
 	}
 
 	/* Shutdown and clean up sender threads */
+	AST_RWLIST_WRLOCK(&aprs_sender_list);
 	while ((sender_entry = AST_LIST_REMOVE_HEAD(&aprs_sender_list, list))) {
 		ast_debug(2, "Waiting for %s sender thread %s to exit\n", sender_entry->type == APRS ? "aprs" : "aprstt", sender_entry->section);
 		pthread_join(sender_entry->thread_id, NULL);
@@ -1682,6 +1682,7 @@ static int unload_module(void)
 		ast_cond_destroy(&sender_entry->condition);
 		ast_free(sender_entry);
 	}
+	AST_RWLIST_UNLOCK(&aprs_sender_list);
 
 	ast_debug(1, "Threads have exited\n");
 
