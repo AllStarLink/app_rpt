@@ -217,7 +217,6 @@ do not use 127.0.0.1
 /*! \brief Echolink directory server port number */
 #define	EL_DIRECTORY_PORT 5200
 
-#define	GPSFILE "/tmp/gps.dat"
 #define	GPS_VALID_SECS 60
 
 #define	ELDB_NODENUMLEN 8
@@ -577,6 +576,20 @@ static char dbget_usage[] = "Usage: echolink dbget <nodename|callsign|ipaddr> <l
 static char show_nodes_usage[] = "Usage: echolink show nodes\n";
 
 static char show_stats_usage[] = "Usage: echolink show stats\n";
+
+/*!
+ * \brief Get system monotonic 
+ * This returns the CLOCK_MONOTONIC time
+ * \retval		Monotonic seconds.
+ */
+static time_t time_monotonic(void)
+{
+	struct timespec ts;
+	
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	
+	return ts.tv_sec;
+}
 
 /*!
  * \brief Break up a delimited string into a table of substrings.
@@ -3410,7 +3423,7 @@ static void *el_reader(void *data)
 	struct ast_frame fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
-	time_t now, was;
+	time_t now;
 	struct tm *tm;
 	struct el_node **found_key;
 	struct el_node *node;
@@ -3421,8 +3434,6 @@ static void *el_reader(void *data)
 	char *nameptr;
 	struct pollfd fds[2];
 	struct timeval current_packet_time;
-	FILE *fp;
-	struct stat mystat;
 	struct gsmVoice_t *gsmPacket;
 	uint32_t time_difference;
 
@@ -3444,12 +3455,13 @@ static void *el_reader(void *data)
 		if (instp->aprstime <= now) {
 			instp->aprstime = now + EL_APRS_INTERVAL;
 			if (sin_aprs.sin_port) {	/* a zero port indicates that we never resolved the host name */
-				char aprsstr[512], aprscall[256], latc, lonc;
+				char aprsstr[512], aprscall[256], gps_data[100], latc, lonc;
 				unsigned char sdes_packet[256];
-				unsigned int u;
+				unsigned long long u_mono;
 				float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
-				int sdes_length;
+				int sdes_length, from_GPS = 0;
 				struct el_node_count count;
+				time_t now_mono, was_mono;
 
 				memset(&count, 0, sizeof(count));
 				count.instp = instp;
@@ -3469,11 +3481,12 @@ static void *el_reader(void *data)
 				}
 				mylat = instp->lat;
 				mylon = instp->lon;
-				fp = fopen(GPSFILE, "r");
-				if (fp && (fstat(fileno(fp), &mystat) != -1) && (mystat.st_size < 100)) {
-					if (fscanf(fp, "%u %f%c %f%c", &u, &lat, &latc, &lon, &lonc) == 5) {
-						was = (time_t) u;
-						if ((was + GPS_VALID_SECS) >= now) {
+				if (ast_custom_function_find("GPS_READ") && !ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
+					/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+					if (sscanf(gps_data, "%llu %*u %f%c %f%c", &u_mono, &lat, &latc, &lon, &lonc) == 5) {
+						now_mono = time_monotonic();
+						was_mono = (time_t) u_mono;
+						if ((was_mono + GPS_VALID_SECS) >= now_mono) {
 							mylat = floor(lat / 100.0);
 							mylat += (lat - (mylat * 100)) / 60.0;
 							mylon = floor(lon / 100.0);
@@ -3484,9 +3497,9 @@ static void *el_reader(void *data)
 							if (lonc == 'W') {
 								mylon = -mylon;
 							}
+							from_GPS = 1;
 						}
-					}
-					fclose(fp);
+					}					
 				}
 				latc = (mylat >= 0.0) ? 'N' : 'S';
 				lonc = (mylon >= 0.0) ? 'E' : 'W';
@@ -3502,7 +3515,7 @@ static void *el_reader(void *data)
 					instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
-				ast_debug(4, "APRS out: %s.\n", aprsstr);
+				ast_debug(4, "APRS out%s: %s.\n", from_GPS ? " (GPS)" : "", aprsstr);
 				snprintf(aprscall, sizeof(aprscall), "%s/%s", instp->mycall, instp->mycall);
 				memset(sdes_packet, 0, sizeof(sdes_packet));
 				sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);

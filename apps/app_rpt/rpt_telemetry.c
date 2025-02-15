@@ -9,6 +9,7 @@
 
 #include "asterisk/channel.h"
 #include "asterisk/cli.h"
+#include "asterisk/pbx.h"		/* functions */
 #include "asterisk/say.h"
 #include "asterisk/indications.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
@@ -968,16 +969,14 @@ void *rpt_tele_thread(void *this)
 	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ct, *ct_copy, *ident, *nodename;
-	time_t t, t1, was;
+	time_t t, t1, t_mono, was_mono;
 	struct ast_tm localtm;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
 	int i, j, k, ns, rbimode;
-	unsigned int u;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
-	char lat[100], lon[100], elev[100], c;
-	FILE *fp;
 	float f;
-	struct stat mystat;
+	unsigned long long u_mono;
+	char gps_data[100], lat[25], lon[25], elev[25], c;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
@@ -2337,24 +2336,25 @@ treataslocal:
 		break;
 	case STATS_GPS:
 	case STATS_GPS_LEGACY:
-		fp = fopen(GPSFILE, "r");
-		if (!fp) {
+		
+		/* If the app_gps custom function GPS_READ does not exist, let them know */
+		if (!ast_custom_function_find("GPS_READ")) {
+			saycharstr(mychannel, "GPS");
+			sayfile(mychannel, "rpt/off");
 			break;
 		}
-		if (fstat(fileno(fp), &mystat) == -1) {
+		if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 			break;
 		}
-		if (mystat.st_size >= 100) {
+
+		/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+		if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
 			break;
 		}
-		elev[0] = 0;
-		if (fscanf(fp, "%u %s %s %s", &u, lat, lon, elev) < 3) {
-			break;
-		}
-		fclose(fp);
-		was = (time_t) u;
-		time(&t);
-		if ((was + GPS_VALID_SECS) < t) {
+		
+		was_mono = (time_t) u_mono;
+		t_mono = rpt_time_monotonic();
+		if ((was_mono + GPS_VALID_SECS) < t_mono) {
 			break;
 		} else if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
@@ -2602,14 +2602,13 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	struct rpt_tele *tele;
 	struct rpt_link *mylink = NULL;
 	int res, i, ns;
-	char *v1, *v2, mystr[1024], *p, haslink, lat[100], lon[100], elev[100];
+	char *v1, *v2, mystr[1024], *p, haslink;
 	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
-	time_t t, was;
-	unsigned int k;
-	FILE *fp;
-	struct stat mystat;
 	struct rpt_link *l;
-
+	time_t t, t_mono, was_mono;
+	unsigned long long u_mono;
+	char gps_data[100], lat[25], lon[25], elev[25];
+	
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 
 	if ((mode == ID) && is_paging(myrpt)) {
@@ -2767,27 +2766,23 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			send_tele_link(myrpt, mystr);
 			return;
 		case STATS_GPS:
-			fp = fopen(GPSFILE, "r");
-			if (!fp) {
+			
+			/* If the app_gps custom function GPS_READ exists, read the GPS position */
+			if (!ast_custom_function_find("GPS_READ")) {
+				break;
+			}				
+			if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 				break;
 			}
-			if (fstat(fileno(fp), &mystat) == -1) {
-				fclose(fp);
+
+			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
 				break;
 			}
-			if (mystat.st_size >= 100) {
-				fclose(fp);
-				break;
-			}
-			elev[0] = 0;
-			if (fscanf(fp, "%u %s %s %s", &k, lat, lon, elev) < 3) {
-				fclose(fp);
-				break;
-			}
-			fclose(fp);
-			was = (time_t) k;
-			time(&t);
-			if ((was + GPS_VALID_SECS) < t) {
+
+			was_mono = (time_t) u_mono;
+			t_mono = rpt_time_monotonic();
+			if ((was_mono + GPS_VALID_SECS) < t_mono) {
 				break;
 			}
 			sprintf(mystr, "STATS_GPS,%s,%s,%s,%s", myrpt->name, lat, lon, elev);

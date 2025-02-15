@@ -101,9 +101,6 @@ typedef struct {
 #define	MAX_RETRIES 5
 #define	MAX_RETRIES_PERM 1000000000
 
-#define	APRSTT_PIPE "/tmp/aprs_ttfifo"
-#define	APRSTT_SUB_PIPE "/tmp/aprs_ttfifo_%s"
-
 #define	REDUNDANT_TX_TIME 2000
 
 #define	RETRY_TIMER_MS 5000
@@ -161,7 +158,6 @@ typedef struct {
 #define	EXTNODEFILE "/var/lib/asterisk/rpt_extnodes"
 #define	NODENAMES "rpt/nodenames"
 #define	PARROTFILE "/tmp/parrot_%s_%u"
-#define	GPSFILE "/tmp/gps.dat"
 
 #define	GPS_VALID_SECS 60
 #define	GPS_UPDATE_SECS 30
@@ -864,7 +860,7 @@ struct rpt {
 	char lastdtmfuser[MAXNODESTR];
 	char curdtmfuser[MAXNODESTR];
 	int  sleeptimer;
-	time_t lastgpstime;
+	time_t lastgpstime;			/* monotonic time */
 	int outstreampipe[2];
 	int outstreampid;
 	time_t outstreamlasterror;	/*!< \brief set when there is an outstream error and is reset when error cleared */

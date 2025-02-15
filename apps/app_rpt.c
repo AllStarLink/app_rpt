@@ -151,8 +151,8 @@
  *          Subcode '810D' is Call Alert (like Maxtrac 'CA')
  *  61 - Send Message to USB to control GPIO pins (cop,61,GPIO1=0[,GPIO4=1].....)
  *  62 - Send Message to USB to control GPIO pins, quietly (cop,62,GPIO1=0[,GPIO4=1].....)
- *  63 - Send pre-configred APRSTT notification (cop,63,CALL[,OVERLAYCHR])
- *  64 - Send pre-configred APRSTT notification, quietly (cop,64,CALL[,OVERLAYCHR])
+ *  63 - Send pre-configred APRStt notification (cop,63,CALL[,OVERLAYCHR])
+ *  64 - Send pre-configred APRStt notification, quietly (cop,64,CALL[,OVERLAYCHR])
  *  65 - Send POCSAG page (equipped channel types only)
  *
  * ilink cmds:
@@ -1545,28 +1545,37 @@ static inline void collect_function_digits_post(struct rpt *myrpt, int res, cons
 	}
 }
 
+/*!
+ * \brief Send APRStt (Touchtone) to app_gps for processing.
+ * This routine takes the received APRStt touchtone digits
+ * and translates them to a callsign.  The results are
+ * sent to app_gps using the APRS_SENDTT function for 
+ * processing and posting to the APRS-IS server.
+ *
+ * \param myrpt		pointer to repeater struct.
+ */
 static void do_aprstt(struct rpt *myrpt)
 {
 	char cmd[300] = "";
-	char overlay, aprscall[100], fname[100];
-	FILE *fp;
+	char overlay, aprscall[100], func[100];
 
 	snprintf(cmd, sizeof(cmd) - 1, "A%s", myrpt->dtmfbuf);
+	/*! \todo we need to support all 4 types of APRStt 
+	 * we only support the 'A' type for call sign
+	 */
 	overlay = aprstt_xlat(cmd, aprscall);
 	if (overlay) {
-		ast_log(LOG_WARNING, "aprstt got string %s call %s overlay %c\n", cmd, aprscall, overlay);
-		if (!myrpt->p.aprstt[0])
-			ast_copy_string(fname, APRSTT_PIPE, sizeof(fname) - 1);
-		else
-			snprintf(fname, sizeof(fname) - 1, APRSTT_SUB_PIPE, myrpt->p.aprstt);
-		fp = fopen(fname, "w");
-		if (!fp) {
-			ast_log(LOG_WARNING, "Can not open APRSTT pipe %s: %s\n", fname, strerror(errno));
+		ast_debug(1, "APRStt got string %s callsign %s overlay %c\n", cmd, aprscall, overlay);
+		
+		if (!ast_custom_function_find("APRS_SENDTT")) {
+			ast_log(LOG_WARNING, "app_gps is not loaded.  APRStt failed\n");
 		} else {
-			fprintf(fp, "%s %c\n", aprscall, overlay);
-			fclose(fp);
-			rpt_telemetry(myrpt, ARB_ALPHA, (void *) aprscall);
-		}
+			snprintf(func, sizeof(func), "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt[0] ? "general" : myrpt->p.aprstt, overlay);
+			/* execute the APRS_SENDTT function in app_gps*/
+			if (!ast_func_write(NULL, func, aprscall)) {
+				rpt_telemetry(myrpt, ARB_ALPHA, (void *) aprscall);
+			}
+		} 
 	}
 }
 
@@ -4682,14 +4691,11 @@ static void *rpt(void *this)
 	char *idtalkover, c, myfirst;
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
-	unsigned int u;
-	FILE *fp;
-	struct stat mystat;
 	struct ast_channel *who;
-	time_t t, was;
+	time_t t, t_mono;
 	struct rpt_link *l;
 	struct rpt_tele *telem;
-	char tmpstr[512], lat[100], lon[100], elev[100];
+	char tmpstr[512];
 	struct ast_format_cap *cap;
 	struct timeval looptimestart;
 
@@ -4898,30 +4904,40 @@ static void *rpt(void *this)
 			break;
 		}
 
-		time(&t);
-		while (t >= (myrpt->lastgpstime + GPS_UPDATE_SECS)) {
-			myrpt->lastgpstime = t;
-			fp = fopen(GPSFILE, "r");
-			if (!fp)
+		t_mono = rpt_time_monotonic();
+		while (t_mono >= (myrpt->lastgpstime + GPS_UPDATE_SECS)) {
+			unsigned long long u_mono;
+			time_t was_mono;
+			char gps_data[100];
+			char lat[25], lon[25], elev[25];
+
+			myrpt->lastgpstime = t_mono;
+			
+			/* If the app_gps custom function GPS_READ exists, read the GPS position */
+			if (!ast_custom_function_find("GPS_READ")) {
 				break;
-			if (fstat(fileno(fp), &mystat) == -1)
+			}				
+			if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 				break;
-			if (mystat.st_size >= 100)
+			}
+
+			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
 				break;
-			elev[0] = 0;
-			if (fscanf(fp, "%u %s %s %s", &u, lat, lon, elev) < 3)
+			}
+			was_mono = (time_t) u_mono;
+			if ((was_mono + GPS_VALID_SECS) < t_mono) {
 				break;
-			fclose(fp);
-			was = (time_t) u;
-			if ((was + GPS_VALID_SECS) < t)
-				break;
+			}
 			sprintf(tmpstr, "G %s %s %s %s", myrpt->name, lat, lon, elev);
+			
 			rpt_mutex_lock(&myrpt->lock);
 			l = myrpt->links.next;
 			myrpt->voteremrx = 0;	/* no voter remotes keyed */
 			while (l != &myrpt->links) {
-				if (l->chan)
+				if (l->chan) {
 					ast_sendtext(l->chan, tmpstr);
+				}
 				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
