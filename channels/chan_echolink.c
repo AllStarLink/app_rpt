@@ -872,24 +872,23 @@ static struct eldb *el_db_put(const char *nodenum, const char *ipaddr, const cha
  */
 static int lookup_node_by_callsign(const char *callsign, struct eldb *result) 
 {
-    struct el_node_lookup_callsign node_lookup = {0};
-	
+	struct el_node_lookup_callsign node_lookup = {0};
+
 	memset(result, 0, sizeof(*result));
-    ast_copy_string(node_lookup.callsign, callsign, sizeof(node_lookup.callsign));
+	ast_copy_string(node_lookup.callsign, callsign, sizeof(node_lookup.callsign));
 
-    ast_mutex_lock(&el_nodelist_lock);
-    twalk_r(el_node_list, lookup_node_callsign, &node_lookup);
-    ast_mutex_unlock(&el_nodelist_lock);
+	ast_mutex_lock(&el_nodelist_lock);
+	twalk_r(el_node_list, lookup_node_callsign, &node_lookup);
+	ast_mutex_unlock(&el_nodelist_lock);
 
-    if (node_lookup.nodenum) {
-        static struct eldb connected_node;
-        snprintf(result->nodenum, sizeof(connected_node.nodenum), "%d", node_lookup.nodenum);
-        ast_copy_string(result->callsign, node_lookup.callsign, sizeof(result->callsign));
-        ast_copy_string(result->ipaddr, node_lookup.ipaddr, sizeof(result->ipaddr));
-        return 1;
-    } else {
+	if (node_lookup.nodenum) {
+		snprintf(result->nodenum, sizeof(result->nodenum), "%d", node_lookup.nodenum);
+		ast_copy_string(result->callsign, node_lookup.callsign, sizeof(result->callsign));
+		ast_copy_string(result->ipaddr, node_lookup.ipaddr, sizeof(result->ipaddr));
+		return 1;
+	} else {
 		struct eldb *found_node;
-        found_node = el_db_find_callsign(callsign);
+		found_node = el_db_find_callsign(callsign);
 		if (found_node) {
 			memcpy(result, found_node, sizeof(*result));
 			return 1;
@@ -909,23 +908,23 @@ static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
  */
 static int lookup_node_by_nodenum(const char *nodenum, struct eldb *result) 
 {
-    struct el_node_lookup_callsign node_lookup = {0};
-	
+	struct el_node_lookup_callsign node_lookup = {0};
+
 	memset(result, 0, sizeof(*result));
-    node_lookup.nodenum = atoi(nodenum);
+	node_lookup.nodenum = atoi(nodenum);
 
-    ast_mutex_lock(&el_nodelist_lock);
-    twalk_r(el_node_list, lookup_node_nodenum, &node_lookup);
-    ast_mutex_unlock(&el_nodelist_lock);
+	ast_mutex_lock(&el_nodelist_lock);
+	twalk_r(el_node_list, lookup_node_nodenum, &node_lookup);
+	ast_mutex_unlock(&el_nodelist_lock);
 
-    if (node_lookup.callsign[0]) {
-        ast_copy_string(result->nodenum, nodenum, sizeof(result->nodenum));
-        ast_copy_string(result->callsign, node_lookup.callsign, sizeof(result->callsign));
-        ast_copy_string(result->ipaddr, node_lookup.ipaddr, sizeof(result->ipaddr));
-        return 1;
-    } else {
+	if (node_lookup.callsign[0]) {
+		ast_copy_string(result->nodenum, nodenum, sizeof(result->nodenum));
+		ast_copy_string(result->callsign, node_lookup.callsign, sizeof(result->callsign));
+		ast_copy_string(result->ipaddr, node_lookup.ipaddr, sizeof(result->ipaddr));
+		return 1;
+	} else {
 		struct eldb *found_node;
-        found_node = el_db_find_nodenum(nodenum);
+		found_node = el_db_find_nodenum(nodenum);
 		if (found_node) {
 			memcpy(result, found_node, sizeof(*result));
 			return 1;
@@ -1852,7 +1851,7 @@ static void lookup_node_nodenum(const void *nodep, const VISIT which, void *clos
 {
 	const struct el_node *node;
 	struct el_node_lookup_callsign *lookup;
-	
+
 	if ((which == leaf) || (which == postorder)) {
 		node = *(struct el_node **) nodep;
 		lookup = closure;
