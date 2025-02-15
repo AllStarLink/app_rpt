@@ -20,7 +20,7 @@
 /*! \file
  *
  * \brief GPS device interface module
- * 
+ *
  * \author Jim Dixon, WB6NIL <jim@lambdatel.com>
  *
  * \ingroup applications
@@ -31,16 +31,16 @@
  ***/
 
 /*
- * app_gps is responsible for posting APRS (Automated Packet Reporting System) 
- * information to APRS-IS Internet servers. APRS is a registered trademark of 
+ * app_gps is responsible for posting APRS (Automated Packet Reporting System)
+ * information to APRS-IS Internet servers. APRS is a registered trademark of
  * Bob Bruninga, WB4APR (SK).
  *
  * The APRS-IS server requires a password to post status messages.  The password
- * is constructed as a hash on the call sign. This website can be used to 
- * to generate the password: https://n5dux.com/ham/aprs-passcode/ 
+ * is constructed as a hash on the call sign. This website can be used to
+ * to generate the password: https://n5dux.com/ham/aprs-passcode/
  *
- * app_gps can connect to a serial GPS receiver to get position information.  
- * If a GPS receiver is not configured, it can provide default position information 
+ * app_gps can connect to a serial GPS receiver to get position information.
+ * If a GPS receiver is not configured, it can provide default position information
  * entered in the gps.conf file.  It decodes the NEMA-0183 $GPGGA sentence.
  *
  * The $GPGGA sentence looks like the following:
@@ -62,13 +62,13 @@
  * Height Unit            M                   M = meters
  * Time since last update blank               No last update
  * DGPS reference         0000                No station id
- * Checksum               *63                 Checksum 
+ * Checksum               *63                 Checksum
  * Terminator             [CR][LF]            Line terminator
  *
  * apps_gps supports standard APRS position updates, along with support for APRS Touchtone.
  * Standard updates are posted to 'APRS'.  APRStt updates are posted to 'APSTAR'.
  *
- * APRStt allows analog users to use DTMF to update the APRS system.  app_rpt can 
+ * APRStt allows analog users to use DTMF to update the APRS system.  app_rpt can
  * receive specially crafted DTMF strings, send those to app_gps through a named pipe,
  * for app_gps to post to the APRS-IS server.
  *
@@ -76,16 +76,16 @@
  *
  * APRStt information - http://www.aprs.org/aprstt.html, http://www.aprs.org/aprstt/aprstt-user.txt
  *
- * The reporting interval (beacon rate) can be configured based on your needs.  
+ * The reporting interval (beacon rate) can be configured based on your needs.
  * Beacon rates should be set as if the station was on a busy RF frequency.
- * Never faster than 1 minute for mobile, 5 minutes for weather, 10 minutes for local 
+ * Never faster than 1 minute for mobile, 5 minutes for weather, 10 minutes for local
  * infrastructure , and 20 minutes for fixed stations).
  */
 
-/* The following are the recognized APRS icon codes: 
+/* The following are the recognized APRS icon codes:
  *
- * NOTE: Since the semicolon (';') is recognized by the Asterisk config 
- * subsystem as a comment, we use the question-mark ('?') instead when 
+ * NOTE: Since the semicolon (';') is recognized by the Asterisk config
+ * subsystem as a comment, we use the question-mark ('?') instead when
  * we want to specify a 'portable tent'.
  *
  * NOTE: The configuration setting icontable can be changed to select the alternate table.
@@ -101,7 +101,7 @@
  * (     CLOUDY             Cloudy
  * )     was Mic-Rptr
  * *     Snow               Snow
- * +     Red Cross          Church  
+ * +     Red Cross          Church
  * ,     reverse L shape
  * -     House QTH
  * .     X
@@ -110,10 +110,10 @@
  * 9     Numeral Circle     Gas Station
  * :     FIRE               Hail
  * ?     Campground         Park/Picnic area (note different then standard ';' * )
- * <     Motorcycle         Advisory 
+ * <     Motorcycle         Advisory
  * =     Railroad Engine
  * >     CAR (SSID * -9)    Numbered Car
- * 
+ *
  * @     HURRICANE or tropical storm Hurricane
  * A     Aid Station        Numbered Box
  * B     BBS                Blowing Snow
@@ -141,7 +141,7 @@
  * X     HELO (SSID-6)      Pharmacy Rx
  * Y     YACHT (sail SSID-5)
  * Z     WinAPRS
- * 
+ *
  * [     RUNNER             Wall Cloud
  * \     TRIANGLE (DF)
  * ]     PBBS
@@ -159,12 +159,12 @@
  * i     IOTA (islands on the air)
  * j     JEEP (SSID-12)     Workzone (Steam Shovel)
  * k     TRUCK (SSID-14)
- * l     Area Locations     Area Locations (box,circle,line,triangle) 
+ * l     Area Locations     Area Locations (box,circle,line,triangle)
  * m     Mic-Repeater       MILEPOST (box displays 2 letters )
  * n     Node               Numbered Triangle
  * o     EOC                small circle
  * p     Rover Puppy        PARTLY CLOUDY
- * q     GRID SQUARE 
+ * q     GRID SQUARE
  * r     ANTENNA            Restrooms
  * s     SHIP (pwr boat SSID-8)  Numbered Ship
  * t     Truck Stop         TORNADO
@@ -173,22 +173,22 @@
  * w     Water Station      FLOODING
  * x     xAPRS (Unix)
  * y     YAGI @ QTH
- * z 
+ * z
  * {                        FOG
  * |     reserved (Stream Switch)
- * }     diamond 
+ * }     diamond
  * ~     reserved (Stream Switch)
- * 
+ *
  */
- 
+
  /* Power, Height, Gain, Dir (direction) codes (PHG)
-  *   DIGITS   0   1   2    3    4    5    6     7     8     9  Units       
+  *   DIGITS   0   1   2    3    4    5    6     7     8     9  Units
   *   -------------------------------------------------------------------
-  *   POWER    0,  1,  4,   9,  16,  25,  36,   49,   64,   81  watts  
-  *   HEIGHT  10, 20, 40,  80, 160, 320, 640, 1280, 2560, 5120  feet   
+  *   POWER    0,  1,  4,   9,  16,  25,  36,   49,   64,   81  watts
+  *   HEIGHT  10, 20, 40,  80, 160, 320, 640, 1280, 2560, 5120  feet
   *   GAIN     0,  1,  2,   3,   4,   5,   6,    7,    8,    9  dB
-  *   DIR   omni, 45, 90, 135, 180, 225, 270,  315,  360,    .  deg   
-  */  
+  *   DIR   omni, 45, 90, 135, 180, 225, 270,  315,  360,    .  deg
+  */
 
 #include "asterisk.h"
 
@@ -303,7 +303,7 @@ enum aprs_sender_type {
 	APRSTT
 };
 
-/*!		
+/*!
  * \brief Structure to track APRS and APRStt sender threads.
  */
 struct aprs_sender_info {
@@ -321,16 +321,16 @@ AST_LIST_HEAD_NOLOCK_STATIC(aprs_sender_list, aprs_sender_info);
 
 
 /*!
- * \brief Get system monotonic 
+ * \brief Get system monotonic
  * This returns the CLOCK_MONOTONIC time
  * \retval		Monotonic seconds.
  */
 static time_t time_monotonic(void)
 {
 	struct timespec ts;
-	
+
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	
+
 	return ts.tv_sec;
 }
 
@@ -452,14 +452,14 @@ static int getserialline(int fd, char *str, int max)
 		str[i] = c;
 	}
 	str[i] = 0;
-	
+
 	return i;
 }
 
 /*!
  * \brief APRS connection thread.
  * This thread opens and maintains a TCP/IP connection to the APRS-IS server.
- * It logs into the server using the call sign and password specified 
+ * It logs into the server using the call sign and password specified
  * in the configuration.
  *
  * Data sent from the APRS-IS server is read and discarded.
@@ -477,7 +477,7 @@ static void *aprs_connection_thread(void *data)
 	struct ast_sockaddr addr = { {0,} };
 	struct pollfd fds[1];
 	int res;
-	
+
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		pthread_exit(NULL);
@@ -503,7 +503,7 @@ static void *aprs_connection_thread(void *data)
 	}
 	ast_config_destroy(cfg);
 	cfg = NULL;
-	
+
 	while (run_forever) {
 		ast_mutex_lock(&aprs_socket_lock);
 		/* See the socket is open.  Close it so that it can be reopened. */
@@ -519,7 +519,7 @@ static void *aprs_connection_thread(void *data)
 			sleep(1);
 			continue;
 		}
-		
+
 		if (ast_sockaddr_resolve_first_af(&addr, server, PARSE_PORT_IGNORE, AST_AF_INET)) {
 			ast_log(LOG_WARNING, "Server %s cannot be found!\n", server);
 			ast_mutex_unlock(&aprs_socket_lock);
@@ -528,7 +528,7 @@ static void *aprs_connection_thread(void *data)
 			continue;
 		}
 		ast_sockaddr_set_port(&addr, atoi(port));
-		
+
 		if (ast_connect(sockfd, &addr) < 0) {
 			ast_log(LOG_WARNING, "Cannot connect to server %s. Error: %s\n", server, strerror(errno));
 			ast_mutex_unlock(&aprs_socket_lock);
@@ -539,7 +539,7 @@ static void *aprs_connection_thread(void *data)
 
 		/* Log into the APRS-IS server */
 		snprintf(buf, sizeof(buf), "user %s pass %s vers " APRS_IS_VERSION "\n", call, password);
-		
+
 		if (send(sockfd, buf, strlen(buf), 0) < 0) {
 			ast_log(LOG_WARNING, "Can not send sign on to server: %s\n", strerror(errno));
 			ast_mutex_unlock(&aprs_socket_lock);
@@ -547,11 +547,11 @@ static void *aprs_connection_thread(void *data)
 		}
 		ast_debug(1, "Sent packet(login): %s", buf);
 		ast_mutex_unlock(&aprs_socket_lock);
-		
+
 		memset(&fds, 0, sizeof(fds));
 		fds[0].fd = sockfd;
 		fds[0].events = POLLIN;
-		
+
 		/* Consume the received data from the APRS-IS server.
 		 * We do not use the returned information at this time.
 		 */
@@ -574,10 +574,10 @@ static void *aprs_connection_thread(void *data)
 			}
 		 }
 	}
-	
+
 	close(sockfd);
 	sockfd = -1;
-	
+
 	ast_debug(2, "%s has exited\n", __FUNCTION__);
 	return NULL;
 }
@@ -609,7 +609,7 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 
 	call = NULL;
 	comment = NULL;
-	
+
 	/* Load the configuration settings for the section requested */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
@@ -665,10 +665,10 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 	}
 	ast_config_destroy(cfg);
 	cfg = NULL;
-	
+
 	/* Remap '?' to ';' due to Asterisk config limitation on using ';' (; = portable tent) */
 	if (icon == '?') {
-		icon = ';';	
+		icon = ';';
 	}
 
 	/* We must have a callsign to report information */
@@ -677,8 +677,8 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 		return -1;
 	}
 
-    /* Setup the server call sign 
-	 * If the SID is a single character, append 'S' 
+    /* Setup the server call sign
+	 * If the SID is a single character, append 'S'
 	 * If there is no SID, append '-VS'
 	 */
 	ast_copy_string(servercall, call, sizeof(servercall));
@@ -690,14 +690,14 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 	} else {
 		strcat(servercall, "-VS");
 	}
-	
+
 	/* Reduce the precision of latitude and longitude
 	 *
 	 * Latitude is expressed as a fixed 8-character field, in degrees and decimal
-	 * minutes (to two decimal places), followed by the letter N for north or 
+	 * minutes (to two decimal places), followed by the letter N for north or
 	 * S for south.
 	 * Longitude is expressed as a fixed 9-character field, in degrees and decimal
-	 * minutes (to two decimal places), followed by the letter E for east or 
+	 * minutes (to two decimal places), followed by the letter E for east or
 	 * W for west.
 	 */
 	cp = strchr(lat, '.');
@@ -710,7 +710,7 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 		*(cp + 3) = lon[strlen(lon) - 1];
 		*(cp + 4) = 0;
 	}
-	
+
 	/* Setup optional elevation */
 	elev_f = 0;
 	sscanf(elev, "%f", &elev_f);
@@ -724,7 +724,7 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 			call, servercall, lat, icon_table, lon, icon, power, height, gain, dir, elev_str, comment);
 
 	ast_mutex_lock(&aprs_socket_lock);
-	
+
 	if (sockfd == -1) {
 		ast_log(LOG_WARNING, "Attempt to send APRS data with no connection open!\n");
 		ast_mutex_unlock(&aprs_socket_lock);
@@ -735,10 +735,10 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 		ast_mutex_unlock(&aprs_socket_lock);
 		return -1;
 	}
-	
+
 	ast_debug(1, "Sent packet(%s): %s", ctg, buf);
 	ast_mutex_unlock(&aprs_socket_lock);
-	
+
 	return 0;
 }
 
@@ -771,7 +771,7 @@ static int report_aprstt(const char *ctg, const char *lat, const char *lon, cons
 
 	call = NULL;
 	comment = NULL;
-	
+
 	/* Load the configuration settings for the section requested */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
@@ -804,14 +804,14 @@ static int report_aprstt(const char *ctg, const char *lat, const char *lon, cons
 	if (cp) {
 		*cp = 0;
 	}
-	
+
 	/* Reduce the precision of latitude and longitude
 	 *
 	 * Latitude is expressed as a fixed 8-character field, in degrees and decimal
-	 * minutes (to two decimal places), followed by the letter N for north or 
+	 * minutes (to two decimal places), followed by the letter N for north or
 	 * S for south.
 	 * Longitude is expressed as a fixed 9-character field, in degrees and decimal
-	 * minutes (to two decimal places), followed by the letter E for east or 
+	 * minutes (to two decimal places), followed by the letter E for east or
 	 * W for west.
 	 */
 	cp = strchr(lat, '.');
@@ -824,31 +824,31 @@ static int report_aprstt(const char *ctg, const char *lat, const char *lon, cons
 		*(cp + 3) = lon[strlen(lon) - 1];
 		*(cp + 4) = 0;
 	}
-	
+
 	t = time(NULL);
 	tm = gmtime(&t);
-	
+
 	snprintf(buf1, sizeof(buf1), "%s-12", theircall);
 	snprintf(buf, sizeof(buf), "%s>APSTAR:;%-9s*%02d%02d%02dz%s%c%sA%s\r\n",
 			call, buf1, tm->tm_hour, tm->tm_min, tm->tm_sec, lat, overlay, lon, comment);
-	
+
 	ast_mutex_lock(&aprs_socket_lock);
-		
+
 	if (sockfd == -1) {
 		ast_log(LOG_WARNING, "Attempt to send APRS (APSTAR) data with no connection open!\n");
 		ast_mutex_unlock(&aprs_socket_lock);
 		return -1;
 	}
-	
+
 	if (send(sockfd, buf, strlen(buf), 0) < 0) {
 		ast_log(LOG_WARNING, "Can not send APRS (APSTAR) data: %s\n", strerror(errno));
 		ast_mutex_unlock(&aprs_socket_lock);
 		return -1;
 	}
-	
+
 	ast_debug(1, "Sent packet(%s): %s", ctg, buf);
 	ast_mutex_unlock(&aprs_socket_lock);
-	
+
 	return 0;
 }
 /*!
@@ -892,7 +892,7 @@ static void lon_decimal_to_DMS(float dec, char *value, int len)
  * \brief GPS device processing thread.
  * This routine continously reads and parses the serial GPS data.
  *
- * The position information is made available through the global 
+ * The position information is made available through the global
  * current_gps_position structure.
  *
  * \param data		Pointer to data (nothing passed)
@@ -944,14 +944,14 @@ static void *gps_reader(void *data)
 			goto err;
 		}
 	}
-	
+
 	/* Give the device a few milliseconds to come on-line */
 	usleep(100000);
 
 	/*! \todo we need to deal with someone unplugging the device */
-	
+
 	while (run_forever) {
-		
+
 		/* Read a line from the serial port */
 		res = getserialline(fd, buf, sizeof(buf) - 1);
 		if (res < 0) {
@@ -962,7 +962,7 @@ static void *gps_reader(void *data)
 			ast_mutex_lock(&position_update_lock);
 			current_gps_position.is_valid = 0;
 			ast_mutex_unlock(&position_update_lock);
-			/* 
+			/*
 			 * A timeout has occurred.  No data received from the GPS device.
 			 * If we don't have default position information, report the timeout.
 			 */
@@ -970,11 +970,11 @@ static void *gps_reader(void *data)
 				ast_log(LOG_WARNING, "GPS timeout!\n");
 				continue;
 			}
-			
+
 			ast_log(LOG_WARNING, "GPS timeout -- Using default (fixed location) parameters instead\n");
-			
+
 			selected_info = &general_def_position;
-			
+
 		} else {
 			now_mono = time_monotonic();
 			/* Check for no data receiption */
@@ -1003,7 +1003,7 @@ static void *gps_reader(void *data)
 				ast_log(LOG_WARNING, "GPS Invalid checksum\n");
 				continue;
 			}
-			
+
 			n = explode_string(buf, strs, 100, ',', '\"');
 			if (!n) {
 				ast_log(LOG_WARNING, "GPS Invalid data format (no data)\n");
@@ -1025,13 +1025,13 @@ static void *gps_reader(void *data)
 				}
 				continue;
 			}
-			
+
 			/* If we have been unlocked, let them know that we are locked */
 			if (gps_unlock_shown) {
 				ast_log(LOG_NOTICE, "GPS locked\n");
 				gps_unlock_shown = 0;
 			}
-			
+
 			ast_mutex_lock(&position_update_lock);
 			current_gps_position.is_valid = 1;
 			snprintf(current_gps_position.latitude, sizeof(current_gps_position.latitude) - 1, "%s%s", strs[2], strs[3]);
@@ -1040,19 +1040,19 @@ static void *gps_reader(void *data)
 			current_gps_position.last_updated = time(NULL);
 			current_gps_position.last_updated_mono = now_mono;
 			ast_mutex_unlock(&position_update_lock);
-			
+
 			selected_info = & current_gps_position;
 		}
-		
-		ast_debug(5, "Got latitude: %s, longitude: %s, elevation: %s from: %s\n", 
+
+		ast_debug(5, "Got latitude: %s, longitude: %s, elevation: %s from: %s\n",
 			selected_info->latitude, selected_info->longitude, selected_info->elevation,
 			(selected_info == &current_gps_position) ? "GPS" : "Default");
 	}
-	
+
 	if (fd != -1) {
 		close(fd);
 	}
-	
+
 err:
 	ast_debug(2, "%s has exited\n", __FUNCTION__);
 	return NULL;
@@ -1080,9 +1080,9 @@ static void *aprs_sender_thread(void *data)
 	struct ast_flags zeroflag = { 0 };
 	struct position_info this_def_position, selected_position;
 	struct aprs_sender_info *sender_entry = data;
-	
+
 	ctg = ast_strdupa(sender_entry->section);
-	
+
 	ast_debug(2, "Starting aprs sender thread: %s\n", ctg);
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
@@ -1144,14 +1144,14 @@ static void *aprs_sender_thread(void *data)
 			strcpy(this_def_position.elevation, "000.0");
 		}
 	 }
-	
+
 	memset(&selected_position, 0, sizeof(selected_position));
 	lastupdate_mono = time_monotonic();
 	my_update_secs = GPS_UPDATE_SECS;
-	
+
 	while (run_forever) {
 		now_mono = time_monotonic();
-		
+
 		ast_mutex_lock(&position_update_lock);
 		selected_position.is_valid = 0;
 		/* See if we need to send live GPS or the default */
@@ -1163,7 +1163,7 @@ static void *aprs_sender_thread(void *data)
 				selected_position.last_updated_mono = now_mono;
 		}
 		ast_mutex_unlock(&position_update_lock);
-		/* 
+		/*
 		 * See if it is time to send the position report
 		 * The last_updated time must be current so that
 		 * we know we are getting good GPS information.
@@ -1208,9 +1208,9 @@ static void *aprstt_sender_thread(void *data)
 	struct timeval tv;
 	struct timespec ts = {0};
 	struct aprs_sender_info *sender_entry = data;
-	
+
 	ctg = ast_strdupa(sender_entry->section);
-	
+
 	ast_debug(2, "Starting aprstt sender thread: %s\n", ctg);
 
 	/* Load our configuration */
@@ -1300,7 +1300,7 @@ static void *aprstt_sender_thread(void *data)
 	mfp = NULL;
 	if (!strcmp(sender_entry->section, "general")) {
 		strcpy(fname, TT_COMMON);
-	} else { 
+	} else {
 		snprintf(fname, sizeof(fname) - 1, TT_SUB_COMMON, sender_entry->section);
 	}
 	if (stat(fname, &mystat) == -1) {
@@ -1357,11 +1357,11 @@ static void *aprstt_sender_thread(void *data)
 		ast_log(LOG_ERROR, "Cannot map aprtss common file %s: %s\n", fname, strerror(errno));
 		pthread_exit(NULL);
 	}
-	
+
 	while (run_forever) {
 		/* Wait for the aprs_sendtt function to give us data or time out after 500ms */
 		ast_mutex_lock(&sender_entry->lock);
-		
+
 		tv = ast_tvadd(ast_tvnow(), ast_samp2tv(500,1000));	/* Setup the time value for 500ms from now */
 		ts.tv_sec = tv.tv_sec;
 		ts.tv_nsec = tv.tv_usec * 1000;
@@ -1373,7 +1373,7 @@ static void *aprstt_sender_thread(void *data)
 		if (ast_strlen_zero(sender_entry->their_call)) {
 			continue;
 		}
-		
+
 		ast_copy_string(theircall, sender_entry->their_call, sizeof(theircall));
 		sender_entry->their_call[0] = '\0';
 		overlay = sender_entry->overlay;
@@ -1382,9 +1382,9 @@ static void *aprstt_sender_thread(void *data)
 		if (overlay < '0') {
 			overlay = APRSTT_DEFAULT_OVERLAY;
 		}
-		
+
 		now = time(NULL);
-		
+
 		/* if we already have it, just update time */
 		for (ttslot = 0; ttslot < ttlist; ttslot++) {
 			if (!strcmp(theircall, ttentries[ttslot].call)) {
@@ -1393,7 +1393,7 @@ static void *aprstt_sender_thread(void *data)
 		}
 		if (ttslot < ttlist) {
 			ttentries[ttslot].last_updated = now;
-		} else {				
+		} else {
 			/* otherwise, look for empty or timed-out */
 			for (ttslot = 0; ttslot < ttlist; ttslot++) {
 				/* if empty */
@@ -1415,7 +1415,7 @@ static void *aprstt_sender_thread(void *data)
 		}
 		/* Sync the entries to the file */
 		msync(ttentries, mystat.st_size, MS_SYNC);
-		
+
 		/* Center tt reports around the origin */
 		if (ttsplit) {
 			myoffset = ttoffset * ((ttslot >> 1) + 1);
@@ -1425,7 +1425,7 @@ static void *aprstt_sender_thread(void *data)
 		} else {
 			myoffset = ttoffset * (ttslot + 1);
 		}
-						
+
 		ast_mutex_lock(&position_update_lock);
 		selected_position.is_valid = 0;
 		/* See if we need to send live GPS or the default */
@@ -1468,7 +1468,7 @@ static void *aprstt_sender_thread(void *data)
 	if (mfp) {
 		fclose(mfp);
 	}
-	
+
 	ast_debug(2, "%s has exited\n", __FUNCTION__);
 	return NULL;
 }
@@ -1496,7 +1496,7 @@ static void *aprstt_sender_thread(void *data)
 static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
 {
 	struct position_info selected_position;
-	
+
 	ast_mutex_lock(&position_update_lock);
 	selected_position.is_valid = 0;
 	/* See if we need to send live GPS or the default */
@@ -1507,12 +1507,12 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
 			selected_position.last_updated = time(NULL);
 	}
 	ast_mutex_unlock(&position_update_lock);
-	/* 
+	/*
 	 * Format the response if we have a valid position
 	 */
 	if (selected_position.is_valid ) {
-		snprintf(buf, len, "%llu %llu %s %s %s", (unsigned long long) selected_position.last_updated_mono, 
-			(unsigned long long) selected_position.last_updated, selected_position.latitude, 
+		snprintf(buf, len, "%llu %llu %s %s %s", (unsigned long long) selected_position.last_updated_mono,
+			(unsigned long long) selected_position.last_updated, selected_position.latitude,
 			selected_position.longitude, selected_position.elevation);
 		return 0;
 	}
@@ -1539,12 +1539,12 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
 {
 	char *parse;
 	struct aprs_sender_info *sender_entry;
-	
+
 	AST_DECLARE_APP_ARGS(args,
 		AST_APP_ARG(section);
 		AST_APP_ARG(overlay);
 	);
-	
+
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_ERROR, "APRS_SENDTT requires arguments\n");
 		return -1;
@@ -1577,11 +1577,11 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
 	}
 
 	ast_mutex_lock(&sender_entry->lock);
-	
+
 	sender_entry->overlay = args.overlay[0];
 	ast_copy_string(sender_entry->their_call, value, sizeof(sender_entry->their_call));
 	ast_cond_signal(&sender_entry->condition);	/* Signal the thread to start working */
-	
+
 	ast_mutex_unlock(&sender_entry->lock);
 
 	return 0;
@@ -1628,21 +1628,21 @@ static char *handle_cli_status(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	}
 
 	ast_mutex_lock(&position_update_lock);
-	ast_cli(a->fd, "GPS: %s, Signal: %s \n", 
+	ast_cli(a->fd, "GPS: %s, Signal: %s \n",
 		ast_strlen_zero(comport) ? "Disconnected" : "Connected",
 		current_gps_position.is_valid ? "Locked" : "Unlocked");
 	if (current_gps_position.is_valid) {
-		ast_cli(a->fd, "Position: %s %s Elevation: %s\n", 
+		ast_cli(a->fd, "Position: %s %s Elevation: %s\n",
 			current_gps_position.latitude, current_gps_position.longitude,
 			current_gps_position.elevation);
 	}
 	if (general_def_position.is_valid) {
-		ast_cli(a->fd, "Default Position: %s %s Elevation: %s\n", 
+		ast_cli(a->fd, "Default Position: %s %s Elevation: %s\n",
 			general_def_position.latitude, general_def_position.longitude,
 			general_def_position.elevation);
 	}
 	ast_mutex_unlock(&position_update_lock);
-	
+
 	return CLI_SUCCESS;
 }
 
@@ -1664,13 +1664,13 @@ static int unload_module(void)
 	}
 	ast_debug(2, "Waiting for aprs_connection_thread to exit\n");
 	pthread_join(aprs_connection_thread_id, NULL);
-	
+
 	if (comport) {
 		ast_debug(2, "Waiting for gps_reader_thread to exit\n");
 		pthread_join(gps_reader_thread_id, NULL);
 		ast_free(comport);
 	}
-	
+
 	/* Shutdown and clean up sender threads */
 	while ((sender_entry = AST_LIST_REMOVE_HEAD(&aprs_sender_list, list))) {
 		ast_debug(2, "Waiting for %s sender thread %s to exit\n", sender_entry->type == APRS ? "aprs" : "aprstt", sender_entry->section);
@@ -1681,21 +1681,21 @@ static int unload_module(void)
 	}
 
 	ast_debug(1, "Threads have exited\n");
-	
+
 	if (server) {
 		ast_free(server);
 	}
 	if (port) {
 		ast_free(port);
 	}
-	
+
 	/* Unregister our functions */
 	res = ast_custom_function_unregister(&gps_read_function);
 	res |= ast_custom_function_unregister(&aprs_sendtt_function);
-	
+
 	/* Unregister cli */
 	ast_cli_unregister(&cli_status);
-	
+
 	return res;
 }
 
@@ -1777,8 +1777,8 @@ static int load_module(void)
 	} else {
 		baudrate = GPS_DEFAULT_BAUDRATE;
 	}
-	
-	/* 
+
+	/*
 	 * Setup the general default position.
 	 * This is used when the GPS device is not available.
 	 */
@@ -1823,7 +1823,7 @@ static int load_module(void)
 		ast_log(LOG_ERROR, "Cannot create APRS sender thread %s", sender_entry->section);
 		return -1;
 	}
-	
+
 	/* Create the aprs tt sender thread for 'general' */
 	sender_entry = ast_calloc(1, sizeof(*sender_entry));
 	if (!sender_entry) {
@@ -1838,9 +1838,9 @@ static int load_module(void)
 		ast_log(LOG_ERROR, "Cannot create APRStt sender thread %s", sender_entry->section);
 		return -1;
 	}
-	/* 
-	 * See if we have sections other than general. 
-	 * If present, create aprs processing threads for those sections 
+	/*
+	 * See if we have sections other than general.
+	 * If present, create aprs processing threads for those sections
 	 */
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL) {
@@ -1860,7 +1860,7 @@ static int load_module(void)
 			ast_log(LOG_ERROR, "Cannot create APRS sender thread %s", sender_entry->section);
 			return -1;
 		}
-		
+
 		/* Create the aprs tt sender thread for this category */
 		sender_entry = ast_calloc(1, sizeof(*sender_entry));
 		if (!sender_entry) {
@@ -1878,14 +1878,14 @@ static int load_module(void)
 	}
 	ast_config_destroy(cfg);
 	cfg = NULL;
-	
+
 	/* Register our functions */
 	res = ast_custom_function_register(&gps_read_function);
 	res |= ast_custom_function_register(&aprs_sendtt_function);
-	
+
 	/* Register cli */
 	ast_cli_register(&cli_status);
-	
+
 	return res;
 }
 
