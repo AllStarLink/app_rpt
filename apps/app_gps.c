@@ -1822,7 +1822,9 @@ static int load_module(void)
 	strcpy(sender_entry->section, "general");
 	ast_mutex_init(&sender_entry->lock);
 	ast_cond_init(&sender_entry->condition, 0);
+	AST_RWLIST_RDLOCK(&aprs_sender_list);
 	AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
+	AST_RWLIST_UNLOCK(&aprs_sender_list);
 	if (ast_pthread_create(&sender_entry->thread_id, NULL, aprs_sender_thread, sender_entry)) {
 		ast_log(LOG_ERROR, "Cannot create APRS sender thread %s", sender_entry->section);
 		return -1;
@@ -1837,7 +1839,9 @@ static int load_module(void)
 	strcpy(sender_entry->section, "general");
 	ast_mutex_init(&sender_entry->lock);
 	ast_cond_init(&sender_entry->condition, 0);
+	AST_RWLIST_RDLOCK(&aprs_sender_list);
 	AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
+	AST_RWLIST_UNLOCK(&aprs_sender_list);
 	if (ast_pthread_create(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry)) {
 		ast_log(LOG_ERROR, "Cannot create APRStt sender thread %s", sender_entry->section);
 		return -1;
@@ -1859,7 +1863,9 @@ static int load_module(void)
 		ast_copy_string(sender_entry->section, ctg, sizeof(sender_entry->section));
 		ast_mutex_init(&sender_entry->lock);
 		ast_cond_init(&sender_entry->condition, 0);
+		AST_RWLIST_RDLOCK(&aprs_sender_list);
 		AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
+		AST_RWLIST_UNLOCK(&aprs_sender_list);
 		if (ast_pthread_create(&sender_entry->thread_id, NULL, aprs_sender_thread, sender_entry)) {
 			ast_log(LOG_ERROR, "Cannot create APRS sender thread %s", sender_entry->section);
 			return -1;
@@ -1874,7 +1880,9 @@ static int load_module(void)
 		ast_copy_string(sender_entry->section, ctg, sizeof(sender_entry));
 		ast_mutex_init(&sender_entry->lock);
 		ast_cond_init(&sender_entry->condition, 0);
+		AST_RWLIST_RDLOCK(&aprs_sender_list);
 		AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
+		AST_RWLIST_UNLOCK(&aprs_sender_list);
 		if (ast_pthread_create_detached(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry->section)) {
 			ast_log(LOG_ERROR, "Cannot create APRStt sender thread %s", sender_entry->section);
 			return -1;
