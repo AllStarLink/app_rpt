@@ -1057,7 +1057,9 @@ void *rpt_tele_thread(void *this)
 	/* make a conference for the tx */
 	/* If the telemetry is only intended for a local audience, only connect the ID audio to the local tx conference so linked systems can't hear it */
 	/* first put the channel on the conference in announce mode */
-	if (rpt_conf_add(mychannel, myrpt, mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE || mytele->mode == STATS_GPS_LEGACY ? RPT_CONF : RPT_TELECONF, RPT_CONF_CONFANN)) {
+	if (rpt_conf_add(mychannel, myrpt, mytele->mode == MDC1200 || mytele->mode == PAGE ||
+			mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE || 
+			mytele->mode == STATS_GPS_LEGACY ? RPT_CONF : RPT_TELECONF, RPT_CONF_CONFANN)) {
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
@@ -1139,9 +1141,9 @@ void *rpt_tele_thread(void *this)
 			res = -1;
 			if (mytele->submode.p) {
 				myrpt->noduck = 1;
-				res = ast_playtones_start(myrpt->txchannel, 0, (char *) mytele->submode.p, 0);
-				while (ast_channel_generatordata(myrpt->txchannel)) {
-					if (ast_safe_sleep(myrpt->txchannel, 50)) {
+				res = ast_playtones_start(mychannel, 0, (char *) mytele->submode.p, 0);
+				while (ast_channel_generatordata(mychannel)) {
+					if (ast_safe_sleep(mychannel, 50)) {
 						res = -1;
 						break;
 					}
@@ -1168,10 +1170,10 @@ void *rpt_tele_thread(void *this)
 					break;
 				}
 			}
-			res = mdc1200gen_start(myrpt->txchannel, mdcp->type, mdcp->UnitID, mdcp->DestID, mdcp->subcode);
+			res = mdc1200gen_start(mychannel, mdcp->type, mdcp->UnitID, mdcp->DestID, mdcp->subcode);
 			ast_free(mdcp);
-			while (ast_channel_generatordata(myrpt->txchannel)) {
-				if (ast_safe_sleep(myrpt->txchannel, 50)) {
+			while (ast_channel_generatordata(mychannel)) {
+				if (ast_safe_sleep(mychannel, 50)) {
 					res = -1;
 					break;
 				}
