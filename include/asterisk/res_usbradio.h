@@ -81,7 +81,7 @@
  *	adjustment factor of 750 or 870.
  *
  *	This adjustment factor is used for both microphone and
- *	speaker calcuations.
+ *	speaker calculations.
  */
 #define C119B_ADJUSTMENT	1000
 
@@ -146,7 +146,7 @@
  *		FreeBSD works decently with blocks of 256 or 512 bytes,
  *		leaving the number unspecified.
  *		Note that this only refers to the device buffer size,
- *		this module will then try to keep the lenght of audio
+ *		this module will then try to keep the length of audio
  *		buffered within small constraints.
  *
  *  QUEUE_SIZE	The max number of blocks actually allowed in the device

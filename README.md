@@ -62,7 +62,7 @@ If you want to manually install app_rpt et al., here is how:
 
 ### Compiling
 
-First, detection of the ALSA library needs to be readded to the build system, by applying the following patch: https://github.com/InterLinked1/phreakscript/blob/master/patches/alsa.diff
+First, detection of the ALSA library needs to be re-added to the build system, by applying the following patch: https://github.com/InterLinked1/phreakscript/blob/master/patches/alsa.diff
 
 Then, add this near the bottom of `apps/Makefile`:
 

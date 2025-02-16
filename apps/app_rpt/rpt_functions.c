@@ -164,7 +164,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 
 		if (strlen(digitbuf) < 1)
 			break;
-		/* if doesnt allow link cmd, or no links active, return */
+		/* if doesn't allow link cmd, or no links active, return */
 		if (myrpt->links.next == &myrpt->links)
 			return DC_COMPLETE;
 		if ((command_source != SOURCE_RPT) &&
@@ -627,10 +627,10 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 		return DC_COMPLETE;
 
 	case 4:					/* set tx PL tone */
-		/* cant set tx tone on RBI (rx tone does both) */
+		/* can't set tx tone on RBI (rx tone does both) */
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_RBI))
 			return DC_ERROR;
-		/* cant set tx tone on ft100 (rx tone does both) */
+		/* can't set tx tone on ft100 (rx tone does both) */
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100))
 			return DC_ERROR;
 		/*  eventually for the ic706 instead of just throwing the exception
@@ -718,7 +718,7 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 			return DC_ERROR;
 		return DC_COMPLETEQUIET;
 	case 99:
-		/* cant log in when logged in */
+		/* can't log in when logged in */
 		if (myrpt->loginlevel[0])
 			return DC_ERROR;
 		*myrpt->loginuser = 0;

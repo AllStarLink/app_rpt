@@ -890,7 +890,7 @@ static void lon_decimal_to_DMS(float dec, char *value, int len)
 
 /*!
  * \brief GPS device processing thread.
- * This routine continously reads and parses the serial GPS data.
+ * This routine continuously reads and parses the serial GPS data.
  *
  * The position information is made available through the global
  * current_gps_position structure.
@@ -977,7 +977,7 @@ static void *gps_reader(void *data)
 
 		} else {
 			now_mono = time_monotonic();
-			/* Check for no data receiption */
+			/* Check for no data reception */
 			if (current_gps_position.last_updated_mono + GPS_VALID_SECS < now_mono) {
 				ast_mutex_lock(&position_update_lock);
 				current_gps_position.is_valid = 0;
