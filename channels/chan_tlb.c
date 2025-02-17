@@ -493,9 +493,9 @@ static void strupr(char* restrict str)
  * \param limit		Maximum number of substrings to process.
  */
 
-static int finddelim(char *str, char *strp[], int limit)
+static int finddelim(char *str, char *strp[], size_t limit)
 {
-	int i, l, inquo;
+	int i, inquo;
 
 	inquo = 0;
 	i = 0;
@@ -504,7 +504,7 @@ static int finddelim(char *str, char *strp[], int limit)
 		strp[0] = 0;
 		return 0;
 	}
-	for (l = 0; *str && (l < limit); str++) {
+	for (; *str && (i < (limit - 1)); str++) {
 		if (*str == QUOTECHR) {
 			if (inquo) {
 				*str = 0;
@@ -516,7 +516,6 @@ static int finddelim(char *str, char *strp[], int limit)
 		}
 		if ((*str == DELIMCHR) && (!inquo)) {
 			*str = 0;
-			l++;
 			strp[i++] = str + 1;
 		}
 	}
@@ -846,7 +845,7 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	ast_config_destroy(cfg);
 	strupr(sval);
 	strs[3] = NULL;
-	n = finddelim(sval, strs, 10);
+	n = finddelim(sval, strs, ARRAY_LEN(strs));
 	if (n < 3) {
 		ast_verb(3, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
 		return -1;
@@ -1178,8 +1177,7 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 	*/
 	sval = ast_strdupa(val);
 	strupr(sval);
-	num_substrings = finddelim(sval, strs, 10);
-	
+	num_substrings = finddelim(sval, strs, ARRAY_LEN(strs));
 	if (num_substrings < 3) {
 		ast_log(LOG_WARNING, "TLB node configuration is not in the correct format - %s.\n", sval);
 		ast_config_destroy(cfg);
@@ -1763,7 +1761,7 @@ static int TLB_do_nodedump(int fd, int argc, const char *const *argv)
 		}
 		s = ast_strdupa(v->value);
 		strupr(s);
-		n = finddelim(s, strs, 10);
+		n = finddelim(s, strs, ARRAY_LEN(strs));
 		if (n < 3) {
 			continue;
 		}
@@ -1813,7 +1811,7 @@ static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 		}
 		sval = ast_strdupa(val);
 		strupr(sval);
-		n = finddelim(sval, strs, 10);
+		n = finddelim(sval, strs, ARRAY_LEN(strs));
 		if (n < 3) {
 			ast_cli(fd, "Error: Entry for %s not found!\n", s);
 			ast_config_destroy(cfg);
@@ -1826,7 +1824,7 @@ static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 			}
 			sval = ast_strdupa(v->value);
 			strupr(sval);
-			n = finddelim(sval, strs, 10);
+			n = finddelim(sval, strs, ARRAY_LEN(strs));
 			if (n < 3) {
 				continue;
 			}
@@ -1983,7 +1981,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 				}
 				sval = ast_strdupa(v->value);
 				strupr(sval);
-				n = finddelim(sval, strs, 10);
+				n = finddelim(sval, strs, ARRAY_LEN(strs));
 				if (n < 3) {
 					continue;
 				}
@@ -2430,11 +2428,11 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = (char *) ast_variable_retrieve(cfg, ctg, "deny");
 	if (val) {
-		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, TLB_MAX_CALL_LIST);
+		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, ARRAY_LEN(instp->denylist));
 	}
 	val = (char *) ast_variable_retrieve(cfg, ctg, "permit");
 	if (val) {
-		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, TLB_MAX_CALL_LIST);
+		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, ARRAY_LEN(instp->permitlist));
 	}
 	instp->pref_rxcodec = PREF_RXCODEC;
 	instp->pref_txcodec = PREF_TXCODEC;
