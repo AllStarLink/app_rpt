@@ -16,11 +16,11 @@
 
 ;jbresyncthreshold = 1000   ; Jump in the frame timestamps over which the jitterbuffer is
 							; resynchronized. Useful to improve the quality of the voice, with
-							; big jumps in/broken timestamps, usualy sent from exotic devices
+							; big jumps in/broken timestamps, usually sent from exotic devices
 							; and programs. Defaults to 1000.
 
 ;jbimpl = fixed             ; Jitterbuffer implementation, used on the receiving side of an simpleusb
-							; channel. Two implementations are currenlty available - "fixed"
+							; channel. Two implementations are currently available - "fixed"
 							; (with size always equals to jbmax-size) and "adaptive" (with
 							; variable size, actually the new jb of IAX2). Defaults to fixed.
 
@@ -70,7 +70,7 @@
 							; intervals following the release of PTT. Use this ONLY on simplex
 							; nodes, and leave commented out for repeaters or other full duplex nodes.
 
-;txoffdelay = 0             ; Ignore the reciever for a specified number of 20 millisecond
+;txoffdelay = 0             ; Ignore the receiver for a specified number of 20 millisecond
 							; intervals after the transmitter unkeys.
 							; This is useful when setting up a half-duplex link with an existing
 							; repeater, where you need to ignore the repeater's hangtime.

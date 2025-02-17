@@ -220,3 +220,12 @@ time_t rpt_mktime(struct ast_tm *tm, const char *zone)
 	now = ast_mktime(tm, zone);
 	return now.tv_sec;
 }
+
+time_t rpt_time_monotonic(void)
+{
+	struct timespec ts;
+	
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	
+	return ts.tv_sec;
+}

@@ -151,8 +151,8 @@
  *          Subcode '810D' is Call Alert (like Maxtrac 'CA')
  *  61 - Send Message to USB to control GPIO pins (cop,61,GPIO1=0[,GPIO4=1].....)
  *  62 - Send Message to USB to control GPIO pins, quietly (cop,62,GPIO1=0[,GPIO4=1].....)
- *  63 - Send pre-configred APRSTT notification (cop,63,CALL[,OVERLAYCHR])
- *  64 - Send pre-configred APRSTT notification, quietly (cop,64,CALL[,OVERLAYCHR])
+ *  63 - Send pre-configred APRStt notification (cop,63,CALL[,OVERLAYCHR])
+ *  64 - Send pre-configred APRStt notification, quietly (cop,64,CALL[,OVERLAYCHR])
  *  65 - Send POCSAG page (equipped channel types only)
  *
  * ilink cmds:
@@ -226,7 +226,7 @@
  * "events" subsystem:
  *
  * in the "events" section of the rpt.conf file (if any), the user may
- * specify actions to take place when ceratin events occur.
+ * specify actions to take place when certain events occur.
  *
  * It is implemented as acripting, based heavily upon expression evaluation built
  * into Asterisk. Each line of the section contains an action, a type, and variable info.
@@ -247,11 +247,11 @@
  * if type is 'E' (for "evaluate statement" (or perhaps "equals") ) then the var-spec is a full statement containing
  *    expressions, variables and operators per the expression evaluation built into Asterisk.
  * if type is 'T' (for "going True"), var-spec is a single (already-defined) variable name, and the result will be 1
- *    if the varible has just gone from 0 to 1.
+ *    if the variable has just gone from 0 to 1.
  * if type is 'F' (for "going False"), var-spec is a single (already-defined) variable name, and the result will be 1
- *    if the varible has just gone from 1 to 0.
+ *    if the variable has just gone from 1 to 0.
  * if type is 'N' (for "no change"), var-spec is a single (already-defined) variable name, and the result will be 1
- *    if the varible has not changed.
+ *    if the variable has not changed.
  *
  * "RANGER" mode configuration:
  * in the node stanza in rpt.conf ONLY the following need be specified for a RANGER node:
@@ -265,7 +265,7 @@
  * litzcmd=*32008
  *
  * This example given would be for node "90101" (note ALL RANGER nodes MUST begin with '9'.
- * litzcmd specifes the function that LiTZ inititiates to cause a connection
+ * litzcmd specifies the function that LiTZ inititiates to cause a connection
  * "rangerfunctions" in this example, is a function stanza that AT LEAST has the *3 command
  * to connect to another node
  *
@@ -379,7 +379,7 @@
 					</option>
 					<option name="D">
 						<para>Dumb Phone Control mode. This allows a regular phone user to have full control and audio access to the radio system. In this
-						mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not generally recomended in
+						mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not generally recommended in
 						this mode), the 'dphone_functions' parameter must be specified for the node in 'rpt.conf'. Otherwise no DTMF control will be
 						available to the phone user.</para>
 					</option>
@@ -536,7 +536,7 @@ static void tone_detect_init(tone_detect_state_t *s, int freq, int duration, int
 
 	periods_in_block = s->block_size * freq / TONE_SAMPLE_RATE;
 
-	/* Make sure we will have at least 5 periods at target frequency for analisys.
+	/* Make sure we will have at least 5 periods at target frequency for analysis.
 	   This may make block larger than expected packet and will make squelching impossible
 	   but at least we will be detecting the tone */
 	if (periods_in_block < 5)
@@ -809,7 +809,7 @@ void rpt_event_process(struct rpt *myrpt)
 					if (var1 && (varp == var1p))
 						cmd = (char *) v->name;
 					break;
-				case 'I':		/* if didnt exist (initial state) */
+				case 'I':		/* if didn't exist (initial state) */
 					if (!var1)
 						cmd = (char *) v->name;
 					break;
@@ -835,7 +835,7 @@ void rpt_event_process(struct rpt *myrpt)
 		if (!cmd) {
 			continue;
 		}
-		if (action == 'F') {	/* excecute a function */
+		if (action == 'F') {	/* execute a function */
 			rpt_mutex_lock(&myrpt->lock);
 			if ((MAXMACRO - strlen(myrpt->macrobuf)) >= strlen(cmd)) {
 				ast_verb(3, "Event on node %s doing macro %s for condition %s\n", myrpt->name, cmd, v->value);
@@ -845,7 +845,7 @@ void rpt_event_process(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Could not execute event %s for %s: Macro buffer overflow\n", cmd, argv[1]);
 			}
 			rpt_mutex_unlock(&myrpt->lock);
-		} else if (action == 'C') {	/* excecute a command */
+		} else if (action == 'C') {	/* execute a command */
 			/* make a local copy of the value of this entry */
 			myval = ast_strdupa(cmd);
 			/* separate out specification into comma-delimited fields */
@@ -887,7 +887,7 @@ void rpt_event_process(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Could not execute event %s for %s: Command buffer in use\n", cmd, argv[1]);
 			}
 			rpt_mutex_unlock(&myrpt->lock);
-		} else if (action == 'S') {	/* excecute a shell command */
+		} else if (action == 'S') {	/* execute a shell command */
 			char *cp;
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
@@ -1545,28 +1545,37 @@ static inline void collect_function_digits_post(struct rpt *myrpt, int res, cons
 	}
 }
 
+/*!
+ * \brief Send APRStt (Touchtone) to app_gps for processing.
+ * This routine takes the received APRStt touchtone digits
+ * and translates them to a callsign.  The results are
+ * sent to app_gps using the APRS_SENDTT function for 
+ * processing and posting to the APRS-IS server.
+ *
+ * \param myrpt		pointer to repeater struct.
+ */
 static void do_aprstt(struct rpt *myrpt)
 {
 	char cmd[300] = "";
-	char overlay, aprscall[100], fname[100];
-	FILE *fp;
+	char overlay, aprscall[100], func[100];
 
 	snprintf(cmd, sizeof(cmd) - 1, "A%s", myrpt->dtmfbuf);
+	/*! \todo we need to support all 4 types of APRStt 
+	 * we only support the 'A' type for call sign
+	 */
 	overlay = aprstt_xlat(cmd, aprscall);
 	if (overlay) {
-		ast_log(LOG_WARNING, "aprstt got string %s call %s overlay %c\n", cmd, aprscall, overlay);
-		if (!myrpt->p.aprstt[0])
-			ast_copy_string(fname, APRSTT_PIPE, sizeof(fname) - 1);
-		else
-			snprintf(fname, sizeof(fname) - 1, APRSTT_SUB_PIPE, myrpt->p.aprstt);
-		fp = fopen(fname, "w");
-		if (!fp) {
-			ast_log(LOG_WARNING, "Can not open APRSTT pipe %s: %s\n", fname, strerror(errno));
+		ast_debug(1, "APRStt got string %s callsign %s overlay %c\n", cmd, aprscall, overlay);
+		
+		if (!ast_custom_function_find("APRS_SENDTT")) {
+			ast_log(LOG_WARNING, "app_gps is not loaded.  APRStt failed\n");
 		} else {
-			fprintf(fp, "%s %c\n", aprscall, overlay);
-			fclose(fp);
-			rpt_telemetry(myrpt, ARB_ALPHA, (void *) aprscall);
-		}
+			snprintf(func, sizeof(func), "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt[0] ? "general" : myrpt->p.aprstt, overlay);
+			/* execute the APRS_SENDTT function in app_gps*/
+			if (!ast_func_write(NULL, func, aprscall)) {
+				rpt_telemetry(myrpt, ARB_ALPHA, (void *) aprscall);
+			}
+		} 
 	}
 }
 
@@ -1616,7 +1625,7 @@ static inline void handle_callmode_1(struct rpt *myrpt, char c)
 				rpt_telemetry(myrpt, PROC, NULL);
 				rpt_mutex_lock(&myrpt->lock);
 			}
-		} else {			/* othewise, reset timer */
+		} else {			/* otherwise, reset timer */
 			myrpt->calldigittimer = 1;
 		}
 	}
@@ -1706,7 +1715,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		strcpy(mylink->linklist, tmp + 2);
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_debug(7, "@@@@ node %s recieved node list %s from node %s\n", myrpt->name, tmp, mylink->name);
+		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, tmp, mylink->name);
 		return;
 	}
 	if (tmp[0] == 'M') {
@@ -2458,7 +2467,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 				if (!myrpt->patchquiet)
 					rpt_telemetry(myrpt, PROC, NULL);
 				return;
-			} else {			/* othewise, reset timer */
+			} else {			/* otherwise, reset timer */
 				myrpt->calldigittimer = 1;
 			}
 		}
@@ -2869,7 +2878,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->mustid = %d\n", myrpt->mustid);
 	ast_debug(2, "myrpt->tounkeyed = %d\n", myrpt->tounkeyed);
 	ast_debug(2, "myrpt->tonotify = %d\n", myrpt->tonotify);
-	ast_debug(2, "myrpt->retxtimer = %ld\n", myrpt->retxtimer);
+	ast_debug(2, "myrpt->retxtimer = %d\n", myrpt->retxtimer);
 	ast_debug(2, "myrpt->totimer = %d\n", myrpt->totimer);
 	ast_debug(2, "myrpt->tailtimer = %d\n", myrpt->tailtimer);
 	ast_debug(2, "myrpt->tailevent = %d\n", myrpt->tailevent);
@@ -2894,8 +2903,8 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->outbound %d\n", zl->outbound);
 		ast_debug(2, "        link->disced %d\n", zl->disced);
 		ast_debug(2, "        link->killme %d\n", zl->killme);
-		ast_debug(2, "        link->disctime %ld\n", zl->disctime);
-		ast_debug(2, "        link->retrytimer %ld\n", zl->retrytimer);
+		ast_debug(2, "        link->disctime %d\n", zl->disctime);
+		ast_debug(2, "        link->retrytimer %d\n", zl->retrytimer);
 		ast_debug(2, "        link->retries = %d\n", zl->retries);
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
 		ast_debug(2, "        link->newkey = %d\n", zl->newkey);
@@ -3074,7 +3083,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			 * side should consider either side "keyed" and transmitting... but as I explain below, the lack of sending/receiving
 			 * this can actually lead to a node being improperly keyed).
 			 *
-			 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be superflous)
+			 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be superfluous)
 			 * The calling node calls this function once. What this function does is send the text frame NEWKEY1STR to the other side.
 			 * Issue #46 was concerned with a case where this was slightly broken, and the below happened:
 			 * (A = calling node, B = called node)
@@ -4682,14 +4691,11 @@ static void *rpt(void *this)
 	char *idtalkover, c, myfirst;
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
-	unsigned int u;
-	FILE *fp;
-	struct stat mystat;
 	struct ast_channel *who;
-	time_t t, was;
+	time_t t, t_mono;
 	struct rpt_link *l;
 	struct rpt_tele *telem;
-	char tmpstr[512], lat[100], lon[100], elev[100];
+	char tmpstr[512];
 	struct ast_format_cap *cap;
 	struct timeval looptimestart;
 
@@ -4898,30 +4904,40 @@ static void *rpt(void *this)
 			break;
 		}
 
-		time(&t);
-		while (t >= (myrpt->lastgpstime + GPS_UPDATE_SECS)) {
-			myrpt->lastgpstime = t;
-			fp = fopen(GPSFILE, "r");
-			if (!fp)
+		t_mono = rpt_time_monotonic();
+		while (t_mono >= (myrpt->lastgpstime + GPS_UPDATE_SECS)) {
+			unsigned long long u_mono;
+			time_t was_mono;
+			char gps_data[100];
+			char lat[25], lon[25], elev[25];
+
+			myrpt->lastgpstime = t_mono;
+			
+			/* If the app_gps custom function GPS_READ exists, read the GPS position */
+			if (!ast_custom_function_find("GPS_READ")) {
 				break;
-			if (fstat(fileno(fp), &mystat) == -1)
+			}				
+			if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 				break;
-			if (mystat.st_size >= 100)
+			}
+
+			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
+			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
 				break;
-			elev[0] = 0;
-			if (fscanf(fp, "%u %s %s %s", &u, lat, lon, elev) < 3)
+			}
+			was_mono = (time_t) u_mono;
+			if ((was_mono + GPS_VALID_SECS) < t_mono) {
 				break;
-			fclose(fp);
-			was = (time_t) u;
-			if ((was + GPS_VALID_SECS) < t)
-				break;
+			}
 			sprintf(tmpstr, "G %s %s %s %s", myrpt->name, lat, lon, elev);
+			
 			rpt_mutex_lock(&myrpt->lock);
 			l = myrpt->links.next;
 			myrpt->voteremrx = 0;	/* no voter remotes keyed */
 			while (l != &myrpt->links) {
-				if (l->chan)
+				if (l->chan) {
 					ast_sendtext(l->chan, tmpstr);
+				}
 				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
@@ -5724,7 +5740,7 @@ static void *rpt_master(void *ignore)
 				continue;
 			}
 			if (rpt_vars[i].outstreamlasterror && time(NULL) < rpt_vars[i].outstreamlasterror + 1) {
-				/* Command exited immediately. It probably doesn't work, no point in continously
+				/* Command exited immediately. It probably doesn't work, no point in continuously
 				 * restarting it in a loop. */
 				ast_log(LOG_ERROR, "outstreamcmd '%s' appears to be broken, disabling\n", rpt_vars[i].p.outstreamcmd);
 				rpt_vars[i].p.outstreamcmd = NULL;

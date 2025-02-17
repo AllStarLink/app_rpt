@@ -33,7 +33,7 @@ char check_tx_freq(struct rpt *myrpt);
 /*! \brief Dispatch to correct frequency bumping function */
 int multimode_bump_freq(struct rpt *myrpt, int interval);
 
-/*! \brief Queue announcment that scan has been stopped */
+/*! \brief Queue announcement that scan has been stopped */
 void stop_scan(struct rpt *myrpt);
 
 /*! \brief This is called periodically when in scan mode */
