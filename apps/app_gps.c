@@ -195,6 +195,7 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
