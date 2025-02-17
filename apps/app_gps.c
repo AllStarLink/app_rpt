@@ -156,6 +156,7 @@ z - WinAPRS
 #include <termios.h>
 #include <math.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 #include "asterisk/lock.h"
 #include "asterisk/channel.h"
