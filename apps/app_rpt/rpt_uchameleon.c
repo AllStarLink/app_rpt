@@ -51,23 +51,23 @@ int uchameleon_thread_start(struct daq_entry_tag *t)
 int uchameleon_connect(struct daq_entry_tag *t)
 {
 	int count;
-	static char *idbuf = "id\n";
-	static char *ledbuf = "led on\n";
-	static char *expect = "Chameleon";
+	static const char idbuf[] = "id\n";
+	static const char ledbuf[] = "led on\n";
+	static const char expect[] = "Chameleon";
 	char rxbuf[20];
 
 	if ((t->fd = serial_open(t->dev, B115200, 0)) == -1) {
 		ast_log(LOG_WARNING, "serial_open on %s failed!\n", t->name);
 		return -1;
 	}
-	if ((count = serial_io(t->fd, idbuf, rxbuf, strlen(idbuf), 14, DAQ_RX_TIMEOUT, 0x0a)) < 1) {
+	if ((count = serial_io(t->fd, idbuf, rxbuf, sizeof(idbuf) - 1, 14, DAQ_RX_TIMEOUT, 0x0a)) < 1) {
 		ast_log(LOG_WARNING, "serial_io on %s failed\n", t->name);
 		close(t->fd);
 		t->fd = -1;
 		return -1;
 	}
 	ast_debug(3, "count = %d, rxbuf = %s\n", count, rxbuf);
-	if ((count != 13) || (strncmp(expect, rxbuf + 4, sizeof(&expect)))) {
+	if ((count != 13) || (strncmp(expect, rxbuf + 4, sizeof(expect) - 1))) {
 		ast_log(LOG_WARNING, "%s is not a uchameleon device\n", t->name);
 		close(t->fd);
 		t->fd = -1;
@@ -75,7 +75,7 @@ int uchameleon_connect(struct daq_entry_tag *t)
 	}
 	/* uchameleon LED on solid once we communicate with it successfully */
 
-	if (serial_io(t->fd, ledbuf, NULL, strlen(ledbuf), 0, DAQ_RX_TIMEOUT, 0) == -1) {
+	if (serial_io(t->fd, ledbuf, NULL, sizeof(ledbuf) - 1, 0, DAQ_RX_TIMEOUT, 0) == -1) {
 		ast_log(LOG_WARNING, "Can't set LED on uchameleon device\n");
 		close(t->fd);
 		t->fd = -1;
