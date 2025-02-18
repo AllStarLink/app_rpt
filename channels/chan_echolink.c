@@ -1815,12 +1815,12 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		i = snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
 		if (i >= sizeof(pkt)) {
 			ast_log(LOG_WARNING, "Exceeded buffer size");
-			return;
+			goto send_message;
 		}
 		j = snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
 		if (j >= sizeof(pkt) - i) {
 			ast_log(LOG_WARNING, "Exceeded buffer size");
-			return;
+			goto send_message;
 		}
 		
 		i += j;
@@ -1830,7 +1830,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 
 			if (j >= sizeof(pkt) - i) {
 				ast_log(LOG_WARNING, "Exceeded buffer size");
-				return;
+				goto send_message;
 			}
 			
 			i += j;
@@ -1841,7 +1841,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 
 			if (i >= sizeof(pkt)) {
 				ast_log(LOG_WARNING, "Exceeded buffer size");
-				return;
+				goto send_message;
 			}
 
 			cp = ast_strdup((*(struct el_node **) nodep)->pvt->linkstr);
@@ -1851,11 +1851,11 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 
 				if (j >= sizeof(pkt) - i) {
 					ast_log(LOG_WARNING, "Exceeded buffer size");
-					return;
 				}
 			}
 		}
-
+		
+send_message:
 		sendto(instp->audio_sock, pkt, strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
 		
 		instp->tx_ctrl_packets++;
