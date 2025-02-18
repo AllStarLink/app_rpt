@@ -3830,7 +3830,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 			p++; 
 		}
 	}
-	
+
 	val = ast_variable_retrieve(cfg, ctg, "recfile");
 	if (!val) {
 		ast_copy_string(instp->fdr_file, "/tmp/echolink_recorded.gsm", FILENAME_MAX - 1);
