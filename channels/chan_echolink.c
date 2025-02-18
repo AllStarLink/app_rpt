@@ -218,7 +218,7 @@ do not use 127.0.0.1
 
 #define	DELIMCHR ','
 #define	QUOTECHR 34
-#define EL_INIT_BUFFER = sizeof("oNDATA\rWelcome to Allstar Node \rEcholink Node 123456 \rNumber \r \rSystems Linked:\r") + 300 /* initial string buffer size for ast_str buffer */
+#define EL_INIT_BUFFER = sizeof("oNDATA\rWelcome to AllStar Node \rEcholink Node 123456 \rNumber \r \rSystems Linked:\r") + 300 /* initial string buffer size for ast_str buffer */
 /* 
  * If you want to compile/link this code
  * on "BIG-ENDIAN" platforms, then
@@ -862,7 +862,7 @@ static struct eldb *el_db_put(const char *nodenum, const char *ipaddr, const cha
  * \param pkt_len		Length of packet buffer
  * \param call			Pointer to callsign
  * \param name			Pointer to node name
- * \param astnode		Pointer to AllstarLink node number
+ * \param astnode		Pointer to AllStarLink node number
  * \retval 0			Unsuccessful - pkt to small
  * \retval  			Successful length
  */
@@ -902,7 +902,7 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call, con
 	ap += l;
 
 	if (astnode) {
-		snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "Allstar %s", astnode);
+		snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "AllStar %s", astnode);
 		*ap++ = 6;
 		*ap++ = l = strlen(line);
 		memcpy(ap, line, l);
@@ -1604,14 +1604,14 @@ static int el_text(struct ast_channel *ast, const char *text)
 			j = 0;
 			k = 0;
 			for (x = 0; x < i; x++) {
-				/* Process allstar node numbers - skip over those that begin with '3' which are echolink */
+				/* Process AllStar node numbers - skip over those that begin with '3' which are echolink */
 				if ((*(strs[x] + 1) != '3')) {
 					if (strlen(pkt + k) >= 32) {
 						k = strlen(pkt);
 						strncat(pkt, "\r    ", pkt_len - k);
 					}
 					if (!j++) {
-						strncat(pkt, "Allstar:", pkt_len - strlen(pkt));
+						strncat(pkt, "AllStar:", pkt_len - strlen(pkt));
 					}
 					pkt_actual_len = strlen(pkt);
 					if (*strs[x] == 'T') {
@@ -1817,7 +1817,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
 
-		ast_str_set(pkt, 0, "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
+		ast_str_set(pkt, 0, "oNDATA\rWelcome to AllStar Node %s\r", instp->astnode);
 		ast_str_append(pkt, 0, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
 
 		if (instp->mymessage[0] != '\0') {
