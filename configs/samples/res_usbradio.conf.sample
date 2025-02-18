@@ -1,0 +1,7 @@
+[general]
+;usb_devices = 1209:7388    ;comma delimited list of usb
+                            ;descriptors to allow.
+                            ;format vvvv:pppp in hexadecimal
+                            ;vvvv=vendor id, pppp=product id
+                            ;
+                            ;1209:7388 = AIOC (all in one cable)

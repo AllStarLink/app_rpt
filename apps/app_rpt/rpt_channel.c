@@ -58,7 +58,7 @@ int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
 			return -1;
 		}
 		ast_debug(1, "Delay complete\n");
-	/* This is not superflous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
+	/* This is not superfluous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
 	} while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
 	return 0;
 }
@@ -339,11 +339,11 @@ int send_morse(struct ast_channel *chan, char *string, int speed, int freq, int 
 
 	dottime = 900 / speed;
 
-	/* Establish timing releationships */
+	/* Establish timing relationships */
 
-	dashtime = 3 * dottime;
+	dashtime = dottime * 3;
 	intralettertime = dottime;
-	interlettertime = dottime * 4;
+	interlettertime = dottime * 3;
 	interwordtime = dottime * 7;
 
 	for (; (*string) && (!res); string++) {
@@ -462,11 +462,12 @@ int send_link_pl(struct rpt *myrpt, char *txt)
 
 void send_newkey(struct ast_channel *chan)
 {
+	ast_assert(chan != NULL);
 	/* app_sendtext locks the channel before calling ast_sendtext,
 	 * do this to prevent simultaneous channel servicing which can cause an assertion. */
 	ast_channel_lock(chan);
 	if (ast_sendtext(chan, NEWKEY1STR)) {
-		ast_log(LOG_WARNING, "Failed to send text %s on %s\n", ast_channel_name(chan), NEWKEY1STR);
+		ast_log(LOG_WARNING, "Failed to send text %s on %s\n", NEWKEY1STR, ast_channel_name(chan));
 	}
 	ast_channel_unlock(chan);
 	return;
@@ -474,9 +475,10 @@ void send_newkey(struct ast_channel *chan)
 
 void send_old_newkey(struct ast_channel *chan)
 {
+	ast_assert(chan != NULL);
 	ast_channel_lock(chan);
 	if (ast_sendtext(chan, NEWKEYSTR)) {
-		ast_log(LOG_WARNING, "Failed to send text %s on %s\n", ast_channel_name(chan), NEWKEYSTR);
+		ast_log(LOG_WARNING, "Failed to send text %s on %s\n", NEWKEYSTR, ast_channel_name(chan));
 	}
 	ast_channel_unlock(chan);
 	return;

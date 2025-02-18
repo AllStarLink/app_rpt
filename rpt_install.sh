@@ -39,8 +39,11 @@ apt-get install -y libusb-dev # chan_simpleusb and chan_usbradio require libusb-
 modprobe snd-pcm-oss # /dev/dsp1 needs to exist for chan_simpleusb and chan_usbradio to work
 echo "snd-pcm-oss" >> /etc/modules # load module at startup for USB
 
-cp ../$MYDIR/Makefiles.diff /tmp/rpt.diff
-git apply /tmp/rpt.diff
+cp ../$MYDIR/apps/Makefile.diff /tmp/app_Makefile.diff
+git apply /tmp/app_Makefile.diff
+
+cp ../$MYDIR/channels/Makefile.diff /tmp/channels_Makefile.diff
+git apply /tmp/channels_Makefile.diff
 
 cp ../$MYDIR/utils/Makefile.diff /tmp/utils_makefile.diff
 git apply /tmp/utils_makefile.diff
@@ -139,7 +142,6 @@ rpt_add "res/res_rpt_http_registrations.c"
 rpt_add "res/res_usbradio.c"
 rpt_add "res/res_usbradio.exports.in"
 
-rpt_add "utils/pi-tune-menu.c"
 rpt_add "utils/radio-tune-menu.c"
 rpt_add "utils/simpleusb-tune-menu.c"
 
@@ -165,7 +167,7 @@ fi
 if [ ! -d /var/lib/asterisk/sounds/en/rpt ]; then
 	printf "RPT sounds don't exist yet, adding them now...\n"
 	mkdir /var/lib/asterisk/sounds/en/rpt
-	cd rpt
+	cd /var/lib/asterisk/sounds/en/rpt
 	wget "http://downloads.allstarlink.org/asterisk-asl-sounds-en-ulaw.tar.gz"
 	# Sounds are extracted directly into the dir
 	tar -xvzf asterisk-asl-sounds-en-ulaw.tar.gz

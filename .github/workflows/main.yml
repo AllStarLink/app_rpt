@@ -27,7 +27,6 @@ jobs:
           ./phreaknet.sh make
           phreaknet update
           phreaknet install --dahdi --lightweight --alsa --fast --devmode
-          /etc/init.d/asterisk restart
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build app_rpt

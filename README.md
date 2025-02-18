@@ -39,8 +39,10 @@ Step 1: Install DAHDI and Asterisk
 
 ```
 cd /usr/src && wget https://docs.phreaknet.org/script/phreaknet.sh && chmod +x phreaknet.sh && ./phreaknet.sh make
-phreaknet install -d -b -v 20 # install in developer mode (for backtraces and assertions),  add -s for chan_sip (if you need it still) and DAHDI (required)
+phreaknet install --alsa -d -b -v 20` # install in developer mode (for backtraces and assertions),  add -s for chan_sip (if you need it still) and DAHDI (required)
 ```
+
+The critical flags here are `--alsa`, which adds ALSA support to the build system (required for `chan_simpleusb` and `chan_usbradio` to build) and `-d`, to install DAHDI.
 
 Step 2: Install app_rpt modules
 
@@ -60,7 +62,9 @@ If you want to manually install app_rpt et al., here is how:
 
 ### Compiling
 
-Add this near the bottom of `apps/Makefile`:
+First, detection of the ALSA library needs to be re-added to the build system, by applying the following patch: https://github.com/InterLinked1/phreakscript/blob/master/patches/alsa.diff
+
+Then, add this near the bottom of `apps/Makefile`:
 
 `$(call MOD_ADD_C,app_rpt,$(wildcard app_rpt/rpt_*.c))`
 

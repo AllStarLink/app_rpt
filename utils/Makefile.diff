@@ -7,7 +7,7 @@ index a17a3c1d39..5e8e4e241d 100644
  #     as a regression test. Others (mere mortals?) need not bother, but they are
  #     more than welcome to play! The regression test itself is in expr2.testinput.
 -ALL_UTILS:=$(MENUSELECT_UTILS)
-+ALL_UTILS:=$(MENUSELECT_UTILS) simpleusb-tune-menu radio-tune-menu pi-tune-menu
++ALL_UTILS:=$(MENUSELECT_UTILS) simpleusb-tune-menu radio-tune-menu
  UTILS:=$(ALL_UTILS)
  
  LIBS += $(BKTR_LIB) # astobj2 with devmode uses backtrace
