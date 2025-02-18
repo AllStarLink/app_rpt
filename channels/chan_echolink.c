@@ -218,6 +218,7 @@ do not use 127.0.0.1
 
 #define	DELIMCHR ','
 #define	QUOTECHR 34
+#define EL_INIT_BUFFER = sizeof("oNDATA\rWelcome to Allstar Node \rEcholink Node %s\rNumber \r \rSystems Linked:\r) + 300 /* initial string buffer size for ast_str buffer */
 /* 
  * If you want to compile/link this code
  * on "BIG-ENDIAN" platforms, then
@@ -1801,9 +1802,12 @@ static void lookup_node_callsign(const void *nodep, const VISIT which, void *clo
 static void send_info(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
-	char pkt[5120], *cp;
+	struct ast_str *pkt;
+	char *cp;
 	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 	int offset;
+
+	pkt = ast_str_create(EL_INIT_BUFFER);
 
 	if ((which == leaf) || (which == postorder)) {
 
@@ -1811,50 +1815,27 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
-		
-		offset = snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
-		if (offset >= sizeof(pkt)) {
-			ast_log(LOG_WARNING, "Exceeded buffer size");
-			goto send_message;
-		}
-		offset += snprintf(pkt + offset, sizeof(pkt) - offset, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
-		if (offset >= sizeof(pkt)) {
-			ast_log(LOG_WARNING, "Exceeded buffer size");
-			goto send_message;
-		}
+
+		ast_str_set(pkt, 0, "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
+		ast_str_append(pkt, 0, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
 
 		if (instp->mymessage[0] != '\0') {
-			offset += snprintf(pkt + offset, sizeof(pkt) - offset, "%s\n\n", instp->mymessage);
-
-			if (offset >= sizeof(pkt)) {
-				ast_log(LOG_WARNING, "Exceeded buffer size");
-				goto send_message;
-			}
+			ast_str_append(pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
-			offset += snprintf(pkt + offset, sizeof(pkt) - offset, "Systems Linked:\r");
+			ast_str_append(pkt, 0, "Systems Linked:\r");
 
-			if (offset >= sizeof(pkt)) {
-				ast_log(LOG_WARNING, "Exceeded buffer size");
-				goto send_message;
-			}
-
-			cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL;
-			if (cp) {
-				offset += snprintf(pkt + offset, sizeof(pkt) - offset, "%s", cp);
-
-				if (offset >= sizeof(pkt)) {
-					ast_log(LOG_WARNING, "Exceeded buffer size");
+			if (cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL){
+				ast_str_append(pkt, 0, "%s", cp);
 				}
-			}
 		}
-		
-send_message:
-		sendto(instp->audio_sock, pkt, strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
+
+		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_len(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
 		
 		instp->tx_ctrl_packets++;
 		(*(struct el_node **) nodep)->tx_ctrl_packets++;
+		ast_free(pkt);
 	}
 	return;
 }
