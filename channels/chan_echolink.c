@@ -228,7 +228,7 @@ do not use 127.0.0.1
 #define	QUOTECHR 34
 
 #define EL_WELCOME_MESSAGE "oNDATA\rWelcome to AllStar Node %s\rEcholink Node %s\rNumber %u\r \r"
-#define EL_INIT_BUFFER sizeof(EL_WELCOME_MESSAGE) \
+#define EL_INIT_BUFFER sizeof(EL_WELCOME_MESSAGE)
 			+ 16 \ /* ASL & EL nodes #'s */
 			+ 80 \ /* room for "a" message */
 			+ (50 * 8) /* room for linked ASL and EL nodes */
