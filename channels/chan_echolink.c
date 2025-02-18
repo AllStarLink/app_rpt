@@ -1805,7 +1805,6 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 	struct ast_str *pkt;
 	char *cp;
 	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
-	int offset;
 
 	pkt = ast_str_create(EL_INIT_BUFFER);
 
