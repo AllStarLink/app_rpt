@@ -1822,25 +1822,6 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_log(LOG_WARNING, "Exceeded buffer size");
 			return;
 		}
-
-		i += j;
-
-		if (instp->mymessage[0] != '\0') {
-			char *p = instp->mymessage;
-			while ((p = strstr(p, "\\n")) != NULL) {
-				*p = '\n'; /* Replace the literal \n with a newline character */
-				memmove(p + 1, p + 2, strlen(p + 2) + 1); /* Shift the string to remove the \n */
-				p++; 
-			}
-
-			j = snprintf(pkt + i, sizeof(pkt) - i, "%s\n\n", instp->mymessage);
-			if (j >= sizeof(pkt) - i) {
-				ast_log(LOG_WARNING, "Exceeded buffer size");
-				return;
-			}
-
-			i += j;
-		}
 		
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
 			i = strlen(pkt);
@@ -3840,12 +3821,16 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "message");
-	if (!val) {
-		ast_copy_string(instp->mymessage, "\0", sizeof(instp->mymessage));
-	} else {
-		ast_copy_string(instp->mymessage, val, sizeof(instp->mymessage));
+	ast_copy_string(instp->mymessage, S_OR(val, ""), sizeof(instp->mymessage));
+	if (instp->mymessage[0] != '\0') {
+		char *p = instp->mymessage;
+		while ((p = strstr(p, "\\n")) != NULL) {
+			*p = '\n'; /* Replace the literal \n with a newline character */
+			memmove(p + 1, p + 2, strlen(p + 2) + 1); /* Shift the string to remove the \n */
+			p++; 
+		}
 	}
-
+	
 	val = ast_variable_retrieve(cfg, ctg, "recfile");
 	if (!val) {
 		ast_copy_string(instp->fdr_file, "/tmp/echolink_recorded.gsm", FILENAME_MAX - 1);
