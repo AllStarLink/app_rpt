@@ -218,7 +218,7 @@ do not use 127.0.0.1
 
 #define	DELIMCHR ','
 #define	QUOTECHR 34
-#define EL_INIT_BUFFER = sizeof("oNDATA\rWelcome to AllStar Node \rEcholink Node 123456 \rNumber \r \rSystems Linked:\r") + 300 /* initial string buffer size for ast_str buffer */
+#define EL_INIT_BUFFER = sizeof("oNDATA\rWelcome to AllStar Node 123456\rEcholink Node 123456\rNumber \r \rSystems Linked: \r") + 300 /* initial string buffer size for ast_str buffer */
 /* 
  * If you want to compile/link this code
  * on "BIG-ENDIAN" platforms, then
