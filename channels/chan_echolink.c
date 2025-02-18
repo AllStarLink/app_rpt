@@ -218,7 +218,7 @@ do not use 127.0.0.1
 
 #define	DELIMCHR ','
 #define	QUOTECHR 34
-#define EL_INIT_BUFFER = sizeof("oNDATA\rWelcome to Allstar Node \rEcholink Node %s\rNumber \r \rSystems Linked:\r") + 300 /* initial string buffer size for ast_str buffer */
+#define EL_INIT_BUFFER = sizeof("oNDATA\rWelcome to Allstar Node \rEcholink Node 123456 \rNumber \r \rSystems Linked:\r") + 300 /* initial string buffer size for ast_str buffer */
 /* 
  * If you want to compile/link this code
  * on "BIG-ENDIAN" platforms, then
@@ -1807,9 +1807,11 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 
 	pkt = ast_str_create(EL_INIT_BUFFER);
+	if (!pkt) {
+		return;
+	}
 
 	if ((which == leaf) || (which == postorder)) {
-
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->audio_port);
@@ -1822,19 +1824,14 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_str_append(pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
-		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
-			ast_str_append(pkt, 0, "Systems Linked:\r");
-
-			if (cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL){
-				ast_str_append(pkt, 0, "%s", cp);
-				}
+		if (cp = cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL) {
+			ast_str_append(pkt, 0, "Systems Linked:\r%s", cp);
 		}
 
 		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_len(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
-		
+		ast_free(pkt);
 		instp->tx_ctrl_packets++;
 		(*(struct el_node **) nodep)->tx_ctrl_packets++;
-		ast_free(pkt);
 	}
 	return;
 }
