@@ -1803,7 +1803,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 	struct sockaddr_in sin;
 	char pkt[5120], *cp;
 	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
-	int i, j;
+	int offset;
 
 	if ((which == leaf) || (which == postorder)) {
 
@@ -1812,44 +1812,39 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
 		
-		i = snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
-		if (i >= sizeof(pkt)) {
+		offset = snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
+		if (offset >= sizeof(pkt)) {
 			ast_log(LOG_WARNING, "Exceeded buffer size");
 			goto send_message;
 		}
-		j = snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
-		if (j >= sizeof(pkt) - i) {
+		offset += snprintf(pkt + offset, sizeof(pkt) - offset, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
+		if (offset >= sizeof(pkt)) {
 			ast_log(LOG_WARNING, "Exceeded buffer size");
 			goto send_message;
 		}
-		
-		i += j;
-		
-		if (instp->mymessage[0] != '\0') {
-			j = snprintf(pkt + i, sizeof(pkt) - i, "%s\n\n", instp->mymessage);
 
-			if (j >= sizeof(pkt) - i) {
+		if (instp->mymessage[0] != '\0') {
+			offset += snprintf(pkt + offset, sizeof(pkt) - offset, "%s\n\n", instp->mymessage);
+
+			if (offset >= sizeof(pkt)) {
 				ast_log(LOG_WARNING, "Exceeded buffer size");
 				goto send_message;
 			}
-			
-			i += j;
 		}
 
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
-			i += snprintf(pkt + i, sizeof(pkt) - i, "Systems Linked:\r");
+			offset += snprintf(pkt + offset, sizeof(pkt) - offset, "Systems Linked:\r");
 
-			if (i >= sizeof(pkt)) {
+			if (offset >= sizeof(pkt)) {
 				ast_log(LOG_WARNING, "Exceeded buffer size");
 				goto send_message;
 			}
 
-			cp = ast_strdup((*(struct el_node **) nodep)->pvt->linkstr);
+			cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL;
 			if (cp) {
-				j = snprintf(pkt + i, sizeof(pkt) - i, "%s", cp);
-				ast_free(cp);
+				offset += snprintf(pkt + offset, sizeof(pkt) - offset, "%s", cp);
 
-				if (j >= sizeof(pkt) - i) {
+				if (offset >= sizeof(pkt)) {
 					ast_log(LOG_WARNING, "Exceeded buffer size");
 				}
 			}
