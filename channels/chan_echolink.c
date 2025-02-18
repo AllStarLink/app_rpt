@@ -1822,9 +1822,9 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_log(LOG_WARNING, "Exceeded buffer size");
 			return;
 		}
-
+		
 		i += j;
-
+		
 		if (instp->mymessage[0] != '\0') {
 			j = snprintf(pkt + i, sizeof(pkt) - i, "%s\n\n", instp->mymessage);
 
@@ -1832,17 +1832,15 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 				ast_log(LOG_WARNING, "Exceeded buffer size");
 				return;
 			}
-
+			
 			i += j;
 		}
 
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
-			i = strlen(pkt);
-			strncat(pkt + i, "Systems Linked:\r", sizeof(pkt) - i);
+			i += snprintf(pkt + i, sizeof(pkt) - i, "Systems Linked:\r");
 			cp = ast_strdup((*(struct el_node **) nodep)->pvt->linkstr);
 			if (cp) {
-				i = strlen(pkt);
-				strncat(pkt + i, cp, sizeof(pkt) - i);
+				snprintf(pkt + i, sizeof(pkt) - i, "%s", cp);
 				ast_free(cp);
 			}
 		}
