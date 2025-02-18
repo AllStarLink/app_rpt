@@ -1822,7 +1822,20 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_log(LOG_WARNING, "Exceeded buffer size");
 			return;
 		}
-		
+
+		i += j;
+
+		if (instp->mymessage[0] != '\0') {
+			j = snprintf(pkt + i, sizeof(pkt) - i, "%s\n\n", instp->mymessage);
+
+			if (j >= sizeof(pkt) - i) {
+				ast_log(LOG_WARNING, "Exceeded buffer size");
+				return;
+			}
+
+			i += j;
+		}
+
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
 			i = strlen(pkt);
 			strncat(pkt + i, "Systems Linked:\r", sizeof(pkt) - i);
@@ -1833,6 +1846,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 				ast_free(cp);
 			}
 		}
+
 		sendto(instp->audio_sock, pkt, strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
 		
 		instp->tx_ctrl_packets++;
