@@ -902,9 +902,9 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call, con
 	ap += l;
 
 	if (astnode) {
-		snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "AllStar %s", astnode);
+		l = snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "AllStar %s", astnode);
 		*ap++ = 6;
-		*ap++ = l = strlen(line);
+		*ap++ = l;
 		memcpy(ap, line, l);
 		ap += l;
 	}
@@ -1607,11 +1607,10 @@ static int el_text(struct ast_channel *ast, const char *text)
 				/* Process AllStar node numbers - skip over those that begin with '3' which are echolink */
 				if ((*(strs[x] + 1) != '3')) {
 					if (strlen(pkt + k) >= 32) {
-						k = strlen(pkt);
-						strncat(pkt, "\r    ", pkt_len - k);
+						strncat(pkt, "\r    ", pkt_len);
 					}
 					if (!j++) {
-						strncat(pkt, "AllStar:", pkt_len - strlen(pkt));
+						strncat(pkt, "AllStar:", pkt_len);
 					}
 					pkt_actual_len = strlen(pkt);
 					if (*strs[x] == 'T') {
@@ -1621,18 +1620,17 @@ static int el_text(struct ast_channel *ast, const char *text)
 					}
 				}
 			}
-			strncat(pkt, "\r", pkt_len - strlen(pkt));
+			strncat(pkt, "\r", pkt_len);
 			j = 0;
 			k = strlen(pkt);
 			for (x = 0; x < i; x++) {
 				/* Process echolink node numbers - they start with 3 */
 				if (*(strs[x] + 1) == '3') {
 					if (strlen(pkt + k) >= 32) {
-						k = strlen(pkt);
-						strncat(pkt, "\r    ", pkt_len - k);
+						strncat(pkt, "\r    ", pkt_len);
 					}
 					if (!j++) {
-						strncat(pkt, "Echolink: ", pkt_len - strlen(pkt));
+						strncat(pkt, "Echolink: ", pkt_len);
 					}
 					pkt_actual_len = strlen(pkt);
 					if (*strs[x] == 'T') {
@@ -1642,7 +1640,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 					}
 				}
 			}
-			strncat(pkt, "\r", pkt_len - strlen(pkt));
+			strncat(pkt, "\r", pkt_len);
 			pvt->linkstr = pkt;
 		}
 		ast_free(cp);
