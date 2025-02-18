@@ -218,7 +218,11 @@ do not use 127.0.0.1
 
 #define	DELIMCHR ','
 #define	QUOTECHR 34
-#define EL_INIT_BUFFER = sizeof("oNDATA\rWelcome to AllStar Node 123456\rEcholink Node 123456\rNumber \r \rSystems Linked: \r") + 300 /* initial string buffer size for ast_str buffer */
+#define EL_WELCOME_MESSAGE "oNDATA\rWelcome to AllStar Node %s\rEcholink Node %s\rNumber %u\r \r"
+#define EL_INIT_BUFFER = sizeof(EL_WELCOME_MESSAGE)
+			+ 16 /* ASL & EL nodes #'s */
+			+ 80 /* room for "a" message */
+			+ (50 * 8) /* room for linked ASL and EL nodes */
 /* 
  * If you want to compile/link this code
  * on "BIG-ENDIAN" platforms, then
@@ -1815,8 +1819,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
 
-		ast_str_set(pkt, 0, "oNDATA\rWelcome to AllStar Node %s\r", instp->astnode);
-		ast_str_append(pkt, 0, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
+		ast_str_set(pkt, 0, EL_WELCOME_MESSAGE, instp->astnode, instp->mycall, instp->mynode);
 
 		if (instp->mymessage[0] != '\0') {
 			ast_str_append(pkt, 0, "%s\n\n", instp->mymessage);
