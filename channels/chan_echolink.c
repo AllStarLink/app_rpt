@@ -1824,7 +1824,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_str_append(pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
-		if (cp = cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL) {
+		if (cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL) {
 			ast_str_append(pkt, 0, "Systems Linked:\r%s", cp);
 		}
 
