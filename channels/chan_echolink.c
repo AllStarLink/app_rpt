@@ -1838,10 +1838,21 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 
 		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
 			i += snprintf(pkt + i, sizeof(pkt) - i, "Systems Linked:\r");
+
+			if (i >= sizeof(pkt)) {
+				ast_log(LOG_WARNING, "Exceeded buffer size");
+				return;
+			}
+
 			cp = ast_strdup((*(struct el_node **) nodep)->pvt->linkstr);
 			if (cp) {
-				snprintf(pkt + i, sizeof(pkt) - i, "%s", cp);
+				j = snprintf(pkt + i, sizeof(pkt) - i, "%s", cp);
 				ast_free(cp);
+
+				if (j >= sizeof(pkt) - i) {
+					ast_log(LOG_WARNING, "Exceeded buffer size");
+					return;
+				}
 			}
 		}
 
