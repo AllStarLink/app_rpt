@@ -101,9 +101,6 @@ typedef struct {
 #define	MAX_RETRIES 5
 #define	MAX_RETRIES_PERM 1000000000
 
-#define	APRSTT_PIPE "/tmp/aprs_ttfifo"
-#define	APRSTT_SUB_PIPE "/tmp/aprs_ttfifo_%s"
-
 #define	REDUNDANT_TX_TIME 2000
 
 #define	RETRY_TIMER_MS 5000
@@ -161,7 +158,6 @@ typedef struct {
 #define	EXTNODEFILE "/var/lib/asterisk/rpt_extnodes"
 #define	NODENAMES "rpt/nodenames"
 #define	PARROTFILE "/tmp/parrot_%s_%u"
-#define	GPSFILE "/tmp/gps.dat"
 
 #define	GPS_VALID_SECS 60
 #define	GPS_UPDATE_SECS 30
@@ -394,12 +390,12 @@ struct rpt_link {
 	char	disced;
 	char	killme;
 	long	elaptime;
-	long	disctime;
-	long 	retrytimer;
-	long	retxtimer;
-	long	rerxtimer;
-	long	rxlingertimer;
-	int     rssi;
+	int	disctime;
+	int	retrytimer;
+	int	retxtimer;
+	int	rerxtimer;
+	int	rxlingertimer;
+	int	rssi;
 	int	retries;
 	int	max_retries;
 	int	reconnects;
@@ -408,7 +404,7 @@ struct rpt_link {
 	struct ast_channel *pchan;	
 	char	linklist[MAXLINKLIST];
 	time_t	linklistreceived;
-	long	linklisttimer;
+	int	linklisttimer;
 	int	dtmfed;
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
@@ -778,8 +774,8 @@ struct rpt {
 	int dtmfidx,rem_dtmfidx;
 	int dailytxtime,dailykerchunks,totalkerchunks,dailykeyups,totalkeyups,timeouts;
 	int totalexecdcommands, dailyexecdcommands;
-	long	retxtimer;
-	long	rerxtimer;
+	int	retxtimer;
+	int	rerxtimer;
 	long long totaltxtime;
 	char mydtmf;
 	char exten[AST_MAX_EXTENSION];
@@ -816,7 +812,7 @@ struct rpt {
 	int tailmessagen;
 	time_t disgorgetime;
 	time_t lastthreadrestarttime;
-	long	macrotimer;
+	int	macrotimer;
 	char	lastnodewhichkeyedusup[MAXNODESTR];
 	int	dtmf_local_timer;
 	char	dtmf_local_str[100];
@@ -843,7 +839,7 @@ struct rpt {
 	char newkey;
 	char iaxkey;
 	char inpadtest;
-	long rxlingertimer;
+	int rxlingertimer;
 	char localoverride;
 	char ready;
 	char lastrxburst;
@@ -864,7 +860,7 @@ struct rpt {
 	char lastdtmfuser[MAXNODESTR];
 	char curdtmfuser[MAXNODESTR];
 	int  sleeptimer;
-	time_t lastgpstime;
+	time_t lastgpstime;			/* monotonic time */
 	int outstreampipe[2];
 	int outstreampid;
 	time_t outstreamlasterror;	/*!< \brief set when there is an outstream error and is reset when error cleared */

@@ -804,7 +804,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
  * the USB device.
  *
  * The CM-XXX USB devices can support up to 8 GPIO pins that can be input or output.
- * It continously polls the input GPIO pins on the device to see if they have changed.  
+ * It continuously polls the input GPIO pins on the device to see if they have changed.  
  * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk 
  * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally 
  * occurs every 50 milliseconds.  
@@ -1177,7 +1177,7 @@ static void *hidthread(void *arg)
 		ast_radio_time(&o->lasthidtime);
 		/* Main processing loop for GPIO 
 		 * This loop process every 50 milliseconds.
-		 * The timer can be interupted by writing to 
+		 * The timer can be interrupted by writing to 
 		 * the pttkick pipe.
 		 */
 		while ((!o->stophid) && o->hasusb) {
@@ -2776,7 +2776,7 @@ static int usb_device_swap(int fd, const char *other)
 		return -1;
 	}
 	if (p == o) {
-		ast_cli(fd, "You cant swap active device with itself!!\n");
+		ast_cli(fd, "You can't swap active device with itself!!\n");
 		return -1;
 	}
 	ast_mutex_lock(&usb_dev_lock);
@@ -3280,7 +3280,7 @@ static void store_rxgain(struct chan_usbradio_pvt *o, const char *s)
 }
 
 /*!
- * \brief Store receive voice adjusment.
+ * \brief Store receive voice adjustment.
  * \param o				Private struct.
  * \param s				New setting.
  */

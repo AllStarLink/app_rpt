@@ -158,7 +158,7 @@ int dahdi_write_wait(struct ast_channel *chan);
 int dahdi_flush(struct ast_channel *chan);
 
 /*!
- * \brief Increase buffer space on DAHDI channel, if needed to accomodate samples
+ * \brief Increase buffer space on DAHDI channel, if needed to accommodate samples
  * \note Only use with DAHDI channels!
  * \param chan
  * \param samples
