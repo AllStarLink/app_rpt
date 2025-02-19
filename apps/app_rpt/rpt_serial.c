@@ -141,7 +141,7 @@ int serial_txstring(int fd, char *txstring)
 	return 0;
 }
 
-int serial_io(int fd, char *txbuf, char *rxbuf, int txbytes, int rxmaxbytes, unsigned int timeoutms, char termchr)
+int serial_io(int fd, const char *txbuf, char *rxbuf, int txbytes, int rxmaxbytes, unsigned int timeoutms, char termchr)
 {
 	int i;
 
