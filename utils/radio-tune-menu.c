@@ -59,6 +59,7 @@
  * Most of these commands take optional parameters to set values.
  *
  */
+#include "asterisk.h"
 
 #include <stdio.h>
 #include <stdlib.h>
