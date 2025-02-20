@@ -545,7 +545,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t b
 				buf[i] = mode;
 		}
 	}
-	/*Afer building the string, count number of nodes (commas) in buffer string. The first
+	/*After building the string, count number of nodes (commas) in buffer string. The first
 	 * node doesn't have a comma, so we need to add 1 if there is at least one_link.  
 	 */
 	for (link_count = 0; buf[link_count]; buf[link_count]==',' ? link_count++: *buf++);
