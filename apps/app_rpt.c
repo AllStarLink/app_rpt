@@ -2991,6 +2991,7 @@ static inline int rpt_any_hangups(struct rpt *myrpt)
 static inline void log_keyed(struct rpt *myrpt)
 {
 	char mydate[100], myfname[512];
+	const char *myformat;
 	time_t myt;
 
 	if (myrpt->monstream) {
@@ -3003,7 +3004,9 @@ static inline void log_keyed(struct rpt *myrpt)
 		time(&myt);
 		strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
 		sprintf(myfname, "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
-		myrpt->monstream = ast_writefile(myfname, "wav49", "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
+		myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
+		myrpt->monstream =
+			ast_writefile(myfname, myformat, "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
 		if (myrpt->p.monminblocks) {
 			blocksleft = diskavail(myrpt);
 			if (blocksleft >= myrpt->p.monminblocks) {
@@ -3824,18 +3827,19 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			if (myrpt->p.archivedir) {
 				if (myrpt->p.duplex < 2) {
 					char myfname[512], mydate[100];
+					const char *myformat;
 					long blocksleft;
 					time_t myt;
 
 					time(&myt);
 					strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
 					sprintf(myfname, "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
+					myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
 					if (myrpt->p.monminblocks) {
 						blocksleft = diskavail(myrpt);
 						if (blocksleft >= myrpt->p.monminblocks) {
 							myrpt->monstream =
-								ast_writefile(myfname, "wav49", "app_rpt Air Archive", O_CREAT | O_APPEND, 0,
-											  0644);
+								ast_writefile(myfname, myformat, "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
 						}
 					}
 				}
@@ -7113,16 +7117,18 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		b1 = b;
 	if (myrpt->p.archivedir) {
 		char mycmd[512], mydate[100];
+		const char *myformat;
 		time_t myt;
 		long blocksleft;
 
 		mkdir(myrpt->p.archivedir, 0700);
-		sprintf(mycmd, "%s/%s", myrpt->p.archivedir, myrpt->name);
+		snprintf(mycmd, sizeof(mycmd), "%s/%s", myrpt->p.archivedir, myrpt->name);
 		mkdir(mycmd, 0775);
 		time(&myt);
-		strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
-		sprintf(mycmd, "mixmonitor start %s %s/%s/%s.wav49 a", ast_channel_name(chan), myrpt->p.archivedir, myrpt->name,
-				mydate);
+		strftime(mydate, sizeof(mydate), "%Y%m%d%H%M%S", localtime(&myt));
+		myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
+		snprintf(mycmd, sizeof(mycmd), "mixmonitor start %s %s/%s/%s.%s a",
+			ast_channel_name(chan), myrpt->p.archivedir, myrpt->name, myformat, mydate);
 		if (myrpt->p.monminblocks) {
 			blocksleft = diskavail(myrpt);
 			if (myrpt->p.remotetimeout) {
@@ -7132,7 +7138,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				ast_cli_command(nullfd, mycmd);
 		} else
 			ast_cli_command(nullfd, mycmd);
-		sprintf(mycmd, "CONNECT,%s", b1);
+		snprintf(mycmd, sizeof(mycmd), "CONNECT,%s", b1);
 		donodelog(myrpt, mycmd);
 		rpt_update_links(myrpt);
 		doconpgm(myrpt, b1);

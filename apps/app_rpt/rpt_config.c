@@ -928,6 +928,7 @@ void load_rpt_vars(int n, int init)
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
 	RPT_CONFIG_VAR(archivedir, "archivedir");
+	RPT_CONFIG_VAR(archiveformat, "archiveformat");
 	RPT_CONFIG_VAR_INT(authlevel, "authlevel");
 
 	val = ast_variable_retrieve(cfg, cat, "parrot");
