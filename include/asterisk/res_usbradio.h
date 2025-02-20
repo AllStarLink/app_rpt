@@ -23,13 +23,8 @@
  */
 
 /*! \note <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
-#if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__)
+#if __has_include(<sys/io.h>)
 #define HAVE_SYS_IO
-#else
-#pragma GCC diagnostic push
-#pragma GCC diagnostic warning "-Wcpp"
-#warning sys.io is not available on this architecture and some functionality will be disabled
-#pragma GCC diagnostic pop
 #endif
 
 /*!
