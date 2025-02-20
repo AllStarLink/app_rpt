@@ -1750,7 +1750,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		ast_copy_string(mylink->linklist, (str + 2), sizeof(mylink->linklist));
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, tmp, mylink->name);
+		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
 		return;
 	}
 	if (*str == 'M') {
