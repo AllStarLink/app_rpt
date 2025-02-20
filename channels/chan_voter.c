@@ -788,9 +788,9 @@ static int16_t deemp1(int16_t input, int32_t * restrict state0)
  * \param limit		Maximum number of substrings to process.
  * \return			Count of strings.
  */
-static int finddelim(char *str, char *strp[], int limit)
+static int finddelim(char *str, char *strp[], size_t limit)
 {
-	int i, l, inquo;
+	int i, inquo;
 
 	inquo = 0;
 	i = 0;
@@ -799,7 +799,7 @@ static int finddelim(char *str, char *strp[], int limit)
 		strp[0] = 0;
 		return 0;
 	}
-	for (l = 0; *str && (l < limit); str++) {
+	for (; *str && (i < (limit - 1)); str++) {
 		if (*str == QUOTECHR) {
 			if (inquo) {
 				*str = 0;
@@ -811,7 +811,6 @@ static int finddelim(char *str, char *strp[], int limit)
 		}
 		if ((*str == DELIMCHR) && (!inquo)) {
 			*str = 0;
-			l++;
 			strp[i++] = str + 1;
 		}
 	}
@@ -2509,7 +2508,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "streams");
 		if (val) {
 			cp = ast_strdup(val);
-			p->nstreams = finddelim(cp, p->streams, MAXSTREAMS);
+			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
 		}
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcss");
 		if (val) {
@@ -2538,7 +2537,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			if (!cp) {
 				return NULL;
 			}
-			j = finddelim(cp, strs, 2);
+			j = finddelim(cp, strs, ARRAY_LEN(strs));
 			if (j < 2) {
 				ast_log(LOG_ERROR, "Channel %s: primary not specified properly\n", ast_channel_name(tmp));
 			} else {
@@ -2565,7 +2564,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
 			cp = ast_strdup(val);
-			p->nthresholds = finddelim(cp, strs, MAXTHRESHOLDS);
+			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
 			for (i = 0; i < p->nthresholds; i++) {
 				cp1 = strchr(strs[i], '=');
 				p->linger_thresh[i] = p->linger;
@@ -3193,7 +3192,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 			}
 		} else {				/* must be a comma-delimited list */
 			ast_copy_string(str, argv[3], sizeof(str) - 1);
-			n = finddelim((char *) argv[3], strs, 100);
+			n = finddelim((char *) argv[3], strs, ARRAY_LEN(strs));
 			for (i = 0; i < n; i++) {
 				if (!*strs[i]) {
 					continue;
@@ -3534,7 +3533,7 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 	}
 	n = 0;
 	if (str) {
-		n = finddelim(str, strs, 100);
+		n = finddelim(str, strs, ARRAY_LEN(strs));
 	}
 	for (j = 1; j <= maxpvtorder; j++) {
 		for (p = pvts; p; p = p->next) {
@@ -5077,7 +5076,7 @@ static int reload(void)
 		p->nstreams = 0;
 		if (val) {
 			cp = ast_strdup(val);
-			p->nstreams = finddelim(cp, p->streams, MAXSTREAMS);
+			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
 		}
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcss");
 		if (val) {
@@ -5107,7 +5106,7 @@ static int reload(void)
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
 			cp = ast_strdup(val);
-			p->nthresholds = finddelim(cp, strs, MAXTHRESHOLDS);
+			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
 			for (i = 0; i < p->nthresholds; i++) {
 				cp1 = strchr(strs[i], '=');
 				p->linger_thresh[i] = p->linger;
@@ -5269,7 +5268,7 @@ static int reload(void)
 				ast_mutex_unlock(&voter_lock);
 				return -1;
 			}
-			n = finddelim(cp, strs, 40);
+			n = finddelim(cp, strs, ARRAY_LEN(strs));
 			if (n < 1) {
 				continue;
 			}
