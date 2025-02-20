@@ -980,10 +980,12 @@ static void doconpgm(struct rpt *myrpt, char *them)
 	return;
 }
 
-/*! \brief Waste the output of libcurl (the OK is sent to stdout) */
-static size_t writefunction(void *ptr, size_t size, size_t nmemb, void *stream)
+/*! \brief Store the output of libcurl (the OK is sent to stdout) */
+static size_t writefunction(char *contents, size_t size, size_t nmemb, void *userdata)
 {
-	return (nmemb*size);
+	struct ast_str **buffer = userdata;
+
+	return  ast_str_append(buffer, 0, "%.*s", (int) (size * nmemb), contents);
 }
 
 static void *perform_statpost(void *stats_url)
@@ -991,24 +993,54 @@ static void *perform_statpost(void *stats_url)
 	char *str;
 	long rescode = 0;
 	CURL *curl = curl_easy_init();
+	CURLcode res;
+	char error_buffer[CURL_ERROR_SIZE];
+	struct ast_str *response_msg;
 
 	if (!curl) {
+		ast_free(stats_url);
+		return NULL;
+	}
+
+	response_msg = ast_str_create(50);
+	if (!response_msg) {
+		ast_free(stats_url);
+		curl_easy_cleanup(curl);
 		return NULL;
 	}
 
 	str = (char *) stats_url;
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &response_msg);
 	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 	curl_easy_setopt(curl, CURLOPT_URL, str);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
-	curl_easy_perform(curl);
-	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rescode);
-	curl_easy_cleanup(curl);
+	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
 
-	if (rescode != 200) {
-		ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld\n", (char *) stats_url, rescode);
+	res = curl_easy_perform(curl);
+	if (res != CURLE_OK) {
+		if (*error_buffer) { /* Anything in the error buffer? */
+			ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", (char *) stats_url, error_buffer);
+		} else {
+			ast_log(LOG_WARNING,
+					"statpost to URL '%s' failed with error: %s\n",
+					(char *) stats_url,
+					curl_easy_strerror(res));
+		}
+	} else {
+		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rescode);
+		if (rescode != 200) {
+			ast_log(LOG_WARNING,
+					"statpost to URL '%s' failed with code %ld : %s\n",
+					(char *) stats_url,
+					rescode,
+					ast_str_buffer(response_msg));
+		}
 	}
+	ast_debug(3, "Response: %s\n", ast_str_buffer(response_msg));
 	ast_free(stats_url); /* Free here since parent is not responsible for it. */
+	ast_free(response_msg);
+	curl_easy_cleanup(curl);
 	return NULL;
 }
 
