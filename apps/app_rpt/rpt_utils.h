@@ -15,7 +15,7 @@ int matchkeyword(char *string, char **param, char *keywords[]);
 * str - delimited string ( will be modified )
 * strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
 * limit- maximum number of substrings to process
-* delim- user specified delimeter
+* delim- user specified delimiter
 * quote- user specified quote for escaping a substring. Set to zero to escape nothing.
 *
 * Note: This modifies the string str, be suer to save an intact copy if you need it later.
@@ -66,3 +66,10 @@ long diskavail(struct rpt *myrpt);
 void rpt_localtime(time_t * t, struct ast_tm *lt, const char *tz);
 
 time_t rpt_mktime(struct ast_tm *tm, const char *zone);
+
+/*!
+ * \brief Get system monotonic 
+ * This returns the CLOCK_MONOTONIC time
+ * \retval		Monotonic seconds.
+ */
+time_t rpt_time_monotonic(void);

@@ -145,22 +145,24 @@ rpt_add "res/res_usbradio.exports.in"
 rpt_add "utils/radio-tune-menu.c"
 rpt_add "utils/simpleusb-tune-menu.c"
 
-nproc
-
 make -j$(nproc) apps
-make -j$(nproc) channels
-make -j$(nproc) res
-
-# Compilation failed
 if [ $? -ne 0 ]; then
-	exit $?
+	exit 1
+fi
+
+make -j$(nproc) channels
+if [ $? -ne 0 ]; then
+	exit 1
+fi
+
+make -j$(nproc) res
+if [ $? -ne 0 ]; then
+	exit 1
 fi
 
 make install
-
-# Compilation failed
 if [ $? -ne 0 ]; then
-	exit $?
+	exit 1
 fi
 
 # If the rpt sounds don't exist yet, add them

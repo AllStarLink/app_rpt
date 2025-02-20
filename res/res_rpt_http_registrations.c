@@ -91,27 +91,17 @@ static AST_RWLIST_HEAD_STATIC(registrations, http_registry);
 
 /* from test_res_prometheus.c */
 /*! \todo should be an ast_ function for this? */
-static size_t curl_write_string_callback(void *contents, size_t size, size_t nmemb, void *userdata)
+static size_t curl_write_string_callback(char *contents, size_t size, size_t nmemb, void *userdata)
 {
 	struct ast_str **buffer = userdata;
-	size_t realsize = size * nmemb;
-	char *rawdata;
 
-	rawdata = ast_malloc(realsize + 1);
-	if (!rawdata) {
-		return 0;
-	}
-	memcpy(rawdata, contents, realsize);
-	rawdata[realsize] = 0;
-	ast_str_append(buffer, 0, "%s", rawdata);
-	ast_free(rawdata);
-
-	return realsize;
+	return  ast_str_append(buffer, 0, "%.*s", (int) (size * nmemb), contents);
 }
 
 static struct ast_str *curl_post(const char *url, const char *header, const char *data)
 {
 	CURL **curl;
+	CURLcode res;
 	struct ast_str *str;
 	long int http_code;
 	struct curl_slist *slist = NULL;
@@ -142,10 +132,13 @@ static struct ast_str *curl_post(const char *url, const char *header, const char
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_errbuf);
 
-	if (curl_easy_perform(curl) != CURLE_OK) {
+	res = curl_easy_perform(curl);
+	if (res != CURLE_OK) {
 		curl_slist_free_all(slist);
 		if (*curl_errbuf) {
 			ast_log(LOG_WARNING, "%s\n", curl_errbuf);
+		} else {
+			ast_log(LOG_WARNING, "%s\n", curl_easy_strerror(res));
 		}
 		ast_log(LOG_WARNING, "Failed to curl URL '%s'\n", url);
 		curl_easy_cleanup(curl);

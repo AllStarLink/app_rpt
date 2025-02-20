@@ -10,6 +10,7 @@
 #include "asterisk/channel.h"
 #include "asterisk/file.h"
 #include "asterisk/cli.h"
+#include "asterisk/pbx.h" /* functions */
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
@@ -163,7 +164,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 
 		if (strlen(digitbuf) < 1)
 			break;
-		/* if doesnt allow link cmd, or no links active, return */
+		/* if doesn't allow link cmd, or no links active, return */
 		if (myrpt->links.next == &myrpt->links)
 			return DC_COMPLETE;
 		if ((command_source != SOURCE_RPT) &&
@@ -626,10 +627,10 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 		return DC_COMPLETE;
 
 	case 4:					/* set tx PL tone */
-		/* cant set tx tone on RBI (rx tone does both) */
+		/* can't set tx tone on RBI (rx tone does both) */
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_RBI))
 			return DC_ERROR;
-		/* cant set tx tone on ft100 (rx tone does both) */
+		/* can't set tx tone on ft100 (rx tone does both) */
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100))
 			return DC_ERROR;
 		/*  eventually for the ic706 instead of just throwing the exception
@@ -717,7 +718,7 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 			return DC_ERROR;
 		return DC_COMPLETEQUIET;
 	case 99:
-		/* cant log in when logged in */
+		/* can't log in when logged in */
 		if (myrpt->loginlevel[0])
 			return DC_ERROR;
 		*myrpt->loginuser = 0;
@@ -1157,10 +1158,9 @@ int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int comma
 
 int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
 {
-	char string[50], fname[50];
+	char string[50], func[100];
 	char paramcopy[500];
 	int argc;
-	FILE *fp;
 	char *argv[101], *cp;
 	int i, j, k, r, src;
 	struct rpt_tele *telem;
@@ -1714,28 +1714,24 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			rpt_telemetry(myrpt, COMPLETE, NULL);
 		}
 		return DC_COMPLETE;
-	case 63:					/* send pre-configured APRSTT notification */
-	case 64:
-		if (argc < 2)
-			break;
-		if (!myrpt->p.aprstt)
-			break;
-		if (!myrpt->p.aprstt[0])
-			ast_copy_string(fname, APRSTT_PIPE, sizeof(fname) - 1);
-		else
-			snprintf(fname, sizeof(fname) - 1, APRSTT_SUB_PIPE, myrpt->p.aprstt);
-		fp = fopen(fname, "w");
-		if (!fp) {
-			ast_log(LOG_WARNING, "Can not open APRSTT pipe %s\n", fname);
+	case 63:					/* send pre-configured APRStt notification */
+	case 64:					/* same, but quiet */
+		if (argc < 2) {
 			break;
 		}
-		if (argc > 2)
-			fprintf(fp, "%s %c\n", argv[1], *argv[2]);
-		else
-			fprintf(fp, "%s\n", argv[1]);
-		fclose(fp);
-		if (myatoi(argv[0]) == 63)
-			rpt_telemetry(myrpt, ARB_ALPHA, (void *) argv[1]);
+		
+		if (!ast_custom_function_find("APRS_SENDTT")) {
+			ast_log(LOG_WARNING, "app_gps is not loaded.  APRStt failed\n");
+			return DC_COMPLETE;
+		}
+		snprintf(func, sizeof(func) -1, "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt ? "general" : myrpt->p.aprstt, 
+			argc > 2 ? argv[2][0] : ' ');
+		/* execute the APRS_SENDTT function in app_gps*/
+		if (!ast_func_write(NULL, func, argv[1])) {
+			if (myatoi(argv[0]) == 63) {
+				rpt_telemetry(myrpt, ARB_ALPHA, (void *) argv[1]);
+			}
+		}
 		return DC_COMPLETE;
 	case 65:					/* send POCSAG page */
 		if (argc < 3)
