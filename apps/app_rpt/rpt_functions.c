@@ -362,7 +362,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 
 	case 16:					/* Restore links disconnected with "disconnect all links" command */
 		strcpy(tmp, myrpt->savednodes);	/* Make a copy */
-		finddelim(tmp, strs, MAXLINKLIST);	/* convert into substrings */
+		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
 		for (i = 0; tmp[0] && strs[i] != NULL && i < MAXLINKLIST; i++) {
 			s1 = strs[i];
 			if (s1[0] == 'X')
@@ -921,7 +921,7 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 		if (!lparam) {
 			return DC_ERROR;
 		}
-		paramlength = finddelim(lparam, paramlist, 20);
+		paramlength = finddelim(lparam, paramlist, ARRAY_LEN(paramlist));
 		for (i = 0; i < paramlength; i++) {
 			index = matchkeyword(paramlist[i], &value, keywords);
 			if (value)
@@ -1172,7 +1172,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		return DC_ERROR;
 
 	ast_copy_string(paramcopy, param, sizeof(paramcopy));
-	argc = explode_string(paramcopy, argv, 100, ',', 0);
+	argc = explode_string(paramcopy, argv, ARRAY_LEN(argv), ',', 0);
 
 	if (!argc)
 		return DC_ERROR;

@@ -207,7 +207,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
 
-			__mklinklist(myrpt, NULL, lbuf, 0);
+			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 
 			j = 0;
 			l = myrpt->links.next;
@@ -271,7 +271,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Get all linked nodes info */
 
 			/* parse em */
-			ns = finddelim(lbuf, strs, MAXLINKLIST);
+			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);

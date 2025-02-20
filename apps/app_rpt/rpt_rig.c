@@ -2444,7 +2444,7 @@ char check_tx_freq(struct rpt *myrpt)
 	/* Parse the limits */
 
 	ast_copy_string(limits, limitlist->value, sizeof(limits));
-	finddelim(limits, limit_ranges, 40);
+	finddelim(limits, limit_ranges, ARRAY_LEN(limit_ranges));
 	for (i = 0; i < 40 && limit_ranges[i]; i++) {
 		char range[40];
 		char *r, *s;

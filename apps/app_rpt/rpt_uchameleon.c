@@ -97,7 +97,7 @@ void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 		return;
 	}
 
-	argc = explode_string(valuecopy, argv, 6, ',', 0);
+	argc = explode_string(valuecopy, argv, ARRAY_LEN(argv), ',', 0);
 
 	ast_debug(3, "Alarm event on device %s, pin %d, state = %d\n", argv[0], p->num, p->value);
 
@@ -188,7 +188,7 @@ int uchameleon_pin_init(struct daq_entry_tag *t)
 
 		ast_copy_string(s, var->value, sizeof(s) - 1);
 
-		if (explode_string(s, argv, 6, ',', 0) != 6) {
+		if (explode_string(s, argv, ARRAY_LEN(argv), ',', 0) != 6) {
 			ast_log(LOG_WARNING, "Alarm arguments must be 6 for %s\n", var->name);
 			var = var->next;
 			continue;
@@ -574,7 +574,7 @@ void *uchameleon_monitor_thread(void *this)
 			ast_debug(5, "Received: %s\n", rxbuff);
 			valid = 0;
 			/* Parse return string */
-			i = explode_string(rxbuff, rxargs, 3, ' ', 0);
+			i = explode_string(rxbuff, rxargs, ARRAY_LEN(rxargs), ' ', 0);
 			if (i == 3) {
 				if (!strcmp(rxargs[0], "pin")) {
 					valid = 1;

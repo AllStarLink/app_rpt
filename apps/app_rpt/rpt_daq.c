@@ -230,7 +230,7 @@ int handle_userout_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 
 	ast_debug(3, "String: %s\n", myargs);
 
-	argc = explode_string(myargs, argv, 10, ',', 0);
+	argc = explode_string(myargs, argv, ARRAY_LEN(argv), ',', 0);
 	if (argc < 4) {				/* Must have at least 4 arguments */
 		ast_log(LOG_WARNING, "Incorrect number of arguments for USEROUT function");
 		ast_free(myargs);
