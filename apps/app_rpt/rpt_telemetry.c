@@ -977,6 +977,7 @@ void *rpt_tele_thread(void *this)
 	float f;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25], c;
+	int type;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
@@ -1057,7 +1058,6 @@ void *rpt_tele_thread(void *this)
 	/* make a conference for the tx */
 	/* If the telemetry is only intended for a local audience, only connect the ID audio to the local tx conference so linked systems can't hear it */
 	/* first put the channel on the conference in announce mode */
-	int type;
 	switch (mytele->mode) {
 		case ID1:
 		case PLAYBACK:
