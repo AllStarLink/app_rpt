@@ -977,7 +977,7 @@ void *rpt_tele_thread(void *this)
 	float f;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25], c;
-	int type;
+	enum rpt_conf_type type;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
