@@ -1592,7 +1592,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 				strcat(cp, ",");
 			strcat(cp, argv[i]);
 		}
-		rpt_telemetry(myrpt, PAGE, cp);
+		rpt_telemetry(myrpt, PAGE, cp); /* cp is passed to rpt_telem_thread where it is free'd after use */
 		return DC_COMPLETE;
 
 	case 49:					/* Disable Incoming connections */
@@ -1686,7 +1686,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		}
 		ast_copy_string(mdcp->type, argv[1], sizeof(mdcp->type));
 		mdcp->UnitID = (short) strtol(argv[2], NULL, 16);
-		rpt_telemetry(myrpt, MDC1200, (void *) mdcp);
+		rpt_telemetry(myrpt, MDC1200, (void *) mdcp); /* mdcp is passed to rpt_telem_thread where it is free'd after use */
 		return DC_COMPLETE;
 #endif
 	case 61:					/* send GPIO change */
