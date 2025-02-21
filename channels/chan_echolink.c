@@ -228,10 +228,10 @@ do not use 127.0.0.1
 #define	QUOTECHR 34
 
 #define EL_WELCOME_MESSAGE "oNDATA\rWelcome to AllStar Node %s\rEcholink Node %s\rNumber %u\r \r"
-#define EL_INIT_BUFFER sizeof(EL_WELCOME_MESSAGE)
-			+ 16 \ /* ASL & EL nodes #'s */
-			+ 80 \ /* room for "a" message */
-			+ (50 * 8) /* room for linked ASL and EL nodes */
+#define EL_INIT_BUFFER sizeof(EL_WELCOME_MESSAGE) \
+		+ 16  		/* ASL & EL nodes #'s */  \
+		+ 80  		/* room for "a" message */ \
+		+ (50 * 8) 	/* room for linked ASL and EL nodes */
 /* 
  * If you want to compile/link this code
  * on "BIG-ENDIAN" platforms, then
@@ -1910,7 +1910,7 @@ static void lookup_node_callsign(const void *nodep, const VISIT which, void *clo
 static void send_info(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
-	struct ast_str *pkt;
+	struct ast_str *pkt = NULL;
 	char *cp;
 	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 
@@ -1925,17 +1925,17 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
 
-		ast_str_set(pkt, 0, EL_WELCOME_MESSAGE, instp->astnode, instp->mycall, instp->mynode);
+		ast_str_set(&pkt, 0, EL_WELCOME_MESSAGE, instp->astnode, instp->mycall, instp->mynode);
 
 		if (instp->mymessage[0] != '\0') {
-			ast_str_append(pkt, 0, "%s\n\n", instp->mymessage);
+			ast_str_append(&pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
-		if (cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL) {
-			ast_str_append(pkt, 0, "Systems Linked:\r%s", cp);
+		if ((cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL)) {
+			ast_str_append(&pkt, 0, "Systems Linked:\r%s", cp);
 		}
 
-		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_len(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
+		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
 		ast_free(pkt);
 
 		instp->tx_ctrl_packets++;
