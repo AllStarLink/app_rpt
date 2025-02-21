@@ -1057,9 +1057,13 @@ void *rpt_tele_thread(void *this)
 	/* make a conference for the tx */
 	/* If the telemetry is only intended for a local audience, only connect the ID audio to the local tx conference so linked systems can't hear it */
 	/* first put the channel on the conference in announce mode */
-	if (rpt_conf_add(mychannel, myrpt, mytele->mode == MDC1200 || mytele->mode == PAGE ||
-			mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE || 
-			mytele->mode == STATS_GPS_LEGACY ? RPT_CONF : RPT_TELECONF, RPT_CONF_CONFANN)) {
+	if (rpt_conf_add(mychannel,
+					 myrpt,
+					 mytele->mode == ID1 || mytele->mode == PLAYBACK || mytele->mode == TEST_TONE ||
+							 mytele->mode == STATS_GPS_LEGACY
+						 ? RPT_CONF
+						 : RPT_TELECONF,
+					 RPT_CONF_CONFANN)) {
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
