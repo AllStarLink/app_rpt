@@ -39,7 +39,15 @@ int send_usb_txt(struct rpt *myrpt, char *txt);
 /*! \brief send asterisk frame text message on the current tx channel */
 int send_link_pl(struct rpt *myrpt, char *txt);
 
-/*! \brief send newkey request */
+/*! \brief send newkey request NEWKEY1STR to caller.  When a call is initiated
+ * l->link_newkey is set to RADIO_KEY_NOT_ALLOWED, and l->newkeytimer is activate.
+ * If the timer expires before receiving NEWKEY1STR, l->link_newkey is set to RADIO_KEY_ALLOWED.
+*/
 void send_newkey(struct ast_channel *chan);
+
+/*! \brief send newkey request NEWKEYSTR to caller.  This appears to be a legacy message.
+ * If NEWKEYSTR is received on the link, l->link_newkey is set RADIO_KEY_ALLOWED_REDUNDANT,
+ * the l->newkeytimer disabled, and NEWKEYSTR is echoed to the caller.
+*/
 
 void send_newkey_redundant(struct ast_channel *chan);
