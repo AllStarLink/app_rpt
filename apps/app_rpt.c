@@ -7286,7 +7286,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		keyed = myrx;
 		update_timer(&myrpt->rxlingertimer, elap, 0);
-		if ((myrpt->newkey == RADIO_KEY_NOT_ALLOWED) && keyed && (!myrpt->rxlingertimer)) {
+		if ((myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED) && keyed && (!myrpt->rxlingertimer)) {
 			myrpt->rerxtimer = 0;
 			keyed = 0;
 		}
