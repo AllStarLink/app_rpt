@@ -313,6 +313,7 @@
 #include "asterisk/module.h"
 #include "asterisk/translate.h"
 #include "asterisk/features.h"
+#include "asterisk/mixmonitor.h"
 #include "asterisk/options.h"
 #include "asterisk/cli.h"
 #include "asterisk/config.h"
@@ -7117,7 +7118,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		b1 = b;
 	if (myrpt->p.archivedir) {
 		char mycmd[512], mydate[100];
-		const char *myformat;
+		char filename[PATH_MAX];
 		time_t myt;
 		long blocksleft;
 
@@ -7126,18 +7127,18 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		mkdir(mycmd, 0775);
 		time(&myt);
 		strftime(mydate, sizeof(mydate), "%Y%m%d%H%M%S", localtime(&myt));
-		myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
-		snprintf(mycmd, sizeof(mycmd), "mixmonitor start %s %s/%s/%s.%s a",
-			ast_channel_name(chan), myrpt->p.archivedir, myrpt->name, myformat, mydate);
+		snprintf(filename, sizeof(filename), "%s/%s/%s.%s", myrpt->p.archivedir, myrpt->name, mydate, S_OR(myrpt->p.archiveformat, "wav49"));
 		if (myrpt->p.monminblocks) {
 			blocksleft = diskavail(myrpt);
 			if (myrpt->p.remotetimeout) {
 				blocksleft -= (myrpt->p.remotetimeout * MONITOR_DISK_BLOCKS_PER_MINUTE) / 60;
 			}
-			if (blocksleft >= myrpt->p.monminblocks)
-				ast_cli_command(nullfd, mycmd);
-		} else
-			ast_cli_command(nullfd, mycmd);
+			if (blocksleft >= myrpt->p.monminblocks) {
+				ast_start_mixmonitor(chan, filename, "a");
+			}
+		} else {
+			ast_start_mixmonitor(chan, filename, "a");
+		}
 		snprintf(mycmd, sizeof(mycmd), "CONNECT,%s", b1);
 		donodelog(myrpt, mycmd);
 		rpt_update_links(myrpt);
@@ -7471,8 +7472,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	/* wait for telem to be done */
 	while (myrpt->tele.next != &myrpt->tele)
 		usleep(50000);
-	sprintf(tmp, "mixmonitor stop %s", ast_channel_name(chan));
-	ast_cli_command(nullfd, tmp);
+	ast_stop_mixmonitor(chan, NULL);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->hfscanmode = 0;
 	myrpt->hfscanstatus = 0;
