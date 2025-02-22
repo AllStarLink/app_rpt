@@ -3119,6 +3119,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		update_timer(&l->rxlingertimer, elap, 0);
 
 		/* Update the timer, checking if it expired just now. */
+		newkeytimer_last = l->newkeytimer;
 		update_timer(&l->newkeytimer, elap, 0);
 
 		/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
