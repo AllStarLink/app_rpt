@@ -3119,7 +3119,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		update_timer(&l->rxlingertimer, elap, 0);
 
 		/* Update the timer, checking if it expired just now. */
-		x = l->newkeytimer;
 		update_timer(&l->newkeytimer, elap, 0);
 
 		/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
@@ -7303,7 +7302,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		keyed = myrx;
 		update_timer(&myrpt->rxlingertimer, elap, 0);
-		if ((myrpt->newkey == 2) && keyed && (!myrpt->rxlingertimer)) {
+		if ((myrpt->newkey == RADIO_KEY_NOT_ALLOWED) && keyed && (!myrpt->rxlingertimer)) {
 			myrpt->rerxtimer = 0;
 			keyed = 0;
 		}
