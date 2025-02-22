@@ -3457,8 +3457,9 @@ static void *el_reader(void *data)
 				char aprsstr[512], aprscall[256], gps_data[100], latc, lonc;
 				unsigned char sdes_packet[256];
 				unsigned long long u_mono;
-				float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
-				int sdes_length, from_GPS = 0;
+				float lat, lon, mylat, mylon;
+				double latmin, lonmin;
+				int sdes_length, from_GPS = 0, latdeg, londeg;
 				struct el_node_count count;
 				time_t now_mono, was_mono;
 
@@ -3500,17 +3501,23 @@ static void *el_reader(void *data)
 						}
 					}					
 				}
-				latc = (mylat >= 0.0) ? 'N' : 'S';
-				lonc = (mylon >= 0.0) ? 'E' : 'W';
-				lata = fabs(mylat);
-				lona = fabs(mylon);
-				latb = (lata - floor(lata)) * 60;
-				latd = (latb - floor(latb)) * 100 + 0.5;
-				lonb = (lona - floor(lona)) * 60;
-				lond = (lonb - floor(lonb)) * 100 + 0.5;
-				snprintf(aprsstr, sizeof(aprsstr), ")EL-%-6.6s!%02d%02d.%02d%cE%03d%02d.%02d%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
-					(int) lata, (int) latb, (int) latd, latc,
-					(int) lona, (int) lonb, (int) lond, lonc,
+
+				/* APRS location format is ddmm.hh (lat) or dddmm.hh (long)
+			     * followed by the cardinal compass direction as N,S,E,W.
+			     * hh hundredths of minutes not thousandths  as is the standard format.
+			     */
+				/* lat conversion */
+				latc = mylat >= 0 ? 'N' : 'S';
+				latdeg = (int) fabs(mylat);
+				latmin = (fabs(mylat) - latdeg) * 60.0;
+
+				/* lon conversion */
+				lonc = mylon >= 0 ? 'E' : 'W';
+				londeg = (int) fabs(mylon);
+				lonmin = (fabs(mylon) - londeg) * 60.0;
+
+				snprintf(aprsstr, sizeof(aprsstr), ")EL-%-6.6s!%02d%05.2f%cE%03d%05.2f%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
+					latdeg, latmin, latc, londeg, lonmin, lonc,
 					instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
