@@ -47,7 +47,7 @@ void send_newkey(struct ast_channel *chan);
 
 /*! \brief send newkey request NEWKEYSTR to caller.  This appears to be a legacy message.
  * If NEWKEYSTR is received on the link, l->link_newkey is set RADIO_KEY_ALLOWED_REDUNDANT,
- * the l->newkeytimer disabled, and NEWKEYSTR is echoed to the caller.
+ * the l->newkeytimer is disabled, and NEWKEYSTR is echoed to the caller.
 */
 
 void send_newkey_redundant(struct ast_channel *chan);
