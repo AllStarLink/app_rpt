@@ -4079,6 +4079,9 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 					AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) x++;
 					for (; x < myrpt->p.simplexpatchdelay; x++) {
 						f1 = ast_frdup(f);
+						if (!f1) {
+							return 0;
+						}
 						memset(f1->data.ptr, 0, f1->datalen);
 						memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 						AST_LIST_INSERT_TAIL(&myrpt->txq, f1, frame_list);
@@ -4086,6 +4089,9 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 					*myfirst = 1;
 				}
 				f1 = ast_frdup(f);
+				if (!f1) {
+					return 0;
+				}
 				memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 				AST_LIST_INSERT_TAIL(&myrpt->txq, f1, frame_list);
 			} else {
@@ -4374,6 +4380,9 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 								AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) x++;
 								for (; x < myrpt->p.simplexphonedelay; x++) {
 									f1 = ast_frdup(f);
+									if (!f1) {
+										return 0;
+									}
 									memset(f1->data.ptr, 0, f1->datalen);
 									memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 									AST_LIST_INSERT_TAIL(&l->rxq, f1, frame_list);
@@ -4381,6 +4390,9 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 								*myfirst = 1;
 							}
 							f1 = ast_frdup(f);
+							if (!f1) {
+								return 0;
+							}
 							memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 							AST_LIST_INSERT_TAIL(&l->rxq, f1, frame_list);
 						} else {
@@ -4580,6 +4592,9 @@ static inline int monchannel_read(struct rpt *myrpt)
 			outstream_write(myrpt, f);
 		}
 		fs = ast_frdup(f);
+		if (!fs) {
+			return -1;
+		}
 		fac = 1.0;
 		if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")))
 			fac = myrpt->p.etxgain;
@@ -5909,6 +5924,10 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 					AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
 					for (; x < myrpt->p.simplexphonedelay; x++) {
 						f1 = ast_frdup(f);
+						if (!f1) {
+							ast_frfree(f);
+							return -1;
+						}
 						memset(f1->data.ptr, 0, f1->datalen);
 						memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 						AST_LIST_INSERT_TAIL(&myrpt->rxq, f1, frame_list);
@@ -5916,6 +5935,10 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 					*myfirst = 1;
 				}
 				f1 = ast_frdup(f);
+				if (!f1) {
+					ast_frfree(f);
+					return -1;
+				}
 				memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 				AST_LIST_INSERT_TAIL(&myrpt->rxq, f1, frame_list);
 			} else
