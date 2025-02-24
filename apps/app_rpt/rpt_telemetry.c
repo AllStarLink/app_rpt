@@ -2627,12 +2627,12 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	struct rpt_link *mylink = NULL;
 	int res, i, ns;
 	char *v1, *v2, mystr[1024], *p, haslink;
-	char *strs[MAXLINKLIST];
+	char *strs[MAXNODES];
 	struct rpt_link *l;
 	time_t t, t_mono, was_mono;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
-	struct ast_str *lbuf = ast_str_create(AST_STR_INIT_SIZE);
+	struct ast_str *lbuf;
 
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 

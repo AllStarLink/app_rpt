@@ -598,7 +598,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	char sx[320], *sy;
 	char *strs[MAXNODES]; /* List of pointers to links in link list string*/
 	struct rpt_link *l;
-	struct ast_str *lstr ast_str_create(AST_STR_INIT_SIZE));
+	struct ast_str *lstr;
 	int reconnects = 0;
 	int i, n;
 	int voterlink = 0;
@@ -622,15 +622,13 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 			}
 		} else {
 			if (strlen(node) < 7) {
-				ast_free(lstr);
 				return 1;
 			}
 			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);		
 		}
 	}
 
-	if (!strcmp(myrpt->name, node)) {	/* Do not allow connections to self */
-		ast_free(lstr);
+	if (!strcmp(myrpt->name, node)) { /* Do not allow connections to self */
 		return -2;
 	}
 
@@ -671,7 +669,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		/* if already in this mode, just ignore */
 		if ((l->mode == mode) || (!l->chan)) {
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_free(lstr);
 			return 2;			/* Already linked */
 		}
 		if ((!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
@@ -679,7 +676,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 			l->mode = mode;
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_free(lstr);
 			return 0;
 		}
 		reconnects = l->reconnects;
@@ -689,7 +685,12 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->retries = l->max_retries + 1;
 		l->disced = 2;
 		modechange = 1;
-	} else {
+	} else { /* Check to see if this noed is already linked */
+		lstr = ast_str_create(AST_STR_INIT_SIZE);
+		if (!lstr) {
+			rpt_mutex_unlock(&myrpt->lock);
+			return -1;
+		}
 		__mklinklist(myrpt, NULL, lstr, 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		n = finddelim(lstr, strs, ARRAY_LEN(strs));
@@ -697,9 +698,11 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 			if ((*strs[i] < '0') || (*strs[i] > '9'))
 				strs[i]++;
 			if (!strcmp(strs[i], node)) {
-				ast_free(lstr) return 2; /* Already linked */
+				ast_free(lstr);
+				return 2; /* Already linked */
 			}
 		}
+		ast_free(lstr);
 	}
 	ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 	/* establish call */
@@ -736,7 +739,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
 		ast_free(l);
-		ast_free(lstr);
 		return -1;
 	}
 	*tele++ = 0;
@@ -745,7 +747,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		ast_free(l);
-		ast_free(lstr);
 		return -1;
 	}
 
@@ -772,7 +773,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 			donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		}
 		ast_free(l);
-		ast_free(lstr);
 		ao2_ref(cap, -1);
 		return -1;
 	}
@@ -782,6 +782,9 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
+		if (l->linklist) {
+			ast_free(l->linklist);
+		}
 		ast_free(l);
 		return -1;
 	}
@@ -792,6 +795,9 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
+		if (l->linklist) {
+			ast_free(l->linklist);
+		}
 		ast_free(l);
 		return -1;
 	}
