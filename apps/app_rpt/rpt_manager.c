@@ -118,7 +118,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 {
 	int i, j;
 	unsigned int ns;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char *strs[MAXNODES];
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
 	char *connstate;
@@ -127,10 +127,13 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 	struct rpt_lstat s_head;
 	const char *node = astman_get_header(m, "Node");
 	int nrpts = rpt_num_rpts();
+	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;
-
+	if (!lbuf) {
+		return -1;
+	}
 	s = NULL;
 	s_head.next = &s_head;
 	s_head.prev = &s_head;
@@ -206,9 +209,9 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
-
-			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
-
+			ast_mutex_lock(&myrpt->lock);
+			__mklinklist(myrpt, NULL, &lbuf, 0);
+			ast_mutex_unlock(&myrpt->lock);
 			j = 0;
 			l = myrpt->links.next;
 			while (l && (l != &myrpt->links)) {
@@ -218,6 +221,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				}
 				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
 					rpt_mutex_unlock(&myrpt->lock);
+					ast_free(lbuf);
 					return -1;
 				}
 				memset(s, 0, sizeof(struct rpt_lstat));
@@ -270,7 +274,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Get all linked nodes info */
 
 			/* parse em */
-			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -348,10 +352,12 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			astman_append(ses, "tel_mode: %s\r\n", tel_mode);
 			astman_append(ses, "\r\n");
 
+			ast_free(lbuf);
 			return 0;
 		}
 	}
 	astman_send_error(ses, m, "RptStatus unknown or missing node");
+	ast_free(lbuf);
 	return 0;
 }
 

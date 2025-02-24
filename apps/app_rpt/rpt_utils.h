@@ -9,20 +9,14 @@
 
 int matchkeyword(char *string, char **param, char *keywords[]);
 
-/*
-* Break up a delimited string into a table of substrings
-*
-* str - delimited string ( will be modified )
-* strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
-* limit- maximum number of substrings to process
-* delim- user specified delimiter
-* quote- user specified quote for escaping a substring. Set to zero to escape nothing.
-*
-* Note: This modifies the string str, be suer to save an intact copy if you need it later.
-*
-* Returns number of substrings found.
-*/
-
+/*!
+ * \brief Explode a string into an array of pointers to the start of each token.
+ * \param str The string to explode (will be modified)
+ * \param strp An array of pointers to the start of each token
+ * \param delim The delimiter to use
+ * \param quote The quote character to use
+ * \return The number of substrings found.
+ */
 int explode_string(char *str, char *strp[], size_t limit, char delim, char quote);
 
 char *strupr(char *instr);
