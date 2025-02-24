@@ -1753,10 +1753,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'L') {
 		rpt_mutex_lock(&myrpt->lock);
-		if (strlen(str + 2) > sizeof(mylink->linklist) - 1) {
-			ast_log(LOG_WARNING, "Link list too long: buffer size: %ld, link size: %ld linklist: %s\n", sizeof(mylink->linklist) - 1, strlen(str + 2), str + 2);
-		}
-		ast_copy_string(mylink->linklist, str + 2, sizeof(mylink->linklist));
+		ast_str_set(&mylink->linklist, 0, "%s", str + 2); /* Dropping the "L " of the message */
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
@@ -3104,7 +3101,6 @@ static inline void update_timer(int *timer_ptr, int elap, int end_val)
 	}
 }
 
-
 static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;
@@ -3224,7 +3220,10 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 			struct ast_frame lf;
-			char lstr[MAXLINKLIST];
+			struct ast_str *lstr = ast_str_create(AST_STR_INIT_SIZE);
+			if (!lstr) {
+				return;
+			}
 			memset(&lf, 0, sizeof(lf));
 			lf.frametype = AST_FRAME_TEXT;
 			lf.subclass.format = ast_format_slin;
@@ -3232,16 +3231,21 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			lf.mallocd = 0;
 			lf.samples = 0;
 			l->linklisttimer = LINKLISTTIME;
-			strcpy(lstr, "L ");
+			ast_str_set(&lstr, 2, "%s", "L ");
 			rpt_mutex_lock(&myrpt->lock);
-			__mklinklist(myrpt, l, lstr + 2, sizeof(lstr) - 2, 0);
+			__mklinklist(myrpt, l, &lstr, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 			if (l->chan) {
-				lf.datalen = strlen(lstr) + 1;
-				lf.data.ptr = lstr;
+				lf.datalen = ast_str_strlen(lstr) + 1;
+				lf.data.ptr = ast_str_buffer(lstr);
 				rpt_qwrite(l, &lf);
-				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, lstr, l->name);
+				ast_debug(7,
+						  "@@@@ node %s sent node string %s to node %s\n",
+						  myrpt->name,
+						  ast_str_buffer(lstr),
+						  l->name);
 			}
+			ast_free(lstr);
 		}
 		if (l->link_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
 			if ((l->retxtimer += elap) >= REDUNDANT_TX_TIME) {
@@ -3323,7 +3327,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			}
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
-			ast_free(l);
+			rpt_free_link_helper(l);
 			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
@@ -3346,7 +3350,8 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			dodispgm(myrpt, l->name);
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
-			ast_free(l);
+			rpt_free_link_helper(l);
+
 			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
@@ -4247,7 +4252,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_hangup(l->pchan);
-	ast_free(l);
+	rpt_free_link_helper(l);
 }
 
 static inline void fac_frame(struct ast_frame *restrict f, float fac)
@@ -5318,7 +5323,7 @@ static void *rpt(void *this)
 				if (l->chan)
 					ast_hangup(l->chan);
 				ast_hangup(l->pchan);
-				ast_free(l);
+				rpt_free_link_helper(l);
 				rpt_mutex_lock(&myrpt->lock);
 				/* re-start link traversal */
 				l = myrpt->links.next;
@@ -5524,7 +5529,7 @@ static void *rpt(void *this)
 			ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		l = l->next;
-		ast_free(ll);
+		rpt_free_link_helper(ll);
 	}
 	if (myrpt->xlink == 1)
 		myrpt->xlink = 2;
@@ -6711,6 +6716,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* establish call in tranceive mode */
 		l = ast_calloc(1, sizeof(struct rpt_link));
 		if (!l) {
+			pthread_exit(NULL);
+		}
+		l->linklist = ast_str_create(AST_STR_INIT_SIZE);
+		if (!l->linklist) {
+			ast_free(l);
 			pthread_exit(NULL);
 		}
 		l->mode = 1;
