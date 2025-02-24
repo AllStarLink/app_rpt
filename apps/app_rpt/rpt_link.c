@@ -595,11 +595,11 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	char *s, *s1, *tele, *cp;
 	char tmp[300], deststr[325] = "", modechange = 0;
 	char sx[320], *sy;
-	char *strs[MAXNODES]; /* List of pointers to links in link list string */
+	char **strs; /* List of pointers to links in link list string */
 	struct rpt_link *l;
 	struct ast_str *lstr;
 	int reconnects = 0;
-	int i, n;
+	int i, ns, n = 1;
 	int voterlink = 0;
 	struct ast_format_cap *cap;
 
@@ -687,18 +687,25 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 			rpt_mutex_unlock(&myrpt->lock);
 			return -1;
 		}
-		__mklinklist(myrpt, NULL, &lstr, 0);
+		n = __mklinklist(myrpt, NULL, &lstr, 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		n = finddelim(ast_str_buffer(lstr), strs, ARRAY_LEN(strs));
-		for (i = 0; i < n; i++) {
+		strs = ast_malloc(sizeof(char *));
+		if (!strs) {
+			ast_free(lstr);
+			return -1;
+		}
+		ns = finddelim(ast_str_buffer(lstr), strs, n);
+		for (i = 0; i < ns; i++) {
 			if ((*strs[i] < '0') || (*strs[i] > '9'))
 				strs[i]++;
 			if (!strcmp(strs[i], node)) {
 				ast_free(lstr);
+				ast_free(strs);
 				return 2; /* Already linked */
 			}
 		}
 		ast_free(lstr);
+		ast_free(strs);
 	}
 	ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 	/* establish call */

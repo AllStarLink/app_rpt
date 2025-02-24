@@ -3189,8 +3189,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				lf.datalen = ast_str_strlen(lstr) + 1;
 				lf.data.ptr = ast_str_buffer(lstr);
 				rpt_qwrite(l, &lf);
-				ast_debug(
-					7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
+				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
 			}
 			ast_free(lstr);
 		}
@@ -6618,7 +6617,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!l->linklist) {
 			ast_free(l);
-			pthread_exit(NULL);
+			return -1;
 		}
 		l->mode = 1;
 		ast_copy_string(l->name, b1, MAXNODESTR);

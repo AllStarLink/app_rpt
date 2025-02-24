@@ -406,9 +406,9 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 
 static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 {
-	int i, j;
+	int i, j, n = 1;
 	unsigned int ns;
-	char *strs[MAXNODES];
+	char **strs;
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
 	char *connstate;
@@ -531,7 +531,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			/* ### GET CONNECTED NODE INFO ####################
 			 * Traverse the list of connected nodes
 			 */
-			__mklinklist(myrpt, NULL, &lbuf, 0);
+			rpt_mutex_lock(&myrpt->lock); /* LOCK */
+			n = __mklinklist(myrpt, NULL, &lbuf, 0);
+			rpt_mutex_unlock(&myrpt->lock); /* LOCK */
 
 			j = 0;
 			l = myrpt->links.next;
@@ -540,11 +542,11 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 					l = l->next;
 					continue;
 				}
-				if ((s = ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
-					rpt_mutex_unlock(&myrpt->lock);	// UNLOCK 
+				if (!(s = ast_calloc(1, sizeof(struct rpt_lstat)))) {
+					rpt_mutex_unlock(&myrpt->lock);
+					ast_free(lbuf);
 					return RESULT_FAILURE;
 				}
-				memset(s, 0, sizeof(struct rpt_lstat));
 				ast_copy_string(s->name, l->name, MAXNODESTR - 1);
 				if (l->chan)
 					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", s->peer, MAXPEERSTR - 1);
@@ -591,8 +593,13 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			}
 
 //### GET ALL LINKED NODES INFO ####################
+			strs = ast_malloc(sizeof(char *));
+			if (!strs) {
+				ast_free(lbuf);
+				return RESULT_FAILURE;
+			}
 			/* parse em */
-			ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, n);
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -609,8 +616,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 			}
 			ast_cli(fd, "\n\n");
+			ast_free(strs);
 
-//### GET VARIABLES INFO ####################
+			/* ### GET VARIABLES INFO #################### */
 			j = 0;
 			ast_channel_lock(rpt_vars[i].rxchannel);
 			AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[i].rxchannel), newvariable, entries) {
@@ -620,7 +628,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			ast_channel_unlock(rpt_vars[i].rxchannel);
 			ast_cli(fd, "\n");
 
-//### OUTPUT RPT STATUS STATES ##############
+			/* ### OUTPUT RPT STATUS STATES ############## */
 			ast_cli(fd, "parrot_ena=%s\n", parrot_ena);
 			ast_cli(fd, "sys_ena=%s\n", sys_ena);
 			ast_cli(fd, "tot_ena=%s\n", tot_ena);
@@ -646,9 +654,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 /*! \brief List all nodes connected, directly or indirectly */
 static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 {
-	int i, j;
+	int i, j, n = 1;
 	unsigned int ns;
-	char *strs[MAXNODES];
+	char **strs;
 	struct rpt *myrpt;
 	int nrpts = rpt_num_rpts();
 	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
@@ -668,10 +676,15 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
-			__mklinklist(myrpt, NULL, &lbuf, 0);
+			n = __mklinklist(myrpt, NULL, &lbuf, 0);
 			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
+			strs = ast_malloc(sizeof(char *));
+			if (!strs) {
+				ast_free(lbuf);
+				return RESULT_FAILURE;
+			}
 			/* parse em */
-			ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, n);
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -693,6 +706,7 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 				}
 			}
 			ast_cli(fd, "\n\n");
+			ast_free(strs);
 			ast_free(lbuf);
 			return RESULT_SUCCESS;
 		}

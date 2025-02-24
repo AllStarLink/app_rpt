@@ -116,9 +116,8 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 
 static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m, char *str)
 {
-	int i, j;
-	unsigned int ns;
-	char *strs[MAXNODES];
+	int i, j, ns, n = 1;
+	char **strs;
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
 	char *connstate;
@@ -210,7 +209,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
 			ast_mutex_lock(&myrpt->lock);
-			__mklinklist(myrpt, NULL, &lbuf, 0);
+			n = __mklinklist(myrpt, NULL, &lbuf, 0);
 			ast_mutex_unlock(&myrpt->lock);
 			j = 0;
 			l = myrpt->links.next;
@@ -272,9 +271,13 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			astman_append(ses, "LinkedNodes: ");
 
 			/* Get all linked nodes info */
-
+			strs = ast_malloc(sizeof(char *));
+			if (!strs) {
+				ast_free(lbuf);
+				return RESULT_FAILURE;
+			}
 			/* parse em */
-			ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, n);
 			/* sort em */
 			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -292,6 +295,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				}
 			}
 			astman_append(ses, "\r\n");
+			ast_free(strs);
 
 			/* Get variables info */
 			j = 0;
