@@ -30,32 +30,34 @@ int matchkeyword(char *string, char **param, char *keywords[])
 	return 0;
 }
 
-int explode_string(char *str, char *strp[], size_t limit, char delim, char quote)
+int explode_string(struct ast_str *str, char *strp[], char delim, char quote)
 {
-	int i, inquo;
-
-	inquo = 0;
-	i = 0;
-	strp[i++] = str;
-	if (!*str) {
-		strp[0] = 0;
-		return (0);
+	int i = 0, inquo = 0;
+	char *tmpstr = ast_str_buffer(str);
+	if (!tmpstr) {
+		return 0;
 	}
-	for (; *str && (i < (limit - 1)); str++) {
+
+	strp[i++] = tmpstr;
+	if (!*tmpstr) {
+		strp[0] = 0;
+		return 0;
+	}
+	for (; *tmpstr && (i < ast_str_strlen(str) - 1); tmpstr++) {
 		if (quote) {
-			if (*str == quote) {
+			if (*tmpstr == quote) {
 				if (inquo) {
-					*str = 0;
+					*tmpstr = 0;
 					inquo = 0;
 				} else {
-					strp[i - 1] = str + 1;
+					strp[i - 1] = tmpstr + 1;
 					inquo = 1;
 				}
 			}
 		}
-		if ((*str == delim) && (!inquo)) {
-			*str = 0;
-			strp[i++] = str + 1;
+		if ((*tmpstr == delim) && (!inquo)) {
+			*tmpstr = 0;
+			strp[i++] = tmpstr + 1;
 		}
 	}
 	strp[i] = 0;
@@ -84,10 +86,16 @@ char *string_toupper(char *str)
 	}
 	return str;
 }
+/*!
+ * \brief Find the delimiter in a string and return a pointer array to the start of each
+ * token. \param str The string to search \param strp An array of pointers to the start of
+ * each token \param limit The maximum number of tokens to find \return The number of
+ * tokens found
+ */
 
-int finddelim(char *str, char *strp[], size_t limit)
+int finddelim(struct ast_str *str, char *strp[], size_t limit)
 {
-	return explode_string(str, strp, limit, DELIMCHR, QUOTECHR);
+	return explode_string(str, strp, DELIMCHR, QUOTECHR);
 }
 
 char *skipchars(char *string, char *charlist)

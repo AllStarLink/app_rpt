@@ -971,13 +971,14 @@ void *rpt_tele_thread(void *this)
 	char *p, *ct, *ct_copy, *ident, *nodename;
 	time_t t, t1, t_mono, was_mono;
 	struct ast_tm localtm;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char *strs[MAXNODES];
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25], c;
-	enum rpt_conf_type type;
+	struct ast_str *lbuf;
+
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
@@ -1257,7 +1258,12 @@ void *rpt_tele_thread(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 
 treataslocal:
-
+		lbuf = ast_str_create(AST_STR_INIT_SIZE);
+		if (!lbuf) {
+			ast_log(
+			LOG_WARNING, "ast_str_create failed on %s\n", ast_channel_name(mychannel));
+			goto abort;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
 		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
@@ -2152,9 +2158,15 @@ treataslocal:
 		imdone = 1;
 		break;
 	case FULLSTATUS:
+		lbuf = ast_str_create(AST_STR_INIT_SIZE);
+		if (!lbuf) {
+			ast_log(
+			LOG_WARNING, "ast_str_create failed on %s\n", ast_channel_name(mychannel));
+			goto abort;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+		__mklinklist(myrpt, NULL, lbuf, 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
 		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
@@ -2615,12 +2627,13 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	struct rpt_link *mylink = NULL;
 	int res, i, ns;
 	char *v1, *v2, mystr[1024], *p, haslink;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char *strs[MAXLINKLIST];
 	struct rpt_link *l;
 	time_t t, t_mono, was_mono;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
-	
+	struct ast_str *lbuf = ast_str_create(AST_STR_INIT_SIZE);
+
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 
 	if ((mode == ID) && is_paging(myrpt)) {
@@ -2866,6 +2879,12 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			send_tele_link(myrpt, mystr);
 			return;
 		case FULLSTATUS:
+			lbuf = ast_str_create(AST_STR_INIT_SIZE);
+			if (!lbuf) {
+				ast_log(LOG_WARNING, "ast_str_create failed on %s\n", myrpt->name);
+				return;
+			}
+
 			rpt_mutex_lock(&myrpt->lock);
 			sprintf(mystr, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* get all the nodes */
@@ -2895,6 +2914,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, strs[i]);
 			}
 			send_tele_link(myrpt, mystr);
+			ast_free(lbuf);
 			return;
 		}
 	}

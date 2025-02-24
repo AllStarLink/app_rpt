@@ -1745,11 +1745,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'L') {
-		rpt_mutex_lock(&myrpt->lock);
-		if (strlen(str + 2) > sizeof(mylink->linklist) - 1) {
-			ast_log(LOG_WARNING, "Link list too long: buffer size: %ld, link size: %ld linklist: %s\n", sizeof(mylink->linklist) - 1, strlen(str + 2), str + 2);
+		rpt_mutex_lock(&myrpt->lock);)
+		if (!mylink->linklist)
+		{
+			rpt_mutex_unlock(&myrpt->lock);
+			return;
 		}
-		ast_copy_string(mylink->linklist, str + 2, sizeof(mylink->linklist));
+		ast_str_set(&mylink->linklist, 0, "%s", str + 2);
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
@@ -3205,7 +3207,11 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 			struct ast_frame lf;
-			char lstr[MAXLINKLIST];
+			struct ast_str *lstr = ast_str_alloca(AST_STR_INIT_SIZE);
+			if (!lstr) {
+				ast_log(LOG_ERROR, "Failed to allocate memory for linklist string\n");
+				return;
+			}
 			memset(&lf, 0, sizeof(lf));
 			lf.frametype = AST_FRAME_TEXT;
 			lf.subclass.format = ast_format_slin;
@@ -3213,14 +3219,21 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			lf.mallocd = 0;
 			lf.samples = 0;
 			l->linklisttimer = LINKLISTTIME;
-			strcpy(lstr, "L ");
-			__mklinklist(myrpt, l, lstr + 2, sizeof(lstr) - 2, 0);
+			ast_str_set(lstr, 0, "L ");
+			rpt_mutex_lock(&myrpt->lock);
+			__mklinklist(myrpt, l, lstr, 0);
+			rpt_mutex_unlock(&myrpt->lock);
 			if (l->chan) {
-				lf.datalen = strlen(lstr) + 1;
-				lf.data.ptr = lstr;
+				lf.datalen = ast_str_strlen(lstr);
+				lf.data.ptr = ast_str_buffer(lstr);
 				rpt_qwrite(l, &lf);
-				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, lstr, l->name);
+				ast_debug(7,
+						  "@@@@ node %s sent node string %s to node %s\n",
+						  myrpt->name,
+						  ast_str_buffer(lstr),
+						  l->name);
 			}
+			ast_free(lstr);
 		}
 		if (l->newkey == 1) {
 			if ((l->retxtimer += elap) >= REDUNDANT_TX_TIME) {

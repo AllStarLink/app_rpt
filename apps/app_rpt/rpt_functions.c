@@ -54,10 +54,11 @@ static char remdtmfstr[] = "0123456789*#ABCD";
 int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
 {
 	char *s1, *s2, tmp[300];
-	char digitbuf[MAXNODESTR], *strs[MAXLINKLIST];
+	char digitbuf[MAXNODESTR], *strs[MAXNODES];
 	char mode, perma;
 	struct rpt_link *l;
 	int i, r;
+	struct ast_str *tmp_str;
 
 	if (!param)
 		return DC_ERROR;
@@ -361,9 +362,13 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		return DC_COMPLETE;
 
 	case 16:					/* Restore links disconnected with "disconnect all links" command */
-		strcpy(tmp, myrpt->savednodes);	/* Make a copy */
-		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
-		for (i = 0; tmp[0] && strs[i] != NULL && i < MAXLINKLIST; i++) {
+		tmp_str = ast_str_create(sizeof(myrpt->savednodes));
+		if (!tmp_str) {
+			break;
+		}
+		ast_str_set(tmp_str, 0, "%s", myrpt->savednodes);
+		finddelim(tmp_str, strs, ARRAY_LEN(strs)); /* convert into substrings */
+		for (i = 0; strs[i] != NULL && i < ast_str_strlen(tmp_str); i++) {
 			s1 = strs[i];
 			if (s1[0] == 'X')
 				mode = 1;
@@ -376,6 +381,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
+		ast_free(tmp_str);
 		break;
 
 	case 200:
