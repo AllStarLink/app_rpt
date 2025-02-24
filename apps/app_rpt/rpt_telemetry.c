@@ -93,7 +93,7 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 		return -1;
 	}
 
-	i = explode_string(myargs, argv, 4, ',', 0);
+	i = explode_string(myargs, argv, ARRAY_LEN(argv), ',', 0);
 	if ((i != 4) && (i != 3)) {	/* Must have 3 or 4 substrings, no more, no less */
 		ast_log(LOG_WARNING, "Wrong number of arguments for meter telemetry function is: %d s/b 3 or 4", i);
 		ast_free(myargs);
@@ -197,7 +197,7 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 		/*
 		 * Parse range entries
 		 */
-		if ((numranges = explode_string(start, range_strings, MAX_DAQ_RANGES, ',', 0)) < 2) {
+		if ((numranges = explode_string(start, range_strings, ARRAY_LEN(range_strings), ',', 0)) < 2) {
 			ast_log(LOG_WARNING, "At least 2 ranges required for range() in meter face %s\n", argv[2]);
 			ast_free(myargs);
 			ast_free(meter_face);
@@ -215,7 +215,7 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 		*start++ = 0;
 		*end = 0;
 		sounds = end + 2;
-		if (2 != explode_string(start, bitphrases, 2, ',', 0)) {
+		if (2 != explode_string(start, bitphrases, ARRAY_LEN(bitphrases), ',', 0)) {
 			ast_log(LOG_WARNING, "2 phrases required for bit() in meter face %s\n", argv[2]);
 			ast_free(myargs);
 			ast_free(meter_face);
@@ -293,7 +293,7 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 	}
 
 	/* Split up the sounds string */
-	files = explode_string(sounds, sound_files, MAX_METER_FILES, ',', 0);
+	files = explode_string(sounds, sound_files, ARRAY_LEN(sound_files), ',', 0);
 	if (files == 0) {
 		ast_log(LOG_WARNING, "No sound files to say for meter %s\n", argv[2]);
 		ast_free(myargs);
@@ -545,7 +545,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	unsigned int t1;
 	struct ast_tm localtm;
 
-	n = finddelim(varcmd, strs, 100);
+	n = finddelim(varcmd, strs, ARRAY_LEN(strs));
 	if (n < 1) {
 		return;
 	}
@@ -1260,10 +1260,10 @@ treataslocal:
 
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, 0);
+		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
-		ns = finddelim(lbuf, strs, MAXLINKLIST);
+		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 		haslink = 0;
 		for (i = 0; i < ns; i++) {
 			char *cpr = strs[i] + 1;
@@ -2154,10 +2154,10 @@ treataslocal:
 	case FULLSTATUS:
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, 0);
+		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
-		ns = finddelim(lbuf, strs, MAXLINKLIST);
+		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 		/* sort em */
 		if (ns)
 			qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -2869,10 +2869,10 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			sprintf(mystr, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* get all the nodes */
-			__mklinklist(myrpt, NULL, lbuf, 0);
+			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 			rpt_mutex_unlock(&myrpt->lock);
 			/* parse em */
-			ns = finddelim(lbuf, strs, MAXLINKLIST);
+			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);

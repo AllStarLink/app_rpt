@@ -11,6 +11,7 @@
 #include "asterisk/channel.h"
 #include "asterisk/pbx.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
+#include "asterisk/lock.h"
 
 #include "app_rpt.h"
 #include "rpt_utils.h"
@@ -22,6 +23,9 @@
 #include "rpt_vox.h"
 #include "rpt_link.h"
 #include "rpt_telemetry.h"
+
+#define OBUFSIZE(size) (size + sizeof("123456,")) /* size of buffer + room for node count + comma */
+#define BUFSIZE(size) (size)
 
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 {
@@ -450,15 +454,51 @@ void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 	check_link_list(myrpt);
 }
 
-void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int flag)
+/*!
+ * \brief Get required buffer size for link message. 
+ * \retval		buffer size.
+ */
+
+int __get_nodelist_size (struct rpt *myrpt)
+{
+	struct rpt_link *l;
+	int buffer_size_links = 0, buffer_size_alinks = 0, link_size;
+
+	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+		/* if is not a real link, ignore it */
+		if (l->name[0] == '0') {
+			continue;
+		}
+		if (l->mode > 1) {
+			continue;			/* Don't report local modes */
+		}
+		/* Calculate size of buffer required to build the list of linked repeaters.
+		 * RPT_ALINKS format = <count>,1234TU,4321TK,2233RU
+		 * RPT_LINKS format = <count>,T1234,R4321,T2233
+		 * Buffer size ALINKS = LINKS with additional U/K characters for each.
+		 */
+		if (l->linklist[0]) {
+			buffer_size_links += (strlen(l->linklist) + 1); /* +1: 1 for comma */
+		}
+		link_size = strlen(l->name);
+		buffer_size_links += (link_size + 2);  /* +2: 1 for comma, 1 form mode (T/R) */
+		buffer_size_alinks += (link_size + 3); /* +3: 1 for comma, 2 for mode (TU/TK/etc) */
+	}
+
+	return (buffer_size_links > buffer_size_alinks) ? buffer_size_links : buffer_size_alinks;
+}
+
+int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t bufsize, int flag)
 {
 	struct rpt_link *l;
 	char mode;
-	int i, spos;
+	int i, spos, link_count, one_link;
 
 	buf[0] = 0;					/* clear output buffer */
+	link_count = 0;
+	one_link = 0;
 	if (myrpt->remote)
-		return;
+		return 0;
 	/* go thru all links */
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
@@ -482,14 +522,15 @@ void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int fla
 			strcat(buf, ",");
 			spos++;
 		}
-		if (flag) {
-			snprintf(buf + spos, MAXLINKLIST - spos, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
-		} else {
+	    one_link = 1;
+		if (flag) { /* RPT_ALINK format - only show adjacent nodes*/
+			snprintf(buf + spos, bufsize - spos, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
+		} else { /* RPT_LINK format - show all nodes*/
 			/* add nodes into buffer */
 			if (l->linklist[0]) {
-				snprintf(buf + spos, MAXLINKLIST - spos, "%c%s,%s", mode, l->name, l->linklist);
+				snprintf(buf + spos, bufsize - spos, "%c%s,%s", mode, l->name, l->linklist);
 			} else {			/* if no nodes, add this node into buffer */
-				snprintf(buf + spos, MAXLINKLIST - spos, "%c%s", mode, l->name);
+				snprintf(buf + spos, bufsize - spos, "%c%s", mode, l->name);
 			}
 		}
 		/* if we are in tranceive mode, let all modes stand */
@@ -503,7 +544,15 @@ void __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, int fla
 				buf[i] = mode;
 		}
 	}
-	return;
+	/* After building the string, count number of nodes (commas) in buffer string. The first
+	 * node doesn't have a comma, so we need to add 1 if there is at least one_link.  
+	 */
+	for (link_count = 0; buf[link_count]; buf[link_count]==',' ? link_count++: *buf++);
+	if (one_link) { /* The first link in the list has no comma but we have 1 link */
+		link_count++;
+	}
+
+	return link_count;
 }
 
 void __kickshort(struct rpt *myrpt)
@@ -523,40 +572,53 @@ void __kickshort(struct rpt *myrpt)
 
 void rpt_update_links(struct rpt *myrpt)
 {
-	char buf[MAXLINKLIST], obuf[MAXLINKLIST + 20], *strs[MAXLINKLIST];
-	int n;
-
+	char *buf, *obuf;
+	int buffer_size, n;
+	/* figure out the RPT_LINK string size - this will be the largest size
+	 * RPT_ALINK is always a subset of RPT_LINK
+	 */
 	ast_mutex_lock(&myrpt->lock);
-	__mklinklist(myrpt, NULL, buf, 1);
-	ast_mutex_unlock(&myrpt->lock);
+	buffer_size = __get_nodelist_size(myrpt);
+	buf = ast_calloc(1, BUFSIZE(buffer_size));
+	if (!buf) {
+		ast_mutex_unlock(&myrpt->lock);
+		return;
+	}
+	obuf = ast_calloc(1, OBUFSIZE(buffer_size));
+	if (!obuf) {
+		ast_mutex_unlock(&myrpt->lock);
+		ast_free(buf);
+		return;
+	}
+	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 1);
 	/* parse em */
-	n = finddelim(ast_strdupa(buf), strs, MAXLINKLIST);
 	if (n) {
-		snprintf(obuf, sizeof(obuf) - 1, "%d,%s", n, buf);
+		snprintf(obuf, OBUFSIZE(buffer_size), "%d,%s", n, buf);
 	} else {
 		strcpy(obuf, "0");
 	}
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_ALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_ALINKS", obuf);
-	snprintf(obuf, sizeof(obuf) - 1, "%d", n);
+	snprintf(obuf, OBUFSIZE(buffer_size), "%d", n);
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMALINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", obuf);
-	ast_mutex_lock(&myrpt->lock);
-	__mklinklist(myrpt, NULL, buf, 0);
+	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 0);
+
 	ast_mutex_unlock(&myrpt->lock);
-	/* parse em */
-	n = finddelim(ast_strdupa(buf), strs, MAXLINKLIST);
 	if (n) {
-		snprintf(obuf, sizeof(obuf) - 1, "%d,%s", n, buf);
+		snprintf(obuf, OBUFSIZE(buffer_size), "%d,%s", n, buf);
 	} else {
 		strcpy(obuf, "0");
 	}
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_LINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_LINKS", obuf);
-	snprintf(obuf, sizeof(obuf) - 1, "%d", n);
+	snprintf(obuf, OBUFSIZE(buffer_size), "%d", n);
 	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMLINKS", obuf);
 	rpt_manager_trigger(myrpt, "RPT_NUMLINKS", obuf);
 	rpt_event_process(myrpt);
+
+	ast_free(buf);
+	ast_free(obuf);
 	return;
 }
 
@@ -650,9 +712,9 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->disced = 2;
 		modechange = 1;
 	} else {
-		__mklinklist(myrpt, NULL, lstr, 0);
+		__mklinklist(myrpt, NULL, lstr, sizeof(lstr), 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		n = finddelim(lstr, strs, MAXLINKLIST);
+		n = finddelim(lstr, strs, ARRAY_LEN(strs));
 		for (i = 0; i < n; i++) {
 			if ((*strs[i] < '0') || (*strs[i] > '9'))
 				strs[i]++;
