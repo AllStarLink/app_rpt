@@ -71,7 +71,7 @@ typedef struct {
 #define	MAXDTMF 32
 #define	MAXMACRO 2048
 #define MAXNODES 500		  /* Maximum number of nodes allowed in the link list*/
-#define AST_STR_INIT_SIZE 500 /* inital guess for ast_str size*/
+#define AST_STR_INIT_SIZE 500 /* initial guess for ast_str size*/
 #define	LINKLISTTIME 10000
 #define	LINKLISTSHORTTIME 200
 #define	LINKPOSTTIME 30000
