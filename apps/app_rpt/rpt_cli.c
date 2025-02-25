@@ -529,8 +529,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			 * Traverse the list of connected nodes
 			 */
 
+			rpt_mutex_lock(&myrpt->lock);
 			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
-
+			rpt_mutex_unlock(&myrpt->lock);
 			j = 0;
 			l = myrpt->links.next;
 			while (l && (l != &myrpt->links)) {
