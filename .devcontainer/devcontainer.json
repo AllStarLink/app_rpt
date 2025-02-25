@@ -3,14 +3,17 @@
   "image": "mcr.microsoft.com/devcontainers/cpp:dev-debian12",
   "remoteUser": "root",
   "postCreateCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
-  "postStartCommand": "git config --global core.hooksPath ${containerWorkspaceFolder}/.dev/ && git clone https://github.com/AllStarLink/asl3-asterisk.git ${containerWorkspaceFolder}/asl3-asterisk && cd ${containerWorkspaceFolder} && ./asl3-asterisk/build-asl3 -l -a 22 -v 3.3.0 -r 1 -d ${containerWorkspaceFolder} source ",
+  "postStartCommand": "git config --global core.hooksPath ${containerWorkspaceFolder}/.dev/ && \
+        git clone https://github.com/AllStarLink/asl3-asterisk.git ${containerWorkspaceFolder}/asl3-asterisk && \
+        cd ${containerWorkspaceFolder} && \
+        ./asl3-asterisk/build-asl3 -l -a 22 -v 3.3.0 -r 1 -d ${containerWorkspaceFolder} source ",
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
       "packages": "codespell,clang-format,libedit-dev,uuid-dev,libjansson-dev,libsqlite3-dev,libusb-dev"
     }
   },
-  "customizations": {
+  git "customizations": {
     "vscode": {
       "extensions": [
         "redhat.vscode-yaml",
