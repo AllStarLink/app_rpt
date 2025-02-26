@@ -125,10 +125,6 @@ static struct ast_jb_conf global_jbconf;
 #define	DIVSAMP (DIVLCM / SAMPRATE)
 
 #define	QUEUE_SIZE	5			/* 100 milliseconds of sound card output buffer */
-#define COR_TIMEOUT                                                                      \
-	50 * 60 * 5 /* 50 - 20ms count per second * 60 seconds * 5 minutes  Initial timeout   \
-				 * with no config file setting.                                          \
-				 */
 #define CONFIG "simpleusb.conf" /* default config file */
 
 /* file handles for writing debug audio packets */
@@ -2245,7 +2241,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		o->rxoncnt = 0;
 	}
 	/* COR timeout timer */
-	if (cd && !o->rx_cos_active) { /* Start timeout timer*/
+	if (cd && !o->rx_cos_active && o->cor_timeout) { /* Start timeout timer*/
 		o->cor_tot = o->cor_timeout;
 	}
 
@@ -2257,8 +2253,8 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 
 	o->rx_cos_active = cd; /* Always store the REAL COR state */
 
-	if (cd && !o->cor_tot) { /* If carrier is detected and we ran out of time stop
-								transmitting. */
+	if (cd && !o->cor_tot && o->cor_timeout) { /* If carrier is detected and we ran out of
+								time stop transmitting. */
 		cd = 0;
 	}
 
@@ -3779,8 +3775,8 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_UINT("cortot", o->cor_timeout);
 		CV_END;
 
-		if (!o->cor_timeout) {
-			o->cor_timeout = COR_TIMEOUT;
+		if (o->cor_timeout) { /* If we have a value, * 50 counts per second.*/
+			o->cor_timeout = o->cor_timeout * 50;
 		}
 
 		for (i = 0; i < GPIO_PINCOUNT; i++) {

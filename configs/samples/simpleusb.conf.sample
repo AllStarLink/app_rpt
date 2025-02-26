@@ -63,7 +63,7 @@
 
 ;plfilter = yes             ; enable PL filter
 
-;cortot = 15000             ; Number of 20mSec intervals before COR timesout and releases PTT. Default 5 minutes
+;cortot = 15000             ; Number of Seconds before COR times out and releases PTT.  Disabled if 0 or not defined.
 
 ;rxondelay = 0              ; Number of 20mSec intervals following the release of PTT.
 							; Uncomment and/or adjust for simplex nodes to eliminate "Ping Ponging"
