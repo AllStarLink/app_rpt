@@ -91,3 +91,8 @@ void rpt_update_links(struct rpt *myrpt);
  * \retval 2 Already connected to this node
  */
 int connect_link(struct rpt *myrpt, char *node, int mode, int perma);
+
+/*! \brief Free link and associated internal memory.
+ * \param link Link structure to free
+ */
+void rpt_free_link_helper(struct rpt_link *link);

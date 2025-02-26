@@ -120,6 +120,13 @@ static void check_tlink_list(struct rpt *myrpt)
 	}
 }
 
+void rpt_free_link_helper(struct rpt_link *link) {
+	if (link->linklist) {
+		ast_free(link->linklist);
+	}
+	ast_free(link);
+}
+
 void tele_link_add(struct rpt *myrpt, struct rpt_tele *t)
 {
 	ast_assert(t != NULL);
@@ -738,7 +745,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	tele = strchr(deststr, '/');
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
-		ast_free(l);
+		rpt_free_link_helper(l);
 		return -1;
 	}
 	*tele++ = 0;
@@ -746,7 +753,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		ast_free(l);
+		rpt_free_link_helper(l);
 		return -1;
 	}
 
@@ -772,7 +779,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		if (myrpt->p.archivedir) {
 			donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		}
-		ast_free(l);
+		rpt_free_link_helper(l);
 		ao2_ref(cap, -1);
 		return -1;
 	}
@@ -782,10 +789,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
-		if (l->linklist) {
-			ast_free(l->linklist);
-		}
-		ast_free(l);
+		rpt_free_link_helper(l);
 		return -1;
 	}
 
@@ -795,10 +799,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		if (l->linklist) {
-			ast_free(l->linklist);
-		}
-		ast_free(l);
+		rpt_free_link_helper(l);
 		return -1;
 	}
 	rpt_mutex_lock(&myrpt->lock);
