@@ -125,8 +125,11 @@ static struct ast_jb_conf global_jbconf;
 #define	DIVSAMP (DIVLCM / SAMPRATE)
 
 #define	QUEUE_SIZE	5			/* 100 milliseconds of sound card output buffer */
-
-#define CONFIG	"simpleusb.conf"				/* default config file */
+#define COR_TIMEOUT                                                                      \
+	50 * 60 * 5 /* 50 - 20ms count per second * 60 seconds * 5 minutes  Initial timeout   \
+				 * with no config file setting.                                          \
+				 */
+#define CONFIG "simpleusb.conf" /* default config file */
 
 /* file handles for writing debug audio packets */
 static FILE *frxcapraw = NULL;
@@ -241,6 +244,8 @@ struct chan_simpleusb_pvt {
 	int txoffcnt;				/* Counts the number of 20 ms intervals after TX unkey */
 	int rxondelay;				/* This is the value which RX is ignored after RX activity */
 	int txoffdelay;				/* This is the value which RX is ignored after TX unkey */
+	int cor_timeout;			/* This is the 20ms setpoint value for COR timeout. */
+	int cor_tot; /* Counts the down the number of 20 ms intervals after COR is active. */
 
 	int pager;
 	int waspager;
@@ -2239,7 +2244,23 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	} else if (!cd) {
 		o->rxoncnt = 0;
 	}
-	o->rx_cos_active = cd;
+	/* COR timeout timer */
+	if (cd && !o->rx_cos_active) { /* Start timeout timer*/
+		o->cor_tot = o->cor_timeout;
+	}
+
+	if (o->cor_tot > 0) {
+		o->cor_tot--;
+	} else {
+		o->cor_tot = 0;
+	}
+
+	o->rx_cos_active = cd; /* Always store the REAL COR state */
+
+	if (cd && !o->cor_tot) { /* If carrier is detected and we ran out of time stop
+								transmitting. */
+		cd = 0;
+	}
 
 	/* Check for SD - CTCSS active */
 	sd = 1;	
@@ -2287,6 +2308,9 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		ast_queue_frame(o->owner, &wf);
 		if (o->duplex3) {
 			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
+		}
+		if (!o->cor_tot) {
+			ast_debug(1, "Channel %s: COR Timeout Timer activated.\n", o->name);
 		}
 	} else if ((!o->lastrx) && (o->rxkeyed)) {
 		o->lastrx = 1;
@@ -3752,8 +3776,13 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_UINT("duplex3", o->duplex3);
 		CV_UINT("clipledgpio", o->clipledgpio);
 		CV_BOOL("legacyaudioscaling", o->legacyaudioscaling);
+		CV_UINT("cortot", o->cor_timeout);
 		CV_END;
-		
+
+		if (!o->cor_timeout) {
+			o->cor_timeout = COR_TIMEOUT;
+		}
+
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			sprintf(buf, "gpio%d", i + 1);
 			if (!strcmp(v->name, buf)) {

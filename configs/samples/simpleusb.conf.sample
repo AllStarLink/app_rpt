@@ -63,6 +63,8 @@
 
 ;plfilter = yes             ; enable PL filter
 
+;cortot = 15000             ; Number of 20mSec intervals before COR timesout and releases PTT. Default 5 minutes
+
 ;rxondelay = 0              ; Number of 20mSec intervals following the release of PTT.
 							; Uncomment and/or adjust for simplex nodes to eliminate "Ping Ponging"
 							; or "Relay Racing". A positive value here will instruct the usbradio
