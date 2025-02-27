@@ -6744,7 +6744,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 		if (!cap) {
 			ast_log(LOG_ERROR, "Failed to alloc cap\n");
-			pthread_exit(NULL); /*! \todo This and all subsequent pthread_exit's do not clean up properly */
+			ast_free(l);
+			pthread_exit(NULL);
 		}
 
 		ast_format_cap_append(cap, ast_format_slin, 0);
@@ -6752,6 +6753,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* allocate a pseudo-channel thru asterisk */
 		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 			ao2_ref(cap, -1);
+			ast_free(l);
 			pthread_exit(NULL);
 		}
 
@@ -6759,6 +6761,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		/* make a conference for the tx */
 		if (rpt_conf_add_speaker(l->pchan, myrpt)) {
+			ast_free(l);
 			pthread_exit(NULL);
 		}
 
