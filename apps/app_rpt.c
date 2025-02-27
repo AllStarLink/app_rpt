@@ -3760,8 +3760,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		f1 = myrpt->lastf2;
 		if (f1) {
 			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
-			ast_frfree(f1);
-			myrpt->lastf2 = NULL; /* Now invalid since aliased with f1 */
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
 				ast_writestream(myrpt->monstream, f1);
 			}
@@ -3769,6 +3767,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				(myrpt->outstreampipe[1] != -1)) {
 				outstream_write(myrpt, f1);
 			}
+			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
+			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
@@ -5948,8 +5948,8 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 				else
 					ast_write(myrpt->txchannel, f);
 			}
-			ast_frfree(f1);
 			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
+			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
