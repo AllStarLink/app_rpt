@@ -7254,9 +7254,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->blocklock);
 		who = ast_waitfor_n(cs, n, &ms);
 		rpt_mutex_unlock(&myrpt->blocklock);
-		if (who == NULL) {
-			ms = 0;
-		}
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
@@ -7264,7 +7261,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			looptimestart = looptimenow;
 		}
 		update_timer(&myrpt->macrotimer, elap, 0);
-		if (!ms) {
+		if (who == NULL) {
 			/* No channels had activity. Loop again. */
 			continue;
 		}
