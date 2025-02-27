@@ -3214,7 +3214,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			lf.samples = 0;
 			l->linklisttimer = LINKLISTTIME;
 			strcpy(lstr, "L ");
+			rpt_mutex_lock(&myrpt->lock);
 			__mklinklist(myrpt, l, lstr + 2, sizeof(lstr) - 2, 0);
+			rpt_mutex_unlock(&myrpt->lock);
 			if (l->chan) {
 				lf.datalen = strlen(lstr) + 1;
 				lf.data.ptr = lstr;
