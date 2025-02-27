@@ -524,7 +524,12 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t b
 		}
 	    one_link = 1;
 		if (flag) { /* RPT_ALINK format - only show adjacent nodes*/
-			snprintf(buf + spos, bufsize - spos, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
+			snprintf(buf + spos,
+					 bufsize - spos,
+					 "%s%c%c",
+					 l->name,
+					 mode,
+					 (l->lastrx1 && !myrpt->totimer) ? 'K' : 'U');
 		} else { /* RPT_LINK format - show all nodes*/
 			/* add nodes into buffer */
 			if (l->linklist[0]) {
