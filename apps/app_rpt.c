@@ -1669,25 +1669,32 @@ static inline void handle_callmode_1(struct rpt *myrpt, char c)
 	}
 }
 
+/*! \brief Handle the function character. Must be called locked.
+ * \param myrpt pointer to repeater struct.
+ * \param c character to process.
+ * \return 1 if the character was processed, 0 otherwise.
+ */
+
 static int funcchar_common(struct rpt *myrpt, char c)
 {
 	if (myrpt->callmode == 1) {
 		handle_callmode_1(myrpt, c);
 	}
-	if ((!myrpt->inpadtest) && myrpt->p.aprstt && (!myrpt->cmdnode[0]) && (c == 'A')) {
-		strcpy(myrpt->cmdnode, "aprstt");
-		myrpt->dtmfidx = 0;
-		myrpt->dtmfbuf[myrpt->dtmfidx] = 0;
-		rpt_mutex_unlock(&myrpt->lock);
-		time(&myrpt->dtmf_time);
-		return 1;
-	}
-	if ((!myrpt->inpadtest) && (c == myrpt->p.funcchar)) {
-		myrpt->rem_dtmfidx = 0;
-		myrpt->rem_dtmfbuf[myrpt->rem_dtmfidx] = 0;
-		time(&myrpt->rem_dtmf_time);
-		rpt_mutex_unlock(&myrpt->lock);
-		return 1;
+
+	if (!myrpt->inpadtest) {
+		if (myrpt->p.aprstt && (!myrpt->cmdnode[0]) && (c == 'A')) {
+			strcpy(myrpt->cmdnode, "aprstt");
+			myrpt->dtmfidx = 0;
+			myrpt->dtmfbuf[myrpt->dtmfidx] = 0;
+			time(&myrpt->dtmf_time);
+			return 1;
+		}
+		if (c == myrpt->p.funcchar) {
+			myrpt->rem_dtmfidx = 0;
+			myrpt->rem_dtmfbuf[myrpt->rem_dtmfidx] = 0;
+			time(&myrpt->rem_dtmf_time);
+			return 1;
+		}
 	}
 	return 0;
 }
@@ -1948,6 +1955,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	if (c == myrpt->p.endchar)
 		myrpt->stopgen = 1;
 	if (funcchar_common(myrpt, c)) {
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 	if (myrpt->rem_dtmfidx < 0) {
@@ -2041,6 +2049,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 		return;
 	}
 	if (funcchar_common(myrpt, c)) {
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 	if (((myrpt->inpadtest) || (c != myrpt->p.endchar)) && (myrpt->rem_dtmfidx >= 0)) {
