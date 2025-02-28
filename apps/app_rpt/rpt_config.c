@@ -982,8 +982,8 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR(discpgm, "discpgm");
 	RPT_CONFIG_VAR(mdclog, "mdclog");
 	RPT_CONFIG_VAR_BOOL(lnkactenable, "lnkactenable");
-
-	rpt_vars[n].p.lnkacttime = retrieve_astcfgint(&rpt_vars[n], cat, "lnkacttime", -120, 90000, 0);	/* Enforce a min max including zero */
+	RPT_CONFIG_VAR(lnkacttimerwarn, "lnkacttimerwarn");
+	rpt_vars[n].p.lnkacttime = retrieve_astcfgint(&rpt_vars[n], cat, "lnkacttime", 0, 90000, 0);	/* Enforce a min max including zero */
 
 	RPT_CONFIG_VAR(lnkactmacro, "lnkactmacro");
 	RPT_CONFIG_VAR_BOOL(nolocallinkct, "nolocallinkct");
