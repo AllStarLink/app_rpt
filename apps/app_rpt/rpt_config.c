@@ -1029,8 +1029,8 @@ void load_rpt_vars(int n, int init)
 #endif
 
 	RPT_CONFIG_VAR_INT(votertype, "votertype");
+	RPT_CONFIG_VAR_INT(votermode, "votermode");
 	RPT_CONFIG_VAR_INT_DEFAULT(votermargin, "votermargin", 10);
-	RPT_CONFIG_VAR_INT(votertype, "votertype");
 
 	val = ast_variable_retrieve(cfg, cat, "telemnomdb");
 	rpt_vars[n].p.telemnomgain = pow(10.0, atof(S_OR(val, "0")) / 20.0);
