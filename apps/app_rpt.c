@@ -2572,9 +2572,10 @@ static void do_scheduler(struct rpt *myrpt)
 	/* Service activity timer */
 	if (myrpt->p.lnkactmacro && myrpt->p.lnkacttime && myrpt->p.lnkactenable && myrpt->linkactivityflag) {
 		myrpt->linkactivitytimer++;
+		ast_debug(1, "Link Activity timer %d\n", myrpt->linkactivitytimer );
 		/* 30 second warn */
 		if ((myrpt->p.lnkacttime - myrpt->linkactivitytimer == 30) && myrpt->p.lnkacttimerwarn) {
-			ast_debug(5, "Warning user of activity timeout\n");
+			ast_debug(1, "Warning user of activity timeout\n");
 			rpt_telemetry(myrpt, LOCALPLAY, (char*) myrpt->p.lnkacttimerwarn);
 		}
 		if (myrpt->linkactivitytimer >= myrpt->p.lnkacttime) {
@@ -2582,9 +2583,11 @@ static void do_scheduler(struct rpt *myrpt)
 			if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(myrpt->p.lnkactmacro)) {
 				ast_log(LOG_WARNING, "Link Activity timer could not execute macro %s: Macro buffer full\n", myrpt->p.lnkactmacro);
 			} else {
-				ast_debug(5, "Executing link activity timer macro %s\n", myrpt->p.lnkactmacro);
+				ast_debug(1, "Executing link activity timer macro %s\n", myrpt->p.lnkactmacro);
 				myrpt->macrotimer = MACROTIME;
-				strncat(myrpt->macrobuf, myrpt->p.lnkactmacro, MAXMACRO - 1);
+				ast_debug(1, "Macro Buffer Before %s, size of %ld, strlen %ld\n", myrpt->macrobuf,sizeof(myrpt->macrobuf), strlen(myrpt->macrobuf));
+				strncat(myrpt->macrobuf, myrpt->p.lnkactmacro, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf) - 1);
+				ast_debug(1, "Macro Buffer After %s, size of %ld, strlen %ld\n", myrpt->macrobuf,sizeof(myrpt->macrobuf), strlen(myrpt->macrobuf));
 			}
 			myrpt->linkactivitytimer = 0;
 			myrpt->linkactivityflag = 0;
