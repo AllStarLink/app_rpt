@@ -87,7 +87,7 @@ int uchameleon_connect(struct daq_entry_tag *t)
 void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 {
 	char *valuecopy;
-	int i, busy;
+	int i;
 	char *s;
 	char *argv[7];
 	int argc;
@@ -107,7 +107,7 @@ void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 	 * high function: argv[5]
 	 *
 	 */
-	i = busy = 0;
+	i = 0;
 	s = (p->value) ? argv[5] : argv[4];
 	if ((argc == 6) && (s[0] != '-')) {
 		for (i = 0; i < nrpts; i++) {
@@ -115,13 +115,11 @@ void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 
 				struct rpt *myrpt = &rpt_vars[i];
 				rpt_mutex_lock(&myrpt->lock);
-				if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(s)) {
-					rpt_mutex_unlock(&myrpt->lock);
-					busy = 1;
-				}
-				if (!busy) {
+				if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(s)) { /* Make sure we have 1 extra char for null */
+					ast_log(LOG_WARNING, "Function decoder busy while processing alarm");
+				} else {
 					myrpt->macrotimer = MACROTIME;
-					strncat(myrpt->macrobuf, s, MAXMACRO - 1);
+					strncat(myrpt->macrobuf, s, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
 				}
 				rpt_mutex_unlock(&myrpt->lock);
 
@@ -130,8 +128,6 @@ void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 	}
 	if (argc != 6) {
 		ast_log(LOG_WARNING, "Not enough arguments to process alarm\n");
-	} else if (busy) {
-		ast_log(LOG_WARNING, "Function decoder busy while processing alarm");
 	}
 	ast_free(valuecopy);
 }

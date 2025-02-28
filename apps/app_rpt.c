@@ -836,12 +836,12 @@ void rpt_event_process(struct rpt *myrpt)
 		}
 		if (action == 'F') {	/* execute a function */
 			rpt_mutex_lock(&myrpt->lock);
-			if ((MAXMACRO - strlen(myrpt->macrobuf)) >= strlen(cmd)) {
+			if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(cmd)) { /* Make sure we have 1 extra char for null */
+				ast_log(LOG_WARNING, "Could not execute event %s for %s: Macro buffer overflow\n", cmd, argv[1]);
+			} else {
 				ast_verb(3, "Event on node %s doing macro %s for condition %s\n", myrpt->name, cmd, v->value);
 				myrpt->macrotimer = MACROTIME;
-				strncat(myrpt->macrobuf, cmd, MAXMACRO - 1);
-			} else {
-				ast_log(LOG_WARNING, "Could not execute event %s for %s: Macro buffer overflow\n", cmd, argv[1]);
+				strncat(myrpt->macrobuf, cmd, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)); /* no -1, want null fill from strncat */
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		} else if (action == 'C') {	/* execute a command */
@@ -2568,15 +2568,17 @@ static void do_scheduler(struct rpt *myrpt)
 		}
 		if (myrpt->linkactivitytimer >= myrpt->p.lnkacttime) {
 			/* Execute lnkactmacro */
-			if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(myrpt->p.lnkactmacro)) {
+			rpt_mutex_lock(&myrpt->lock);
+			if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(myrpt->p.lnkactmacro)) { /* Make sure we have 1 extra char for null */
 				ast_log(LOG_WARNING, "Link Activity timer could not execute macro %s: Macro buffer full\n", myrpt->p.lnkactmacro);
 			} else {
 				ast_debug(5, "Executing link activity timer macro %s\n", myrpt->p.lnkactmacro);
 				rpt_mutex_lock(&myrpt->lock);
 				myrpt->macrotimer = MACROTIME;
-				strncat(myrpt->macrobuf, myrpt->p.lnkactmacro, MAXMACRO - 1);
+				strncat(myrpt->macrobuf, myrpt->p.lnkactmacro, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
 				rpt_mutex_unlock(&myrpt->lock);
 			}
+			rpt_mutex_unlock(&myrpt->lock);
 			myrpt->linkactivitytimer = 0;
 			myrpt->linkactivityflag = 0;
 		}
@@ -2588,13 +2590,17 @@ static void do_scheduler(struct rpt *myrpt)
 		else {
 			myrpt->rptinacttimer = 0;
 			myrpt->rptinactwaskeyedflag = 0;
-			if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(myrpt->p.rptinactmacro)) {
+			rpt_mutex_unlock(&myrpt->lock);
+			if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(myrpt->p.rptinactmacro)) { /* Make sure we have 1 extra char for null */
 				ast_log(LOG_WARNING, "Rpt inactivity timer could not execute macro %s: Macro buffer full\n", myrpt->p.rptinactmacro);
 			} else {
 				ast_debug(5, "Executing rpt inactivity timer macro %s\n", myrpt->p.rptinactmacro);
-				myrpt->macrotimer = MACROTIME;
-				strncat(myrpt->macrobuf, myrpt->p.rptinactmacro, MAXMACRO - 1);
+				if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) > strlen(myrpt->p.rptinactmacro)) {
+					myrpt->macrotimer = MACROTIME;
+					strncat(myrpt->macrobuf, myrpt->p.rptinactmacro, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
+				}
 			}
+			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
 
@@ -2664,12 +2670,15 @@ static void do_scheduler(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Scheduler could not find macro %s\n", skedlist->name);
 				return;			/* Macro not found */
 			}
-			if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(val)) {
+			rpt_mutex_lock(&myrpt->lock);
+			if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(val)) { /* Make sure we have 1 extra char for null */
 				ast_log(LOG_WARNING, "Scheduler could not execute macro %s: Macro buffer full\n", skedlist->name);
+				rpt_mutex_unlock(&myrpt->lock);
 				return;			/* Macro buffer full */
 			}
 			myrpt->macrotimer = MACROTIME;
-			strncat(myrpt->macrobuf, val, MAXMACRO - 1);
+			strncat(myrpt->macrobuf, val, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
+			rpt_mutex_unlock(&myrpt->lock);
 		} else {
 			ast_log(LOG_WARNING, "Malformed scheduler entry in rpt.conf: %s = %s\n", skedlist->name, skedlist->value);
 		}
@@ -3786,14 +3795,13 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if ((myrpt->p.litzcmd) && (x >= myrpt->p.litztime) && strchr(myrpt->p.litzchar, c)) {
 			ast_debug(1, "Doing litz command %s on node %s\n", myrpt->p.litzcmd, myrpt->name);
 			rpt_mutex_lock(&myrpt->lock);
-			if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(myrpt->p.litzcmd)) {
+			if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(myrpt->p.litzcmd)) { /* Make sure we have 1 extra char for null */
 				rpt_mutex_unlock(&myrpt->lock);
 				return 0;
 			}
 			myrpt->macrotimer = MACROTIME;
-			strncat(myrpt->macrobuf, myrpt->p.litzcmd, MAXMACRO - 1);
+			strncat(myrpt->macrobuf, myrpt->p.litzcmd, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
 			rpt_mutex_unlock(&myrpt->lock);
-
 			return 0;
 		}
 		mute_frame_helper(myrpt);
@@ -3873,14 +3881,14 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					strcpy(val, "*6");
 					myrpt->macropatch = 1;
 					rpt_mutex_lock(&myrpt->lock);
-					if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(val)) {
+					if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(val)) { /* Make sure we have 1 extra char for null */
+						rpt_mutex_unlock(&myrpt->lock);
 						busy = 1;
-					}
-					if (!busy) {
+					} else {
 						myrpt->macrotimer = MACROTIME;
-						strncat(myrpt->macrobuf, val, MAXMACRO - 1);
-						if (!busy)
-							strcpy(myrpt->lasttone, (char *) f->data.ptr);
+						strncat(myrpt->macrobuf, val, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
+						strncpy(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone) - 1);
+						myrpt->lasttone[sizeof(myrpt->lasttone) - 1] = '\0';
 					}
 					rpt_mutex_unlock(&myrpt->lock);
 				} else if (strcmp((char *) f->data.ptr, myrpt->lasttone)) {
@@ -3888,17 +3896,19 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					if (val) {
 						ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, val, myrpt->name);
 						rpt_mutex_lock(&myrpt->lock);
-						if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(val)) {
+						if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(val)) { /* Make sure we have 1 extra char for null */
+							rpt_mutex_unlock(&myrpt->lock);
 							busy = 1;
-						}
-						if (!busy) {
+						} else {
 							myrpt->macrotimer = MACROTIME;
-							strncat(myrpt->macrobuf, val, MAXMACRO - 1);
+							strncat(myrpt->macrobuf, val, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
 						}
 						rpt_mutex_unlock(&myrpt->lock);
 					}
-					if (!busy)
-						strcpy(myrpt->lasttone, (char *) f->data.ptr);
+					if (!busy) {
+						strncpy(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone) - 1);
+						myrpt->lasttone[sizeof(myrpt->lasttone) - 1] = '\0';
+					}
 				}
 			} else {
 				myrpt->lasttone[0] = 0;
@@ -4842,7 +4852,7 @@ static void *rpt(void *this)
 #endif
 	}
 	if (myrpt->p.startupmacro) {
-		snprintf(myrpt->macrobuf, MAXMACRO - 1, "PPPP%s", myrpt->p.startupmacro);
+		snprintf(myrpt->macrobuf, sizeof(myrpt->macrobuf) - 1, "PPPP%s", myrpt->p.startupmacro);
 	}
 	/* @@@@@@@ UNLOCK @@@@@@@ */
 	rpt_mutex_unlock(&myrpt->lock);
@@ -5362,7 +5372,7 @@ static void *rpt(void *this)
 		if (c && !myrpt->macrotimer && starttime && t > starttime) {
 			char cin = c & 0x7f;
 			myrpt->macrotimer = MACROTIME;
-			memmove(myrpt->macrobuf, myrpt->macrobuf + 1, MAXMACRO - 1);
+			memmove(myrpt->macrobuf, myrpt->macrobuf + 1, sizeof(myrpt->macrobuf) - 1);
 			if ((cin == 'p') || (cin == 'P'))
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -6989,7 +6999,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->hfscanmode = 0;
 	myrpt->hfscanstatus = 0;
 	if (myrpt->p.startupmacro) {
-		snprintf(myrpt->macrobuf, MAXMACRO - 1, "PPPP%s", myrpt->p.startupmacro);
+		snprintf(myrpt->macrobuf, sizeof(myrpt->macrobuf) - 1, "PPPP%s", myrpt->p.startupmacro);
 	}
 	time(&myrpt->start_time);
 	myrpt->last_activity_time = myrpt->start_time;
@@ -7326,7 +7336,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		c = myrpt->macrobuf[0];
 		if (c && !myrpt->macrotimer) {
 			myrpt->macrotimer = MACROTIME;
-			memmove(myrpt->macrobuf, myrpt->macrobuf + 1, MAXMACRO - 1);
+			memmove(myrpt->macrobuf, myrpt->macrobuf + 1, sizeof(myrpt->macrobuf) - 1);
 			if ((c == 'p') || (c == 'P'))
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);

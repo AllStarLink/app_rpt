@@ -1315,31 +1315,23 @@ void load_rpt_vars(int n, int init)
 	ast_mutex_unlock(&rpt_vars[n].lock);
 }
 
-int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
-{
-	int busy = 0;
-
+int rpt_push_alt_macro(struct rpt *myrpt, char *sptr) {
 	rpt_mutex_lock(&myrpt->lock);
-	if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(sptr)) {
+	if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(sptr)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		busy = 1;
-	}
-	if (!busy) {
-		int x;
-		ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
-		myrpt->macrotimer = MACROTIME;
-		for (x = 0; *(sptr + x); x++) {
-			myrpt->macrobuf[x] = *(sptr + x) | 0x80;
-		}
-		*(sptr + x) = 0;
-	}
-	rpt_mutex_unlock(&myrpt->lock);
-
-	if (busy) {
 		ast_log(LOG_WARNING, "Function decoder busy on app_rpt command macro.\n");
+		return 1;
 	}
 
-	return busy;
+	int x;
+	ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
+	myrpt->macrotimer = MACROTIME;
+	for (x = 0; *(sptr + x); x++) {
+		myrpt->macrobuf[x] = *(sptr + x) | 0x80;
+	}
+	*(sptr + x) = 0;
+	rpt_mutex_unlock(&myrpt->lock);
+	return 0;
 }
 
 void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
