@@ -2592,8 +2592,10 @@ static void do_scheduler(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Link Activity timer could not execute macro %s: Macro buffer full\n", myrpt->p.lnkactmacro);
 			} else {
 				ast_debug(5, "Executing link activity timer macro %s\n", myrpt->p.lnkactmacro);
+				rpt_mutex_lock(&myrpt->lock);
 				myrpt->macrotimer = MACROTIME;
 				strncat(myrpt->macrobuf, myrpt->p.lnkactmacro, MAXMACRO - 1);
+				rpt_mutex_unlock(&myrpt->lock);
 			}
 			myrpt->linkactivitytimer = 0;
 			myrpt->linkactivityflag = 0;
