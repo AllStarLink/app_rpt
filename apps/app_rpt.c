@@ -3767,6 +3767,9 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if (myrpt->p.votertype == 1 && myrpt->voted_link != NULL) {
 			ismuted = 1;
 		}
+		if (!myrpt->totimer) {
+			ismuted = 1;
+		}
 		mute_frame_helper(myrpt, f, ismuted);
 		f1 = myrpt->lastf2;
 		if (f1) {
@@ -4450,11 +4453,10 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					}
 				} else {
 					/* if a voting rx link and not the winner, mute audio */
-					if (myrpt->p.votertype == 1 && l->voterlink && myrpt->voted_link != l)
+					if (myrpt->p.votertype == 1 && ((l->voterlink && myrpt->voted_link != l) || !myrpt->totimer))
 						ismuted = 1;
 					else
 						ismuted = 0;
-
 					if (!l->lastrx || ismuted)
 						memset(f->data.ptr, 0, f->datalen);
 					ast_write(l->pchan, f);
