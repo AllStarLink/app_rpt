@@ -1225,6 +1225,10 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			wf.src = PAGER_SRC;
 			memcpy(wf.data.ptr, (char *) (audio + i), FRAME_SIZE * 2);
 			f1 = ast_frdup(&wf);
+			if (!f1) {
+				ast_free(audio);
+				return 0;
+			}
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 			ast_mutex_lock(&o->pagerqlock);
 			AST_LIST_INSERT_TAIL(&o->pagerq, f1, frame_list);
@@ -1284,6 +1288,9 @@ static int voter_write(struct ast_channel *ast, struct ast_frame *frame)
 		fwrite(frame->data.ptr, 1, frame->datalen, fp);
 	}
 	f1 = ast_frdup(frame);
+	if (!f1) {
+		return 0;
+	}
 	if (p->gtxgain != 1.0) {
 		register int x1;
 		short* restrict sp;
@@ -1575,7 +1582,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	p->rxkey = 1;
 	x = 0;
 	if (p->dsp && p->usedtmf) {
-		struct ast_frame *f3 = ast_frdup(f1);	/* dsp_process frees frame, so dup f1 so we still have it later on */
+		struct ast_frame *f3 = ast_frdup(f1); /* dsp_process frees frame, so dup f1 so we still have it later on */
+		if (!f3) {
+			ast_frfree(f1);
+			return 0;
+		}
 		f2 = ast_dsp_process(NULL, p->dsp, f3);
 		if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
