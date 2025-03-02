@@ -6773,20 +6773,17 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_free(l);
 			pthread_exit(NULL);
 		}
-
-		rpt_mutex_lock(&myrpt->lock);
+		
 		if ((phone_mode == 2) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
-		rpt_mutex_lock(&myrpt->blocklock);
 
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_answer(chan);
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
-					rpt_mutex_unlock(&myrpt->blocklock);
-					rpt_mutex_unlock(&myrpt->lock);
+					ast_free(l);
 					return -1;
 				}
 			} else {
@@ -6795,27 +6792,19 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 			}
 		}
-		rpt_mutex_unlock(&myrpt->blocklock);
-		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
 
 		if (myrpt->p.archivedir) {
 			donodelog_fmt(myrpt,"LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		}
 		doconpgm(myrpt, l->name);
 		if ((!phone_mode) && (l->name[0] <= '9')) {
-			rpt_mutex_lock(&myrpt->blocklock);
 			send_newkey(chan);
-			rpt_mutex_unlock(&myrpt->blocklock);
 		}
 
-		rpt_mutex_lock(&myrpt->lock);
 		if (l->chan) {
-			rpt_mutex_unlock(&myrpt->lock);
 			if (!strcasecmp(ast_channel_tech(chan)->type, "echolink") || !strcasecmp(ast_channel_tech(chan)->type, "tlb") || (l->name[0] > '9')) {
 				rpt_telemetry(myrpt, CONNECTED, l);
 			}
-		} else {
-			rpt_mutex_unlock(&myrpt->lock);
 		}
 
 		/* In theory, both these conditions should be true if one is, since the node thread will queue a soft hangup on this channel and then set l->chan to NULL */
@@ -6826,9 +6815,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		/* insert at end of queue */
+		rpt_mutex_lock(&myrpt->lock);
 		rpt_link_add(myrpt, l);
 		__kickshort(myrpt);
 		gettimeofday(&myrpt->lastlinktime, NULL);
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
 
 		/* Set the PBX to NULL to avoid a warning in channel.c about a PBX remaining on the channel when it gets destroyed.
