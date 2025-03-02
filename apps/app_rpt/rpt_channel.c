@@ -177,8 +177,6 @@ void do_dtmf_local(struct rpt *myrpt, char c)
 	}
 	/* if at timeout */
 	if (myrpt->dtmf_local_timer == 1) {
-		ast_debug(7, "time out dtmf_local_timer=%i\n", myrpt->dtmf_local_timer);
-
 		/* if anything in the string */
 		if (myrpt->dtmf_local_str[0]) {
 			digit = myrpt->dtmf_local_str[0];
