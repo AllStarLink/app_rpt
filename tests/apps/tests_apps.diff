@@ -1,0 +1,12 @@
+diff --git a/tests/apps/tests.yaml b/tests/apps/tests.yaml
+index 4c8261c..9124368 100644
+--- a/tests/apps/tests.yaml
++++ b/tests/apps/tests.yaml
+@@ -4,6 +4,7 @@ tests:
+     - dir: 'directory'
+     - dir: 'bridge'
+     - dir: 'dial'
++    - dir: 'rpt'
+     - test: 'originate'
+     - dir: 'voicemail'
+     - dir: 'confbridge'
