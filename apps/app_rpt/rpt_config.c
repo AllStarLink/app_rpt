@@ -1318,19 +1318,15 @@ void load_rpt_vars(int n, int init)
 
 int rpt_push_alt_macro(struct rpt *myrpt, char *sptr) {
 	rpt_mutex_lock(&myrpt->lock);
-	if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(sptr)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_log(LOG_WARNING, "Function decoder busy on app_rpt command macro.\n");
-		return 1;
-	}
-
 	int x;
+	char *str;
 	ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
+	str = ast_str_buffer(myrpt->macrobuf);
 	myrpt->macrotimer = MACROTIME;
 	for (x = 0; *(sptr + x); x++) {
-		myrpt->macrobuf[x] = *(sptr + x) | 0x80;
+		str[x] = *(sptr + x) | 0x80;
 	}
-	*(sptr + x) = 0;
+	*(sptr + x) = 0; /* Do we really need to do this? it was 0 to end loop*/
 	rpt_mutex_unlock(&myrpt->lock);
 	return 0;
 }

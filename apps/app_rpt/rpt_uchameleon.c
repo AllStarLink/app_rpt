@@ -115,12 +115,8 @@ void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 
 				struct rpt *myrpt = &rpt_vars[i];
 				rpt_mutex_lock(&myrpt->lock);
-				if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(s)) { /* Make sure we have 1 extra char for null */
-					ast_log(LOG_WARNING, "Function decoder busy while processing alarm");
-				} else {
-					myrpt->macrotimer = MACROTIME;
-					strncat(myrpt->macrobuf, s, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
-				}
+				myrpt->macrotimer = MACROTIME;
+				ast_str_append(&myrpt->macrobuf, 0, "%s", s);
 				rpt_mutex_unlock(&myrpt->lock);
 
 			}
