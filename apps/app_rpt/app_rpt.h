@@ -69,24 +69,24 @@ typedef struct {
 #endif
 
 /* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
-#define	MAXDTMF 32
-#define	MAXMACRO 2048
-#define	MAXLINKLIST 5120
-#define	LINKLISTTIME 10000
-#define	LINKLISTSHORTTIME 200
-#define	LINKPOSTTIME 30000
-#define	LINKPOSTSHORTTIME 200
-#define	KEYPOSTTIME 30000
-#define	KEYPOSTSHORTTIME 200
-#define	KEYTIMERTIME 250
-#define	MACROTIME 100
-#define	MACROPTIME 500
-#define	DTMF_TIMEOUT 3
-#define	KENWOOD_RETRIES 5
-#define	TOPKEYN 32
-#define	TOPKEYWAIT 3
-#define	TOPKEYMAXSTR 30
-#define	NEWKEYTIME 2000
+#define MAXDTMF 32
+#define MAXMACRO 512
+#define MAXLINKLIST 5120
+#define LINKLISTTIME 10000
+#define LINKLISTSHORTTIME 200
+#define LINKPOSTTIME 30000
+#define LINKPOSTSHORTTIME 200
+#define KEYPOSTTIME 30000
+#define KEYPOSTSHORTTIME 200
+#define KEYTIMERTIME 250
+#define MACROTIME 100
+#define MACROPTIME 500
+#define DTMF_TIMEOUT 3
+#define KENWOOD_RETRIES 5
+#define TOPKEYN 32
+#define TOPKEYWAIT 3
+#define TOPKEYMAXSTR 30
+#define NEWKEYTIME 2000
 
 #define	AUTHTELLTIME 7000
 #define	AUTHTXTIME 1000
@@ -327,9 +327,9 @@ struct rpt_chan_stat {
 #define MAX_STAT_LINKS 256
 #define POLITEID 30000
 #define FUNCTDELAY 1500
-
-#define	MAXXLAT 20
-#define	MAXXLATTIME 3
+#define TMP_SIZE 256 /* Size of tmp char* */
+#define MAXXLAT 20
+#define MAXXLATTIME 3
 
 #define MAX_SYSSTATES 10
 
@@ -748,7 +748,7 @@ struct rpt {
 	char tounkeyed;
 	char tonotify;
 	char dtmfbuf[MAXDTMF];
-	char macrobuf[MAXMACRO];
+	struct ast_str *macrobuf;
 	char rem_dtmfbuf[MAXDTMF];
 	char lastdtmfcommand[MAXDTMF];
 	char cmdnode[50];

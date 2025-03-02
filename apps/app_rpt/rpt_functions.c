@@ -1113,16 +1113,7 @@ int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 		rpt_telemetry(myrpt, MACRO_NOTFOUND, NULL);
 		return DC_COMPLETE;
 	}
-	rpt_mutex_lock(&myrpt->lock);
-	if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(val)) { /* Make sure we have 1 extra char for null */
-		rpt_mutex_unlock(&myrpt->lock);
-		rpt_telem_select(myrpt, command_source, mylink);
-		rpt_telemetry(myrpt, MACRO_BUSY, NULL);
-		return DC_ERROR;
-	}
-	myrpt->macrotimer = MACROTIME;
-	strncat(myrpt->macrobuf, val, sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
-	rpt_mutex_unlock(&myrpt->lock);
+	macro_append(myrpt, val);
 	return DC_COMPLETE;
 }
 

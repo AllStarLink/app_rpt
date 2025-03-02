@@ -734,16 +734,7 @@ static int rpt_do_fun(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock);
-			if ((sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf)) <= strlen(argv[3])) { /* Make sure we have 1 extra char for null */
-				rpt_mutex_unlock(&myrpt->lock);
-				busy = 1;
-			}
-			if (!busy) {
-				myrpt->macrotimer = MACROTIME;
-				strncat(myrpt->macrobuf, argv[3], sizeof(myrpt->macrobuf) - strlen(myrpt->macrobuf));
-			}
-			rpt_mutex_unlock(&myrpt->lock);
+			macro_append(myrpt, argv[3]);
 		}
 	}
 	if (busy) {
