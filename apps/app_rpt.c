@@ -5910,7 +5910,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 	if (f->frametype == AST_FRAME_VOICE) {
 		struct ast_frame *f1;
 		int ismuted;
-		if (myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED){
+		if (myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED) {
 			myrpt->rxlingertimer = ((myrpt->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 			if (!*keyed) {
 				*keyed = 1;
