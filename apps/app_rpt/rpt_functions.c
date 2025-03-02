@@ -1114,8 +1114,7 @@ int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 		return DC_COMPLETE;
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	myrpt->macrotimer = MACROTIME;
-	ast_str_append(&myrpt->macrobuf, 0, "%s", val);
+	macro_append(myrpt, val);
 	rpt_mutex_unlock(&myrpt->lock);
 	return DC_COMPLETE;
 }

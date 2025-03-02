@@ -228,3 +228,8 @@ time_t rpt_time_monotonic(void)
 	
 	return ts.tv_sec;
 }
+
+int macro_append(struct rpt *myrpt, const char *cmd) {
+	myrpt->macrotimer = MACROTIME;
+	return ast_str_append(&myrpt->macrobuf, 0, "%s", cmd);
+}

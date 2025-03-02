@@ -73,3 +73,10 @@ time_t rpt_mktime(struct ast_tm *tm, const char *zone);
  * \retval		Monotonic seconds.
  */
 time_t rpt_time_monotonic(void);
+
+/*! \brief Append a command to the macro buffer
+ * \param myrpt Pointer to the rpt structure
+ * \param cmd Command to append
+ * \retval 0 on success, -1 on failure (result of ast_str_append)
+ */
+int macro_append(struct rpt *myrpt, const char *cmd);

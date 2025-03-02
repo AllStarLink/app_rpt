@@ -115,8 +115,7 @@ void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 
 				struct rpt *myrpt = &rpt_vars[i];
 				rpt_mutex_lock(&myrpt->lock);
-				myrpt->macrotimer = MACROTIME;
-				ast_str_append(&myrpt->macrobuf, 0, "%s", s);
+				macro_append(&myrpt->macrobuf, s);
 				rpt_mutex_unlock(&myrpt->lock);
 
 			}

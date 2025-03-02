@@ -839,8 +839,7 @@ void rpt_event_process(struct rpt *myrpt)
 		if (action == 'F') {	/* execute a function */
 			rpt_mutex_lock(&myrpt->lock);
 			ast_verb(3, "Event on node %s doing macro %s for condition %s\n", myrpt->name, cmd, v->value);
-			myrpt->macrotimer = MACROTIME;
-			ast_str_append(&myrpt->macrobuf, 0, "%s", cmd);
+			macro_append(myrpt, cmd);
 			rpt_mutex_unlock(&myrpt->lock);
 		} else if (action == 'C') {	/* execute a command */
 			/* make a local copy of the value of this entry */
@@ -2586,9 +2585,7 @@ static void do_scheduler(struct rpt *myrpt)
 			/* Execute lnkactmacro */
 			rpt_mutex_lock(&myrpt->lock);
 			ast_debug(5, "Executing link activity timer macro %s\n", myrpt->p.lnkactmacro);
-			myrpt->macrotimer = MACROTIME;
-			ast_str_append(&myrpt->macrobuf, 0, "%s", myrpt->p.lnkactmacro);
-			}
+			macro_append(myrpt, myrpt->p.lnkactmacro);
 			rpt_mutex_unlock(&myrpt->lock);
 			myrpt->linkactivitytimer = 0;
 			myrpt->linkactivityflag = 0;
@@ -2603,9 +2600,7 @@ static void do_scheduler(struct rpt *myrpt)
 			myrpt->rptinactwaskeyedflag = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_debug(5, "Executing rpt inactivity timer macro %s\n", myrpt->p.rptinactmacro);
-			myrpt->macrotimer = MACROTIME;
-			ast_str_append(&myrpt->macrobuf, 0, "%s", myrpt->p.rptinactmacro);
-			}
+			macro_append(myrpt, myrpt->p.rptinactmacro);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
@@ -2686,8 +2681,7 @@ static void do_scheduler(struct rpt *myrpt)
 				return;			/* Macro not found */
 			}
 			rpt_mutex_lock(&myrpt->lock);
-			myrpt->macrotimer = MACROTIME;
-			ast_str_append(&myrpt->macrobuf, 0, "%s", val);
+			macro_append(myrpt, val);
 			rpt_mutex_unlock(&myrpt->lock);
 		} else {
 			ast_log(LOG_WARNING, "Malformed scheduler entry in rpt.conf: %s = %s\n", skedlist->name, skedlist->value);
@@ -3788,8 +3782,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if ((myrpt->p.litzcmd) && (x >= myrpt->p.litztime) && strchr(myrpt->p.litzchar, c)) {
 			ast_debug(1, "Doing litz command %s on node %s\n", myrpt->p.litzcmd, myrpt->name);
 			rpt_mutex_lock(&myrpt->lock);
-			myrpt->macrotimer = MACROTIME;
-			ast_str_append(&myrpt->macrobuf, 0, "%s", myrpt->p.litzcmd);
+			macro_append(myrpt, myrpt->p.litzcmd);
 			rpt_mutex_unlock(&myrpt->lock);
 			return 0;
 		}
@@ -3852,7 +3845,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			myrpt->elketimer = 0;
 			myrpt->localoverride = 0;
 			if (f->datalen && f->data.ptr) {
-				char *val, busy = 0;
+				char *val;
 
 				send_link_pl(myrpt, f->data.ptr);
 
@@ -3873,8 +3866,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					strcpy(val, "*6");
 					myrpt->macropatch = 1;
 					rpt_mutex_lock(&myrpt->lock);
-					myrpt->macrotimer = MACROTIME;
-					ast_str_append(&myrpt->macrobuf, 0, "%s", val);
+					macro_append(myrpt, val);
 					strncpy(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone) - 1);
 					myrpt->lasttone[sizeof(myrpt->lasttone) - 1] = '\0';
 					rpt_mutex_unlock(&myrpt->lock);
@@ -3883,9 +3875,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					if (val) {
 						ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, val, myrpt->name);
 						rpt_mutex_lock(&myrpt->lock);
-						myrpt->macrotimer = MACROTIME;
-						ast_str_append(&myrpt->macrobuf, 0, "%s", val);
-					}
+						macro_append(myrpt, val);
 					rpt_mutex_unlock(&myrpt->lock);
 					}
 					strncpy(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone) - 1);
@@ -5386,13 +5376,13 @@ static void *rpt(void *this)
 		}
 
 		str = ast_str_buffer(myrpt->macrobuf);
-		len = ast_str_len(myrpt->macrobuf);
+		len = ast_str_strlen(myrpt->macrobuf);
 		c = str[0];
 		time(&t);
 		if (c && (!myrpt->macrotimer) && starttime && (t > (starttime + START_DELAY))) {
 			char cin = c & 0x7f;
 			myrpt->macrotimer = MACROTIME;
-			ast_str_copy_string(str, str + 1, len - 1);
+			ast_copy_string(str, str + 1, len - 1);
 			ast_str_truncate(myrpt->macrobuf, len - 1);
 			if ((cin == 'p') || (cin == 'P'))
 				myrpt->macrotimer = MACROPTIME;

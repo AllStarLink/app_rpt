@@ -737,8 +737,7 @@ static int rpt_do_fun(int fd, int argc, const char *const *argv)
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
-			myrpt->macrotimer = MACROTIME;
-			ast_str_append(&myrpt->macrobuf, 0, argv[3]);
+			macro_append(myrpt, argv[3]);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}

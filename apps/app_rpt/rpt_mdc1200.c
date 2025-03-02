@@ -180,8 +180,7 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 		if (!myrpt->keyed)
 			return;
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->macrotimer = MACROTIME;
-		ast_str_append(&myrpt->macrobuf, 0, myval);
+		macro_append(&myrpt->macrobuf, myval);
 		rpt_mutex_unlock(&myrpt->lock);
 	}
 	if ((data[0] == 'I') && (!busy)) {
