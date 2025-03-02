@@ -462,7 +462,8 @@ void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 int __get_nodelist_size (struct rpt *myrpt)
 {
 	struct rpt_link *l;
-	int buffer_size_links = 0, buffer_size_alinks = 0, link_size;
+	/* minimum size for empty string is 1 byte */
+	int buffer_size_links = 1, buffer_size_alinks = 1, link_size;
 
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
