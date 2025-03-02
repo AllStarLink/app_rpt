@@ -579,6 +579,9 @@ void rpt_update_links(struct rpt *myrpt)
 	 */
 	ast_mutex_lock(&myrpt->lock);
 	buffer_size = __get_nodelist_size(myrpt);
+	if (!buffer_size) {
+		return; /* Avoid high fence violation by trying to allocate when size is 0 */
+	}
 	buf = ast_calloc(1, BUFSIZE(buffer_size));
 	if (!buf) {
 		ast_mutex_unlock(&myrpt->lock);
