@@ -6816,7 +6816,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		/* insert at end of queue */
 		rpt_mutex_lock(&myrpt->lock);
-		rpt_link_add(myrpt, l);
+		rpt_link_add(myrpt, l); /* After putting the link on the linked list, ast_waitfor_n can and will start referencing it */
 		__kickshort(myrpt);
 		gettimeofday(&myrpt->lastlinktime, NULL);
 		rpt_mutex_unlock(&myrpt->lock);
