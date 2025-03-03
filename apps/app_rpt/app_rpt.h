@@ -333,6 +333,14 @@ struct rpt_chan_stat {
 #define NEWKEY1STR "!NEWKEY1!"
 #define IAXKEYSTR "!IAXKEY!"
 
+
+/*! \brief Repeater link connection newkey handshake state */
+enum newkey { 
+	RADIO_KEY_ALLOWED, /*!< AST_CONTROL_RADIO_KEY is allowed on repeater channel */
+	RADIO_KEY_ALLOWED_REDUNDANT, /*!< "!NEWKEY!" - AST_CONTROL_RADIO_KEY allowed on the repeater channel */
+	RADIO_KEY_NOT_ALLOWED /*!< "!NEWKEY1!" message - AST_CONTROL_RADIO_KEY are not allowed on the repeater channel */
+};
+
 struct vox {
 	float	speech_energy;
 	float	noise_energy;
@@ -409,7 +417,7 @@ struct rpt_link {
 	char wasvox;
 	int voxtotimer;
 	char voxtostate;
-	char newkey;
+	enum newkey link_newkey;
 	char iaxkey;
 	int linkmode;
 	int newkeytimer;
@@ -832,7 +840,7 @@ struct rpt {
 	int linkposttimer;			
 	int keyposttimer;			
 	int lastkeytimer;			
-	char newkey;
+	enum newkey rpt_newkey;
 	char iaxkey;
 	char inpadtest;
 	int rxlingertimer;

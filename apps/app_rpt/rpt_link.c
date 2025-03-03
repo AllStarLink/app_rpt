@@ -741,10 +741,10 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	l->hasconnected = l->perma = perma;
 	l->newkeytimer = NEWKEYTIME;
 	l->iaxkey = 0;
-	l->newkey = 2;
+	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 	l->voterlink = voterlink;
 	if (strncasecmp(s1, "echolink/", 9) == 0) {
-		l->newkey = 0;
+		l->link_newkey = RADIO_KEY_ALLOWED;
 	}
 	if (!strncasecmp(s1, "iax2/", 5) || !strncasecmp(s1, "echolink/", 9) || !strncasecmp(s1, "tlb/", 4)
 #ifdef ALLOW_LOCAL_CHANNELS

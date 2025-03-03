@@ -1730,16 +1730,16 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (!strcmp(str, NEWKEYSTR)) {
-		if ((!mylink->newkey) || mylink->newkeytimer) {
+		if ((!mylink->link_newkey) || mylink->newkeytimer) {
 			mylink->newkeytimer = 0;
-			mylink->newkey = 1;
-			send_old_newkey(mylink->chan);
+			mylink->link_newkey = RADIO_KEY_ALLOWED_REDUNDANT;
+			send_newkey_redundant(mylink->chan);
 		}
 		return;
 	}
 	if (!strcmp(str, NEWKEY1STR)) {
 		mylink->newkeytimer = 0;
-		mylink->newkey = 2;
+		mylink->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		return;
 	}
 	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
@@ -2202,14 +2202,14 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	if (!strcmp(str, DISCSTR))
 		return 0;
 	if (!strcmp(str, NEWKEYSTR)) {
-		if (!myrpt->newkey) {
-			send_old_newkey(myrpt->rxchannel);
-			myrpt->newkey = 1;
+		if (!myrpt->rpt_newkey) {
+			send_newkey_redundant(myrpt->rxchannel);
+			myrpt->rpt_newkey = RADIO_KEY_ALLOWED_REDUNDANT;
 		}
 		return 0;
 	}
 	if (!strcmp(str, NEWKEY1STR)) {
-		myrpt->newkey = 2;
+		myrpt->rpt_newkey = RADIO_KEY_NOT_ALLOWED;
 		return 0;
 	}
 	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
@@ -2333,7 +2333,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->connecttime = 0;
 	l->thisconnected = 0;
 	l->iaxkey = 0;
-	l->newkey = 0;
+	l->link_newkey = RADIO_KEY_ALLOWED;
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
@@ -2350,7 +2350,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->lastrealrx = 0;
 	l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 	l->newkeytimer = NEWKEYTIME;
-	l->newkey = 2;
+	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
 		ast_frfree(f1);
 	if (l->chan) {
@@ -2941,6 +2941,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->sleepreq = %d\n", (int) myrpt->sleepreq);
 	ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
+	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
 
 	zl = myrpt->links.next;
 	while (zl != &myrpt->links) {
@@ -2956,7 +2957,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->retrytimer %d\n", zl->retrytimer);
 		ast_debug(2, "        link->retries = %d\n", zl->retries);
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
-		ast_debug(2, "        link->newkey = %d\n", zl->newkey);
+		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
 		zl = zl->next;
 	}
 
@@ -3107,7 +3108,7 @@ static inline void update_timer(int *timer_ptr, int elap, int end_val)
 static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;
-	int x;
+	int newkeytimer_last;
 	struct rpt_link *l = myrpt->links.next;
 	while (l != &myrpt->links) {
 		int myrx, mymaxct;
@@ -3120,14 +3121,15 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		update_timer(&l->rxlingertimer, elap, 0);
 
 		/* Update the timer, checking if it expired just now. */
-		x = l->newkeytimer;
+		newkeytimer_last = l->newkeytimer;
 		update_timer(&l->newkeytimer, elap, 0);
 
 		/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
-		 * This if statement executes if the timer just expired.
-		 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey to 1 or 2 (because then x == 0 here)
+		 * This if statement executes if the newkeytimer just expired.
+		 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey 
+		 * to RADIO_KEY_ALLOWED_REDUNDANT or RADIO_KEY_NOT_ALLOWED (because then newkeytimer_last == 0 here)
 		 */
-		if (x > 0 && !l->newkeytimer) {
+		if (newkeytimer_last > 0 && !l->newkeytimer) { /* Translation: We were timing, and it just expired */
 			/* Issue #46 background:
 			 *
 			 * There is a kind of "handshake" that happens when setting up the IAX2 trunk between two nodes,
@@ -3152,7 +3154,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			 * Note that the above depiction separates the TX and RX, but there are only 3 text frames involved.
 			 * In issue #46, 3 text frames are sent, but only 2 are really "received".
 			 * And it so happens that the text frame that B doesn't get from A is exactly the text frame
-			 * that is responsible for setting newkeytimer=0 and newkey=2, i.e. if this doesn't happen, then we'll hit the WARNING case in the below if statement.
+			 * that is responsible for setting newkeytimer=0 and newkey=RADIO_KEY_NOT_ALLOWED, i.e. if this doesn't happen, 
+			 * then we'll hit the WARNING case in the below if statement.  Because this code sets l->link_newkey to RADIO_KEY_ALLOWED,
+			 * There is an unintended radio keyup.
 			 *
 			 * Note that all of these comments are from spending hours debugging this issue and reverse-engineering, but at this point I'm pretty confident
 			 * about these parts of the code, even though I'm not Jim Dixon and he didn't comment any of this code originally.
@@ -3165,26 +3169,30 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (l->thisconnected) {
 				/* We're connected, but haven't received a NEWKEY1STR text frame yet...
 				 * The newkeytimer expired on a connected (~answered?) node, i.e. handle_link_data hasn't yet gotten called
-				 * to set newkeytimer = 0 and newkey to non-zero, i.e. we haven't received a text frame with NEWKEY1STR over the IAX2 channel yet.
+				 * to set newkeytimer = 0 and newkey to RADIO_KEY_NOT_ALLOWED, i.e. we haven't received a text frame with NEWKEY1STR over the IAX2 channel yet.
 				 */
-				if (l->newkey == 2) {
+				if (l->link_newkey == RADIO_KEY_NOT_ALLOWED) {
 					/* This can ripple to have consequences down the line, namely we might start writing voice frames
 					 * across the IAX2 link because of this, basically causing us to be transmitting (keyed).
 					 * If this happens, this indicates a problem upstream, and we should emit a warning here
 					 * since undesired behavior will likely ensue.
+					 * We probably SHOULD just hangup the line right here if we are connected and did not receive the ~!NEWKEY1!
+					 * message as something is wrong with the text messaging part of the connection.
 					 */
-					ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from 2 to 0.\n", l);
-					l->newkey = 0;
+					ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from RADIO_KEY_NOT_ALLOWED to RADIO_KEY_ALLOWED.\n", l);
+					l->link_newkey = RADIO_KEY_ALLOWED;
 				}
 			} else {
-				/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms */
+				/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms (forever! - probably should limit
+				 * the number of retries here) 
+				 */
 				l->newkeytimer = NEWKEYTIME;
 			}
 		}
 		if ((l->linkmode >1) && (l->linkmode < 0x7ffffffe)) {
 			update_timer(&l->linkmode, elap, 1);
 		}
-		if ((l->newkey == 2) && l->lastrealrx && (!l->rxlingertimer)) {
+		if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && l->lastrealrx && (!l->rxlingertimer)) {
 			rxunkey_helper(myrpt, l);
 		}
 
@@ -3235,7 +3243,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, lstr, l->name);
 			}
 		}
-		if (l->newkey == 1) {
+		if (l->link_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
 			if ((l->retxtimer += elap) >= REDUNDANT_TX_TIME) {
 				l->retxtimer = 0;
 				if (l->chan && l->phonemode == 0) {
@@ -4326,7 +4334,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				*totx = 0;
 			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx)) {
 				if (*totx && !l->voterlink) {
-					if (l->newkey < 2)
+					if (l->link_newkey != RADIO_KEY_NOT_ALLOWED)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
@@ -4367,7 +4375,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 
 				l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 
-				if ((l->newkey == 2) && (!l->lastrealrx)) {
+				if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && (!l->lastrealrx)) {
 					rxkey_helper(myrpt, l);
 				}
 				if (((l->phonemode) && (l->phonevox)) || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
@@ -4516,7 +4524,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 						l->reconnects++;
 				}
 				/* if RX key */
-				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->newkey < 2)) {
+				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->link_newkey != RADIO_KEY_NOT_ALLOWED)) {
 					rxkey_helper(myrpt, l);
 				}
 				/* if RX un-key */
@@ -4551,12 +4559,15 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					fac_frame(f, fac);
 				}
 				/* foop */
-				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
 					/* Reverse-engineering comments from NA debugging issue #46:
-					 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey hasn't been set to 2 yet.
-					 * Of course if handle_link_data is never called to set newkey to 2 and stop newkeytimer, then at some point, we'll
-					 * set newkey = 0 forcibly (see comments in that part of the code for more info), which will cause us to start passing on the voice frames here.
-					 * If this happens, then we're passing voice frames so we're keyed up and transmitting, essentially.
+					 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey is set to != RADIO_KEY_NOT_ALLOWED yet.
+					 * This happens when the reset code forces it to RADIO_ALLOWED.
+					 * Of course if handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some point, we'll
+					 * set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info), 
+					 * If this happens, we're passing voice frames and now sending AST_READIO_KEY messages
+					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
+					 * 
 					 */
 					ast_write(l->chan, f);
 				}
@@ -4607,7 +4618,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 		/* go thru all the links */
 		while (l != &myrpt->links) {
 			/* foop */
-			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && ((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
 				if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "irlp"))) {
 					ast_write(l->chan, fs);
 				} else {
@@ -5901,7 +5912,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 	if (f->frametype == AST_FRAME_VOICE) {
 		struct ast_frame *f1;
 		int ismuted;
-		if (myrpt->newkey == 2) {
+		if (myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED) {
 			myrpt->rxlingertimer = ((myrpt->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 			if (!*keyed) {
 				*keyed = 1;
@@ -6003,7 +6014,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			return -1;
 		}
 		/* if RX key */
-		if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (myrpt->newkey < 2)) {
+		if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (myrpt->rpt_newkey != RADIO_KEY_NOT_ALLOWED)) {
 			ast_debug(7, "@@@@ rx key\n");
 			*keyed = 1;
 			myrpt->rerxtimer = 0;
@@ -6073,7 +6084,7 @@ static inline int exec_pchannel_read(struct rpt *myrpt, struct ast_channel *chan
 		return -1;
 	}
 	if (f->frametype == AST_FRAME_VOICE) {
-		if ((myrpt->newkey < 2) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX2")) {
+		if ((myrpt->rpt_newkey != RADIO_KEY_NOT_ALLOWED) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX2")) {
 			ast_write(chan, f);
 		}
 	}
@@ -6730,12 +6741,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->gott = 0;
 		l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 		l->newkeytimer = NEWKEYTIME;
-		l->newkey = 0;
+		l->link_newkey = RADIO_KEY_ALLOWED;
 		l->iaxkey = 0;
 		if ((!phone_mode) && (l->name[0] != '0') && strcasecmp(ast_channel_tech(chan)->type, "echolink") && strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
-			l->newkey = 2;
+			l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		}
-		ast_debug(7, "newkey: %d\n", l->newkey);
+		ast_debug(7, "newkey: %d\n", l->link_newkey);
 		if (l->name[0] > '9') {
 			l->newkeytimer = 0;
 		}
@@ -7076,7 +7087,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->reload = 0;
 	myrpt->tele.next = &myrpt->tele;
 	myrpt->tele.prev = &myrpt->tele;
-	myrpt->newkey = 0;
+	myrpt->rpt_newkey = RADIO_KEY_ALLOWED;
 	myrpt->iaxkey = 0;
 	myrpt->lastitx = !myrpt->lastitx;
 	myrpt->tunerequest = 0;
@@ -7142,7 +7153,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 	/* if is a webtransceiver */
 	if (myrpt->remote_webtransceiver)
-		myrpt->newkey = 2;
+		myrpt->rpt_newkey = RADIO_KEY_NOT_ALLOWED;
 	myrpt->loginuser[0] = 0;
 	myrpt->loginlevel[0] = 0;
 	myrpt->authtelltimer = 0;
@@ -7270,7 +7281,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		keyed = myrx;
 		update_timer(&myrpt->rxlingertimer, elap, 0);
-		if ((myrpt->newkey == 2) && keyed && (!myrpt->rxlingertimer)) {
+		if ((myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED) && keyed && (!myrpt->rxlingertimer)) {
 			myrpt->rerxtimer = 0;
 			keyed = 0;
 		}
@@ -7309,7 +7320,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		if (rem_rx && !myrpt->remoterx) {
 			myrpt->remoterx = 1;
-			if (myrpt->newkey < 2)
+			if (myrpt->rpt_newkey != RADIO_KEY_NOT_ALLOWED)
 				ast_indicate(chan, AST_CONTROL_RADIO_KEY);
 		}
 		if (!rem_rx && myrpt->remoterx) {
@@ -7326,7 +7337,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				break; /* if not logged in, hang up after a time */
 			}
 		}
-		if (myrpt->newkey == 1) {
+		if (myrpt->rpt_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
 			if ((myrpt->retxtimer += elap) >= REDUNDANT_TX_TIME) {
 				myrpt->retxtimer = 0;
 				if ((myrpt->remoterx) && (!myrpt->remotetx))
