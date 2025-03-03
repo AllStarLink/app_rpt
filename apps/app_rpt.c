@@ -826,10 +826,10 @@ void rpt_event_process(struct rpt *myrpt)
 			}
 		}
 		if (action == 'V') {	/* set a variable */
-			pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, (cmd) ? "1" : "0");
+			pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, cmd ? "1" : "0");
 			continue;
 		} else if (action == 'G') {	/* set a global variable */
-			pbx_builtin_setvar_helper(NULL, v->name, (cmd) ? "1" : "0");
+			pbx_builtin_setvar_helper(NULL, v->name, cmd ? "1" : "0");
 			continue;
 		}
 		/* if not command to execute, go to next one */
@@ -6373,36 +6373,26 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		int res = 0;
 		char buf2[128];
 
-		if (myrpt->keyed)
-			pbx_builtin_setvar_helper(chan, "RPT_STAT_RXKEYED", "1");
-		else
-			pbx_builtin_setvar_helper(chan, "RPT_STAT_RXKEYED", "0");
+		pbx_builtin_setvar_helper(chan, "RPT_STAT_RXKEYED", myrpt->keyed ? "1" : "0");
+		pbx_builtin_setvar_helper(chan, "RPT_STAT_TXKEYED", myrpt->txkeyed ? "1" : "0");
 
-		if (myrpt->txkeyed)
-			pbx_builtin_setvar_helper(chan, "RPT_STAT_TXKEYED", "1");
-		else
-			pbx_builtin_setvar_helper(chan, "RPT_STAT_TXKEYED", "0");
+#define rpt_set_numeric_var_helper(chan, varname, varvalue) \
+	snprintf(buf2, sizeof(buf2), "%d", varvalue); \
+	pbx_builtin_setvar_helper(chan, varname, buf2);
 
-		snprintf(buf2, sizeof(buf2), "%s=%i", "RPT_STAT_XLINK", myrpt->xlink);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%i", "RPT_STAT_LINKS", numlinks);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_WASCHAN", myrpt->waschan);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_NOWCHAN", myrpt->nowchan);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_DUPLEX", myrpt->p.duplex);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_PARROT", myrpt->p.parrotmode);
-		pbx_builtin_setvar(chan, buf2);
-		//snprintf(buf2,sizeof(buf2),"%s=%d", "RPT_STAT_PHONEVOX", myrpt->phonevox);
-		//pbx_builtin_setvar(chan, buf2);
-		//snprintf(buf2,sizeof(buf2),"%s=%d", "RPT_STAT_CONNECTED", myrpt->connected);
-		//pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_CALLMODE", myrpt->callmode);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%s", "RPT_STAT_LASTTONE", myrpt->lasttone);
-		pbx_builtin_setvar(chan, buf2);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_XLINK", myrpt->xlink);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_LINKS", numlinks);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_WASCHAN", myrpt->waschan);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_NOWCHAN", myrpt->nowchan);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_DUPLEX", myrpt->p.duplex);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_PARROT", myrpt->p.parrotmode);
+#if 0
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_PHONEVOX", myrpt->phonevox);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_CONNECTED", myrpt->connected);
+#endif
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_CALLMODE", myrpt->callmode);
+		pbx_builtin_setvar_helper(chan, "RPT_STAT_LASTTONE", myrpt->lasttone);
+#undef rpt_set_numeric_var_helper
 
 		res = priority_jump(myrpt, chan);
 		return res;
@@ -6411,7 +6401,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (options && (*options == 'V' || *options == 'v')) {
 		if (callstr && myrpt->rxchannel) {
 			pbx_builtin_setvar(myrpt->rxchannel, callstr);
-			ast_verb(3, "Set Asterisk channel variable %s for node %s\n", callstr, myrpt->name);
 		}
 		return 0;
 	}
