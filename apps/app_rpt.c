@@ -6808,7 +6808,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		/* In theory, both these conditions should be true if one is, since the node thread will queue a soft hangup on this channel and then set l->chan to NULL */
-		if (!l->chan || ast_check_hangup(chan)) {
+		if (ast_check_hangup(chan)) {
 			/* This connection is already toast, just return -1 as normal and let the core kill the channel off */
 			ast_debug(3, "Channel %s is a dead link\n", ast_channel_name(chan));
 			return -1;
@@ -6826,7 +6826,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		 * This goes hand in hand with mirroring the old "KEEPALIVE" behavior. Past this point, there is no PBX for this channel.
 		 * We don't do this until the very end, because the node thread will check if this channel has a PBX to determine
 		 * if it's still "owned" by the PBX thread, as opposed to by an app_rpt thread. */
-
 		rpt_mutex_lock(&myrpt->lock);
 		ast_debug(1, "Stopping PBX on %s\n", ast_channel_name(chan));
 		ast_channel_pbx_set(chan, NULL);
