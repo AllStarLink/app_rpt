@@ -6773,29 +6773,17 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_free(l);
 			pthread_exit(NULL);
 		}
-
-		rpt_mutex_lock(&myrpt->lock);
+		
 		if ((phone_mode == 2) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
-		/* insert at end of queue */
-		rpt_link_add(myrpt, l);
-		__kickshort(myrpt);
-		gettimeofday(&myrpt->lastlinktime, NULL);
-		rpt_mutex_lock(&myrpt->blocklock);
-
-		/* Since we've added l to the list, the node thread can now
-		 * start using it, and potentially set l->chan to NULL.
-		 * Therefore, we have to be careful when using it
-		 * (lock and check for NULL). */
 
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_answer(chan);
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
-					rpt_mutex_unlock(&myrpt->blocklock);
-					rpt_mutex_unlock(&myrpt->lock);
+					ast_free(l);
 					return -1;
 				}
 			} else {
@@ -6804,47 +6792,35 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 			}
 		}
-		rpt_mutex_unlock(&myrpt->blocklock);
-		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
 
-		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
 			donodelog_fmt(myrpt,"LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		}
 		doconpgm(myrpt, l->name);
 		if ((!phone_mode) && (l->name[0] <= '9')) {
-			rpt_mutex_lock(&myrpt->blocklock);
 			send_newkey(chan);
-			rpt_mutex_unlock(&myrpt->blocklock);
 		}
 
-		/* Be extra careful here.
-		 * Since above we impart this into the list of links (rpt_link_add),
-		 * it is possible that this node's thread (started at rpt() - the C function, not the dialplan one),
-		 * has already requested this channel be hungup.
-		 * We take care to not use ast_hangup if we detect the channel has a PBX,
-		 * so this channel won't have the rug pulled out from underneath it.
-		 * However, l->chan could still be set to NULL. Thus, if it's NULL here,
-		 * that means we're going to get hung up and should just abort, no point in doing telemetry.
-		 * For that reason, even though l->chan is chan if l->chan isn't NULL,
-		 * we always use chan here, rather than l->chan, since l->chan could be NULL.
-		 * This way, even if l->chan isn't NULL when we check but becomes NULL later, we're still safe. */
-		rpt_mutex_lock(&myrpt->lock);
 		if (l->chan) {
-			rpt_mutex_unlock(&myrpt->lock);
 			if (!strcasecmp(ast_channel_tech(chan)->type, "echolink") || !strcasecmp(ast_channel_tech(chan)->type, "tlb") || (l->name[0] > '9')) {
 				rpt_telemetry(myrpt, CONNECTED, l);
 			}
-		} else {
-			rpt_mutex_unlock(&myrpt->lock);
 		}
 
 		/* In theory, both these conditions should be true if one is, since the node thread will queue a soft hangup on this channel and then set l->chan to NULL */
-		if (!l->chan || ast_check_hangup(chan)) {
+		if (ast_check_hangup(chan)) {
 			/* This connection is already toast, just return -1 as normal and let the core kill the channel off */
 			ast_debug(3, "Channel %s is a dead link\n", ast_channel_name(chan));
 			return -1;
 		}
+
+		/* insert at end of queue */
+		rpt_mutex_lock(&myrpt->lock);
+		rpt_link_add(myrpt, l); /* After putting the link on the linked list, ast_waitfor_n can and will start referencing it */
+		__kickshort(myrpt);
+		gettimeofday(&myrpt->lastlinktime, NULL);
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_update_links(myrpt);
 
 		/* Set the PBX to NULL to avoid a warning in channel.c about a PBX remaining on the channel when it gets destroyed.
 		 * This goes hand in hand with mirroring the old "KEEPALIVE" behavior. Past this point, there is no PBX for this channel.
