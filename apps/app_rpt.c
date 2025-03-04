@@ -4322,7 +4322,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			if (myrpt->patchvoxalways)
 				mycalltx = mycalltx && ((!myrpt->voxtostate) && myrpt->wasvox);
 #endif
-			*totx = ((l->isremote) ? (remnomute) : myrpt->localtx || mycalltx) || remrx;
+			*totx = ((l->isremote) ? (remnomute) : (myrpt->localtx && myrpt->totimer) || mycalltx) || remrx;
 
 			/* foop */
 			if ((!l->lastrx) && altlink(myrpt, l))
@@ -6050,7 +6050,12 @@ static inline int exec_rxchannel_read(struct rpt *myrpt, const int reming, const
 		if (myreming || !*remkeyed || (myrpt->remote && myrpt->remotetx) || (myrpt->remmode != REM_MODE_FM && notremming)) {
 			memset(f->data.ptr, 0, f->datalen);
 		}
-		ast_write(myrpt->pchannel, f);
+		if (myrpt->totimer) {
+			if (myrpt->totimer) { /* Don't send local RX voice frames if the local repeater is timedout */
+				ast_write(myrpt->pchannel, f);
+			}
+		}
+		
 	} else if (f->frametype == AST_FRAME_CONTROL) {
 		if (f->subclass.integer == AST_CONTROL_HANGUP) {
 			ast_debug(1, "@@@@ rpt:Hung Up\n");
