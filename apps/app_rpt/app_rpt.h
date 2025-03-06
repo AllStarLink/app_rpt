@@ -550,11 +550,11 @@ struct sysstate {
 #define CMD_STATE_EXECUTING 3
 
 struct rpt_cmd_struct {
-    int state;
-    int functionNumber;
-    char param[MAXDTMF];
-    char digits[MAXDTMF];
-    int command_source;
+	int state;
+	int functionNumber;
+	char param[MAXMACRO];
+	char digits[MAXDTMF];
+	int command_source;
 };
 
 enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
