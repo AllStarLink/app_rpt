@@ -1,0 +1,92 @@
+testinfo:
+    summary: 'Test fast connect/disconnect'
+    description: |
+        'See app_rpt issue #459'
+
+test-modules:
+    test-object:
+        config-section: test-object-config
+        typename: 'test_case.TestCaseModule'
+    modules:
+        -
+            config-section: timer-originator
+            typename: 'pluggable_modules.Originator'
+        -
+            config-section: hangup-monitor
+            typename: 'pluggable_modules.HangupMonitor'
+        -
+            config-section: ami-config-1
+            typename: 'pluggable_modules.EventActionModule'
+        -
+            config-section: ami-config-2
+            typename: 'pluggable_modules.EventActionModule'
+        -
+            config-section: ami-config-3
+            typename: 'pluggable_modules.EventActionModule'
+
+test-object-config:
+    connect-ami: True
+    reactor-timeout: 10
+    stop-after-scenarios: False
+
+timer-originator:
+    channel: 'Local/s@wait'
+    context: 'timer'
+    exten: 'ilink'
+    priority: '1'
+    trigger: 'ami_connect'
+
+hangup-monitor:
+    ids: '0'
+
+ami-config-1:
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'UserEvent'
+                    UserEvent: 'TimerExpired'
+                    TimerEvent: nodestart
+        ami-actions:
+            action:
+                Action: 'Command'
+                Command: 'rpt cmd 456 ilink 13 123'
+
+ami-config-2:
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'UserEvent'
+                    UserEvent: 'TimerExpired'
+                    TimerEvent: ilink
+        ami-actions:
+            action:
+                Action: 'Command'
+                Command: 'rpt cmd 456 ilink 11 123'
+
+# Something that allows us to detect that everything's gone as expected,
+# we haven't crashed, and we can stop the test after the connect/disconnect
+ami-config-3:
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'RPT_ALINKS'
+                    EventValue: '0'
+                count: 5
+        stop_test:
+
+properties:
+    tags:
+        - dial
+        - apps
+    dependencies:
+        - python: 'twisted'
+        - python: 'starpy'
+        - asterisk: 'app_dial'
+        - asterisk: 'app_userevent'
+        - asterisk: 'app_originate'
+        - asterisk: 'app_rpt'
+        - asterisk: 'chan_iax2'
+        - asterisk: 'pbx_config'

@@ -175,3 +175,10 @@ if [ ! -d /var/lib/asterisk/sounds/en/rpt ]; then
 	tar -xvzf asterisk-asl-sounds-en-ulaw.tar.gz
 	rm asterisk-asl-sounds-en-ulaw.tar.gz
 fi
+
+# Add tests to the test suite, if it exists
+if [ -d /usr/src/testsuite ]; then
+	cd /usr/src/testsuite
+	git apply ../$MYDIR/tests/apps/tests_apps.diff
+	cp -r ../$MYDIR/tests/apps/rpt tests/apps
+fi

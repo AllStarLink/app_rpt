@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:12
     steps:
-      - name: Build Asterisk
+      - name: Build DAHDI and Asterisk
         run: |
           cd /usr/src
           apt-get update -y
@@ -25,16 +25,15 @@ jobs:
           wget https://docs.phreaknet.org/script/phreaknet.sh
           chmod +x phreaknet.sh
           ./phreaknet.sh make
-          phreaknet update
-          phreaknet install --dahdi --lightweight --alsa --fast --devmode
+          phreaknet install --dahdi --lightweight --alsa --fast --devmode --testsuite
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build app_rpt
         run: |
-          pwd
-          ls -la ..
-          ls -la
           cp -r ../app_rpt /usr/src
-          ls -la /usr/src
           cd /usr/src/app_rpt
           ./rpt_install.sh
+      - name: Run tests
+        run: |
+          cd /usr/src/testsuite
+          phreaknet runtest apps/rpt
