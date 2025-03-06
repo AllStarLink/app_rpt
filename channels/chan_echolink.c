@@ -3009,7 +3009,7 @@ static int do_el_directory(const char *hostname)
 	struct ast_hostent ah;
 	struct hostent *host;
 	struct sockaddr_in dirserver;
-	char str[200], ipaddr[200], nodenum[200], call[200];
+	char str[200], ipaddr[200], nodenum[200], call[200], format[sizeof("%%d:%%%lus")];
 	char *pp, *cc;
 	int n = 0, rep_lines, delmode, str_len;
 	int dir_compressed, dir_partial;
@@ -3094,7 +3094,8 @@ static int do_el_directory(const char *hostname)
 		goto cleanup;
 	}
 	if (dir_compressed) {
-		if (sscanf(str, "%d:%s", &rep_lines, snapshot_id) < 2) {
+		snprintf(format, sizeof(format), "%%d:%%%lus", sizeof(snapshot_id) - 1);
+		if (sscanf(str, format, &rep_lines, snapshot_id) < 2) {
 			ast_log(LOG_ERROR, "Error in parsing header on %s.\n", hostname);
 			goto cleanup;
 		}

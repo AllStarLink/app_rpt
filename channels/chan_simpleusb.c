@@ -1658,7 +1658,7 @@ static void mkpsamples(short* restrict audio, uint32_t data, int* restrict audio
 static int simpleusb_text(struct ast_channel *c, const char *text)
 {
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
-	char *cmd;
+	char *cmd, format[sizeof("%%%lus %%d %%d %%n")];
 	int cnt, i, j, audio_samples, divcnt, divdiv, audio_ptr, baud;
 	struct pocsag_batch *batch, *b;
 	short *audio;
@@ -1678,7 +1678,8 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* set receive CTCSS */
 	if (!strncmp(text, "RXCTCSS", 7)) {
-		cnt = sscanf(text, "%s %d", cmd, &i);
+		snprintf(format, sizeof(format), "%%%lus %%d", sizeof(cmd) - 1);
+		cnt = sscanf(text, format, cmd, &i);
 		if (cnt < 2) {
 			return 0;
 		}
@@ -1689,8 +1690,8 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* GPIO command */
 	if (!strncmp(text, "GPIO", 4)) {
-		
-		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
+		snprintf(format, sizeof(format), "%%%lus %%d %%d", sizeof(cmd) - 1);
+		cnt = sscanf(text, format, cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -1721,8 +1722,8 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* Parallel port command */
 	if (!strncmp(text, "PP", 2)) {
-		
-		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
+		snprintf(format, sizeof(format), "%%%lus %%d %%d", sizeof(cmd) - 1);
+		cnt = sscanf(text, format, cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -1751,8 +1752,8 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* pager command */
 	if (!strncmp(text, "PAGE", 4)) {
-		
-		cnt = sscanf(text, "%s %d %d %n", cmd, &baud, &i, &j);
+		snprintf(format, sizeof(format), "%%%lus %%d %%d %%n", sizeof(cmd) - 1);
+		cnt = sscanf(text, format, cmd, &baud, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}

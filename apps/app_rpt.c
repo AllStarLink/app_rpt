@@ -1713,7 +1713,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	/* XXX cmd, dst, and src should be validated. Why is remote_data src[300] in other locations?
 	* Is this a typo here?  Why would dest be any bigger than src?
 	*/
-	char tmp1[512], cmd[300] = "", dest[300], src[30], c;
+	char tmp1[512], cmd[300] = "", dest[300], src[30], c, format[sizeof("%%%lus %%%lus %%%lus %%d %%c ")];
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
@@ -1764,7 +1764,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'M') {
 		rest = 0;
-		if (sscanf(str, "%s %s %s %n", cmd, src, dest, &rest) < 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		snprintf(format,
+				 sizeof(format),
+				 "%%%lus %%%lus %%%lus %%n",
+				 sizeof(cmd) - 1,
+				 sizeof(src) - 1,
+				 sizeof(dest) - 1);
+		if (sscanf(str, format, cmd, src, dest, &rest) < 3) {
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
 		}
@@ -1792,7 +1798,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'T') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		snprintf(format, sizeof(format), "%%%lus %%%lus %%%lus", sizeof(cmd) - 1, sizeof(src) - 1, sizeof(dest) - 1);
+		if (sscanf(str, format, cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse telem string %s\n", str);
 			return;
 		}
@@ -1824,7 +1831,14 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 
 	if (*str == 'C') {
-		if (sscanf(str, "%s %s %s %s", cmd, src, tmp1, dest) != 4) { /*! \todo We should limit to sizeof(cmd, src, tmp1, dest) */
+		snprintf(format,
+				 sizeof(format),
+				 "%%%lus %%%lus %%%lus %%%lus",
+				 sizeof(cmd) - 1,
+				 sizeof(src) - 1,
+				 sizeof(tmp1) - 1,
+				 sizeof(dest) - 1);
+		if (sscanf(str, format, cmd, src, tmp1, dest) != 4) {
 			ast_log(LOG_WARNING, "Unable to parse ctcss string %s\n", str);
 			return;
 		}
@@ -1843,7 +1857,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 
 	if (*str == 'K') {
-		if (sscanf(str, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		snprintf(format,
+				 sizeof(format),
+				 "%%%lus %%%lus %%%lus %%d %%d",
+				 sizeof(cmd) - 1,
+				 sizeof(dest) - 1,
+				 sizeof(src) - 1);
+		if (sscanf(str, format, cmd, dest, src, &seq, &ts) != 5) {
 			ast_log(LOG_WARNING, "Unable to parse keying string %s\n", str);
 			return;
 		}
@@ -1900,14 +1920,21 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'I') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		snprintf(format, sizeof(format), "%%%lus %%%lus %%%lus", sizeof(cmd) - 1, sizeof(src) - 1, sizeof(dest) - 1);
+		if (sscanf(str, format, cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return;
 		}
 		mdc1200_notify(myrpt, src, dest);
 		strcpy(dest, "*");
 	} else {
-		if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {/*! \todo We should limit to sizeof(cmd, src, dest) */
+		snprintf(format,
+				 sizeof(format),
+				 "%%%lus %%%lus %%%lus %%d %%c",
+				 sizeof(cmd) - 1,
+				 sizeof(dest) - 1,
+				 sizeof(src) - 1);
+		if (sscanf(str, format, cmd, dest, src, &seq, &c) != 5) {
 			ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 			return;
 		}
@@ -2195,7 +2222,7 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 static int handle_remote_data(struct rpt *myrpt, const char *str)
 {
 	/* Should src[300] be src[30] as in handle_link_data?*/
-	char cmd[300], dest[300], src[300], c;
+	char cmd[300], dest[300], src[300], c, format[sizeof("%%%lus %%%lus %%%lus %%d %%c")];
 	int seq, res;
 
 	/* put string in our buffer */
@@ -2222,7 +2249,8 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 
 #ifndef	DO_NOT_NOTIFY_MDC1200_ON_REMOTE_BASES
 	if (*str == 'I') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) {
+		snprintf(format, sizeof(format), "%%%lus %%%lus %%%lus", sizeof(cmd) - 1, sizeof(src) - 1, sizeof(dest) - 1);
+		if (sscanf(str, format, cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return 0;
 		}
@@ -2233,7 +2261,13 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	if (*str == 'L') {
 		return 0;
 	}
-	if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+	snprintf(format,
+			 sizeof(format),
+			 "%%%lus %%%lus %%%lus %%d %%c",
+			 sizeof(cmd) - 1,
+			 sizeof(dest) - 1,
+			 sizeof(src) - 1);
+	if (sscanf(str, format, cmd, dest, src, &seq, &c) != 5) {
 		ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 		return 0;
 	}
@@ -3577,6 +3611,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	int ismuted;
 	struct ast_frame *f, *f1;
 	int i, dtmfed = 0;
+	char format[sizeof("R %%%lus")];
 
 	rpt_mutex_lock(&myrpt->blocklock);
 	f = ast_read(myrpt->rxchannel);
@@ -3588,8 +3623,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 
 	if (f->frametype == AST_FRAME_TEXT && myrpt->rxchankeyed) {
 		char myrxrssi[32];
-
-		if (sscanf((char *) f->data.ptr, "R %s", myrxrssi) == 1) {
+		snprintf(format, sizeof(format), "R %%%lus", (sizeof(myrxrssi) - 1));
+		if (sscanf((char *) f->data.ptr, format, myrxrssi) == 1) {
 			myrpt->rxrssi = atoi(myrxrssi);
 			ast_debug(8, "[%s] rxchannel rssi=%i\n", myrpt->name, myrpt->rxrssi);
 			if (myrpt->p.votertype == 2)
@@ -4974,7 +5009,7 @@ static void *rpt(void *this)
 			unsigned long long u_mono;
 			time_t was_mono;
 			char gps_data[100];
-			char lat[25], lon[25], elev[25];
+			char lat[25], lon[25], elev[25], format[sizeof("%%llu %%*u %%%lus %%%lus %%%lus")];
 
 			myrpt->lastgpstime = t_mono;
 
@@ -4987,7 +5022,13 @@ static void *rpt(void *this)
 			}
 
 			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
-			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
+			snprintf(format,
+					 sizeof(format),
+					 "%%llu %%*u %%%lus %%%lus %%%lus",
+					 sizeof(lat) - 1,
+					 sizeof(lon) - 1,
+					 sizeof(elev) - 1);
+			if (sscanf(gps_data, format, &u_mono, lat, lon, elev) != 4) {
 				break;
 			}
 			was_mono = (time_t) u_mono;
