@@ -98,16 +98,27 @@ typedef struct {
 
 #define	REDUNDANT_TX_TIME 2000
 
-#define	RETRY_TIMER_MS 5000
+#define RETRY_TIMER_MS 5000
 
-#define	PATCH_DIALPLAN_TIMEOUT 1500
+#define PATCH_DIALPLAN_TIMEOUT 1500
 
-#define	RPT_LOCKOUT_SECS 10
+#define RPT_LOCKOUT_SECS 10
+#define RPT_CMD_SZ 299
+#define RPT_SRC_SZ 299
+#define RPT_DEST_SZ 299
+#define RPT_TMP_SZ 511
+#define RSSI_SZ 31
+#define RPT_TO_STRING(x) #x
+#define S_FMT(x) "%" RPT_TO_STRING(x) "s "
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
+#define LON_SZ 24
+#define LAT_SZ 24
+#define ELEV_SZ 24
 
 #define MAXPEERSTR 31
-#define	MAXREMSTR 15
+#define MAXREMSTR 15
 
-#define	MONITOR_DISK_BLOCKS_PER_MINUTE 38
+#define MONITOR_DISK_BLOCKS_PER_MINUTE 38
 
 #define	DEFAULT_MONITOR_MIN_DISK_BLOCKS 10000
 #define	DEFAULT_REMOTE_INACT_TIMEOUT (15 * 60)

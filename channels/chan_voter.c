@@ -266,20 +266,20 @@ struct ast_flags zeroflag = { 0 };
 #define	PING_TIME_MS 250
 #define	PING_TIMEOUT_MS 3000
 
-#define	DEFAULT_LINGER 6
+#define DEFAULT_LINGER 6
 #define DEFAULT_GTXGAIN "0.0"
 
-#define	DEFAULT_DYNTIME 30000
+#define DEFAULT_DYNTIME 30000
 
 #define MAX_MASTER_COUNT 3
-
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 #define CLIENT_WARN_SECS 60
 
-#define	DELIMCHR ','
-#define	QUOTECHR 34
+#define DELIMCHR ','
+#define QUOTECHR 34
 
-#define	MAXSTREAMS 50
-#define	MAXTHRESHOLDS 20
+#define MAXSTREAMS 50
+#define MAXTHRESHOLDS 20
 
 #define	GPS_WORK_FILE "/tmp/gps%s.tmp"
 #define	GPS_DATA_FILE "/tmp/gps%s.dat"
@@ -1135,7 +1135,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			ast_log(LOG_WARNING, "Channel %s: Attempt to page on a non-flat-audio Voter config\n", ast_channel_name(ast));
 			return 0;
 		}
-		cnt = sscanf(text, "%s %d %d %n", cmd, &baud, &i, &j);
+		cnt = sscanf(text, "%s " N_FMT(d) " " N_FMT(d) " %n", cmd, &baud, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -2796,7 +2796,7 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 		if ((!strcasecmp(argv[4], "off")) || (!strncasecmp(argv[4], "dis", 3))) {
 			newlevel = -2;
 		} else {
-			if (sscanf(argv[4], "%d", &newlevel) < 1) {
+			if (sscanf(argv[4], N_FMT(d), &newlevel) < 1) {
 				ast_cli(fd, "Error: Invalid priority value specification!!\n");
 				ast_mutex_unlock(&voter_lock);
 				return RESULT_SUCCESS;

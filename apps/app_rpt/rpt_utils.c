@@ -133,7 +133,7 @@ int myatoi(const char *str)
 	}
 
 	/* leave this %i alone, non-base-10 input is useful here */
-	if (sscanf(str, "%i", &ret) != 1) {
+	if (sscanf(str, N_FMT(i), &ret) != 1) {
 		return -1;
 	}
 	return ret;

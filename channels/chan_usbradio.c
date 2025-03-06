@@ -77,14 +77,17 @@
 #define TX_CAP_TRACE_FILE		"/tmp/tx_trace.pcm"
 #define TX_CAP_OUT_FILE			"/tmp/tx_cap_out.pcm"
 
-#define	DELIMCHR ','
-#define	QUOTECHR 34
+#define DELIMCHR ','
+#define QUOTECHR 34
 
-#define	READERR_THRESHOLD 50
-#define	DEFAULT_ECHO_MAX 1000	/* 20 secs of echo buffer, max */
-#define	PP_MASK 0xbffc
-#define	PP_PORT "/dev/parport0"
-#define	PP_IOPORT 0x378
+#define READERR_THRESHOLD 50
+#define DEFAULT_ECHO_MAX 1000 /* 20 secs of echo buffer, max */
+#define PP_MASK 0xbffc
+#define PP_PORT "/dev/parport0"
+#define PP_IOPORT 0x378
+#define RPT_TO_STRING(x) #x
+#define S_FMT(x) "%" RPT_TO_STRING(x) "s "
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 
 #include "./xpmr/xpmr.h"
 #ifdef HAVE_XPMRX
@@ -1708,7 +1711,8 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 	char *cmd, pwr;
 	int cnt, i, j;
 	double tx, rx;
-	char rxs[16], txs[16], txpl[16], rxpl[16];
+#define STR_SZ 15 /* Size of text strings */
+	char rxs[STR_SZ + 1], txs[STR_SZ + 1], txpl[STR_SZ + 1], rxpl[STR_SZ + 1];
 
 #ifdef HAVE_SYS_IO
 	if (haspp == 2) {
@@ -1721,7 +1725,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 	/* print received messages */
 	ast_debug(3, "Channel %s: Console Received usbradio text %s >>\n", o->name, text);
 
-	cnt = sscanf(text, "%s %s %s %s %s %c", cmd, rxs, txs, rxpl, txpl, &pwr);
+	cnt = sscanf(text, "%s " S_FMT(STR_SZ) S_FMT(STR_SZ) S_FMT(STR_SZ) S_FMT(STR_SZ) "%c", cmd, rxs, txs, rxpl, txpl, &pwr);
 
 	/* set channel on parallel port */
 	if (strcmp(cmd, "SETCHAN") == 0) {
@@ -1754,8 +1758,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* GPIO command */
 	if (!strncmp(text, "GPIO", 4)) {
-
-		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
+		cnt = sscanf(text, "%s " N_FMT(d) " %d", cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -1786,8 +1789,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* Parallel port command */
 	if (!strncmp(text, "PP", 2)) {
-
-		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
+		cnt = sscanf(text, "%s " N_FMT(d) " " N_FMT(d), cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -3275,7 +3277,7 @@ static void store_rxsdtype(struct chan_usbradio_pvt *o, const char *s)
 static void store_rxgain(struct chan_usbradio_pvt *o, const char *s)
 {
 	float f;
-	sscanf(s, "%f", &f);
+	sscanf(s, N_FMT(f), &f);
 	o->rxgain = f;
 }
 
@@ -3287,7 +3289,7 @@ static void store_rxgain(struct chan_usbradio_pvt *o, const char *s)
 static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s)
 {
 	float f;
-	sscanf(s, "%f", &f);
+	sscanf(s, N_FMT(f), &f);
 	o->rxvoiceadj = f;
 }
 
@@ -3299,7 +3301,7 @@ static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s)
 static void store_rxctcssadj(struct chan_usbradio_pvt *o, const char *s)
 {
 	float f;
-	sscanf(s, "%f", &f);
+	sscanf(s, N_FMT(f), &f);
 	o->rxctcssadj = f;
 }
 
@@ -3621,7 +3623,7 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 			break;
 		}
 	}
-	if (str[x] || (sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
+	if (str[x] || (sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 		ast_cli(fd, "Entry Error, Rx voice setting not changed\n");
 		return;
 	}
@@ -3722,7 +3724,7 @@ static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str
 			break;
 		}
 	}
-	if (str[x] || (sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
+	if (str[x] || (sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 		ast_cli(fd, "Entry Error, Rx Squelch Level setting not changed\n");
 		return;
 	}
@@ -3794,7 +3796,7 @@ static void _menu_txvoice(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 			break;
 		}
 	}
-	if (str[x] || (sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
+	if (str[x] || (sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 		ast_cli(fd, "Entry Error, Tx Voice Level setting not changed\n");
 		return;
 	}
@@ -3845,7 +3847,7 @@ static void _menu_auxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 			break;
 		}
 	}
-	if (str[x] || (sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
+	if (str[x] || (sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 		ast_cli(fd, "Entry Error, Aux Voice Level setting not changed\n");
 		return;
 	}
@@ -3886,7 +3888,7 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 				break;
 			}
 		}
-		if (str[x] || (sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
+		if (str[x] || (sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 			ast_cli(fd, "Entry Error, Tx CTCSS Modulation Level setting not changed\n");
 			return;
 		}

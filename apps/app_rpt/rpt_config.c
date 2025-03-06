@@ -881,7 +881,7 @@ void load_rpt_vars(int n, int init)
 	/* do not use atoi() here, we need to be able to have
 	   the input specified in hex or decimal so we use
 	   sscanf with a %i */
-	if ((!val) || (sscanf(val, "%i", &rpt_vars[n].p.iobase) != 1)) {
+	if ((!val) || (sscanf(val, N_FMT(i), &rpt_vars[n].p.iobase) != 1)) {
 		rpt_vars[n].p.iobase = DEFAULT_IOBASE;
 	}
 
