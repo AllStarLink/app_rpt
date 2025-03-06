@@ -6234,6 +6234,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 	ast_copy_string(tmp, data, sizeof(tmp));
 	time(&t);
+	ast_debug(1, "Rpt called with %s\n", tmp);
 	/* if time has externally shifted negative, screw it */
 	if (t < starttime)
 		t = starttime + START_DELAY;
@@ -6403,6 +6404,22 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			pbx_builtin_setvar(myrpt->rxchannel, callstr);
 		}
 		return 0;
+	}
+
+	if (options && !strncasecmp(options, "localplay", 1) == 0) {
+		if (callstr) {
+			ast_debug(1, "Localplay command '%s'\n", callstr);
+		    rpt_telemetry(myrpt, LOCALPLAY, callstr);
+		}
+		pthread_exit(NULL);
+	}
+
+	if (options && !strncasecmp(options, "playback", 1) == 0) {
+		if (callstr) {
+			ast_debug(1, "Playback command '%s'\n", callstr);
+			rpt_telemetry(myrpt, PLAYBACK, callstr);
+		}
+		pthread_exit(NULL);
 	}
 
 	if (options && *options == 'o') {
