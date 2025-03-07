@@ -3601,7 +3601,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	if (myrpt->p.votermode && !myrpt->votewinner
 		&& (f->frametype == AST_FRAME_DTMF_BEGIN || f->frametype == AST_FRAME_DTMF_END)
 		) {
-		rpt_mutex_unlock(&myrpt->lock);
 		ast_frfree(f);
 		return 0;
 	}
@@ -3897,7 +3896,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					myrpt->macropatch = 1;
 					rpt_mutex_lock(&myrpt->lock);
 					if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(val)) {
-						rpt_mutex_unlock(&myrpt->lock);
 						busy = 1;
 					}
 					if (!busy) {
