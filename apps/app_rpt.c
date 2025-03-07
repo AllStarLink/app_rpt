@@ -3372,7 +3372,6 @@ static inline int do_link_post(struct rpt *myrpt)
 	}
 	str = ast_malloc(nstr + 256);
 	if (!str) {
-		ast_mutex_unlock(&myrpt->lock);
 		return -1;
 	}
 	nstr = 0;
