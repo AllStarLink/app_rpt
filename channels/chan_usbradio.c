@@ -1720,6 +1720,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* print received messages */
 	ast_debug(3, "Channel %s: Console Received usbradio text %s >>\n", o->name, text);
+
 	cnt = sscanf(text, "%s %15s %15s %15s %15s %c", cmd, rxs, txs, rxpl, txpl, &pwr);
 
 	/* set channel on parallel port */
@@ -1753,6 +1754,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* GPIO command */
 	if (!strncmp(text, "GPIO", 4)) {
+
 		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
@@ -1784,6 +1786,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* Parallel port command */
 	if (!strncmp(text, "PP", 2)) {
+
 		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
