@@ -3911,7 +3911,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, val, myrpt->name);
 						rpt_mutex_lock(&myrpt->lock);
 						if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(val)) {
-							rpt_mutex_unlock(&myrpt->lock);
 							busy = 1;
 						}
 						if (!busy) {
