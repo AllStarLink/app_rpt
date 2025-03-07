@@ -1689,7 +1689,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* GPIO command */
 	if (!strncmp(text, "GPIO", 4)) {
-
+		
 		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
@@ -1721,7 +1721,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* Parallel port command */
 	if (!strncmp(text, "PP", 2)) {
-
+		
 		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
@@ -1751,7 +1751,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* pager command */
 	if (!strncmp(text, "PAGE", 4)) {
-
+		
 		cnt = sscanf(text, "%s %d %d %n", cmd, &baud, &i, &j);
 		if (cnt < 3) {
 			return 0;
