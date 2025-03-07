@@ -229,7 +229,8 @@ time_t rpt_time_monotonic(void)
 	return ts.tv_sec;
 }
 
-int macro_append(struct rpt *myrpt, const char *cmd) {
+int macro_append(struct rpt *myrpt, const char *cmd)
+{
 	int res;
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->macrotimer = MACROTIME;

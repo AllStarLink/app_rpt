@@ -4724,7 +4724,6 @@ static void *rpt(void *this)
 	myrpt->ready = 0;
 	myrpt->macrobuf = ast_str_create(MAXMACRO);
 	if (!myrpt->macrobuf) {
-		ast_log(LOG_ERROR, "Failed to allocate macro buffer\n");
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
