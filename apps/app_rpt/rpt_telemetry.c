@@ -1718,7 +1718,9 @@ treataslocal:
 				setdtr(myrpt, myrpt->iofd, 0);
 			}
 			setxpmr(myrpt, 0);
+			ast_mutex_unlock(&myrpt->remlock);
 			if (ast_safe_sleep(mychannel, 200) == -1) {
+				ast_mutex_lock(&myrpt->remlock);
 				myrpt->remsetting = 0;
 				ast_mutex_unlock(&myrpt->remlock);
 				res = -1;
@@ -1727,6 +1729,7 @@ treataslocal:
 			if (myrpt->iofd < 0) {
 				int rxisoffhook;
 				if (dahdi_flush(myrpt->dahditxchannel) || ((rxisoffhook = dahdi_rx_offhook(myrpt->dahdirxchannel)) < 0)) {
+					ast_mutex_lock(&myrpt->remlock);
 					myrpt->remsetting = 0;
 					ast_mutex_unlock(&myrpt->remlock);
 					res = -1;
@@ -1738,7 +1741,7 @@ treataslocal:
 			res = set_tmd700(myrpt);
 			setxpmr(myrpt, 0);
 		}
-
+		ast_mutex_lock(&myrpt->remlock);
 		myrpt->remsetting = 0;
 		ast_mutex_unlock(&myrpt->remlock);
 		if (!res) {
@@ -1899,7 +1902,9 @@ treataslocal:
 			if (play_tone(mychannel, 800, 6000, 8192) == -1) {
 				break;
 			}
+			ast_mutex_unlock(&myrpt->remlock);
 			ast_safe_sleep(mychannel, 500);
+			ast_mutex_lock(&myrpt->remlock);
 			set_mode_ic706(myrpt, myrpt->remmode);
 			myrpt->tunerequest = 0;
 			ast_mutex_unlock(&myrpt->remlock);
@@ -1913,7 +1918,9 @@ treataslocal:
 				break;
 			}
 			simple_command_ft100(myrpt, 0x0f, 0);
+			ast_mutex_unlock(&myrpt->remlock);
 			ast_safe_sleep(mychannel, 500);
+			ast_mutex_lock(&myrpt->remlock);
 			set_mode_ft100(myrpt, myrpt->remmode);
 			myrpt->tunerequest = 0;
 			ast_mutex_unlock(&myrpt->remlock);
@@ -1928,7 +1935,9 @@ treataslocal:
 			break;
 		}
 		myrpt->tunetx = 0;
+		ast_mutex_unlock(&myrpt->remlock);
 		ast_safe_sleep(mychannel, 500);
+		ast_mutex_lock(&myrpt->remlock);
 		set_mode_ft897(myrpt, myrpt->remmode);
 		ast_playtones_stop(mychannel);
 		myrpt->tunerequest = 0;
