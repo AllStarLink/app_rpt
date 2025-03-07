@@ -1764,7 +1764,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'M') {
 		rest = 0;
-		if (sscanf(str, "%s %s %s %n", cmd, src, dest, &rest) < 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, "%299s %29s %299s %n", cmd, src, dest, &rest) < 3) {
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
 		}
@@ -1792,7 +1792,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'T') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, "%299s %29s %299s", cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse telem string %s\n", str);
 			return;
 		}
@@ -1824,7 +1824,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 
 	if (*str == 'C') {
-		if (sscanf(str, "%s %s %s %s", cmd, src, tmp1, dest) != 4) { /*! \todo We should limit to sizeof(cmd, src, tmp1, dest) */
+		if (sscanf(str, "%299s %29s %511s %299s", cmd, src, tmp1, dest) != 4) {
 			ast_log(LOG_WARNING, "Unable to parse ctcss string %s\n", str);
 			return;
 		}
@@ -1843,7 +1843,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 
 	if (*str == 'K') {
-		if (sscanf(str, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, "%299s %288s %29s %d %d", cmd, dest, src, &seq, &ts) != 5) {
 			ast_log(LOG_WARNING, "Unable to parse keying string %s\n", str);
 			return;
 		}
@@ -1900,14 +1900,14 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'I') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, "%299s %29s %299s", cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return;
 		}
 		mdc1200_notify(myrpt, src, dest);
 		strcpy(dest, "*");
 	} else {
-		if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {/*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, "%299s %299s %29s %d %c", cmd, dest, src, &seq, &c) != 5) {
 			ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 			return;
 		}
@@ -2222,7 +2222,7 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 
 #ifndef	DO_NOT_NOTIFY_MDC1200_ON_REMOTE_BASES
 	if (*str == 'I') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) {
+		if (sscanf(str, "%299s %299s %299s", cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return 0;
 		}
@@ -2233,7 +2233,7 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	if (*str == 'L') {
 		return 0;
 	}
-	if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+	if (sscanf(str, "%299s %299s %299s %d %c", cmd, dest, src, &seq, &c) != 5) {
 		ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 		return 0;
 	}
@@ -3588,8 +3588,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 
 	if (f->frametype == AST_FRAME_TEXT && myrpt->rxchankeyed) {
 		char myrxrssi[32];
-
-		if (sscanf((char *) f->data.ptr, "R %s", myrxrssi) == 1) {
+		if (sscanf((char *) f->data.ptr, "R %31s", myrxrssi) == 1) {
 			myrpt->rxrssi = atoi(myrxrssi);
 			ast_debug(8, "[%s] rxchannel rssi=%i\n", myrpt->name, myrpt->rxrssi);
 			if (myrpt->p.votertype == 2)
@@ -4987,7 +4986,7 @@ static void *rpt(void *this)
 			}
 
 			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
-			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
+			if (sscanf(gps_data, "%llu %*u %24s %24s %24s", &u_mono, lat, lon, elev) != 4) {
 				break;
 			}
 			was_mono = (time_t) u_mono;

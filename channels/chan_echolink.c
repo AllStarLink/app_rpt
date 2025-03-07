@@ -3094,7 +3094,7 @@ static int do_el_directory(const char *hostname)
 		goto cleanup;
 	}
 	if (dir_compressed) {
-		if (sscanf(str, "%d:%s", &rep_lines, snapshot_id) < 2) {
+		if (sscanf(str, "%d:%49s", &rep_lines, snapshot_id) < 2) {
 			ast_log(LOG_ERROR, "Error in parsing header on %s.\n", hostname);
 			goto cleanup;
 		}

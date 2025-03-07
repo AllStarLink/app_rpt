@@ -1721,7 +1721,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 	/* print received messages */
 	ast_debug(3, "Channel %s: Console Received usbradio text %s >>\n", o->name, text);
 
-	cnt = sscanf(text, "%s %s %s %s %s %c", cmd, rxs, txs, rxpl, txpl, &pwr);
+	cnt = sscanf(text, "%s %15s %15s %15s %15s %c", cmd, rxs, txs, rxpl, txpl, &pwr);
 
 	/* set channel on parallel port */
 	if (strcmp(cmd, "SETCHAN") == 0) {
