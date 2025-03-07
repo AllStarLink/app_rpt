@@ -3240,10 +3240,10 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				lf.data.ptr = ast_str_buffer(lstr);
 				rpt_qwrite(l, &lf);
 				ast_debug(7,
-						"@@@@ node %s sent node string %s to node %s\n",
-						myrpt->name,
-						ast_str_buffer(lstr),
-						l->name);
+					"@@@@ node %s sent node string %s to node %s\n",
+					myrpt->name,
+					ast_str_buffer(lstr),
+					l->name);
 			}
 			ast_free(lstr);
 		}
