@@ -3181,6 +3181,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 					 */
 					ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from RADIO_KEY_NOT_ALLOWED to RADIO_KEY_ALLOWED.\n", l);
 					l->link_newkey = RADIO_KEY_ALLOWED;
+					if (l->lastrealrx) { /* We were keyed up using newkey mode, need to unkey or we will be stuck keyed up. */
+						rxunkey_helper(myrpt, l);
+					}
 				}
 			} else {
 				/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms (forever! - probably should limit
