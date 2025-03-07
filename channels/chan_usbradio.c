@@ -1708,7 +1708,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 	char *cmd, pwr;
 	int cnt, i, j;
 	double tx, rx;
-	char rxs[16], txs[16], txpl[16], rxpl[16], format[sizeof("%%%lus %%%lus %%%lus %%%lus %%%lus %%c")];
+	char rxs[16], txs[16], txpl[16], rxpl[16];
 
 #ifdef HAVE_SYS_IO
 	if (haspp == 2) {
@@ -1720,15 +1720,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* print received messages */
 	ast_debug(3, "Channel %s: Console Received usbradio text %s >>\n", o->name, text);
-	snprintf(format,
-			 sizeof(format),
-			 "%%%lus %%%lus %%%lus %%%lus %%%lus %%c",
-			 sizeof(cmd) - 1,
-			 sizeof(rxs) - 1,
-			 sizeof(txs) - 1,
-			 sizeof(rxpl) - 1,
-			 sizeof(txpl) - 1);
-	cnt = sscanf(text, format, cmd, rxs, txs, rxpl, txpl, &pwr);
+	cnt = sscanf(text, "%s %15s %15s %15s %15s %c", cmd, rxs, txs, rxpl, txpl, &pwr);
 
 	/* set channel on parallel port */
 	if (strcmp(cmd, "SETCHAN") == 0) {
@@ -1761,8 +1753,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* GPIO command */
 	if (!strncmp(text, "GPIO", 4)) {
-		snprintf(format, sizeof(format), "%%%lus %%d %%d", sizeof(cmd) - 1);
-		cnt = sscanf(text, format, cmd, &i, &j);
+		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -1793,7 +1784,6 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* Parallel port command */
 	if (!strncmp(text, "PP", 2)) {
-		snprintf(format, sizeof(format), "%%%lus %%d %%d", sizeof(cmd) - 1);
 		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;

@@ -1122,7 +1122,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 	int cnt, i, j, audio_samples, divcnt, divdiv, audio_ptr, baud;
 	struct pocsag_batch *batch, *b;
 	short *audio;
-	char *cmd, audio1[AST_FRIENDLY_OFFSET + (FRAME_SIZE * sizeof(short))], format[sizeof("%%%lus %%d %%d %%n")];
+	char *cmd, audio1[AST_FRIENDLY_OFFSET + (FRAME_SIZE * sizeof(short))];
 	struct ast_frame wf, *f1;
 
 	cmd = ast_alloca(strlen(text) + 10);
@@ -1135,8 +1135,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			ast_log(LOG_WARNING, "Channel %s: Attempt to page on a non-flat-audio Voter config\n", ast_channel_name(ast));
 			return 0;
 		}
-		snprintf(format, sizeof(format), "%%%lus %%d %%d %%n", sizeof(cmd) - 1);
-		cnt = sscanf(text, format, cmd, &baud, &i, &j);
+		cnt = sscanf(text, "%s %d %d %n", cmd, &baud, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
