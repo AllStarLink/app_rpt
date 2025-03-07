@@ -6051,11 +6051,10 @@ static inline int exec_rxchannel_read(struct rpt *myrpt, const int reming, const
 			memset(f->data.ptr, 0, f->datalen);
 		}
 		if (myrpt->totimer) {
-			if (myrpt->totimer) { /* Don't send local RX voice frames if the local repeater is timedout */
+			if (myrpt->totimer) { /* Don't send local RX voice frames if the local repeater is timed out */
 				ast_write(myrpt->pchannel, f);
 			}
 		}
-		
 	} else if (f->frametype == AST_FRAME_CONTROL) {
 		if (f->subclass.integer == AST_CONTROL_HANGUP) {
 			ast_debug(1, "@@@@ rpt:Hung Up\n");
