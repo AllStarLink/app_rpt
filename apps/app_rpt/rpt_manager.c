@@ -127,7 +127,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 	struct rpt_lstat s_head;
 	const char *node = astman_get_header(m, "Node");
 	int nrpts = rpt_num_rpts();
-	struct ast_str *lbuf = ast_str_create(AST_STR_INIT_SIZE);
+	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;

@@ -553,12 +553,12 @@ void rpt_update_links(struct rpt *myrpt)
 	struct ast_str *buf, *obuf;
 	int n;
 
-	buf = ast_str_create(AST_STR_INIT_SIZE);
+	buf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!buf) {
 		ast_mutex_unlock(&myrpt->lock);
 		return;
 	}
-	obuf = ast_str_create(AST_STR_INIT_SIZE);
+	obuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!obuf) {
 		ast_mutex_unlock(&myrpt->lock);
 		ast_free(buf);
@@ -689,7 +689,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->disced = 2;
 		modechange = 1;
 	} else { /* Check to see if this noed is already linked */
-		lstr = ast_str_create(AST_STR_INIT_SIZE);
+		lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
 			rpt_mutex_unlock(&myrpt->lock);
 			return -1;
@@ -713,7 +713,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (!l) {
 		return -1;
 	}
-	l->linklist = ast_str_create(AST_STR_INIT_SIZE);
+	l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!l->linklist) {
 		ast_free(l);
 		return -1;

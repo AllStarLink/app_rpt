@@ -1259,7 +1259,7 @@ void *rpt_tele_thread(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 
 treataslocal:
-		lbuf = ast_str_create(AST_STR_INIT_SIZE);
+		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lbuf) {
 			goto abort;
 		}
@@ -2158,7 +2158,7 @@ treataslocal:
 		imdone = 1;
 		break;
 	case FULLSTATUS:
-		lbuf = ast_str_create(AST_STR_INIT_SIZE);
+		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lbuf) {
 			goto abort;
 		}
@@ -2878,7 +2878,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			send_tele_link(myrpt, mystr);
 			return;
 		case FULLSTATUS:
-			lbuf = ast_str_create(AST_STR_INIT_SIZE);
+			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 			if (!lbuf) {
 				return;
 			}

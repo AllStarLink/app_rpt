@@ -3220,7 +3220,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 			struct ast_frame lf;
-			struct ast_str *lstr = ast_str_create(AST_STR_INIT_SIZE);
+			struct ast_str *lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 			if (!lstr) {
 				return;
 			}
@@ -3240,10 +3240,10 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				lf.data.ptr = ast_str_buffer(lstr);
 				rpt_qwrite(l, &lf);
 				ast_debug(7,
-						  "@@@@ node %s sent node string %s to node %s\n",
-						  myrpt->name,
-						  ast_str_buffer(lstr),
-						  l->name);
+						"@@@@ node %s sent node string %s to node %s\n",
+						myrpt->name,
+						ast_str_buffer(lstr),
+						l->name);
 			}
 			ast_free(lstr);
 		}
@@ -6718,7 +6718,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (!l) {
 			pthread_exit(NULL);
 		}
-		l->linklist = ast_str_create(AST_STR_INIT_SIZE);
+		l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!l->linklist) {
 			ast_free(l);
 			pthread_exit(NULL);
