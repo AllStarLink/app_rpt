@@ -1764,7 +1764,6 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'M') {
 		rest = 0;
-
 		if (sscanf(str, "%299s %29s %299s %n", cmd, src, dest, &rest) < 3) {
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
