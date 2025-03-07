@@ -6406,30 +6406,27 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		return 0;
 	}
 
-	if (options && !strncasecmp(options, "localplay", 9) == 0) {
+	if (options && !strncasecmp(options, "localplay", 9)) {
 		if (callstr) {
 			ast_debug(1, "Localplay command '%s'\n", callstr);
 		    rpt_telemetry(myrpt, LOCALPLAY, callstr);
 		}
-		sleep(10);
 		return 0;
 	}
 
-	if (options && !strncasecmp(options, "playback", 8) == 0) {
+	if (options && !strncasecmp(options, "playback", 8)) {
 		if (callstr) {
 			ast_debug(1, "Playback command '%s'\n", callstr);
 			rpt_telemetry(myrpt, PLAYBACK, callstr);
 		}
-		sleep(10);
 		return 0;
 	}
 
-	if (options && !strncasecmp(options, "cli", 3) == 0) {
+	if (options && !strncasecmp(options, "cli", 3)) {
 		if (callstr) {
-			ast_debug(1, "commandline command '%s'\n", callstr);
+			ast_debug(1, "Commandline command '%s'\n", callstr);
 			ast_cli_command(rpt_nullfd(), callstr);
 		}
-		sleep(10);
 		return 0;
 	}
 
