@@ -7050,8 +7050,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->tunerequest = 0;
 	myrpt->tunetx = 0;
 	if (!myrpt->macrobuf) {
-		myrpt->macrobuf = ast_str_create(MAXMACRO);
-	
+		myrpt->macrobuf = ast_str_create(MAXMACRO);	
 		if (!myrpt->macrobuf) {
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_hangup_rx_tx(myrpt);
