@@ -3564,27 +3564,27 @@ static inline void dtmf_mute_frame_helper(struct rpt *myrpt)
 	}
 }
 
+/*! \brief Shifts frames: myrpt->lastf1 -> myrpt->lastf2, f -> myrpt->lastf1.
+ * If muted, old lastf2, lastf1, lastf2 and f are filled with zeros.
+ * \param myrpt - the rpt structure
+ * \param f - the frame to be stored in lastf1
+ * \param ismuted - if true, the frame is muted by filling f, lastf1 and lastf2 with zeros
+ */
 static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int ismuted)
 {
 	struct ast_frame *f2;
+
 	if (ismuted) {
-		memset(f->data.ptr, 0, f->datalen);
-		if (myrpt->lastf1)
-			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		if (myrpt->lastf2)
-			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		if (f) {
+			memset(f->data.ptr, 0, f->datalen);
+		}
+		dtmf_mute_frame_helper(myrpt);
 	}
+
 	f2 = f ? ast_frdup(f) : NULL;
 	myrpt->lastf2 = myrpt->lastf1;
 	myrpt->lastf1 = f2;
-	if (ismuted) {
-		if (myrpt->lastf1)
-			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		if (myrpt->lastf2)
-			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-	}
 }
-
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
 	int ismuted;
