@@ -3353,6 +3353,11 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		l = l->next;
 	}
 }
+/*! \brief Post link data to Allstar. 
+ * Must be called locked.
+ * \param myrpt The rpt structure
+ * \retval 0 on success, -1 on failure
+ */	
 
 static inline int do_link_post(struct rpt *myrpt)
 {
