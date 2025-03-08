@@ -48,7 +48,6 @@ void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 		mylink->linkmode = 1;
 		break;
 	}
-	return;
 }
 
 void set_linkmode(struct rpt_link *mylink, int linkmode)
@@ -70,7 +69,6 @@ void set_linkmode(struct rpt_link *mylink, int linkmode)
 		mylink->linkmode = 1;
 		break;
 	}
-	return;
 }
 
 int altlink(struct rpt *myrpt, struct rpt_link *mylink)
@@ -185,7 +183,6 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 	f1 = ast_frdup(f);
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
-	return;
 }
 
 int linkcount(struct rpt *myrpt)
@@ -290,7 +287,6 @@ void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c)
 			ast_senddigit(l->chan, c, 0);
 		l = l->next;
 	}
-	return;
 }
 
 void rssi_send(struct rpt *myrpt)
@@ -360,7 +356,6 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
-	return;
 }
 
 void send_link_keyquery(struct rpt *myrpt)
@@ -390,7 +385,6 @@ void send_link_keyquery(struct rpt *myrpt)
 			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
-	return;
 }
 
 void send_tele_link(struct rpt *myrpt, char *cmd)
@@ -416,7 +410,6 @@ void send_tele_link(struct rpt *myrpt, char *cmd)
 		l = l->next;
 	}
 	rpt_telemetry(myrpt, VARCMD, cmd);
-	return;
 }
 
 static void check_link_list(struct rpt *myrpt)
@@ -568,7 +561,6 @@ void __kickshort(struct rpt *myrpt)
 	}
 	myrpt->linkposttimer = LINKPOSTSHORTTIME;
 	myrpt->lastgpstime = 0;
-	return;
 }
 
 void rpt_update_links(struct rpt *myrpt)
@@ -620,7 +612,6 @@ void rpt_update_links(struct rpt *myrpt)
 
 	ast_free(buf);
 	ast_free(obuf);
-	return;
 }
 
 int connect_link(struct rpt *myrpt, char *node, int mode, int perma)

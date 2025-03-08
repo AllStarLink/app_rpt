@@ -1581,12 +1581,10 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 				argv[i] = dtmf_tones[15];
 			j += strlen(argv[i]);
 		}
-		cp = ast_malloc(j + 100);
+		cp = ast_calloc(1, j + 100);
 		if (!cp) {
-			ast_log(LOG_WARNING, "cannot malloc");
 			return DC_ERROR;
 		}
-		memset(cp, 0, j + 100);
 		for (i = 1; i < argc; i++) {
 			if (i != 1)
 				strcat(cp, ",");
@@ -1675,9 +1673,9 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		if (argc < 3)
 			break;
 		mdcp = ast_calloc(1, sizeof(struct mdcparams));
-		if (!mdcp)
+		if (!mdcp) {
 			return DC_ERROR;
-		memset(mdcp, 0, sizeof(*mdcp));
+		}
 		if (*argv[1] == 'C') {
 			if (argc < 5)
 				return DC_ERROR;
@@ -1802,13 +1800,9 @@ int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		if (*param == '#') {	/* to execute asterisk cli command */
 			ast_cli_command(rpt_nullfd(), param + 1);
 		} else {
-			cp = ast_malloc(strlen(param) + 10);
-			if (!cp) {
-				ast_log(LOG_WARNING, "Unable to malloc");
+			if (ast_asprintf(&cp, "%s &", param) < 0) {
 				return DC_ERROR;
 			}
-			memset(cp, 0, strlen(param) + 10);
-			sprintf(cp, "%s &", param);
 			ast_safe_system(cp);
 			ast_free(cp);
 		}

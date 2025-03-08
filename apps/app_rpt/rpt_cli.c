@@ -347,8 +347,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					l = l->next;
 					continue;
 				}
-				if ((s = (struct rpt_lstat *) ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
-					ast_log(LOG_ERROR, "Malloc failed in rpt_do_lstats\n");
+				if ((s = ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
 					rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 					return RESULT_FAILURE;
 				}
@@ -539,8 +538,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 					l = l->next;
 					continue;
 				}
-				if ((s = (struct rpt_lstat *) ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
-					ast_log(LOG_ERROR, "Malloc failed in rpt_do_lstats\n");
+				if ((s = ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
 					rpt_mutex_unlock(&myrpt->lock);	// UNLOCK 
 					return RESULT_FAILURE;
 				}

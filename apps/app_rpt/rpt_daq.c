@@ -33,12 +33,9 @@ struct daq_entry_tag *daq_open(int type, char *name, char *dev)
 	if (!name)
 		return NULL;
 
-	if ((t = ast_malloc(sizeof(struct daq_entry_tag))) == NULL) {
-		ast_log(LOG_WARNING, "daq_open out of memory\n");
+	if (!(t = ast_calloc(1, sizeof(struct daq_entry_tag)))) {
 		return NULL;
 	}
-
-	memset(t, 0, sizeof(struct daq_entry_tag));
 
 	/* Save the device path for open */
 	if (dev) {
@@ -224,7 +221,6 @@ int handle_userout_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	struct daq_entry_tag *t;
 
 	if (!(myargs = ast_strdup(args))) {	/* Make a local copy to slice and dice */
-		ast_log(LOG_WARNING, "Out of memory\n");
 		return -1;
 	}
 

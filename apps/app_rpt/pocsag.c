@@ -208,11 +208,9 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 
 void free_batch(struct pocsag_batch *batch)
 {
-	if (batch != NULL)
-	{
+	if (batch != NULL) {
 		free_batch(batch->next);
 		ast_free(batch);
 	}
-	return;
 }
 
