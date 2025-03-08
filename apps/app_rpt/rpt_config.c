@@ -1318,7 +1318,6 @@ void load_rpt_vars(int n, int init)
 
 int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 {
-	int x;
 	char *altstr, *cp;
 
 	ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
