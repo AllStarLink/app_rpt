@@ -4844,6 +4844,16 @@ static void *rpt(void *this)
 	myrpt->vote_counter = 10;
 	myrpt->rptinactwaskeyedflag = 0;
 	myrpt->rptinacttimer = 0;
+
+	if (!myrpt->macrobuf) {
+		myrpt->macrobuf = ast_str_create(MAXMACRO);
+	}
+	if (!myrpt->macrobuf) {
+		rpt_mutex_unlock(&myrpt->lock);
+		myrpt->rpt_thread = AST_PTHREADT_STOP;
+		pthread_exit(NULL);
+	}
+
 	if (myrpt->p.rxburstfreq) {
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
@@ -4861,7 +4871,7 @@ static void *rpt(void *this)
 #endif
 	}
 	if (myrpt->p.startupmacro) {
-		ast_str_append(&myrpt->macrobuf, 0, "PPPP%s", myrpt->p.startupmacro);
+		ast_str_set(&myrpt->macrobuf, 0, "PPPP%s", myrpt->p.startupmacro);
 	}
 	/* @@@@@@@ UNLOCK @@@@@@@ */
 	rpt_mutex_unlock(&myrpt->lock);
@@ -5568,6 +5578,10 @@ static int load_config(int reload)
 		if (reload) {
 			for (n = 0; n < nrpts; n++) {
 				if (!strcmp(this, rpt_vars[n].name)) {
+					if (rpt_vars[n].macrobuf) {
+						ast_free(rpt_vars[n].macrobuf);
+						rpt_vars[n].macrobuf = NULL;
+					}
 					rpt_vars[n].reload1 = 1;
 					break;
 				}
@@ -7031,7 +7045,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->hfscanmode = 0;
 	myrpt->hfscanstatus = 0;
 	if (myrpt->p.startupmacro) {
-		ast_str_append(&myrpt->macrobuf, 0, "PPPP%s", myrpt->p.startupmacro);
+		ast_str_set(&myrpt->macrobuf, 0, "PPPP%s", myrpt->p.startupmacro);
 	}
 	time(&myrpt->start_time);
 	myrpt->last_activity_time = myrpt->start_time;
