@@ -87,16 +87,16 @@ char *string_toupper(char *str)
 }
 /*!
  * \brief Find the delimiter in a string and return a pointer array to the start of each token.
- * Note: This modifies the string str, be suer to save an intact copy if you need it later. 
- * \param str The string to search 
- * \param strp An array of pointers to the start of each token 
- * \param limit The maximum number of tokens to find 
+ * Note: This modifies the string str, be sure to save an intact copy if you need it later.
+ * \param str The string to search
+ * \param strp An array of pointers to the start of each token
+ * \param limit The maximum number of tokens to find
  * \return The number of tokens found
  */
 
- int finddelim(char *str, char *strp[], size_t limit)
- {
-	 return explode_string(str, strp, limit, DELIMCHR, QUOTECHR);
+int finddelim(char *str, char *strp[], size_t limit)
+{
+	return explode_string(str, strp, limit, DELIMCHR, QUOTECHR);
  }
  
 char *skipchars(char *string, char *charlist)

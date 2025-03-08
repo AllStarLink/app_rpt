@@ -123,10 +123,11 @@ static void check_tlink_list(struct rpt *myrpt)
 /*! \brief free a link structure and it's ast_str linklist if it exists
  *  \param link the link to free
  */
-void rpt_free_link_helper(struct rpt_link *link) {
+void rpt_free_link_helper(struct rpt_link *link)
+{
 	if (link->linklist) {
-		link->linklist = NULL;
 		ast_free(link->linklist);
+		link->linklist = NULL;
 	}
 	ast_free(link);
 }
@@ -467,7 +468,7 @@ void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 
 int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, int alink_format) {
 	struct rpt_link *l;
-	char mode, *links_buf, *buf_end;
+	char mode, *links_buf;
 	int i, spos, len, link_count = 0, one_link = 0;
 	if (myrpt->remote)
 		return 0;
@@ -521,11 +522,8 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 	 * node doesn't have a comma, so we need to add 1 if there is at least one_link.  
 	 */
 	links_buf = ast_str_buffer(*buf);
-	buf_end = links_buf + ast_str_strlen(*buf);
-	for (link_count = 0; links_buf[link_count] && (&links_buf[link_count] < buf_end);
-		 links_buf[link_count] == ',' ? link_count++ : *links_buf++)
-		 ;
-
+	for (link_count = 0; links_buf[link_count]; links_buf[link_count] == ',' ? link_count++ : *links_buf++)
+		;
 	if (one_link) { /* The first link in the list has no comma but we have 1 link */
 		link_count++;
 	}
@@ -602,7 +600,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	char *s, *s1, *tele, *cp;
 	char tmp[300], deststr[325] = "", modechange = 0;
 	char sx[320], *sy;
-	char *strs[MAXNODES]; /* List of pointers to links in link list string*/
+	char *strs[MAXNODES]; /* List of pointers to links in link list string */
 	struct rpt_link *l;
 	struct ast_str *lstr;
 	int reconnects = 0;
