@@ -1319,15 +1319,15 @@ void load_rpt_vars(int n, int init)
 int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 {
 	int x;
-	char tmp[TMP_SIZE];
+	char *altstr, *cp;
 
 	ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
-	for (x = 0; *(sptr + x) && (x < sizeof(tmp) - 1); x++) {
-		tmp[x] = *(sptr + x) | 0x80;
+	altstr = strdup(sptr);
+	for (cp = alstr; *cp; cp++) {
+		*cp |= 0x80;
 	}
-	*(sptr + x) = 0; /* Do we really need to do this? it was 0 to end loop*/
-	tmp[x + 1] = '\0';
 	macro_append(myrpt, tmp);
+	ast_free(altstr);
 	return 0;
 }
 
