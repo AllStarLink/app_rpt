@@ -3874,7 +3874,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						macro_append(myrpt, val);
 					}
 					rpt_mutex_lock(&myrpt->lock);
-					ast_copy_string(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone) - 1);
+					ast_copy_string(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone));
 					rpt_mutex_unlock(&myrpt->lock);
 				}
 			} else {
