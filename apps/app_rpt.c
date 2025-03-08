@@ -3551,9 +3551,16 @@ static inline void outstream_write(struct rpt *myrpt, struct ast_frame *f)
 	}
 }
 
-static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int ismuted)
+/*! \brief Shifts frames: myrpt->lastf1 -> myrpt->lastf2, f -> myrpt->lastf1.
+ * If muted, old lastf2, lastf1, lastf2 and f are filled with zeros.
+ * \param myrpt - the rpt structure
+ * \param f - the frame to be stored in lastf1
+ * \param ismuted - if true, the frame is muted by filling f, lastf1 and lastf2 with zeros
+ */
+static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int ismuted) 
 {
 	struct ast_frame *f2;
+
 	if (ismuted) {
 		memset(f->data.ptr, 0, f->datalen);
 		if (myrpt->lastf1)
@@ -3561,6 +3568,7 @@ static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int
 		if (myrpt->lastf2)
 			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
 	}
+
 	f2 = f ? ast_frdup(f) : NULL;
 	myrpt->lastf2 = myrpt->lastf1;
 	myrpt->lastf1 = f2;
@@ -3575,7 +3583,7 @@ static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
 	int ismuted;
-	struct ast_frame *f, *f1;
+	struct ast_frame *f;
 	int i, dtmfed = 0;
 
 	rpt_mutex_lock(&myrpt->blocklock);
@@ -3778,18 +3786,17 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			ismuted = 1;
 		}
 		mute_frame_helper(myrpt, f, ismuted);
-		f1 = myrpt->lastf2;
-		if (f1) {
-			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
+		if (myrpt->lastf2) {
+			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, myrpt->lastf2);
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
-				ast_writestream(myrpt->monstream, f1);
+				ast_writestream(myrpt->monstream, myrpt->lastf2);
 			}
 			if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd &&
 				(myrpt->outstreampipe[1] != -1)) {
-				outstream_write(myrpt, f1);
+				outstream_write(myrpt, myrpt->lastf2);
 			}
+			ast_frfree(myrpt->lastf2);
 			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
-			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
@@ -5964,16 +5971,15 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			ismuted = 1;
 		*dtmfed = 0;
 		mute_frame_helper(myrpt, f, ismuted);
-		f1 = myrpt->lastf2;
-		if (f1) {
+		if (myrpt->lastf2) {
 			if (!myrpt->remstopgen) {
 				if (phone_mode)
-					ast_write(myrpt->txchannel, f1);
+					ast_write(myrpt->txchannel, myrpt->lastf2);
 				else
 					ast_write(myrpt->txchannel, f);
 			}
+			ast_frfree(myrpt->lastf2);
 			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
-			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
