@@ -1325,7 +1325,7 @@ static struct ast_frame *ast_frcat(const struct ast_frame * restrict f1, const s
 		ast_log(LOG_ERROR, "ast_frcat() called with non-matching frame types!!\n");
 		return NULL;
 	}
-	f = (struct ast_frame *) ast_calloc(1, sizeof(struct ast_frame));
+	f = ast_calloc(1, sizeof(struct ast_frame));
 	if (!f) {
 		return NULL;
 	}
@@ -3673,7 +3673,6 @@ static void voter_xmit_master(void)
 			memset(&client->sin, 0, sizeof(client->sin));
 		}
 	}
-	return;
 }
 
 /*!
@@ -5290,7 +5289,7 @@ static int reload(void)
 			newclient = 0;
 			/* if a new one, alloc its space */
 			if (!client) {
-				client = (struct voter_client *) ast_calloc(1, sizeof(struct voter_client));
+				client = ast_calloc(1, sizeof(struct voter_client));
 				if (!client) {
 					ast_free(cp);
 					close(udp_socket);
@@ -5350,9 +5349,8 @@ static int reload(void)
 				client->drainindex = 0;
 			}
 			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->audio = (uint8_t *) ast_realloc(client->audio, client->buflen);
+				client->audio = ast_realloc(client->audio, client->buflen);
 				if (!client->audio) {
-					ast_log(LOG_ERROR, "Can't realloc()\n");
 					close(udp_socket);
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
@@ -5360,7 +5358,7 @@ static int reload(void)
 				}
 				memset(client->audio, 0xff, client->buflen);
 			} else if (!client->audio) {
-				client->audio = (uint8_t *) ast_malloc(client->buflen);
+				client->audio = ast_malloc(client->buflen);
 				if (!client->audio) {
 					close(udp_socket);
 					ast_config_destroy(cfg);
@@ -5370,9 +5368,8 @@ static int reload(void)
 				memset(client->audio, 0xff, client->buflen);
 			}
 			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->rssi = (uint8_t *) ast_realloc(client->rssi, client->buflen);
+				client->rssi = ast_realloc(client->rssi, client->buflen);
 				if (!client->rssi) {
-					ast_log(LOG_ERROR, "Can't realloc()\n");
 					close(udp_socket);
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
@@ -5380,7 +5377,7 @@ static int reload(void)
 				}
 				memset(client->rssi, 0, client->buflen);
 			} else if (!client->rssi) {
-				client->rssi = (uint8_t *) ast_calloc(1, client->buflen);
+				client->rssi = ast_calloc(1, client->buflen);
 				if (!client->rssi) {
 					close(udp_socket);
 					ast_config_destroy(cfg);
