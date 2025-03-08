@@ -1322,8 +1322,8 @@ int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 	char *altstr, *cp;
 
 	ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
-	altstr = strdup(sptr);
-	for (cp = alstr; *cp; cp++) {
+	altstr = ast_strdup(sptr);
+	for (cp = altstr; *cp; cp++) {
 		*cp |= 0x80;
 	}
 	macro_append(myrpt, altstr);
