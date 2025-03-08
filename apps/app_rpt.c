@@ -4724,10 +4724,10 @@ static void *rpt(void *this)
 	myrpt->ready = 0;
 	if (!myrpt->macrobuf) {
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
-	}
-	if (!myrpt->macrobuf) {
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		if (!myrpt->macrobuf) {
+			myrpt->rpt_thread = AST_PTHREADT_STOP;
+			pthread_exit(NULL);
+		}
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->remrx = 0;
@@ -7051,15 +7051,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->tunetx = 0;
 	if (!myrpt->macrobuf) {
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
+	
+		if (!myrpt->macrobuf) {
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			ao2_ref(cap, -1);
+			pthread_exit(NULL);
+		}
 	}
-	if (!myrpt->macrobuf) {
-		rpt_mutex_unlock(&myrpt->lock);
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		ao2_ref(cap, -1);
-		pthread_exit(NULL);
-	}
-
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_set_write_format(chan, ast_format_slin);
 	ast_set_read_format(chan, ast_format_slin);
