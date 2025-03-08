@@ -1326,7 +1326,7 @@ int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 	for (cp = alstr; *cp; cp++) {
 		*cp |= 0x80;
 	}
-	macro_append(myrpt, tmp);
+	macro_append(myrpt, altstr);
 	ast_free(altstr);
 	return 0;
 }
