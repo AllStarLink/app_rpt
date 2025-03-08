@@ -3562,20 +3562,22 @@ static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int
 	struct ast_frame *f2;
 
 	if (ismuted) {
-		if (f) {
-			memset(f->data.ptr, 0, f->datalen);
-		}
-		if (myrpt->lastf1) {
+		memset(f->data.ptr, 0, f->datalen);
+		if (myrpt->lastf1)
 			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		}
-		if (myrpt->lastf2) {
+		if (myrpt->lastf2)
 			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-		}
 	}
 
 	f2 = f ? ast_frdup(f) : NULL;
 	myrpt->lastf2 = myrpt->lastf1;
 	myrpt->lastf1 = f2;
+	if (ismuted) {
+		if (myrpt->lastf1)
+			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
+		if (myrpt->lastf2)
+			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+	}
 }
 
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
@@ -3784,9 +3786,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			ismuted = 1;
 		}
 		mute_frame_helper(myrpt, f, ismuted);
-		f1 = myrpt->lastf2;
-		if (f1) {
-			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
+		if (myrpt->lastf2) {
+			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, myrpt->lastf2);
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
 				ast_writestream(myrpt->monstream, myrpt->lastf2);
 			}
@@ -3794,8 +3795,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				(myrpt->outstreampipe[1] != -1)) {
 				outstream_write(myrpt, myrpt->lastf2);
 			}
+			ast_frfree(myrpt->lastf2);
 			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
-			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
@@ -5977,8 +5978,8 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 				else
 					ast_write(myrpt->txchannel, f);
 			}
+			ast_frfree(myrpt->lastf2);
 			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
-			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
