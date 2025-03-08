@@ -469,7 +469,7 @@ void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, int alink_format) {
 	struct rpt_link *l;
 	char mode, *links_buf;
-	int i, spos, len, link_count = 0, one_link = 0;
+	int i, spos, len, links_count = 0, one_link = 0;
 	if (myrpt->remote)
 		return 0;
 	/* go thru all links */
@@ -521,14 +521,18 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 	/* After building the string, count number of nodes (commas) in buffer string. The first
 	 * node doesn't have a comma, so we need to add 1 if there is at least one_link.  
 	 */
+	links_count = 0;
 	links_buf = ast_str_buffer(*buf);
-	for (link_count = 0; links_buf[link_count]; links_buf[link_count] == ',' ? link_count++ : *links_buf++)
-		;
+	for (i = 0; i < ast_str_strlen(*buf); i++) {
+		if (links_buf[i] == ',') {
+			links_count++;
+		}
+	}
 	if (one_link) { /* The first link in the list has no comma but we have 1 link */
-		link_count++;
+		links_count++;
 	}
 
-	return link_count;
+	return links_count;
 }
 
 void __kickshort(struct rpt *myrpt)
