@@ -4845,15 +4845,6 @@ static void *rpt(void *this)
 	myrpt->rptinactwaskeyedflag = 0;
 	myrpt->rptinacttimer = 0;
 
-	if (!myrpt->macrobuf) {
-		myrpt->macrobuf = ast_str_create(MAXMACRO);
-	}
-	if (!myrpt->macrobuf) {
-		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
-	}
-
 	if (myrpt->p.rxburstfreq) {
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
@@ -7058,6 +7049,17 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->lastitx = !myrpt->lastitx;
 	myrpt->tunerequest = 0;
 	myrpt->tunetx = 0;
+	if (!myrpt->macrobuf) {
+		myrpt->macrobuf = ast_str_create(MAXMACRO);
+	}
+	if (!myrpt->macrobuf) {
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		ao2_ref(cap, -1);
+		pthread_exit(NULL);
+	}
+
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_set_write_format(chan, ast_format_slin);
 	ast_set_read_format(chan, ast_format_slin);
