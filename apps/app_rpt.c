@@ -892,12 +892,10 @@ void rpt_event_process(struct rpt *myrpt)
 			char *cp;
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
-			cp = ast_malloc(strlen(cmd) + 10);
+			ast_asprintf(&cp, "%s &", cmd);
 			if (!cp) {
 				return;
 			}
-			memset(cp, 0, strlen(cmd) + 10);
-			sprintf(cp, "%s &", cmd);
 			ast_safe_system(cp);
 			ast_free(cp);
 		}
@@ -946,17 +944,13 @@ void rpt_event_process(struct rpt *myrpt)
 static void dodispgm(struct rpt *myrpt, char *them)
 {
 	char *a;
-	int i;
 
 	if (!myrpt->p.discpgm)
 		return;
-	i = strlen(them) + strlen(myrpt->p.discpgm) + 100;
-	a = ast_malloc(i);
+	ast_asprintf(&a, "%s %s %s &", myrpt->p.discpgm, myrpt->name, them);
 	if (!a) {
 		return;
 	}
-	memset(a, 0, i);
-	sprintf(a, "%s %s %s &", myrpt->p.discpgm, myrpt->name, them);
 	ast_safe_system(a);
 	ast_free(a);
 	return;
@@ -965,17 +959,13 @@ static void dodispgm(struct rpt *myrpt, char *them)
 static void doconpgm(struct rpt *myrpt, char *them)
 {
 	char *a;
-	int i;
 
 	if (!myrpt->p.connpgm)
 		return;
-	i = strlen(them) + strlen(myrpt->p.connpgm) + +100;
-	a = ast_malloc(i);
+	ast_asprintf(&a, "%s %s %s &", myrpt->p.connpgm, myrpt->name, them);
 	if (!a) {
 		return;
 	}
-	memset(a, 0, i);
-	sprintf(a, "%s %s %s &", myrpt->p.connpgm, myrpt->name, them);
 	ast_safe_system(a);
 	ast_free(a);
 	return;
