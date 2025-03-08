@@ -849,7 +849,7 @@ static struct eldb *el_db_put(const char *nodenum, const char *ipaddr, const cha
 {
 	struct eldb *node, *mynode;
 
-	node = (struct eldb *) ast_calloc(1, sizeof(struct eldb));
+	node = ast_calloc(1, sizeof(struct eldb));
 	if (!node) {
 		return NULL;
 	}
@@ -1207,7 +1207,6 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 		}
 		p += (ntohs(*((short *) (p + 2))) + 1) * 4;
 	}
-	return;
 }
 
 /*!
@@ -1224,7 +1223,6 @@ static void copy_sdes_item(const char *source, char *dest, int destlen)
 	}
 	memcpy(dest, source + 2, len);
 	dest[len] = 0;
-	return;
 }
 
 /*!
@@ -1941,7 +1939,6 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		instp->tx_ctrl_packets++;
 		(*(struct el_node **) nodep)->tx_ctrl_packets++;
 	}
-	return;
 }
 
 /*!
@@ -2007,7 +2004,6 @@ static void send_text(const void *nodep, const VISIT which, const int depth)
 			node->tx_audio_packets++;
 		}
 	}
-	return;
 }
 
 /*!
@@ -2194,7 +2190,6 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 		return;
 	}
 	instp->rx_bad_packets++;
-	return;
 }
 
 /*!
@@ -3329,77 +3324,75 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	char nodestr[30];
 	time_t now;
 
-	el_node_key = (struct el_node *) ast_calloc(1, sizeof(struct el_node));
-	if (el_node_key) {
-		ast_copy_string(el_node_key->call, call, EL_CALL_SIZE);
-		ast_copy_string(el_node_key->ip, instp->el_node_test.ip, EL_IP_SIZE);
-		ast_copy_string(el_node_key->name, name, EL_NAME_SIZE);
-
-		ast_mutex_lock(&el_db_lock);
-		mynode = el_db_find_ipaddr(el_node_key->ip);
-		if (!mynode) {
-			ast_log(LOG_ERROR, "Cannot find database entry for IP address %s, Callsign %s.\n", el_node_key->ip, call);
-			ast_free(el_node_key);
-			ast_mutex_unlock(&el_db_lock);
-			return 1;
-		}
-		ast_copy_string(nodestr, mynode->nodenum, sizeof(nodestr));
-		el_node_key->nodenum = atoi(nodestr);
-		el_node_key->countdown = instp->rtcptimeout;
-		el_node_key->seqnum = 1;
-		el_node_key->instp = instp;
-		if (tsearch(el_node_key, &el_node_list, compare_ip)) {
-			ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip, el_node_key->nodenum, el_node_key->name);
-			if (pvt == NULL) {	/* if a new inbound call */
-				pvt = el_alloc(instp->name);
-				if (!pvt) {
-					ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
-					ast_free(el_node_key);
-					ast_mutex_unlock(&el_db_lock);
-					return -1;
-				}
-				el_node_key->pvt = pvt;
-				ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
-				el_node_key->chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
-				if (!el_node_key->chan) {
-					el_destroy(el_node_key->pvt);
-					ast_free(el_node_key);
-					ast_mutex_unlock(&el_db_lock);
-					return -1;
-				}
-				el_node_key->rx_ctrl_packets++;
-				ast_mutex_lock(&instp->lock);
-				time(&now);
-				if (instp->starttime < (now - EL_APRS_START_DELAY)) {
-					instp->aprstime = now;
-				}
-				ast_mutex_unlock(&instp->lock);
-			} else {
-				el_node_key->pvt = pvt;
-				ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
-				el_node_key->chan = pvt->owner;
-				el_node_key->outbound = 1;
-				el_node_key->rx_ctrl_packets++;
-				ast_mutex_lock(&instp->lock);
-				strcpy(instp->lastcall, mynode->callsign);
-				time(&now);
-				if (instp->starttime < (now - EL_APRS_START_DELAY)) {
-					instp->aprstime = now;
-				}
-				ast_mutex_unlock(&instp->lock);
-			}
-		} else {
-			ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n",
-					el_node_key->call, el_node_key->ip, el_node_key->name);
-			ast_free(el_node_key);
-			ast_mutex_unlock(&el_db_lock);
-			return -1;
-		}
-		ast_mutex_unlock(&el_db_lock);
-	} else {
-		ast_log(LOG_ERROR, "calloc() failed for Callsign %s, IP Address %s.\n", call, instp->el_node_test.ip);
+	el_node_key = ast_calloc(1, sizeof(struct el_node));
+	if (!el_node_key) {
 		return -1;
 	}
+	ast_copy_string(el_node_key->call, call, EL_CALL_SIZE);
+	ast_copy_string(el_node_key->ip, instp->el_node_test.ip, EL_IP_SIZE);
+	ast_copy_string(el_node_key->name, name, EL_NAME_SIZE);
+
+	ast_mutex_lock(&el_db_lock);
+	mynode = el_db_find_ipaddr(el_node_key->ip);
+	if (!mynode) {
+		ast_log(LOG_ERROR, "Cannot find database entry for IP address %s, Callsign %s.\n", el_node_key->ip, call);
+		ast_free(el_node_key);
+		ast_mutex_unlock(&el_db_lock);
+		return 1;
+	}
+	ast_copy_string(nodestr, mynode->nodenum, sizeof(nodestr));
+	el_node_key->nodenum = atoi(nodestr);
+	el_node_key->countdown = instp->rtcptimeout;
+	el_node_key->seqnum = 1;
+	el_node_key->instp = instp;
+	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
+		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip, el_node_key->nodenum, el_node_key->name);
+		if (pvt == NULL) {	/* if a new inbound call */
+			pvt = el_alloc(instp->name);
+			if (!pvt) {
+				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
+				ast_free(el_node_key);
+				ast_mutex_unlock(&el_db_lock);
+				return -1;
+			}
+			el_node_key->pvt = pvt;
+			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
+			el_node_key->chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
+			if (!el_node_key->chan) {
+				el_destroy(el_node_key->pvt);
+				ast_free(el_node_key);
+				ast_mutex_unlock(&el_db_lock);
+				return -1;
+			}
+			el_node_key->rx_ctrl_packets++;
+			ast_mutex_lock(&instp->lock);
+			time(&now);
+			if (instp->starttime < (now - EL_APRS_START_DELAY)) {
+				instp->aprstime = now;
+			}
+			ast_mutex_unlock(&instp->lock);
+		} else {
+			el_node_key->pvt = pvt;
+			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
+			el_node_key->chan = pvt->owner;
+			el_node_key->outbound = 1;
+			el_node_key->rx_ctrl_packets++;
+			ast_mutex_lock(&instp->lock);
+			strcpy(instp->lastcall, mynode->callsign);
+			time(&now);
+			if (instp->starttime < (now - EL_APRS_START_DELAY)) {
+				instp->aprstime = now;
+			}
+			ast_mutex_unlock(&instp->lock);
+		}
+	} else {
+		ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n",
+				el_node_key->call, el_node_key->ip, el_node_key->name);
+		ast_free(el_node_key);
+		ast_mutex_unlock(&el_db_lock);
+		return -1;
+	}
+	ast_mutex_unlock(&el_db_lock);
 	return 0;
 }
 

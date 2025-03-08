@@ -2342,7 +2342,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			 u != (struct usbecho *) &o->echoq; u = (struct usbecho *) u->q_forw)
 			x++;
 		if (x < o->echomax) {
-			u = (struct usbecho *) ast_calloc(1, sizeof(struct usbecho));
+			u = ast_calloc(1, sizeof(struct usbecho));
 			if (u) {
 				memcpy(u->data, (o->usbradio_read_buf_8k + AST_FRIENDLY_OFFSET), FRAME_SIZE * 2);
 				insque((struct qelem *) u, o->echoq.q_back);
@@ -3649,7 +3649,6 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 	}
 	*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
 	ast_cli(fd, "Changed rx voice setting to %d\n", i);
-	return;
 }
 
 /*!
@@ -3701,7 +3700,6 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 	if (o->legacyaudioscaling) {
 		ast_cli(fd, "legacyaudioscaling is enabled\n");
 	}
-	return;
 }
 
 /*!
@@ -3740,7 +3738,6 @@ static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str
 			adjustment = 1000;
 	}
 	*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / adjustment;
-	return;
 }
 
 /*!
@@ -3819,7 +3816,6 @@ static void _menu_txvoice(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 		o->pmrChan->b.txCtcssInhibit = 0;
 		ast_cli(fd, "DONE.\n");
 	}
-	return;
 }
 
 /*!
@@ -3862,7 +3858,6 @@ static void _menu_auxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 	}
 	mixer_write(o);
 	mult_set(o);
-	return;
 }
 
 /*!
@@ -3906,7 +3901,6 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 		o->txtestkey = 0;
 		ast_cli(fd, "DONE.\n");
 	}
-	return;
 }
 
 /*!
@@ -4228,7 +4222,6 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 	}
 	o->pmrChan->b.tuning = 0;
 	option_verbose = oldverbose;
-	return;
 }
 
 /*!
@@ -4820,8 +4813,6 @@ static void pmrdump(struct chan_usbradio_pvt *o)
 	pd(p->b.radioactive);
 	pd(p->b.txboost);
 	pd(p->b.txCtcssOff);
-
-	return;
 }
 
 /*
