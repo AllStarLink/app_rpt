@@ -4722,7 +4722,9 @@ static void *rpt(void *this)
 	sprintf(tmpstr, "%s/%s", myrpt->p.archivedir, myrpt->name);
 	mkdir(tmpstr, 0775);
 	myrpt->ready = 0;
-	myrpt->macrobuf = ast_str_create(MAXMACRO);
+	if !myrpt->macrobuf) {
+		myrpt->macrobuf = ast_str_create(MAXMACRO);
+	}
 	if (!myrpt->macrobuf) {
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
