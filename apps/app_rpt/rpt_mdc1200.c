@@ -17,7 +17,7 @@
 #include "app_rpt.h"
 
 #include "rpt_mdc1200.h"
-
+#include "rpt_utils.h"
 #include "rpt_lock.h"
 #include "rpt_config.h"
 #include "rpt_link.h"
@@ -161,10 +161,9 @@ static const char *my_variable_match(const struct ast_config *config, const char
 
 void mdc1200_cmd(struct rpt *myrpt, char *data)
 {
-	char busy, *myval;
+	char *myval;
 	int i;
 
-	busy = 0;
 	if ((data[0] == 'I') && (!strcmp(data, myrpt->lastmdc)))
 		return;
 	myval = (char *) my_variable_match(myrpt->cfg, myrpt->p.mdcmacro, data);
@@ -179,19 +178,11 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 		}
 		if (!myrpt->keyed)
 			return;
-		rpt_mutex_lock(&myrpt->lock);
-		if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(myval)) {
-			rpt_mutex_unlock(&myrpt->lock);
-			busy = 1;
-		}
-		if (!busy) {
-			myrpt->macrotimer = MACROTIME;
-			strncat(myrpt->macrobuf, myval, MAXMACRO - 1);
-		}
-		rpt_mutex_unlock(&myrpt->lock);
+		macro_append(myrpt, myval);
 	}
-	if ((data[0] == 'I') && (!busy))
-		strcpy(myrpt->lastmdc, data);
+	if (data[0] == 'I') {
+		ast_copy_string(myrpt->lastmdc, data, sizeof(myrpt->lastmdc));
+	}
 	return;
 }
 

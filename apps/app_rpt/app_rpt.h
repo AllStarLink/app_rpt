@@ -70,7 +70,7 @@ typedef struct {
 
 /* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
 #define	MAXDTMF 32
-#define	MAXMACRO 2048
+#define MAXMACRO 512
 #define	MAXLINKLIST 5120
 #define	LINKLISTTIME 10000
 #define	LINKLISTSHORTTIME 200
@@ -319,7 +319,7 @@ struct rpt_chan_stat {
 #define MAX_STAT_LINKS 256
 #define POLITEID 30000
 #define FUNCTDELAY 1500
-
+#define TMP_SIZE 256 /* Size of tmp char* */
 #define	MAXXLAT 20
 #define	MAXXLATTIME 3
 
@@ -740,7 +740,7 @@ struct rpt {
 	char tounkeyed;
 	char tonotify;
 	char dtmfbuf[MAXDTMF];
-	char macrobuf[MAXMACRO];
+	struct ast_str *macrobuf;
 	char rem_dtmfbuf[MAXDTMF];
 	char lastdtmfcommand[MAXDTMF];
 	char cmdnode[50];
