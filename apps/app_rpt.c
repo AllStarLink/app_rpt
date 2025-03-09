@@ -3583,7 +3583,7 @@ static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
 	int ismuted;
-	struct ast_frame *f, *lastf2_old;
+	struct ast_frame *f, *last_frame;
 	int i, dtmfed = 0;
 
 	rpt_mutex_lock(&myrpt->blocklock);
@@ -3785,18 +3785,18 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if (myrpt->p.votertype == 1 && myrpt->voted_link != NULL) {
 			ismuted = 1;
 		}
-		lastf2_old = myrpt->lastf2;
+		last_frame = myrpt->lastf2;
 		mute_frame_helper(myrpt, f, ismuted);
-		if (lastf2_old) {
-			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, lastf2_old);
+		if (last_frame) {
+			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, last_frame);
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
-				ast_writestream(myrpt->monstream, lastf2_old);
+				ast_writestream(myrpt->monstream, last_frame);
 			}
 			if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd &&
 				(myrpt->outstreampipe[1] != -1)) {
-				outstream_write(myrpt, lastf2_old);
+				outstream_write(myrpt, last_frame);
 			}
-			ast_frfree(lastf2_old);
+			ast_frfree(last_frame);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
@@ -5911,7 +5911,7 @@ done:
 
 static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed, const int phone_mode, const int phone_vox, char *restrict myfirst, int *restrict dtmfed)
 {
-	struct ast_frame *f = ast_read(chan), *lastf2_old;
+	struct ast_frame *f = ast_read(chan), *last_frame;
 	if (!f) {
 		ast_debug(1, "@@@@ link:Hung Up\n");
 		return -1;
@@ -5970,16 +5970,16 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 		if (*dtmfed && phone_mode)
 			ismuted = 1;
 		*dtmfed = 0;
-		lastf2_old = myrpt->lastf2;
+		last_frame = myrpt->lastf2;
 		mute_frame_helper(myrpt, f, ismuted);
-		if (lastf2_old) {
+		if (last_frame) {
 			if (!myrpt->remstopgen) {
 				if (phone_mode)
-					ast_write(myrpt->txchannel, lastf2_old);
+					ast_write(myrpt->txchannel, last_frame);
 				else
 					ast_write(myrpt->txchannel, f);
 			}
-			ast_frfree(lastf2_old);
+			ast_frfree(last_frame);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
