@@ -3570,9 +3570,9 @@ static inline void dtmf_mute_frame_helper(struct rpt *myrpt)
  * \param f - the frame to be stored in lastf1
  * \param ismuted - if true, the frame is muted by filling f, lastf1 and lastf2 with zeros
  */
-static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int ismuted)
+static inline ast_frame *rpt_mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int ismuted)
 {
-	struct ast_frame *f2;
+	struct ast_frame *f2, *last_frame;
 
 	if (ismuted) {
 		if (f) {
@@ -3580,10 +3580,11 @@ static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int
 		}
 		dtmf_mute_frame_helper(myrpt);
 	}
-
 	f2 = f ? ast_frdup(f) : NULL;
+	last_frame = myrpt->lastf2;
 	myrpt->lastf2 = myrpt->lastf1;
 	myrpt->lastf1 = f2;
+	return last_frame;
 }
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
@@ -3790,8 +3791,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if (myrpt->p.votertype == 1 && myrpt->voted_link != NULL) {
 			ismuted = 1;
 		}
-		f1 = myrpt->lastf2;
-		mute_frame_helper(myrpt, f, ismuted);
+		f1 = rpt_mute_frame_helper(myrpt, f, ismuted);
 		if (f1) {
 			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
@@ -5969,8 +5969,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 		if (*dtmfed && phone_mode)
 			ismuted = 1;
 		*dtmfed = 0;
-		f1 = myrpt->lastf2;
-		mute_frame_helper(myrpt, f, ismuted);
+		f1 = rpt_mute_frame_helper(myrpt, f, ismuted);
 		if (f1) {
 			if (!myrpt->remstopgen) {
 				if (phone_mode)
