@@ -3790,8 +3790,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if (myrpt->p.votertype == 1 && myrpt->voted_link != NULL) {
 			ismuted = 1;
 		}
-		mute_frame_helper(myrpt, f, ismuted);
 		f1 = myrpt->lastf2;
+		mute_frame_helper(myrpt, f, ismuted);
 		if (f1) {
 			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
@@ -3801,7 +3801,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				(myrpt->outstreampipe[1] != -1)) {
 				outstream_write(myrpt, f1);
 			}
-			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
 			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
@@ -5970,8 +5969,8 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 		if (*dtmfed && phone_mode)
 			ismuted = 1;
 		*dtmfed = 0;
-		mute_frame_helper(myrpt, f, ismuted);
 		f1 = myrpt->lastf2;
+		mute_frame_helper(myrpt, f, ismuted);
 		if (f1) {
 			if (!myrpt->remstopgen) {
 				if (phone_mode)
@@ -5979,7 +5978,6 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 				else
 					ast_write(myrpt->txchannel, f);
 			}
-			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
 			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
