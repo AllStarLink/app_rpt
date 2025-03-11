@@ -1122,7 +1122,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 	int cnt, i, j, audio_samples, divcnt, divdiv, audio_ptr, baud;
 	struct pocsag_batch *batch, *b;
 	short *audio;
-	char *cmd, audio1[AST_FRIENDLY_OFFSET + (FRAME_SIZE * sizeof(short))];
+	char *cmd, *cmdp, *audio1;
 	struct ast_frame wf, *f1;
 
 	cmd = ast_alloca(strlen(text) + 10);
@@ -1167,11 +1167,15 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) if (f1->src && (!strcmp(f1->src, PAGER_SRC)))
 				i++;
 			ast_mutex_unlock(&o->txqlock);
-			cmd = (i) ? "PAGES" : "NOPAGES";
+			cmdp = ast_malloc(sizeof("NOPAGES"));
+			if (!cmdp) {
+				return 0;
+			}
+			cmdp = (i) ? "PAGES" : "NOPAGES";
 			memset(&wf, 0, sizeof(wf));
 			wf.frametype = AST_FRAME_TEXT;
-			wf.datalen = strlen(cmd);
-			wf.data.ptr = cmd;
+			wf.datalen = strlen(cmdp);
+			wf.data.ptr = cmdp;
 			ast_queue_frame(o->owner, &wf);
 			return 0;
 		default:
@@ -1213,7 +1217,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			b = b->next;
 		}
 		free_batch(batch);
-		memset(audio1, 0, sizeof(audio1));
+		audio1 = ast_calloc(1, AST_FRIENDLY_OFFSET + (FRAME_SIZE * sizeof(short)));
 		for (i = 0; i < audio_samples; i += FRAME_SIZE) {
 			memset(&wf, 0, sizeof(wf));
 			wf.frametype = AST_FRAME_VOICE;
