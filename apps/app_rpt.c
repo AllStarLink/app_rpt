@@ -3564,13 +3564,13 @@ static inline void mute_frame_helper(struct rpt *myrpt)
  * If muted, old lastf2, lastf1, lastf2 and f are filled with zeros.
  * \param myrpt - the rpt structure
  * \param f - the frame to be stored in lastf1
- * \param ismuted - if true, the frame is muted by filling f, lastf1 and lastf2 with zeros
+ * \param mute - if true, the frame is muted by filling last_frame, f, lastf1 and lastf2 with zeros
  */
-static inline struct ast_frame *rpt_frame_helper(struct rpt *myrpt, struct ast_frame *f, int ismuted)
+static inline struct ast_frame *rpt_frame_helper(struct rpt *myrpt, struct ast_frame *f, int mute)
 {
 	struct ast_frame *f2, *last_frame;
 
-	if (ismuted) {
+	if (mute) {
 		RPT_MUTE_FRAME_IE(f);
 		mute_frame_helper(myrpt);
 	}
