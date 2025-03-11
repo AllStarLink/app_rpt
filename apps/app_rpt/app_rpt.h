@@ -929,4 +929,4 @@ void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
 
-#define RPT_MUTE_FRAME_IE(f) if (f) memset(f->data.ptr, 0, f->datalen)
+#define RPT_MUTE_FRAME(f) if (f) memset(f->data.ptr, 0, f->datalen)

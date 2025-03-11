@@ -3556,12 +3556,12 @@ static inline void outstream_write(struct rpt *myrpt, struct ast_frame *f)
  */
 static inline void mute_frame_helper(struct rpt *myrpt)
 {
-	RPT_MUTE_FRAME_IE(myrpt->lastf1);
-	RPT_MUTE_FRAME_IE(myrpt->lastf2);
+	RPT_MUTE_FRAME(myrpt->lastf1);
+	RPT_MUTE_FRAME(myrpt->lastf2);
 }
 
 /*! \brief Shifts frames: myrpt->lastf1 -> myrpt->lastf2, f -> myrpt->lastf1.
- * If muted, old lastf2, lastf1, lastf2 and f are filled with zeros.
+ * If muted, lastf1, lastf2 and f are filled with zeros before shifting the frames.
  * \param myrpt - the rpt structure
  * \param f - the frame to be stored in lastf1
  * \param mute - if true, the frame is muted by filling last_frame, f, lastf1 and lastf2 with zeros
@@ -3571,7 +3571,7 @@ static inline struct ast_frame *rpt_frame_helper(struct rpt *myrpt, struct ast_f
 	struct ast_frame *f2, *last_frame;
 
 	if (mute) {
-		RPT_MUTE_FRAME_IE(f);
+		RPT_MUTE_FRAME(f);
 		mute_frame_helper(myrpt);
 	}
 	f2 = f ? ast_frdup(f) : NULL;
