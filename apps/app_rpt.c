@@ -3554,14 +3554,10 @@ static inline void outstream_write(struct rpt *myrpt, struct ast_frame *f)
 /*! \brief Zero data in myrpt->lastf1 and lastf2 registers (muting audio)
  * \param myrpt The rpt structure to mute
  */
-static inline void dtmf_mute_frame_helper(struct rpt *myrpt)
+static inline void mute_frame_helper(struct rpt *myrpt)
 {
-	if (myrpt->lastf1) {
-		memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-	}
-	if (myrpt->lastf2) {
-		memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-	}
+	RPT_MUTE_FRAME_IE(myrpt->lastf1);
+	RPT_MUTE_FRAME_IE(myrpt->lastf2);
 }
 
 /*! \brief Shifts frames: myrpt->lastf1 -> myrpt->lastf2, f -> myrpt->lastf1.
@@ -3575,10 +3571,8 @@ static inline struct ast_frame *rpt_frame_helper(struct rpt *myrpt, struct ast_f
 	struct ast_frame *f2, *last_frame;
 
 	if (ismuted) {
-		if (f) {
-			memset(f->data.ptr, 0, f->datalen);
-		}
-		dtmf_mute_frame_helper(myrpt);
+		RPT_MUTE_FRAME_IE(f);
+		mute_frame_helper(myrpt);
 	}
 	f2 = f ? ast_frdup(f) : NULL;
 	last_frame = myrpt->lastf2;
@@ -3804,7 +3798,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
-		dtmf_mute_frame_helper(myrpt);
+		mute_frame_helper(myrpt);
 		dtmfed = 1;
 		myrpt->lastdtmftime = ast_tvnow();
 	} else if (f->frametype == AST_FRAME_DTMF) {
@@ -3825,7 +3819,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 
 			return 0;
 		}
-		dtmf_mute_frame_helper(myrpt);
+		mute_frame_helper(myrpt);
 		dtmfed = 1;
 		if ((!myrpt->lastkeytimer) && (!myrpt->localoverride)) {
 			if (myrpt->p.dtmfkey)
@@ -5980,11 +5974,11 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
-		dtmf_mute_frame_helper(myrpt);
+		mute_frame_helper(myrpt);
 		*dtmfed = 1;
 	}
 	if (f->frametype == AST_FRAME_DTMF) {
-		dtmf_mute_frame_helper(myrpt);
+		mute_frame_helper(myrpt);
 		*dtmfed = 1;
 		if (handle_remote_phone_dtmf(myrpt, f->subclass.integer, keyed, phone_mode) == -1) {
 			ast_debug(1, "@@@@ rpt:Hung Up\n");
