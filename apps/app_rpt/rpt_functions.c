@@ -363,7 +363,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 	case 16:					/* Restore links disconnected with "disconnect all links" command */
 		strcpy(tmp, myrpt->savednodes);	/* Make a copy */
 		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
-		for (i = 0; tmp[0] && strs[i] != NULL && i < ARRAY_LEN(strs); i++) {
+		for (i = 0; tmp[0] && i < ARRAY_LEN(strs) && strs[i]; i++) {
 			s1 = strs[i];
 			if (s1[0] == 'X')
 				mode = 1;

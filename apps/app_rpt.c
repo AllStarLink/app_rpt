@@ -3274,7 +3274,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			}
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
-			rpt_free_link_helper(l);
+			rpt_link_free(l);
 			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
@@ -3297,7 +3297,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			dodispgm(myrpt, l->name);
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
-			rpt_free_link_helper(l);
+			rpt_link_free(l);
 
 			rpt_mutex_lock(&myrpt->lock);
 			break;
@@ -4178,7 +4178,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_hangup(l->pchan);
-	rpt_free_link_helper(l);
+	rpt_link_free(l);
 }
 
 static inline void fac_frame(struct ast_frame *restrict f, float fac)
@@ -5225,7 +5225,7 @@ static void *rpt(void *this)
 				if (l->chan)
 					ast_hangup(l->chan);
 				ast_hangup(l->pchan);
-				rpt_free_link_helper(l);
+				rpt_link_free(l);
 				rpt_mutex_lock(&myrpt->lock);
 				/* re-start link traversal */
 				l = myrpt->links.next;
@@ -5434,7 +5434,7 @@ static void *rpt(void *this)
 			ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		l = l->next;
-		rpt_free_link_helper(ll);
+		rpt_link_free(ll);
 	}
 	if (myrpt->xlink == 1)
 		myrpt->xlink = 2;

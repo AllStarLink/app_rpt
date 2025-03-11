@@ -89,4 +89,4 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma);
 /*! \brief Free link and associated internal memory.
  * \param link Link structure to free
  */
-void rpt_free_link_helper(struct rpt_link *link);
+void rpt_link_free(struct rpt_link *link);

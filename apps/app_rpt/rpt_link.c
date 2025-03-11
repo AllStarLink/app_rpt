@@ -121,7 +121,7 @@ static void check_tlink_list(struct rpt *myrpt)
 /*! \brief free a link structure and it's ast_str linklist if it exists
  *  \param link the link to free
  */
-void rpt_free_link_helper(struct rpt_link *link)
+void rpt_link_free(struct rpt_link *link)
 {
 	if (link->linklist) {
 		ast_free(link->linklist);
@@ -485,7 +485,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 			mode = 'C';			/* indicate connecting */
 		spos = ast_str_strlen(*buf); /* current buf size (b4 we add our stuff) */
 		if (spos > 2) {
-			ast_str_append(buf, 1, "%s", ",");
+			ast_str_append(buf, 0, "%s", ",");
 		}
 	    one_link = 1;
 		if (alink_format) { /* RPT_ALINK format - only show adjacent nodes*/
@@ -739,7 +739,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	tele = strchr(deststr, '/');
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
-		rpt_free_link_helper(l);
+		rpt_link_free(l);
 		return -1;
 	}
 	*tele++ = 0;
@@ -747,7 +747,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		rpt_free_link_helper(l);
+		rpt_link_free(l);
 		return -1;
 	}
 
@@ -773,7 +773,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		if (myrpt->p.archivedir) {
 			donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		}
-		rpt_free_link_helper(l);
+		rpt_link_free(l);
 		ao2_ref(cap, -1);
 		return -1;
 	}
@@ -783,7 +783,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
-		rpt_free_link_helper(l);
+		rpt_link_free(l);
 		return -1;
 	}
 
@@ -793,7 +793,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		rpt_free_link_helper(l);
+		rpt_link_free(l);
 		return -1;
 	}
 	rpt_mutex_lock(&myrpt->lock);
