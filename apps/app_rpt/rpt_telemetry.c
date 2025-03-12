@@ -996,7 +996,7 @@ void *rpt_tele_thread(void *this)
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
 	struct rpt_link *l, *l1, linkbase;
-	struct ast_channel *mychannel = NULL;
+	struct ast_channel *mychannel = NULL, *dpchannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ct, *ct_copy, *ident, *nodename;
 	time_t t, t1, t_mono, was_mono;
@@ -1678,9 +1678,34 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		res = ast_stream_and_wait(mychannel, mytele->param, "");
+		if (mytele->param[0] != '*') {
+			res = ast_stream_and_wait(mychannel, mytele->param, "");
+			imdone = 1;
+			break;
+		}
+		/* If parameter starts with a *, use dialplan to translate */
+		/* allocate a pseudo-channel thru asterisk */
+		dpchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+		if (!dpchannel) {
+			break;
+		}
+		rpt_disable_cdr(dpchannel);
+		if (rpt_conf_add(dpchannel, myrpt, type, RPT_CONF_CONFANN)) {
+			ast_hangup(dpchannel);
+			break;
+		}
+		ast_channel_context_set(dpchannel, "telemetry");
+		ast_channel_exten_set(dpchannel, mytele->param + 1);
+		ast_channel_priority_set(dpchannel, 1);
+		ast_pbx_start(dpchannel);
+		ast_debug(5, "Playback dialplan extension %s\n", mytele->param);
+		while (!ast_check_hangup(dpchannel)) {
+			usleep(MSWAIT * 1000); /* Wait for PBX thread to hangup */
+		}
+		ast_debug(5, "PBX has finished on telemetry\n");
 		imdone = 1;
 		break;
+
 	case TOPKEY:
 		/* wait a little bit */
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
@@ -2616,6 +2641,7 @@ treataslocal:
 		ast_free(ident);
 	}
 	ast_free(mytele);
+	ao2_ref(cap, -1);
 	ast_hangup(mychannel);
 #ifdef  APP_RPT_LOCK_DEBUG
 	{
@@ -2645,6 +2671,7 @@ abort3:
 	if (mychannel) {
 		ast_hangup(mychannel);
 	}
+	ao2_ref(cap, -1);
 	pthread_exit(NULL);
 }
 
