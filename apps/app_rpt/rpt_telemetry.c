@@ -808,7 +808,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 				f /= 3.2808399;
 			}
 		}
-		sprintf(buf, "%0.1f", f);
+		snprintf(buf, sizeof(buf), "%0.1f", f);
 		if (sscanf(buf, "%d.%d", &i, &j) != 2) {
 			return;
 		}
@@ -1017,7 +1017,7 @@ void *rpt_tele_thread(void *this)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	/* allocate a pseudo-channel thru asterisk */
-	mychannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	mychannel = rpt_request_pseudo_chan(cap);
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {
@@ -1404,7 +1404,7 @@ treataslocal:
 				rpt_mutex_lock(&myrpt->lock);
 				goto abort;
 			}
-			sprintf(mystr, "%04x", myrpt->lastunit);
+			snprintf(mystr, sizeof(mystr), "%04x", myrpt->lastunit);
 			myrpt->lastunit = 0;
 			ast_say_character_str(mychannel, mystr, NULL, ast_channel_language(mychannel));
 			break;
@@ -2226,7 +2226,7 @@ treataslocal:
 		imdone = 1;
 		break;
 	case PARROT:				/* Repeat stuff */
-		sprintf(mystr, PARROTFILE, myrpt->name, mytele->parrot);
+		snprintf(mystr, sizeof(mystr), PARROTFILE, myrpt->name, mytele->parrot);
 		if (ast_fileexists(mystr, NULL, ast_channel_language(mychannel)) <= 0) {
 			imdone = 1;
 			myrpt->parrotstate = 0;
@@ -2235,9 +2235,9 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_PARROT, mychannel) == -1) {
 			break;
 		}
-		sprintf(mystr, PARROTFILE, myrpt->name, mytele->parrot);
+		snprintf(mystr, sizeof(mystr), PARROTFILE, myrpt->name, mytele->parrot);
 		res = ast_stream_and_wait(mychannel, mystr, "");
-		sprintf(mystr, PARROTFILE, myrpt->name, mytele->parrot);
+		snprintf(mystr, sizeof(mystr), PARROTFILE, myrpt->name, mytele->parrot);
 		strcat(mystr, ".wav");
 		unlink(mystr);
 		imdone = 1;
@@ -2449,7 +2449,7 @@ treataslocal:
 				f /= 3.2808399;
 			}
 		}
-		sprintf(mystr, "%0.1f", f);
+		snprintf(mystr, sizeof(mystr), "%0.1f", f);
 		if (sscanf(mystr, "%d.%d", &i, &j) != 2) {
 			break;
 		}
@@ -2728,7 +2728,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			if ((!mylink) || (mylink->name[0] == '0')) {
 				return;
 			}
-			sprintf(mystr, "CONNECTED,%s,%s", myrpt->name, mylink->name);
+			snprintf(mystr, sizeof(mystr), "CONNECTED,%s,%s", myrpt->name, mylink->name);
 			send_tele_link(myrpt, mystr);
 			return;
 		case CONNFAIL:
@@ -2736,7 +2736,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			if ((!mylink) || (mylink->name[0] == '0')) {
 				return;
 			}
-			sprintf(mystr, "CONNFAIL,%s", mylink->name);
+			snprintf(mystr, sizeof(mystr), "CONNFAIL,%s", mylink->name);
 			send_tele_link(myrpt, mystr);
 			return;
 		case REMDISC:
@@ -2765,16 +2765,16 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			if (haslink) {
 				return;
 			}
-			sprintf(mystr, "REMDISC,%s", mylink->name);
+			snprintf(mystr, sizeof(mystr), "REMDISC,%s", mylink->name);
 			send_tele_link(myrpt, mystr);
 			return;
 		case STATS_TIME:
 			t = time(NULL);
-			sprintf(mystr, "STATS_TIME,%u", (unsigned int) t);
+			snprintf(mystr, sizeof(mystr), "STATS_TIME,%u", (unsigned int) t);
 			send_tele_link(myrpt, mystr);
 			return;
 		case STATS_VERSION:
-			sprintf(mystr, "STATS_VERSION,%d.%d", VERSION_MAJOR, VERSION_MINOR);
+			snprintf(mystr, sizeof(mystr), "STATS_VERSION,%d.%d", VERSION_MAJOR, VERSION_MINOR);
 			send_tele_link(myrpt, mystr);
 			return;
 		case STATS_GPS:
@@ -2797,11 +2797,11 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			if ((was_mono + GPS_VALID_SECS) < t_mono) {
 				break;
 			}
-			sprintf(mystr, "STATS_GPS,%s,%s,%s,%s", myrpt->name, lat, lon, elev);
+			snprintf(mystr, sizeof(mystr), "STATS_GPS,%s,%s,%s,%s", myrpt->name, lat, lon, elev);
 			send_tele_link(myrpt, mystr);
 			return;
 		case ARB_ALPHA:
-			sprintf(mystr, "ARB_ALPHA,%s", (char *) data);
+			snprintf(mystr, sizeof(mystr), "ARB_ALPHA,%s", (char *) data);
 			send_tele_link(myrpt, mystr);
 			return;
 		case REV_PATCH:
@@ -2811,35 +2811,35 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 					p[i] = '^';
 				}
 			}
-			sprintf(mystr, "REV_PATCH,%s,%s", myrpt->name, p);
+			snprintf(mystr, sizeof(mystr), "REV_PATCH,%s,%s", myrpt->name, p);
 			send_tele_link(myrpt, mystr);
 			return;
 		case LASTNODEKEY:
 			if (!myrpt->lastnodewhichkeyedusup[0]) {
 				return;
 			}
-			sprintf(mystr, "LASTNODEKEY,%s", myrpt->lastnodewhichkeyedusup);
+			snprintf(mystr, sizeof(mystr), "LASTNODEKEY,%s", myrpt->lastnodewhichkeyedusup);
 			send_tele_link(myrpt, mystr);
 			return;
 		case LASTUSER:
 			if ((!myrpt->lastdtmfuser[0]) && (!myrpt->curdtmfuser[0])) {
 				return;
 			} else if (myrpt->lastdtmfuser[0] && (!myrpt->curdtmfuser[0])) {
-				sprintf(mystr, "LASTUSER,%s", myrpt->lastdtmfuser);
+				snprintf(mystr, sizeof(mystr), "LASTUSER,%s", myrpt->lastdtmfuser);
 			} else if ((!myrpt->lastdtmfuser[0]) && myrpt->curdtmfuser[0]) {
-				sprintf(mystr, "LASTUSER,%s", myrpt->curdtmfuser);
+				snprintf(mystr, sizeof(mystr), "LASTUSER,%s", myrpt->curdtmfuser);
 			} else {
 				if (strcmp(myrpt->curdtmfuser, myrpt->lastdtmfuser)) {
-					sprintf(mystr, "LASTUSER,%s,%s", myrpt->curdtmfuser, myrpt->lastdtmfuser);
+					snprintf(mystr, sizeof(mystr), "LASTUSER,%s,%s", myrpt->curdtmfuser, myrpt->lastdtmfuser);
 				} else {
-					sprintf(mystr, "LASTUSER,%s", myrpt->curdtmfuser);
+					snprintf(mystr, sizeof(mystr), "LASTUSER,%s", myrpt->curdtmfuser);
 				}
 			}
 			send_tele_link(myrpt, mystr);
 			return;
 		case STATUS:
 			rpt_mutex_lock(&myrpt->lock);
-			sprintf(mystr, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
 			l = myrpt->links.next;
 			while (l != &myrpt->links) {
@@ -2867,7 +2867,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			return;
 		case FULLSTATUS:
 			rpt_mutex_lock(&myrpt->lock);
-			sprintf(mystr, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* get all the nodes */
 			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 			rpt_mutex_unlock(&myrpt->lock);
