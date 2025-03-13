@@ -944,6 +944,26 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	return;
 }
 
+/*!
+ * \brief Execute dialplan on telemetry conference
+ */
+static int do_telemetry_dialplan(struct rpt *myrpt, struct rpt_tele *mytele)
+{
+	struct ast_channel *dpchannel;
+
+	dpchannel = mytele->chan;
+	rpt_disable_cdr(dpchannel);
+	ast_channel_context_set(dpchannel, myrpt->p.telemetry);
+	ast_channel_exten_set(dpchannel, mytele->param + 1);
+	ast_pbx_start(dpchannel);
+	ast_debug(5, "Playback dialplan extension %s\n", mytele->param);
+	while (!ast_check_hangup(dpchannel)) {
+		usleep(MSWAIT * 1000); /* Wait for PBX thread to hangup */
+	}
+	ast_debug(5, "PBX has finished on telemetry\n");
+	return 0;
+}
+
 /*! \brief Try to catch setting active_telem NULL when we weren't what it was set to
  * If somebody sets active_telem to NULL when it wasn't the current telem, then
  * that can cause a queued telemetry to think the current telem is done when it isn't,
@@ -961,12 +981,12 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
  */
 void *rpt_tele_thread(void *this)
 {
-	int res = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x;
+	int res = 0, haslink, hastx, hasremote, imdone = 0, pbx = 0, unkeys_queued, x;
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
 	struct rpt_link *l, *l1, linkbase;
-	struct ast_channel *mychannel = NULL, *dpchannel = NULL;
+	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ct, *ct_copy, *ident, *nodename;
 	time_t t, t1, t_mono, was_mono;
@@ -1018,6 +1038,7 @@ void *rpt_tele_thread(void *this)
 
 	/* allocate a pseudo-channel thru asterisk */
 	mychannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	ao2_ref(cap, -1);
 
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel (mode: %d)\n", mytele->mode);
@@ -1026,7 +1047,6 @@ void *rpt_tele_thread(void *this)
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	rpt_disable_cdr(mychannel);
-	ast_answer(mychannel);
 
 	rpt_mutex_lock(&myrpt->lock);
 	mytele->chan = mychannel;
@@ -1655,25 +1675,9 @@ treataslocal:
 		}
 		/* If parameter starts with a *, use dialplan to translate */
 		/* allocate a pseudo-channel thru asterisk */
-		dpchannel = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-		if (!dpchannel) {
-			break;
-		}
-		rpt_disable_cdr(dpchannel);
-		if (rpt_conf_add(dpchannel, myrpt, type, RPT_CONF_CONFANN)) {
-			ast_hangup(dpchannel);
-			break;
-		}
-		ast_channel_context_set(dpchannel, "telemetry");
-		ast_channel_exten_set(dpchannel, mytele->param + 1);
-		ast_channel_priority_set(dpchannel, 1);
-		ast_pbx_start(dpchannel);
-		ast_debug(5, "Playback dialplan extension %s\n", mytele->param);
-		while (!ast_check_hangup(dpchannel)) {
-			usleep(MSWAIT * 1000); /* Wait for PBX thread to hangup */
-		}
-		ast_debug(5, "PBX has finished on telemetry\n");
-		imdone = 1;
+
+		do_telemetry_dialplan(myrpt, mytele);
+		pbx = 1;
 		break;
 
 	case TOPKEY:
@@ -2573,15 +2577,18 @@ treataslocal:
 	default:
 		break;
 	}
-	if (!imdone) {
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		} else {
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-			res = 0;
+	if (!pbx) {
+		if (!imdone) {
+			if (!res) {
+				res = ast_waitstream(mychannel, "");
+			} else {
+				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+				res = 0;
+			}
 		}
+		ast_stopstream(mychannel);
+		ast_hangup(mychannel);
 	}
-	ast_stopstream(mychannel);
 	rpt_mutex_lock(&myrpt->lock);
 	if (mytele->mode == TAILMSG) {
 		if (!res) {
@@ -2601,8 +2608,6 @@ treataslocal:
 		ast_free(ident);
 	}
 	ast_free(mytele);
-	ao2_ref(cap, -1);
-	ast_hangup(mychannel);
 #ifdef  APP_RPT_LOCK_DEBUG
 	{
 		struct lockthread *t;
@@ -2631,7 +2636,6 @@ abort3:
 	if (mychannel) {
 		ast_hangup(mychannel);
 	}
-	ao2_ref(cap, -1);
 	pthread_exit(NULL);
 }
 
