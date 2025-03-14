@@ -3560,11 +3560,11 @@ static inline void mute_frame_helper(struct rpt *myrpt)
 	RPT_MUTE_FRAME(myrpt->lastf2);
 }
 
-/*! \brief Shifts frames: myrpt->lastf1 -> myrpt->lastf2, f -> myrpt->lastf1.
- * If muted, lastf1, lastf2 and f are filled with zeros before shifting the frames.
+/*! \brief Shifts frames: myrpt->lastf2 -> return value, myrpt->lastf1 -> myrpt->lastf2, f -> myrpt->lastf1.
  * \param myrpt - the rpt structure
  * \param f - the frame to be stored in lastf1
- * \param mute - if true, the frame is muted by filling last_frame, f, lastf1 and lastf2 with zeros
+ * \param mute - if true, the frame is muted by filling f, lastf1 and lastf2 with zeros
+ * \note If muted, lastf1, lastf2 and f are filled with zeros before shifting the frames, resulting in a muted return frame.
  */
 static inline struct ast_frame *rpt_frame_helper(struct rpt *myrpt, struct ast_frame *f, int mute)
 {
