@@ -1004,11 +1004,8 @@ static int do_telemetry_dialplan(struct rpt *myrpt, struct rpt_tele *mytele)
 	rpt_disable_cdr(dpchannel);
 	ast_channel_context_set(dpchannel, myrpt->p.telemetry);
 	ast_channel_exten_set(dpchannel, mytele->param + 1);
-	ast_pbx_start(dpchannel);
 	ast_debug(5, "Playback dialplan extension %s\n", mytele->param);
-	while (!ast_check_hangup(dpchannel)) {
-		usleep(MSWAIT * 1000); /* Wait for PBX thread to hangup */
-	}
+	ast_pbx_run(dpchannel);
 	ast_debug(5, "PBX has finished on telemetry\n");
 	return 0;
 }
