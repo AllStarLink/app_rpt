@@ -2629,25 +2629,16 @@ static void do_scheduler(struct rpt *myrpt)
 		myrpt->dailyexecdcommands = 0;
 	}
 
-	if (tmnow.tm_sec != 0)
-		return;
-
-	/* Code below only executes once per minute */
-
-	/* Don't schedule if remote */
-
-	if (myrpt->remote)
-		return;
-
-	/* Don't schedule if disabled */
-
-	if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) {
-		ast_debug(7, "Scheduler disabled\n");
+	if (tmnow.tm_sec != 0) {
 		return;
 	}
 
-	if (ast_strlen_zero(myrpt->p.skedstanzaname)) {	/* No stanza means we do nothing */
-		ast_debug(7, "No stanza for scheduler in rpt.conf\n");
+	/* Code below only executes once per minute */
+	if (myrpt->remote) { /* Don't schedule if remote */
+		return;
+	} else if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) { /* Don't schedule if disabled */
+		return;
+	} else if (ast_strlen_zero(myrpt->p.skedstanzaname)) {	/* No stanza means we do nothing */
 		return;
 	}
 
@@ -4687,9 +4678,6 @@ static inline int telechannel_read(struct rpt *myrpt, int complexcondition)
 {
 	struct ast_frame *f;
 
-	if (debug) {
-		ast_debug(10, "node=%s %p %d %d %d\n", myrpt->name, myrpt->telechannel, myrpt->keyed, myrpt->remrx, myrpt->noduck);
-	}
 	f = ast_read(myrpt->telechannel);
 	if (!f) {
 		ast_debug(1, "node=%s telechannel Hung Up implied\n", myrpt->name);
