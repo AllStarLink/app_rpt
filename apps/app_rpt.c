@@ -301,6 +301,7 @@
 #include <curl/curl.h>
 #include <termios.h>
 
+#include "asterisk/audiohook.h"
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
@@ -2763,54 +2764,11 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	/* Telemetry Channel Resources */
-	if (rpt_request_pseudo(myrpt, cap, RPT_TELECHAN)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		return -1;
-	}
-
-	/* make a conference for the voice/tone telemetry */
-	if (rpt_conf_create(myrpt->telechannel, myrpt, RPT_TELECONF, RPT_CONF_CONF | RPT_CONF_TALKER | RPT_CONF_LISTENER)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		rpt_hangup(myrpt, RPT_TELECHAN);
-		return -1;
-	}
-
-	/* make a channel to connect between the telemetry conference process
-	   and the main tx audio conference. */
-	if (rpt_request_pseudo(myrpt, cap, RPT_BTELECHAN)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		rpt_hangup(myrpt, RPT_TELECHAN);
-		return -1;
-	}
-
-	/* make a conference linked to the main tx conference */
-	if (rpt_tx_conf_add_speaker(myrpt->btelechannel, myrpt)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		rpt_hangup(myrpt, RPT_TELECHAN);
-		rpt_hangup(myrpt, RPT_BTELECHAN);
-		return -1;
-	}
-
 	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		rpt_hangup(myrpt, RPT_TELECHAN);
-		rpt_hangup(myrpt, RPT_BTELECHAN);
 		return -1;
 	}
 
@@ -2819,8 +2777,6 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		rpt_hangup(myrpt, RPT_TELECHAN);
-		rpt_hangup(myrpt, RPT_BTELECHAN);
 		rpt_hangup(myrpt, RPT_VOXCHAN);
 		return -1;
 	}
@@ -2831,8 +2787,6 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		rpt_hangup(myrpt, RPT_TELECHAN);
-		rpt_hangup(myrpt, RPT_BTELECHAN);
 		rpt_hangup(myrpt, RPT_VOXCHAN);
 		rpt_hangup(myrpt, RPT_TXPCHAN);
 		return -1;
@@ -3782,6 +3736,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->reallykeyed = 1;
 				myrpt->dtmfkeybuf[0] = 0;
 				myrpt->curdtmfuser[0] = 0;
+
 				if ((!myrpt->p.rxburstfreq) && (!myrpt->p.dtmfkey)) {
 					myrpt->linkactivitytimer = 0;
 					myrpt->keyed = 1;
@@ -4561,58 +4516,6 @@ static inline int txpchannel_read(struct rpt *myrpt)
 	return wait_for_hangup_helper(myrpt->txpchannel, "txpchannel");
 }
 
-static inline int telechannel_read(struct rpt *myrpt, int complexcondition)
-{
-	struct ast_frame *f;
-
-	f = ast_read(myrpt->telechannel);
-	if (!f) {
-		ast_debug(1, "node=%s telechannel Hung Up implied\n", myrpt->name);
-		return -1;
-	}
-	if (f->frametype == AST_FRAME_VOICE) {
-		float gain;
-		if (complexcondition) {
-#ifdef SIMPLE_VOTER_IMPLEMENTED
-			/* New condition once implemented: */
-			/* This is for when/if simple voter is implemented.  It replaces the line below it. */
-			gain = !myrpt->noduck && (myrpt->rxchankeyed || myrpt->remrx) ? myrpt->p.telemduckgain : myrpt->p.telemnomgain;
-#else
-			gain = !myrpt->noduck && (myrpt->keyed || myrpt->remrx) ? myrpt->p.telemduckgain : myrpt->p.telemnomgain;
-#endif
-		} else {
-			gain = myrpt->keyed ? myrpt->p.telemduckgain : myrpt->p.telemnomgain;
-		}
-		if (gain != 0) {
-			int n, k;
-			short *sp = (short *) f->data.ptr;
-			for (n = 0; n < f->datalen / 2; n++) {
-				k = sp[n] * gain;
-				if (k > 32767)
-					k = 32767;
-				else if (k < -32767)
-					k = -32767;
-				sp[n] = k;
-			}
-		}
-		ast_write(myrpt->btelechannel, f);
-	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(6, "node=%s telechannel Hung Up\n", myrpt->name);
-			ast_frfree(f);
-			return -1;
-		}
-	}
-	ast_frfree(f);
-	return 0;
-}
-
-static inline int btelechannel_read(struct rpt *myrpt)
-{
-	return wait_for_hangup_helper(myrpt->btelechannel, "btelechannel");
-}
-
 static inline void voxtostate_to_voxtotimer(struct rpt *myrpt)
 {
 	if (myrpt->voxtostate) {
@@ -4633,7 +4536,7 @@ static void *rpt(void *this)
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
 	struct rpt_link *l;
-	struct rpt_tele *telem;
+	struct rpt_tele *telem, *last_tele = NULL;
 	char tmpstr[512];
 	struct ast_format_cap *cap;
 	struct timeval looptimestart;
@@ -5223,13 +5126,28 @@ static void *rpt(void *this)
 				}
 			}
 		}
+		/* If we have a new telemetry or we haven't adjusted ducking and we are keyed up */
+		if (((myrpt->tele.next != last_tele) || !lastduck) && myrpt->tele.next->chan && (myrpt->keyed || myrpt->remrx)) {
+			
+			if (ast_audiohook_volume_set(myrpt->tele.next->chan, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemduckgain)){
+				ast_debug(7, "I've set the volume on channel %s to %d", ast_channel_name(myrpt->tele.next->chan), myrpt->p.telemduckgain);
+			}
+			lastduck = 1;
+		}
+		/* If we have a new telemetry or we have already adjusted ducking and we are not keyed up */
+		if (((myrpt->tele.next != last_tele) || lastduck) && myrpt->tele.next->chan && !myrpt->keyed && !myrpt->remrx) {
+			
+			if (ast_audiohook_volume_set(myrpt->tele.next->chan, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)){
+				ast_debug(7, "I've set the volume on channel %s to %d", ast_channel_name(myrpt->tele.next->chan), myrpt->p.telemnomgain);
+			}
+			lastduck = 0;
+		}
+		last_tele = myrpt->tele.next;
+
 		n = 0;
 		cs[n++] = myrpt->rxchannel;
 		cs[n++] = myrpt->pchannel;
 		cs[n++] = myrpt->monchannel;
-		cs[n++] = myrpt->telechannel;
-		cs[n++] = myrpt->btelechannel;
-
 		if (myrpt->parrotchannel)
 			cs[n++] = myrpt->parrotchannel;
 		if (myrpt->voxchannel)
@@ -5358,14 +5276,6 @@ static void *rpt(void *this)
 			if (txpchannel_read(myrpt)) {
 				break;
 			}
-		} else if (who == myrpt->telechannel) {	/* if is telemetry conference output */
-			if (telechannel_read(myrpt, 1)) {
-				break;
-			}
-		} else if (who == myrpt->btelechannel) { /* if is btelemetry conference output */
-			if (btelechannel_read(myrpt)) {
-				break;
-			}
 		}
 	}
 
@@ -5386,8 +5296,6 @@ static void *rpt(void *this)
 	if (myrpt->voxchannel) {
 		rpt_hangup(myrpt, RPT_VOXCHAN);
 	}
-	rpt_hangup(myrpt, RPT_BTELECHAN);
-	rpt_hangup(myrpt, RPT_TELECHAN);
 	rpt_hangup(myrpt, RPT_TXPCHAN);
 	if (myrpt->dahditxchannel != myrpt->txchannel) {
 		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
@@ -7027,8 +6935,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	cs[n++] = chan;
 	cs[n++] = myrpt->rxchannel;
 	cs[n++] = myrpt->pchannel;
-	cs[n++] = myrpt->telechannel;
-	cs[n++] = myrpt->btelechannel;
 	if (myrpt->rxchannel != myrpt->txchannel)
 		cs[n++] = myrpt->txchannel;
 
@@ -7296,14 +7202,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		} else if (who == myrpt->rxchannel) {	/* if it was a read from radio */
 			if (exec_rxchannel_read(myrpt, reming, notremming, &remkeyed)) {
-				break;
-			}
-		} else if (who == myrpt->telechannel) {	/* if is telemetry conference output */
-			if (telechannel_read(myrpt, 0)) {
-				break;
-			}
-		} else if (who == myrpt->btelechannel) { /* if is btelemetry conference output */
-			if (btelechannel_read(myrpt)) {
 				break;
 			}
 		} else if (who == myrpt->pchannel) {	/* if is remote mix output */
