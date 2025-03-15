@@ -53,10 +53,6 @@ static const char *rpt_chan_type_str(enum rpt_chan_type chantype)
 		return "monchan";
 	case RPT_PARROTCHAN:
 		return "parrotchan";
-	case RPT_TELECHAN:
-		return "telechan";
-	case RPT_BTELECHAN:
-		return "btelechan";
 	case RPT_VOXCHAN:
 		return "voxchan";
 	case RPT_TXPCHAN:
@@ -77,8 +73,6 @@ static const char *rpt_chan_name(struct rpt *myrpt, enum rpt_chan_type chantype)
 	case RPT_DAHDITXCHAN:
 	case RPT_MONCHAN:
 	case RPT_PARROTCHAN:
-	case RPT_TELECHAN:
-	case RPT_BTELECHAN:
 	case RPT_VOXCHAN:
 	case RPT_TXPCHAN:
 		return NULL;
@@ -103,10 +97,6 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 			return &myrpt->monchannel;
 		case RPT_PARROTCHAN:
 			return &myrpt->parrotchannel;
-		case RPT_TELECHAN:
-			return &myrpt->telechannel;
-		case RPT_BTELECHAN:
-			return &myrpt->btelechannel;
 		case RPT_VOXCHAN:
 			return &myrpt->voxchannel;
 		case RPT_TXPCHAN:
@@ -170,8 +160,6 @@ static const char *rpt_chan_app(enum rpt_chan_type chantype, enum rpt_chan_flags
 	case RPT_DAHDITXCHAN:
 	case RPT_MONCHAN:
 	case RPT_PARROTCHAN:
-	case RPT_TELECHAN:
-	case RPT_BTELECHAN:
 	case RPT_VOXCHAN:
 	case RPT_TXPCHAN:
 		return NULL;
@@ -191,8 +179,6 @@ static const char *rpt_chan_app_data(enum rpt_chan_type chantype)
 	case RPT_DAHDITXCHAN:
 	case RPT_MONCHAN:
 	case RPT_PARROTCHAN:
-	case RPT_TELECHAN:
-	case RPT_BTELECHAN:
 	case RPT_VOXCHAN:
 	case RPT_TXPCHAN:
 		return NULL;
@@ -409,8 +395,6 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
 		return &myrpt->rptconf.dahdiconf.conf;
 	case RPT_TXCONF:
 		return &myrpt->rptconf.dahdiconf.txconf;
-	case RPT_TELECONF:
-		return &myrpt->rptconf.dahdiconf.teleconf;
 	}
 	ast_assert(0);
 	return NULL;
