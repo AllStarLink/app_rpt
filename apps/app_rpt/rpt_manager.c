@@ -175,17 +175,17 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				ider_state = "2";	//"CLEAN";
 
 			switch (myrpt->callmode) {
-			case 1:
+			case EXTEN_WAIT:
 				patch_state = "0";	//"DIALING";
 				break;
-			case 2:
+			case EXTEN_DIAL:
 				patch_state = "1";	//"CONNECTING";
 				break;
-			case 3:
+			case ACTIVE:
 				patch_state = "2";	//"UP";
 				break;
 
-			case 4:
+			case CONGESTION:
 				patch_state = "3";	//"CALL FAILED";
 				break;
 

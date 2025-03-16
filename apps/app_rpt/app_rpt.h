@@ -271,6 +271,8 @@ enum  rpt_dns_method {
 	LOOKUP_FILE
 };
 
+enum patch_call_mode { NO_CALL, EXTEN_WAIT, EXTEN_DIAL, ACTIVE, CONGESTION };
+
 #define DEFAULT_NODE_LOOKUP_METHOD LOOKUP_BOTH
 #define DEFAULT_TELEMDUCKDB "-9"
 #define	DEFAULT_RPT_TELEMDEFAULT 1
@@ -770,7 +772,8 @@ struct rpt {
 	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
 	int calldigittimer;
 	struct rpt_conf rptconf;
-	int tailtimer,totimer,idtimer,callmode,cidx,scantimer,tmsgtimer,skedtimer,linkactivitytimer,elketimer;
+	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
+	enum patch_call_mode callmode;
 	int mustid,tailid;
 	int rptinacttimer;
 	int tailevent;
