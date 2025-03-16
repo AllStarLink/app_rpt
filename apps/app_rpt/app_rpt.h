@@ -271,7 +271,7 @@ enum  rpt_dns_method {
 	LOOKUP_FILE
 };
 
-enum patch_call_mode { NO_CALL, EXTEN_WAIT, EXTEN_DIAL, ACTIVE, CONGESTION };
+enum patch_call_mode { DOWN, DIALING, CONNECTING, UP, FAILED };
 
 #define DEFAULT_NODE_LOOKUP_METHOD LOOKUP_BOTH
 #define DEFAULT_TELEMDUCKDB "-9"

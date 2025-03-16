@@ -1194,7 +1194,7 @@ void *rpt_tele_thread(void *this)
 #endif
 	case UNKEY:
 	case LOCUNKEY:
-		if (myrpt->patchnoct && (myrpt->callmode != NO_CALL)) { /* If no CT during patch configured, then don't send one */
+		if (myrpt->patchnoct && (myrpt->callmode != DOWN)) { /* If no CT during patch configured, then don't send one */
 			imdone = 1;
 			break;
 		}
@@ -1418,7 +1418,7 @@ treataslocal:
 			imdone = 1;
 			break;
 		}
-		if (myrpt->patchnoct && (myrpt->callmode != NO_CALL)) { /* If no CT during patch configured, then don't send one */
+		if (myrpt->patchnoct && (myrpt->callmode != DOWN)) { /* If no CT during patch configured, then don't send one */
 			imdone = 1;
 			break;
 		}
@@ -2097,7 +2097,7 @@ treataslocal:
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		res = saynode(myrpt, mychannel, myrpt->name);
-		if (myrpt->callmode != NO_CALL) {
+		if (myrpt->callmode != DOWN) {
 			hastx = 1;
 			res = ast_streamfile(mychannel, "rpt/autopatch_on", ast_channel_language(mychannel));
 			if (!res) {
@@ -2166,7 +2166,7 @@ treataslocal:
 			break;
 		hastx = 0;
 		res = saynode(myrpt, mychannel, myrpt->name);
-		if (myrpt->callmode != NO_CALL) {
+		if (myrpt->callmode != DOWN) {
 			hastx = 1;
 			res = ast_stream_and_wait(mychannel, "rpt/autopatch_on", "");
 		}
