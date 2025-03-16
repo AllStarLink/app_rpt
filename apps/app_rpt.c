@@ -5939,15 +5939,14 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			ismuted = 1;
 		*dtmfed = 0;
 		f1 = rpt_frame_helper(myrpt, f, ismuted);
-		if (f1) {
-			if (!myrpt->remstopgen) {
-				if (phone_mode)
-					ast_write(myrpt->txchannel, f1);
-				else
-					ast_write(myrpt->txchannel, f);
+		if (!myrpt->remstopgen) {
+			if (phone_mode && f1) {
+				ast_write(myrpt->txchannel, f1);
+			} else if (!phone_mode) {
+				ast_write(myrpt->txchannel, f);
 			}
-			ast_frfree(f1);
 		}
+		ast_frfree(f1);
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		mute_frame_helper(myrpt);
 		*dtmfed = 1;
