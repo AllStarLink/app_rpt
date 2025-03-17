@@ -202,17 +202,17 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 				ider_state = "CLEAN";
 
 			switch (myrpt->callmode) {
-			case DIALING:
+			case CALLMODE_DIALING:
 				patch_state = "DIALING";
 				break;
-			case CONNECTING:
+			case CALLMODE_CONNECTING:
 				patch_state = "CONNECTING";
 				break;
-			case UP:
+			case CALLMODE_UP:
 				patch_state = "UP";
 				break;
 
-			case FAILED:
+			case CALLMODE_FAILED:
 				patch_state = "CALL FAILED";
 				break;
 
@@ -496,17 +496,17 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				ider_state = "2";	//"CLEAN";
 
 			switch (myrpt->callmode) {
-			case DIALING:
+			case CALLMODE_DIALING:
 				patch_state = "0";	//"DIALING";
 				break;
-			case CONNECTING:
+			case CALLMODE_CONNECTING:
 				patch_state = "1";	//"CONNECTING";
 				break;
-			case UP:
+			case CALLMODE_UP:
 				patch_state = "2";	//"UP";
 				break;
 
-			case FAILED:
+			case CALLMODE_FAILED:
 				patch_state = "3";	//"CALL FAILED";
 				break;
 
