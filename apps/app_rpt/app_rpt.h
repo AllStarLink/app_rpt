@@ -696,8 +696,8 @@ struct rpt {
 		const char *locallist[16];
 		int nlocallist;
 		char ctgroup[16];
-		int telemnomgain;  /*!< \brief nominal gain adjust for telemetry */
-		int telemduckgain; /*!< \brief duck on busy gain adjust for telemetry */
+		float telemnomgain;	 /*!< \brief nominal gain adjust for telemetry */
+		float telemduckgain; /*!< \brief duck on busy gain adjust for telemetry */
 		float erxgain;
 		float etxgain;
 		float linkmongain;
