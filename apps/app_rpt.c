@@ -3575,7 +3575,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->linkactivitytimer = 0;
 				myrpt->keyed = 1;
 				time(&myrpt->lastkeyedtime);
-				myrpt->keyposttimer = KEYPOSTSHORTTIME;	
+				myrpt->keyposttimer = KEYPOSTSHORTTIME;
 			}
 		}
 #ifdef	_MDC_DECODE_H_
