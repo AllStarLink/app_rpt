@@ -1644,7 +1644,7 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 	return 0;
 }
 
-static inline void handle_callmode_exten_wait(struct rpt *myrpt, char c)
+static inline void handle_callmode_dialing(struct rpt *myrpt, char c)
 {
 	myrpt->exten[myrpt->cidx++] = c;
 	myrpt->exten[myrpt->cidx] = 0;
@@ -1678,7 +1678,7 @@ static inline void handle_callmode_exten_wait(struct rpt *myrpt, char c)
 static int funcchar_common(struct rpt *myrpt, char c)
 {
 	if (myrpt->callmode == CALLMODE_DIALING) {
-		handle_callmode_exten_wait(myrpt, c);
+		handle_callmode_dialing(myrpt, c);
 	}
 
 	if (!myrpt->inpadtest) {
@@ -2037,7 +2037,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 				return;
 			}
 #if 0
-			if ((myrpt->rem_dtmfidx < 0) && ((myrpt->callmode == EXTEN_DIAL) || (myrpt->callmode == ACTIVE))) {
+			if ((myrpt->rem_dtmfidx < 0) && ((myrpt->callmode == CALLMODE_DIALING) || (myrpt->callmode == CALLMODE_UP))) {
 				myrpt->mydtmf = c;
 			}
 #endif
