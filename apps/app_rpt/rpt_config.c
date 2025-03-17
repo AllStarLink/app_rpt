@@ -1031,8 +1031,8 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT(votertype, "votertype");
 	RPT_CONFIG_VAR_INT(votermode, "votermode");
 	RPT_CONFIG_VAR_INT_DEFAULT(votermargin, "votermargin", DEFAULT_VOTERGAIN);
-	RPT_CONFIG_VAR_INT_DEFAULT(telemnomgain, "telemnomdb", DEFAULT_TELEMNOMDB);
-	RPT_CONFIG_VAR_INT_DEFAULT(telemduckgain, "telemduckgain", DEFAULT_TELEMDUCKDB);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(telemnomgain, "telemnomdb", DEFAULT_TELEMNOMDB);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(telemduckgain, "telemduckgain", DEFAULT_TELEMDUCKDB);
 
 	RPT_CONFIG_VAR_INT_DEFAULT(telemdefault, "telemdefault", DEFAULT_RPT_TELEMDEFAULT);
 	RPT_CONFIG_VAR_BOOL_DEFAULT(telemdynamic, "telemdynamic", DEFAULT_RPT_TELEMDYNAMIC);

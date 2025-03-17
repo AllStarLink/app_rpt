@@ -1068,10 +1068,10 @@ void *rpt_tele_thread(void *this)
 			type = RPT_TXCONF;
 			break;
 	}
-	if (ast_audiohook_volume_set(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)){
-		ast_debug(7, "I've set the volume on channel %s to %d", ast_channel_name(mychannel), myrpt->p.telemnomgain);
+	if (ast_audiohook_volume_set(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, (int) myrpt->p.telemnomgain)) {
+		ast_debug(7, "I've set the volume on channel %s to %2.2f", ast_channel_name(mychannel), myrpt->p.telemnomgain);
 	}
-	
+
 	if (rpt_conf_add(mychannel, myrpt, type, RPT_CONF_CONFANN)) {
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
