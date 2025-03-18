@@ -7,7 +7,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "asterisk/audiohook.h"
 #include "asterisk/channel.h"
 #include "asterisk/cli.h"
 #include "asterisk/pbx.h"		/* functions */
@@ -16,6 +15,7 @@
 #include "asterisk/format_cache.h" /* use ast_format_slin */
 
 #include "app_rpt.h"
+#include "audiohook.h"
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h> /* use ioperm */
@@ -1102,7 +1102,7 @@ void *rpt_tele_thread(void *this)
 			type = RPT_TXCONF;
 			break;
 	}
-	if (ast_audiohook_volume_set(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, (int) myrpt->p.telemnomgain)) {
+	if (ast_audiohook_volume_set_float(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
 		ast_debug(7, "Setting the volume on channel %s to %2.2f", ast_channel_name(mychannel), myrpt->p.telemnomgain);
 	}
 
