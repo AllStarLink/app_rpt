@@ -1,8 +1,12 @@
 name: "Pre-commit checks"
 
-on: [ push, pull_request ]
-branches-ignore:
-   - master
+on:  
+   push:
+      branches-ignore:
+         - master
+   pull_request:
+      branches-ignore:
+         - master
    
 jobs:
    codespell:
