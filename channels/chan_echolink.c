@@ -199,6 +199,7 @@ do not use 127.0.0.1
 #define EL_IP_SIZE 16
 #define EL_CALL_SIZE 12
 #define EL_NAME_SIZE 32
+#define EL_MESSAGE_SIZE 256
 #define EL_APRS_SIZE 200
 #define EL_PWD_SIZE 16
 #define EL_EMAIL_SIZE 32
@@ -225,7 +226,13 @@ do not use 127.0.0.1
 
 #define	DELIMCHR ','
 #define	QUOTECHR 34
-/*
+
+#define EL_WELCOME_MESSAGE "oNDATA\rWelcome to AllStar Node %s\rEcholink Node %s\rNumber %u\r \r"
+#define EL_INIT_BUFFER sizeof(EL_WELCOME_MESSAGE) \
+		+ 16  		/* ASL & EL nodes #'s */  \
+		+ 80  		/* room for "a" message */ \
+		+ (50 * 8) 	/* room for linked ASL and EL nodes */
+/* 
  * If you want to compile/link this code
  * on "BIG-ENDIAN" platforms, then
  * use this: #define RTP_BIG_ENDIAN
@@ -393,6 +400,7 @@ struct el_instance {
 	char name[EL_NAME_SIZE];
 	char mycall[EL_CALL_SIZE];
 	char myname[EL_NAME_SIZE];
+	char mymessage[EL_MESSAGE_SIZE];
 	char mypwd[EL_PWD_SIZE];
 	char myemail[EL_EMAIL_SIZE];
 	char myqth[EL_QTH_SIZE];
@@ -954,7 +962,7 @@ static int lookup_node_by_nodenum(const char *nodenum, struct eldb *result)
  * \param pkt_len		Length of packet buffer
  * \param call			Pointer to callsign
  * \param name			Pointer to node name
- * \param astnode		Pointer to AllstarLink node number
+ * \param astnode		Pointer to AllStarLink node number
  * \retval 0			Unsuccessful - pkt to small
  * \retval  			Successful length
  */
@@ -994,9 +1002,9 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call, con
 	ap += l;
 
 	if (astnode) {
-		snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "Allstar %s", astnode);
+		l = snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "AllStar %s", astnode);
 		*ap++ = 6;
-		*ap++ = l = strlen(line);
+		*ap++ = l;
 		memcpy(ap, line, l);
 		ap += l;
 	}
@@ -1683,14 +1691,13 @@ static int el_text(struct ast_channel *ast, const char *text)
 			j = 0;
 			k = 0;
 			for (x = 0; x < i; x++) {
-				/* Process allstar node numbers - skip over those that begin with '3' which are echolink */
+				/* Process AllStar node numbers - skip over those that begin with '3' which are echolink */
 				if ((*(strs[x] + 1) != '3')) {
 					if (strlen(pkt + k) >= 32) {
-						k = strlen(pkt);
-						strncat(pkt, "\r    ", pkt_len - k);
+						strncat(pkt, "\r    ", pkt_len);
 					}
 					if (!j++) {
-						strncat(pkt, "Allstar:", pkt_len - strlen(pkt));
+						strncat(pkt, "AllStar:", pkt_len);
 					}
 					pkt_actual_len = strlen(pkt);
 					if (*strs[x] == 'T') {
@@ -1700,18 +1707,17 @@ static int el_text(struct ast_channel *ast, const char *text)
 					}
 				}
 			}
-			strncat(pkt, "\r", pkt_len - strlen(pkt));
+			strncat(pkt, "\r", pkt_len);
 			j = 0;
 			k = strlen(pkt);
 			for (x = 0; x < i; x++) {
 				/* Process echolink node numbers - they start with 3 */
 				if (*(strs[x] + 1) == '3') {
 					if (strlen(pkt + k) >= 32) {
-						k = strlen(pkt);
-						strncat(pkt, "\r    ", pkt_len - k);
+						strncat(pkt, "\r    ", pkt_len);
 					}
 					if (!j++) {
-						strncat(pkt, "Echolink: ", pkt_len - strlen(pkt));
+						strncat(pkt, "Echolink: ", pkt_len);
 					}
 					pkt_actual_len = strlen(pkt);
 					if (*strs[x] == 'T') {
@@ -1721,7 +1727,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 					}
 				}
 			}
-			strncat(pkt, "\r", pkt_len - strlen(pkt));
+			strncat(pkt, "\r", pkt_len);
 			pvt->linkstr = pkt;
 		}
 		ast_free(cp);
@@ -1904,39 +1910,33 @@ static void lookup_node_callsign(const void *nodep, const VISIT which, void *clo
 static void send_info(const void *nodep, const VISIT which, const int depth)
 {
 	struct sockaddr_in sin;
-	char pkt[5120], *cp;
+	struct ast_str *pkt = NULL;
+	char *cp;
 	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
-	int i, j;
+
+	pkt = ast_str_create(EL_INIT_BUFFER);
+	if (!pkt) {
+		return;
+	}
 
 	if ((which == leaf) || (which == postorder)) {
-
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->audio_port);
 		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
 
-		i = snprintf(pkt, sizeof(pkt), "oNDATA\rWelcome to Allstar Node %s\r", instp->astnode);
-		if (i >= sizeof(pkt)) {
-			ast_log(LOG_WARNING, "Exceeded buffer size");
-			return;
-		}
-		j = snprintf(pkt + i, sizeof(pkt) - i, "Echolink Node %s\rNumber %u\r \r", instp->mycall, instp->mynode);
-		if (j >= sizeof(pkt) - i) {
-			ast_log(LOG_WARNING, "Exceeded buffer size");
-			return;
+		ast_str_set(&pkt, 0, EL_WELCOME_MESSAGE, instp->astnode, instp->mycall, instp->mynode);
+
+		if (instp->mymessage[0] != '\0') {
+			ast_str_append(&pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
-		if ((*(struct el_node **) nodep)->pvt && (*(struct el_node **) nodep)->pvt->linkstr) {
-			i = strlen(pkt);
-			strncat(pkt + i, "Systems Linked:\r", sizeof(pkt) - i);
-			cp = ast_strdup((*(struct el_node **) nodep)->pvt->linkstr);
-			if (cp) {
-				i = strlen(pkt);
-				strncat(pkt + i, cp, sizeof(pkt) - i);
-				ast_free(cp);
-			}
+		if ((cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL)) {
+			ast_str_append(&pkt, 0, "Systems Linked:\r%s", cp);
 		}
-		sendto(instp->audio_sock, pkt, strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
+
+		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
+		ast_free(pkt);
 
 		instp->tx_ctrl_packets++;
 		(*(struct el_node **) nodep)->tx_ctrl_packets++;
@@ -3457,8 +3457,9 @@ static void *el_reader(void *data)
 				char aprsstr[512], aprscall[256], gps_data[100], latc, lonc;
 				unsigned char sdes_packet[256];
 				unsigned long long u_mono;
-				float lata, lona, latb, lonb, latd, lond, lat, lon, mylat, mylon;
-				int sdes_length, from_GPS = 0;
+				float lat, lon, mylat, mylon;
+				double latmin, lonmin;
+				int sdes_length, from_GPS = 0, latdeg, londeg;
 				struct el_node_count count;
 				time_t now_mono, was_mono;
 
@@ -3500,17 +3501,23 @@ static void *el_reader(void *data)
 						}
 					}					
 				}
-				latc = (mylat >= 0.0) ? 'N' : 'S';
-				lonc = (mylon >= 0.0) ? 'E' : 'W';
-				lata = fabs(mylat);
-				lona = fabs(mylon);
-				latb = (lata - floor(lata)) * 60;
-				latd = (latb - floor(latb)) * 100 + 0.5;
-				lonb = (lona - floor(lona)) * 60;
-				lond = (lonb - floor(lonb)) * 100 + 0.5;
-				snprintf(aprsstr, sizeof(aprsstr), ")EL-%-6.6s!%02d%02d.%02d%cE%03d%02d.%02d%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
-					(int) lata, (int) latb, (int) latd, latc,
-					(int) lona, (int) lonb, (int) lond, lonc,
+
+				/* APRS location format is ddmm.hh (lat) or dddmm.hh (long)
+			     * followed by the cardinal compass direction as N,S,E,W.
+			     * hh hundredths of minutes not thousandths  as is the standard format.
+			     */
+				/* lat conversion */
+				latc = mylat >= 0 ? 'N' : 'S';
+				latdeg = (int) fabs(mylat);
+				latmin = (fabs(mylat) - latdeg) * 60.0;
+
+				/* lon conversion */
+				lonc = mylon >= 0 ? 'E' : 'W';
+				londeg = (int) fabs(mylon);
+				lonmin = (fabs(mylon) - londeg) * 60.0;
+
+				snprintf(aprsstr, sizeof(aprsstr), ")EL-%-6.6s!%02d%05.2f%cE%03d%05.2f%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
+					latdeg, latmin, latc, londeg, lonmin, lonc,
 					instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
@@ -3931,6 +3938,17 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		ast_copy_string(instp->myname, instp->mycall, sizeof(instp->myname));
 	} else {
 		ast_copy_string(instp->myname, val, sizeof(instp->myname));
+	}
+
+	val = ast_variable_retrieve(cfg, ctg, "message");
+	ast_copy_string(instp->mymessage, S_OR(val, ""), sizeof(instp->mymessage));
+	if (instp->mymessage[0] != '\0') {
+		char *p = instp->mymessage;
+		while ((p = strstr(p, "\\n")) != NULL) {
+			*p = '\n'; /* Replace the literal \n with a newline character */
+			memmove(p + 1, p + 2, strlen(p + 2) + 1); /* Shift the string to remove the \n */
+			p++; 
+		}
 	}
 
 	val = ast_variable_retrieve(cfg, ctg, "recfile");

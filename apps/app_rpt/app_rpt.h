@@ -1,6 +1,6 @@
 
 #define VERSION_MAJOR 3
-#define VERSION_MINOR 2
+#define VERSION_MINOR 3
 #define VERSION_PATCH 0
 
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
@@ -22,13 +22,8 @@
 #endif
 
 /*! \note <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
-#if defined(__alpha__) || defined(__x86_64__) || defined(__ia64__)
+#if __has_include(<sys/io.h>)
 #define HAVE_SYS_IO
-#else
-#pragma GCC diagnostic push
-#pragma GCC diagnostic warning "-Wcpp"
-#warning sys.io is not available on this architecture and some functionality will be disabled
-#pragma GCC diagnostic pop
 #endif
 
 /* Un-comment the following to include support for notch filters in the
@@ -338,6 +333,14 @@ struct rpt_chan_stat {
 #define NEWKEY1STR "!NEWKEY1!"
 #define IAXKEYSTR "!IAXKEY!"
 
+
+/*! \brief Repeater link connection newkey handshake state */
+enum newkey { 
+	RADIO_KEY_ALLOWED, /*!< AST_CONTROL_RADIO_KEY is allowed on repeater channel */
+	RADIO_KEY_ALLOWED_REDUNDANT, /*!< "!NEWKEY!" - AST_CONTROL_RADIO_KEY allowed on the repeater channel */
+	RADIO_KEY_NOT_ALLOWED /*!< "!NEWKEY1!" message - AST_CONTROL_RADIO_KEY are not allowed on the repeater channel */
+};
+
 struct vox {
 	float	speech_energy;
 	float	noise_energy;
@@ -414,7 +417,7 @@ struct rpt_link {
 	char wasvox;
 	int voxtotimer;
 	char voxtostate;
-	char newkey;
+	enum newkey link_newkey;
 	char iaxkey;
 	int linkmode;
 	int newkeytimer;
@@ -837,7 +840,7 @@ struct rpt {
 	int linkposttimer;			
 	int keyposttimer;			
 	int lastkeytimer;			
-	char newkey;
+	enum newkey rpt_newkey;
 	char iaxkey;
 	char inpadtest;
 	int rxlingertimer;

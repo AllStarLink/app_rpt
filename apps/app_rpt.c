@@ -313,6 +313,7 @@
 #include "asterisk/module.h"
 #include "asterisk/translate.h"
 #include "asterisk/features.h"
+#include "asterisk/mixmonitor.h"
 #include "asterisk/options.h"
 #include "asterisk/cli.h"
 #include "asterisk/config.h"
@@ -825,10 +826,10 @@ void rpt_event_process(struct rpt *myrpt)
 			}
 		}
 		if (action == 'V') {	/* set a variable */
-			pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, (cmd) ? "1" : "0");
+			pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, cmd ? "1" : "0");
 			continue;
 		} else if (action == 'G') {	/* set a global variable */
-			pbx_builtin_setvar_helper(NULL, v->name, (cmd) ? "1" : "0");
+			pbx_builtin_setvar_helper(NULL, v->name, cmd ? "1" : "0");
 			continue;
 		}
 		/* if not command to execute, go to next one */
@@ -1093,7 +1094,7 @@ static void startoutstream(struct rpt *myrpt)
 	if (!str) {
 		return;
 	}
-	n = finddelim(str, strs, 100);
+	n = finddelim(str, strs, ARRAY_LEN(strs));
 	if (n < 1) {
 		ast_log(LOG_ERROR, "Could not parse string '%s'\n", myrpt->p.outstreamcmd);
 		ast_free(str);
@@ -1581,7 +1582,7 @@ static inline void collect_function_digits_post(struct rpt *myrpt, int res, cons
  * \brief Send APRStt (Touchtone) to app_gps for processing.
  * This routine takes the received APRStt touchtone digits
  * and translates them to a callsign.  The results are
- * sent to app_gps using the APRS_SENDTT function for 
+ * sent to app_gps using the APRS_SENDTT function for
  * processing and posting to the APRS-IS server.
  *
  * \param myrpt		pointer to repeater struct.
@@ -1592,13 +1593,13 @@ static void do_aprstt(struct rpt *myrpt)
 	char overlay, aprscall[100], func[100];
 
 	snprintf(cmd, sizeof(cmd) - 1, "A%s", myrpt->dtmfbuf);
-	/*! \todo we need to support all 4 types of APRStt 
+	/*! \todo we need to support all 4 types of APRStt
 	 * we only support the 'A' type for call sign
 	 */
 	overlay = aprstt_xlat(cmd, aprscall);
 	if (overlay) {
 		ast_debug(1, "APRStt got string %s callsign %s overlay %c\n", cmd, aprscall, overlay);
-		
+
 		if (!ast_custom_function_find("APRS_SENDTT")) {
 			ast_log(LOG_WARNING, "app_gps is not loaded.  APRStt failed\n");
 		} else {
@@ -1607,7 +1608,7 @@ static void do_aprstt(struct rpt *myrpt)
 			if (!ast_func_write(NULL, func, aprscall)) {
 				rpt_telemetry(myrpt, ARB_ALPHA, (void *) aprscall);
 			}
-		} 
+		}
 	}
 }
 
@@ -1668,25 +1669,32 @@ static inline void handle_callmode_1(struct rpt *myrpt, char c)
 	}
 }
 
+/*! \brief Handle the function character. Must be called locked.
+ * \param myrpt pointer to repeater struct.
+ * \param c character to process.
+ * \return 1 if the character was processed, 0 otherwise.
+ */
+
 static int funcchar_common(struct rpt *myrpt, char c)
 {
 	if (myrpt->callmode == 1) {
 		handle_callmode_1(myrpt, c);
 	}
-	if ((!myrpt->inpadtest) && myrpt->p.aprstt && (!myrpt->cmdnode[0]) && (c == 'A')) {
-		strcpy(myrpt->cmdnode, "aprstt");
-		myrpt->dtmfidx = 0;
-		myrpt->dtmfbuf[myrpt->dtmfidx] = 0;
-		rpt_mutex_unlock(&myrpt->lock);
-		time(&myrpt->dtmf_time);
-		return 1;
-	}
-	if ((!myrpt->inpadtest) && (c == myrpt->p.funcchar)) {
-		myrpt->rem_dtmfidx = 0;
-		myrpt->rem_dtmfbuf[myrpt->rem_dtmfidx] = 0;
-		time(&myrpt->rem_dtmf_time);
-		rpt_mutex_unlock(&myrpt->lock);
-		return 1;
+
+	if (!myrpt->inpadtest) {
+		if (myrpt->p.aprstt && (!myrpt->cmdnode[0]) && (c == 'A')) {
+			strcpy(myrpt->cmdnode, "aprstt");
+			myrpt->dtmfidx = 0;
+			myrpt->dtmfbuf[myrpt->dtmfidx] = 0;
+			time(&myrpt->dtmf_time);
+			return 1;
+		}
+		if (c == myrpt->p.funcchar) {
+			myrpt->rem_dtmfidx = 0;
+			myrpt->rem_dtmfbuf[myrpt->rem_dtmfidx] = 0;
+			time(&myrpt->rem_dtmf_time);
+			return 1;
+		}
 	}
 	return 0;
 }
@@ -1702,63 +1710,67 @@ static inline void init_text_frame(struct ast_frame *wf)
 
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
 {
-	char tmp[512], tmp1[512], cmd[300] = "", dest[300], src[30], c;
+	/* XXX cmd, dst, and src should be validated. Why is remote_data src[300] in other locations?
+	* Is this a typo here?  Why would dest be any bigger than src?
+	*/
+	char tmp1[512], cmd[300] = "", dest[300], src[30], c;
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
 	init_text_frame(&wf);
 	wf.datalen = strlen(str) + 1;
 	wf.src = "handle_link_data";
-	/* put string in our buffer */
-	ast_copy_string(tmp, str, sizeof(tmp) - 1);
 
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
-	if (!strcmp(tmp, DISCSTR)) {
+	if (!strcmp(str, DISCSTR)) {
 		mylink->disced = 1;
 		mylink->retries = mylink->max_retries + 1;
 		ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
 		return;
 	}
-	if (!strcmp(tmp, NEWKEYSTR)) {
-		if ((!mylink->newkey) || mylink->newkeytimer) {
+	if (!strcmp(str, NEWKEYSTR)) {
+		if ((!mylink->link_newkey) || mylink->newkeytimer) {
 			mylink->newkeytimer = 0;
-			mylink->newkey = 1;
-			send_old_newkey(mylink->chan);
+			mylink->link_newkey = RADIO_KEY_ALLOWED_REDUNDANT;
+			send_newkey_redundant(mylink->chan);
 		}
 		return;
 	}
-	if (!strcmp(tmp, NEWKEY1STR)) {
+	if (!strcmp(str, NEWKEY1STR)) {
 		mylink->newkeytimer = 0;
-		mylink->newkey = 2;
+		mylink->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		return;
 	}
-	if (!strncmp(tmp, IAXKEYSTR, strlen(IAXKEYSTR))) {
+	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
 		mylink->iaxkey = 1;
 		return;
 	}
-	if (tmp[0] == 'G') {		/* got GPS data */
+	if (*str == 'G') {		/* got GPS data */
 		/* re-distribute it to attached nodes */
 		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
 		return;
 	}
-	if (tmp[0] == 'L') {
+	if (*str == 'L') {
 		rpt_mutex_lock(&myrpt->lock);
-		strcpy(mylink->linklist, tmp + 2);
+		if (strlen(str + 2) > sizeof(mylink->linklist) - 1) {
+			ast_log(LOG_WARNING, "Link list too long: buffer size: %ld, link size: %ld linklist: %s\n", sizeof(mylink->linklist) - 1, strlen(str + 2), str + 2);
+		}
+		ast_copy_string(mylink->linklist, str + 2, sizeof(mylink->linklist));
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, tmp, mylink->name);
+		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
 		return;
 	}
-	if (tmp[0] == 'M') {
+	if (*str == 'M') {
 		rest = 0;
-		if (sscanf(tmp, "%s %s %s %n", cmd, src, dest, &rest) < 3) {
+		if (sscanf(str, "%s %s %s %n", cmd, src, dest, &rest) < 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
 		}
 		if (!rest)
 			return;
-		if (strlen(tmp + rest) < 2)
+		if (strlen(str + rest) < 2)
 			return;
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
@@ -1766,21 +1778,21 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		/* if is for one of my nodes, dont do too much! */
 		for (i = 0; i < nrpts; i++) {
 			if (!strcmp(dest, rpt_vars[i].name)) {
-				ast_verb(3, "Private Text Message for %s From %s: %s\n", rpt_vars[i].name, src, tmp + rest);
-				ast_debug(1, "Node %s Got Private Text Message From Node %s: %s\n", rpt_vars[i].name, src, tmp + rest);
+				ast_verb(3, "Private Text Message for %s From %s: %s\n", rpt_vars[i].name, src, str + rest);
+				ast_debug(1, "Node %s Got Private Text Message From Node %s: %s\n", rpt_vars[i].name, src, str + rest);
 				return;
 			}
 		}
 		/* if is for everyone, at least log it */
 		if (!strcmp(dest, "0")) {
-			ast_verb(3, "Text Message From %s: %s\n", src, tmp + rest);
-			ast_debug(1, "Node %s Got Text Message From Node %s: %s\n", myrpt->name, src, tmp + rest);
+			ast_verb(3, "Text Message From %s: %s\n", src, str + rest);
+			ast_debug(1, "Node %s Got Text Message From Node %s: %s\n", myrpt->name, src, str + rest);
 		}
 		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
 		return;
 	}
-	if (tmp[0] == 'T') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'T') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse telem string %s\n", str);
 			return;
 		}
@@ -1811,8 +1823,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 
-	if (tmp[0] == 'C') {
-		if (sscanf(tmp, "%s %s %s %s", cmd, src, tmp1, dest) != 4) {
+	if (*str == 'C') {
+		if (sscanf(str, "%s %s %s %s", cmd, src, tmp1, dest) != 4) { /*! \todo We should limit to sizeof(cmd, src, tmp1, dest) */
 			ast_log(LOG_WARNING, "Unable to parse ctcss string %s\n", str);
 			return;
 		}
@@ -1830,8 +1842,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 
-	if (tmp[0] == 'K') {
-		if (sscanf(tmp, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) {
+	if (*str == 'K') {
+		if (sscanf(str, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) { /*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse keying string %s\n", str);
 			return;
 		}
@@ -1859,7 +1871,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			if (myrpt->lastkeyedtime) {
 				n = (int) (now - myrpt->lastkeyedtime);
 			}
-			sprintf(tmp1, "K %s %s %d %d", src, myrpt->name, myrpt->keyed, n);
+			snprintf(tmp1, sizeof(tmp1), "K %s %s %d %d", src, myrpt->name, myrpt->keyed, n);
 			wf.data.ptr = tmp1;
 			wf.datalen = strlen(tmp1) + 1;
 			if (mylink->chan)
@@ -1887,15 +1899,15 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
-	if (tmp[0] == 'I') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'I') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return;
 		}
 		mdc1200_notify(myrpt, src, dest);
 		strcpy(dest, "*");
 	} else {
-		if (sscanf(tmp, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+		if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {/*! \todo We should limit to sizeof(cmd, src, dest) */
 			ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 			return;
 		}
@@ -1943,6 +1955,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	if (c == myrpt->p.endchar)
 		myrpt->stopgen = 1;
 	if (funcchar_common(myrpt, c)) {
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 	if (myrpt->rem_dtmfidx < 0) {
@@ -2036,6 +2049,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 		return;
 	}
 	if (funcchar_common(myrpt, c)) {
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 	if (((myrpt->inpadtest) || (c != myrpt->p.endchar)) && (myrpt->rem_dtmfidx >= 0)) {
@@ -2178,37 +2192,37 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 	return res;
 }
 
-static int handle_remote_data(struct rpt *myrpt, char *str)
+static int handle_remote_data(struct rpt *myrpt, const char *str)
 {
-	char tmp[300], cmd[300], dest[300], src[300], c;
+	/* Should src[300] be src[30] as in handle_link_data?*/
+	char cmd[300], dest[300], src[300], c;
 	int seq, res;
 
 	/* put string in our buffer */
-	ast_copy_string(tmp, str, sizeof(tmp));
-	if (!strcmp(tmp, DISCSTR))
+	if (!strcmp(str, DISCSTR))
 		return 0;
-	if (!strcmp(tmp, NEWKEYSTR)) {
-		if (!myrpt->newkey) {
-			send_old_newkey(myrpt->rxchannel);
-			myrpt->newkey = 1;
+	if (!strcmp(str, NEWKEYSTR)) {
+		if (!myrpt->rpt_newkey) {
+			send_newkey_redundant(myrpt->rxchannel);
+			myrpt->rpt_newkey = RADIO_KEY_ALLOWED_REDUNDANT;
 		}
 		return 0;
 	}
-	if (!strcmp(tmp, NEWKEY1STR)) {
-		myrpt->newkey = 2;
+	if (!strcmp(str, NEWKEY1STR)) {
+		myrpt->rpt_newkey = RADIO_KEY_NOT_ALLOWED;
 		return 0;
 	}
-	if (!strncmp(tmp, IAXKEYSTR, strlen(IAXKEYSTR))) {
+	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
 		myrpt->iaxkey = 1;
 		return 0;
 	}
 
-	if (tmp[0] == 'T')
+	if (*str == 'T')
 		return 0;
 
 #ifndef	DO_NOT_NOTIFY_MDC1200_ON_REMOTE_BASES
-	if (tmp[0] == 'I') {
-		if (sscanf(tmp, "%s %s %s", cmd, src, dest) != 3) {
+	if (*str == 'I') {
+		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return 0;
 		}
@@ -2216,9 +2230,10 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 		return 0;
 	}
 #endif
-	if (tmp[0] == 'L')
+	if (*str == 'L') {
 		return 0;
-	if (sscanf(tmp, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+	}
+	if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
 		ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 		return 0;
 	}
@@ -2234,7 +2249,7 @@ static int handle_remote_data(struct rpt *myrpt, char *str)
 	}
 	c = func_xlat(myrpt, c, &myrpt->p.outxlat);
 	if (!c)
-		return (0);
+		return 0;
 	res = handle_remote_dtmf_digit(myrpt, c, NULL, 0);
 	if (res != 1)
 		return res;
@@ -2318,7 +2333,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->connecttime = 0;
 	l->thisconnected = 0;
 	l->iaxkey = 0;
-	l->newkey = 0;
+	l->link_newkey = RADIO_KEY_ALLOWED;
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
@@ -2335,7 +2350,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->lastrealrx = 0;
 	l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 	l->newkeytimer = NEWKEYTIME;
-	l->newkey = 2;
+	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
 		ast_frfree(f1);
 	if (l->chan) {
@@ -2577,8 +2592,10 @@ static void do_scheduler(struct rpt *myrpt)
 				ast_log(LOG_WARNING, "Link Activity timer could not execute macro %s: Macro buffer full\n", myrpt->p.lnkactmacro);
 			} else {
 				ast_debug(5, "Executing link activity timer macro %s\n", myrpt->p.lnkactmacro);
+				rpt_mutex_lock(&myrpt->lock);
 				myrpt->macrotimer = MACROTIME;
 				strncat(myrpt->macrobuf, myrpt->p.lnkactmacro, MAXMACRO - 1);
+				rpt_mutex_unlock(&myrpt->lock);
 			}
 			myrpt->linkactivitytimer = 0;
 			myrpt->linkactivityflag = 0;
@@ -2924,6 +2941,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->sleepreq = %d\n", (int) myrpt->sleepreq);
 	ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
+	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
 
 	zl = myrpt->links.next;
 	while (zl != &myrpt->links) {
@@ -2939,7 +2957,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->retrytimer %d\n", zl->retrytimer);
 		ast_debug(2, "        link->retries = %d\n", zl->retries);
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
-		ast_debug(2, "        link->newkey = %d\n", zl->newkey);
+		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
 		zl = zl->next;
 	}
 
@@ -3075,7 +3093,7 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 /*! \brief Do timer value update, limit to end_val */
 static inline void update_timer(int *timer_ptr, int elap, int end_val)
 {
-	if (!timer_ptr){
+	if (!timer_ptr || !*timer_ptr) { /* if the timer value = 0 or we have a null pointer, do not update */
 		return;
 	}
 	if (*timer_ptr > end_val) {
@@ -3090,7 +3108,7 @@ static inline void update_timer(int *timer_ptr, int elap, int end_val)
 static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;
-	int x;
+	int newkeytimer_last;
 	struct rpt_link *l = myrpt->links.next;
 	while (l != &myrpt->links) {
 		int myrx, mymaxct;
@@ -3103,14 +3121,15 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		update_timer(&l->rxlingertimer, elap, 0);
 
 		/* Update the timer, checking if it expired just now. */
-		x = l->newkeytimer;
+		newkeytimer_last = l->newkeytimer;
 		update_timer(&l->newkeytimer, elap, 0);
 
 		/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
-		 * This if statement executes if the timer just expired.
-		 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey to 1 or 2 (because then x == 0 here)
+		 * This if statement executes if the newkeytimer just expired.
+		 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey 
+		 * to RADIO_KEY_ALLOWED_REDUNDANT or RADIO_KEY_NOT_ALLOWED (because then newkeytimer_last == 0 here)
 		 */
-		if (x > 0 && !l->newkeytimer) {
+		if (newkeytimer_last > 0 && !l->newkeytimer) { /* Translation: We were timing, and it just expired */
 			/* Issue #46 background:
 			 *
 			 * There is a kind of "handshake" that happens when setting up the IAX2 trunk between two nodes,
@@ -3135,7 +3154,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			 * Note that the above depiction separates the TX and RX, but there are only 3 text frames involved.
 			 * In issue #46, 3 text frames are sent, but only 2 are really "received".
 			 * And it so happens that the text frame that B doesn't get from A is exactly the text frame
-			 * that is responsible for setting newkeytimer=0 and newkey=2, i.e. if this doesn't happen, then we'll hit the WARNING case in the below if statement.
+			 * that is responsible for setting newkeytimer=0 and newkey=RADIO_KEY_NOT_ALLOWED, i.e. if this doesn't happen, 
+			 * then we'll hit the WARNING case in the below if statement.  Because this code sets l->link_newkey to RADIO_KEY_ALLOWED,
+			 * There is an unintended radio keyup.
 			 *
 			 * Note that all of these comments are from spending hours debugging this issue and reverse-engineering, but at this point I'm pretty confident
 			 * about these parts of the code, even though I'm not Jim Dixon and he didn't comment any of this code originally.
@@ -3148,26 +3169,30 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (l->thisconnected) {
 				/* We're connected, but haven't received a NEWKEY1STR text frame yet...
 				 * The newkeytimer expired on a connected (~answered?) node, i.e. handle_link_data hasn't yet gotten called
-				 * to set newkeytimer = 0 and newkey to non-zero, i.e. we haven't received a text frame with NEWKEY1STR over the IAX2 channel yet.
+				 * to set newkeytimer = 0 and newkey to RADIO_KEY_NOT_ALLOWED, i.e. we haven't received a text frame with NEWKEY1STR over the IAX2 channel yet.
 				 */
-				if (l->newkey == 2) {
+				if (l->link_newkey == RADIO_KEY_NOT_ALLOWED) {
 					/* This can ripple to have consequences down the line, namely we might start writing voice frames
 					 * across the IAX2 link because of this, basically causing us to be transmitting (keyed).
 					 * If this happens, this indicates a problem upstream, and we should emit a warning here
 					 * since undesired behavior will likely ensue.
+					 * We probably SHOULD just hangup the line right here if we are connected and did not receive the ~!NEWKEY1!
+					 * message as something is wrong with the text messaging part of the connection.
 					 */
-					ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from 2 to 0.\n", l);
-					l->newkey = 0;
+					ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from RADIO_KEY_NOT_ALLOWED to RADIO_KEY_ALLOWED.\n", l);
+					l->link_newkey = RADIO_KEY_ALLOWED;
 				}
 			} else {
-				/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms */
+				/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms (forever! - probably should limit
+				 * the number of retries here) 
+				 */
 				l->newkeytimer = NEWKEYTIME;
 			}
 		}
 		if ((l->linkmode >1) && (l->linkmode < 0x7ffffffe)) {
 			update_timer(&l->linkmode, elap, 1);
 		}
-		if ((l->newkey == 2) && l->lastrealrx && (!l->rxlingertimer)) {
+		if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && l->lastrealrx && (!l->rxlingertimer)) {
 			rxunkey_helper(myrpt, l);
 		}
 
@@ -3200,7 +3225,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 			struct ast_frame lf;
 			char lstr[MAXLINKLIST];
-
 			memset(&lf, 0, sizeof(lf));
 			lf.frametype = AST_FRAME_TEXT;
 			lf.subclass.format = ast_format_slin;
@@ -3209,7 +3233,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			lf.samples = 0;
 			l->linklisttimer = LINKLISTTIME;
 			strcpy(lstr, "L ");
-			__mklinklist(myrpt, l, lstr + 2, 0);
+			rpt_mutex_lock(&myrpt->lock);
+			__mklinklist(myrpt, l, lstr + 2, sizeof(lstr) - 2, 0);
+			rpt_mutex_unlock(&myrpt->lock);
 			if (l->chan) {
 				lf.datalen = strlen(lstr) + 1;
 				lf.data.ptr = lstr;
@@ -3217,7 +3243,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, lstr, l->name);
 			}
 		}
-		if (l->newkey == 1) {
+		if (l->link_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
 			if ((l->retxtimer += elap) >= REDUNDANT_TX_TIME) {
 				l->retxtimer = 0;
 				if (l->chan && l->phonemode == 0) {
@@ -3755,8 +3781,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		f1 = myrpt->lastf2;
 		if (f1) {
 			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
-			ast_frfree(f1);
-			myrpt->lastf2 = NULL; /* Now invalid since aliased with f1 */
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
 				ast_writestream(myrpt->monstream, f1);
 			}
@@ -3764,6 +3788,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				(myrpt->outstreampipe[1] != -1)) {
 				outstream_write(myrpt, f1);
 			}
+			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
+			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
@@ -4308,7 +4334,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				*totx = 0;
 			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx)) {
 				if (*totx && !l->voterlink) {
-					if (l->newkey < 2)
+					if (l->link_newkey != RADIO_KEY_NOT_ALLOWED)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
@@ -4349,7 +4375,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 
 				l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 
-				if ((l->newkey == 2) && (!l->lastrealrx)) {
+				if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && (!l->lastrealrx)) {
 					rxkey_helper(myrpt, l);
 				}
 				if (((l->phonemode) && (l->phonevox)) || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
@@ -4498,7 +4524,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 						l->reconnects++;
 				}
 				/* if RX key */
-				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->newkey < 2)) {
+				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->link_newkey != RADIO_KEY_NOT_ALLOWED)) {
 					rxkey_helper(myrpt, l);
 				}
 				/* if RX un-key */
@@ -4533,12 +4559,15 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					fac_frame(f, fac);
 				}
 				/* foop */
-				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
 					/* Reverse-engineering comments from NA debugging issue #46:
-					 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey hasn't been set to 2 yet.
-					 * Of course if handle_link_data is never called to set newkey to 2 and stop newkeytimer, then at some point, we'll
-					 * set newkey = 0 forcibly (see comments in that part of the code for more info), which will cause us to start passing on the voice frames here.
-					 * If this happens, then we're passing voice frames so we're keyed up and transmitting, essentially.
+					 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey is set to != RADIO_KEY_NOT_ALLOWED yet.
+					 * This happens when the reset code forces it to RADIO_ALLOWED.
+					 * Of course if handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some point, we'll
+					 * set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info), 
+					 * If this happens, we're passing voice frames and now sending AST_READIO_KEY messages
+					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
+					 * 
 					 */
 					ast_write(l->chan, f);
 				}
@@ -4589,7 +4618,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 		/* go thru all the links */
 		while (l != &myrpt->links) {
 			/* foop */
-			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && ((l->newkey < 2) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
 				if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "irlp"))) {
 					ast_write(l->chan, fs);
 				} else {
@@ -4863,8 +4892,8 @@ static void *rpt(void *this)
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
-		/* \todo At this point, we have a memory leak, because dsp needs to be freed. */
-		/* \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
+		/*! \todo At this point, we have a memory leak, because dsp needs to be freed. */
+		/*! \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
 		ast_dsp_set_features(myrpt->dsp, DSP_FEATURE_FREQ_DETECT);
 		ast_dsp_set_freqmode(myrpt->dsp, myrpt->p.rxburstfreq, myrpt->p.rxbursttime, myrpt->p.rxburstthreshold, 0);
 #else
@@ -4948,11 +4977,11 @@ static void *rpt(void *this)
 			char lat[25], lon[25], elev[25];
 
 			myrpt->lastgpstime = t_mono;
-			
+
 			/* If the app_gps custom function GPS_READ exists, read the GPS position */
 			if (!ast_custom_function_find("GPS_READ")) {
 				break;
-			}				
+			}
 			if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 				break;
 			}
@@ -4966,7 +4995,7 @@ static void *rpt(void *this)
 				break;
 			}
 			sprintf(tmpstr, "G %s %s %s %s", myrpt->name, lat, lon, elev);
-			
+
 			rpt_mutex_lock(&myrpt->lock);
 			l = myrpt->links.next;
 			myrpt->voteremrx = 0;	/* no voter remotes keyed */
@@ -5883,7 +5912,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 	if (f->frametype == AST_FRAME_VOICE) {
 		struct ast_frame *f1;
 		int ismuted;
-		if (myrpt->newkey == 2) {
+		if (myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED) {
 			myrpt->rxlingertimer = ((myrpt->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 			if (!*keyed) {
 				*keyed = 1;
@@ -5943,8 +5972,8 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 				else
 					ast_write(myrpt->txchannel, f);
 			}
-			ast_frfree(f1);
 			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
+			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		if (myrpt->lastf1)
@@ -5985,7 +6014,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			return -1;
 		}
 		/* if RX key */
-		if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (myrpt->newkey < 2)) {
+		if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (myrpt->rpt_newkey != RADIO_KEY_NOT_ALLOWED)) {
 			ast_debug(7, "@@@@ rx key\n");
 			*keyed = 1;
 			myrpt->rerxtimer = 0;
@@ -6055,7 +6084,7 @@ static inline int exec_pchannel_read(struct rpt *myrpt, struct ast_channel *chan
 		return -1;
 	}
 	if (f->frametype == AST_FRAME_VOICE) {
-		if ((myrpt->newkey < 2) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX2")) {
+		if ((myrpt->rpt_newkey != RADIO_KEY_NOT_ALLOWED) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX2")) {
 			ast_write(chan, f);
 		}
 	}
@@ -6344,36 +6373,26 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		int res = 0;
 		char buf2[128];
 
-		if (myrpt->keyed)
-			pbx_builtin_setvar_helper(chan, "RPT_STAT_RXKEYED", "1");
-		else
-			pbx_builtin_setvar_helper(chan, "RPT_STAT_RXKEYED", "0");
+		pbx_builtin_setvar_helper(chan, "RPT_STAT_RXKEYED", myrpt->keyed ? "1" : "0");
+		pbx_builtin_setvar_helper(chan, "RPT_STAT_TXKEYED", myrpt->txkeyed ? "1" : "0");
 
-		if (myrpt->txkeyed)
-			pbx_builtin_setvar_helper(chan, "RPT_STAT_TXKEYED", "1");
-		else
-			pbx_builtin_setvar_helper(chan, "RPT_STAT_TXKEYED", "0");
+#define rpt_set_numeric_var_helper(chan, varname, varvalue) \
+	snprintf(buf2, sizeof(buf2), "%d", varvalue); \
+	pbx_builtin_setvar_helper(chan, varname, buf2);
 
-		snprintf(buf2, sizeof(buf2), "%s=%i", "RPT_STAT_XLINK", myrpt->xlink);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%i", "RPT_STAT_LINKS", numlinks);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_WASCHAN", myrpt->waschan);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_NOWCHAN", myrpt->nowchan);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_DUPLEX", myrpt->p.duplex);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_PARROT", myrpt->p.parrotmode);
-		pbx_builtin_setvar(chan, buf2);
-		//snprintf(buf2,sizeof(buf2),"%s=%d", "RPT_STAT_PHONEVOX", myrpt->phonevox);
-		//pbx_builtin_setvar(chan, buf2);
-		//snprintf(buf2,sizeof(buf2),"%s=%d", "RPT_STAT_CONNECTED", myrpt->connected);
-		//pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%d", "RPT_STAT_CALLMODE", myrpt->callmode);
-		pbx_builtin_setvar(chan, buf2);
-		snprintf(buf2, sizeof(buf2), "%s=%s", "RPT_STAT_LASTTONE", myrpt->lasttone);
-		pbx_builtin_setvar(chan, buf2);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_XLINK", myrpt->xlink);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_LINKS", numlinks);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_WASCHAN", myrpt->waschan);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_NOWCHAN", myrpt->nowchan);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_DUPLEX", myrpt->p.duplex);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_PARROT", myrpt->p.parrotmode);
+#if 0
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_PHONEVOX", myrpt->phonevox);
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_CONNECTED", myrpt->connected);
+#endif
+		rpt_set_numeric_var_helper(chan, "RPT_STAT_CALLMODE", myrpt->callmode);
+		pbx_builtin_setvar_helper(chan, "RPT_STAT_LASTTONE", myrpt->lasttone);
+#undef rpt_set_numeric_var_helper
 
 		res = priority_jump(myrpt, chan);
 		return res;
@@ -6382,7 +6401,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (options && (*options == 'V' || *options == 'v')) {
 		if (callstr && myrpt->rxchannel) {
 			pbx_builtin_setvar(myrpt->rxchannel, callstr);
-			ast_verb(3, "Set Asterisk channel variable %s for node %s\n", callstr, myrpt->name);
 		}
 		return 0;
 	}
@@ -6712,12 +6730,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->gott = 0;
 		l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
 		l->newkeytimer = NEWKEYTIME;
-		l->newkey = 0;
+		l->link_newkey = RADIO_KEY_ALLOWED;
 		l->iaxkey = 0;
 		if ((!phone_mode) && (l->name[0] != '0') && strcasecmp(ast_channel_tech(chan)->type, "echolink") && strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
-			l->newkey = 2;
+			l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		}
-		ast_debug(7, "newkey: %d\n", l->newkey);
+		ast_debug(7, "newkey: %d\n", l->link_newkey);
 		if (l->name[0] > '9') {
 			l->newkeytimer = 0;
 		}
@@ -6737,7 +6755,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 		if (!cap) {
 			ast_log(LOG_ERROR, "Failed to alloc cap\n");
-			pthread_exit(NULL); /*! \todo This and all subsequent pthread_exit's do not clean up properly */
+			ast_free(l);
+			pthread_exit(NULL);
 		}
 
 		ast_format_cap_append(cap, ast_format_slin, 0);
@@ -6745,6 +6764,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* allocate a pseudo-channel thru asterisk */
 		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 			ao2_ref(cap, -1);
+			ast_free(l);
 			pthread_exit(NULL);
 		}
 
@@ -6752,31 +6772,20 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		/* make a conference for the tx */
 		if (rpt_conf_add_speaker(l->pchan, myrpt)) {
+			ast_free(l);
 			pthread_exit(NULL);
 		}
-
-		rpt_mutex_lock(&myrpt->lock);
+		
 		if ((phone_mode == 2) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
-		/* insert at end of queue */
-		rpt_link_add(myrpt, l);
-		__kickshort(myrpt);
-		gettimeofday(&myrpt->lastlinktime, NULL);
-		rpt_mutex_lock(&myrpt->blocklock);
-
-		/* Since we've added l to the list, the node thread can now
-		 * start using it, and potentially set l->chan to NULL.
-		 * Therefore, we have to be careful when using it
-		 * (lock and check for NULL). */
 
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_answer(chan);
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
-					rpt_mutex_unlock(&myrpt->blocklock);
-					rpt_mutex_unlock(&myrpt->lock);
+					ast_free(l);
 					return -1;
 				}
 			} else {
@@ -6785,47 +6794,35 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 			}
 		}
-		rpt_mutex_unlock(&myrpt->blocklock);
-		rpt_mutex_unlock(&myrpt->lock); /* Moved unlock to AFTER the if... answer block above, to prevent ast_waitfor_n assertion due to simultaneous channel access */
 
-		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
 			donodelog_fmt(myrpt,"LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		}
 		doconpgm(myrpt, l->name);
 		if ((!phone_mode) && (l->name[0] <= '9')) {
-			rpt_mutex_lock(&myrpt->blocklock);
 			send_newkey(chan);
-			rpt_mutex_unlock(&myrpt->blocklock);
 		}
 
-		/* Be extra careful here.
-		 * Since above we impart this into the list of links (rpt_link_add),
-		 * it is possible that this node's thread (started at rpt() - the C function, not the dialplan one),
-		 * has already requested this channel be hungup.
-		 * We take care to not use ast_hangup if we detect the channel has a PBX,
-		 * so this channel won't have the rug pulled out from underneath it.
-		 * However, l->chan could still be set to NULL. Thus, if it's NULL here,
-		 * that means we're going to get hung up and should just abort, no point in doing telemetry.
-		 * For that reason, even though l->chan is chan if l->chan isn't NULL,
-		 * we always use chan here, rather than l->chan, since l->chan could be NULL.
-		 * This way, even if l->chan isn't NULL when we check but becomes NULL later, we're still safe. */
-		rpt_mutex_lock(&myrpt->lock);
 		if (l->chan) {
-			rpt_mutex_unlock(&myrpt->lock);
 			if (!strcasecmp(ast_channel_tech(chan)->type, "echolink") || !strcasecmp(ast_channel_tech(chan)->type, "tlb") || (l->name[0] > '9')) {
 				rpt_telemetry(myrpt, CONNECTED, l);
 			}
-		} else {
-			rpt_mutex_unlock(&myrpt->lock);
 		}
 
 		/* In theory, both these conditions should be true if one is, since the node thread will queue a soft hangup on this channel and then set l->chan to NULL */
-		if (!l->chan || ast_check_hangup(chan)) {
+		if (ast_check_hangup(chan)) {
 			/* This connection is already toast, just return -1 as normal and let the core kill the channel off */
 			ast_debug(3, "Channel %s is a dead link\n", ast_channel_name(chan));
 			return -1;
 		}
+
+		/* insert at end of queue */
+		rpt_mutex_lock(&myrpt->lock);
+		rpt_link_add(myrpt, l); /* After putting the link on the linked list, ast_waitfor_n can and will start referencing it */
+		__kickshort(myrpt);
+		gettimeofday(&myrpt->lastlinktime, NULL);
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_update_links(myrpt);
 
 		/* Set the PBX to NULL to avoid a warning in channel.c about a PBX remaining on the channel when it gets destroyed.
 		 * This goes hand in hand with mirroring the old "KEEPALIVE" behavior. Past this point, there is no PBX for this channel.
@@ -7079,7 +7076,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->reload = 0;
 	myrpt->tele.next = &myrpt->tele;
 	myrpt->tele.prev = &myrpt->tele;
-	myrpt->newkey = 0;
+	myrpt->rpt_newkey = RADIO_KEY_ALLOWED;
 	myrpt->iaxkey = 0;
 	myrpt->lastitx = !myrpt->lastitx;
 	myrpt->tunerequest = 0;
@@ -7117,7 +7114,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		b1 = b;
 	if (myrpt->p.archivedir) {
 		char mycmd[512], mydate[100];
-		const char *myformat;
+		char filename[PATH_MAX];
 		time_t myt;
 		long blocksleft;
 
@@ -7126,18 +7123,18 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		mkdir(mycmd, 0775);
 		time(&myt);
 		strftime(mydate, sizeof(mydate), "%Y%m%d%H%M%S", localtime(&myt));
-		myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
-		snprintf(mycmd, sizeof(mycmd), "mixmonitor start %s %s/%s/%s.%s a",
-			ast_channel_name(chan), myrpt->p.archivedir, myrpt->name, myformat, mydate);
+		snprintf(filename, sizeof(filename), "%s/%s/%s.%s", myrpt->p.archivedir, myrpt->name, mydate, S_OR(myrpt->p.archiveformat, "wav49"));
 		if (myrpt->p.monminblocks) {
 			blocksleft = diskavail(myrpt);
 			if (myrpt->p.remotetimeout) {
 				blocksleft -= (myrpt->p.remotetimeout * MONITOR_DISK_BLOCKS_PER_MINUTE) / 60;
 			}
-			if (blocksleft >= myrpt->p.monminblocks)
-				ast_cli_command(nullfd, mycmd);
-		} else
-			ast_cli_command(nullfd, mycmd);
+			if (blocksleft >= myrpt->p.monminblocks) {
+				ast_start_mixmonitor(chan, filename, "a");
+			}
+		} else {
+			ast_start_mixmonitor(chan, filename, "a");
+		}
 		snprintf(mycmd, sizeof(mycmd), "CONNECT,%s", b1);
 		donodelog(myrpt, mycmd);
 		rpt_update_links(myrpt);
@@ -7145,7 +7142,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 	/* if is a webtransceiver */
 	if (myrpt->remote_webtransceiver)
-		myrpt->newkey = 2;
+		myrpt->rpt_newkey = RADIO_KEY_NOT_ALLOWED;
 	myrpt->loginuser[0] = 0;
 	myrpt->loginlevel[0] = 0;
 	myrpt->authtelltimer = 0;
@@ -7249,9 +7246,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->blocklock);
 		who = ast_waitfor_n(cs, n, &ms);
 		rpt_mutex_unlock(&myrpt->blocklock);
-		if (who == NULL) {
-			ms = 0;
-		}
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
@@ -7259,7 +7253,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			looptimestart = looptimenow;
 		}
 		update_timer(&myrpt->macrotimer, elap, 0);
-		if (!ms) {
+		if (who == NULL) {
 			/* No channels had activity. Loop again. */
 			continue;
 		}
@@ -7276,7 +7270,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		keyed = myrx;
 		update_timer(&myrpt->rxlingertimer, elap, 0);
-		if ((myrpt->newkey == 2) && keyed && (!myrpt->rxlingertimer)) {
+		if ((myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED) && keyed && (!myrpt->rxlingertimer)) {
 			myrpt->rerxtimer = 0;
 			keyed = 0;
 		}
@@ -7315,7 +7309,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		if (rem_rx && !myrpt->remoterx) {
 			myrpt->remoterx = 1;
-			if (myrpt->newkey < 2)
+			if (myrpt->rpt_newkey != RADIO_KEY_NOT_ALLOWED)
 				ast_indicate(chan, AST_CONTROL_RADIO_KEY);
 		}
 		if (!rem_rx && myrpt->remoterx) {
@@ -7332,7 +7326,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				break; /* if not logged in, hang up after a time */
 			}
 		}
-		if (myrpt->newkey == 1) {
+		if (myrpt->rpt_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
 			if ((myrpt->retxtimer += elap) >= REDUNDANT_TX_TIME) {
 				myrpt->retxtimer = 0;
 				if ((myrpt->remoterx) && (!myrpt->remotetx))
@@ -7471,8 +7465,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	/* wait for telem to be done */
 	while (myrpt->tele.next != &myrpt->tele)
 		usleep(50000);
-	sprintf(tmp, "mixmonitor stop %s", ast_channel_name(chan));
-	ast_cli_command(nullfd, tmp);
+	ast_stop_mixmonitor(chan, NULL);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->hfscanmode = 0;
 	myrpt->hfscanstatus = 0;

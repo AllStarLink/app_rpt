@@ -14,6 +14,7 @@
 #include "asterisk/dns_srv.h"	/* use for srv dns lookup */
 #include "asterisk/dns_txt.h" /* user for dns lookup */
 #include "asterisk/vector.h" /* required for dns */
+#include "asterisk/utils.h" /* required for ARRAY_LEN */
 
 #include "app_rpt.h"
 #include <arpa/nameser.h> /* needed for dns - must be after app_rpt.h */
@@ -23,7 +24,7 @@
 #include "rpt_utils.h" /* use myatoi */
 #include "rpt_rig.h" /* use setrem */
 
-/*! \brief Echolink queryoption for retrieving call sign */ 
+/*! \brief Echolink queryoption for retrieving call sign */
 #define ECHOLINK_QUERY_CALLSIGN 2
 
 /*! \brief The Link Box queryoptions */
@@ -292,7 +293,7 @@ int elink_query_callsign(char *node, char *callsign, int callsignlen)
 		ast_log(LOG_WARNING, "chan_echolink not loaded.  Cannot query callsign.\n");
 		return res;
 	}
-	
+
 	/* data is passed to and from the query option using the callsign field */
 	ast_copy_string(callsign, node, callsignlen);
 
@@ -312,11 +313,11 @@ int tlb_query_node_exists(const char *node)
 		ast_debug(5, "chan_tlb not loaded.\n");
 		return res;
 	}
-	
+
 	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, (void *) node, 0)) {
 		res = 1;
 	}
-	
+
 	return res;
 }
 
@@ -331,7 +332,7 @@ int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
 		ast_debug(5, "chan_tlb not loaded. Cannot query callsign.\n");
 		return res;
 	}
-	
+
 	/* data is passed to and from the query option using the callsign field */
 	ast_copy_string(callsign, node, callsignlen);
 
@@ -343,12 +344,12 @@ int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
 /*!
  * \brief AllStar Network node lookup by dns.
  * Calling routine should pass a buffer for nodedata and nodedatalength
- * of sufficient length. A typical response is 
+ * of sufficient length. A typical response is
  * "radio@123.123.123.123:4569/50000,123.123.123.123
  * This routine uses the SRV or TXT records provided by AllStarLink
  *
- * \note This routine can be called by app_rpt multiple times as 
- * it constructs the node number.  The routine will only perform a 
+ * \note This routine can be called by app_rpt multiple times as
+ * it constructs the node number.  The routine will only perform a
  * lookup after it receives 4 digits.  The actual node number may be
  * longer than 4 digits.
  *
@@ -385,7 +386,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		char *hostname;
 		const char *ipaddress;
 		unsigned short iaxport;
-		
+
 		/* setup the domain to lookup */
 		memset(domain,0, sizeof(domain));
 		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.nodes.allstarlink.org", node);
@@ -406,7 +407,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 		/* get the response */
 		record = ast_dns_result_get_records(result);
-	
+
 		if(!record) {
 			ast_debug(4, "No SRV records returned for %s\n", domain);
 			ast_dns_result_free(result);
@@ -464,7 +465,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		}
 
 		ast_debug(4, "Resolving DNS TXT records for: %s\n", domain);
-	
+
 		/* resolve the domain name */
 		if (ast_dns_resolve(domain, T_TXT, C_IN, &result)) {
 			ast_log(LOG_ERROR, "DNS request failed\n");
@@ -476,14 +477,14 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 		/* get the response */
 		record = ast_dns_result_get_records(result);
-	
+
 		if(!record) {
 			ast_dns_result_free(result);
 			return -1;
 		}
 
-		/* process the text records 
-		text records are in the format 
+		/* process the text records
+		text records are in the format
 		"NN=2530" "RT=2023-02-21 17:33:07" "RB=0" "IP=104.153.109.212" "PIP=0" "PT=4569" "RH=register-west"
 		*/
 		txtrecords = ast_dns_txt_get_strings( record);
@@ -500,7 +501,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 				ast_copy_string(iaxport,tmp + 3, sizeof(iaxport));
 			}
 		}
-	
+
 		/* format the response */
 		memset(nodedata, 0, nodedatalength);
 		snprintf(nodedata, nodedatalength, "radio@%s:%s/%s,%s", ipaddress, iaxport, actualnode, ipaddress);
@@ -558,7 +559,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 
 	/* try to lookup using the external file(s) */
 	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
-		
+
 		/* lock the node lookup */
 		ast_mutex_lock(&nodelookuplock);
 		if (!myrpt->p.extnodefilesn) {
@@ -668,7 +669,7 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 		}
 
 		/* parse the external node file name(s) - we allow for multiple files */
-		n = finddelim(efil, strs, 100);
+		n = finddelim(efil, strs, ARRAY_LEN(strs));
 		if (n < 1) {
 			ast_free(efil);
 			ast_mutex_unlock(&nodelookuplock);
@@ -908,22 +909,22 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(extnodes, "extnodes", EXTNODES);
 
 	val = ast_variable_retrieve(cfg, cat, "extnodefile");
-	rpt_vars[n].p.extnodefilesn = explode_string((char*) S_OR(val, EXTNODEFILE), (char**) rpt_vars[n].p.extnodefiles, MAX_EXTNODEFILES, ',', 0); /*! \todo Illegal cast */
+	rpt_vars[n].p.extnodefilesn = explode_string((char*) S_OR(val, EXTNODEFILE), (char**) rpt_vars[n].p.extnodefiles, ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0); /*! \todo Illegal cast */
 
 	/*! \todo Is this memory properly freed? */
 	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
 	if (val) {
-		rpt_vars[n].p.locallinknodesn = explode_string(ast_strdup(val), (char**) rpt_vars[n].p.locallinknodes, MAX_LOCALLINKNODES, ',', 0);
+		rpt_vars[n].p.locallinknodesn = explode_string(ast_strdup(val), (char**) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "lconn");
 	if (val) {
-		rpt_vars[n].p.nlconn = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.lconn, MAX_LSTUFF, ',', 0);
+		rpt_vars[n].p.nlconn = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "ldisc");
 	if (val) {
-		rpt_vars[n].p.nldisc = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.ldisc, MAX_LSTUFF, ',', 0);
+		rpt_vars[n].p.nldisc = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
 	}
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
@@ -981,8 +982,8 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR(discpgm, "discpgm");
 	RPT_CONFIG_VAR(mdclog, "mdclog");
 	RPT_CONFIG_VAR_BOOL(lnkactenable, "lnkactenable");
-
-	rpt_vars[n].p.lnkacttime = retrieve_astcfgint(&rpt_vars[n], cat, "lnkacttime", -120, 90000, 0);	/* Enforce a min max including zero */
+	RPT_CONFIG_VAR(lnkacttimerwarn, "lnkacttimerwarn");
+	rpt_vars[n].p.lnkacttime = retrieve_astcfgint(&rpt_vars[n], cat, "lnkacttime", 0, 90000, 0);	/* Enforce a min max including zero */
 
 	RPT_CONFIG_VAR(lnkactmacro, "lnkactmacro");
 	RPT_CONFIG_VAR_BOOL(nolocallinkct, "nolocallinkct");
@@ -1028,8 +1029,8 @@ void load_rpt_vars(int n, int init)
 #endif
 
 	RPT_CONFIG_VAR_INT(votertype, "votertype");
+	RPT_CONFIG_VAR_INT(votermode, "votermode");
 	RPT_CONFIG_VAR_INT_DEFAULT(votermargin, "votermargin", 10);
-	RPT_CONFIG_VAR_INT(votertype, "votertype");
 
 	val = ast_variable_retrieve(cfg, cat, "telemnomdb");
 	rpt_vars[n].p.telemnomgain = pow(10.0, atof(S_OR(val, "0")) / 20.0);
@@ -1073,7 +1074,7 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "inxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.inxlat, 0, sizeof(struct rpt_xlat));
-		i = finddelim((char*) val, strs, 3); /*! \todo Illegal cast */
+		i = finddelim((char *) val, strs, ARRAY_LEN(strs)); /*! \todo Illegal cast */
 		if (i > 3) {
 			rpt_vars[n].p.dopfxtone = ast_true(strs[3]);
 		} else if (i > 2) {
@@ -1088,7 +1089,7 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "outxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.outxlat, 0, sizeof(struct rpt_xlat));
-		i = finddelim((char*) val, strs, 3); /*! \todo Illegal cast */
+		i = finddelim((char *) val, strs, ARRAY_LEN(strs)); /*! \todo Illegal cast */
 		if (i > 2) {
 			ast_copy_string(rpt_vars[n].p.outxlat.passchars, strs[2], sizeof(rpt_vars[n].p.outxlat.passchars));
 		} else if (i > 1) {
@@ -1226,7 +1227,7 @@ void load_rpt_vars(int n, int init)
 		int k, nukw, statenum;
 		statenum = atoi(vp->name);
 		ast_copy_string(s1, vp->value, sizeof(s1));
-		nukw = finddelim(s1, strs, 32);
+		nukw = finddelim(s1, strs, ARRAY_LEN(strs));
 
 		for (k = 0; k < nukw; k++) {	/* for each user specified keyword */
 			for (j = 0; cs_keywords[j] != NULL; j++) {	/* try to match to one in our internal table */
