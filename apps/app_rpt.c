@@ -4441,11 +4441,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					}
 				} else {
 					/* if a voting rx link and not the winner, mute audio */
-					if (myrpt->p.votertype == 1 && l->voterlink && myrpt->voted_link != l)
-						ismuted = 1;
-					else
-						ismuted = 0;
-
+					ismuted = (myrpt->p.votertype == 1) && l->voterlink && (myrpt->voted_link != l);
 					if (!l->lastrx || ismuted)
 						RPT_MUTE_FRAME(f);
 					ast_write(l->pchan, f);
