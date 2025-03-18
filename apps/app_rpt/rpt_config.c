@@ -799,7 +799,7 @@ void load_rpt_vars(int n, int init)
 	if (!ast_strlen_zero(val)) { \
 		rpt_vars[n].p.var = pow(10.0, atof(val)) / 20.0; \
 	} else { \
-		rpt_vars[n].p.var = default; \
+		rpt_vars[n].p.var = pow(10.0, default / 20); \
 	}
 
 #define RPT_CONFIG_VAR_INT_DEFAULT(var, name, default) \
@@ -1032,8 +1032,17 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT(votermode, "votermode");
 	RPT_CONFIG_VAR_INT_DEFAULT(votermargin, "votermargin", DEFAULT_VOTERGAIN);
 	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(telemnomgain, "telemnomdb", DEFAULT_TELEMNOMDB);
+	/* Because asterisk usese an int for gain adjustment and divides when negative
+	 * numbers used, we need the gain to be a non decimal number.  Note: negative gain
+	 * results in decimal numbers.
+	 */
+	if (rpt_vars[n].p.telemnomgain < 0) {
+		rpt_vars[n].p.telemnomgain = -1 / rpt_vars[n].p.telemnomgain;
+	}
 	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(telemduckgain, "telemduckgain", DEFAULT_TELEMDUCKDB);
-
+	if (rpt_vars[n].p.telemduckgain < 0) {
+		rpt_vars[n].p.telemduckgain = -1 / rpt_vars[n].p.telemduckgain;
+	}
 	RPT_CONFIG_VAR_INT_DEFAULT(telemdefault, "telemdefault", DEFAULT_RPT_TELEMDEFAULT);
 	RPT_CONFIG_VAR_BOOL_DEFAULT(telemdynamic, "telemdynamic", DEFAULT_RPT_TELEMDYNAMIC);
 
