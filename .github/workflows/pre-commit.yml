@@ -1,7 +1,9 @@
 name: "Pre-commit checks"
 
 on: [ push, pull_request ]
-
+   branches-ignore:
+      - master
+   
 jobs:
    codespell:
     name: "Check for spelling errors"
