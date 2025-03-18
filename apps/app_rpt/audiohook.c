@@ -34,12 +34,12 @@
 #include "asterisk/channel.h"
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
+#include "asterisk/audiohook.h"
 #include "asterisk/slinfactory.h"
 #include "asterisk/frame.h"
 #include "asterisk/translate.h"
 #include "asterisk/format_cache.h"
 #include "asterisk/test.h"
-#include "audiohook.h"
 
 #define AST_AUDIOHOOK_SYNC_TOLERANCE 100 /*!< Tolerance in milliseconds for audiohooks synchronization */
 #define AST_AUDIOHOOK_SMALL_QUEUE_TOLERANCE \
@@ -1353,22 +1353,7 @@ static struct audiohook_volume *audiohook_volume_get(struct ast_channel *chan, i
 
 int ast_audiohook_volume_set(struct ast_channel *chan, enum ast_audiohook_direction direction, int volume)
 {
-	struct audiohook_volume *audiohook_volume = NULL;
-
-	/* Attempt to find the audiohook volume information, but only create it if we are not setting the adjustment value to zero */
-	if (!(audiohook_volume = audiohook_volume_get(chan, (volume ? 1 : 0)))) {
-		return -1;
-	}
-
-	/* Now based on the direction set the proper value */
-	if (direction == AST_AUDIOHOOK_DIRECTION_READ || direction == AST_AUDIOHOOK_DIRECTION_BOTH) {
-		audiohook_volume->read_adjustment = (float) volume;
-	}
-	if (direction == AST_AUDIOHOOK_DIRECTION_WRITE || direction == AST_AUDIOHOOK_DIRECTION_BOTH) {
-		audiohook_volume->write_adjustment = (float) volume;
-	}
-
-	return 0;
+	return ast_audiohook_volume_adjust_float(chan, direction, (float) volume);
 }
 
 int ast_audiohook_volume_set_float(struct ast_channel *chan, enum ast_audiohook_direction direction, float volume)
@@ -1393,22 +1378,7 @@ int ast_audiohook_volume_set_float(struct ast_channel *chan, enum ast_audiohook_
 
 int ast_audiohook_volume_get(struct ast_channel *chan, enum ast_audiohook_direction direction)
 {
-	struct audiohook_volume *audiohook_volume = NULL;
-	int adjustment = 0;
-
-	/* Attempt to find the audiohook volume information, but do not create it as we only want to look at the values */
-	if (!(audiohook_volume = audiohook_volume_get(chan, 0))) {
-		return 0;
-	}
-
-	/* Grab the adjustment value based on direction given */
-	if (direction == AST_AUDIOHOOK_DIRECTION_READ) {
-		adjustment = (int) audiohook_volume->read_adjustment;
-	} else if (direction == AST_AUDIOHOOK_DIRECTION_WRITE) {
-		adjustment = (int) audiohook_volume->write_adjustment;
-	}
-
-	return adjustment;
+	return (int) ast_audiohook_volume_get_float(chan, direction);
 }
 
 float ast_audiohook_volume_get_float(struct ast_channel *chan, enum ast_audiohook_direction direction)
@@ -1433,22 +1403,7 @@ float ast_audiohook_volume_get_float(struct ast_channel *chan, enum ast_audiohoo
 
 int ast_audiohook_volume_adjust(struct ast_channel *chan, enum ast_audiohook_direction direction, int volume)
 {
-	struct audiohook_volume *audiohook_volume = NULL;
-
-	/* Attempt to find the audiohook volume information, and create an audiohook if none exists */
-	if (!(audiohook_volume = audiohook_volume_get(chan, 1))) {
-		return -1;
-	}
-
-	/* Based on the direction change the specific adjustment value */
-	if (direction == AST_AUDIOHOOK_DIRECTION_READ || direction == AST_AUDIOHOOK_DIRECTION_BOTH) {
-		audiohook_volume->read_adjustment += (float) volume;
-	}
-	if (direction == AST_AUDIOHOOK_DIRECTION_WRITE || direction == AST_AUDIOHOOK_DIRECTION_BOTH) {
-		audiohook_volume->write_adjustment += (float) volume;
-	}
-
-	return 0;
+	return ast_audiohook_volume_adjust_float(chan, direction, (float) volume);
 }
 
 int ast_audiohook_volume_adjust_float(struct ast_channel *chan, enum ast_audiohook_direction direction, float volume)
