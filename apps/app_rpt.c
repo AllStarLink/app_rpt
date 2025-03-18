@@ -5129,14 +5129,14 @@ static void *rpt(void *this)
 		/* If we have a new telemetry or we haven't adjusted ducking and we are keyed up */
 		if (((myrpt->tele.next != last_tele) || !lastduck) && myrpt->tele.next->chan && (myrpt->keyed || myrpt->remrx)) {
 			if (ast_audiohook_volume_set(myrpt->tele.next->chan, AST_AUDIOHOOK_DIRECTION_WRITE, (int) myrpt->p.telemduckgain)) {
-				ast_debug(7, "I've set the volume on channel %s to %2.2f", ast_channel_name(myrpt->tele.next->chan), myrpt->p.telemduckgain);
+				ast_debug(7, "Setting the volume on channel %s to %2.2f", ast_channel_name(myrpt->tele.next->chan), myrpt->p.telemduckgain);
 			}
 			lastduck = 1;
 		}
 		/* If we have a new telemetry or we have already adjusted ducking and we are not keyed up */
 		if (((myrpt->tele.next != last_tele) || lastduck) && myrpt->tele.next->chan && !myrpt->keyed && !myrpt->remrx) {
 			if (ast_audiohook_volume_set(myrpt->tele.next->chan, AST_AUDIOHOOK_DIRECTION_WRITE, (int) myrpt->p.telemnomgain)) {
-				ast_debug(7, "I've set the volume on channel %s to %2.2f", ast_channel_name(myrpt->tele.next->chan), myrpt->p.telemnomgain);
+				ast_debug(7, "Setting the volume on channel %s to %2.2f", ast_channel_name(myrpt->tele.next->chan), myrpt->p.telemnomgain);
 			}
 			lastduck = 0;
 		}
