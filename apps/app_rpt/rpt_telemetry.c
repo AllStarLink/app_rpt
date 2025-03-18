@@ -15,7 +15,7 @@
 #include "asterisk/format_cache.h" /* use ast_format_slin */
 
 #include "app_rpt.h"
-#include "audiohook.h"
+#include "asterisk/audiohook.h"
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h> /* use ioperm */
