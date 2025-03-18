@@ -322,7 +322,7 @@
 #include "asterisk/dsp.h"
 
 #include "app_rpt/app_rpt.h"
-#include "app_rpt/audiohook.h"
+#include "asterisk/audiohook.h"
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h>
