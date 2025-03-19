@@ -6689,7 +6689,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* establish call in tranceive mode */
 		l = ast_calloc(1, sizeof(struct rpt_link));
 		if (!l) {
-			pthread_exit(NULL);
+			return -1;
 		}
 		l->mode = 1;
 		ast_copy_string(l->name, b1, MAXNODESTR);
@@ -6734,7 +6734,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (!cap) {
 			ast_log(LOG_ERROR, "Failed to alloc cap\n");
 			ast_free(l);
-			pthread_exit(NULL);
+			return -1;
 		}
 
 		ast_format_cap_append(cap, ast_format_slin, 0);
@@ -6743,7 +6743,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 			ao2_ref(cap, -1);
 			ast_free(l);
-			pthread_exit(NULL);
+			return -1;
 		}
 
 		ao2_ref(cap, -1);
@@ -6751,7 +6751,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* make a conference for the tx */
 		if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 			ast_free(l);
-			pthread_exit(NULL);
+			return -1;
 		}
 		
 		if ((phone_mode == 2) && (!phone_vox))
@@ -6781,17 +6781,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			send_newkey(chan);
 		}
 
-		if (l->chan) {
-			if (!strcasecmp(ast_channel_tech(chan)->type, "echolink") || !strcasecmp(ast_channel_tech(chan)->type, "tlb") || (l->name[0] > '9')) {
-				rpt_telemetry(myrpt, CONNECTED, l);
-			}
-		}
-
-		/* In theory, both these conditions should be true if one is, since the node thread will queue a soft hangup on this channel and then set l->chan to NULL */
-		if (ast_check_hangup(chan)) {
-			/* This connection is already toast, just return -1 as normal and let the core kill the channel off */
-			ast_debug(3, "Channel %s is a dead link\n", ast_channel_name(chan));
-			return -1;
+		if (!strcasecmp(ast_channel_tech(chan)->type, "echolink") || !strcasecmp(ast_channel_tech(chan)->type, "tlb") || (l->name[0] > '9')) {
+			rpt_telemetry(myrpt, CONNECTED, l);
 		}
 
 		/* insert at end of queue */
@@ -6922,7 +6913,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (!cap) {
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		pthread_exit(NULL);
+		return -1;
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
@@ -6930,7 +6921,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (__rpt_request(myrpt, cap, RPT_RXCHAN, RPT_LINK_CHAN)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		ao2_ref(cap, -1);
-		pthread_exit(NULL);
+		return -1;
 	}
 
 	myrpt->dahditxchannel = NULL;
@@ -6939,7 +6930,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_hangup(myrpt, RPT_RXCHAN);
 			ao2_ref(cap, -1);
-			pthread_exit(NULL);
+			return -1;
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
@@ -6955,7 +6946,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup_rx_tx(myrpt);
 		ao2_ref(cap, -1);
-		pthread_exit(NULL);
+		return -1;
 	}
 
 	ao2_ref(cap, -1);
@@ -6970,7 +6961,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		pthread_exit(NULL);
+		return -1;
 	}
 
 	rpt_equate_tx_conf(myrpt);
@@ -6982,7 +6973,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		ao2_ref(cap, -1);
-		pthread_exit(NULL);
+		return -1;
 	}
 
 	iskenwood_pci4 = 0;
