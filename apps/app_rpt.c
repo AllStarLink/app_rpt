@@ -6780,26 +6780,37 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_telemetry(myrpt, CONNECTED, l);
 		}
 
+		/* The way things work here is that other threads in app_rpt service the channel,
+		 * and the PBX thread which initially gave us this channel is going to exit momentarily.
+		 * Originally, we would return AST_PBX_KEEPALIVE to tell the PBX not to hangup
+		 * the channel when terminating the PBX.
+		 * This was removed in Asterisk commit 50a25ac8474d7900ba59a68ed4fd942074082435
+		 *
+		 * The new way things are done does not work for us out of the box, because the PBX
+		 * needs to be told from the get-go not to hangup the channel, and by the time
+		 * dialplan is running, it's already too late.
+		 *
+		 * Instead, we masquerade the channel here to force the old pointer to the channel
+		 * to become invalid. The old channel, now dead, can then get hung up by the
+		 * PBX thread as normal, while the new channel is what we insert into the list. */
+		chan = ast_channel_yank(chan);
+		if (!chan) {
+			/* l->chan still points to the original chan */
+			ast_log(LOG_ERROR, "Failed to masquerade channel %s\n", ast_channel_name(l->chan));
+			ast_free(l);
+			return -1;
+		}
+		l->chan = chan; /* Update pointer to the masqueraded channel. The original channel is dead. */
+
 		/* insert at end of queue */
 		rpt_mutex_lock(&myrpt->lock);
-		rpt_link_add(myrpt, l); /* After putting the link on the linked list, ast_waitfor_n can and will start referencing it */
+		rpt_link_add(myrpt, l); /* After putting the link in the link list, other threads can start using it */
 		__kickshort(myrpt);
 		gettimeofday(&myrpt->lastlinktime, NULL);
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
 
-		/* Set the PBX to NULL to avoid a warning in channel.c about a PBX remaining on the channel when it gets destroyed.
-		 * This goes hand in hand with mirroring the old "KEEPALIVE" behavior. Past this point, there is no PBX for this channel.
-		 * We don't do this until the very end, because the node thread will check if this channel has a PBX to determine
-		 * if it's still "owned" by the PBX thread, as opposed to by an app_rpt thread. */
-		rpt_mutex_lock(&myrpt->lock);
-		ast_debug(1, "Stopping PBX on %s\n", ast_channel_name(chan));
-		ast_channel_pbx_set(chan, NULL);
-		rpt_mutex_unlock(&myrpt->lock);
-
-		//return AST_PBX_KEEPALIVE;
-		pthread_exit(NULL); // BUGBUG: For now, this emulates the behavior of KEEPALIVE, but this won't be a clean exit. Makes it work, but since the PBX doesn't clean up we'll leak memory. Either do what the PBX core does here or we need to somehow do KEEPALIVE handling in the core, possibly with a custom patch for now.
-		//return -1;				/*! \todo AST_PBX_KEEPALIVE doesn't exist anymore. Figure out what we should return here. */
+		return -1; /* We can now safely return -1 to the PBX, as the old channel pre-masquerade is what will get killed off */
 	}
 	/* well, then it is a remote */
 	rpt_mutex_lock(&myrpt->lock);
