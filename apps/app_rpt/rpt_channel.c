@@ -76,15 +76,7 @@ int priority_jump(struct rpt *myrpt, struct ast_channel *chan)
 
 int sayfile(struct ast_channel *mychannel, char *fname)
 {
-	int res;
-
-	res = ast_streamfile(mychannel, fname, ast_channel_language(mychannel));
-	if (!res)
-		res = ast_waitstream(mychannel, "");
-	else
-		ast_log(LOG_WARNING, "ast_streamfile %s failed on %s\n", fname, ast_channel_name(mychannel));
-	ast_stopstream(mychannel);
-	return res;
+	return ast_stream_and_wait(mychannel, fname, "");
 }
 
 int saycharstr(struct ast_channel *mychannel, char *str)
