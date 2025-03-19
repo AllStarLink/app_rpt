@@ -1317,29 +1317,19 @@ void load_rpt_vars(int n, int init)
 
 int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 {
-	int busy = 0;
+	char *altstr, *cp;
 
-	rpt_mutex_lock(&myrpt->lock);
-	if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(sptr)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		busy = 1;
+	ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
+	altstr = ast_strdup(sptr);
+	if (!altstr) {
+		return -1;
 	}
-	if (!busy) {
-		int x;
-		ast_debug(1, "rpt_push_alt_macro %s\n", sptr);
-		myrpt->macrotimer = MACROTIME;
-		for (x = 0; *(sptr + x); x++) {
-			myrpt->macrobuf[x] = *(sptr + x) | 0x80;
-		}
-		*(sptr + x) = 0;
+	for (cp = altstr; *cp; cp++) {
+		*cp |= 0x80;
 	}
-	rpt_mutex_unlock(&myrpt->lock);
-
-	if (busy) {
-		ast_log(LOG_WARNING, "Function decoder busy on app_rpt command macro.\n");
-	}
-
-	return busy;
+	macro_append(myrpt, altstr);
+	ast_free(altstr);
+	return 0;
 }
 
 void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
