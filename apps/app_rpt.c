@@ -282,8 +282,6 @@
 
 #include "asterisk.h"
 
-#define	START_DELAY 2
-
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -457,6 +455,7 @@ int rpt_nullfd(void)
 	return nullfd;
 }
 
+/*! \brief Time at which all repeaters were launched initially. Generally avoid using, and do NOT use to check if a node is ready */
 static time_t starttime = 0;
 
 time_t rpt_starttime(void)
@@ -736,8 +735,10 @@ void rpt_event_process(struct rpt *myrpt)
 	struct ast_variable *v;
 	struct ast_var_t *newvariable;
 
-	if (!starttime)
+	if (!myrpt->ready) {
 		return;
+	}
+
 	for (v = ast_variable_browse(myrpt->cfg, myrpt->p.events); v; v = v->next) {
 		/* make a local copy of the value of this entry */
 		myval = ast_strdupa(v->value);
@@ -4736,7 +4737,6 @@ static void *rpt(void *this)
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
 	struct ast_channel *who;
-	time_t t, t_mono;
 	struct rpt_link *l;
 	struct rpt_tele *telem;
 	char tmpstr[512];
@@ -4916,6 +4916,7 @@ static void *rpt(void *this)
 	while (ms >= 0) {
 		struct ast_channel *cs[300], *cs1[300];
 		int totx = 0, elap = 0, n, x;
+		time_t t, t_mono;
 		struct timeval looptimenow;
 
 		if (myrpt->disgorgetime && (time(NULL) >= myrpt->disgorgetime)) {
@@ -5395,7 +5396,7 @@ static void *rpt(void *this)
 
 		c = myrpt->macrobuf[0];
 		time(&t);
-		if (c && (!myrpt->macrotimer) && starttime && (t > (starttime + START_DELAY))) {
+		if (c && !myrpt->macrotimer && starttime && t > starttime) {
 			char cin = c & 0x7f;
 			myrpt->macrotimer = MACROTIME;
 			memmove(myrpt->macrobuf, myrpt->macrobuf + 1, MAXMACRO - 1);
@@ -5722,7 +5723,6 @@ static void *rpt_master(void *ignore)
 		rpt_vars[i].ready = 0;
 		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
 	}
-	usleep(500000);
 	time(&starttime);
 	ast_mutex_lock(&rpt_master_lock);
 	for (;;) {
@@ -6198,7 +6198,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct ast_channel *cs[20];
 	struct rpt_link *l;
 	int ms, elap, myrx;
-	time_t t, last_timeout_warning;
+	time_t last_timeout_warning;
 	struct rpt_tele *telem;
 	int numlinks;
 	struct ast_format_cap *cap;
@@ -6211,15 +6211,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 
 	ast_copy_string(tmp, data, sizeof(tmp));
-	time(&t);
-	/* if time has externally shifted negative, screw it */
-	if (t < starttime)
-		t = starttime + START_DELAY;
-	if ((!starttime) || (t < (starttime + START_DELAY))) {
-		ast_log(LOG_NOTICE, "Node %s rejecting call: too soon!\n", tmp);
-		ast_safe_sleep(chan, 3000);
-		return -1;
-	}
 
 	ast_set_read_format(chan, ast_format_slin);
 	ast_set_write_format(chan, ast_format_slin);
@@ -6248,6 +6239,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* if name matches, assign it and exit loop */
 		if (!strcmp(tmp, rpt_vars[i].name)) {
 			myrpt = &rpt_vars[i];
+			if (!myrpt->ready) {
+				ast_log(LOG_WARNING, "Node %s is not ready yet, rejecting call on %s\n", rpt_vars[i].name, ast_channel_name(chan));
+				return -1;
+			}
 			break;
 		}
 	}
@@ -7141,6 +7136,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	looptimestart = ast_tvnow();
 	/* start un-locked */
 	for (;;) {
+		time_t t;
 		if (ast_check_hangup(chan) || ast_check_hangup(myrpt->rxchannel)) {
 			break;
 		}
