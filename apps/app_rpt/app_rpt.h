@@ -1,4 +1,3 @@
-
 #define VERSION_MAJOR 3
 #define VERSION_MINOR 3
 #define VERSION_PATCH 0
@@ -69,24 +68,25 @@ typedef struct {
 #endif
 
 /* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
-#define MAXDTMF 32
-#define MAXMACRO 512
-#define MAXLINKLIST 5120
-#define LINKLISTTIME 10000
-#define LINKLISTSHORTTIME 200
-#define LINKPOSTTIME 30000
-#define LINKPOSTSHORTTIME 200
-#define KEYPOSTTIME 30000
-#define KEYPOSTSHORTTIME 200
-#define KEYTIMERTIME 250
-#define MACROTIME 100
-#define MACROPTIME 500
-#define DTMF_TIMEOUT 3
-#define KENWOOD_RETRIES 5
-#define TOPKEYN 32
-#define TOPKEYWAIT 3
-#define TOPKEYMAXSTR 30
-#define NEWKEYTIME 2000
+#define	MAXDTMF 32
+#define	MAXMACRO 2048
+#define	MAXNODES 500			  /* Maximum number of nodes allowed in the link list */
+#define	RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
+#define	LINKLISTTIME 10000
+#define	LINKLISTSHORTTIME 200
+#define	LINKPOSTTIME 30000
+#define	LINKPOSTSHORTTIME 200
+#define	KEYPOSTTIME 30000
+#define	KEYPOSTSHORTTIME 200
+#define	KEYTIMERTIME 250
+#define	MACROTIME 100
+#define	MACROPTIME 500
+#define	DTMF_TIMEOUT 3
+#define	KENWOOD_RETRIES 5
+#define	TOPKEYN 32
+#define	TOPKEYWAIT 3
+#define	TOPKEYMAXSTR 30
+#define	NEWKEYTIME 2000
 
 #define	AUTHTELLTIME 7000
 #define	AUTHTXTIME 1000
@@ -412,8 +412,8 @@ struct rpt_link {
 	int	reconnects;
 	long long connecttime;
 	struct ast_channel *chan;	
-	struct ast_channel *pchan;	
-	char	linklist[MAXLINKLIST];
+	struct ast_channel *pchan;
+	struct ast_str *linklist;
 	time_t	linklistreceived;
 	int	linklisttimer;
 	int	dtmfed;

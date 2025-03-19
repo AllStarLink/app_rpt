@@ -967,13 +967,15 @@ void *rpt_tele_thread(void *this)
 	char *p, *ct, *ct_copy, *ident, *nodename;
 	time_t t, t1, t_mono, was_mono;
 	struct ast_tm localtm;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char *strs[MAXNODES];
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25], c;
+	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
+
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
@@ -1253,13 +1255,17 @@ void *rpt_tele_thread(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 
 treataslocal:
-
+		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+		if (!lbuf) {
+			goto abort;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+		__mklinklist(myrpt, NULL, &lbuf, 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
-		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+		ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
+		ast_free(lbuf);
 		haslink = 0;
 		for (i = 0; i < ns; i++) {
 			char *cpr = strs[i] + 1;
@@ -2148,12 +2154,17 @@ treataslocal:
 		imdone = 1;
 		break;
 	case FULLSTATUS:
+		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+		if (!lbuf) {
+			goto abort;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+		__mklinklist(myrpt, NULL, &lbuf, 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* parse em */
-		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+		ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
+		ast_free(lbuf);
 		/* sort em */
 		if (ns)
 			qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -2611,12 +2622,13 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	struct rpt_link *mylink = NULL;
 	int res, i, ns;
 	char *v1, *v2, mystr[1024], *p, haslink;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char *strs[MAXNODES];
 	struct rpt_link *l;
 	time_t t, t_mono, was_mono;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
-	
+	struct ast_str *lbuf;
+
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 
 	if ((mode == ID) && is_paging(myrpt)) {
@@ -2862,13 +2874,18 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			send_tele_link(myrpt, mystr);
 			return;
 		case FULLSTATUS:
+			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf) {
+				return;
+			}
+
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* get all the nodes */
-			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+			__mklinklist(myrpt, NULL, &lbuf, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 			/* parse em */
-			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -2891,6 +2908,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, strs[i]);
 			}
 			send_tele_link(myrpt, mystr);
+			ast_free(lbuf);
 			return;
 		}
 	}

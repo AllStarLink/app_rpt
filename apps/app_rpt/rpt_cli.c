@@ -408,7 +408,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 {
 	int i, j;
 	unsigned int ns;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char *strs[MAXNODES];
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
 	char *connstate;
@@ -416,14 +416,18 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 	struct rpt_lstat *s, *t;
 	struct rpt_lstat s_head;
 	int nrpts = rpt_num_rpts();
+	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;
 
+	if (!lbuf) {
+		return RESULT_FAILURE;
+	}
 	if (argc != 3) {
+		ast_free(lbuf);
 		return RESULT_SHOWUSAGE;
 	}
-
 	s = NULL;
 	s_head.next = &s_head;
 	s_head.prev = &s_head;
@@ -527,10 +531,8 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			/* ### GET CONNECTED NODE INFO ####################
 			 * Traverse the list of connected nodes
 			 */
+			__mklinklist(myrpt, NULL, &lbuf, 0);
 
-			rpt_mutex_lock(&myrpt->lock);
-			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
-			rpt_mutex_unlock(&myrpt->lock);
 			j = 0;
 			l = myrpt->links.next;
 			while (l && (l != &myrpt->links)) {
@@ -590,7 +592,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 //### GET ALL LINKED NODES INFO ####################
 			/* parse em */
-			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -633,9 +635,11 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "ider_state=%s\n", ider_state);
 			ast_cli(fd, "tel_mode=%s\n\n", tel_mode);
 
+			ast_free(lbuf);
 			return RESULT_SUCCESS;
 		}
 	}
+	ast_free(lbuf);
 	return RESULT_FAILURE;
 }
 
@@ -644,23 +648,30 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 {
 	int i, j;
 	unsigned int ns;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char *strs[MAXNODES];
 	struct rpt *myrpt;
 	int nrpts = rpt_num_rpts();
+	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+
+	if (!lbuf) {
+		return RESULT_FAILURE;
+	}
 
 	if (argc != 3) {
+		ast_free(lbuf);
 		return RESULT_SHOWUSAGE;
 	}
+
 
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
-			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+			__mklinklist(myrpt, NULL, &lbuf, 0);
 			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 			/* parse em */
-			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -682,9 +693,11 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 				}
 			}
 			ast_cli(fd, "\n\n");
+			ast_free(lbuf);
 			return RESULT_SUCCESS;
 		}
 	}
+	ast_free(lbuf);
 	return RESULT_FAILURE;
 }
 
