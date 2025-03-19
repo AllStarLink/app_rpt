@@ -905,7 +905,7 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 
 	ast_debug(1, "@@@@ Autopatch up\n");
 
-	if (!myrpt->callmode) {
+	if (myrpt->callmode == CALLMODE_DOWN) {
 		/* Set defaults */
 		myrpt->patchnoct = 0;
 		myrpt->patchdialtime = 0;
@@ -926,7 +926,7 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 			index = matchkeyword(paramlist[i], &value, keywords);
 			if (value)
 				value = skipchars(value, "= ");
-			if (!myrpt->callmode) {
+			if (myrpt->callmode == CALLMODE_DOWN) {
 				switch (index) {
 				case 1:		/* context */
 					ast_copy_string(myrpt->patchcontext, value, sizeof(myrpt->patchcontext));
@@ -967,15 +967,15 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 
 	/* if on call, force * into current audio stream */
 
-	if ((myrpt->callmode == 2) || (myrpt->callmode == 3)) {
+	if ((myrpt->callmode == CALLMODE_CONNECTING) || (myrpt->callmode == CALLMODE_UP)) {
 		if (!nostar)
 			myrpt->mydtmf = myrpt->p.funcchar;
 	}
-	if (myrpt->callmode) {
+	if (myrpt->callmode != CALLMODE_DOWN) {
 		rpt_mutex_unlock(&myrpt->lock);
 		return DC_COMPLETE;
 	}
-	myrpt->callmode = 1;
+	myrpt->callmode = CALLMODE_DIALING;
 	myrpt->cidx = 0;
 	myrpt->exten[myrpt->cidx] = 0;
 	rpt_mutex_unlock(&myrpt->lock);
@@ -994,12 +994,12 @@ int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int com
 
 	myrpt->macropatch = 0;
 
-	if (!myrpt->callmode) {
+	if (myrpt->callmode == CALLMODE_DOWN) {
 		rpt_mutex_unlock(&myrpt->lock);
 		return DC_COMPLETE;
 	}
 
-	myrpt->callmode = 0;
+	myrpt->callmode = CALLMODE_DOWN;
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_telem_select(myrpt, command_source, mylink);

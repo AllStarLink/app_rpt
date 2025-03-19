@@ -1206,7 +1206,7 @@ void *rpt_call(void *this)
 
 	if (rpt_conf_add_speaker(mychannel, myrpt)) {
 		ast_hangup(mychannel);
-		myrpt->callmode = 0;
+		myrpt->callmode = CALLMODE_DOWN;
 		ao2_ref(cap, -1);
 		pthread_exit(NULL);
 	}
@@ -1225,20 +1225,20 @@ void *rpt_call(void *this)
 	if (rpt_conf_add_speaker(genchannel, myrpt)) {
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
-		myrpt->callmode = 0;
+		myrpt->callmode = CALLMODE_DOWN;
 		pthread_exit(NULL);
 	}
 	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
-		myrpt->callmode = 0;
+		myrpt->callmode = CALLMODE_DOWN;
 		pthread_exit(NULL);
 	}
 	/* start dialtone if patchquiet is 0. Special patch modes don't send dial tone */
 	if (!myrpt->patchquiet && !myrpt->patchexten[0] && rpt_play_dialtone(genchannel) < 0) {
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
-		myrpt->callmode = 0;
+		myrpt->callmode = CALLMODE_DOWN;
 		pthread_exit(NULL);
 	}
 	stopped = 0;
@@ -1264,10 +1264,10 @@ void *rpt_call(void *this)
 
 	if (myrpt->patchexten[0]) {
 		strcpy(myrpt->exten, myrpt->patchexten);
-		myrpt->callmode = 2;
+		myrpt->callmode = CALLMODE_CONNECTING;
 	}
-	while ((myrpt->callmode == 1) || (myrpt->callmode == 4)) {
-		if ((myrpt->patchdialtime) && (myrpt->callmode == 1) && (myrpt->cidx != lastcidx)) {
+	while ((myrpt->callmode == CALLMODE_DIALING) || (myrpt->callmode == CALLMODE_FAILED)) {
+		if ((myrpt->patchdialtime) && (myrpt->callmode == CALLMODE_DIALING) && (myrpt->cidx != lastcidx)) {
 			dialtimer = 0;
 			lastcidx = myrpt->cidx;
 		}
@@ -1276,26 +1276,26 @@ void *rpt_call(void *this)
 			ast_debug(1, "dialtimer %i > patchdialtime %i\n", dialtimer, myrpt->patchdialtime);
 			rpt_mutex_lock(&myrpt->lock);
 			aborted = 1;
-			myrpt->callmode = 0;
+			myrpt->callmode = CALLMODE_DOWN;
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		}
 
-		if ((!myrpt->patchquiet) && (!stopped) && (myrpt->callmode == 1) && (myrpt->cidx > 0)) {
+		if ((!myrpt->patchquiet) && (!stopped) && (myrpt->callmode == CALLMODE_DIALING) && (myrpt->cidx > 0)) {
 			stopped = 1;
 			/* stop dial tone */
 			rpt_stop_tone(genchannel);
 		}
-		if (myrpt->callmode == 1) {
+		if (myrpt->callmode == CALLMODE_DIALING) {
 			if (myrpt->calldigittimer > PATCH_DIALPLAN_TIMEOUT) {
-				myrpt->callmode = 2;
+				myrpt->callmode = CALLMODE_CONNECTING;
 				break;
 			}
 			/* bump timer if active */
 			if (myrpt->calldigittimer)
 				myrpt->calldigittimer += MSWAIT;
 		}
-		if (myrpt->callmode == 4) {
+		if (myrpt->callmode == CALLMODE_FAILED) {
 			if (!congstarted) {
 				congstarted = 1;
 				/* start congestion tone */
@@ -1308,7 +1308,7 @@ void *rpt_call(void *this)
 			ast_hangup(mychannel);
 			ast_hangup(genchannel);
 			rpt_mutex_lock(&myrpt->lock);
-			myrpt->callmode = 0;
+			myrpt->callmode = CALLMODE_DOWN;
 			rpt_mutex_unlock(&myrpt->lock);
 			pthread_exit(NULL);
 		}
@@ -1319,12 +1319,12 @@ void *rpt_call(void *this)
 	rpt_stop_tone(genchannel);
 
 	/* end if done */
-	if (!myrpt->callmode) {
+	if (myrpt->callmode == CALLMODE_DOWN) {
 		ast_debug(1, "callmode==0\n");
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->callmode = 0;
+		myrpt->callmode = CALLMODE_DOWN;
 		myrpt->macropatch = 0;
 		channel_revert(myrpt);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -1355,17 +1355,17 @@ void *rpt_call(void *this)
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->callmode = 0;
+		myrpt->callmode = CALLMODE_DOWN;
 		rpt_mutex_unlock(&myrpt->lock);
 		pthread_exit(NULL);
 	}
 	usleep(10000);
 	rpt_mutex_lock(&myrpt->lock);
-	myrpt->callmode = 3;
+	myrpt->callmode = CALLMODE_UP;
 
 	if (ast_channel_pbx(mychannel)) {
 		if (rpt_call_bridge_setup(myrpt, mychannel, genchannel)) {
-			myrpt->callmode = 0;
+			myrpt->callmode = CALLMODE_DOWN;
 			rpt_mutex_unlock(&myrpt->lock);
 			pthread_exit(NULL);
 		}
@@ -1375,13 +1375,13 @@ void *rpt_call(void *this)
 	}
 
 	sentpatchconnect = 0;
-	while (myrpt->callmode) {
-		if ((!ast_channel_pbx(mychannel)) && (myrpt->callmode != 4)) {
+	while (myrpt->callmode != CALLMODE_DOWN) {
+		if (!ast_channel_pbx(mychannel) && (myrpt->callmode != CALLMODE_FAILED)) {
 			/* If patch is setup for far end disconnect */
 			if (myrpt->patchfarenddisconnect || (myrpt->p.duplex < 2)) {
 				ast_debug(1, "callmode=%i, patchfarenddisconnect=%i, duplex=%i\n",
 					myrpt->callmode, myrpt->patchfarenddisconnect, myrpt->p.duplex);
-				myrpt->callmode = 0;
+				myrpt->callmode = CALLMODE_DOWN;
 				myrpt->macropatch = 0;
 				if (!myrpt->patchquiet) {
 					rpt_mutex_unlock(&myrpt->lock);
@@ -1389,7 +1389,7 @@ void *rpt_call(void *this)
 					rpt_mutex_lock(&myrpt->lock);
 				}
 			} else {			/* Send congestion until patch is downed by command */
-				myrpt->callmode = 4;
+				myrpt->callmode = CALLMODE_FAILED;
 				rpt_mutex_unlock(&myrpt->lock);
 				/* start congestion tone */
 				rpt_play_congestion(genchannel);
@@ -1427,7 +1427,7 @@ void *rpt_call(void *this)
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
 	ast_hangup(genchannel);
 	rpt_mutex_lock(&myrpt->lock);
-	myrpt->callmode = 0;
+	myrpt->callmode = CALLMODE_DOWN;
 	myrpt->macropatch = 0;
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
@@ -1627,7 +1627,7 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 	return 0;
 }
 
-static inline void handle_callmode_1(struct rpt *myrpt, char c)
+static inline void handle_callmode_dialing(struct rpt *myrpt, char c)
 {
 	myrpt->exten[myrpt->cidx++] = c;
 	myrpt->exten[myrpt->cidx] = 0;
@@ -1635,7 +1635,7 @@ static inline void handle_callmode_1(struct rpt *myrpt, char c)
 	if (ast_exists_extension(myrpt->pchannel, myrpt->patchcontext, myrpt->exten, 1, NULL)) {
 		/* if this really it, end now */
 		if (!ast_matchmore_extension(myrpt->pchannel, myrpt->patchcontext, myrpt->exten, 1, NULL)) {
-			myrpt->callmode = 2;
+			myrpt->callmode = CALLMODE_CONNECTING;
 			if (!myrpt->patchquiet) {
 				rpt_mutex_unlock(&myrpt->lock);
 				rpt_telemetry(myrpt, PROC, NULL);
@@ -1648,7 +1648,7 @@ static inline void handle_callmode_1(struct rpt *myrpt, char c)
 	/* if can continue, do so */
 	if (!ast_canmatch_extension(myrpt->pchannel, myrpt->patchcontext, myrpt->exten, 1, NULL)) {
 		/* call has failed, inform user */
-		myrpt->callmode = 4;
+		myrpt->callmode = CALLMODE_FAILED;
 	}
 }
 
@@ -1660,8 +1660,8 @@ static inline void handle_callmode_1(struct rpt *myrpt, char c)
 
 static int funcchar_common(struct rpt *myrpt, char c)
 {
-	if (myrpt->callmode == 1) {
-		handle_callmode_1(myrpt, c);
+	if (myrpt->callmode == CALLMODE_DIALING) {
+		handle_callmode_dialing(myrpt, c);
 	}
 
 	if (!myrpt->inpadtest) {
@@ -1942,7 +1942,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (myrpt->rem_dtmfidx < 0) {
-		if ((myrpt->callmode == 2) || (myrpt->callmode == 3)) {
+		if ((myrpt->callmode == CALLMODE_CONNECTING) || (myrpt->callmode == CALLMODE_UP)) {
 			myrpt->mydtmf = c;
 		}
 		if (myrpt->p.propagate_dtmf)
@@ -2019,7 +2019,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 				return;
 			}
 #if 0
-			if ((myrpt->rem_dtmfidx < 0) && ((myrpt->callmode == 2) || (myrpt->callmode == 3))) {
+			if ((myrpt->rem_dtmfidx < 0) && ((myrpt->callmode == CALLMODE_DIALING) || (myrpt->callmode == CALLMODE_UP))) {
 				myrpt->mydtmf = c;
 			}
 #endif
@@ -2364,10 +2364,10 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 	}
 	if (c == myrpt->p.endchar) {
 		/* if in simple mode, kill autopatch */
-		if (myrpt->p.simple && myrpt->callmode) {
+		if (myrpt->p.simple && (myrpt->callmode != CALLMODE_DOWN)) {
 			ast_log(LOG_WARNING, "simple mode autopatch kill\n");
 			rpt_mutex_lock(&myrpt->lock);
-			myrpt->callmode = 0;
+			myrpt->callmode = CALLMODE_DOWN;
 			myrpt->macropatch = 0;
 			channel_revert(myrpt);
 			rpt_mutex_unlock(&myrpt->lock);
@@ -2386,7 +2386,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			rpt_mutex_unlock(&myrpt->lock);
 			if (myrpt->p.propagate_phonedtmf)
 				do_dtmf_phone(myrpt, NULL, c);
-			if ((myrpt->dtmfidx == -1) && ((myrpt->callmode == 2) || (myrpt->callmode == 3))) {
+			if ((myrpt->dtmfidx == -1) && ((myrpt->callmode == CALLMODE_CONNECTING) || (myrpt->callmode == CALLMODE_UP))) {
 				myrpt->mydtmf = c;
 			}
 			return;
@@ -2470,7 +2470,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 		}
 	} else {					/* if simple */
 		if ((!myrpt->callmode) && (c == myrpt->p.funcchar)) {
-			myrpt->callmode = 1;
+			myrpt->callmode = CALLMODE_DIALING;
 			myrpt->patchnoct = 0;
 			myrpt->patchquiet = 0;
 			myrpt->patchfarenddisconnect = 0;
@@ -2483,14 +2483,14 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			return;
 		}
 	}
-	if (myrpt->callmode == 1) {
+	if (myrpt->callmode == CALLMODE_DIALING) {
 		myrpt->exten[myrpt->cidx++] = c;
 		myrpt->exten[myrpt->cidx] = 0;
 		/* if this exists */
 		if (ast_exists_extension(myrpt->pchannel, myrpt->patchcontext, myrpt->exten, 1, NULL)) {
 			/* if this really it, end now */
 			if (!ast_matchmore_extension(myrpt->pchannel, myrpt->patchcontext, myrpt->exten, 1, NULL)) {
-				myrpt->callmode = 2;
+				myrpt->callmode = CALLMODE_CONNECTING;
 				rpt_mutex_unlock(&myrpt->lock);
 				if (!myrpt->patchquiet)
 					rpt_telemetry(myrpt, PROC, NULL);
@@ -2502,12 +2502,12 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 		/* if can continue, do so */
 		if (!ast_canmatch_extension(myrpt->pchannel, myrpt->patchcontext, myrpt->exten, 1, NULL)) {
 			/* call has failed, inform user */
-			myrpt->callmode = 4;
+			myrpt->callmode = CALLMODE_FAILED;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
-	if (((myrpt->callmode == 2) || (myrpt->callmode == 3)) && (myrpt->dtmfidx < 0)) {
+	if (((myrpt->callmode == CALLMODE_CONNECTING) || (myrpt->callmode == CALLMODE_UP)) && (myrpt->dtmfidx < 0)) {
 		myrpt->mydtmf = c;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
@@ -4079,7 +4079,7 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 		if (myrpt->p.duplex < 2) {
 			int x;
 			if (myrpt->txrealkeyed) {
-				if (!*myfirst && myrpt->callmode) {
+				if (!*myfirst && (myrpt->callmode != CALLMODE_DOWN)) {
 					x = 0;
 					AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) x++;
 					for (; x < myrpt->p.simplexpatchdelay; x++) {
@@ -4820,7 +4820,7 @@ static void *rpt(void *this)
 	myrpt->idtimer = myrpt->p.politeid;
 	myrpt->elketimer = myrpt->p.elke;
 	myrpt->mustid = myrpt->tailid = 0;
-	myrpt->callmode = 0;
+	myrpt->callmode = CALLMODE_DOWN;
 	myrpt->tounkeyed = 0;
 	myrpt->tonotify = 0;
 	myrpt->retxtimer = 0;
@@ -5033,9 +5033,9 @@ static void *rpt(void *this)
 		/* If full duplex, add local tx to totx */
 
 		if ((myrpt->p.duplex > 1) && (!myrpt->patchvoxalways)) {
-			totx = myrpt->callmode;
+			totx = (myrpt->callmode != CALLMODE_DOWN);
 		} else {
-			int myrx = myrpt->localtx || myrpt->remrx || (!myrpt->callmode);
+			int myrx = myrpt->localtx || myrpt->remrx || (myrpt->callmode == CALLMODE_DOWN);
 
 			if (lastmyrx != myrx) {
 				if (myrpt->p.duplex < 2)
@@ -5043,11 +5043,11 @@ static void *rpt(void *this)
 				lastmyrx = myrx;
 			}
 			totx = 0;
-			if (myrpt->callmode && (myrpt->voxtotimer <= 0)) {
+			if ((myrpt->callmode != CALLMODE_DOWN) && (myrpt->voxtotimer <= 0)) {
 				voxtostate_to_voxtotimer(myrpt);
 			}
 			if (!myrpt->voxtostate)
-				totx = myrpt->callmode && myrpt->wasvox;
+				totx = (myrpt->callmode != CALLMODE_DOWN) && myrpt->wasvox;
 		}
 		if (myrpt->p.duplex > 1) {
 			totx = totx || myrpt->localtx;
@@ -5144,9 +5144,9 @@ static void *rpt(void *this)
 			continue;
 		}
 		/* if timed-out and in circuit busy after call */
-		if ((!totx) && (!myrpt->totimer) && (myrpt->callmode == 4)) {
+		if (!totx && !myrpt->totimer && (myrpt->callmode == CALLMODE_FAILED)) {
 			ast_debug(1, "timed-out and in circuit busy after call\n");
-			myrpt->callmode = 0;
+			myrpt->callmode = CALLMODE_DOWN;
 			myrpt->macropatch = 0;
 			channel_revert(myrpt);
 		}
@@ -5278,8 +5278,8 @@ static void *rpt(void *this)
 			rpt_update_boolean(myrpt, "RPT_ETXKEYED", lastexttx);
 		}
 
-		if (((myrpt->callmode != 0)) != lastpatchup) {
-			lastpatchup = ((myrpt->callmode != 0));
+		if ((myrpt->callmode != CALLMODE_DOWN) != lastpatchup) {
+			lastpatchup = (myrpt->callmode != CALLMODE_DOWN);
 			rpt_update_boolean(myrpt, "RPT_AUTOPATCHUP", lastpatchup);
 		}
 
@@ -5305,7 +5305,7 @@ static void *rpt(void *this)
 			}
 			l = l->next;
 		}
-		x = myrpt->remrx || myrpt->localtx || myrpt->callmode || myrpt->parrotstate;
+		x = myrpt->remrx || myrpt->localtx || (myrpt->callmode != CALLMODE_DOWN) || myrpt->parrotstate;
 		if (x != myrpt->lastitx) {
 			char str[16];
 
@@ -6451,16 +6451,17 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* Parts of this section taken from app_parkandannounce */
 		char *return_context;
 		//int l, m, lot, timeout = 0;
-		int l, m, timeout = 0;
+		int l, timeout = 0;
+		enum patch_call_mode callmode;
 		char tmp[256], *template;
 		char *working, *context, *exten, *priority;
 		char *s, *orig_s;
 
 		rpt_mutex_lock(&myrpt->lock);
-		m = myrpt->callmode;
+		callmode = myrpt->callmode;
 		rpt_mutex_unlock(&myrpt->lock);
 
-		if ((!myrpt->p.nobusyout) && m) {
+		if ((!myrpt->p.nobusyout) && (callmode != CALLMODE_DOWN)) {
 			if (ast_channel_state(chan) != AST_STATE_UP) {
 				ast_indicate(chan, AST_CONTROL_BUSY);
 			}
