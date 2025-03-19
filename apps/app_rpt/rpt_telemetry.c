@@ -62,7 +62,6 @@ void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *my
 		return;
 	}
 	myrpt->telemmode = TELEM_HANG_TIME;
-	return;
 }
 
 int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *args)
@@ -89,7 +88,6 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 	struct daq_entry_tag *entry;
 
 	if (!(myargs = ast_strdup(args))) {	/* Make a local copy to slice and dice */
-		ast_log(LOG_WARNING, "Out of memory\n");
 		return -1;
 	}
 
@@ -155,7 +153,6 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 	}
 
 	if (!(meter_face = ast_strdup(p))) {
-		ast_log(LOG_WARNING, "Out of memory");
 		ast_free(myargs);
 		return -1;
 	}
@@ -941,7 +938,6 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		return;
 	}
 	ast_log(LOG_WARNING, "Got unknown link telemetry command: %s\n", strs[0]);
-	return;
 }
 
 /*! \brief Try to catch setting active_telem NULL when we weren't what it was set to

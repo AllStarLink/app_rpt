@@ -2352,7 +2352,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			 u != (struct usbecho *) &o->echoq; u = (struct usbecho *) u->q_forw)
 			x++;
 		if (x < o->echomax) {
-			u = (struct usbecho *) ast_calloc(1, sizeof(struct usbecho));
+			u = ast_calloc(1, sizeof(struct usbecho));
 			if (u) {
 				memcpy(u->data, (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET), FRAME_SIZE * 2);
 				insque((struct qelem *) u, o->echoq.q_back);
@@ -3093,7 +3093,6 @@ static void _menu_print(int fd, struct chan_simpleusb_pvt *o)
 	if (o->legacyaudioscaling) {
 		ast_cli(fd, "legacyaudioscaling is enabled\n");
 	}
-	return;
 }
 
 /*!
@@ -3121,7 +3120,6 @@ static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, const char *str)
 	o->rxmixerset = i;
 	ast_cli(fd, "Channel %s: Changed setting on RX Channel to %d\n", o->name, o->rxmixerset);
 	mixer_write(o);
-	return;
 }
 
 /*!
@@ -3158,7 +3156,6 @@ static void _menu_txa(int fd, struct chan_simpleusb_pvt *o, const char *str)
 		}
 		_send_tx_test_tone(fd, o, 5000, 1);
 	}
-	return;
 }
 
 /*!
@@ -3195,7 +3192,6 @@ static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
 		}
 		_send_tx_test_tone(fd, o, 5000, 1);
 	}
-	return;
 }
 
 /*!
@@ -3571,7 +3567,6 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 		break;
 	}
 	option_verbose = oldverbose;
-	return;
 }
 
 /*!

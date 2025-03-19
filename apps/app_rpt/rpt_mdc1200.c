@@ -142,7 +142,6 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
-	return;
 }
 
 static const char *my_variable_match(const struct ast_config *config, const char *category, const char *variable)
@@ -192,7 +191,6 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 	}
 	if ((data[0] == 'I') && (!busy))
 		strcpy(myrpt->lastmdc, data);
-	return;
 }
 
 #ifdef	_MDC_ENCODE_H_
@@ -208,7 +206,6 @@ void mdc1200_ack_status(struct rpt *myrpt, short UnitID)
 	mdcp->type[0] = 'A';
 	mdcp->UnitID = UnitID;
 	rpt_telemetry(myrpt, MDC1200, (void *) mdcp);
-	return;
 }
 
 #endif
@@ -227,7 +224,6 @@ static void mdcgen_release(struct ast_channel *chan, void *params)
 	if (ps->mdc)
 		ast_free(ps->mdc);
 	ast_free(ps);
-	return;
 }
 
 static void *mdcgen_alloc(struct ast_channel *chan, void *params)
@@ -240,7 +236,6 @@ static void *mdcgen_alloc(struct ast_channel *chan, void *params)
 	ps->origwfmt = ast_channel_writeformat(chan);	/*! \todo does this need to be freed? */
 	ps->mdc = mdc_encoder_new(8000);
 	if (!ps->mdc) {
-		ast_log(LOG_ERROR, "Unable to make new MDC encoder!!\n");
 		ast_free(ps);
 		return NULL;
 	}

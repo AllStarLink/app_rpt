@@ -42,9 +42,10 @@ mdc_decoder_t * mdc_decoder_new(int sampleRate)
 	mdc_decoder_t *decoder;
 	int i;
 
-	decoder = (mdc_decoder_t *) ast_malloc(sizeof(mdc_decoder_t));
-	if(!decoder)
+	decoder = ast_malloc(sizeof(mdc_decoder_t));
+	if (!decoder) {
 		return (mdc_decoder_t *) 0L;
+	}
 
 	decoder->hyst = 3;
 	decoder->incr = (1200.0 * TWOPI) / ((double)sampleRate);

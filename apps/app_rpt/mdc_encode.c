@@ -99,9 +99,10 @@ mdc_encoder_t * mdc_encoder_new(int sampleRate)
 {
 	mdc_encoder_t *encoder;
 
-	encoder = (mdc_encoder_t *) ast_malloc(sizeof(mdc_encoder_t));
-	if(!encoder)
+	encoder = ast_malloc(sizeof(mdc_encoder_t));
+	if (!encoder) {
 		return (mdc_encoder_t *) 0L;
+	}
 
 	encoder->incr = (1200.0 * TWOPI) / ((double)sampleRate);
 	encoder->loaded = 0;

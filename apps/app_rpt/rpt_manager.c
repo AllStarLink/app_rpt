@@ -216,8 +216,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 					l = l->next;
 					continue;
 				}
-				if (!(s = (struct rpt_lstat *) ast_malloc(sizeof(struct rpt_lstat)))) {
-					ast_log(LOG_ERROR, "Malloc failed in rpt_do_lstats\r\n");
+				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
 					rpt_mutex_unlock(&myrpt->lock);
 					return -1;
 				}

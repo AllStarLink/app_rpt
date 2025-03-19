@@ -698,7 +698,7 @@ void donodelog(struct rpt *myrpt, char *str)
 		return;
 	}
 
-	nodep = (struct nodelog *) ast_malloc(sizeof(struct nodelog));
+	nodep = ast_malloc(sizeof(struct nodelog));
 	if (!nodep) {
 		return;
 	}
@@ -786,12 +786,9 @@ void rpt_event_process(struct rpt *myrpt)
 			/* set to 1 if var is true */
 			varp = ((pbx_checkcondition(var) > 0));
 			for (i = 0; (!cmd) && (c = *(argv[1] + i)); i++) {
-				cmpvar = (char *) ast_malloc(strlen(argv[2]) + 10);
-				if (!cmpvar) {
-					ast_log(LOG_ERROR, "Cannot malloc()\n");
+				if (ast_asprintf(&cmpvar, "XX_%s", argv[2]) < 0) {
 					return;
 				}
-				sprintf(cmpvar, "XX_%s", argv[2]);
 				var1 = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, cmpvar);
 				var1p = !varp;	/* start with it being opposite */
 				if (var1) {
@@ -892,12 +889,9 @@ void rpt_event_process(struct rpt *myrpt)
 			char *cp;
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
-			cp = ast_malloc(strlen(cmd) + 10);
-			if (!cp) {
+			if (ast_asprintf(&cp, "%s &", cmd) < 0) {
 				return;
 			}
-			memset(cp, 0, strlen(cmd) + 10);
-			sprintf(cp, "%s &", cmd);
 			ast_safe_system(cp);
 			ast_free(cp);
 		}
@@ -919,12 +913,10 @@ void rpt_event_process(struct rpt *myrpt)
 		if (!var)
 			continue;
 		/* set to 1 if var is true */
-		varp = ((pbx_checkcondition(var) > 0));
-		cmpvar = (char *) ast_malloc(strlen(argv[2]) + 10);
-		if (!cmpvar) {
+		varp = pbx_checkcondition(var) > 0;
+		if (ast_asprintf(&cmpvar, "XX_%s", argv[2]) < 0) {
 			return;
 		}
-		sprintf(cmpvar, "XX_%s", argv[2]);
 		var1 = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, cmpvar);
 		pbx_builtin_setvar_helper(myrpt->rxchannel, cmpvar, var);
 		ast_free(cmpvar);
@@ -940,42 +932,32 @@ void rpt_event_process(struct rpt *myrpt)
 	}
 	ast_channel_unlock(myrpt->rxchannel);
 	ast_debug(2, "    -- %d variables\n", i);
-	return;
 }
 
 static void dodispgm(struct rpt *myrpt, char *them)
 {
 	char *a;
-	int i;
 
-	if (!myrpt->p.discpgm)
-		return;
-	i = strlen(them) + strlen(myrpt->p.discpgm) + 100;
-	a = ast_malloc(i);
-	if (!a) {
+	if (!myrpt->p.discpgm) {
 		return;
 	}
-	memset(a, 0, i);
-	sprintf(a, "%s %s %s &", myrpt->p.discpgm, myrpt->name, them);
+	if (ast_asprintf(&a, "%s %s %s &", myrpt->p.discpgm, myrpt->name, them) < 0) {
+		return;
+	}
 	ast_safe_system(a);
 	ast_free(a);
-	return;
 }
 
 static void doconpgm(struct rpt *myrpt, char *them)
 {
 	char *a;
-	int i;
 
-	if (!myrpt->p.connpgm)
-		return;
-	i = strlen(them) + strlen(myrpt->p.connpgm) + +100;
-	a = ast_malloc(i);
-	if (!a) {
+	if (!myrpt->p.connpgm) {
 		return;
 	}
-	memset(a, 0, i);
-	sprintf(a, "%s %s %s &", myrpt->p.connpgm, myrpt->name, them);
+	if (ast_asprintf(&a, "%s %s %s &", myrpt->p.connpgm, myrpt->name, them) < 0) {
+		return;
+	}
 	ast_safe_system(a);
 	ast_free(a);
 	return;
@@ -986,7 +968,7 @@ static size_t writefunction(char *contents, size_t size, size_t nmemb, void *use
 {
 	struct ast_str **buffer = userdata;
 
-	return  ast_str_append(buffer, 0, "%.*s", (int) (size * nmemb), contents);
+	return ast_str_append(buffer, 0, "%.*s", (int) (size * nmemb), contents);
 }
 
 static void *perform_statpost(void *stats_url)
@@ -1982,7 +1964,6 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		}
 	}
 	rpt_mutex_unlock(&myrpt->lock);
-	return;
 }
 
 static inline void cmdnode_helper(struct rpt *myrpt, char *cmd)
@@ -2082,7 +2063,6 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 	} else if (myrpt->p.propagate_phonedtmf)
 		do_dtmf_local(myrpt, c);
 	rpt_mutex_unlock(&myrpt->lock);
-	return;
 }
 
 static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int phonemode)
@@ -2532,7 +2512,6 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 	rpt_mutex_unlock(&myrpt->lock);
 	if ((myrpt->dtmfidx < 0) && myrpt->p.propagate_phonedtmf)
 		do_dtmf_phone(myrpt, NULL, c);
-	return;
 }
 
 /* place an ID event in the telemetry queue */
@@ -4887,7 +4866,6 @@ static void *rpt(void *this)
 	if (myrpt->p.rxburstfreq) {
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
-			ast_log(LOG_WARNING, "Unable to allocate DSP!\n");
 			rpt_hangup(myrpt, RPT_RXCHAN);
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);

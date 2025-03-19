@@ -279,7 +279,6 @@ void local_dtmfkey_helper(struct rpt *myrpt, char c)
 	ast_copy_string(myrpt->curdtmfuser, val, sizeof(myrpt->curdtmfuser));
 	myrpt->dtmfkeyed = 1;
 	myrpt->dtmfkeybuf[0] = 0;
-	return;
 }
 
 int elink_query_callsign(char *node, char *callsign, int callsignlen)

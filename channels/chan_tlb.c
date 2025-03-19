@@ -482,7 +482,6 @@ static void strupr(char* restrict str)
 		*str = toupper(*str);
 		str++;
 	}
-	return;
 }
 
 /*!
@@ -695,7 +694,6 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 		}
 		p += (ntohs(*((short *) (p + 2))) + 1) * 4;
 	}
-	return;
 }
 
 /*!
@@ -712,7 +710,6 @@ static void copy_sdes_item(const char *source, char *dest, int destlen)
 	}
 	memcpy(dest, source + 2, len);
 	dest[len] = 0;
-	return;
 }
 
 /*!
@@ -1962,87 +1959,84 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	if (codec) {
 		ast_copy_string(mycodec, codec, sizeof(mycodec) - 1);
 	}
-	TLB_node_key = (struct TLB_node *) ast_malloc(sizeof(struct TLB_node));
-	if (TLB_node_key) {
-		ast_copy_string(TLB_node_key->call, call, TLB_CALL_SIZE);
-		ast_copy_string(TLB_node_key->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
-		TLB_node_key->port = instp->TLB_node_test.port;
-		ast_copy_string(TLB_node_key->name, name, TLB_NAME_SIZE);
-		/* find the node that matches the ipaddr and call */
-		if (!(cfg = ast_config_load(config, zeroflag))) {
-			ast_log(LOG_ERROR, "Unable to load config %s\n", config);
-			ast_free(TLB_node_key);
-			return -1;
+	TLB_node_key = ast_malloc(sizeof(struct TLB_node));
+	if (!TLB_node_key) {
+		return -1;
+	}
+	ast_copy_string(TLB_node_key->call, call, TLB_CALL_SIZE);
+	ast_copy_string(TLB_node_key->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
+	TLB_node_key->port = instp->TLB_node_test.port;
+	ast_copy_string(TLB_node_key->name, name, TLB_NAME_SIZE);
+	/* find the node that matches the ipaddr and call */
+	if (!(cfg = ast_config_load(config, zeroflag))) {
+		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		ast_free(TLB_node_key);
+		return -1;
+	}
+	if (strcmp(call, "OUTBOUND")) {
+		for (v = ast_variable_browse(cfg, "nodes"); v; v = v->next) {
+			if (!v->value) {
+				continue;
+			}
+			sval = ast_strdupa(v->value);
+			strupr(sval);
+			n = finddelim(sval, strs, ARRAY_LEN(strs));
+			if (n < 3) {
+				continue;
+			}
+			if ((!strcmp(TLB_node_key->ip, strs[1])) &&
+				(TLB_node_key->port == (unsigned short) strtoul(strs[2], NULL, 0)) && (!strcmp(call, strs[0]))) {
+				break;
+			}
 		}
-		if (strcmp(call, "OUTBOUND")) {
-			for (v = ast_variable_browse(cfg, "nodes"); v; v = v->next) {
-				if (!v->value) {
-					continue;
-				}
-				sval = ast_strdupa(v->value);
-				strupr(sval);
-				n = finddelim(sval, strs, ARRAY_LEN(strs));
-				if (n < 3) {
-					continue;
-				}
-				if ((!strcmp(TLB_node_key->ip, strs[1])) &&
-					(TLB_node_key->port == (unsigned short) strtoul(strs[2], NULL, 0)) && (!strcmp(call, strs[0]))) {
-					break;
-				}
-			}
-			if (!v) {
-				ast_log(LOG_ERROR, "Cannot find node entry for %s IP addr %s port %u\n",
-						call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
-				ast_free(TLB_node_key);
-				ast_config_destroy(cfg);
-				return 1;
-			}
-			TLB_node_key->nodenum = atoi(v->name);
-			if (n > 3) {
-				ast_copy_string(mycodec, strs[3], sizeof(mycodec) - 1);
-			}
-		} else {
-			TLB_node_key->nodenum = 0;
-		}
-		ast_config_destroy(cfg);
-		TLB_node_key->countdown = instp->rtcptimeout;
-		TLB_node_key->seqnum = 1;
-		TLB_node_key->instp = instp;
-		if (tsearch(TLB_node_key, &TLB_node_list, compare_ip)) {
-			ast_debug(1, "tlb: new CALL = %s, ip = %s, port = %u\n", TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
-			if (instp->confmode) {
-				TLB_node_key->p = instp->confp;
-			} else {
-				if (p == NULL) {	/* if a new inbound call */
-					p = TLB_alloc((void *) instp->name);
-					if (!p) {
-						ast_log(LOG_ERROR, "Cannot alloc TLB channel\n");
-						return -1;
-					}
-					TLB_node_key->p = p;
-					ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
-					TLB_node_key->p->port = instp->TLB_node_test.port;
-					TLB_node_key->chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum, NULL, NULL);
-					if (!TLB_node_key->chan) {
-						TLB_destroy(TLB_node_key->p);
-						return -1;
-					}
-				} else {
-					TLB_node_key->p = p;
-					ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
-					TLB_node_key->p->port = instp->TLB_node_test.port;
-					TLB_node_key->chan = p->owner;
-				}
-			}
-		} else {
-			ast_log(LOG_ERROR, "tsearch() failed to add CALL = %s,ip = %s,port = %u\n",
-					TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
+		if (!v) {
+			ast_log(LOG_ERROR, "Cannot find node entry for %s IP addr %s port %u\n",
+					call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
 			ast_free(TLB_node_key);
-			return -1;
+			ast_config_destroy(cfg);
+			return 1;
+		}
+		TLB_node_key->nodenum = atoi(v->name);
+		if (n > 3) {
+			ast_copy_string(mycodec, strs[3], sizeof(mycodec) - 1);
 		}
 	} else {
-		ast_log(LOG_ERROR, "malloc() failed for new CALL=%s, ip=%s, port=%u\n",
-				call, instp->TLB_node_test.ip, instp->TLB_node_test.port);
+		TLB_node_key->nodenum = 0;
+	}
+	ast_config_destroy(cfg);
+	TLB_node_key->countdown = instp->rtcptimeout;
+	TLB_node_key->seqnum = 1;
+	TLB_node_key->instp = instp;
+	if (tsearch(TLB_node_key, &TLB_node_list, compare_ip)) {
+		ast_debug(1, "tlb: new CALL = %s, ip = %s, port = %u\n", TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
+		if (instp->confmode) {
+			TLB_node_key->p = instp->confp;
+		} else {
+			if (p == NULL) {	/* if a new inbound call */
+				p = TLB_alloc((void *) instp->name);
+				if (!p) {
+					ast_log(LOG_ERROR, "Cannot alloc TLB channel\n");
+					return -1;
+				}
+				TLB_node_key->p = p;
+				ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
+				TLB_node_key->p->port = instp->TLB_node_test.port;
+				TLB_node_key->chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum, NULL, NULL);
+				if (!TLB_node_key->chan) {
+					TLB_destroy(TLB_node_key->p);
+					return -1;
+				}
+			} else {
+				TLB_node_key->p = p;
+				ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
+				TLB_node_key->p->port = instp->TLB_node_test.port;
+				TLB_node_key->chan = p->owner;
+			}
+		}
+	} else {
+		ast_log(LOG_ERROR, "tsearch() failed to add CALL = %s,ip = %s,port = %u\n",
+				TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
+		ast_free(TLB_node_key);
 		return -1;
 	}
 	if (mycodec[0]) {
@@ -2321,9 +2315,7 @@ static void *TLB_reader(void *data)
 							}
 							/* need complete packet and IP address for TheLinkBox */
 							qpel = ast_malloc(sizeof(struct TLB_rxqel));
-							if (!qpel) {
-								ast_log(LOG_ERROR, "Cannot malloc for qpel\n");
-							} else {
+							if (qpel) {
 								memcpy(qpel->buf, ((struct rtpVoice_t *) buf)->data,
 									   tlb_codecs[p->rxcodec].blocking_factor * tlb_codecs[p->rxcodec].frame_size);
 								ast_copy_string(qpel->fromip, instp->TLB_node_test.ip, TLB_IP_SIZE);
@@ -2363,12 +2355,10 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		return -1;
 	}
 
-	instp = ast_malloc(sizeof(struct TLB_instance));
+	instp = ast_calloc(1, sizeof(struct TLB_instance));
 	if (!instp) {
-		ast_log(LOG_ERROR, "Cannot malloc\n");
 		return -1;
 	}
-	memset(instp, 0, sizeof(struct TLB_instance));
 
 	ast_mutex_init(&instp->lock);
 	instp->audio_sock = -1;
