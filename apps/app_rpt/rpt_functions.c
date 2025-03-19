@@ -362,7 +362,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 
 	case 16:					/* Restore links disconnected with "disconnect all links" command */
 		strcpy(tmp, myrpt->savednodes);	/* Make a copy */
-		finddelim(tmp, strs, MAXLINKLIST);	/* convert into substrings */
+		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
 		for (i = 0; tmp[0] && strs[i] != NULL && i < MAXLINKLIST; i++) {
 			s1 = strs[i];
 			if (s1[0] == 'X')
@@ -905,7 +905,7 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 
 	ast_debug(1, "@@@@ Autopatch up\n");
 
-	if (!myrpt->callmode) {
+	if (myrpt->callmode == CALLMODE_DOWN) {
 		/* Set defaults */
 		myrpt->patchnoct = 0;
 		myrpt->patchdialtime = 0;
@@ -921,12 +921,12 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 		if (!lparam) {
 			return DC_ERROR;
 		}
-		paramlength = finddelim(lparam, paramlist, 20);
+		paramlength = finddelim(lparam, paramlist, ARRAY_LEN(paramlist));
 		for (i = 0; i < paramlength; i++) {
 			index = matchkeyword(paramlist[i], &value, keywords);
 			if (value)
 				value = skipchars(value, "= ");
-			if (!myrpt->callmode) {
+			if (myrpt->callmode == CALLMODE_DOWN) {
 				switch (index) {
 				case 1:		/* context */
 					ast_copy_string(myrpt->patchcontext, value, sizeof(myrpt->patchcontext));
@@ -967,15 +967,15 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 
 	/* if on call, force * into current audio stream */
 
-	if ((myrpt->callmode == 2) || (myrpt->callmode == 3)) {
+	if ((myrpt->callmode == CALLMODE_CONNECTING) || (myrpt->callmode == CALLMODE_UP)) {
 		if (!nostar)
 			myrpt->mydtmf = myrpt->p.funcchar;
 	}
-	if (myrpt->callmode) {
+	if (myrpt->callmode != CALLMODE_DOWN) {
 		rpt_mutex_unlock(&myrpt->lock);
 		return DC_COMPLETE;
 	}
-	myrpt->callmode = 1;
+	myrpt->callmode = CALLMODE_DIALING;
 	myrpt->cidx = 0;
 	myrpt->exten[myrpt->cidx] = 0;
 	rpt_mutex_unlock(&myrpt->lock);
@@ -994,12 +994,12 @@ int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int com
 
 	myrpt->macropatch = 0;
 
-	if (!myrpt->callmode) {
+	if (myrpt->callmode == CALLMODE_DOWN) {
 		rpt_mutex_unlock(&myrpt->lock);
 		return DC_COMPLETE;
 	}
 
-	myrpt->callmode = 0;
+	myrpt->callmode = CALLMODE_DOWN;
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_telem_select(myrpt, command_source, mylink);
@@ -1172,7 +1172,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		return DC_ERROR;
 
 	ast_copy_string(paramcopy, param, sizeof(paramcopy));
-	argc = explode_string(paramcopy, argv, 100, ',', 0);
+	argc = explode_string(paramcopy, argv, ARRAY_LEN(argv), ',', 0);
 
 	if (!argc)
 		return DC_ERROR;
@@ -1581,18 +1581,16 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 				argv[i] = dtmf_tones[15];
 			j += strlen(argv[i]);
 		}
-		cp = ast_malloc(j + 100);
+		cp = ast_calloc(1, j + 100);
 		if (!cp) {
-			ast_log(LOG_WARNING, "cannot malloc");
 			return DC_ERROR;
 		}
-		memset(cp, 0, j + 100);
 		for (i = 1; i < argc; i++) {
 			if (i != 1)
 				strcat(cp, ",");
 			strcat(cp, argv[i]);
 		}
-		rpt_telemetry(myrpt, PAGE, cp);
+		rpt_telemetry(myrpt, PAGE, cp); /* cp is passed to rpt_telem_thread where it is free'd after use */
 		return DC_COMPLETE;
 
 	case 49:					/* Disable Incoming connections */
@@ -1675,9 +1673,9 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		if (argc < 3)
 			break;
 		mdcp = ast_calloc(1, sizeof(struct mdcparams));
-		if (!mdcp)
+		if (!mdcp) {
 			return DC_ERROR;
-		memset(mdcp, 0, sizeof(*mdcp));
+		}
 		if (*argv[1] == 'C') {
 			if (argc < 5)
 				return DC_ERROR;
@@ -1686,7 +1684,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 		}
 		ast_copy_string(mdcp->type, argv[1], sizeof(mdcp->type));
 		mdcp->UnitID = (short) strtol(argv[2], NULL, 16);
-		rpt_telemetry(myrpt, MDC1200, (void *) mdcp);
+		rpt_telemetry(myrpt, MDC1200, (void *) mdcp); /* mdcp is passed to rpt_telem_thread where it is free'd after use */
 		return DC_COMPLETE;
 #endif
 	case 61:					/* send GPIO change */
@@ -1800,15 +1798,11 @@ int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 
 	if (param) {
 		if (*param == '#') {	/* to execute asterisk cli command */
-			ast_cli_command(rpt_nullfd(), param + 1);
+			ast_cli_command(rpt_nullfd(), param + 2);
 		} else {
-			cp = ast_malloc(strlen(param) + 10);
-			if (!cp) {
-				ast_log(LOG_WARNING, "Unable to malloc");
+			if (ast_asprintf(&cp, "%s &", param) < 0) {
 				return DC_ERROR;
 			}
-			memset(cp, 0, strlen(param) + 10);
-			sprintf(cp, "%s &", param);
 			ast_safe_system(cp);
 			ast_free(cp);
 		}

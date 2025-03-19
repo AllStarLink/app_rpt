@@ -202,17 +202,17 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 				ider_state = "CLEAN";
 
 			switch (myrpt->callmode) {
-			case 1:
+			case CALLMODE_DIALING:
 				patch_state = "DIALING";
 				break;
-			case 2:
+			case CALLMODE_CONNECTING:
 				patch_state = "CONNECTING";
 				break;
-			case 3:
+			case CALLMODE_UP:
 				patch_state = "UP";
 				break;
 
-			case 4:
+			case CALLMODE_FAILED:
 				patch_state = "CALL FAILED";
 				break;
 
@@ -347,8 +347,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					l = l->next;
 					continue;
 				}
-				if ((s = (struct rpt_lstat *) ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
-					ast_log(LOG_ERROR, "Malloc failed in rpt_do_lstats\n");
+				if ((s = ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
 					rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 					return RESULT_FAILURE;
 				}
@@ -496,17 +495,17 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				ider_state = "2";	//"CLEAN";
 
 			switch (myrpt->callmode) {
-			case 1:
+			case CALLMODE_DIALING:
 				patch_state = "0";	//"DIALING";
 				break;
-			case 2:
+			case CALLMODE_CONNECTING:
 				patch_state = "1";	//"CONNECTING";
 				break;
-			case 3:
+			case CALLMODE_UP:
 				patch_state = "2";	//"UP";
 				break;
 
-			case 4:
+			case CALLMODE_FAILED:
 				patch_state = "3";	//"CALL FAILED";
 				break;
 
@@ -525,11 +524,13 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				tel_mode = "3";
 			}
 
-//### GET CONNECTED NODE INFO ####################
-			// Traverse the list of connected nodes 
+			/* ### GET CONNECTED NODE INFO ####################
+			 * Traverse the list of connected nodes
+			 */
 
-			__mklinklist(myrpt, NULL, lbuf, 0);
-
+			rpt_mutex_lock(&myrpt->lock);
+			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+			rpt_mutex_unlock(&myrpt->lock);
 			j = 0;
 			l = myrpt->links.next;
 			while (l && (l != &myrpt->links)) {
@@ -537,8 +538,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 					l = l->next;
 					continue;
 				}
-				if ((s = (struct rpt_lstat *) ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
-					ast_log(LOG_ERROR, "Malloc failed in rpt_do_lstats\n");
+				if ((s = ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
 					rpt_mutex_unlock(&myrpt->lock);	// UNLOCK 
 					return RESULT_FAILURE;
 				}
@@ -590,7 +590,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 //### GET ALL LINKED NODES INFO ####################
 			/* parse em */
-			ns = finddelim(lbuf, strs, MAXLINKLIST);
+			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -657,10 +657,10 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
-			__mklinklist(myrpt, NULL, lbuf, 0);
+			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 			/* parse em */
-			ns = finddelim(lbuf, strs, MAXLINKLIST);
+			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -1001,8 +1001,8 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE) {
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_BUSY;
 		rpt_vars[thisRpt].cmdAction.functionNumber = thisAction;
-		snprintf(rpt_vars[thisRpt].cmdAction.param, MAXDTMF, "%s,%s", argv[4], argv[5]);
-		ast_copy_string(rpt_vars[thisRpt].cmdAction.digits, argv[5], MAXDTMF);
+		snprintf(rpt_vars[thisRpt].cmdAction.param, sizeof(rpt_vars[thisRpt].cmdAction.param), "%s,%s", argv[4], argv[5]);
+		ast_copy_string(rpt_vars[thisRpt].cmdAction.digits, argv[5], sizeof(rpt_vars[thisRpt].cmdAction.digits));
 		rpt_vars[thisRpt].cmdAction.command_source = SOURCE_RPT;
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_READY;
 	}							/* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */

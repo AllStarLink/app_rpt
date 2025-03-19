@@ -1,6 +1,6 @@
 
 #define VERSION_MAJOR 3
-#define VERSION_MINOR 2
+#define VERSION_MINOR 3
 #define VERSION_PATCH 0
 
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
@@ -271,6 +271,14 @@ enum  rpt_dns_method {
 	LOOKUP_FILE
 };
 
+enum patch_call_mode {
+	CALLMODE_DOWN,
+	CALLMODE_DIALING,
+	CALLMODE_CONNECTING,
+	CALLMODE_UP,
+	CALLMODE_FAILED
+};
+
 #define DEFAULT_NODE_LOOKUP_METHOD LOOKUP_BOTH
 #define DEFAULT_TELEMDUCKDB "-9"
 #define	DEFAULT_RPT_TELEMDEFAULT 1
@@ -332,6 +340,14 @@ struct rpt_chan_stat {
 #define NEWKEYSTR "!NEWKEY!"
 #define NEWKEY1STR "!NEWKEY1!"
 #define IAXKEYSTR "!IAXKEY!"
+
+
+/*! \brief Repeater link connection newkey handshake state */
+enum newkey { 
+	RADIO_KEY_ALLOWED, /*!< AST_CONTROL_RADIO_KEY is allowed on repeater channel */
+	RADIO_KEY_ALLOWED_REDUNDANT, /*!< "!NEWKEY!" - AST_CONTROL_RADIO_KEY allowed on the repeater channel */
+	RADIO_KEY_NOT_ALLOWED /*!< "!NEWKEY1!" message - AST_CONTROL_RADIO_KEY are not allowed on the repeater channel */
+};
 
 struct vox {
 	float	speech_energy;
@@ -409,7 +425,7 @@ struct rpt_link {
 	char wasvox;
 	int voxtotimer;
 	char voxtostate;
-	char newkey;
+	enum newkey link_newkey;
 	char iaxkey;
 	int linkmode;
 	int newkeytimer;
@@ -542,11 +558,11 @@ struct sysstate {
 #define CMD_STATE_EXECUTING 3
 
 struct rpt_cmd_struct {
-    int state;
-    int functionNumber;
-    char param[MAXDTMF];
-    char digits[MAXDTMF];
-    int command_source;
+	int state;
+	int functionNumber;
+	char param[MAXMACRO];
+	char digits[MAXDTMF];
+	int command_source;
 };
 
 enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
@@ -762,7 +778,8 @@ struct rpt {
 	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
 	int calldigittimer;
 	struct rpt_conf rptconf;
-	int tailtimer,totimer,idtimer,callmode,cidx,scantimer,tmsgtimer,skedtimer,linkactivitytimer,elketimer;
+	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
+	enum patch_call_mode callmode;
 	int mustid,tailid;
 	int rptinacttimer;
 	int tailevent;
@@ -832,7 +849,7 @@ struct rpt {
 	int linkposttimer;			
 	int keyposttimer;			
 	int lastkeytimer;			
-	char newkey;
+	enum newkey rpt_newkey;
 	char iaxkey;
 	char inpadtest;
 	int rxlingertimer;
@@ -920,3 +937,7 @@ void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char
 
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
+
+#define RPT_MUTE_FRAME(f) \
+	if (f) \
+	ast_frame_clear(f)

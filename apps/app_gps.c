@@ -858,17 +858,19 @@ static int report_aprstt(const char *ctg, const char *lat, const char *lon, cons
  * \param dec		Latitude in decimal
  * \param value		Pointer to buffer to receive the value
  * \param len		Length of the value buffer
+ *
+ * DMS in APRS format is seconds-to-hundreths not thousandths
  */
 static void lat_decimal_to_DMS(float dec, char *value, int len)
 {
 	char direction;
-	float lata, latb, latd;
+	int latdeg;
+	double latmin;
 
 	direction = (dec >= 0.0) ? 'N' : 'S';
-	lata = fabs(dec);
-	latb = (lata - floor(lata)) * 60;
-	latd = (latb - floor(latb)) * 100 + 0.5;
-	snprintf(value, len, "%02d%02d.%02d%c", (int) lata, (int) latb, (int) latd, direction);
+	latdeg = (int) fabs(dec);
+	latmin = (fabs(dec) - latdeg) * 60.0;
+	snprintf(value, len, "%02d%05.2f%c", latdeg, latmin, direction);
 }
 /*!
  * \brief Convert longitude in decimal to DMS string.
@@ -876,17 +878,19 @@ static void lat_decimal_to_DMS(float dec, char *value, int len)
  * \param dec		Longitude in decimal
  * \param value		Pointer to buffer to receive the value
  * \param len		Length of the value buffer
+ *
+ * DMS in APRS format is seconds-to-hundreths not thousandths
  */
 static void lon_decimal_to_DMS(float dec, char *value, int len)
 {
 	char direction;
-	float lona, lonb, lond;
+	int londeg;
+	double lonmin;
 
 	direction = (dec >= 0.0) ? 'E' : 'W';
-	lona = fabs(dec);
-	lonb = (lona - floor(lona)) * 60;
-	lond = (lonb - floor(lonb)) * 100 + 0.5;
-	snprintf(value, len, "%03d%02d.%02d%c", (int) lona, (int) lonb, (int) lond, direction);
+	londeg = (int) fabs(dec);
+	lonmin = (fabs(dec) - londeg) * 60.0;
+	snprintf(value, len, "%03d%05.2f%c", londeg, lonmin, direction);
 }
 
 /*!

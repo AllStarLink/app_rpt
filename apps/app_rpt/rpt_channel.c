@@ -35,7 +35,6 @@ void rpt_safe_sleep(struct rpt *rpt, struct ast_channel *chan, int ms)
 		}
 		ast_frfree(f);
 	}
-	return;
 }
 
 int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
@@ -128,7 +127,7 @@ int saynum(struct ast_channel *mychannel, int num)
 
 int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 {
-	int res = 0, tgn;
+	int res = 0, tgn = 0;
 	char *val, fname[300], str[100];
 
 	if (strlen(name) < 1)
@@ -470,10 +469,9 @@ void send_newkey(struct ast_channel *chan)
 		ast_log(LOG_WARNING, "Failed to send text %s on %s\n", NEWKEY1STR, ast_channel_name(chan));
 	}
 	ast_channel_unlock(chan);
-	return;
 }
 
-void send_old_newkey(struct ast_channel *chan)
+void send_newkey_redundant(struct ast_channel *chan)
 {
 	ast_assert(chan != NULL);
 	ast_channel_lock(chan);
@@ -481,5 +479,4 @@ void send_old_newkey(struct ast_channel *chan)
 		ast_log(LOG_WARNING, "Failed to send text %s on %s\n", NEWKEYSTR, ast_channel_name(chan));
 	}
 	ast_channel_unlock(chan);
-	return;
 }

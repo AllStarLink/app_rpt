@@ -175,17 +175,17 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				ider_state = "2";	//"CLEAN";
 
 			switch (myrpt->callmode) {
-			case 1:
+			case CALLMODE_DIALING:
 				patch_state = "0";	//"DIALING";
 				break;
-			case 2:
+			case CALLMODE_CONNECTING:
 				patch_state = "1";	//"CONNECTING";
 				break;
-			case 3:
+			case CALLMODE_UP:
 				patch_state = "2";	//"UP";
 				break;
 
-			case 4:
+			case CALLMODE_FAILED:
 				patch_state = "3";	//"CALL FAILED";
 				break;
 
@@ -207,7 +207,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
 
-			__mklinklist(myrpt, NULL, lbuf, 0);
+			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
 
 			j = 0;
 			l = myrpt->links.next;
@@ -216,8 +216,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 					l = l->next;
 					continue;
 				}
-				if (!(s = (struct rpt_lstat *) ast_malloc(sizeof(struct rpt_lstat)))) {
-					ast_log(LOG_ERROR, "Malloc failed in rpt_do_lstats\r\n");
+				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
 					rpt_mutex_unlock(&myrpt->lock);
 					return -1;
 				}
@@ -271,7 +270,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Get all linked nodes info */
 
 			/* parse em */
-			ns = finddelim(lbuf, strs, MAXLINKLIST);
+			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
 			/* sort em */
 			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);

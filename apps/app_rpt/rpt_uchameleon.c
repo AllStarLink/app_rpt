@@ -97,7 +97,7 @@ void uchameleon_alarm_handler(struct daq_pin_entry_tag *p)
 		return;
 	}
 
-	argc = explode_string(valuecopy, argv, 6, ',', 0);
+	argc = explode_string(valuecopy, argv, ARRAY_LEN(argv), ',', 0);
 
 	ast_debug(3, "Alarm event on device %s, pin %d, state = %d\n", argv[0], p->num, p->value);
 
@@ -188,7 +188,7 @@ int uchameleon_pin_init(struct daq_entry_tag *t)
 
 		ast_copy_string(s, var->value, sizeof(s) - 1);
 
-		if (explode_string(s, argv, 6, ',', 0) != 6) {
+		if (explode_string(s, argv, ARRAY_LEN(argv), ',', 0) != 6) {
 			ast_log(LOG_WARNING, "Alarm arguments must be 6 for %s\n", var->name);
 			var = var->next;
 			continue;
@@ -486,12 +486,10 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(s
 		if (cmd == DAQ_CMD_PINSET) {
 			if (arg1 && *arg1 && (*arg1 < 19)) {
 				/* New pin definition */
-				if (!(p = (struct daq_pin_entry_tag *) ast_malloc(sizeof(struct daq_pin_entry_tag)))) {
-					ast_log(LOG_ERROR, "Out of memory");
+				if (!(p = ast_calloc(1, sizeof(struct daq_pin_entry_tag)))) {
 					ast_mutex_unlock(&t->lock);
 					return -1;
 				}
-				memset(p, 0, sizeof(struct daq_pin_entry_tag));
 				p->pintype = *arg1;
 				p->command = DAQ_CMD_PINSET;
 				p->num = pin;
@@ -521,12 +519,9 @@ void uchameleon_queue_tx(struct daq_entry_tag *t, char *txbuff)
 	if (!t)
 		return;
 
-	if (!(q = (struct daq_tx_entry_tag *) ast_malloc(sizeof(struct daq_tx_entry_tag)))) {
-		ast_log(LOG_WARNING, "Out of memory\n");
+	if (!(q = ast_calloc(1, sizeof(struct daq_tx_entry_tag)))) {
 		return;
 	}
-
-	memset(q, 0, sizeof(struct daq_tx_entry_tag));
 
 	ast_copy_string(q->txbuff, txbuff, sizeof(q->txbuff));
 
@@ -534,9 +529,9 @@ void uchameleon_queue_tx(struct daq_entry_tag *t, char *txbuff)
 		t->txtail->next = q;
 		q->prev = t->txtail;
 		t->txtail = q;
-	} else
+	} else {
 		t->txhead = t->txtail = q;
-	return;
+	}
 }
 
 void *uchameleon_monitor_thread(void *this)
@@ -574,7 +569,7 @@ void *uchameleon_monitor_thread(void *this)
 			ast_debug(5, "Received: %s\n", rxbuff);
 			valid = 0;
 			/* Parse return string */
-			i = explode_string(rxbuff, rxargs, 3, ' ', 0);
+			i = explode_string(rxbuff, rxargs, ARRAY_LEN(rxargs), ' ', 0);
 			if (i == 3) {
 				if (!strcmp(rxargs[0], "pin")) {
 					valid = 1;

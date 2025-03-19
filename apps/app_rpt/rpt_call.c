@@ -142,5 +142,4 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 
 	}
 	ast_hangup(dest);
-	return;
 }
