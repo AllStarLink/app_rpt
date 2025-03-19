@@ -9,9 +9,9 @@ AlignConsecutiveBitFields: None
 AlignConsecutiveDeclarations: None
 AlignEscapedNewlines: DontAlign
 AlignOperands:   Align
-AlignTrailingComments: true
+AlignTrailingComments: True
 AllowAllArgumentsOnNextLine: True
-AllowAllParametersOfDeclarationOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: True
 AllowShortEnumsOnASingleLine: False
 AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
@@ -37,7 +37,7 @@ BreakConstructorInitializersBeforeComma: false
 BreakConstructorInitializers: BeforeColon
 BreakAfterJavaFieldAnnotations: false
 BreakStringLiterals: true
-ColumnLimit:     90
+ColumnLimit:     130
 CommentPragmas:  '^ IWYU pragma:'
 QualifierAlignment: Leave
 CompactNamespaces: false
@@ -60,6 +60,7 @@ ForEachMacros:
   - BOOST_FOREACH
 IfMacros:
   - KJ_IF_MAYBE
+  - IF
 IncludeBlocks:   Preserve
 IncludeCategories:
   - Regex:           '^"(llvm|llvm-c|clang|clang-c)/'
@@ -99,15 +100,15 @@ ObjCBlockIndentWidth: 2
 ObjCBreakBeforeNestedBlockParam: true
 ObjCSpaceAfterProperty: false
 ObjCSpaceBeforeProtocolList: true
-PenaltyBreakAssignment: 2
+PenaltyBreakAssignment: 0
 PenaltyBreakBeforeFirstCallParameter: 19
-PenaltyBreakComment: 300
-PenaltyBreakFirstLessLess: 130
+PenaltyBreakComment: 30
+PenaltyBreakFirstLessLess: 120
 PenaltyBreakOpenParenthesis: 0
-PenaltyBreakString: 1000
+PenaltyBreakString: 100
 PenaltyBreakTemplateDeclaration: 10
-PenaltyExcessCharacter: 1000000
-PenaltyReturnTypeOnItsOwnLine: 60
+PenaltyExcessCharacter: 1
+PenaltyReturnTypeOnItsOwnLine: 100
 PenaltyIndentedWhitespace: 0
 PointerAlignment: Right
 PPIndentWidth:   -1
@@ -160,7 +161,7 @@ StatementMacros:
   - QT_REQUIRE_VERSION
 TabWidth:        4
 UseCRLF:         false
-UseTab:          true
+UseTab:          Always
 WhitespaceSensitiveMacros:
   - STRINGIZE
   - PP_STRINGIZE
