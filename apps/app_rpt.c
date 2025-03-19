@@ -3334,6 +3334,11 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	}
 }
 
+/*! \brief Post link data to a URL configured in myrpt->p.statpost_url.
+ * \note Must be called locked.
+ * \param myrpt The rpt structure
+ * \retval 0 on success, -1 on failure
+ */
 static inline int do_link_post(struct rpt *myrpt)
 {
 	int nstr;
@@ -3352,7 +3357,6 @@ static inline int do_link_post(struct rpt *myrpt)
 	}
 	str = ast_malloc(nstr + 256);
 	if (!str) {
-		ast_mutex_unlock(&myrpt->lock);
 		return -1;
 	}
 	nstr = 0;
