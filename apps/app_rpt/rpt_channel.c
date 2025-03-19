@@ -127,7 +127,7 @@ int saynum(struct ast_channel *mychannel, int num)
 
 int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 {
-	int res = 0, tgn;
+	int res = 0, tgn = 0;
 	char *val, fname[300], str[100];
 
 	if (strlen(name) < 1)
