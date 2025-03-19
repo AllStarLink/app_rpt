@@ -1798,7 +1798,7 @@ int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 
 	if (param) {
 		if (*param == '#') {	/* to execute asterisk cli command */
-			ast_cli_command(rpt_nullfd(), param + 1);
+			ast_cli_command(rpt_nullfd(), param + 2);
 		} else {
 			if (ast_asprintf(&cp, "%s &", param) < 0) {
 				return DC_ERROR;
