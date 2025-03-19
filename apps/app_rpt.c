@@ -3531,27 +3531,35 @@ static inline void outstream_write(struct rpt *myrpt, struct ast_frame *f)
 	}
 }
 
-static inline void mute_frame_helper(struct rpt *myrpt, struct ast_frame *f, int ismuted)
+/*! \brief Zero data in myrpt->lastf1 and lastf2 registers (muting audio)
+ * \param myrpt The rpt structure to mute
+ */
+static inline void mute_frame_helper(struct rpt *myrpt)
 {
-	struct ast_frame *f2;
-	if (ismuted) {
-		memset(f->data.ptr, 0, f->datalen);
-		if (myrpt->lastf1)
-			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		if (myrpt->lastf2)
-			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-	}
-	f2 = f ? ast_frdup(f) : NULL;
-	myrpt->lastf2 = myrpt->lastf1;
-	myrpt->lastf1 = f2;
-	if (ismuted) {
-		if (myrpt->lastf1)
-			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		if (myrpt->lastf2)
-			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
-	}
+	RPT_MUTE_FRAME(myrpt->lastf1);
+	RPT_MUTE_FRAME(myrpt->lastf2);
 }
 
+/*! \brief Shifts frames: myrpt->lastf2 -> return value, myrpt->lastf1 -> myrpt->lastf2, f -> myrpt->lastf1.
+ * \param myrpt - the rpt structure
+ * \param f - the frame to be stored in lastf1
+ * \param mute - if true, the frame is muted by filling f, lastf1 and lastf2 with zeros
+ * \note If muted, lastf1, lastf2 and f are filled with zeros before shifting the frames, resulting in a muted return frame.
+ */
+static inline struct ast_frame *rpt_frame_helper(struct rpt *myrpt, struct ast_frame *f, int mute)
+{
+	struct ast_frame *f2, *last_frame;
+
+	if (mute) {
+		RPT_MUTE_FRAME(f);
+		mute_frame_helper(myrpt);
+	}
+	f2 = f ? ast_frdup(f) : NULL;
+	last_frame = myrpt->lastf2;
+	myrpt->lastf2 = myrpt->lastf1;
+	myrpt->lastf1 = f2;
+	return last_frame;
+}
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
 	int ismuted;
@@ -3644,7 +3652,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		}
 #ifdef	_MDC_DECODE_H_
 		if (!myrpt->reallykeyed) {
-			memset(f->data.ptr, 0, f->datalen);
+			RPT_MUTE_FRAME(f);
 		}
 		sp = (short *) f->data.ptr;
 		/* convert block to unsigned char */
@@ -3724,7 +3732,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 #endif
 		if ((!myrpt->localtx) &&	/* (!myrpt->p.linktolink) && */
 			(!myrpt->localoverride)) {
-			memset(f->data.ptr, 0, f->datalen);
+			RPT_MUTE_FRAME(f);
 		}
 
 		ismuted = dtmfed || rpt_conf_get_muted(myrpt->dahdirxchannel, myrpt);
@@ -3757,8 +3765,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if (myrpt->p.votertype == 1 && myrpt->voted_link != NULL) {
 			ismuted = 1;
 		}
-		mute_frame_helper(myrpt, f, ismuted);
-		f1 = myrpt->lastf2;
+		f1 = rpt_frame_helper(myrpt, f, ismuted);
 		if (f1) {
 			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
 			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
@@ -3768,14 +3775,10 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				(myrpt->outstreampipe[1] != -1)) {
 				outstream_write(myrpt, f1);
 			}
-			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
 			ast_frfree(f1);
 		}
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
-		if (myrpt->lastf1)
-			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		if (myrpt->lastf2)
-			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		mute_frame_helper(myrpt);
 		dtmfed = 1;
 		myrpt->lastdtmftime = ast_tvnow();
 	} else if (f->frametype == AST_FRAME_DTMF) {
@@ -3796,10 +3799,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 
 			return 0;
 		}
-		if (myrpt->lastf1)
-			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		if (myrpt->lastf2)
-			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		mute_frame_helper(myrpt);
 		dtmfed = 1;
 		if ((!myrpt->lastkeytimer) && (!myrpt->localoverride)) {
 			if (myrpt->p.dtmfkey)
@@ -4084,7 +4084,7 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 					AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) x++;
 					for (; x < myrpt->p.simplexpatchdelay; x++) {
 						f1 = ast_frdup(f);
-						memset(f1->data.ptr, 0, f1->datalen);
+						RPT_MUTE_FRAME(f1);
 						memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 						AST_LIST_INSERT_TAIL(&myrpt->txq, f1, frame_list);
 					}
@@ -4099,7 +4099,7 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 			x = 0;
 			AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) x++;
 			if (!x) {
-				memset(f->data.ptr, 0, f->datalen);
+				RPT_MUTE_FRAME(f);
 			} else {
 				ast_frfree(f);
 				f = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list);
@@ -4360,7 +4360,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				}
 				if (((l->phonemode) && (l->phonevox)) || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
 					|| (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb"))) {
-					struct ast_frame *f1, *f2;
+					struct ast_frame *f1;
 					if (l->phonevox) {
 						int x;
 						n1 = dovox(&l->vox, f->data.ptr, f->datalen / 2);
@@ -4379,7 +4379,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 								AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) x++;
 								for (; x < myrpt->p.simplexphonedelay; x++) {
 									f1 = ast_frdup(f);
-									memset(f1->data.ptr, 0, f1->datalen);
+									RPT_MUTE_FRAME(f1);
 									memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 									AST_LIST_INSERT_TAIL(&l->rxq, f1, frame_list);
 								}
@@ -4394,7 +4394,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 						x = 0;
 						AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) x++;
 						if (!x) {
-							memset(f->data.ptr, 0, f->datalen);
+							RPT_MUTE_FRAME(f);
 						} else {
 							ast_frfree(f);
 							f = AST_LIST_REMOVE_HEAD(&l->rxq, frame_list);
@@ -4414,46 +4414,20 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 						ismuted = 1;
 					}
 
-					if (ismuted) {
-						memset(f->data.ptr, 0, f->datalen);
-						if (l->lastf1)
-							memset(l->lastf1->data.ptr, 0, l->lastf1->datalen);
-						if (l->lastf2)
-							memset(l->lastf2->data.ptr, 0, l->lastf2->datalen);
-					}
-					if (f)
-						f2 = ast_frdup(f);
-					else
-						f2 = NULL;
-					f1 = l->lastf2;
-					l->lastf2 = l->lastf1;
-					l->lastf1 = f2;
-					if (ismuted) {
-						if (l->lastf1)
-							memset(l->lastf1->data.ptr, 0, l->lastf1->datalen);
-						if (l->lastf2)
-							memset(l->lastf2->data.ptr, 0, l->lastf2->datalen);
-					}
+					f1 = rpt_frame_helper(myrpt, f, ismuted);
 					if (f1) {
 						ast_write(l->pchan, f1);
 						ast_frfree(f1);
 					}
 				} else {
 					/* if a voting rx link and not the winner, mute audio */
-					if (myrpt->p.votertype == 1 && l->voterlink && myrpt->voted_link != l)
-						ismuted = 1;
-					else
-						ismuted = 0;
-
+					ismuted = (myrpt->p.votertype == 1) && l->voterlink && (myrpt->voted_link != l);
 					if (!l->lastrx || ismuted)
-						memset(f->data.ptr, 0, f->datalen);
+						RPT_MUTE_FRAME(f);
 					ast_write(l->pchan, f);
 				}
 			} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
-				if (l->lastf1)
-					memset(l->lastf1->data.ptr, 0, l->lastf1->datalen);
-				if (l->lastf2)
-					memset(l->lastf2->data.ptr, 0, l->lastf2->datalen);
+				mute_frame_helper(myrpt);
 				l->dtmfed = 1;
 			} else if (f->frametype == AST_FRAME_TEXT) {
 				char *tstr = ast_malloc(f->datalen + 1);
@@ -4464,10 +4438,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					ast_free(tstr);
 				}
 			} else if (f->frametype == AST_FRAME_DTMF) {
-				if (l->lastf1)
-					memset(l->lastf1->data.ptr, 0, l->lastf1->datalen);
-				if (l->lastf2)
-					memset(l->lastf2->data.ptr, 0, l->lastf2->datalen);
+				mute_frame_helper(myrpt);
 				l->dtmfed = 1;
 				handle_link_phone_dtmf(myrpt, l, f->subclass.integer);
 			} else if (f->frametype == AST_FRAME_CONTROL) {
@@ -5915,7 +5886,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 					AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
 					for (; x < myrpt->p.simplexphonedelay; x++) {
 						f1 = ast_frdup(f);
-						memset(f1->data.ptr, 0, f1->datalen);
+						RPT_MUTE_FRAME(f1);
 						memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 						AST_LIST_INSERT_TAIL(&myrpt->rxq, f1, frame_list);
 					}
@@ -5929,7 +5900,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			x = 0;
 			AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
 			if (!x) {
-				memset(f->data.ptr, 0, f->datalen);
+				RPT_MUTE_FRAME(f);
 			} else {
 				ast_frfree(f);
 				f = AST_LIST_REMOVE_HEAD(&myrpt->rxq, frame_list);
@@ -5941,30 +5912,21 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 		if (*dtmfed && phone_mode)
 			ismuted = 1;
 		*dtmfed = 0;
-		mute_frame_helper(myrpt, f, ismuted);
-		f1 = myrpt->lastf2;
-		if (f1) {
-			if (!myrpt->remstopgen) {
-				if (phone_mode)
-					ast_write(myrpt->txchannel, f1);
-				else
-					ast_write(myrpt->txchannel, f);
+		f1 = rpt_frame_helper(myrpt, f, ismuted);
+		if (!myrpt->remstopgen) {
+			if (phone_mode && f1) {
+				ast_write(myrpt->txchannel, f1);
+			} else if (!phone_mode) {
+				ast_write(myrpt->txchannel, f);
 			}
-			myrpt->lastf2 = NULL; /* Aliased with f1, so set to NULL since this reference is no longer valid */
-			ast_frfree(f1);
 		}
+		ast_frfree(f1);
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
-		if (myrpt->lastf1)
-			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		if (myrpt->lastf2)
-			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		mute_frame_helper(myrpt);
 		*dtmfed = 1;
 	}
 	if (f->frametype == AST_FRAME_DTMF) {
-		if (myrpt->lastf1)
-			memset(myrpt->lastf1->data.ptr, 0, myrpt->lastf1->datalen);
-		if (myrpt->lastf2)
-			memset(myrpt->lastf2->data.ptr, 0, myrpt->lastf2->datalen);
+		mute_frame_helper(myrpt);
 		*dtmfed = 1;
 		if (handle_remote_phone_dtmf(myrpt, f->subclass.integer, keyed, phone_mode) == -1) {
 			ast_debug(1, "@@@@ rpt:Hung Up\n");
@@ -6026,7 +5988,7 @@ static inline int exec_rxchannel_read(struct rpt *myrpt, const int reming, const
 			myreming = reming;
 		}
 		if (myreming || !*remkeyed || (myrpt->remote && myrpt->remotetx) || (myrpt->remmode != REM_MODE_FM && notremming)) {
-			memset(f->data.ptr, 0, f->datalen);
+			RPT_MUTE_FRAME(f);
 		}
 		if (myrpt->totimer) { /* Don't send local RX voice frames if the local repeater is timed out */
 			ast_write(myrpt->pchannel, f);
