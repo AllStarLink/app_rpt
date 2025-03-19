@@ -4943,7 +4943,7 @@ static void *rpt(void *this)
 			break;
 		}
 
-		if (rpt_any_hangups(myrpt)) {
+		if (ast_shutting_down() || rpt_any_hangups(myrpt)) {
 			break;
 		}
 
@@ -5741,7 +5741,7 @@ static void *rpt_master(void *ignore)
 					rpt_vars[i].name[0] = 0;
 					continue;
 				}
-				if (shutting_down) {
+				if (ast_shutting_down() || shutting_down) {
 					continue; /* Don't restart thread if we're unloading the module */
 				}
 				if (time(NULL) - rpt_vars[i].lastthreadrestarttime <= 5) {
