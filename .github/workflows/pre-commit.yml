@@ -29,7 +29,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           version: '14'
-          lines-changed-only: diff
+          lines-changed-only: true
           style: 'file:.dev/.clang-format'  # Use .clang-format config file
           tidy-checks: '-*' # Use .clang-tidy config file
           # only 'update' a single comment in a pull request thread.
