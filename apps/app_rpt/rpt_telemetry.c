@@ -957,7 +957,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
  */
 void *rpt_tele_thread(void *this)
 {
-	int res = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x;
+	int res = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x, n = 1;
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
@@ -967,7 +967,7 @@ void *rpt_tele_thread(void *this)
 	char *p, *ct, *ct_copy, *ident, *nodename;
 	time_t t, t1, t_mono, was_mono;
 	struct ast_tm localtm;
-	char *strs[MAXNODES];
+	char **strs;
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
@@ -1261,10 +1261,15 @@ treataslocal:
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, &lbuf, 0);
+		n = __mklinklist(myrpt, NULL, &lbuf, 0);
 		rpt_mutex_unlock(&myrpt->lock);
+		strs = ast_malloc(sizeof(char *));
+		if (!strs) {
+			ast_free(lbuf);
+			goto abort;
+		}
 		/* parse em */
-		ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
+		ns = finddelim(ast_str_buffer(lbuf), strs, n);
 		ast_free(lbuf);
 		haslink = 0;
 		for (i = 0; i < ns; i++) {
@@ -1274,7 +1279,7 @@ treataslocal:
 			if (ISRANGER(cpr))
 				haslink = 1;
 		}
-
+		ast_free(strs);
 		/* if has a RANGER node connected to it, use special telemetry for RANGER mode */
 		if (haslink) {
 			res = telem_lookup(myrpt, mychannel, myrpt->name, "ranger");
@@ -2160,10 +2165,15 @@ treataslocal:
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, &lbuf, 0);
+		n = __mklinklist(myrpt, NULL, &lbuf, 0);
 		rpt_mutex_unlock(&myrpt->lock);
+		strs = ast_malloc(sizeof(char *));
+		if (!strs) {
+			ast_free(lbuf);
+			goto abort;
+		}
 		/* parse em */
-		ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
+		ns = finddelim(ast_str_buffer(lbuf), strs, n);
 		ast_free(lbuf);
 		/* sort em */
 		if (ns)
@@ -2198,6 +2208,7 @@ treataslocal:
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
 		}
+		ast_free(strs);
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
@@ -2619,9 +2630,9 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 {
 	struct rpt_tele *tele;
 	struct rpt_link *mylink = NULL;
-	int res, i, ns;
+	int res, i, ns, n = 1;
 	char *v1, *v2, mystr[1024], *p, haslink;
-	char *strs[MAXNODES];
+	char **strs;
 	struct rpt_link *l;
 	time_t t, t_mono, was_mono;
 	unsigned long long u_mono;
@@ -2881,10 +2892,15 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* get all the nodes */
-			__mklinklist(myrpt, NULL, &lbuf, 0);
+			n = __mklinklist(myrpt, NULL, &lbuf, 0);
 			rpt_mutex_unlock(&myrpt->lock);
+			strs = ast_malloc(sizeof(char *));
+			if (!strs) {
+				ast_free(lbuf);
+				return;
+			}
 			/* parse em */
-			ns = finddelim(ast_str_buffer(lbuf), strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, n);
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -2908,6 +2924,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			}
 			send_tele_link(myrpt, mystr);
 			ast_free(lbuf);
+			ast_free(strs);
 			return;
 		}
 	}

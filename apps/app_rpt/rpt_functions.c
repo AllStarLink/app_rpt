@@ -54,7 +54,7 @@ static char remdtmfstr[] = "0123456789*#ABCD";
 int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
 {
 	char *s1, *s2, tmp[MAXNODESTR];
-	char digitbuf[MAXNODESTR], *strs[MAXNODES];
+	char digitbuf[MAXNODESTR], *strs[sizeof(myrpt->savednodes)];
 	char mode, perma;
 	struct rpt_link *l;
 	int i, r;
@@ -363,7 +363,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 	case 16:					/* Restore links disconnected with "disconnect all links" command */
 		strcpy(tmp, myrpt->savednodes);	/* Make a copy */
 		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
-		for (i = 0; tmp[0] && i < ARRAY_LEN(strs) && strs[i]; i++) {
+		for (i = 0; tmp[0] && strs[i] && i < ARRAY_LEN(strs); i++) {
 			s1 = strs[i];
 			if (s1[0] == 'X')
 				mode = 1;
