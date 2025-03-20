@@ -797,7 +797,7 @@ void load_rpt_vars(int n, int init)
 #define RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(var, name, default) \
 	val = ast_variable_retrieve(cfg, cat, name); \
 	if (!ast_strlen_zero(val)) { \
-		rpt_vars[n].p.var = pow(10.0, atof(val)) / 20.0; \
+		rpt_vars[n].p.var = pow(10.0, atof(val) / 20.0); \
 	} else { \
 		rpt_vars[n].p.var = pow(10.0, default / 20); \
 	}
