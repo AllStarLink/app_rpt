@@ -320,9 +320,9 @@
 #include "asterisk/indications.h"
 #include "asterisk/format.h"
 #include "asterisk/dsp.h"
+#include "asterisk/audiohook.h"
 
 #include "app_rpt/app_rpt.h"
-#include "asterisk/audiohook.h"
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h>
