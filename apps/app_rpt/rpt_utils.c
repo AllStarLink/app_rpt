@@ -246,3 +246,16 @@ int macro_append(struct rpt *myrpt, const char *cmd)
 	rpt_mutex_unlock(&myrpt->lock);
 	return res;
 }
+
+void update_timer(int *timer_ptr, int elap, int end_val)
+{
+	if (!timer_ptr || !*timer_ptr) { /* if the timer value = 0 or we have a null pointer, do not update */
+		return;
+	}
+	if (*timer_ptr > end_val) {
+		*timer_ptr -= elap;
+	}
+	if (*timer_ptr < end_val) {
+		*timer_ptr = end_val;
+	}
+}

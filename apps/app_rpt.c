@@ -3034,20 +3034,6 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 }
 
-/*! \brief Do timer value update, limit to end_val */
-static inline void update_timer(int *timer_ptr, int elap, int end_val)
-{
-	if (!timer_ptr || !*timer_ptr) { /* if the timer value = 0 or we have a null pointer, do not update */
-		return;
-	}
-	if (*timer_ptr > end_val) {
-		*timer_ptr -= elap;
-	}
-	if (*timer_ptr < end_val) {
-		*timer_ptr = end_val;
-	}
-}
-
 static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;

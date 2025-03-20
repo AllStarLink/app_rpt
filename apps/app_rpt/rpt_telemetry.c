@@ -1232,11 +1232,7 @@ void *rpt_tele_thread(void *this)
 			}
 			ast_safe_sleep(mychannel, ctint);
 			rpt_mutex_lock(&myrpt->lock);
-			if (myrpt->unkeytocttimer < ctint) {
-				myrpt->unkeytocttimer = 0;
-			} else {
-				myrpt->unkeytocttimer -= ctint;
-			}
+			update_timer(&myrpt->unkeytocttimer, ctint, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 
@@ -1475,11 +1471,7 @@ treataslocal:
 					}
 					ast_safe_sleep(mychannel, ctint);
 					rpt_mutex_lock(&myrpt->lock);
-					if (myrpt->unkeytocttimer < ctint) {
-						myrpt->unkeytocttimer = 0;
-					} else {
-						myrpt->unkeytocttimer -= ctint;
-					}
+					update_timer(&myrpt->unkeytocttimer, ctint, 0);
 					rpt_mutex_unlock(&myrpt->lock);
 				}
 			}
@@ -1539,11 +1531,7 @@ treataslocal:
 			}
 			ast_safe_sleep(mychannel, ctint);
 			rpt_mutex_lock(&myrpt->lock);
-			if (mytele->mylink.linkunkeytocttimer < ctint) {
-				mytele->mylink.linkunkeytocttimer = 0;
-			} else {
-				mytele->mylink.linkunkeytocttimer -= ctint;
-			}
+			update_timer(&mytele->mylink.linkunkeytocttimer, ctint, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		l = myrpt->links.next;

@@ -74,3 +74,6 @@ time_t rpt_time_monotonic(void);
  * \retval 0 on success, -1 on failure (result of ast_str_append)
  */
 int macro_append(struct rpt *myrpt, const char *cmd);
+
+/*! \brief Do timer value update, limit to end_val */
+void update_timer(int *timer_ptr, int elap, int end_val);
