@@ -6695,10 +6695,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					ast_free(l);
 					return -1;
 				}
-			} else {
-				if (!phone_mode) {
-					send_newkey(chan);
-				}
 			}
 		}
 
