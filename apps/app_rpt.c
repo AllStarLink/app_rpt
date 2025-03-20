@@ -3037,7 +3037,7 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;
-	int newkeytimer_last;
+	int newkeytimer_last, max_retries;
 	struct rpt_link *l = myrpt->links.next;
 	while (l != &myrpt->links) {
 		int myrx, mymaxct;
@@ -3227,7 +3227,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
-		if ((!l->chan) && (!l->retrytimer) && l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
+		max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
+
+		if (!l->chan && !l->retrytimer && l->outbound && !max_retries && l->hasconnected) {
 			rpt_mutex_unlock(&myrpt->lock);
 			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
 				if (attempt_reconnect(myrpt, l) == -1) {
@@ -3240,7 +3242,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
-		if ((!l->chan) && (!l->retrytimer) && l->outbound && (l->retries >= l->max_retries)) {
+		if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
 			/* remove from queue */
 			rpt_link_remove(myrpt, l);
 			if (!strcmp(myrpt->cmdnode, l->name))
