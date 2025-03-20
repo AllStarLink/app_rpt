@@ -1809,7 +1809,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
 			return;
-		sprintf(cmd, "TXTONE %.290s", dest);
+		snprintf(cmd, sizeof(cmd), "TXTONE %.290s", dest);
 		if (IS_XPMR(myrpt))
 			send_usb_txt(myrpt, cmd);
 		return;
@@ -2289,7 +2289,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
 		sy = strchr(s1, '/');
 		*sy = 0;
-		sprintf(sx, "%s:4569/%s", s1, sy + 1);
+		snprintf(sx, sizeof(sx), "%s:4569/%s", s1, sy + 1);
 		s1 = sx;
 	}
 	strsep(&s, ",");
@@ -2346,7 +2346,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 
 	c = c_in & 0x7f;
 
-	sprintf(tone, "%c", c);
+	snprintf(tone, sizeof(tone), "%c", c);
 	rpt_manager_trigger(myrpt, "DTMF", tone);
 
 	if (myrpt->p.archivedir) {
@@ -2965,7 +2965,7 @@ static inline void log_keyed(struct rpt *myrpt)
 
 		time(&myt);
 		strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
-		sprintf(myfname, "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
+		snprintf(myfname, sizeof(myfname), "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
 		myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
 		myrpt->monstream =
 			ast_writefile(myfname, myformat, "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
@@ -3334,16 +3334,20 @@ static inline int do_link_post(struct rpt *myrpt)
 			lst = 'C';
 		if (nstr)
 			strcat(str, ",");
-		sprintf(str + strlen(str), "%c%s", lst, l->name);
+		snprintf(str + strlen(str), sizeof(str) - strlen(str), "%c%s", lst, l->name);
 		nstr = 1;
 	}
-	sprintf(str + strlen(str), "&apprptvers=%d.%d.%d", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
+	snprintf(str + strlen(str), sizeof(str) - strlen(str), "&apprptvers=%d.%d.%d", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 	time(&now);
-	sprintf(str + strlen(str), "&apprptuptime=%d", (int) (now - starttime));
-	sprintf(str + strlen(str),
-			"&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d",
-			myrpt->totalkerchunks, myrpt->totalkeyups, (int) myrpt->totaltxtime / 1000, myrpt->timeouts,
-			myrpt->totalexecdcommands);
+	snprintf(str + strlen(str), sizeof(str) - strlen(str), "&apprptuptime=%d", (int) (now - starttime));
+	snprintf(str + strlen(str),
+		sizeof(str) - strlen(str),
+		"&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d",
+		myrpt->totalkerchunks,
+		myrpt->totalkeyups,
+		(int) myrpt->totaltxtime / 1000,
+		myrpt->timeouts,
+		myrpt->totalexecdcommands);
 	rpt_mutex_unlock(&myrpt->lock);
 	statpost(myrpt, str);
 	rpt_mutex_lock(&myrpt->lock);
@@ -3375,7 +3379,7 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		if (myrpt->lastkeyedtime) {
 			n = (int) (now - myrpt->lastkeyedtime);
 		}
-		sprintf(str, "keyed=%d&keytime=%d", myrpt->keyed, n);
+		snprintf(str, sizeof(str), "keyed=%d&keytime=%d", myrpt->keyed, n);
 		rpt_mutex_unlock(&myrpt->lock);
 		statpost(myrpt, str);
 		rpt_mutex_lock(&myrpt->lock);
@@ -3633,7 +3637,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			/* if for PTT ID */
 			if ((op == 1) && ((arg == 0) || (arg == 0x80))) {
 				myrpt->lastunit = unitID;
-				sprintf(ustr, "I%04X", unitID);
+				snprintf(ustr, sizeof(ustr), "I%04X", unitID);
 				mdc1200_notify(myrpt, NULL, ustr);
 				mdc1200_send(myrpt, ustr);
 				mdc1200_cmd(myrpt, ustr);
@@ -3641,7 +3645,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			/* if for EMERGENCY */
 			if ((op == 0) && ((arg == 0x81) || (arg == 0x80))) {
 				myrpt->lastunit = unitID;
-				sprintf(ustr, "E%04X", unitID);
+				snprintf(ustr, sizeof(ustr), "E%04X", unitID);
 				mdc1200_notify(myrpt, NULL, ustr);
 				mdc1200_send(myrpt, ustr);
 				mdc1200_cmd(myrpt, ustr);
@@ -3649,12 +3653,12 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			/* if for Stun ACK W9CR */
 			if ((op == 0x0b) && (arg == 0x00)) {
 				myrpt->lastunit = unitID;
-				sprintf(ustr, "STUN ACK %04X", unitID);
+				snprintf(ustr, sizeof(ustr), "STUN ACK %04X", unitID);
 			}
 			/* if for STS (status)  */
 			if (op == 0x46) {
 				myrpt->lastunit = unitID;
-				sprintf(ustr, "S%04X-%X", unitID, arg & 0xf);
+				snprintf(ustr, sizeof(ustr), "S%04X-%X", unitID, arg & 0xf);
 
 #ifdef	_MDC_ENCODE_H_
 				mdc1200_ack_status(myrpt, unitID);
@@ -3677,10 +3681,10 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			if ((op == 0x35) && (arg = 0x89)) {
 				/* if is Alert */
 				if (ex1 & 1)
-					sprintf(ustr, "A%02X%02X-%04X", ex3 & 255, ex4 & 255, unitID);
+					snprintf(ustr, sizeof(ustr), "A%02X%02X-%04X", ex3 & 255, ex4 & 255, unitID);
 				/* otherwise is selcall */
 				else
-					sprintf(ustr, "S%02X%02X-%04X", ex3 & 255, ex4 & 255, unitID);
+					snprintf(ustr, sizeof(ustr), "S%02X%02X-%04X", ex3 & 255, ex4 & 255, unitID);
 				mdc1200_notify(myrpt, NULL, ustr);
 				mdc1200_send(myrpt, ustr);
 				mdc1200_cmd(myrpt, ustr);
@@ -3792,7 +3796,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 
 					time(&myt);
 					strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
-					sprintf(myfname, "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
+					snprintf(myfname, sizeof(myfname), "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
 					myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
 					if (myrpt->p.monminblocks) {
 						blocksleft = diskavail(myrpt);
@@ -3898,12 +3902,12 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 			/* if message parsable */
 			if (sscanf(f->data.ptr, "GPIO" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
-				sprintf(buf, "RPT_URI_GPIO%d", i);
+				snprintf(buf, sizeof(buf), "RPT_URI_GPIO%d", i);
 				rpt_update_boolean(myrpt, buf, j);
 			}
 			/* if message parsable */
 			else if (sscanf(f->data.ptr, "PP" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
-				sprintf(buf, "RPT_PP%d", i);
+				snprintf(buf, sizeof(buf), "RPT_PP%d", i);
 				rpt_update_boolean(myrpt, buf, j);
 			} else if (!strcmp(f->data.ptr, "ENDPAGE")) {
 				myrpt->paging.tv_sec = 0;
@@ -3914,7 +3918,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle")) {
 			/* if message parsable */
 			if (sscanf(f->data.ptr, "GPIO" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
-				sprintf(buf, "RPT_BEAGLE_GPIO%d", i);
+				snprintf(buf, sizeof(buf), "RPT_BEAGLE_GPIO%d", i);
 				rpt_update_boolean(myrpt, buf, j);
 			}
 		}
@@ -3928,7 +3932,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->paging.tv_sec = 0;
 				myrpt->paging.tv_usec = 0;
 			} else {
-				sprintf(str, "V %s %s", myrpt->name, (char *) f->data.ptr);
+				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
 				init_text_frame(&wf);
 				wf.datalen = strlen(str) + 1;
 				wf.src = "voter_text_send";
@@ -4517,7 +4521,7 @@ static inline int parrotchannel_read(struct rpt *myrpt)
 			ast_closestream(myrpt->parrotstream);
 			myrpt->parrotstream = 0;
 		}
-		sprintf(myfname, PARROTFILE, myrpt->name, myrpt->parrotcnt);
+		snprintf(myfname, sizeof(myfname), PARROTFILE, myrpt->name, myrpt->parrotcnt);
 		strcat(myfname, ".wav");
 		unlink(myfname);
 	} else if (f->frametype == AST_FRAME_VOICE) {
@@ -4634,7 +4638,7 @@ static void *rpt(void *this)
 
 	if (myrpt->p.archivedir)
 		mkdir(myrpt->p.archivedir, 0700);
-	sprintf(tmpstr, "%s/%s", myrpt->p.archivedir, myrpt->name);
+	snprintf(tmpstr, sizeof(tmpstr), "%s/%s", myrpt->p.archivedir, myrpt->name);
 	mkdir(tmpstr, 0775);
 	myrpt->ready = 0;
 	if (!myrpt->macrobuf) {
@@ -4870,7 +4874,7 @@ static void *rpt(void *this)
 			if ((was_mono + GPS_VALID_SECS) < t_mono) {
 				break;
 			}
-			sprintf(tmpstr, "G %s %s %s %s", myrpt->name, lat, lon, elev);
+			snprintf(tmpstr, sizeof(tmpstr), "G %s %s %s %s", myrpt->name, lat, lon, elev);
 
 			rpt_mutex_lock(&myrpt->lock);
 			l = myrpt->links.next;
@@ -5158,15 +5162,14 @@ static void *rpt(void *this)
 				break;
 			}
 
-			sprintf(myfname, PARROTFILE, myrpt->name, myrpt->parrotcnt);
-			strcat(myfname, ".wav");
+			snprintf(myfname, sizeof(myfname), PARROTFILE ".wav", myrpt->name, myrpt->parrotcnt);
 			unlink(myfname);
-			sprintf(myfname, PARROTFILE, myrpt->name, myrpt->parrotcnt);
 			myrpt->parrotstate = 1;
 			myrpt->parrottimer = myrpt->p.parrottime;
 			if (myrpt->parrotstream)
 				ast_closestream(myrpt->parrotstream);
 			myrpt->parrotstream = NULL;
+			snprintf(myfname, sizeof(myfname), PARROTFILE, myrpt->name, myrpt->parrotcnt);
 			myrpt->parrotstream = ast_writefile(myfname, "wav", "app_rpt Parrot", O_CREAT | O_TRUNC, 0, 0600);
 		}
 
@@ -5212,7 +5215,7 @@ static void *rpt(void *this)
 					dahdi_radio_set_ctcss_encode(myrpt->dahdirxchannel, !x);
 				} else if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
 					!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
-					sprintf(str, "TXCTCSS %d", !(!x));
+					snprintf(str, sizeof(str), "TXCTCSS %d", !(!x));
 					ast_sendtext(myrpt->rxchannel, str);
 				}
 			}
@@ -5716,7 +5719,7 @@ static void *rpt_master(void *ignore)
 			}
 			*space = 0;
 			strftime(datestr, sizeof(datestr) - 1, "%Y%m%d", localtime(&nodep->timestamp));
-			sprintf(fname, "%s/%s/%s.txt", nodep->archivedir, nodep->str, datestr);
+			snprintf(fname, sizeof(fname), "%s/%s/%s.txt", nodep->archivedir, nodep->str, datestr);
 			fd = open(fname, O_WRONLY | O_CREAT | O_APPEND, 0644);
 			if (fd == -1) {
 				ast_log(LOG_ERROR, "Cannot open node log file %s for write: %s", fname, strerror(errno));
@@ -5971,7 +5974,7 @@ static inline int exec_txchannel_read(struct rpt *myrpt)
 	return wait_for_hangup_helper(myrpt->txchannel, "txchannel");
 }
 
-static char *parse_node_format(char *s, char **restrict s1, char *sx)
+static char *parse_node_format(char *s, char **restrict s1, char *sx, size_t size)
 {
 	char *s2;
 
@@ -5979,7 +5982,7 @@ static char *parse_node_format(char *s, char **restrict s1, char *sx)
 	if (!strchr(*s1, ':') && strchr(*s1, '/') && strncasecmp(*s1, "local/", 6)) {
 		char *sy = strchr(*s1, '/');
 		*sy = 0;
-		sprintf(sx, "%s:4569/%s", *s1, sy + 1);
+		snprintf(sx, size, "%s:4569/%s", *s1, sy + 1);
 		*s1 = sx;
 	}
 	s2 = strsep(&s, ",");
@@ -5994,7 +5997,7 @@ static int parse_caller(const char *b1, const char *hisip, char *s)
 	char sx[320];
 	char *s1, *s2, *s3;
 
-	s2 = parse_node_format(s, &s1, sx);
+	s2 = parse_node_format(s, &s1, sx, sizeof(sx));
 	if (!s2) {
 		ast_log(LOG_WARNING, "Reported node %s not in correct format\n", b1);
 		return -1;
@@ -6166,7 +6169,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				if (b1 && myadr) {
 					forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
 					ast_copy_string(xstr, nodedata, sizeof(xstr));
-					s2 = parse_node_format(xstr, &s1, sx);
+					s2 = parse_node_format(xstr, &s1, sx, sizeof(sx));
 					if (!s2) {
 						ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 						ast_config_destroy(cfg);
@@ -6204,7 +6207,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					return -1;
 				}
 			}
-			s2 = parse_node_format(xstr, &s1, sx);
+			s2 = parse_node_format(xstr, &s1, sx, sizeof(sx));
 			if (!s2) {
 				ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 				ast_config_destroy(cfg);
@@ -6911,10 +6914,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			char string[100];
 
 			if (sscanf(myrpt->p.lconn[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 || sscanf(myrpt->p.lconn[i], "GPIO%d:%d", &j, &k) == 2) {
-				sprintf(string, "GPIO %d %d", j, k);
+				snprintf(string, sizeof(string), "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else if (sscanf(myrpt->p.lconn[i], "PP" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
-				sprintf(string, "PP %d %d", j, k);
+				snprintf(string, sizeof(string), "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			}
 		}
@@ -7330,7 +7333,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_callerid_parse(ast_channel_caller(chan)->id.number.str, &b, &b1);
 			ast_shrink_phone_number(b1);
 		}
-		sprintf(mycmd, "DISCONNECT,%s", b1);
+		snprintf(mycmd, sizeof(mycmd), "DISCONNECT,%s", b1);
 		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
 			donodelog(myrpt, mycmd);
@@ -7363,10 +7366,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 			if (sscanf(myrpt->p.ldisc[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 ||
 				sscanf(myrpt->p.ldisc[i], "GPIO" N_FMT(d) ":" N_FMT(d), &j, &k) == 2) {
-				sprintf(string, "GPIO %d %d", j, k);
+				snprintf(string, sizeof(string), "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else if (sscanf(myrpt->p.ldisc[i], "PP" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
-				sprintf(string, "PP %d %d", j, k);
+				snprintf(string, sizeof(string), "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			}
 		}
