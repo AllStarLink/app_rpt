@@ -4180,24 +4180,6 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	rpt_link_free(l);
 }
 
-static inline void fac_frame(struct ast_frame *restrict f, float fac)
-{
-	int x1;
-	short *sp;
-	float fsamp;
-
-	sp = (short *) f->data.ptr;
-	for (x1 = 0; x1 < f->datalen / 2; x1++) {
-		fsamp = (float) sp[x1] * fac;
-		/* Prevent clipping */
-		if (fsamp > 32765.0)
-			fsamp = 32765.0;
-		if (fsamp < -32765.0)
-			fsamp = -32765.0;
-		sp[x1] = (int) fsamp;
-	}
-}
-
 static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	ast_debug(7, "@@@@ rx key\n");
@@ -4300,7 +4282,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				if ((myrpt->p.linkmongain != 1.0) && (l->mode != 1) && (l->wouldtx))
 					fac *= myrpt->p.linkmongain;
 				if (fac != 1.0) {
-					fac_frame(f, fac);
+					ast_frame_adjust_volume_float(f, fac);
 				}
 
 				l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
@@ -4457,7 +4439,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					fac = myrpt->p.ttxgain;
 
 				if (fac != 1.0) {
-					fac_frame(f, fac);
+					ast_frame_adjust_volume_float(f, fac);
 				}
 				/* foop */
 				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
@@ -4513,7 +4495,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 		if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")))
 			fac = myrpt->p.etxgain;
 		if (fac != 1.0) {
-			fac_frame(fs, fac);
+			ast_frame_adjust_volume_float(fs, fac);
 		}
 		l = myrpt->links.next;
 		/* go thru all the links */
