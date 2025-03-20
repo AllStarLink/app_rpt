@@ -64,6 +64,8 @@
 #pragma GCC diagnostic ignored "-Wsequence-point"
 #endif
 
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
+
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
@@ -284,36 +286,35 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		i16 ii,ri,ti;
 		float f;
 
- 		p=pChan->pStr=pChan->pRxCode[i];
+		p = pChan->pStr = pChan->pRxCode[i];
 
-		#ifdef HAVE_XPMRX
-		if(!xpmrx(pChan,XXO_LSDCODEPARSE_1))
-		#endif
+#ifdef HAVE_XPMRX
+		if (!xpmrx(pChan, XXO_LSDCODEPARSE_1))
+#endif
 		{
-			sscanf(p,"%f",&f);
-			ri=CtcssFreqIndex(f);
-			if(ri>maxctcssindex)maxctcssindex=ri;
+			sscanf(p, N_FMT(f), &f);
+			ri = CtcssFreqIndex(f);
+			if (ri > maxctcssindex) {
+				maxctcssindex = ri;
+			}
 
-			sscanf(pChan->pTxCode[i],"%f",&f);
-		    ti=CtcssFreqIndex(f);
-			if(f>maxctcsstxfreq)maxctcsstxfreq=f;
+			sscanf(pChan->pTxCode[i], N_FMT(f), &f);
+			ti = CtcssFreqIndex(f);
+			if (f > maxctcsstxfreq) {
+				maxctcsstxfreq = f;
+			}
 
-			if(ri>CTCSS_NULL && ti>CTCSS_NULL)
-			{
+			if (ri > CTCSS_NULL && ti > CTCSS_NULL) {
 				pChan->b.ctcssRxEnable=pChan->b.ctcssTxEnable=1;
 				pChan->rxCtcssMap[ri]=ti;
 				pChan->numrxctcssfreqs++;
 				TRACEF(1,("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i\n",i,pChan->rxctcss[i],ri,ti));
-			}
-			else if(ri>CTCSS_NULL && f==0)
-			{
+			} else if (ri > CTCSS_NULL && f == 0) {
 				pChan->b.ctcssRxEnable=1;
 				pChan->rxCtcssMap[ri]=CTCSS_RXONLY;
 				pChan->numrxctcssfreqs++;
 				TRACEF(1,("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i RXONLY\n",i,pChan->rxctcss[i],ri,ti));
-			}
-			else
-			{
+			} else {
 				pChan->numrxctcssfreqs=0;
 				for(ii=0;ii<CTCSS_NUM_CODES;ii++) pChan->rxCtcssMap[ii]=CTCSS_NULL;
 				TRACEF(1,("WARNING: Invalid Channel code detected and ignored. %i %s %s \n",i,pChan->pRxCode[i],pChan->pTxCode[i]));
@@ -350,49 +351,47 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		ptdet->fudgeFactor=8;
 	}
 
-
 	// DEFAULT TX CODE
-	TRACEF(1,("code_string_parse() Default Tx Code %s \n",pChan->pTxCodeDefault));
-	pChan->txcodedefaultsmode=SMODE_NULL;
-	p=pChan->pStr=pChan->pTxCodeDefault;
+	TRACEF(1, ("code_string_parse() Default Tx Code %s \n", pChan->pTxCodeDefault));
+	pChan->txcodedefaultsmode = SMODE_NULL;
+	p = pChan->pStr = pChan->pTxCodeDefault;
 
-	#ifdef HAVE_XPMRX
-	if(!lsd_code_parse(pChan,3))
-	#endif
+#ifdef HAVE_XPMRX
+	if (!lsd_code_parse(pChan, 3))
+#endif
 	{
-		sscanf(p,"%f",&f);
-	    ti=CtcssFreqIndex(f);
-		if(f>maxctcsstxfreq)maxctcsstxfreq=f;
+		sscanf(p, N_FMT(f), &f);
+		ti = CtcssFreqIndex(f);
+		if (f > maxctcsstxfreq) {
+			maxctcsstxfreq = f;
+		}
 
-		if(ti>CTCSS_NULL)
-		{
-			pChan->b.ctcssTxEnable=1;
-			pChan->txctcssdefault_index=ti;
-			pChan->txctcssdefault_value=f;
-			pChan->spsSigGen0->freq=f*10;
-			pChan->txcodedefaultsmode=SMODE_CTCSS;
-			TRACEF(1,("code_string_parse() Tx Default CTCSS = %s %i %f\n",p,ti,f));
+		if (ti > CTCSS_NULL) {
+			pChan->b.ctcssTxEnable = 1;
+			pChan->txctcssdefault_index = ti;
+			pChan->txctcssdefault_value = f;
+			pChan->spsSigGen0->freq = f * 10;
+			pChan->txcodedefaultsmode = SMODE_CTCSS;
+			TRACEF(1, ("code_string_parse() Tx Default CTCSS = %s %i %f\n", p, ti, f));
 		}
 	}
-
 
 	// set x for maximum length and just change pointers
 	TRACEF(1,("code_string_parse() Filter Config \n"));
 	pSps=pChan->spsTxLsdLpf;
-	if(pSps->x)ast_free(pSps->x);
-	if(maxctcsstxfreq>203.5)
-	{
-		pSps->ncoef=taps_fir_lpf_250_9_66;
-		pSps->size_coef=2;
-		pSps->coef=(void*)coef_fir_lpf_250_9_66;
-		pSps->nx=taps_fir_lpf_250_9_66;
-		pSps->size_x=2;
-		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		pSps->calcAdjust=gain_fir_lpf_250_9_66;
-		TRACEF(1,("code_string_parse() Tx Filter Freq High\n"));
+	if (pSps->x) {
+		ast_free(pSps->x);
 	}
-	else
-	{
+	if (maxctcsstxfreq > 203.5) {
+		pSps->ncoef = taps_fir_lpf_250_9_66;
+		pSps->size_coef = 2;
+		pSps->coef = (void *) coef_fir_lpf_250_9_66;
+		pSps->nx = taps_fir_lpf_250_9_66;
+		pSps->size_x = 2;
+		pSps->x = (void *) (ast_calloc(pSps->nx, pSps->size_x));
+		pSps->calcAdjust = gain_fir_lpf_250_9_66;
+		TRACEF(1, ("code_string_parse() Tx Filter Freq High\n"));
+	} else {
 		pSps->ncoef=taps_fir_lpf_215_9_88;
 		pSps->size_coef=2;
 		pSps->coef=(void*)coef_fir_lpf_215_9_88;

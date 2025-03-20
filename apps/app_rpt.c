@@ -1687,9 +1687,9 @@ static inline void init_text_frame(struct ast_frame *wf)
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
 {
 	/* XXX cmd, dst, and src should be validated. Why is remote_data src[300] in other locations?
-	* Is this a typo here?  Why would dest be any bigger than src?
-	*/
-	char tmp1[512], cmd[300] = "", dest[300], src[30], c;
+	 * Is this a typo here?  Why would dest be any bigger than src?
+	 */
+	char tmp1[RPT_TMP_SZ + 1], cmd[RPT_CMD_SZ + 1] = "", dest[RPT_DEST_SZ + 1], src[RPT_SRC_SZ + 1], c;
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
@@ -1737,7 +1737,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'M') {
 		rest = 0;
-		if (sscanf(str, "%s %s %s %n", cmd, src, dest, &rest) < 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_SRC_SZ) S_FMT(RPT_DEST_SZ) "%n", cmd, src, dest, &rest) < 3) {
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
 		}
@@ -1765,7 +1765,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'T') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_SRC_SZ) S_FMT(RPT_DEST_SZ), cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse telem string %s\n", str);
 			return;
 		}
@@ -1797,7 +1797,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 
 	if (*str == 'C') {
-		if (sscanf(str, "%s %s %s %s", cmd, src, tmp1, dest) != 4) { /*! \todo We should limit to sizeof(cmd, src, tmp1, dest) */
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_SRC_SZ) S_FMT(RPT_TMP_SZ) S_FMT(RPT_DEST_SZ), cmd, src, tmp1, dest) != 4) {
 			ast_log(LOG_WARNING, "Unable to parse ctcss string %s\n", str);
 			return;
 		}
@@ -1816,7 +1816,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 
 	if (*str == 'K') {
-		if (sscanf(str, "%s %s %s %d %d", cmd, dest, src, &seq, &ts) != 5) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_DEST_SZ) S_FMT(RPT_SRC_SZ) N_FMT(d) N_FMT(d), cmd, dest, src, &seq, &ts) != 5) {
 			ast_log(LOG_WARNING, "Unable to parse keying string %s\n", str);
 			return;
 		}
@@ -1873,14 +1873,14 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'I') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) { /*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_SRC_SZ) S_FMT(RPT_DEST_SZ), cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return;
 		}
 		mdc1200_notify(myrpt, src, dest);
 		strcpy(dest, "*");
 	} else {
-		if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {/*! \todo We should limit to sizeof(cmd, src, dest) */
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_DEST_SZ) S_FMT(RPT_SRC_SZ) N_FMT(d) " %c", cmd, dest, src, &seq, &c) != 5) {
 			ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 			return;
 		}
@@ -2166,7 +2166,7 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 static int handle_remote_data(struct rpt *myrpt, const char *str)
 {
 	/* Should src[300] be src[30] as in handle_link_data?*/
-	char cmd[300], dest[300], src[300], c;
+	char cmd[RPT_CMD_SZ + 1], dest[RPT_DEST_SZ + 1], src[RPT_SRC_SZ + 1], c;
 	int seq, res;
 
 	/* put string in our buffer */
@@ -2191,9 +2191,9 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	if (*str == 'T')
 		return 0;
 
-#ifndef	DO_NOT_NOTIFY_MDC1200_ON_REMOTE_BASES
+#ifndef DO_NOT_NOTIFY_MDC1200_ON_REMOTE_BASES
 	if (*str == 'I') {
-		if (sscanf(str, "%s %s %s", cmd, src, dest) != 3) {
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_SRC_SZ) S_FMT(RPT_DEST_SZ), cmd, src, dest) != 3) {
 			ast_log(LOG_WARNING, "Unable to parse ident string %s\n", str);
 			return 0;
 		}
@@ -2204,7 +2204,7 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	if (*str == 'L') {
 		return 0;
 	}
-	if (sscanf(str, "%s %s %s %d %c", cmd, dest, src, &seq, &c) != 5) {
+	if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_DEST_SZ) S_FMT(RPT_SRC_SZ) N_FMT(d) " %c", cmd, dest, src, &seq, &c) != 5) {
 		ast_log(LOG_WARNING, "Unable to parse link string %s\n", str);
 		return 0;
 	}
@@ -3551,9 +3551,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	}
 
 	if (f->frametype == AST_FRAME_TEXT && myrpt->rxchankeyed) {
-		char myrxrssi[32];
-
-		if (sscanf((char *) f->data.ptr, "R %s", myrxrssi) == 1) {
+		char myrxrssi[RSSI_SZ + 1];
+		if (sscanf((char *) f->data.ptr, "R " S_FMT(RSSI_SZ), myrxrssi) == 1) {
 			myrpt->rxrssi = atoi(myrxrssi);
 			ast_debug(8, "[%s] rxchannel rssi=%i\n", myrpt->name, myrpt->rxrssi);
 			if (myrpt->p.votertype == 2)
@@ -3908,14 +3907,15 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			rpt_do_sendall(0, argc, argv);
 		}
 		/* if is a USB device */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") || !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
+			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 			/* if message parsable */
-			if (sscanf(f->data.ptr, "GPIO%d %d", &i, &j) >= 2) {
+			if (sscanf(f->data.ptr, "GPIO" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
 				sprintf(buf, "RPT_URI_GPIO%d", i);
 				rpt_update_boolean(myrpt, buf, j);
 			}
 			/* if message parsable */
-			else if (sscanf(f->data.ptr, "PP%d %d", &i, &j) >= 2) {
+			else if (sscanf(f->data.ptr, "PP" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
 				sprintf(buf, "RPT_PP%d", i);
 				rpt_update_boolean(myrpt, buf, j);
 			} else if (!strcmp(f->data.ptr, "ENDPAGE")) {
@@ -3926,7 +3926,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		/* if is a BeagleBoard device */
 		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle")) {
 			/* if message parsable */
-			if (sscanf(f->data.ptr, "GPIO%d %d", &i, &j) >= 2) {
+			if (sscanf(f->data.ptr, "GPIO" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
 				sprintf(buf, "RPT_BEAGLE_GPIO%d", i);
 				rpt_update_boolean(myrpt, buf, j);
 			}
@@ -4881,7 +4881,7 @@ static void *rpt(void *this)
 			unsigned long long u_mono;
 			time_t was_mono;
 			char gps_data[100];
-			char lat[25], lon[25], elev[25];
+			char lat[LAT_SZ + 1], lon[LON_SZ + 1], elev[ELEV_SZ + 1];
 
 			myrpt->lastgpstime = t_mono;
 
@@ -4894,7 +4894,7 @@ static void *rpt(void *this)
 			}
 
 			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
-			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
+			if (sscanf(gps_data, N_FMT(llu) " %*u " S_FMT(LAT_SZ) S_FMT(LON_SZ) S_FMT(ELEV_SZ), &u_mono, lat, lon, elev) != 4) {
 				break;
 			}
 			was_mono = (time_t) u_mono;
@@ -6945,11 +6945,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			int j, k;
 			char string[100];
 
-			if (sscanf(myrpt->p.lconn[i], "GPIO%d=%d", &j, &k) == 2 ||
-				sscanf(myrpt->p.lconn[i], "GPIO%d:%d", &j, &k) == 2) {
+			if (sscanf(myrpt->p.lconn[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 || sscanf(myrpt->p.lconn[i], "GPIO%d:%d", &j, &k) == 2) {
 				sprintf(string, "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
-			} else if (sscanf(myrpt->p.lconn[i], "PP%d=%d", &j, &k) == 2) {
+			} else if (sscanf(myrpt->p.lconn[i], "PP" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			}
@@ -7397,11 +7396,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			int j, k;
 			char string[100];
 
-			if (sscanf(myrpt->p.ldisc[i], "GPIO%d=%d", &j, &k) == 2 ||
-				sscanf(myrpt->p.ldisc[i], "GPIO%d:%d", &j, &k) == 2) {
+			if (sscanf(myrpt->p.ldisc[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 ||
+				sscanf(myrpt->p.ldisc[i], "GPIO" N_FMT(d) ":" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
-			} else if (sscanf(myrpt->p.ldisc[i], "PP%d=%d", &j, &k) == 2) {
+			} else if (sscanf(myrpt->p.ldisc[i], "PP" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			}

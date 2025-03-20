@@ -67,11 +67,12 @@
 #define	DELIMCHR ','
 #define	QUOTECHR 34
 
-#define	READERR_THRESHOLD 50
-#define	DEFAULT_ECHO_MAX 1000	/* 20 secs of echo buffer, max */
-#define	PP_MASK 0xbffc
-#define	PP_PORT "/dev/parport0"
-#define	PP_IOPORT 0x378
+#define READERR_THRESHOLD 50
+#define DEFAULT_ECHO_MAX 1000 /* 20 secs of echo buffer, max */
+#define PP_MASK 0xbffc
+#define PP_PORT "/dev/parport0"
+#define PP_IOPORT 0x378
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 
 #ifdef __linux
 #include <linux/soundcard.h>
@@ -1678,7 +1679,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* set receive CTCSS */
 	if (!strncmp(text, "RXCTCSS", 7)) {
-		cnt = sscanf(text, "%s %d", cmd, &i);
+		cnt = sscanf(text, "%s " N_FMT(d), cmd, &i);
 		if (cnt < 2) {
 			return 0;
 		}
@@ -1689,8 +1690,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* GPIO command */
 	if (!strncmp(text, "GPIO", 4)) {
-		
-		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
+		cnt = sscanf(text, "%s " N_FMT(d) " " N_FMT(d), cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -1721,8 +1721,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* Parallel port command */
 	if (!strncmp(text, "PP", 2)) {
-		
-		cnt = sscanf(text, "%s %d %d", cmd, &i, &j);
+		cnt = sscanf(text, "%s " N_FMT(d) " " N_FMT(d), cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -1751,8 +1750,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 
 	/* pager command */
 	if (!strncmp(text, "PAGE", 4)) {
-		
-		cnt = sscanf(text, "%s %d %d %n", cmd, &baud, &i, &j);
+		cnt = sscanf(text, "%s " N_FMT(d) " " N_FMT(d) " %n", cmd, &baud, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -3113,7 +3111,7 @@ static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, const char *str)
 		if (!isdigit(str[x]))
 			break;
 	}
-	if (str[x] || (sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
+	if (str[x] || (sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 		ast_cli(fd, "Channel %s: Entry Error, Rx Channel Level setting not changed\n", o->name);
 		return;
 	}
@@ -3142,7 +3140,7 @@ static void _menu_txa(int fd, struct chan_simpleusb_pvt *o, const char *str)
 		str++;
 	}
 	if (str[0]) {
-		if ((sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
+		if ((sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 			ast_cli(fd, "Channel %s: Entry Error, Tx Channel A Level setting not changed\n", o->name);
 			return;
 		}
@@ -3178,7 +3176,7 @@ static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
 		str++;
 	}
 	if (str[0]) {
-		if ((sscanf(str, "%d", &i) < 1) || (i < 0) || (i > 999)) {
+		if ((sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 			ast_cli(fd, "Channel %s: Entry Error, Tx Channel B Level setting not changed\n", o->name);
 			return;
 		}
