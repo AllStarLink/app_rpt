@@ -12,7 +12,7 @@ enum rpt_chan_type {
 
 /* Each of these corresponds to a member of the rpt_conf structure in app_rpt.h */
 enum rpt_conf_type {
-	RPT_CONF, /* Audio on all links */
+	RPT_CONF,	/* Audio on all links */
 	RPT_TXCONF, /* Local Audio */
 };
 
