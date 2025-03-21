@@ -901,9 +901,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 				telem = telem->next;
 			}
 			gettimeofday(&myrpt->paging, NULL);
-			rpt_mutex_lock(&myrpt->blocklock);
 			ast_sendtext(myrpt->rxchannel, str);
-			rpt_mutex_unlock(&myrpt->blocklock);
 			break;
 		}
 	}
