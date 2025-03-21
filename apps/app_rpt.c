@@ -1588,7 +1588,7 @@ static void do_aprstt(struct rpt *myrpt)
 	}
 }
 
-static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, const char *src, const char *dest, char *str, struct ast_frame *wf)
+static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, const char *src, const char *dest, struct ast_frame *wf)
 {
 	struct rpt_link *l = myrpt->links.next;
 	/* see if this is one in list */
@@ -1605,7 +1605,6 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 		if (!dest || !strcmp(l->name, dest)) {
 			/* send, but not to src */
 			if (strcmp(l->name, src)) {
-				wf->data.ptr = str;
 				if (l->chan) {
 					rpt_qwrite(l, wf);
 				}
@@ -1675,15 +1674,6 @@ static int funcchar_common(struct rpt *myrpt, char c)
 	return 0;
 }
 
-static inline void init_text_frame(struct ast_frame *wf)
-{
-	wf->frametype = AST_FRAME_TEXT;
-	wf->subclass.format = ast_format_slin;
-	wf->offset = 0;
-	wf->mallocd = 0;
-	wf->samples = 0;
-}
-
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
 {
 	/* XXX cmd, dst, and src should be validated. Why is remote_data src[300] in other locations?
@@ -1693,10 +1683,9 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
-	init_text_frame(&wf);
+	init_text_frame(&wf, "handle_link_data");
 	wf.datalen = strlen(str) + 1;
-	wf.src = "handle_link_data";
-
+	wf.data.ptr = str;
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(str, DISCSTR)) {
@@ -1724,7 +1713,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'G') {		/* got GPS data */
 		/* re-distribute it to attached nodes */
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		return;
 	}
 	if (*str == 'L') {
@@ -1761,7 +1750,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			ast_verb(3, "Text Message From %s: %s\n", src, str + rest);
 			ast_debug(1, "Node %s Got Text Message From Node %s: %s\n", myrpt->name, src, str + rest);
 		}
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		return;
 	}
 	if (*str == 'T') {
@@ -1770,7 +1759,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			return;
 		}
 		/* otherwise, send it to all of em */
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
 			return;
@@ -1805,7 +1794,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			return;
 		if (strcasecmp(myrpt->p.ctgroup, tmp1))
 			return;
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
 			return;
@@ -1825,13 +1814,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		}
 		/* if not for me, redistribute to all links */
 		if (strcmp(dest, myrpt->name)) {
-			if (distribute_to_all_links(myrpt, mylink, src, dest, str, &wf)) {
+			if (distribute_to_all_links(myrpt, mylink, src, dest, &wf)) {
 				return;
 			}
 		}
 		/* if not for me, or is broadcast, redistribute to all links */
 		if (strcmp(dest, myrpt->name) || dest[0] == '*') {
-			distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+			distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		}
 		/* if not for me, end here */
 		if (strcmp(dest, myrpt->name) && (dest[0] != '*'))
@@ -1895,11 +1884,11 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 
 	/* if not for me, redistribute to all links */
 	if (strcmp(dest, myrpt->name)) {
-		if (distribute_to_all_links(myrpt, mylink, src, dest, str, &wf)) {
+		if (distribute_to_all_links(myrpt, mylink, src, dest, &wf)) {
 			return;
 		}
 		/* otherwise, send it to all of em */
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		return;
 	}
 	if (myrpt->p.archivedir) {
@@ -3160,12 +3149,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (!lstr) {
 				return;
 			}
-			memset(&lf, 0, sizeof(lf));
-			lf.frametype = AST_FRAME_TEXT;
-			lf.subclass.format = ast_format_slin;
-			lf.offset = 0;
-			lf.mallocd = 0;
-			lf.samples = 0;
+			init_text_frame(&lf, "periodic_process_links");
 			l->linklisttimer = LINKLISTTIME;
 			ast_str_set(&lstr, 0, "%s", "L ");
 			rpt_mutex_lock(&myrpt->lock);
@@ -3933,10 +3917,9 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->paging.tv_usec = 0;
 			} else {
 				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
-				init_text_frame(&wf);
+				init_text_frame(&wf, "voter_text_send");
 				wf.datalen = strlen(str) + 1;
-				wf.src = "voter_text_send";
-
+				wf.data.ptr = str;
 				l = myrpt->links.next;
 				/* otherwise, send it to all of em */
 				while (l != &myrpt->links) {
@@ -3945,7 +3928,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						l = l->next;
 						continue;
 					}
-					wf.data.ptr = str;
 					if (l->chan)
 						rpt_qwrite(l, &wf);
 					l = l->next;
