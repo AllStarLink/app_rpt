@@ -102,11 +102,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 			l->disced = 1;
 			l->hasconnected = 1;
 			rpt_mutex_unlock(&myrpt->lock);
-			memset(&wf, 0, sizeof(wf));
-			wf.frametype = AST_FRAME_TEXT;
+			init_text_frame(&wf, "function_ilink:1");
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
-			wf.src = "function_ilink:1";
 			if (l->chan) {
 				if (l->thisconnected)
 					ast_write(l->chan, &wf);
@@ -245,12 +243,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 			l->disced = 2;		/* Silently disconnect */
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_debug(5, "dumping link %s\n",l->name);
-
-			memset(&wf, 0, sizeof(wf));
-			wf.frametype = AST_FRAME_TEXT;
+			init_text_frame(&wf, "function_ilink:6");
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
-			wf.src = "function_ilink:6";
 			if (l->chan) {
 				if (l->thisconnected)
 					ast_write(l->chan, &wf);
@@ -298,11 +293,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_debug(5, "dumping link %s\n",l->name);
 
-				memset(&wf, 0, sizeof(wf));
-				wf.frametype = AST_FRAME_TEXT;
+				init_text_frame(&wf, "function_ilink:10");
 				wf.datalen = strlen(DISCSTR) + 1;
 				wf.data.ptr = DISCSTR;
-				wf.src = "function_ilink:6";
 				if (l->chan) {
 					if (l->thisconnected)
 						ast_write(l->chan, &wf);

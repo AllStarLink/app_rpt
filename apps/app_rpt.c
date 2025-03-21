@@ -1675,15 +1675,6 @@ static int funcchar_common(struct rpt *myrpt, char c)
 	return 0;
 }
 
-static inline void init_text_frame(struct ast_frame *wf)
-{
-	wf->frametype = AST_FRAME_TEXT;
-	wf->subclass.format = ast_format_slin;
-	wf->offset = 0;
-	wf->mallocd = 0;
-	wf->samples = 0;
-}
-
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
 {
 	/* XXX cmd, dst, and src should be validated. Why is remote_data src[300] in other locations?
@@ -1693,9 +1684,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
-	init_text_frame(&wf);
+	init_text_frame(&wf, "handle_link_data");
 	wf.datalen = strlen(str) + 1;
-	wf.src = "handle_link_data";
 
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
@@ -3160,12 +3150,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (!lstr) {
 				return;
 			}
-			memset(&lf, 0, sizeof(lf));
-			lf.frametype = AST_FRAME_TEXT;
-			lf.subclass.format = ast_format_slin;
-			lf.offset = 0;
-			lf.mallocd = 0;
-			lf.samples = 0;
+			init_text_frame(&lf, "");
 			l->linklisttimer = LINKLISTTIME;
 			ast_str_set(&lstr, 0, "%s", "L ");
 			rpt_mutex_lock(&myrpt->lock);
@@ -3933,9 +3918,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->paging.tv_usec = 0;
 			} else {
 				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
-				init_text_frame(&wf);
+				init_text_frame(&wf, "voter_text_send");
 				wf.datalen = strlen(str) + 1;
-				wf.src = "voter_text_send";
 
 				l = myrpt->links.next;
 				/* otherwise, send it to all of em */
