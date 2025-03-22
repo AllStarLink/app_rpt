@@ -334,6 +334,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	snprintf(str, sizeof(str), "D %s %s %d %c", myrpt->cmdnode, myrpt->name, ++(myrpt->dtmfidx), c);
 	init_text_frame(&wf, "send_link_dtmf");
 	wf.datalen = strlen(str) + 1;
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* first, see if our dude is there */
 	while (l != &myrpt->links) {
@@ -343,7 +344,6 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		}
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name, myrpt->cmdnode)) {
-			wf.data.ptr = str;
 			if (l->chan)
 				rpt_qwrite(l, &wf);
 			return;
@@ -352,8 +352,8 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	}
 	l = myrpt->links.next;
 	/* if not, give it to everyone */
+	wf.data.ptr = str;
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan)
 			rpt_qwrite(l, &wf);
 		l = l->next;

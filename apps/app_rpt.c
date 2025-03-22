@@ -1588,7 +1588,7 @@ static void do_aprstt(struct rpt *myrpt)
 	}
 }
 
-static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, const char *src, const char *dest, char *str, struct ast_frame *wf)
+static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, const char *src, const char *dest, struct ast_frame *wf)
 {
 	struct rpt_link *l = myrpt->links.next;
 	/* see if this is one in list */
@@ -1605,7 +1605,6 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 		if (!dest || !strcmp(l->name, dest)) {
 			/* send, but not to src */
 			if (strcmp(l->name, src)) {
-				wf->data.ptr = str;
 				if (l->chan) {
 					rpt_qwrite(l, wf);
 				}
@@ -1686,7 +1685,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 
 	init_text_frame(&wf, "handle_link_data");
 	wf.datalen = strlen(str) + 1;
-
+	wf.data.ptr = str;
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(str, DISCSTR)) {
@@ -1714,7 +1713,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'G') {		/* got GPS data */
 		/* re-distribute it to attached nodes */
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		return;
 	}
 	if (*str == 'L') {
@@ -1751,7 +1750,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			ast_verb(3, "Text Message From %s: %s\n", src, str + rest);
 			ast_debug(1, "Node %s Got Text Message From Node %s: %s\n", myrpt->name, src, str + rest);
 		}
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		return;
 	}
 	if (*str == 'T') {
@@ -1760,7 +1759,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			return;
 		}
 		/* otherwise, send it to all of em */
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
 			return;
@@ -1795,7 +1794,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			return;
 		if (strcasecmp(myrpt->p.ctgroup, tmp1))
 			return;
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
 			return;
@@ -1815,13 +1814,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		}
 		/* if not for me, redistribute to all links */
 		if (strcmp(dest, myrpt->name)) {
-			if (distribute_to_all_links(myrpt, mylink, src, dest, str, &wf)) {
+			if (distribute_to_all_links(myrpt, mylink, src, dest, &wf)) {
 				return;
 			}
 		}
 		/* if not for me, or is broadcast, redistribute to all links */
 		if (strcmp(dest, myrpt->name) || dest[0] == '*') {
-			distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+			distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		}
 		/* if not for me, end here */
 		if (strcmp(dest, myrpt->name) && (dest[0] != '*'))
@@ -1885,11 +1884,11 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 
 	/* if not for me, redistribute to all links */
 	if (strcmp(dest, myrpt->name)) {
-		if (distribute_to_all_links(myrpt, mylink, src, dest, str, &wf)) {
+		if (distribute_to_all_links(myrpt, mylink, src, dest, &wf)) {
 			return;
 		}
 		/* otherwise, send it to all of em */
-		distribute_to_all_links(myrpt, mylink, src, NULL, str, &wf);
+		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		return;
 	}
 	if (myrpt->p.archivedir) {
