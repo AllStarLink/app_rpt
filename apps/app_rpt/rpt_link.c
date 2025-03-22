@@ -354,6 +354,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	}
 	l = myrpt->links.next;
 	/* if not, give it to everyone */
+	wf.data.ptr = str;
 	while (l != &myrpt->links) {
 		if (l->chan)
 			rpt_qwrite(l, &wf);
