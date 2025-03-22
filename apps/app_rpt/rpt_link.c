@@ -352,7 +352,6 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	}
 	l = myrpt->links.next;
 	/* if not, give it to everyone */
-	wf.data.ptr = str;
 	while (l != &myrpt->links) {
 		if (l->chan)
 			rpt_qwrite(l, &wf);
@@ -374,10 +373,10 @@ void send_link_keyquery(struct rpt *myrpt)
 	snprintf(str, sizeof(str), "K? * %s 0 0", myrpt->name);
 	init_text_frame(&wf, "send_link_keyquery");
 	wf.datalen = strlen(str) + 1;
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan)
 			rpt_qwrite(l, &wf);
 		l = l->next;
@@ -393,10 +392,10 @@ void send_tele_link(struct rpt *myrpt, char *cmd)
 	snprintf(str, sizeof(str) - 1, "T %s %s", myrpt->name, cmd);
 	init_text_frame(&wf, "send_tele_link");
 	wf.datalen = strlen(str) + 1;
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan && (l->mode == 1))
 			rpt_qwrite(l, &wf);
 		l = l->next;

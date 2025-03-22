@@ -3149,7 +3149,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (!lstr) {
 				return;
 			}
-			init_text_frame(&lf, "");
+			init_text_frame(&lf, "periodic_process_links");
 			l->linklisttimer = LINKLISTTIME;
 			ast_str_set(&lstr, 0, "%s", "L ");
 			rpt_mutex_lock(&myrpt->lock);
