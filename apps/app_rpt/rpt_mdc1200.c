@@ -120,15 +120,9 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 		return;
 
 	sprintf(str, "I %s %s", myrpt->name, data);
-
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "mdc1200_send");
 	wf.data.ptr = str;
-	wf.datalen = strlen(str) + 1;	// Isuani, 20141001
-	wf.samples = 0;
-	wf.src = "mdc1200_send";
+	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
 	l = myrpt->links.next;
 	/* otherwise, send it to all of em */
