@@ -593,7 +593,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			}
 
 //### GET ALL LINKED NODES INFO ####################
-			strs = ast_malloc(sizeof(char *));
+			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
 				return RESULT_FAILURE;
@@ -678,7 +678,7 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
 			n = __mklinklist(myrpt, NULL, &lbuf, 0);
 			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
-			strs = ast_malloc(sizeof(char *));
+			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
 				return RESULT_FAILURE;

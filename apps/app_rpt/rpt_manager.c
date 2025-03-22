@@ -271,7 +271,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			astman_append(ses, "LinkedNodes: ");
 
 			/* Get all linked nodes info */
-			strs = ast_malloc(sizeof(char *));
+			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
 				return RESULT_FAILURE;
