@@ -4470,9 +4470,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 		return -1;
 	}
 	if (f->frametype == AST_FRAME_VOICE) {
-		struct ast_frame *fs;
-		float fac;
-		struct rpt_link *l = &myrpt->links;
+		struct rpt_link *l;
 
 		if ((myrpt->p.duplex > 1) || (myrpt->txkeyed)) {
 			if (myrpt->monstream)
@@ -4482,27 +4480,16 @@ static inline int monchannel_read(struct rpt *myrpt)
 			&& (myrpt->outstreampipe[1] != -1)) {
 			outstream_write(myrpt, f);
 		}
-		fs = ast_frdup(f);
-		fac = 1.0;
-		if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")))
-			fac = myrpt->p.etxgain;
-		if (fac != 1.0) {
-			ast_frame_adjust_volume_float(fs, fac);
-		}
 		l = myrpt->links.next;
 		/* go thru all the links */
 		while (l != &myrpt->links) {
-			/* foop */
-			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
-				if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "irlp"))) {
-					ast_write(l->chan, fs);
-				} else {
-					ast_write(l->chan, f);
-				}
+			/* IF we are an altlink() -> !altlink() handled elsewhere */
+			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
+				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+				ast_write(l->chan, f);
 			}
 			l = l->next;
 		}
-		ast_frfree(fs);
 	}
 	return hangup_frame_helper(myrpt->monchannel, "monchannel", f);
 }
