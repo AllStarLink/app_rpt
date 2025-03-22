@@ -1840,6 +1840,10 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			wf.src = PAGER_SRC;
 			memcpy(wf.data.ptr, (char *) (audio + i), FRAME_SIZE * 2);
 			f1 = ast_frdup(&wf);
+			if (!f1) {
+				ast_free(audio);
+				return 0;
+			}
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 			ast_mutex_lock(&o->txqlock);
 			AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
@@ -1955,6 +1959,9 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 
 	//take the data from the network and save it for processing
 	f1 = ast_frdup(f);
+	if (!f1) {
+		return 0;
+	}
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	ast_mutex_lock(&o->txqlock);
 	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
@@ -2039,6 +2046,9 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			memcpy(f->data.ptr, u->data, FRAME_SIZE * 2);
 			ast_free(u);
 			f1 = ast_frdup(f);
+			if (!f1) {
+				return &ast_null_frame;
+			}
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 			ast_mutex_lock(&o->txqlock);
 			AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);

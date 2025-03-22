@@ -193,6 +193,9 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 	if (!l->chan)
 		return;
 	f1 = ast_frdup(f);
+	if (!f1) {
+		return;
+	}
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
 }
