@@ -3919,7 +3919,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
 				init_text_frame(&wf, "voter_text_send");
 				wf.datalen = strlen(str) + 1;
-
+				wf.data.ptr = str;
 				l = myrpt->links.next;
 				/* otherwise, send it to all of em */
 				while (l != &myrpt->links) {
@@ -3928,7 +3928,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						l = l->next;
 						continue;
 					}
-					wf.data.ptr = str;
 					if (l->chan)
 						rpt_qwrite(l, &wf);
 					l = l->next;

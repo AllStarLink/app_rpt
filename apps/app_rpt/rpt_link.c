@@ -309,7 +309,7 @@ void rssi_send(struct rpt *myrpt)
 	sprintf(str, "R %i", myrpt->rxrssi);
 	init_text_frame(&wf, "rssi_send");
 	wf.datalen = strlen(str) + 1;
-
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* otherwise, send it to all of em */
 	while (l != &myrpt->links) {
@@ -317,7 +317,6 @@ void rssi_send(struct rpt *myrpt)
 			l = l->next;
 			continue;
 		}
-		wf.data.ptr = str;
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
 		if (l->chan)
 			rpt_qwrite(l, &wf);
