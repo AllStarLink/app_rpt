@@ -186,17 +186,6 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	return (0);
 }
 
-void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
-{
-	struct ast_frame *f1;
-
-	if (!l->chan)
-		return;
-	f1 = ast_frdup(f);
-	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
-}
-
 int linkcount(struct rpt *myrpt)
 {
 	struct rpt_link *l;
@@ -320,7 +309,7 @@ void rssi_send(struct rpt *myrpt)
 		wf.data.ptr = str;
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
 		if (l->chan)
-			rpt_qwrite(l, &wf);
+			ast_write(l->chan, &wf);
 		l = l->next;
 	}
 }
@@ -345,7 +334,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name, myrpt->cmdnode)) {
 			if (l->chan)
-				rpt_qwrite(l, &wf);
+				ast_write(l->chan, &wf);
 			return;
 		}
 		l = l->next;
@@ -355,7 +344,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	wf.data.ptr = str;
 	while (l != &myrpt->links) {
 		if (l->chan)
-			rpt_qwrite(l, &wf);
+			ast_write(l->chan, &wf);
 		l = l->next;
 	}
 }
@@ -379,7 +368,7 @@ void send_link_keyquery(struct rpt *myrpt)
 	while (l != &myrpt->links) {
 		wf.data.ptr = str;
 		if (l->chan)
-			rpt_qwrite(l, &wf);
+			ast_write(l->chan, &wf);
 		l = l->next;
 	}
 }
@@ -398,7 +387,7 @@ void send_tele_link(struct rpt *myrpt, char *cmd)
 	while (l != &myrpt->links) {
 		wf.data.ptr = str;
 		if (l->chan && (l->mode == 1))
-			rpt_qwrite(l, &wf);
+			ast_write(l->chan, &wf);
 		l = l->next;
 	}
 	rpt_telemetry(myrpt, VARCMD, cmd);
