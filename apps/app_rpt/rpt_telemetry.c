@@ -1259,7 +1259,7 @@ treataslocal:
 		/* get all the nodes */
 		n = __mklinklist(myrpt, NULL, &lbuf, 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		strs = ast_malloc(sizeof(char *));
+		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
 			ast_free(lbuf);
 			goto abort;
@@ -2155,7 +2155,7 @@ treataslocal:
 		/* get all the nodes */
 		n = __mklinklist(myrpt, NULL, &lbuf, 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		strs = ast_malloc(sizeof(char *));
+		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
 			ast_free(lbuf);
 			goto abort;
@@ -2882,7 +2882,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			/* get all the nodes */
 			n = __mklinklist(myrpt, NULL, &lbuf, 0);
 			rpt_mutex_unlock(&myrpt->lock);
-			strs = ast_malloc(sizeof(char *));
+			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
 				return;
