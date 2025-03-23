@@ -4879,7 +4879,7 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
  * \param ctg			Category.
  * \return				chan_usbradio_pvt.
  */
-static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, const char *ctg)
+static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char *ctg)
 {
 	const struct ast_variable *v;
 	struct chan_usbradio_pvt *o;
@@ -4894,6 +4894,9 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		if (strcmp(ctg, "general") == 0) {
 			o = &usbradio_default;
 		} else {
+			if (!ast_variable_retrieve(cfg, ctg, "devstr")) {
+				return NULL;
+			}
 			if (!(o = ast_calloc(1, sizeof(*o)))) {
 				return NULL;
 			}

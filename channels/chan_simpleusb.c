@@ -3692,12 +3692,12 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 
 /*!
  * \brief Store configuration.
- *	Initializes chan_usbradio and loads it with the configuration data.
+ *	Initializes chan_simpleusb and loads it with the configuration data.
  * \param cfg			ast_config structure.
  * \param ctg			Category.
- * \return				chan_usbradio_pvt.
+ * \return				chan_simpleusb_pvt.
  */
-static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, const char *ctg)
+static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const char *ctg)
 {
 	const struct ast_variable *v;
 	struct chan_simpleusb_pvt *o;
@@ -3712,6 +3712,9 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		if (strcmp(ctg, "general") == 0) {
 			o = &simpleusb_default;
 		} else {
+			if (!ast_variable_retrieve(cfg, ctg, "devstr")) {
+				return NULL;
+			}
 			if (!(o = ast_calloc(1, sizeof(*o)))) {
 				return NULL;
 			}
