@@ -784,8 +784,8 @@ static int16_t deemp1(int16_t input, int32_t * restrict state0)
  * \brief Break up a delimited string into a table of substrings.
  * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
  * \param str		Pointer to string to process (it will be modified).
- * \param strp		Pointer to a list of substrings created, NULL will be placed at the end of the list.
- * \param limit		Maximum number of substrings to process.
+ * \param strp		An array of pointers to the start of each token + 1 or more for a NULL end token
+ * \param limit		The maximum number of tokens to find + 1 or more for the NULL end token
  * \return			Count of strings.
  */
 static int finddelim(char *str, char *strp[], size_t limit)
