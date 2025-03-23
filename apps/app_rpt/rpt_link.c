@@ -687,7 +687,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 			rpt_mutex_unlock(&myrpt->lock);
 			return -1;
 		}
-		n = __mklinklist(myrpt, NULL, &lstr, 0);
+		n = __mklinklist(myrpt, NULL, &lstr, 0) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {

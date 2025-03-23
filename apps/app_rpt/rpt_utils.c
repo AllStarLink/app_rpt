@@ -89,8 +89,8 @@ char *string_toupper(char *str)
  * \brief Find the delimiter in a string and return a pointer array to the start of each token.
  * Note: This modifies the string str, be sure to save an intact copy if you need it later.
  * \param str The string to search
- * \param strp An array of pointers to the start of each token
- * \param limit The maximum number of tokens to find
+ * \param strp An array of pointers to the start of each token + 1 for a null end token
+ * \param limit The maximum number of tokens to find + 1 for the null end token
  * \return The number of tokens found
  */
 int finddelim(char *str, char *strp[], size_t limit)
