@@ -73,6 +73,7 @@
 #define PP_PORT "/dev/parport0"
 #define PP_IOPORT 0x378
 #define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
+#define HID_POLL_RATE 50
 
 #ifdef __linux
 #include <linux/soundcard.h>
@@ -838,10 +839,10 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
  * the USB device.
  *
  * The CM-XXX USB devices can support up to 8 GPIO pins that can be input or output.
- * It continuously polls the input GPIO pins on the device to see if they have changed.  
- * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk 
- * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally 
- * occurs every 50 milliseconds.  
+ * It continuously polls the input GPIO pins on the device to see if they have changed.
+ * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk
+ * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally
+ * occurs every HID_POLL_RATE milliseconds.
  *
  * The output PTT (push to talk) GPIO, along with other GPIO outputs are updated as
  * required.
@@ -850,7 +851,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
  * as appropriate.  An asterisk text frame is raised in the format 'PP%d %d' when
  * GPIOs change. (Parallel port support is not available for all platforms.)
  *
- * This routine also reads and writes to the EPROM attached to the USB device.  The 
+ * This routine also reads and writes to the EPROM attached to the USB device.  The
  * EPROM holds the configuration information (sound level settings) for this device.
  *
  * This routine updates the lasthidtimer during setup and processing.  In the event
@@ -1101,16 +1102,16 @@ static void *hidthread(void *arg)
 		rfds[0].events = POLLIN;
 		
 		ast_radio_time(&o->lasthidtime);
-		/* Main processing loop for GPIO 
-		 * This loop process every 50 milliseconds.
-		 * The timer can be interrupted by writing to 
+		/* Main processing loop for GPIO
+		 * This loop process every HID_POLL_RATE milliseconds.
+		 * The timer can be interrupted by writing to
 		 * the pttkick pipe.
 		 */
 		while ((!o->stophid) && o->hasusb) {
 			
 			then = ast_radio_tvnow();
-			/* poll the pttkick pipe - timeout after 50 milliseconds */
-			res = ast_poll(rfds, 1, 50);
+			/* poll the pttkick pipe - timeout after HID_POLL_RATE milliseconds */
+			res = ast_poll(rfds, 1, HID_POLL_RATE);
 			if (res < 0) {
 				ast_log(LOG_WARNING, "Channel %s: Poll failed: %s\n", o->name, strerror(errno));
 				usleep(10000);
