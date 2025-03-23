@@ -3533,9 +3533,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	struct ast_frame *f, *f1;
 	int i, dtmfed = 0;
 
-	rpt_mutex_lock(&myrpt->blocklock);
 	f = ast_read(myrpt->rxchannel);
-	rpt_mutex_unlock(&myrpt->blocklock);
 	if (!f) {
 		ast_debug(1, "@@@@ rpt:Hung Up\n");
 		return -1;
@@ -4056,9 +4054,7 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 			while ((f1 = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list)))
 				ast_frfree(f1);
 		}
-		rpt_mutex_lock(&myrpt->blocklock);
 		ast_write(myrpt->txchannel, f);
-		rpt_mutex_unlock(&myrpt->blocklock);
 	}
 	return hangup_frame_helper(myrpt->dahditxchannel, "dahditxchannel", f);
 }
@@ -4388,9 +4384,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					l->thisconnected = 1;
 					l->elaptime = -1;
 					if (!l->phonemode) {
-						rpt_mutex_lock(&myrpt->blocklock);
 						send_newkey(l->chan);
-						rpt_mutex_unlock(&myrpt->blocklock);
 					}
 					if (!l->isremote)
 						l->retries = 0;
@@ -4793,11 +4787,9 @@ static void *rpt(void *this)
 		setrem(myrpt);
 	/* wait for telem to be done */
 	while ((ms >= 0) && (myrpt->tele.next != &myrpt->tele)) {
-		rpt_mutex_lock(&myrpt->blocklock);
 		if (ast_safe_sleep(myrpt->rxchannel, 50) == -1) {
 			ms = -1;
 		}
-		rpt_mutex_unlock(&myrpt->blocklock);
 	}
 	lastmyrx = 0;
 	myfirst = 0;
@@ -5260,9 +5252,7 @@ static void *rpt(void *this)
 			cs1[x] = cs[s];
 		}
 		myrpt->scram++;
-		rpt_mutex_lock(&myrpt->blocklock);
 		who = ast_waitfor_n(cs1, n, &ms);
-		rpt_mutex_unlock(&myrpt->blocklock);
 		if (who == NULL) {
 			ms = 0;
 		}
@@ -5549,7 +5539,6 @@ static int load_config(int reload)
 		ast_mutex_init(&rpt_vars[n].lock);
 		ast_mutex_init(&rpt_vars[n].remlock);
 		ast_mutex_init(&rpt_vars[n].statpost_lock);
-		ast_mutex_init(&rpt_vars[n].blocklock);
 		rpt_vars[n].tele.next = &rpt_vars[n].tele;
 		rpt_vars[n].tele.prev = &rpt_vars[n].tele;
 		rpt_vars[n].rpt_thread = AST_PTHREADT_NULL;
@@ -6082,14 +6071,12 @@ static inline int kenwood_uio_helper(struct rpt *myrpt)
 
 static void answer_newkey_helper(struct rpt *myrpt, struct ast_channel *chan, int phone_mode)
 {
-	rpt_mutex_lock(&myrpt->blocklock);
 	if (ast_channel_state(chan) != AST_STATE_UP) {
 		ast_answer(chan);
 		if (!phone_mode) {
 			send_newkey(chan);
 		}
 	}
-	rpt_mutex_unlock(&myrpt->blocklock);
 }
 
 static int rpt_exec(struct ast_channel *chan, const char *data)
@@ -6372,9 +6359,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (ast_channel_state(chan) != AST_STATE_UP) {
 				ast_indicate(chan, AST_CONTROL_BUSY);
 			}
-			rpt_mutex_lock(&myrpt->blocklock);
-			while (ast_safe_sleep(chan, 10000) != -1);
-			rpt_mutex_unlock(&myrpt->blocklock);
+			while (ast_safe_sleep(chan, 10000) != -1) {
+			}
 			return -1;
 		}
 
@@ -6525,12 +6511,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (ast_check_hangup(myrpt->rxchannel)) {
 				return -1;
 			}
-			rpt_mutex_lock(&myrpt->blocklock);
 			if (ast_safe_sleep(myrpt->rxchannel, 100) == -1) {
-				rpt_mutex_unlock(&myrpt->blocklock);
 				return -1;
 			}
-			rpt_mutex_unlock(&myrpt->blocklock);
 			rpt_mutex_lock(&myrpt->lock);
 			gettimeofday(&now, NULL);
 		}
@@ -6751,12 +6734,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				ast_playtones_start(chan, 0, ts->data, 1);
 				i = 0;
 				while (ast_channel_generatordata(chan) && (i < 5000)) {
-					rpt_mutex_lock(&myrpt->blocklock);
 					if (ast_safe_sleep(chan, 20)) {
-						rpt_mutex_unlock(&myrpt->blocklock);
 						break;
 					}
-					rpt_mutex_unlock(&myrpt->blocklock);
 					i += 20;
 				}
 				ast_playtones_stop(chan);
@@ -6789,13 +6769,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						killedit = 1;
 					}
 					rpt_mutex_unlock(&myrpt->lock);
-					rpt_mutex_lock(&myrpt->blocklock);
 					if (ast_safe_sleep(chan, 500) == -1) {
-						rpt_mutex_unlock(&myrpt->blocklock);
 						rpt_disable_cdr(chan);
 						return -1;
 					}
-					rpt_mutex_unlock(&myrpt->blocklock);
 					rpt_mutex_lock(&myrpt->lock);
 				}
 				break;
@@ -7055,11 +7032,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (myrpt->rxchannel != myrpt->txchannel)
 		cs[n++] = myrpt->txchannel;
 
-	rpt_mutex_lock(&myrpt->blocklock);
 	if (!phone_mode) {
 		send_newkey(chan);
 	}
-	rpt_mutex_unlock(&myrpt->blocklock);
 
 	myfirst = 0;
 	looptimestart = ast_tvnow();
@@ -7137,9 +7112,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		}
 		ms = MSWAIT;
-		rpt_mutex_lock(&myrpt->blocklock);
 		who = ast_waitfor_n(cs, n, &ms);
-		rpt_mutex_unlock(&myrpt->blocklock);
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
@@ -7464,9 +7437,6 @@ static int unload_module(void)
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
 		/* Lock and unlock in case somebody had the lock */
-		ast_mutex_lock(&rpt_vars[i].blocklock);
-		ast_mutex_unlock(&rpt_vars[i].blocklock);
-		ast_mutex_destroy(&rpt_vars[i].blocklock);
 	}
 
 	res = ast_unregister_application(app);
