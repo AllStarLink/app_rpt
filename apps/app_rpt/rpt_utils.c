@@ -4,6 +4,7 @@
 #include <sys/vfs.h> /* use statfs */
 
 #include "asterisk/channel.h" /* includes all the locking stuff needed (lock.h doesn't) */
+#include "asterisk/translate.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
@@ -258,4 +259,12 @@ void update_timer(int *timer_ptr, int elap, int end_val)
 	if (*timer_ptr < end_val) {
 		*timer_ptr = end_val;
 	}
+}
+
+void init_text_frame(struct ast_frame *wf, const char *src)
+{
+	memset(wf, 0, sizeof(struct ast_frame));
+	wf->frametype = AST_FRAME_TEXT;
+	wf->subclass.format = ast_format_slin;
+	wf->src = src;
 }

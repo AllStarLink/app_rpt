@@ -310,14 +310,9 @@ void rssi_send(struct rpt *myrpt)
 	struct ast_frame wf;
 	char str[200];
 	sprintf(str, "R %i", myrpt->rxrssi);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "rssi_send");
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
-	wf.src = "rssi_send";
-
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* otherwise, send it to all of em */
 	while (l != &myrpt->links) {
@@ -325,7 +320,6 @@ void rssi_send(struct rpt *myrpt)
 			l = l->next;
 			continue;
 		}
-		wf.data.ptr = str;
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
 		if (l->chan)
 			rpt_qwrite(l, &wf);
@@ -340,13 +334,9 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	struct rpt_link *l;
 
 	snprintf(str, sizeof(str), "D %s %s %d %c", myrpt->cmdnode, myrpt->name, ++(myrpt->dtmfidx), c);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "send_link_dtmf");
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
-	wf.src = "send_link_dtmf";
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* first, see if our dude is there */
 	while (l != &myrpt->links) {
@@ -356,7 +346,6 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		}
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name, myrpt->cmdnode)) {
-			wf.data.ptr = str;
 			if (l->chan)
 				rpt_qwrite(l, &wf);
 			return;
@@ -366,7 +355,6 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	l = myrpt->links.next;
 	/* if not, give it to everyone */
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan)
 			rpt_qwrite(l, &wf);
 		l = l->next;
@@ -385,17 +373,12 @@ void send_link_keyquery(struct rpt *myrpt)
 	time(&myrpt->topkeytime);
 	rpt_mutex_unlock(&myrpt->lock);
 	snprintf(str, sizeof(str), "K? * %s 0 0", myrpt->name);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "send_link_keyquery");
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
-	wf.src = "send_link_keyquery";
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan)
 			rpt_qwrite(l, &wf);
 		l = l->next;
@@ -409,17 +392,12 @@ void send_tele_link(struct rpt *myrpt, char *cmd)
 	struct rpt_link *l;
 
 	snprintf(str, sizeof(str) - 1, "T %s %s", myrpt->name, cmd);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "send_tele_link");
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
-	wf.src = "send_tele_link";
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan && (l->mode == 1))
 			rpt_qwrite(l, &wf);
 		l = l->next;
