@@ -441,12 +441,11 @@ int send_link_pl(struct rpt *myrpt, char *txt)
 	wf.data.ptr = str;
 	wf.samples = 0;
 	wf.src = "send_link_pl";
-	l = myrpt->links.next;
-	while (l && (l != &myrpt->links)) {
+	AST_LIST_TRAVERSE(&myrpt->links, l, links)
+	{
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
 			ast_write(l->chan, &wf);
 		}
-		l = l->next;
 	}
 	return 0;
 }

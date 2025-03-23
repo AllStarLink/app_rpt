@@ -390,8 +390,6 @@ struct rpt;
 
 /*! \brief Structure used to manage links */
 struct rpt_link {
-	struct rpt_link *next;
-	struct rpt_link *prev;
 	char	mode;			/* 1 if in tx mode */
 	char	isremote;
 	char	phonemode;
@@ -447,12 +445,8 @@ struct rpt_link {
 	time_t	lastunkeytime;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
+	AST_LIST_ENTRY(rpt_link) links;
 };
-
-/*!
- * \brief Initialize doubly linked list of RPT links
- */
-void rpt_links_init(struct rpt_link *l);
 
 /*! \brief Structure used to manage link status */
 struct rpt_lstat {
@@ -742,7 +736,7 @@ struct rpt {
 		int nldisc;
 		const char *timezone;
 	} p;
-	struct rpt_link links;
+	AST_LIST_HEAD_NOLOCK(, rpt_link) links;
 	int unkeytocttimer;
 	time_t lastkeyedtime;
 	time_t lasttxkeyedtime;

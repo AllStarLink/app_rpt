@@ -77,19 +77,17 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
 			strcpy(digitbuf, myrpt->lastlinknode);
 		rpt_mutex_lock(&myrpt->lock);
-		l = myrpt->links.next;
 		/* try to find this one in queue */
-		while (l != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, l, links)
+		{
 			if (l->name[0] == '0') {
-				l = l->next;
 				continue;
 			}
 			/* if found matching string */
 			if (!strcmp(l->name, digitbuf))
 				break;
-			l = l->next;
 		}
-		if (l != &myrpt->links) {	/* if found */
+		if (l != NULL) { /* if found */
 			struct ast_frame wf;
 
 			/* must use perm command on perm link */
@@ -165,7 +163,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		if (strlen(digitbuf) < 1)
 			break;
 		/* if doesn't allow link cmd, or no links active, return */
-		if (myrpt->links.next == &myrpt->links)
+		if (AST_LIST_EMPTY(&myrpt->links))
 			return DC_COMPLETE;
 		if ((command_source != SOURCE_RPT) &&
 			(command_source != SOURCE_PHONE) &&
@@ -219,13 +217,12 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 	case 6:					/* All Links Off, including permalinks */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
-		l = myrpt->links.next;
 		/* loop through all links */
-		while (l != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, l, links)
+		{
 			struct ast_frame wf;
 			char c1;
-			if ((l->name[0] <= '0') || (l->name[0] > '9')) {	/* Skip any IAXRPT monitoring */
-				l = l->next;
+			if ((l->name[0] <= '0') || (l->name[0] > '9')) { /* Skip any IAXRPT monitoring */
 				continue;
 			}
 			if (l->mode == 1)
@@ -258,7 +255,6 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 			rpt_mutex_lock(&myrpt->lock);
-			l = l->next;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(1, "Nodes disconnected: %s\n", myrpt->savednodes);
@@ -269,13 +265,12 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 	case 10:					/* All RANGER Links Off */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
-		l = myrpt->links.next;
 		/* loop through all links */
-		while (l != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, l, links)
+		{
 			struct ast_frame wf;
 			char c1;
-			if ((l->name[0] <= '0') || (l->name[0] > '9')) {	/* Skip any IAXRPT monitoring */
-				l = l->next;
+			if ((l->name[0] <= '0') || (l->name[0] > '9')) { /* Skip any IAXRPT monitoring */
 				continue;
 			}
 			/* if RANGER and not permalink */
@@ -311,7 +306,6 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 				}
 				rpt_mutex_lock(&myrpt->lock);
 			}
-			l = l->next;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(4, "Nodes disconnected: %s\n", myrpt->savednodes);
@@ -345,16 +339,14 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		*s2 = 0;
 		snprintf(tmp, MAX_TEXTMSG_SIZE - 1, "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
-		l = myrpt->links.next;
 		/* otherwise, send it to all of em */
-		while (l != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, l, links)
+		{
 			if (l->name[0] == '0') {
-				l = l->next;
 				continue;
 			}
 			if (l->chan)
 				ast_sendtext(l->chan, tmp);
-			l = l->next;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telemetry(myrpt, COMPLETE, NULL);

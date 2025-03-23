@@ -1590,16 +1590,16 @@ static void do_aprstt(struct rpt *myrpt)
 
 static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, const char *src, const char *dest, char *str, struct ast_frame *wf)
 {
-	struct rpt_link *l = myrpt->links.next;
+	struct rpt_link *l;
 	/* see if this is one in list */
-	while (l != &myrpt->links) {
+
+	AST_LIST_TRAVERSE(&myrpt->links, l, links)
+	{
 		if (l->name[0] == '0') {
-			l = l->next;
 			continue;
 		}
 		/* dont send back from where it came */
 		if (l == mylink || !strcmp(l->name, mylink->name)) {
-			l = l->next;
 			continue;
 		}
 		if (!dest || !strcmp(l->name, dest)) {
@@ -1615,7 +1615,6 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 				return 1;
 			}
 		}
-		l = l->next;
 	}
 	return 0;
 }
@@ -2670,12 +2669,6 @@ static void _load_rpt_vars_by_rpt(struct rpt *myrpt, int force)
 	}
 }
 
-void rpt_links_init(struct rpt_link *l)
-{
-	l->next = l;
-	l->prev = l;
-}
-
 #define rpt_hangup_rx_tx(myrpt) \
 	rpt_hangup(myrpt, RPT_RXCHAN); \
 	if (myrpt->txchannel) { \
@@ -2887,8 +2880,8 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
 
-	zl = myrpt->links.next;
-	while (zl != &myrpt->links) {
+	AST_LIST_TRAVERSE(&myrpt->links, zl, links)
+	{
 		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
 		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
 		ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
@@ -2902,7 +2895,6 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->retries = %d\n", zl->retries);
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
 		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
-		zl = zl->next;
 	}
 
 	zt = myrpt->tele.next;
@@ -3038,8 +3030,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;
 	int newkeytimer_last, max_retries;
-	struct rpt_link *l = myrpt->links.next;
-	while (l != &myrpt->links) {
+	struct rpt_link *l;
+	AST_LIST_TRAVERSE(&myrpt->links, l, links)
+	{
 		int myrx, mymaxct;
 
 		if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
@@ -3213,7 +3206,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		/* ignore non-timing channels */
 		if (l->elaptime < 0) {
-			l = l->next;
 			continue;
 		}
 		l->elaptime += elap;
@@ -3269,7 +3261,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			ast_debug(1, "LINKDISC AA\n");
 			/* remove from queue */
 			rpt_link_remove(myrpt, l);
-			if (myrpt->links.next == &myrpt->links)
+			if (AST_LIST_EMPTY(&myrpt->links))
 				channel_revert(myrpt);
 			if (!strcmp(myrpt->cmdnode, l->name))
 				myrpt->cmdnode[0] = 0;
@@ -3289,7 +3281,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
-		l = l->next;
 	}
 }
 
@@ -3307,7 +3298,8 @@ static inline int do_link_post(struct rpt *myrpt)
 
 	myrpt->linkposttimer = LINKPOSTTIME;
 	nstr = 0;
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+	AST_LIST_TRAVERSE(&myrpt->links, l, links)
+	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -3320,7 +3312,8 @@ static inline int do_link_post(struct rpt *myrpt)
 	}
 	nstr = 0;
 	strcpy(str, "nodes=");
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+	AST_LIST_TRAVERSE(&myrpt->links, l, links)
+	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -3937,18 +3930,16 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				wf.datalen = strlen(str) + 1;
 				wf.src = "voter_text_send";
 
-				l = myrpt->links.next;
 				/* otherwise, send it to all of em */
-				while (l != &myrpt->links) {
+				AST_LIST_TRAVERSE(&myrpt->links, l, links)
+				{
 					/* Dont send to other then IAXRPT client */
 					if ((l->name[0] != '0') || (l->phonemode)) {
-						l = l->next;
 						continue;
 					}
 					wf.data.ptr = str;
 					if (l->chan)
 						rpt_qwrite(l, &wf);
-					l = l->next;
 				}
 			}
 		}
@@ -4200,24 +4191,22 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
-	l = myrpt->links.next;
-	while (l != &myrpt->links) {
+	AST_LIST_TRAVERSE(&myrpt->links, l, links)
+	{
 		int remnomute, remrx;
 		struct timeval now;
 
 		if (l->disctime) {
-			l = l->next;
 			continue;
 		}
 
 		remrx = 0;
 		/* see if any other links are receiving */
-		m = myrpt->links.next;
-		while (m != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, m, links)
+		{
 			/* if not us, and not localonly count it */
 			if ((m != l) && (m->lastrx) && (m->mode < 2))
 				remrx = 1;
-			m = m->next;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 
@@ -4467,7 +4456,6 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			ast_frfree(f);
 			return 0;
 		}
-		l = l->next;
 	}
 	/* @@@@@ UNLOCK @@@@@ */
 	rpt_mutex_unlock(&myrpt->lock);
@@ -4492,15 +4480,14 @@ static inline int monchannel_read(struct rpt *myrpt)
 			&& (myrpt->outstreampipe[1] != -1)) {
 			outstream_write(myrpt, f);
 		}
-		l = myrpt->links.next;
 		/* go thru all the links */
-		while (l != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, l, links)
+		{
 			/* IF we are an altlink() -> !altlink() handled elsewhere */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
 				ast_write(l->chan, f);
 			}
-			l = l->next;
 		}
 	}
 	return hangup_frame_helper(myrpt->monchannel, "monchannel", f);
@@ -4712,7 +4699,6 @@ static void *rpt(void *this)
 	/* Now, the idea here is to copy from the physical rx channel buffer
 	   into the pseudo tx buffer, and from the pseudo rx buffer into the
 	   tx channel buffer */
-	rpt_links_init(&myrpt->links);
 	myrpt->tailtimer = 0;
 	myrpt->totimer = myrpt->p.totime;
 	myrpt->tmsgtimer = myrpt->p.tailmessagetime;
@@ -4876,13 +4862,12 @@ static void *rpt(void *this)
 			snprintf(tmpstr, sizeof(tmpstr), "G %s %s %s %s", myrpt->name, lat, lon, elev);
 
 			rpt_mutex_lock(&myrpt->lock);
-			l = myrpt->links.next;
 			myrpt->voteremrx = 0;	/* no voter remotes keyed */
-			while (l != &myrpt->links) {
+			AST_LIST_TRAVERSE(&myrpt->links, l, links)
+			{
 				if (l->chan) {
 					ast_sendtext(l->chan, tmpstr);
 				}
-				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
@@ -4890,9 +4875,9 @@ static void *rpt(void *this)
 		rpt_mutex_lock(&myrpt->lock);
 
 		/* If someone's connected, and they're transmitting from their end to us, set remrx true */
-		l = myrpt->links.next;
 		myrpt->remrx = 0;
-		while (l != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, l, links)
+		{
 			if (l->lastrx) {
 				myrpt->remrx = 1;
 				if (l->voterlink)
@@ -4900,7 +4885,6 @@ static void *rpt(void *this)
 				if ((l->name[0] > '0') && (l->name[0] <= '9'))	/* Ignore '0' nodes */
 					strcpy(myrpt->lastnodewhichkeyedusup, l->name);	/* Note the node which is doing the key up */
 			}
-			l = l->next;
 		}
 		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {	/* If sleep mode enabled */
 			if (myrpt->remrx) {	/* signal coming from net wakes up system */
@@ -5184,8 +5168,8 @@ static void *rpt(void *this)
 
 		/* Reconnect */
 
-		l = myrpt->links.next;
-		while (l != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, l, links)
+		{
 			if (l->killme) {
 				/* remove from queue */
 				rpt_link_remove(myrpt, l);
@@ -5199,10 +5183,8 @@ static void *rpt(void *this)
 				rpt_link_free(l);
 				rpt_mutex_lock(&myrpt->lock);
 				/* re-start link traversal */
-				l = myrpt->links.next;
 				continue;
 			}
-			l = l->next;
 		}
 		x = myrpt->remrx || myrpt->localtx || (myrpt->callmode != CALLMODE_DOWN) || myrpt->parrotstate;
 		if (x != myrpt->lastitx) {
@@ -5235,13 +5217,12 @@ static void *rpt(void *this)
 			cs[n++] = myrpt->txchannel;
 		if (myrpt->dahditxchannel != myrpt->txchannel)
 			cs[n++] = myrpt->dahditxchannel;
-		l = myrpt->links.next;
-		while (l != &myrpt->links) {
+		AST_LIST_TRAVERSE(&myrpt->links, l, links)
+		{
 			if ((!l->killme) && (!l->disctime) && l->chan) {
 				cs[n++] = l->chan;
 				cs[n++] = l->pchan;
 			}
-			l = l->next;
 		}
 		if ((myrpt->topkeystate == 1) && ((t - myrpt->topkeytime) > TOPKEYWAIT)) {
 			myrpt->topkeystate = 2;
@@ -5395,8 +5376,8 @@ static void *rpt(void *this)
 	free_frame(&myrpt->lastf2);
 
 	rpt_mutex_lock(&myrpt->lock);
-	l = myrpt->links.next;
-	while (l != &myrpt->links) {
+	AST_LIST_TRAVERSE(&myrpt->links, l, links)
+	{
 		struct rpt_link *ll = l;
 		/* remove from queue */
 		rpt_link_remove(myrpt, l);
@@ -5404,7 +5385,6 @@ static void *rpt(void *this)
 		if (l->chan)
 			ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		l = l->next;
 		rpt_link_free(ll);
 	}
 	if (myrpt->xlink == 1)
@@ -6565,20 +6545,18 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		if (!b1[i]) {			/* if not a call-based node number */
 			rpt_mutex_lock(&myrpt->lock);
-			l = myrpt->links.next;
 			/* try to find this one in queue */
-			while (l != &myrpt->links) {
+			AST_LIST_TRAVERSE(&myrpt->links, l, links)
+			{
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				/* if found matching string */
 				if (!strcmp(l->name, b1))
 					break;
-				l = l->next;
 			}
 			/* if found */
-			if (l != &myrpt->links) {
+			if (l != NULL) {
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
 				l->disced = 2;
@@ -6773,9 +6751,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		time(&now);
 		for (i = 0; i < nrpts; i++) {
 			if (!strcasecmp(rpt_vars[i].name, myrpt->p.rptnode)) {
-				if ((rpt_vars[i].links.next != &rpt_vars[i].links) ||
-					rpt_vars[i].keyed ||
-					((rpt_vars[i].lastkeyedtime + RPT_LOCKOUT_SECS) > now) ||
+				if (!AST_LIST_EMPTY(&rpt_vars[i].links) || rpt_vars[i].keyed || ((rpt_vars[i].lastkeyedtime + RPT_LOCKOUT_SECS) > now) ||
 					rpt_vars[i].txkeyed || ((rpt_vars[i].lasttxkeyedtime + RPT_LOCKOUT_SECS) > now)) {
 					rpt_mutex_unlock(&myrpt->lock);
 					ast_log(LOG_WARNING, "Trying to use busy link (repeater node %s) on %s\n", rpt_vars[i].name, tmp);
