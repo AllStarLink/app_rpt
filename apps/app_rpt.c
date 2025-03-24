@@ -5268,12 +5268,16 @@ static void *rpt(void *this)
 		str = ast_str_buffer(myrpt->macrobuf);
 		len = ast_str_strlen(myrpt->macrobuf);
 		c = str[0];
+		if (len) {
+			ast_debug(7, "macrobuf string %d, %s", len, str);
+		}
 		time(&t);
 		if (c && !myrpt->macrotimer && starttime && t > starttime) {
 			char cin = c & 0x7f;
 			myrpt->macrotimer = MACROTIME;
-			ast_copy_string(str, str + 1, len - 1);
-			ast_str_truncate(myrpt->macrobuf, -1);
+			ast_copy_string(str, str + 1, len);
+			ast_str_truncate(myrpt->macrobuf, len - 1);
+			ast_debug(7, "Macrobuf string after %lu, %s", ast_str_strlen(myrpt->macrobuf), ast_str_buffer(myrpt->macrobuf));
 			if ((cin == 'p') || (cin == 'P'))
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -7252,11 +7256,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->lock);
 		str = ast_str_buffer(myrpt->macrobuf);
 		len = ast_str_strlen(myrpt->macrobuf);
+		if (len) {
+			ast_debug(1, "macrobuf string %s", str);
+		}
 		c = str[0];
 		if (c && !myrpt->macrotimer) {
 			myrpt->macrotimer = MACROTIME;
-			ast_copy_string(str, str + 1, len - 1);
-			ast_str_truncate(myrpt->macrobuf, -1);
+			ast_copy_string(str, str + 1, len);
+			ast_str_truncate(myrpt->macrobuf, len - 1);
+			ast_debug(1, "Macrobuf string after %s", ast_str_buffer(myrpt->macrobuf));
 			if ((c == 'p') || (c == 'P'))
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);

@@ -242,6 +242,7 @@ int macro_append(struct rpt *myrpt, const char *cmd)
 {
 	int res;
 	rpt_mutex_lock(&myrpt->lock);
+	ast_debug(7, "Going on the macro buffer %s", cmd);
 	myrpt->macrotimer = MACROTIME;
 	res = ast_str_append(&myrpt->macrobuf, 0, "%s", cmd);
 	rpt_mutex_unlock(&myrpt->lock);
