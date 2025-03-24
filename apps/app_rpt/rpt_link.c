@@ -307,8 +307,9 @@ void rssi_send(struct rpt *myrpt)
 			continue;
 		}
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
-		if (l->chan)
-			ast_write(l->chan, &wf);
+		if (l->chan) {
+			ast_queue_frame(l->chan, &wf);
+		}
 		l = l->next;
 	}
 }
@@ -332,8 +333,9 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		}
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name, myrpt->cmdnode)) {
-			if (l->chan)
-				ast_write(l->chan, &wf);
+			if (l->chan) {
+				ast_queue_frame(l->chan, &wf);
+			}
 			return;
 		}
 		l = l->next;
@@ -365,8 +367,9 @@ void send_link_keyquery(struct rpt *myrpt)
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		if (l->chan)
-			ast_write(l->chan, &wf);
+		if (l->chan) {
+			ast_queue_frame(l->chan, &wf);
+		}
 		l = l->next;
 	}
 }
@@ -384,8 +387,9 @@ void send_tele_link(struct rpt *myrpt, char *cmd)
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		if (l->chan && (l->mode == 1))
-			ast_write(l->chan, &wf);
+		if (l->chan && (l->mode == 1)) {
+			ast_queue_frame(l->chan, &wf);
+		}
 		l = l->next;
 	}
 	rpt_telemetry(myrpt, VARCMD, cmd);

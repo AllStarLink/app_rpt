@@ -106,8 +106,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
 			if (l->chan) {
-				if (l->thisconnected)
-					ast_write(l->chan, &wf);
+				if (l->thisconnected) {
+					ast_queue_frame(l->chan, &wf);
+				}
 				rpt_safe_sleep(myrpt, l->chan, 250);
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
@@ -247,8 +248,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
 			if (l->chan) {
-				if (l->thisconnected)
-					ast_write(l->chan, &wf);
+				if (l->thisconnected) {
+					ast_queue_frame(l->chan, &wf);
+				}
 				rpt_safe_sleep(myrpt, l->chan, 250);	/* It's dead already, why check the return value? */
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
@@ -297,8 +299,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 				wf.datalen = strlen(DISCSTR) + 1;
 				wf.data.ptr = DISCSTR;
 				if (l->chan) {
-					if (l->thisconnected)
-						ast_write(l->chan, &wf);
+					if (l->thisconnected) {
+						ast_queue_frame(l->chan, &wf);
+					}
 					rpt_safe_sleep(myrpt, l->chan, 250);	/* It's dead already, why check the return value? */
 					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 				}

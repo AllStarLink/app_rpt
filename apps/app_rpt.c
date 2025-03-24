@@ -3149,7 +3149,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (l->chan) {
 				lf.datalen = ast_str_strlen(lstr) + 1;
 				lf.data.ptr = ast_str_buffer(lstr);
-				ast_write(l->chan, &lf);
+				ast_queue_frame(l->chan, &lf);
 				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
 			}
 			ast_free(lstr);
@@ -3917,8 +3917,9 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						l = l->next;
 						continue;
 					}
-					if (l->chan)
-						ast_write(l->chan, &wf);
+					if (l->chan) {
+						ast_queue_frame(l->chan, &wf);
+					}
 					l = l->next;
 				}
 			}

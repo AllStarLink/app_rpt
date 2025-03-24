@@ -132,8 +132,9 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 			l = l->next;
 			continue;
 		}
-		if (l->chan)
-			ast_write(l->chan, &wf);
+		if (l->chan) {
+			ast_queue_frame(l->chan, &wf);
+		}
 		l = l->next;
 	}
 }

@@ -416,7 +416,7 @@ int send_usb_txt(struct rpt *myrpt, char *txt)
 	init_text_frame(&wf, "send_usb_txt");
 	wf.datalen = strlen(txt) + 1;
 	wf.data.ptr = txt;
-	ast_write(myrpt->txchannel, &wf);
+	ast_queue_frame(myrpt->txchannel, &wf);
 	return 0;
 }
 
@@ -436,7 +436,7 @@ int send_link_pl(struct rpt *myrpt, char *txt)
 	l = myrpt->links.next;
 	while (l && (l != &myrpt->links)) {
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
-			ast_write(l->chan, &wf);
+			ast_queue_frame(l->chan, &wf);
 		}
 		l = l->next;
 	}
