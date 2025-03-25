@@ -5272,8 +5272,8 @@ static void *rpt(void *this)
 		if (c && !myrpt->macrotimer && starttime && t > starttime) {
 			char cin = c & 0x7f;
 			myrpt->macrotimer = MACROTIME;
-			ast_copy_string(str, str + 1, len - 1);
-			ast_str_truncate(myrpt->macrobuf, -1);
+			ast_copy_string(str, str + 1, len);
+			ast_str_truncate(myrpt->macrobuf, len - 1);
 			if ((cin == 'p') || (cin == 'P'))
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -7255,8 +7255,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		c = str[0];
 		if (c && !myrpt->macrotimer) {
 			myrpt->macrotimer = MACROTIME;
-			ast_copy_string(str, str + 1, len - 1);
-			ast_str_truncate(myrpt->macrobuf, -1);
+			ast_copy_string(str, str + 1, len);
+			ast_str_truncate(myrpt->macrobuf, len - 1);
 			if ((c == 'p') || (c == 'P'))
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
