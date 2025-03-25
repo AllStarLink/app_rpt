@@ -4687,7 +4687,6 @@ static void *voter_reader(void *data)
 											fr.datalen = strlen(maxclient->name) + 1;
 											fr.samples = 0;
 											fr.frametype = AST_FRAME_TEXT;
-											fr.subclass.format = ast_format_slin;
 											fr.data.ptr = maxclient->name;
 											fr.src = type;
 											fr.offset = 0;

@@ -1293,7 +1293,6 @@ static void *hidthread(void *arg)
 						fr.datalen = strlen(buf1);
 						fr.samples = 0;
 						fr.frametype = AST_FRAME_TEXT;
-						fr.subclass.format = ast_format_slin;
 						fr.src = "chan_usbradio";
 						fr.offset = 0;
 						fr.mallocd = 0;
@@ -1342,7 +1341,6 @@ static void *hidthread(void *arg)
 							fr.datalen = strlen(buf1);
 							fr.samples = 0;
 							fr.frametype = AST_FRAME_TEXT;
-							fr.subclass.format = ast_format_slin;
 							fr.src = "chan_usbradio";
 							fr.offset = 0;
 							fr.mallocd = 0;
