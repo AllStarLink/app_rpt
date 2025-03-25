@@ -3284,21 +3284,22 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
  */
 static inline int do_link_post(struct rpt *myrpt)
 {
-	int nstr;
+	int nstr, str_size;
 	char lst, *str;
 	time_t now;
 	struct rpt_link *l;
 
 	myrpt->linkposttimer = LINKPOSTTIME;
-	nstr = 0;
+	str_size = 0;
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
 		}
-		nstr += strlen(l->name) + 1;
+		str_size += strlen(l->name) + 1;
 	}
-	str = ast_malloc(nstr + 256);
+	str_size += 256;
+	str = ast_malloc(str_size);
 	if (!str) {
 		return -1;
 	}
@@ -3318,14 +3319,14 @@ static inline int do_link_post(struct rpt *myrpt)
 			lst = 'C';
 		if (nstr)
 			strcat(str, ",");
-		snprintf(str + strlen(str), sizeof(str) - strlen(str), "%c%s", lst, l->name);
+		snprintf(str + strlen(str), str_size - strlen(str), "%c%s", lst, l->name);
 		nstr = 1;
 	}
-	snprintf(str + strlen(str), sizeof(str) - strlen(str), "&apprptvers=%d.%d.%d", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
+	snprintf(str + strlen(str), str_size - strlen(str), "&apprptvers=%d.%d.%d", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 	time(&now);
-	snprintf(str + strlen(str), sizeof(str) - strlen(str), "&apprptuptime=%d", (int) (now - starttime));
+	snprintf(str + strlen(str), str_size - strlen(str), "&apprptuptime=%d", (int) (now - starttime));
 	snprintf(str + strlen(str),
-		sizeof(str) - strlen(str),
+	str_size - strlen(str),
 		"&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d",
 		myrpt->totalkerchunks,
 		myrpt->totalkeyups,
