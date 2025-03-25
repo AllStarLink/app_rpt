@@ -1235,13 +1235,8 @@ static void *hidthread(void *arg)
 						memset(&fr, 0, sizeof(fr));
 						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1);
-						fr.samples = 0;
 						fr.frametype = AST_FRAME_TEXT;
 						fr.src = "chan_simpleusb";
-						fr.offset = 0;
-						fr.mallocd = 0;
-						fr.delivery.tv_sec = 0;
-						fr.delivery.tv_usec = 0;
 						ast_queue_frame(o->owner, &fr);
 					}
 				}
@@ -1283,13 +1278,8 @@ static void *hidthread(void *arg)
 							memset(&fr, 0, sizeof(fr));
 							fr.data.ptr = buf1;
 							fr.datalen = strlen(buf1);
-							fr.samples = 0;
 							fr.frametype = AST_FRAME_TEXT;
 							fr.src = "chan_simpleusb";
-							fr.offset = 0;
-							fr.mallocd = 0;
-							fr.delivery.tv_sec = 0;
-							fr.delivery.tv_usec = 0;
 							ast_queue_frame(o->owner, &fr);
 						}
 					}

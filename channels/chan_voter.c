@@ -4685,14 +4685,9 @@ static void *voter_reader(void *data)
 															p->nodenum);
 											memset(&fr, 0, sizeof(fr));
 											fr.datalen = strlen(maxclient->name) + 1;
-											fr.samples = 0;
 											fr.frametype = AST_FRAME_TEXT;
 											fr.data.ptr = maxclient->name;
 											fr.src = type;
-											fr.offset = 0;
-											fr.mallocd = 0;
-											fr.delivery.tv_sec = 0;
-											fr.delivery.tv_usec = 0;
 											ast_queue_frame(p->owner, &fr);
 										}
 										ast_debug(2, "Sending from client %s RSSI %d\n", maxclient->name, maxrssi);
