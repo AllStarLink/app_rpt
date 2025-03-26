@@ -3276,25 +3276,19 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 static inline int do_link_post(struct rpt *myrpt)
 {
 	int nstr;
-	char lst, *str;
+	char lst;
+	struct ast_str *str;
 	time_t now;
 	struct rpt_link *l;
 
 	myrpt->linkposttimer = LINKPOSTTIME;
-	nstr = 0;
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
-		/* if is not a real link, ignore it */
-		if (l->name[0] == '0') {
-			continue;
-		}
-		nstr += strlen(l->name) + 1;
-	}
-	str = ast_malloc(nstr + 256);
+
+	str = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!str) {
 		return -1;
 	}
 	nstr = 0;
-	strcpy(str, "nodes=");
+	ast_str_set(&str, 0, "%s", "nodes=");
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
@@ -3308,23 +3302,25 @@ static inline int do_link_post(struct rpt *myrpt)
 		if (!l->thisconnected)
 			lst = 'C';
 		if (nstr)
-			strcat(str, ",");
-		snprintf(str + strlen(str), sizeof(str) - strlen(str), "%c%s", lst, l->name);
+			ast_str_append(&str, 0, "%s", ",");
+		ast_str_append(&str, 0, "%c%s", lst, l->name);
 		nstr = 1;
 	}
-	snprintf(str + strlen(str), sizeof(str) - strlen(str), "&apprptvers=%d.%d.%d", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 	time(&now);
-	snprintf(str + strlen(str), sizeof(str) - strlen(str), "&apprptuptime=%d", (int) (now - starttime));
-	snprintf(str + strlen(str),
-		sizeof(str) - strlen(str),
-		"&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d",
+	ast_str_append(&str,
+		0,
+		"&apprptvers=%d.%d.%d&apprptuptime=%d&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d",
+		VERSION_MAJOR,
+		VERSION_MINOR,
+		VERSION_PATCH,
+		(int) (now - starttime),
 		myrpt->totalkerchunks,
 		myrpt->totalkeyups,
 		(int) myrpt->totaltxtime / 1000,
 		myrpt->timeouts,
 		myrpt->totalexecdcommands);
 	rpt_mutex_unlock(&myrpt->lock);
-	statpost(myrpt, str);
+	statpost(myrpt, ast_str_buffer(str));
 	rpt_mutex_lock(&myrpt->lock);
 	ast_free(str);
 	return 0;
