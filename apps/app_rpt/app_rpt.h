@@ -75,9 +75,7 @@ typedef struct {
 #define	LINKLISTTIME 10000
 #define	LINKLISTSHORTTIME 200
 #define	LINKPOSTTIME 30000
-#define	LINKPOSTSHORTTIME 200
-#define	KEYPOSTTIME 30000
-#define	KEYPOSTSHORTTIME 200
+#define LINKPOSTSHORTTIME 200
 #define	KEYTIMERTIME 250
 #define	MACROTIME 100
 #define	MACROPTIME 500
@@ -231,8 +229,11 @@ typedef struct {
 #define DAQ_ADC_ACQINT 10 /* Acquire interval in sec. for ADC channels */
 #define ADC_HIST_TIME 300 /* Time  in sec. to calculate short term avg, high and low peaks from. */
 #define ADC_HISTORY_DEPTH ADC_HIST_TIME/DAQ_ADC_ACQINT
- 
 
+enum keypost {
+	RPT_KEYPOST_NONE,
+	RPT_KEYPOST
+};
 enum {REM_OFF,REM_MONITOR,REM_TX};
 
 enum {LINKMODE_OFF,LINKMODE_ON,LINKMODE_FOLLOW,LINKMODE_DEMAND,
@@ -852,8 +853,8 @@ struct rpt {
 	char wasvox;
 	int voxtotimer;
 	char voxtostate;
-	int linkposttimer;			
-	int keyposttimer;			
+	int linkposttimer;
+	enum keypost keypost;
 	int lastkeytimer;
 	enum newkey rpt_newkey;
 	char inpadtest;
