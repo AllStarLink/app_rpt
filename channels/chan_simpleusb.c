@@ -2061,52 +2061,23 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		ast_mutex_unlock(&o->echolock);
 	}
 
-	/* Read audio data from the USB sound device.
-	 * Sound data will arrive at 48000 samples per second
-	 * in stereo format.
-	 */
-	res = read(o->sounddev, o->simpleusb_read_buf + o->readpos, sizeof(o->simpleusb_read_buf) - o->readpos);
-	if (res < 0) {				/* Audio data not ready, return a NULL frame */
-		if (errno != EAGAIN) {
-			o->readerrs = 0;
-			o->hasusb = 0;
-			return &ast_null_frame;
-		}
-		if (o->readerrs++ > READERR_THRESHOLD) {
-			ast_log(LOG_ERROR, "Stuck USB read channel [%s], un-sticking it!\n", o->name);
-			o->readerrs = 0;
-			o->hasusb = 0;
-			return &ast_null_frame;
-		}
-		if (o->readerrs == 1) {
-			ast_log(LOG_WARNING, "Possibly stuck USB read channel. [%s]\n", o->name);
-		}
-		return &ast_null_frame;
-	}
-	
-#if DEBUG_CAPTURES == 1
-	if (o->rxcapraw && frxcapraw)
-		fwrite(o->simpleusb_read_buf + o->readpos, 1, res, frxcapraw);
-#endif
+		/* Process the transmit queue */
 
-	if (o->readerrs) {
-		ast_log(LOG_WARNING, "USB read channel [%s] was not stuck.\n", o->name);
-	}
-	o->readerrs = 0;
-	o->readpos += res;
-	if (o->readpos < sizeof(o->simpleusb_read_buf)) {	/* not enough samples */
-		return &ast_null_frame;
-	}
-
-	/* Process the transmit queue */
 	for (;;) {
 		num_frames = 0;
 		ast_mutex_lock(&o->txqlock);
 		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) num_frames++;
 		ast_mutex_unlock(&o->txqlock);
-		
 		i = used_blocks(o);
-		if (num_frames && ((num_frames > 3) || ((!o->txkeyed) && (!o->txtestkey))) && (i <= o->queuesize)) {
+		if (o->txkeyed) {
+			ast_debug(7, "blocks used %d, Dest Buffer %d", i, o->simpleusb_write_dst);
+		}
+		if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && i <= o->queuesize) {
+			if (i == 0) { /* We are not keeping the buffer full, add 1 frame */
+				memset(outbuf, 0, sizeof(outbuf));
+				soundcard_writeframe(o, outbuf);
+				ast_debug(7, "A null frame has been added");
+			}
 			ast_mutex_lock(&o->txqlock);
 			f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
 			ast_mutex_unlock(&o->txqlock);
@@ -2119,7 +2090,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 				if (f1->datalen - src >= l) {	
 					/* enough to fill a frame */
 					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
-
 					/* Below is an attempt to match levels to the original CM108 IC which has
 					 * been out of production for over 10 years. Scaling audio to 109.375% will
 					 * result in clipping! Any adjustments for CM1xxx gain differences should be
@@ -2135,8 +2105,8 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 						sp = (short *) o->simpleusb_write_buf;
 						for (i = 0; i < FRAME_SIZE; i++) {
 							v = *sp;
-							v += v >> 3;	/* add *.125 giving * 1.125 */
-							v -= *sp >> 5;	/* subtract *.03125 giving * 1.09375 */
+							v += v >> 3;   /* add *.125 giving * 1.125 */
+							v -= *sp >> 5; /* subtract *.03125 giving * 1.09375 */
 							if (v > 32765.0) {
 								v = 32765.0;
 							} else if (v < -32765.0) {
@@ -2210,6 +2180,44 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			continue;
 		}
 		break;
+	}
+	
+	/* Read audio data from the USB sound device.
+	 * Sound data will arrive at 48000 samples per second
+	 * in stereo format.
+	 */
+	res = read(o->sounddev, o->simpleusb_read_buf + o->readpos, sizeof(o->simpleusb_read_buf) - o->readpos);
+	if (res < 0) { /* Audio data not ready, return a NULL frame */
+		if (errno != EAGAIN) {
+			o->readerrs = 0;
+			o->hasusb = 0;
+			return &ast_null_frame;
+		}
+		if (o->readerrs++ > READERR_THRESHOLD) {
+			ast_log(LOG_ERROR, "Stuck USB read channel [%s], un-sticking it!\n", o->name);
+			o->readerrs = 0;
+			o->hasusb = 0;
+			return &ast_null_frame;
+		}
+		if (o->readerrs == 1) {
+			ast_log(LOG_WARNING, "Possibly stuck USB read channel. [%s]\n", o->name);
+		}
+		return &ast_null_frame;
+	}
+
+#if DEBUG_CAPTURES == 1
+	if (o->rxcapraw && frxcapraw)
+		fwrite(o->simpleusb_read_buf + o->readpos, 1, res, frxcapraw);
+#endif
+
+	if (o->readerrs) {
+		ast_log(LOG_WARNING, "USB read channel [%s] was not stuck.\n", o->name);
+	}
+
+	o->readerrs = 0;
+	o->readpos += res;
+	if (o->readpos < sizeof(o->simpleusb_read_buf)) { /* not enough samples */
+		return &ast_null_frame;
 	}
 
 	/* If we have been sending pager audio, see if
