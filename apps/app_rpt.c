@@ -4159,7 +4159,7 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 }
 
 /*! \retval -1 to exit and terminate the node, 0 to continue */
-static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx, char *restrict myfirst)
+static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx_p, char *restrict myfirst)
 {
 	struct rpt_link *l, *m;
 
@@ -4197,28 +4197,28 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			if (myrpt->patchvoxalways)
 				mycalltx = mycalltx && ((!myrpt->voxtostate) && myrpt->wasvox);
 #endif
-			*totx = ((l->isremote) ? (remnomute) : (myrpt->localtx && myrpt->totimer) || mycalltx) || remrx;
+			*totx_p = ((l->isremote) ? (remnomute) : (myrpt->localtx && myrpt->totimer) || mycalltx) || remrx;
 
 			/* foop */
 			if ((!l->lastrx) && altlink(myrpt, l))
-				*totx = myrpt->txkeyed;
+				*totx_p = myrpt->txkeyed;
 			if (altlink1(myrpt, l))
-				*totx = 1;
-			l->wouldtx = *totx;
+				*totx_p = 1;
+			l->wouldtx = *totx_p;
 			if (l->mode != 1)
-				*totx = 0;
-			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx)) {
-				if (*totx && !l->voterlink) {
+				*totx_p = 0;
+			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx_p)) {
+				if (*totx_p && !l->voterlink) {
 					if (l->link_newkey != RADIO_KEY_NOT_ALLOWED)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
 				}
 				if (myrpt->p.archivedir) {
-					donodelog_fmt(myrpt, *totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
+					donodelog_fmt(myrpt, *totx_p ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
 				}
 			}
-			l->lasttx = *totx;
+			l->lasttx = *totx_p;
 		}
 
 		rpt_mutex_lock(&myrpt->lock);
