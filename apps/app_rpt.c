@@ -2299,6 +2299,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->linkmode = 0;
 	l->lastrx1 = 0;
 	l->lastrealrx = 0;
+	l->lastframe = 0;
 	l->rxlingertimer = RX_LINGER_TIME;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
@@ -4162,6 +4163,7 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx, char *restrict myfirst)
 {
 	struct rpt_link *l, *m;
+	struct ast_frame wf;
 
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
@@ -4219,6 +4221,16 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				}
 			}
 			l->lasttx = *totx;
+
+			if (l->chan && l->lastframe && !l->lasttx) { /* Send a silence frame to clear jitter buffer */
+				ast_write(l->chan, &ast_null_frame);
+				wf.frametype = AST_FRAME_CNG;
+				wf.subclass.integer = 0;
+				wf.delivery.tv_sec = 0;
+				wf.delivery.tv_usec = 0;
+				ast_write(l->chan, &wf);
+				l->lastframe = 0;
+			}
 		}
 
 		rpt_mutex_lock(&myrpt->lock);
@@ -4420,6 +4432,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					 * 
 					 */
 					ast_write(l->chan, f);
+					l->lastframe = 1;
 				}
 			}
 			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
@@ -6553,6 +6566,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_copy_string(l->name, b1, MAXNODESTR);
 		l->isremote = 0;
 		l->chan = chan;
+		l->lastframe = 0;
 		l->connected = 1;
 		l->thisconnected = 1;
 		l->hasconnected = 1;
