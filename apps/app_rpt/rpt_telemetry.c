@@ -1061,6 +1061,7 @@ void *rpt_tele_thread(void *this)
 		case PLAYBACK:
 		case TEST_TONE:
 		case STATS_GPS_LEGACY:
+		case STATS_TIME:
 			type = RPT_CONF;
 			break;
 		default:

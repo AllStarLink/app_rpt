@@ -4215,7 +4215,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
 				}
 				if (myrpt->p.archivedir) {
-					donodelog_fmt(myrpt, totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
+					donodelog_fmt(myrpt, *totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
 				}
 			}
 			l->lasttx = *totx;
