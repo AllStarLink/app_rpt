@@ -1707,10 +1707,6 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		mylink->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		return;
 	}
-	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
-		mylink->iaxkey = 1;
-		return;
-	}
 	if (*str == 'G') {		/* got GPS data */
 		/* re-distribute it to attached nodes */
 		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
@@ -2172,10 +2168,6 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 		myrpt->rpt_newkey = RADIO_KEY_NOT_ALLOWED;
 		return 0;
 	}
-	if (!strncmp(str, IAXKEYSTR, strlen(IAXKEYSTR))) {
-		myrpt->iaxkey = 1;
-		return 0;
-	}
 
 	if (*str == 'T')
 		return 0;
@@ -2292,7 +2284,6 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->elaptime = 0;
 	l->connecttime = 0;
 	l->thisconnected = 0;
-	l->iaxkey = 0;
 	l->link_newkey = RADIO_KEY_ALLOWED;
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
@@ -2308,7 +2299,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->linkmode = 0;
 	l->lastrx1 = 0;
 	l->lastrealrx = 0;
-	l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
+	l->rxlingertimer = RX_LINGER_TIME;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
@@ -3285,25 +3276,19 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 static inline int do_link_post(struct rpt *myrpt)
 {
 	int nstr;
-	char lst, *str;
+	char lst;
+	struct ast_str *str;
 	time_t now;
 	struct rpt_link *l;
 
 	myrpt->linkposttimer = LINKPOSTTIME;
-	nstr = 0;
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
-		/* if is not a real link, ignore it */
-		if (l->name[0] == '0') {
-			continue;
-		}
-		nstr += strlen(l->name) + 1;
-	}
-	str = ast_malloc(nstr + 256);
+
+	str = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!str) {
 		return -1;
 	}
 	nstr = 0;
-	strcpy(str, "nodes=");
+	ast_str_set(&str, 0, "%s", "nodes=");
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
@@ -3317,23 +3302,25 @@ static inline int do_link_post(struct rpt *myrpt)
 		if (!l->thisconnected)
 			lst = 'C';
 		if (nstr)
-			strcat(str, ",");
-		snprintf(str + strlen(str), sizeof(str) - strlen(str), "%c%s", lst, l->name);
+			ast_str_append(&str, 0, "%s", ",");
+		ast_str_append(&str, 0, "%c%s", lst, l->name);
 		nstr = 1;
 	}
-	snprintf(str + strlen(str), sizeof(str) - strlen(str), "&apprptvers=%d.%d.%d", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 	time(&now);
-	snprintf(str + strlen(str), sizeof(str) - strlen(str), "&apprptuptime=%d", (int) (now - starttime));
-	snprintf(str + strlen(str),
-		sizeof(str) - strlen(str),
-		"&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d",
+	ast_str_append(&str,
+		0,
+		"&apprptvers=%d.%d.%d&apprptuptime=%d&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d",
+		VERSION_MAJOR,
+		VERSION_MINOR,
+		VERSION_PATCH,
+		(int) (now - starttime),
 		myrpt->totalkerchunks,
 		myrpt->totalkeyups,
 		(int) myrpt->totaltxtime / 1000,
 		myrpt->timeouts,
 		myrpt->totalexecdcommands);
 	rpt_mutex_unlock(&myrpt->lock);
-	statpost(myrpt, str);
+	statpost(myrpt, ast_str_buffer(str));
 	rpt_mutex_lock(&myrpt->lock);
 	ast_free(str);
 	return 0;
@@ -4192,7 +4179,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 		/* see if any other links are receiving */
 		m = myrpt->links.next;
 		while (m != &myrpt->links) {
-			/* if not us, and not localonly count it */
+			/* if not the link we are currently processing, and not localonly count it */
 			if ((m != l) && (m->lastrx) && (m->mode < 2))
 				remrx = 1;
 			m = m->next;
@@ -4261,7 +4248,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					ast_frame_adjust_volume_float(f, fac);
 				}
 
-				l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
+				l->rxlingertimer = RX_LINGER_TIME;
 
 				if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && (!l->lastrealrx)) {
 					rxkey_helper(myrpt, l);
@@ -4360,7 +4347,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					char lconnected = l->connected;
 
 					__kickshort(myrpt);
-					myrpt->rxlingertimer = ((myrpt->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
+					myrpt->rxlingertimer = RX_LINGER_TIME;
 					l->connected = 1;
 					l->hasconnected = 1;
 					l->thisconnected = 1;
@@ -5241,10 +5228,8 @@ static void *rpt(void *this)
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		if (elap != 0) {
-			looptimestart = looptimenow;
-		}
-		/* @@@@@@ LOCK @@@@@@@ */
+		looptimestart = looptimenow;
+
 		rpt_mutex_lock(&myrpt->lock);
 		periodic_process_links(myrpt, elap);
 		if (update_timers(myrpt, elap, totx)) {
@@ -5768,7 +5753,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 		struct ast_frame *f1;
 		int ismuted;
 		if (myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED) {
-			myrpt->rxlingertimer = ((myrpt->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
+			myrpt->rxlingertimer = RX_LINGER_TIME;
 			if (!*keyed) {
 				*keyed = 1;
 				myrpt->rerxtimer = 0;
@@ -6579,10 +6564,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->lastf2 = NULL;
 		l->dtmfed = 0;
 		l->gott = 0;
-		l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
+		l->rxlingertimer = RX_LINGER_TIME;
 		l->newkeytimer = NEWKEYTIME;
 		l->link_newkey = RADIO_KEY_ALLOWED;
-		l->iaxkey = 0;
 		if ((!phone_mode) && (l->name[0] != '0') && strcasecmp(ast_channel_tech(chan)->type, "echolink") && strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
 			l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		}
@@ -6919,7 +6903,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->tele.next = &myrpt->tele;
 	myrpt->tele.prev = &myrpt->tele;
 	myrpt->rpt_newkey = RADIO_KEY_ALLOWED;
-	myrpt->iaxkey = 0;
 	myrpt->lastitx = !myrpt->lastitx;
 	myrpt->tunerequest = 0;
 	myrpt->tunetx = 0;
@@ -7098,9 +7081,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		if (elap != 0) {
-			looptimestart = looptimenow;
-		}
+		looptimestart = looptimenow;
+
 		update_timer(&myrpt->macrotimer, elap, 0);
 		if (who == NULL) {
 			/* No channels had activity. Loop again. */

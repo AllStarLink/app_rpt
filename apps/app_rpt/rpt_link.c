@@ -709,7 +709,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->connected = 1;
 	l->hasconnected = l->perma = perma;
 	l->newkeytimer = NEWKEYTIME;
-	l->iaxkey = 0;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 	l->voterlink = voterlink;
 	if (strncasecmp(s1, "echolink/", 9) == 0) {
@@ -798,7 +797,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->max_retries = MAX_RETRIES_PERM;
 	if (l->isremote)
 		l->retries = l->max_retries + 1;
-	l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
+	l->rxlingertimer = RX_LINGER_TIME;
 	rpt_link_add(myrpt, l);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);

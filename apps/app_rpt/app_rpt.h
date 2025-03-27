@@ -1,5 +1,5 @@
 #define VERSION_MAJOR 3
-#define VERSION_MINOR 3
+#define VERSION_MINOR 4
 #define VERSION_PATCH 0
 
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
@@ -207,8 +207,7 @@ typedef struct {
 #define	SIMPLEX_PATCH_DELAY 25
 #define	SIMPLEX_PHONE_DELAY 25
 
-#define	RX_LINGER_TIME 50
-#define	RX_LINGER_TIME_IAXKEY 150
+#define RX_LINGER_TIME 50
 
 #define	STATPOST_PROGRAM "/usr/bin/wget,-q,--output-document=/dev/null,--no-check-certificate"
 
@@ -350,8 +349,6 @@ struct rpt_chan_stat {
 #define DISCSTR "!!DISCONNECT!!"
 #define NEWKEYSTR "!NEWKEY!"
 #define NEWKEY1STR "!NEWKEY1!"
-#define IAXKEYSTR "!IAXKEY!"
-
 
 /*! \brief Repeater link connection newkey handshake state */
 enum newkey { 
@@ -437,7 +434,6 @@ struct rpt_link {
 	int voxtotimer;
 	char voxtostate;
 	enum newkey link_newkey;
-	char iaxkey;
 	int linkmode;
 	int newkeytimer;
 	char gott;
@@ -858,9 +854,8 @@ struct rpt {
 	char voxtostate;
 	int linkposttimer;			
 	int keyposttimer;			
-	int lastkeytimer;			
+	int lastkeytimer;
 	enum newkey rpt_newkey;
-	char iaxkey;
 	char inpadtest;
 	int rxlingertimer;
 	char localoverride;
