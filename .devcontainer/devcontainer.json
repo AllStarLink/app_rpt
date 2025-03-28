@@ -1,8 +1,8 @@
 {
   "name": "allStarLink Dev",
-  "image": "ghcr.io/allstarlink/asl3-asterisk-ci",
+  "image": "ghcr.io/allstarlink/asl3-asterisk-ci:latest",
   "remoteUser": "root",
-  "postCreateCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
+  "postCreateCommand": "git config --global --add safe.directory '*'",
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
