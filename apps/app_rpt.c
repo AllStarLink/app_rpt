@@ -4215,22 +4215,18 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
+					if (l->lastframe) {
+						memset(&wf, 0, sizeof(wf));
+						wf.frametype = AST_FRAME_CNG;
+						ast_write(l->chan, &wf);
+						l->lastframe = 0;
+					}
 				}
 				if (myrpt->p.archivedir) {
 					donodelog_fmt(myrpt, totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
 				}
 			}
 			l->lasttx = *totx;
-
-			if (l->chan && l->lastframe && !l->lasttx) { /* Send a silence frame to clear jitter buffer */
-				ast_write(l->chan, &ast_null_frame);
-				wf.frametype = AST_FRAME_CNG;
-				wf.subclass.integer = 0;
-				wf.delivery.tv_sec = 0;
-				wf.delivery.tv_usec = 0;
-				ast_write(l->chan, &wf);
-				l->lastframe = 0;
-			}
 		}
 
 		rpt_mutex_lock(&myrpt->lock);
