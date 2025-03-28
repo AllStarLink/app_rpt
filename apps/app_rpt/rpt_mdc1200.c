@@ -17,7 +17,7 @@
 #include "app_rpt.h"
 
 #include "rpt_mdc1200.h"
-
+#include "rpt_utils.h"
 #include "rpt_lock.h"
 #include "rpt_config.h"
 #include "rpt_link.h"
@@ -120,15 +120,9 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 		return;
 
 	sprintf(str, "I %s %s", myrpt->name, data);
-
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "mdc1200_send");
 	wf.data.ptr = str;
-	wf.datalen = strlen(str) + 1;	// Isuani, 20141001
-	wf.samples = 0;
-	wf.src = "mdc1200_send";
+	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
 	l = myrpt->links.next;
 	/* otherwise, send it to all of em */
@@ -160,10 +154,9 @@ static const char *my_variable_match(const struct ast_config *config, const char
 
 void mdc1200_cmd(struct rpt *myrpt, char *data)
 {
-	char busy, *myval;
+	char *myval;
 	int i;
 
-	busy = 0;
 	if ((data[0] == 'I') && (!strcmp(data, myrpt->lastmdc)))
 		return;
 	myval = (char *) my_variable_match(myrpt->cfg, myrpt->p.mdcmacro, data);
@@ -178,22 +171,15 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 		}
 		if (!myrpt->keyed)
 			return;
-		rpt_mutex_lock(&myrpt->lock);
-		if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(myval)) {
-			rpt_mutex_unlock(&myrpt->lock);
-			busy = 1;
-		}
-		if (!busy) {
-			myrpt->macrotimer = MACROTIME;
-			strncat(myrpt->macrobuf, myval, MAXMACRO - 1);
-		}
-		rpt_mutex_unlock(&myrpt->lock);
+		macro_append(myrpt, myval);
 	}
-	if ((data[0] == 'I') && (!busy))
-		strcpy(myrpt->lastmdc, data);
+	if (data[0] == 'I') {
+		ast_copy_string(myrpt->lastmdc, data, sizeof(myrpt->lastmdc));
+	}
+	return;
 }
 
-#ifdef	_MDC_ENCODE_H_
+#ifdef _MDC_ENCODE_H_
 
 void mdc1200_ack_status(struct rpt *myrpt, short UnitID)
 {

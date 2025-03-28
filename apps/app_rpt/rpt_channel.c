@@ -9,8 +9,10 @@
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
+#include "rpt_link.h"
 #include "rpt_channel.h"
 #include "rpt_config.h"
+#include "rpt_utils.h"
 
 extern char *dtmf_tones[];
 
@@ -76,15 +78,7 @@ int priority_jump(struct rpt *myrpt, struct ast_channel *chan)
 
 int sayfile(struct ast_channel *mychannel, char *fname)
 {
-	int res;
-
-	res = ast_streamfile(mychannel, fname, ast_channel_language(mychannel));
-	if (!res)
-		res = ast_waitstream(mychannel, "");
-	else
-		ast_log(LOG_WARNING, "ast_streamfile %s failed on %s\n", fname, ast_channel_name(mychannel));
-	ast_stopstream(mychannel);
-	return res;
+	return ast_stream_and_wait(mychannel, fname, "");
 }
 
 int saycharstr(struct ast_channel *mychannel, char *str)
@@ -419,14 +413,9 @@ int send_usb_txt(struct rpt *myrpt, char *txt)
 	struct ast_frame wf;
 
 	ast_debug(1, "send_usb_txt %s\n", txt);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "send_usb_txt");
 	wf.datalen = strlen(txt) + 1;
 	wf.data.ptr = txt;
-	wf.samples = 0;
-	wf.src = "send_usb_txt";
 	ast_write(myrpt->txchannel, &wf);
 	return 0;
 }
@@ -441,18 +430,13 @@ int send_link_pl(struct rpt *myrpt, char *txt)
 		return 0;
 	snprintf(str, sizeof(str), "C %s %s %s", myrpt->name, myrpt->p.ctgroup, txt);
 	ast_debug(1, "send_link_pl %s\n", str);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "send_link_pl");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	wf.samples = 0;
-	wf.src = "send_link_pl";
 	l = myrpt->links.next;
 	while (l && (l != &myrpt->links)) {
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		}
 		l = l->next;
 	}

@@ -1,6 +1,5 @@
-
 #define VERSION_MAJOR 3
-#define VERSION_MINOR 3
+#define VERSION_MINOR 4
 #define VERSION_PATCH 0
 
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
@@ -71,7 +70,8 @@ typedef struct {
 /* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
 #define	MAXDTMF 32
 #define	MAXMACRO 2048
-#define	MAXLINKLIST 5120
+#define	MAXNODES 500			  /* Maximum number of nodes allowed in the link list */
+#define	RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
 #define	LINKLISTTIME 10000
 #define	LINKLISTSHORTTIME 200
 #define	LINKPOSTTIME 30000
@@ -98,16 +98,27 @@ typedef struct {
 
 #define	REDUNDANT_TX_TIME 2000
 
-#define	RETRY_TIMER_MS 5000
+#define RETRY_TIMER_MS 5000
 
-#define	PATCH_DIALPLAN_TIMEOUT 1500
+#define PATCH_DIALPLAN_TIMEOUT 1500
 
-#define	RPT_LOCKOUT_SECS 10
+#define RPT_LOCKOUT_SECS 10
+#define RPT_CMD_SZ 299
+#define RPT_SRC_SZ 299
+#define RPT_DEST_SZ 299
+#define RPT_TMP_SZ 511
+#define RSSI_SZ 31
+#define RPT_TO_STRING(x) #x
+#define S_FMT(x) "%" RPT_TO_STRING(x) "s "
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
+#define LON_SZ 24
+#define LAT_SZ 24
+#define ELEV_SZ 24
 
 #define MAXPEERSTR 31
-#define	MAXREMSTR 15
+#define MAXREMSTR 15
 
-#define	MONITOR_DISK_BLOCKS_PER_MINUTE 38
+#define MONITOR_DISK_BLOCKS_PER_MINUTE 38
 
 #define	DEFAULT_MONITOR_MIN_DISK_BLOCKS 10000
 #define	DEFAULT_REMOTE_INACT_TIMEOUT (15 * 60)
@@ -196,8 +207,7 @@ typedef struct {
 #define	SIMPLEX_PATCH_DELAY 25
 #define	SIMPLEX_PHONE_DELAY 25
 
-#define	RX_LINGER_TIME 50
-#define	RX_LINGER_TIME_IAXKEY 150
+#define RX_LINGER_TIME 50
 
 #define	STATPOST_PROGRAM "/usr/bin/wget,-q,--output-document=/dev/null,--no-check-certificate"
 
@@ -327,9 +337,9 @@ struct rpt_chan_stat {
 #define MAX_STAT_LINKS 256
 #define POLITEID 30000
 #define FUNCTDELAY 1500
-
-#define	MAXXLAT 20
-#define	MAXXLATTIME 3
+#define TMP_SIZE 256 /* Size of tmp char* */
+#define MAXXLAT 20
+#define MAXXLATTIME 3
 
 #define MAX_SYSSTATES 10
 
@@ -339,8 +349,6 @@ struct rpt_chan_stat {
 #define DISCSTR "!!DISCONNECT!!"
 #define NEWKEYSTR "!NEWKEY!"
 #define NEWKEY1STR "!NEWKEY1!"
-#define IAXKEYSTR "!IAXKEY!"
-
 
 /*! \brief Repeater link connection newkey handshake state */
 enum newkey { 
@@ -412,8 +420,8 @@ struct rpt_link {
 	int	reconnects;
 	long long connecttime;
 	struct ast_channel *chan;	
-	struct ast_channel *pchan;	
-	char	linklist[MAXLINKLIST];
+	struct ast_channel *pchan;
+	struct ast_str *linklist;
 	time_t	linklistreceived;
 	int	linklisttimer;
 	int	dtmfed;
@@ -426,7 +434,6 @@ struct rpt_link {
 	int voxtotimer;
 	char voxtostate;
 	enum newkey link_newkey;
-	char iaxkey;
 	int linkmode;
 	int newkeytimer;
 	char gott;
@@ -581,7 +588,6 @@ struct rpt {
 	ast_mutex_t lock;
 	ast_mutex_t remlock;
 	ast_mutex_t statpost_lock;
-	ast_mutex_t blocklock;	/*!< Lock added to prevent multiple threads from performing blocking operations simultaneously */
 	struct ast_config *cfg;
 	char reload;
 	char reload1;
@@ -748,7 +754,7 @@ struct rpt {
 	char tounkeyed;
 	char tonotify;
 	char dtmfbuf[MAXDTMF];
-	char macrobuf[MAXMACRO];
+	struct ast_str *macrobuf;
 	char rem_dtmfbuf[MAXDTMF];
 	char lastdtmfcommand[MAXDTMF];
 	char cmdnode[50];
@@ -848,9 +854,8 @@ struct rpt {
 	char voxtostate;
 	int linkposttimer;			
 	int keyposttimer;			
-	int lastkeytimer;			
+	int lastkeytimer;
 	enum newkey rpt_newkey;
-	char iaxkey;
 	char inpadtest;
 	int rxlingertimer;
 	char localoverride;

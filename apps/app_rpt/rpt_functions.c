@@ -53,8 +53,8 @@ static char remdtmfstr[] = "0123456789*#ABCD";
 
 int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
 {
-	char *s1, *s2, tmp[300];
-	char digitbuf[MAXNODESTR], *strs[MAXLINKLIST];
+	char *s1, *s2, tmp[MAXNODESTR];
+	char digitbuf[MAXNODESTR], *strs[sizeof(myrpt->savednodes)];
 	char mode, perma;
 	struct rpt_link *l;
 	int i, r;
@@ -102,11 +102,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 			l->disced = 1;
 			l->hasconnected = 1;
 			rpt_mutex_unlock(&myrpt->lock);
-			memset(&wf, 0, sizeof(wf));
-			wf.frametype = AST_FRAME_TEXT;
+			init_text_frame(&wf, "function_ilink:1");
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
-			wf.src = "function_ilink:1";
 			if (l->chan) {
 				if (l->thisconnected)
 					ast_write(l->chan, &wf);
@@ -245,12 +243,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 			l->disced = 2;		/* Silently disconnect */
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_debug(5, "dumping link %s\n",l->name);
-
-			memset(&wf, 0, sizeof(wf));
-			wf.frametype = AST_FRAME_TEXT;
+			init_text_frame(&wf, "function_ilink:6");
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
-			wf.src = "function_ilink:6";
 			if (l->chan) {
 				if (l->thisconnected)
 					ast_write(l->chan, &wf);
@@ -298,11 +293,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_debug(5, "dumping link %s\n",l->name);
 
-				memset(&wf, 0, sizeof(wf));
-				wf.frametype = AST_FRAME_TEXT;
+				init_text_frame(&wf, "function_ilink:10");
 				wf.datalen = strlen(DISCSTR) + 1;
 				wf.data.ptr = DISCSTR;
-				wf.src = "function_ilink:6";
 				if (l->chan) {
 					if (l->thisconnected)
 						ast_write(l->chan, &wf);
@@ -363,7 +356,7 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 	case 16:					/* Restore links disconnected with "disconnect all links" command */
 		strcpy(tmp, myrpt->savednodes);	/* Make a copy */
 		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
-		for (i = 0; tmp[0] && strs[i] != NULL && i < MAXLINKLIST; i++) {
+		for (i = 0; tmp[0] && strs[i] && i < ARRAY_LEN(strs); i++) {
 			s1 = strs[i];
 			if (s1[0] == 'X')
 				mode = 1;
@@ -1113,16 +1106,7 @@ int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 		rpt_telemetry(myrpt, MACRO_NOTFOUND, NULL);
 		return DC_COMPLETE;
 	}
-	rpt_mutex_lock(&myrpt->lock);
-	if ((MAXMACRO - strlen(myrpt->macrobuf)) < strlen(val)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		rpt_telem_select(myrpt, command_source, mylink);
-		rpt_telemetry(myrpt, MACRO_BUSY, NULL);
-		return DC_ERROR;
-	}
-	myrpt->macrotimer = MACROTIME;
-	strncat(myrpt->macrobuf, val, MAXMACRO - 1);
-	rpt_mutex_unlock(&myrpt->lock);
+	macro_append(myrpt, val);
 	return DC_COMPLETE;
 }
 
@@ -1699,11 +1683,10 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			}
 		/* go thru all the specs */
 		for (i = 1; i < argc; i++) {
-			if (sscanf(argv[i], "GPIO%d=%d", &j, &k) == 2 ||
-				sscanf(argv[i], "GPIO%d:%d", &j, &k) == 2) {
+			if (sscanf(argv[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 || sscanf(argv[i], "GPIO" N_FMT(d) ":" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
-			} else if (sscanf(argv[i], "PP%d=%d", &j, &k) == 2) {
+			} else if (sscanf(argv[i], "PP" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			}

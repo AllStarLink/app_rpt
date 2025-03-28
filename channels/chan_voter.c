@@ -266,20 +266,20 @@ struct ast_flags zeroflag = { 0 };
 #define	PING_TIME_MS 250
 #define	PING_TIMEOUT_MS 3000
 
-#define	DEFAULT_LINGER 6
+#define DEFAULT_LINGER 6
 #define DEFAULT_GTXGAIN "0.0"
 
-#define	DEFAULT_DYNTIME 30000
+#define DEFAULT_DYNTIME 30000
 
 #define MAX_MASTER_COUNT 3
-
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 #define CLIENT_WARN_SECS 60
 
-#define	DELIMCHR ','
-#define	QUOTECHR 34
+#define DELIMCHR ','
+#define QUOTECHR 34
 
-#define	MAXSTREAMS 50
-#define	MAXTHRESHOLDS 20
+#define MAXSTREAMS 50
+#define MAXTHRESHOLDS 20
 
 #define	GPS_WORK_FILE "/tmp/gps%s.tmp"
 #define	GPS_DATA_FILE "/tmp/gps%s.dat"
@@ -784,8 +784,8 @@ static int16_t deemp1(int16_t input, int32_t * restrict state0)
  * \brief Break up a delimited string into a table of substrings.
  * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
  * \param str		Pointer to string to process (it will be modified).
- * \param strp		Pointer to a list of substrings created, NULL will be placed at the end of the list.
- * \param limit		Maximum number of substrings to process.
+ * \param strp		An array of pointers to the start of each token + 1 or more for a NULL end token
+ * \param limit		The maximum number of tokens to find + 1 or more for the NULL end token
  * \return			Count of strings.
  */
 static int finddelim(char *str, char *strp[], size_t limit)
@@ -1135,7 +1135,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			ast_log(LOG_WARNING, "Channel %s: Attempt to page on a non-flat-audio Voter config\n", ast_channel_name(ast));
 			return 0;
 		}
-		cnt = sscanf(text, "%s %d %d %n", cmd, &baud, &i, &j);
+		cnt = sscanf(text, "%s " N_FMT(d) " " N_FMT(d) " %n", cmd, &baud, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
@@ -1225,6 +1225,10 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			wf.src = PAGER_SRC;
 			memcpy(wf.data.ptr, (char *) (audio + i), FRAME_SIZE * 2);
 			f1 = ast_frdup(&wf);
+			if (!f1) {
+				ast_free(audio);
+				return 0;
+			}
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 			ast_mutex_lock(&o->pagerqlock);
 			AST_LIST_INSERT_TAIL(&o->pagerq, f1, frame_list);
@@ -1284,6 +1288,9 @@ static int voter_write(struct ast_channel *ast, struct ast_frame *frame)
 		fwrite(frame->data.ptr, 1, frame->datalen, fp);
 	}
 	f1 = ast_frdup(frame);
+	if (!f1) {
+		return 0;
+	}
 	if (p->gtxgain != 1.0) {
 		register int x1;
 		short* restrict sp;
@@ -1575,7 +1582,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	p->rxkey = 1;
 	x = 0;
 	if (p->dsp && p->usedtmf) {
-		struct ast_frame *f3 = ast_frdup(f1);	/* dsp_process frees frame, so dup f1 so we still have it later on */
+		struct ast_frame *f3 = ast_frdup(f1); /* dsp_process frees frame, so dup f1 so we still have it later on */
+		if (!f3) {
+			ast_frfree(f1);
+			return 0;
+		}
 		f2 = ast_dsp_process(NULL, p->dsp, f3);
 		if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
@@ -2796,7 +2807,7 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 		if ((!strcasecmp(argv[4], "off")) || (!strncasecmp(argv[4], "dis", 3))) {
 			newlevel = -2;
 		} else {
-			if (sscanf(argv[4], "%d", &newlevel) < 1) {
+			if (sscanf(argv[4], N_FMT(d), &newlevel) < 1) {
 				ast_cli(fd, "Error: Invalid priority value specification!!\n");
 				ast_mutex_unlock(&voter_lock);
 				return RESULT_SUCCESS;

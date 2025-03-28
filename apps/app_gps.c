@@ -351,7 +351,7 @@ static time_t time_monotonic(void)
  */
 static int explode_string(char *str, char *strp[], int limit, const char delim, const char quote)
 {
-	int i, l, inquo;
+	int i, inquo;
 
 	inquo = 0;
 	i = 0;
@@ -360,7 +360,7 @@ static int explode_string(char *str, char *strp[], int limit, const char delim, 
 		strp[0] = 0;
 		return 0;
 	}
-	for (l = 0; *str && (l < limit); str++) {
+	for (; *str && (i < (limit - 1)); str++) {
 		if (quote) {
 			if (*str == quote) {
 				if (inquo) {
@@ -374,7 +374,6 @@ static int explode_string(char *str, char *strp[], int limit, const char delim, 
 		}
 		if ((*str == delim) && (!inquo)) {
 			*str = 0;
-			l++;
 			strp[i++] = str + 1;
 		}
 	}
@@ -995,7 +994,7 @@ static void *gps_reader(void *data)
 			}
 			/* Calculate the check sum */
 			c = 0;
-			for (i = 1; buf[i]; i++) {
+			for (i = 1; i < sizeof(buf) && buf[i]; i++) {
 				if (buf[i] == '*')
 					break;
 				c ^= buf[i];
@@ -1009,7 +1008,7 @@ static void *gps_reader(void *data)
 				continue;
 			}
 
-			n = explode_string(buf, strs, 100, ',', '\"');
+			n = explode_string(buf, strs, ARRAY_LEN(strs), ',', '\"');
 			if (!n) {
 				ast_log(LOG_WARNING, "GPS Invalid data format (no data)\n");
 				continue;

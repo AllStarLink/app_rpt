@@ -185,17 +185,19 @@ do not use 127.0.0.1
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
 
-#define	MAX_RXKEY_TIME 4 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
-#define	KEEPALIVE_TIME 50 * 10
-#define	AUTH_RETRY_MS 5000
-#define	AUTH_ABANDONED_MS 15000
-#define	BLOCKING_FACTOR 4
-#define	GSM_FRAME_SIZE 33
+#define MAX_RXKEY_TIME 4 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
+#define KEEPALIVE_TIME 50 * 10
+#define AUTH_RETRY_MS 5000
+#define AUTH_ABANDONED_MS 15000
+#define BLOCKING_FACTOR 4
+#define GSM_FRAME_SIZE 33
 #define QUEUE_OVERLOAD_THRESHOLD_AST 75
 #define QUEUE_OVERLOAD_THRESHOLD_EL 30
-#define	MAXPENDING 20
-#define AUDIO_TIMEOUT 800	/*Audio timeout in milliseconds */
-
+#define MAXPENDING 20
+#define AUDIO_TIMEOUT 800 /*Audio timeout in milliseconds */
+#define RPT_TO_STRING(x) #x
+#define S_FMT(x) "%" RPT_TO_STRING(x) "s "
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 #define EL_IP_SIZE 16
 #define EL_CALL_SIZE 12
 #define EL_NAME_SIZE 32
@@ -241,7 +243,8 @@ do not use 127.0.0.1
 */
 static const char tdesc[] = "Echolink channel driver";
 static char type[] = "echolink";
-static char snapshot_id[50] = { '0', 0 };
+#define SNAPSHOT_SZ 49
+static char snapshot_id[SNAPSHOT_SZ + 1] = { '0', 0 };
 
 static int el_net_get_index = 0;
 static int el_net_get_nread = 0;
@@ -3089,12 +3092,12 @@ static int do_el_directory(const char *hostname)
 		goto cleanup;
 	}
 	if (dir_compressed) {
-		if (sscanf(str, "%d:%s", &rep_lines, snapshot_id) < 2) {
+		if (sscanf(str, N_FMT(d) ":" S_FMT(SNAPSHOT_SZ), &rep_lines, snapshot_id) < 2) {
 			ast_log(LOG_ERROR, "Error in parsing header on %s.\n", hostname);
 			goto cleanup;
 		}
 	} else {
-		if (sscanf(str, "%d", &rep_lines) < 1) {
+		if (sscanf(str, N_FMT(d), &rep_lines) < 1) {
 			ast_log(LOG_ERROR, "Error in parsing header on %s.\n", hostname);
 			goto cleanup;
 		}
@@ -3476,7 +3479,7 @@ static void *el_reader(void *data)
 				mylon = instp->lon;
 				if (ast_custom_function_find("GPS_READ") && !ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 					/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
-					if (sscanf(gps_data, "%llu %*u %f%c %f%c", &u_mono, &lat, &latc, &lon, &lonc) == 5) {
+					if (sscanf(gps_data, N_FMT(llu) " %*u " N_FMT(f) N_FMT(c) N_FMT(f) N_FMT(c), &u_mono, &lat, &latc, &lon, &lonc) == 5) {
 						now_mono = time_monotonic();
 						was_mono = (time_t) u_mono;
 						if ((was_mono + GPS_VALID_SECS) >= now_mono) {
@@ -3492,13 +3495,13 @@ static void *el_reader(void *data)
 							}
 							from_GPS = 1;
 						}
-					}					
+					}
 				}
 
 				/* APRS location format is ddmm.hh (lat) or dddmm.hh (long)
-			     * followed by the cardinal compass direction as N,S,E,W.
-			     * hh hundredths of minutes not thousandths  as is the standard format.
-			     */
+				 * followed by the cardinal compass direction as N,S,E,W.
+				 * hh hundredths of minutes not thousandths  as is the standard format.
+				 */
 				/* lat conversion */
 				latc = mylat >= 0 ? 'N' : 'S';
 				latdeg = (int) fabs(mylat);

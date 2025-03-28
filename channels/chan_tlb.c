@@ -138,10 +138,10 @@ struct {
 #define TLB_QUERY_NODE_EXISTS 1
 #define TLB_QUERY_GET_CALLSIGN 2
 
-#define	DELIMCHR ','
-#define	QUOTECHR 34
-
-/* 
+#define DELIMCHR ','
+#define QUOTECHR 34
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
+/*
    If you want to compile/link this code
    on "BIG-ENDIAN" platforms, then
    use this: #define RTP_BIG_ENDIAN
@@ -2241,8 +2241,7 @@ static void *TLB_reader(void *data)
 							 we're not going to worry about it here. */
 
 							/* parse the packet. If not parseable, throw away */
-							if (sscanf((char *) ((struct rtpVoice_t *) buf)->data,
-									   "DTMF%c %u %u", &dchar, &dseq, &dtime) < 3) {
+							if (sscanf((char *) ((struct rtpVoice_t *) buf)->data, "DTMF%c " N_FMT(u) " " N_FMT(u), &dchar, &dseq, &dtime) < 3) {
 								continue;
 							}
 							ast_mutex_lock(&p->lock);

@@ -118,6 +118,18 @@ static void check_tlink_list(struct rpt *myrpt)
 	}
 }
 
+/*! \brief free a link structure and it's ast_str linklist if it exists
+ *  \param link the link to free
+ */
+void rpt_link_free(struct rpt_link *link)
+{
+	if (link->linklist) {
+		ast_free(link->linklist);
+		link->linklist = NULL;
+	}
+	ast_free(link);
+}
+
 void tele_link_add(struct rpt *myrpt, struct rpt_tele *t)
 {
 	ast_assert(t != NULL);
@@ -181,6 +193,9 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 	if (!l->chan)
 		return;
 	f1 = ast_frdup(f);
+	if (!f1) {
+		return;
+	}
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
 }
@@ -295,14 +310,9 @@ void rssi_send(struct rpt *myrpt)
 	struct ast_frame wf;
 	char str[200];
 	sprintf(str, "R %i", myrpt->rxrssi);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "rssi_send");
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
-	wf.src = "rssi_send";
-
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* otherwise, send it to all of em */
 	while (l != &myrpt->links) {
@@ -310,7 +320,6 @@ void rssi_send(struct rpt *myrpt)
 			l = l->next;
 			continue;
 		}
-		wf.data.ptr = str;
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
 		if (l->chan)
 			rpt_qwrite(l, &wf);
@@ -325,13 +334,9 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	struct rpt_link *l;
 
 	snprintf(str, sizeof(str), "D %s %s %d %c", myrpt->cmdnode, myrpt->name, ++(myrpt->dtmfidx), c);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "send_link_dtmf");
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
-	wf.src = "send_link_dtmf";
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* first, see if our dude is there */
 	while (l != &myrpt->links) {
@@ -341,7 +346,6 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		}
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name, myrpt->cmdnode)) {
-			wf.data.ptr = str;
 			if (l->chan)
 				rpt_qwrite(l, &wf);
 			return;
@@ -351,7 +355,6 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	l = myrpt->links.next;
 	/* if not, give it to everyone */
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan)
 			rpt_qwrite(l, &wf);
 		l = l->next;
@@ -370,17 +373,12 @@ void send_link_keyquery(struct rpt *myrpt)
 	time(&myrpt->topkeytime);
 	rpt_mutex_unlock(&myrpt->lock);
 	snprintf(str, sizeof(str), "K? * %s 0 0", myrpt->name);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "send_link_keyquery");
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
-	wf.src = "send_link_keyquery";
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan)
 			rpt_qwrite(l, &wf);
 		l = l->next;
@@ -394,17 +392,12 @@ void send_tele_link(struct rpt *myrpt, char *cmd)
 	struct rpt_link *l;
 
 	snprintf(str, sizeof(str) - 1, "T %s %s", myrpt->name, cmd);
-	wf.frametype = AST_FRAME_TEXT;
-	wf.subclass.format = ast_format_slin;
-	wf.offset = 0;
-	wf.mallocd = 0;
+	init_text_frame(&wf, "send_tele_link");
 	wf.datalen = strlen(str) + 1;
-	wf.samples = 0;
-	wf.src = "send_tele_link";
+	wf.data.ptr = str;
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		wf.data.ptr = str;
 		if (l->chan && (l->mode == 1))
 			rpt_qwrite(l, &wf);
 		l = l->next;
@@ -447,50 +440,10 @@ void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 	check_link_list(myrpt);
 }
 
-/*!
- * \brief Get required buffer size for link message. 
- * \retval		buffer size.
- */
-
-int __get_nodelist_size (struct rpt *myrpt)
-{
+int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, int alink_format) {
 	struct rpt_link *l;
-	/* minimum size for empty string is 1 byte */
-	int buffer_size_links = 1, buffer_size_alinks = 1, link_size;
-
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
-		/* if is not a real link, ignore it */
-		if (l->name[0] == '0') {
-			continue;
-		}
-		if (l->mode > 1) {
-			continue;			/* Don't report local modes */
-		}
-		/* Calculate size of buffer required to build the list of linked repeaters.
-		 * RPT_ALINKS format = <count>,1234TU,4321TK,2233RU
-		 * RPT_LINKS format = <count>,T1234,R4321,T2233
-		 * Buffer size ALINKS = LINKS with additional U/K characters for each.
-		 */
-		if (l->linklist[0]) {
-			buffer_size_links += (strlen(l->linklist) + 1); /* +1: 1 for comma */
-		}
-		link_size = strlen(l->name);
-		buffer_size_links += (link_size + 2);  /* +2: 1 for comma, 1 form mode (T/R) */
-		buffer_size_alinks += (link_size + 3); /* +3: 1 for comma, 2 for mode (TU/TK/etc) */
-	}
-
-	return (buffer_size_links > buffer_size_alinks) ? buffer_size_links : buffer_size_alinks;
-}
-
-int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t bufsize, int flag)
-{
-	struct rpt_link *l;
-	char mode;
-	int i, spos, link_count, one_link;
-
-	buf[0] = 0;					/* clear output buffer */
-	link_count = 0;
-	one_link = 0;
+	char mode, *links_buf;
+	int i, spos, len, links_count = 0, one_link = 0;
 	if (myrpt->remote)
 		return 0;
 	/* go thru all links */
@@ -511,42 +464,49 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, char *buf, size_t b
 			mode = 'R';			/* indicate RX for our mode */
 		if (!l->thisconnected)
 			mode = 'C';			/* indicate connecting */
-		spos = strlen(buf);		/* current buf size (b4 we add our stuff) */
-		if (spos) {
-			strcat(buf, ",");
-			spos++;
+		spos = ast_str_strlen(*buf); /* current buf size (b4 we add our stuff) */
+		if (spos > 2) {
+			ast_str_append(buf, 0, "%s", ",");
 		}
 	    one_link = 1;
-		if (flag) { /* RPT_ALINK format - only show adjacent nodes*/
-			snprintf(buf + spos, bufsize - spos, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
+		if (alink_format) { /* RPT_ALINK format - only show adjacent nodes*/
+			ast_str_append(buf, 0, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
 		} else { /* RPT_LINK format - show all nodes*/
 			/* add nodes into buffer */
-			if (l->linklist[0]) {
-				snprintf(buf + spos, bufsize - spos, "%c%s,%s", mode, l->name, l->linklist);
-			} else {			/* if no nodes, add this node into buffer */
-				snprintf(buf + spos, bufsize - spos, "%c%s", mode, l->name);
+			if (ast_str_strlen(l->linklist)) {
+				ast_str_append(buf, 0, "%c%s,%s", mode, l->name, ast_str_buffer(l->linklist));
+			} else { /* if no nodes, add this node into buffer */
+				ast_str_append(buf, 0, "%c%s", mode, l->name);
 			}
 		}
 		/* if we are in tranceive mode, let all modes stand */
 		if (mode == 'T')
 			continue;
 		/* downgrade everyone on this node if appropriate */
-		for (i = spos; buf[i]; i++) {
-			if (buf[i] == 'T')
-				buf[i] = mode;
-			if ((buf[i] == 'R') && (mode == 'C'))
-				buf[i] = mode;
+		links_buf = ast_str_buffer(*buf);
+		len = ast_str_strlen(*buf);
+		for (i = spos; i < len; i++) {
+			if (links_buf[i] == 'T')
+				links_buf[i] = mode;
+			if ((links_buf[i] == 'R') && (mode == 'C'))
+				links_buf[i] = mode;
 		}
 	}
 	/* After building the string, count number of nodes (commas) in buffer string. The first
 	 * node doesn't have a comma, so we need to add 1 if there is at least one_link.  
 	 */
-	for (link_count = 0; buf[link_count]; buf[link_count]==',' ? link_count++: *buf++);
+	links_count = 0;
+	links_buf = ast_str_buffer(*buf);
+	for (i = 0; i < ast_str_strlen(*buf); i++) {
+		if (links_buf[i] == ',') {
+			links_count++;
+		}
+	}
 	if (one_link) { /* The first link in the list has no comma but we have 1 link */
-		link_count++;
+		links_count++;
 	}
 
-	return link_count;
+	return links_count;
 }
 
 void __kickshort(struct rpt *myrpt)
@@ -565,49 +525,46 @@ void __kickshort(struct rpt *myrpt)
 
 void rpt_update_links(struct rpt *myrpt)
 {
-	char *buf, *obuf;
-	int buffer_size, n;
-	/* figure out the RPT_LINK string size - this will be the largest size
-	 * RPT_ALINK is always a subset of RPT_LINK
-	 */
-	ast_mutex_lock(&myrpt->lock);
-	buffer_size = __get_nodelist_size(myrpt);
-	buf = ast_calloc(1, BUFSIZE(buffer_size));
+	struct ast_str *buf, *obuf;
+	int n;
+
+	buf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!buf) {
 		ast_mutex_unlock(&myrpt->lock);
 		return;
 	}
-	obuf = ast_calloc(1, OBUFSIZE(buffer_size));
+	obuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!obuf) {
 		ast_mutex_unlock(&myrpt->lock);
 		ast_free(buf);
 		return;
 	}
-	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 1);
+
+	ast_mutex_lock(&myrpt->lock);
+	n = __mklinklist(myrpt, NULL, &buf, 1);
+	ast_mutex_unlock(&myrpt->lock);
 	/* parse em */
 	if (n) {
-		snprintf(obuf, OBUFSIZE(buffer_size), "%d,%s", n, buf);
-	} else {
-		strcpy(obuf, "0");
+		ast_str_set(&obuf, 0, "%d,%s", n, ast_str_buffer(buf));
 	}
-	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_ALINKS", obuf);
-	rpt_manager_trigger(myrpt, "RPT_ALINKS", obuf);
-	snprintf(obuf, OBUFSIZE(buffer_size), "%d", n);
-	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMALINKS", obuf);
-	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", obuf);
-	n = __mklinklist(myrpt, NULL, buf, BUFSIZE(buffer_size), 0);
+	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_ALINKS", ast_str_buffer(obuf));
+	rpt_manager_trigger(myrpt, "RPT_ALINKS", ast_str_buffer(obuf));
+	ast_str_set(&obuf, 0, "%d", n);
+	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMALINKS", ast_str_buffer(obuf));
+	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", ast_str_buffer(obuf));
 
+	ast_str_reset(buf);
+	ast_mutex_lock(&myrpt->lock);
+	n = __mklinklist(myrpt, NULL, &buf, 0);
 	ast_mutex_unlock(&myrpt->lock);
 	if (n) {
-		snprintf(obuf, OBUFSIZE(buffer_size), "%d,%s", n, buf);
-	} else {
-		strcpy(obuf, "0");
+		ast_str_set(&obuf, 0, "%d,%s", n, ast_str_buffer(buf));
 	}
-	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_LINKS", obuf);
-	rpt_manager_trigger(myrpt, "RPT_LINKS", obuf);
-	snprintf(obuf, OBUFSIZE(buffer_size), "%d", n);
-	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMLINKS", obuf);
-	rpt_manager_trigger(myrpt, "RPT_NUMLINKS", obuf);
+	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_LINKS", ast_str_buffer(obuf));
+	rpt_manager_trigger(myrpt, "RPT_LINKS", ast_str_buffer(obuf));
+	ast_str_set(&obuf, 0, "%d", n);
+	pbx_builtin_setvar_helper(myrpt->rxchannel, "RPT_NUMLINKS", ast_str_buffer(obuf));
+	rpt_manager_trigger(myrpt, "RPT_NUMLINKS", ast_str_buffer(obuf));
 	rpt_event_process(myrpt);
 
 	ast_free(buf);
@@ -617,12 +574,13 @@ void rpt_update_links(struct rpt *myrpt)
 int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 {
 	char *s, *s1, *tele, *cp;
-	char lstr[MAXLINKLIST], *strs[MAXLINKLIST];
 	char tmp[300], deststr[325] = "", modechange = 0;
 	char sx[320], *sy;
+	char **strs; /* List of pointers to links in link list string */
 	struct rpt_link *l;
+	struct ast_str *lstr;
 	int reconnects = 0;
-	int i, n;
+	int i, ns, n = 1;
 	int voterlink = 0;
 	struct ast_format_cap *cap;
 
@@ -634,8 +592,9 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	} else {
 		if (node[0] != '3') {
 			if (node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1)) {
-				if (strlen(node) >= myrpt->longestnode)
+				if (strlen(node) >= myrpt->longestnode) {
 					return -1;	/* No such node */
+				}
 				return 1;		/* No match yet */
 			}
 		} else {
@@ -646,7 +605,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		}
 	}
 
-	if (!strcmp(myrpt->name, node)) {	/* Do not allow connections to self */
+	if (!strcmp(myrpt->name, node)) { /* Do not allow connections to self */
 		return -2;
 	}
 
@@ -703,22 +662,41 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->retries = l->max_retries + 1;
 		l->disced = 2;
 		modechange = 1;
-	} else {
-		__mklinklist(myrpt, NULL, lstr, sizeof(lstr), 0);
+	} else { /* Check to see if this node is already linked */
+		lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
+		if (!lstr) {
+			rpt_mutex_unlock(&myrpt->lock);
+			return -1;
+		}
+		n = __mklinklist(myrpt, NULL, &lstr, 0) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
-		n = finddelim(lstr, strs, ARRAY_LEN(strs));
-		for (i = 0; i < n; i++) {
+		strs = ast_malloc(n * sizeof(char *));
+		if (!strs) {
+			ast_free(lstr);
+			return -1;
+		}
+		ns = finddelim(ast_str_buffer(lstr), strs, n);
+		for (i = 0; i < ns; i++) {
 			if ((*strs[i] < '0') || (*strs[i] > '9'))
 				strs[i]++;
 			if (!strcmp(strs[i], node)) {
-				return 2;		/* Already linked */
+				ast_free(lstr);
+				ast_free(strs);
+				return 2; /* Already linked */
 			}
 		}
+		ast_free(lstr);
+		ast_free(strs);
 	}
 	ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 	/* establish call */
 	l = ast_calloc(1, sizeof(struct rpt_link));
 	if (!l) {
+		return -1;
+	}
+	l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	if (!l->linklist) {
+		ast_free(l);
 		return -1;
 	}
 	l->mode = mode;
@@ -731,7 +709,6 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->connected = 1;
 	l->hasconnected = l->perma = perma;
 	l->newkeytimer = NEWKEYTIME;
-	l->iaxkey = 0;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 	l->voterlink = voterlink;
 	if (strncasecmp(s1, "echolink/", 9) == 0) {
@@ -749,7 +726,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	tele = strchr(deststr, '/');
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
-		ast_free(l);
+		rpt_link_free(l);
 		return -1;
 	}
 	*tele++ = 0;
@@ -757,7 +734,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		ast_free(l);
+		rpt_link_free(l);
 		return -1;
 	}
 
@@ -783,7 +760,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		if (myrpt->p.archivedir) {
 			donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		}
-		ast_free(l);
+		rpt_link_free(l);
 		ao2_ref(cap, -1);
 		return -1;
 	}
@@ -793,7 +770,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
-		ast_free(l);
+		rpt_link_free(l);
 		return -1;
 	}
 
@@ -803,7 +780,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		ast_free(l);
+		rpt_link_free(l);
 		return -1;
 	}
 	rpt_mutex_lock(&myrpt->lock);
@@ -820,7 +797,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 		l->max_retries = MAX_RETRIES_PERM;
 	if (l->isremote)
 		l->retries = l->max_retries + 1;
-	l->rxlingertimer = ((l->iaxkey) ? RX_LINGER_TIME_IAXKEY : RX_LINGER_TIME);
+	l->rxlingertimer = RX_LINGER_TIME;
 	rpt_link_add(myrpt, l);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);

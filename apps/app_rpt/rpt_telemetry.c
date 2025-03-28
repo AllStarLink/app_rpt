@@ -165,10 +165,10 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 			ast_free(meter_face);
 			return -1;
 		}
-		*start++ = 0;			/* Points to comma delimited scaling values */
+		*start++ = 0; /* Points to comma delimited scaling values */
 		*end = 0;
-		sounds = end + 2;		/* Start of sounds part */
-		if (sscanf(start, "%f,%f,%f", &scalepre, &scalediv, &scalepost) != 3) {
+		sounds = end + 2; /* Start of sounds part */
+		if (sscanf(start, N_FMT(f) "," N_FMT(f) "," N_FMT(f), &scalepre, &scalediv, &scalepost) != 3) {
 			ast_log(LOG_WARNING, "Scale must have 3 args in meter face %s\n", argv[2]);
 			ast_free(myargs);
 			ast_free(meter_face);
@@ -245,7 +245,7 @@ int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *ar
 	/* Select Range */
 	if (metertype == 2) {
 		for (i = 0; i < numranges; i++) {
-			if (2 != sscanf(range_strings[i], "%u-%u:", &rangemin, &rangemax)) {
+			if (2 != sscanf(range_strings[i], N_FMT(u) "-" N_FMT(u) ":", &rangemin, &rangemax)) {
 				ast_log(LOG_WARNING, "Range variable error on meter face %s\n", argv[2]);
 				ast_free(myargs);
 				ast_free(meter_face);
@@ -408,7 +408,7 @@ int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 		if (!tonesubset) {
 			break;
 		}
-		if (sscanf(tonesubset, "(%d,%d,%d,%d", &f1, &f2, &duration, &amplitude) != 4) {
+		if (sscanf(tonesubset, "(" N_FMT(d) "," N_FMT(d) "," N_FMT(d) "," N_FMT(d), &f1, &f2, &duration, &amplitude) != 4) {
 			break;
 		}
 		res = play_tone_pair(chan, f1, f2, duration, amplitude);
@@ -650,7 +650,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		if (n < 2) {
 			return;
 		}
-		if (sscanf(strs[1], "%u", &t1) != 1) {
+		if (sscanf(strs[1], N_FMT(u), &t1) != 1) {
 			return;
 		}
 		t = t1;
@@ -686,7 +686,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		if (n < 2) {
 			return;
 		}
-		if (sscanf(strs[1], "%d.%d", &vmajor, &vminor) != 2) {
+		if (sscanf(strs[1], N_FMT(d) "." N_FMT(d), &vmajor, &vminor) != 2) {
 			return;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
@@ -730,7 +730,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		}
 		c = *(strs[2] + strlen(strs[2]) - 1);
 		*(strs[2] + strlen(strs[2]) - 1) = 0;
-		if (sscanf(strs[2], "%2d%d.%d", &i, &j, &k) != 3) {
+		if (sscanf(strs[2], "%2d" N_FMT(d) "." N_FMT(d), &i, &j, &k) != 3) {
 			return;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
@@ -760,7 +760,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		}
 		c = *(strs[3] + strlen(strs[3]) - 1);
 		*(strs[3] + strlen(strs[3]) - 1) = 0;
-		if (sscanf(strs[3], "%3d%d.%d", &i, &j, &k) != 3) {
+		if (sscanf(strs[3], "%3d" N_FMT(d) "." N_FMT(d), &i, &j, &k) != 3) {
 			return;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
@@ -793,7 +793,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 		}
 		c = *(strs[4] + strlen(strs[4]) - 1);
 		*(strs[4] + strlen(strs[4]) - 1) = 0;
-		if (sscanf(strs[4], "%f", &f) != 1) {
+		if (sscanf(strs[4], N_FMT(f), &f) != 1) {
 			return;
 		}
 		if (myrpt->p.gpsfeet) {
@@ -806,7 +806,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 			}
 		}
 		snprintf(buf, sizeof(buf), "%0.1f", f);
-		if (sscanf(buf, "%d.%d", &i, &j) != 2) {
+		if (sscanf(buf, N_FMT(d) "." N_FMT(d), &i, &j) != 2) {
 			return;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
@@ -957,7 +957,7 @@ void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
  */
 void *rpt_tele_thread(void *this)
 {
-	int res = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x;
+	int res = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x, n = 1;
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
@@ -967,13 +967,15 @@ void *rpt_tele_thread(void *this)
 	char *p, *ct, *ct_copy, *ident, *nodename;
 	time_t t, t1, t_mono, was_mono;
 	struct ast_tm localtm;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char **strs;
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
 	unsigned long long u_mono;
-	char gps_data[100], lat[25], lon[25], elev[25], c;
+	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
+	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
+
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
 #endif
@@ -1230,11 +1232,7 @@ void *rpt_tele_thread(void *this)
 			}
 			ast_safe_sleep(mychannel, ctint);
 			rpt_mutex_lock(&myrpt->lock);
-			if (myrpt->unkeytocttimer < ctint) {
-				myrpt->unkeytocttimer = 0;
-			} else {
-				myrpt->unkeytocttimer -= ctint;
-			}
+			update_timer(&myrpt->unkeytocttimer, ctint, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 
@@ -1253,13 +1251,22 @@ void *rpt_tele_thread(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 
 treataslocal:
-
+		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+		if (!lbuf) {
+			goto abort;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+		n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
+		strs = ast_malloc(n * sizeof(char *));
+		if (!strs) {
+			ast_free(lbuf);
+			goto abort;
+		}
 		/* parse em */
-		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+		ns = finddelim(ast_str_buffer(lbuf), strs, n);
+		ast_free(lbuf);
 		haslink = 0;
 		for (i = 0; i < ns; i++) {
 			char *cpr = strs[i] + 1;
@@ -1268,7 +1275,7 @@ treataslocal:
 			if (ISRANGER(cpr))
 				haslink = 1;
 		}
-
+		ast_free(strs);
 		/* if has a RANGER node connected to it, use special telemetry for RANGER mode */
 		if (haslink) {
 			res = telem_lookup(myrpt, mychannel, myrpt->name, "ranger");
@@ -1464,11 +1471,7 @@ treataslocal:
 					}
 					ast_safe_sleep(mychannel, ctint);
 					rpt_mutex_lock(&myrpt->lock);
-					if (myrpt->unkeytocttimer < ctint) {
-						myrpt->unkeytocttimer = 0;
-					} else {
-						myrpt->unkeytocttimer -= ctint;
-					}
+					update_timer(&myrpt->unkeytocttimer, ctint, 0);
 					rpt_mutex_unlock(&myrpt->lock);
 				}
 			}
@@ -1528,11 +1531,7 @@ treataslocal:
 			}
 			ast_safe_sleep(mychannel, ctint);
 			rpt_mutex_lock(&myrpt->lock);
-			if (mytele->mylink.linkunkeytocttimer < ctint) {
-				mytele->mylink.linkunkeytocttimer = 0;
-			} else {
-				mytele->mylink.linkunkeytocttimer -= ctint;
-			}
+			update_timer(&mytele->mylink.linkunkeytocttimer, ctint, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		l = myrpt->links.next;
@@ -2148,12 +2147,22 @@ treataslocal:
 		imdone = 1;
 		break;
 	case FULLSTATUS:
+		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+		if (!lbuf) {
+			goto abort;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+		n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
+		strs = ast_malloc(n * sizeof(char *));
+		if (!strs) {
+			ast_free(lbuf);
+			goto abort;
+		}
 		/* parse em */
-		ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+		ns = finddelim(ast_str_buffer(lbuf), strs, n);
+		ast_free(lbuf);
 		/* sort em */
 		if (ns)
 			qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -2187,6 +2196,7 @@ treataslocal:
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
 		}
+		ast_free(strs);
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
@@ -2356,10 +2366,9 @@ treataslocal:
 		}
 
 		/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
-		if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
+		if (sscanf(gps_data, N_FMT(llu) " %*u " S_FMT(LAT_SZ) S_FMT(LON_SZ) S_FMT(ELEV_SZ), &u_mono, lat, lon, elev) != 4) {
 			break;
 		}
-		
 		was_mono = (time_t) u_mono;
 		t_mono = rpt_time_monotonic();
 		if ((was_mono + GPS_VALID_SECS) < t_mono) {
@@ -2373,7 +2382,7 @@ treataslocal:
 		}
 		c = lat[strlen(lat) - 1];
 		lat[strlen(lat) - 1] = 0;
-		if (sscanf(lat, "%2d%d.%d", &i, &j, &k) != 3) {
+		if (sscanf(lat, "%2d" N_FMT(d) "." N_FMT(d), &i, &j, &k) != 3) {
 			break;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
@@ -2400,7 +2409,7 @@ treataslocal:
 		}
 		c = lon[strlen(lon) - 1];
 		lon[strlen(lon) - 1] = 0;
-		if (sscanf(lon, "%3d%d.%d", &i, &j, &k) != 3) {
+		if (sscanf(lon, "%3d" N_FMT(d) "." N_FMT(d), &i, &j, &k) != 3) {
 			break;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
@@ -2433,7 +2442,7 @@ treataslocal:
 		}
 		c = elev[strlen(elev) - 1];
 		elev[strlen(elev) - 1] = 0;
-		if (sscanf(elev, "%f", &f) != 1) {
+		if (sscanf(elev, N_FMT(f), &f) != 1) {
 			break;
 		}
 		if (myrpt->p.gpsfeet) {
@@ -2446,7 +2455,7 @@ treataslocal:
 			}
 		}
 		snprintf(mystr, sizeof(mystr), "%0.1f", f);
-		if (sscanf(mystr, "%d.%d", &i, &j) != 2) {
+		if (sscanf(mystr, N_FMT(d) "." N_FMT(d), &i, &j) != 2) {
 			break;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
@@ -2609,14 +2618,15 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 {
 	struct rpt_tele *tele;
 	struct rpt_link *mylink = NULL;
-	int res, i, ns;
+	int res, i, ns, n = 1;
 	char *v1, *v2, mystr[1024], *p, haslink;
-	char lbuf[MAXLINKLIST], *strs[MAXLINKLIST];
+	char **strs;
 	struct rpt_link *l;
 	time_t t, t_mono, was_mono;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
-	
+	struct ast_str *lbuf;
+
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 
 	if ((mode == ID) && is_paging(myrpt)) {
@@ -2784,7 +2794,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			}
 
 			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
-			if (sscanf(gps_data, "%llu %*u %s %s %s", &u_mono, lat, lon, elev) != 4) {
+			if (sscanf(gps_data, N_FMT(llu) " %*u " S_FMT(LAT_SZ) S_FMT(LON_SZ) S_FMT(ELEV_SZ), &u_mono, lat, lon, elev) != 4) {
 				break;
 			}
 
@@ -2862,13 +2872,23 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			send_tele_link(myrpt, mystr);
 			return;
 		case FULLSTATUS:
+			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf) {
+				return;
+			}
+
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* get all the nodes */
-			__mklinklist(myrpt, NULL, lbuf, sizeof(lbuf), 0);
+			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 			rpt_mutex_unlock(&myrpt->lock);
+			strs = ast_malloc(n * sizeof(char *));
+			if (!strs) {
+				ast_free(lbuf);
+				return;
+			}
 			/* parse em */
-			ns = finddelim(lbuf, strs, ARRAY_LEN(strs));
+			ns = finddelim(ast_str_buffer(lbuf), strs, n);
 			/* sort em */
 			if (ns)
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
@@ -2891,6 +2911,8 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, strs[i]);
 			}
 			send_tele_link(myrpt, mystr);
+			ast_free(lbuf);
+			ast_free(strs);
 			return;
 		}
 	}
