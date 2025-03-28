@@ -4163,7 +4163,9 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx, char *restrict myfirst)
 {
 	struct rpt_link *l, *m;
-	struct ast_frame wf = { .frametype = AST_FRAME_CNG };
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_CNG
+	};
 
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);

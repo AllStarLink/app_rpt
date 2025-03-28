@@ -400,7 +400,7 @@ struct rpt_link {
 	char lastrx;
 	char lastrealrx;
 	char lastrx1;
-	char last_frame_sent; /* We have written a single frame */
+	unsigned int last_frame_sent : 1; /* We have written a single frame */
 	char wouldtx;
 	char connected;
 	char hasconnected;
