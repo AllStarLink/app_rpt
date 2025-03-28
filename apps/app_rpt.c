@@ -4163,7 +4163,7 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx, char *restrict myfirst)
 {
 	struct rpt_link *l, *m;
-	struct ast_frame wf;
+	struct ast_frame wf = { .frametype = AST_FRAME_CNG };
 
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
@@ -4216,8 +4216,6 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
 					if (l->lastframe) {
-						memset(&wf, 0, sizeof(wf));
-						wf.frametype = AST_FRAME_CNG;
 						ast_write(l->chan, &wf);
 						l->lastframe = 0;
 					}
