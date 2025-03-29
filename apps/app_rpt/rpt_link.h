@@ -42,8 +42,6 @@ void send_link_dtmf(struct rpt *myrpt, char c);
 
 void send_link_keyquery(struct rpt *myrpt);
 
-void send_tele_link(struct rpt *myrpt, char *cmd);
-
 /*!
  * \brief Add an rpt_link to a rpt
  * \param myrpt

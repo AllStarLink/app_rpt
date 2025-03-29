@@ -64,7 +64,13 @@ void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *my
 	myrpt->telemmode = TELEM_HANG_TIME;
 }
 
-int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *args)
+/*
+ * Parse a METER request for telemetry thread.
+ * This is passed in a comma separated list of items from the function table entry
+ * There should be 3 or 4 fields in the function table entry: device, channel,
+ * meter face, and  optionally: filter
+ */
+static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *args)
 {
 	int i, res, files, filter, val;
 	int pin = 0;
@@ -386,7 +392,28 @@ void cancel_pfxtone(struct rpt *myrpt)
 	}
 }
 
-int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
+static void send_tele_link(struct rpt *myrpt, char *cmd)
+{
+	char str[1028];
+	struct ast_frame wf;
+	struct rpt_link *l;
+
+	snprintf(str, sizeof(str) - 1, "T %s %s", myrpt->name, cmd);
+	init_text_frame(&wf, "send_tele_link");
+	wf.datalen = strlen(str) + 1;
+	wf.data.ptr = str;
+	l = myrpt->links.next;
+	/* give it to everyone */
+	while (l != &myrpt->links) {
+		if (l->chan && (l->mode == 1))
+			rpt_qwrite(l, &wf);
+		l = l->next;
+	}
+	rpt_telemetry(myrpt, VARCMD, cmd);
+}
+
+/*! Send telemetry tones */
+static int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 {
 	char *p, *stringp;
 	char *tonesubset;
@@ -434,7 +461,7 @@ int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 	return res;
 }
 
-int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
+static int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
 {
 	int res;
 	char c;
@@ -501,7 +528,10 @@ static struct telem_defaults tele_defs[] = {
 	{ "pfxtone", "|t(350,440,30000,3072)" }
 };
 
-int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node, char *name)
+/*! \brief Looks up a telemetry name in the config file, and does a telemetry response as configured.
+ * 4 types of telemetry are handled: Morse ID, Morse Message, Tone Sequence, and a File containing a recording.
+ */
+static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node, char *name)
 {
 
 	int res;
@@ -533,7 +563,11 @@ int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node, char *
 	return res;
 }
 
-void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
+/*! \brief Processes various telemetry commands that are in the myrpt structure
+ * Used extensively when links are built or torn down and other events are processed
+ * by the rpt_master threads.
+ */
+static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
 	char *strs[100], *p, buf[100], c;
 	int i, j, k, n, res, vmajor, vminor;
