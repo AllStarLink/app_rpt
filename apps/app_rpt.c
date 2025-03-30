@@ -2299,6 +2299,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->linkmode = 0;
 	l->lastrx1 = 0;
 	l->lastrealrx = 0;
+	l->last_frame_sent = 0;
 	l->rxlingertimer = RX_LINGER_TIME;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
@@ -4162,7 +4163,9 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx_p, char *restrict myfirst)
 {
 	struct rpt_link *l, *m;
-
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_CNG,
+	};
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
 	l = myrpt->links.next;
@@ -4213,6 +4216,10 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
+					if (l->last_frame_sent) {
+						ast_write(l->chan, &wf);
+						l->last_frame_sent = 0;
+					}
 				}
 				if (myrpt->p.archivedir) {
 					donodelog_fmt(myrpt, *totx_p ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
@@ -4420,6 +4427,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					 * 
 					 */
 					ast_write(l->chan, f);
+					l->last_frame_sent = 1;
 				}
 			}
 			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
@@ -6553,6 +6561,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_copy_string(l->name, b1, MAXNODESTR);
 		l->isremote = 0;
 		l->chan = chan;
+		l->last_frame_sent = 0;
 		l->connected = 1;
 		l->thisconnected = 1;
 		l->hasconnected = 1;

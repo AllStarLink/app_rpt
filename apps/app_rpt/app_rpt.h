@@ -389,27 +389,28 @@ struct rpt;
 struct rpt_link {
 	struct rpt_link *next;
 	struct rpt_link *prev;
-	char	mode;			/* 1 if in tx mode */
-	char	isremote;
-	char	phonemode;
-	char	phonevox;		/* vox the phone */
-	char	phonemonitor;		/* no tx or funs for the phone */
-	char	name[MAXNODESTR];	/* identifier (routing) string */
-	char	lasttx;
-	char	lasttx1;
-	char	lastrx;
-	char	lastrealrx;
-	char	lastrx1;
-	char	wouldtx;
-	char	connected;
-	char	hasconnected;
-	char	perma;
-	char	thisconnected;
-	char	outbound;
-	char	disced;
-	char	killme;
-	long	elaptime;
-	int	disctime;
+	char mode; /* 1 if in tx mode */
+	char isremote;
+	char phonemode;
+	char phonevox;		   /* vox the phone */
+	char phonemonitor;	   /* no tx or funs for the phone */
+	char name[MAXNODESTR]; /* identifier (routing) string */
+	char lasttx;
+	char lasttx1;
+	char lastrx;
+	char lastrealrx;
+	char lastrx1;
+	unsigned int last_frame_sent:1; /* We have written a single frame */
+	char wouldtx;
+	char connected;
+	char hasconnected;
+	char perma;
+	char thisconnected;
+	char outbound;
+	char disced;
+	char killme;
+	long elaptime;
+	int disctime;
 	int	retrytimer;
 	int	retxtimer;
 	int	rerxtimer;
