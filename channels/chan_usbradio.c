@@ -1522,6 +1522,7 @@ static int used_blocks(struct chan_usbradio_pvt *o)
 static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 {
 	int res;
+	short outbuf[FRAME_SIZE * 2 * 2 * 6];
 
 	/* If the sound device is not open, setformat will open the device */
 	if (o->sounddev < 0) {
@@ -1552,7 +1553,11 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 		}
 		return 0;
 	}
-
+	if (res == 0) { /* We are not keeping the buffer full, add 1 frame */
+		memset(outbuf, 0, sizeof(outbuf));
+		write(o->sounddev, ((void *) outbuf), FRAME_SIZE * 2 * 2 * 6);
+		ast_debug(7, "A null frame has been added");
+	}
 	res = write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
 	if (res < 0) {
 		ast_log(LOG_ERROR, "Channel %s: Sound card write error %s\n", o->name, strerror(errno));
