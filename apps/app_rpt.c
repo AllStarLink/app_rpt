@@ -3363,7 +3363,7 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 	/* IF a new keyup occurs, we set keypost and trigger do_key_post()
 	 * otherwise, these messages are handled by do_link_post()
 	 */
-	if (myrpt->keypost == RPT_KEYPOST) {
+	if (myrpt->keypost == RPT_KEYPOST_ACTIVE) {
 		myrpt->keypost = RPT_KEYPOST_NONE;
 		do_key_post(myrpt);
 	}
@@ -3578,7 +3578,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					myrpt->linkactivitytimer = 0;
 					myrpt->keyed = 1;
 					time(&myrpt->lastkeyedtime);
-					myrpt->keypost = RPT_KEYPOST;
+					myrpt->keypost = RPT_KEYPOST_ACTIVE;
 				}
 				myrpt->lastrxburst = i;
 			}
@@ -3594,7 +3594,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->linkactivitytimer = 0;
 				myrpt->keyed = 1;
 				time(&myrpt->lastkeyedtime);
-				myrpt->keypost = RPT_KEYPOST;
+				myrpt->keypost = RPT_KEYPOST_ACTIVE;
 			}
 		}
 #ifdef	_MDC_DECODE_H_
@@ -3766,7 +3766,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					myrpt->linkactivitytimer = 0;
 					myrpt->keyed = 1;
 					time(&myrpt->lastkeyedtime);
-					myrpt->keypost = RPT_KEYPOST;
+					myrpt->keypost = RPT_KEYPOST_ACTIVE;
 				}
 			}
 			if (myrpt->p.archivedir) {
@@ -3855,7 +3855,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			}
 			myrpt->localoverride = 0;
 			time(&myrpt->lastkeyedtime);
-			myrpt->keypost = RPT_KEYPOST;
+			myrpt->keypost = RPT_KEYPOST_ACTIVE;
 			myrpt->lastdtmfuser[0] = 0;
 			strcpy(myrpt->lastdtmfuser, myrpt->curdtmfuser);
 			myrpt->curdtmfuser[0] = 0;

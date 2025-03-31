@@ -82,7 +82,6 @@ int macro_append(struct rpt *myrpt, const char *cmd);
  * value.  This behavior allows for a timer to reach an value then be set to 0
  * to indicate some code has been executed (a oneshot).
  */
-
 void update_timer(int *timer_ptr, int elap, int end_val);
 
 /*! \brief Initialize a text frame */

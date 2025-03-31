@@ -517,8 +517,8 @@ void __kickshort(struct rpt *myrpt)
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0')
 			continue;
-		if (myrpt->linkposttimer > LINKPOSTSHORTTIME) {
-			myrpt->linkposttimer = LINKPOSTSHORTTIME;
+		if (l->linklisttimer > LINKLISTSHORTTIME) {
+			l->linklisttimer = LINKLISTSHORTTIME;
 		}
 	}
 	if (myrpt->linkposttimer > LINKPOSTSHORTTIME) {
