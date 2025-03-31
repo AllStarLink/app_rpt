@@ -497,9 +497,13 @@ void __kickshort(struct rpt *myrpt)
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0')
 			continue;
-		l->linklisttimer = LINKLISTSHORTTIME;
+		if (l->linklisttimer > LINKLISTSHORTTIME) {
+			l->linklisttimer = LINKLISTSHORTTIME;
+		}
 	}
-	myrpt->linkposttimer = LINKPOSTSHORTTIME;
+	if (myrpt->linkposttimer > LINKPOSTSHORTTIME) {
+		myrpt->linkposttimer = LINKPOSTSHORTTIME;
+	}
 	myrpt->lastgpstime = 0;
 }
 
