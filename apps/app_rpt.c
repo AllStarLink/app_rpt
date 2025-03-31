@@ -1426,7 +1426,7 @@ void *rpt_call(void *this)
 	rpt_mutex_unlock(&myrpt->lock);
 
 	/* first put the channel on the conference in announce mode */
-	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
+	if (myrpt->p.duplex >= 2 && myrpt->p.duplex <= 4) {
 		rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
 	} else {
 		rpt_conf_add_speaker(myrpt->pchannel, myrpt);
@@ -2712,7 +2712,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
+	if (myrpt->p.duplex >= 2 && myrpt->p.duplex <= 4) {
 		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
 	} else {
 		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER);
@@ -4023,6 +4023,9 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 		} else {
 			while ((f1 = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list)))
 				ast_frfree(f1);
+		}
+		if (myrpt->p.duplex == 3 && myrpt->keyed) {
+			RPT_MUTE_FRAME(f);
 		}
 		ast_write(myrpt->txchannel, f);
 	}
