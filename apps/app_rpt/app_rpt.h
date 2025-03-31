@@ -187,8 +187,6 @@ typedef struct {
 
 #define MAXPATCHCONTEXT 100
 
-#define ACTIONSIZE 32
-
 #define TELEPARAMSIZE 400
 
 #define REM_SCANTIME 100
@@ -484,8 +482,9 @@ struct rpt_tele {
 };
 
 struct function_table_tag {
-	char action[ACTIONSIZE];
+	char *action;
 	int (*function)(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+	int minargs;
 };
 
 /*
@@ -936,7 +935,8 @@ int rpt_set_debug_level(int newlevel);
 int rpt_num_rpts(void);
 int rpt_nullfd(void);
 time_t rpt_starttime(void);
-int function_table_index(const char *s);
+int rpt_function_lookup(const char *f);
+int rpt_function_minargs(int index);
 
 void donodelog(struct rpt *myrpt, char *str);
 #define donodelog_fmt(myrpt, fmt, ...) __donodelog_fmt(myrpt, __FILE__, __LINE__, __FUNCTION__, fmt, __VA_ARGS__)

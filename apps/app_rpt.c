@@ -658,33 +658,36 @@ static int tone_detect(tone_detect_state_t * s, int16_t * amp, int samples)
 #endif
 
 /*! \brief Function table */
-struct function_table_tag function_table[] = {
-	{ "cop", function_cop },
-	{ "autopatchup", function_autopatchup },
-	{ "autopatchdn", function_autopatchdn },
-	{ "ilink", function_ilink },
-	{ "status", function_status },
-	{ "remote", function_remote },
-	{ "macro", function_macro },
-	{ "playback", function_playback },
-	{ "localplay", function_localplay },
-	{ "meter", function_meter },
-	{ "userout", function_userout },
-	{ "cmd", function_cmd }
+const struct function_table_tag function_table[] = {
+	{ "cop", function_cop, 1 },
+	{ "autopatchup", function_autopatchup, 0 },
+	{ "autopatchdn", function_autopatchdn, 0 },
+	{ "ilink", function_ilink, 1 },
+	{ "status", function_status, 1 },
+	{ "remote", function_remote, 1 },
+	{ "macro", function_macro, 2 },
+	{ "playback", function_playback, 1 },
+	{ "localplay", function_localplay, 1 },
+	{ "meter", function_meter, 1 },
+	{ "userout", function_userout, 1 },
+	{ "cmd", function_cmd, 0 },
 };
 
-int function_table_index(const char *s)
+int rpt_function_lookup(const char *f)
 {
-	int i, l, num_actions = sizeof(function_table) / sizeof(struct function_table_tag);
+	int i;
 
-	l = strlen(s);
-
-	for (i = 0; i < num_actions; i++) {
-		if (!strncasecmp(s, function_table[i].action, l)) {
+	for (i = 0; i < ARRAY_LEN(function_table); i++) {
+		if (!strcasecmp(f, function_table[i].action)) {
 			return i;
 		}
 	}
 	return -1;
+}
+
+int rpt_function_minargs(int index)
+{
+	return function_table[index].minargs;
 }
 
 /*! \brief format date string for archive log/file */
@@ -744,7 +747,7 @@ void rpt_event_process(struct rpt *myrpt)
 {
 	char *myval, *argv[5], *cmpvar, *var, *var1, *cmd, c;
 	char buf[1000], valbuf[500], action;
-	int i, l, argc, varp, var1p, thisAction, maxActions;
+	int i, argc, varp, var1p, thisAction;
 	struct ast_variable *v;
 	struct ast_var_t *newvariable;
 
@@ -860,15 +863,7 @@ void rpt_event_process(struct rpt *myrpt)
 				continue;
 			}
 			/* Look up the action */
-			l = strlen(argv[0]);
-			thisAction = -1;
-			maxActions = sizeof(function_table) / sizeof(struct function_table_tag);
-			for (i = 0; i < maxActions; i++) {
-				if (!strncasecmp(argv[0], function_table[i].action, l)) {
-					thisAction = i;
-					break;
-				}
-			}
+			thisAction = rpt_function_lookup(argv[0]);
 			if (thisAction < 0) {
 				ast_log(LOG_ERROR, "Unknown action name %s.\n", argv[0]);
 				continue;
@@ -1513,18 +1508,9 @@ static int collect_function_digits(struct rpt *myrpt, char *digits, int command_
 	param = stringp;
 	ast_debug(1, "@@@@ action: %s, param = %s\n", action, (param) ? param : "(null)");
 	/* Look up the action */
-	for (i = 0; i < (sizeof(function_table) / sizeof(struct function_table_tag)); i++) {
-		if (!strncasecmp(action, function_table[i].action, strlen(action)))
-			break;
-	}
-	ast_debug(1, "@@@@ table index i = %d\n", i);
-	if (i == (sizeof(function_table) / sizeof(struct function_table_tag))) {
+	i = rpt_function_lookup(action);
+	if (i < 0) {
 		/* Error, action not in table */
-		return DC_ERROR;
-	}
-	if (function_table[i].function == NULL) {
-		/* Error, function undefined */
-		ast_debug(1, "@@@@ NULL for action: %s\n", action);
 		return DC_ERROR;
 	}
 	functiondigits = digits + strlen(vp->name);
