@@ -977,14 +977,11 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 /*!
  * \brief Execute dialplan on telemetry conference
  */
-static int do_telemetry_dialplan(struct rpt *myrpt, struct rpt_tele *mytele)
+static int do_telemetry_dialplan(ast_channel *dpchannel, char *extension, char *context)
 {
-	struct ast_channel *dpchannel;
-
-	dpchannel = mytele->chan;
 	rpt_disable_cdr(dpchannel);
-	ast_channel_context_set(dpchannel, myrpt->p.telemetry);
-	ast_channel_exten_set(dpchannel, mytele->param + 1);
+	ast_channel_context_set(dpchannel, context);
+	ast_channel_exten_set(dpchannel, extension);
 	ast_pbx_start(dpchannel);
 	ast_debug(5, "Playback dialplan extension %s\n", mytele->param);
 	while (!ast_check_hangup(dpchannel)) {
@@ -994,19 +991,19 @@ static int do_telemetry_dialplan(struct rpt *myrpt, struct rpt_tele *mytele)
 }
 
 /*!
- * \brief Execute dialplan on telemetry conference
+ * \brief Execute dialplan on conference conference
  */
-static int do_telemetry_dialplan(struct rpt *myrpt, struct rpt_tele *mytele)
+static int do_telemetry_dialplan(struct rpt *myrpt, struct rpt_tele *mytele, char *context)
 {
 	struct ast_channel *dpchannel;
 
 	dpchannel = mytele->chan;
 	rpt_disable_cdr(dpchannel);
-	ast_channel_context_set(dpchannel, myrpt->p.telemetry);
+	ast_channel_context_set(dpchannel, context);
 	ast_channel_exten_set(dpchannel, mytele->param + 1);
 	ast_debug(5, "Playback dialplan extension %s\n", mytele->param);
 	ast_pbx_run(dpchannel);
-	ast_debug(5, "PBX has finished on telemetry\n");
+	ast_debug(5, "PBX has finished on %s\n", context);
 	return 0;
 }
 
@@ -1721,7 +1718,7 @@ treataslocal:
 		/* If parameter starts with a *, use dialplan to translate */
 		/* allocate a pseudo-channel thru asterisk */
 
-		do_telemetry_dialplan(myrpt, mytele);
+		do_telemetry_dialplan(mychannel, mytele->param + 1, myrpt->p.telemetry);
 		pbx = 1;
 		break;
 
