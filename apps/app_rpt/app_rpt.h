@@ -367,6 +367,7 @@ enum rpt_daq_mode {
 	DAQ_PS_BUSY,
 	DAQ_PS_IN_MONITOR
 };
+
 enum rpt_daq_cmd {
 	DAQ_CMD_IN,
 	DAQ_CMD_ADC,
@@ -374,6 +375,7 @@ enum rpt_daq_cmd {
 	DAQ_CMD_PINSET,
 	DAQ_CMD_MONITOR
 };
+
 enum rpt_daq_filter {
 	DAQ_SUB_CUR = 0,
 	DAQ_SUB_MIN,
@@ -382,12 +384,14 @@ enum rpt_daq_filter {
 	DAQ_SUB_STMAX,
 	DAQ_SUB_STAVG
 };
+
 enum rpt_daq_pintype {
 	DAQ_PT_INADC = 1,
 	DAQ_PT_INP,
 	DAQ_PT_IN,
 	DAQ_PT_OUT
 };
+
 enum rpt_daq_type {
 	DAQ_TYPE_UCHAMELEON
 };
