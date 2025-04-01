@@ -292,7 +292,7 @@ int uchameleon_close(struct daq_entry_tag *t)
 	return res;
 }
 
-int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2)
+int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2)
 {
 	int i, j, x;
 	struct daq_pin_entry_tag *p, *listl, *listp;
@@ -345,7 +345,7 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(s
 
 			if (cmd == DAQ_CMD_ADC) {
 				if (arg2) {
-					switch (*((int *) arg2)) {
+					switch (*((enum rpt_daq_filter *) arg2)) {
 					case DAQ_SUB_CUR:
 						if (arg1)
 							*arg1 = listp->value;
