@@ -977,7 +977,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 /*!
  * \brief Execute dialplan on telemetry conference
  */
-static int do_telemetry_dialplan(ast_channel *dpchannel, char *extension, char *context)
+static int rpt_do_dialplan(ast_channel *dpchannel, char *extension, char *context)
 {
 	rpt_disable_cdr(dpchannel);
 	ast_channel_context_set(dpchannel, context);
@@ -993,7 +993,7 @@ static int do_telemetry_dialplan(ast_channel *dpchannel, char *extension, char *
 /*!
  * \brief Execute dialplan on conference conference
  */
-static int do_telemetry_dialplan(struct rpt *myrpt, struct rpt_tele *mytele, char *context)
+static int rpt_do_dialplan(struct rpt *myrpt, struct rpt_tele *mytele, char *context)
 {
 	struct ast_channel *dpchannel;
 
@@ -1718,7 +1718,7 @@ treataslocal:
 		/* If parameter starts with a *, use dialplan to translate */
 		/* allocate a pseudo-channel thru asterisk */
 
-		do_telemetry_dialplan(mychannel, mytele->param + 1, myrpt->p.telemetry);
+		rpt_do_dialplan(mychannel, mytele->param + 1, myrpt->p.telemetry);
 		pbx = 1;
 		break;
 
