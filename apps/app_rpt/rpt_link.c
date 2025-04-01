@@ -47,10 +47,11 @@ void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 	case LINKMODE_DEMAND:
 		mylink->linkmode = 1;
 		break;
+	default:
 	}
 }
 
-void set_linkmode(struct rpt_link *mylink, int linkmode)
+void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode)
 {
 
 	if (!mylink)
@@ -68,6 +69,7 @@ void set_linkmode(struct rpt_link *mylink, int linkmode)
 	case LINKMODE_DEMAND:
 		mylink->linkmode = 1;
 		break;
+	default:
 	}
 }
 
