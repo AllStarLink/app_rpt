@@ -25,7 +25,7 @@ static struct daq_tag daq;
  * **************************
  */
 
-struct daq_entry_tag *daq_open(int type, char *name, char *dev)
+static struct daq_entry_tag *daq_open(enum rpt_daq_type type, char *name, char *dev)
 {
 	int fd;
 	struct daq_entry_tag *t;
@@ -61,7 +61,7 @@ struct daq_entry_tag *daq_open(int type, char *name, char *dev)
 	return t;
 }
 
-int daq_close(struct daq_entry_tag *t)
+static int daq_close(struct daq_entry_tag *t)
 {
 	int res = -1;
 
@@ -117,8 +117,7 @@ int uchameleon_reset_minmax(struct daq_entry_tag *t, int pin, int minmax)
 	return 0;
 }
 
-int daq_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1,
-					   void *arg2)
+int daq_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2)
 {
 	int res = -1;
 
@@ -132,7 +131,7 @@ int daq_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct d
 	return res;
 }
 
-int daq_do(struct daq_entry_tag *t, int pin, int cmd, int arg1)
+int daq_do(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, int arg1)
 {
 	int a1 = arg1;
 

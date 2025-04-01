@@ -235,44 +235,173 @@ enum keypost {
 
 enum {REM_OFF,REM_MONITOR,REM_TX};
 
-enum {LINKMODE_OFF,LINKMODE_ON,LINKMODE_FOLLOW,LINKMODE_DEMAND,
-	LINKMODE_GUI,LINKMODE_PHONE,LINKMODE_ECHOLINK,LINKMODE_TLB};
+enum rpt_linkmode {
+	LINKMODE_OFF,
+	LINKMODE_ON,
+	LINKMODE_FOLLOW,
+	LINKMODE_DEMAND,
+	LINKMODE_GUI,
+	LINKMODE_PHONE,
+	LINKMODE_ECHOLINK,
+	LINKMODE_TLB
+};
 
-enum{ID,PROC,TERM,COMPLETE,UNKEY,REMDISC,REMALREADY,REMNOTFOUND,REMGO,
-	CONNECTED,CONNFAIL,STATUS,TIMEOUT,ID1, STATS_TIME, PLAYBACK,
-	LOCALPLAY, STATS_VERSION, IDTALKOVER, ARB_ALPHA, TEST_TONE, REV_PATCH,
-	TAILMSG, MACRO_NOTFOUND, MACRO_BUSY, LASTNODEKEY, FULLSTATUS,
-	MEMNOTFOUND, INVFREQ, REMMODE, REMLOGIN, REMXXX, REMSHORTSTATUS,
-	REMLONGSTATUS, LOGINREQ, SCAN, SCANSTAT, TUNE, SETREMOTE, TOPKEY,
-	TIMEOUT_WARNING, ACT_TIMEOUT_WARNING, LINKUNKEY, UNAUTHTX, PARROT,
-	STATS_TIME_LOCAL, VARCMD, LOCUNKEY, METER, USEROUT, PAGE,
-	STATS_GPS,STATS_GPS_LEGACY, MDC1200, LASTUSER, REMCOMPLETE, PFXTONE};
+enum rpt_tele_mode {
+	ID,
+	PROC,
+	TERM,
+	COMPLETE,
+	UNKEY,
+	REMDISC,
+	REMALREADY,
+	REMNOTFOUND,
+	REMGO,
+	CONNECTED,
+	CONNFAIL,
+	STATUS,
+	TIMEOUT,
+	ID1,
+	STATS_TIME,
+	PLAYBACK,
+	LOCALPLAY,
+	STATS_VERSION,
+	IDTALKOVER,
+	ARB_ALPHA,
+	TEST_TONE,
+	REV_PATCH,
+	TAILMSG,
+	MACRO_NOTFOUND,
+	MACRO_BUSY,
+	LASTNODEKEY,
+	FULLSTATUS,
+	MEMNOTFOUND,
+	INVFREQ,
+	REMMODE,
+	REMLOGIN,
+	REMXXX,
+	REMSHORTSTATUS,
+	REMLONGSTATUS,
+	LOGINREQ,
+	SCAN,
+	SCANSTAT,
+	TUNE,
+	SETREMOTE,
+	TOPKEY,
+	TIMEOUT_WARNING,
+	ACT_TIMEOUT_WARNING,
+	LINKUNKEY,
+	UNAUTHTX,
+	PARROT,
+	STATS_TIME_LOCAL,
+	VARCMD,
+	LOCUNKEY,
+	METER,
+	USEROUT,
+	PAGE,
+	STATS_GPS,
+	STATS_GPS_LEGACY,
+	MDC1200,
+	LASTUSER,
+	REMCOMPLETE,
+	PFXTONE
+};
 
+enum rpt_offset {
+	REM_SIMPLEX,
+	REM_MINUS,
+	REM_PLUS
+};
 
-enum {REM_SIMPLEX,REM_MINUS,REM_PLUS};
+enum rpt_power {
+	REM_LOWPWR,
+	REM_MEDPWR,
+	REM_HIPWR
+};
 
-enum {REM_LOWPWR,REM_MEDPWR,REM_HIPWR};
+enum rpt_function_response {
+	DC_INDETERMINATE,
+	DC_REQ_FLUSH,
+	DC_ERROR,
+	DC_COMPLETE,
+	DC_COMPLETEQUIET,
+	DC_DOKEY
+};
 
-enum {DC_INDETERMINATE, DC_REQ_FLUSH, DC_ERROR, DC_COMPLETE, DC_COMPLETEQUIET, DC_DOKEY};
+enum rpt_command_source {
+	SOURCE_RPT,
+	SOURCE_LNK,
+	SOURCE_RMT,
+	SOURCE_PHONE,
+	SOURCE_DPHONE,
+	SOURCE_ALT
+};
 
-enum {SOURCE_RPT, SOURCE_LNK, SOURCE_RMT, SOURCE_PHONE, SOURCE_DPHONE, SOURCE_ALT};
+enum rpt_delay {
+	DLY_TELEM,
+	DLY_ID,
+	DLY_UNKEY,
+	DLY_CALLTERM,
+	DLY_COMP,
+	DLY_LINKUNKEY,
+	DLY_PARROT,
+	DLY_MDC1200
+};
 
-enum {DLY_TELEM, DLY_ID, DLY_UNKEY, DLY_CALLTERM, DLY_COMP, DLY_LINKUNKEY, DLY_PARROT, DLY_MDC1200};
+enum rpt_mode {
+	REM_MODE_FM,
+	REM_MODE_USB,
+	REM_MODE_LSB,
+	REM_MODE_AM
+};
 
-enum {REM_MODE_FM,REM_MODE_USB,REM_MODE_LSB,REM_MODE_AM};
-
-enum {HF_SCAN_OFF,HF_SCAN_DOWN_SLOW,HF_SCAN_DOWN_QUICK,
-      HF_SCAN_DOWN_FAST,HF_SCAN_UP_SLOW,HF_SCAN_UP_QUICK,HF_SCAN_UP_FAST};
+enum rpt_hf_mode {
+	HF_SCAN_OFF,
+	HF_SCAN_DOWN_SLOW,
+	HF_SCAN_DOWN_QUICK,
+	HF_SCAN_DOWN_FAST,
+	HF_SCAN_UP_SLOW,
+	HF_SCAN_UP_QUICK,
+	HF_SCAN_UP_FAST
+};
 
 /*
  * DAQ Subsystem
  */
 
-enum{DAQ_PS_IDLE = 0, DAQ_PS_START, DAQ_PS_BUSY, DAQ_PS_IN_MONITOR};
-enum{DAQ_CMD_IN, DAQ_CMD_ADC, DAQ_CMD_OUT, DAQ_CMD_PINSET, DAQ_CMD_MONITOR};
-enum{DAQ_SUB_CUR = 0, DAQ_SUB_MIN, DAQ_SUB_MAX, DAQ_SUB_STMIN, DAQ_SUB_STMAX, DAQ_SUB_STAVG};
-enum{DAQ_PT_INADC = 1, DAQ_PT_INP, DAQ_PT_IN, DAQ_PT_OUT};
-enum{DAQ_TYPE_UCHAMELEON};
+enum rpt_daq_mode {
+	DAQ_PS_IDLE = 0,
+	DAQ_PS_START,
+	DAQ_PS_BUSY,
+	DAQ_PS_IN_MONITOR
+};
+
+enum rpt_daq_cmd {
+	DAQ_CMD_IN,
+	DAQ_CMD_ADC,
+	DAQ_CMD_OUT,
+	DAQ_CMD_PINSET,
+	DAQ_CMD_MONITOR
+};
+
+enum rpt_daq_filter {
+	DAQ_SUB_CUR = 0,
+	DAQ_SUB_MIN,
+	DAQ_SUB_MAX,
+	DAQ_SUB_STMIN,
+	DAQ_SUB_STMAX,
+	DAQ_SUB_STAVG
+};
+
+enum rpt_daq_pintype {
+	DAQ_PT_INADC = 1,
+	DAQ_PT_INP,
+	DAQ_PT_IN,
+	DAQ_PT_OUT
+};
+
+enum rpt_daq_type {
+	DAQ_TYPE_UCHAMELEON
+};
 
 /* general setting - rpt_node_lookup */
 enum  rpt_dns_method {
@@ -476,7 +605,7 @@ struct rpt_tele {
 	struct rpt_tele *prev;
 	struct rpt *rpt;
 	struct ast_channel *chan;
-	int	mode;
+	enum rpt_tele_mode mode;
 	struct rpt_link mylink;
 	char param[TELEPARAMSIZE];
 	union {
@@ -491,7 +620,8 @@ struct rpt_tele {
 
 struct function_table_tag {
 	char *action;
-	int (*function)(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+	enum rpt_function_response (*function)(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+		struct rpt_link *mylink);
 	int minargs;
 };
 
@@ -506,9 +636,9 @@ struct daq_tx_entry_tag {
 
 struct daq_pin_entry_tag {
 	int num;
-	int pintype;
-	int command;
-	int state;
+	enum rpt_daq_pintype pintype;
+	enum rpt_daq_cmd command;
+	enum rpt_daq_mode state;
 	int value;
 	int valuemax;
 	int valuemin;
@@ -524,7 +654,7 @@ struct daq_pin_entry_tag {
 struct daq_entry_tag {
 	char name[MAX_DAQ_NAME];
 	char dev[MAX_DAQ_DEV];
-	int type;
+	enum rpt_daq_type type;
 	int fd;
 	int active;
 	time_t adcacqtime;
@@ -577,10 +707,8 @@ struct rpt_cmd_struct {
 	int functionNumber;
 	char param[MAXMACRO];
 	char digits[MAXDTMF];
-	int command_source;
+	enum rpt_command_source command_source;
 };
-
-enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 
 struct rpt_conf {
 	/* DAHDI conference numbers */
@@ -696,7 +824,7 @@ struct rpt {
 		unsigned int lnkactenable:1;
 		const char *statpost_program;
 		const char *statpost_url;
-		char linkmode[10];
+		enum rpt_linkmode linkmode[10];
 		char linkmodedynamic[10];
 		const char *locallist[16];
 		int nlocallist;
@@ -810,13 +938,13 @@ struct rpt {
 	char exten[AST_MAX_EXTENSION];
 	char freq[MAXREMSTR],rxpl[MAXREMSTR],txpl[MAXREMSTR];
 	int  splitkhz;
-	char offset;
-	char powerlevel;
+	enum rpt_offset offset;
+	enum rpt_power powerlevel;
 	char txplon;
 	char rxplon;
-	char remmode;
+	enum rpt_mode remmode;
 	char tunerequest;
-	char hfscanmode;
+	enum rpt_hf_mode hfscanmode;
 	int hfscanstatus;
 	char hfscanstop;
 	char lastlinknode[MAXNODESTR];

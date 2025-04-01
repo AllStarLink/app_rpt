@@ -39,7 +39,7 @@ extern struct rpt rpt_vars[MAXRPTS];
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink)
 {
-	int src;
+	enum rpt_linkmode src;
 
 	if (mylink && mylink->chan) {
 		src = LINKMODE_GUI;
@@ -72,7 +72,8 @@ void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *my
  */
 static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *args)
 {
-	int i, res, files, filter, val;
+	int i, res, files, val;
+	enum rpt_daq_filter filter;
 	int pin = 0;
 	int pintype = 0;
 	int device = 0;
@@ -1894,7 +1895,7 @@ treataslocal:
 		ast_mutex_lock(&myrpt->remlock);
 		if (myrpt->hfscanstop) {
 			myrpt->hfscanstatus = 0;
-			myrpt->hfscanmode = 0;
+			myrpt->hfscanmode = HF_SCAN_OFF;
 			myrpt->hfscanstop = 0;
 			mytele->mode = SCANSTAT;
 			ast_mutex_unlock(&myrpt->remlock);

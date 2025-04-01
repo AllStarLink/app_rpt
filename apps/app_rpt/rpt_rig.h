@@ -11,9 +11,9 @@ int set_tmd700(struct rpt *myrpt);
 /*! \todo should be in rpt_utils for consistency? */
 int split_ctcss_freq(char *hertz, char *decimal, char *freq);
 
-int set_mode_ft897(struct rpt *myrpt, char newmode);
-int set_mode_ft100(struct rpt *myrpt, char newmode);
-int set_mode_ic706(struct rpt *myrpt, char newmode);
+int set_mode_ft897(struct rpt *myrpt, enum rpt_mode newmode);
+int set_mode_ft100(struct rpt *myrpt, enum rpt_mode newmode);
+int set_mode_ic706(struct rpt *myrpt, enum rpt_mode newmode);
 
 int simple_command_ft897(struct rpt *myrpt, char command);
 int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char p1);
@@ -24,7 +24,7 @@ int setrem(struct rpt *myrpt);
 int closerem(struct rpt *myrpt);
 
 /*! \brief Dispatch to correct RX frequency checker */
-int check_freq(struct rpt *myrpt, int m, int d, int *defmode);
+int check_freq(struct rpt *myrpt, int m, int d, enum rpt_mode *defmode);
 
 /*! \brief Check TX frequency before transmitting */
 /*! \retval 1 if tx frequency in ok. */

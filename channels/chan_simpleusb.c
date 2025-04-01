@@ -51,6 +51,7 @@
 #include <linux/version.h>
 
 #include "asterisk/res_usbradio.h"
+#include "asterisk/rpt_chan_shared.h"
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h>
@@ -151,10 +152,6 @@ static char stoppulser;
 static char hasout;
 pthread_t pulserid;
 
-enum { CD_IGNORE, CD_HID, CD_HID_INVERT, CD_PP, CD_PP_INVERT };
-enum { SD_IGNORE, SD_HID, SD_HID_INVERT, SD_PP, SD_PP_INVERT };	// no,external,externalinvert,software
-enum { PAGER_NONE, PAGER_A, PAGER_B };
-
 /*! \brief type of signal detection used for carrier (cos) or ctcss */
 static const char * const signal_type[] = {"no", "usb", "usbinvert", "pp", "ppinvert"};
 
@@ -236,8 +233,8 @@ struct chan_simpleusb_pvt {
 	int32_t destate;			/* deemphasis state variable */
 	int32_t prestate;			/* preemphasis state variable */
 
-	int rxcdtype;
-	int rxsdtype;
+	enum radio_carrier_detect rxcdtype;
+	enum radio_squelch_detect rxsdtype;
 
 	int rxoncnt;				/* Counts the number of 20 ms intervals after RX activity */
 	int txoffcnt;				/* Counts the number of 20 ms intervals after TX unkey */

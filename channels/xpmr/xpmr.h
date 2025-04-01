@@ -227,88 +227,77 @@
 #define DTX_TP1 	LP_PIN07		// not used
 #define DTX_TP2 	LP_PIN08		// not used
 
-#define BIN_PROG_0 	LP_PIN06
-#define BIN_PROG_1 	LP_PIN07
-#define BIN_PROG_2 	LP_PIN08
-#define BIN_PROG_3 	LP_PIN09 
-		 
-#ifndef CHAN_USBRADIO  
-enum {RX_AUDIO_NONE,RX_AUDIO_SPEAKER,RX_AUDIO_FLAT};
-enum {TX_AUDIO_NONE,TX_AUDIO_FLAT,TX_AUDIO_FILTERED,TX_AUDIO_PROC};
-enum {CD_IGNORE,CD_XPMR_NOISE,CD_XPMR_VOX,CD_HID,CD_HID_INVERT};
-enum {SD_IGNORE,SD_HID,SD_HID_INVERT,SD_XPMR};    				 // no,external,externalinvert,software
-enum {RX_KEY_CARRIER,RX_KEY_CARRIER_CODE};
-enum {TX_OUT_OFF,TX_OUT_VOICE,TX_OUT_LSD,TX_OUT_COMPOSITE,TX_OUT_AUX};
-enum {TOC_NONE,TOC_PHASE,TOC_NOTONE};
-#endif
+#define BIN_PROG_0 LP_PIN06
+#define BIN_PROG_1 LP_PIN07
+#define BIN_PROG_2 LP_PIN08
+#define BIN_PROG_3 LP_PIN09
 
 enum dbg_pts {
- 
-RX_INPUT,	
-RX_NOISE_AMP, 
-RX_NOISE_TRIG,
+	RX_INPUT,
+	RX_NOISE_AMP,
+	RX_NOISE_TRIG,
 
-RX_CTCSS_LPF,
-RX_CTCSS_CENTER,
-RX_CTCSS_NRZ,
-RX_CTCSS_CLK,
-RX_CTCSS_P0,  
-RX_CTCSS_P1,
-RX_CTCSS_ACCUM,
-RX_CTCSS_DVDT,
-RX_CTCSS_DECODE,
+	RX_CTCSS_LPF,
+	RX_CTCSS_CENTER,
+	RX_CTCSS_NRZ,
+	RX_CTCSS_CLK,
+	RX_CTCSS_P0,
+	RX_CTCSS_P1,
+	RX_CTCSS_ACCUM,
+	RX_CTCSS_DVDT,
+	RX_CTCSS_DECODE,
 
-RX_DCS_CENTER,
-RX_DCS_DEC,
-RX_DCS_DIN,
-RX_DCS_CLK,
-RX_DCS_DAT,
+	RX_DCS_CENTER,
+	RX_DCS_DEC,
+	RX_DCS_DIN,
+	RX_DCS_CLK,
+	RX_DCS_DAT,
 
-RX_LSD_LPF,
-RX_LSD_CLK,
-RX_LSD_DAT,
-RX_LSD_DEC,
+	RX_LSD_LPF,
+	RX_LSD_CLK,
+	RX_LSD_DAT,
+	RX_LSD_DEC,
 
-RX_LSD_CENTER,
-RX_LSD_SYNC,  
-RX_LSD_STATE,
-RX_LSD_ERR,
-RX_LSD_INTE,
+	RX_LSD_CENTER,
+	RX_LSD_SYNC,
+	RX_LSD_STATE,
+	RX_LSD_ERR,
+	RX_LSD_INTE,
 
-RX_SMODE,
+	RX_SMODE,
 
-TX_PTT_IN,
-TX_PTT_OUT,
+	TX_PTT_IN,
+	TX_PTT_OUT,
 
-TX_DEDRIFT_LEAD,
-TX_DEDRIFT_ERR,
-TX_DEDRIFT_FACTOR,
-TX_DEDRIFT_DRIFT,
-TX_DEDRIFT_TWIDDLE,
+	TX_DEDRIFT_LEAD,
+	TX_DEDRIFT_ERR,
+	TX_DEDRIFT_FACTOR,
+	TX_DEDRIFT_DRIFT,
+	TX_DEDRIFT_TWIDDLE,
 
-TX_CTCSS_GEN,
+	TX_CTCSS_GEN,
 
-TX_SIGGEN_0,
+	TX_SIGGEN_0,
 
-TX_DCS_CLK,
-TX_DCS_DAT,
-TX_DCS_LPF,
+	TX_DCS_CLK,
+	TX_DCS_DAT,
+	TX_DCS_LPF,
 
-TX_LSD_CLK,
-TX_LSD_DAT,
-TX_LSD_GEN,  	
-TX_LSD_LPF,
+	TX_LSD_CLK,
+	TX_LSD_DAT,
+	TX_LSD_GEN,
+	TX_LSD_LPF,
 
-TX_NET_INT,
-TX_VOX_HPF,
-TX_VOX_LIM,
+	TX_NET_INT,
+	TX_VOX_HPF,
+	TX_VOX_LIM,
 
-TX_VOX_LPF,
+	TX_VOX_LPF,
 
-TX_OUT_A,
-TX_OUT_B,
+	TX_OUT_A,
+	TX_OUT_B,
 
-NUM_DEBUG_PTS  
+	NUM_DEBUG_PTS
 };
 
 typedef struct
@@ -607,26 +596,26 @@ typedef struct	t_pmr_chan
 	u32 rxfreq;
 	i8  txpower;
 
-	i32 txsettletime;			// in samples
+	i32 txsettletime; /* in samples */
 	i32 txsettletimer;
 
-    i16 txrxblankingtime;		// in milli-seconds
-	i16 txrxblankingtimer;	
-	
-	i16	rxDC;			    // average DC value of input
-	i16 rxSqSet;			// carrier squelch threshold
-	i16 rxSqHyst;			// carrier squelch hysterysis
-	i16 rxRssi;				// current Rssi level
-	i16 rxQuality;			// signal quality metric
-	i16 rxCarrierDetect;    // carrier detect
-	i16 rxCdType;
-	i16 voxHangTime;		// if rxCdType=CD_XPMR_VOX, time to wait for RX audio before setting CD=0
-	i16 rxSqVoxAdj;
-	i16 rxExtCarrierDetect; 
-	i32 inputBlanking;  	// Tx pulse eliminator
+	i16 txrxblankingtime; /* in milli-seconds */
+	i16 txrxblankingtimer;
 
-	i16 rxDemod;   		// see enum
-	i16 txMod;			//
+	i16 rxDC;			 /* average DC value of input */
+	i16 rxSqSet;		 /* carrier squelch threshold */
+	i16 rxSqHyst;		 /* carrier squelch hysterysis */
+	i16 rxRssi;			 /* current Rssi level */
+	i16 rxQuality;		 /* signal quality metric */
+	i16 rxCarrierDetect; /* carrier detect */
+	enum radio_carrier_detect rxCdType;
+	i16 voxHangTime; /* if rxCdType=CD_XPMR_VOX, time to wait for RX audio before setting CD=0 */
+	i16 rxSqVoxAdj;
+	i16 rxExtCarrierDetect;
+	i32 inputBlanking; /* Tx pulse eliminator */
+
+	enum radio_rx_audio rxDemod;
+	i16 txMod;
 
 	i16 rxNoiseSquelchEnable;
 	i16 rxHpfEnable;
@@ -705,9 +694,9 @@ typedef struct	t_pmr_chan
 	i16 gainVoice;
 	i16 gainSubAudible;
 
-	i16 txMixA;				// Off, Ctcss, Voice, Composite
-	i16 txMixB;				// Off, Ctcss, Voice, Composite
-	
+	enum radio_tx_mix txMixA;
+	enum radio_tx_mix txMixB;
+
 	i16 rxMuting;
 
 	i16 rxCpuSaver;

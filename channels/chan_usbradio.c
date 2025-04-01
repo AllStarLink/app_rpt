@@ -55,6 +55,7 @@
 #include <linux/version.h>
 
 #include "asterisk/res_usbradio.h"
+#include "asterisk/rpt_chan_shared.h"
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h>
@@ -155,13 +156,6 @@ static char stoppulser;
 static char hasout;
 pthread_t pulserid;
 
-enum { RX_AUDIO_NONE, RX_AUDIO_SPEAKER, RX_AUDIO_FLAT };
-enum { CD_IGNORE, CD_XPMR_NOISE, CD_XPMR_VOX, CD_HID, CD_HID_INVERT, CD_PP, CD_PP_INVERT };
-enum { SD_IGNORE, SD_HID, SD_HID_INVERT, SD_XPMR, SD_PP, SD_PP_INVERT };	// no,external,externalinvert,software
-enum { RX_KEY_CARRIER, RX_KEY_CARRIER_CODE };
-enum { TX_OUT_OFF, TX_OUT_VOICE, TX_OUT_LSD, TX_OUT_COMPOSITE, TX_OUT_AUX };
-enum { TOC_NONE, TOC_PHASE, TOC_NOTONE };
-
 /*! \brief type of signal detection used for carrier (cd) or ctcss (sd) */
 static const char * const cd_signal_type[] = {"no", "dsp", "vox", "usb", "usbinvert", "pp", "ppinvert"};
 static const char * const sd_signal_type[] = {"no", "usb", "usbinvert", "dsp", "pp", "ppinvert"};
@@ -261,21 +255,21 @@ struct chan_usbradio_pvt {
 
 	t_pmr_chan *pmrChan;
 
-	int rxdemod;
+	enum radio_rx_audio rxdemod;
 	float rxgain;
-	int rxcdtype;
-	int voxhangtime;			/* if rxcdtype=vox, ms to wait detecting RX audio before setting CD=0 */
-	int rxsdtype;
-	int rxsquelchadj;			/* this copy needs to be here for initialization */
+	enum radio_carrier_detect rxcdtype;
+	int voxhangtime; /* if rxcdtype=vox, ms to wait detecting RX audio before setting CD=0 */
+	enum radio_squelch_detect rxsdtype;
+	int rxsquelchadj; /* this copy needs to be here for initialization */
 	int rxsqhyst;
 	int rxsqvoxadj;
 	int rxnoisefiltype;
 	int rxsquelchdelay;
-	char txtoctype;
+	enum usbradio_carrier_type txtoctype;
 
 	float txctcssgain;
-	int txmixa;
-	int txmixb;
+	enum radio_tx_mix txmixa;
+	enum radio_tx_mix txmixb;
 	int rxlpf;
 	int rxhpf;
 	int txlpf;
@@ -453,7 +447,7 @@ static int usbradio_answer(struct ast_channel *c);
 static struct ast_frame *usbradio_read(struct ast_channel *chan);
 static int usbradio_call(struct ast_channel *c, const char *dest, int timeout);
 static int usbradio_write(struct ast_channel *chan, struct ast_frame *f);
-static int usbradio_indicate(struct ast_channel *chan, int cond, const void *data, size_t datalen);
+static int usbradio_indicate(struct ast_channel *chan, int cond_in, const void *data, size_t datalen);
 static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newchan);
 static int usbradio_setoption(struct ast_channel *chan, int option, void *data, int datalen);
 static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s);
@@ -2498,17 +2492,16 @@ static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newch
  * \retval 0			If successful.
  * \retval -1			For hangup.
  */
-static int usbradio_indicate(struct ast_channel *c, int cond, const void *data, size_t datalen)
+static int usbradio_indicate(struct ast_channel *c, int cond_in, const void *data, size_t datalen)
 {
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
+	enum ast_control_frame_type cond = cond_in;
 
 	switch (cond) {
 	case AST_CONTROL_BUSY:
 	case AST_CONTROL_CONGESTION:
 	case AST_CONTROL_RINGING:
 		break;
-	case -1:
-		return 0;
 	case AST_CONTROL_VIDUPDATE:
 		break;
 	case AST_CONTROL_HOLD:

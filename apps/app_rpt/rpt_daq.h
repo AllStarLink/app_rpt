@@ -1,17 +1,5 @@
 
 /*
- * Open a daq device
- */
-
-struct daq_entry_tag *daq_open(int type, char *name, char *dev);
-
-/*
- * Close a daq device
- */
-
-int daq_close(struct daq_entry_tag *t);
-
-/*
  * Look up a device entry for a particular device name
  */
 
@@ -27,13 +15,13 @@ int uchameleon_reset_minmax(struct daq_entry_tag *t, int pin, int minmax);
  * Do something with the daq subsystem
  */
 
-int daq_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2);
+int daq_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2);
 
 /*
  * Short version of above
  */
 
-int daq_do(struct daq_entry_tag *t, int pin, int cmd, int arg1);
+int daq_do(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, int arg1);
 
 /*
  * Function to reset the long term minimum or maximum
