@@ -1996,7 +1996,6 @@ static int set_offset_ic706(struct rpt *myrpt, enum rpt_offset offset)
 	}
 
 	return simple_command_ic706(myrpt, 0x0f, c);
-
 }
 
 /* ic-706 mode */

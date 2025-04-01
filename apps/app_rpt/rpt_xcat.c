@@ -145,7 +145,6 @@ static int set_offset_xcat(struct rpt *myrpt, enum rpt_offset offset)
 	}
 
 	return simple_command_xcat(myrpt, 0x0f, c);
-
 }
 
 /* Set transmit and receive ctcss tone frequencies */
