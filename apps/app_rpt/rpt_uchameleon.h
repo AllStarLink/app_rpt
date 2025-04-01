@@ -22,7 +22,7 @@ int uchameleon_open(struct daq_entry_tag *t);
 int uchameleon_close(struct daq_entry_tag *t);
 
 /*! \brief Uchameleon generic interface which supports monitor thread */
-int uchameleon_do_long(struct daq_entry_tag *t, int pin, int cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2);
+int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, void (*exec)(struct daq_pin_entry_tag *), int *arg1, void *arg2);
 
 /*! \brief Queue up a tx command (used exclusively by uchameleon_monitor()) */
 void uchameleon_queue_tx(struct daq_entry_tag *t, char *txbuff);
