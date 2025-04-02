@@ -300,31 +300,31 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 		myrpt = data;
 	}
 	switch (chantype) {
-		case RPT_PCHAN:
-			ast_copy_string(name, "PCHAN", sizeof(name));
-			break;
-		case RPT_DAHDITXCHAN:
-			ast_copy_string(name, "DHADITXCHAN", sizeof(name));
-			break;
-		case RPT_MONCHAN:	
-			ast_copy_string(name, "RPT_MONCHAN", sizeof(name));
-			break;
-		case RPT_PARROTCHAN:
-			ast_copy_string(name, "RPT_PARROTCHAN", sizeof(name));
-			break;
-		case RPT_TELECHAN:
-			ast_copy_string(name, "RPT_TELECHAN", sizeof(name));
-			break;
-		case RPT_BTELECHAN:
-			ast_copy_string(name, "RPT_BTELECHAN", sizeof(name));
-			break;
-		case RPT_VOXCHAN:
-			ast_copy_string(name, "RPT_VOXCHAN", sizeof(name));
-			break;
-		case RPT_TXPCHAN:
-			ast_copy_string(name, "RPT_TXPCHAN", sizeof(name));
-			break;
-		default:
+	case RPT_PCHAN:
+		ast_copy_string(name, "PCHAN", sizeof(name));
+		break;
+	case RPT_DAHDITXCHAN:
+		ast_copy_string(name, "DHADITXCHAN", sizeof(name));
+		break;
+	case RPT_MONCHAN:
+		ast_copy_string(name, "RPT_MONCHAN", sizeof(name));
+		break;
+	case RPT_PARROTCHAN:
+		ast_copy_string(name, "RPT_PARROTCHAN", sizeof(name));
+		break;
+	case RPT_TELECHAN:
+		ast_copy_string(name, "RPT_TELECHAN", sizeof(name));
+		break;
+	case RPT_BTELECHAN:
+		ast_copy_string(name, "RPT_BTELECHAN", sizeof(name));
+		break;
+	case RPT_VOXCHAN:
+		ast_copy_string(name, "RPT_VOXCHAN", sizeof(name));
+		break;
+	case RPT_TXPCHAN:
+		ast_copy_string(name, "RPT_TXPCHAN", sizeof(name));
+		break;
+	default:
 	}
 	chan = ast_request("Local", cap, NULL, NULL, name, NULL);
 	if (!chan) {

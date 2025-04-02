@@ -2668,8 +2668,8 @@ void rpt_links_init(struct rpt_link *l)
 
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
-//	int res;
-	
+	//	int res;
+
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
 	}
@@ -2705,31 +2705,31 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the tx */
-//	if (rpt_conf_create(myrpt->dahditxchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
-//		rpt_hangup_rx_tx(myrpt);
-//		rpt_hangup(myrpt, RPT_PCHAN);
-//		rpt_hangup(myrpt, RPT_MONCHAN);
-//		return -1;
-//	}
+	//	if (rpt_conf_create(myrpt->dahditxchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
+	//		rpt_hangup_rx_tx(myrpt);
+	//		rpt_hangup(myrpt, RPT_PCHAN);
+	//		rpt_hangup(myrpt, RPT_MONCHAN);
+	//		return -1;
+	//	}
 
-//	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
-//		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
-//	} else {
-//		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER);
-//	}
-//	if (res) {
-//		rpt_hangup_rx_tx(myrpt);
-//		rpt_hangup(myrpt, RPT_PCHAN);
-//		rpt_hangup(myrpt, RPT_MONCHAN);
-//		return -1;
-//	}
+	//	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
+	//		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
+	//	} else {
+	//		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER);
+	//	}
+	//	if (res) {
+	//		rpt_hangup_rx_tx(myrpt);
+	//		rpt_hangup(myrpt, RPT_PCHAN);
+	//		rpt_hangup(myrpt, RPT_MONCHAN);
+	//		return -1;
+	//	}
 
-//	if (rpt_mon_setup(myrpt)) {
-//		rpt_hangup_rx_tx(myrpt);
-//		rpt_hangup(myrpt, RPT_PCHAN);
-//		rpt_hangup(myrpt, RPT_MONCHAN);
-//		return -1;
-//	}
+	//	if (rpt_mon_setup(myrpt)) {
+	//		rpt_hangup_rx_tx(myrpt);
+	//		rpt_hangup(myrpt, RPT_PCHAN);
+	//		rpt_hangup(myrpt, RPT_MONCHAN);
+	//		return -1;
+	//	}
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN)) {
 		rpt_hangup_rx_tx(myrpt);
@@ -2748,14 +2748,14 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the voice/tone telemetry */
-//	if (rpt_conf_create(myrpt->telechannel, myrpt, RPT_TELECONF, RPT_CONF_CONF | RPT_CONF_TALKER | RPT_CONF_LISTENER)) {
-//		rpt_hangup_rx_tx(myrpt);
-//		rpt_hangup(myrpt, RPT_PCHAN);
-//		rpt_hangup(myrpt, RPT_MONCHAN);
-//		rpt_hangup(myrpt, RPT_PARROTCHAN);
-//		rpt_hangup(myrpt, RPT_TELECHAN);
-//		return -1;
-//	}
+	//	if (rpt_conf_create(myrpt->telechannel, myrpt, RPT_TELECONF, RPT_CONF_CONF | RPT_CONF_TALKER | RPT_CONF_LISTENER)) {
+	//		rpt_hangup_rx_tx(myrpt);
+	//		rpt_hangup(myrpt, RPT_PCHAN);
+	//		rpt_hangup(myrpt, RPT_MONCHAN);
+	//		rpt_hangup(myrpt, RPT_PARROTCHAN);
+	//		rpt_hangup(myrpt, RPT_TELECHAN);
+	//		return -1;
+	//	}
 
 	/* make a channel to connect between the telemetry conference process
 	   and the main tx audio conference. */
@@ -2769,15 +2769,15 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference linked to the main tx conference */
-//	if (rpt_tx_conf_add_speaker(myrpt->btelechannel, myrpt)) {
-//		rpt_hangup_rx_tx(myrpt);
-//		rpt_hangup(myrpt, RPT_PCHAN);
-//		rpt_hangup(myrpt, RPT_MONCHAN);
-//		rpt_hangup(myrpt, RPT_PARROTCHAN);
-//		rpt_hangup(myrpt, RPT_TELECHAN);
-//		rpt_hangup(myrpt, RPT_BTELECHAN);
-//		return -1;
-//	}
+	//	if (rpt_tx_conf_add_speaker(myrpt->btelechannel, myrpt)) {
+	//		rpt_hangup_rx_tx(myrpt);
+	//		rpt_hangup(myrpt, RPT_PCHAN);
+	//		rpt_hangup(myrpt, RPT_MONCHAN);
+	//		rpt_hangup(myrpt, RPT_PARROTCHAN);
+	//		rpt_hangup(myrpt, RPT_TELECHAN);
+	//		rpt_hangup(myrpt, RPT_BTELECHAN);
+	//		return -1;
+	//	}
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN)) {
 		rpt_hangup_rx_tx(myrpt);
@@ -2801,17 +2801,17 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the tx */
-//	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_TALKER)) {
-//		rpt_hangup_rx_tx(myrpt);
-//		rpt_hangup(myrpt, RPT_PCHAN);
-//		rpt_hangup(myrpt, RPT_MONCHAN);
-//		rpt_hangup(myrpt, RPT_PARROTCHAN);
-//		rpt_hangup(myrpt, RPT_TELECHAN);
-//		rpt_hangup(myrpt, RPT_BTELECHAN);
-//		rpt_hangup(myrpt, RPT_VOXCHAN);
-//		rpt_hangup(myrpt, RPT_TXPCHAN);
-//		return -1;
-//	}
+	//	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_TALKER)) {
+	//		rpt_hangup_rx_tx(myrpt);
+	//		rpt_hangup(myrpt, RPT_PCHAN);
+	//		rpt_hangup(myrpt, RPT_MONCHAN);
+	//		rpt_hangup(myrpt, RPT_PARROTCHAN);
+	//		rpt_hangup(myrpt, RPT_TELECHAN);
+	//		rpt_hangup(myrpt, RPT_BTELECHAN);
+	//		rpt_hangup(myrpt, RPT_VOXCHAN);
+	//		rpt_hangup(myrpt, RPT_TXPCHAN);
+	//		return -1;
+	//	}
 
 	return 0;
 }
