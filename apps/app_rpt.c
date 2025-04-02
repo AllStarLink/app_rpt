@@ -6676,7 +6676,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		gettimeofday(&myrpt->lastlinktime, NULL);
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
-
 		return -1; /* We can now safely return -1 to the PBX, as the old channel pre-masquerade is what will get killed off */
 	}
 	/* well, then it is a remote */

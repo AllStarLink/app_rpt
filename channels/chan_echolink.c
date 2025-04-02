@@ -356,7 +356,6 @@ struct el_node {
 	float jitter;
 	struct el_instance *instp;
 	struct el_pvt *pvt;
-	struct ast_channel *chan;
 	struct timeval last_packet_time;
 	uint32_t rx_audio_packets;
 	uint32_t tx_audio_packets;
@@ -481,13 +480,11 @@ struct el_rxqel {
  * This is stored in the asterisk channel private technology for reference.
  */
 struct el_pvt {
-	struct ast_channel *owner;
 	struct el_instance *instp;
 	char app[16];
 	char stream[80];
 	char ip[EL_IP_SIZE];
 	char firstsent;
-	char firstheard;
 	char txkey;
 	int rxkey;
 	int keepalive;
@@ -1325,7 +1322,6 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 		ast_log(LOG_WARNING, "el_call called on %s, neither down nor reserved.\n", ast_channel_name(ast));
 		return -1;
 	}
-
 	/* Make sure we have a destination */
 	if (!*dest) {
 		ast_log(LOG_WARNING, "Call on %s failed - no destination.\n", ast_channel_name(ast));
@@ -1474,6 +1470,7 @@ static int el_hangup(struct ast_channel *ast)
 	ast_mutex_lock(&instp->lock);
 	strcpy(instp->el_node_test.ip, pvt->ip);
 	find_delete(&instp->el_node_test);
+	ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 	ast_mutex_unlock(&instp->lock);
 	n = rtcp_make_bye(bye, "disconnected");
 
@@ -2057,7 +2054,6 @@ static int find_delete(const struct el_node *key)
 		node = *found_key;
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
 		found = 1;
-		ast_softhangup(node->chan, AST_SOFTHANGUP_DEV);
 		tdelete(node, &el_node_list, compare_ip);
 		ast_free(node);
 	}
@@ -2435,7 +2431,6 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 		snprintf(tmpstr, sizeof(tmpstr), "3%06u", nodenum);
 		ast_set_callerid(tmp, tmpstr, NULL, NULL);
 	}
-	pvt->owner = tmp;
 	pvt->u = ast_module_user_add(tmp);
 	pvt->nodenum = nodenum;
 	if (state != AST_STATE_DOWN) {
@@ -3323,6 +3318,7 @@ static void *el_register(void *data)
 static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char *call, const char *name)
 {
 	struct el_node *el_node_key;
+	struct ast_channel *chan;
 	const struct eldb *mynode;
 	char nodestr[30];
 	time_t now;
@@ -3360,13 +3356,14 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			}
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
-			el_node_key->chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
-			if (!el_node_key->chan) {
+			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
+			if (!chan) {
 				el_destroy(el_node_key->pvt);
 				ast_free(el_node_key);
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
+			ast_raw_answer(chan);
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
 			time(&now);
@@ -3377,7 +3374,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 		} else {
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
-			el_node_key->chan = pvt->owner;
 			el_node_key->outbound = 1;
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
@@ -3415,7 +3411,6 @@ static void *el_reader(void *data)
 	struct sockaddr_in sin, sin1;
 	int i, j, x;
 	struct el_rxqast *qpast;
-	struct ast_frame fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
 	time_t now;
@@ -3586,22 +3581,6 @@ static void *el_reader(void *data)
 						found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
 						if (found_key) {
 							node = *found_key;
-							if (!node->pvt->firstheard) {
-								node->pvt->firstheard = 1;
-								memset(&fr, 0, sizeof(fr));
-								fr.datalen = 0;
-								fr.samples = 0;
-								fr.frametype = AST_FRAME_CONTROL;
-								fr.subclass.integer = AST_CONTROL_ANSWER;
-								fr.data.ptr = 0;
-								fr.src = type;
-								fr.offset = 0;
-								fr.mallocd = 0;
-								fr.delivery.tv_sec = 0;
-								fr.delivery.tv_usec = 0;
-								ast_queue_frame((*found_key)->chan, &fr);
-								ast_debug(1, "Channel %s answering.\n", ast_channel_name(node->chan));
-							}
 							node->countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
 							if (strncmp((*found_key)->call, call, EL_CALL_SIZE) != 0) {
@@ -3735,22 +3714,6 @@ static void *el_reader(void *data)
 					if (found_key) {
 						node = *found_key;
 
-						if (!node->pvt->firstheard) {
-							node->pvt->firstheard = 1;
-							memset(&fr, 0, sizeof(fr));
-							fr.datalen = 0;
-							fr.samples = 0;
-							fr.frametype = AST_FRAME_CONTROL;
-							fr.subclass.integer = AST_CONTROL_ANSWER;
-							fr.data.ptr = 0;
-							fr.src = type;
-							fr.offset = 0;
-							fr.mallocd = 0;
-							fr.delivery.tv_sec = 0;
-							fr.delivery.tv_usec = 0;
-							ast_queue_frame(node->chan, &fr);
-							ast_verb(3, "Channel %s answering.\n", ast_channel_name(node->chan));
-						}
 						node->countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
 						/* compute inter-arrival jitter */
