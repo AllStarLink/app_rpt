@@ -484,9 +484,9 @@ struct el_pvt {
 	char app[16];
 	char stream[80];
 	char ip[EL_IP_SIZE];
-	char firstsent;
-	char txkey;
-	int rxkey;
+	unsigned int firstsent:1; /* First packet seen from echolink */
+	unsigned int txkey:1;	  /* Transmit keyed */
+	int rxkey;				  /* Receive keyed timer */
 	int keepalive;
 	int txindex;
 	struct ast_frame fr;
@@ -497,6 +497,7 @@ struct el_pvt {
 	struct ast_trans_pvt *xpath;
 	unsigned int nodenum;
 	char *linkstr;
+	ast_mutex_t lock;
 };
 
 /*!
@@ -742,6 +743,7 @@ static int compare_eldb_callsign(const void *pa, const void *pb)
 
 /*!
  * \brief Find an echolink node from the internal user database by nodenum.
+ * \note Must be called locked.
  * \param nodenum	Pointer to node number to find.
  * \retval NULL		If the IP address was not found.
  * \return If found returns an eldb struct.
@@ -763,6 +765,7 @@ static struct eldb *el_db_find_nodenum(const char *nodenum)
 
 /*!
  * \brief Find an echolink node from the internal user database by callsign.
+ * \note Must be called locked.
  * \param callsign	Pointer to callsign to find.
  * \retval NULL		If the callsign was not found.
  * \return If found returns an eldb struct.
@@ -784,6 +787,7 @@ static struct eldb *el_db_find_callsign(const char *callsign)
 
 /*!
  * \brief Find an echolink node from the internal user database by ip address.
+ * \note Must be called locked.
  * \param ipaddr	IP address to find.
  * \retval NULL		If the IP address was not found.
  * \return If found returns an eldb struct.
@@ -805,6 +809,7 @@ static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 
 /*!
  * \brief Delete a node from the internal echolink users database.
+ * \note Must be called locked.
  * \param nodenum		Pointer to node to delete.
  */
 static void el_db_delete_entries(struct eldb *node)
@@ -840,6 +845,7 @@ static void el_db_delete_entries(struct eldb *node)
 /*!
  * \brief Add a node to the internal echolink users database.
  * The node is added to the three internal indexes.
+ * \note Must be called locked.
  * \param nodenum		Buffer to node number.
  * \param ipaddr		Buffer to ip address.
  * \param callsign		Buffer to callsign.
@@ -908,7 +914,9 @@ static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
 		return 1;
 	} else {
 		struct eldb *found_node;
+		ast_mutex_lock(&el_db_lock);
 		found_node = el_db_find_callsign(callsign);
+		ast_mutex_unlock(&el_db_lock);
 		if (found_node) {
 			memcpy(result, found_node, sizeof(*result));
 			return 1;
@@ -944,7 +952,9 @@ static int lookup_node_by_nodenum(const char *nodenum, struct eldb *result)
 		return 1;
 	} else {
 		struct eldb *found_node;
+		ast_mutex_lock(&el_db_lock);
 		found_node = el_db_find_nodenum(nodenum);
+		ast_mutex_unlock(&el_db_lock);
 		if (found_node) {
 			memcpy(result, found_node, sizeof(*result));
 			return 1;
@@ -1386,6 +1396,22 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
  */
 static void el_destroy(struct el_pvt *pvt)
 {
+	struct qelem *qpast;
+
+	ast_mutex_lock(&pvt->lock);
+	while (pvt->rxqast.qe_forw != &pvt->rxqast) {
+		qpast = (struct qelem *) pvt->rxqast.qe_forw;
+		remque(qpast);
+		ast_free(qpast);
+	}
+
+	while (pvt->rxqel.qe_forw != &pvt->rxqel) {
+		qpast = (struct qelem *) pvt->rxqel.qe_forw;
+		remque(qpast);
+		ast_free(qpast);
+	}
+	ast_mutex_unlock(&pvt->lock);
+
 	if (pvt->dsp) {
 		ast_dsp_free(pvt->dsp);
 	}
@@ -1396,7 +1422,9 @@ static void el_destroy(struct el_pvt *pvt)
 		ast_free(pvt->linkstr);
 	}
 	pvt->linkstr = NULL;
+	ast_mutex_lock(&el_nodelist_lock);
 	twalk(el_node_list, send_info);
+	ast_mutex_unlock(&el_nodelist_lock);
 	ast_module_user_remove(pvt->u);
 	ast_free(pvt);
 }
@@ -1581,7 +1609,9 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 	/* Process the requested query option */
 	switch (option) {
 		case EL_QUERY_IPADDR:
+			ast_mutex_lock(&el_db_lock);
 			foundnode = el_db_find_nodenum(node);
+			ast_mutex_unlock(&el_db_lock);
 			if (foundnode) {
 				ast_copy_string(data, foundnode->ipaddr, *datalen);
 				res = 0;
@@ -1589,10 +1619,12 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 			break;
 		case EL_QUERY_CALLSIGN:
 			/* lookup first in connected table, then echolink database */
+			ast_mutex_lock(&el_db_lock);
 			if (lookup_node_by_nodenum(node, &node_result)) {
 				ast_copy_string(data, node_result.callsign, *datalen);
 				res = 0;
 			}
+			ast_mutex_unlock(&el_db_lock);
 			break;
 		default:
 			ast_log(LOG_ERROR, "Option %i is not valid.", option);
@@ -1659,7 +1691,9 @@ static int el_text(struct ast_channel *ast, const char *text)
 			if (pvt->linkstr) {
 				ast_free(pvt->linkstr);
 				pvt->linkstr = NULL;
+				ast_mutex_lock(&el_nodelist_lock);
 				twalk(el_node_list, send_info);
+				ast_mutex_unlock(&el_nodelist_lock);
 			}
 			return 0;
 		}
@@ -1729,7 +1763,9 @@ static int el_text(struct ast_channel *ast, const char *text)
 			pvt->linkstr = pkt;
 		}
 		ast_free(cp);
+		ast_mutex_lock(&el_nodelist_lock);
 		twalk(el_node_list, send_info);
+		ast_mutex_unlock(&el_nodelist_lock);
 		return 0;
 	}
 
@@ -2092,7 +2128,9 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 
 			instp->text_packet = buf;
 			instp->text_packet_len = buf_len;
+			ast_mutex_lock(&el_nodelist_lock);
 			twalk(el_node_list, send_text);
+			ast_mutex_unlock(&el_nodelist_lock);
 			instp->text_packet = NULL;
 			instp->text_packet_len = 0;
 
@@ -2123,7 +2161,9 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 	/* all commands with no arguments go first */
 
 	if (strcmp(buf, "o.users") == 0) {
+		ast_mutex_lock(&el_nodelist_lock);
 		twalk(el_node_list, print_users);
+		ast_mutex_unlock(&el_nodelist_lock);
 		return;
 	}
 
@@ -2201,16 +2241,6 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
 
 	memset(&p->fr, 0, sizeof(struct ast_frame));
-	p->fr.frametype = 0;
-	p->fr.subclass.integer = 0;
-	p->fr.datalen = 0;
-	p->fr.samples = 0;
-	p->fr.data.ptr = NULL;
-	p->fr.src = type;
-	p->fr.offset = 0;
-	p->fr.mallocd = 0;
-	p->fr.delivery.tv_sec = 0;
-	p->fr.delivery.tv_usec = 0;
 	return &p->fr;
 }
 
@@ -2261,32 +2291,29 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			n++;
 		}
 		if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
+			ast_mutex_lock(&p->lock);
 			while (p->rxqast.qe_forw != &p->rxqast) {
 				qpast = p->rxqast.qe_forw;
 				remque((struct qelem *) qpast);
 				ast_free(qpast);
 			}
+			ast_mutex_unlock(&p->lock);
 			if (p->rxkey) {
 				p->rxkey = 1;
 			}
 		} else {
 			if (!p->rxkey) {
 				memset(&fr, 0, sizeof(fr));
-				fr.datalen = 0;
-				fr.samples = 0;
 				fr.frametype = AST_FRAME_CONTROL;
 				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
-				fr.data.ptr = 0;
 				fr.src = type;
-				fr.offset = 0;
-				fr.mallocd = 0;
-				fr.delivery.tv_sec = 0;
-				fr.delivery.tv_usec = 0;
 				ast_queue_frame(ast, &fr);
 			}
 			p->rxkey = MAX_RXKEY_TIME;
+			ast_mutex_lock(&p->lock);
 			qpast = p->rxqast.qe_forw;
 			remque((struct qelem *) qpast);
+			ast_mutex_unlock(&p->lock);
 			memcpy(buf + AST_FRIENDLY_OFFSET, qpast->buf, GSM_FRAME_SIZE);
 			ast_free(qpast);
 
@@ -2298,9 +2325,6 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
 			fr.src = type;
 			fr.offset = AST_FRIENDLY_OFFSET;
-			fr.mallocd = 0;
-			fr.delivery.tv_sec = 0;
-			fr.delivery.tv_usec = 0;
 
 			x = 0;
 			if (p->dsp) {
@@ -2323,16 +2347,9 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 	if (p->rxkey == 1) {
 		memset(&fr, 0, sizeof(fr));
-		fr.datalen = 0;
-		fr.samples = 0;
 		fr.frametype = AST_FRAME_CONTROL;
 		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-		fr.data.ptr = 0;
 		fr.src = type;
-		fr.offset = 0;
-		fr.mallocd = 0;
-		fr.delivery.tv_sec = 0;
-		fr.delivery.tv_usec = 0;
 		ast_queue_frame(ast, &fr);
 	}
 	if (p->rxkey) {
@@ -2355,7 +2372,9 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (p->txindex >= BLOCKING_FACTOR) {
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->el_node_test.ip, p->ip);
+		ast_mutex_lock(&el_nodelist_lock);
 		twalk(el_node_list, send_audio_only_one);
+		ast_mutex_unlock(&el_nodelist_lock);
 		ast_mutex_unlock(&instp->lock);
 		p->txindex = 0;
 	}
@@ -2368,7 +2387,9 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	/* Echolink: send heartbeats and drop dead stations */
 	ast_mutex_lock(&instp->lock);
 	instp->el_node_test.ip[0] = '\0';
+	ast_mutex_lock(&el_nodelist_lock);
 	twalk(el_node_list, send_heartbeat);
+	ast_mutex_unlock(&el_nodelist_lock);
 	if (instp->el_node_test.ip[0] != '\0') {
 		if (find_delete(&instp->el_node_test)) {
 			bye_length = rtcp_make_bye(bye, "rtcp timeout");
@@ -2522,7 +2543,7 @@ static int el_do_dbdump(int fd, int argc, const char *const *argv)
 
 /*!
  * \brief Process asterisk cli request for internal user database entry.
- * Lookup can be for ip address, callsign, or nodenumber
+ * Lookup can be for ip address, callsign, or nodenumber.
  * \param fd			Asterisk cli file descriptor.
  * \param argc			Number of arguments.
  * \param argv			Pointer to asterisk cli arguments.
@@ -2576,9 +2597,9 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 static int el_do_show_nodes(int fd, int argc, const char *const *argv)
 {
 	ast_cli(fd, "   Node  Call Sign  IP Address        Name\n");
-
+	ast_mutex_lock(&el_nodelist_lock);
 	twalk_r(el_node_list, print_connected_nodes, &fd);
-
+	ast_mutex_unlock(&el_nodelist_lock);
 	return RESULT_SUCCESS;
 }
 
@@ -3319,6 +3340,10 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 {
 	struct el_node *el_node_key;
 	struct ast_channel *chan;
+	struct ast_frame fr = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_ANSWER,
+	};
 	const struct eldb *mynode;
 	char nodestr[30];
 	time_t now;
@@ -3363,7 +3388,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
-			ast_raw_answer(chan);
+			fr.src = type;
+			ast_queue_frame(chan, &fr);
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
 			time(&now);
@@ -3578,7 +3604,9 @@ static void *el_reader(void *data)
 							name = nameptr + 1;
 							name = ast_strip(name);
 						}
+						ast_mutex_lock(&el_nodelist_lock);
 						found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
+						ast_mutex_unlock(&el_nodelist_lock);
 						if (found_key) {
 							node = *found_key;
 							node->countdown = instp->rtcptimeout;
@@ -3677,7 +3705,9 @@ static void *el_reader(void *data)
 									}
 								}
 							}
+							ast_mutex_lock(&el_nodelist_lock);
 							twalk(el_node_list, send_info);
+							ast_mutex_unlock(&el_nodelist_lock);
 						}
 					} else {
 						instp->rx_bad_packets++;
@@ -3710,7 +3740,9 @@ static void *el_reader(void *data)
 				if (buf[0] == 0x6f) {
 					process_cmd(buf, recvlen, instp->el_node_test.ip, instp);
 				} else {
+					ast_mutex_lock(&el_nodelist_lock);
 					found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
+					ast_mutex_unlock(&el_nodelist_lock);
 					if (found_key) {
 						node = *found_key;
 
@@ -3760,7 +3792,9 @@ static void *el_reader(void *data)
 									qpast = ast_malloc(sizeof(struct el_rxqast));
 									if (qpast) {
 										memcpy(qpast->buf, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
+										ast_mutex_lock(&node->pvt->lock);
 										insque((struct qelem *) qpast, (struct qelem *) node->pvt->rxqast.qe_back);
+										ast_mutex_unlock(&node->pvt->lock);
 									}
 								}
 							} else {
@@ -4124,7 +4158,9 @@ static int unload_module(void)
 
 	run_forever = 0;
 	if (el_node_list) {
+		ast_mutex_lock(&el_nodelist_lock);
 		tdestroy(el_node_list, free_node);
+		ast_mutex_unlock(&el_nodelist_lock);
 	}
 	if (el_db_callsign) {
 		el_db_delete_all_nodes();
