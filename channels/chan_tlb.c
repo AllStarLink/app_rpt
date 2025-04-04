@@ -96,6 +96,8 @@ tlb.conf file.
 
 #define	MAX_RXKEY_TIME 4
 #define	RTPBUF_SIZE 400			/* actually 320 would be sufficient */
+#define TLB_INIT_STR 40
+
 enum { TLB_GSM, TLB_G726, TLB_ULAW };
 
 /*!
@@ -245,7 +247,7 @@ struct TLB_instance;
 struct TLB_pvt;
 
 /*!
- * \brief Echolink connected node struct.
+ * \brief TLB connected node struct.
  * These are stored internally in a binary tree.
  */
 struct TLB_node {
@@ -258,7 +260,6 @@ struct TLB_node {
 	uint16_t seqnum;
 	struct TLB_instance *instp;
 	struct TLB_pvt *p;
-	struct ast_channel *chan;
 };
 
 /*!
@@ -295,6 +296,15 @@ struct TLB_instance {
 	int pref_txcodec;
 };
 
+/* !
+ * \brief TLB Text message queue struct
+ */
+struct TLB_textq {
+	struct TLB_textq *qe_forw;
+	struct TLB_textq *qe_back;
+	struct ast_str *buff;
+};
+
 /*!
  * \brief TLB receive queue struct from asterisk.
  */
@@ -305,7 +315,7 @@ struct TLB_rxqast {
 };
 
 /*!
- * \brief Echolink receive queue struct from TLB.
+ * \brief TLB receive queue struct from TLB.
  */
 struct TLB_rxqel {
 	struct TLB_rxqel *qe_forw;
@@ -316,7 +326,7 @@ struct TLB_rxqel {
 };
 
 /*!
- * \brief Echolink private information.
+ * \brief TLB private information.
  * This is stored in the asterisk channel private technology for reference.
  */
 struct TLB_pvt {
@@ -334,6 +344,7 @@ struct TLB_pvt {
 	int txindex;
 	struct TLB_rxqast rxqast;
 	struct TLB_rxqel rxqel;
+	struct TLB_textq textq;
 	char firstsent;
 	char firstheard;
 	struct ast_module_user *u;
@@ -345,6 +356,7 @@ struct TLB_pvt {
 	uint32_t dtmfidx;
 	int rxcodec;
 	int txcodec;
+	unsigned int codec_change:1;
 };
 
 struct TLB_instance *instances[TLB_MAX_INSTANCES];
@@ -370,6 +382,7 @@ static void send_audio_all_but_one(const void *nodep, const VISIT which, const i
 static void send_audio_all(const void *nodep, const VISIT which, const int depth);
 static int find_delete(struct TLB_node *key);
 static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char *call, const char *name, const char *codec);
+static int tlb_set_nativeformats(struct ast_channel *chan, int txcodec, int rxcodec);
 
 /*!
  * \brief Asterisk channel technology struct.
@@ -883,8 +896,8 @@ static void TLB_destroy(struct TLB_pvt *p)
 
 /*!
  * \brief Allocate and initialize a TLB private structure.
- * \param data			Pointer to echolink instance name to initialize.
- * \retval 				el_pvt structure.		
+ * \param data			Pointer to TLB instance name to initialize.
+ * \retval 				el_pvt structure.
  */
 static struct TLB_pvt *TLB_alloc(const char *data)
 {
@@ -919,6 +932,10 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 		pvt->rxqel.qe_forw = &pvt->rxqel;
 		pvt->rxqel.qe_back = &pvt->rxqel;
 
+		pvt->textq.qe_forw = &pvt->textq;
+		pvt->textq.qe_back = &pvt->textq;
+		pvt->codec_change = 0;
+
 		pvt->keepalive = KEEPALIVE_TIME;
 		pvt->instp = instances[n];
 		pvt->instp->confp = pvt;	/* save for conference mode */
@@ -947,7 +964,10 @@ static int TLB_hangup(struct ast_channel *ast)
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->TLB_node_test.ip, p->ip);
 		instp->TLB_node_test.port = p->port;
-		find_delete(&instp->TLB_node_test);
+		if (find_delete(&instp->TLB_node_test)) {
+			ast_softhangup(ast, AST_SOFTHANGUP_DEV);
+		}
+
 		ast_mutex_unlock(&instp->lock);
 		
 		n = rtcp_make_bye(bye, "disconnected");
@@ -1351,7 +1371,7 @@ static void free_node(void *nodep)
 
 /*!
  * \brief Find and delete a node from our internal node list.
- * \param key			Pointer to Echolink node struct to delete.
+ * \param key			Pointer to TLB node struct to delete.
  * \retval 0			If node not found.
  * \retval 1			If node found.
  */
@@ -1364,9 +1384,6 @@ static int find_delete(struct TLB_node *key)
 	if (found_key) {
 		ast_debug(1, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
 		found = 1;
-		if (!(*found_key)->instp->confmode) {
-			ast_softhangup((*found_key)->chan, AST_SOFTHANGUP_DEV);
-		}
 		tdelete(key, &TLB_node_list, compare_ip);
 	}
 	return found;
@@ -1397,7 +1414,7 @@ static struct ast_frame *TLB_xread(struct ast_channel *ast)
 
 /*!
  * \brief Asterisk write function.
- * This routine handles echolink to asterisk and asterisk to echolink.
+ * This routine handles TLB to asterisk and asterisk to TLB.
  * \param ast			Pointer to Asterisk channel.
  * \param frame			Pointer to Asterisk frame to process.
  * \retval 0			Successful.
@@ -1412,14 +1429,21 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct TLB_instance *instp = p->instp;
 	struct ast_frame fr;
 	struct TLB_rxqast *qpast;
-	int n, m, x;
+	int n, m;
 	struct TLB_rxqel *qpel;
+	struct TLB_textq *textq;
+
 	char buf[RTPBUF_SIZE + AST_FRIENDLY_OFFSET];
 
 	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
 	}
 
+	ast_mutex_lock(&p->lock);
+	if (p->codec_change) {
+		tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
+		p->codec_change = 0;
+	}
 	if (!p->firstsent) {
 		struct sockaddr_in sin;
 		unsigned char sdes_packet[256];
@@ -1433,6 +1457,14 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		sin.sin_port = htons(p->port + 1);
 		sin.sin_addr.s_addr = inet_addr(p->ip);
 		sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin, sizeof(sin));
+	}
+
+	if (p->textq.qe_forw != &p->textq) {
+		textq = p->textq.qe_forw;
+		remque((struct qelem *) textq);
+		ast_sendtext(ast, ast_str_buffer(textq->buff));
+		ast_free(textq->buff);
+		ast_free(textq);
 	}
 
 	/* TheLinkBox to Asterisk */
@@ -1481,11 +1513,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.mallocd = 0;
 			fr.delivery.tv_sec = 0;
 			fr.delivery.tv_usec = 0;
-
-			x = 0;
-			if (!x) {
-				ast_queue_frame(ast, &fr);
-			}
+			ast_queue_frame(ast, &fr);
 		}
 	}
 	if (p->rxkey == 1) {
@@ -1596,6 +1624,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		instp->TLB_node_test.port = 0;
 	}
 	ast_mutex_unlock(&instp->lock);
+	ast_mutex_unlock(&p->lock);
 	return 0;
 }
 
@@ -1652,7 +1681,6 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 		sprintf(tmpstr, "%u", nodenum);
 		ast_set_callerid(tmp, tmpstr, NULL, NULL);
 	}
-	i->owner = tmp;
 	i->u = ast_module_user_add(tmp);
 	i->nodenum = nodenum;
 	if (state != AST_STATE_DOWN) {
@@ -1948,10 +1976,10 @@ static int tlb_set_nativeformats(struct ast_channel *chan, int txcodec, int rxco
 static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char *call, const char *name, const char *codec)
 {
 	struct TLB_node *TLB_node_key = NULL;
+	struct ast_channel *chan;
 	struct ast_config *cfg = NULL;
 	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
-	struct ast_channel *ast;
 	char *sval, *strs[10], mycodec[20];
 	int i, n;
 
@@ -2021,16 +2049,18 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 				TLB_node_key->p = p;
 				ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
 				TLB_node_key->p->port = instp->TLB_node_test.port;
-				TLB_node_key->chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum, NULL, NULL);
-				if (!TLB_node_key->chan) {
+				chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum, NULL, NULL);
+				if (!chan) {
 					TLB_destroy(TLB_node_key->p);
 					return -1;
 				}
+				tlb_set_nativeformats(chan, p->txcodec, p->rxcodec);
+				ast_debug(1, "tlb: tx codec set to %s\n", tlb_codecs[p->txcodec].name);
+				ast_raw_answer(chan);
 			} else {
 				TLB_node_key->p = p;
 				ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
 				TLB_node_key->p->port = instp->TLB_node_test.port;
-				TLB_node_key->chan = p->owner;
 			}
 		}
 	} else {
@@ -2052,11 +2082,6 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		}
 		p->txcodec = i;
 	}
-
-	ast = TLB_node_key->chan;
-	tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
-
-	ast_debug(1, "tlb: tx codec set to %s\n", tlb_codecs[p->txcodec].name);
 	return 0;
 }
 
@@ -2066,7 +2091,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
  * One thread is required for each TLB instance.
  * It receives data from the audio socket and control socket.
  * Connection requests arrive over the control socket.
- * \param data		Pointer to struct el_instance data passed this this thread
+ * \param data		Pointer to struct TLB_instance data passed this this thread
  */
 static void *TLB_reader(void *data)
 {
@@ -2077,7 +2102,7 @@ static void *TLB_reader(void *data)
 	int i, j, x;
 	struct TLB_rxqast *qpast;
 	struct TLB_rxqel *qpel;
-	struct ast_frame fr;
+	struct TLB_textq *textq;
 	socklen_t fromlen;
 	ssize_t recvlen;
 	struct TLB_node **found_key = NULL;
@@ -2131,22 +2156,6 @@ static void *TLB_reader(void *data)
 					if (call[0] != '\0') {
 						found_key = (struct TLB_node **) tfind(&instp->TLB_node_test, &TLB_node_list, compare_ip);
 						if (found_key) {
-							if (!(*found_key)->p->firstheard) {
-								(*found_key)->p->firstheard = 1;
-								memset(&fr, 0, sizeof(fr));
-								fr.datalen = 0;
-								fr.samples = 0;
-								fr.frametype = AST_FRAME_CONTROL;
-								fr.subclass.integer = AST_CONTROL_ANSWER;
-								fr.data.ptr = 0;
-								fr.src = type;
-								fr.offset = 0;
-								fr.mallocd = 0;
-								fr.delivery.tv_sec = 0;
-								fr.delivery.tv_usec = 0;
-								ast_queue_frame((*found_key)->chan, &fr);
-								ast_debug(1, "Channel %s answering\n", ast_channel_name((*found_key)->chan));
-							}
 							(*found_key)->countdown = instp->rtcptimeout;
 						} else {	/* otherwise its a new request */
 							i = 0;	/* default authorized */
@@ -2209,29 +2218,12 @@ static void *TLB_reader(void *data)
 				found_key = (struct TLB_node **) tfind(&instp->TLB_node_test, &TLB_node_list, compare_ip);
 				if (found_key) {
 					struct TLB_pvt *p = (*found_key)->p;
-
-					if (!(*found_key)->p->firstheard) {
-						(*found_key)->p->firstheard = 1;
-						memset(&fr, 0, sizeof(fr));
-						fr.datalen = 0;
-						fr.samples = 0;
-						fr.frametype = AST_FRAME_CONTROL;
-						fr.subclass.integer = AST_CONTROL_ANSWER;
-						fr.data.ptr = 0;
-						fr.src = type;
-						fr.offset = 0;
-						fr.mallocd = 0;
-						fr.delivery.tv_sec = 0;
-						fr.delivery.tv_usec = 0;
-						ast_queue_frame((*found_key)->chan, &fr);
-						ast_debug(1, "tlb: Channel %s answering\n", ast_channel_name((*found_key)->chan));
-					}
 					(*found_key)->countdown = instp->rtcptimeout;
 					if (recvlen > 12) {	/* if at least a header size and some payload */
 						/* if its a DTMF frame */
 						if ((((struct rtpVoice_t *) buf)->version == 2) && (((struct rtpVoice_t *) buf)->payt == 96)) {
 							uint32_t dseq, dtime;
-							char dchar, dstr[50];
+							char dchar;
 
 							/* The DTMF sequence numbers are a 32 bit number. I guess to be
 							 *really* pedantic, there should be code to handle a roll-over
@@ -2260,41 +2252,39 @@ static void *TLB_reader(void *data)
 							/* save lastdtmftime and lastdtmfseq */
 							p->dtmflastseq = dseq;
 							p->dtmflasttime = dtime;
-							snprintf(dstr, sizeof(dstr) - 1, "D 0 %s %u %c", p->instp->astnode, ++(p->dtmfidx), dchar);
-							ast_mutex_unlock(&p->lock);
+							textq = ast_malloc(sizeof(struct TLB_textq));
 							/* Send DTMF (in dchar) to Asterisk */
-							memset(&fr, 0, sizeof(fr));
-							fr.datalen = strlen(dstr) + 1;
-							fr.data.ptr = dstr;
-							fr.samples = 0;
-							fr.frametype = AST_FRAME_TEXT;
-							fr.subclass.format = 0;
-							fr.src = type;
-							fr.offset = 0;
-							fr.mallocd = 0;
-							fr.delivery.tv_sec = 0;
-							fr.delivery.tv_usec = 0;
-							ast_queue_frame((*found_key)->chan, &fr);
-							ast_debug(1, "tlb: Channel %s got DTMF %c\n", ast_channel_name((*found_key)->chan), dchar);
+							if (textq) {
+								textq->buff = ast_str_create(TLB_INIT_STR);
+								if (textq->buff) {
+									ast_str_set(&textq->buff, 0, "D 0 %s %u %c", p->instp->astnode, ++(p->dtmfidx), dchar);
+									insque((struct qelem *) textq, (struct qelem *) p->textq.qe_back);
+								} else {
+									ast_free(textq);
+								}
+							}
+							ast_mutex_unlock(&p->lock);
 						}
 						/* it its a voice frame */
 						else if (((struct rtpVoice_t *) buf)->version == 2) {
 							j = ((struct rtpVoice_t *) buf)->payt;
 							/* if codec changed from ours */
 							if (j != tlb_codecs[p->rxcodec].payt) {
-								struct ast_channel *ast = (*found_key)->chan;
 								for (i = 0; tlb_codecs[i].blocking_factor; i++) {
 									if (tlb_codecs[i].payt == j)
 										break;
 								}
 								if (!tlb_codecs[i].blocking_factor) {
-									ast_log(LOG_ERROR, "tlb:Payload type %d not recognized on channel %s\n",
-											j, ast_channel_name(ast));
+									ast_log(LOG_ERROR, "tlb:Payload type %d not recognized on channel %s\n", j, (*found_key)->call);
 									continue;
 								}
-								ast_debug(1, "tlb: channel %s switching to codec %s from codec %s\n", ast_channel_name(ast), tlb_codecs[i].name, tlb_codecs[p->rxcodec].name);
+								ast_debug(1,
+									"tlb: channel %s switching to codec %s from codec %s\n",
+									(*found_key)->call,
+									tlb_codecs[i].name,
+									tlb_codecs[p->rxcodec].name);
 								p->rxcodec = i;
-								tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
+								p->codec_change = 1;
 							}
 							if (recvlen ==
 								((tlb_codecs[p->rxcodec].frame_size * tlb_codecs[p->rxcodec].blocking_factor) + 12)) {
