@@ -974,6 +974,20 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 	ast_log(LOG_WARNING, "Got unknown link telemetry command: %s\n", strs[0]);
 }
 
+/*!
+ * \brief Execute dialplan on conference conference
+ */
+static int rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const char *context)
+{
+	rpt_disable_cdr(dpchannel);
+	ast_channel_context_set(dpchannel, context);
+	ast_channel_exten_set(dpchannel, exten);
+	ast_debug(5, "Playback dialplan extension %s\n", exten);
+	ast_pbx_run(dpchannel);
+	ast_debug(5, "PBX has finished on %s\n", context);
+	return 0;
+}
+
 /*! \brief Try to catch setting active_telem NULL when we weren't what it was set to
  * If somebody sets active_telem to NULL when it wasn't the current telem, then
  * that can cause a queued telemetry to think the current telem is done when it isn't,
@@ -991,7 +1005,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
  */
 void *rpt_tele_thread(void *this)
 {
-	int res = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x, n = 1;
+	int res = 0, haslink, hastx, hasremote, imdone = 0, pbx = 0, unkeys_queued, x, n = 1;
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
@@ -1059,7 +1073,6 @@ void *rpt_tele_thread(void *this)
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	rpt_disable_cdr(mychannel);
-	ast_answer(mychannel);
 
 	rpt_mutex_lock(&myrpt->lock);
 	mytele->chan = mychannel;
@@ -1678,9 +1691,18 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		res = ast_stream_and_wait(mychannel, mytele->param, "");
-		imdone = 1;
+		if (mytele->param[0] != '*') {
+			res = ast_stream_and_wait(mychannel, mytele->param, "");
+			imdone = 1;
+			break;
+		}
+		/* If parameter starts with a *, use dialplan to translate */
+		/* allocate a pseudo-channel thru asterisk */
+
+		rpt_do_dialplan(mychannel, mytele->param + 1, myrpt->p.telemetry);
+		pbx = 1;
 		break;
+
 	case TOPKEY:
 		/* wait a little bit */
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
@@ -2588,15 +2610,18 @@ treataslocal:
 	default:
 		break;
 	}
-	if (!imdone) {
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		} else {
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-			res = 0;
+	if (!pbx) {
+		if (!imdone) {
+			if (!res) {
+				res = ast_waitstream(mychannel, "");
+			} else {
+				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+				res = 0;
+			}
 		}
+		ast_stopstream(mychannel);
+		ast_hangup(mychannel);
 	}
-	ast_stopstream(mychannel);
 	rpt_mutex_lock(&myrpt->lock);
 	if (mytele->mode == TAILMSG) {
 		if (!res) {
@@ -2616,7 +2641,6 @@ treataslocal:
 		ast_free(ident);
 	}
 	ast_free(mytele);
-	ast_hangup(mychannel);
 #ifdef  APP_RPT_LOCK_DEBUG
 	{
 		struct lockthread *t;
