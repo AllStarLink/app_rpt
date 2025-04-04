@@ -340,6 +340,7 @@ struct TLB_pvt {
 	char txkey;
 	int rxkey;
 	int keepalive;
+	unsigned int hangup:1; /* Hangup channel requested */
 	struct ast_frame fr;
 	int txindex;
 	struct TLB_rxqast rxqast;
@@ -935,6 +936,7 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 		pvt->textq.qe_forw = &pvt->textq;
 		pvt->textq.qe_back = &pvt->textq;
 		pvt->codec_change = 0;
+		pvt->hangup = 0;
 
 		pvt->keepalive = KEEPALIVE_TIME;
 		pvt->instp = instances[n];
@@ -964,10 +966,9 @@ static int TLB_hangup(struct ast_channel *ast)
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->TLB_node_test.ip, p->ip);
 		instp->TLB_node_test.port = p->port;
-		if (find_delete(&instp->TLB_node_test)) {
-			ast_softhangup(ast, AST_SOFTHANGUP_DEV);
-		}
-
+		find_delete(&instp->TLB_node_test);
+		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
+		p->hangup = 0;
 		ast_mutex_unlock(&instp->lock);
 		
 		n = rtcp_make_bye(bye, "disconnected");
@@ -1384,6 +1385,7 @@ static int find_delete(struct TLB_node *key)
 	if (found_key) {
 		ast_debug(1, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
 		found = 1;
+		(*found_key)->p->hangup = 1;
 		tdelete(key, &TLB_node_list, compare_ip);
 	}
 	return found;
@@ -1398,6 +1400,10 @@ static struct ast_frame *TLB_xread(struct ast_channel *ast)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
 
+	if (p->hangup) {
+		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
+		p->hangup = 0;
+	}
 	memset(&p->fr, 0, sizeof(struct ast_frame));
 	p->fr.frametype = 0;
 	p->fr.subclass.format = 0;
@@ -1438,7 +1444,10 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
 	}
-
+	if (p->hangup) {
+		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
+		p->hangup = 0;
+	}
 	ast_mutex_lock(&p->lock);
 	if (p->codec_change) {
 		tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
