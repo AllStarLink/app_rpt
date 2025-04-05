@@ -489,6 +489,7 @@ struct el_pvt {
 	int rxkey;
 	int keepalive;
 	int txindex;
+	unsigned int hangup:1; /* indicate the channel should hang up */
 	struct ast_frame fr;
 	struct el_rxqast rxqast;
 	struct el_rxqel rxqel;
@@ -1441,6 +1442,7 @@ static struct el_pvt *el_alloc(const char *data)
 			ast_log(LOG_ERROR, "Cannot get DSP!\n");
 			return NULL;
 		}
+		pvt->hangup = 0;
 		ast_dsp_set_features(pvt->dsp, DSP_FEATURE_DIGIT_DETECT);
 		ast_dsp_set_digitmode(pvt->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
 		pvt->xpath = ast_translator_build_path(ast_format_slin, ast_format_gsm);
@@ -1471,6 +1473,7 @@ static int el_hangup(struct ast_channel *ast)
 	strcpy(instp->el_node_test.ip, pvt->ip);
 	find_delete(&instp->el_node_test);
 	ast_softhangup(ast, AST_SOFTHANGUP_DEV);
+	pvt->hangup = 0;
 	ast_mutex_unlock(&instp->lock);
 	n = rtcp_make_bye(bye, "disconnected");
 
@@ -2054,6 +2057,7 @@ static int find_delete(const struct el_node *key)
 		node = *found_key;
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
 		found = 1;
+		node->pvt->hangup = 1;
 		tdelete(node, &el_node_list, compare_ip);
 		ast_free(node);
 	}
@@ -2200,6 +2204,11 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
 
+	if (p->hangup) {
+		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
+		p->hangup = 0;
+	}
+
 	memset(&p->fr, 0, sizeof(struct ast_frame));
 	p->fr.frametype = 0;
 	p->fr.subclass.integer = 0;
@@ -2236,6 +2245,10 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
+	}
+	if (p->hangup) {
+		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
+		p->hangup = 0;
 	}
 
 	if (!p->firstsent) {
