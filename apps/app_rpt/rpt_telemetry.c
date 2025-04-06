@@ -1013,11 +1013,11 @@ void *rpt_tele_thread(void *this)
 	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ct, *ct_copy, *ident, *nodename;
-	time_t t, t1, t_mono, was_mono;
+	time_t t, t_mono, was_mono;
 	struct ast_tm localtm;
 	char **strs;
 	int i, j, k, ns, rbimode;
-	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
+	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200], exten[20];
 	float f;
 	unsigned long long u_mono;
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
@@ -2352,7 +2352,7 @@ treataslocal:
 		}
 		t = time(NULL);
 		rpt_localtime(&t, &localtm, myrpt->p.timezone);
-		t1 = rpt_mktime(&localtm, NULL);
+		rpt_mktime(&localtm, NULL);
 		/* Say the phase of the day is before the time */
 		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
 			p = "rpt/goodmorning";
@@ -2361,22 +2361,14 @@ treataslocal:
 		} else {
 			p = "rpt/goodevening";
 		}
-		if (sayfile(mychannel, p) == -1) {
-			imdone = 1;
-			break;
-		}
-		/* Say the time is ... */
-		if (sayfile(mychannel, "rpt/thetimeis") == -1) {
-			imdone = 1;
-			break;
-		}
 		/* Say the time */
-		res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		}
-		ast_stopstream(mychannel);
+		pbx_builtin_setvar_helper(mychannel, "DAY", p);
+
+		snprintf(exten, sizeof(exten), "%d", STAT_TIME);
+		rpt_do_dialplan(mychannel, exten, myrpt->p.telemetry);
+
 		imdone = 1;
+		goto abort3;
 		break;
 	case STATS_VERSION:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
