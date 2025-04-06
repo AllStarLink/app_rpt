@@ -2367,8 +2367,7 @@ treataslocal:
 		snprintf(exten, sizeof(exten), "%d", STAT_TIME);
 		rpt_do_dialplan(mychannel, exten, myrpt->p.telemetry);
 
-		imdone = 1;
-		goto abort3;
+		pbx = 1;
 		break;
 	case STATS_VERSION:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
