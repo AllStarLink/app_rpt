@@ -574,13 +574,12 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node,
  * Used extensively when links are built or torn down and other events are processed
  * by the rpt_master threads.
  */
-static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
+static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
 	char *strs[100], *p, buf[100], c, exten[20], time[30];
 	int i, j, k, n, res, vmajor, vminor;
 	float f;
 	time_t t;
-	unsigned int t1;
 	struct ast_tm localtm;
 
 	n = finddelim(varcmd, strs, ARRAY_LEN(strs));
@@ -699,22 +698,20 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 			return;
 		}
 		rpt_localtime(&t, &localtm, myrpt->p.timezone);
-		t1 = rpt_mktime(&localtm, NULL);
 		/* Say the phase of the day is before the time */
 		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
-			p = "rpt/goodmorning";
+			p = "MORNING";
 		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
-			p = "rpt/goodafternoon";
+			p = "AFTERNOON";
 		} else {
-			p = "rpt/goodevening";
+			p = "EVENING";
 		}
-		snprintf(time, sizeof(time), "%d", t1);
 		pbx_builtin_setvar_helper(mychannel, "DAY", p);
 
 		snprintf(exten, sizeof(exten), "%d", STAT_TIME);
 		rpt_do_dialplan(mychannel, exten, myrpt->p.telemetry);
 
-		return;
+		return 1;
 	}
 	if (!strcasecmp(strs[0], "STATS_VERSION")) {
 		if (n < 2) {
@@ -1130,7 +1127,7 @@ void *rpt_tele_thread(void *this)
 		imdone = 1;
 		break;
 	case VARCMD:
-		handle_varcmd_tele(myrpt, mychannel, mytele->param);
+		pbx = handle_varcmd_tele(myrpt, mychannel, mytele->param);
 		imdone = 1;
 		break;
 	case ID:
@@ -2355,11 +2352,11 @@ treataslocal:
 		rpt_mktime(&localtm, NULL);
 		/* Say the phase of the day is before the time */
 		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
-			p = "rpt/goodmorning";
+			p = "MORNING";
 		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
-			p = "rpt/goodafternoon";
+			p = "AFTERNOON";
 		} else {
-			p = "rpt/goodevening";
+			p = "EVENING";
 		}
 		/* Say the time */
 		pbx_builtin_setvar_helper(mychannel, "DAY", p);
