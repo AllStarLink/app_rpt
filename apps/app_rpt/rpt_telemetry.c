@@ -37,6 +37,13 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 
+enum telem_ext {
+	STAT_TIME = 1111,
+	TEST_TIME,
+};
+
+static int rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const char *context);
+
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink)
 {
 	int src;
@@ -569,7 +576,7 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node,
  */
 static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
-	char *strs[100], *p, buf[100], c;
+	char *strs[100], *p, buf[100], c, exten[20], time[30];
 	int i, j, k, n, res, vmajor, vminor;
 	float f;
 	time_t t;
@@ -701,19 +708,12 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		} else {
 			p = "rpt/goodevening";
 		}
-		if (sayfile(mychannel, p) == -1) {
-			return;
-		}
-		/* Say the time is ... */
-		if (sayfile(mychannel, "rpt/thetimeis") == -1) {
-			return;
-		}
-		/* Say the time */
-		res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		}
-		ast_stopstream(mychannel);
+		snprintf(time, sizeof(time), "%d", t1);
+		pbx_builtin_setvar_helper(mychannel, "DAY", p);
+
+		snprintf(exten, sizeof(exten), "%d", STAT_TIME);
+		rpt_do_dialplan(mychannel, exten, myrpt->p.telemetry);
+
 		return;
 	}
 	if (!strcasecmp(strs[0], "STATS_VERSION")) {
