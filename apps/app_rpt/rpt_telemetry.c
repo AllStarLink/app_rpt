@@ -38,6 +38,7 @@
 extern struct rpt rpt_vars[MAXRPTS];
 
 #define TELEM_STAT_TIME_EXTN "TOD"
+#define TELEM_STAT_TIME_REMOTE_EXTN "TODREMOTE"
 #define TELEM_VERSION_EXTN "VERSION"
 #define TELEM_FILE_EXTN "FILE"
 
@@ -662,12 +663,10 @@ static int telem_lookup_new(struct rpt *myrpt, struct ast_channel *chan, char *n
  */
 static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
-	char *strs[100], *p, buf[100], c;
+	char *strs[100], buf[100], c;
 	int i, j, k, n, res, vmajor, vminor;
 	unsigned int t1;
 	float f;
-	time_t t;
-	struct ast_tm localtm;
 
 	n = finddelim(varcmd, strs, ARRAY_LEN(strs));
 	if (n < 1) {
@@ -767,22 +766,12 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		if (sscanf(strs[1], N_FMT(u), &t1) != 1) {
 			return 0;
 		}
-		t = t1;
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return 0;
 		}
-		rpt_localtime(&t, &localtm, myrpt->p.timezone);
-		/* Say the phase of the day is before the time */
-		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
-			p = "MORNING";
-		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
-			p = "AFTERNOON";
-		} else {
-			p = "EVENING";
-		}
-		pbx_builtin_setvar_helper(mychannel, "DAY", p);
-		rpt_do_dialplan(mychannel, TELEM_STAT_TIME_EXTN, myrpt->p.telemetry);
-
+		snprintf(buf, sizeof(buf), "%d", t1);
+		pbx_builtin_setvar_helper(mychannel, "TIME", buf);
+		rpt_do_dialplan(mychannel, TELEM_STAT_TIME_REMOTE_EXTN, myrpt->p.telemetry);
 		return 1;
 	}
 	if (!strcasecmp(strs[0], "STATS_VERSION")) {
@@ -1069,7 +1058,6 @@ void *rpt_tele_thread(void *this)
 	int id_malloc = 0, m;
 	char *p, *ct, *ct_copy, *ident, *nodename;
 	time_t t, t_mono, was_mono;
-	struct ast_tm localtm;
 	char **strs;
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
@@ -2406,21 +2394,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		t = time(NULL);
-		rpt_localtime(&t, &localtm, myrpt->p.timezone);
-		rpt_mktime(&localtm, NULL);
-		/* Say the phase of the day is before the time */
-		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
-			p = "MORNING";
-		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
-			p = "AFTERNOON";
-		} else {
-			p = "EVENING";
-		}
-		/* Say the time */
-		pbx_builtin_setvar_helper(mychannel, "DAY", p);
 		rpt_do_dialplan(mychannel, TELEM_STAT_TIME_EXTN, myrpt->p.telemetry);
-
 		pbx = 1;
 		break;
 	case STATS_VERSION:
