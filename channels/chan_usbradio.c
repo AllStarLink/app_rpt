@@ -155,41 +155,6 @@ static char stoppulser;
 static char hasout;
 pthread_t pulserid;
 
-enum usbradio_rx_audio {
-	RX_AUDIO_NONE,
-	RX_AUDIO_SPEAKER,
-	RX_AUDIO_FLAT
-};
-enum usbradio_carrier_detect {
-	CD_IGNORE,
-	CD_XPMR_NOISE,
-	CD_XPMR_VOX,
-	CD_HID,
-	CD_HID_INVERT,
-	CD_PP,
-	CD_PP_INVERT
-};
-enum usbradio_squelch_detect {
-	SD_IGNORE,
-	SD_HID,
-	SD_HID_INVERT,
-	SD_XPMR,
-	SD_PP,
-	SD_PP_INVERT
-}; // no,external,externalinvert,software
-enum usbradio_tx_mix {
-	TX_OUT_OFF,
-	TX_OUT_VOICE,
-	TX_OUT_LSD,
-	TX_OUT_COMPOSITE,
-	TX_OUT_AUX
-};
-enum usbradio_carrier_type {
-	TOC_NONE,
-	TOC_PHASE,
-	TOC_NOTONE
-};
-
 /*! \brief type of signal detection used for carrier (cd) or ctcss (sd) */
 static const char * const cd_signal_type[] = {"no", "dsp", "vox", "usb", "usbinvert", "pp", "ppinvert"};
 static const char * const sd_signal_type[] = {"no", "usb", "usbinvert", "dsp", "pp", "ppinvert"};

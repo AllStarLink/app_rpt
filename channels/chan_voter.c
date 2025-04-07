@@ -519,7 +519,7 @@ struct voter_pvt {
 	char txctcssfreq[32];
 	int txctcsslevel;
 	int txctcsslevelset;
-	int txtoctype;
+	enum usbradio_carrier_type txtoctype;
 	int order;
 	struct ast_frame *adpcmf1;
 	struct ast_frame *nulawf1;

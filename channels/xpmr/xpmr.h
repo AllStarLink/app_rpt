@@ -225,17 +225,41 @@
 #define BIN_PROG_0 	LP_PIN06
 #define BIN_PROG_1 	LP_PIN07
 #define BIN_PROG_2 	LP_PIN08
-#define BIN_PROG_3 	LP_PIN09 
-		 
-#ifndef CHAN_USBRADIO  
-enum {RX_AUDIO_NONE,RX_AUDIO_SPEAKER,RX_AUDIO_FLAT};
-enum {TX_AUDIO_NONE,TX_AUDIO_FLAT,TX_AUDIO_FILTERED,TX_AUDIO_PROC};
-enum {CD_IGNORE,CD_XPMR_NOISE,CD_XPMR_VOX,CD_HID,CD_HID_INVERT};
-enum {SD_IGNORE,SD_HID,SD_HID_INVERT,SD_XPMR};    				 // no,external,externalinvert,software
-enum {RX_KEY_CARRIER,RX_KEY_CARRIER_CODE};
-enum {TX_OUT_OFF,TX_OUT_VOICE,TX_OUT_LSD,TX_OUT_COMPOSITE,TX_OUT_AUX};
-enum {TOC_NONE,TOC_PHASE,TOC_NOTONE};
-#endif
+#define BIN_PROG_3 LP_PIN09
+enum usbradio_rx_audio {
+	RX_AUDIO_NONE,
+	RX_AUDIO_SPEAKER,
+	RX_AUDIO_FLAT
+};
+enum usbradio_carrier_detect {
+	CD_IGNORE,
+	CD_XPMR_NOISE,
+	CD_XPMR_VOX,
+	CD_HID,
+	CD_HID_INVERT,
+	CD_PP,
+	CD_PP_INVERT
+};
+enum usbradio_squelch_detect {
+	SD_IGNORE,
+	SD_HID,
+	SD_HID_INVERT,
+	SD_XPMR,
+	SD_PP,
+	SD_PP_INVERT
+}; // no,external,externalinvert,software
+enum usbradio_tx_mix {
+	TX_OUT_OFF,
+	TX_OUT_VOICE,
+	TX_OUT_LSD,
+	TX_OUT_COMPOSITE,
+	TX_OUT_AUX
+};
+enum usbradio_carrier_type {
+	TOC_NONE,
+	TOC_PHASE,
+	TOC_NOTONE
+};
 
 enum dbg_pts {
  
@@ -614,13 +638,13 @@ typedef struct	t_pmr_chan
 	i16 rxRssi;				// current Rssi level
 	i16 rxQuality;			// signal quality metric
 	i16 rxCarrierDetect;    // carrier detect
-	i16 rxCdType;
+	enum usbradio_carrier_detect rxCdType;
 	i16 voxHangTime;		// if rxCdType=CD_XPMR_VOX, time to wait for RX audio before setting CD=0
 	i16 rxSqVoxAdj;
 	i16 rxExtCarrierDetect; 
 	i32 inputBlanking;  	// Tx pulse eliminator
 
-	i16 rxDemod;   		// see enum
+	enum usbradio_rx_audio rxDemod; // see enum
 	i16 txMod;			//
 
 	i16 rxNoiseSquelchEnable;
@@ -700,9 +724,9 @@ typedef struct	t_pmr_chan
 	i16 gainVoice;
 	i16 gainSubAudible;
 
-	i16 txMixA;				// Off, Ctcss, Voice, Composite
-	i16 txMixB;				// Off, Ctcss, Voice, Composite
-	
+	enum usbradio_tx_mix txMixA; // Off, Ctcss, Voice, Composite
+	enum usbradio_tx_mix txMixB; // Off, Ctcss, Voice, Composite
+
 	i16 rxMuting;
 
 	i16 rxCpuSaver;
