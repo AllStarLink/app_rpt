@@ -151,9 +151,25 @@ static char stoppulser;
 static char hasout;
 pthread_t pulserid;
 
-enum { CD_IGNORE, CD_HID, CD_HID_INVERT, CD_PP, CD_PP_INVERT };
-enum { SD_IGNORE, SD_HID, SD_HID_INVERT, SD_PP, SD_PP_INVERT };	// no,external,externalinvert,software
-enum { PAGER_NONE, PAGER_A, PAGER_B };
+enum simpleusb_carrier_detect {
+	CD_IGNORE,
+	CD_HID,
+	CD_HID_INVERT,
+	CD_PP,
+	CD_PP_INVERT
+};
+enum simpleusb_squelch_detect {
+	SD_IGNORE,
+	SD_HID,
+	SD_HID_INVERT,
+	SD_PP,
+	SD_PP_INVERT
+}; // no,external,externalinvert,software
+enum simpleusb_pager {
+	PAGER_NONE,
+	PAGER_A,
+	PAGER_B
+};
 
 /*! \brief type of signal detection used for carrier (cos) or ctcss */
 static const char * const signal_type[] = {"no", "usb", "usbinvert", "pp", "ppinvert"};
@@ -236,8 +252,8 @@ struct chan_simpleusb_pvt {
 	int32_t destate;			/* deemphasis state variable */
 	int32_t prestate;			/* preemphasis state variable */
 
-	int rxcdtype;
-	int rxsdtype;
+	enum simpleusb_carrier_detect rxcdtype;
+	enum simpleusb_squelch_detect rxsdtype;
 
 	int rxoncnt;				/* Counts the number of 20 ms intervals after RX activity */
 	int txoffcnt;				/* Counts the number of 20 ms intervals after TX unkey */
