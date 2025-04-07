@@ -226,11 +226,13 @@
 #define BIN_PROG_1 	LP_PIN07
 #define BIN_PROG_2 	LP_PIN08
 #define BIN_PROG_3 LP_PIN09
+
 enum usbradio_rx_audio {
 	RX_AUDIO_NONE,
 	RX_AUDIO_SPEAKER,
 	RX_AUDIO_FLAT
 };
+
 enum usbradio_carrier_detect {
 	CD_IGNORE,
 	CD_XPMR_NOISE,
@@ -240,14 +242,16 @@ enum usbradio_carrier_detect {
 	CD_PP,
 	CD_PP_INVERT
 };
+
 enum usbradio_squelch_detect {
-	SD_IGNORE,
-	SD_HID,
-	SD_HID_INVERT,
-	SD_XPMR,
-	SD_PP,
-	SD_PP_INVERT
-}; // no,external,externalinvert,software
+	SD_IGNORE,	   /* no */
+	SD_HID,		   /* external */
+	SD_HID_INVERT, /* external inverted */
+	SD_XPMR,	   /* software */
+	SD_PP,		   /* Parallel port */
+	SD_PP_INVERT   /*Parallel port inverted */
+};
+
 enum usbradio_tx_mix {
 	TX_OUT_OFF,
 	TX_OUT_VOICE,
@@ -255,6 +259,7 @@ enum usbradio_tx_mix {
 	TX_OUT_COMPOSITE,
 	TX_OUT_AUX
 };
+
 enum usbradio_carrier_type {
 	TOC_NONE,
 	TOC_PHASE,
@@ -262,72 +267,71 @@ enum usbradio_carrier_type {
 };
 
 enum dbg_pts {
- 
-RX_INPUT,	
-RX_NOISE_AMP, 
-RX_NOISE_TRIG,
+	RX_INPUT,
+	RX_NOISE_AMP,
+	RX_NOISE_TRIG,
 
-RX_CTCSS_LPF,
-RX_CTCSS_CENTER,
-RX_CTCSS_NRZ,
-RX_CTCSS_CLK,
-RX_CTCSS_P0,  
-RX_CTCSS_P1,
-RX_CTCSS_ACCUM,
-RX_CTCSS_DVDT,
-RX_CTCSS_DECODE,
+	RX_CTCSS_LPF,
+	RX_CTCSS_CENTER,
+	RX_CTCSS_NRZ,
+	RX_CTCSS_CLK,
+	RX_CTCSS_P0,
+	RX_CTCSS_P1,
+	RX_CTCSS_ACCUM,
+	RX_CTCSS_DVDT,
+	RX_CTCSS_DECODE,
 
-RX_DCS_CENTER,
-RX_DCS_DEC,
-RX_DCS_DIN,
-RX_DCS_CLK,
-RX_DCS_DAT,
+	RX_DCS_CENTER,
+	RX_DCS_DEC,
+	RX_DCS_DIN,
+	RX_DCS_CLK,
+	RX_DCS_DAT,
 
-RX_LSD_LPF,
-RX_LSD_CLK,
-RX_LSD_DAT,
-RX_LSD_DEC,
+	RX_LSD_LPF,
+	RX_LSD_CLK,
+	RX_LSD_DAT,
+	RX_LSD_DEC,
 
-RX_LSD_CENTER,
-RX_LSD_SYNC,  
-RX_LSD_STATE,
-RX_LSD_ERR,
-RX_LSD_INTE,
+	RX_LSD_CENTER,
+	RX_LSD_SYNC,
+	RX_LSD_STATE,
+	RX_LSD_ERR,
+	RX_LSD_INTE,
 
-RX_SMODE,
+	RX_SMODE,
 
-TX_PTT_IN,
-TX_PTT_OUT,
+	TX_PTT_IN,
+	TX_PTT_OUT,
 
-TX_DEDRIFT_LEAD,
-TX_DEDRIFT_ERR,
-TX_DEDRIFT_FACTOR,
-TX_DEDRIFT_DRIFT,
-TX_DEDRIFT_TWIDDLE,
+	TX_DEDRIFT_LEAD,
+	TX_DEDRIFT_ERR,
+	TX_DEDRIFT_FACTOR,
+	TX_DEDRIFT_DRIFT,
+	TX_DEDRIFT_TWIDDLE,
 
-TX_CTCSS_GEN,
+	TX_CTCSS_GEN,
 
-TX_SIGGEN_0,
+	TX_SIGGEN_0,
 
-TX_DCS_CLK,
-TX_DCS_DAT,
-TX_DCS_LPF,
+	TX_DCS_CLK,
+	TX_DCS_DAT,
+	TX_DCS_LPF,
 
-TX_LSD_CLK,
-TX_LSD_DAT,
-TX_LSD_GEN,  	
-TX_LSD_LPF,
+	TX_LSD_CLK,
+	TX_LSD_DAT,
+	TX_LSD_GEN,
+	TX_LSD_LPF,
 
-TX_NET_INT,
-TX_VOX_HPF,
-TX_VOX_LIM,
+	TX_NET_INT,
+	TX_VOX_HPF,
+	TX_VOX_LIM,
 
-TX_VOX_LPF,
+	TX_VOX_LPF,
 
-TX_OUT_A,
-TX_OUT_B,
+	TX_OUT_A,
+	TX_OUT_B,
 
-NUM_DEBUG_PTS  
+	NUM_DEBUG_PTS
 };
 
 typedef struct
