@@ -420,7 +420,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 }
 
 /*! Send telemetry tones */
-static int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
+static int send_tone_telemetry(struct ast_channel *chan, const char *tonestring)
 {
 	char *p, *stringp;
 	char *tonesubset;
@@ -468,11 +468,11 @@ static int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 	return res;
 }
 
-static int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
+static int telem_any(struct rpt *myrpt, struct ast_channel *chan, const char *entry)
 {
 	int res;
 	char c;
-
+	const char *tone_entry;
 	int morsespeed;
 	int morsefreq;
 	int morseampl;
@@ -494,16 +494,16 @@ static int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
 		if ((c >= 'a') && (c <= 'z')) {
 			c -= 0x20;
 		}
-
+		tone_entry = entry + 2;
 		switch (c) {
 		case 'I':				/* Morse ID */
-			send_morse(chan, entry + 2, morsespeed, morseidfreq, morseidampl);
+			send_morse(chan, tone_entry, morsespeed, morseidfreq, morseidampl);
 			break;
 		case 'M':				/* Morse Message */
-			res = send_morse(chan, entry + 2, morsespeed, morsefreq, morseampl);
+			res = send_morse(chan, tone_entry, morsespeed, morsefreq, morseampl);
 			break;
 		case 'T':				/* Tone sequence */
-			res = send_tone_telemetry(chan, entry + 2);
+			res = send_tone_telemetry(chan, tone_entry);
 			break;
 		default:
 			res = -1;
@@ -629,12 +629,12 @@ static int telem_lookup_new(struct rpt *myrpt, struct ast_channel *chan, char *n
 {
 	int res;
 	int i;
-	char *entry;
+	const char *entry;
 
 	res = 0;
 	entry = NULL;
 
-	entry = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.telemetry, name);
+	entry = ast_variable_retrieve(myrpt->cfg, myrpt->p.telemetry, name);
 
 	/* Try to look up the telemetry name */
 

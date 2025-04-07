@@ -76,7 +76,7 @@ int priority_jump(struct rpt *myrpt, struct ast_channel *chan)
 	return res;
 }
 
-int sayfile(struct ast_channel *mychannel, char *fname)
+int sayfile(struct ast_channel *mychannel, const char *fname)
 {
 	return ast_stream_and_wait(mychannel, fname, "");
 }
@@ -246,7 +246,7 @@ static int morse_cat(char *str, int freq, int duration)
 	return 0;
 }
 
-int send_morse(struct ast_channel *chan, char *string, int speed, int freq, int amplitude)
+int send_morse(struct ast_channel *chan, const char *string, int speed, int freq, int amplitude)
 {
 
 	static struct morse_bits mbits[] = {
