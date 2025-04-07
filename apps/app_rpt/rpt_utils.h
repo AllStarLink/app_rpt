@@ -76,7 +76,12 @@ time_t rpt_time_monotonic(void);
  */
 int macro_append(struct rpt *myrpt, const char *cmd);
 
-/*! \brief Do timer value update, limit to end_val */
+/*! \brief Do timer value update, limit to end_val
+ * \note Timers can end at any value and will stop and maintain the end value.
+ * If the timer value is set to 0, it will maintain 0 and not reset to the end
+ * value.  This behavior allows for a timer to reach an value then be set to 0
+ * to indicate some code has been executed (a oneshot).
+ */
 void update_timer(int *timer_ptr, int elap, int end_val);
 
 /*! \brief Initialize a text frame */
