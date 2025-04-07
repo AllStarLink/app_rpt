@@ -558,7 +558,7 @@ static int telem_any_new(struct rpt *myrpt, struct ast_channel *chan, char *entr
 			res = 0;
 		}
 	} else {
-		pbx_builtin_setvar_helper(chan, "FILE", entry);
+		pbx_builtin_setvar_helper(chan, "RPT_PLAYBACK_FILE", entry);
 		rpt_do_dialplan(chan, TELEM_FILE_EXTN, myrpt->p.telemetry);
 		res = 1;
 	}
