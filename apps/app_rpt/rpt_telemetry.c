@@ -573,40 +573,42 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node,
 /*! \brief Processes various telemetry commands that are in the myrpt structure
  * Used extensively when links are built or torn down and other events are processed
  * by the rpt_master threads.
+ * \return 1 if handled by PBX, 0 if not handled by PBX
  */
 static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
-	char *strs[100], *p, buf[100], c, exten[20], time[30];
+	char *strs[100], *p, buf[100], c, exten[20];
 	int i, j, k, n, res, vmajor, vminor;
+	unsigned int t1;
 	float f;
 	time_t t;
 	struct ast_tm localtm;
 
 	n = finddelim(varcmd, strs, ARRAY_LEN(strs));
 	if (n < 1) {
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "REMGO")) {
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/remote_go");
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "REMALREADY")) {
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/remote_already");
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "REMNOTFOUND")) {
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/remote_notfound");
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "COMPLETE")) {
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
 		if (!res) {
@@ -615,7 +617,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		}
 		ast_stopstream(mychannel);
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "PROC")) {
 		wait_interval(myrpt, DLY_TELEM, mychannel);
@@ -623,79 +625,79 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		if (res < 0) {			/* Then default message */
 			sayfile(mychannel, "rpt/callproceeding");
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "TERM")) {
 		/* wait a little bit longer */
 		if (wait_interval(myrpt, DLY_CALLTERM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		res = telem_lookup(myrpt, mychannel, myrpt->name, "patchdown");
 		if (res < 0) {			/* Then default message */
 			sayfile(mychannel, "rpt/callterminated");
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "MACRO_NOTFOUND")) {
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/macro_notfound");
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "MACRO_BUSY")) {
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
 			sayfile(mychannel, "rpt/macro_busy");
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "CONNECTED")) {
 		if (n < 3) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		res = saynode(myrpt, mychannel, strs[2]);
 		if (!res) {
 			res = ast_stream_and_wait(mychannel, "rpt/connected-to", "");
 		}
 		saynode(myrpt, mychannel, strs[1]);
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "CONNFAIL")) {
 		if (n < 2) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		res = saynode(myrpt, mychannel, strs[1]);
 		if (!res) {
 			sayfile(mychannel, "rpt/connection_failed");
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "REMDISC")) {
 
 		if (n < 2)
-			return;
+			return 0;
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
-			return;
+			return 0;
 		res = saynode(myrpt, mychannel, strs[1]);
 		if (!res)
 			sayfile(mychannel, "rpt/remote_disc");
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "STATS_TIME")) {
 		if (n < 2) {
-			return;
+			return 0;
 		}
 		if (sscanf(strs[1], N_FMT(u), &t1) != 1) {
-			return;
+			return 0;
 		}
 		t = t1;
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		rpt_localtime(&t, &localtm, myrpt->p.timezone);
 		/* Say the phase of the day is before the time */
@@ -715,17 +717,17 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 	}
 	if (!strcasecmp(strs[0], "STATS_VERSION")) {
 		if (n < 2) {
-			return;
+			return 0;
 		}
 		if (sscanf(strs[1], N_FMT(d) "." N_FMT(d), &vmajor, &vminor) != 2) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		/* Say "version" */
 		if (sayfile(mychannel, "rpt/version") == -1) {
-			return;
+			return 0;
 		}
 		res = ast_say_number(mychannel, vmajor, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) {
@@ -733,7 +735,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		}
 		ast_stopstream(mychannel);
 		if (saycharstr(mychannel, ".") == -1) {
-			return;
+			return 0;
 		}
 		if (!res) {				/* Say "Y" */
 			ast_say_number(mychannel, vminor, "", ast_channel_language(mychannel), (char *) NULL);
@@ -744,25 +746,25 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		} else {
 			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
 		}
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "STATS_GPS")) {
 		if (n < 5) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		if (saynode(myrpt, mychannel, strs[1]) == -1) {
-			return;
+			return 0;
 		}
 		if (sayfile(mychannel, "location") == -1) {
-			return;
+			return 0;
 		}
 		c = *(strs[2] + strlen(strs[2]) - 1);
 		*(strs[2] + strlen(strs[2]) - 1) = 0;
 		if (sscanf(strs[2], "%2d" N_FMT(d) "." N_FMT(d), &i, &j, &k) != 3) {
-			return;
+			return 0;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) {
@@ -770,7 +772,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		}
 		ast_stopstream(mychannel);
 		if (sayfile(mychannel, "degrees") == -1) {
-			return;
+			return 0;
 		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) {
@@ -778,21 +780,21 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		}
 		ast_stopstream(mychannel);
 		if (saycharstr(mychannel, strs[2] + 4) == -1) {
-			return;
+			return 0;
 		}
 		if (sayfile(mychannel, "minutes") == -1) {
-			return;
+			return 0;
 		}
 		if (sayfile(mychannel, (c == 'N') ? "north" : "south") == -1) {
-			return;
+			return 0;
 		}
 		if (sayfile(mychannel, "rpt/latitude") == -1) {
-			return;
+			return 0;
 		}
 		c = *(strs[3] + strlen(strs[3]) - 1);
 		*(strs[3] + strlen(strs[3]) - 1) = 0;
 		if (sscanf(strs[3], "%3d" N_FMT(d) "." N_FMT(d), &i, &j, &k) != 3) {
-			return;
+			return 0;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) {
@@ -800,7 +802,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		}
 		ast_stopstream(mychannel);
 		if (sayfile(mychannel, "degrees") == -1) {
-			return;
+			return 0;
 		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) {
@@ -808,24 +810,24 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		}
 		ast_stopstream(mychannel);
 		if (saycharstr(mychannel, strs[3] + 5) == -1) {
-			return;
+			return 0;
 		}
 		if (sayfile(mychannel, "minutes") == -1) {
-			return;
+			return 0;
 		}
 		if (sayfile(mychannel, (c == 'E') ? "east" : "west") == -1) {
-			return;
+			return 0;
 		}
 		if (sayfile(mychannel, "rpt/longitude") == -1) {
-			return;
+			return 0;
 		}
 		if (!*strs[4]) {
-			return;
+			return 0;
 		}
 		c = *(strs[4] + strlen(strs[4]) - 1);
 		*(strs[4] + strlen(strs[4]) - 1) = 0;
 		if (sscanf(strs[4], N_FMT(f), &f) != 1) {
-			return;
+			return 0;
 		}
 		if (myrpt->p.gpsfeet) {
 			if (c == 'M') {
@@ -838,7 +840,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		}
 		snprintf(buf, sizeof(buf), "%0.1f", f);
 		if (sscanf(buf, N_FMT(d) "." N_FMT(d), &i, &j) != 2) {
-			return;
+			return 0;
 		}
 		res = ast_say_number(mychannel, i, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) {
@@ -846,7 +848,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		}
 		ast_stopstream(mychannel);
 		if (saycharstr(mychannel, ".") == -1) {
-			return;
+			return 0;
 		}
 		res = ast_say_number(mychannel, j, "", ast_channel_language(mychannel), (char *) NULL);
 		if (!res) {
@@ -854,23 +856,23 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		}
 		ast_stopstream(mychannel);
 		if (sayfile(mychannel, (myrpt->p.gpsfeet) ? "feet" : "meters") == -1) {
-			return;
+			return 0;
 		}
 		if (saycharstr(mychannel, "AMSL") == -1) {
-			return;
+			return 0;
 		}
 		ast_stopstream(mychannel);
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "ARB_ALPHA")) {
 		if (n < 2) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		saycharstr(mychannel, strs[1]);
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "REV_PATCH")) {
 		/* Parts of this section taken from app_parkandannounce */
@@ -879,10 +881,10 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		int looptemp = 0, i = 0, dres = 0;
 
 		if (n < 3) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 
 		tpl_working = ast_strdup(strs[2]);
@@ -910,49 +912,49 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 			}
 		}
 		ast_free(tpl_copy);
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "LASTNODEKEY")) {
 		if (n < 2) {
-			return;
+			return 0;
 		}
 		if (!atoi(strs[1])) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		saynode(myrpt, mychannel, strs[1]);
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "LASTUSER")) {
 		if (n < 2) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		sayphoneticstr(mychannel, strs[1]);
 		if (n < 3) {
-			return;
+			return 0;
 		}
 		sayfile(mychannel, "and");
 		sayphoneticstr(mychannel, strs[2]);
-		return;
+		return 0;
 	}
 	if (!strcasecmp(strs[0], "STATUS")) {
 		if (n < 3) {
-			return;
+			return 0;
 		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
+			return 0;
 		}
 		saynode(myrpt, mychannel, strs[1]);
 		if (atoi(strs[2]) > 0) {
 			sayfile(mychannel, "rpt/autopatch_on");
 		} else if (n == 3) {
 			sayfile(mychannel, "rpt/repeat_only");
-			return;
+			return 0;
 		}
 		for (i = 3; i < n; i++) {
 			saynode(myrpt, mychannel, strs[i] + 1);
@@ -966,9 +968,10 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 				sayfile(mychannel, "rpt/connecting");
 			}
 		}
-		return;
+		return 0;
 	}
 	ast_log(LOG_WARNING, "Got unknown link telemetry command: %s\n", strs[0]);
+	return 0;
 }
 
 /*!
