@@ -37,10 +37,9 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 
-enum telem_ext {
-	STAT_TIME = 1111,
-	TEST_TIME,
-};
+#define TELEM_STAT_TIME_EXTN "TOD"
+#define TELEM_VERSION_EXTN "VERSION"
+#define TELEM_FILE_EXTN "FILE"
 
 static int rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const char *context);
 
@@ -497,7 +496,7 @@ static int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
 
 		switch (c) {
 		case 'I':				/* Morse ID */
-			res = send_morse(chan, entry + 2, morsespeed, morseidfreq, morseidampl);
+			send_morse(chan, entry + 2, morsespeed, morseidfreq, morseidampl);
 			break;
 		case 'M':				/* Morse Message */
 			res = send_morse(chan, entry + 2, morsespeed, morsefreq, morseampl);
@@ -510,6 +509,57 @@ static int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
 		}
 	} else {
 		res = sayfile(chan, entry);	/* File */
+	}
+	return res;
+}
+
+/*! \brief Select correct telemetry type (Morse, tone, or file)
+ * \return 1 if PBX is used, 0 if no PBX is used.
+ */
+static int telem_any_new(struct rpt *myrpt, struct ast_channel *chan, char *entry)
+{
+	int res;
+	char c;
+
+	int morsespeed;
+	int morsefreq;
+	int morseampl;
+	int morseidfreq;
+	int morseidampl;
+
+	res = 0;
+
+	morsespeed = retrieve_astcfgint(myrpt, myrpt->p.morse, "speed", 5, 35, 20);
+	morsefreq = retrieve_astcfgint(myrpt, myrpt->p.morse, "frequency", 300, 3000, 800);
+	morseampl = retrieve_astcfgint(myrpt, myrpt->p.morse, "amplitude", 200, 8192, 4096);
+	morseidampl = retrieve_astcfgint(myrpt, myrpt->p.morse, "idamplitude", 200, 8192, 2048);
+	morseidfreq = retrieve_astcfgint(myrpt, myrpt->p.morse, "idfrequency", 300, 3000, 330);
+
+	/* Is it a file, or a tone sequence? */
+
+	if (entry[0] == '|') {
+		c = entry[1];
+		if ((c >= 'a') && (c <= 'z')) {
+			c -= 0x20;
+		}
+
+		switch (c) {
+		case 'I': /* Morse ID */
+			send_morse(chan, entry + 2, morsespeed, morseidfreq, morseidampl);
+			break;
+		case 'M': /* Morse Message */
+			send_morse(chan, entry + 2, morsespeed, morsefreq, morseampl);
+			break;
+		case 'T': /* Tone sequence */
+			send_tone_telemetry(chan, entry + 2);
+			break;
+		default:
+			res = 0;
+		}
+	} else {
+		pbx_builtin_setvar_helper(chan, "FILE", entry);
+		rpt_do_dialplan(chan, TELEM_FILE_EXTN, myrpt->p.telemetry);
+		res = 1;
 	}
 	return res;
 }
@@ -570,6 +620,41 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node,
 	return res;
 }
 
+/*! \brief Looks up a telemetry name in the config file, and does a telemetry response as configured.
+ * 4 types of telemetry are handled: Morse ID, Morse Message, Tone Sequence, and a File containing a recording.
+ * \return 1 if PBX is used, 0 if not
+ */
+static int telem_lookup_new(struct rpt *myrpt, struct ast_channel *chan, char *node, char *name)
+{
+	int res;
+	int i;
+	char *entry;
+
+	res = 0;
+	entry = NULL;
+
+	entry = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.telemetry, name);
+
+	/* Try to look up the telemetry name */
+
+	if (!entry) {
+		/* Telemetry name wasn't found in the config file, use the default */
+		for (i = 0; i < sizeof(tele_defs) / sizeof(struct telem_defaults); i++) {
+			if (!strcasecmp(tele_defs[i].name, name)) {
+				entry = tele_defs[i].value;
+			}
+		}
+	}
+	if (entry) {
+		if (!ast_strlen_zero(entry) && chan) {
+			res = telem_any(myrpt, chan, entry);
+		}
+	} else {
+		res = 0;
+	}
+	return res;
+}
+
 /*! \brief Processes various telemetry commands that are in the myrpt structure
  * Used extensively when links are built or torn down and other events are processed
  * by the rpt_master threads.
@@ -577,7 +662,7 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node,
  */
 static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
-	char *strs[100], *p, buf[100], c, exten[20];
+	char *strs[100], *p, buf[100], c;
 	int i, j, k, n, res, vmajor, vminor;
 	unsigned int t1;
 	float f;
@@ -610,33 +695,20 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return 0;
 		}
-		res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		} else {
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		}
-		ast_stopstream(mychannel);
-		return 0;
+		return telem_lookup_new(myrpt, mychannel, myrpt->name, "functcomplete");
 	}
 	if (!strcasecmp(strs[0], "PROC")) {
-		wait_interval(myrpt, DLY_TELEM, mychannel);
-		res = telem_lookup(myrpt, mychannel, myrpt->name, "patchup");
-		if (res < 0) {			/* Then default message */
-			sayfile(mychannel, "rpt/callproceeding");
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			return 0;
 		}
-		return 0;
+		return telem_lookup_new(myrpt, mychannel, myrpt->name, "patchup");
 	}
 	if (!strcasecmp(strs[0], "TERM")) {
 		/* wait a little bit longer */
 		if (wait_interval(myrpt, DLY_CALLTERM, mychannel) == -1) {
 			return 0;
 		}
-		res = telem_lookup(myrpt, mychannel, myrpt->name, "patchdown");
-		if (res < 0) {			/* Then default message */
-			sayfile(mychannel, "rpt/callterminated");
-		}
-		return 0;
+		return telem_lookup_new(myrpt, mychannel, myrpt->name, "patchdown");
 	}
 	if (!strcasecmp(strs[0], "MACRO_NOTFOUND")) {
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
@@ -709,9 +781,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 			p = "EVENING";
 		}
 		pbx_builtin_setvar_helper(mychannel, "DAY", p);
-
-		snprintf(exten, sizeof(exten), "%d", STAT_TIME);
-		rpt_do_dialplan(mychannel, exten, myrpt->p.telemetry);
+		rpt_do_dialplan(mychannel, TELEM_STAT_TIME_EXTN, myrpt->p.telemetry);
 
 		return 1;
 	}
@@ -725,28 +795,13 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return 0;
 		}
-		/* Say "version" */
-		if (sayfile(mychannel, "rpt/version") == -1) {
-			return 0;
-		}
-		res = ast_say_number(mychannel, vmajor, "", ast_channel_language(mychannel), (char *) NULL);
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		}
-		ast_stopstream(mychannel);
-		if (saycharstr(mychannel, ".") == -1) {
-			return 0;
-		}
-		if (!res) {				/* Say "Y" */
-			ast_say_number(mychannel, vminor, "", ast_channel_language(mychannel), (char *) NULL);
-		}
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-			ast_stopstream(mychannel);
-		} else {
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-		}
-		return 0;
+
+		snprintf(buf, sizeof(buf), "%d", vmajor);
+		pbx_builtin_setvar_helper(mychannel, "MAJOR", buf);
+		snprintf(buf, sizeof(buf), "%d", vminor);
+		pbx_builtin_setvar_helper(mychannel, "MINOR", buf);
+		rpt_do_dialplan(mychannel, TELEM_VERSION_EXTN, myrpt->p.telemetry);
+		return 1;
 	}
 	if (!strcasecmp(strs[0], "STATS_GPS")) {
 		if (n < 5) {
@@ -1017,7 +1072,7 @@ void *rpt_tele_thread(void *this)
 	struct ast_tm localtm;
 	char **strs;
 	int i, j, k, ns, rbimode;
-	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200], exten[20];
+	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
 	unsigned long long u_mono;
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
@@ -1138,48 +1193,49 @@ void *rpt_tele_thread(void *this)
 		if (*ident) {
 			/* wait a bit */
 			if (!wait_interval(myrpt, (mytele->mode == ID) ? DLY_ID : DLY_TELEM, mychannel))
-				res = telem_any(myrpt, mychannel, ident);
+				pbx = telem_any_new(myrpt, mychannel, ident);
 		}
 		imdone = 1;
 		break;
 	case TAILMSG:
 		/* wait a little bit longer */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res =
-				ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
+			pbx_builtin_setvar_helper(mychannel, "FILE", myrpt->p.tailmessages[myrpt->tailmessagen]);
+			rpt_do_dialplan(mychannel, TELEM_FILE_EXTN, myrpt->p.telemetry);
+			pbx = 1;
+		}
 		break;
 	case IDTALKOVER:
 		ast_debug(7, "Tracepoint IDTALKOVER: in rpt_tele_thread()\n");
 		p = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "idtalkover");
-		if (p)
-			res = telem_any(myrpt, mychannel, p);
+		if (p) {
+			pbx = telem_any_new(myrpt, mychannel, p);
+		}
 		imdone = 1;
 		break;
 	case PROC:
 		/* wait a little bit longer */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "patchup");
-		if (res < 0) {			/* Then default message */
-			res = ast_streamfile(mychannel, "rpt/callproceeding", ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel)) {
+			pbx = telem_lookup_new(myrpt, mychannel, myrpt->name, "patchup");
 		}
 		break;
 	case TERM:
 		/* wait a little bit longer */
-		if (!wait_interval(myrpt, DLY_CALLTERM, mychannel))
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "patchdown");
-		if (res < 0) {			/* Then default message */
-			res = ast_streamfile(mychannel, "rpt/callterminated", ast_channel_language(mychannel));
+		if (!wait_interval(myrpt, DLY_CALLTERM, mychannel)) {
+			pbx = telem_lookup_new(myrpt, mychannel, myrpt->name, "patchdown");
 		}
 		break;
 	case COMPLETE:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
+			pbx = telem_lookup_new(myrpt, mychannel, myrpt->name, "functcomplete");
+		}
 		break;
 	case REMCOMPLETE:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "remcomplete");
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
+			pbx = telem_lookup_new(myrpt, mychannel, myrpt->name, "remcomplete");
+		}
 		break;
 	case MACRO_NOTFOUND:
 		/* wait a little bit */
@@ -2363,9 +2419,7 @@ treataslocal:
 		}
 		/* Say the time */
 		pbx_builtin_setvar_helper(mychannel, "DAY", p);
-
-		snprintf(exten, sizeof(exten), "%d", STAT_TIME);
-		rpt_do_dialplan(mychannel, exten, myrpt->p.telemetry);
+		rpt_do_dialplan(mychannel, TELEM_STAT_TIME_EXTN, myrpt->p.telemetry);
 
 		pbx = 1;
 		break;
