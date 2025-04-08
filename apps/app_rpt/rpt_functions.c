@@ -879,8 +879,8 @@ enum rpt_function_response function_remote(
 	return DC_INDETERMINATE;
 }
 
-enum rpt_function_response function_autopatchup(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	int i, index, paramlength, nostar = 0;
 	char *lparam;
@@ -982,8 +982,8 @@ enum rpt_function_response function_autopatchup(
 	return DC_COMPLETE;
 }
 
-enum rpt_function_response function_autopatchdn(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
 		return DC_ERROR;
@@ -1008,8 +1008,8 @@ enum rpt_function_response function_autopatchdn(
 	return DC_COMPLETE;
 }
 
-enum rpt_function_response function_status(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_status(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	struct rpt_tele *telem;
 
@@ -1083,8 +1083,8 @@ enum rpt_function_response function_status(
 	return DC_INDETERMINATE;
 }
 
-enum rpt_function_response function_macro(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_macro(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	const char *val;
 	int i;
@@ -1119,8 +1119,8 @@ enum rpt_function_response function_macro(
 	return DC_COMPLETE;
 }
 
-enum rpt_function_response function_playback(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_playback(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	if (myrpt->remote)
 		return DC_ERROR;
@@ -1135,8 +1135,8 @@ enum rpt_function_response function_playback(
 	return DC_COMPLETE;
 }
 
-enum rpt_function_response function_localplay(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_localplay(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	if (myrpt->remote)
 		return DC_ERROR;
@@ -1150,8 +1150,8 @@ enum rpt_function_response function_localplay(
 	return DC_COMPLETE;
 }
 
-enum rpt_function_response function_cop(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char string[50], func[100];
 	char paramcopy[500];
@@ -1769,8 +1769,8 @@ enum rpt_function_response function_meter(
 	return DC_COMPLETE;
 }
 
-enum rpt_function_response function_userout(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_userout(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	if (myrpt->remote)
 		return DC_ERROR;
@@ -1782,8 +1782,8 @@ enum rpt_function_response function_userout(
 	return DC_COMPLETE;
 }
 
-enum rpt_function_response function_cmd(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *cp;
 
