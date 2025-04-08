@@ -2663,8 +2663,8 @@ void rpt_links_init(struct rpt_link *l)
 		rpt_hangup(myrpt, RPT_TXCHAN); \
 	}
 
-#define IS_DAHDI_CHAN(c) (!strcasecmp(ast_channel_tech(c)->type, "Local"))
-#define IS_DAHDI_CHAN_NAME(s) (!strncasecmp(s, "Local", 5))
+#define IS_LOCAL_CHAN(c) (!strcasecmp(ast_channel_tech(c)->type, "Local"))
+#define IS_LOCAL_CHAN_NAME(s) (!strncasecmp(s, "Local", 5))
 
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
@@ -2681,7 +2681,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		myrpt->dahditxchannel = IS_DAHDI_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
+		myrpt->dahditxchannel = IS_LOCAL_CHAN_NAME(myrpt->rxchanname) && !IS_LOCAL_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 	}
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN)) {
@@ -2965,7 +2965,7 @@ static inline void log_keyed(struct rpt *myrpt)
 	myrpt->dailykeyups++;
 	myrpt->totalkeyups++;
 	rpt_mutex_unlock(&myrpt->lock);
-	if (!IS_PSEUDO(myrpt->txchannel)) {
+	if (!IS_LOCAL(myrpt->txchannel)) {
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_KEY);
 	}
 	rpt_mutex_lock(&myrpt->lock);
@@ -2981,7 +2981,7 @@ static inline void log_unkeyed(struct rpt *myrpt)
 	myrpt->txkeyed = 0;
 	time(&myrpt->lasttxkeyedtime);
 	rpt_mutex_unlock(&myrpt->lock);
-	if (!IS_PSEUDO(myrpt->txchannel)) {
+	if (!IS_LOCAL(myrpt->txchannel)) {
 		ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
 	}
 	rpt_mutex_lock(&myrpt->lock);
@@ -5179,10 +5179,10 @@ static void *rpt(void *this)
 
 			myrpt->lastitx = x;
 			if (myrpt->p.itxctcss) {
-				if (IS_DAHDI_CHAN(myrpt->rxchannel)) {
+				if (IS_LOCAL_CHAN(myrpt->rxchannel)) {
 					dahdi_radio_set_ctcss_encode(myrpt->dahdirxchannel, !x);
 				} else if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-					!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+						   !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 					snprintf(str, sizeof(str), "TXCTCSS %d", !(!x));
 					ast_sendtext(myrpt->rxchannel, str);
 				}
@@ -6800,7 +6800,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		if (IS_DAHDI_CHAN_NAME(myrpt->rxchanname)) {
+		if (IS_LOCAL_CHAN_NAME(myrpt->rxchanname)) {
 			myrpt->dahditxchannel = myrpt->rxchannel;
 		}
 	}

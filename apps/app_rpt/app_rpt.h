@@ -927,8 +927,8 @@ struct nodelog {
 	char str[MAXNODESTR * 2];
 };
 
-#define IS_PSEUDO(c) (!strncasecmp(ast_channel_name(c), "Local", 5))
-#define IS_PSEUDO_NAME(c) (!strncasecmp(c, "Local", 5))
+#define IS_LOCAL(c) (!strncasecmp(ast_channel_name(c), "Local", 5))
+#define IS_LOCAL_NAME(c) (!strncasecmp(c, "Local", 5))
 
 int rpt_debug_level(void);
 int rpt_set_debug_level(int newlevel);

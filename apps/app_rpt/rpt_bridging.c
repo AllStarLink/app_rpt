@@ -260,14 +260,12 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 
 	switch (chantype) {
 	case RPT_RXCHAN:
-		myrpt->dahdirxchannel = !strcasecmp(tech, "DAHDI") ? chan : NULL;
+		myrpt->dahdirxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
 		break;
 	case RPT_TXCHAN:
 		if (flags & RPT_LINK_CHAN) {
 			/* XXX Dunno if this difference is really necessary, but this is a literal refactor of existing logic... */
-			myrpt->dahditxchannel = !strcasecmp(tech, "DAHDI") ? chan : NULL;
-		} else {
-			myrpt->dahditxchannel = !strcasecmp(tech, "DAHDI") && strcasecmp(device, "pseudo") ? chan : NULL;
+			myrpt->dahditxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
 		}
 		break;
 	default:
@@ -279,7 +277,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 
 struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap)
 {
-	struct ast_channel *chan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	struct ast_channel *chan = ast_request("Local", cap, NULL, NULL, "pseudo", NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
 		return NULL;
@@ -541,7 +539,7 @@ int rpt_mon_setup(struct rpt *myrpt)
 {
 	int res;
 
-	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
+	if (!IS_LOCAL(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
 		int confno = dahdi_conf_get_channo(myrpt->txchannel); /* get tx channel's port number */
 		if (confno < 0) {
 			return -1;
