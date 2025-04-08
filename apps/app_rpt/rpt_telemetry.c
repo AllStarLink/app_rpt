@@ -41,6 +41,16 @@ extern struct rpt rpt_vars[MAXRPTS];
 #define TELEM_STAT_TIME_REMOTE_EXTN "TODREMOTE"
 #define TELEM_VERSION_EXTN "VERSION"
 #define TELEM_FILE_EXTN "FILE"
+#define TELEM_MACRO_NOTFOUND_EXTN "MACRONOTFOUND"
+#define TELEM_MACRO_BUSY_EXTN "MACROBUSY"
+#define TELEM_REMDISC_EXTN "REMDISC"
+#define TELEM_REMBUSY_EXTN "REMBUSY"
+#define TELEM_REMALREADY_EXTN "REMALREADY"
+#define TELEM_REMNOTFOUND_EXTN "REMNOTFOUND"
+#define TELEM_REMGO_EXTN "REMGO"
+#define TELEM_CONNECTED_EXTN "REMCON"
+#define TELEM_FAILED_EXTN "REMFAILED"
+#define TELEM_NOTFOUND_EXTN "MEMNFND"
 
 static int rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const char *context);
 
@@ -517,7 +527,7 @@ static int telem_any(struct rpt *myrpt, struct ast_channel *chan, const char *en
 /*! \brief Select correct telemetry type (Morse, tone, or file)
  * \return 1 if PBX is used, 0 if no PBX is used.
  */
-static int telem_any_new(struct rpt *myrpt, struct ast_channel *chan, char *entry)
+static int telem_any_new(struct rpt *myrpt, struct ast_channel *chan, const char *entry)
 {
 	int res;
 	char c;
@@ -648,7 +658,7 @@ static int telem_lookup_new(struct rpt *myrpt, struct ast_channel *chan, char *n
 	}
 	if (entry) {
 		if (!ast_strlen_zero(entry) && chan) {
-			res = telem_any(myrpt, chan, entry);
+			res = telem_any_new(myrpt, chan, entry);
 		}
 	} else {
 		res = 0;
@@ -1188,7 +1198,7 @@ void *rpt_tele_thread(void *this)
 	case TAILMSG:
 		/* wait a little bit longer */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			pbx_builtin_setvar_helper(mychannel, "FILE", myrpt->p.tailmessages[myrpt->tailmessagen]);
+			pbx_builtin_setvar_helper(mychannel, "RPT_PLAYBACK_FILE", myrpt->p.tailmessages[myrpt->tailmessagen]);
 			rpt_do_dialplan(mychannel, TELEM_FILE_EXTN, myrpt->p.telemetry);
 			pbx = 1;
 		}
@@ -1227,13 +1237,16 @@ void *rpt_tele_thread(void *this)
 		break;
 	case MACRO_NOTFOUND:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/macro_notfound", ast_channel_language(mychannel));
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
+			rpt_do_dialplan(mychannel, TELEM_MACRO_NOTFOUND_EXTN, myrpt->p.telemetry);
+			pbx = 1;
+		}
 		break;
 	case MACRO_BUSY:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/macro_busy", ast_channel_language(mychannel));
+			rpt_do_dialplan(mychannel, TELEM_MACRO_BUSY_EXTN, myrpt->p.telemetry);
+		pbx = 1;
 		break;
 	case PAGE:
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
@@ -1682,27 +1695,33 @@ treataslocal:
 			imdone = 1;
 			break;
 		}
-		res = saynode(myrpt, mychannel, mytele->mylink.name);
-		if (!res) {
-			res = ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? "rpt/remote_disc" : "rpt/remote_busy"), ast_channel_language(mychannel));
+		pbx_builtin_setvar_helper(mychannel, "NODE", mytele->mylink.name);
+		if (mytele->mylink.hasconnected) {
+			rpt_do_dialplan(mychannel, TELEM_REMDISC_EXTN, myrpt->p.telemetry);
+		} else {
+			rpt_do_dialplan(mychannel, TELEM_REMBUSY_EXTN, myrpt->p.telemetry);
 		}
+		pbx = 1;
 		break;
 	case REMALREADY:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/remote_already", ast_channel_language(mychannel));
+			rpt_do_dialplan(mychannel, TELEM_REMALREADY_EXTN, myrpt->p.telemetry);
+			pbx = 1;
 		}
 		break;
 	case REMNOTFOUND:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/remote_notfound", ast_channel_language(mychannel));
+			rpt_do_dialplan(mychannel, TELEM_REMNOTFOUND_EXTN, myrpt->p.telemetry);
+			pbx = 1;
 		}
 		break;
 	case REMGO:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/remote_go", ast_channel_language(mychannel));
+			rpt_do_dialplan(mychannel, TELEM_REMGO_EXTN, myrpt->p.telemetry);
+			pbx = 1;
 		}
 		break;
 	case CONNECTED:
@@ -1710,23 +1729,21 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		res = saynode(myrpt, mychannel, mytele->mylink.name);
-		if (!res) {
-			res = ast_stream_and_wait(mychannel, "rpt/connected-to", "");
-		}
-		res = saynode(myrpt, mychannel, myrpt->name);
-		imdone = 1;
+		pbx_builtin_setvar_helper(mychannel, "NODE", mytele->mylink.name);
+		pbx_builtin_setvar_helper(mychannel, "NODETO", myrpt->name);
+		rpt_do_dialplan(mychannel, TELEM_CONNECTED_EXTN, myrpt->p.telemetry);
+		pbx = 1;
 		break;
 	case CONNFAIL:
-		res = saynode(myrpt, mychannel, mytele->mylink.name);
-		if (!res) {
-			res = ast_streamfile(mychannel, "rpt/connection_failed", ast_channel_language(mychannel));
-		}
+		pbx_builtin_setvar_helper(mychannel, "NODE", mytele->mylink.name);
+		rpt_do_dialplan(mychannel, TELEM_FAILED_EXTN, myrpt->p.telemetry);
+		pbx = 1;
 		break;
 	case MEMNOTFOUND:
 		/* wait a little bit */
 		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/memory_notfound", ast_channel_language(mychannel));
+			rpt_do_dialplan(mychannel, TELEM_NOTFOUND_EXTN, myrpt->p.telemetry);
+			pbx = 1;
 		}
 		break;
 	case PLAYBACK:
@@ -1736,8 +1753,9 @@ treataslocal:
 			break;
 		}
 		if (mytele->param[0] != '*') {
-			res = ast_stream_and_wait(mychannel, mytele->param, "");
-			imdone = 1;
+			pbx_builtin_setvar_helper(mychannel, "RPT_PLAYBACK_FILE", mytele->param);
+			rpt_do_dialplan(mychannel, TELEM_FILE_EXTN, myrpt->p.telemetry);
+			pbx = 1;
 			break;
 		}
 		/* If parameter starts with a *, use dialplan to translate */
