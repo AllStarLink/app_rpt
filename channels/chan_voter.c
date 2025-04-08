@@ -1372,7 +1372,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	short silbuf[FRAME_SIZE];
 
 	haslastaudio = 0;
-	memset(&fr, 0, sizeof(struct ast_frame));
+	memset(&fr, 0, sizeof(fr));
 	fr.frametype = AST_FRAME_VOICE;
 	fr.subclass.format = ast_format_ulaw;
 	fr.datalen = FRAME_SIZE;
@@ -1380,9 +1380,6 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	fr.data.ptr = p->buf + AST_FRIENDLY_OFFSET;
 	fr.src = type;
 	fr.offset = AST_FRIENDLY_OFFSET;
-	fr.mallocd = 0;
-	fr.delivery.tv_sec = 0;
-	fr.delivery.tv_usec = 0;
 	f1 = ast_translate(p->toast, &fr, 0);
 	if (!f1) {
 		ast_log(LOG_ERROR, "Voter %i: Can not translate frame to send to Asterisk\n", p->nodenum);
@@ -1464,7 +1461,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			maxrssi = client->lastrssi;
 			maxclient = client;
 		}
-		memset(&fr, 0, sizeof(struct ast_frame));
+		memset(&fr, 0, sizeof(fr));
 		fr.frametype = AST_FRAME_VOICE;
 		fr.subclass.format = ast_format_ulaw;
 		fr.datalen = FRAME_SIZE;
@@ -1472,9 +1469,6 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		fr.data.ptr = p->buf + AST_FRIENDLY_OFFSET;
 		fr.src = type;
 		fr.offset = AST_FRIENDLY_OFFSET;
-		fr.mallocd = 0;
-		fr.delivery.tv_sec = 0;
-		fr.delivery.tv_usec = 0;
 		f2 = ast_translate(p->toast1, &fr, 0);
 		if (!f2) {
 			ast_log(LOG_ERROR, "Voter %i: Can not translate frame to send to Asterisk\n", p->nodenum);
@@ -1516,17 +1510,13 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		}
 		if (p->rxkey && p->dsp && p->usedtmf) {
 			memset(silbuf, 0, sizeof(silbuf));
-			memset(&fr, 0, sizeof(struct ast_frame));
+			memset(&fr, 0, sizeof(fr));
 			fr.frametype = AST_FRAME_VOICE;
 			fr.subclass.format = ast_format_slin;
 			fr.datalen = FRAME_SIZE * 2;
 			fr.samples = FRAME_SIZE;
 			fr.data.ptr = silbuf;
 			fr.src = type;
-			fr.offset = 0;
-			fr.mallocd = 0;
-			fr.delivery.tv_sec = 0;
-			fr.delivery.tv_usec = 0;
 			f2 = ast_dsp_process(NULL, p->dsp, &fr);
 			if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 				if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
@@ -1542,17 +1532,13 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			ast_frfree(f2);
 		}
 		memset(silbuf, 0, sizeof(silbuf));
-		memset(&fr, 0, sizeof(struct ast_frame));
+		memset(&fr, 0, sizeof(fr));
 		fr.frametype = AST_FRAME_VOICE;
 		fr.subclass.format = ast_format_slin;
 		fr.datalen = FRAME_SIZE * 2;
 		fr.samples = FRAME_SIZE;
 		fr.data.ptr = silbuf;
 		fr.src = type;
-		fr.offset = 0;
-		fr.mallocd = 0;
-		fr.delivery.tv_sec = 0;
-		fr.delivery.tv_usec = 0;
 		p->threshold = 0;
 		p->threshcount = 0;
 		p->lingercount = 0;
@@ -1566,18 +1552,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	incr_drainindex(p);
 	gettimeofday(&p->lastrxtime, NULL);
 	if (!p->rxkey) {
-		memset(&fr, 0, sizeof(fr));
-		fr.datalen = 0;
-		fr.samples = 0;
-		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass.integer = AST_CONTROL_RADIO_KEY;
-		fr.data.ptr = 0;
-		fr.src = type;
-		fr.offset = 0;
-		fr.mallocd = 0;
-		fr.delivery.tv_sec = 0;
-		fr.delivery.tv_usec = 0;
-		ast_queue_frame(p->owner, &fr);
+		ast_indicate(p->owner, AST_CONTROL_RADIO_KEY);
 	}
 	p->rxkey = 1;
 	x = 0;
@@ -1605,17 +1580,13 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		ast_queue_frame(p->owner, f1);
 	} else {
 		memset(silbuf, 0, sizeof(silbuf));
-		memset(&fr, 0, sizeof(struct ast_frame));
+		memset(&fr, 0, sizeof(fr));
 		fr.frametype = AST_FRAME_VOICE;
 		fr.subclass.format = ast_format_slin;
 		fr.datalen = FRAME_SIZE * 2;
 		fr.samples = FRAME_SIZE;
 		fr.data.ptr = silbuf;
 		fr.src = type;
-		fr.offset = 0;
-		fr.mallocd = 0;
-		fr.delivery.tv_sec = 0;
-		fr.delivery.tv_usec = 0;
 		ast_queue_frame(p->owner, &fr);
 	}
 	ast_frfree(f1);
@@ -1912,17 +1883,13 @@ static void *voter_xmit(void *data)
 						xmtbuf[i] = -28000;
 					}
 				}
-				memset(&fr, 0, sizeof(struct ast_frame));
+				memset(&fr, 0, sizeof(fr));
 				fr.frametype = AST_FRAME_VOICE;
 				fr.subclass.format = ast_format_slin;
 				fr.datalen = FRAME_SIZE;
 				fr.samples = FRAME_SIZE;
 				fr.data.ptr = xmtbuf;
 				fr.src = type;
-				fr.offset = 0;
-				fr.mallocd = 0;
-				fr.delivery.tv_sec = 0;
-				fr.delivery.tv_usec = 0;
 				f1 = ast_translate(p->fromast, &fr, 0);
 				if (!f1) {
 					ast_log(LOG_ERROR, "Voter %i: Can not translate frame to recv from Asterisk\n", p->nodenum);
@@ -2036,17 +2003,13 @@ static void *voter_xmit(void *data)
 					if ((!x) && (!i)) {
 						continue;
 					}
-					memset(&fr, 0, sizeof(struct ast_frame));
+					memset(&fr, 0, sizeof(fr));
 					fr.frametype = AST_FRAME_VOICE;
 					fr.subclass.format = ast_format_slin;
 					fr.datalen = FRAME_SIZE;
 					fr.samples = FRAME_SIZE;
 					fr.data.ptr = xmtbuf2;
 					fr.src = type;
-					fr.offset = 0;
-					fr.mallocd = 0;
-					fr.delivery.tv_sec = 0;
-					fr.delivery.tv_usec = 0;
 					if (f1) {
 						ast_frfree(f1);
 					}
@@ -2093,17 +2056,13 @@ static void *voter_xmit(void *data)
 				p->adpcmf1 = ast_frdup(f1);
 			} else {
 				memset(xmtbuf, 0xff, sizeof(xmtbuf));
-				memset(&fr, 0, sizeof(struct ast_frame));
+				memset(&fr, 0, sizeof(fr));
 				fr.frametype = AST_FRAME_VOICE;
 				fr.subclass.format = ast_format_ulaw;
 				fr.datalen = FRAME_SIZE;
 				fr.samples = FRAME_SIZE;
 				fr.data.ptr = xmtbuf;
 				fr.src = type;
-				fr.offset = 0;
-				fr.mallocd = 0;
-				fr.delivery.tv_sec = 0;
-				fr.delivery.tv_usec = 0;
 				if (x) {
 					f3 = ast_frcat(p->adpcmf1, f1);
 				} else {
@@ -2174,17 +2133,13 @@ static void *voter_xmit(void *data)
 				p->nulawf1 = ast_frdup(f1);
 			} else {
 				memset(xmtbuf, 0xff, sizeof(xmtbuf));
-				memset(&fr, 0, sizeof(struct ast_frame));
+				memset(&fr, 0, sizeof(fr));
 				fr.frametype = AST_FRAME_VOICE;
 				fr.subclass.format = ast_format_ulaw;
 				fr.datalen = FRAME_SIZE;
 				fr.samples = FRAME_SIZE;
 				fr.data.ptr = xmtbuf;
 				fr.src = type;
-				fr.offset = 0;
-				fr.mallocd = 0;
-				fr.delivery.tv_sec = 0;
-				fr.delivery.tv_usec = 0;
 				if (x) {
 					f3 = ast_frcat(p->nulawf1, f1);
 				} else {
@@ -3830,18 +3785,7 @@ static void *voter_reader(void *data)
 				continue;
 			}
 			if (voter_tvdiff_ms(tv, p->lastrxtime) > RX_TIMEOUT_MS) {
-				memset(&fr, 0, sizeof(fr));
-				fr.datalen = 0;
-				fr.samples = 0;
-				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-				fr.data.ptr = 0;
-				fr.src = type;
-				fr.offset = 0;
-				fr.mallocd = 0;
-				fr.delivery.tv_sec = 0;
-				fr.delivery.tv_usec = 0;
-				ast_queue_frame(p->owner, &fr);
+				ast_indicate(p->owner, AST_CONTROL_RADIO_UNKEY);
 				p->rxkey = 0;
 				p->lastwon = NULL;
 			}
@@ -4005,18 +3949,7 @@ static void *voter_reader(void *data)
 								}
 								for (p = pvts; p; p = p->next) {
 									if (p->rxkey) {
-										memset(&fr, 0, sizeof(fr));
-										fr.datalen = 0;
-										fr.samples = 0;
-										fr.frametype = AST_FRAME_CONTROL;
-										fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-										fr.data.ptr = 0;
-										fr.src = type;
-										fr.offset = 0;
-										fr.mallocd = 0;
-										fr.delivery.tv_sec = 0;
-										fr.delivery.tv_usec = 0;
-										ast_queue_frame(p->owner, &fr);
+										ast_indicate(p->owner, AST_CONTROL_RADIO_UNKEY);
 									}
 									p->lastwon = NULL;
 									p->rxkey = 0;
@@ -4228,17 +4161,13 @@ static void *voter_reader(void *data)
 										(struct sockaddr *) &client->sin, sizeof(client->sin));
 #endif
 
-									memset(&fr, 0, sizeof(struct ast_frame));
+									memset(&fr, 0, sizeof(fr));
 									fr.frametype = AST_FRAME_VOICE;
 									fr.subclass.format = ast_format_adpcm;
 									fr.datalen = ADPCM_FRAME_SIZE;
 									fr.samples = FRAME_SIZE * 2;
 									fr.data.ptr = buf + sizeof(VOTER_PACKET_HEADER) + 1;
 									fr.src = type;
-									fr.offset = 0;
-									fr.mallocd = 0;
-									fr.delivery.tv_sec = 0;
-									fr.delivery.tv_usec = 0;
 									f1 = ast_translate(p->adpcmin, &fr, 0);
 								}
 								/* if otherwise (RSSI > 0), if NULAW, translate it */
@@ -4264,17 +4193,13 @@ static void *voter_reader(void *data)
 										xbuf[i] = lpass4(s, p->rlpx, p->rlpy);
 										xbuf[i + 1] = lpass4(s, p->rlpx, p->rlpy);
 									}
-									memset(&fr, 0, sizeof(struct ast_frame));
+									memset(&fr, 0, sizeof(fr));
 									fr.frametype = AST_FRAME_VOICE;
 									fr.subclass.format = ast_format_slin;
 									fr.datalen = FRAME_SIZE * 4;
 									fr.samples = FRAME_SIZE * 2;
 									fr.data.ptr = xbuf;
 									fr.src = type;
-									fr.offset = 0;
-									fr.mallocd = 0;
-									fr.delivery.tv_sec = 0;
-									fr.delivery.tv_usec = 0;
 									f1 = ast_translate(p->nuin, &fr, 0);
 								}
 								if ((!client->doadpcm) && (!client->donulaw)) {
@@ -4550,17 +4475,13 @@ static void *voter_reader(void *data)
 										}
 										if (!maxclient) {	/* if nothing there */
 											memset(silbuf, 0, sizeof(silbuf));
-											memset(&fr, 0, sizeof(struct ast_frame));
+											memset(&fr, 0, sizeof(fr));
 											fr.frametype = AST_FRAME_VOICE;
 											fr.subclass.format = ast_format_slin;
 											fr.datalen = FRAME_SIZE * 2;
 											fr.samples = FRAME_SIZE;
 											fr.data.ptr = silbuf;
 											fr.src = type;
-											fr.offset = 0;
-											fr.mallocd = 0;
-											fr.delivery.tv_sec = 0;
-											fr.delivery.tv_usec = 0;
 											p->threshold = 0;
 											p->threshcount = 0;
 											p->lingercount = 0;
@@ -4617,17 +4538,13 @@ static void *voter_reader(void *data)
 											p->rxkey = 0;
 											p->lastwon = NULL;
 											memset(silbuf, 0, sizeof(silbuf));
-											memset(&fr, 0, sizeof(struct ast_frame));
+											memset(&fr, 0, sizeof(fr));
 											fr.frametype = AST_FRAME_VOICE;
 											fr.subclass.format = ast_format_slin;
 											fr.datalen = FRAME_SIZE * 2;
 											fr.samples = FRAME_SIZE;
 											fr.data.ptr = silbuf;
 											fr.src = type;
-											fr.offset = 0;
-											fr.mallocd = 0;
-											fr.delivery.tv_sec = 0;
-											fr.delivery.tv_usec = 0;
 											p->threshold = 0;
 											p->threshcount = 0;
 											p->lingercount = 0;
@@ -4685,15 +4602,9 @@ static void *voter_reader(void *data)
 															p->nodenum);
 											memset(&fr, 0, sizeof(fr));
 											fr.datalen = strlen(maxclient->name) + 1;
-											fr.samples = 0;
 											fr.frametype = AST_FRAME_TEXT;
-											fr.subclass.format = ast_format_slin;
 											fr.data.ptr = maxclient->name;
 											fr.src = type;
-											fr.offset = 0;
-											fr.mallocd = 0;
-											fr.delivery.tv_sec = 0;
-											fr.delivery.tv_usec = 0;
 											ast_queue_frame(p->owner, &fr);
 										}
 										ast_debug(2, "Sending from client %s RSSI %d\n", maxclient->name, maxrssi);
@@ -4702,17 +4613,13 @@ static void *voter_reader(void *data)
 										p->rxkey = 0;
 										p->lastwon = NULL;
 										memset(silbuf, 0, sizeof(silbuf));
-										memset(&fr, 0, sizeof(struct ast_frame));
+										memset(&fr, 0, sizeof(fr));
 										fr.frametype = AST_FRAME_VOICE;
 										fr.subclass.format = ast_format_slin;
 										fr.datalen = FRAME_SIZE * 2;
 										fr.samples = FRAME_SIZE;
 										fr.data.ptr = silbuf;
 										fr.src = type;
-										fr.offset = 0;
-										fr.mallocd = 0;
-										fr.delivery.tv_sec = 0;
-										fr.delivery.tv_usec = 0;
 										p->threshold = 0;
 										p->threshcount = 0;
 										p->lingercount = 0;

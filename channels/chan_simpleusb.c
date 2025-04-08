@@ -1214,7 +1214,10 @@ static void *hidthread(void *arg)
 			}
 			if ((!o->had_gpios_in) || (o->last_gpios_in != j)) {
 				char buf1[100];
-				struct ast_frame fr;
+				struct ast_frame fr = {
+					.frametype = AST_FRAME_TEXT,
+					.src = "chan_simpleusb",
+				};
 
 				for (i = 0; i < GPIO_PINCOUNT; i++) {
 					/* skip if not specified */
@@ -1232,17 +1235,8 @@ static void *hidthread(void *arg)
 					/* if bit has changed, or never reported */
 					if ((!o->had_gpios_in) || ((o->last_gpios_in & (1 << i)) != (j & (1 << i)))) {
 						sprintf(buf1, "GPIO%d %d\n", i + 1, (j & (1 << i)) ? 1 : 0);
-						memset(&fr, 0, sizeof(fr));
 						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1);
-						fr.samples = 0;
-						fr.frametype = AST_FRAME_TEXT;
-						fr.subclass.format = ast_format_slin;
-						fr.src = "chan_simpleusb";
-						fr.offset = 0;
-						fr.mallocd = 0;
-						fr.delivery.tv_sec = 0;
-						fr.delivery.tv_usec = 0;
 						ast_queue_frame(o->owner, &fr);
 					}
 				}
@@ -1263,7 +1257,10 @@ static void *hidthread(void *arg)
 				}
 				if ((!o->had_pp_in) || (o->last_pp_in != j)) {
 					char buf1[100];
-					struct ast_frame fr;
+					struct ast_frame fr = {
+						.frametype = AST_FRAME_TEXT,
+						.src = "chan_simpleusb",
+					};
 
 					for (i = 10; i <= 15; i++) {
 						/* skip if not specified */
@@ -1281,17 +1278,8 @@ static void *hidthread(void *arg)
 						/* if bit has changed, or never reported */
 						if ((!o->had_pp_in) || ((o->last_pp_in & (1 << ppinshift[i])) != (j & (1 << ppinshift[i])))) {
 							sprintf(buf1, "PP%d %d\n", i, (j & (1 << ppinshift[i])) ? 1 : 0);
-							memset(&fr, 0, sizeof(fr));
 							fr.data.ptr = buf1;
 							fr.datalen = strlen(buf1);
-							fr.samples = 0;
-							fr.frametype = AST_FRAME_TEXT;
-							fr.subclass.format = ast_format_slin;
-							fr.src = "chan_simpleusb";
-							fr.offset = 0;
-							fr.mallocd = 0;
-							fr.delivery.tv_sec = 0;
-							fr.delivery.tv_usec = 0;
 							ast_queue_frame(o->owner, &fr);
 						}
 					}
@@ -1982,7 +1970,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	register int i;
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f = &o->read_f, *f1;
-	struct ast_frame wf = { AST_FRAME_CONTROL }, wf1;
+	struct ast_frame wf1;
 	time_t now;
 	register short *sp, *sp1; 
 	short outbuf[FRAME_SIZE * 2 * 6];
@@ -1999,15 +1987,13 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	memset(f, 0, sizeof(struct ast_frame));
 	f->frametype = AST_FRAME_NULL;
 	f->src = simpleusb_tech.type;
-	wf.src = simpleusb_tech.type;
 
 	/* if USB device not ready, just return NULL frame */
 	if (!o->hasusb) {
 		if (o->rxkeyed) {
 			o->lastrx = 0;
 			o->rxkeyed = 0;
-			wf.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-			ast_queue_frame(o->owner, &wf);
+			ast_indicate(o->owner, AST_CONTROL_RADIO_UNKEY);
 		}
 		return &ast_null_frame;
 	}
@@ -2300,15 +2286,13 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	/* Send a message to indicate rx signal detect conditions */
 	if (o->lastrx && (!o->rxkeyed)) {
 		o->lastrx = 0;
-		wf.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-		ast_queue_frame(o->owner, &wf);
+		ast_indicate(o->owner, AST_CONTROL_RADIO_UNKEY);
 		if (o->duplex3) {
 			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 		}
 	} else if ((!o->lastrx) && (o->rxkeyed)) {
 		o->lastrx = 1;
-		wf.subclass.integer = AST_CONTROL_RADIO_KEY;
-		ast_queue_frame(o->owner, &wf);
+		ast_indicate(o->owner, AST_CONTROL_RADIO_KEY);
 		if (o->duplex3) {
 			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
 		}
