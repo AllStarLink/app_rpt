@@ -222,49 +222,10 @@
 #define DTX_TP1 	LP_PIN07		// not used
 #define DTX_TP2 	LP_PIN08		// not used
 
-#define BIN_PROG_0 	LP_PIN06
-#define BIN_PROG_1 	LP_PIN07
-#define BIN_PROG_2 	LP_PIN08
+#define BIN_PROG_0 LP_PIN06
+#define BIN_PROG_1 LP_PIN07
+#define BIN_PROG_2 LP_PIN08
 #define BIN_PROG_3 LP_PIN09
-
-enum usbradio_rx_audio {
-	RX_AUDIO_NONE,
-	RX_AUDIO_SPEAKER,
-	RX_AUDIO_FLAT
-};
-
-enum usbradio_carrier_detect {
-	CD_IGNORE,
-	CD_XPMR_NOISE,
-	CD_XPMR_VOX,
-	CD_HID,
-	CD_HID_INVERT,
-	CD_PP,
-	CD_PP_INVERT
-};
-
-enum usbradio_squelch_detect {
-	SD_IGNORE,	   /* no */
-	SD_HID,		   /* external */
-	SD_HID_INVERT, /* external inverted */
-	SD_XPMR,	   /* software */
-	SD_PP,		   /* Parallel port */
-	SD_PP_INVERT   /*Parallel port inverted */
-};
-
-enum usbradio_tx_mix {
-	TX_OUT_OFF,
-	TX_OUT_VOICE,
-	TX_OUT_LSD,
-	TX_OUT_COMPOSITE,
-	TX_OUT_AUX
-};
-
-enum usbradio_carrier_type {
-	TOC_NONE,
-	TOC_PHASE,
-	TOC_NOTONE
-};
 
 enum dbg_pts {
 	RX_INPUT,
@@ -630,26 +591,26 @@ typedef struct	t_pmr_chan
 	u32 rxfreq;
 	i8  txpower;
 
-	i32 txsettletime;			// in samples
+	i32 txsettletime; /* in samples */
 	i32 txsettletimer;
 
-    i16 txrxblankingtime;		// in milli-seconds
-	i16 txrxblankingtimer;	
-	
-	i16	rxDC;			    // average DC value of input
-	i16 rxSqSet;			// carrier squelch threshold
-	i16 rxSqHyst;			// carrier squelch hysterysis
-	i16 rxRssi;				// current Rssi level
-	i16 rxQuality;			// signal quality metric
-	i16 rxCarrierDetect;    // carrier detect
-	enum usbradio_carrier_detect rxCdType;
-	i16 voxHangTime;		// if rxCdType=CD_XPMR_VOX, time to wait for RX audio before setting CD=0
-	i16 rxSqVoxAdj;
-	i16 rxExtCarrierDetect; 
-	i32 inputBlanking;  	// Tx pulse eliminator
+	i16 txrxblankingtime; /* in milli-seconds */
+	i16 txrxblankingtimer;
 
-	enum usbradio_rx_audio rxDemod; // see enum
-	i16 txMod;			//
+	i16 rxDC;			 /* average DC value of input */
+	i16 rxSqSet;		 /* carrier squelch threshold */
+	i16 rxSqHyst;		 /* carrier squelch hysterysis */
+	i16 rxRssi;			 /* current Rssi level */
+	i16 rxQuality;		 /* signal quality metric */
+	i16 rxCarrierDetect; /* carrier detect */
+	enum radio_carrier_detect rxCdType;
+	i16 voxHangTime; /* if rxCdType=CD_XPMR_VOX, time to wait for RX audio before setting CD=0 */
+	i16 rxSqVoxAdj;
+	i16 rxExtCarrierDetect;
+	i32 inputBlanking; /* Tx pulse eliminator */
+
+	enum radio_rx_audio rxDemod;
+	i16 txMod;
 
 	i16 rxNoiseSquelchEnable;
 	i16 rxHpfEnable;
@@ -728,8 +689,8 @@ typedef struct	t_pmr_chan
 	i16 gainVoice;
 	i16 gainSubAudible;
 
-	enum usbradio_tx_mix txMixA; // Off, Ctcss, Voice, Composite
-	enum usbradio_tx_mix txMixB; // Off, Ctcss, Voice, Composite
+	enum radio_tx_mix txMixA;
+	enum radio_tx_mix txMixB;
 
 	i16 rxMuting;
 

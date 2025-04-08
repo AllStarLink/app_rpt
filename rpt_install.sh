@@ -141,6 +141,7 @@ rpt_add "include/asterisk/res_usbradio.h"
 rpt_add "res/res_rpt_http_registrations.c"
 rpt_add "res/res_usbradio.c"
 rpt_add "res/res_usbradio.exports.in"
+rpt_add "include/asterisk/res_radio.h"
 
 rpt_add "utils/radio-tune-menu.c"
 rpt_add "utils/simpleusb-tune-menu.c"

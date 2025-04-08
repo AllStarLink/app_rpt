@@ -55,6 +55,7 @@
 #include <linux/version.h>
 
 #include "asterisk/res_usbradio.h"
+#include "asterisk/res_radio.h"
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h>
@@ -254,12 +255,12 @@ struct chan_usbradio_pvt {
 
 	t_pmr_chan *pmrChan;
 
-	enum usbradio_rx_audio rxdemod;
+	enum radio_rx_audio rxdemod;
 	float rxgain;
-	enum usbradio_carrier_detect rxcdtype;
-	int voxhangtime;			/* if rxcdtype=vox, ms to wait detecting RX audio before setting CD=0 */
-	enum usbradio_squelch_detect rxsdtype;
-	int rxsquelchadj;			/* this copy needs to be here for initialization */
+	enum radio_carrier_detect rxcdtype;
+	int voxhangtime; /* if rxcdtype=vox, ms to wait detecting RX audio before setting CD=0 */
+	enum radio_squelch_detect rxsdtype;
+	int rxsquelchadj; /* this copy needs to be here for initialization */
 	int rxsqhyst;
 	int rxsqvoxadj;
 	int rxnoisefiltype;
@@ -267,8 +268,8 @@ struct chan_usbradio_pvt {
 	enum usbradio_carrier_type txtoctype;
 
 	float txctcssgain;
-	enum usbradio_tx_mix txmixa;
-	enum usbradio_tx_mix txmixb;
+	enum radio_tx_mix txmixa;
+	enum radio_tx_mix txmixb;
 	int rxlpf;
 	int rxhpf;
 	int txlpf;

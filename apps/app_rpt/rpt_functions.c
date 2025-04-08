@@ -875,6 +875,7 @@ enum rpt_function_response function_remote(
 	default:
 		break;
 	}
+
 	return DC_INDETERMINATE;
 }
 

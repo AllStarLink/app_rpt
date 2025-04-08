@@ -243,6 +243,7 @@ Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or 
 #include "asterisk/format_cache.h"
 #include "asterisk/format_compatibility.h"
 #include "asterisk/timing.h"
+#include "asterisk/res_radio.h"
 
 #include "../apps/app_rpt/pocsag.c"
 

@@ -2,7 +2,8 @@
 /* Define function protos for function table here */
 
 /*! \brief Internet linking function */
-enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink);
+enum rpt_function_response function_ilink(
+	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink);
 
 /*! \brief Autopatch up */
 enum rpt_function_response function_autopatchup(
