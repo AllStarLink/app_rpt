@@ -568,9 +568,9 @@ int set_tm271(struct rpt *myrpt)
 	return 0;
 }
 
-static int check_freq_kenwood(int m, int d, int *defmode)
+static int check_freq_kenwood(int m, int d, enum rpt_mode *defmode)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (m == 144) {				/* 2 meters */
 		if (d < 10100)
@@ -588,9 +588,9 @@ static int check_freq_kenwood(int m, int d, int *defmode)
 	return 0;
 }
 
-static int check_freq_tm271(int m, int d, int *defmode)
+static int check_freq_tm271(int m, int d, enum rpt_mode *defmode)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (m == 144) {				/* 2 meters */
 		if (d < 10100)
@@ -609,9 +609,9 @@ static int check_freq_tm271(int m, int d, int *defmode)
 /* Check for valid rbi frequency */
 /* Hard coded limits now, configurable later, maybe? */
 
-static int check_freq_rbi(int m, int d, int *defmode)
+static int check_freq_rbi(int m, int d, enum rpt_mode *defmode)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (m == 50) {				/* 6 meters */
 		if (d < 10100)
@@ -641,9 +641,9 @@ static int check_freq_rbi(int m, int d, int *defmode)
 /* Check for valid rtx frequency */
 /* Hard coded limits now, configurable later, maybe? */
 
-static int check_freq_rtx(int m, int d, int *defmode, struct rpt *myrpt)
+static int check_freq_rtx(int m, int d, enum rpt_mode *defmode, struct rpt *myrpt)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_RTX150)) {
 
@@ -690,9 +690,9 @@ int split_ctcss_freq(char *hertz, char *decimal, char *freq)
 /* Check to see that the frequency is valid */
 /* Hard coded limits now, configurable later, maybe? */
 
-static int check_freq_ft897(int m, int d, int *defmode)
+static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (m == 1) {				/* 160 meters */
 		dflmd = REM_MODE_LSB;
@@ -808,7 +808,7 @@ int simple_command_ft897(struct rpt *myrpt, char command)
 
 /* ft-897 offset */
 
-static int set_offset_ft897(struct rpt *myrpt, char offset)
+static int set_offset_ft897(struct rpt *myrpt, enum rpt_offset offset)
 {
 	unsigned char cmdstr[5];
 	int mysplit, res;
@@ -864,7 +864,7 @@ static int set_offset_ft897(struct rpt *myrpt, char offset)
 
 /* ft-897 mode */
 
-int set_mode_ft897(struct rpt *myrpt, char newmode)
+int set_mode_ft897(struct rpt *myrpt, enum rpt_mode newmode)
 {
 	unsigned char cmdstr[5];
 
@@ -1057,9 +1057,9 @@ static int multimode_bump_freq_ft897(struct rpt *myrpt, int interval)
 /* Check to see that the frequency is valid */
 /* Hard coded limits now, configurable later, maybe? */
 
-static int check_freq_ft100(int m, int d, int *defmode)
+static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (m == 1) {				/* 160 meters */
 		dflmd = REM_MODE_LSB;
@@ -1175,7 +1175,7 @@ int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char
 
 /* ft-897 offset */
 
-static int set_offset_ft100(struct rpt *myrpt, char offset)
+static int set_offset_ft100(struct rpt *myrpt, enum rpt_offset offset)
 {
 	unsigned char p1;
 
@@ -1201,7 +1201,7 @@ static int set_offset_ft100(struct rpt *myrpt, char offset)
 
 /* ft-897 mode */
 
-int set_mode_ft100(struct rpt *myrpt, char newmode)
+int set_mode_ft100(struct rpt *myrpt, enum rpt_mode newmode)
 {
 	unsigned char p1;
 
@@ -1345,9 +1345,9 @@ static int multimode_bump_freq_ft100(struct rpt *myrpt, int interval)
 /* Check to see that the frequency is valid */
 /* Hard coded limits now, configurable later, maybe? */
 
-static int check_freq_ft950(int m, int d, int *defmode)
+static int check_freq_ft950(int m, int d, enum rpt_mode *defmode)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (m == 1) {				/* 160 meters */
 		dflmd = REM_MODE_LSB;
@@ -1429,7 +1429,7 @@ static int set_freq_ft950(struct rpt *myrpt, char *newfreq)
 
 /* ft-950 offset */
 
-static int set_offset_ft950(struct rpt *myrpt, char offset)
+static int set_offset_ft950(struct rpt *myrpt, enum rpt_offset offset)
 {
 	char *cmdstr;
 
@@ -1622,9 +1622,9 @@ static int multimode_bump_freq_ft950(struct rpt *myrpt, int interval)
 /* Check to see that the frequency is valid */
 /* returns 0 if frequency is valid          */
 
-static int check_freq_ic706(int m, int d, int *defmode, char mars)
+static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 	int rv = 0;
 
 	ast_debug(7, "(%i,%i,%i,%i)\n", m, d, *defmode, mars);
@@ -1941,7 +1941,7 @@ static int set_freq_ic706(struct rpt *myrpt, char *newfreq)
 
 /* ic-706 offset */
 
-static int set_offset_ic706(struct rpt *myrpt, char offset)
+static int set_offset_ic706(struct rpt *myrpt, enum rpt_offset offset)
 {
 	unsigned char c;
 	int mysplit, res;
@@ -1996,12 +1996,11 @@ static int set_offset_ic706(struct rpt *myrpt, char offset)
 	}
 
 	return simple_command_ic706(myrpt, 0x0f, c);
-
 }
 
 /* ic-706 mode */
 
-int set_mode_ic706(struct rpt *myrpt, char newmode)
+int set_mode_ic706(struct rpt *myrpt, enum rpt_mode newmode)
 {
 	unsigned char c;
 
@@ -2362,7 +2361,7 @@ int closerem(struct rpt *myrpt)
 		return 0;
 }
 
-int check_freq(struct rpt *myrpt, int m, int d, int *defmode)
+int check_freq(struct rpt *myrpt, int m, int d, enum rpt_mode *defmode)
 {
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT897))
 		return check_freq_ft897(m, d, defmode);
@@ -2561,7 +2560,7 @@ int service_scan(struct rpt *myrpt)
 		break;
 
 	default:
-		myrpt->hfscanmode = 0;	/* Huh? */
+		myrpt->hfscanmode = HF_SCAN_OFF; /* Huh? */
 		return -1;
 	}
 
@@ -2577,7 +2576,7 @@ int service_scan(struct rpt *myrpt)
 		res = split_freq(mhz, decimals, myrpt->freq);
 
 	if (res) {
-		myrpt->hfscanmode = 0;
+		myrpt->hfscanmode = HF_SCAN_OFF;
 		myrpt->hfscanstatus = -2;
 		return -1;
 	}
