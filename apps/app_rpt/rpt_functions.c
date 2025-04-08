@@ -51,8 +51,8 @@ char *dtmf_tones[] = {
 
 static char remdtmfstr[] = "0123456789*#ABCD";
 
-enum rpt_function_response function_ilink(
-	struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *s1, *s2, tmp[MAXNODESTR];
 	char digitbuf[MAXNODESTR], *strs[sizeof(myrpt->savednodes)];
@@ -401,8 +401,8 @@ enum rpt_function_response function_ilink(
 	return DC_INDETERMINATE;
 }
 
-enum rpt_function_response function_remote(
-	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *s, *s1, *s2;
 	int i, j, p, r, ht, k, l, ls2, m, d, offsave, modesave;
