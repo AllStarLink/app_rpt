@@ -2299,6 +2299,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->linkmode = 0;
 	l->lastrx1 = 0;
 	l->lastrealrx = 0;
+	l->last_frame_sent = 0;
 	l->rxlingertimer = RX_LINGER_TIME;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
@@ -4159,10 +4160,12 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 }
 
 /*! \retval -1 to exit and terminate the node, 0 to continue */
-static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx, char *restrict myfirst)
+static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx_p, char *restrict myfirst)
 {
 	struct rpt_link *l, *m;
-
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_CNG,
+	};
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
 	l = myrpt->links.next;
@@ -4197,28 +4200,32 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			if (myrpt->patchvoxalways)
 				mycalltx = mycalltx && ((!myrpt->voxtostate) && myrpt->wasvox);
 #endif
-			*totx = ((l->isremote) ? (remnomute) : (myrpt->localtx && myrpt->totimer) || mycalltx) || remrx;
+			*totx_p = ((l->isremote) ? (remnomute) : (myrpt->localtx && myrpt->totimer) || mycalltx) || remrx;
 
 			/* foop */
 			if ((!l->lastrx) && altlink(myrpt, l))
-				*totx = myrpt->txkeyed;
+				*totx_p = myrpt->txkeyed;
 			if (altlink1(myrpt, l))
-				*totx = 1;
-			l->wouldtx = *totx;
+				*totx_p = 1;
+			l->wouldtx = *totx_p;
 			if (l->mode != 1)
-				*totx = 0;
-			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx)) {
-				if (*totx && !l->voterlink) {
+				*totx_p = 0;
+			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx_p)) {
+				if (*totx_p && !l->voterlink) {
 					if (l->link_newkey != RADIO_KEY_NOT_ALLOWED)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
+					if (l->last_frame_sent) {
+						ast_write(l->chan, &wf);
+						l->last_frame_sent = 0;
+					}
 				}
 				if (myrpt->p.archivedir) {
-					donodelog_fmt(myrpt, totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
+					donodelog_fmt(myrpt, *totx_p ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
 				}
 			}
-			l->lasttx = *totx;
+			l->lasttx = *totx_p;
 		}
 
 		rpt_mutex_lock(&myrpt->lock);
@@ -4420,6 +4427,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					 * 
 					 */
 					ast_write(l->chan, f);
+					l->last_frame_sent = 1;
 				}
 			}
 			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
@@ -6553,6 +6561,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_copy_string(l->name, b1, MAXNODESTR);
 		l->isremote = 0;
 		l->chan = chan;
+		l->last_frame_sent = 0;
 		l->connected = 1;
 		l->thisconnected = 1;
 		l->hasconnected = 1;
@@ -6667,7 +6676,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		gettimeofday(&myrpt->lastlinktime, NULL);
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
-
 		return -1; /* We can now safely return -1 to the PBX, as the old channel pre-masquerade is what will get killed off */
 	}
 	/* well, then it is a remote */
@@ -6874,7 +6882,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			int j, k;
 			char string[100];
 
-			if (sscanf(myrpt->p.lconn[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 || sscanf(myrpt->p.lconn[i], "GPIO%d:%d", &j, &k) == 2) {
+			if (sscanf(myrpt->p.lconn[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 ||
+				sscanf(myrpt->p.lconn[i], "GPIO" N_FMT(d) ":" N_FMT(d), &j, &k) == 2) {
 				snprintf(string, sizeof(string), "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else if (sscanf(myrpt->p.lconn[i], "PP" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {

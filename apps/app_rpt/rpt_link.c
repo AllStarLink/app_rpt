@@ -385,26 +385,6 @@ void send_link_keyquery(struct rpt *myrpt)
 	}
 }
 
-void send_tele_link(struct rpt *myrpt, char *cmd)
-{
-	char str[400];
-	struct ast_frame wf;
-	struct rpt_link *l;
-
-	snprintf(str, sizeof(str) - 1, "T %s %s", myrpt->name, cmd);
-	init_text_frame(&wf, "send_tele_link");
-	wf.datalen = strlen(str) + 1;
-	wf.data.ptr = str;
-	l = myrpt->links.next;
-	/* give it to everyone */
-	while (l != &myrpt->links) {
-		if (l->chan && (l->mode == 1))
-			rpt_qwrite(l, &wf);
-		l = l->next;
-	}
-	rpt_telemetry(myrpt, VARCMD, cmd);
-}
-
 static void check_link_list(struct rpt *myrpt)
 {
 	struct rpt_link *l;
