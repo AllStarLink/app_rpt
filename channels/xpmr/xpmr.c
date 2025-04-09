@@ -65,6 +65,7 @@
 #endif
 
 #define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
+#include "asterisk.h"
 
 #include <stdio.h>
 #include <ctype.h>
@@ -129,7 +130,7 @@ void	pptp_init (void)
 
     if (ppdrvdev < 0)
     {
-        ast_log(LOG_ERROR, "open /dev/ppdrv_ppdrvdev returned %i\n",ppdrvdev);
+		ast_log(AST_LOG_ERROR, "open /dev/ppdrv_ppdrvdev returned %i\n", ppdrvdev);
 		exit(0);
 	}
 	ioctl(ppdrvdev, PPDRV_IOC_PINMODE_OUT, DTX_CLK | DTX_DATA | DTX_ENABLE | DTX_TXPWR | DTX_TX | DTX_TP1 | DTX_TP2);
@@ -254,8 +255,9 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	pChan->numrxcodes = string_parse( pChan->pRxCodeSrc, &(pChan->pRxCodeStr), &(pChan->pRxCode));
 	pChan->numtxcodes = string_parse( pChan->pTxCodeSrc, &(pChan->pTxCodeStr), &(pChan->pTxCode));
 
-	if(pChan->numrxcodes!=pChan->numtxcodes)printf("ERROR: numrxcodes != numtxcodes \n");
-	
+	if (pChan->numrxcodes != pChan->numtxcodes) {
+		ast_log(AST_LOG_ERROR, "ERROR: numrxcodes != numtxcodes \n");
+	}
 	pChan->rxCtcss->enabled=0;
 	pChan->rxCtcss->gain=1*M_Q8;
 	pChan->rxCtcss->limit=8192;
@@ -587,12 +589,12 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 			if(y>32767)
 			{
 				y=32767;
-				printf("pmr_rx_frontend() OVRFLW \n"  );
+				ast_log(AST_LOG_ERROR, "pmr_rx_frontend() OVRFLW \n");
 			}
 			else if(y<-32767)
 			{
 				y=-32767;
-				printf("pmr_rx_frontend() UNDFLW \n"  );
+				ast_log(AST_LOG_ERROR, "pmr_rx_frontend() UNDFLW \n");
 			}
 #else
 			if(y>32767)y=32767;
@@ -1672,7 +1674,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan = (t_pmr_chan *)ast_calloc(sizeof(t_pmr_chan),1);
 	if(pChan==NULL)
 	{
-		printf("createPmrChannel() failed\n");
+		ast_log(AST_LOG_ERROR, "createPmrChannel() failed\n");
 		return(NULL);
 	}
 
@@ -1693,7 +1695,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	if(tChan==NULL)
 	{
-		printf("createPmrChannel() WARNING: NULL tChan!\n");
+		ast_log(AST_LOG_WARNING, "createPmrChannel() WARNING: NULL tChan!\n");
 		pChan->rxNoiseSquelchEnable=0;
 		pChan->rxHpfEnable=0;
 		pChan->rxDeEmpEnable=0;
@@ -2079,8 +2081,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	TRACEF(1,("spsTxLsdLpf = sps \n"));
 
-	if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
-
+	if (pSps == NULL) {
+		ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+	}
 
 	// RX Process
 	TRACEF(1,("create rx\n"));
@@ -2174,7 +2177,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->nx=fir_rxhpf[pChan->rxhpf].taps;
 	pSps->size_x=2;
 	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-	if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
+	if (pSps == NULL) {
+		ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+	}
 	pSps->calcAdjust=fir_rxhpf[pChan->rxhpf].gain;
 	pSps->inputGain=(1*M_Q8);
 	pSps->outputGain=(1*M_Q8);
@@ -2200,7 +2205,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->nx=taps_int_lpf_300_1_2;
 		pSps->size_x=4;
 		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
+		if (pSps == NULL) {
+			ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+		}
 		pSps->calcAdjust=gain_int_lpf_300_1_2/2;
 		pSps->inputGain=(1.0*M_Q8);
 		pSps->outputGain=(1.0*M_Q8);
@@ -2301,7 +2308,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->nx=fir_txhpf[pChan->txhpf].taps;
 		pSps->size_x=2;
 		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
+		if (pSps == NULL) {
+			ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+		}
 		pSps->calcAdjust=fir_txhpf[pChan->txhpf].gain;
 		pSps->inputGain=(1*M_Q8);
 		pSps->outputGain=(1*M_Q8);
@@ -2328,8 +2337,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->nx=taps_int_hpf_4000_1_2;
 		pSps->size_x=2;
 		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
-		 
+		if (pSps == NULL) {
+			ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+		}
 		pSps->calcAdjust=gain_int_hpf_4000_1_2;
 		pSps->inputGain=(1*M_Q8);
 		pSps->outputGain=(1*M_Q8);	 // to match flat at 1KHz 
@@ -2446,7 +2456,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 #endif
 	pSps->size_x=2;
 	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-	if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
+	if (pSps == NULL) {
+		ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+	}
 	pSps->inputGain=(1*M_Q8);
 	pSps->outputGain=(1*M_Q8);
 	if(pChan->txMixA==pChan->txMixB)pSps->monoOut=1;
@@ -2506,7 +2518,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 #endif
 		pSps->size_x=2;
 		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		if(pSps==NULL)printf("Error: calloc(), createPmrChannel()\n");
+		if (pSps == NULL) {
+			ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+		}
 		pSps->inputGain=(1*M_Q8);
 		pSps->outputGain=(1*M_Q8);
 	}
@@ -2615,7 +2629,9 @@ t_pmr_sps *createPmrSps(t_pmr_chan *pChan)
 
 	pSps = (t_pmr_sps *)ast_calloc(sizeof(t_pmr_sps),1);
 
-	if(!pSps)printf("Error: createPmrSps()\n");
+	if (!pSps) {
+		ast_log(AST_LOG_ERROR, "Error: createPmrSps()\n");
+	}
 
 	pSps->parentChan=pChan;
 	pSps->index=pChan->spsIndex++;
@@ -2650,7 +2666,7 @@ i16 PmrTx(t_pmr_chan *pChan, i16 *input)
 	#endif
 
 	if(pChan==NULL){
-		printf("PmrTx() pChan == NULL\n");
+		ast_log(AST_LOG_ERROR, "PmrTx() pChan == NULL\n");
 		return 1;
 	}
 
@@ -2684,7 +2700,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	#endif
 
 	if(pChan==NULL){
-		printf("PmrRx() pChan == NULL\n");
+		ast_log(AST_LOG_ERROR, "PmrRx() pChan == NULL\n");
 		return 1;
 	}
 
@@ -2940,7 +2956,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		}
 		else
 		{
-			printf   ("ERROR: txPttIn=%i NOT HANDLED PROPERLY.\n",pChan->txPttIn);
+			ast_log(AST_LOG_ERROR, "ERROR: txPttIn=%i NOT HANDLED PROPERLY.\n", pChan->txPttIn);
 			TRACEC(1,("ERROR: txPttIn=%i NOT HANDLED PROPERLY.\n",pChan->txPttIn));
 		}
 
