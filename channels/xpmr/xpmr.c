@@ -165,10 +165,10 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 	char *ptstr[1000];
 	i16 i, slen, numsub;
 
-	TRACEJ(2,("string_parse(%s)\n",src));
+	ast_debug(2, "string_parse(%s)\n", src);
 
 	slen=strlen(src);
-	TRACEJ(2,(" source len = %i\n",slen));
+	ast_debug(2, " source len = %i\n", slen);
 
 	pd=*dest;
 	if(pd) ast_free(pd);
@@ -180,7 +180,7 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 	numsub=0;
 	for(i=0;i<slen+1;i++)
 	{
-		TRACEJ(5,(" pd[%i] = %c\n",i,pd[i]));
+		ast_debug(5, " pd[%i] = %c\n", i, pd[i]);
 
 		if( p==0 && pd[i]!=',' && pd[i]!=' ' )
 		{
@@ -197,7 +197,7 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 
 	for(i=0;i<numsub;i++)
 	{
-		TRACEJ(5,(" ptstr[%i] = %p %s\n",i,ptstr[i],ptstr[i]));
+		ast_debug(5, " ptstr[%i] = %p %s\n", i, ptstr[i], ptstr[i]);
 	}
 
 	if(*ptrs)ast_free(*ptrs);
@@ -205,9 +205,9 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 	for(i=0;i<numsub;i++)
 	{
 		(*ptrs)[i]=ptstr[i];
-		TRACEJ(5,(" %i = %s\n",i,(*ptrs)[i]));
+		ast_debug(5, " %i = %s\n", i, (*ptrs)[i]);
 	}
-	TRACEJ(5,("string_parse()=%i\n\n",numsub));
+	ast_debug(5, "string_parse()=%i\n\n", numsub);
 
 	return numsub;
 }
@@ -226,10 +226,10 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	t_pmr_sps  	*pSps;
 	i16	maxctcssindex;
 
-	TRACEF(1,("code_string_parse(%i)\n",0)); 
-	TRACEF(1,("pChan->pRxCodeSrc %s \n",pChan->pRxCodeSrc));
-	TRACEF(1,("pChan->pTxCodeSrc %s \n",pChan->pTxCodeSrc));
-	TRACEF(1,("pChan->pTxCodeDefault %s \n",pChan->pTxCodeDefault));
+	ast_debug(1, "code_string_parse(%i)\n", 0);
+	ast_debug(1, "pChan->pRxCodeSrc %s \n", pChan->pRxCodeSrc);
+	ast_debug(1, "pChan->pTxCodeSrc %s \n", pChan->pTxCodeSrc);
+	ast_debug(1, "pChan->pTxCodeDefault %s \n", pChan->pTxCodeDefault);
 
 	//printf("code_string_parse() %s / %s / %s / %s \n",pChan->name, pChan->pTxCodeDefault,pChan->pTxCodeSrc,pChan->pRxCodeSrc);
 
@@ -250,7 +250,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pChan->spsLsdGen->state=0;
 	}
 
-	TRACEF(1,("code_string_parse(%i) 05\n",0));
+	ast_debug(1, "code_string_parse(%i) 05\n", 0);
 
 	pChan->numrxcodes = string_parse( pChan->pRxCodeSrc, &(pChan->pRxCodeStr), &(pChan->pRxCode));
 	pChan->numtxcodes = string_parse( pChan->pTxCodeSrc, &(pChan->pTxCodeStr), &(pChan->pTxCode));
@@ -276,9 +276,9 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pChan->rxCtcssMap[i]=CTCSS_NULL;
 	}
 
-	TRACEF(1,("code_string_parse(%i) 10\n",0));
-	
-	#ifdef XPMRX_H
+	ast_debug(1, "code_string_parse(%i) 10\n", 0);
+
+#ifdef XPMRX_H
 	xpmrx(pChan,XXO_LSDCODEPARSE);
 	#endif
 
@@ -310,21 +310,21 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				pChan->b.ctcssRxEnable=pChan->b.ctcssTxEnable=1;
 				pChan->rxCtcssMap[ri]=ti;
 				pChan->numrxctcssfreqs++;
-				TRACEF(1,("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i\n",i,pChan->rxctcss[i],ri,ti));
+				ast_debug(1, "pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i\n", i, pChan->rxctcss[i], ri, ti);
 			} else if (ri > CTCSS_NULL && f == 0) {
 				pChan->b.ctcssRxEnable=1;
 				pChan->rxCtcssMap[ri]=CTCSS_RXONLY;
 				pChan->numrxctcssfreqs++;
-				TRACEF(1,("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i RXONLY\n",i,pChan->rxctcss[i],ri,ti));
+				ast_debug(1, "pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i RXONLY\n", i, pChan->rxctcss[i], ri, ti);
 			} else {
 				pChan->numrxctcssfreqs=0;
 				for(ii=0;ii<CTCSS_NUM_CODES;ii++) pChan->rxCtcssMap[ii]=CTCSS_NULL;
-				TRACEF(1,("WARNING: Invalid Channel code detected and ignored. %i %s %s \n",i,pChan->pRxCode[i],pChan->pTxCode[i]));
+				ast_debug(1, "WARNING: Invalid Channel code detected and ignored. %i %s %s \n", i, pChan->pRxCode[i], pChan->pTxCode[i]);
 			}
 		}
 	}
 
-	TRACEF(1,("code_string_parse() CTCSS Init Struct  %i  %i\n",pChan->b.ctcssRxEnable,pChan->b.ctcssTxEnable));
+	ast_debug(1, "code_string_parse() CTCSS Init Struct  %i  %i\n", pChan->b.ctcssRxEnable, pChan->b.ctcssTxEnable);
 	if(pChan->b.ctcssRxEnable)
 	{
 		pChan->rxHpfEnable=1;
@@ -340,7 +340,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pChan->rxCtcss->enabled=0;
 	}
 
-	TRACEF(1,("code_string_parse() CTCSS Init Decoders \n"));
+	ast_debug(1, "code_string_parse() CTCSS Init Decoders \n");
 	for(i=0;i<CTCSS_NUM_CODES;i++)
 	{
 		t_tdet *ptdet;
@@ -354,7 +354,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	}
 
 	// DEFAULT TX CODE
-	TRACEF(1, ("code_string_parse() Default Tx Code %s \n", pChan->pTxCodeDefault));
+	ast_debug(1, "code_string_parse() Default Tx Code %s \n", pChan->pTxCodeDefault);
 	pChan->txcodedefaultsmode = SMODE_NULL;
 	p = pChan->pStr = pChan->pTxCodeDefault;
 
@@ -374,12 +374,12 @@ i16 code_string_parse(t_pmr_chan *pChan)
 			pChan->txctcssdefault_value = f;
 			pChan->spsSigGen0->freq = f * 10;
 			pChan->txcodedefaultsmode = SMODE_CTCSS;
-			TRACEF(1, ("code_string_parse() Tx Default CTCSS = %s %i %f\n", p, ti, f));
+			ast_debug(1, "code_string_parse() Tx Default CTCSS = %s %i %f\n", p, ti, f);
 		}
 	}
 
 	// set x for maximum length and just change pointers
-	TRACEF(1,("code_string_parse() Filter Config \n"));
+	ast_debug(1, "code_string_parse() Filter Config \n");
 	pSps=pChan->spsTxLsdLpf;
 	if (pSps->x) {
 		ast_free(pSps->x);
@@ -392,7 +392,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->size_x = 2;
 		pSps->x = (void *) (ast_calloc(pSps->nx, pSps->size_x));
 		pSps->calcAdjust = gain_fir_lpf_250_9_66;
-		TRACEF(1, ("code_string_parse() Tx Filter Freq High\n"));
+		ast_debug(1, "code_string_parse() Tx Filter Freq High\n");
 	} else {
 		pSps->ncoef=taps_fir_lpf_215_9_88;
 		pSps->size_coef=2;
@@ -401,7 +401,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->size_x=2;
 		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		pSps->calcAdjust=gain_fir_lpf_215_9_88;
-		TRACEF(1,("code_string_parse() Tx Filter Freq Low\n"));
+		ast_debug(1, "code_string_parse() Tx Filter Freq Low\n");
 	}
 
 	// CTCSS Rx Decoder Low Pass Filter
@@ -423,7 +423,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->size_x=2;
 		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		pSps->calcAdjust=gain_fir_lpf_250_9_66;
-		TRACEF(1,("code_string_parse() Rx Filter Freq High\n"));
+		ast_debug(1, "code_string_parse() Rx Filter Freq High\n");
 	}
 	else
 	{
@@ -434,7 +434,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->size_x=2;
 		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
 		pSps->calcAdjust=gain_fir_lpf_215_9_88;
-		TRACEF(1,("code_string_parse() Rx Filter Freq Low\n"));
+		ast_debug(1, "code_string_parse() Rx Filter Freq Low\n");
 	}
 
 	if(pChan->b.ctcssRxEnable || pChan->b.dcsRxEnable || pChan->b.lmrRxEnable)
@@ -449,14 +449,14 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	}
 
 	#if XPMR_DEBUG0 == 1
-	TRACEF(2,("code_string_parse() ctcssRxEnable = %i \n",pChan->b.ctcssRxEnable));
-	TRACEF(2,("                    ctcssTxEnable = %i \n",pChan->b.ctcssTxEnable));
-	TRACEF(2,("                      dcsRxEnable = %i \n",pChan->b.dcsRxEnable));
-	TRACEF(2,("                      lmrRxEnable = %i \n",pChan->b.lmrRxEnable));
-	TRACEF(2,("               txcodedefaultsmode = %i \n",pChan->txcodedefaultsmode));
+	ast_debug(2, "code_string_parse() ctcssRxEnable = %i \n", pChan->b.ctcssRxEnable);
+	ast_debug(2, "                    ctcssTxEnable = %i \n", pChan->b.ctcssTxEnable);
+	ast_debug(2, "                      dcsRxEnable = %i \n", pChan->b.dcsRxEnable);
+	ast_debug(2, "                      lmrRxEnable = %i \n", pChan->b.lmrRxEnable);
+	ast_debug(2, "               txcodedefaultsmode = %i \n", pChan->txcodedefaultsmode);
 	for(i=0;i<CTCSS_NUM_CODES;i++)
 	{
-		TRACEF(2,("rxCtcssMap[%i] = %i \n",i,pChan->rxCtcssMap[i]));
+		ast_debug(2, "rxCtcssMap[%i] = %i \n", i, pChan->rxCtcssMap[i]);
 	}
     #endif
 
@@ -464,7 +464,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	lsd_code_parse(pChan,5);
 	#endif
 
-	TRACEF(1,("code_string_parse(%i) end\n",0));
+	ast_debug(1, "code_string_parse(%i) end\n", 0);
 
 	return 0;
 }
@@ -498,7 +498,7 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 	i32 i, naccum, outputGain, calcAdjust;
 	i64 y, npwr;
 
-	TRACEJ(5,("pmr_rx_frontend()\n"));
+	ast_debug(5, "pmr_rx_frontend()\n");
 
 	if(!mySps->enabled)return(1);
 
@@ -660,7 +660,7 @@ i16 pmr_gp_fir(t_pmr_sps *mySps)
 	i16 decimator, decimate, interpolate;
 	i16 numChanOut, selChanOut, mixOut, monoOut;
 
-	TRACEJ(5,("pmr_gp_fir() %i %i\n",mySps->index, mySps->enabled));
+	ast_debug(5, "pmr_gp_fir() %i %i\n", mySps->index, mySps->enabled);
 
 	if(!mySps->enabled)return(1);
 
@@ -831,7 +831,7 @@ i16 gp_inte_00(t_pmr_sps *mySps)
 	i32 state00;
  	i16 coeff00, coeff01;
 
-	TRACEJ(5,("gp_inte_00() %i\n",mySps->enabled));
+	ast_debug(5, "gp_inte_00() %i\n", mySps->enabled);
 	if(!mySps->enabled)return(1);
 
 	input   = mySps->source;
@@ -891,10 +891,9 @@ i16 gp_diff(t_pmr_sps *mySps)
 
 	x0=x[0];
 
-	TRACEJ(5,("gp_diff()\n"));
+	ast_debug(5, "gp_diff()\n");
 
-  	for (i=0;i<npoints;i++)
-    {
+	for (i = 0; i < npoints; i++) {
 		temp0 =	x0 * a1;
 		   x0 = input[i];
 		temp1 = input[i] * a0;
@@ -904,7 +903,7 @@ i16 gp_diff(t_pmr_sps *mySps)
 		if(y0>32767)y0=32767;
 		else if(y0<-32767)y0=-32767;
         output[i]=y0;
-    }
+	}
 
 	x[0]=x0;
 
@@ -932,7 +931,7 @@ i16 CenterSlicer(t_pmr_sps *mySps)
 	i32  discounterl;	// amplitude detector integrator discharge counter lower
 	i32  discfactor;	// amplitude detector integrator discharge factor
 
-	TRACEJ(5,("CenterSlicer() %i\n",mySps->enabled));
+	ast_debug(5, "CenterSlicer() %i\n", mySps->enabled);
 	if(!mySps->enabled)return(1);
 
 	input   = mySps->source;
@@ -1052,7 +1051,7 @@ i16 MeasureBlock(t_pmr_sps *mySps)
 	i32  discounterl;	// amplitude detector integrator discharge counter lower
 	i32  discfactor;	// amplitude detector integrator discharge factor
 
-	TRACEJ(5,("MeasureBlock() %i\n",mySps->enabled));
+	ast_debug(5, "MeasureBlock() %i\n", mySps->enabled);
 
 	if(!mySps->enabled)return 1;
 
@@ -1149,7 +1148,7 @@ i16 SoftLimiter(t_pmr_sps *mySps)
 	amax=(setpt*124)/128;
 	amin=-amax;
 
-	TRACEJ(5,("SoftLimiter() %i %i %i) \n",amin, amax,setpt));
+	ast_debug(5, "SoftLimiter() %i %i %i) \n", amin, amax, setpt);
 
 	for(i=0;i<npoints;i++)
 	{
@@ -1192,10 +1191,8 @@ i16	SigGen(t_pmr_sps *mySps)
 	i32 ph;
 	i16 i,outputgain,waveform,numChanOut,selChanOut;
 	i32 accum;
-	
-	t_pmr_chan *pChan;
-	pChan=mySps->parentChan;
-	TRACEC(5,("SigGen(%i %i %i)\n",mySps->option,mySps->enabled,mySps->state));
+
+	ast_debug(5, "SigGen(%i %i %i)\n", mySps->option, mySps->enabled, mySps->state);
 
 	if(!mySps->freq ||!mySps->enabled)return 0;
 
@@ -1211,7 +1208,7 @@ i16	SigGen(t_pmr_sps *mySps)
 		mySps->discfactor=
 			(SAMPLES_PER_SINE*mySps->freq*PH_FRACT_FACT)/mySps->sampleRate/10;
 
-		TRACEF(5,(" SigGen() discfactor = %i\n",mySps->discfactor));
+		ast_debug(5, "SigGen() discfactor = %i\n", mySps->discfactor);
 		if(mySps->discounterl)mySps->state=2;
 	}
 	else if(mySps->option==2)
@@ -1300,10 +1297,7 @@ i16 pmrMixer(t_pmr_sps *mySps)
 	i16	 discounteru,discounterl,amax,amin,setpt,discfactor;
 	i16	 npoints,uhit,lhit,apeak,measPeak;
 
-	t_pmr_chan *pChan;
-	pChan=mySps->parentChan;
-	TRACEF(5,("pmrMixer()\n"));
-
+	ast_debug(5, "pmrMixer()\n");
 
 	input     = mySps->source;
 	inputB    = mySps->sourceB;
@@ -1391,9 +1385,7 @@ i16 DelayLine(t_pmr_sps *mySps)
 	i16 *input, *output, *buff;
 	i16	 i, npoints,buffsize,inindex,outindex;
 
-	t_pmr_chan *pChan;
-	pChan=mySps->parentChan;
-	TRACEF(5,(" DelayLine() %i\n",mySps->enabled));
+	ast_debug(5, " DelayLine() %i\n", mySps->enabled);
 
 	if(!mySps->enabled || mySps->b.outzero)
 	{
@@ -1441,11 +1433,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 	i16 points=0;
 	i16 indexWas=0;
 
-	TRACEF(5,("ctcss_detect(%p) %i %i %i %i\n",pChan,
-		pChan->rxCtcss->enabled,
-		0,
-		pChan->rxCtcss->testIndex,
-		pChan->rxCtcss->decode));
+	ast_debug(5, "ctcss_detect(%p) %i %i %i %i\n", pChan, pChan->rxCtcss->enabled, 0, pChan->rxCtcss->testIndex, pChan->rxCtcss->decode);
 
 	if(!pChan->rxCtcss->enabled)return(1);
 
@@ -1463,7 +1451,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 		i16 fudgeFactor;
 		i16 binFactor;
 
-		TRACEF(6,(" ctcss_detect() tnum=%i %i\n",tnum,pChan->rxCtcssMap[tnum]));
+		ast_debug(6, " ctcss_detect() tnum=%i %i\n", tnum, pChan->rxCtcssMap[tnum]);
 		//if(tnum==14)printf("ctcss_detect() %i %i %i\n",tnum,pChan->rxCtcssMap[tnum], pChan->rxCtcss->decode );
 
 		if( (pChan->rxCtcssMap[tnum]==CTCSS_NULL) ||
@@ -1471,7 +1459,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 		  )
 			continue;
 
-		TRACEF(6,(" ctcss_detect() tnum=%i\n",tnum));
+		ast_debug(6, " ctcss_detect() tnum=%i\n", tnum);
 
 		ptdet=&(pChan->rxCtcss->tdet[tnum]);
 		indexDebug=0;
@@ -1546,7 +1534,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 			{
 				ptdet->decode=0;
 				ptdet->z[0]=ptdet->z[1]=ptdet->z[2]=ptdet->z[3]=ptdet->dvu=0;
-				TRACEF(4,("ctcss_detect() turnoff detected by dvdt for tnum = %i.\n",tnum));
+				ast_debug(4, "ctcss_detect() turnoff detected by dvdt for tnum = %i.\n", tnum);
 			}
 
 			if(ptdet->decode<0 || !pChan->rxCarrierDetect)ptdet->decode=0;
@@ -1562,7 +1550,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 
 			#if XPMR_DEBUG0 == 1
 			if(thit>=0 && thit==tnum)
-				TRACEF(6,(" ctcss_detect() %i %i %i %i \n",tnum,ptdet->peak,ptdet->setpt,ptdet->hyst));
+				ast_debug(6, " ctcss_detect() %i %i %i %i \n", tnum, ptdet->peak, ptdet->setpt, ptdet->hyst);
 
 			if(ptdet->pDebug0)
 			{
@@ -1618,14 +1606,14 @@ i16 ctcss_detect(t_pmr_chan *pChan)
     {
 		pChan->rxCtcss->decode=thit;
 		sprintf(pChan->rxctcssfreq,"%.1f",freq_ctcss[thit]);
-		TRACEC(1,("ctcss decode  %i  %.1f\n",thit,freq_ctcss[thit]));
+		ast_debug(1, "ctcss decode  %i  %.1f\n", thit, freq_ctcss[thit]);
 	}
 	else if(thit<=CTCSS_NULL && pChan->rxCtcss->decode>CTCSS_NULL)
 	{
 		pChan->rxCtcss->BlankingTimer=SAMPLE_RATE_NETWORK/5;
 		pChan->rxCtcss->decode=CTCSS_NULL;
 		strcpy(pChan->rxctcssfreq,"0");
-		TRACEC(1,("ctcss decode  NULL\n"));
+		ast_debug(1, "ctcss decode  NULL\n");
 		for(tnum=0;tnum<CTCSS_NUM_CODES;tnum++)
 		{
 		    t_tdet	*ptdet=NULL;
@@ -1669,7 +1657,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	t_pmr_sps  	*pSps;
 	t_dec_ctcss	*pDecCtcss;
 
-	TRACEJ(1,("createPmrChannel(%p,%i)\n",tChan,numSamples));
+	ast_debug(1, "createPmrChannel(%p,%i)\n", tChan, numSamples);
 
 	pChan = (t_pmr_chan *)ast_calloc(sizeof(t_pmr_chan),1);
 	if(pChan==NULL)
@@ -1812,7 +1800,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	pChan->lastrxdecode = CTCSS_NULL;
 
-	TRACEF(1,("calloc buffers \n"));
+	ast_debug(1, "calloc buffers \n");
 
 	pChan->pRxDemod 	= ast_calloc(numSamples,2);
 	pChan->pRxNoise 	= ast_calloc(numSamples,2);
@@ -1844,7 +1832,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 #endif
 
 	#if XPMR_DEBUG0 == 1
-	TRACEF(1,("configure tracing\n"));
+	ast_debug(1, "configure tracing\n");
 
 	pChan->pTstTxOut	= ast_calloc(numSamples,2);
 	pChan->pRxLsdCen    = ast_calloc(numSamples,2);
@@ -1880,9 +1868,10 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	// TSCOPE CONFIGURATION SETSCOPE configure debug traces and sources for each channel of the output
 	pChan->sdbg			= (t_sdbg *)ast_calloc(sizeof(t_sdbg),1);
 
-	for(i=0;i<XPMR_DEBUG_CHANS;i++)pChan->sdbg->trace[i]=-1; 	
+	for (i = 0; i < XPMR_DEBUG_CHANS; i++)
+		pChan->sdbg->trace[i] = -1;
 
-	TRACEF(1,("pChan->tracetype = %i\n",pChan->tracetype));
+	ast_debug(1, "pChan->tracetype = %i\n", pChan->tracetype);
 
 	if(pChan->tracetype==1)				  			// CTCSS DECODE
 	{
@@ -2079,14 +2068,14 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->inputGain=(1*M_Q8);
 	pSps->outputGain=(1*M_Q8);
 
-	TRACEF(1,("spsTxLsdLpf = sps \n"));
+	ast_debug(1, "spsTxLsdLpf = sps \n");
 
 	if (pSps == NULL) {
 		ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
 	}
 
 	// RX Process
-	TRACEF(1,("create rx\n"));
+	ast_debug(1, "create rx\n");
 	pSps = NULL;
 
 	// allocate space for first sps and set pointers
@@ -2225,7 +2214,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	}
 	if(pChan->rxSquelchDelay>0)
 	{
-		TRACEF(1,("create rx squelch delay\n"));
+		ast_debug(1, "create rx squelch delay\n");
 		pSps=pChan->spsDelayLine=pSps->nextSps=createPmrSps(pChan);
 		pChan->spsRxSquelchDelay=pSps;
 		pSps->sigProc=DelayLine;
@@ -2249,7 +2238,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	if(pChan->rxCdType==CD_XPMR_VOX)
 	{
-		TRACEF(1,("create vox measureblock\n"));
+		ast_debug(1, "create vox measureblock\n");
 		pChan->prxVoxMeas=ast_calloc(pChan->nSamplesRx,2);
 
 		pSps=pChan->spsRxVox=pSps->nextSps=createPmrSps(pChan);
@@ -2282,7 +2271,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 
 	// CREATE TRANSMIT CHAIN
-	TRACEF(1,("create tx\n"));
+	ast_debug(1, "create tx\n");
 	inputTmp=NULL;
 	pSps = NULL;
 
@@ -2539,7 +2528,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan->txsettletimer=0;
 	pChan->txrxblankingtimer=0;
 
-	TRACEF(1,("createPmrChannel() end\n"));
+	ast_debug(1, "createPmrChannel() end\n");
 
 	return pChan;
 }
@@ -2550,8 +2539,8 @@ i16 destroyPmrChannel(t_pmr_chan *pChan)
 	t_pmr_sps  	*pmr_sps, *tmp_sps;
 	i16 i;
 
-	TRACEF(1,("destroyPmrChannel()\n"));
-	
+	ast_debug(1, "destroyPmrChannel()\n");
+
 	ast_free(pChan->pRxDemod);
 	ast_free(pChan->pRxNoise);
 	ast_free(pChan->pRxBase);
@@ -2625,7 +2614,7 @@ t_pmr_sps *createPmrSps(t_pmr_chan *pChan)
 {
 	t_pmr_sps  *pSps;
 
-	TRACEF(1,("createPmrSps()\n"));
+	ast_debug(1, "createPmrSps()\n");
 
 	pSps = (t_pmr_sps *)ast_calloc(sizeof(t_pmr_sps),1);
 
@@ -2644,7 +2633,7 @@ t_pmr_sps *createPmrSps(t_pmr_chan *pChan)
 */
 i16 destroyPmrSps(t_pmr_sps  *pSps)
 {
-	TRACEJ(1,("destroyPmrSps(%i)\n",pSps->index));
+	ast_debug(1, "destroyPmrSps(%i)\n", pSps->index);
 
 	if(pSps->x!=NULL)ast_free(pSps->x);
 	ast_free(pSps);
@@ -2657,9 +2646,9 @@ i16 PmrTx(t_pmr_chan *pChan, i16 *input)
 {
 	pChan->frameCountTx++;
 
-	TRACEF(5,("PmrTx() start %i\n",pChan->frameCountTx));
+	ast_debug(5, "PmrTx() start %i\n", pChan->frameCountTx);
 
-	#if XPMR_PPTP == 99
+#if XPMR_PPTP == 99
 	pptp_p2^=1;
 	if(pptp_p2)ioctl(ppdrvdev,PPDRV_IOC_PINSET,LP_PIN02);
 	else ioctl(ppdrvdev,PPDRV_IOC_PINCLEAR,LP_PIN02);
@@ -2690,9 +2679,9 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	float f=0;
 	t_pmr_sps *pmr_sps;
 
-	TRACEC(5,("PmrRx(%p %p %p %p)\n",pChan, input, outputrx, outputtx));
+	ast_debug(5, "PmrRx(%p %p %p %p)\n", pChan, input, outputrx, outputtx);
 
-    #if XPMR_PPTP == 1
+#if XPMR_PPTP == 1
 	if(pChan->b.radioactive)
 	{
 		pptp_write(1,pChan->frameCountRx&0x00000001);
@@ -2729,8 +2718,8 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	    pChan->txrxblankingtimer-=MS_PER_FRAME;
 	    if(pChan->txrxblankingtimer<=0){
 	        pChan->txrxblankingtimer=0;
-	        TRACEC(1,("TXRXBLANKING TIME OUT **********\n"));
-	    }
+			ast_debug(1, "TXRXBLANKING TIME OUT **********\n");
+		}
 	}
 
 	#if 0
@@ -2752,7 +2741,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			if(pChan->spsRxHpf)pChan->spsRxHpf->enabled=0;
 			if(pChan->spsRxDeEmp)pChan->spsRxDeEmp->enabled=0;
 			pChan->b.rxhalted=1;
-			TRACEC(1,("PmrRx() rx sps halted\n"));
+			ast_debug(1, "PmrRx() rx sps halted\n");
 		}
 	}
 	else if(pChan->b.rxhalted)
@@ -2760,13 +2749,13 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		if(pChan->spsRxHpf)pChan->spsRxHpf->enabled=1;
 		if(pChan->spsRxDeEmp)pChan->spsRxDeEmp->enabled=1;
 		pChan->b.rxhalted=0;
-		TRACEC(1,("PmrRx() rx sps un-halted\n"));
+		ast_debug(1, "PmrRx() rx sps un-halted\n");
 	}
 
 	i=0;
 	while(pmr_sps!=NULL && pmr_sps!=0)
 	{
-		TRACEC(5,("PmrRx() sps %i\n",i++));
+		ast_debug(5, "PmrRx() sps %i\n", i++);
 		pmr_sps->sigProc(pmr_sps);
 		pmr_sps = (t_pmr_sps *)(pmr_sps->nextSps);
 		//pmr_sps=NULL;	// sph maw
@@ -2810,7 +2799,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	if(pChan->txPttIn!=pChan->b.pttwas)
 	{
 		pChan->b.pttwas=pChan->txPttIn;
-		TRACEC(1,("PmrRx() txPttIn=%i\n",pChan->b.pttwas));
+		ast_debug(1, "PmrRx() txPttIn=%i\n", pChan->b.pttwas);
 	}
 	#endif
 
@@ -2828,7 +2817,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			pChan->smodewas=pChan->smode;
 			pChan->smode=SMODE_NULL;
 			pChan->b.smodeturnoff=1;
-			TRACEC(1,("smode timeout. smode was=%i\n",pChan->smodewas));
+			ast_debug(1, "smode timeout. smode was=%i\n", pChan->smodewas);
 		}
 	}
 
@@ -2837,7 +2826,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	{
 		if(pChan->smode!=SMODE_CTCSS)
 		{
-			TRACEC(1,("smode set=%i  code=%i\n",pChan->smode,pChan->rxCtcss->decode));
+			ast_debug(1, "smode set=%i  code=%i\n", pChan->smode, pChan->rxCtcss->decode);
 			pChan->smode=pChan->smodewas=SMODE_CTCSS;
 		}
 		pChan->smodetimer=pChan->smodetime;
@@ -2885,8 +2874,10 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 
 	if( pChan->txPttIn && (pChan->txState==CHAN_TXSTATE_IDLE ))
 	{
-		TRACEC(1,("txPttIn==1 from CHAN_TXSTATE_IDLE && !SMODE_LSD. codeindex=%i  %i \n",
-			pChan->rxCtcss->decode, pChan->rxCtcssMap[pChan->rxCtcss->decode] ));
+		ast_debug(1,
+			"txPttIn==1 from CHAN_TXSTATE_IDLE && !SMODE_LSD. codeindex=%i  %i \n",
+			pChan->rxCtcss->decode,
+			pChan->rxCtcssMap[pChan->rxCtcss->decode]);
 		pChan->dd.b.doitnow=1;
 		pChan->spsSigGen0->freq=0;
 	    if(pChan->smode==SMODE_CTCSS && !pChan->b.txCtcssInhibit)
@@ -2902,7 +2893,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			{
 				f=pChan->txctcssdefault_value;	
 			}
-			TRACEC(1,("txPttIn - Start CTCSSGen  %f \n",f));
+			ast_debug(1, "txPttIn - Start CTCSSGen  %f \n", f);
 			if(f)
 			{
 				t_pmr_sps *pSps;
@@ -2941,7 +2932,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		}
 		else if(pChan->smode==SMODE_NULL && pChan->txcodedefaultsmode==SMODE_CTCSS && !pChan->b.txCtcssInhibit)
 		{
-		    TRACEC(1,("txPtt Encode txcodedefaultsmode==SMODE_CTCSS %f\n",pChan->txctcssdefault_value));
+			ast_debug(1, "txPtt Encode txcodedefaultsmode==SMODE_CTCSS %f\n", pChan->txctcssdefault_value);
 			f=pChan->txctcssdefault_value;
 			pChan->spsSigGen0->freq=f*10;
 			pChan->spsSigGen0->option=1;
@@ -2952,12 +2943,12 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		}
 		else if(pChan->txcodedefaultsmode==SMODE_NULL||pChan->b.txCtcssInhibit)
 		{
-			TRACEC(1,("txPtt Encode txcodedefaultsmode==SMODE_NULL\n"));
+			ast_debug(1, "txPtt Encode txcodedefaultsmode==SMODE_NULL\n");
 		}
 		else
 		{
 			ast_log(AST_LOG_ERROR, "ERROR: txPttIn=%i NOT HANDLED PROPERLY.\n", pChan->txPttIn);
-			TRACEC(1,("ERROR: txPttIn=%i NOT HANDLED PROPERLY.\n",pChan->txPttIn));
+			ast_debug(1, "ERROR: txPttIn=%i NOT HANDLED PROPERLY.\n", pChan->txPttIn);
 		}
 
 		memset(pChan->txctcssfreq,0,sizeof(pChan->txctcssfreq));
@@ -2973,7 +2964,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		if(pChan->spsTxOutB)pChan->spsTxOutB->enabled=1;
 		if(pChan->spsTxLsdLpf)pChan->spsTxLsdLpf->enabled=1;
 		if(pChan->txfreq)pChan->b.reprog=1;
-		TRACEC(1,("PmrRx() TxOn\n"));
+		ast_debug(1, "PmrRx() TxOn\n");
 	}
 	else if(pChan->txPttIn && pChan->txState==CHAN_TXSTATE_ACTIVE)
 	{
@@ -2982,12 +2973,12 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	}
 	else if(!pChan->txPttIn && pChan->txState==CHAN_TXSTATE_ACTIVE)
 	{
-		TRACEC(1,("txPttIn==0 from CHAN_TXSTATE_ACTIVE\n"));
+		ast_debug(1, "txPttIn==0 from CHAN_TXSTATE_ACTIVE\n");
 		if(pChan->smode==SMODE_CTCSS && !pChan->b.txCtcssInhibit)
 		{
 			if( pChan->txTocType==TOC_NONE || !pChan->b.ctcssTxEnable )
 			{
-				TRACEC(1,("Tx Off Immediate.\n"));
+				ast_debug(1, "Tx Off Immediate.\n");
 				pChan->spsSigGen0->option=3;
 				pChan->txBufferClear=3;
 				pChan->txState=CHAN_TXSTATE_FINISHING;
@@ -2997,28 +2988,28 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 				pChan->txState=CHAN_TXSTATE_TOC;
 				pChan->txHangTime=TOC_NOTONE_TIME/MS_PER_FRAME;
 				pChan->spsSigGen0->option=3;
-				TRACEC(1,("Tx Turn Off No Tone Start.\n"));
+				ast_debug(1, "Tx Turn Off No Tone Start.\n");
 			}
 	 		else
 			{
 				pChan->txState=CHAN_TXSTATE_TOC;
 				pChan->txHangTime=0;
 				pChan->spsSigGen0->option=2;
-				TRACEC(1,("Tx Turn Off Phase Shift Start.\n"));
+				ast_debug(1, "Tx Turn Off Phase Shift Start.\n");
 			}
 	    }
 		else
 		{
 		    pChan->txBufferClear=3;
 			pChan->txState=CHAN_TXSTATE_FINISHING;
-			TRACEC(1,("Tx Off No SMODE to Finish.\n"));
+			ast_debug(1, "Tx Off No SMODE to Finish.\n");
 		}
 	}
 	else if(pChan->txState==CHAN_TXSTATE_TOC)
 	{
 		if( pChan->txPttIn && pChan->smode==SMODE_CTCSS )
 		{
-			TRACEC(1,("Tx Key During HangTime\n"));
+			ast_debug(1, "Tx Key During HangTime\n");
 			pChan->txState = CHAN_TXSTATE_ACTIVE;
 			pChan->spsSigGen0->option=1;
 			pChan->spsSigGen0->enabled=1;
@@ -3033,7 +3024,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		{
 			pChan->txBufferClear=3;
 			pChan->txState=CHAN_TXSTATE_FINISHING;
-			TRACEC(1,("Tx Off TOC.\n"));
+			ast_debug(1, "Tx Off TOC.\n");
 		}
 	}
 	else if(pChan->txState==CHAN_TXSTATE_FINISHING)
@@ -3052,7 +3043,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		pChan->txPttOut=0;
 		pChan->spsSigGen0->option=3;
 		pChan->txrxblankingtimer=pChan->txrxblankingtime;
-		TRACEC(1,("PmrRx() txrxblankingtimer=%i\n",pChan->txrxblankingtimer));
+		ast_debug(1, "PmrRx() txrxblankingtimer=%i\n", pChan->txrxblankingtimer);
 		pChan->txState=CHAN_TXSTATE_IDLE;
 		if(pChan->spsTxLsdLpf)pChan->spsTxLsdLpf->option=3;
 		if(pChan->spsTxOutA)pChan->spsTxOutA->option=3;
@@ -3060,7 +3051,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		if(pChan->rxfreq||pChan->txfreq)pChan->b.reprog=1;
 		memset(pChan->txctcssfreq,0,sizeof(pChan->txctcssfreq));
 		pChan->b.txCtcssReady = 1;
-		TRACEC(1,("Tx Off hit.\n"));
+		ast_debug(1, "Tx Off hit.\n");
 	}
 			  
 	if(pChan->b.reprog)
@@ -3085,14 +3076,14 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		if(!pChan->b.txhalted)
 		{
 			pChan->b.txhalted=1;
-			TRACEC(1,("PmrRx() tx sps halted\n"));
+			ast_debug(1, "PmrRx() tx sps halted\n");
 		}
 	}
 	else if(pChan->b.txhalted)
 	{
 		pChan->dd.b.doitnow=1;
 		pChan->b.txhalted=0;
-		TRACEC(1,("PmrRx() tx sps un-halted\n"));
+		ast_debug(1, "PmrRx() tx sps un-halted\n");
 	}
 
 	if(pChan->b.txhalted)return(1);
@@ -3161,12 +3152,12 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	i=0;
 	while(pmr_sps!=NULL && pmr_sps!=0)
 	{
-		//TRACEF(1,("PmrTx() sps %i\n",i++));
+		// ast_debug(1,"PmrTx() sps %i\n",i++);
 		pmr_sps->sigProc(pmr_sps);
 		pmr_sps = (t_pmr_sps *)(pmr_sps->nextSps);
 	}
 
-	//TRACEF(1,("PmrTx() - outputs \n"));
+	// ast_debug(1,"PmrTx() - outputs \n");
 	if(pChan->txMixA==TX_OUT_OFF || !pChan->txPttOut){
 		for(i=0;i<pChan->nSamplesTx*2*6;i+=2)outputtx[i]=0;
 	}
@@ -3184,7 +3175,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	#endif
 
 	#if XPMR_DEBUG0 == 1
-	// TRACEF(1,("PmrRx() - debug outputs \n"));
+	// ast_debug(1,"PmrRx() - debug outputs \n");
 	if(pChan->b.rxCapture){
 		for(i=0;i<pChan->nSamplesRx;i++)
 		{
@@ -3205,7 +3196,12 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	#endif
 
 	strace2(pChan->sdbg);
-	TRACEC(5,("PmrRx() return  cd=%i smode=%i  txPttIn=%i  txPttOut=%i \n",pChan->rxCarrierDetect,pChan->smode,pChan->txPttIn,pChan->txPttOut));
+	ast_debug(5,
+		"PmrRx() return  cd=%i smode=%i  txPttIn=%i  txPttOut=%i \n",
+		pChan->rxCarrierDetect,
+		pChan->smode,
+		pChan->txPttIn,
+		pChan->txPttOut);
 	return 0;
 }
 /*
@@ -3221,7 +3217,7 @@ void	ppbinout	(u8 chan)
 
     if (ppdrvdev < 0)
     {
-        ast_log(LOG_ERROR, "open /dev/ppdrv_ppdrvdev returned %i\n",ppdrvdev);
+		ast_debug(LOG_ERROR, "open /dev/ppdrv_ppdrvdev returned %i\n", ppdrvdev);
 		return;
 	}
 
@@ -3257,7 +3253,7 @@ void	ppspiout	(u32 spidata)
 
     if (ppdrvdev < 0)
     {
-        ast_log(LOG_ERROR, "no parallel port permission ppdrvdev %i\n",ppdrvdev);
+		ast_debug(LOG_ERROR, "no parallel port permission ppdrvdev %i\n", ppdrvdev);
 		exit(0);
 	}
 
@@ -3316,14 +3312,14 @@ void	progdtx(t_pmr_chan *pChan)
 	u32 shiftreg;
 	u32 tmp;
 
-	TRACEC(1,("\nprogdtx() %i %i %i\n",pChan->rxfreq,pChan->txfreq,0));
+	ast_debug(1, "\nprogdtx() %i %i %i\n", pChan->rxfreq, pChan->txfreq, 0);
 
 	if (ppdrvdev == 0)
     	ppdrvdev = open("/dev/ppdrv_device", 0);
 
     if (ppdrvdev < 0)
     {
-        ast_log(LOG_ERROR, "open /dev/ppdrv_ppdrvdev returned %i\n",ppdrvdev);
+		ast_debug(LOG_ERROR, "open /dev/ppdrv_ppdrvdev returned %i\n", ppdrvdev);
 		exit(0);
 	}
 
@@ -3381,11 +3377,11 @@ void	progdtx(t_pmr_chan *pChan)
 */
 void dedrift(t_pmr_chan *pChan)
 {
-	TRACEC(5,("dedrift()\n"));
+	ast_debug(5, "dedrift()\n");
 
 	if(pChan->dd.option==9)
 	{
-		TRACEF(1,("dedrift(9)\n"));
+		ast_debug(1, "dedrift(9)\n");
 		pChan->dd.framesize=DDB_FRAME_SIZE;
 		pChan->dd.frames=DDB_FRAMES_IN_BUFF;
 		pChan->dd.buffersize = pChan->dd.frames * pChan->dd.framesize;
@@ -3503,8 +3499,19 @@ void dedrift(t_pmr_chan *pChan)
 		#endif
 
 		#if XPMR_DEBUG0 == 1
-		if(indextweak!=0)TRACEF(4,("%08i indextweak  %+4i  %+4i  %+5i  %5i  %5i  %5i  %+4i\n",pChan->dd.rxframecnt, indextweak, pChan->dd.err, accum, inputindex, pChan->dd.outputindex, pChan->dd.lead, pChan->dd.skew));
-		#endif
+		if (indextweak != 0) {
+			ast_debug(4,
+				"%08i indextweak  %+4i  %+4i  %+5i  %5i  %5i  %5i  %+4i\n",
+				pChan->dd.rxframecnt,
+				indextweak,
+				pChan->dd.err,
+				accum,
+				inputindex,
+				pChan->dd.outputindex,
+				pChan->dd.lead,
+				pChan->dd.skew);
+		}
+#endif
 
 		// set the output index based on lead and clock offset
 		pChan->dd.outputindex = (pChan->dd.outputindex + pChan->dd.framesize + indextweak)%pChan->dd.buffersize;
@@ -3516,7 +3523,7 @@ void dedrift_write(t_pmr_chan *pChan, i16 *src )
 {
 	void *vptr;
 
-	TRACEF(5,("dedrift_write()\n"));
+	ast_debug(5, "dedrift_write()\n");
 	vptr = pChan->dd.buff + pChan->dd.inputindex;
 	memcpy(vptr, src, pChan->dd.framesize*2);
 	pChan->dd.inputindex = (pChan->dd.inputindex + pChan->dd.framesize) % pChan->dd.buffersize;
