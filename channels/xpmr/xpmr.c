@@ -123,13 +123,12 @@ void strace2(t_sdbg *sdbg)
 /*
 	Hardware Trace Signals via the PC Parallel Port
 */
-void	pptp_init (void)
+void pptp_init(void)
 {
-	if (ppdrvdev == 0)
-    	ppdrvdev = open("/dev/ppdrv_device", 0);
-
-    if (ppdrvdev < 0)
-    {
+	if (ppdrvdev == 0) {
+		ppdrvdev = open("/dev/ppdrv_device", 0);
+	}
+	if (ppdrvdev < 0) {
 		ast_log(AST_LOG_ERROR, "open /dev/ppdrv_ppdrvdev returned %i\n", ppdrvdev);
 		exit(0);
 	}
@@ -390,7 +389,10 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->coef = (void *) coef_fir_lpf_250_9_66;
 		pSps->nx = taps_fir_lpf_250_9_66;
 		pSps->size_x = 2;
-		pSps->x = (void *) (ast_calloc(pSps->nx, pSps->size_x));
+		pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+		if (pSps->x == NULL) {
+			; /* XXX do something here */
+		}
 		pSps->calcAdjust = gain_fir_lpf_250_9_66;
 		ast_debug(1, "code_string_parse() Tx Filter Freq High\n");
 	} else {
@@ -399,7 +401,10 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->coef=(void*)coef_fir_lpf_215_9_88;
 		pSps->nx=taps_fir_lpf_215_9_88;
 		pSps->size_x=2;
-		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
+		pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+		if (pSps->x == NULL) {
+			; /* XXX do something here */
+		}
 		pSps->calcAdjust=gain_fir_lpf_215_9_88;
 		ast_debug(1, "code_string_parse() Tx Filter Freq Low\n");
 	}
@@ -421,7 +426,10 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->coef=(void*)coef_fir_lpf_250_9_66;
 		pSps->nx=taps_fir_lpf_250_9_66;
 		pSps->size_x=2;
-		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
+		pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+		if (pSps->x == NULL) {
+			; /* XXX do something here */
+		}
 		pSps->calcAdjust=gain_fir_lpf_250_9_66;
 		ast_debug(1, "code_string_parse() Rx Filter Freq High\n");
 	}
@@ -432,7 +440,10 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		pSps->coef=(void*)coef_fir_lpf_215_9_88;
 		pSps->nx=taps_fir_lpf_215_9_88;
 		pSps->size_x=2;
-		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
+		pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+		if (pSps->x == NULL) {
+			; /* XXX do something here */
+		}
 		pSps->calcAdjust=gain_fir_lpf_215_9_88;
 		ast_debug(1, "code_string_parse() Rx Filter Freq Low\n");
 	}
@@ -2062,17 +2073,16 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->coef=(void*)coef_fir_lpf_215_9_88;
 	pSps->nx=taps_fir_lpf_215_9_88;
 	pSps->size_x=2;
-	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
+	pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+	if (pSps->x == NULL) {
+		; /* XXX do something here */
+	}
 	pSps->calcAdjust=gain_fir_lpf_215_9_88;
 
 	pSps->inputGain=(1*M_Q8);
 	pSps->outputGain=(1*M_Q8);
 
 	ast_debug(1, "spsTxLsdLpf = sps \n");
-
-	if (pSps == NULL) {
-		ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
-	}
 
 	// RX Process
 	ast_debug(1, "create rx\n");
@@ -2092,7 +2102,10 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->coef=(void*)fir_rxlpf[pChan->rxlpf].coefs;
 	pSps->nx=fir_rxlpf[pChan->rxlpf].taps;
 	pSps->size_x=2;
-	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_coef));
+	pSps->x = ast_calloc(pSps->nx, pSps->size_coef);
+	if (pSps->x == NULL) {
+		; /* XXX do something here */
+	}
 	pSps->calcAdjust=(fir_rxlpf[pChan->rxlpf].gain*256)/0x0100;
 	pSps->outputGain=(1.0*M_Q8);
 	pSps->discfactor=2;
@@ -2125,7 +2138,10 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->coef=(void*)coef_fir_lpf_215_9_88;
 	pSps->nx=taps_fir_lpf_215_9_88;
 	pSps->size_x=2;
-	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
+	pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+	if (pSps->x == NULL) {
+		; /* XXX do something here */
+	}
 	pSps->calcAdjust=gain_fir_lpf_215_9_88;
 
 	pSps->inputGain=(1*M_Q8);
@@ -2165,9 +2181,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->coef=(void*)fir_rxhpf[pChan->rxhpf].coefs;
 	pSps->nx=fir_rxhpf[pChan->rxhpf].taps;
 	pSps->size_x=2;
-	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-	if (pSps == NULL) {
-		ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+	pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+	if (pSps->x == NULL) {
+		; /* XXX do something here */
 	}
 	pSps->calcAdjust=fir_rxhpf[pChan->rxhpf].gain;
 	pSps->inputGain=(1*M_Q8);
@@ -2193,9 +2209,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 		pSps->nx=taps_int_lpf_300_1_2;
 		pSps->size_x=4;
-		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		if (pSps == NULL) {
-			ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+		pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+		if (pSps->x == NULL) {
+			; /* XXX do something here */
 		}
 		pSps->calcAdjust=gain_int_lpf_300_1_2/2;
 		pSps->inputGain=(1.0*M_Q8);
@@ -2296,9 +2312,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->coef=(void*)fir_txhpf[pChan->txhpf].coefs;
 		pSps->nx=fir_txhpf[pChan->txhpf].taps;
 		pSps->size_x=2;
-		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		if (pSps == NULL) {
-			ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+		pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+		if (pSps->x == NULL) {
+			; /* XXX do something here */
 		}
 		pSps->calcAdjust=fir_txhpf[pChan->txhpf].gain;
 		pSps->inputGain=(1*M_Q8);
@@ -2325,9 +2341,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 		pSps->nx=taps_int_hpf_4000_1_2;
 		pSps->size_x=2;
-		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		if (pSps == NULL) {
-			ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+		pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+		if (pSps->x == NULL) {
+			; /* XXX do something here */
 		}
 		pSps->calcAdjust=gain_int_hpf_4000_1_2;
 		pSps->inputGain=(1*M_Q8);
@@ -2444,9 +2460,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->calcAdjust=fir_txlpf[pChan->txlpf].gain;
 #endif
 	pSps->size_x=2;
-	pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-	if (pSps == NULL) {
-		ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+	pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+	if (pSps->x == NULL) {
+		; /* XXX do something here */
 	}
 	pSps->inputGain=(1*M_Q8);
 	pSps->outputGain=(1*M_Q8);
@@ -2506,9 +2522,9 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->calcAdjust=(fir_txlpf[pChan->txlpf].gain);
 #endif
 		pSps->size_x=2;
-		pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
-		if (pSps == NULL) {
-			ast_log(AST_LOG_ERROR, "Error: calloc(), createPmrChannel()\n");
+		pSps->x = ast_calloc(pSps->nx, pSps->size_x);
+		if (pSps->x == NULL) {
+			; /* XXX do something here */
 		}
 		pSps->inputGain=(1*M_Q8);
 		pSps->outputGain=(1*M_Q8);
@@ -2625,8 +2641,6 @@ t_pmr_sps *createPmrSps(t_pmr_chan *pChan)
 	pSps->parentChan=pChan;
 	pSps->index=pChan->spsIndex++;
 
-	// pSps->x=ast_calloc(pSps->nx,pSps->size_x);
-
 	return pSps;
 }
 /*
@@ -2713,11 +2727,13 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	if(outputrx!=NULL)pChan->spsRxOut->sink=outputrx;	 //last sps
 
 	if(pChan->txrxblankingtimer>0){
-	    for(i=0;i<pChan->nSamplesRx*6;i++)input[i]=0;
-	
-	    pChan->txrxblankingtimer-=MS_PER_FRAME;
-	    if(pChan->txrxblankingtimer<=0){
-	        pChan->txrxblankingtimer=0;
+		for (i = 0; i < pChan->nSamplesRx * 6; i++) {
+			input[i] = 0;
+		}
+
+		pChan->txrxblankingtimer -= MS_PER_FRAME;
+		if (pChan->txrxblankingtimer <= 0) {
+			pChan->txrxblankingtimer = 0;
 			ast_debug(1, "TXRXBLANKING TIME OUT **********\n");
 		}
 	}
@@ -2910,7 +2926,11 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 					pSps->coef=(void*)coef_fir_lpf_250_9_66;
 					pSps->nx=taps_fir_lpf_250_9_66;
 					pSps->size_x=2;
-					pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
+					pSps->x= ast_calloc(pSps->nx,pSps->size_x);
+					if (pSps->x == NULL) {
+						; /* XXX do something here */
+					}
+
 					pSps->calcAdjust=gain_fir_lpf_250_9_66;
 				}
 				else
@@ -2920,7 +2940,10 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 					pSps->coef=(void*)coef_fir_lpf_215_9_88;
 					pSps->nx=taps_fir_lpf_215_9_88;
 					pSps->size_x=2;
-					pSps->x=(void*)(ast_calloc(pSps->nx,pSps->size_x));
+					pSps->x= ast_calloc(pSps->nx,pSps->size_x);
+					if (pSps->x == NULL) {
+						; /* XXX do something here */
+					}
 					pSps->calcAdjust=gain_fir_lpf_215_9_88;
 				}
 				#endif
