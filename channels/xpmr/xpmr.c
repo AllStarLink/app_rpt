@@ -298,10 +298,15 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				maxctcssindex = ri;
 			}
 
-			sscanf(pChan->pTxCode[i], N_FMT(f), &f);
-			ti = CtcssFreqIndex(f);
-			if (f > maxctcsstxfreq) {
-				maxctcsstxfreq = f;
+			if (i < pChan->numtxcodes) {
+				sscanf(pChan->pTxCode[i], N_FMT(f), &f);
+				ti = CtcssFreqIndex(f);
+				if (f > maxctcsstxfreq) {
+					maxctcsstxfreq = f;
+				}
+			} else {
+				ti = -1;
+				f = 0;
 			}
 
 			if (ri > CTCSS_NULL && ti > CTCSS_NULL) {
