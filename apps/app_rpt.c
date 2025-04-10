@@ -2668,7 +2668,7 @@ void rpt_links_init(struct rpt_link *l)
 
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
-	//	int res;
+	int res;
 
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
@@ -2705,6 +2705,11 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the tx */
+	res = ast_pbx_exec_application(myrpt->dahditxchannel, "ConfBridge", "RPT_TXCONF");
+	if (!res) {
+		ast_log(LOG_ERROR, "I've failed to setup conf");
+	}
+
 	//	if (rpt_conf_create(myrpt->dahditxchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
 	//		rpt_hangup_rx_tx(myrpt);
 	//		rpt_hangup(myrpt, RPT_PCHAN);
