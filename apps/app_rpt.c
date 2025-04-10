@@ -2705,6 +2705,8 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the tx */
+	res = 0;
+	res |= ast_func_write(chan, "CONFBRIDGE(user,quiet)", "1");
 	res = ast_pbx_exec_application(myrpt->dahditxchannel, "ConfBridge", "RPT_TXCONF");
 	if (!res) {
 		ast_log(LOG_ERROR, "I've failed to setup conf");
