@@ -80,30 +80,35 @@
 
 #define	XPMR_TRACE_AMP		8192
 
-// TRACEM(3,TSYS_LSD,("pmr_lsdctl_exec() RX FRAME UNPROCESSED.\n"));
-#if(XPMR_TRACE == 1)
-#define TRACEX(a) {printf a;}
-#define TRACEXL(a) {printf("%s @ %u : ",__FILE__ ,__LINE__); printf a; }
-#define TRACEXT(a) {struct timeval hack; gettimeofday(&hack,NULL); printf("%ld.",hack.tv_sec%100000); printf("%i : ",(int)hack.tv_usec); printf a; }
-#define TRACEXR(a) {printf a;}
-#define TRACEC(level,a) {if(pChan->tracelevel>=level){printf("%08i ",pChan->frameCountRx);printf a;} }
-#define TRACEF(level,a) {if(pChan->tracelevel>=level){printf a;} }
-#define TRACEJ(level,a) {if(XPMR_TRACE_LEVEL>=level){printf a;} }
-#define TRACES(level,a) {if(mySps->parentChan->tracelevel >= level){printf a;} }
-#define TRACET(level,a) {if(pChan->tracelevel>=level){printf("%08i %02i",pChan->frameCountRx,pChan->rptnum);printf a;} }
-#define TRACEXR(a) {printf a;}
-#define TRACEM(level,sys,a) {if(pChan->tracelevel>=level || (pChan->tracesys[sys])){printf a;} }
-#else						  
+#if (XPMR_TRACE == 1)
+#define TRACEX(a) \
+	{ \
+		ast_debug a; \
+	}
+#define TRACEC(level, ...) \
+	{ \
+		if (pChan->tracelevel >= level) { \
+			ast_debug(level, "%08i ", pChan->frameCountRx); \
+			ast_debug(level, __VA_ARGS__); \
+		} \
+	}
+#define TRACEF(level, ...) \
+	{ \
+		if (pChan->tracelevel >= level) { \
+			ast_debug(level, __VA_ARGS__); \
+		} \
+	}
+#define TRACEJ(level, ...) \
+	{ \
+		if (XPMR_TRACE_LEVEL >= level) { \
+			ast_debug(level, __VA_ARGS__); \
+		} \
+	}
+#else
 #define TRACEX(a)
-#define TRACEXL(a)
-#define TRACEXT(a)
-#define TRACEC(level,a)
-#define TRACEF(level,a)
-#define TRACEJ(level,a)
-#define TRACES(level,a)
-#define TRACET(level,a)
-#define TRACEXR(a)
-#define TRACEM(level,sys,a)
+#define TRACEC(level, a)
+#define TRACEF(level, a)
+#define TRACEJ(level, a)
 #endif
 
 #define i8  	int8_t
