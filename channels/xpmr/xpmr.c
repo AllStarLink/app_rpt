@@ -312,6 +312,8 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				ti = CtcssFreqIndex(f);
 				if (f > maxctcsstxfreq && ti > CTCSS_NULL) {
 					maxctcsstxfreq = f;
+				} else {
+					f = 0;
 				}
 			} else {
 				ti = -1;
