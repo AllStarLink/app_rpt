@@ -301,13 +301,13 @@ i16 code_string_parse(t_pmr_chan *pChan)
 			if (i < pChan->numtxcodes) {
 				sscanf(pChan->pTxCode[i], N_FMT(f), &f);
 				ti = CtcssFreqIndex(f);
-				if (f > maxctcsstxfreq && ti > CTCSS_NULL) {
-					maxctcsstxfreq = f;
-				} else {
+				if (ti == CTCSS_NULL) {
 					f = 0;
+				} else if (f > maxctcsstxfreq) {
+					maxctcsstxfreq = f;
 				}
 			} else {
-				ti = -1;
+				ti = CTCSS_NULL;
 				f = 0;
 			}
 
