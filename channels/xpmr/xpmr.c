@@ -256,15 +256,6 @@ i16 code_string_parse(t_pmr_chan *pChan)
 
 	if(pChan->numrxcodes!=pChan->numtxcodes)printf("ERROR: numrxcodes != numtxcodes \n");
 
-	if (pChan->numrxcodes >= CTCSS_NUM_CODES) {
-		ast_log(LOG_ERROR, "Too many rxctcss codes: %d defined, only %d allowed", pChan->numrxcodes, CTCSS_NUM_CODES);
-		pChan->numrxcodes = CTCSS_NUM_CODES;
-	}
-	if (pChan->numtxcodes >= CTCSS_NUM_CODES) {
-		ast_log(LOG_ERROR, "Too many txctcss codes: %d defined, only %d allowed", pChan->numtxcodes, CTCSS_NUM_CODES);
-		pChan->numtxcodes = CTCSS_NUM_CODES;
-	}
-
 	pChan->rxCtcss->enabled=0;
 	pChan->rxCtcss->gain=1*M_Q8;
 	pChan->rxCtcss->limit=8192;
