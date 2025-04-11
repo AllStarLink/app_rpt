@@ -80,6 +80,37 @@
 
 #define	XPMR_TRACE_AMP		8192
 
+#if (XPMR_TRACE == 1)
+#define TRACEX(a) \
+	{ \
+		ast_debug a; \
+	}
+#define TRACEC(level, ...) \
+	{ \
+		if (pChan->tracelevel >= level) { \
+			ast_debug(level, "%08i ", pChan->frameCountRx); \
+			ast_debug(level, __VA_ARGS__); \
+		} \
+	}
+#define TRACEF(level, ...) \
+	{ \
+		if (pChan->tracelevel >= level) { \
+			ast_debug(level, __VA_ARGS__); \
+		} \
+	}
+#define TRACEJ(level, ...) \
+	{ \
+		if (XPMR_TRACE_LEVEL >= level) { \
+			ast_debug(level, __VA_ARGS__); \
+		} \
+	}
+#else
+#define TRACEX(a)
+#define TRACEC(level, a)
+#define TRACEF(level, a)
+#define TRACEJ(level, a)
+#endif
+
 #define i8  	int8_t
 #define u8  	u_int8_t
 #define i16		int16_t
