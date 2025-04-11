@@ -471,7 +471,8 @@ static int getserialline(int fd, char *str, int max)
  */
 static void *aprs_connection_thread(void *data)
 {
-	char *call, *password, *val, buf[300];
+	char *call, *password, buf[300];
+	const char *val;
 	struct ast_config *cfg = NULL;
 	struct ast_flags zeroflag = { 0 };
 	struct ast_sockaddr addr = { {0,} };
@@ -481,28 +482,26 @@ static void *aprs_connection_thread(void *data)
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		pthread_exit(NULL);
-		return NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, "general", "call");
+	val = ast_variable_retrieve(cfg, "general", "call");
 	if (val) {
 		call = ast_strdupa(val);
 	} else {
 		call = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, "general", "password");
+	val = ast_variable_retrieve(cfg, "general", "password");
 	if (val) {
 		password = ast_strdupa(val);
 	} else {
 		password = NULL;
 	}
+	ast_config_destroy(cfg);
+
 	/* Verify that we have a callsign and password */
 	if ((!call) || (!password)) {
 		ast_log(LOG_ERROR, "You must specify call and password\n");
 		pthread_exit(NULL);
-		return NULL;
 	}
-	ast_config_destroy(cfg);
-	cfg = NULL;
 
 	while (run_forever) {
 		ast_mutex_lock(&aprs_socket_lock);
@@ -602,7 +601,8 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment, icon, icon_table;
-	char power, height, gain, dir, *val, servercall[20], buf[350], *cp;
+	char power, height, gain, dir, servercall[20], buf[350], *cp;
+	const char *val;
 	struct ast_flags zeroflag = { 0 };
 	char elev_str[25];
 	float elev_f;
@@ -615,56 +615,55 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return -1;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "call");
+	val = ast_variable_retrieve(cfg, ctg, "call");
 	if (val) {
 		call = ast_strdupa(val);
 	} else {
 		call = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "comment");
+	val = ast_variable_retrieve(cfg, ctg, "comment");
 	if (val) {
 		comment = ast_strdupa(val);
 	} else {
-		comment = ast_strdupa(APRS_DEFAULT_COMMENT);
+		comment = APRS_DEFAULT_COMMENT;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "power");
+	val = ast_variable_retrieve(cfg, ctg, "power");
 	if (val) {
 		power = (char) strtol(val, NULL, 0);
 	} else {
 		power = 0;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "height");
+	val = ast_variable_retrieve(cfg, ctg, "height");
 	if (val) {
 		height = (char) strtol(val, NULL, 0);
 	} else {
 		height = 0;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "gain");
+	val = ast_variable_retrieve(cfg, ctg, "gain");
 	if (val) {
 		gain = (char) strtol(val, NULL, 0);
 	} else {
 		gain = 0;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "dir");
+	val = ast_variable_retrieve(cfg, ctg, "dir");
 	if (val) {
 		dir = (char) strtol(val, NULL, 0);
 	} else {
 		dir = 0;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "icon");
+	val = ast_variable_retrieve(cfg, ctg, "icon");
 	if (val && *val) {
 		icon = *val;
 	} else {
 		icon = APRS_DEFAULT_ICON;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "icontable");
+	val = ast_variable_retrieve(cfg, ctg, "icontable");
 	if (val && *val) {
 		icon_table = *val;
 	} else {
 		icon_table = APRS_DEFAULT_ICON_TABLE;
 	}
 	ast_config_destroy(cfg);
-	cfg = NULL;
 
 	/* Remap '?' to ';' due to Asterisk config limitation on using ';' (; = portable tent) */
 	if (icon == '?') {
@@ -764,7 +763,8 @@ static int report_aprstt(const char *ctg, const char *lat, const char *lon, cons
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment;
-	char *val, basecall[20], buf[300], buf1[20], *cp;
+	char basecall[20], buf[300], buf1[20], *cp;
+	const char *val;
 	time_t t;
 	struct tm *tm;
 	struct ast_flags zeroflag = { 0 };
@@ -777,20 +777,19 @@ static int report_aprstt(const char *ctg, const char *lat, const char *lon, cons
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return -1;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "call");
+	val = ast_variable_retrieve(cfg, ctg, "call");
 	if (val) {
 		call = ast_strdupa(val);
 	} else {
 		call = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "ttcomment");
+	val = ast_variable_retrieve(cfg, ctg, "ttcomment");
 	if (val) {
 		comment = ast_strdupa(val);
 	} else {
-		comment = ast_strdupa(APRSTT_DEFAULT_COMMENT);
+		comment = APRSTT_DEFAULT_COMMENT;
 	}
 	ast_config_destroy(cfg);
-	cfg = NULL;
 
 	/* We must have a callsign to report information */
 	if (!call) {
@@ -1078,7 +1077,8 @@ static void *aprs_sender_thread(void *data)
 {
 	struct ast_config *cfg = NULL;
 	char *ctg;
-	char *val, *deflat, *deflon, *defelev;
+	const char *val;
+	char *deflat, *deflon, *defelev;
 	int interval, my_update_secs, ehlert;
 	time_t now_mono, lastupdate_mono;
 	struct ast_flags zeroflag = { 0 };
@@ -1092,40 +1092,39 @@ static void *aprs_sender_thread(void *data)
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		pthread_exit(NULL);
-		return NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "lat");
+	val = ast_variable_retrieve(cfg, ctg, "lat");
 	if (val) {
 		deflat = ast_strdupa(val);
 	} else {
 		deflat = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "lon");
+	val = ast_variable_retrieve(cfg, ctg, "lon");
 	if (val) {
 		deflon = ast_strdupa(val);
 	} else {
 		deflon = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "elev");
+	val = ast_variable_retrieve(cfg, ctg, "elev");
 	if (val) {
 		defelev = ast_strdupa(val);
 	} else {
 		defelev = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "interval");
+	val = ast_variable_retrieve(cfg, ctg, "interval");
 	if (val) {
 		interval = atoi(val);
 	} else {
 		interval = GPS_UPDATE_SECS;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "ehlert");
+	val = ast_variable_retrieve(cfg, ctg, "ehlert");
 	if (val) {
 		ehlert = ast_true(val);
 	} else {
 		ehlert = 0;
 	}
 	ast_config_destroy(cfg);
-	cfg = NULL;
+
 	/*
 	 * Set the default position for this section
 	 * If it is [general], we already have the defaults
@@ -1202,7 +1201,8 @@ static void *aprstt_sender_thread(void *data)
 	struct ast_flags zeroflag = { 0 };
 	int i, j, ttlist, ttoffset, ttslot, myoffset;
 	char *ctg, c;
-	char *val, *deflat, *deflon, *defelev, ttsplit, *ttlat, *ttlon;
+	char *deflat, *deflon, *defelev, ttsplit, *ttlat, *ttlon;
+	const char *val;
 	char fname[200], lat[25], theircall[20], overlay;
 	FILE *mfp;
 	struct stat mystat;
@@ -1221,58 +1221,56 @@ static void *aprstt_sender_thread(void *data)
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		pthread_exit(NULL);
-		return NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "lat");
+	val = ast_variable_retrieve(cfg, ctg, "lat");
 	if (val) {
 		deflat = ast_strdupa(val);
 	} else {
 		deflat = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "lon");
+	val = ast_variable_retrieve(cfg, ctg, "lon");
 	if (val) {
 		deflon = ast_strdupa(val);
 	} else {
 		deflon = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "elev");
+	val = ast_variable_retrieve(cfg, ctg, "elev");
 	if (val) {
 		defelev = ast_strdupa(val);
 	} else {
 		defelev = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "ttlat");
+	val = ast_variable_retrieve(cfg, ctg, "ttlat");
 	if (val) {
 		ttlat = ast_strdupa(val);
 	} else {
 		ttlat = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "ttlon");
+	val = ast_variable_retrieve(cfg, ctg, "ttlon");
 	if (val) {
 		ttlon = ast_strdupa(val);
 	} else {
 		ttlon = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "ttlist");
+	val = ast_variable_retrieve(cfg, ctg, "ttlist");
 	if (val) {
 		ttlist = atoi(val);
 	} else {
 		ttlist = DEFAULT_TTLIST;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "ttoffset");
+	val = ast_variable_retrieve(cfg, ctg, "ttoffset");
 	if (val) {
 		ttoffset = atoi(val);
 	} else {
 		ttoffset = DEFAULT_TTOFFSET;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "ttsplit");
+	val = ast_variable_retrieve(cfg, ctg, "ttsplit");
 	if (val) {
 		ttsplit = ast_true(val);
 	} else {
 		ttsplit = 0;
 	}
 	ast_config_destroy(cfg);
-	cfg = NULL;
 
 	/*
 	 * Set the default position for this section
@@ -1710,7 +1708,8 @@ static int unload_module(void)
 static int load_module(void)
 {
 	struct ast_config *cfg = NULL;
-	char *ctg = "general", *val;
+	char *ctg;
+	const char *val;
 	char *def_lat, *def_lon, *def_elev;
 	struct aprs_sender_info *sender_entry;
 	int res;
@@ -1721,43 +1720,43 @@ static int load_module(void)
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "comport");
+	val = ast_variable_retrieve(cfg, "general", "comport");
 	if (val) {
 		comport = ast_strdup(val);
 	} else {
 		comport = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "lat");
+	val = ast_variable_retrieve(cfg, "general", "lat");
 	if (val) {
 		def_lat = ast_strdupa(val);
 	} else {
 		def_lat = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "lon");
+	val = ast_variable_retrieve(cfg, "general", "lon");
 	if (val) {
 		def_lon = ast_strdupa(val);
 	} else {
 		def_lon = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "elev");
+	val = ast_variable_retrieve(cfg, "general", "elev");
 	if (val) {
 		def_elev = ast_strdupa(val);
 	} else {
 		def_elev = NULL;
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "server");
+	val = ast_variable_retrieve(cfg, "general", "server");
 	if (val) {
 		server = ast_strdup(val);
 	} else {
 		server = ast_strdup(APRS_DEFAULT_SERVER);
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "port");
+	val = ast_variable_retrieve(cfg, "general", "port");
 	if (val) {
 		port = ast_strdup(val);
 	} else {
 		port = ast_strdup(APRS_DEFAULT_PORT);
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "baudrate");
+	val = ast_variable_retrieve(cfg, "general", "baudrate");
 	if (val) {
 		switch (atoi(val)) {
 		case 2400:
@@ -1808,92 +1807,102 @@ static int load_module(void)
 	/* Create the aprs connection thread */
 	if (ast_pthread_create(&aprs_connection_thread_id, NULL, aprs_connection_thread, NULL)) {
 		ast_log(LOG_ERROR, "Cannot create APRS connection thread");
+		ast_config_destroy(cfg);
 		return -1;
 	}
 	/* If we have a comport specified, start the GPS processing thread */
 	if (comport) {
 		if (ast_pthread_create(&gps_reader_thread_id, NULL, gps_reader, NULL)) {
 			ast_log(LOG_ERROR, "Cannot create APRS reader thread");
+			ast_config_destroy(cfg);
 			return -1;
 		}
 	}
 	/* Create the aprs sender thread for 'general' */
 	sender_entry = ast_calloc(1, sizeof(*sender_entry));
 	if (!sender_entry) {
+		ast_config_destroy(cfg);
 		return -1;
 	}
 	sender_entry->type = APRS;
 	strcpy(sender_entry->section, "general");
 	ast_mutex_init(&sender_entry->lock);
 	ast_cond_init(&sender_entry->condition, 0);
-	AST_RWLIST_RDLOCK(&aprs_sender_list);
+	AST_RWLIST_WRLOCK(&aprs_sender_list);
 	AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
 	AST_RWLIST_UNLOCK(&aprs_sender_list);
 	if (ast_pthread_create(&sender_entry->thread_id, NULL, aprs_sender_thread, sender_entry)) {
 		ast_log(LOG_ERROR, "Cannot create APRS sender thread %s", sender_entry->section);
+		ast_config_destroy(cfg);
 		return -1;
 	}
 
 	/* Create the aprs tt sender thread for 'general' */
 	sender_entry = ast_calloc(1, sizeof(*sender_entry));
 	if (!sender_entry) {
+		ast_config_destroy(cfg);
 		return -1;
 	}
 	sender_entry->type = APRSTT;
 	strcpy(sender_entry->section, "general");
 	ast_mutex_init(&sender_entry->lock);
 	ast_cond_init(&sender_entry->condition, 0);
-	AST_RWLIST_RDLOCK(&aprs_sender_list);
+	AST_RWLIST_WRLOCK(&aprs_sender_list);
 	AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
 	AST_RWLIST_UNLOCK(&aprs_sender_list);
 	if (ast_pthread_create(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry)) {
 		ast_log(LOG_ERROR, "Cannot create APRStt sender thread %s", sender_entry->section);
+		ast_config_destroy(cfg);
 		return -1;
 	}
 	/*
 	 * See if we have sections other than general.
 	 * If present, create aprs processing threads for those sections
 	 */
+	ctg = NULL;
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
-		if (ctg == NULL) {
+		if (!strcmp(ctg, "general")) {
 			continue;
 		}
 		/* Create the aprs sender thread for this category */
 		sender_entry = ast_calloc(1, sizeof(*sender_entry));
 		if (!sender_entry) {
+			ast_config_destroy(cfg);
 			return -1;
 		}
 		sender_entry->type = APRS;
 		ast_copy_string(sender_entry->section, ctg, sizeof(sender_entry->section));
 		ast_mutex_init(&sender_entry->lock);
 		ast_cond_init(&sender_entry->condition, 0);
-		AST_RWLIST_RDLOCK(&aprs_sender_list);
+		AST_RWLIST_WRLOCK(&aprs_sender_list);
 		AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
 		AST_RWLIST_UNLOCK(&aprs_sender_list);
 		if (ast_pthread_create(&sender_entry->thread_id, NULL, aprs_sender_thread, sender_entry)) {
 			ast_log(LOG_ERROR, "Cannot create APRS sender thread %s", sender_entry->section);
+			ast_config_destroy(cfg);
 			return -1;
 		}
 
 		/* Create the aprs tt sender thread for this category */
 		sender_entry = ast_calloc(1, sizeof(*sender_entry));
 		if (!sender_entry) {
+			ast_config_destroy(cfg);
 			return -1;
 		}
 		sender_entry->type = APRSTT;
-		ast_copy_string(sender_entry->section, ctg, sizeof(sender_entry));
+		ast_copy_string(sender_entry->section, ctg, sizeof(sender_entry->section));
 		ast_mutex_init(&sender_entry->lock);
 		ast_cond_init(&sender_entry->condition, 0);
-		AST_RWLIST_RDLOCK(&aprs_sender_list);
+		AST_RWLIST_WRLOCK(&aprs_sender_list);
 		AST_LIST_INSERT_TAIL(&aprs_sender_list, sender_entry, list);
 		AST_RWLIST_UNLOCK(&aprs_sender_list);
-		if (ast_pthread_create_detached(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry->section)) {
+		if (ast_pthread_create(&sender_entry->thread_id, NULL, aprstt_sender_thread, sender_entry)) {
 			ast_log(LOG_ERROR, "Cannot create APRStt sender thread %s", sender_entry->section);
+			ast_config_destroy(cfg);
 			return -1;
 		}
 	}
 	ast_config_destroy(cfg);
-	cfg = NULL;
 
 	/* Register our functions */
 	res = ast_custom_function_register(&gps_read_function);
