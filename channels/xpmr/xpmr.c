@@ -310,7 +310,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 			if (i < pChan->numtxcodes) {
 				sscanf(pChan->pTxCode[i], N_FMT(f), &f);
 				ti = CtcssFreqIndex(f);
-				if (f > maxctcsstxfreq) {
+				if (f > maxctcsstxfreq && ti > -1) {
 					maxctcsstxfreq = f;
 				}
 			} else {
