@@ -302,13 +302,15 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				sscanf(pChan->pTxCode[i], N_FMT(f), &f);
 				ti = CtcssFreqIndex(f);
 				if (ti == CTCSS_NULL) {
-					f = 0;
+					if (f != 0.0) {
+						f = -1.0; /* tone freq not valid */
+					}
 				} else if (f > maxctcsstxfreq) {
 					maxctcsstxfreq = f;
 				}
 			} else {
 				ti = CTCSS_NULL;
-				f = 0;
+				f = -1.0; /* tone freq not provided */
 			}
 
 			if (ri > CTCSS_NULL && ti > CTCSS_NULL) {
@@ -323,8 +325,10 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				TRACEF(1,("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i RXONLY\n",i,pChan->rxctcss[i],ri,ti));
 			} else {
 				pChan->numrxctcssfreqs=0;
-				for(ii=0;ii<CTCSS_NUM_CODES;ii++) pChan->rxCtcssMap[ii]=CTCSS_NULL;
-				TRACEF(1,("WARNING: Invalid Channel code detected and ignored. %i %s %s \n",i,pChan->pRxCode[i],pChan->pTxCode[i]));
+				for (ii = 0; ii < CTCSS_NUM_CODES; ii++) {
+					pChan->rxCtcssMap[ii] = CTCSS_NULL;
+				}
+				ast_log(LOG_ERROR, "ERROR: Invalid Channel code detected and ignored. %i %s %s \n", i, pChan->pRxCode[i], pChan->pTxCode[i]);
 			}
 		}
 	}
