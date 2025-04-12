@@ -298,12 +298,17 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				maxctcssindex = ri;
 			}
 
-			if (i < pChan->numtxcodes) {
+			if (i < pChan->numtxcodes) { /* more rx codes than tx codes */
 				sscanf(pChan->pTxCode[i], N_FMT(f), &f);
 				ti = CtcssFreqIndex(f);
 				if (ti == CTCSS_NULL) {
 					if (f != 0.0) {
 						f = -1.0; /* tone freq not valid */
+						ast_log(LOG_ERROR,
+							"ERROR: Invalid Channel code detected and ignored. %i %s %s \n",
+							i,
+							pChan->pRxCode[i],
+							pChan->pTxCode[i]);
 					}
 				} else if (f > maxctcsstxfreq) {
 					maxctcsstxfreq = f;
@@ -311,24 +316,26 @@ i16 code_string_parse(t_pmr_chan *pChan)
 			} else {
 				ti = CTCSS_NULL;
 				f = -1.0; /* tone freq not provided */
+				ast_log(LOG_ERROR, "ERROR: Invalid ctcss configuration.  Number of rx codes > number of tx codes\n");
 			}
 
 			if (ri > CTCSS_NULL && ti > CTCSS_NULL) {
-				pChan->b.ctcssRxEnable=pChan->b.ctcssTxEnable=1;
-				pChan->rxCtcssMap[ri]=ti;
+				pChan->b.ctcssRxEnable = 1;
+				pChan->b.ctcssTxEnable = 1;
+				pChan->rxCtcssMap[ri] = ti;
 				pChan->numrxctcssfreqs++;
-				TRACEF(1,("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i\n",i,pChan->rxctcss[i],ri,ti));
+				TRACEF(1, ("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i\n", i, pChan->rxctcss[i], ri, ti));
 			} else if (ri > CTCSS_NULL && f == 0) {
 				pChan->b.ctcssRxEnable=1;
-				pChan->rxCtcssMap[ri]=CTCSS_RXONLY;
+				pChan->rxCtcssMap[ri] = CTCSS_RXONLY;
 				pChan->numrxctcssfreqs++;
-				TRACEF(1,("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i RXONLY\n",i,pChan->rxctcss[i],ri,ti));
+				TRACEF(1, ("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i RXONLY\n", i, pChan->rxctcss[i], ri, ti));
 			} else {
-				pChan->numrxctcssfreqs=0;
+				pChan->numrxctcssfreqs = 0;
 				for (ii = 0; ii < CTCSS_NUM_CODES; ii++) {
 					pChan->rxCtcssMap[ii] = CTCSS_NULL;
+					ast_log(LOG_ERROR, "ERROR: Invalid ctcss configuration.  TX CTCSS has been disabled\n");
 				}
-				ast_log(LOG_ERROR, "ERROR: Invalid Channel code detected and ignored. %i %s %s \n", i, pChan->pRxCode[i], pChan->pTxCode[i]);
 			}
 		}
 	}
