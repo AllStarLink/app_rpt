@@ -294,7 +294,10 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		{
 			sscanf(p, N_FMT(f), &f);
 			ri = CtcssFreqIndex(f);
-			if (ri > maxctcssindex) {
+			if (ri == CTCSS_NULL) {
+				ast_log(LOG_ERROR, "ERROR: Invalid RX CTCSS code detected and ignored. %i %s\n", i, pChan->pRxCode[i]);
+
+			} else if (ri > maxctcssindex) {
 				maxctcssindex = ri;
 			}
 
@@ -304,11 +307,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				if (ti == CTCSS_NULL) {
 					if (f != 0.0) {
 						f = -1.0; /* tone freq not valid */
-						ast_log(LOG_ERROR,
-							"ERROR: Invalid Channel code detected and ignored. %i %s %s \n",
-							i,
-							pChan->pRxCode[i],
-							pChan->pTxCode[i]);
+						ast_log(LOG_ERROR, "ERROR: Invalid TX CTCSS code detected and ignored. %i %s\n", i, pChan->pTxCode[i]);
 					}
 				} else if (f > maxctcsstxfreq) {
 					maxctcsstxfreq = f;
@@ -316,7 +315,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 			} else {
 				ti = CTCSS_NULL;
 				f = -1.0; /* tone freq not provided */
-				ast_log(LOG_ERROR, "ERROR: Invalid ctcss configuration.  Number of rx codes > number of tx codes\n");
+				ast_log(LOG_ERROR, "ERROR: Invalid CTCSS configuration. Number of rx codes > number of tx codes\n");
 			}
 
 			if (ri > CTCSS_NULL && ti > CTCSS_NULL) {
@@ -334,7 +333,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				pChan->numrxctcssfreqs = 0;
 				for (ii = 0; ii < CTCSS_NUM_CODES; ii++) {
 					pChan->rxCtcssMap[ii] = CTCSS_NULL;
-					ast_log(LOG_ERROR, "ERROR: Invalid ctcss configuration.  TX CTCSS has been disabled\n");
+					ast_log(LOG_ERROR, "ERROR: Invalid CTCSS configuration. TX CTCSS has been disabled\n");
 				}
 			}
 		}
