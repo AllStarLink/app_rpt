@@ -331,9 +331,9 @@ i16 code_string_parse(t_pmr_chan *pChan)
 				TRACEF(1, ("pChan->rxctcss[%i]=%s  pChan->rxCtcssMap[%i]=%i RXONLY\n", i, pChan->rxctcss[i], ri, ti));
 			} else {
 				pChan->numrxctcssfreqs = 0;
+				ast_log(LOG_ERROR, "ERROR: Invalid CTCSS configuration. CTCSS has been disabled\n");
 				for (ii = 0; ii < CTCSS_NUM_CODES; ii++) {
 					pChan->rxCtcssMap[ii] = CTCSS_NULL;
-					ast_log(LOG_ERROR, "ERROR: Invalid CTCSS configuration. TX CTCSS has been disabled\n");
 				}
 			}
 		}
