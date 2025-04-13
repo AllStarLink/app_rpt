@@ -379,7 +379,9 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	{
 		sscanf(p, N_FMT(f), &f);
 		ti = CtcssFreqIndex(f);
-		if (f > maxctcsstxfreq) {
+		if (ti == CTCSS_NULL) {
+			ast_log(LOG_ERROR, "ERROR: Invalid default TX CTCSS code detected and ignored. %s\n", pChan->pTxCodeDefault);
+		} else if (f > maxctcsstxfreq) {
 			maxctcsstxfreq = f;
 		}
 
