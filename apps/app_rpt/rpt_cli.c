@@ -321,13 +321,12 @@ static int rpt_compare_node(const void *p, const void *q)
 {
 	const struct rpt_lstat *first = *(const struct rpt_lstat **) p;
 	const struct rpt_lstat *next = *(const struct rpt_lstat **) q;
-	int first_i, next_i;
-	first_i = atoi(first->name);
-	next_i = atoi(next->name);
-	if (first_i < next_i) {
+	int val;
+	val = strverscmp(first->name, next->name);
+	if (val < 0) {
 		return -1;
 	}
-	if (first_i > next_i) {
+	if (val > 0) {
 		return 1;
 	}
 	return 0;
