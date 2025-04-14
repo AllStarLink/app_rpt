@@ -316,16 +316,34 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 	return RESULT_FAILURE;
 }
 
+/*! \brief compare numric values of node names */
+static int rpt_compare_node(const void *p, const void *q)
+{
+	const struct rpt_lstat *first = *(const struct rpt_lstat **) p;
+	const struct rpt_lstat *next = *(const struct rpt_lstat **) q;
+	int first_i, next_i;
+	first_i = atoi(first->name);
+	next_i = atoi(next->name);
+	if (first_i < next_i) {
+		return -1;
+	}
+	if (first_i > next_i) {
+		return 1;
+	}
+	return 0;
+}
+
 /*! \brief Link stats function */
 static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 {
-	int i;
+	int i, node_count = 0;
 	char *connstate;
 	struct rpt *myrpt;
 	struct rpt_link *l;
-	struct rpt_lstat *s, *t;
+	struct rpt_lstat *s;
 	struct rpt_lstat s_head;
 	int nrpts = rpt_num_rpts();
+	struct rpt_lstat **stat_array = NULL;
 
 	if (argc != 3) {
 		return RESULT_SHOWUSAGE;
@@ -339,9 +357,27 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
+			rpt_mutex_lock(&myrpt->lock);
+			/* count the number of nodes */
+			l = myrpt->links.next;
+			while (l && (l != &myrpt->links)) {
+				if (l->name[0] == '0') { /* Skip '0' nodes */
+					l = l->next;
+					continue;
+				}
+				node_count++;
+				l = l->next;
+			}
+
+			if (node_count > 0) {
+				stat_array = ast_calloc(node_count, sizeof(struct rpt_lstat *));
+				if (!stat_array) {
+					return RESULT_FAILURE;
+				}
+			}
 			/* Traverse the list of connected nodes */
 			l = myrpt->links.next;
+			i = 0;
 			while (l && (l != &myrpt->links)) {
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					l = l->next;
@@ -363,18 +399,24 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				s->connecttime = l->connecttime;
 				s->thisconnected = l->thisconnected;
 				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				insque((struct qelem *) s, (struct qelem *) s_head.next);
+				stat_array[i] = s;
+				i++;
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				l = l->next;
 			}
-			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
+			rpt_mutex_unlock(&myrpt->lock);
+
+			qsort(stat_array, node_count, sizeof(struct rpt_lstat *), rpt_compare_node);
 			ast_cli(fd, "NODE      PEER                RECONNECTS  DIRECTION  CONNECT TIME        CONNECT STATE\n");
 			ast_cli(fd, "----      ----                ----------  ---------  ------------        -------------\n");
 
-			for (s = s_head.next; s != &s_head; s = s->next) {
+			for (i = 0; i < node_count; i++) {
 				int hours, minutes, seconds;
 				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
 				char conntime[21];
+
+				s = stat_array[i];
+				connecttime = s->connecttime;
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;
@@ -389,15 +431,9 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					connstate = "CONNECTING";
 				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s\n", s->name, s->peer, s->reconnects,
 						(s->outbound) ? "OUT" : "IN", conntime, connstate);
+				ast_free(s);
 			}
-			/* destroy our local link queue */
-			s = s_head.next;
-			while (s != &s_head) {
-				t = s;
-				s = s->next;
-				remque((struct qelem *) t);
-				ast_free(t);
-			}
+			ast_free(stat_array);
 			return RESULT_SUCCESS;
 		}
 	}
