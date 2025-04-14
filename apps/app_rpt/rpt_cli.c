@@ -341,17 +341,12 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 	struct rpt *myrpt;
 	struct rpt_link *l;
 	struct rpt_lstat *s;
-	struct rpt_lstat s_head;
 	int nrpts = rpt_num_rpts();
 	struct rpt_lstat **stat_array = NULL;
 
 	if (argc != 3) {
 		return RESULT_SHOWUSAGE;
 	}
-
-	s = NULL;
-	s_head.next = &s_head;
-	s_head.prev = &s_head;
 
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
