@@ -419,7 +419,7 @@ struct rpt_link {
 	int	retries;
 	int	max_retries;
 	int	reconnects;
-	long long connecttime;
+	struct timeval connecttime;
 	struct ast_channel *chan;	
 	struct ast_channel *pchan;
 	struct ast_str *linklist;
@@ -453,16 +453,16 @@ void rpt_links_init(struct rpt_link *l);
 
 /*! \brief Structure used to manage link status */
 struct rpt_lstat {
-	struct	rpt_lstat *next;
-	struct	rpt_lstat *prev;
-	char	peer[MAXPEERSTR];
-	char	name[MAXNODESTR];
-	char	mode;
-	char	outbound;
-	int	reconnects;
-	char	thisconnected;
-	long long	connecttime;
-	struct	rpt_chan_stat chan_stat[NRPTSTAT];
+	struct rpt_lstat *next;
+	struct rpt_lstat *prev;
+	char peer[MAXPEERSTR];
+	char name[MAXNODESTR];
+	char mode;
+	char outbound;
+	int reconnects;
+	char thisconnected;
+	struct timeval connecttime;
+	struct rpt_chan_stat chan_stat[NRPTSTAT];
 };
 
 struct rpt_tele {
