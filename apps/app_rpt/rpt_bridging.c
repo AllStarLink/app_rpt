@@ -479,7 +479,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 		res = rpt_conf_add_speaker(myrpt->pchannel, myrpt);
 	}
 	if (res) {
-		ast_hangup(mychannel);
+		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV); /* The PBX has control of this channel */
 		ast_hangup(genchannel);
 		return -1;
 	}
@@ -488,7 +488,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 	res = dahdi_conf_get_channo(mychannel);
 	if (res < 0) {
 		ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
-		ast_hangup(mychannel);
+		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV); /* The PBX has control of this channel */
 		return -1;
 	}
 
@@ -504,7 +504,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, stru
 	 * on a channel number being used as a conference.
 	 */
 	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
-		ast_hangup(mychannel);
+		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV); /* The PBX has control of this channel */
 		return -1;
 	}
 	return 0;

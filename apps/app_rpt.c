@@ -1416,8 +1416,11 @@ void *rpt_call(void *this)
 	ast_debug(1, "exit channel loop\n");
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_stop_tone(genchannel);
-	if (ast_channel_pbx(mychannel))
+	if (ast_channel_pbx(mychannel)) {
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
+	} else {
+		ast_hangup(mychannel);
+	}
 	ast_hangup(genchannel);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = CALLMODE_DOWN;
@@ -1993,11 +1996,6 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 				rpt_telemetry(myrpt, COMPLETE, NULL);
 				return;
 			}
-#if 0
-			if ((myrpt->rem_dtmfidx < 0) && ((myrpt->callmode == CALLMODE_DIALING) || (myrpt->callmode == CALLMODE_UP))) {
-				myrpt->mydtmf = c;
-			}
-#endif
 		}
 	}
 	if (myrpt->cmdnode[0] && strcmp(myrpt->cmdnode, "aprstt")) {
