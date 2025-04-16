@@ -1359,11 +1359,15 @@ void *rpt_call(void *this)
 	if (ast_channel_pbx(mychannel)) {
 		if (rpt_call_bridge_setup(myrpt, mychannel, genchannel)) {
 			myrpt->callmode = CALLMODE_DOWN;
+			ast_softhangup(mychannel, AST_SOFTHANGUP_DEV); /* The PBX has control of this channel */
+			ast_hangup(genchannel);
 			rpt_mutex_unlock(&myrpt->lock);
 			pthread_exit(NULL);
 		}
 	} else {
-		/* XXX Can this ever happen (since we exit if ast_pbx_start fails)? */
+		/* XXX Can this ever happen (since we exit if ast_pbx_start fails)?
+		 * Note: This does happen when the dialplan ends faster than usleep(10000)
+		 */
 		ast_log(LOG_WARNING, "%s has no PBX?\n", ast_channel_name(mychannel));
 	}
 
@@ -1418,8 +1422,6 @@ void *rpt_call(void *this)
 	rpt_stop_tone(genchannel);
 	if (ast_channel_pbx(mychannel)) {
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
-	} else {
-		ast_hangup(mychannel);
 	}
 	ast_hangup(genchannel);
 	rpt_mutex_lock(&myrpt->lock);
