@@ -1169,13 +1169,56 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
 
 #endif
 
- /*
-  *
-  * WARNING:  YOU ARE NOW HEADED INTO ONE GIANT MAZE OF SWITCH STATEMENTS THAT DO MOST OF THE WORK FOR
-  *           APP_RPT.  THE MAJORITY OF THIS IS VERY UNDOCUMENTED CODE AND CAN BE VERY HARD TO READ.
-  *           IT IS ALSO PROBABLY THE MOST ERROR PRONE PART OF THE CODE, ESPECIALLY THE PORTIONS
-  *           RELATED TO THREADED OPERATIONS.
-  */
+struct rpt_autopatch {
+	struct rpt *myrpt;
+	struct ast_channel *mychannel;
+	unsigned int pbx_exited:1;
+};
+
+/*!
+ * \brief Create an autopatch specific pbx run thread with no_hangup_chan = 1 arg.
+ * \param data 	Structure of rpt_autopatch
+ */
+static void *rpt_pbx_autopatch_run(void *data)
+{
+	struct rpt_autopatch *autopatch = data;
+	struct rpt *myrpt = autopatch->myrpt;
+	enum ast_pbx_result res;
+	struct ast_pbx_args pbx_args;
+
+	memset(&pbx_args, 0, sizeof(pbx_args));
+	pbx_args.no_hangup_chan = 1;
+
+	res = ast_pbx_run_args(autopatch->mychannel, &pbx_args);
+	if (res) { /* could not start PBX */
+		rpt_mutex_lock(&myrpt->lock);
+		myrpt->callmode = CALLMODE_FAILED;
+		rpt_mutex_unlock(&myrpt->lock);
+	} else if (myrpt->patchfarenddisconnect || (myrpt->p.duplex < 2)) { /* PBX has finished dialplan */
+		ast_debug(1, "callmode=%i, patchfarenddisconnect=%i, duplex=%i\n", myrpt->callmode, myrpt->patchfarenddisconnect, myrpt->p.duplex);
+		rpt_mutex_lock(&myrpt->lock);
+		myrpt->callmode = CALLMODE_DOWN;
+		rpt_mutex_unlock(&myrpt->lock);
+		myrpt->macropatch = 0;
+		if (!myrpt->patchquiet) {
+			rpt_telemetry(myrpt, TERM, NULL);
+		}
+	} else { /* Send congestion until patch is downed by command */
+		rpt_mutex_lock(&myrpt->lock);
+		myrpt->callmode = CALLMODE_FAILED;
+		rpt_mutex_unlock(&myrpt->lock);
+	}
+	autopatch->pbx_exited = 1;
+	return NULL;
+}
+
+/*
+ *
+ * WARNING:  YOU ARE NOW HEADED INTO ONE GIANT MAZE OF SWITCH STATEMENTS THAT DO MOST OF THE WORK FOR
+ *           APP_RPT.  THE MAJORITY OF THIS IS VERY UNDOCUMENTED CODE AND CAN BE VERY HARD TO READ.
+ *           IT IS ALSO PROBABLY THE MOST ERROR PRONE PART OF THE CODE, ESPECIALLY THE PORTIONS
+ *           RELATED TO THREADED OPERATIONS.
+ */
 
 /*
  *  This is the main entry point from the Asterisk call handler to app_rpt when a new "call" is detected and passed off
@@ -1190,6 +1233,8 @@ void *rpt_call(void *this)
 	int stopped, congstarted, dialtimer, lastcidx, aborted, sentpatchconnect;
 	struct ast_channel *mychannel, *genchannel;
 	struct ast_format_cap *cap;
+	struct rpt_autopatch *patch_thread_data;
+	pthread_t threadid;
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
@@ -1256,14 +1301,6 @@ void *rpt_call(void *this)
 
 	/* Reverse engineering of callmode Mar 2023 NA
 	 * XXX These should be converted to enums once we're sure about these, for programmer sanity.
-	 *
-	 * If 1 or 4, then we wait.
-	 * 0 = abort this call
-	 * 1 = no auto patch extension
-	 * 2 = auto patch extension exists
-	 * 3 = ?
-	 * 4 = congestion
-	 *
 	 * We wait up to patchdialtime for digits to be received.
 	 * If there's no auto patch extension, then we'll wait for PATCH_DIALPLAN_TIMEOUT ms and then play an announcement.
 	 */
@@ -1330,7 +1367,6 @@ void *rpt_call(void *this)
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->callmode = CALLMODE_DOWN;
 		myrpt->macropatch = 0;
 		channel_revert(myrpt);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -1348,7 +1384,6 @@ void *rpt_call(void *this)
 			ast_free(instr);
 		}
 	}
-
 	ast_channel_context_set(mychannel, myrpt->patchcontext);
 	ast_channel_exten_set(mychannel, myrpt->exten);
 
@@ -1356,94 +1391,106 @@ void *rpt_call(void *this)
 		ast_channel_accountcode_set(mychannel, myrpt->p.acctcode);
 	ast_channel_priority_set(mychannel, 1);
 	ast_channel_undefer_dtmf(mychannel);
-	if (ast_pbx_start(mychannel) < 0) {
-		ast_log(LOG_ERROR, "Unable to start PBX!\n");
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
+	if (rpt_call_bridge_setup(myrpt, mychannel)) {
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->callmode = CALLMODE_DOWN;
 		rpt_mutex_unlock(&myrpt->lock);
+		ast_hangup(mychannel);
+		ast_hangup(genchannel);
 		pthread_exit(NULL);
 	}
-	usleep(10000);
-	rpt_mutex_lock(&myrpt->lock);
-	myrpt->callmode = CALLMODE_UP;
-
-	if (ast_channel_pbx(mychannel)) {
-		if (rpt_call_bridge_setup(myrpt, mychannel, genchannel)) {
-			myrpt->callmode = CALLMODE_DOWN;
-			rpt_mutex_unlock(&myrpt->lock);
-			pthread_exit(NULL);
-		}
-	} else {
-		/* XXX Can this ever happen (since we exit if ast_pbx_start fails)? */
-		ast_log(LOG_WARNING, "%s has no PBX?\n", ast_channel_name(mychannel));
+	patch_thread_data = ast_calloc(1, sizeof(struct rpt_autopatch));
+	if (!patch_thread_data) {
+		rpt_mutex_lock(&myrpt->lock);
+		myrpt->callmode = CALLMODE_DOWN;
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_hangup(mychannel);
+		ast_hangup(genchannel);
+		pthread_exit(NULL);
+	}
+	patch_thread_data->myrpt = myrpt;
+	patch_thread_data->mychannel = mychannel;
+	res = ast_pthread_create(&threadid, NULL, rpt_pbx_autopatch_run, patch_thread_data);
+	if (res < 0) {
+		ast_log(LOG_ERROR, "Unable to start PBX!\n");
+		rpt_mutex_lock(&myrpt->lock);
+		myrpt->callmode = CALLMODE_DOWN;
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_hangup(mychannel);
+		ast_hangup(genchannel);
+		pthread_exit(NULL);
 	}
 
+	rpt_mutex_lock(&myrpt->lock);
+	myrpt->callmode = CALLMODE_UP;
 	sentpatchconnect = 0;
+	congstarted = 0;
 	while (myrpt->callmode != CALLMODE_DOWN) {
-		if (!ast_channel_pbx(mychannel) && (myrpt->callmode != CALLMODE_FAILED)) {
-			/* If patch is setup for far end disconnect */
-			if (myrpt->patchfarenddisconnect || (myrpt->p.duplex < 2)) {
-				ast_debug(1, "callmode=%i, patchfarenddisconnect=%i, duplex=%i\n",
-					myrpt->callmode, myrpt->patchfarenddisconnect, myrpt->p.duplex);
-				myrpt->callmode = CALLMODE_DOWN;
-				myrpt->macropatch = 0;
-				if (!myrpt->patchquiet) {
-					rpt_mutex_unlock(&myrpt->lock);
-					rpt_telemetry(myrpt, TERM, NULL);
-					rpt_mutex_lock(&myrpt->lock);
-				}
-			} else {			/* Send congestion until patch is downed by command */
-				myrpt->callmode = CALLMODE_FAILED;
-				rpt_mutex_unlock(&myrpt->lock);
-				/* start congestion tone */
-				rpt_play_congestion(genchannel);
-				rpt_mutex_lock(&myrpt->lock);
-			}
+		if (!congstarted && myrpt->callmode == CALLMODE_FAILED) { /* Send congestion until patch is downed by command */
+			rpt_mutex_unlock(&myrpt->lock);
+			/* start congestion tone */
+			rpt_play_congestion(genchannel);
+			rpt_mutex_lock(&myrpt->lock);
+			congstarted = 1;
 		}
-		if (ast_channel_is_bridged(mychannel) && ast_channel_state(mychannel) == AST_STATE_UP)
-			if ((!sentpatchconnect) && myrpt->p.patchconnect && ast_channel_is_bridged(mychannel)
-				&& (ast_channel_state(mychannel) == AST_STATE_UP)) {
+		if (myrpt->callmode != CALLMODE_FAILED) {
+			ast_channel_lock(mychannel);
+			if ((!sentpatchconnect) && myrpt->p.patchconnect && ast_channel_is_bridged(mychannel) &&
+				(ast_channel_state(mychannel) == AST_STATE_UP)) {
+				ast_channel_unlock(mychannel);
 				sentpatchconnect = 1;
 				rpt_mutex_unlock(&myrpt->lock);
-				rpt_telemetry(myrpt, PLAYBACK, (char*) myrpt->p.patchconnect);
+				rpt_telemetry(myrpt, PLAYBACK, (char *) myrpt->p.patchconnect);
 				rpt_mutex_lock(&myrpt->lock);
+			} else {
+				ast_channel_unlock(mychannel);
 			}
-		if (myrpt->mydtmf) {
-			struct ast_frame wf = { AST_FRAME_DTMF, };
+			if (myrpt->mydtmf) {
+				struct ast_frame wf = {
+					AST_FRAME_DTMF,
+				};
 
-			wf.subclass.integer = myrpt->mydtmf;
-			if (ast_channel_is_bridged(mychannel) && ast_channel_state(mychannel) == AST_STATE_UP) {
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_queue_frame(mychannel, &wf);
-				ast_senddigit(genchannel, myrpt->mydtmf, 0);
-				rpt_mutex_lock(&myrpt->lock);
+				wf.subclass.integer = myrpt->mydtmf;
+				ast_channel_lock(mychannel);
+				if (ast_channel_is_bridged(mychannel) && ast_channel_state(mychannel) == AST_STATE_UP) {
+					ast_channel_unlock(mychannel);
+					rpt_mutex_unlock(&myrpt->lock);
+					ast_queue_frame(mychannel, &wf);
+					ast_senddigit(genchannel, myrpt->mydtmf, 0);
+					rpt_mutex_lock(&myrpt->lock);
+				} else {
+					ast_channel_unlock(mychannel);
+				}
 			}
-			myrpt->mydtmf = 0;
 		}
+		myrpt->mydtmf = 0;
 		rpt_mutex_unlock(&myrpt->lock);
 		usleep(MSWAIT * 1000);
 		rpt_mutex_lock(&myrpt->lock);
 	}
-	ast_debug(1, "exit channel loop\n");
+	ast_debug(1, "exit channel loop mode %d\n", myrpt->callmode);
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_stop_tone(genchannel);
-	if (ast_channel_pbx(mychannel))
+
+	if (!patch_thread_data->pbx_exited) {
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
+		pthread_join(threadid, NULL);
+	} else {
+		ast_hangup(mychannel);
+	}
 	ast_hangup(genchannel);
+
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = CALLMODE_DOWN;
 	myrpt->macropatch = 0;
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 
-	/* first put the channel on the conference in announce mode */
-	if (myrpt->p.duplex >= 2 && myrpt->p.duplex <= 4) {
+	/* Put pchannel back on the conference in announce mode */
+	if (myrpt->p.duplex == 4 || myrpt->p.duplex == 3) {
 		rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
-	} else {
-		rpt_conf_add_speaker(myrpt->pchannel, myrpt);
 	}
+	ast_free(patch_thread_data);
 	pthread_exit(NULL);
 }
 
@@ -2006,11 +2053,6 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 				rpt_telemetry(myrpt, COMPLETE, NULL);
 				return;
 			}
-#if 0
-			if ((myrpt->rem_dtmfidx < 0) && ((myrpt->callmode == CALLMODE_DIALING) || (myrpt->callmode == CALLMODE_UP))) {
-				myrpt->mydtmf = c;
-			}
-#endif
 		}
 	}
 	if (myrpt->cmdnode[0] && strcmp(myrpt->cmdnode, "aprstt")) {
