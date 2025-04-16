@@ -1343,7 +1343,7 @@ void *rpt_call(void *this)
 		ast_channel_accountcode_set(mychannel, myrpt->p.acctcode);
 	ast_channel_priority_set(mychannel, 1);
 	ast_channel_undefer_dtmf(mychannel);
-	if (ast_pbx_start(mychannel) < 0) {
+	if (ast_pbx_start(mychannel) != AST_PBX_SUCCESS) {
 		ast_log(LOG_ERROR, "Unable to start PBX!\n");
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
@@ -1357,7 +1357,7 @@ void *rpt_call(void *this)
 	myrpt->callmode = CALLMODE_UP;
 
 	if (ast_channel_pbx(mychannel)) {
-		if (rpt_call_bridge_setup(myrpt, mychannel, genchannel)) {
+		if (rpt_call_bridge_setup(myrpt, mychannel)) {
 			myrpt->callmode = CALLMODE_DOWN;
 			ast_softhangup(mychannel, AST_SOFTHANGUP_DEV); /* The PBX has control of this channel */
 			ast_hangup(genchannel);
@@ -1367,9 +1367,13 @@ void *rpt_call(void *this)
 	} else {
 		/* XXX Can this ever happen (since we exit if ast_pbx_start fails)?
 		 * Note: This does happen when the dialplan ends faster than usleep(10000)
+		 * The PBX has handled mychannel, just need to cleanup genchannel.
 		 */
 		ast_log(LOG_WARNING, "%s has no PBX?\n", ast_channel_name(mychannel));
 		myrpt->callmode = CALLMODE_DOWN;
+		ast_hangup(genchannel);
+		rpt_mutex_unlock(&myrpt->lock);
+		pthread_exit(NULL);
 	}
 
 	sentpatchconnect = 0;
@@ -1394,14 +1398,12 @@ void *rpt_call(void *this)
 				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
-		if (ast_channel_is_bridged(mychannel) && ast_channel_state(mychannel) == AST_STATE_UP)
-			if ((!sentpatchconnect) && myrpt->p.patchconnect && ast_channel_is_bridged(mychannel)
-				&& (ast_channel_state(mychannel) == AST_STATE_UP)) {
-				sentpatchconnect = 1;
-				rpt_mutex_unlock(&myrpt->lock);
-				rpt_telemetry(myrpt, PLAYBACK, (char*) myrpt->p.patchconnect);
-				rpt_mutex_lock(&myrpt->lock);
-			}
+		if (!sentpatchconnect && myrpt->p.patchconnect && ast_channel_is_bridged(mychannel) && (ast_channel_state(mychannel) == AST_STATE_UP)) {
+			sentpatchconnect = 1;
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_telemetry(myrpt, PLAYBACK, (char *) myrpt->p.patchconnect);
+			rpt_mutex_lock(&myrpt->lock);
+		}
 		if (myrpt->mydtmf) {
 			struct ast_frame wf = { AST_FRAME_DTMF, };
 
@@ -1432,7 +1434,7 @@ void *rpt_call(void *this)
 	rpt_mutex_unlock(&myrpt->lock);
 
 	/* first put the channel on the conference in announce mode */
-	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
+	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) { /* p.duplex == 4 -> move pchannel back to repeated audio */
 		rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
 	} else {
 		rpt_conf_add_speaker(myrpt->pchannel, myrpt);
