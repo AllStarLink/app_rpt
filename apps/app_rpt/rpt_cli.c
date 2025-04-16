@@ -1064,6 +1064,24 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 	return 0;
 }
 
+static char *complete_node_list(const char *line, const char *word, int pos, int rpos)
+{
+	int i = 0;
+	int nrpts = rpt_num_rpts();
+	size_t wordlen = strlen(word);
+
+	if (pos != rpos) {
+		return NULL;
+	}
+
+	for (i = 0; i < nrpts; i++) {
+		if (!strncmp(rpt_vars[i].name, word, wordlen)) {
+			ast_cli_completion_add(ast_strdup(rpt_vars[i].name));
+		}
+	}
+	return NULL;
+}
+
 static int rpt_show_channels(int fd, int argc, const char *const *argv)
 {
 	int i, this_rpt = -1;
@@ -1198,7 +1216,7 @@ static char *handle_cli_dump(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"	Dumps struct debug info to log\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_dump(a->fd, a->argc, a->argv));
 }
@@ -1213,7 +1231,7 @@ static char *handle_cli_stats(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"	Dumps node statistics to console\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_stats(a->fd, a->argc, a->argv));
 }
@@ -1228,7 +1246,7 @@ static char *handle_cli_nodes(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"	Dumps a list of directly and indirectly connected nodes to the console\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_nodes(a->fd, a->argc, a->argv));
 }
@@ -1243,7 +1261,7 @@ static char *handle_cli_xnode(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"	Dumps extended node info to the console\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_xnode(a->fd, a->argc, a->argv));
 }
@@ -1273,7 +1291,7 @@ static char *handle_cli_lstats(struct ast_cli_entry *e, int cmd, struct ast_cli_
 			"	Dumps link statistics to console\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_lstats(a->fd, a->argc, a->argv));
 }
@@ -1303,7 +1321,7 @@ static char *handle_cli_fun(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 			"	Send a DTMF function to a node\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_fun(a->fd, a->argc, a->argv));
 }
@@ -1318,7 +1336,7 @@ static char *handle_cli_fun1(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"	Send a DTMF function to a node\n";;
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_fun1(a->fd, a->argc, a->argv));
 }
@@ -1333,7 +1351,7 @@ static char *handle_cli_playback(struct ast_cli_entry *e, int cmd, struct ast_cl
 			"	Send an Audio File to a node, send to all other connected nodes (global)\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_playback(a->fd, a->argc, a->argv));
 }
@@ -1349,7 +1367,7 @@ static char *handle_cli_cmd(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 			"	i.e. rpt cmd 2000 ilink 3 2001\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_cmd(a->fd, a->argc, a->argv));
 }
@@ -1365,7 +1383,7 @@ static char *handle_cli_setvar(struct ast_cli_entry *e, int cmd, struct ast_cli_
 			"   Note: variable names are case-sensitive.\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 3);
 	}
 	return res2cli(rpt_do_setvar(a->fd, a->argc, a->argv));
 }
@@ -1379,7 +1397,7 @@ static char *handle_cli_showvars(struct ast_cli_entry *e, int cmd, struct ast_cl
 			"	Display all the Asterisk channel variables for a node.\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 3);
 	}
 	return res2cli(rpt_do_showvars(a->fd, a->argc, a->argv));
 }
@@ -1393,7 +1411,7 @@ static char *handle_cli_show_channels(struct ast_cli_entry *e, int cmd, struct a
 			"	Display all the Asterisk channels for a node.\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 3);
 	}
 	return res2cli(rpt_show_channels(a->fd, a->argc, a->argv));
 }
@@ -1407,7 +1425,7 @@ static char *handle_cli_lookup(struct ast_cli_entry *e, int cmd, struct ast_cli_
 		e->usage = NULL;		/*! \todo 20220111 NA rpt_usage doesn't exist! */
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_lookup(a->fd, a->argc, a->argv));
 }
@@ -1422,7 +1440,7 @@ static char *handle_cli_localplay(struct ast_cli_entry *e, int cmd, struct ast_c
 			"	Send an audio file to a node, do not send to other connected nodes (local)\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_localplay(a->fd, a->argc, a->argv));
 }
@@ -1437,7 +1455,7 @@ static char *handle_cli_sendall(struct ast_cli_entry *e, int cmd, struct ast_cli
 			"	Send a Text message to all connected nodes\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_sendall(a->fd, a->argc, a->argv));
 }
@@ -1452,7 +1470,7 @@ static char *handle_cli_sendtext(struct ast_cli_entry *e, int cmd, struct ast_cl
 			"	Send a Text message to a specified node\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_sendtext(a->fd, a->argc, a->argv));
 }
@@ -1467,7 +1485,7 @@ static char *handle_cli_page(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"	Send a page to a user on a node, specifying capcode and type/text\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_page(a->fd, a->argc, a->argv));
 }
