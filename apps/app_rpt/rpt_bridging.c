@@ -484,7 +484,7 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel)
 	if (res < 0) {
 		ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
 		/* Put pchannel back on the conference in announce mode */
-		if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
+		if (myrpt->p.duplex == 4) {
 			rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
 		}
 		return -1;
