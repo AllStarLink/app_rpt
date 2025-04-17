@@ -1433,11 +1433,9 @@ void *rpt_call(void *this)
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 
-	/* first put the channel on the conference in announce mode */
-	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) { /* p.duplex == 4 -> move pchannel back to repeated audio */
+	/* Put pchannel back on the conference in announce mode */
+	if (myrpt->p.duplex == 4) {
 		rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
-	} else {
-		rpt_conf_add_speaker(myrpt->pchannel, myrpt);
 	}
 	pthread_exit(NULL);
 }

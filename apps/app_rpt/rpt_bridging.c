@@ -472,27 +472,22 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel)
 {
 	int res;
 
-	/* first put the channel on the conference in announce mode */
-	if (myrpt->p.duplex == 2) {
-		res = rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
-	} else { /* p.duplex == 4 -> move pchannel to speaker (no repeated audio) */
-		res = rpt_conf_add_speaker(myrpt->pchannel, myrpt);
-	}
-	if (res) {
-		return -1;
+	/* Put pchannel back on the conference in speaker mode */
+	if (myrpt->p.duplex == 4) {
+		if (rpt_conf_add_speaker(myrpt->pchannel, myrpt)) {
+			return -1;
+		}
 	}
 
 	/* get its conference number */
 	res = dahdi_conf_get_channo(mychannel);
 	if (res < 0) {
 		ast_log(LOG_WARNING, "Unable to get autopatch channel number\n");
-		/* Restore the conference mode */
-		if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) { /* p.duplex == 4 -> move pchannel back to repeated audio */
+		/* Put pchannel back on the conference in announce mode */
+		if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
 			rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
-		} else {
-			rpt_conf_add_speaker(myrpt->pchannel, myrpt);
-			return -1;
 		}
+		return -1;
 	}
 
 	/* put vox channel monitoring on the channel  
@@ -507,11 +502,9 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel)
 	 * on a channel number being used as a conference.
 	 */
 	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
-		/* Restore the conference mode */
-		if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) { /* p.duplex == 4 -> move pchannel back to repeated audio */
+		/* Put pchannel back on the conference in announce mode */
+		if (myrpt->p.duplex == 4) {
 			rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
-		} else {
-			rpt_conf_add_speaker(myrpt->pchannel, myrpt);
 		}
 		return -1;
 	}
