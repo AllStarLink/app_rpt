@@ -1317,7 +1317,6 @@ void *rpt_call(void *this)
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->callmode = CALLMODE_DOWN;
 		myrpt->macropatch = 0;
 		channel_revert(myrpt);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -1343,6 +1342,15 @@ void *rpt_call(void *this)
 		ast_channel_accountcode_set(mychannel, myrpt->p.acctcode);
 	ast_channel_priority_set(mychannel, 1);
 	ast_channel_undefer_dtmf(mychannel);
+
+	if (rpt_call_bridge_setup(myrpt, mychannel)) {
+		myrpt->callmode = CALLMODE_DOWN;
+		ast_hangup(mychannel);
+		ast_hangup(genchannel);
+		rpt_mutex_unlock(&myrpt->lock);
+		pthread_exit(NULL);
+	}
+
 	if (ast_pbx_start(mychannel) != AST_PBX_SUCCESS) {
 		ast_log(LOG_ERROR, "Unable to start PBX!\n");
 		ast_hangup(mychannel);
@@ -1352,29 +1360,8 @@ void *rpt_call(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		pthread_exit(NULL);
 	}
-	usleep(10000);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = CALLMODE_UP;
-
-	if (ast_channel_pbx(mychannel)) {
-		if (rpt_call_bridge_setup(myrpt, mychannel)) {
-			myrpt->callmode = CALLMODE_DOWN;
-			ast_softhangup(mychannel, AST_SOFTHANGUP_DEV); /* The PBX has control of this channel */
-			ast_hangup(genchannel);
-			rpt_mutex_unlock(&myrpt->lock);
-			pthread_exit(NULL);
-		}
-	} else {
-		/* XXX Can this ever happen (since we exit if ast_pbx_start fails)?
-		 * Note: This does happen when the dialplan ends faster than usleep(10000)
-		 * The PBX has handled mychannel, just need to cleanup genchannel.
-		 */
-		ast_log(LOG_WARNING, "%s has no PBX?\n", ast_channel_name(mychannel));
-		myrpt->callmode = CALLMODE_DOWN;
-		ast_hangup(genchannel);
-		rpt_mutex_unlock(&myrpt->lock);
-		pthread_exit(NULL);
-	}
 
 	sentpatchconnect = 0;
 	while (myrpt->callmode != CALLMODE_DOWN) {
@@ -1390,7 +1377,7 @@ void *rpt_call(void *this)
 					rpt_telemetry(myrpt, TERM, NULL);
 					rpt_mutex_lock(&myrpt->lock);
 				}
-			} else {			/* Send congestion until patch is downed by command */
+			} else { /* Send congestion until patch is downed by command */
 				myrpt->callmode = CALLMODE_FAILED;
 				rpt_mutex_unlock(&myrpt->lock);
 				/* start congestion tone */
@@ -1420,7 +1407,7 @@ void *rpt_call(void *this)
 		usleep(MSWAIT * 1000);
 		rpt_mutex_lock(&myrpt->lock);
 	}
-	ast_debug(1, "exit channel loop\n");
+	ast_debug(1, "exit channel loop %d\n", myrpt->callmode);
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_stop_tone(genchannel);
 	if (ast_channel_pbx(mychannel)) {
@@ -1428,7 +1415,6 @@ void *rpt_call(void *this)
 	}
 	ast_hangup(genchannel);
 	rpt_mutex_lock(&myrpt->lock);
-	myrpt->callmode = CALLMODE_DOWN;
 	myrpt->macropatch = 0;
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
