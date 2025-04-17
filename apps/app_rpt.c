@@ -1423,7 +1423,7 @@ void *rpt_call(void *this)
 	ast_debug(1, "exit channel loop\n");
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_stop_tone(genchannel);
-	if (mychannel && ast_channel_pbx(mychannel)) {
+	if (ast_channel_pbx(mychannel)) {
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
 	}
 	ast_hangup(genchannel);
