@@ -1362,7 +1362,8 @@ void *rpt_call(void *this)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = CALLMODE_UP;
-
+	while (!ast_channel_pbx(mychannel))
+		; /* Wait for PBX to populate the structure */
 	sentpatchconnect = 0;
 	while (myrpt->callmode != CALLMODE_DOWN) {
 		if (!ast_channel_pbx(mychannel) && (myrpt->callmode != CALLMODE_FAILED)) {
