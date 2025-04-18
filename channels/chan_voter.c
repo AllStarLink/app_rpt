@@ -3517,10 +3517,12 @@ static struct ast_cli_entry voter_cli[] = {
 static void rpt_manager_success(struct mansession *s, const struct message *m)
 {
 	const char *id = astman_get_header(m, "ActionID");
+
+	astman_append(s, "Response: Success\r\n");
+
 	if (!ast_strlen_zero(id)) {
 		astman_append(s, "ActionID: %s\r\n", id);
 	}
-	astman_append(s, "Response: Success\r\n");
 }
 
 /*!
