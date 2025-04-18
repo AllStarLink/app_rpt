@@ -320,6 +320,7 @@
 #include "asterisk/indications.h"
 #include "asterisk/format.h"
 #include "asterisk/dsp.h"
+#include "asterisk/stasis_channels.h"
 
 #include "app_rpt/app_rpt.h"
 
@@ -1156,13 +1157,41 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
 
 #endif
 
- /*
-  *
-  * WARNING:  YOU ARE NOW HEADED INTO ONE GIANT MAZE OF SWITCH STATEMENTS THAT DO MOST OF THE WORK FOR
-  *           APP_RPT.  THE MAJORITY OF THIS IS VERY UNDOCUMENTED CODE AND CAN BE VERY HARD TO READ.
-  *           IT IS ALSO PROBABLY THE MOST ERROR PRONE PART OF THE CODE, ESPECIALLY THE PORTIONS
-  *           RELATED TO THREADED OPERATIONS.
-  */
+/*!
+ * \brief Subscription callback for all channel messages.
+ * \param data Data pointer given when creating the subscription.
+ * \param sub This subscription.
+ * \param message The message itself.
+ */
+
+static void channel_callback(void *userdata, struct stasis_subscription *sub, struct stasis_message *msg)
+{
+	struct rpt *myrpt = userdata;
+	if (ast_channel_hangup_request_type() == stasis_message_type(msg)) {
+		ast_debug(1, "Hangup requested");
+		if (myrpt->patchfarenddisconnect || (myrpt->p.duplex < 2)) {
+			ast_debug(
+				1, "callmode=%i, patchfarenddisconnect=%i, duplex=%i\n", myrpt->callmode, myrpt->patchfarenddisconnect, myrpt->p.duplex);
+			myrpt->callmode = CALLMODE_HANGUP;
+			myrpt->macropatch = 0;
+			if (!myrpt->patchquiet) {
+				rpt_mutex_unlock(&myrpt->lock);
+				rpt_telemetry(myrpt, TERM, NULL);
+				rpt_mutex_lock(&myrpt->lock);
+			}
+		} else { /* Send congestion until patch is downed by command */
+			myrpt->callmode = CALLMODE_FAILED;
+		}
+	}
+}
+
+/*
+ *
+ * WARNING:  YOU ARE NOW HEADED INTO ONE GIANT MAZE OF SWITCH STATEMENTS THAT DO MOST OF THE WORK FOR
+ *           APP_RPT.  THE MAJORITY OF THIS IS VERY UNDOCUMENTED CODE AND CAN BE VERY HARD TO READ.
+ *           IT IS ALSO PROBABLY THE MOST ERROR PRONE PART OF THE CODE, ESPECIALLY THE PORTIONS
+ *           RELATED TO THREADED OPERATIONS.
+ */
 
 /*
  *  This is the main entry point from the Asterisk call handler to app_rpt when a new "call" is detected and passed off
@@ -1173,7 +1202,8 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
 void *rpt_call(void *this)
 {
 	struct rpt *myrpt = (struct rpt *) this;
-	int res;
+	struct stasis_subscription *subscription;
+	int res, last_failed = 0;
 	int stopped, congstarted, dialtimer, lastcidx, aborted, sentpatchconnect;
 	struct ast_channel *mychannel, *genchannel;
 	struct ast_format_cap *cap;
@@ -1342,6 +1372,7 @@ void *rpt_call(void *this)
 		ast_channel_accountcode_set(mychannel, myrpt->p.acctcode);
 	ast_channel_priority_set(mychannel, 1);
 	ast_channel_undefer_dtmf(mychannel);
+	subscription = stasis_subscribe(ast_channel_topic(mychannel), channel_callback, myrpt);
 
 	if (rpt_call_bridge_setup(myrpt, mychannel)) {
 		myrpt->callmode = CALLMODE_DOWN;
@@ -1362,30 +1393,16 @@ void *rpt_call(void *this)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = CALLMODE_UP;
-	while (!ast_channel_pbx(mychannel))
-		; /* Wait for PBX to populate the structure */
 	sentpatchconnect = 0;
-	while (myrpt->callmode != CALLMODE_DOWN) {
-		if (!ast_channel_pbx(mychannel) && (myrpt->callmode != CALLMODE_FAILED)) {
-			/* If patch is setup for far end disconnect */
-			if (myrpt->patchfarenddisconnect || (myrpt->p.duplex < 2)) {
-				ast_debug(1, "callmode=%i, patchfarenddisconnect=%i, duplex=%i\n",
-					myrpt->callmode, myrpt->patchfarenddisconnect, myrpt->p.duplex);
-				myrpt->callmode = CALLMODE_DOWN;
-				myrpt->macropatch = 0;
-				if (!myrpt->patchquiet) {
-					rpt_mutex_unlock(&myrpt->lock);
-					rpt_telemetry(myrpt, TERM, NULL);
-					rpt_mutex_lock(&myrpt->lock);
-				}
-			} else { /* Send congestion until patch is downed by command */
-				myrpt->callmode = CALLMODE_FAILED;
-				rpt_mutex_unlock(&myrpt->lock);
-				/* start congestion tone */
-				rpt_play_congestion(genchannel);
-				rpt_mutex_lock(&myrpt->lock);
-			}
+	while (myrpt->callmode != CALLMODE_DOWN && myrpt->callmode != CALLMODE_HANGUP) {
+		if (!last_failed && (myrpt->callmode == CALLMODE_FAILED)) {
+			rpt_mutex_unlock(&myrpt->lock);
+			/* start congestion tone */
+			rpt_play_congestion(genchannel);
+			rpt_mutex_lock(&myrpt->lock);
+			last_failed = 1;
 		}
+
 		if (!sentpatchconnect && myrpt->p.patchconnect && ast_channel_is_bridged(mychannel) && (ast_channel_state(mychannel) == AST_STATE_UP)) {
 			sentpatchconnect = 1;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -1411,11 +1428,13 @@ void *rpt_call(void *this)
 	ast_debug(1, "exit channel loop %d\n", myrpt->callmode);
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_stop_tone(genchannel);
-	if (ast_channel_pbx(mychannel)) {
+	if (myrpt->callmode != CALLMODE_HANGUP && ast_channel_pbx(mychannel)) {
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
 	}
 	ast_hangup(genchannel);
+	stasis_unsubscribe(subscription);
 	rpt_mutex_lock(&myrpt->lock);
+	myrpt->callmode = CALLMODE_DOWN;
 	myrpt->macropatch = 0;
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
