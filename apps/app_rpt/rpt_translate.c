@@ -18,38 +18,46 @@ char func_xlat(struct rpt *myrpt, char c, struct rpt_xlat *xlat)
 
 	time(&now);
 	gotone = 0;
-	/* if too much time, reset the skate machine */
+	/* if too much time, reset the state machine */
 	if ((now - xlat->lastone) > MAXXLATTIME) {
-		xlat->funcindex = xlat->endindex = 0;
+		xlat->funcindex = 0;
+		xlat->endindex = 0;
 	}
 	if (xlat->funccharseq[0] && (c == xlat->funccharseq[xlat->funcindex++])) {
 		time(&xlat->lastone);
 		gotone = 1;
 		if (!xlat->funccharseq[xlat->funcindex]) {
-			xlat->funcindex = xlat->endindex = 0;
-			return (myrpt->p.funcchar);
+			xlat->funcindex = 0;
+			xlat->endindex = 0;
+			return myrpt->p.funcchar;
 		}
-	} else
+	} else {
 		xlat->funcindex = 0;
+	}
 	if (xlat->endcharseq[0] && (c == xlat->endcharseq[xlat->endindex++])) {
 		time(&xlat->lastone);
 		gotone = 1;
 		if (!xlat->endcharseq[xlat->endindex]) {
-			xlat->funcindex = xlat->endindex = 0;
-			return (myrpt->p.endchar);
+			xlat->funcindex = 0;
+			xlat->endindex = 0;
+			return myrpt->p.endchar;
 		}
-	} else
+	} else {
 		xlat->endindex = 0;
+	}
 	/* if in middle of decode seq, send nothing back */
-	if (gotone)
-		return (0);
+	if (gotone) {
+		return 0;
+	}
 	/* if no pass chars specified, return em all */
-	if (!xlat->passchars[0])
-		return (c);
+	if (!xlat->passchars[0]) {
+		return c;
+	}
 	/* if a "pass char", pass it */
-	if (strchr(xlat->passchars, c))
-		return (c);
-	return (0);
+	if (strchr(xlat->passchars, c)) {
+		return c;
+	}
+	return 0;
 }
 
 char aprstt_xlat(const char *instr, char *outstr)
