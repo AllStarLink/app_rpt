@@ -96,7 +96,7 @@ int rpt_equate_tx_conf(struct rpt *myrpt);
 #define rpt_tx_conf_add_announcer(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_TXCONF, RPT_CONF_CONFANN)
 
 /*! \note Used in app_rpt.c */
-int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel, struct ast_channel *genchannel);
+int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel);
 
 /*! \note Used in app_rpt.c */
 int rpt_mon_setup(struct rpt *myrpt);
