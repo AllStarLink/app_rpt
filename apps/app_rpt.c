@@ -6059,9 +6059,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	int res = -1, i, rem_totx, rem_rx, remkeyed, n, phone_mode = 0;
 	int iskenwood_pci4, authtold, authreq, setting, notremming, reming;
 	int dtmfed, phone_vox = 0, phone_monitor = 0;
+	char *use_pipe;
 	char tmp[TMP_SIZE], keyed = 0, keyed1 = 0;
 	char *options, *stringp, *callstr, c, *altp, *memp, *str;
-	char sx[320], myfirst, *b, *b1;
+	char sx[320], myfirst, *b, *b1, *separator = "|";
 	struct rpt *myrpt;
 	struct ast_channel *who;
 	struct ast_channel *cs[20];
@@ -6084,22 +6085,31 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	ast_set_read_format(chan, ast_format_slin);
 	ast_set_write_format(chan, ast_format_slin);
 
-	altp = strstr(tmp, "|*");
+	/*! \todo issue #133 - use "," - first step allow "|"" or ","" but not both
+	 * eventually remove | as an option after most installations have moved
+	 */
+	use_pipe = strchr(tmp, '|');
+	if (use_pipe) {
+		separator = "|";
+	} else {
+		separator = ",";
+	}
+	altp = use_pipe ? strstr(tmp, "|*") : strstr(tmp, ",*");
 	if (altp) {
 		altp[0] = 0;
 		altp++;
 	}
 
-	memp = strstr(tmp, "|M");
+	memp = use_pipe ? strstr(tmp, "|M") : strstr(tmp, ",M");
 	if (memp) {
 		memp[0] = 0;
 		memp += 2;
 	}
 
 	stringp = tmp;
-	strsep(&stringp, "|");
+	strsep(&stringp, separator);
 	options = stringp;
-	strsep(&stringp, "|");
+	strsep(&stringp, separator);
 	callstr = stringp;
 
 	myrpt = NULL;
@@ -6349,7 +6359,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		s = orig_s;
 		strncpy(s, options, l);
 
-		template = strsep(&s, "|");
+		template = strsep(&s, separator);
 		if (!template) {
 			ast_log(LOG_WARNING, "An announce template must be defined\n");
 			ast_free(orig_s);
@@ -6357,7 +6367,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		if (s) {
-			timeout = atoi(strsep(&s, "|"));
+			timeout = atoi(strsep(&s, separator));
 			timeout *= 1000;
 		}
 
@@ -6367,15 +6377,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			/* set the return context. Code borrowed from the Goto builtin */
 
 			working = return_context;
-			context = strsep(&working, "|");
-			exten = strsep(&working, "|");
+			context = strsep(&working, separator);
+			exten = strsep(&working, separator);
 			if (!exten) {
 				/* Only a priority in this one */
 				priority = context;
 				exten = NULL;
 				context = NULL;
 			} else {
-				priority = strsep(&working, "|");
+				priority = strsep(&working, separator);
 				if (!priority) {
 					/* Only an extension and priority in this one */
 					priority = exten;
