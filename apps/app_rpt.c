@@ -1172,15 +1172,17 @@ static void channel_callback(void *userdata, struct stasis_subscription *sub, st
 		if (myrpt->patchfarenddisconnect || (myrpt->p.duplex < 2)) {
 			ast_debug(
 				1, "callmode=%i, patchfarenddisconnect=%i, duplex=%i\n", myrpt->callmode, myrpt->patchfarenddisconnect, myrpt->p.duplex);
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->callmode = CALLMODE_HANGUP;
 			myrpt->macropatch = 0;
+			rpt_mutex_unlock(&myrpt->lock);
 			if (!myrpt->patchquiet) {
-				rpt_mutex_unlock(&myrpt->lock);
 				rpt_telemetry(myrpt, TERM, NULL);
-				rpt_mutex_lock(&myrpt->lock);
 			}
 		} else { /* Send congestion until patch is downed by command */
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->callmode = CALLMODE_FAILED;
+			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
 }
@@ -1375,20 +1377,21 @@ void *rpt_call(void *this)
 	subscription = stasis_subscribe(ast_channel_topic(mychannel), channel_callback, myrpt);
 
 	if (rpt_call_bridge_setup(myrpt, mychannel)) {
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->callmode = CALLMODE_DOWN;
+		rpt_mutex_unlock(&myrpt->lock);
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
-		rpt_mutex_unlock(&myrpt->lock);
 		pthread_exit(NULL);
 	}
 
 	if (ast_pbx_start(mychannel) != AST_PBX_SUCCESS) {
 		ast_log(LOG_ERROR, "Unable to start PBX!\n");
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->callmode = CALLMODE_DOWN;
 		rpt_mutex_unlock(&myrpt->lock);
+		ast_hangup(mychannel);
+		ast_hangup(genchannel);
 		pthread_exit(NULL);
 	}
 	rpt_mutex_lock(&myrpt->lock);
