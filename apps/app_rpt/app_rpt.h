@@ -662,6 +662,7 @@ struct rpt {
 		struct rpt_xlat inxlat;
 		struct rpt_xlat outxlat;
 		const char *archivedir;
+		const char *archivedatefmt;
 		const char *archiveformat;
 		int authlevel;
 		const char *csstanzaname;

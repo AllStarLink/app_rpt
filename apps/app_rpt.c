@@ -687,6 +687,20 @@ int function_table_index(const char *s)
 	return -1;
 }
 
+/*! \brief format date string for archive log/file */
+static char *donode_make_datestr(char *buf, size_t bufsize, time_t *timep, const char *datefmt)
+{
+	struct timeval t = ast_tvnow();
+	struct ast_tm tm;
+
+	ast_localtime(&t, &tm, NULL);
+	if (timep) {
+		*timep = t.tv_sec;
+	}
+	ast_strftime(buf, bufsize, datefmt ? datefmt : "%Y%m%d%H%M%S", &tm);
+	return buf;
+}
+
 /*! \brief node logging function */
 void donodelog(struct rpt *myrpt, char *str)
 {
@@ -701,10 +715,9 @@ void donodelog(struct rpt *myrpt, char *str)
 	if (!nodep) {
 		return;
 	}
-	time(&nodep->timestamp);
 	ast_copy_string(nodep->archivedir, myrpt->p.archivedir, sizeof(nodep->archivedir));
-	strftime(datestr, sizeof(datestr) - 1, "%Y%m%d%H%M%S", localtime(&nodep->timestamp));
-	snprintf(nodep->str, sizeof(nodep->str) - 1, "%s %s,%s\n", myrpt->name, datestr, str);
+	donode_make_datestr(datestr, sizeof(datestr), &nodep->timestamp, myrpt->p.archivedatefmt);
+	snprintf(nodep->str, sizeof(nodep->str), "%s %s,%s\n", myrpt->name, datestr, str);
 	ast_mutex_lock(&nodeloglock);
 	insque((struct qelem *) nodep, (struct qelem *) nodelog.prev);
 	ast_mutex_unlock(&nodeloglock);
@@ -2935,7 +2948,6 @@ static inline void log_keyed(struct rpt *myrpt)
 {
 	char mydate[100], myfname[512];
 	const char *myformat;
-	time_t myt;
 
 	if (myrpt->monstream) {
 		ast_closestream(myrpt->monstream);
@@ -2944,8 +2956,7 @@ static inline void log_keyed(struct rpt *myrpt)
 	if (myrpt->p.archivedir) {
 		long blocksleft;
 
-		time(&myt);
-		strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
+		donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
 		snprintf(myfname, sizeof(myfname), "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
 		myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
 		myrpt->monstream =
@@ -3762,10 +3773,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					char myfname[512], mydate[100];
 					const char *myformat;
 					long blocksleft;
-					time_t myt;
 
-					time(&myt);
-					strftime(mydate, sizeof(mydate) - 1, "%Y%m%d%H%M%S", localtime(&myt));
+					donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
 					snprintf(myfname, sizeof(myfname), "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
 					myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
 					if (myrpt->p.monminblocks) {
@@ -6959,14 +6968,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (myrpt->p.archivedir) {
 		char mycmd[512], mydate[100];
 		char filename[PATH_MAX];
-		time_t myt;
 		long blocksleft;
 
 		mkdir(myrpt->p.archivedir, 0700);
 		snprintf(mycmd, sizeof(mycmd), "%s/%s", myrpt->p.archivedir, myrpt->name);
 		mkdir(mycmd, 0775);
-		time(&myt);
-		strftime(mydate, sizeof(mydate), "%Y%m%d%H%M%S", localtime(&myt));
+		donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
 		snprintf(filename, sizeof(filename), "%s/%s/%s.%s", myrpt->p.archivedir, myrpt->name, mydate, S_OR(myrpt->p.archiveformat, "wav49"));
 		if (myrpt->p.monminblocks) {
 			blocksleft = diskavail(myrpt);
