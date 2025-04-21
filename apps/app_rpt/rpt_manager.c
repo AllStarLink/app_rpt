@@ -73,9 +73,12 @@ static int manager_rpt_local_nodes(struct mansession *s, const struct message *m
 static void rpt_manager_success(struct mansession *s, const struct message *m)
 {
 	const char *id = astman_get_header(m, "ActionID");
-	if (!ast_strlen_zero(id))
-		astman_append(s, "ActionID: %s\r\n", id);
+
 	astman_append(s, "Response: Success\r\n");
+
+	if (!ast_strlen_zero(id)) {
+		astman_append(s, "ActionID: %s\r\n", id);
+	}
 }
 
 static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *m, char *str)
