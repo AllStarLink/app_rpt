@@ -2282,7 +2282,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	*tele++ = 0;
 	l->elaptime = 0;
-	l->connecttime = 0;
+	l->connecttime.tv_sec = 0; /* not connected */
 	l->thisconnected = 0;
 	l->link_newkey = RADIO_KEY_ALLOWED;
 
@@ -3186,7 +3186,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		/* start tracking connect time */
 		if (l->connecttime.tv_sec == 0) {
-			l->connecttime = rpt_tvnow();
+			l->connecttime = ast_tvnow();
 		}
 
 		/* ignore non-timing channels */
@@ -4104,7 +4104,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 			l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
 			l->retrytimer = RETRY_TIMER_MS;
 			l->elaptime = 0;
-			l->connecttime = 0;
+			l->connecttime.tv_sec = 0; /* no longer connected */
 			l->thisconnected = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
