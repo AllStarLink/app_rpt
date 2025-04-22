@@ -1397,7 +1397,7 @@ static void *hidthread(void *arg)
 		buf[o->hid_gpio_loc] = o->hid_gpio_val;
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
-		ast_mutex_lock(&o->usblock);
+		ast_mutex_unlock(&o->usblock);
 	}
 	pthread_exit(0);
 }
