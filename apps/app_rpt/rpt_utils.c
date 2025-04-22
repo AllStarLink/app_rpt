@@ -265,6 +265,5 @@ void init_text_frame(struct ast_frame *wf, const char *src)
 {
 	memset(wf, 0, sizeof(struct ast_frame));
 	wf->frametype = AST_FRAME_TEXT;
-	wf->subclass.format = ast_format_slin;
 	wf->src = src;
 }
