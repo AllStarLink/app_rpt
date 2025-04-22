@@ -2307,8 +2307,10 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	/* Check conditions and set receiver active */
 	if (cd && sd) {
 		//if(!o->rxkeyed)o->pmrChan->dd.b.doitnow=1;
-		if (o->rxkeyed || ((o->txoffcnt >= o->txoffdelay) && (o->rxoncnt >= o->rxondelay))) {
+		if (!o->rxkeyed) {
 			ast_debug(3, "Channel %s: o->rxkeyed = 1.\n", o->name);
+		}
+		if (o->rxkeyed || ((o->txoffcnt >= o->txoffdelay) && (o->rxoncnt >= o->rxondelay))) {
 			o->rxkeyed = 1;
 		} else {
 			o->rxoncnt++;
