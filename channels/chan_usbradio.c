@@ -459,7 +459,7 @@ static int usbradio_setoption(struct ast_channel *chan, int option, void *data, 
 static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s);
 static void store_rxctcssadj(struct chan_usbradio_pvt *o, const char *s);
 static int set_txctcss_level(struct chan_usbradio_pvt *o);
-static void pmrdump(struct chan_usbradio_pvt *o);
+static void pmrdump(struct chan_usbradio_pvt *o, int fd);
 static void mult_set(struct chan_usbradio_pvt *o);
 static int mult_calc(int value);
 static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int flag);
@@ -2859,7 +2859,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 	o->pmrChan->b.tuning = 1;
 
 	if (!strcasecmp(argv[2], "dump")) {
-		pmrdump(o);
+		pmrdump(o, fd);
 	}
 	else if (!strcasecmp(argv[2], "swap")) {
 		if (argc > 3) {
@@ -4606,10 +4606,22 @@ static int mult_calc(int value)
 	return (mult);
 }
 
-#define pd(x) {printf(#x" = %d\n",x);}
-#define pp(x) {printf(#x" = %p\n",x);}
-#define ps(x) {printf(#x" = %s\n",x);}
-#define pf(x) {printf(#x" = %f\n",x);}
+#define pd(x) \
+	{ \
+		ast_cli(fd, #x " = %d\n", x); \
+	}
+#define pp(x) \
+	{ \
+		ast_cli(fd, #x " = %p\n", x); \
+	}
+#define ps(x) \
+	{ \
+		ast_cli(fd, #x " = %s\n", x); \
+	}
+#define pf(x) \
+	{ \
+		ast_cli(fd, #x " = %f\n", x); \
+	}
 
 #if 0
 /*
@@ -4682,14 +4694,14 @@ static int usbhider(struct chan_usbradio_pvt *o, int opt)
  * \brief Dump pmr settings.
  * \param o				Private struct.
  */
-static void pmrdump(struct chan_usbradio_pvt *o)
+static void pmrdump(struct chan_usbradio_pvt *o, int fd)
 {
 	t_pmr_chan *p;
 	int i;
 
 	p = o->pmrChan;
 
-	printf("\nodump()\n");
+	ast_cli(fd, "\nodump()\n");
 
 	pd(o->devicenum);
 	ast_mutex_lock(&usb_dev_lock);
@@ -4719,12 +4731,12 @@ static void pmrdump(struct chan_usbradio_pvt *o)
 	ps(o->txctcssfreq);
 
 	pd(o->numrxctcssfreqs);
+	pd(o->numtxctcssfreqs);
 	if (o->numrxctcssfreqs > 0) {
 		for (i = 0; i < o->numrxctcssfreqs; i++) {
-			printf(" %i =  %s  %s\n", i, o->rxctcss[i], o->txctcss[i]);
+			ast_cli(fd, " %i =  %s  %s\n", i, o->rxctcss[i], o->txctcss[i]);
 		}
 	}
-
 	pd(o->rxpolarity);
 	pd(o->txpolarity);
 
@@ -4736,11 +4748,11 @@ static void pmrdump(struct chan_usbradio_pvt *o)
 	pd(o->txmixaset);
 	pd(o->txmixbset);
 
-	printf("\npmrdump()\n");
+	ast_cli(fd, "\npmrdump()\n");
 
 	pd(p->devicenum);
 
-	printf("prxSquelchAdjust=%i\n", *(o->pmrChan->prxSquelchAdjust));
+	ast_cli(fd, "prxSquelchAdjust=%i\n", *(o->pmrChan->prxSquelchAdjust));
 
 	pd(p->rxCarrierPoint);
 	pd(p->rxCarrierHyst);
@@ -4756,7 +4768,7 @@ static void pmrdump(struct chan_usbradio_pvt *o)
 	pd(p->numrxcodes);
 	if (o->pmrChan->numrxcodes > 0) {
 		for (i = 0; i < o->pmrChan->numrxcodes; i++) {
-			printf(" %i = %s\n", i, o->pmrChan->pRxCode[i]);
+			ast_cli(fd, " %i = %s\n", i, o->pmrChan->pRxCode[i]);
 		}
 	}
 
@@ -4766,7 +4778,7 @@ static void pmrdump(struct chan_usbradio_pvt *o)
 	pd(p->numtxcodes);
 	if (o->pmrChan->numtxcodes > 0) {
 		for (i = 0; i < o->pmrChan->numtxcodes; i++) {
-			printf(" %i = %s\n", i, o->pmrChan->pTxCode[i]);
+			ast_cli(fd, " %i = %s\n", i, o->pmrChan->pTxCode[i]);
 		}
 	}
 
