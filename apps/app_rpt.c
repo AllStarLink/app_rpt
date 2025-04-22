@@ -5280,15 +5280,13 @@ static void *rpt(void *this)
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		if (elap < 0) {
-			elap = 0;
-		}
+
 		if (elap > 0) {
 			looptimenow.tv_usec -= (looptimenow.tv_usec - looptimestart.tv_usec) - elap * 1000; /* Put the residual time back on now,
 																								 * eliminating accumulated error
 																								 */
+			looptimestart = looptimenow;
 		}
-		looptimestart = looptimenow;
 
 		rpt_mutex_lock(&myrpt->lock);
 		periodic_process_links(myrpt, elap);
@@ -7132,15 +7130,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		if (elap < 0) {
-			elap = 0;
-		}
 		if (elap > 0) {
 			looptimenow.tv_usec -= (looptimenow.tv_usec - looptimestart.tv_usec) - elap * 1000; /* Put the residual time back on now,
 																								 * eliminating accumulated error
 																								 */
+			looptimestart = looptimenow;
 		}
-		looptimestart = looptimenow;
 
 		update_timer(&myrpt->macrotimer, elap, 0);
 		if (who == NULL) {
