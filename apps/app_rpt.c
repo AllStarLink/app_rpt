@@ -5263,6 +5263,8 @@ static void *rpt(void *this)
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
+		looptimenow.tv_usec -= (looptimenow.tv_usec - looptimestart.tv_usec) - elap * 1000; /* Put the residual time back on now,
+																							   eliminating accumulated error */
 		looptimestart = looptimenow;
 
 		rpt_mutex_lock(&myrpt->lock);
@@ -7125,6 +7127,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
+		looptimenow.tv_usec -= (looptimenow.tv_usec - looptimestart.tv_usec) - elap * 1000; /* Put the residual time back on now,
+																							   eliminating accumulated error */
 		looptimestart = looptimenow;
 
 		update_timer(&myrpt->macrotimer, elap, 0);
