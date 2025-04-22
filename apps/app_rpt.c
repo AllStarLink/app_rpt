@@ -3282,6 +3282,24 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	}
 }
 
+/*! \brief Post keyup data to a URL configured in myrpt->p.statpost_url.
+ * \note Must be called locked.  This is only called when a keypost timer
+ * has been reset for a short trigger.  Otherwise this data is included
+ * with a link_post message.
+ * \param myrpt The rpt structure
+ */
+static inline void do_key_post(struct rpt *myrpt)
+{
+	char str[100];
+	time_t now;
+
+	time(&now);
+	snprintf(str, sizeof(str), "keyed=%d&keytime=%d", myrpt->keyed, myrpt->lastkeyedtime ? ((int) (now - myrpt->lastkeyedtime)) : 0);
+	rpt_mutex_unlock(&myrpt->lock);
+	statpost(myrpt, str);
+	rpt_mutex_lock(&myrpt->lock);
+}
+
 /*! \brief Post link data to a URL configured in myrpt->p.statpost_url.
  * \note Must be called locked.
  * \param myrpt The rpt structure
@@ -3321,9 +3339,11 @@ static inline int do_link_post(struct rpt *myrpt)
 		nstr = 1;
 	}
 	time(&now);
+
 	ast_str_append(&str,
 		0,
-		"&apprptvers=%d.%d.%d&apprptuptime=%d&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d",
+		"&apprptvers=%d.%d.%d&apprptuptime=%d&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d&"
+		"keyed=%d&keytime=%d",
 		VERSION_MAJOR,
 		VERSION_MINOR,
 		VERSION_PATCH,
@@ -3332,7 +3352,9 @@ static inline int do_link_post(struct rpt *myrpt)
 		myrpt->totalkeyups,
 		(int) myrpt->totaltxtime / 1000,
 		myrpt->timeouts,
-		myrpt->totalexecdcommands);
+		myrpt->totalexecdcommands,
+		myrpt->keyed,
+		myrpt->lastkeyedtime ? ((int) (now - myrpt->lastkeyedtime)) : 0);
 	rpt_mutex_unlock(&myrpt->lock);
 	statpost(myrpt, ast_str_buffer(str));
 	rpt_mutex_lock(&myrpt->lock);
@@ -3352,23 +3374,14 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		queue_id(myrpt);
 	}
 
-	update_timer(&myrpt->keyposttimer, elap, 0);
-
-	if (myrpt->keyposttimer <= 0) {
-		char str[100];
-		int n = 0;
-		time_t now;
-
-		myrpt->keyposttimer = KEYPOSTTIME;
-		time(&now);
-		if (myrpt->lastkeyedtime) {
-			n = (int) (now - myrpt->lastkeyedtime);
-		}
-		snprintf(str, sizeof(str), "keyed=%d&keytime=%d", myrpt->keyed, n);
-		rpt_mutex_unlock(&myrpt->lock);
-		statpost(myrpt, str);
-		rpt_mutex_lock(&myrpt->lock);
+	/* IF a new keyup occurs, we set keypost and trigger do_key_post()
+	 * otherwise, these messages are handled by do_link_post()
+	 */
+	if (myrpt->keypost == RPT_KEYPOST_ACTIVE) {
+		myrpt->keypost = RPT_KEYPOST_NONE;
+		do_key_post(myrpt);
 	}
+
 	if (totx) {
 		myrpt->dailytxtime += elap;
 		myrpt->totaltxtime += elap;
@@ -3579,7 +3592,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					myrpt->linkactivitytimer = 0;
 					myrpt->keyed = 1;
 					time(&myrpt->lastkeyedtime);
-					myrpt->keyposttimer = KEYPOSTSHORTTIME;
+					myrpt->keypost = RPT_KEYPOST_ACTIVE;
 				}
 				myrpt->lastrxburst = i;
 			}
@@ -3595,7 +3608,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->linkactivitytimer = 0;
 				myrpt->keyed = 1;
 				time(&myrpt->lastkeyedtime);
-				myrpt->keyposttimer = KEYPOSTSHORTTIME;
+				myrpt->keypost = RPT_KEYPOST_ACTIVE;
 			}
 		}
 #ifdef	_MDC_DECODE_H_
@@ -3767,7 +3780,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					myrpt->linkactivitytimer = 0;
 					myrpt->keyed = 1;
 					time(&myrpt->lastkeyedtime);
-					myrpt->keyposttimer = KEYPOSTSHORTTIME;
+					myrpt->keypost = RPT_KEYPOST_ACTIVE;
 				}
 			}
 			if (myrpt->p.archivedir) {
@@ -3854,7 +3867,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			}
 			myrpt->localoverride = 0;
 			time(&myrpt->lastkeyedtime);
-			myrpt->keyposttimer = KEYPOSTSHORTTIME;
+			myrpt->keypost = RPT_KEYPOST_ACTIVE;
 			myrpt->lastdtmfuser[0] = 0;
 			strcpy(myrpt->lastdtmfuser, myrpt->curdtmfuser);
 			myrpt->curdtmfuser[0] = 0;
