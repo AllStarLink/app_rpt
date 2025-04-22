@@ -2741,9 +2741,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	if (myrpt->p.duplex >= 2 && myrpt->p.duplex <= 4) {
-		res = rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
+		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
 	} else {
-		res = rpt_conf_add_speaker(myrpt->pchannel, myrpt);
+		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER);
 	}
 	if (res) {
 		rpt_hangup_rx_tx(myrpt);
