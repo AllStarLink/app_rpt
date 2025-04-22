@@ -5282,9 +5282,6 @@ static void *rpt(void *this)
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
 
 		if (elap > 0) {
-			looptimenow.tv_usec -= (looptimenow.tv_usec - looptimestart.tv_usec) - elap * 1000; /* Put the residual time back on now,
-																								 * eliminating accumulated error
-																								 */
 			looptimestart = looptimenow;
 		}
 
@@ -7131,12 +7128,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
 		if (elap > 0) {
-			looptimenow.tv_usec -= (looptimenow.tv_usec - looptimestart.tv_usec) - elap * 1000; /* Put the residual time back on now,
-																								 * eliminating accumulated error
-																								 */
 			looptimestart = looptimenow;
 		}
-
 		update_timer(&myrpt->macrotimer, elap, 0);
 		if (who == NULL) {
 			/* No channels had activity. Loop again. */
