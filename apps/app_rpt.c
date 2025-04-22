@@ -2256,11 +2256,37 @@ static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict ke
 	return 0;
 }
 
+/*!
+ * \brief Create dial string from parsed channel name
+ * \param[in] s Input string
+ * \param[out] s1
+ * \param[out] buf
+ * \param len
+ * \return s2
+ */
+static char *parse_node_format(char *s, char **restrict s1, char *buf, size_t len)
+{
+	char *s2;
+
+	*s1 = strsep(&s, ",");
+	if (!strchr(*s1, ':') && strchr(*s1, '/') && strncasecmp(*s1, "local/", 6)) {
+		char *sy = strchr(*s1, '/');
+		*sy = 0;
+		snprintf(buf, len, "%s:4569/%s", *s1, sy + 1);
+		*s1 = buf;
+	}
+	s2 = strsep(&s, ",");
+	if (!s2) {
+		return NULL;
+	}
+	return s2;
+}
+
 static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 {
-	char *s, *s1, *tele;
+	char *s1, *tele;
 	char tmp[300], deststr[325] = "";
-	char sx[320], *sy;
+	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
 
@@ -2278,21 +2304,10 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	/* remove from queue */
 	rpt_link_remove(myrpt, l);
 	rpt_mutex_unlock(&myrpt->lock);
-	s = tmp;
-	s1 = strsep(&s, ",");
-	if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6)) {
-		sy = strchr(s1, '/');
-		*sy = 0;
-		snprintf(sx, sizeof(sx), "%s:4569/%s", s1, sy + 1);
-		s1 = sx;
-	}
-	strsep(&s, ",");
+	parse_node_format(tmp, &s1, sx, sizeof(sx));
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
 	tele = strchr(deststr, '/');
-	if (!tele) {
-		ast_log(LOG_WARNING, "attempt_reconnect: Dial number (%s) must be in format tech/number\n", deststr);
-		return -1;
-	}
+	/* tele must be non-NULL here since deststr always contains at least 'IAX2/' */
 	*tele++ = 0;
 	l->elaptime = 0;
 	l->connecttime.tv_sec = 0; /* not connected */
@@ -4626,7 +4641,6 @@ static void *rpt(void *this)
 	int len;
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
-	struct ast_channel *who;
 	struct rpt_link *l;
 	struct rpt_tele *telem;
 	char tmpstr[512];
@@ -4781,10 +4795,11 @@ static void *rpt(void *this)
 	}
 	/* @@@@@@@ UNLOCK @@@@@@@ */
 	rpt_mutex_unlock(&myrpt->lock);
+
 	val = 1;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_RELAXDTMF, &val, sizeof(char), 0);
-	val = 1;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &val, sizeof(char), 0);
+
 	if (myrpt->p.archivedir)
 		donodelog(myrpt, "STARTUP");
 	if (myrpt->remoterig && !ISRIG_RTX(myrpt->remoterig))
@@ -4810,9 +4825,11 @@ static void *rpt(void *this)
 	looptimestart = ast_tvnow();
 
 	while (ms >= 0) {
+		struct ast_channel *who;
 		struct ast_channel *cs[300], *cs1[300];
 		int totx = 0, elap = 0, n, x;
 		time_t t, t_mono;
+		struct rpt_link *l;
 		struct timeval looptimenow;
 
 		if (myrpt->disgorgetime && (time(NULL) >= myrpt->disgorgetime)) {
@@ -5974,24 +5991,6 @@ static inline int exec_txchannel_read(struct rpt *myrpt)
 	return wait_for_hangup_helper(myrpt->txchannel, "txchannel");
 }
 
-static char *parse_node_format(char *s, char **restrict s1, char *sx, size_t size)
-{
-	char *s2;
-
-	*s1 = strsep(&s, ",");
-	if (!strchr(*s1, ':') && strchr(*s1, '/') && strncasecmp(*s1, "local/", 6)) {
-		char *sy = strchr(*s1, '/');
-		*sy = 0;
-		snprintf(sx, size, "%s:4569/%s", *s1, sy + 1);
-		*s1 = sx;
-	}
-	s2 = strsep(&s, ",");
-	if (!s2) {
-		return NULL;
-	}
-	return s2;
-}
-
 static int parse_caller(const char *b1, const char *hisip, char *s)
 {
 	char sx[320];
@@ -6093,7 +6092,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	char *options, *stringp, *callstr, c, *altp, *memp, *str;
 	char sx[320], myfirst, *b, *b1, *separator = "|";
 	struct rpt *myrpt;
-	struct ast_channel *who;
 	struct ast_channel *cs[20];
 	struct rpt_link *l;
 	int ms, elap, myrx, len;
@@ -7051,6 +7049,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	looptimestart = ast_tvnow();
 	/* start un-locked */
 	for (;;) {
+		struct ast_channel *who;
 		time_t t;
 		if (ast_check_hangup(chan) || ast_check_hangup(myrpt->rxchannel)) {
 			break;
