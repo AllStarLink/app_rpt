@@ -466,16 +466,6 @@ struct el_rxqast {
 };
 
 /*!
- * \brief Echolink receive queue struct from echolink.
- */
-struct el_rxqel {
-	struct el_rxqel *qe_forw;
-	struct el_rxqel *qe_back;
-	char buf[BLOCKING_FACTOR * GSM_FRAME_SIZE];
-	char fromip[EL_IP_SIZE];
-};
-
-/*!
  * \brief Echolink private information.
  * This is stored in the asterisk channel private technology for reference.
  */
@@ -492,7 +482,6 @@ struct el_pvt {
 	unsigned int hangup:1; /* indicate the channel should hang up */
 	struct ast_frame fr;
 	struct el_rxqast rxqast;
-	struct el_rxqel rxqel;
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
 	struct ast_trans_pvt *xpath;
@@ -1406,11 +1395,6 @@ static void el_destroy(struct el_pvt *pvt)
 		ast_free(qpast);
 	}
 
-	while (pvt->rxqel.qe_forw != &pvt->rxqel) {
-		qpast = (struct qelem *) pvt->rxqel.qe_forw;
-		remque(qpast);
-		ast_free(qpast);
-	}
 	ast_mutex_unlock(&pvt->lock);
 
 	if (pvt->dsp) {
@@ -1459,9 +1443,6 @@ static struct el_pvt *el_alloc(const char *data)
 		snprintf(pvt->stream, sizeof(pvt->stream), "%s-%lu", data, instances[n]->seqno++);
 		pvt->rxqast.qe_forw = &pvt->rxqast;
 		pvt->rxqast.qe_back = &pvt->rxqast;
-
-		pvt->rxqel.qe_forw = &pvt->rxqel;
-		pvt->rxqel.qe_back = &pvt->rxqel;
 
 		pvt->keepalive = KEEPALIVE_TIME;
 		pvt->instp = instances[n];
