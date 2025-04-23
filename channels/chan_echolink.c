@@ -2250,6 +2250,7 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 	}
 
 	memset(&p->fr, 0, sizeof(struct ast_frame));
+	p->fr.src = type;
 	return &p->fr;
 }
 
