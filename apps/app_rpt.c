@@ -3212,7 +3212,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		/* start tracking connect time */
 		if (l->connecttime.tv_sec == 0) {
-			l->connecttime = ast_tvnow();
+			l->connecttime = rpt_tvnow();
 		}
 
 		/* ignore non-timing channels */
@@ -3756,12 +3756,12 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		mute_frame_helper(myrpt);
 		dtmfed = 1;
-		myrpt->lastdtmftime = ast_tvnow();
+		myrpt->lastdtmftime = rpt_tvnow();
 	} else if (f->frametype == AST_FRAME_DTMF) {
 		int x;
 		char c = (char) f->subclass.integer;	/* get DTMF char */
 		ast_frfree(f);
-		x = ast_tvdiff_ms(ast_tvnow(), myrpt->lastdtmftime);
+		x = ast_tvdiff_ms(rpt_tvnow(), myrpt->lastdtmftime);
 		if ((myrpt->p.litzcmd) && (x >= myrpt->p.litztime) && strchr(myrpt->p.litzchar, c)) {
 			ast_debug(1, "Doing litz command %s on node %s\n", myrpt->p.litzcmd, myrpt->name);
 			macro_append(myrpt, myrpt->p.litzcmd);
@@ -4231,7 +4231,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 
-		now = ast_tvnow();
+		now = rpt_tvnow();
 		if ((who == l->chan) || (!l->lastlinktv.tv_sec) || (ast_tvdiff_ms(now, l->lastlinktv) >= 19)) {
 			char mycalltx;
 
@@ -4822,7 +4822,7 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_ALINKS", -1);
 	myrpt->ready = 1;
-	looptimestart = ast_tvnow();
+	looptimestart = rpt_tvnow();
 
 	while (ms >= 0) {
 		struct ast_channel *who;
@@ -5278,7 +5278,7 @@ static void *rpt(void *this)
 			ms = 0;
 		}
 		/* calculate loop time */
-		looptimenow = ast_tvnow();
+		looptimenow = rpt_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
 		if (elap < 0) { /* The system time has changed? */
 			elap = 0;
@@ -7051,7 +7051,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 
 	myfirst = 0;
-	looptimestart = ast_tvnow();
+	looptimestart = rpt_tvnow();
 	/* start un-locked */
 	for (;;) {
 		struct ast_channel *who;
@@ -7129,7 +7129,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
 		/* calculate loop time */
-		looptimenow = ast_tvnow();
+		looptimenow = rpt_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
 		if (elap < 0) { /* The system time has changed? */
 			elap = 0;

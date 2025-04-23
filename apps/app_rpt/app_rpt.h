@@ -950,3 +950,15 @@ void *rpt_call(void *this);
 #define RPT_MUTE_FRAME(f) \
 	if (f) \
 	ast_frame_clear(f)
+
+/*!
+ * \brief Returns current timeval. Meant to replace calls to gettimeofday().
+ */
+AST_INLINE_API(struct timeval rpt_tvnow(void), {
+	struct timeval t;
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	t.tv_sec = ts.tv_sec;
+	t.tv_usec = ts.tv_nsec / 1000;
+	return t;
+})
