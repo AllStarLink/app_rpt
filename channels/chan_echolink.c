@@ -1973,11 +1973,10 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		}
 
 		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
-		ast_free(pkt);
-
 		instp->tx_ctrl_packets++;
 		(*(struct el_node **) nodep)->tx_ctrl_packets++;
 	}
+	ast_free(pkt);
 }
 
 /*!
