@@ -4830,7 +4830,7 @@ static void *rpt(void *this)
 		int totx = 0, elap = 0, n, x;
 		time_t t, t_mono;
 		struct rpt_link *l;
-		struct timeval looptimenow;
+		struct timeval looptimenow, residualtime, intermediatetime;
 
 		if (myrpt->disgorgetime && (time(NULL) >= myrpt->disgorgetime)) {
 			myrpt->disgorgetime = 0;
@@ -5280,11 +5280,12 @@ static void *rpt(void *this)
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-
+		intermediatetime.tv_sec = 0;			/* with 20ms loops, we should never have a full second */
+		intermediatetime.tv_usec = elap * 1000; /* usec accounted for */
+		residualtime = ast_tvsub(ast_tvsub(looptimenow, looptimestart), intermediatetime);
 		if (elap > 0) {
-			looptimestart = looptimenow;
+			looptimestart = ast_tvsub(looptimenow, residualtime);
 		}
-
 		rpt_mutex_lock(&myrpt->lock);
 		periodic_process_links(myrpt, elap);
 		if (update_timers(myrpt, elap, totx)) {
@@ -6100,8 +6101,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct rpt_tele *telem;
 	int numlinks;
 	struct ast_format_cap *cap;
-	struct timeval looptimestart;
-	struct timeval looptimenow;
+	struct timeval looptimestart, looptimenow, intermediatetime, residualtime;
 
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "Rpt requires an argument (system node)\n");
@@ -7127,9 +7127,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* calculate loop time */
 		looptimenow = ast_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
+		intermediatetime.tv_sec = 0;			/* with 20ms loops, we should never have a full second */
+		intermediatetime.tv_usec = elap * 1000; /* usec accounted for */
+		residualtime = ast_tvsub(ast_tvsub(looptimenow, looptimestart), intermediatetime);
 		if (elap > 0) {
-			looptimestart = looptimenow;
+			looptimestart = ast_tvsub(looptimenow, residualtime);
 		}
+
 		update_timer(&myrpt->macrotimer, elap, 0);
 		if (who == NULL) {
 			/* No channels had activity. Loop again. */
