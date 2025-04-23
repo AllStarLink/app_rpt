@@ -445,7 +445,6 @@ struct rpt_link {
 	time_t	lastkeytime;
 	time_t	lastunkeytime;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
-	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
 
 /*!
