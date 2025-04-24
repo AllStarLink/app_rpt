@@ -2984,6 +2984,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 		rpt_mutex_lock(&myrpt->lock);
 		tele_link_remove(myrpt, tele); /* We don't like stuck transmitters, remove it from the queue */
 		rpt_mutex_unlock(&myrpt->lock);
+		ast_free(tele);
 		ast_log(LOG_WARNING, "Could not create telemetry thread: %s", strerror(res));
 	}
 	ast_debug(6, "Tracepoint rpt_telemetry() exit\n");
