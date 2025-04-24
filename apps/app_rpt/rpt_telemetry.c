@@ -1300,7 +1300,6 @@ treataslocal:
 		}
 		/* parse em */
 		ns = finddelim(ast_str_buffer(lbuf), strs, n);
-		ast_free(lbuf);
 		haslink = 0;
 		for (i = 0; i < ns; i++) {
 			char *cpr = strs[i] + 1;
@@ -1310,6 +1309,7 @@ treataslocal:
 				haslink = 1;
 		}
 		ast_free(strs);
+		ast_free(lbuf);
 		/* if has a RANGER node connected to it, use special telemetry for RANGER mode */
 		if (haslink) {
 			res = telem_lookup(myrpt, mychannel, myrpt->name, "ranger");
@@ -2196,13 +2196,15 @@ treataslocal:
 		}
 		/* parse em */
 		ns = finddelim(ast_str_buffer(lbuf), strs, n);
-		ast_free(lbuf);
 		/* sort em */
 		if (ns)
 			qsort((void *) strs, ns, sizeof(char *), mycompar);
 		/* wait a little bit */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			ast_free(strs);
+			ast_free(lbuf);
 			break;
+		}
 		hastx = 0;
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (myrpt->callmode != CALLMODE_DOWN) {
@@ -2231,6 +2233,7 @@ treataslocal:
 			res = ast_stream_and_wait(mychannel, s, "");
 		}
 		ast_free(strs);
+		ast_free(lbuf);
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
@@ -2945,8 +2948,8 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, strs[i]);
 			}
 			send_tele_link(myrpt, mystr);
-			ast_free(lbuf);
 			ast_free(strs);
+			ast_free(lbuf);
 			return;
 		}
 	}
