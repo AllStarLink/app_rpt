@@ -373,7 +373,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 
 			for (s = s_head.next; s != &s_head; s = s->next) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(ast_tvnow(), s->connecttime);
+				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
 				char conntime[21];
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
@@ -565,7 +565,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			rpt_mutex_unlock(&myrpt->lock);	// UNLOCK 
 			for (s = s_head.next; s != &s_head; s = s->next) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(ast_tvnow(), s->connecttime);
+				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
 				char conntime[21];
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;

@@ -245,7 +245,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			rpt_mutex_unlock(&myrpt->lock);
 			for (s = s_head.next; s != &s_head; s = s->next) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(ast_tvnow(), s->connecttime);
+				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
 				char conntime[21];
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;

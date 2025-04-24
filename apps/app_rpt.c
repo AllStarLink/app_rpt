@@ -5280,10 +5280,6 @@ static void *rpt(void *this)
 		/* calculate loop time */
 		looptimenow = rpt_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		if (elap < 0) { /* The system time has changed? */
-			elap = 0;
-			looptimestart = looptimenow;
-		}
 		intermediatetime.tv_sec = 0;			/* with 20ms loops, we should never have a full second */
 		intermediatetime.tv_usec = elap * 1000; /* usec accounted for */
 		residualtime = ast_tvsub(ast_tvsub(looptimenow, looptimestart), intermediatetime);
@@ -7131,10 +7127,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* calculate loop time */
 		looptimenow = rpt_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		if (elap < 0) { /* The system time has changed? */
-			elap = 0;
-			looptimestart = looptimenow;
-		}
 		intermediatetime.tv_sec = 0;			/* with 20ms loops, we should never have a full second */
 		intermediatetime.tv_usec = elap * 1000; /* usec accounted for */
 		residualtime = ast_tvsub(ast_tvsub(looptimenow, looptimestart), intermediatetime);
