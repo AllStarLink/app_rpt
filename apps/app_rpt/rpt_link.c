@@ -655,8 +655,8 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 				return 2; /* Already linked */
 			}
 		}
-		ast_free(lstr);
 		ast_free(strs);
+		ast_free(lstr);
 	}
 	ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 	/* establish call */
