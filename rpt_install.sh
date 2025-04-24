@@ -29,7 +29,6 @@ if [ "$1" != "updated" ]; then
 fi
 
 printf "Script is now the latest version\n"
-sleep 1
 
 # cd into Asterisk source directory
 ls -d -v */ | grep "^asterisk" | tail -1
@@ -54,14 +53,6 @@ echoerr() {
 	printf "\e[31;1m%s\e[0m\n" "$*" >&2;
 }
 
-rpt_add() {
-	if [ ! -f ../$MYDIR/$1 ]; then
-		echoerr "WARNING: File $1 does not exist"
-	fi
-	printf "Adding module %s\n" "$1"
-	cp ../$MYDIR/$1 $1
-}
-
 if [ ! -d apps/app_rpt ]; then
 	mkdir apps/app_rpt
 fi
@@ -72,94 +63,17 @@ fi
 # Remove anything that may have been there before (mainly relevant for testing older HEADs)
 rm -f apps/app_rpt/*
 
-rpt_add "apps/app_rpt.c"
-rpt_add "apps/app_gps.c"
-rpt_add "apps/app_rpt/app_rpt.h"
-rpt_add "apps/app_rpt/mdc_encode.c"
-rpt_add "apps/app_rpt/mdc_encode.h"
-rpt_add "apps/app_rpt/mdc_decode.c"
-rpt_add "apps/app_rpt/mdc_decode.h"
-rpt_add "apps/app_rpt/rpt_mdc1200.c"
-rpt_add "apps/app_rpt/rpt_mdc1200.h"
-rpt_add "apps/app_rpt/pocsag.c"
-rpt_add "apps/app_rpt/pocsag.h"
-rpt_add "apps/app_rpt/rpt_cli.c"
-rpt_add "apps/app_rpt/rpt_cli.h"
-rpt_add "apps/app_rpt/rpt_daq.c"
-rpt_add "apps/app_rpt/rpt_daq.h"
-rpt_add "apps/app_rpt/rpt_lock.c"
-rpt_add "apps/app_rpt/rpt_lock.h"
-rpt_add "apps/app_rpt/rpt_utils.c"
-rpt_add "apps/app_rpt/rpt_utils.h"
-rpt_add "apps/app_rpt/rpt_call.c"
-rpt_add "apps/app_rpt/rpt_call.h"
-rpt_add "apps/app_rpt/rpt_serial.c"
-rpt_add "apps/app_rpt/rpt_serial.h"
-rpt_add "apps/app_rpt/rpt_xcat.c"
-rpt_add "apps/app_rpt/rpt_xcat.h"
-rpt_add "apps/app_rpt/rpt_capabilities.c"
-rpt_add "apps/app_rpt/rpt_capabilities.h"
-rpt_add "apps/app_rpt/rpt_vox.c"
-rpt_add "apps/app_rpt/rpt_vox.h"
-rpt_add "apps/app_rpt/rpt_uchameleon.c"
-rpt_add "apps/app_rpt/rpt_uchameleon.h"
-rpt_add "apps/app_rpt/rpt_bridging.c"
-rpt_add "apps/app_rpt/rpt_bridging.h"
-rpt_add "apps/app_rpt/rpt_radio.c"
-rpt_add "apps/app_rpt/rpt_radio.h"
-rpt_add "apps/app_rpt/rpt_channel.c"
-rpt_add "apps/app_rpt/rpt_channel.h"
-rpt_add "apps/app_rpt/rpt_config.c"
-rpt_add "apps/app_rpt/rpt_config.h"
-rpt_add "apps/app_rpt/rpt_link.c"
-rpt_add "apps/app_rpt/rpt_link.h"
-rpt_add "apps/app_rpt/rpt_functions.c"
-rpt_add "apps/app_rpt/rpt_functions.h"
-rpt_add "apps/app_rpt/rpt_telemetry.c"
-rpt_add "apps/app_rpt/rpt_telemetry.h"
-rpt_add "apps/app_rpt/rpt_manager.c"
-rpt_add "apps/app_rpt/rpt_manager.h"
-rpt_add "apps/app_rpt/rpt_translate.c"
-rpt_add "apps/app_rpt/rpt_translate.h"
-rpt_add "apps/app_rpt/rpt_rig.c"
-rpt_add "apps/app_rpt/rpt_rig.h"
-rpt_add "channels/chan_echolink.c"
-rpt_add "channels/chan_simpleusb.c"
-rpt_add "channels/chan_usbradio.c"
-rpt_add "channels/chan_tlb.c"
-rpt_add "channels/chan_voter.c"
-rpt_add "channels/chan_usrp.c"
-rpt_add "channels/xpmr/sinetabx.h"
-rpt_add "channels/xpmr/xpmr.c"
-rpt_add "channels/xpmr/xpmr.h"
-rpt_add "channels/xpmr/xpmr_coef.h"
-rpt_add "configs/samples/rpt_http_registrations.conf.sample"
-rpt_add "configs/samples/usbradio.conf.sample"
-rpt_add "configs/samples/simpleusb.conf.sample"
-rpt_add "include/asterisk/res_usbradio.h"
-rpt_add "res/res_rpt_http_registrations.c"
-rpt_add "res/res_usbradio.c"
-rpt_add "res/res_usbradio.exports.in"
+# Copy in the radio modules and files
+cp ../$MYDIR/apps/*.c apps
+cp ../$MYDIR/apps/app_rpt/* apps/app_rpt
+cp ../$MYDIR/channels/*.c channels
+cp ../$MYDIR/channels/xpmr/* channels/xpmr
+cp ../$MYDIR/configs/samples/*.conf.sample configs/samples
+cp ../$MYDIR/include/asterisk/*.h include/asterisk
+cp ../$MYDIR/res/* res
+cp ../$MYDIR/utils/*.c utils
 
-rpt_add "utils/radio-tune-menu.c"
-rpt_add "utils/simpleusb-tune-menu.c"
-
-make -j$(nproc) apps
-if [ $? -ne 0 ]; then
-	exit 1
-fi
-
-make -j$(nproc) channels
-if [ $? -ne 0 ]; then
-	exit 1
-fi
-
-make -j$(nproc) res
-if [ $? -ne 0 ]; then
-	exit 1
-fi
-
-make install
+make -j$(nproc) apps && make -j$(nproc) channels && make -j$(nproc) res && make install
 if [ $? -ne 0 ]; then
 	exit 1
 fi
