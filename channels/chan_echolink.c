@@ -475,6 +475,8 @@ struct el_pvt {
 	char stream[80];
 	char ip[EL_IP_SIZE];
 	unsigned int firstsent:1; /* First packet seen from echolink */
+	unsigned int firstheard:1;		/* First heard from called node */
+	unsigned int last_firstheard:1; /* Rising edge */
 	unsigned int txkey:1;	  /* Transmit keyed */
 	int rxkey;				  /* Receive keyed timer */
 	int keepalive;
@@ -1523,7 +1525,6 @@ static int el_hangup(struct ast_channel *ast)
 static int el_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
 {
 	struct el_pvt *pvt = ast_channel_tech_pvt(ast);
-
 	switch (cond) {
 	case AST_CONTROL_RADIO_KEY:
 		pvt->txkey = 1;
@@ -2223,13 +2224,21 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 static struct ast_frame *el_xread(struct ast_channel *ast)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
+	struct ast_frame fr = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_ANSWER,
+	};
 
 	if (p->hangup) {
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
 	}
-
+	if (!p->last_firstheard && p->firstheard) {
+		ast_queue_frame(ast, &fr);
+		p->last_firstheard = 1;
+	}
 	memset(&p->fr, 0, sizeof(struct ast_frame));
+	p->fr.src = type;
 	return &p->fr;
 }
 
@@ -2252,7 +2261,15 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct el_rxqast *qpast;
 	int n, x;
 	char buf[GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET];
+	struct ast_frame fr3 = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_ANSWER,
+	};
 
+	if (!p->last_firstheard && p->firstheard) {
+		ast_queue_frame(ast, &fr3);
+		p->last_firstheard = 1;
+	}
 	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
 	}
@@ -3602,6 +3619,8 @@ static void *el_reader(void *data)
 						ast_mutex_unlock(&el_nodelist_lock);
 						if (found_key) {
 							node = *found_key;
+							node->pvt->firstheard = 1;
+
 							node->countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
 							if (strncmp((*found_key)->call, call, EL_CALL_SIZE) != 0) {
@@ -3738,7 +3757,7 @@ static void *el_reader(void *data)
 					ast_mutex_unlock(&el_nodelist_lock);
 					if (found_key) {
 						node = *found_key;
-
+						node->pvt->firstheard = 1;
 						node->countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
 						/* compute inter-arrival jitter */
