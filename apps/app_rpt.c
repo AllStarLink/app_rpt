@@ -3203,7 +3203,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		/* start tracking connect time */
 		if (l->connecttime.tv_sec == 0) {
-			l->connecttime = ast_tvnow();
+			l->connecttime = rpt_tvnow();
 		}
 
 		/* ignore non-timing channels */
@@ -3747,12 +3747,12 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	} else if (f->frametype == AST_FRAME_DTMF_BEGIN) {
 		mute_frame_helper(myrpt);
 		dtmfed = 1;
-		myrpt->lastdtmftime = ast_tvnow();
+		myrpt->lastdtmftime = rpt_tvnow();
 	} else if (f->frametype == AST_FRAME_DTMF) {
 		int x;
 		char c = (char) f->subclass.integer;	/* get DTMF char */
 		ast_frfree(f);
-		x = ast_tvdiff_ms(ast_tvnow(), myrpt->lastdtmftime);
+		x = ast_tvdiff_ms(rpt_tvnow(), myrpt->lastdtmftime);
 		if ((myrpt->p.litzcmd) && (x >= myrpt->p.litztime) && strchr(myrpt->p.litzchar, c)) {
 			ast_debug(1, "Doing litz command %s on node %s\n", myrpt->p.litzcmd, myrpt->name);
 			macro_append(myrpt, myrpt->p.litzcmd);
@@ -4222,7 +4222,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 
-		now = ast_tvnow();
+		now = rpt_tvnow();
 		if ((who == l->chan) || (!l->lastlinktv.tv_sec) || (ast_tvdiff_ms(now, l->lastlinktv) >= 19)) {
 			char mycalltx;
 
@@ -4813,7 +4813,7 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_ALINKS", -1);
 	myrpt->ready = 1;
-	looptimestart = ast_tvnow();
+	looptimestart = rpt_tvnow();
 
 	while (ms >= 0) {
 		struct ast_channel *who;
@@ -4821,7 +4821,7 @@ static void *rpt(void *this)
 		int totx = 0, elap = 0, n, x;
 		time_t t, t_mono;
 		struct rpt_link *l;
-		struct timeval looptimenow;
+		struct timeval looptimenow, residualtime, intermediatetime;
 
 		if (myrpt->disgorgetime && (time(NULL) >= myrpt->disgorgetime)) {
 			myrpt->disgorgetime = 0;
@@ -5269,12 +5269,14 @@ static void *rpt(void *this)
 			ms = 0;
 		}
 		/* calculate loop time */
-		looptimenow = ast_tvnow();
+		looptimenow = rpt_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		looptimenow.tv_usec -= (looptimenow.tv_usec - looptimestart.tv_usec) - elap * 1000; /* Put the residual time back on now,
-																							   eliminating accumulated error */
-		looptimestart = looptimenow;
-
+		intermediatetime.tv_sec = 0;			/* with 20ms loops, we should never have a full second */
+		intermediatetime.tv_usec = elap * 1000; /* usec accounted for */
+		residualtime = ast_tvsub(ast_tvsub(looptimenow, looptimestart), intermediatetime);
+		if (elap > 0) {
+			looptimestart = ast_tvsub(looptimenow, residualtime);
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		periodic_process_links(myrpt, elap);
 		if (update_timers(myrpt, elap, totx)) {
@@ -6090,8 +6092,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct rpt_tele *telem;
 	int numlinks;
 	struct ast_format_cap *cap;
-	struct timeval looptimestart;
-	struct timeval looptimenow;
+	struct timeval looptimestart, looptimenow, intermediatetime, residualtime;
 
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "Rpt requires an argument (system node)\n");
@@ -7037,7 +7038,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 
 	myfirst = 0;
-	looptimestart = ast_tvnow();
+	looptimestart = rpt_tvnow();
 	/* start un-locked */
 	for (;;) {
 		struct ast_channel *who;
@@ -7115,11 +7116,14 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
 		/* calculate loop time */
-		looptimenow = ast_tvnow();
+		looptimenow = rpt_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		looptimenow.tv_usec -= (looptimenow.tv_usec - looptimestart.tv_usec) - elap * 1000; /* Put the residual time back on now,
-																							   eliminating accumulated error */
-		looptimestart = looptimenow;
+		intermediatetime.tv_sec = 0;			/* with 20ms loops, we should never have a full second */
+		intermediatetime.tv_usec = elap * 1000; /* usec accounted for */
+		residualtime = ast_tvsub(ast_tvsub(looptimenow, looptimestart), intermediatetime);
+		if (elap > 0) {
+			looptimestart = ast_tvsub(looptimenow, residualtime);
+		}
 
 		update_timer(&myrpt->macrotimer, elap, 0);
 		if (who == NULL) {
