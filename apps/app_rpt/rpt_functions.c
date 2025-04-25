@@ -1683,12 +1683,14 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			}
 		/* go thru all the specs */
 		for (i = 1; i < argc; i++) {
-			if (sscanf(argv[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 || sscanf(argv[i], "GPIO" N_FMT(d) ":" N_FMT(d), &j, &k) == 2) {
+			if (sscanf(argv[i], "%*[Gg]%*[Pp]%*[Ii]%*[oO]" N_FMT(d) "%*[=:]" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
-			} else if (sscanf(argv[i], "PP" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
+			} else if (sscanf(argv[i], "%*2[pP]" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
+			} else {
+				ast_log(LOG_WARNING, "Invalid command COP %s, %s", argv[0], argv[i]);
 			}
 		}
 		if (myatoi(argv[0]) == 61) {
