@@ -321,25 +321,18 @@ static int rpt_compare_node(const void *p, const void *q)
 {
 	const struct rpt_lstat *first = *(const struct rpt_lstat **) p;
 	const struct rpt_lstat *next = *(const struct rpt_lstat **) q;
-	int val;
-	val = strverscmp(first->name, next->name);
-	if (val < 0) {
-		return -1;
-	}
-	if (val > 0) {
-		return 1;
-	}
-	return 0;
+
+	return strverscmp(first->name, next->name);
 }
 
 /*! \brief Link stats function */
 static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 {
-	int i, node_count = 0;
+	int i, x, node_count = 0;
 	char *connstate;
 	struct rpt *myrpt;
 	struct rpt_link *l;
-	struct rpt_lstat *s;
+	struct rpt_lstat *s = NULL;
 	int nrpts = rpt_num_rpts();
 	struct rpt_lstat **stat_array = NULL;
 
@@ -378,6 +371,12 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					continue;
 				}
 				if ((s = ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
+					if (i > 0) {
+						for (x = 0; x < i; x++) {
+							ast_free(stat_array[i]);
+						}
+					}
+					ast_free(stat_array);
 					rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 					return RESULT_FAILURE;
 				}
@@ -399,8 +398,9 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
-
-			qsort(stat_array, node_count, sizeof(struct rpt_lstat *), rpt_compare_node);
+			if (node_count > 1) {
+				qsort(stat_array, node_count, sizeof(struct rpt_lstat *), rpt_compare_node);
+			}
 			ast_cli(fd, "NODE      PEER                RECONNECTS  DIRECTION  CONNECT TIME        CONNECT STATE\n");
 			ast_cli(fd, "----      ----                ----------  ---------  ------------        -------------\n");
 
@@ -410,7 +410,6 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				char conntime[21];
 
 				s = stat_array[i];
-				connecttime = s->connecttime;
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;
@@ -427,7 +426,9 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 						(s->outbound) ? "OUT" : "IN", conntime, connstate);
 				ast_free(s);
 			}
-			ast_free(stat_array);
+			if (stat_array) {
+				ast_free(stat_array);
+			}
 			return RESULT_SUCCESS;
 		}
 	}
