@@ -1727,7 +1727,11 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	}
 	if (*str == 'L') {
 		rpt_mutex_lock(&myrpt->lock);
-		ast_str_set(&mylink->linklist, 0, "%s", str + 2); /* Dropping the "L " of the message */
+		if (strlen(str) > 2) {
+			ast_str_set(&mylink->linklist, 0, "%s", str + 2); /* Dropping the "L " of the message */
+		} else {
+			ast_str_set(&mylink->linklist, 0, " ");
+		}
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
