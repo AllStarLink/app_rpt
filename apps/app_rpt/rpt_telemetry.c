@@ -406,7 +406,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	/* give it to everyone */
 	while (l != &myrpt->links) {
 		if (l->chan && (l->mode == 1))
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
 	rpt_telemetry(myrpt, VARCMD, cmd);

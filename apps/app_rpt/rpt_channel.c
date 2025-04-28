@@ -436,7 +436,7 @@ int send_link_pl(struct rpt *myrpt, char *txt)
 	l = myrpt->links.next;
 	while (l && (l != &myrpt->links)) {
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		}
 		l = l->next;
 	}
