@@ -341,14 +341,13 @@ struct TLB_pvt {
 	int rxkey;
 	int keepalive;
 	unsigned int hangup:1; /* Hangup channel requested */
+	unsigned int firstsent:1;
 	unsigned int firstheard:1;
 	unsigned int last_firstheard:1;
-	struct ast_frame fr;
 	int txindex;
 	struct TLB_rxqast rxqast;
 	struct TLB_rxqtlb rxqtlb;
 	struct TLB_textq textq;
-	char firstsent;
 	struct ast_module_user *u;
 	unsigned int nodenum;
 	char *linkstr;
@@ -1431,7 +1430,7 @@ static int find_delete(struct TLB_node *key)
 static struct ast_frame *TLB_xread(struct ast_channel *ast)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
-	struct ast_frame fra = {
+	struct ast_frame fr = {
 		.frametype = AST_FRAME_CONTROL,
 		.subclass.integer = AST_CONTROL_ANSWER,
 	};
@@ -1441,12 +1440,11 @@ static struct ast_frame *TLB_xread(struct ast_channel *ast)
 		p->hangup = 0;
 	}
 	if (!p->last_firstheard && p->firstheard) {
-		ast_queue_frame(ast, &fra);
+		ast_queue_frame(ast, &fr);
 		p->firstheard = 0;
 		p->last_firstheard = 1;
 	}
-	memset(&p->fr, 0, sizeof(struct ast_frame));
-	return &p->fr;
+	return &ast_null_frame;
 }
 
 /*!
