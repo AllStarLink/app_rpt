@@ -1619,7 +1619,7 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 			/* send, but not to src */
 			if (strcmp(l->name, src)) {
 				if (l->chan) {
-					ast_write(l->chan, wf);
+					rpt_qwrite(l, wf);
 				}
 			}
 			if (dest) {
@@ -1846,7 +1846,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			wf.data.ptr = tmp1;
 			wf.datalen = strlen(tmp1) + 1;
 			if (mylink->chan)
-				ast_write(mylink->chan, &wf);
+				rpt_qwrite(mylink, &wf);
 			return;
 		}
 		if (myrpt->topkeystate != 1)
@@ -2287,6 +2287,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	char *s1, *tele;
 	char tmp[300], deststr[325] = "";
 	char sx[320];
+	struct ast_frame *f1;
 	struct ast_format_cap *cap;
 
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
@@ -2330,6 +2331,8 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->rxlingertimer = RX_LINGER_TIME;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
+	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
+		ast_frfree(f1);
 	if (l->chan) {
 		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
 	} else {
@@ -3040,11 +3043,17 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 
 static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
+	struct ast_frame *f;
 	int newkeytimer_last, max_retries;
 	struct rpt_link *l = myrpt->links.next;
 	while (l != &myrpt->links) {
 		int myrx, mymaxct;
 
+		if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
+			ast_write(l->chan, f);
+			ast_frfree(f);
+		}
 		update_timer(&l->rxlingertimer, elap, 0);
 
 		/* Update the timer, checking if it expired just now. */
@@ -3167,7 +3176,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (l->chan) {
 				lf.datalen = ast_str_strlen(lstr) + 1;
 				lf.data.ptr = ast_str_buffer(lstr);
-				ast_write(l->chan, &lf);
+				rpt_qwrite(l, &lf);
 				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
 			}
 			ast_free(lstr);
@@ -3945,7 +3954,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						continue;
 					}
 					if (l->chan)
-						ast_write(l->chan, &wf);
+						rpt_qwrite(l, &wf);
 					l = l->next;
 				}
 			}

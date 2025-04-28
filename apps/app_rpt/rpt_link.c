@@ -186,6 +186,20 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	return (0);
 }
 
+void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
+{
+	struct ast_frame *f1;
+
+	if (!l->chan)
+		return;
+	f1 = ast_frdup(f);
+	if (!f1) {
+		return;
+	}
+	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
+	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
+}
+
 int linkcount(struct rpt *myrpt)
 {
 	struct rpt_link *l;
@@ -308,7 +322,7 @@ void rssi_send(struct rpt *myrpt)
 		}
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
 		if (l->chan)
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
 }
@@ -333,7 +347,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name, myrpt->cmdnode)) {
 			if (l->chan)
-				ast_write(l->chan, &wf);
+				rpt_qwrite(l, &wf);
 			return;
 		}
 		l = l->next;
@@ -342,7 +356,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	/* if not, give it to everyone */
 	while (l != &myrpt->links) {
 		if (l->chan)
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
 }
@@ -366,7 +380,7 @@ void send_link_keyquery(struct rpt *myrpt)
 	/* give it to everyone */
 	while (l != &myrpt->links) {
 		if (l->chan)
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
 }
