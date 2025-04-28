@@ -488,7 +488,7 @@ struct el_pvt {
 	struct ast_module_user *u;
 	struct ast_trans_pvt *xpath;
 	unsigned int nodenum;
-	char *linkstr;
+	struct ast_str *linkstr;
 	ast_mutex_t lock;
 };
 
@@ -1388,11 +1388,11 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
  */
 static void el_destroy(struct el_pvt *pvt)
 {
-	struct qelem *qpast;
+	struct el_rxqast *qpast;
 
 	ast_mutex_lock(&pvt->lock);
 	while (pvt->rxqast.qe_forw != &pvt->rxqast) {
-		qpast = (struct qelem *) pvt->rxqast.qe_forw;
+		qpast = pvt->rxqast.qe_forw;
 		remque(qpast);
 		ast_free(qpast);
 	}
@@ -1666,9 +1666,9 @@ static int el_text(struct ast_channel *ast, const char *text)
 	struct el_pvt *pvt = ast_channel_tech_pvt(ast);
 	const char *delim = " ";
 	char *cmd, *arg1, *arg4;
-	char *ptr,*saveptr, *cp, *pkt;
+	char *ptr, *saveptr, *cp;
 	char buf[5120], str[200], *strs[MAXLINKSTRS];
-	int i, j, k, x, pkt_len, pkt_actual_len;
+	int i, j, k, x;
 
 	/* see if we are receiving a link text message */
 	if (pvt->instp && (text[0] == 'L')) {
@@ -1692,59 +1692,55 @@ static int el_text(struct ast_channel *ast, const char *text)
 		}
 		i = finddelim(cp, strs, ARRAY_LEN(strs));
 		if (i) {
-			qsort(strs, i, sizeof(char *), mycompar);
-			/* get size of largest string (node number) */
-			j = 0;
-			for (x =0; x < i; x++) {
-			    j = MAX(strlen(strs[x]), j);
+			struct ast_str *pkt = ast_str_create(EL_INIT_BUFFER);
+
+			if (i > 1) {
+				qsort(strs, i, sizeof(char *), mycompar);
 			}
-			/* allocate a string for all of the links */
-			pkt_len = (i * (j + 3)) + 50;
-			pkt = ast_calloc(1, pkt_len);
-			if (!pkt) {
-				ast_free(cp);
-				return -1;
-			}
-			j = 0;
-			k = 0;
+
+			j = 0; /* if header added */
+			k = 0; /* start of current line in buffer */
 			for (x = 0; x < i; x++) {
+				char mode = *strs[x];
+				char *node = strs[x] + 1;
+
 				/* Process AllStar node numbers - skip over those that begin with '3' which are echolink */
-				if ((*(strs[x] + 1) != '3')) {
-					if (strlen(pkt + k) >= 32) {
-						strncat(pkt, "\r    ", pkt_len);
+				if (*node != '3') {
+					if ((ast_str_strlen(pkt) - k + strlen(node)) >= 36) {
+						/* the current line in the buffer is getting long, start fresh */
+						ast_str_append(&pkt, 0, "\r    ");
+						k = ast_str_strlen(pkt) - 4;
 					}
 					if (!j++) {
-						strncat(pkt, "AllStar:", pkt_len);
+						ast_str_append(&pkt, 0, "AllStar:");
 					}
-					pkt_actual_len = strlen(pkt);
-					if (*strs[x] == 'T') {
-						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %s", strs[x] + 1);
-					} else {
-						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %s(M)", strs[x] + 1);
-					}
+					ast_str_append(&pkt, 0, " %s%s", node, mode == 'T' ? "" : "(M)");
 				}
 			}
-			strncat(pkt, "\r", pkt_len);
-			j = 0;
-			k = strlen(pkt);
+			ast_str_append(&pkt, 0, "\r");
+
+			j = 0;					 /* if header added */
+			k = ast_str_strlen(pkt); /* start of current line in buffer */
 			for (x = 0; x < i; x++) {
+				char mode = *strs[x];
+				char *node = strs[x] + 1;
+
 				/* Process echolink node numbers - they start with 3 */
-				if (*(strs[x] + 1) == '3') {
-					if (strlen(pkt + k) >= 32) {
-						strncat(pkt, "\r    ", pkt_len);
+				if (*node == '3') {
+					node++; /* advance to the EL node# */
+					if ((ast_str_strlen(pkt) - k + strlen(node)) >= 36) {
+						/* the current line in the buffer is getting long, start fresh */
+						ast_str_append(&pkt, 0, "\r    ");
+						k = ast_str_strlen(pkt) - 4;
 					}
 					if (!j++) {
-						strncat(pkt, "Echolink: ", pkt_len);
+						ast_str_append(&pkt, 0, "Echolink:");
 					}
-					pkt_actual_len = strlen(pkt);
-					if (*strs[x] == 'T') {
-						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %d", atoi(strs[x] + 2));
-					} else {
-						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %d(M)", atoi(strs[x] + 2));
-					}
+					ast_str_append(&pkt, 0, " %d%s", atoi(node), mode == 'T' ? "" : "(M)");
 				}
 			}
-			strncat(pkt, "\r", pkt_len);
+			ast_str_append(&pkt, 0, "\r");
+
 			pvt->linkstr = pkt;
 		}
 		ast_free(cp);
@@ -1807,15 +1803,16 @@ static int compare_ip(const void *pa, const void *pb)
  */
 static void send_audio_only_one(const void *nodep, const VISIT which, const int depth)
 {
+	struct el_node *node = *(struct el_node **) nodep;
+	struct el_instance *instp = node->instp;
 	struct sockaddr_in sin;
-	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 
 	if ((which == leaf) || (which == postorder)) {
-		if (strncmp((*(struct el_node **) nodep)->ip, instp->el_node_test.ip, EL_IP_SIZE) == 0) {
+		if (strncmp(node->ip, instp->el_node_test.ip, EL_IP_SIZE) == 0) {
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons(instp->audio_port);
-			sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
+			sin.sin_addr.s_addr = inet_addr(node->ip);
 
 			instp->audio_all.version = 3;
 			instp->audio_all.pad = 0;
@@ -1823,7 +1820,7 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 			instp->audio_all.csrc = 0;
 			instp->audio_all.marker = 0;
 			instp->audio_all.payt = 3;
-			instp->audio_all.seqnum = htons((*(struct el_node **) nodep)->seqnum++);
+			instp->audio_all.seqnum = htons(node->seqnum++);
 			instp->audio_all.time = htonl(0);
 			instp->audio_all.ssrc = htonl(instp->mynode);
 
@@ -1831,7 +1828,7 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 				   0, (struct sockaddr *) &sin, sizeof(sin));
 
 			instp->tx_audio_packets++;
-			(*(struct el_node **) nodep)->tx_audio_packets++;
+			node->tx_audio_packets++;
 		}
 	}
 }
@@ -1928,10 +1925,10 @@ static void lookup_node_callsign(const void *nodep, const VISIT which, void *clo
  */
 static void send_info(const void *nodep, const VISIT which, const int depth)
 {
+	struct el_node *node = *(struct el_node **) nodep;
+	struct el_instance *instp = node->instp;
 	struct sockaddr_in sin;
 	struct ast_str *pkt = NULL;
-	char *cp;
-	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 
 	pkt = ast_str_create(EL_INIT_BUFFER);
 	if (!pkt) {
@@ -1942,7 +1939,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->audio_port);
-		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
+		sin.sin_addr.s_addr = inet_addr(node->ip);
 
 		ast_str_set(&pkt, 0, EL_WELCOME_MESSAGE, instp->astnode, instp->mycall, instp->mynode);
 
@@ -1950,13 +1947,13 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_str_append(&pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
-		if ((cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL)) {
-			ast_str_append(&pkt, 0, "Systems Linked:\r%s", cp);
+		if (node->pvt && node->pvt->linkstr) {
+			ast_str_append(&pkt, 0, "Systems Linked:\r%s", ast_str_buffer(node->pvt->linkstr));
 		}
 
 		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
 		instp->tx_ctrl_packets++;
-		(*(struct el_node **) nodep)->tx_ctrl_packets++;
+		node->tx_ctrl_packets++;
 	}
 	ast_free(pkt);
 }
@@ -1969,20 +1966,21 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
  */
 static void send_heartbeat(const void *nodep, const VISIT which, const int depth)
 {
+	struct el_node *node = *(struct el_node **) nodep;
+	struct el_instance *instp = node->instp;
 	struct sockaddr_in sin;
 	unsigned char sdes_packet[256];
 	int sdes_length;
-	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 
 	if ((which == leaf) || (which == postorder)) {
 
-		if ((*(struct el_node **) nodep)->countdown >= 0) {
-			(*(struct el_node **) nodep)->countdown--;
+		if (node->countdown >= 0) {
+			node->countdown--;
 		}
 
-		if ((*(struct el_node **) nodep)->countdown < 0) {
-			ast_copy_string(instp->el_node_test.ip, (*(struct el_node **) nodep)->ip, EL_IP_SIZE);
-			ast_copy_string(instp->el_node_test.call, (*(struct el_node **) nodep)->call, EL_CALL_SIZE);
+		if (node->countdown < 0) {
+			ast_copy_string(instp->el_node_test.ip, node->ip, EL_IP_SIZE);
+			ast_copy_string(instp->el_node_test.call, node->call, EL_CALL_SIZE);
 			ast_log(LOG_WARNING, "Countdown for Callsign %s, IP Address %s is negative.\n", instp->el_node_test.call, instp->el_node_test.ip);
 		}
 		memset(sdes_packet, 0, sizeof(sdes_packet));
@@ -1991,11 +1989,11 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->ctrl_port);
-		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
+		sin.sin_addr.s_addr = inet_addr(node->ip);
 		sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 
 		instp->tx_ctrl_packets++;
-		(*(struct el_node **) nodep)->tx_ctrl_packets++;
+		node->tx_ctrl_packets++;
 	}
 }
 
