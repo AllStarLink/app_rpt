@@ -359,6 +359,12 @@ enum newkey {
 	RADIO_KEY_NOT_ALLOWED /*!< "!NEWKEY1!" message - AST_CONTROL_RADIO_KEY are not allowed on the repeater channel */
 };
 
+enum link_mode {
+	MODE_MONITOR,
+	MODE_TRANSCEIVE,
+	MODE_LOCAL_MONITOR
+};
+
 struct vox {
 	float	speech_energy;
 	float	noise_energy;
@@ -391,7 +397,7 @@ struct rpt;
 struct rpt_link {
 	struct rpt_link *next;
 	struct rpt_link *prev;
-	char mode; /* 1 if in tx mode */
+	enum link_mode mode;
 	char isremote;
 	char phonemode;
 	char phonevox;		   /* vox the phone */
@@ -459,7 +465,7 @@ struct rpt_lstat {
 	struct rpt_lstat *prev;
 	char peer[MAXPEERSTR];
 	char name[MAXNODESTR];
-	char mode;
+	enum link_mode mode;
 	unsigned int outbound:1;
 	unsigned int thisconnected:1;
 	int reconnects;

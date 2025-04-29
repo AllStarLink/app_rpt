@@ -55,7 +55,8 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 {
 	char *s1, *s2, tmp[MAXNODESTR];
 	char digitbuf[MAXNODESTR], *strs[sizeof(myrpt->savednodes)];
-	char mode, perma;
+	char perma;
+	enum link_mode mode;
 	struct rpt_link *l;
 	int i, r;
 
@@ -129,9 +130,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		r = atoi(param);
 		/* Attempt connection  */
 		perma = (r > 10) ? 1 : 0;
-		mode = (r & 1) ? 1 : 0;
+		mode = (r & 1) ? MODE_TRANSCEIVE : MODE_MONITOR;
 		if ((r == 8) || (r == 18))
-			mode = 2;
+			mode = MODE_LOCAL_MONITOR;
 		r = connect_link(myrpt, digitbuf, mode, perma);
 		switch (r) {
 		case -2:				/* Attempt to connect to self */
@@ -226,9 +227,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 				l = l->next;
 				continue;
 			}
-			if (l->mode == 1)
+			if (l->mode == MODE_TRANSCEIVE)
 				c1 = 'X';
-			else if (l->mode > 1)
+			else if (l->mode == MODE_LOCAL_MONITOR)
 				c1 = 'L';
 			else
 				c1 = 'M';
@@ -275,9 +276,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 			}
 			/* if RANGER and not permalink */
 			if ((l->max_retries <= MAX_RETRIES) && ISRANGER(l->name)) {
-				if (l->mode == 1)
+				if (l->mode == MODE_TRANSCEIVE)
 					c1 = 'X';
-				else if (l->mode > 1)
+				else if (l->mode == MODE_LOCAL_MONITOR)
 					c1 = 'L';
 				else
 					c1 = 'M';
@@ -359,11 +360,11 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		for (i = 0; tmp[0] && strs[i] && i < ARRAY_LEN(strs); i++) {
 			s1 = strs[i];
 			if (s1[0] == 'X')
-				mode = 1;
+				mode = MODE_TRANSCEIVE;
 			else if (s1[0] == 'L')
-				mode = 2;
+				mode = MODE_LOCAL_MONITOR;
 			else
-				mode = 0;
+				mode = MODE_MONITOR;
 			perma = (s1[1] == 'P') ? 1 : 0;
 			connect_link(myrpt, s1 + 2, mode, perma);	/* Try to reconnect */
 		}
