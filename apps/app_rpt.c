@@ -4252,7 +4252,18 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				if ((myrpt->p.linkmongain != 1.0) && (l->mode != 1) && (l->wouldtx))
 					fac *= myrpt->p.linkmongain;
 				if (fac != 1.0) {
-					ast_frame_adjust_volume_float(f, fac);
+					if (f->data.ptr && (f->samples == f->datalen / 2)) {
+						ast_frame_adjust_volume_float(f, fac);
+					} else {
+						ast_debug(3,
+							"Skip volume adjust on %s, fac = %f, data = %p, datalen = %d, samples = %d, src = %s\n",
+							ast_channel_name(l->chan),
+							fac,
+							f->data.ptr,
+							f->datalen,
+							f->samples,
+							f->src ? f->src : "(nil)");
+					}
 				}
 
 				l->rxlingertimer = RX_LINGER_TIME;
@@ -4413,7 +4424,18 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					fac = myrpt->p.ttxgain;
 
 				if (fac != 1.0) {
-					ast_frame_adjust_volume_float(f, fac);
+					if (f->data.ptr && (f->samples == f->datalen / 2)) {
+						ast_frame_adjust_volume_float(f, fac);
+					} else {
+						ast_debug(3,
+							"Skip volume adjust on %s, fac = %f, data = %p, datalen = %d, samples = %d, src = %s\n",
+							ast_channel_name(l->chan),
+							fac,
+							f->data.ptr,
+							f->datalen,
+							f->samples,
+							f->src ? f->src : "(nil)");
+					}
 				}
 				/* foop */
 				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
