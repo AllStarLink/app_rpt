@@ -341,13 +341,14 @@ struct TLB_pvt {
 	int rxkey;
 	int keepalive;
 	unsigned int hangup:1; /* Hangup channel requested */
+	unsigned int firstheard:1;
+	unsigned int last_firstheard:1;
 	struct ast_frame fr;
 	int txindex;
 	struct TLB_rxqast rxqast;
 	struct TLB_rxqtlb rxqtlb;
 	struct TLB_textq textq;
 	char firstsent;
-	char firstheard;
 	struct ast_module_user *u;
 	unsigned int nodenum;
 	char *linkstr;
@@ -1430,10 +1431,19 @@ static int find_delete(struct TLB_node *key)
 static struct ast_frame *TLB_xread(struct ast_channel *ast)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
+	struct ast_frame fra = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_ANSWER,
+	};
 
 	if (p->hangup) {
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
+	}
+	if (!p->last_firstheard && p->firstheard) {
+		ast_queue_frame(ast, &fra);
+		p->firstheard = 0;
+		p->last_firstheard = 1;
 	}
 	memset(&p->fr, 0, sizeof(struct ast_frame));
 	return &p->fr;
@@ -1459,6 +1469,10 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	int n, m;
 	struct TLB_rxqtlb *qptlb;
 	struct TLB_textq *textq;
+	struct ast_frame fra = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_ANSWER,
+	};
 
 	char buf[RTPBUF_SIZE + AST_FRIENDLY_OFFSET];
 
@@ -1468,6 +1482,11 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (p->hangup) {
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
+	}
+	if (!p->last_firstheard && p->firstheard) {
+		ast_queue_frame(ast, &fra);
+		p->firstheard = 0;
+		p->last_firstheard = 1;
 	}
 	ast_mutex_lock(&p->lock);
 	if (p->codec_change) {
@@ -2187,6 +2206,7 @@ static void *TLB_reader(void *data)
 						found_key = (struct TLB_node **) tfind(&instp->TLB_node_test, &TLB_node_list, compare_ip);
 						if (found_key) {
 							(*found_key)->countdown = instp->rtcptimeout;
+							(*found_key)->p->firstheard = 1;
 						} else {	/* otherwise its a new request */
 							i = 0;	/* default authorized */
 							if (instp->ndenylist) {
@@ -2249,6 +2269,7 @@ static void *TLB_reader(void *data)
 				if (found_key) {
 					struct TLB_pvt *p = (*found_key)->p;
 					(*found_key)->countdown = instp->rtcptimeout;
+					p->firstheard = 1;
 					if (recvlen > 12) {	/* if at least a header size and some payload */
 						/* if its a DTMF frame */
 						if ((((struct rtpVoice_t *) buf)->version == 2) && (((struct rtpVoice_t *) buf)->payt == 96)) {
