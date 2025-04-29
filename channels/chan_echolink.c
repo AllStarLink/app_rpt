@@ -234,13 +234,7 @@ do not use 127.0.0.1
 		+ 16  		/* ASL & EL nodes #'s */  \
 		+ 80  		/* room for "a" message */ \
 		+ (50 * 8) 	/* room for linked ASL and EL nodes */
-/* 
- * If you want to compile/link this code
- * on "BIG-ENDIAN" platforms, then
- * use this: #define RTP_BIG_ENDIAN
- * Have only tested this code on "little-endian"
- * platforms running Linux.
-*/
+
 static const char tdesc[] = "Echolink channel driver";
 static char type[] = "echolink";
 #define SNAPSHOT_SZ 49
@@ -256,7 +250,7 @@ struct sockaddr_in sin_aprs;
  * This is the standard RTP packet format.
  */
 struct gsmVoice_t {
-#ifdef RTP_BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
 	uint8_t version:2;
 	uint8_t pad:1;
 	uint8_t ext:1;
@@ -298,7 +292,7 @@ struct rtcp_sdes_request {
  * \brief RTCP Control Packet common header word.
  */
 struct rtcp_common_t {
-#ifdef RTP_BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
 	uint8_t version:2;
 	uint8_t p:1;
 	uint8_t count:5;
@@ -975,41 +969,46 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call, con
 	struct rtcp_t *rp;
 	unsigned char *ap;
 	char line[EL_CALL_SIZE + EL_NAME_SIZE];
-	int l, hl, pl;
+	int l, hl, pad;
 
 	hl = 0;
 	*p++ = 3 << 6;
 	*p++ = 201;
 	*p++ = 0;
 	*p++ = 1;
-	*((long *) p) = htonl(0);
+	*((long *) p) = 0;
 	p += 4;
 	hl = 8;
 
 	rp = (struct rtcp_t *) p;
-	*((short *) p) = htons((3 << 14) | 202 | (1 << 8));
-	rp->r.sdes.src = htonl(0);
+	rp->common.version = 3;
+	rp->common.p = 0;
+	rp->common.count = 1;
+	rp->common.pt = 202;
+	rp->common.length = 0;
+	rp->r.sdes.src = 0;
 	ap = (unsigned char *) rp->r.sdes.item;
 
-	ast_copy_string(line, "CALLSIGN", EL_CALL_SIZE + EL_NAME_SIZE);
+	ast_copy_string(line, "CALLSIGN", sizeof(line));
 	*ap++ = 1;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
 	ap += l;
 
-	snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "%s %s", call, name);
+	snprintf(line, sizeof(line), "%s %s", call, name);
 	*ap++ = 2;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
 	ap += l;
 
 	if (astnode) {
-		l = snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "AllStar %s", astnode);
+		l = snprintf(line, sizeof(line), "AllStar %s", astnode);
 		*ap++ = 6;
 		*ap++ = l;
 		memcpy(ap, line, l);
 		ap += l;
 	}
+
 	/* enable DTMF keypad */
 	*ap++ = 8;
 	*ap++ = 3;
@@ -1019,25 +1018,22 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call, con
 
 	*ap++ = 0;
 	*ap++ = 0;
-	l = ap - p;
 
-	rp->common.length = htons(((l + 3) / 4) - 1);
-	l = hl + ((ntohs(rp->common.length) + 1) * 4);
+	l = hl + (ap - p);
 
-	pl = (l & 4) ? l : l + 4;
-
-	if (pl > l) {
-		int pad = pl - l;
+	pad = (4 - (l % 4)) % 4;
+	if (pad > 0) {
 		memset(zp + l, '\0', pad);
-		zp[pl - 1] = pad;
-		p[0] |= 0x20;
-		rp->common.length = htons(ntohs(rp->common.length) + ((pad) / 4));
-		l = pl;
+		l += pad;
+		zp[l - 1] = pad;
+		rp->common.p = 1;
 	}
 
 	if (l > pkt_len) {
 		return 0;
 	}
+
+	rp->common.length = htons(((l - hl + 3) / 4) - 1);
 	memcpy(pkt, zp, l);
 	return l;
 }
@@ -1059,22 +1055,24 @@ static int rtcp_make_el_sdes(unsigned char *pkt, int pkt_len, const char *cname,
 	unsigned char *p = zp;
 	struct rtcp_t *rp;
 	unsigned char *ap;
-	int l, hl, pl;
-
-	memset(zp, 0, sizeof(zp)); /* Not really needed since pkt has been memset already by the caller, but prevents valgrind complaining about it */
+	int l, hl, pad;
 
 	hl = 0;
 	*p++ = 2 << 6;
 	*p++ = 201;
 	*p++ = 0;
 	*p++ = 1;
-	*((long *) p) = htonl(0);
+	*((long *) p) = 0;
 	p += 4;
 	hl = 8;
 
 	rp = (struct rtcp_t *) p;
-	*((short *) p) = htons((2 << 14) | 202 | (1 << 8));
-	rp->r.sdes.src = htonl(0);
+	rp->common.version = 2;
+	rp->common.p = 0;
+	rp->common.count = 1;
+	rp->common.pt = 202;
+	rp->common.length = 0;
+	rp->r.sdes.src = 0;
 	ap = (unsigned char *) rp->r.sdes.item;
 
 	*ap++ = 1;
@@ -1089,21 +1087,17 @@ static int rtcp_make_el_sdes(unsigned char *pkt, int pkt_len, const char *cname,
 
 	*ap++ = 0;
 	*ap++ = 0;
-	l = ap - p;
 
-	rp->common.length = htons(((l + 3) / 4) - 1);
-	l = hl + ((ntohs(rp->common.length) + 1) * 4);
+	l = hl + (ap - p);
+	pad = (4 - (l % 4)) % 4;
 
-	pl = (l & 4) ? l : l + 4;
-
-	if (pl > l) {
-		int pad = pl - l;
+	if (pad > 0) {
 		memset(zp + l, '\0', pad);
-		zp[pl - 1] = pad;
-		p[0] |= 0x20;
-		rp->common.length = htons(ntohs(rp->common.length) + ((pad) / 4));
-		l = pl;
+		l += pad;
+		zp[l - 1] = pad;
+		rp->common.p = 1;
 	}
+	rp->common.length = htons(((l - hl + 3) / 4) - 1);
 
 	if (l > pkt_len) {
 		return 0;
@@ -1120,28 +1114,31 @@ static int rtcp_make_el_sdes(unsigned char *pkt, int pkt_len, const char *cname,
  * \param reason		Pointer to reason for the bye packet
  * \retval  			Successful length
  */
-static int rtcp_make_bye(unsigned char *pkt, const char *reason)
+static int rtcp_make_bye(unsigned char *pkt, int pkt_len, const char *reason)
 {
+	unsigned char *p = pkt;
 	struct rtcp_t *rp;
-	unsigned char *ap, *zp;
-	int l, hl, pl;
+	unsigned char *ap;
+	int l, hl, pad;
 
-	zp = pkt;
 	hl = 0;
-
-	*pkt++ = 3 << 6;
-	*pkt++ = 201;
-	*pkt++ = 0;
-	*pkt++ = 1;
-	*((long *) pkt) = htonl(0);
-	pkt += 4;
+	*p++ = 3 << 6;
+	*p++ = 201;
+	*p++ = 0;
+	*p++ = 1;
+	*((long *) p) = 0;
+	p += 4;
 	hl = 8;
 
-	rp = (struct rtcp_t *) pkt;
-	*((short *) pkt) = htons((3 << 14) | 203 | (1 << 8));
-	rp->r.bye.src[0] = htonl(0);
+	rp = (struct rtcp_t *) p;
+	rp->common.version = 3;
+	rp->common.p = 0;
+	rp->common.count = 1;
+	rp->common.pt = 203;
+	rp->common.length = 0;
+	rp->r.bye.src[0] = 0;
 	ap = (unsigned char *) rp->r.sdes.item;
-	l = 0;
+
 	if (reason != NULL) {
 		l = strlen(reason);
 		if (l > 0) {
@@ -1150,22 +1147,22 @@ static int rtcp_make_bye(unsigned char *pkt, const char *reason)
 			ap += l;
 		}
 	}
-	while ((ap - pkt) & 3) {
-		*ap++ = 0;
-	}
-	l = ap - pkt;
-	rp->common.length = htons((l / 4) - 1);
-	l = hl + ((ntohs(rp->common.length) + 1) * 4);
 
-	pl = (l & 4) ? l : l + 4;
-	if (pl > l) {
-		int pad = pl - l;
-		memset(zp + l, '\0', pad);
-		zp[pl - 1] = pad;
-		pkt[0] |= 0x20;
-		rp->common.length = htons(ntohs(rp->common.length) + ((pad) / 4));
-		l = pl;
+	l = hl + (ap - p);
+
+	pad = (4 - (l % 4)) % 4;
+	if (pad > 0) {
+		memset(pkt + l, '\0', pad);
+		l += pad;
+		pkt[l - 1] = pad;
+		rp->common.p = 1;
 	}
+
+	if (l > pkt_len) {
+		return 0;
+	}
+
+	rp->common.length = htons(((l - hl + 3) / 4) - 1);
 	return l;
 }
 
@@ -1486,7 +1483,7 @@ static int el_hangup(struct ast_channel *ast)
 	ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 	pvt->hangup = 0;
 	ast_mutex_unlock(&instp->lock);
-	n = rtcp_make_bye(bye, "disconnected");
+	n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
@@ -2185,7 +2182,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 			n = 1;
 			pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall, instp->myname, instp->astnode);
 		} else {
-			pack_length = rtcp_make_bye(pack, "bye");
+			pack_length = rtcp_make_bye(pack, sizeof(pack), "bye");
 			n = 20;
 		}
 		memset(&sin, 0, sizeof(sin));
@@ -2400,7 +2397,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	ast_mutex_unlock(&el_nodelist_lock);
 	if (instp->el_node_test.ip[0] != '\0') {
 		if (find_delete(&instp->el_node_test)) {
-			bye_length = rtcp_make_bye(bye, "rtcp timeout");
+			bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
@@ -3674,7 +3671,7 @@ static void *el_reader(void *data)
 									/* if its time, send un-auth */
 									if (ast_tvdiff_ms(ast_tvnow(), instp->pending[x].reqtime) >= AUTH_RETRY_MS) {
 										ast_debug(1, "Sent bye to IP address %s.\n", instp->el_node_test.ip);
-										j = rtcp_make_bye(bye, "UN-AUTHORIZED");
+										j = rtcp_make_bye(bye, sizeof(bye), "UN-AUTHORIZED");
 										memset(&sin1, 0, sizeof(sin1));
 										sin1.sin_family = AF_INET;
 										sin1.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
