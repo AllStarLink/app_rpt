@@ -397,20 +397,22 @@ struct rpt_link {
 	char phonevox;		   /* vox the phone */
 	char phonemonitor;	   /* no tx or funs for the phone */
 	char name[MAXNODESTR]; /* identifier (routing) string */
-	char lasttx;
-	char lasttx1;
-	char lastrx;
-	char lastrealrx;
-	char lastrx1;
+	unsigned int lasttx:1;
+	unsigned int lasttx1:1;
+	unsigned int lastrx:1;
+	unsigned int lastrealrx:1;
+	unsigned int lastrx1:1;
 	unsigned int last_frame_sent:1; /* We have written a single frame */
-	char wouldtx;
-	char connected;
-	char hasconnected;
-	char perma;
-	char thisconnected;
-	char outbound;
-	char disced;
-	char killme;
+	unsigned int wouldtx:1;
+	unsigned int connected:1;
+	unsigned int hasconnected:1;
+	unsigned int perma:1;
+	unsigned int thisconnected:1;
+	unsigned int outbound:1;
+	unsigned int disced:2;
+	unsigned int killme:1;
+	unsigned int dtmfed:1;
+	unsigned int gott:1;
 	long elaptime;
 	int disctime;
 	int	retrytimer;
@@ -426,8 +428,7 @@ struct rpt_link {
 	struct ast_channel *pchan;
 	struct ast_str *linklist;
 	time_t	linklistreceived;
-	int	linklisttimer;
-	int	dtmfed;
+	int linklisttimer;
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
 	struct	ast_frame *lastf1,*lastf2;
@@ -439,7 +440,6 @@ struct rpt_link {
 	enum newkey link_newkey;
 	int linkmode;
 	int newkeytimer;
-	char gott;
 	int		voterlink;      /*!< \brief set if node is defined as a voter rx */
 	int		votewinner;		/*!< \brief set if node won the rssi competition */
 	time_t	lastkeytime;
@@ -460,9 +460,9 @@ struct rpt_lstat {
 	char peer[MAXPEERSTR];
 	char name[MAXNODESTR];
 	char mode;
-	char outbound;
+	unsigned int outbound:1;
+	unsigned int thisconnected:1;
 	int reconnects;
-	char thisconnected;
 	struct timeval connecttime;
 	struct rpt_chan_stat chan_stat[NRPTSTAT];
 };
