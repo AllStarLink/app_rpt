@@ -405,7 +405,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		if (l->chan && (l->mode == 1))
+		if (l->chan && (l->mode == MODE_TRANSCEIVE))
 			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
@@ -1370,7 +1370,7 @@ treataslocal:
 				if (w) {
 					haslink = 1;
 				}
-				if (l->mode == 1) {
+				if (l->mode == MODE_TRANSCEIVE) {
 					hastx++;
 					if (l->isremote) {
 						hasremote++;
@@ -2143,10 +2143,10 @@ treataslocal:
 			hastx = 1;
 			res = saynode(myrpt, mychannel, l->name);
 			s = "rpt/tranceive";
-			if (!l->mode) {
+			if (l->mode == MODE_MONITOR) {
 				s = "rpt/monitor";
 			}
-			if (l->mode > 1) {
+			if (l->mode == MODE_LOCAL_MONITOR) {
 				s = "rpt/localmonitor";
 			}
 			if (!l->thisconnected) {
@@ -2893,10 +2893,10 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 					continue;
 				}
 				s = 'T';
-				if (!l->mode) {
+				if (l->mode == MODE_MONITOR) {
 					s = 'R';
 				}
-				if (l->mode > 1) {
+				if (l->mode == MODE_LOCAL_MONITOR) {
 					s = 'L';
 				}
 				if (!l->thisconnected) {

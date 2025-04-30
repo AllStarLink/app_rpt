@@ -159,7 +159,7 @@
  *
  *  1 - Disconnect specified link
  *  2 - Connect specified link -- monitor only
- *  3 - Connect specified link -- tranceive
+ *  3 - Connect specified link -- transceive
  *  4 - Enter command mode on specified link
  *  5 - System status
  *  6 - Disconnect all links
@@ -169,7 +169,7 @@
  *  10 - Disconnect all RANGER links (except permalinks)
  *  11 - Disconnect a previously permanently connected link
  *  12 - Permanently connect specified link -- monitor only
- *  13 - Permanently connect specified link -- tranceive
+ *  13 - Permanently connect specified link -- transceive
  *  15 - Full system status (all nodes)
  *  16 - Reconnect links disconnected with "disconnect all links"
  *  17 - MDC test (for diag purposes)
@@ -3374,9 +3374,9 @@ static inline int do_link_post(struct rpt *myrpt)
 			continue;
 		}
 		lst = 'T';
-		if (!l->mode)
+		if (l->mode == MODE_MONITOR)
 			lst = 'R';
-		if (l->mode > 1)
+		if (l->mode == MODE_LOCAL_MONITOR)
 			lst = 'L';
 		if (!l->thisconnected)
 			lst = 'C';
@@ -4282,7 +4282,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			if (altlink1(myrpt, l))
 				*totx_p = 1;
 			l->wouldtx = *totx_p;
-			if (l->mode != 1)
+			if (l->mode != MODE_TRANSCEIVE)
 				*totx_p = 0;
 			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx_p)) {
 				if (*totx_p && !l->voterlink) {
@@ -4323,7 +4323,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					fac = myrpt->p.erxgain;
 				if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")))
 					fac = myrpt->p.trxgain;
-				if ((myrpt->p.linkmongain != 1.0) && (l->mode != 1) && (l->wouldtx))
+				if ((myrpt->p.linkmongain != 1.0) && (l->mode != MODE_TRANSCEIVE) && (l->wouldtx))
 					fac *= myrpt->p.linkmongain;
 				if (fac != 1.0) {
 					if (f->data.ptr && (f->samples == f->datalen / 2)) {
@@ -4452,9 +4452,9 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					if (!lconnected) {
 						rpt_telemetry(myrpt, CONNECTED, l);
 						if (myrpt->p.archivedir) {
-							if (l->mode == 1) {
+							if (l->mode == MODE_TRANSCEIVE) {
 								donodelog_fmt(myrpt, "LINKTRX,%s", l->name);
-							} else if (l->mode > 1) {
+							} else if (l->mode == MODE_LOCAL_MONITOR) {
 								donodelog_fmt(myrpt, "LINKLOCALMONITOR,%s", l->name);
 							} else {
 								donodelog_fmt(myrpt, "LINKMONITOR,%s", l->name);
@@ -6639,7 +6639,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			} else
 				rpt_mutex_unlock(&myrpt->lock);
 		}
-		/* establish call in tranceive mode */
+		/* establish call in transceive mode */
 		l = ast_calloc(1, sizeof(struct rpt_link));
 		if (!l) {
 			return -1;
@@ -6649,7 +6649,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_free(l);
 			return -1;
 		}
-		l->mode = 1;
+		l->mode = MODE_TRANSCEIVE;
 		ast_copy_string(l->name, b1, MAXNODESTR);
 		l->isremote = 0;
 		l->chan = chan;

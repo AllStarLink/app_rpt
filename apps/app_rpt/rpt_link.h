@@ -82,7 +82,7 @@ void rpt_update_links(struct rpt *myrpt);
  * \retval 1 No match yet
  * \retval 2 Already connected to this node
  */
-int connect_link(struct rpt *myrpt, char *node, int mode, int perma);
+int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma);
 
 /*! \brief Free link and associated internal memory.
  * \param link Link structure to free

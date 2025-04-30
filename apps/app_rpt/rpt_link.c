@@ -431,7 +431,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0')
 			continue;
-		if (l->mode > 1)
+		if (l->mode == MODE_LOCAL_MONITOR)
 			continue;			/* dont report local modes */
 		/* dont count our stuff */
 		if (l == mylink)
@@ -439,8 +439,8 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		if (mylink && (!strcmp(l->name, mylink->name)))
 			continue;
 		/* figure out mode to report */
-		mode = 'T';				/* use Tranceive by default */
-		if (!l->mode)
+		mode = 'T'; /* use Transceive by default */
+		if (l->mode == MODE_MONITOR)
 			mode = 'R';			/* indicate RX for our mode */
 		if (!l->thisconnected)
 			mode = 'C';			/* indicate connecting */
@@ -459,7 +459,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 				ast_str_append(buf, 0, "%c%s", mode, l->name);
 			}
 		}
-		/* if we are in tranceive mode, let all modes stand */
+		/* if we are in transceive mode, let all modes stand */
 		if (mode == 'T')
 			continue;
 		/* downgrade everyone on this node if appropriate */
@@ -555,7 +555,7 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
-int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
+int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 {
 	char *s, *s1, *tele, *cp;
 	char tmp[300], deststr[325] = "", modechange = 0;
