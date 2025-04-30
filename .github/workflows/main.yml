@@ -14,18 +14,9 @@ on:
 jobs:
   container:
     runs-on: ubuntu-latest
-    container: debian:12
+    container: 
+      image: ghcr.io/allstarlink/asl3-ci:latest
     steps:
-      - name: Build DAHDI and Asterisk
-        run: |
-          cd /usr/src
-          apt-get update -y
-          apt-get install -y wget procps
-          sysctl net.ipv6.conf.all.disable_ipv6
-          wget https://docs.phreaknet.org/script/phreaknet.sh
-          chmod +x phreaknet.sh
-          ./phreaknet.sh make
-          phreaknet install --dahdi --lightweight --alsa --fast --devmode --testsuite
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build app_rpt
