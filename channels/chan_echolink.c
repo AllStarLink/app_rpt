@@ -472,11 +472,10 @@ struct el_pvt {
 	unsigned int firstheard:1;		/* First heard from called node */
 	unsigned int last_firstheard:1; /* Rising edge */
 	unsigned int txkey:1;	  /* Transmit keyed */
+	unsigned int hangup:1;	  /* indicate the channel should hang up */
 	int rxkey;				  /* Receive keyed timer */
 	int keepalive;
 	int txindex;
-	unsigned int hangup:1; /* indicate the channel should hang up */
-	struct ast_frame fr;
 	struct el_rxqast rxqast;
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
@@ -2232,9 +2231,7 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 		ast_queue_frame(ast, &fr);
 		p->last_firstheard = 1;
 	}
-	memset(&p->fr, 0, sizeof(struct ast_frame));
-	p->fr.src = type;
-	return &p->fr;
+	return &ast_null_frame;
 }
 
 /*!
@@ -2337,8 +2334,9 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				f1 = ast_dsp_process(NULL, p->dsp, f2);
 				if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
 					if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
-						if (f1->frametype == AST_FRAME_DTMF_END)
+						if (f1->frametype == AST_FRAME_DTMF_END) {
 							ast_verb(4, "Echolink %s Got DTMF character %c from IP address %s.\n", p->stream, f1->subclass.integer, p->ip);
+						}
 						ast_queue_frame(ast, f1);
 						x = 1;
 					}
@@ -2377,10 +2375,10 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (p->txindex >= BLOCKING_FACTOR) {
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->el_node_test.ip, p->ip);
+		ast_mutex_unlock(&instp->lock);
 		ast_mutex_lock(&el_nodelist_lock);
 		twalk(el_node_list, send_audio_only_one);
 		ast_mutex_unlock(&el_nodelist_lock);
-		ast_mutex_unlock(&instp->lock);
 		p->txindex = 0;
 	}
 
@@ -2402,13 +2400,11 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			sin.sin_family = AF_INET;
 			sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
 			sin.sin_port = htons(instp->ctrl_port);
-			ast_mutex_lock(&instp->lock);
 			/* send 20 bye packets to insure that they receive this disconnect */
 			for (i = 0; i < 20; i++) {
 				sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 				instp->tx_ctrl_packets++;
 			}
-			ast_mutex_unlock(&instp->lock);
 			ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
 		}
 		instp->el_node_test.ip[0] = '\0';
@@ -4143,7 +4139,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 	/* start the registration thread */
 	ast_pthread_create(&el_register_thread, NULL, el_register, instp);
-	ast_pthread_create_detached(&instp->el_reader_thread, NULL, el_reader, instp);
+	ast_pthread_create(&instp->el_reader_thread, NULL, el_reader, instp);
 	instances[ninstances++] = instp;
 
 	ast_debug(1, "Echolink/%s listening on %s port %s.\n", instp->name, instp->ipaddr, instp->port);
