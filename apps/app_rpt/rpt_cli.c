@@ -986,7 +986,8 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	struct rpt *myrpt = NULL;
 	int nrpts = rpt_num_rpts();
 
-	if (argc != 6) {
+	if (argc < 4) {
+		/* we need at least "rpt cmd <node> ..." */
 		return RESULT_SHOWUSAGE;
 	}
 
@@ -1004,11 +1005,17 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	}							/* if thisRpt < 0 */
 
 	/* Look up the action */
-	thisAction = function_table_index(argv[3]);
+	thisAction = rpt_function_lookup(argv[3]);
 	if (thisAction < 0) {
 		ast_cli(fd, "Unknown action name %s.\n", argv[3]);
 		return RESULT_FAILURE;
-	}							/* if thisAction < 0 */
+	} /* if thisAction < 0 */
+
+	if (argc < (4 + rpt_function_minargs(thisAction))) {
+		/* for this function we need to have (at least)
+		   "rpt cmd <node> <function-name> [required-function-args]" */
+		return RESULT_SHOWUSAGE;
+	}
 
 	/* at this point, it looks like all the arguments make sense... */
 
@@ -1017,8 +1024,22 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE) {
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_BUSY;
 		rpt_vars[thisRpt].cmdAction.functionNumber = thisAction;
-		snprintf(rpt_vars[thisRpt].cmdAction.param, sizeof(rpt_vars[thisRpt].cmdAction.param), "%s,%s", argv[4], argv[5]);
-		ast_copy_string(rpt_vars[thisRpt].cmdAction.digits, argv[5], sizeof(rpt_vars[thisRpt].cmdAction.digits));
+		rpt_vars[thisRpt].cmdAction.param[0] = 0;
+		rpt_vars[thisRpt].cmdAction.digits[0] = 0;
+		if (argc > 5) {
+			/* given a command like "rpt cmd 2000 ilink 3 2001" we set :
+				.cmdAction.param  = "3,2001"
+				.cmdAction.digits = "2001"
+			 */
+			snprintf(rpt_vars[thisRpt].cmdAction.param, sizeof(rpt_vars[thisRpt].cmdAction.param), "%s,%s", argv[4], argv[5]);
+			ast_copy_string(rpt_vars[thisRpt].cmdAction.digits, argv[5], sizeof(rpt_vars[thisRpt].cmdAction.digits));
+		} else if (argc > 4) {
+			/* given a (shorter) command like "rpt cmd 2000 status 12" we set :
+				.cmdAction.param  = "12"
+				.cmdAction.digits = ""
+			 */
+			ast_copy_string(rpt_vars[thisRpt].cmdAction.param, argv[4], sizeof(rpt_vars[thisRpt].cmdAction.param));
+		}
 		rpt_vars[thisRpt].cmdAction.command_source = SOURCE_RPT;
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_READY;
 	}							/* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
@@ -1361,10 +1382,11 @@ static char *handle_cli_cmd(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt cmd";
-		e->usage =
-			"Usage: rpt cmd <nodename> <cmd-name> <cmd-index> <cmd-args>\n"
-			"	Send a command to a node.\n"
-			"	i.e. rpt cmd 2000 ilink 3 2001\n";
+		e->usage = "Usage: rpt cmd <nodename> <cmd-name> <cmd-index> <cmd-args>\n"
+				   "	Send a command to a node.\n"
+				   "	i.e. rpt cmd 2000 ilink 3 2001\n"
+				   "	     rpt cmd 2000 localplay rpt/goodafternoon\n"
+				   "	     rpt cmd 2000 status 12\n";
 		return NULL;
 	case CLI_GENERATE:
 		return complete_node_list(a->line, a->word, a->pos, 2);
@@ -1421,8 +1443,8 @@ static char *handle_cli_lookup(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt lookup";
-		//e->usage = rpt_usage;
-		e->usage = NULL;		/*! \todo 20220111 NA rpt_usage doesn't exist! */
+		e->usage = "Usage: rpt lookup <nodename>\n"
+				   "	Display the connection information for a node.\n";
 		return NULL;
 	case CLI_GENERATE:
 		return complete_node_list(a->line, a->word, a->pos, 2);
