@@ -1442,7 +1442,8 @@ void *rpt_call(void *this)
 			}
 			if (myrpt->mydtmf) {
 				struct ast_frame wf = {
-					AST_FRAME_DTMF,
+					.frametype = AST_FRAME_DTMF,
+					.src = __PRETTY_FUNCTION__,
 				};
 
 				wf.subclass.integer = myrpt->mydtmf;
@@ -1729,7 +1730,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	int i, seq, res, ts, rest;
 	struct ast_frame wf;
 
-	init_text_frame(&wf, "handle_link_data");
+	init_text_frame(&wf, __PRETTY_FUNCTION__);
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	ast_debug(5, "Received text over link: '%s'\n", str);
@@ -1759,12 +1760,11 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'L') {
-		rpt_mutex_lock(&myrpt->lock);
 		if (strlen(str) < 3) {
 			return;
 		}
+		rpt_mutex_lock(&myrpt->lock);
 		ast_str_set(&mylink->linklist, 0, "%s", str + 2); /* Dropping the "L " of the message */
-
 		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
@@ -3206,7 +3206,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (!lstr) {
 				return;
 			}
-			init_text_frame(&lf, "periodic_process_links");
+			init_text_frame(&lf, __PRETTY_FUNCTION__);
 			l->linklisttimer = LINKLISTTIME;
 			ast_str_set(&lstr, 0, "%s", "L ");
 			rpt_mutex_lock(&myrpt->lock);
@@ -3579,6 +3579,7 @@ static inline struct ast_frame *rpt_frame_helper(struct rpt *myrpt, struct ast_f
 	myrpt->lastf1 = f2;
 	return last_frame;
 }
+
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
 	int ismuted;
@@ -4256,6 +4257,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 	struct rpt_link *l, *m;
 	struct ast_frame wf = {
 		.frametype = AST_FRAME_CNG,
+		.src = __PRETTY_FUNCTION__,
 	};
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
@@ -4902,7 +4904,7 @@ static void *rpt(void *this)
 		int totx = 0, elap = 0, n, x;
 		time_t t, t_mono;
 		struct rpt_link *l;
-		struct timeval looptimenow, residualtime, intermediatetime;
+		struct timeval looptimenow, residualtime, elap_tv_ms, elap_tv_us;
 
 		if (myrpt->disgorgetime && (time(NULL) >= myrpt->disgorgetime)) {
 			myrpt->disgorgetime = 0;
@@ -5352,9 +5354,10 @@ static void *rpt(void *this)
 		/* calculate loop time */
 		looptimenow = rpt_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		intermediatetime.tv_sec = 0;			/* with 20ms loops, we should never have a full second */
-		intermediatetime.tv_usec = elap * 1000; /* usec accounted for */
-		residualtime = ast_tvsub(ast_tvsub(looptimenow, looptimestart), intermediatetime);
+		elap_tv_ms.tv_sec = 0;			  /* with 20ms loops, we should never have a full second */
+		elap_tv_ms.tv_usec = elap * 1000; /* usec accounted for */
+		elap_tv_us = ast_tvsub(looptimenow, looptimestart);
+		residualtime = ast_tvsub(elap_tv_us, elap_tv_ms);
 		if (elap > 0) {
 			looptimestart = ast_tvsub(looptimenow, residualtime);
 		}
@@ -6173,7 +6176,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct rpt_tele *telem;
 	int numlinks;
 	struct ast_format_cap *cap;
-	struct timeval looptimestart, looptimenow, intermediatetime, residualtime;
+	struct timeval looptimestart, looptimenow, residualtime, elap_tv_ms, elap_tv_us;
 
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "Rpt requires an argument (system node)\n");
@@ -7205,9 +7208,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* calculate loop time */
 		looptimenow = rpt_tvnow();
 		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		intermediatetime.tv_sec = 0;			/* with 20ms loops, we should never have a full second */
-		intermediatetime.tv_usec = elap * 1000; /* usec accounted for */
-		residualtime = ast_tvsub(ast_tvsub(looptimenow, looptimestart), intermediatetime);
+		elap_tv_ms.tv_sec = 0;			  /* with 20ms loops, we should never have a full second */
+		elap_tv_ms.tv_usec = elap * 1000; /* usec accounted for */
+		elap_tv_us = ast_tvsub(looptimenow, looptimestart);
+		residualtime = ast_tvsub(elap_tv_us, elap_tv_ms);
 		if (elap > 0) {
 			looptimestart = ast_tvsub(looptimenow, residualtime);
 		}

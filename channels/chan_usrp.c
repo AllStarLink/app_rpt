@@ -115,7 +115,7 @@ struct usrp_rxq {
 /*!
  * \brief Descriptor for one of our channels.
  */
- struct usrp_pvt {
+struct usrp_pvt {
 	int usrp;					/* Open UDP socket */
 	struct ast_channel *owner;	/* Channel we belong to, possibly NULL */
 	char stream[80];			/* Our stream */
@@ -463,7 +463,6 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 	unsigned long seq;
 	int n;
 	int datalen;
-	struct ast_frame fr;
 	struct usrp_rxq *qp;
 	struct _chan_usrp_bufhdr *bufhdrp = (struct _chan_usrp_bufhdr *) buf;
 	char *bufdata = &buf[sizeof(struct _chan_usrp_bufhdr)];
@@ -485,7 +484,7 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 		pvt->fr.datalen = 0;
 		pvt->fr.samples = 0;
 		pvt->fr.data.ptr = NULL;
-		pvt->fr.src = type;
+		pvt->fr.src = __PRETTY_FUNCTION__;
 		pvt->fr.offset = 0;
 		pvt->fr.mallocd = 0;
 		pvt->fr.delivery.tv_sec = 0;
@@ -508,47 +507,29 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 			pvt->rxseq = seq + 1;
 			// TODO: TEXT processing added N4IRR
 			if (datalen == USRP_VOICE_FRAME_SIZE) {
-				qp = ast_malloc(sizeof(struct usrp_rxq));
-				if (qp) {
-					/* Pass received text messages to Asterisk */
-					if (bufhdrp->type == USRP_TYPE_TEXT) {
-						char buf1[320];
+				/* Pass received text messages to Asterisk */
+				if (bufhdrp->type == USRP_TYPE_TEXT) {
+					struct ast_frame wf = {
+						.frametype = AST_FRAME_TEXT,
+						.data.ptr = bufdata,
+						.datalen = strlen(bufdata) + 1,
+						.src = __PRETTY_FUNCTION__,
+					};
 
-						insque((struct qelem *) qp, (struct qelem *) pvt->rxq.qe_back);
-						strcpy(buf1, bufdata);
-						memset(&fr, 0, sizeof(fr));
-						fr.data.ptr = buf1;
-						fr.datalen = strlen(buf1) + 1;
-						fr.samples = 0;
-						fr.frametype = AST_FRAME_TEXT;
-						fr.subclass.integer = 0;
-						fr.src = "chan_usrp";
-						fr.offset = 0;
-						fr.mallocd = 0;
-						fr.delivery.tv_sec = 0;
-						fr.delivery.tv_usec = 0;
-						ast_queue_frame(ast, &fr);
-					} else {
+					ast_queue_frame(ast, &wf);
+				} else {
+					qp = ast_malloc(sizeof(struct usrp_rxq));
+					if (qp) {
 						/* Queue the received voice frame for processing */
-						memcpy(qp->buf, bufdata, USRP_VOICE_FRAME_SIZE);
+						memcpy(qp->buf, bufdata, sizeof(qp->buf));
 						insque((struct qelem *) qp, (struct qelem *) pvt->rxq.qe_back);
 					}
 				}
 			}
 		}
 	}
-	fr.datalen = 0;
-	fr.samples = 0;
-	fr.frametype = 0;
-	fr.subclass.integer = 0;
-	fr.data.ptr = 0;
-	fr.src = type;
-	fr.offset = 0;
-	fr.mallocd = 0;
-	fr.delivery.tv_sec = 0;
-	fr.delivery.tv_usec = 0;
 
-	return &pvt->fr;
+	return &ast_null_frame;
 }
 
 /*!
@@ -613,18 +594,13 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			}
 		} else {
 			if (!pvt->rxkey) {
-				memset(&fr, 0, sizeof(fr));
-				fr.datalen = 0;
-				fr.samples = 0;
-				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
-				fr.data.ptr = 0;
-				fr.src = type;
-				fr.offset = 0;
-				fr.mallocd = 0;
-				fr.delivery.tv_sec = 0;
-				fr.delivery.tv_usec = 0;
-				ast_queue_frame(ast, &fr);
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_RADIO_KEY,
+					.src = __PRETTY_FUNCTION__,
+				};
+
+				ast_queue_frame(ast, &wf);
 				ast_debug(1, "Channel %s: RX ON\n", ast_channel_name(ast));
 			}
 			pvt->rxkey = MAX_RXKEY_TIME;
@@ -640,7 +616,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.frametype = AST_FRAME_VOICE;
 			fr.subclass.format = ast_format_slin;
 			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
-			fr.src = type;
+			fr.src = __PRETTY_FUNCTION__;
 			fr.offset = AST_FRIENDLY_OFFSET;
 			fr.mallocd = 0;
 			fr.delivery.tv_sec = 0;
@@ -666,18 +642,13 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 	}
 	if (pvt->rxkey == 1) {
-		memset(&fr, 0, sizeof(fr));
-		fr.datalen = 0;
-		fr.samples = 0;
-		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-		fr.data.ptr = 0;
-		fr.src = type;
-		fr.offset = 0;
-		fr.mallocd = 0;
-		fr.delivery.tv_sec = 0;
-		fr.delivery.tv_usec = 0;
-		ast_queue_frame(ast, &fr);
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(ast, &wf);
 		ast_debug(1, "Channel %s: RX OFF\n", ast_channel_name(ast));
 	}
 	/* Decrement the receive key counter.

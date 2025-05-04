@@ -54,7 +54,7 @@ static char remdtmfstr[] = "0123456789*#ABCD";
 int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
 {
 	char *s1, *s2, tmp[MAXNODESTR];
-	char digitbuf[MAXNODESTR], *strs[sizeof(myrpt->savednodes)];
+	char digitbuf[MAXNODESTR], *strs[ARRAY_LEN(myrpt->savednodes)];
 	char perma;
 	enum link_mode mode;
 	struct rpt_link *l;
