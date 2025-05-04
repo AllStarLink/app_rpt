@@ -1216,7 +1216,7 @@ static void *hidthread(void *arg)
 				char buf1[100];
 				struct ast_frame fr = {
 					.frametype = AST_FRAME_TEXT,
-					.src = "chan_simpleusb",
+					.src = __PRETTY_FUNCTION__,
 				};
 
 				for (i = 0; i < GPIO_PINCOUNT; i++) {
@@ -1259,7 +1259,7 @@ static void *hidthread(void *arg)
 					char buf1[100];
 					struct ast_frame fr = {
 						.frametype = AST_FRAME_TEXT,
-						.src = "chan_simpleusb",
+						.src = __PRETTY_FUNCTION__,
 					};
 
 					for (i = 10; i <= 15; i++) {
@@ -1653,7 +1653,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 	struct pocsag_batch *batch, *b;
 	short *audio;
 	char audio1[AST_FRIENDLY_OFFSET + (FRAME_SIZE * sizeof(short))];
-	struct ast_frame wf, *f1;
+	struct ast_frame *f1;
 
 #ifdef HAVE_SYS_IO
 	if (haspp == 2) {
@@ -1765,6 +1765,11 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), ALPHA, 0);
 			break;
 		case '?':				/* Query Page Status */
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_TEXT,
+				.src = __PRETTY_FUNCTION__,
+			};
+
 			i = 0;
 			ast_mutex_lock(&o->txqlock);
 			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
@@ -1772,10 +1777,8 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			}
 			ast_mutex_unlock(&o->txqlock);
 			cmd = (i) ? "PAGES" : "NOPAGES";
-			memset(&wf, 0, sizeof(wf));
-			wf.frametype = AST_FRAME_TEXT;
-			wf.datalen = strlen(cmd);
 			wf.data.ptr = cmd;
+			wf.datalen = strlen(cmd);
 			ast_queue_frame(o->owner, &wf);
 			return 0;
 		default:
@@ -1819,14 +1822,16 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 		free_batch(batch);
 		memset(audio1, 0, sizeof(audio1));
 		for (i = 0; i < audio_samples; i += FRAME_SIZE) {
-			memset(&wf, 0, sizeof(wf));
-			wf.frametype = AST_FRAME_VOICE;
-			wf.subclass.format = ast_format_slin;
-			wf.samples = FRAME_SIZE;
-			wf.datalen = FRAME_SIZE * 2;
-			wf.offset = AST_FRIENDLY_OFFSET;
-			wf.data.ptr = audio1 + AST_FRIENDLY_OFFSET;
-			wf.src = PAGER_SRC;
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_VOICE,
+				.subclass.format = ast_format_slin,
+				.samples = FRAME_SIZE,
+				.data.ptr = audio1 + AST_FRIENDLY_OFFSET,
+				.datalen = FRAME_SIZE * 2,
+				.offset = AST_FRIENDLY_OFFSET,
+				.src = PAGER_SRC,
+			};
+
 			memcpy(wf.data.ptr, (char *) (audio + i), FRAME_SIZE * 2);
 			f1 = ast_frdup(&wf);
 			if (!f1) {
@@ -1986,14 +1991,20 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	/* Set frame defaults */
 	memset(f, 0, sizeof(struct ast_frame));
 	f->frametype = AST_FRAME_NULL;
-	f->src = simpleusb_tech.type;
+	f->src = __PRETTY_FUNCTION__;
 
 	/* if USB device not ready, just return NULL frame */
 	if (!o->hasusb) {
 		if (o->rxkeyed) {
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+				.src = __PRETTY_FUNCTION__,
+			};
+
 			o->lastrx = 0;
 			o->rxkeyed = 0;
-			ast_indicate(o->owner, AST_CONTROL_RADIO_UNKEY);
+			ast_queue_frame(o->owner, &wf);
 		}
 		return &ast_null_frame;
 	}
@@ -2047,7 +2058,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		ast_mutex_unlock(&o->echolock);
 	}
 
-		/* Process the transmit queue */
+	/* Process the transmit queue */
 
 	for (;;) {
 		num_frames = 0;
@@ -2147,11 +2158,14 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 					src += l;
 					o->simpleusb_write_dst = 0;
 					if (o->waspager && (!ispager)) {
-						memset(&wf1, 0, sizeof(wf1));
-						wf1.frametype = AST_FRAME_TEXT;
-						wf1.datalen = strlen(ENDPAGE_STR) + 1;
-						wf1.data.ptr = ENDPAGE_STR;
-						ast_queue_frame(o->owner, &wf1);
+						struct ast_frame wf = {
+							.frametype = AST_FRAME_TEXT,
+							.data.ptr = ENDPAGE_STR,
+							.datalen = strlen(ENDPAGE_STR) + 1,
+							.src = __PRETTY_FUNCTION__,
+						};
+
+						ast_queue_frame(o->owner, &wf);
 					}
 					o->waspager = ispager;
 				} else {		
@@ -2285,14 +2299,26 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 
 	/* Send a message to indicate rx signal detect conditions */
 	if (o->lastrx && (!o->rxkeyed)) {
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		o->lastrx = 0;
-		ast_indicate(o->owner, AST_CONTROL_RADIO_UNKEY);
+		ast_queue_frame(o->owner, &wf);
 		if (o->duplex3) {
 			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 		}
 	} else if ((!o->lastrx) && (o->rxkeyed)) {
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_KEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		o->lastrx = 1;
-		ast_indicate(o->owner, AST_CONTROL_RADIO_KEY);
+		ast_queue_frame(o->owner, &wf);
 		if (o->duplex3) {
 			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
 		}
@@ -3684,10 +3710,10 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 
 /*!
  * \brief Store configuration.
- *	Initializes chan_usbradio and loads it with the configuration data.
+ *	Initializes chan_simpleusb and loads it with the configuration data.
  * \param cfg			ast_config structure.
  * \param ctg			Category.
- * \return				chan_usbradio_pvt.
+ * \return				chan_simpleusb_pvt.
  */
 static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, const char *ctg)
 {

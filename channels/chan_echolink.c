@@ -1216,8 +1216,8 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 static void copy_sdes_item(const char *source, char *dest, int destlen)
 {
 	int len = source[1] & 0xFF;
-	if (len > destlen) {
-		len = destlen;
+	if (len > destlen - 1) {
+		len = destlen - 1;
 	}
 	memcpy(dest, source + 2, len);
 	dest[len] = 0;
@@ -2221,6 +2221,7 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 	struct ast_frame fr = {
 		.frametype = AST_FRAME_CONTROL,
 		.subclass.integer = AST_CONTROL_ANSWER,
+		.src = __PRETTY_FUNCTION__,
 	};
 
 	if (p->hangup) {
@@ -2256,6 +2257,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct ast_frame fr3 = {
 		.frametype = AST_FRAME_CONTROL,
 		.subclass.integer = AST_CONTROL_ANSWER,
+		.src = __PRETTY_FUNCTION__,
 	};
 
 	if (!p->last_firstheard && p->firstheard) {
@@ -2305,11 +2307,13 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			}
 		} else {
 			if (!p->rxkey) {
-				memset(&fr, 0, sizeof(fr));
-				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
-				fr.src = type;
-				ast_queue_frame(ast, &fr);
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_RADIO_KEY,
+					.src = __PRETTY_FUNCTION__,
+				};
+
+				ast_queue_frame(ast, &wf);
 			}
 			p->rxkey = MAX_RXKEY_TIME;
 			ast_mutex_lock(&p->lock);
@@ -2325,8 +2329,8 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.frametype = AST_FRAME_VOICE;
 			fr.subclass.format = ast_format_gsm;
 			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
-			fr.src = type;
 			fr.offset = AST_FRIENDLY_OFFSET;
+			fr.src = __PRETTY_FUNCTION__;
 
 			x = 0;
 			if (p->dsp) {
@@ -2349,11 +2353,13 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 	}
 	if (p->rxkey == 1) {
-		memset(&fr, 0, sizeof(fr));
-		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-		fr.src = type;
-		ast_queue_frame(ast, &fr);
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_KEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(ast, &wf);
 	}
 	if (p->rxkey) {
 		p->rxkey--;
@@ -3341,10 +3347,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 {
 	struct el_node *el_node_key;
 	struct ast_channel *chan;
-	struct ast_frame fr = {
-		.frametype = AST_FRAME_CONTROL,
-		.subclass.integer = AST_CONTROL_ANSWER,
-	};
 	const struct eldb *mynode;
 	char nodestr[30];
 	time_t now;
@@ -3373,6 +3375,12 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip, el_node_key->nodenum, el_node_key->name);
 		if (pvt == NULL) {	/* if a new inbound call */
+			struct ast_frame fr = {
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_ANSWER,
+				.src = __PRETTY_FUNCTION__,
+			};
+
 			pvt = el_alloc(instp->name);
 			if (!pvt) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
@@ -3389,7 +3397,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
-			fr.src = type;
 			ast_queue_frame(chan, &fr);
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
@@ -3594,7 +3601,7 @@ static void *el_reader(void *data)
 					items.item[0].r_text = NULL;
 					parse_sdes((unsigned char *) buf, &items);
 					if (items.item[0].r_text != NULL) {
-						copy_sdes_item(items.item[0].r_text, call_name, 127);
+						copy_sdes_item(items.item[0].r_text, call_name, sizeof(call_name));
 					}
 					if (call_name[0] != '\0') {
 						call = call_name;

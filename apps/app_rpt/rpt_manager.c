@@ -145,6 +145,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			struct ast_channel *rxchan = NULL;
 			char rxchanname[256];
 			int pseudo = 0;
+
 			rpt_manager_success(ses, m);
 			astman_append(ses, "Node: %s\r\n", node);
 
@@ -222,7 +223,6 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 					continue;
 				}
 				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
-					rpt_mutex_unlock(&myrpt->lock);
 					ast_free(lbuf);
 					return -1;
 				}

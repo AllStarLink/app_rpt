@@ -514,12 +514,10 @@ void rpt_update_links(struct rpt *myrpt)
 
 	buf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!buf) {
-		ast_mutex_unlock(&myrpt->lock);
 		return;
 	}
 	obuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!obuf) {
-		ast_mutex_unlock(&myrpt->lock);
 		ast_free(buf);
 		return;
 	}

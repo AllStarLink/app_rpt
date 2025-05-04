@@ -1926,6 +1926,7 @@ treataslocal:
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) {
 			set_mode_ic706(myrpt, REM_MODE_AM);
 			if (play_tone(mychannel, 800, 6000, 8192) == -1) {
+				ast_mutex_unlock(&myrpt->remlock);
 				break;
 			}
 			ast_safe_sleep(mychannel, 500);
@@ -1939,6 +1940,7 @@ treataslocal:
 			set_mode_ft100(myrpt, REM_MODE_AM);
 			simple_command_ft100(myrpt, 0x0f, 1);
 			if (play_tone(mychannel, 800, 6000, 8192) == -1) {
+				ast_mutex_unlock(&myrpt->remlock);
 				break;
 			}
 			simple_command_ft100(myrpt, 0x0f, 0);
@@ -1954,6 +1956,7 @@ treataslocal:
 		ast_safe_sleep(mychannel, 500);
 		myrpt->tunetx = 1;
 		if (play_tone(mychannel, 800, 6000, 8192) == -1) {
+			ast_mutex_unlock(&myrpt->remlock);
 			break;
 		}
 		myrpt->tunetx = 0;

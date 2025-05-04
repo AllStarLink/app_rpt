@@ -343,7 +343,6 @@ struct TLB_pvt {
 	struct TLB_textq textq;
 	struct ast_module_user *u;
 	unsigned int nodenum;
-	char *linkstr;
 	uint32_t dtmflastseq;
 	uint32_t dtmflasttime;
 	uint32_t dtmfseq;
@@ -920,9 +919,6 @@ static void TLB_destroy(struct TLB_pvt *p)
 		ast_free(textp->buf);
 		ast_free(qptlb);
 	}
-	if (p->linkstr)
-		ast_free(p->linkstr);
-	p->linkstr = NULL;
 	ast_module_user_remove(p->u);
 	ast_free(p);
 }
@@ -1434,17 +1430,19 @@ static int find_delete(struct TLB_node *key)
 static struct ast_frame *TLB_xread(struct ast_channel *ast)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
-	struct ast_frame fr = {
-		.frametype = AST_FRAME_CONTROL,
-		.subclass.integer = AST_CONTROL_ANSWER,
-	};
 
 	if (p->hangup) {
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
 	}
 	if (!p->last_firstheard && p->firstheard) {
-		ast_queue_frame(ast, &fr);
+		struct ast_frame fra = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_ANSWER,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(ast, &fra);
 		p->firstheard = 0;
 		p->last_firstheard = 1;
 	}
@@ -1471,11 +1469,6 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	int n, m;
 	struct TLB_rxqtlb *qptlb;
 	struct TLB_textq *textq;
-	struct ast_frame fra = {
-		.frametype = AST_FRAME_CONTROL,
-		.subclass.integer = AST_CONTROL_ANSWER,
-	};
-
 	char buf[RTPBUF_SIZE + AST_FRIENDLY_OFFSET];
 
 	if (frame->frametype != AST_FRAME_VOICE) {
@@ -1486,6 +1479,12 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		p->hangup = 0;
 	}
 	if (!p->last_firstheard && p->firstheard) {
+		struct ast_frame fra = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_ANSWER,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		ast_queue_frame(ast, &fra);
 		p->firstheard = 0;
 		p->last_firstheard = 1;
@@ -1538,11 +1537,13 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			}
 		} else {
 			if (!p->rxkey) {
-				memset(&fr, 0, sizeof(fr));
-				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
-				fr.src = type;
-				ast_queue_frame(ast, &fr);
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_RADIO_KEY,
+					.src = __PRETTY_FUNCTION__,
+				};
+
+				ast_queue_frame(ast, &wf);
 			}
 			p->rxkey = MAX_RXKEY_TIME;
 			ast_mutex_lock(&p->lock);
@@ -1558,17 +1559,19 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.frametype = AST_FRAME_VOICE;
 			fr.subclass.format = tlb_codecs[p->rxcodec].format;
 			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
-			fr.src = type;
 			fr.offset = AST_FRIENDLY_OFFSET;
+			fr.src = __PRETTY_FUNCTION__;
 			ast_queue_frame(ast, &fr);
 		}
 	}
 	if (p->rxkey == 1) {
-		memset(&fr, 0, sizeof(fr));
-		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-		fr.src = type;
-		ast_queue_frame(ast, &fr);
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(ast, &wf);
 	}
 	if (p->rxkey) {
 		p->rxkey--;
@@ -2019,10 +2022,6 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 {
 	struct TLB_node *TLB_node_key = NULL;
 	struct ast_channel *chan;
-	struct ast_frame fr = {
-		.frametype = AST_FRAME_CONTROL,
-		.subclass.integer = AST_CONTROL_ANSWER,
-	};
 	struct ast_config *cfg = NULL;
 	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
@@ -2088,6 +2087,12 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 			TLB_node_key->p = instp->confp;
 		} else {
 			if (p == NULL) {	/* if a new inbound call */
+				struct ast_frame fr = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_ANSWER,
+					.src = __PRETTY_FUNCTION__,
+				};
+
 				p = TLB_alloc((void *) instp->name);
 				if (!p) {
 					ast_log(LOG_ERROR, "Cannot alloc TLB channel\n");
@@ -2103,7 +2108,6 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 				}
 				tlb_set_nativeformats(chan, p->txcodec, p->rxcodec);
 				ast_debug(1, "tlb: tx codec set to %s\n", tlb_codecs[p->txcodec].name);
-				fr.src = type;
 				ast_queue_frame(chan, &fr);
 			} else {
 				TLB_node_key->p = p;
