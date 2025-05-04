@@ -2993,29 +2993,36 @@ static inline int rpt_any_hangups(struct rpt *myrpt)
 
 static inline void log_keyed(struct rpt *myrpt)
 {
-	char mydate[100], myfname[512];
-	const char *myformat;
-
 	if (myrpt->monstream) {
 		ast_closestream(myrpt->monstream);
 	}
 	myrpt->monstream = 0;
 	if (myrpt->p.archivedir) {
-		long blocksleft;
+		int do_archive = 0;
 
-		donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
-		snprintf(myfname, sizeof(myfname), "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
-		myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
-		myrpt->monstream =
-			ast_writefile(myfname, myformat, "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
-		if (myrpt->p.monminblocks) {
-			blocksleft = diskavail(myrpt);
-			if (blocksleft >= myrpt->p.monminblocks) {
-				donodelog(myrpt, "TXKEY,MAIN");
+		if (myrpt->p.archiveaudio) {
+			do_archive = 1;
+			if (myrpt->p.monminblocks) {
+				long blocksleft;
+
+				blocksleft = diskavail(myrpt);
+				if (blocksleft < myrpt->p.monminblocks) {
+					do_archive = 0;
+				}
 			}
-		} else {
-			donodelog(myrpt, "TXKEY,MAIN");
 		}
+
+		if (do_archive) {
+			char mydate[100], myfname[PATH_MAX];
+			const char *myformat;
+
+			donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
+			snprintf(myfname, sizeof(myfname), "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
+			myformat = S_OR(myrpt->p.archiveformat, "wav49");
+			myrpt->monstream = ast_writefile(myfname, myformat, "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
+		}
+
+		donodelog(myrpt, "TXKEY,MAIN");
 	}
 	rpt_update_boolean(myrpt, "RPT_TXKEYED", 1);
 	myrpt->txkeyed = 1;
@@ -3832,21 +3839,31 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			}
 			if (myrpt->p.archivedir) {
 				if (myrpt->p.duplex < 2) {
-					char myfname[512], mydate[100];
-					const char *myformat;
-					long blocksleft;
+					int do_archive = 0;
 
-					donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
-					snprintf(myfname, sizeof(myfname), "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
-					myformat = myrpt->p.archiveformat ? myrpt->p.archiveformat : "wav49";
-					if (myrpt->p.monminblocks) {
-						blocksleft = diskavail(myrpt);
-						if (blocksleft >= myrpt->p.monminblocks) {
-							myrpt->monstream =
-								ast_writefile(myfname, myformat, "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
+					if (myrpt->p.archiveaudio) {
+						do_archive = 1;
+						if (myrpt->p.monminblocks) {
+							long blocksleft;
+
+							blocksleft = diskavail(myrpt);
+							if (blocksleft < myrpt->p.monminblocks) {
+								do_archive = 0;
+							}
 						}
 					}
+
+					if (do_archive) {
+						char mydate[100], myfname[PATH_MAX];
+						const char *myformat;
+
+						donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
+						snprintf(myfname, sizeof(myfname), "%s/%s/%s", myrpt->p.archivedir, myrpt->name, mydate);
+						myformat = S_OR(myrpt->p.archiveformat, "wav49");
+						myrpt->monstream = ast_writefile(myfname, myformat, "app_rpt Air Archive", O_CREAT | O_APPEND, 0, 0644);
+					}
 				}
+
 				donodelog(myrpt, "RXKEY,MAIN");
 			}
 			rpt_update_boolean(myrpt, "RPT_RXKEYED", 1);
@@ -4701,10 +4718,11 @@ static void *rpt(void *this)
 	struct ast_format_cap *cap;
 	struct timeval looptimestart;
 
-	if (myrpt->p.archivedir)
+	if (myrpt->p.archivedir) {
 		mkdir(myrpt->p.archivedir, 0700);
-	snprintf(tmpstr, sizeof(tmpstr), "%s/%s", myrpt->p.archivedir, myrpt->name);
-	mkdir(tmpstr, 0775);
+		snprintf(tmpstr, sizeof(tmpstr), "%s/%s", myrpt->p.archivedir, myrpt->name);
+		mkdir(tmpstr, 0775);
+	}
 	myrpt->ready = 0;
 	if (!myrpt->macrobuf) {
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
@@ -7049,28 +7067,34 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if ((b1[0] == '0') && b && b[0] && (strlen(b) <= 8))
 		b1 = b;
 	if (myrpt->p.archivedir) {
-		char mycmd[512], mydate[100];
-		char filename[PATH_MAX];
-		long blocksleft;
+		int do_archive = 0;
 
-		mkdir(myrpt->p.archivedir, 0700);
-		snprintf(mycmd, sizeof(mycmd), "%s/%s", myrpt->p.archivedir, myrpt->name);
-		mkdir(mycmd, 0775);
-		donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
-		snprintf(filename, sizeof(filename), "%s/%s/%s.%s", myrpt->p.archivedir, myrpt->name, mydate, S_OR(myrpt->p.archiveformat, "wav49"));
-		if (myrpt->p.monminblocks) {
-			blocksleft = diskavail(myrpt);
-			if (myrpt->p.remotetimeout) {
-				blocksleft -= (myrpt->p.remotetimeout * MONITOR_DISK_BLOCKS_PER_MINUTE) / 60;
+		if (myrpt->p.archiveaudio) {
+			do_archive = 1;
+			if (myrpt->p.monminblocks) {
+				long blocksleft;
+
+				blocksleft = diskavail(myrpt);
+				if (myrpt->p.remotetimeout) {
+					blocksleft -= (myrpt->p.remotetimeout * MONITOR_DISK_BLOCKS_PER_MINUTE) / 60;
+				}
+				if (blocksleft < myrpt->p.monminblocks) {
+					do_archive = 0;
+				}
 			}
-			if (blocksleft >= myrpt->p.monminblocks) {
-				ast_start_mixmonitor(chan, filename, "a");
-			}
-		} else {
-			ast_start_mixmonitor(chan, filename, "a");
 		}
-		snprintf(mycmd, sizeof(mycmd), "CONNECT,%s", b1);
-		donodelog(myrpt, mycmd);
+
+		if (do_archive) {
+			char mydate[100], myfname[PATH_MAX];
+			const char *myformat;
+
+			donode_make_datestr(mydate, sizeof(mydate), NULL, myrpt->p.archivedatefmt);
+			myformat = S_OR(myrpt->p.archiveformat, "wav49");
+			snprintf(myfname, sizeof(myfname), "%s/%s/%s.%s", myrpt->p.archivedir, myrpt->name, mydate, myformat);
+			ast_start_mixmonitor(chan, myfname, "a");
+		}
+
+		donodelog_fmt(myrpt, "CONNECT,%s", b1);
 		rpt_update_links(myrpt);
 		doconpgm(myrpt, b1);
 	}
@@ -7384,8 +7408,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 	if (myrpt->p.archivedir || myrpt->p.discpgm) {
-		char mycmd[100];
-
 		/* look at callerid to see what node this comes from */
 		if (!ast_channel_caller(chan)->id.number.str) {	/* if doesn't have caller id */
 			b1 = "0";
@@ -7393,10 +7415,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_callerid_parse(ast_channel_caller(chan)->id.number.str, &b, &b1);
 			ast_shrink_phone_number(b1);
 		}
-		snprintf(mycmd, sizeof(mycmd), "DISCONNECT,%s", b1);
 		rpt_update_links(myrpt);
 		if (myrpt->p.archivedir) {
-			donodelog(myrpt, mycmd);
+			donodelog_fmt(myrpt, "DISCONNECT,%s", b1);
 		}
 		dodispgm(myrpt, b1);
 	}

@@ -660,6 +660,7 @@ struct rpt {
 		int iospeed;
 		char funcchar;
 		char endchar;
+		unsigned int archiveaudio:1;
 		unsigned int nobusyout:1;
 		unsigned int notelemtx:1;
 		unsigned int propagate_dtmf:1;
