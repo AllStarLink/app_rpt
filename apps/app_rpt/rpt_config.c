@@ -69,7 +69,7 @@ int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name
 	return ret;
 }
 
-int get_wait_interval(struct rpt *myrpt, int type)
+int get_wait_interval(struct rpt *myrpt, enum rpt_delay type)
 {
 	int interval;
 	char *wait_times;

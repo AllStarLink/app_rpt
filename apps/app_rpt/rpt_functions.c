@@ -51,7 +51,8 @@ char *dtmf_tones[] = {
 
 static char remdtmfstr[] = "0123456789*#ABCD";
 
-int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *s1, *s2, tmp[MAXNODESTR];
 	char digitbuf[MAXNODESTR], *strs[ARRAY_LEN(myrpt->savednodes)];
@@ -401,10 +402,13 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 	return DC_INDETERMINATE;
 }
 
-int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *s, *s1, *s2;
-	int i, j, p, r, ht, k, l, ls2, m, d, offset, offsave, modesave, defmode;
+	int i, j, p, r, ht, k, l, ls2, m, d, offsave, modesave;
+	enum rpt_mode defmode;
+	enum rpt_offset offset;
 	char multimode = 0;
 	char oc, *cp, *cp1, *cp2;
 	char tmp[15], freq[15] = "", savestr[15] = "";
@@ -872,10 +876,12 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 	default:
 		break;
 	}
+
 	return DC_INDETERMINATE;
 }
 
-int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	int i, index, paramlength, nostar = 0;
 	char *lparam;
@@ -977,7 +983,8 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 	return DC_COMPLETE;
 }
 
-int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
 		return DC_ERROR;
@@ -1002,7 +1009,8 @@ int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int com
 	return DC_COMPLETE;
 }
 
-int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_status(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	struct rpt_tele *telem;
 
@@ -1076,7 +1084,8 @@ int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_
 	return DC_INDETERMINATE;
 }
 
-int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_macro(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	const char *val;
 	int i;
@@ -1111,7 +1120,8 @@ int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 	return DC_COMPLETE;
 }
 
-int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_playback(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	if (myrpt->remote)
 		return DC_ERROR;
@@ -1126,9 +1136,9 @@ int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int comman
 	return DC_COMPLETE;
 }
 
-int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_localplay(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-
 	if (myrpt->remote)
 		return DC_ERROR;
 
@@ -1141,13 +1151,15 @@ int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int comma
 	return DC_COMPLETE;
 }
 
-int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char string[50], func[100];
 	char paramcopy[500];
 	int argc;
 	char *argv[101], *cp;
-	int i, j, k, r, src;
+	int i, j, k, r;
+	enum rpt_linkmode src;
 	struct rpt_tele *telem;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -1438,7 +1450,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 	case 36:					/* Link Output Enable */
 		if (!mylink)
 			return DC_ERROR;
-		src = 0;
+		src = LINKMODE_OFF;
 		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
 			src = LINKMODE_GUI;
 		if (mylink->phonemode)
@@ -1747,9 +1759,9 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 	return DC_INDETERMINATE;
 }
 
-int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_meter(
+	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-
 	if (myrpt->remote)
 		return DC_ERROR;
 
@@ -1760,9 +1772,9 @@ int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 	return DC_COMPLETE;
 }
 
-int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_userout(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-
 	if (myrpt->remote)
 		return DC_ERROR;
 
@@ -1773,7 +1785,8 @@ int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command
 	return DC_COMPLETE;
 }
 
-int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *cp;
 

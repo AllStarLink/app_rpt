@@ -1493,7 +1493,7 @@ void *rpt_call(void *this)
 /*
 * Collect digits one by one until something matches
 */
-static int collect_function_digits(struct rpt *myrpt, char *digits, int command_source, struct rpt_link *mylink)
+static enum rpt_function_response collect_function_digits(struct rpt *myrpt, char *digits, int command_source, struct rpt_link *mylink)
 {
 	int i, rv;
 	char *stringp, *action, *param, *functiondigits;
@@ -1567,7 +1567,7 @@ static int collect_function_digits(struct rpt *myrpt, char *digits, int command_
 	return (rv);
 }
 
-static inline void collect_function_digits_post(struct rpt *myrpt, int res, const char *cmd, struct rpt_link *mylink)
+static inline void collect_function_digits_post(struct rpt *myrpt, enum rpt_function_response res, const char *cmd, struct rpt_link *mylink)
 {
 	switch (res) {
 	case DC_INDETERMINATE:
@@ -2089,8 +2089,8 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int phonemode)
 {
 	time_t now;
-	int ret, res = 0, src;
-
+	int res = 0, src;
+	enum rpt_function_response ret;
 	ast_debug(7, "c=%c  phonemode=%i  dtmfidx=%i\n", c, phonemode, myrpt->dtmfidx);
 
 	time(&myrpt->last_activity_time);
@@ -2382,7 +2382,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 /* 0 return=continue, 1 return = break, -1 return = error */
 static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 {
-	int res;
+	enum rpt_function_response res;
 	char cmd[MAXDTMF + 1] = "", c, tone[10];
 
 	c = c_in & 0x7f;
@@ -2453,7 +2453,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			cancel_pfxtone(myrpt);
 
 			if (myrpt->dtmfidx < MAXDTMF) {
-				int src;
+				enum rpt_command_source src;
 
 				myrpt->dtmfbuf[myrpt->dtmfidx++] = c;
 				myrpt->dtmfbuf[myrpt->dtmfidx] = 0;
@@ -6697,6 +6697,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			l->newkeytimer = 0;
 		}
 		voxinit_link(l, 1);
+		/*! \todo XXX These init_linkmode() calls do nothing.
+		 * After using enum, the compiler pointed it out.
+		 * Need to research what they used to do in ASL2...
+		 */
 		if (!strcasecmp(ast_channel_tech(chan)->type, "echolink"))
 			init_linkmode(myrpt, l, LINKMODE_ECHOLINK);
 		else if (!strcasecmp(ast_channel_tech(chan)->type, "tlb"))
@@ -7013,7 +7017,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->dtmfidx = -1;
 	myrpt->dtmfbuf[0] = 0;
 	myrpt->dtmf_time_rem = 0;
-	myrpt->hfscanmode = 0;
+	myrpt->hfscanmode = HF_SCAN_OFF;
 	myrpt->hfscanstatus = 0;
 	if (myrpt->p.startupmacro) {
 		ast_str_set(&myrpt->macrobuf, 0, "PPPP%s", myrpt->p.startupmacro);
@@ -7431,7 +7435,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		usleep(50000);
 	ast_stop_mixmonitor(chan, NULL);
 	rpt_mutex_lock(&myrpt->lock);
-	myrpt->hfscanmode = 0;
+	myrpt->hfscanmode = HF_SCAN_OFF;
 	myrpt->hfscanstatus = 0;
 	myrpt->remoteon = 0;
 	rpt_mutex_unlock(&myrpt->lock);

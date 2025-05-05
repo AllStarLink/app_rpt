@@ -403,7 +403,10 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 
 			if (myrpt->remote) {	/* Remote base ? */
 				char *loginuser, *loginlevel, *freq, *rxpl, *txpl, *modestr;
-				char offset = 0, powerlevel = 0, rxplon = 0, txplon = 0, remoteon, remmode = 0, reportfmstuff;
+				char rxplon = 0, txplon = 0, remoteon, reportfmstuff;
+				enum rpt_mode remmode = REM_MODE_FM;
+				enum rpt_power powerlevel = REM_LOWPWR;
+				enum rpt_offset offset = REM_SIMPLEX;
 				char offsetc, powerlevelc;
 
 				loginuser = loginlevel = freq = rxpl = txpl = NULL;

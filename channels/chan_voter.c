@@ -243,6 +243,7 @@ Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or 
 #include "asterisk/format_cache.h"
 #include "asterisk/format_compatibility.h"
 #include "asterisk/timing.h"
+#include "asterisk/rpt_chan_shared.h"
 
 #include "../apps/app_rpt/pocsag.c"
 
@@ -519,7 +520,7 @@ struct voter_pvt {
 	char txctcssfreq[32];
 	int txctcsslevel;
 	int txctcsslevelset;
-	int txtoctype;
+	enum usbradio_carrier_type txtoctype;
 	int order;
 	struct ast_frame *adpcmf1;
 	struct ast_frame *nulawf1;

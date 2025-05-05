@@ -20,9 +20,9 @@
 #include "rpt_xcat.h"
 #include "rpt_rig.h"
 
-int check_freq_xcat(int m, int d, int *defmode)
+int check_freq_xcat(int m, int d, enum rpt_mode *defmode)
 {
-	int dflmd = REM_MODE_FM;
+	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (m == 144) {				/* 2 meters */
 		if (d < 10100)
@@ -96,7 +96,7 @@ static int set_freq_xcat(struct rpt *myrpt, char *newfreq)
 	return (civ_cmd(myrpt, cmdstr, 11));
 }
 
-static int set_offset_xcat(struct rpt *myrpt, char offset)
+static int set_offset_xcat(struct rpt *myrpt, enum rpt_offset offset)
 {
 	unsigned char c, cmdstr[20];
 	int mysplit;
@@ -145,7 +145,6 @@ static int set_offset_xcat(struct rpt *myrpt, char offset)
 	}
 
 	return simple_command_xcat(myrpt, 0x0f, c);
-
 }
 
 /* Set transmit and receive ctcss tone frequencies */
