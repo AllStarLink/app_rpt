@@ -1707,8 +1707,9 @@ static int el_text(struct ast_channel *ast, const char *text)
 						ast_str_append(&pkt, 0, "\r    ");
 						k = ast_str_strlen(pkt) - 4;
 					}
-					if (!j++) {
+					if (!j) {
 						ast_str_append(&pkt, 0, "AllStar:");
+						j = 1;
 					}
 					ast_str_append(&pkt, 0, " %s%s", node, mode == 'T' ? "" : "(M)");
 				}
@@ -1720,6 +1721,7 @@ static int el_text(struct ast_channel *ast, const char *text)
 			for (x = 0; x < i; x++) {
 				char mode = *strs[x];
 				char *node = strs[x] + 1;
+				struct eldb node_result;
 
 				/* Process echolink node numbers - they start with 3 */
 				if (*node == '3') {
@@ -1729,10 +1731,16 @@ static int el_text(struct ast_channel *ast, const char *text)
 						ast_str_append(&pkt, 0, "\r    ");
 						k = ast_str_strlen(pkt) - 4;
 					}
-					if (!j++) {
+					if (!j) {
 						ast_str_append(&pkt, 0, "Echolink:");
+						j = 1;
 					}
-					ast_str_append(&pkt, 0, " %d%s", atoi(node), mode == 'T' ? "" : "(M)");
+					lookup_node_by_nodenum(node, &node_result);
+					if (node_result.callsign[0]) {
+						ast_str_append(&pkt, 0, " %s%s", node_result.callsign, mode == 'T' ? "" : "(M)");
+					} else {
+						ast_str_append(&pkt, 0, " %d%s", atoi(node), mode == 'T' ? "" : "(M)");
+					}
 				}
 			}
 			ast_str_append(&pkt, 0, "\r");
