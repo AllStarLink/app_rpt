@@ -2355,7 +2355,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (p->rxkey == 1) {
 		struct ast_frame wf = {
 			.frametype = AST_FRAME_CONTROL,
-			.subclass.integer = AST_CONTROL_RADIO_KEY,
+			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 			.src = __PRETTY_FUNCTION__,
 		};
 
