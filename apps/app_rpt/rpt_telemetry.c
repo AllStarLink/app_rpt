@@ -2828,21 +2828,21 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			
 			/* If the app_gps custom function GPS_READ exists, read the GPS position */
 			if (!ast_custom_function_find("GPS_READ")) {
-				break;
+				return;
 			}				
 			if (ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
-				break;
+				return;
 			}
 
 			/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
 			if (sscanf(gps_data, N_FMT(llu) " %*u " S_FMT(LAT_SZ) S_FMT(LON_SZ) S_FMT(ELEV_SZ), &u_mono, lat, lon, elev) != 4) {
-				break;
+				return;
 			}
 
 			was_mono = (time_t) u_mono;
 			t_mono = rpt_time_monotonic();
 			if ((was_mono + GPS_VALID_SECS) < t_mono) {
-				break;
+				return;
 			}
 			snprintf(mystr, sizeof(mystr), "STATS_GPS,%s,%s,%s,%s", myrpt->name, lat, lon, elev);
 			send_tele_link(myrpt, mystr);
