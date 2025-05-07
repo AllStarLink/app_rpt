@@ -6133,7 +6133,7 @@ static int rpt_handle_call(struct rpt_link *l, struct rpt *myrpt)
 		.frametype = AST_FRAME_CNG,
 		.src = __PRETTY_FUNCTION__,
 	};
-
+	looptimestart = rpt_tvnow();
 	while (!l->killme) {
 		int remnomute, remrx, totx, mymaxct, myfirst = 0;
 		struct timeval now;
@@ -6268,26 +6268,16 @@ static int rpt_handle_call(struct rpt_link *l, struct rpt *myrpt)
 			l->connecttime = rpt_tvnow();
 		}
 
-		/* ignore non-timing channels */
-		if (l->elaptime < 0) {
-			l = l->next;
-			continue;
-		}
 		l->elaptime += elap;
 		mymaxct = MAXCONNECTTIME;
 		/* if connection has taken too long */
 		if ((l->elaptime > mymaxct) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
 			l->elaptime = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			if (l->chan)
-				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
 		max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
 
 		if (!l->chan && !l->retrytimer && l->outbound && !max_retries && l->hasconnected) {
-			rpt_mutex_unlock(&myrpt->lock);
 			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
 				if (attempt_reconnect(myrpt, l) == -1) {
 					l->retrytimer = RETRY_TIMER_MS;
@@ -6295,12 +6285,11 @@ static int rpt_handle_call(struct rpt_link *l, struct rpt *myrpt)
 			} else {
 				l->retries = l->max_retries + 1;
 			}
-
-			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
 		if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
 			/* remove from queue */
+			rpt_mutex_lock(&myrpt->lock);
 			rpt_link_remove(myrpt, l);
 			if (!strcmp(myrpt->cmdnode, l->name))
 				myrpt->cmdnode[0] = 0;
@@ -6316,15 +6305,12 @@ static int rpt_handle_call(struct rpt_link *l, struct rpt *myrpt)
 			if (myrpt->p.archivedir) {
 				donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 			}
-			/* hang-up on call to device */
-			ast_hangup(l->pchan);
-			rpt_link_free(l);
-			rpt_mutex_lock(&myrpt->lock);
 			break;
 		}
 		if ((!l->chan) && (!l->disctime) && (!l->outbound)) {
 			ast_debug(1, "LINKDISC AA\n");
 			/* remove from queue */
+			rpt_mutex_lock(&myrpt->lock);
 			rpt_link_remove(myrpt, l);
 			if (myrpt->links.next == &myrpt->links)
 				channel_revert(myrpt);
@@ -6342,18 +6328,17 @@ static int rpt_handle_call(struct rpt_link *l, struct rpt *myrpt)
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
 			rpt_link_free(l);
-
-			rpt_mutex_lock(&myrpt->lock);
-			break;
+			return 0;
 		}
 		if (!ms) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
-			rpt_mutex_unlock(&myrpt->lock);
+			continue;
 		}
 
 		remrx = 0;
 		/* see if any other links are receiving */
+		rpt_mutex_lock(&myrpt->lock);
 		m = myrpt->links.next;
 		while (m != &myrpt->links) {
 			/* if not the link we are currently processing, and not localonly count it */
@@ -6403,7 +6388,6 @@ static int rpt_handle_call(struct rpt_link *l, struct rpt *myrpt)
 			f = ast_read(l->chan);
 			if (!f) {
 				ast_debug(3, "Failed to read frame on %s, must've hung up\n", ast_channel_name(l->chan));
-				remote_hangup_helper(myrpt, l);
 				break;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
@@ -6564,15 +6548,12 @@ static int rpt_handle_call(struct rpt_link *l, struct rpt *myrpt)
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {
 					ast_frfree(f);
 					ast_debug(3, "Received hangup frame on %s\n", ast_channel_name(l->chan));
-					remote_hangup_helper(myrpt, l);
-					return 0;
+					break;
 				}
 			}
 			ast_frfree(f);
-			return 0;
 		} else if (who == l->pchan) { /* Process frames from the conference */
 			struct ast_frame *f;
-			rpt_mutex_unlock(&myrpt->lock);
 			f = ast_read(l->pchan);
 			if (!f) {
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
@@ -6612,22 +6593,20 @@ static int rpt_handle_call(struct rpt_link *l, struct rpt *myrpt)
 			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
 				ast_frfree(f);
-				break;
 			}
 			ast_frfree(f);
-			break;
 		}
-		rpt_mutex_unlock(&myrpt->lock);
 	}
-
+	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_remove(myrpt, l);
+	rpt_mutex_unlock(&myrpt->lock);
 	if (!strcmp(myrpt->cmdnode, l->name)) {
 		myrpt->cmdnode[0] = 0;
 	}
 
 	ast_hangup(l->pchan);
 	rpt_link_free(l);
-	return 0;
+	return -1; /* l->chan handled by Asterisk cleanup */
 }
 
 static int rpt_exec(struct ast_channel *chan, const char *data)
@@ -7248,8 +7227,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		 * Instead, we masquerade the channel here to force the old pointer to the channel
 		 * to become invalid. The old channel, now dead, can then get hung up by the
 		 * PBX thread as normal, while the new channel is what we insert into the list. */
-
-		l->chan = chan; /* Update pointer to the masqueraded channel. The original channel is dead. */
 
 		/* insert at end of queue */
 		rpt_mutex_lock(&myrpt->lock);
