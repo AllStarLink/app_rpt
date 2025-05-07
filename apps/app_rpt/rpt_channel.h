@@ -9,12 +9,12 @@ int wait_interval(struct rpt *myrpt, enum rpt_delay type, struct ast_channel *ch
 int priority_jump(struct rpt *myrpt, struct ast_channel *chan);
 
 /*! \brief Say a file - streams file to output channel */
-int sayfile(struct ast_channel *mychannel, char *fname);
+int sayfile(struct ast_channel *mychannel, const char *fname);
 
-int saycharstr(struct ast_channel *mychannel, char *str);
+int saycharstr(struct ast_channel *mychannel, const char *str);
 
 /*! \brief Say a phonetic words -- streams corresponding sound file */
-int sayphoneticstr(struct ast_channel *mychannel, char *str);
+int sayphoneticstr(struct ast_channel *mychannel, const char *str);
 
 /*! \brief Say a number -- streams corresponding sound file */
 int saynum(struct ast_channel *mychannel, int num);
@@ -31,13 +31,13 @@ int play_tone_pair(struct ast_channel *chan, int f1, int f2, int duration, int a
 int play_tone(struct ast_channel *chan, int freq, int duration, int amplitude);
 
 /*! \brief Convert string into morse code */
-int send_morse(struct ast_channel *chan, char *string, int speed, int freq, int amplitude);
+int send_morse(struct ast_channel *chan, const char *string, int speed, int freq, int amplitude);
 
 /*! \brief send asterisk frame text message on the current tx channel */
 int send_usb_txt(struct rpt *myrpt, char *txt);
 
 /*! \brief send asterisk frame text message on the current tx channel */
-int send_link_pl(struct rpt *myrpt, char *txt);
+int send_link_pl(struct rpt *myrpt, const char *txt);
 
 /*! \brief send newkey request NEWKEY1STR to caller.  When a call is initiated
  * l->link_newkey is set to RADIO_KEY_NOT_ALLOWED, and l->newkeytimer is activate.

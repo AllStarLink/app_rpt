@@ -395,14 +395,19 @@ void cancel_pfxtone(struct rpt *myrpt)
 
 static void send_tele_link(struct rpt *myrpt, char *cmd)
 {
-	char str[1028];
+	int len;
+	char *str;
 	struct ast_frame wf;
 	struct rpt_link *l;
 
-	snprintf(str, sizeof(str) - 1, "T %s %s", myrpt->name, cmd);
+	len = ast_asprintf(&str, "T %s %s", myrpt->name, cmd);
+	if (len < 0) {
+		return;
+	}
+
 	init_text_frame(&wf, "send_tele_link");
-	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
+	wf.datalen = len + 1;
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
@@ -410,11 +415,12 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
+	ast_free(str);
 	rpt_telemetry(myrpt, VARCMD, cmd);
 }
 
 /*! Send telemetry tones */
-static int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
+static int send_tone_telemetry(struct ast_channel *chan, const char *tonestring)
 {
 	char *p, *stringp;
 	char *tonesubset;
@@ -462,7 +468,7 @@ static int send_tone_telemetry(struct ast_channel *chan, char *tonestring)
 	return res;
 }
 
-static int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
+static int telem_any(struct rpt *myrpt, struct ast_channel *chan, const char *entry, const char *why)
 {
 	int res;
 	char c;
@@ -491,19 +497,23 @@ static int telem_any(struct rpt *myrpt, struct ast_channel *chan, char *entry)
 
 		switch (c) {
 		case 'I':				/* Morse ID */
+			donodelog_fmt(myrpt, "TELEMETRY,%s,%s(I)", myrpt->name, why);
 			res = send_morse(chan, entry + 2, morsespeed, morseidfreq, morseidampl);
 			break;
 		case 'M':				/* Morse Message */
+			donodelog_fmt(myrpt, "TELEMETRY,%s,%s(M)", myrpt->name, why);
 			res = send_morse(chan, entry + 2, morsespeed, morsefreq, morseampl);
 			break;
 		case 'T':				/* Tone sequence */
+			donodelog_fmt(myrpt, "TELEMETRY,%s,%s(T),%s", myrpt->name, why, entry + 2);
 			res = send_tone_telemetry(chan, entry + 2);
 			break;
 		default:
 			res = -1;
 		}
 	} else {
-		res = sayfile(chan, entry);	/* File */
+		donodelog_fmt(myrpt, "TELEMETRY,%s,%s,%s", myrpt->name, why, entry);
+		res = sayfile(chan, entry); /* File */
 	}
 	return res;
 }
@@ -532,21 +542,16 @@ static struct telem_defaults tele_defs[] = {
 /*! \brief Looks up a telemetry name in the config file, and does a telemetry response as configured.
  * 4 types of telemetry are handled: Morse ID, Morse Message, Tone Sequence, and a File containing a recording.
  */
-static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node, char *name)
+static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, const char *name, const char *why)
 {
-
 	int res;
-	int i;
-	char *entry;
+	const char *entry;
 
 	res = 0;
-	entry = NULL;
-
-	entry = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.telemetry, name);
-
-	/* Try to look up the telemetry name */
-
+	entry = ast_variable_retrieve(myrpt->cfg, myrpt->p.telemetry, name);
 	if (!entry) {
+		int i;
+
 		/* Telemetry name wasn't found in the config file, use the default */
 		for (i = 0; i < sizeof(tele_defs) / sizeof(struct telem_defaults); i++) {
 			if (!strcasecmp(tele_defs[i].name, name)) {
@@ -554,12 +559,41 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, char *node,
 			}
 		}
 	}
-	if (entry) {
-		if (!ast_strlen_zero(entry) && chan) {
-			telem_any(myrpt, chan, entry);
-		}
-	} else {
+	if (!entry) {
 		res = -1;
+	}
+
+	if (!res && !ast_strlen_zero(entry) && chan) {
+		res = telem_any(myrpt, chan, entry, why);
+	} else {
+		donodelog_fmt(myrpt, "TELEMETRY,%s,%s*", myrpt->name, why);
+	}
+	return res;
+}
+
+/*! \brief Send telemetry for node
+ * Look up telemetry type (e.g. "unlinkedct", "linkunkeyct") for node and, if
+ * available, send the associated telemetry
+ */
+static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char *ct_key, const char *why, int delay)
+{
+	const char *ct;
+	int res;
+
+	ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
+	if (!ct || ast_strlen_zero(ct)) {
+		donodelog_fmt(myrpt, "TELEMETRY,%s,%s*", myrpt->name, why);
+		return 0;
+	}
+
+	if (delay) {
+		ast_safe_sleep(chan, delay);
+	}
+
+	myrpt->noduck = 1;
+	res = telem_lookup(myrpt, chan, ct, why);
+	if (res) {
+		ast_log(LOG_WARNING, "telem_lookup: ct \"%s\" (%s) failed on %s\n", ct_key, ct, ast_channel_name(chan));
 	}
 	return res;
 }
@@ -582,28 +616,34 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		return;
 	}
 	if (!strcasecmp(strs[0], "REMGO")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			sayfile(mychannel, "rpt/remote_go");
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMGO,%s", myrpt->name);
+		sayfile(mychannel, "rpt/remote_go");
 		return;
 	}
 	if (!strcasecmp(strs[0], "REMALREADY")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			sayfile(mychannel, "rpt/remote_already");
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMALREADY,%s", myrpt->name);
+		sayfile(mychannel, "rpt/remote_already");
 		return;
 	}
 	if (!strcasecmp(strs[0], "REMNOTFOUND")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			sayfile(mychannel, "rpt/remote_notfound");
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMNOTFOUND,%s", myrpt->name);
+		sayfile(mychannel, "rpt/remote_notfound");
 		return;
 	}
 	if (!strcasecmp(strs[0], "COMPLETE")) {
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
-		res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+		res = telem_lookup(myrpt, mychannel, "functcomplete", "COMPLETE");
 		if (!res) {
 			res = ast_waitstream(mychannel, "");
 		} else {
@@ -613,9 +653,11 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		return;
 	}
 	if (!strcasecmp(strs[0], "PROC")) {
-		wait_interval(myrpt, DLY_TELEM, mychannel);
-		res = telem_lookup(myrpt, mychannel, myrpt->name, "patchup");
-		if (res < 0) {			/* Then default message */
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			return;
+		}
+		res = telem_lookup(myrpt, mychannel, "patchup", "PROC");
+		if (res < 0) { /* Then default message */
 			sayfile(mychannel, "rpt/callproceeding");
 		}
 		return;
@@ -625,22 +667,26 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_CALLTERM, mychannel) == -1) {
 			return;
 		}
-		res = telem_lookup(myrpt, mychannel, myrpt->name, "patchdown");
-		if (res < 0) {			/* Then default message */
+		res = telem_lookup(myrpt, mychannel, "patchdown", "TERM");
+		if (res < 0) { /* Then default message */
 			sayfile(mychannel, "rpt/callterminated");
 		}
 		return;
 	}
 	if (!strcasecmp(strs[0], "MACRO_NOTFOUND")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			sayfile(mychannel, "rpt/macro_notfound");
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_NOTFOUND,%s", myrpt->name);
+		sayfile(mychannel, "rpt/macro_notfound");
 		return;
 	}
 	if (!strcasecmp(strs[0], "MACRO_BUSY")) {
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			sayfile(mychannel, "rpt/macro_busy");
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_BUSY,%s", myrpt->name);
+		sayfile(mychannel, "rpt/macro_busy");
 		return;
 	}
 	if (!strcasecmp(strs[0], "CONNECTED")) {
@@ -650,6 +696,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,CONNECTED,%s", myrpt->name, strs[2]);
 		res = saynode(myrpt, mychannel, strs[2]);
 		if (!res) {
 			res = ast_stream_and_wait(mychannel, "rpt/connected-to", "");
@@ -664,6 +711,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,CONNFAIL,%s", myrpt->name, strs[1]);
 		res = saynode(myrpt, mychannel, strs[1]);
 		if (!res) {
 			sayfile(mychannel, "rpt/connection_failed");
@@ -674,8 +722,10 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 
 		if (n < 2)
 			return;
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMDISC,%s", myrpt->name, strs[1]);
 		res = saynode(myrpt, mychannel, strs[1]);
 		if (!res)
 			sayfile(mychannel, "rpt/remote_disc");
@@ -692,6 +742,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_TIME", myrpt->name);
 		rpt_localtime(&t, &localtm, myrpt->p.timezone);
 		t1 = rpt_mktime(&localtm, NULL);
 		/* Say the phase of the day is before the time */
@@ -727,6 +778,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_VERSION", myrpt->name);
 		/* Say "version" */
 		if (sayfile(mychannel, "rpt/version") == -1) {
 			return;
@@ -757,6 +809,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_GPS", myrpt->name);
 		if (saynode(myrpt, mychannel, strs[1]) == -1) {
 			return;
 		}
@@ -873,6 +926,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,ARB_ALPHA", myrpt->name);
 		saycharstr(mychannel, strs[1]);
 		return;
 	}
@@ -888,7 +942,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
-
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REV_PATCH", myrpt->name);
 		tpl_working = ast_strdup(strs[2]);
 		tpl_copy = tpl_working;
 		myparm = strsep(&tpl_working, "^");
@@ -926,6 +980,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,LASTNODEKEY,%s", myrpt->name, strs[1]);
 		saynode(myrpt, mychannel, strs[1]);
 		return;
 	}
@@ -936,6 +991,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,LASTUSER,%s", myrpt->name, strs[1]);
 		sayphoneticstr(mychannel, strs[1]);
 		if (n < 3) {
 			return;
@@ -951,6 +1007,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,STATUS,%s", myrpt->name, strs[1]);
 		saynode(myrpt, mychannel, strs[1]);
 		if (atoi(strs[2]) > 0) {
 			sayfile(mychannel, "rpt/autopatch_on");
@@ -999,7 +1056,7 @@ void *rpt_tele_thread(void *this)
 	struct rpt_link *l, *l1, linkbase;
 	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
-	char *p, *ct, *ct_copy, *ident, *nodename;
+	char *p, *ident, *nodename;
 	time_t t, t1, t_mono, was_mono;
 	struct ast_tm localtm;
 	char **strs;
@@ -1125,74 +1182,97 @@ void *rpt_tele_thread(void *this)
 	case ID1:
 		if (*ident) {
 			/* wait a bit */
-			if (!wait_interval(myrpt, (mytele->mode == ID) ? DLY_ID : DLY_TELEM, mychannel))
-				res = telem_any(myrpt, mychannel, ident);
+			if (wait_interval(myrpt, (mytele->mode == ID) ? DLY_ID : DLY_TELEM, mychannel) == -1) {
+				imdone = 1;
+				break;
+			}
+			res = telem_any(myrpt, mychannel, ident, mytele->mode == ID ? "ID" : "ID1");
 		}
 		imdone = 1;
 		break;
 	case TAILMSG:
 		/* wait a little bit longer */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res =
-				ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
+		res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
 		break;
 	case IDTALKOVER:
 		ast_debug(7, "Tracepoint IDTALKOVER: in rpt_tele_thread()\n");
 		p = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "idtalkover");
-		if (p)
-			res = telem_any(myrpt, mychannel, p);
+		if (p) {
+			res = telem_any(myrpt, mychannel, p, "IDTALKOVER");
+		}
 		imdone = 1;
 		break;
 	case PROC:
 		/* wait a little bit longer */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "patchup");
-		if (res < 0) {			/* Then default message */
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
+		}
+		res = telem_lookup(myrpt, mychannel, "patchup", "PROC");
+		if (res < 0) { /* Then default message */
 			res = ast_streamfile(mychannel, "rpt/callproceeding", ast_channel_language(mychannel));
 		}
 		break;
 	case TERM:
 		/* wait a little bit longer */
-		if (!wait_interval(myrpt, DLY_CALLTERM, mychannel))
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "patchdown");
-		if (res < 0) {			/* Then default message */
+		if (wait_interval(myrpt, DLY_CALLTERM, mychannel) == -1) {
+			break;
+		}
+		res = telem_lookup(myrpt, mychannel, "patchdown", "TERM");
+		if (res < 0) { /* Then default message */
 			res = ast_streamfile(mychannel, "rpt/callterminated", ast_channel_language(mychannel));
 		}
 		break;
 	case COMPLETE:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
+		}
+		res = telem_lookup(myrpt, mychannel, "functcomplete", "COMPLETE");
 		break;
 	case REMCOMPLETE:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "remcomplete");
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
+		}
+		res = telem_lookup(myrpt, mychannel, "remcomplete", "REMCOMPLETE");
 		break;
 	case MACRO_NOTFOUND:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/macro_notfound", ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_NOTFOUND,%s", myrpt->name);
+		res = ast_streamfile(mychannel, "rpt/macro_notfound", ast_channel_language(mychannel));
 		break;
 	case MACRO_BUSY:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel))
-			res = ast_streamfile(mychannel, "rpt/macro_busy", ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_BUSY,%s", myrpt->name);
+		res = ast_streamfile(mychannel, "rpt/macro_busy", ast_channel_language(mychannel));
 		break;
 	case PAGE:
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = -1;
-			if (mytele->submode.p) {
-				myrpt->noduck = 1;
-				res = ast_playtones_start(mychannel, 0, (char *) mytele->submode.p, 0);
-				while (ast_channel_generatordata(mychannel)) {
-					if (ast_safe_sleep(mychannel, 50)) {
-						res = -1;
-						break;
-					}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			imdone = 1;
+			break;
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,PAGE,%s", myrpt->name);
+		res = -1;
+		if (mytele->submode.p) {
+			myrpt->noduck = 1;
+			res = ast_playtones_start(mychannel, 0, (char *) mytele->submode.p, 0);
+			while (ast_channel_generatordata(mychannel)) {
+				if (ast_safe_sleep(mychannel, 50)) {
+					res = -1;
+					break;
 				}
-				ast_free((char *) mytele->submode.p);
 			}
+			ast_free((char *) mytele->submode.p);
 		}
 		imdone = 1;
 		break;
@@ -1313,23 +1393,14 @@ treataslocal:
 		ast_free(lbuf);
 		/* if has a RANGER node connected to it, use special telemetry for RANGER mode */
 		if (haslink) {
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "ranger");
+			res = telem_lookup(myrpt, mychannel, "ranger", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY");
 			if (res)
 				ast_log(LOG_WARNING, "telem_lookup: ranger failed on %s\n", ast_channel_name(mychannel));
 		}
 
-		if ((mytele->mode == LOCUNKEY) && ((ct = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "localct")))) {	/* Local override ct */
-			ct_copy = ast_strdup(ct);
-			if (ct_copy) {
-				myrpt->noduck = 1;
-				res = telem_lookup(myrpt, mychannel, myrpt->name, ct_copy);
-				ast_free(ct_copy);
-			} else {
-				res = -1;
-			}
-			if (res) {
-				ast_log(LOG_WARNING, "telem_lookup: ctx failed on %s\n", ast_channel_name(mychannel));
-			}
+		if (mytele->mode == LOCUNKEY) {
+			/* Local Override Courtesy Tone */
+			res = telem_send_ct(myrpt, mychannel, "localct", "LOCUNKEY", 0);
 		}
 		haslink = 0;
 		hastx = 0;
@@ -1383,7 +1454,7 @@ treataslocal:
 		}
 		if (haslink) {
 			myrpt->noduck = 1;
-			res = telem_lookup(myrpt, mychannel, myrpt->name, (!hastx) ? "remotemon" : "remotetx");
+			res = telem_lookup(myrpt, mychannel, (!hastx) ? "remotemon" : "remotetx", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY");
 			if (res) {
 				ast_log(LOG_WARNING, "telem_lookup: remotexx failed on %s\n", ast_channel_name(mychannel));
 			}
@@ -1391,24 +1462,15 @@ treataslocal:
 			/* if in remote cmd mode, indicate it */
 			if (myrpt->cmdnode[0] && strcmp(myrpt->cmdnode, "aprstt")) {
 				ast_safe_sleep(mychannel, 200);
-				res = telem_lookup(myrpt, mychannel, myrpt->name, "cmdmode");
+				res = telem_lookup(myrpt, mychannel, "cmdmode", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY");
 				if (res) {
 					ast_log(LOG_WARNING, "telem_lookup: cmdmode failed on %s\n", ast_channel_name(mychannel));
 				}
 				ast_stopstream(mychannel);
 			}
-		} else if ((ct = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "unlinkedct"))) {	/* Unlinked Courtesy Tone */
-			ct_copy = ast_strdup(ct);
-			if (ct_copy) {
-				myrpt->noduck = 1;
-				res = telem_lookup(myrpt, mychannel, myrpt->name, ct_copy);
-				ast_free(ct_copy);
-			} else {
-				res = -1;
-			}
-			if (res) {
-				ast_log(LOG_WARNING, "telem_lookup: ctx failed on %s\n", ast_channel_name(mychannel));
-			}
+		} else {
+			/* Not Linked Unkey Courtesy Tone */
+			res = telem_send_ct(myrpt, mychannel, "unlinkedct", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY", 0);
 		}
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt")))) {
 			/* set for all to hear */
@@ -1416,21 +1478,8 @@ treataslocal:
 				rpt_mutex_lock(&myrpt->lock);
 				goto abort;
 			}
-			if ((ct = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "remotect"))) {	/* Unlinked Courtesy Tone */
-				ast_safe_sleep(mychannel, 200);
-				ct_copy = ast_strdup(ct);
-				if (ct_copy) {
-					myrpt->noduck = 1;
-					res = telem_lookup(myrpt, mychannel, myrpt->name, ct_copy);
-					ast_free(ct_copy);
-				} else {
-					res = -1;
-				}
-
-				if (res) {
-					ast_log(LOG_WARNING, "telem_lookup: ctx failed on %s\n", ast_channel_name(mychannel));
-				}
-			}
+			/* Remote Unkey Courtesy Tone */
+			res = telem_send_ct(myrpt, mychannel, "remotect", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY", 200);
 		}
 #if	defined(_MDC_DECODE_H_) && defined(MDC_SAY_WHEN_DOING_CT)
 		if (myrpt->lastunit) {
@@ -1585,18 +1634,8 @@ treataslocal:
 			break;
 		}
 
-		if ((ct = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "linkunkeyct"))) {	/* Unlinked Courtesy Tone */
-			ct_copy = ast_strdup(ct);
-			if (ct_copy) {
-				res = telem_lookup(myrpt, mychannel, myrpt->name, ct_copy);
-				ast_free(ct_copy);
-			} else {
-				res = -1;
-			}
-			if (res) {
-				ast_log(LOG_WARNING, "telem_lookup: ctx failed on %s\n", ast_channel_name(mychannel));
-			}
-		}
+		/* Unlinked Courtesy Tone */
+		res = telem_send_ct(myrpt, mychannel, "linkunkeyct", "LINKUNKEY", 0);
 		imdone = 1;
 		break;
 	case REMDISC:
@@ -1626,6 +1665,7 @@ treataslocal:
 			imdone = 1;
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMDISC,%s", myrpt->name);
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 		if (!res) {
 			res = ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? "rpt/remote_disc" : "rpt/remote_busy"), ast_channel_language(mychannel));
@@ -1633,27 +1673,34 @@ treataslocal:
 		break;
 	case REMALREADY:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/remote_already", ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMALREADY,%s", myrpt->name);
+		res = ast_streamfile(mychannel, "rpt/remote_already", ast_channel_language(mychannel));
 		break;
 	case REMNOTFOUND:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/remote_notfound", ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMNOTFOUND,%s", myrpt->name);
+		res = ast_streamfile(mychannel, "rpt/remote_notfound", ast_channel_language(mychannel));
 		break;
 	case REMGO:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/remote_go", ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMGO,%s", myrpt->name);
+		res = ast_streamfile(mychannel, "rpt/remote_go", ast_channel_language(mychannel));
 		break;
 	case CONNECTED:
 		/* wait a little bit */
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,CONNECTED,%s", myrpt->name);
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 		if (!res) {
 			res = ast_stream_and_wait(mychannel, "rpt/connected-to", "");
@@ -1662,6 +1709,11 @@ treataslocal:
 		imdone = 1;
 		break;
 	case CONNFAIL:
+		/* wait a little bit */
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,CONNFAIL,%s", myrpt->name);
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 		if (!res) {
 			res = ast_streamfile(mychannel, "rpt/connection_failed", ast_channel_language(mychannel));
@@ -1669,9 +1721,11 @@ treataslocal:
 		break;
 	case MEMNOTFOUND:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/memory_notfound", ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MEMNOTFOUND,%s", myrpt->name);
+		res = ast_streamfile(mychannel, "rpt/memory_notfound", ast_channel_language(mychannel));
 		break;
 	case PLAYBACK:
 	case LOCALPLAY:
@@ -1679,13 +1733,16 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,%s,%s", myrpt->name, mytele->mode == PLAYBACK ? "PLAYBACK" : "LOCALPLAY", mytele->param);
 		res = ast_stream_and_wait(mychannel, mytele->param, "");
 		imdone = 1;
 		break;
 	case TOPKEY:
 		/* wait a little bit */
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,TOPKEY", myrpt->name);
 		for (i = 0; i < TOPKEYN; i++) {
 			if (!myrpt->topkey[i].node[0]) {
 				continue;
@@ -1773,20 +1830,23 @@ treataslocal:
 		ast_mutex_unlock(&myrpt->remlock);
 		if (!res) {
 			if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)))
-				telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+				telem_lookup(myrpt, mychannel, "functcomplete", "SETREMOTE");
 			break;
 		}
 		/* fall thru to invalid freq */
 	case INVFREQ:
 		/* wait a little bit */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = ast_streamfile(mychannel, "rpt/invalid-freq", ast_channel_language(mychannel));
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,INVFREQ", myrpt->name);
+		res = ast_streamfile(mychannel, "rpt/invalid-freq", ast_channel_language(mychannel));
 		break;
 	case REMMODE:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMMODE", myrpt->name);
 		switch (myrpt->remmode) {
 		case REM_MODE_FM:
 			saycharstr(mychannel, "FM");
@@ -1801,16 +1861,16 @@ treataslocal:
 			saycharstr(mychannel, "AM");
 			break;
 		}
-		if (!wait_interval(myrpt, DLY_COMP, mychannel) && !res) {
-			if (!res) {
-				res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
-			}
+		if (wait_interval(myrpt, DLY_COMP, mychannel) == -1) {
+			break;
 		}
+		res = telem_lookup(myrpt, mychannel, "functcomplete", "REMMODE");
 		break;
 	case LOGINREQ:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,LOGINREQ", myrpt->name);
 		sayfile(mychannel, "rpt/login");
 		saycharstr(mychannel, myrpt->name);
 		break;
@@ -1818,17 +1878,19 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMLOGIN", myrpt->name);
 		saycharstr(mychannel, myrpt->loginuser);
 		saynode(myrpt, mychannel, myrpt->name);
-		wait_interval(myrpt, DLY_COMP, mychannel);
-		if (!res) {
-			res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
+		if (wait_interval(myrpt, DLY_COMP, mychannel) == -1) {
+			break;
 		}
+		res = telem_lookup(myrpt, mychannel, "functcomplete", "REMLOGIN");
 		break;
 	case REMXXX:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMXXX", myrpt->name);
 		res = 0;
 		switch (mytele->submode.i) {
 		case 100:				/* RX PL Off */
@@ -1884,10 +1946,11 @@ treataslocal:
 			res = -1;
 		}
 		if (strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
-			if (!wait_interval(myrpt, DLY_COMP, mychannel)) {
-				if (!res) {
-					res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
-				}
+			if (wait_interval(myrpt, DLY_COMP, mychannel) == -1) {
+				break;
+			}
+			if (!res) {
+				res = telem_lookup(myrpt, mychannel, "functcomplete", "REMXXX");
 			}
 		}
 		break;
@@ -1987,6 +2050,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == REMSHORTSTATUS ? "REMSHORTSTATUS" : "REMLONGSTATUS");
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (!res) {
 			res = sayfile(mychannel, "rpt/frequency");
@@ -2055,11 +2119,12 @@ treataslocal:
 			break;
 		}
 
-		if (mytele->mode == REMSHORTSTATUS) {	/* Short status? */
-			if (!wait_interval(myrpt, DLY_COMP, mychannel)) {
-				if (!res) {
-					res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
-				}
+		if (mytele->mode == REMSHORTSTATUS) { /* Short status? */
+			if (wait_interval(myrpt, DLY_COMP, mychannel) == -1) {
+				break;
+			}
+			if (!res) {
+				res = telem_lookup(myrpt, mychannel, "functcomplete", "REMSHORTSTATUS");
 			}
 			break;
 		}
@@ -2098,10 +2163,11 @@ treataslocal:
 				break;
 			}
 		}
-		if (!wait_interval(myrpt, DLY_COMP, mychannel)) {
-			if (!res) {
-				res = telem_lookup(myrpt, mychannel, myrpt->name, "functcomplete");
-			}
+		if (wait_interval(myrpt, DLY_COMP, mychannel) == -1) {
+			break;
+		}
+		if (!res) {
+			res = telem_lookup(myrpt, mychannel, "functcomplete", mytele->mode == REMSHORTSTATUS ? "REMSHORTSTATUS" : "REMLONGSTATUS");
 		}
 		break;
 	case STATUS:
@@ -2259,9 +2325,12 @@ treataslocal:
 			imdone = 1;			/* no node previously keyed us up, or the node which did has been disconnected */
 			break;
 		}
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			res = saynode(myrpt, mychannel, p);
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			ast_free(p);
+			imdone = 1;
+			break;
 		}
+		res = saynode(myrpt, mychannel, p);
 		ast_free(p);
 		imdone = 1;
 		break;
@@ -2292,6 +2361,7 @@ treataslocal:
 		myrpt->parrotonce = 0;
 		break;
 	case TIMEOUT:
+		donodelog_fmt(myrpt, "TELEMETRY,%s,TIMEOUT", myrpt->name);
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (!res) {
 			res = ast_streamfile(mychannel, "rpt/timeout", ast_channel_language(mychannel));
@@ -2299,6 +2369,7 @@ treataslocal:
 		break;
 	case TIMEOUT_WARNING:
 		time(&t);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,TIMEOUT_WARNING", myrpt->name);
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (!res) {
 			res = ast_stream_and_wait(mychannel, "rpt/timeout-warning", "");
@@ -2314,6 +2385,7 @@ treataslocal:
 		break;
 	case ACT_TIMEOUT_WARNING:
 		time(&t);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,ACT_TIMEOUT_WARNING", myrpt->name);
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (!res) {
 			res = ast_stream_and_wait(mychannel, "rpt/act-timeout-warning", "");
@@ -2335,6 +2407,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_TIME ? "STATS_TIME" : "STATS_TIME_LOCAL");
 		t = time(NULL);
 		rpt_localtime(&t, &localtm, myrpt->p.timezone);
 		t1 = rpt_mktime(&localtm, NULL);
@@ -2367,6 +2440,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_VERSION", myrpt->name);
 		/* Say "version" */
 		if (sayfile(mychannel, "rpt/version") == -1) {
 			imdone = 1;
@@ -2395,9 +2469,12 @@ treataslocal:
 		break;
 	case STATS_GPS:
 	case STATS_GPS_LEGACY:
-		
 		/* If the app_gps custom function GPS_READ does not exist, let them know */
 		if (!ast_custom_function_find("GPS_READ")) {
+			if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+				break;
+			}
+			donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_GPS ? "STATS_GPS" : "STATS_GPS_LEGACY");
 			saycharstr(mychannel, "GPS");
 			sayfile(mychannel, "rpt/off");
 			break;
@@ -2414,11 +2491,15 @@ treataslocal:
 		t_mono = rpt_time_monotonic();
 		if ((was_mono + GPS_VALID_SECS) < t_mono) {
 			break;
-		} else if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+		}
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
-		} else if (saynode(myrpt, mychannel, myrpt->name) == -1) {
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_GPS ? "STATS_GPS" : "STATS_GPS_LEGACY");
+		if (saynode(myrpt, mychannel, myrpt->name) == -1) {
 			break;
-		} else if (sayfile(mychannel, "location") == -1) {
+		}
+		if (sayfile(mychannel, "location") == -1) {
 			break;
 		}
 		c = lat[strlen(lat) - 1];
@@ -2522,10 +2603,13 @@ treataslocal:
 		imdone = 1;
 		break;
 	case ARB_ALPHA:
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			if (!ast_strlen_zero(mytele->param)) {
-				saycharstr(mychannel, mytele->param);
+		if (!ast_strlen_zero(mytele->param)) {
+			if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+				imdone = 1;
+				break;
 			}
+			donodelog_fmt(myrpt, "TELEMETRY,%s,ARB_ALPHA,%s", myrpt->name, mytele->param);
+			saycharstr(mychannel, mytele->param);
 		}
 		imdone = 1;
 		break;
@@ -2538,6 +2622,8 @@ treataslocal:
 			char *tpl_working, *tpl_current;
 			char *tmp[100], *myparm;
 			int looptemp = 0, i = 0, dres = 0;
+
+			donodelog_fmt(myrpt, "TELEMETRY,%s,REV_PATCH", myrpt->name);
 
 			tpl_working = ast_strdup(mytele->param);
 			myparm = strsep(&tpl_working, ",");
@@ -2590,7 +2676,7 @@ treataslocal:
 		}
 		break;
 	case PFXTONE:
-		res = telem_lookup(myrpt, mychannel, myrpt->name, "pfxtone");
+		res = telem_lookup(myrpt, mychannel, "pfxtone", "PFXTONE");
 		break;
 	default:
 		break;
@@ -2712,10 +2798,11 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 		   otherwise, dont bother */
 		v1 = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "unlinkedct");
 		v2 = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "remotect");
-		if (telem_lookup(myrpt, NULL, myrpt->name, "remotemon") &&
-			telem_lookup(myrpt, NULL, myrpt->name, "remotetx") &&
-			telem_lookup(myrpt, NULL, myrpt->name, "cmdmode") && (!(v1 && telem_lookup(myrpt, NULL, myrpt->name, v1)))
-			&& (!(v2 && telem_lookup(myrpt, NULL, myrpt->name, v2)))) {
+		if (telem_lookup(myrpt, NULL, "remotemon", mode == UNKEY ? "UNKEY" : "LOCUNKEY") &&
+			telem_lookup(myrpt, NULL, "remotetx", mode == UNKEY ? "UNKEY" : "LOCUNKEY") &&
+			telem_lookup(myrpt, NULL, "cmdmode", mode == UNKEY ? "UNKEY" : "LOCUNKEY") &&
+			(!(v1 && telem_lookup(myrpt, NULL, v1, mode == UNKEY ? "UNKEY" : "LOCUNKEY"))) &&
+			(!(v2 && telem_lookup(myrpt, NULL, v2, mode == UNKEY ? "UNKEY" : "LOCUNKEY")))) {
 			return;
 		}
 		break;

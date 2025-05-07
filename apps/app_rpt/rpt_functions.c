@@ -733,9 +733,7 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			}
 			ast_copy_string(myrpt->loginuser, cp1 + 1, sizeof(myrpt->loginuser) - 1);
 			ast_mutex_unlock(&myrpt->lock);
-			if (myrpt->p.archivedir) {
-				donodelog_fmt(myrpt, "LOGIN,%s,%s", myrpt->loginuser, myrpt->loginlevel);
-			}
+			donodelog_fmt(myrpt, "LOGIN,%s,%s", myrpt->loginuser, myrpt->loginlevel);
 			ast_debug(1, "loginuser %s level %s\n", myrpt->loginuser, myrpt->loginlevel);
 			rpt_telemetry(myrpt, REMLOGIN, NULL);
 		}
