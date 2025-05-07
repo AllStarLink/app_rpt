@@ -740,9 +740,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	}
 	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
-		if (myrpt->p.archivedir) {
-			donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
-		}
+		donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		rpt_link_free(l);
 		ao2_ref(cap, -1);
 		return -1;
