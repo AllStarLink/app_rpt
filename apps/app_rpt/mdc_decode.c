@@ -42,24 +42,15 @@ mdc_decoder_t * mdc_decoder_new(int sampleRate)
 	mdc_decoder_t *decoder;
 	int i;
 
-	decoder = ast_malloc(sizeof(mdc_decoder_t));
+	decoder = ast_calloc(1, sizeof(mdc_decoder_t));
 	if (!decoder) {
 		return (mdc_decoder_t *) 0L;
 	}
 
 	decoder->hyst = 3;
-	decoder->incr = (1200.0 * TWOPI) / ((double)sampleRate);
-	decoder->good = 0;
-	decoder->level = 0;
-	decoder->lastv = 0;
-
-	for(i=0; i<MDC_ND; i++)
-	{
-		decoder->th[i] = 0.0 + ( ((double)i) * (TWOPI/(double)MDC_ND));
-		decoder->zc[i] = 0;
-		decoder->xorb[i] = 0;
-		decoder->shstate[i] = 0;
-		decoder->shcount[i] = 0;
+	decoder->incr = (1200.0 * TWOPI) / ((double) sampleRate);
+	for (i = 0; i < MDC_ND; i++) {
+		decoder->th[i] = 0.0 + (((double) i) * (TWOPI / (double) MDC_ND));
 	}
 
 	return decoder;
