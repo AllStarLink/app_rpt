@@ -1006,7 +1006,7 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT_DEFAULT(default_split_2m, "split2m", DEFAULT_SPLIT_2M);
 	RPT_CONFIG_VAR_INT_DEFAULT(default_split_70cm, "split70cm", DEFAULT_SPLIT_70CM);
 	RPT_CONFIG_VAR_BOOL(dtmfkey, "dtmfkey");
-	RPT_CONFIG_VAR(dtmfkeys, "dtmfkeys");
+	RPT_CONFIG_VAR_DEFAULT(dtmfkeys, "dtmfkeys", DTMFKEYS);
 	RPT_CONFIG_VAR(outstreamcmd, "outstreamcmd");
 	RPT_CONFIG_VAR(eloutbound, "eloutbound");
 	RPT_CONFIG_VAR_DEFAULT(events, "events", "events");
