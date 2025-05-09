@@ -1,0 +1,66 @@
+; This is a sample configuration file for configuring a remote base.
+;
+;functions = functions-remote       ; Repeater Function stanza
+;phone_functions = functions-remote ; Phone Function stanza
+;memory = memory                    ; Memory channel stanza
+
+;remote = ft897                     ; Configure remote base radio type
+;ioport = /dev/ttyS1                ; Serial port for control
+
+;remote_inact_timeout =             ; Specifies the amount of time without keying from the link. Set to 0 to disable timeout. (15 * 60)
+;remote_timeout =                   ; Session time out for remote base. Set to 0 to disable. (60 * 60)
+;remote_timeout_warning_freq =      ; 30
+;remote_timeout_warning =           ; (3 * 60)
+
+; [functions-remote]
+;;;;; Functions for remote bases ;;;;;
+;
+; 0 = remote,1                      ; Retrieve Memory
+; 1 = remote,2                      ; Set freq.
+; 2 = remote,3                      ; Set TX PL tone
+; 3 = remote,4                      ; Set RX PL tone
+; 40 = remote,100                   ; RX PL off
+; 41 = remote,101                   ; RX PL on
+; 42 = remote,102                   ; TX PL off
+; 43 = remote,103                   ; TX PL on
+; 44 = remote,104                   ; Low Power
+; 45 = remote,105                   ; Medium Power
+; 46 = remote,106                   ; High Power
+; 711 = remote,107                  ; Bump -20
+; 714 = remote,108                  ; Bump -100
+; 717 = remote,109                  ; Bump -500
+; 713 = remote,110                  ; Bump +20
+; 716 = remote,111                  ; Bump +100
+; 719 = remote,112                  ; Bump +500
+; 721 = remote,113                  ; Scan - slow
+; 724 = remote,114                  ; Scan - quick
+; 727 = remote,115                  ; Scan - fast
+; 723 = remote,116                  ; Scan + slow
+; 726 = remote,117                  ; Scan + quick
+; 729 = remote,118                  ; Scan + fast
+; 79 = remote,119                   ; Tune
+; 51 = remote,5                     ; Long status query
+; 52 = remote,140                   ; Short status query
+; 67 = remote,210                   ; Send a *
+; 69 = remote,211                   ; Send a #
+; 91 = remote,99,CALLSIGN,LICENSETAG     ; Remote base login.
+                                    ; Define a different DTMF sequence for each user which is
+                                    ; authorized to use the remote base to control access to it.
+                                    ; For example 9139583=remote,99,WB6NIL,G would grant access to
+                                    ; the remote base and announce WB6NIL as being logged in.
+                                    ; Another entry, 9148351=remote,99,WA6ZFT,E would grant access to
+                                    ; the remote base and announce WA6ZFT as being logged in.
+                                    ; When the remote base is disconnected from the originating node, the
+                                    ; user will be logged out. The LICENSETAG argument is used to enforce
+                                    ; TX frequency limits. See [txlimits] below.
+; 85 = cop,6                        ; Remote base telephone key
+
+[memory]
+;;;;; Remote base memories ;;;;;
+; Memories for remote bases (not for repeaters or hotspots). Seldom used.
+;00 = 146.580,100.0,m
+;01 = 147.030,103.5,m+t
+;02 = 147.240,103.5,m+t
+;03 = 147.765,79.7,m-t
+;04 = 146.460,100.0,m
+;05 = 146.550,100.0,m
