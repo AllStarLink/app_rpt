@@ -1510,15 +1510,21 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 
 	if (p->textq.qe_forw != &p->textq) {
+		struct ast_frame fr = {
+			.frametype = AST_FRAME_TEXT,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		ast_mutex_lock(&p->lock);
 		textq = p->textq.qe_forw;
 		remque((struct qelem *) textq);
 		ast_mutex_unlock(&p->lock);
-		ast_sendtext(ast, ast_str_buffer(textq->buf));
+		fr.data.ptr = ast_str_buffer(textq->buf);
+		fr.datalen = ast_str_strlen(textq->buf) + 1;
+		ast_queue_frame(ast, &fr);
 		ast_free(textq->buf);
 		ast_free(textq);
 	}
-
 	/* TheLinkBox to Asterisk */
 	if (p->rxqast.qe_forw != &p->rxqast) {
 		for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
