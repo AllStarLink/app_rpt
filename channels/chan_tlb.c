@@ -531,8 +531,8 @@ static int finddelim(char *str, char *strp[], size_t limit)
 
 /*!
  * \brief Make a sdes packet with our nodes information.
- * The RTP version = 3, RTP packet type = 201.
- * The RTCP: version = 3, packet type = 202.
+ * The RTP version = 2, RTP packet type = 201.
+ * The RTCP: version = 2, packet type = 202.
  * \param pkt			Pointer to buffer for sdes packet
  * \param pkt_len		Length of packet buffer
  * \param call			Pointer to callsign
@@ -551,7 +551,7 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call)
 	int l, hl, pad;
 
 	hl = 0;
-	*p++ = 3 << 6;
+	*p++ = 2 << 6;
 	*p++ = 201;
 	*p++ = 0;
 	*p++ = 1;
@@ -617,8 +617,8 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call)
 
 /*!
  * \brief Make a rtcp bye packet
- * The RTP version = 3, RTP packet type = 201.
- * The RTCP: version = 3, packet type = 203.
+ * The RTP version = 2, RTP packet type = 201.
+ * The RTCP: version = 2, packet type = 203.
  * \param pkt			Pointer to buffer for bye packet
  * \param reason		Pointer to reason for the bye packet
  * \retval  			Successful length
@@ -631,7 +631,7 @@ static int rtcp_make_bye(unsigned char *pkt, int pkt_len, const char *reason)
 	int l, hl, pad;
 
 	hl = 0;
-	*p++ = 3 << 6;
+	*p++ = 2 << 6;
 	*p++ = 201;
 	*p++ = 0;
 	*p++ = 1;
