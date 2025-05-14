@@ -560,7 +560,7 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call)
 	hl = 8;
 
 	rp = (struct rtcp_t *) p;
-	rp->common.version = 3;
+	rp->common.version = 2;
 	rp->common.p = 0;
 	rp->common.count = 1;
 	rp->common.pt = 202;
@@ -640,7 +640,7 @@ static int rtcp_make_bye(unsigned char *pkt, int pkt_len, const char *reason)
 	hl = 8;
 
 	rp = (struct rtcp_t *) p;
-	rp->common.version = 3;
+	rp->common.version = 2;
 	rp->common.p = 0;
 	rp->common.count = 1;
 	rp->common.pt = 203;
