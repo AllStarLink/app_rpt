@@ -685,6 +685,23 @@ int rpt_function_lookup(const char *f)
 	return -1;
 }
 
+char *rpt_complete_function_list(const char *line, const char *word, int pos, int rpos)
+{
+	int i;
+	size_t wordlen = strlen(word);
+
+	if (pos != rpos) {
+		return NULL;
+	}
+
+	for (i = 0; i < ARRAY_LEN(function_table); i++) {
+		if (!strncmp(function_table[i].action, word, wordlen)) {
+			ast_cli_completion_add(ast_strdup(function_table[i].action));
+		}
+	}
+	return NULL;
+}
+
 int rpt_function_minargs(int index)
 {
 	return function_table[index].minargs;

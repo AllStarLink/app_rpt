@@ -1082,6 +1082,11 @@ void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
 
+/*!
+ * \brief Generates a command line completion list for rpt cmd third argument
+ */
+char *rpt_complete_function_list(const char *line, const char *word, int pos, int rpos);
+
 #define RPT_MUTE_FRAME(f) \
 	if (f) \
 	ast_frame_clear(f)
