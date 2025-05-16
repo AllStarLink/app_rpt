@@ -5666,13 +5666,14 @@ static void *rpt_master(void *ignore)
 		return NULL;
 	}
 
-	/* start em all */
+	/* start a rpt() thread for each repeater that is not a remote */
 	for (i = 0; i < nrpts; i++) {
 		load_rpt_vars(i, 1); /* Load initial config */
 
-		/* if is a remote, dont start one for it */
+		/* if is a remote, dont start a rpt() thread for it */
 		if (rpt_vars[i].remote) {
-			if (retrieve_memory(&rpt_vars[i], "init")) {	/* Try to retrieve initial memory channel */
+			rpt_vars[i].ready = 1;
+			if (retrieve_memory(&rpt_vars[i], "init")) { /* Try to retrieve initial memory channel */
 				if ((!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX450)) || (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_XCAT))) {
 					ast_copy_string(rpt_vars[i].freq, "446.500", sizeof(rpt_vars[i].freq));
 				} else {
