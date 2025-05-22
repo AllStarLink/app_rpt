@@ -1,0 +1,73 @@
+; This is a sample configuration file for interfacing with a uChameleon 
+; Data Acquisition Device (DAQ).
+;
+;[daq-list]
+;;;;; Data Acquisition configuration ;;;;;
+;Where: device_name1 and device_name2 are stanzas you define in this file
+;device = daq-cham-1
+;device = device_name1
+;device = device_name2
+
+;[daq-cham-1]                       ; Defined in [daq-list]
+; Device name
+;hwtype = uchameleon                ; DAQ hardware type
+;devnode = /dev/ttyUSB0             ; DAQ device node (if required)
+;1 = inadc                          ; Pin definition for an ADC channel
+;2 = inadc
+;3 = inadc
+;4 = inadc
+;5 = inadc
+;6 = inadc
+;7 = inadc
+;8 = inadc
+;9 = inp                            ; Pin definition for an input with a weak pullup resistor
+;10 = inp
+;11 = inp
+;12 = inp
+;13 = in                            ; Pin definition for an input without a weak pullup resistor
+;14 = out                           ; Pin definition for an output
+;15 = out
+;16 = out
+;17 = out
+;18 = out
+
+;[meter-faces]
+;
+;face = scale(scalepre,scalediv,scalepost),word/?,...
+;
+; scalepre = offset to add before dividing with scalediv
+; scalediv = full scale/number of whole units (e.g. 256/20 or 12.8 for 20 volts).
+; scalepost = offset to add after dividing with scalediv
+;
+;face = range(X-Y:word,X2-Y2:word,...),word/?,...
+;face = bit(low-word,high-word),word/?,...
+;
+; word/? is either a word in /usr/share/asterisk/sounds or one of its subdirectories,
+; or a question mark which is  a placeholder for the measured value.
+;
+;
+; Battery voltage 0-20 volts
+;batvolts = scale(0,12.8,0),rpt/thevoltageis,?,ha/volts
+; 4 quadrant wind direction
+;winddir = range(0-33:north,34-96:west,97-160:south,161-224:east,225-255:north),rpt/thewindis,?
+; LM34 temperature sensor with 130 deg. F full scale
+;lm34f = scale(0,1.969,0),rpt/thetemperatureis,?,degrees,fahrenheit
+; Status poll (non alarmed)
+;light = bit(ha/off,ha/on),ha/light,?
+
+;[alarms]
+;
+;tag = device,pin,node,ignorefirst,func-low,func-hi
+;
+;tag = a unique name for the alarm
+;device = daq device to poll
+;pin = the device pin to be monitored
+;ignorefirstalarm = set to 1 to throwaway first alarm event, or 0 to report it
+;node = the node number to execute the function on
+;func-low = the DTMF function to execute on a high to low transition
+;func-high = the DTMF function to execute on a low to high transition
+;
+; a  '-' as a function name is shorthand for no-operation
+;
+;door = daq-cham-1,9,1,2017,*7,-
+;pwrfail = daq-cham-1,10,0,2017,*911111,-
