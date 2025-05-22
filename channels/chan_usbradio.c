@@ -5026,6 +5026,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 
 	if (o->rxsdtype != SD_XPMR) {
 		o->rxctcssfreqs[0] = 0;
+		o->txctcssfreqs[0] = 0;
 	}
 
 	if ((o->txmixa == TX_OUT_COMPOSITE) && (o->txmixb == TX_OUT_VOICE)) {
