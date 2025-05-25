@@ -6900,7 +6900,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 #endif
 	}
 
-	myrpt->remoteon = 1;
 	voxinit_rpt(myrpt, 1);
 	rpt_mutex_unlock(&myrpt->lock);
 
@@ -6971,7 +6970,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		ao2_ref(cap, -1);
 		return -1;
 	}
 
@@ -6982,6 +6980,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if ((!res) && (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 			if (kenwood_uio_helper(myrpt)) {
 				rpt_mutex_unlock(&myrpt->lock);
+				/*! \todo HANG UP CHANNELS, CLOSE SERIAL PORT? */
 				return -1;
 			}
 			iskenwood_pci4 = 1;
@@ -6999,11 +6998,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 1)) {
 				ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
+				/*! \todo HANG UP CHANNELS, CLOSE SERIAL PORT? */
 				return -1;
 			}
 			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
 				ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
+				/*! \todo HANG UP CHANNELS, CLOSE SERIAL PORT? */
 				return -1;
 			}
 		}
@@ -7054,7 +7055,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
-			ao2_ref(cap, -1);
+			/*! \todo HANG UP CHANNELS, CLOSE SERIAL PORT? */
 			pthread_exit(NULL);
 		}
 	}
@@ -7138,10 +7139,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	cs[n++] = chan;
 	cs[n++] = myrpt->rxchannel;
 	cs[n++] = myrpt->pchannel;
-	cs[n++] = myrpt->telechannel;
-	cs[n++] = myrpt->btelechannel;
-	if (myrpt->rxchannel != myrpt->txchannel)
+	if (myrpt->telechannel) {
+		cs[n++] = myrpt->telechannel;
+	}
+	if (myrpt->btelechannel) {
+		cs[n++] = myrpt->btelechannel;
+	}
+	if (myrpt->txchannel && myrpt->rxchannel != myrpt->txchannel) {
 		cs[n++] = myrpt->txchannel;
+	}
 
 	if (!phone_mode) {
 		send_newkey(chan);
