@@ -799,7 +799,7 @@ void load_rpt_vars(int n, int init)
 	if (!ast_strlen_zero(val)) { \
 		rpt_vars[n].p.var = pow(10.0, atof(val) / 20.0); \
 	} else { \
-		rpt_vars[n].p.var = pow(10.0, (double) (default) / 20.0);
+		rpt_vars[n].p.var = pow(10.0, (double) (default) / 20.0); \
 	}
 
 #define RPT_CONFIG_VAR_INT_DEFAULT(var, name, default) \
