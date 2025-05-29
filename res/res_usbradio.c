@@ -678,9 +678,10 @@ int ast_radio_load_parallel_port(int *haspp, int *ppfd, int *pbase, const char *
 				if (ioperm(*pbase, 2, 1) == -1) {
 					ast_log(LOG_ERROR, "Can't get io permission on IO port %04x hex, disabling pp support\n", *pbase);
 					*haspp = 0;
+				} else {
+					*haspp = 2;
+					ast_verb(3, "Using direct IO port for pp support, since parport driver not available.\n");
 				}
-				*haspp = 2;
-				ast_verb(3, "Using direct IO port for pp support, since parport driver not available.\n");
 #else
 				ast_log(LOG_ERROR, "Parallel port I/O is not supported on this architecture\n");
 #endif

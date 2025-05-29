@@ -51,11 +51,13 @@ char *dtmf_tones[] = {
 
 static char remdtmfstr[] = "0123456789*#ABCD";
 
-int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *s1, *s2, tmp[MAXNODESTR];
-	char digitbuf[MAXNODESTR], *strs[sizeof(myrpt->savednodes)];
-	char mode, perma;
+	char digitbuf[MAXNODESTR], *strs[ARRAY_LEN(myrpt->savednodes)];
+	char perma;
+	enum link_mode mode;
 	struct rpt_link *l;
 	int i, r;
 
@@ -129,9 +131,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		r = atoi(param);
 		/* Attempt connection  */
 		perma = (r > 10) ? 1 : 0;
-		mode = (r & 1) ? 1 : 0;
+		mode = (r & 1) ? MODE_TRANSCEIVE : MODE_MONITOR;
 		if ((r == 8) || (r == 18))
-			mode = 2;
+			mode = MODE_LOCAL_MONITOR;
 		r = connect_link(myrpt, digitbuf, mode, perma);
 		switch (r) {
 		case -2:				/* Attempt to connect to self */
@@ -226,9 +228,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 				l = l->next;
 				continue;
 			}
-			if (l->mode == 1)
+			if (l->mode == MODE_TRANSCEIVE)
 				c1 = 'X';
-			else if (l->mode > 1)
+			else if (l->mode == MODE_LOCAL_MONITOR)
 				c1 = 'L';
 			else
 				c1 = 'M';
@@ -275,9 +277,9 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 			}
 			/* if RANGER and not permalink */
 			if ((l->max_retries <= MAX_RETRIES) && ISRANGER(l->name)) {
-				if (l->mode == 1)
+				if (l->mode == MODE_TRANSCEIVE)
 					c1 = 'X';
-				else if (l->mode > 1)
+				else if (l->mode == MODE_LOCAL_MONITOR)
 					c1 = 'L';
 				else
 					c1 = 'M';
@@ -359,11 +361,11 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 		for (i = 0; tmp[0] && strs[i] && i < ARRAY_LEN(strs); i++) {
 			s1 = strs[i];
 			if (s1[0] == 'X')
-				mode = 1;
+				mode = MODE_TRANSCEIVE;
 			else if (s1[0] == 'L')
-				mode = 2;
+				mode = MODE_LOCAL_MONITOR;
 			else
-				mode = 0;
+				mode = MODE_MONITOR;
 			perma = (s1[1] == 'P') ? 1 : 0;
 			connect_link(myrpt, s1 + 2, mode, perma);	/* Try to reconnect */
 		}
@@ -400,10 +402,13 @@ int function_ilink(struct rpt *myrpt, char *param, char *digits, int command_sou
 	return DC_INDETERMINATE;
 }
 
-int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *s, *s1, *s2;
-	int i, j, p, r, ht, k, l, ls2, m, d, offset, offsave, modesave, defmode;
+	int i, j, p, r, ht, k, l, ls2, m, d, offsave, modesave;
+	enum rpt_mode defmode;
+	enum rpt_offset offset;
 	char multimode = 0;
 	char oc, *cp, *cp1, *cp2;
 	char tmp[15], freq[15] = "", savestr[15] = "";
@@ -728,9 +733,7 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 			}
 			ast_copy_string(myrpt->loginuser, cp1 + 1, sizeof(myrpt->loginuser) - 1);
 			ast_mutex_unlock(&myrpt->lock);
-			if (myrpt->p.archivedir) {
-				donodelog_fmt(myrpt, "LOGIN,%s,%s", myrpt->loginuser, myrpt->loginlevel);
-			}
+			donodelog_fmt(myrpt, "LOGIN,%s,%s", myrpt->loginuser, myrpt->loginlevel);
 			ast_debug(1, "loginuser %s level %s\n", myrpt->loginuser, myrpt->loginlevel);
 			rpt_telemetry(myrpt, REMLOGIN, NULL);
 		}
@@ -871,10 +874,12 @@ int function_remote(struct rpt *myrpt, char *param, char *digitbuf, int command_
 	default:
 		break;
 	}
+
 	return DC_INDETERMINATE;
 }
 
-int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	int i, index, paramlength, nostar = 0;
 	char *lparam;
@@ -976,7 +981,8 @@ int function_autopatchup(struct rpt *myrpt, char *param, char *digitbuf, int com
 	return DC_COMPLETE;
 }
 
-int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
 		return DC_ERROR;
@@ -1001,7 +1007,8 @@ int function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf, int com
 	return DC_COMPLETE;
 }
 
-int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_status(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	struct rpt_tele *telem;
 
@@ -1075,7 +1082,8 @@ int function_status(struct rpt *myrpt, char *param, char *digitbuf, int command_
 	return DC_INDETERMINATE;
 }
 
-int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_macro(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	const char *val;
 	int i;
@@ -1110,7 +1118,8 @@ int function_macro(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 	return DC_COMPLETE;
 }
 
-int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_playback(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	if (myrpt->remote)
 		return DC_ERROR;
@@ -1125,9 +1134,9 @@ int function_playback(struct rpt *myrpt, char *param, char *digitbuf, int comman
 	return DC_COMPLETE;
 }
 
-int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_localplay(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-
 	if (myrpt->remote)
 		return DC_ERROR;
 
@@ -1140,13 +1149,15 @@ int function_localplay(struct rpt *myrpt, char *param, char *digitbuf, int comma
 	return DC_COMPLETE;
 }
 
-int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char string[50], func[100];
 	char paramcopy[500];
 	int argc;
 	char *argv[101], *cp;
-	int i, j, k, r, src;
+	int i, j, k, r;
+	enum rpt_linkmode src;
 	struct rpt_tele *telem;
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -1437,7 +1448,7 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 	case 36:					/* Link Output Enable */
 		if (!mylink)
 			return DC_ERROR;
-		src = 0;
+		src = LINKMODE_OFF;
 		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
 			src = LINKMODE_GUI;
 		if (mylink->phonemode)
@@ -1683,12 +1694,14 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 			}
 		/* go thru all the specs */
 		for (i = 1; i < argc; i++) {
-			if (sscanf(argv[i], "GPIO" N_FMT(d) "=" N_FMT(d), &j, &k) == 2 || sscanf(argv[i], "GPIO" N_FMT(d) ":" N_FMT(d), &j, &k) == 2) {
+			if (sscanf(argv[i], "%*[Gg]%*[Pp]%*[Ii]%*[oO]" N_FMT(d) "%*[=:]" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
-			} else if (sscanf(argv[i], "PP" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
+			} else if (sscanf(argv[i], "%*2[pP]" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
 				sprintf(string, "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
+			} else {
+				ast_log(LOG_WARNING, "Invalid command COP %s, %s", argv[0], argv[i]);
 			}
 		}
 		if (myatoi(argv[0]) == 61) {
@@ -1744,9 +1757,9 @@ int function_cop(struct rpt *myrpt, char *param, char *digitbuf, int command_sou
 	return DC_INDETERMINATE;
 }
 
-int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_meter(
+	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-
 	if (myrpt->remote)
 		return DC_ERROR;
 
@@ -1757,9 +1770,9 @@ int function_meter(struct rpt *myrpt, char *param, char *digitbuf, int command_s
 	return DC_COMPLETE;
 }
 
-int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_userout(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-
 	if (myrpt->remote)
 		return DC_ERROR;
 
@@ -1770,7 +1783,8 @@ int function_userout(struct rpt *myrpt, char *param, char *digitbuf, int command
 	return DC_COMPLETE;
 }
 
-int function_cmd(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink)
+enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	char *cp;
 

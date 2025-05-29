@@ -39,7 +39,7 @@ void rpt_safe_sleep(struct rpt *rpt, struct ast_channel *chan, int ms)
 	}
 }
 
-int wait_interval(struct rpt *myrpt, int type, struct ast_channel *chan)
+int wait_interval(struct rpt *myrpt, enum rpt_delay type, struct ast_channel *chan)
 {
 	int interval;
 
@@ -76,12 +76,12 @@ int priority_jump(struct rpt *myrpt, struct ast_channel *chan)
 	return res;
 }
 
-int sayfile(struct ast_channel *mychannel, char *fname)
+int sayfile(struct ast_channel *mychannel, const char *fname)
 {
 	return ast_stream_and_wait(mychannel, fname, "");
 }
 
-int saycharstr(struct ast_channel *mychannel, char *str)
+int saycharstr(struct ast_channel *mychannel, const char *str)
 {
 	int res;
 
@@ -94,7 +94,7 @@ int saycharstr(struct ast_channel *mychannel, char *str)
 	return res;
 }
 
-int sayphoneticstr(struct ast_channel *mychannel, char *str)
+int sayphoneticstr(struct ast_channel *mychannel, const char *str)
 {
 	int res;
 
@@ -246,9 +246,8 @@ static int morse_cat(char *str, int freq, int duration)
 	return 0;
 }
 
-int send_morse(struct ast_channel *chan, char *string, int speed, int freq, int amplitude)
+int send_morse(struct ast_channel *chan, const char *string, int speed, int freq, int amplitude)
 {
-
 	static struct morse_bits mbits[] = {
 		{ 0, 0 },				/* SPACE */
 		{ 0, 0 },
@@ -420,7 +419,7 @@ int send_usb_txt(struct rpt *myrpt, char *txt)
 	return 0;
 }
 
-int send_link_pl(struct rpt *myrpt, char *txt)
+int send_link_pl(struct rpt *myrpt, const char *txt)
 {
 	struct ast_frame wf;
 	struct rpt_link *l;
@@ -436,7 +435,7 @@ int send_link_pl(struct rpt *myrpt, char *txt)
 	l = myrpt->links.next;
 	while (l && (l != &myrpt->links)) {
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		}
 		l = l->next;
 	}

@@ -69,7 +69,7 @@ int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name
 	return ret;
 }
 
-int get_wait_interval(struct rpt *myrpt, int type)
+int get_wait_interval(struct rpt *myrpt, enum rpt_delay type)
 {
 	int interval;
 	char *wait_times;
@@ -936,6 +936,7 @@ void load_rpt_vars(int n, int init)
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
 	RPT_CONFIG_VAR(archivedir, "archivedir");
+	RPT_CONFIG_VAR_BOOL_DEFAULT(archiveaudio, "archiveaudio", 1);
 	RPT_CONFIG_VAR(archivedatefmt, "archivedatefmt");
 	RPT_CONFIG_VAR(archiveformat, "archiveformat");
 	RPT_CONFIG_VAR_INT(authlevel, "authlevel");
@@ -1006,7 +1007,7 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT_DEFAULT(default_split_2m, "split2m", DEFAULT_SPLIT_2M);
 	RPT_CONFIG_VAR_INT_DEFAULT(default_split_70cm, "split70cm", DEFAULT_SPLIT_70CM);
 	RPT_CONFIG_VAR_BOOL(dtmfkey, "dtmfkey");
-	RPT_CONFIG_VAR(dtmfkeys, "dtmfkeys");
+	RPT_CONFIG_VAR_DEFAULT(dtmfkeys, "dtmfkeys", DTMFKEYS);
 	RPT_CONFIG_VAR(outstreamcmd, "outstreamcmd");
 	RPT_CONFIG_VAR(eloutbound, "eloutbound");
 	RPT_CONFIG_VAR_DEFAULT(events, "events", "events");

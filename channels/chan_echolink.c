@@ -234,13 +234,7 @@ do not use 127.0.0.1
 		+ 16  		/* ASL & EL nodes #'s */  \
 		+ 80  		/* room for "a" message */ \
 		+ (50 * 8) 	/* room for linked ASL and EL nodes */
-/* 
- * If you want to compile/link this code
- * on "BIG-ENDIAN" platforms, then
- * use this: #define RTP_BIG_ENDIAN
- * Have only tested this code on "little-endian"
- * platforms running Linux.
-*/
+
 static const char tdesc[] = "Echolink channel driver";
 static char type[] = "echolink";
 #define SNAPSHOT_SZ 49
@@ -256,7 +250,7 @@ struct sockaddr_in sin_aprs;
  * This is the standard RTP packet format.
  */
 struct gsmVoice_t {
-#ifdef RTP_BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
 	uint8_t version:2;
 	uint8_t pad:1;
 	uint8_t ext:1;
@@ -298,7 +292,7 @@ struct rtcp_sdes_request {
  * \brief RTCP Control Packet common header word.
  */
 struct rtcp_common_t {
-#ifdef RTP_BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
 	uint8_t version:2;
 	uint8_t p:1;
 	uint8_t count:5;
@@ -466,16 +460,6 @@ struct el_rxqast {
 };
 
 /*!
- * \brief Echolink receive queue struct from echolink.
- */
-struct el_rxqel {
-	struct el_rxqel *qe_forw;
-	struct el_rxqel *qe_back;
-	char buf[BLOCKING_FACTOR * GSM_FRAME_SIZE];
-	char fromip[EL_IP_SIZE];
-};
-
-/*!
  * \brief Echolink private information.
  * This is stored in the asterisk channel private technology for reference.
  */
@@ -485,19 +469,19 @@ struct el_pvt {
 	char stream[80];
 	char ip[EL_IP_SIZE];
 	unsigned int firstsent:1; /* First packet seen from echolink */
+	unsigned int firstheard:1;		/* First heard from called node */
+	unsigned int last_firstheard:1; /* Rising edge */
 	unsigned int txkey:1;	  /* Transmit keyed */
+	unsigned int hangup:1;	  /* indicate the channel should hang up */
 	int rxkey;				  /* Receive keyed timer */
 	int keepalive;
 	int txindex;
-	unsigned int hangup:1; /* indicate the channel should hang up */
-	struct ast_frame fr;
 	struct el_rxqast rxqast;
-	struct el_rxqel rxqel;
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
 	struct ast_trans_pvt *xpath;
 	unsigned int nodenum;
-	char *linkstr;
+	struct ast_str *linkstr;
 	ast_mutex_t lock;
 };
 
@@ -984,41 +968,46 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call, con
 	struct rtcp_t *rp;
 	unsigned char *ap;
 	char line[EL_CALL_SIZE + EL_NAME_SIZE];
-	int l, hl, pl;
+	int l, hl, pad;
 
 	hl = 0;
 	*p++ = 3 << 6;
 	*p++ = 201;
 	*p++ = 0;
 	*p++ = 1;
-	*((long *) p) = htonl(0);
+	*((long *) p) = 0;
 	p += 4;
 	hl = 8;
 
 	rp = (struct rtcp_t *) p;
-	*((short *) p) = htons((3 << 14) | 202 | (1 << 8));
-	rp->r.sdes.src = htonl(0);
+	rp->common.version = 3;
+	rp->common.p = 0;
+	rp->common.count = 1;
+	rp->common.pt = 202;
+	rp->common.length = 0;
+	rp->r.sdes.src = 0;
 	ap = (unsigned char *) rp->r.sdes.item;
 
-	ast_copy_string(line, "CALLSIGN", EL_CALL_SIZE + EL_NAME_SIZE);
+	ast_copy_string(line, "CALLSIGN", sizeof(line));
 	*ap++ = 1;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
 	ap += l;
 
-	snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "%s %s", call, name);
+	snprintf(line, sizeof(line), "%s %s", call, name);
 	*ap++ = 2;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
 	ap += l;
 
 	if (astnode) {
-		l = snprintf(line, EL_CALL_SIZE + EL_NAME_SIZE, "AllStar %s", astnode);
+		l = snprintf(line, sizeof(line), "AllStar %s", astnode);
 		*ap++ = 6;
 		*ap++ = l;
 		memcpy(ap, line, l);
 		ap += l;
 	}
+
 	/* enable DTMF keypad */
 	*ap++ = 8;
 	*ap++ = 3;
@@ -1028,25 +1017,22 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call, con
 
 	*ap++ = 0;
 	*ap++ = 0;
-	l = ap - p;
 
-	rp->common.length = htons(((l + 3) / 4) - 1);
-	l = hl + ((ntohs(rp->common.length) + 1) * 4);
+	l = hl + (ap - p);
 
-	pl = (l & 4) ? l : l + 4;
-
-	if (pl > l) {
-		int pad = pl - l;
+	pad = (4 - (l % 4)) % 4;
+	if (pad > 0) {
 		memset(zp + l, '\0', pad);
-		zp[pl - 1] = pad;
-		p[0] |= 0x20;
-		rp->common.length = htons(ntohs(rp->common.length) + ((pad) / 4));
-		l = pl;
+		l += pad;
+		zp[l - 1] = pad;
+		rp->common.p = 1;
 	}
 
 	if (l > pkt_len) {
 		return 0;
 	}
+
+	rp->common.length = htons(((l - hl + 3) / 4) - 1);
 	memcpy(pkt, zp, l);
 	return l;
 }
@@ -1068,22 +1054,24 @@ static int rtcp_make_el_sdes(unsigned char *pkt, int pkt_len, const char *cname,
 	unsigned char *p = zp;
 	struct rtcp_t *rp;
 	unsigned char *ap;
-	int l, hl, pl;
-
-	memset(zp, 0, sizeof(zp)); /* Not really needed since pkt has been memset already by the caller, but prevents valgrind complaining about it */
+	int l, hl, pad;
 
 	hl = 0;
 	*p++ = 2 << 6;
 	*p++ = 201;
 	*p++ = 0;
 	*p++ = 1;
-	*((long *) p) = htonl(0);
+	*((long *) p) = 0;
 	p += 4;
 	hl = 8;
 
 	rp = (struct rtcp_t *) p;
-	*((short *) p) = htons((2 << 14) | 202 | (1 << 8));
-	rp->r.sdes.src = htonl(0);
+	rp->common.version = 2;
+	rp->common.p = 0;
+	rp->common.count = 1;
+	rp->common.pt = 202;
+	rp->common.length = 0;
+	rp->r.sdes.src = 0;
 	ap = (unsigned char *) rp->r.sdes.item;
 
 	*ap++ = 1;
@@ -1098,21 +1086,17 @@ static int rtcp_make_el_sdes(unsigned char *pkt, int pkt_len, const char *cname,
 
 	*ap++ = 0;
 	*ap++ = 0;
-	l = ap - p;
 
-	rp->common.length = htons(((l + 3) / 4) - 1);
-	l = hl + ((ntohs(rp->common.length) + 1) * 4);
+	l = hl + (ap - p);
+	pad = (4 - (l % 4)) % 4;
 
-	pl = (l & 4) ? l : l + 4;
-
-	if (pl > l) {
-		int pad = pl - l;
+	if (pad > 0) {
 		memset(zp + l, '\0', pad);
-		zp[pl - 1] = pad;
-		p[0] |= 0x20;
-		rp->common.length = htons(ntohs(rp->common.length) + ((pad) / 4));
-		l = pl;
+		l += pad;
+		zp[l - 1] = pad;
+		rp->common.p = 1;
 	}
+	rp->common.length = htons(((l - hl + 3) / 4) - 1);
 
 	if (l > pkt_len) {
 		return 0;
@@ -1129,28 +1113,31 @@ static int rtcp_make_el_sdes(unsigned char *pkt, int pkt_len, const char *cname,
  * \param reason		Pointer to reason for the bye packet
  * \retval  			Successful length
  */
-static int rtcp_make_bye(unsigned char *pkt, const char *reason)
+static int rtcp_make_bye(unsigned char *pkt, int pkt_len, const char *reason)
 {
+	unsigned char *p = pkt;
 	struct rtcp_t *rp;
-	unsigned char *ap, *zp;
-	int l, hl, pl;
+	unsigned char *ap;
+	int l, hl, pad;
 
-	zp = pkt;
 	hl = 0;
-
-	*pkt++ = 3 << 6;
-	*pkt++ = 201;
-	*pkt++ = 0;
-	*pkt++ = 1;
-	*((long *) pkt) = htonl(0);
-	pkt += 4;
+	*p++ = 3 << 6;
+	*p++ = 201;
+	*p++ = 0;
+	*p++ = 1;
+	*((long *) p) = 0;
+	p += 4;
 	hl = 8;
 
-	rp = (struct rtcp_t *) pkt;
-	*((short *) pkt) = htons((3 << 14) | 203 | (1 << 8));
-	rp->r.bye.src[0] = htonl(0);
+	rp = (struct rtcp_t *) p;
+	rp->common.version = 3;
+	rp->common.p = 0;
+	rp->common.count = 1;
+	rp->common.pt = 203;
+	rp->common.length = 0;
+	rp->r.bye.src[0] = 0;
 	ap = (unsigned char *) rp->r.sdes.item;
-	l = 0;
+
 	if (reason != NULL) {
 		l = strlen(reason);
 		if (l > 0) {
@@ -1159,22 +1146,22 @@ static int rtcp_make_bye(unsigned char *pkt, const char *reason)
 			ap += l;
 		}
 	}
-	while ((ap - pkt) & 3) {
-		*ap++ = 0;
-	}
-	l = ap - pkt;
-	rp->common.length = htons((l / 4) - 1);
-	l = hl + ((ntohs(rp->common.length) + 1) * 4);
 
-	pl = (l & 4) ? l : l + 4;
-	if (pl > l) {
-		int pad = pl - l;
-		memset(zp + l, '\0', pad);
-		zp[pl - 1] = pad;
-		pkt[0] |= 0x20;
-		rp->common.length = htons(ntohs(rp->common.length) + ((pad) / 4));
-		l = pl;
+	l = hl + (ap - p);
+
+	pad = (4 - (l % 4)) % 4;
+	if (pad > 0) {
+		memset(pkt + l, '\0', pad);
+		l += pad;
+		pkt[l - 1] = pad;
+		rp->common.p = 1;
 	}
+
+	if (l > pkt_len) {
+		return 0;
+	}
+
+	rp->common.length = htons(((l - hl + 3) / 4) - 1);
 	return l;
 }
 
@@ -1229,8 +1216,8 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 static void copy_sdes_item(const char *source, char *dest, int destlen)
 {
 	int len = source[1] & 0xFF;
-	if (len > destlen) {
-		len = destlen;
+	if (len > destlen - 1) {
+		len = destlen - 1;
 	}
 	memcpy(dest, source + 2, len);
 	dest[len] = 0;
@@ -1397,20 +1384,15 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
  */
 static void el_destroy(struct el_pvt *pvt)
 {
-	struct qelem *qpast;
+	struct el_rxqast *qpast;
 
 	ast_mutex_lock(&pvt->lock);
 	while (pvt->rxqast.qe_forw != &pvt->rxqast) {
-		qpast = (struct qelem *) pvt->rxqast.qe_forw;
+		qpast = pvt->rxqast.qe_forw;
 		remque(qpast);
 		ast_free(qpast);
 	}
 
-	while (pvt->rxqel.qe_forw != &pvt->rxqel) {
-		qpast = (struct qelem *) pvt->rxqel.qe_forw;
-		remque(qpast);
-		ast_free(qpast);
-	}
 	ast_mutex_unlock(&pvt->lock);
 
 	if (pvt->dsp) {
@@ -1460,9 +1442,6 @@ static struct el_pvt *el_alloc(const char *data)
 		pvt->rxqast.qe_forw = &pvt->rxqast;
 		pvt->rxqast.qe_back = &pvt->rxqast;
 
-		pvt->rxqel.qe_forw = &pvt->rxqel;
-		pvt->rxqel.qe_back = &pvt->rxqel;
-
 		pvt->keepalive = KEEPALIVE_TIME;
 		pvt->instp = instances[n];
 		pvt->dsp = ast_dsp_new();
@@ -1503,7 +1482,7 @@ static int el_hangup(struct ast_channel *ast)
 	ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 	pvt->hangup = 0;
 	ast_mutex_unlock(&instp->lock);
-	n = rtcp_make_bye(bye, "disconnected");
+	n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
@@ -1542,7 +1521,6 @@ static int el_hangup(struct ast_channel *ast)
 static int el_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
 {
 	struct el_pvt *pvt = ast_channel_tech_pvt(ast);
-
 	switch (cond) {
 	case AST_CONTROL_RADIO_KEY:
 		pvt->txkey = 1;
@@ -1684,9 +1662,9 @@ static int el_text(struct ast_channel *ast, const char *text)
 	struct el_pvt *pvt = ast_channel_tech_pvt(ast);
 	const char *delim = " ";
 	char *cmd, *arg1, *arg4;
-	char *ptr,*saveptr, *cp, *pkt;
+	char *ptr, *saveptr, *cp;
 	char buf[5120], str[200], *strs[MAXLINKSTRS];
-	int i, j, k, x, pkt_len, pkt_actual_len;
+	int i, j, k, x;
 
 	/* see if we are receiving a link text message */
 	if (pvt->instp && (text[0] == 'L')) {
@@ -1710,59 +1688,63 @@ static int el_text(struct ast_channel *ast, const char *text)
 		}
 		i = finddelim(cp, strs, ARRAY_LEN(strs));
 		if (i) {
-			qsort(strs, i, sizeof(char *), mycompar);
-			/* get size of largest string (node number) */
-			j = 0;
-			for (x =0; x < i; x++) {
-			    j = MAX(strlen(strs[x]), j);
+			struct ast_str *pkt = ast_str_create(EL_INIT_BUFFER);
+
+			if (i > 1) {
+				qsort(strs, i, sizeof(char *), mycompar);
 			}
-			/* allocate a string for all of the links */
-			pkt_len = (i * (j + 3)) + 50;
-			pkt = ast_calloc(1, pkt_len);
-			if (!pkt) {
-				ast_free(cp);
-				return -1;
-			}
-			j = 0;
-			k = 0;
+
+			j = 0; /* if header added */
+			k = 0; /* start of current line in buffer */
 			for (x = 0; x < i; x++) {
+				char mode = *strs[x];
+				char *node = strs[x] + 1;
+
 				/* Process AllStar node numbers - skip over those that begin with '3' which are echolink */
-				if ((*(strs[x] + 1) != '3')) {
-					if (strlen(pkt + k) >= 32) {
-						strncat(pkt, "\r    ", pkt_len);
+				if (*node != '3') {
+					if ((ast_str_strlen(pkt) - k + strlen(node)) >= 36) {
+						/* the current line in the buffer is getting long, start fresh */
+						ast_str_append(&pkt, 0, "\r    ");
+						k = ast_str_strlen(pkt) - 4;
 					}
-					if (!j++) {
-						strncat(pkt, "AllStar:", pkt_len);
+					if (!j) {
+						ast_str_append(&pkt, 0, "AllStar:");
+						j = 1;
 					}
-					pkt_actual_len = strlen(pkt);
-					if (*strs[x] == 'T') {
-						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %s", strs[x] + 1);
-					} else {
-						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %s(M)", strs[x] + 1);
-					}
+					ast_str_append(&pkt, 0, " %s%s", node, mode == 'T' ? "" : "(M)");
 				}
 			}
-			strncat(pkt, "\r", pkt_len);
-			j = 0;
-			k = strlen(pkt);
+			ast_str_append(&pkt, 0, "\r");
+
+			j = 0;					 /* if header added */
+			k = ast_str_strlen(pkt); /* start of current line in buffer */
 			for (x = 0; x < i; x++) {
+				char mode = *strs[x];
+				char *node = strs[x] + 1;
+				struct eldb node_result;
+
 				/* Process echolink node numbers - they start with 3 */
-				if (*(strs[x] + 1) == '3') {
-					if (strlen(pkt + k) >= 32) {
-						strncat(pkt, "\r    ", pkt_len);
+				if (*node == '3') {
+					node++; /* advance to the EL node# */
+					if ((ast_str_strlen(pkt) - k + strlen(node)) >= 36) {
+						/* the current line in the buffer is getting long, start fresh */
+						ast_str_append(&pkt, 0, "\r    ");
+						k = ast_str_strlen(pkt) - 4;
 					}
-					if (!j++) {
-						strncat(pkt, "Echolink: ", pkt_len);
+					if (!j) {
+						ast_str_append(&pkt, 0, "Echolink:");
+						j = 1;
 					}
-					pkt_actual_len = strlen(pkt);
-					if (*strs[x] == 'T') {
-						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %d", atoi(strs[x] + 2));
+					lookup_node_by_nodenum(node, &node_result);
+					if (node_result.callsign[0]) {
+						ast_str_append(&pkt, 0, " %s%s", node_result.callsign, mode == 'T' ? "" : "(M)");
 					} else {
-						snprintf(pkt + pkt_actual_len, pkt_len - pkt_actual_len, " %d(M)", atoi(strs[x] + 2));
+						ast_str_append(&pkt, 0, " %d%s", atoi(node), mode == 'T' ? "" : "(M)");
 					}
 				}
 			}
-			strncat(pkt, "\r", pkt_len);
+			ast_str_append(&pkt, 0, "\r");
+
 			pvt->linkstr = pkt;
 		}
 		ast_free(cp);
@@ -1825,15 +1807,16 @@ static int compare_ip(const void *pa, const void *pb)
  */
 static void send_audio_only_one(const void *nodep, const VISIT which, const int depth)
 {
+	struct el_node *node = *(struct el_node **) nodep;
+	struct el_instance *instp = node->instp;
 	struct sockaddr_in sin;
-	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 
 	if ((which == leaf) || (which == postorder)) {
-		if (strncmp((*(struct el_node **) nodep)->ip, instp->el_node_test.ip, EL_IP_SIZE) == 0) {
+		if (strncmp(node->ip, instp->el_node_test.ip, EL_IP_SIZE) == 0) {
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons(instp->audio_port);
-			sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
+			sin.sin_addr.s_addr = inet_addr(node->ip);
 
 			instp->audio_all.version = 3;
 			instp->audio_all.pad = 0;
@@ -1841,7 +1824,7 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 			instp->audio_all.csrc = 0;
 			instp->audio_all.marker = 0;
 			instp->audio_all.payt = 3;
-			instp->audio_all.seqnum = htons((*(struct el_node **) nodep)->seqnum++);
+			instp->audio_all.seqnum = htons(node->seqnum++);
 			instp->audio_all.time = htonl(0);
 			instp->audio_all.ssrc = htonl(instp->mynode);
 
@@ -1849,7 +1832,7 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 				   0, (struct sockaddr *) &sin, sizeof(sin));
 
 			instp->tx_audio_packets++;
-			(*(struct el_node **) nodep)->tx_audio_packets++;
+			node->tx_audio_packets++;
 		}
 	}
 }
@@ -1946,10 +1929,10 @@ static void lookup_node_callsign(const void *nodep, const VISIT which, void *clo
  */
 static void send_info(const void *nodep, const VISIT which, const int depth)
 {
+	struct el_node *node = *(struct el_node **) nodep;
+	struct el_instance *instp = node->instp;
 	struct sockaddr_in sin;
 	struct ast_str *pkt = NULL;
-	char *cp;
-	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 
 	pkt = ast_str_create(EL_INIT_BUFFER);
 	if (!pkt) {
@@ -1960,7 +1943,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->audio_port);
-		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
+		sin.sin_addr.s_addr = inet_addr(node->ip);
 
 		ast_str_set(&pkt, 0, EL_WELCOME_MESSAGE, instp->astnode, instp->mycall, instp->mynode);
 
@@ -1968,16 +1951,15 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_str_append(&pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
-		if ((cp = (*(struct el_node **) nodep)->pvt ? (*(struct el_node **) nodep)->pvt->linkstr : NULL)) {
-			ast_str_append(&pkt, 0, "Systems Linked:\r%s", cp);
+		if (node->pvt && node->pvt->linkstr) {
+			ast_str_append(&pkt, 0, "Systems Linked:\r%s", ast_str_buffer(node->pvt->linkstr));
 		}
 
 		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
-		ast_free(pkt);
-
 		instp->tx_ctrl_packets++;
-		(*(struct el_node **) nodep)->tx_ctrl_packets++;
+		node->tx_ctrl_packets++;
 	}
+	ast_free(pkt);
 }
 
 /*!
@@ -1988,20 +1970,21 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
  */
 static void send_heartbeat(const void *nodep, const VISIT which, const int depth)
 {
+	struct el_node *node = *(struct el_node **) nodep;
+	struct el_instance *instp = node->instp;
 	struct sockaddr_in sin;
 	unsigned char sdes_packet[256];
 	int sdes_length;
-	struct el_instance *instp = (*(struct el_node **) nodep)->instp;
 
 	if ((which == leaf) || (which == postorder)) {
 
-		if ((*(struct el_node **) nodep)->countdown >= 0) {
-			(*(struct el_node **) nodep)->countdown--;
+		if (node->countdown >= 0) {
+			node->countdown--;
 		}
 
-		if ((*(struct el_node **) nodep)->countdown < 0) {
-			ast_copy_string(instp->el_node_test.ip, (*(struct el_node **) nodep)->ip, EL_IP_SIZE);
-			ast_copy_string(instp->el_node_test.call, (*(struct el_node **) nodep)->call, EL_CALL_SIZE);
+		if (node->countdown < 0) {
+			ast_copy_string(instp->el_node_test.ip, node->ip, EL_IP_SIZE);
+			ast_copy_string(instp->el_node_test.call, node->call, EL_CALL_SIZE);
 			ast_log(LOG_WARNING, "Countdown for Callsign %s, IP Address %s is negative.\n", instp->el_node_test.call, instp->el_node_test.ip);
 		}
 		memset(sdes_packet, 0, sizeof(sdes_packet));
@@ -2010,11 +1993,11 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->ctrl_port);
-		sin.sin_addr.s_addr = inet_addr((*(struct el_node **) nodep)->ip);
+		sin.sin_addr.s_addr = inet_addr(node->ip);
 		sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 
 		instp->tx_ctrl_packets++;
-		(*(struct el_node **) nodep)->tx_ctrl_packets++;
+		node->tx_ctrl_packets++;
 	}
 }
 
@@ -2206,7 +2189,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 			n = 1;
 			pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall, instp->myname, instp->astnode);
 		} else {
-			pack_length = rtcp_make_bye(pack, "bye");
+			pack_length = rtcp_make_bye(pack, sizeof(pack), "bye");
 			n = 20;
 		}
 		memset(&sin, 0, sizeof(sin));
@@ -2243,14 +2226,21 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 static struct ast_frame *el_xread(struct ast_channel *ast)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
+	struct ast_frame fr = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_ANSWER,
+		.src = __PRETTY_FUNCTION__,
+	};
 
 	if (p->hangup) {
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
 	}
-
-	memset(&p->fr, 0, sizeof(struct ast_frame));
-	return &p->fr;
+	if (!p->last_firstheard && p->firstheard) {
+		ast_queue_frame(ast, &fr);
+		p->last_firstheard = 1;
+	}
+	return &ast_null_frame;
 }
 
 /*!
@@ -2272,7 +2262,16 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct el_rxqast *qpast;
 	int n, x;
 	char buf[GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET];
+	struct ast_frame fr3 = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_ANSWER,
+		.src = __PRETTY_FUNCTION__,
+	};
 
+	if (!p->last_firstheard && p->firstheard) {
+		ast_queue_frame(ast, &fr3);
+		p->last_firstheard = 1;
+	}
 	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
 	}
@@ -2316,11 +2315,13 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			}
 		} else {
 			if (!p->rxkey) {
-				memset(&fr, 0, sizeof(fr));
-				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
-				fr.src = type;
-				ast_queue_frame(ast, &fr);
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_RADIO_KEY,
+					.src = __PRETTY_FUNCTION__,
+				};
+
+				ast_queue_frame(ast, &wf);
 			}
 			p->rxkey = MAX_RXKEY_TIME;
 			ast_mutex_lock(&p->lock);
@@ -2336,8 +2337,8 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.frametype = AST_FRAME_VOICE;
 			fr.subclass.format = ast_format_gsm;
 			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
-			fr.src = type;
 			fr.offset = AST_FRIENDLY_OFFSET;
+			fr.src = __PRETTY_FUNCTION__;
 
 			x = 0;
 			if (p->dsp) {
@@ -2345,8 +2346,9 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				f1 = ast_dsp_process(NULL, p->dsp, f2);
 				if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
 					if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
-						if (f1->frametype == AST_FRAME_DTMF_END)
+						if (f1->frametype == AST_FRAME_DTMF_END) {
 							ast_verb(4, "Echolink %s Got DTMF character %c from IP address %s.\n", p->stream, f1->subclass.integer, p->ip);
+						}
 						ast_queue_frame(ast, f1);
 						x = 1;
 					}
@@ -2359,11 +2361,13 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 	}
 	if (p->rxkey == 1) {
-		memset(&fr, 0, sizeof(fr));
-		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-		fr.src = type;
-		ast_queue_frame(ast, &fr);
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(ast, &wf);
 	}
 	if (p->rxkey) {
 		p->rxkey--;
@@ -2385,10 +2389,10 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (p->txindex >= BLOCKING_FACTOR) {
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->el_node_test.ip, p->ip);
+		ast_mutex_unlock(&instp->lock);
 		ast_mutex_lock(&el_nodelist_lock);
 		twalk(el_node_list, send_audio_only_one);
 		ast_mutex_unlock(&el_nodelist_lock);
-		ast_mutex_unlock(&instp->lock);
 		p->txindex = 0;
 	}
 
@@ -2405,18 +2409,16 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	ast_mutex_unlock(&el_nodelist_lock);
 	if (instp->el_node_test.ip[0] != '\0') {
 		if (find_delete(&instp->el_node_test)) {
-			bye_length = rtcp_make_bye(bye, "rtcp timeout");
+			bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
 			sin.sin_port = htons(instp->ctrl_port);
-			ast_mutex_lock(&instp->lock);
 			/* send 20 bye packets to insure that they receive this disconnect */
 			for (i = 0; i < 20; i++) {
 				sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 				instp->tx_ctrl_packets++;
 			}
-			ast_mutex_unlock(&instp->lock);
 			ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
 		}
 		instp->el_node_test.ip[0] = '\0';
@@ -3353,10 +3355,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 {
 	struct el_node *el_node_key;
 	struct ast_channel *chan;
-	struct ast_frame fr = {
-		.frametype = AST_FRAME_CONTROL,
-		.subclass.integer = AST_CONTROL_ANSWER,
-	};
 	const struct eldb *mynode;
 	char nodestr[30];
 	time_t now;
@@ -3385,6 +3383,12 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip, el_node_key->nodenum, el_node_key->name);
 		if (pvt == NULL) {	/* if a new inbound call */
+			struct ast_frame fr = {
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_ANSWER,
+				.src = __PRETTY_FUNCTION__,
+			};
+
 			pvt = el_alloc(instp->name);
 			if (!pvt) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
@@ -3401,7 +3405,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
-			fr.src = type;
 			ast_queue_frame(chan, &fr);
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
@@ -3606,7 +3609,7 @@ static void *el_reader(void *data)
 					items.item[0].r_text = NULL;
 					parse_sdes((unsigned char *) buf, &items);
 					if (items.item[0].r_text != NULL) {
-						copy_sdes_item(items.item[0].r_text, call_name, 127);
+						copy_sdes_item(items.item[0].r_text, call_name, sizeof(call_name));
 					}
 					if (call_name[0] != '\0') {
 						call = call_name;
@@ -3622,6 +3625,8 @@ static void *el_reader(void *data)
 						ast_mutex_unlock(&el_nodelist_lock);
 						if (found_key) {
 							node = *found_key;
+							node->pvt->firstheard = 1;
+
 							node->countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
 							if (strncmp((*found_key)->call, call, EL_CALL_SIZE) != 0) {
@@ -3677,7 +3682,7 @@ static void *el_reader(void *data)
 									/* if its time, send un-auth */
 									if (ast_tvdiff_ms(ast_tvnow(), instp->pending[x].reqtime) >= AUTH_RETRY_MS) {
 										ast_debug(1, "Sent bye to IP address %s.\n", instp->el_node_test.ip);
-										j = rtcp_make_bye(bye, "UN-AUTHORIZED");
+										j = rtcp_make_bye(bye, sizeof(bye), "UN-AUTHORIZED");
 										memset(&sin1, 0, sizeof(sin1));
 										sin1.sin_family = AF_INET;
 										sin1.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
@@ -3758,7 +3763,7 @@ static void *el_reader(void *data)
 					ast_mutex_unlock(&el_nodelist_lock);
 					if (found_key) {
 						node = *found_key;
-
+						node->pvt->firstheard = 1;
 						node->countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
 						/* compute inter-arrival jitter */
@@ -4149,7 +4154,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 	/* start the registration thread */
 	ast_pthread_create(&el_register_thread, NULL, el_register, instp);
-	ast_pthread_create_detached(&instp->el_reader_thread, NULL, el_reader, instp);
+	ast_pthread_create(&instp->el_reader_thread, NULL, el_reader, instp);
 	instances[ninstances++] = instp;
 
 	ast_debug(1, "Echolink/%s listening on %s port %s.\n", instp->name, instp->ipaddr, instp->port);

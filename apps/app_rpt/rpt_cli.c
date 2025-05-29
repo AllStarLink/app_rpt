@@ -316,38 +316,67 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 	return RESULT_FAILURE;
 }
 
+/*! \brief compare numric values of node names */
+static int rpt_compare_node(const void *p, const void *q)
+{
+	const struct rpt_lstat *first = *(const struct rpt_lstat **) p;
+	const struct rpt_lstat *next = *(const struct rpt_lstat **) q;
+
+	return strverscmp(first->name, next->name);
+}
+
 /*! \brief Link stats function */
 static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 {
-	int i;
+	int i, x, node_count = 0;
 	char *connstate;
 	struct rpt *myrpt;
 	struct rpt_link *l;
-	struct rpt_lstat *s, *t;
-	struct rpt_lstat s_head;
+	struct rpt_lstat *s = NULL;
 	int nrpts = rpt_num_rpts();
+	struct rpt_lstat **stat_array = NULL;
 
 	if (argc != 3) {
 		return RESULT_SHOWUSAGE;
 	}
 
-	s = NULL;
-	s_head.next = &s_head;
-	s_head.prev = &s_head;
-
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
+			rpt_mutex_lock(&myrpt->lock);
+			/* count the number of nodes */
+			l = myrpt->links.next;
+			while (l && (l != &myrpt->links)) {
+				if (l->name[0] == '0') { /* Skip '0' nodes */
+					l = l->next;
+					continue;
+				}
+				node_count++;
+				l = l->next;
+			}
+
+			if (node_count > 0) {
+				stat_array = ast_calloc(node_count, sizeof(struct rpt_lstat *));
+				if (!stat_array) {
+					return RESULT_FAILURE;
+				}
+			}
 			/* Traverse the list of connected nodes */
 			l = myrpt->links.next;
+			i = 0;
 			while (l && (l != &myrpt->links)) {
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					l = l->next;
 					continue;
 				}
 				if ((s = ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
+					if (i > 0) {
+						for (x = 0; x < i; x++) {
+							ast_free(stat_array[i]);
+						}
+					}
+					ast_free(stat_array);
 					rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 					return RESULT_FAILURE;
 				}
@@ -363,18 +392,24 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				s->connecttime = l->connecttime;
 				s->thisconnected = l->thisconnected;
 				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				insque((struct qelem *) s, (struct qelem *) s_head.next);
+				stat_array[i] = s;
+				i++;
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				l = l->next;
 			}
-			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
+			rpt_mutex_unlock(&myrpt->lock);
+			if (node_count > 1) {
+				qsort(stat_array, node_count, sizeof(struct rpt_lstat *), rpt_compare_node);
+			}
 			ast_cli(fd, "NODE      PEER                RECONNECTS  DIRECTION  CONNECT TIME        CONNECT STATE\n");
 			ast_cli(fd, "----      ----                ----------  ---------  ------------        -------------\n");
 
-			for (s = s_head.next; s != &s_head; s = s->next) {
+			for (i = 0; i < node_count; i++) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(ast_tvnow(), s->connecttime);
+				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
 				char conntime[21];
+
+				s = stat_array[i];
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;
@@ -389,14 +424,10 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					connstate = "CONNECTING";
 				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s\n", s->name, s->peer, s->reconnects,
 						(s->outbound) ? "OUT" : "IN", conntime, connstate);
+				ast_free(s);
 			}
-			/* destroy our local link queue */
-			s = s_head.next;
-			while (s != &s_head) {
-				t = s;
-				s = s->next;
-				remque((struct qelem *) t);
-				ast_free(t);
+			if (stat_array) {
+				ast_free(stat_array);
 			}
 			return RESULT_SUCCESS;
 		}
@@ -565,7 +596,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			rpt_mutex_unlock(&myrpt->lock);	// UNLOCK 
 			for (s = s_head.next; s != &s_head; s = s->next) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(ast_tvnow(), s->connecttime);
+				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
 				char conntime[21];
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
@@ -986,7 +1017,8 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	struct rpt *myrpt = NULL;
 	int nrpts = rpt_num_rpts();
 
-	if (argc != 6) {
+	if (argc < 4) {
+		/* we need at least "rpt cmd <node> ..." */
 		return RESULT_SHOWUSAGE;
 	}
 
@@ -1004,11 +1036,17 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	}							/* if thisRpt < 0 */
 
 	/* Look up the action */
-	thisAction = function_table_index(argv[3]);
+	thisAction = rpt_function_lookup(argv[3]);
 	if (thisAction < 0) {
 		ast_cli(fd, "Unknown action name %s.\n", argv[3]);
 		return RESULT_FAILURE;
-	}							/* if thisAction < 0 */
+	} /* if thisAction < 0 */
+
+	if (argc < (4 + rpt_function_minargs(thisAction))) {
+		/* for this function we need to have (at least)
+		   "rpt cmd <node> <function-name> [required-function-args]" */
+		return RESULT_SHOWUSAGE;
+	}
 
 	/* at this point, it looks like all the arguments make sense... */
 
@@ -1017,8 +1055,22 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE) {
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_BUSY;
 		rpt_vars[thisRpt].cmdAction.functionNumber = thisAction;
-		snprintf(rpt_vars[thisRpt].cmdAction.param, sizeof(rpt_vars[thisRpt].cmdAction.param), "%s,%s", argv[4], argv[5]);
-		ast_copy_string(rpt_vars[thisRpt].cmdAction.digits, argv[5], sizeof(rpt_vars[thisRpt].cmdAction.digits));
+		rpt_vars[thisRpt].cmdAction.param[0] = 0;
+		rpt_vars[thisRpt].cmdAction.digits[0] = 0;
+		if (argc > 5) {
+			/* given a command like "rpt cmd 2000 ilink 3 2001" we set :
+				.cmdAction.param  = "3,2001"
+				.cmdAction.digits = "2001"
+			 */
+			snprintf(rpt_vars[thisRpt].cmdAction.param, sizeof(rpt_vars[thisRpt].cmdAction.param), "%s,%s", argv[4], argv[5]);
+			ast_copy_string(rpt_vars[thisRpt].cmdAction.digits, argv[5], sizeof(rpt_vars[thisRpt].cmdAction.digits));
+		} else if (argc > 4) {
+			/* given a (shorter) command like "rpt cmd 2000 status 12" we set :
+				.cmdAction.param  = "12"
+				.cmdAction.digits = ""
+			 */
+			ast_copy_string(rpt_vars[thisRpt].cmdAction.param, argv[4], sizeof(rpt_vars[thisRpt].cmdAction.param));
+		}
 		rpt_vars[thisRpt].cmdAction.command_source = SOURCE_RPT;
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_READY;
 	}							/* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
@@ -1064,9 +1116,9 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 	return 0;
 }
 
-static char *complete_node_list(const char *line, const char *word, int pos, int rpos)
+static char *rpt_complete_node_list(const char *line, const char *word, int pos, int rpos)
 {
-	int i = 0;
+	int i;
 	int nrpts = rpt_num_rpts();
 	size_t wordlen = strlen(word);
 
@@ -1214,7 +1266,7 @@ static char *handle_cli_dump(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"	Dumps struct debug info to log\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_dump(a->fd, a->argc, a->argv));
 }
@@ -1229,7 +1281,7 @@ static char *handle_cli_stats(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"	Dumps node statistics to console\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_stats(a->fd, a->argc, a->argv));
 }
@@ -1244,7 +1296,7 @@ static char *handle_cli_nodes(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"	Dumps a list of directly and indirectly connected nodes to the console\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_nodes(a->fd, a->argc, a->argv));
 }
@@ -1259,7 +1311,7 @@ static char *handle_cli_xnode(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"	Dumps extended node info to the console\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_xnode(a->fd, a->argc, a->argv));
 }
@@ -1289,7 +1341,7 @@ static char *handle_cli_lstats(struct ast_cli_entry *e, int cmd, struct ast_cli_
 			"	Dumps link statistics to console\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_lstats(a->fd, a->argc, a->argv));
 }
@@ -1319,7 +1371,7 @@ static char *handle_cli_fun(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 			"	Send a DTMF function to a node\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_fun(a->fd, a->argc, a->argv));
 }
@@ -1334,7 +1386,7 @@ static char *handle_cli_fun1(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"	Send a DTMF function to a node\n";;
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_fun1(a->fd, a->argc, a->argv));
 }
@@ -1349,7 +1401,7 @@ static char *handle_cli_playback(struct ast_cli_entry *e, int cmd, struct ast_cl
 			"	Send an Audio File to a node, send to all other connected nodes (global)\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_playback(a->fd, a->argc, a->argv));
 }
@@ -1359,13 +1411,21 @@ static char *handle_cli_cmd(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt cmd";
-		e->usage =
-			"Usage: rpt cmd <nodename> <cmd-name> <cmd-index> <cmd-args>\n"
-			"	Send a command to a node.\n"
-			"	i.e. rpt cmd 2000 ilink 3 2001\n";
+		e->usage = "Usage: rpt cmd <nodename> <cmd-name> <cmd-index> <cmd-args>\n"
+				   "	Send a command to a node.\n"
+				   "	i.e. rpt cmd 2000 ilink 3 2001\n"
+				   "	     rpt cmd 2000 localplay rpt/goodafternoon\n"
+				   "	     rpt cmd 2000 status 12\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		switch (a->pos) {
+		case 2:
+			return rpt_complete_node_list(a->line, a->word, a->pos, 2);
+		case 3:
+			return rpt_complete_function_list(a->line, a->word, a->pos, 3);
+		default:
+			return NULL;
+		}
 	}
 	return res2cli(rpt_do_cmd(a->fd, a->argc, a->argv));
 }
@@ -1381,7 +1441,7 @@ static char *handle_cli_setvar(struct ast_cli_entry *e, int cmd, struct ast_cli_
 			"   Note: variable names are case-sensitive.\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 3);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 3);
 	}
 	return res2cli(rpt_do_setvar(a->fd, a->argc, a->argv));
 }
@@ -1395,7 +1455,7 @@ static char *handle_cli_showvars(struct ast_cli_entry *e, int cmd, struct ast_cl
 			"	Display all the Asterisk channel variables for a node.\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 3);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 3);
 	}
 	return res2cli(rpt_do_showvars(a->fd, a->argc, a->argv));
 }
@@ -1409,7 +1469,7 @@ static char *handle_cli_show_channels(struct ast_cli_entry *e, int cmd, struct a
 			"	Display all the Asterisk channels for a node.\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 3);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 3);
 	}
 	return res2cli(rpt_show_channels(a->fd, a->argc, a->argv));
 }
@@ -1419,11 +1479,11 @@ static char *handle_cli_lookup(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt lookup";
-		//e->usage = rpt_usage;
-		e->usage = NULL;		/*! \todo 20220111 NA rpt_usage doesn't exist! */
+		e->usage = "Usage: rpt lookup <nodename>\n"
+				   "	Display the connection information for a node.\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_lookup(a->fd, a->argc, a->argv));
 }
@@ -1438,7 +1498,7 @@ static char *handle_cli_localplay(struct ast_cli_entry *e, int cmd, struct ast_c
 			"	Send an audio file to a node, do not send to other connected nodes (local)\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_localplay(a->fd, a->argc, a->argv));
 }
@@ -1453,7 +1513,7 @@ static char *handle_cli_sendall(struct ast_cli_entry *e, int cmd, struct ast_cli
 			"	Send a Text message to all connected nodes\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_sendall(a->fd, a->argc, a->argv));
 }
@@ -1468,7 +1528,7 @@ static char *handle_cli_sendtext(struct ast_cli_entry *e, int cmd, struct ast_cl
 			"	Send a Text message to a specified node\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_sendtext(a->fd, a->argc, a->argv));
 }
@@ -1483,7 +1543,7 @@ static char *handle_cli_page(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"	Send a page to a user on a node, specifying capcode and type/text\n";
 		return NULL;
 	case CLI_GENERATE:
-		return complete_node_list(a->line, a->word, a->pos, 2);
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(rpt_do_page(a->fd, a->argc, a->argv));
 }

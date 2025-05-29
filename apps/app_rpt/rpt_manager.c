@@ -145,6 +145,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			struct ast_channel *rxchan = NULL;
 			char rxchanname[256];
 			int pseudo = 0;
+
 			rpt_manager_success(ses, m);
 			astman_append(ses, "Node: %s\r\n", node);
 
@@ -222,7 +223,6 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 					continue;
 				}
 				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
-					rpt_mutex_unlock(&myrpt->lock);
 					ast_free(lbuf);
 					return -1;
 				}
@@ -245,7 +245,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			rpt_mutex_unlock(&myrpt->lock);
 			for (s = s_head.next; s != &s_head; s = s->next) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(ast_tvnow(), s->connecttime);
+				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
 				char conntime[21];
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
@@ -403,7 +403,10 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 
 			if (myrpt->remote) {	/* Remote base ? */
 				char *loginuser, *loginlevel, *freq, *rxpl, *txpl, *modestr;
-				char offset = 0, powerlevel = 0, rxplon = 0, txplon = 0, remoteon, remmode = 0, reportfmstuff;
+				char rxplon = 0, txplon = 0, remoteon, reportfmstuff;
+				enum rpt_mode remmode = REM_MODE_FM;
+				enum rpt_power powerlevel = REM_LOWPWR;
+				enum rpt_offset offset = REM_SIMPLEX;
 				char offsetc, powerlevelc;
 
 				loginuser = loginlevel = freq = rxpl = txpl = NULL;

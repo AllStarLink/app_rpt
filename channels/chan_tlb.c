@@ -143,13 +143,6 @@ struct {
 #define DELIMCHR ','
 #define QUOTECHR 34
 #define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
-/*
-   If you want to compile/link this code
-   on "BIG-ENDIAN" platforms, then
-   use this: #define RTP_BIG_ENDIAN
-   Have only tested this code on "little-endian"
-   platforms running Linux.
-*/
 
 static const char tdesc[] = "TheLinkBox channel driver";
 static char type[] = "tlb";
@@ -161,7 +154,7 @@ int run_forever = 1;
  * This is the standard RTP packet format.
  */
 struct rtpVoice_t {
-#ifdef RTP_BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
 	uint8_t version:2;
 	uint8_t pad:1;
 	uint8_t ext:1;
@@ -193,7 +186,7 @@ struct rtcp_sdes_request_item {
 /*!
  * \brief RTP Control Packet SDES request items.
  */
- struct rtcp_sdes_request {
+struct rtcp_sdes_request {
 	int nitems;
 	unsigned char ssrc[4];
 	struct rtcp_sdes_request_item item[10];
@@ -203,7 +196,7 @@ struct rtcp_sdes_request_item {
  * \brief RTCP Control Packet common header word.
  */
 struct rtcp_common_t {
-#ifdef RTP_BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
 	uint8_t version:2;
 	uint8_t p:1;
 	uint8_t count:5;
@@ -341,16 +334,15 @@ struct TLB_pvt {
 	int rxkey;
 	int keepalive;
 	unsigned int hangup:1; /* Hangup channel requested */
-	struct ast_frame fr;
+	unsigned int firstsent:1;
+	unsigned int firstheard:1;
+	unsigned int last_firstheard:1;
 	int txindex;
 	struct TLB_rxqast rxqast;
 	struct TLB_rxqtlb rxqtlb;
 	struct TLB_textq textq;
-	char firstsent;
-	char firstheard;
 	struct ast_module_user *u;
 	unsigned int nodenum;
-	char *linkstr;
 	uint32_t dtmflastseq;
 	uint32_t dtmflasttime;
 	uint32_t dtmfseq;
@@ -539,8 +531,8 @@ static int finddelim(char *str, char *strp[], size_t limit)
 
 /*!
  * \brief Make a sdes packet with our nodes information.
- * The RTP version = 3, RTP packet type = 201.
- * The RTCP: version = 3, packet type = 202.
+ * The RTP version = 2, RTP packet type = 201.
+ * The RTCP: version = 2, packet type = 202.
  * \param pkt			Pointer to buffer for sdes packet
  * \param pkt_len		Length of packet buffer
  * \param call			Pointer to callsign
@@ -549,102 +541,113 @@ static int finddelim(char *str, char *strp[], size_t limit)
  * \retval 0			Unsuccessful - pkt to small
  * \retval  			Successful length
  */
-static int rtcp_make_sdes(unsigned char *pkt, int pktLen, const char *call)
+static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call)
 {
 	unsigned char zp[1500];
 	unsigned char *p = zp;
 	struct rtcp_t *rp;
 	unsigned char *ap;
 	char line[100];
-	int l, hl, pl;
+	int l, hl, pad;
 
 	hl = 0;
 	*p++ = 2 << 6;
 	*p++ = 201;
 	*p++ = 0;
 	*p++ = 1;
-	*((long *) p) = htonl(0);
+	*((long *) p) = 0;
 	p += 4;
 	hl = 8;
 
 	rp = (struct rtcp_t *) p;
-	*((short *) p) = htons((2 << 14) | 202 | (1 << 8));
-	rp->r.sdes.src = htonl(0);
+	rp->common.version = 2;
+	rp->common.p = 0;
+	rp->common.count = 1;
+	rp->common.pt = 202;
+	rp->common.length = 0;
+	rp->r.sdes.src = 0;
 	ap = (unsigned char *) rp->r.sdes.item;
 
-	strcpy(line, "CALLSIGN");
+	ast_copy_string(line, "CALLSIGN", sizeof(line));
 	*ap++ = 1;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
 	ap += l;
 
-	snprintf(line, TLB_CALL_SIZE, "%s", call);
+	snprintf(line, sizeof(line), "%s", call);
 	*ap++ = 2;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
 	ap += l;
 
-	strcpy(line, "Asterisk/app_rpt/TheLinkBox");
+	ast_copy_string(line, "Asterisk/app_rpt/TheLinkBox", sizeof(line));
 	*ap++ = 6;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
 	ap += l;
 
+	/* enable DTMF keypad */
+	*ap++ = 8;
+	*ap++ = 3;
+	*ap++ = 1;
+	*ap++ = 'D';
+	*ap++ = '1';
+
 	*ap++ = 0;
 	*ap++ = 0;
-	l = ap - p;
 
-	rp->common.length = htons(((l + 3) / 4) - 1);
-	l = hl + ((ntohs(rp->common.length) + 1) * 4);
+	l = hl + (ap - p);
 
-	pl = (l & 4) ? l : l + 4;
-
-	if (pl > l) {
-		int pad = pl - l;
+	pad = (4 - (l % 4)) % 4;
+	if (pad > 0) {
 		memset(zp + l, '\0', pad);
-		zp[pl - 1] = pad;
-		p[0] |= 0x20;
-		rp->common.length = htons(ntohs(rp->common.length) + ((pad) / 4));
-		l = pl;
+		l += pad;
+		zp[l - 1] = pad;
+		rp->common.p = 1;
 	}
 
-	if (l > pktLen) {
+	if (l > pkt_len) {
 		return 0;
 	}
+
+	rp->common.length = htons(((l - hl + 3) / 4) - 1);
 	memcpy(pkt, zp, l);
 	return l;
 }
 
 /*!
  * \brief Make a rtcp bye packet
- * The RTP version = 3, RTP packet type = 201.
- * The RTCP: version = 3, packet type = 203.
+ * The RTP version = 2, RTP packet type = 201.
+ * The RTCP: version = 2, packet type = 203.
  * \param pkt			Pointer to buffer for bye packet
  * \param reason		Pointer to reason for the bye packet
  * \retval  			Successful length
  */
-static int rtcp_make_bye(unsigned char *p, const char *reason)
+static int rtcp_make_bye(unsigned char *pkt, int pkt_len, const char *reason)
 {
+	unsigned char *p = pkt;
 	struct rtcp_t *rp;
-	unsigned char *ap, *zp;
-	int l, hl, pl;
+	unsigned char *ap;
+	int l, hl, pad;
 
-	zp = p;
 	hl = 0;
-
 	*p++ = 2 << 6;
 	*p++ = 201;
 	*p++ = 0;
 	*p++ = 1;
-	*((long *) p) = htonl(0);
+	*((long *) p) = 0;
 	p += 4;
 	hl = 8;
 
 	rp = (struct rtcp_t *) p;
-	*((short *) p) = htons((2 << 14) | 203 | (1 << 8));
-	rp->r.bye.src[0] = htonl(0);
+	rp->common.version = 2;
+	rp->common.p = 0;
+	rp->common.count = 1;
+	rp->common.pt = 203;
+	rp->common.length = 0;
+	rp->r.bye.src[0] = 0;
 	ap = (unsigned char *) rp->r.sdes.item;
-	l = 0;
+
 	if (reason != NULL) {
 		l = strlen(reason);
 		if (l > 0) {
@@ -653,22 +656,22 @@ static int rtcp_make_bye(unsigned char *p, const char *reason)
 			ap += l;
 		}
 	}
-	while ((ap - p) & 3) {
-		*ap++ = 0;
-	}
-	l = ap - p;
-	rp->common.length = htons((l / 4) - 1);
-	l = hl + ((ntohs(rp->common.length) + 1) * 4);
 
-	pl = (l & 4) ? l : l + 4;
-	if (pl > l) {
-		int pad = pl - l;
-		memset(zp + l, '\0', pad);
-		zp[pl - 1] = pad;
-		p[0] |= 0x20;
-		rp->common.length = htons(ntohs(rp->common.length) + ((pad) / 4));
-		l = pl;
+	l = hl + (ap - p);
+
+	pad = (4 - (l % 4)) % 4;
+	if (pad > 0) {
+		memset(pkt + l, '\0', pad);
+		l += pad;
+		pkt[l - 1] = pad;
+		rp->common.p = 1;
 	}
+
+	if (l > pkt_len) {
+		return 0;
+	}
+
+	rp->common.length = htons(((l - hl + 3) / 4) - 1);
 	return l;
 }
 
@@ -916,9 +919,6 @@ static void TLB_destroy(struct TLB_pvt *p)
 		ast_free(textp->buf);
 		ast_free(qptlb);
 	}
-	if (p->linkstr)
-		ast_free(p->linkstr);
-	p->linkstr = NULL;
 	ast_module_user_remove(p->u);
 	ast_free(p);
 }
@@ -999,7 +999,7 @@ static int TLB_hangup(struct ast_channel *ast)
 		p->hangup = 0;
 		ast_mutex_unlock(&instp->lock);
 		
-		n = rtcp_make_bye(bye, "disconnected");
+		n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 		sin.sin_family = AF_INET;
 		sin.sin_addr.s_addr = inet_addr(p->ip);
 		sin.sin_port = htons(p->port + 1);
@@ -1435,8 +1435,18 @@ static struct ast_frame *TLB_xread(struct ast_channel *ast)
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
 	}
-	memset(&p->fr, 0, sizeof(struct ast_frame));
-	return &p->fr;
+	if (!p->last_firstheard && p->firstheard) {
+		struct ast_frame fra = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_ANSWER,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(ast, &fra);
+		p->firstheard = 0;
+		p->last_firstheard = 1;
+	}
+	return &ast_null_frame;
 }
 
 /*!
@@ -1459,7 +1469,6 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	int n, m;
 	struct TLB_rxqtlb *qptlb;
 	struct TLB_textq *textq;
-
 	char buf[RTPBUF_SIZE + AST_FRIENDLY_OFFSET];
 
 	if (frame->frametype != AST_FRAME_VOICE) {
@@ -1468,6 +1477,17 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (p->hangup) {
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
+	}
+	if (!p->last_firstheard && p->firstheard) {
+		struct ast_frame fra = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_ANSWER,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(ast, &fra);
+		p->firstheard = 0;
+		p->last_firstheard = 1;
 	}
 	ast_mutex_lock(&p->lock);
 	if (p->codec_change) {
@@ -1490,15 +1510,21 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 
 	if (p->textq.qe_forw != &p->textq) {
+		struct ast_frame fr = {
+			.frametype = AST_FRAME_TEXT,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		ast_mutex_lock(&p->lock);
 		textq = p->textq.qe_forw;
 		remque((struct qelem *) textq);
 		ast_mutex_unlock(&p->lock);
-		ast_sendtext(ast, ast_str_buffer(textq->buf));
+		fr.data.ptr = ast_str_buffer(textq->buf);
+		fr.datalen = ast_str_strlen(textq->buf) + 1;
+		ast_queue_frame(ast, &fr);
 		ast_free(textq->buf);
 		ast_free(textq);
 	}
-
 	/* TheLinkBox to Asterisk */
 	if (p->rxqast.qe_forw != &p->rxqast) {
 		for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
@@ -1517,11 +1543,13 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			}
 		} else {
 			if (!p->rxkey) {
-				memset(&fr, 0, sizeof(fr));
-				fr.frametype = AST_FRAME_CONTROL;
-				fr.subclass.integer = AST_CONTROL_RADIO_KEY;
-				fr.src = type;
-				ast_queue_frame(ast, &fr);
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_RADIO_KEY,
+					.src = __PRETTY_FUNCTION__,
+				};
+
+				ast_queue_frame(ast, &wf);
 			}
 			p->rxkey = MAX_RXKEY_TIME;
 			ast_mutex_lock(&p->lock);
@@ -1537,17 +1565,19 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.frametype = AST_FRAME_VOICE;
 			fr.subclass.format = tlb_codecs[p->rxcodec].format;
 			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
-			fr.src = type;
 			fr.offset = AST_FRIENDLY_OFFSET;
+			fr.src = __PRETTY_FUNCTION__;
 			ast_queue_frame(ast, &fr);
 		}
 	}
 	if (p->rxkey == 1) {
-		memset(&fr, 0, sizeof(fr));
-		fr.frametype = AST_FRAME_CONTROL;
-		fr.subclass.integer = AST_CONTROL_RADIO_UNKEY;
-		fr.src = type;
-		ast_queue_frame(ast, &fr);
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(ast, &wf);
 	}
 	if (p->rxkey) {
 		p->rxkey--;
@@ -1630,7 +1660,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	twalk(TLB_node_list, send_heartbeat);
 	if (instp->TLB_node_test.ip[0] != '\0') {
 		if (find_delete(&instp->TLB_node_test)) {
-			bye_length = rtcp_make_bye(bye, "rtcp timeout");
+			bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
 			sin.sin_family = AF_INET;
 			sin.sin_addr.s_addr = inet_addr(instp->TLB_node_test.ip);
 			sin.sin_port = htons(instp->TLB_node_test.port + 1);
@@ -1998,10 +2028,6 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 {
 	struct TLB_node *TLB_node_key = NULL;
 	struct ast_channel *chan;
-	struct ast_frame fr = {
-		.frametype = AST_FRAME_CONTROL,
-		.subclass.integer = AST_CONTROL_ANSWER,
-	};
 	struct ast_config *cfg = NULL;
 	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
@@ -2067,6 +2093,12 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 			TLB_node_key->p = instp->confp;
 		} else {
 			if (p == NULL) {	/* if a new inbound call */
+				struct ast_frame fr = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_ANSWER,
+					.src = __PRETTY_FUNCTION__,
+				};
+
 				p = TLB_alloc((void *) instp->name);
 				if (!p) {
 					ast_log(LOG_ERROR, "Cannot alloc TLB channel\n");
@@ -2082,7 +2114,6 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 				}
 				tlb_set_nativeformats(chan, p->txcodec, p->rxcodec);
 				ast_debug(1, "tlb: tx codec set to %s\n", tlb_codecs[p->txcodec].name);
-				fr.src = type;
 				ast_queue_frame(chan, &fr);
 			} else {
 				TLB_node_key->p = p;
@@ -2187,6 +2218,7 @@ static void *TLB_reader(void *data)
 						found_key = (struct TLB_node **) tfind(&instp->TLB_node_test, &TLB_node_list, compare_ip);
 						if (found_key) {
 							(*found_key)->countdown = instp->rtcptimeout;
+							(*found_key)->p->firstheard = 1;
 						} else {	/* otherwise its a new request */
 							i = 0;	/* default authorized */
 							if (instp->ndenylist) {
@@ -2217,7 +2249,7 @@ static void *TLB_reader(void *data)
 							}
 							if (i) {	/* if not authorized */
 								ast_debug(1, "Sent bye to IP address %s\n", instp->TLB_node_test.ip);
-								x = rtcp_make_bye(bye, "UN-AUTHORIZED");
+								x = rtcp_make_bye(bye, sizeof(bye), "UN-AUTHORIZED");
 								sin1.sin_family = AF_INET;
 								sin1.sin_addr.s_addr = inet_addr(instp->TLB_node_test.ip);
 								sin1.sin_port = htons(instp->TLB_node_test.port + 1);
@@ -2249,6 +2281,7 @@ static void *TLB_reader(void *data)
 				if (found_key) {
 					struct TLB_pvt *p = (*found_key)->p;
 					(*found_key)->countdown = instp->rtcptimeout;
+					p->firstheard = 1;
 					if (recvlen > 12) {	/* if at least a header size and some payload */
 						/* if its a DTMF frame */
 						if ((((struct rtpVoice_t *) buf)->version == 2) && (((struct rtpVoice_t *) buf)->payt == 96)) {

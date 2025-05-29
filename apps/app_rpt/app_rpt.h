@@ -1,6 +1,6 @@
 #define VERSION_MAJOR 3
-#define VERSION_MINOR 4
-#define VERSION_PATCH 3
+#define VERSION_MINOR 5
+#define VERSION_PATCH 0
 
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
 	converted to use public dsp.h API.
@@ -185,8 +185,6 @@ typedef struct {
 
 #define MAXPATCHCONTEXT 100
 
-#define ACTIONSIZE 32
-
 #define TELEPARAMSIZE 400
 
 #define REM_SCANTIME 100
@@ -237,44 +235,173 @@ enum keypost {
 
 enum {REM_OFF,REM_MONITOR,REM_TX};
 
-enum {LINKMODE_OFF,LINKMODE_ON,LINKMODE_FOLLOW,LINKMODE_DEMAND,
-	LINKMODE_GUI,LINKMODE_PHONE,LINKMODE_ECHOLINK,LINKMODE_TLB};
+enum rpt_linkmode {
+	LINKMODE_OFF,
+	LINKMODE_ON,
+	LINKMODE_FOLLOW,
+	LINKMODE_DEMAND,
+	LINKMODE_GUI,
+	LINKMODE_PHONE,
+	LINKMODE_ECHOLINK,
+	LINKMODE_TLB
+};
 
-enum{ID,PROC,TERM,COMPLETE,UNKEY,REMDISC,REMALREADY,REMNOTFOUND,REMGO,
-	CONNECTED,CONNFAIL,STATUS,TIMEOUT,ID1, STATS_TIME, PLAYBACK,
-	LOCALPLAY, STATS_VERSION, IDTALKOVER, ARB_ALPHA, TEST_TONE, REV_PATCH,
-	TAILMSG, MACRO_NOTFOUND, MACRO_BUSY, LASTNODEKEY, FULLSTATUS,
-	MEMNOTFOUND, INVFREQ, REMMODE, REMLOGIN, REMXXX, REMSHORTSTATUS,
-	REMLONGSTATUS, LOGINREQ, SCAN, SCANSTAT, TUNE, SETREMOTE, TOPKEY,
-	TIMEOUT_WARNING, ACT_TIMEOUT_WARNING, LINKUNKEY, UNAUTHTX, PARROT,
-	STATS_TIME_LOCAL, VARCMD, LOCUNKEY, METER, USEROUT, PAGE,
-	STATS_GPS,STATS_GPS_LEGACY, MDC1200, LASTUSER, REMCOMPLETE, PFXTONE};
+enum rpt_tele_mode {
+	ID,
+	PROC,
+	TERM,
+	COMPLETE,
+	UNKEY,
+	REMDISC,
+	REMALREADY,
+	REMNOTFOUND,
+	REMGO,
+	CONNECTED,
+	CONNFAIL,
+	STATUS,
+	TIMEOUT,
+	ID1,
+	STATS_TIME,
+	PLAYBACK,
+	LOCALPLAY,
+	STATS_VERSION,
+	IDTALKOVER,
+	ARB_ALPHA,
+	TEST_TONE,
+	REV_PATCH,
+	TAILMSG,
+	MACRO_NOTFOUND,
+	MACRO_BUSY,
+	LASTNODEKEY,
+	FULLSTATUS,
+	MEMNOTFOUND,
+	INVFREQ,
+	REMMODE,
+	REMLOGIN,
+	REMXXX,
+	REMSHORTSTATUS,
+	REMLONGSTATUS,
+	LOGINREQ,
+	SCAN,
+	SCANSTAT,
+	TUNE,
+	SETREMOTE,
+	TOPKEY,
+	TIMEOUT_WARNING,
+	ACT_TIMEOUT_WARNING,
+	LINKUNKEY,
+	UNAUTHTX,
+	PARROT,
+	STATS_TIME_LOCAL,
+	VARCMD,
+	LOCUNKEY,
+	METER,
+	USEROUT,
+	PAGE,
+	STATS_GPS,
+	STATS_GPS_LEGACY,
+	MDC1200,
+	LASTUSER,
+	REMCOMPLETE,
+	PFXTONE
+};
 
+enum rpt_offset {
+	REM_SIMPLEX,
+	REM_MINUS,
+	REM_PLUS
+};
 
-enum {REM_SIMPLEX,REM_MINUS,REM_PLUS};
+enum rpt_power {
+	REM_LOWPWR,
+	REM_MEDPWR,
+	REM_HIPWR
+};
 
-enum {REM_LOWPWR,REM_MEDPWR,REM_HIPWR};
+enum rpt_function_response {
+	DC_INDETERMINATE,
+	DC_REQ_FLUSH,
+	DC_ERROR,
+	DC_COMPLETE,
+	DC_COMPLETEQUIET,
+	DC_DOKEY
+};
 
-enum {DC_INDETERMINATE, DC_REQ_FLUSH, DC_ERROR, DC_COMPLETE, DC_COMPLETEQUIET, DC_DOKEY};
+enum rpt_command_source {
+	SOURCE_RPT,
+	SOURCE_LNK,
+	SOURCE_RMT,
+	SOURCE_PHONE,
+	SOURCE_DPHONE,
+	SOURCE_ALT
+};
 
-enum {SOURCE_RPT, SOURCE_LNK, SOURCE_RMT, SOURCE_PHONE, SOURCE_DPHONE, SOURCE_ALT};
+enum rpt_delay {
+	DLY_TELEM,
+	DLY_ID,
+	DLY_UNKEY,
+	DLY_CALLTERM,
+	DLY_COMP,
+	DLY_LINKUNKEY,
+	DLY_PARROT,
+	DLY_MDC1200
+};
 
-enum {DLY_TELEM, DLY_ID, DLY_UNKEY, DLY_CALLTERM, DLY_COMP, DLY_LINKUNKEY, DLY_PARROT, DLY_MDC1200};
+enum rpt_mode {
+	REM_MODE_FM,
+	REM_MODE_USB,
+	REM_MODE_LSB,
+	REM_MODE_AM
+};
 
-enum {REM_MODE_FM,REM_MODE_USB,REM_MODE_LSB,REM_MODE_AM};
-
-enum {HF_SCAN_OFF,HF_SCAN_DOWN_SLOW,HF_SCAN_DOWN_QUICK,
-      HF_SCAN_DOWN_FAST,HF_SCAN_UP_SLOW,HF_SCAN_UP_QUICK,HF_SCAN_UP_FAST};
+enum rpt_hf_mode {
+	HF_SCAN_OFF,
+	HF_SCAN_DOWN_SLOW,
+	HF_SCAN_DOWN_QUICK,
+	HF_SCAN_DOWN_FAST,
+	HF_SCAN_UP_SLOW,
+	HF_SCAN_UP_QUICK,
+	HF_SCAN_UP_FAST
+};
 
 /*
  * DAQ Subsystem
  */
 
-enum{DAQ_PS_IDLE = 0, DAQ_PS_START, DAQ_PS_BUSY, DAQ_PS_IN_MONITOR};
-enum{DAQ_CMD_IN, DAQ_CMD_ADC, DAQ_CMD_OUT, DAQ_CMD_PINSET, DAQ_CMD_MONITOR};
-enum{DAQ_SUB_CUR = 0, DAQ_SUB_MIN, DAQ_SUB_MAX, DAQ_SUB_STMIN, DAQ_SUB_STMAX, DAQ_SUB_STAVG};
-enum{DAQ_PT_INADC = 1, DAQ_PT_INP, DAQ_PT_IN, DAQ_PT_OUT};
-enum{DAQ_TYPE_UCHAMELEON};
+enum rpt_daq_mode {
+	DAQ_PS_IDLE = 0,
+	DAQ_PS_START,
+	DAQ_PS_BUSY,
+	DAQ_PS_IN_MONITOR
+};
+
+enum rpt_daq_cmd {
+	DAQ_CMD_IN,
+	DAQ_CMD_ADC,
+	DAQ_CMD_OUT,
+	DAQ_CMD_PINSET,
+	DAQ_CMD_MONITOR
+};
+
+enum rpt_daq_filter {
+	DAQ_SUB_CUR = 0,
+	DAQ_SUB_MIN,
+	DAQ_SUB_MAX,
+	DAQ_SUB_STMIN,
+	DAQ_SUB_STMAX,
+	DAQ_SUB_STAVG
+};
+
+enum rpt_daq_pintype {
+	DAQ_PT_INADC = 1,
+	DAQ_PT_INP,
+	DAQ_PT_IN,
+	DAQ_PT_OUT
+};
+
+enum rpt_daq_type {
+	DAQ_TYPE_UCHAMELEON
+};
 
 /* general setting - rpt_node_lookup */
 enum  rpt_dns_method {
@@ -361,6 +488,12 @@ enum newkey {
 	RADIO_KEY_NOT_ALLOWED /*!< "!NEWKEY1!" message - AST_CONTROL_RADIO_KEY are not allowed on the repeater channel */
 };
 
+enum link_mode {
+	MODE_MONITOR,
+	MODE_TRANSCEIVE,
+	MODE_LOCAL_MONITOR
+};
+
 struct vox {
 	float	speech_energy;
 	float	noise_energy;
@@ -393,26 +526,28 @@ struct rpt;
 struct rpt_link {
 	struct rpt_link *next;
 	struct rpt_link *prev;
-	char mode; /* 1 if in tx mode */
+	enum link_mode mode;
 	char isremote;
 	char phonemode;
 	char phonevox;		   /* vox the phone */
 	char phonemonitor;	   /* no tx or funs for the phone */
 	char name[MAXNODESTR]; /* identifier (routing) string */
-	char lasttx;
-	char lasttx1;
-	char lastrx;
-	char lastrealrx;
-	char lastrx1;
+	unsigned int lasttx:1;
+	unsigned int lasttx1:1;
+	unsigned int lastrx:1;
+	unsigned int lastrealrx:1;
+	unsigned int lastrx1:1;
 	unsigned int last_frame_sent:1; /* We have written a single frame */
-	char wouldtx;
-	char connected;
-	char hasconnected;
-	char perma;
-	char thisconnected;
-	char outbound;
-	char disced;
-	char killme;
+	unsigned int wouldtx:1;
+	unsigned int connected:1;
+	unsigned int hasconnected:1;
+	unsigned int perma:1;
+	unsigned int thisconnected:1;
+	unsigned int outbound:1;
+	unsigned int disced:2;
+	unsigned int killme:1;
+	unsigned int dtmfed:1;
+	unsigned int gott:1;
 	long elaptime;
 	int disctime;
 	int	retrytimer;
@@ -428,8 +563,7 @@ struct rpt_link {
 	struct ast_channel *pchan;
 	struct ast_str *linklist;
 	time_t	linklistreceived;
-	int	linklisttimer;
-	int	dtmfed;
+	int linklisttimer;
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
 	struct	ast_frame *lastf1,*lastf2;
@@ -441,12 +575,12 @@ struct rpt_link {
 	enum newkey link_newkey;
 	int linkmode;
 	int newkeytimer;
-	char gott;
 	int		voterlink;      /*!< \brief set if node is defined as a voter rx */
 	int		votewinner;		/*!< \brief set if node won the rssi competition */
 	time_t	lastkeytime;
 	time_t	lastunkeytime;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
+	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
 
 /*!
@@ -460,10 +594,10 @@ struct rpt_lstat {
 	struct rpt_lstat *prev;
 	char peer[MAXPEERSTR];
 	char name[MAXNODESTR];
-	char mode;
-	char outbound;
+	enum link_mode mode;
+	unsigned int outbound:1;
+	unsigned int thisconnected:1;
 	int reconnects;
-	char thisconnected;
 	struct timeval connecttime;
 	struct rpt_chan_stat chan_stat[NRPTSTAT];
 };
@@ -473,7 +607,7 @@ struct rpt_tele {
 	struct rpt_tele *prev;
 	struct rpt *rpt;
 	struct ast_channel *chan;
-	int	mode;
+	enum rpt_tele_mode mode;
 	struct rpt_link mylink;
 	char param[TELEPARAMSIZE];
 	union {
@@ -487,8 +621,10 @@ struct rpt_tele {
 };
 
 struct function_table_tag {
-	char action[ACTIONSIZE];
-	int (*function)(struct rpt *myrpt, char *param, char *digitbuf, int command_source, struct rpt_link *mylink);
+	char *action;
+	enum rpt_function_response (*function)(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+		struct rpt_link *mylink);
+	int minargs;
 };
 
 /*
@@ -502,9 +638,9 @@ struct daq_tx_entry_tag {
 
 struct daq_pin_entry_tag {
 	int num;
-	int pintype;
-	int command;
-	int state;
+	enum rpt_daq_pintype pintype;
+	enum rpt_daq_cmd command;
+	enum rpt_daq_mode state;
 	int value;
 	int valuemax;
 	int valuemin;
@@ -520,7 +656,7 @@ struct daq_pin_entry_tag {
 struct daq_entry_tag {
 	char name[MAX_DAQ_NAME];
 	char dev[MAX_DAQ_DEV];
-	int type;
+	enum rpt_daq_type type;
 	int fd;
 	int active;
 	time_t adcacqtime;
@@ -573,10 +709,8 @@ struct rpt_cmd_struct {
 	int functionNumber;
 	char param[MAXMACRO];
 	char digits[MAXDTMF];
-	int command_source;
+	enum rpt_command_source command_source;
 };
-
-enum {TOP_TOP,TOP_WON,WON_BEFREAD,BEFREAD_AFTERREAD};
 
 struct rpt_conf {
 	/* DAHDI conference numbers */
@@ -656,6 +790,7 @@ struct rpt {
 		int iospeed;
 		char funcchar;
 		char endchar;
+		unsigned int archiveaudio:1;
 		unsigned int nobusyout:1;
 		unsigned int notelemtx:1;
 		unsigned int propagate_dtmf:1;
@@ -691,7 +826,7 @@ struct rpt {
 		unsigned int lnkactenable:1;
 		const char *statpost_program;
 		const char *statpost_url;
-		char linkmode[10];
+		enum rpt_linkmode linkmode[10];
 		char linkmodedynamic[10];
 		const char *locallist[16];
 		int nlocallist;
@@ -803,13 +938,13 @@ struct rpt {
 	char exten[AST_MAX_EXTENSION];
 	char freq[MAXREMSTR],rxpl[MAXREMSTR],txpl[MAXREMSTR];
 	int  splitkhz;
-	char offset;
-	char powerlevel;
+	enum rpt_offset offset;
+	enum rpt_power powerlevel;
 	char txplon;
 	char rxplon;
-	char remmode;
+	enum rpt_mode remmode;
 	char tunerequest;
-	char hfscanmode;
+	enum rpt_hf_mode hfscanmode;
 	int hfscanstatus;
 	char hfscanstop;
 	char lastlinknode[MAXNODESTR];
@@ -937,7 +1072,8 @@ int rpt_set_debug_level(int newlevel);
 int rpt_num_rpts(void);
 int rpt_nullfd(void);
 time_t rpt_starttime(void);
-int function_table_index(const char *s);
+int rpt_function_lookup(const char *f);
+int rpt_function_minargs(int index);
 
 void donodelog(struct rpt *myrpt, char *str);
 #define donodelog_fmt(myrpt, fmt, ...) __donodelog_fmt(myrpt, __FILE__, __LINE__, __FUNCTION__, fmt, __VA_ARGS__)
@@ -946,6 +1082,23 @@ void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
 
+/*!
+ * \brief Generates a command line completion list for rpt cmd third argument
+ */
+char *rpt_complete_function_list(const char *line, const char *word, int pos, int rpos);
+
 #define RPT_MUTE_FRAME(f) \
 	if (f) \
 	ast_frame_clear(f)
+
+/*!
+ * \brief Returns current timeval. Meant to replace calls to gettimeofday().
+ */
+AST_INLINE_API(struct timeval rpt_tvnow(void), {
+	struct timeval t;
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	t.tv_sec = ts.tv_sec;
+	t.tv_usec = ts.tv_nsec / 1000;
+	return t;
+})

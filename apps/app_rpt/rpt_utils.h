@@ -24,13 +24,13 @@ char *strupr(char *instr);
 
 char *string_toupper(char *str);
 
-/*
-* Break up a delimited string into a table of substrings
-*
-* str - delimited string ( will be modified )
-* strp- list of pointers to substrings (this is built by this function), NULL will be placed at end of list
-* limit- maximum number of substrings to process
-*/
+/*!
+ * \brief Break up a delimited string into a table of substrings
+ * \param str - delimited string (will be modified)
+ * \param strp- An array of pointers to the substrings (in the modified "str"), NULL will be placed at end of list
+ * \param limit- maximum number of substrings to process
+ * \return The number of substrings found
+ */
 int finddelim(char *str, char *strp[], size_t limit);
 
 /*

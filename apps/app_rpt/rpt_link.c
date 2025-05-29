@@ -47,12 +47,12 @@ void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 	case LINKMODE_DEMAND:
 		mylink->linkmode = 1;
 		break;
+	default:
 	}
 }
 
-void set_linkmode(struct rpt_link *mylink, int linkmode)
+void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode)
 {
-
 	if (!mylink)
 		return;
 	switch (linkmode) {
@@ -68,6 +68,7 @@ void set_linkmode(struct rpt_link *mylink, int linkmode)
 	case LINKMODE_DEMAND:
 		mylink->linkmode = 1;
 		break;
+	default:
 	}
 }
 
@@ -184,6 +185,20 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	if (myrpt->telemmode > 1)
 		return (1);
 	return (0);
+}
+
+void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
+{
+	struct ast_frame *f1;
+
+	if (!l->chan)
+		return;
+	f1 = ast_frdup(f);
+	if (!f1) {
+		return;
+	}
+	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
+	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
 }
 
 int linkcount(struct rpt *myrpt)
@@ -308,7 +323,7 @@ void rssi_send(struct rpt *myrpt)
 		}
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
 		if (l->chan)
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
 }
@@ -333,7 +348,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name, myrpt->cmdnode)) {
 			if (l->chan)
-				ast_write(l->chan, &wf);
+				rpt_qwrite(l, &wf);
 			return;
 		}
 		l = l->next;
@@ -342,7 +357,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	/* if not, give it to everyone */
 	while (l != &myrpt->links) {
 		if (l->chan)
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
 }
@@ -366,7 +381,7 @@ void send_link_keyquery(struct rpt *myrpt)
 	/* give it to everyone */
 	while (l != &myrpt->links) {
 		if (l->chan)
-			ast_write(l->chan, &wf);
+			rpt_qwrite(l, &wf);
 		l = l->next;
 	}
 }
@@ -417,7 +432,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0')
 			continue;
-		if (l->mode > 1)
+		if (l->mode == MODE_LOCAL_MONITOR)
 			continue;			/* dont report local modes */
 		/* dont count our stuff */
 		if (l == mylink)
@@ -425,8 +440,8 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		if (mylink && (!strcmp(l->name, mylink->name)))
 			continue;
 		/* figure out mode to report */
-		mode = 'T';				/* use Tranceive by default */
-		if (!l->mode)
+		mode = 'T'; /* use Transceive by default */
+		if (l->mode == MODE_MONITOR)
 			mode = 'R';			/* indicate RX for our mode */
 		if (!l->thisconnected)
 			mode = 'C';			/* indicate connecting */
@@ -445,7 +460,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 				ast_str_append(buf, 0, "%c%s", mode, l->name);
 			}
 		}
-		/* if we are in tranceive mode, let all modes stand */
+		/* if we are in transceive mode, let all modes stand */
 		if (mode == 'T')
 			continue;
 		/* downgrade everyone on this node if appropriate */
@@ -500,12 +515,10 @@ void rpt_update_links(struct rpt *myrpt)
 
 	buf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!buf) {
-		ast_mutex_unlock(&myrpt->lock);
 		return;
 	}
 	obuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!obuf) {
-		ast_mutex_unlock(&myrpt->lock);
 		ast_free(buf);
 		return;
 	}
@@ -541,7 +554,7 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
-int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
+int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 {
 	char *s, *s1, *tele, *cp;
 	char tmp[300], deststr[325] = "", modechange = 0;
@@ -655,8 +668,8 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 				return 2; /* Already linked */
 			}
 		}
-		ast_free(lstr);
 		ast_free(strs);
+		ast_free(lstr);
 	}
 	ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 	/* establish call */
@@ -727,9 +740,7 @@ int connect_link(struct rpt *myrpt, char *node, int mode, int perma)
 	}
 	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
-		if (myrpt->p.archivedir) {
-			donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
-		}
+		donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		rpt_link_free(l);
 		ao2_ref(cap, -1);
 		return -1;

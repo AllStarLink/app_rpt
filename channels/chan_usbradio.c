@@ -55,6 +55,7 @@
 #include <linux/version.h>
 
 #include "asterisk/res_usbradio.h"
+#include "asterisk/rpt_chan_shared.h"
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h>
@@ -155,13 +156,6 @@ static char stoppulser;
 static char hasout;
 pthread_t pulserid;
 
-enum { RX_AUDIO_NONE, RX_AUDIO_SPEAKER, RX_AUDIO_FLAT };
-enum { CD_IGNORE, CD_XPMR_NOISE, CD_XPMR_VOX, CD_HID, CD_HID_INVERT, CD_PP, CD_PP_INVERT };
-enum { SD_IGNORE, SD_HID, SD_HID_INVERT, SD_XPMR, SD_PP, SD_PP_INVERT };	// no,external,externalinvert,software
-enum { RX_KEY_CARRIER, RX_KEY_CARRIER_CODE };
-enum { TX_OUT_OFF, TX_OUT_VOICE, TX_OUT_LSD, TX_OUT_COMPOSITE, TX_OUT_AUX };
-enum { TOC_NONE, TOC_PHASE, TOC_NOTONE };
-
 /*! \brief type of signal detection used for carrier (cd) or ctcss (sd) */
 static const char * const cd_signal_type[] = {"no", "dsp", "vox", "usb", "usbinvert", "pp", "ppinvert"};
 static const char * const sd_signal_type[] = {"no", "usb", "usbinvert", "dsp", "pp", "ppinvert"};
@@ -261,21 +255,21 @@ struct chan_usbradio_pvt {
 
 	t_pmr_chan *pmrChan;
 
-	int rxdemod;
+	enum radio_rx_audio rxdemod;
 	float rxgain;
-	int rxcdtype;
-	int voxhangtime;			/* if rxcdtype=vox, ms to wait detecting RX audio before setting CD=0 */
-	int rxsdtype;
-	int rxsquelchadj;			/* this copy needs to be here for initialization */
+	enum radio_carrier_detect rxcdtype;
+	int voxhangtime; /* if rxcdtype=vox, ms to wait detecting RX audio before setting CD=0 */
+	enum radio_squelch_detect rxsdtype;
+	int rxsquelchadj; /* this copy needs to be here for initialization */
 	int rxsqhyst;
 	int rxsqvoxadj;
 	int rxnoisefiltype;
 	int rxsquelchdelay;
-	char txtoctype;
+	enum usbradio_carrier_type txtoctype;
 
 	float txctcssgain;
-	int txmixa;
-	int txmixb;
+	enum radio_tx_mix txmixa;
+	enum radio_tx_mix txmixb;
 	int rxlpf;
 	int rxhpf;
 	int txlpf;
@@ -453,7 +447,7 @@ static int usbradio_answer(struct ast_channel *c);
 static struct ast_frame *usbradio_read(struct ast_channel *chan);
 static int usbradio_call(struct ast_channel *c, const char *dest, int timeout);
 static int usbradio_write(struct ast_channel *chan, struct ast_frame *f);
-static int usbradio_indicate(struct ast_channel *chan, int cond, const void *data, size_t datalen);
+static int usbradio_indicate(struct ast_channel *chan, int cond_in, const void *data, size_t datalen);
 static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newchan);
 static int usbradio_setoption(struct ast_channel *chan, int option, void *data, int datalen);
 static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s);
@@ -1270,10 +1264,6 @@ static void *hidthread(void *arg)
 			}
 			if ((!o->had_gpios_in) || (o->last_gpios_in != j)) {
 				char buf1[100];
-				struct ast_frame fr = {
-					.frametype = AST_FRAME_TEXT,
-					.src = "chan_usbradio",
-				};
 
 				for (i = 0; i < GPIO_PINCOUNT; i++) {
 					/* skip if not specified */
@@ -1290,7 +1280,12 @@ static void *hidthread(void *arg)
 					}
 					/* if bit has changed, or never reported */
 					if ((!o->had_gpios_in) || ((o->last_gpios_in & (1 << i)) != (j & (1 << i)))) {
-						sprintf(buf1, "GPIO%d %d\n", i + 1, (j & (1 << i)) ? 1 : 0);
+						struct ast_frame fr = {
+							.frametype = AST_FRAME_TEXT,
+							.src = __PRETTY_FUNCTION__,
+						};
+
+						snprintf(buf1, sizeof(buf1), "GPIO%d %d\n", i + 1, (j & (1 << i)) ? 1 : 0);
 						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1);
 						ast_queue_frame(o->owner, &fr);
@@ -1313,10 +1308,6 @@ static void *hidthread(void *arg)
 				}
 				if ((!o->had_pp_in) || (o->last_pp_in != j)) {
 					char buf1[100];
-					struct ast_frame fr = {
-						.frametype = AST_FRAME_TEXT,
-						.src = "chan_usbradio",
-					};
 
 					for (i = 10; i <= 15; i++) {
 						/* skip if not specified */
@@ -1333,7 +1324,12 @@ static void *hidthread(void *arg)
 						}
 						/* if bit has changed, or never reported */
 						if ((!o->had_pp_in) || ((o->last_pp_in & (1 << ppinshift[i])) != (j & (1 << ppinshift[i])))) {
-							sprintf(buf1, "PP%d %d\n", i, (j & (1 << ppinshift[i])) ? 1 : 0);
+							struct ast_frame fr = {
+								.frametype = AST_FRAME_TEXT,
+								.src = __PRETTY_FUNCTION__,
+							};
+
+							snprintf(buf1, sizeof(buf1), "PP%d %d\n", i, (j & (1 << ppinshift[i])) ? 1 : 0);
 							fr.data.ptr = buf1;
 							fr.datalen = strlen(buf1);
 							ast_queue_frame(o->owner, &fr);
@@ -1543,7 +1539,10 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	}
 	if (res == 0) { /* We are not keeping the buffer full, add 1 frame */
 		memset(outbuf, 0, sizeof(outbuf));
-		write(o->sounddev, ((void *) outbuf), sizeof(outbuf));
+		res = write(o->sounddev, ((void *) outbuf), sizeof(outbuf));
+		if (res < 0) {
+			ast_log(LOG_ERROR, "Channel %s: Sound card write error %s\n", o->name, strerror(errno));
+		}
 		ast_debug(7, "A null frame has been added");
 	}
 	res = write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
@@ -1947,7 +1946,6 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	int cd, sd;
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f = &o->read_f, *f1;
-	struct ast_frame wf = { AST_FRAME_CONTROL };
 	time_t now;
 
 	/* check to the if the hid thread is still processing */
@@ -1961,15 +1959,20 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	/* Set frame defaults */
 	memset(f, 0, sizeof(struct ast_frame));
 	f->frametype = AST_FRAME_NULL;
-	f->src = usbradio_tech.type;
-	wf.src = usbradio_tech.type;
+	f->src = __PRETTY_FUNCTION__;
 
 	/* if USB device not ready, just return NULL frame */
 	if (!o->hasusb) {
 		if (o->rxkeyed) {
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+				.src = __PRETTY_FUNCTION__,
+			};
+
 			o->lastrx = 0;
 			o->rxkeyed = 0;
-			ast_indicate(o->owner, AST_CONTROL_RADIO_UNKEY);
+			ast_queue_frame(o->owner, &wf);
 			if (o->duplex3) {
 				ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 			}
@@ -2349,14 +2352,25 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 	/* Send a message to indicate rx signal detect conditions */
 	if (o->lastrx && (!o->rxkeyed)) {
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		o->lastrx = 0;
-		ast_indicate(o->owner, AST_CONTROL_RADIO_UNKEY);
+		ast_queue_frame(o->owner, &wf);
 		if (o->duplex3) {
 			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 		}
 	} else if ((!o->lastrx) && (o->rxkeyed)) {
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_RADIO_KEY,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		o->lastrx = 1;
-		wf.subclass.integer = AST_CONTROL_RADIO_KEY;
 		if (o->rxctcssdecode) {
 			wf.data.ptr = o->rxctcssfreq;
 			wf.datalen = strlen(o->rxctcssfreq) + 1;
@@ -2382,6 +2396,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	f->samples = FRAME_SIZE;
 	f->datalen = FRAME_SIZE * 2;
 	f->data.ptr = o->usbradio_read_buf_8k + AST_FRIENDLY_OFFSET;
+	f->src = __PRETTY_FUNCTION__;
 	if (!o->rxkeyed) {
 		memset(f->data.ptr, 0, f->datalen);
 	}
@@ -2416,26 +2431,34 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 
 	if (o->pmrChan->b.txCtcssReady) {
-		struct ast_frame wf = { AST_FRAME_TEXT };
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_TEXT,
+			.src = __PRETTY_FUNCTION__,
+		};
 		char msg[32];
-		memset(msg, 0, 32);
 
-		sprintf(msg, "cstx=%.26s", o->pmrChan->txctcssfreq);
-		ast_debug(3, "Channel %s: got b.txCtcssReady %s.\n", o->name, o->pmrChan->txctcssfreq);
-		o->pmrChan->b.txCtcssReady = 0;
+		snprintf(msg, sizeof(msg), "cstx=%.26s", o->pmrChan->txctcssfreq);
 		wf.data.ptr = msg;
 		wf.datalen = strlen(msg) + 1;
 		ast_queue_frame(o->owner, &wf);
+
+		ast_debug(3, "Channel %s: got b.txCtcssReady %s.\n", o->name, o->pmrChan->txctcssfreq);
+		o->pmrChan->b.txCtcssReady = 0;
 	}
 	/* report channel rssi */
 	if (o->sendvoter && o->count_rssi_update && o->rxkeyed) {
 		if (--o->count_rssi_update <= 0) {
-			struct ast_frame wf = { AST_FRAME_TEXT };
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_TEXT,
+				.src = __PRETTY_FUNCTION__,
+			};
 			char msg[32];
-			sprintf(msg, "R %i", ((32767 - o->pmrChan->rxRssi) * 1000) / 32767);
+
+			snprintf(msg, sizeof(msg), "R %i", ((32767 - o->pmrChan->rxRssi) * 1000) / 32767);
 			wf.data.ptr = msg;
 			wf.datalen = strlen(msg) + 1;
 			ast_queue_frame(o->owner, &wf);
+
 			o->count_rssi_update = 10;
 			ast_debug(4, "Channel %s: Count_rssi_update %i\n",
 						o->name, ((32767 - o->pmrChan->rxRssi) * 1000 / 32767));
@@ -2469,17 +2492,16 @@ static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newch
  * \retval 0			If successful.
  * \retval -1			For hangup.
  */
-static int usbradio_indicate(struct ast_channel *c, int cond, const void *data, size_t datalen)
+static int usbradio_indicate(struct ast_channel *c, int cond_in, const void *data, size_t datalen)
 {
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
+	enum ast_control_frame_type cond = cond_in;
 
 	switch (cond) {
 	case AST_CONTROL_BUSY:
 	case AST_CONTROL_CONGESTION:
 	case AST_CONTROL_RINGING:
 		break;
-	case -1:
-		return 0;
 	case AST_CONTROL_VIDUPDATE:
 		break;
 	case AST_CONTROL_HOLD:
@@ -5004,6 +5026,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 
 	if (o->rxsdtype != SD_XPMR) {
 		o->rxctcssfreqs[0] = 0;
+		o->txctcssfreqs[0] = 0;
 	}
 
 	if ((o->txmixa == TX_OUT_COMPOSITE) && (o->txmixb == TX_OUT_VOICE)) {

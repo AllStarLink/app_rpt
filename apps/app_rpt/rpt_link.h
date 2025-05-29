@@ -6,7 +6,7 @@
 
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype);
 
-void set_linkmode(struct rpt_link *mylink, int linkmode);
+void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode);
 
 int altlink(struct rpt *myrpt, struct rpt_link *mylink);
 
@@ -25,6 +25,8 @@ void tele_link_add(struct rpt *myrpt, struct rpt_tele *t);
 void tele_link_remove(struct rpt *myrpt, struct rpt_tele *t);
 
 int altlink1(struct rpt *myrpt, struct rpt_link *mylink);
+
+void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
 
 int linkcount(struct rpt *myrpt);
 
@@ -80,7 +82,7 @@ void rpt_update_links(struct rpt *myrpt);
  * \retval 1 No match yet
  * \retval 2 Already connected to this node
  */
-int connect_link(struct rpt *myrpt, char *node, int mode, int perma);
+int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma);
 
 /*! \brief Free link and associated internal memory.
  * \param link Link structure to free
