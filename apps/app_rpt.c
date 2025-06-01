@@ -4611,7 +4611,7 @@ static void *rpt(void *this)
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
 	struct rpt_link *l;
-	struct rpt_tele *telem, *last_tele = NULL;
+	struct rpt_tele *telem, *last_telem = NULL;
 	char tmpstr[512];
 	struct ast_format_cap *cap;
 	struct timeval looptimestart;
@@ -5204,21 +5204,21 @@ static void *rpt(void *this)
 		/* If we have a new active telemetry message and a channel */
 		if (myrpt->active_telem && myrpt->active_telem->chan) {
 			/* If we have a new telmetry message or we have changed keyup state to keyup */
-			if (((myrpt->active_telem != last_tele) || !lastduck) && (myrpt->keyed || myrpt->remrx)) {
+			if (((myrpt->active_telem != last_telem) || !lastduck) && (myrpt->keyed || myrpt->remrx)) {
 				if (ast_audiohook_volume_set_float(myrpt->active_telem->chan, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemduckgain)) {
 					ast_debug(7, "Setting the volume on channel %s to %2.2f", ast_channel_name(myrpt->tele.next->chan), myrpt->p.telemduckgain);
 				}
 				lastduck = 1;
 			}
 			/* If we have a new telemetry message or we have already adjusted ducking and we are not keyed up */
-			if (((myrpt->active_telem != last_tele) || lastduck) && !myrpt->keyed && !myrpt->remrx) {
+			if (((myrpt->active_telem != last_telem) || lastduck) && !myrpt->keyed && !myrpt->remrx) {
 				if (ast_audiohook_volume_set_float(myrpt->active_telem->chan, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
 					ast_debug(7, "Setting the volume on channel %s to %2.2f", ast_channel_name(myrpt->tele.next->chan), myrpt->p.telemnomgain);
 				}
 				lastduck = 0;
 			}
 		}
-		last_tele = myrpt->active_telem;
+		last_telem = myrpt->active_telem;
 
 		n = 0;
 		cs[n++] = myrpt->rxchannel;
