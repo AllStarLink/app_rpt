@@ -1361,34 +1361,34 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 }
 
 bool rpt_is_valid_dns_name(const char *dns_name) {
-    if (!dns_name || strlen(dns_name) > MAX_DOMAIN_LENGTH) {
-        return false;
-    }
+	if (!dns_name || strlen(dns_name) > MAX_DOMAIN_LENGTH) {
+		return false;
+	}
 
-    int label_length = 0;
-    bool label_start = true;
+	int label_length = 0;
+	bool label_start = true;
 
-    for (const char *ptr = dns_name; *ptr; ++ptr) {
-        if (*ptr == '.') {
-            if (label_start || label_length == 0) {
-                return false; // No empty labels
-            }
-            label_length = 0;
-            label_start = true;
-        } else {
-            if (!isalnum(*ptr) && *ptr != '-') {
-                return false; // Only alphanumeric and hyphens allowed
-            }
-            if (label_start && *ptr == '-') {
-                return false; // Labels can't start with a hyphen
-            }
-            label_length++;
-            if (label_length > MAX_LABEL_LENGTH) {
-                return false;
-            }
-            label_start = false;
-        }
-    }
+	for (const char *ptr = dns_name; *ptr; ++ptr) {
+		if (*ptr == '.') {
+			if (label_start || label_length == 0) {
+				return false; // No empty labels
+			}
+			label_length = 0;
+			label_start = true;
+		} else {
+			if (!isalnum(*ptr) && *ptr != '-') {
+				return false; // Only alphanumeric and hyphens allowed
+			}
+			if (label_start && *ptr == '-') {
+				return false; // Labels can't start with a hyphen
+			}
+			label_length++;
+			if (label_length > MAX_LABEL_LENGTH) {
+				return false;
+			}
+			label_start = false;
+		}
+	}
 
-    return label_length > 0; // Ensure last label isn't empty
+	return label_length > 0; // Ensure last label isn't empty
 }
