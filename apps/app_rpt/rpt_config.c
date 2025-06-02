@@ -1363,37 +1363,41 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 }
 
 int rpt_is_valid_dns_name(const char *dns_name) {
+	int label_length, label_start;
+
 	if (!dns_name || strlen(dns_name) > MAX_DNS_NODE_DOMAIN_LEN) {
 		return 0;
 	}
 
-	int label_length = 0;
-	int label_start = 1;
+	label_length = 0;
+	label_start = 0;
 
 	for (const char *ptr = dns_name; *ptr; ++ptr) {
 		if (*ptr == '.') {
-			if (label_start || label_length == 0) {
+			/* no empty labels */
+			if (label_start) {
 				return 0; // No empty labels
 			}
 			label_length = 0;
 			label_start = 1;
 		} else {
-			if (!isalnum(*ptr) && *ptr != '-') {
-				return 0; // Only alphanumeric and hyphens allowed
+			/* only allow ASCII alphanumerics and hypens per the standard */
+			if (!isascii(*ptr) || (!isalnum(*ptr) && *ptr != '-')) {
+				return 0; 
 			}
-			if (label_start && *ptr == '-') {
-				return 0; // Labels can't start with a hyphen
+			/* labels cannot start or end with a hypen */
+			if (label_length == 0 && *ptr == '-') {
+				return 0; 
 			}
 			label_length++;
+			/* labels cannot exceed the max label length */
 			if (label_length > MAX_DNS_NODE_LABEL_LEN) {
 				return 0;
 			}
-			label_start = 1;
+			label_start = 0;
 		}
 	}
 
 	/* ensure last label isn't empty (good) */
-	if (label_length > 0)
-		return 1;
-	return 0;
+	return label_length > 0;
 }
