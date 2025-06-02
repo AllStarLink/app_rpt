@@ -5,7 +5,6 @@
 #include <math.h>
 #include <termios.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <ctype.h>
 #include <string.h>
 
@@ -1360,35 +1359,38 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 	}
 }
 
-bool rpt_is_valid_dns_name(const char *dns_name) {
+int rpt_is_valid_dns_name(const char *dns_name) {
 	if (!dns_name || strlen(dns_name) > MAX_DOMAIN_LENGTH) {
 		return false;
 	}
 
 	int label_length = 0;
-	bool label_start = true;
+	int label_start = 1;
 
 	for (const char *ptr = dns_name; *ptr; ++ptr) {
 		if (*ptr == '.') {
 			if (label_start || label_length == 0) {
-				return false; // No empty labels
+				return 0; // No empty labels
 			}
 			label_length = 0;
-			label_start = true;
+			label_start = 1;
 		} else {
 			if (!isalnum(*ptr) && *ptr != '-') {
-				return false; // Only alphanumeric and hyphens allowed
+				return 0; // Only alphanumeric and hyphens allowed
 			}
 			if (label_start && *ptr == '-') {
-				return false; // Labels can't start with a hyphen
+				return 0; // Labels can't start with a hyphen
 			}
 			label_length++;
 			if (label_length > MAX_LABEL_LENGTH) {
-				return false;
+				return 0;
 			}
-			label_start = false;
+			label_start = 1;
 		}
 	}
 
-	return label_length > 0; // Ensure last label isn't empty
+	/* ensure last label isn't empty (good) */
+	if (label_length > 0)
+		return 1
+	return 0;
 }

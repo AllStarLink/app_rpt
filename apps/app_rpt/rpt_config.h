@@ -95,4 +95,4 @@ int rpt_push_alt_macro(struct rpt *myrpt, char *sptr);
 void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval);
 
 /*! \brief Test strings for valid DNS contents */
-bool rpt_is_valid_dns_name(const char *dns_name);
+int rpt_is_valid_dns_name(const char *dns_name);
