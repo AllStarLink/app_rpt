@@ -4,6 +4,10 @@
 #include <sys/stat.h>
 #include <math.h>
 #include <termios.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <ctype.h>
+#include <string.h>
 
 #include "asterisk/channel.h"
 #include "asterisk/pbx.h"
@@ -34,6 +38,7 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 extern enum rpt_dns_method rpt_node_lookup_method;
+extern char *rpt_dns_node_domain;
 extern int rpt_max_dns_node_length;
 
 static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
@@ -388,7 +393,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 		/* setup the domain to lookup */
 		memset(domain,0, sizeof(domain));
-		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.nodes.allstarlink.org", node);
+		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.%s", node, rpt_dns_node_domain);
 		if (res < 0) {
 			return -1;
 		}
@@ -458,7 +463,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 		/* setup the domain to lookup */
 		memset(domain, 0, sizeof(domain));
-		res = snprintf(domain, sizeof(domain), "%s.nodes.allstarlink.org", node);
+		res = snprintf(domain, sizeof(domain), "%s.%s", node, rpt_dns_node_domain);
 		if (res < 0) {
 			return -1;
 		}
@@ -1353,4 +1358,37 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 	if (newval >= 0) {
 		rpt_event_process(myrpt);
 	}
+}
+
+bool rpt_is_valid_dns_name(const char *dns_name) {
+    if (!dns_name || strlen(dns_name) > MAX_DOMAIN_LENGTH) {
+        return false;
+    }
+
+    int label_length = 0;
+    bool label_start = true;
+
+    for (const char *ptr = dns_name; *ptr; ++ptr) {
+        if (*ptr == '.') {
+            if (label_start || label_length == 0) {
+                return false; // No empty labels
+            }
+            label_length = 0;
+            label_start = true;
+        } else {
+            if (!isalnum(*ptr) && *ptr != '-') {
+                return false; // Only alphanumeric and hyphens allowed
+            }
+            if (label_start && *ptr == '-') {
+                return false; // Labels can't start with a hyphen
+            }
+            label_length++;
+            if (label_length > MAX_LABEL_LENGTH) {
+                return false;
+            }
+            label_start = false;
+        }
+    }
+
+    return label_length > 0; // Ensure last label isn't empty
 }

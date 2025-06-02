@@ -5538,6 +5538,21 @@ static int load_config(int reload)
 			rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
 		}
 	}
+
+	val = (char *) ast_variable_retrieve(cfg, "general", "dns_node_domain");
+	if (val) {
+		if (is_valid_dns_name(val)){
+			rpt_dns_node_domain = val;
+		} else {
+			ast_log(LOG_ERROR, "Configuration error: dns_node_domain value %s is not a valid format", val);
+			ast_log(LOG_ERROR, "Configuration error: revert to default dns_node_domain value %s", DEFAULT_DNS_NODE_DOMAIN);
+			rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
+		}
+	} else {
+		rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
+	}
+	ast_log(LOG_NOTICE, "Domain used for DNS node lookup is: %s", rpt_dns_node_domain);
+	
 	val = (char *) ast_variable_retrieve(cfg, "general", "max_dns_node_length");
 	if (val) {
 		i = atoi(val);
