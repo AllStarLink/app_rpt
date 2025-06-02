@@ -5546,7 +5546,6 @@ static int load_config(int reload)
 			rpt_dns_node_domain = val;
 		} else {
 			ast_log(LOG_ERROR, "Configuration error: dns_node_domain value %s is not a valid format", val);
-			ast_log(LOG_ERROR, "Configuration error: revert to default dns_node_domain value %s", DEFAULT_DNS_NODE_DOMAIN);
 			rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 		}
 	}
