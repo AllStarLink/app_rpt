@@ -34,6 +34,9 @@
 #define TLB_QUERY_NODE_EXISTS 1
 #define TLB_QUERY_GET_CALLSIGN 2
 
+/*! \brief DNS max overall and per-label sizes (RFC1035) */
+#define MAX_DNS_NODE_DOMAIN_LEN 253
+#define MAX_DNS_NODE_LABEL_LEN 63
 
 extern struct rpt rpt_vars[MAXRPTS];
 extern enum rpt_dns_method rpt_node_lookup_method;
@@ -1360,8 +1363,8 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 }
 
 int rpt_is_valid_dns_name(const char *dns_name) {
-	if (!dns_name || strlen(dns_name) > MAX_DOMAIN_LENGTH) {
-		return false;
+	if (!dns_name || strlen(dns_name) > MAX_DNS_NODE_DOMAIN_LEN) {
+		return 0;
 	}
 
 	int label_length = 0;
@@ -1382,7 +1385,7 @@ int rpt_is_valid_dns_name(const char *dns_name) {
 				return 0; // Labels can't start with a hyphen
 			}
 			label_length++;
-			if (label_length > MAX_LABEL_LENGTH) {
+			if (label_length > MAX_DNS_NODE_LABEL_LEN) {
 				return 0;
 			}
 			label_start = 1;
@@ -1391,6 +1394,6 @@ int rpt_is_valid_dns_name(const char *dns_name) {
 
 	/* ensure last label isn't empty (good) */
 	if (label_length > 0)
-		return 1
+		return 1;
 	return 0;
 }
