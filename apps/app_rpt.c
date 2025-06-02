@@ -424,6 +424,7 @@ static int nrpts = 0;
 
 /* general settings */
 enum rpt_dns_method rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
+char *rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 int rpt_max_dns_node_length = 6;
 
 int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
@@ -5549,8 +5550,6 @@ static int load_config(int reload)
 			ast_log(LOG_ERROR, "Configuration error: revert to default dns_node_domain value %s", DEFAULT_DNS_NODE_DOMAIN);
 			rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 		}
-	} else {
-		rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 	}
 	ast_log(LOG_NOTICE, "Domain used for DNS node lookup is: %s", rpt_dns_node_domain);
 	
