@@ -5550,7 +5550,6 @@ static int load_config(int reload)
 		}
 	}
 	ast_log(LOG_NOTICE, "Domain used for DNS node lookup is: %s", rpt_dns_node_domain);
-	
 	val = (char *) ast_variable_retrieve(cfg, "general", "max_dns_node_length");
 	if (val) {
 		i = atoi(val);
