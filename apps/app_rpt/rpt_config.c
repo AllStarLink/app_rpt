@@ -1362,7 +1362,8 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 	}
 }
 
-int rpt_is_valid_dns_name(const char *dns_name) {
+int rpt_is_valid_dns_name(const char *dns_name)
+{
 	int label_length, label_start;
 
 	if (!dns_name || strlen(dns_name) > MAX_DNS_NODE_DOMAIN_LEN) {
@@ -1383,11 +1384,11 @@ int rpt_is_valid_dns_name(const char *dns_name) {
 		} else {
 			/* only allow ASCII alphanumerics and hyphens per the standard */
 			if (!isascii(*ptr) || (!isalnum(*ptr) && *ptr != '-')) {
-				return 0; 
+				return 0;
 			}
 			/* labels cannot start or end with a hypen */
 			if (label_length == 0 && *ptr == '-') {
-				return 0; 
+				return 0;
 			}
 			label_length++;
 			/* labels cannot exceed the max label length */
@@ -1400,4 +1401,4 @@ int rpt_is_valid_dns_name(const char *dns_name) {
 
 	/* ensure last label isn't empty (good) */
 	return label_length > 0;
-}}
+}
