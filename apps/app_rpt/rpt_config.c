@@ -1386,7 +1386,7 @@ int rpt_is_valid_dns_name(const char *dns_name)
 			if (!isascii(*ptr) || (!isalnum(*ptr) && *ptr != '-')) {
 				return 0;
 			}
-			/* labels cannot start or end with a hypen */
+			/* labels cannot start or end with a hyphen */
 			if (label_length == 0 && *ptr == '-') {
 				return 0;
 			}
