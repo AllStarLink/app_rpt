@@ -300,7 +300,6 @@
 #include <fnmatch.h>
 #include <curl/curl.h>
 #include <termios.h>
-#include <stdbool.h>
 
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
