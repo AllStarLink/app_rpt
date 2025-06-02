@@ -1381,7 +1381,7 @@ int rpt_is_valid_dns_name(const char *dns_name) {
 			label_length = 0;
 			label_start = 1;
 		} else {
-			/* only allow ASCII alphanumerics and hypens per the standard */
+			/* only allow ASCII alphanumerics and hyphens per the standard */
 			if (!isascii(*ptr) || (!isalnum(*ptr) && *ptr != '-')) {
 				return 0; 
 			}
@@ -1400,4 +1400,4 @@ int rpt_is_valid_dns_name(const char *dns_name) {
 
 	/* ensure last label isn't empty (good) */
 	return label_length > 0;
-}
+}}
