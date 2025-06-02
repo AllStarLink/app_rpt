@@ -5541,7 +5541,7 @@ static int load_config(int reload)
 
 	val = (char *) ast_variable_retrieve(cfg, "general", "dns_node_domain");
 	if (val) {
-		if (is_valid_dns_name(val)){
+		if (rpt_is_valid_dns_name(val)) {
 			rpt_dns_node_domain = val;
 		} else {
 			ast_log(LOG_ERROR, "Configuration error: dns_node_domain value %s is not a valid format", val);
