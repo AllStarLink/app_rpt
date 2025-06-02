@@ -5548,6 +5548,8 @@ static int load_config(int reload)
 			ast_log(LOG_ERROR, "Configuration error: dns_node_domain value %s is not a valid format", val);
 			rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 		}
+	} else {
+		rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 	}
 	ast_log(LOG_NOTICE, "Domain used for DNS node lookup is: %s", rpt_dns_node_domain);
 	val = (char *) ast_variable_retrieve(cfg, "general", "max_dns_node_length");
