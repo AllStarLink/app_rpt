@@ -423,7 +423,7 @@ static int nrpts = 0;
 
 /* general settings */
 enum rpt_dns_method rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
-char *rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
+const char *rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 int rpt_max_dns_node_length = 6;
 
 int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
@@ -5505,6 +5505,7 @@ static int load_config(int reload)
 	int i, n = 0;
 	struct ast_config *cfg;
 	char *val, *this = NULL;
+	const char *cval;
 
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
@@ -5540,12 +5541,12 @@ static int load_config(int reload)
 		}
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, "general", "dns_node_domain");
-	if (val) {
+	cval = ast_variable_retrieve(cfg, "general", "dns_node_domain");
+	if (cval) {
 		if (rpt_is_valid_dns_name(val)) {
 			rpt_dns_node_domain = val;
 		} else {
-			ast_log(LOG_ERROR, "Configuration error: dns_node_domain value %s is not a valid format", val);
+			ast_log(LOG_ERROR, "Configuration error: dns_node_domain value %s is not a valid format", cval);
 			rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 		}
 	} else {
