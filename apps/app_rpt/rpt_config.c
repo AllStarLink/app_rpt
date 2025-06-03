@@ -1381,12 +1381,16 @@ int rpt_is_valid_dns_name(const char *dns_name)
 			}
 			label_length = 0;
 			label_start = 1;
+			/* labels cannot end with a hyphen */
+			if (*(ptr - 1) == '-') {
+				return 0;
+			}
 		} else {
 			/* only allow ASCII alphanumerics and hyphens per the standard */
 			if (!isascii(*ptr) || (!isalnum(*ptr) && *ptr != '-')) {
 				return 0;
 			}
-			/* labels cannot start or end with a hyphen */
+			/* labels cannot start with a hyphen */
 			if (label_length == 0 && *ptr == '-') {
 				return 0;
 			}
