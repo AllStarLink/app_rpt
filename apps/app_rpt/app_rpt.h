@@ -431,6 +431,9 @@ enum patch_call_mode {
 #define	DEFAULT_TLB_LINK_MODE LINKMODE_DEMAND
 #define	DEFAULT_TLB_LINK_MODE_DYNAMIC 1
 
+/* for DNS resolution of node data */
+#define DEFAULT_DNS_NODE_DOMAIN "nodes.allstarlink.org"
+
 #define NRPTSTAT 7
 
 struct rpt_chan_stat {
