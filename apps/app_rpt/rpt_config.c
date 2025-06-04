@@ -1366,7 +1366,7 @@ int rpt_is_valid_dns_name(const char *dns_name)
 {
 	int label_length, label_start;
 
-	if (!dns_name || strlen(dns_name) > MAX_DNS_NODE_DOMAIN_LEN) {
+	if (!dns_name || *dns_name == '\0' || *dns_name == '.' || strlen(dns_name) > MAX_DNS_NODE_DOMAIN_LEN) {
 		return 0;
 	}
 
@@ -1381,18 +1381,19 @@ int rpt_is_valid_dns_name(const char *dns_name)
 			}
 			label_length = 0;
 			label_start = 1;
-			/* labels cannot end with a hyphen */
-			if (*(ptr - 1) == '-') {
-				return 0;
-			}
 		} else {
 			/* only allow ASCII alphanumerics and hyphens per the standard */
 			if (!isascii(*ptr) || (!isalnum(*ptr) && *ptr != '-')) {
 				return 0;
 			}
-			/* labels cannot start with a hyphen */
-			if (label_length == 0 && *ptr == '-') {
-				return 0;
+			if (*ptr == '-') {
+				if (label_length == 0) {
+					/* labels cannot start with a hyphen */
+					return 0;
+				} else if (*(ptr + 1) == '\0' || *(ptr + 1) == '.') {
+					/* labels cannot end with a hyphen */
+					return 0;
+				}
 			}
 			label_length++;
 			/* labels cannot exceed the max label length */
@@ -1403,6 +1404,5 @@ int rpt_is_valid_dns_name(const char *dns_name)
 		}
 	}
 
-	/* ensure last label isn't empty (good) */
-	return label_length > 0;
+	return 1;
 }
