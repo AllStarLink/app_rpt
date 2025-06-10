@@ -492,6 +492,12 @@ enum link_mode {
 	MODE_LOCAL_MONITOR
 };
 
+enum rpt_parrot_mode {
+	PARROT_MODE_OFF = 0,
+	PARROT_MODE_ON_COMMAND,
+	PARROT_MODE_ON_ALWAYS
+};
+
 struct vox {
 	float	speech_energy;
 	float	noise_energy;
@@ -811,7 +817,7 @@ struct rpt {
 		int remotetimeoutwarningfreq;
 		int sysstate_cur;
 		struct sysstate s[MAX_SYSSTATES];
-		char parrotmode;
+		enum rpt_parrot_mode parrotmode;
 		int parrottime;
 		const char *rptnode;
 		char remote_mars;

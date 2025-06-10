@@ -1311,20 +1311,20 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "ATDIS");
 		return DC_COMPLETE;
 
-	case 21:					/* Parrot Mode Enable */
+	case 21: /* Parrot Mode Enable */
 		birdbath(myrpt);
-		if (myrpt->p.parrotmode < 2) {
+		if (myrpt->p.parrotmode != PARROT_MODE_ON_ALWAYS) {
 			myrpt->parrotonce = 0;
-			myrpt->p.parrotmode = 1;
+			myrpt->p.parrotmode = PARROT_MODE_ON_COMMAND;
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, COMPLETE, NULL);
 			return DC_COMPLETE;
 		}
 		break;
-	case 22:					/* Parrot Mode Disable */
+	case 22: /* Parrot Mode Disable */
 		birdbath(myrpt);
-		if (myrpt->p.parrotmode < 2) {
-			myrpt->p.parrotmode = 0;
+		if (myrpt->p.parrotmode != PARROT_MODE_ON_ALWAYS) {
+			myrpt->p.parrotmode = PARROT_MODE_OFF;
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, COMPLETE, NULL);
 			return DC_COMPLETE;
