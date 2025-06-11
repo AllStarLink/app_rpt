@@ -619,7 +619,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,REMGO,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMGO", myrpt->name);
 		sayfile(mychannel, "rpt/remote_go");
 		return;
 	}
@@ -627,7 +627,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,REMALREADY,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMALREADY", myrpt->name);
 		sayfile(mychannel, "rpt/remote_already");
 		return;
 	}
@@ -635,7 +635,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,REMNOTFOUND,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMNOTFOUND", myrpt->name);
 		sayfile(mychannel, "rpt/remote_notfound");
 		return;
 	}
@@ -677,7 +677,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_NOTFOUND,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_NOTFOUND", myrpt->name);
 		sayfile(mychannel, "rpt/macro_notfound");
 		return;
 	}
@@ -685,7 +685,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_BUSY,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_BUSY", myrpt->name);
 		sayfile(mychannel, "rpt/macro_busy");
 		return;
 	}
@@ -1245,7 +1245,7 @@ void *rpt_tele_thread(void *this)
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_NOTFOUND,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_NOTFOUND", myrpt->name);
 		res = ast_streamfile(mychannel, "rpt/macro_notfound", ast_channel_language(mychannel));
 		break;
 	case MACRO_BUSY:
@@ -1253,7 +1253,7 @@ void *rpt_tele_thread(void *this)
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_BUSY,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MACRO_BUSY", myrpt->name);
 		res = ast_streamfile(mychannel, "rpt/macro_busy", ast_channel_language(mychannel));
 		break;
 	case PAGE:
@@ -1261,7 +1261,7 @@ void *rpt_tele_thread(void *this)
 			imdone = 1;
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,PAGE,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,PAGE", myrpt->name);
 		res = -1;
 		if (mytele->submode.p) {
 			myrpt->noduck = 1;
@@ -1665,7 +1665,7 @@ treataslocal:
 			imdone = 1;
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,REMDISC,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMDISC", myrpt->name);
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 		if (!res) {
 			res = ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? "rpt/remote_disc" : "rpt/remote_busy"), ast_channel_language(mychannel));
@@ -1676,7 +1676,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,REMALREADY,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMALREADY", myrpt->name);
 		res = ast_streamfile(mychannel, "rpt/remote_already", ast_channel_language(mychannel));
 		break;
 	case REMNOTFOUND:
@@ -1684,7 +1684,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,REMNOTFOUND,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMNOTFOUND", myrpt->name);
 		res = ast_streamfile(mychannel, "rpt/remote_notfound", ast_channel_language(mychannel));
 		break;
 	case REMGO:
@@ -1692,7 +1692,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,REMGO,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,REMGO", myrpt->name);
 		res = ast_streamfile(mychannel, "rpt/remote_go", ast_channel_language(mychannel));
 		break;
 	case CONNECTED:
@@ -1700,7 +1700,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,CONNECTED,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,CONNECTED", myrpt->name);
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 		if (!res) {
 			res = ast_stream_and_wait(mychannel, "rpt/connected-to", "");
@@ -1713,7 +1713,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,CONNFAIL,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,CONNFAIL", myrpt->name);
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 		if (!res) {
 			res = ast_streamfile(mychannel, "rpt/connection_failed", ast_channel_language(mychannel));
@@ -1724,7 +1724,7 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,MEMNOTFOUND,%s", myrpt->name);
+		donodelog_fmt(myrpt, "TELEMETRY,%s,MEMNOTFOUND", myrpt->name);
 		res = ast_streamfile(mychannel, "rpt/memory_notfound", ast_channel_language(mychannel));
 		break;
 	case PLAYBACK:
