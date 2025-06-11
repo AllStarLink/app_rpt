@@ -942,9 +942,9 @@ void load_rpt_vars(int n, int init)
 
 	val = ast_variable_retrieve(cfg, cat, "parrot");
 	if (val) {
-		rpt_vars[n].p.parrotmode = (ast_true(val)) ? 2 : 0;
+		rpt_vars[n].p.parrotmode = ast_true(val) ? PARROT_MODE_ON_ALWAYS : PARROT_MODE_OFF;
 	} else {
-		rpt_vars[n].p.parrotmode = 0;
+		rpt_vars[n].p.parrotmode = PARROT_MODE_OFF;
 	}
 
 	RPT_CONFIG_VAR_INT_DEFAULT(parrottime, "parrottime", PARROTTIME);
