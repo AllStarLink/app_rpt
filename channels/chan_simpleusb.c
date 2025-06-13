@@ -153,7 +153,8 @@ static char hasout;
 pthread_t pulserid;
 
 /*! \brief type of signal detection used for carrier (cos) or ctcss */
-static const char * const signal_type[] = {"no", "usb", "usbinvert", "pp", "ppinvert"};
+static const char * const cd_signal_type[] = { "no", "N/A", "N/A", "usb", "usbinvert", "pp", "ppinvert" };
+static const char * const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "pp", "ppinvert" };
 
 /*!
  * \brief Descriptor for one of our channels.
@@ -3284,13 +3285,11 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 	if (tune_variable_update(CONFIG, category, #field, o->field ? "yes" : "no")) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
-	
-#define CONFIG_UPDATE_SIGNAL(key, field) \
+
+#define CONFIG_UPDATE_SIGNAL(key, field, signal_type) \
 	if (tune_variable_update(CONFIG, category, #key, signal_type[o->field])) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
-
-
 
 	category = ast_category_get(cfg, o->name, NULL);
 	if (!category) {
@@ -3305,8 +3304,8 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 		CONFIG_UPDATE_BOOL(deemphasis);
 		CONFIG_UPDATE_BOOL(plfilter);
 		CONFIG_UPDATE_BOOL(invertptt);
-		CONFIG_UPDATE_SIGNAL(carrierfrom, rxcdtype);
-		CONFIG_UPDATE_SIGNAL(ctcssfrom, rxsdtype);
+		CONFIG_UPDATE_SIGNAL(carrierfrom, rxcdtype, cd_signal_type);
+		CONFIG_UPDATE_SIGNAL(ctcssfrom, rxsdtype, sd_signal_type);
 		CONFIG_UPDATE_INT(rxondelay);
 		CONFIG_UPDATE_INT(txoffdelay);
 		if (ast_config_text_file_save2(CONFIG, cfg, "chan_simpleusb", 0)) {
@@ -3531,20 +3530,20 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 			ast_cli(fd, "PTT mode is currently %s\n", (o->plfilter) ? "Open" : "Ground");
 		}
 		break;
-	case 'r':					/* change carrier from */
+	case 'r': /* change carrier from */
 		if (cmd[1]) {
 			o->rxcdtype = atoi(&cmd[1]);
-			ast_cli(fd, "Carrier From changed to %s\n", signal_type[o->rxcdtype]);
+			ast_cli(fd, "Carrier From changed to %s\n", cd_signal_type[o->rxcdtype]);
 		} else {
-			ast_cli(fd, "Carrier From is currently %s\n", signal_type[o->rxcdtype]);
+			ast_cli(fd, "Carrier From is currently %s\n", cd_signal_type[o->rxcdtype]);
 		}
 		break;
-	case 's':					/* change ctcss from */
+	case 's': /* change ctcss from */
 		if (cmd[1]) {
 			o->rxsdtype = atoi(&cmd[1]);
-			ast_cli(fd, "CTCSS From changed to %s\n", signal_type[o->rxsdtype]);
+			ast_cli(fd, "CTCSS From changed to %s\n", sd_signal_type[o->rxsdtype]);
 		} else {
-			ast_cli(fd, "CTCSS From is currently %s\n", signal_type[o->rxsdtype]);
+			ast_cli(fd, "CTCSS From is currently %s\n", sd_signal_type[o->rxsdtype]);
 		}
 		break;
 	case 't':					/* change rx on delay */

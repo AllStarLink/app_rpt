@@ -64,10 +64,12 @@
 #include <errno.h>
 #include <sys/wait.h>
 
+#include "asterisk/rpt_chan_shared.h"
 #include "asterisk/utils.h"
 
 /*! \brief type of signal detection used for carrier (cos) or ctcss */
-static const char * const signal_type[] = {"no", "usb", "usbinvert", "pp", "ppinvert"};
+static const char * const cd_signal_type[] = { "no", "N/A", "N/A", "usb", "usbinvert", "pp", "ppinvert" };
+static const char * const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "pp", "ppinvert" };
 
 /*! \brief command prefix for Asterisk - simpleusb channel driver access */
 #define COMMAND_PREFIX "susb "
@@ -662,17 +664,45 @@ static int astgetresp(char *cmd)
  * \brief Menu option to select signal type.
  * \param signal		Pointer to signal description.
  * \param selection		Current signal selection.
+ *
+ * \retval				Updated signal type (+1); 0 if unchanged
  */
- static int menu_signal_type(const char *signal, int selection)
+static int menu_signal_type(const char *signal, int selection)
 {
 	char str[100];
-	
+	int cd_mapin[] = {
+		1, /* CD_IGNORE */
+		0, /* CD_XPMR_NOISE (N/A) */
+		0, /* CD_XPMR_VOX (N/A) */
+		2, /* CD_HID */
+		3, /* CD_HID_INVERT */
+		4, /* CD_PP */
+		5, /* CD_PP_INVERT */
+	};
+	int cd_mapout[] = { 0, CD_IGNORE, CD_HID, CD_HID_INVERT, CD_PP, CD_PP_INVERT };
+	int sd_mapin[] = {
+		1, /* SD_IGNORE */
+		2, /* SD_HID */
+		3, /* SD_HID_INVERT */
+		0, /* SD_XPMR (N/A) */
+		4, /* SD_PP */
+		5, /* SD_PP_INVERT */
+	};
+	int sd_mapout[] = { 0, SD_IGNORE, SD_HID, SD_HID_INVERT, SD_PP, SD_PP_INVERT };
+	int mapped;
+
+	if (!strcmp(signal, "Carrier From")) {
+		mapped = cd_mapin[selection];
+	} else {
+		mapped = sd_mapin[selection];
+	}
+
 	printf("\nPlease select from the following methods for %s:\n", signal);
-	printf("1) no %s\n", selection == 0 ? "- Current" : "");
-	printf("2) usb %s\n", selection == 1 ? "- Current" : "");
-	printf("3) usbinvert %s\n", selection == 2 ? "- Current" : "");
-	printf("4) pp %s\n", selection == 3 ? "- Current" : "");
-	printf("5) ppinvert %s\n", selection == 4 ? "- Current" : "");
+	printf("1) no %s\n", mapped == 1 ? "- Current" : "");
+	printf("2) usb %s\n", mapped == 2 ? "- Current" : "");
+	printf("3) usbinvert %s\n", mapped == 3 ? "- Current" : "");
+	printf("4) pp %s\n", mapped == 4 ? "- Current" : "");
+	printf("5) ppinvert %s\n", mapped == 5 ? "- Current" : "");
 
 	printf("Select new %s or C/R for current): ", signal);
 	if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
@@ -686,7 +716,15 @@ static int astgetresp(char *cmd)
 		printf("Method not changed\n");
 		return 0;
 	}
-	return atoi(str);
+	mapped = atoi(str);
+
+	if (!strcmp(signal, "Carrier From")) {
+		selection = cd_mapout[mapped];
+	} else {
+		selection = sd_mapout[mapped];
+	}
+
+	return selection + 1;
 }
 
 /*!
@@ -743,7 +781,7 @@ static int astgetresp(char *cmd)
 /*!
  * \brief Main program entry point.
  */
- int main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int txmixaset = 0, txmixbset = 0, keying = 0, echomode = 0;
 	int rxboost = 0, preemphasis = 0, deemphasis = 0;
@@ -822,8 +860,8 @@ static int astgetresp(char *cmd)
 		printf("F) Flash (Toggle PTT and Tone output several times)\n");
 		printf("G) Toggle PL Filter (currently '%s')\n", plfilter ? "enabled" : "disabled");
 		printf("H) Toggle PTT mode (currently '%s')\n", pttmode ? "open" : "ground");
-		printf("I) Change Carrier From (currently '%s')\n", signal_type[carrierfrom]);
-		printf("J) Change CTCSS From (currently '%s')\n", signal_type[ctcssfrom]);
+		printf("I) Change Carrier From (currently '%s')\n", cd_signal_type[carrierfrom]);
+		printf("J) Change CTCSS From (currently '%s')\n", sd_signal_type[ctcssfrom]);
 		printf("K) Change RX On Delay (currently '%d')\n", rxondelay);
 		printf("L) Change TX Off Delay (currently '%d')\n", txoffdelay);
 		printf("P) Print Current Parameter Values\n");
