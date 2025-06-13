@@ -153,8 +153,8 @@ static char hasout;
 pthread_t pulserid;
 
 /*! \brief type of signal detection used for carrier (cos) or ctcss */
-static const char * const cd_signal_type[] = { "no", "N/A", "N/A", "usb", "usbinvert", "pp", "ppinvert" };
-static const char * const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "pp", "ppinvert" };
+static const char *const cd_signal_type[] = { "no", "N/A", "N/A", "usb", "usbinvert", "pp", "ppinvert" };
+static const char *const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "pp", "ppinvert" };
 
 /*!
  * \brief Descriptor for one of our channels.
