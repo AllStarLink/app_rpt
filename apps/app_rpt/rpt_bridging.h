@@ -1,22 +1,19 @@
 
 enum rpt_chan_type {
-	RPT_RXCHAN,	/* Receive channel */
-	RPT_TXCHAN,	/* Transmit channel */
+	RPT_RXCHAN, /* Receive channel */
+	RPT_TXCHAN, /* Transmit channel */
 	RPT_PCHAN,
 	RPT_DAHDITXCHAN,
-	RPT_MONCHAN,	/* Monitor channel */
+	RPT_MONCHAN, /* Monitor channel */
 	RPT_PARROTCHAN,
-	RPT_TELECHAN,
-	RPT_BTELECHAN,
 	RPT_VOXCHAN,
 	RPT_TXPCHAN,
 };
 
 /* Each of these corresponds to a member of the rpt_conf structure in app_rpt.h */
 enum rpt_conf_type {
-	RPT_CONF,
-	RPT_TXCONF,
-	RPT_TELECONF,
+	RPT_CONF,	/* Audio on all links */
+	RPT_TXCONF, /* Local Audio */
 };
 
 /* Uses same flag name style as DAHDI_CONF flags, since that's what these are based on */

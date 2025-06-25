@@ -124,11 +124,11 @@ typedef struct {
 #define	DEFAULT_REMOTE_TIMEOUT_WARNING (3 * 60)
 #define	DEFAULT_REMOTE_TIMEOUT_WARNING_FREQ 30
 
-#define	DEFAULT_ERXGAIN "-3.0"
-#define	DEFAULT_ETXGAIN "3.0"
-#define	DEFAULT_TRXGAIN "-3.0"
-#define	DEFAULT_TTXGAIN "3.0"
-#define	DEFAULT_LINKMONGAIN "0.0"
+#define DEFAULT_ERXGAIN -3.0
+#define DEFAULT_ETXGAIN 3.0
+#define DEFAULT_TRXGAIN -3.0
+#define DEFAULT_TTXGAIN 3.0
+#define DEFAULT_LINKMONGAIN 0.0
 
 #define	DEFAULT_EANNMODE 1
 #define	DEFAULT_TANNMODE 1
@@ -419,8 +419,10 @@ enum patch_call_mode {
 };
 
 #define DEFAULT_NODE_LOOKUP_METHOD LOOKUP_BOTH
-#define DEFAULT_TELEMDUCKDB "-9"
-#define	DEFAULT_RPT_TELEMDEFAULT 1
+#define DEFAULT_VOTERGAIN 10
+#define DEFAULT_TELEMDUCKDB -15
+#define DEFAULT_TELEMNOMDB -3
+#define DEFAULT_RPT_TELEMDEFAULT 1
 #define	DEFAULT_RPT_TELEMDYNAMIC 1
 #define	DEFAULT_GUI_LINK_MODE LINKMODE_ON
 #define	DEFAULT_GUI_LINK_MODE_DYNAMIC 1
@@ -838,8 +840,8 @@ struct rpt {
 		const char *locallist[16];
 		int nlocallist;
 		char ctgroup[16];
-		float telemnomgain;		/*!< \brief nominal gain adjust for telemetry */
-		float telemduckgain;	/*!< \brief duck on busy gain adjust for telemetry */
+		float telemnomgain;	 /*!< \brief nominal gain adjust for telemetry */
+		float telemduckgain; /*!< \brief duck on busy gain adjust for telemetry */
 		float erxgain;
 		float etxgain;
 		float linkmongain;
@@ -921,8 +923,6 @@ struct rpt {
 	int telemmode;
 	struct ast_channel *rxchannel,*txchannel, *monchannel, *parrotchannel;
 	struct ast_channel *pchannel,*txpchannel, *dahdirxchannel, *dahditxchannel;
-	struct ast_channel *telechannel;  	/*!< \brief pseudo channel between telemetry conference and txconf */
-	struct ast_channel *btelechannel;  	/*!< \brief pseudo channel buffer between telemetry conference and txconf */
 	struct ast_channel *voxchannel;
 	struct ast_frame *lastf1,*lastf2;
 	struct rpt_tele tele;
