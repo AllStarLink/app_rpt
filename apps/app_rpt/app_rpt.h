@@ -204,6 +204,7 @@ typedef struct {
 #define	SIMPLEX_PHONE_DELAY 25
 
 #define RX_LINGER_TIME 50
+#define RX_MUTE_TIMER 60
 
 #define	STATPOST_PROGRAM "/usr/bin/wget,-q,--output-document=/dev/null,--no-check-certificate"
 
@@ -996,6 +997,7 @@ struct rpt {
 	enum newkey rpt_newkey;
 	char inpadtest;
 	int rxlingertimer;
+	int rxmutetimer;
 	char localoverride;
 	char ready;
 	char lastrxburst;

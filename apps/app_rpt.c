@@ -4115,6 +4115,9 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 				ast_frfree(f1);
 		}
 		if (myrpt->p.duplex == 3 && myrpt->keyed) {
+			myrpt->rxmutetimer = RX_MUTE_TIMER;
+		}
+		if (myrpt->rxmutetimer) {
 			RPT_MUTE_FRAME(f);
 		}
 		ast_write(myrpt->txchannel, f);
@@ -7226,6 +7229,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				myrx = myrx || myrpt->wasvox;
 		}
 		keyed = myrx;
+		update_timer(&myrpt->rxmutetimer, elap, 0);
 		update_timer(&myrpt->rxlingertimer, elap, 0);
 		if ((myrpt->rpt_newkey == RADIO_KEY_NOT_ALLOWED) && keyed && (!myrpt->rxlingertimer)) {
 			myrpt->rerxtimer = 0;
