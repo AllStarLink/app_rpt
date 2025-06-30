@@ -1590,9 +1590,7 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 	/* Process the requested query option */
 	switch (option) {
 		case EL_QUERY_IPADDR:
-			ast_mutex_lock(&el_db_lock);
 			foundnode = el_db_find_nodenum(node);
-			ast_mutex_unlock(&el_db_lock);
 			if (foundnode) {
 				ast_copy_string(data, foundnode->ipaddr, *datalen);
 				res = 0;
@@ -1600,12 +1598,10 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 			break;
 		case EL_QUERY_CALLSIGN:
 			/* lookup first in connected table, then echolink database */
-			ast_mutex_lock(&el_db_lock);
 			if (lookup_node_by_nodenum(node, &node_result)) {
 				ast_copy_string(data, node_result.callsign, *datalen);
 				res = 0;
 			}
-			ast_mutex_unlock(&el_db_lock);
 			break;
 		default:
 			ast_log(LOG_ERROR, "Option %i is not valid.", option);
