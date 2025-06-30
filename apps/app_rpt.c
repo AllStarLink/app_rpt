@@ -3788,7 +3788,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		f1 = rpt_frame_helper(myrpt, f, ismuted);
 		if (f1) {
 			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
-			if ((myrpt->p.duplex < 2) && myrpt->monstream && (!myrpt->txkeyed) && myrpt->keyed) {
+			if (((myrpt->p.duplex < 2 && !myrpt->txkeyed) || myrpt->p.duplex == 3) && myrpt->monstream && myrpt->keyed) {
 				ast_writestream(myrpt->monstream, f1);
 			}
 			if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd &&
@@ -4561,9 +4561,8 @@ static inline int monchannel_read(struct rpt *myrpt)
 	if (f->frametype == AST_FRAME_VOICE) {
 		struct rpt_link *l;
 
-		if ((myrpt->p.duplex > 1) || (myrpt->txkeyed)) {
-			if (myrpt->monstream)
-				ast_writestream(myrpt->monstream, f);
+		if (((myrpt->p.duplex > 1 && myrpt->p.duplex != 3) || (myrpt->txkeyed && !myrpt->keyed)) && myrpt->monstream) {
+			ast_writestream(myrpt->monstream, f);
 		}
 		if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) && myrpt->p.outstreamcmd
 			&& (myrpt->outstreampipe[1] != -1)) {
