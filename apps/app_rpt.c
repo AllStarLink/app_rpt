@@ -1777,9 +1777,9 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (!strncmp(str, IAXKEYSTR, sizeof(IAXKEYSTR) - 1)) {
- 		return;
- 	}
-	if (*str == 'G') {		/* got GPS data */
+		return;
+	}
+	if (*str == 'G') { /* got GPS data */
 		/* re-distribute it to attached nodes */
 		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		return;
