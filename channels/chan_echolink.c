@@ -185,8 +185,8 @@ do not use 127.0.0.1
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
 
-#define MAX_RXKEY_TIME 4 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
-#define KEEPALIVE_TIME 50 * 10
+#define MAX_RXKEY_TIME 4
+#define KEEPALIVE_TIME 50 * 10 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
 #define AUTH_RETRY_MS 5000
 #define AUTH_ABANDONED_MS 15000
 #define BLOCKING_FACTOR 4
