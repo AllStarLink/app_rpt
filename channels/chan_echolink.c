@@ -2066,7 +2066,7 @@ static int find_delete(const struct el_node *key)
 	int found = 0;
 	struct el_node **found_key;
 	struct el_node *node ;
-
+	ast_mutex_lock(&el_nodelist_lock);
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
 		node = *found_key;
@@ -2076,6 +2076,7 @@ static int find_delete(const struct el_node *key)
 		tdelete(node, &el_node_list, compare_ip);
 		ast_free(node);
 	}
+	ast_mutex_unlock(&el_nodelist_lock);
 	return found;
 }
 
