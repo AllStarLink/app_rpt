@@ -2092,7 +2092,7 @@ static int find_delete(const struct el_node *key)
 static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_instance *instp)
 {
 	char *cmd, *arg1;
-	char delim = ' ';
+	const char *delim = " ";
 	char *ptr, *saveptr, *textptr;
 	struct sockaddr_in sin;
 	unsigned char pack[256];
@@ -2164,16 +2164,16 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 		return;
 	}
 
-	cmd = strtok_r(buf, &delim, &saveptr);
+	cmd = strtok_r(buf, delim, &saveptr);
 	if (!cmd) {
 		instp->rx_bad_packets++;
 		return;
 	}
 
 	/* This version:  up to 3 parameters */
-	arg1 = strtok_r(NULL, &delim, &saveptr);
-	strtok_r(NULL, &delim, &saveptr);
-	strtok_r(NULL, &delim, &saveptr);
+	arg1 = strtok_r(NULL, delim, &saveptr);
+	strtok_r(NULL, delim, &saveptr);
+	strtok_r(NULL, delim, &saveptr);
 
 	if ((strcmp(cmd, "o.conip") == 0) || (strcmp(cmd, "o.dconip") == 0)) {
 		if (!arg1) {
