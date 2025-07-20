@@ -481,6 +481,7 @@ struct rpt_chan_stat {
 #define DISCSTR "!!DISCONNECT!!"
 #define NEWKEYSTR "!NEWKEY!"
 #define NEWKEY1STR "!NEWKEY1!"
+#define IAXKEYSTR "!IAXKEY!"
 
 /*! \brief Repeater link connection newkey handshake state */
 enum newkey { 
