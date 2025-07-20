@@ -155,9 +155,9 @@ isprimary = y
 
 The "secondary" server needs to have the following in all of its instances that require redundancy:
 
-primary = 12.34.56.78:667,mypswd
+primary = 12.34.56.78:1667,mypswd
 
-(where 12.34.56.78:667 is the IPADDDR:PORT of the "primary" server, and mypswd is the password of the
+(where 12.34.56.78:1667 is the IPADDDR:PORT of the "primary" server, and mypswd is the password of the
 "primary connectivity" client)
 
 Note: Master timing sources *MUST* be local to their associated server, and therefore, can not be operated
@@ -318,7 +318,7 @@ static int nullfd = -1;
 
 AST_MUTEX_DEFINE_STATIC(voter_lock);
 
-int16_t listen_port = 667;		/* port to listen to UDP packets on */
+int16_t listen_port = 1667; /* port to listen to UDP packets on */
 int udp_socket = -1;
 
 struct ast_timer *voter_thread_timer = NULL;
