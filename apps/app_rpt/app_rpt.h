@@ -527,6 +527,10 @@ struct rpt_xlat {
 	time_t	lastone;
 };
 
+struct rpt_frame_queue {
+	struct ast_frame *lastf1, *lastf2;
+};
+
 /*! \brief Structure that holds information regarding app_rpt operation */
 struct rpt;
 
@@ -574,8 +578,8 @@ struct rpt_link {
 	int linklisttimer;
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
-	struct	ast_frame *lastf1,*lastf2;
-	struct	rpt_chan_stat chan_stat[NRPTSTAT];
+	struct rpt_frame_queue frame_queue;
+	struct rpt_chan_stat chan_stat[NRPTSTAT];
 	struct vox vox;
 	char wasvox;
 	int voxtotimer;
@@ -925,7 +929,7 @@ struct rpt {
 	struct ast_channel *telechannel;  	/*!< \brief pseudo channel between telemetry conference and txconf */
 	struct ast_channel *btelechannel;  	/*!< \brief pseudo channel buffer between telemetry conference and txconf */
 	struct ast_channel *voxchannel;
-	struct ast_frame *lastf1,*lastf2;
+	struct rpt_frame_queue frame_queue;
 	struct rpt_tele tele;
 	struct timeval lasttv,curtv;
 	pthread_t rpt_call_thread,rpt_thread;
