@@ -1220,8 +1220,7 @@ void *rpt_tele_thread(void *this)
 		} else {
 			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
 		}
-	}
-	break;
+		break;
 	case IDTALKOVER:
 		ast_debug(7, "Tracepoint IDTALKOVER: in rpt_tele_thread()\n");
 		p = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "idtalkover");
