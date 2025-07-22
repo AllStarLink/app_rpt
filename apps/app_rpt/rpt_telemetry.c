@@ -1058,6 +1058,11 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele); \
 	myrpt->active_telem = NULL;
 
+inline static void rpt_do_tail_exten(struct ast_channel *chan, struct rpt *myrpt, const char *context)
+{
+	pbx_builtin_setvar_helper(chan, TELEM_TAIL_FILE, myrpt->p.tailmessages[myrpt->tailmessagen]);
+	rpt_do_dialplan(chan, TELEM_TAIL_FILE_EXTN, context);
+}
 /*
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
  * This routine does a lot of processing of what you "hear" when app_rpt is running.
@@ -1214,8 +1219,10 @@ void *rpt_tele_thread(void *this)
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
 		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
-			pbx_builtin_setvar_helper(mychannel, TELEM_TAIL_FILE, myrpt->p.tailmessages[myrpt->tailmessagen]);
-			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
+			rpt_do_tail_exten(mychannel, myrpt, myrpt->p.telemetry);
+			pbx = 1;
+		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
+			rpt_do_tail_exten(mychannel, myrpt, TELEMETRY);
 			pbx = 1;
 		} else {
 			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
