@@ -1209,7 +1209,7 @@ void *rpt_tele_thread(void *this)
 		break;
 	case TAILMSG:
 		/* wait a little bit longer */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
