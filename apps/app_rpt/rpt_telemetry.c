@@ -36,6 +36,7 @@
 #include "rpt_rig.h"
 
 #define TELEM_TAIL_FILE_EXTN "TAIL"
+#define TELEM_TAIL_FILE "RPT_PLAYBACK_FILE"
 
 extern struct rpt rpt_vars[MAXRPTS];
 
@@ -1208,15 +1209,17 @@ void *rpt_tele_thread(void *this)
 		break;
 	case TAILMSG:
 		/* wait a little bit longer */
-		if (!wait_interval(myrpt, DLY_TELEM, mychannel)) {
-			donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
-			if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
-				pbx_builtin_setvar_helper(mychannel, "RPT_PLAYBACK_FILE", myrpt->p.tailmessages[myrpt->tailmessagen]);
-				rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
-				pbx = 1;
-			} else {
-				res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
-			}
+		if (!wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
+			break;
+		}
+		donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
+		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
+			pbx_builtin_setvar_helper(mychannel, TELEM_TAIL_FILE, myrpt->p.tailmessages[myrpt->tailmessagen]);
+			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
+			pbx = 1;
+		} else {
+			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
+		}
 		}
 		break;
 	case IDTALKOVER:
