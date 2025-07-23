@@ -431,12 +431,12 @@ static int astgetresp(char *cmd)
 	}
 
 	/* get device list from Asterisk */
-	if (astgetline(COMMAND_PREFIX "tune menu-support 1", buf, sizeof(buf) - 1)) {
+	if (astgetline(COMMAND_PREFIX "tune menu-support 1", buf, sizeof(buf) - 1) < 0) {
 		exit(255);
 	}
 	n = explode_string(buf, strs, ARRAY_LEN(strs), ',', 0);
 	if (n < 1) {
-		fprintf(stderr, "Error parsing USB device information\n");
+		fprintf(stderr, "No USB devices found\n");
 		return;
 	}
 	qsort(strs, n, sizeof(char *), qcompar);
@@ -489,11 +489,11 @@ static void menu_swapusb(void)
 	}
 
 	/* get device list from Asterisk */
-	if (astgetline(COMMAND_PREFIX "tune menu-support 3", buf, sizeof(buf) - 1)) {
+	if (astgetline(COMMAND_PREFIX "tune menu-support 3", buf, sizeof(buf) - 1) < 0) {
 		exit(255);
 	}
 	n = explode_string(buf, strs, ARRAY_LEN(strs), ',', 0);
-	if ((n < 1) || (!*strs[0])) {
+	if (n < 1) {
 		fprintf(stderr, "No additional USB devices found\n");
 		return;
 	}
