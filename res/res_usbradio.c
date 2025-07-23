@@ -338,8 +338,8 @@ static int is_known_device(struct usb_device *dev)
 	int matched_entry = 0;
 	
 	for (index = 0; index < ARRAY_LEN(known_devices); index++) {
-		if (dev->descriptor.idVendor == known_devices[index].idVendor && 
-			dev->descriptor.idProduct == (known_devices[index].idProduct & known_devices[index].idMask)) {
+		if (known_devices[index].idVendor == dev->descriptor.idVendor &&
+			known_devices[index].idProduct == (dev->descriptor.idProduct & known_devices[index].idMask)) {
 			matched_entry = 1;
 			break;
 		};
