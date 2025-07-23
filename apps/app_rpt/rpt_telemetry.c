@@ -48,9 +48,7 @@ static int rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const cha
 	rpt_disable_cdr(dpchannel);
 	ast_channel_context_set(dpchannel, context);
 	ast_channel_exten_set(dpchannel, exten);
-	ast_debug(5, "Playback dialplan extension %s\n", exten);
 	ast_pbx_run(dpchannel);
-	ast_debug(5, "PBX has finished on %s\n", context);
 	return 0;
 }
 
