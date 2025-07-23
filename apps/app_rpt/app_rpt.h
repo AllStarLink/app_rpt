@@ -417,7 +417,8 @@ enum patch_call_mode {
 	CALLMODE_UP,
 	CALLMODE_FAILED
 };
-
+#define RPT_CONF_EXTEN = "CONF@pseudo-channel"
+#define RPT_TXCONF_EXTEN = "TXCONF@pseudo-channel"
 #define DEFAULT_NODE_LOOKUP_METHOD LOOKUP_BOTH
 #define DEFAULT_VOTERGAIN 10
 #define DEFAULT_TELEMDUCKDB -15

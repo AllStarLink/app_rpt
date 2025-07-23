@@ -1271,14 +1271,7 @@ void *rpt_call(void *this)
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	rpt_disable_cdr(mychannel);
-	ast_answer(mychannel);
 
-	if (rpt_conf_add_speaker(mychannel, myrpt)) {
-		ast_hangup(mychannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		ao2_ref(cap, -1);
-		pthread_exit(NULL);
-	}
 	genchannel = rpt_request_pseudo_chan(cap);
 	ao2_ref(cap, -1);
 	if (!genchannel) {
@@ -1288,15 +1281,8 @@ void *rpt_call(void *this)
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
 	rpt_disable_cdr(genchannel);
-	ast_answer(genchannel);
 
 	/* first put the channel on the conference */
-	if (rpt_conf_add_speaker(genchannel, myrpt)) {
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
-	}
 	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
@@ -2750,6 +2736,8 @@ void rpt_links_init(struct rpt_link *l)
 
 #define IS_DAHDI_CHAN(c) (!strcasecmp(ast_channel_tech(c)->type, "DAHDI"))
 #define IS_DAHDI_CHAN_NAME(s) (!strncasecmp(s, "DAHDI", 5))
+#define IS_LOCAL(c) (!strcasecmp(ast_channel_tech(c)->type, "Local"))
+#define IS_LOCAL_CHAN_NAME(s) (!strncasecmp(s, "Local", 5))
 
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
@@ -6658,12 +6646,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		ao2_ref(cap, -1);
 
-		/* make a conference for the tx */
-		if (rpt_conf_add_speaker(l->pchan, myrpt)) {
-			ast_free(l);
-			return -1;
-		}
-		
 		if ((phone_mode == 2) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;

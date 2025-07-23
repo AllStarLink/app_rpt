@@ -263,15 +263,27 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	return 0;
 }
 
-struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap)
+struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, enum rpt_conf_type type)
 {
-	struct ast_channel *chan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
-	if (!chan) {
-		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
-		return NULL;
+	char *exten[30];
+	switch (type) {
+	case RPT_CONF:
+		ast_debug(1, "Requesting pseudo channel for RPT_CONF\n");
+		exten = RPT_CONF_EXTEN;
+		break;
+	case RPT_TXCONF:
+		ast_debug(1, "Requesting pseudo channel for RPT_TXCONF\n");
+		exten = RPT_TXCONF_EXTEN;
+		break;
+	default:
+		break;
+		struct ast_channel *chan = ast_request("Local", cap, NULL, NULL, exten, NULL);
+		if (!chan) {
+			ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
+			return NULL;
+		}
+		return chan;
 	}
-	return chan;
-}
 
 int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags)
 {
@@ -285,7 +297,7 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 		myrpt = data;
 	}
 
-	chan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	chan = ast_request("Local", cap, NULL, NULL, RPT_CONF_EXTEN, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
 		return -1;
@@ -297,7 +309,6 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 	ast_set_read_format(chan, ast_format_slin);
 	ast_set_write_format(chan, ast_format_slin);
 	rpt_disable_cdr(chan);
-	ast_answer(chan);
 
 	chanptr = rpt_chan_channel(myrpt, link, chantype);
 	*chanptr = chan;
@@ -332,123 +343,10 @@ static int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci,
 	return 0;
 }
 
-static int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode)
-{
-	int res;
-	struct dahdi_confinfo ci;	/* conference info */
-
-	ci.confno = -1;
-	ci.confmode = mode;
-
-	res = join_dahdiconf(chan, &ci);
-	if (res) {
-		ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mode);
-	} else {
-		*confno = ci.confno;
-	}
-	return res;
-}
-
-static int dahdi_conf_add(struct ast_channel *chan, int confno, int mode)
-{
-	int res;
-	struct dahdi_confinfo ci;	/* conference info */
-
-	ci.confno = confno;
-	ci.confmode = mode;
-	
-	ast_debug(2, "Channel %s joining conference %i", ast_channel_name(chan), confno);
-
-	res = join_dahdiconf(chan, &ci);
-	if (res) {
-		ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mode);
-	}
-	return res;
-}
-
-#define RPT_DAHDI_FLAG(r, d) \
-	if (rflags & r) { \
-		dflags |= d; \
-	}
-
-static int dahdi_conf_flags(enum rpt_conf_flags rflags)
-{
-	int dflags = 0;
-
-	RPT_DAHDI_FLAG(RPT_CONF_NORMAL, DAHDI_CONF_NORMAL);
-	RPT_DAHDI_FLAG(RPT_CONF_MONITOR, DAHDI_CONF_MONITOR);
-	RPT_DAHDI_FLAG(RPT_CONF_MONITORTX, DAHDI_CONF_MONITORTX);
-	RPT_DAHDI_FLAG(RPT_CONF_CONF, DAHDI_CONF_CONF);
-	RPT_DAHDI_FLAG(RPT_CONF_CONFANN, DAHDI_CONF_CONFANN);
-	RPT_DAHDI_FLAG(RPT_CONF_CONFMON, DAHDI_CONF_CONFMON);
-	RPT_DAHDI_FLAG(RPT_CONF_CONFANNMON, DAHDI_CONF_CONFANNMON);
-	RPT_DAHDI_FLAG(RPT_CONF_LISTENER, DAHDI_CONF_LISTENER);
-	RPT_DAHDI_FLAG(RPT_CONF_TALKER, DAHDI_CONF_TALKER);
-
-	return dflags;
-}
-
-static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
-{
-	switch (type) {
-	case RPT_CONF:
-		return &myrpt->rptconf.dahdiconf.conf;
-	case RPT_TXCONF:
-		return &myrpt->rptconf.dahdiconf.txconf;
-	}
-	ast_assert(0);
-	return NULL;
-}
-
-/*!
- * \brief Get the channel number of a DAHDI channel
- * \param chan DAHDI channel
- * \retval -1 on failure, conference number on success
- */
-static int dahdi_conf_get_channo(struct ast_channel *chan)
-{
-	struct dahdi_confinfo ci = {0};
-
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.chan)) {
-		ast_log(LOG_WARNING, "DAHDI_CHANNO failed: %s\n", strerror(errno));
-		return -1;
-	}
-
-	return ci.chan;
-}
-
-int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line)
-{
-	int *confno, dflags;
-	/* Convert RPT conf flags to DAHDI conf flags... for now. */
-	dflags = dahdi_conf_flags(flags);
-	confno = dahdi_confno(myrpt, type);
-	if (dahdi_conf_create(chan, confno, dflags)) {
-		ast_log(LOG_ERROR, "%s:%d: Failed to create conference using chan type %d\n", file, line, type);
-		return -1;
-	}
-	return 0;
-}
-
 int rpt_equate_tx_conf(struct rpt *myrpt)
 {
 	/* save pseudo channel conference number */
 	myrpt->rptconf.dahdiconf.conf = myrpt->rptconf.dahdiconf.txconf;
-	return 0;
-}
-
-int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line)
-{
-	/* Convert RPT conf flags to DAHDI conf flags... for now. */
-	int *confno, dflags;
-
-	dflags = dahdi_conf_flags(flags);
-	confno = dahdi_confno(myrpt, type);
-
-	if (dahdi_conf_add(chan, *confno, dflags)) {
-		ast_log(LOG_ERROR, "%s:%d: Failed to add to conference using chan type %d\n", file, line, type);
-		return -1;
-	}
 	return 0;
 }
 

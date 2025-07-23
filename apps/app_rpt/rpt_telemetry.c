@@ -1098,31 +1098,6 @@ void *rpt_tele_thread(void *this)
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 
-	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
-	}
-
-	ast_format_cap_append(cap, ast_format_slin, 0);
-
-	/* allocate a pseudo-channel thru asterisk */
-	mychannel = rpt_request_pseudo_chan(cap);
-	ao2_ref(cap, -1);
-
-	if (!mychannel) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel (mode: %d)\n", mytele->mode);
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-	rpt_disable_cdr(mychannel);
-	ast_answer(mychannel);
-
-	rpt_mutex_lock(&myrpt->lock);
-	mytele->chan = mychannel;
-
 	/* Wait for previous telemetry to finish before we start so we're not speaking on top of each other. */
 	ast_debug(5, "Queued telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 	while (myrpt->active_telem && ((myrpt->active_telem->mode == PAGE) || (myrpt->active_telem->mode == MDC1200))) {
@@ -1164,10 +1139,31 @@ void *rpt_tele_thread(void *this)
 		ast_debug(7, "Setting the volume on channel %s to %2.2f", ast_channel_name(mychannel), myrpt->p.telemnomgain);
 	}
 
-	if (rpt_conf_add(mychannel, myrpt, type, RPT_CONF_CONFANN)) {
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_mutex_lock(&myrpt->lock);
-		goto abort;
+		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+
+	/* allocate a pseudo-channel thru asterisk */
+	mychannel = rpt_request_pseudo_chan(cap, type);
+	ao2_ref(cap, -1);
+
+	if (!mychannel) {
+		ast_log(LOG_WARNING, "Unable to obtain pseudo channel (mode: %d)\n", mytele->mode);
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
+	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
+	rpt_disable_cdr(mychannel);
+	ast_answer(mychannel);
+
+	rpt_mutex_lock(&myrpt->lock);
+	mytele->chan = mychannel;
+
 	ast_stopstream(mychannel);
 	res = 0;
 	switch (mytele->mode) {
