@@ -801,6 +801,14 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.var = atoi(val); \
 	}
 
+#define RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(var, name, default) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (!ast_strlen_zero(val)) { \
+		rpt_vars[n].p.var = pow(10.0, atof(val) / 20.0); \
+	} else { \
+		rpt_vars[n].p.var = pow(10.0, (double) (default) / 20.0); \
+	}
+
 #define RPT_CONFIG_VAR_INT_DEFAULT(var, name, default) \
 	val = ast_variable_retrieve(cfg, cat, name); \
 	if (!ast_strlen_zero(val)) { \
@@ -957,11 +965,8 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT_DEFAULT(remotetimeoutwarning, "remote_timeout_warning", DEFAULT_REMOTE_TIMEOUT_WARNING);
 	RPT_CONFIG_VAR_INT_DEFAULT(remotetimeoutwarningfreq, "remote_timeout_warning_freq", DEFAULT_REMOTE_TIMEOUT_WARNING_FREQ);
 
-	val = ast_variable_retrieve(cfg, cat, "erxgain");
-	rpt_vars[n].p.erxgain = pow(10.0, atof(S_OR(val, DEFAULT_ERXGAIN)) / 20.0);
-
-	val = ast_variable_retrieve(cfg, cat, "etxgain");
-	rpt_vars[n].p.etxgain = pow(10.0, atof(S_OR(val, DEFAULT_ETXGAIN)) / 20.0);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(erxgain, "erxgain", DEFAULT_ERXGAIN);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(etxgain, "etxgain", DEFAULT_ETXGAIN);
 
 	RPT_CONFIG_VAR_INT_DEFAULT(eannmode, "eannmode", DEFAULT_EANNMODE);
 	if (rpt_vars[n].p.eannmode < 0) {
@@ -970,11 +975,8 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.eannmode = 3;
 	}
 
-	val = ast_variable_retrieve(cfg, cat, "trxgain");
-	rpt_vars[n].p.trxgain = pow(10.0, atof(S_OR(val, DEFAULT_TRXGAIN)) / 20.0);
-
-	val = ast_variable_retrieve(cfg, cat, "ttxgain");
-	rpt_vars[n].p.ttxgain = pow(10.0, atof(S_OR(val, DEFAULT_TTXGAIN)) / 20.0);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(trxgain, "trxgain", DEFAULT_TRXGAIN);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(ttxgain, "ttxgain", DEFAULT_TTXGAIN);
 
 	RPT_CONFIG_VAR_INT_DEFAULT(tannmode, "tannmode", DEFAULT_TANNMODE);
 	if (rpt_vars[n].p.tannmode < 1) {
@@ -983,8 +985,7 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.tannmode = 3;
 	}
 
-	val = ast_variable_retrieve(cfg, cat, "linkmongain");
-	rpt_vars[n].p.linkmongain = pow(10.0, atof(S_OR(val, DEFAULT_LINKMONGAIN)) / 20.0);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(linkmongain, "linkmongain", DEFAULT_LINKMONGAIN);
 
 	RPT_CONFIG_VAR(connpgm, "connpgm");
 	RPT_CONFIG_VAR(discpgm, "discpgm");
@@ -1038,14 +1039,9 @@ void load_rpt_vars(int n, int init)
 
 	RPT_CONFIG_VAR_INT(votertype, "votertype");
 	RPT_CONFIG_VAR_INT(votermode, "votermode");
-	RPT_CONFIG_VAR_INT_DEFAULT(votermargin, "votermargin", 10);
-
-	val = ast_variable_retrieve(cfg, cat, "telemnomdb");
-	rpt_vars[n].p.telemnomgain = pow(10.0, atof(S_OR(val, "0")) / 20.0);
-
-	val = ast_variable_retrieve(cfg, cat, "telemduckdb");
-	rpt_vars[n].p.telemduckgain = pow(10.0, atof(S_OR(val, DEFAULT_TELEMDUCKDB)) / 20.0);
-
+	RPT_CONFIG_VAR_INT_DEFAULT(votermargin, "votermargin", DEFAULT_VOTERGAIN);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(telemnomgain, "telemnomdb", DEFAULT_TELEMNOMDB);
+	RPT_CONFIG_VAR_FLOAT_DB_DEFAULT(telemduckgain, "telemduckdb", DEFAULT_TELEMDUCKDB);
 	RPT_CONFIG_VAR_INT_DEFAULT(telemdefault, "telemdefault", DEFAULT_RPT_TELEMDEFAULT);
 	RPT_CONFIG_VAR_BOOL_DEFAULT(telemdynamic, "telemdynamic", DEFAULT_RPT_TELEMDYNAMIC);
 

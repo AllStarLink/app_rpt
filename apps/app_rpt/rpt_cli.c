@@ -1166,8 +1166,6 @@ static int rpt_show_channels(int fd, int argc, const char *const *argv)
 	DUMP_CHANNEL(txpchannel);
 	DUMP_CHANNEL(dahdirxchannel);
 	DUMP_CHANNEL(dahditxchannel);
-	DUMP_CHANNEL(telechannel);
-	DUMP_CHANNEL(btelechannel);
 	DUMP_CHANNEL(voxchannel);
 	rpt_mutex_unlock(&rpt_vars[this_rpt].lock);
 #undef DUMP_CHANNEL
