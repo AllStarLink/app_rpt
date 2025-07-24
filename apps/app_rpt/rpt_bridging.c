@@ -546,7 +546,7 @@ int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
  * \param tone tone type (e.g., "dial", "congestion")
  * \retval 0 on success, -1 on failure
  */
-static int rpt_play_tone(struct ast_channel *chan, const char *tone)
+int rpt_play_tone(struct ast_channel *chan, const char *tone)
 {
 	struct ast_tone_zone_sound *ts;
 	int res = 0;
@@ -564,18 +564,6 @@ static int rpt_play_tone(struct ast_channel *chan, const char *tone)
 		return -1;
 	}
 	return 0;
-}
-
-/*! \brief Play dial tone on a channel */
-int rpt_play_dialtone(struct ast_channel *chan)
-{
-	return rpt_play_tone(chan, "dial");
-}
-
-/*! \brief Play congestion tone on a channel */
-int rpt_play_congestion(struct ast_channel *chan)
-{
-	return rpt_play_tone(chan, "congestion");
 }
 
 /*! \brief Stop playing tones on a channel */
