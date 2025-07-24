@@ -542,40 +542,67 @@ int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
 }
 
 /*!
- * \param chan
- * \param tone DAHDI_TONE_DIALTONE, DAHDI_TONE_CONGESTION, or -1 to stop tone
+ * \param chan Channel to play tone on
+ * \param tone tone type (e.g., "dial", "congestion")
  * \retval 0 on success, -1 on failure
  */
-static int rpt_play_tone(struct ast_channel *chan, int tone)
+static int rpt_play_tone(struct ast_channel *chan, const char *tone)
 {
-	if (tone_zone_play_tone(ast_channel_fd(chan, 0), tone)) {
+	struct ast_tone_zone_sound *ts;
+	int res = 0;
+	ts = ast_get_indication_tone(ast_channel_zone(chan), tone);
+	if (ts) {
+		res = ast_playtones_start(chan, 0, ts->data, 0);
+		ts = ast_tone_zone_sound_unref(ts);
+	} else {
+		ast_log(LOG_WARNING, "No tone '%s' found in zone '%s'\n", tone, ast_channel_zone(chan)->country);
+		return -1;
+	}
+
+	if (res) {
 		ast_log(LOG_WARNING, "Cannot start tone on %s\n", ast_channel_name(chan));
 		return -1;
 	}
 	return 0;
 }
 
+/*! \brief Play dial tone on a channel */
 int rpt_play_dialtone(struct ast_channel *chan)
 {
-	return rpt_play_tone(chan, DAHDI_TONE_DIALTONE);
+	return rpt_play_tone(chan, "dial");
 }
 
+/*! \brief Play congestion tone on a channel */
 int rpt_play_congestion(struct ast_channel *chan)
 {
-	return rpt_play_tone(chan, DAHDI_TONE_CONGESTION);
+	return rpt_play_tone(chan, "congestion");
 }
 
+/*! \brief Stop playing tones on a channel */
 int rpt_stop_tone(struct ast_channel *chan)
 {
-	return rpt_play_tone(chan, -1);
+	ast_playtones_stop(chan);
+	return 0;
 }
 
+/*! \brief Set the tone zone for a channel.
+ *! \note Based on Asterisk func_channel.c
+ */
 int rpt_set_tone_zone(struct ast_channel *chan, const char *tz)
 {
-	if (tone_zone_set_zone(ast_channel_fd(chan, 0), (char*) tz) == -1) {
-		ast_log(LOG_WARNING, "Unable to set tone zone %s on %s\n", tz, ast_channel_name(chan));
+	struct ast_tone_zone *new_zone;
+	if (!(new_zone = ast_get_indication_zone(tz))) {
+		ast_log(LOG_ERROR, "Unknown country code '%s' for tonezone. Check indications.conf for available country codes.\n", tz);
 		return -1;
 	}
+
+	ast_channel_lock(chan);
+	if (ast_channel_zone(chan)) {
+		ast_channel_zone_set(chan, ast_tone_zone_unref(ast_channel_zone(chan)));
+	}
+	ast_channel_zone_set(chan, ast_tone_zone_ref(new_zone));
+	ast_channel_unlock(chan);
+	new_zone = ast_tone_zone_unref(new_zone);
 	return 0;
 }
 

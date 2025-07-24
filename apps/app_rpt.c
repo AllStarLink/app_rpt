@@ -1262,7 +1262,8 @@ void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	genchannel = rpt_request_pseudo_chan(cap);
-	ao2_ref(cap, -1);
+	ao2_ref(cap, -1); /* cap is no longer needed */
+
 	if (!genchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		ast_hangup(mychannel);
