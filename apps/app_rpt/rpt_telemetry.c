@@ -43,13 +43,12 @@ extern struct rpt rpt_vars[MAXRPTS];
 /*!
  * \brief Execute dialplan on conference conference
  */
-static int rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const char *context)
+static enum ast_pbx_result rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const char *context)
 {
 	rpt_disable_cdr(dpchannel);
 	ast_channel_context_set(dpchannel, context);
 	ast_channel_exten_set(dpchannel, exten);
-	ast_pbx_run(dpchannel);
-	return 0;
+	return ast_pbx_run(dpchannel);
 }
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink)
@@ -1059,10 +1058,10 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 /*! \brief Set a TELEM_TAIL_FILE variable to the selected tail file name
  * and execute the dial plan with extentsion TELEM_TAIL_FILE_EXTN
  */
-inline static void rpt_do_tail_exten(struct ast_channel *chan, const char *filename, const char *context)
+inline static enum ast_pbx_result rpt_do_tail_exten(struct ast_channel *chan, const char *filename, const char *context)
 {
 	pbx_builtin_setvar_helper(chan, TELEM_TAIL_FILE, filename);
-	rpt_do_dialplan(chan, TELEM_TAIL_FILE_EXTN, context);
+	return rpt_do_dialplan(chan, TELEM_TAIL_FILE_EXTN, context);
 }
 /*
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
@@ -2726,12 +2725,12 @@ treataslocal:
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	if (mytele->mode == TAILMSG) {
-		if (!res) {
+		if (!res) { /* The tail message was not squashed (Keyed up while playing tail message)*/
 			myrpt->tailmessagen++;
 			if (myrpt->tailmessagen >= myrpt->p.tailmessagemax) {
 				myrpt->tailmessagen = 0;
 			}
-		} else {
+		} else { /* The tail message was squashed */
 			myrpt->tmsgtimer = myrpt->p.tailsquashedtime;
 		}
 	}
