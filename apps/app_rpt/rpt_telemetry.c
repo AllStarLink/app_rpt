@@ -1215,7 +1215,7 @@ void *rpt_tele_thread(void *this)
 		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
 			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
 			pbx = 1;
-		} else {
+		} else if (myrpt->p.tailmessages[0]) {
 			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
 		}
 		break;
