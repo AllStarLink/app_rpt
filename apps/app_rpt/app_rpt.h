@@ -1,5 +1,5 @@
 #define VERSION_MAJOR 3
-#define VERSION_MINOR 4
+#define VERSION_MINOR 5
 #define VERSION_PATCH 5
 
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
@@ -431,6 +431,9 @@ enum patch_call_mode {
 #define	DEFAULT_TLB_LINK_MODE LINKMODE_DEMAND
 #define	DEFAULT_TLB_LINK_MODE_DYNAMIC 1
 
+/* for DNS resolution of node data */
+#define DEFAULT_DNS_NODE_DOMAIN "nodes.allstarlink.org"
+
 #define NRPTSTAT 7
 
 struct rpt_chan_stat {
@@ -478,6 +481,7 @@ struct rpt_chan_stat {
 #define DISCSTR "!!DISCONNECT!!"
 #define NEWKEYSTR "!NEWKEY!"
 #define NEWKEY1STR "!NEWKEY1!"
+#define IAXKEYSTR "!IAXKEY!"
 
 /*! \brief Repeater link connection newkey handshake state */
 enum newkey { 
@@ -490,6 +494,12 @@ enum link_mode {
 	MODE_MONITOR,
 	MODE_TRANSCEIVE,
 	MODE_LOCAL_MONITOR
+};
+
+enum rpt_parrot_mode {
+	PARROT_MODE_OFF = 0,
+	PARROT_MODE_ON_COMMAND,
+	PARROT_MODE_ON_ALWAYS
 };
 
 struct vox {
@@ -515,6 +525,10 @@ struct rpt_xlat {
 	int	funcindex;
 	int	endindex;
 	time_t	lastone;
+};
+
+struct rpt_frame_queue {
+	struct ast_frame *lastf1, *lastf2;
 };
 
 /*! \brief Structure that holds information regarding app_rpt operation */
@@ -564,8 +578,8 @@ struct rpt_link {
 	int linklisttimer;
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
-	struct	ast_frame *lastf1,*lastf2;
-	struct	rpt_chan_stat chan_stat[NRPTSTAT];
+	struct rpt_frame_queue frame_queue;
+	struct rpt_chan_stat chan_stat[NRPTSTAT];
 	struct vox vox;
 	char wasvox;
 	int voxtotimer;
@@ -811,7 +825,7 @@ struct rpt {
 		int remotetimeoutwarningfreq;
 		int sysstate_cur;
 		struct sysstate s[MAX_SYSSTATES];
-		char parrotmode;
+		enum rpt_parrot_mode parrotmode;
 		int parrottime;
 		const char *rptnode;
 		char remote_mars;
@@ -915,7 +929,7 @@ struct rpt {
 	struct ast_channel *telechannel;  	/*!< \brief pseudo channel between telemetry conference and txconf */
 	struct ast_channel *btelechannel;  	/*!< \brief pseudo channel buffer between telemetry conference and txconf */
 	struct ast_channel *voxchannel;
-	struct ast_frame *lastf1,*lastf2;
+	struct rpt_frame_queue frame_queue;
 	struct rpt_tele tele;
 	struct timeval lasttv,curtv;
 	pthread_t rpt_call_thread,rpt_thread;

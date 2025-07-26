@@ -4,6 +4,9 @@
 #include <sys/stat.h>
 #include <math.h>
 #include <termios.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
 
 #include "asterisk/channel.h"
 #include "asterisk/pbx.h"
@@ -31,9 +34,13 @@
 #define TLB_QUERY_NODE_EXISTS 1
 #define TLB_QUERY_GET_CALLSIGN 2
 
+/*! \brief DNS max overall and per-label sizes (RFC1035) */
+#define MAX_DNS_NODE_DOMAIN_LEN 253
+#define MAX_DNS_NODE_LABEL_LEN 63
 
 extern struct rpt rpt_vars[MAXRPTS];
 extern enum rpt_dns_method rpt_node_lookup_method;
+extern char *rpt_dns_node_domain;
 extern int rpt_max_dns_node_length;
 
 static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
@@ -388,7 +395,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 		/* setup the domain to lookup */
 		memset(domain,0, sizeof(domain));
-		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.nodes.allstarlink.org", node);
+		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.%s", node, rpt_dns_node_domain);
 		if (res < 0) {
 			return -1;
 		}
@@ -458,7 +465,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 		/* setup the domain to lookup */
 		memset(domain, 0, sizeof(domain));
-		res = snprintf(domain, sizeof(domain), "%s.nodes.allstarlink.org", node);
+		res = snprintf(domain, sizeof(domain), "%s.%s", node, rpt_dns_node_domain);
 		if (res < 0) {
 			return -1;
 		}
@@ -935,9 +942,9 @@ void load_rpt_vars(int n, int init)
 
 	val = ast_variable_retrieve(cfg, cat, "parrot");
 	if (val) {
-		rpt_vars[n].p.parrotmode = (ast_true(val)) ? 2 : 0;
+		rpt_vars[n].p.parrotmode = ast_true(val) ? PARROT_MODE_ON_ALWAYS : PARROT_MODE_OFF;
 	} else {
-		rpt_vars[n].p.parrotmode = 0;
+		rpt_vars[n].p.parrotmode = PARROT_MODE_OFF;
 	}
 
 	RPT_CONFIG_VAR_INT_DEFAULT(parrottime, "parrottime", PARROTTIME);
@@ -1053,7 +1060,7 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT_DEFAULT(linkmode[LINKMODE_GUI], "guilinkdefault", DEFAULT_GUI_LINK_MODE);
 	RPT_CONFIG_VAR_BOOL_DEFAULT(linkmodedynamic[LINKMODE_GUI], "guilinkdynamic", DEFAULT_GUI_LINK_MODE_DYNAMIC);
 	RPT_CONFIG_VAR_INT_DEFAULT(linkmode[LINKMODE_PHONE], "phonelinkdefault", DEFAULT_PHONE_LINK_MODE);
-	RPT_CONFIG_VAR_BOOL_DEFAULT(linkmodedynamic[LINKMODE_PHONE], "guilinkdynamic", DEFAULT_PHONE_LINK_MODE_DYNAMIC);
+	RPT_CONFIG_VAR_BOOL_DEFAULT(linkmodedynamic[LINKMODE_PHONE], "phonelinkdynamic", DEFAULT_PHONE_LINK_MODE_DYNAMIC);
 	RPT_CONFIG_VAR_INT_DEFAULT(linkmode[LINKMODE_ECHOLINK], "echolinkdefault", DEFAULT_ECHOLINK_LINK_MODE);
 	RPT_CONFIG_VAR_BOOL_DEFAULT(linkmodedynamic[LINKMODE_ECHOLINK], "echolinkdynamic", DEFAULT_ECHOLINK_LINK_MODE_DYNAMIC);
 	RPT_CONFIG_VAR_INT_DEFAULT(linkmode[LINKMODE_TLB], "tlbdefault", DEFAULT_TLB_LINK_MODE);
@@ -1353,4 +1360,49 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 	if (newval >= 0) {
 		rpt_event_process(myrpt);
 	}
+}
+
+int rpt_is_valid_dns_name(const char *dns_name)
+{
+	int label_length, label_start;
+
+	if (!dns_name || *dns_name == '\0' || *dns_name == '.' || strlen(dns_name) > MAX_DNS_NODE_DOMAIN_LEN) {
+		return 0;
+	}
+
+	label_length = 0;
+	label_start = 0;
+
+	for (const char *ptr = dns_name; *ptr; ++ptr) {
+		if (*ptr == '.') {
+			/* no empty labels */
+			if (label_start) {
+				return 0; // No empty labels
+			}
+			label_length = 0;
+			label_start = 1;
+		} else {
+			/* only allow ASCII alphanumerics and hyphens per the standard */
+			if (!isascii(*ptr) || (!isalnum(*ptr) && *ptr != '-')) {
+				return 0;
+			}
+			if (*ptr == '-') {
+				if (label_length == 0) {
+					/* labels cannot start with a hyphen */
+					return 0;
+				} else if (*(ptr + 1) == '\0' || *(ptr + 1) == '.') {
+					/* labels cannot end with a hyphen */
+					return 0;
+				}
+			}
+			label_length++;
+			/* labels cannot exceed the max label length */
+			if (label_length > MAX_DNS_NODE_LABEL_LEN) {
+				return 0;
+			}
+			label_start = 0;
+		}
+	}
+
+	return 1;
 }

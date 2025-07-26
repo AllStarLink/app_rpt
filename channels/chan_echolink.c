@@ -185,8 +185,8 @@ do not use 127.0.0.1
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
 
-#define MAX_RXKEY_TIME 4 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
-#define KEEPALIVE_TIME 50 * 10
+#define MAX_RXKEY_TIME 4
+#define KEEPALIVE_TIME 50 * 10 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
 #define AUTH_RETRY_MS 5000
 #define AUTH_ABANDONED_MS 15000
 #define BLOCKING_FACTOR 4
@@ -1590,9 +1590,7 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 	/* Process the requested query option */
 	switch (option) {
 		case EL_QUERY_IPADDR:
-			ast_mutex_lock(&el_db_lock);
 			foundnode = el_db_find_nodenum(node);
-			ast_mutex_unlock(&el_db_lock);
 			if (foundnode) {
 				ast_copy_string(data, foundnode->ipaddr, *datalen);
 				res = 0;
@@ -1600,12 +1598,10 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 			break;
 		case EL_QUERY_CALLSIGN:
 			/* lookup first in connected table, then echolink database */
-			ast_mutex_lock(&el_db_lock);
 			if (lookup_node_by_nodenum(node, &node_result)) {
 				ast_copy_string(data, node_result.callsign, *datalen);
 				res = 0;
 			}
-			ast_mutex_unlock(&el_db_lock);
 			break;
 		default:
 			ast_log(LOG_ERROR, "Option %i is not valid.", option);
@@ -2096,7 +2092,7 @@ static int find_delete(const struct el_node *key)
 static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_instance *instp)
 {
 	char *cmd, *arg1;
-	char delim = ' ';
+	const char *delim = " ";
 	char *ptr, *saveptr, *textptr;
 	struct sockaddr_in sin;
 	unsigned char pack[256];
@@ -2168,16 +2164,16 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 		return;
 	}
 
-	cmd = strtok_r(buf, &delim, &saveptr);
+	cmd = strtok_r(buf, delim, &saveptr);
 	if (!cmd) {
 		instp->rx_bad_packets++;
 		return;
 	}
 
 	/* This version:  up to 3 parameters */
-	arg1 = strtok_r(NULL, &delim, &saveptr);
-	strtok_r(NULL, &delim, &saveptr);
-	strtok_r(NULL, &delim, &saveptr);
+	arg1 = strtok_r(NULL, delim, &saveptr);
+	strtok_r(NULL, delim, &saveptr);
+	strtok_r(NULL, delim, &saveptr);
 
 	if ((strcmp(cmd, "o.conip") == 0) || (strcmp(cmd, "o.dconip") == 0)) {
 		if (!arg1) {
