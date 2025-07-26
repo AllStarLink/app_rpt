@@ -5148,13 +5148,13 @@ static void *rpt(void *this)
 					telem->killed = 1;
 					hasid = 1;
 					if (telem->chan) {
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
 					}
 				}
 				if (telem->mode == TAILMSG && !telem->killed) {
 					telem->killed = 1;
 					if (telem->chan) {
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
 					}
 				}
 				if (telem->mode == IDTALKOVER) {
