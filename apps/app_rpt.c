@@ -5159,21 +5159,21 @@ static void *rpt(void *this)
 			telem = myrpt->tele.next;
 			while (telem != &myrpt->tele) {
 				if (telem->mode == ID && !telem->killed) {
-					if (telem->chan) {
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
-					}
 					telem->killed = 1;
 					hasid = 1;
-				}
-				if (telem->mode == TAILMSG && !telem->killed) {
 					if (telem->chan) {
 						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
 					}
-					myrpt->tmsgtimer = myrpt->p.tailsquashedtime;
-					telem->killed = 1;
 				}
-				if (telem->mode == IDTALKOVER)
+				if (telem->mode == TAILMSG && !telem->killed) {
+					telem->killed = 1;
+					if (telem->chan) {
+						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+					}
+				}
+				if (telem->mode == IDTALKOVER) {
 					hastalkover = 1;
+				}
 				telem = telem->next;
 			}
 			if (hasid && !hastalkover) {
