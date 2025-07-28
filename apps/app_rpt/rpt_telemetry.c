@@ -36,6 +36,7 @@
 #include "rpt_rig.h"
 
 #define TELEM_TAIL_FILE_EXTN "TAIL"
+#define TELEM_TIME_EXTN "TOD"
 
 extern struct rpt rpt_vars[MAXRPTS];
 
@@ -2429,6 +2430,17 @@ treataslocal:
 			break;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_TIME ? "STATS_TIME" : "STATS_TIME_LOCAL");
+
+		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
+			pbx = 1;
+			break;
+		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
+			pbx = 1;
+			break;
+		}
+
 		t = time(NULL);
 		rpt_localtime(&t, &localtm, myrpt->p.timezone);
 		t1 = rpt_mktime(&localtm, NULL);
