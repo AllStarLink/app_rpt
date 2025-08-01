@@ -961,7 +961,8 @@ void		ppspiout	(u32 spidata);
 void		progdtx		(t_pmr_chan *pChan);
 void		ppbinout	(u8 chan);
 
-i16		TxTestTone(t_pmr_chan *pChan, i16 function);
+i16		    TxTestTone(t_pmr_chan *pChan, i16 function);
+i16         SetTxSoftLimiterSetpoint(t_pmr_chan *pChan, i16 setpoint);
 
 
 #if XPMR_PPTP == 1

@@ -2681,6 +2681,19 @@ i16 destroyPmrSps(t_pmr_sps  *pSps)
 	return 0;
 }
 /*
+Set the tx soft limiter set point
+Takes the pmr channel and the new setpoint as arguments
+Returns 0 
+*/
+ 
+i16 SetTxSoftLimiterSetpoint(t_pmr_chan *pChan, i16 setpoint)
+{
+	pChan->limiterSpsTx->setpt = setpoint;
+	return 0;
+}
+
+
+/*
 	PmrTx - takes data from network and holds it for PmrRx
 */
 i16 PmrTx(t_pmr_chan *pChan, i16 *input)
