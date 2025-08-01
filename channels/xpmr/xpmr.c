@@ -2382,6 +2382,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	{
 		if(pSps==NULL) pSps=pChan->spsTx=createPmrSps(pChan);
 		else pSps=pSps->nextSps=createPmrSps(pChan);
+		pChan->limiterSpsTx = pSps;
 		pSps->source=inputTmp;
 		pSps->sink=pChan->pTxLimiter;
 		pSps->sigProc=SoftLimiter;
