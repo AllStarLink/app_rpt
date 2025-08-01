@@ -266,7 +266,7 @@ struct chan_usbradio_pvt {
 	int rxsqvoxadj;
 	int rxnoisefiltype;
 	int rxsquelchdelay;
-	int txsoftlimitersetpoint;
+	int txslimsp;
 	enum usbradio_carrier_type txtoctype;
 
 	float txctcssgain;
@@ -753,7 +753,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	o->rxctcssadj = 0.5;
 	o->txctcssadj = 200;
 	o->rxsquelchadj = 500;
-	o->txsoftlimitersetpoint = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
+	o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
 
 	devstr[0] = '\0';
 	if (!reload) {
@@ -781,7 +781,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 		CV_F("rxctcssadj", store_rxctcssadj(o, v->value));
 		CV_UINT("txctcssadj", o->txctcssadj);
 		CV_UINT("rxsquelchadj", o->rxsquelchadj);
-		CV_UINT("txslimsp", o->txsoftlimitersetpoint);
+		CV_UINT("txslimsp", o->txslimsp);
 		CV_UINT("fever", o->fever);
 		CV_STR("devstr", devstr);
 		CV_END;
@@ -1164,10 +1164,10 @@ static void *hidthread(void *arg)
 		mult_set(o);
 		set_txctcss_level(o);
 		/* Sync soft limiter level in xpmr with what we read from the tuning config. */
-		if(set_tx_soft_limiter_xpmr(o, o->txsoftlimitersetpoint)) {
+		if(set_tx_soft_limiter_xpmr(o, o->txslimsp)) {
 			/* Invalid setting in config file. Set default */
-			o->txsoftlimitersetpoint = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
-			set_tx_soft_limiter_xpmr(o, o->txsoftlimitersetpoint); 
+			o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
+			set_tx_soft_limiter_xpmr(o, o->txslimsp); 
 		}
 
 		ast_mutex_lock(&o->eepromlock);
@@ -3120,7 +3120,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "Requesting loading of tuning settings from EEPROM for channel %s\n", o->name);
 	} else if (!strcasecmp(argv[2],"txslimsp")) {
 		if(argc == 3) {
-			ast_cli(fd, "Current tx limiter setpoint: %i\n", (int) o->txsoftlimitersetpoint);
+			ast_cli(fd, "Current tx limiter setpoint: %i\n", (int) o->txslimsp);
 		}
 		else {
 			int new_slsetpoint = atoi(argv[3]);
@@ -3128,7 +3128,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 				ast_cli(fd, "Limiter set point out of range, needs to be between 5000 and 13000\n");
 				return RESULT_SHOWUSAGE;
 			}
-			o->txsoftlimitersetpoint = new_slsetpoint;
+			o->txslimsp = new_slsetpoint;
 		}
 	} else {
 		o->pmrChan->b.tuning = 0;
@@ -4039,13 +4039,13 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 				",rxcdtype:%d,rxsdtype:%d,rxondelay:%d,txoffdelay:%d,txprelim:%d"
 				",txlimonly:%d,rxdemod:%d,txmixa:%d,txmixb:%d,rxmixerset:%d,rxvoiceadj:%f"
 				",rxsquelchadj:%d,txmixaset:%d,txmixbset:%d,txctcssadj:%d,micplaymax:%d"
-				",spkrmax:%d,micmax:%d,txsoftlimitersetpoint:%d\n",
+				",spkrmax:%d,micmax:%d,txslimsp:%d\n",
 				flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
 				o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
 				o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
 				o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
 				o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax,
-				o->micmax, o->txsoftlimitersetpoint);
+				o->micmax, o->txslimsp);
 		} else {
 			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
 				flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
@@ -4172,7 +4172,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			ast_cli(fd, "TX soft limiting setpoint changed to %i\n", setpoint);
 		}
 		else {
-			ast_cli(fd, "TX soft limiting setpoint currently set to: %i\n", o->txsoftlimitersetpoint);	
+			ast_cli(fd, "TX soft limiting setpoint currently set to: %i\n", o->txslimsp);	
 		}
 		break;
 			
@@ -4591,6 +4591,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		CONFIG_UPDATE_SIGNAL(rxdemod, rxdemod, demodulation_type);
 		CONFIG_UPDATE_SIGNAL(txmixa, txmixa, mixer_type);
 		CONFIG_UPDATE_SIGNAL(txmixb, txmixb, mixer_type);
+		CONFIG_UPDATE_INT(txslimsp);
 		if (ast_config_text_file_save2(CONFIG, cfg, "chan_usbradio", 0)) {
 			ast_log(LOG_WARNING, "Failed to save config %s\n", CONFIG);
 		}
