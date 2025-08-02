@@ -2382,6 +2382,7 @@ t_pmr_chan	*createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	{
 		if(pSps==NULL) pSps=pChan->spsTx=createPmrSps(pChan);
 		else pSps=pSps->nextSps=createPmrSps(pChan);
+		pChan->limiterSpsTx = pSps;
 		pSps->source=inputTmp;
 		pSps->sink=pChan->pTxLimiter;
 		pSps->sigProc=SoftLimiter;
@@ -2679,6 +2680,19 @@ i16 destroyPmrSps(t_pmr_sps  *pSps)
 	ast_free(pSps);
 	return 0;
 }
+/*
+Set the tx soft limiter set point
+Takes the pmr channel and the new setpoint as arguments
+Returns 0 
+*/
+ 
+i16 SetTxSoftLimiterSetpoint(t_pmr_chan *pChan, i16 setpoint)
+{
+	pChan->limiterSpsTx->setpt = setpoint;
+	return 0;
+}
+
+
 /*
 	PmrTx - takes data from network and holds it for PmrRx
 */

@@ -781,6 +781,8 @@ typedef struct	t_pmr_chan
 	t_pmr_sps *spsSigGen1;		// test and other tones
 	t_pmr_sps *spsLsdGen;
 	t_pmr_sps *spsTxLsdLpf;
+	
+	t_pmr_sps *limiterSpsTx;    // Pointer to limiter signal processing struct
 
 	// tune tweaks
 
@@ -917,6 +919,7 @@ typedef struct	t_pmr_chan
 	t_sdbg	*sdbg;
 
 	i16 fever;
+	i16 tx_limiter_setpoint;
 
 } t_pmr_chan;
 
@@ -958,7 +961,8 @@ void		ppspiout	(u32 spidata);
 void		progdtx		(t_pmr_chan *pChan);
 void		ppbinout	(u8 chan);
 
-i16		TxTestTone(t_pmr_chan *pChan, i16 function);
+i16		    TxTestTone(t_pmr_chan *pChan, i16 function);
+i16         SetTxSoftLimiterSetpoint(t_pmr_chan *pChan, i16 setpoint);
 
 
 #if XPMR_PPTP == 1

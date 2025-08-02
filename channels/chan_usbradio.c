@@ -83,6 +83,7 @@
 
 #define READERR_THRESHOLD 50
 #define DEFAULT_ECHO_MAX 1000 /* 20 secs of echo buffer, max */
+#define DEFAULT_TX_SOFT_LIMITER_SETPOINT 12000
 #define PP_MASK 0xbffc
 #define PP_PORT "/dev/parport0"
 #define PP_IOPORT 0x378
@@ -265,6 +266,7 @@ struct chan_usbradio_pvt {
 	int rxsqvoxadj;
 	int rxnoisefiltype;
 	int rxsquelchdelay;
+	int txslimsp;
 	enum usbradio_carrier_type txtoctype;
 
 	float txctcssgain;
@@ -366,7 +368,7 @@ struct chan_usbradio_pvt {
 	unsigned int lsdtxpolarity:1;	/* indicator for lsd transmit polarity */
 	unsigned int radioactive:1;		/* indicator for active radio channel */
 	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
-	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */ 
+	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
 	unsigned int hasusb:1;			/* indicator for has a USB device */
 	unsigned int usbass:1;			/* indicator for USB device assigned */
 	unsigned int wanteeprom:1;		/* indicator if we should use EEPROM */
@@ -392,7 +394,7 @@ struct chan_usbradio_pvt {
 	int toneflag;
 	int duplex3;
 	int clipledgpio;           /* enables ADC Clip Detect feature to output on a specified GPIO# */
-	
+
 	int fever;
 	int count_rssi_update;
 
@@ -409,7 +411,7 @@ struct chan_usbradio_pvt {
 };
 
 /*!
- * \brief Default channel descriptor 
+ * \brief Default channel descriptor
  */
 static struct chan_usbradio_pvt usbradio_default = {
 	.sounddev = -1,
@@ -437,7 +439,7 @@ static struct chan_usbradio_pvt usbradio_default = {
 static int hidhdwconfig(struct chan_usbradio_pvt *o);
 static void mixer_write(struct chan_usbradio_pvt *o);
 static int setformat(struct chan_usbradio_pvt *o, int mode);
-static struct ast_channel *usbradio_request(const char *type, struct ast_format_cap *cap, 
+static struct ast_channel *usbradio_request(const char *type, struct ast_format_cap *cap,
 	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
 static int usbradio_digit_begin(struct ast_channel *c, char digit);
 static int usbradio_digit_end(struct ast_channel *c, char digit, unsigned int duration);
@@ -463,6 +465,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int flag);
 static void tune_txoutput(struct chan_usbradio_pvt *o, int value, int fd, int flag);
 static void tune_write(struct chan_usbradio_pvt *o);
 static int xpmr_config(struct chan_usbradio_pvt *o);
+static int set_tx_soft_limiter_xpmr(struct chan_usbradio_pvt *o, int setpoint);
 #if	DEBUG_FILETEST == 1
 static int RxTestIt(struct chan_usbradio_pvt *o);
 #endif
@@ -508,7 +511,7 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 
 /* NOTE: on the CM-108AH, GPIO2 is *not* a REAL GPIO.. it was re-purposed
  *  as a signal called "HOOK" which can only be read from the HID.
- *  Apparently, in a REAL CM-108, GPIO really works as a GPIO 
+ *  Apparently, in a REAL CM-108, GPIO really works as a GPIO
  */
 
 	if (o->hdwtype == 1) {			//sphusb
@@ -663,7 +666,7 @@ static char *find_installed_usb_match(void)
 {
 	struct chan_usbradio_pvt *o = NULL;
 	char *match = NULL;
-	
+
 	for (o = usbradio_default.next; o ; o = o->next) {
 		if (ast_radio_usb_list_check(o->devstr)) {
 			match = o->devstr;
@@ -696,7 +699,7 @@ static void *pulserthread(void *arg)
 	ast_radio_ppwrite(haspp, ppfd, pbase, pport, pp_val);
 	ast_mutex_unlock(&pp_lock);
 	then = ast_radio_tvnow();
-	
+
 	while (!stoppulser) {
 		usleep(50000);
 		ast_mutex_lock(&pp_lock);
@@ -742,6 +745,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	int configured = 0;
 	char devstr[sizeof(o->devstr)];
 
+	/* No load defaults */
 	o->rxmixerset = 500;
 	o->txmixaset = 500;
 	o->txmixbset = 500;
@@ -749,6 +753,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	o->rxctcssadj = 0.5;
 	o->txctcssadj = 200;
 	o->rxsquelchadj = 500;
+	o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
 
 	devstr[0] = '\0';
 	if (!reload) {
@@ -776,6 +781,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 		CV_F("rxctcssadj", store_rxctcssadj(o, v->value));
 		CV_UINT("txctcssadj", o->txctcssadj);
 		CV_UINT("rxsquelchadj", o->rxsquelchadj);
+		CV_UINT("txslimsp", o->txslimsp);
 		CV_UINT("fever", o->fever);
 		CV_STR("devstr", devstr);
 		CV_END;
@@ -801,10 +807,10 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
  * the USB device.
  *
  * The CM-XXX USB devices can support up to 8 GPIO pins that can be input or output.
- * It continuously polls the input GPIO pins on the device to see if they have changed.  
- * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk 
- * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally 
- * occurs every 50 milliseconds.  
+ * It continuously polls the input GPIO pins on the device to see if they have changed.
+ * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk
+ * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally
+ * occurs every 50 milliseconds.
  *
  * The output PTT (push to talk) GPIO, along with other GPIO outputs are updated as
  * required.
@@ -813,7 +819,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
  * as appropriate.  An asterisk text frame is raised in the format 'PP%d %d' when
  * GPIOs change. (Parallel port support is not available for all platforms.)
  *
- * This routine also reads and writes to the EPROM attached to the USB device.  The 
+ * This routine also reads and writes to the EPROM attached to the USB device.  The
  * EPROM holds the configuration information (sound level settings) for this device.
  *
  * This routine updates the lasthidtimer during setup and processing.  In the event
@@ -848,7 +854,7 @@ static void *hidthread(void *arg)
 	/* This is the main loop for this thread.
 	 * It performs setup and initialization of the usb device.
 	 * After setup is complete and the device can be accessed,
-	 * it enters a processing loop responsible for interacting 
+	 * it enters a processing loop responsible for interacting
 	 * with the usb hid device
 	 */
 	while (!o->stophid) {
@@ -863,21 +869,21 @@ static void *hidthread(void *arg)
 		usb_handle = NULL;
 		usb_dev = NULL;
 		ast_radio_hid_device_mklist();
-		
-		/* Check to see if our specified device string 
-		 * matches to a device that is attached to this system, or exists 
+
+		/* Check to see if our specified device string
+		 * matches to a device that is attached to this system, or exists
 		 * in our channel configuration.
 		 *
 		 * If no device string is specified, attempt to assign the first
 		 * found device.
 		 */
 		ast_radio_time(&o->lasthidtime);
-						
+
 		/* Automatically assign a devstr if one was not specified in the configuration. */
 		if (ast_strlen_zero(o->devstr)) {
 			int index = 0;
 			char *index_devstr = NULL;
-			
+
 			for (;;) {
 				index_devstr = ast_radio_usb_get_devstr(index);
 				if (ast_strlen_zero(index_devstr)) {
@@ -911,7 +917,7 @@ static void *hidthread(void *arg)
 
 		if ((!ast_radio_usb_list_check(o->devstr)) || (!find_desc_usb(o->devstr))) {
 			/* The device string did not match.
-			 * Now look through the attached devices and see 
+			 * Now look through the attached devices and see
 			 * one of those is associated with one of our
 			 * configured channels.
 			 */
@@ -1020,7 +1026,7 @@ static void *hidthread(void *arg)
 		buf[o->hid_gpio_loc] = o->hid_gpio_val;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		memcpy(bufsave, buf, sizeof(buf));
-		/* setup the pttkick pipe 
+		/* setup the pttkick pipe
 		 * this pipe is used for timing the main processing loop
 		 * it also signaled when the ptt changes to exit the timer
 		 */
@@ -1102,7 +1108,7 @@ static void *hidthread(void *arg)
 			o->pmrChan->txrxblankingtime = o->txrxblankingtime;
 			o->pmrChan->rxCpuSaver = o->rxcpusaver;
 			o->pmrChan->txCpuSaver = o->txcpusaver;
-			
+
 			/* adjust settings based on the device */
 			switch (o->devtype)
 			{
@@ -1111,7 +1117,7 @@ static void *hidthread(void *arg)
 						((999 - o->rxsquelchadj) * 32767) / C119B_ADJUSTMENT;
 					break;
 				default:
-					*(o->pmrChan->prxSquelchAdjust) = 
+					*(o->pmrChan->prxSquelchAdjust) =
 						((999 - o->rxsquelchadj) * 32767) / 1000;
 			}
 
@@ -1152,11 +1158,18 @@ static void *hidthread(void *arg)
 
 		/* reload the settings from the tune file */
 		load_tune_config(o, NULL, 1);
+		
 
 		mixer_write(o);
 		mult_set(o);
 		set_txctcss_level(o);
-		
+		/* Sync soft limiter level in xpmr with what we read from the tuning config. */
+		if(set_tx_soft_limiter_xpmr(o, o->txslimsp)) {
+			/* Invalid setting in config file. Set default */
+			o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
+			set_tx_soft_limiter_xpmr(o, o->txslimsp); 
+		}
+
 		ast_mutex_lock(&o->eepromlock);
 		if (o->wanteeprom) {
 			o->eepromctl = 1;
@@ -1166,19 +1179,19 @@ static void *hidthread(void *arg)
 		setformat(o, O_RDWR);
 		o->hasusb = 1;
 		o->had_gpios_in = 0;
-				
+
 		memset(&rfds, 0, sizeof(rfds));
 		rfds[0].fd = o->pttkick[1];
 		rfds[0].events = POLLIN;
-		
+
 		ast_radio_time(&o->lasthidtime);
-		/* Main processing loop for GPIO 
+		/* Main processing loop for GPIO
 		 * This loop process every 50 milliseconds.
-		 * The timer can be interrupted by writing to 
+		 * The timer can be interrupted by writing to
 		 * the pttkick pipe.
 		 */
 		while ((!o->stophid) && o->hasusb) {
-			
+
 			then = ast_radio_tvnow();
 			/* poll the pttkick pipe - timeout after 50 milliseconds */
 			res = ast_poll(rfds, 1, 50);
@@ -1189,7 +1202,7 @@ static void *hidthread(void *arg)
 			}
 			if (rfds[0].revents) {
 				char c;
-				
+
 				int bytes = read(o->pttkick[0], &c, 1);
 				if (bytes <= 0) {
 					ast_log(LOG_ERROR, "Channel %s: pttkick read failed: %s\n", o->name, strerror(errno));
@@ -1479,7 +1492,7 @@ static int used_blocks(struct chan_usbradio_pvt *o)
 
 	/* Set the total blocks */
 	if (o->total_blocks == 0) {
-		ast_debug(1, "Channel %s: fragment total %d, size %d, available %d, bytes %d\n", 
+		ast_debug(1, "Channel %s: fragment total %d, size %d, available %d, bytes %d\n",
 			o->name, info.fragstotal, info.fragsize, info.fragments, info.bytes);
 		o->total_blocks = info.fragments;
 		/* Check the queue size, it cannot exceed the total fragments */
@@ -1549,10 +1562,10 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	if (res < 0) {
 		ast_log(LOG_ERROR, "Channel %s: Sound card write error %s\n", o->name, strerror(errno));
 	} else if (res != FRAME_SIZE * 2 * 2 * 6) {
-		ast_log(LOG_ERROR, "Channel %s: Sound card wrote %d bytes of %d\n", 
+		ast_log(LOG_ERROR, "Channel %s: Sound card wrote %d bytes of %d\n",
 			o->name, res, (FRAME_SIZE * 2 * 2 * 6));
 	}
-	
+
 	return res;
 }
 
@@ -1581,7 +1594,7 @@ static int setformat(struct chan_usbradio_pvt *o, int mode)
 	}
 	if (mode == O_CLOSE)		/* we are done */
 		return 0;
-		
+
 	strcpy(device, "/dev/dsp");
 	if (o->devicenum) {
 		sprintf(device, "/dev/dsp%d", o->devicenum);
@@ -1667,7 +1680,7 @@ static int setformat(struct chan_usbradio_pvt *o, int mode)
  * \brief Asterisk digit begin function.
  * \param c				Asterisk channel.
  * \param digit			Digit processed.
- * \retval 0			
+ * \retval 0
  */
 static int usbradio_digit_begin(struct ast_channel *c, char digit)
 {
@@ -1679,7 +1692,7 @@ static int usbradio_digit_begin(struct ast_channel *c, char digit)
  * \param c				Asterisk channel.
  * \param digit			Digit processed.
  * \param duration		Duration of the digit.
- * \retval -1			
+ * \retval -1
  */
 static int usbradio_digit_end(struct ast_channel *c, char digit, unsigned int duration)
 {
@@ -1867,7 +1880,7 @@ static int usbradio_answer(struct ast_channel *c)
 /*!
  * \brief Asterisk hangup function.
  * \param c			Asterisk channel.
- * \retval 0		Always returns 0.			
+ * \retval 0		Always returns 0.
  */
 static int usbradio_hangup(struct ast_channel *c)
 {
@@ -1912,7 +1925,7 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 	 * Keep the residue stored for future use.
 	 */
 
-#if DEBUG_CAPTURES == 1			
+#if DEBUG_CAPTURES == 1
 	/* Write input data to a file.
 	 * Left channel has the audio, right channel shows txkeyed
 	 */
@@ -1931,7 +1944,7 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 		PmrTx(o->pmrChan, (short *) f->data.ptr);
 		o->didpmrtx = 1;
 	}
-	
+
 	return 0;
 }
 
@@ -2038,7 +2051,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		}
 		return &ast_null_frame;
 	}
-	
+
 #if DEBUG_CAPTURES == 1
 	if (o->rxcapraw && frxcapraw)
 		fwrite(o->usbradio_read_buf + o->readpos, 1, res, frxcapraw);
@@ -2288,7 +2301,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		sd = 1;
 	}
 	o->rx_ctcss_active = sd;
-		
+
 	/* Special case where cd and sd have been configured for no */
 	if (o->rxcdtype == CD_IGNORE && o->rxsdtype == SD_IGNORE) {
 		cd = 0;
@@ -2306,7 +2319,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			}
 		}
 	}
-	
+
 	/* Check conditions and set receiver active */
 	if (cd && sd) {
 		//if(!o->rxkeyed)o->pmrChan->dd.b.doitnow=1;
@@ -2327,7 +2340,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		o->rxoncnt = 0;
 	}
 
-	/* If we are in echomode and receiving audio, store 
+	/* If we are in echomode and receiving audio, store
 	 * it in the echo queue for later playback.
 	 */
 	if (o->echomode && o->rxkeyed && (!o->echoing)) {
@@ -2382,11 +2395,11 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
 		}
 	}
-	
+
 	/* reset read pointer for next frame */
 	o->readpos = AST_FRIENDLY_OFFSET;
 	/* Do not return the frame if the channel is not up */
-	if (ast_channel_state(c) != AST_STATE_UP) {	
+	if (ast_channel_state(c) != AST_STATE_UP) {
 		return &ast_null_frame;
 	}
 	/* ok we can build and deliver the frame to the caller */
@@ -2472,7 +2485,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
  * \brief Asterisk fixup function.
  * \param oldchan		Old asterisk channel.
  * \param newchan		New asterisk channel.
- * \retval 0			Always returns 0.			
+ * \retval 0			Always returns 0.
  */
 static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
 {
@@ -2607,7 +2620,7 @@ static int usbradio_setoption(struct ast_channel *chan, int option, void *data, 
  * \return 				Asterisk channel.
  */
 static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, char *ctx, int state,
-										const struct ast_assigned_ids *assignedids, 
+										const struct ast_assigned_ids *assignedids,
 										const struct ast_channel *requestor)
 {
 	struct ast_channel *c;
@@ -2649,13 +2662,13 @@ static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, 
  * \param type			Type of channel to request.
  * \param cap			Format capabilities for the channel.
  * \param assignedids	Unique ID string to assign to the channel.
- * \param requestor		Channel asking for data. 
+ * \param requestor		Channel asking for data.
  * \param data			Destination of the call.
  * \param cause			Cause of failure.
  * \retval NULL			Failure
  * \return				ast_channel if successful
  */
-static struct ast_channel *usbradio_request(const char *type, struct ast_format_cap *cap, 
+static struct ast_channel *usbradio_request(const char *type, struct ast_format_cap *cap,
 											const struct ast_assigned_ids *assignedids,
 											const struct ast_channel *requestor, const char *data, int *cause)
 {
@@ -2666,14 +2679,14 @@ static struct ast_channel *usbradio_request(const char *type, struct ast_format_
 		ast_log(LOG_WARNING, "Device %s not found.\n", (char *) data);
 		return NULL;
 	}
-	
+
 	if (!(ast_format_cap_iscompatible(cap, usbradio_tech.capabilities))) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-		ast_log(LOG_NOTICE, "Channel %s: Channel requested with unsupported format(s): '%s'\n", 
+		ast_log(LOG_NOTICE, "Channel %s: Channel requested with unsupported format(s): '%s'\n",
 			o->name, ast_format_cap_get_names(cap, &cap_buf));
 		return NULL;
 	}
-	
+
 	if (o->owner) {
 		ast_log(LOG_NOTICE, "Channel %s: Already have a call (chan %p) on the usb channel\n",
 			o->name, o->owner);
@@ -3105,6 +3118,18 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		ast_mutex_unlock(&o->eepromlock);
 
 		ast_cli(fd, "Requesting loading of tuning settings from EEPROM for channel %s\n", o->name);
+	} else if (!strcasecmp(argv[2],"txslimsp")) {
+		if(argc == 3) {
+			ast_cli(fd, "Current tx limiter setpoint: %i\n", (int) o->txslimsp);
+		}
+		else {
+			int new_slsetpoint = atoi(argv[3]);
+			if(set_tx_soft_limiter_xpmr(o, new_slsetpoint)) {
+				ast_cli(fd, "Limiter set point out of range, needs to be between 5000 and 13000\n");
+				return RESULT_SHOWUSAGE;
+			}
+			o->txslimsp = new_slsetpoint;
+		}
 	} else {
 		o->pmrChan->b.tuning = 0;
 		return RESULT_SHOWUSAGE;
@@ -3125,7 +3150,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 static int set_txctcss_level(struct chan_usbradio_pvt *o)
 {
 	int adjustment;
-	
+
 	if (o->txmixa == TX_OUT_LSD) {
 //      o->txmixaset=(151*o->txctcssadj) / 1000;
 		o->txmixaset = o->txctcssadj;
@@ -3152,6 +3177,27 @@ static int set_txctcss_level(struct chan_usbradio_pvt *o)
 	}
 	return 0;
 }
+
+/*!
+ * \brief Set transmit soft limiting threshold.
+ * Modifies the set point in xpmr where soft limiting starts to take place.
+ * 
+ * Warning: only call this if you are certain the pmrChan as been initialized!
+ *
+ * \param o				chan_usbradio structure.
+ * \return			    zero if successful, 1 if otherwise
+ */
+
+static int set_tx_soft_limiter_xpmr(struct chan_usbradio_pvt *o, int setpoint) {
+	// Update xpmr with new value if it is within range
+	if((setpoint < 5000) || (setpoint > 13000)) {
+		return 1;
+	}
+	SetTxSoftLimiterSetpoint(o->pmrChan, setpoint);
+	return 0;
+}
+
+
 
 /*!
  * \brief Process Asterisk CLI request to set xpmr debug level.
@@ -3602,13 +3648,13 @@ static void tune_rxtx_status(int fd, struct chan_usbradio_pvt *o)
 		if (ast_radio_poll_input(fd, 200)) {
 			break;
 		}
-		ast_cli(fd, " %s  | %s  | %s | %s\r", 
-			o->rxcdtype ? (o->rx_cos_active ? "Keyed" : "Clear") : "Off  ", 
-			o->rxsdtype ? (o->rx_ctcss_active ? "Keyed" : "Clear") : "Off  ", 
+		ast_cli(fd, " %s  | %s  | %s | %s\r",
+			o->rxcdtype ? (o->rx_cos_active ? "Keyed" : "Clear") : "Off  ",
+			o->rxsdtype ? (o->rx_ctcss_active ? "Keyed" : "Clear") : "Off  ",
 			o->rxkeyed ? "Keyed" : "Clear",
 			(o->txkeyed || o->txtestkey) ? "Keyed" : "Clear");
 	}
-	
+
 	option_verbose = wasverbose;
 }
 
@@ -3981,15 +4027,23 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		   of the returned list.  Also, once an update has been released we can't change
 		   the format/content of any previously returned string */
 		if (!strcmp(cmd, "0+9")) {
-			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d\n", 
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d\n",
 				flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
 				o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
 				o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
 				o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
 				o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax,
 				o->micmax);
+		} else if (!strcmp(cmd, "0+10")) { /* With o->txslimsp tx soft limiter set point */
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d,%d\n", 
+				flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
+				o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
+				o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
+				o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
+				o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax,
+				o->micmax, o->txslimsp);
 		} else {
-			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", 
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
 				flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
 				o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
 				o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb);
@@ -4106,6 +4160,18 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		}
 		tune_flash(fd, o, 1);
 		break;
+		
+	case 'L':                  /* Set TX soft limiter when operating with preemphasized and limited tx audio */
+		if (cmd[1]) {
+			int setpoint = atoi(cmd+1);
+			set_tx_soft_limiter_xpmr(o, setpoint);
+			ast_cli(fd, "TX soft limiting setpoint changed to %i\n", setpoint);
+		}
+		else {
+			ast_cli(fd, "TX soft limiting setpoint currently set to: %i\n", o->txslimsp);	
+		}
+		break;
+			
 	case 'm':					/* change rxboost */
 		if (cmd[1]) {
 			if (cmd[1] > '0') {
@@ -4233,6 +4299,8 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			}
 		}
 		break;
+
+			
 	default:
 		ast_cli(fd, "Invalid Command\n");
 		break;
@@ -4488,7 +4556,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	} \
 }
-	
+
 #define CONFIG_UPDATE_SIGNAL(key, field, signal_type) \
 	if (tune_variable_update(CONFIG, category, #key, signal_type[o->field])) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
@@ -4519,6 +4587,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		CONFIG_UPDATE_SIGNAL(rxdemod, rxdemod, demodulation_type);
 		CONFIG_UPDATE_SIGNAL(txmixa, txmixa, mixer_type);
 		CONFIG_UPDATE_SIGNAL(txmixb, txmixb, mixer_type);
+		CONFIG_UPDATE_INT(txslimsp);
 		if (ast_config_text_file_save2(CONFIG, cfg, "chan_usbradio", 0)) {
 			ast_log(LOG_WARNING, "Failed to save config %s\n", CONFIG);
 		}
@@ -4560,7 +4629,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 static void mixer_write(struct chan_usbradio_pvt *o)
 {
 	int mic_setting;
-	
+
 	if (o->duplex3) {
 		if (o->duplex3 > o->micplaymax) {
 			o->duplex3 = o->micplaymax;
@@ -4589,7 +4658,7 @@ static void mixer_write(struct chan_usbradio_pvt *o)
 }
 
 /*!
- * \brief Adjust DSP multiplier 
+ * \brief Adjust DSP multiplier
  * Adjusts the DSP multiplier to add resolution to the tx level adjustment
  *
  * \param		chan_usbradio structure.
@@ -4597,7 +4666,7 @@ static void mixer_write(struct chan_usbradio_pvt *o)
 static void mult_set(struct chan_usbradio_pvt *o)
 {
 	int adjustment;
-	
+
 	/* adjust settings based on the device */
 	switch (o->devtype)
 	{
@@ -4788,7 +4857,7 @@ static void pmrdump(struct chan_usbradio_pvt *o, int fd)
 	pd(p->txfreq);
 
 	pd(p->rxCtcss->relax);
-	//pf(p->rxCtcssFreq);   
+	//pf(p->rxCtcssFreq);
 	pd(p->numrxcodes);
 	if (o->pmrChan->numrxcodes > 0) {
 		for (i = 0; i < o->pmrChan->numrxcodes; i++) {
@@ -4895,6 +4964,7 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
 	if (o->pmrChan->rxfreq) {
 		o->pmrChan->b.reprog = 1;
 	}
+	
 
 	return 0;
 }
@@ -5005,7 +5075,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_UINT("clipledgpio", o->clipledgpio);
 		CV_BOOL("legacyaudioscaling", o->legacyaudioscaling);
 		CV_END;
-		
+
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			sprintf(buf, "gpio%d", i + 1);
 			if (!strcmp(v->name, buf)) {
@@ -5100,6 +5170,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		tChan.rxCarrierHyst = o->rxsqhyst;
 		tChan.rxSqVoxAdj = o->rxsqvoxadj;
 		tChan.rxSquelchDelay = o->rxsquelchdelay;
+		
 
 		if (o->txlimonly) {
 			tChan.txMod = 1;
@@ -5158,7 +5229,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 					((999 - o->rxsquelchadj) * 32767) / C119B_ADJUSTMENT;
 				break;
 			default:
-				*(o->pmrChan->prxSquelchAdjust) = 
+				*(o->pmrChan->prxSquelchAdjust) =
 					((999 - o->rxsquelchadj) * 32767) / 1000;
 		}
 
@@ -5203,7 +5274,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 	TRACEO(1, ("store_config() 130\n"));
 	mult_set(o);
 #endif
-	
+
 	hidhdwconfig(o);
 
 	/* link into list of devices */
@@ -5318,7 +5389,7 @@ static char *handle_console_key(struct ast_cli_entry *e, int cmd, struct ast_cli
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "radio key";
-		e->usage = 	"Usage: radio key\n" 
+		e->usage = 	"Usage: radio key\n"
 					"       Simulates COR active.\n";
 		return NULL;
 	case CLI_GENERATE:
@@ -5339,7 +5410,7 @@ static char *handle_console_unkey(struct ast_cli_entry *e, int cmd, struct ast_c
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "radio unkey";
-		e->usage =	"Usage: radio unkey\n" 
+		e->usage =	"Usage: radio unkey\n"
 					"       Simulates COR un-active.\n";
 		return NULL;
 	case CLI_GENERATE:
@@ -5359,7 +5430,7 @@ static char *handle_radio_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "radio tune {auxvoice|dump|swap|rxnoise|rxvoice|rxtone|txvoice|txtone|txall|flash|rxsquelch|nocap|rxtracecap|txtracecap|rxcap|txcap|save|load|menu-support}";
+		e->command = "radio tune {auxvoice|dump|swap|rxnoise|rxvoice|rxtone|txvoice|txtone|txall|flash|rxsquelch|nocap|rxtracecap|txtracecap|rxcap|txcap|save|load|menu-support|txslimsp}";
 		e->usage =	"Usage: radio tune <function>\n"
 					"       rxnoise\n"
 					"       rxvoice\n"
@@ -5367,10 +5438,12 @@ static char *handle_radio_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_
 					"       rxsquelch [newsetting]\n"
 					"       txvoice [newsetting]\n"
 					"       txtone [newsetting]\n"
+                    "       txslimsp [setpoint]\n"
 					"       auxvoice [newsetting]\n"
 					"       save (settings to tuning file)\n"
-					"       load (tuning settings from EEPROM)\n\n" 
-					"       All [newsetting]'s are values 0-999\n\n";
+					"       load (tuning settings from EEPROM)\n\n"
+					"       All [newsetting]'s are values 0-999\n"
+					"       [setpoint] is 5000 to 13000\n\n";
 
 		return NULL;
 	case CLI_GENERATE:
@@ -5412,7 +5485,7 @@ static char *handle_radio_active(struct ast_cli_entry *e, int cmd, struct ast_cl
 static char *handle_show_settings(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	struct chan_usbradio_pvt *o;
-	
+
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "radio show settings";
@@ -5421,7 +5494,7 @@ static char *handle_show_settings(struct ast_cli_entry *e, int cmd, struct ast_c
 	case CLI_GENERATE:
 		return NULL;
 	}
-	
+
 	o = find_desc(usbradio_active);
 	if (o) {
 		_menu_print(a->fd, o);
@@ -5525,7 +5598,7 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_format_cap_append(usbradio_tech.capabilities, ast_format_slin, 0);
-	
+
 	if (ast_radio_hid_device_mklist()) {
 		ast_log(LOG_ERROR, "Unable to make hid list\n");
 		return AST_MODULE_LOAD_DECLINE;
