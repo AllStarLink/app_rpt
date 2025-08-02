@@ -82,11 +82,14 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 
 	dest = ast_request("IAX2", cap, NULL, NULL, dialstr, NULL);
 	if (!dest) {
-		if (ast_safe_sleep(chan, 150) == -1)
+		if (ast_safe_sleep(chan, 150) == -1) {
+			ao2_ref(cap, -1);
 			return;
+		}
 		dest = ast_request("IAX2", cap, NULL, NULL, dialstr, NULL);
 		if (!dest) {
 			ast_log(LOG_ERROR, "Can not create channel for rpt_forward to IAX2/%s\n", dialstr);
+			ao2_ref(cap, -1);
 			return;
 		}
 	}
