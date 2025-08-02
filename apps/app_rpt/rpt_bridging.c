@@ -53,10 +53,6 @@ static const char *rpt_chan_type_str(enum rpt_chan_type chantype)
 		return "monchan";
 	case RPT_PARROTCHAN:
 		return "parrotchan";
-	case RPT_TELECHAN:
-		return "telechan";
-	case RPT_BTELECHAN:
-		return "btelechan";
 	case RPT_VOXCHAN:
 		return "voxchan";
 	case RPT_TXPCHAN:
@@ -77,8 +73,6 @@ static const char *rpt_chan_name(struct rpt *myrpt, enum rpt_chan_type chantype)
 	case RPT_DAHDITXCHAN:
 	case RPT_MONCHAN:
 	case RPT_PARROTCHAN:
-	case RPT_TELECHAN:
-	case RPT_BTELECHAN:
 	case RPT_VOXCHAN:
 	case RPT_TXPCHAN:
 		return NULL;
@@ -103,10 +97,6 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 			return &myrpt->monchannel;
 		case RPT_PARROTCHAN:
 			return &myrpt->parrotchannel;
-		case RPT_TELECHAN:
-			return &myrpt->telechannel;
-		case RPT_BTELECHAN:
-			return &myrpt->btelechannel;
 		case RPT_VOXCHAN:
 			return &myrpt->voxchannel;
 		case RPT_TXPCHAN:
@@ -170,8 +160,6 @@ static const char *rpt_chan_app(enum rpt_chan_type chantype, enum rpt_chan_flags
 	case RPT_DAHDITXCHAN:
 	case RPT_MONCHAN:
 	case RPT_PARROTCHAN:
-	case RPT_TELECHAN:
-	case RPT_BTELECHAN:
 	case RPT_VOXCHAN:
 	case RPT_TXPCHAN:
 		return NULL;
@@ -191,8 +179,6 @@ static const char *rpt_chan_app_data(enum rpt_chan_type chantype)
 	case RPT_DAHDITXCHAN:
 	case RPT_MONCHAN:
 	case RPT_PARROTCHAN:
-	case RPT_TELECHAN:
-	case RPT_BTELECHAN:
 	case RPT_VOXCHAN:
 	case RPT_TXPCHAN:
 		return NULL;
@@ -409,8 +395,6 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
 		return &myrpt->rptconf.dahdiconf.conf;
 	case RPT_TXCONF:
 		return &myrpt->rptconf.dahdiconf.txconf;
-	case RPT_TELECONF:
-		return &myrpt->rptconf.dahdiconf.teleconf;
 	}
 	ast_assert(0);
 	return NULL;
@@ -559,11 +543,11 @@ int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
 
 /*!
  * \param chan
- * \param tone 0 = congestion, 1 = dialtone
+ * \param tone DAHDI_TONE_DIALTONE, DAHDI_TONE_CONGESTION, or -1 to stop tone
+ * \retval 0 on success, -1 on failure
  */
 static int rpt_play_tone(struct ast_channel *chan, int tone)
 {
-	tone = tone ? DAHDI_TONE_DIALTONE : DAHDI_TONE_CONGESTION;
 	if (tone_zone_play_tone(ast_channel_fd(chan, 0), tone)) {
 		ast_log(LOG_WARNING, "Cannot start tone on %s\n", ast_channel_name(chan));
 		return -1;
@@ -573,12 +557,12 @@ static int rpt_play_tone(struct ast_channel *chan, int tone)
 
 int rpt_play_dialtone(struct ast_channel *chan)
 {
-	return rpt_play_tone(chan, 1);
+	return rpt_play_tone(chan, DAHDI_TONE_DIALTONE);
 }
 
 int rpt_play_congestion(struct ast_channel *chan)
 {
-	return rpt_play_tone(chan, 0);
+	return rpt_play_tone(chan, DAHDI_TONE_CONGESTION);
 }
 
 int rpt_stop_tone(struct ast_channel *chan)

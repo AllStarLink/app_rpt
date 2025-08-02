@@ -13,6 +13,7 @@
 #include "asterisk/say.h"
 #include "asterisk/indications.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
+#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 
@@ -1170,9 +1171,13 @@ void *rpt_tele_thread(void *this)
 			type = RPT_CONF;
 			break;
 		default:
-			type = RPT_TELECONF;
+			type = RPT_TXCONF;
 			break;
 	}
+	if (ast_audiohook_volume_set_float(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
+		ast_debug(7, "Setting the volume on channel %s to %2.2f", ast_channel_name(mychannel), myrpt->p.telemnomgain);
+	}
+
 	if (rpt_conf_add(mychannel, myrpt, type, RPT_CONF_CONFANN)) {
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
