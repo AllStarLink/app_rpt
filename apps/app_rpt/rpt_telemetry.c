@@ -37,7 +37,7 @@
 #include "rpt_rig.h"
 
 #define TELEM_TAIL_FILE_EXTN "TAIL"
-#define TELEM_TIME_EXTN "TOD"
+#define TELEM_TIME_EXTN "TIME"
 
 extern struct rpt rpt_vars[MAXRPTS];
 
