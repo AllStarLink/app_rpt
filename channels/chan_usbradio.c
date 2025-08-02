@@ -4034,12 +4034,8 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 				o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
 				o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax,
 				o->micmax);
-		} else if (!strcmp(cmd+1, "+all")) {
-				ast_cli(fd, "flatrx:%d,txhasctcss:%d,echomode:%d,rxboost:%d,txboost:%d"
-				",rxcdtype:%d,rxsdtype:%d,rxondelay:%d,txoffdelay:%d,txprelim:%d"
-				",txlimonly:%d,rxdemod:%d,txmixa:%d,txmixb:%d,rxmixerset:%d,rxvoiceadj:%f"
-				",rxsquelchadj:%d,txmixaset:%d,txmixbset:%d,txctcssadj:%d,micplaymax:%d"
-				",spkrmax:%d,micmax:%d,txslimsp:%d\n",
+		} else if (!strcmp(cmd, "0+10")) { /* With o->txslimsp tx soft limiter set point */
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d,%d\n", 
 				flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
 				o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
 				o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
