@@ -5049,31 +5049,36 @@ static void *rpt(void *this)
 			channel_revert(myrpt);
 		}
 		/* get rid of tail if timed out or beaconing */
-		if (!myrpt->totimer || (!myrpt->mustid && myrpt->p.beaconing)) myrpt->tailtimer = 0;
+		if (!myrpt->totimer || (!myrpt->mustid && myrpt->p.beaconing)) {
+			myrpt->tailtimer = 0;
+		}
 		/* if not timed-out, add in tail */
-		if (myrpt->totimer)
+		if (myrpt->totimer) {
 			totx = totx || myrpt->tailtimer;
+		}
 		/* If user or links key up or are keyed up over standard ID, switch to talkover ID, if one is defined */
 		/* If tail message, kill the message if someone keys up over it */
-		if ((myrpt->keyed || myrpt->remrx || myrpt->localoverride)
-			&& ((identqueued && idtalkover) || (tailmessagequeued))) {
+		if ((myrpt->keyed || myrpt->remrx || myrpt->localoverride) && ((identqueued && idtalkover) || (tailmessagequeued))) {
 			int hasid = 0, hastalkover = 0;
 
 			telem = myrpt->tele.next;
 			while (telem != &myrpt->tele) {
 				if (telem->mode == ID && !telem->killed) {
-					if (telem->chan)
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
 					telem->killed = 1;
 					hasid = 1;
+					if (telem->chan) {
+						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
+					}
 				}
 				if (telem->mode == TAILMSG && !telem->killed) {
-					if (telem->chan)
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
 					telem->killed = 1;
+					if (telem->chan) {
+						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
+					}
 				}
-				if (telem->mode == IDTALKOVER)
+				if (telem->mode == IDTALKOVER) {
 					hastalkover = 1;
+				}
 				telem = telem->next;
 			}
 			if (hasid && !hastalkover) {
@@ -5103,7 +5108,7 @@ static void *rpt(void *this)
 			if (myrpt->tailid) {
 				totx = 1;
 				queue_id(myrpt);
-			} else if ((myrpt->p.tailmessages[0]) && (myrpt->p.tailmessagetime) && (myrpt->tmsgtimer == 0)) {
+			} else if (myrpt->p.tailmessagetime && myrpt->tmsgtimer == 0) {
 				totx = 1;
 				myrpt->tmsgtimer = myrpt->p.tailmessagetime;
 				rpt_mutex_unlock(&myrpt->lock);

@@ -36,7 +36,20 @@
 #include "rpt_xcat.h"
 #include "rpt_rig.h"
 
+#define TELEM_TAIL_FILE_EXTN "TAIL"
+
 extern struct rpt rpt_vars[MAXRPTS];
+
+/*!
+ * \brief Execute dialplan on conference conference
+ */
+static enum ast_pbx_result rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const char *context)
+{
+	rpt_disable_cdr(dpchannel);
+	ast_channel_context_set(dpchannel, context);
+	ast_channel_exten_set(dpchannel, exten);
+	return ast_pbx_run(dpchannel);
+}
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink)
 {
@@ -1045,12 +1058,12 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 /*
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
  * This routine does a lot of processing of what you "hear" when app_rpt is running.
- * Note that this routine could probably benefit from an overhaul to make it easier to read/debug. 
+ * Note that this routine could probably benefit from an overhaul to make it easier to read/debug.
  * Many of the items here seem to have been bolted onto this routine as app_rpt has evolved.
  */
 void *rpt_tele_thread(void *this)
 {
-	int res = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x, n = 1;
+	int res = 0, pbx = 0, haslink, hastx, hasremote, imdone = 0, unkeys_queued, x, n = 1;
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
@@ -1201,7 +1214,15 @@ void *rpt_tele_thread(void *this)
 			break;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
-		res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
+		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
+			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
+			pbx = 1;
+		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
+			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
+			pbx = 1;
+		} else if (myrpt->p.tailmessages[0]) {
+			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
+		}
 		break;
 	case IDTALKOVER:
 		ast_debug(7, "Tracepoint IDTALKOVER: in rpt_tele_thread()\n");
@@ -2686,23 +2707,26 @@ treataslocal:
 	default:
 		break;
 	}
-	if (!imdone) {
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		} else {
-			ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
-			res = 0;
+	if (!pbx) {
+		if (!imdone) {
+			if (!res) {
+				res = ast_waitstream(mychannel, "");
+			} else {
+				ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+				res = 0;
+			}
 		}
+		ast_stopstream(mychannel);
+		ast_hangup(mychannel);
 	}
-	ast_stopstream(mychannel);
 	rpt_mutex_lock(&myrpt->lock);
 	if (mytele->mode == TAILMSG) {
-		if (!res) {
+		if (!res && !mytele->killed) { /* The tail message was not squashed (Keyed up while playing tail message)*/
 			myrpt->tailmessagen++;
 			if (myrpt->tailmessagen >= myrpt->p.tailmessagemax) {
 				myrpt->tailmessagen = 0;
 			}
-		} else {
+		} else { /* The tail message was squashed */
 			myrpt->tmsgtimer = myrpt->p.tailsquashedtime;
 		}
 	}
@@ -2714,7 +2738,6 @@ treataslocal:
 		ast_free(ident);
 	}
 	ast_free(mytele);
-	ast_hangup(mychannel);
 #ifdef  APP_RPT_LOCK_DEBUG
 	{
 		struct lockthread *t;
