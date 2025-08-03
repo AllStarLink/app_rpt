@@ -2611,7 +2611,7 @@ i16 destroyPmrSps(t_pmr_sps *pSps)
 /*
 Set the tx soft limiter set point
 Takes the pmr channel and the new setpoint as arguments
-Returns 0 if successful. 1 if the setpoint is out of bounds or the pChan isn't properly initialized.
+Returns 0 if successful. -1 if the setpoint is out of bounds or the pChan isn't properly initialized.
 */
 
 i16 SetTxSoftLimiterSetpoint(t_pmr_chan *pChan, i16 setpoint)

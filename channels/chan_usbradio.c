@@ -3186,7 +3186,7 @@ static int set_txctcss_level(struct chan_usbradio_pvt *o)
  * 
  * \param o				chan_usbradio structure.
  * \param setpoint      A value which indicates the onset of soft limiting.
- * \return			    zero if successful, 1 if otherwise
+ * \return			    zero if successful, -1 if otherwise
  */
 
 static int xpmr_set_tx_soft_limiter(struct chan_usbradio_pvt *o, int setpoint)
