@@ -466,7 +466,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int flag);
 static void tune_txoutput(struct chan_usbradio_pvt *o, int value, int fd, int flag);
 static void tune_write(struct chan_usbradio_pvt *o);
 static int xpmr_config(struct chan_usbradio_pvt *o);
-static int set_tx_soft_limiter_xpmr(struct chan_usbradio_pvt *o, int setpoint);
+static int xpmr_set_tx_soft_limiter(struct chan_usbradio_pvt *o, int setpoint);
 #if	DEBUG_FILETEST == 1
 static int RxTestIt(struct chan_usbradio_pvt *o);
 #endif
@@ -498,6 +498,7 @@ static struct ast_channel_tech usbradio_tech = {
 	.fixup = usbradio_fixup,
 	.setoption = usbradio_setoption,
 };
+
 
 /*!
  * \brief Configure our private structure based on the
@@ -1161,15 +1162,17 @@ static void *hidthread(void *arg)
 
 		/* reload the settings from the tune file */
 		load_tune_config(o, NULL, 1);
+		
 
 		mixer_write(o);
 		mult_set(o);
 		set_txctcss_level(o);
 		/* Sync soft limiter level in xpmr with what we read from the tuning config. */
-		if (set_tx_soft_limiter_xpmr(o, o->txslimsp)) {
+		if (xpmr_set_tx_soft_limiter(o, o->txslimsp)) {
 			/* Invalid setting in config file. Set default */
+			ast_log(LOG_WARNING, "Invalid value for txslimsp in radio settings section of usbradio.c, using default");
 			o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
-			set_tx_soft_limiter_xpmr(o, o->txslimsp);
+			xpmr_set_tx_soft_limiter(o, o->txslimsp);
 		}
 
 		ast_mutex_lock(&o->eepromlock);
@@ -3123,7 +3126,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "Current tx limiter setpoint: %i\n", (int) o->txslimsp);
 		} else {
 			int new_slsetpoint = atoi(argv[3]);
-			if (set_tx_soft_limiter_xpmr(o, new_slsetpoint)) {
+			if (xpmr_set_tx_soft_limiter(o, new_slsetpoint)) {
 				ast_cli(fd, "Limiter set point out of range, needs to be between 5000 and 13000\n");
 				return RESULT_SHOWUSAGE;
 			}
@@ -3180,20 +3183,26 @@ static int set_txctcss_level(struct chan_usbradio_pvt *o)
  * \brief Set transmit soft limiting threshold.
  * Modifies the set point in xpmr where soft limiting starts to take place.
  * 
- * Warning: only call this if you are certain the pmrChan as been initialized!
- *
+ * 
  * \param o				chan_usbradio structure.
+ * \param setpoint      A value which indicates the onset of soft limiting.
  * \return			    zero if successful, 1 if otherwise
  */
 
-static int set_tx_soft_limiter_xpmr(struct chan_usbradio_pvt *o, int setpoint)
+static int xpmr_set_tx_soft_limiter(struct chan_usbradio_pvt *o, int setpoint)
 {
-	// Update xpmr with new value if it is within range
-	if ((setpoint < 5000) || (setpoint > 13000)) {
-		return 1;
+
+	
+	/* Check for a valid pmrChan has to be done here. Data structures in xpmr are all dynamic. */
+	
+	if(o->pmrChan) {
+		return SetTxSoftLimiterSetpoint(o->pmrChan, setpoint);
 	}
-	SetTxSoftLimiterSetpoint(o->pmrChan, setpoint);
-	return 0;
+	else {
+		/* Not initialized yet */
+		ast_debug(3, "Attempt to set soft limiter value before xpmr is initialized, request ignored\n");
+		return -1;
+	}
 }
 
 /*!
@@ -3522,12 +3531,13 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		o->rxmixerset = ((setting * 1000) + (o->micmax / 2)) / o->micmax;
 
 		/* adjust settings based on the device */
-		switch (o->devtype) {
-		case C119B_PRODUCT_ID:
-			adjustment = C119B_ADJUSTMENT;
-			break;
-		default:
-			adjustment = 1000;
+		switch (o->devtype)
+		{
+			case C119B_PRODUCT_ID:
+				adjustment = C119B_ADJUSTMENT;
+				break;
+			default:
+				adjustment = 1000;
 		}
 
 		if (o->rxcdtype == CD_XPMR_NOISE) {
@@ -3652,6 +3662,7 @@ static void tune_rxtx_status(int fd, struct chan_usbradio_pvt *o)
 
 	option_verbose = wasverbose;
 }
+
 
 /*!
  * \brief Set received voice level.
@@ -4018,20 +4029,20 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		   values to be returned (and in a specific order).  So, we only add to the end
 		   of the returned list.  Also, once an update has been released we can't change
 		   the format/content of any previously returned string */
-		if (!strcmp(cmd, "0+9")) {
+		if (!strcmp(cmd, "0+10")) {	/* With o->txslimsp tx soft limiter set point */
+			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d,%d\n",
+					flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
+					o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
+					o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
+					o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
+					o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax, o->micmax, o->txslimsp);		   
+		} else if (!strcmp(cmd, "0+9")) {
 			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d\n",
 					flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
 					o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
 					o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
 					o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
 					o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax, o->micmax);
-		} else if (!strcmp(cmd, "0+10")) {	/* With o->txslimsp tx soft limiter set point */
-			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d,%d\n",
-					flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
-					o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
-					o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
-					o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
-					o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax, o->micmax, o->txslimsp);
 		} else {
 			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
 					flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
@@ -4154,7 +4165,14 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 	case 'L':					/* Set TX soft limiter when operating with preemphasized and limited tx audio */
 		if (cmd[1]) {
 			int setpoint = atoi(cmd + 1);
-			set_tx_soft_limiter_xpmr(o, setpoint);
+			if(xpmr_set_tx_soft_limiter(o, setpoint)) {
+				ast_debug(3, "TX soft limiter set failed in tune menu-support\n");
+				break;
+			}
+			else {
+				o->txslimsp = setpoint;
+			}
+				
 			ast_cli(fd, "TX soft limiting setpoint changed to %i\n", setpoint);
 		} else {
 			ast_cli(fd, "TX soft limiting setpoint currently set to: %i\n", o->txslimsp);
@@ -4289,6 +4307,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 		}
 		break;
 
+			
 	default:
 		ast_cli(fd, "Invalid Command\n");
 		break;
@@ -4548,6 +4567,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	if (tune_variable_update(CONFIG, category, #key, signal_type[o->field])) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
+
 
 	category = ast_category_get(cfg, o->name, NULL);
 	if (!category) {
@@ -4843,7 +4863,7 @@ static void pmrdump(struct chan_usbradio_pvt *o, int fd)
 	pd(p->txfreq);
 
 	pd(p->rxCtcss->relax);
-	//pf(p->rxCtcssFreq);
+	/* pf(p->rxCtcssFreq); */
 	pd(p->numrxcodes);
 	if (o->pmrChan->numrxcodes > 0) {
 		for (i = 0; i < o->pmrChan->numrxcodes; i++) {
@@ -4950,6 +4970,7 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
 	if (o->pmrChan->rxfreq) {
 		o->pmrChan->b.reprog = 1;
 	}
+	
 
 	return 0;
 }
@@ -5153,6 +5174,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		tChan.rxCarrierHyst = o->rxsqhyst;
 		tChan.rxSqVoxAdj = o->rxsqvoxadj;
 		tChan.rxSquelchDelay = o->rxsquelchdelay;
+		
 
 		if (o->txlimonly) {
 			tChan.txMod = 1;
