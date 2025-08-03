@@ -770,7 +770,7 @@ typedef struct t_pmr_chan {
 	t_pmr_sps *spsLsdGen;
 	t_pmr_sps *spsTxLsdLpf;
 
-	t_pmr_sps *limiterSpsTx;	// Pointer to limiter signal processing struct
+	t_pmr_sps *spsLimiterTx;	// Pointer to limiter signal processing struct
 
 	// tune tweaks
 

@@ -2317,7 +2317,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 			pSps = pChan->spsTx = createPmrSps(pChan);
 		else
 			pSps = pSps->nextSps = createPmrSps(pChan);
-		pChan->limiterSpsTx = pSps;
+		pChan->spsLimiterTx = pSps;
 		pSps->source = inputTmp;
 		pSps->sink = pChan->pTxLimiter;
 		pSps->sigProc = SoftLimiter;
@@ -2610,12 +2610,29 @@ i16 destroyPmrSps(t_pmr_sps *pSps)
 /*
 Set the tx soft limiter set point
 Takes the pmr channel and the new setpoint as arguments
-Returns 0 
+Returns 0 if successful. 1 if the setpoint is out of bounds or the pChan isn't properly initialized.
 */
 
 i16 SetTxSoftLimiterSetpoint(t_pmr_chan *pChan, i16 setpoint)
 {
-	pChan->limiterSpsTx->setpt = setpoint;
+	
+	if(!pChan) {
+		return -1;
+	}
+
+	/* Ignore if soft limiter setpoint adjust isn't enabled */
+	/* Limiter pSps won't be initialized in this case */
+	if(!pChan->txLimiterEnable) {
+		TRACEF(1, "Request to set limiter setpoint ignored. Limiter not enabled\n");
+		return 0;
+	}
+	
+    /* Bounds check setpoint to ensure it is within range */
+	if ((setpoint < 5000) || (setpoint > 13000)) {
+		return -1;
+	}
+	
+	pChan->spsLimiterTx->setpt = setpoint;
 	return 0;
 }
 
