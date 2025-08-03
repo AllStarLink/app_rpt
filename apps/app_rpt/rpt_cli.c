@@ -335,6 +335,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 	struct rpt_lstat *s = NULL;
 	int nrpts = rpt_num_rpts();
 	struct rpt_lstat **stat_array = NULL;
+	struct timeval now;
 
 	if (argc != 3) {
 		return RESULT_SHOWUSAGE;
@@ -370,7 +371,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					l = l->next;
 					continue;
 				}
-				if ((s = ast_malloc(sizeof(struct rpt_lstat))) == NULL) {
+				if ((s = ast_calloc(1, sizeof(struct rpt_lstat))) == NULL) {
 					if (i > 0) {
 						for (x = 0; x < i; x++) {
 							ast_free(stat_array[i]);
@@ -380,8 +381,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 					return RESULT_FAILURE;
 				}
-				memset(s, 0, sizeof(struct rpt_lstat));
-				ast_copy_string(s->name, l->name, MAXNODESTR - 1);
+				ast_copy_string(s->name, l->name, sizeof(s->name));
 				if (l->chan)
 					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", s->peer, MAXPEERSTR - 1);
 				else
@@ -391,10 +391,10 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				s->reconnects = l->reconnects;
 				s->connecttime = l->connecttime;
 				s->thisconnected = l->thisconnected;
-				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
+				memcpy(s->chan_stat, l->chan_stat, sizeof(s->chan_stat));
 				stat_array[i] = s;
 				i++;
-				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
+				memset(l->chan_stat, 0, sizeof(l->chan_stat));
 				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
@@ -403,13 +403,14 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			}
 			ast_cli(fd, "NODE      PEER                RECONNECTS  DIRECTION  CONNECT TIME        CONNECT STATE\n");
 			ast_cli(fd, "----      ----                ----------  ---------  ------------        -------------\n");
-
+			now = rpt_tvnow();
 			for (i = 0; i < node_count; i++) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
+				long long connecttime;
 				char conntime[21];
 
 				s = stat_array[i];
+				connecttime = ast_tvdiff_ms(now, s->connecttime);
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;
@@ -448,6 +449,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 	struct rpt_lstat s_head;
 	int nrpts = rpt_num_rpts();
 	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	struct timeval now;
 
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;
@@ -593,10 +595,11 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				l = l->next;
 			}
-			rpt_mutex_unlock(&myrpt->lock);	// UNLOCK 
+			now = rpt_tvnow();
+			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
 			for (s = s_head.next; s != &s_head; s = s->next) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
+				long long connecttime = ast_tvdiff_ms(now, s->connecttime);
 				char conntime[21];
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
