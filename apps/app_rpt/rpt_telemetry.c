@@ -2546,8 +2546,8 @@ treataslocal:
 			}
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
 			pbx = 1;
+			break;
 		}
-
 		rpt_say_time(mychannel, time(NULL), myrpt->p.timezone);
 		imdone = 1;
 		break;
