@@ -422,11 +422,6 @@ static int shutting_down = 0;
 static int debug = 7;			/* Set this >0 for extra debug output */
 static int nrpts = 0;
 
-static struct ast_custom_function rpt_read_telem_datastore_function = {
-	.name = "RPT_TELEM_TIME",
-	.read = rpt_telem_read_datastore,
-};
-
 /* general settings */
 enum rpt_dns_method rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
 const char *rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
@@ -7455,7 +7450,7 @@ static int unload_module(void)
 	}
 
 	res = ast_unregister_application(app);
-	res |= ast_custom_function_unregister(&rpt_read_telem_datastore_function);
+	res |= rpt_cleanup_telemetry();
 
 #ifdef _MDC_ENCODE_H_
 	res |= mdc1200_unload();
@@ -7482,7 +7477,7 @@ static int load_module(void)
 	res = 0;
 	res |= rpt_manager_load();
 	res |= ast_register_application_xml(app, rpt_exec);
-	res |= ast_custom_function_register(&rpt_read_telem_datastore_function);
+	res |= rpt_init_telemtry();
 
 #ifdef	_MDC_ENCODE_H_
 	res |= mdc1200_load();

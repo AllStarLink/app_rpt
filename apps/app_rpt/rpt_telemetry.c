@@ -41,6 +41,20 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 
+static struct ast_custom_function rpt_read_telem_datastore_function = {
+	.name = "RPT_TELEM_TIME",
+	.read = rpt_telem_read_datastore,
+};
+
+int rpt_init_telemtry()
+{
+	return ast_custom_function_register(&rpt_read_telem_datastore_function);
+}
+
+int rpt_cleanup_telemetry()
+{
+	return ast_custom_function_unregister(&rpt_read_telem_datastore_function);
+}
 /*!
  * \brief Free the datastore data
  * \param data The data to free
@@ -60,12 +74,12 @@ int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *da
 	time_t *value;
 	datastore = ast_channel_datastore_find(chan, &telemetry_datastore, NULL);
 	if (!datastore || !datastore->data) {
-		snprintf(buf, len, "X"); // Default or error value
+		snprintf(buf, len, "X"); /* X causes unixsaytime to "say" current time as a fallback*/
 		return 0;
 	}
 
 	value = (time_t *) datastore->data;
-	snprintf(buf, len, "%ld", (long) *value); // Convert time_t to string for dialplan
+	snprintf(buf, len, "%ld", (long) *value); /* Convert time_t to string for dialplan */
 	return 0;
 }
 

@@ -25,3 +25,13 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data);
  * \return 0 on success, -1 on failure
  */
 int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len);
+
+/*!
+ * \brief Register telemetry function
+ */
+int rpt_init_telemtry();
+
+/* !
+ * \brief Unregister telemtery functions
+ */
+int rpt_cleanup_telemetry();
