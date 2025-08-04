@@ -822,7 +822,6 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
 			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
 			if (!datastore) {
-				ast_log(LOG_ERROR, "Failed to allocate datastore for telemetry\n");
 				return;
 			}
 			time_data = ast_malloc(sizeof(time_t));
@@ -837,7 +836,6 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
 			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
 			if (!datastore) {
-				ast_log(LOG_ERROR, "Failed to allocate datastore for telemetry\n");
 				return;
 			}
 			time_data = ast_malloc(sizeof(time_t));
@@ -2510,7 +2508,6 @@ treataslocal:
 		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
 			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
 			if (!datastore) {
-				ast_log(LOG_ERROR, "Failed to allocate datastore for telemetry\n");
 				imdone = 1;
 				break;
 			}
