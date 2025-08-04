@@ -42,6 +42,43 @@
 extern struct rpt rpt_vars[MAXRPTS];
 
 /*!
+ * \brief Say the time
+ * \param mychannel The channel to speak on
+ * \param t The time to say
+ * \param timezone The timezone to use for the time
+ */
+static void rpt_say_time(struct ast_channel *mychannel, time_t t, const char *timezone)
+{
+	time_t t1;
+	struct ast_tm localtm;
+	char *p;
+	int res;
+
+	rpt_localtime(&t, &localtm, timezone);
+	t1 = rpt_mktime(&localtm, NULL);
+	/* Say the phase of the day is before the time */
+	if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
+		p = "rpt/goodmorning";
+	} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
+		p = "rpt/goodafternoon";
+	} else {
+		p = "rpt/goodevening";
+	}
+	if (sayfile(mychannel, p) == -1) {
+		return;
+	}
+	/* Say the time is ... */
+	if (sayfile(mychannel, "rpt/thetimeis") == -1) {
+		return;
+	}
+	/* Say the time */
+	res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
+	if (!res) {
+		res = ast_waitstream(mychannel, "");
+	}
+	ast_stopstream(mychannel);
+}
+/*!
  * \brief Execute dialplan on conference conference
  */
 static enum ast_pbx_result rpt_do_dialplan(struct ast_channel *dpchannel, char *exten, const char *context)
@@ -619,13 +656,10 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
  */
 static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
-	char *strs[100], *p, buf[100], c;
+	char *strs[100], buf[100], c;
 	int i, j, k, n, res, vmajor, vminor;
 	float f;
-	time_t t;
 	unsigned int t1;
-	struct ast_tm localtm;
-
 	n = finddelim(varcmd, strs, ARRAY_LEN(strs));
 	if (n < 1) {
 		return;
@@ -753,34 +787,19 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (sscanf(strs[1], N_FMT(u), &t1) != 1) {
 			return;
 		}
-		t = t1;
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_TIME", myrpt->name);
-		rpt_localtime(&t, &localtm, myrpt->p.timezone);
-		t1 = rpt_mktime(&localtm, NULL);
-		/* Say the phase of the day is before the time */
-		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
-			p = "rpt/goodmorning";
-		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
-			p = "rpt/goodafternoon";
-		} else {
-			p = "rpt/goodevening";
-		}
-		if (sayfile(mychannel, p) == -1) {
+		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
+			return;
+		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, TELEMETRY);
 			return;
 		}
-		/* Say the time is ... */
-		if (sayfile(mychannel, "rpt/thetimeis") == -1) {
-			return;
-		}
-		/* Say the time */
-		res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		}
-		ast_stopstream(mychannel);
+
+		rpt_say_time(mychannel, t1, myrpt->p.timezone);
 		return;
 	}
 	if (!strcasecmp(strs[0], "STATS_VERSION")) {
@@ -1072,8 +1091,7 @@ void *rpt_tele_thread(void *this)
 	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ident, *nodename;
-	time_t t, t1, t_mono, was_mono;
-	struct ast_tm localtm;
+	time_t t, t_mono, was_mono;
 	char **strs;
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
@@ -2441,37 +2459,12 @@ treataslocal:
 			pbx = 1;
 			break;
 		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
-			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, TELEMETRY);
 			pbx = 1;
 			break;
 		}
 
-		t = time(NULL);
-		rpt_localtime(&t, &localtm, myrpt->p.timezone);
-		t1 = rpt_mktime(&localtm, NULL);
-		/* Say the phase of the day is before the time */
-		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
-			p = "rpt/goodmorning";
-		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
-			p = "rpt/goodafternoon";
-		} else {
-			p = "rpt/goodevening";
-		}
-		if (sayfile(mychannel, p) == -1) {
-			imdone = 1;
-			break;
-		}
-		/* Say the time is ... */
-		if (sayfile(mychannel, "rpt/thetimeis") == -1) {
-			imdone = 1;
-			break;
-		}
-		/* Say the time */
-		res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		}
-		ast_stopstream(mychannel);
+		rpt_say_time(mychannel, time(NULL), myrpt->p.timezone);
 		imdone = 1;
 		break;
 	case STATS_VERSION:
