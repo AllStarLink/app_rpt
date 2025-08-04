@@ -69,6 +69,29 @@ int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *da
 	return 0;
 }
 
+/* !
+ * \brief Store the time in the telemetry datastore.
+ * \param chan The channel to store the data in
+ * \param t The time to store
+ */
+
+static int rpt_telem_datastore(struct ast_channel *chan, time_t t)
+{
+	struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
+	time_t *time_data = NULL;
+
+	if (!datastore) {
+		return -1;
+	}
+	time_data = ast_malloc(sizeof(time_t));
+	if (!time_data) {
+		return -1;
+	}
+	*time_data = t;
+	datastore->data = time_data;
+	ast_channel_datastore_add(chan, datastore);
+	return 0;
+}
 /*!
  * \brief Say the time
  * \param mychannel The channel to speak on
@@ -820,31 +843,15 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_TIME", myrpt->name);
 		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
-			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
-			if (!datastore) {
+			if (rpt_telem_datastore(mychannel, t1) < 0) {
 				return;
 			}
-			time_data = ast_malloc(sizeof(time_t));
-			if (!time_data) {
-				return;
-			}
-			*time_data = t1;
-			datastore->data = time_data;
-			ast_channel_datastore_add(mychannel, datastore);
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
 			return;
 		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
-			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
-			if (!datastore) {
+			if (rpt_telem_datastore(mychannel, t1) < 0) {
 				return;
 			}
-			time_data = ast_malloc(sizeof(time_t));
-			if (!time_data) {
-				return;
-			}
-			*time_data = t1;
-			datastore->data = time_data;
-			ast_channel_datastore_add(mychannel, datastore);
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, TELEMETRY);
 			return;
 		}
@@ -1150,7 +1157,6 @@ void *rpt_tele_thread(void *this)
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
 	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
-	time_t *time_data = NULL;
 
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -2506,36 +2512,18 @@ treataslocal:
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_TIME ? "STATS_TIME" : "STATS_TIME_LOCAL");
 
 		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
-			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
-			if (!datastore) {
+			if (rpt_telem_datastore(mychannel, time(NULL)) < 0) {
 				imdone = 1;
 				break;
 			}
-			time_data = ast_malloc(sizeof(time_t));
-			if (!time_data) {
-				imdone = 1;
-				break;
-			}
-			*time_data = time(NULL);
-			datastore->data = time_data;
-			ast_channel_datastore_add(mychannel, datastore);
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
 			pbx = 1;
 			break;
 		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
-			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
-			if (!datastore) {
+			if (rpt_telem_datastore(mychannel, time(NULL)) < 0) {
 				imdone = 1;
 				break;
 			}
-			time_data = ast_malloc(sizeof(time_t));
-			if (!time_data) {
-				imdone = 1;
-				break;
-			}
-			*time_data = time(NULL);
-			datastore->data = time_data;
-			ast_channel_datastore_add(mychannel, datastore);
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, TELEMETRY);
 			pbx = 1;
 			break;
