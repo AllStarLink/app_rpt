@@ -105,10 +105,11 @@ static const char *rpt_telem_extension(struct ast_channel *chan, const char *pri
 	return NULL;
 }
 
-/* !
+/*!
  * \brief Store the time in the telemetry datastore.
  * \param chan The channel to store the data in
  * \param t The time to store
+ * \return 0 on success, -1 on failure
  */
 
 static int rpt_telem_datastore(struct ast_channel *chan, time_t t)

@@ -16,17 +16,6 @@ void *rpt_tele_thread(void *this);
 void rpt_telemetry(struct rpt *myrpt, int mode, void *data);
 
 /*!
- * \brief Read time_t from telemetry datastore
- * \param chan The channel to read from
- * \param cmd The command to execute
- * \param data Pointer to the data buffer
- * \param buf Buffer to store the result
- * \param len Length of the buffer
- * \return 0 on success, -1 on failure
- */
-int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len);
-
-/*!
  * \brief Register telemetry function
  */
 int rpt_init_telemetry(void);
