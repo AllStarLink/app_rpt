@@ -42,6 +42,34 @@
 extern struct rpt rpt_vars[MAXRPTS];
 
 /*!
+ * \brief Free the datastore data
+ * \param data The data to free
+ *
+ * This function is used to free the data stored in the telemetry datastore.
+ */
+static void rpt_telem_callback_destroy(void *data)
+{
+	ast_free(data);
+}
+
+static const struct ast_datastore_info telemetry_datastore = { .type = TELEM_DATASTORE, .destroy = rpt_telem_callback_destroy };
+
+int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
+{
+	struct ast_datastore *datastore = NULL;
+	time_t *value;
+	datastore = ast_channel_datastore_find(chan, &telemetry_datastore, NULL);
+	if (!datastore || !datastore->data) {
+		snprintf(buf, len, "X"); // Default or error value
+		return 0;
+	}
+
+	value = (time_t *) datastore->data;
+	snprintf(buf, len, "%ld", (long) *value); // Convert time_t to string for dialplan
+	return 0;
+}
+
+/*!
  * \brief Say the time
  * \param mychannel The channel to speak on
  * \param t The time to say
@@ -792,9 +820,33 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_TIME", myrpt->name);
 		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
+			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
+			if (!datastore) {
+				ast_log(LOG_ERROR, "Failed to allocate datastore for telemetry\n");
+				return;
+			}
+			time_data = ast_malloc(sizeof(time_t));
+			if (!time_data) {
+				return;
+			}
+			*time_data = t1;
+			datastore->data = time_data;
+			ast_channel_datastore_add(mychannel, datastore);
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
 			return;
 		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
+			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
+			if (!datastore) {
+				ast_log(LOG_ERROR, "Failed to allocate datastore for telemetry\n");
+				return;
+			}
+			time_data = ast_malloc(sizeof(time_t));
+			if (!time_data) {
+				return;
+			}
+			*time_data = t1;
+			datastore->data = time_data;
+			ast_channel_datastore_add(mychannel, datastore);
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, TELEMETRY);
 			return;
 		}
@@ -1100,6 +1152,7 @@ void *rpt_tele_thread(void *this)
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
 	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
+	time_t *time_data = NULL;
 
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -2455,10 +2508,37 @@ treataslocal:
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_TIME ? "STATS_TIME" : "STATS_TIME_LOCAL");
 
 		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
+			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
+			if (!datastore) {
+				ast_log(LOG_ERROR, "Failed to allocate datastore for telemetry\n");
+				imdone = 1;
+				break;
+			}
+			time_data = ast_malloc(sizeof(time_t));
+			if (!time_data) {
+				imdone = 1;
+				break;
+			}
+			*time_data = time(NULL);
+			datastore->data = time_data;
+			ast_channel_datastore_add(mychannel, datastore);
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
 			pbx = 1;
 			break;
 		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
+			struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
+			if (!datastore) {
+				imdone = 1;
+				break;
+			}
+			time_data = ast_malloc(sizeof(time_t));
+			if (!time_data) {
+				imdone = 1;
+				break;
+			}
+			*time_data = time(NULL);
+			datastore->data = time_data;
+			ast_channel_datastore_add(mychannel, datastore);
 			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, TELEMETRY);
 			pbx = 1;
 			break;

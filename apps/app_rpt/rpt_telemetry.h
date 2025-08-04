@@ -1,3 +1,4 @@
+#define TELEM_DATASTORE "telemetry"
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 
@@ -13,3 +14,14 @@ void *rpt_tele_thread(void *this);
 
 /*! \brief More repeater telemetry routines. */
 void rpt_telemetry(struct rpt *myrpt, int mode, void *data);
+
+/*!
+ * \brief Read time_t from telemetry datastore
+ * \param chan The channel to read from
+ * \param cmd The command to execute
+ * \param data Pointer to the data buffer
+ * \param buf Buffer to store the result
+ * \param len Length of the buffer
+ * \return 0 on success, -1 on failure
+ */
+int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len);
