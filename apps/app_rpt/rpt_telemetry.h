@@ -29,9 +29,9 @@ int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *da
 /*!
  * \brief Register telemetry function
  */
-int rpt_init_telemtry();
+int rpt_init_telemetry(void);
 
 /* !
  * \brief Unregister telemtery functions
  */
-int rpt_cleanup_telemetry();
+int rpt_cleanup_telemetry(void);

@@ -46,7 +46,7 @@ static struct ast_custom_function rpt_read_telem_datastore_function = {
 	.read = rpt_telem_read_datastore,
 };
 
-int rpt_init_telemtry()
+int rpt_init_telemetry()
 {
 	return ast_custom_function_register(&rpt_read_telem_datastore_function);
 }
@@ -81,6 +81,25 @@ int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *da
 	value = (time_t *) datastore->data;
 	snprintf(buf, len, "%ld", (long) *value); /* Convert time_t to string for dialplan */
 	return 0;
+}
+
+/* !
+ * \brief determine if an extension exists in a primary or alternate context
+ * \param chan The channel to check
+ * \param primary The primary context to check
+ * \param alternate The alternate context check
+ * \return The context if it exists, NULL otherwise
+ */
+
+static const char *rpt_telem_extension(struct ast_channel *chan, const char *primary, const char *alternate)
+{
+	if (ast_exists_extension(chan, primary, TELEM_TIME_EXTN, 1, NULL)) {
+		return primary;
+	}
+	if (ast_exists_extension(chan, alternate, TELEM_TIME_EXTN, 1, NULL)) {
+		return alternate;
+	}
+	return NULL;
 }
 
 /* !
@@ -722,6 +741,7 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
 	char *strs[100], buf[100], c;
+	const char *context;
 	int i, j, k, n, res, vmajor, vminor;
 	float f;
 	unsigned int t1;
@@ -856,17 +876,12 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 			return;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_TIME", myrpt->name);
-		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		if (context) {
 			if (rpt_telem_datastore(mychannel, t1) < 0) {
 				return;
 			}
-			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
-			return;
-		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
-			if (rpt_telem_datastore(mychannel, t1) < 0) {
-				return;
-			}
-			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, TELEMETRY);
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
 			return;
 		}
 
@@ -1162,6 +1177,7 @@ void *rpt_tele_thread(void *this)
 	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ident, *nodename;
+	const char *context;
 	time_t t, t_mono, was_mono;
 	char **strs;
 	int i, j, k, ns, rbimode;
@@ -1304,11 +1320,9 @@ void *rpt_tele_thread(void *this)
 			break;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
-		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
-			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
-			pbx = 1;
-		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
-			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		if (context) {
+			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, context);
 			pbx = 1;
 		} else if (myrpt->p.tailmessages[0]) {
 			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
@@ -2524,23 +2538,14 @@ treataslocal:
 			break;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_TIME ? "STATS_TIME" : "STATS_TIME_LOCAL");
-
-		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TIME_EXTN, 1, NULL)) {
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		if (context) {
 			if (rpt_telem_datastore(mychannel, time(NULL)) < 0) {
 				imdone = 1;
 				break;
 			}
-			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, myrpt->p.telemetry);
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
 			pbx = 1;
-			break;
-		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TIME_EXTN, 1, NULL)) {
-			if (rpt_telem_datastore(mychannel, time(NULL)) < 0) {
-				imdone = 1;
-				break;
-			}
-			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, TELEMETRY);
-			pbx = 1;
-			break;
 		}
 
 		rpt_say_time(mychannel, time(NULL), myrpt->p.timezone);

@@ -7477,7 +7477,7 @@ static int load_module(void)
 	res = 0;
 	res |= rpt_manager_load();
 	res |= ast_register_application_xml(app, rpt_exec);
-	res |= rpt_init_telemtry();
+	res |= rpt_init_telemetry();
 
 #ifdef	_MDC_ENCODE_H_
 	res |= mdc1200_load();
