@@ -2616,7 +2616,7 @@ Returns 0 if successful. -1 if the setpoint is out of bounds or the pChan isn't 
 
 i16 SetTxSoftLimiterSetpoint(t_pmr_chan *pChan, i16 setpoint)
 {
-	if((!pChan)) {
+	if(!pChan) {
 		return -1;
 	}
 
