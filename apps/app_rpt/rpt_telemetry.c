@@ -41,20 +41,6 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 
-static struct ast_custom_function rpt_read_telem_datastore_function = {
-	.name = "RPT_TELEM_TIME",
-	.read = rpt_telem_read_datastore,
-};
-
-int rpt_init_telemetry()
-{
-	return ast_custom_function_register(&rpt_read_telem_datastore_function);
-}
-
-int rpt_cleanup_telemetry()
-{
-	return ast_custom_function_unregister(&rpt_read_telem_datastore_function);
-}
 /*!
  * \brief Free the datastore data
  * \param data The data to free
@@ -71,7 +57,31 @@ static const struct ast_datastore_info telemetry_datastore = {
 	.destroy = rpt_telem_callback_destroy 
 };
 
-int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
+/*!
+ * \brief Store the time in the telemetry datastore.
+ * \param chan The channel to store the data in
+ * \param t The time to store
+ * \return 0 on success, -1 on failure
+ */
+static int rpt_telem_datastore(struct ast_channel *chan, time_t t)
+{
+	struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
+	time_t *time_data = NULL;
+
+	if (!datastore) {
+		return -1;
+	}
+	time_data = ast_malloc(sizeof(time_t));
+	if (!time_data) {
+		return -1;
+	}
+	*time_data = t;
+	datastore->data = time_data;
+	ast_channel_datastore_add(chan, datastore);
+	return 0;
+}
+
+static int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
 {
 	struct ast_datastore *datastore = NULL;
 	time_t *value;
@@ -84,6 +94,21 @@ int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *da
 	value = datastore->data;
 	snprintf(buf, len, "%ld", (long) *value); /* Convert time_t to string for dialplan */
 	return 0;
+}
+
+static struct ast_custom_function rpt_read_telem_datastore_function = {
+	.name = "RPT_TELEM_TIME",
+	.read = rpt_telem_read_datastore,
+};
+
+int rpt_init_telemetry()
+{
+	return ast_custom_function_register(&rpt_read_telem_datastore_function);
+}
+
+int rpt_cleanup_telemetry()
+{
+	return ast_custom_function_unregister(&rpt_read_telem_datastore_function);
 }
 
 /* !
@@ -105,30 +130,6 @@ static const char *rpt_telem_extension(struct ast_channel *chan, const char *pri
 	return NULL;
 }
 
-/*!
- * \brief Store the time in the telemetry datastore.
- * \param chan The channel to store the data in
- * \param t The time to store
- * \return 0 on success, -1 on failure
- */
-
-static int rpt_telem_datastore(struct ast_channel *chan, time_t t)
-{
-	struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
-	time_t *time_data = NULL;
-
-	if (!datastore) {
-		return -1;
-	}
-	time_data = ast_malloc(sizeof(time_t));
-	if (!time_data) {
-		return -1;
-	}
-	*time_data = t;
-	datastore->data = time_data;
-	ast_channel_datastore_add(chan, datastore);
-	return 0;
-}
 /*!
  * \brief Say the time
  * \param mychannel The channel to speak on
