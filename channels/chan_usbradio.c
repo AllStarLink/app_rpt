@@ -3195,7 +3195,7 @@ static int xpmr_set_tx_soft_limiter(struct chan_usbradio_pvt *o, int setpoint)
 	
 	/* Check for a valid pmrChan has to be done here. Data structures in xpmr are all dynamic. */
 	
-	if(o->pmrChan) {
+	if (o->pmrChan) {
 		return SetTxSoftLimiterSetpoint(o->pmrChan, setpoint);
 	}
 	else {
@@ -3531,13 +3531,12 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		o->rxmixerset = ((setting * 1000) + (o->micmax / 2)) / o->micmax;
 
 		/* adjust settings based on the device */
-		switch (o->devtype)
-		{
-			case C119B_PRODUCT_ID:
-				adjustment = C119B_ADJUSTMENT;
-				break;
-			default:
-				adjustment = 1000;
+		switch (o->devtype) {
+		case C119B_PRODUCT_ID:
+			adjustment = C119B_ADJUSTMENT;
+			break;
+		default:
+			adjustment = 1000;
 		}
 
 		if (o->rxcdtype == CD_XPMR_NOISE) {
@@ -4035,7 +4034,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 					o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay,
 					o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb,
 					o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
-					o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax, o->micmax, o->txslimsp);		   
+					o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax, o->micmax, o->txslimsp);
 		} else if (!strcmp(cmd, "0+9")) {
 			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d\n",
 					flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
@@ -4165,11 +4164,10 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 	case 'L':					/* Set TX soft limiter when operating with preemphasized and limited tx audio */
 		if (cmd[1]) {
 			int setpoint = atoi(cmd + 1);
-			if(xpmr_set_tx_soft_limiter(o, setpoint)) {
+			if (xpmr_set_tx_soft_limiter(o, setpoint)) {
 				ast_debug(3, "TX soft limiter set failed in tune menu-support\n");
 				break;
-			}
-			else {
+			} else {
 				o->txslimsp = setpoint;
 			}
 				

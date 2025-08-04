@@ -2621,12 +2621,12 @@ i16 SetTxSoftLimiterSetpoint(t_pmr_chan *pChan, i16 setpoint)
 	}
 
 	/* Ignore if soft limiter setpoint adjust isn't enabled or the pSps block pointer is NULL */
-	if((!pChan->spsLimiterTx) || (!pChan->txLimiterEnable)) {
+	if ((!pChan->spsLimiterTx) || (!pChan->txLimiterEnable)) {
 		TRACEF(1, "Request to set limiter setpoint ignored. Limiter not enabled\n");
 		return 0;
 	}
 	
-    /* Bounds check setpoint to ensure it is within range */
+	/* Bounds check setpoint to ensure it is within range */
 	if ((setpoint < 5000) || (setpoint > 13000)) {
 		return -1;
 	}
