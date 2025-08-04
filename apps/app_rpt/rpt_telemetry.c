@@ -74,11 +74,11 @@ int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *da
 	time_t *value;
 	datastore = ast_channel_datastore_find(chan, &telemetry_datastore, NULL);
 	if (!datastore || !datastore->data) {
-		snprintf(buf, len, "X"); /* X causes unixsaytime to "say" current time as a fallback*/
+		ast_copy_string(buf, "", len); /* Causes unixsaytime to "say" current time as a fallback*/
 		return 0;
 	}
 
-	value = (time_t *) datastore->data;
+	value = datastore->data;
 	snprintf(buf, len, "%ld", (long) *value); /* Convert time_t to string for dialplan */
 	return 0;
 }
