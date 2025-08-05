@@ -52,9 +52,9 @@ static void rpt_telem_callback_destroy(void *data)
 	ast_free(data);
 }
 
-static const struct ast_datastore_info telemetry_datastore = { 
-	.type = TELEM_DATASTORE, 
-	.destroy = rpt_telem_callback_destroy 
+static const struct ast_datastore_info telemetry_datastore = {
+	.type = TELEM_DATASTORE,
+	.destroy = rpt_telem_callback_destroy,
 };
 
 /*!
