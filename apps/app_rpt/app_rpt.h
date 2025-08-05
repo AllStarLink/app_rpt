@@ -465,9 +465,10 @@ struct rpt_chan_stat {
 #define	MSWAIT 20
 #define	HANGTIME 5000
 #define SLEEPTIME 900		/* default # of seconds for of no activity before entering sleep mode */
-#define	TOTIME 180000
-#define	IDTIME 300000
-#define	MAXRPTS 500
+#define TOTIME 180000		/* default timeout time to 180000ms (3 minutes) */
+#define TORESETTIME 1000	/* default timeout reset time to 1000ms (1 second) */
+#define IDTIME 300000
+#define MAXRPTS 500
 #define MAX_STAT_LINKS 256
 #define POLITEID 30000
 #define FUNCTDELAY 1500
@@ -782,6 +783,7 @@ struct rpt {
 		int hangtime;
 		int althangtime;
 		int totime;
+		int toresettime;
 		int idtime;
 		int tailmessagetime;
 		int tailsquashedtime;
@@ -936,7 +938,7 @@ struct rpt {
 	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
 	int calldigittimer;
 	struct rpt_conf rptconf;
-	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
+	int tailtimer, totimer, toresettimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	enum patch_call_mode callmode;
 	int mustid,tailid;
 	int rptinacttimer;
