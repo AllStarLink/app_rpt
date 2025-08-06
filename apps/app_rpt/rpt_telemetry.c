@@ -37,9 +37,136 @@
 #include "rpt_rig.h"
 
 #define TELEM_TAIL_FILE_EXTN "TAIL"
+#define TELEM_TIME_EXTN "TIME"
 
 extern struct rpt rpt_vars[MAXRPTS];
 
+/*!
+ * \brief Free the datastore data
+ * \param data The data to free
+ *
+ * This function is used to free the data stored in the telemetry datastore.
+ */
+static void rpt_telem_callback_destroy(void *data)
+{
+	ast_free(data);
+}
+
+static const struct ast_datastore_info telemetry_datastore = {
+	.type = TELEM_DATASTORE,
+	.destroy = rpt_telem_callback_destroy,
+};
+
+/*!
+ * \brief Store the time in the telemetry datastore.
+ * \param chan The channel to store the data in
+ * \param t The time to store
+ * \return 0 on success, -1 on failure
+ */
+static int rpt_telem_datastore(struct ast_channel *chan, time_t t)
+{
+	struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
+	time_t *time_data;
+
+	if (!datastore) {
+		return -1;
+	}
+	time_data = ast_malloc(sizeof(time_t));
+	if (!time_data) {
+		return -1;
+	}
+	*time_data = t;
+	datastore->data = time_data;
+	ast_channel_datastore_add(chan, datastore);
+	return 0;
+}
+
+static int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
+{
+	struct ast_datastore *datastore = NULL;
+	time_t *value;
+	datastore = ast_channel_datastore_find(chan, &telemetry_datastore, NULL);
+	if (!datastore || !datastore->data) {
+		ast_copy_string(buf, "", len); /* The empty string causes SayUnixTime to "say" current time as a fallback*/
+		return 0;
+	}
+
+	value = datastore->data;
+	snprintf(buf, len, "%ld", (long) *value); /* Convert time_t to string for dialplan */
+	return 0;
+}
+
+static struct ast_custom_function rpt_read_telem_datastore_function = {
+	.name = "RPT_TELEM_TIME",
+	.read = rpt_telem_read_datastore,
+};
+
+int rpt_init_telemetry()
+{
+	return ast_custom_function_register(&rpt_read_telem_datastore_function);
+}
+
+int rpt_cleanup_telemetry()
+{
+	return ast_custom_function_unregister(&rpt_read_telem_datastore_function);
+}
+
+/* !
+ * \brief determine if an extension exists in a primary or alternate context
+ * \param chan The channel to check
+ * \param primary The primary context to check
+ * \param alternate The alternate context check
+ * \return The context if it exists, NULL otherwise
+ */
+
+static const char *rpt_telem_extension(struct ast_channel *chan, const char *primary, const char *alternate)
+{
+	if (ast_exists_extension(chan, primary, TELEM_TIME_EXTN, 1, NULL)) {
+		return primary;
+	}
+	if (ast_exists_extension(chan, alternate, TELEM_TIME_EXTN, 1, NULL)) {
+		return alternate;
+	}
+	return NULL;
+}
+
+/*!
+ * \brief Say the time
+ * \param mychannel The channel to speak on
+ * \param t The time to say
+ * \param timezone The timezone to use for the time
+ */
+static void rpt_say_time(struct ast_channel *mychannel, time_t t, const char *timezone)
+{
+	time_t t1;
+	struct ast_tm localtm;
+	char *p;
+	int res;
+
+	rpt_localtime(&t, &localtm, timezone);
+	t1 = rpt_mktime(&localtm, NULL);
+	/* Say the phase of the day is before the time */
+	if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
+		p = "rpt/goodmorning";
+	} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
+		p = "rpt/goodafternoon";
+	} else {
+		p = "rpt/goodevening";
+	}
+	if (sayfile(mychannel, p) == -1) {
+		return;
+	}
+	/* Say the time is ... */
+	if (sayfile(mychannel, "rpt/thetimeis") == -1) {
+		return;
+	}
+	/* Say the time */
+	res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
+	if (!res) {
+		res = ast_waitstream(mychannel, "");
+	}
+	ast_stopstream(mychannel);
+}
 /*!
  * \brief Execute dialplan on conference conference
  */
@@ -618,13 +745,11 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
  */
 static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
-	char *strs[100], *p, buf[100], c;
+	char *strs[100], buf[100], c;
+	const char *context;
 	int i, j, k, n, res, vmajor, vminor;
 	float f;
-	time_t t;
 	unsigned int t1;
-	struct ast_tm localtm;
-
 	n = finddelim(varcmd, strs, ARRAY_LEN(strs));
 	if (n < 1) {
 		return;
@@ -752,34 +877,20 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		if (sscanf(strs[1], N_FMT(u), &t1) != 1) {
 			return;
 		}
-		t = t1;
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_TIME", myrpt->name);
-		rpt_localtime(&t, &localtm, myrpt->p.timezone);
-		t1 = rpt_mktime(&localtm, NULL);
-		/* Say the phase of the day is before the time */
-		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
-			p = "rpt/goodmorning";
-		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
-			p = "rpt/goodafternoon";
-		} else {
-			p = "rpt/goodevening";
-		}
-		if (sayfile(mychannel, p) == -1) {
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		if (context) {
+			if (rpt_telem_datastore(mychannel, t1) < 0) {
+				return;
+			}
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
 			return;
 		}
-		/* Say the time is ... */
-		if (sayfile(mychannel, "rpt/thetimeis") == -1) {
-			return;
-		}
-		/* Say the time */
-		res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		}
-		ast_stopstream(mychannel);
+
+		rpt_say_time(mychannel, t1, myrpt->p.timezone);
 		return;
 	}
 	if (!strcasecmp(strs[0], "STATS_VERSION")) {
@@ -1071,8 +1182,8 @@ void *rpt_tele_thread(void *this)
 	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ident, *nodename;
-	time_t t, t1, t_mono, was_mono;
-	struct ast_tm localtm;
+	const char *context;
+	time_t t, t_mono, was_mono;
 	char **strs;
 	int i, j, k, ns, rbimode;
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
@@ -1214,11 +1325,9 @@ void *rpt_tele_thread(void *this)
 			break;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
-		if (ast_exists_extension(mychannel, myrpt->p.telemetry, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
-			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
-			pbx = 1;
-		} else if (ast_exists_extension(mychannel, TELEMETRY, TELEM_TAIL_FILE_EXTN, 1, NULL)) {
-			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, myrpt->p.telemetry);
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		if (context) {
+			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, context);
 			pbx = 1;
 		} else if (myrpt->p.tailmessages[0]) {
 			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
@@ -2434,32 +2543,17 @@ treataslocal:
 			break;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_TIME ? "STATS_TIME" : "STATS_TIME_LOCAL");
-		t = time(NULL);
-		rpt_localtime(&t, &localtm, myrpt->p.timezone);
-		t1 = rpt_mktime(&localtm, NULL);
-		/* Say the phase of the day is before the time */
-		if ((localtm.tm_hour >= 0) && (localtm.tm_hour < 12)) {
-			p = "rpt/goodmorning";
-		} else if ((localtm.tm_hour >= 12) && (localtm.tm_hour < 18)) {
-			p = "rpt/goodafternoon";
-		} else {
-			p = "rpt/goodevening";
-		}
-		if (sayfile(mychannel, p) == -1) {
-			imdone = 1;
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		if (context) {
+			if (rpt_telem_datastore(mychannel, time(NULL)) < 0) {
+				imdone = 1;
+				break;
+			}
+			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
+			pbx = 1;
 			break;
 		}
-		/* Say the time is ... */
-		if (sayfile(mychannel, "rpt/thetimeis") == -1) {
-			imdone = 1;
-			break;
-		}
-		/* Say the time */
-		res = ast_say_time(mychannel, t1, "", ast_channel_language(mychannel));
-		if (!res) {
-			res = ast_waitstream(mychannel, "");
-		}
-		ast_stopstream(mychannel);
+		rpt_say_time(mychannel, time(NULL), myrpt->p.timezone);
 		imdone = 1;
 		break;
 	case STATS_VERSION:

@@ -1,3 +1,4 @@
+#define TELEM_DATASTORE "telemetry"
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 
@@ -13,3 +14,13 @@ void *rpt_tele_thread(void *this);
 
 /*! \brief More repeater telemetry routines. */
 void rpt_telemetry(struct rpt *myrpt, int mode, void *data);
+
+/*!
+ * \brief Register telemetry function
+ */
+int rpt_init_telemetry(void);
+
+/* !
+ * \brief Unregister telemtery functions
+ */
+int rpt_cleanup_telemetry(void);
