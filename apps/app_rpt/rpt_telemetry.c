@@ -66,7 +66,7 @@ static const struct ast_datastore_info telemetry_datastore = {
 static int rpt_telem_datastore(struct ast_channel *chan, time_t t)
 {
 	struct ast_datastore *datastore = ast_datastore_alloc(&telemetry_datastore, NULL);
-	time_t *time_data = NULL;
+	time_t *time_data;
 
 	if (!datastore) {
 		return -1;
@@ -87,7 +87,7 @@ static int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, c
 	time_t *value;
 	datastore = ast_channel_datastore_find(chan, &telemetry_datastore, NULL);
 	if (!datastore || !datastore->data) {
-		ast_copy_string(buf, "", len); /* Causes unixsaytime to "say" current time as a fallback*/
+		ast_copy_string(buf, "", len); /* The empty string causes SayUnixTime to "say" current time as a fallback*/
 		return 0;
 	}
 
