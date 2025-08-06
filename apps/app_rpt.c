@@ -2892,6 +2892,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->tonotify = %d\n", myrpt->tonotify);
 	ast_debug(2, "myrpt->retxtimer = %d\n", myrpt->retxtimer);
 	ast_debug(2, "myrpt->totimer = %d\n", myrpt->totimer);
+	ast_debug(2, "myrpt->toresettimer = %d\n", myrpt->toresettimer);
 	ast_debug(2, "myrpt->tailtimer = %d\n", myrpt->tailtimer);
 	ast_debug(2, "myrpt->tailevent = %d\n", myrpt->tailevent);
 	ast_debug(2, "myrpt->linkactivitytimer = %d\n", myrpt->linkactivitytimer);
@@ -3419,6 +3420,7 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 	if (!myrpt->p.s[myrpt->p.sysstate_cur].totdisable) {
 		update_timer(&myrpt->totimer, elap, 0);
 	}
+	update_timer(&myrpt->toresettimer, elap, 0);
 	update_timer(&myrpt->idtimer, elap, 0);
 	update_timer(&myrpt->tmsgtimer, elap, 0);
 	update_timer(&myrpt->voxtotimer, elap, 0);
@@ -5006,15 +5008,23 @@ static void *rpt(void *this)
 		}
 		/* add in parrot stuff */
 		totx = totx || (myrpt->parrotstate > 1);
-		/* Reset time out timer variables if there is no activity */
-		if (!totx) {
+
+		/* we are timed out and wanting to transmit, activate time out reset timer delaying reset of totimer. */
+		if (!myrpt->totimer && totx) {
+			myrpt->toresettimer = myrpt->p.toresettime;
+		}
+		/* Delay of timeout timer reset
+		 * Reset the timeout timer if:
+		 * 1 - We are NOT wanting to transmit (totx) AND are NOT currently timed out (totimer) OR not configured to delay timeout
+		 * reset 2 - If we ARE configured to delay timeout reset AND the timeout reset timer is complete
+		 */
+		if ((!totx && (myrpt->totimer || !myrpt->p.toresettime)) || (!myrpt->totimer && !myrpt->toresettimer && myrpt->p.toresettime)) {
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
 			myrpt->tonotify = 0;
-		} else {
-			myrpt->tailtimer = myrpt->p.s[myrpt->p.sysstate_cur].alternatetail ? myrpt->p.althangtime :	/* Initialize tail timer */
-				myrpt->p.hangtime;
-
+		} else if (totx) {
+			myrpt->tailtimer = myrpt->p.s[myrpt->p.sysstate_cur].alternatetail ? myrpt->p.althangtime : /* Initialize tail timer */
+								   myrpt->p.hangtime;
 		}
 		/* if in 1/2 or 3/4 duplex, give rx priority */
 		if ((myrpt->p.duplex < 2) && (myrpt->keyed) && (!myrpt->p.linktolink) && (!myrpt->p.dias))
@@ -5031,7 +5041,7 @@ static void *rpt(void *this)
 		}
 
 		/* If unkey and re-key, reset time out timer */
-		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed)) {
+		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed) && !myrpt->toresettimer) {
 			myrpt->tounkeyed = 1;
 		}
 		if ((!totx) && (!myrpt->totimer) && myrpt->tounkeyed && myrpt->keyed) {
