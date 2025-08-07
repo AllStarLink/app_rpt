@@ -89,10 +89,11 @@
 #define PP_IOPORT 0x378
 #define RPT_TO_STRING(x) #x
 #define S_FMT(x) "%" RPT_TO_STRING(x) "s "
-#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
-#define RX_ON_DELAY_MAX 60000 /* in ms, 60000ms, 60 seconds, 1 minute */
-#define TX_OFF_DELAY_MAX 60000 /* in ms 60000ms, 60 seconds, 1 minute */
-#define MS_TO_20MS_TICKS(ms) ((ms) / 20)
+#define N_FMT(duf) "%30" #duf				   /* Maximum sscanf conversion to numeric strings */
+#define RX_ON_DELAY_MAX 60000				   /* in ms, 60000ms, 60 seconds, 1 minute */
+#define TX_OFF_DELAY_MAX 60000				   /* in ms 60000ms, 60 seconds, 1 minute */
+#define MS_PER_FRAME 20						   /* 20 ms frames */
+#define MS_TO_FRAMES(ms) ((ms) / MS_PER_FRAME) /* convert ms to frames */
 
 #include "./xpmr/xpmr.h"
 #ifdef HAVE_XPMRX
@@ -2306,8 +2307,8 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			o->txoffcnt = 0; /* If keyed, set this to zero. */
 		} else {
 			o->txoffcnt++;
-			if (o->txoffcnt > MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX)) {
-				o->txoffcnt = MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX); /* Limit the count */
+			if (o->txoffcnt > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
+				o->txoffcnt = MS_TO_FRAMES(TX_OFF_DELAY_MAX); /* Limit the count */
 			}
 		}
 	}
@@ -4184,8 +4185,8 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 	case 'q': /* change rx on delay */
 		if (cmd[1]) {
 			o->rxondelay = atoi(&cmd[1]);
-			if (o->rxondelay > MS_TO_20MS_TICKS(RX_ON_DELAY_MAX)) {
-				o->rxondelay = MS_TO_20MS_TICKS(RX_ON_DELAY_MAX);
+			if (o->rxondelay > MS_TO_FRAMES(RX_ON_DELAY_MAX)) {
+				o->rxondelay = MS_TO_FRAMES(RX_ON_DELAY_MAX);
 			}
 			ast_cli(fd, "RX On Delay From changed to %d\n", o->rxondelay);
 		} else {
@@ -4195,8 +4196,8 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 	case 'r': /* change tx off delay */
 		if (cmd[1]) {
 			o->txoffdelay = atoi(&cmd[1]);
-			if (o->txoffdelay > MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX)) {
-				o->txoffdelay = MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX);
+			if (o->txoffdelay > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
+				o->txoffdelay = MS_TO_FRAMES(TX_OFF_DELAY_MAX);
 			}
 			ast_cli(fd, "TX Off Delay From changed to %d\n", o->txoffdelay);
 		} else {
@@ -5031,12 +5032,12 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		CV_UINT("tracetype", o->tracetype);
 		CV_UINT("tracelevel", o->tracelevel);
 		CV_UINT("rxondelay", o->rxondelay);
-		if (o->rxondelay > MS_TO_20MS_TICKS(RX_ON_DELAY_MAX)) {
-			o->rxondelay = MS_TO_20MS_TICKS(RX_ON_DELAY_MAX);
+		if (o->rxondelay > MS_TO_FRAMES(RX_ON_DELAY_MAX)) {
+			o->rxondelay = MS_TO_FRAMES(RX_ON_DELAY_MAX);
 		}
 		CV_UINT("txoffdelay", o->txoffdelay);
-		if (o->txoffdelay > MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX)) {
-			o->txoffdelay = MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX);
+		if (o->txoffdelay > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
+			o->txoffdelay = MS_TO_FRAMES(TX_OFF_DELAY_MAX);
 		}
 		CV_UINT("area", o->area);
 		CV_STR("ukey", o->ukey);
