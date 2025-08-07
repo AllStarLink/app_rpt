@@ -21,7 +21,7 @@ Thank you!
 
 Note: This is an optional step. If you are touching existing code in a few places, then it is best to skip prettifying and just let the commit checker check for conformance to the coding standards. 
 
-If 'clang_format' isn't already installed, install `clang_format` on your development system.  
+If `clang-format` isn't already installed, install `clang-format` on your development system.  
 
 From the top level project directory run:
 
