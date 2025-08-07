@@ -19,7 +19,14 @@ Thank you!
 
 ## Prettifying
 
-`indent --k-and-r-style --use-tabs --tab-size4 --braces-on-if-line --cuddle-else --dont-break-function-decl-args --line-length120 --swallow-optional-blank-lines apps/app_rpt.c`
+Note: This is an optional step. If you are touching existing code in a few places, then it is best to skip prettifying and just let the commit checker check for conformance to the coding standards. 
+
+If 'clang_format' isn't already installed, install `clang_format` on your development system.  
+
+From the top level project directory run:
+
+`clang_format -style file:.dev/.clang_format your_file > your_prettified_file`
+
 
 # Installing
 
