@@ -25,7 +25,7 @@ If 'clang_format' isn't already installed, install `clang_format` on your develo
 
 From the top level project directory run:
 
-`clang_format -style file:.dev/.clang_format your_file > your_prettified_file`
+`clang-format -style file:.dev/.clang-format your_file > your_prettified_file`
 
 
 # Installing
