@@ -2307,7 +2307,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		} else {
 			o->txoffcnt++;
 			if (o->txoffcnt > MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX)) {
-				o->txoffcnt = MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX); /* Cap this timer at 3000 - 60 seconds */
+				o->txoffcnt = MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX); /* Limit the count */
 			}
 		}
 	}

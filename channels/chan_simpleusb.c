@@ -2290,7 +2290,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		} else {
 			o->txoffcnt++;
 			if (o->txoffcnt > MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX)) {
-				o->txoffcnt = MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX); /* Cap this timer at 20000 - 400 seconds */
+				o->txoffcnt = MS_TO_20MS_TICKS(TX_OFF_DELAY_MAX); /* limit count */
 			}
 		}
 	}
