@@ -21,12 +21,13 @@ Thank you!
 
 Note: This is an optional step. If you are touching existing code in a few places, then it is best to skip prettifying and just let the commit checker check for conformance to the coding standards. 
 
-If `clang-format` isn't already installed, install `clang-format` on your development system.  
+After installing clang-format and codespell, set up the pre-commit workflow.
 
-From the top level project directory run:
+From the top level project directory, execute:
 
-`clang-format -style file:.dev/.clang-format your_file > your_prettified_file`
+`cp ./.dev/pre-commit ./.git/hooks/pre-commit`
 
+This will enable coding standards to be checked locally.
 
 # Installing
 
