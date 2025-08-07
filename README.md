@@ -19,7 +19,15 @@ Thank you!
 
 ## Prettifying
 
-`indent --k-and-r-style --use-tabs --tab-size4 --braces-on-if-line --cuddle-else --dont-break-function-decl-args --line-length120 --swallow-optional-blank-lines apps/app_rpt.c`
+Note: This is an optional step. If you are touching existing code in a few places, then it is best to skip prettifying and just let the commit checker check for conformance to the coding standards. 
+
+After installing clang-format and codespell, set up the pre-commit workflow.
+
+From the top level project directory, execute:
+
+`cp ./.dev/pre-commit ./.git/hooks/pre-commit`
+
+This will enable coding standards to be checked locally.
 
 # Installing
 
