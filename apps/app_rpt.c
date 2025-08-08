@@ -4223,13 +4223,14 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 }
 
 /*! \retval -1 to exit and terminate the node, 0 to continue */
-static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, int *restrict totx_p, char *restrict myfirst)
+static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, char *restrict myfirst)
 {
 	struct rpt_link *l, *m;
 	struct ast_frame wf = {
 		.frametype = AST_FRAME_CNG,
 		.src = __PRETTY_FUNCTION__,
 	};
+	int totx;
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
 	l = myrpt->links.next;
@@ -4264,18 +4265,18 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			if (myrpt->patchvoxalways)
 				mycalltx = mycalltx && ((!myrpt->voxtostate) && myrpt->wasvox);
 #endif
-			*totx_p = ((l->isremote) ? (remnomute) : (myrpt->localtx && myrpt->totimer) || mycalltx) || remrx;
+			totx = ((l->isremote) ? (remnomute) : (myrpt->localtx && myrpt->totimer) || mycalltx) || remrx;
 
 			/* foop */
 			if ((!l->lastrx) && altlink(myrpt, l))
-				*totx_p = myrpt->txkeyed;
+				totx = myrpt->txkeyed;
 			if (altlink1(myrpt, l))
-				*totx_p = 1;
-			l->wouldtx = *totx_p;
+				totx = 1;
+			l->wouldtx = totx;
 			if (l->mode != MODE_TRANSCEIVE)
-				*totx_p = 0;
-			if (l->phonemode == 0 && l->chan && (l->lasttx != *totx_p)) {
-				if (*totx_p && !l->voterlink) {
+				totx = 0;
+			if (l->phonemode == 0 && l->chan && (l->lasttx != totx)) {
+				if (totx && !l->voterlink) {
 					if (l->link_newkey != RADIO_KEY_NOT_ALLOWED)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
@@ -4285,9 +4286,9 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 						l->last_frame_sent = 0;
 					}
 				}
-				donodelog_fmt(myrpt, *totx_p ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
+				donodelog_fmt(myrpt, totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
 			}
-			l->lasttx = *totx_p;
+			l->lasttx = totx;
 		}
 
 		rpt_mutex_lock(&myrpt->lock);
@@ -5364,7 +5365,7 @@ static void *rpt(void *this)
 			continue;
 		}
 
-		if (process_link_channels(myrpt, who, &totx, &myfirst)) {
+		if (process_link_channels(myrpt, who, &myfirst)) {
 			break;
 		}
 
