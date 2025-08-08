@@ -1299,14 +1299,14 @@ static int beagle_unkey(int fd, int argc, const char *const *argv)
 
 static int rad_rxwait(int fd,int ms)
 {
-fd_set fds;
-struct timeval tv;
+	ast_fdset fds;
+	struct timeval tv;
 
 	FD_ZERO(&fds);
 	FD_SET(fd,&fds);
 	tv.tv_usec = ms * 1000;
 	tv.tv_sec = 0;
-	return(select(fd + 1,&fds,NULL,NULL,&tv));
+	return(ast_select(fd + 1,&fds,NULL,NULL,&tv));
 }
 
 static void tune_rxdisplay(int fd, struct chan_beagle_pvt *o)
