@@ -46,6 +46,12 @@
 #include <sys/mman.h>
 #include <alsa/asoundlib.h>
 
+/* These three defines are merely to get this module to build */
+/* REMOVE when they are resolved */
+#define SND_PCCV_FORMAT_S16_LE		SND_PCM_FORMAT_S16_LE
+#define SND_PCCV_STREAM_CAPTURE		SND_PCM_STREAM_CAPTURE
+#define SND_PCCV_STREAM_PLAYBACK	SND_PCM_STREAM_PLAYBACK
+
 #define DEBUG_CAPTURES	 		1
 
 #define RX_CAP_RAW_FILE			"/tmp/rx_cap_in.pcm"
