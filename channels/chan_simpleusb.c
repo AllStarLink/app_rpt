@@ -129,7 +129,11 @@ static struct ast_jb_conf global_jbconf;
 
 #define	QUEUE_SIZE	5			/* 100 milliseconds of sound card output buffer */
 
-#define CONFIG	"simpleusb.conf"				/* default config file */
+#define CONFIG "simpleusb.conf"				   /* default config file */
+#define RX_ON_DELAY_MAX 60000				   /* in ms, 60000ms, 60 seconds, 1 minute */
+#define TX_OFF_DELAY_MAX 60000				   /* in ms, 60000ms, 60 seconds, 1 minute */
+#define MS_PER_FRAME 20						   /* 20 ms frames */
+#define MS_TO_FRAMES(ms) ((ms) / MS_PER_FRAME) /* convert ms to frames */
 
 /* file handles for writing debug audio packets */
 static FILE *frxcapraw = NULL;
@@ -2286,8 +2290,8 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			o->txoffcnt = 0;		/* If keyed, set this to zero. */
 		} else {
 			o->txoffcnt++;
-			if (o->txoffcnt > 50000) {
-				o->txoffcnt = 20000;	/* Cap this timer at 20000 - 400 seconds */
+			if (o->txoffcnt > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
+				o->txoffcnt = MS_TO_FRAMES(TX_OFF_DELAY_MAX); /* limit count */
 			}
 		}
 	}
@@ -3549,6 +3553,9 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 	case 't':					/* change rx on delay */
 		if (cmd[1]) {
 			o->rxondelay = atoi(&cmd[1]);
+			if (o->rxondelay > MS_TO_FRAMES(RX_ON_DELAY_MAX)) {
+				o->rxondelay = MS_TO_FRAMES(RX_ON_DELAY_MAX);
+			}
 			ast_cli(fd, "RX On Delay From changed to %d\n", o->rxondelay);
 		} else {
 			ast_cli(fd, "RX On Delay is currently %d\n", o->rxondelay);
@@ -3557,6 +3564,9 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 	case 'u':					/* change tx off delay */
 		if (cmd[1]) {
 			o->txoffdelay = atoi(&cmd[1]);
+			if (o->txoffdelay > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
+				o->txoffdelay = MS_TO_FRAMES(TX_OFF_DELAY_MAX);
+			}
 			ast_cli(fd, "TX Off Delay From changed to %d\n", o->txoffdelay);
 		} else {
 			ast_cli(fd, "TX Off Delay is currently %d\n", o->txoffdelay);
@@ -3762,7 +3772,13 @@ static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, con
 		CV_UINT("hdwtype", o->hdwtype);
 		CV_UINT("eeprom", o->wanteeprom);
 		CV_UINT("rxondelay", o->rxondelay);
+		if (o->rxondelay > MS_TO_FRAMES(RX_ON_DELAY_MAX)) {
+			o->rxondelay = MS_TO_FRAMES(RX_ON_DELAY_MAX);
+		}
 		CV_UINT("txoffdelay", o->txoffdelay);
+		if (o->txoffdelay > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
+			o->txoffdelay = MS_TO_FRAMES(TX_OFF_DELAY_MAX);
+		}
 		CV_F("pager", store_pager(o, (char *) v->value));
 		CV_BOOL("plfilter", o->plfilter);
 		CV_BOOL("deemphasis", o->deemphasis);
