@@ -3965,14 +3965,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->paging.tv_usec = 0;
 			}
 		}
-		/* if is a BeagleBoard device */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle")) {
-			/* if message parsable */
-			if (sscanf(f->data.ptr, "GPIO" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
-				snprintf(buf, sizeof(buf), "RPT_BEAGLE_GPIO%d", i);
-				rpt_update_boolean(myrpt, buf, j);
-			}
-		}
 		/* if is a Voter device */
 		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "voter")) {
 			struct rpt_link *l;
@@ -6934,7 +6926,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 	if ((myrpt->p.nlconn) && (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-		!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") || !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
+		!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
 		/* go thru all the specs */
 		for (i = 0; i < myrpt->p.nlconn; i++) {
 			int j, k;
@@ -7370,7 +7362,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 	if ((myrpt->p.nldisc) && (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-		!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") || !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
+		!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
 		/* go thru all the specs */
 		for (i = 0; i < myrpt->p.nldisc; i++) {
 			int j, k;
