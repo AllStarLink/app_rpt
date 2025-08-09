@@ -1688,7 +1688,6 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			break;
 		/* ignore if not a USB channel */
 		if (strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
-			strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") &&
 			strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 				break;
 			}
@@ -1732,7 +1731,6 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			break;
 		/* ignore if not a USB channel */
 		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
-			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") &&
 			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))
 			break;
 		if (argc > 5)
