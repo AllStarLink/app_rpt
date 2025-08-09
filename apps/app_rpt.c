@@ -6925,8 +6925,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		}
 	}
-	if ((myrpt->p.nlconn) && (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-		!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
+	if ((myrpt->p.nlconn) && !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") || !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 		/* go thru all the specs */
 		for (i = 0; i < myrpt->p.nlconn; i++) {
 			int j, k;
@@ -7361,8 +7360,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 	}
-	if ((myrpt->p.nldisc) && (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-		!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
+	if ((myrpt->p.nldisc) && !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") || !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 		/* go thru all the specs */
 		for (i = 0; i < myrpt->p.nldisc; i++) {
 			int j, k;
