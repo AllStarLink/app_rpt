@@ -1005,17 +1005,6 @@ static void *hidthread(void *arg)
 			continue;
 		}
 		o->devicenum = i;
-		/*! \todo this code does not appear to serve any purpose and can be removed after testing */
-#if 0
-		for (aop = &simpleusb_default.next; *aop && (*aop)->name; aop = &((*aop)->next)) {
-			if (strcmp((*(aop))->name, o->name)) {
-				continue;
-			}
-			o->next = (*(aop))->next;
-			*aop = o;
-			break;
-		}
-#endif
 		o->device_error = 0;
 		ast_radio_time(&o->lasthidtime);
 		o->usbass = 1;
