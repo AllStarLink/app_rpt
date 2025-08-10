@@ -747,8 +747,8 @@ void donodelog(struct rpt *myrpt, char *str)
 	ast_mutex_unlock(&nodeloglock);
 }
 
-void __attribute__((format(gnu_printf, 5, 6))) __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func,
-	const char *fmt, ...)
+void __attribute__((format(gnu_printf, 5, 6)))
+__donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func, const char *fmt, ...)
 {
 	va_list ap;
 	char *buf;
