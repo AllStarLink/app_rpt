@@ -364,32 +364,35 @@
 				<optionlist>
 					<option name="X">
 						<para>Normal endpoint mode WITHOUT security check.
-						Only specify this if you have checked security already (like with an IAX2 user/password or something).</para>
+						Only specify this if you have checked security already (like with an IAX2 user/password or
+ something).</para>
 					</option>
 					<option name="R">
 						<para>announce-string[|timeout[|timeout-destination]] - Amateur Radio</para>
-						<para>Reverse Autopatch. Caller is put on hold, and announcement (as specified by the 'announce-string') is played on radio system.
-						Users of radio system can access autopatch, dial specified code, and pick up call. Announce-string is list of names of
-						recordings, or <literal>PARKED</literal> to substitute code for un-parking or <literal>NODE</literal> to substitute node number.</para>
+						<para>Reverse Autopatch. Caller is put on hold, and announcement (as specified by the 'announce-string')
+ is played on radio system. Users of radio system can access autopatch, dial specified code, and pick up call. Announce-string is
+ list of names of recordings, or <literal>PARKED</literal> to substitute code for un-parking or <literal>NODE</literal> to
+ substitute node number.</para>
 					</option>
 					<option name="P">
-						<para>Phone Control mode. This allows a regular phone user to have full control and audio access to the radio system. For the
-						user to have DTMF control, the 'phone_functions' parameter must be specified for the node in 'rpt.conf'. An additional
-						function (cop,6) must be listed so that PTT control is available.</para>
+						<para>Phone Control mode. This allows a regular phone user to have full control and audio access to the
+ radio system. For the user to have DTMF control, the 'phone_functions' parameter must be specified for the node in 'rpt.conf'. An
+ additional function (cop,6) must be listed so that PTT control is available.</para>
 					</option>
 					<option name="D">
-						<para>Dumb Phone Control mode. This allows a regular phone user to have full control and audio access to the radio system. In this
-						mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not generally recommended in
-						this mode), the 'dphone_functions' parameter must be specified for the node in 'rpt.conf'. Otherwise no DTMF control will be
-						available to the phone user.</para>
+						<para>Dumb Phone Control mode. This allows a regular phone user to have full control and audio access to
+ the radio system. In this mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not
+ generally recommended in this mode), the 'dphone_functions' parameter must be specified for the node in 'rpt.conf'. Otherwise no
+ DTMF control will be available to the phone user.</para>
 					</option>
 					<option name="S">
-						<para>Simplex Dumb Phone Control mode. This allows a regular phone user audio-only access to the radio system. In this mode, the
-						transmitter is toggled on and off when the phone user presses the funcchar (*) key on the telephone set. In addition, the transmitter
-						will turn off if the endchar (#) key is pressed. When a user first calls in, the transmitter will be off, and the user can listen for
-						radio traffic. When the user wants to transmit, they press the * key, start talking, then press the * key again or the # key to turn
-						the transmitter off.  No other functions can be executed by the user on the phone when this mode is selected. Note: If your
-						radio system is full-duplex, we recommend using either P or D modes as they provide more flexibility.</para>
+						<para>Simplex Dumb Phone Control mode. This allows a regular phone user audio-only access to the radio
+ system. In this mode, the transmitter is toggled on and off when the phone user presses the funcchar (*) key on the telephone
+ set. In addition, the transmitter will turn off if the endchar (#) key is pressed. When a user first calls in, the transmitter
+ will be off, and the user can listen for radio traffic. When the user wants to transmit, they press the * key, start talking,
+ then press the * key again or the # key to turn the transmitter off.  No other functions can be executed by the user on the phone
+ when this mode is selected. Note: If your radio system is full-duplex, we recommend using either P or D modes as they provide
+ more flexibility.</para>
 					</option>
 					<option name="V">
 						<para>Set Asterisk channel variable for specified node (e.g. Rpt(2000|V|foo=bar))</para>
@@ -419,7 +422,7 @@ struct rpt rpt_vars[MAXRPTS];
 
 static int shutting_down = 0;
 
-static int debug = 7;			/* Set this >0 for extra debug output */
+static int debug = 7; /* Set this >0 for extra debug output */
 static int nrpts = 0;
 
 /* general settings */
@@ -468,7 +471,7 @@ time_t rpt_starttime(void)
 AST_MUTEX_DEFINE_STATIC(nodeloglock);
 
 #ifndef NATIVE_DSP
-static inline void goertzel_sample(goertzel_state_t * s, short sample)
+static inline void goertzel_sample(goertzel_state_t *s, short sample)
 {
 	int v1;
 
@@ -485,7 +488,7 @@ static inline void goertzel_sample(goertzel_state_t * s, short sample)
 	}
 }
 
-static inline void goertzel_update(goertzel_state_t * s, short *samps, int count)
+static inline void goertzel_update(goertzel_state_t *s, short *samps, int count)
 {
 	int i;
 
@@ -494,7 +497,7 @@ static inline void goertzel_update(goertzel_state_t * s, short *samps, int count
 	}
 }
 
-static inline float goertzel_result(goertzel_state_t * s)
+static inline float goertzel_result(goertzel_state_t *s)
 {
 	goertzel_result_t r;
 	r.value = (s->v3 * s->v3) + (s->v2 * s->v2);
@@ -503,20 +506,20 @@ static inline float goertzel_result(goertzel_state_t * s)
 	return (float) r.value * (float) (1 << r.power);
 }
 
-static inline void goertzel_init(goertzel_state_t * s, float freq, int samples)
+static inline void goertzel_init(goertzel_state_t *s, float freq, int samples)
 {
 	s->v2 = s->v3 = s->chunky = 0.0;
 	s->fac = (int) (32768.0 * 2.0 * cos(2.0 * M_PI * freq / TONE_SAMPLE_RATE));
 }
 
-static inline void goertzel_reset(goertzel_state_t * s)
+static inline void goertzel_reset(goertzel_state_t *s)
 {
 	s->v2 = s->v3 = s->chunky = 0.0;
 }
 
 /*
  * Code used to detect tones
-*/
+ */
 
 static void tone_detect_init(tone_detect_state_t *s, int freq, int duration, int amp)
 {
@@ -578,7 +581,7 @@ static void tone_detect_init(tone_detect_state_t *s, int freq, int duration, int
 	ast_debug(1, "Setup tone %d Hz, %d ms, block_size=%d, hits_required=%d\n", freq, duration, s->block_size, s->hits_required);
 }
 
-static int tone_detect(tone_detect_state_t * s, int16_t * amp, int samples)
+static int tone_detect(tone_detect_state_t *s, int16_t *amp, int samples)
 {
 	float tone_energy;
 	int i;
@@ -598,7 +601,7 @@ static int tone_detect(tone_detect_state_t * s, int16_t * amp, int samples)
 
 		for (i = limit, ptr = amp; i > 0; i--, ptr++) {
 			/* signed 32 bit int should be enough to suqare any possible signed 16 bit value */
-			s->energy += (int32_t) * ptr * (int32_t) * ptr;
+			s->energy += (int32_t) *ptr * (int32_t) *ptr;
 
 			goertzel_sample(&s->tone, *ptr);
 		}
@@ -634,7 +637,6 @@ static int tone_detect(tone_detect_state_t * s, int16_t * amp, int samples)
 			} else if (!s->hit_count) {
 				s->hit_count++;
 			}
-
 		}
 
 		if (s->hit_count >= s->hits_required) {
@@ -745,7 +747,8 @@ void donodelog(struct rpt *myrpt, char *str)
 	ast_mutex_unlock(&nodeloglock);
 }
 
-void __attribute__ ((format (gnu_printf, 5, 6))) __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func, const char *fmt, ...)
+void __attribute__((format(gnu_printf, 5, 6)))
+__donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func, const char *fmt, ...)
 {
 	va_list ap;
 	char *buf;
@@ -797,7 +800,7 @@ void rpt_event_process(struct rpt *myrpt)
 		/* start indicating no command to do */
 		cmd = NULL;
 		c = toupper(*argv[1]);
-		if (c == 'E') {			/* if to merely evaluate the statement */
+		if (c == 'E') { /* if to merely evaluate the statement */
 			if (!strncasecmp(v->name, "RPT", 3)) {
 				ast_log(LOG_ERROR, "%s is not a valid name for an event variable!!!!\n", v->name);
 				continue;
@@ -830,12 +833,12 @@ void rpt_event_process(struct rpt *myrpt)
 					return;
 				}
 				var1 = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, cmpvar);
-				var1p = !varp;	/* start with it being opposite */
+				var1p = !varp; /* start with it being opposite */
 				if (var1) {
 					/* set to 1 if var is true */
 					var1p = ((pbx_checkcondition(var1) > 0));
 				}
-//                              pbx_builtin_setvar_helper(myrpt->rxchannel,cmpvar,var);
+				//                              pbx_builtin_setvar_helper(myrpt->rxchannel,cmpvar,var);
 				ast_free(cmpvar);
 				c = toupper(c);
 				if (!strchr("TFNI", c)) {
@@ -843,29 +846,29 @@ void rpt_event_process(struct rpt *myrpt)
 					continue;
 				}
 				switch (c) {
-				case 'N':		/* if no change */
+				case 'N': /* if no change */
 					if (var1 && (varp == var1p))
 						cmd = (char *) v->name;
 					break;
-				case 'I':		/* if didn't exist (initial state) */
+				case 'I': /* if didn't exist (initial state) */
 					if (!var1)
 						cmd = (char *) v->name;
 					break;
-				case 'F':		/* transition to false */
+				case 'F': /* transition to false */
 					if (var1 && (var1p == 1) && (varp == 0))
 						cmd = (char *) v->name;
 					break;
-				case 'T':		/* transition to true */
+				case 'T': /* transition to true */
 					if ((var1p == 0) && (varp == 1))
 						cmd = (char *) v->name;
 					break;
 				}
 			}
 		}
-		if (action == 'V') {	/* set a variable */
+		if (action == 'V') { /* set a variable */
 			pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, cmd ? "1" : "0");
 			continue;
-		} else if (action == 'G') {	/* set a global variable */
+		} else if (action == 'G') { /* set a global variable */
 			pbx_builtin_setvar_helper(NULL, v->name, cmd ? "1" : "0");
 			continue;
 		}
@@ -951,7 +954,8 @@ void rpt_event_process(struct rpt *myrpt)
 	i = 0;
 	ast_debug(2, "Node Variable dump for node %s:\n", myrpt->name);
 	ast_channel_lock(myrpt->rxchannel);
-	AST_LIST_TRAVERSE(ast_channel_varshead(myrpt->rxchannel), newvariable, entries) {
+	AST_LIST_TRAVERSE(ast_channel_varshead(myrpt->rxchannel), newvariable, entries)
+	{
 		i++;
 		ast_debug(2, "   %s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 	}
@@ -1030,19 +1034,12 @@ static void *perform_statpost(void *stats_url)
 		if (*error_buffer) { /* Anything in the error buffer? */
 			ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", (char *) stats_url, error_buffer);
 		} else {
-			ast_log(LOG_WARNING,
-					"statpost to URL '%s' failed with error: %s\n",
-					(char *) stats_url,
-					curl_easy_strerror(res));
+			ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", (char *) stats_url, curl_easy_strerror(res));
 		}
 	} else {
 		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rescode);
 		if (rescode != 200) {
-			ast_log(LOG_WARNING,
-					"statpost to URL '%s' failed with code %ld : %s\n",
-					(char *) stats_url,
-					rescode,
-					ast_str_buffer(response_msg));
+			ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld : %s\n", (char *) stats_url, rescode, ast_str_buffer(response_msg));
 		}
 	}
 	ast_debug(3, "Response: %s\n", ast_str_buffer(response_msg));
@@ -1072,7 +1069,8 @@ static void statpost(struct rpt *myrpt, char *pairs)
 	ast_mutex_unlock(&myrpt->statpost_lock);
 
 	time(&now);
-	snprintf(str, len, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int)now, seq, pairs ? "&" : "", S_OR(pairs, ""));
+	snprintf(str, len, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq,
+		pairs ? "&" : "", S_OR(pairs, ""));
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
 	ast_debug(4, "Making statpost to %s\n", str);
@@ -1161,7 +1159,7 @@ static int topcompar(const void *a, const void *b)
 	return (x->timesince - y->timesince);
 }
 
-#ifdef	__RPT_NOTCH
+#ifdef __RPT_NOTCH
 
 /* rpt filter routine */
 static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
@@ -1514,8 +1512,8 @@ void *rpt_call(void *this)
 }
 
 /*
-* Collect digits one by one until something matches
-*/
+ * Collect digits one by one until something matches
+ */
 static enum rpt_function_response collect_function_digits(struct rpt *myrpt, char *digits, int command_source, struct rpt_link *mylink)
 {
 	int i, rv;
@@ -1527,7 +1525,7 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 
 	ast_debug(7, "digits=%s  source=%d\n", digits, command_source);
 
-	//ast_debug(1, "@@@@ Digits collected: %s, source: %d\n", digits, command_source);
+	// ast_debug(1, "@@@@ Digits collected: %s, source: %d\n", digits, command_source);
 
 	if (command_source == SOURCE_DPHONE) {
 		if (!myrpt->p.dphone_functions)
@@ -1585,7 +1583,7 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 		return DC_ERROR;
 	}
 	functiondigits = digits + strlen(vp->name);
-	rv = (*function_table[i].function) (myrpt, param, functiondigits, command_source, mylink);
+	rv = (*function_table[i].function)(myrpt, param, functiondigits, command_source, mylink);
 	ast_debug(7, "rv=%i\n", rv);
 	return (rv);
 }
@@ -1703,7 +1701,7 @@ static inline void handle_callmode_dialing(struct rpt *myrpt, char c)
 				rpt_telemetry(myrpt, PROC, NULL);
 				rpt_mutex_lock(&myrpt->lock);
 			}
-		} else {			/* otherwise, reset timer */
+		} else { /* otherwise, reset timer */
 			myrpt->calldigittimer = 1;
 		}
 	}
@@ -1847,14 +1845,14 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		mylink->gott = 1;
 
 		/*  If inbound telemetry from a remote node, wake up from sleep if sleep mode is enabled */
-		rpt_mutex_lock(&myrpt->lock);	/* LOCK */
+		rpt_mutex_lock(&myrpt->lock); /* LOCK */
 		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
 			myrpt->sleeptimer = myrpt->p.sleeptime;
 			if (myrpt->sleep) {
 				myrpt->sleep = 0;
 			}
 		}
-		rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
+		rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
 
 		rpt_telemetry(myrpt, VARCMD, dest);
 		return;
@@ -1972,8 +1970,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	if ((iswebtransceiver(mylink)) ||	/* if a WebTransceiver node */
-		(!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))) {	/* or a tlb node */
+	if ((iswebtransceiver(mylink)) ||								  /* if a WebTransceiver node */
+		(!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))) { /* or a tlb node */
 		if (c == myrpt->p.endchar)
 			myrpt->cmdnode[0] = 0;
 		else if (myrpt->cmdnode[0]) {
@@ -2032,7 +2030,6 @@ static inline void cmdnode_helper(struct rpt *myrpt, char *cmd)
 
 static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, char c)
 {
-
 	char cmd[300];
 	int res;
 
@@ -2042,15 +2039,15 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 
 	rpt_mutex_lock(&myrpt->lock);
 
-	if (mylink->phonemode == 3) {	/*If in simplex dumb phone mode */
-		if (c == myrpt->p.endchar) {	/* If end char */
-			mylink->lastrealrx = 0;	/* Keying state = off */
+	if (mylink->phonemode == 3) {	 /*If in simplex dumb phone mode */
+		if (c == myrpt->p.endchar) { /* If end char */
+			mylink->lastrealrx = 0;	 /* Keying state = off */
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
 
-		if (c == myrpt->p.funcchar) {	/* If lead-in char */
-			mylink->lastrealrx = !mylink->lastrealrx;	/* Toggle keying state */
+		if (c == myrpt->p.funcchar) {				  /* If lead-in char */
+			mylink->lastrealrx = !mylink->lastrealrx; /* Toggle keying state */
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
@@ -2177,7 +2174,6 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 	ret = collect_function_digits(myrpt, myrpt->dtmfbuf, src, NULL);
 
 	switch (ret) {
-
 	case DC_INDETERMINATE:
 		res = 0;
 		break;
@@ -2290,15 +2286,15 @@ static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict ke
 {
 	int res;
 
-	if (phonemode == 3) {		/* simplex phonemode, funcchar key/unkey toggle */
+	if (phonemode == 3) { /* simplex phonemode, funcchar key/unkey toggle */
 		if (keyed && *keyed && ((c == myrpt->p.funcchar) || (c == myrpt->p.endchar))) {
-			*keyed = 0;			/* UNKEY */
+			*keyed = 0; /* UNKEY */
 			return 0;
 		} else if (keyed && !*keyed && (c == myrpt->p.funcchar)) {
-			*keyed = 1;			/* KEY */
+			*keyed = 1; /* KEY */
 			return 0;
 		}
-	} else {					/* endchar unkey */
+	} else { /* endchar unkey */
 		if (keyed && *keyed && (c == myrpt->p.endchar)) {
 			*keyed = 0;
 			return DC_INDETERMINATE;
@@ -2524,7 +2520,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 				}
 			}
 		}
-	} else {					/* if simple */
+	} else { /* if simple */
 		if ((!myrpt->callmode) && (c == myrpt->p.funcchar)) {
 			myrpt->callmode = CALLMODE_DIALING;
 			myrpt->patchnoct = 0;
@@ -2551,7 +2547,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 				if (!myrpt->patchquiet)
 					rpt_telemetry(myrpt, PROC, NULL);
 				return;
-			} else {			/* otherwise, reset timer */
+			} else { /* otherwise, reset timer */
 				myrpt->calldigittimer = 1;
 			}
 		}
@@ -2575,9 +2571,9 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 
 static void queue_id(struct rpt *myrpt)
 {
-	if (myrpt->p.idtime) {		/* ID time must be non-zero */
+	if (myrpt->p.idtime) { /* ID time must be non-zero */
 		myrpt->mustid = myrpt->tailid = 0;
-		myrpt->idtimer = myrpt->p.idtime;	/* Reset our ID timer */
+		myrpt->idtimer = myrpt->p.idtime; /* Reset our ID timer */
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telemetry(myrpt, ID, NULL);
 		rpt_mutex_lock(&myrpt->lock);
@@ -2606,12 +2602,12 @@ static void do_scheduler(struct rpt *myrpt)
 		return;
 
 	/* Service the sleep timer */
-	if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {	/* If sleep mode enabled */
+	if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) { /* If sleep mode enabled */
 		if (myrpt->sleeptimer)
 			myrpt->sleeptimer--;
 		else {
 			if (!myrpt->sleep)
-				myrpt->sleep = 1;	/* ZZZZZZ */
+				myrpt->sleep = 1; /* ZZZZZZ */
 		}
 	}
 	/* Service activity timer */
@@ -2620,7 +2616,7 @@ static void do_scheduler(struct rpt *myrpt)
 		/* 30 second warn */
 		if ((myrpt->p.lnkacttime - myrpt->linkactivitytimer == 30) && myrpt->p.lnkacttimerwarn) {
 			ast_debug(5, "Warning user of activity timeout\n");
-			rpt_telemetry(myrpt, LOCALPLAY, (char*) myrpt->p.lnkacttimerwarn);
+			rpt_telemetry(myrpt, LOCALPLAY, (char *) myrpt->p.lnkacttimerwarn);
 		}
 		if (myrpt->linkactivitytimer >= myrpt->p.lnkacttime) {
 			/* Execute lnkactmacro */
@@ -2662,7 +2658,7 @@ static void do_scheduler(struct rpt *myrpt)
 		return;
 	} else if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) { /* Don't schedule if disabled */
 		return;
-	} else if (ast_strlen_zero(myrpt->p.skedstanzaname)) {	/* No stanza means we do nothing */
+	} else if (ast_strlen_zero(myrpt->p.skedstanzaname)) { /* No stanza means we do nothing */
 		return;
 	}
 
@@ -2678,13 +2674,13 @@ static void do_scheduler(struct rpt *myrpt)
 		for (i = 0, vp = value; i < 5; i++) {
 			if (!*vp)
 				break;
-			while ((*vp == ' ') || (*vp == 0x09))	/* get rid of any leading white space */
+			while ((*vp == ' ') || (*vp == 0x09)) /* get rid of any leading white space */
 				vp++;
-			strs[i] = vp;		/* save pointer to beginning of substring */
-			while ((*vp != ' ') && (*vp != 0x09) && (*vp != 0))	/* skip over substring */
+			strs[i] = vp;										/* save pointer to beginning of substring */
+			while ((*vp != ' ') && (*vp != 0x09) && (*vp != 0)) /* skip over substring */
 				vp++;
 			if (*vp)
-				*vp++ = 0;		/* mark end of substring */
+				*vp++ = 0; /* mark end of substring */
 		}
 		ast_debug(7, "i = %d, min = %s, hour = %s, mday=%s, mon=%s, wday=%s\n", i, strs[0], strs[1], strs[2], strs[3], strs[4]);
 		if (i == 5) {
@@ -2702,7 +2698,7 @@ static void do_scheduler(struct rpt *myrpt)
 				continue;
 			ast_debug(1, "Executing scheduler entry %s = %s\n", skedlist->name, skedlist->value);
 			if (atoi(skedlist->name) == 0)
-				return;			/* Zero is reserved for the startup macro */
+				return; /* Zero is reserved for the startup macro */
 			val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.macro, skedlist->name);
 			if (!val) {
 				ast_log(LOG_WARNING, "Scheduler could not find macro %s\n", skedlist->name);
@@ -3078,7 +3074,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
 		 * This if statement executes if the newkeytimer just expired.
-		 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey 
+		 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey
 		 * to RADIO_KEY_ALLOWED_REDUNDANT or RADIO_KEY_NOT_ALLOWED (because then newkeytimer_last == 0 here)
 		 */
 		if (newkeytimer_last > 0 && !l->newkeytimer) { /* Translation: We were timing, and it just expired */
@@ -3089,10 +3085,10 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			 * side should consider either side "keyed" and transmitting... but as I explain below, the lack of sending/receiving
 			 * this can actually lead to a node being improperly keyed).
 			 *
-			 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be superfluous)
-			 * The calling node calls this function once. What this function does is send the text frame NEWKEY1STR to the other side.
-			 * Issue #46 was concerned with a case where this was slightly broken, and the below happened:
-			 * (A = calling node, B = called node)
+			 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be
+			 *superfluous) The calling node calls this function once. What this function does is send the text frame NEWKEY1STR to
+			 *the other side. Issue #46 was concerned with a case where this was slightly broken, and the below happened: (A =
+			 *calling node, B = called node)
 			 *
 			 * A									B
 			 *		<- send_newkey
@@ -3106,22 +3102,25 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			 * Note that the above depiction separates the TX and RX, but there are only 3 text frames involved.
 			 * In issue #46, 3 text frames are sent, but only 2 are really "received".
 			 * And it so happens that the text frame that B doesn't get from A is exactly the text frame
-			 * that is responsible for setting newkeytimer=0 and newkey=RADIO_KEY_NOT_ALLOWED, i.e. if this doesn't happen, 
-			 * then we'll hit the WARNING case in the below if statement.  Because this code sets l->link_newkey to RADIO_KEY_ALLOWED,
-			 * There is an unintended radio keyup.
+			 * that is responsible for setting newkeytimer=0 and newkey=RADIO_KEY_NOT_ALLOWED, i.e. if this doesn't happen,
+			 * then we'll hit the WARNING case in the below if statement.  Because this code sets l->link_newkey to
+			 *RADIO_KEY_ALLOWED, There is an unintended radio keyup.
 			 *
-			 * Note that all of these comments are from spending hours debugging this issue and reverse-engineering, but at this point I'm pretty confident
-			 * about these parts of the code, even though I'm not Jim Dixon and he didn't comment any of this code originally.
+			 * Note that all of these comments are from spending hours debugging this issue and reverse-engineering, but at this
+			 *point I'm pretty confident about these parts of the code, even though I'm not Jim Dixon and he didn't comment any of
+			 *this code originally.
 			 *
-			 * The issue was resolvable by setting jitterbuffer=no in iax.conf. It seems the jitterbuffer was holding received text frames in the JB queue
-			 * until it got something "important" like a voice frame. This is because chan_iax2's jitter buffer was stalling improperly
-			 * until it received a voice frame, because only at that point would it try to begin reading from the jitterbuffer queue. This was fixed
-			 * by falling back to the format negotiated during call setup prior to receiving audio.
+			 * The issue was resolvable by setting jitterbuffer=no in iax.conf. It seems the jitterbuffer was holding received
+			 *text frames in the JB queue until it got something "important" like a voice frame. This is because chan_iax2's
+			 *jitter buffer was stalling improperly until it received a voice frame, because only at that point would it try to
+			 *begin reading from the jitterbuffer queue. This was fixed by falling back to the format negotiated during call setup
+			 *prior to receiving audio.
 			 */
 			if (l->thisconnected) {
 				/* We're connected, but haven't received a NEWKEY1STR text frame yet...
 				 * The newkeytimer expired on a connected (~answered?) node, i.e. handle_link_data hasn't yet gotten called
-				 * to set newkeytimer = 0 and newkey to RADIO_KEY_NOT_ALLOWED, i.e. we haven't received a text frame with NEWKEY1STR over the IAX2 channel yet.
+				 * to set newkeytimer = 0 and newkey to RADIO_KEY_NOT_ALLOWED, i.e. we haven't received a text frame with
+				 * NEWKEY1STR over the IAX2 channel yet.
 				 */
 				if (l->link_newkey == RADIO_KEY_NOT_ALLOWED) {
 					/* This can ripple to have consequences down the line, namely we might start writing voice frames
@@ -3131,20 +3130,21 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 					 * We probably SHOULD just hangup the line right here if we are connected and did not receive the ~!NEWKEY1!
 					 * message as something is wrong with the text messaging part of the connection.
 					 */
-					ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from RADIO_KEY_NOT_ALLOWED to RADIO_KEY_ALLOWED.\n", l);
+					ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from RADIO_KEY_NOT_ALLOWED to RADIO_KEY_ALLOWED.\n",
+						l);
 					l->link_newkey = RADIO_KEY_ALLOWED;
 					if (l->lastrealrx) { /* We were keyed up using newkey mode, need to unkey or we will be stuck keyed up. */
 						rxunkey_helper(myrpt, l);
 					}
 				}
 			} else {
-				/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms (forever! - probably should limit
-				 * the number of retries here) 
+				/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms (forever! - probably should
+				 * limit the number of retries here)
 				 */
 				l->newkeytimer = NEWKEYTIME;
 			}
 		}
-		if ((l->linkmode >1) && (l->linkmode < 0x7ffffffe)) {
+		if ((l->linkmode > 1) && (l->linkmode < 0x7ffffffe)) {
 			update_timer(&l->linkmode, elap, 1);
 		}
 		if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && l->lastrealrx && (!l->rxlingertimer)) {
@@ -3175,7 +3175,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		}
 		l->lastrx = myrx;
 
-		update_timer(&l->linklisttimer,elap, 0);
+		update_timer(&l->linklisttimer, elap, 0);
 
 		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 			struct ast_frame lf;
@@ -3365,20 +3365,11 @@ static inline int do_link_post(struct rpt *myrpt)
 	}
 	time(&now);
 
-	ast_str_append(&str,
-		0,
+	ast_str_append(&str, 0,
 		"&apprptvers=%d.%d.%d&apprptuptime=%d&totalkerchunks=%d&totalkeyups=%d&totaltxtime=%d&timeouts=%d&totalexecdcommands=%d&"
 		"keyed=%d&keytime=%d",
-		VERSION_MAJOR,
-		VERSION_MINOR,
-		VERSION_PATCH,
-		(int) (now - starttime),
-		myrpt->totalkerchunks,
-		myrpt->totalkeyups,
-		(int) myrpt->totaltxtime / 1000,
-		myrpt->timeouts,
-		myrpt->totalexecdcommands,
-		myrpt->keyed,
+		VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, (int) (now - starttime), myrpt->totalkerchunks, myrpt->totalkeyups,
+		(int) myrpt->totaltxtime / 1000, myrpt->timeouts, myrpt->totalexecdcommands, myrpt->keyed,
 		myrpt->lastkeyedtime ? ((int) (now - myrpt->lastkeyedtime)) : 0);
 	rpt_mutex_unlock(&myrpt->lock);
 	statpost(myrpt, ast_str_buffer(str));
@@ -3479,8 +3470,8 @@ static inline void process_command(struct rpt *myrpt)
 {
 	myrpt->cmdAction.state = CMD_STATE_EXECUTING;
 	rpt_mutex_unlock(&myrpt->lock);
-	(*function_table[myrpt->cmdAction.functionNumber].function)(myrpt, myrpt->cmdAction.param,
-		myrpt->cmdAction.digits, myrpt->cmdAction.command_source, NULL);
+	(*function_table[myrpt->cmdAction.functionNumber].function)(myrpt, myrpt->cmdAction.param, myrpt->cmdAction.digits,
+		myrpt->cmdAction.command_source, NULL);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->cmdAction.state = CMD_STATE_IDLE;
 }
@@ -3596,15 +3587,13 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	}
 
 	/* if out voted drop DTMF frames */
-	if (myrpt->p.votermode && !myrpt->votewinner
-		&& (f->frametype == AST_FRAME_DTMF_BEGIN || f->frametype == AST_FRAME_DTMF_END)
-		) {
+	if (myrpt->p.votermode && !myrpt->votewinner && (f->frametype == AST_FRAME_DTMF_BEGIN || f->frametype == AST_FRAME_DTMF_END)) {
 		ast_frfree(f);
 		return 0;
 	}
 
 	if (f->frametype == AST_FRAME_VOICE) {
-#ifdef	_MDC_DECODE_H_
+#ifdef _MDC_DECODE_H_
 		unsigned char ubuf[2560];
 		short *sp;
 		int n;
@@ -3629,7 +3618,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 
 				/* leave f alone */
 				frame = ast_dsp_process(myrpt->rxchannel, myrpt->dsp, ast_frdup(f));
-				i= (frame->frametype == AST_FRAME_DTMF && frame->subclass.integer == 'q') ? 1 : 0; /* q indicates frequency hit */
+				i = (frame->frametype == AST_FRAME_DTMF && frame->subclass.integer == 'q') ? 1 : 0; /* q indicates frequency hit */
 				ast_frfree(frame);
 #else
 				i = tone_detect(&myrpt->burst_tone_state, f->data.ptr, f->samples);
@@ -3659,7 +3648,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->keypost = RPT_KEYPOST_ACTIVE;
 			}
 		}
-#ifdef	_MDC_DECODE_H_
+#ifdef _MDC_DECODE_H_
 		if (!myrpt->reallykeyed) {
 			RPT_MUTE_FRAME(f);
 		}
@@ -3670,7 +3659,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		}
 		n = mdc_decoder_process_samples(myrpt->mdc, ubuf, f->datalen / 2);
 		if (n == 1) {
-
 			unsigned char op, arg;
 			unsigned short unitID;
 			char ustr[16];
@@ -3704,7 +3692,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->lastunit = unitID;
 				snprintf(ustr, sizeof(ustr), "S%04X-%X", unitID, arg & 0xf);
 
-#ifdef	_MDC_ENCODE_H_
+#ifdef _MDC_ENCODE_H_
 				mdc1200_ack_status(myrpt, unitID);
 #endif
 				mdc1200_notify(myrpt, NULL, ustr);
@@ -3735,11 +3723,11 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			}
 		}
 #endif
-#ifdef	__RPT_NOTCH
+#ifdef __RPT_NOTCH
 		/* apply inbound filters, if any */
 		rpt_filter(myrpt, f->data.ptr, f->datalen / 2);
 #endif
-		if ((!myrpt->localtx) &&	/* (!myrpt->p.linktolink) && */
+		if ((!myrpt->localtx) && /* (!myrpt->p.linktolink) && */
 			(!myrpt->localoverride)) {
 			RPT_MUTE_FRAME(f);
 		}
@@ -3760,9 +3748,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			}
 		}
 
-		if (myrpt->p.votertype == 1 && myrpt->vote_counter && (myrpt->rxchankeyed || myrpt->voteremrx)
-			&& (myrpt->p.votermode == 2 || (myrpt->p.votermode == 1 && !myrpt->voter_oneshot))
-			) {
+		if (myrpt->p.votertype == 1 && myrpt->vote_counter && (myrpt->rxchankeyed || myrpt->voteremrx) &&
+			(myrpt->p.votermode == 2 || (myrpt->p.votermode == 1 && !myrpt->voter_oneshot))) {
 			if (--myrpt->vote_counter <= 0) {
 				myrpt->vote_counter = 10;
 				ast_debug(7, "[%s] vote rxrssi=%i\n", myrpt->name, myrpt->rxrssi);
@@ -3780,8 +3767,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			if (((myrpt->p.duplex < 2 && !myrpt->txkeyed) || myrpt->p.duplex == 3) && myrpt->monstream && myrpt->keyed) {
 				ast_writestream(myrpt->monstream, f1);
 			}
-			if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd &&
-				(myrpt->outstreampipe[1] != -1)) {
+			if ((myrpt->p.duplex < 2) && myrpt->keyed && myrpt->p.outstreamcmd && (myrpt->outstreampipe[1] != -1)) {
 				outstream_write(myrpt, f1);
 			}
 			ast_frfree(f1);
@@ -3792,7 +3778,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		myrpt->lastdtmftime = rpt_tvnow();
 	} else if (f->frametype == AST_FRAME_DTMF) {
 		int x;
-		char c = (char) f->subclass.integer;	/* get DTMF char */
+		char c = (char) f->subclass.integer; /* get DTMF char */
 		ast_frfree(f);
 		x = ast_tvdiff_ms(rpt_tvnow(), myrpt->lastdtmftime);
 		if ((myrpt->p.litzcmd) && (x >= myrpt->p.litztime) && strchr(myrpt->p.litzchar, c)) {
@@ -3937,7 +3923,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			donodelog(myrpt, "RXUNKEY,MAIN");
 			rpt_update_boolean(myrpt, "RPT_RXKEYED", 0);
 		}
-	} else if (f->frametype == AST_FRAME_TEXT) {	/* if a message from a USB device */
+	} else if (f->frametype == AST_FRAME_TEXT) { /* if a message from a USB device */
 		char buf[100];
 		int j;
 		/* if is a USRP device */
@@ -3963,14 +3949,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			} else if (!strcmp(f->data.ptr, "ENDPAGE")) {
 				myrpt->paging.tv_sec = 0;
 				myrpt->paging.tv_usec = 0;
-			}
-		}
-		/* if is a BeagleBoard device */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle")) {
-			/* if message parsable */
-			if (sscanf(f->data.ptr, "GPIO" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
-				snprintf(buf, sizeof(buf), "RPT_BEAGLE_GPIO%d", i);
-				rpt_update_boolean(myrpt, buf, j);
 			}
 		}
 		/* if is a Voter device */
@@ -4261,7 +4239,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			l->lastlinktv = now;
 			remnomute = myrpt->localtx && (!(myrpt->cmdnode[0] || (myrpt->dtmfidx > -1)));
 			mycalltx = myrpt->callmode;
-#ifdef	DONT_USE__CAUSES_CLIPPING_OF_FIRST_SYLLABLE_ON_LINK
+#ifdef DONT_USE__CAUSES_CLIPPING_OF_FIRST_SYLLABLE_ON_LINK
 			if (myrpt->patchvoxalways)
 				mycalltx = mycalltx && ((!myrpt->voxtostate) && myrpt->wasvox);
 #endif
@@ -4292,7 +4270,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 		}
 
 		rpt_mutex_lock(&myrpt->lock);
-		if (who == l->chan) {	/* if it was a read from rx */
+		if (who == l->chan) { /* if it was a read from rx */
 			struct ast_frame *f;
 			rpt_mutex_unlock(&myrpt->lock);
 			f = ast_read(l->chan);
@@ -4318,14 +4296,8 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					if (f->data.ptr && (f->samples == f->datalen / 2)) {
 						ast_frame_adjust_volume_float(f, fac);
 					} else {
-						ast_debug(3,
-							"Skip volume adjust on %s, fac = %f, data = %p, datalen = %d, samples = %d, src = %s\n",
-							ast_channel_name(l->chan),
-							fac,
-							f->data.ptr,
-							f->datalen,
-							f->samples,
-							f->src ? f->src : "(nil)");
+						ast_debug(3, "Skip volume adjust on %s, fac = %f, data = %p, datalen = %d, samples = %d, src = %s\n",
+							ast_channel_name(l->chan), fac, f->data.ptr, f->datalen, f->samples, f->src ? f->src : "(nil)");
 					}
 				}
 
@@ -4334,8 +4306,8 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && (!l->lastrealrx)) {
 					rxkey_helper(myrpt, l);
 				}
-				if (((l->phonemode) && (l->phonevox)) || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
-					|| (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb"))) {
+				if (((l->phonemode) && (l->phonevox)) || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")) ||
+					(!strcasecmp(ast_channel_tech(l->chan)->type, "tlb"))) {
 					struct ast_frame *f1;
 					if (l->phonevox) {
 						int x;
@@ -4385,8 +4357,8 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					ismuted = rpt_conf_get_muted(l->chan, myrpt);
 					/* if not receiving, zero-out audio */
 					ismuted |= (!l->lastrx);
-					if (l->dtmfed && (l->phonemode || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
-						|| (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")))) {
+					if (l->dtmfed && (l->phonemode || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")) ||
+										 (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")))) {
 						ismuted = 1;
 					}
 					l->dtmfed = 0;
@@ -4488,26 +4460,21 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					if (f->data.ptr && (f->samples == f->datalen / 2)) {
 						ast_frame_adjust_volume_float(f, fac);
 					} else {
-						ast_debug(3,
-							"Skip volume adjust on %s, fac = %f, data = %p, datalen = %d, samples = %d, src = %s\n",
-							ast_channel_name(l->chan),
-							fac,
-							f->data.ptr,
-							f->datalen,
-							f->samples,
-							f->src ? f->src : "(nil)");
+						ast_debug(3, "Skip volume adjust on %s, fac = %f, data = %p, datalen = %d, samples = %d, src = %s\n",
+							ast_channel_name(l->chan), fac, f->data.ptr, f->datalen, f->samples, f->src ? f->src : "(nil)");
 					}
 				}
 				/* foop */
-				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) && ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) &&
+					((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
 					/* Reverse-engineering comments from NA debugging issue #46:
-					 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey is set to != RADIO_KEY_NOT_ALLOWED yet.
-					 * This happens when the reset code forces it to RADIO_ALLOWED.
-					 * Of course if handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some point, we'll
-					 * set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info), 
+					 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey is set
+					 * to != RADIO_KEY_NOT_ALLOWED yet. This happens when the reset code forces it to RADIO_ALLOWED. Of course if
+					 * handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some
+					 * point, we'll set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info),
 					 * If this happens, we're passing voice frames and now sending AST_READIO_KEY messages
 					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
-					 * 
+					 *
 					 */
 					ast_write(l->chan, f);
 					l->last_frame_sent = 1;
@@ -4541,8 +4508,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 		if (((myrpt->p.duplex > 1 && myrpt->p.duplex != 3) || (myrpt->txkeyed && !myrpt->keyed)) && myrpt->monstream) {
 			ast_writestream(myrpt->monstream, f);
 		}
-		if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) && myrpt->p.outstreamcmd
-			&& (myrpt->outstreampipe[1] != -1)) {
+		if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) && myrpt->p.outstreamcmd && (myrpt->outstreampipe[1] != -1)) {
 			outstream_write(myrpt, f);
 		}
 		l = myrpt->links.next;
@@ -4878,7 +4844,7 @@ static void *rpt(void *this)
 
 			rpt_mutex_lock(&myrpt->lock);
 			l = myrpt->links.next;
-			myrpt->voteremrx = 0;	/* no voter remotes keyed */
+			myrpt->voteremrx = 0; /* no voter remotes keyed */
 			while (l != &myrpt->links) {
 				if (l->chan) {
 					ast_sendtext(l->chan, tmpstr);
@@ -4898,32 +4864,32 @@ static void *rpt(void *this)
 				myrpt->remrx = 1;
 				if (l->voterlink)
 					myrpt->voteremrx = 1;
-				if ((l->name[0] > '0') && (l->name[0] <= '9'))	/* Ignore '0' nodes */
-					strcpy(myrpt->lastnodewhichkeyedusup, l->name);	/* Note the node which is doing the key up */
+				if ((l->name[0] > '0') && (l->name[0] <= '9'))		/* Ignore '0' nodes */
+					strcpy(myrpt->lastnodewhichkeyedusup, l->name); /* Note the node which is doing the key up */
 			}
 			l = l->next;
 		}
-		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {	/* If sleep mode enabled */
-			if (myrpt->remrx) {	/* signal coming from net wakes up system */
-				myrpt->sleeptimer = myrpt->p.sleeptime;	/* reset sleep timer */
-				if (myrpt->sleep) {	/* if asleep, then awake */
+		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) { /* If sleep mode enabled */
+			if (myrpt->remrx) {							  /* signal coming from net wakes up system */
+				myrpt->sleeptimer = myrpt->p.sleeptime;	  /* reset sleep timer */
+				if (myrpt->sleep) {						  /* if asleep, then awake */
 					myrpt->sleep = 0;
 				}
-			} else if (myrpt->keyed) {	/* if signal on input */
-				if (!myrpt->sleep) {	/* if not sleeping */
-					myrpt->sleeptimer = myrpt->p.sleeptime;	/* reset sleep timer */
+			} else if (myrpt->keyed) {						/* if signal on input */
+				if (!myrpt->sleep) {						/* if not sleeping */
+					myrpt->sleeptimer = myrpt->p.sleeptime; /* reset sleep timer */
 				}
 			}
 
 			if (myrpt->sleep)
-				myrpt->localtx = 0;	/* No RX if asleep */
+				myrpt->localtx = 0; /* No RX if asleep */
 			else
-				myrpt->localtx = myrpt->keyed;	/* Set localtx to keyed state if awake */
+				myrpt->localtx = myrpt->keyed; /* Set localtx to keyed state if awake */
 		} else {
-			myrpt->localtx = myrpt->keyed;	/* If sleep disabled, just copy keyed state to localrx */
+			myrpt->localtx = myrpt->keyed; /* If sleep disabled, just copy keyed state to localrx */
 		}
 		/* Create a "must_id" flag for the cleanup ID */
-		if (myrpt->p.idtime)	/* ID time must be non-zero */
+		if (myrpt->p.idtime) /* ID time must be non-zero */
 			myrpt->mustid |= (myrpt->idtimer) && (myrpt->keyed || myrpt->remrx);
 		if (myrpt->keyed || myrpt->remrx) {
 			/* Set the inactivity was keyed flag and reset its timer */
@@ -4967,16 +4933,16 @@ static void *rpt(void *this)
 				continue;
 			}
 			if ((telem->mode == ID) || (telem->mode == IDTALKOVER)) {
-				identqueued = 1;	/* Identification telemetry */
+				identqueued = 1; /* Identification telemetry */
 			} else if (telem->mode == TAILMSG) {
-				tailmessagequeued = 1;	/* Tail message telemetry */
+				tailmessagequeued = 1; /* Tail message telemetry */
 			} else if ((telem->mode == STATS_TIME_LOCAL) || (telem->mode == LOCALPLAY)) {
-				localmsgqueued = 1;	/* Local message */
+				localmsgqueued = 1; /* Local message */
 			} else {
 				if ((telem->mode != UNKEY) && (telem->mode != LINKUNKEY))
-					othertelemqueued = 1;	/* Other telemetry */
+					othertelemqueued = 1; /* Other telemetry */
 				else
-					ctqueued = 1;	/* Courtesy tone telemetry */
+					ctqueued = 1; /* Courtesy tone telemetry */
 			}
 			telem = telem->next;
 		}
@@ -5004,8 +4970,8 @@ static void *rpt(void *this)
 		totx = totx || is_paging(myrpt);
 		/* If full duplex, add local dtmf stuff active */
 		if (myrpt->p.duplex > 1) {
-			totx = totx ||		/* (myrpt->dtmfidx > -1) || */
-				(myrpt->cmdnode[0] && strcmp(myrpt->cmdnode, "aprstt"));
+			totx = totx || /* (myrpt->dtmfidx > -1) || */
+				   (myrpt->cmdnode[0] && strcmp(myrpt->cmdnode, "aprstt"));
 		}
 		/* add in parrot stuff */
 		totx = totx || (myrpt->parrotstate > 1);
@@ -5095,7 +5061,7 @@ static void *rpt(void *this)
 			if (hasid && !hastalkover) {
 				ast_debug(6, "Tracepoint IDTALKOVER\n");
 				rpt_mutex_unlock(&myrpt->lock);
-				rpt_telemetry(myrpt, IDTALKOVER, NULL);	/* Start Talkover ID */
+				rpt_telemetry(myrpt, IDTALKOVER, NULL); /* Start Talkover ID */
 				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
@@ -5108,7 +5074,7 @@ static void *rpt(void *this)
 		if (((myrpt->mustid) || (myrpt->p.beaconing)) && (!myrpt->idtimer))
 			queue_id(myrpt);
 
-		if ((myrpt->p.idtime && totx && (!myrpt->exttx) && (myrpt->idtimer <= myrpt->p.politeid) && myrpt->tailtimer)) {	/* ID time must be non-zero */
+		if ((myrpt->p.idtime && totx && (!myrpt->exttx) && (myrpt->idtimer <= myrpt->p.politeid) && myrpt->tailtimer)) { /* ID time must be non-zero */
 			myrpt->tailid = 1;
 		}
 
@@ -5151,8 +5117,8 @@ static void *rpt(void *this)
 		}
 		time(&t);
 		/* if DTMF timeout */
-		if (((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt"))) && (myrpt->dtmfidx >= 0)
-			&& ((myrpt->dtmf_time + DTMF_TIMEOUT) < t)) {
+		if (((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt"))) && (myrpt->dtmfidx >= 0) &&
+			((myrpt->dtmf_time + DTMF_TIMEOUT) < t)) {
 			cancel_pfxtone(myrpt);
 			myrpt->inpadtest = 0;
 			myrpt->dtmfidx = -1;
@@ -5227,7 +5193,7 @@ static void *rpt(void *this)
 				if (IS_DAHDI_CHAN(myrpt->rxchannel)) {
 					dahdi_radio_set_ctcss_encode(myrpt->dahdirxchannel, !x);
 				} else if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-					!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+						   !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
 					snprintf(str, sizeof(str), "TXCTCSS %d", !(!x));
 					ast_sendtext(myrpt->rxchannel, str);
 				}
@@ -5320,7 +5286,7 @@ static void *rpt(void *this)
 				break;
 			}
 		}
-		if (myrpt->cmdAction.state == CMD_STATE_READY) {	/* there is a command waiting to be processed */
+		if (myrpt->cmdAction.state == CMD_STATE_READY) { /* there is a command waiting to be processed */
 			process_command(myrpt);
 		}
 
@@ -5343,22 +5309,22 @@ static void *rpt(void *this)
 		}
 		/* @@@@@@ UNLOCK @@@@@ */
 
-		if (who == myrpt->rxchannel) {	/* if it was a read from rx */
+		if (who == myrpt->rxchannel) { /* if it was a read from rx */
 			if (rxchannel_read(myrpt, lasttx)) {
 				break;
 			}
 			continue;
-		} else if (who == myrpt->pchannel) {	/* if it was a read from pseudo */
+		} else if (who == myrpt->pchannel) { /* if it was a read from pseudo */
 			if (pchannel_read(myrpt)) {
 				break;
 			}
 			continue;
-		} else if (who == myrpt->txchannel) {	/* if it was a read from tx */
+		} else if (who == myrpt->txchannel) { /* if it was a read from tx */
 			if (txchannel_read(myrpt)) {
 				break;
 			}
 			continue;
-		} else if (who == myrpt->dahditxchannel) {	/* if it was a read from pseudo-tx */
+		} else if (who == myrpt->dahditxchannel) { /* if it was a read from pseudo-tx */
 			if (dahditxchannel_read(myrpt, &myfirst)) {
 				break;
 			}
@@ -5381,7 +5347,7 @@ static void *rpt(void *this)
 			if (voxchannel_read(myrpt)) {
 				break;
 			}
-		} else if (who == myrpt->txpchannel) {	/* if it was a read from remote tx */
+		} else if (who == myrpt->txpchannel) { /* if it was a read from remote tx */
 			if (txpchannel_read(myrpt)) {
 				break;
 			}
@@ -5475,7 +5441,7 @@ static int load_config(int reload)
 		} else if (!strcasecmp(val, "file")) {
 			rpt_node_lookup_method = LOOKUP_FILE;
 		} else {
-			ast_log(LOG_WARNING,"Configuration error: node_lookup_method, %s, is not valid", val);
+			ast_log(LOG_WARNING, "Configuration error: node_lookup_method, %s, is not valid", val);
 			rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
 		}
 	}
@@ -5585,7 +5551,7 @@ static int load_config(int reload)
 		rpt_vars[n].tele.prev = &rpt_vars[n].tele;
 		rpt_vars[n].rpt_thread = AST_PTHREADT_NULL;
 		rpt_vars[n].tailmessagen = 0;
-#ifdef	_MDC_DECODE_H_
+#ifdef _MDC_DECODE_H_
 		rpt_vars[n].mdc = mdc_decoder_new(8000);
 #endif
 		if (reload) {
@@ -5637,7 +5603,7 @@ static void *rpt_master(void *ignore)
 			continue;
 		} else { /* is a normal repeater */
 			rpt_vars[i].p.memory = rpt_vars[i].name;
-			if (retrieve_memory(&rpt_vars[i], "radiofreq")) {	/* Try to retrieve initial memory channel */
+			if (retrieve_memory(&rpt_vars[i], "radiofreq")) { /* Try to retrieve initial memory channel */
 				if (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX450)) {
 					ast_copy_string(rpt_vars[i].freq, "446.500", sizeof(rpt_vars[i].freq));
 				} else if (!strcmp(rpt_vars[i].remoterig, REMOTE_RIG_RTX150)) {
@@ -5716,7 +5682,7 @@ static void *rpt_master(void *ignore)
 				/* The outstreamcmd has exited (probably because it failed).
 				 * Clean up the child before moving on, and don't reattempt if we fail twice. */
 				time(&rpt_vars[i].outstreamlasterror); /* Keep track that it just exited */
-				rpt_vars[i].outstreampid = 0; /* In case we continue, reset */
+				rpt_vars[i].outstreampid = 0;		   /* In case we continue, reset */
 			} else {
 				continue;
 			}
@@ -5737,7 +5703,7 @@ static void *rpt_master(void *ignore)
 
 			ast_mutex_lock(&nodeloglock);
 			nodep = nodelog.next;
-			if (nodep == &nodelog) {	/* if nothing in queue */
+			if (nodep == &nodelog) { /* if nothing in queue */
 				ast_mutex_unlock(&nodeloglock);
 				break;
 			}
@@ -5818,7 +5784,8 @@ done:
 	pthread_exit(NULL);
 }
 
-static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed, const int phone_mode, const int phone_vox, char *restrict myfirst, int *restrict dtmfed)
+static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed, const int phone_mode,
+	const int phone_vox, char *restrict myfirst, int *restrict dtmfed)
 {
 	struct ast_frame *f = ast_read(chan);
 	if (!f) {
@@ -6025,7 +5992,9 @@ static int parse_caller(const char *b1, const char *hisip, char *s)
 	}
 	if (strcmp(s2, "NONE")) {
 		char nodeip[100];
-		struct ast_sockaddr addr = { {0,} };
+		struct ast_sockaddr addr = { {
+			0,
+		} };
 		if (ast_sockaddr_resolve_first_af(&addr, s2, PARSE_PORT_FORBID, AF_UNSPEC)) {
 			ast_log(LOG_WARNING, "Reported node %s, name %s cannot be found!!\n", b1, s2);
 			return -1;
@@ -6245,7 +6214,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_forward(chan, s1, b1);
 				return -1;
 			}
-			if (!strcmp(myadr, s2)) {	/* if we have it.. */
+			if (!strcmp(myadr, s2)) { /* if we have it.. */
 				char tmp2[512];
 
 				strcpy(tmp2, tmp);
@@ -6369,7 +6338,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 #endif
-		if ((myrpt->p.s[myrpt->p.sysstate_cur].txdisable) || myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns) {	/* Do not allow incoming radio connections if disabled or noincomingconns is set */
+		if ((myrpt->p.s[myrpt->p.sysstate_cur].txdisable) ||
+			myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns) { /* Do not allow incoming radio connections if disabled or noincomingconns is set */
 			ast_log(LOG_NOTICE, "Connect attempt to node %s  with tx disabled or NOICE cop function active", myrpt->name);
 			return -1;
 		}
@@ -6377,7 +6347,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (options && (*options == 'R')) {
 		/* Parts of this section taken from app_parkandannounce */
 		char *return_context;
-		//int l, m, lot, timeout = 0;
+		// int l, m, lot, timeout = 0;
 		int l, timeout = 0;
 		enum patch_call_mode callmode;
 		char tmp[256], *template;
@@ -6452,37 +6422,35 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				ast_channel_exten_set(chan, exten);
 			if (context)
 				ast_channel_context_set(chan, context);
-		} else {				/* increment the priority by default */
+		} else { /* increment the priority by default */
 			ast_channel_priority_set(chan, ast_channel_priority(chan) + 1);
 		}
 
 		ast_verb(3, "Return Context: (%s,%s,%d) ID: %s\n", ast_channel_context(chan), ast_channel_exten(chan),
 			ast_channel_priority(chan), ast_channel_caller(chan)->id.number.str);
-		if (!ast_exists_extension
-			(chan, ast_channel_context(chan), ast_channel_exten(chan), ast_channel_priority(chan),
-			 ast_channel_caller(chan)->id.number.str)) {
+		if (!ast_exists_extension(chan, ast_channel_context(chan), ast_channel_exten(chan), ast_channel_priority(chan),
+				ast_channel_caller(chan)->id.number.str)) {
 			ast_log(LOG_WARNING, "Return Context Invalid, call will return to default|s\n");
 		}
 
-		/* we are using masq_park here to protect * from touching the channel once we park it.  If the channel comes out of timeout
-		   before we are done announcing and the channel is messed with, Kablooeee.  So we use Masq to prevent this.  */
+		/* we are using masq_park here to protect * from touching the channel once we park it.  If the channel comes out of
+		   timeout before we are done announcing and the channel is messed with, Kablooeee.  So we use Masq to prevent this.  */
 
 		/*! \todo the parking API changed a while ago, this all needs to be completely redone here */
 		// old way: https://github.com/asterisk/asterisk/blob/1.8/apps/app_parkandannounce.c
 		// new way: https://github.com/asterisk/asterisk/blob/master/res/parking/parking_applications.c#L890
 
-		//ast_masq_park_call(chan, NULL, timeout, &lot); // commented out to avoid compiler error.
+		// ast_masq_park_call(chan, NULL, timeout, &lot); // commented out to avoid compiler error.
 
-		//ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context);
+		// ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context);
 
-		//snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1);
+		// snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1);
 
 		rpt_telemetry(myrpt, REV_PATCH, tmp);
 
 		ast_free(orig_s);
 
 		return 0;
-
 	}
 	i = 0;
 	if (!strcasecmp(ast_channel_tech(chan)->type, "echolink")) {
@@ -6494,7 +6462,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (!options && !i) {
 		char hisip[100] = "";
 		/* look at callerid to see what node this comes from */
-		if (!ast_channel_caller(chan)->id.number.str) {	/* if doesn't have caller id */
+		if (!ast_channel_caller(chan)->id.number.str) { /* if doesn't have caller id */
 			ast_log(LOG_WARNING, "Does not have callerid on %s\n", tmp);
 			return -1;
 		}
@@ -6553,7 +6521,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		gettimeofday(&myrpt->lastlinktime, NULL);
 		rpt_mutex_unlock(&myrpt->lock);
 		/* look at callerid to see what node this comes from */
-		if (!ast_channel_caller(chan)->id.number.str) {	/* if doesn't have caller id */
+		if (!ast_channel_caller(chan)->id.number.str) { /* if doesn't have caller id */
 			ast_log(LOG_WARNING, "Doesn't have callerid on %s\n", tmp);
 			return -1;
 		}
@@ -6563,7 +6531,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (callstr)
 				b1 = callstr;
 		} else {
-			//b = chan->cid.cid_name;
+			// b = chan->cid.cid_name;
 			b = ast_channel_caller(chan)->id.name.str;
 			b1 = ast_channel_caller(chan)->id.number.str;
 			ast_shrink_phone_number(b1);
@@ -6579,7 +6547,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (!isdigit(b1[i]))
 				break;
 		}
-		if (!b1[i]) {			/* if not a call-based node number */
+		if (!b1[i]) { /* if not a call-based node number */
 			rpt_mutex_lock(&myrpt->lock);
 			l = myrpt->links.next;
 			/* try to find this one in queue */
@@ -6632,7 +6600,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->rxlingertimer = RX_LINGER_TIME;
 		l->newkeytimer = NEWKEYTIME;
 		l->link_newkey = RADIO_KEY_ALLOWED;
-		if ((!phone_mode) && (l->name[0] != '0') && strcasecmp(ast_channel_tech(chan)->type, "echolink") && strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
+		if ((!phone_mode) && (l->name[0] != '0') && strcasecmp(ast_channel_tech(chan)->type, "echolink") &&
+			strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
 			l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		}
 		ast_debug(7, "newkey: %d\n", l->link_newkey);
@@ -6679,7 +6648,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_free(l);
 			return -1;
 		}
-		
+
 		if ((phone_mode == 2) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
@@ -6739,11 +6708,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	/* well, then it is a remote */
 	rpt_mutex_lock(&myrpt->lock);
 	/* look at callerid to see what node this comes from */
-	if (!ast_channel_caller(chan)->id.number.str) {	/* if doesn't have caller id */
+	if (!ast_channel_caller(chan)->id.number.str) { /* if doesn't have caller id */
 		b1 = "0";
 		b = NULL;
 	} else {
-		//b = chan->cid.cid_name;
+		// b = chan->cid.cid_name;
 		b = ast_channel_caller(chan)->id.name.str;
 		b1 = ast_channel_caller(chan)->id.number.str;
 		ast_shrink_phone_number(b1);
@@ -6785,10 +6754,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		time(&now);
 		for (i = 0; i < nrpts; i++) {
 			if (!strcasecmp(rpt_vars[i].name, myrpt->p.rptnode)) {
-				if ((rpt_vars[i].links.next != &rpt_vars[i].links) ||
-					rpt_vars[i].keyed ||
-					((rpt_vars[i].lastkeyedtime + RPT_LOCKOUT_SECS) > now) ||
-					rpt_vars[i].txkeyed || ((rpt_vars[i].lasttxkeyedtime + RPT_LOCKOUT_SECS) > now)) {
+				if ((rpt_vars[i].links.next != &rpt_vars[i].links) || rpt_vars[i].keyed ||
+					((rpt_vars[i].lastkeyedtime + RPT_LOCKOUT_SECS) > now) || rpt_vars[i].txkeyed ||
+					((rpt_vars[i].lasttxkeyedtime + RPT_LOCKOUT_SECS) > now)) {
 					rpt_mutex_unlock(&myrpt->lock);
 					ast_log(LOG_WARNING, "Trying to use busy link (repeater node %s) on %s\n", rpt_vars[i].name, tmp);
 					rpt_disable_cdr(chan);
@@ -6916,11 +6884,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		dahdi_set_onhook(myrpt->dahditxchannel);
 		/* if PCIRADIO and Yaesu ft897/ICOM IC-706 selected */
 		if ((myrpt->iofd < 1) && (!res) &&
-			((!strcmp(myrpt->remoterig, REMOTE_RIG_FT897)) ||
-			 (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) ||
-			 (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) ||
-			 (!strcmp(myrpt->remoterig, REMOTE_RIG_XCAT)) ||
-			 (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)))) {
+			((!strcmp(myrpt->remoterig, REMOTE_RIG_FT897)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) ||
+				(!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_XCAT)) ||
+				(!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)))) {
 			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 1)) {
 				ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
@@ -6934,7 +6900,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 	if ((myrpt->p.nlconn) && (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-		!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") || !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
+								 !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
 		/* go thru all the specs */
 		for (i = 0; i < myrpt->p.nlconn; i++) {
 			int j, k;
@@ -7003,7 +6969,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 	/* look at callerid to see what node this comes from */
-	if (!ast_channel_caller(chan)->id.number.str) {	/* if doesn't have caller id */
+	if (!ast_channel_caller(chan)->id.number.str) { /* if doesn't have caller id */
 		b1 = "0";
 		b = NULL;
 	} else {
@@ -7107,8 +7073,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				ast_safe_sleep(chan, 1000);
 				break;
 			}
-			if ((myrpt->p.remotetimeoutwarning) && (r >= (myrpt->p.remotetimeout - myrpt->p.remotetimeoutwarning))
-				&& (r <= (myrpt->p.remotetimeout - myrpt->p.remotetimeoutwarningfreq))) {
+			if ((myrpt->p.remotetimeoutwarning) && (r >= (myrpt->p.remotetimeout - myrpt->p.remotetimeoutwarning)) &&
+				(r <= (myrpt->p.remotetimeout - myrpt->p.remotetimeoutwarningfreq))) {
 				if (myrpt->p.remotetimeoutwarningfreq) {
 					if ((t - last_timeout_warning) >= myrpt->p.remotetimeoutwarningfreq) {
 						time(&last_timeout_warning);
@@ -7131,8 +7097,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				ast_safe_sleep(chan, 1000);
 				break;
 			}
-			if ((myrpt->p.remotetimeoutwarning) && (r >= (myrpt->p.remoteinacttimeout - myrpt->p.remotetimeoutwarning))
-				&& (r <= (myrpt->p.remoteinacttimeout - myrpt->p.remotetimeoutwarningfreq))) {
+			if ((myrpt->p.remotetimeoutwarning) && (r >= (myrpt->p.remoteinacttimeout - myrpt->p.remotetimeoutwarning)) &&
+				(r <= (myrpt->p.remoteinacttimeout - myrpt->p.remotetimeoutwarningfreq))) {
 				if (myrpt->p.remotetimeoutwarningfreq) {
 					if ((t - last_timeout_warning) >= myrpt->p.remotetimeoutwarningfreq) {
 						time(&last_timeout_warning);
@@ -7196,8 +7162,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (myrpt->remsetting)
 			rem_totx = 0;
 		if (rem_totx) {
-			ast_debug(7, "Set rem_totx=%i.  dtmf_local_timer=%i phone_mode=%i keyed=%i tunerequest=%i\n",
-					rem_totx, myrpt->dtmf_local_timer, phone_mode, keyed, myrpt->tunerequest);
+			ast_debug(7, "Set rem_totx=%i.  dtmf_local_timer=%i phone_mode=%i keyed=%i tunerequest=%i\n", rem_totx,
+				myrpt->dtmf_local_timer, phone_mode, keyed, myrpt->tunerequest);
 		}
 		if (keyed && !keyed1) {
 			keyed1 = 1;
@@ -7250,8 +7216,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (rem_totx && (!myrpt->remotetx)) {
 			/* if not authed, and needed, do not transmit */
 			if ((!myrpt->p.authlevel) || myrpt->loginlevel[0]) {
-				ast_debug(7, "Handle rem_totx=%i.  dtmf_local_timer=%i  tunerequest=%i\n", rem_totx,
-					myrpt->dtmf_local_timer, myrpt->tunerequest);
+				ast_debug(7, "Handle rem_totx=%i.  dtmf_local_timer=%i  tunerequest=%i\n", rem_totx, myrpt->dtmf_local_timer,
+					myrpt->tunerequest);
 
 				myrpt->remotetx = 1;
 				if ((myrpt->remtxfreqok = check_tx_freq(myrpt))) {
@@ -7260,7 +7226,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					while (telem != &myrpt->tele) {
 						if (telem->mode == ACT_TIMEOUT_WARNING && !telem->killed) {
 							if (telem->chan)
-								ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+								ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
 							telem->killed = 1;
 						}
 						telem = telem->next;
@@ -7278,7 +7244,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 			}
 		}
-		if (!rem_totx && myrpt->remotetx) {	/* Remote base radio TX unkey */
+		if (!rem_totx && myrpt->remotetx) { /* Remote base radio TX unkey */
 			myrpt->remotetx = 0;
 			if (!myrpt->remtxfreqok) {
 				rpt_telemetry(myrpt, UNAUTHTX, NULL);
@@ -7323,19 +7289,19 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 
-		if (who == chan) {		/* if it was a read from incoming */
+		if (who == chan) { /* if it was a read from incoming */
 			if (exec_chan_read(myrpt, chan, &keyed, phone_mode, phone_vox, &myfirst, &dtmfed)) {
 				break;
 			}
-		} else if (who == myrpt->rxchannel) {	/* if it was a read from radio */
+		} else if (who == myrpt->rxchannel) { /* if it was a read from radio */
 			if (exec_rxchannel_read(myrpt, reming, notremming, &remkeyed)) {
 				break;
 			}
-		} else if (who == myrpt->pchannel) {	/* if is remote mix output */
+		} else if (who == myrpt->pchannel) { /* if is remote mix output */
 			if (exec_pchannel_read(myrpt, chan)) {
 				break;
 			}
-		} else if (myrpt->rxchannel != myrpt->txchannel && who == myrpt->txchannel) {	/* do this cuz you have to */
+		} else if (myrpt->rxchannel != myrpt->txchannel && who == myrpt->txchannel) { /* do this cuz you have to */
 			if (exec_txchannel_read(myrpt)) {
 				break;
 			}
@@ -7343,7 +7309,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 	if (myrpt->p.archivedir || myrpt->p.discpgm) {
 		/* look at callerid to see what node this comes from */
-		if (!ast_channel_caller(chan)->id.number.str) {	/* if doesn't have caller id */
+		if (!ast_channel_caller(chan)->id.number.str) { /* if doesn't have caller id */
 			b1 = "0";
 		} else {
 			ast_callerid_parse(ast_channel_caller(chan)->id.number.str, &b, &b1);
@@ -7370,7 +7336,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 	if ((myrpt->p.nldisc) && (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-		!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "beagle") || !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
+								 !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
 		/* go thru all the specs */
 		for (i = 0; i < myrpt->p.nldisc; i++) {
 			int j, k;
@@ -7425,7 +7391,8 @@ static int stop_repeaters(void)
 			ast_channel_lock(myrpt->rxchannel);
 			ast_softhangup(myrpt->rxchannel, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
 			ast_channel_unlock(myrpt->rxchannel);
-			myrpt->rxchannel = NULL; /* If we aborted the repeater but haven't unloaded, this channel handle is not valid anymore in a future call to stop_repeaters() */
+			myrpt->rxchannel = NULL; /* If we aborted the repeater but haven't unloaded, this channel handle is not valid anymore
+										in a future call to stop_repeaters() */
 		}
 	}
 	return 0;
@@ -7490,7 +7457,7 @@ static int load_module(void)
 	res |= ast_register_application_xml(app, rpt_exec);
 	res |= rpt_init_telemetry();
 
-#ifdef	_MDC_ENCODE_H_
+#ifdef _MDC_ENCODE_H_
 	res |= mdc1200_load();
 #endif
 
@@ -7517,10 +7484,5 @@ static int reload(void)
 	return (0);
 }
 
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application",
-	.support_level = AST_MODULE_SUPPORT_EXTENDED,
-	.load = load_module,
-	.unload = unload_module,
-	.reload = reload,
-	.requires = "res_curl",
-);
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application", .support_level = AST_MODULE_SUPPORT_EXTENDED,
+	.load = load_module, .unload = unload_module, .reload = reload, .requires = "res_curl", );
