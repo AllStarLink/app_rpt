@@ -5008,10 +5008,10 @@ static void *rpt(void *this)
 		}
 
 		/* If unkey and re-key, reset time out timer */
-		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed) && !myrpt->toresettimer) {
+		if (!totx && !myrpt->totimer && !myrpt->tounkeyed && !myrpt->keyed && (!myrpt->toresettimer || myrpt->remrx) {
 			myrpt->tounkeyed = 1;
 		}
-		if ((!totx) && (!myrpt->totimer) && myrpt->tounkeyed && myrpt->keyed) {
+		if (!totx && !myrpt->totimer && myrpt->tounkeyed && myrpt->keyed) {
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
 			myrpt->tonotify = 0;
