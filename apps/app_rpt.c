@@ -4989,7 +4989,7 @@ static void *rpt(void *this)
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
 			myrpt->tonotify = 0;
-		} else if (totx) {
+		} else {
 			myrpt->tailtimer = myrpt->p.s[myrpt->p.sysstate_cur].alternatetail ? myrpt->p.althangtime : /* Initialize tail timer */
 								   myrpt->p.hangtime;
 		}
