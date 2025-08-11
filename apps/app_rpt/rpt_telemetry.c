@@ -184,14 +184,16 @@ void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *my
 
 	if (mylink && mylink->chan) {
 		src = LINKMODE_GUI;
-		if (mylink->phonemode)
+		if (mylink->phonemode) {
 			src = LINKMODE_PHONE;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+		} else if (CHAN_TECH(mylink->chan, "echolink")) {
 			src = LINKMODE_ECHOLINK;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+		} else if (CHAN_TECH(mylink->chan, "tlb")) {
 			src = LINKMODE_TLB;
-		if (myrpt->p.linkmodedynamic[src] && (mylink->linkmode >= 1) && (mylink->linkmode < 0x7ffffffe))
+		}
+		if (myrpt->p.linkmodedynamic[src] && (mylink->linkmode >= 1) && (mylink->linkmode < 0x7ffffffe)) {
 			mylink->linkmode = LINK_HANG_TIME;
+		}
 	}
 	if (!myrpt->p.telemdynamic) {
 		return;
@@ -2896,9 +2898,8 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			return;
 		} else if ((!mylink) || (mylink->name[0] == '0')) {
 			return;
-		} else if ((!mylink->gott) && (!mylink->isremote) && (!mylink->outbound) &&
-			mylink->chan && strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink")
-			&& strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb")) {
+		} else if (!mylink->gott && !mylink->isremote && !mylink->outbound &&
+				   mylink->chan && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
 			return;
 		}
 		break;

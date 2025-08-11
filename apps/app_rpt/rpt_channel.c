@@ -182,21 +182,17 @@ void do_dtmf_local(struct rpt *myrpt, char c)
 			myrpt->dtmf_local_str[i - 1] = 0;
 			myrpt->dtmf_local_timer = DTMF_LOCAL_TIME;
 			rpt_mutex_unlock(&myrpt->lock);
-			if (!strcasecmp(ast_channel_tech(myrpt->txchannel)->type, "rtpdir")) {
-				ast_senddigit(myrpt->txchannel, digit, 0);
+			if (digit >= '0' && digit <= '9') {
+				ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[digit - '0'], 0);
+			} else if (digit >= 'A' && digit <= 'D') {
+				ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[digit - 'A' + 10], 0);
+			} else if (digit == '*') {
+				ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[14], 0);
+			} else if (digit == '#') {
+				ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[15], 0);
 			} else {
-				if (digit >= '0' && digit <= '9')
-					ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[digit - '0'], 0);
-				else if (digit >= 'A' && digit <= 'D')
-					ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[digit - 'A' + 10], 0);
-				else if (digit == '*')
-					ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[14], 0);
-				else if (digit == '#')
-					ast_playtones_start(myrpt->txchannel, 0, dtmf_tones[15], 0);
-				else {
-					/* not handled */
-					ast_log(LOG_WARNING, "Unable to generate DTMF tone '%c' for '%s'\n", digit, ast_channel_name(myrpt->txchannel));
-				}
+				/* not handled */
+				ast_log(LOG_WARNING, "Unable to generate DTMF tone '%c' for '%s'\n", digit, ast_channel_name(myrpt->txchannel));
 			}
 			rpt_mutex_lock(&myrpt->lock);
 		} else {

@@ -1970,8 +1970,8 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	if ((iswebtransceiver(mylink)) ||								  /* if a WebTransceiver node */
-		(!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))) { /* or a tlb node */
+	if ((iswebtransceiver(mylink)) || CHAN_TECH(mylink->chan, "tlb")) {
+		/* if a WebTransceiver node or a TLB node */
 		if (c == myrpt->p.endchar)
 			myrpt->cmdnode[0] = 0;
 		else if (myrpt->cmdnode[0]) {
@@ -2053,7 +2053,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 		}
 	} else {
 		if (c == myrpt->p.endchar) {
-			if (mylink->lastrx && strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink")) {
+			if (mylink->lastrx && !CHAN_TECH(mylink->chan, "echolink")) {
 				mylink->lastrealrx = 0;
 				rpt_mutex_unlock(&myrpt->lock);
 				return;
@@ -2744,7 +2744,7 @@ void rpt_links_init(struct rpt_link *l)
 		rpt_hangup(myrpt, RPT_TXCHAN); \
 	}
 
-#define IS_DAHDI_CHAN(c) (!strcasecmp(ast_channel_tech(c)->type, "DAHDI"))
+#define IS_DAHDI_CHAN(c) (CHAN_TECH(c, "DAHDI"))
 #define IS_DAHDI_CHAN_NAME(s) (!strncasecmp(s, "DAHDI", 5))
 
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
@@ -3927,7 +3927,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		char buf[100];
 		int j;
 		/* if is a USRP device */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "usrp")) {
+		if (CHAN_TECH(myrpt->rxchannel, "usrp")) {
 			const char *argv[4];
 			int argc = 4;
 			argv[2] = myrpt->name;
@@ -3935,8 +3935,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			rpt_do_sendall(0, argc, argv);
 		}
 		/* if is a USB device */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+		if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 			/* if message parsable */
 			if (sscanf(f->data.ptr, "GPIO" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
 				snprintf(buf, sizeof(buf), "RPT_URI_GPIO%d", i);
@@ -3952,7 +3951,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			}
 		}
 		/* if is a Voter device */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "voter")) {
+		if (CHAN_TECH(myrpt->rxchannel, "voter")) {
 			struct rpt_link *l;
 			struct ast_frame wf;
 			char str[200];
@@ -4111,9 +4110,6 @@ static inline void hangup_link_chan(struct rpt_link *l)
 	}
 }
 
-/*! \brief Whether a channel is using a specified technology */
-#define CHAN_TECH(c, s) (!strcasecmp(ast_channel_tech(c)->type, s))
-
 /*!
  * \internal
  * \brief Final cleanup of link prior to node termination
@@ -4124,7 +4120,8 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 
-	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) { /* If neither echolink nor tlb */
+	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
+		/* If neither echolink nor tlb */
 		if ((!l->disced) && (!l->outbound)) {
 			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote)
 				l->disctime = 1;
@@ -4286,10 +4283,13 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				dahdi_bump_buffers(l->pchan, f->samples); /* Make room if needed */
 
 				fac = 1.0;
-				if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")))
-					fac = myrpt->p.erxgain;
-				if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")))
-					fac = myrpt->p.trxgain;
+				if (l->chan) {
+					if (CHAN_TECH(l->chan, "echolink")) {
+						fac = myrpt->p.erxgain;
+					} else if (CHAN_TECH(l->chan, "tlb")) {
+						fac = myrpt->p.trxgain;
+					}
+				}
 				if ((myrpt->p.linkmongain != 1.0) && (l->mode != MODE_TRANSCEIVE) && (l->wouldtx))
 					fac *= myrpt->p.linkmongain;
 				if (fac != 1.0) {
@@ -4306,8 +4306,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && (!l->lastrealrx)) {
 					rxkey_helper(myrpt, l);
 				}
-				if (((l->phonemode) && (l->phonevox)) || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")) ||
-					(!strcasecmp(ast_channel_tech(l->chan)->type, "tlb"))) {
+				if (((l->phonemode) && (l->phonevox)) || (CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
 					struct ast_frame *f1;
 					if (l->phonevox) {
 						int x;
@@ -4357,8 +4356,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					ismuted = rpt_conf_get_muted(l->chan, myrpt);
 					/* if not receiving, zero-out audio */
 					ismuted |= (!l->lastrx);
-					if (l->dtmfed && (l->phonemode || (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")) ||
-										 (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")))) {
+					if (l->dtmfed && (l->phonemode || (CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb")))) {
 						ismuted = 1;
 					}
 					l->dtmfed = 0;
@@ -4451,11 +4449,13 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				float fac = 1.0;
-				if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "echolink")))
-					fac = myrpt->p.etxgain;
-				if (l->chan && (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb")))
-					fac = myrpt->p.ttxgain;
-
+				if (l->chan) {
+					if (CHAN_TECH(l->chan, "echolink")) {
+						fac = myrpt->p.etxgain;
+					} else if (CHAN_TECH(l->chan, "tlb")) {
+						fac = myrpt->p.ttxgain;
+					}
+				}
 				if (fac != 1.0) {
 					if (f->data.ptr && (f->samples == f->datalen / 2)) {
 						ast_frame_adjust_volume_float(f, fac);
@@ -4466,7 +4466,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				}
 				/* foop */
 				if (l->chan && (l->lastrx || (!altlink(myrpt, l))) &&
-					((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+					((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
 					/* Reverse-engineering comments from NA debugging issue #46:
 					 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey is set
 					 * to != RADIO_KEY_NOT_ALLOWED yet. This happens when the reset code forces it to RADIO_ALLOWED. Of course if
@@ -4516,7 +4516,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 		while (l != &myrpt->links) {
 			/* IF we are an altlink() -> !altlink() handled elsewhere */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
-				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || strcasecmp(ast_channel_tech(l->chan)->type, "IAX2"))) {
+				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
 				ast_write(l->chan, f);
 			}
 			l = l->next;
@@ -5192,8 +5192,7 @@ static void *rpt(void *this)
 			if (myrpt->p.itxctcss) {
 				if (IS_DAHDI_CHAN(myrpt->rxchannel)) {
 					dahdi_radio_set_ctcss_encode(myrpt->dahdirxchannel, !x);
-				} else if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-						   !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+				} else if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 					snprintf(str, sizeof(str), "TXCTCSS %d", !(!x));
 					ast_sendtext(myrpt->rxchannel, str);
 				}
@@ -5968,7 +5967,7 @@ static inline int exec_pchannel_read(struct rpt *myrpt, struct ast_channel *chan
 		return -1;
 	}
 	if (f->frametype == AST_FRAME_VOICE) {
-		if ((myrpt->rpt_newkey != RADIO_KEY_NOT_ALLOWED) || myrpt->remoterx || strcasecmp(ast_channel_tech(chan)->type, "IAX2")) {
+		if ((myrpt->rpt_newkey != RADIO_KEY_NOT_ALLOWED) || myrpt->remoterx || !CHAN_TECH(chan, "IAX2")) {
 			ast_write(chan, f);
 		}
 	}
@@ -6325,16 +6324,14 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			phone_monitor = 1;
 	} else {
 #ifdef ALLOW_LOCAL_CHANNELS
-		/* Check to insure the connection is IAX2 or Local */
-		if ((strcmp(ast_channel_tech(chan)->type, "IAX2")) && (strcmp(ast_channel_tech(chan)->type, "Local")) &&
-			(strcasecmp(ast_channel_tech(chan)->type, "echolink")) && (strcasecmp(ast_channel_tech(chan)->type, "tlb"))) {
-			ast_log(LOG_WARNING, "We only accept links via IAX2, Echolink, TheLinkBox or Local!!\n");
+		/* Check to ensure the connection is IAX2 or Local */
+		if (!CHAN_TECH(chan, "IAX2") && !CHAN_TECH(chan, "echolink") && !CHAN_TECH(chan, "tlb") && !CHAN_TECH(chan, "Local")) {
+			ast_log(LOG_WARNING, "We only accept links via IAX2, EchoLink, TheLinkBox or Local!!\n");
 			return -1;
 		}
 #else
-		if (strcmp(ast_channel_tech(chan)->type, "IAX2") && strcasecmp(ast_channel_tech(chan)->type, "Echolink") &&
-			strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
-			ast_log(LOG_WARNING, "We only accept links via IAX2 or Echolink!!\n");
+		if (!CHAN_TECH(chan, "IAX2") && !CHAN_TECH(chan, "echolink") && !CHAN_TECH(chan, "tlb")) {
+			ast_log(LOG_WARNING, "We only accept links via IAX2, EchoLink, or TheLinkBox!!\n");
 			return -1;
 		}
 #endif
@@ -6453,10 +6450,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		return 0;
 	}
 	i = 0;
-	if (!strcasecmp(ast_channel_tech(chan)->type, "echolink")) {
-		i = 1;
-	}
-	if (!strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
+	if (CHAN_TECH(chan, "echolink") || CHAN_TECH(chan, "tlb")) {
 		i = 1;
 	}
 	if (!options && !i) {
@@ -6600,8 +6594,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->rxlingertimer = RX_LINGER_TIME;
 		l->newkeytimer = NEWKEYTIME;
 		l->link_newkey = RADIO_KEY_ALLOWED;
-		if ((!phone_mode) && (l->name[0] != '0') && strcasecmp(ast_channel_tech(chan)->type, "echolink") &&
-			strcasecmp(ast_channel_tech(chan)->type, "tlb")) {
+		if ((!phone_mode) && (l->name[0] != '0') && !CHAN_TECH(chan, "echolink") && !CHAN_TECH(chan, "tlb")) {
 			l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		}
 		ast_debug(7, "newkey: %d\n", l->link_newkey);
@@ -6613,14 +6606,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		 * After using enum, the compiler pointed it out.
 		 * Need to research what they used to do in ASL2...
 		 */
-		if (!strcasecmp(ast_channel_tech(chan)->type, "echolink"))
+		if (CHAN_TECH(chan, "echolink")) {
 			init_linkmode(myrpt, l, LINKMODE_ECHOLINK);
-		else if (!strcasecmp(ast_channel_tech(chan)->type, "tlb"))
+		} else if (CHAN_TECH(chan, "tlb")) {
 			init_linkmode(myrpt, l, LINKMODE_TLB);
-		else if (phone_mode)
+		} else if (phone_mode) {
 			init_linkmode(myrpt, l, LINKMODE_PHONE);
-		else
+		} else {
 			init_linkmode(myrpt, l, LINKMODE_GUI);
+		}
 		ast_set_read_format(l->chan, ast_format_slin);
 		ast_set_write_format(l->chan, ast_format_slin);
 		gettimeofday(&myrpt->lastlinktime, NULL);
@@ -6670,7 +6664,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			send_newkey(chan);
 		}
 
-		if (!strcasecmp(ast_channel_tech(chan)->type, "echolink") || !strcasecmp(ast_channel_tech(chan)->type, "tlb") || (l->name[0] > '9')) {
+		if (CHAN_TECH(chan, "echolink") || CHAN_TECH(chan, "tlb") || (l->name[0] > '9')) {
 			rpt_telemetry(myrpt, CONNECTED, l);
 		}
 
@@ -6899,8 +6893,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		}
 	}
-	if ((myrpt->p.nlconn) && (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-								 !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
+	if ((myrpt->p.nlconn) && (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb"))) {
 		/* go thru all the specs */
 		for (i = 0; i < myrpt->p.nlconn; i++) {
 			int j, k;
@@ -7335,8 +7328,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 	}
-	if ((myrpt->p.nldisc) && (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-								 !strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))) {
+	if ((myrpt->p.nldisc) && (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb"))) {
 		/* go thru all the specs */
 		for (i = 0; i < myrpt->p.nldisc; i++) {
 			int j, k;

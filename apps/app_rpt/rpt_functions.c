@@ -170,9 +170,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if ((command_source != SOURCE_RPT) &&
 			(command_source != SOURCE_PHONE) &&
 			(command_source != SOURCE_ALT) &&
-			(command_source != SOURCE_DPHONE) && mylink &&
-			(!iswebtransceiver(mylink)) && strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink")
-			&& strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+			(command_source != SOURCE_DPHONE) &&
+			mylink &&
+			(!iswebtransceiver(mylink)) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb"))
 			return DC_COMPLETE;
 
 		/* if already in cmd mode, or selected self, fughetabahtit */
@@ -1446,17 +1446,20 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		break;
 	case 36:					/* Link Output Enable */
-		if (!mylink)
+		if (!mylink) {
 			return DC_ERROR;
+		}
 		src = LINKMODE_OFF;
-		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
+		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9')) {
 			src = LINKMODE_GUI;
-		if (mylink->phonemode)
+		}
+		if (mylink->phonemode) {
 			src = LINKMODE_PHONE;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+		} else if (CHAN_TECH(mylink->chan, "echolink")) {
 			src = LINKMODE_ECHOLINK;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+		} else if (CHAN_TECH(mylink->chan, "tlb")) {
 			src = LINKMODE_TLB;
+		}
 		if (src && myrpt->p.linkmodedynamic[src]) {
 			set_linkmode(mylink, LINKMODE_ON);
 			rpt_telem_select(myrpt, command_source, mylink);
@@ -1465,17 +1468,20 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		break;
 	case 37:					/* Link Output Disable */
-		if (!mylink)
+		if (!mylink) {
 			return DC_ERROR;
+		}
 		src = 0;
-		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
+		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9')) {
 			src = LINKMODE_GUI;
-		if (mylink->phonemode)
+		}
+		if (mylink->phonemode) {
 			src = LINKMODE_PHONE;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+		} else if (CHAN_TECH(mylink->chan, "echolink")) {
 			src = LINKMODE_ECHOLINK;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+		} else if (CHAN_TECH(mylink->chan, "tlb")) {
 			src = LINKMODE_TLB;
+		}
 		if (src && myrpt->p.linkmodedynamic[src]) {
 			set_linkmode(mylink, LINKMODE_OFF);
 			rpt_telem_select(myrpt, command_source, mylink);
@@ -1484,17 +1490,20 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		break;
 	case 38:					/* Gui Link Output Follow */
-		if (!mylink)
+		if (!mylink) {
 			return DC_ERROR;
+		}
 		src = 0;
-		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
+		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9')) {
 			src = LINKMODE_GUI;
-		if (mylink->phonemode)
+		}
+		if (mylink->phonemode) {
 			src = LINKMODE_PHONE;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+		} else if (CHAN_TECH(mylink->chan, "echolink")) {
 			src = LINKMODE_ECHOLINK;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+		} else if (CHAN_TECH(mylink->chan, "tlb")) {
 			src = LINKMODE_TLB;
+		}
 		if (src && myrpt->p.linkmodedynamic[src]) {
 			set_linkmode(mylink, LINKMODE_FOLLOW);
 			rpt_telem_select(myrpt, command_source, mylink);
@@ -1503,17 +1512,20 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		break;
 	case 39:					/* Link Output Demand */
-		if (!mylink)
+		if (!mylink) {
 			return DC_ERROR;
+		}
 		src = 0;
-		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9'))
+		if ((mylink->name[0] <= '0') || (mylink->name[0] > '9')) {
 			src = LINKMODE_GUI;
-		if (mylink->phonemode)
+		}
+		if (mylink->phonemode) {
 			src = LINKMODE_PHONE;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink"))
+		} else if (CHAN_TECH(mylink->chan, "echolink")) {
 			src = LINKMODE_ECHOLINK;
-		else if (!strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
+		} else if (CHAN_TECH(mylink->chan, "tlb")) {
 			src = LINKMODE_TLB;
+		}
 		if (src && myrpt->p.linkmodedynamic[src]) {
 			set_linkmode(mylink, LINKMODE_DEMAND);
 			rpt_telem_select(myrpt, command_source, mylink);
@@ -1637,8 +1649,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_COMPLETE;
 	case 56:					/* RX CTCSS Enable */
 		rpt_radio_rx_set_ctcss_decode(myrpt, 0);
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+		if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 			ast_sendtext(myrpt->rxchannel, "RXCTCSS 1");
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -1646,8 +1657,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_COMPLETE;
 	case 57:					/* RX CTCSS Disable */
 		rpt_radio_rx_set_ctcss_decode(myrpt, 1);
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") ||
-			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+		if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 			ast_sendtext(myrpt->rxchannel, "RXCTCSS 0");
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -1684,13 +1694,13 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 #endif
 	case 61:					/* send GPIO change */
 	case 62:					/* same, without function complete (quietly) */
-		if (argc < 1)
+		if (argc < 1) {
 			break;
-		/* ignore if not a USB channel */
-		if (strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
-			strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
-				break;
-			}
+		}
+		if (!CHAN_TECH(myrpt->rxchannel, "radio") && !CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
+			/* ignore if not a USB channel */
+			break;
+		}
 		/* go thru all the specs */
 		for (i = 1; i < argc; i++) {
 			if (sscanf(argv[i], "%*[Gg]%*[Pp]%*[Ii]%*[oO]" N_FMT(d) "%*[=:]" N_FMT(d), &j, &k) == 2) {
@@ -1727,16 +1737,18 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		return DC_COMPLETE;
 	case 65:					/* send POCSAG page */
-		if (argc < 3)
+		if (argc < 3) {
 			break;
-		/* ignore if not a USB channel */
-		if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "radio") &&
-			!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb"))
+		}
+		if (!CHAN_TECH(myrpt->rxchannel, "radio") && !CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
+			/* ignore if not a USB channel */
 			break;
-		if (argc > 5)
+		}
+		if (argc > 5) {
 			sprintf(string, "PAGE %s %s %s %s %s", argv[1], argv[2], argv[3], argv[4], argv[5]);
-		else
+		} else {
 			sprintf(string, "PAGE %s %s %s", argv[1], argv[2], argv[3]);
+		}
 		telem = myrpt->tele.next;
 		k = 0;
 		while (telem != &myrpt->tele) {

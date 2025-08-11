@@ -74,30 +74,40 @@ void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode)
 
 int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 {
-	if (!myrpt)
-		return (0);
-	if (!mylink)
-		return (0);
-	if (!mylink->chan)
-		return (0);
-	if ((myrpt->p.duplex == 3) && mylink->phonemode && myrpt->keyed)
-		return (0);
-	/* if doesn't qual as a foreign link */
-	if ((mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
-		(!mylink->phonemode) && strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink")
-		&& strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
-		return (0);
-	if ((myrpt->p.duplex < 2) && (myrpt->tele.next == &myrpt->tele))
-		return (0);
-	if (mylink->linkmode < 2)
-		return (0);
-	if (mylink->linkmode == 0x7fffffff)
-		return (1);
-	if (mylink->linkmode < 0x7ffffffe)
-		return (1);
-	if (myrpt->telemmode > 1)
-		return (1);
-	return (0);
+	if (!myrpt) {
+		return 0;
+	}
+	if (!mylink) {
+		return 0;
+	}
+	if (!mylink->chan) {
+		return 0;
+	}
+	if ((myrpt->p.duplex == 3) && mylink->phonemode && myrpt->keyed) {
+		return 0;
+	}
+	if (!mylink->phonemode &&
+		(mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
+		!CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
+		/* if doesn't qual as a foreign link */
+		return 0;
+	}
+	if ((myrpt->p.duplex < 2) && (myrpt->tele.next == &myrpt->tele)) {
+		return 0;
+	}
+	if (mylink->linkmode < 2) {
+		return 0;
+	}
+	if (mylink->linkmode == 0x7fffffff) {
+		return 1;
+	}
+	if (mylink->linkmode < 0x7ffffffe) {
+		return 1;
+	}
+	if (myrpt->telemmode > 1) {
+		return 1;
+	}
+	return 0;
 }
 
 static void check_tlink_list(struct rpt *myrpt)
@@ -152,12 +162,15 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	struct rpt_tele *tlist;
 	int nonlocals;
 
-	if (!myrpt)
-		return (0);
-	if (!mylink)
-		return (0);
-	if (!mylink->chan)
-		return (0);
+	if (!myrpt) {
+		return 0;
+	}
+	if (!mylink) {
+		return 0;
+	}
+	if (!mylink->chan) {
+		return 0;
+	}
 	nonlocals = 0;
 	tlist = myrpt->tele.next;
 	check_tlink_list(myrpt);
@@ -169,22 +182,28 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 			tlist = tlist->next;
 		}
 	}
-	if ((!myrpt->p.duplex) || (!nonlocals))
-		return (0);
-	/* if doesn't qual as a foreign link */
-	if ((mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
-		(!mylink->phonemode) && strcasecmp(ast_channel_tech(mylink->chan)->type, "echolink")
-		&& strcasecmp(ast_channel_tech(mylink->chan)->type, "tlb"))
-		return (1);
-	if (mylink->linkmode < 2)
-		return (0);
-	if (mylink->linkmode == 0x7fffffff)
-		return (1);
-	if (mylink->linkmode < 0x7ffffffe)
-		return (1);
-	if (myrpt->telemmode > 1)
-		return (1);
-	return (0);
+	if ((!myrpt->p.duplex) || (!nonlocals)) {
+		return 0;
+	}
+	if (!mylink->phonemode &&
+		(mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
+		!CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
+		/* if doesn't qual as a foreign link */
+		return 1;
+	}
+	if (mylink->linkmode < 2) {
+		return 0;
+	}
+	if (mylink->linkmode == 0x7fffffff) {
+		return 1;
+	}
+	if (mylink->linkmode < 0x7ffffffe) {
+		return 1;
+	}
+	if (myrpt->telemmode > 1) {
+		return 1;
+	}
+	return 0;
 }
 
 void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
@@ -631,8 +650,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 			rpt_mutex_unlock(&myrpt->lock);
 			return 2;			/* Already linked */
 		}
-		if ((!strcasecmp(ast_channel_tech(l->chan)->type, "echolink"))
-			|| (!strcasecmp(ast_channel_tech(l->chan)->type, "tlb"))) {
+		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
 			l->mode = mode;
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
