@@ -524,11 +524,11 @@ int rpt_parrot_add(struct rpt *myrpt)
 static int dahdi_conf_get_muted(struct ast_channel *chan)
 {
 	int muted;
-	
-	if (strcasecmp(ast_channel_tech(chan)->type, "DAHDI")) {
+
+	if (!CHAN_TECH(chan, "DAHDI")) {
 		return 0;
 	}
-	
+
 	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONFMUTE, &muted) == -1) {
 		ast_log(LOG_WARNING, "Couldn't get mute status on %s: %s\n", ast_channel_name(chan), strerror(errno));
 		muted = 0;

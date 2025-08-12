@@ -917,9 +917,8 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
-			/* ignore if not a channel that can accept the paging command */
-			if (strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "voter") &&
-				strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "simpleusb")) {
+			if (!CHAN_TECH(myrpt->rxchannel, "voter") && !CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
+				/* ignore channels that cannot accept the paging command */
 				return RESULT_SUCCESS;
 			}
 			/* if we are playing telemetry, stop it now */

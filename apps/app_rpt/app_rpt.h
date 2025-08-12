@@ -1080,6 +1080,9 @@ struct nodelog {
 	char str[MAXNODESTR * 2];
 };
 
+/*! \brief Whether a channel is using a specified technology */
+#define CHAN_TECH(c, s) (!strcasecmp(ast_channel_tech(c)->type, s))
+
 #define IS_PSEUDO(c) (!strncasecmp(ast_channel_name(c), "DAHDI/pseudo", 12))
 #define IS_PSEUDO_NAME(c) (!strncasecmp(c, "DAHDI/pseudo", 12))
 

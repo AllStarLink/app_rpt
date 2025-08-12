@@ -128,7 +128,7 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 	/* otherwise, send it to all of em */
 	while (l != &myrpt->links) {
 		/* Dont send to IAXRPT client, unless main channel is Voter */
-		if (((l->name[0] == '0') && strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "voter")) || (l->phonemode)) {
+		if (((l->name[0] == '0') && !CHAN_TECH(myrpt->rxchannel, "voter")) || (l->phonemode)) {
 			l = l->next;
 			continue;
 		}

@@ -37,7 +37,7 @@ static int dahdi_radio_set_ctcss_decode(struct ast_channel *chan, int enable)
 
 int rpt_radio_rx_set_ctcss_decode(struct rpt *myrpt, int enable)
 {
-	if (!strcasecmp(ast_channel_tech(myrpt->rxchannel)->type, "DAHDI")) {
+	if (CHAN_TECH(myrpt->rxchannel, "DAHDI")) {
 		return dahdi_radio_set_ctcss_decode(myrpt->dahdirxchannel, enable);
 	}
 	return 1;
