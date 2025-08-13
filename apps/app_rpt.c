@@ -4975,15 +4975,53 @@ static void *rpt(void *this)
 		}
 		/* add in parrot stuff */
 		totx = totx || (myrpt->parrotstate > 1);
+	
+		/*
+		* Time out timer operation
+		* 
+		* 1. The time out timer starts counting down when any valid signal is received (local or remote).
+		* 
+		* 2. If the timeout timer expires, drop the transmitter (do the telemetry timeout message first).
+		* 
+		* 3. Two cases:
+		* 
+		*    3a. If a time out is due to a local keyup, use the toresettime value to "filter" a weak signal 
+		*        (COS/CTCSS going true/false a few times a second) on the local receiver.
+		*        Note: if toresettime is set to zero, then there will be no filtering of the COS/CTCSS signal
+		*        (i.e. As it was prior to adding toresettime feature).
+		* 
+		*    3b. If a far end connection (i.e. through a link) is holding up the transmitter, then a user
+		*        listening to the repeater can reset the time out timer by transmitting for at least 
+		*        the length of the toresetburp time. If tortesetburp is set to zero, then the time out will
+		*        not be able to be reset by sending a signal on the repeater input. All valid RX signals would
+		*        have to cease before any new RX signal could key the transmitter.
+		*    
+		* 4. The time out timer gets reset just prior to the courtesy tone being sent or 
+		*    when there is nothing requesting the repeater transmitter to key up.
+		* 
+		* Historical Note: TOT reset of a remote TX request by quick keying has been around since
+		* the beginning of app_rpt. We faced this issue early on with nets holding up the 
+		* local TX at almost 100% duty cycle, and at that time, we thought this was the
+		* best way to resolve it. Could we have done something else? Surely. We could have required
+		* the use of a DTMF function to reset the TOT.
+		* This would be aggravating to the users though.
+		* 	
+		*/  
+
 
 		/* we are timed out and wanting to transmit, activate time out reset timer delaying reset of totimer. */
 		if (!myrpt->totimer && totx) {
 			myrpt->toresettimer = myrpt->p.toresettime;
 		}
-		/* Delay of timeout timer reset
+		/* 
+		 * Delay of timeout timer reset when all RX signals drop
+		 * 
 		 * Reset the timeout timer if:
+		 * 
 		 * 1 - We are NOT wanting to transmit (totx) AND are NOT currently timed out (totimer) OR not configured to delay timeout
-		 * reset 2 - If we ARE configured to delay timeout reset AND the timeout reset timer is complete
+		 * reset.
+		 * 
+		 * 2 - If we ARE configured to delay timeout reset AND the timeout reset timer is complete
 		 */
 		if ((!totx && (myrpt->totimer || !myrpt->p.toresettime)) || (!myrpt->totimer && !myrpt->toresettimer && myrpt->p.toresettime)) {
 			myrpt->totimer = myrpt->p.totime;
@@ -4996,6 +5034,8 @@ static void *rpt(void *this)
 		/* if in 1/2 or 3/4 duplex, give rx priority */
 		if ((myrpt->p.duplex < 2) && (myrpt->keyed) && (!myrpt->p.linktolink) && (!myrpt->p.dias))
 			totx = 0;
+
+		
 		/* Disable the local transmitter if we are timed out */
 		totx = totx && myrpt->totimer;
 		/* if timed-out and not said already, say it */
@@ -5008,9 +5048,13 @@ static void *rpt(void *this)
 		}
 
 		/* If unkey and re-key, reset time out timer */
-		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed) && !myrpt->toresettimer) {
+		/* Also handles the case where there's a signal on a remote and the user wants to "burp" the local RX to reset the TOT. */
+		/* Note: Not the final implementation: TODO: add toreset burptimer to allow tailoring of the length of the received signal to help prevent interference from inadvertently resetting the TOT */
+		
+		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed) && ((!myrpt->toresettimer) || myrpt->remrx)) {
 			myrpt->tounkeyed = 1;
 		}
+		/* TOT reset when keyed and unkeyed (users generally do this when they want to reset the TOT and continue talking) */
 		if ((!totx) && (!myrpt->totimer) && myrpt->tounkeyed && myrpt->keyed) {
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
