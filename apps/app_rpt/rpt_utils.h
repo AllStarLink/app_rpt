@@ -63,11 +63,25 @@ void rpt_localtime(time_t * t, struct ast_tm *lt, const char *tz);
 time_t rpt_mktime(struct ast_tm *tm, const char *zone);
 
 /*!
- * \brief Get system monotonic 
+ * \brief Returns the elapsed time since a specified start time.
+ * \param start Starting time
+ * \retval Elapsed time (ms)
+ * \note The starting time will be updated to the current time including
+ * adjustments for any microseconds that have not been counted.
+ */
+int rpt_time_elapsed(struct timeval *start);
+
+/*!
+ * \brief Get system monotonic
  * This returns the CLOCK_MONOTONIC time
  * \retval		Monotonic seconds.
  */
 time_t rpt_time_monotonic(void);
+
+/*!
+ * \brief Returns current timeval. Meant to replace calls to gettimeofday().
+ */
+struct timeval rpt_tvnow(void);
 
 /*! \brief Append a command to the macro buffer
  * \param myrpt Pointer to the rpt structure

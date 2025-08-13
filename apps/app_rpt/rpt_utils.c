@@ -229,6 +229,25 @@ time_t rpt_mktime(struct ast_tm *tm, const char *zone)
 	return now.tv_sec;
 }
 
+int rpt_time_elapsed(struct timeval *start)
+{
+	int elap;
+	struct timeval now, elap_tv_us;
+
+	now = rpt_tvnow();
+	elap_tv_us = ast_tvsub(now, *start);
+	elap = (elap_tv_us.tv_sec * 1000) + (elap_tv_us.tv_usec / 1000);
+	if (elap > 0) {
+		struct timeval elap_tv_ms, residualtime;
+
+		elap_tv_ms.tv_sec = elap_tv_us.tv_sec;
+		elap_tv_ms.tv_usec = (elap_tv_us.tv_usec / 1000) * 1000;
+		residualtime = ast_tvsub(elap_tv_us, elap_tv_ms);
+		*start = ast_tvsub(now, residualtime);
+	}
+	return elap;
+}
+
 time_t rpt_time_monotonic(void)
 {
 	struct timespec ts;
@@ -236,6 +255,16 @@ time_t rpt_time_monotonic(void)
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	
 	return ts.tv_sec;
+}
+
+struct timeval rpt_tvnow(void)
+{
+	struct timeval t;
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	t.tv_sec = ts.tv_sec;
+	t.tv_usec = ts.tv_nsec / 1000;
+	return t;
 }
 
 int macro_append(struct rpt *myrpt, const char *cmd)

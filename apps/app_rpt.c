@@ -1792,7 +1792,6 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		ast_str_set(&mylink->linklist, 0, "%s", str + 2); /* Dropping the "L " of the message */
-		time(&mylink->linklistreceived);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
 		return;
@@ -4784,7 +4783,6 @@ static void *rpt(void *this)
 		int totx = 0, elap = 0, n, x, lastduck = 0;
 		time_t t, t_mono;
 		struct rpt_link *l;
-		struct timeval looptimenow, residualtime, elap_tv_ms, elap_tv_us;
 
 		if (myrpt->disgorgetime && (time(NULL) >= myrpt->disgorgetime)) {
 			myrpt->disgorgetime = 0;
@@ -5259,16 +5257,7 @@ static void *rpt(void *this)
 		if (who == NULL) {
 			ms = 0;
 		}
-		/* calculate loop time */
-		looptimenow = rpt_tvnow();
-		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		elap_tv_ms.tv_sec = 0;			  /* with 20ms loops, we should never have a full second */
-		elap_tv_ms.tv_usec = elap * 1000; /* usec accounted for */
-		elap_tv_us = ast_tvsub(looptimenow, looptimestart);
-		residualtime = ast_tvsub(elap_tv_us, elap_tv_ms);
-		if (elap > 0) {
-			looptimestart = ast_tvsub(looptimenow, residualtime);
-		}
+		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		rpt_mutex_lock(&myrpt->lock);
 		periodic_process_links(myrpt, elap);
 		if (update_timers(myrpt, elap, totx)) {
@@ -6089,7 +6078,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	struct rpt_tele *telem;
 	int numlinks;
 	struct ast_format_cap *cap;
-	struct timeval looptimestart, looptimenow, residualtime, elap_tv_ms, elap_tv_us;
+	struct timeval looptimestart;
 
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "Rpt requires an argument (system node)\n");
@@ -6489,7 +6478,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	/* if is not a remote */
 	if (!myrpt->remote) {
 		int reconnects = 0;
-		struct timeval now;
 		struct ast_format_cap *cap;
 
 		rpt_mutex_lock(&myrpt->lock);
@@ -6500,8 +6488,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 		rpt_mutex_lock(&myrpt->lock);
-		gettimeofday(&now, NULL);
-		while ((!ast_tvzero(myrpt->lastlinktime)) && (ast_tvdiff_ms(now, myrpt->lastlinktime) < 250)) {
+		while ((!ast_tvzero(myrpt->lastlinktime)) && (ast_tvdiff_ms(rpt_tvnow(), myrpt->lastlinktime) < 250)) {
 			rpt_mutex_unlock(&myrpt->lock);
 			if (ast_check_hangup(myrpt->rxchannel)) {
 				return -1;
@@ -6510,9 +6497,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				return -1;
 			}
 			rpt_mutex_lock(&myrpt->lock);
-			gettimeofday(&now, NULL);
 		}
-		gettimeofday(&myrpt->lastlinktime, NULL);
+		myrpt->lastlinktime = rpt_tvnow();
 		rpt_mutex_unlock(&myrpt->lock);
 		/* look at callerid to see what node this comes from */
 		if (!ast_channel_caller(chan)->id.number.str) { /* if doesn't have caller id */
@@ -6617,7 +6603,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		ast_set_read_format(l->chan, ast_format_slin);
 		ast_set_write_format(l->chan, ast_format_slin);
-		gettimeofday(&myrpt->lastlinktime, NULL);
+		myrpt->lastlinktime = rpt_tvnow();
 
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 		if (!cap) {
@@ -6694,7 +6680,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->lock);
 		rpt_link_add(myrpt, l); /* After putting the link in the link list, other threads can start using it */
 		__kickshort(myrpt);
-		gettimeofday(&myrpt->lastlinktime, NULL);
+		myrpt->lastlinktime = rpt_tvnow();
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
 		return -1; /* We can now safely return -1 to the PBX, as the old channel pre-masquerade is what will get killed off */
@@ -7107,17 +7093,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
-		/* calculate loop time */
-		looptimenow = rpt_tvnow();
-		elap = ast_tvdiff_ms(looptimenow, looptimestart);
-		elap_tv_ms.tv_sec = 0;			  /* with 20ms loops, we should never have a full second */
-		elap_tv_ms.tv_usec = elap * 1000; /* usec accounted for */
-		elap_tv_us = ast_tvsub(looptimenow, looptimestart);
-		residualtime = ast_tvsub(elap_tv_us, elap_tv_ms);
-		if (elap > 0) {
-			looptimestart = ast_tvsub(looptimenow, residualtime);
-		}
-
+		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		update_timer(&myrpt->macrotimer, elap, 0);
 		if (who == NULL) {
 			/* No channels had activity. Loop again. */
