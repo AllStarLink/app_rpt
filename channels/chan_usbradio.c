@@ -1323,6 +1323,10 @@ static void *hidthread(void *arg)
 				}
 				if ((!o->had_pp_in) || (o->last_pp_in != j)) {
 					char buf1[100];
+					struct ast_frame fr = {
+						.frametype = AST_FRAME_TEXT,
+						.src = __PRETTY_FUNCTION__,
+					};
 
 					for (i = 10; i <= 15; i++) {
 						/* skip if not specified */
@@ -1339,11 +1343,6 @@ static void *hidthread(void *arg)
 						}
 						/* if bit has changed, or never reported */
 						if ((!o->had_pp_in) || ((o->last_pp_in & (1 << ppinshift[i])) != (j & (1 << ppinshift[i])))) {
-							struct ast_frame fr = {
-								.frametype = AST_FRAME_TEXT,
-								.src = __PRETTY_FUNCTION__,
-							};
-
 							snprintf(buf1, sizeof(buf1), "PP%d %d\n", i, (j & (1 << ppinshift[i])) ? 1 : 0);
 							fr.data.ptr = buf1;
 							fr.datalen = strlen(buf1);
