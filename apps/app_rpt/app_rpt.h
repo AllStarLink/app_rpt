@@ -466,7 +466,7 @@ struct rpt_chan_stat {
 #define	HANGTIME 5000
 #define SLEEPTIME 900 /* default # of seconds for of no activity before entering sleep mode */
 #define TOTIME 180000 /* default timeout time to 180000ms (3 minutes) */
-#define TORESETTIME 0 /* default timeout reset time to 0ms (0 seconds) - disabled */
+#define TIME_OUT_RESET_UNKEY_INTERVAL 0 /* default timeout reset unkey interval to 0ms (0 seconds) - disabled */
 #define IDTIME 300000
 #define MAXRPTS 500
 #define MAX_STAT_LINKS 256
@@ -783,7 +783,7 @@ struct rpt {
 		int hangtime;
 		int althangtime;
 		int totime;
-		int toresettime;
+		int time_out_reset_unkey_interval;
 		int idtime;
 		int tailmessagetime;
 		int tailsquashedtime;

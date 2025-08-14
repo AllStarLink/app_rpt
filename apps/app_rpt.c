@@ -5002,10 +5002,10 @@ static void *rpt(void *this)
 		* 
 		* 3. Two cases:
 		* 
-		*    3a. If a time out is due to a local keyup, use the toresettime value to "filter" a weak signal 
+		*    3a. If a time out is due to a local keyup, use the time_out_reset_unkey_interval value to "filter" a weak signal 
 		*        (COS/CTCSS going true/false a few times a second) on the local receiver.
-		*        Note: if toresettime is set to zero, then there will be no filtering of the COS/CTCSS signal
-		*        (i.e. As it was prior to adding toresettime feature).
+		*        Note: if time_out_reset_unkey_interval is set to zero, then there will be no filtering of the COS/CTCSS signal
+		*        (i.e. As it was prior to adding time_out_reset_unkey_interval feature).
 		* 
 		*    3b. If a far end connection (i.e. through a link) is holding up the transmitter, then a user
 		*        listening to the repeater can reset the time out timer by transmitting for at least 
@@ -5028,7 +5028,7 @@ static void *rpt(void *this)
 
 		/* we are timed out and wanting to transmit, activate time out reset timer delaying reset of totimer. */
 		if (!myrpt->totimer && totx) {
-			myrpt->toresettimer = myrpt->p.toresettime;
+			myrpt->toresettimer = myrpt->p.time_out_reset_unkey_interval;
 		}
 		
 		/* 
@@ -5041,7 +5041,8 @@ static void *rpt(void *this)
 		 * 
 		 * 2 - If we ARE configured to delay timeout reset AND the timeout reset timer is complete
 		 */
-		if ((!totx && (myrpt->totimer || !myrpt->p.toresettime)) || (!myrpt->totimer && !myrpt->toresettimer && myrpt->p.toresettime)) {
+		if ((!totx && (myrpt->totimer || !myrpt->p.time_out_reset_unkey_interval)) || (!myrpt->totimer && !myrpt->toresettimer && myrpt->p.time_out_reset_unkey_interval)) {
+		    ast_debug(1, "Time out time reset by user unkeying");
 		    reset_time_out_timer(myrpt);
 		} else {
 			myrpt->tailtimer = myrpt->p.s[myrpt->p.sysstate_cur].alternatetail ? myrpt->p.althangtime : /* Initialize tail timer */
@@ -5065,14 +5066,17 @@ static void *rpt(void *this)
 
 		/* If unkey and re-key, reset time out timer */
 		/* Also handles the case where there's a signal on a remote and the user wants to "burp" the local RX to reset the TOT. */
-		/* Note: Not the final implementation: TODO: add toreset burptimer to allow tailoring of the length of the received signal to help prevent interference from inadvertently resetting the TOT */
 		
-		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed) && ((!myrpt->toresettimer) || myrpt->remrx)) {
+		
+		int to_reset_by_user_key_unkey_bool = myrpt->remrx || (myrpt->callmode != CALLMODE_DOWN); // TODO: Add reset kerchunk interval test here.
+		
+		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed) && ((!myrpt->toresettimer) || to_reset_by_user_key_unkey_bool)) {
 			myrpt->tounkeyed = 1;
 		}
 		/* TOT reset when keyed and unkeyed (users generally do this when they want to reset the TOT and continue talking) */
 		if ((!totx) && (!myrpt->totimer) && myrpt->tounkeyed && myrpt->keyed) {
-			reset_time_out_timer(struct rpt myrpt)
+			ast_debug(1, "Time out timer reset by unkey/rekey");
+			reset_time_out_timer(myrpt);
 			rpt_mutex_unlock(&myrpt->lock);
 			continue;
 		}
