@@ -4587,6 +4587,23 @@ static inline void voxtostate_to_voxtotimer(struct rpt *myrpt)
 	}
 }
 
+
+
+/*!
+ * \brief Reset the time out timer.
+ * Common logic to reset the time out timer
+ * \param rpt control struct.
+ * \return None
+ */
+ 
+static void reset_time_out_timer(struct rpt *myrpt)
+{
+	myrpt->totimer = myrpt->p.totime;
+	myrpt->tounkeyed = 0;
+	myrpt->tonotify = 0;
+}
+		
+
 /* single thread with one file (request) to dial */
 static void *rpt(void *this)
 {
@@ -5013,6 +5030,7 @@ static void *rpt(void *this)
 		if (!myrpt->totimer && totx) {
 			myrpt->toresettimer = myrpt->p.toresettime;
 		}
+		
 		/* 
 		 * Delay of timeout timer reset when all RX signals drop
 		 * 
@@ -5024,9 +5042,7 @@ static void *rpt(void *this)
 		 * 2 - If we ARE configured to delay timeout reset AND the timeout reset timer is complete
 		 */
 		if ((!totx && (myrpt->totimer || !myrpt->p.toresettime)) || (!myrpt->totimer && !myrpt->toresettimer && myrpt->p.toresettime)) {
-			myrpt->totimer = myrpt->p.totime;
-			myrpt->tounkeyed = 0;
-			myrpt->tonotify = 0;
+		    reset_time_out_timer(myrpt);
 		} else {
 			myrpt->tailtimer = myrpt->p.s[myrpt->p.sysstate_cur].alternatetail ? myrpt->p.althangtime : /* Initialize tail timer */
 								   myrpt->p.hangtime;
@@ -5056,9 +5072,7 @@ static void *rpt(void *this)
 		}
 		/* TOT reset when keyed and unkeyed (users generally do this when they want to reset the TOT and continue talking) */
 		if ((!totx) && (!myrpt->totimer) && myrpt->tounkeyed && myrpt->keyed) {
-			myrpt->totimer = myrpt->p.totime;
-			myrpt->tounkeyed = 0;
-			myrpt->tonotify = 0;
+			reset_time_out_timer(struct rpt myrpt)
 			rpt_mutex_unlock(&myrpt->lock);
 			continue;
 		}
