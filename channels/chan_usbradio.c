@@ -1279,6 +1279,10 @@ static void *hidthread(void *arg)
 			}
 			if ((!o->had_gpios_in) || (o->last_gpios_in != j)) {
 				char buf1[100];
+				struct ast_frame fr = {
+					.frametype = AST_FRAME_TEXT,
+					.src = __PRETTY_FUNCTION__,
+				};
 
 				for (i = 0; i < GPIO_PINCOUNT; i++) {
 					/* skip if not specified */
@@ -1295,11 +1299,6 @@ static void *hidthread(void *arg)
 					}
 					/* if bit has changed, or never reported */
 					if ((!o->had_gpios_in) || ((o->last_gpios_in & (1 << i)) != (j & (1 << i)))) {
-						struct ast_frame fr = {
-							.frametype = AST_FRAME_TEXT,
-							.src = __PRETTY_FUNCTION__,
-						};
-
 						snprintf(buf1, sizeof(buf1), "GPIO%d %d\n", i + 1, (j & (1 << i)) ? 1 : 0);
 						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1);
@@ -1762,7 +1761,7 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 
 	/* GPIO command */
 	if (!strncmp(text, "GPIO", 4)) {
-		cnt = sscanf(text, "%s " N_FMT(d) " %d", cmd, &i, &j);
+		cnt = sscanf(text, "%s " N_FMT(d) " " N_FMT(d), cmd, &i, &j);
 		if (cnt < 3) {
 			return 0;
 		}
