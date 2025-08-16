@@ -4984,7 +4984,7 @@ static void *rpt(void *this)
 		 * reset 2 - If we ARE configured to delay timeout reset AND the timeout reset timer is complete
 		 */
 		if ((!totx && (myrpt->totimer || !myrpt->p.toresettime)) || (!myrpt->totimer && !myrpt->toresettimer && myrpt->p.toresettime)) {
-		    if(myrpt->tounkeyed) {
+			if (myrpt->tounkeyed) {
 				ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT reset from time out condition ***");
 			} else {
 				if(myrpt->totimer < myrpt->p.totime - 100) {
