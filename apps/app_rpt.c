@@ -4987,7 +4987,7 @@ static void *rpt(void *this)
 			if (myrpt->tounkeyed) {
 				ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT reset from time out condition ***");
 			} else {
-				if(myrpt->totimer < myrpt->p.totime - 100) {
+				if (myrpt->totimer < myrpt->p.totime - 100) {
 					ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT reset by unkey/rekey ***");
 				}
 			}
