@@ -4981,7 +4981,7 @@ static void *rpt(void *this)
 			/* Note: This is called every time through the loop when timed out, need to be careful about logging here */
 			/* 100mS "filter" for debugging should only trigger on the first time the down counter is initialized */
 			if (myrpt->toresettimer < myrpt->p.time_out_reset_unkey_interval - 100) {
-				ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT Initialize toresettimer ***\n");
+				ast_debug(1, "*** TOT Initialize toresettimer ***\n");
 			}
 			myrpt->toresettimer = myrpt->p.time_out_reset_unkey_interval;
 		}
@@ -4993,7 +4993,7 @@ static void *rpt(void *this)
 			/* This is the execution path taken when a user unkeys when not timed out to intentionally reset the time out timer */
 			/* 100mS "filter" for debugging should only trigger on the first time the down counter is initialized */
 			if (myrpt->totimer < myrpt->p.totime - 100) {
-				ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT reset by user unkey when not timed out ***\n");
+				ast_debug(1, "*** TOT reset by user unkey when not timed out ***\n");
 			}
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
@@ -5010,7 +5010,7 @@ static void *rpt(void *this)
 		totx = totx && myrpt->totimer;
 		/* if timed-out and not said already, say it */
 		if ((!myrpt->totimer) && (!myrpt->tonotify)) {
-			ast_debug(RPT_TOT_DEBUG_LEVEL, "*** Sending time out message ***\n");
+			ast_debug(1, "*** Sending time out message ***\n");
 			myrpt->tonotify = 1;
 			myrpt->timeouts++;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -5021,7 +5021,7 @@ static void *rpt(void *this)
 		/* If unkey and re-key, set the tounkeyed flag to be acted on later */
 		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed)) {
 			if (!myrpt->tounkeyed) {
-				ast_debug(RPT_TOT_DEBUG_LEVEL, "*** Setting myrpt->tounkeyed true ***\n");
+				ast_debug(1, "*** Setting myrpt->tounkeyed true ***\n");
 			}
 			myrpt->tounkeyed = 1;
 		}
@@ -5032,7 +5032,7 @@ static void *rpt(void *this)
 		 
 		if ((!totx) && (!myrpt->totimer) && myrpt->tounkeyed && myrpt->keyed) {
 			
-			ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT reset due to rekey on local RX after timeout ***\n");
+			ast_debug(1, "*** TOT reset due to rekey on local RX after timeout ***\n");
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
 			myrpt->tonotify = 0;

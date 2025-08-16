@@ -486,11 +486,6 @@ struct rpt_chan_stat {
 #define NEWKEY1STR "!NEWKEY1!"
 #define IAXKEYSTR "!IAXKEY!"
 
-/*
- * Debug levels for log messages
- */
- 
-#define RPT_TOT_DEBUG_LEVEL 1
 
 /*! \brief Repeater link connection newkey handshake state */
 enum newkey { 
