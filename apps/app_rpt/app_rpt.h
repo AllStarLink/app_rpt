@@ -489,7 +489,6 @@ struct rpt_chan_stat {
 /*
  * Debug levels for log messages
  */
-#define RPT_TOT_DEBUG_LEVEL 1
 
 /*! \brief Repeater link connection newkey handshake state */
 enum newkey { 
