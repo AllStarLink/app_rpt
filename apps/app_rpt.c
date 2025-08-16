@@ -5015,7 +5015,7 @@ static void *rpt(void *this)
 
 		/* If unkey and re-key, reset time out timer */
 		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed) && !myrpt->toresettimer) {
-			if(!myrpt->tounkeyed) {
+			if (!myrpt->tounkeyed) {
 				ast_debug(RPT_TOT_DEBUG_LEVEL, "*** Setting myrpt->tounkeyed true ***");
 			}
 			myrpt->tounkeyed = 1;
