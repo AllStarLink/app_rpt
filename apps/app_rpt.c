@@ -4990,15 +4990,11 @@ static void *rpt(void *this)
 		if (!totx && myrpt->totimer) {
 			/* Note: This is called every time through the loop when not wanting to transmit and not in the timed out condition */
 			/* Need to be careful about logging here */
-			if (myrpt->tounkeyed) {
-				/* This is the execution path taken when the system was placed in timed out condition previously (i.e. TX disabled due to timeout) */
-				ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT reset from time out condition ***\n");
-			} else {
-				/* This is the execution path taken when a user unkeys when not timed out to intentionally reset the time out timer */
-				/* 100mS "filter" for debugging should only trigger on the first time the down counter is initialized */
-				if (myrpt->totimer < myrpt->p.totime - 100) {
-					ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT reset by user unkey when not timed out ***\n");
-				}
+
+			/* This is the execution path taken when a user unkeys when not timed out to intentionally reset the time out timer */
+			/* 100mS "filter" for debugging should only trigger on the first time the down counter is initialized */
+			if (myrpt->totimer < myrpt->p.totime - 100) {
+				ast_debug(RPT_TOT_DEBUG_LEVEL, "*** TOT reset by user unkey when not timed out ***\n");
 			}
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
