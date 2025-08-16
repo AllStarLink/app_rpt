@@ -6097,7 +6097,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	use_pipe = strchr(tmp, '|');
 	if (use_pipe) {
 		separator = "|";
-		ast_log(LOG_WARNING, "The application delimiter is now the comma, not the pipe. Please convert your dialplan?\n");
+		ast_log(LOG_WARNING, "Using pipes as a delimiter is deprecated and support will be removed in a future version of Asterisk. Please use commas instead.\n");
 	} else {
 		separator = ",";
 	}
