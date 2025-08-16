@@ -43,6 +43,7 @@
  * \note contributions by Steven Henke, W9SH, <w9sh@arrl.net>
  * \note contributions by Mike Zingman, N4IRR
  * \note contributions by Steve Zingman, N4IRS
+ * \note contributions by Lee Woldanski, VE7FET
  * \note significant rewrite for modern Asterisk by Naveen Albert <asterisk@phreaknet.org>
  *
  * \note Allison ducking code by W9SH
@@ -6096,6 +6097,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	use_pipe = strchr(tmp, '|');
 	if (use_pipe) {
 		separator = "|";
+		ast_log(LOG_WARNING, "The application delimiter is now the comma, not the pipe. Please convert your dialplan?\n");
 	} else {
 		separator = ",";
 	}
