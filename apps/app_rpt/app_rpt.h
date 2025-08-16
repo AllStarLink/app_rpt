@@ -487,7 +487,7 @@ struct rpt_chan_stat {
 #define IAXKEYSTR "!IAXKEY!"
 
 /*
- * Debug levels for log messages 
+ * Debug levels for log messages
  */
  
 #define RPT_TOT_DEBUG_LEVEL 1
