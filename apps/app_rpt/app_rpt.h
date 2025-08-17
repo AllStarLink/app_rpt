@@ -462,11 +462,11 @@ struct rpt_chan_stat {
 #define ISRIG_RTX(x) ((!strcmp(x,REMOTE_RIG_RTX150)) || (!strcmp(x,REMOTE_RIG_RTX450)))
 #define	IS_XPMR(x) (!strncasecmp(x->rxchanname,"rad",3))
 
-#define	MSWAIT 20
-#define	HANGTIME 5000
-#define SLEEPTIME 900 /* default # of seconds for of no activity before entering sleep mode */
-#define TOTIME 180000 /* default timeout time to 180000ms (3 minutes) */
-#define TIMEOUTRESETUNKEYINTERVAL 0 /* default timeout reset time to 0ms (0 seconds) - disabled by default */
+#define MSWAIT 20
+#define HANGTIME 5000
+#define SLEEPTIME 900					 /* default # of seconds for of no activity before entering sleep mode */
+#define TOTIME 180000					 /* default timeout time to 180000ms (3 minutes) */
+#define TIMEOUTRESETUNKEYINTERVAL 0		 /* default timeout reset time to 0ms (0 seconds) - disabled by default */
 #define TIMEOUTRESETKERCHUNKINTERVAL 250 /* Minimum local keyed time to reset a time out condition caused by a remote link */
 #define IDTIME 300000
 #define MAXRPTS 500
@@ -1041,7 +1041,7 @@ struct rpt {
 	time_t outstreamlasterror;	/*!< \brief set when there is an outstream error and is reset when error cleared */
 	struct ast_channel *remote_webtransceiver;
 	struct timeval lastdtmftime;
-	int keyed_time_ms;			/*! Time in milliseconds that a user has been keyed on the local RX */
+	int keyed_time_ms; /*! Time in milliseconds that a user has been keyed on the local RX */
 #ifdef NATIVE_DSP
 	struct ast_dsp *dsp;
 #else

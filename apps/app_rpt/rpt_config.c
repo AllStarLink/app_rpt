@@ -857,8 +857,10 @@ void load_rpt_vars(int n, int init)
 	}
 
 	RPT_CONFIG_VAR_INT_DEFAULT(totime, "totime", (ISRANGER(rpt_vars[n].name) ? 9999999 : TOTIME));
-	RPT_CONFIG_VAR_INT_DEFAULT(time_out_reset_unkey_interval, "time_out_reset_unkey_interval", (ISRANGER(rpt_vars[n].name) ? 0 : TIMEOUTRESETUNKEYINTERVAL));
-	RPT_CONFIG_VAR_INT_DEFAULT(time_out_reset_kerchunk_interval, "time_out_reset_kerchunk_interval", (ISRANGER(rpt_vars[n].name) ? 0 : TIMEOUTRESETKERCHUNKINTERVAL));
+	RPT_CONFIG_VAR_INT_DEFAULT(time_out_reset_unkey_interval, "time_out_reset_unkey_interval",
+		(ISRANGER(rpt_vars[n].name) ? 0 : TIMEOUTRESETUNKEYINTERVAL));
+	RPT_CONFIG_VAR_INT_DEFAULT(time_out_reset_kerchunk_interval, "time_out_reset_kerchunk_interval",
+		(ISRANGER(rpt_vars[n].name) ? 0 : TIMEOUTRESETKERCHUNKINTERVAL));
 	RPT_CONFIG_VAR_INT_DEFAULT(voxtimeout_ms, "voxtimeout", VOX_TIMEOUT_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(voxrecover_ms, "voxrecover", VOX_RECOVER_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexpatchdelay, "simplexpatchdelay", SIMPLEX_PATCH_DELAY);

@@ -3397,19 +3397,17 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		myrpt->keypost = RPT_KEYPOST_NONE;
 		do_key_post(myrpt);
 	}
-	
+
 	/* Keep track of time keyed */
-	if(myrpt->keyed) {
-		if(myrpt->keyed + elap < 0) {
+	if (myrpt->keyed) {
+		if (myrpt->keyed + elap < 0) {
 			myrpt->keyed_time_ms = INT_MAX;
-		}
-		else {
+		} else {
 			myrpt->keyed_time_ms += elap;
 		}
 	} else {
 		myrpt->keyed_time_ms = 0;
 	}
-		
 
 	if (totx) {
 		myrpt->dailytxtime += elap;
@@ -4988,13 +4986,13 @@ static void *rpt(void *this)
 		}
 		/* add in parrot stuff */
 		totx = totx || (myrpt->parrotstate > 1);
-		
-		/* 
+
+		/*
 		 * *** TIME OUT TIMER LOGIC ***
-		 * 
-		 * If the time_out_reset_unkey_interval is enabled and we are timed out and wanting to transmit, and user didn't unkey from
-		 * after a time out condition, initialize time out reset timer. 
-		 * 
+		 *
+		 * If the time_out_reset_unkey_interval is enabled and we are timed out and wanting to transmit, and user didn't unkey
+		 * from after a time out condition, initialize time out reset timer.
+		 *
 		 * */
 		if (myrpt->p.time_out_reset_unkey_interval && !myrpt->totimer && totx && !myrpt->tounkeyed) {
 			/*
@@ -5008,7 +5006,7 @@ static void *rpt(void *this)
 			}
 			myrpt->toresettimer = myrpt->p.time_out_reset_unkey_interval;
 		}
-			
+
 		/* If not in time out condition and not wanting to transmit */
 		if (!totx && myrpt->totimer) {
 			/* Note: This is called every time through the loop when not wanting to transmit and not in the timed out condition
@@ -5035,7 +5033,6 @@ static void *rpt(void *this)
 		totx = totx && myrpt->totimer;
 		/* if timed-out and not said already, say it */
 		if ((!myrpt->totimer) && (!myrpt->tonotify)) {
-		
 			ast_debug(1, "*** TOT trace point: SENDINGTOMESSAGE ***\n");
 			myrpt->tonotify = 1;
 			myrpt->timeouts++;
@@ -5053,18 +5050,18 @@ static void *rpt(void *this)
 			}
 			myrpt->tounkeyed = 1;
 		}
-		
+
 		/* If the user rekeys at at any time after a time out condition, the time out timer
-		 * will be reset here. 
-		 * 
+		 * will be reset here.
+		 *
 		 * Note: totx will have been forced to FALSE in the code due to the timeout condition
-		 * 
+		 *
 		 *  NB: The time between the time out condition and when the user rekeys could be a very, very long time!
 		 * */
-		 
+
 		if ((!totx) && (!myrpt->totimer) && myrpt->tounkeyed && myrpt->keyed) {
 			int do_tot_reset = 0;
-	
+
 			/* If time_out_reset_unkey_interval is configured */
 			if (myrpt->p.time_out_reset_unkey_interval) {
 				/* Enforce a minimum time the RX must remain unkeyed */
@@ -5073,13 +5070,13 @@ static void *rpt(void *this)
 					 * Test for remote link traffic during time out condition A rekey during which lasts for
 					 *  time_out_reset_kerchunk_interval will take priority over the toresettimer time_out_reset_kerchunk_interval
 					 *  enforces a minumum time the RX must be keyed before resetting the TOT.
-					 * 
+					 *
 					 * Note: remrx_override doesn't have any effect when myrpt->p.timeout_reset_unkey_interval is set to zero.
 					 * In that case the traditional time out timer reset behaviour will apply,
 					 * and the TOT timer will get reset with no delay when the user unkeys and rekeys in a time out condition
 					 * with a active signal from any link.
 					 *  */
-					if(myrpt->p.time_out_reset_kerchunk_interval) {
+					if (myrpt->p.time_out_reset_kerchunk_interval) {
 						if (myrpt->keyed_time_ms >= myrpt->p.time_out_reset_kerchunk_interval) {
 							ast_debug(1, "*** TOT trace point: TOTRESETBYREMRXRKI ***\n");
 							do_tot_reset = 1;
@@ -5096,14 +5093,14 @@ static void *rpt(void *this)
 				/* time_out_reset_unkey_interval is not configured (backward compatibility) */
 				do_tot_reset = 1;
 			}
-			if(do_tot_reset) {
+			if (do_tot_reset) {
 				ast_debug(1, "*** TOT trace point: TOTRESETDUETOREKEYAFTERTO ***\n");
 				myrpt->totimer = myrpt->p.totime;
 				myrpt->tounkeyed = 0;
 				myrpt->tonotify = 0;
 				/* Note that in this case, the rest of the loop body doesn't get executed,
-				 * and instead we start again at the top of the loop 
-				 * @@@@@@@ UNLOCK @@@@@@@ 
+				 * and instead we start again at the top of the loop
+				 * @@@@@@@ UNLOCK @@@@@@@
 				 * */
 				rpt_mutex_unlock(&myrpt->lock);
 				continue;
@@ -5188,15 +5185,15 @@ static void *rpt(void *this)
 		/* Main TX control */
 
 		/* let telemetry transmit anyway (regardless of timeout) */
-		
-	    /* Fixme note: is is somewhat undesired as we really only want to 
-	     * TX key up for the time out message and all other messages should not 
-	     * cause TX key up. This is a big source of confusion to the users
-	     * as it makes the users think that the node isn't timed out.
-	     * It's probably going to take a restructure of the telemetry queue
-	     * to fix it.
-	     * */
-	
+
+		/* Fixme note: is is somewhat undesired as we really only want to
+		 * TX key up for the time out message and all other messages should not
+		 * cause TX key up. This is a big source of confusion to the users
+		 * as it makes the users think that the node isn't timed out.
+		 * It's probably going to take a restructure of the telemetry queue
+		 * to fix it.
+		 * */
+
 		if (myrpt->p.duplex > 0)
 			totx = totx || (myrpt->tele.next != &myrpt->tele);
 		totx = totx && !myrpt->p.s[myrpt->p.sysstate_cur].txdisable;
