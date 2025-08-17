@@ -6097,7 +6097,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	use_pipe = strchr(tmp, '|');
 	if (use_pipe) {
 		separator = "|";
-		ast_log(LOG_WARNING, "Using pipes as a delimiter is deprecated and support will be removed in a future version of Asterisk. Please use commas instead.\n");
+		ast_log(LOG_WARNING, "Pipe (|) delimiter is deprecated and will be removed in a future release, please use comma (,).\n");
 	} else {
 		separator = ",";
 	}
