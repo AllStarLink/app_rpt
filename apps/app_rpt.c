@@ -5069,7 +5069,7 @@ static void *rpt(void *this)
 					/* remrx-override of time_out_reset_unkey_interval:
 					 * Test for remote link traffic during time out condition A rekey during which lasts for
 					 *  time_out_reset_kerchunk_interval will take priority over the toresettimer time_out_reset_kerchunk_interval
-					 *  enforces a minumum time the RX must be keyed before resetting the TOT.
+					 *  enforces a minimum time the RX must be keyed before resetting the TOT.
 					 *
 					 * Note: remrx_override doesn't have any effect when myrpt->p.timeout_reset_unkey_interval is set to zero.
 					 * In that case the traditional time out timer reset behaviour will apply,
