@@ -940,7 +940,7 @@ struct rpt {
 	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
 	int calldigittimer;
 	struct rpt_conf rptconf;
-	int tailtimer, totimer, toresettimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
+	int tailtimer, totimer, time_out_reset_unkey_interval_timer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	enum patch_call_mode callmode;
 	int mustid,tailid;
 	int rptinacttimer;
