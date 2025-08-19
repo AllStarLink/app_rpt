@@ -5002,7 +5002,7 @@ static void *rpt(void *this)
 			 *
 			 * */
 			if (myrpt->toresettimer < myrpt->p.time_out_reset_unkey_interval - 100) {
-				ast_debug(1, "*** TOT trace point: TOINITTORESETTIMER ***\n");
+				ast_debug(6, "*** TOT trace point: TOINITTORESETTIMER ***\n");
 			}
 			myrpt->toresettimer = myrpt->p.time_out_reset_unkey_interval;
 		}
@@ -5015,7 +5015,7 @@ static void *rpt(void *this)
 			 * There is a 100mS "filter" for debugging should only trigger on the first time the down counter is initialized
 			 * */
 			if (myrpt->totimer < myrpt->p.totime - 100) {
-				ast_debug(1, "*** TOT trace point: TOTRESETBYUSERUNKEYNOTTO ***\n");
+				ast_debug(6, "*** TOT trace point: TOTRESETBYUSERUNKEYNOTTO ***\n");
 			}
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
@@ -5033,7 +5033,7 @@ static void *rpt(void *this)
 		totx = totx && myrpt->totimer;
 		/* if timed-out and not said already, say it */
 		if ((!myrpt->totimer) && (!myrpt->tonotify)) {
-			ast_debug(1, "*** TOT trace point: SENDINGTOMESSAGE ***\n");
+			ast_debug(6, "*** TOT trace point: SENDINGTOMESSAGE ***\n");
 			myrpt->tonotify = 1;
 			myrpt->timeouts++;
 			/* @@@@@@@ UNLOCK @@@@@@@ */
@@ -5046,7 +5046,7 @@ static void *rpt(void *this)
 		/* If unkey and re-key, set the tounkeyed flag to be acted on later */
 		if ((!totx) && (!myrpt->totimer) && (!myrpt->tounkeyed) && (!myrpt->keyed)) {
 			if (!myrpt->tounkeyed) {
-				ast_debug(1, "*** TOT trace point: SETTINGTOUNKEYED ***\n");
+				ast_debug(6, "*** TOT trace point: SETTINGTOUNKEYED ***\n");
 			}
 			myrpt->tounkeyed = 1;
 		}
@@ -5078,14 +5078,14 @@ static void *rpt(void *this)
 					 *  */
 					if (myrpt->p.time_out_reset_kerchunk_interval) {
 						if (myrpt->keyed_time_ms >= myrpt->p.time_out_reset_kerchunk_interval) {
-							ast_debug(1, "*** TOT trace point: TOTRESETBYREMRXRKI ***\n");
+							ast_debug(6, "*** TOT trace point: TOTRESETBYREMRXRKI ***\n");
 							do_tot_reset = 1;
 						}
 					}
 				} else if (myrpt->toresettimer) {
 					/* Reload toresettimer due to noise or picket fencing seen before it expires */
 					myrpt->toresettimer = myrpt->p.time_out_reset_unkey_interval;
-					ast_debug(2, "*** TOT trace point: TORESETTIMERRELOADED ***\n");
+					ast_debug(6, "*** TOT trace point: TORESETTIMERRELOADED ***\n");
 				} else {
 					do_tot_reset = 1;
 				}
@@ -5094,7 +5094,7 @@ static void *rpt(void *this)
 				do_tot_reset = 1;
 			}
 			if (do_tot_reset) {
-				ast_debug(1, "*** TOT trace point: TOTRESETDUETOREKEYAFTERTO ***\n");
+				ast_debug(6, "*** TOT trace point: TOTRESETDUETOREKEYAFTERTO ***\n");
 				myrpt->totimer = myrpt->p.totime;
 				myrpt->tounkeyed = 0;
 				myrpt->tonotify = 0;

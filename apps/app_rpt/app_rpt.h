@@ -487,7 +487,6 @@ struct rpt_chan_stat {
 #define NEWKEY1STR "!NEWKEY1!"
 #define IAXKEYSTR "!IAXKEY!"
 
-
 /*! \brief Repeater link connection newkey handshake state */
 enum newkey { 
 	RADIO_KEY_ALLOWED, /*!< AST_CONTROL_RADIO_KEY is allowed on repeater channel */
