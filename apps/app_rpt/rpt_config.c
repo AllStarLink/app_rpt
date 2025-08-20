@@ -816,6 +816,19 @@ void load_rpt_vars(int n, int init)
 	} else { \
 		rpt_vars[n].p.var = default; \
 	}
+	
+#define RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(var, name, default_val, min_val, max_val) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (!ast_strlen_zero(val)) { \
+		rpt_vars[n].p.var = atoi(val); \
+		if (rpt_vars[n].p.var < min_val) { \
+			rpt_vars[n].p.var = min_val; \
+		} else if (rpt_vars[n].p.var > max_val) { \
+			rpt_vars[n].p.var = max_val; \
+		} \
+	} else { \
+		rpt_vars[n].p.var = default_val; \
+	}
 
 #define RPT_CONFIG_VAR_BOOL(var, name) \
 	val = ast_variable_retrieve(cfg, cat, name); \
@@ -857,10 +870,10 @@ void load_rpt_vars(int n, int init)
 	}
 
 	RPT_CONFIG_VAR_INT_DEFAULT(totime, "totime", (ISRANGER(rpt_vars[n].name) ? 9999999 : TOTIME));
-	RPT_CONFIG_VAR_INT_DEFAULT(time_out_reset_unkey_interval, "time_out_reset_unkey_interval",
-		(ISRANGER(rpt_vars[n].name) ? 0 : TIMEOUTRESETUNKEYINTERVAL));
-	RPT_CONFIG_VAR_INT_DEFAULT(time_out_reset_kerchunk_interval, "time_out_reset_kerchunk_interval",
-		(ISRANGER(rpt_vars[n].name) ? 0 : TIMEOUTRESETKERCHUNKINTERVAL));
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(time_out_reset_unkey_interval,
+	"time_out_reset_unkey_interval",TIMEOUTRESETUNKEYINTERVAL, 0, 3000)
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(time_out_reset_kerchunk_interval,
+	"time_out_reset_kerchunk_interval",TIMEOUTRESETKERCHUNKINTERVAL, 0, 3000);
 	RPT_CONFIG_VAR_INT_DEFAULT(voxtimeout_ms, "voxtimeout", VOX_TIMEOUT_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(voxrecover_ms, "voxrecover", VOX_RECOVER_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexpatchdelay, "simplexpatchdelay", SIMPLEX_PATCH_DELAY);
