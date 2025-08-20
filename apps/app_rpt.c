@@ -5187,7 +5187,7 @@ static void *rpt(void *this)
 
 		/* let telemetry transmit anyway (regardless of timeout) */
 
-		/* Fixme note: is is somewhat undesired as we really only want to
+		/* Fixme note: is somewhat undesired as we really only want to
 		 * TX key up for the time out message and all other messages should not
 		 * cause TX key up. This is a big source of confusion to the users
 		 * as it makes the users think that the node isn't timed out.

@@ -816,6 +816,7 @@ void load_rpt_vars(int n, int init)
 	} else { \
 		rpt_vars[n].p.var = default; \
 	}
+	
 #define RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(var, name, default_val, min_val, max_val) \
 	val = ast_variable_retrieve(cfg, cat, name); \
 	if (!ast_strlen_zero(val)) { \
