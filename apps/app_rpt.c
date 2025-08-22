@@ -5172,10 +5172,10 @@ static void *rpt(void *this)
 		if (myrpt->p.duplex > 0) {
 			/* If timed out, we only want to keep the TX keyed if there
 			 * is a message queued which is configured to override
-			 *  the time out condition
+			 * the time out condition
 			 */
 			if ((!myrpt->totimer) || myrpt->tounkeyed) {
-				totx = totx || tot_override_message_pending(myrpt);
+				totx = totx || priority_telemetry_pending(myrpt);
 			} else {
 				totx = totx || (myrpt->tele.next != &myrpt->tele);
 			}
@@ -5183,7 +5183,7 @@ static void *rpt(void *this)
 		totx = totx && !myrpt->p.s[myrpt->p.sysstate_cur].txdisable;
 		myrpt->txrealkeyed = totx;
 		/* Control op tx disable overrides everything prior to this. */
-		/*  Hold up the TX as long as there are frames in the tx queue */
+		/* Hold up the TX as long as there are frames in the tx queue */
 		totx = totx || (!AST_LIST_EMPTY(&myrpt->txq));
 		/* if in 1/2 or 3/4 duplex, give rx priority */
 		if ((myrpt->p.duplex < 2) && (!myrpt->p.linktolink) && (!myrpt->p.dias) && (myrpt->keyed)) {
