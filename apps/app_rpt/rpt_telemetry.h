@@ -3,7 +3,7 @@
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 
 /*! \brief Routine checks to see if there's a message pending which needs to override a time out condition */
-int tot_override_message_pending(struct rpt *myrpt);
+int priority_telemetry_pending(struct rpt *myrpt);
 
 void flush_telem(struct rpt *myrpt);
 

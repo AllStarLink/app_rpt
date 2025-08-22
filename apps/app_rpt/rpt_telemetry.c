@@ -493,7 +493,7 @@ done:
 	return 0;
 }
 
-int tot_override_message_pending(struct rpt *myrpt)
+int priority_telemetry_pending(struct rpt *myrpt)
 {
 	struct rpt_tele *telem;
 	int pending = 0;
@@ -509,8 +509,15 @@ int tot_override_message_pending(struct rpt *myrpt)
 		 * Add more telemetry modes here if they need
 		 * to be sent during a time out condition
 		 */
-		if (telem->mode == TIMEOUT) {
+		switch (telem->mode) {
+		case TIMEOUT:
 			pending = 1;
+			break;
+		default:
+			break;
+		}
+		if (pending) {
+			break;
 		}
 		telem = telem->next;
 	}
