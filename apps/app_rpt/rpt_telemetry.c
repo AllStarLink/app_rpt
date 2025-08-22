@@ -500,7 +500,6 @@ int tot_override_message_pending(struct rpt *myrpt)
 	if (!myrpt) {
 		return 0;
 	}
-	
 	ast_debug(3, "Check for tot override message pending");
 	rpt_mutex_lock(&myrpt->lock);
 	telem = myrpt->tele.next;
