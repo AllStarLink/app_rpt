@@ -2,6 +2,9 @@
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 
+/*! \brief Routine checks to see if there's a message pending which needs to override a time out condition */
+int priority_telemetry_pending(struct rpt *myrpt);
+
 void flush_telem(struct rpt *myrpt);
 
 /*! \brief Routine that hangs up all links and frees all threads related to them hence taking a "bird bath".  Makes a lot of noise/cleans up the mess */
