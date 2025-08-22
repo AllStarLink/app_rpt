@@ -5196,7 +5196,7 @@ static void *rpt(void *this)
 		// Disable TX if Elke timer is enabled and it expires.
 		if (myrpt->p.elke && (myrpt->elketimer > myrpt->p.elke))
 			totx = 0;
-		/* Log unkeyed to keyed transition point */
+		// Disable TX if Elke timer is enabled and it expires.
 		if (totx && !lasttx) {
 			log_keyed(myrpt);
 			lasttx = 1;
