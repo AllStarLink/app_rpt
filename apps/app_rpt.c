@@ -5179,8 +5179,7 @@ static void *rpt(void *this)
 			 */
 			if ((!myrpt->totimer) || myrpt->tounkeyed) {
 				totx = totx || tot_override_message_pending(myrpt);
-			}
-			else {
+			} else {
 				/* Not in time out condition. Keep TX keyed for all telemetry */
 				totx = totx || (myrpt->tele.next != &myrpt->tele);
 			}
