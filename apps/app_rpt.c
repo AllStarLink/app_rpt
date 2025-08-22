@@ -5181,7 +5181,7 @@ static void *rpt(void *this)
 				totx = totx || tot_override_message_pending(myrpt);
 			} else {
 				totx = totx || (myrpt->tele.next != &myrpt->tele);
-			}		
+			}
 		}
 		/* Control op tx disable overrides everything prior to this. */
 		/*  Hold up the TX as long as there are frames in the tx queue */
