@@ -5175,6 +5175,7 @@ static void *rpt(void *this)
 			 * is a message queued which is configured to override
 			 *  the time out condition
 			 */
+			 
 			if ((!myrpt->totimer) || myrpt->tounkeyed) {
 				totx = totx || tot_override_message_pending(myrpt);
 			} else {
