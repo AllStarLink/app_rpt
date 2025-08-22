@@ -497,7 +497,6 @@ int tot_override_message_pending(struct rpt *myrpt)
 {
 	struct rpt_tele *telem;
 	int pending = 0;
-	
 	if (!myrpt) {
 		return 0;
 	}
