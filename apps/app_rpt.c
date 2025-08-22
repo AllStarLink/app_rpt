@@ -5195,7 +5195,7 @@ static void *rpt(void *this)
 		/* if in 1/2 or 3/4 duplex, give rx priority */
 		if ((myrpt->p.duplex < 2) && (!myrpt->p.linktolink) && (!myrpt->p.dias) && (myrpt->keyed))
 			totx = 0;
-	    // Disable TX if Elke timer is enabled and it expires.
+		// Disable TX if Elke timer is enabled and it expires.
 		if (myrpt->p.elke && (myrpt->elketimer > myrpt->p.elke))
 			totx = 0;
 		/* Log unkeyed to keyed transition point */
