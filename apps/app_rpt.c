@@ -5175,7 +5175,7 @@ static void *rpt(void *this)
 		if (myrpt->p.duplex > 0) {
 			/* If timed out, we only want to keep the TX keyed if there
 			 * is a message queued which is configured to override
-			 *  the time out condition 
+			 *  the time out condition
 			 */
 			if ((!myrpt->totimer) || myrpt->tounkeyed)  {
 				totx = totx || tot_override_message_pending(myrpt);
