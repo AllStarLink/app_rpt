@@ -5186,10 +5186,8 @@ static void *rpt(void *this)
 			
 		}
 
+
 		/* Control op tx disable overrides everything prior to this. */
-		totx = totx && !myrpt->p.s[myrpt->p.sysstate_cur].txdisable;
-		/* Save a copy of the "real" tx state */
-		myrpt->txrealkeyed = totx;
 		/*  Hold up the TX as long as there are frames in the tx queue */
 		totx = totx || (!AST_LIST_EMPTY(&myrpt->txq));
 		/* if in 1/2 or 3/4 duplex, give rx priority */
