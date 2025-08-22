@@ -5094,7 +5094,7 @@ static void *rpt(void *this)
 		}
 
 		/* Main TX control */
-
+		
 		/* Handling  of telemetry during a time out condition */
 		if (myrpt->p.duplex > 0) {
 			/* If timed out, we only want to keep the TX keyed if there
@@ -5107,6 +5107,8 @@ static void *rpt(void *this)
 				totx = totx || (myrpt->tele.next != &myrpt->tele);
 			}
 		}
+		totx = totx && !myrpt->p.s[myrpt->p.sysstate_cur].txdisable;
+		myrpt->txrealkeyed = totx;
 		/* Control op tx disable overrides everything prior to this. */
 		/*  Hold up the TX as long as there are frames in the tx queue */
 		totx = totx || (!AST_LIST_EMPTY(&myrpt->txq));
