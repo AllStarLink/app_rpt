@@ -5168,7 +5168,6 @@ static void *rpt(void *this)
 		}
 
 		/* Main TX control */
-
 		/* Handling  of telemetry during a time out condition */
 		if (myrpt->p.duplex > 0) {
 			/* If timed out, we only want to keep the TX keyed if there
