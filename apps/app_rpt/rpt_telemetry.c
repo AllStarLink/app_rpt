@@ -511,7 +511,7 @@ int tot_override_message_pending(struct rpt *myrpt)
 		 * Add more telemetry modes here if they need
 		 * to be sent during a time out condition
 		 */
-		if(telem->mode == TIMEOUT) {
+		if (telem->mode == TIMEOUT) {
 			pending = 1;
 		}
 		telem = telem->next;
