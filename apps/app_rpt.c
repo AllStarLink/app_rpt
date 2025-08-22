@@ -5181,21 +5181,20 @@ static void *rpt(void *this)
 				totx = totx || tot_override_message_pending(myrpt);
 			} else {
 				totx = totx || (myrpt->tele.next != &myrpt->tele);
-			}
-			
+			}		
 		}
-
-
 		/* Control op tx disable overrides everything prior to this. */
 		/*  Hold up the TX as long as there are frames in the tx queue */
 		totx = totx || (!AST_LIST_EMPTY(&myrpt->txq));
 		/* if in 1/2 or 3/4 duplex, give rx priority */
-		if ((myrpt->p.duplex < 2) && (!myrpt->p.linktolink) && (!myrpt->p.dias) && (myrpt->keyed))
+		if ((myrpt->p.duplex < 2) && (!myrpt->p.linktolink) && (!myrpt->p.dias) && (myrpt->keyed)) {
 			totx = 0;
-		// Disable TX if Elke timer is enabled and it expires.
-		if (myrpt->p.elke && (myrpt->elketimer > myrpt->p.elke))
+		}
+		/* Disable TX if Elke timer is enabled and it expires. */
+		if (myrpt->p.elke && (myrpt->elketimer > myrpt->p.elke)) {
 			totx = 0;
-		// Disable TX if Elke timer is enabled and it expires.
+		}
+		/* Disable TX if Elke timer is enabled and it expires. */
 		if (totx && !lasttx) {
 			log_keyed(myrpt);
 			lasttx = 1;
