@@ -5095,21 +5095,42 @@ static void *rpt(void *this)
 
 		/* Main TX control */
 
-		/* let telemetry transmit anyway (regardless of timeout) */
-		if (myrpt->p.duplex > 0)
-			totx = totx || (myrpt->tele.next != &myrpt->tele);
+		/* Handling  of telemetry during a time out condition */
+		if (myrpt->p.duplex > 0) {
+			/* If timed out, we only want to keep the TX keyed if there
+			 * is a message queued which is configured to override
+			 *  the time out condition 
+			 */
+			if ((!myrpt->totimer) || myrpt->tounkeyed)  {
+				totx = totx || tot_override_message_pending(myrpt);
+			}
+			else {
+				/* Not in time out condition. Keep TX keyed for all telemetry */
+				totx = totx || (myrpt->tele.next != &myrpt->tele);
+			}
+			
+		}
+		
+			
+			
+		/* Control op tx disable overrides everything prior to this. */	
 		totx = totx && !myrpt->p.s[myrpt->p.sysstate_cur].txdisable;
+		/* Save a copy of the "real" tx state */
 		myrpt->txrealkeyed = totx;
+		/*  Hold up the TX as long as there are frames in the tx queue */
 		totx = totx || (!AST_LIST_EMPTY(&myrpt->txq));
 		/* if in 1/2 or 3/4 duplex, give rx priority */
 		if ((myrpt->p.duplex < 2) && (!myrpt->p.linktolink) && (!myrpt->p.dias) && (myrpt->keyed))
 			totx = 0;
+	    // Disable TX if Elke timer is enabled and it expires.
 		if (myrpt->p.elke && (myrpt->elketimer > myrpt->p.elke))
 			totx = 0;
+		/* Log unkeyed to keyed transition point */
 		if (totx && !lasttx) {
 			log_keyed(myrpt);
 			lasttx = 1;
 		}
+		/* Log keyed to unkeyed transition point */
 		if (!totx && lasttx) {
 			lasttx = 0;
 			log_unkeyed(myrpt);
