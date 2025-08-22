@@ -5109,10 +5109,8 @@ static void *rpt(void *this)
 			}
 			
 		}
-		
-			
-			
-		/* Control op tx disable overrides everything prior to this. */	
+
+		/* Control op tx disable overrides everything prior to this. */
 		totx = totx && !myrpt->p.s[myrpt->p.sysstate_cur].txdisable;
 		/* Save a copy of the "real" tx state */
 		myrpt->txrealkeyed = totx;
