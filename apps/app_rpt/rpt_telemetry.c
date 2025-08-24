@@ -516,9 +516,6 @@ int priority_telemetry_pending(struct rpt *myrpt)
 		default:
 			break;
 		}
-		if (pending) {
-			break;
-		}
 		telem = telem->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
