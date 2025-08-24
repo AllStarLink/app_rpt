@@ -504,7 +504,7 @@ int priority_telemetry_pending(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 	telem = myrpt->tele.next;
 	/* Traverse the telemetry list looking for override_tot flag */
-	while (telem != &myrpt->tele) {
+	while ((telem != &myrpt->tele) && !pending) {
 		/*
 		 * Add more telemetry modes here if they need
 		 * to be sent during a time out condition
@@ -514,9 +514,6 @@ int priority_telemetry_pending(struct rpt *myrpt)
 			pending = 1;
 			break;
 		default:
-			break;
-		}
-		if (pending) {
 			break;
 		}
 		telem = telem->next;
