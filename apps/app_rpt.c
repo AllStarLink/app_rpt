@@ -5002,6 +5002,10 @@ static void *rpt(void *this)
 			myrpt->tonotify = 1;
 			myrpt->timeouts++;
 			rpt_mutex_unlock(&myrpt->lock);
+			/* Flush pending telemetry messages */
+			flush_telem(myrpt);
+			/* Insert time out message which will have priority */
+			/* and keep the TX up during the time it is being sent out */
 			rpt_telemetry(myrpt, TIMEOUT, NULL);
 			rpt_mutex_lock(&myrpt->lock);
 		}
