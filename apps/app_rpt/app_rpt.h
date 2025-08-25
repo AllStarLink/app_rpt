@@ -1040,7 +1040,7 @@ struct rpt {
 	time_t outstreamlasterror;	/*!< \brief set when there is an outstream error and is reset when error cleared */
 	struct ast_channel *remote_webtransceiver;
 	struct timeval lastdtmftime;
-	int keyed_time_ms; /*! Time in milliseconds that a user has been keyed on the local RX */
+	int keyed_time_ms; /*!< Time in milliseconds that a user has been keyed on the local RX */
 #ifdef NATIVE_DSP
 	struct ast_dsp *dsp;
 #else
