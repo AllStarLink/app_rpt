@@ -5174,7 +5174,7 @@ static void *rpt(void *this)
 			 * is a message queued which is configured to override
 			 * the time out condition
 			 */
-			if ((!myrpt->totimer) || myrpt->tounkeyed) {
+			if (!myrpt->totimer || myrpt->tounkeyed) {
 				totx = totx || priority_telemetry_pending(myrpt);
 			} else {
 				totx = totx || (myrpt->tele.next != &myrpt->tele);
@@ -5193,12 +5193,12 @@ static void *rpt(void *this)
 		if (myrpt->p.elke && (myrpt->elketimer > myrpt->p.elke)) {
 			totx = 0;
 		}
-		/* Disable TX if Elke timer is enabled and it expires. */
+		/* Detect and log unkeyed to keyed transition point */
 		if (totx && !lasttx) {
 			log_keyed(myrpt);
 			lasttx = 1;
 		}
-		/* Log keyed to unkeyed transition point */
+		/* Detect and log keyed to unkeyed transition point */
 		if (!totx && lasttx) {
 			lasttx = 0;
 			log_unkeyed(myrpt);
