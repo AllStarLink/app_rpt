@@ -493,6 +493,35 @@ done:
 	return 0;
 }
 
+int priority_telemetry_pending(struct rpt *myrpt)
+{
+	struct rpt_tele *telem;
+	int pending = 0;
+	if (!myrpt) {
+		return 0;
+	}
+	ast_debug(3, "Check for tot override message pending");
+	rpt_mutex_lock(&myrpt->lock);
+	telem = myrpt->tele.next;
+	/* Traverse the telemetry list looking for override_tot flag */
+	while ((telem != &myrpt->tele) && !pending) {
+		/*
+		 * Add more telemetry modes here if they need
+		 * to be sent during a time out condition
+		 */
+		switch (telem->mode) {
+		case TIMEOUT:
+			pending = 1;
+			break;
+		default:
+			break;
+		}
+		telem = telem->next;
+	}
+	rpt_mutex_unlock(&myrpt->lock);
+	return pending;
+}
+
 void flush_telem(struct rpt *myrpt)
 {
 	struct rpt_tele *telem;

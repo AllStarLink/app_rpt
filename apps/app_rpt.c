@@ -5002,6 +5002,10 @@ static void *rpt(void *this)
 			myrpt->tonotify = 1;
 			myrpt->timeouts++;
 			rpt_mutex_unlock(&myrpt->lock);
+			/* Flush pending telemetry messages */
+			flush_telem(myrpt);
+			/* Insert time out message which will have priority */
+			/* and keep the TX up during the time it is being sent out */
 			rpt_telemetry(myrpt, TIMEOUT, NULL);
 			rpt_mutex_lock(&myrpt->lock);
 		}
@@ -5094,22 +5098,37 @@ static void *rpt(void *this)
 		}
 
 		/* Main TX control */
-
-		/* let telemetry transmit anyway (regardless of timeout) */
-		if (myrpt->p.duplex > 0)
-			totx = totx || (myrpt->tele.next != &myrpt->tele);
+		/* Handling  of telemetry during a time out condition */
+		if (myrpt->p.duplex > 0) {
+			/* If timed out, we only want to keep the TX keyed if there
+			 * is a message queued which is configured to override
+			 * the time out condition
+			 */
+			if (!myrpt->totimer || myrpt->tounkeyed) {
+				totx = totx || priority_telemetry_pending(myrpt);
+			} else {
+				totx = totx || (myrpt->tele.next != &myrpt->tele);
+			}
+		}
 		totx = totx && !myrpt->p.s[myrpt->p.sysstate_cur].txdisable;
 		myrpt->txrealkeyed = totx;
+		/* Control op tx disable overrides everything prior to this. */
+		/* Hold up the TX as long as there are frames in the tx queue */
 		totx = totx || (!AST_LIST_EMPTY(&myrpt->txq));
 		/* if in 1/2 or 3/4 duplex, give rx priority */
-		if ((myrpt->p.duplex < 2) && (!myrpt->p.linktolink) && (!myrpt->p.dias) && (myrpt->keyed))
+		if ((myrpt->p.duplex < 2) && (!myrpt->p.linktolink) && (!myrpt->p.dias) && (myrpt->keyed)) {
 			totx = 0;
-		if (myrpt->p.elke && (myrpt->elketimer > myrpt->p.elke))
+		}
+		/* Disable TX if Elke timer is enabled and it expires. */
+		if (myrpt->p.elke && (myrpt->elketimer > myrpt->p.elke)) {
 			totx = 0;
+		}
+		/* Detect and log unkeyed to keyed transition point */
 		if (totx && !lasttx) {
 			log_keyed(myrpt);
 			lasttx = 1;
 		}
+		/* Detect and log keyed to unkeyed transition point */
 		if (!totx && lasttx) {
 			lasttx = 0;
 			log_unkeyed(myrpt);
