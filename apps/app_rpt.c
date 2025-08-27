@@ -167,7 +167,7 @@
  *  7 - Last Node to Key Up
  *  8 - Connect specified link -- local monitor only
  *  9 - Send Text Message (9,<destnodeno or 0 (for all)>,Message Text, etc.
- *  10 - used to be Disconnect all RANGER links (except permalinks)
+ *  10 - unused
  *  11 - Disconnect a previously permanently connected link
  *  12 - Permanently connect specified link -- monitor only
  *  13 - Permanently connect specified link -- transceive

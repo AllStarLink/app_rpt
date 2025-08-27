@@ -263,11 +263,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
 
-	case 10:					/* used to be All RANGER Links Off */
-		rpt_telem_select(myrpt, command_source, mylink);
-		rpt_telemetry(myrpt, COMPLETE, NULL);
-		return DC_COMPLETE;
-
 	case 7:					/* Identify last node which keyed us up */
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, LASTNODEKEY, NULL);
