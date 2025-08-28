@@ -263,57 +263,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
 
-	case 10:					/* All RANGER Links Off */
-		rpt_mutex_lock(&myrpt->lock);
-		myrpt->savednodes[0] = 0;
-		l = myrpt->links.next;
-		/* loop through all links */
-		while (l != &myrpt->links) {
-			struct ast_frame wf;
-			char c1;
-			if ((l->name[0] <= '0') || (l->name[0] > '9')) {	/* Skip any IAXRPT monitoring */
-				l = l->next;
-				continue;
-			}
-			/* if RANGER and not permalink */
-			if ((l->max_retries <= MAX_RETRIES) && ISRANGER(l->name)) {
-				if (l->mode == MODE_TRANSCEIVE)
-					c1 = 'X';
-				else if (l->mode == MODE_LOCAL_MONITOR)
-					c1 = 'L';
-				else
-					c1 = 'M';
-				/* Make a string of disconnected nodes for possible restoration */
-				sprintf(tmp, "%c%c%.290s", c1, (l->perma) ? 'P' : 'T', l->name);
-				if (strlen(tmp) + strlen(myrpt->savednodes) + 1 < MAXNODESTR) {
-					if (myrpt->savednodes[0])
-						strcat(myrpt->savednodes, ",");
-					strcat(myrpt->savednodes, tmp);
-				}
-				l->retries = l->max_retries + 1;
-				l->disced = 2;	/* Silently disconnect */
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_debug(5, "dumping link %s\n",l->name);
-
-				init_text_frame(&wf, "function_ilink:10");
-				wf.datalen = strlen(DISCSTR) + 1;
-				wf.data.ptr = DISCSTR;
-				if (l->chan) {
-					if (l->thisconnected)
-						ast_write(l->chan, &wf);
-					rpt_safe_sleep(myrpt, l->chan, 250);	/* It's dead already, why check the return value? */
-					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-				}
-				rpt_mutex_lock(&myrpt->lock);
-			}
-			l = l->next;
-		}
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_debug(4, "Nodes disconnected: %s\n", myrpt->savednodes);
-		rpt_telem_select(myrpt, command_source, mylink);
-		rpt_telemetry(myrpt, COMPLETE, NULL);
-		return DC_COMPLETE;
-
 	case 7:					/* Identify last node which keyed us up */
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, LASTNODEKEY, NULL);

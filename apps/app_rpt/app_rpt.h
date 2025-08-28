@@ -145,8 +145,6 @@ typedef struct {
 #define	MAX_LOCALLINKNODES 50
 #define	MAX_LSTUFF 20
 
-#define ISRANGER(name) (name[0] == '9')
-
 #define	NODES "nodes"
 #define	EXTNODES "extnodes"
 #define MEMORY "memory"

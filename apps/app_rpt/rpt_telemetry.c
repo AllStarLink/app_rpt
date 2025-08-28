@@ -671,9 +671,6 @@ static struct telem_defaults tele_defs[] = {
 	{ "ct6", "|t(880,0,150,3072)" },
 	{ "ct7", "|t(660,440,150,3072)" },
 	{ "ct8", "|t(700,1100,150,3072)" },
-	{ "ranger",
-	 "|t(1800,0,60,3072)(0,0,50,0)(1800,0,60,3072)(0,0,50,0)(1800,0,60,3072)(0,0,50,0)(1800,0,60,3072)(0,0,50,0)(1800,0,60,3072)(0,0,50,0)(1800,0,60,3072)(0,0,150,0)"
-	 },
 	{ "remotemon", "|t(1600,0,75,2048)" },
 	{ "remotetx", "|t(2000,0,75,2048)(0,0,75,0)(1600,0,75,2048)" },
 	{ "cmdmode", "|t(900,904,200,2048)" },
@@ -1523,17 +1520,9 @@ treataslocal:
 			char *cpr = strs[i] + 1;
 			if (!strcmp(cpr, myrpt->name))
 				continue;
-			if (ISRANGER(cpr))
-				haslink = 1;
 		}
 		ast_free(strs);
 		ast_free(lbuf);
-		/* if has a RANGER node connected to it, use special telemetry for RANGER mode */
-		if (haslink) {
-			res = telem_lookup(myrpt, mychannel, "ranger", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY");
-			if (res)
-				ast_log(LOG_WARNING, "telem_lookup: ranger failed on %s\n", ast_channel_name(mychannel));
-		}
 
 		if (mytele->mode == LOCUNKEY) {
 			/* Local Override Courtesy Tone */

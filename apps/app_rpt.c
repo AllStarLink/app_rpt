@@ -167,7 +167,7 @@
  *  7 - Last Node to Key Up
  *  8 - Connect specified link -- local monitor only
  *  9 - Send Text Message (9,<destnodeno or 0 (for all)>,Message Text, etc.
- *  10 - Disconnect all RANGER links (except permalinks)
+ *  10 - unused
  *  11 - Disconnect a previously permanently connected link
  *  12 - Permanently connect specified link -- monitor only
  *  13 - Permanently connect specified link -- transceive
@@ -253,23 +253,6 @@
  *    if the variable has just gone from 1 to 0.
  * if type is 'N' (for "no change"), var-spec is a single (already-defined) variable name, and the result will be 1
  *    if the variable has not changed.
- *
- * "RANGER" mode configuration:
- * in the node stanza in rpt.conf ONLY the following need be specified for a RANGER node:
- *
- *
- *
- * [90101]
- *
- * rxchannel=Radio/usb90101
- * functions=rangerfunctions
- * litzcmd=*32008
- *
- * This example given would be for node "90101" (note ALL RANGER nodes MUST begin with '9'.
- * litzcmd specifies the function that LiTZ inititiates to cause a connection
- * "rangerfunctions" in this example, is a function stanza that AT LEAST has the *3 command
- * to connect to another node
- *
  *
  */
 
@@ -1835,10 +1818,6 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
-			return;
-
-		/* if is a RANGER node, only allow CONNECTED message that directly involve our node */
-		if (ISRANGER(myrpt->name) && (strncasecmp(dest, "CONNECTED,", 10) || (!strstr(dest, myrpt->name))))
 			return;
 
 		/* set 'got T message' flag */

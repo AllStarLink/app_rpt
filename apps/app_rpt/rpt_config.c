@@ -855,7 +855,7 @@ void load_rpt_vars(int n, int init)
 
 	RPT_CONFIG_VAR_INT(hangtime, "hangtime");
 	if (!val) {
-		rpt_vars[n].p.hangtime = (ISRANGER(rpt_vars[n].name) ? 1 : HANGTIME);
+		rpt_vars[n].p.hangtime = HANGTIME;
 	}
 	if (rpt_vars[n].p.hangtime < 1) {
 		rpt_vars[n].p.hangtime = 1;
@@ -863,13 +863,13 @@ void load_rpt_vars(int n, int init)
 
 	RPT_CONFIG_VAR_INT(althangtime, "althangtime");
 	if (!val) {
-		rpt_vars[n].p.althangtime = (ISRANGER(rpt_vars[n].name) ? 1 : HANGTIME);
+		rpt_vars[n].p.althangtime = HANGTIME;
 	}
 	if (rpt_vars[n].p.althangtime < 1) {
 		rpt_vars[n].p.althangtime = 1;
 	}
 
-	RPT_CONFIG_VAR_INT_DEFAULT(totime, "totime", (ISRANGER(rpt_vars[n].name) ? 9999999 : TOTIME));
+	RPT_CONFIG_VAR_INT_DEFAULT(totime, "totime", TOTIME);
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(time_out_reset_unkey_interval, "time_out_reset_unkey_interval", TIMEOUTRESETUNKEYINTERVAL, 0, 3000)
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(time_out_reset_kerchunk_interval, "time_out_reset_kerchunk_interval",
 		TIMEOUTRESETKERCHUNKINTERVAL, 0, 3000);
@@ -881,7 +881,7 @@ void load_rpt_vars(int n, int init)
 
 	rpt_vars[n].p.tailmessagetime = retrieve_astcfgint(&rpt_vars[n], cat, "tailmessagetime", 0, 200000000, 0);
 	rpt_vars[n].p.tailsquashedtime = retrieve_astcfgint(&rpt_vars[n], cat, "tailsquashedtime", 0, 200000000, 0);
-	rpt_vars[n].p.duplex = retrieve_astcfgint(&rpt_vars[n], cat, "duplex", 0, 4, (ISRANGER(rpt_vars[n].name) ? 0 : 2));
+	rpt_vars[n].p.duplex = retrieve_astcfgint(&rpt_vars[n], cat, "duplex", 0, 4, 2);
 	rpt_vars[n].p.idtime = retrieve_astcfgint(&rpt_vars[n], cat, "idtime", -60000, 2400000, IDTIME);	/* Enforce a min max including zero */
 	rpt_vars[n].p.politeid = retrieve_astcfgint(&rpt_vars[n], cat, "politeid", 30000, 300000, POLITEID);	/* Enforce a min max */
 
@@ -924,8 +924,8 @@ void load_rpt_vars(int n, int init)
 	}
 
 	RPT_CONFIG_VAR_DEFAULT(link_functions, "link_functions", rpt_vars[n].p.functions);
-	RPT_CONFIG_VAR_COND_DEFAULT(phone_functions, "phone_functions", ISRANGER(rpt_vars[n].name), rpt_vars[n].p.functions);
-	RPT_CONFIG_VAR_COND_DEFAULT(dphone_functions, "dphone_functions", ISRANGER(rpt_vars[n].name), rpt_vars[n].p.functions);
+	RPT_CONFIG_VAR_COND_DEFAULT(phone_functions, "phone_functions", 0, rpt_vars[n].p.functions);
+	RPT_CONFIG_VAR_COND_DEFAULT(dphone_functions, "dphone_functions", 0, rpt_vars[n].p.functions);
 	RPT_CONFIG_VAR(alt_functions, "alt_functions");
 	RPT_CONFIG_VAR_CHAR_DEFAULT(funcchar, "funcchar", FUNCCHAR);
 	RPT_CONFIG_VAR_CHAR_DEFAULT(endchar, "endchar", ENDCHAR);
