@@ -41,6 +41,19 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 
+/*** DOCUMENTATION
+	<function name="RPT_TELEM_TIME" language="en_US">
+		<synopsis>
+			Read current time from telemetry .
+		</synopsis>
+		<description>
+			<para>Read current time for telemetry message.
+			Returns a string in the format epoch time.
+			</para>
+		</description>
+	</function>
+ ***/
+
 /*!
  * \brief Free the datastore data
  * \param data The data to free
@@ -95,6 +108,10 @@ static int rpt_telem_read_datastore(struct ast_channel *chan, const char *cmd, c
 	snprintf(buf, len, "%ld", (long) *value); /* Convert time_t to string for dialplan */
 	return 0;
 }
+
+/*!
+ * \brief Asterisk function returns time from rpt telemetry datastore
+ */
 
 static struct ast_custom_function rpt_read_telem_datastore_function = {
 	.name = "RPT_TELEM_TIME",
