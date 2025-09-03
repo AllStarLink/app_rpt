@@ -3626,11 +3626,11 @@ static void *el_reader(void *data)
 
 							node->countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
-							if (strncmp((*found_key)->call, call, EL_CALL_SIZE) != 0) {
+							if (strncmp((*found_key)->call, call, EL_CALL_SIZE - 1) != 0) {
 								ast_verb(4, "Call changed from %s to %s.\n", node->call, call);
 								ast_copy_string(node->call, call, EL_CALL_SIZE);
 							}
-							if (strncmp(node->name, name, EL_NAME_SIZE) != 0) {
+							if (strncmp(node->name, name, EL_NAME_SIZE - 1) != 0) {
 								ast_verb(4, "Name changed from %s to %s.\n", (*found_key)->name, name);
 								ast_copy_string(node->name, name, EL_NAME_SIZE);
 							}
