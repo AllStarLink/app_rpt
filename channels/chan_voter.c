@@ -999,11 +999,11 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 	switch (cond) {
 	case AST_CONTROL_RADIO_KEY:
 		p->txkey = 1;
-		ast_debug(5, "Channel %s: TX On\n", ast_channel_name(ast));
+		ast_debug(2, "Channel %s: TX On\n", ast_channel_name(ast));
 		break;
 	case AST_CONTROL_RADIO_UNKEY:
 		p->txkey = 0;
-		ast_debug(5, "Channel %s: TX Off\n", ast_channel_name(ast));
+		ast_debug(2, "Channel %s: TX Off\n", ast_channel_name(ast));
 		break;
 	case AST_CONTROL_HANGUP:
 		return -1;
@@ -1036,7 +1036,7 @@ static int voter_digit_begin(struct ast_channel *ast, char digit)
 static int voter_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
 {
 	/* no better use for received digits than print them */
-	ast_verbose(" << Console Received digit %c of duration %u ms >> \n", digit, duration);
+	ast_verb(1, " << Console Received digit %c of duration %u ms >> \n", digit, duration);
 	return 0;
 }
 
@@ -1665,7 +1665,7 @@ static void *voter_primary_client(void *data)
 			strcpy((char *) authpacket.vp.challenge, challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
-			ast_debug(3, "Voter %i: Sent primary client GPS Keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
+			ast_debug(5, "Voter %i: Sent primary client GPS Keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary,
 				sizeof(p->primary));
@@ -1745,14 +1745,14 @@ static void check_ping_done(struct voter_client *client)
 		if (voter_tvdiff_ms(ast_tvnow(),
 							(ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) >
 			PING_TIMEOUT_MS) {
-			ast_verbose("\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
+			ast_verb(1, "\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
 		} else {
 			if (client->pings_received < client->pings_requested) {
 				return;
 			}
 		}
 	} else {
-		ast_verbose("\nPING (%s): ABORTED!!\n", client->name);
+		ast_verb(1, "\nPING (%s): ABORTED!!\n", client->name);
 		client->ping_abort = 0;
 	}
 	if (client->pings_sent) {
@@ -1765,9 +1765,9 @@ static void check_ping_done(struct voter_client *client)
 	} else {
 		q = 0;
 	}
-	ast_verbose("\nPING (%s): Packets tx: %d, rx: %d, oos: %d, Avg.: %0.3f ms\n", client->name, client->pings_sent,
+	ast_verb(1, "\nPING (%s): Packets tx: %d, rx: %d, oos: %d, Avg.: %0.3f ms\n", client->name, client->pings_sent,
 				client->pings_received, client->pings_oos, q);
-	ast_verbose("PING (%s):  Worst: %d ms, Best: %d ms, %0.1f%% Packets successfully received (%0.1f%% loss)\n",
+	ast_verb(1, "PING (%s):  Worst: %d ms, Best: %d ms, %0.1f%% Packets successfully received (%0.1f%% loss)\n",
 				client->name, client->pings_worst, client->pings_best, p, 100.0 - p);
 	client->pings_requested = 0;
 }
@@ -2046,12 +2046,12 @@ static void *voter_xmit(void *data)
 						proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 						proxy_audiopacket.vp.curtime.vtime_nsec =
 							(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-						ast_debug(2, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum, client->name,
+						ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum, client->name,
 							proxy_audiopacket.vp.digest);
 						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0,
 							   (struct sockaddr *) &client->sin, sizeof(client->sin));
 					} else {
-						ast_debug(2, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
+						ast_debug(6, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
 							client->respdigest);
 						sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							   sizeof(client->sin));
@@ -2117,12 +2117,12 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 							proxy_audiopacket.vp.curtime.vtime_nsec =
 								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(2, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum, client->name,
+							ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum, client->name,
 								proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0,
 								(struct sockaddr *) &client->sin, sizeof(client->sin));
 						} else {
-							ast_debug(2, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
+							ast_debug(6, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
 								client->respdigest);
 							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
 								sizeof(client->sin));
@@ -2211,12 +2211,12 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 							proxy_audiopacket.vp.curtime.vtime_nsec =
 								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(2, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum, client->name,
+							ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum, client->name,
 									proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0,
 								   (struct sockaddr *) &client->sin, sizeof(client->sin));
 						} else {
-							ast_debug(2, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
+							ast_debug(6, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
 								client->respdigest);
 							sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0,
 								(struct sockaddr *) &client->sin, sizeof(client->sin));
@@ -2311,12 +2311,12 @@ static void *voter_xmit(void *data)
 					proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 					proxy_audiopacket.vp.curtime.vtime_nsec =
 						(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-					ast_debug(2, "Voter %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum, client->name,
+					ast_debug(5, "Voter %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum, client->name,
 						proxy_audiopacket.vp.digest);
 					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
 						(struct sockaddr *) &client->sin, sizeof(client->sin));
 				} else {
-					ast_debug(2, "Voter %i: Sending KEEPALIVE (GPS) packet to client %s digest %08x\n", p->nodenum, client->name,
+					ast_debug(5, "Voter %i: Sending KEEPALIVE (GPS) packet to client %s digest %08x\n", p->nodenum, client->name,
 						client->respdigest);
 					sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
 						sizeof(client->sin));
@@ -3817,7 +3817,7 @@ static void *voter_reader(void *data)
 			/* if set got something worthwhile */
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) {	
 				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(4, "Got rx packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
+				ast_debug(6, "Got rx packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
 					ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 				client = NULL;
 				if ((!check_client_sanity) && master_port) {
@@ -3882,11 +3882,11 @@ static void *voter_reader(void *data)
 							break;
 						}
 					}
-					if (DEBUG_ATLEAST(3) && client && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0) &&
+					if (DEBUG_ATLEAST(4) && client && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0) &&
 						ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) {
 						timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
 						strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-						ast_verbose("Time:      %s.%03d, (%s) RSSI: %d\n", timestr, ntohl(vph->curtime.vtime_nsec) / 1000000, client->name, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+						ast_debug(4, "Time:      %s.%03d, (%s) RSSI: %d\n", timestr, ntohl(vph->curtime.vtime_nsec) / 1000000, client->name, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 					}
 					if (client) {
 						for (p = pvts; p; p = p->next) {
@@ -4058,7 +4058,7 @@ static void *voter_reader(void *data)
 										client->mix = 0;
 									}
 									recvlen -= sizeof(proxy);
-									ast_debug(4, "Now (proxy) Got rx packet, len %d payload %d challenge %s digest %08x\n",
+									ast_debug(6, "Now (proxy) Got rx packet, len %d payload %d challenge %s digest %08x\n",
 											 (int) recvlen, ntohs(vph->payload_type), vph->challenge,
 											 ntohl(vph->digest));
 									if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
@@ -4147,14 +4147,14 @@ static void *voter_reader(void *data)
 								difftime = (ptime - btime) + (BUFDELAY(client) * 125000LL);
 								difftime -= puckoffset(client);
 								index = (int) ((long long) difftime / 125000LL);
-								if (DEBUG_ATLEAST(3) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
+								if (DEBUG_ATLEAST(5) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
 									timestuff = (time_t) master_time.vtime_sec;
 									strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-									ast_verbose("DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
+									ast_debug(4, "DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
 									gettimeofday(&timetv, NULL);
 									timestuff = (time_t) timetv.tv_sec;
 									strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-									ast_debug(3, "SysTime:   %s.%03d, diff: %lld,index: %d\n", timestr,
+									ast_debug(4, "SysTime:   %s.%03d, diff: %lld,index: %d\n", timestr,
 										(int) timetv.tv_usec / 1000, btime - ptime, index);
 								}
 							}
@@ -4630,7 +4630,7 @@ static void *voter_reader(void *data)
 											fr.src = __PRETTY_FUNCTION__;
 											ast_queue_frame(p->owner, &fr);
 										}
-										ast_debug(2, "Sending from client %s RSSI %d\n", maxclient->name, maxrssi);
+										ast_debug(4, "Sending from client %s RSSI %d\n", maxclient->name, maxrssi);
 									}
 									if ((!p->duplex) && p->txkey) {
 										p->rxkey = 0;
@@ -4674,12 +4674,12 @@ static void *voter_reader(void *data)
 							continue;
 						}
 						if (client->ping_last_seqno && (pingpacket.seqno < (client->ping_last_seqno + 1))) {
-							ast_verbose("PING (%s): Packets out of sequence!!\n", client->name);
+							ast_verb(1, "PING (%s): Packets out of sequence!!\n", client->name);
 							client->pings_oos++;
 						}
 						timediff = ast_tvdiff_ms(client->ping_last_rxtime, pingpacket.txtime);
 						if (timediff < 0) {
-							ast_verbose("PING (%s): Packet has invalid time (diff=%d)!!\n", client->name, timediff);
+							ast_verb(1, "PING (%s): Packet has invalid time (diff=%d)!!\n", client->name, timediff);
 							continue;
 						}
 						client->ping_last_seqno = pingpacket.seqno;
@@ -4697,13 +4697,13 @@ static void *voter_reader(void *data)
 						if (timediff > client->pings_worst){
 							client->pings_worst = timediff;
 						}
-						ast_verbose("PING (%s) Response:   seqno: %u  diff: %d ms\n", client->name, pingpacket.seqno,
+						ast_verb(1, "PING (%s) Response:   seqno: %u  diff: %d ms\n", client->name, pingpacket.seqno,
 									timediff);
 						//if (debug >= 3)
 						{
 							timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
 							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-//                          ast_verbose("PING (%s):   seqno: %u  %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec));
+//                          ast_verb(1, "PING (%s):   seqno: %u  %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec));
 						}
 						check_ping_done(client);
 						continue;
@@ -4761,12 +4761,12 @@ static void *voter_reader(void *data)
 					  process_gps:
 						client->lastmastergpstime.vtime_sec = mastergps_time.vtime_sec;
 						client->lastmastergpstime.vtime_nsec = mastergps_time.vtime_nsec;
-						if (DEBUG_ATLEAST(3)) {
+						if (DEBUG_ATLEAST(4)) {
 							gettimeofday(&timetv, NULL);
 							timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
 							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
 
-							ast_debug(3, "GPSTime (%s):   %s.%09d\n", client->name, timestr,
+							ast_debug(4, "GPSTime (%s):   %s.%09d\n", client->name, timestr,
 								ntohl(vph->curtime.vtime_nsec));
 							timetv.tv_usec = ((timetv.tv_usec + 10000) / 20000) * 20000;
 							if (timetv.tv_usec >= 1000000) {
@@ -4775,13 +4775,13 @@ static void *voter_reader(void *data)
 							}
 							timestuff = (time_t) timetv.tv_sec;
 							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-							ast_verbose("SysTime:   %s.%06d\n", timestr, (int) timetv.tv_usec);
+							ast_debug(4, "SysTime:   %s.%06d\n", timestr, (int) timetv.tv_usec);
 							timestuff = (time_t) master_time.vtime_sec;
 							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-							ast_verbose("DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
+							ast_debug(4, "DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
 						}
 						if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
-							ast_debug(2, "Got GPS Keepalive from (%s)\n", client->name);
+							ast_debug(5, "Got GPS Keepalive from (%s)\n", client->name);
 						} else {
 							vgp = (VOTER_GPS *) (buf + sizeof(VOTER_PACKET_HEADER));
 							if (client->gpsid) {
@@ -4797,7 +4797,7 @@ static void *voter_reader(void *data)
 								fclose(gpsfp);
 								rename(gps1, gps2);
 							}
-							ast_debug(2, "Got GPS (%s): Lat: %s, Lon: %s, Elev: %s\n",
+							ast_debug(5, "Got GPS (%s): Lat: %s, Lon: %s, Elev: %s\n",
 											client->name, vgp->lat, vgp->lon, vgp->elev);
 						}
 						continue;
