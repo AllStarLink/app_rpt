@@ -549,6 +549,10 @@ void flush_telem(struct rpt *myrpt)
 	while (telem != &myrpt->tele) {
 		if (telem->mode != SETREMOTE && telem->chan) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+			if (myrpt->active_telem == telem) {
+				/* If we are the active telemetry, we need to clean it up */
+				myrpt->active_telem = NULL;
+			}
 		}
 		telem = telem->next;
 	}
@@ -564,6 +568,11 @@ void birdbath(struct rpt *myrpt)
 	while (telem != &myrpt->tele) {
 		if (telem->mode == PARROT) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+			if (myrpt->active_telem == telem) {
+				/* If we are the active telemetry, we need to clean it up */
+				myrpt->active_telem = NULL;
+			}
+
 		}
 		telem = telem->next;
 	}
