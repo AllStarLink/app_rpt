@@ -1767,7 +1767,7 @@ static void check_ping_done(struct voter_client *client)
 	}
 	ast_verb(1, "\nPING (%s): Packets tx: %d, rx: %d, oos: %d, Avg.: %0.3f ms\n", client->name, client->pings_sent,
 		client->pings_received, client->pings_oos, q);
-	ast_verb(1, "PING (%s):  Worst: %d ms, Best: %d ms, %0.1f%% Packets successfully received (%0.1f%% loss)\n", client->name, 
+	ast_verb(1, "PING (%s):  Worst: %d ms, Best: %d ms, %0.1f%% Packets successfully received (%0.1f%% loss)\n", client->name,
 		client->pings_worst, client->pings_best, p, 100.0 - p);
 	client->pings_requested = 0;
 }
@@ -2048,7 +2048,8 @@ static void *voter_xmit(void *data)
 							(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 						ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, proxy_audiopacket.vp.digest);
-						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
+						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
+							sizeof(client->sin));
 					} else {
 						ast_debug(6, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
 						sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
@@ -2117,8 +2118,8 @@ static void *voter_xmit(void *data)
 								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 							ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
-							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0,
-								(struct sockaddr *) &client->sin, sizeof(client->sin));
+							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0, (struct sockaddr *) &client->sin,
+								sizeof(client->sin));
 						} else {
 							ast_debug(6, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
 								client->respdigest);
@@ -2209,7 +2210,7 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 							proxy_audiopacket.vp.curtime.vtime_nsec =
 								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum, 
+							ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0,
 								(struct sockaddr *) &client->sin, sizeof(client->sin));
@@ -4700,7 +4701,7 @@ static void *voter_reader(void *data)
 						{
 							timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
 							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-                        	// ast_verb(1, "PING (%s):   seqno: %u  %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec));
+                        	// ast_verb(1, "PING (%s):   seqno: %u %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec));
 						}
 						check_ping_done(client);
 						continue;
