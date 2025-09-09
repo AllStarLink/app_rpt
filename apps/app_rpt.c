@@ -1184,10 +1184,7 @@ static void *rpt_pbx_autopatch_run(void *data)
 	struct rpt_autopatch *autopatch = data;
 	struct rpt *myrpt = autopatch->myrpt;
 	enum ast_pbx_result res;
-	struct ast_pbx_args pbx_args;
-
-	memset(&pbx_args, 0, sizeof(pbx_args));
-	pbx_args.no_hangup_chan = 1;
+	struct ast_pbx_args pbx_args = { .no_hangup_chan = 1 };
 
 	res = ast_pbx_run_args(autopatch->mychannel, &pbx_args);
 	if (res) { /* could not start PBX */
@@ -1239,6 +1236,7 @@ void *rpt_call(void *this)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		myrpt->callmode = CALLMODE_DOWN;
 		pthread_exit(NULL);
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
@@ -1249,6 +1247,7 @@ void *rpt_call(void *this)
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		ao2_ref(cap, -1);
+		myrpt->callmode = CALLMODE_DOWN;
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
@@ -1266,6 +1265,7 @@ void *rpt_call(void *this)
 	if (!genchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
 		ast_hangup(mychannel);
+		myrpt->callmode = CALLMODE_DOWN;
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
@@ -1285,6 +1285,13 @@ void *rpt_call(void *this)
 		myrpt->callmode = CALLMODE_DOWN;
 		pthread_exit(NULL);
 	}
+	if (myrpt->p.tonezone && rpt_set_tone_zone(genchannel, myrpt->p.tonezone)) {
+		ast_hangup(mychannel);
+		ast_hangup(genchannel);
+		myrpt->callmode = CALLMODE_DOWN;
+		pthread_exit(NULL);
+	}
+
 	/* start dialtone if patchquiet is 0. Special patch modes don't send dial tone */
 	if (!myrpt->patchquiet && !myrpt->patchexten[0] && rpt_play_dialtone(genchannel) < 0) {
 		ast_hangup(mychannel);
