@@ -182,7 +182,7 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 			tlist = tlist->next;
 		}
 	}
-	if ((!myrpt->p.duplex) || (!nonlocals)) {
+	if ((!myrpt->p.duplex && !myrpt->p.linktolink) || (!nonlocals)) {
 		return 0;
 	}
 	if (!mylink->phonemode &&
