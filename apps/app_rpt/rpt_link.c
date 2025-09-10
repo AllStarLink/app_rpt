@@ -29,11 +29,12 @@
 
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 {
-
-	if (!myrpt)
+	if (!myrpt) {
 		return;
-	if (!mylink)
+	}
+	if (!mylink) {
 		return;
+	}
 	switch (myrpt->p.linkmode[linktype]) {
 	case LINKMODE_OFF:
 		mylink->linkmode = 0;
@@ -53,8 +54,9 @@ void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 
 void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode)
 {
-	if (!mylink)
+	if (!mylink) {
 		return;
+	}
 	switch (linkmode) {
 	case LINKMODE_OFF:
 		mylink->linkmode = 0;
@@ -176,9 +178,9 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	check_tlink_list(myrpt);
 	if (tlist != &myrpt->tele) {
 		while (tlist != &myrpt->tele) {
-			if ((tlist->mode == PLAYBACK) || (tlist->mode == STATS_GPS_LEGACY) || (tlist->mode == ID1)
-				|| (tlist->mode == TEST_TONE))
+			if ((tlist->mode == PLAYBACK) || (tlist->mode == STATS_GPS_LEGACY) || (tlist->mode == ID1) || (tlist->mode == TEST_TONE)) {
 				nonlocals++;
+			}
 			tlist = tlist->next;
 		}
 	}
@@ -210,8 +212,9 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 {
 	struct ast_frame *f1;
 
-	if (!l->chan)
+	if (!l->chan) {
 		return;
+	}
 	f1 = ast_frdup(f);
 	if (!f1) {
 		return;
@@ -260,13 +263,14 @@ int FindBestRssi(struct rpt *myrpt)
 	newboss = 0;
 
 	myrpt->voted_rssi = 0;
-	if (myrpt->votewinner && myrpt->rxchankeyed)
+	if (myrpt->votewinner && myrpt->rxchankeyed) {
 		myrpt->voted_rssi = myrpt->rxrssi;
-	else if (myrpt->voted_link != NULL && myrpt->voted_link->lastrealrx)
+	} else if (myrpt->voted_link != NULL && myrpt->voted_link->lastrealrx) {
 		myrpt->voted_rssi = myrpt->voted_link->rssi;
-
-	if (myrpt->rxchankeyed)
+	}
+	if (myrpt->rxchankeyed) {
 		maxrssi = myrpt->rxrssi;
+	}
 
 	l = myrpt->links.next;
 	while (l && (l != &myrpt->links)) {
@@ -288,10 +292,11 @@ int FindBestRssi(struct rpt *myrpt)
 		) {
 		newboss = 1;
 		myrpt->votewinner = 0;
-		if (bl == NULL && myrpt->rxchankeyed)
+		if (bl == NULL && myrpt->rxchankeyed) {
 			myrpt->votewinner = 1;
-		else if (bl != NULL)
+		} else if (bl != NULL) {
 			bl->votewinner = 1;
+		}
 		myrpt->voted_link = bl;
 		myrpt->voted_rssi = maxrssi;
 	}
@@ -318,8 +323,9 @@ void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c)
 			l = l->next;
 			continue;
 		}
-		if (l->chan)
+		if (l->chan) {
 			ast_senddigit(l->chan, c, 0);
+		}
 		l = l->next;
 	}
 }
@@ -341,8 +347,9 @@ void rssi_send(struct rpt *myrpt)
 			continue;
 		}
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
-		if (l->chan)
+		if (l->chan) {
 			rpt_qwrite(l, &wf);
+		}
 		l = l->next;
 	}
 }
@@ -366,8 +373,9 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		}
 		/* if we found it, write it and were done */
 		if (!strcmp(l->name, myrpt->cmdnode)) {
-			if (l->chan)
+			if (l->chan) {
 				rpt_qwrite(l, &wf);
+			}
 			return;
 		}
 		l = l->next;
@@ -375,8 +383,9 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	l = myrpt->links.next;
 	/* if not, give it to everyone */
 	while (l != &myrpt->links) {
-		if (l->chan)
+		if (l->chan) {
 			rpt_qwrite(l, &wf);
+		}
 		l = l->next;
 	}
 }
@@ -399,8 +408,9 @@ void send_link_keyquery(struct rpt *myrpt)
 	l = myrpt->links.next;
 	/* give it to everyone */
 	while (l != &myrpt->links) {
-		if (l->chan)
+		if (l->chan) {
 			rpt_qwrite(l, &wf);
+		}
 		l = l->next;
 	}
 }
@@ -449,21 +459,27 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 	/* go thru all links */
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
-		if (l->name[0] == '0')
+		if (l->name[0] == '0') {
 			continue;
-		if (l->mode == MODE_LOCAL_MONITOR)
-			continue;			/* dont report local modes */
+		}
+		if (l->mode == MODE_LOCAL_MONITOR) {
+			continue; /* dont report local modes */
+		}
 		/* dont count our stuff */
-		if (l == mylink)
+		if (l == mylink) {
 			continue;
-		if (mylink && (!strcmp(l->name, mylink->name)))
+		}
+		if (mylink && !strcmp(l->name, mylink->name)) {
 			continue;
+		}
 		/* figure out mode to report */
 		mode = 'T'; /* use Transceive by default */
-		if (l->mode == MODE_MONITOR)
-			mode = 'R';			/* indicate RX for our mode */
-		if (!l->thisconnected)
-			mode = 'C';			/* indicate connecting */
+		if (l->mode == MODE_MONITOR) {
+			mode = 'R'; /* indicate RX for our mode */
+		}
+		if (!l->thisconnected) {
+			mode = 'C'; /* indicate connecting */
+		}
 		spos = ast_str_strlen(*buf); /* current buf size (b4 we add our stuff) */
 		if (spos > 2) {
 			ast_str_append(buf, 0, "%s", ",");
@@ -480,16 +496,19 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 			}
 		}
 		/* if we are in transceive mode, let all modes stand */
-		if (mode == 'T')
+		if (mode == 'T') {
 			continue;
+		}
 		/* downgrade everyone on this node if appropriate */
 		links_buf = ast_str_buffer(*buf);
 		len = ast_str_strlen(*buf);
 		for (i = spos; i < len; i++) {
-			if (links_buf[i] == 'T')
+			if (links_buf[i] == 'T') {
 				links_buf[i] = mode;
-			if ((links_buf[i] == 'R') && (mode == 'C'))
+			}
+			if ((links_buf[i] == 'R') && (mode == 'C')) {
 				links_buf[i] = mode;
+			}
 		}
 	}
 	/* After building the string, count number of nodes (commas) in buffer string. The first
@@ -515,8 +534,9 @@ void __kickshort(struct rpt *myrpt)
 
 	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
 		/* if is not a real link, ignore it */
-		if (l->name[0] == '0')
+		if (l->name[0] == '0') {
 			continue;
+		}
 		if (l->linklisttimer > LINKLISTSHORTTIME) {
 			l->linklisttimer = LINKLISTSHORTTIME;
 		}
@@ -639,8 +659,9 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 			continue;
 		}
 		/* if found matching string */
-		if (!strcmp(l->name, node))
+		if (!strcmp(l->name, node)) {
 			break;
+		}
 		l = l->next;
 	}
 	/* if found */
@@ -658,8 +679,9 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		}
 		reconnects = l->reconnects;
 		rpt_mutex_unlock(&myrpt->lock);
-		if (l->chan)
+		if (l->chan) {
 			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+		}
 		l->retries = l->max_retries + 1;
 		l->disced = 2;
 		modechange = 1;
@@ -678,8 +700,9 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		}
 		ns = finddelim(ast_str_buffer(lstr), strs, n);
 		for (i = 0; i < ns; i++) {
-			if ((*strs[i] < '0') || (*strs[i] > '9'))
+			if ((*strs[i] < '0') || (*strs[i] > '9')) {
 				strs[i]++;
+			}
 			if (!strcmp(strs[i], node)) {
 				ast_free(lstr);
 				ast_free(strs);
@@ -783,19 +806,22 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		return -1;
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	if (tlb_query_node_exists(node))
+	if (tlb_query_node_exists(node)) {
 		init_linkmode(myrpt, l, LINKMODE_TLB);
-	else if (node[0] == '3')
+	} else if (node[0] == '3') {
 		init_linkmode(myrpt, l, LINKMODE_ECHOLINK);
-	else
+	} else {
 		l->linkmode = 0;
+	}
 	l->reconnects = reconnects;
 	/* insert at end of queue */
 	l->max_retries = MAX_RETRIES;
-	if (perma)
+	if (perma) {
 		l->max_retries = MAX_RETRIES_PERM;
-	if (l->isremote)
+	}
+	if (l->isremote) {
 		l->retries = l->max_retries + 1;
+	}
 	l->rxlingertimer = RX_LINGER_TIME;
 	rpt_link_add(myrpt, l);
 	__kickshort(myrpt);
