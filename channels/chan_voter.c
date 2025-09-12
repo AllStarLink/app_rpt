@@ -1745,14 +1745,14 @@ static void check_ping_done(struct voter_client *client)
 		if (voter_tvdiff_ms(ast_tvnow(),
 							(ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) >
 			PING_TIMEOUT_MS) {
-			ast_verb(1, "\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
+			ast_log(LOG_WARNING, "\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
 		} else {
 			if (client->pings_received < client->pings_requested) {
 				return;
 			}
 		}
 	} else {
-		ast_verb(1, "\nPING (%s): ABORTED!!\n", client->name);
+		ast_log(LOG_WARNING, "\nPING (%s): ABORTED!!\n", client->name);
 		client->ping_abort = 0;
 	}
 	if (client->pings_sent) {
@@ -4673,12 +4673,12 @@ static void *voter_reader(void *data)
 							continue;
 						}
 						if (client->ping_last_seqno && (pingpacket.seqno < (client->ping_last_seqno + 1))) {
-							ast_verb(1, "PING (%s): Packets out of sequence!!\n", client->name);
+							ast_log(LOG_WARNING, "PING (%s): Packets out of sequence!!\n", client->name);
 							client->pings_oos++;
 						}
 						timediff = ast_tvdiff_ms(client->ping_last_rxtime, pingpacket.txtime);
 						if (timediff < 0) {
-							ast_verb(1, "PING (%s): Packet has invalid time (diff=%d)!!\n", client->name, timediff);
+							ast_log(LOG_WARNING, "PING (%s): Packet has invalid time (diff=%d)!!\n", client->name, timediff);
 							continue;
 						}
 						client->ping_last_seqno = pingpacket.seqno;
