@@ -1036,7 +1036,7 @@ static int voter_digit_begin(struct ast_channel *ast, char digit)
 static int voter_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
 {
 	/* no better use for received digits than print them */
-	ast_verb(1, " << Console Received digit %c of duration %u ms >> \n", digit, duration);
+	ast_debug(3, " << Console Received digit %c of duration %u ms >> \n", digit, duration);
 	return 0;
 }
 
@@ -4697,12 +4697,11 @@ static void *voter_reader(void *data)
 							client->pings_worst = timediff;
 						}
 						ast_verb(1, "PING (%s) Response:   seqno: %u  diff: %d ms\n", client->name, pingpacket.seqno, timediff);
-						// if (debug >= 3)
-						{
-							timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-                        	// ast_verb(1, "PING (%s):   seqno: %u %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec));
-						}
+						
+						timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
+						strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
+                        /* ast_debug(3, "PING (%s):   seqno: %u %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec)); */
+						
 						check_ping_done(client);
 						continue;
 					}
