@@ -904,6 +904,7 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(telemetry, "telemetry", TELEMETRY);
 	RPT_CONFIG_VAR_DEFAULT(macro, "macro", MACRO);
 	RPT_CONFIG_VAR_DEFAULT(tonemacro, "tonemacro", TONEMACRO);
+	RPT_CONFIG_VAR_BOOL_DEFAULT(tonemacro_every_key, "tonemacro_every_key", 0);
 	RPT_CONFIG_VAR_DEFAULT(mdcmacro, "mdcmacro", MDCMACRO);
 	RPT_CONFIG_VAR(startupmacro, "startup_macro");
 

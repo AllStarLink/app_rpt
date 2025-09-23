@@ -3873,7 +3873,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					rpt_mutex_lock(&myrpt->lock);
 					ast_copy_string(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone));
 					rpt_mutex_unlock(&myrpt->lock);
-				} else if (strcmp((char *) f->data.ptr, myrpt->lasttone)) {
+				} else if (strcmp((char *) f->data.ptr, myrpt->lasttone) || myrpt->p.tonemacro_every_key) {
 					val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.tonemacro, (char *) f->data.ptr);
 					if (val) {
 						ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, val, myrpt->name);

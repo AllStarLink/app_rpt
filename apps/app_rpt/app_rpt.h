@@ -806,6 +806,7 @@ struct rpt {
 		int iospeed;
 		char funcchar;
 		char endchar;
+		unsigned int tonemacro_every_key:1;
 		unsigned int archiveaudio:1;
 		unsigned int nobusyout:1;
 		unsigned int notelemtx:1;
