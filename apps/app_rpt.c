@@ -3849,7 +3849,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			myrpt->elketimer = 0;
 			myrpt->localoverride = 0;
 			if (f->datalen && f->data.ptr) {
-				char *repeat;
+				int repeat;
 				const char *val;
 				send_link_pl(myrpt, f->data.ptr);
 
@@ -3876,14 +3876,11 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				} else {
 					val = ast_variable_retrieve(myrpt->cfg, myrpt->p.tonemacro, f->data.ptr);
 					if (val) {
-						repeat = strchr(val, TONEMACRO_REPEAT);
-						if (repeat) { /* remove repeat char from tone string */
-							ast_copy_string(repeat, repeat + 1, strlen(repeat));
-						}
+						repeat = (val[0] == TONEMACRO_REPEAT);
 						/* If this is a new tone or the tone string contains the repeat command, execute the macro */
 						if (strcmp(f->data.ptr, myrpt->lasttone) || repeat) {
-							ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, val, myrpt->name);
-							macro_append(myrpt, val);
+							ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, repeat ? val + 1 : val, myrpt->name);
+							macro_append(myrpt, repeat ? val + 1 : val);
 						}
 					}
 					rpt_mutex_lock(&myrpt->lock);
