@@ -79,6 +79,7 @@ typedef struct {
 #define	KEYTIMERTIME 250
 #define	MACROTIME 100
 #define	MACROPTIME 500
+#define TONEMACRO_REPEAT 'R'
 #define	DTMF_TIMEOUT 3
 #define	KENWOOD_RETRIES 5
 #define	TOPKEYN 32
@@ -806,7 +807,6 @@ struct rpt {
 		int iospeed;
 		char funcchar;
 		char endchar;
-		unsigned int tonemacro_every_key:1;
 		unsigned int archiveaudio:1;
 		unsigned int nobusyout:1;
 		unsigned int notelemtx:1;

@@ -3849,8 +3849,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			myrpt->elketimer = 0;
 			myrpt->localoverride = 0;
 			if (f->datalen && f->data.ptr) {
-				char *val;
-
+				char *repeat;
+				const char *val;
 				send_link_pl(myrpt, f->data.ptr);
 
 				if (myrpt->p.nlocallist) {
@@ -3865,22 +3865,29 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				}
 				ast_debug(1, "Got PL %s on node %s\n", (char *) f->data.ptr, myrpt->name);
 				/* ctcss code autopatch initiate */
-				if (strstr((char *) f->data.ptr, "/M/") && !myrpt->macropatch) {
+				if (strstr(f->data.ptr, "/M/") && !myrpt->macropatch) {
 					char val[16];
 					strcpy(val, "*6");
 					myrpt->macropatch = 1;
 					macro_append(myrpt, val);
 					rpt_mutex_lock(&myrpt->lock);
-					ast_copy_string(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone));
+					ast_copy_string(myrpt->lasttone, f->data.ptr, sizeof(myrpt->lasttone));
 					rpt_mutex_unlock(&myrpt->lock);
-				} else if (strcmp((char *) f->data.ptr, myrpt->lasttone) || myrpt->p.tonemacro_every_key) {
-					val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.tonemacro, (char *) f->data.ptr);
+				} else {
+					val = ast_variable_retrieve(myrpt->cfg, myrpt->p.tonemacro, f->data.ptr);
 					if (val) {
-						ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, val, myrpt->name);
-						macro_append(myrpt, val);
+						repeat = strchr(val, TONEMACRO_REPEAT);
+						if (repeat) { /* remove repeat char from tone string */
+							ast_copy_string(repeat, repeat + 1, strlen(repeat));
+						}
+						/* If this is a new tone or the tone string contains the repeat command, execute the macro */
+						if (strcmp(f->data.ptr, myrpt->lasttone) || repeat) {
+							ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, val, myrpt->name);
+							macro_append(myrpt, val);
+						}
 					}
 					rpt_mutex_lock(&myrpt->lock);
-					ast_copy_string(myrpt->lasttone, (char *) f->data.ptr, sizeof(myrpt->lasttone));
+					ast_copy_string(myrpt->lasttone, f->data.ptr, sizeof(myrpt->lasttone));
 					rpt_mutex_unlock(&myrpt->lock);
 				}
 			} else {
