@@ -3849,7 +3849,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			myrpt->elketimer = 0;
 			myrpt->localoverride = 0;
 			if (f->datalen && f->data.ptr) {
-				int repeat;
+				int repeat = 0;
 				const char *val;
 				send_link_pl(myrpt, f->data.ptr);
 
@@ -3870,24 +3870,24 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					strcpy(val, "*6");
 					myrpt->macropatch = 1;
 					macro_append(myrpt, val);
-					rpt_mutex_lock(&myrpt->lock);
 					ast_copy_string(myrpt->lasttone, f->data.ptr, sizeof(myrpt->lasttone));
-					rpt_mutex_unlock(&myrpt->lock);
 				} else {
 					val = ast_variable_retrieve(myrpt->cfg, myrpt->p.tonemacro, f->data.ptr);
 					if (val) {
 						repeat = (val[0] == TONEMACRO_REPEAT);
 						/* If this is a new tone or the tone string contains the repeat command, execute the macro */
-						if (strcmp(f->data.ptr, myrpt->lasttone) || repeat) {
+						if (repeat || strcmp(f->data.ptr, myrpt->lasttone)) {
 							ast_debug(1, "Tone %s doing %s on node %s\n", (char *) f->data.ptr, repeat ? val + 1 : val, myrpt->name);
-							macro_append(myrpt, repeat ? val + 1 : val);
+							macro_append(myrpt, repeat ? val + 1 : val); /* Drop the "R" if it's a repeat */
 						}
 					}
-					rpt_mutex_lock(&myrpt->lock);
-					ast_copy_string(myrpt->lasttone, f->data.ptr, sizeof(myrpt->lasttone));
-					rpt_mutex_unlock(&myrpt->lock);
+					if (!repeat) { /* Small optimization, only copy the string if we care what it was */
+						ast_copy_string(myrpt->lasttone, f->data.ptr, sizeof(myrpt->lasttone));
+					} else { /* otherwise do the lower cost clearing */
+						myrpt->lasttone[0] = 0;
+					}
 				}
-			} else {
+			} else { /* There is no tone for this keyup*/
 				myrpt->lasttone[0] = 0;
 				send_link_pl(myrpt, "0");
 			}
