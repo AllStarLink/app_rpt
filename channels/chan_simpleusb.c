@@ -3214,6 +3214,7 @@ static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
 
 /*!
  * \brief Update the tune settings to the configuration file.
+ * \param config	The (opened) config to use
  * \param filename	The configuration file being updated (e.g. "simpleusb.conf").
  * \param category	The category being updated (e.g. "12345").
  * \param variable	The variable being updated (e.g. "rxboost").
@@ -3221,18 +3222,33 @@ static void _menu_txb(int fd, struct chan_simpleusb_pvt *o, const char *str)
  * \retval 0		If successful.
  * \retval -1		If unsuccessful.
  */
-static int tune_variable_update(const char *filename, struct ast_category *category,
-								const char *variable, const char *value)
+static int tune_variable_update(struct ast_config *config, const char *filename, struct ast_category *category,
+	const char *variable, const char *value)
 {
 	int res;
-	struct ast_variable *var;
+	struct ast_variable *v, *var = NULL;
 
-	res = ast_variable_update(category, variable, value, NULL, 0);
-	if (res == 0) {
+	/* ast_variable_retrieve, but returning the variable struct */
+	for (v = ast_variable_browse(config, ast_category_get_name(category)); v; v = v->next) {
+		if (!strcasecmp(variable, v->name)) {
+			var = v;
+		}
+	}
+
+	if (var && !strcmp(var->value, value)) {
+		/* no need to update a matching value */
 		return 0;
 	}
 
-	/* if we could not find/update the variable, create new */
+	if (var && !var->inherited) {
+		/* the variable is defined and not inherited from a template category */
+		res = ast_variable_update(category, variable, value, var->value, var->object);
+		if (res == 0) {
+			return 0;
+		}
+	}
+
+	/* create and add the variable / value to the category */
 	var = ast_variable_new(variable, value, filename);
 	if (var == NULL) {
 		return -1;
@@ -3262,25 +3278,26 @@ static void tune_write(struct chan_simpleusb_pvt *o)
 	}
 
 #define CONFIG_UPDATE_STR(field) \
-	if (tune_variable_update(CONFIG, category, #field, o->field)) { \
+	if (tune_variable_update(cfg, CONFIG, category, #field, o->field)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
-#define CONFIG_UPDATE_INT(field) { \
-	char _buf[15]; \
-	snprintf(_buf, sizeof(_buf), "%d", o->field); \
-	if (tune_variable_update(CONFIG, category, #field, _buf)) { \
-		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
-	} \
-}
+#define CONFIG_UPDATE_INT(field) \
+	{ \
+		char _buf[15]; \
+		snprintf(_buf, sizeof(_buf), "%d", o->field); \
+		if (tune_variable_update(cfg, CONFIG, category, #field, _buf)) { \
+			ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
+		} \
+	}
 
 #define CONFIG_UPDATE_BOOL(field) \
-	if (tune_variable_update(CONFIG, category, #field, o->field ? "yes" : "no")) { \
+	if (tune_variable_update(cfg, CONFIG, category, #field, o->field ? "yes" : "no")) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
 #define CONFIG_UPDATE_SIGNAL(key, field, signal_type) \
-	if (tune_variable_update(CONFIG, category, #key, signal_type[o->field])) { \
+	if (tune_variable_update(cfg, CONFIG, category, #key, signal_type[o->field])) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
