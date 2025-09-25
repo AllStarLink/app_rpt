@@ -3851,8 +3851,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			if (f->datalen && f->data.ptr) {
 				int repeat = 0;
 				const char *val;
-				send_link_pl(myrpt, f->data.ptr);
 
+				send_link_pl(myrpt, f->data.ptr);
 				if (myrpt->p.nlocallist) {
 					int x;
 					for (x = 0; x < myrpt->p.nlocallist; x++) {
@@ -3884,10 +3884,10 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					if (!repeat) { /* Small optimization, only copy the string if we care what it was */
 						ast_copy_string(myrpt->lasttone, f->data.ptr, sizeof(myrpt->lasttone));
 					} else { /* otherwise do the lower cost clearing */
-						myrpt->lasttone[0] = 0;
+						myrpt->lasttone[0] = \0;
 					}
 				}
-			} else { /* There is no tone for this keyup*/
+			} else { /* There is no tone for this keyup */
 				myrpt->lasttone[0] = 0;
 				send_link_pl(myrpt, "0");
 			}
