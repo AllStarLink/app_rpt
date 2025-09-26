@@ -3943,9 +3943,9 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
  *
  * susb tune menusupport X - where X is one of the following:
  *		0 - get flatrx, ctcssenable, echomode
- *		1 - get node names that are configured in simpleusb.conf
+ *		1 - get node names that are configured in usbradio.conf
  *		2 - print parameters
- *		3 - get node names that are configured in simpleusb.conf, except current device
+ *		3 - get node names that are configured in usbradio.conf, except current device
  *		a - receive rx level
  *		b - receiver tune display
  *		c - receive level
@@ -4454,6 +4454,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 
 /*!
  * \brief Update the tune settings to the configuration file.
+ * \param config	The (opened) config to use
  * \param filename	The configuration file being updated (e.g. "usbradio.conf").
  * \param category	The category being updated (e.g. "12345").
  * \param variable	The variable being updated (e.g. "rxboost").
@@ -4461,17 +4462,33 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
  * \retval 0		If successful.
  * \retval -1		If unsuccessful.
  */
-static int tune_variable_update(const char *filename, struct ast_category *category, const char *variable, const char *value)
+static int tune_variable_update(struct ast_config *config, const char *filename, struct ast_category *category,
+	const char *variable, const char *value)
 {
 	int res;
-	struct ast_variable *var;
+	struct ast_variable *v, *var = NULL;
 
-	res = ast_variable_update(category, variable, value, NULL, 0);
-	if (res == 0) {
+	/* ast_variable_retrieve, but returning the variable struct */
+	for (v = ast_variable_browse(config, ast_category_get_name(category)); v; v = v->next) {
+		if (!strcasecmp(variable, v->name)) {
+			var = v;
+		}
+	}
+
+	if (var && !strcmp(var->value, value)) {
+		/* no need to update a matching value */
 		return 0;
 	}
 
-	/* if we could not find/update the variable, create new */
+	if (var && !var->inherited) {
+		/* the variable is defined and not inherited from a template category */
+		res = ast_variable_update(category, variable, value, var->value, var->object);
+		if (res == 0) {
+			return 0;
+		}
+	}
+
+	/* create and add the variable / value to the category */
 	var = ast_variable_new(variable, value, filename);
 	if (var == NULL) {
 		return -1;
@@ -4501,7 +4518,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	}
 
 #define CONFIG_UPDATE_STR(field) \
-	if (tune_variable_update(CONFIG, category, #field, o->field)) { \
+	if (tune_variable_update(cfg, CONFIG, category, #field, o->field)) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
@@ -4509,13 +4526,13 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	{ \
 		char _buf[15]; \
 		snprintf(_buf, sizeof(_buf), "%d", o->field); \
-		if (tune_variable_update(CONFIG, category, #field, _buf)) { \
+		if (tune_variable_update(cfg, CONFIG, category, #field, _buf)) { \
 			ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 		} \
 	}
 
 #define CONFIG_UPDATE_BOOL(field) \
-	if (tune_variable_update(CONFIG, category, #field, o->field ? "yes" : "no")) { \
+	if (tune_variable_update(cfg, CONFIG, category, #field, o->field ? "yes" : "no")) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
@@ -4523,13 +4540,13 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	{ \
 		char _buf[15]; \
 		snprintf(_buf, sizeof(_buf), "%f", o->field); \
-		if (tune_variable_update(CONFIG, category, #field, _buf)) { \
+		if (tune_variable_update(cfg, CONFIG, category, #field, _buf)) { \
 			ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 		} \
 	}
 
 #define CONFIG_UPDATE_SIGNAL(key, field, signal_type) \
-	if (tune_variable_update(CONFIG, category, #key, signal_type[o->field])) { \
+	if (tune_variable_update(cfg, CONFIG, category, #key, signal_type[o->field])) { \
 		ast_log(LOG_WARNING, "Failed to update %s\n", #field); \
 	}
 
