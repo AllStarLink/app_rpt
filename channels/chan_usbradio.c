@@ -412,7 +412,8 @@ struct chan_usbradio_pvt {
 	char *pps[32];
 	int sendvoter;
 
-	struct rxaudiostatistics rxaudiostats;
+	struct audiostatistics rxaudiostats;
+	struct audiostatistics txaudiostats;
 
 	int legacyaudioscaling;
 
@@ -2067,11 +2068,11 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 	/* Check for ADC clipping and input audio statistics before any filtering is done.
 	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
-	 * ast_radio_check_rx_audio() takes the read buffer as received (48K stereo),
+	 * ast_radio_check_audio() takes the read buffer as received (48K stereo),
 	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
 	 * and returns true if clipping was detected.
 	 */
-	if (ast_radio_check_rx_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+	if (ast_radio_check_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
 		if (o->clipledgpio) {
 			/* Set Clip LED GPIO pulsetimer if not already set */
 			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
@@ -2177,6 +2178,15 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 	/* Write the received audio to the sound card */
 	soundcard_writeframe(o, (short *) o->usbradio_write_buf);
+
+	/* Check Tx audio statistics. FRAME_SIZE define refers to 8Ksps mono which is 160 samples
+	 * per 20mS USB frame. ast_radio_check_audio() takes the write buffer (48K stereo),
+	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+	 * and returns true if clipping was detected. If local Tx audio is clipped it might be
+	 * nice to log a warning but as this does not relate to outgoing network audio it's not
+	 * a major issue. User can check the Tx Audio Stats utility if desired.
+	 */
+	ast_radio_check_audio((short *) o->usbradio_write_buf, &o->txaudiostats, 12 * FRAME_SIZE);
 
 #else
 	static FILE *hInput;
@@ -3971,6 +3981,7 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
  *		w - change tx mixer a
  *		x - change tx mixer b
  *		y - receive audio statistics display
+ *		z - transmit audio statistics display
  *
  * \param fd			Asterisk CLI fd
  * \param o				Private struct.
@@ -4264,7 +4275,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			break;
 		}
 		for (;;) {
-			ast_radio_print_rx_audio_stats(fd, &o->rxaudiostats);
+			ast_radio_print_audio_stats(fd, &o->rxaudiostats, "Rx");
 			if (cmd[0] == 'Y') {
 				break;
 			}
@@ -4273,7 +4284,22 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			}
 		}
 		break;
-
+	case 'z': /* display transmit audio statistics (interactive) */
+	case 'Z': /* display transmit audio statistics (once only) */
+		if (!o->hasusb) {
+			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
+			break;
+		}
+		for (;;) {
+			ast_radio_print_audio_stats(fd, &o->txaudiostats, "Tx");
+			if (cmd[0] == 'Z') {
+				break;
+			}
+			if (ast_radio_poll_input(fd, 1000)) {
+				break;
+			}
+		}
+		break;
 	default:
 		ast_cli(fd, "Invalid Command\n");
 		break;

@@ -1105,6 +1105,7 @@ static void options_menu(void)
 		printf("T) Toggle Transmit Test Tone/Keying (currently '%s')\n", (keying) ? "enabled" : "disabled");
 		printf("V) View COS, CTCSS and PTT Status\n");
 		printf("W) Write (Save) Current Parameter Values\n");
+		printf("X) View Tx Audio Statistics\n");
 		printf("0) Exit Menu\n");
 		printf("\nPlease enter your selection now: ");
 
@@ -1236,6 +1237,10 @@ static void options_menu(void)
 			if (astgetresp(COMMAND_PREFIX "tune menu-support j")) {
 				exit(255);
 			}
+			break;
+		case 'x':				/* display transmit audio statistics */
+		case 'X':
+			astgetresp(COMMAND_PREFIX "tune menu-support z");
 			break;
 		default:
 			printf("Invalid Entry, try again\n");
