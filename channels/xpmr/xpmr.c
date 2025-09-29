@@ -684,8 +684,6 @@ i16 pmr_gp_fir(t_pmr_sps *mySps)
 	setpt = mySps->setpt;
 	compOut = mySps->compOut;
 
-	inputGain = mySps->inputGain;
-	outputGain = mySps->outputGain;
 	numChanOut = mySps->numChanOut;
 	selChanOut = mySps->selChanOut;
 	mixOut = mySps->mixOut;
@@ -1312,6 +1310,14 @@ i16 pmrMixer(t_pmr_sps *mySps)
 			accum = (input[i] * inputGain) / M_Q8;
 		}
 		accum = (accum * outputGain) / M_Q8;
+
+		// Check for overflows
+		if (accum > 32767) {
+			accum = 32767;
+		} else if (accum < -32767) {
+			accum = -32767;
+		}
+
 		output[i] = accum;
 
 		if (measPeak) {
