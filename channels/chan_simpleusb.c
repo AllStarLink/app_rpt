@@ -327,7 +327,7 @@ struct chan_simpleusb_pvt {
 
 	struct audiostatistics rxaudiostats;
 	struct audiostatistics txaudiostats;
-	
+
 	int legacyaudioscaling;
 
 	ast_mutex_t usblock;
