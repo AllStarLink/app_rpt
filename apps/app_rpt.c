@@ -5736,7 +5736,7 @@ static void *rpt_master(void *ignore)
 			if ((rpt_vars[i].lastthreadupdatetime != last_thread_time[i]) &&
 				(current_time - rpt_vars[i].lastthreadupdatetime > RPT_THREAD_TIMEOUT)) {
 				/*! \todo Implement thread kill/recovery mechanism */
-				ast_log(LOG_WARNING, "RPT thread timeout on %s is hung for greater than %d.\n", rpt_vars[i].name, RPT_THREAD_TIMEOUT);
+				ast_log(LOG_WARNING, "RPT thread on %s is hung for greater than %d seconds.\n", rpt_vars[i].name, RPT_THREAD_TIMEOUT);
 				last_thread_time[i] = rpt_vars[i].lastthreadupdatetime; /* Only log message one time */
 			}
 			if ((rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
