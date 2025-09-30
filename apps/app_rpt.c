@@ -4603,7 +4603,6 @@ static void *rpt(void *this)
 	struct ast_format_cap *cap;
 	struct timeval looptimestart;
 
-	myrpt->lastthreadupdatetime = rpt_time_monotonic();
 	if (myrpt->p.archivedir) {
 		mkdir(myrpt->p.archivedir, 0700);
 		snprintf(tmpstr, sizeof(tmpstr), "%s/%s", myrpt->p.archivedir, myrpt->name);
@@ -5667,7 +5666,9 @@ static int load_config(int reload)
 
 static void *rpt_master(void *ignore)
 {
-	int i, last_thread_time = 0;
+	int i;
+	time_t last_thread_time[MAXRPTS];
+	time_t current_time = rpt_time_monotonic();
 	/* init nodelog queue */
 	nodelog.next = nodelog.prev = &nodelog;
 	/* go thru all the specified repeaters */
@@ -5720,22 +5721,23 @@ static void *rpt_master(void *ignore)
 			pthread_exit(NULL);
 		}
 		rpt_vars[i].ready = 0;
-		rpt_vars[i].lastthreadupdatetime = rpt_time_monotonic();
+		rpt_vars[i].lastthreadupdatetime = current_time;
 		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
 	}
 	time(&starttime);
 	ast_mutex_lock(&rpt_master_lock);
 	for (;;) {
 		/* Now monitor each thread, and restart it if necessary */
+		current_time = rpt_time_monotonic();
 		for (i = 0; i < nrpts; i++) {
 			int rv;
 			if (rpt_vars[i].remote)
 				continue;
-			if ((rpt_time_monotonic() - rpt_vars[i].lastthreadupdatetime > RPT_THREAD_TIMEOUT) &&
-				(rpt_vars[i].lastthreadupdatetime != last_thread_time)) {
+			if ((rpt_vars[i].lastthreadupdatetime != last_thread_time[i]) &&
+				(current_time - rpt_vars[i].lastthreadupdatetime > RPT_THREAD_TIMEOUT)) {
 				/*! \todo Implement thread kill/recovery mechanism */
 				ast_log(LOG_WARNING, "RPT thread timeout on %s is hung for greater than %d.\n", rpt_vars[i].name, RPT_THREAD_TIMEOUT);
-				last_thread_time = rpt_vars[i].lastthreadupdatetime; /* Only log message one time */
+				last_thread_time[i] = rpt_vars[i].lastthreadupdatetime; /* Only log message one time */
 			}
 			if ((rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
 				rv = -1;
@@ -5768,7 +5770,7 @@ static void *rpt_master(void *ignore)
 				}
 
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
-				rpt_vars[i].lastthreadupdatetime = rpt_time_monotonic();
+				rpt_vars[i].lastthreadupdatetime = current_time;
 				ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
 				/* if (!rpt_vars[i].xlink) */
 				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
