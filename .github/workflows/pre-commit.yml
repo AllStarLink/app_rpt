@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  metadata: read
   pull-requests: write
 
 jobs:
