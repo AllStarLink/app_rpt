@@ -4290,8 +4290,15 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
+		x = 1;
 		for (;;) {
-			ast_radio_print_audio_stats(fd, &o->txaudiostats, "Tx");
+			if (o->txkeyed) {
+				ast_radio_print_audio_stats(fd, &o->txaudiostats, "Tx");
+				x = 1;
+			} else if (x == 1) {
+				ast_cli(fd, "Tx not keyed\n");
+				x = 0;
+			}
 			if (cmd[0] == 'Z') {
 				break;
 			}

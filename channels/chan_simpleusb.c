@@ -1468,7 +1468,16 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 		ast_log(LOG_ERROR, "Channel %s: Sound card wrote %d bytes of %d\n", 
 			o->name, res, (FRAME_SIZE * 2 * 2 * 6));
 	}
-	
+
+	/* Check Tx audio statistics. FRAME_SIZE define refers to 8Ksps mono which is 160 samples
+	 * per 20mS USB frame. ast_radio_check_audio() takes the write buffer (48K stereo),
+	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+	 * and returns true if clipping was detected. If local Tx audio is clipped it might be
+	 * nice to log a warning but as this does not relate to outgoing network audio it's not
+	 * a major issue. User can check the Tx Audio Stats utility if desired.
+	 */
+	ast_radio_check_audio(data, &o->txaudiostats, 12 * FRAME_SIZE);
+
 	return res;
 }
 
@@ -2146,18 +2155,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 						*sp1++ = (doleft) ? v : 0;
 						*sp1++ = (doright) ? v : 0;
 					}
-
 					soundcard_writeframe(o, outbuf);
-
-					/* Check Tx audio statistics. FRAME_SIZE define refers to 8Ksps mono which is 160 samples
-					 * per 20mS USB frame. ast_radio_check_audio() takes the write buffer (48K stereo),
-					 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
-					 * and returns true if clipping was detected. If local Tx audio is clipped it might be
-					 * nice to log a warning but as this does not relate to outgoing network audio it's not
-					 * a major issue. User can check the Tx Audio Stats utility if desired.
-					 */
-					ast_radio_check_audio(outbuf, &o->txaudiostats, 12 * FRAME_SIZE);
-
 					src += l;
 					o->simpleusb_write_dst = 0;
 					if (o->waspager && (!ispager)) {
@@ -3620,8 +3618,15 @@ static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *c
 			ast_cli(fd, USB_UNASSIGNED_FMT, o->name, o->devstr);
 			break;
 		}
+		x = 1;
 		for (;;) {
-			ast_radio_print_audio_stats(fd, &o->txaudiostats, "Tx");
+			if (o->txkeyed) {
+				ast_radio_print_audio_stats(fd, &o->txaudiostats, "Tx");
+				x = 1;
+			} else if (x == 1) {
+				ast_cli(fd, "Tx not keyed\n");
+				x = 0;
+			}
 			if (cmd[0] == 'Z') {
 				break;
 			}
