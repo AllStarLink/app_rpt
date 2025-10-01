@@ -284,6 +284,7 @@
 #include <fnmatch.h>
 #include <curl/curl.h>
 #include <termios.h>
+#include <stdbool.h>
 
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
@@ -5667,6 +5668,7 @@ static int load_config(int reload)
 static void *rpt_master(void *ignore)
 {
 	int i;
+	bool thread_hung[MAXRPTS] = { false };
 	time_t last_thread_time[MAXRPTS];
 	time_t current_time = rpt_time_monotonic();
 	/* init nodelog queue */
@@ -5728,16 +5730,26 @@ static void *rpt_master(void *ignore)
 	ast_mutex_lock(&rpt_master_lock);
 	for (;;) {
 		/* Now monitor each thread, and restart it if necessary */
+		time_t current_loop_time;
 		current_time = rpt_time_monotonic();
 		for (i = 0; i < nrpts; i++) {
 			int rv;
 			if (rpt_vars[i].remote)
 				continue;
-			if ((rpt_vars[i].lastthreadupdatetime != last_thread_time[i]) &&
-				(current_time - rpt_vars[i].lastthreadupdatetime > RPT_THREAD_TIMEOUT)) {
+
+			current_loop_time = current_time - rpt_vars[i].lastthreadupdatetime;
+			if (rpt_vars[i].lastthreadupdatetime != last_thread_time[i]) {
 				/*! \todo Implement thread kill/recovery mechanism */
-				ast_log(LOG_WARNING, "RPT thread on %s is hung for greater than %d seconds.\n", rpt_vars[i].name, RPT_THREAD_TIMEOUT);
+				if (thread_hung[i]) { /* We were hung and a new update time */
+					thread_hung[i] = false;
+					ast_log(LOG_WARNING, "RPT thread on %s has recovered after %ld seconds.\n", rpt_vars[i].name,
+						current_time - last_thread_time[i]);
+				}
 				last_thread_time[i] = rpt_vars[i].lastthreadupdatetime; /* Only log message one time */
+			}
+			if (current_loop_time > RPT_THREAD_TIMEOUT && !thread_hung[i]) {
+				thread_hung[i] = true;
+				ast_log(LOG_WARNING, "RPT thread on %s is hung for %ld seconds.\n", rpt_vars[i].name, current_loop_time);
 			}
 			if ((rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
 				rv = -1;
