@@ -5,8 +5,8 @@ on:
       types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
-  metadata: read
+  contents: write
+  actions: write
   pull-requests: write
 
 jobs:
