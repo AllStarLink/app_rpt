@@ -1035,7 +1035,7 @@ int main(int argc, char *argv[])
 				exit(255);
 			}
 			break;
-		case 'x':				/* display transmit audio statistics */
+		case 'x': /* display transmit audio statistics */
 		case 'X':
 			astgetresp(COMMAND_PREFIX "tune menu-support z");
 			break;
