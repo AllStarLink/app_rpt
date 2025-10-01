@@ -1311,7 +1311,7 @@ i16 pmrMixer(t_pmr_sps *mySps)
 		}
 		accum = (accum * outputGain) / M_Q8;
 
-		// Check for overflows
+		/* Check for overflows */
 		if (accum > 32767) {
 			accum = 32767;
 		} else if (accum < -32767) {
