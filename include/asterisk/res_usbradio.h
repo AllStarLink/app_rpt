@@ -181,11 +181,11 @@ struct usbecho {
 	short data[FRAME_SIZE];
 };
 
-/* Rx audio (ADC) statistics variables. tune-menu "R" command displays
+/* Audio statistics variables. tune-menu "R" and "X" commands display
  * stats data (peak, average, min, max levels and clipped sample count).
  */
 #define AUDIO_STATS_LEN 50 	                	/* number of 20mS frames. 50 => 1 second buf len */
-struct rxaudiostatistics {
+struct audiostatistics {
 	unsigned short maxbuf[AUDIO_STATS_LEN]; 	/* peak sample value per frame */
 	unsigned short clipbuf[AUDIO_STATS_LEN];	/* number of clipped samples per frame */
 	unsigned int pwrbuf[AUDIO_STATS_LEN];   	/* total RMS power per frame */
@@ -479,7 +479,7 @@ struct timeval ast_radio_tvnow(void);
  * \return 	    	1 if clipping detected, 0 otherwise
  */
 #define CLIP_LED_HOLD_TIME_MS  500
-int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len);
+int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len);
 
 /*!
  * \brief Display receive audio statistics.
@@ -503,4 +503,4 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
  * \param o 		Channel data structure
  * \return  		None
  */
-void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o);
+void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *prefix_text);

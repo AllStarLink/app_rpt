@@ -795,7 +795,7 @@ struct timeval ast_radio_tvnow(void)
 
 #define CLIP_SAMP_THRESH       0x7eb0
 #define CLIP_EVENT_MIN_SAMPLES 3
-int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len)
+int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len)
 {
 	unsigned short i, j, val, max = 0, seq_clips = 0;
 	double pwr = 0.0;
@@ -839,7 +839,7 @@ int ast_radio_check_rx_audio(short *sbuf, struct rxaudiostatistics *o, short len
 	return (seq_clips >= CLIP_EVENT_MIN_SAMPLES);
 }
 
-void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
+void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *prefix_text)
 {
 	unsigned int i, pk = 0, pwr = 0, minpwr = 0x40000000, maxpwr = 0, clipcnt = 0;
 	double dpk, dmin, dmax, scale, tpwr = 0.0;
@@ -872,8 +872,7 @@ void ast_radio_print_rx_audio_stats(int fd, struct rxaudiostatistics *o)
 	dmin = minpwr ? 10 * log10(minpwr * scale) : -96.0;
 	dmax = maxpwr ? 10 * log10(maxpwr * scale) : -96.0;
 	/* Print stats */
-	sprintf(s1, "RxAudioStats: Pk %5.1f  Avg Pwr %3.0f  Min %3.0f  Max %3.0f  dBFS  ClipCnt %u",
-			dpk, tpwr, dmin, dmax, clipcnt);
+	sprintf(s1, "%sAudioStats: Pk %5.1f  Avg Pwr %3.0f  Min %3.0f  Max %3.0f  dBFS  ClipCnt %u", prefix_text, dpk, tpwr, dmin, dmax, clipcnt);
 	if (fd >= 0) {
 		ast_cli(fd, "%s\n", s1);
 	} else {
