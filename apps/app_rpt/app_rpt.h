@@ -101,6 +101,7 @@ typedef struct {
 
 #define PATCH_DIALPLAN_TIMEOUT 1500
 
+#define RPT_THREAD_TIMEOUT 30 /* Time in seconds to consider rpt thread "stuck" if no activity */
 #define RPT_LOCKOUT_SECS 10
 #define RPT_CMD_SZ 299
 #define RPT_SRC_SZ 299
@@ -986,20 +987,21 @@ struct rpt {
 	int tailmessagen;
 	time_t disgorgetime;
 	time_t lastthreadrestarttime;
-	int	macrotimer;
-	char	lastnodewhichkeyedusup[MAXNODESTR];
-	int	dtmf_local_timer;
-	char	dtmf_local_str[100];
-	struct ast_filestream *monstream,*parrotstream;
-	char	loginuser[50];
-	char	loginlevel[10];
-	long	authtelltimer;
-	long	authtimer;
+	time_t lastthreadupdatetime; /* Thread activity timestamp.  Used to detect a "stuck" thread */
+	int macrotimer;
+	char lastnodewhichkeyedusup[MAXNODESTR];
+	int dtmf_local_timer;
+	char dtmf_local_str[100];
+	struct ast_filestream *monstream, *parrotstream;
+	char loginuser[50];
+	char loginlevel[10];
+	long authtelltimer;
+	long authtimer;
 	int iofd;
 	time_t start_time,last_activity_time;
-	char	lasttone[32];
+	char lasttone[32];
 	struct rpt_tele *active_telem;
-	struct 	rpt_topkey topkey[TOPKEYN];
+	struct rpt_topkey topkey[TOPKEYN];
 	int topkeystate;
 	time_t topkeytime;
 	int topkeylong;
