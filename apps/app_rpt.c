@@ -3047,7 +3047,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	int newkeytimer_last, max_retries;
 	struct rpt_link *l = myrpt->links.next;
 	while (l != &myrpt->links) {
-		int myrx, mymaxct;
+		int myrx;
 
 		if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
@@ -3223,9 +3223,8 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			continue;
 		}
 		l->elaptime += elap;
-		mymaxct = MAXCONNECTTIME;
 		/* if connection has taken too long */
-		if ((l->elaptime > mymaxct) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
+		if ((l->elaptime > MAXCONNECTTIME) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
 			l->elaptime = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			if (l->chan)
