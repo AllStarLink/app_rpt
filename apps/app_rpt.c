@@ -2353,6 +2353,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	*tele++ = 0;
 	l->elaptime = 0;
 	l->connecttime.tv_sec = 0; /* not connected */
+	l->connecttime.tv_usec = 0;
 	l->thisconnected = 0;
 	l->link_newkey = RADIO_KEY_ALLOWED;
 
@@ -3213,7 +3214,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		update_timer(&l->retrytimer, elap, 0);
 
 		/* start tracking connect time */
-		if (l->connecttime.tv_sec == 0) {
+		if (ast_tvzero(l->connecttime)) {
 			l->connecttime = rpt_tvnow();
 		}
 
@@ -4149,6 +4150,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 			l->retrytimer = RETRY_TIMER_MS;
 			l->elaptime = 0;
 			l->connecttime.tv_sec = 0; /* no longer connected */
+			l->connecttime.tv_usec = 0;
 			l->thisconnected = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
