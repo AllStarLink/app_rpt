@@ -3046,10 +3046,10 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 {
 	struct ast_frame *f;
 	int newkeytimer_last, max_retries;
-	struct rpt_link *l = myrpt->links.next;
-	while (l != &myrpt->links) {
+	struct rpt_link *l, *l_next;
+	for (l = myrpt->links.next; l != &myrpt->links; l = l_next) {
 		int myrx;
-
+		l_next = l->next; /* In case we remove or free l */
 		if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 			ast_write(l->chan, f);
@@ -3220,7 +3220,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		/* ignore non-timing channels */
 		if (l->elaptime < 0) {
-			l = l->next;
 			continue;
 		}
 		l->elaptime += elap;
@@ -3231,7 +3230,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (l->chan)
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			rpt_mutex_lock(&myrpt->lock);
-			break;
+			continue;
 		}
 		max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
 
@@ -3244,9 +3243,8 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			} else {
 				l->retries = l->max_retries + 1;
 			}
-
 			rpt_mutex_lock(&myrpt->lock);
-			break;
+			continue;
 		}
 		if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
 			/* remove from queue */
@@ -3267,7 +3265,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			ast_hangup(l->pchan);
 			rpt_link_free(l);
 			rpt_mutex_lock(&myrpt->lock);
-			break;
+			continue;
 		}
 		if ((!l->chan) && (!l->disctime) && (!l->outbound)) {
 			ast_debug(1, "LINKDISC AA\n");
@@ -3287,11 +3285,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
 			rpt_link_free(l);
-
 			rpt_mutex_lock(&myrpt->lock);
-			break;
+			continue;
 		}
-		l = l->next;
 	}
 }
 
