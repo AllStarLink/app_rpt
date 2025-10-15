@@ -1290,6 +1290,7 @@ void *rpt_tele_thread(void *this)
 	ast_answer(mychannel);
 
 	rpt_mutex_lock(&myrpt->lock);
+	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
 	mytele->chan = mychannel;
 
 	/* Wait for previous telemetry to finish before we start so we're not speaking on top of each other. */
@@ -2861,8 +2862,9 @@ treataslocal:
 			myrpt->tmsgtimer = myrpt->p.tailsquashedtime;
 		}
 	}
-	tele_link_remove(myrpt, mytele);
 	telem_done(myrpt);
+	tele_link_remove(myrpt, mytele);
+	ast_channel_unref(mychannel);
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_free(nodename);
 	if (id_malloc) {
@@ -2896,6 +2898,7 @@ abort3:
 	ast_free(mytele);
 	if (mychannel) {
 		ast_hangup(mychannel);
+		ast_channel_unref(mychannel);
 	}
 	pthread_exit(NULL);
 }
