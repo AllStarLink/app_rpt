@@ -5300,7 +5300,6 @@ static void *rpt(void *this)
 			}
 		}
 		/* If we have a new active telemetry message and a channel */
-		rpt_mutex_lock(&myrpt->lock);
 		if (!myrpt->noduck && myrpt->active_telem && myrpt->active_telem->chan) {
 			/* If we have a new telmetry message or we have changed keyup state to keyup */
 			if (((myrpt->active_telem != last_telem) || !lastduck) && (myrpt->keyed || myrpt->remrx)) {
@@ -5320,7 +5319,6 @@ static void *rpt(void *this)
 			}
 		}
 		last_telem = myrpt->active_telem;
-		rpt_mutex_unlock(&myrpt->lock);
 
 		n = 0;
 		cs[n++] = myrpt->rxchannel;
