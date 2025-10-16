@@ -546,7 +546,7 @@ void flush_telem(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		if (telem->mode != SETREMOTE) {
+		if (telem->mode != SETREMOTE && telem->chan) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
 		}
 		telem = telem->next;
