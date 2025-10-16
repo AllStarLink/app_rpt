@@ -360,6 +360,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			if (node_count > 0) {
 				stat_array = ast_calloc(node_count, sizeof(struct rpt_lstat *));
 				if (!stat_array) {
+					rpt_mutex_unlock(&myrpt->lock);
 					return RESULT_FAILURE;
 				}
 			}

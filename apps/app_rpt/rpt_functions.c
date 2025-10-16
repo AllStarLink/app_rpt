@@ -685,7 +685,10 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			donodelog_fmt(myrpt, "LOGIN,%s,%s", myrpt->loginuser, myrpt->loginlevel);
 			ast_debug(1, "loginuser %s level %s\n", myrpt->loginuser, myrpt->loginlevel);
 			rpt_telemetry(myrpt, REMLOGIN, NULL);
+		} else {
+			rpt_mutex_unlock(&myrpt->lock);
 		}
+
 		ast_free(cp);
 		return DC_COMPLETEQUIET;
 	case 100:					/* RX PL Off */

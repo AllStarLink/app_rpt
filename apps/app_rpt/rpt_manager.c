@@ -212,9 +212,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
-			ast_mutex_lock(&myrpt->lock);
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
-			ast_mutex_unlock(&myrpt->lock);
 			j = 0;
 			l = myrpt->links.next;
 			while (l && (l != &myrpt->links)) {
