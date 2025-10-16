@@ -562,9 +562,9 @@ void rpt_update_links(struct rpt *myrpt)
 		return;
 	}
 
-	ast_mutex_lock(&myrpt->lock);
+	rpt_mutex_lock(&myrpt->lock);
 	n = __mklinklist(myrpt, NULL, &buf, 1);
-	ast_mutex_unlock(&myrpt->lock);
+	rpt_mutex_unlock(&myrpt->lock);
 	/* parse em */
 	if (n) {
 		ast_str_set(&obuf, 0, "%d,%s", n, ast_str_buffer(buf));
@@ -576,9 +576,9 @@ void rpt_update_links(struct rpt *myrpt)
 	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", ast_str_buffer(obuf));
 
 	ast_str_reset(buf);
-	ast_mutex_lock(&myrpt->lock);
+	rpt_mutex_lock(&myrpt->lock);
 	n = __mklinklist(myrpt, NULL, &buf, 0);
-	ast_mutex_unlock(&myrpt->lock);
+	rpt_mutex_unlock(&myrpt->lock);
 	if (n) {
 		ast_str_set(&obuf, 0, "%d,%s", n, ast_str_buffer(buf));
 	}
