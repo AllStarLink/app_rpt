@@ -4592,7 +4592,7 @@ static void *rpt(void *this)
 {
 	struct rpt *myrpt = this;
 	char *idtalkover, c, myfirst, *str;
-	int len;
+	int len, lastduck = 0;
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
 	struct rpt_link *l;
@@ -4782,7 +4782,7 @@ static void *rpt(void *this)
 	while (ms >= 0) {
 		struct ast_channel *who;
 		struct ast_channel *cs[300], *cs1[300];
-		int totx = 0, elap = 0, n, x, lastduck = 0;
+		int totx = 0, elap = 0, n, x;
 		time_t t, t_mono;
 		struct rpt_link *l;
 
