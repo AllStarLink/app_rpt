@@ -4793,16 +4793,8 @@ static void *rpt(void *this)
 		}
 
 		if (myrpt->reload) {
-			struct rpt_tele *telem;
-
-			rpt_mutex_lock(&myrpt->lock);
-			telem = myrpt->tele.next;
-			while (telem != &myrpt->tele) {
-				ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-				telem = telem->next;
-			}
+			flush_telem(myrpt);
 			myrpt->reload = 0;
-			rpt_mutex_unlock(&myrpt->lock);
 			usleep(10000);
 			load_rpt_vars_by_rpt(myrpt, 1);
 		}
