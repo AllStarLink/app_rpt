@@ -672,8 +672,8 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		myrpt->loginlevel[0] = 0;
 		cp = ast_strdup(param);
 		cp1 = strchr(cp, ',');
-		ast_mutex_lock(&myrpt->lock);
 		if (cp1) {
+			ast_mutex_lock(&myrpt->lock);
 			*cp1 = 0;
 			cp2 = strchr(cp1 + 1, ',');
 			if (cp2) {
@@ -685,8 +685,6 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			donodelog_fmt(myrpt, "LOGIN,%s,%s", myrpt->loginuser, myrpt->loginlevel);
 			ast_debug(1, "loginuser %s level %s\n", myrpt->loginuser, myrpt->loginlevel);
 			rpt_telemetry(myrpt, REMLOGIN, NULL);
-		} else {
-			rpt_mutex_unlock(&myrpt->lock);
 		}
 
 		ast_free(cp);
