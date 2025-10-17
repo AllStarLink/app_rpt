@@ -5355,6 +5355,7 @@ static void *rpt(void *this)
 		rpt_mutex_lock(&myrpt->lock);
 		periodic_process_links(myrpt, elap);
 		if (update_timers(myrpt, elap, totx)) {
+			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		}
 		if (!ms) {
@@ -5365,6 +5366,7 @@ static void *rpt(void *this)
 		}
 		if ((myrpt->p.parrotmode || myrpt->parrotonce) && myrpt->parrotstate == 1 && myrpt->parrottimer <= 0) {
 			if (update_parrot(myrpt)) {
+				rpt_mutex_unlock(&myrpt->lock);
 				break;
 			}
 		}
