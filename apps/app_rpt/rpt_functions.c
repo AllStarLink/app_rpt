@@ -672,8 +672,8 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		myrpt->loginlevel[0] = 0;
 		cp = ast_strdup(param);
 		cp1 = strchr(cp, ',');
-		ast_mutex_lock(&myrpt->lock);
 		if (cp1) {
+			ast_mutex_lock(&myrpt->lock);
 			*cp1 = 0;
 			cp2 = strchr(cp1 + 1, ',');
 			if (cp2) {
@@ -686,6 +686,7 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			ast_debug(1, "loginuser %s level %s\n", myrpt->loginuser, myrpt->loginlevel);
 			rpt_telemetry(myrpt, REMLOGIN, NULL);
 		}
+
 		ast_free(cp);
 		return DC_COMPLETEQUIET;
 	case 100:					/* RX PL Off */
