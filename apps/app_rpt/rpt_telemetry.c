@@ -620,6 +620,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	char *str;
 	struct ast_frame wf;
 	struct rpt_link *l;
+	struct ao2_iterator l_it;
 
 	len = ast_asprintf(&str, "T %s %s", myrpt->name, cmd);
 	if (len < 0) {
@@ -629,13 +630,15 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	init_text_frame(&wf, "send_tele_link");
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
-	l = myrpt->links.next;
+	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 	/* give it to everyone */
-	while (l != &myrpt->links) {
-		if (l->chan && (l->mode == MODE_TRANSCEIVE))
+	while ((l = ao2_iterator_next(&l_it))) {
+		if (l->chan && (l->mode == MODE_TRANSCEIVE)) {
 			rpt_qwrite(l, &wf);
-		l = l->next;
+		}
+		ao2_ref(l, -1);
 	}
+	ao2_iterator_destroy(&l_it);
 	ast_free(str);
 	rpt_telemetry(myrpt, VARCMD, cmd);
 }
@@ -1246,8 +1249,10 @@ void *rpt_tele_thread(void *this)
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
-	struct rpt_link *l, *l1, linkbase;
+	struct rpt_link *l, *l1;
 	struct ast_channel *mychannel = NULL;
+	struct ao2_iterator l_it;
+	struct ao2_container *ao2_copy;
 	int id_malloc = 0, m;
 	char *p, *ident, *nodename;
 	const char *context;
@@ -1600,14 +1605,14 @@ treataslocal:
 		haslink = 0;
 		hastx = 0;
 		hasremote = 0;
-		l = myrpt->links.next;
-		if (l != &myrpt->links) {
+		if (ao2_container_count(myrpt->ao2_links)) {
+			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			rpt_mutex_lock(&myrpt->lock);
-			while (l != &myrpt->links) {
+			while ((l = ao2_iterator_next(&l_it))) {
 				int v, w;
 
 				if (l->name[0] == '0') {
-					l = l->next;
+					ao2_ref(l, -1);
 					continue;
 				}
 				w = 1;
@@ -1615,22 +1620,28 @@ treataslocal:
 					int nrpts = rpt_num_rpts();
 					for (v = 0; v < nrpts; v++) {
 						if (&rpt_vars[v] == myrpt) {
+							ao2_ref(l, -1);
 							continue;
 						} else if (rpt_vars[v].remote) {
+							ao2_ref(l, -1);
 							continue;
 						} else if (strcmp(rpt_vars[v].name, l->name)) {
+							ao2_ref(l, -1);
 							continue;
 						}
 						w = 0;
+						ao2_ref(l, -1);
 						break;
 					}
 				}
 				if (myrpt->p.locallinknodesn) {
 					for (v = 0; v < myrpt->p.locallinknodesn; v++) {
 						if (strcmp(l->name, myrpt->p.locallinknodes[v])) {
+							ao2_ref(l, -1);
 							continue;
 						}
 						w = 0;
+						ao2_ref(l, -1);
 						break;
 					}
 				}
@@ -1643,8 +1654,9 @@ treataslocal:
 						hasremote++;
 					}
 				}
-				l = l->next;
+				ao2_ref(l, -1);
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		if (haslink) {
@@ -1813,16 +1825,18 @@ treataslocal:
 			update_timer(&mytele->mylink.linkunkeytocttimer, ctint, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
-		l = myrpt->links.next;
+		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 		unkeys_queued = 0;
 		rpt_mutex_lock(&myrpt->lock);
-		while (l != &myrpt->links) {
+		while ((l = ao2_iterator_next(&l_it))) {
 			if (!strcmp(l->name, mytele->mylink.name)) {
 				unkeys_queued = l->lastrx;
+				ao2_ref(l, -1);
 				break;
 			}
-			l = l->next;
+			ao2_ref(l, -1);
 		}
+		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 		if (unkeys_queued) {
 			imdone = 1;
@@ -1838,22 +1852,23 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		l = myrpt->links.next;
 		haslink = 0;
 		/* dont report if a link for this one still on system */
-		if (l != &myrpt->links) {
+		if (ao2_container_count(myrpt->ao2_links)) {
+			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			rpt_mutex_lock(&myrpt->lock);
-			while (l != &myrpt->links) {
+			while ((l = ao2_iterator_next(&l_it))) {
 				if (l->name[0] == '0') {
-					l = l->next;
+					ao2_ref(l, -1);
 					continue;
 				}
 				if (!strcmp(l->name, mytele->mylink.name)) {
 					haslink = 1;
+					ao2_ref(l, -1);
 					break;
 				}
-				l = l->next;
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		if (haslink) {
@@ -2371,24 +2386,32 @@ treataslocal:
 			break;
 		}
 		hastx = 0;
-		rpt_links_init(&linkbase);
+		ao2_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
+			0,								   /* AO2 container flags. */
+			NULL,							   /* Sorting function. NULL means the list will not be sorted */
+			NULL);							   /* Comparison function */
+		if (!ao2_copy) {
+			goto abort;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
-		l = myrpt->links.next;
-		while (l != &myrpt->links) {
+		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+		while ((l = ao2_iterator_next(&l_it))) {
 			if (l->name[0] == '0') {
-				l = l->next;
+				ao2_ref(l, -1);
 				continue;
 			}
-			l1 = ast_malloc(sizeof(struct rpt_link));
+			l1 = ao2_alloc(sizeof(struct rpt_link), rpt_link_ao2_destroy);
 			if (!l1) {
+				ao2_ref(l, -1);
+				ao2_iterator_destroy(&l_it);
 				goto abort;
 			}
 			memcpy(l1, l, sizeof(struct rpt_link));
-			l1->next = l1->prev = NULL; /* Don't carry over next/prev pointers from the original list we're duplicating */
-			insque((struct qelem *) l1, (struct qelem *) linkbase.next);
-			l = l->next;
+			ao2_link(ao2_copy, l1);
+			ao2_ref(l, -1);
 		}
+		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (myrpt->callmode != CALLMODE_DOWN) {
@@ -2401,8 +2424,8 @@ treataslocal:
 			}
 			ast_stopstream(mychannel);
 		}
-		l = linkbase.next;
-		while (l != &linkbase) {
+		l_it = ao2_iterator_init(ao2_copy, 0);
+		while ((l = ao2_iterator_next(&l_it))) {
 			char *s;
 
 			hastx = 1;
@@ -2418,19 +2441,14 @@ treataslocal:
 				s = "rpt/connecting";
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
-			l = l->next;
+			ao2_ref(l, -2); /* -2: 1 for the iterator, 1 for the link reference */
 		}
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
 		/* destroy our local link queue */
-		l = linkbase.next;
-		while (l != &linkbase) {
-			l1 = l;
-			l = l->next;
-			remque((struct qelem *) l1);
-			ast_free(l1);
-		}
+		ao2_ref(ao2_copy, -1);
+		ao2_iterator_destroy(&l_it);
 		imdone = 1;
 		break;
 	case LASTUSER:
@@ -2938,6 +2956,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
 	struct ast_str *lbuf;
+	struct ao2_iterator l_it;
 
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 
@@ -3062,22 +3081,23 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			if ((!mylink) || (mylink->name[0] == '0')) {
 				return;
 			}
-			l = myrpt->links.next;
 			haslink = 0;
 			/* dont report if a link for this one still on system */
-			if (l != &myrpt->links) {
+			if (ao2_container_count(myrpt->ao2_links)) {
+				l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 				rpt_mutex_lock(&myrpt->lock);
-				while (l != &myrpt->links) {
+				while ((l = ao2_iterator_next(&l_it))) {
 					if (l->name[0] == '0') {
-						l = l->next;
+						ao2_ref(l, -1);
 						continue;
 					}
 					if (!strcmp(l->name, mylink->name)) {
 						haslink = 1;
+						ao2_ref(l, -1);
 						break;
 					}
-					l = l->next;
 				}
+				ao2_iterator_destroy(&l_it);
 				rpt_mutex_unlock(&myrpt->lock);
 			}
 			if (haslink) {
@@ -3159,12 +3179,12 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
-			l = myrpt->links.next;
-			while (l != &myrpt->links) {
+			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			while ((l = ao2_iterator_next(&l_it))) {
 				char s;
 
 				if (l->name[0] == '0') {
-					l = l->next;
+					ao2_ref(l, -1);
 					continue;
 				}
 				s = 'T';
@@ -3178,8 +3198,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 					s = 'C';
 				}
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
-				l = l->next;
+				ao2_ref(l, -1);
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 			send_tele_link(myrpt, mystr);
 			return;

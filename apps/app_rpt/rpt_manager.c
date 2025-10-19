@@ -86,6 +86,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 	int i;
 	int nrpts = rpt_num_rpts();
 	struct rpt_link *l;
+	struct ao2_iterator l_it;
 	const char *node = astman_get_header(m, "Node");
 	time_t now;
 
@@ -97,18 +98,19 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 
 			rpt_mutex_lock(&rpt_vars[i].lock);	/* LOCK */
 
-			l = rpt_vars[i].links.next;
-			while (l && (l != &rpt_vars[i].links)) {
-				if (l->name[0] == '0') {	// Skip '0' nodes
-					l = l->next;
+			l_it = ao2_iterator_init(rpt_vars[i].ao2_links, 0);
+			while ((l = ao2_iterator_next(&l_it))) {
+				if (l->name[0] == '0') { /* Skip '0' nodes */
+					ao2_ref(l, -1);
 					continue;
 				}
 				astman_append(ses, "Conn: %s %d %d %d\r\n", l->name, l->lastrx1,
 							  (l->lastkeytime) ? (int) (now - l->lastkeytime) : -1,
 							  (l->lastunkeytime) ? (int) (now - l->lastunkeytime) : -1);
-				l = l->next;
+				ao2_ref(l, -1);
 			}
-			rpt_mutex_unlock(&rpt_vars[i].lock);	// UNLOCK
+			ao2_iterator_destroy(&l_it);
+			rpt_mutex_unlock(&rpt_vars[i].lock);
 			astman_append(ses, "\r\n");
 			return (0);
 		}
@@ -130,6 +132,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 	const char *node = astman_get_header(m, "Node");
 	int nrpts = rpt_num_rpts();
 	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	struct ao2_iterator l_it;
 
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;
@@ -214,14 +217,16 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			/* Traverse the list of connected nodes */
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 			j = 0;
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
-				if (l->name[0] == '0') {	/* Skip '0' nodes */
-					l = l->next;
+			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			while ((l = ao2_iterator_next(&l_it))) {
+				if (l->name[0] == '0') { /* Skip '0' nodes */
+					ao2_ref(l, -1);
 					continue;
 				}
 				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
 					ast_free(lbuf);
+					ao2_ref(l, -1);
+					ao2_iterator_destroy(&l_it);
 					return -1;
 				}
 				memset(s, 0, sizeof(struct rpt_lstat));
@@ -238,8 +243,9 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				insque((struct qelem *) s, (struct qelem *) s_head.next);
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				l = l->next;
+				ao2_ref(l, -1);
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 			for (s = s_head.next; s != &s_head; s = s->next) {
 				int hours, minutes, seconds;
@@ -384,6 +390,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 	char *transmitterkeyed;
 	const char *node = astman_get_header(m, "Node");
 	struct rpt *myrpt;
+	struct ao2_iterator l_it;
 	int nrpts = rpt_num_rpts();
 	static char *not_applicable = "N/A";
 
@@ -513,27 +520,26 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
-			numoflinks = 0;
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
+			numoflinks = ao2_container_count(myrpt->ao2_links);
+			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			while ((l = ao2_iterator_next(&l_it))) {
 				if (numoflinks >= MAX_STAT_LINKS) {
 					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
 					break;
 				}
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					reverse_patch_state = "UP";
-					l = l->next;
+					ao2_ref(l, -1);
 					continue;
 				}
 				listoflinks[numoflinks] = ast_strdup(l->name);
 				if (listoflinks[numoflinks] == NULL) {
+					ao2_ref(l, -1);
 					break;
-				} else {
-					numoflinks++;
 				}
-				l = l->next;
+				ao2_ref(l, -1);
 			}
-
+			ao2_iterator_destroy(&l_it);
 			if (myrpt->keyed)
 				input_signal = "YES";
 			else
