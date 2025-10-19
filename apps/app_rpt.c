@@ -5658,7 +5658,7 @@ static void *rpt_master(void *ignore)
 {
 	int i;
 	bool thread_hung[MAXRPTS] = { false };
-	time_t last_thread_time[MAXRPTS];
+	time_t last_thread_time[MAXRPTS] = { 0 };
 	time_t current_time = rpt_time_monotonic();
 	/* init nodelog queue */
 	nodelog.next = nodelog.prev = &nodelog;
