@@ -116,7 +116,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
-			numoflinks = ao2_container_count(myrpt->ao2_links);
+			numoflinks = 0;
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			while ((l = ao2_iterator_next(&l_it))) {
 				if (numoflinks >= MAX_STAT_LINKS) {
@@ -133,6 +133,8 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 				if (listoflinks[numoflinks] == NULL) {
 					ao2_ref(l, -1);
 					break;
+				} else {
+					numoflinks++;
 				}
 			}
 			ao2_iterator_destroy(&l_it);
