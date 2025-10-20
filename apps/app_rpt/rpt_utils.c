@@ -215,10 +215,8 @@ void rpt_localtime(time_t * t, struct ast_tm *lt, const char *tz)
 {
 	struct timeval tv;
 
-	tv.tv_sec = *t;
-	tv.tv_usec = 0;
+	tv = ast_tv(*t, 0);
 	ast_localtime(&tv, lt, tz);
-
 }
 
 time_t rpt_mktime(struct ast_tm *tm, const char *zone)
@@ -240,8 +238,7 @@ int rpt_time_elapsed(struct timeval *start)
 	if (elap > 0) {
 		struct timeval elap_tv_ms, residualtime;
 
-		elap_tv_ms.tv_sec = elap_tv_us.tv_sec;
-		elap_tv_ms.tv_usec = (elap_tv_us.tv_usec / 1000) * 1000;
+		elap_tv_ms = ast_tv(elap_tv_us.tv_sec, (elap_tv_us.tv_usec / 1000) * 1000);
 		residualtime = ast_tvsub(elap_tv_us, elap_tv_ms);
 		*start = ast_tvsub(now, residualtime);
 	}
@@ -262,8 +259,7 @@ struct timeval rpt_tvnow(void)
 	struct timeval t;
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	t.tv_sec = ts.tv_sec;
-	t.tv_usec = ts.tv_nsec / 1000;
+	t = ast_tv(ts.tv_sec, ts.tv_nsec / 1000);
 	return t;
 }
 

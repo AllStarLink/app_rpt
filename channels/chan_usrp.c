@@ -487,8 +487,7 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 		pvt->fr.src = __PRETTY_FUNCTION__;
 		pvt->fr.offset = 0;
 		pvt->fr.mallocd = 0;
-		pvt->fr.delivery.tv_sec = 0;
-		pvt->fr.delivery.tv_usec = 0;
+		pvt->fr.delivery = ast_tv(0, 0);
 		return &pvt->fr;
 	}
 #endif
@@ -619,8 +618,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			fr.src = __PRETTY_FUNCTION__;
 			fr.offset = AST_FRIENDLY_OFFSET;
 			fr.mallocd = 0;
-			fr.delivery.tv_sec = 0;
-			fr.delivery.tv_usec = 0;
+			fr.delivery = ast_tv(0, 0);
 			ast_queue_frame(ast, &fr);
 
 			/* See if we need to check for DTMF */
