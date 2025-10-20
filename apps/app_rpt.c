@@ -2360,6 +2360,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		rpt_link_free(l);
 		return -1;
 	}
 
