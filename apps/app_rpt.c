@@ -2352,8 +2352,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	/* tele must be non-NULL here since deststr always contains at least 'IAX2/' */
 	*tele++ = 0;
 	l->elaptime = 0;
-	l->connecttime.tv_sec = 0; /* not connected */
-	l->connecttime.tv_usec = 0;
+	l->connecttime = ast_tv(0, 0); /* not connected */
 	l->thisconnected = 0;
 	l->link_newkey = RADIO_KEY_ALLOWED;
 
@@ -3945,8 +3944,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				snprintf(buf, sizeof(buf), "RPT_PP%d", i);
 				rpt_update_boolean(myrpt, buf, j);
 			} else if (!strcmp(f->data.ptr, "ENDPAGE")) {
-				myrpt->paging.tv_sec = 0;
-				myrpt->paging.tv_usec = 0;
+				myrpt->paging = ast_tv(0, 0);
 			}
 		}
 		/* if is a Voter device */
@@ -3956,8 +3954,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			char str[200];
 
 			if (!strcmp(f->data.ptr, "ENDPAGE")) {
-				myrpt->paging.tv_sec = 0;
-				myrpt->paging.tv_usec = 0;
+				myrpt->paging = ast_tv(0, 0);
 			} else {
 				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
 				init_text_frame(&wf, "voter_text_send");
@@ -4144,8 +4141,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 			l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
 			l->retrytimer = RETRY_TIMER_MS;
 			l->elaptime = 0;
-			l->connecttime.tv_sec = 0; /* no longer connected */
-			l->connecttime.tv_usec = 0;
+			l->connecttime = ast_tv(0, 0); /* no longer connected */
 			l->thisconnected = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			return;

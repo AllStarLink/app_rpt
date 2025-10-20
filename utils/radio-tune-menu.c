@@ -246,8 +246,7 @@ static int waitfds(int fd1, int fd2, int ms)
 	if (fd2 >= 0) {
 		FD_SET(fd2, &fds);
 	}
-	tv.tv_usec = ms * 1000;
-	tv.tv_sec = 0;
+	tv = ast_tv(0, ms * 1000);
 
 	i = fd1;
 	if (fd2 > fd1) {

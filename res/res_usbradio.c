@@ -786,10 +786,9 @@ struct timeval ast_radio_tvnow(void)
 	struct timespec ts;
 	
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	
-	tv.tv_sec = ts.tv_sec;
-	tv.tv_usec = ts.tv_nsec / 1000;
-	
+
+	tv = ast_tv(ts.tv_sec, ts.tv_nsec / 1000);
+
 	return tv;
 }
 

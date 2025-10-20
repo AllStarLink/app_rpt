@@ -3694,7 +3694,7 @@ static void *voter_timer(void *data)
 					ast_verb(3, "Voter client %s disconnect (timeout)\n", client->name);
 					client->heardfrom = 0;
 					client->respdigest = 0;
-					client->lastheardtime.tv_sec = client->lastheardtime.tv_usec = 0;
+					client->lastheardtime = ast_tv(0, 0);
 				}
 			}
 			if (check_client_sanity) {

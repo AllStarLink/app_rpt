@@ -399,8 +399,7 @@ static int getserialchar(int fd)
 	struct timeval tv;
 
 	for (i = 0; (i < (SERIAL_MAXMS / 100)) && run_forever; i++) {
-		tv.tv_sec = 0;
-		tv.tv_usec = 100000;
+		tv = ast_tv(0, 100000);
 		FD_ZERO(&fds);
 		FD_SET(fd, &fds);
 		res = ast_select(fd + 1, &fds, NULL, NULL, &tv);

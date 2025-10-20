@@ -73,7 +73,7 @@ static void rpt_mutex_spew(void)
 	lock_ring_index_copy = lock_ring_index;
 	ast_mutex_unlock(&locklock);
 
-	lasttv.tv_sec = lasttv.tv_usec = 0;
+	lasttv = ast_tv(0, 0);
 	for (i = 0; i < 32; i++) {
 		j = (i + lock_ring_index_copy) % 32;
 		strftime(a, sizeof(a) - 1, "%m/%d/%Y %H:%M:%S", localtime(&lock_ring_copy[j].tv.tv_sec));
