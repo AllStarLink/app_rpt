@@ -2356,18 +2356,6 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->connecttime.tv_usec = 0;
 	l->thisconnected = 0;
 	l->link_newkey = RADIO_KEY_ALLOWED;
-
-	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		rpt_link_free(l);
-		return -1;
-	}
-
-	ast_format_cap_append(cap, ast_format_slin, 0);
-
-	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
-	ao2_ref(cap, -1);
 	l->linkmode = 0;
 	l->lastrx1 = 0;
 	l->lastrealrx = 0;
@@ -2375,12 +2363,31 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->rxlingertimer = RX_LINGER_TIME;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		rpt_mutex_lock(&myrpt->lock);
+		/* put back in queue to try again later */
+		rpt_link_add(myrpt, l);
+		rpt_mutex_unlock(&myrpt->lock);
+		return -1;
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+
+	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
+	ao2_ref(cap, -1);
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
 		ast_frfree(f1);
 	if (l->chan) {
 		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
+		rpt_mutex_lock(&myrpt->lock);
+		/* put back in queue to try again later */
+		rpt_link_add(myrpt, l);
+		rpt_mutex_unlock(&myrpt->lock);
 		return -1;
 	}
 	rpt_mutex_lock(&myrpt->lock);
