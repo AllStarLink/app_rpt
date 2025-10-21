@@ -430,11 +430,10 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
 			rpt_qwrite(l, &wf);
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 	return 0;
