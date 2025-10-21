@@ -600,11 +600,10 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	wf.datalen = len + 1;
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 	/* give it to everyone */
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (l->chan && (l->mode == MODE_TRANSCEIVE)) {
 			rpt_qwrite(l, &wf);
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 	ast_free(str);
@@ -1587,11 +1586,10 @@ treataslocal:
 		if (ao2_container_count(myrpt->ao2_links)) {
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			rpt_mutex_lock(&myrpt->lock);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				int v, w;
 
 				if (l->name[0] == '0') {
-					ao2_ref(l, -1);
 					continue;
 				}
 				w = 1;
@@ -1599,28 +1597,22 @@ treataslocal:
 					int nrpts = rpt_num_rpts();
 					for (v = 0; v < nrpts; v++) {
 						if (&rpt_vars[v] == myrpt) {
-							ao2_ref(l, -1);
 							continue;
 						} else if (rpt_vars[v].remote) {
-							ao2_ref(l, -1);
 							continue;
 						} else if (strcmp(rpt_vars[v].name, l->name)) {
-							ao2_ref(l, -1);
 							continue;
 						}
 						w = 0;
-						ao2_ref(l, -1);
 						break;
 					}
 				}
 				if (myrpt->p.locallinknodesn) {
 					for (v = 0; v < myrpt->p.locallinknodesn; v++) {
 						if (strcmp(l->name, myrpt->p.locallinknodes[v])) {
-							ao2_ref(l, -1);
 							continue;
 						}
 						w = 0;
-						ao2_ref(l, -1);
 						break;
 					}
 				}
@@ -1633,7 +1625,6 @@ treataslocal:
 						hasremote++;
 					}
 				}
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
@@ -1807,13 +1798,12 @@ treataslocal:
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 		unkeys_queued = 0;
 		rpt_mutex_lock(&myrpt->lock);
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if (!strcmp(l->name, mytele->mylink.name)) {
 				unkeys_queued = l->lastrx;
 				ao2_ref(l, -1);
 				break;
 			}
-			ao2_ref(l, -1);
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -1836,9 +1826,8 @@ treataslocal:
 		if (ao2_container_count(myrpt->ao2_links)) {
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			rpt_mutex_lock(&myrpt->lock);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') {
-					ao2_ref(l, -1);
 					continue;
 				}
 				if (!strcmp(l->name, mytele->mylink.name)) {
@@ -2375,9 +2364,8 @@ treataslocal:
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if (l->name[0] == '0') {
-				ao2_ref(l, -1);
 				continue;
 			}
 			l1 = ao2_alloc(sizeof(struct rpt_link), rpt_link_ao2_destroy);
@@ -2388,7 +2376,6 @@ treataslocal:
 			}
 			memcpy(l1, l, sizeof(struct rpt_link));
 			ao2_link(ao2_copy, l1);
-			ao2_ref(l, -1);
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -2404,7 +2391,7 @@ treataslocal:
 			ast_stopstream(mychannel);
 		}
 		l_it = ao2_iterator_init(ao2_copy, 0);
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			char *s;
 
 			hastx = 1;
@@ -2420,7 +2407,7 @@ treataslocal:
 				s = "rpt/connecting";
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
-			ao2_ref(l, -2); /* -2: 1 for the iterator, 1 for the link reference */
+			ao2_ref(l, -1); /* 1 for the link reference */
 		}
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
@@ -3064,9 +3051,8 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			if (ao2_container_count(myrpt->ao2_links)) {
 				l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 				rpt_mutex_lock(&myrpt->lock);
-				while ((l = ao2_iterator_next(&l_it))) {
+				for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 					if (l->name[0] == '0') {
-						ao2_ref(l, -1);
 						continue;
 					}
 					if (!strcmp(l->name, mylink->name)) {
@@ -3158,11 +3144,10 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				char s;
 
 				if (l->name[0] == '0') {
-					ao2_ref(l, -1);
 					continue;
 				}
 				s = 'T';
@@ -3176,7 +3161,6 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 					s = 'C';
 				}
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);

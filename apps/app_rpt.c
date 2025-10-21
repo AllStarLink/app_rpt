@@ -1654,14 +1654,12 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 	struct ao2_iterator l_it;
 	/* see if this is one in list */
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (l->name[0] == '0') {
-			ao2_ref(l, -1);
 			continue;
 		}
 		/* dont send back from where it came */
 		if (l == mylink || !strcmp(l->name, mylink->name)) {
-			ao2_ref(l, -1);
 			continue;
 		}
 		if (!dest || !strcmp(l->name, dest)) {
@@ -1678,7 +1676,6 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 				return 1;
 			}
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 	return 0;
@@ -2369,18 +2366,6 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->connecttime = ast_tv(0, 0); /* not connected */
 	l->thisconnected = 0;
 	l->link_newkey = RADIO_KEY_ALLOWED;
-
-	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		ao2_ref(l, -1);
-		return -1;
-	}
-
-	ast_format_cap_append(cap, ast_format_slin, 0);
-
-	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
-	ao2_ref(cap, -1);
 	l->linkmode = 0;
 	l->lastrx1 = 0;
 	l->lastrealrx = 0;
@@ -2388,6 +2373,15 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->rxlingertimer = RX_LINGER_TIME;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		ao2_link(myrpt->ao2_links, l); /* put back in queue */
+		return -1;
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 	ao2_ref(cap, -1);
@@ -2397,14 +2391,11 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
-		res = -1;
+		ao2_link(myrpt->ao2_links, l); /* put back in queue */
+		return -1;
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	/* put back in queue */
-	if (!ao2_link(myrpt->ao2_links, l)) {
-		ast_log(LOG_ERROR, "attempt_reconnect: ao2_link failed for link %s\n", l->name);
-		ao2_ref(l, -1);
-	}
+	ao2_link(myrpt->ao2_links, l); /* put back in queue */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 	return res;
@@ -2908,7 +2899,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
 
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((zl = ao2_iterator_next(&l_it))) {
+	for (; (zl = ao2_iterator_next(&l_it)); ao2_ref(zl, -1)) {
 		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
 		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
 		ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
@@ -2922,7 +2913,6 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->retries = %d\n", zl->retries);
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
 		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
-		ao2_ref(zl, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 	zt = myrpt->tele.next;
@@ -3064,7 +3054,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		int myrx;
 		if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
@@ -3238,7 +3228,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 
 		/* ignore non-timing channels */
 		if (l->elaptime < 0) {
-			ao2_ref(l, -1);
 			continue;
 		}
 		l->elaptime += elap;
@@ -3249,7 +3238,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (l->chan)
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			rpt_mutex_lock(&myrpt->lock);
-			ao2_ref(l, -1);
 			continue;
 		}
 		max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
@@ -3264,7 +3252,6 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				l->retries = l->max_retries + 1;
 			}
 			rpt_mutex_lock(&myrpt->lock);
-			ao2_ref(l, -1);
 			continue;
 		}
 		if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
@@ -3284,9 +3271,8 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
-			ao2_ref(l, -2); /* -2: 1 for the iterator, 1 for the link reference */
+			ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
 			rpt_mutex_lock(&myrpt->lock);
-
 			continue;
 		}
 		if ((!l->chan) && (!l->disctime) && (!l->outbound)) {
@@ -3308,11 +3294,10 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			dodispgm(myrpt, l->name);
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
-			ao2_ref(l, -2); /* -2: 1 for the iterator, 1 for the link reference */
+			ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
 			rpt_mutex_lock(&myrpt->lock);
 			continue;
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 }
@@ -3358,10 +3343,9 @@ static inline int do_link_post(struct rpt *myrpt)
 	nstr = 0;
 	ast_str_set(&str, 0, "%s", "nodes=");
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
-			ao2_ref(l, -1);
 			continue;
 		}
 		lst = 'T';
@@ -3375,7 +3359,6 @@ static inline int do_link_post(struct rpt *myrpt)
 			ast_str_append(&str, 0, "%s", ",");
 		ast_str_append(&str, 0, "%c%s", lst, l->name);
 		nstr = 1;
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 	time(&now);
@@ -3995,16 +3978,14 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				wf.data.ptr = str;
 				l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 				/* otherwise, send it to all of em */
-				while ((l = ao2_iterator_next(&l_it))) {
+				for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 					/* Dont send to other then IAXRPT client */
 					if ((l->name[0] != '0') || (l->phonemode)) {
-						ao2_ref(l, -1);
 						continue;
 					}
 					if (l->chan) {
 						rpt_qwrite(l, &wf);
 					}
-					ao2_ref(l, -1);
 				}
 				ao2_iterator_destroy(&l_it);
 			}
@@ -4242,24 +4223,22 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 	rpt_mutex_lock(&myrpt->lock);
 
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		int remnomute, remrx;
 		struct timeval now;
 
 		if (l->disctime) {
-			ao2_ref(l, -1);
 			continue;
 		}
 
 		remrx = 0;
 		/* see if any other links are receiving */
 		l_it2 = ao2_iterator_init(myrpt->ao2_links, 0);
-		while ((m = ao2_iterator_next(&l_it2))) {
+		for (; (m = ao2_iterator_next(&l_it2)); ao2_ref(m, -1)) {
 			/* if not the link we are currently processing, and not localonly count it */
 			if ((m != l) && (m->lastrx) && (m->mode < 2)) {
 				remrx = 1;
 			}
-			ao2_ref(m, -1);
 		}
 		ao2_iterator_destroy(&l_it2);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -4539,10 +4518,8 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			ao2_iterator_destroy(&l_it);
 			return 0;
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
-	/* @@@@@ UNLOCK @@@@@ */
 	rpt_mutex_unlock(&myrpt->lock);
 	return 0;
 }
@@ -4567,13 +4544,12 @@ static inline int monchannel_read(struct rpt *myrpt)
 		}
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 		/* go thru all the links */
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			/* IF we are an altlink() -> !altlink() handled elsewhere */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
 				ast_write(l->chan, f);
 			}
-			ao2_ref(l, -1);
 		}
 		ao2_iterator_destroy(&l_it);
 	}
@@ -4906,11 +4882,10 @@ static void *rpt(void *this)
 			rpt_mutex_lock(&myrpt->lock);
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			myrpt->voteremrx = 0; /* no voter remotes keyed */
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->chan) {
 					ast_sendtext(l->chan, tmpstr);
 				}
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
@@ -4921,7 +4896,7 @@ static void *rpt(void *this)
 		/* If someone's connected, and they're transmitting from their end to us, set remrx true */
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 		myrpt->remrx = 0;
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if (l->lastrx) {
 				myrpt->remrx = 1;
 				if (l->voterlink)
@@ -4929,7 +4904,6 @@ static void *rpt(void *this)
 				if ((l->name[0] > '0') && (l->name[0] <= '9'))		/* Ignore '0' nodes */
 					strcpy(myrpt->lastnodewhichkeyedusup, l->name); /* Note the node which is doing the key up */
 			}
-			ao2_ref(l, -1);
 		}
 		ao2_iterator_destroy(&l_it);
 		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) { /* If sleep mode enabled */
@@ -5325,7 +5299,7 @@ static void *rpt(void *this)
 		/* Reconnect */
 
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if (l->killme) {
 				/* remove from queue */
 				ao2_unlink(myrpt->ao2_links, l);
@@ -5338,10 +5312,9 @@ static void *rpt(void *this)
 				ast_hangup(l->pchan);
 				rpt_mutex_lock(&myrpt->lock);
 				/* re-start link traversal */
-				ao2_ref(l, -2); /* -2: 1 for the iterator, 1 for the link reference */
+				ao2_ref(l, -1); /* 1 for the link reference - Freeing the link */
 				continue;
 			}
-			ao2_ref(l, -1);
 		}
 		ao2_iterator_destroy(&l_it);
 		x = myrpt->remrx || myrpt->localtx || (myrpt->callmode != CALLMODE_DOWN) || myrpt->parrotstate;
@@ -5393,12 +5366,11 @@ static void *rpt(void *this)
 		if (myrpt->dahditxchannel != myrpt->txchannel)
 			cs[n++] = myrpt->dahditxchannel;
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if ((!l->killme) && (!l->disctime) && l->chan) {
 				cs[n++] = l->chan;
 				cs[n++] = l->pchan;
 			}
-			ao2_ref(l, -1);
 		}
 		ao2_iterator_destroy(&l_it);
 		if ((myrpt->topkeystate == 1) && ((t - myrpt->topkeytime) > TOPKEYWAIT)) {
@@ -5535,14 +5507,14 @@ static void *rpt(void *this)
 
 	rpt_mutex_lock(&myrpt->lock);
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		/* remove from queue */
 		ao2_unlink(myrpt->ao2_links, l);
 		/* hang-up on call to device */
 		if (l->chan)
 			ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		ao2_ref(l, -1);
+		ao2_ref(l, -1); /* 1 for the link reference - Freeing the link */
 	}
 	ao2_iterator_destroy(&l_it);
 	if (myrpt->xlink == 1)
@@ -6721,16 +6693,14 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_mutex_lock(&myrpt->lock);
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			/* try to find this one in queue */
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') {
-					ao2_ref(l, -1);
 					continue;
 				}
 				/* if found matching string */
 				if (!strcmp(l->name, b1)) {
-					break;
+					break; /* Don't deref here, using l after the loop */
 				}
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			/* if found */
