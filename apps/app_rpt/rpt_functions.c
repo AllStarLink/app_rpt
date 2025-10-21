@@ -82,14 +82,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_mutex_lock(&myrpt->lock);
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 		/* try to find this one in queue */
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if (l->name[0] == '0') {
-				ao2_ref(l, -1);
 				continue;
 			}
 			/* if found matching string */
 			if (!strcmp(l->name, digitbuf))
-				break;
+				break; /* Don't unref here, using l after the loop */
 		}
 		ao2_iterator_destroy(&l_it);
 		if (l) { /* if found */
@@ -224,11 +223,10 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		myrpt->savednodes[0] = 0;
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 		/* loop through all links */
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			struct ast_frame wf;
 			char c1;
-			if ((l->name[0] <= '0') || (l->name[0] > '9')) {	/* Skip any IAXRPT monitoring */
-				ao2_ref(l, -1);
+			if ((l->name[0] <= '0') || (l->name[0] > '9')) { /* Skip any IAXRPT monitoring */
 				continue;
 			}
 			if (l->mode == MODE_TRANSCEIVE)
@@ -258,7 +256,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 			rpt_mutex_lock(&myrpt->lock);
-			ao2_ref(l, -1);
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -295,15 +292,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_mutex_lock(&myrpt->lock);
 		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 		/* otherwise, send it to all of em */
-		while ((l = ao2_iterator_next(&l_it))) {
+		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if (l->name[0] == '0') {
-				ao2_ref(l, -1);
 				continue;
 			}
 			if (l->chan) {
 				ast_sendtext(l->chan, tmp);
 			}
-			ao2_ref(l, -1);
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);

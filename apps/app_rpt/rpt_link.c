@@ -258,7 +258,7 @@ void FindBestRssi(struct rpt *myrpt)
 		maxrssi = myrpt->rxrssi;
 	}
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (numoflinks >= MAX_STAT_LINKS) {
 			ast_log(LOG_WARNING, "[%s] number of links exceeds limit of %d \n", myrpt->name, MAX_STAT_LINKS);
 			ao2_ref(l, -1);
@@ -269,7 +269,7 @@ void FindBestRssi(struct rpt *myrpt)
 			bl = l;
 		}
 		l->votewinner = 0;
-		ao2_ref(l, -1);
+		numoflinks++;
 	}
 	ao2_iterator_destroy(&l_it);
 
@@ -297,20 +297,17 @@ void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c)
 
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 	/* go thru all the links */
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (!l->phonemode) {
-			ao2_ref(l, -1);
 			continue;
 		}
 		/* dont send to self */
 		if (mylink && (l == mylink)) {
-			ao2_ref(l, -1);
 			continue;
 		}
 		if (l->chan) {
 			ast_senddigit(l->chan, c, 0);
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 }
@@ -327,16 +324,14 @@ void rssi_send(struct rpt *myrpt)
 	wf.data.ptr = str;
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 	/* otherwise, send it to all of em */
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (l->name[0] == '0') {
-			ao2_ref(l, -1);
 			continue;
 		}
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 }
@@ -354,9 +349,8 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	wf.data.ptr = str;
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 	/* first, see if our dude is there */
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (l->name[0] == '0') {
-			ao2_ref(l, -1);
 			continue;
 		}
 		/* if we found it, write it and were done */
@@ -368,15 +362,13 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 			ao2_iterator_destroy(&l_it);
 			return;
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_restart(&l_it);
 	/* if not, give it to everyone */
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 }
@@ -399,11 +391,10 @@ void send_link_keyquery(struct rpt *myrpt)
 	wf.data.ptr = str;
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 	/* give it to everyone */
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 }
@@ -417,23 +408,19 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		return 0;
 	/* go thru all links */
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
-			ao2_ref(l, -1);
 			continue;
 		}
 		if (l->mode == MODE_LOCAL_MONITOR) {
-			ao2_ref(l, -1);
 			continue; /* dont report local modes */
 		}
 		/* dont count our stuff */
 		if (l == mylink) {
-			ao2_ref(l, -1);
 			continue;
 		}
 		if (mylink && !strcmp(l->name, mylink->name)) {
-			ao2_ref(l, -1);
 			continue;
 		}
 		/* figure out mode to report */
@@ -461,7 +448,6 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		}
 		/* if we are in transceive mode, let all modes stand */
 		if (mode == 'T') {
-			ao2_ref(l, -1);
 			continue;
 		}
 		/* downgrade everyone on this node if appropriate */
@@ -475,7 +461,6 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 				links_buf[i] = mode;
 			}
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 	/* After building the string, count number of nodes (commas) in buffer string. The first
@@ -501,16 +486,14 @@ void __kickshort(struct rpt *myrpt)
 	struct ao2_iterator l_it;
 
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
-			ao2_ref(l, -1);
 			continue;
 		}
 		if (l->linklisttimer > LINKLISTSHORTTIME) {
 			l->linklisttimer = LINKLISTSHORTTIME;
 		}
-		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 	if (myrpt->linkposttimer > LINKPOSTSHORTTIME) {
@@ -626,14 +609,13 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	rpt_mutex_lock(&myrpt->lock);
 	l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 	/* try to find this one in queue */
-	while ((l = ao2_iterator_next(&l_it))) {
+	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 		if (l->name[0] == '0') {
-			ao2_ref(l, -1);
 			continue;
 		}
 		/* if found matching string */
 		if (!strcmp(l->name, node)) {
-			break;
+			break; /* found , leave referenced */
 		}
 	}
 	ao2_iterator_destroy(&l_it);

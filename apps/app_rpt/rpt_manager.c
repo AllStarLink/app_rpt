@@ -99,15 +99,12 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 			rpt_mutex_lock(&rpt_vars[i].lock);	/* LOCK */
 
 			l_it = ao2_iterator_init(rpt_vars[i].ao2_links, 0);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
-					ao2_ref(l, -1);
 					continue;
 				}
 				astman_append(ses, "Conn: %s %d %d %d\r\n", l->name, l->lastrx1,
-							  (l->lastkeytime) ? (int) (now - l->lastkeytime) : -1,
-							  (l->lastunkeytime) ? (int) (now - l->lastunkeytime) : -1);
-				ao2_ref(l, -1);
+					(l->lastkeytime) ? (int) (now - l->lastkeytime) : -1, (l->lastunkeytime) ? (int) (now - l->lastunkeytime) : -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&rpt_vars[i].lock);
@@ -218,9 +215,8 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 			j = 0;
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
-					ao2_ref(l, -1);
 					continue;
 				}
 				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
@@ -243,7 +239,6 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				insque((struct qelem *) s, (struct qelem *) s_head.next);
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
@@ -522,14 +517,14 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			reverse_patch_state = "DOWN";
 			numoflinks = 0;
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (numoflinks >= MAX_STAT_LINKS) {
 					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
+					ao2_ref(l, -1);
 					break;
 				}
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					reverse_patch_state = "UP";
-					ao2_ref(l, -1);
 					continue;
 				}
 				listoflinks[numoflinks] = ast_strdup(l->name);
@@ -539,7 +534,6 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 				} else {
 					numoflinks++;
 				}
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			if (myrpt->keyed)

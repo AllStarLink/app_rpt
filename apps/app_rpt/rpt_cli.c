@@ -118,7 +118,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			reverse_patch_state = "DOWN";
 			numoflinks = 0;
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (numoflinks >= MAX_STAT_LINKS) {
 					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
 					ao2_ref(l, -1);
@@ -126,7 +126,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 				}
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					reverse_patch_state = "UP";
-					ao2_ref(l, -1);
 					continue;
 				}
 				listoflinks[numoflinks] = ast_strdup(l->name);
@@ -350,13 +349,11 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			rpt_mutex_lock(&myrpt->lock);
 			/* count the number of nodes */
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
-					ao2_ref(l, -1);
 					continue;
 				}
 				node_count++;
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 
@@ -370,9 +367,8 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			/* Traverse the list of connected nodes */
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			i = 0;
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
-					ao2_ref(l, -1);
 					continue;
 				}
 				if ((s = ast_calloc(1, sizeof(struct rpt_lstat))) == NULL) {
@@ -402,7 +398,6 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				stat_array[i] = s;
 				i++;
 				memset(l->chan_stat, 0, sizeof(l->chan_stat));
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
@@ -577,9 +572,8 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 			j = 0;
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') { // Skip '0' nodes
-					ao2_ref(l, -1);
 					continue;
 				}
 				if (!(s = ast_calloc(1, sizeof(struct rpt_lstat)))) {
@@ -602,7 +596,6 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				insque((struct qelem *) s, (struct qelem *) s_head.next);
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			now = rpt_tvnow();
@@ -881,15 +874,13 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 			rpt_mutex_lock(&myrpt->lock);
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			/* otherwise, send it to all of em */
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') {
-					ao2_ref(l, -1);
 					continue;
 				}
 				if (l->chan) {
 					ast_sendtext(l->chan, str);
 				}
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
@@ -984,15 +975,13 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 			rpt_mutex_lock(&myrpt->lock);
 			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
 			/* otherwise, send it to all of em */
-			while ((l = ao2_iterator_next(&l_it))) {
+			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') {
-					ao2_ref(l, -1);
 					continue;
 				}
 				if (l->chan) {
 					ast_sendtext(l->chan, str);
 				}
-				ao2_ref(l, -1);
 			}
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
