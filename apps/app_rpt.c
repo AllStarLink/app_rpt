@@ -3275,6 +3275,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			if (l->chan)
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			rpt_mutex_lock(&myrpt->lock);
+			ao2_ref(l, -1);
 			continue;
 		}
 		max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
@@ -3337,6 +3338,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			rpt_mutex_lock(&myrpt->lock);
 			continue;
 		}
+		ao2_ref(l, -1);
 	}
 	ao2_iterator_destroy(&l_it);
 }
