@@ -169,13 +169,11 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (!ao2_container_count(myrpt->ao2_links)) {
 			return DC_COMPLETE;
 		}
-		if ((command_source != SOURCE_RPT) &&
-			(command_source != SOURCE_PHONE) &&
-			(command_source != SOURCE_ALT) &&
-			(command_source != SOURCE_DPHONE) &&
-			mylink &&
-			(!iswebtransceiver(mylink)) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb"))
+		if ((command_source != SOURCE_RPT) && (command_source != SOURCE_PHONE) && (command_source != SOURCE_ALT) &&
+			(command_source != SOURCE_DPHONE) && mylink && (!iswebtransceiver(mylink)) && !CHAN_TECH(mylink->chan, "echolink") &&
+			!CHAN_TECH(mylink->chan, "tlb")) {
 			return DC_COMPLETE;
+		}
 
 		/* if already in cmd mode, or selected self, fughetabahtit */
 		if ((myrpt->cmdnode[0]) || (!strcmp(myrpt->name, digitbuf))) {
