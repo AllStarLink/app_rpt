@@ -2418,23 +2418,24 @@ treataslocal:
 			ast_stopstream(mychannel);
 		}
 		l_it = ao2_iterator_init(ao2_copy, 0);
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		for (; (l1 = ao2_iterator_next(&l_it)); ao2_ref(l1, -1)) {
 			char *s;
 
 			hastx = 1;
 			res = saynode(myrpt, mychannel, l->name);
 			s = "rpt/tranceive";
-			if (l->mode == MODE_MONITOR) {
+			if (l1->mode == MODE_MONITOR) {
 				s = "rpt/monitor";
 			}
-			if (l->mode == MODE_LOCAL_MONITOR) {
+			if (l1->mode == MODE_LOCAL_MONITOR) {
 				s = "rpt/localmonitor";
 			}
-			if (!l->thisconnected) {
+			if (!l1->thisconnected) {
 				s = "rpt/connecting";
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
-			ao2_ref(l, -1); /* 1 for the link reference - freeing the link*/
+			ao2_unlink(ao2_copy, l1);
+			ao2_ref(l1, -1); /* 1 for the link reference - freeing the link*/
 		}
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
