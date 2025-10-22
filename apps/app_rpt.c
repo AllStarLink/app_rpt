@@ -4267,7 +4267,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_hangup(l->pchan);
-	ao2_ref(l, -2); /* -2: 1 for the iterator, 1 for the link reference */
+	ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
 }
 
 static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
@@ -5366,7 +5366,7 @@ static void *rpt(void *this)
 				ast_hangup(l->pchan);
 				rpt_mutex_lock(&myrpt->lock);
 				/* re-start link traversal */
-				ao2_ref(l, -1); /* 1 for the link reference - Freeing the link */
+				ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
 				continue;
 			}
 		}
@@ -5569,7 +5569,7 @@ static void *rpt(void *this)
 		if (l->chan)
 			ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		ao2_ref(l, -1); /* 1 for the link reference - Freeing the link */
+		ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
 	}
 	ao2_iterator_destroy(&l_it);
 	if (myrpt->xlink == 1)

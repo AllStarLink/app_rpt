@@ -2434,7 +2434,7 @@ treataslocal:
 				s = "rpt/connecting";
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
-			ao2_ref(l, -1); /* 1 for the link reference */
+			ao2_ref(l, -1); /* 1 for the link reference - freeing the link*/
 		}
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
