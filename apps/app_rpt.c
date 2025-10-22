@@ -4933,7 +4933,6 @@ static void *rpt(void *this)
 			time_t was_mono;
 			char gps_data[100];
 			char lat[LAT_SZ + 1], lon[LON_SZ + 1], elev[ELEV_SZ + 1];
-			struct ao2_iterator l_it;
 
 			myrpt->lastgpstime = t_mono;
 
@@ -5576,7 +5575,7 @@ static void *rpt(void *this)
 	if (myrpt->xlink == 1)
 		myrpt->xlink = 2;
 	rpt_mutex_unlock(&myrpt->lock);
-
+	ao2_ref(myrpt->ao2_links, -1);
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	myrpt->rpt_thread = AST_PTHREADT_STOP;
 	stop_outstream(myrpt);

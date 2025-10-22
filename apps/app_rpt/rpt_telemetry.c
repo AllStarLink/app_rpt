@@ -2434,8 +2434,8 @@ treataslocal:
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
 		/* destroy our local link queue */
-		ao2_ref(ao2_copy, -1);
 		ao2_iterator_destroy(&l_it);
+		ao2_ref(ao2_copy, -1);
 		imdone = 1;
 		break;
 	case LASTUSER:
