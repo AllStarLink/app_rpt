@@ -142,7 +142,6 @@ void rpt_link_ao2_destroy(void *obj)
 		ast_free(doomed_link->linklist);
 		doomed_link->linklist = NULL;
 	}
-	ast_free(doomed_link);
 }
 
 void tele_link_add(struct rpt *myrpt, struct rpt_tele *t)
