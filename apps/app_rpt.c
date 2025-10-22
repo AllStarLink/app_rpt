@@ -5665,7 +5665,7 @@ static void *rpt_master(void *ignore)
 	/* go thru all the specified repeaters */
 
 	/* wait until asterisk starts */
-	while (!ast_test_flag(&ast_options, AST_OPT_FLAG_FULLY_BOOTED)) {
+	while (!ast_fully_booted) {
 		usleep(250000);
 	}
 
