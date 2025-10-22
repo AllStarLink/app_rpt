@@ -2395,7 +2395,13 @@ treataslocal:
 				ao2_iterator_destroy(&l_it);
 				goto abort;
 			}
-			memcpy(l1, l, sizeof(struct rpt_link));
+			/* We need a deep copy of the limited link information
+			 * to limit the myrpt->lock time.  Without a copy we would
+			 * hang the lock until all streams are compete
+			 */
+			l1->mode = l->mode;
+			l1->thisconnected = l->thisconnected;
+			ast_copy_string(l1->name, l->name, sizeof(l1->name));
 			ao2_link(ao2_copy, l1);
 		}
 		ao2_iterator_destroy(&l_it);
