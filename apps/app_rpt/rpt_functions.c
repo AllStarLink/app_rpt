@@ -80,7 +80,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
 			strcpy(digitbuf, myrpt->lastlinknode);
 		rpt_mutex_lock(&myrpt->lock);
-		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+		l_it = ao2_iterator_init(myrpt->links, 0);
 		/* try to find this one in queue */
 		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if (l->name[0] == '0') {
@@ -166,7 +166,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (strlen(digitbuf) < 1)
 			break;
 		/* if doesn't allow link cmd, or no links active, return */
-		if (!ao2_container_count(myrpt->ao2_links)) {
+		if (!ao2_container_count(myrpt->links)) {
 			return DC_COMPLETE;
 		}
 		if ((command_source != SOURCE_RPT) && (command_source != SOURCE_PHONE) && (command_source != SOURCE_ALT) &&
@@ -219,7 +219,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 6:					/* All Links Off, including permalinks */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
-		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+		l_it = ao2_iterator_init(myrpt->links, 0);
 		/* loop through all links */
 		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			struct ast_frame wf;
@@ -288,7 +288,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		*s2 = 0;
 		snprintf(tmp, MAX_TEXTMSG_SIZE - 1, "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
-		l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+		l_it = ao2_iterator_init(myrpt->links, 0);
 		/* otherwise, send it to all of em */
 		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 			if (l->name[0] == '0') {
