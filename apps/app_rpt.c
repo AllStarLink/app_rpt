@@ -2331,6 +2331,7 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
+	int res = 0;
 
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
@@ -2342,6 +2343,14 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	/* cannot apply to tlb */
 	if (!strncasecmp(tmp, "tlb", 3))
 		return 0;
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		return -1;
+	}
+	ast_format_cap_append(cap, ast_format_slin, 0);
+
 	rpt_mutex_lock(&myrpt->lock);
 	/* remove from queue */
 	rpt_link_remove(myrpt, l);
@@ -2364,18 +2373,6 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 
-	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		rpt_mutex_lock(&myrpt->lock);
-		/* put back in queue to try again later */
-		rpt_link_add(myrpt, l);
-		rpt_mutex_unlock(&myrpt->lock);
-		return -1;
-	}
-
-	ast_format_cap_append(cap, ast_format_slin, 0);
-
 	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 	ao2_ref(cap, -1);
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
@@ -2384,18 +2381,14 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
-		rpt_mutex_lock(&myrpt->lock);
-		/* put back in queue to try again later */
-		rpt_link_add(myrpt, l);
-		rpt_mutex_unlock(&myrpt->lock);
-		return -1;
+		res = -1;
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	/* put back in queue */
 	rpt_link_add(myrpt, l);
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
-	return 0;
+	return res;
 }
 
 /* 0 return=continue, 1 return = break, -1 return = error */
