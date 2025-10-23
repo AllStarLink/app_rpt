@@ -124,17 +124,15 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 	wf.data.ptr = str;
 	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
-	l = myrpt->links.next;
 	/* otherwise, send it to all of em */
-	while (l != &myrpt->links) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		/* Dont send to IAXRPT client, unless main channel is Voter */
 		if (((l->name[0] == '0') && !CHAN_TECH(myrpt->rxchannel, "voter")) || (l->phonemode)) {
-			l = l->next;
 			continue;
 		}
 		if (l->chan)
 			rpt_qwrite(l, &wf);
-		l = l->next;
 	}
 }
 

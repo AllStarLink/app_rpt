@@ -117,15 +117,14 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
 			numoflinks = 0;
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
 				if (numoflinks >= MAX_STAT_LINKS) {
 					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
 					break;
 				}
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					reverse_patch_state = "UP";
-					l = l->next;
 					continue;
 				}
 				listoflinks[numoflinks] = ast_strdup(l->name);
@@ -134,7 +133,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 				} else {
 					numoflinks++;
 				}
-				l = l->next;
 			}
 
 			if (myrpt->keyed)
@@ -347,14 +345,12 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* count the number of nodes */
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
 				if (l->name[0] == '0') { /* Skip '0' nodes */
-					l = l->next;
 					continue;
 				}
 				node_count++;
-				l = l->next;
 			}
 
 			if (node_count > 0) {
@@ -365,11 +361,10 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				}
 			}
 			/* Traverse the list of connected nodes */
-			l = myrpt->links.next;
 			i = 0;
-			while (l && (l != &myrpt->links)) {
-				if (l->name[0] == '0') {	/* Skip '0' nodes */
-					l = l->next;
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
+				if (l->name[0] == '0') { /* Skip '0' nodes */
 					continue;
 				}
 				if ((s = ast_calloc(1, sizeof(struct rpt_lstat))) == NULL) {
@@ -396,7 +391,6 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				stat_array[i] = s;
 				i++;
 				memset(l->chan_stat, 0, sizeof(l->chan_stat));
-				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 			if (node_count > 1) {
@@ -570,10 +564,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			rpt_mutex_unlock(&myrpt->lock); /* LOCK */
 
 			j = 0;
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
-				if (l->name[0] == '0') {	// Skip '0' nodes 
-					l = l->next;
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
+				if (l->name[0] == '0') { // Skip '0' nodes
 					continue;
 				}
 				if (!(s = ast_calloc(1, sizeof(struct rpt_lstat)))) {
@@ -594,7 +587,6 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				insque((struct qelem *) s, (struct qelem *) s_head.next);
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				l = l->next;
 			}
 			now = rpt_tvnow();
 			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
@@ -869,16 +861,14 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 		if (!strcmp(from, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
-			l = myrpt->links.next;
 			/* otherwise, send it to all of em */
-			while (l != &myrpt->links) {
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				if (l->chan)
 					ast_sendtext(l->chan, str);
-				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
@@ -969,16 +959,14 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
-			l = myrpt->links.next;
 			/* otherwise, send it to all of em */
-			while (l != &myrpt->links) {
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				if (l->chan)
 					ast_sendtext(l->chan, str);
-				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}

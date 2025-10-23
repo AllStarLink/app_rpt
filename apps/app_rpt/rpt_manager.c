@@ -97,16 +97,13 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 
 			rpt_mutex_lock(&rpt_vars[i].lock);	/* LOCK */
 
-			l = rpt_vars[i].links.next;
-			while (l && (l != &rpt_vars[i].links)) {
-				if (l->name[0] == '0') {	// Skip '0' nodes
-					l = l->next;
+			AST_RWDLLIST_TRAVERSE(&rpt_vars[i].links, l, list)
+			{
+				if (l->name[0] == '0') { // Skip '0' nodes
 					continue;
 				}
 				astman_append(ses, "Conn: %s %d %d %d\r\n", l->name, l->lastrx1,
-							  (l->lastkeytime) ? (int) (now - l->lastkeytime) : -1,
-							  (l->lastunkeytime) ? (int) (now - l->lastunkeytime) : -1);
-				l = l->next;
+					(l->lastkeytime) ? (int) (now - l->lastkeytime) : -1, (l->lastunkeytime) ? (int) (now - l->lastunkeytime) : -1);
 			}
 			rpt_mutex_unlock(&rpt_vars[i].lock);	// UNLOCK
 			astman_append(ses, "\r\n");
@@ -214,10 +211,9 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			/* Traverse the list of connected nodes */
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 			j = 0;
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
-				if (l->name[0] == '0') {	/* Skip '0' nodes */
-					l = l->next;
+			AST_RWDLLIST_TRAVERSE(&rpt_vars[i].links, l, list)
+			{
+				if (l->name[0] == '0') { /* Skip '0' nodes */
 					continue;
 				}
 				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
@@ -238,7 +234,6 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				insque((struct qelem *) s, (struct qelem *) s_head.next);
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 			for (s = s_head.next; s != &s_head; s = s->next) {
@@ -515,15 +510,14 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
 			numoflinks = 0;
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
 				if (numoflinks >= MAX_STAT_LINKS) {
 					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
 					break;
 				}
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					reverse_patch_state = "UP";
-					l = l->next;
 					continue;
 				}
 				listoflinks[numoflinks] = ast_strdup(l->name);
@@ -532,7 +526,6 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 				} else {
 					numoflinks++;
 				}
-				l = l->next;
 			}
 
 			if (myrpt->keyed)

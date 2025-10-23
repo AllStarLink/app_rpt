@@ -597,12 +597,11 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	init_text_frame(&wf, "send_tele_link");
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
-	l = myrpt->links.next;
 	/* give it to everyone */
-	while (l != &myrpt->links) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (l->chan && (l->mode == MODE_TRANSCEIVE))
 			rpt_qwrite(l, &wf);
-		l = l->next;
 	}
 	ast_free(str);
 	rpt_telemetry(myrpt, VARCMD, cmd);
@@ -1223,7 +1222,8 @@ void *rpt_tele_thread(void *this)
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
-	struct rpt_link *l, *l1, linkbase;
+	struct rpt_link *l, *l1, *l_next;
+	AST_LIST_HEAD_NOLOCK(, rpt_link) linkbase;
 	struct ast_channel *mychannel = NULL;
 	int id_malloc = 0, m;
 	char *p, *ident, *nodename;
@@ -1578,14 +1578,13 @@ treataslocal:
 		haslink = 0;
 		hastx = 0;
 		hasremote = 0;
-		l = myrpt->links.next;
-		if (l != &myrpt->links) {
+		if (myrpt->links.first) {
 			rpt_mutex_lock(&myrpt->lock);
-			while (l != &myrpt->links) {
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
 				int v, w;
 
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				w = 1;
@@ -1621,7 +1620,6 @@ treataslocal:
 						hasremote++;
 					}
 				}
-				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
@@ -1791,15 +1789,14 @@ treataslocal:
 			update_timer(&mytele->mylink.linkunkeytocttimer, ctint, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
-		l = myrpt->links.next;
 		unkeys_queued = 0;
 		rpt_mutex_lock(&myrpt->lock);
-		while (l != &myrpt->links) {
+		AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+		{
 			if (!strcmp(l->name, mytele->mylink.name)) {
 				unkeys_queued = l->lastrx;
 				break;
 			}
-			l = l->next;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		if (unkeys_queued) {
@@ -1816,21 +1813,19 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		l = myrpt->links.next;
 		haslink = 0;
 		/* dont report if a link for this one still on system */
-		if (l != &myrpt->links) {
+		if (myrpt->links.first) {
 			rpt_mutex_lock(&myrpt->lock);
-			while (l != &myrpt->links) {
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				if (!strcmp(l->name, mytele->mylink.name)) {
 					haslink = 1;
 					break;
 				}
-				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
@@ -2349,13 +2344,12 @@ treataslocal:
 			break;
 		}
 		hastx = 0;
-		rpt_links_init(&linkbase);
+		AST_LIST_HEAD_INIT_NOLOCK(&linkbase);
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
-		l = myrpt->links.next;
-		while (l != &myrpt->links) {
+		AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+		{
 			if (l->name[0] == '0') {
-				l = l->next;
 				continue;
 			}
 			l1 = ast_malloc(sizeof(struct rpt_link));
@@ -2363,9 +2357,8 @@ treataslocal:
 				goto abort;
 			}
 			memcpy(l1, l, sizeof(struct rpt_link));
-			l1->next = l1->prev = NULL; /* Don't carry over next/prev pointers from the original list we're duplicating */
-			insque((struct qelem *) l1, (struct qelem *) linkbase.next);
-			l = l->next;
+			l1->list.first = l1->list.last = NULL; /* Don't carry over next/prev pointers from the original list we're duplicating */
+			AST_RWDLLIST_INSERT_TAIL(&linkbase, l1, list);
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		res = saynode(myrpt, mychannel, myrpt->name);
@@ -2379,10 +2372,13 @@ treataslocal:
 			}
 			ast_stopstream(mychannel);
 		}
-		l = linkbase.next;
-		while (l != &linkbase) {
-			char *s;
 
+		/* go thru all the nodes in list
+		 * Cannot use AST_LIST_TRAVERSE as we may free l
+		 */
+		for (l = linkbase.first; l; l = l_next) {
+			char *s;
+			l_next = l->list.first; /* Save next pointer because we free l */
 			hastx = 1;
 			res = saynode(myrpt, mychannel, l->name);
 			s = "rpt/tranceive";
@@ -2396,18 +2392,13 @@ treataslocal:
 				s = "rpt/connecting";
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
-			l = l->next;
+			/* We just go through this list 1 time, freeing
+			 * the element destroys the list, no need to remove
+			 */
+			ast_free(l);
 		}
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
-		}
-		/* destroy our local link queue */
-		l = linkbase.next;
-		while (l != &linkbase) {
-			l1 = l;
-			l = l->next;
-			remque((struct qelem *) l1);
-			ast_free(l1);
 		}
 		imdone = 1;
 		break;
@@ -3039,21 +3030,19 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			if ((!mylink) || (mylink->name[0] == '0')) {
 				return;
 			}
-			l = myrpt->links.next;
 			haslink = 0;
 			/* dont report if a link for this one still on system */
-			if (l != &myrpt->links) {
+			if (myrpt->links.first) {
 				rpt_mutex_lock(&myrpt->lock);
-				while (l != &myrpt->links) {
+				AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+				{
 					if (l->name[0] == '0') {
-						l = l->next;
 						continue;
 					}
 					if (!strcmp(l->name, mylink->name)) {
 						haslink = 1;
 						break;
 					}
-					l = l->next;
 				}
 				rpt_mutex_unlock(&myrpt->lock);
 			}
@@ -3136,12 +3125,11 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
-			l = myrpt->links.next;
-			while (l != &myrpt->links) {
+			AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+			{
 				char s;
 
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				s = 'T';
@@ -3155,7 +3143,6 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 					s = 'C';
 				}
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
-				l = l->next;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 			send_tele_link(myrpt, mystr);

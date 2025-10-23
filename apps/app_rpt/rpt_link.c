@@ -229,21 +229,13 @@ int linkcount(struct rpt *myrpt)
 	int numoflinks;
 
 	numoflinks = 0;
-	l = myrpt->links.next;
-	while (l && (l != &myrpt->links)) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (numoflinks >= MAX_STAT_LINKS) {
 			ast_log(LOG_WARNING, "maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
 			break;
 		}
-#if 0
-		if (l->name[0] == '0'){ /* Skip '0' nodes */
-		      l = l->next;
-		      continue;
-		}
-#endif
 		numoflinks++;
-
-		l = l->next;
 	}
 
 	return numoflinks;
@@ -272,8 +264,8 @@ int FindBestRssi(struct rpt *myrpt)
 		maxrssi = myrpt->rxrssi;
 	}
 
-	l = myrpt->links.next;
-	while (l && (l != &myrpt->links)) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (numoflinks >= MAX_STAT_LINKS) {
 			ast_log(LOG_WARNING, "[%s] number of links exceeds limit of %d \n", myrpt->name, MAX_STAT_LINKS);
 			break;
@@ -284,7 +276,6 @@ int FindBestRssi(struct rpt *myrpt)
 		}
 		l->votewinner = 0;
 		numoflinks++;
-		l = l->next;
 	}
 
 	if (!myrpt->voted_rssi || (myrpt->voted_link == NULL && !myrpt->votewinner)
@@ -311,22 +302,19 @@ void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c)
 {
 	struct rpt_link *l;
 
-	l = myrpt->links.next;
 	/* go thru all the links */
-	while (l != &myrpt->links) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (!l->phonemode) {
-			l = l->next;
 			continue;
 		}
 		/* dont send to self */
 		if (mylink && (l == mylink)) {
-			l = l->next;
 			continue;
 		}
 		if (l->chan) {
 			ast_senddigit(l->chan, c, 0);
 		}
-		l = l->next;
 	}
 }
 
@@ -339,18 +327,16 @@ void rssi_send(struct rpt *myrpt)
 	init_text_frame(&wf, "rssi_send");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	l = myrpt->links.next;
 	/* otherwise, send it to all of em */
-	while (l != &myrpt->links) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (l->name[0] == '0') {
-			l = l->next;
 			continue;
 		}
 		ast_debug(6, "[%s] rssi=%i to %s\n", myrpt->name, myrpt->rxrssi, l->name);
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
 		}
-		l = l->next;
 	}
 }
 
@@ -364,11 +350,10 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	init_text_frame(&wf, "send_link_dtmf");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	l = myrpt->links.next;
 	/* first, see if our dude is there */
-	while (l != &myrpt->links) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (l->name[0] == '0') {
-			l = l->next;
 			continue;
 		}
 		/* if we found it, write it and were done */
@@ -378,15 +363,13 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 			}
 			return;
 		}
-		l = l->next;
 	}
-	l = myrpt->links.next;
 	/* if not, give it to everyone */
-	while (l != &myrpt->links) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
 		}
-		l = l->next;
 	}
 }
 
@@ -405,49 +388,13 @@ void send_link_keyquery(struct rpt *myrpt)
 	init_text_frame(&wf, "send_link_keyquery");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	l = myrpt->links.next;
 	/* give it to everyone */
-	while (l != &myrpt->links) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
 		}
-		l = l->next;
 	}
-}
-
-static void check_link_list(struct rpt *myrpt)
-{
-	struct rpt_link *l;
-
-	/* This is supposed to be a doubly linked list,
-	 * so make sure it's not corrupted.
-	 * If it is, that should trigger the assertion.
-	 * This is temporary, for troubleshooting issue #217.
-	 * Once that is fixed, this should be removed.
-	 */
-	l = myrpt->links.next;
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
-		if (!l) {
-			ast_log(LOG_ERROR, "Link linked list is corrupted (not properly doubly linked)\n");
-		}
-		ast_assert(l != NULL);
-	}
-}
-
-void rpt_link_add(struct rpt *myrpt, struct rpt_link *l)
-{
-	ast_assert(l != NULL);
-	check_link_list(myrpt);
-	insque(l, myrpt->links.next);
-	check_link_list(myrpt);
-}
-
-void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
-{
-	ast_assert(l != NULL);
-	check_link_list(myrpt);
-	remque(l);
-	check_link_list(myrpt);
 }
 
 int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, int alink_format) {
@@ -457,7 +404,8 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 	if (myrpt->remote)
 		return 0;
 	/* go thru all links */
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -532,7 +480,8 @@ void __kickshort(struct rpt *myrpt)
 {
 	struct rpt_link *l;
 
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -651,21 +600,19 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		ast_debug(1, "NODE is a VOTER.\n");
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	l = myrpt->links.next;
 	/* try to find this one in queue */
-	while (l != &myrpt->links) {
+	AST_RWDLLIST_TRAVERSE(&myrpt->links, l, list)
+	{
 		if (l->name[0] == '0') {
-			l = l->next;
 			continue;
 		}
 		/* if found matching string */
 		if (!strcmp(l->name, node)) {
 			break;
 		}
-		l = l->next;
 	}
 	/* if found */
-	if (l != &myrpt->links) {
+	if (l) {
 		/* if already in this mode, just ignore */
 		if ((l->mode == mode) || (!l->chan)) {
 			rpt_mutex_unlock(&myrpt->lock);
@@ -823,7 +770,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		l->retries = l->max_retries + 1;
 	}
 	l->rxlingertimer = RX_LINGER_TIME;
-	rpt_link_add(myrpt, l);
+	AST_RWDLLIST_INSERT_HEAD(&myrpt->links, l, list);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	return 0;

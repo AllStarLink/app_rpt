@@ -2,6 +2,8 @@
 #define VERSION_MINOR 6
 #define VERSION_PATCH 1
 
+#include "asterisk/dlinkedlists.h"
+
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
 	converted to use public dsp.h API.
 	Eventually, the app_rpt DSP could should be/will be removed and NATIVE_DSP will be assumed,
@@ -540,8 +542,7 @@ struct rpt;
 
 /*! \brief Structure used to manage links */
 struct rpt_link {
-	struct rpt_link *next;
-	struct rpt_link *prev;
+	AST_RWDLLIST_ENTRY(rpt_link) list;
 	enum link_mode mode;
 	char isremote;
 	char phonemode;
@@ -895,7 +896,7 @@ struct rpt {
 		int nldisc;
 		const char *timezone;
 	} p;
-	struct rpt_link links;
+	AST_RWDLLIST_HEAD(, rpt_link) links;
 	int unkeytocttimer;
 	time_t lastkeyedtime;
 	time_t lasttxkeyedtime;
