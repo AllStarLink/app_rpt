@@ -907,7 +907,7 @@ struct rpt {
 		int nldisc;
 		const char *timezone;
 	} p;
-	struct ao2_container *ao2_links;
+	struct ao2_container *links;
 	int unkeytocttimer;
 	time_t lastkeyedtime;
 	time_t lasttxkeyedtime;

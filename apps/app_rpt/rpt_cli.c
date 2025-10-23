@@ -117,7 +117,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
 			numoflinks = 0;
-			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			l_it = ao2_iterator_init(myrpt->links, 0);
 			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (numoflinks >= MAX_STAT_LINKS) {
 					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
@@ -348,7 +348,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* count the number of nodes */
-			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			l_it = ao2_iterator_init(myrpt->links, 0);
 			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
 					continue;
@@ -365,7 +365,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				}
 			}
 			/* Traverse the list of connected nodes */
-			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			l_it = ao2_iterator_init(myrpt->links, 0);
 			i = 0;
 			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
@@ -571,7 +571,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 
 			j = 0;
-			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			l_it = ao2_iterator_init(myrpt->links, 0);
 			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') { // Skip '0' nodes
 					continue;
@@ -872,7 +872,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 		if (!strcmp(from, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
-			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			l_it = ao2_iterator_init(myrpt->links, 0);
 			/* otherwise, send it to all of em */
 			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') {
@@ -973,7 +973,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
-			l_it = ao2_iterator_init(myrpt->ao2_links, 0);
+			l_it = ao2_iterator_init(myrpt->links, 0);
 			/* otherwise, send it to all of em */
 			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
 				if (l->name[0] == '0') {
