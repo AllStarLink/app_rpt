@@ -4,6 +4,40 @@
  * \brief RPT link functions
  */
 
+/*!
+* \brief Loops over (traverses) the entries in an AO2 container list.
+* \param container This is a pointer to the AO2 container
+* \param var This is the name of the variable that will hold a pointer to the
+* current list entry on each iteration. It must be declared before calling
+* this macro.
+* \param iterator This is the name of the variable that will be used for
+* the AO2_ITERATOR. It must be declared before calling this macro.
+*
+* This macro is use to loop over (traverse) the entries in an AO2 container list. It uses a
+* \a for loop, and supplies the enclosed code with a pointer to each list
+* entry as it loops. It is typically used as follows:
+* \code
+* static ao2_container container;
+* ao2_iterator_t iterator;
+* ...
+* struct list_entry {
+*    ...
+* }
+* ...
+* struct list_entry *current;
+* ...
+* RPT_AO2_LIST_TRAVERSE(&container, current, iterator) {
+	(do something with current here)
+* }
+* ao2_iterator_destroy(&iterator);
+* \endcode
+
+*/
+
+#define RPT_AO2_LIST_TRAVERSE(container, var, iterator) \
+	(iterator) = ao2_iterator_init((container), 0); \
+	for (; ((var) = ao2_iterator_next(&(iterator))); ao2_ref((var), -1))
+
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype);
 
 void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode);
