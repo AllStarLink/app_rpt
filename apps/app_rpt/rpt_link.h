@@ -42,6 +42,20 @@ void send_link_dtmf(struct rpt *myrpt, char c);
 
 void send_link_keyquery(struct rpt *myrpt);
 
+/*! 1Code has comments. Press enter to view.
+ * \brief Add an rpt_link to a rpt
+ * \param myrpt
+ * \param l Link to insert into the repeater's linked list of links
+ */
+void rpt_link_add(struct ao2_container *links, struct rpt_link *l);
+
+/*!
+ * \brief Remove an rpt_link from a rpt
+ * \param myrpt
+ * \param l Link to remove from the repeater's linked list of links
+ */
+void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
+
 /*!
  * \brief Create a list of links for this node.
  * Must be called locked.
@@ -72,4 +86,4 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma);
 
 /*! \brief destroy ao2 object
  */
-void rpt_link_ao2_destroy(void *obj);
+void rpt_link_destroy(void *obj);
