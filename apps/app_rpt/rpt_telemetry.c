@@ -588,6 +588,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	char *str;
 	struct ast_frame wf;
 	struct rpt_link *l;
+	struct ao2_iterator l_it;
 
 	len = ast_asprintf(&str, "T %s %s", myrpt->name, cmd);
 	if (len < 0) {
@@ -597,13 +598,14 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	init_text_frame(&wf, "send_tele_link");
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
-	l = myrpt->links.next;
 	/* give it to everyone */
-	while (l != &myrpt->links) {
-		if (l->chan && (l->mode == MODE_TRANSCEIVE))
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
+		if (l->chan && (l->mode == MODE_TRANSCEIVE)) {
 			rpt_qwrite(l, &wf);
-		l = l->next;
+		}
 	}
+	ao2_iterator_destroy(&l_it);
 	ast_free(str);
 	rpt_telemetry(myrpt, VARCMD, cmd);
 }
@@ -1223,8 +1225,10 @@ void *rpt_tele_thread(void *this)
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
-	struct rpt_link *l, *l1, linkbase;
+	struct rpt_link *l, *l1;
 	struct ast_channel *mychannel = NULL;
+	struct ao2_iterator l_it;
+	struct ao2_container *ao2_copy;
 	int id_malloc = 0, m;
 	char *p, *ident, *nodename;
 	const char *context;
@@ -1578,14 +1582,13 @@ treataslocal:
 		haslink = 0;
 		hastx = 0;
 		hasremote = 0;
-		l = myrpt->links.next;
-		if (l != &myrpt->links) {
+		if (ao2_container_count(myrpt->links)) {
 			rpt_mutex_lock(&myrpt->lock);
-			while (l != &myrpt->links) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				int v, w;
 
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				w = 1;
@@ -1621,8 +1624,8 @@ treataslocal:
 						hasremote++;
 					}
 				}
-				l = l->next;
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		if (haslink) {
@@ -1791,16 +1794,17 @@ treataslocal:
 			update_timer(&mytele->mylink.linkunkeytocttimer, ctint, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
-		l = myrpt->links.next;
 		unkeys_queued = 0;
 		rpt_mutex_lock(&myrpt->lock);
-		while (l != &myrpt->links) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (!strcmp(l->name, mytele->mylink.name)) {
 				unkeys_queued = l->lastrx;
+				ao2_ref(l, -1);
 				break;
 			}
-			l = l->next;
 		}
+		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 		if (unkeys_queued) {
 			imdone = 1;
@@ -1816,22 +1820,22 @@ treataslocal:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		l = myrpt->links.next;
 		haslink = 0;
 		/* dont report if a link for this one still on system */
-		if (l != &myrpt->links) {
+		if (ao2_container_count(myrpt->links)) {
 			rpt_mutex_lock(&myrpt->lock);
-			while (l != &myrpt->links) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				if (!strcmp(l->name, mytele->mylink.name)) {
 					haslink = 1;
+					ao2_ref(l, -1);
 					break;
 				}
-				l = l->next;
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		if (haslink) {
@@ -2349,24 +2353,36 @@ treataslocal:
 			break;
 		}
 		hastx = 0;
-		rpt_links_init(&linkbase);
+		ao2_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
+			0,								   /* AO2 container flags. */
+			NULL,							   /* Sorting function. NULL means the list will not be sorted */
+			NULL);							   /* Comparison function */
+		if (!ao2_copy) {
+			goto abort;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
-		l = myrpt->links.next;
-		while (l != &myrpt->links) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (l->name[0] == '0') {
-				l = l->next;
 				continue;
 			}
-			l1 = ast_malloc(sizeof(struct rpt_link));
+			l1 = ao2_alloc(sizeof(struct rpt_link), rpt_link_destroy);
 			if (!l1) {
+				ao2_ref(l, -1);
+				ao2_iterator_destroy(&l_it);
 				goto abort;
 			}
-			memcpy(l1, l, sizeof(struct rpt_link));
-			l1->next = l1->prev = NULL; /* Don't carry over next/prev pointers from the original list we're duplicating */
-			insque((struct qelem *) l1, (struct qelem *) linkbase.next);
-			l = l->next;
+			/* We need a deep copy of the limited link information
+			 * to limit the myrpt->lock time.  Without a copy we would
+			 * hang the lock until all streams are compete
+			 */
+			l1->mode = l->mode;
+			l1->thisconnected = l->thisconnected;
+			ast_copy_string(l1->name, l->name, sizeof(l1->name));
+			rpt_link_add(ao2_copy, l1);
 		}
+		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (myrpt->callmode != CALLMODE_DOWN) {
@@ -2379,36 +2395,32 @@ treataslocal:
 			}
 			ast_stopstream(mychannel);
 		}
-		l = linkbase.next;
-		while (l != &linkbase) {
+		RPT_AO2_LIST_TRAVERSE(ao2_copy, l1, l_it)
+		{
 			char *s;
 
 			hastx = 1;
 			res = saynode(myrpt, mychannel, l->name);
 			s = "rpt/tranceive";
-			if (l->mode == MODE_MONITOR) {
+			if (l1->mode == MODE_MONITOR) {
 				s = "rpt/monitor";
 			}
-			if (l->mode == MODE_LOCAL_MONITOR) {
+			if (l1->mode == MODE_LOCAL_MONITOR) {
 				s = "rpt/localmonitor";
 			}
-			if (!l->thisconnected) {
+			if (!l1->thisconnected) {
 				s = "rpt/connecting";
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
-			l = l->next;
+			rpt_link_remove(ao2_copy, l1);
+			ao2_ref(l1, -1); /* 1 for the link reference - freeing the link*/
 		}
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
 		/* destroy our local link queue */
-		l = linkbase.next;
-		while (l != &linkbase) {
-			l1 = l;
-			l = l->next;
-			remque((struct qelem *) l1);
-			ast_free(l1);
-		}
+		ao2_iterator_destroy(&l_it);
+		ao2_ref(ao2_copy, -1);
 		imdone = 1;
 		break;
 	case LASTUSER:
@@ -2915,6 +2927,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
 	struct ast_str *lbuf;
+	struct ao2_iterator l_it;
 
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
 
@@ -3039,22 +3052,22 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			if ((!mylink) || (mylink->name[0] == '0')) {
 				return;
 			}
-			l = myrpt->links.next;
 			haslink = 0;
 			/* dont report if a link for this one still on system */
-			if (l != &myrpt->links) {
+			if (ao2_container_count(myrpt->links)) {
 				rpt_mutex_lock(&myrpt->lock);
-				while (l != &myrpt->links) {
+				RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+				{
 					if (l->name[0] == '0') {
-						l = l->next;
 						continue;
 					}
 					if (!strcmp(l->name, mylink->name)) {
 						haslink = 1;
+						ao2_ref(l, -1);
 						break;
 					}
-					l = l->next;
 				}
+				ao2_iterator_destroy(&l_it);
 				rpt_mutex_unlock(&myrpt->lock);
 			}
 			if (haslink) {
@@ -3136,12 +3149,11 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
-			l = myrpt->links.next;
-			while (l != &myrpt->links) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				char s;
 
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
 				s = 'T';
@@ -3155,8 +3167,8 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 					s = 'C';
 				}
 				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
-				l = l->next;
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 			send_tele_link(myrpt, mystr);
 			return;

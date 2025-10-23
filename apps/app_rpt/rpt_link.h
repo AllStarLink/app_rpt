@@ -4,6 +4,40 @@
  * \brief RPT link functions
  */
 
+/*!
+* \brief Loops over (traverses) the entries in an AO2 container list.
+* \param container This is a pointer to the AO2 container
+* \param var This is the name of the variable that will hold a pointer to the
+* current list entry on each iteration. It must be declared before calling
+* this macro.
+* \param iterator This is the name of the variable that will be used for
+* the AO2_ITERATOR. It must be declared before calling this macro.
+*
+* This macro is use to loop over (traverse) the entries in an AO2 container list. It uses a
+* \a for loop, and supplies the enclosed code with a pointer to each list
+* entry as it loops. It is typically used as follows:
+* \code
+* static ao2_container container;
+* ao2_iterator_t iterator;
+* ...
+* struct list_entry {
+*    ...
+* }
+* ...
+* struct list_entry *current;
+* ...
+* RPT_AO2_LIST_TRAVERSE(&container, current, iterator) {
+	(do something with current here)
+* }
+* ao2_iterator_destroy(&iterator);
+* \endcode
+
+*/
+
+#define RPT_AO2_LIST_TRAVERSE(container, var, iterator) \
+	(iterator) = ao2_iterator_init((container), 0); \
+	for (; ((var) = ao2_iterator_next(&(iterator))); ao2_ref((var), -1))
+
 void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype);
 
 void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode);
@@ -42,19 +76,19 @@ void send_link_dtmf(struct rpt *myrpt, char c);
 
 void send_link_keyquery(struct rpt *myrpt);
 
-/*!
+/*! 1Code has comments. Press enter to view.
  * \brief Add an rpt_link to a rpt
  * \param myrpt
  * \param l Link to insert into the repeater's linked list of links
  */
-void rpt_link_add(struct rpt *myrpt, struct rpt_link *l);
+void rpt_link_add(struct ao2_container *links, struct rpt_link *l);
 
 /*!
  * \brief Remove an rpt_link from a rpt
  * \param myrpt
  * \param l Link to remove from the repeater's linked list of links
  */
-void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l);
+void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
 
 /*!
  * \brief Create a list of links for this node.
@@ -84,7 +118,6 @@ void rpt_update_links(struct rpt *myrpt);
  */
 int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma);
 
-/*! \brief Free link and associated internal memory.
- * \param link Link structure to free
+/*! \brief destroy ao2 object
  */
-void rpt_link_free(struct rpt_link *link);
+void rpt_link_destroy(void *obj);

@@ -51,6 +51,16 @@ char *dtmf_tones[] = {
 
 static char remdtmfstr[] = "0123456789*#ABCD";
 
+int rpt_link_find_by_name(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	char *str = arg;
+
+	if (!strcmp(link->name, str)) {
+		return CMP_MATCH;
+	}
+	return 0;
+}
 enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
 	struct rpt_link *mylink)
 {
@@ -59,6 +69,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	char perma;
 	enum link_mode mode;
 	struct rpt_link *l;
+	struct ao2_iterator l_it;
 	int i, r;
 
 	if (!param)
@@ -79,19 +90,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
 			strcpy(digitbuf, myrpt->lastlinknode);
 		rpt_mutex_lock(&myrpt->lock);
-		l = myrpt->links.next;
 		/* try to find this one in queue */
-		while (l != &myrpt->links) {
-			if (l->name[0] == '0') {
-				l = l->next;
-				continue;
-			}
-			/* if found matching string */
-			if (!strcmp(l->name, digitbuf))
-				break;
-			l = l->next;
-		}
-		if (l != &myrpt->links) {	/* if found */
+		l = ao2_callback(myrpt->links, 0, rpt_link_find_by_name, digitbuf);
+		if (l) { /* if found */
 			struct ast_frame wf;
 
 			/* must use perm command on perm link */
@@ -116,6 +117,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			myrpt->linkactivityflag = 1;
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, COMPLETE, NULL);
+			ao2_ref(l, -1);
 			return DC_COMPLETE;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
@@ -165,15 +167,14 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (strlen(digitbuf) < 1)
 			break;
 		/* if doesn't allow link cmd, or no links active, return */
-		if (myrpt->links.next == &myrpt->links)
+		if (!ao2_container_count(myrpt->links)) {
 			return DC_COMPLETE;
-		if ((command_source != SOURCE_RPT) &&
-			(command_source != SOURCE_PHONE) &&
-			(command_source != SOURCE_ALT) &&
-			(command_source != SOURCE_DPHONE) &&
-			mylink &&
-			(!iswebtransceiver(mylink)) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb"))
+		}
+		if ((command_source != SOURCE_RPT) && (command_source != SOURCE_PHONE) && (command_source != SOURCE_ALT) &&
+			(command_source != SOURCE_DPHONE) && mylink && (!iswebtransceiver(mylink)) && !CHAN_TECH(mylink->chan, "echolink") &&
+			!CHAN_TECH(mylink->chan, "tlb")) {
 			return DC_COMPLETE;
+		}
 
 		/* if already in cmd mode, or selected self, fughetabahtit */
 		if ((myrpt->cmdnode[0]) || (!strcmp(myrpt->name, digitbuf))) {
@@ -219,13 +220,12 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 6:					/* All Links Off, including permalinks */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
-		l = myrpt->links.next;
 		/* loop through all links */
-		while (l != &myrpt->links) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			struct ast_frame wf;
 			char c1;
-			if ((l->name[0] <= '0') || (l->name[0] > '9')) {	/* Skip any IAXRPT monitoring */
-				l = l->next;
+			if ((l->name[0] <= '0') || (l->name[0] > '9')) { /* Skip any IAXRPT monitoring */
 				continue;
 			}
 			if (l->mode == MODE_TRANSCEIVE)
@@ -255,8 +255,8 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 			rpt_mutex_lock(&myrpt->lock);
-			l = l->next;
 		}
+		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(1, "Nodes disconnected: %s\n", myrpt->savednodes);
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -289,17 +289,17 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		*s2 = 0;
 		snprintf(tmp, MAX_TEXTMSG_SIZE - 1, "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
-		l = myrpt->links.next;
 		/* otherwise, send it to all of em */
-		while (l != &myrpt->links) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (l->name[0] == '0') {
-				l = l->next;
 				continue;
 			}
-			if (l->chan)
+			if (l->chan) {
 				ast_sendtext(l->chan, tmp);
-			l = l->next;
+			}
 		}
+		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;

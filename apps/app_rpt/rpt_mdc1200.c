@@ -114,6 +114,7 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 {
 	struct rpt_link *l;
 	struct ast_frame wf;
+	struct ao2_iterator l_it;
 	char str[200];
 
 	if (!myrpt->keyed)
@@ -124,18 +125,18 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 	wf.data.ptr = str;
 	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
-	l = myrpt->links.next;
 	/* otherwise, send it to all of em */
-	while (l != &myrpt->links) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		/* Dont send to IAXRPT client, unless main channel is Voter */
 		if (((l->name[0] == '0') && !CHAN_TECH(myrpt->rxchannel, "voter")) || (l->phonemode)) {
-			l = l->next;
 			continue;
 		}
-		if (l->chan)
+		if (l->chan) {
 			rpt_qwrite(l, &wf);
-		l = l->next;
+		}
 	}
+	ao2_iterator_destroy(&l_it);
 }
 
 static const char *my_variable_match(const struct ast_config *config, const char *category, const char *variable)

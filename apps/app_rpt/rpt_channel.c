@@ -419,6 +419,7 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 {
 	struct ast_frame wf;
 	struct rpt_link *l;
+	struct ao2_iterator l_it;
 	char str[300];
 
 	if (!strcmp(myrpt->p.ctgroup, "0"))
@@ -428,13 +429,13 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 	init_text_frame(&wf, "send_link_pl");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	l = myrpt->links.next;
-	while (l && (l != &myrpt->links)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
 			rpt_qwrite(l, &wf);
 		}
-		l = l->next;
 	}
+	ao2_iterator_destroy(&l_it);
 	return 0;
 }
 

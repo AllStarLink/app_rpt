@@ -87,7 +87,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 	char *iconns;
 	struct rpt *myrpt;
 	int nrpts = rpt_num_rpts();
-
+	struct ao2_iterator l_it;
 	static char *not_applicable = "N/A";
 
 	if (argc != 3) {
@@ -117,26 +117,26 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
 			numoflinks = 0;
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (numoflinks >= MAX_STAT_LINKS) {
 					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
+					ao2_ref(l, -1);
 					break;
 				}
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					reverse_patch_state = "UP";
-					l = l->next;
 					continue;
 				}
 				listoflinks[numoflinks] = ast_strdup(l->name);
 				if (listoflinks[numoflinks] == NULL) {
+					ao2_ref(l, -1);
 					break;
 				} else {
 					numoflinks++;
 				}
-				l = l->next;
 			}
-
+			ao2_iterator_destroy(&l_it);
 			if (myrpt->keyed)
 				input_signal = "YES";
 			else
@@ -336,6 +336,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 	int nrpts = rpt_num_rpts();
 	struct rpt_lstat **stat_array = NULL;
 	struct timeval now;
+	struct ao2_iterator l_it;
 
 	if (argc != 3) {
 		return RESULT_SHOWUSAGE;
@@ -347,15 +348,14 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* count the number of nodes */
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (l->name[0] == '0') { /* Skip '0' nodes */
-					l = l->next;
 					continue;
 				}
 				node_count++;
-				l = l->next;
 			}
+			ao2_iterator_destroy(&l_it);
 
 			if (node_count > 0) {
 				stat_array = ast_calloc(node_count, sizeof(struct rpt_lstat *));
@@ -365,11 +365,10 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				}
 			}
 			/* Traverse the list of connected nodes */
-			l = myrpt->links.next;
 			i = 0;
-			while (l && (l != &myrpt->links)) {
-				if (l->name[0] == '0') {	/* Skip '0' nodes */
-					l = l->next;
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
+				if (l->name[0] == '0') { /* Skip '0' nodes */
 					continue;
 				}
 				if ((s = ast_calloc(1, sizeof(struct rpt_lstat))) == NULL) {
@@ -380,13 +379,16 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					}
 					ast_free(stat_array);
 					rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
+					ao2_ref(l, -1);
+					ao2_iterator_destroy(&l_it);
 					return RESULT_FAILURE;
 				}
 				ast_copy_string(s->name, l->name, sizeof(s->name));
-				if (l->chan)
+				if (l->chan) {
 					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", s->peer, MAXPEERSTR - 1);
-				else
+				} else {
 					strcpy(s->peer, "(none)");
+				}
 				s->mode = l->mode;
 				s->outbound = l->outbound;
 				s->reconnects = l->reconnects;
@@ -396,8 +398,8 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				stat_array[i] = s;
 				i++;
 				memset(l->chan_stat, 0, sizeof(l->chan_stat));
-				l = l->next;
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 			if (node_count > 1) {
 				qsort(stat_array, node_count, sizeof(struct rpt_lstat *), rpt_compare_node);
@@ -451,6 +453,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 	int nrpts = rpt_num_rpts();
 	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	struct timeval now;
+	struct ao2_iterator l_it;
 
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;
@@ -570,15 +573,16 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			rpt_mutex_unlock(&myrpt->lock); /* LOCK */
 
 			j = 0;
-			l = myrpt->links.next;
-			while (l && (l != &myrpt->links)) {
-				if (l->name[0] == '0') {	// Skip '0' nodes 
-					l = l->next;
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
+				if (l->name[0] == '0') { // Skip '0' nodes
 					continue;
 				}
 				if (!(s = ast_calloc(1, sizeof(struct rpt_lstat)))) {
 					rpt_mutex_unlock(&myrpt->lock);
 					ast_free(lbuf);
+					ao2_ref(l, -1);
+					ao2_iterator_destroy(&l_it);
 					return RESULT_FAILURE;
 				}
 				ast_copy_string(s->name, l->name, MAXNODESTR - 1);
@@ -594,8 +598,8 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
 				insque((struct qelem *) s, (struct qelem *) s_head.next);
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				l = l->next;
 			}
+			ao2_iterator_destroy(&l_it);
 			now = rpt_tvnow();
 			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
 			for (s = s_head.next; s != &s_head; s = s->next) {
@@ -849,6 +853,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	char str[MAX_TEXTMSG_SIZE];
 	char *from, *to;
 	int nrpts = rpt_num_rpts();
+	struct ao2_iterator l_it;
 
 	if (argc < 5) {
 		return RESULT_SHOWUSAGE;
@@ -869,17 +874,17 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 		if (!strcmp(from, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
-			l = myrpt->links.next;
 			/* otherwise, send it to all of em */
-			while (l != &myrpt->links) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
-				if (l->chan)
+				if (l->chan) {
 					ast_sendtext(l->chan, str);
-				l = l->next;
+				}
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
@@ -951,6 +956,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	char str[MAX_TEXTMSG_SIZE];
 	char *nodename;
 	int nrpts = rpt_num_rpts();
+	struct ao2_iterator l_it;
 
 	if (argc < 4) {
 		return RESULT_SHOWUSAGE;
@@ -969,17 +975,17 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
-			l = myrpt->links.next;
 			/* otherwise, send it to all of em */
-			while (l != &myrpt->links) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (l->name[0] == '0') {
-					l = l->next;
 					continue;
 				}
-				if (l->chan)
+				if (l->chan) {
 					ast_sendtext(l->chan, str);
-				l = l->next;
+				}
 			}
+			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
