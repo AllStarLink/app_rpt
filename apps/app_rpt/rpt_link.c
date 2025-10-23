@@ -254,8 +254,8 @@ int FindBestRssi(struct rpt *myrpt)
 	if (myrpt->rxchankeyed) {
 		maxrssi = myrpt->rxrssi;
 	}
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (numoflinks >= MAX_STAT_LINKS) {
 			ast_log(LOG_WARNING, "[%s] number of links exceeds limit of %d \n", myrpt->name, MAX_STAT_LINKS);
 			ao2_ref(l, -1);
@@ -295,9 +295,9 @@ void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c)
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 
-	l_it = ao2_iterator_init(myrpt->links, 0);
 	/* go thru all the links */
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (!l->phonemode) {
 			continue;
 		}
@@ -322,9 +322,9 @@ void rssi_send(struct rpt *myrpt)
 	init_text_frame(&wf, "rssi_send");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	l_it = ao2_iterator_init(myrpt->links, 0);
 	/* otherwise, send it to all of em */
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (l->name[0] == '0') {
 			continue;
 		}
@@ -347,9 +347,9 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	init_text_frame(&wf, "send_link_dtmf");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	l_it = ao2_iterator_init(myrpt->links, 0);
 	/* first, see if our dude is there */
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (l->name[0] == '0') {
 			continue;
 		}
@@ -363,9 +363,10 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 			return;
 		}
 	}
-	ao2_iterator_restart(&l_it);
+	ao2_iterator_destroy(&l_it);
 	/* if not, give it to everyone */
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
 		}
@@ -389,9 +390,9 @@ void send_link_keyquery(struct rpt *myrpt)
 	init_text_frame(&wf, "send_link_keyquery");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	l_it = ao2_iterator_init(myrpt->links, 0);
 	/* give it to everyone */
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
 		}
@@ -418,8 +419,8 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 	if (myrpt->remote)
 		return 0;
 	/* go thru all links */
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -496,8 +497,8 @@ void __kickshort(struct rpt *myrpt)
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -618,9 +619,9 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		ast_debug(1, "NODE is a VOTER.\n");
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	l_it = ao2_iterator_init(myrpt->links, 0);
 	/* try to find this one in queue */
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (l->name[0] == '0') {
 			continue;
 		}
@@ -631,7 +632,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	}
 	ao2_iterator_destroy(&l_it);
 	/* if found */
-	if (l != NULL) {
+	if (l) {
 		/* if already in this mode, just ignore */
 		if ((l->mode == mode) || (!l->chan)) {
 			rpt_mutex_unlock(&myrpt->lock);
