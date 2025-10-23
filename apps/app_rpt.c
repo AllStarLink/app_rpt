@@ -6285,7 +6285,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	int numlinks;
 	struct ast_format_cap *cap;
 	struct timeval looptimestart;
-	struct ao2_iterator l_it;
 
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "Rpt requires an argument (system node)\n");
@@ -6740,17 +6739,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (!b1[i]) { /* if not a call-based node number */
 			rpt_mutex_lock(&myrpt->lock);
 			/* try to find this one in queue */
-			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
-				if (l->name[0] == '0') {
-					continue;
-				}
-				/* if found matching string */
-				if (!strcmp(l->name, b1)) {
-					break; /* Don't deref here, using l after the loop */
-				}
-			}
-			ao2_iterator_destroy(&l_it);
+			l = ao2_callback(myrpt->links, 0, rpt_link_find_by_name, b1);
 			/* if found */
 			if (l != NULL) {
 				l->killme = 1;
