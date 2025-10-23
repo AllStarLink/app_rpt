@@ -80,9 +80,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
 			strcpy(digitbuf, myrpt->lastlinknode);
 		rpt_mutex_lock(&myrpt->lock);
-		l_it = ao2_iterator_init(myrpt->links, 0);
 		/* try to find this one in queue */
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (l->name[0] == '0') {
 				continue;
 			}
@@ -219,9 +219,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 6:					/* All Links Off, including permalinks */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
-		l_it = ao2_iterator_init(myrpt->links, 0);
 		/* loop through all links */
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			struct ast_frame wf;
 			char c1;
 			if ((l->name[0] <= '0') || (l->name[0] > '9')) { /* Skip any IAXRPT monitoring */
@@ -288,9 +288,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		*s2 = 0;
 		snprintf(tmp, MAX_TEXTMSG_SIZE - 1, "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
-		l_it = ao2_iterator_init(myrpt->links, 0);
 		/* otherwise, send it to all of em */
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (l->name[0] == '0') {
 				continue;
 			}
