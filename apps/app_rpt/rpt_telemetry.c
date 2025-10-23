@@ -630,9 +630,9 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	init_text_frame(&wf, "send_tele_link");
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
-	l_it = ao2_iterator_init(myrpt->links, 0);
 	/* give it to everyone */
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (l->chan && (l->mode == MODE_TRANSCEIVE)) {
 			rpt_qwrite(l, &wf);
 		}
@@ -1605,9 +1605,9 @@ treataslocal:
 		hastx = 0;
 		hasremote = 0;
 		if (ao2_container_count(myrpt->links)) {
-			l_it = ao2_iterator_init(myrpt->links, 0);
 			rpt_mutex_lock(&myrpt->lock);
-			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				int v, w;
 
 				if (l->name[0] == '0') {
@@ -1816,10 +1816,10 @@ treataslocal:
 			update_timer(&mytele->mylink.linkunkeytocttimer, ctint, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
-		l_it = ao2_iterator_init(myrpt->links, 0);
 		unkeys_queued = 0;
 		rpt_mutex_lock(&myrpt->lock);
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (!strcmp(l->name, mytele->mylink.name)) {
 				unkeys_queued = l->lastrx;
 				ao2_ref(l, -1);
@@ -1845,9 +1845,9 @@ treataslocal:
 		haslink = 0;
 		/* dont report if a link for this one still on system */
 		if (ao2_container_count(myrpt->links)) {
-			l_it = ao2_iterator_init(myrpt->links, 0);
 			rpt_mutex_lock(&myrpt->lock);
-			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (l->name[0] == '0') {
 					continue;
 				}
@@ -2384,8 +2384,8 @@ treataslocal:
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
-		l_it = ao2_iterator_init(myrpt->links, 0);
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (l->name[0] == '0') {
 				continue;
 			}
@@ -2417,8 +2417,8 @@ treataslocal:
 			}
 			ast_stopstream(mychannel);
 		}
-		l_it = ao2_iterator_init(ao2_copy, 0);
-		for (; (l1 = ao2_iterator_next(&l_it)); ao2_ref(l1, -1)) {
+		RPT_AO2_LIST_TRAVERSE(ao2_copy, l1, l_it)
+		{
 			char *s;
 
 			hastx = 1;
@@ -3078,9 +3078,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			haslink = 0;
 			/* dont report if a link for this one still on system */
 			if (ao2_container_count(myrpt->links)) {
-				l_it = ao2_iterator_init(myrpt->links, 0);
 				rpt_mutex_lock(&myrpt->lock);
-				for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+				RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+				{
 					if (l->name[0] == '0') {
 						continue;
 					}
@@ -3172,8 +3172,8 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
-			l_it = ao2_iterator_init(myrpt->links, 0);
-			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				char s;
 
 				if (l->name[0] == '0') {

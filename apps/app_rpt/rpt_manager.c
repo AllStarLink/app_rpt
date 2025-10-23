@@ -98,8 +98,8 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 
 			rpt_mutex_lock(&rpt_vars[i].lock);	/* LOCK */
 
-			l_it = ao2_iterator_init(rpt_vars[i].links, 0);
-			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+			RPT_AO2_LIST_TRAVERSE(rpt_vars[i].links, l, l_it)
+			{
 				if (l->name[0] == '0') { /* Skip '0' nodes */
 					continue;
 				}
@@ -214,8 +214,8 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			/* Traverse the list of connected nodes */
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 			j = 0;
-			l_it = ao2_iterator_init(myrpt->links, 0);
-			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (l->name[0] == '0') { /* Skip '0' nodes */
 					continue;
 				}
@@ -516,8 +516,8 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
 			numoflinks = 0;
-			l_it = ao2_iterator_init(myrpt->links, 0);
-			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (numoflinks >= MAX_STAT_LINKS) {
 					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
 					ao2_ref(l, -1);

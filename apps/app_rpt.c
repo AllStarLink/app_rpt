@@ -1728,8 +1728,8 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	/* see if this is one in list */
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		if (l->name[0] == '0') {
 			continue;
 		}
@@ -2960,8 +2960,8 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
 
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (zl = ao2_iterator_next(&l_it)); ao2_ref(zl, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, zl, l_it)
+	{
 		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
 		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
 		ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
@@ -3115,8 +3115,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	int newkeytimer_last, max_retries;
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		int myrx;
 		if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
@@ -3404,8 +3405,8 @@ static inline int do_link_post(struct rpt *myrpt)
 	}
 	nstr = 0;
 	ast_str_set(&str, 0, "%s", "nodes=");
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -4039,9 +4040,9 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				init_text_frame(&wf, "voter_text_send");
 				wf.datalen = strlen(str) + 1;
 				wf.data.ptr = str;
-				l_it = ao2_iterator_init(myrpt->links, 0);
 				/* otherwise, send it to all of em */
-				for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+				RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+				{
 					/* Dont send to other then IAXRPT client */
 					if ((l->name[0] != '0') || (l->phonemode != RPT_PHONE_MODE_NONE)) {
 						ao2_ref(l, -1);
@@ -4286,8 +4287,8 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
 
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		int remnomute, remrx;
 		struct timeval now;
 
@@ -4608,9 +4609,9 @@ static inline int monchannel_read(struct rpt *myrpt)
 		if (((myrpt->p.duplex >= 2) || (!myrpt->keyed)) && myrpt->p.outstreamcmd && (myrpt->outstreampipe[1] != -1)) {
 			outstream_write(myrpt, f);
 		}
-		l_it = ao2_iterator_init(myrpt->links, 0);
 		/* go thru all the links */
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			/* IF we are an altlink() -> !altlink() handled elsewhere */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
@@ -4945,9 +4946,9 @@ static void *rpt(void *this)
 			snprintf(tmpstr, sizeof(tmpstr), "G %s %s %s %s", myrpt->name, lat, lon, elev);
 
 			rpt_mutex_lock(&myrpt->lock);
-			l_it = ao2_iterator_init(myrpt->links, 0);
 			myrpt->voteremrx = 0; /* no voter remotes keyed */
-			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (l->chan) {
 					ast_sendtext(l->chan, tmpstr);
 				}
@@ -4955,13 +4956,12 @@ static void *rpt(void *this)
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
-		/* @@@@@@@ LOCK @@@@@@@ */
 		rpt_mutex_lock(&myrpt->lock);
 
 		/* If someone's connected, and they're transmitting from their end to us, set remrx true */
-		l_it = ao2_iterator_init(myrpt->links, 0);
 		myrpt->remrx = 0;
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (l->lastrx) {
 				myrpt->remrx = 1;
 				if (l->voterlink)
@@ -5342,8 +5342,8 @@ static void *rpt(void *this)
 
 		/* Reconnect */
 
-		l_it = ao2_iterator_init(myrpt->links, 0);
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if (l->killme) {
 				/* remove from queue */
 				rpt_link_remove(myrpt->links, l);
@@ -5409,8 +5409,8 @@ static void *rpt(void *this)
 			cs[n++] = myrpt->txchannel;
 		if (myrpt->dahditxchannel != myrpt->txchannel)
 			cs[n++] = myrpt->dahditxchannel;
-		l_it = ao2_iterator_init(myrpt->links, 0);
-		for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		{
 			if ((!l->killme) && (!l->disctime) && l->chan) {
 				cs[n++] = l->chan;
 				cs[n++] = l->pchan;
@@ -5421,7 +5421,6 @@ static void *rpt(void *this)
 			myrpt->topkeystate = 2;
 			qsort(myrpt->topkey, TOPKEYN, sizeof(struct rpt_topkey), topcompar);
 		}
-		/* @@@@@@ UNLOCK @@@@@@@@ */
 		rpt_mutex_unlock(&myrpt->lock);
 
 		if (myrpt->topkeystate == 2) {
@@ -5551,8 +5550,8 @@ static void *rpt(void *this)
 	rpt_frame_queue_free(&myrpt->frame_queue);
 
 	rpt_mutex_lock(&myrpt->lock);
-	l_it = ao2_iterator_init(myrpt->links, 0);
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		/* remove from queue */
 		rpt_link_remove(myrpt->links, l);
 		/* hang-up on call to device */
@@ -6740,9 +6739,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		if (!b1[i]) { /* if not a call-based node number */
 			rpt_mutex_lock(&myrpt->lock);
-			l_it = ao2_iterator_init(myrpt->links, 0);
 			/* try to find this one in queue */
-			for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			{
 				if (l->name[0] == '0') {
 					continue;
 				}

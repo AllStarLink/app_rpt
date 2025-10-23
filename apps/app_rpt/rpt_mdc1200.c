@@ -125,9 +125,9 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 	wf.data.ptr = str;
 	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
-	l_it = ao2_iterator_init(myrpt->links, 0);
 	/* otherwise, send it to all of em */
-	for (; (l = ao2_iterator_next(&l_it)); ao2_ref(l, -1)) {
+	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
 		/* Dont send to IAXRPT client, unless main channel is Voter */
 		if (((l->name[0] == '0') && !CHAN_TECH(myrpt->rxchannel, "voter")) || (l->phonemode)) {
 			continue;
