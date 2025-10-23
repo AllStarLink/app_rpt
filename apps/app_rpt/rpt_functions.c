@@ -51,6 +51,16 @@ char *dtmf_tones[] = {
 
 static char remdtmfstr[] = "0123456789*#ABCD";
 
+int rpt_link_find_by_name(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	char *str = arg;
+
+	if (!strcmp(link->name, str)) {
+		return CMP_MATCH;
+	}
+	return 0;
+}
 enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
 	struct rpt_link *mylink)
 {
@@ -81,16 +91,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			strcpy(digitbuf, myrpt->lastlinknode);
 		rpt_mutex_lock(&myrpt->lock);
 		/* try to find this one in queue */
-		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
-			if (l->name[0] == '0') {
-				continue;
-			}
-			/* if found matching string */
-			if (!strcmp(l->name, digitbuf))
-				break; /* Don't unref here, using l after the loop */
-		}
-		ao2_iterator_destroy(&l_it);
+		l = ao2_callback(myrpt->links, 0, rpt_link_find_by_name, digitbuf);
 		if (l) { /* if found */
 			struct ast_frame wf;
 
