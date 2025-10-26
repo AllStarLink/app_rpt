@@ -98,6 +98,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			/* must use perm command on perm link */
 			if ((myatoi(param) < 10) && (l->max_retries > MAX_RETRIES)) {
 				rpt_mutex_unlock(&myrpt->lock);
+				ao2_ref(l, -1);
 				return DC_COMPLETE;
 			}
 			ast_copy_string(myrpt->lastlinknode, digitbuf, MAXNODESTR - 1);
@@ -221,7 +222,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
 		/* loop through all links */
-		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 		{
 			struct ast_frame wf;
 			char c1;
@@ -290,7 +291,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		snprintf(tmp, MAX_TEXTMSG_SIZE - 1, "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
 		/* otherwise, send it to all of em */
-		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 		{
 			if (l->name[0] == '0') {
 				continue;
