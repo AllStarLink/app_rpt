@@ -429,7 +429,7 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 	init_text_frame(&wf, "send_link_pl");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
 			rpt_qwrite(l, &wf);
