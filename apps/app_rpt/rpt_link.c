@@ -256,19 +256,13 @@ void FindBestRssi(struct rpt *myrpt)
 	if (myrpt->rxchankeyed) {
 		maxrssi = myrpt->rxrssi;
 	}
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
-		if (numoflinks >= MAX_STAT_LINKS) {
-			ast_log(LOG_WARNING, "[%s] number of links exceeds limit of %d \n", myrpt->name, MAX_STAT_LINKS);
-			ao2_ref(l, -1);
-			break;
-		}
 		if (l->lastrealrx && (l->rssi > maxrssi)) {
 			maxrssi = l->rssi;
 			bl = l;
 		}
 		l->votewinner = 0;
-		numoflinks++;
 	}
 	ao2_iterator_destroy(&l_it);
 
@@ -295,7 +289,7 @@ void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c)
 	struct ao2_iterator l_it;
 
 	/* go thru all the links */
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		if (!l->phonemode) {
 			continue;
@@ -322,7 +316,7 @@ void rssi_send(struct rpt *myrpt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* otherwise, send it to all of em */
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		if (l->name[0] == '0') {
 			continue;
@@ -347,7 +341,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* first, see if our dude is there */
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		if (l->name[0] == '0') {
 			continue;
@@ -364,7 +358,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	}
 	ao2_iterator_destroy(&l_it);
 	/* if not, give it to everyone */
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
@@ -390,7 +384,7 @@ void send_link_keyquery(struct rpt *myrpt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* give it to everyone */
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		if (l->chan) {
 			rpt_qwrite(l, &wf);
@@ -418,7 +412,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 	if (myrpt->remote)
 		return 0;
 	/* go thru all links */
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
@@ -496,7 +490,7 @@ void __kickshort(struct rpt *myrpt)
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
@@ -619,7 +613,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	/* try to find this one in queue */
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		if (l->name[0] == '0') {
 			continue;
