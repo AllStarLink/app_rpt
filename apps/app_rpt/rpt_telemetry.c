@@ -600,7 +600,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
 	/* give it to everyone */
-	RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 	{
 		if (l->chan && (l->mode == MODE_TRANSCEIVE)) {
 			rpt_qwrite(l, &wf);
@@ -1584,7 +1584,7 @@ treataslocal:
 		hasremote = 0;
 		if (ao2_container_count(myrpt->links)) {
 			rpt_mutex_lock(&myrpt->lock);
-			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 			{
 				int v, w;
 
@@ -1796,7 +1796,7 @@ treataslocal:
 		}
 		unkeys_queued = 0;
 		rpt_mutex_lock(&myrpt->lock);
-		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 		{
 			if (!strcmp(l->name, mytele->mylink.name)) {
 				unkeys_queued = l->lastrx;
@@ -1824,7 +1824,7 @@ treataslocal:
 		/* dont report if a link for this one still on system */
 		if (ao2_container_count(myrpt->links)) {
 			rpt_mutex_lock(&myrpt->lock);
-			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 			{
 				if (l->name[0] == '0') {
 					continue;
@@ -2362,7 +2362,7 @@ treataslocal:
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
-		RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 		{
 			if (l->name[0] == '0') {
 				continue;
@@ -2395,7 +2395,7 @@ treataslocal:
 			}
 			ast_stopstream(mychannel);
 		}
-		RPT_AO2_LIST_TRAVERSE(ao2_copy, l1, l_it)
+		RPT_LIST_TRAVERSE(ao2_copy, l1, l_it)
 		{
 			char *s;
 
@@ -3057,7 +3057,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			/* dont report if a link for this one still on system */
 			if (ao2_container_count(myrpt->links)) {
 				rpt_mutex_lock(&myrpt->lock);
-				RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+				RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 				{
 					if (l->name[0] == '0') {
 						continue;
@@ -3150,7 +3150,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
-			RPT_AO2_LIST_TRAVERSE(myrpt->links, l, l_it)
+			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
 			{
 				char s;
 
