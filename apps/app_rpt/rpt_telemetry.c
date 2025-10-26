@@ -1370,12 +1370,13 @@ void *rpt_tele_thread(void *this)
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
 		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
 		if (context) {
+			donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG, Extension %s, Context %s", myrpt->name, TELEM_TAIL_FILE_EXTN, context);
 			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, context);
 			pbx = 1;
 		} else if (myrpt->p.tailmessages[0]) {
+			donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
 			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
 		}
 		break;
