@@ -272,7 +272,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			{
 				if (l->name[0] == '0') { /* Skip '0' nodes */
 					reverse_patch_state = "UP";
-					ao2_ref(l, -1); /* Free the copy of link */
 					continue;
 				}
 				j++;
@@ -284,7 +283,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 					if ((numoflinks - 1) - j > 0)
 						ast_cli(fd, ", ");
 				}
-				ao2_ref(l, -1); /* Free the copy of link */
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_ref(links_copy, -1); /* Free the copy container */
@@ -364,16 +362,13 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			RPT_LIST_TRAVERSE(links_copy, l, l_it)
 			{
 				char peer[MAXPEERSTR];
-				char name[MAXNODESTR];
 				int hours, minutes, seconds;
 				long long connecttime;
 				char conntime[21];
 
 				if (l->name[0] == '0') { /* Skip '0' nodes */
-					ao2_ref(l, -1);		 /* Free the copy of link */
 					continue;
 				}
-				ast_copy_string(name, l->name, sizeof(name));
 				if (l->chan) {
 					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", peer, MAXPEERSTR - 1);
 				} else {
@@ -393,8 +388,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					connstate = "ESTABLISHED";
 				else
 					connstate = "CONNECTING";
-				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s\n", name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
-				ao2_ref(l, -1); /* Free the copy of link */
+				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_ref(links_copy, -1); /* Free the copy container */
