@@ -565,9 +565,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			/* ### GET CONNECTED NODE INFO ####################
 			 * Traverse the list of connected nodes
 			 */
-			rpt_mutex_lock(&myrpt->lock); /* LOCK */
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
-			rpt_mutex_unlock(&myrpt->lock); /* LOCK */
 
 			j = 0;
 			l = myrpt->links.next;
