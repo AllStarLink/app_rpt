@@ -120,25 +120,22 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 {
 	int i, j, ns, n = 1;
 	char **strs;
+	char peer[MAXPEERSTR];
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
 	char *connstate;
 	struct rpt_link *l;
-	struct rpt_lstat *s, *t;
-	struct rpt_lstat s_head;
 	const char *node = astman_get_header(m, "Node");
 	int nrpts = rpt_num_rpts();
 	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	struct ao2_iterator l_it;
+	struct ao2_container *links_copy;
 
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;
 	if (!lbuf) {
 		return -1;
 	}
-	s = NULL;
-	s_head.next = &s_head;
-	s_head.prev = &s_head;
 
 	for (i = 0; i < nrpts; i++) {
 		if (node && !strcmp(node, rpt_vars[i].name)) {
@@ -213,39 +210,30 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
-			j = 0;
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
+			links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
+				0,									 /* AO2 container flags. */
+				NULL,								 /* Sorting function. NULL means the list will not be sorted */
+				NULL);								 /* Comparison function */
+			if (!links_copy) {
+				return -1;
+			}
+			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+			rpt_mutex_unlock(&myrpt->lock);
+
+			RPT_LIST_TRAVERSE(links_copy, l, l_it)
 			{
+				int hours, minutes, seconds;
+				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), l->connecttime);
+				char conntime[21];
+
 				if (l->name[0] == '0') { /* Skip '0' nodes */
 					continue;
 				}
-				if (!(s = ast_malloc(sizeof(struct rpt_lstat)))) {
-					ast_free(lbuf);
-					ao2_ref(l, -1);
-					ao2_iterator_destroy(&l_it);
-					return -1;
+				if (l->chan) {
+					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", peer, MAXPEERSTR - 1);
+				} else {
+					strcpy(peer, "(none)");
 				}
-				memset(s, 0, sizeof(struct rpt_lstat));
-				ast_copy_string(s->name, l->name, MAXNODESTR - 1);
-				if (l->chan)
-					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", s->peer, MAXPEERSTR - 1);
-				else
-					strcpy(s->peer, "(none)");
-				s->mode = l->mode;
-				s->outbound = l->outbound;
-				s->reconnects = l->reconnects;
-				s->connecttime = l->connecttime;
-				s->thisconnected = l->thisconnected;
-				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				insque((struct qelem *) s, (struct qelem *) s_head.next);
-				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
-			}
-			ao2_iterator_destroy(&l_it);
-			rpt_mutex_unlock(&myrpt->lock);
-			for (s = s_head.next; s != &s_head; s = s->next) {
-				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), s->connecttime);
-				char conntime[21];
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;
@@ -254,21 +242,16 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				connecttime %= 1000L;
 				snprintf(conntime, 20, "%02d:%02d:%02d", hours, minutes, seconds);
 				conntime[20] = 0;
-				if (s->thisconnected)
+				if (l->thisconnected)
 					connstate = "ESTABLISHED";
 				else
 					connstate = "CONNECTING";
-				astman_append(ses, "Conn: %-10s%-20s%-12d%-11s%-20s%-20s\r\n",
-							  s->name, s->peer, s->reconnects, (s->outbound) ? "OUT" : "IN", conntime, connstate);
+				astman_append(ses, "Conn: %-10s%-20s%-12d%-11s%-20s%-20s\r\n", l->name, peer, l->reconnects,
+					(l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
 			/* destroy our local link queue */
-			s = s_head.next;
-			while (s != &s_head) {
-				t = s;
-				s = s->next;
-				remque((struct qelem *) t);
-				ast_free(t);
-			}
+			ao2_iterator_destroy(&l_it);
+			ao2_ref(links_copy, -1);
 
 			astman_append(ses, "LinkedNodes: ");
 
@@ -370,14 +353,13 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 /*! \brief Dump statistics to manager session */
 static int rpt_manager_do_stats(struct mansession *s, const struct message *m, struct ast_str *str)
 {
-	int i, j, numoflinks;
+	int i, j;
 	int dailytxtime, dailykerchunks;
 	time_t now;
 	int totalkerchunks, dailykeyups, totalkeyups, timeouts;
 	int totalexecdcommands, dailyexecdcommands, hours, minutes, seconds;
 	long long totaltxtime;
 	struct rpt_link *l;
-	char *listoflinks[MAX_STAT_LINKS];
 	char *lastdtmfcommand, *parrot_ena;
 	char *tot_state, *ider_state, *patch_state;
 	char *reverse_patch_state, *sys_ena, *tot_ena, *link_ena, *patch_ena;
@@ -386,6 +368,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 	const char *node = astman_get_header(m, "Node");
 	struct rpt *myrpt;
 	struct ao2_iterator l_it;
+	struct ao2_container *links_copy;
 	int nrpts = rpt_num_rpts();
 	static char *not_applicable = "N/A";
 
@@ -394,6 +377,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 
 	time(&now);
 	for (i = 0; i < nrpts; i++) {
+		int numoflinks;
 		if ((node) && (!strcmp(node, rpt_vars[i].name))) {
 			rpt_manager_success(s, m);
 
@@ -515,27 +499,26 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
-			numoflinks = 0;
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
+
+			links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
+				0,									 /* AO2 container flags. */
+				NULL,								 /* Sorting function. NULL means the list will not be sorted */
+				NULL);								 /* Comparison function */
+			if (!links_copy) {
+				return -1;
+			}
+			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+
+			RPT_LIST_TRAVERSE(links_copy, l, l_it)
 			{
-				if (numoflinks >= MAX_STAT_LINKS) {
-					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
-					ao2_ref(l, -1);
-					break;
-				}
 				if (l->name[0] == '0') {	/* Skip '0' nodes */
 					reverse_patch_state = "UP";
-					continue;
-				}
-				listoflinks[numoflinks] = ast_strdup(l->name);
-				if (listoflinks[numoflinks] == NULL) {
-					ao2_ref(l, -1);
 					break;
-				} else {
-					numoflinks++;
 				}
 			}
 			ao2_iterator_destroy(&l_it);
+			ao2_ref(links_copy, -1);
+
 			if (myrpt->keyed)
 				input_signal = "YES";
 			else
@@ -626,7 +609,8 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			if (strlen(myrpt->lastdtmfcommand)) {
 				lastdtmfcommand = ast_strdup(myrpt->lastdtmfcommand);
 			}
-			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
+
+			rpt_mutex_unlock(&myrpt->lock);
 
 			astman_append(s, "IsRemoteBase: NO\r\n");
 			astman_append(s, "NodeState: %d\r\n", myrpt->p.sysstate_cur);
@@ -667,16 +651,25 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 						  (int) totaltxtime);
 
 			ast_str_set(&str, 0, "NodesCurrentlyConnectedToUs: ");
-			if (!numoflinks) {
-				ast_str_append(&str, 0, "<NONE>");
-			} else {
-				for (j = 0; j < numoflinks; j++) {
-					ast_str_append(&str, 0, "%s", listoflinks[j]);
-					if (j < numoflinks - 1)
-						ast_str_append(&str, 0, ",");
-				}
+			j = 0;
+			numoflinks = ao2_container_count(links_copy);
+			RPT_LIST_TRAVERSE(links_copy, l, l_it)
+			{
+				j++;
+				ast_str_append(&str, 0, "%s", l->name);
 			}
-			astman_append(s, "%s\r\n", ast_str_buffer(str));
+			(j < numoflinks - 1) {
+				ast_str_append(&str, 0, ",");
+			}
+			if (j > 0) {
+				str[strlen(str) - 1] = '\0'; /* Remove last comma */
+			} else {
+				strcat(str, "<NONE>");
+			}
+			ao2_iterator_destroy(&l_it);
+			ao2_ref(links_copy, -1);
+
+			astman_append(s, "%s\r\n", str);
 
 			astman_append(s, "Autopatch: %s\r\n", patch_ena);
 			astman_append(s, "AutopatchState: %s\r\n", patch_state);
@@ -686,9 +679,6 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			astman_append(s, "UserLinkingCommands: %s\r\n", link_ena);
 			astman_append(s, "UserFunctions: %s\r\n", user_funs);
 
-			for (j = 0; j < numoflinks; j++) {	/* ast_free() all link names */
-				ast_free(listoflinks[j]);
-			}
 			if (called_number) {
 				ast_free(called_number);
 			}
