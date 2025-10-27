@@ -285,7 +285,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 				}
 			}
 			ao2_iterator_destroy(&l_it);
-			ao2_ref(links_copy, -1); /* Free the copy container */
+			ao2_cleanup(links_copy); /* Free the copy container */
 
 			if (!j) {
 				ast_cli(fd, "<NONE>");
@@ -391,7 +391,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
 			ao2_iterator_destroy(&l_it);
-			ao2_ref(links_copy, -1); /* Free the copy container */
+			ao2_cleanup(links_copy); /* Free the copy container */
 			return RESULT_SUCCESS;
 		}
 	}

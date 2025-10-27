@@ -2424,7 +2424,7 @@ treataslocal:
 		}
 		/* destroy our local link queue */
 		ao2_iterator_destroy(&l_it);
-		ao2_ref(links_copy, -1);
+		ao2_cleanup(links_copy);
 		imdone = 1;
 		break;
 	case LASTUSER:

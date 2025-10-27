@@ -251,7 +251,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			}
 			/* destroy our local link queue */
 			ao2_iterator_destroy(&l_it);
-			ao2_ref(links_copy, -1);
+			ao2_cleanup(links_copy);
 
 			astman_append(ses, "LinkedNodes: ");
 
@@ -511,13 +511,13 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 
 			RPT_LIST_TRAVERSE(links_copy, l, l_it)
 			{
-				if (l->name[0] == '0') {	/* Skip '0' nodes */
+				if (l->name[0] == '0') { /* Skip '0' nodes */
 					reverse_patch_state = "UP";
 					break;
 				}
 			}
 			ao2_iterator_destroy(&l_it);
-			ao2_ref(links_copy, -1);
+			ao2_cleanup(links_copy);
 
 			if (myrpt->keyed)
 				input_signal = "YES";
@@ -667,7 +667,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 				strcat(str, "<NONE>");
 			}
 			ao2_iterator_destroy(&l_it);
-			ao2_ref(links_copy, -1);
+			ao2_cleanup(links_copy);
 
 			astman_append(s, "%s\r\n", str);
 

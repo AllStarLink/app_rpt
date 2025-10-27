@@ -5564,7 +5564,7 @@ static void *rpt(void *this)
 	if (myrpt->xlink == 1)
 		myrpt->xlink = 2;
 	rpt_mutex_unlock(&myrpt->lock);
-	ao2_ref(myrpt->links, -1);
+	ao2_cleanup(myrpt->links);
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	myrpt->rpt_thread = AST_PTHREADT_STOP;
 	stop_outstream(myrpt);
