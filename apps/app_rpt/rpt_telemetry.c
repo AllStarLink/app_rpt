@@ -1248,10 +1248,10 @@ void *rpt_tele_thread(void *this)
 	struct rpt_tele *mytele = (struct rpt_tele *) this;
 	struct rpt_tele *tlist;
 	struct rpt *myrpt;
-	struct rpt_link *l, *l1;
+	struct rpt_link *l;
 	struct ast_channel *mychannel = NULL;
 	struct ao2_iterator l_it;
-	struct ao2_container *ao2_copy;
+	struct ao2_container *links_copy;
 	int id_malloc = 0, m;
 	char *p, *ident, *nodename;
 	const char *context;
@@ -2375,36 +2375,16 @@ treataslocal:
 			break;
 		}
 		hastx = 0;
-		ao2_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
-			0,								   /* AO2 container flags. */
-			NULL,							   /* Sorting function. NULL means the list will not be sorted */
-			NULL);							   /* Comparison function */
-		if (!ao2_copy) {
+		links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
+			0,									 /* AO2 container flags. */
+			NULL,								 /* Sorting function. NULL means the list will not be sorted */
+			NULL);								 /* Comparison function */
+		if (!links_copy) {
 			goto abort;
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
-			if (l->name[0] == '0') {
-				continue;
-			}
-			l1 = ao2_alloc(sizeof(struct rpt_link), rpt_link_destroy);
-			if (!l1) {
-				ao2_ref(l, -1);
-				ao2_iterator_destroy(&l_it);
-				goto abort;
-			}
-			/* We need a deep copy of the limited link information
-			 * to limit the myrpt->lock time.  Without a copy we would
-			 * hang the lock until all streams are compete
-			 */
-			l1->mode = l->mode;
-			l1->thisconnected = l->thisconnected;
-			ast_copy_string(l1->name, l->name, sizeof(l1->name));
-			rpt_link_add(ao2_copy, l1);
-		}
-		ao2_iterator_destroy(&l_it);
+		ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
 		rpt_mutex_unlock(&myrpt->lock);
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (myrpt->callmode != CALLMODE_DOWN) {
@@ -2417,32 +2397,34 @@ treataslocal:
 			}
 			ast_stopstream(mychannel);
 		}
-		RPT_LIST_TRAVERSE(ao2_copy, l1, l_it)
+		RPT_LIST_TRAVERSE(links_copy, l, l_it)
 		{
 			char *s;
-
+			if (l->name[0] == '0') {
+				continue;
+			}
 			hastx = 1;
 			res = saynode(myrpt, mychannel, l->name);
 			s = "rpt/tranceive";
-			if (l1->mode == MODE_MONITOR) {
+			if (l->mode == MODE_MONITOR) {
 				s = "rpt/monitor";
 			}
-			if (l1->mode == MODE_LOCAL_MONITOR) {
+			if (l->mode == MODE_LOCAL_MONITOR) {
 				s = "rpt/localmonitor";
 			}
-			if (!l1->thisconnected) {
+			if (!l->thisconnected) {
 				s = "rpt/connecting";
 			}
 			res = ast_stream_and_wait(mychannel, s, "");
-			rpt_link_remove(ao2_copy, l1);
-			ao2_ref(l1, -1); /* 1 for the link reference - freeing the link*/
+			rpt_link_remove(links_copy, l);
+			ao2_ref(l, -1); /* 1 for the link reference - freeing the link*/
 		}
 		if (!hastx) {
 			res = ast_stream_and_wait(mychannel, "rpt/repeat_only", "");
 		}
 		/* destroy our local link queue */
 		ao2_iterator_destroy(&l_it);
-		ao2_ref(ao2_copy, -1);
+		ao2_ref(links_copy, -1);
 		imdone = 1;
 		break;
 	case LASTUSER:

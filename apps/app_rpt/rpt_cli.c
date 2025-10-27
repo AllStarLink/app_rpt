@@ -79,7 +79,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 	int uptime;
 	long long totaltxtime;
 	struct rpt_link *l;
-	char *listoflinks[MAX_STAT_LINKS];
 	char *lastdtmfcommand, *parrot_ena;
 	char *tot_state, *ider_state, *patch_state;
 	char *reverse_patch_state, *sys_ena, *tot_ena, *link_ena, *patch_ena;
@@ -88,6 +87,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 	struct rpt *myrpt;
 	int nrpts = rpt_num_rpts();
 	struct ao2_iterator l_it;
+	struct ao2_container *links_copy;
 	static char *not_applicable = "N/A";
 
 	if (argc != 3) {
@@ -116,27 +116,17 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
-			numoflinks = 0;
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
-				if (numoflinks >= MAX_STAT_LINKS) {
-					ast_log(LOG_WARNING, "Maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
-					ao2_ref(l, -1);
-					break;
-				}
-				if (l->name[0] == '0') {	/* Skip '0' nodes */
-					reverse_patch_state = "UP";
-					continue;
-				}
-				listoflinks[numoflinks] = ast_strdup(l->name);
-				if (listoflinks[numoflinks] == NULL) {
-					ao2_ref(l, -1);
-					break;
-				} else {
-					numoflinks++;
-				}
+
+			links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
+				0,									 /* AO2 container flags. */
+				NULL,								 /* Sorting function. NULL means the list will not be sorted */
+				NULL);								 /* Comparison function */
+			if (!links_copy) {
+				return RESULT_FAILURE;
 			}
-			ao2_iterator_destroy(&l_it);
+			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+			rpt_mutex_unlock(&myrpt->lock);
+
 			if (myrpt->keyed)
 				input_signal = "YES";
 			else
@@ -227,7 +217,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			if (strlen(myrpt->lastdtmfcommand)) {
 				lastdtmfcommand = ast_strdup(myrpt->lastdtmfcommand);
 			}
-			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 
 			ast_cli(fd, "************************ NODE %s STATISTICS *************************\n\n", myrpt->name);
 			ast_cli(fd, "Selected system state............................: %d\n", myrpt->p.sysstate_cur);
@@ -277,20 +266,33 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "Uptime...........................................: %02d:%02d:%02d\n", hours, minutes, uptime);
 
 			ast_cli(fd, "Nodes currently connected to us..................: ");
-			if (!numoflinks) {
-				ast_cli(fd, "<NONE>");
-			} else {
-				for (j = 0; j < numoflinks; j++) {
-					ast_cli(fd, "%s", listoflinks[j]);
-					if (j % 4 == 3) {
-						ast_cli(fd, "\n");
-						ast_cli(fd, "                                                 : ");
-					} else {
-						if ((numoflinks - 1) - j > 0)
-							ast_cli(fd, ", ");
-					}
+			j = 0;
+			numoflinks = ao2_container_count(links_copy);
+			RPT_LIST_TRAVERSE(links_copy, l, l_it)
+			{
+				if (l->name[0] == '0') { /* Skip '0' nodes */
+					reverse_patch_state = "UP";
+					ao2_ref(l, -1); /* Free the copy of link */
+					continue;
 				}
+				j++;
+				ast_cli(fd, "%s", l->name);
+				if (j % 4 == 3) {
+					ast_cli(fd, "\n");
+					ast_cli(fd, "                                                 : ");
+				} else {
+					if ((numoflinks - 1) - j > 0)
+						ast_cli(fd, ", ");
+				}
+				ao2_ref(l, -1); /* Free the copy of link */
 			}
+			ao2_iterator_destroy(&l_it);
+			ao2_ref(links_copy, -1); /* Free the copy container */
+
+			if (!j) {
+				ast_cli(fd, "<NONE>");
+			}
+
 			ast_cli(fd, "\n");
 
 			ast_cli(fd, "Autopatch........................................: %s\n", patch_ena);
@@ -301,9 +303,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "User linking commands............................: %s\n", link_ena);
 			ast_cli(fd, "User functions...................................: %s\n\n", user_funs);
 
-			for (j = 0; j < numoflinks; j++) {	/* Free all link names */
-				ast_free(listoflinks[j]);
-			}
 			if (called_number) {
 				ast_free(called_number);
 			}
@@ -343,26 +342,16 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 	}
 
 	for (i = 0; i < nrpts; i++) {
+		node_count = ao2_container_count(rpt_vars[i].links);
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* count the number of nodes */
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
-				if (l->name[0] == '0') { /* Skip '0' nodes */
-					continue;
-				}
-				node_count++;
-			}
-			ao2_iterator_destroy(&l_it);
-
-			if (node_count > 0) {
-				stat_array = ast_calloc(node_count, sizeof(struct rpt_lstat *));
-				if (!stat_array) {
-					rpt_mutex_unlock(&myrpt->lock);
-					return RESULT_FAILURE;
-				}
+			stat_array = ast_calloc(node_count, sizeof(struct rpt_lstat *));
+			if (!stat_array) {
+				rpt_mutex_unlock(&myrpt->lock);
+				return RESULT_FAILURE;
 			}
 			/* Traverse the list of connected nodes */
 			i = 0;
