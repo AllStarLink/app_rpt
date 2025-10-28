@@ -125,7 +125,10 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			if (!links_copy) {
 				return RESULT_FAILURE;
 			}
-			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
+				ao2_cleanup(links_copy);
+				return RESULT_FAILURE;
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 
 			if (myrpt->keyed)
@@ -352,7 +355,10 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 
 			/* Make a copy of all stat variables while locked */
 			rpt_mutex_lock(&myrpt->lock);
-			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
+				ao2_cleanup(links_copy);
+				return RESULT_FAILURE;
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 
 			ast_cli(fd, "NODE      PEER                RECONNECTS  DIRECTION  CONNECT TIME        CONNECT STATE\n");
@@ -436,7 +442,11 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			}
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
-			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
+				ao2_cleanup(links_copy);
+				ast_free(lbuf);
+				return RESULT_FAILURE;
+			}
 			/* ### GET RPT STATUS STATES WHILE LOCKED ######################## */
 			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
 				parrot_ena = "1"; //"ENABLED";

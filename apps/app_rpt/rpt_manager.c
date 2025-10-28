@@ -216,7 +216,10 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			if (!links_copy) {
 				return -1;
 			}
-			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
+				ao2_cleanup(links_copy);
+				return -1;
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
@@ -505,7 +508,10 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			if (!links_copy) {
 				return -1;
 			}
-			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
+				ao2_cleanup(links_copy);
+				return -1;
+			}
 
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */

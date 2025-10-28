@@ -2383,7 +2383,11 @@ treataslocal:
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
-		ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+		if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
+			rpt_mutex_unlock(&myrpt->lock);
+			ao2_cleanup(links_copy);
+			goto abort;
+		}
 		rpt_mutex_unlock(&myrpt->lock);
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (myrpt->callmode != CALLMODE_DOWN) {
