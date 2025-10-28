@@ -109,7 +109,7 @@ void mdc1200_notify(struct rpt *myrpt, char *fromnode, char *data)
 }
 
 #ifdef	_MDC_DECODE_H_
-static int mdc_sendtext_cb(void *obj, void *arg, int flags)
+static int mdc_qwrite_cb(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
 	struct ast_frame *wf = arg;
@@ -133,7 +133,7 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
 	/* otherwise, send it to all of em */
-	ao2_callback(myrpt->links, OBJ_NODATA, mdc_sendtext_cb, &wf);
+	ao2_callback(myrpt->links, OBJ_NODATA, mdc_qwrite_cb, &wf);
 }
 
 static const char *my_variable_match(const struct ast_config *config, const char *category, const char *variable)
