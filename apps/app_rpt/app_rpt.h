@@ -1155,9 +1155,8 @@ char *rpt_complete_function_list(const char *line, const char *word, int pos, in
 * ...
 * struct list_entry *current;
 * ...
-* RPT_LIST_TRAVERSE(&container, current, iterator)
-* {
-	(do something with current here)
+* RPT_LIST_TRAVERSE(&container, current, iterator) {
+*	(do something with current here)
 * }
 * ao2_iterator_destroy(&iterator);
 * \endcode

@@ -237,8 +237,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
 		/* loop through all links */
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			struct ast_frame wf;
 			char c1;
 			if ((l->name[0] <= '0') || (l->name[0] > '9')) { /* Skip any IAXRPT monitoring */

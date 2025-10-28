@@ -269,8 +269,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "Nodes currently connected to us..................: ");
 			j = 0;
 			numoflinks = ao2_container_count(links_copy);
-			RPT_LIST_TRAVERSE(links_copy, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
 					reverse_patch_state = "UP";
 					continue;
@@ -360,8 +359,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "----      ----                ----------  ---------  ------------        -------------\n");
 
 			/* Traverse the list of connected nodes */
-			RPT_LIST_TRAVERSE(links_copy, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				char peer[MAXPEERSTR];
 				int hours, minutes, seconds;
 				long long connecttime;
@@ -537,8 +535,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			j = 0;
 			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
 
-			RPT_LIST_TRAVERSE(links_copy, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				int hours, minutes, seconds;
 				long long connecttime = ast_tvdiff_ms(now, l->connecttime);
 				char conntime[21];

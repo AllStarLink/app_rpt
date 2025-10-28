@@ -98,8 +98,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 
 			rpt_mutex_lock(&rpt_vars[i].lock);	/* LOCK */
 
-			RPT_LIST_TRAVERSE(rpt_vars[i].links, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(rpt_vars[i].links, l, l_it) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
 					continue;
 				}
@@ -220,8 +219,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
 			rpt_mutex_unlock(&myrpt->lock);
 
-			RPT_LIST_TRAVERSE(links_copy, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				int hours, minutes, seconds;
 				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), l->connecttime);
 				char conntime[21];
@@ -509,8 +507,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			}
 			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
 
-			RPT_LIST_TRAVERSE(links_copy, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
 					reverse_patch_state = "UP";
 					break;
