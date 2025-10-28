@@ -613,14 +613,22 @@ void cancel_pfxtone(struct rpt *myrpt)
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 }
+static int telm_qwrite_cb(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	struct ast_frame *wf = arg;
 
+	if (link->chan && (link->mode == MODE_TRANSCEIVE)) {
+		rpt_qwrite(link, wf);
+	}
+
+	return 0;
+}
 static void send_tele_link(struct rpt *myrpt, char *cmd)
 {
 	int len;
 	char *str;
 	struct ast_frame wf;
-	struct rpt_link *l;
-	struct ao2_iterator l_it;
 
 	len = ast_asprintf(&str, "T %s %s", myrpt->name, cmd);
 	if (len < 0) {
@@ -631,13 +639,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
 	/* give it to everyone */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
-		if (l->chan && (l->mode == MODE_TRANSCEIVE)) {
-			rpt_qwrite(l, &wf);
-		}
-	}
-	ao2_iterator_destroy(&l_it);
+	ao2_callback(myrpt->links, OBJ_NODATA, telm_qwrite_cb, &wf);
 	ast_free(str);
 	rpt_telemetry(myrpt, VARCMD, cmd);
 }
