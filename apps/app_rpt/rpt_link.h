@@ -31,7 +31,7 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
 int linkcount(struct rpt *myrpt);
 
 /*! \brief Considers repeater received RSSI and all voter link RSSI information and set values in myrpt structure. */
-int FindBestRssi(struct rpt *myrpt);
+void FindBestRssi(struct rpt *myrpt);
 
 void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c);
 
