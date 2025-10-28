@@ -57,6 +57,7 @@ ForEachMacros:
   - foreach
   - Q_FOREACH
   - BOOST_FOREACH
+  - RPT_LIST_TRAVERSE
 IfMacros:
   - KJ_IF_MAYBE
   - IF
@@ -127,7 +128,7 @@ SpaceBeforeCaseColon: false
 SpaceBeforeCpp11BracedList: true
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
-SpaceBeforeParens: ControlStatements
+SpaceBeforeParens: ControlStatementsExceptForEachMacros
 SpaceBeforeParensOptions:
   AfterControlStatements: true
   AfterForeachMacros: true

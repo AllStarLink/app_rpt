@@ -1729,8 +1729,7 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	/* see if this is one in list */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
 		}
@@ -2964,8 +2963,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
 
-	RPT_LIST_TRAVERSE(myrpt->links, zl, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, zl, l_it) {
 		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
 		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
 		ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
@@ -3120,8 +3118,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		int myrx;
 		if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
@@ -3409,8 +3406,7 @@ static inline int do_link_post(struct rpt *myrpt)
 	}
 	nstr = 0;
 	ast_str_set(&str, 0, "%s", "nodes=");
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -4290,8 +4286,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 	/* @@@@@ LOCK @@@@@ */
 	rpt_mutex_lock(&myrpt->lock);
 
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		int remnomute, remrx;
 		struct timeval now;
 
@@ -4301,8 +4296,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 
 		remrx = 0;
 		/* see if any other links are receiving */
-		RPT_LIST_TRAVERSE(myrpt->links, m, l_it2)
-		{
+		RPT_LIST_TRAVERSE(myrpt->links, m, l_it2) {
 			/* if not the link we are currently processing, and not localonly count it */
 			if ((m != l) && (m->lastrx) && (m->mode < 2)) {
 				remrx = 1;
@@ -4611,8 +4605,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 			outstream_write(myrpt, f);
 		}
 		/* go thru all the links */
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			/* IF we are an altlink() -> !altlink() handled elsewhere */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
@@ -4966,8 +4959,7 @@ static void *rpt(void *this)
 
 		/* If someone's connected, and they're transmitting from their end to us, set remrx true */
 		myrpt->remrx = 0;
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->lastrx) {
 				myrpt->remrx = 1;
 				if (l->voterlink)
@@ -5347,8 +5339,7 @@ static void *rpt(void *this)
 
 		/* Reconnect */
 
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
 				/* remove from queue */
 				rpt_link_remove(myrpt->links, l);
@@ -5414,8 +5405,7 @@ static void *rpt(void *this)
 			cs[n++] = myrpt->txchannel;
 		if (myrpt->dahditxchannel != myrpt->txchannel)
 			cs[n++] = myrpt->dahditxchannel;
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if ((!l->killme) && (!l->disctime) && l->chan) {
 				cs[n++] = l->chan;
 				cs[n++] = l->pchan;
@@ -5554,8 +5544,7 @@ static void *rpt(void *this)
 	rpt_frame_queue_free(&myrpt->frame_queue);
 
 	rpt_mutex_lock(&myrpt->lock);
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* remove from queue */
 		rpt_link_remove(myrpt->links, l);
 		/* hang-up on call to device */
