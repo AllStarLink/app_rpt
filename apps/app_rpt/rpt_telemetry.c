@@ -1588,8 +1588,7 @@ treataslocal:
 		hasremote = 0;
 		if (ao2_container_count(myrpt->links)) {
 			rpt_mutex_lock(&myrpt->lock);
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 				int v, w;
 
 				if (l->name[0] == '0') {
@@ -1800,8 +1799,7 @@ treataslocal:
 		}
 		unkeys_queued = 0;
 		rpt_mutex_lock(&myrpt->lock);
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
+		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (!strcmp(l->name, mytele->mylink.name)) {
 				unkeys_queued = l->lastrx;
 				ao2_ref(l, -1);
@@ -1828,8 +1826,7 @@ treataslocal:
 		/* dont report if a link for this one still on system */
 		if (ao2_container_count(myrpt->links)) {
 			rpt_mutex_lock(&myrpt->lock);
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 				if (l->name[0] == '0') {
 					continue;
 				}
@@ -2379,8 +2376,7 @@ treataslocal:
 			}
 			ast_stopstream(mychannel);
 		}
-		RPT_LIST_TRAVERSE(links_copy, l, l_it)
-		{
+		RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 			char *s;
 			if (l->name[0] == '0') {
 				continue;
@@ -3041,8 +3037,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			/* dont report if a link for this one still on system */
 			if (ao2_container_count(myrpt->links)) {
 				rpt_mutex_lock(&myrpt->lock);
-				RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-				{
+				RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 					if (l->name[0] == '0') {
 						continue;
 					}
@@ -3134,8 +3129,7 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 				char s;
 
 				if (l->name[0] == '0') {
