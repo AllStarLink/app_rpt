@@ -245,8 +245,7 @@ void FindBestRssi(struct rpt *myrpt)
 	if (myrpt->rxchankeyed) {
 		maxrssi = myrpt->rxrssi;
 	}
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->lastrealrx && (l->rssi > maxrssi)) {
 			maxrssi = l->rssi;
 			bl = l;
@@ -278,8 +277,7 @@ void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c)
 	struct ao2_iterator l_it;
 
 	/* go thru all the links */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (!l->phonemode) {
 			continue;
 		}
@@ -305,8 +303,7 @@ void rssi_send(struct rpt *myrpt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* otherwise, send it to all of em */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
 		}
@@ -342,8 +339,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* first, see if our dude is there */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
 		}
@@ -399,8 +395,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 	if (myrpt->remote)
 		return 0;
 	/* go thru all links */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -477,8 +472,7 @@ void __kickshort(struct rpt *myrpt)
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
 			continue;
@@ -600,8 +594,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	/* try to find this one in queue */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
 		}
