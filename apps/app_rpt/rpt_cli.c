@@ -811,7 +811,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* otherwise, send it to all of em */
-			ao2_callback(myrpt->links, OBJ_NODATA, rpt_sendtext_cb, &str);
+			ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, &str);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
@@ -901,7 +901,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* otherwise, send it to all of em */
-			ao2_callback(myrpt->links, OBJ_NODATA, rpt_sendtext_cb, &str);
+			ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, &str);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}

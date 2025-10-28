@@ -359,7 +359,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	}
 	ao2_iterator_destroy(&l_it);
 	/* if not, give it to everyone */
-	ao2_callback(myrpt->links, OBJ_NODATA, link_qwrite_cb, &wf);
+	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_qwrite_cb, &wf);
 }
 
 void send_link_keyquery(struct rpt *myrpt)
@@ -377,7 +377,7 @@ void send_link_keyquery(struct rpt *myrpt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* give it to everyone */
-	ao2_callback(myrpt->links, OBJ_NODATA, link_qwrite_cb, &wf);
+	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_qwrite_cb, &wf);
 }
 void rpt_link_add(struct ao2_container *links, struct rpt_link *l)
 {

@@ -4047,7 +4047,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				wf.datalen = strlen(str) + 1;
 				wf.data.ptr = str;
 				/* otherwise, send it to all of em */
-				ao2_callback(myrpt->links, OBJ_NODATA, rxchannel_qwrite_cb, &wf);
+				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rxchannel_qwrite_cb, &wf);
 			}
 		}
 	}
@@ -4950,7 +4950,7 @@ static void *rpt(void *this)
 
 			rpt_mutex_lock(&myrpt->lock);
 			myrpt->voteremrx = 0; /* no voter remotes keyed */
-			ao2_callback(myrpt->links, OBJ_NODATA, sendtext_cb, &tmpstr);
+			ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, sendtext_cb, &tmpstr);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		rpt_mutex_lock(&myrpt->lock);

@@ -639,7 +639,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
 	/* give it to everyone */
-	ao2_callback(myrpt->links, OBJ_NODATA, telm_qwrite_cb, &wf);
+	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, telm_qwrite_cb, &wf);
 	ast_free(str);
 	rpt_telemetry(myrpt, VARCMD, cmd);
 }

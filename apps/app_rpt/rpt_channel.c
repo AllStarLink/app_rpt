@@ -439,7 +439,7 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	rpt_mutex_lock(&myrpt->lock);
-	ao2_callback(myrpt->links, OBJ_NODATA, rpt_qwrite_cb, &wf);
+	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_qwrite_cb, &wf);
 	rpt_mutex_unlock(&myrpt->lock);
 	return 0;
 }
