@@ -136,12 +136,12 @@ int rpt_cleanup_telemetry()
  * \return The context if it exists, NULL otherwise
  */
 
-static const char *rpt_telem_extension(struct ast_channel *chan, const char *primary, const char *alternate)
+static const char *rpt_telem_extension(struct ast_channel *chan, const char *primary, const char *alternate, const char *exten)
 {
-	if (ast_exists_extension(chan, primary, TELEM_TIME_EXTN, 1, NULL)) {
+	if (ast_exists_extension(chan, primary, exten, 1, NULL)) {
 		return primary;
 	}
-	if (ast_exists_extension(chan, alternate, TELEM_TIME_EXTN, 1, NULL)) {
+	if (ast_exists_extension(chan, alternate, exten, 1, NULL)) {
 		return alternate;
 	}
 	return NULL;
@@ -926,7 +926,7 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 			return;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_TIME", myrpt->name);
-		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY, TELEM_TIME_EXTN);
 		if (context) {
 			if (rpt_telem_datastore(mychannel, t1) < 0) {
 				return;
@@ -1370,7 +1370,7 @@ void *rpt_tele_thread(void *this)
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
-		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY, TELEM_TAIL_FILE_EXTN);
 		if (context) {
 			donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG, Extension %s, Context %s", myrpt->name, TELEM_TAIL_FILE_EXTN, context);
 			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, context);
@@ -2582,7 +2582,7 @@ treataslocal:
 			break;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_TIME ? "STATS_TIME" : "STATS_TIME_LOCAL");
-		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY);
+		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY, TELEM_TIME_EXTN);
 		if (context) {
 			if (rpt_telem_datastore(mychannel, time(NULL)) < 0) {
 				imdone = 1;
