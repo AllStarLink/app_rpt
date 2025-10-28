@@ -3636,13 +3636,24 @@ static inline void rpt_frame_queue_free(struct rpt_frame_queue *frame_queue)
 	free_frame(&frame_queue->lastf1);
 	free_frame(&frame_queue->lastf2);
 }
-
+static int rxchannel_qwrite_cb(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	struct ast_frame *wf = arg;
+	/* Dont send to other then IAXRPT client */
+	if ((link->name[0] != '0') || (link->phonemode)) {
+		return 0;
+	}
+	if (link->chan) {
+		rpt_qwrite(link, wf);
+	}
+	return 0;
+}
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
 	int ismuted;
 	struct ast_frame *f, *f1;
 	int i, dtmfed = 0;
-	struct ao2_iterator l_it;
 
 	f = ast_read(myrpt->rxchannel);
 	if (!f) {
@@ -4029,7 +4040,6 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		}
 		/* if is a Voter device */
 		if (CHAN_TECH(myrpt->rxchannel, "voter")) {
-			struct rpt_link *l;
 			struct ast_frame wf;
 			char str[200];
 
@@ -4041,18 +4051,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				wf.datalen = strlen(str) + 1;
 				wf.data.ptr = str;
 				/* otherwise, send it to all of em */
-				RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-				{
-					/* Dont send to other then IAXRPT client */
-					if ((l->name[0] != '0') || (l->phonemode != RPT_PHONE_MODE_NONE)) {
-						ao2_ref(l, -1);
-						continue;
-					}
-					if (l->chan) {
-						rpt_qwrite(l, &wf);
-					}
-				}
-				ao2_iterator_destroy(&l_it);
+				ao2_callback(myrpt->links, OBJ_NODATA, rxchannel_qwrite_cb, &wf);
 			}
 		}
 	}
@@ -4298,8 +4297,8 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 
 		remrx = 0;
 		/* see if any other links are receiving */
-		l_it2 = ao2_iterator_init(myrpt->links, 0);
-		for (; (m = ao2_iterator_next(&l_it2)); ao2_ref(m, -1)) {
+		RPT_LIST_TRAVERSE(myrpt->links, m, l_it2)
+		{
 			/* if not the link we are currently processing, and not localonly count it */
 			if ((m != l) && (m->lastrx) && (m->mode < 2)) {
 				remrx = 1;
@@ -4685,6 +4684,17 @@ static inline void voxtostate_to_voxtotimer(struct rpt *myrpt)
 	}
 }
 
+static int sendtext_cb(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	char *str = arg;
+
+	if (link->chan) {
+		ast_sendtext(link->chan, str);
+	}
+	return 0;
+}
+
 /* single thread with one file (request) to dial */
 static void *rpt(void *this)
 {
@@ -4947,13 +4957,7 @@ static void *rpt(void *this)
 
 			rpt_mutex_lock(&myrpt->lock);
 			myrpt->voteremrx = 0; /* no voter remotes keyed */
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
-				if (l->chan) {
-					ast_sendtext(l->chan, tmpstr);
-				}
-			}
-			ao2_iterator_destroy(&l_it);
+			ao2_callback(myrpt->links, OBJ_NODATA, sendtext_cb, &tmpstr);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		rpt_mutex_lock(&myrpt->lock);
@@ -6879,7 +6883,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		/* insert at end of queue */
 		rpt_mutex_lock(&myrpt->lock);
-		rpt_link_add(myrpt->links, l);
+		rpt_link_add(myrpt->links, l); /* After putting the link in the link list, other threads can start using it */
 		__kickshort(myrpt);
 		myrpt->lastlinktime = rpt_tvnow();
 		rpt_mutex_unlock(&myrpt->lock);

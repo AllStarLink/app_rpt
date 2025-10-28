@@ -226,14 +226,7 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 
 int linkcount(struct rpt *myrpt)
 {
-	int numoflinks;
-
-	numoflinks = ao2_container_count(myrpt->links);
-	if (numoflinks >= MAX_STAT_LINKS) {
-		ast_log(LOG_WARNING, "maximum number of links exceeds %d in rpt_do_stats()!", MAX_STAT_LINKS);
-		return MAX_STAT_LINKS;
-	}
-	return numoflinks;
+	return ao2_container_count(myrpt->links);
 }
 
 void FindBestRssi(struct rpt *myrpt)
@@ -329,6 +322,18 @@ void rssi_send(struct rpt *myrpt)
 	ao2_iterator_destroy(&l_it);
 }
 
+static int link_qwrite_cb(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	struct ast_frame *wf = arg;
+
+	if (link->chan) {
+		rpt_qwrite(link, wf);
+	}
+
+	return 0;
+}
+
 void send_link_dtmf(struct rpt *myrpt, char c)
 {
 	char str[300];
@@ -358,21 +363,13 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	}
 	ao2_iterator_destroy(&l_it);
 	/* if not, give it to everyone */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
-		if (l->chan) {
-			rpt_qwrite(l, &wf);
-		}
-	}
-	ao2_iterator_destroy(&l_it);
+	ao2_callback(myrpt->links, OBJ_NODATA, link_qwrite_cb, &wf);
 }
 
 void send_link_keyquery(struct rpt *myrpt)
 {
 	char str[300];
 	struct ast_frame wf;
-	struct rpt_link *l;
-	struct ao2_iterator l_it;
 
 	rpt_mutex_lock(&myrpt->lock);
 	memset(myrpt->topkey, 0, sizeof(myrpt->topkey));
@@ -384,13 +381,7 @@ void send_link_keyquery(struct rpt *myrpt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* give it to everyone */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-	{
-		if (l->chan) {
-			rpt_qwrite(l, &wf);
-		}
-	}
-	ao2_iterator_destroy(&l_it);
+	ao2_callback(myrpt->links, OBJ_NODATA, link_qwrite_cb, &wf);
 }
 void rpt_link_add(struct ao2_container *links, struct rpt_link *l)
 {
