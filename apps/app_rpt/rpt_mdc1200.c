@@ -108,21 +108,14 @@ void mdc1200_notify(struct rpt *myrpt, char *fromnode, char *data)
 	}
 }
 
-#ifdef	_MDC_DECODE_H_
-static int mdc_qwrite_cb(void *obj, void *arg, int flags)
-{
-	struct rpt_link *link = obj;
-	struct ast_frame *wf = arg;
+#ifdef _MDC_DECODE_H_
 
-	if (link->chan && (link->mode == MODE_TRANSCEIVE)) {
-		rpt_qwrite(link, wf);
-	}
-	return 0;
-}
 void mdc1200_send(struct rpt *myrpt, char *data)
 {
 	struct ast_frame wf;
 	char str[200];
+	struct rpt_link *l;
+	struct ao2_iterator l_it;
 
 	if (!myrpt->keyed)
 		return;
@@ -133,7 +126,17 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
 	/* otherwise, send it to all of em */
-	ao2_callback(myrpt->links, OBJ_NODATA, mdc_qwrite_cb, &wf);
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
+	{
+		/* Dont send to IAXRPT client, unless main channel is Voter */
+		if (((l->name[0] == '0') && !CHAN_TECH(myrpt->rxchannel, "voter")) || (l->phonemode)) {
+			continue;
+		}
+		if (l->chan) {
+			rpt_qwrite(l, &wf);
+		}
+	}
+	ao2_iterator_destroy(&l_it);
 }
 
 static const char *my_variable_match(const struct ast_config *config, const char *category, const char *variable)
