@@ -21,6 +21,7 @@
 #include "rpt_config.h"
 #include "rpt_manager.h"
 #include "rpt_telemetry.h"
+#include "rpt_functions.h"
 
 extern struct rpt rpt_vars[MAXRPTS];
 
@@ -786,20 +787,6 @@ static int rpt_do_localplay(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-static int rpt_do_sendtext_cb(void *obj, void *arg, int flags)
-{
-	struct rpt_link *link = obj;
-	char *str = arg;
-
-	if (link->name[0] == '0') {
-		return 0;
-	}
-	if (link->chan) {
-		ast_sendtext(link->chan, str);
-	}
-	return 0;
-}
-
 static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 {
 	int i;
@@ -827,7 +814,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* otherwise, send it to all of em */
-			ao2_callback(myrpt->links, OBJ_NODATA, rpt_do_sendtext_cb, &str);
+			ao2_callback(myrpt->links, OBJ_NODATA, rpt_sendtext_cb, &str);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
@@ -917,7 +904,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* otherwise, send it to all of em */
-			ao2_callback(myrpt->links, OBJ_NODATA, rpt_do_sendtext_cb, &str);
+			ao2_callback(myrpt->links, OBJ_NODATA, rpt_sendtext_cb, &str);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}

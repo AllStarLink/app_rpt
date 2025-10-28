@@ -62,7 +62,7 @@ int rpt_link_find_by_name(void *obj, void *arg, int flags)
 	return 0;
 }
 
-static int rpt_sendtext_cb(void *obj, void *arg, int flags)
+int rpt_sendtext_cb(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
 	char *str = arg;
