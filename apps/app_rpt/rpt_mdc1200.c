@@ -281,8 +281,7 @@ static int mdcgen_generator(struct ast_channel *chan, void *data, int len, int s
 	ps->f.samples = n;
 	ps->f.offset = AST_FRIENDLY_OFFSET;
 	ps->f.data.ptr = ps->buf + AST_FRIENDLY_OFFSET;
-	ps->f.delivery.tv_sec = 0;
-	ps->f.delivery.tv_usec = 0;
+	ps->f.delivery = ast_tv(0, 0);
 	ast_write(chan, &ps->f);
 	return 0;
 }
