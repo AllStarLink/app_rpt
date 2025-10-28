@@ -274,7 +274,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 					reverse_patch_state = "UP";
 					continue;
 				}
-				j++;
 				ast_cli(fd, "%s", l->name);
 				if (j % 4 == 3) {
 					ast_cli(fd, "\n");
@@ -283,6 +282,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 					if ((numoflinks - 1) - j > 0)
 						ast_cli(fd, ", ");
 				}
+				j++;
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_cleanup(links_copy); /* Free the copy container */
@@ -403,16 +403,16 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 	int i, j, n = 1;
 	unsigned int ns;
 	char **strs;
+	char peer[MAXPEERSTR];
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
 	char *connstate;
 	struct rpt_link *l;
-	struct rpt_lstat *s, *t;
-	struct rpt_lstat s_head;
 	int nrpts = rpt_num_rpts();
 	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	struct timeval now;
 	struct ao2_iterator l_it;
+	struct ao2_container *links_copy;
 
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;
@@ -424,17 +424,21 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 		ast_free(lbuf);
 		return RESULT_SHOWUSAGE;
 	}
-	s = NULL;
-	s_head.next = &s_head;
-	s_head.prev = &s_head;
-
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
+			links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
+				0,									 /* AO2 container flags. */
+				NULL,								 /* Sorting function. NULL means the list will not be sorted */
+				NULL);								 /* Comparison function */
+			if (!links_copy) {
+				ast_free(lbuf);
+				return RESULT_FAILURE;
+			}
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
-
-//### GET RPT STATUS STATES WHILE LOCKED ########################
+			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
+			// ### GET RPT STATUS STATES WHILE LOCKED ########################
 			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
 				parrot_ena = "1"; //"ENABLED";
 			else
@@ -530,39 +534,22 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 
 			j = 0;
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
+			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
+
+			RPT_LIST_TRAVERSE(links_copy, l, l_it)
 			{
+				int hours, minutes, seconds;
+				long long connecttime = ast_tvdiff_ms(now, l->connecttime);
+				char conntime[21];
+
 				if (l->name[0] == '0') { // Skip '0' nodes
 					continue;
 				}
-				if (!(s = ast_calloc(1, sizeof(struct rpt_lstat)))) {
-					rpt_mutex_unlock(&myrpt->lock);
-					ast_free(lbuf);
-					ao2_ref(l, -1);
-					ao2_iterator_destroy(&l_it);
-					return RESULT_FAILURE;
-				}
-				ast_copy_string(s->name, l->name, MAXNODESTR - 1);
 				if (l->chan)
-					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", s->peer, MAXPEERSTR - 1);
+					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", peer, MAXPEERSTR - 1);
 				else
-					strcpy(s->peer, "(none)");
-				s->mode = l->mode;
-				s->outbound = l->outbound;
-				s->reconnects = l->reconnects;
-				s->connecttime = l->connecttime;
-				s->thisconnected = l->thisconnected;
-				memcpy(s->chan_stat, l->chan_stat, NRPTSTAT * sizeof(struct rpt_chan_stat));
-				insque((struct qelem *) s, (struct qelem *) s_head.next);
-				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
-			}
-			ao2_iterator_destroy(&l_it);
-			now = rpt_tvnow();
-			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
-			for (s = s_head.next; s != &s_head; s = s->next) {
-				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(now, s->connecttime);
-				char conntime[21];
+					strcpy(peer, "(none)");
+				now = rpt_tvnow();
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;
@@ -571,24 +558,18 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				connecttime %= 1000;
 				snprintf(conntime, 20, "%02d:%02d:%02d", hours, minutes, seconds);
 				conntime[20] = 0;
-				if (s->thisconnected)
+				if (l->thisconnected)
 					connstate = "ESTABLISHED";
 				else
 					connstate = "CONNECTING";
-				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s~", s->name, s->peer, s->reconnects,
-						(s->outbound) ? "OUT" : "IN", conntime, connstate);
+				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s~", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
+				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
 			}
+			ao2_iterator_destroy(&l_it);
+			ao2_cleanup(links_copy); /* Free the copy container */
 			ast_cli(fd, "\n\n");
-			// destroy our local link queue 
-			s = s_head.next;
-			while (s != &s_head) {
-				t = s;
-				s = s->next;
-				remque((struct qelem *) t);
-				ast_free(t);
-			}
 
-//### GET ALL LINKED NODES INFO ####################
+			// ### GET ALL LINKED NODES INFO ####################
 			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
