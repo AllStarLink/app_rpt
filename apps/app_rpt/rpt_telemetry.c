@@ -132,8 +132,9 @@ int rpt_cleanup_telemetry()
  * \brief determine if an extension exists in a primary or alternate context
  * \param chan The channel to check
  * \param primary The primary context to check
- * \param alternate The alternate context check
- * \return The context if it exists, NULL otherwise
+ * \param alternate The alternate context to check
+ * \param exten The extension to check
+ * \return The context if the extension exists in primary or alternate contexts, NULL otherwise
  */
 
 static const char *rpt_telem_extension(struct ast_channel *chan, const char *primary, const char *alternate, const char *exten)
