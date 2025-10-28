@@ -428,6 +428,7 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 	init_text_frame(&wf, "send_link_pl");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
+	rpt_mutex_lock(&myrpt->lock);
 	l = myrpt->links.next;
 	while (l && (l != &myrpt->links)) {
 		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
@@ -435,6 +436,7 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 		}
 		l = l->next;
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	return 0;
 }
 
