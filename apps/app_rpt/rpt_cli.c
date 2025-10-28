@@ -438,7 +438,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
 			ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK);
-			// ### GET RPT STATUS STATES WHILE LOCKED ########################
+			/* ### GET RPT STATUS STATES WHILE LOCKED ######################## */
 			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
 				parrot_ena = "1"; //"ENABLED";
 			else
@@ -545,10 +545,11 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				if (l->name[0] == '0') { // Skip '0' nodes
 					continue;
 				}
-				if (l->chan)
+				if (l->chan) {
 					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", peer, MAXPEERSTR - 1);
-				else
+				} else {
 					strcpy(peer, "(none)");
+				}
 				now = rpt_tvnow();
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
@@ -558,10 +559,11 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				connecttime %= 1000;
 				snprintf(conntime, 20, "%02d:%02d:%02d", hours, minutes, seconds);
 				conntime[20] = 0;
-				if (l->thisconnected)
+				if (l->thisconnected) {
 					connstate = "ESTABLISHED";
-				else
+				} else {
 					connstate = "CONNECTING";
+				}
 				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s~", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
 				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
 			}
@@ -569,7 +571,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			ao2_cleanup(links_copy); /* Free the copy container */
 			ast_cli(fd, "\n\n");
 
-			// ### GET ALL LINKED NODES INFO ####################
+			/* ### GET ALL LINKED NODES INFO #################### */
 			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
@@ -784,14 +786,26 @@ static int rpt_do_localplay(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
+static int rpt_do_sendtext_cb(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	char *str = arg;
+
+	if (link->name[0] == '0') {
+		return 0;
+	}
+	if (link->chan) {
+		ast_sendtext(link->chan, str);
+	}
+	return 0;
+}
+
 static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 {
 	int i;
-	struct rpt_link *l;
 	char str[MAX_TEXTMSG_SIZE];
 	char *from, *to;
 	int nrpts = rpt_num_rpts();
-	struct ao2_iterator l_it;
 
 	if (argc < 5) {
 		return RESULT_SHOWUSAGE;
@@ -813,16 +827,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* otherwise, send it to all of em */
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
-				if (l->name[0] == '0') {
-					continue;
-				}
-				if (l->chan) {
-					ast_sendtext(l->chan, str);
-				}
-			}
-			ao2_iterator_destroy(&l_it);
+			ao2_callback(myrpt->links, OBJ_NODATA, rpt_do_sendtext_cb, &str);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
@@ -890,11 +895,9 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 int rpt_do_sendall(int fd, int argc, const char *const *argv)
 {
 	int i;
-	struct rpt_link *l;
 	char str[MAX_TEXTMSG_SIZE];
 	char *nodename;
 	int nrpts = rpt_num_rpts();
-	struct ao2_iterator l_it;
 
 	if (argc < 4) {
 		return RESULT_SHOWUSAGE;
@@ -914,16 +917,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 			struct rpt *myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 			/* otherwise, send it to all of em */
-			RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-			{
-				if (l->name[0] == '0') {
-					continue;
-				}
-				if (l->chan) {
-					ast_sendtext(l->chan, str);
-				}
-			}
-			ao2_iterator_destroy(&l_it);
+			ao2_callback(myrpt->links, OBJ_NODATA, rpt_do_sendtext_cb, &str);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}

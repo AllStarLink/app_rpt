@@ -61,6 +61,21 @@ int rpt_link_find_by_name(void *obj, void *arg, int flags)
 	}
 	return 0;
 }
+
+static int rpt_sendtext_cb(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	char *str = arg;
+
+	if (link->name[0] == '0') {
+		return 0;
+	}
+	if (link->chan) {
+		ast_sendtext(link->chan, str);
+	}
+	return 0;
+}
+
 enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
 	struct rpt_link *mylink)
 {
@@ -291,16 +306,8 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		snprintf(tmp, MAX_TEXTMSG_SIZE - 1, "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
 		/* otherwise, send it to all of em */
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it)
-		{
-			if (l->name[0] == '0') {
-				continue;
-			}
-			if (l->chan) {
-				ast_sendtext(l->chan, tmp);
-			}
-		}
-		ao2_iterator_destroy(&l_it);
+		ao2_callback(myrpt->links, OBJ_NODATA, rpt_sendtext_cb, &tmp);
+
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
