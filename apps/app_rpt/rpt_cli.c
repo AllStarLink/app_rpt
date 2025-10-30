@@ -343,10 +343,10 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
-			links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
-				0,									 /* AO2 container flags. */
-				rpt_compare_node,					 /* Sorting function. NULL means the list will not be sorted */
-				NULL);								 /* Comparison function */
+			links_copy = ao2_container_alloc_rbtree(0, /* AO2 object flags. 0 means to use the default behavior */
+				0,									   /* AO2 container flags. */
+				rpt_compare_node,					   /* Sorting function. NULL means the list will not be sorted */
+				NULL);								   /* Comparison function */
 			if (!links_copy) {
 				return RESULT_FAILURE;
 			}
