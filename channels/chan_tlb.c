@@ -1610,13 +1610,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		/* Asterisk to TheLinkBox */
 		if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
 			struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-			ast_log(LOG_WARNING,
-					"Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
-					ast_format_get_name(frame->subclass.format),
-					ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
-					ast_format_get_name(ast_channel_readformat(ast)),
-					ast_format_get_name(ast_channel_writeformat(ast)));
-			ast_mutex_unlock(&instp->lock);
+			ast_log(LOG_WARNING, "Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
+				ast_format_get_name(frame->subclass.format), ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
+				ast_format_get_name(ast_channel_readformat(ast)), ast_format_get_name(ast_channel_writeformat(ast)));
 			return -1;
 		}
 		if (p->txkey || p->txindex) {
@@ -1638,6 +1634,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 
 	if (p->keepalive--) {
+		ast_mutex_unlock(&p->lock);
 		return 0;
 	}
 	p->keepalive = KEEPALIVE_TIME;
