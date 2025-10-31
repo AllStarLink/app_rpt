@@ -514,7 +514,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			}
 
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
-				if (l->name[0] == '0') { /* Skip '0' nodes */
+				if (l->name[0] == '0') {
 					reverse_patch_state = "UP";
 					break;
 				}
