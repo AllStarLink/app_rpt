@@ -538,6 +538,21 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
+static int link_find_by_name(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	char *node = arg;
+
+	if (link->name[0] == '0') {
+		return 0;
+	}
+	/* if found matching string */
+	if (!strcmp(link->name, node)) {
+		return CMP_MATCH;
+	}
+	return 0;
+}
+
 int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 {
 	char *s, *s1, *tele, *cp;
@@ -550,7 +565,6 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	int i, ns, n = 1;
 	int voterlink = 0;
 	struct ast_format_cap *cap;
-	struct ao2_iterator l_it;
 
 	if (strlen(node) < 1)
 		return 1;
@@ -598,16 +612,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	/* try to find this one in queue */
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		if (l->name[0] == '0') {
-			continue;
-		}
-		/* if found matching string */
-		if (!strcmp(l->name, node)) {
-			break; /* found , leave referenced */
-		}
-	}
-	ao2_iterator_destroy(&l_it);
+	l = ao2_callback(myrpt->links, 0, link_find_by_name, node);
 	/* if found */
 	if (l) {
 		/* if already in this mode, just ignore */
