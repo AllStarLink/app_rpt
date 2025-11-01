@@ -365,6 +365,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "----      ----                ----------  ---------  ------------        -------------\n");
 
 			/* Traverse the list of connected nodes */
+			now = rpt_tvnow();
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				char peer[MAXPEERSTR];
 				int hours, minutes, seconds;
@@ -379,7 +380,6 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				} else {
 					strcpy(peer, "(none)");
 				}
-				now = rpt_tvnow();
 				connecttime = ast_tvdiff_ms(now, l->connecttime);
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
@@ -544,7 +544,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 			j = 0;
 			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
-
+			now = rpt_tvnow();
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				int hours, minutes, seconds;
 				long long connecttime = ast_tvdiff_ms(now, l->connecttime);
@@ -558,7 +558,6 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				} else {
 					strcpy(peer, "(none)");
 				}
-				now = rpt_tvnow();
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;

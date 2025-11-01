@@ -107,37 +107,38 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_mutex_lock(&myrpt->lock);
 		/* try to find this one in queue */
 		l = ao2_callback(myrpt->links, 0, rpt_link_find_by_name, digitbuf);
-		if (l) { /* if found */
-			struct ast_frame wf;
-
-			/* must use perm command on perm link */
-			if ((myatoi(param) < 10) && (l->max_retries > MAX_RETRIES)) {
-				rpt_mutex_unlock(&myrpt->lock);
-				ao2_ref(l, -1);
-				return DC_COMPLETE;
-			}
-			ast_copy_string(myrpt->lastlinknode, digitbuf, MAXNODESTR - 1);
-			l->retries = l->max_retries + 1;
-			l->disced = 1;
-			l->hasconnected = 1;
+		if (!l) { /* if not found */
 			rpt_mutex_unlock(&myrpt->lock);
-			init_text_frame(&wf, "function_ilink:1");
-			wf.datalen = strlen(DISCSTR) + 1;
-			wf.data.ptr = DISCSTR;
-			if (l->chan) {
-				if (l->thisconnected)
-					ast_write(l->chan, &wf);
-				rpt_safe_sleep(myrpt, l->chan, 250);
-				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-			}
-			myrpt->linkactivityflag = 1;
-			rpt_telem_select(myrpt, command_source, mylink);
-			rpt_telemetry(myrpt, COMPLETE, NULL);
+			break;
+		}
+		/* if found */
+		struct ast_frame wf;
+
+		/* must use perm command on perm link */
+		if ((myatoi(param) < 10) && (l->max_retries > MAX_RETRIES)) {
+			rpt_mutex_unlock(&myrpt->lock);
 			ao2_ref(l, -1);
 			return DC_COMPLETE;
 		}
+		ast_copy_string(myrpt->lastlinknode, digitbuf, MAXNODESTR - 1);
+		l->retries = l->max_retries + 1;
+		l->disced = 1;
+		l->hasconnected = 1;
 		rpt_mutex_unlock(&myrpt->lock);
-		break;
+		init_text_frame(&wf, "function_ilink:1");
+		wf.datalen = strlen(DISCSTR) + 1;
+		wf.data.ptr = DISCSTR;
+		if (l->chan) {
+			if (l->thisconnected)
+				ast_write(l->chan, &wf);
+			rpt_safe_sleep(myrpt, l->chan, 250);
+			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+		}
+		myrpt->linkactivityflag = 1;
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		ao2_ref(l, -1);
+		return DC_COMPLETE;
 	case 2:					/* Link Monitor */
 	case 3:					/* Link transceive */
 	case 12:					/* Link Monitor permanent */
