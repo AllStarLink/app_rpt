@@ -4781,7 +4781,7 @@ static void *rpt(void *this)
 	myrpt->links = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
 		AO2_CONTAINER_ALLOC_OPT_INSERT_BEGIN,  /* AO2 container flags. New items should be added to the front of the list */
 		NULL,								   /* Sorting function. NULL means the list will not be sorted */
-		NULL);								   /* Comparison function */
+		rpt_link_find_by_name);				   /* Comparison function */
 
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
@@ -6732,7 +6732,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (!b1[i]) { /* if not a call-based node number */
 			rpt_mutex_lock(&myrpt->lock);
 			/* try to find this one in queue */
-			l = ao2_callback(myrpt->links, 0, rpt_link_find_by_name, b1);
+			l = ao2_find(myrpt->links, b1, 0);
 			/* if found */
 			if (l != NULL) {
 				l->killme = 1;

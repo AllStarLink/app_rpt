@@ -106,7 +106,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			strcpy(digitbuf, myrpt->lastlinknode);
 		rpt_mutex_lock(&myrpt->lock);
 		/* try to find this one in queue */
-		l = ao2_callback(myrpt->links, 0, rpt_link_find_by_name, digitbuf);
+		l = ao2_find(myrpt->links, digitbuf, 0);
 		if (!l) { /* if not found */
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
