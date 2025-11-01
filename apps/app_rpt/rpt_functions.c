@@ -100,6 +100,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	switch (myatoi(param)) {
 	case 11:					/* Perm Link off */
 	case 1:					/* Link off */
+		struct ast_frame wf;
 		if (strlen(digitbuf) < 1)
 			break;
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
@@ -112,8 +113,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			break;
 		}
 		/* if found */
-		struct ast_frame wf;
-
 		/* must use perm command on perm link */
 		if ((myatoi(param) < 10) && (l->max_retries > MAX_RETRIES)) {
 			rpt_mutex_unlock(&myrpt->lock);
