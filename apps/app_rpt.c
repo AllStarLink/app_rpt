@@ -3416,7 +3416,7 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		update_timer(&myrpt->lastkeytimer, elap, 0);
 	}
 	myrpt->elketimer += elap;
-	if (myrpt->telemmode != 0x7fffffff) {
+	if ((myrpt->telemmode != 0x7fffffff) && (myrpt->telemmode != 0)) {
 		update_timer(&myrpt->telemmode, elap, 1);
 	}
 	if (myrpt->exttx) {
