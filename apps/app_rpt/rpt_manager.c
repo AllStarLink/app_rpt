@@ -279,8 +279,8 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 
 			/* Get variables info */
 			j = 0;
-			if (!strcasecmp(rxchanname, "DAHDI/pseudo")) {
-				/* DAHDI/pseudo isn't a real channel name, calling ast_channel_get_by_name
+			if (!strcasecmp(rxchanname, "Local/pseudo")) {
+				/* Local/pseudo isn't a real channel name, calling ast_channel_get_by_name
 				 * will always fail, so avoid an unnecessary traversal of the channels container for nothing. */
 				pseudo = 1;
 			} else {
