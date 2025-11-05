@@ -1079,12 +1079,10 @@ static int rpt_show_channels(int fd, int argc, const char *const *argv)
 	DUMP_CHANNEL(rxchannel);
 	DUMP_CHANNEL(txchannel);
 	DUMP_CHANNEL(monchannel);
-	DUMP_CHANNEL(parrotchannel);
 	DUMP_CHANNEL(pchannel);
 	DUMP_CHANNEL(txpchannel);
-	DUMP_CHANNEL(dahdirxchannel);
-	DUMP_CHANNEL(dahditxchannel);
-	DUMP_CHANNEL(voxchannel);
+	DUMP_CHANNEL(localrxchannel);
+	DUMP_CHANNEL(localtxchannel);
 	rpt_mutex_unlock(&rpt_vars[this_rpt].lock);
 #undef DUMP_CHANNEL
 

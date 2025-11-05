@@ -689,8 +689,6 @@ static int send_tone_telemetry(struct ast_channel *chan, const char *tonestring)
 
 	ast_stopstream(chan);
 
-	/* Wait for the DAHDI driver to physically write the tone blocks to the hardware */
-	res = dahdi_write_wait(chan);
 	return res;
 }
 
@@ -1267,6 +1265,7 @@ void *rpt_tele_thread(void *this)
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
 	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
+	char exten[10];
 
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -1306,16 +1305,34 @@ void *rpt_tele_thread(void *this)
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
-	/* allocate a pseudo-channel thru asterisk */
-	mychannel = rpt_request_pseudo_chan(cap);
+	switch (mytele->mode) {
+	case ID1:
+	case PLAYBACK:
+	case TEST_TONE:
+	case STATS_GPS_LEGACY:
+		type = RPT_CONF;
+		strncpy(exten, RPT_CONF_NAME, sizeof(exten));
+		break;
+	default:
+		type = RPT_TXCONF;
+		strncpy(exten, RPT_TXCONF_NAME, sizeof(exten));
+		break;
+	}
+	/* allocate a pseudo-channel thru asterisk and call the correct conference */
+	mychannel = rpt_request_pseudo_chan(cap, "Telem");
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel (mode: %d)\n", mytele->mode);
+		ast_log(LOG_WARNING, "Unable to obtain local channel (mode: %d)\n", mytele->mode);
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
+	if (rpt_conf_add(mychannel, myrpt, type)) {
+		ast_log(LOG_WARNING, "Unable to join local channel to conference %s\n", type == RPT_CONF ? RPT_CONF_NAME : RPT_TXCONF_NAME);
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort;
+	}
 
 	rpt_mutex_lock(&myrpt->lock);
 	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
@@ -1344,28 +1361,10 @@ void *rpt_tele_thread(void *this)
 
 	ast_debug(5, "Beginning telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 
-	/* make a conference for the tx */
-	/* If the telemetry is only intended for a local audience, only connect the ID audio to the local tx conference so linked systems can't hear it */
-	/* first put the channel on the conference in announce mode */
-	switch (mytele->mode) {
-		case ID1:
-		case PLAYBACK:
-		case TEST_TONE:
-		case STATS_GPS_LEGACY:
-			type = RPT_CONF;
-			break;
-		default:
-			type = RPT_TXCONF;
-			break;
-	}
 	if (ast_audiohook_volume_set_float(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
 		ast_log(LOG_WARNING, "Setting the volume on channel %s to %2.2f failed", ast_channel_name(mychannel), myrpt->p.telemnomgain);
 	}
 
-	if (rpt_conf_add(mychannel, myrpt, type, RPT_CONF_CONFANN)) {
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort;
-	}
 	ast_stopstream(mychannel);
 	res = 0;
 	switch (mytele->mode) {
@@ -1675,7 +1674,7 @@ treataslocal:
 		}
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt")))) {
 			/* set for all to hear */
-			if (rpt_conf_add_announcer(mychannel, myrpt)) {
+			if (rpt_conf_add(mychannel, myrpt, RPT_CONF)) {
 				rpt_mutex_lock(&myrpt->lock);
 				goto abort;
 			}
@@ -2011,21 +2010,10 @@ treataslocal:
 				res = -1;
 				break;
 			}
-			if (myrpt->iofd < 0) {
-				int rxisoffhook;
-				if (dahdi_flush(myrpt->dahditxchannel) || ((rxisoffhook = dahdi_rx_offhook(myrpt->dahdirxchannel)) < 0)) {
-					myrpt->remsetting = 0;
-					ast_mutex_unlock(&myrpt->remlock);
-					res = -1;
-					break;
-				}
-				myrpt->remoterx = rxisoffhook || myrpt->tele.next != &myrpt->tele;
-			}
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_TMD700)) {
 			res = set_tmd700(myrpt);
 			setxpmr(myrpt, 0);
 		}
-
 		myrpt->remsetting = 0;
 		ast_mutex_unlock(&myrpt->remlock);
 		if (!res) {
