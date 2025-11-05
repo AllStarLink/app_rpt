@@ -38,7 +38,7 @@ static int dahdi_radio_set_ctcss_decode(struct ast_channel *chan, int enable)
 int rpt_radio_rx_set_ctcss_decode(struct rpt *myrpt, int enable)
 {
 	if (CHAN_TECH(myrpt->rxchannel, "DAHDI")) {
-		return dahdi_radio_set_ctcss_decode(myrpt->dahdirxchannel, enable);
+		return dahdi_radio_set_ctcss_decode(myrpt->localrxchannel, enable);
 	}
 	return 1;
 }
@@ -61,7 +61,7 @@ int rpt_radio_set_remcommand_data(struct ast_channel *chan, struct rpt *myrpt, u
 
 	r.radpar = DAHDI_RADPAR_REMCOMMAND;
 	memcpy(&r.data, data, len);
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
+	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
 		ast_log(LOG_WARNING, "Cannot send RBI command for channel %s: %s\n", ast_channel_name(chan), strerror(errno));
 		return -1;
 	}
@@ -74,32 +74,26 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 	struct dahdi_radio_param prm;
 
 	prm.radpar = DAHDI_RADPAR_UIOMODE;
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1) {
+	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1) {
 		return -1;
 	}
 	oldmode = prm.data;
 	prm.radpar = DAHDI_RADPAR_UIODATA;
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1) {
+	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1) {
 		return -1;
 	}
 	olddata = prm.data;
 	prm.radpar = DAHDI_RADPAR_REMMODE;
 	if ((asciiflag & 1) && strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
-		if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL_ASCII)) {
+		if (rpt_radio_set_param(myrpt->localrxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL_ASCII)) {
 			return -1;
 		}
 	} else {
-		if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL)) {
+		if (rpt_radio_set_param(myrpt->localrxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL)) {
 			return -1;
 		}
 	}
 
-	if (asciiflag & 2) {
-		if (dahdi_set_onhook(myrpt->dahdirxchannel)) {
-			return -1;
-		}
-		usleep(100000);
-	}
 	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 		for (i = 0; i < txbytes - 1; i++) {
 
@@ -107,7 +101,7 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 			prm.data = 0;
 			prm.buf[0] = txbuf[i];
 			prm.index = 1;
-			if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+			if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 				return -1;
 			usleep(6666);
 		}
@@ -116,7 +110,7 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 			prm.data = DAHDI_RADPAR_REM_SERIAL_ASCII;
 		else
 			prm.data = DAHDI_RADPAR_REM_SERIAL;
-		if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+		if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 			return -1;
 		prm.radpar = DAHDI_RADPAR_REMCOMMAND;
 		prm.data = rxmaxbytes;
@@ -128,25 +122,26 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 		memcpy(prm.buf, txbuf, txbytes);
 		prm.index = txbytes;
 	}
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
 		return -1;
 	if (rxbuf) {
 		*rxbuf = 0;
 		memcpy(rxbuf, prm.buf, prm.index);
 	}
 	index = prm.index;
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE)) {
+	if (rpt_radio_set_param(myrpt->localrxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE)) {
 		return -1;
 	}
-	if (asciiflag & 2) {
-		if (dahdi_set_offhook(myrpt->dahdirxchannel)) {
-			return -1;
+	/*	if (asciiflag & 2) {
+			if (dahdi_set_offhook(myrpt->localrxchannel)) {
+				return -1;
+			}
 		}
-	}
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_UIOMODE, oldmode)) {
+	*/
+	if (rpt_radio_set_param(myrpt->localrxchannel, myrpt, RPT_RADPAR_UIOMODE, oldmode)) {
 		return -1;
 	}
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_UIODATA, olddata)) {
+	if (rpt_radio_set_param(myrpt->localrxchannel, myrpt, RPT_RADPAR_UIODATA, olddata)) {
 		return -1;
 	}
 	return index;
