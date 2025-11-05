@@ -1237,7 +1237,7 @@ void *rpt_tele_thread(void *this)
 	unsigned long long u_mono;
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
 	struct ast_str *lbuf = NULL;
-	enum rpt_conf_type type;
+	char type[10];
 
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -1276,9 +1276,19 @@ void *rpt_tele_thread(void *this)
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
-
-	/* allocate a pseudo-channel thru asterisk */
-	mychannel = rpt_request_pseudo_chan(cap);
+	switch (mytele->mode) {
+	case ID1:
+	case PLAYBACK:
+	case TEST_TONE:
+	case STATS_GPS_LEGACY:
+		strncpy(type, CONF, sizeof(type));
+		break;
+	default:
+		strncpy(type, TXCONF, sizeof(type));
+		break;
+	}
+	/* allocate a pseudo-channel thru asterisk and call the correct conference */
+	mychannel = rpt_request_pseudo_chan(cap, type, RPT_CONTEXT);
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {
@@ -1315,28 +1325,10 @@ void *rpt_tele_thread(void *this)
 
 	ast_debug(5, "Beginning telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 
-	/* make a conference for the tx */
-	/* If the telemetry is only intended for a local audience, only connect the ID audio to the local tx conference so linked systems can't hear it */
-	/* first put the channel on the conference in announce mode */
-	switch (mytele->mode) {
-		case ID1:
-		case PLAYBACK:
-		case TEST_TONE:
-		case STATS_GPS_LEGACY:
-			type = RPT_CONF;
-			break;
-		default:
-			type = RPT_TXCONF;
-			break;
-	}
 	if (ast_audiohook_volume_set_float(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
 		ast_log(LOG_WARNING, "Setting the volume on channel %s to %2.2f failed", ast_channel_name(mychannel), myrpt->p.telemnomgain);
 	}
 
-	if (rpt_conf_add(mychannel, myrpt, type, RPT_CONF_CONFANN)) {
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort;
-	}
 	ast_stopstream(mychannel);
 	res = 0;
 	switch (mytele->mode) {

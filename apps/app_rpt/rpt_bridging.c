@@ -246,14 +246,14 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 
 	switch (chantype) {
 	case RPT_RXCHAN:
-		myrpt->dahdirxchannel = !strcasecmp(tech, "DAHDI") ? chan : NULL;
+		myrpt->dahdirxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
 		break;
 	case RPT_TXCHAN:
 		if (flags & RPT_LINK_CHAN) {
 			/* XXX Dunno if this difference is really necessary, but this is a literal refactor of existing logic... */
-			myrpt->dahditxchannel = !strcasecmp(tech, "DAHDI") ? chan : NULL;
+			myrpt->dahditxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
 		} else {
-			myrpt->dahditxchannel = !strcasecmp(tech, "DAHDI") && strcasecmp(device, "pseudo") ? chan : NULL;
+			myrpt->dahditxchannel = !strcasecmp(tech, "Local") && strcasecmp(device, "pseudo") ? chan : NULL;
 		}
 		break;
 	default:
@@ -263,9 +263,13 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	return 0;
 }
 
-struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap)
+struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *exten, const char *context)
 {
-	struct ast_channel *chan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	char destination[AST_MAX_EXTENSION + AST_MAX_CONTEXT + 1];
+	struct ast_channel *chan;
+
+	snprintf(destination, sizeof(destination), "%s@%s", exten, context);
+	chan = ast_request("Local", cap, NULL, NULL, destination, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
 		return NULL;
@@ -275,19 +279,21 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap)
 	return chan;
 }
 
-int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags)
+int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags,
+	const char *exten, const char *context)
 {
 	struct rpt *myrpt = NULL;
 	struct rpt_link *link = NULL;
 	struct ast_channel *chan, **chanptr;
+	char destination[AST_MAX_EXTENSION + AST_MAX_CONTEXT + 1];
 
 	if (flags & RPT_LINK_CHAN) {
 		link = data;
 	} else {
 		myrpt = data;
 	}
-
-	chan = ast_request("DAHDI", cap, NULL, NULL, "pseudo", NULL);
+	snprintf(destination, sizeof(destination), "%s@%s", exten, context);
+	chan = ast_request("Local", cap, NULL, NULL, destination, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
 		return -1;

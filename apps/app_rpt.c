@@ -1323,7 +1323,7 @@ void *rpt_call(void *this)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	myrpt->mydtmf = 0;
-	mychannel = rpt_request_pseudo_chan(cap);
+	mychannel = rpt_request_pseudo_chan(cap, CONF, RPT_CONTEXT);
 
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -1332,14 +1332,10 @@ void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
+	rpt_disable_cdr(mychannel);
+	ast_answer(mychannel);
 
-	if (rpt_conf_add_speaker(mychannel, myrpt)) {
-		ast_hangup(mychannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		ao2_ref(cap, -1);
-		pthread_exit(NULL);
-	}
-	genchannel = rpt_request_pseudo_chan(cap);
+	genchannel = rpt_request_pseudo_chan(cap, CONF, RPT_CONTEXT);
 	ao2_ref(cap, -1);
 	if (!genchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -1348,14 +1344,9 @@ void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
+	rpt_disable_cdr(genchannel);
+	ast_answer(genchannel);
 
-	/* first put the channel on the conference */
-	if (rpt_conf_add_speaker(genchannel, myrpt)) {
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
-	}
 	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
 		ast_hangup(mychannel);
 		ast_hangup(genchannel);
@@ -2811,10 +2802,11 @@ void rpt_links_init(struct rpt_link *l)
 #define IS_DAHDI_CHAN(c) (CHAN_TECH(c, "DAHDI"))
 #define IS_DAHDI_CHAN_NAME(s) (!strncasecmp(s, "DAHDI", 5))
 
+#define IS_LOCAL_CHAN(c) (CHAN_TECH(c, "Local"))
+#define IS_LOCAL_CHAN_NAME(s) (!strncasecmp(s, "Local", 5))
+
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
-	int res;
-
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
 	}
@@ -2826,64 +2818,58 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		myrpt->dahditxchannel = IS_DAHDI_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
+		myrpt->dahditxchannel = IS_LOCAL_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN)) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, CONF, RPT_CONTEXT)) {
 		rpt_hangup_rx_tx(myrpt);
 		return -1;
 	}
 
 	if (!myrpt->dahditxchannel) {
-		if (rpt_request_pseudo(myrpt, cap, RPT_DAHDITXCHAN)) {
+		if (rpt_request_pseudo(myrpt, cap, RPT_DAHDITXCHAN, TXCONF, RPT_CONTEXT)) {
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			return -1;
 		}
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN)) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN, TXCONF, RPT_CONTEXT)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
 		return -1;
 	}
 
-	/* make a conference for the tx */
-	if (rpt_conf_create(myrpt->dahditxchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_LISTENER)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		return -1;
-	}
-
-	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
-		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
-	} else {
-		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER);
-	}
-	if (res) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		return -1;
-	}
-
-	if (rpt_mon_setup(myrpt)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		return -1;
-	}
-
-	if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		return -1;
-	}
-
-	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN)) {
+	/* Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
+	/*	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
+			res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
+		} else {
+			res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER);
+		}
+		if (res) {
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			return -1;
+		}
+	*/
+	/* Need to verify always setting MONCHAN to TXCONF is "ok" or how to deal at dialtime*/
+	/*	if (rpt_mon_setup(myrpt)) {
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			return -1;
+		}
+	*/
+	/*	if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN)) {
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			return -1;
+		}
+	*/
+	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN, TXCONF, RPT_CONTEXT)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -2891,7 +2877,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN)) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN, TXCONF, RPT_CONTEXT)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -2901,16 +2887,16 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/* make a conference for the tx */
-	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_TALKER)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		rpt_hangup(myrpt, RPT_VOXCHAN);
-		rpt_hangup(myrpt, RPT_TXPCHAN);
-		return -1;
-	}
-
+	/*	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_TALKER)) {
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			rpt_hangup(myrpt, RPT_PARROTCHAN);
+			rpt_hangup(myrpt, RPT_VOXCHAN);
+			rpt_hangup(myrpt, RPT_TXPCHAN);
+			return -1;
+		}
+	*/
 	return 0;
 }
 
@@ -3016,12 +3002,10 @@ static inline int rpt_any_hangups(struct rpt *myrpt)
 	if (ast_check_hangup(myrpt->monchannel)) {
 		return -1;
 	}
-	if (myrpt->parrotchannel && ast_check_hangup(myrpt->parrotchannel)) {
-		return -1;
-	}
-	if (myrpt->voxchannel && ast_check_hangup(myrpt->voxchannel)) {
-		return -1;
-	}
+	/*	if (myrpt->voxchannel && ast_check_hangup(myrpt->voxchannel)) {
+			return -1;
+		}
+	*/
 	if (ast_check_hangup(myrpt->txpchannel)) {
 		return -1;
 	}
@@ -5274,12 +5258,12 @@ static void *rpt(void *this)
 			myrpt->rem_dtmfbuf[0] = 0;
 		}
 
-		if (myrpt->exttx && myrpt->parrotchannel && (myrpt->p.parrotmode || myrpt->parrotonce) && (!myrpt->parrotstate)) {
+		if (myrpt->exttx && (myrpt->p.parrotmode || myrpt->parrotonce) && (!myrpt->parrotstate)) {
 			char myfname[300];
 
 			/* first put the channel on the conference in announce mode */
-			if (rpt_conf_add_announcer_monitor(myrpt->parrotchannel, myrpt)) {
-				rpt_mutex_unlock(&myrpt->lock);
+			if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN, TXCONF, RPT_CONTEXT)) {
+				ast_mutex_unlock(&myrpt->lock);
 				break;
 			}
 
@@ -5332,7 +5316,7 @@ static void *rpt(void *this)
 
 			myrpt->lastitx = x;
 			if (myrpt->p.itxctcss) {
-				if (IS_DAHDI_CHAN(myrpt->rxchannel)) {
+				if (IS_LOCAL_CHAN(myrpt->rxchannel)) {
 					dahdi_radio_set_ctcss_encode(myrpt->dahdirxchannel, !x);
 				} else if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 					snprintf(str, sizeof(str), "TXCTCSS %d", !(!x));
@@ -6786,7 +6770,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_format_cap_append(cap, ast_format_slin, 0);
 
 		/* allocate a pseudo-channel thru asterisk */
-		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
+		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN, CONF, RPT_CONTEXT)) {
 			ao2_ref(cap, -1);
 			ast_free(l);
 			return -1;
@@ -6795,11 +6779,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ao2_ref(cap, -1);
 
 		/* make a conference for the tx */
-		if (rpt_conf_add_speaker(l->pchan, myrpt)) {
-			ast_free(l);
-			return -1;
-		}
-
+		/*		if (rpt_conf_add_speaker(l->pchan, myrpt)) {
+					ast_free(l);
+					return -1;
+				}
+		*/
 		if ((phone_mode == 2) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
@@ -6977,7 +6961,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		if (IS_DAHDI_CHAN_NAME(myrpt->rxchanname)) {
+		if (IS_LOCAL_CHAN_NAME(myrpt->rxchanname)) {
 			myrpt->dahditxchannel = myrpt->rxchannel;
 		}
 	}
@@ -6985,7 +6969,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	i = 3;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &i, sizeof(char), 0);
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN)) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, TXCONF, RPT_CONTEXT)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup_rx_tx(myrpt);
 		ao2_ref(cap, -1);
@@ -7000,13 +6984,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		myrpt->dahditxchannel = myrpt->pchannel;
 
 	/* first put the channel on the conference in announce/monitor mode */
-	if (rpt_conf_create(myrpt->pchannel, myrpt, RPT_TXCONF, RPT_CONF_CONFANNMON)) {
-		rpt_mutex_unlock(&myrpt->lock);
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		return -1;
-	}
-
+	/*	if (rpt_conf_create(myrpt->pchannel, myrpt, RPT_TXCONF, RPT_CONF_CONFANNMON)) {
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			return -1;
+		}
+	*/
 	rpt_equate_tx_conf(myrpt);
 
 	/* if serial io port, open it */
