@@ -16,6 +16,10 @@ enum rpt_conf_type {
 	RPT_TXCONF, /* Local Audio */
 };
 
+#define TXCONF "TXCONF"
+#define CONF "CONF"
+#define RPT_CONTEXT "repeater"
+
 /* Uses same flag name style as DAHDI_CONF flags, since that's what these are based on */
 enum rpt_conf_flags {
 	RPT_CONF_NORMAL = (1 << 0),
@@ -59,7 +63,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
  * \return channel on success
  * \return NULL on failure
  */
-struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap);
+struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *exten, const char *context);
 
 /*!
  * \brief Request a repeater channel not associated with a real device
@@ -69,9 +73,10 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap);
  * \note myrpt->lock must be held when calling
  * \retval 0 on success, -1 on failure
  */
-int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags);
+int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags,
+	const char *exten, const char *context);
 
-#define rpt_request_pseudo(data, cap, chantype) __rpt_request_pseudo(data, cap, chantype, 0)
+#define rpt_request_pseudo(data, cap, chantype, exten, context) __rpt_request_pseudo(data, cap, chantype, 0, exten, context)
 
 int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
 

@@ -789,7 +789,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 
 	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
 
-	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
+	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN, CONF, RPT_CONTEXT)) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		rpt_link_free(l);
@@ -798,13 +798,6 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 
 	ao2_ref(cap, -1);
 
-	/* make a conference for the tx */
-	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
-		ast_hangup(l->chan);
-		ast_hangup(l->pchan);
-		rpt_link_free(l);
-		return -1;
-	}
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {
 		init_linkmode(myrpt, l, LINKMODE_TLB);
