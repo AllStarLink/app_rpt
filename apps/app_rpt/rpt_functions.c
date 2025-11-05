@@ -828,7 +828,7 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			 (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) ||
 			 (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)))) {
 			myrpt->remotetx = 0;
-			if (!IS_PSEUDO(myrpt->txchannel)) {
+			if (!IS_LOCAL(myrpt->txchannel)) {
 				ast_indicate(myrpt->txchannel, AST_CONTROL_RADIO_UNKEY);
 			}
 			myrpt->tunetx = 0;

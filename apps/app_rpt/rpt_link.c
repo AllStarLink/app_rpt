@@ -752,9 +752,9 @@ void *rpt_link_connect(void *data)
 		goto cleanup;
 	}
 
-	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
+	rpt_make_call(l->chan, tele, 2000, deststr, "Remote Rx", "remote", myrpt->name);
 
-	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
+	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAXLink")) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		ao2_ref(l, -1);
@@ -763,8 +763,7 @@ void *rpt_link_connect(void *data)
 
 	ao2_ref(cap, -1);
 
-	/* make a conference for the tx */
-	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
+	if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		ao2_ref(l, -1);
