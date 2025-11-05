@@ -546,9 +546,6 @@ int priority_telemetry_pending(struct rpt *myrpt)
  */
 #define telem_done(myrpt, telem) \
 	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, telem); \
-	if (myrpt->active_telem && myrpt->active_telem != telem) { \
-		ast_log(LOG_WARNING, "Attempting to clear active_telem %p when telem is %p", myrpt->active_telem, telem); \
-	} \
 	if (myrpt->active_telem == telem) { \
 		myrpt->active_telem = NULL; \
 	}
@@ -689,8 +686,6 @@ static int send_tone_telemetry(struct ast_channel *chan, const char *tonestring)
 
 	ast_stopstream(chan);
 
-	/* Wait for the DAHDI driver to physically write the tone blocks to the hardware */
-	res = dahdi_write_wait(chan);
 	return res;
 }
 
@@ -874,9 +869,6 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		return;
 	}
 	if (!strcasecmp(strs[0], "PROC")) {
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
-		}
 		res = telem_lookup(myrpt, mychannel, "patchup", "PROC");
 		if (res < 0) { /* Then default message */
 			sayfile(mychannel, "rpt/callproceeding");
@@ -1295,32 +1287,6 @@ void *rpt_tele_thread(void *this)
 		ident = "";
 		id_malloc = 0;
 	}
-	rpt_mutex_unlock(&myrpt->lock);
-
-	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
-	}
-
-	ast_format_cap_append(cap, ast_format_slin, 0);
-
-	/* allocate a pseudo-channel thru asterisk */
-	mychannel = rpt_request_pseudo_chan(cap);
-	ao2_ref(cap, -1);
-
-	if (!mychannel) {
-		ast_log(LOG_WARNING, "Unable to obtain pseudo channel (mode: %d)\n", mytele->mode);
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-
-	rpt_mutex_lock(&myrpt->lock);
-	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
-	mytele->chan = mychannel;
-
 	/* Wait for previous telemetry to finish before we start so we're not speaking on top of each other. */
 	ast_debug(5, "Queued telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 	while (myrpt->active_telem && ((myrpt->active_telem->mode == PAGE) || (myrpt->active_telem->mode == MDC1200))) {
@@ -1344,29 +1310,49 @@ void *rpt_tele_thread(void *this)
 
 	ast_debug(5, "Beginning telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 
-	/* make a conference for the tx */
-	/* If the telemetry is only intended for a local audience, only connect the ID audio to the local tx conference so linked systems can't hear it */
-	/* first put the channel on the conference in announce mode */
-	switch (mytele->mode) {
-		case ID1:
-		case PLAYBACK:
-		case TEST_TONE:
-		case STATS_GPS_LEGACY:
-			type = RPT_CONF;
-			break;
-		default:
-			type = RPT_TXCONF;
-			break;
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort;
 	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+	/* allocate a local channel thru asterisk and call the correct conference */
+	mychannel = rpt_request_telem_chan(cap, "Telem");
+	ao2_ref(cap, -1);
+
+	if (!mychannel) {
+		ast_log(LOG_WARNING, "Unable to obtain local channel (mode: %d)\n", mytele->mode);
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort;
+	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
+	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
+	mytele->chan = mychannel;
+
+	switch (mytele->mode) {
+	case ID1:
+	case PLAYBACK:
+	case TEST_TONE:
+	case STATS_GPS_LEGACY:
+		type = RPT_CONF;
+		break;
+	default:
+		type = RPT_TXCONF;
+		break;
+	}
+
 	if (ast_audiohook_volume_set_float(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
 		ast_log(LOG_WARNING, "Setting the volume on channel %s to %2.2f failed", ast_channel_name(mychannel), myrpt->p.telemnomgain);
 	}
 
-	if (rpt_conf_add(mychannel, myrpt, type, RPT_CONF_CONFANN)) {
+	if (rpt_conf_add(mychannel, myrpt, type)) {
+		ast_log(LOG_WARNING, "Unable to join local channel to conference %s\n", type == RPT_CONF ? RPT_CONF_NAME : RPT_TXCONF_NAME);
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
-	ast_stopstream(mychannel);
+
 	res = 0;
 	switch (mytele->mode) {
 	case USEROUT:
@@ -1674,11 +1660,6 @@ treataslocal:
 			res = telem_send_ct(myrpt, mychannel, "unlinkedct", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY", 0);
 		}
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt")))) {
-			/* set for all to hear */
-			if (rpt_conf_add_announcer(mychannel, myrpt)) {
-				rpt_mutex_lock(&myrpt->lock);
-				goto abort;
-			}
 			/* Remote Unkey Courtesy Tone */
 			res = telem_send_ct(myrpt, mychannel, "remotect", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY", 200);
 		}
@@ -1687,11 +1668,6 @@ treataslocal:
 			char mystr[10];
 
 			ast_safe_sleep(mychannel, 200);
-			/* set for all to hear */
-			if (rpt_tx_conf_add_announcer(mychannel, myrpt)) {
-				rpt_mutex_lock(&myrpt->lock);
-				goto abort;
-			}
 			snprintf(mystr, sizeof(mystr), "%04x", myrpt->lastunit);
 			myrpt->lastunit = 0;
 			ast_say_character_str(mychannel, mystr, NULL, ast_channel_language(mychannel));
@@ -2011,21 +1987,10 @@ treataslocal:
 				res = -1;
 				break;
 			}
-			if (myrpt->iofd < 0) {
-				int rxisoffhook;
-				if (dahdi_flush(myrpt->dahditxchannel) || ((rxisoffhook = dahdi_rx_offhook(myrpt->dahdirxchannel)) < 0)) {
-					myrpt->remsetting = 0;
-					ast_mutex_unlock(&myrpt->remlock);
-					res = -1;
-					break;
-				}
-				myrpt->remoterx = rxisoffhook || myrpt->tele.next != &myrpt->tele;
-			}
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_TMD700)) {
 			res = set_tmd700(myrpt);
 			setxpmr(myrpt, 0);
 		}
-
 		myrpt->remsetting = 0;
 		ast_mutex_unlock(&myrpt->remlock);
 		if (!res) {
