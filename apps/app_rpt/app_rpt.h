@@ -1026,6 +1026,8 @@ struct rpt {
 	int topkeylong;
 	struct vox vox;
 	int voxtotimer;
+	char voxtostate;
+	unsigned int patch_talking:1;
 	int linkposttimer;
 	enum keypost keypost;
 	int lastkeytimer;

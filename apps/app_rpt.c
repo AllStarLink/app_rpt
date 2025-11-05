@@ -2447,6 +2447,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* We don't want the link to free after removing from the list */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
+	ast_autoservice_start(l->pchan); /* We need to dump audio on l->chan while redialing or we receive long voice queue warnings */
 	rpt_mutex_unlock(&myrpt->lock);
 	parse_node_format(tmp, &s1, sx, sizeof(sx));
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
@@ -2477,6 +2478,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
 	}
+	ast_autoservice_stop(l->pchan);
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
 	ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
@@ -2910,6 +2912,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_request_local(myrpt, cap, RPT_RXPCHAN, "RXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
@@ -2942,6 +2945,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (rpt_request_local(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_TXPCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
