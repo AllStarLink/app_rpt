@@ -75,7 +75,19 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
 
+/*!
+ * \brief Create a conference for repeater channels to join
+ * \param myrpt Repeater structure
+ * \param type Conference type
+ */
 #define rpt_conf_create(myrpt, type) __rpt_conf_create(myrpt, type, __FILE__, __LINE__)
+
+/*!
+ * \brief Add a Local channel to a conference (based on type)
+ * \param chan Channel to add to conference - must be of type unreal.
+ * \param myrpt Repeater structure
+ * \param type Conference type
+ */
 #define rpt_conf_add(chan, myrpt, type) __rpt_conf_add(chan, myrpt, type, __FILE__, __LINE__)
 
 /*!

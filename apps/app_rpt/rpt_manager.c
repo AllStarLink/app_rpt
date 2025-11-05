@@ -7,6 +7,7 @@
 #include "asterisk/manager.h"
 #include "asterisk/pbx.h"
 #include "asterisk/cli.h" /* use RESULT_SUCCESS */
+#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"

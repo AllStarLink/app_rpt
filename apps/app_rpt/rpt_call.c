@@ -23,6 +23,7 @@
 #include "asterisk/channel.h"
 #include "asterisk/format_cache.h"
 #include "asterisk/core_unreal.h"
+#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 #include "rpt_call.h"
@@ -50,6 +51,7 @@ int rpt_disable_cdr(struct ast_channel *chan)
 		ast_log(AST_LOG_WARNING, "Local channel %s missing private\n", ast_channel_name(chan));
 		return -1;
 	}
+	ao2_ref(p, +1);
 	ao2_lock(p);
 	if (p->owner) {
 		if (ast_channel_cdr(p->owner)) {
@@ -73,6 +75,7 @@ int rpt_disable_cdr(struct ast_channel *chan)
 		}
 	}
 	ao2_unlock(p);
+	ao2_ref(p, -1);
 	return res;
 }
 

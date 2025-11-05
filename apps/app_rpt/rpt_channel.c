@@ -6,6 +6,7 @@
 #include "asterisk/format_cache.h"
 #include "asterisk/say.h"
 #include "asterisk/indications.h"
+#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
