@@ -300,8 +300,6 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(chan));
 
 	/* A subset of what rpt_make_call does... */
-	ast_set_read_format(chan, ast_format_slin);
-	ast_set_write_format(chan, ast_format_slin);
 	rpt_disable_cdr(chan);
 	ast_answer(chan);
 
