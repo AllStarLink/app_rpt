@@ -1252,8 +1252,6 @@ void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-	rpt_disable_cdr(mychannel);
-	ast_answer(mychannel);
 
 	if (rpt_conf_add_speaker(mychannel, myrpt)) {
 		ast_hangup(mychannel);
@@ -1270,8 +1268,6 @@ void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
-	rpt_disable_cdr(genchannel);
-	ast_answer(genchannel);
 
 	/* first put the channel on the conference */
 	if (rpt_conf_add_speaker(genchannel, myrpt)) {
