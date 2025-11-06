@@ -2799,9 +2799,6 @@ void rpt_links_init(struct rpt_link *l)
 		rpt_hangup(myrpt, RPT_TXCHAN); \
 	}
 
-#define IS_DAHDI_CHAN(c) (CHAN_TECH(c, "DAHDI"))
-#define IS_DAHDI_CHAN_NAME(s) (!strncasecmp(s, "DAHDI", 5))
-
 #define IS_LOCAL_CHAN(c) (CHAN_TECH(c, "Local"))
 #define IS_LOCAL_CHAN_NAME(s) (!strncasecmp(s, "Local", 5))
 
