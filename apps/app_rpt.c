@@ -2831,13 +2831,13 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN, TXCONF, RPT_CONTEXT)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
-		return -1;
-	}
-
+	/*	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN, TXCONF, RPT_CONTEXT)) {
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_DAHDITXCHAN);
+			return -1;
+		}
+	*/
 	/* Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
 	/*	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
 			res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
@@ -2866,20 +2866,21 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 			return -1;
 		}
 	*/
-	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN, TXCONF, RPT_CONTEXT)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		return -1;
-	}
+	/*	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN, TXCONF, RPT_CONTEXT)) {
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			rpt_hangup(myrpt, RPT_PARROTCHAN);
+			return -1;
+		}
+	*/
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN, TXCONF, RPT_CONTEXT)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
+		//		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
-		rpt_hangup(myrpt, RPT_VOXCHAN);
+		//		rpt_hangup(myrpt, RPT_VOXCHAN);
 		return -1;
 	}
 
@@ -2996,9 +2997,10 @@ static inline int rpt_any_hangups(struct rpt *myrpt)
 	if (ast_check_hangup(myrpt->pchannel)) {
 		return -1;
 	}
-	if (ast_check_hangup(myrpt->monchannel)) {
-		return -1;
-	}
+	/*	if (ast_check_hangup(myrpt->monchannel)) {
+			return -1;
+		}
+			*/
 	/*	if (myrpt->voxchannel && ast_check_hangup(myrpt->voxchannel)) {
 			return -1;
 		}
@@ -3785,7 +3787,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			RPT_MUTE_FRAME(f);
 		}
 
-		ismuted = dtmfed || rpt_conf_get_muted(myrpt->dahdirxchannel, myrpt);
+		ismuted = dtmfed; //|| rpt_conf_get_muted(myrpt->dahdirxchannel, myrpt);
 		dtmfed = 0;
 
 		if (myrpt->p.votertype == 1) {
@@ -4833,7 +4835,7 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_ALINKS", -1);
 	myrpt->ready = 1;
 	looptimestart = rpt_tvnow();
-
+	ast_verb(1, "I've made it to the loop");
 	while (ms >= 0) {
 		struct ast_channel *who;
 		struct ast_channel *cs[300], *cs1[300];
@@ -5345,12 +5347,13 @@ static void *rpt(void *this)
 		n = 0;
 		cs[n++] = myrpt->rxchannel;
 		cs[n++] = myrpt->pchannel;
-		cs[n++] = myrpt->monchannel;
+		cs[n++] = myrpt->txpchannel;
+		if (myrpt->monchannel)
+			cs[n++] = myrpt->monchannel;
 		if (myrpt->parrotchannel)
 			cs[n++] = myrpt->parrotchannel;
 		if (myrpt->voxchannel)
 			cs[n++] = myrpt->voxchannel;
-		cs[n++] = myrpt->txpchannel;
 		if (myrpt->txchannel != myrpt->rxchannel)
 			cs[n++] = myrpt->txchannel;
 		if (myrpt->dahditxchannel != myrpt->txchannel)
@@ -5427,21 +5430,25 @@ static void *rpt(void *this)
 		/* @@@@@@ UNLOCK @@@@@ */
 
 		if (who == myrpt->rxchannel) { /* if it was a read from rx */
+			ast_verb(1, "rxchannel Read %p", who);
 			if (rxchannel_read(myrpt, lasttx)) {
 				break;
 			}
 			continue;
 		} else if (who == myrpt->pchannel) { /* if it was a read from pseudo */
+			ast_verb(1, "pchannel Read %p", who);
 			if (pchannel_read(myrpt)) {
 				break;
 			}
 			continue;
 		} else if (who == myrpt->txchannel) { /* if it was a read from tx */
+			ast_verb(1, "txchannel Read %p", who);
 			if (txchannel_read(myrpt)) {
 				break;
 			}
 			continue;
 		} else if (who == myrpt->dahditxchannel) { /* if it was a read from pseudo-tx */
+			ast_verb(1, "dahditxchannel Read %p", who);
 			if (dahditxchannel_read(myrpt, &myfirst)) {
 				break;
 			}
@@ -5452,7 +5459,8 @@ static void *rpt(void *this)
 			break;
 		}
 
-		if (who == myrpt->monchannel) {
+		if (myrpt->monchannel && who == myrpt->monchannel) {
+			ast_verb(1, "monchannel Read %p", who);
 			if (monchannel_read(myrpt)) {
 				break;
 			}
@@ -5465,6 +5473,7 @@ static void *rpt(void *this)
 				break;
 			}
 		} else if (who == myrpt->txpchannel) { /* if it was a read from remote tx */
+			ast_verb(1, "txpchannel Read %p", who);
 			if (txpchannel_read(myrpt)) {
 				break;
 			}
