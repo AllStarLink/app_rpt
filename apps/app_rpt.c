@@ -2735,7 +2735,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		myrpt->dahditxchannel = IS_LOCAL_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
+		myrpt->localtxchannel = IS_LOCAL_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 	}
 
 	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, CONF, RPT_CONTEXT)) {
@@ -2743,8 +2743,8 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	if (!myrpt->dahditxchannel) {
-		if (rpt_request_pseudo(myrpt, cap, RPT_DAHDITXCHAN, TXCONF, RPT_CONTEXT)) {
+	if (!myrpt->localtxchannel) {
+		if (rpt_request_pseudo(myrpt, cap, RPT_DAHDITXCHAN, TXCONFL, RPT_CONTEXT)) { /* Listen only link */
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			return -1;
@@ -2928,7 +2928,7 @@ static inline int rpt_any_hangups(struct rpt *myrpt)
 	if (ast_check_hangup(myrpt->txpchannel)) {
 		return -1;
 	}
-	if (myrpt->dahditxchannel && ast_check_hangup(myrpt->dahditxchannel)) {
+	if (myrpt->localtxchannel && ast_check_hangup(myrpt->localtxchannel)) {
 		return -1;
 	}
 	return 0;
@@ -4012,7 +4012,7 @@ static inline int txchannel_read(struct rpt *myrpt)
 
 static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 {
-	struct ast_frame *f = ast_read(myrpt->dahditxchannel);
+	struct ast_frame *f = ast_read(myrpt->localtxchannel);
 	if (!f) {
 		ast_debug(1, "@@@@ rpt:Hung Up\n");
 		return -1;
@@ -4060,7 +4060,7 @@ static inline int dahditxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 		}
 		ast_write(myrpt->txchannel, f);
 	}
-	return hangup_frame_helper(myrpt->dahditxchannel, "dahditxchannel", f);
+	return hangup_frame_helper(myrpt->localtxchannel, "localtxchannel", f);
 }
 
 /*! \brief Safely hang up any channel, even if a PBX could be running on it */
@@ -4255,8 +4255,6 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			if (f->frametype == AST_FRAME_VOICE) {
 				int ismuted, n1;
 				float fac;
-
-				dahdi_bump_buffers(l->pchan, f->samples); /* Make room if needed */
 
 				fac = 1.0;
 				if (l->chan) {
@@ -4549,7 +4547,14 @@ static inline int voxchannel_read(struct rpt *myrpt)
 
 static inline int txpchannel_read(struct rpt *myrpt)
 {
-	return wait_for_hangup_helper(myrpt->txpchannel, "txpchannel");
+	struct ast_frame *f = ast_read(myrpt->txpchannel);
+	if (!f) {
+		ast_debug(1, "@@@@ rpt:Hung Up\n");
+		return -1;
+	}
+	return hangup_frame_helper(myrpt->txpchannel, "txpchannel", f);
+	/* for now, read the channel, but when done, this should never "hear" anything */
+	//	return wait_for_hangup_helper(myrpt->txpchannel, "txpchannel");
 }
 
 static inline void voxtostate_to_voxtotimer(struct rpt *myrpt)
@@ -5257,7 +5262,7 @@ static void *rpt(void *this)
 			myrpt->lastitx = x;
 			if (myrpt->p.itxctcss) {
 				if (IS_LOCAL_CHAN(myrpt->rxchannel)) {
-					dahdi_radio_set_ctcss_encode(myrpt->dahdirxchannel, !x);
+					dahdi_radio_set_ctcss_encode(myrpt->localrxchannel, !x);
 				} else if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 					snprintf(str, sizeof(str), "TXCTCSS %d", !(!x));
 					ast_sendtext(myrpt->rxchannel, str);
@@ -5297,8 +5302,8 @@ static void *rpt(void *this)
 			cs[n++] = myrpt->voxchannel;
 		if (myrpt->txchannel != myrpt->rxchannel)
 			cs[n++] = myrpt->txchannel;
-		if (myrpt->dahditxchannel != myrpt->txchannel)
-			cs[n++] = myrpt->dahditxchannel;
+		if (myrpt->localtxchannel != myrpt->txchannel)
+			cs[n++] = myrpt->localtxchannel;
 		l = myrpt->links.next;
 		while (l != &myrpt->links) {
 			if ((!l->killme) && (!l->disctime) && l->chan) {
@@ -5371,25 +5376,21 @@ static void *rpt(void *this)
 		/* @@@@@@ UNLOCK @@@@@ */
 
 		if (who == myrpt->rxchannel) { /* if it was a read from rx */
-			ast_verb(1, "rxchannel Read %p", who);
 			if (rxchannel_read(myrpt, lasttx)) {
 				break;
 			}
 			continue;
 		} else if (who == myrpt->pchannel) { /* if it was a read from pseudo */
-			ast_verb(1, "pchannel Read %p", who);
 			if (pchannel_read(myrpt)) {
 				break;
 			}
 			continue;
 		} else if (who == myrpt->txchannel) { /* if it was a read from tx */
-			ast_verb(1, "txchannel Read %p", who);
 			if (txchannel_read(myrpt)) {
 				break;
 			}
 			continue;
-		} else if (who == myrpt->dahditxchannel) { /* if it was a read from pseudo-tx */
-			ast_verb(1, "dahditxchannel Read %p", who);
+		} else if (who == myrpt->localtxchannel) { /* if it was a read from pseudo-tx */
 			if (dahditxchannel_read(myrpt, &myfirst)) {
 				break;
 			}
@@ -5401,7 +5402,6 @@ static void *rpt(void *this)
 		}
 
 		if (myrpt->monchannel && who == myrpt->monchannel) {
-			ast_verb(1, "monchannel Read %p", who);
 			if (monchannel_read(myrpt)) {
 				break;
 			}
@@ -5414,7 +5414,6 @@ static void *rpt(void *this)
 				break;
 			}
 		} else if (who == myrpt->txpchannel) { /* if it was a read from remote tx */
-			ast_verb(1, "txpchannel Read %p", who);
 			if (txpchannel_read(myrpt)) {
 				break;
 			}
@@ -5439,7 +5438,7 @@ static void *rpt(void *this)
 		rpt_hangup(myrpt, RPT_VOXCHAN);
 	}
 	rpt_hangup(myrpt, RPT_TXPCHAN);
-	if (myrpt->dahditxchannel != myrpt->txchannel) {
+	if (myrpt->localtxchannel != myrpt->txchannel) {
 		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
 	}
 	rpt_hangup_rx_tx(myrpt);
@@ -6138,17 +6137,18 @@ static int get_his_ip(struct ast_channel *chan, char *buf, size_t len)
 
 static inline int kenwood_uio_helper(struct rpt *myrpt)
 {
-	if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 3)) {
-		ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+	if (rpt_radio_set_param(myrpt->localtxchannel, myrpt, RPT_RADPAR_UIOMODE, 3)) {
+		ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->localtxchannel), strerror(errno));
 		return -1;
 	}
-	if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
-		ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+	if (rpt_radio_set_param(myrpt->localtxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
+		ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->localtxchannel), strerror(errno));
 		return -1;
 	}
-	if (dahdi_set_offhook(myrpt->dahditxchannel)) {
-		return -1;
-	}
+	/*	if (dahdi_set_offhook(myrpt->localtxchannel)) {
+			return -1;
+		}
+			*/
 	return 0;
 }
 
@@ -6898,7 +6898,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		return -1;
 	}
 
-	myrpt->dahditxchannel = NULL;
+	myrpt->localtxchannel = NULL;
 	if (myrpt->txchanname) {
 		if (__rpt_request(myrpt, cap, RPT_TXCHAN, RPT_LINK_CHAN)) {
 			rpt_mutex_unlock(&myrpt->lock);
@@ -6909,7 +6909,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
 		if (IS_LOCAL_CHAN_NAME(myrpt->rxchanname)) {
-			myrpt->dahditxchannel = myrpt->rxchannel;
+			myrpt->localtxchannel = myrpt->rxchannel;
 		}
 	}
 
@@ -6925,10 +6925,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 	ao2_ref(cap, -1);
 
-	if (!myrpt->dahdirxchannel)
-		myrpt->dahdirxchannel = myrpt->pchannel;
-	if (!myrpt->dahditxchannel)
-		myrpt->dahditxchannel = myrpt->pchannel;
+	if (!myrpt->localrxchannel)
+		myrpt->localrxchannel = myrpt->pchannel;
+	if (!myrpt->localtxchannel)
+		myrpt->localtxchannel = myrpt->pchannel;
 
 	/* first put the channel on the conference in announce/monitor mode */
 	/*	if (rpt_conf_create(myrpt->pchannel, myrpt, RPT_TXCONF, RPT_CONF_CONFANNMON)) {
@@ -6951,8 +6951,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 
 	iskenwood_pci4 = 0;
-	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->dahditxchannel)) {
-		res = rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE);
+	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->localtxchannel)) {
+		res = rpt_radio_set_param(myrpt->localtxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE);
 		/* if PCIRADIO and kenwood selected */
 		if ((!res) && (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 			if (kenwood_uio_helper(myrpt)) {
@@ -6962,20 +6962,20 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			iskenwood_pci4 = 1;
 		}
 	}
-	if (myrpt->txchannel == myrpt->dahditxchannel) {
-		dahdi_set_onhook(myrpt->dahditxchannel);
+	if (myrpt->txchannel == myrpt->localtxchannel) {
+		//		dahdi_set_onhook(myrpt->localtxchannel);
 		/* if PCIRADIO and Yaesu ft897/ICOM IC-706 selected */
 		if ((myrpt->iofd < 1) && (!res) &&
 			((!strcmp(myrpt->remoterig, REMOTE_RIG_FT897)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) ||
 				(!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_XCAT)) ||
 				(!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)))) {
-			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 1)) {
-				ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+			if (rpt_radio_set_param(myrpt->localtxchannel, myrpt, RPT_RADPAR_UIOMODE, 1)) {
+				ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->localtxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
-			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
-				ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+			if (rpt_radio_set_param(myrpt->localtxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
+				ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->localtxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
@@ -7036,19 +7036,20 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rem_rx = 0;
 	remkeyed = 0;
 	/* if we are on 2w loop and are a remote, turn EC on */
-	if (myrpt->remote && myrpt->rxchannel == myrpt->txchannel) {
-		dahdi_set_echocancel(myrpt->dahdirxchannel, 128);
-	}
-
+	/*	if (myrpt->remote && myrpt->rxchannel == myrpt->txchannel) {
+			dahdi_set_echocancel(myrpt->localrxchannel, 128);
+		}
+	*/
 	answer_newkey_helper(myrpt, chan, phone_mode);
 
-	if (myrpt->rxchannel == myrpt->dahdirxchannel) {
-		if (dahdi_rx_offhook(myrpt->dahdirxchannel) == 1) {
-			ast_indicate(chan, AST_CONTROL_RADIO_KEY);
-			myrpt->remoterx = 1;
-			remkeyed = 1;
+	/*	if (myrpt->rxchannel == myrpt->localrxchannel) {
+			if (dahdi_rx_offhook(myrpt->localrxchannel) == 1) {
+				ast_indicate(chan, AST_CONTROL_RADIO_KEY);
+				myrpt->remoterx = 1;
+				remkeyed = 1;
+			}
 		}
-	}
+	*/
 	/* look at callerid to see what node this comes from */
 	if (!ast_channel_caller(chan)->id.number.str) { /* if doesn't have caller id */
 		b1 = "0";
@@ -7302,9 +7303,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						}
 						telem = telem->next;
 					}
-					if (iskenwood_pci4 && myrpt->txchannel == myrpt->dahditxchannel) {
-						if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 1)) {
-							ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+					if (iskenwood_pci4 && myrpt->txchannel == myrpt->localtxchannel) {
+						if (rpt_radio_set_param(myrpt->localtxchannel, myrpt, RPT_RADPAR_UIODATA, 1)) {
+							ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->localtxchannel), strerror(errno));
 							return -1;
 						}
 					} else {
@@ -7320,9 +7321,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (!myrpt->remtxfreqok) {
 				rpt_telemetry(myrpt, UNAUTHTX, NULL);
 			}
-			if (iskenwood_pci4 && myrpt->txchannel == myrpt->dahditxchannel) {
-				if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
-					ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
+			if (iskenwood_pci4 && myrpt->txchannel == myrpt->localtxchannel) {
+				if (rpt_radio_set_param(myrpt->localtxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
+					ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->localtxchannel), strerror(errno));
 					return -1;
 				}
 			} else {
@@ -7401,7 +7402,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->remoteon = 0;
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_frame_queue_free(&myrpt->frame_queue);
-	if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->dahditxchannel)) {
+	if ((iskenwood_pci4) && (myrpt->txchannel == myrpt->localtxchannel)) {
 		if (kenwood_uio_helper(myrpt)) {
 			return -1;
 		}

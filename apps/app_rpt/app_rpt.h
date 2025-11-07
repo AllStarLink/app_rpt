@@ -931,7 +931,7 @@ struct rpt {
 	unsigned int parrotcnt;
 	int telemmode;
 	struct ast_channel *rxchannel,*txchannel, *monchannel, *parrotchannel;
-	struct ast_channel *pchannel,*txpchannel, *dahdirxchannel, *dahditxchannel;
+	struct ast_channel *pchannel, *txpchannel, *localrxchannel, *localtxchannel;
 	struct ast_channel *voxchannel;
 	struct rpt_frame_queue frame_queue;
 	struct rpt_tele tele;
