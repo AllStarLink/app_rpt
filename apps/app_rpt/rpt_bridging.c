@@ -92,7 +92,7 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 		case RPT_PCHAN:
 			return &myrpt->pchannel;
 		case RPT_DAHDITXCHAN:
-			return &myrpt->dahditxchannel;
+			return &myrpt->localtxchannel;
 		case RPT_MONCHAN:
 			return &myrpt->monchannel;
 		case RPT_PARROTCHAN:
@@ -246,14 +246,14 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 
 	switch (chantype) {
 	case RPT_RXCHAN:
-		myrpt->dahdirxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
+		myrpt->localrxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
 		break;
 	case RPT_TXCHAN:
 		if (flags & RPT_LINK_CHAN) {
 			/* XXX Dunno if this difference is really necessary, but this is a literal refactor of existing logic... */
-			myrpt->dahditxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
+			myrpt->localtxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
 		} else {
-			myrpt->dahditxchannel = !strcasecmp(tech, "Local") && strcasecmp(device, "pseudo") ? chan : NULL;
+			myrpt->localtxchannel = !strcasecmp(tech, "Local") && strcasecmp(device, "pseudo") ? chan : NULL;
 		}
 		break;
 	default:
@@ -275,7 +275,8 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const ch
 		return NULL;
 	}
 	rpt_disable_cdr(chan);
-	ast_answer(chan);
+	ast_call(chan, destination, RPT_DIAL_TIME);
+
 	return chan;
 }
 
@@ -292,6 +293,7 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 	} else {
 		myrpt = data;
 	}
+
 	snprintf(destination, sizeof(destination), "%s@%s", exten, context);
 	chan = ast_request("Local", cap, NULL, NULL, destination, NULL);
 	if (!chan) {
@@ -299,12 +301,20 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 		return -1;
 	}
 
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(chan));
-
-	/* A subset of what rpt_make_call does... */
 	rpt_disable_cdr(chan);
-	ast_answer(chan);
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(chan));
+	ast_call(chan, destination, RPT_DIAL_TIME);
 
+	/*	if (ast_channel_state(chan) != AST_STATE_UP) {
+			ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
+			ast_hangup(chan);
+			return -1;
+		}
+	*/
+	/* A subset of what rpt_make_call does... */
+	/*	rpt_disable_cdr(chan);
+	 *	ast_answer(chan);
+	 */
 	chanptr = rpt_chan_channel(myrpt, link, chantype);
 	*chanptr = chan;
 
@@ -312,8 +322,8 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 	case RPT_PCHAN:
 		if (!(flags & RPT_LINK_CHAN)) {
 			ast_assert(myrpt != NULL);
-			if (!myrpt->dahdirxchannel) {
-				myrpt->dahdirxchannel = chan;
+			if (!myrpt->localrxchannel) {
+				myrpt->localrxchannel = chan;
 			}
 		}
 		break;
@@ -505,7 +515,7 @@ int rpt_mon_setup(struct rpt *myrpt)
 {
 	int res;
 
-	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->dahditxchannel == myrpt->txchannel) {
+	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->localtxchannel == myrpt->txchannel) {
 		int confno = dahdi_conf_get_channo(myrpt->txchannel); /* get tx channel's port number */
 		if (confno < 0) {
 			return -1;
@@ -552,121 +562,46 @@ int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
  * \param tone DAHDI_TONE_DIALTONE, DAHDI_TONE_CONGESTION, or -1 to stop tone
  * \retval 0 on success, -1 on failure
  */
-static int rpt_play_tone(struct ast_channel *chan, int tone)
+int rpt_play_tone(struct ast_channel *chan, const char *tone)
 {
-	if (tone_zone_play_tone(ast_channel_fd(chan, 0), tone)) {
+	struct ast_tone_zone_sound *ts;
+	int res = 0;
+	ts = ast_get_indication_tone(ast_channel_zone(chan), tone);
+	if (ts) {
+		res = ast_playtones_start(chan, 0, ts->data, 0);
+		ts = ast_tone_zone_sound_unref(ts);
+	} else {
+		ast_log(LOG_WARNING, "No tone '%s' found in zone '%s'\n", tone, ast_channel_zone(chan)->country);
+		return -1;
+	}
+
+	if (res) {
 		ast_log(LOG_WARNING, "Cannot start tone on %s\n", ast_channel_name(chan));
 		return -1;
 	}
 	return 0;
 }
 
-int rpt_play_dialtone(struct ast_channel *chan)
-{
-	return rpt_play_tone(chan, DAHDI_TONE_DIALTONE);
-}
-
-int rpt_play_congestion(struct ast_channel *chan)
-{
-	return rpt_play_tone(chan, DAHDI_TONE_CONGESTION);
-}
-
 int rpt_stop_tone(struct ast_channel *chan)
 {
-	return rpt_play_tone(chan, -1);
+	ast_playtones_stop(chan);
+	return 0;
 }
 
 int rpt_set_tone_zone(struct ast_channel *chan, const char *tz)
 {
-	if (tone_zone_set_zone(ast_channel_fd(chan, 0), (char*) tz) == -1) {
-		ast_log(LOG_WARNING, "Unable to set tone zone %s on %s\n", tz, ast_channel_name(chan));
+	struct ast_tone_zone *new_zone;
+	if (!(new_zone = ast_get_indication_zone(tz))) {
+		ast_log(LOG_ERROR, "Unknown country code '%s' for tonezone. Check indications.conf for available country codes.\n", tz);
 		return -1;
 	}
-	return 0;
-}
 
-int dahdi_write_wait(struct ast_channel *chan)
-{
-	int res, i, flags;
-
-	for (i = 0; i < 20; i++) {
-		flags = DAHDI_IOMUX_WRITEEMPTY | DAHDI_IOMUX_NOWAIT;
-		res = ioctl(ast_channel_fd(chan, 0), DAHDI_IOMUX, &flags);
-		if (res) {
-			ast_log(LOG_WARNING, "DAHDI_IOMUX failed: %s\n", strerror(errno));
-			break;
-		}
-		if (flags & DAHDI_IOMUX_WRITEEMPTY) {
-			break;
-		}
-		if (ast_safe_sleep(chan, 50)) {
-			res = -1;
-			break;
-		}
+	ast_channel_lock(chan);
+	if (ast_channel_zone(chan)) {
+		ast_channel_zone_set(chan, ast_tone_zone_unref(ast_channel_zone(chan)));
 	}
-	return res;
-}
-
-int dahdi_flush(struct ast_channel *chan)
-{
-	int i = DAHDI_FLUSH_EVENT;
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_FLUSH, &i) == -1) {
-		ast_log(LOG_ERROR, "Can't flush events on %s: %s", ast_channel_name(chan), strerror(errno));
-		return -1;
-	}
-	return 0;
-}
-
-int dahdi_bump_buffers(struct ast_channel *chan, int samples)
-{
-	struct dahdi_bufferinfo bi;
-
-	/* This is a miserable kludge. For some unknown reason, which I dont have
-	   time to properly research, buffer settings do not get applied to dahdi
-	   pseudo-channels. So, if we have a need to fit more then 1 160 sample
-	   buffer into the psuedo-channel at a time, and there currently is not
-	   room, it increases the number of buffers to accommodate the larger number
-	   of samples (version 0.257 9/3/10) */
-	memset(&bi, 0, sizeof(bi));
-
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GET_BUFINFO, &bi) == -1) {
-		ast_log(LOG_ERROR, "Failed to get buffer info on %s: %s\n", ast_channel_name(chan), strerror(errno));
-		return -1;
-	}
-	if (samples > bi.bufsize && (bi.numbufs < ((samples / bi.bufsize) + 1))) {
-		bi.numbufs = (samples / bi.bufsize) + 1;
-		if (ioctl(ast_channel_fd(chan, 0), DAHDI_SET_BUFINFO, &bi)) {
-			ast_log(LOG_ERROR, "Failed to set buffer info on %s: %s\n", ast_channel_name(chan), strerror(errno));
-			return -1;
-		}
-	}
-	return 0;
-}
-
-int dahdi_rx_offhook(struct ast_channel *chan)
-{
-	struct dahdi_params par;
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GET_PARAMS, &par) == -1) {
-		ast_log(LOG_ERROR, "Can't get params on %s: %s", ast_channel_name(chan), strerror(errno));
-		return -1;
-	}
-	return par.rxisoffhook;
-}
-
-int dahdi_set_hook(struct ast_channel *chan, int offhook)
-{
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_HOOK, &offhook) == -1) {
-		ast_log(LOG_ERROR, "Can't set hook on %s: %s\n", ast_channel_name(chan), strerror(errno));
-		return -1;
-	}
-	return 0;
-}
-
-int dahdi_set_echocancel(struct ast_channel *chan, int ec)
-{
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_ECHOCANCEL, &ec)) {
-		ast_log(LOG_ERROR, "Can't set echocancel on %s: %s\n", ast_channel_name(chan), strerror(errno));
-		return -1;
-	}
+	ast_channel_zone_set(chan, ast_tone_zone_ref(new_zone));
+	ast_channel_unlock(chan);
+	new_zone = ast_tone_zone_unref(new_zone);
 	return 0;
 }

@@ -16,8 +16,9 @@ enum rpt_conf_type {
 	RPT_TXCONF, /* Local Audio */
 };
 
-#define TXCONF "TXCONF"
-#define CONF "CONF"
+#define TXCONF "TXCONF"	  /* TX Conference extension */
+#define TXCONFL "TXCONFL" /* TX Conference Listen only extension */
+#define CONF "CONF"		  /* Repeater Conference extension */
 #define RPT_CONTEXT "repeater"
 
 /* Uses same flag name style as DAHDI_CONF flags, since that's what these are based on */
@@ -97,6 +98,27 @@ int rpt_equate_tx_conf(struct rpt *myrpt);
 
 #define rpt_tx_conf_add_announcer(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_TXCONF, RPT_CONF_CONFANN)
 
+/*!
+ * \param chan Channel to play tone on
+ * \param tone tone type (e.g., "dial", "congestion")
+ * \retval 0 on success, -1 on failure
+ */
+int rpt_play_tone(struct ast_channel *chan, const char *tone);
+
+/*!
+ * \brief Play congestion on a channel
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+#define rpt_play_congestion(chan) rpt_play_tone(chan, "congestion")
+
+/*!
+ * \brief Play dialtone on a channel
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+#define rpt_play_dialtone(chan) rpt_play_tone(chan, "dial")
+
 /*! \note Used in app_rpt.c */
 int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel);
 
@@ -115,20 +137,6 @@ int rpt_parrot_add(struct rpt *myrpt);
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt);
 
 /*!
- * \brief Play dialtone on a channel
- * \param chan
- * \retval 0 on success, -1 on failure
- */
-int rpt_play_dialtone(struct ast_channel *chan);
-
-/*!
- * \brief Play congestion tone on a channel
- * \param chan
- * \retval 0 on success, -1 on failure
- */
-int rpt_play_congestion(struct ast_channel *chan);
-
-/*!
  * \brief Stop playing tones on a channel
  * \param chan
  * \retval 0 on success, -1 on failure
@@ -141,59 +149,3 @@ int rpt_stop_tone(struct ast_channel *chan);
  * \retval -1 on failure, 0 on success
  */
 int rpt_set_tone_zone(struct ast_channel *chan, const char *tz);
-
-/*!
- * \brief Wait for the DAHDI driver to physically write all audio to the hardware
- * \note Up to a max of 1 second
- * \note Only use with DAHDI channels!
- * \param chan
- * \retval 0 on success, -1 on failure
- */
-int dahdi_write_wait(struct ast_channel *chan);
-
-/*!
- * \brief Flush events on a DAHDI channel
- * \note Only use with DAHDI channels!
- * \param chan
- * \retval 0 on success, -1 on failure
- */
-int dahdi_flush(struct ast_channel *chan);
-
-/*!
- * \brief Increase buffer space on DAHDI channel, if needed to accommodate samples
- * \note Only use with DAHDI channels!
- * \param chan
- * \param samples
- * \retval 0 on success, -1 on failure
- */
-int dahdi_bump_buffers(struct ast_channel *chan, int samples);
-
-/*!
- * \brief Get value of rxisoffhook
- * \note Only use with DAHDI channels!
- * \param chan
- * \retval -1 on failure
- * \retval 0 if on hook, 1 if off hook
- */
-int dahdi_rx_offhook(struct ast_channel *chan);
-
-/*!
- * \brief Set on/off hook state
- * \note Only use with DAHDI channels!
- * \param chan
- * \param offhook 1 for off hook, 0 for on hook
- * \retval -1 on failure
- * \retval 0 if on hook, 1 if off hook
- */
-int dahdi_set_hook(struct ast_channel *chan, int offhook);
-
-#define dahdi_set_offhook(chan) dahdi_set_hook(chan, 1)
-#define dahdi_set_onhook(chan) dahdi_set_hook(chan, 0)
-
-/*!
- * \brief Set echo cancellation on DAHDI channel
- * \param chan
- * \param ec 0 to disable, non-zero to enable
- * \retval 0 on success, -1 on failure
- */
-int dahdi_set_echocancel(struct ast_channel *chan, int ec);

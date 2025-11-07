@@ -653,8 +653,6 @@ static int send_tone_telemetry(struct ast_channel *chan, const char *tonestring)
 
 	ast_stopstream(chan);
 
-	/* Wait for the DAHDI driver to physically write the tone blocks to the hardware */
-	res = dahdi_write_wait(chan);
 	return res;
 }
 
@@ -1276,6 +1274,7 @@ void *rpt_tele_thread(void *this)
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
+
 	switch (mytele->mode) {
 	case ID1:
 	case PLAYBACK:
@@ -1976,21 +1975,18 @@ treataslocal:
 				res = -1;
 				break;
 			}
-			if (myrpt->iofd < 0) {
-				int rxisoffhook;
-				if (dahdi_flush(myrpt->dahditxchannel) || ((rxisoffhook = dahdi_rx_offhook(myrpt->dahdirxchannel)) < 0)) {
-					myrpt->remsetting = 0;
-					ast_mutex_unlock(&myrpt->remlock);
-					res = -1;
-					break;
-				}
-				myrpt->remoterx = rxisoffhook || myrpt->tele.next != &myrpt->tele;
-			}
+			/*			if (myrpt->iofd < 0) {
+							int rxisoffhook;
+							if (dahdi_flush(myrpt->dahditxchannel) || ((rxisoffhook = dahdi_rx_offhook(myrpt->localrxchannel)) <
+			   0)) { myrpt->remsetting = 0; ast_mutex_unlock(&myrpt->remlock); res = -1; break;
+							}
+							myrpt->remoterx = rxisoffhook || myrpt->tele.next != &myrpt->tele;
+						}
+			*/
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_TMD700)) {
 			res = set_tmd700(myrpt);
 			setxpmr(myrpt, 0);
 		}
-
 		myrpt->remsetting = 0;
 		ast_mutex_unlock(&myrpt->remlock);
 		if (!res) {
