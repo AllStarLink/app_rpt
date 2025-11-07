@@ -1252,8 +1252,6 @@ void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-	rpt_disable_cdr(mychannel);
-	ast_answer(mychannel);
 
 	genchannel = rpt_request_pseudo_chan(cap, CONF, RPT_CONTEXT);
 	ao2_ref(cap, -1);
@@ -1264,8 +1262,6 @@ void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(genchannel));
-	rpt_disable_cdr(genchannel);
-	ast_answer(genchannel);
 
 	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
 		ast_hangup(mychannel);
