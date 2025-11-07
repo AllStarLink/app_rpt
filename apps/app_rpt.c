@@ -2831,13 +2831,13 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	}
 
-	/*	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN, TXCONF, RPT_CONTEXT)) {
-			rpt_hangup_rx_tx(myrpt);
-			rpt_hangup(myrpt, RPT_PCHAN);
-			rpt_hangup(myrpt, RPT_DAHDITXCHAN);
-			return -1;
-		}
-	*/
+	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN, TXCONFL, RPT_CONTEXT)) {
+		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
+		return -1;
+	}
+
 	/* Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
 	/*	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
 			res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
@@ -2852,20 +2852,20 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	*/
 	/* Need to verify always setting MONCHAN to TXCONF is "ok" or how to deal at dialtime*/
-	/*	if (rpt_mon_setup(myrpt)) {
-			rpt_hangup_rx_tx(myrpt);
-			rpt_hangup(myrpt, RPT_PCHAN);
-			rpt_hangup(myrpt, RPT_MONCHAN);
-			return -1;
-		}
+	/*		if (rpt_mon_setup(myrpt)) {
+				rpt_hangup_rx_tx(myrpt);
+				rpt_hangup(myrpt, RPT_PCHAN);
+				rpt_hangup(myrpt, RPT_MONCHAN);
+				return -1;
+			}
 	*/
 	/*	if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN)) {
-			rpt_hangup_rx_tx(myrpt);
-			rpt_hangup(myrpt, RPT_PCHAN);
-			rpt_hangup(myrpt, RPT_MONCHAN);
-			return -1;
-		}
-	*/
+				rpt_hangup_rx_tx(myrpt);
+				rpt_hangup(myrpt, RPT_PCHAN);
+				rpt_hangup(myrpt, RPT_MONCHAN);
+				return -1;
+			}
+		*/
 	/*	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN, TXCONF, RPT_CONTEXT)) {
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
@@ -2878,23 +2878,12 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN, TXCONF, RPT_CONTEXT)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		//		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
 		//		rpt_hangup(myrpt, RPT_VOXCHAN);
 		return -1;
 	}
 
-	/* make a conference for the tx */
-	/*	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF, RPT_CONF_CONF | RPT_CONF_TALKER)) {
-			rpt_hangup_rx_tx(myrpt);
-			rpt_hangup(myrpt, RPT_PCHAN);
-			rpt_hangup(myrpt, RPT_MONCHAN);
-			rpt_hangup(myrpt, RPT_PARROTCHAN);
-			rpt_hangup(myrpt, RPT_VOXCHAN);
-			rpt_hangup(myrpt, RPT_TXPCHAN);
-			return -1;
-		}
-	*/
 	return 0;
 }
 
