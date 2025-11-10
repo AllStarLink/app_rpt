@@ -985,50 +985,70 @@ static size_t writefunction(char *contents, size_t size, size_t nmemb, void *use
 	return ast_str_append(buffer, 0, "%.*s", (int) (size * nmemb), contents);
 }
 
-static void *perform_statpost(void *stats_url)
+// Function to check if HTTP status code is in 2xx range
+static bool is_http_success(int code)
 {
-	char *str;
+	return (code >= 200 && code <= 299);
+}
+
+static void *perform_statpost(void *data)
+{
+	int failed = 0;
 	long rescode = 0;
 	CURL *curl = curl_easy_init();
 	CURLcode res;
 	char error_buffer[CURL_ERROR_SIZE];
 	struct ast_str *response_msg;
+	struct statpost *sp = (struct statpost *) data;
+	struct rpt *myrpt = sp->myrpt;
 
 	if (!curl) {
-		ast_free(stats_url);
+		ast_free(sp->stats_url);
+		ast_free(sp);
 		return NULL;
 	}
 
 	response_msg = ast_str_create(50);
 	if (!response_msg) {
-		ast_free(stats_url);
+		ast_free(sp->stats_url);
+		ast_free(sp);
 		curl_easy_cleanup(curl);
 		return NULL;
 	}
-
-	str = (char *) stats_url;
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &response_msg);
 	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-	curl_easy_setopt(curl, CURLOPT_URL, str);
+	curl_easy_setopt(curl, CURLOPT_URL, sp->stats_url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
 
 	res = curl_easy_perform(curl);
 	if (res != CURLE_OK) {
 		if (*error_buffer) { /* Anything in the error buffer? */
-			ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", (char *) stats_url, error_buffer);
+			failed = 1;
+			if (!myrpt->last_statpost_failed) {
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", sp->stats_url, error_buffer);
+			}
 		} else {
-			ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", (char *) stats_url, curl_easy_strerror(res));
+			failed = 1;
+			if (!myrpt->last_statpost_failed) {
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", sp->stats_url, curl_easy_strerror(res));
+			}
 		}
 	} else {
 		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rescode);
-		if (rescode != 200) {
-			ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld : %s\n", (char *) stats_url, rescode, ast_str_buffer(response_msg));
+		if (!is_http_success(rescode)) {
+			failed = 1;
+			if (!myrpt->last_statpost_failed) {
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld : %s\n", sp->stats_url, rescode, ast_str_buffer(response_msg));
+			}
 		}
 	}
+	myrpt->last_statpost_failed = ((failed) ? 1 : 0);
+
 	ast_debug(3, "Response: %s\n", ast_str_buffer(response_msg));
-	ast_free(stats_url); /* Free here since parent is not responsible for it. */
+	ast_free(sp->stats_url); /* Free here since parent is not responsible for it. */
+	ast_free(sp);
 	ast_free(response_msg);
 	curl_easy_cleanup(curl);
 	return NULL;
@@ -1036,33 +1056,39 @@ static void *perform_statpost(void *stats_url)
 
 static void statpost(struct rpt *myrpt, char *pairs)
 {
-	char *str;
 	time_t now;
 	unsigned int seq;
 	int res, len;
 	pthread_t statpost_thread;
+	struct statpost *sp;
 
 	if (!myrpt->p.statpost_url) {
 		return;
 	}
+	sp = ast_malloc(sizeof(struct statpost));
+	if (!sp) {
+		return;
+	}
 
 	len = strlen(pairs) + strlen(myrpt->p.statpost_url) + 200;
-	str = ast_malloc(len);
+	sp->stats_url = ast_malloc(len);
 
 	ast_mutex_lock(&myrpt->statpost_lock);
 	seq = ++myrpt->statpost_seqno;
 	ast_mutex_unlock(&myrpt->statpost_lock);
 
 	time(&now);
-	snprintf(str, len, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq,
+	sp->myrpt = myrpt;
+	snprintf(sp->stats_url, len, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq,
 		pairs ? "&" : "", S_OR(pairs, ""));
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
-	ast_debug(4, "Making statpost to %s\n", str);
-	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, (void *) str);
+	ast_debug(4, "Making statpost to %s\n", sp->stats_url);
+	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, (void *) sp);
 	if (res) {
 		ast_log(LOG_ERROR, "Error creating statpost thread: %s\n", strerror(res));
-		ast_free(str);
+		ast_free(sp->stats_url);
+		ast_free(sp);
 	}
 }
 
