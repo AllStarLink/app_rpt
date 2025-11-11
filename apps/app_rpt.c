@@ -1462,6 +1462,7 @@ void *rpt_call(void *this)
 		ast_channel_accountcode_set(mychannel, myrpt->p.acctcode);
 	ast_channel_priority_set(mychannel, 1);
 	ast_channel_undefer_dtmf(mychannel);
+	ast_channel_talking(mychannel);
 	if (rpt_call_bridge_setup(myrpt, mychannel)) {
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->callmode = CALLMODE_DOWN;
@@ -2801,7 +2802,7 @@ void rpt_links_init(struct rpt_link *l)
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
 	int res = 0;
-
+	/* Setup the extensions for the repeater conferences */
 	if (!ast_context_find_or_create(NULL, NULL, RPT_CONTEXT, AST_MODULE)) {
 		ast_log(LOG_ERROR, "Failed to create %s dialplan context.\n", RPT_CONTEXT);
 		return -1;
@@ -2859,7 +2860,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	/* Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
+	/*! \todo Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
 	/*	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
 			res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
 		} else {
@@ -2872,7 +2873,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 			return -1;
 		}
 	*/
-	/* Need to verify always setting MONCHAN to TXCONF is "ok" or how to deal at dialtime*/
+	/*! \todo Need to verify always setting MONCHAN to TXCONF is "ok" or how to deal at dialtime*/
 	/*		if (rpt_mon_setup(myrpt)) {
 				rpt_hangup_rx_tx(myrpt);
 				rpt_hangup(myrpt, RPT_PCHAN);
@@ -2887,6 +2888,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 				return -1;
 			}
 		*/
+	/*! \todo Can use ConfBridge talker indication inplace of VOX */
 	/*	if (rpt_request_pseudo(myrpt, cap, RPT_VOXCHAN, TXCONF, RPT_CONTEXT)) {
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
