@@ -1074,6 +1074,7 @@ struct rpt {
 	struct timeval paging;
 	char deferid;
 	struct timeval lastlinktime;
+	unsigned int last_statpost_failed:1;
 };
 
 struct nodelog {
@@ -1082,6 +1083,11 @@ struct nodelog {
 	time_t	timestamp;
 	char archivedir[MAXNODESTR];
 	char str[MAXNODESTR * 2];
+};
+
+struct statpost {
+	struct rpt *myrpt;
+	char *stats_url;
 };
 
 /*! \brief Whether a channel is using a specified technology */
