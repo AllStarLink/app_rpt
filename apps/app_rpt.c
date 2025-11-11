@@ -2800,6 +2800,31 @@ void rpt_links_init(struct rpt_link *l)
 
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
+	int res = 0;
+
+	if (!ast_context_find_or_create(NULL, NULL, RPT_CONTEXT, AST_MODULE)) {
+		ast_log(LOG_ERROR, "Failed to create %s dialplan context.\n", RPT_CONTEXT);
+		return -1;
+	}
+
+	res = ast_add_extension(RPT_CONTEXT, 1, CONF, 1, NULL, NULL, "Answer", "", NULL, "app_rpt");
+	res |= ast_add_extension(RPT_CONTEXT, 1, CONF, 2, NULL, NULL, "ConfBridge", CONF, NULL, "app_rpt");
+	res |= ast_add_extension(RPT_CONTEXT, 1, CONF, 3, NULL, NULL, "Hangup", "", NULL, "app_rpt");
+
+	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONF, 1, NULL, NULL, "Answer", "", NULL, "app_rpt");
+	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONF, 2, NULL, NULL, "ConfBridge", TXCONF, NULL, "app_rpt");
+	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONF, 3, NULL, NULL, "Hangup", "", NULL, "app_rpt");
+
+	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 1, NULL, NULL, "Answer", "", NULL, "app_rpt");
+	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 2, NULL, NULL, "Set", "CONFBRIDGE(user,startmuted)=yes", NULL, "app_rpt");
+	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 3, NULL, NULL, "ConfBridge", TXCONF, NULL, "app_rpt");
+	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 4, NULL, NULL, "Hangup", "", NULL, "app_rpt");
+
+	if (res) {
+		ast_log(LOG_ERROR, "Failed to add Repeater Conference extensions\n");
+		return -1;
+	}
+
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
 	}
