@@ -733,7 +733,6 @@ struct rpt_conf {
 	struct {
 		int conf;
 		int txconf;
-		int teleconf; /*!< \brief telemetry conference id */
 	} dahdiconf;
 };
 
