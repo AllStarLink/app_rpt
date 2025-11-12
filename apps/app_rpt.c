@@ -1253,8 +1253,7 @@ void *rpt_call(void *this)
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 
-	//	genchannel = rpt_request_pseudo_chan(cap, CONF, RPT_CONTEXT);
-	genchannel = ast_request("CBAnn", cap, NULL, NULL, CONF, NULL);
+	genchannel = rpt_request_pseudo_chan(cap, CONF, RPT_CONTEXT);
 	ao2_ref(cap, -1);
 	if (!genchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -1262,6 +1261,7 @@ void *rpt_call(void *this)
 		myrpt->callmode = CALLMODE_DOWN;
 		pthread_exit(NULL);
 	}
+	ast_autoservice_start(genchannel);
 	ast_debug(1, "Created announcer channel '%s' to conference bridge '%s'\n", ast_channel_name(genchannel), CONF);
 
 	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
