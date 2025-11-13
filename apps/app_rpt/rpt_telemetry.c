@@ -1286,6 +1286,13 @@ void *rpt_tele_thread(void *this)
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
+	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
+		ast_log(LOG_WARNING, "Unable to set tone zone (mode: %d)\n", mytele->mode);
+		ast_hangup(mychannel);
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
+	}
+
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	rpt_disable_cdr(mychannel);
 	ast_answer(mychannel);
