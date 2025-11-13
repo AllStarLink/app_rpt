@@ -1577,6 +1577,7 @@ void *rpt_tele_thread(void *this)
 treataslocal:
 		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lbuf) {
+			rpt_mutex_lock(&myrpt->lock);
 			goto abort;
 		}
 		rpt_mutex_lock(&myrpt->lock);
@@ -1586,6 +1587,7 @@ treataslocal:
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
 			ast_free(lbuf);
+			rpt_mutex_lock(&myrpt->lock);
 			goto abort;
 		}
 		/* parse em */
@@ -2379,12 +2381,12 @@ treataslocal:
 			NULL,								 /* Sorting function. NULL means the list will not be sorted */
 			NULL);								 /* Comparison function */
 		if (!links_copy) {
+			rpt_mutex_lock(&myrpt->lock);
 			goto abort;
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* make our own list of links */
 		if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
-			rpt_mutex_unlock(&myrpt->lock);
 			ao2_cleanup(links_copy);
 			goto abort;
 		}
@@ -2442,6 +2444,7 @@ treataslocal:
 	case FULLSTATUS:
 		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lbuf) {
+			rpt_mutex_lock(&myrpt->lock);
 			goto abort;
 		}
 		rpt_mutex_lock(&myrpt->lock);
@@ -2451,6 +2454,7 @@ treataslocal:
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
 			ast_free(lbuf);
+			rpt_mutex_lock(&myrpt->lock);
 			goto abort;
 		}
 		/* parse em */
