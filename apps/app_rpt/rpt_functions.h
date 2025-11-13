@@ -39,3 +39,9 @@ enum rpt_function_response function_userout(struct rpt *myrpt, char *param, char
 
 /*! \brief Execute shell command */
 enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source, struct rpt_link *mylink);
+
+/*! \brief Find rpt_link by name for AO2 callback*/
+int rpt_link_find_by_name(void *obj, void *arg, int flags);
+
+/*! \brief Send text to a link for AO2 callback */
+int rpt_sendtext_cb(void *obj, void *arg, int flags);
