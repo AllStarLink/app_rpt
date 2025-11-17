@@ -1432,13 +1432,13 @@ static struct ast_frame *TLB_xread(struct ast_channel *ast)
 		p->hangup = 0;
 	}
 	if (!p->last_firstheard && p->firstheard) {
-		struct ast_frame fra = {
+		struct ast_frame f = {
 			.frametype = AST_FRAME_CONTROL,
 			.subclass.integer = AST_CONTROL_ANSWER,
 			.src = __PRETTY_FUNCTION__,
 		};
 
-		ast_queue_frame(ast, &fra);
+		ast_queue_frame(ast, &f);
 		p->last_firstheard = 1;
 	}
 	if (p->codec_change) {
@@ -1479,13 +1479,13 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		p->hangup = 0;
 	}
 	if (!p->last_firstheard && p->firstheard) {
-		struct ast_frame fra = {
+		struct ast_frame f = {
 			.frametype = AST_FRAME_CONTROL,
 			.subclass.integer = AST_CONTROL_ANSWER,
 			.src = __PRETTY_FUNCTION__,
 		};
 
-		ast_queue_frame(ast, &fra);
+		ast_queue_frame(ast, &f);
 		p->last_firstheard = 1;
 	}
 	ast_mutex_lock(&p->lock);
@@ -1509,16 +1509,16 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 
 	if (p->textq.qe_forw != &p->textq) {
-		struct ast_frame fra = {
+		struct ast_frame f = {
 			.frametype = AST_FRAME_TEXT,
 			.src = __PRETTY_FUNCTION__,
 		};
 
 		textq = p->textq.qe_forw;
 		remque((struct qelem *) textq);
-		fra.data.ptr = ast_str_buffer(textq->buf);
-		fra.datalen = ast_str_strlen(textq->buf) + 1;
-		ast_queue_frame(ast, &fra);
+		f.data.ptr = ast_str_buffer(textq->buf);
+		f.datalen = ast_str_strlen(textq->buf) + 1;
+		ast_queue_frame(ast, &f);
 		ast_free(textq->buf);
 		ast_free(textq);
 	}
@@ -2077,7 +2077,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 			TLB_node_key->p = instp->confp;
 		} else {
 			if (p == NULL) { /* if a new inbound call */
-				struct ast_frame fr = {
+				struct ast_frame f = {
 					.frametype = AST_FRAME_CONTROL,
 					.subclass.integer = AST_CONTROL_ANSWER,
 					.src = __PRETTY_FUNCTION__,
@@ -2097,7 +2097,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 					ast_mutex_unlock(&instp->lock);
 					return -1;
 				}
-				ast_queue_frame(chan, &fr);
+				ast_queue_frame(chan, &f);
 			} else {
 				TLB_node_key->p = p;
 				ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
