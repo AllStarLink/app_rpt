@@ -985,7 +985,7 @@ static size_t writefunction(char *contents, size_t size, size_t nmemb, void *use
 	return ast_str_append(buffer, 0, "%.*s", (int) (size * nmemb), contents);
 }
 
-// Function to check if HTTP status code is in 2xx range
+/* Function to check if HTTP status code is in 2xx range */
 static bool is_http_success(int code)
 {
 	return (code >= 200 && code <= 299);
