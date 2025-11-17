@@ -272,7 +272,6 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap)
 	}
 	rpt_disable_cdr(chan);
 	ast_answer(chan);
-
 	return chan;
 }
 
