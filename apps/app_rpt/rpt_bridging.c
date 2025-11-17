@@ -590,7 +590,7 @@ int rpt_set_tone_zone(struct ast_channel *chan, const char *tz)
 	}
 	ast_channel_zone_set(chan, ast_tone_zone_ref(new_zone));
 	ast_channel_unlock(chan);
-	new_zone = ast_tone_zone_unref(new_zone);
+	ast_tone_zone_unref(new_zone);
 	return 0;
 }
 
