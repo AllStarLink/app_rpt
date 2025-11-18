@@ -4985,24 +4985,30 @@ static void *rpt(void *this)
 		if ((myrpt->p.duplex < 2) && myrpt->keyed && !myrpt->p.linktolink && !myrpt->p.dias)
 			totx = 0;
 
-		/* filter remote unkey for picket fencing */
+		/* reset the remote_time_out_reset_unkey_interval_timer.
+		 * remote_time_out_reset_unkey_interval_timer is a filter for noisy/short remote unkey.
+		 */
 		if (!myrpt->totimer && myrpt->remrx) {
 			myrpt->remote_time_out_reset_unkey_interval_timer = myrpt->p.time_out_reset_unkey_interval;
 		}
 
-		/* If unkey, set the tounkeyed flag start the unkey timer */
+		/* If unkey, set the tounkeyed flag and start the unkey timer.
+		 * tounkeyed indicates a leading edge of unkeying and remains true
+		 * once the time_out_reset_unkey_interval_timer has expired.
+		 * If unkeyed before the timer expires, tounkeyed resets.
+		 */
 		if (!myrpt->totimer && !myrpt->tounkeyed && !myrpt->keyed) {
 			myrpt->time_out_reset_unkey_interval_timer = myrpt->p.time_out_reset_unkey_interval;
 			myrpt->tounkeyed = 1;
 		}
-		/* if keyed up and the unkey timer is not finished, reset the tounkeyed flag */
+		/* if keyed up and the unkey timer is not expired, reset the tounkeyed flag */
 		if (myrpt->tounkeyed && myrpt->keyed && myrpt->time_out_reset_unkey_interval_timer) {
 			myrpt->tounkeyed = 0;
 		}
-		/* If the user rekeys at at any time after a time out condition, the time out timer
-		 * will be reset here.
-		 *
-		 * Note: totx will have been forced to FALSE in the code due to the timeout condition
+		/* If the user rekeys at any time after a time out condition, the time out timer
+		 * will be reset here.  unkey/rekey times depend on time_out_reset_unkey_interval and
+		 * time_out_reset_kerchunk_interval configuration parameters.  If time_out_reset_unkey_interval is
+		 * not configured, the time out timer will be reset immediately on a local rekey.
 		 *
 		 *  NB: The time between the time out condition and when the user rekeys could be a very, very long time!
 		 */
@@ -5015,10 +5021,11 @@ static void *rpt(void *this)
 				/* Enforce a minimum time the RX must remain unkeyed */
 				if (myrpt->remrx) {
 					/* remrx-override of time_out_reset_unkey_interval:
-					 * Test for remote link traffic during time out condition A rekey during which lasts for
-					 *  time_out_reset_kerchunk_interval will take priority over the
-					 *  time_out_reset_unkey_interval_timer time_out_reset_kerchunk_interval
-					 *  enforces a minimum time the RX must be keyed before resetting the TOT.
+					 * Test for remote link traffic during time out condition. A local rekey which lasts for
+					 *  time_out_reset_kerchunk_interval after the time_out_reset_unkey_interval_timer is satisfied will
+					 * *  time_out_reset_unkey_interval_timer. time_out_reset_kerchunk_interval reset the timeout time. If both
+					 * time_out_reset_unkey_interval_timer and remote_time_out_reset_unkey_interval_timer are expired, the timeout
+					 * timer will be reset.
 					 *
 					 * Note: remrx_override doesn't have any effect when myrpt->p.timeout_reset_unkey_interval is set to zero.
 					 * In that case the traditional time out timer reset behaviour will apply,
@@ -5033,7 +5040,7 @@ static void *rpt(void *this)
 				} else if (!myrpt->time_out_reset_unkey_interval_timer && !myrpt->remote_time_out_reset_unkey_interval_timer) {
 					do_tot_reset = 1;
 				}
-			} else if (!totx) {
+			} else if (!totx || (myrpt->tounkeyed && myrpt->keyed)) {
 				/* time_out_reset_unkey_interval is not configured (backward compatibility) */
 				do_tot_reset = 1;
 			}
@@ -5048,11 +5055,13 @@ static void *rpt(void *this)
 				continue;
 			}
 		}
-
+		/* Disable the local transmitter if we are timed out
+		 *  ***** From this point forward, totx will be FALSE
+		 *  if in the timed out condition
+		 */
 		totx = totx && myrpt->totimer;
 		/* if timed-out and not said already, say it */
 		if (!myrpt->totimer && !myrpt->tonotify) {
-			ast_debug(6, "TIMEOUT TRACE: Notify w/telemetry\n");
 			myrpt->tonotify = 1;
 			myrpt->timeouts++;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -5064,10 +5073,6 @@ static void *rpt(void *this)
 			rpt_mutex_lock(&myrpt->lock);
 		}
 		/* If timed-out and in circuit busy after call, teardown the call */
-		/* Disable the local transmitter if we are timed out
-		 *  ***** From this point forward, totx will be FALSE
-		 *  if in the timed out condition
-		 */
 		if (!totx && !myrpt->totimer && (myrpt->callmode == CALLMODE_FAILED)) {
 			ast_debug(1, "timed-out and in circuit busy after call\n");
 			myrpt->callmode = CALLMODE_DOWN;
