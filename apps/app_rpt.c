@@ -4970,9 +4970,7 @@ static void *rpt(void *this)
 		/* If not in time out condition and not wanting to transmit */
 		if (!totx && myrpt->totimer) {
 			/* Note: This is called every time through the loop when not wanting to transmit and not in the timed out condition
-			 * Need to be careful about logging here
 			 * This is the execution path taken when a user unkeys when not timed out to intentionally reset the time out timer
-			 * There is a 100mS "filter" for debugging should only trigger on the first time the down counter is initialized
 			 */
 			myrpt->totimer = myrpt->p.totime;
 			myrpt->tounkeyed = 0;
@@ -5006,7 +5004,7 @@ static void *rpt(void *this)
 			myrpt->tounkeyed = 0;
 		}
 		/* If the user rekeys at any time after a time out condition, the time out timer
-		 * will be reset here.  unkey/rekey times depend on time_out_reset_unkey_interval and
+		 * will be reset here.  unkey/key times depend on time_out_reset_unkey_interval and
 		 * time_out_reset_kerchunk_interval configuration parameters.  If time_out_reset_unkey_interval is
 		 * not configured, the time out timer will be reset immediately on a local rekey.
 		 *
@@ -5018,18 +5016,17 @@ static void *rpt(void *this)
 
 			/* If time_out_reset_unkey_interval is configured */
 			if (myrpt->p.time_out_reset_unkey_interval) {
-				/* Enforce a minimum time the RX must remain unkeyed */
 				if (myrpt->remrx) {
 					/* remrx-override of time_out_reset_unkey_interval:
 					 * Test for remote link traffic during time out condition. A local rekey which lasts for
 					 *  time_out_reset_kerchunk_interval after the time_out_reset_unkey_interval_timer is satisfied will
-					 * *  time_out_reset_unkey_interval_timer. time_out_reset_kerchunk_interval reset the timeout time. If both
-					 * time_out_reset_unkey_interval_timer and remote_time_out_reset_unkey_interval_timer are expired, the timeout
-					 * timer will be reset.
+					 *  reset the timeout time. Additionally, if both time_out_reset_unkey_interval_timer and
+					 * remote_time_out_reset_unkey_interval_timer are expired (aka no keyups from any source),
+					 * the timeout timer will be reset.
 					 *
-					 * Note: remrx_override doesn't have any effect when myrpt->p.timeout_reset_unkey_interval is set to zero.
+					 * Note: remrx-override doesn't have any effect when myrpt->p.timeout_reset_unkey_interval is set to zero.
 					 * In that case the traditional time out timer reset behaviour will apply,
-					 * and the TOT timer will get reset with no delay when the user unkeys and rekeys in a time out condition
+					 * and the timeout timer will get reset with no delay when the user unkeys and rekeys in a time out condition
 					 * with a active signal from any link.
 					 */
 					if (myrpt->p.time_out_reset_kerchunk_interval && !myrpt->time_out_reset_unkey_interval_timer) {
@@ -5206,7 +5203,7 @@ static void *rpt(void *this)
 
 			/* first put the channel on the conference in announce mode */
 			if (rpt_conf_add_announcer_monitor(myrpt->parrotchannel, myrpt)) {
-				ast_mutex_unlock(&myrpt->lock);
+				rpt_mutex_unlock(&myrpt->lock);
 				break;
 			}
 
