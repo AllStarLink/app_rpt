@@ -908,7 +908,7 @@ struct rpt {
 	char remotetx;
 	char remoteon;
 	char remtxfreqok;
-	char tounkeyed;
+	unsigned int tounkeyed:1;
 	char tonotify;
 	char dtmfbuf[MAXDTMF];
 	struct ast_str *macrobuf;
@@ -939,7 +939,8 @@ struct rpt {
 	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
 	int calldigittimer;
 	struct rpt_conf rptconf;
-	int tailtimer, totimer, time_out_reset_unkey_interval_timer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
+	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
+	int remote_time_out_reset_unkey_interval_timer, time_out_reset_unkey_interval_timer;
 	enum patch_call_mode callmode;
 	int mustid,tailid;
 	int rptinacttimer;
