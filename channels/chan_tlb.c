@@ -948,10 +948,8 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 		return NULL;
 	}
 
-	pvt = ast_malloc(sizeof(struct TLB_pvt));
+	pvt = ast_calloc(1, sizeof(struct TLB_pvt));
 	if (pvt) {
-		memset(pvt, 0, sizeof(struct TLB_pvt));
-
 		ast_mutex_init(&pvt->lock);
 		sprintf(stream, "%s-%lu", (char *) data, instances[n]->seqno++);
 		strcpy(pvt->stream, stream);
@@ -963,8 +961,6 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 
 		pvt->textq.qe_forw = &pvt->textq;
 		pvt->textq.qe_back = &pvt->textq;
-		pvt->codec_change = 0;
-		pvt->hangup = 0;
 
 		pvt->keepalive = KEEPALIVE_TIME;
 		pvt->instp = instances[n];
@@ -1436,16 +1432,20 @@ static struct ast_frame *TLB_xread(struct ast_channel *ast)
 		p->hangup = 0;
 	}
 	if (!p->last_firstheard && p->firstheard) {
-		struct ast_frame fra = {
+		struct ast_frame f = {
 			.frametype = AST_FRAME_CONTROL,
 			.subclass.integer = AST_CONTROL_ANSWER,
 			.src = __PRETTY_FUNCTION__,
 		};
 
-		ast_queue_frame(ast, &fra);
-		p->firstheard = 0;
+		ast_queue_frame(ast, &f);
 		p->last_firstheard = 1;
 	}
+	if (p->codec_change) {
+		tlb_set_nativeformats(ast, p->txcodec, p->rxcodec);
+		p->codec_change = 0;
+	}
+
 	return &ast_null_frame;
 }
 
@@ -1479,14 +1479,13 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		p->hangup = 0;
 	}
 	if (!p->last_firstheard && p->firstheard) {
-		struct ast_frame fra = {
+		struct ast_frame f = {
 			.frametype = AST_FRAME_CONTROL,
 			.subclass.integer = AST_CONTROL_ANSWER,
 			.src = __PRETTY_FUNCTION__,
 		};
 
-		ast_queue_frame(ast, &fra);
-		p->firstheard = 0;
+		ast_queue_frame(ast, &f);
 		p->last_firstheard = 1;
 	}
 	ast_mutex_lock(&p->lock);
@@ -1510,18 +1509,16 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 
 	if (p->textq.qe_forw != &p->textq) {
-		struct ast_frame fr = {
+		struct ast_frame f = {
 			.frametype = AST_FRAME_TEXT,
 			.src = __PRETTY_FUNCTION__,
 		};
 
-		ast_mutex_lock(&p->lock);
 		textq = p->textq.qe_forw;
 		remque((struct qelem *) textq);
-		ast_mutex_unlock(&p->lock);
-		fr.data.ptr = ast_str_buffer(textq->buf);
-		fr.datalen = ast_str_strlen(textq->buf) + 1;
-		ast_queue_frame(ast, &fr);
+		f.data.ptr = ast_str_buffer(textq->buf);
+		f.datalen = ast_str_strlen(textq->buf) + 1;
+		ast_queue_frame(ast, &f);
 		ast_free(textq->buf);
 		ast_free(textq);
 	}
@@ -1532,14 +1529,12 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 		if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
 			while (p->rxqast.qe_forw != &p->rxqast) {
-				ast_mutex_lock(&p->lock);
 				qpast = p->rxqast.qe_forw;
 				remque((struct qelem *) qpast);
-				ast_mutex_unlock(&p->lock);
 				ast_free(qpast);
 			}
 			if (p->rxkey) {
-				p->rxkey = 1;
+				p->rxkey = 1; /* Set the timer to 1 if not 0 triggering unkey message */
 			}
 		} else {
 			if (!p->rxkey) {
@@ -1552,10 +1547,8 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				ast_queue_frame(ast, &wf);
 			}
 			p->rxkey = MAX_RXKEY_TIME;
-			ast_mutex_lock(&p->lock);
 			qpast = p->rxqast.qe_forw;
 			remque((struct qelem *) qpast);
-			ast_mutex_unlock(&p->lock);
 			memcpy(buf + AST_FRIENDLY_OFFSET, qpast->buf, tlb_codecs[p->rxcodec].frame_size);
 			ast_free(qpast);
 
@@ -1590,17 +1583,13 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 		if (m > QUEUE_OVERLOAD_THRESHOLD_EL) {
 			while (p->rxqtlb.qe_forw != &p->rxqtlb) {
-				ast_mutex_lock(&p->lock);
 				qptlb = p->rxqtlb.qe_forw;
 				remque((struct qelem *) qptlb);
-				ast_mutex_unlock(&p->lock);
 				ast_free(qptlb);
 			}
 		} else {
-			ast_mutex_lock(&p->lock);
 			qptlb = p->rxqtlb.qe_forw;
 			remque((struct qelem *) qptlb);
-			ast_mutex_unlock(&p->lock);
 			memcpy(instp->audio_all_but_one.data, qptlb->buf, tlb_codecs[p->txcodec].blocking_factor * tlb_codecs[p->txcodec].frame_size);
 			ast_copy_string(instp->TLB_node_test.ip, qptlb->fromip, TLB_IP_SIZE);
 			instp->TLB_node_test.port = qptlb->fromport;
@@ -1621,13 +1610,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		/* Asterisk to TheLinkBox */
 		if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
 			struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-			ast_log(LOG_WARNING,
-					"Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
-					ast_format_get_name(frame->subclass.format),
-					ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
-					ast_format_get_name(ast_channel_readformat(ast)),
-					ast_format_get_name(ast_channel_writeformat(ast)));
-			ast_mutex_unlock(&instp->lock);
+			ast_log(LOG_WARNING, "Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
+				ast_format_get_name(frame->subclass.format), ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
+				ast_format_get_name(ast_channel_readformat(ast)), ast_format_get_name(ast_channel_writeformat(ast)));
 			return -1;
 		}
 		if (p->txkey || p->txindex) {
@@ -1649,6 +1634,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 
 	if (p->keepalive--) {
+		ast_mutex_unlock(&p->lock);
 		return 0;
 	}
 	p->keepalive = KEEPALIVE_TIME;
@@ -1664,11 +1650,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			sin.sin_family = AF_INET;
 			sin.sin_addr.s_addr = inet_addr(instp->TLB_node_test.ip);
 			sin.sin_port = htons(instp->TLB_node_test.port + 1);
-			ast_mutex_lock(&instp->lock);
 			for (i = 0; i < 20; i++) {
 				sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 			}
-			ast_mutex_unlock(&instp->lock);
 			ast_debug(1, "tlb: call=%s RTCP timeout, removing\n", instp->TLB_node_test.call);
 		}
 		instp->TLB_node_test.ip[0] = '\0';
@@ -2092,16 +2076,16 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		if (instp->confmode) {
 			TLB_node_key->p = instp->confp;
 		} else {
-			if (p == NULL) {	/* if a new inbound call */
-				struct ast_frame fr = {
+			if (p == NULL) { /* if a new inbound call */
+				struct ast_frame f = {
 					.frametype = AST_FRAME_CONTROL,
 					.subclass.integer = AST_CONTROL_ANSWER,
 					.src = __PRETTY_FUNCTION__,
 				};
-
 				p = TLB_alloc((void *) instp->name);
 				if (!p) {
 					ast_log(LOG_ERROR, "Cannot alloc TLB channel\n");
+					ast_mutex_unlock(&instp->lock);
 					return -1;
 				}
 				TLB_node_key->p = p;
@@ -2110,11 +2094,10 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 				chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum, NULL, NULL);
 				if (!chan) {
 					TLB_destroy(TLB_node_key->p);
+					ast_mutex_unlock(&instp->lock);
 					return -1;
 				}
-				tlb_set_nativeformats(chan, p->txcodec, p->rxcodec);
-				ast_debug(1, "tlb: tx codec set to %s\n", tlb_codecs[p->txcodec].name);
-				ast_queue_frame(chan, &fr);
+				ast_queue_frame(chan, &f);
 			} else {
 				TLB_node_key->p = p;
 				ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
