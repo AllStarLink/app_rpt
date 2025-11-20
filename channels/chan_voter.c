@@ -3303,7 +3303,7 @@ static char *voter_complete_client_list(const char *link, const char *word, int 
 	if (pos != rpos) {
 		return NULL;
 	}
-
+	ast_mutex_lock(&voter_lock);
 	for (client = clients; client; client = client->next) {
 		if (client->dynamic) {
 			continue;
@@ -3321,26 +3321,28 @@ static char *voter_complete_client_list(const char *link, const char *word, int 
 			ast_cli_completion_add(ast_strdup(client->name));
 		}
 	}
+	ast_mutex_unlock(&voter_lock);
 	return NULL;
 }
 
 static char *voter_complete_node_list(const char *line, const char *word, int pos, int rpos)
 {
 	struct voter_pvt *p;
-	char node[100];
+	char node[20];
 
 	size_t wordlen = strlen(word);
 
 	if (pos != rpos) {
 		return NULL;
 	}
-
+	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
-		sprintf(node, "%d", p->nodenum);
+		snprintf(node, sizeof(node), "%d", p->nodenum);
 		if (!strncmp(node, word, wordlen)) {
 			ast_cli_completion_add(ast_strdup(node));
 		}
 	}
+	ast_mutex_unlock(&voter_lock);
 	return NULL;
 }
 
@@ -3662,6 +3664,7 @@ static void voter_xmit_master(void)
 	struct voter_pvt *p;
 	struct timeval tv;
 
+	ast_mutex_lock(&voter_lock);
 	for (client = clients; client; client = client->next) {
 		if (!client->respdigest) {
 			continue;
@@ -3704,6 +3707,7 @@ static void voter_xmit_master(void)
 			memset(&client->sin, 0, sizeof(client->sin));
 		}
 	}
+	ast_mutex_unlock(&voter_lock);
 }
 
 /*!
