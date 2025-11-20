@@ -2817,6 +2817,7 @@ static int voter_do_record(int fd, int argc, const char *const *argv)
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
 		if (p->nodenum == atoi(argv[2])) {
 			break;
@@ -2833,17 +2834,21 @@ static int voter_do_record(int fd, int argc, const char *const *argv)
 		}
 		p->recfp = NULL;
 		ast_cli(fd, "Voter instance %s recording disabled\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
 	if (argc != 4) {
+		ast_mutex_unlock(&voter_lock);
 		return RESULT_SHOWUSAGE;
 	}
 	p->recfp = fopen(argv[3], "w");
 	if (!p->recfp) {
 		ast_cli(fd, "Voter instance %s Record: Could not open file %s\n", argv[2], argv[3]);
+		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
 	ast_cli(fd, "Voter instance %s Record: Recording enabled info file %s\n", argv[2], argv[3]);
+	ast_mutex_unlock(&voter_lock);
 	return RESULT_SUCCESS;
 }
 
