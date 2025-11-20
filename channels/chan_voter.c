@@ -3664,7 +3664,6 @@ static void voter_xmit_master(void)
 	struct voter_pvt *p;
 	struct timeval tv;
 
-	ast_mutex_lock(&voter_lock);
 	for (client = clients; client; client = client->next) {
 		if (!client->respdigest) {
 			continue;
@@ -3707,7 +3706,6 @@ static void voter_xmit_master(void)
 			memset(&client->sin, 0, sizeof(client->sin));
 		}
 	}
-	ast_mutex_unlock(&voter_lock);
 }
 
 /*!
