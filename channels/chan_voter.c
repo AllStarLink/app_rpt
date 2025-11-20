@@ -3295,6 +3295,55 @@ static int voter_do_ping(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
+static char *voter_complete_client_list(const char *link, const char *word, int pos, int rpos)
+{
+	struct voter_client *client;
+	size_t wordlen = strlen(word);
+
+	if (pos != rpos) {
+		return NULL;
+	}
+
+	for (client = clients; client; client = client->next) {
+		if (client->dynamic) {
+			continue;
+		}
+		if (IS_CLIENT_PROXY(client)) {
+			continue;
+		}
+		if (!client->heardfrom) {
+			continue;
+		}
+		if (!client->respdigest) {
+			continue;
+		}
+		if (!strncmp(client->name, word, wordlen)) {
+			ast_cli_completion_add(ast_strdup(client->name));
+		}
+	}
+	return NULL;
+}
+
+static char *voter_complete_node_list(const char *line, const char *word, int pos, int rpos)
+{
+	struct voter_pvt *p;
+	char node[100];
+
+	size_t wordlen = strlen(word);
+
+	if (pos != rpos) {
+		return NULL;
+	}
+
+	for (p = pvts; p; p = p->next) {
+		sprintf(node, "%d", p->nodenum);
+		if (!strncmp(node, word, wordlen)) {
+			ast_cli_completion_add(ast_strdup(node));
+		}
+	}
+	return NULL;
+}
+
 /*!
  * \brief Turns integer response to char CLI response
  * \param r				Response.
@@ -3328,7 +3377,7 @@ static char *handle_cli_test(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 				   "       Specifies/Queries test mode for voter instance\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(voter_do_test(a->fd, a->argc, a->argv));
 }
@@ -3350,7 +3399,10 @@ static char *handle_cli_prio(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		if (a->pos == 2) {
+			return voter_complete_node_list(a->line, a->word, a->pos, 2);
+		}
+		return voter_complete_client_list(a->line, a->word, a->pos, 3);
 	}
 	return res2cli(voter_do_prio(a->fd, a->argc, a->argv));
 }
@@ -3372,7 +3424,7 @@ static char *handle_cli_record(struct ast_cli_entry *e, int cmd, struct ast_cli_
 
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(voter_do_record(a->fd, a->argc, a->argv));
 }
@@ -3394,7 +3446,7 @@ static char *handle_cli_tone(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(voter_do_tone(a->fd, a->argc, a->argv));
 }
@@ -3415,7 +3467,7 @@ static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli
 				   "       Display voter instance clients\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(voter_do_display(a->fd, a->argc, a->argv));
 }
@@ -3436,7 +3488,10 @@ static char *handle_cli_txlockout(struct ast_cli_entry *e, int cmd, struct ast_c
 					"       Set Tx Lockout for voter instance clients\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		if (a->pos == 2) {
+			return voter_complete_node_list(a->line, a->word, a->pos, 2);
+		}
+		return voter_complete_client_list(a->line, a->word, a->pos, 3);
 	}
 	return res2cli(voter_do_txlockout(a->fd, a->argc, a->argv));
 }
@@ -3457,7 +3512,7 @@ static char *handle_cli_ping(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 					"       Ping (check connectivity) to client\n";
 		return NULL;
 	case CLI_GENERATE:
-		return NULL;
+		return voter_complete_client_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(voter_do_ping(a->fd, a->argc, a->argv));
 }
