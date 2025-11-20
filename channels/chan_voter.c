@@ -3299,8 +3299,25 @@ static int voter_do_ping(int fd, int argc, const char *const *argv)
 	client->pings_requested = npings;
 	return RESULT_SUCCESS;
 }
+static char *voter_complete_static_client_list(const char *line, const char *word, int pos, int rpos)
+{
+	struct voter_client *client;
+	size_t wordlen = strlen(word);
 
-static char *voter_complete_client_list(const char *line, const char *word, int pos, int rpos)
+	if (pos != rpos) {
+		return NULL;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (client = clients; client; client = client->next) {
+		if (!strncmp(client->name, word, wordlen)) {
+			ast_cli_completion_add(ast_strdup(client->name));
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+	return NULL;
+}
+
+static char *voter_complete_connected_client_list(const char *line, const char *word, int pos, int rpos)
 {
 	struct voter_client *client;
 	size_t wordlen = strlen(word);
@@ -3408,8 +3425,10 @@ static char *handle_cli_prio(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	case CLI_GENERATE:
 		if (a->pos == 2) {
 			return voter_complete_node_list(a->line, a->word, a->pos, 2);
+		} else if (a->pos == 3) {
+			return voter_complete_static_client_list(a->line, a->word, a->pos, 3);
 		}
-		return voter_complete_client_list(a->line, a->word, a->pos, 3);
+		return NULL;
 	}
 	return res2cli(voter_do_prio(a->fd, a->argc, a->argv));
 }
@@ -3497,8 +3516,10 @@ static char *handle_cli_txlockout(struct ast_cli_entry *e, int cmd, struct ast_c
 	case CLI_GENERATE:
 		if (a->pos == 2) {
 			return voter_complete_node_list(a->line, a->word, a->pos, 2);
+		} else if (a->pos == 3) {
+			return voter_complete_static_client_list(a->line, a->word, a->pos, 3);
 		}
-		return voter_complete_client_list(a->line, a->word, a->pos, 3);
+		return NULL;
 	}
 	return res2cli(voter_do_txlockout(a->fd, a->argc, a->argv));
 }
@@ -3519,7 +3540,7 @@ static char *handle_cli_ping(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 					"       Ping (check connectivity) to client\n";
 		return NULL;
 	case CLI_GENERATE:
-		return voter_complete_client_list(a->line, a->word, a->pos, 2);
+		return voter_complete_connected_client_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(voter_do_ping(a->fd, a->argc, a->argv));
 }
