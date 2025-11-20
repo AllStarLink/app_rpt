@@ -3295,7 +3295,7 @@ static int voter_do_ping(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-static char *voter_complete_client_list(const char *link, const char *word, int pos, int rpos)
+static char *voter_complete_client_list(const char *line, const char *word, int pos, int rpos)
 {
 	struct voter_client *client;
 	size_t wordlen = strlen(word);
