@@ -3722,10 +3722,18 @@ static void *voter_timer(void *data)
 	return NULL;
 }
 
-/*!
- * \brief Voter read processing thread.
- *	This thread reads and process incoming voter packets.
- * \param data		This is always NULL.
+/**
+ * UDP reader thread that processes incoming Voter protocol packets and updates voter state.
+ *
+ * This thread receives Voter-format UDP packets, matches them to configured clients (including
+ * dynamic binding), validates/authenticates clients, and handles payloads such as audio
+ * (ULAW/ADPCM/NULAW), proxy-encapsulated packets, GPS, and PING.  It updates timing and master
+ * synchronization state, writes received audio and RSSI into per-client circular buffers,
+ * performs RSSI-based selection and threshold/linger logic per node, queues audio/text/control
+ * frames to the associated Asterisk channel, and sends authentication/keepalive responses when
+ * appropriate.
+ *
+ * @param data Always NULL (unused).
  */
 static void *voter_reader(void *data)
 {
