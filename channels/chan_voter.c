@@ -3722,10 +3722,18 @@ static void *voter_timer(void *data)
 	return NULL;
 }
 
-/*!
- * \brief Voter read processing thread.
- *	This thread reads and process incoming voter packets.
- * \param data		This is always NULL.
+/**
+ * UDP reader thread that processes incoming Voter protocol packets and updates voter state.
+ *
+ * This thread receives Voter-format UDP packets, matches them to configured clients (including
+ * dynamic binding), validates/authenticates clients, and handles payloads such as audio
+ * (ULAW/ADPCM/NULAW), proxy-encapsulated packets, GPS, and PING.  It updates timing and master
+ * synchronization state, writes received audio and RSSI into per-client circular buffers,
+ * performs RSSI-based selection and threshold/linger logic per node, queues audio/text/control
+ * frames to the associated Asterisk channel, and sends authentication/keepalive responses when
+ * appropriate.
+ *
+ * @param data Always NULL (unused).
  */
 static void *voter_reader(void *data)
 {
@@ -3893,11 +3901,20 @@ static void *voter_reader(void *data)
 					client->name, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
 			if (client) {
+				/* Search for connected asterisk channel for this known client */
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
 						break;
 					}
 				}
+				if (!p) {
+					/* We didn't find an asterisk channel,
+					 * act like we don't know the client.
+					 */
+					client = NULL;
+				}
+			}
+			if (client) {
 				if (check_client_sanity && p && (!p->priconn)) {
 					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
 						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
