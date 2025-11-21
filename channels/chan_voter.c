@@ -3810,923 +3810,263 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		/* Is there activity on our UDP socket */
-		if (i == udp_socket) {	
-			fromlen = sizeof(struct sockaddr_in);
-			recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
-			/* if set got something worthwhile */
-			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) {	
-				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(6, "Got rx packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
-					ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
-				client = NULL;
-				if ((!check_client_sanity) && master_port) {
-					sin.sin_port = htons(master_port);
+		if (i != udp_socket) {
+			continue;
+		}
+		fromlen = sizeof(struct sockaddr_in);
+		recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
+		/* if set got something worthwhile */
+		if (recvlen < sizeof(VOTER_PACKET_HEADER)) {
+			continue;
+		}
+		vph = (VOTER_PACKET_HEADER *) buf;
+		ast_debug(6, "Got rx packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
+			vph->challenge, ntohl(vph->digest));
+		client = NULL;
+		if ((!check_client_sanity) && master_port) {
+			sin.sin_port = htons(master_port);
+		}
+		isproxy = 0;
+		if (vph->digest) {
+			gettimeofday(&tv, NULL);
+			/* first see if client is not a dynamic one */
+			for (client = clients; client; client = client->next) {
+				if (client->dynamic) {
+					continue;
 				}
-				isproxy = 0;
-				if (vph->digest) {
-					gettimeofday(&tv, NULL);
-					/* first see if client is not a dynamic one */
-					for (client = clients; client; client = client->next) {
-						if (client->dynamic) {
-							continue;
-						}
-						if (client->digest == htonl(vph->digest)) {
-							break;
-						}
+				if (client->digest == htonl(vph->digest)) {
+					break;
+				}
+			}
+			/* if not found as non-dynamic, try it as existing dynamic */
+			if (!client) {
+				for (client = clients; client; client = client->next) {
+					if (!client->dynamic) {
+						continue;
 					}
-					/* if not found as non-dynamic, try it as existing dynamic */
-					if (!client) {
-						for (client = clients; client; client = client->next) {
-							if (!client->dynamic) {
-								continue;
-							}
-							if (ast_tvzero(client->lastdyntime)) {
-								continue;
-							}
-							if (voter_tvdiff_ms(tv, client->lastdyntime) > dyntime) {
-								ast_verb(3, "DYN client %s past lease time\n", client->name);
-								client->lastdyntime = (struct timeval) {0};
-								memset(&client->sin, 0, sizeof(client->sin));
-								continue;
-							}
-							if (client->digest != htonl(vph->digest)) {
-								continue;
-							}
-							if (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr) {
-								continue;
-							}
-							if (client->sin.sin_port != sin.sin_port) {
-								continue;
-							}
-							ast_verb(3, "Using existing Dynamic client %s for %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
-							break;
-						}
+					if (ast_tvzero(client->lastdyntime)) {
+						continue;
 					}
-					/* if still now found, try as new dynamic */
-					if (!client) {
-						for (client = clients; client; client = client->next) {
-							if (!client->dynamic) {
-								continue;
-							}
-							if (!ast_tvzero(client->lastdyntime)) {
-								continue;
-							}
-							if (client->digest != htonl(vph->digest)) {
-								continue;
-							}
-							/* okay, we found an empty dynamic slot with proper digest */
-							gettimeofday(&client->lastdyntime, NULL);
-							client->sin = sin;
-							ast_verb(3, "Bound new Dynamic client %s to %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
-							break;
-						}
+					if (voter_tvdiff_ms(tv, client->lastdyntime) > dyntime) {
+						ast_verb(3, "DYN client %s past lease time\n", client->name);
+						client->lastdyntime = (struct timeval) { 0 };
+						memset(&client->sin, 0, sizeof(client->sin));
+						continue;
 					}
-					if (DEBUG_ATLEAST(4) && client && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0) &&
-						ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) {
-						timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-						strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-						ast_debug(4, "Time:      %s.%03d, (%s) RSSI: %d\n", timestr, ntohl(vph->curtime.vtime_nsec) / 1000000,
-							client->name, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+					if (client->digest != htonl(vph->digest)) {
+						continue;
 					}
-					if (client) {
-						for (p = pvts; p; p = p->next) {
-							if (p->nodenum == client->nodenum) {
-								break;
-							}
-						}
-						if (check_client_sanity && p && (!p->priconn)) {
-							if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
-								(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
-								client->heardfrom = 0;
-							}
-							if (IS_CLIENT_PROXY(client)) {
-								client->heardfrom = 0;
-								client->respdigest = 0;
-							}
-						}
-						lastmaster = NULL;
-						/* first, kill all the 'curmaster' flags */
-						for (client1 = clients; client1; client1 = client1->next) {
-							if (client1->curmaster) {
-								lastmaster = client1;
-								client1->curmaster = 0;
-							}
-						}
-						client->lastheardtime = tv;
-						/* if possible, set it to first 'active' one */
+					if (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr) {
+						continue;
+					}
+					if (client->sin.sin_port != sin.sin_port) {
+						continue;
+					}
+					ast_verb(3, "Using existing Dynamic client %s for %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
+					break;
+				}
+			}
+			/* if still now found, try as new dynamic */
+			if (!client) {
+				for (client = clients; client; client = client->next) {
+					if (!client->dynamic) {
+						continue;
+					}
+					if (!ast_tvzero(client->lastdyntime)) {
+						continue;
+					}
+					if (client->digest != htonl(vph->digest)) {
+						continue;
+					}
+					/* okay, we found an empty dynamic slot with proper digest */
+					gettimeofday(&client->lastdyntime, NULL);
+					client->sin = sin;
+					ast_verb(3, "Bound new Dynamic client %s to %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
+					break;
+				}
+			}
+			if (DEBUG_ATLEAST(4) && client && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0) &&
+				ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) {
+				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
+				strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+				ast_debug(4, "Time:      %s.%03d, (%s) RSSI: %d\n", timestr, ntohl(vph->curtime.vtime_nsec) / 1000000,
+					client->name, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+			}
+			if (client) {
+				for (p = pvts; p; p = p->next) {
+					if (p->nodenum == client->nodenum) {
+						break;
+					}
+				}
+				if (check_client_sanity && p && (!p->priconn)) {
+					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
+						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
+						client->heardfrom = 0;
+					}
+					if (IS_CLIENT_PROXY(client)) {
+						client->heardfrom = 0;
+						client->respdigest = 0;
+					}
+				}
+				lastmaster = NULL;
+				/* first, kill all the 'curmaster' flags */
+				for (client1 = clients; client1; client1 = client1->next) {
+					if (client1->curmaster) {
+						lastmaster = client1;
+						client1->curmaster = 0;
+					}
+				}
+				client->lastheardtime = tv;
+				/* if possible, set it to first 'active' one */
+				for (client1 = clients; client1; client1 = client1->next) {
+					if (!client1->ismaster) {
+						continue;
+					}
+					if (ast_tvzero(client1->lastheardtime)) {
+						continue;
+					}
+					if (voter_tvdiff_ms(tv, client1->lastheardtime) > MASTER_TIMEOUT_MS) {
+						continue;
+					}
+					client1->curmaster = 1;
+					if (client1 != lastmaster) {
+						ast_log(LOG_NOTICE, "Voter Master changed from client %s to %s\n",
+							(lastmaster) ? lastmaster->name : "NONE", client1->name);
+					}
+					break;
+				}
+				/* if not, just set to to 'one of them' */
+				if (!client1) {
+					if (client->ismaster) {
+						client->curmaster = 1;
+					} else {
 						for (client1 = clients; client1; client1 = client1->next) {
 							if (!client1->ismaster) {
 								continue;
 							}
-							if (ast_tvzero(client1->lastheardtime)) {
-								continue;
-							}
-							if (voter_tvdiff_ms(tv, client1->lastheardtime) > MASTER_TIMEOUT_MS) {
-								continue;
-							}
 							client1->curmaster = 1;
 							if (client1 != lastmaster) {
-								ast_log(LOG_NOTICE, "Voter Master changed from client %s to %s\n",
-										(lastmaster) ? lastmaster->name : "NONE", client1->name);
+								ast_log(LOG_NOTICE, "Voter Master changed from client %s to %s (inactive)\n",
+									(lastmaster) ? lastmaster->name : "NONE", client1->name);
 							}
 							break;
 						}
-						/* if not, just set to to 'one of them' */
-						if (!client1) {
-							if (client->ismaster) {
-								client->curmaster = 1;
-							} else {
-								for (client1 = clients; client1; client1 = client1->next) {
-									if (!client1->ismaster) {
-										continue;
-									}
-									client1->curmaster = 1;
-									if (client1 != lastmaster) {
-										ast_log(LOG_NOTICE, "Voter Master changed from client %s to %s (inactive)\n",
-												(lastmaster) ? lastmaster->name : "NONE", client1->name);
-									}
-									break;
-								}
-							}
-						}
-						gettimeofday(&client->lastdyntime, NULL);
-						if ((!client) || (client && (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY))) {
-							client->respdigest = crc32_bufs((char *) vph->challenge, password);
-						}
-						client->sin = sin;
-						memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
-						if ((!client->curmaster) && hasmaster) {
-							if (last_master_count && (voter_timing_count > (last_master_count + MAX_MASTER_COUNT))) {
-								ast_log(LOG_NOTICE, "Voter lost master timing source!!\n");
-								last_master_count = 0;
-								master_time.vtime_sec = 0;
-								for (client1 = client->next; client1; client1 = client1->next) {
-									memset(client1->audio, 0xff, client1->buflen);
-									memset(client1->rssi, 0, client1->buflen);
-								}
-								for (p = pvts; p; p = p->next) {
-									if (p->rxkey) {
-										struct ast_frame wf = {
-											.frametype = AST_FRAME_CONTROL,
-											.subclass.integer = AST_CONTROL_RADIO_UNKEY,
-											.src = __PRETTY_FUNCTION__,
-										};
-
-										ast_queue_frame(p->owner, &wf);
-									}
-									p->lastwon = NULL;
-									p->rxkey = 0;
-									ast_mutex_lock(&p->txqlock);
-									while ((f1 = AST_LIST_REMOVE_HEAD(&p->txq, frame_list)) != NULL) {
-										ast_frfree(f1);
-									}
-									ast_mutex_unlock(&p->txqlock);
-								}
-								continue;
-							}
-							if (!master_time.vtime_sec) {
-								continue;
-							}
-						}
 					}
-					if (client && ntohs(vph->payload_type)) {
-						client->heardfrom = 1;
-					}
-					/* if we know the client, find the connection that the audio belongs to and send it there */
-					if (client && client->heardfrom &&
-						(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) &&
-						  (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))) ||
-						 ((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) &&
-						  (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))) ||
-						 (ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) ||
-						 ((ntohs(vph->payload_type) == VOTER_PAYLOAD_NULAW) &&
-						  (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))))) {
+				}
+				gettimeofday(&client->lastdyntime, NULL);
+				if ((!client) || (client && (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY))) {
+					client->respdigest = crc32_bufs((char *) vph->challenge, password);
+				}
+				client->sin = sin;
+				memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
+				if ((!client->curmaster) && hasmaster) {
+					if (last_master_count && (voter_timing_count > (last_master_count + MAX_MASTER_COUNT))) {
+						ast_log(LOG_NOTICE, "Voter lost master timing source!!\n");
+						last_master_count = 0;
+						master_time.vtime_sec = 0;
+						for (client1 = client->next; client1; client1 = client1->next) {
+							memset(client1->audio, 0xff, client1->buflen);
+							memset(client1->rssi, 0, client1->buflen);
+						}
 						for (p = pvts; p; p = p->next) {
-							if (p->nodenum == client->nodenum) {
-								break;
+							if (p->rxkey) {
+								struct ast_frame wf = {
+									.frametype = AST_FRAME_CONTROL,
+									.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+									.src = __PRETTY_FUNCTION__,
+								};
+
+								ast_queue_frame(p->owner, &wf);
 							}
+							p->lastwon = NULL;
+							p->rxkey = 0;
+							ast_mutex_lock(&p->txqlock);
+							while ((f1 = AST_LIST_REMOVE_HEAD(&p->txq, frame_list)) != NULL) {
+								ast_frfree(f1);
+							}
+							ast_mutex_unlock(&p->txqlock);
 						}
-						/* if we found the client */
-						if (p) {	
-							long long btime, ptime, difftime;
-							int index, flen;
+						continue;
+					}
+					if (!master_time.vtime_sec) {
+						continue;
+					}
+				}
+			}
+			if (client && ntohs(vph->payload_type)) {
+				client->heardfrom = 1;
+			}
+			/* if we know the client, find the connection that the audio belongs to and send it there */
+			if (client && client->heardfrom &&
+				(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))) ||
+					((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))) ||
+					(ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) ||
+					((ntohs(vph->payload_type) == VOTER_PAYLOAD_NULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))))) {
+				for (p = pvts; p; p = p->next) {
+					if (p->nodenum == client->nodenum) {
+						break;
+					}
+				}
+				/* if we found the client */
+				if (p) {
+					long long btime, ptime, difftime;
+					int index, flen;
 
-							gettimeofday(&client->lastheardtime, NULL);
-							if (client->curmaster) {
-								if (!master_time.vtime_sec) {
-									for (p = pvts; p; p = p->next) {
-										ast_mutex_lock(&p->txqlock);
-										while ((f1 = AST_LIST_REMOVE_HEAD(&p->txq, frame_list)) != NULL) {
-											ast_frfree(f1);
-										}
-										ast_mutex_unlock(&p->txqlock);
-									}
-								}
-								last_master_count = voter_timing_count;
-								master_time.vtime_sec = ntohl(vph->curtime.vtime_sec);
-								master_time.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
-								if (!master_port) {
-									master_port = ntohs(sin.sin_port);
-								}
-							} else {
-								if (!master_time.vtime_sec) {
-									continue;
-								}
-								if (ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) {
-									memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
-									memmove(buf + sizeof(VOTER_PACKET_HEADER),
-											buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER),
-											recvlen - (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER)));
-									vph->payload_type = proxy.payload_type;
-									psin.sin_family = AF_INET;
-									psin.sin_addr.s_addr = proxy.ipaddr;
-									psin.sin_port = proxy.port;
-									isproxy = 1;
-									if (!p->isprimary) {
-										vph->digest = htonl(client->respdigest);
-										strcpy((char *) vph->challenge, challenge);
-										sendto(udp_socket, buf, recvlen - sizeof(proxy), 0,
-											   (struct sockaddr *) &psin, sizeof(psin));
-										continue;
-									}
-									ast_copy_string(client->saved_challenge, proxy.challenge,
-													sizeof(client->saved_challenge) - 1);
-									client->proxy_sin = psin;
-									if (proxy.flags & 32) {
-										client->mix = 1;
-									} else {
-										client->mix = 0;
-									}
-									recvlen -= sizeof(proxy);
-									ast_debug(6, "Now (proxy) Got rx packet, len %d payload %d challenge %s digest %08x\n",
-										(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
-									if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
-										goto process_gps;
-									}
-								} else if (p->priconn && (!client->dynamic) && (!client->mix)) {
-									memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
-									proxy.ipaddr = sin.sin_addr.s_addr;
-									proxy.port = sin.sin_port;
-									proxy.payload_type = vph->payload_type;
-									ast_copy_string(proxy.challenge, challenge, sizeof(proxy.challenge) - 1);
-									vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
-									proxy.flags = 0;
-									if (client->ismaster) {
-										proxy.flags |= 2 | 8;
-									}
-									if (client->doadpcm) {
-										proxy.flags |= 16;
-									}
-									if (client->mix) {
-										proxy.flags |= 32;
-									}
-									if (client->nodeemp || p->hostdeemp) {
-										proxy.flags |= 1;
-									}
-									if (client->noplfilter) {
-										proxy.flags |= 4;
-									}
-									vph->digest = htonl(crc32_bufs(p->primary_challenge, client->pswd));
-									memmove(buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER),
-											buf + sizeof(VOTER_PACKET_HEADER), recvlen - sizeof(VOTER_PACKET_HEADER));
-									memcpy(buf + sizeof(VOTER_PACKET_HEADER), &proxy, sizeof(proxy));
-									ast_debug(3, "Sent outproxy to %s:%d for %s payload %d digest %08x\n",
-										ast_inet_ntoa(p->primary.sin_addr), ntohs(p->primary.sin_port),
-										client->name, ntohs(proxy.payload_type), ntohl(vph->digest));
-									sendto(udp_socket, buf, recvlen + sizeof(proxy), 0,
-										(struct sockaddr *) &p->primary, sizeof(p->primary));
-									continue;
-								}
-							}
-							if (client->mix) {
-								if (ntohl(vph->curtime.vtime_nsec) > client->rxseqno) {
-									client->rxseqno = 0;
-									client->rxseqno_40ms = 0;
-									client->rxseq40ms = 0;
-									client->drain40ms = 0;
-								}
-								if (client->txseqno > (client->txseqno_rxkeyed + 4)) {
-									client->rxseqno = 0;
-									client->rxseqno_40ms = 0;
-									client->rxseq40ms = 0;
-									client->drain40ms = 0;
-								}
-								client->txseqno_rxkeyed = client->txseqno;
-								if (!client->rxseqno) {
-									client->rxseqno_40ms = client->rxseqno = ntohl(vph->curtime.vtime_nsec);
-								}
-								if ((!client->doadpcm) && (!client->donulaw)) {
-									index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno;
-								} else {
-									index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
-								}
-								index *= FRAME_SIZE;
-								index += BUFDELAY(client);
-								index -= (FRAME_SIZE * 4);
-								if (DEBUG_ATLEAST(3)) {
-									if ((!client->doadpcm) && (!client->donulaw)) {
-										ast_debug(3, "mix client (Mulaw) %s index: %d their seq: %d our seq: %d\n",
-											client->name, index, ntohl(vph->curtime.vtime_nsec),
-											client->rxseqno);
-									} else {
-										ast_debug(3, "mix client (ADPCM/Nulaw) %s index: %d their seq: %d our seq: %d\n",
-											client->name, index, ntohl(vph->curtime.vtime_nsec),
-											client->rxseqno_40ms);
-									}
-								}
-							} else {
-								btime = ((long long) master_time.vtime_sec * 1000000000LL) + master_time.vtime_nsec;
-								btime += 40000000;
-								if (client->curmaster) {
-									btime -= 20000000;
-								}
-								ptime =
-									((long long) ntohl(vph->curtime.vtime_sec) * 1000000000LL) +
-									ntohl(vph->curtime.vtime_nsec);
-								difftime = (ptime - btime) + (BUFDELAY(client) * 125000LL);
-								difftime -= puckoffset(client);
-								index = (int) ((long long) difftime / 125000LL);
-								if (DEBUG_ATLEAST(5) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
-									timestuff = (time_t) master_time.vtime_sec;
-									strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-									ast_debug(4, "DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
-									gettimeofday(&timetv, NULL);
-									timestuff = (time_t) timetv.tv_sec;
-									strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-									ast_debug(4, "SysTime:   %s.%03d, diff: %lld,index: %d\n", timestr,
-										(int) timetv.tv_usec / 1000, btime - ptime, index);
-								}
-							}
-							/* if in bounds */
-							if ((index > 0) && (index < (client->buflen - (FRAME_SIZE * 2)))) {
-
-								f1 = NULL;
-								/* if no RSSI, just make it quiet */
-								if (!buf[sizeof(VOTER_PACKET_HEADER)]) {
-									for (i = 0; i < FRAME_SIZE; i++) {
-										buf[sizeof(VOTER_PACKET_HEADER) + i + 1] = 0xff;
-									}
-								}
-								/* if otherwise (RSSI > 0), if ADPCM, translate it */
-								else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) {
-
-#ifdef	ADPCM_LOOPBACK
-									memset(&audiopacket, 0, sizeof(audiopacket));
-									strcpy((char *) audiopacket.vp.challenge, challenge);
-									audiopacket.vp.payload_type = htons(3);
-									audiopacket.rssi = 0;
-									memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE + 3);
-									audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-									audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
-									audiopacket.vp.digest = htonl(client->respdigest);
-									sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0,
-										(struct sockaddr *) &client->sin, sizeof(client->sin));
-#endif
-
-									memset(&fr, 0, sizeof(fr));
-									fr.frametype = AST_FRAME_VOICE;
-									fr.subclass.format = ast_format_adpcm;
-									fr.datalen = ADPCM_FRAME_SIZE;
-									fr.samples = FRAME_SIZE * 2;
-									fr.data.ptr = buf + sizeof(VOTER_PACKET_HEADER) + 1;
-									fr.src = __PRETTY_FUNCTION__;
-									f1 = ast_translate(p->adpcmin, &fr, 0);
-								}
-								/* if otherwise (RSSI > 0), if NULAW, translate it */
-								else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_NULAW) {
-
-									short s, xbuf[FRAME_SIZE * 2];
-#ifdef	NULAW_LOOPBACK
-									memset(&audiopacket, 0, sizeof(audiopacket));
-									strcpy((char *) audiopacket.vp.challenge, challenge);
-									audiopacket.vp.payload_type = htons(4);
-									audiopacket.rssi = 0;
-									memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE);
-									audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-									audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
-									audiopacket.vp.digest = htonl(client->respdigest);
-									sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0,
-										(struct sockaddr *) &client->sin, sizeof(client->sin));
-#endif
-
-									for (i = 0; i < FRAME_SIZE * 2; i += 2) {
-										s = (AST_MULAW((int) (unsigned char)
-													   buf[sizeof(VOTER_PACKET_HEADER) + 1 + (i >> 1)])) / 2;
-										xbuf[i] = lpass4(s, p->rlpx, p->rlpy);
-										xbuf[i + 1] = lpass4(s, p->rlpx, p->rlpy);
-									}
-									memset(&fr, 0, sizeof(fr));
-									fr.frametype = AST_FRAME_VOICE;
-									fr.subclass.format = ast_format_slin;
-									fr.datalen = FRAME_SIZE * 4;
-									fr.samples = FRAME_SIZE * 2;
-									fr.data.ptr = xbuf;
-									fr.src = __PRETTY_FUNCTION__;
-									f1 = ast_translate(p->nuin, &fr, 0);
-								}
-								if ((!client->doadpcm) && (!client->donulaw)) {
-									index = (index + client->drainindex) % client->buflen;
-								} else {
-									index = (index + client->drainindex_40ms) % client->buflen;
-								}
-								flen = (f1) ? f1->datalen : FRAME_SIZE;
-								i = (int) client->buflen - (index + flen);
-								if (i >= 0) {
-									memcpy(client->audio + index,
-										   ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen);
-									memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen);
-								} else {
-									memcpy(client->audio + index,
-										   ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen + i);
-									memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen + i);
-									memcpy(client->audio,
-										   ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + i),
-										   -i);
-									memset(client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], -i);
-								}
-								if (f1) {
+					gettimeofday(&client->lastheardtime, NULL);
+					if (client->curmaster) {
+						if (!master_time.vtime_sec) {
+							for (p = pvts; p; p = p->next) {
+								ast_mutex_lock(&p->txqlock);
+								while ((f1 = AST_LIST_REMOVE_HEAD(&p->txq, frame_list)) != NULL) {
 									ast_frfree(f1);
 								}
-							} else if (client->mix) {
-								client->rxseqno = 0;
-								client->rxseqno_40ms = 0;
-								client->rxseq40ms = 0;
-								client->drain40ms = 0;
-								ast_debug(3, "mix client %s out of bounds, resetting!!\n", client->name);
+								ast_mutex_unlock(&p->txqlock);
 							}
-							if (client->curmaster) {
-								gettimeofday(&tv, NULL);
-								for (client = clients; client; client = client->next) {
-									if (!ast_tvzero(client->lastheardtime)
-										&& (voter_tvdiff_ms(tv, client->lastheardtime) >
-											((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
-										ast_verb(3, "Voter client %s disconnect (timeout)\n", client->name);
-										client->heardfrom = 0;
-										client->respdigest = 0;
-									}
-									if (!client->heardfrom) {
-										client->lastheardtime.tv_sec = client->lastheardtime.tv_usec = 0;
-									}
-								}
-								if (check_client_sanity) {
-									for (client = clients; client; client = client->next) {
-										for (p = pvts; p; p = p->next) {
-											if (p->nodenum == client->nodenum) {
-												break;
-											}
-										}
-										if ((!p) || p->priconn) {
-											continue;
-										}
-										if (!client->respdigest) {
-											continue;
-										}
-										for (client1 = client->next; client1; client1 = client1->next) {
-											if (client1 == client) {
-												continue;
-											}
-											if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) &&
-												(client1->sin.sin_port == client->sin.sin_port)) {
-												if (!client1->respdigest) {
-													continue;
-												}
-												client->respdigest = 0;
-												client->heardfrom = 0;
-												client1->respdigest = 0;
-												client1->heardfrom = 0;
-											}
-										}
-									}
-								}
-								hasmastered = 0;
-								voter_xmit_master();
-								for (p = pvts; p; p = p->next) {
-									char startagain;
-
-									startagain = 0;
-									maxrssi = 0;
-									maxclient = NULL;
-									for (client = clients; client; client = (startagain) ? clients : client->next) {
-										int maxprio, thisprio;
-
-										startagain = 0;
-										if (client->nodenum != p->nodenum) {
-											continue;
-										}
-										if (client->mix) {
-											continue;
-										}
-										if (client->prio_override == -1) {
-											continue;
-										}
-										k = 0;
-										i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
-										if (i >= 0) {
-											for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-												k += client->rssi[j];
-											}
-										} else {
-											for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
-												k += client->rssi[j];
-											}
-											for (j = 0; j < -i; j++) {
-												k += client->rssi[j];
-											}
-										}
-										client->lastrssi = k / FRAME_SIZE;
-										maxprio = thisprio = 0;
-										if (maxclient) {
-											if (maxclient->prio_override > -2) {
-												maxprio = maxclient->prio_override;
-											} else {
-												maxprio = maxclient->prio;
-											}
-										}
-										if (client->prio_override > -2) {
-											thisprio = client->prio_override;
-										} else {
-											thisprio = client->prio;
-										}
-										if (((client->lastrssi > maxrssi) && (thisprio == maxprio))
-											|| (client->lastrssi && (thisprio > maxprio))) {
-											maxrssi = client->lastrssi;
-											maxclient = client;
-											if (thisprio > maxprio) {
-												startagain = 1;
-											}
-										}
-									}
-									for (client = clients; client; client = client->next) {
-										if (client->nodenum != p->nodenum) {
-											continue;
-										}
-										if (client->mix) {
-											continue;
-										}
-										if (client->prio_override == -1) {
-											continue;
-										}
-										i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
-										if (i >= 0) {
-											for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-												client->rssi[j] = 0;
-											}
-										} else {
-											for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
-												client->rssi[j] = 0;
-											}
-											for (j = 0; j < -i; j++) {
-												client->rssi[j] = 0;
-											}
-										}
-									}
-									if (!maxclient) {
-										maxrssi = 0;
-									}
-									memset(p->buf + AST_FRIENDLY_OFFSET, 0xff, FRAME_SIZE);
-									if (maxclient) {
-										int maxprio, lastprio;
-
-										if (maxclient->prio_override > -2) {
-											maxprio = maxclient->prio_override;
-										} else {
-											maxprio = maxclient->prio;
-										}
-										lastprio = 0;
-										if (p->lastwon) {
-											if (p->lastwon->prio_override > -2) {
-												lastprio = p->lastwon->prio_override;
-											} else {
-												lastprio = p->lastwon->prio;
-											}
-										}
-										/* if not on same client, and we have thresholds, and priority appropriate */
-										if (p->lastwon && p->nthresholds && (maxprio <= lastprio)) {
-											/* go thru all the thresholds */
-											for (i = 0; i < p->nthresholds; i++) {
-												/* if meets criteria */
-												if (p->lastwon->lastrssi >= p->rssi_thresh[i]) {
-													/* if not at same threshold, change to new one */
-													if ((i + 1) != p->threshold) {
-														p->threshold = i + 1;
-														p->threshcount = 0;
-														ast_debug(3, "New threshold %d, client %s, rssi %d\n",
-																		p->threshold, p->lastwon->name,
-																		p->lastwon->lastrssi);
-													}
-													/* at the same threshold still, if count is enabled and is met */
-													else if (p->count_thresh[i]
-															 && (p->threshcount++ >= p->count_thresh[i])) {
-														ast_debug(3, "Threshold %d time (%d) exceeded, client %s, rssi %d\n",
-																 p->threshold, p->count_thresh[i], p->lastwon->name,
-																 p->lastwon->lastrssi);
-														p->threshold = 0;
-														p->threshcount = 0;
-														p->lingercount = 0;
-														continue;
-													}
-													p->lingercount = 0;
-													maxclient = p->lastwon;
-													maxrssi = maxclient->lastrssi;
-													break;
-												}
-												/* if doesn't match any criteria */
-												if (i == (p->nthresholds - 1)) {
-													if (DEBUG_ATLEAST(3) && p->threshold) {
-														ast_debug(3, "Nothing matches criteria any more\n");
-													}
-													if (p->threshold) {
-														p->lingercount = p->linger_thresh[p->threshold - 1];
-													}
-													p->threshold = 0;
-													p->threshcount = 0;
-												}
-											}
-										}
-										if (p->lingercount) {
-											ast_debug(3, "Lingering on client %s, rssi %d, Maxclient is %s, rssi %d\n",
-													 p->lastwon->name, p->lastwon->lastrssi, maxclient->name, maxrssi);
-											p->lingercount--;
-											maxclient = p->lastwon;
-											maxrssi = maxclient->lastrssi;
-										}
-										if (p->voter_test > 0) {	/* perform cyclic selection */
-											/* see how many are eligible */
-											for (i = 0, client = clients; client; client = client->next) {
-												if (client->nodenum != p->nodenum) {
-													continue;
-												}
-												if (client->mix) {
-													continue;
-												}
-												if (client->lastrssi == maxrssi) {
-													i++;
-												}
-											}
-											if (p->voter_test == 1) {
-												p->testindex = random() % i;
-											} else {
-												p->testcycle++;
-												if (p->testcycle >= (p->voter_test - 1)) {
-													p->testcycle = 0;
-													p->testindex++;
-													if (p->testindex >= i) {
-														p->testindex = 0;
-													}
-												}
-											}
-											for (i = 0, client = clients; client; client = client->next) {
-												if (client->nodenum != p->nodenum) {
-													continue;
-												}
-												if (client->mix) {
-													continue;
-												}
-												if (client->lastrssi != maxrssi) {
-													continue;
-												}
-												if (i++ == p->testindex) {
-													maxclient = client;
-													maxrssi = client->lastrssi;
-													break;
-												}
-											}
-										} else {
-											p->testcycle = 0;
-											p->testindex = 0;
-										}
-										if (!maxclient) {	/* if nothing there */
-											memset(silbuf, 0, sizeof(silbuf));
-											memset(&fr, 0, sizeof(fr));
-											fr.frametype = AST_FRAME_VOICE;
-											fr.subclass.format = ast_format_slin;
-											fr.datalen = FRAME_SIZE * 2;
-											fr.samples = FRAME_SIZE;
-											fr.data.ptr = silbuf;
-											fr.src = __PRETTY_FUNCTION__;
-											p->threshold = 0;
-											p->threshcount = 0;
-											p->lingercount = 0;
-											p->winner = 0;
-											incr_drainindex(p);
-											ast_queue_frame(p->owner, &fr);
-											continue;
-										}
-										i = (int) maxclient->buflen - ((int) maxclient->drainindex + FRAME_SIZE);
-										if (i >= 0) {
-											memcpy(p->buf + AST_FRIENDLY_OFFSET,
-												   maxclient->audio + maxclient->drainindex, FRAME_SIZE);
-										} else {
-											memcpy(p->buf + AST_FRIENDLY_OFFSET,
-												   maxclient->audio + maxclient->drainindex, FRAME_SIZE + i);
-											memcpy(p->buf + AST_FRIENDLY_OFFSET + (maxclient->buflen - i),
-												   maxclient->audio, -i);
-										}
-										for (client = clients; client; client = client->next) {
-											if (client->nodenum != p->nodenum) {
-												continue;
-											}
-											if (client->mix) {
-												continue;
-											}
-											if (p->recfp) {
-												if (!hasmastered) {
-													hasmastered = 1;
-													memset(&rec, 0, sizeof(rec));
-													memcpy(rec.audio, &master_time, sizeof(master_time));
-													fwrite(&rec, 1, sizeof(rec), p->recfp);
-												}
-												ast_copy_string(rec.name, client->name, sizeof(rec.name) - 1);
-												rec.rssi = client->lastrssi;
-												if (i >= 0) {
-													memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE);
-												} else {
-													memcpy(rec.audio, client->audio + client->drainindex,
-														   FRAME_SIZE + i);
-													memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
-													memcpy(rec.audio + FRAME_SIZE + i, client->audio, -i);
-													memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
-												}
-												fwrite(&rec, 1, sizeof(rec), p->recfp);
-											}
-											if (i >= 0) {
-												memset(client->audio + client->drainindex, 0xff, FRAME_SIZE);
-											} else {
-												memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
-												memset(client->audio, 0xff, -i);
-											}
-										}
-										if ((!p->duplex) && p->txkey) {
-											p->rxkey = 0;
-											p->lastwon = NULL;
-											memset(silbuf, 0, sizeof(silbuf));
-											memset(&fr, 0, sizeof(fr));
-											fr.frametype = AST_FRAME_VOICE;
-											fr.subclass.format = ast_format_slin;
-											fr.datalen = FRAME_SIZE * 2;
-											fr.samples = FRAME_SIZE;
-											fr.data.ptr = silbuf;
-											fr.src = __PRETTY_FUNCTION__;
-											p->threshold = 0;
-											p->threshcount = 0;
-											p->lingercount = 0;
-											p->winner = 0;
-											incr_drainindex(p);
-											ast_queue_frame(p->owner, &fr);
-											continue;
-										}
-										if (p->plfilter || p->hostdeemp) {
-											short ix;
-											for (i = 0; i < FRAME_SIZE; i++) {
-												j = p->buf[AST_FRIENDLY_OFFSET + i] & 0xff;
-												ix = AST_MULAW(j);
-												if (p->plfilter) {
-													ix = hpass6(ix, p->hpx, p->hpy);
-												}
-												if (p->hostdeemp) {
-													ix = deemp1(ix, &p->hdx);
-												}
-												p->buf[AST_FRIENDLY_OFFSET + i] = AST_LIN2MU(ix);
-											}
-										}
-										stream.curtime = master_time;
-										memcpy(stream.audio, p->buf + AST_FRIENDLY_OFFSET, FRAME_SIZE);
-										sprintf(stream.str, "%s", maxclient->name);
-										for (client = clients; client; client = client->next) {
-											if (client->nodenum != p->nodenum) {
-												continue;
-											}
-											sprintf(stream.str + strlen(stream.str), ",%s=%d", client->name,
-													client->lastrssi);
-										}
-										for (i = 0; i < p->nstreams; i++) {
-											cp = ast_strdup(p->streams[i]);
-											if (!cp) {
-												break;
-											}
-											cp1 = strchr(cp, ':');
-											if (cp1) {
-												*cp1 = 0;
-												j = atoi(cp1 + 1);
-											} else {
-												j = listen_port;
-											}
-											sin_stream.sin_family = AF_INET;
-											sin_stream.sin_addr.s_addr = inet_addr(cp);
-											sin_stream.sin_port = htons(j);
-											sendto(udp_socket, &stream, sizeof(stream), 0,
-												   (struct sockaddr *) &sin_stream, sizeof(sin_stream));
-											ast_free(cp);
-										}
-										if (maxclient != p->lastwon) {
-											p->lastwon = maxclient;
-											ast_debug(1, "Voter client %s selected for node %d\n", maxclient->name,
-															p->nodenum);
-											memset(&fr, 0, sizeof(fr));
-											fr.datalen = strlen(maxclient->name) + 1;
-											fr.frametype = AST_FRAME_TEXT;
-											fr.data.ptr = maxclient->name;
-											fr.src = __PRETTY_FUNCTION__;
-											ast_queue_frame(p->owner, &fr);
-										}
-										ast_debug(4, "Sending from client %s RSSI %d\n", maxclient->name, maxrssi);
-									}
-									if ((!p->duplex) && p->txkey) {
-										p->rxkey = 0;
-										p->lastwon = NULL;
-										memset(silbuf, 0, sizeof(silbuf));
-										memset(&fr, 0, sizeof(fr));
-										fr.frametype = AST_FRAME_VOICE;
-										fr.subclass.format = ast_format_slin;
-										fr.datalen = FRAME_SIZE * 2;
-										fr.samples = FRAME_SIZE;
-										fr.data.ptr = silbuf;
-										fr.src = __PRETTY_FUNCTION__;
-										p->threshold = 0;
-										p->threshcount = 0;
-										p->lingercount = 0;
-										p->winner = 0;
-										incr_drainindex(p);
-										ast_queue_frame(p->owner, &fr);
-										continue;
-									}
-									if (!voter_mix_and_send(p, maxclient, maxrssi)) {
-										continue;
-									}
-								}
-							}
-						} else {
-							ast_debug(2, "Request for voter client %s to unknown node %d\n",
-								client->name, client->nodenum);
 						}
-						continue;
-					}
-					/* if we know the dude, and its ping, process it */
-					if (client && client->heardfrom && (ntohs(vph->payload_type) == VOTER_PAYLOAD_PING) &&
-						(recvlen == sizeof(pingpacket))) {
-						int timediff;
-
-						memcpy(&pingpacket, buf, sizeof(pingpacket));
-						gettimeofday(&client->ping_last_rxtime, NULL);
-						/* if ping not for this session */
-						if (voter_tvdiff_ms(client->ping_txtime, pingpacket.starttime)) {
+						last_master_count = voter_timing_count;
+						master_time.vtime_sec = ntohl(vph->curtime.vtime_sec);
+						master_time.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
+						if (!master_port) {
+							master_port = ntohs(sin.sin_port);
+						}
+					} else {
+						if (!master_time.vtime_sec) {
 							continue;
 						}
-						if (client->ping_last_seqno && (pingpacket.seqno < (client->ping_last_seqno + 1))) {
-							ast_log(LOG_WARNING, "PING (%s): Packets out of sequence!!\n", client->name);
-							client->pings_oos++;
-						}
-						timediff = ast_tvdiff_ms(client->ping_last_rxtime, pingpacket.txtime);
-						if (timediff < 0) {
-							ast_log(LOG_WARNING, "PING (%s): Packet has invalid time (diff=%d)!!\n", client->name, timediff);
-							continue;
-						}
-						client->ping_last_seqno = pingpacket.seqno;
-						client->pings_received++;
-						client->pings_total_ms += timediff;
-						if (!client->pings_worst) {
-							client->pings_worst = timediff;
-						}
-						if (!client->pings_best) {
-							client->pings_best = timediff;
-						}
-						if (timediff < client->pings_best) {
-							client->pings_best = timediff;
-						}
-						if (timediff > client->pings_worst){
-							client->pings_worst = timediff;
-						}
-						ast_verb(1, "PING (%s) Response:   seqno: %u  diff: %d ms\n", client->name, pingpacket.seqno, timediff);
-						
-						timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-						strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-                        /* ast_debug(3, "PING (%s):   seqno: %u %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec)); */
-						
-						check_ping_done(client);
-						continue;
-					}
-					/* if we know the dude, find the connection his audio belongs to and send it there */
-					if (client && client->heardfrom && (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) &&
-						((recvlen == sizeof(VOTER_PACKET_HEADER)) ||
-						 (recvlen == (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_GPS))) ||
-						 (recvlen == ((sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_GPS)) - 1)))) {
-						gettimeofday(&client->lastheardtime, NULL);
-						client->lastgpstime.vtime_sec = ntohl(vph->curtime.vtime_sec);
-						client->lastgpstime.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
-						for (p = pvts; p; p = p->next) {
-							if (p->nodenum == client->nodenum) {
-								break;
+						if (ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) {
+							memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
+							memmove(buf + sizeof(VOTER_PACKET_HEADER), buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER),
+								recvlen - (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER)));
+							vph->payload_type = proxy.payload_type;
+							psin.sin_family = AF_INET;
+							psin.sin_addr.s_addr = proxy.ipaddr;
+							psin.sin_port = proxy.port;
+							isproxy = 1;
+							if (!p->isprimary) {
+								vph->digest = htonl(client->respdigest);
+								strcpy((char *) vph->challenge, challenge);
+								sendto(udp_socket, buf, recvlen - sizeof(proxy), 0, (struct sockaddr *) &psin, sizeof(psin));
+								continue;
 							}
-						}
-						if (client->curmaster) {
-							mastergps_time.vtime_sec = ntohl(vph->curtime.vtime_sec);
-							mastergps_time.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
-						} else if (p && p->priconn && (!client->dynamic) && (!client->mix)) {
+							ast_copy_string(client->saved_challenge, proxy.challenge, sizeof(client->saved_challenge) - 1);
+							client->proxy_sin = psin;
+							if (proxy.flags & 32) {
+								client->mix = 1;
+							} else {
+								client->mix = 0;
+							}
+							recvlen -= sizeof(proxy);
+							ast_debug(6, "Now (proxy) Got rx packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
+								ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
+							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
+								goto process_gps;
+							}
+						} else if (p->priconn && (!client->dynamic) && (!client->mix)) {
 							memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
 							proxy.ipaddr = sin.sin_addr.s_addr;
 							proxy.port = sin.sin_port;
 							proxy.payload_type = vph->payload_type;
-							ast_copy_string(proxy.challenge, challenge, sizeof(challenge));
+							ast_copy_string(proxy.challenge, challenge, sizeof(proxy.challenge) - 1);
 							vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy.flags = 0;
 							if (client->ismaster) {
@@ -4746,148 +4086,771 @@ static void *voter_reader(void *data)
 							}
 							vph->digest = htonl(crc32_bufs(p->primary_challenge, client->pswd));
 							memmove(buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER),
-									buf + sizeof(VOTER_PACKET_HEADER), recvlen - sizeof(VOTER_PACKET_HEADER));
+								buf + sizeof(VOTER_PACKET_HEADER), recvlen - sizeof(VOTER_PACKET_HEADER));
 							memcpy(buf + sizeof(VOTER_PACKET_HEADER), &proxy, sizeof(proxy));
-							ast_debug(3, "Sent outproxy to %s:%d for %s payload %d digest %08x\n",
-											ast_inet_ntoa(p->primary.sin_addr), ntohs(p->primary.sin_port),
-											client->name, ntohs(proxy.payload_type), ntohl(vph->digest));
-							sendto(udp_socket, buf, recvlen + sizeof(proxy), 0,
-								   (struct sockaddr *) &p->primary, sizeof(p->primary));
+							ast_debug(3, "Sent outproxy to %s:%d for %s payload %d digest %08x\n", ast_inet_ntoa(p->primary.sin_addr),
+								ntohs(p->primary.sin_port), client->name, ntohs(proxy.payload_type), ntohl(vph->digest));
+							sendto(udp_socket, buf, recvlen + sizeof(proxy), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 							continue;
 						}
-					  process_gps:
-						client->lastmastergpstime.vtime_sec = mastergps_time.vtime_sec;
-						client->lastmastergpstime.vtime_nsec = mastergps_time.vtime_nsec;
-						if (DEBUG_ATLEAST(4)) {
-							gettimeofday(&timetv, NULL);
-							timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-
-							ast_debug(4, "GPSTime (%s):   %s.%09d\n", client->name, timestr, ntohl(vph->curtime.vtime_nsec));
-							timetv.tv_usec = ((timetv.tv_usec + 10000) / 20000) * 20000;
-							if (timetv.tv_usec >= 1000000) {
-								timetv.tv_sec++;
-								timetv.tv_usec -= 1000000;
-							}
-							timestuff = (time_t) timetv.tv_sec;
-							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-							ast_debug(4, "SysTime:   %s.%06d\n", timestr, (int) timetv.tv_usec);
-							timestuff = (time_t) master_time.vtime_sec;
-							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) & timestuff));
-							ast_debug(4, "DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
+					}
+					if (client->mix) {
+						if (ntohl(vph->curtime.vtime_nsec) > client->rxseqno) {
+							client->rxseqno = 0;
+							client->rxseqno_40ms = 0;
+							client->rxseq40ms = 0;
+							client->drain40ms = 0;
 						}
-						if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
-							ast_debug(5, "Got GPS Keepalive from (%s)\n", client->name);
+						if (client->txseqno > (client->txseqno_rxkeyed + 4)) {
+							client->rxseqno = 0;
+							client->rxseqno_40ms = 0;
+							client->rxseq40ms = 0;
+							client->drain40ms = 0;
+						}
+						client->txseqno_rxkeyed = client->txseqno;
+						if (!client->rxseqno) {
+							client->rxseqno_40ms = client->rxseqno = ntohl(vph->curtime.vtime_nsec);
+						}
+						if ((!client->doadpcm) && (!client->donulaw)) {
+							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno;
 						} else {
-							vgp = (VOTER_GPS *) (buf + sizeof(VOTER_PACKET_HEADER));
-							if (client->gpsid) {
-								snprintf(gps1, sizeof(gps1) - 1, GPS_WORK_FILE, client->gpsid);
-								snprintf(gps2, sizeof(gps2) - 1, GPS_DATA_FILE, client->gpsid);
-								gpsfp = fopen(gps1, "w");
-								if (!gpsfp) {
-									ast_log(LOG_ERROR, "Unable to open GPS work file %s!!\n", gps1);
+							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
+						}
+						index *= FRAME_SIZE;
+						index += BUFDELAY(client);
+						index -= (FRAME_SIZE * 4);
+						if (DEBUG_ATLEAST(3)) {
+							if ((!client->doadpcm) && (!client->donulaw)) {
+								ast_debug(3, "mix client (Mulaw) %s index: %d their seq: %d our seq: %d\n", client->name, index,
+									ntohl(vph->curtime.vtime_nsec), client->rxseqno);
+							} else {
+								ast_debug(3, "mix client (ADPCM/Nulaw) %s index: %d their seq: %d our seq: %d\n", client->name,
+									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno_40ms);
+							}
+						}
+					} else {
+						btime = ((long long) master_time.vtime_sec * 1000000000LL) + master_time.vtime_nsec;
+						btime += 40000000;
+						if (client->curmaster) {
+							btime -= 20000000;
+						}
+						ptime = ((long long) ntohl(vph->curtime.vtime_sec) * 1000000000LL) + ntohl(vph->curtime.vtime_nsec);
+						difftime = (ptime - btime) + (BUFDELAY(client) * 125000LL);
+						difftime -= puckoffset(client);
+						index = (int) ((long long) difftime / 125000LL);
+						if (DEBUG_ATLEAST(5) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
+							timestuff = (time_t) master_time.vtime_sec;
+							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+							ast_debug(4, "DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
+							gettimeofday(&timetv, NULL);
+							timestuff = (time_t) timetv.tv_sec;
+							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+							ast_debug(4, "SysTime:   %s.%03d, diff: %lld,index: %d\n", timestr, (int) timetv.tv_usec / 1000,
+								btime - ptime, index);
+						}
+					}
+					/* if in bounds */
+					if ((index > 0) && (index < (client->buflen - (FRAME_SIZE * 2)))) {
+						f1 = NULL;
+						/* if no RSSI, just make it quiet */
+						if (!buf[sizeof(VOTER_PACKET_HEADER)]) {
+							for (i = 0; i < FRAME_SIZE; i++) {
+								buf[sizeof(VOTER_PACKET_HEADER) + i + 1] = 0xff;
+							}
+						}
+						/* if otherwise (RSSI > 0), if ADPCM, translate it */
+						else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) {
+#ifdef ADPCM_LOOPBACK
+							memset(&audiopacket, 0, sizeof(audiopacket));
+							strcpy((char *) audiopacket.vp.challenge, challenge);
+							audiopacket.vp.payload_type = htons(3);
+							audiopacket.rssi = 0;
+							memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE + 3);
+							audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
+							audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
+							audiopacket.vp.digest = htonl(client->respdigest);
+							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
+								sizeof(client->sin));
+#endif
+
+							memset(&fr, 0, sizeof(fr));
+							fr.frametype = AST_FRAME_VOICE;
+							fr.subclass.format = ast_format_adpcm;
+							fr.datalen = ADPCM_FRAME_SIZE;
+							fr.samples = FRAME_SIZE * 2;
+							fr.data.ptr = buf + sizeof(VOTER_PACKET_HEADER) + 1;
+							fr.src = __PRETTY_FUNCTION__;
+							f1 = ast_translate(p->adpcmin, &fr, 0);
+						}
+						/* if otherwise (RSSI > 0), if NULAW, translate it */
+						else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_NULAW) {
+							short s, xbuf[FRAME_SIZE * 2];
+#ifdef NULAW_LOOPBACK
+							memset(&audiopacket, 0, sizeof(audiopacket));
+							strcpy((char *) audiopacket.vp.challenge, challenge);
+							audiopacket.vp.payload_type = htons(4);
+							audiopacket.rssi = 0;
+							memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE);
+							audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
+							audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
+							audiopacket.vp.digest = htonl(client->respdigest);
+							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
+								sizeof(client->sin));
+#endif
+
+							for (i = 0; i < FRAME_SIZE * 2; i += 2) {
+								s = (AST_MULAW((int) (unsigned char) buf[sizeof(VOTER_PACKET_HEADER) + 1 + (i >> 1)])) / 2;
+								xbuf[i] = lpass4(s, p->rlpx, p->rlpy);
+								xbuf[i + 1] = lpass4(s, p->rlpx, p->rlpy);
+							}
+							memset(&fr, 0, sizeof(fr));
+							fr.frametype = AST_FRAME_VOICE;
+							fr.subclass.format = ast_format_slin;
+							fr.datalen = FRAME_SIZE * 4;
+							fr.samples = FRAME_SIZE * 2;
+							fr.data.ptr = xbuf;
+							fr.src = __PRETTY_FUNCTION__;
+							f1 = ast_translate(p->nuin, &fr, 0);
+						}
+						if ((!client->doadpcm) && (!client->donulaw)) {
+							index = (index + client->drainindex) % client->buflen;
+						} else {
+							index = (index + client->drainindex_40ms) % client->buflen;
+						}
+						flen = (f1) ? f1->datalen : FRAME_SIZE;
+						i = (int) client->buflen - (index + flen);
+						if (i >= 0) {
+							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen);
+							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen);
+						} else {
+							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen + i);
+							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen + i);
+							memcpy(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + i), -i);
+							memset(client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], -i);
+						}
+						if (f1) {
+							ast_frfree(f1);
+						}
+					} else if (client->mix) {
+						client->rxseqno = 0;
+						client->rxseqno_40ms = 0;
+						client->rxseq40ms = 0;
+						client->drain40ms = 0;
+						ast_debug(3, "mix client %s out of bounds, resetting!!\n", client->name);
+					}
+					if (client->curmaster) {
+						gettimeofday(&tv, NULL);
+						for (client = clients; client; client = client->next) {
+							if (!ast_tvzero(client->lastheardtime) &&
+								(voter_tvdiff_ms(tv, client->lastheardtime) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
+								ast_verb(3, "Voter client %s disconnect (timeout)\n", client->name);
+								client->heardfrom = 0;
+								client->respdigest = 0;
+							}
+							if (!client->heardfrom) {
+								client->lastheardtime.tv_sec = client->lastheardtime.tv_usec = 0;
+							}
+						}
+						if (check_client_sanity) {
+							for (client = clients; client; client = client->next) {
+								for (p = pvts; p; p = p->next) {
+									if (p->nodenum == client->nodenum) {
+										break;
+									}
+								}
+								if ((!p) || p->priconn) {
 									continue;
 								}
-								time(&t);
-								fprintf(gpsfp, "%u %s %s %sM\n", (unsigned int) t, vgp->lat, vgp->lon, vgp->elev);
-								fclose(gpsfp);
-								rename(gps1, gps2);
+								if (!client->respdigest) {
+									continue;
+								}
+								for (client1 = client->next; client1; client1 = client1->next) {
+									if (client1 == client) {
+										continue;
+									}
+									if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) &&
+										(client1->sin.sin_port == client->sin.sin_port)) {
+										if (!client1->respdigest) {
+											continue;
+										}
+										client->respdigest = 0;
+										client->heardfrom = 0;
+										client1->respdigest = 0;
+										client1->heardfrom = 0;
+									}
+								}
 							}
-							ast_debug(5, "Got GPS (%s): Lat: %s, Lon: %s, Elev: %s\n", client->name, vgp->lat, vgp->lon, vgp->elev);
 						}
-						continue;
+						hasmastered = 0;
+						voter_xmit_master();
+						for (p = pvts; p; p = p->next) {
+							char startagain;
+
+							startagain = 0;
+							maxrssi = 0;
+							maxclient = NULL;
+							for (client = clients; client; client = (startagain) ? clients : client->next) {
+								int maxprio, thisprio;
+
+								startagain = 0;
+								if (client->nodenum != p->nodenum) {
+									continue;
+								}
+								if (client->mix) {
+									continue;
+								}
+								if (client->prio_override == -1) {
+									continue;
+								}
+								k = 0;
+								i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
+								if (i >= 0) {
+									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
+										k += client->rssi[j];
+									}
+								} else {
+									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
+										k += client->rssi[j];
+									}
+									for (j = 0; j < -i; j++) {
+										k += client->rssi[j];
+									}
+								}
+								client->lastrssi = k / FRAME_SIZE;
+								maxprio = thisprio = 0;
+								if (maxclient) {
+									if (maxclient->prio_override > -2) {
+										maxprio = maxclient->prio_override;
+									} else {
+										maxprio = maxclient->prio;
+									}
+								}
+								if (client->prio_override > -2) {
+									thisprio = client->prio_override;
+								} else {
+									thisprio = client->prio;
+								}
+								if (((client->lastrssi > maxrssi) && (thisprio == maxprio)) || (client->lastrssi && (thisprio > maxprio))) {
+									maxrssi = client->lastrssi;
+									maxclient = client;
+									if (thisprio > maxprio) {
+										startagain = 1;
+									}
+								}
+							}
+							for (client = clients; client; client = client->next) {
+								if (client->nodenum != p->nodenum) {
+									continue;
+								}
+								if (client->mix) {
+									continue;
+								}
+								if (client->prio_override == -1) {
+									continue;
+								}
+								i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
+								if (i >= 0) {
+									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
+										client->rssi[j] = 0;
+									}
+								} else {
+									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
+										client->rssi[j] = 0;
+									}
+									for (j = 0; j < -i; j++) {
+										client->rssi[j] = 0;
+									}
+								}
+							}
+							if (!maxclient) {
+								maxrssi = 0;
+							}
+							memset(p->buf + AST_FRIENDLY_OFFSET, 0xff, FRAME_SIZE);
+							if (maxclient) {
+								int maxprio, lastprio;
+
+								if (maxclient->prio_override > -2) {
+									maxprio = maxclient->prio_override;
+								} else {
+									maxprio = maxclient->prio;
+								}
+								lastprio = 0;
+								if (p->lastwon) {
+									if (p->lastwon->prio_override > -2) {
+										lastprio = p->lastwon->prio_override;
+									} else {
+										lastprio = p->lastwon->prio;
+									}
+								}
+								/* if not on same client, and we have thresholds, and priority appropriate */
+								if (p->lastwon && p->nthresholds && (maxprio <= lastprio)) {
+									/* go thru all the thresholds */
+									for (i = 0; i < p->nthresholds; i++) {
+										/* if meets criteria */
+										if (p->lastwon->lastrssi >= p->rssi_thresh[i]) {
+											/* if not at same threshold, change to new one */
+											if ((i + 1) != p->threshold) {
+												p->threshold = i + 1;
+												p->threshcount = 0;
+												ast_debug(3, "New threshold %d, client %s, rssi %d\n", p->threshold,
+													p->lastwon->name, p->lastwon->lastrssi);
+											}
+											/* at the same threshold still, if count is enabled and is met */
+											else if (p->count_thresh[i] && (p->threshcount++ >= p->count_thresh[i])) {
+												ast_debug(3, "Threshold %d time (%d) exceeded, client %s, rssi %d\n",
+													p->threshold, p->count_thresh[i], p->lastwon->name, p->lastwon->lastrssi);
+												p->threshold = 0;
+												p->threshcount = 0;
+												p->lingercount = 0;
+												continue;
+											}
+											p->lingercount = 0;
+											maxclient = p->lastwon;
+											maxrssi = maxclient->lastrssi;
+											break;
+										}
+										/* if doesn't match any criteria */
+										if (i == (p->nthresholds - 1)) {
+											if (DEBUG_ATLEAST(3) && p->threshold) {
+												ast_debug(3, "Nothing matches criteria any more\n");
+											}
+											if (p->threshold) {
+												p->lingercount = p->linger_thresh[p->threshold - 1];
+											}
+											p->threshold = 0;
+											p->threshcount = 0;
+										}
+									}
+								}
+								if (p->lingercount) {
+									ast_debug(3, "Lingering on client %s, rssi %d, Maxclient is %s, rssi %d\n", p->lastwon->name,
+										p->lastwon->lastrssi, maxclient->name, maxrssi);
+									p->lingercount--;
+									maxclient = p->lastwon;
+									maxrssi = maxclient->lastrssi;
+								}
+								if (p->voter_test > 0) { /* perform cyclic selection */
+									/* see how many are eligible */
+									for (i = 0, client = clients; client; client = client->next) {
+										if (client->nodenum != p->nodenum) {
+											continue;
+										}
+										if (client->mix) {
+											continue;
+										}
+										if (client->lastrssi == maxrssi) {
+											i++;
+										}
+									}
+									if (p->voter_test == 1) {
+										p->testindex = random() % i;
+									} else {
+										p->testcycle++;
+										if (p->testcycle >= (p->voter_test - 1)) {
+											p->testcycle = 0;
+											p->testindex++;
+											if (p->testindex >= i) {
+												p->testindex = 0;
+											}
+										}
+									}
+									for (i = 0, client = clients; client; client = client->next) {
+										if (client->nodenum != p->nodenum) {
+											continue;
+										}
+										if (client->mix) {
+											continue;
+										}
+										if (client->lastrssi != maxrssi) {
+											continue;
+										}
+										if (i++ == p->testindex) {
+											maxclient = client;
+											maxrssi = client->lastrssi;
+											break;
+										}
+									}
+								} else {
+									p->testcycle = 0;
+									p->testindex = 0;
+								}
+								if (!maxclient) { /* if nothing there */
+									memset(silbuf, 0, sizeof(silbuf));
+									memset(&fr, 0, sizeof(fr));
+									fr.frametype = AST_FRAME_VOICE;
+									fr.subclass.format = ast_format_slin;
+									fr.datalen = FRAME_SIZE * 2;
+									fr.samples = FRAME_SIZE;
+									fr.data.ptr = silbuf;
+									fr.src = __PRETTY_FUNCTION__;
+									p->threshold = 0;
+									p->threshcount = 0;
+									p->lingercount = 0;
+									p->winner = 0;
+									incr_drainindex(p);
+									ast_queue_frame(p->owner, &fr);
+									continue;
+								}
+								i = (int) maxclient->buflen - ((int) maxclient->drainindex + FRAME_SIZE);
+								if (i >= 0) {
+									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE);
+								} else {
+									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE + i);
+									memcpy(p->buf + AST_FRIENDLY_OFFSET + (maxclient->buflen - i), maxclient->audio, -i);
+								}
+								for (client = clients; client; client = client->next) {
+									if (client->nodenum != p->nodenum) {
+										continue;
+									}
+									if (client->mix) {
+										continue;
+									}
+									if (p->recfp) {
+										if (!hasmastered) {
+											hasmastered = 1;
+											memset(&rec, 0, sizeof(rec));
+											memcpy(rec.audio, &master_time, sizeof(master_time));
+											fwrite(&rec, 1, sizeof(rec), p->recfp);
+										}
+										ast_copy_string(rec.name, client->name, sizeof(rec.name) - 1);
+										rec.rssi = client->lastrssi;
+										if (i >= 0) {
+											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE);
+										} else {
+											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + i);
+											memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
+											memcpy(rec.audio + FRAME_SIZE + i, client->audio, -i);
+											memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
+										}
+										fwrite(&rec, 1, sizeof(rec), p->recfp);
+									}
+									if (i >= 0) {
+										memset(client->audio + client->drainindex, 0xff, FRAME_SIZE);
+									} else {
+										memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
+										memset(client->audio, 0xff, -i);
+									}
+								}
+								if ((!p->duplex) && p->txkey) {
+									p->rxkey = 0;
+									p->lastwon = NULL;
+									memset(silbuf, 0, sizeof(silbuf));
+									memset(&fr, 0, sizeof(fr));
+									fr.frametype = AST_FRAME_VOICE;
+									fr.subclass.format = ast_format_slin;
+									fr.datalen = FRAME_SIZE * 2;
+									fr.samples = FRAME_SIZE;
+									fr.data.ptr = silbuf;
+									fr.src = __PRETTY_FUNCTION__;
+									p->threshold = 0;
+									p->threshcount = 0;
+									p->lingercount = 0;
+									p->winner = 0;
+									incr_drainindex(p);
+									ast_queue_frame(p->owner, &fr);
+									continue;
+								}
+								if (p->plfilter || p->hostdeemp) {
+									short ix;
+									for (i = 0; i < FRAME_SIZE; i++) {
+										j = p->buf[AST_FRIENDLY_OFFSET + i] & 0xff;
+										ix = AST_MULAW(j);
+										if (p->plfilter) {
+											ix = hpass6(ix, p->hpx, p->hpy);
+										}
+										if (p->hostdeemp) {
+											ix = deemp1(ix, &p->hdx);
+										}
+										p->buf[AST_FRIENDLY_OFFSET + i] = AST_LIN2MU(ix);
+									}
+								}
+								stream.curtime = master_time;
+								memcpy(stream.audio, p->buf + AST_FRIENDLY_OFFSET, FRAME_SIZE);
+								sprintf(stream.str, "%s", maxclient->name);
+								for (client = clients; client; client = client->next) {
+									if (client->nodenum != p->nodenum) {
+										continue;
+									}
+									sprintf(stream.str + strlen(stream.str), ",%s=%d", client->name, client->lastrssi);
+								}
+								for (i = 0; i < p->nstreams; i++) {
+									cp = ast_strdup(p->streams[i]);
+									if (!cp) {
+										break;
+									}
+									cp1 = strchr(cp, ':');
+									if (cp1) {
+										*cp1 = 0;
+										j = atoi(cp1 + 1);
+									} else {
+										j = listen_port;
+									}
+									sin_stream.sin_family = AF_INET;
+									sin_stream.sin_addr.s_addr = inet_addr(cp);
+									sin_stream.sin_port = htons(j);
+									sendto(udp_socket, &stream, sizeof(stream), 0, (struct sockaddr *) &sin_stream, sizeof(sin_stream));
+									ast_free(cp);
+								}
+								if (maxclient != p->lastwon) {
+									p->lastwon = maxclient;
+									ast_debug(1, "Voter client %s selected for node %d\n", maxclient->name, p->nodenum);
+									memset(&fr, 0, sizeof(fr));
+									fr.datalen = strlen(maxclient->name) + 1;
+									fr.frametype = AST_FRAME_TEXT;
+									fr.data.ptr = maxclient->name;
+									fr.src = __PRETTY_FUNCTION__;
+									ast_queue_frame(p->owner, &fr);
+								}
+								ast_debug(4, "Sending from client %s RSSI %d\n", maxclient->name, maxrssi);
+							}
+							if ((!p->duplex) && p->txkey) {
+								p->rxkey = 0;
+								p->lastwon = NULL;
+								memset(silbuf, 0, sizeof(silbuf));
+								memset(&fr, 0, sizeof(fr));
+								fr.frametype = AST_FRAME_VOICE;
+								fr.subclass.format = ast_format_slin;
+								fr.datalen = FRAME_SIZE * 2;
+								fr.samples = FRAME_SIZE;
+								fr.data.ptr = silbuf;
+								fr.src = __PRETTY_FUNCTION__;
+								p->threshold = 0;
+								p->threshcount = 0;
+								p->lingercount = 0;
+								p->winner = 0;
+								incr_drainindex(p);
+								ast_queue_frame(p->owner, &fr);
+								continue;
+							}
+							if (!voter_mix_and_send(p, maxclient, maxrssi)) {
+								continue;
+							}
+						}
 					}
-					if (client) {
-						client->heardfrom = 1;
-					}
-				}
-				/* otherwise, we just need to send an empty packet to the dude */
-				memset(&authpacket, 0, sizeof(authpacket));
-				memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
-				if (client) {
-					client->txseqno = 0;
-					client->txseqno_rxkeyed = 0;
-					client->rxseqno = 0;
-					client->rxseqno_40ms = 0;
-					client->rxseq40ms = 0;
-					client->drain40ms = 0;
-				}
-				strcpy((char *) authpacket.vp.challenge, challenge);
-				gettimeofday(&tv, NULL);
-				authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
-				authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-				/* make our digest based on their challenge */
-				authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
-				authpacket.flags = 0;
-				proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
-				proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-				/* make our digest based on their challenge */
-				proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
-				proxy_authpacket.flags = 0;
-				if (client && (!vph->payload_type)) {
-					client->mix = 0;
-					/* if client is sending options */
-					if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
-						if (client->ismaster) {
-							ast_log(LOG_WARNING,
-									"Voter client master timing source %s attempting to authenticate as mix client!! (HUH\?\?)\n",
-									client->name);
-							authpacket.vp.digest = 0;
-							client->heardfrom = 0;
-							client->respdigest = 0;
-							continue;
-						}
-						if (buf[sizeof(VOTER_PACKET_HEADER)] & 32) {
-							client->mix = 1;
-						}
-					}
-					if ((!client->mix) && (!hasmaster)) {
-						time(&t);
-						if (t >= (client->warntime + CLIENT_WARN_SECS)) {
-							client->warntime = t;
-							ast_log(LOG_WARNING,
-									"Voter client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
-									client->name);
-						}
-						authpacket.vp.digest = 0;
-						client->heardfrom = 0;
-						client->respdigest = 0;
-					} else {
-						if (client->ismaster) {
-							authpacket.flags |= 2 | 8;
-						}
-						if (client->doadpcm) {
-							authpacket.flags |= 16;
-						}
-						if (client->mix) {
-							authpacket.flags |= 32;
-						}
-						if (client->nodeemp || (p && p->hostdeemp)) {
-							authpacket.flags |= 1;
-						}
-						if (client->noplfilter) {
-							authpacket.flags |= 4;
-						}
-					}
-				}
-				/* send them the empty packet to get things started */
-				if (isproxy) {
-					ast_debug(2, "sending (proxied) packet challenge %s digest %08x password %s\n",
-						authpacket.vp.challenge, ntohl(authpacket.vp.digest), password);
-					proxy_authpacket.flags = authpacket.flags;
-					proxy_authpacket.vprox.ipaddr = sin.sin_addr.s_addr;
-					proxy_authpacket.vprox.port = sin.sin_port;
-					proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
-					sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin,
-						   sizeof(psin));
 				} else {
-					ast_debug(2, "sending packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
-						ntohl(authpacket.vp.digest), password);
-					sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+					ast_debug(2, "Request for voter client %s to unknown node %d\n", client->name, client->nodenum);
 				}
 				continue;
 			}
+			/* if we know the dude, and its ping, process it */
+			if (client && client->heardfrom && (ntohs(vph->payload_type) == VOTER_PAYLOAD_PING) && (recvlen == sizeof(pingpacket))) {
+				int timediff;
+
+				memcpy(&pingpacket, buf, sizeof(pingpacket));
+				gettimeofday(&client->ping_last_rxtime, NULL);
+				/* if ping not for this session */
+				if (voter_tvdiff_ms(client->ping_txtime, pingpacket.starttime)) {
+					continue;
+				}
+				if (client->ping_last_seqno && (pingpacket.seqno < (client->ping_last_seqno + 1))) {
+					ast_log(LOG_WARNING, "PING (%s): Packets out of sequence!!\n", client->name);
+					client->pings_oos++;
+				}
+				timediff = ast_tvdiff_ms(client->ping_last_rxtime, pingpacket.txtime);
+				if (timediff < 0) {
+					ast_log(LOG_WARNING, "PING (%s): Packet has invalid time (diff=%d)!!\n", client->name, timediff);
+					continue;
+				}
+				client->ping_last_seqno = pingpacket.seqno;
+				client->pings_received++;
+				client->pings_total_ms += timediff;
+				if (!client->pings_worst) {
+					client->pings_worst = timediff;
+				}
+				if (!client->pings_best) {
+					client->pings_best = timediff;
+				}
+				if (timediff < client->pings_best) {
+					client->pings_best = timediff;
+				}
+				if (timediff > client->pings_worst) {
+					client->pings_worst = timediff;
+				}
+				ast_verb(1, "PING (%s) Response:   seqno: %u  diff: %d ms\n", client->name, pingpacket.seqno, timediff);
+
+				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
+				strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+				/* ast_debug(3, "PING (%s):   seqno: %u %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec)); */
+
+				check_ping_done(client);
+				continue;
+			}
+			/* if we know the dude, find the connection his audio belongs to and send it there */
+			if (client && client->heardfrom && (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) &&
+				((recvlen == sizeof(VOTER_PACKET_HEADER)) || (recvlen == (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_GPS))) ||
+					(recvlen == ((sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_GPS)) - 1)))) {
+				gettimeofday(&client->lastheardtime, NULL);
+				client->lastgpstime.vtime_sec = ntohl(vph->curtime.vtime_sec);
+				client->lastgpstime.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
+				for (p = pvts; p; p = p->next) {
+					if (p->nodenum == client->nodenum) {
+						break;
+					}
+				}
+				if (client->curmaster) {
+					mastergps_time.vtime_sec = ntohl(vph->curtime.vtime_sec);
+					mastergps_time.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
+				} else if (p && p->priconn && (!client->dynamic) && (!client->mix)) {
+					memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
+					proxy.ipaddr = sin.sin_addr.s_addr;
+					proxy.port = sin.sin_port;
+					proxy.payload_type = vph->payload_type;
+					ast_copy_string(proxy.challenge, challenge, sizeof(challenge));
+					vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
+					proxy.flags = 0;
+					if (client->ismaster) {
+						proxy.flags |= 2 | 8;
+					}
+					if (client->doadpcm) {
+						proxy.flags |= 16;
+					}
+					if (client->mix) {
+						proxy.flags |= 32;
+					}
+					if (client->nodeemp || p->hostdeemp) {
+						proxy.flags |= 1;
+					}
+					if (client->noplfilter) {
+						proxy.flags |= 4;
+					}
+					vph->digest = htonl(crc32_bufs(p->primary_challenge, client->pswd));
+					memmove(buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), buf + sizeof(VOTER_PACKET_HEADER),
+						recvlen - sizeof(VOTER_PACKET_HEADER));
+					memcpy(buf + sizeof(VOTER_PACKET_HEADER), &proxy, sizeof(proxy));
+					ast_debug(3, "Sent outproxy to %s:%d for %s payload %d digest %08x\n", ast_inet_ntoa(p->primary.sin_addr),
+						ntohs(p->primary.sin_port), client->name, ntohs(proxy.payload_type), ntohl(vph->digest));
+					sendto(udp_socket, buf, recvlen + sizeof(proxy), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
+					continue;
+				}
+process_gps:
+				client->lastmastergpstime.vtime_sec = mastergps_time.vtime_sec;
+				client->lastmastergpstime.vtime_nsec = mastergps_time.vtime_nsec;
+				if (DEBUG_ATLEAST(4)) {
+					gettimeofday(&timetv, NULL);
+					timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
+					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+
+					ast_debug(4, "GPSTime (%s):   %s.%09d\n", client->name, timestr, ntohl(vph->curtime.vtime_nsec));
+					timetv.tv_usec = ((timetv.tv_usec + 10000) / 20000) * 20000;
+					if (timetv.tv_usec >= 1000000) {
+						timetv.tv_sec++;
+						timetv.tv_usec -= 1000000;
+					}
+					timestuff = (time_t) timetv.tv_sec;
+					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+					ast_debug(4, "SysTime:   %s.%06d\n", timestr, (int) timetv.tv_usec);
+					timestuff = (time_t) master_time.vtime_sec;
+					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+					ast_debug(4, "DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
+				}
+				if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
+					ast_debug(5, "Got GPS Keepalive from (%s)\n", client->name);
+				} else {
+					vgp = (VOTER_GPS *) (buf + sizeof(VOTER_PACKET_HEADER));
+					if (client->gpsid) {
+						snprintf(gps1, sizeof(gps1) - 1, GPS_WORK_FILE, client->gpsid);
+						snprintf(gps2, sizeof(gps2) - 1, GPS_DATA_FILE, client->gpsid);
+						gpsfp = fopen(gps1, "w");
+						if (!gpsfp) {
+							ast_log(LOG_ERROR, "Unable to open GPS work file %s!!\n", gps1);
+							continue;
+						}
+						time(&t);
+						fprintf(gpsfp, "%u %s %s %sM\n", (unsigned int) t, vgp->lat, vgp->lon, vgp->elev);
+						fclose(gpsfp);
+						rename(gps1, gps2);
+					}
+					ast_debug(5, "Got GPS (%s): Lat: %s, Lon: %s, Elev: %s\n", client->name, vgp->lat, vgp->lon, vgp->elev);
+				}
+				continue;
+			}
+			if (client) {
+				client->heardfrom = 1;
+			}
 		}
+
+		/* otherwise, we just need to send an empty packet to the dude */
+		memset(&authpacket, 0, sizeof(authpacket));
+		memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
+		if (client) {
+			client->txseqno = 0;
+			client->txseqno_rxkeyed = 0;
+			client->rxseqno = 0;
+			client->rxseqno_40ms = 0;
+			client->rxseq40ms = 0;
+			client->drain40ms = 0;
+		}
+		strcpy((char *) authpacket.vp.challenge, challenge);
+		gettimeofday(&tv, NULL);
+		authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
+		authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+		/* make our digest based on their challenge */
+		authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
+		authpacket.flags = 0;
+		proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
+		proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+		/* make our digest based on their challenge */
+		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
+		proxy_authpacket.flags = 0;
+		if (client && (!vph->payload_type)) {
+			client->mix = 0;
+			/* if client is sending options */
+			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
+				if (client->ismaster) {
+					ast_log(LOG_WARNING,
+						"Voter client master timing source %s attempting to authenticate as mix client!! (HUH\?\?)\n", client->name);
+					authpacket.vp.digest = 0;
+					client->heardfrom = 0;
+					client->respdigest = 0;
+					continue;
+				}
+				if (buf[sizeof(VOTER_PACKET_HEADER)] & 32) {
+					client->mix = 1;
+				}
+			}
+			if ((!client->mix) && (!hasmaster)) {
+				time(&t);
+				if (t >= (client->warntime + CLIENT_WARN_SECS)) {
+					client->warntime = t;
+					ast_log(LOG_WARNING, "Voter client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
+						client->name);
+				}
+				authpacket.vp.digest = 0;
+				client->heardfrom = 0;
+				client->respdigest = 0;
+			} else {
+				if (client->ismaster) {
+					authpacket.flags |= 2 | 8;
+				}
+				if (client->doadpcm) {
+					authpacket.flags |= 16;
+				}
+				if (client->mix) {
+					authpacket.flags |= 32;
+				}
+				if (client->nodeemp || (p && p->hostdeemp)) {
+					authpacket.flags |= 1;
+				}
+				if (client->noplfilter) {
+					authpacket.flags |= 4;
+				}
+			}
+		}
+		/* send them the empty packet to get things started */
+		if (isproxy) {
+			ast_debug(2, "sending (proxied) packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
+				ntohl(authpacket.vp.digest), password);
+			proxy_authpacket.flags = authpacket.flags;
+			proxy_authpacket.vprox.ipaddr = sin.sin_addr.s_addr;
+			proxy_authpacket.vprox.port = sin.sin_port;
+			proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
+			sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
+		} else {
+			ast_debug(2, "sending packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
+				ntohl(authpacket.vp.digest), password);
+			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+		}
+		continue;
 	}
 	ast_mutex_unlock(&voter_lock);
 	ast_debug(1, "Voter: Read thread exited.\n");
