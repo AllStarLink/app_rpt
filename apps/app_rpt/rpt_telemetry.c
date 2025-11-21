@@ -2537,6 +2537,7 @@ treataslocal:
 		break;
 	case TIMEOUT:
 		donodelog_fmt(myrpt, "TELEMETRY,%s,TIMEOUT", myrpt->name);
+		myrpt->noduck = 1;
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (!res) {
 			res = ast_streamfile(mychannel, "rpt/timeout", ast_channel_language(mychannel));
