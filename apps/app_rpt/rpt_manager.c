@@ -214,10 +214,12 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				NULL,								 /* Sorting function. NULL means the list will not be sorted */
 				NULL);								 /* Comparison function */
 			if (!links_copy) {
+				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
 			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
 				ao2_cleanup(links_copy);
+				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
