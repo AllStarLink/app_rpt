@@ -991,6 +991,44 @@ static bool is_http_success(int code)
 	return (code >= 200 && code <= 299);
 }
 
+static const char *http_status_text(long code)
+{
+	switch (code) {
+	case 100:
+		return "Continue";
+	case 101:
+		return "Switching Protocols";
+	case 200:
+		return "OK";
+	case 201:
+		return "Created";
+	case 204:
+		return "No Content";
+	case 301:
+		return "Moved Permanently";
+	case 302:
+		return "Found";
+	case 304:
+		return "Not Modified";
+	case 400:
+		return "Bad Request";
+	case 401:
+		return "Unauthorized";
+	case 403:
+		return "Forbidden";
+	case 404:
+		return "Not Found";
+	case 500:
+		return "Internal Server Error";
+	case 502:
+		return "Bad Gateway";
+	case 503:
+		return "Service Unavailable";
+	default:
+		return "Unknown Status";
+	}
+}
+
 static void *perform_statpost(void *data)
 {
 	int failed = 0;
@@ -1040,7 +1078,7 @@ static void *perform_statpost(void *data)
 		if (!is_http_success(rescode)) {
 			failed = 1;
 			if (!myrpt->last_statpost_failed) {
-				ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld : %s\n", sp->stats_url, rescode, ast_str_buffer(response_msg));
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld: %s\n", sp->stats_url, rescode, http_status_text(rescode));
 			}
 		}
 	}
