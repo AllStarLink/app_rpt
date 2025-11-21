@@ -3926,12 +3926,12 @@ static void *voter_reader(void *data)
 						break;
 					}
 				}
-			}
-			if (!p) {
-				/* We didn't find an asterisk channel,
-				 * act like we don't know the client.
-				 */
-				client = NULL;
+				if (!p) {
+					/* We didn't find an asterisk channel,
+					 * act like we don't know the client.
+					 */
+					client = NULL;
+				}
 			}
 			if (client) {
 				if (check_client_sanity && p && !p->priconn) {
