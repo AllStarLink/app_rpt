@@ -3735,18 +3735,13 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
 		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
 	/* adjust settings based on the device */
-	switch (o->devtype) {
-		case C119B_PRODUCT_ID:
-			mic_setting =  o->rxmixerset * o->micmax / C119B_ADJUSTMENT;
-			/* get interval step size */
-			f = C119B_ADJUSTMENT / (float) o->micmax;
-			o->rxboost = 1;		/*rxboost is always set for this device */
-			break;
-		default:
-			mic_setting =  o->rxmixerset * o->micmax / 1000;
-			/* get interval step size */
-			f = 1000.0 / (float) o->micmax;
+	if (o->devtype == C119B_PRODUCT_ID) {
+		o->rxboost = 1; /*rxboost is always set for this device */
 	}
+	mic_setting = o->rxmixerset * o->micmax / AUDIO_ADJUSTMENT;
+	/* get interval step size */
+	f = AUDIO_ADJUSTMENT / (float) o->micmax;
+
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);

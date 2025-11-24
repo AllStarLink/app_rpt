@@ -78,7 +78,7 @@
  *	This adjustment factor is used for both microphone and
  *	speaker calculations.
  */
-#define C119B_ADJUSTMENT	1000
+#define AUDIO_ADJUSTMENT 1000
 
 /*!
  * \brief EEPROM memory layout
