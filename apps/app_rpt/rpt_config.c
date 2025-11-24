@@ -1096,11 +1096,14 @@ void load_rpt_vars(int n, int init)
 		i = finddelim((char *) val, strs, ARRAY_LEN(strs)); /*! \todo Illegal cast */
 		if (i > 3) {
 			rpt_vars[n].p.dopfxtone = ast_true(strs[3]);
-		} else if (i > 2) {
+		}
+		if (i > 2) {
 			ast_copy_string(rpt_vars[n].p.inxlat.passchars, strs[2], sizeof(rpt_vars[n].p.inxlat.passchars));
-		} else if (i > 1) {
+		}
+		if (i > 1) {
 			ast_copy_string(rpt_vars[n].p.inxlat.endcharseq, strs[1], sizeof(rpt_vars[n].p.inxlat.endcharseq));
-		} else if (i) {
+		}
+		if (i) {
 			ast_copy_string(rpt_vars[n].p.inxlat.funccharseq, strs[0], sizeof(rpt_vars[n].p.inxlat.funccharseq));
 		}
 	}
@@ -1111,9 +1114,11 @@ void load_rpt_vars(int n, int init)
 		i = finddelim((char *) val, strs, ARRAY_LEN(strs)); /*! \todo Illegal cast */
 		if (i > 2) {
 			ast_copy_string(rpt_vars[n].p.outxlat.passchars, strs[2], sizeof(rpt_vars[n].p.outxlat.passchars));
-		} else if (i > 1) {
+		}
+		if (i > 1) {
 			ast_copy_string(rpt_vars[n].p.outxlat.endcharseq, strs[1], sizeof(rpt_vars[n].p.outxlat.endcharseq));
-		} else if (i) {
+		}
+		if (i) {
 			ast_copy_string(rpt_vars[n].p.outxlat.funccharseq, strs[0], sizeof(rpt_vars[n].p.outxlat.funccharseq));
 		}
 	}
