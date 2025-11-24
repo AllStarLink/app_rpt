@@ -3793,12 +3793,15 @@ static void *voter_timer(void *data)
 }
 
 /*!
- * \brief Reader thread that processes incoming VOTER UDP packets and updates driver state.
+ * \brief UDP reader thread that processes incoming Voter protocol packets and updates voter state.
  *
- * This thread receives VOTER protocol packets, authenticates and identifies clients,
- * updates per-client and per-node timing/state (including master timing, GPS, and ping
- * statistics), routes or proxies audio payloads into per-client buffers, and triggers
- * node-level selection/mixing and keepalive responses as appropriate.
+ * \description This thread receives Voter-format UDP packets, matches them to configured clients (including
+ * dynamic binding), validates/authenticates clients, and handles payloads such as audio
+ * (ULAW/ADPCM/NULAW), proxy-encapsulated packets, GPS, and PING.  It updates timing and master
+ * synchronization state, writes received audio and RSSI into per-client circular buffers,
+ * performs RSSI-based selection and threshold/linger logic per node, queues audio/text/control
+ * frames to the associated Asterisk channel, and sends authentication/keepalive responses when
+ * appropriate.
  *
  * \param data Always NULL; unused thread argument.
  * \return     NULL when the thread exits.
@@ -3920,7 +3923,7 @@ static void *voter_reader(void *data)
 					client->name, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
 			if (client) {
-				/* Search for connected asterisk channel for this known client */
+				/* Search for connected Asterisk channel for this known client */
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
 						break;
