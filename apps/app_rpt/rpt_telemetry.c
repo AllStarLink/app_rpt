@@ -1287,8 +1287,6 @@ void *rpt_tele_thread(void *this)
 		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-	rpt_disable_cdr(mychannel);
-	ast_answer(mychannel);
 
 	rpt_mutex_lock(&myrpt->lock);
 	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */

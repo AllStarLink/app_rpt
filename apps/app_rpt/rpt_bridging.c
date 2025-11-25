@@ -270,6 +270,8 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap)
 		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
 		return NULL;
 	}
+	rpt_disable_cdr(chan);
+	ast_answer(chan);
 	return chan;
 }
 
