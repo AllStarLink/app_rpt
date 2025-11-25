@@ -11,6 +11,13 @@ reviews:
       mode: 'off'
   tools:
     github-checks:
+      enabled: true
       timeout_ms: 100000
+code_generation:
+  docstrings:
+    language: en-US
+    path_instructions:
+      - path: "*.{c,h}"
+        instructions: Use Asterisk style docstrings with Args and Returns sections in the QT format.
 chat:
   art: false
