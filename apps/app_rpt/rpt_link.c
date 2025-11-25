@@ -249,17 +249,15 @@ int linkcount(struct rpt *myrpt)
 	return numoflinks;
 }
 
-int FindBestRssi(struct rpt *myrpt)
+void FindBestRssi(struct rpt *myrpt)
 {
 	struct rpt_link *l;
 	struct rpt_link *bl;
 	int maxrssi;
-	int numoflinks;
 	char newboss;
 
 	bl = NULL;
 	maxrssi = 0;
-	numoflinks = 0;
 	newboss = 0;
 
 	myrpt->voted_rssi = 0;
@@ -274,16 +272,11 @@ int FindBestRssi(struct rpt *myrpt)
 
 	l = myrpt->links.next;
 	while (l && (l != &myrpt->links)) {
-		if (numoflinks >= MAX_STAT_LINKS) {
-			ast_log(LOG_WARNING, "[%s] number of links exceeds limit of %d \n", myrpt->name, MAX_STAT_LINKS);
-			break;
-		}
 		if (l->lastrealrx && (l->rssi > maxrssi)) {
 			maxrssi = l->rssi;
 			bl = l;
 		}
 		l->votewinner = 0;
-		numoflinks++;
 		l = l->next;
 	}
 
@@ -301,10 +294,7 @@ int FindBestRssi(struct rpt *myrpt)
 		myrpt->voted_rssi = maxrssi;
 	}
 
-	ast_debug(5, "[%s] links=%i best rssi=%i from %s%s\n",
-		myrpt->name, numoflinks, maxrssi, bl == NULL ? "rpt" : bl->name, newboss ? "*" : "");
-
-	return numoflinks;
+	ast_debug(5, "[%s] best rssi=%i from %s%s\n", myrpt->name, maxrssi, bl == NULL ? "rpt" : bl->name, newboss ? "*" : "");
 }
 
 void do_dtmf_phone(struct rpt *myrpt, struct rpt_link *mylink, char c)
