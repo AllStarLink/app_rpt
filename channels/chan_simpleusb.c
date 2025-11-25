@@ -1408,6 +1408,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	 */
 
 	res = snd_pcm_writei(o->pcm_playback, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
+	ast_debug(3, "I've writen with res=%d\n", res);
 	if (res < 0) {
 		ast_log(LOG_ERROR, "Channel %s: Sound card write error %s\n", o->name, strerror(errno));
 	} else if (res != FRAME_SIZE * 2 * 2 * 6) {
@@ -1459,33 +1460,34 @@ static int setformat(struct chan_simpleusb_pvt *o, int mode)
 	 * Convert "default" to a configuration value
 	 */
 
-	if (snd_pcm_open(&o->pcm_playback, "default", SND_PCM_STREAM_PLAYBACK, 0) < 0) {
+	if (snd_pcm_open(&o->pcm_playback, "plughw:CARD=Device", SND_PCM_STREAM_PLAYBACK, 0) < 0) {
 		ast_log(LOG_ERROR, "Playback Channel %s: Unable to open ALSA device %d: %s.\n", o->name, o->devicenum, strerror(errno));
 		return -1;
 	}
-	if (snd_pcm_open(&o->pcm_capture, "default", SND_PCM_STREAM_CAPTURE, 0) < 0) {
+	if (snd_pcm_open(&o->pcm_capture, "plughw:CARD=Device", SND_PCM_STREAM_CAPTURE, 0) < 0) {
 		ast_log(LOG_ERROR, "Capture Channel %s: Unable to open ALSA device %d: %s.\n", o->name, o->devicenum, strerror(errno));
 		return -1;
 	}
-
-/*	if (o->owner) {
+	if (o->owner) {
 		ast_channel_internal_fd_set(o->owner, 0, fd);
 	}
-*/
+
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 	fmt = SND_PCM_FORMAT_S16_LE;
 #else
 	fmt = SND_PCM_FORMAT_S16_BE;
 #endif
-
+	ast_debug(3, "I've set the format");
 	snd_pcm_hw_params_alloca(&params);
 	snd_pcm_hw_params_any(o->pcm_playback, params);
+	snd_pcm_hw_params_set_access(o->pcm_playback, params, SND_PCM_ACCESS_RW_INTERLEAVED);
 	snd_pcm_hw_params_set_format(o->pcm_playback, params, fmt);
 	snd_pcm_hw_params_set_rate(o->pcm_playback, params, 48000, 0);
 	snd_pcm_hw_params(o->pcm_playback, params);
 
 	snd_pcm_hw_params_alloca(&params);
 	snd_pcm_hw_params_any(o->pcm_capture, params);
+	snd_pcm_hw_params_set_access(o->pcm_capture, params, SND_PCM_ACCESS_RW_INTERLEAVED);
 	snd_pcm_hw_params_set_format(o->pcm_capture, params, fmt);
 	snd_pcm_hw_params_set_rate(o->pcm_capture, params, 48000, 0);
 	snd_pcm_hw_params(o->pcm_capture, params);
@@ -2096,6 +2098,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	 * in stereo format.
 	 */
 	res = snd_pcm_readi(o->pcm_capture, o->simpleusb_read_buf + o->readpos, sizeof(o->simpleusb_read_buf) - o->readpos);
+	ast_debug(3, "I've read with %d", res);
 	if (res < 0) { /* Audio data not ready, return a NULL frame */
 		if (errno != EAGAIN) {
 			o->readerrs = 0;
