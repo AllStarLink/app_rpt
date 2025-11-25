@@ -2223,17 +2223,18 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 static struct ast_frame *el_xread(struct ast_channel *ast)
 {
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
-	struct ast_frame fr = {
-		.frametype = AST_FRAME_CONTROL,
-		.subclass.integer = AST_CONTROL_ANSWER,
-		.src = __PRETTY_FUNCTION__,
-	};
 
 	if (p->hangup) {
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
 	}
 	if (!p->last_firstheard && p->firstheard) {
+		struct ast_frame fr = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_ANSWER,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		ast_queue_frame(ast, &fr);
 		p->last_firstheard = 1;
 	}
@@ -2259,13 +2260,14 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct el_rxqast *qpast;
 	int n, x;
 	char buf[GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET];
-	struct ast_frame fr3 = {
-		.frametype = AST_FRAME_CONTROL,
-		.subclass.integer = AST_CONTROL_ANSWER,
-		.src = __PRETTY_FUNCTION__,
-	};
 
 	if (!p->last_firstheard && p->firstheard) {
+		struct ast_frame fr3 = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = AST_CONTROL_ANSWER,
+			.src = __PRETTY_FUNCTION__,
+		};
+
 		ast_queue_frame(ast, &fr3);
 		p->last_firstheard = 1;
 	}
