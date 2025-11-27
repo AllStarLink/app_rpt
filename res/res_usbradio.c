@@ -116,21 +116,7 @@ long ast_radio_lround(double x)
 
 int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype)
 {
-	int v;
-	
-	switch (devtype) {
-		case C108_PRODUCT_ID:
-			v = (request_value * spkrmax) / 1000;
-			return v;
-			
-		case C119B_PRODUCT_ID:
-			v = (request_value * spkrmax) / C119B_ADJUSTMENT;
-			return v;
-			
-		default:
-			v = (request_value * spkrmax) / 1000;
-			return v;
-	}
+	return (request_value * spkrmax) / AUDIO_ADJUSTMENT;
 }
 
 int ast_radio_amixer_max(int devnum, char *param)

@@ -1120,15 +1120,7 @@ static void *hidthread(void *arg)
 			o->pmrChan->rxCpuSaver = o->rxcpusaver;
 			o->pmrChan->txCpuSaver = o->txcpusaver;
 
-			/* adjust settings based on the device */
-			switch (o->devtype) {
-			case C119B_PRODUCT_ID:
-				*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / C119B_ADJUSTMENT;
-				break;
-			default:
-				*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / 1000;
-			}
-
+			*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / AUDIO_ADJUSTMENT;
 			*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
 			*(o->pmrChan->prxCtcssAdjust) = o->rxctcssadj * M_Q8;
 			o->pmrChan->rxCtcss->relax = o->rxctcssrelax;
@@ -2883,7 +2875,6 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 {
 	struct chan_usbradio_pvt *o = find_desc(usbradio_active);
 	int i = 0;
-	int adjustment;
 
 	if ((argc < 3) || (argc > 4)) {
 		return RESULT_SHOWUSAGE;
@@ -2932,15 +2923,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 			}
 			ast_cli(fd, "Changed Squelch setting to %d\n", i);
 			o->rxsquelchadj = i;
-			/* adjust settings based on the device */
-			switch (o->devtype) {
-			case C119B_PRODUCT_ID:
-				adjustment = C119B_ADJUSTMENT;
-				break;
-			default:
-				adjustment = 1000;
-			}
-			*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / adjustment;
+			*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / AUDIO_ADJUSTMENT;
 		}
 	} else if (!strcasecmp(argv[2], "txvoice")) {
 		i = 0;
@@ -3138,8 +3121,6 @@ static int radio_tune(int fd, int argc, const char *const *argv)
  */
 static int set_txctcss_level(struct chan_usbradio_pvt *o)
 {
-	int adjustment;
-
 	if (o->txmixa == TX_OUT_LSD) {
 		//      o->txmixaset=(151*o->txctcssadj) / 1000;
 		o->txmixaset = o->txctcssadj;
@@ -3152,15 +3133,7 @@ static int set_txctcss_level(struct chan_usbradio_pvt *o)
 		mult_set(o);
 	} else {
 		if (o->pmrChan->ptxCtcssAdjust) { /* Ignore if ptr not defined */
-			/* adjust settings based on the device */
-			switch (o->devtype) {
-			case C119B_PRODUCT_ID:
-				adjustment = C119B_ADJUSTMENT;
-				break;
-			default:
-				adjustment = 1000;
-			}
-			*o->pmrChan->ptxCtcssAdjust = (o->txctcssadj * M_Q8) / adjustment;
+			*o->pmrChan->ptxCtcssAdjust = (o->txctcssadj * M_Q8) / AUDIO_ADJUSTMENT;
 		}
 	}
 	return 0;
@@ -3418,7 +3391,6 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 	int tolerance = 2750;
 	int setting = 0, tries = 0, tmpdiscfactor, meas, measnoise;
 	float settingmax, f;
-	int adjustment;
 
 	if (o->rxdemod == RX_AUDIO_SPEAKER && o->rxcdtype == CD_XPMR_NOISE) {
 		ast_cli(fd, "ERROR: usbradio.conf rxdemod=speaker vs. carrierfrom=dsp \n");
@@ -3513,17 +3485,8 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		ast_cli(fd, "INFO: RX INPUT ADJUST SUCCESS.\n");
 		o->rxmixerset = ((setting * 1000) + (o->micmax / 2)) / o->micmax;
 
-		/* adjust settings based on the device */
-		switch (o->devtype) {
-		case C119B_PRODUCT_ID:
-			adjustment = C119B_ADJUSTMENT;
-			break;
-		default:
-			adjustment = 1000;
-		}
-
 		if (o->rxcdtype == CD_XPMR_NOISE) {
-			int normRssi = ((32767 - o->pmrChan->rxRssi) * adjustment / 32767);
+			int normRssi = ((32767 - o->pmrChan->rxRssi) * AUDIO_ADJUSTMENT / 32767);
 
 			if ((meas / (measnoise / 10)) > 26) {
 				ast_cli(fd, "WARNING: Insufficient high frequency noise from receiver.\n");
@@ -3537,7 +3500,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 				if (o->rxsquelchadj > 999) {
 					o->rxsquelchadj = 999;
 				}
-				*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / adjustment;
+				*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / AUDIO_ADJUSTMENT;
 				ast_cli(fd, "Rx Squelch set to %d (RSSI=%d).\n", o->rxsquelchadj, normRssi);
 			} else {
 				if (o->rxsquelchadj < normRssi) {
@@ -3678,18 +3641,13 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 	} else {
 		o->rxmixerset = i;
 		/* adjust settings based on the device */
-		switch (o->devtype) {
-		case C119B_PRODUCT_ID:
-			adjustment = o->rxmixerset * o->micmax / C119B_ADJUSTMENT;
-			/* get interval step size */
-			f = C119B_ADJUSTMENT / (float) o->micmax;
+		if (o->devtype == C119B_PRODUCT_ID) {
 			o->rxboost = 1; /*rxboost is always set for this device */
-			break;
-		default:
-			adjustment = o->rxmixerset * o->micmax / 1000;
-			/* get interval step size */
-			f = 1000.0 / (float) o->micmax;
 		}
+		adjustment = o->rxmixerset * o->micmax / AUDIO_ADJUSTMENT;
+		/* get interval step size */
+		f = AUDIO_ADJUSTMENT / (float) o->micmax;
+
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, adjustment, 0);
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 		o->rxvoiceadj = 0.5 + (modff(((float) i) / f, &f1) * .093981);
@@ -3757,7 +3715,7 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
  */
 static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str)
 {
-	int i, x, adjustment;
+	int i, x;
 
 	if (!str[0]) {
 		ast_cli(fd, "Current Signal Strength is %d\n", ((32767 - o->pmrChan->rxRssi) * 1000 / 32767));
@@ -3776,14 +3734,7 @@ static void _menu_rxsquelch(int fd, struct chan_usbradio_pvt *o, const char *str
 	ast_cli(fd, "Changed Rx Squelch Level setting to %d\n", i);
 	o->rxsquelchadj = i;
 	/* adjust settings based on the device */
-	switch (o->devtype) {
-	case C119B_PRODUCT_ID:
-		adjustment = C119B_ADJUSTMENT;
-		break;
-	default:
-		adjustment = 1000;
-	}
-	*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / adjustment;
+	*(o->pmrChan->prxSquelchAdjust) = ((999 - i) * 32767) / AUDIO_ADJUSTMENT;
 }
 
 /*!
@@ -4411,7 +4362,6 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 
 	float setting;
 	int tries = 0, meas;
-	int adjustment;
 
 	ast_cli(fd, "INFO: RX CTCSS ADJUST START.\n");
 	ast_cli(fd, "target=%i tolerance=%i \n", target, tolerance);
@@ -4466,15 +4416,8 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 			o->pmrChan->b.tuning = 0;
 			return;
 		}
-		/* adjust settings based on the device */
-		switch (o->devtype) {
-		case C119B_PRODUCT_ID:
-			adjustment = C119B_ADJUSTMENT;
-			break;
-		default:
-			adjustment = 1000;
-		}
-		normRssi = ((32767 - o->pmrChan->rxRssi) * adjustment / 32767);
+
+		normRssi = ((32767 - o->pmrChan->rxRssi) * AUDIO_ADJUSTMENT / 32767);
 
 		if (o->rxsquelchadj > normRssi) {
 			ast_cli(fd, "WARNING: RSSI=%i SQUELCH=%i and is too tight. Use 'radio tune rxsquelch'.\n", normRssi, o->rxsquelchadj);
@@ -4664,14 +4607,10 @@ static void mixer_write(struct chan_usbradio_pvt *o)
 		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
 		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
 	/* adjust settings based on the device */
-	switch (o->devtype) {
-	case C119B_PRODUCT_ID:
-		mic_setting = o->rxmixerset * o->micmax / C119B_ADJUSTMENT;
+	if (o->devtype == C119B_PRODUCT_ID) {
 		o->rxboost = 1; /*rxboost is always set for this device */
-		break;
-	default:
-		mic_setting = o->rxmixerset * o->micmax / 1000;
 	}
+	mic_setting = o->rxmixerset * o->micmax / AUDIO_ADJUSTMENT;
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
@@ -4685,21 +4624,11 @@ static void mixer_write(struct chan_usbradio_pvt *o)
  */
 static void mult_set(struct chan_usbradio_pvt *o)
 {
-	int adjustment;
-
-	/* adjust settings based on the device */
-	switch (o->devtype) {
-	case C119B_PRODUCT_ID:
-		adjustment = C119B_ADJUSTMENT;
-		break;
-	default:
-		adjustment = 1000;
-	}
 	if (o->pmrChan->spsTxOutA) {
-		o->pmrChan->spsTxOutA->outputGain = mult_calc((o->txmixaset * 152) / adjustment);
+		o->pmrChan->spsTxOutA->outputGain = mult_calc((o->txmixaset * 152) / AUDIO_ADJUSTMENT);
 	}
 	if (o->pmrChan->spsTxOutB) {
-		o->pmrChan->spsTxOutB->outputGain = mult_calc((o->txmixbset * 152) / adjustment);
+		o->pmrChan->spsTxOutB->outputGain = mult_calc((o->txmixbset * 152) / AUDIO_ADJUSTMENT);
 	}
 }
 
@@ -5240,15 +5169,7 @@ static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, cons
 		o->pmrChan->rxCpuSaver = o->rxcpusaver;
 		o->pmrChan->txCpuSaver = o->txcpusaver;
 
-		/* adjust settings based on the device */
-		switch (o->devtype) {
-		case C119B_PRODUCT_ID:
-			*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / C119B_ADJUSTMENT;
-			break;
-		default:
-			*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / 1000;
-		}
-
+		*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / AUDIO_ADJUSTMENT;
 		*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
 		*(o->pmrChan->prxCtcssAdjust) = o->rxctcssadj * M_Q8;
 		o->pmrChan->rxCtcss->relax = o->rxctcssrelax;
