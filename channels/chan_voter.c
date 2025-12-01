@@ -3933,6 +3933,7 @@ static void *voter_reader(void *data)
 					/* We didn't find an asterisk channel,
 					 * act like we don't know the client.
 					 */
+					ast_debug(2, "Request for voter client %s to unknown node %d\n", client->name, client->nodenum);
 					client = NULL;
 				}
 			}
@@ -4668,8 +4669,6 @@ static void *voter_reader(void *data)
 							}
 						}
 					}
-				} else {
-					ast_debug(2, "Request from VOTER client %s to unknown node %d\n", client->name, client->nodenum);
 				}
 				continue;
 			}
