@@ -1655,7 +1655,7 @@ static void *voter_primary_client(void *data)
 			strcpy((char *) authpacket.vp.challenge, challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.flags = 32;
-			ast_debug(3, "VOTER %i: Sent primary client auth to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr), 
+			ast_debug(3, "VOTER %i: Sent primary client auth to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
@@ -1697,7 +1697,7 @@ static void *voter_primary_client(void *data)
 
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) {	/* if set got something worthwhile */
 				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(3, "VOTER %i: Got primary client X packet, len %d payload %d challenge %s digest %08x\n", p->nodenum, 
+				ast_debug(3, "VOTER %i: Got primary client X packet, len %d payload %d challenge %s digest %08x\n", p->nodenum,
 					(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 				/* if this is a new session */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
@@ -2052,7 +2052,7 @@ static void *voter_xmit(void *data)
 						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
 					} else {
-						ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name, 
+						ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
 							client->respdigest);
 						sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
@@ -3904,7 +3904,7 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
-		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x from client %s\n", (int) recvlen, 
+		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x from client %s\n", (int) recvlen,
 			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest), ((client) ? client->name : "UNKNOWN"));
 		client = NULL;
 		if ((!check_client_sanity) && master_port) {
@@ -4320,9 +4320,9 @@ static void *voter_reader(void *data)
 						client->rxseqno_40ms = 0;
 						client->rxseq40ms = 0;
 						client->drain40ms = 0;
-						ast_debug(3, "Mix client %s index %i < bufflen %i out of bounds, resetting!!\n", client->name, index, 
+						ast_debug(3, "Mix client %s index %i < bufflen %i out of bounds, resetting!!\n", client->name, index,
 							(client->buflen - (FRAME_SIZE * 2)));
-						ast_log(LOG_ERROR, "Mix client %s out of bounds! buflen must be >=160 in voter.conf with Mix clients!", 
+						ast_log(LOG_ERROR, "Mix client %s out of bounds! buflen must be >=160 in voter.conf with Mix clients!",
 							client->name);
 					}
 					if (client->curmaster) {
