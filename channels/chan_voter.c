@@ -3822,7 +3822,7 @@ static void *voter_reader(void *data)
 	ssize_t recvlen;
 	struct timeval tv, timetv;
 	FILE *gpsfp;
-	struct voter_client *client, *client1, *maxclient, *lastmaster;
+	struct voter_client *client = NULL, *client1, *maxclient, *lastmaster;
 	VOTER_PACKET_HEADER *vph;
 	VOTER_PROXY_HEADER proxy;
 	VOTER_GPS *vgp;
