@@ -33,10 +33,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          version: '14'
+          version: '19'
           lines-changed-only: true
           format-review: true
-          style: 'file:.dev/.clang-format'  # Use .clang-format config file
+          style: 'file:./.dev/.clang-format'  # Use .clang-format config file
           tidy-checks: '-*' # Use .clang-tidy config file
           # only 'update' a single comment in a pull request thread.
           thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
