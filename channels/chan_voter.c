@@ -423,7 +423,6 @@ struct voter_client {
 	unsigned int mix:1;
 	unsigned int nodeemp:1;
 	unsigned int noplfilter:1;
-	unsigned int dynamic:1;
 	unsigned int txlockout:1;
 	unsigned int reload:1;
 	unsigned int rxseq40ms:1;
@@ -1649,7 +1648,7 @@ static void *voter_primary_client(void *data)
 		}
 		gettimeofday(&tv, NULL);
 		memset(&authpacket, 0, sizeof(authpacket));
-		if ((!p->priconn) && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 500))) {
+		if (!p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 500))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
 			strcpy((char *) authpacket.vp.challenge, challenge);
@@ -1705,8 +1704,8 @@ static void *voter_primary_client(void *data)
 					strcpy(p->primary_challenge, (char *) vph->challenge);
 					p->priconn = 0;
 				} else {
-					if ((!digest) || (!vph->digest) || (digest != ntohl(vph->digest)) ||
-						(ntohs(vph->payload_type) == 0) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
+					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) || (ntohs(vph->payload_type) == 0) ||
+						(ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
 						mydigest = crc32_bufs(challenge, password);
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
@@ -1837,7 +1836,7 @@ static void *voter_xmit(void *data)
 		}
 		f1 = NULL;
 		// x will be set here is there was actual transmit activity
-		if ((!x) && (p->pmrChan)) {
+		if (!x && p->pmrChan) {
 			p->pmrChan->txPttIn = 0;
 		}
 		if (x && (!p->pmrChan)) {
@@ -1956,10 +1955,10 @@ static void *voter_xmit(void *data)
 				if (client->nodenum != p->nodenum) {
 					continue;
 				}
-				if (p->priconn && (!client->dynamic) && (!client->mix)) {
+				if (p->priconn && !client->mix) {
 					continue;
 				}
-				if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+				if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 					continue;
 				}
 				if (!client->heardfrom) {
@@ -2010,7 +2009,7 @@ static void *voter_xmit(void *data)
 							xmtbuf2[i] = l;
 						}
 					}
-					if ((!x) && (!i)) {
+					if (!x && !i) {
 						continue;
 					}
 					memset(&fr, 0, sizeof(fr));
@@ -2032,9 +2031,8 @@ static void *voter_xmit(void *data)
 				}
 				mkpucked(client, &audiopacket.vp.curtime);
 				audiopacket.vp.digest = htonl(client->respdigest);
-				audiopacket.vp.curtime.vtime_nsec =
-					(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				if (client->totransmit && (!client->txlockout)) {
+				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+				if (client->totransmit && !client->txlockout) {
 					if (IS_CLIENT_PROXY(client)) {
 						memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
 						proxy_audiopacket.vp = audiopacket.vp;
@@ -2045,8 +2043,7 @@ static void *voter_xmit(void *data)
 						proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
 						proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 						proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-						proxy_audiopacket.vp.curtime.vtime_nsec =
-							(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+						proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 						ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, proxy_audiopacket.vp.digest);
 						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
@@ -2088,10 +2085,10 @@ static void *voter_xmit(void *data)
 					if (client->nodenum != p->nodenum) {
 						continue;
 					}
-					if (p->priconn && (!client->dynamic) && (!client->mix)) {
+					if (p->priconn && !client->mix) {
 						continue;
 					}
-					if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+					if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 						continue;
 					}
 					if (!client->heardfrom) {
@@ -2102,8 +2099,7 @@ static void *voter_xmit(void *data)
 					}
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
-					audiopacket.vp.curtime.vtime_nsec =
-						(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 #ifndef	ADPCM_LOOPBACK
 					if (client->totransmit && (!client->txlockout)) {
 						if (IS_CLIENT_PROXY(client)) {
@@ -2116,8 +2112,7 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
 							proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-							proxy_audiopacket.vp.curtime.vtime_nsec =
-								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+							proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 							ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0, (struct sockaddr *) &client->sin,
@@ -2182,10 +2177,10 @@ static void *voter_xmit(void *data)
 					if (client->nodenum != p->nodenum) {
 						continue;
 					}
-					if (p->priconn && (!client->dynamic) && (!client->mix)) {
+					if (p->priconn && !client->mix) {
 						continue;
 					}
-					if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+					if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 						continue;
 					}
 					if (!client->heardfrom) {
@@ -2196,10 +2191,9 @@ static void *voter_xmit(void *data)
 					}
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
-					audiopacket.vp.curtime.vtime_nsec =
-						(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 #ifndef	NULAW_LOOPBACK
-					if (client->totransmit && (!client->txlockout)) {
+					if (client->totransmit && !client->txlockout) {
 						if (IS_CLIENT_PROXY(client)) {
 							memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
 							proxy_audiopacket.vp = audiopacket.vp;
@@ -2210,8 +2204,7 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
 							proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-							proxy_audiopacket.vp.curtime.vtime_nsec =
-								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+							proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 							ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0,
@@ -2272,8 +2265,7 @@ static void *voter_xmit(void *data)
 				pingpacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
 				mkpucked(client, &pingpacket.vp.curtime);
 				pingpacket.vp.digest = htonl(client->respdigest);
-				pingpacket.vp.curtime.vtime_nsec =
-					(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+				pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
 				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
@@ -2282,10 +2274,10 @@ static void *voter_xmit(void *data)
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 				continue;
 			}
-			if (p->priconn && (!client->dynamic) && (!client->mix) && (!IS_CLIENT_PROXY(client))) {
+			if (p->priconn && !client->mix && !IS_CLIENT_PROXY(client)) {
 				continue;
 			}
 			if (!client->heardfrom) {
@@ -2297,8 +2289,7 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(2);
 				audiopacket.vp.digest = htonl(client->respdigest);
-				audiopacket.vp.curtime.vtime_nsec =
-					(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				if (IS_CLIENT_PROXY(client)) {
 					memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
 					proxy_audiopacket.vp = audiopacket.vp;
@@ -2309,8 +2300,7 @@ static void *voter_xmit(void *data)
 					proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
 					proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 					proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-					proxy_audiopacket.vp.curtime.vtime_nsec =
-						(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 					ast_debug(5, "VOTER %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum,
 						client->name, proxy_audiopacket.vp.digest);
 					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
@@ -2768,7 +2758,7 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 		if (strcasecmp(argv[3], "all") && strcasecmp(argv[3], client->name)) {
 			continue;
 		}
-		if ((!strcasecmp(argv[4], "off")) || (!strncasecmp(argv[4], "dis", 3))) {
+		if (!strcasecmp(argv[4], "off") || !strncasecmp(argv[4], "dis", 3)) {
 			newlevel = -2;
 		} else {
 			if (sscanf(argv[4], N_FMT(d), &newlevel) < 1) {
@@ -2982,7 +2972,7 @@ static int term_supports_clear(void)
 static void voter_display(int fd, const struct voter_pvt *p, int doips)
 {
 	int j, rssi, thresh, ncols = 56, wasverbose, vt100compat;
-	char str[256], c, hasdyn;
+	char str[256], c;
 	struct voter_client *client;
 
 #ifdef ASSUME_CONSOLES_SUPPORT_CLEAR
@@ -3014,18 +3004,14 @@ static void voter_display(int fd, const struct voter_pvt *p, int doips)
 		if (hasmaster && (!master_time.vtime_sec)) {
 			ast_cli(fd, "*** WARNING -- LOSS OF MASTER TIMING SOURCE ***\n\n");
 		}
-		hasdyn = 0;
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if (client->dynamic) {
-				hasdyn = 1;
-			}
-			if (p->priconn && (!client->dynamic) && (!client->mix)) {
+			if (p->priconn && !client->mix) {
 				continue;
 			}
-			if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 				continue;
 			}
 			if (!client->heardfrom) {
@@ -3052,36 +3038,16 @@ static void voter_display(int fd, const struct voter_pvt *p, int doips)
 			ast_cli(fd, "%c%10.10s |%s| [%3d]\n", c, client->name, str, rssi);
 		}
 		ast_cli(fd, "\n\n");
-		if (hasdyn) {
-			ast_cli(fd, "Active Dynamic Clients:\n\n");
-			for (client = clients; client; client = client->next) {
-				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				if (!client->dynamic) {
-					continue;
-				}
-				if (ast_tvzero(client->lastdyntime)) {
-					continue;
-				}
-				ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr),
-						ntohs(client->sin.sin_port));
-			}
-			ast_cli(fd, "\n\n");
-		}
 		if (doips) {
 			ast_cli(fd, "Active Non-Dynamic Clients:\n\n");
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
 					continue;
 				}
-				if (client->dynamic) {
+				if (p->priconn && !client->mix) {
 					continue;
 				}
-				if (p->priconn && (!client->dynamic) && (!client->mix)) {
-					continue;
-				}
-				if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+				if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 					continue;
 				}
 				if (!client->heardfrom) {
@@ -3155,17 +3121,11 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 				if (client->nodenum != p->nodenum) {
 					continue;
 				}
-				if (client->dynamic) {
-					continue;
-				}
 				client->txlockout = 1;
 			}
 		} else if (!strcasecmp(argv[3], "none")) {
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				if (client->dynamic) {
 					continue;
 				}
 				client->txlockout = 0;
@@ -3191,10 +3151,6 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 					if (strcasecmp(strs[i], client->name)) {
 						continue;
 					}
-					if (client->dynamic) {
-						ast_cli(fd, "Client %s can not be set since it is dynamic!!\n", strs[i]);
-						continue;
-					}
 					ast_cli(fd, "Client %s tx lockout %s\n", strs[i], (newval) ? "Enabled" : "Disabled");
 					client->txlockout = newval;
 					break;
@@ -3210,9 +3166,6 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 		if (client->nodenum != p->nodenum) {
 			continue;
 		}
-		if (client->dynamic) {
-			continue;
-		}
 		if (client->txlockout) {
 			ast_cli(fd, "Client %s tx is locked-out\n", client->name);
 			n++;
@@ -3224,9 +3177,6 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 	ast_cli(fd, "\nFull list of normally transmitting clients for voter instance %s:\n", argv[2]);
 	for (n = 0, client = clients; client; client = client->next) {
 		if (client->nodenum != p->nodenum) {
-			continue;
-		}
-		if (client->dynamic) {
 			continue;
 		}
 		if (!client->txlockout) {
@@ -3258,9 +3208,6 @@ static int voter_do_ping(int fd, int argc, const char *const *argv)
 	}
 
 	for (client = clients; client; client = client->next) {
-		if (client->dynamic) {
-			continue;
-		}
 		if (IS_CLIENT_PROXY(client)) {
 			continue;
 		}
@@ -3328,9 +3275,6 @@ static char *voter_complete_connected_client_list(const char *line, const char *
 	}
 	ast_mutex_lock(&voter_lock);
 	for (client = clients; client; client = client->next) {
-		if (client->dynamic) {
-			continue;
-		}
 		if (IS_CLIENT_PROXY(client)) {
 			continue;
 		}
@@ -3631,9 +3575,6 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 			}
 			if (IS_CLIENT_PROXY(client)) {
 				astman_append(ses, "Client: %s", client->name);
-				if (client->dynamic) {
-					astman_append(ses, " Dynamic");
-				}
 				if (client->mix) {
 					astman_append(ses, " Mix");
 				}
@@ -3651,9 +3592,6 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 					continue;
 				}
 				astman_append(ses, "Client: %s", client->name);
-				if (client->dynamic) {
-					astman_append(ses, " Dynamic");
-				}
 				if (client->mix) {
 					astman_append(ses, " Mix");
 				}
@@ -3703,7 +3641,7 @@ static void voter_xmit_master(void)
 		}
 		client->txseqno++;
 		if (client->rxseqno) {
-			if ((!client->doadpcm) && (!client->donulaw)) {
+			if (!client->doadpcm && !client->donulaw) {
 				client->rxseqno++;
 			} else {
 				if (client->rxseq40ms) {
@@ -3719,20 +3657,6 @@ static void voter_xmit_master(void)
 		ast_mutex_unlock(&p->xmit_lock);
 	}
 	gettimeofday(&tv, NULL);
-	/* For dynamic clients, verify the lease time */
-	for (client = clients; client; client = client->next) {
-		if (!client->dynamic) {
-			continue;
-		}
-		if (ast_tvzero(client->lastdyntime)) {
-			continue;
-		}
-		if (voter_tvdiff_ms(tv, client->lastdyntime) > dyntime) {
-			ast_verb(3, "DYN client %s past lease time\n", client->name);
-			client->lastdyntime = (struct timeval) {0};
-			memset(&client->sin, 0, sizeof(client->sin));
-		}
-	}
 }
 
 /*!
@@ -3908,65 +3832,15 @@ static void *voter_reader(void *data)
 		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x from client %s\n", (int) recvlen,
 			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest), (client && client->name) ? client->name : "UNKNOWN");
 		client = NULL;
-		if ((!check_client_sanity) && master_port) {
+		if (!check_client_sanity && master_port) {
 			sin.sin_port = htons(master_port);
 		}
 		isproxy = 0;
 		if (vph->digest) {
 			gettimeofday(&tv, NULL);
-			/* first see if client is not a dynamic one */
+			/* first see if client is found */
 			for (client = clients; client; client = client->next) {
-				if (client->dynamic) {
-					continue;
-				}
 				if (client->digest == htonl(vph->digest)) {
-					break;
-				}
-			}
-			/* if not found as non-dynamic, try it as existing dynamic */
-			if (!client) {
-				for (client = clients; client; client = client->next) {
-					if (!client->dynamic) {
-						continue;
-					}
-					if (ast_tvzero(client->lastdyntime)) {
-						continue;
-					}
-					if (voter_tvdiff_ms(tv, client->lastdyntime) > dyntime) {
-						ast_verb(3, "DYN client %s past lease time\n", client->name);
-						client->lastdyntime = (struct timeval) { 0 };
-						memset(&client->sin, 0, sizeof(client->sin));
-						continue;
-					}
-					if (client->digest != htonl(vph->digest)) {
-						continue;
-					}
-					if (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr) {
-						continue;
-					}
-					if (client->sin.sin_port != sin.sin_port) {
-						continue;
-					}
-					ast_verb(3, "Using existing Dynamic client %s for %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
-					break;
-				}
-			}
-			/* if still not found, try as new dynamic */
-			if (!client) {
-				for (client = clients; client; client = client->next) {
-					if (!client->dynamic) {
-						continue;
-					}
-					if (!ast_tvzero(client->lastdyntime)) {
-						continue;
-					}
-					if (client->digest != htonl(vph->digest)) {
-						continue;
-					}
-					/* okay, we found an empty dynamic slot with proper digest */
-					gettimeofday(&client->lastdyntime, NULL);
-					client->sin = sin;
-					ast_verb(3, "Bound new Dynamic client %s to %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
 					break;
 				}
 			}
@@ -4039,12 +3913,12 @@ static void *voter_reader(void *data)
 					}
 				}
 				gettimeofday(&client->lastdyntime, NULL);
-				if ((!client) || (client && (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY))) {
+				if (!client || (client && (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY))) {
 					client->respdigest = crc32_bufs((char *) vph->challenge, password);
 				}
 				client->sin = sin;
 				memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
-				if ((!client->curmaster) && hasmaster) {
+				if (!client->curmaster && hasmaster) {
 					if (last_master_count && (voter_timing_count > (last_master_count + MAX_MASTER_COUNT))) {
 						ast_log(LOG_NOTICE, "VOTER lost master timing source!!\n");
 						last_master_count = 0;
@@ -4146,7 +4020,7 @@ static void *voter_reader(void *data)
 							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
 								goto process_gps;
 							}
-						} else if (p->priconn && (!client->dynamic) && (!client->mix)) {
+						} else if (p->priconn && !client->mix) {
 							memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
 							proxy.ipaddr = sin.sin_addr.s_addr;
 							proxy.port = sin.sin_port;
@@ -4196,7 +4070,7 @@ static void *voter_reader(void *data)
 						if (!client->rxseqno) {
 							client->rxseqno_40ms = client->rxseqno = ntohl(vph->curtime.vtime_nsec);
 						}
-						if ((!client->doadpcm) && (!client->donulaw)) {
+						if (!client->doadpcm && !client->donulaw) {
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno;
 						} else {
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
@@ -4205,7 +4079,7 @@ static void *voter_reader(void *data)
 						index += BUFDELAY(client);
 						index -= (FRAME_SIZE * 4);
 						if (DEBUG_ATLEAST(3)) {
-							if ((!client->doadpcm) && (!client->donulaw)) {
+							if (!client->doadpcm && !client->donulaw) {
 								ast_debug(7, "Mix client (Mulaw) %s index: %d their seq: %d our seq: %d\n", client->name, index,
 									ntohl(vph->curtime.vtime_nsec), client->rxseqno);
 							} else {
@@ -4297,7 +4171,7 @@ static void *voter_reader(void *data)
 							fr.src = __PRETTY_FUNCTION__;
 							f1 = ast_translate(p->nuin, &fr, 0);
 						}
-						if ((!client->doadpcm) && (!client->donulaw)) {
+						if (!client->doadpcm && !client->donulaw) {
 							index = (index + client->drainindex) % client->buflen;
 						} else {
 							index = (index + client->drainindex_40ms) % client->buflen;
@@ -4346,7 +4220,7 @@ static void *voter_reader(void *data)
 										break;
 									}
 								}
-								if ((!p) || p->priconn) {
+								if (!p || p->priconn) {
 									continue;
 								}
 								if (!client->respdigest) {
@@ -4619,7 +4493,7 @@ static void *voter_reader(void *data)
 										memset(client->audio, 0xff, -i);
 									}
 								}
-								if ((!p->duplex) && p->txkey) {
+								if (!p->duplex && p->txkey) {
 									p->rxkey = 0;
 									p->lastwon = NULL;
 									memset(silbuf, 0, sizeof(silbuf));
@@ -4691,7 +4565,7 @@ static void *voter_reader(void *data)
 								}
 								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
 							}
-							if ((!p->duplex) && p->txkey) {
+							if (!p->duplex && p->txkey) {
 								p->rxkey = 0;
 								p->lastwon = NULL;
 								memset(silbuf, 0, sizeof(silbuf));
@@ -4778,7 +4652,7 @@ static void *voter_reader(void *data)
 				if (client->curmaster) {
 					mastergps_time.vtime_sec = ntohl(vph->curtime.vtime_sec);
 					mastergps_time.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
-				} else if (p && p->priconn && (!client->dynamic) && (!client->mix)) {
+				} else if (p && p->priconn && !client->mix) {
 					memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
 					proxy.ipaddr = sin.sin_addr.s_addr;
 					proxy.port = sin.sin_port;
@@ -4896,7 +4770,7 @@ process_gps:
 					client->mix = 1;
 				}
 			}
-			if ((!client->mix) && (!hasmaster)) {
+			if (!client->mix && !hasmaster) {
 				time(&t);
 				if (t >= (client->warntime + CLIENT_WARN_SECS)) {
 					client->warntime = t;
@@ -5226,9 +5100,6 @@ static int reload(void)
 			if (!strncasecmp(v->name, "nulaw", 5)) {
 				continue;
 			}
-			if (!strncasecmp(v->name, "dynamic", 7)) {
-				continue;
-			}
 			if (!strncasecmp(v->name, "gpsid", 5)) {
 				continue;
 			}
@@ -5260,9 +5131,6 @@ static int reload(void)
 			}
 			/* see if we "know" this client already */
 			for (client = clients; client; client = client->next) {
-				if (client->dynamic) {
-					continue;
-				}
 				/* if this is the one whose digest matches one currently being looked at */
 				if (client->digest == crc32_bufs(challenge, strs[0])) {
 					/* if has moved to another instance, free this one, and treat as new */
@@ -5291,8 +5159,13 @@ static int reload(void)
 			client->reload = 1;
 			client->buflen = instance_buflen;
 			client->nodenum = strtoul(ctg, NULL, 0);
-			client->totransmit = client->doadpcm = client->donulaw = 0;
-			client->nodeemp = client->noplfilter = client->dynamic = client->prio = 0;
+			client->totransmit = 0;
+			client->doadpcm = 0;
+			client->donulaw = 0;
+			client->nodeemp = 0;
+			client->mix = 0;
+			client->noplfilter = 0;
+			client->prio = 0;
 			client->gpsid = 0;
 			for (i = 1; i < n; i++) {
 				if (!strcasecmp(strs[i], "transmit")) {
@@ -5308,8 +5181,6 @@ static int reload(void)
 					client->nodeemp = 1;
 				} else if (!strcasecmp(strs[i], "noplfilter")) {
 					client->noplfilter = 1;
-				} else if (!strcasecmp(strs[i], "dynamic")) {
-					client->dynamic = 1;
 				} else if (!strncasecmp(strs[i], "gpsid", 5)) {
 					cp1 = strchr(strs[i], '=');
 					if (!cp1) {
@@ -5394,9 +5265,6 @@ static int reload(void)
 				client->name);
 			ast_mutex_unlock(&voter_lock);
 			return -1;
-		}
-		if (client->dynamic) {
-			continue;
 		}
 		for (client1 = clients; client1; client1 = client1->next) {
 			if (!client1->reload) {
