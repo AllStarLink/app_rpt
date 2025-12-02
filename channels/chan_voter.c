@@ -78,10 +78,10 @@ Voter Channel test modes:
 1 - Randomly pick which client of all that
     are receiving at the max RSSI value to use.
 > 1 - Cycle thru all the clients that are receiving
-    at the max RSSI value with a cycle time of (test mode - 1)
-    frames. In other words, if you set it to 2, it will
-    change every single time. If you set it to 11, it will
-    change every 10 times. This is serious torture test.
+	at the max RSSI value with a cycle time of (test mode - 1)
+	frames. In other words, if you set it to 2, it will
+	change every single time. If you set it to 11, it will
+	change every 10 times. This is serious torture test.
 
 Note on ADPCM functionality:
 The original intent was to change this driver to use signed linear internally (slin),
@@ -91,11 +91,6 @@ degradation in dynamic range when using ADPCM resulting in doing so).  This was
 done because existing external entities (such as the recording files and the streaming
 stuff) use mulaw as their transport, and changing all of that to signed linear would
 be cumbersome, inefficient and undesirable.
-
-Note on "Dynamic" client functionality:
-DONT USE IT!!. It is intentionally *NOT* documented to encourage non-use of this
-feature. It is for demo purposes *ONLY*. The chan_voter driver will *NOT* properly
-perform reliably in a production environment if this option is used.
 
 Redundant "Proxy" Mode:
 
@@ -3913,7 +3908,7 @@ static void *voter_reader(void *data)
 					}
 				}
 				gettimeofday(&client->lastdyntime, NULL);
-				if (!client || (client && (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY))) {
+				if (!client || (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY)) {
 					client->respdigest = crc32_bufs((char *) vph->challenge, password);
 				}
 				client->sin = sin;
