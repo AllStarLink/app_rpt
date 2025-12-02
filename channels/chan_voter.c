@@ -41,7 +41,7 @@ driver to identify them.
 Each channel instance (as opened by app_rpt as a main radio channel, e.g. rxchannel=Voter/1999 in rpt.conf) and
 is directly associated with the node that opened it.
 
-Each client has a pair of circular buffers, one for mu-law audio data, and one for RSSI value. The allocated buffer
+Each client has a pair of circular buffers, one for mulaw audio data, and one for RSSI value. The allocated buffer
 length in all clients is determined by the 'buflen' parameter, which is specified in the "global" stanza in the
 voter.conf file in milliseconds, and represented in the channel driver as number of samples (actual buffer length,
 which is 8 * milliseconds).
@@ -56,7 +56,7 @@ Buflen is selected so that there is enough time (delay) for any straggling packe
 to present the data to the Asterisk channel.
 
 The idea is that the current audio being presented to Asterisk is from some time shortly in the past. Therefore,
-"Now" is the position in the abstratcted buffer of 'bufdelay' (generally buflen - 160) (you gotta at least leave room for
+"Now" is the position in the abstracted buffer of 'bufdelay' (generally buflen - 160) (you gotta at least leave room for
 an entire frame) and the data is being presented from the start of the abstracted buffer. As the physical buffer
 moves along, what was once "now" will eventually become far enough in the "past" to be presented to Asterisk (gosh,
 doesn't this sound like a scene from "Spaceballs"??.. I too always drink coffee while watching "Mr. Radar").
@@ -76,15 +76,15 @@ Voter Channel test modes:
 
 0 - Normal voting operation
 1 - Randomly pick which client of all that
-    are receiving at the max rssi value to use.
+    are receiving at the max RSSI value to use.
 > 1 - Cycle thru all the clients that are receiving
-    at the max rssi value with a cycle time of (test mode - 1)
+    at the max RSSI value with a cycle time of (test mode - 1)
     frames. In other words, if you set it to 2, it will
     change every single time. If you set it to 11, it will
     change every 10 times. This is serious torture test.
 
 Note on ADPCM functionality:
-The original intent was to change this driver to use signed linear internally,
+The original intent was to change this driver to use signed linear internally (slin),
 but after some thought, it was determined that it was prudent to continue using
 mulaw as the "standard" internal audio format (with the understanding of the slight
 degradation in dynamic range when using ADPCM resulting in doing so).  This was
@@ -129,7 +129,7 @@ The operation is performed by more-or-less "encapsulating" the VOTER packets rec
 server, and forwarding them on to the "primary" server, where they are "un-encapsulated" and appear to
 that serer to be coming from clients connected directly to it (and keeps track of which ones are connected
 in this manner, etc). When it needs to send VOTER packets to a client connected through the "secondary",
-it "encapsulates" them, and sends them to the "secondary", where they get "un-enacpsulated" and sent
+it "encapsulates" them, and sends them to the "secondary", where they get "un-encapsulated" and sent
 to their associated connected clients, based upon information in the "encapsulation".
 
 If the "secondary" server loses (or does not make) connection to the "primary", it operates as normal, until
@@ -191,7 +191,7 @@ If all of the above is true, then you need to use the "hostdeemp" option in chan
 RTCM *NOT* to do de-emphasis in hardware (it will send the non-de-emphasized audio to the host), and have the host
 "do" the de-emphasis (in software) instead.
 
-This will allow the Voter (RTCM) board to be able to "pass" the non-de-emphaszed audio back into the "direct modulation
+This will allow the Voter (RTCM) board to be able to "pass" the non-de-emphasized audio back into the "direct modulation
 audio" stream, since that is what will be "presented" to the processor in the Voter (RTCM) board, as the hardware de-emphasis
 is disabled in this mode.
 
@@ -999,11 +999,11 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 	switch (cond) {
 	case AST_CONTROL_RADIO_KEY:
 		p->txkey = 1;
-		ast_debug(2, "Channel %s: TX On\n", ast_channel_name(ast));
+		ast_debug(1, "Channel %s: TX On\n", ast_channel_name(ast));
 		break;
 	case AST_CONTROL_RADIO_UNKEY:
 		p->txkey = 0;
-		ast_debug(2, "Channel %s: TX Off\n", ast_channel_name(ast));
+		ast_debug(1, "Channel %s: TX Off\n", ast_channel_name(ast));
 		break;
 	case AST_CONTROL_HANGUP:
 		return -1;
@@ -1133,7 +1133,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 
 	if (!strncmp(text, "PAGE", 4)) {
 		if (!o->pmrChan) {
-			ast_log(LOG_WARNING, "Channel %s: Attempt to page on a non-flat-audio Voter config\n", ast_channel_name(ast));
+			ast_log(LOG_WARNING, "Channel %s: Attempt to page on a non-flat-audio VOTER config\n", ast_channel_name(ast));
 			return 0;
 		}
 		cnt = sscanf(text, "%s " N_FMT(d) " " N_FMT(d) " %n", cmd, &baud, &i, &j);
@@ -1239,7 +1239,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 		ast_free(audio);
 		return 0;
 	}
-	ast_log(LOG_ERROR, "Channel %s: Cannot parse voter cmd: %s\n", ast_channel_name(ast), text);
+	ast_log(LOG_ERROR, "Channel %s: Cannot parse VOTER cmd: %s\n", ast_channel_name(ast), text);
 	return 0;
 }
 
@@ -1384,7 +1384,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	fr.src = __PRETTY_FUNCTION__;
 	f1 = ast_translate(p->toast, &fr, 0);
 	if (!f1) {
-		ast_log(LOG_ERROR, "Voter %i: Can not translate frame to send to Asterisk\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to send to Asterisk\n", p->nodenum);
 		return 0;
 	}
 	maxprio = 0;
@@ -1473,7 +1473,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		fr.offset = AST_FRIENDLY_OFFSET;
 		f2 = ast_translate(p->toast1, &fr, 0);
 		if (!f2) {
-			ast_log(LOG_ERROR, "Voter %i: Can not translate frame to send to Asterisk\n", p->nodenum);
+			ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to send to Asterisk\n", p->nodenum);
 			ast_frfree(f1);
 			return 0;
 		}
@@ -1523,7 +1523,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 				if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
 					if (f2->frametype == AST_FRAME_DTMF_END)
-						ast_debug(1, "Voter %d: Got DTMF char %c\n", p->nodenum, f2->subclass.integer);
+						ast_debug(1, "VOTER %d: Got DTMF char %c\n", p->nodenum, f2->subclass.integer);
 				} else {
 					f2->frametype = AST_FRAME_NULL;
 					f2->subclass.integer = 0;
@@ -1574,7 +1574,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
 				if (f2->frametype == AST_FRAME_DTMF_END)
-					ast_debug(1, "Voter %d: Got DTMF char %c\n", p->nodenum, f2->subclass.integer);
+					ast_debug(1, "VOTER %d: Got DTMF char %c\n", p->nodenum, f2->subclass.integer);
 			} else {
 				f2->frametype = AST_FRAME_NULL;
 				f2->subclass.integer = 0;
@@ -1625,9 +1625,9 @@ static void *voter_primary_client(void *data)
 	} authpacket;
 #pragma pack(pop)
 
-	ast_debug(3, "Voter %i: Primary client thread started\n", p->nodenum);
+	ast_debug(3, "VOTER %i: Primary client thread started\n", p->nodenum);
 	if ((pri_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-		ast_log(LOG_ERROR, "Unable to create new socket for voter primary connection for instance %d\n", p->nodenum);
+		ast_log(LOG_ERROR, "Unable to create new socket for VOTER primary connection for instance %d\n", p->nodenum);
 		pthread_exit(NULL);
 		return NULL;
 	}
@@ -1644,7 +1644,7 @@ static void *voter_primary_client(void *data)
 		ast_mutex_lock(&voter_lock);
 		if (i == -1) {
 			ast_mutex_unlock(&voter_lock);
-			ast_log(LOG_ERROR, "Voter %i: Error in select()\n", p->nodenum);
+			ast_log(LOG_ERROR, "VOTER %i: Error in select()\n", p->nodenum);
 			pthread_exit(NULL);
 		}
 		gettimeofday(&tv, NULL);
@@ -1655,7 +1655,8 @@ static void *voter_primary_client(void *data)
 			strcpy((char *) authpacket.vp.challenge, challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.flags = 32;
-			ast_debug(3, "Voter %i: Sent primary client auth to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr), ntohs(p->primary.sin_port));
+			ast_debug(3, "VOTER %i: Sent primary client auth to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
+				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
 		}
@@ -1665,7 +1666,7 @@ static void *voter_primary_client(void *data)
 			strcpy((char *) authpacket.vp.challenge, challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
-			ast_debug(5, "Voter %i: Sent primary client GPS Keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
+			ast_debug(5, "VOTER %i: Sent primary client GPS Keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary,
 				sizeof(p->primary));
@@ -1675,7 +1676,7 @@ static void *voter_primary_client(void *data)
 			p->priconn = 0;
 			digest = 0;
 			p->primary_challenge[0] = 0;
-			ast_verb(3, "Voter %i: Primary client for %d  Lost connection!!!\n", p->nodenum, p->nodenum);
+			ast_verb(3, "VOTER %i: Primary client for %d  Lost connection!!!\n", p->nodenum, p->nodenum);
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
 					continue;
@@ -1696,8 +1697,8 @@ static void *voter_primary_client(void *data)
 
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) {	/* if set got something worthwhile */
 				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(3, "Voter %i: Got primary client rx packet, len %d payload %d challenge %s digest %08x\n", p->nodenum, (int) recvlen,
-					ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
+				ast_debug(3, "VOTER %i: Got primary client X packet, len %d payload %d challenge %s digest %08x\n", p->nodenum,
+					(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 				/* if this is a new session */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
 					resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
@@ -1710,7 +1711,7 @@ static void *voter_primary_client(void *data)
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
 							if (!p->priconn) {
-								ast_verb(3, "Voter %i: Primary client connected (with challenge=%s)\n", p->nodenum, p->primary_challenge);
+								ast_verb(3, "VOTER %i: Primary client connected (with challenge=%s)\n", p->nodenum, p->primary_challenge);
 							}
 							p->priconn = 1;
 							lastrx = tv;
@@ -1843,7 +1844,7 @@ static void *voter_xmit(void *data)
 			memcpy(xmtbuf, f2->data.ptr, sizeof(xmtbuf));
 			f1 = ast_translate(p->fromast, f2, 1);
 			if (!f1) {
-				ast_log(LOG_ERROR, "Voter %i: Can not translate frame to recv from Asterisk\n", p->nodenum);
+				ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to receive from Asterisk\n", p->nodenum);
 				ast_frfree(f2);
 				continue;
 			}
@@ -1875,7 +1876,7 @@ static void *voter_xmit(void *data)
 				f1 = ast_translate(p->fromast, f3, 1);
 				if (!f1) {
 					ast_mutex_unlock(&p->pagerqlock);
-					ast_log(LOG_ERROR, "Voter %i: Can not translate frame to recv from Asterisk\n", p->nodenum);
+					ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to receive from Asterisk\n", p->nodenum);
 					ast_frfree(f3);
 					continue;
 				}
@@ -1901,7 +1902,7 @@ static void *voter_xmit(void *data)
 				fr.src = __PRETTY_FUNCTION__;
 				f1 = ast_translate(p->fromast, &fr, 0);
 				if (!f1) {
-					ast_log(LOG_ERROR, "Voter %i: Can not translate frame to recv from Asterisk\n", p->nodenum);
+					ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to receive from Asterisk\n", p->nodenum);
 					continue;
 				}
 			}
@@ -2024,7 +2025,7 @@ static void *voter_xmit(void *data)
 					}
 					f1 = ast_translate(p->fromast, &fr, 0);
 					if (!f1) {
-						ast_log(LOG_ERROR, "Voter %i: Can not translate frame to recv from Asterisk\n", p->nodenum);
+						ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to receive from Asterisk\n", p->nodenum);
 						continue;
 					}
 					memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
@@ -2046,12 +2047,13 @@ static void *voter_xmit(void *data)
 						proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 						proxy_audiopacket.vp.curtime.vtime_nsec =
 							(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-						ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum,
+						ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, proxy_audiopacket.vp.digest);
 						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
 					} else {
-						ast_debug(6, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+						ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
+							client->respdigest);
 						sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
 					}
@@ -2116,12 +2118,12 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 							proxy_audiopacket.vp.curtime.vtime_nsec =
 								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum,
+							ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0, (struct sockaddr *) &client->sin,
 								sizeof(client->sin));
 						} else {
-							ast_debug(6, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
+							ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
 								client->respdigest);
 							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
 								sizeof(client->sin));
@@ -2210,12 +2212,12 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 							proxy_audiopacket.vp.curtime.vtime_nsec =
 								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(6, "Voter %i: Sending (proxied) audio packet to client %s digest %08x\n", p->nodenum,
+							ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0,
 								(struct sockaddr *) &client->sin, sizeof(client->sin));
 						} else {
-							ast_debug(6, "Voter %i: Sending audio packet to client %s digest %08x\n", p->nodenum, client->name,
+							ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
 								client->respdigest);
 							sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0,
 								(struct sockaddr *) &client->sin, sizeof(client->sin));
@@ -2272,9 +2274,8 @@ static void *voter_xmit(void *data)
 				pingpacket.vp.digest = htonl(client->respdigest);
 				pingpacket.vp.curtime.vtime_nsec =
 					(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				ast_debug(2, "Voter %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin,
-					sizeof(client->sin));
+				ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
 		}
 		for (client = clients; client; client = client->next) {
@@ -2310,12 +2311,12 @@ static void *voter_xmit(void *data)
 					proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 					proxy_audiopacket.vp.curtime.vtime_nsec =
 						(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-					ast_debug(5, "Voter %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum,
+					ast_debug(5, "VOTER %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum,
 						client->name, proxy_audiopacket.vp.digest);
 					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
 						(struct sockaddr *) &client->sin, sizeof(client->sin));
 				} else {
-					ast_debug(5, "Voter %i: Sending KEEPALIVE (GPS) packet to client %s digest %08x\n", p->nodenum, client->name,
+					ast_debug(5, "VOTER %i: Sending KEEPALIVE (GPS) packet to client %s digest %08x\n", p->nodenum, client->name,
 						client->respdigest);
 					sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
 						sizeof(client->sin));
@@ -2368,7 +2369,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	ast_cond_init(&p->xmit_cond, NULL);
 	p->dsp = ast_dsp_new();
 	if (!p->dsp) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot get DSP!!\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot get DSP!!\n", p->nodenum);
 		ast_free(p);
 		return NULL;
 	}
@@ -2377,49 +2378,49 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	p->usedtmf = 1;
 	p->adpcmin = ast_translator_build_path(ast_format_ulaw, ast_format_adpcm);
 	if (!p->adpcmin) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot get translator from adpcm to ulaw!!\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from adpcm to ulaw!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
 		ast_free(p);
 		return NULL;
 	}
 	p->adpcmout = ast_translator_build_path(ast_format_adpcm, ast_format_ulaw);
 	if (!p->adpcmout) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot get translator from ulaw to adpcm!!\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to adpcm!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
 		ast_free(p);
 		return NULL;
 	}
 	p->toast = ast_translator_build_path(ast_format_slin, ast_format_ulaw);
 	if (!p->toast) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
 		ast_free(p);
 		return NULL;
 	}
 	p->toast1 = ast_translator_build_path(ast_format_slin, ast_format_ulaw);
 	if (!p->toast1) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
 		ast_free(p);
 		return NULL;
 	}
 	p->fromast = ast_translator_build_path(ast_format_ulaw, ast_format_slin);
 	if (!p->fromast) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot get translator from slinear to ulaw!!\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from slinear to ulaw!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
 		ast_free(p);
 		return NULL;
 	}
 	p->nuin = ast_translator_build_path(ast_format_ulaw, ast_format_slin);
 	if (!p->nuin) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot get translator from slinear to ulaw!!\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from slinear to ulaw!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
 		ast_free(p);
 		return NULL;
 	}
 	p->nuout = ast_translator_build_path(ast_format_slin, ast_format_ulaw);
 	if (!p->nuout) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
 		ast_free(p);
 		return NULL;
@@ -2427,7 +2428,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	tmp = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s",
 						  (char *) data);
 	if (!tmp) {
-		ast_log(LOG_ERROR, "Voter %i: Cannot alloc new asterisk channel\n", p->nodenum);
+		ast_log(LOG_ERROR, "VOTER %i: Cannot alloc new Asterisk channel\n", p->nodenum);
 		ast_free(p);
 		return NULL;
 	}
@@ -3774,7 +3775,7 @@ static void *voter_timer(void *data)
 				if (!ast_tvzero(client->lastheardtime)
 					&& (voter_tvdiff_ms(tv, client->lastheardtime) >
 						((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
-					ast_verb(3, "Voter client %s disconnect (timeout)\n", client->name);
+					ast_log(LOG_NOTICE, "VOTER client %s disconnect (timeout)\n", client->name);
 					client->heardfrom = 0;
 					client->respdigest = 0;
 					client->lastheardtime = ast_tv(0, 0);
@@ -3822,7 +3823,7 @@ static void *voter_reader(void *data)
 	ssize_t recvlen;
 	struct timeval tv, timetv;
 	FILE *gpsfp;
-	struct voter_client *client, *client1, *maxclient, *lastmaster;
+	struct voter_client *client = NULL, *client1, *maxclient, *lastmaster;
 	VOTER_PACKET_HEADER *vph;
 	VOTER_PROXY_HEADER proxy;
 	VOTER_GPS *vgp;
@@ -3857,7 +3858,7 @@ static void *voter_reader(void *data)
 	} pingpacket;
 #pragma pack(pop)
 
-	ast_debug(1, "Voter: Reader thread started.\n");
+	ast_debug(1, "VOTER: Reader thread started.\n");
 	ast_mutex_lock(&voter_lock);
 	master_port = 0;
 	
@@ -3883,7 +3884,8 @@ static void *voter_reader(void *data)
 					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 					.src = __PRETTY_FUNCTION__,
 				};
-
+				ast_debug(3, "VOTER client %s was receiving but now has stopped (RX_TIMEOUT_MS)!\n",
+					(client && client->name) ? client->name : "UNKNOWN");
 				ast_queue_frame(p->owner, &wf);
 				p->rxkey = 0;
 				p->lastwon = NULL;
@@ -3903,8 +3905,8 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
-		ast_debug(6, "Got rx packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
-			vph->challenge, ntohl(vph->digest));
+		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x from client %s\n", (int) recvlen,
+			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest), (client && client->name) ? client->name : "UNKNOWN");
 		client = NULL;
 		if ((!check_client_sanity) && master_port) {
 			sin.sin_port = htons(master_port);
@@ -3949,7 +3951,7 @@ static void *voter_reader(void *data)
 					break;
 				}
 			}
-			/* if still now found, try as new dynamic */
+			/* if still not found, try as new dynamic */
 			if (!client) {
 				for (client = clients; client; client = client->next) {
 					if (!client->dynamic) {
@@ -4013,7 +4015,7 @@ static void *voter_reader(void *data)
 					}
 					client1->curmaster = 1;
 					if (client1 != lastmaster) {
-						ast_log(LOG_NOTICE, "Voter Master changed from client %s to %s\n",
+						ast_log(LOG_NOTICE, "VOTER Master changed from client %s to %s\n",
 							(lastmaster) ? lastmaster->name : "NONE", client1->name);
 					}
 					break;
@@ -4029,7 +4031,7 @@ static void *voter_reader(void *data)
 							}
 							client1->curmaster = 1;
 							if (client1 != lastmaster) {
-								ast_log(LOG_NOTICE, "Voter Master changed from client %s to %s (inactive)\n",
+								ast_log(LOG_NOTICE, "VOTER Master changed from client %s to %s (inactive)\n",
 									(lastmaster) ? lastmaster->name : "NONE", client1->name);
 							}
 							break;
@@ -4044,7 +4046,7 @@ static void *voter_reader(void *data)
 				memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
 				if ((!client->curmaster) && hasmaster) {
 					if (last_master_count && (voter_timing_count > (last_master_count + MAX_MASTER_COUNT))) {
-						ast_log(LOG_NOTICE, "Voter lost master timing source!!\n");
+						ast_log(LOG_NOTICE, "VOTER lost master timing source!!\n");
 						last_master_count = 0;
 						master_time.vtime_sec = 0;
 						for (client1 = client->next; client1; client1 = client1->next) {
@@ -4139,7 +4141,7 @@ static void *voter_reader(void *data)
 								client->mix = 0;
 							}
 							recvlen -= sizeof(proxy);
-							ast_debug(6, "Now (proxy) Got rx packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
+							ast_debug(6, "Now (proxy) Got RX packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
 								ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
 								goto process_gps;
@@ -4204,10 +4206,10 @@ static void *voter_reader(void *data)
 						index -= (FRAME_SIZE * 4);
 						if (DEBUG_ATLEAST(3)) {
 							if ((!client->doadpcm) && (!client->donulaw)) {
-								ast_debug(3, "mix client (Mulaw) %s index: %d their seq: %d our seq: %d\n", client->name, index,
+								ast_debug(7, "Mix client (Mulaw) %s index: %d their seq: %d our seq: %d\n", client->name, index,
 									ntohl(vph->curtime.vtime_nsec), client->rxseqno);
 							} else {
-								ast_debug(3, "mix client (ADPCM/Nulaw) %s index: %d their seq: %d our seq: %d\n", client->name,
+								ast_debug(7, "Mix client (ADPCM/Nulaw) %s index: %d their seq: %d our seq: %d\n", client->name,
 									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno_40ms);
 							}
 						}
@@ -4228,7 +4230,7 @@ static void *voter_reader(void *data)
 							gettimeofday(&timetv, NULL);
 							timestuff = (time_t) timetv.tv_sec;
 							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
-							ast_debug(4, "SysTime:   %s.%03d, diff: %lld,index: %d\n", timestr, (int) timetv.tv_usec / 1000,
+							ast_debug(4, "SysTime:   %s.%03d, diff: %lld, index: %d\n", timestr, (int) timetv.tv_usec / 1000,
 								btime - ptime, index);
 						}
 					}
@@ -4319,14 +4321,17 @@ static void *voter_reader(void *data)
 						client->rxseqno_40ms = 0;
 						client->rxseq40ms = 0;
 						client->drain40ms = 0;
-						ast_debug(3, "mix client %s out of bounds, resetting!!\n", client->name);
+						ast_debug(3, "Mix client %s index %i < bufflen %i out of bounds, resetting!!\n", client->name, index,
+							(client->buflen - (FRAME_SIZE * 2)));
+						ast_log(LOG_ERROR, "Mix client %s out of bounds! buflen must be >=160 in voter.conf with Mix clients!",
+							client->name);
 					}
 					if (client->curmaster) {
 						gettimeofday(&tv, NULL);
 						for (client = clients; client; client = client->next) {
 							if (!ast_tvzero(client->lastheardtime) &&
 								(voter_tvdiff_ms(tv, client->lastheardtime) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
-								ast_verb(3, "Voter client %s disconnect (timeout)\n", client->name);
+								ast_log(LOG_NOTICE, "VOTER client %s disconnect (timeout)\n", client->name);
 								client->heardfrom = 0;
 								client->respdigest = 0;
 							}
@@ -4475,12 +4480,12 @@ static void *voter_reader(void *data)
 											if ((i + 1) != p->threshold) {
 												p->threshold = i + 1;
 												p->threshcount = 0;
-												ast_debug(3, "New threshold %d, client %s, rssi %d\n", p->threshold,
+												ast_debug(3, "New threshold %d, client %s, RSSI %d\n", p->threshold,
 													p->lastwon->name, p->lastwon->lastrssi);
 											}
 											/* at the same threshold still, if count is enabled and is met */
 											else if (p->count_thresh[i] && (p->threshcount++ >= p->count_thresh[i])) {
-												ast_debug(3, "Threshold %d time (%d) exceeded, client %s, rssi %d\n",
+												ast_debug(3, "Threshold %d time (%d) exceeded, client %s, RSSI %d\n",
 													p->threshold, p->count_thresh[i], p->lastwon->name, p->lastwon->lastrssi);
 												p->threshold = 0;
 												p->threshcount = 0;
@@ -4506,7 +4511,7 @@ static void *voter_reader(void *data)
 									}
 								}
 								if (p->lingercount) {
-									ast_debug(3, "Lingering on client %s, rssi %d, Maxclient is %s, rssi %d\n", p->lastwon->name,
+									ast_debug(3, "Lingering on client %s, RSSI %d, Maxclient is %s, RSSI %d\n", p->lastwon->name,
 										p->lastwon->lastrssi, maxclient->name, maxrssi);
 									p->lingercount--;
 									maxclient = p->lastwon;
@@ -4676,7 +4681,7 @@ static void *voter_reader(void *data)
 								}
 								if (maxclient != p->lastwon) {
 									p->lastwon = maxclient;
-									ast_debug(1, "Voter client %s selected for node %d\n", maxclient->name, p->nodenum);
+									ast_debug(1, "VOTER client %s selected for node %d\n", maxclient->name, p->nodenum);
 									memset(&fr, 0, sizeof(fr));
 									fr.datalen = strlen(maxclient->name) + 1;
 									fr.frametype = AST_FRAME_TEXT;
@@ -4684,7 +4689,7 @@ static void *voter_reader(void *data)
 									fr.src = __PRETTY_FUNCTION__;
 									ast_queue_frame(p->owner, &fr);
 								}
-								ast_debug(4, "Sending from client %s RSSI %d\n", maxclient->name, maxrssi);
+								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
 							}
 							if ((!p->duplex) && p->txkey) {
 								p->rxkey = 0;
@@ -4711,7 +4716,7 @@ static void *voter_reader(void *data)
 						}
 					}
 				} else {
-					ast_debug(2, "Request for voter client %s to unknown node %d\n", client->name, client->nodenum);
+					ast_debug(2, "Request from VOTER client %s to unknown node %d\n", client->name, client->nodenum);
 				}
 				continue;
 			}
@@ -4813,7 +4818,7 @@ process_gps:
 					timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
 
-					ast_debug(4, "GPSTime (%s):   %s.%09d\n", client->name, timestr, ntohl(vph->curtime.vtime_nsec));
+					ast_debug(4, "GPSTime from %s:   %s.%09d\n", client->name, timestr, ntohl(vph->curtime.vtime_nsec));
 					timetv.tv_usec = ((timetv.tv_usec + 10000) / 20000) * 20000;
 					if (timetv.tv_usec >= 1000000) {
 						timetv.tv_sec++;
@@ -4827,7 +4832,7 @@ process_gps:
 					ast_debug(4, "DrainTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
 				}
 				if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
-					ast_debug(5, "Got GPS Keepalive from (%s)\n", client->name);
+					ast_debug(5, "Got GPS Keepalive from %s\n", client->name);
 				} else {
 					vgp = (VOTER_GPS *) (buf + sizeof(VOTER_PACKET_HEADER));
 					if (client->gpsid) {
@@ -4843,7 +4848,7 @@ process_gps:
 						fclose(gpsfp);
 						rename(gps1, gps2);
 					}
-					ast_debug(5, "Got GPS (%s): Lat: %s, Lon: %s, Elev: %s\n", client->name, vgp->lat, vgp->lon, vgp->elev);
+					ast_debug(5, "Got GPSLoc from %s: Lat: %s, Lon: %s, Elev: %s\n", client->name, vgp->lat, vgp->lon, vgp->elev);
 				}
 				continue;
 			}
@@ -4881,7 +4886,7 @@ process_gps:
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
 				if (client->ismaster) {
 					ast_log(LOG_WARNING,
-						"Voter client master timing source %s attempting to authenticate as mix client!! (HUH\?\?)\n", client->name);
+						"VOTER client master timing source %s attempting to authenticate as a mix client!! (HUH\?\?)\n", client->name);
 					authpacket.vp.digest = 0;
 					client->heardfrom = 0;
 					client->respdigest = 0;
@@ -4895,7 +4900,7 @@ process_gps:
 				time(&t);
 				if (t >= (client->warntime + CLIENT_WARN_SECS)) {
 					client->warntime = t;
-					ast_log(LOG_WARNING, "Voter client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
+					ast_log(LOG_WARNING, "VOTER client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
 						client->name);
 				}
 				authpacket.vp.digest = 0;
@@ -4921,7 +4926,7 @@ process_gps:
 		}
 		/* send them the empty packet to get things started */
 		if (isproxy) {
-			ast_debug(2, "sending (proxied) packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
+			ast_debug(2, "Sending (proxied) packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
 				ntohl(authpacket.vp.digest), password);
 			proxy_authpacket.flags = authpacket.flags;
 			proxy_authpacket.vprox.ipaddr = sin.sin_addr.s_addr;
@@ -4929,14 +4934,14 @@ process_gps:
 			proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 			sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
 		} else {
-			ast_debug(2, "sending packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
-				ntohl(authpacket.vp.digest), password);
+			ast_debug(2, "Sending packet challenge %s digest %08x password %s to client %s\n", authpacket.vp.challenge,
+				ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
 			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
 		}
 		continue;
 	}
 	ast_mutex_unlock(&voter_lock);
-	ast_debug(1, "Voter: Read thread exited.\n");
+	ast_debug(1, "VOTER: Read thread exited.\n");
 	return NULL;
 }
 
@@ -5385,9 +5390,8 @@ static int reload(void)
 			continue;
 		}
 		if (client->digest == 0) {
-			ast_log(LOG_ERROR,
-					"Can Not Load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
-					client->name);
+			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
+				client->name);
 			ast_mutex_unlock(&voter_lock);
 			return -1;
 		}
@@ -5402,9 +5406,8 @@ static int reload(void)
 				continue;
 			}
 			if (client->digest == client1->digest) {
-				ast_log(LOG_ERROR,
-						"Can Not Load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
-						client->name, client1->name);
+				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
+					client->name, client1->name);
 				ast_mutex_unlock(&voter_lock);
 				return -1;
 			}
@@ -5484,7 +5487,7 @@ static int load_module(void)
 	}
 
 	if ((udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-		ast_log(LOG_ERROR, "Unable to create new socket for voter audio connection\n");
+		ast_log(LOG_ERROR, "Unable to create new socket for VOTER audio connection\n");
 		ast_config_destroy(cfg);
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -5505,7 +5508,7 @@ static int load_module(void)
 	ast_config_destroy(cfg);
 
 	if (bind(udp_socket, &sin, sizeof(sin)) == -1) {
-		ast_log(LOG_ERROR, "Unable to bind port for voter audio connection: %s\n", strerror(errno));
+		ast_log(LOG_ERROR, "Unable to bind port for VOTER audio connection: %s\n", strerror(errno));
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
