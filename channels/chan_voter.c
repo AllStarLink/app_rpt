@@ -475,7 +475,9 @@ struct voter_pvt {
 	unsigned int priconn:1;
 	unsigned int mixminus:1;
 	unsigned int waspager:1;
-	
+	unsigned int kill_xmit_thread:1;
+	unsigned int kill_primary_thread:1;
+
 	int testcycle;
 	int testindex;
 	struct voter_client *lastwon;
@@ -517,6 +519,7 @@ struct voter_pvt {
 	ast_mutex_t xmit_lock;
 	ast_cond_t xmit_cond;
 	pthread_t xmit_thread;
+	pthread_t primary_thread;
 	struct sockaddr_in primary;
 	char primary_pswd[VOTER_NAME_LEN];
 	char primary_challenge[VOTER_CHALLENGE_LEN];
@@ -969,6 +972,17 @@ static int voter_hangup(struct ast_channel *ast)
 	}
 	if (pvts == p) {
 		pvts = p->next;
+	}
+	if (p->xmit_thread) {
+		p->kill_xmit_thread = 1;
+		ast_mutex_lock(&p->xmit_lock);
+		ast_cond_signal(&p->xmit_cond);
+		ast_mutex_unlock(&p->xmit_lock);
+		pthread_join(p->xmit_thread, NULL);
+	}
+	if (p->primary_thread) {
+		p->kill_primary_thread = 1;
+		pthread_join(p->primary_thread, NULL);
 	}
 	ast_mutex_unlock(&voter_lock);
 	ast_free(p);
@@ -1638,7 +1652,7 @@ static void *voter_primary_client(void *data)
 	lastrx = (struct timeval) {0};
 	ast_mutex_lock(&voter_lock);
 	p->primary_challenge[0] = 0;
-	while (run_forever && (!ast_shutting_down())) {
+	while (run_forever && !ast_shutting_down() && !p->kill_primary_thread) {
 		ast_mutex_unlock(&voter_lock);
 		ms = 100;
 		i = ast_waitfor_n_fd(&pri_socket, 1, &ms, NULL);
@@ -1817,7 +1831,7 @@ static void *voter_xmit(void *data)
 	} pingpacket;
 #pragma pack(pop)
 
-	while (run_forever && (!ast_shutting_down())) {
+	while (run_forever && !ast_shutting_down() && !p->kill_xmit_thread) {
 		ast_mutex_lock(&p->xmit_lock);
 		ast_cond_wait(&p->xmit_cond, &p->xmit_lock);
 		ast_mutex_unlock(&p->xmit_lock);
@@ -2627,7 +2641,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	ast_pthread_create(&p->xmit_thread, &attr, voter_xmit, p);
 	if (SEND_PRIMARY(p)) {
-		ast_pthread_create(&p->xmit_thread, &attr, voter_primary_client, p);
+		ast_pthread_create(&p->primary_thread, &attr, voter_primary_client, p);
 	}
 	pthread_attr_destroy(&attr);
 	return tmp;
