@@ -76,7 +76,7 @@ Voter Channel test modes:
 
 0 - Normal voting operation
 1 - Randomly pick which client of all that
-    are receiving at the max RSSI value to use.
+	are receiving at the max RSSI value to use.
 > 1 - Cycle thru all the clients that are receiving
 	at the max RSSI value with a cycle time of (test mode - 1)
 	frames. In other words, if you set it to 2, it will
