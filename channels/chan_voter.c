@@ -2364,7 +2364,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	struct ast_channel *tmp = NULL;
 	char *val, *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
 	struct ast_config *cfg = NULL;
-	pthread_attr_t attr;
 
 	if (!ast_format_cap_iscompatible(cap, voter_tech.capabilities)) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
@@ -2636,14 +2635,10 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		}
 		ast_mutex_unlock(&voter_lock);
 	}
-	ast_config_destroy(cfg);
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&p->xmit_thread, &attr, voter_xmit, p);
+	ast_pthread_create(&p->xmit_thread, NULL, voter_xmit, p);
 	if (SEND_PRIMARY(p)) {
-		ast_pthread_create(&p->primary_thread, &attr, voter_primary_client, p);
+		ast_pthread_create(&p->primary_thread, NULL, voter_primary_client, p);
 	}
-	pthread_attr_destroy(&attr);
 	return tmp;
 }
 
