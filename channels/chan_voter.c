@@ -809,7 +809,7 @@ static int finddelim(char *str, char *strp[], size_t limit)
 				inquo = 1;
 			}
 		}
-		if ((*str == DELIMCHR) && (!inquo)) {
+		if ((*str == DELIMCHR) && !inquo) {
 			*str = 0;
 			strp[i++] = str + 1;
 		}
@@ -2100,8 +2100,8 @@ static void *voter_xmit(void *data)
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
 					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-#ifndef	ADPCM_LOOPBACK
-					if (client->totransmit && (!client->txlockout)) {
+#ifndef ADPCM_LOOPBACK
+					if (client->totransmit && !client->txlockout) {
 						if (IS_CLIENT_PROXY(client)) {
 							memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
 							proxy_audiopacket.vp = audiopacket.vp;
@@ -2192,7 +2192,7 @@ static void *voter_xmit(void *data)
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
 					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-#ifndef	NULAW_LOOPBACK
+#ifndef NULAW_LOOPBACK
 					if (client->totransmit && !client->txlockout) {
 						if (IS_CLIENT_PROXY(client)) {
 							memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
@@ -2342,7 +2342,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	struct ast_config *cfg = NULL;
 	pthread_attr_t attr;
 
-	if (!(ast_format_cap_iscompatible(cap, voter_tech.capabilities))) {
+	if (!ast_format_cap_iscompatible(cap, voter_tech.capabilities)) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
 		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n",
 				ast_format_cap_get_names(cap, &cap_buf));
@@ -3674,7 +3674,7 @@ static void *voter_timer(void *data)
 	struct timeval tv;
 	int timingfd = ast_timer_fd(voter_thread_timer);
 
-	while (run_forever && (!ast_shutting_down())) {
+	while (run_forever && !ast_shutting_down()) {
 		int timeout = -1;
 		ast_waitfor_n_fd(&timingfd, 1, &timeout, NULL);
 		if (ast_timer_ack(voter_thread_timer, 1) < 0) {
@@ -3785,8 +3785,8 @@ static void *voter_reader(void *data)
 	ast_debug(1, "VOTER: Reader thread started.\n");
 	ast_mutex_lock(&voter_lock);
 	master_port = 0;
-	
-	while (run_forever && (!ast_shutting_down())) {
+
+	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
 		ms = 50;
 		i = ast_waitfor_n_fd(&udp_socket, 1, &ms, NULL);
@@ -3857,7 +3857,7 @@ static void *voter_reader(void *data)
 						break;
 					}
 				}
-				if (check_client_sanity && p && (!p->priconn)) {
+				if (check_client_sanity && p && !p->priconn) {
 					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
 						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
 						client->heardfrom = 0;
@@ -4754,7 +4754,7 @@ process_gps:
 		/* make our digest based on their challenge */
 		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		proxy_authpacket.flags = 0;
-		if (client && (!vph->payload_type)) {
+		if (client && !vph->payload_type) {
 			client->mix = 0;
 			/* if client is sending options */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
