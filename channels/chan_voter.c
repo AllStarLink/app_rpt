@@ -3884,7 +3884,8 @@ static void *voter_reader(void *data)
 					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 					.src = __PRETTY_FUNCTION__,
 				};
-				ast_debug(3, "VOTER client %s was receiving but now has stopped (RX_TIMEOUT_MS)!\n", ((client) ? client->name : "UNKNOWN"));
+				ast_debug(3, "VOTER client %s was receiving but now has stopped (RX_TIMEOUT_MS)!\n",
+					(client && client->name) ? client->name : "UNKNOWN");
 				ast_queue_frame(p->owner, &wf);
 				p->rxkey = 0;
 				p->lastwon = NULL;
@@ -3905,7 +3906,7 @@ static void *voter_reader(void *data)
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
 		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x from client %s\n", (int) recvlen,
-			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest), ((client) ? client->name : "UNKNOWN"));
+			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest), (client && client->name) ? client->name : "UNKNOWN");
 		client = NULL;
 		if ((!check_client_sanity) && master_port) {
 			sin.sin_port = htons(master_port);
