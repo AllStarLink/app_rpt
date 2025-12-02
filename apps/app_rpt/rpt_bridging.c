@@ -114,7 +114,7 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 	return NULL;
 }
 
-#define RPT_DIAL_TIME 999
+#define RPT_DIAL_DURATION 999
 
 void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 {
@@ -234,7 +234,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	 * if flags & RPT_LINK_CHAN.
 	 * This might not be necessary, but if it is, this should be re-added. */
 
-	rpt_make_call(chan, device, RPT_DIAL_TIME, tech, rpt_chan_app(chantype, flags), rpt_chan_app_data(chantype), myrpt->name);
+	rpt_make_call(chan, device, RPT_DIAL_DURATION, tech, rpt_chan_app(chantype, flags), rpt_chan_app_data(chantype), myrpt->name);
 	if (ast_channel_state(chan) != AST_STATE_UP) {
 		ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
 		ast_hangup(chan);
@@ -275,7 +275,7 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const ch
 		return NULL;
 	}
 	rpt_disable_cdr(chan);
-	ast_call(chan, destination, RPT_DIAL_TIME);
+	ast_call(chan, destination, RPT_DIAL_DURATION);
 
 	return chan;
 }
@@ -303,7 +303,7 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 
 	rpt_disable_cdr(chan);
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(chan));
-	ast_call(chan, destination, RPT_DIAL_TIME);
+	ast_call(chan, destination, RPT_DIAL_DURATION);
 
 	/*	if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
