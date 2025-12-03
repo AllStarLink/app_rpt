@@ -769,13 +769,20 @@ static int16_t deemp1(int16_t input, int32_t * restrict state0)
 	return output;
 }
 
-/*!
- * \brief Break up a delimited string into a table of substrings.
- * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
- * \param str		Pointer to string to process (it will be modified).
- * \param strp		An array of pointers to the start of each token + 1 or more for a NULL end token
- * \param limit		The maximum number of tokens to find + 1 or more for the NULL end token
- * \return			Count of strings.
+/**
+ * Split a string into tokens using DELIMCHR and QUOTECHR and store pointers to each token.
+ *
+ * The function modifies the input string in-place: delimiter characters and closing
+ * quote characters are replaced with NUL ('\0') bytes. Text enclosed by QUOTECHR is
+ * treated as a single token and the surrounding quote characters are removed.
+ *
+ * @param str Pointer to the NUL-terminated string to tokenize; the buffer is modified.
+ * @param strp Array to receive pointers to token start positions and a terminating NULL.
+ *             Must have space for at least `limit` pointers.
+ * @param limit Maximum number of pointers available in `strp`. The function will stop
+ *              scanning when it has filled `limit - 1` token entries and will always
+ *              write a terminating NULL at `strp[index]`.
+ * @returns The number of tokens placed into `strp` (zero if none).
  */
 static int finddelim(char *str, char *strp[], size_t limit)
 {
@@ -1589,9 +1596,15 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	return 1;
 }
 
-/*!
- * \brief Primary client processing thread.
- * \param data		Pointer to voter_pvt struct.
+/**
+ * Manage the UDP-based primary-client keepalive and authentication for a node.
+ *
+ * Sends periodic authentication and GPS keepalive packets to the configured primary,
+ * processes incoming primary responses to establish/maintain a primary session,
+ * and updates per-client proxy state when the primary connection is lost.
+ *
+ * @param data Pointer to the per-node state struct (struct voter_pvt *).
+ * @returns NULL when the thread exits. 
  */
 static void *voter_primary_client(void *data)
 {
@@ -1761,10 +1774,14 @@ static void check_ping_done(struct voter_client *client)
 	client->pings_requested = 0;
 }
 
-/*!
- * \brief Voter transmit thread.
- * \param data		Pointer to voter_pvt struct.
- */
+/**
+ * Manage and dispatch transmit activity for a single Voter node instance.
+ *
+ * Runs the per-node transmit worker: consumes queued Asterisk frames and pager frames,
+ * integrates PMR channel input, performs optional mix-minus and format conversions,
+ * and sends TX audio, keepalive, ping, and proxy packets to connected clients.
+ *
+ * @param data Pointer to the per-node voter_pvt instance. */
 static void *voter_xmit(void *data)
 {
 
@@ -2307,18 +2324,21 @@ static void *voter_xmit(void *data)
 	pthread_exit(NULL);
 }
 
-/*!
- * \brief Voter request from Asterisk.
- * This is a standard Asterisk function - requester.
- * Asterisk calls this function to to setup private data structures.
- * \param type			Type of channel to request.
- * \param cap			Format capabilities for the channel.
- * \param assignedids	Unique ID string to assign to the channel.
- * \param requestor		Channel asking for data. 
- * \param data			Destination of the call.
- * \param cause			Cause of failure.
- * \retval NULL			Failure
- * \return				ast_channel if successful
+/**
+ * Create and initialize a Voter channel instance for the requested node.
+ *
+ * Allocates and initializes per-node private state, translators, DSP, channel
+ * formats, and loads node configuration from voter.conf. The function registers
+ * the new channel with Asterisk, links the private state to the channel, and
+ * starts per-node worker threads (transmit and optional primary/keepalive).
+ *
+ * @param type         Requested channel type string.
+ * @param cap          Format capabilities negotiated for the channel.
+ * @param assignedids  Unique IDs to assign to the new channel.
+ * @param requestor    Channel that requested this new channel (may be NULL).
+ * @param data         Node identifier string (interpreted as the node number).
+ * @param cause        Pointer to integer to receive a failure cause code on error.
+ * @return             Pointer to the newly allocated ast_channel on success, `NULL` on failure.
  */
 static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap,
 										 const struct ast_assigned_ids *assignedids,
@@ -2668,12 +2688,23 @@ static int voter_do_test(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*!
- * \brief Process Asterisk CLI request to set client priority.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+/**
+ * Update or display per-client priority settings for a Voter node from the Asterisk CLI.
+ *
+ * When invoked with just a node number, prints all clients and their effective/override
+ * priority values for that node. When given a node number and a client name (or "all"),
+ * prints that client's priority information. When additionally supplied with a priority
+ * value (or "off"/"disable"), sets the client's priority override to that value (or
+ * disables the override).
+ *
+ * @param fd Asterisk CLI file descriptor used for output.
+ * @param argc Number of CLI arguments.
+ * @param argv CLI arguments; expected forms:
+ *             - argv[2]: node number
+ *             - argv[3] (optional): client name or "all"
+ *             - argv[4] (optional): priority value or "off"/"disable"
+ * @returns RESULT_SHOWUSAGE when the argument count or format is incorrect,
+ *          RESULT_SUCCESS otherwise.
  */
 static int voter_do_prio(int fd, int argc, const char *const *argv)
 {
@@ -2952,10 +2983,19 @@ static int term_supports_clear(void)
 }
 #endif
 
-/*!
- * \brief Display voter information.
- * \param fd			Asterisk CLI fd.
- * \param p				Pointer to voter_pvt struct.
+/**
+ * Display a live, updating CLI view of the specified voter instance.
+ *
+ * Presents per-client RSSI bars, marks the current winner, lists active clients
+ * with their source addresses, and shows a warning when the master timing
+ * source is unavailable. The display updates periodically and remains active
+ * until the user cancels the console view.
+ *
+ * @param fd  Asterisk CLI file descriptor used to write the display.
+ * @param p   Pointer to the voter_pvt instance to display.
+ *
+ * @note This function temporarily suppresses other verbose console output by
+ *       modifying global verbose state and restores it before returning.
  */
 static void voter_display(int fd, const struct voter_pvt *p)
 {
@@ -3047,12 +3087,14 @@ static void voter_display(int fd, const struct voter_pvt *p)
 	option_verbose = wasverbose;
 }
 
-/*!
- * \brief Process Asterisk CLI request to display voter information.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+/**
+ * Handle the CLI "voter display" request and print the voter instance information for a node.
+ *
+ * @param fd   Asterisk CLI file descriptor.
+ * @param argc Number of arguments in argv.
+ * @param argv Argument array; argv[2] is expected to contain the node number to display.
+ * @returns RESULT_SUCCESS if the node was found or when a not-found message was printed,
+ *          RESULT_SHOWUSAGE if insufficient arguments were provided.
  */
 static int voter_do_display(int fd, int argc, const char *const *argv)
 {
@@ -3074,12 +3116,22 @@ static int voter_do_display(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*!
- * \brief Process Asterisk CLI request for tx lockout.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+/**
+ * Handle the CLI "txlockout" command to set or display per-client transmit lockout
+ * state for a specified voter instance.
+ *
+ * The command accepts a node number and an optional lockout specification:
+ * - "all" to enable tx lockout for every client on the node,
+ * - "none" to clear lockout for every client on the node,
+ * - or a comma-separated list of client names, optionally prefixed with '-' to
+ *   disable or '+' (or no sign) to enable lockout for each named client.
+ *
+ * @param fd  Asterisk CLI file descriptor to write output to.
+ * @param argc Number of command arguments.
+ * @param argv Argument vector; argv[2] is the node number and argv[3] (optional)
+ *             is the lockout specification as described above.
+ * @returns `RESULT_SHOWUSAGE` if arguments are insufficient, `RESULT_SUCCESS`
+ *          on successful processing, or `RESULT_FAILURE` on error.
  */
 static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 {
@@ -3176,12 +3228,13 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*!
- * \brief Process Asterisk CLI request to ping client.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+/**
+ * Start or stop a ping sequence for a named Voter client from the Asterisk CLI.
+ *
+ * @param fd   Asterisk CLI file descriptor used for command output.
+ * @param argc Number of CLI arguments.
+ * @param argv CLI argument vector; argv[2] is the client name, argv[3] (optional) is ping count.
+ * @returns RESULT_SUCCESS on normal handling, RESULT_SHOWUSAGE if arguments are insufficient, or RESULT_FAILURE on error.
  */
 static int voter_do_ping(int fd, int argc, const char *const *argv)
 {
@@ -3250,6 +3303,19 @@ static char *voter_complete_static_client_list(const char *line, const char *wor
 	return NULL;
 }
 
+/**
+ * Populate CLI completions with names of currently connected, authenticated clients
+ *
+ * Scans the global client list and, for each non-proxy client that has been heard
+ * from and has a valid response digest, adds the client's name as a completion
+ * if it starts with the provided word prefix and the cursor is at the end of the line.
+ *
+ * @param line Full input line from the CLI.
+ * @param word Current word to complete (prefix to match).
+ * @param pos Cursor position in the line.
+ * @param rpos Cursor position relative to the completion engine (should equal pos to act).
+ * @returns NULL
+ */
 static char *voter_complete_connected_client_list(const char *line, const char *word, int pos, int rpos)
 {
 	struct voter_client *client;
@@ -3501,11 +3567,17 @@ static void rpt_manager_success(struct mansession *s, const struct message *m)
 	}
 }
 
-/*!
- * \brief Report voter status to asterisk manager.
- * \param ses				Pointer to mansession struct.
- * \param m					Pointer to message struct.
- * \retval RESULT_SUCCESS	Always returns success.
+/**
+ * Send per-node and per-client voter status lines to the given Asterisk manager session.
+ *
+ * When a "Node" header is present in the manager message, only status for the listed node
+ * numbers is included. For each reported node this emits node identifier, last voted client (if any),
+ * and for each client that has been heard from emits client name, flags (Mix, Master, ActiveMaster),
+ * IP/port information (proxied clients are marked), and last RSSI.
+ *
+ * @param ses Pointer to the manager session to which status lines will be written.
+ * @param m   Pointer to the manager message; the optional "Node" header is used to filter output.
+ * @returns RESULT_SUCCESS to indicate the manager response was sent.
  */
 static int manager_voter_status(struct mansession *ses, const struct message *m)
 {
@@ -3602,11 +3674,13 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 
 #include "xpmr/xpmr.c"
 
-/*!
- * \brief Voter transmit processing.
- *	Increments the tx and rx sequence numbers
- *	for clients marked as "mix".
- *	Set the xmit_cond for our voters/nodes.
+/**
+ * Advance transmit and receive sequence numbers for mixed clients and wake per-node transmit workers.
+ *
+ * Increments the tx sequence number for each client that has completed authentication, has been heard
+ * from recently, and is marked for mixing. Also advances each client's rx sequence number in a
+ * format-aware manner. After updating clients, signals the xmit condition on every per-node voter
+ * instance to wake transmit threads.
  */
 static void voter_xmit_master(void)
 {
@@ -3642,12 +3716,15 @@ static void voter_xmit_master(void)
 	}
 }
 
-/*!
- * \brief Voter timing thread.
- *	Maintains a relative time source that is not dependent 
- *	on the system time of day.
- *	The timing loop processes every 20 milliseconds.
- * \param data		This is always NULL.
+/**
+ * Voter timing thread that drives the driver's internal 20 ms timing tick.
+ *
+ * Maintains the driver's master-relative timebase, advances per-node timing counters,
+ * sends empty frames when no master is present, performs periodic client timeout and
+ * sanity checks, and wakes transmit logic as required.
+ *
+ * @param data Always NULL; unused.
+ * @returns NULL on thread exit.
  */
 static void *voter_timer(void *data)
 {
@@ -3713,10 +3790,16 @@ static void *voter_timer(void *data)
 	return NULL;
 }
 
-/*!
- * \brief Voter read processing thread.
- *	This thread reads and process incoming voter packets.
- * \param data		This is always NULL.
+/**
+ * Reader thread that processes incoming VOTER UDP packets and updates driver state.
+ *
+ * This thread receives VOTER protocol packets, authenticates and identifies clients,
+ * updates per-client and per-node timing/state (including master timing, GPS, and ping
+ * statistics), routes or proxies audio payloads into per-client buffers, and triggers
+ * node-level selection/mixing and keepalive responses as appropriate.
+ *
+ * @param data Always NULL; unused thread argument.
+ * @return NULL when the thread exits.
  */
 static void *voter_reader(void *data)
 {
@@ -4801,10 +4884,16 @@ process_gps:
 	return NULL;
 }
 
-/*!
- * \brief Load configuration.
- * \retval 0		Success.
- * \retval -1		Failed.
+/**
+ * Reload Voter driver configuration from disk and apply changes.
+ *
+ * Parses the configured voter.conf, updates per-instance (pvts) and per-client
+ * state, reallocates audio and RSSI buffers as needed, creates or tears down
+ * per-instance PMR channels for CTCSS changes, and ensures client digests are
+ * unique and valid. The global voter_lock is held while modifying shared state.
+ *
+ * @retval 0 Success — configuration loaded and applied.
+ * @retval -1 Failure — configuration load or allocation error; existing state is left unchanged where possible.
  */
 static int reload(void)
 {
@@ -5311,6 +5400,17 @@ static int unload_module(void)
 	return 0;
 }
 
+/**
+ * Initialize and register the Voter channel module and its runtime resources.
+ *
+ * Sets up UDP socket and bind address/port from configuration, opens a periodic
+ * timer, loads runtime configuration, registers CLI and manager hooks, creates
+ * reader and timer threads, allocates channel format capabilities, and registers
+ * the channel driver so the Voter channel becomes available to Asterisk.
+ *
+ * @returns 0 on success; non-zero on failure (typically AST_MODULE_LOAD_DECLINE for
+ *         module load errors, or 1 if the configuration could not be loaded).
+ */
 static int load_module(void)
 {
 	struct sockaddr_in sin;
