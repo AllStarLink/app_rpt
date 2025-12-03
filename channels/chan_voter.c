@@ -265,8 +265,6 @@ struct ast_flags zeroflag = { 0 };
 #define DEFAULT_LINGER 6
 #define DEFAULT_GTXGAIN "0.0"
 
-#define DEFAULT_DYNTIME 30000
-
 #define MAX_MASTER_COUNT 3
 #define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 #define CLIENT_WARN_SECS 60
@@ -320,7 +318,6 @@ struct ast_timer *voter_thread_timer = NULL;
 
 int voter_timing_count = 0;
 int last_master_count = 0;
-int dyntime = DEFAULT_DYNTIME;
 
 int check_client_sanity = 1;
 
@@ -436,7 +433,6 @@ struct voter_client {
 	int prio;
 	int prio_override;
 	struct timeval lastheardtime;
-	struct timeval lastdyntime;
 	struct timeval lastsenttime;
 	VTIME lastgpstime;
 	VTIME lastmastergpstime;
@@ -554,8 +550,6 @@ static char *config = "voter.conf";			/* default config file */
 struct voter_pvt *pvts = NULL;
 
 struct voter_client *clients = NULL;
-
-struct voter_client *dyn_clients = NULL;
 
 FILE *fp;
 
@@ -2962,9 +2956,8 @@ static int term_supports_clear(void)
  * \brief Display voter information.
  * \param fd			Asterisk CLI fd.
  * \param p				Pointer to voter_pvt struct.
- * \param doips			Set to 1 to show non-dynamic clients
  */
-static void voter_display(int fd, const struct voter_pvt *p, int doips)
+static void voter_display(int fd, const struct voter_pvt *p)
 {
 	int j, rssi, thresh, ncols = 56, wasverbose, vt100compat;
 	char str[256], c;
@@ -3033,26 +3026,23 @@ static void voter_display(int fd, const struct voter_pvt *p, int doips)
 			ast_cli(fd, "%c%10.10s |%s| [%3d]\n", c, client->name, str, rssi);
 		}
 		ast_cli(fd, "\n\n");
-		if (doips) {
-			ast_cli(fd, "Active Non-Dynamic Clients:\n\n");
-			for (client = clients; client; client = client->next) {
-				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				if (p->priconn && !client->mix) {
-					continue;
-				}
-				if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
-					continue;
-				}
-				if (!client->heardfrom) {
-					continue;
-				}
-				ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr),
-						ntohs(client->sin.sin_port));
+		ast_cli(fd, "Active Clients:\n\n");
+		for (client = clients; client; client = client->next) {
+			if (client->nodenum != p->nodenum) {
+				continue;
 			}
-			ast_cli(fd, "\n\n");
+			if (p->priconn && !client->mix) {
+				continue;
+			}
+			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
+				continue;
+			}
+			if (!client->heardfrom) {
+				continue;
+			}
+			ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
 		}
+		ast_cli(fd, "\n\n");
 	}
 	option_verbose = wasverbose;
 }
@@ -3080,7 +3070,7 @@ static int voter_do_display(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "Voter instance %s not found\n", argv[2]);
 		return RESULT_SUCCESS;
 	}
-	voter_display(fd, p, ((argc > 3)));
+	voter_display(fd, p);
 	return RESULT_SUCCESS;
 }
 
@@ -3622,7 +3612,6 @@ static void voter_xmit_master(void)
 {
 	struct voter_client *client;
 	struct voter_pvt *p;
-	struct timeval tv;
 
 	for (client = clients; client; client = client->next) {
 		if (!client->respdigest) {
@@ -3651,7 +3640,6 @@ static void voter_xmit_master(void)
 		ast_cond_signal(&p->xmit_cond);
 		ast_mutex_unlock(&p->xmit_lock);
 	}
-	gettimeofday(&tv, NULL);
 }
 
 /*!
@@ -3907,7 +3895,6 @@ static void *voter_reader(void *data)
 						}
 					}
 				}
-				gettimeofday(&client->lastdyntime, NULL);
 				if (!client || (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY)) {
 					client->respdigest = crc32_bufs((char *) vph->challenge, password);
 				}
@@ -4874,13 +4861,6 @@ static int reload(void)
 		puckit = ast_true(val);
 	} else {
 		puckit = 0;
-	}
-
-	val = (char *) ast_variable_retrieve(cfg, "general", "dyntime");
-	if (val) {
-		dyntime = strtoul(val, NULL, 0);
-	} else {
-		dyntime = DEFAULT_DYNTIME;
 	}
 
 	if (buflen < (FRAME_SIZE * 2)) {
