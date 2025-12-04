@@ -5940,8 +5940,8 @@ done:
 	pthread_exit(NULL);
 }
 
-static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed, const enum rpt_phone_mode phone_mode,
-	const int phone_vox, char *restrict myfirst, int *restrict dtmfed)
+static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed,
+	const enum rpt_phone_mode phone_mode, const int phone_vox, char *restrict myfirst, int *restrict dtmfed)
 {
 	struct ast_frame *f = ast_read(chan);
 	if (!f) {
