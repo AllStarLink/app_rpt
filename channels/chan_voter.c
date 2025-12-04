@@ -3804,7 +3804,7 @@ static void *voter_timer(void *data)
 /*!
  * \brief UDP reader thread that processes incoming Voter protocol packets and updates voter state.
  *
- * \description This thread receives Voter-format UDP packets, matches them to configured clients (including
+ * This thread receives Voter-format UDP packets, matches them to configured clients (including
  * dynamic binding), validates/authenticates clients, and handles payloads such as audio
  * (ULAW/ADPCM/NULAW), proxy-encapsulated packets, GPS, and PING.  It updates timing and master
  * synchronization state, writes received audio and RSSI into per-client circular buffers,
