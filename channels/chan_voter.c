@@ -3821,7 +3821,7 @@ static void *voter_reader(void *data)
 	char gps1[300], gps2[300], isproxy;
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
-	int i, j, k, ms, maxrssi, master_port;
+	int i, j, k, ms, maxrssi, master_port, no_ast_channel;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -3868,6 +3868,7 @@ static void *voter_reader(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
+		no_ast_channel = 0;
 		ms = 50;
 		i = ast_waitfor_n_fd(&udp_socket, 1, &ms, NULL);
 		ast_mutex_lock(&voter_lock);
@@ -3888,8 +3889,7 @@ static void *voter_reader(void *data)
 					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 					.src = __PRETTY_FUNCTION__,
 				};
-				ast_debug(3, "VOTER client %s was receiving but now has stopped (RX_TIMEOUT_MS)!\n",
-					(client && client->name) ? client->name : "UNKNOWN");
+				ast_debug(3, "A VOTER on %d was receiving but now has stopped (RX_TIMEOUT_MS)!\n", p->nodenum);
 				ast_queue_frame(p->owner, &wf);
 				p->rxkey = 0;
 				p->lastwon = NULL;
@@ -3909,8 +3909,8 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
-		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x from client %s\n", (int) recvlen,
-			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest), (client && client->name) ? client->name : "UNKNOWN");
+		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
+			vph->challenge, ntohl(vph->digest));
 		client = NULL;
 		if (!check_client_sanity && master_port) {
 			sin.sin_port = htons(master_port);
@@ -3942,7 +3942,9 @@ static void *voter_reader(void *data)
 					/* We didn't find an asterisk channel,
 					 * act like we don't know the client.
 					 */
-					ast_debug(2, "Request for voter client %s to unknown node %d\n", client->name, client->nodenum);
+					ast_debug(2, "Request for voter client %s to node %d with no matching asterisk channel\n", client->name,
+						client->nodenum);
+					no_ast_channel = 1;
 					client = NULL;
 				}
 			}
@@ -4818,6 +4820,9 @@ process_gps:
 			}
 		}
 
+		if (no_ast_channel) {
+			continue;
+		}
 		/* otherwise, we just need to send an empty packet to the dude */
 		memset(&authpacket, 0, sizeof(authpacket));
 		memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
