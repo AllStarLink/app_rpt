@@ -76,12 +76,12 @@ Voter Channel test modes:
 
 0 - Normal voting operation
 1 - Randomly pick which client of all that
-    are receiving at the max RSSI value to use.
+	are receiving at the max RSSI value to use.
 > 1 - Cycle thru all the clients that are receiving
-    at the max RSSI value with a cycle time of (test mode - 1)
-    frames. In other words, if you set it to 2, it will
-    change every single time. If you set it to 11, it will
-    change every 10 times. This is serious torture test.
+	at the max RSSI value with a cycle time of (test mode - 1)
+	frames. In other words, if you set it to 2, it will
+	change every single time. If you set it to 11, it will
+	change every 10 times. This is serious torture test.
 
 Note on ADPCM functionality:
 The original intent was to change this driver to use signed linear internally (slin),
@@ -91,11 +91,6 @@ degradation in dynamic range when using ADPCM resulting in doing so).  This was
 done because existing external entities (such as the recording files and the streaming
 stuff) use mulaw as their transport, and changing all of that to signed linear would
 be cumbersome, inefficient and undesirable.
-
-Note on "Dynamic" client functionality:
-DONT USE IT!!. It is intentionally *NOT* documented to encourage non-use of this
-feature. It is for demo purposes *ONLY*. The chan_voter driver will *NOT* properly
-perform reliably in a production environment if this option is used.
 
 Redundant "Proxy" Mode:
 
@@ -270,8 +265,6 @@ struct ast_flags zeroflag = { 0 };
 #define DEFAULT_LINGER 6
 #define DEFAULT_GTXGAIN "0.0"
 
-#define DEFAULT_DYNTIME 30000
-
 #define MAX_MASTER_COUNT 3
 #define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 #define CLIENT_WARN_SECS 60
@@ -325,7 +318,6 @@ struct ast_timer *voter_thread_timer = NULL;
 
 int voter_timing_count = 0;
 int last_master_count = 0;
-int dyntime = DEFAULT_DYNTIME;
 
 int check_client_sanity = 1;
 
@@ -423,7 +415,6 @@ struct voter_client {
 	unsigned int mix:1;
 	unsigned int nodeemp:1;
 	unsigned int noplfilter:1;
-	unsigned int dynamic:1;
 	unsigned int txlockout:1;
 	unsigned int reload:1;
 	unsigned int rxseq40ms:1;
@@ -442,7 +433,6 @@ struct voter_client {
 	int prio;
 	int prio_override;
 	struct timeval lastheardtime;
-	struct timeval lastdyntime;
 	struct timeval lastsenttime;
 	VTIME lastgpstime;
 	VTIME lastmastergpstime;
@@ -560,8 +550,6 @@ static char *config = "voter.conf";			/* default config file */
 struct voter_pvt *pvts = NULL;
 
 struct voter_client *clients = NULL;
-
-struct voter_client *dyn_clients = NULL;
 
 FILE *fp;
 
@@ -782,12 +770,19 @@ static int16_t deemp1(int16_t input, int32_t * restrict state0)
 }
 
 /*!
- * \brief Break up a delimited string into a table of substrings.
- * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
- * \param str		Pointer to string to process (it will be modified).
- * \param strp		An array of pointers to the start of each token + 1 or more for a NULL end token
- * \param limit		The maximum number of tokens to find + 1 or more for the NULL end token
- * \return			Count of strings.
+ * \brief Split a string into tokens using DELIMCHR and QUOTECHR and store pointers to each token.
+ *
+ * The function modifies the input string in-place: delimiter characters and closing
+ * quote characters are replaced with NUL ('\0') bytes. Text enclosed by QUOTECHR is
+ * treated as a single token and the surrounding quote characters are removed.
+ *
+ * \param str   Pointer to the NUL-terminated string to tokenize; the buffer is modified.
+ * \param strp  Array to receive pointers to token start positions and a terminating NULL.
+ *              Must have space for at least `limit` pointers.
+ * \param limit Maximum number of pointers available in `strp`. The function will stop
+ *              scanning when it has filled `limit - 1` token entries and will always
+ *              write a terminating NULL at `strp[index]`.
+ * \return      The number of tokens placed into `strp` (zero if none).
  */
 static int finddelim(char *str, char *strp[], size_t limit)
 {
@@ -810,7 +805,7 @@ static int finddelim(char *str, char *strp[], size_t limit)
 				inquo = 1;
 			}
 		}
-		if ((*str == DELIMCHR) && (!inquo)) {
+		if ((*str == DELIMCHR) && !inquo) {
 			*str = 0;
 			strp[i++] = str + 1;
 		}
@@ -824,7 +819,7 @@ static int finddelim(char *str, char *strp[], size_t limit)
  * \brief Determine difference in two timevals in milliseconds.
  * \param x		First timeval.
  * \param y		Second timeval.
- * \returns 	Difference in milliseconds.
+ * \return      Difference in milliseconds.
  */
 static unsigned int voter_tvdiff_ms(const struct timeval x, const struct timeval y)
 {
@@ -926,8 +921,8 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 
 /*!
  * \brief Asterisk hangup function.
- * \param c			Asterisk channel.
- * \retval 0		Always returns 0.			
+ * \param c Asterisk channel.
+ * \return  Always returns 0.
  */
 static int voter_hangup(struct ast_channel *ast)
 {
@@ -1318,9 +1313,9 @@ static int voter_write(struct ast_channel *ast, struct ast_frame *frame)
 }
 /*!
  * \brief Concatenates two asterisk frames.
- * \param f1		Pointer to asterisk frame.
- * \param f2		Pointer to asterisk frame.
- * \returns			Concatenated frame, or NULL if there is an error.
+ * \param f1 Pointer to asterisk frame.
+ * \param f2 Pointer to asterisk frame.
+ * \return   Concatenated frame, or NULL if there is an error.
  */
 
 static struct ast_frame *ast_frcat(const struct ast_frame * restrict f1, const struct ast_frame * restrict f2)
@@ -1602,8 +1597,14 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 }
 
 /*!
- * \brief Primary client processing thread.
- * \param data		Pointer to voter_pvt struct.
+ * \brief Manage the UDP-based primary-client keepalive and authentication for a node.
+ *
+ * Sends periodic authentication and GPS keepalive packets to the configured primary,
+ * processes incoming primary responses to establish/maintain a primary session,
+ * and updates per-client proxy state when the primary connection is lost.
+ *
+ * \param data Pointer to the per-node state struct (struct voter_pvt *).
+ * \return     NULL when the thread exits.
  */
 static void *voter_primary_client(void *data)
 {
@@ -1649,7 +1650,7 @@ static void *voter_primary_client(void *data)
 		}
 		gettimeofday(&tv, NULL);
 		memset(&authpacket, 0, sizeof(authpacket));
-		if ((!p->priconn) && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 500))) {
+		if (!p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 500))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
 			strcpy((char *) authpacket.vp.challenge, challenge);
@@ -1705,8 +1706,8 @@ static void *voter_primary_client(void *data)
 					strcpy(p->primary_challenge, (char *) vph->challenge);
 					p->priconn = 0;
 				} else {
-					if ((!digest) || (!vph->digest) || (digest != ntohl(vph->digest)) ||
-						(ntohs(vph->payload_type) == 0) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
+					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) || (ntohs(vph->payload_type) == 0) ||
+						(ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
 						mydigest = crc32_bufs(challenge, password);
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
@@ -1774,8 +1775,13 @@ static void check_ping_done(struct voter_client *client)
 }
 
 /*!
- * \brief Voter transmit thread.
- * \param data		Pointer to voter_pvt struct.
+ * \brief Manage and dispatch transmit activity for a single Voter node instance.
+ *
+ * Runs the per-node transmit worker: consumes queued Asterisk frames and pager frames,
+ * integrates PMR channel input, performs optional mix-minus and format conversions,
+ * and sends TX audio, keepalive, ping, and proxy packets to connected clients.
+ *
+ * \param data Pointer to the per-node voter_pvt instance.
  */
 static void *voter_xmit(void *data)
 {
@@ -1837,7 +1843,7 @@ static void *voter_xmit(void *data)
 		}
 		f1 = NULL;
 		// x will be set here is there was actual transmit activity
-		if ((!x) && (p->pmrChan)) {
+		if (!x && p->pmrChan) {
 			p->pmrChan->txPttIn = 0;
 		}
 		if (x && (!p->pmrChan)) {
@@ -1956,10 +1962,10 @@ static void *voter_xmit(void *data)
 				if (client->nodenum != p->nodenum) {
 					continue;
 				}
-				if (p->priconn && (!client->dynamic) && (!client->mix)) {
+				if (p->priconn && !client->mix) {
 					continue;
 				}
-				if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+				if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 					continue;
 				}
 				if (!client->heardfrom) {
@@ -2010,7 +2016,7 @@ static void *voter_xmit(void *data)
 							xmtbuf2[i] = l;
 						}
 					}
-					if ((!x) && (!i)) {
+					if (!x && !i) {
 						continue;
 					}
 					memset(&fr, 0, sizeof(fr));
@@ -2032,9 +2038,8 @@ static void *voter_xmit(void *data)
 				}
 				mkpucked(client, &audiopacket.vp.curtime);
 				audiopacket.vp.digest = htonl(client->respdigest);
-				audiopacket.vp.curtime.vtime_nsec =
-					(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				if (client->totransmit && (!client->txlockout)) {
+				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+				if (client->totransmit && !client->txlockout) {
 					if (IS_CLIENT_PROXY(client)) {
 						memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
 						proxy_audiopacket.vp = audiopacket.vp;
@@ -2045,8 +2050,7 @@ static void *voter_xmit(void *data)
 						proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
 						proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 						proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-						proxy_audiopacket.vp.curtime.vtime_nsec =
-							(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+						proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 						ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, proxy_audiopacket.vp.digest);
 						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
@@ -2088,10 +2092,10 @@ static void *voter_xmit(void *data)
 					if (client->nodenum != p->nodenum) {
 						continue;
 					}
-					if (p->priconn && (!client->dynamic) && (!client->mix)) {
+					if (p->priconn && !client->mix) {
 						continue;
 					}
-					if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+					if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 						continue;
 					}
 					if (!client->heardfrom) {
@@ -2102,10 +2106,9 @@ static void *voter_xmit(void *data)
 					}
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
-					audiopacket.vp.curtime.vtime_nsec =
-						(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-#ifndef	ADPCM_LOOPBACK
-					if (client->totransmit && (!client->txlockout)) {
+					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+#ifndef ADPCM_LOOPBACK
+					if (client->totransmit && !client->txlockout) {
 						if (IS_CLIENT_PROXY(client)) {
 							memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
 							proxy_audiopacket.vp = audiopacket.vp;
@@ -2116,8 +2119,7 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
 							proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-							proxy_audiopacket.vp.curtime.vtime_nsec =
-								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+							proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 							ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0, (struct sockaddr *) &client->sin,
@@ -2182,10 +2184,10 @@ static void *voter_xmit(void *data)
 					if (client->nodenum != p->nodenum) {
 						continue;
 					}
-					if (p->priconn && (!client->dynamic) && (!client->mix)) {
+					if (p->priconn && !client->mix) {
 						continue;
 					}
-					if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+					if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 						continue;
 					}
 					if (!client->heardfrom) {
@@ -2196,10 +2198,9 @@ static void *voter_xmit(void *data)
 					}
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
-					audiopacket.vp.curtime.vtime_nsec =
-						(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-#ifndef	NULAW_LOOPBACK
-					if (client->totransmit && (!client->txlockout)) {
+					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+#ifndef NULAW_LOOPBACK
+					if (client->totransmit && !client->txlockout) {
 						if (IS_CLIENT_PROXY(client)) {
 							memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
 							proxy_audiopacket.vp = audiopacket.vp;
@@ -2210,8 +2211,7 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
 							proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-							proxy_audiopacket.vp.curtime.vtime_nsec =
-								(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+							proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 							ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0,
@@ -2272,8 +2272,7 @@ static void *voter_xmit(void *data)
 				pingpacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
 				mkpucked(client, &pingpacket.vp.curtime);
 				pingpacket.vp.digest = htonl(client->respdigest);
-				pingpacket.vp.curtime.vtime_nsec =
-					(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+				pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
 				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
@@ -2282,10 +2281,10 @@ static void *voter_xmit(void *data)
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 				continue;
 			}
-			if (p->priconn && (!client->dynamic) && (!client->mix) && (!IS_CLIENT_PROXY(client))) {
+			if (p->priconn && !client->mix && !IS_CLIENT_PROXY(client)) {
 				continue;
 			}
 			if (!client->heardfrom) {
@@ -2297,8 +2296,7 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(2);
 				audiopacket.vp.digest = htonl(client->respdigest);
-				audiopacket.vp.curtime.vtime_nsec =
-					(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				if (IS_CLIENT_PROXY(client)) {
 					memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
 					proxy_audiopacket.vp = audiopacket.vp;
@@ -2309,8 +2307,7 @@ static void *voter_xmit(void *data)
 					proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
 					proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 					proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-					proxy_audiopacket.vp.curtime.vtime_nsec =
-						(client->mix) ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 					ast_debug(5, "VOTER %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum,
 						client->name, proxy_audiopacket.vp.digest);
 					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
@@ -2329,17 +2326,20 @@ static void *voter_xmit(void *data)
 }
 
 /*!
- * \brief Voter request from Asterisk.
- * This is a standard Asterisk function - requester.
- * Asterisk calls this function to to setup private data structures.
- * \param type			Type of channel to request.
- * \param cap			Format capabilities for the channel.
- * \param assignedids	Unique ID string to assign to the channel.
- * \param requestor		Channel asking for data. 
- * \param data			Destination of the call.
- * \param cause			Cause of failure.
- * \retval NULL			Failure
- * \return				ast_channel if successful
+ * \brief Create and initialize a Voter channel instance for the requested node from Asterisk.
+ *
+ * Allocates and initializes per-node private state, translators, DSP, channel
+ * formats, and loads node configuration from voter.conf. The function registers
+ * the new channel with Asterisk, links the private state to the channel, and
+ * starts per-node worker threads (transmit and optional primary/keepalive).
+ *
+ * \param type         Requested channel type string.
+ * \param cap          Format capabilities negotiated for the channel.
+ * \param assignedids  Unique IDs to assign to the new channel.
+ * \param requestor    Channel that requested this new channel (may be NULL).
+ * \param data         Node identifier string (interpreted as the node number).
+ * \param cause        Pointer to integer to receive a failure cause code on error.
+ * \return             Pointer to the newly allocated ast_channel on success, `NULL` on failure.
  */
 static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap,
 										 const struct ast_assigned_ids *assignedids,
@@ -2352,7 +2352,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	struct ast_config *cfg = NULL;
 	pthread_attr_t attr;
 
-	if (!(ast_format_cap_iscompatible(cap, voter_tech.capabilities))) {
+	if (!ast_format_cap_iscompatible(cap, voter_tech.capabilities)) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
 		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n",
 				ast_format_cap_get_names(cap, &cap_buf));
@@ -2690,11 +2690,22 @@ static int voter_do_test(int fd, int argc, const char *const *argv)
 }
 
 /*!
- * \brief Process Asterisk CLI request to set client priority.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+ * \brief Update or display per-client priority settings for a Voter node from the Asterisk CLI.
+ *
+ * When invoked with just a node number, prints all clients and their effective/override
+ * priority values for that node. When given a node number and a client name (or "all"),
+ * prints that client's priority information. When additionally supplied with a priority
+ * value (or "off"/"disable"), sets the client's priority override to that value (or
+ * disables the override).
+ *
+ * \param fd Asterisk CLI file descriptor used for output.
+ * \param argc Number of CLI arguments.
+ * \param argv CLI arguments; expected forms:
+ *             - argv[2]: node number
+ *             - argv[3] (optional): client name or "all"
+ *             - argv[4] (optional): priority value or "off"/"disable"
+ * \return     RESULT_SHOWUSAGE when the argument count or format is incorrect,
+ *             RESULT_SUCCESS otherwise.
  */
 static int voter_do_prio(int fd, int argc, const char *const *argv)
 {
@@ -2768,7 +2779,7 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 		if (strcasecmp(argv[3], "all") && strcasecmp(argv[3], client->name)) {
 			continue;
 		}
-		if ((!strcasecmp(argv[4], "off")) || (!strncasecmp(argv[4], "dis", 3))) {
+		if (!strcasecmp(argv[4], "off") || !strncasecmp(argv[4], "dis", 3)) {
 			newlevel = -2;
 		} else {
 			if (sscanf(argv[4], N_FMT(d), &newlevel) < 1) {
@@ -2909,7 +2920,7 @@ static int voter_do_tone(int fd, int argc, const char *const *argv)
  * \brief Poll the specified fd for input for the specified milliseconds.
  * \param fd			File descriptor.
  * \param ms			Milliseconds to wait.
- * \returns -1, 1, 0    Needs to be defined.
+ * \return  -1, 1, 0    Needs to be defined.
  */
 static int rad_rxwait(int fd, int ms)
 {
@@ -2974,15 +2985,23 @@ static int term_supports_clear(void)
 #endif
 
 /*!
- * \brief Display voter information.
- * \param fd			Asterisk CLI fd.
- * \param p				Pointer to voter_pvt struct.
- * \param doips			Set to 1 to show non-dynamic clients
+ * \brief Display a live, updating CLI view of the specified voter instance.
+ *
+ * Presents per-client RSSI bars, marks the current winner, lists active clients
+ * with their source addresses, and shows a warning when the master timing
+ * source is unavailable. The display updates periodically and remains active
+ * until the user cancels the console view.
+ *
+ * \param fd  Asterisk CLI file descriptor used to write the display.
+ * \param p   Pointer to the voter_pvt instance to display.
+ *
+ * \note This function temporarily suppresses other verbose console output by
+ *       modifying global verbose state and restores it before returning.
  */
-static void voter_display(int fd, const struct voter_pvt *p, int doips)
+static void voter_display(int fd, const struct voter_pvt *p)
 {
 	int j, rssi, thresh, ncols = 56, wasverbose, vt100compat;
-	char str[256], c, hasdyn;
+	char str[256], c;
 	struct voter_client *client;
 
 #ifdef ASSUME_CONSOLES_SUPPORT_CLEAR
@@ -3014,18 +3033,14 @@ static void voter_display(int fd, const struct voter_pvt *p, int doips)
 		if (hasmaster && (!master_time.vtime_sec)) {
 			ast_cli(fd, "*** WARNING -- LOSS OF MASTER TIMING SOURCE ***\n\n");
 		}
-		hasdyn = 0;
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if (client->dynamic) {
-				hasdyn = 1;
-			}
-			if (p->priconn && (!client->dynamic) && (!client->mix)) {
+			if (p->priconn && !client->mix) {
 				continue;
 			}
-			if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
+			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 				continue;
 			}
 			if (!client->heardfrom) {
@@ -3052,56 +3067,35 @@ static void voter_display(int fd, const struct voter_pvt *p, int doips)
 			ast_cli(fd, "%c%10.10s |%s| [%3d]\n", c, client->name, str, rssi);
 		}
 		ast_cli(fd, "\n\n");
-		if (hasdyn) {
-			ast_cli(fd, "Active Dynamic Clients:\n\n");
-			for (client = clients; client; client = client->next) {
-				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				if (!client->dynamic) {
-					continue;
-				}
-				if (ast_tvzero(client->lastdyntime)) {
-					continue;
-				}
-				ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr),
-						ntohs(client->sin.sin_port));
+		ast_cli(fd, "Active Clients:\n\n");
+		for (client = clients; client; client = client->next) {
+			if (client->nodenum != p->nodenum) {
+				continue;
 			}
-			ast_cli(fd, "\n\n");
-		}
-		if (doips) {
-			ast_cli(fd, "Active Non-Dynamic Clients:\n\n");
-			for (client = clients; client; client = client->next) {
-				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				if (client->dynamic) {
-					continue;
-				}
-				if (p->priconn && (!client->dynamic) && (!client->mix)) {
-					continue;
-				}
-				if ((!client->respdigest) && (!IS_CLIENT_PROXY(client))) {
-					continue;
-				}
-				if (!client->heardfrom) {
-					continue;
-				}
-				ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr),
-						ntohs(client->sin.sin_port));
+			if (p->priconn && !client->mix) {
+				continue;
 			}
-			ast_cli(fd, "\n\n");
+			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
+				continue;
+			}
+			if (!client->heardfrom) {
+				continue;
+			}
+			ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
 		}
+		ast_cli(fd, "\n\n");
 	}
 	option_verbose = wasverbose;
 }
 
 /*!
- * \brief Process Asterisk CLI request to display voter information.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+ * \brief Handle the CLI "voter display" request and print the voter instance information for a node.
+ *
+ * \param fd   Asterisk CLI file descriptor.
+ * \param argc Number of arguments in argv.
+ * \param argv Argument array; argv[2] is expected to contain the node number to display.
+ * \return     RESULT_SUCCESS if the node was found or when a not-found message was printed,
+ *             RESULT_SHOWUSAGE if insufficient arguments were provided.
  */
 static int voter_do_display(int fd, int argc, const char *const *argv)
 {
@@ -3119,16 +3113,26 @@ static int voter_do_display(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "Voter instance %s not found\n", argv[2]);
 		return RESULT_SUCCESS;
 	}
-	voter_display(fd, p, ((argc > 3)));
+	voter_display(fd, p);
 	return RESULT_SUCCESS;
 }
 
 /*!
- * \brief Process Asterisk CLI request for tx lockout.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+ * \brief Handle the CLI "txlockout" command to set or display per-client transmit lockout
+ * state for a specified voter instance.
+ *
+ * The command accepts a node number and an optional lockout specification:
+ * - "all" to enable tx lockout for every client on the node,
+ * - "none" to clear lockout for every client on the node,
+ * - or a comma-separated list of client names, optionally prefixed with '-' to
+ *   disable or '+' (or no sign) to enable lockout for each named client.
+ *
+ * \param fd   Asterisk CLI file descriptor to write output to.
+ * \param argc Number of command arguments.
+ * \param argv Argument vector; argv[2] is the node number and argv[3] (optional)
+ *             is the lockout specification as described above.
+ * \return     `RESULT_SHOWUSAGE` if arguments are insufficient, `RESULT_SUCCESS`
+ *             on successful processing, or `RESULT_FAILURE` on error.
  */
 static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 {
@@ -3155,17 +3159,11 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 				if (client->nodenum != p->nodenum) {
 					continue;
 				}
-				if (client->dynamic) {
-					continue;
-				}
 				client->txlockout = 1;
 			}
 		} else if (!strcasecmp(argv[3], "none")) {
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				if (client->dynamic) {
 					continue;
 				}
 				client->txlockout = 0;
@@ -3191,10 +3189,6 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 					if (strcasecmp(strs[i], client->name)) {
 						continue;
 					}
-					if (client->dynamic) {
-						ast_cli(fd, "Client %s can not be set since it is dynamic!!\n", strs[i]);
-						continue;
-					}
 					ast_cli(fd, "Client %s tx lockout %s\n", strs[i], (newval) ? "Enabled" : "Disabled");
 					client->txlockout = newval;
 					break;
@@ -3210,9 +3204,6 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 		if (client->nodenum != p->nodenum) {
 			continue;
 		}
-		if (client->dynamic) {
-			continue;
-		}
 		if (client->txlockout) {
 			ast_cli(fd, "Client %s tx is locked-out\n", client->name);
 			n++;
@@ -3224,9 +3215,6 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 	ast_cli(fd, "\nFull list of normally transmitting clients for voter instance %s:\n", argv[2]);
 	for (n = 0, client = clients; client; client = client->next) {
 		if (client->nodenum != p->nodenum) {
-			continue;
-		}
-		if (client->dynamic) {
 			continue;
 		}
 		if (!client->txlockout) {
@@ -3242,11 +3230,12 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 }
 
 /*!
- * \brief Process Asterisk CLI request to ping client.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+ * \brief Start or stop a ping sequence for a named Voter client from the Asterisk CLI.
+ *
+ * \param fd   Asterisk CLI file descriptor used for command output.
+ * \param argc Number of CLI arguments.
+ * \param argv CLI argument vector; argv[2] is the client name, argv[3] (optional) is ping count.
+ * \return     RESULT_SUCCESS on normal handling, RESULT_SHOWUSAGE if arguments are insufficient, or RESULT_FAILURE on error.
  */
 static int voter_do_ping(int fd, int argc, const char *const *argv)
 {
@@ -3258,9 +3247,6 @@ static int voter_do_ping(int fd, int argc, const char *const *argv)
 	}
 
 	for (client = clients; client; client = client->next) {
-		if (client->dynamic) {
-			continue;
-		}
 		if (IS_CLIENT_PROXY(client)) {
 			continue;
 		}
@@ -3318,6 +3304,19 @@ static char *voter_complete_static_client_list(const char *line, const char *wor
 	return NULL;
 }
 
+/*!
+ * \brief Populate CLI completions with names of currently connected, authenticated clients
+ *
+ * Scans the global client list and, for each non-proxy client that has been heard
+ * from and has a valid response digest, adds the client's name as a completion
+ * if it starts with the provided word prefix and the cursor is at the end of the line.
+ *
+ * \param line Full input line from the CLI.
+ * \param word Current word to complete (prefix to match).
+ * \param pos  Cursor position in the line.
+ * \param rpos Cursor position relative to the completion engine (should equal pos to act).
+ * \return     NULL
+ */
 static char *voter_complete_connected_client_list(const char *line, const char *word, int pos, int rpos)
 {
 	struct voter_client *client;
@@ -3328,9 +3327,6 @@ static char *voter_complete_connected_client_list(const char *line, const char *
 	}
 	ast_mutex_lock(&voter_lock);
 	for (client = clients; client; client = client->next) {
-		if (client->dynamic) {
-			continue;
-		}
 		if (IS_CLIENT_PROXY(client)) {
 			continue;
 		}
@@ -3573,10 +3569,16 @@ static void rpt_manager_success(struct mansession *s, const struct message *m)
 }
 
 /*!
- * \brief Report voter status to asterisk manager.
- * \param ses				Pointer to mansession struct.
- * \param m					Pointer to message struct.
- * \retval RESULT_SUCCESS	Always returns success.
+ * \brief Send per-node and per-client voter status lines to the given Asterisk manager session.
+ *
+ * When a "Node" header is present in the manager message, only status for the listed node
+ * numbers is included. For each reported node this emits node identifier, last voted client (if any),
+ * and for each client that has been heard from emits client name, flags (Mix, Master, ActiveMaster),
+ * IP/port information (proxied clients are marked), and last RSSI.
+ *
+ * \param ses Pointer to the manager session to which status lines will be written.
+ * \param m   Pointer to the manager message; the optional "Node" header is used to filter output.
+ * \return    RESULT_SUCCESS to indicate the manager response was sent.
  */
 static int manager_voter_status(struct mansession *ses, const struct message *m)
 {
@@ -3631,9 +3633,6 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 			}
 			if (IS_CLIENT_PROXY(client)) {
 				astman_append(ses, "Client: %s", client->name);
-				if (client->dynamic) {
-					astman_append(ses, " Dynamic");
-				}
 				if (client->mix) {
 					astman_append(ses, " Mix");
 				}
@@ -3651,9 +3650,6 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 					continue;
 				}
 				astman_append(ses, "Client: %s", client->name);
-				if (client->dynamic) {
-					astman_append(ses, " Dynamic");
-				}
 				if (client->mix) {
 					astman_append(ses, " Mix");
 				}
@@ -3680,16 +3676,17 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 #include "xpmr/xpmr.c"
 
 /*!
- * \brief Voter transmit processing.
- *	Increments the tx and rx sequence numbers
- *	for clients marked as "mix".
- *	Set the xmit_cond for our voters/nodes.
+ * \brief Advance transmit and receive sequence numbers for mixed clients and wake per-node transmit workers.
+ *
+ * Increments the tx sequence number for each client that has completed authentication, has been heard
+ * from recently, and is marked for mixing. Also advances each client's rx sequence number in a
+ * format-aware manner. After updating clients, signals the xmit condition on every per-node voter
+ * instance to wake transmit threads.
  */
 static void voter_xmit_master(void)
 {
 	struct voter_client *client;
 	struct voter_pvt *p;
-	struct timeval tv;
 
 	for (client = clients; client; client = client->next) {
 		if (!client->respdigest) {
@@ -3703,7 +3700,7 @@ static void voter_xmit_master(void)
 		}
 		client->txseqno++;
 		if (client->rxseqno) {
-			if ((!client->doadpcm) && (!client->donulaw)) {
+			if (!client->doadpcm && !client->donulaw) {
 				client->rxseqno++;
 			} else {
 				if (client->rxseq40ms) {
@@ -3718,29 +3715,18 @@ static void voter_xmit_master(void)
 		ast_cond_signal(&p->xmit_cond);
 		ast_mutex_unlock(&p->xmit_lock);
 	}
-	gettimeofday(&tv, NULL);
-	/* For dynamic clients, verify the lease time */
-	for (client = clients; client; client = client->next) {
-		if (!client->dynamic) {
-			continue;
-		}
-		if (ast_tvzero(client->lastdyntime)) {
-			continue;
-		}
-		if (voter_tvdiff_ms(tv, client->lastdyntime) > dyntime) {
-			ast_verb(3, "DYN client %s past lease time\n", client->name);
-			client->lastdyntime = (struct timeval) {0};
-			memset(&client->sin, 0, sizeof(client->sin));
-		}
-	}
 }
 
 /*!
- * \brief Voter timing thread.
- *	Maintains a relative time source that is not dependent 
- *	on the system time of day.
- *	The timing loop processes every 20 milliseconds.
- * \param data		This is always NULL.
+ * \brief Voter timing thread that drives the driver's internal 20 ms timing tick.
+ *
+ * Maintains the driver's master-relative timebase that is not dependent on the system
+ * time of day, advances per-node timing counters,
+ * sends empty frames when no master is present, performs periodic client timeout and
+ * sanity checks, and wakes transmit logic as required.
+ *
+ * \param data Always NULL; unused.
+ * \return     NULL on thread exit.
  */
 static void *voter_timer(void *data)
 {
@@ -3750,7 +3736,7 @@ static void *voter_timer(void *data)
 	struct timeval tv;
 	int timingfd = ast_timer_fd(voter_thread_timer);
 
-	while (run_forever && (!ast_shutting_down())) {
+	while (run_forever && !ast_shutting_down()) {
 		int timeout = -1;
 		ast_waitfor_n_fd(&timingfd, 1, &timeout, NULL);
 		if (ast_timer_ack(voter_thread_timer, 1) < 0) {
@@ -3807,9 +3793,15 @@ static void *voter_timer(void *data)
 }
 
 /*!
- * \brief Voter read processing thread.
- *	This thread reads and process incoming voter packets.
- * \param data		This is always NULL.
+ * \brief Reader thread that processes incoming VOTER UDP packets and updates driver state.
+ *
+ * This thread receives VOTER protocol packets, authenticates and identifies clients,
+ * updates per-client and per-node timing/state (including master timing, GPS, and ping
+ * statistics), routes or proxies audio payloads into per-client buffers, and triggers
+ * node-level selection/mixing and keepalive responses as appropriate.
+ *
+ * \param data Always NULL; unused thread argument.
+ * \return     NULL when the thread exits.
  */
 static void *voter_reader(void *data)
 {
@@ -3861,8 +3853,8 @@ static void *voter_reader(void *data)
 	ast_debug(1, "VOTER: Reader thread started.\n");
 	ast_mutex_lock(&voter_lock);
 	master_port = 0;
-	
-	while (run_forever && (!ast_shutting_down())) {
+
+	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
 		ms = 50;
 		i = ast_waitfor_n_fd(&udp_socket, 1, &ms, NULL);
@@ -3908,65 +3900,15 @@ static void *voter_reader(void *data)
 		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x from client %s\n", (int) recvlen,
 			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest), (client && client->name) ? client->name : "UNKNOWN");
 		client = NULL;
-		if ((!check_client_sanity) && master_port) {
+		if (!check_client_sanity && master_port) {
 			sin.sin_port = htons(master_port);
 		}
 		isproxy = 0;
 		if (vph->digest) {
 			gettimeofday(&tv, NULL);
-			/* first see if client is not a dynamic one */
+			/* first see if client is found */
 			for (client = clients; client; client = client->next) {
-				if (client->dynamic) {
-					continue;
-				}
 				if (client->digest == htonl(vph->digest)) {
-					break;
-				}
-			}
-			/* if not found as non-dynamic, try it as existing dynamic */
-			if (!client) {
-				for (client = clients; client; client = client->next) {
-					if (!client->dynamic) {
-						continue;
-					}
-					if (ast_tvzero(client->lastdyntime)) {
-						continue;
-					}
-					if (voter_tvdiff_ms(tv, client->lastdyntime) > dyntime) {
-						ast_verb(3, "DYN client %s past lease time\n", client->name);
-						client->lastdyntime = (struct timeval) { 0 };
-						memset(&client->sin, 0, sizeof(client->sin));
-						continue;
-					}
-					if (client->digest != htonl(vph->digest)) {
-						continue;
-					}
-					if (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr) {
-						continue;
-					}
-					if (client->sin.sin_port != sin.sin_port) {
-						continue;
-					}
-					ast_verb(3, "Using existing Dynamic client %s for %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
-					break;
-				}
-			}
-			/* if still not found, try as new dynamic */
-			if (!client) {
-				for (client = clients; client; client = client->next) {
-					if (!client->dynamic) {
-						continue;
-					}
-					if (!ast_tvzero(client->lastdyntime)) {
-						continue;
-					}
-					if (client->digest != htonl(vph->digest)) {
-						continue;
-					}
-					/* okay, we found an empty dynamic slot with proper digest */
-					gettimeofday(&client->lastdyntime, NULL);
-					client->sin = sin;
-					ast_verb(3, "Bound new Dynamic client %s to %s:%d\n", client->name, ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
 					break;
 				}
 			}
@@ -3983,7 +3925,7 @@ static void *voter_reader(void *data)
 						break;
 					}
 				}
-				if (check_client_sanity && p && (!p->priconn)) {
+				if (check_client_sanity && p && !p->priconn) {
 					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
 						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
 						client->heardfrom = 0;
@@ -4038,13 +3980,12 @@ static void *voter_reader(void *data)
 						}
 					}
 				}
-				gettimeofday(&client->lastdyntime, NULL);
-				if ((!client) || (client && (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY))) {
+				if (!client || (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY)) {
 					client->respdigest = crc32_bufs((char *) vph->challenge, password);
 				}
 				client->sin = sin;
 				memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
-				if ((!client->curmaster) && hasmaster) {
+				if (!client->curmaster && hasmaster) {
 					if (last_master_count && (voter_timing_count > (last_master_count + MAX_MASTER_COUNT))) {
 						ast_log(LOG_NOTICE, "VOTER lost master timing source!!\n");
 						last_master_count = 0;
@@ -4146,7 +4087,7 @@ static void *voter_reader(void *data)
 							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
 								goto process_gps;
 							}
-						} else if (p->priconn && (!client->dynamic) && (!client->mix)) {
+						} else if (p->priconn && !client->mix) {
 							memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
 							proxy.ipaddr = sin.sin_addr.s_addr;
 							proxy.port = sin.sin_port;
@@ -4196,7 +4137,7 @@ static void *voter_reader(void *data)
 						if (!client->rxseqno) {
 							client->rxseqno_40ms = client->rxseqno = ntohl(vph->curtime.vtime_nsec);
 						}
-						if ((!client->doadpcm) && (!client->donulaw)) {
+						if (!client->doadpcm && !client->donulaw) {
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno;
 						} else {
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
@@ -4205,7 +4146,7 @@ static void *voter_reader(void *data)
 						index += BUFDELAY(client);
 						index -= (FRAME_SIZE * 4);
 						if (DEBUG_ATLEAST(3)) {
-							if ((!client->doadpcm) && (!client->donulaw)) {
+							if (!client->doadpcm && !client->donulaw) {
 								ast_debug(7, "Mix client (Mulaw) %s index: %d their seq: %d our seq: %d\n", client->name, index,
 									ntohl(vph->curtime.vtime_nsec), client->rxseqno);
 							} else {
@@ -4297,7 +4238,7 @@ static void *voter_reader(void *data)
 							fr.src = __PRETTY_FUNCTION__;
 							f1 = ast_translate(p->nuin, &fr, 0);
 						}
-						if ((!client->doadpcm) && (!client->donulaw)) {
+						if (!client->doadpcm && !client->donulaw) {
 							index = (index + client->drainindex) % client->buflen;
 						} else {
 							index = (index + client->drainindex_40ms) % client->buflen;
@@ -4346,7 +4287,7 @@ static void *voter_reader(void *data)
 										break;
 									}
 								}
-								if ((!p) || p->priconn) {
+								if (!p || p->priconn) {
 									continue;
 								}
 								if (!client->respdigest) {
@@ -4619,7 +4560,7 @@ static void *voter_reader(void *data)
 										memset(client->audio, 0xff, -i);
 									}
 								}
-								if ((!p->duplex) && p->txkey) {
+								if (!p->duplex && p->txkey) {
 									p->rxkey = 0;
 									p->lastwon = NULL;
 									memset(silbuf, 0, sizeof(silbuf));
@@ -4691,7 +4632,7 @@ static void *voter_reader(void *data)
 								}
 								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
 							}
-							if ((!p->duplex) && p->txkey) {
+							if (!p->duplex && p->txkey) {
 								p->rxkey = 0;
 								p->lastwon = NULL;
 								memset(silbuf, 0, sizeof(silbuf));
@@ -4778,7 +4719,7 @@ static void *voter_reader(void *data)
 				if (client->curmaster) {
 					mastergps_time.vtime_sec = ntohl(vph->curtime.vtime_sec);
 					mastergps_time.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
-				} else if (p && p->priconn && (!client->dynamic) && (!client->mix)) {
+				} else if (p && p->priconn && !client->mix) {
 					memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
 					proxy.ipaddr = sin.sin_addr.s_addr;
 					proxy.port = sin.sin_port;
@@ -4880,7 +4821,7 @@ process_gps:
 		/* make our digest based on their challenge */
 		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		proxy_authpacket.flags = 0;
-		if (client && (!vph->payload_type)) {
+		if (client && !vph->payload_type) {
 			client->mix = 0;
 			/* if client is sending options */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
@@ -4896,7 +4837,7 @@ process_gps:
 					client->mix = 1;
 				}
 			}
-			if ((!client->mix) && (!hasmaster)) {
+			if (!client->mix && !hasmaster) {
 				time(&t);
 				if (t >= (client->warntime + CLIENT_WARN_SECS)) {
 					client->warntime = t;
@@ -4946,9 +4887,15 @@ process_gps:
 }
 
 /*!
- * \brief Load configuration.
- * \retval 0		Success.
- * \retval -1		Failed.
+ * \brief Reload Voter driver configuration from disk and apply changes.
+ *
+ * Parses the configured voter.conf, updates per-instance (pvts) and per-client
+ * state, reallocates audio and RSSI buffers as needed, creates or tears down
+ * per-instance PMR channels for CTCSS changes, and ensures client digests are
+ * unique and valid. The global voter_lock is held while modifying shared state.
+ *
+ * \retval  0 Success — configuration loaded and applied.
+ * \retval -1 Failure — configuration load or allocation error; existing state is left unchanged where possible.
  */
 static int reload(void)
 {
@@ -5005,13 +4952,6 @@ static int reload(void)
 		puckit = ast_true(val);
 	} else {
 		puckit = 0;
-	}
-
-	val = (char *) ast_variable_retrieve(cfg, "general", "dyntime");
-	if (val) {
-		dyntime = strtoul(val, NULL, 0);
-	} else {
-		dyntime = DEFAULT_DYNTIME;
 	}
 
 	if (buflen < (FRAME_SIZE * 2)) {
@@ -5226,9 +5166,6 @@ static int reload(void)
 			if (!strncasecmp(v->name, "nulaw", 5)) {
 				continue;
 			}
-			if (!strncasecmp(v->name, "dynamic", 7)) {
-				continue;
-			}
 			if (!strncasecmp(v->name, "gpsid", 5)) {
 				continue;
 			}
@@ -5260,9 +5197,6 @@ static int reload(void)
 			}
 			/* see if we "know" this client already */
 			for (client = clients; client; client = client->next) {
-				if (client->dynamic) {
-					continue;
-				}
 				/* if this is the one whose digest matches one currently being looked at */
 				if (client->digest == crc32_bufs(challenge, strs[0])) {
 					/* if has moved to another instance, free this one, and treat as new */
@@ -5291,8 +5225,13 @@ static int reload(void)
 			client->reload = 1;
 			client->buflen = instance_buflen;
 			client->nodenum = strtoul(ctg, NULL, 0);
-			client->totransmit = client->doadpcm = client->donulaw = 0;
-			client->nodeemp = client->noplfilter = client->dynamic = client->prio = 0;
+			client->totransmit = 0;
+			client->doadpcm = 0;
+			client->donulaw = 0;
+			client->nodeemp = 0;
+			client->mix = 0;
+			client->noplfilter = 0;
+			client->prio = 0;
 			client->gpsid = 0;
 			for (i = 1; i < n; i++) {
 				if (!strcasecmp(strs[i], "transmit")) {
@@ -5308,8 +5247,6 @@ static int reload(void)
 					client->nodeemp = 1;
 				} else if (!strcasecmp(strs[i], "noplfilter")) {
 					client->noplfilter = 1;
-				} else if (!strcasecmp(strs[i], "dynamic")) {
-					client->dynamic = 1;
 				} else if (!strncasecmp(strs[i], "gpsid", 5)) {
 					cp1 = strchr(strs[i], '=');
 					if (!cp1) {
@@ -5395,9 +5332,6 @@ static int reload(void)
 			ast_mutex_unlock(&voter_lock);
 			return -1;
 		}
-		if (client->dynamic) {
-			continue;
-		}
 		for (client1 = clients; client1; client1 = client1->next) {
 			if (!client1->reload) {
 				continue;
@@ -5468,6 +5402,17 @@ static int unload_module(void)
 	return 0;
 }
 
+/*!
+ * \brief Initialize and register the Voter channel module and its runtime resources.
+ *
+ * Sets up UDP socket and bind address/port from configuration, opens a periodic
+ * timer, loads runtime configuration, registers CLI and manager hooks, creates
+ * reader and timer threads, allocates channel format capabilities, and registers
+ * the channel driver so the Voter channel becomes available to Asterisk.
+ *
+ * \return 0 on success; non-zero on failure (typically AST_MODULE_LOAD_DECLINE for
+ *         module load errors, or 1 if the configuration could not be loaded).
+ */
 static int load_module(void)
 {
 	struct sockaddr_in sin;
@@ -5564,9 +5509,5 @@ static int load_module(void)
 	return 0;
 }
 
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Voter Radio Channel Driver",
-	.support_level = AST_MODULE_SUPPORT_EXTENDED,
-	.load = load_module,
-	.unload = unload_module,
-	.reload = reload,
-);
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Voter Radio Channel Driver", .support_level = AST_MODULE_SUPPORT_EXTENDED,
+	.load = load_module, .unload = unload_module, .reload = reload, );
