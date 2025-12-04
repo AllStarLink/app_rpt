@@ -7424,7 +7424,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
 			donodelog_fmt(myrpt, "DTMF(M),%c", c);
-			if (handle_remote_dtmf_digit(myrpt, c, &keyed, 0) == -1)
+			if (handle_remote_dtmf_digit(myrpt, c, &keyed, RPT_PHONE_MODE_NONE) == -1)
 				break;
 			continue;
 		} else {
