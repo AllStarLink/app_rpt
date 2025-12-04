@@ -4821,7 +4821,7 @@ process_gps:
 			}
 		}
 
-		if (no_ast_channel) { 
+		if (no_ast_channel) {
 			/* No Askterisk channel, do not respond to the client. */
 			continue;
 		}
