@@ -3940,7 +3940,8 @@ static void *voter_reader(void *data)
 				}
 				if (!p) {
 					/* We didn't find an asterisk channel,
-					 * act like we don't know the client.
+					 * act like we don't know the client,
+					 * do not respond via no_ast_channel flag
 					 */
 					ast_debug(2, "Request for voter client %s to node %d with no matching asterisk channel\n", client->name,
 						client->nodenum);
@@ -4820,7 +4821,8 @@ process_gps:
 			}
 		}
 
-		if (no_ast_channel) {
+		if (no_ast_channel) { 
+			/* No Askterisk channel, do not respond to the client. */
 			continue;
 		}
 		/* otherwise, we just need to send an empty packet to the dude */
