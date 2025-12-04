@@ -2104,7 +2104,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 
 	if (mylink->phonemode == RPT_PHONE_MODE_DUMB_SIMPLEX) { /*If in simplex dumb phone mode */
 		if (c == myrpt->p.endchar) {						/* If end char */
-			mylink->lastrealrx = 0;	 /* Keying state = off */
+			mylink->lastrealrx = 0;							/* Keying state = off */
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
