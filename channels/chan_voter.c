@@ -3869,7 +3869,6 @@ static void *voter_reader(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
-		no_ast_channel = 0;
 		ms = 50;
 		i = ast_waitfor_n_fd(&udp_socket, 1, &ms, NULL);
 		ast_mutex_lock(&voter_lock);
