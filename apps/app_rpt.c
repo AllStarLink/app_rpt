@@ -2102,9 +2102,9 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 
 	rpt_mutex_lock(&myrpt->lock);
 
-	if (mylink->phonemode == 3) {	 /*If in simplex dumb phone mode */
-		if (c == myrpt->p.endchar) { /* If end char */
-			mylink->lastrealrx = 0;	 /* Keying state = off */
+	if (mylink->phonemode == RPT_PHONE_MODE_DUMB_SIMPLEX) { /*If in simplex dumb phone mode */
+		if (c == myrpt->p.endchar) {						/* If end char */
+			mylink->lastrealrx = 0;							/* Keying state = off */
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
@@ -2148,14 +2148,11 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_copy_string(cmd, myrpt->rem_dtmfbuf, sizeof(cmd));
 			switch (mylink->phonemode) {
-			case 1:
+			case RPT_PHONE_MODE_PHONE_CONTROL:
 				res = collect_function_digits(myrpt, cmd, SOURCE_PHONE, mylink);
 				break;
-			case 2:
+			case RPT_PHONE_MODE_DUMB_DUPLEX:
 				res = collect_function_digits(myrpt, cmd, SOURCE_DPHONE, mylink);
-				break;
-			case 4:
-				res = collect_function_digits(myrpt, cmd, SOURCE_ALT, mylink);
 				break;
 			default:
 				res = collect_function_digits(myrpt, cmd, SOURCE_LNK, mylink);
@@ -2171,7 +2168,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
-static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int phonemode)
+static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum rpt_phone_mode phonemode)
 {
 	time_t now;
 	int res = 0, src;
@@ -2228,12 +2225,11 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, int 
 	myrpt->dtmf_time_rem = now;
 
 	src = SOURCE_RMT;
-	if (phonemode == 2)
+	if (phonemode == RPT_PHONE_MODE_DUMB_DUPLEX) {
 		src = SOURCE_DPHONE;
-	else if (phonemode)
+	} else if (phonemode != RPT_PHONE_MODE_NONE) {
 		src = SOURCE_PHONE;
-	else if (phonemode == 4)
-		src = SOURCE_ALT;
+	}
 	ret = collect_function_digits(myrpt, myrpt->dtmfbuf, src, NULL);
 
 	switch (ret) {
@@ -2335,7 +2331,7 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	c = func_xlat(myrpt, c, &myrpt->p.outxlat);
 	if (!c)
 		return 0;
-	res = handle_remote_dtmf_digit(myrpt, c, NULL, 0);
+	res = handle_remote_dtmf_digit(myrpt, c, NULL, RPT_PHONE_MODE_NONE);
 	if (res != 1)
 		return res;
 	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)))
@@ -2345,11 +2341,11 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	return 0;
 }
 
-static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict keyed, int phonemode)
+static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict keyed, enum rpt_phone_mode phonemode)
 {
 	int res;
 
-	if (phonemode == 3) { /* simplex phonemode, funcchar key/unkey toggle */
+	if (phonemode == RPT_PHONE_MODE_DUMB_SIMPLEX) { /* simplex phonemode, funcchar key/unkey toggle */
 		if (keyed && *keyed && ((c == myrpt->p.funcchar) || (c == myrpt->p.endchar))) {
 			*keyed = 0; /* UNKEY */
 			return 0;
@@ -3219,12 +3215,12 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		update_timer(&l->voxtotimer, elap, 0);
 
 		if (l->lasttx != l->lasttx1) {
-			if ((!l->phonemode) || (!l->phonevox))
+			if ((l->phonemode == RPT_PHONE_MODE_NONE) || (!l->phonevox))
 				voxinit_link(l, !l->lasttx);
 			l->lasttx1 = l->lasttx;
 		}
 		myrx = l->lastrealrx;
-		if ((l->phonemode) && (l->phonevox)) {
+		if ((l->phonemode != RPT_PHONE_MODE_NONE) && (l->phonevox)) {
 			myrx = myrx || (!AST_LIST_EMPTY(&l->rxq));
 			if (l->voxtotimer <= 0) {
 				if (l->voxtostate) {
@@ -3265,7 +3261,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		if (l->link_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
 			if ((l->retxtimer += elap) >= REDUNDANT_TX_TIME) {
 				l->retxtimer = 0;
-				if (l->chan && l->phonemode == 0) {
+				if (l->chan && l->phonemode == RPT_PHONE_MODE_NONE) {
 					if (l->lasttx)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 					else
@@ -4042,7 +4038,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				/* otherwise, send it to all of em */
 				while (l != &myrpt->links) {
 					/* Dont send to other then IAXRPT client */
-					if ((l->name[0] != '0') || (l->phonemode)) {
+					if ((l->name[0] != '0') || (l->phonemode != RPT_PHONE_MODE_NONE)) {
 						l = l->next;
 						continue;
 					}
@@ -4324,7 +4320,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			l->wouldtx = totx;
 			if (l->mode != MODE_TRANSCEIVE)
 				totx = 0;
-			if (l->phonemode == 0 && l->chan && (l->lasttx != totx)) {
+			if (l->phonemode == RPT_PHONE_MODE_NONE && l->chan && (l->lasttx != totx)) {
 				if (totx && !l->voterlink) {
 					if (l->link_newkey != RADIO_KEY_NOT_ALLOWED)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
@@ -4380,7 +4376,8 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && (!l->lastrealrx)) {
 					rxkey_helper(myrpt, l);
 				}
-				if (((l->phonemode) && (l->phonevox)) || (CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
+				if (((l->phonemode != RPT_PHONE_MODE_NONE) && (l->phonevox)) || (CHAN_TECH(l->chan, "echolink")) ||
+					(CHAN_TECH(l->chan, "tlb"))) {
 					struct ast_frame *f1;
 					if (l->phonevox) {
 						int x;
@@ -4430,7 +4427,8 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					ismuted = rpt_conf_get_muted(l->chan, myrpt);
 					/* if not receiving, zero-out audio */
 					ismuted |= (!l->lastrx);
-					if (l->dtmfed && (l->phonemode || (CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb")))) {
+					if (l->dtmfed &&
+						((l->phonemode != RPT_PHONE_MODE_NONE) || (CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb")))) {
 						ismuted = 1;
 					}
 					l->dtmfed = 0;
@@ -4477,7 +4475,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					l->hasconnected = 1;
 					l->thisconnected = 1;
 					l->elaptime = -1;
-					if (!l->phonemode) {
+					if (l->phonemode == RPT_PHONE_MODE_NONE) {
 						send_newkey(l->chan);
 					}
 					if (!l->isremote)
@@ -5942,8 +5940,8 @@ done:
 	pthread_exit(NULL);
 }
 
-static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed, const int phone_mode,
-	const int phone_vox, char *restrict myfirst, int *restrict dtmfed)
+static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed,
+	const enum rpt_phone_mode phone_mode, const int phone_vox, char *restrict myfirst, int *restrict dtmfed)
 {
 	struct ast_frame *f = ast_read(chan);
 	if (!f) {
@@ -5960,7 +5958,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 				myrpt->rerxtimer = 0;
 			}
 		}
-		if (phone_mode && phone_vox) {
+		if ((phone_mode != RPT_PHONE_MODE_NONE) && phone_vox) {
 			int x;
 			int n1 = dovox(&myrpt->vox, f->data.ptr, f->datalen / 2);
 			if (n1 != myrpt->wasvox) {
@@ -6009,12 +6007,13 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 		ismuted = rpt_conf_get_muted(chan, myrpt);
 		/* if not transmitting, zero-out audio */
 		ismuted |= (!myrpt->remotetx);
-		if (*dtmfed && phone_mode)
+		if (*dtmfed && (phone_mode != RPT_PHONE_MODE_NONE)) {
 			ismuted = 1;
+		}
 		*dtmfed = 0;
 		f1 = rpt_frame_queue_helper(&myrpt->frame_queue, f, ismuted);
 		if (!myrpt->remstopgen) {
-			if (!phone_mode) {
+			if (phone_mode == RPT_PHONE_MODE_NONE) {
 				ast_write(myrpt->txchannel, f); /* write frame w/no delay */
 			} else if (f1) {
 				ast_write(myrpt->txchannel, f1); /* write delayed frame */
@@ -6221,11 +6220,11 @@ static inline int kenwood_uio_helper(struct rpt *myrpt)
 	return 0;
 }
 
-static void answer_newkey_helper(struct rpt *myrpt, struct ast_channel *chan, int phone_mode)
+static void answer_newkey_helper(struct rpt *myrpt, struct ast_channel *chan, enum rpt_phone_mode phone_mode)
 {
 	if (ast_channel_state(chan) != AST_STATE_UP) {
 		ast_answer(chan);
-		if (!phone_mode) {
+		if (phone_mode == RPT_PHONE_MODE_NONE) {
 			send_newkey(chan);
 		}
 	}
@@ -6233,7 +6232,8 @@ static void answer_newkey_helper(struct rpt *myrpt, struct ast_channel *chan, in
 
 static int rpt_exec(struct ast_channel *chan, const char *data)
 {
-	int res = -1, i, rem_totx, rem_rx, remkeyed, n, phone_mode = 0;
+	int res = -1, i, rem_totx, rem_rx, remkeyed, n;
+	enum rpt_phone_mode phone_mode = RPT_PHONE_MODE_NONE;
 	int iskenwood_pci4, authtold, authreq, setting, notremming, reming;
 	int dtmfed, phone_vox = 0, phone_monitor = 0;
 	char *use_pipe;
@@ -6470,11 +6470,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 		if (altp)
 			rpt_push_alt_macro(myrpt, altp);
-		phone_mode = 1;
-		if (*options == 'D')
-			phone_mode = 2;
-		if (*options == 'S')
-			phone_mode = 3;
+		phone_mode = RPT_PHONE_MODE_PHONE_CONTROL;
+		if (*options == 'D') {
+			phone_mode = RPT_PHONE_MODE_DUMB_DUPLEX;
+		}
+		if (*options == 'S') {
+			phone_mode = RPT_PHONE_MODE_DUMB_SIMPLEX;
+		}
 		ast_set_callerid(chan, "0", "app_rpt user", "0");
 		val = 1;
 		ast_channel_setoption(chan, AST_OPTION_TONE_VERIFY, &val, sizeof(char), 0);
@@ -6676,7 +6678,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_log(LOG_WARNING, "Doesn't have callerid on %s\n", tmp);
 			return -1;
 		}
-		if (phone_mode) {
+		if (phone_mode != RPT_PHONE_MODE_NONE) {
 			b1 = "0";
 			b = NULL;
 			if (callstr)
@@ -6751,7 +6753,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->rxlingertimer = RX_LINGER_TIME;
 		l->newkeytimer = NEWKEYTIME;
 		l->link_newkey = RADIO_KEY_ALLOWED;
-		if ((!phone_mode) && (l->name[0] != '0') && !CHAN_TECH(chan, "echolink") && !CHAN_TECH(chan, "tlb")) {
+		if ((phone_mode == RPT_PHONE_MODE_NONE) && (l->name[0] != '0') && !CHAN_TECH(chan, "echolink") && !CHAN_TECH(chan, "tlb")) {
 			l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 		}
 		ast_debug(7, "newkey: %d\n", l->link_newkey);
@@ -6767,7 +6769,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			init_linkmode(myrpt, l, LINKMODE_ECHOLINK);
 		} else if (CHAN_TECH(chan, "tlb")) {
 			init_linkmode(myrpt, l, LINKMODE_TLB);
-		} else if (phone_mode) {
+		} else if (phone_mode != RPT_PHONE_MODE_NONE) {
 			init_linkmode(myrpt, l, LINKMODE_PHONE);
 		} else {
 			init_linkmode(myrpt, l, LINKMODE_GUI);
@@ -6800,7 +6802,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 
-		if ((phone_mode == 2) && (!phone_vox))
+		if ((phone_mode == RPT_PHONE_MODE_DUMB_DUPLEX) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
 
@@ -6817,7 +6819,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		doconpgm(myrpt, l->name);
-		if ((!phone_mode) && (l->name[0] <= '9')) {
+		if ((phone_mode == RPT_PHONE_MODE_NONE) && (l->name[0] <= '9')) {
 			send_newkey(chan);
 		}
 
@@ -7182,7 +7184,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (myrpt->rxchannel != myrpt->txchannel)
 		cs[n++] = myrpt->txchannel;
 
-	if (!phone_mode) {
+	if (phone_mode == RPT_PHONE_MODE_NONE) {
 		send_newkey(chan);
 	}
 
@@ -7273,7 +7275,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		update_timer(&myrpt->dtmf_local_timer, elap, 1);
 		update_timer(&myrpt->voxtotimer, elap, 0);
 		myrx = keyed;
-		if (phone_mode && phone_vox) {
+		if (phone_mode != RPT_PHONE_MODE_NONE && phone_vox) {
 			myrx = (!AST_LIST_EMPTY(&myrpt->rxq));
 			if (myrpt->voxtotimer <= 0) {
 				voxtostate_to_voxtotimer(myrpt);
@@ -7290,7 +7292,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->lock);
 		do_dtmf_local(myrpt, 0);
 		rpt_mutex_unlock(&myrpt->lock);
-		rem_totx = myrpt->dtmf_local_timer && (!phone_mode);
+		rem_totx = myrpt->dtmf_local_timer && (phone_mode == RPT_PHONE_MODE_NONE);
 		rem_totx |= keyed && (!myrpt->tunerequest);
 		rem_rx = (remkeyed && (!setting)) || (myrpt->tele.next != &myrpt->tele);
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706))
@@ -7422,7 +7424,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
 			donodelog_fmt(myrpt, "DTMF(M),%c", c);
-			if (handle_remote_dtmf_digit(myrpt, c, &keyed, 0) == -1)
+			if (handle_remote_dtmf_digit(myrpt, c, &keyed, RPT_PHONE_MODE_NONE) == -1)
 				break;
 			continue;
 		} else {
