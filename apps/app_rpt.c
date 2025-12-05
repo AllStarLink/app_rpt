@@ -4707,7 +4707,7 @@ static void *rpt(void *this)
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
-
+	ast_debug(1, "Setting up channels");
 	if (rpt_setup_channels(myrpt, cap)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;

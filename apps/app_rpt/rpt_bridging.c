@@ -293,20 +293,23 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
 		return -1;
 	}
-
+	ast_debug(1, "Requesting channel %s setup\n", ast_channel_name(chan));
+	ast_set_read_format(chan, ast_format_slin);
+	ast_set_write_format(chan, ast_format_slin);
 	rpt_disable_cdr(chan);
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(chan));
+	ast_debug(1, "Requested channel %s cdr disabled\n", ast_channel_name(chan));
+	ast_answer(chan);
+	ast_debug(1, "Requested channel %s answered\n", ast_channel_name(chan));
 
 	/*	if (ast_channel_state(chan) != AST_STATE_UP) {
-			ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
-			ast_hangup(chan);
-			return -1;
-		}
+				ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
+				ast_debug(1, "Requested channel %s not up? %d\n", ast_channel_name(chan), ast_channel_state(chan));
+				ast_hangup(chan);
+				return -1;
+			}
 	*/
-	/* A subset of what rpt_make_call does... */
-	/*	rpt_disable_cdr(chan);
-	 *	ast_answer(chan);
-	 */
+	ast_debug(1, "Requested channel %s stored\n", ast_channel_name(chan));
+
 	chanptr = rpt_chan_channel(myrpt, link, chantype);
 	*chanptr = chan;
 
@@ -438,6 +441,7 @@ int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf
 		.silence_threshold = DEFAULT_SILENCE_THRESHOLD,
 		.drop_silence = 0,
 	};
+	ast_debug(1, "Setting up conference '%s' mixing bridge features.\n", conference_name);
 	if (ast_bridge_features_init(&features)) {
 		ast_log(LOG_ERROR, "Conference '%s' mixing bridge features could not be created.\n", conference_name);
 		return -1;
@@ -452,6 +456,7 @@ int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf
 		conf = myrpt->txconf;
 		break;
 	}
+	ast_debug(1, "Setting up conference '%s' mixing bridge \n", conference_name);
 	conf = ast_bridge_base_new(AST_BRIDGE_CAPABILITY_MULTIMIX,
 		AST_BRIDGE_FLAG_MASQUERADE_ONLY | AST_BRIDGE_FLAG_TRANSFER_BRIDGE_ONLY, "app_rpt", conference_name, NULL);
 	if (!conf) {
