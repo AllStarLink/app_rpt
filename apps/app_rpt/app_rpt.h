@@ -245,12 +245,14 @@ enum rpt_linkmode {
 	LINKMODE_ECHOLINK,
 	LINKMODE_TLB
 };
+
 enum rpt_phone_mode {
 	RPT_PHONE_MODE_NONE,		  /* not in phone control mode */
 	RPT_PHONE_MODE_PHONE_CONTROL, /* Phone control mode Reverse patch or Phone control mode */
 	RPT_PHONE_MODE_DUMB_DUPLEX,	  /* Dumb duplex mode  (Full controls of radio)*/
 	RPT_PHONE_MODE_DUMB_SIMPLEX	  /* Allows audio-only access */
 };
+
 enum rpt_tele_mode {
 	ID,
 	PROC,
