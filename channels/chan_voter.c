@@ -4827,7 +4827,7 @@ process_gps:
 		}
 
 		if (no_ast_channel) {
-			/* No Askterisk channel, do not respond to the client. */
+			/* No Asterisk channel, do not respond to the client. */
 			continue;
 		}
 		/* otherwise, we just need to send an empty packet to the dude */
