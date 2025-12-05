@@ -3821,7 +3821,7 @@ static void *voter_reader(void *data)
 	char gps1[300], gps2[300], isproxy;
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
-	int i, j, k, ms, maxrssi, master_port, no_ast_channel;
+	int i, j, k, ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -3868,7 +3868,6 @@ static void *voter_reader(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
-		no_ast_channel = 0;
 		ms = 50;
 		i = ast_waitfor_n_fd(&udp_socket, 1, &ms, NULL);
 		ast_mutex_lock(&voter_lock);
@@ -3941,12 +3940,18 @@ static void *voter_reader(void *data)
 				if (!p) {
 					/* We didn't find an asterisk channel,
 					 * act like we don't know the client,
-					 * do not respond via no_ast_channel flag
+					 * do not respond to messages via no_ast_channel flag.
 					 */
-					ast_debug(2, "Request for voter client %s to node %d with no matching asterisk channel\n", client->name,
-						client->nodenum);
 					no_ast_channel = 1;
 					client = NULL;
+					if (!logged_no_ast_channel) {
+						ast_log(LOG_WARNING, "Request for voter client %s to node %d with no matching asterisk channel\n", client->name,
+							client->nodenum);
+						logged_no_ast_channel = 1;
+					}
+				} else {
+					logged_no_ast_channel = 0;
+					no_ast_channel = 0;
 				}
 			}
 			if (client) {
