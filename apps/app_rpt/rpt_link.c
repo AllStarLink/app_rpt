@@ -405,39 +405,16 @@ void send_link_keyquery(struct rpt *myrpt)
 	}
 }
 
-static void check_link_list(struct rpt *myrpt)
-{
-	struct rpt_link *l;
-
-	/* This is supposed to be a doubly linked list,
-	 * so make sure it's not corrupted.
-	 * If it is, that should trigger the assertion.
-	 * This is temporary, for troubleshooting issue #217.
-	 * Once that is fixed, this should be removed.
-	 */
-	l = myrpt->links.next;
-	for (l = myrpt->links.next; l != &myrpt->links; l = l->next) {
-		if (!l) {
-			ast_log(LOG_ERROR, "Link linked list is corrupted (not properly doubly linked)\n");
-		}
-		ast_assert(l != NULL);
-	}
-}
-
 void rpt_link_add(struct rpt *myrpt, struct rpt_link *l)
 {
 	ast_assert(l != NULL);
-	check_link_list(myrpt);
 	insque(l, myrpt->links.next);
-	check_link_list(myrpt);
 }
 
 void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l)
 {
 	ast_assert(l != NULL);
-	check_link_list(myrpt);
 	remque(l);
-	check_link_list(myrpt);
 }
 
 int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, int alink_format) {
