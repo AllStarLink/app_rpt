@@ -1280,14 +1280,14 @@ void *rpt_tele_thread(void *this)
 	case PLAYBACK:
 	case TEST_TONE:
 	case STATS_GPS_LEGACY:
-		strncpy(type, CONF, sizeof(type));
+		strncpy(type, RPT_CONF_NAME, sizeof(type));
 		break;
 	default:
-		strncpy(type, TXCONF, sizeof(type));
+		strncpy(type, RPT_TXCONF_NAME, sizeof(type));
 		break;
 	}
 	/* allocate a pseudo-channel thru asterisk and call the correct conference */
-	mychannel = rpt_request_pseudo_chan(cap, type, RPT_CONTEXT);
+	mychannel = rpt_request_pseudo_chan(cap, type);
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {

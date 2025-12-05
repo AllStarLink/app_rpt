@@ -26,9 +26,7 @@
 
 #include "asterisk.h"
 
-#include <dahdi/user.h>
-#include <dahdi/tonezone.h>		/* use tone_zone_set_zone */
-
+#include "asterisk/bridge.h"
 #include "asterisk/channel.h"
 #include "asterisk/indications.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
@@ -263,30 +261,26 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	return 0;
 }
 
-struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *exten, const char *context)
+struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *exten)
 {
 	char destination[AST_MAX_EXTENSION + AST_MAX_CONTEXT + 1];
 	struct ast_channel *chan;
 
-	snprintf(destination, sizeof(destination), "%s@%s", exten, context);
-	chan = ast_request("Local", cap, NULL, NULL, destination, NULL);
+	chan = ast_request("Local", cap, NULL, NULL, exten, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
 		return NULL;
 	}
 	rpt_disable_cdr(chan);
-	ast_call(chan, destination, RPT_DIAL_DURATION);
-
+	ast_answer(chan);
 	return chan;
 }
 
-int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags,
-	const char *exten, const char *context)
+int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten)
 {
 	struct rpt *myrpt = NULL;
 	struct rpt_link *link = NULL;
 	struct ast_channel *chan, **chanptr;
-	char destination[AST_MAX_EXTENSION + AST_MAX_CONTEXT + 1];
 
 	if (flags & RPT_LINK_CHAN) {
 		link = data;
@@ -294,8 +288,7 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 		myrpt = data;
 	}
 
-	snprintf(destination, sizeof(destination), "%s@%s", exten, context);
-	chan = ast_request("Local", cap, NULL, NULL, destination, NULL);
+	chan = ast_request("Local", cap, NULL, NULL, exten, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
 		return -1;
@@ -303,7 +296,6 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 
 	rpt_disable_cdr(chan);
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(chan));
-	ast_call(chan, destination, RPT_DIAL_DURATION);
 
 	/*	if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
@@ -338,47 +330,50 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 
 static int __join_dahdiconf(struct ast_channel *chan, struct dahdi_confinfo *ci, const char *file, int line, const char *function)
 {
-	ci->chan = 0;
+	/*	ci->chan = 0; */
 
 	/* First put the channel on the conference in proper mode */
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_SETCONF, ci) == -1) {
-		ast_log(LOG_WARNING, "%s:%d (%s) Unable to set conference mode on %s\n", file, line, function, ast_channel_name(chan));
-		return -1;
-	}
+	/*	if (ioctl(ast_channel_fd(chan, 0), DAHDI_SETCONF, ci) == -1) {
+			ast_log(LOG_WARNING, "%s:%d (%s) Unable to set conference mode on %s\n", file, line, function,
+	   ast_channel_name(chan)); return -1;
+		}
+	*/
 	return 0;
 }
 
 static int dahdi_conf_create(struct ast_channel *chan, int *confno, int mode)
 {
-	int res;
-	struct dahdi_confinfo ci;	/* conference info */
-
-	ci.confno = -1;
-	ci.confmode = mode;
-
-	res = join_dahdiconf(chan, &ci);
-	if (res) {
-		ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mode);
-	} else {
-		*confno = ci.confno;
-	}
+	int res = 0;
+	/*	struct dahdi_confinfo ci; */ /* conference info */
+									 /*
+										 ci.confno = -1;
+										 ci.confmode = mode;
+								 
+										 res = join_dahdiconf(chan, &ci);
+										 if (res) {
+											 ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mode);
+										 } else {
+											 *confno = ci.confno;
+										 }
+									 */
 	return res;
 }
 
 static int dahdi_conf_add(struct ast_channel *chan, int confno, int mode)
 {
-	int res;
-	struct dahdi_confinfo ci;	/* conference info */
+	int res = 0;
+	/*	struct dahdi_confinfo ci;	 conference info */
+	/*
+		ci.confno = confno;
+		ci.confmode = mode;
 
-	ci.confno = confno;
-	ci.confmode = mode;
-	
-	ast_debug(2, "Channel %s joining conference %i", ast_channel_name(chan), confno);
+		ast_debug(2, "Channel %s joining conference %i", ast_channel_name(chan), confno);
 
-	res = join_dahdiconf(chan, &ci);
-	if (res) {
-		ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mode);
-	}
+		res = join_dahdiconf(chan, &ci);
+		if (res) {
+			ast_log(LOG_WARNING, "Failed to join DAHDI conf (mode: %d)\n", mode);
+		}
+		*/
 	return res;
 }
 
@@ -390,17 +385,17 @@ static int dahdi_conf_add(struct ast_channel *chan, int confno, int mode)
 static int dahdi_conf_flags(enum rpt_conf_flags rflags)
 {
 	int dflags = 0;
-
-	RPT_DAHDI_FLAG(RPT_CONF_NORMAL, DAHDI_CONF_NORMAL);
-	RPT_DAHDI_FLAG(RPT_CONF_MONITOR, DAHDI_CONF_MONITOR);
-	RPT_DAHDI_FLAG(RPT_CONF_MONITORTX, DAHDI_CONF_MONITORTX);
-	RPT_DAHDI_FLAG(RPT_CONF_CONF, DAHDI_CONF_CONF);
-	RPT_DAHDI_FLAG(RPT_CONF_CONFANN, DAHDI_CONF_CONFANN);
-	RPT_DAHDI_FLAG(RPT_CONF_CONFMON, DAHDI_CONF_CONFMON);
-	RPT_DAHDI_FLAG(RPT_CONF_CONFANNMON, DAHDI_CONF_CONFANNMON);
-	RPT_DAHDI_FLAG(RPT_CONF_LISTENER, DAHDI_CONF_LISTENER);
-	RPT_DAHDI_FLAG(RPT_CONF_TALKER, DAHDI_CONF_TALKER);
-
+	/*
+		RPT_DAHDI_FLAG(RPT_CONF_NORMAL, DAHDI_CONF_NORMAL);
+		RPT_DAHDI_FLAG(RPT_CONF_MONITOR, DAHDI_CONF_MONITOR);
+		RPT_DAHDI_FLAG(RPT_CONF_MONITORTX, DAHDI_CONF_MONITORTX);
+		RPT_DAHDI_FLAG(RPT_CONF_CONF, DAHDI_CONF_CONF);
+		RPT_DAHDI_FLAG(RPT_CONF_CONFANN, DAHDI_CONF_CONFANN);
+		RPT_DAHDI_FLAG(RPT_CONF_CONFMON, DAHDI_CONF_CONFMON);
+		RPT_DAHDI_FLAG(RPT_CONF_CONFANNMON, DAHDI_CONF_CONFANNMON);
+		RPT_DAHDI_FLAG(RPT_CONF_LISTENER, DAHDI_CONF_LISTENER);
+		RPT_DAHDI_FLAG(RPT_CONF_TALKER, DAHDI_CONF_TALKER);
+	*/
 	return dflags;
 }
 
@@ -423,26 +418,48 @@ static int *dahdi_confno(struct rpt *myrpt, enum rpt_conf_type type)
  */
 static int dahdi_conf_get_channo(struct ast_channel *chan)
 {
-	struct dahdi_confinfo ci = {0};
+	/*	struct dahdi_confinfo ci = {0}; */
 
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.chan)) {
-		ast_log(LOG_WARNING, "DAHDI_CHANNO failed: %s\n", strerror(errno));
-		return -1;
-	}
-
-	return ci.chan;
+	/*	if (ioctl(ast_channel_fd(chan, 0), DAHDI_CHANNO, &ci.chan)) {
+			ast_log(LOG_WARNING, "DAHDI_CHANNO failed: %s\n", strerror(errno));
+			return -1;
+		}
+	*/
+	return 1234; /* XXX Placeholder value until DAHDI is re-integrated */
 }
 
 int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line)
 {
-	int *confno, dflags;
-	/* Convert RPT conf flags to DAHDI conf flags... for now. */
-	dflags = dahdi_conf_flags(flags);
-	confno = dahdi_confno(myrpt, type);
-	if (dahdi_conf_create(chan, confno, dflags)) {
-		ast_log(LOG_ERROR, "%s:%d: Failed to create conference using chan type %d\n", file, line, type);
+	struct ast_bridge *conf = NULL;
+	char conference_name[10] = "\0";
+	struct ast_bridge_features features;
+	struct ast_bridge_tech_optimizations tech_args = {
+		.talking_threshold = DEFAULT_TALKING_THRESHOLD,
+		.silence_threshold = DEFAULT_SILENCE_THRESHOLD,
+		.drop_silence = 0,
+	};
+	if (ast_bridge_features_init(&features)) {
+		ast_log(LOG_ERROR, "Conference '%s' mixing bridge features could not be created.\n", conference_name);
 		return -1;
 	}
+	switch (type) {
+	case RPT_CONF:
+		snprintf(conference_name, sizeof(conference_name), RPT_CONF_NAME);
+		conf = myrpt->conf;
+		break;
+	case RPT_TXCONF:
+		snprintf(conference_name, sizeof(conference_name), RPT_TXCONF_NAME);
+		conf = myrpt->txconf;
+		break;
+	}
+	conf = ast_bridge_base_new(AST_BRIDGE_CAPABILITY_MULTIMIX,
+		AST_BRIDGE_FLAG_MASQUERADE_ONLY | AST_BRIDGE_FLAG_TRANSFER_BRIDGE_ONLY, "app_rpt", conference_name, NULL);
+	if (!conf) {
+		ast_log(LOG_ERROR, "Conference '%s' mixing bridge could not be created.\n", conference_name);
+		return -1;
+	}
+	ast_bridge_join(conf, chan, NULL, &features, &tech_args, 0);
+
 	return 0;
 }
 
@@ -455,17 +472,27 @@ int rpt_equate_tx_conf(struct rpt *myrpt)
 
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line)
 {
+	struct ast_bridge *conf = NULL;
+	char conference_name[10] = "\0";
+	struct ast_bridge_features features;
+	struct ast_bridge_tech_optimizations tech_args = {
+		.talking_threshold = DEFAULT_TALKING_THRESHOLD,
+		.silence_threshold = DEFAULT_SILENCE_THRESHOLD,
+		.drop_silence = 0,
+	};
+
 	/* Convert RPT conf flags to DAHDI conf flags... for now. */
-	int *confno, dflags;
-
-	dflags = dahdi_conf_flags(flags);
-	confno = dahdi_confno(myrpt, type);
-
-	if (dahdi_conf_add(chan, *confno, dflags)) {
-		ast_log(LOG_ERROR, "%s:%d: Failed to add to conference using chan type %d\n", file, line, type);
-		return -1;
+	switch (type) {
+	case RPT_CONF:
+		snprintf(conference_name, sizeof(conference_name), RPT_CONF_NAME);
+		conf = myrpt->conf;
+		break;
+	case RPT_TXCONF:
+		snprintf(conference_name, sizeof(conference_name), RPT_TXCONF_NAME);
+		conf = myrpt->txconf;
+		break;
 	}
-	return 0;
+	return ast_bridge_join(conf, chan, NULL, &features, &tech_args, 0);
 }
 
 int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel)
@@ -501,26 +528,27 @@ int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel)
 	 * prevents the DAHDI check conference routine from acting
 	 * on a channel number being used as a conference.
 	 */
-	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) {
-		/* Put pchannel back on the conference in announce mode */
-		if (myrpt->p.duplex == 4 || myrpt->p.duplex == 3) {
-			rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
+	/*	if (dahdi_conf_add(myrpt->voxchannel, res, DAHDI_CONF_MONITOR)) { */
+	/* Put pchannel back on the conference in announce mode */
+	/*		if (myrpt->p.duplex == 4 || myrpt->p.duplex == 3) {
+				rpt_conf_add_announcer_monitor(myrpt->pchannel, myrpt);
+			}
+			return -1;
 		}
-		return -1;
-	}
+	*/
 	return 0;
 }
 
 int rpt_mon_setup(struct rpt *myrpt)
 {
-	int res;
+	int res = 0;
 
 	if (!IS_PSEUDO(myrpt->txchannel) && myrpt->localtxchannel == myrpt->txchannel) {
 		int confno = dahdi_conf_get_channo(myrpt->txchannel); /* get tx channel's port number */
 		if (confno < 0) {
 			return -1;
 		}
-		res = dahdi_conf_add(myrpt->monchannel, confno, DAHDI_CONF_MONITORTX);
+		/* res = dahdi_conf_add(myrpt->monchannel, confno, DAHDI_CONF_MONITORTX); */
 	} else {
 		/* first put the channel on the conference in announce mode */
 		res = rpt_conf_add(myrpt->monchannel, myrpt, RPT_TXCONF, RPT_CONF_CONFANNMON);
@@ -531,24 +559,26 @@ int rpt_mon_setup(struct rpt *myrpt)
 int rpt_parrot_add(struct rpt *myrpt)
 {
 	/* first put the channel on the conference in announce mode */
-	if (dahdi_conf_add(myrpt->parrotchannel, 0, DAHDI_CONF_NORMAL)) {
-		return -1;
-	}
+	/*	if (dahdi_conf_add(myrpt->parrotchannel, 0, DAHDI_CONF_NORMAL)) {
+			return -1;
+		}
+			*/
 	return 0;
 }
 
 static int dahdi_conf_get_muted(struct ast_channel *chan)
 {
-	int muted;
+	int muted = 0;
 
 	if (!CHAN_TECH(chan, "DAHDI")) {
 		return 0;
 	}
 
-	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONFMUTE, &muted) == -1) {
-		ast_log(LOG_WARNING, "Couldn't get mute status on %s: %s\n", ast_channel_name(chan), strerror(errno));
-		muted = 0;
-	}
+	/*	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GETCONFMUTE, &muted) == -1) {
+			ast_log(LOG_WARNING, "Couldn't get mute status on %s: %s\n", ast_channel_name(chan), strerror(errno));
+			muted = 0;
+		}
+			*/
 	return muted;
 }
 

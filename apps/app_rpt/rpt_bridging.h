@@ -16,9 +16,8 @@ enum rpt_conf_type {
 	RPT_TXCONF, /* Local Audio */
 };
 
-#define TXCONF "TXCONF"	  /* TX Conference extension */
-#define TXCONFL "TXCONFL" /* TX Conference Listen only extension */
-#define CONF "CONF"		  /* Repeater Conference extension */
+#define RPT_TXCONF_NAME "TXCONF" /* TX Conference extension */
+#define RPT_CONF_NAME "CONF"	 /* Repeater Conference extension */
 #define RPT_CONTEXT "repeater"
 
 /* Uses same flag name style as DAHDI_CONF flags, since that's what these are based on */
@@ -64,7 +63,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
  * \return channel on success
  * \return NULL on failure
  */
-struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *exten, const char *context);
+struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *exten);
 
 /*!
  * \brief Request a repeater channel not associated with a real device
@@ -74,10 +73,9 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const ch
  * \note myrpt->lock must be held when calling
  * \retval 0 on success, -1 on failure
  */
-int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags,
-	const char *exten, const char *context);
+int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten);
 
-#define rpt_request_pseudo(data, cap, chantype, exten, context) __rpt_request_pseudo(data, cap, chantype, 0, exten, context)
+#define rpt_request_pseudo(data, cap, chantype, exten) __rpt_request_pseudo(data, cap, chantype, 0, exten)
 
 int __rpt_conf_create(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, enum rpt_conf_flags flags, const char *file, int line);
 
@@ -149,3 +147,6 @@ int rpt_stop_tone(struct ast_channel *chan);
  * \retval -1 on failure, 0 on success
  */
 int rpt_set_tone_zone(struct ast_channel *chan, const char *tz);
+
+#define DEFAULT_TALKING_THRESHOLD 160
+#define DEFAULT_SILENCE_THRESHOLD 2500

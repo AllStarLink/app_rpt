@@ -1323,7 +1323,7 @@ void *rpt_call(void *this)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	myrpt->mydtmf = 0;
-	mychannel = rpt_request_pseudo_chan(cap, CONF, RPT_CONTEXT);
+	mychannel = rpt_request_pseudo_chan(cap, RPT_CONF_NAME);
 
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -1333,7 +1333,7 @@ void *rpt_call(void *this)
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 
-	genchannel = rpt_request_pseudo_chan(cap, CONF, RPT_CONTEXT);
+	genchannel = rpt_request_pseudo_chan(cap, RPT_CONF_NAME);
 	ao2_ref(cap, -1);
 	if (!genchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain pseudo channel\n");
@@ -1342,7 +1342,7 @@ void *rpt_call(void *this)
 		pthread_exit(NULL);
 	}
 	ast_autoservice_start(genchannel);
-	ast_debug(1, "Created announcer channel '%s' to conference bridge '%s'\n", ast_channel_name(genchannel), CONF);
+	ast_debug(1, "Created announcer channel '%s' to conference bridge '%s'\n", ast_channel_name(genchannel), RPT_CONF_NAME);
 
 	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
 		ast_hangup(mychannel);
@@ -2802,32 +2802,6 @@ void rpt_links_init(struct rpt_link *l)
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
 	int res = 0;
-	/* Setup the extensions for the repeater conferences */
-	if (!ast_context_find_or_create(NULL, NULL, RPT_CONTEXT, AST_MODULE)) {
-		ast_log(LOG_ERROR, "Failed to create %s dialplan context.\n", RPT_CONTEXT);
-		return -1;
-	}
-
-	res = ast_add_extension(RPT_CONTEXT, 1, CONF, 1, NULL, NULL, "Answer", "", NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, CONF, 2, NULL, NULL, "Set", "CONFBRIDGE(user,quiet)=yes", NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, CONF, 2, NULL, NULL, "ConfBridge", CONF, NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, CONF, 3, NULL, NULL, "Hangup", "", NULL, "app_rpt");
-
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONF, 1, NULL, NULL, "Answer", "", NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONF, 2, NULL, NULL, "Set", "CONFBRIDGE(user,quiet)=yes", NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONF, 2, NULL, NULL, "ConfBridge", TXCONF, NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONF, 3, NULL, NULL, "Hangup", "", NULL, "app_rpt");
-
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 1, NULL, NULL, "Answer", "", NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 2, NULL, NULL, "Set", "CONFBRIDGE(user,quiet)=yes", NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 2, NULL, NULL, "Set", "CONFBRIDGE(user,startmuted)=yes", NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 3, NULL, NULL, "ConfBridge", TXCONF, NULL, "app_rpt");
-	res |= ast_add_extension(RPT_CONTEXT, 1, TXCONFL, 4, NULL, NULL, "Hangup", "", NULL, "app_rpt");
-
-	if (res) {
-		ast_log(LOG_ERROR, "Failed to add Repeater Conference extensions\n");
-		return -1;
-	}
 
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
@@ -2843,20 +2817,20 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		myrpt->localtxchannel = IS_LOCAL_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, CONF, RPT_CONTEXT)) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, RPT_CONF_NAME)) {
 		rpt_hangup_rx_tx(myrpt);
 		return -1;
 	}
 
 	if (!myrpt->localtxchannel) {
-		if (rpt_request_pseudo(myrpt, cap, RPT_DAHDITXCHAN, TXCONFL, RPT_CONTEXT)) { /* Listen only link */
+		if (rpt_request_pseudo(myrpt, cap, RPT_DAHDITXCHAN, RPT_TXCONF_NAME)) { /* Listen only link */
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			return -1;
 		}
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN, TXCONFL, RPT_CONTEXT)) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN, RPT_TXCONF_NAME)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_DAHDITXCHAN);
@@ -2864,18 +2838,18 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	/*! \todo Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
-	/*	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
-			res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
-		} else {
-			res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER);
-		}
-		if (res) {
-			rpt_hangup_rx_tx(myrpt);
-			rpt_hangup(myrpt, RPT_PCHAN);
-			rpt_hangup(myrpt, RPT_MONCHAN);
-			return -1;
-		}
-	*/
+	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
+		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONFANNMON);
+	} else {
+		res = rpt_conf_create(myrpt->pchannel, myrpt, RPT_CONF, RPT_CONF_CONF | RPT_CONF_LISTENER | RPT_CONF_TALKER);
+	}
+	if (res) {
+		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		return -1;
+	}
+
 	/*! \todo Need to verify always setting MONCHAN to TXCONF is "ok" or how to deal at dialtime*/
 	/*		if (rpt_mon_setup(myrpt)) {
 				rpt_hangup_rx_tx(myrpt);
@@ -2901,7 +2875,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	*/
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN, TXCONF, RPT_CONTEXT)) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN, RPT_TXCONF_NAME)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -5281,7 +5255,7 @@ static void *rpt(void *this)
 			char myfname[300];
 
 			/* first put the channel on the conference in announce mode */
-			if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN, TXCONF, RPT_CONTEXT)) {
+			if (rpt_request_pseudo(myrpt, cap, RPT_PARROTCHAN, RPT_TXCONF_NAME)) {
 				ast_mutex_unlock(&myrpt->lock);
 				break;
 			}
@@ -6791,7 +6765,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_format_cap_append(cap, ast_format_slin, 0);
 
 		/* allocate a pseudo-channel thru asterisk */
-		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN, CONF, RPT_CONTEXT)) {
+		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN, RPT_CONF)) {
 			ao2_ref(cap, -1);
 			ast_free(l);
 			return -1;
@@ -6990,7 +6964,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	i = 3;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &i, sizeof(char), 0);
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, TXCONF, RPT_CONTEXT)) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, RPT_TXCONF_NAME)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup_rx_tx(myrpt);
 		ao2_ref(cap, -1);

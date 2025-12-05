@@ -779,7 +779,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 
 	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
 
-	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN, CONF, RPT_CONTEXT)) {
+	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN, RPT_CONF_NAME)) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		rpt_link_free(l);
