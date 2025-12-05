@@ -3942,13 +3942,13 @@ static void *voter_reader(void *data)
 					 * act like we don't know the client,
 					 * do not respond to messages via no_ast_channel flag.
 					 */
-					no_ast_channel = 1;
-					client = NULL;
 					if (!logged_no_ast_channel) {
 						ast_log(LOG_WARNING, "Request for voter client %s to node %d with no matching asterisk channel\n",
 							client->name, client->nodenum);
 						logged_no_ast_channel = 1;
 					}
+					no_ast_channel = 1;
+					client = NULL;
 				} else {
 					logged_no_ast_channel = 0;
 					no_ast_channel = 0;
