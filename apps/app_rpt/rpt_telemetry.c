@@ -555,7 +555,7 @@ void flush_telem(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 	mytele = myrpt->tele.next;
 	while (mytele != &myrpt->tele) {
-		if (mytele->mode != SETREMOTE && telem->chan) {
+		if (mytele->mode != SETREMOTE && mytele->chan) {
 			ast_softhangup(mytele->chan, AST_SOFTHANGUP_DEV);
 			if (myrpt->active_telem == mytele) {
 				/* If we are the active telemetry, we need to clean it up */
