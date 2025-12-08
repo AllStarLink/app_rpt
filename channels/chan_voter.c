@@ -475,7 +475,9 @@ struct voter_pvt {
 	unsigned int priconn:1;
 	unsigned int mixminus:1;
 	unsigned int waspager:1;
-	
+	unsigned int kill_xmit_thread:1;
+	unsigned int kill_primary_thread:1;
+
 	int testcycle;
 	int testindex;
 	struct voter_client *lastwon;
@@ -517,6 +519,7 @@ struct voter_pvt {
 	ast_mutex_t xmit_lock;
 	ast_cond_t xmit_cond;
 	pthread_t xmit_thread;
+	pthread_t primary_thread;
 	struct sockaddr_in primary;
 	char primary_pswd[VOTER_NAME_LEN];
 	char primary_challenge[VOTER_CHALLENGE_LEN];
@@ -969,6 +972,17 @@ static int voter_hangup(struct ast_channel *ast)
 	}
 	if (pvts == p) {
 		pvts = p->next;
+	}
+	if (p->xmit_thread) {
+		p->kill_xmit_thread = 1;
+		ast_mutex_lock(&p->xmit_lock);
+		ast_cond_signal(&p->xmit_cond);
+		ast_mutex_unlock(&p->xmit_lock);
+		pthread_join(p->xmit_thread, NULL);
+	}
+	if (p->primary_thread) {
+		p->kill_primary_thread = 1;
+		pthread_join(p->primary_thread, NULL);
 	}
 	ast_mutex_unlock(&voter_lock);
 	ast_free(p);
@@ -1638,7 +1652,7 @@ static void *voter_primary_client(void *data)
 	lastrx = (struct timeval) {0};
 	ast_mutex_lock(&voter_lock);
 	p->primary_challenge[0] = 0;
-	while (run_forever && (!ast_shutting_down())) {
+	while (run_forever && !ast_shutting_down() && !p->kill_primary_thread) {
 		ast_mutex_unlock(&voter_lock);
 		ms = 100;
 		i = ast_waitfor_n_fd(&pri_socket, 1, &ms, NULL);
@@ -1817,7 +1831,7 @@ static void *voter_xmit(void *data)
 	} pingpacket;
 #pragma pack(pop)
 
-	while (run_forever && (!ast_shutting_down())) {
+	while (run_forever && !ast_shutting_down() && !p->kill_xmit_thread) {
 		ast_mutex_lock(&p->xmit_lock);
 		ast_cond_wait(&p->xmit_cond, &p->xmit_lock);
 		ast_mutex_unlock(&p->xmit_lock);
@@ -2350,7 +2364,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	struct ast_channel *tmp = NULL;
 	char *val, *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
 	struct ast_config *cfg = NULL;
-	pthread_attr_t attr;
 
 	if (!ast_format_cap_iscompatible(cap, voter_tech.capabilities)) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
@@ -2623,13 +2636,10 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_mutex_unlock(&voter_lock);
 	}
 	ast_config_destroy(cfg);
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&p->xmit_thread, &attr, voter_xmit, p);
+	ast_pthread_create(&p->xmit_thread, NULL, voter_xmit, p);
 	if (SEND_PRIMARY(p)) {
-		ast_pthread_create(&p->xmit_thread, &attr, voter_primary_client, p);
+		ast_pthread_create(&p->primary_thread, NULL, voter_primary_client, p);
 	}
-	pthread_attr_destroy(&attr);
 	return tmp;
 }
 
@@ -3793,12 +3803,15 @@ static void *voter_timer(void *data)
 }
 
 /*!
- * \brief Reader thread that processes incoming VOTER UDP packets and updates driver state.
+ * \brief UDP reader thread that processes incoming Voter protocol packets and updates voter state.
  *
- * This thread receives VOTER protocol packets, authenticates and identifies clients,
- * updates per-client and per-node timing/state (including master timing, GPS, and ping
- * statistics), routes or proxies audio payloads into per-client buffers, and triggers
- * node-level selection/mixing and keepalive responses as appropriate.
+ * This thread receives Voter-format UDP packets, matches them to configured clients (including
+ * dynamic binding), validates/authenticates clients, and handles payloads such as audio
+ * (ULAW/ADPCM/NULAW), proxy-encapsulated packets, GPS, and PING.  It updates timing and master
+ * synchronization state, writes received audio and RSSI into per-client circular buffers,
+ * performs RSSI-based selection and threshold/linger logic per node, queues audio/text/control
+ * frames to the associated Asterisk channel, and sends authentication/keepalive responses when
+ * appropriate.
  *
  * \param data Always NULL; unused thread argument.
  * \return     NULL when the thread exits.
@@ -3809,7 +3822,7 @@ static void *voter_reader(void *data)
 	char gps1[300], gps2[300], isproxy;
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
-	int i, j, k, ms, maxrssi, master_port;
+	int i, j, k, ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -3876,8 +3889,7 @@ static void *voter_reader(void *data)
 					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 					.src = __PRETTY_FUNCTION__,
 				};
-				ast_debug(3, "VOTER client %s was receiving but now has stopped (RX_TIMEOUT_MS)!\n",
-					(client && client->name) ? client->name : "UNKNOWN");
+				ast_debug(3, "A VOTER on %d was receiving but now has stopped (RX_TIMEOUT_MS)!\n", p->nodenum);
 				ast_queue_frame(p->owner, &wf);
 				p->rxkey = 0;
 				p->lastwon = NULL;
@@ -3897,8 +3909,8 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
-		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x from client %s\n", (int) recvlen,
-			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest), (client && client->name) ? client->name : "UNKNOWN");
+		ast_debug(7, "Got RX packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
+			vph->challenge, ntohl(vph->digest));
 		client = NULL;
 		if (!check_client_sanity && master_port) {
 			sin.sin_port = htons(master_port);
@@ -3920,11 +3932,30 @@ static void *voter_reader(void *data)
 					client->name, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
 			if (client) {
+				/* Search for connected Asterisk channel for this known client */
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
 						break;
 					}
 				}
+				if (!p) {
+					/* We didn't find an asterisk channel,
+					 * act like we don't know the client,
+					 * do not respond to messages via no_ast_channel flag.
+					 */
+					if (!logged_no_ast_channel) {
+						ast_log(LOG_WARNING, "Request for voter client %s to node %d with no matching asterisk channel\n",
+							client->name, client->nodenum);
+						logged_no_ast_channel = 1;
+					}
+					no_ast_channel = 1;
+					client = NULL;
+				} else {
+					logged_no_ast_channel = 0;
+					no_ast_channel = 0;
+				}
+			}
+			if (client) {
 				if (check_client_sanity && p && !p->priconn) {
 					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
 						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
@@ -4656,8 +4687,6 @@ static void *voter_reader(void *data)
 							}
 						}
 					}
-				} else {
-					ast_debug(2, "Request from VOTER client %s to unknown node %d\n", client->name, client->nodenum);
 				}
 				continue;
 			}
@@ -4798,6 +4827,10 @@ process_gps:
 			}
 		}
 
+		if (no_ast_channel) {
+			/* No Asterisk channel, do not respond to the client. */
+			continue;
+		}
 		/* otherwise, we just need to send an empty packet to the dude */
 		memset(&authpacket, 0, sizeof(authpacket));
 		memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
