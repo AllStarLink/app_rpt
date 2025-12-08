@@ -2635,6 +2635,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		}
 		ast_mutex_unlock(&voter_lock);
 	}
+	ast_config_destroy(cfg);
 	ast_pthread_create(&p->xmit_thread, NULL, voter_xmit, p);
 	if (SEND_PRIMARY(p)) {
 		ast_pthread_create(&p->primary_thread, NULL, voter_primary_client, p);
