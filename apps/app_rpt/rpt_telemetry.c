@@ -544,44 +544,44 @@ int priority_telemetry_pending(struct rpt *myrpt)
  * that can cause a queued telemetry to think the current telem is done when it isn't,
  * and things will get doubled up.
  */
-#define telem_done(myrpt) \
-	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele); \
+#define telem_done(myrpt, tele) \
+	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, tele); \
 	myrpt->active_telem = NULL;
 
 void flush_telem(struct rpt *myrpt)
 {
-	struct rpt_tele *mytele;
+	struct rpt_tele *telem;
 	ast_debug(3, "flush_telem()!!");
 	rpt_mutex_lock(&myrpt->lock);
-	mytele = myrpt->tele.next;
-	while (mytele != &myrpt->tele) {
-		if (mytele->mode != SETREMOTE && mytele->chan) {
-			ast_softhangup(mytele->chan, AST_SOFTHANGUP_DEV);
-			if (myrpt->active_telem == mytele) {
+	telem = myrpt->tele.next;
+	while (telem != &myrpt->tele) {
+		if (telem->mode != SETREMOTE && telem->chan) {
+			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+			if (myrpt->active_telem == telem) {
 				/* If we are the active telemetry, we need to clean it up */
-				telem_done(myrpt);
+				telem_done(myrpt, telem);
 			}
 		}
-		mytele = mytele->next;
+		telem = telem->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
 void birdbath(struct rpt *myrpt)
 {
-	struct rpt_tele *mytele;
+	struct rpt_tele *telem;
 	ast_debug(3, "birdbath!!");
 	rpt_mutex_lock(&myrpt->lock);
-	mytele = myrpt->tele.next;
-	while (mytele != &myrpt->tele) {
-		if (mytele->mode == PARROT) {
-			ast_softhangup(mytele->chan, AST_SOFTHANGUP_DEV);
-			if (myrpt->active_telem == mytele) {
+	telem = myrpt->tele.next;
+	while (telem != &myrpt->tele) {
+		if (telem->mode == PARROT && telem->chan) {
+			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+			if (myrpt->active_telem == telem) {
 				/* If we are the active telemetry, we need to clean it up */
-				telem_done(myrpt);
+				telem_done(myrpt, telem);
 			}
 		}
-		mytele = mytele->next;
+		telem = telem->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 }
@@ -2870,7 +2870,7 @@ treataslocal:
 			myrpt->tmsgtimer = myrpt->p.tailsquashedtime;
 		}
 	}
-	telem_done(myrpt);
+	telem_done(myrpt, mytele);
 	tele_link_remove(myrpt, mytele);
 	ast_channel_unref(mychannel);
 	rpt_mutex_unlock(&myrpt->lock);
@@ -2894,7 +2894,7 @@ treataslocal:
 	myrpt->noduck = 0;
 	pthread_exit(NULL);
 abort:
-	telem_done(myrpt);
+	telem_done(myrpt, mytele);
 abort2:
 	ast_free(nodename);
 abort3:
