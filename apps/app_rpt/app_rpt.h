@@ -246,6 +246,13 @@ enum rpt_linkmode {
 	LINKMODE_TLB
 };
 
+enum rpt_phone_mode {
+	RPT_PHONE_MODE_NONE,		  /* not in phone control mode */
+	RPT_PHONE_MODE_PHONE_CONTROL, /* Phone control mode Reverse patch or Phone control mode */
+	RPT_PHONE_MODE_DUMB_DUPLEX,	  /* Dumb duplex mode  (Full controls of radio)*/
+	RPT_PHONE_MODE_DUMB_SIMPLEX	  /* Allows audio-only access */
+};
+
 enum rpt_tele_mode {
 	ID,
 	PROC,
@@ -544,7 +551,7 @@ struct rpt_link {
 	struct rpt_link *prev;
 	enum link_mode mode;
 	char isremote;
-	char phonemode;
+	enum rpt_phone_mode phonemode;
 	char phonevox;		   /* vox the phone */
 	char phonemonitor;	   /* no tx or funs for the phone */
 	char name[MAXNODESTR]; /* identifier (routing) string */
