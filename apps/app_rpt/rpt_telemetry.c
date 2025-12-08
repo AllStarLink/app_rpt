@@ -539,42 +539,49 @@ int priority_telemetry_pending(struct rpt *myrpt)
 	rpt_mutex_unlock(&myrpt->lock);
 	return pending;
 }
+/*! \brief Try to catch setting active_telem NULL when we weren't what it was set to
+ * If somebody sets active_telem to NULL when it wasn't the current telem, then
+ * that can cause a queued telemetry to think the current telem is done when it isn't,
+ * and things will get doubled up.
+ */
+#define telem_done(myrpt) \
+	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele); \
+	myrpt->active_telem = NULL;
 
 void flush_telem(struct rpt *myrpt)
 {
-	struct rpt_tele *telem;
+	struct rpt_tele *mytele;
 	ast_debug(3, "flush_telem()!!");
 	rpt_mutex_lock(&myrpt->lock);
-	telem = myrpt->tele.next;
-	while (telem != &myrpt->tele) {
-		if (telem->mode != SETREMOTE && telem->chan) {
-			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-			if (myrpt->active_telem == telem) {
+	mytele = myrpt->tele.next;
+	while (mytele != &myrpt->tele) {
+		if (mytele->mode != SETREMOTE && telem->chan) {
+			ast_softhangup(mytele->chan, AST_SOFTHANGUP_DEV);
+			if (myrpt->active_telem == mytele) {
 				/* If we are the active telemetry, we need to clean it up */
-				myrpt->active_telem = NULL;
+				telem_done(myrpt);
 			}
 		}
-		telem = telem->next;
+		mytele = mytele->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
 void birdbath(struct rpt *myrpt)
 {
-	struct rpt_tele *telem;
+	struct rpt_tele *mytele;
 	ast_debug(3, "birdbath!!");
 	rpt_mutex_lock(&myrpt->lock);
-	telem = myrpt->tele.next;
-	while (telem != &myrpt->tele) {
-		if (telem->mode == PARROT) {
-			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-			if (myrpt->active_telem == telem) {
+	mytele = myrpt->tele.next;
+	while (mytele != &myrpt->tele) {
+		if (mytele->mode == PARROT) {
+			ast_softhangup(mytele->chan, AST_SOFTHANGUP_DEV);
+			if (myrpt->active_telem == mytele) {
 				/* If we are the active telemetry, we need to clean it up */
-				myrpt->active_telem = NULL;
+				telem_done(myrpt);
 			}
-
 		}
-		telem = telem->next;
+		mytele = mytele->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 }
@@ -1211,15 +1218,6 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 	}
 	ast_log(LOG_WARNING, "Got unknown link telemetry command: %s\n", strs[0]);
 }
-
-/*! \brief Try to catch setting active_telem NULL when we weren't what it was set to
- * If somebody sets active_telem to NULL when it wasn't the current telem, then
- * that can cause a queued telemetry to think the current telem is done when it isn't,
- * and things will get doubled up.
- */
-#define telem_done(myrpt) \
-	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele); \
-	myrpt->active_telem = NULL;
 
 /*
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
