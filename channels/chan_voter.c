@@ -369,10 +369,10 @@ char context[100];
 #define PAGER_SRC "PAGER"
 #define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 30000
-#define SAMPRATE 8000			// (Sample Rate)
-#define DIVLCM 192000			// (Least Common Mult of 512,1200,2400,8000)
+#define SAMPRATE 8000 // (Sample Rate)
+#define DIVLCM 192000 // (Least Common Mult of 512,1200,2400,8000)
 #define PREAMBLE_BITS 576
-#define MESSAGE_BITS 544		// (17 * 32), 1 longword SYNC plus 16 longwords data
+#define MESSAGE_BITS 544 // (17 * 32), 1 longword SYNC plus 16 longwords data
 /* We have to send "inverted".. probably because of inverting AMP in Voter board */
 #define ONEVAL AMPVAL
 #define ZEROVAL -AMPVAL
