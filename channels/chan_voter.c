@@ -1911,9 +1911,7 @@ static void check_ping_done(struct voter_client *client)
 		if (client->pings_sent < client->pings_requested) {
 			return;
 		}
-		if (voter_tvdiff_ms(ast_tvnow(),
-							(ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) >
-			PING_TIMEOUT_MS) {
+		if (voter_tvdiff_ms(ast_tvnow(), (ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) > PING_TIMEOUT_MS) {
 			ast_log(LOG_WARNING, "\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
 		} else {
 			if (client->pings_received < client->pings_requested) {
