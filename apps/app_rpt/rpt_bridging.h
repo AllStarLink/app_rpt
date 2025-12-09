@@ -92,6 +92,27 @@ int rpt_equate_tx_conf(struct rpt *myrpt);
 
 #define rpt_tx_conf_add_announcer(chan, myrpt) rpt_conf_add(chan, myrpt, RPT_TXCONF, RPT_CONF_CONFANN)
 
+/*!
+ * \param chan Channel to play tone on
+ * \param tone tone type (e.g., "dial", "congestion")
+ * \retval 0 on success, -1 on failure
+ */
+int rpt_play_tone(struct ast_channel *chan, const char *tone);
+
+/*!
+ * \brief Play congestion on a channel
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+#define rpt_play_congestion(chan) rpt_play_tone(chan, "congestion")
+
+/*!
+ * \brief Play dialtone on a channel
+ * \param chan
+ * \retval 0 on success, -1 on failure
+ */
+#define rpt_play_dialtone(chan) rpt_play_tone(chan, "dial")
+
 /*! \note Used in app_rpt.c */
 int rpt_call_bridge_setup(struct rpt *myrpt, struct ast_channel *mychannel);
 
@@ -108,20 +129,6 @@ int rpt_parrot_add(struct rpt *myrpt);
  * \retval 0 if not muted, 1 if muted
  */
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt);
-
-/*!
- * \brief Play dialtone on a channel
- * \param chan
- * \retval 0 on success, -1 on failure
- */
-int rpt_play_dialtone(struct ast_channel *chan);
-
-/*!
- * \brief Play congestion tone on a channel
- * \param chan
- * \retval 0 on success, -1 on failure
- */
-int rpt_play_congestion(struct ast_channel *chan);
 
 /*!
  * \brief Stop playing tones on a channel
