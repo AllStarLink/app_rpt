@@ -4,7 +4,7 @@
  * Copyright (C) 1999 - 2011, Digium, Inc.
  *
  * Copyright (C) 2011-2013
- * Jim Dixon, WB6NIL <jim@lambdatel.com>
+ * Jim Dixon, WB6NIL (SK)
  *
  * See http://www.asterisk.org for more information about
  * the Asterisk project. Please do not directly contact
@@ -21,7 +21,7 @@
  *
  * \brief Radio Voter channel driver for Asterisk
  *
- * \author Jim Dixon, WB6NIL <jim@lambdatel.com>
+ * \author Jim Dixon, WB6NIL (SK)
  *
  * \ingroup channel_drivers
  */
@@ -44,7 +44,11 @@ is directly associated with the node that opened it.
 Each client has a pair of circular buffers, one for mulaw audio data, and one for RSSI value. The allocated buffer
 length in all clients is determined by the 'buflen' parameter, which is specified in the "global" stanza in the
 voter.conf file in milliseconds, and represented in the channel driver as number of samples (actual buffer length,
-which is 8 * milliseconds).
+which is 8 * milliseconds). The buflen in voter.conf is in increments of 40ms, with values rounded down.
+
+The absolute minimum buflen in voter.conf is 40, with a recommended minimum of 120 for voting clients. For mix
+mode/general purpose clients, the minimum is 160. The default if buflen is not specified is defined below, but
+is generally 480.
 
 Every channel instance has a index ("drainindex"), indicating the next position within the physical buffer(s) where
 the audio will be taken from the buffers and presented to the Asterisk channel stream as VOICE frames.
@@ -72,18 +76,8 @@ next time those positions in the physical buffer are examined, they will not con
 put there, since all client's buffers are significant regardless of whether they were populated or not. This
 allows for the true 'connectionless-ness' of this protocol implementation.
 
-Voter Channel test modes:
-
-0 - Normal voting operation
-1 - Randomly pick which client of all that
-	are receiving at the max RSSI value to use.
-> 1 - Cycle thru all the clients that are receiving
-	at the max RSSI value with a cycle time of (test mode - 1)
-	frames. In other words, if you set it to 2, it will
-	change every single time. If you set it to 11, it will
-	change every 10 times. This is serious torture test.
-
 Note on ADPCM functionality:
+
 The original intent was to change this driver to use signed linear internally (slin),
 but after some thought, it was determined that it was prudent to continue using
 mulaw as the "standard" internal audio format (with the understanding of the slight
@@ -91,6 +85,7 @@ degradation in dynamic range when using ADPCM resulting in doing so).  This was
 done because existing external entities (such as the recording files and the streaming
 stuff) use mulaw as their transport, and changing all of that to signed linear would
 be cumbersome, inefficient and undesirable.
+
 
 Redundant "Proxy" Mode:
 
@@ -163,6 +158,7 @@ redundancy configured for it, even if a separate instance needs to be created ju
 Also, if Non-GPS-based operation is all that is needed, just the use of redundancy within the clients is
 sufficient, and does not require any use of the server redundancy features.
 
+
 "hostdeemp" (app_rpt duplex=3) mode:
 
 As of Voter board firmware 1.19 (7/19/2013), there is a set of options in both the firmware ("Offline Menu item
@@ -195,6 +191,63 @@ board is fully capable of providing the functionality all by itself.
 
 Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or simulcasted system.
 
+
+POCSAG Paging:
+
+This channel driver supports POCSAG paging, however, the VOTER/RTCM hardware interfaces do NOT (without modification).
+
+POCSAG paging uses FSK, where the transmitter is modulated directly to change its frequency. This is not the same as
+"traditional" packet that uses AFSK, modulating the transmitter with two different tones.
+
+You need a transmitter that is capable of REAL DIRECT FM. Any of the common transmitters, commercial or amateur,
+even with a direct modulation input, likely have some sort of AC coupling of the modulation input. This will not
+work with POCSAG paging.
+
+POCSAG, because of the fact that it is direct FSK, not AFSK, needs a transmitter with direct DC coupling of its modulation
+input. In other words, the modulation input must be capable of something like this:
+
+Say, for example, a change of 500mv of modulation voltage changes the transmitter’s frequency 3kHz. So, your modulation
+voltage is normally 2 volts. At that 2 volt input, your transmitter outputs a 440.000MHz. You raise the modulation
+voltage to 2.5 volts. Your transmitter then shifts to 440.003 MHz. You keep the modulation voltage at 2.5 volts for
+10 minutes, and during that ENTIRE 10 minute period, the transmitter stays at 440.003MHz.
+
+Any normal, capacitive-coupled input modulator is just NOT capable of doing that (for hopefully painfully-obvious reasons).
+
+Commercial paging transmitters have a DIGITAL voltage (like just a 0V/+5V) input to select one of the two frequencies
+(+/- from “center” carrier frequency for FSK). That is how they deal with the true FSK nature of paging.
+
+Specific to the VOTER/RTCM hardware interfaces, they have an AC coupled modulation output that would at the very least
+need to be bypassed. How the output opamp then interacts with you transmitter would still be unknown.
+
+POCSAG test pages can be sent from the Asterisk CLI with the format:
+
+rpt page <node number> <baud> <cap code> <type> <"message">
+
+Where type is:
+A - alpha
+T - tone
+N - numeric
+
+
+Asterisk CLI commands for this module:
+
+voter display                  -- Displays voter (instance) clients
+voter ping                     -- Client ping
+voter prio                     -- Specify/Query voter client priority value
+voter record                   -- Enable/Specify (or disable) voter recording file
+voter test                     -- Specify/Query voter instance test mode
+voter tone                     -- Sets/Queries Tx CTCSS level for specified chan_voter instance
+voter txlockout                -- Set Tx Lockout for voter (instance) clients
+
+Voter Channel test modes:
+
+0 - Normal voting operation
+1 - Randomly pick which client of all that are receiving at the max RSSI value to use.
+>1 - Cycle thru all the clients that are receiving at the max RSSI value with a cycle time of (test mode - 1)
+	frames. In other words, if you set it to 2, it will change every single time. If you set it to 11, it will
+	change every 10 times. This is serious torture test.
+
+Use "core show help voter <command>"" to display usage.
 */
 
 #include "asterisk.h"
@@ -245,22 +298,49 @@ Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or 
 /* Un-comment this if you wish Digital milliwatt output rather then real audio
    when transmitting (for debugging only) */
 /* #define	DMWDIAG */
+#ifdef DMWDIAG
+unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
+unsigned char mwp;
+#endif
 
 struct ast_flags zeroflag = { 0 };
 
 #define	XPMR_VOTER
 #include "xpmr/xpmr.h"
+#include "xpmr/xpmr.c"
 
 #define	VOTER_CHALLENGE_LEN 10
 #define	VOTER_PASSWORD_LEN 30
 #define	VOTER_NAME_LEN 50
+char challenge[VOTER_CHALLENGE_LEN];
+char password[VOTER_PASSWORD_LEN];
+char context[100];
 
-#define	RX_TIMEOUT_MS 200
-#define	CLIENT_TIMEOUT_MS 3000
-#define	MASTER_TIMEOUT_MS 100
-#define	TX_KEEPALIVE_MS 1000
-#define	PING_TIME_MS 250
-#define	PING_TIMEOUT_MS 3000
+/* Timeout definitions in ms*/
+#define RX_TIMEOUT_MS 200
+#define CLIENT_TIMEOUT_MS 3000
+#define MASTER_TIMEOUT_MS 100
+#define TX_KEEPALIVE_MS 1000
+#define PING_TIME_MS 250
+#define PING_TIMEOUT_MS 3000
+
+/* Buffer definitions
+ * FRAME_SIZE 160 --> 160 octets of Mulaw audio (20ms @ 8k samples/sec) = 160 samples
+ * ADPCM_FRAME_SIZE 163 --> 163 octets of IMA ADPCM audio (40ms @ 8k samples/sec) = 320 samples
+ *
+ * DEFAULT_BUFLEN is in ms when uing Mulaw (default) audio ONLY:
+ * DEFAULT_BUFLEN * 8 = Samples
+ * Samples / FRAME_SIZE = Frames
+ * Frames * 20ms/frame = Delay
+ *
+ * Since FRAME_SIZE != ADPCM_FRAME_SIZE, and Mulaw fame rate is 20ms/frame vs
+ * ADPCM frame rate of 40ms/frame, buflen in voter.conf will be ~2x ms when using ADPCM
+ *
+ */
+#define FRAME_SIZE 160
+#define ADPCM_FRAME_SIZE 163
+#define DEFAULT_BUFLEN 480 /* 480ms default buffer length when buflen not specified in voter.conf*/
+#define BUFDELAY(p) (p->buflen - (FRAME_SIZE * 2))
 
 #define DEFAULT_LINGER 6
 #define DEFAULT_GTXGAIN "0.0"
@@ -278,66 +358,77 @@ struct ast_flags zeroflag = { 0 };
 #define	GPS_WORK_FILE "/tmp/gps%s.tmp"
 #define	GPS_DATA_FILE "/tmp/gps%s.dat"
 
-#define	NTAPS_PL 6
-#define	NTAPS_4K 6
-
-#ifdef DMWDIAG
-unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
-
-unsigned char mwp;
-#endif
+/* DSP filter taps */
+#define NTAPS_PL 6
+#define NTAPS_4K 6
 
 #define	IS_CLIENT_PROXY(x) (x->proxy_sin.sin_family == AF_INET)
 #define	SEND_PRIMARY(x) (x->primary.sin_family == AF_INET)
 
-/*! Defines for constructing POSAG paging packets */
-#define	PAGER_SRC "PAGER"
-#define	ENDPAGE_STR "ENDPAGE"
+/* Defines for constructing POCSAG paging packets */
+#define PAGER_SRC "PAGER"
+#define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 30000
-#define	SAMPRATE 8000			// (Sample Rate)
-#define	DIVLCM 192000			// (Least Common Mult of 512,1200,2400,8000)
-#define	PREAMBLE_BITS 576
-#define	MESSAGE_BITS 544		// (17 * 32), 1 longword SYNC plus 16 longwords data
+#define SAMPRATE 8000 // (Sample Rate)
+#define DIVLCM 192000 // (Least Common Mult of 512,1200,2400,8000)
+#define PREAMBLE_BITS 576
+#define MESSAGE_BITS 544 // (17 * 32), 1 longword SYNC plus 16 longwords data
 /* We have to send "inverted".. probably because of inverting AMP in Voter board */
-#define	ONEVAL AMPVAL
+#define ONEVAL AMPVAL
 #define ZEROVAL -AMPVAL
-#define	DIVSAMP (DIVLCM / SAMPRATE)
+#define DIVSAMP (DIVLCM / SAMPRATE)
+
+/* Defines voter payload types */
+#define VOTER_PAYLOAD_NONE 0
+#define VOTER_PAYLOAD_ULAW 1
+#define VOTER_PAYLOAD_GPS 2
+#define VOTER_PAYLOAD_ADPCM 3
+#define VOTER_PAYLOAD_NULAW 4
+#define VOTER_PAYLOAD_PING 5
+#define VOTER_PAYLOAD_PROXY 0xf000
 
 static const char vdesc[] = "radio Voter channel driver";
 static char type[] = "voter";
 
+/* default config file */
+static char *config = "voter.conf";
+
+/* port to listen to UDP packets on */
+int16_t listen_port = 1667;
+int udp_socket = -1;
+
 int run_forever = 1;
+int check_client_sanity = 1;
 static int nullfd = -1;
 
-AST_MUTEX_DEFINE_STATIC(voter_lock);
+static int reload(void);
 
-int16_t listen_port = 1667; /* port to listen to UDP packets on */
-int udp_socket = -1;
+AST_MUTEX_DEFINE_STATIC(voter_lock);
 
 struct ast_timer *voter_thread_timer = NULL;
 
 int voter_timing_count = 0;
 int last_master_count = 0;
+int hasmaster = 0;
 
-int check_client_sanity = 1;
+int maxpvtorder = 0;
 
-char challenge[VOTER_CHALLENGE_LEN];
-char password[VOTER_PASSWORD_LEN];
-char context[100];
+/*! This is just a horrendous KLUDGE!! Some Garmin LVC-18 GPS "pucks"
+ sometimes get exactly 1 second off!! Some don't do it at all,
+ while others do it constantly. Others do it once in a while. In an attempt
+ to be at least somewhat tolerant of this operation, the "puckit"
+ configuration flag may be set. We attempt to deal with  this problem by
+ keeping a "time differential" for each client (compared with the "master")
+ and applying it to time information within the protocol.
+ Obviously, this SHOULD NEVER HAVE TO BE DONE.
+ */
+int puckit = 0;
 
+/* this variable doesn't seem to be used, delete?*/
 double dnsec;
 
 static pthread_t voter_reader_thread = 0;
 static pthread_t voter_timer_thread = 0;
-
-int maxpvtorder = 0;
-
-#define	FRAME_SIZE 160
-#define	ADPCM_FRAME_SIZE 163
-
-#define	DEFAULT_BUFLEN 480		/* 480ms default buffer len */
-
-#define BUFDELAY(p) (p->buflen - (FRAME_SIZE * 2))
 
 #pragma pack(push)
 #pragma pack(1)
@@ -378,17 +469,7 @@ typedef struct {
 	uint8_t flags;
 	char challenge[VOTER_CHALLENGE_LEN];
 } VOTER_PROXY_HEADER;
-
 #pragma pack(pop)
-
-/*! Defines voter payload types */
-#define VOTER_PAYLOAD_NONE	0
-#define VOTER_PAYLOAD_ULAW	1
-#define	VOTER_PAYLOAD_GPS	2
-#define VOTER_PAYLOAD_ADPCM	3
-#define VOTER_PAYLOAD_NULAW	4
-#define VOTER_PAYLOAD_PING	5
-#define	VOTER_PAYLOAD_PROXY	0xf000
 
 /*!
  * \brief Structure for one of our clients.
@@ -451,6 +532,7 @@ struct voter_client {
 	unsigned int ping_seqno;
 	int pings_total_ms;
 };
+struct voter_client *clients = NULL;
 
 /*!
  * \brief Structure for one of our channels.
@@ -532,27 +614,7 @@ struct voter_pvt {
 	ast_mutex_t txqlock;
 	ast_mutex_t pagerqlock;
 };
-
-static int reload(void);
-
-int hasmaster = 0;
-
-/*! This is just a horrendous KLUDGE!! Some Garmin LVC-18 GPS "pucks"
- sometimes get exactly 1 second off!! Some don't do it at all,
- while others do it constantly. Others do it once in a while. In an attempt
- to be at least somewhat tolerant of this operation, the "puckit"
- configuration flag may be set. We attempt to deal with  this problem by 
- keeping a "time differential" for each client (compared with the "master") 
- and applying it to time information within the protocol.
- Obviously, this SHOULD NEVER HAVE TO BE DONE. 
- */
-int puckit = 0;
-
-static char *config = "voter.conf";			/* default config file */
-
 struct voter_pvt *pvts = NULL;
-
-struct voter_client *clients = NULL;
 
 FILE *fp;
 
@@ -574,8 +636,8 @@ static int voter_setoption(struct ast_channel *chan, int option, void *data, int
 
 /*!
  * \brief Asterisk channel technology struct.
- * This tells Asterisk the functions to call when
- * it needs to interact with our module.
+ *
+ * This tells Asterisk the functions to call when it needs to interact with our module.
  */
 static struct ast_channel_tech voter_tech = {
 	.type = type,
@@ -591,31 +653,6 @@ static struct ast_channel_tech voter_tech = {
 	.send_digit_end = voter_digit_end,
 	.setoption = voter_setoption,
 };
-
-/*
-* CLI extensions
-*/
-
-/* Test */
-static int voter_do_test(int fd, int argc, const char *const *argv);
-
-/* Prio */
-static int voter_do_prio(int fd, int argc, const char *const *argv);
-
-/* Record */
-static int voter_do_record(int fd, int argc, const char *const *argv);
-
-/* Tone */
-static int voter_do_tone(int fd, int argc, const char *const *argv);
-
-/* Display */
-static int voter_do_display(int fd, int argc, const char *const *argv);
-
-/* Txlockout */
-static int voter_do_txlockout(int fd, int argc, const char *const *argv);
-
-/* Ping client */
-static int voter_do_ping(int fd, int argc, const char *const *argv);
 
 /* CRC polynomial 0xedb88320 */
 static uint32_t crc_32_tab[] = {	
@@ -665,7 +702,7 @@ static uint32_t crc_32_tab[] = {
 };
 
 /*!
- * \brief Calculate the crc for two buffers.
+ * \brief Calculate the CRC for two buffers.
  * \param buf			First buffer.
  * \param buf1			Seconds buffer.
  * \return				Computed CRC.
@@ -687,12 +724,14 @@ static int32_t crc32_bufs(char * restrict buf, char * restrict buf1)
 #define GAIN1   1.745882764e+00
 /*!
  * \brief IIR High pass filter.
- * IIR 6 pole High pass filter, 300 Hz corner with 0.5 db ripple
- * \param input		Audio value to filter.
- * \param xv		Delay line.
- * \param yv		Delay line.
- * \return 			Filtered value.
- * \todo	This filter needs more documentation.
+ *
+ * IIR 6 pole High pass filter, 300Hz corner with 0.5db ripple
+ *
+ * \param input			Audio value to filter.
+ * \param xv			Delay line.
+ * \param yv			Delay line.
+ * \return 				Filtered value.
+ * \todo				This filter needs more documentation.
  */
 static int16_t hpass6(int16_t input, float * restrict xv, float * restrict yv)
 {
@@ -720,12 +759,14 @@ static int16_t hpass6(int16_t input, float * restrict xv, float * restrict yv)
 #define GAIN2   1.080715413e+02
 /*!
  * \brief IIR Low pass filter.
- * IIR 6 pole Low pass filter, 1900 Hz corner with 0.5 db ripple
- * \param input		Audio value to filter.
- * \param xv		Delay line.
- * \param yv		Delay line.
- * \return 			Filtered value.
- * \todo	This filter needs more documentation.
+ *
+ * IIR 6 pole Low pass filter, 1900Hz corner with 0.5db ripple
+ *
+ * \param input			Audio value to filter.
+ * \param xv			Delay line.
+ * \param yv			Delay line.
+ * \return 				Filtered value.
+ * \todo				This filter needs more documentation.
  */
 static int16_t lpass4(int16_t input, float * restrict xv, float * restrict yv)
 {
@@ -752,12 +793,14 @@ static int16_t lpass4(int16_t input, float * restrict xv, float * restrict yv)
 
 /*!
  * \brief Deemphasis filter.
+ *
  * Perform standard 6db/octave de-emphasis.
  * FIR integrator at 8000 samples/second.
- * \param input		Audio value to filter.
- * \param state		State variable.
- * \return 			Filtered value.
- * \todo	This filter needs more documentation.
+ *
+ * \param input			Audio value to filter.
+ * \param state			State variable.
+ * \return 				Filtered value.
+ * \todo				This filter needs more documentation.
  */
 static int16_t deemp1(int16_t input, int32_t * restrict state0)
 {
@@ -779,13 +822,13 @@ static int16_t deemp1(int16_t input, int32_t * restrict state0)
  * quote characters are replaced with NUL ('\0') bytes. Text enclosed by QUOTECHR is
  * treated as a single token and the surrounding quote characters are removed.
  *
- * \param str   Pointer to the NUL-terminated string to tokenize; the buffer is modified.
- * \param strp  Array to receive pointers to token start positions and a terminating NULL.
- *              Must have space for at least `limit` pointers.
- * \param limit Maximum number of pointers available in `strp`. The function will stop
- *              scanning when it has filled `limit - 1` token entries and will always
- *              write a terminating NULL at `strp[index]`.
- * \return      The number of tokens placed into `strp` (zero if none).
+ * \param str   		Pointer to the NUL-terminated string to tokenize; the buffer is modified.
+ * \param strp  		Array to receive pointers to token start positions and a terminating NULL.
+ *              		Must have space for at least `limit` pointers.
+ * \param limit 		Maximum number of pointers available in `strp`. The function will stop
+ *              		scanning when it has filled `limit - 1` token entries and will always
+ *              		write a terminating NULL at `strp[index]`.
+ * \return      		The number of tokens placed into `strp` (zero if none).
  */
 static int finddelim(char *str, char *strp[], size_t limit)
 {
@@ -820,9 +863,10 @@ static int finddelim(char *str, char *strp[], size_t limit)
 
 /*!
  * \brief Determine difference in two timevals in milliseconds.
- * \param x		First timeval.
- * \param y		Second timeval.
- * \return      Difference in milliseconds.
+ *
+ * \param x				First timeval.
+ * \param y				Second timeval.
+ * \return      		Difference in milliseconds.
  */
 static unsigned int voter_tvdiff_ms(const struct timeval x, const struct timeval y)
 {
@@ -836,11 +880,13 @@ static unsigned int voter_tvdiff_ms(const struct timeval x, const struct timeval
 }
 
 /*!
- * \brief Determine the puck (GPS) offset time.
- *	Calculates the difference in time between the master GPS 
+ * \brief Determine the Garmin puck (GPS) offset time.
+ *
+ *	Calculates the difference in time between the master GPS
  *	time and the client's last GPS time.
+ *
  * \note This is only used for Garmin LVC-18 when the
- *	puckit configuration value is true.
+ *	puckit configuration value is true in voter.conf.
  * \param client		Pointer to voter_client struct.
  * \return				Time difference in nanoseconds.
  */
@@ -859,7 +905,8 @@ static long long puckoffset(const struct voter_client *client)
 }
 
 /*!
- * \brief Adjust the puck (GPS) time.
+ * \brief Adjust the Garmin puck (GPS) time.
+ *
  * \param client		Pointer to voter_client struct.
  * \param dst			Pointer to VTIME struct.
  */
@@ -875,8 +922,10 @@ static void mkpucked(const struct voter_client *client, VTIME * dst)
 
 /*!
  * \brief Increment the drain index for the specified instance.
+ *
  * Call this routine with voter_locked locked.
- * \param p			Pointer to voter_pvt struct.
+ *
+ * \param p				Pointer to voter_pvt struct.
  */
 static void incr_drainindex(const struct voter_pvt *p)
 {
@@ -903,6 +952,7 @@ static void incr_drainindex(const struct voter_pvt *p)
 
 /*!
  * \brief Voter call.
+ *
  * \param c				Asterisk channel.
  * \param dest			Destination.
  * \param timeout		Timeout.
@@ -924,8 +974,9 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 
 /*!
  * \brief Asterisk hangup function.
- * \param c Asterisk channel.
- * \return  Always returns 0.
+ *
+ * \param c 			Asterisk channel.
+ * \return  			Always returns 0.
  */
 static int voter_hangup(struct ast_channel *ast)
 {
@@ -993,7 +1044,9 @@ static int voter_hangup(struct ast_channel *ast)
 
 /*!
  * \brief Asterisk indicate function.
+ *
  * This is used to indicate tx key / unkey.
+ *
  * \param c				Asterisk channel.
  * \param cond			Condition.
  * \param data			Data.
@@ -1026,9 +1079,10 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 
 /*!
  * \brief Asterisk digit begin function.
+ *
  * \param ast			Asterisk channel.
  * \param digit			Digit processed.
- * \retval 0			
+ * \retval 0
  */
 static int voter_digit_begin(struct ast_channel *ast, char digit)
 {
@@ -1037,10 +1091,11 @@ static int voter_digit_begin(struct ast_channel *ast, char digit)
 
 /*!
  * \brief Asterisk digit end function.
+ *
  * \param ast			Asterisk channel.
  * \param digit			Digit processed.
  * \param duration		Duration of the digit.
- * \retval 0			
+ * \retval 0
  */
 static int voter_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
 {
@@ -1051,6 +1106,7 @@ static int voter_digit_end(struct ast_channel *ast, char digit, unsigned int dur
 
 /*!
  * \brief Asterisk setoption function.
+ *
  * \param chan			Asterisk channel.
  * \param option		Option.
  * \param data			Data.
@@ -1097,7 +1153,8 @@ static int voter_setoption(struct ast_channel *chan, int option, void *data, int
 }
 
 /*!
- * \brief Make paging audio samples.
+ * \brief Make paging audio samples for POCSAG pages.
+ *
  * \param audio			Audio buffer.
  * \param data			Data to encode into audio.
  * \param audio_ptr		Audio buffer pointer.
@@ -1120,7 +1177,8 @@ static void mkpsamples(short* restrict audio, uint32_t x, int* restrict audio_pt
 }
 
 /*!
- * \brief Asterisk text function.
+ * \brief Asterisk text function. Used for processing POCSAG pages.
+ *
  * \param c				Asterisk channel.
  * \param text			Text message to process.
  * \retval 0			If successful.
@@ -1254,6 +1312,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 
 /*!
  * \brief Asterisk read function.
+ *
  * \param ast			Asterisk channel.
  * \retval 				Asterisk frame.
  */
@@ -1268,7 +1327,9 @@ static struct ast_frame *voter_read(struct ast_channel *ast)
 
 /*!
  * \brief Asterisk write function.
+ *
  * This routine handles asterisk to radio frames.
+ *
  * \param ast			Asterisk channel.
  * \param frame			Asterisk frame to process.
  * \retval 0			Successful.
@@ -1326,10 +1387,11 @@ static int voter_write(struct ast_channel *ast, struct ast_frame *frame)
 	return 0;
 }
 /*!
- * \brief Concatenates two asterisk frames.
- * \param f1 Pointer to asterisk frame.
- * \param f2 Pointer to asterisk frame.
- * \return   Concatenated frame, or NULL if there is an error.
+ * \brief Concatenates two Asterisk frames.
+ *
+ * \param f1 			Pointer to Asterisk frame.
+ * \param f2 			Pointer to Asterisk frame.
+ * \return   			Concatenated frame, or NULL if there is an error.
  */
 
 static struct ast_frame *ast_frcat(const struct ast_frame * restrict f1, const struct ast_frame * restrict f2)
@@ -1367,8 +1429,1148 @@ static struct ast_frame *ast_frcat(const struct ast_frame * restrict f1, const s
 }
 
 /*!
+ * \brief Poll the specified fd for input for the specified milliseconds.
+ *
+ * \param fd			File descriptor.
+ * \param ms			Milliseconds to wait.
+ * \return  -1, 1, 0    Needs to be defined.
+ */
+static int rad_rxwait(int fd, int ms)
+{
+	int myms = ms, x;
+
+	x = ast_waitfor_n_fd(&fd, 1, &myms, NULL);
+	if (x == -1) {
+		return -1;
+	}
+	if (x == fd) {
+		return 1;
+	}
+	return 0;
+}
+
+static char *voter_complete_static_client_list(const char *line, const char *word, int pos, int rpos)
+{
+	struct voter_client *client;
+	size_t wordlen = strlen(word);
+
+	if (pos != rpos) {
+		return NULL;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (client = clients; client; client = client->next) {
+		if (!strncmp(client->name, word, wordlen)) {
+			ast_cli_completion_add(ast_strdup(client->name));
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+	return NULL;
+}
+
+/*!
+ * \brief Populate Asterisk CLI completions with names of currently connected, authenticated clients
+ *
+ * Scans the global client list and, for each non-proxy client that has been heard
+ * from and has a valid response digest, adds the client's name as a completion
+ * if it starts with the provided word prefix and the cursor is at the end of the line.
+ *
+ * \param line 			Full input line from the CLI.
+ * \param word 			Current word to complete (prefix to match).
+ * \param pos  			Cursor position in the line.
+ * \param rpos 			Cursor position relative to the completion engine (should equal pos to act).
+ * \return     			NULL
+ */
+static char *voter_complete_connected_client_list(const char *line, const char *word, int pos, int rpos)
+{
+	struct voter_client *client;
+	size_t wordlen = strlen(word);
+
+	if (pos != rpos) {
+		return NULL;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (client = clients; client; client = client->next) {
+		if (IS_CLIENT_PROXY(client)) {
+			continue;
+		}
+		if (!client->heardfrom) {
+			continue;
+		}
+		if (!client->respdigest) {
+			continue;
+		}
+		if (!strncmp(client->name, word, wordlen)) {
+			ast_cli_completion_add(ast_strdup(client->name));
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+	return NULL;
+}
+
+static char *voter_complete_node_list(const char *line, const char *word, int pos, int rpos)
+{
+	struct voter_pvt *p;
+	char node[20];
+
+	size_t wordlen = strlen(word);
+
+	if (pos != rpos) {
+		return NULL;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (p = pvts; p; p = p->next) {
+		snprintf(node, sizeof(node), "%d", p->nodenum);
+		if (!strncmp(node, word, wordlen)) {
+			ast_cli_completion_add(ast_strdup(node));
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+	return NULL;
+}
+
+/*!
+ * \brief Turns integer response to char Asterisk CLI response
+ *
+ * \param r				Response.
+ * \return				CLI success, showusage, or failure.
+ */
+static char *res2cli(int r)
+{
+	switch (r) {
+	case RESULT_SUCCESS:
+		return (CLI_SUCCESS);
+	case RESULT_SHOWUSAGE:
+		return (CLI_SHOWUSAGE);
+	default:
+		return (CLI_FAILURE);
+	}
+}
+
+/*!
+ * \brief Append Success and ActionID to asterisk manager response.
+ *
+ * \param s				Pointer to mansession struct.
+ * \param m				Pointer to message struct.
+ */
+static void rpt_manager_success(struct mansession *s, const struct message *m)
+{
+	const char *id = astman_get_header(m, "ActionID");
+
+	astman_append(s, "Response: Success\r\n");
+
+	if (!ast_strlen_zero(id)) {
+		astman_append(s, "ActionID: %s\r\n", id);
+	}
+}
+
+/*!
+ * \brief Send per-node and per-client VOTER status lines to the given Asterisk manager session.
+ *
+ * When a "Node" header is present in the manager message, only status for the listed node
+ * numbers is included. For each reported node this emits node identifier, last voted client (if any),
+ * and for each client that has been heard from emits client name, flags (Mix, Master, ActiveMaster),
+ * IP/port information (proxied clients are marked), and last RSSI.
+ *
+ * \param ses 			Pointer to the manager session to which status lines will be written.
+ * \param m   			Pointer to the manager message; the optional "Node" header is used to filter output.
+ * \return    			RESULT_SUCCESS to indicate the manager response was sent.
+ */
+static int manager_voter_status(struct mansession *ses, const struct message *m)
+{
+	int i, j, n;
+	struct voter_pvt *p;
+	struct voter_client *client;
+	const char *node = astman_get_header(m, "Node");
+	char *str, *strs[100];
+
+	ast_mutex_lock(&voter_lock);
+	str = NULL;
+	if (node) {
+		str = ast_strdup(node);
+	}
+	n = 0;
+	if (str) {
+		n = finddelim(str, strs, ARRAY_LEN(strs));
+	}
+	for (j = 1; j <= maxpvtorder; j++) {
+		for (p = pvts; p; p = p->next) {
+			if (p->order == j) {
+				break;
+			}
+		}
+		if (!p) {
+			continue;
+		}
+		if (node && *node && str && n) {
+			for (i = 0; i < n; i++) {
+				if (!*strs[i]) {
+					continue;
+				}
+				if (atoi(strs[i]) == p->nodenum) {
+					break;
+				}
+			}
+			if (i >= n) {
+				continue;
+			}
+		}
+		rpt_manager_success(ses, m);
+		astman_append(ses, "Node: %d\r\n", p->nodenum);
+		if (p->lastwon) {
+			astman_append(ses, "Voted: %s\r\n", p->lastwon->name);
+		}
+		for (client = clients; client; client = client->next) {
+			if (client->nodenum != p->nodenum) {
+				continue;
+			}
+			if (!client->heardfrom) {
+				continue;
+			}
+			if (IS_CLIENT_PROXY(client)) {
+				astman_append(ses, "Client: %s", client->name);
+				if (client->mix) {
+					astman_append(ses, " Mix");
+				}
+				if (client->ismaster) {
+					astman_append(ses, " Master");
+				}
+				if (client->curmaster) {
+					astman_append(ses, " ActiveMaster");
+				}
+				astman_append(ses, "\r\n");
+				astman_append(ses, "IP: %s:%d (Proxied)\r\n", ast_inet_ntoa(client->proxy_sin.sin_addr), ntohs(client->proxy_sin.sin_port));
+			} else {
+				if (!client->respdigest) {
+					continue;
+				}
+				astman_append(ses, "Client: %s", client->name);
+				if (client->mix) {
+					astman_append(ses, " Mix");
+				}
+				if (client->ismaster) {
+					astman_append(ses, " Master");
+				}
+				if (client->curmaster) {
+					astman_append(ses, " ActiveMaster");
+				}
+				astman_append(ses, "\r\n");
+				astman_append(ses, "IP: %s:%d\r\n", ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
+			}
+			astman_append(ses, "RSSI: %d\r\n", client->lastrssi);
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+	astman_append(ses, "\r\n"); /* Properly terminate Manager output */
+	if (str) {
+		ast_free(str);
+	}
+	return RESULT_SUCCESS;
+}
+
+/****************************BEGIN ASTERISK CLI FUNCTIONS****************************/
+
+/* VOTER Display */
+static int voter_do_display(int fd, int argc, const char *const *argv);
+
+/* VOTER Ping client */
+static int voter_do_ping(int fd, int argc, const char *const *argv);
+
+/* VOTER Prio */
+static int voter_do_prio(int fd, int argc, const char *const *argv);
+
+/* VOTER Record */
+static int voter_do_record(int fd, int argc, const char *const *argv);
+
+/* VOTER Test */
+static int voter_do_test(int fd, int argc, const char *const *argv);
+
+/* VOTER Tone */
+static int voter_do_tone(int fd, int argc, const char *const *argv);
+
+/* VOTER Txlockout */
+static int voter_do_txlockout(int fd, int argc, const char *const *argv);
+
+/*! \brief I think it's reasonable to assume everyone has a VT100 compatible console these days...
+ *         This must be enabled if the screen should clear automatically for remote consoles too
+ *         (and you probably want that to work!) */
+#define ASSUME_CONSOLES_SUPPORT_CLEAR
+
+#ifndef ASSUME_CONSOLES_SUPPORT_CLEAR
+/*!
+ * \brief Determine if the console supports clear.
+ *
+ * \note This only works if Asterisk is running in foreground console (-c option when starting).
+ * This is because this function is checking the TERM of the process, and if Asterisk forked and
+ * is daemonized, then TERM is not the TERM type of the connecting remote console user.
+ * Yet another reason that trying to check the TERM type is a big no-no and shouldn't be done.
+ * \retval 0			Does not support clear.
+ * \retval 1			Supports clear.
+ */
+static int term_supports_clear(void)
+{
+	char *term;
+
+	term = getenv("TERM");
+	/* XXX We should probably query ncurses/termcap DB to be more complete, instead of checking just common TERM types */
+
+	ast_debug(2, "Terminal type: %s\n", S_OR(term, ""));
+
+	if (term) {
+		if (!strcmp(term, "linux")) {
+			return 1;
+		} else if (!strcmp(term, "xterm")) {
+			return 1;
+		} else if (!strcmp(term, "xterm-color")) {
+			return 1;
+		} else if (!strcmp(term, "xterm-256color")) {
+			return 1;
+		} else if (!strncmp(term, "Eterm", 5)) {
+			/* Both entries which start with Eterm support color */
+			return 1;
+		} else if (!strcmp(term, "vt100")) {
+			return 1;
+		} else if (!strncmp(term, "crt", 3)) {
+			/* Both crt terminals support color */
+			return 1;
+		}
+	}
+	return 0;
+}
+#endif
+
+/*!
+ * \brief Displays a live, updating CLI view of the specified VOTER instance.
+ *
+ * Presents per-client RSSI bars, marks the current winner, lists active clients
+ * with their source addresses, and shows a warning when the master timing
+ * source is unavailable. The display updates periodically and remains active
+ * until the user cancels the console view.
+ *
+ * \param fd  			Asterisk CLI file descriptor used to write the display.
+ * \param p   			Pointer to the voter_pvt instance to display.
+ *
+ * \note This function temporarily suppresses other verbose console output by
+ *       modifying global verbose state and restores it before returning.
+ */
+static void voter_display(int fd, const struct voter_pvt *p)
+{
+	int j, rssi, thresh, ncols = 56, wasverbose, vt100compat;
+	char str[256], c;
+	struct voter_client *client;
+
+#ifdef ASSUME_CONSOLES_SUPPORT_CLEAR
+	vt100compat = 1;
+#else
+	vt100compat = term_supports_clear();
+#endif
+
+	for (j = 0; j < ncols; j++) {
+		str[j] = ' ';
+	}
+	str[j] = 0;
+	ast_cli(fd, " %s \r", str);
+
+	/* Temporarily disable other verbose messages as long as we're running.
+	 * XXX This should probably be done for just *THIS* console, not all of them. */
+	wasverbose = option_verbose;
+	option_verbose = 0;
+
+	for (;;) {
+		/* Repeat every 100ms */
+		if (rad_rxwait(fd, 100)) {
+			break;
+		}
+		if (vt100compat) {
+			ast_cli(fd, "\033[2J\033[H"); /* Clear the screen */
+		}
+		ast_cli(fd, "Voter Instance %d Display:\n\n", p->nodenum);
+		if (hasmaster && (!master_time.vtime_sec)) {
+			ast_cli(fd, "*** WARNING -- LOSS OF MASTER TIMING SOURCE ***\n\n");
+		}
+		for (client = clients; client; client = client->next) {
+			if (client->nodenum != p->nodenum) {
+				continue;
+			}
+			if (p->priconn && !client->mix) {
+				continue;
+			}
+			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
+				continue;
+			}
+			if (!client->heardfrom) {
+				continue;
+			}
+			rssi = client->lastrssi;
+			thresh = (rssi * ncols) / 256;
+			for (j = 0; j < ncols; j++) {
+				if (client->prio_override == -1) {
+					str[j] = 'X';
+				} else if (j < thresh) {
+					str[j] = '=';
+				} else if (j == thresh) {
+					str[j] = '>';
+				} else {
+					str[j] = ' ';
+				}
+			}
+			str[j] = 0;
+			c = ' ';
+			if (p->winner == client) {
+				c = '*';
+			}
+			ast_cli(fd, "%c%10.10s |%s| [%3d]\n", c, client->name, str, rssi);
+		}
+		ast_cli(fd, "\n\n");
+		ast_cli(fd, "Active Clients:\n\n");
+		for (client = clients; client; client = client->next) {
+			if (client->nodenum != p->nodenum) {
+				continue;
+			}
+			if (p->priconn && !client->mix) {
+				continue;
+			}
+			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
+				continue;
+			}
+			if (!client->heardfrom) {
+				continue;
+			}
+			ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
+		}
+		ast_cli(fd, "\n\n");
+	}
+	option_verbose = wasverbose;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI "voter display" request and print the VOTER instance information for a node.
+ *
+ * \param fd   			Asterisk CLI file descriptor.
+ * \param argc 			Number of arguments in argv.
+ * \param argv 			Argument array; argv[2] is expected to contain the node number to display.
+ * \return     			RESULT_SUCCESS if the node was found or when a not-found message was printed,
+ *             			RESULT_SHOWUSAGE if insufficient arguments were provided.
+ */
+static int voter_do_display(int fd, int argc, const char *const *argv)
+{
+	struct voter_pvt *p;
+
+	if (argc < 3) {
+		return RESULT_SHOWUSAGE;
+	}
+	for (p = pvts; p; p = p->next) {
+		if (p->nodenum == atoi(argv[2])) {
+			break;
+		}
+	}
+	if (!p) {
+		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		return RESULT_SUCCESS;
+	}
+	voter_display(fd, p);
+	return RESULT_SUCCESS;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "voter display" usage help.
+ *
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return				CLI success or failure.
+ */
+static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "voter display";
+		e->usage = "Usage: voter display [instance]\n"
+				   "       Display VOTER instance clients\n";
+		return NULL;
+	case CLI_GENERATE:
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
+	}
+	return res2cli(voter_do_display(a->fd, a->argc, a->argv));
+}
+
+/*!
+ * \brief See if the ping request has completed.
+ *
+ * This used in conjunction with the CLI "voter ping" command. It will print the results of the ping test.
+ *
+ * \param client		Pointer to voter_client struct.
+ */
+static void check_ping_done(struct voter_client *client)
+{
+	float p, q;
+
+	if (!client->pings_requested) {
+		return;
+	}
+	if (!client->ping_abort) {
+		if (client->pings_sent < client->pings_requested) {
+			return;
+		}
+		if (voter_tvdiff_ms(ast_tvnow(), (ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) > PING_TIMEOUT_MS) {
+			ast_log(LOG_WARNING, "\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
+		} else {
+			if (client->pings_received < client->pings_requested) {
+				return;
+			}
+		}
+	} else {
+		ast_log(LOG_WARNING, "\nPING (%s): ABORTED!!\n", client->name);
+		client->ping_abort = 0;
+	}
+	if (client->pings_sent) {
+		p = 100.0 * (float) (client->pings_received - client->pings_oos) / (float) client->pings_sent;
+	} else {
+		p = 0.0;
+	}
+	if (client->pings_received) {
+		q = (float) client->pings_total_ms / (float) client->pings_received;
+	} else {
+		q = 0;
+	}
+	ast_verb(1, "\nPING (%s): Packets tx: %d, rx: %d, oos: %d, Avg.: %0.3f ms\n", client->name, client->pings_sent,
+		client->pings_received, client->pings_oos, q);
+	ast_verb(1, "PING (%s): Worst: %d ms, Best: %d ms, %0.1f%% Packets successfully received (%0.1f%% loss)\n", client->name,
+		client->pings_worst, client->pings_best, p, 100.0 - p);
+	client->pings_requested = 0;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI "voter ping" request to start or stop a ping sequence for a named VOTER client.
+ *
+ * \param fd   			Asterisk CLI file descriptor used for command output.
+ * \param argc 			Number of CLI arguments.
+ * \param argv 			CLI argument vector; argv[2] is the client name, argv[3] (optional) is ping count.
+ * \return     			RESULT_SUCCESS on normal handling,
+ *						RESULT_SHOWUSAGE if arguments are insufficient, or
+ *						RESULT_FAILURE on error.
+ */
+static int voter_do_ping(int fd, int argc, const char *const *argv)
+{
+	struct voter_client *client;
+	int npings = 8;
+
+	if (argc < 3) {
+		return RESULT_SHOWUSAGE;
+	}
+
+	for (client = clients; client; client = client->next) {
+		if (IS_CLIENT_PROXY(client)) {
+			continue;
+		}
+		if (!client->heardfrom) {
+			continue;
+		}
+		if (!client->respdigest) {
+			continue;
+		}
+		if (!strcasecmp(client->name, argv[2])) {
+			break;
+		}
+	}
+	if (!client) {
+		ast_cli(fd, "VOTER client %s not found or not connected\n", argv[2]);
+		return RESULT_SUCCESS;
+	}
+	if (argc > 3) {
+		npings = atoi(argv[3]);
+	}
+	if (npings <= 0) {
+		client->ping_abort = 1;
+		return RESULT_SUCCESS;
+	} else if ((client->pings_requested) && (client->pings_sent < client->pings_requested)) {
+		ast_cli(fd, "VOTER client %s already pinging!!\n", argv[2]);
+		return RESULT_SUCCESS;
+	}
+	client->pings_sent = 0;
+	client->pings_received = 0;
+	client->pings_oos = 0;
+	client->pings_total_ms = 0;
+	client->pings_best = 0;
+	client->pings_worst = 0;
+	client->ping_last_seqno = 0;
+	client->ping_seqno = 0;
+	client->ping_abort = 0;
+	client->pings_requested = npings;
+	return RESULT_SUCCESS;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "voter ping" usage help.
+ *
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return				CLI success or failure.
+ */
+static char *handle_cli_ping(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "voter ping";
+		e->usage = "Usage: voter ping [client] <# pings, 0 to abort>\n"
+				   "       Ping (check connectivity) to client\n";
+		return NULL;
+	case CLI_GENERATE:
+		return voter_complete_connected_client_list(a->line, a->word, a->pos, 2);
+	}
+	return res2cli(voter_do_ping(a->fd, a->argc, a->argv));
+}
+
+/*!
+ * \brief Handle the Asterisl CLI "voter prio" request to update or display per-client
+ *        priority settings for a VOTER instance.
+ *
+ * When invoked with just an instance number, prints all clients and their effective/override
+ * priority values for that instance. When given a instance number and a client name (or "all"),
+ * prints that client's priority information. When additionally supplied with a priority
+ * value (or "off"/"disable"), sets the client's priority override to that value (or
+ * disables the override).
+ *
+ * \param fd 			Asterisk CLI file descriptor used for output.
+ * \param argc 			Number of CLI arguments.
+ * \param argv 			CLI arguments; expected forms:
+ *             			- argv[2]: instance number
+ *             			- argv[3] (optional): client name or "all"
+ *             			- argv[4] (optional): priority value or "off"/"disable"
+ * \return     			RESULT_SHOWUSAGE when the argument count or format is incorrect,
+ *             			RESULT_SUCCESS otherwise.
+ */
+static int voter_do_prio(int fd, int argc, const char *const *argv)
+{
+	int newlevel, foundit;
+	struct voter_pvt *p;
+	struct voter_client *client;
+
+	if (argc < 3) {
+		return RESULT_SHOWUSAGE;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (p = pvts; p; p = p->next) {
+		if (p->nodenum == atoi(argv[2])) {
+			break;
+		}
+	}
+	if (!p) {
+		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc == 3) {
+		ast_cli(fd, "VOTER instance %d priority values:\n\n", p->nodenum);
+		for (client = clients; client; client = client->next) {
+			if (client->nodenum != p->nodenum) {
+				continue;
+			}
+			if (client->prio_override > -2) {
+				ast_cli(fd, "Client %s: eff_prio: %d, prio: %d, override_prio: %d\n", client->name, client->prio_override,
+					client->prio, client->prio_override);
+			} else {
+				ast_cli(fd, "Client %s: prio: %d (not overridden)\n", client->name, client->prio);
+			}
+		}
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc == 4) {
+		foundit = 0;
+		for (client = clients; client; client = client->next) {
+			if (client->nodenum != p->nodenum) {
+				continue;
+			}
+			if (strcasecmp(argv[3], "all") && strcasecmp(argv[3], client->name)) {
+				continue;
+			}
+			foundit = 1;
+			if (client->prio_override > -2) {
+				ast_cli(fd, "VOTER instance %d, client %s: eff_prio: %d, prio: %d, override_prio: %d\n", p->nodenum, client->name,
+					client->prio_override, client->prio, client->prio_override);
+			} else {
+				ast_cli(fd, "VOTER instance %d, client %s: prio: %d (not overridden)\n", p->nodenum, client->name, client->prio);
+			}
+		}
+		if (!foundit) {
+			ast_cli(fd, "VOTER client %s not found\n", argv[3]);
+		}
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc != 5) {
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SHOWUSAGE;
+	}
+	foundit = 0;
+	for (client = clients; client; client = client->next) {
+		if (client->nodenum != p->nodenum) {
+			continue;
+		}
+		if (strcasecmp(argv[3], "all") && strcasecmp(argv[3], client->name)) {
+			continue;
+		}
+		if (!strcasecmp(argv[4], "off") || !strncasecmp(argv[4], "dis", 3)) {
+			newlevel = -2;
+		} else {
+			if (sscanf(argv[4], N_FMT(d), &newlevel) < 1) {
+				ast_cli(fd, "Error: Invalid priority value specification!!\n");
+				ast_mutex_unlock(&voter_lock);
+				return RESULT_SUCCESS;
+			}
+		}
+		if (newlevel < -2) {
+			ast_cli(fd, "Error: Invalid priority value specification!!\n");
+			ast_mutex_unlock(&voter_lock);
+			return RESULT_SUCCESS;
+		}
+		if (newlevel > -2) {
+			if (client->prio_override > -2) {
+				ast_cli(fd, "VOTER instance %d client %s prio (override): previous level: %d, new level: %d\n", p->nodenum,
+					client->name, client->prio_override, newlevel);
+			} else {
+				ast_cli(fd, "VOTER instance %d client %s prio (override): previous level: <disabled>, new level: %d\n",
+					p->nodenum, client->name, newlevel);
+			}
+		} else {
+			ast_cli(fd, "VOTER instance %d client %s prio (override) disabled\n", p->nodenum, client->name);
+		}
+
+		client->prio_override = newlevel;
+		foundit = 1;
+	}
+	ast_mutex_unlock(&voter_lock);
+	if (!foundit) {
+		ast_cli(fd, "VOTER client %s not found\n", argv[3]);
+	}
+	return RESULT_SUCCESS;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "voter prio" usage help.
+ *
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return				CLI success or failure.
+ */
+static char *handle_cli_prio(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "voter prio";
+		e->usage = "Usage: voter prio instance_id [client_id] [priority value]\n"
+				   "       Specifies/Queries priority value for VOTER client\n";
+
+		return NULL;
+	case CLI_GENERATE:
+		if (a->pos == 2) {
+			return voter_complete_node_list(a->line, a->word, a->pos, 2);
+		} else if (a->pos == 3) {
+			return voter_complete_static_client_list(a->line, a->word, a->pos, 3);
+		}
+		return NULL;
+	}
+	return res2cli(voter_do_prio(a->fd, a->argc, a->argv));
+}
+
+/*!
+ * \brief Handle the Asterisk CLI "voter record" request to enable/disable recording.
+ *
+ * \param fd			Asterisk CLI fd
+ * \param argc			Number of arguments
+ * \param argv			Arguments
+ * \return				CLI success, showusage, or failure.
+ */
+static int voter_do_record(int fd, int argc, const char *const *argv)
+{
+	struct voter_pvt *p;
+
+	if (argc < 3) {
+		return RESULT_SHOWUSAGE;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (p = pvts; p; p = p->next) {
+		if (p->nodenum == atoi(argv[2])) {
+			break;
+		}
+	}
+	if (!p) {
+		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc == 3) {
+		if (p->recfp) {
+			fclose(p->recfp);
+		}
+		p->recfp = NULL;
+		ast_cli(fd, "VOTER instance %s recording disabled\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc != 4) {
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SHOWUSAGE;
+	}
+	p->recfp = fopen(argv[3], "w");
+	if (!p->recfp) {
+		ast_cli(fd, "VOTER instance %s Record: Could not open file %s\n", argv[2], argv[3]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	ast_cli(fd, "VOTER instance %s Record: Recording enabled info file %s\n", argv[2], argv[3]);
+	ast_mutex_unlock(&voter_lock);
+	return RESULT_SUCCESS;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "voter record" usage help.
+ *
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return				CLI success or failure.
+ */
+static char *handle_cli_record(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "voter record";
+		e->usage = "Usage: voter record instance_id [record filename]\n"
+				   "       Enables/Specifies (or disables) recording file for VOTER instance\n";
+
+		return NULL;
+	case CLI_GENERATE:
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
+	}
+	return res2cli(voter_do_record(a->fd, a->argc, a->argv));
+}
+
+/*!
+ * \brief Handle the Asterisk CLI "voter test" request to enable/disable client test mode.
+ *
+ * Voter Channel test modes:
+ *
+ * 0 - Normal voting operation
+ * 1 - Randomly pick which client of all that are receiving at the max RSSI value to use.
+ * >1 - Cycle thru all the clients that are receiving at the max RSSI value with a cycle
+ *      time of (test mode - 1) frames. In other words, if you set it to 2, it will change
+ *      every single time. If you set it to 11, it will change every 10 times. This is
+ *	    serious torture test.
+ *
+ * \param fd			Asterisk CLI fd
+ * \param argc			Number of arguments
+ * \param argv			Arguments
+ * \return	CLI success, showusage, or failure.
+ */
+static int voter_do_test(int fd, int argc, const char *const *argv)
+{
+	int newlevel;
+	struct voter_pvt *p;
+
+	if (argc < 3) {
+		return RESULT_SHOWUSAGE;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (p = pvts; p; p = p->next) {
+		if (p->nodenum == atoi(argv[2])) {
+			break;
+		}
+	}
+	if (!p) {
+		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc == 3) {
+		if (p->voter_test) {
+			ast_cli(fd, "VOTER instance %d Test: currently set to %d\n", p->nodenum, p->voter_test);
+		} else {
+			ast_cli(fd, "VOTER instance %d Test: currently disabled\n", p->nodenum);
+		}
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc != 4) {
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SHOWUSAGE;
+	}
+	newlevel = atoi(argv[3]);
+	if (newlevel < 0) {
+		ast_cli(fd, "Error: Invalid test mode value specification!!\n");
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (newlevel) {
+		ast_cli(fd, "VOTER instance %d Test: previous level: %d, new level: %d\n", p->nodenum, p->voter_test, newlevel);
+	} else {
+		ast_cli(fd, "VOTER instance %d Test: disabled\n", p->nodenum);
+	}
+
+	p->voter_test = newlevel;
+	ast_mutex_unlock(&voter_lock);
+	return RESULT_SUCCESS;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "voter test" usage help.
+ *
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return				CLI success or failure.
+ */
+static char *handle_cli_test(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "voter test";
+		e->usage = "Usage: voter test instance_id [test value]\n"
+				   "       Specifies/Queries test mode for VOTER instance\n";
+		return NULL;
+	case CLI_GENERATE:
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
+	}
+	return res2cli(voter_do_test(a->fd, a->argc, a->argv));
+}
+
+/*!
+ * \brief Handle the Asterisk CLI "voter tone" request to display or set the ctcss level.
+ *
+ * \param fd			Asterisk CLI fd
+ * \param argc			Number of arguments
+ * \param argv			Arguments
+ * \return				CLI success, showusage, or failure.
+ */
+static int voter_do_tone(int fd, int argc, const char *const *argv)
+{
+	int newlevel;
+	struct voter_pvt *p;
+
+	if (argc < 3) {
+		return RESULT_SHOWUSAGE;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (p = pvts; p; p = p->next) {
+		if (p->nodenum == atoi(argv[2])) {
+			break;
+		}
+	}
+	if (!p) {
+		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (!p->pmrChan) {
+		ast_cli(fd, "VOTER instance %s does not have CTCSS enabled\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc == 3) {
+		ast_cli(fd, "VOTER instance %d CTCSS tone level is %d\n", p->nodenum, p->txctcsslevel);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (!strcasecmp(argv[3], "default")) {
+		newlevel = p->txctcsslevelset;
+	} else {
+		newlevel = atoi(argv[3]);
+		if ((newlevel < 0) || (newlevel > 250)) {
+			ast_mutex_unlock(&voter_lock);
+			return RESULT_SHOWUSAGE;
+		}
+	}
+	ast_cli(fd, "VOTER instance %d CTCSS tone level set to %d\n", p->nodenum, newlevel);
+	p->txctcsslevel = newlevel;
+	*p->pmrChan->ptxCtcssAdjust = newlevel;
+	ast_mutex_unlock(&voter_lock);
+	return RESULT_SUCCESS;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "voter tone" usage help.
+ *
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return				CLI success or failure.
+ */
+static char *handle_cli_tone(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "voter tone";
+		e->usage = "Usage: voter tone instance_id [new_tone_level(0-250)]\n"
+				   "       Sets/Queries TX CTCSS level for specified VOTER instance\n";
+
+		return NULL;
+	case CLI_GENERATE:
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
+	}
+	return res2cli(voter_do_tone(a->fd, a->argc, a->argv));
+}
+
+/*!
+ * \brief Handle the Asterisk CLI "voter txlockout" request to set or display per-client
+ *        transmit lockout state for a specified VOTER instance.
+ *
+ * The command accepts an instance number and an optional lockout specification:
+ * - "all" to enable tx lockout for every client in the instance,
+ * - "none" to clear lockout for every client in the instance,
+ * - or a comma-separated list of client names, optionally prefixed with '-' to
+ *   disable or '+' (or no sign) to enable lockout for each named client.
+ *
+ * \param fd   			Asterisk CLI file descriptor to write output to.
+ * \param argc 			Number of command arguments.
+ * \param argv 			Argument vector; argv[2] is the node number and argv[3] (optional)
+ *             			is the lockout specification as described above.
+ * \return     			`RESULT_SHOWUSAGE` if arguments are insufficient, `RESULT_SUCCESS`
+ *             			on successful processing, or `RESULT_FAILURE` on error.
+ */
+static int voter_do_txlockout(int fd, int argc, const char *const *argv)
+{
+	int i, n, newval;
+	char str[300], *strs[100];
+	struct voter_pvt *p;
+	struct voter_client *client;
+
+	if (argc < 3) {
+		return RESULT_SHOWUSAGE;
+	}
+	for (p = pvts; p; p = p->next) {
+		if (p->nodenum == atoi(argv[2])) {
+			break;
+		}
+	}
+	if (!p) {
+		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		return RESULT_SUCCESS;
+	}
+	if (argc > 3) { /* specify list of lockouts */
+		if (!strcasecmp(argv[3], "all")) {
+			for (client = clients; client; client = client->next) {
+				if (client->nodenum != p->nodenum) {
+					continue;
+				}
+				client->txlockout = 1;
+			}
+		} else if (!strcasecmp(argv[3], "none")) {
+			for (client = clients; client; client = client->next) {
+				if (client->nodenum != p->nodenum) {
+					continue;
+				}
+				client->txlockout = 0;
+			}
+		} else { /* must be a comma-delimited list */
+			ast_copy_string(str, argv[3], sizeof(str) - 1);
+			n = finddelim((char *) argv[3], strs, ARRAY_LEN(strs));
+			for (i = 0; i < n; i++) {
+				if (!*strs[i]) {
+					continue;
+				}
+				newval = 1;
+				if (*strs[i] == '-') {
+					strs[i]++;
+					newval = 0;
+				} else if (*strs[i] == '+') {
+					strs[i]++;
+				}
+				for (client = clients; client; client = client->next) {
+					if (client->nodenum != p->nodenum) {
+						continue;
+					}
+					if (strcasecmp(strs[i], client->name)) {
+						continue;
+					}
+					ast_cli(fd, "Client %s TX lockout %s\n", strs[i], (newval) ? "Enabled" : "Disabled");
+					client->txlockout = newval;
+					break;
+				}
+				if (!client) {
+					ast_cli(fd, "Client %s not found!!\n", strs[i]);
+				}
+			}
+		}
+	}
+	ast_cli(fd, "\nFull list of TX locked out clients for VOTER instance %s:\n", argv[2]);
+	for (n = 0, client = clients; client; client = client->next) {
+		if (client->nodenum != p->nodenum) {
+			continue;
+		}
+		if (client->txlockout) {
+			ast_cli(fd, "Client %s TX is locked out\n", client->name);
+			n++;
+		}
+	}
+	if (!n) {
+		ast_cli(fd, "No clients are currently locked out\n");
+	}
+	ast_cli(fd, "\nFull list of normally transmitting clients for VOTER instance %s:\n", argv[2]);
+	for (n = 0, client = clients; client; client = client->next) {
+		if (client->nodenum != p->nodenum) {
+			continue;
+		}
+		if (!client->txlockout) {
+			ast_cli(fd, "Client %s is able to transmit\n", client->name);
+			n++;
+		}
+	}
+	if (!n) {
+		ast_cli(fd, "No clients are currently able to transmit\n");
+	}
+	ast_cli(fd, "\n");
+	return RESULT_SUCCESS;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "voter txlockout" usage help.
+ *
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return				CLI success or failure.
+ */
+static char *handle_cli_txlockout(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "voter txlockout";
+		e->usage = "Usage: voter txlockout [instance] <client_list>\n"
+				   "       Set TX lockout for VOTER instance clients\n";
+		return NULL;
+	case CLI_GENERATE:
+		if (a->pos == 2) {
+			return voter_complete_node_list(a->line, a->word, a->pos, 2);
+		} else if (a->pos == 3) {
+			return voter_complete_static_client_list(a->line, a->word, a->pos, 3);
+		}
+		return NULL;
+	}
+	return res2cli(voter_do_txlockout(a->fd, a->argc, a->argv));
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "core show help voter"
+ */
+static struct ast_cli_entry voter_cli[] = {
+	AST_CLI_DEFINE(handle_cli_test, "Specify/Query VOTER instance test mode"),
+	AST_CLI_DEFINE(handle_cli_prio, "Specify/Query VOTER client priority value"),
+	AST_CLI_DEFINE(handle_cli_record, "Enable/Specify (or disable) VOTER recording file"),
+	AST_CLI_DEFINE(handle_cli_tone, "Sets/Queries TX CTCSS level for specified VOTER instance"),
+	AST_CLI_DEFINE(handle_cli_display, "Displays VOTER instance clients"),
+	AST_CLI_DEFINE(handle_cli_txlockout, "Set TX lockout for VOTER instance clients"),
+	AST_CLI_DEFINE(handle_cli_ping, "VOTER client ping"),
+};
+
+/****************************END OF ASTERISK CLI FUNCTIONS****************************/
+
+/*!
  * \brief Mix and send audio packet.
+ *
  * This routine must be called with voter_locked locked.
+ *
  * \param p				Pointer to voter_pvt struct.
  * \param maxclient		Pointer to voter_client struct.
  * \param maxrssi		Maximum RSSI value.
@@ -1511,7 +2713,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	if (p->priconn) {
 		maxclient = NULL;
 	}
-	if (!maxclient) {			/* if nothing there */
+	if (!maxclient) { /* if nothing there */
 		/* XXX p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
 		 * For now, this prevents a crash from queuing a frame to a NULL channel. */
 		if (!p->owner) {
@@ -1617,8 +2819,9 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
  * processes incoming primary responses to establish/maintain a primary session,
  * and updates per-client proxy state when the primary connection is lost.
  *
- * \param data Pointer to the per-node state struct (struct voter_pvt *).
- * \return     NULL when the thread exits.
+ * \note This is only used for redundant server applications
+ * \param data 			Pointer to the per-node state struct (struct voter_pvt *).
+ * \return     			NULL when the thread exits.
  */
 static void *voter_primary_client(void *data)
 {
@@ -1648,8 +2851,8 @@ static void *voter_primary_client(void *data)
 	}
 	resp_digest = 0;
 	digest = 0;
-	lasttx = (struct timeval) {0};
-	lastrx = (struct timeval) {0};
+	lasttx = (struct timeval) { 0 };
+	lastrx = (struct timeval) { 0 };
 	ast_mutex_lock(&voter_lock);
 	p->primary_challenge[0] = 0;
 	while (run_forever && !ast_shutting_down() && !p->kill_primary_thread) {
@@ -1683,8 +2886,7 @@ static void *voter_primary_client(void *data)
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
 			ast_debug(5, "VOTER %i: Sent primary client GPS Keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
-			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary,
-				sizeof(p->primary));
+			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
 		}
 		if (p->priconn && (ast_tvzero(lastrx) || (voter_tvdiff_ms(tv, lastrx) >= 2000))) {
@@ -1710,7 +2912,7 @@ static void *voter_primary_client(void *data)
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(pri_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 
-			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) {	/* if set got something worthwhile */
+			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* if set got something worthwhile */
 				vph = (VOTER_PACKET_HEADER *) buf;
 				ast_debug(3, "VOTER %i: Got primary client X packet, len %d payload %d challenge %s digest %08x\n", p->nodenum,
 					(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
@@ -1744,52 +2946,7 @@ static void *voter_primary_client(void *data)
 }
 
 /*!
- * \brief See if the ping request has completed.
- * \param client		Pointer to voter_client struct.
- */
-static void check_ping_done(struct voter_client *client)
-{
-	float p, q;
-
-	if (!client->pings_requested) {
-		return;
-	}
-	if (!client->ping_abort) {
-		if (client->pings_sent < client->pings_requested) {
-			return;
-		}
-		if (voter_tvdiff_ms(ast_tvnow(),
-							(ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) >
-			PING_TIMEOUT_MS) {
-			ast_log(LOG_WARNING, "\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
-		} else {
-			if (client->pings_received < client->pings_requested) {
-				return;
-			}
-		}
-	} else {
-		ast_log(LOG_WARNING, "\nPING (%s): ABORTED!!\n", client->name);
-		client->ping_abort = 0;
-	}
-	if (client->pings_sent) {
-		p = 100.0 * (float) (client->pings_received - client->pings_oos) / (float) client->pings_sent;
-	} else {
-		p = 0.0;
-	}
-	if (client->pings_received) {
-		q = (float) client->pings_total_ms / (float) client->pings_received;
-	} else {
-		q = 0;
-	}
-	ast_verb(1, "\nPING (%s): Packets tx: %d, rx: %d, oos: %d, Avg.: %0.3f ms\n", client->name, client->pings_sent,
-		client->pings_received, client->pings_oos, q);
-	ast_verb(1, "PING (%s):  Worst: %d ms, Best: %d ms, %0.1f%% Packets successfully received (%0.1f%% loss)\n", client->name,
-		client->pings_worst, client->pings_best, p, 100.0 - p);
-	client->pings_requested = 0;
-}
-
-/*!
- * \brief Manage and dispatch transmit activity for a single Voter node instance.
+ * \brief Manage and dispatch transmit activity for a single VOTER instance.
  *
  * Runs the per-node transmit worker: consumes queued Asterisk frames and pager frames,
  * integrates PMR channel input, performs optional mix-minus and format conversions,
@@ -1799,7 +2956,6 @@ static void check_ping_done(struct voter_client *client)
  */
 static void *voter_xmit(void *data)
 {
-
 	struct voter_pvt *p = (struct voter_pvt *) data;
 	int i, n, x, mx;
 	i16 dummybuf1[FRAME_SIZE * 12], xmtbuf1[FRAME_SIZE * 12];
@@ -1856,7 +3012,7 @@ static void *voter_xmit(void *data)
 			}
 		}
 		f1 = NULL;
-		// x will be set here is there was actual transmit activity
+		// x will be set here if there was actual transmit activity
 		if (!x && p->pmrChan) {
 			p->pmrChan->txPttIn = 0;
 		}
@@ -1963,7 +3119,7 @@ static void *voter_xmit(void *data)
 			if (f1) {
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 			}
-#ifdef	DMWDIAG
+#ifdef DMWDIAG
 			for (i = 0; i < FRAME_SIZE; i++) {
 				audiopacket.audio[i] = ulaw_digital_milliwatt[mwp++];
 				if (mwp > 7)
@@ -2233,8 +3389,8 @@ static void *voter_xmit(void *data)
 						} else {
 							ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
 								client->respdigest);
-							sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0,
-								(struct sockaddr *) &client->sin, sizeof(client->sin));
+							sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
+								sizeof(client->sin));
 						}
 						gettimeofday(&client->lastsenttime, NULL);
 					}
@@ -2340,7 +3496,7 @@ static void *voter_xmit(void *data)
 }
 
 /*!
- * \brief Create and initialize a Voter channel instance for the requested node from Asterisk.
+ * \brief Create and initialize a VOTER channel instance for the requested node from Asterisk.
  *
  * Allocates and initializes per-node private state, translators, DSP, channel
  * formats, and loads node configuration from voter.conf. The function registers
@@ -2355,9 +3511,8 @@ static void *voter_xmit(void *data)
  * \param cause        Pointer to integer to receive a failure cause code on error.
  * \return             Pointer to the newly allocated ast_channel on success, `NULL` on failure.
  */
-static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap,
-										 const struct ast_assigned_ids *assignedids,
-										 const struct ast_channel *requestor, const char *data, int *cause)
+static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *data, int *cause)
 {
 	int i, j;
 	struct voter_pvt *p, *p1;
@@ -2367,8 +3522,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 
 	if (!ast_format_cap_iscompatible(cap, voter_tech.capabilities)) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n",
-				ast_format_cap_get_names(cap, &cap_buf));
+		ast_log(LOG_NOTICE, "Channel requested with unsupported format(s): '%s'\n", ast_format_cap_get_names(cap, &cap_buf));
 		return NULL;
 	}
 	p = ast_calloc(1, sizeof(struct voter_pvt));
@@ -2438,8 +3592,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	tmp = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s",
-						  (char *) data);
+	tmp = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s", (char *) data);
 	if (!tmp) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot alloc new Asterisk channel\n", p->nodenum);
 		ast_free(p);
@@ -2457,7 +3610,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	ast_channel_set_rawreadformat(tmp, ast_format_slin);
 	ast_channel_set_readformat(tmp, ast_format_slin);
 	ast_channel_nativeformats_set(tmp, voter_tech.capabilities);
-//  if (state == AST_STATE_RING) tmp->rings = 1;
+	//  if (state == AST_STATE_RING) tmp->rings = 1;
 	ast_channel_tech_pvt_set(tmp, p);
 	ast_channel_unlock(tmp);
 	ast_channel_language_set(tmp, "");
@@ -2565,7 +3718,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 							p->linger_thresh[i] = (uint16_t) atoi(cp2 + 1);
 						}
 					}
-					if (cp1[1]){
+					if (cp1[1]) {
 						p->count_thresh[i] = (uint16_t) atoi(cp1 + 1);
 					}
 				}
@@ -2595,7 +3748,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			destroyPmrChannel(p->pmrChan);
 		}
 		p->pmrChan = createPmrChannel(&tChan, FRAME_SIZE);
-		p->pmrChan->radioDuplex = 1;	//o->radioduplex;
+		p->pmrChan->radioDuplex = 1; // o->radioduplex;
 		p->pmrChan->b.loopback = 0;
 		p->pmrChan->b.radioactive = 1;
 		p->pmrChan->txrxblankingtime = 0;
@@ -2610,7 +3763,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		*p->pmrChan->ptxCtcssAdjust = p->txctcsslevel;
 		p->pmrChan->pTxCodeDefault = p->txctcssfreq;
 		p->pmrChan->pTxCodeSrc = p->txctcssfreq;
-
 	}
 	i = 0;
 	ctg = NULL;
@@ -2644,1053 +3796,502 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 }
 
 /*!
- * \brief Process Asterisk CLI request to enable/disable client test mode.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
- */
-static int voter_do_test(int fd, int argc, const char *const *argv)
-{
-	int newlevel;
-	struct voter_pvt *p;
-
-	if (argc < 3) {
-		return RESULT_SHOWUSAGE;
-	}
-	ast_mutex_lock(&voter_lock);
-	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
-			break;
-		}
-	}
-	if (!p) {
-		ast_cli(fd, "Voter instance %s not found\n", argv[2]);
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc == 3) {
-		if (p->voter_test) {
-			ast_cli(fd, "Voter instance %d Test: currently set to %d\n", p->nodenum, p->voter_test);
-		} else {
-			ast_cli(fd, "Voter instance %d Test: currently disabled\n", p->nodenum);
-		}
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc != 4) {
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SHOWUSAGE;
-	}
-	newlevel = atoi(argv[3]);
-	if (newlevel < 0) {
-		ast_cli(fd, "Error: Invalid test mode value specification!!\n");
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (newlevel) {
-		ast_cli(fd, "Voter instance %d Test: previous level: %d, new level: %d\n", p->nodenum, p->voter_test, newlevel);
-	} else {
-		ast_cli(fd, "Voter instance %d Test disabled\n", p->nodenum);
-	}
-
-	p->voter_test = newlevel;
-	ast_mutex_unlock(&voter_lock);
-	return RESULT_SUCCESS;
-}
-
-/*!
- * \brief Update or display per-client priority settings for a Voter node from the Asterisk CLI.
+ * \brief Reload VOTER driver configuration from disk and apply changes.
  *
- * When invoked with just a node number, prints all clients and their effective/override
- * priority values for that node. When given a node number and a client name (or "all"),
- * prints that client's priority information. When additionally supplied with a priority
- * value (or "off"/"disable"), sets the client's priority override to that value (or
- * disables the override).
+ * Parses the configured voter.conf, updates per-instance (pvts) and per-client
+ * state, reallocates audio and RSSI buffers as needed, creates or tears down
+ * per-instance PMR channels for CTCSS changes, and ensures client digests are
+ * unique and valid. The global voter_lock is held while modifying shared state.
  *
- * \param fd Asterisk CLI file descriptor used for output.
- * \param argc Number of CLI arguments.
- * \param argv CLI arguments; expected forms:
- *             - argv[2]: node number
- *             - argv[3] (optional): client name or "all"
- *             - argv[4] (optional): priority value or "off"/"disable"
- * \return     RESULT_SHOWUSAGE when the argument count or format is incorrect,
- *             RESULT_SUCCESS otherwise.
+ * \retval  			0 Success — configuration loaded and applied.
+ * \retval 				-1 Failure — configuration load or allocation error;
+ *						existing state is left unchanged where possible.
  */
-static int voter_do_prio(int fd, int argc, const char *const *argv)
+static int reload(void)
 {
-	int newlevel, foundit;
+	struct ast_flags zeroflag = { 0 };
+	int i, n, instance_buflen, buflen, oldtoctype, oldlevel;
+	char *val, *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
 	struct voter_pvt *p;
-	struct voter_client *client;
+	struct voter_client *client, *client1;
+	struct ast_config *cfg = NULL;
+	struct ast_variable *v;
 
-	if (argc < 3) {
-		return RESULT_SHOWUSAGE;
-	}
 	ast_mutex_lock(&voter_lock);
-	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
-			break;
-		}
-	}
-	if (!p) {
-		ast_cli(fd, "Voter instance %s not found\n", argv[2]);
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc == 3) {
-		ast_cli(fd, "Voter instance %d priority values:\n\n", p->nodenum);
-		for (client = clients; client; client = client->next) {
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			if (client->prio_override > -2) {
-				ast_cli(fd, "Client %s: eff_prio: %d, prio: %d, override_prio: %d\n",
-						client->name, client->prio_override, client->prio, client->prio_override);
-			} else {
-				ast_cli(fd, "Client %s: prio: %d (not overridden)\n", client->name, client->prio);
-			}
-		}
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc == 4) {
-		foundit = 0;
-		for (client = clients; client; client = client->next) {
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			if (strcasecmp(argv[3], "all") && strcasecmp(argv[3], client->name)) {
-				continue;
-			}
-			foundit = 1;
-			if (client->prio_override > -2) {
-				ast_cli(fd, "Voter instance %d, client %s: eff_prio: %d, prio: %d, override_prio: %d\n",
-						p->nodenum, client->name, client->prio_override, client->prio, client->prio_override);
-			} else {
-				ast_cli(fd, "Voter instance %d, client %s: prio: %d (not overridden)\n",
-						p->nodenum, client->name, client->prio);
-			}
-		}
-		if (!foundit) {
-			ast_cli(fd, "Voter client %s not found\n", argv[3]);
-		}
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc != 5) {
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SHOWUSAGE;
-	}
-	foundit = 0;
 	for (client = clients; client; client = client->next) {
-		if (client->nodenum != p->nodenum) {
-			continue;
-		}
-		if (strcasecmp(argv[3], "all") && strcasecmp(argv[3], client->name)) {
-			continue;
-		}
-		if (!strcasecmp(argv[4], "off") || !strncasecmp(argv[4], "dis", 3)) {
-			newlevel = -2;
-		} else {
-			if (sscanf(argv[4], N_FMT(d), &newlevel) < 1) {
-				ast_cli(fd, "Error: Invalid priority value specification!!\n");
-				ast_mutex_unlock(&voter_lock);
-				return RESULT_SUCCESS;
-			}
-		}
-		if (newlevel < -2) {
-			ast_cli(fd, "Error: Invalid priority value specification!!\n");
-			ast_mutex_unlock(&voter_lock);
-			return RESULT_SUCCESS;
-		}
-		if (newlevel > -2) {
-			if (client->prio_override > -2) {
-				ast_cli(fd, "Voter instance %d client %s prio (override): previous level: %d, new level: %d\n",
-						p->nodenum, client->name, client->prio_override, newlevel);
-			} else {
-				ast_cli(fd, "Voter instance %d client %s prio (override): previous level: <disabled>, new level: %d\n",
-						p->nodenum, client->name, newlevel);
-			}
-		} else {
-			ast_cli(fd, "Voter instance %d client %s prio (override) disabled\n", p->nodenum, client->name);
-		}
+		client->reload = 0;
+		client->old_buflen = client->buflen;
+	}
 
-		client->prio_override = newlevel;
-		foundit = 1;
-	}
-	ast_mutex_unlock(&voter_lock);
-	if (!foundit) {
-		ast_cli(fd, "Voter client %s not found\n", argv[3]);
-	}
-	return RESULT_SUCCESS;
-}
-
-/*!
- * \brief Process Asterisk CLI request to enable/disable recording.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
- */
-static int voter_do_record(int fd, int argc, const char *const *argv)
-{
-	struct voter_pvt *p;
-
-	if (argc < 3) {
-		return RESULT_SHOWUSAGE;
-	}
-	ast_mutex_lock(&voter_lock);
-	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
-			break;
-		}
-	}
-	if (!p) {
-		ast_cli(fd, "Voter instance %s not found\n", argv[2]);
+	if (!(cfg = ast_config_load(config, zeroflag))) {
+		ast_log(LOG_ERROR, "Unable to reload config %s\n", config);
 		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc == 3) {
-		if (p->recfp) {
-			fclose(p->recfp);
-		}
-		p->recfp = NULL;
-		ast_cli(fd, "Voter instance %s recording disabled\n", argv[2]);
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc != 4) {
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SHOWUSAGE;
-	}
-	p->recfp = fopen(argv[3], "w");
-	if (!p->recfp) {
-		ast_cli(fd, "Voter instance %s Record: Could not open file %s\n", argv[2], argv[3]);
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	ast_cli(fd, "Voter instance %s Record: Recording enabled info file %s\n", argv[2], argv[3]);
-	ast_mutex_unlock(&voter_lock);
-	return RESULT_SUCCESS;
-}
-
-/*!
- * \brief Process Asterisk CLI request to display or set the ctcss level.
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
- */
-static int voter_do_tone(int fd, int argc, const char *const *argv)
-{
-	int newlevel;
-	struct voter_pvt *p;
-
-	if (argc < 3) {
-		return RESULT_SHOWUSAGE;
-	}
-	ast_mutex_lock(&voter_lock);
-	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
-			break;
-		}
-	}
-	if (!p) {
-		ast_cli(fd, "Voter instance %s not found\n", argv[2]);
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (!p->pmrChan) {
-		ast_cli(fd, "Voter instance %s does not have CTCSS enabled\n", argv[2]);
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc == 3) {
-		ast_cli(fd, "Voter instance %d CTCSS tone level is %d\n", p->nodenum, p->txctcsslevel);
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (!strcasecmp(argv[3], "default")) {
-		newlevel = p->txctcsslevelset;
-	} else {
-		newlevel = atoi(argv[3]);
-		if ((newlevel < 0) || (newlevel > 250)) {
-			ast_mutex_unlock(&voter_lock);
-			return RESULT_SHOWUSAGE;
-		}
-	}
-	ast_cli(fd, "Voter instance %d CTCSS tone level set to %d\n", p->nodenum, newlevel);
-	p->txctcsslevel = newlevel;
-	*p->pmrChan->ptxCtcssAdjust = newlevel;
-	ast_mutex_unlock(&voter_lock);
-	return RESULT_SUCCESS;
-}
-
-/*!
- * \brief Poll the specified fd for input for the specified milliseconds.
- * \param fd			File descriptor.
- * \param ms			Milliseconds to wait.
- * \return  -1, 1, 0    Needs to be defined.
- */
-static int rad_rxwait(int fd, int ms)
-{
-	int myms = ms, x;
-
-	x = ast_waitfor_n_fd(&fd, 1, &myms, NULL);
-	if (x == -1) {
 		return -1;
 	}
-	if (x == fd) {
-		return 1;
+
+	val = (char *) ast_variable_retrieve(cfg, "general", "password");
+	if (val) {
+		ast_copy_string(password, val, sizeof(password) - 1);
+	} else {
+		password[0] = 0;
 	}
-	return 0;
-}
 
-/*! \brief I think it's reasonable to assume everyone has a VT100 compatible console these days...
- * This must be enabled if the screen should clear automatically for remote consoles too
- * (and you probably want that to work!) */
-#define ASSUME_CONSOLES_SUPPORT_CLEAR
-
-#ifndef ASSUME_CONSOLES_SUPPORT_CLEAR
-/*!
- * \brief Determine if the console supports clear.
- * \note This only works if Asterisk is running in foreground console (-c option when starting).
- * This is because this function is checking the TERM of the process, and if Asterisk forked and
- * is daemonized, then TERM is not the TERM type of the connecting remote console user.
- * Yet another reason that trying to check the TERM type is a big no-no and shouldn't be done. 
- * \retval 0	Does not support clear.
- * \retval 1	Supports clear.
- */
-
-static int term_supports_clear(void)
-{
-	char *term;
-
-	term = getenv("TERM");
-	/* XXX We should probably query ncurses/termcap DB to be more complete, instead of checking just common TERM types */
-
-	ast_debug(2, "Terminal type: %s\n", S_OR(term, ""));
-
-	if (term) {
-		if (!strcmp(term, "linux")) {
-			return 1;
-		} else if (!strcmp(term, "xterm")) {
-			return 1;
-		} else if (!strcmp(term, "xterm-color")) {
-			return 1;
-		} else if (!strcmp(term, "xterm-256color")) {
-			return 1;
-		} else if (!strncmp(term, "Eterm", 5)) {
-			/* Both entries which start with Eterm support color */
-			return 1;
-		} else if (!strcmp(term, "vt100")) {
-			return 1;
-		} else if (!strncmp(term, "crt", 3)) {
-			/* Both crt terminals support color */
-			return 1;
-		}
+	val = (char *) ast_variable_retrieve(cfg, "general", "context");
+	if (val) {
+		ast_copy_string(context, val, sizeof(context) - 1);
+	} else {
+		context[0] = 0;
 	}
-	return 0;
-}
-#endif
 
-/*!
- * \brief Display a live, updating CLI view of the specified voter instance.
- *
- * Presents per-client RSSI bars, marks the current winner, lists active clients
- * with their source addresses, and shows a warning when the master timing
- * source is unavailable. The display updates periodically and remains active
- * until the user cancels the console view.
- *
- * \param fd  Asterisk CLI file descriptor used to write the display.
- * \param p   Pointer to the voter_pvt instance to display.
- *
- * \note This function temporarily suppresses other verbose console output by
- *       modifying global verbose state and restores it before returning.
- */
-static void voter_display(int fd, const struct voter_pvt *p)
-{
-	int j, rssi, thresh, ncols = 56, wasverbose, vt100compat;
-	char str[256], c;
-	struct voter_client *client;
-
-#ifdef ASSUME_CONSOLES_SUPPORT_CLEAR
-	vt100compat = 1;
-#else
-	vt100compat = term_supports_clear();
-#endif
-
-	for (j = 0; j < ncols; j++) {
-		str[j] = ' ';
+	val = (char *) ast_variable_retrieve(cfg, "general", "buflen");
+	if (val) {
+		buflen = strtoul(val, NULL, 0) * 8;
+	} else {
+		buflen = DEFAULT_BUFLEN * 8;
 	}
-	str[j] = 0;
-	ast_cli(fd, " %s \r", str);
 
-	/* Temporarily disable other verbose messages as long as we're running.
-	 * XXX This should probably be done for just *THIS* console, not all of them. */
-	wasverbose = option_verbose;
-	option_verbose = 0;
-
-	for (;;) {
-		/* Repeat every 100ms */
-		if (rad_rxwait(fd, 100)) {
-			break;
-		}
-		if (vt100compat) {
-			ast_cli(fd, "\033[2J\033[H"); /* Clear the screen */
-		}
-		ast_cli(fd, "Voter Instance %d Display:\n\n", p->nodenum);
-		if (hasmaster && (!master_time.vtime_sec)) {
-			ast_cli(fd, "*** WARNING -- LOSS OF MASTER TIMING SOURCE ***\n\n");
-		}
-		for (client = clients; client; client = client->next) {
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			if (p->priconn && !client->mix) {
-				continue;
-			}
-			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
-				continue;
-			}
-			if (!client->heardfrom) {
-				continue;
-			}
-			rssi = client->lastrssi;
-			thresh = (rssi * ncols) / 256;
-			for (j = 0; j < ncols; j++) {
-				if (client->prio_override == -1) {
-					str[j] = 'X';
-				} else if (j < thresh) {
-					str[j] = '=';
-				} else if (j == thresh) {
-					str[j] = '>';
-				} else {
-					str[j] = ' ';
-				}
-			}
-			str[j] = 0;
-			c = ' ';
-			if (p->winner == client) {
-				c = '*';
-			}
-			ast_cli(fd, "%c%10.10s |%s| [%3d]\n", c, client->name, str, rssi);
-		}
-		ast_cli(fd, "\n\n");
-		ast_cli(fd, "Active Clients:\n\n");
-		for (client = clients; client; client = client->next) {
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			if (p->priconn && !client->mix) {
-				continue;
-			}
-			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
-				continue;
-			}
-			if (!client->heardfrom) {
-				continue;
-			}
-			ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
-		}
-		ast_cli(fd, "\n\n");
+	val = (char *) ast_variable_retrieve(cfg, "general", "sanity");
+	if (val) {
+		check_client_sanity = ast_true(val);
+	} else {
+		check_client_sanity = 1;
 	}
-	option_verbose = wasverbose;
-}
 
-/*!
- * \brief Handle the CLI "voter display" request and print the voter instance information for a node.
- *
- * \param fd   Asterisk CLI file descriptor.
- * \param argc Number of arguments in argv.
- * \param argv Argument array; argv[2] is expected to contain the node number to display.
- * \return     RESULT_SUCCESS if the node was found or when a not-found message was printed,
- *             RESULT_SHOWUSAGE if insufficient arguments were provided.
- */
-static int voter_do_display(int fd, int argc, const char *const *argv)
-{
-	struct voter_pvt *p;
-
-	if (argc < 3) {
-		return RESULT_SHOWUSAGE;
+	val = (char *) ast_variable_retrieve(cfg, "general", "puckit");
+	if (val) {
+		puckit = ast_true(val);
+	} else {
+		puckit = 0;
 	}
+
+	if (buflen < (FRAME_SIZE * 2)) {
+		buflen = FRAME_SIZE * 2;
+	}
+
 	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
-			break;
+		oldctcss[0] = 0;
+		strcpy(oldctcss, p->txctcssfreq);
+		sprintf(data, "%d", p->nodenum);
+		if (ast_variable_browse(cfg, data) == NULL) {
+			continue;
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "linger");
+		if (val) {
+			p->linger = atoi(val);
+		} else {
+			p->linger = DEFAULT_LINGER;
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "plfilter");
+		if (val) {
+			p->plfilter = ast_true(val);
+		} else {
+			p->plfilter = 0;
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "hostdeemp");
+		if (val) {
+			p->hostdeemp = ast_true(val);
+		} else {
+			p->hostdeemp = 0;
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "duplex");
+		if (val) {
+			p->duplex = ast_true(val);
+		} else {
+			p->duplex = 1;
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
+		if (val) {
+			p->mixminus = ast_true(val);
+		} else {
+			p->mixminus = 0;
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "streams");
+		if (p->nstreams && p->streams[0]) {
+			ast_free(p->streams[0]);
+		}
+		p->nstreams = 0;
+		if (val) {
+			cp = ast_strdup(val);
+			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcss");
+		if (val) {
+			ast_copy_string(p->txctcssfreq, val, sizeof(p->txctcssfreq));
+		} else {
+			p->txctcssfreq[0] = 0;
+		}
+		oldlevel = p->txctcsslevel;
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
+		if (val) {
+			p->txctcsslevel = atoi(val);
+		} else {
+			p->txctcsslevel = 62;
+		}
+		p->txctcsslevelset = p->txctcsslevel;
+		oldtoctype = p->txtoctype;
+		p->txtoctype = TOC_NONE;
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txtoctype");
+		if (val) {
+			if (!strcasecmp(val, "phase")) {
+				p->txtoctype = TOC_PHASE;
+			} else if (!strcasecmp(val, "notone")) {
+				p->txtoctype = TOC_NOTONE;
+			}
+		}
+		p->nthresholds = 0;
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "thresholds");
+		if (val) {
+			cp = ast_strdup(val);
+			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			for (i = 0; i < p->nthresholds; i++) {
+				cp1 = strchr(strs[i], '=');
+				p->linger_thresh[i] = p->linger;
+				if (cp1) {
+					*cp1 = 0;
+					cp2 = strchr(cp1 + 1, ':');
+					if (cp2) {
+						*cp2 = 0;
+						if (cp2[1]) {
+							p->linger_thresh[i] = (uint16_t) atoi(cp2 + 1);
+						}
+					}
+					if (cp1[1]) {
+						p->count_thresh[i] = (uint16_t) atoi(cp1 + 1);
+					}
+				}
+				p->rssi_thresh[i] = (uint8_t) atoi(strs[i]);
+			}
+			ast_free(cp);
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "gtxgain");
+		if (!val) {
+			val = DEFAULT_GTXGAIN;
+		}
+		p->gtxgain = pow(10.0, atof(val) / 20.0);
+		/* if new CTCSS freq */
+		if (strcmp(oldctcss, p->txctcssfreq) || (oldtoctype != p->txtoctype) || (oldlevel != p->txctcsslevel)) {
+			t_pmr_chan tChan;
+
+			if (p->pmrChan) {
+				destroyPmrChannel(p->pmrChan);
+			}
+			p->pmrChan = 0;
+			if (p->txctcssfreq[0]) {
+				memset(&tChan, 0, sizeof(t_pmr_chan));
+
+				tChan.pTxCodeDefault = p->txctcssfreq;
+				tChan.pTxCodeSrc = p->txctcssfreq;
+				tChan.pRxCodeSrc = p->txctcssfreq;
+				tChan.txMod = 2;
+				tChan.txMixA = TX_OUT_COMPOSITE;
+				tChan.b.txboost = 1;
+				p->pmrChan = createPmrChannel(&tChan, FRAME_SIZE);
+				p->pmrChan->radioDuplex = 1; // o->radioduplex;
+				p->pmrChan->b.loopback = 0;
+				p->pmrChan->b.radioactive = 1;
+				p->pmrChan->txrxblankingtime = 0;
+				p->pmrChan->rxCpuSaver = 0;
+				p->pmrChan->txCpuSaver = 0;
+				*(p->pmrChan->prxSquelchAdjust) = 0;
+				*(p->pmrChan->prxVoiceAdjust) = 0;
+				*(p->pmrChan->prxCtcssAdjust) = 0;
+				p->pmrChan->rxCtcss->relax = 0;
+				p->pmrChan->txTocType = p->txtoctype;
+				p->pmrChan->spsTxOutA->outputGain = 250;
+				*p->pmrChan->ptxCtcssAdjust = p->txctcsslevel;
+				p->pmrChan->pTxCodeDefault = p->txctcssfreq;
+				p->pmrChan->pTxCodeSrc = p->txctcssfreq;
+			}
 		}
 	}
-	if (!p) {
-		ast_cli(fd, "Voter instance %s not found\n", argv[2]);
-		return RESULT_SUCCESS;
-	}
-	voter_display(fd, p);
-	return RESULT_SUCCESS;
-}
-
-/*!
- * \brief Handle the CLI "txlockout" command to set or display per-client transmit lockout
- * state for a specified voter instance.
- *
- * The command accepts a node number and an optional lockout specification:
- * - "all" to enable tx lockout for every client on the node,
- * - "none" to clear lockout for every client on the node,
- * - or a comma-separated list of client names, optionally prefixed with '-' to
- *   disable or '+' (or no sign) to enable lockout for each named client.
- *
- * \param fd   Asterisk CLI file descriptor to write output to.
- * \param argc Number of command arguments.
- * \param argv Argument vector; argv[2] is the node number and argv[3] (optional)
- *             is the lockout specification as described above.
- * \return     `RESULT_SHOWUSAGE` if arguments are insufficient, `RESULT_SUCCESS`
- *             on successful processing, or `RESULT_FAILURE` on error.
- */
-static int voter_do_txlockout(int fd, int argc, const char *const *argv)
-{
-	int i, n, newval;
-	char str[300], *strs[100];
-	struct voter_pvt *p;
-	struct voter_client *client;
-
-	if (argc < 3) {
-		return RESULT_SHOWUSAGE;
-	}
-	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
-			break;
+	hasmaster = 0;
+	ctg = NULL;
+	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
+		if (ctg == NULL) {
+			continue;
 		}
-	}
-	if (!p) {
-		ast_cli(fd, "Voter instance %s not found\n", argv[2]);
-		return RESULT_SUCCESS;
-	}
-	if (argc > 3) {				/* specify list of lockouts */
-		if (!strcasecmp(argv[3], "all")) {
-			for (client = clients; client; client = client->next) {
-				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				client->txlockout = 1;
+		if (!strcmp(ctg, "general")) {
+			continue;
+		}
+		val = (char *) ast_variable_retrieve(cfg, ctg, "buflen");
+		if (val) {
+			instance_buflen = strtoul(val, NULL, 0) * 8;
+		} else {
+			instance_buflen = buflen;
+		}
+		if (instance_buflen < (FRAME_SIZE * 2)) {
+			instance_buflen = FRAME_SIZE * 2;
+		}
+		for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
+			if (!strcmp(v->name, "txctcsslevel")) {
+				continue;
 			}
-		} else if (!strcasecmp(argv[3], "none")) {
-			for (client = clients; client; client = client->next) {
-				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				client->txlockout = 0;
+			if (!strcmp(v->name, "txctcss")) {
+				continue;
 			}
-		} else {				/* must be a comma-delimited list */
-			ast_copy_string(str, argv[3], sizeof(str) - 1);
-			n = finddelim((char *) argv[3], strs, ARRAY_LEN(strs));
-			for (i = 0; i < n; i++) {
-				if (!*strs[i]) {
-					continue;
-				}
-				newval = 1;
-				if (*strs[i] == '-') {
-					strs[i]++;
-					newval = 0;
-				} else if (*strs[i] == '+') {
-					strs[i]++;
-				}
-				for (client = clients; client; client = client->next) {
-					if (client->nodenum != p->nodenum) {
-						continue;
+			if (!strcmp(v->name, "txtoctype")) {
+				continue;
+			}
+			if (!strcmp(v->name, "streams")) {
+				continue;
+			}
+			if (!strcmp(v->name, "thresholds")) {
+				continue;
+			}
+			if (!strcmp(v->name, "plfilter")) {
+				continue;
+			}
+			if (!strcmp(v->name, "gtxgain")) {
+				continue;
+			}
+			if (!strcmp(v->name, "hostdeemp")) {
+				continue;
+			}
+			if (!strcmp(v->name, "duplex")) {
+				continue;
+			}
+			if (!strcmp(v->name, "mixminus")) {
+				continue;
+			}
+			if (!strcmp(v->name, "linger")) {
+				continue;
+			}
+			if (!strcmp(v->name, "primary")) {
+				continue;
+			}
+			if (!strcmp(v->name, "isprimary")) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "transmit", 8)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "master", 6)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "adpcm", 5)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "nulaw", 5)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "gpsid", 5)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "buflen", 6)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "nodeemp", 7)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "hostdeemp", 9)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "noplfilter", 10)) {
+				continue;
+			}
+			if (!strncasecmp(v->name, "prio", 4)) {
+				continue;
+			}
+			cp = ast_strdup(v->value);
+			if (!cp) {
+				close(udp_socket);
+				ast_config_destroy(cfg);
+				ast_mutex_unlock(&voter_lock);
+				return -1;
+			}
+			n = finddelim(cp, strs, ARRAY_LEN(strs));
+			if (n < 1) {
+				continue;
+			}
+			/* see if we "know" this client already */
+			for (client = clients; client; client = client->next) {
+				/* if this is the one whose digest matches one currently being looked at */
+				if (client->digest == crc32_bufs(challenge, strs[0])) {
+					/* if has moved to another instance, free this one, and treat as new */
+					if (client->nodenum != strtoul(ctg, NULL, 0)) {
+						client->reload = 0;
+						client = NULL;
 					}
-					if (strcasecmp(strs[i], client->name)) {
-						continue;
-					}
-					ast_cli(fd, "Client %s tx lockout %s\n", strs[i], (newval) ? "Enabled" : "Disabled");
-					client->txlockout = newval;
 					break;
 				}
+			}
+			newclient = 0;
+			/* if a new one, alloc its space */
+			if (!client) {
+				client = ast_calloc(1, sizeof(struct voter_client));
 				if (!client) {
-					ast_cli(fd, "Client %s not found!!\n", strs[i]);
+					ast_free(cp);
+					close(udp_socket);
+					ast_config_destroy(cfg);
+					ast_mutex_unlock(&voter_lock);
+					return -1;
+				}
+				client->prio_override = -2;
+				ast_copy_string(client->name, v->name, VOTER_NAME_LEN - 1);
+				newclient = 1;
+			}
+			client->reload = 1;
+			client->buflen = instance_buflen;
+			client->nodenum = strtoul(ctg, NULL, 0);
+			client->totransmit = 0;
+			client->doadpcm = 0;
+			client->donulaw = 0;
+			client->nodeemp = 0;
+			client->mix = 0;
+			client->noplfilter = 0;
+			client->prio = 0;
+			client->gpsid = 0;
+			for (i = 1; i < n; i++) {
+				if (!strcasecmp(strs[i], "transmit")) {
+					client->totransmit = 1;
+				} else if (!strcasecmp(strs[i], "master")) {
+					client->ismaster = 1;
+					hasmaster = 1;
+				} else if (!strcasecmp(strs[i], "adpcm")) {
+					client->doadpcm = 1;
+				} else if (!strcasecmp(strs[i], "nulaw")) {
+					client->donulaw = 1;
+				} else if (!strcasecmp(strs[i], "nodeemp")) {
+					client->nodeemp = 1;
+				} else if (!strcasecmp(strs[i], "noplfilter")) {
+					client->noplfilter = 1;
+				} else if (!strncasecmp(strs[i], "gpsid", 5)) {
+					cp1 = strchr(strs[i], '=');
+					if (!cp1) {
+						client->gpsid = ast_strdup("");
+					} else {
+						client->gpsid = ast_strdup(cp1);
+						*client->gpsid = '_';
+					}
+				} else if (!strncasecmp(strs[i], "prio", 4)) {
+					cp1 = strchr(strs[i], '=');
+					if (cp1) {
+						client->prio = strtoul(cp1 + 1, NULL, 0);
+						if (client->prio < -1) {
+							client->prio = 0;
+						}
+					}
+				}
+			}
+			client->buflen -= client->buflen % (FRAME_SIZE * 2);
+			client->digest = crc32_bufs(challenge, strs[0]);
+			ast_copy_string(client->pswd, strs[0], sizeof(client->pswd) - 1);
+			ast_free(cp);
+			if (client->old_buflen && (client->buflen != client->old_buflen)) {
+				client->drainindex = 0;
+			}
+			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
+				client->audio = ast_realloc(client->audio, client->buflen);
+				if (!client->audio) {
+					close(udp_socket);
+					ast_config_destroy(cfg);
+					ast_mutex_unlock(&voter_lock);
+					return -1;
+				}
+				memset(client->audio, 0xff, client->buflen);
+			} else if (!client->audio) {
+				client->audio = ast_malloc(client->buflen);
+				if (!client->audio) {
+					close(udp_socket);
+					ast_config_destroy(cfg);
+					ast_mutex_unlock(&voter_lock);
+					return -1;
+				}
+				memset(client->audio, 0xff, client->buflen);
+			}
+			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
+				client->rssi = ast_realloc(client->rssi, client->buflen);
+				if (!client->rssi) {
+					close(udp_socket);
+					ast_config_destroy(cfg);
+					ast_mutex_unlock(&voter_lock);
+					return -1;
+				}
+				memset(client->rssi, 0, client->buflen);
+			} else if (!client->rssi) {
+				client->rssi = ast_calloc(1, client->buflen);
+				if (!client->rssi) {
+					close(udp_socket);
+					ast_config_destroy(cfg);
+					ast_mutex_unlock(&voter_lock);
+					return -1;
+				}
+			}
+			/* if a new client, add it into list */
+			if (newclient) {
+				if (clients == NULL) {
+					clients = client;
+				} else {
+					for (client1 = clients; client1->next; client1 = client1->next)
+						;
+					client1->next = client;
 				}
 			}
 		}
 	}
-	ast_cli(fd, "\nFull list of Tx Locked-out clients for voter instance %s:\n", argv[2]);
-	for (n = 0, client = clients; client; client = client->next) {
-		if (client->nodenum != p->nodenum) {
-			continue;
-		}
-		if (client->txlockout) {
-			ast_cli(fd, "Client %s tx is locked-out\n", client->name);
-			n++;
-		}
-	}
-	if (!n) {
-		ast_cli(fd, "No clients are currently locked-out\n");
-	}
-	ast_cli(fd, "\nFull list of normally transmitting clients for voter instance %s:\n", argv[2]);
-	for (n = 0, client = clients; client; client = client->next) {
-		if (client->nodenum != p->nodenum) {
-			continue;
-		}
-		if (!client->txlockout) {
-			ast_cli(fd, "Client %s is able to transmit\n", client->name);
-			n++;
-		}
-	}
-	if (!n) {
-		ast_cli(fd, "No clients are currently able to transmit\n");
-	}
-	ast_cli(fd, "\n");
-	return RESULT_SUCCESS;
-}
-
-/*!
- * \brief Start or stop a ping sequence for a named Voter client from the Asterisk CLI.
- *
- * \param fd   Asterisk CLI file descriptor used for command output.
- * \param argc Number of CLI arguments.
- * \param argv CLI argument vector; argv[2] is the client name, argv[3] (optional) is ping count.
- * \return     RESULT_SUCCESS on normal handling, RESULT_SHOWUSAGE if arguments are insufficient, or RESULT_FAILURE on error.
- */
-static int voter_do_ping(int fd, int argc, const char *const *argv)
-{
-	struct voter_client *client;
-	int npings = 8;
-
-	if (argc < 3) {
-		return RESULT_SHOWUSAGE;
-	}
-
+	ast_config_destroy(cfg);
 	for (client = clients; client; client = client->next) {
-		if (IS_CLIENT_PROXY(client)) {
+		if (!client->reload) {
 			continue;
 		}
-		if (!client->heardfrom) {
-			continue;
+		if (client->digest == 0) {
+			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
+				client->name);
+			ast_mutex_unlock(&voter_lock);
+			return -1;
 		}
-		if (!client->respdigest) {
-			continue;
+		for (client1 = clients; client1; client1 = client1->next) {
+			if (!client1->reload) {
+				continue;
+			}
+			if (client == client1) {
+				continue;
+			}
+			if (client->digest == client1->digest) {
+				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
+					client->name, client1->name);
+				ast_mutex_unlock(&voter_lock);
+				return -1;
+			}
 		}
-		if (!strcasecmp(client->name, argv[2])) {
-			break;
-		}
 	}
-	if (!client) {
-		ast_cli(fd, "Voter client %s not found or not connected\n", argv[2]);
-		return RESULT_SUCCESS;
-	}
-	if (argc > 3) {
-		npings = atoi(argv[3]);
-	}
-	if (npings <= 0) {
-		client->ping_abort = 1;
-		return RESULT_SUCCESS;
-	} else if ((client->pings_requested) && (client->pings_sent < client->pings_requested)) {
-		ast_cli(fd, "Voter client %s already pinging!!\n", argv[2]);
-		return RESULT_SUCCESS;
-	}
-	client->pings_sent = 0;
-	client->pings_received = 0;
-	client->pings_oos = 0;
-	client->pings_total_ms = 0;
-	client->pings_best = 0;
-	client->pings_worst = 0;
-	client->ping_last_seqno = 0;
-	client->ping_seqno = 0;
-	client->ping_abort = 0;
-	client->pings_requested = npings;
-	return RESULT_SUCCESS;
-}
-static char *voter_complete_static_client_list(const char *line, const char *word, int pos, int rpos)
-{
-	struct voter_client *client;
-	size_t wordlen = strlen(word);
-
-	if (pos != rpos) {
-		return NULL;
-	}
-	ast_mutex_lock(&voter_lock);
+	/* remove all the clients that are no longer in the config */
 	for (client = clients; client; client = client->next) {
-		if (!strncmp(client->name, word, wordlen)) {
-			ast_cli_completion_add(ast_strdup(client->name));
-		}
-	}
-	ast_mutex_unlock(&voter_lock);
-	return NULL;
-}
-
-/*!
- * \brief Populate CLI completions with names of currently connected, authenticated clients
- *
- * Scans the global client list and, for each non-proxy client that has been heard
- * from and has a valid response digest, adds the client's name as a completion
- * if it starts with the provided word prefix and the cursor is at the end of the line.
- *
- * \param line Full input line from the CLI.
- * \param word Current word to complete (prefix to match).
- * \param pos  Cursor position in the line.
- * \param rpos Cursor position relative to the completion engine (should equal pos to act).
- * \return     NULL
- */
-static char *voter_complete_connected_client_list(const char *line, const char *word, int pos, int rpos)
-{
-	struct voter_client *client;
-	size_t wordlen = strlen(word);
-
-	if (pos != rpos) {
-		return NULL;
-	}
-	ast_mutex_lock(&voter_lock);
-	for (client = clients; client; client = client->next) {
-		if (IS_CLIENT_PROXY(client)) {
+		if (client->reload) {
 			continue;
 		}
-		if (!client->heardfrom) {
-			continue;
+		if (client->audio) {
+			ast_free(client->audio);
 		}
-		if (!client->respdigest) {
-			continue;
+		if (client->rssi) {
+			ast_free(client->rssi);
 		}
-		if (!strncmp(client->name, word, wordlen)) {
-			ast_cli_completion_add(ast_strdup(client->name));
+		if (client->gpsid) {
+			ast_free(client->gpsid);
 		}
-	}
-	ast_mutex_unlock(&voter_lock);
-	return NULL;
-}
-
-static char *voter_complete_node_list(const char *line, const char *word, int pos, int rpos)
-{
-	struct voter_pvt *p;
-	char node[20];
-
-	size_t wordlen = strlen(word);
-
-	if (pos != rpos) {
-		return NULL;
-	}
-	ast_mutex_lock(&voter_lock);
-	for (p = pvts; p; p = p->next) {
-		snprintf(node, sizeof(node), "%d", p->nodenum);
-		if (!strncmp(node, word, wordlen)) {
-			ast_cli_completion_add(ast_strdup(node));
-		}
-	}
-	ast_mutex_unlock(&voter_lock);
-	return NULL;
-}
-
-/*!
- * \brief Turns integer response to char CLI response
- * \param r				Response.
- * \return	CLI success, showusage, or failure.
- */
-static char *res2cli(int r)
-{
-	switch (r) {
-	case RESULT_SUCCESS:
-		return (CLI_SUCCESS);
-	case RESULT_SHOWUSAGE:
-		return (CLI_SHOWUSAGE);
-	default:
-		return (CLI_FAILURE);
-	}
-}
-
-/*!
- * \brief Handle Asterisk CLI request to report/set client test mode.
- * \param e				Asterisk CLI entry.
- * \param cmd			CLI command type.
- * \param a				Asterisk CLI arguments.
- * \return	CLI success or failure.
- */
-static char *handle_cli_test(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter test";
-		e->usage = "Usage: voter test instance_id [test value]\n" 
-				   "       Specifies/Queries test mode for voter instance\n";
-		return NULL;
-	case CLI_GENERATE:
-		return voter_complete_node_list(a->line, a->word, a->pos, 2);
-	}
-	return res2cli(voter_do_test(a->fd, a->argc, a->argv));
-}
-
-/*!
- * \brief Handle Asterisk CLI request to set client priority.
- * \param e				Asterisk CLI entry.
- * \param cmd			CLI command type.
- * \param a				Asterisk CLI arguments.
- * \return	CLI success or failure.
- */
-static char *handle_cli_prio(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter prio";
-		e->usage = 	"Usage: voter prio instance_id [client_id] [priority value]\n"
-					"       Specifies/Queries priority value for voter client\n";
-
-		return NULL;
-	case CLI_GENERATE:
-		if (a->pos == 2) {
-			return voter_complete_node_list(a->line, a->word, a->pos, 2);
-		} else if (a->pos == 3) {
-			return voter_complete_static_client_list(a->line, a->word, a->pos, 3);
-		}
-		return NULL;
-	}
-	return res2cli(voter_do_prio(a->fd, a->argc, a->argv));
-}
-
-/*!
- * \brief Handle Asterisk CLI request to enable/disable recording.
- * \param e				Asterisk CLI entry.
- * \param cmd			CLI command type.
- * \param a				Asterisk CLI arguments.
- * \return	CLI success or failure.
- */
-static char *handle_cli_record(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter record";
-		e->usage = 	"Usage: voter record instance_id [record filename]\n"
-					"       Enables/Specifies (or disables) recording file for chan_voter\n";
-
-		return NULL;
-	case CLI_GENERATE:
-		return voter_complete_node_list(a->line, a->word, a->pos, 2);
-	}
-	return res2cli(voter_do_record(a->fd, a->argc, a->argv));
-}
-
-/*!
- * \brief Handle Asterisk CLI request report or set ctcss level.
- * \param e				Asterisk CLI entry.
- * \param cmd			CLI command type.
- * \param a				Asterisk CLI arguments.
- * \return	CLI success or failure.
- */
-static char *handle_cli_tone(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter tone";
-		e->usage = 	"Usage: voter tone instance_id [new_tone_level(0-250)]\n"
-					"       Sets/Queries Tx CTCSS level for specified chan_voter instance\n";
-
-		return NULL;
-	case CLI_GENERATE:
-		return voter_complete_node_list(a->line, a->word, a->pos, 2);
-	}
-	return res2cli(voter_do_tone(a->fd, a->argc, a->argv));
-}
-
-/*!
- * \brief Handle Asterisk CLI request to display voter information.
- * \param e				Asterisk CLI entry.
- * \param cmd			CLI command type.
- * \param a				Asterisk CLI arguments.
- * \return	CLI success or failure.
- */
-static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter display";
-		e->usage = "Usage: voter display [instance]\n" 
-				   "       Display voter instance clients\n";
-		return NULL;
-	case CLI_GENERATE:
-		return voter_complete_node_list(a->line, a->word, a->pos, 2);
-	}
-	return res2cli(voter_do_display(a->fd, a->argc, a->argv));
-}
-
-/*!
- * \brief Handle Asterisk CLI request for tx lockout.
- * \param e				Asterisk CLI entry.
- * \param cmd			CLI command type.
- * \param a				Asterisk CLI arguments.
- * \return	CLI success or failure.
- */
-static char *handle_cli_txlockout(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter txlockout";
-		e->usage = 	"Usage: voter txlockout [instance] <client_list>\n" 
-					"       Set Tx Lockout for voter instance clients\n";
-		return NULL;
-	case CLI_GENERATE:
-		if (a->pos == 2) {
-			return voter_complete_node_list(a->line, a->word, a->pos, 2);
-		} else if (a->pos == 3) {
-			return voter_complete_static_client_list(a->line, a->word, a->pos, 3);
-		}
-		return NULL;
-	}
-	return res2cli(voter_do_txlockout(a->fd, a->argc, a->argv));
-}
-
-/*!
- * \brief Handle Asterisk CLI request to ping client.
- * \param e				Asterisk CLI entry.
- * \param cmd			CLI command type.
- * \param a				Asterisk CLI arguments.
- * \return	CLI success or failure.
- */
-static char *handle_cli_ping(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter ping";
-		e->usage = 	"Usage: voter ping [client] <# pings, 0 to abort>\n" 
-					"       Ping (check connectivity) to client\n";
-		return NULL;
-	case CLI_GENERATE:
-		return voter_complete_connected_client_list(a->line, a->word, a->pos, 2);
-	}
-	return res2cli(voter_do_ping(a->fd, a->argc, a->argv));
-}
-
-static struct ast_cli_entry voter_cli[] = {
-	AST_CLI_DEFINE(handle_cli_test, "Specify/Query voter instance test mode"),
-	AST_CLI_DEFINE(handle_cli_prio, "Specify/Query voter client priority value"),
-	AST_CLI_DEFINE(handle_cli_record, "Enable/Specify (or disable) voter recording file"),
-	AST_CLI_DEFINE(handle_cli_tone, "Sets/Queries Tx CTCSS level for specified chan_voter instance"),
-	AST_CLI_DEFINE(handle_cli_display, "Displays voter (instance) clients"),
-	AST_CLI_DEFINE(handle_cli_txlockout, "Set Tx Lockout for voter (instance) clients"),
-	AST_CLI_DEFINE(handle_cli_ping, "Client ping"),
-};
-
-/*!
- * \brief Append Success and ActionID to asterisk manager response.
- * \param s					Pointer to mansession struct.
- * \param m					Pointer to message struct.
- */
-static void rpt_manager_success(struct mansession *s, const struct message *m)
-{
-	const char *id = astman_get_header(m, "ActionID");
-
-	astman_append(s, "Response: Success\r\n");
-
-	if (!ast_strlen_zero(id)) {
-		astman_append(s, "ActionID: %s\r\n", id);
-	}
-}
-
-/*!
- * \brief Send per-node and per-client voter status lines to the given Asterisk manager session.
- *
- * When a "Node" header is present in the manager message, only status for the listed node
- * numbers is included. For each reported node this emits node identifier, last voted client (if any),
- * and for each client that has been heard from emits client name, flags (Mix, Master, ActiveMaster),
- * IP/port information (proxied clients are marked), and last RSSI.
- *
- * \param ses Pointer to the manager session to which status lines will be written.
- * \param m   Pointer to the manager message; the optional "Node" header is used to filter output.
- * \return    RESULT_SUCCESS to indicate the manager response was sent.
- */
-static int manager_voter_status(struct mansession *ses, const struct message *m)
-{
-	int i, j, n;
-	struct voter_pvt *p;
-	struct voter_client *client;
-	const char *node = astman_get_header(m, "Node");
-	char *str, *strs[100];
-
-	ast_mutex_lock(&voter_lock);
-	str = NULL;
-	if (node) {
-		str = ast_strdup(node);
-	}
-	n = 0;
-	if (str) {
-		n = finddelim(str, strs, ARRAY_LEN(strs));
-	}
-	for (j = 1; j <= maxpvtorder; j++) {
-		for (p = pvts; p; p = p->next) {
-			if (p->order == j) {
+		for (client1 = clients; client1; client1 = client1->next) {
+			if (client1->next == client) {
 				break;
 			}
 		}
-		if (!p) {
-			continue;
+		if (client1) {
+			client1->next = client->next;
+		} else {
+			clients = NULL;
 		}
-		if (node && *node && str && n) {
-			for (i = 0; i < n; i++) {
-				if (!*strs[i]) {
-					continue;
-				}
-				if (atoi(strs[i]) == p->nodenum) {
-					break;
-				}
-			}
-			if (i >= n) {
-				continue;
-			}
-		}
-		rpt_manager_success(ses, m);
-		astman_append(ses, "Node: %d\r\n", p->nodenum);
-		if (p->lastwon) {
-			astman_append(ses, "Voted: %s\r\n", p->lastwon->name);
-		}
-		for (client = clients; client; client = client->next) {
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			if (!client->heardfrom) {
-				continue;
-			}
-			if (IS_CLIENT_PROXY(client)) {
-				astman_append(ses, "Client: %s", client->name);
-				if (client->mix) {
-					astman_append(ses, " Mix");
-				}
-				if (client->ismaster) {
-					astman_append(ses, " Master");
-				}
-				if (client->curmaster) {
-					astman_append(ses, " ActiveMaster");
-				}
-				astman_append(ses, "\r\n");
-				astman_append(ses, "IP: %s:%d (Proxied)\r\n",
-							  ast_inet_ntoa(client->proxy_sin.sin_addr), ntohs(client->proxy_sin.sin_port));
-			} else {
-				if (!client->respdigest) {
-					continue;
-				}
-				astman_append(ses, "Client: %s", client->name);
-				if (client->mix) {
-					astman_append(ses, " Mix");
-				}
-				if (client->ismaster) {
-					astman_append(ses, " Master");
-				}
-				if (client->curmaster) {
-					astman_append(ses, " ActiveMaster");
-				}
-				astman_append(ses, "\r\n");
-				astman_append(ses, "IP: %s:%d\r\n", ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
-			}
-			astman_append(ses, "RSSI: %d\r\n", client->lastrssi);
-		}
+		ast_free(client);
+		client = clients;
 	}
 	ast_mutex_unlock(&voter_lock);
-	astman_append(ses, "\r\n");	/* Properly terminate Manager output */
-	if (str) {
-		ast_free(str);
-	}
-	return RESULT_SUCCESS;
+	return 0;
 }
-
-#include "xpmr/xpmr.c"
 
 /*!
  * \brief Advance transmit and receive sequence numbers for mixed clients and wake per-node transmit workers.
  *
- * Increments the tx sequence number for each client that has completed authentication, has been heard
+ * Increments the TX sequence number for each client that has completed authentication, has been heard
  * from recently, and is marked for mixing. Also advances each client's rx sequence number in a
- * format-aware manner. After updating clients, signals the xmit condition on every per-node voter
+ * format-aware manner. After updating clients, signals the transmit condition on every per-node VOTER
  * instance to wake transmit threads.
  */
 static void voter_xmit_master(void)
@@ -3728,15 +4329,14 @@ static void voter_xmit_master(void)
 }
 
 /*!
- * \brief Voter timing thread that drives the driver's internal 20 ms timing tick.
+ * \brief VOTER timing thread that drives the channel driver's internal 20ms timing tick.
  *
- * Maintains the driver's master-relative timebase that is not dependent on the system
- * time of day, advances per-node timing counters,
- * sends empty frames when no master is present, performs periodic client timeout and
- * sanity checks, and wakes transmit logic as required.
+ * Maintains the channel driver's master-relative timebase that is not dependent on the system
+ * time of day, advances per-node timing counters, sends empty frames when no master is present,
+ * performs periodic client timeout and sanity checks, and wakes transmit logic as required.
  *
- * \param data Always NULL; unused.
- * \return     NULL on thread exit.
+ * \param data 			Always NULL; unused.
+ * \return     			NULL on thread exit.
  */
 static void *voter_timer(void *data)
 {
@@ -3768,9 +4368,8 @@ static void *voter_timer(void *data)
 			voter_xmit_master();
 			gettimeofday(&tv, NULL);
 			for (client = clients; client; client = client->next) {
-				if (!ast_tvzero(client->lastheardtime)
-					&& (voter_tvdiff_ms(tv, client->lastheardtime) >
-						((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
+				if (!ast_tvzero(client->lastheardtime) &&
+					(voter_tvdiff_ms(tv, client->lastheardtime) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
 					ast_log(LOG_NOTICE, "VOTER client %s disconnect (timeout)\n", client->name);
 					client->heardfrom = 0;
 					client->respdigest = 0;
@@ -3783,8 +4382,7 @@ static void *voter_timer(void *data)
 						continue;
 					}
 					for (client1 = client->next; client1; client1 = client1->next) {
-						if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) &&
-							(client1->sin.sin_port == client->sin.sin_port)) {
+						if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) && (client1->sin.sin_port == client->sin.sin_port)) {
 							if (!client1->respdigest) {
 								continue;
 							}
@@ -3803,18 +4401,19 @@ static void *voter_timer(void *data)
 }
 
 /*!
- * \brief UDP reader thread that processes incoming Voter protocol packets and updates voter state.
+ * \brief UDP reader thread that processes incoming VOTER protocol packets and updates VOTER state.
  *
- * This thread receives Voter-format UDP packets, matches them to configured clients (including
- * dynamic binding), validates/authenticates clients, and handles payloads such as audio
- * (ULAW/ADPCM/NULAW), proxy-encapsulated packets, GPS, and PING.  It updates timing and master
- * synchronization state, writes received audio and RSSI into per-client circular buffers,
- * performs RSSI-based selection and threshold/linger logic per node, queues audio/text/control
- * frames to the associated Asterisk channel, and sends authentication/keepalive responses when
- * appropriate.
+ * This thread receives VOTER-format UDP packets, matches them to configured clients,
+ * validates/authenticates clients, and handles payloads such as audio (ULAW/ADPCM/NULAW),
+ * proxy-encapsulated packets, GPS, and PING.
  *
- * \param data Always NULL; unused thread argument.
- * \return     NULL when the thread exits.
+ * It updates timing and master synchronization state, writes received audio and RSSI into per-client
+ * circular buffers, performs RSSI-based selection and threshold/linger logic per node, queues
+ * audio/text/control frames to the associated Asterisk channel, and sends
+ * authentication/keepalive responses when appropriate.
+ *
+ * \param data 			Always NULL; unused thread argument.
+ * \return     			NULL when the thread exits.
  */
 static void *voter_reader(void *data)
 {
@@ -3838,7 +4437,7 @@ static void *voter_reader(void *data)
 	short silbuf[FRAME_SIZE];
 #pragma pack(push)
 #pragma pack(1)
-#ifdef	ADPCM_LOOPBACK
+#ifdef ADPCM_LOOPBACK
 	struct {
 		VOTER_PACKET_HEADER vp;
 		char rssi;
@@ -4920,497 +5519,8 @@ process_gps:
 }
 
 /*!
- * \brief Reload Voter driver configuration from disk and apply changes.
- *
- * Parses the configured voter.conf, updates per-instance (pvts) and per-client
- * state, reallocates audio and RSSI buffers as needed, creates or tears down
- * per-instance PMR channels for CTCSS changes, and ensures client digests are
- * unique and valid. The global voter_lock is held while modifying shared state.
- *
- * \retval  0 Success — configuration loaded and applied.
- * \retval -1 Failure — configuration load or allocation error; existing state is left unchanged where possible.
+ * \brief Unload the VOTER channel module
  */
-static int reload(void)
-{
-	struct ast_flags zeroflag = { 0 };
-	int i, n, instance_buflen, buflen, oldtoctype, oldlevel;
-	char *val, *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
-	struct voter_pvt *p;
-	struct voter_client *client, *client1;
-	struct ast_config *cfg = NULL;
-	struct ast_variable *v;
-
-	ast_mutex_lock(&voter_lock);
-	for (client = clients; client; client = client->next) {
-		client->reload = 0;
-		client->old_buflen = client->buflen;
-	}
-
-	if (!(cfg = ast_config_load(config, zeroflag))) {
-		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
-		ast_mutex_unlock(&voter_lock);
-		return -1;
-	}
-
-	val = (char *) ast_variable_retrieve(cfg, "general", "password");
-	if (val) {
-		ast_copy_string(password, val, sizeof(password) - 1);
-	} else {
-		password[0] = 0;
-	}
-
-	val = (char *) ast_variable_retrieve(cfg, "general", "context");
-	if (val) {
-		ast_copy_string(context, val, sizeof(context) - 1);
-	} else {
-		context[0] = 0;
-	}
-
-	val = (char *) ast_variable_retrieve(cfg, "general", "buflen");
-	if (val) {
-		buflen = strtoul(val, NULL, 0) * 8;
-	} else {
-		buflen = DEFAULT_BUFLEN * 8;
-	}
-
-	val = (char *) ast_variable_retrieve(cfg, "general", "sanity");
-	if (val) {
-		check_client_sanity = ast_true(val);
-	} else {
-		check_client_sanity = 1;
-	}
-
-	val = (char *) ast_variable_retrieve(cfg, "general", "puckit");
-	if (val) {
-		puckit = ast_true(val);
-	} else {
-		puckit = 0;
-	}
-
-	if (buflen < (FRAME_SIZE * 2)) {
-		buflen = FRAME_SIZE * 2;
-	}
-
-	for (p = pvts; p; p = p->next) {
-		oldctcss[0] = 0;
-		strcpy(oldctcss, p->txctcssfreq);
-		sprintf(data, "%d", p->nodenum);
-		if (ast_variable_browse(cfg, data) == NULL) {
-			continue;
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "linger");
-		if (val) {
-			p->linger = atoi(val);
-		} else {
-			p->linger = DEFAULT_LINGER;
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "plfilter");
-		if (val) {
-			p->plfilter = ast_true(val);
-		} else {
-			p->plfilter = 0;
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "hostdeemp");
-		if (val) {
-			p->hostdeemp = ast_true(val);
-		} else {
-			p->hostdeemp = 0;
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "duplex");
-		if (val) {
-			p->duplex = ast_true(val);
-		} else {
-			p->duplex = 1;
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
-		if (val) {
-			p->mixminus = ast_true(val);
-		} else {
-			p->mixminus = 0;
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "streams");
-		if (p->nstreams && p->streams[0]) {
-			ast_free(p->streams[0]);
-		}
-		p->nstreams = 0;
-		if (val) {
-			cp = ast_strdup(val);
-			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcss");
-		if (val) {
-			ast_copy_string(p->txctcssfreq, val, sizeof(p->txctcssfreq));
-		} else {
-			p->txctcssfreq[0] = 0;
-		}
-		oldlevel = p->txctcsslevel;
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
-		if (val) {
-			p->txctcsslevel = atoi(val);
-		} else {
-			p->txctcsslevel = 62;
-		}
-		p->txctcsslevelset = p->txctcsslevel;
-		oldtoctype = p->txtoctype;
-		p->txtoctype = TOC_NONE;
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txtoctype");
-		if (val) {
-			if (!strcasecmp(val, "phase")) {
-				p->txtoctype = TOC_PHASE;
-			} else if (!strcasecmp(val, "notone")) {
-				p->txtoctype = TOC_NOTONE;
-			}
-		}
-		p->nthresholds = 0;
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "thresholds");
-		if (val) {
-			cp = ast_strdup(val);
-			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
-			for (i = 0; i < p->nthresholds; i++) {
-				cp1 = strchr(strs[i], '=');
-				p->linger_thresh[i] = p->linger;
-				if (cp1) {
-					*cp1 = 0;
-					cp2 = strchr(cp1 + 1, ':');
-					if (cp2) {
-						*cp2 = 0;
-						if (cp2[1]) {
-							p->linger_thresh[i] = (uint16_t) atoi(cp2 + 1);
-						}
-					}
-					if (cp1[1]) {
-						p->count_thresh[i] = (uint16_t) atoi(cp1 + 1);
-					}
-				}
-				p->rssi_thresh[i] = (uint8_t) atoi(strs[i]);
-			}
-			ast_free(cp);
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "gtxgain");
-		if (!val) {
-			val = DEFAULT_GTXGAIN;
-		}
-		p->gtxgain = pow(10.0, atof(val) / 20.0);
-		/* if new CTCSS freq */
-		if (strcmp(oldctcss, p->txctcssfreq) || (oldtoctype != p->txtoctype) || (oldlevel != p->txctcsslevel)) {
-
-			t_pmr_chan tChan;
-
-			if (p->pmrChan) {
-				destroyPmrChannel(p->pmrChan);
-			}
-			p->pmrChan = 0;
-			if (p->txctcssfreq[0]) {
-
-				memset(&tChan, 0, sizeof(t_pmr_chan));
-
-				tChan.pTxCodeDefault = p->txctcssfreq;
-				tChan.pTxCodeSrc = p->txctcssfreq;
-				tChan.pRxCodeSrc = p->txctcssfreq;
-				tChan.txMod = 2;
-				tChan.txMixA = TX_OUT_COMPOSITE;
-				tChan.b.txboost = 1;
-				p->pmrChan = createPmrChannel(&tChan, FRAME_SIZE);
-				p->pmrChan->radioDuplex = 1;	//o->radioduplex;
-				p->pmrChan->b.loopback = 0;
-				p->pmrChan->b.radioactive = 1;
-				p->pmrChan->txrxblankingtime = 0;
-				p->pmrChan->rxCpuSaver = 0;
-				p->pmrChan->txCpuSaver = 0;
-				*(p->pmrChan->prxSquelchAdjust) = 0;
-				*(p->pmrChan->prxVoiceAdjust) = 0;
-				*(p->pmrChan->prxCtcssAdjust) = 0;
-				p->pmrChan->rxCtcss->relax = 0;
-				p->pmrChan->txTocType = p->txtoctype;
-				p->pmrChan->spsTxOutA->outputGain = 250;
-				*p->pmrChan->ptxCtcssAdjust = p->txctcsslevel;
-				p->pmrChan->pTxCodeDefault = p->txctcssfreq;
-				p->pmrChan->pTxCodeSrc = p->txctcssfreq;
-			}
-		}
-	}
-	hasmaster = 0;
-	ctg = NULL;
-	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
-		if (ctg == NULL) {
-			continue;
-		}
-		if (!strcmp(ctg, "general")) {
-			continue;
-		}
-		val = (char *) ast_variable_retrieve(cfg, ctg, "buflen");
-		if (val) {
-			instance_buflen = strtoul(val, NULL, 0) * 8;
-		} else {
-			instance_buflen = buflen;
-		}
-		if (instance_buflen < (FRAME_SIZE * 2)) {
-			instance_buflen = FRAME_SIZE * 2;
-		}
-		for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
-			if (!strcmp(v->name, "txctcsslevel")) {
-				continue;
-			}
-			if (!strcmp(v->name, "txctcss")) {
-				continue;
-			}
-			if (!strcmp(v->name, "txtoctype")) {
-				continue;
-			}
-			if (!strcmp(v->name, "streams")) {
-				continue;
-			}
-			if (!strcmp(v->name, "thresholds")) {
-				continue;
-			}
-			if (!strcmp(v->name, "plfilter")) {
-				continue;
-			}
-			if (!strcmp(v->name, "gtxgain")) {
-				continue;
-			}
-			if (!strcmp(v->name, "hostdeemp")) {
-				continue;
-			}
-			if (!strcmp(v->name, "duplex")) {
-				continue;
-			}
-			if (!strcmp(v->name, "mixminus")) {
-				continue;
-			}
-			if (!strcmp(v->name, "linger")) {
-				continue;
-			}
-			if (!strcmp(v->name, "primary")) {
-				continue;
-			}
-			if (!strcmp(v->name, "isprimary")) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "transmit", 8)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "master", 6)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "adpcm", 5)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "nulaw", 5)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "gpsid", 5)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "buflen", 6)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "nodeemp", 7)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "hostdeemp", 9)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "noplfilter", 10)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "prio", 4)) {
-				continue;
-			}
-			cp = ast_strdup(v->value);
-			if (!cp) {
-				close(udp_socket);
-				ast_config_destroy(cfg);
-				ast_mutex_unlock(&voter_lock);
-				return -1;
-			}
-			n = finddelim(cp, strs, ARRAY_LEN(strs));
-			if (n < 1) {
-				continue;
-			}
-			/* see if we "know" this client already */
-			for (client = clients; client; client = client->next) {
-				/* if this is the one whose digest matches one currently being looked at */
-				if (client->digest == crc32_bufs(challenge, strs[0])) {
-					/* if has moved to another instance, free this one, and treat as new */
-					if (client->nodenum != strtoul(ctg, NULL, 0)) {
-						client->reload = 0;
-						client = NULL;
-					}
-					break;
-				}
-			}
-			newclient = 0;
-			/* if a new one, alloc its space */
-			if (!client) {
-				client = ast_calloc(1, sizeof(struct voter_client));
-				if (!client) {
-					ast_free(cp);
-					close(udp_socket);
-					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
-					return -1;
-				}
-				client->prio_override = -2;
-				ast_copy_string(client->name, v->name, VOTER_NAME_LEN - 1);
-				newclient = 1;
-			}
-			client->reload = 1;
-			client->buflen = instance_buflen;
-			client->nodenum = strtoul(ctg, NULL, 0);
-			client->totransmit = 0;
-			client->doadpcm = 0;
-			client->donulaw = 0;
-			client->nodeemp = 0;
-			client->mix = 0;
-			client->noplfilter = 0;
-			client->prio = 0;
-			client->gpsid = 0;
-			for (i = 1; i < n; i++) {
-				if (!strcasecmp(strs[i], "transmit")) {
-					client->totransmit = 1;
-				} else if (!strcasecmp(strs[i], "master")) {
-					client->ismaster = 1;
-					hasmaster = 1;
-				} else if (!strcasecmp(strs[i], "adpcm")) {
-					client->doadpcm = 1;
-				} else if (!strcasecmp(strs[i], "nulaw")) {
-					client->donulaw = 1;
-				} else if (!strcasecmp(strs[i], "nodeemp")) {
-					client->nodeemp = 1;
-				} else if (!strcasecmp(strs[i], "noplfilter")) {
-					client->noplfilter = 1;
-				} else if (!strncasecmp(strs[i], "gpsid", 5)) {
-					cp1 = strchr(strs[i], '=');
-					if (!cp1) {
-						client->gpsid = ast_strdup("");
-					} else {
-						client->gpsid = ast_strdup(cp1);
-						*client->gpsid = '_';
-					}
-				} else if (!strncasecmp(strs[i], "prio", 4)) {
-					cp1 = strchr(strs[i], '=');
-					if (cp1) {
-						client->prio = strtoul(cp1 + 1, NULL, 0);
-						if (client->prio < -1) {
-							client->prio = 0;
-						}
-					}
-				}
-			}
-			client->buflen -= client->buflen % (FRAME_SIZE * 2);
-			client->digest = crc32_bufs(challenge, strs[0]);
-			ast_copy_string(client->pswd, strs[0], sizeof(client->pswd) - 1);
-			ast_free(cp);
-			if (client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->drainindex = 0;
-			}
-			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->audio = ast_realloc(client->audio, client->buflen);
-				if (!client->audio) {
-					close(udp_socket);
-					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
-					return -1;
-				}
-				memset(client->audio, 0xff, client->buflen);
-			} else if (!client->audio) {
-				client->audio = ast_malloc(client->buflen);
-				if (!client->audio) {
-					close(udp_socket);
-					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
-					return -1;
-				}
-				memset(client->audio, 0xff, client->buflen);
-			}
-			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->rssi = ast_realloc(client->rssi, client->buflen);
-				if (!client->rssi) {
-					close(udp_socket);
-					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
-					return -1;
-				}
-				memset(client->rssi, 0, client->buflen);
-			} else if (!client->rssi) {
-				client->rssi = ast_calloc(1, client->buflen);
-				if (!client->rssi) {
-					close(udp_socket);
-					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
-					return -1;
-				}
-			}
-			/* if a new client, add it into list */
-			if (newclient) {
-				if (clients == NULL) {
-					clients = client;
-				}
-				else {
-					for (client1 = clients; client1->next; client1 = client1->next);
-					client1->next = client;
-				}
-			}
-		}
-	}
-	ast_config_destroy(cfg);
-	for (client = clients; client; client = client->next) {
-		if (!client->reload) {
-			continue;
-		}
-		if (client->digest == 0) {
-			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
-				client->name);
-			ast_mutex_unlock(&voter_lock);
-			return -1;
-		}
-		for (client1 = clients; client1; client1 = client1->next) {
-			if (!client1->reload) {
-				continue;
-			}
-			if (client == client1) {
-				continue;
-			}
-			if (client->digest == client1->digest) {
-				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
-					client->name, client1->name);
-				ast_mutex_unlock(&voter_lock);
-				return -1;
-			}
-		}
-	}
-	/* remove all the clients that are no longer in the config */
-	for (client = clients; client; client = client->next) {
-		if (client->reload) {
-			continue;
-		}
-		if (client->audio) {
-			ast_free(client->audio);
-		}
-		if (client->rssi) {
-			ast_free(client->rssi);
-		}
-		if (client->gpsid) {
-			ast_free(client->gpsid);
-		}
-		for (client1 = clients; client1; client1 = client1->next) {
-			if (client1->next == client) {
-				break;
-			}
-		}
-		if (client1) {
-			client1->next = client->next;
-		} else {
-			clients = NULL;
-		}
-		ast_free(client);
-		client = clients;
-	}
-	ast_mutex_unlock(&voter_lock);
-	return 0;
-}
-
 static int unload_module(void)
 {
 	run_forever = 0;
@@ -5436,15 +5546,16 @@ static int unload_module(void)
 }
 
 /*!
- * \brief Initialize and register the Voter channel module and its runtime resources.
+ * \brief Initialize and register the VOTER channel module and its runtime resources.
  *
  * Sets up UDP socket and bind address/port from configuration, opens a periodic
  * timer, loads runtime configuration, registers CLI and manager hooks, creates
  * reader and timer threads, allocates channel format capabilities, and registers
  * the channel driver so the Voter channel becomes available to Asterisk.
  *
- * \return 0 on success; non-zero on failure (typically AST_MODULE_LOAD_DECLINE for
- *         module load errors, or 1 if the configuration could not be loaded).
+ * \return 				0 on success; non-zero on failure (typically AST_MODULE_LOAD_DECLINE for
+ *         				module load errors, or
+ *						1 if the configuration could not be loaded).
  */
 static int load_module(void)
 {
