@@ -317,7 +317,7 @@ char password[VOTER_PASSWORD_LEN];
 char context[100];
 
 /* Timeout definitions in ms*/
-#define	RX_TIMEOUT_MS 200
+#define RX_TIMEOUT_MS 200
 #define	CLIENT_TIMEOUT_MS 3000
 #define	MASTER_TIMEOUT_MS 100
 #define	TX_KEEPALIVE_MS 1000
@@ -359,14 +359,14 @@ char context[100];
 #define	GPS_DATA_FILE "/tmp/gps%s.dat"
 
 /* DSP filter taps */
-#define	NTAPS_PL 6
+#define NTAPS_PL 6
 #define	NTAPS_4K 6
 
 #define	IS_CLIENT_PROXY(x) (x->proxy_sin.sin_family == AF_INET)
 #define	SEND_PRIMARY(x) (x->primary.sin_family == AF_INET)
 
 /* Defines for constructing POCSAG paging packets */
-#define	PAGER_SRC "PAGER"
+#define PAGER_SRC "PAGER"
 #define	ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 30000
 #define	SAMPRATE 8000			// (Sample Rate)
