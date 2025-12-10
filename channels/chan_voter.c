@@ -424,9 +424,6 @@ int maxpvtorder = 0;
  */
 int puckit = 0;
 
-/* this variable doesn't seem to be used, delete?*/
-double dnsec;
-
 static pthread_t voter_reader_thread = 0;
 static pthread_t voter_timer_thread = 0;
 
@@ -4138,6 +4135,8 @@ static int reload(void)
 			client->donulaw = 0;
 			client->nodeemp = 0;
 			client->mix = 0;
+			client->curmaster = 0;
+			client->ismaster = 0;
 			client->noplfilter = 0;
 			client->prio = 0;
 			client->gpsid = 0;
