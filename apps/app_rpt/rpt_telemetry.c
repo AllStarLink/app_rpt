@@ -539,6 +539,18 @@ int priority_telemetry_pending(struct rpt *myrpt)
 	rpt_mutex_unlock(&myrpt->lock);
 	return pending;
 }
+/*! \brief Try to log setting active_telem NULL when we weren't what it was set to
+ * If somebody sets active_telem to NULL when it wasn't the current telem, then
+ * that can cause a queued telemetry to think the current telem is done when it isn't,
+ * and things will get doubled up.
+ */
+#define telem_done(myrpt, telem) \
+	if (myrpt->active_telem == telem) { \
+		ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, telem); \
+		myrpt->active_telem = NULL; \
+	} else { \
+		ast_log(LOG_WARNING, "Attempting to clear active_telem %p when telem is %p", myrpt->active_telem, telem); \
+	}
 
 void flush_telem(struct rpt *myrpt)
 {
@@ -549,6 +561,10 @@ void flush_telem(struct rpt *myrpt)
 	while (telem != &myrpt->tele) {
 		if (telem->mode != SETREMOTE && telem->chan) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+			if (myrpt->active_telem == telem) {
+				/* If we are the active telemetry, we need to clean it up */
+				telem_done(myrpt, telem);
+			}
 		}
 		telem = telem->next;
 	}
@@ -562,8 +578,12 @@ void birdbath(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		if (telem->mode == PARROT) {
+		if (telem->mode == PARROT && telem->chan) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+			if (myrpt->active_telem == telem) {
+				/* If we are the active telemetry, we need to clean it up */
+				telem_done(myrpt, telem);
+			}
 		}
 		telem = telem->next;
 	}
@@ -1202,15 +1222,6 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 	}
 	ast_log(LOG_WARNING, "Got unknown link telemetry command: %s\n", strs[0]);
 }
-
-/*! \brief Try to catch setting active_telem NULL when we weren't what it was set to
- * If somebody sets active_telem to NULL when it wasn't the current telem, then
- * that can cause a queued telemetry to think the current telem is done when it isn't,
- * and things will get doubled up.
- */
-#define telem_done(myrpt) \
-	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele); \
-	myrpt->active_telem = NULL;
 
 /*
  * Threaded telemetry handling routines - goes hand in hand with handle_varcmd_tele (see above)
@@ -2863,7 +2874,7 @@ treataslocal:
 			myrpt->tmsgtimer = myrpt->p.tailsquashedtime;
 		}
 	}
-	telem_done(myrpt);
+	telem_done(myrpt, mytele);
 	tele_link_remove(myrpt, mytele);
 	ast_channel_unref(mychannel);
 	rpt_mutex_unlock(&myrpt->lock);
@@ -2887,7 +2898,7 @@ treataslocal:
 	myrpt->noduck = 0;
 	pthread_exit(NULL);
 abort:
-	telem_done(myrpt);
+	telem_done(myrpt, mytele);
 abort2:
 	ast_free(nodename);
 abort3:
