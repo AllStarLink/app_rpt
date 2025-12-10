@@ -518,7 +518,6 @@ int priority_telemetry_pending(struct rpt *myrpt)
 	if (!myrpt) {
 		return 0;
 	}
-	ast_debug(3, "Check for tot override message pending");
 	rpt_mutex_lock(&myrpt->lock);
 	telem = myrpt->tele.next;
 	/* Traverse the telemetry list looking for override_tot flag */
@@ -529,6 +528,7 @@ int priority_telemetry_pending(struct rpt *myrpt)
 		 */
 		switch (telem->mode) {
 		case TIMEOUT:
+			ast_debug(3, "Transmit override: Priority telemetry message pending (TIMEOUT).");
 			pending = 1;
 			break;
 		default:
