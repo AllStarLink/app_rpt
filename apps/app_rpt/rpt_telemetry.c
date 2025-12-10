@@ -528,7 +528,7 @@ int priority_telemetry_pending(struct rpt *myrpt)
 		 */
 		switch (telem->mode) {
 		case TIMEOUT:
-			ast_debug(3, "tot override message pending.");
+			ast_debug(3, "Transmit override: Priority telemetry message pending (TIMEOUT).");
 			pending = 1;
 			break;
 		default:
