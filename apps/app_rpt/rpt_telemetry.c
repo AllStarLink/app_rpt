@@ -2529,7 +2529,7 @@ treataslocal:
 		snprintf(mystr, sizeof(mystr), PARROTFILE, myrpt->name, mytele->parrot);
 		if (ast_fileexists(mystr, NULL, ast_channel_language(mychannel)) <= 0) {
 			imdone = 1;
-			myrpt->parrotstate = 0;
+			myrpt->parrotstate = PARROT_STATE_IDLE;
 			break;
 		}
 		if (wait_interval(myrpt, DLY_PARROT, mychannel) == -1) {
@@ -2541,7 +2541,7 @@ treataslocal:
 		strcat(mystr, ".wav");
 		unlink(mystr);
 		imdone = 1;
-		myrpt->parrotstate = 0;
+		myrpt->parrotstate = PARROT_STATE_IDLE;
 		myrpt->parrotonce = 0;
 		break;
 	case TIMEOUT:

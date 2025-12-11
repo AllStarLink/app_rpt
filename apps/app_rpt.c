@@ -3528,7 +3528,7 @@ static inline int update_parrot(struct rpt *myrpt)
 		ast_closestream(myrpt->parrotstream);
 	}
 	myrpt->parrotstream = NULL;
-	myrpt->parrotstate = 2;
+	myrpt->parrotstate = PARROT_STATE_PLAYING;
 	pu.i = myrpt->parrotcnt++;
 	rpt_telemetry(myrpt, PARROT, pu.p);
 	return 0;
@@ -4604,7 +4604,7 @@ static inline int parrotchannel_read(struct rpt *myrpt)
 		ast_debug(1, "@@@@ rpt:Hung Up\n");
 		return -1;
 	}
-	if (!(myrpt->p.parrotmode || myrpt->parrotonce)) {
+	if (!((myrpt->p.parrotmode != PARROT_MODE_OFF) || myrpt->parrotonce)) {
 		char myfname[300];
 
 		if (myrpt->parrotstream) {
@@ -5039,7 +5039,7 @@ static void *rpt(void *this)
 				   (myrpt->cmdnode[0] && strcmp(myrpt->cmdnode, "aprstt"));
 		}
 		/* add in parrot stuff */
-		totx = totx || (myrpt->parrotstate > 1);
+		totx = totx || (myrpt->parrotstate == PARROT_STATE_PLAYING);
 		if (!totx && myrpt->totimer) {
 			/*
 			 * This is the execution path taken when a user unkeys (!totx) and not
@@ -5272,7 +5272,8 @@ static void *rpt(void *this)
 			myrpt->rem_dtmfbuf[0] = 0;
 		}
 
-		if (myrpt->exttx && myrpt->parrotchannel && (myrpt->p.parrotmode || myrpt->parrotonce) && (!myrpt->parrotstate)) {
+		if (myrpt->exttx && myrpt->parrotchannel && ((myrpt->p.parrotmode != PARROT_MODE_OFF) || myrpt->parrotonce) &&
+			(myrpt->parrotstate == PARROT_STATE_IDLE)) {
 			char myfname[300];
 
 			/* first put the channel on the conference in announce mode */
@@ -5283,7 +5284,7 @@ static void *rpt(void *this)
 
 			snprintf(myfname, sizeof(myfname), PARROTFILE ".wav", myrpt->name, myrpt->parrotcnt);
 			unlink(myfname);
-			myrpt->parrotstate = 1;
+			myrpt->parrotstate = PARROT_STATE_RECORDING;
 			myrpt->parrottimer = myrpt->p.parrottime;
 			if (myrpt->parrotstream)
 				ast_closestream(myrpt->parrotstream);
@@ -5414,7 +5415,8 @@ static void *rpt(void *this)
 			rpt_mutex_unlock(&myrpt->lock);
 			continue;
 		}
-		if ((myrpt->p.parrotmode || myrpt->parrotonce) && myrpt->parrotstate == 1 && myrpt->parrottimer <= 0) {
+		if (((myrpt->p.parrotmode != PARROT_MODE_OFF) || myrpt->parrotonce) && myrpt->parrotstate == PARROT_STATE_RECORDING &&
+			myrpt->parrottimer <= 0) {
 			if (update_parrot(myrpt)) {
 				rpt_mutex_unlock(&myrpt->lock);
 				break;
@@ -5501,7 +5503,7 @@ static void *rpt(void *this)
 	if (myrpt->parrotchannel) {
 		rpt_hangup(myrpt, RPT_PARROTCHAN);
 	}
-	myrpt->parrotstate = 0;
+	myrpt->parrotstate = PARROT_STATE_IDLE;
 	if (myrpt->voxchannel) {
 		rpt_hangup(myrpt, RPT_VOXCHAN);
 	}
