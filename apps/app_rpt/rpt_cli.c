@@ -474,9 +474,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 //### GET RPT STATUS STATES WHILE LOCKED ########################
 			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
-				parrot_ena = "1";	//"ENABLED";
+				parrot_ena = "1"; //"ENABLED";
 			else
-				parrot_ena = "0";	//"DISABLED";
+				parrot_ena = "0"; //"DISABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable)
 				sys_ena = "0";	//"DISABLED";
