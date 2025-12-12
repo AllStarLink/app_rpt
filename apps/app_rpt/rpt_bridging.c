@@ -264,6 +264,7 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const ch
 	p = ast_channel_tech_pvt(chan);
 	if (!p || !p->owner || !p->chan) {
 		ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(chan));
+		ast_hangup(chan);
 		return NULL;
 	}
 	ast_debug(1, "Requested channel %s cdr disabled\n", ast_channel_name(chan));
@@ -292,6 +293,11 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 	}
 	rpt_disable_cdr(chan);
 	p = ast_channel_tech_pvt(chan);
+	if (!p || !p->owner || !p->chan) {
+		ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(chan));
+		ast_hangup(chan);
+		return -1;
+	}
 	ast_answer(p->owner);
 	ast_answer(p->chan);
 	ast_debug(3, "Local channel p->owner %p, p->chan %p, chan %p\n", p->owner, p->chan, chan);
