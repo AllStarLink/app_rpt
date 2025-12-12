@@ -1594,7 +1594,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		return DC_COMPLETE;
 	case 55:					/* Parrot Once if parrot mode is disabled */
-		if (!myrpt->p.parrotmode)
+		if (myrpt->p.parrotmode == PARROT_MODE_OFF)
 			myrpt->parrotonce = 1;
 		return DC_COMPLETE;
 	case 56:					/* RX CTCSS Enable */

@@ -513,6 +513,12 @@ enum rpt_parrot_mode {
 	PARROT_MODE_ON_ALWAYS
 };
 
+enum rpt_parrot_states {
+	PARROT_STATE_IDLE,
+	PARROT_STATE_RECORDING,
+	PARROT_STATE_PLAYING
+};
+
 struct vox {
 	float	speech_energy;
 	float	noise_energy;
@@ -926,8 +932,8 @@ struct rpt {
 	char waschan;						/*!< channel selected initially or by command */
 	char bargechan;						/*!< barge in channel */
 	char macropatch;					/*!< autopatch via tonemacro state */
-	char parrotstate;
-	char parrotonce;
+	enum rpt_parrot_states parrotstate;
+	unsigned int parrotonce:1;
 	char linkactivityflag;
 	char rptinactwaskeyedflag;
 	char lastitx;

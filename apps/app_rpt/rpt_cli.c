@@ -142,7 +142,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			else
 				input_signal = "NO";
 
-			if (myrpt->p.parrotmode)
+			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
 				parrot_ena = "ENABLED";
 			else
 				parrot_ena = "DISABLED";
@@ -473,10 +473,10 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
 
 //### GET RPT STATUS STATES WHILE LOCKED ########################
-			if (myrpt->p.parrotmode)
-				parrot_ena = "1";	//"ENABLED";
+			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
+				parrot_ena = "1"; //"ENABLED";
 			else
-				parrot_ena = "0";	//"DISABLED";
+				parrot_ena = "0"; //"DISABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable)
 				sys_ena = "0";	//"DISABLED";

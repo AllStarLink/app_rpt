@@ -156,7 +156,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 			ast_copy_string(rxchanname, myrpt->rxchanname, sizeof(rxchanname));
 
 			/* Get RPT status states while locked */
-			parrot_ena = myrpt->p.parrotmode ? "1" : "0";
+			parrot_ena = (myrpt->p.parrotmode == PARROT_MODE_OFF) ? "0" : "1";
 			sys_ena = myrpt->p.s[myrpt->p.sysstate_cur].txdisable ? "1" : "0";
 			tot_ena = myrpt->p.s[myrpt->p.sysstate_cur].totdisable ? "1" : "0";
 			link_ena = myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable ? "1" : "0";
@@ -545,7 +545,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 			else
 				transmitterkeyed = "NO";
 
-			if (myrpt->p.parrotmode)
+			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
 				parrot_ena = "ENABLED";
 			else
 				parrot_ena = "DISABLED";
