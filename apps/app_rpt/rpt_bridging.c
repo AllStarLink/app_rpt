@@ -262,6 +262,10 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const ch
 	ast_set_write_format(chan, ast_format_slin);
 	rpt_disable_cdr(chan);
 	p = ast_channel_tech_pvt(chan);
+	if (!p || !p->owner || !p->chan) {
+		ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(chan));
+		return NULL;
+	}
 	ast_debug(1, "Requested channel %s cdr disabled\n", ast_channel_name(chan));
 	ast_answer(p->owner);
 	ast_answer(p->chan);
@@ -388,7 +392,7 @@ int rpt_play_tone(struct ast_channel *chan, const char *tone)
 		res = ast_playtones_start(chan, 0, ts->data, 0);
 		ts = ast_tone_zone_sound_unref(ts);
 	} else {
-		ast_log(LOG_WARNING, "No tone '%s' found in zone '%s'\n", tone, zone ? zone->country : "default");
+		ast_log(LOG_WARNING, "No tone '%s' found in zone '%s'\n", tone, (zone && zone->country[0]) ? zone->country : "default");
 		return -1;
 	}
 
