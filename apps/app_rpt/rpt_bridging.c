@@ -388,7 +388,7 @@ int rpt_play_tone(struct ast_channel *chan, const char *tone)
 		res = ast_playtones_start(chan, 0, ts->data, 0);
 		ts = ast_tone_zone_sound_unref(ts);
 	} else {
-		ast_log(LOG_WARNING, "No tone '%s' found in zone '%s'\n", tone, (zone && zone->country) ? zone->country : "default");
+		ast_log(LOG_WARNING, "No tone '%s' found in zone '%s'\n", tone, zone ? zone->country : "default");
 		return -1;
 	}
 
