@@ -934,8 +934,8 @@ struct rpt {
 	struct rpt_tele tele;
 	struct timeval lasttv,curtv;
 	struct rpt_conf rptconf;
-	pthread_t rpt_call_thread,rpt_thread;
-	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
+	pthread_t rpt_call_thread, rpt_thread;
+	time_t dtmf_time, rem_dtmf_time, dtmf_time_rem;
 	int calldigittimer;
 	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	int remote_time_out_reset_unkey_interval_timer, time_out_reset_unkey_interval_timer;

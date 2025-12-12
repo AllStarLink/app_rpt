@@ -3708,8 +3708,7 @@ static inline void check_parrot(struct rpt *myrpt)
 			myrpt->parrotstream = 0;
 		}
 
-		snprintf(myfname, sizeof(myfname), PARROTFILE, myrpt->name, myrpt->parrotcnt);
-		strcat(myfname, ".wav");
+		snprintf(myfname, sizeof(myfname), PARROTFILE ".wav", myrpt->name, myrpt->parrotcnt);
 		unlink(myfname);
 	}
 }
@@ -5345,8 +5344,7 @@ static void *rpt(void *this)
 			myrpt->rem_dtmfbuf[0] = 0;
 		}
 
-		if (myrpt->exttx && ((myrpt->p.parrotmode != PARROT_MODE_OFF) || myrpt->parrotonce) &&
-			(myrpt->parrotstate == PARROT_STATE_IDLE)) {
+		if (myrpt->exttx && ((myrpt->p.parrotmode != PARROT_MODE_OFF) || myrpt->parrotonce) && (myrpt->parrotstate == PARROT_STATE_IDLE)) {
 			char myfname[300];
 			/* setup audiohook to spy on the pchannel. */
 			ast_verb(1, "Parrot attached to %s\n", ast_channel_name(myrpt->pchannel));
