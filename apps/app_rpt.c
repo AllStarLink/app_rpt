@@ -290,7 +290,6 @@
 #include "asterisk/file.h"
 #include "asterisk/logger.h"
 #include "asterisk/bridge.h"
-#include "asterisk/bridge_channel_internal.h"
 #include "asterisk/channel.h"
 #include "asterisk/callerid.h"
 #include "asterisk/pbx.h"
@@ -2862,7 +2861,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
 		if (IS_PSEUDO_NAME(myrpt->rxchanname)) {
-			ast_log(LOG_WARNING, "Using DAHDI channel %s is depreciated. Update your rpt.conf to use Local.\n", myrpt->rxchanname);
+			ast_log(LOG_WARNING, "Using DAHDI/Pseudo channel %s is depreciated. Update your rpt.conf to use Local.\n", myrpt->rxchanname);
 			return -1;
 		} else {
 			/* If it is a DAHDI hardware address (Not PSEUDO), use the configured txchannel. */
