@@ -316,8 +316,7 @@ int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_t
 int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
 {
 	struct ast_bridge *conf = NULL, **confptr;
-	char conference_name[10] = "\0";
-	ast_debug(3, "Setting up conference '%s' mixing bridge features.\n", conference_name);
+	char conference_name[64] = "";
 	switch (type) {
 	case RPT_CONF:
 		snprintf(conference_name, sizeof(conference_name), RPT_CONF_NAME);
@@ -361,6 +360,10 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 		ast_debug(3, "Incorrect conference type");
 		return -1;
 	}
+	if (!conf) {
+		ast_log(LOG_ERROR, "Conference '%s' mixing bridge is null cannot add %s.\n", conference_name, ast_channel_name(chan));
+		return -1;
+	}
 	ast_debug(3, "Adding channel %s to conference '%s' mixing bridge \n", ast_channel_name(chan), conference_name);
 	return ast_unreal_channel_push_to_bridge(chan, conf, AST_BRIDGE_CHANNEL_FLAG_IMMOVABLE);
 }
@@ -378,14 +381,14 @@ int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
  */
 int rpt_play_tone(struct ast_channel *chan, const char *tone)
 {
-	struct ast_tone_zone_sound *ts;
 	int res = 0;
-	ts = ast_get_indication_tone(ast_channel_zone(chan), tone);
+	struct ast_tone_zone *zone = ast_channel_zone(chan);
+	struct ast_tone_zone_sound *ts = ast_get_indication_tone(zone, tone);
 	if (ts) {
 		res = ast_playtones_start(chan, 0, ts->data, 0);
 		ts = ast_tone_zone_sound_unref(ts);
 	} else {
-		ast_log(LOG_WARNING, "No tone '%s' found in zone '%s'\n", tone, ast_channel_zone(chan)->country);
+		ast_log(LOG_WARNING, "No tone '%s' found in zone '%s'\n", tone, (zone && zone->country) ? zone->country : "default");
 		return -1;
 	}
 
