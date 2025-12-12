@@ -1380,7 +1380,6 @@ void *rpt_call(void *this)
 	congstarted = 0;
 	dialtimer = 0;
 	lastcidx = 0;
-	myrpt->calldigittimer = 0;
 	aborted = 0;
 
 	/* Reverse engineering of callmode Mar 2023 NA
@@ -2587,6 +2586,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			myrpt->patchquiet = 0;
 			myrpt->patchfarenddisconnect = 0;
 			myrpt->patchdialtime = 0;
+			myrpt->calldigittimer = 0;
 			ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT - 1);
 			myrpt->cidx = 0;
 			myrpt->exten[myrpt->cidx] = 0;
