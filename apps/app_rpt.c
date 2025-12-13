@@ -1295,6 +1295,7 @@ static void *rpt_pbx_autopatch_run(void *data)
 	autopatch->pbx_exited = 1;
 	return NULL;
 }
+
 static int rpt_handle_talker_cb(struct ast_bridge_channel *bridge_cannel, void *hook_pvt, int talking)
 {
 	struct rpt *myrpt = hook_pvt;
@@ -1343,7 +1344,7 @@ void *rpt_call(void *this)
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 	myrpt->mydtmf = 0;
-	mychannel = rpt_request_pseudo_chan(cap, "Autopatch");
+	mychannel = rpt_request_local_chan(cap, "Autopatch");
 
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain AutoPatch pseudo channel\n");
@@ -1372,7 +1373,7 @@ void *rpt_call(void *this)
 	ast_debug(1, "Got Bridge channel %p\n", bridge_chan);
 	ast_bridge_talk_detector_hook(bridge_chan->features, rpt_handle_talker_cb, myrpt, NULL, AST_BRIDGE_HOOK_REMOVE_ON_PULL);
 
-	genchannel = rpt_request_pseudo_chan(cap, "GenChannel");
+	genchannel = rpt_request_local_chan(cap, "GenChannel");
 	ao2_ref(cap, -1);
 	if (!genchannel) {
 		ast_log(LOG_WARNING, "Unable to obtain Gen pseudo channel\n");
@@ -1486,7 +1487,6 @@ void *rpt_call(void *this)
 		ast_hangup(genchannel);
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->macropatch = 0;
-		// channel_revert(myrpt);
 		rpt_mutex_unlock(&myrpt->lock);
 		if ((!myrpt->patchquiet) && aborted)
 			rpt_telemetry(myrpt, TERM, NULL);
@@ -2861,7 +2861,8 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
 		if (IS_PSEUDO_NAME(myrpt->rxchanname)) {
-			ast_log(LOG_WARNING, "Using DAHDI/Pseudo channel %s is depreciated. Update your rpt.conf to use Local.\n", myrpt->rxchanname);
+			ast_log(LOG_ERROR, "Using DAHDI/Pseudo channel %s is no longer supported. Update your rpt.conf to use Local/Pseudo.\n",
+				myrpt->rxchanname);
 			return -1;
 		} else {
 			/* If it is a DAHDI hardware address (Not PSEUDO), use the configured txchannel. */
@@ -4929,7 +4930,6 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_ALINKS", -1);
 	myrpt->ready = 1;
 	looptimestart = rpt_tvnow();
-	ast_verb(1, "I've made it to the loop");
 	while (ms >= 0) {
 		struct ast_channel *who;
 		struct ast_channel *cs[300], *cs1[300];
@@ -6277,10 +6277,9 @@ static inline int kenwood_uio_helper(struct rpt *myrpt)
 		ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->localtxchannel), strerror(errno));
 		return -1;
 	}
-	/*	if (dahdi_set_offhook(myrpt->localtxchannel)) {
-			return -1;
-		}
-			*/
+	if (dahdi_set_offhook(myrpt->localtxchannel)) {
+		return -1;
+	}
 	return 0;
 }
 
@@ -6841,7 +6840,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_format_cap_append(cap, ast_format_slin, 0);
 
 		/* allocate a pseudo-channel thru asterisk */
-		if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAX-Link")) {
+		if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAX-Link")) {
 			ao2_ref(cap, -1);
 			ao2_ref(l, -1);
 			return -1;

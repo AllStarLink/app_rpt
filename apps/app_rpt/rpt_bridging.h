@@ -47,7 +47,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
  * \return channel on success
  * \return NULL on failure
  */
-struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *exten);
+struct ast_channel *rpt_request_local_chan(struct ast_format_cap *cap, const char *exten);
 
 /*!
  * \brief Request a repeater channel not associated with a real device
@@ -57,9 +57,9 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const ch
  * \note myrpt->lock must be held when calling
  * \retval 0 on success, -1 on failure
  */
-int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten);
+int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten);
 
-#define rpt_request_pseudo(data, cap, chantype, exten) __rpt_request_pseudo(data, cap, chantype, 0, exten)
+#define rpt_request_pseudo(data, cap, chantype, exten) __rpt_request_local(data, cap, chantype, 0, exten)
 
 int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
 
@@ -112,3 +112,25 @@ int rpt_stop_tone(struct ast_channel *chan);
 int rpt_set_tone_zone(struct ast_channel *chan, const char *tz);
 
 #define DEFAULT_TALKING_THRESHOLD 160
+
+/*!
+ * \brief Get value of rxisoffhook
+ * \note Only use with DAHDI channels!
+ * \param chan
+ * \retval -1 on failure
+ * \retval 0 if on hook, 1 if off hook
+ */
+int dahdi_rx_offhook(struct ast_channel *chan);
+
+/*!
+ * \brief Set on/off hook state
+ * \note Only use with DAHDI channels!
+ * \param chan
+ * \param offhook 1 for off hook, 0 for on hook
+ * \retval -1 on failure
+ * \retval 0 if on hook, 1 if off hook
+ */
+int dahdi_set_hook(struct ast_channel *chan, int offhook);
+
+#define dahdi_set_offhook(chan) dahdi_set_hook(chan, 1)
+#define dahdi_set_onhook(chan) dahdi_set_hook(chan, 0)

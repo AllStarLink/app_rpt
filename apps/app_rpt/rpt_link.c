@@ -768,7 +768,7 @@ void *rpt_link_connect(void *data)
 
 	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
 
-	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAX-Link")) {
+	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAX-Link")) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		l->connect_threadid = 0;

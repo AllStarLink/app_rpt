@@ -132,12 +132,11 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 	if (rpt_radio_set_param(myrpt->localrxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE)) {
 		return -1;
 	}
-	/*	if (asciiflag & 2) {
-			if (dahdi_set_offhook(myrpt->localrxchannel)) {
-				return -1;
-			}
+	if (asciiflag & 2) {
+		if (dahdi_set_offhook(myrpt->localrxchannel)) {
+			return -1;
 		}
-	*/
+	}
 	if (rpt_radio_set_param(myrpt->localrxchannel, myrpt, RPT_RADPAR_UIOMODE, oldmode)) {
 		return -1;
 	}

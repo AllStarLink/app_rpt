@@ -246,14 +246,14 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	return 0;
 }
 
-struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const char *exten)
+struct ast_channel *rpt_request_local_chan(struct ast_format_cap *cap, const char *exten)
 {
 	struct ast_channel *chan;
 	struct ast_unreal_pvt *p;
 
 	chan = ast_request("Local", cap, NULL, NULL, exten, NULL);
 	if (!chan) {
-		ast_log(LOG_ERROR, "Failed to request pseudo channel\n");
+		ast_log(LOG_ERROR, "Failed to request local channel\n");
 		return NULL;
 	}
 
@@ -273,7 +273,7 @@ struct ast_channel *rpt_request_pseudo_chan(struct ast_format_cap *cap, const ch
 	return chan;
 }
 
-int __rpt_request_pseudo(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten)
+int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten)
 {
 	struct rpt *myrpt = NULL;
 	struct rpt_link *link = NULL;
@@ -337,7 +337,7 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 		confptr = &myrpt->rptconf.txconf;
 		break;
 	default:
-		ast_debug(1, "Incorrect conference type\n");
+		__builtin_unreachable();
 		return -1;
 	}
 	ast_debug(3, "Setting up conference '%s' mixing bridge \n", conference_name);
@@ -355,7 +355,7 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
 {
 	struct ast_bridge *conf = NULL;
-	char conference_name[10] = "\0";
+	char conference_name[10] = "";
 
 	switch (type) {
 	case RPT_CONF:
@@ -367,11 +367,11 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 		conf = myrpt->rptconf.txconf;
 		break;
 	default:
-		ast_debug(3, "Incorrect conference type");
+		__builtin_unreachable();
 		return -1;
 	}
 	if (!conf) {
-		ast_log(LOG_ERROR, "Conference '%s' mixing bridge is null cannot add %s.\n", conference_name, ast_channel_name(chan));
+		ast_log(LOG_ERROR, "Conference '%s' mixing bridge doesn't exist, can't add channel %s\n", conference_name, ast_channel_name(chan));
 		return -1;
 	}
 	ast_debug(3, "Adding channel %s to conference '%s' mixing bridge \n", ast_channel_name(chan), conference_name);
@@ -384,11 +384,6 @@ int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
 	return 0;
 }
 
-/*!
- * \param chan
- * \param tone DAHDI_TONE_DIALTONE, DAHDI_TONE_CONGESTION, or -1 to stop tone
- * \retval 0 on success, -1 on failure
- */
 int rpt_play_tone(struct ast_channel *chan, const char *tone)
 {
 	int res = 0;
