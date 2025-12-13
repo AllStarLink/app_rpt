@@ -4805,18 +4805,20 @@ static void *voter_reader(void *data)
 								 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
 								 * (buflen * 8). If a client connects as mix mode, we need to enforce the minimum buflen,
 								 * otherwie the client will connect, but cannot send us audio because the buffer isn't big enough.
-					 			 *
-					 			 * Check the buflen, throw an error if it is too small, and block the client from connecting.
-					 			 */
+								 *
+								 * Check the buflen, throw an error if it is too small, and block the client from connecting.
+								 */
 								if (client->buflen < 1280) {
 									if (!logged_buflen_too_small) {
-										ast_log(LOG_ERROR, "Mix mode client (proxy) connecting and buflen too small (<160), FIX voter.conf! Rejecting connection!\n");
+										ast_log(LOG_ERROR,
+											"Mix mode client (proxy) connecting and buflen too small (<160), FIX voter.conf! Rejecting connection!\n");
 										logged_buflen_too_small = 1;
 									}
 									continue;
 								} else {
 								client->mix = 1;
-								ast_log(LOG_NOTICE, "Client: %s (proxy) is sending mix mode flag, setting client to mix mode\n", client->name);
+								ast_log(LOG_NOTICE,
+									"Client: %s (proxy) is sending mix mode flag, setting client to mix mode\n", client->name);
 								logged_buflen_too_small = 0;
 								} 
 							} else {
@@ -5619,7 +5621,8 @@ process_gps:
 					 */
 					if (client->buflen < 1280) {
 						if (!logged_buflen_too_small) {
-							ast_log(LOG_ERROR, "Mix mode client connecting and buflen too small (<160), FIX voter.conf! Rejecting connection!\n");
+							ast_log(LOG_ERROR,
+								"Mix mode client connecting and buflen too small (<160), FIX voter.conf! Rejecting connection!\n");
 							logged_buflen_too_small = 1;
 						}
 						continue;
@@ -5627,7 +5630,7 @@ process_gps:
 						client->mix = 1;
 						ast_log(LOG_NOTICE, "Client: %s is sending mix mode flag, setting client to mix mode\n", client->name);
 						logged_buflen_too_small = 0;
-					} 
+					}
 				}
 			}
 			if (!client->mix && !hasmaster) {
