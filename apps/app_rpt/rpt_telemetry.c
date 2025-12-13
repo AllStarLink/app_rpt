@@ -1258,7 +1258,7 @@ void *rpt_tele_thread(void *this)
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
 	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
-	char exten[10];
+	char exten[AST_MAX_EXTENSION];
 
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -1311,8 +1311,8 @@ void *rpt_tele_thread(void *this)
 		strncpy(exten, RPT_TXCONF_NAME, sizeof(exten));
 		break;
 	}
-	/* allocate a pseudo-channel thru asterisk and call the correct conference */
-	mychannel = rpt_request_pseudo_chan(cap, "Telem");
+	/* allocate a local channel thru asterisk and call the correct conference */
+	mychannel = rpt_request_local_chan(cap, "Telem");
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {
