@@ -4805,8 +4805,8 @@ static void *voter_reader(void *data)
 								 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
 								 * (buflen * 8). If a client connects as mix mode, we need to enforce the minimum buflen,
 								 * otherwie the client will connect, but cannot send us audio because the buffer isn't big enough.
-								 * The easiest way is to abort and throw an error to fix the configuration, otherwise we have a whole
-								 * lot of memory allocations that need to be reallocated.
+								 * The easiest way is to abort and throw an error to fix the configuration, otherwise we have a
+								 * whole lot of memory allocations that need to be reallocated.
 								 */
 								ast_log(LOG_NOTICE,
 									"Client: %s (proxy) is sending us mix mode flags, setting client to mix mode\n", client->name);
@@ -4888,7 +4888,7 @@ static void *voter_reader(void *data)
 						/* Finish setting up the drain index. This is where the minimum buflen = 160 in voter.conf
 						 * becomes important for mix mode clients.
 						 */
-						index *= FRAME_SIZE;	// At least with Mulaw, since index already started at 0, this is still 0
+						index *= FRAME_SIZE;	   // At least with Mulaw, since index already started at 0, this is still 0
 						index += BUFDELAY(client); // With Mulaw, since index was still 0, this is now just BUFDELAY(client)
 						/* Recall that FRAME_SIZE is typically 160, so FRAME_SIZE * 4 = 640.
 						 * If the client->buflen is too small at this point (< 160), then index <= 0, which
