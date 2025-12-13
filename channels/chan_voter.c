@@ -295,7 +295,7 @@ Use "core show help voter <command>"" to display usage.
 #include "../apps/app_rpt/pocsag.c"
 
 /* Un-comment this if you wish Digital milliwatt output rather then real audio
- * when transmitting (for debugging only) 
+ * when transmitting (for debugging only)
  */
 /* #define	DMWDIAG */
 #ifdef DMWDIAG
@@ -4618,8 +4618,8 @@ static void *voter_reader(void *data)
 				ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) {
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
 				strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
-				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr, ntohl(vph->curtime.vtime_nsec) / 1000000,
-					(unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
+					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
 			if (client) {
 				/* Search for connected Asterisk channel for this known client. */
@@ -4801,18 +4801,19 @@ static void *voter_reader(void *data)
 							/* Is the mix mode flag being sent by the proxy client? */
 							if (proxy.flags & 32) {
 								/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
-								* so this is where we check the flags from the client, and update client->mix accordingly.
-								* Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
-								* (buflen * 8). If a client connects as mix mode, we need to enforce the minimum buflen,
-								* otherwie the client will connect, but cannot send us audio because the buffer isn't big enough.
-								* The easiest way is to abort and throw an error to fix the configuration, otherwise we have a whole
-								* lot of memory allocations that need to be reallocated.
-								*/
-								ast_log(LOG_NOTICE, "Client: %s (proxy) is sending us mix mode flags, setting client to mix mode\n", 
-									client->name);
+								 * so this is where we check the flags from the client, and update client->mix accordingly.
+								 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
+								 * (buflen * 8). If a client connects as mix mode, we need to enforce the minimum buflen,
+								 * otherwie the client will connect, but cannot send us audio because the buffer isn't big enough.
+								 * The easiest way is to abort and throw an error to fix the configuration, otherwise we have a whole
+								 * lot of memory allocations that need to be reallocated.
+								 */
+								ast_log(LOG_NOTICE,
+									"Client: %s (proxy) is sending us mix mode flags, setting client to mix mode\n", client->name);
 								client->mix = 1;
 								if (client->buflen < 1280) {
-									ast_log(LOG_ERROR, "Client: %s (proxy) is a mix mode client and buflen is too small (<160), FIX voter.conf! Shutting down!\n", client->name);
+									ast_log(LOG_ERROR, "Client: %s (proxy) is a mix mode client and buflen is too small (<160), FIX voter.conf! Shutting down!\n",
+										client->name);
 									run_forever = 0;
 									ast_mutex_unlock(&voter_lock);
 								}
@@ -4820,8 +4821,8 @@ static void *voter_reader(void *data)
 								client->mix = 0;
 							}
 							recvlen -= sizeof(proxy);
-							ast_debug(6, "Now (proxy) rcvd network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
-								ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
+							ast_debug(6, "Now (proxy) rcvd network packet, len %d payload %d challenge %s digest %08x\n",
+								(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
 								goto process_gps;
 							}
@@ -4885,23 +4886,23 @@ static void *voter_reader(void *data)
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
 						}
 						/* Finish setting up the drain index. This is where the minimum buflen = 160 in voter.conf
-						* becomes important for mix mode clients.
-						*/
-						index *= FRAME_SIZE; // At least with Mulaw, since index already started at 0, this is still 0
+						 * becomes important for mix mode clients.
+						 */
+						index *= FRAME_SIZE;	// At least with Mulaw, since index already started at 0, this is still 0
 						index += BUFDELAY(client); // With Mulaw, since index was still 0, this is now just BUFDELAY(client)
 						/* Recall that FRAME_SIZE is typically 160, so FRAME_SIZE * 4 = 640.
-						* If the client->buflen is too small at this point (< 160), then index <= 0, which 
-						* will put us "out of bounds" below (for mix mode clients).
-						*/
+						 * If the client->buflen is too small at this point (< 160), then index <= 0, which
+						 * will put us "out of bounds" below (for mix mode clients).
+						 */
 						index -= (FRAME_SIZE * 4); // With the min buflen = 160 (so client->buflen = 1280), index = 320 here
 						if (DEBUG_ATLEAST(5)) {
 							ast_debug(5, "Mix client drain index = %i\n", index);
 							if (!client->doadpcm && !client->donulaw) {
-								ast_debug(7, "Mix client (Mulaw) %s drain index: %d their seq: %d our seq: %d\n", client->name, index,
-									ntohl(vph->curtime.vtime_nsec), client->rxseqno);
+								ast_debug(7, "Mix client (Mulaw) %s drain index: %d their seq: %d our seq: %d\n", client->name,
+									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno);
 							} else {
-								ast_debug(7, "Mix client (ADPCM/Nulaw) %s drain index: %d their seq: %d our seq: %d\n", client->name,
-									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno_40ms);
+								ast_debug(7, "Mix client (ADPCM/Nulaw) %s drain index: %d their seq: %d our seq: %d\n",
+									client->name, index, ntohl(vph->curtime.vtime_nsec), client->rxseqno_40ms);
 							}
 						}
 					} else {
@@ -4919,7 +4920,7 @@ static void *voter_reader(void *data)
 						difftime -= puckoffset(client);
 						/* All the above would seem to make our drain index "elastic", based on the difference in time
 						 * between the master and the current client?
-						*/
+						 */
 						index = (int) ((long long) difftime / 125000LL);
 						/* This only prints if we are receiving something (and debug is >= 5). */
 						if (DEBUG_ATLEAST(5) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
@@ -5020,11 +5021,11 @@ static void *voter_reader(void *data)
 						}
 					} else if (client->mix) {
 						/* Presumably, the only way to get here is to be a mix mode client AND index < 0
-						* because buflen < 160 in voter.conf.
-						* We should never get here now, because when a client sends us flags to indicate it is a
-						* mix mode client, we check the buflen then, an abort chan_voter with an error to fix the
-						* config file.
-						*/
+						 * because buflen < 160 in voter.conf.
+						 * We should never get here now, because when a client sends us flags to indicate it is a
+						 * mix mode client, we check the buflen then, an abort chan_voter with an error to fix the
+						 * config file.
+						 */
 						client->rxseqno = 0;
 						client->rxseqno_40ms = 0;
 						client->rxseq40ms = 0;
