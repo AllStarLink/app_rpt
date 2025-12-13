@@ -295,8 +295,8 @@ Use "core show help voter <command>"" to display usage.
 #include "../apps/app_rpt/pocsag.c"
 
 /* Un-comment this if you wish Digital milliwatt output rather then real audio
- * when transmitting (for debugging only)
-*/
+ * when transmitting (for debugging only) 
+ */
 /* #define	DMWDIAG */
 #ifdef DMWDIAG
 unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
@@ -2964,7 +2964,7 @@ static void *voter_primary_client(void *data)
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If set, we got something worthwhile. */
 				vph = (VOTER_PACKET_HEADER *) buf;
 				ast_debug(3, "VOTER %i: Rcvd primary client network packet, len %d payload %d challenge %s digest %08x\n",
-					p->nodenum,	(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
+					p->nodenum, (int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 				/* If this is a new session. */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
 					resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
@@ -3552,7 +3552,7 @@ static void *voter_xmit(void *data)
  * the new channel with Asterisk, links the private state to the channel, and
  * starts per-node worker threads (transmit and optional primary/keepalive).
  *
- * Note that on initial start, Asterisk runs reload first, before this function. 
+ * Note that on initial start, Asterisk runs reload first, before this function.
  *
  * This function is used by Asterisk to interact with our module.
  *
@@ -3672,8 +3672,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	p->owner = tmp;
 	p->u = ast_module_user_add(tmp);
 	/* Load the configuration for this node. Note that not all variables are loaded here,
-	* some are loaded in the reload function, which is also executed on initial start.
-	*/
+	 * some are loaded in the reload function, which is also executed on initial start.
+	 */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 	} else {
@@ -3911,21 +3911,21 @@ static int reload(void)
 		context[0] = 0;
 	}
 	/* This is where we load the value for the receive buffer length. The value in the general stanza
-	* will be used for all defined instances, if a per-instance buflen isn't defined.
-	*
-	* The value of buflen in the config file is in ms when Mulaw audio is used, that is NOT the case
-	* if ADPCM audio is used (the delay will actually be almost double, since the each audio frame
-	* contains 40ms of audio for ADPCM, versus 20ms/frame for Mulaw).
-	*
-	* Note here that we read in the value of buflen and *8 to convert it to "frames", if buflen was
-	* 20 (ms) * 8 = 160 --> 1 frame, since FRAME_SIZE = 160. Also note that the absolute minimum for
-	* buflen is actually 40, since we force it to be a minimum of 2 "frames" below ( 40 * 8 = 320,
-	* which is FRAME_SIZE * 2). 
-	*
-	* HOWEVER, this minimum of 40 is only valid for voting clients, for mix mode/general purpose clients,
-	* the actual minimum is buflen = 160. That check is done elsewhere and can will cause chan_voter to 
-	* NOT load and throw and error if buflen < 160 when a mix mode client is detected. 
-	*/
+	 * will be used for all defined instances, if a per-instance buflen isn't defined.
+	 *
+	 * The value of buflen in the config file is in ms when Mulaw audio is used, that is NOT the case
+	 * if ADPCM audio is used (the delay will actually be almost double, since the each audio frame
+	 * contains 40ms of audio for ADPCM, versus 20ms/frame for Mulaw).
+	 *
+	 * Note here that we read in the value of buflen and *8 to convert it to "frames", if buflen was
+	 * 20 (ms) * 8 = 160 --> 1 frame, since FRAME_SIZE = 160. Also note that the absolute minimum for
+	 * buflen is actually 40, since we force it to be a minimum of 2 "frames" below ( 40 * 8 = 320,
+	 * which is FRAME_SIZE * 2).
+	 *
+	 * HOWEVER, this minimum of 40 is only valid for voting clients, for mix mode/general purpose clients,
+	 * the actual minimum is buflen = 160. That check is done elsewhere and can will cause chan_voter to
+	 * NOT load and throw and error if buflen < 160 when a mix mode client is detected.
+	 */
 	val = (char *) ast_variable_retrieve(cfg, "general", "buflen");
 	if (val) {
 		buflen = strtoul(val, NULL, 0) * 8;
@@ -5029,7 +5029,7 @@ static void *voter_reader(void *data)
 						client->rxseqno_40ms = 0;
 						client->rxseq40ms = 0;
 						client->drain40ms = 0;
-						ast_log(LOG_ERROR, 
+						ast_log(LOG_ERROR,
 							"Client out of bounds! Please file a bug report with the developers if you see this message!\n");
 					}
 					if (client->curmaster) {
@@ -5566,7 +5566,7 @@ process_gps:
 		if (no_ast_channel) {
 			/* No Asterisk channel, do not respond to the client. This prevents the client from "looping"
 			 * through online/offline mode when there is no valid channel in app_rpt to connect to.
-			*/
+			 */
 			continue;
 		}
 		/* Otherwise, we just need to send an empty packet to the client. */
@@ -5597,7 +5597,7 @@ process_gps:
 			/* If client is sending options/flags. */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
 				if (client->ismaster) {
-					ast_log(LOG_WARNING, "VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n", 
+					ast_log(LOG_WARNING, "VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n",
 						client->name);
 					authpacket.vp.digest = 0;
 					client->heardfrom = 0;
@@ -5607,18 +5607,18 @@ process_gps:
 				/* Is the mix mode flag being sent by the client? */
 				if (buf[sizeof(VOTER_PACKET_HEADER)] & 32) {
 					/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
-					* so this is where we check the flags from the client, and update client->mix accordingly.
-					* Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
-					* (buflen * 8). If a client connects as mix mode, we need to enforce the minimum buflen,
-					* otherwie the client will connect, but cannot send us audio because the buffer isn't big enough.
-					* The easiest way is to abort and throw an error to fix the configuration, otherwise we have a whole
-					* lot of memory allocations that need to be reallocated.
-					*/
+					 * so this is where we check the flags from the client, and update client->mix accordingly.
+					 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
+					 * (buflen * 8). If a client connects as mix mode, we need to enforce the minimum buflen,
+					 * otherwie the client will connect, but cannot send us audio because the buffer isn't big enough.
+					 * The easiest way is to abort and throw an error to fix the configuration, otherwise we have a whole
+					 * lot of memory allocations that need to be reallocated.
+					 */
 					ast_log(LOG_NOTICE, "Client: %s is sending us mix mode flags, setting client to mix mode\n", client->name);
 					client->mix = 1;
 					/* buflen = 160 * 8 = 1280 = client->buflen */
 					if (client->buflen < 1280) {
-						ast_log(LOG_ERROR, "Client: %s is a mix mode client and buflen is too small (<160), FIX voter.conf! Shutting down!\n", 
+						ast_log(LOG_ERROR, "Client: %s is a mix mode client and buflen is too small (<160), FIX voter.conf! Shutting down!\n",
 							client->name);
 						run_forever = 0;
 						ast_mutex_unlock(&voter_lock);
