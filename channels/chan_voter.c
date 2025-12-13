@@ -295,7 +295,7 @@ Use "core show help voter <command>"" to display usage.
 #include "../apps/app_rpt/pocsag.c"
 
 /* Un-comment this if you wish Digital milliwatt output rather then real audio
- * when transmitting (for debugging only) 
+ * when transmitting (for debugging only)
 */
 /* #define	DMWDIAG */
 #ifdef DMWDIAG
@@ -424,7 +424,7 @@ int maxpvtorder = 0;
  * Obviously, this SHOULD NEVER HAVE TO BE DONE, but there is obviously a bug in the Garmin
  * firmware.
  *
-*/
+ */
 int puckit = 0;
 
 static pthread_t voter_reader_thread = 0;
@@ -539,7 +539,7 @@ struct voter_client *clients = NULL;
  */
 struct voter_pvt {
 	struct ast_channel *owner;
-	unsigned int nodenum;		/* Node number associated with this instance. */
+	unsigned int nodenum; /* Node number associated with this instance. */
 	struct voter_pvt *next;
 	struct ast_frame fr;
 	char buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
@@ -1542,7 +1542,7 @@ static char *voter_complete_connected_client_list(const char *line, const char *
 }
 
 /*!
- * \brief Used by various CLI commands to retun a list of VOTER instances that are configured.
+ * \brief Used by various CLI commands to return a list of VOTER instances that are configured.
  *
  * When a CLI command such as "voter display ?" is issued, a list of configured instances will
  * be displayed (or only one, if there is only one instance).
@@ -1610,7 +1610,7 @@ static void rpt_manager_success(struct mansession *s, const struct message *m)
 /*!
  * \brief Send per-node and per-client VOTER status lines to the given Asterisk manager (AMI) session.
  *
- * When we load this module (load_module), we register VoterStatus with the AMI (not to be confused with 
+ * When we load this module (load_module), we register VoterStatus with the AMI (not to be confused with
  * the CLI) that runs this function when invoked:
  *
  * ast_manager_register("VoterStatus", 0, manager_voter_status, "Return Voter instance(s) status");
@@ -2963,8 +2963,8 @@ static void *voter_primary_client(void *data)
 
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If set, we got something worthwhile. */
 				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(3, "VOTER %i: Rcvd primary client network packet, len %d payload %d challenge %s digest %08x\n", p->nodenum,
-					(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
+				ast_debug(3, "VOTER %i: Rcvd primary client network packet, len %d payload %d challenge %s digest %08x\n",
+					p->nodenum,	(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 				/* If this is a new session. */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
 					resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
@@ -3923,7 +3923,7 @@ static int reload(void)
 	* which is FRAME_SIZE * 2). 
 	*
 	* HOWEVER, this minimum of 40 is only valid for voting clients, for mix mode/general purpose clients,
-	* the acutal minimum is buflen = 160. That check is done elsewhere and can will cause chan_voter to 
+	* the actual minimum is buflen = 160. That check is done elsewhere and can will cause chan_voter to 
 	* NOT load and throw and error if buflen < 160 when a mix mode client is detected. 
 	*/
 	val = (char *) ast_variable_retrieve(cfg, "general", "buflen");
@@ -4771,7 +4771,7 @@ static void *voter_reader(void *data)
 							}
 						}
 						last_master_count = voter_timing_count;
-						/* Set sec and nsec time variables fom GPS time sent by client. */
+						/* Set sec and nsec time variables from GPS time sent by client. */
 						master_time.vtime_sec = ntohl(vph->curtime.vtime_sec);
 						master_time.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
 						if (!master_port) {
@@ -5029,7 +5029,8 @@ static void *voter_reader(void *data)
 						client->rxseqno_40ms = 0;
 						client->rxseq40ms = 0;
 						client->drain40ms = 0;
-						ast_log(LOG_ERROR, "Client out of bounds! Please file a bug report with the developers if you see this message!\n");
+						ast_log(LOG_ERROR, 
+							"Client out of bounds! Please file a bug report with the developers if you see this message!\n");
 					}
 					if (client->curmaster) {
 						gettimeofday(&tv, NULL);
@@ -5563,8 +5564,8 @@ process_gps:
 		}
 
 		if (no_ast_channel) {
-			/* No Asterisk channel, do not respond to the client. This prevents the client from "looping" 
-			* through online/offline mode when there is no valid channel in app_rpt to connect to.
+			/* No Asterisk channel, do not respond to the client. This prevents the client from "looping"
+			 * through online/offline mode when there is no valid channel in app_rpt to connect to.
 			*/
 			continue;
 		}
@@ -5596,8 +5597,8 @@ process_gps:
 			/* If client is sending options/flags. */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
 				if (client->ismaster) {
-					ast_log(LOG_WARNING,
-						"VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n", client->name);
+					ast_log(LOG_WARNING, "VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n", 
+						client->name);
 					authpacket.vp.digest = 0;
 					client->heardfrom = 0;
 					client->respdigest = 0;
@@ -5613,12 +5614,12 @@ process_gps:
 					* The easiest way is to abort and throw an error to fix the configuration, otherwise we have a whole
 					* lot of memory allocations that need to be reallocated.
 					*/
-					ast_log(LOG_NOTICE, "Client: %s is sending us mix mode flags, setting client to mix mode\n", 
-						client->name);
+					ast_log(LOG_NOTICE, "Client: %s is sending us mix mode flags, setting client to mix mode\n", client->name);
 					client->mix = 1;
 					/* buflen = 160 * 8 = 1280 = client->buflen */
 					if (client->buflen < 1280) {
-						ast_log(LOG_ERROR, "Client: %s is a mix mode client and buflen is too small (<160), FIX voter.conf! Shutting down!\n", client->name);
+						ast_log(LOG_ERROR, "Client: %s is a mix mode client and buflen is too small (<160), FIX voter.conf! Shutting down!\n", 
+							client->name);
 						run_forever = 0;
 						ast_mutex_unlock(&voter_lock);
 					}
