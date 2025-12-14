@@ -4709,12 +4709,15 @@ static void *voter_reader(void *data)
 								/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
 								 * so this is where we check the flags from the client, and update client->mix accordingly.
 								 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
-								 * (buflen * 8). If a client connects as mix mode, we need to enforce the minimum buflen,
-								 * otherwie the client will connect, but cannot send us audio because the buffer isn't big enough.
+								 * (buflen * 8, also FRAME_SIZE * 8). This keeps the starting drain index > 0 when we 
+								 * configure it. 
+								 * 
+								 * If a client connects as mix mode, we need to enforce the minimum buflen, otherwie the
+								 * client will connect, but cannot send us audio because the buffer isn't big enough.
 								 *
 								 * Check the buflen, throw an error if it is too small, and block the client from connecting.
 								 */
-								if (client->buflen < 1280) {
+								if (client->buflen < (FRAME_SIZE * 8)) {
 									if (!logged_buflen_too_small) {
 										ast_log(LOG_ERROR,
 											"VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
@@ -5497,12 +5500,15 @@ process_gps:
 					/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
 					 * so this is where we check the flags from the client, and update client->mix accordingly.
 					 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
-					 * (buflen * 8). If a client connects as mix mode, we need to enforce the minimum buflen,
-					 * otherwie the client will connect, but cannot send us audio because the buffer isn't big enough.
+					 * (buflen * 8, also FRAME_SIZE * 8). This keeps the starting drain index > 0 when we 
+					 * configure it. 
+					 * 
+					 * If a client connects as mix mode, we need to enforce the minimum buflen, otherwie the
+					 * client will connect, but cannot send us audio because the buffer isn't big enough.
 					 *
 					 * Check the buflen, throw an error if it is too small, and block the client from connecting.
 					 */
-					if (client->buflen < 1280) {
+					if (client->buflen < (FRAME_SIZE * 8)) {
 						if (!logged_buflen_too_small) {
 							ast_log(LOG_ERROR,
 								"VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
