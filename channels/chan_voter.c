@@ -5506,9 +5506,9 @@ process_gps:
 						}
 						continue;
 					} else {
-					client->mix = 1;
-					ast_log(LOG_NOTICE, "Client: %s is sending mix mode flag, setting client to mix mode\n", client->name);
-					logged_buflen_too_small = 0;
+						client->mix = 1;
+						ast_log(LOG_NOTICE, "Client: %s is sending mix mode flag, setting client to mix mode\n", client->name);
+						logged_buflen_too_small = 0;
 					}
 				}
 			}
