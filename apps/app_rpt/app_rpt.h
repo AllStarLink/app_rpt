@@ -1142,7 +1142,7 @@ char *rpt_complete_function_list(const char *line, const char *word, int pos, in
 * \param iterator This is the name of the variable that will be used for
 * the AO2_ITERATOR. It must be declared before calling this macro.
 *
-* This macro is use to loop over (traverse) the entries in an AO2 container list. It uses a
+* This macro is used to loop over (traverse) the entries in an AO2 container list. It uses a
 * \a for loop, and supplies the enclosed code with a pointer to each list
 * entry as it loops. It is typically used as follows:
 * \code

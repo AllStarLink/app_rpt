@@ -57,6 +57,12 @@ void rpt_link_add(struct ao2_container *links, struct rpt_link *l);
 void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
 
 /*!
+ * \brief destroy ao2 object
+ * \param obj rpt_link object called by the ao2_alloc() destructor function
+ */
+void rpt_link_destroy(void *obj);
+
+/*!
  * \brief Create a list of links for this node.
  * Must be called locked.
  * \param myrpt		Pointer to rpt structure.
@@ -83,7 +89,3 @@ void rpt_update_links(struct rpt *myrpt);
  * \retval 2 Already connected to this node
  */
 int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma);
-
-/*! \brief destroy ao2 object
- */
-void rpt_link_destroy(void *obj);
