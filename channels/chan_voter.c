@@ -966,8 +966,8 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 		ast_log(LOG_WARNING, "voter_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
 		return -1;
 	}
-	/* When we call, it just works, really, there's no destination...  
-	 * Just ring the phone and wait for someone to answer. 
+	/* When we call, it just works, really, there's no destination...
+	 * Just ring the phone and wait for someone to answer.
 	 */
 	ast_debug(1, "Channel %s: Calling %s\n",ast_channel_name(ast), dest);
 	ast_setstate(ast, AST_STATE_UP);
