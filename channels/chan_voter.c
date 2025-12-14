@@ -369,10 +369,10 @@ char context[100];
 #define PAGER_SRC "PAGER"
 #define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 30000
-#define SAMPRATE 8000 // (Sample Rate)
-#define DIVLCM 192000 // (Least Common Mult of 512,1200,2400,8000)
+#define SAMPRATE 8000 /* (Sample Rate) */
+#define DIVLCM 192000 /* (Least Common Mult of 512,1200,2400,8000) */
 #define PREAMBLE_BITS 576
-#define MESSAGE_BITS 544 // (17 * 32), 1 longword SYNC plus 16 longwords data
+#define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
 /* We have to send "inverted"... probably because of inverting AMP in Voter board. */
 #define ONEVAL AMPVAL
 #define ZEROVAL -AMPVAL
@@ -954,9 +954,7 @@ static void incr_drainindex(const struct voter_pvt *p)
 }
 
 /*!
- * \brief Voter call.
- *
- * This function is used by Asterisk to interact with our module.
+ * \brief Channel driver call callback to Asterisk.
  *
  * \param c				Asterisk channel.
  * \param dest			Destination.
@@ -978,9 +976,7 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 }
 
 /*!
- * \brief Asterisk hangup function.
- *
- * This function is used by Asterisk to interact with our module.
+ * \brief Channel driver hangup callback to Asterisk.
  *
  * \param c 			Asterisk channel.
  * \return  			Always returns 0.
@@ -1050,7 +1046,7 @@ static int voter_hangup(struct ast_channel *ast)
 }
 
 /*!
- * \brief Channel driver indicate callback.
+ * \brief Channel driver indicate callback to Asterisk.
  *
  * This is used to indicate TX key/unkey status.
  *
@@ -1085,9 +1081,7 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 }
 
 /*!
- * \brief Asterisk digit begin function.
- *
- * This function is used by Asterisk to interact with our module.
+ * \brief Channel driver digit_begin callback to Asterisk.
  *
  * \param ast			Asterisk channel.
  * \param digit			Digit processed.
@@ -1099,9 +1093,7 @@ static int voter_digit_begin(struct ast_channel *ast, char digit)
 }
 
 /*!
- * \brief Asterisk digit end function.
- *
- * This function is used by Asterisk to interact with our module.
+ * \brief Channel driver digit_end callback to Asterisk.
  *
  * \param ast			Asterisk channel.
  * \param digit			Digit processed.
@@ -1116,9 +1108,7 @@ static int voter_digit_end(struct ast_channel *ast, char digit, unsigned int dur
 }
 
 /*!
- * \brief Asterisk setoption function.
- *
- * This function is used by Asterisk to interact with our module.
+ * \brief Channel driver setoption callback to Asterisk.
  *
  * \param chan			Asterisk channel.
  * \param option		Option.
@@ -1190,9 +1180,7 @@ static void mkpsamples(short* restrict audio, uint32_t x, int* restrict audio_pt
 }
 
 /*!
- * \brief Asterisk text function. Used for processing POCSAG pages.
- *
- * This function is used by Asterisk to interact with our module.
+ * \brief Channel driver text callback to Asterisk. Used for processing POCSAG pages.
  *
  * \param c				Asterisk channel.
  * \param text			Text message to process.
@@ -1326,9 +1314,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 }
 
 /*!
- * \brief Asterisk read function.
- *
- * This function is used by Asterisk to interact with our module.
+ * \brief Channel driver read callback to Asterisk.
  *
  * \param ast			Asterisk channel.
  * \retval 				Asterisk frame.
@@ -1343,9 +1329,7 @@ static struct ast_frame *voter_read(struct ast_channel *ast)
 }
 
 /*!
- * \brief Asterisk write function.
- *
- * This function is used by Asterisk to interact with our module.
+ * \brief Channel driver write callback to Asterisk.
  *
  * This routine handles asterisk to radio frames.
  *
@@ -3661,7 +3645,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	ast_channel_set_rawreadformat(tmp, ast_format_slin);
 	ast_channel_set_readformat(tmp, ast_format_slin);
 	ast_channel_nativeformats_set(tmp, voter_tech.capabilities);
-	//  if (state == AST_STATE_RING) tmp->rings = 1;
+	/* if (state == AST_STATE_RING) tmp->rings = 1; */
 	ast_channel_tech_pvt_set(tmp, p);
 	ast_channel_unlock(tmp);
 	ast_channel_language_set(tmp, "");
@@ -3806,7 +3790,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			destroyPmrChannel(p->pmrChan);
 		}
 		p->pmrChan = createPmrChannel(&tChan, FRAME_SIZE);
-		p->pmrChan->radioDuplex = 1; // o->radioduplex;
+		p->pmrChan->radioDuplex = 1; /* o->radioduplex; */
 		p->pmrChan->b.loopback = 0;
 		p->pmrChan->b.radioactive = 1;
 		p->pmrChan->txrxblankingtime = 0;
@@ -4066,7 +4050,7 @@ static int reload(void)
 				tChan.txMixA = TX_OUT_COMPOSITE;
 				tChan.b.txboost = 1;
 				p->pmrChan = createPmrChannel(&tChan, FRAME_SIZE);
-				p->pmrChan->radioDuplex = 1; // o->radioduplex;
+				p->pmrChan->radioDuplex = 1; /* o->radioduplex; */
 				p->pmrChan->b.loopback = 0;
 				p->pmrChan->b.radioactive = 1;
 				p->pmrChan->txrxblankingtime = 0;
@@ -4884,18 +4868,18 @@ static void *voter_reader(void *data)
 						/* Figure out whether we are using ADPCM/Nulaw or Mulaw, and set the starting drain index.*/
 						if (!client->doadpcm && !client->donulaw) {
 							/* Using Mulaw (typical default) */
-							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno; // This seems to result in 0?
+							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno; /* This seems to result in 0? */
 						} else {
 							/* Using ADPCM or Nulaw */
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
 						}
-						index *= FRAME_SIZE;	   // At least with Mulaw, since index already started at 0, this is still 0
-						index += BUFDELAY(client); // With Mulaw, since index was still 0, this is now just BUFDELAY(client)
+						index *= FRAME_SIZE;	   /* At least with Mulaw, since index already started at 0, this is still 0 */
+						index += BUFDELAY(client); /* With Mulaw, since index was still 0, this is now just BUFDELAY(client) */
 						/* Recall that FRAME_SIZE is typically 160, so FRAME_SIZE * 4 = 640.
 						 * If the client->buflen is too small at this point (< 160), then index <= 0, which
 						 * will put us "out of bounds" below (for mix mode clients).
 						 */
-						index -= (FRAME_SIZE * 4); // With the min buflen = 160 (so client->buflen = 1280), index = 320 here
+						index -= (FRAME_SIZE * 4); /* With the min buflen = 160 (so client->buflen = 1280), index = 320 here */
 						if (DEBUG_ATLEAST(5)) {
 							ast_debug(5, "Mix client drain index = %i\n", index);
 							if (!client->doadpcm && !client->donulaw) {
