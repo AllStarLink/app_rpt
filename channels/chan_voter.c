@@ -969,7 +969,7 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 	/* When we call, it just works, really, there's no destination...
 	 * Just ring the phone and wait for someone to answer.
 	 */
-	ast_debug(1, "Channel %s: Calling %s\n",ast_channel_name(ast), dest);
+	ast_debug(1, "Channel %s: Calling %s\n", ast_channel_name(ast), dest);
 	ast_setstate(ast, AST_STATE_UP);
 	return 0;
 }
