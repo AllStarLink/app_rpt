@@ -424,7 +424,7 @@ int maxpvtorder = 0;
  * Obviously, this SHOULD NEVER HAVE TO BE DONE, but there is obviously a bug in the Garmin
  * firmware.
  *
-*/
+ */
 int puckit = 0;
 
 static pthread_t voter_reader_thread = 0;
