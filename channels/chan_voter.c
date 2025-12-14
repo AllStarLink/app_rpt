@@ -5737,6 +5737,9 @@ static int load_module(void)
 	snprintf(challenge, sizeof(challenge), "%ld", ast_random());
 	hasmaster = 0;
 
+	/* Do an initial configuration load from the config file. Note we also run reload
+	 * further down.
+	 */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return 1;
@@ -5789,6 +5792,7 @@ static int load_module(void)
 	}
 	ast_timer_set_rate(voter_thread_timer, 50); /* 50 ticks per second = every 20ms */
 
+	/* Load the rest of the values from the config file by running reload. */
 	if (reload()) {
 		return AST_MODULE_LOAD_DECLINE;
 	}
