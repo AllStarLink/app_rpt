@@ -339,14 +339,14 @@ char context[100];
  */
 #define FRAME_SIZE 160
 #define ADPCM_FRAME_SIZE 163
-#define DEFAULT_BUFLEN 480 /* 480ms default buffer length when buflen not specified in voter.conf. */
+#define DEFAULT_BUFLEN 480 /* 480ms default buffer length when buflen not specified in voter.conf */
 #define BUFDELAY(p) (p->buflen - (FRAME_SIZE * 2))
 
 #define DEFAULT_LINGER 6
 #define DEFAULT_GTXGAIN "0.0"
 
 #define MAX_MASTER_COUNT 3
-#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings. */
+#define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 #define CLIENT_WARN_SECS 60
 
 #define DELIMCHR ','
@@ -419,10 +419,8 @@ int maxpvtorder = 0;
  * in a while. In an attempt to be at least somewhat tolerant of this operation, the "puckit"
  * configuration flag may be set in voter.conf. We attempt to deal with this problem by keeping
  * a "time differential" for each client (compared with the "master") and applying it to time
- * information within the protocol.
- *
- * Obviously, this SHOULD NEVER HAVE TO BE DONE, but there is obviously a bug in the Garmin
- * firmware.
+ * information within the protocol. Obviously, this SHOULD NEVER HAVE TO BE DONE, but there
+ * is obviously a bug in the Garmin firmware.
  *
  */
 int puckit = 0;
@@ -539,7 +537,7 @@ struct voter_client *clients = NULL;
  */
 struct voter_pvt {
 	struct ast_channel *owner;
-	unsigned int nodenum; /* Node number associated with this instance. */
+	unsigned int nodenum; /* Node number associated with this instance */
 	struct voter_pvt *next;
 	struct ast_frame fr;
 	char buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
@@ -954,7 +952,7 @@ static void incr_drainindex(const struct voter_pvt *p)
 }
 
 /*!
- * \brief Channel driver call callback to Asterisk.
+ * \brief Channel driver call callback to core.
  *
  * \param c				Asterisk channel.
  * \param dest			Destination.
@@ -968,15 +966,16 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 		ast_log(LOG_WARNING, "voter_call called on %s, neither down nor reserved\n", ast_channel_name(ast));
 		return -1;
 	}
-	/* When we call, it just works, really, there's no destination...  Just
-	   ring the phone and wait for someone to answer */
+	/* When we call, it just works, really, there's no destination...  
+	 * Just ring the phone and wait for someone to answer. 
+	 */
 	ast_debug(1, "Channel %s: Calling %s\n",ast_channel_name(ast), dest);
 	ast_setstate(ast, AST_STATE_UP);
 	return 0;
 }
 
 /*!
- * \brief Channel driver hangup callback to Asterisk.
+ * \brief Channel driver hangup callback to core.
  *
  * \param c 			Asterisk channel.
  * \return  			Always returns 0.
@@ -1046,7 +1045,7 @@ static int voter_hangup(struct ast_channel *ast)
 }
 
 /*!
- * \brief Channel driver indicate callback to Asterisk.
+ * \brief Channel driver indicate callback to core.
  *
  * This is used to indicate TX key/unkey status.
  *
@@ -1081,7 +1080,7 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 }
 
 /*!
- * \brief Channel driver digit_begin callback to Asterisk.
+ * \brief Channel driver digit_begin callback to core.
  *
  * \param ast			Asterisk channel.
  * \param digit			Digit processed.
@@ -1093,7 +1092,7 @@ static int voter_digit_begin(struct ast_channel *ast, char digit)
 }
 
 /*!
- * \brief Channel driver digit_end callback to Asterisk.
+ * \brief Channel driver digit_end callback to core.
  *
  * \param ast			Asterisk channel.
  * \param digit			Digit processed.
@@ -1108,7 +1107,7 @@ static int voter_digit_end(struct ast_channel *ast, char digit, unsigned int dur
 }
 
 /*!
- * \brief Channel driver setoption callback to Asterisk.
+ * \brief Channel driver setoption callback to core.
  *
  * \param chan			Asterisk channel.
  * \param option		Option.
@@ -1180,7 +1179,7 @@ static void mkpsamples(short* restrict audio, uint32_t x, int* restrict audio_pt
 }
 
 /*!
- * \brief Channel driver text callback to Asterisk. Used for processing POCSAG pages.
+ * \brief Channel driver text callback to core. Used for processing POCSAG pages.
  *
  * \param c				Asterisk channel.
  * \param text			Text message to process.
@@ -1314,7 +1313,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 }
 
 /*!
- * \brief Channel driver read callback to Asterisk.
+ * \brief Channel driver read callback to core.
  *
  * \param ast			Asterisk channel.
  * \retval 				Asterisk frame.
@@ -1329,7 +1328,7 @@ static struct ast_frame *voter_read(struct ast_channel *ast)
 }
 
 /*!
- * \brief Channel driver write callback to Asterisk.
+ * \brief Channel driver write callback to core.
  *
  * This routine handles asterisk to radio frames.
  *
@@ -1691,7 +1690,7 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 		}
 	}
 	ast_mutex_unlock(&voter_lock);
-	astman_append(ses, "\r\n"); /* Properly terminate Manager output. */
+	astman_append(ses, "\r\n"); /* Properly terminate Manager output */
 	if (str) {
 		ast_free(str);
 	}
@@ -1756,12 +1755,12 @@ static int term_supports_clear(void)
 		} else if (!strcmp(term, "xterm-256color")) {
 			return 1;
 		} else if (!strncmp(term, "Eterm", 5)) {
-			/* Both entries which start with Eterm support color. */
+			/* Both entries which start with Eterm support color */
 			return 1;
 		} else if (!strcmp(term, "vt100")) {
 			return 1;
 		} else if (!strncmp(term, "crt", 3)) {
-			/* Both CRT terminals support color. */
+			/* Both CRT terminals support color */
 			return 1;
 		}
 	}
@@ -1807,12 +1806,12 @@ static void voter_display(int fd, const struct voter_pvt *p)
 	option_verbose = 0;
 
 	for (;;) {
-		/* Repeat every 100ms. */
+		/* Repeat every 100ms */
 		if (rad_rxwait(fd, 100)) {
 			break;
 		}
 		if (vt100compat) {
-			ast_cli(fd, "\033[2J\033[H"); /* Clear the screen. */
+			ast_cli(fd, "\033[2J\033[H"); /* Clear the screen */
 		}
 		ast_cli(fd, "Voter Instance %d Display:\n\n", p->nodenum);
 		if (hasmaster && (!master_time.vtime_sec)) {
@@ -2479,7 +2478,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
 		return RESULT_SUCCESS;
 	}
-	if (argc > 3) { /* Specify list of lockouts. */
+	if (argc > 3) { /* Specify list of lockouts */
 		if (!strcasecmp(argv[3], "all")) {
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
@@ -2494,7 +2493,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 				}
 				client->txlockout = 0;
 			}
-		} else { /* Must be a comma-delimited list. */
+		} else { /* Must be a comma-delimited list */
 			ast_copy_string(str, argv[3], sizeof(str) - 1);
 			n = finddelim((char *) argv[3], strs, ARRAY_LEN(strs));
 			for (i = 0; i < n; i++) {
@@ -2649,7 +2648,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			maxprio = i;
 		}
 	}
-	/* f1 now contains the voted-upon audio in slinear. */
+	/* f1 now contains the voted-upon audio in slinear */
 	for (client = clients; client; client = client->next) {
 		short *sp1, *sp2;
 		if (client->nodenum != p->nodenum) {
@@ -2744,7 +2743,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	if (p->priconn) {
 		maxclient = NULL;
 	}
-	if (!maxclient) { /* If nothing there. */
+	if (!maxclient) { /* If nothing there */
 		/* XXX p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
 		 * For now, this prevents a crash from queuing a frame to a NULL channel. */
 		if (!p->owner) {
@@ -2807,7 +2806,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	p->rxkey = 1;
 	x = 0;
 	if (p->dsp && p->usedtmf) {
-		struct ast_frame *f3 = ast_frdup(f1); /* dsp_process frees frame, so dup f1 so we still have it later on. */
+		struct ast_frame *f3 = ast_frdup(f1); /* dsp_process frees frame, so dup f1 so we still have it later on */
 		if (!f3) {
 			ast_frfree(f1);
 			return 0;
@@ -2943,7 +2942,7 @@ static void *voter_primary_client(void *data)
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(pri_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 
-			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If set got something worthwhile. */
+			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If set got something worthwhile */
 				vph = (VOTER_PACKET_HEADER *) buf;
 				ast_debug(3, "VOTER %i: Rcvd primary client network packet, len %d payload %d challenge %s digest %08x\n",
 					p->nodenum, (int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
@@ -3043,7 +3042,7 @@ static void *voter_xmit(void *data)
 			}
 		}
 		f1 = NULL;
-		/* x will be set here if there was actual transmit activity. */
+		/* x will be set here if there was actual transmit activity */
 		if (!x && p->pmrChan) {
 			p->pmrChan->txPttIn = 0;
 		}
@@ -3140,7 +3139,7 @@ static void *voter_xmit(void *data)
 				}
 			}
 		}
-		/* x will now be set if we are to generate TX output. */
+		/* x will now be set if we are to generate TX output */
 		if (x || mx) {
 			memset(&audiopacket, 0, sizeof(audiopacket) - sizeof(audiopacket.audio));
 			memset(&audiopacket.audio, 0xff, sizeof(audiopacket.audio));
@@ -4032,7 +4031,7 @@ static int reload(void)
 			val = DEFAULT_GTXGAIN;
 		}
 		p->gtxgain = pow(10.0, atof(val) / 20.0);
-		/* If new CTCSS frequency. */
+		/* If new CTCSS frequency */
 		if (strcmp(oldctcss, p->txctcssfreq) || (oldtoctype != p->txtoctype) || (oldlevel != p->txctcsslevel)) {
 			t_pmr_chan tChan;
 
@@ -4909,7 +4908,7 @@ static void *voter_reader(void *data)
 						index = (int) ((long long) difftime / 125000LL);
 						/* This only prints if we are receiving something (and debug is >= 5). */
 						if (DEBUG_ATLEAST(5) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
-							/* Get the time of the master client so we can display it*/
+							/* Get the time of the master client so we can display it */
 							timestuff = (time_t) master_time.vtime_sec;
 							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
 							ast_debug(5, "MasterTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
@@ -5254,7 +5253,7 @@ static void *voter_reader(void *data)
 									p->testcycle = 0;
 									p->testindex = 0;
 								}
-								if (!maxclient) { /* If nothing there. */
+								if (!maxclient) { /* If nothing there */
 									memset(silbuf, 0, sizeof(silbuf));
 									memset(&fr, 0, sizeof(fr));
 									fr.frametype = AST_FRAME_VOICE;
@@ -5416,7 +5415,7 @@ static void *voter_reader(void *data)
 
 				memcpy(&pingpacket, buf, sizeof(pingpacket));
 				gettimeofday(&client->ping_last_rxtime, NULL);
-				/* If ping not for this session. */
+				/* If ping not for this session */
 				if (voter_tvdiff_ms(client->ping_txtime, pingpacket.starttime)) {
 					continue;
 				}
@@ -5504,11 +5503,11 @@ process_gps:
 				client->lastmastergpstime.vtime_sec = mastergps_time.vtime_sec;
 				client->lastmastergpstime.vtime_nsec = mastergps_time.vtime_nsec;
 				if (DEBUG_ATLEAST(4)) {
-					/* Get and display GPS Time that the client is sending us. */
+					/* Get and display GPS Time that the client is sending us */
 					timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "GPSTime:    %s.%09d from %s\n", timestr, ntohl(vph->curtime.vtime_nsec), client->name);
-					/* Get and display the System time. */
+					/* Get and display the System time */
 					gettimeofday(&timetv, NULL);
 					timetv.tv_usec = ((timetv.tv_usec + 10000) / 20000) * 20000;
 					if (timetv.tv_usec >= 1000000) {
@@ -5518,7 +5517,7 @@ process_gps:
 					timestuff = (time_t) timetv.tv_sec;
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "SysTime:   %s.%06d\n", timestr, (int) timetv.tv_usec);
-					/* Display the time from the master client. */
+					/* Display the time from the master client */
 					timestuff = (time_t) master_time.vtime_sec;
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "MasterTime: %s.%09d\n", timestr, master_time.vtime_nsec);
@@ -5570,17 +5569,17 @@ process_gps:
 		gettimeofday(&tv, NULL);
 		authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
 		authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-		/* Make our digest based on their challenge. */
+		/* Make our digest based on their challenge */
 		authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		authpacket.flags = 0;
 		proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
 		proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-		/* Make our digest based on their challenge. */
+		/* Make our digest based on their challenge */
 		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		proxy_authpacket.flags = 0;
 		if (client && !vph->payload_type) {
 			client->mix = 0;
-			/* If client is sending options/flags. */
+			/* If client is sending options/flags */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
 				if (client->ismaster) {
 					ast_log(LOG_WARNING, "VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n",
