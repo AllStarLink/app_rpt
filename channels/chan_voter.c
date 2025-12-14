@@ -4717,9 +4717,13 @@ static void *voter_reader(void *data)
 								if (client->buflen < 1280) {
 									if (!logged_buflen_too_small) {
 										ast_log(LOG_ERROR,
-											"Mix mode client (proxy) connecting and buflen too small (<160), FIX voter.conf! Rejecting connection!\n");
+											"VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
+											client->nodenum, client->name, client->buflen / 8);
 										logged_buflen_too_small = 1;
 									}
+									client->mix = 0;
+									client->heardfrom = 0;
+									client->respdigest = 0;
 									continue;
 								} else {
 									client->mix = 1;
@@ -5501,9 +5505,13 @@ process_gps:
 					if (client->buflen < 1280) {
 						if (!logged_buflen_too_small) {
 							ast_log(LOG_ERROR,
-								"Mix mode client connecting and buflen too small (<160), FIX voter.conf! Rejecting connection!\n");
+								"VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
+								client->nodenum, client->name, client->buflen / 8);
 							logged_buflen_too_small = 1;
 						}
+						client->mix = 0;
+						client->heardfrom = 0;
+						client->respdigest = 0;
 						continue;
 					} else {
 						client->mix = 1;
