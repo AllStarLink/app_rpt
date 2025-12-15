@@ -24,7 +24,7 @@
 #include "rpt_link.h"
 #include "rpt_telemetry.h"
 
-#define ENABLE_CHECK_TLINK_LIST	0
+#define ENABLE_CHECK_TLINK_LIST 0
 
 #define OBUFSIZE(size) (size + sizeof("123456,")) /* size of buffer + room for node count + comma */
 #define BUFSIZE(size) (size)
