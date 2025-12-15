@@ -118,8 +118,8 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
 			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
-			rpt_mutex_unlock(&myrpt->lock);
 			if (!links_copy) {
+				rpt_mutex_unlock(&myrpt->lock);
 				return RESULT_FAILURE;
 			}
 			if (myrpt->keyed)
@@ -212,6 +212,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			if (strlen(myrpt->lastdtmfcommand)) {
 				lastdtmfcommand = ast_strdup(myrpt->lastdtmfcommand);
 			}
+			rpt_mutex_unlock(&myrpt->lock);
 
 			ast_cli(fd, "************************ NODE %s STATISTICS *************************\n\n", myrpt->name);
 			ast_cli(fd, "Selected system state............................: %d\n", myrpt->p.sysstate_cur);
