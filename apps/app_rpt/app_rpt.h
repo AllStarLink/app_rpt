@@ -1164,5 +1164,5 @@ char *rpt_complete_function_list(const char *line, const char *word, int pos, in
 */
 
 #define RPT_LIST_TRAVERSE(container, var, iterator) \
-	(iterator) = ao2_iterator_init((container), 0); \
+	(iterator) = (container) ? ao2_iterator_init((container), 0) : (struct ao2_iterator) { 0 }; \
 	for (; ((var) = ao2_iterator_next(&(iterator))); ao2_ref((var), -1))
