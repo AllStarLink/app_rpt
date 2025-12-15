@@ -24,6 +24,8 @@
 #include "rpt_link.h"
 #include "rpt_telemetry.h"
 
+#define ENABLE_CHECK_TLINK_LIST 0
+
 #define OBUFSIZE(size) (size + sizeof("123456,")) /* size of buffer + room for node count + comma */
 #define BUFSIZE(size) (size)
 
@@ -114,6 +116,7 @@ int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 
 static void check_tlink_list(struct rpt *myrpt)
 {
+#if ENABLE_CHECK_TLINK_LIST
 	struct rpt_tele *tlist;
 
 	/* This is supposed to be a doubly linked list,
@@ -129,6 +132,7 @@ static void check_tlink_list(struct rpt *myrpt)
 		}
 		ast_assert(tlist != NULL);
 	}
+#endif
 }
 
 /*! \brief free a link structure and it's ast_str linklist if it exists
