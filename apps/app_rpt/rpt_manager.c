@@ -212,7 +212,8 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 			rpt_mutex_unlock(&myrpt->lock);
 			if (!links_copy) {
-				return -1;
+				ast_free(lbuf);
+				return RESULT_FAILURE;
 			}
 
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
@@ -506,7 +507,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 					break;
 				}
 			}
-
+			ao2_iterator_destroy(&l_it);
 			if (myrpt->keyed)
 				input_signal = "YES";
 			else

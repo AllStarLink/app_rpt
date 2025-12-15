@@ -778,6 +778,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	}
 	l->rxlingertimer = RX_LINGER_TIME;
 	rpt_link_add(myrpt->links, l);
+	ao2_ref(l, -1); /* Release our reference; container now owns it*/
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	return 0;
