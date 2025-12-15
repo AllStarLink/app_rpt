@@ -506,8 +506,6 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 					break;
 				}
 			}
-			ao2_iterator_destroy(&l_it);
-			ao2_cleanup(links_copy);
 
 			if (myrpt->keyed)
 				input_signal = "YES";

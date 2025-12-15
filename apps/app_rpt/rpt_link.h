@@ -50,10 +50,11 @@ void send_link_keyquery(struct rpt *myrpt);
 void rpt_link_add(struct ao2_container *links, struct rpt_link *l);
 
 /*!
- * \brief Remove an rpt_link from a rpt
- * \param myrpt
- * \param l Link to remove from the repeater's linked list of links
+ * \brief Remove an rpt_link from a links container
+ * \param links ao2_container to remove the link from
+ * \param l Link to remove from the container
  */
+
 void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
 
 /*!

@@ -349,6 +349,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			rpt_mutex_lock(&myrpt->lock);
 			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
 				ao2_cleanup(links_copy);
+				rpt_mutex_unlock(&myrpt->lock);
 				return RESULT_FAILURE;
 			}
 			rpt_mutex_unlock(&myrpt->lock);
