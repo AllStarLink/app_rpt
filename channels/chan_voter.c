@@ -31,29 +31,76 @@
 
 /*  Basic Information On How This Works
 Each node has a number of potential "clients" associated with it. In the voter.conf file, each stanza (category)
-is named by the node number that the clients specified within the stanza are to be associated with. Each entry
-consists of an arbitrary (relatively meaningless, just included for easy identification purposes within this
-channel driver, and has nothing to do with its operation) identifier equated to a unique password. This password
-is programmed into the client. All clients must have unique passwords, as that is what is used by this channel
-driver to identify them.
+is named by the node number that the clients specified within the stanza are to be associated with. This is known
+as an "instance" in this channel driver. There can be one or more instances, and one or more client associated
+with each instance.
 
-Each channel instance (as opened by app_rpt as a main radio channel, e.g. rxchannel=Voter/1999 in rpt.conf) and
-is directly associated with the node that opened it.
+Each client entry in voter.conf starts with an arbitrary identifier, which is used by various display commands
+to identify each client. Each client entry then contains a set of options for that client, starting with a
+unique password that must match what is programmed into the client hardware device. All clients must have unique
+passwords, as that is what is used by this channel driver to identify and authenticate them.
 
-Each client has a pair of circular buffers, one for mulaw audio data, and one for RSSI value. The allocated buffer
-length in all clients is determined by the 'buflen' parameter, which is specified in the "global" stanza in the
-voter.conf file in milliseconds, and represented in the channel driver as number of samples (actual buffer length,
-which is 8 * milliseconds). The buflen in voter.conf is in increments of 40ms, with values rounded down.
+Each channel instance (as opened by app_rpt as a main radio channel, e.g. rxchannel=Voter/1999 in rpt.conf) is
+directly associated with the node that opened it.
 
-The absolute minimum buflen in voter.conf is 40, with a recommended minimum of 120 for voting clients. For mix
-mode/general purpose clients, the minimum is 160. The default if buflen is not specified is defined below, but
-is generally 480.
 
-Every channel instance has a index ("drainindex"), indicating the next position within the physical buffer(s) where
-the audio will be taken from the buffers and presented to the Asterisk channel stream as VOICE frames.
+Audio:
+
+Before talking about how audio is buffered in the channel driver, we need to talk a bit about audio and frames.
+
+The two audio codecs supported for transport between chan_voter and the client are ulaw and IMA-ADPCM. ulaw is
+8-bit, 8kHz (8k samples/sec), whereas IMA-ADPCM (aka ADPCM in this context) is 4-bit, 8kHz (8k samples/sec).
+Since 8-bit audio has better dynamic range than 4-bit audio... ulaw should typically be used.
+
+A "frame" as defined by FRAME_SIZE is 160 bytes, and contains 20ms of ulaw audio, sampled at 8k samples/s. So,
+a "Payload 1" type packet contains one frame (20ms) of ulaw audio.
+
+A "frame" as defined by ADPCM_FRAME_SIZE is 163 bytes, and contains 40ms of IMA-ADPCM audio, sampled at 8k samples/s.
+So, a "Payload 3" type packet contains one frame (40ms) of IMA-ADPCM audio.
+
+The typical (default) configuration of the channel driver uses ulaw for audio encoding to/from the clients. This
+is the preferred encoding, as it has less compression (40ms of audio crammed into 163 bytes is going to be more
+compressed than 20ms of audio in 160 bytes, and 8-bit ulaw audio has better dynamic range than 4-bit IMA-ADPCM).
+
+It is a convenient (but also confusing) coincidence that for ulaw audio, 160 bytes / 20 ms = 8 bytes/ms, and this
+relationship is NOT the same for IMA-ADPCM audio. You will see why shortly.
+
+
+Note from Jim Dixon on ADPCM functionality:
+
+The original intent was to change this driver to use signed linear (slin) audio internally, but after some thought,
+it was determined that it was prudent to continue using ulaw as the "standard" internal audio format (with the
+understanding of the slight degradation in dynamic range when using ADPCM resulting in doing so). This was
+done because existing external entities (such as the recording files and the streaming stuff) use ulaw as their
+transport, and changing all of that to signed linear would be cumbersome, inefficient and undesirable.
+
+
+Buffers:
+
+Each client has a pair of circular buffers, one for audio data, and one for RSSI values. The allocated buffer
+length for all clients is determined by the 'buflen' parameter, which can be specified in the [global] stanza
+in voter.conf to apply to all instances, or optionally in each instance to only apply to the clients associated
+with that instance.
+
+When buflen is read in to the channel driver, it is immediately multiplied by 8, and stored back in the same
+buflen variable (unfortunately). This means buflen in voter.conf is really in "bits", but buflen and the
+resulting assignment into client->buflen in the channel driver is in "bytes". Recall from above that for
+**ulaw** audio, there are 8 bytes/ms, that makes buflen in voter.conf equivalent to time in ms (since the first
+thing we do is buflen * 8 when it is loaded to convert to bytes). This is only true when using ulaw audio!
+
+It is also critical to note that the calculations in the channel driver equate in a buflen resolution in
+voter.conf of 40 (so, 40ms when ulaw is used). Values in between are rounded down to the nearest 40(ms) step.
+
+With default ulaw audio, the absolute minimum buflen in voter.conf is 40(ms), with a recommended minimum of
+120(ms) for voting clients. For mix mode/general purpose clients, the minimum is 160(ms). The default if buflen
+is not specified is defined below as DEFAULT_BUFLEN, and is generally 480(ms). These numbers are NOT in ms if
+IMA-ADPCM audio is selected.
+
+Every channel instance has an index ("drainindex"), indicating the next position within the physical buffer(s)
+where the audio will be taken from the buffers and presented to the Asterisk channel stream as VOICE frames.
 
 Therefore, there is an abstraction of a "buffer" that exists starting at drainindex and ending (modulo) at
-drainindex - 1, with length of buflen.
+drainindex - 1, with length of buflen (client->buflen).
 
 Buflen is selected so that there is enough time (delay) for any straggling packets to arrive before it is time
 to present the data to the Asterisk channel.
@@ -74,16 +121,6 @@ audio is set to quiet (0x7f). The overwriting of the buffers after their use/exa
 next time those positions in the physical buffer are examined, they will not contain any data that was not actually
 put there, since all client's buffers are significant regardless of whether they were populated or not. This
 allows for the true 'connectionless-ness' of this protocol implementation.
-
-Note on ADPCM functionality:
-
-The original intent was to change this driver to use signed linear internally (slin),
-but after some thought, it was determined that it was prudent to continue using
-mulaw as the "standard" internal audio format (with the understanding of the slight
-degradation in dynamic range when using ADPCM resulting in doing so).  This was
-done because existing external entities (such as the recording files and the streaming
-stuff) use mulaw as their transport, and changing all of that to signed linear would
-be cumbersome, inefficient and undesirable.
 
 
 Redundant "Proxy" Mode:
@@ -325,15 +362,15 @@ char context[100];
 #define PING_TIMEOUT_MS 3000
 
 /* Buffer definitions
- * FRAME_SIZE 160 --> 160 octets of Mulaw audio (20ms @ 8k samples/sec) = 160 samples
- * ADPCM_FRAME_SIZE 163 --> 163 octets of IMA ADPCM audio (40ms @ 8k samples/sec) = 320 samples
+ * FRAME_SIZE 160 --> 160 octets of ulaw audio (20ms @ 8k samples/sec) = 160 audio samples
+ * ADPCM_FRAME_SIZE 163 --> 163 octets of IMA-ADPCM audio (40ms @ 8k samples/sec) = 320 audio samples
  *
- * DEFAULT_BUFLEN is in ms when uing Mulaw (default) audio ONLY:
- * DEFAULT_BUFLEN * 8 = Samples
+ * DEFAULT_BUFLEN is in ms when uing ulaw (default) audio ONLY:
+ * DEFAULT_BUFLEN * 8 = Samples (and is in bytes)
  * Samples / FRAME_SIZE = Frames
  * Frames * 20ms/frame = Delay
  *
- * Since FRAME_SIZE != ADPCM_FRAME_SIZE, and Mulaw fame rate is 20ms/frame vs
+ * Since FRAME_SIZE != ADPCM_FRAME_SIZE, and the ulaw fame rate is 20ms/frame vs
  * ADPCM frame rate of 40ms/frame, buflen in voter.conf will be ~2x ms when using ADPCM
  *
  */
@@ -365,12 +402,12 @@ char context[100];
 #define	IS_CLIENT_PROXY(x) (x->proxy_sin.sin_family == AF_INET)
 #define	SEND_PRIMARY(x) (x->primary.sin_family == AF_INET)
 
-/* Defines for constructing POCSAG paging packets. */
+/* Defines for constructing POCSAG paging packets */
 #define PAGER_SRC "PAGER"
 #define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 30000
 #define SAMPRATE 8000 /* (Sample Rate) */
-#define DIVLCM 192000 /* (Least Common Mult of 512,1200,2400,8000) */
+#define DIVLCM 192000 /* (A common multiple of 512,1200,2400,8000) */
 #define PREAMBLE_BITS 576
 #define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
 /* We have to send "inverted"... probably because of inverting AMP in Voter board. */
@@ -391,10 +428,10 @@ char context[100];
 static const char vdesc[] = "radio Voter channel driver";
 static char type[] = "voter";
 
-/* Name of our default config file to load from. */
+/* Name of our default config file to load from */
 static char *config = "voter.conf";
 
-/* Port to listen to UDP packets on from our clients. */
+/* Port to listen to UDP packets on from our clients */
 int16_t listen_port = 1667;
 int udp_socket = -1;
 
@@ -725,9 +762,9 @@ static int32_t crc32_bufs(char * restrict buf, char * restrict buf1)
 
 #define GAIN1   1.745882764e+00
 /*!
- * \brief DSP IIR high pass filter.
+ * \brief DSP IIR high pass filter
  *
- * IIR 6 pole high pass filter, 300Hz corner with 0.5db ripple.
+ * IIR 6 pole high pass filter, 300Hz corner with 0.5db ripple
  *
  * \param input			Audio value to filter.
  * \param xv			Delay line.
@@ -760,9 +797,9 @@ static int16_t hpass6(int16_t input, float * restrict xv, float * restrict yv)
 
 #define GAIN2   1.080715413e+02
 /*!
- * \brief DSP IIR low pass filter.
+ * \brief DSP IIR low pass filter
  *
- * IIR 6 pole low pass filter, 1900Hz corner with 0.5db ripple.
+ * IIR 6 pole low pass filter, 1900Hz corner with 0.5db ripple
  *
  * \param input			Audio value to filter.
  * \param xv			Delay line.
@@ -794,7 +831,7 @@ static int16_t lpass4(int16_t input, float * restrict xv, float * restrict yv)
 }
 
 /*!
- * \brief De-emphasis filter.
+ * \brief De-emphasis filter
  *
  * Perform standard 6db/octave de-emphasis.
  * FIR integrator at 8000 samples/second.
@@ -1741,8 +1778,9 @@ static int term_supports_clear(void)
 	char *term;
 
 	term = getenv("TERM");
-	/* todo We should probably query ncurses/termcap DB to be more complete, instead of checking just common TERM types. */
-
+	/*! 
+	 * \todo We should probably query ncurses/termcap DB to be more complete, instead of checking just common TERM types.
+	 */
 	ast_debug(2, "Terminal type: %s\n", S_OR(term, ""));
 
 	if (term) {
@@ -1800,8 +1838,10 @@ static void voter_display(int fd, const struct voter_pvt *p)
 	str[j] = 0;
 	ast_cli(fd, " %s \r", str);
 
-	/* Temporarily disable other verbose messages as long as we're running.
-	 * todo This should probably be done for just *THIS* console, not all of them. */
+	/*!
+	 * Temporarily disable other verbose messages as long as we're running.
+	 * \todo This should probably be done for just *THIS* console, not all of them.
+	 */
 	wasverbose = option_verbose;
 	option_verbose = 0;
 
@@ -2744,8 +2784,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		maxclient = NULL;
 	}
 	if (!maxclient) { /* If nothing there */
-		/* todo p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
-		 * For now, this prevents a crash from queuing a frame to a NULL channel. */
+		/*!
+		 * \todo p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
+		 * For now, this prevents a crash from queuing a frame to a NULL channel.
+		 */
 		if (!p->owner) {
 			ast_log(LOG_WARNING, "Cannot queue frame, %p has no owner\n", p);
 			ast_frfree(f1);
@@ -3887,21 +3929,8 @@ static int reload(void)
 	} else {
 		context[0] = 0;
 	}
-	/* This is where we load the value for the receive buffer length. The value in the general stanza
-	 * will be used for all defined instances, if a per-instance buflen isn't defined.
-	 *
-	 * The value of buflen in the config file is in ms when Mulaw audio is used, that is NOT the case
-	 * if ADPCM audio is used (the delay will actually be almost double, since the each audio frame
-	 * contains 40ms of audio for ADPCM, versus 20ms/frame for Mulaw).
-	 *
-	 * Note here that we read in the value of buflen and *8 to convert it to "frames", if buflen was
-	 * 20 (ms) * 8 = 160 --> 1 frame, since FRAME_SIZE = 160. Also note that the absolute minimum for
-	 * buflen is actually 40, since we force it to be a minimum of 2 "frames" below ( 40 * 8 = 320,
-	 * which is FRAME_SIZE * 2).
-	 *
-	 * HOWEVER, this minimum of 40 is only valid for voting clients, for mix mode/general purpose clients,
-	 * the actual minimum is buflen = 160. That check is done elsewhere and can will cause chan_voter to
-	 * NOT load and throw and error if buflen < 160 when a mix mode client is detected.
+	/* We read in buflen from the config file, and * 8 to convert it to bytes. See the
+	 * notes at the top of the source for more information on how/why buflen relates to time.
 	 */
 	val = (char *) ast_variable_retrieve(cfg, "general", "buflen");
 	if (val) {
@@ -3910,7 +3939,7 @@ static int reload(void)
 		ast_debug(1, "global buflen not specified, using default buflen = %i for all clients\n", DEFAULT_BUFLEN);
 		buflen = DEFAULT_BUFLEN * 8;
 	}
-	/* Ensure buflen is at least 320 (actual buflen = 40), or two "frames" of Mulaw audio.*/
+	/* Ensure buflen is at least 320 (voter.conf buflen = 40), or two "frames" of ulaw audio.*/
 	if (buflen < (FRAME_SIZE * 2)) {
 		buflen = FRAME_SIZE * 2;
 	}
@@ -4863,16 +4892,16 @@ static void *voter_reader(void *data)
 						if (!client->rxseqno) {
 							client->rxseqno_40ms = client->rxseqno = ntohl(vph->curtime.vtime_nsec);
 						}
-						/* Figure out whether we are using ADPCM/Nulaw or Mulaw, and set the starting drain index.*/
+						/* Figure out whether we are using ADPCM/Nulaw or ulaw, and set the starting drain index.*/
 						if (!client->doadpcm && !client->donulaw) {
-							/* Using Mulaw (typical default) */
+							/* Using ulaw (typical default) */
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno; /* This seems to result in 0? */
 						} else {
 							/* Using ADPCM or Nulaw */
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
 						}
-						index *= FRAME_SIZE;	   /* At least with Mulaw, since index already started at 0, this is still 0 */
-						index += BUFDELAY(client); /* With Mulaw, since index was still 0, this is now just BUFDELAY(client) */
+						index *= FRAME_SIZE;	   /* At least with ulaw, since index already started at 0, this is still 0 */
+						index += BUFDELAY(client); /* With ulaw, since index was still 0, this is now just BUFDELAY(client) */
 						/* Recall that FRAME_SIZE is typically 160, so FRAME_SIZE * 4 = 640.
 						 * If the client->buflen is too small at this point (< 160), then index <= 0, which
 						 * will put us "out of bounds" below (for mix mode clients).
@@ -4881,7 +4910,7 @@ static void *voter_reader(void *data)
 						if (DEBUG_ATLEAST(5)) {
 							ast_debug(5, "Mix client drain index = %i\n", index);
 							if (!client->doadpcm && !client->donulaw) {
-								ast_debug(7, "Mix client (Mulaw) %s drain index: %d their seq: %d our seq: %d\n", client->name,
+								ast_debug(7, "Mix client (ulaw) %s drain index: %d their seq: %d our seq: %d\n", client->name,
 									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno);
 							} else {
 								ast_debug(7, "Mix client (ADPCM/Nulaw) %s drain index: %d their seq: %d our seq: %d\n",
