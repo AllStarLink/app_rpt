@@ -3632,10 +3632,12 @@ static inline void rpt_frame_queue_free(struct rpt_frame_queue *frame_queue)
 	free_frame(&frame_queue->lastf1);
 	free_frame(&frame_queue->lastf2);
 }
+
 static int rxchannel_qwrite_cb(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
 	struct ast_frame *wf = arg;
+
 	/* Dont send to other then IAXRPT client */
 	if ((link->name[0] != '0') || (link->phonemode)) {
 		return 0;
