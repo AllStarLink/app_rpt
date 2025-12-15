@@ -1577,11 +1577,10 @@ void *rpt_tele_thread(void *this)
 
 treataslocal:
 		lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+		rpt_mutex_lock(&myrpt->lock);
 		if (!lbuf) {
-			rpt_mutex_lock(&myrpt->lock);
 			goto abort;
 		}
-		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
 		n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
 		rpt_mutex_unlock(&myrpt->lock);

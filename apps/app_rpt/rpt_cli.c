@@ -432,7 +432,6 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				rpt_mutex_unlock(&myrpt->lock);
 				return RESULT_FAILURE;
 			}
-			/* ### GET RPT STATUS STATES WHILE LOCKED ######################## */
 			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
 				parrot_ena = "1"; //"ENABLED";
 			else
