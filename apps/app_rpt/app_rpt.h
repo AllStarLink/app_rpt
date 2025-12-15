@@ -443,16 +443,6 @@ enum patch_call_mode {
 /* for DNS resolution of node data */
 #define DEFAULT_DNS_NODE_DOMAIN "nodes.allstarlink.org"
 
-#define NRPTSTAT 7
-
-struct rpt_chan_stat {
-	struct timeval last;
-	long long total;
-	unsigned long count;
-	unsigned long largest;
-	struct timeval largest_time;
-};
-
 #define REMOTE_RIG_FT950 "ft950"
 #define REMOTE_RIG_FT897 "ft897"
 #define REMOTE_RIG_FT100 "ft100"
@@ -596,7 +586,6 @@ struct rpt_link {
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
 	struct rpt_frame_queue frame_queue;
-	struct rpt_chan_stat chan_stat[NRPTSTAT];
 	struct vox vox;
 	char wasvox;
 	int voxtotimer;
@@ -628,7 +617,6 @@ struct rpt_lstat {
 	unsigned int thisconnected:1;
 	int reconnects;
 	struct timeval connecttime;
-	struct rpt_chan_stat chan_stat[NRPTSTAT];
 };
 
 struct rpt_tele {
@@ -766,7 +754,6 @@ struct rpt {
 	char *txchanname;
 	char remote;
 	char *remoterig;
-	struct	rpt_chan_stat chan_stat[NRPTSTAT];
 	unsigned int scram;
 #ifdef	_MDC_DECODE_H_
 	mdc_decoder_t *mdc;

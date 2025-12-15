@@ -557,7 +557,6 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 					connstate = "CONNECTING";
 				}
 				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s~", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
-				memset(l->chan_stat, 0, NRPTSTAT * sizeof(struct rpt_chan_stat));
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_cleanup(links_copy); /* Free the copy container */
