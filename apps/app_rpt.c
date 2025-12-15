@@ -7089,7 +7089,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 	if (myrpt->txchannel == myrpt->localtxchannel) {
-		//		dahdi_set_onhook(myrpt->localtxchannel);
+		dahdi_set_onhook(myrpt->localtxchannel);
 		/* if PCIRADIO and Yaesu ft897/ICOM IC-706 selected */
 		if ((myrpt->iofd < 1) && (!res) &&
 			((!strcmp(myrpt->remoterig, REMOTE_RIG_FT897)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) ||

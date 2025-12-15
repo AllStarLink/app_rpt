@@ -26,6 +26,8 @@
 
 #include "asterisk.h"
 
+#include <dahdi/user.h>
+
 #include "asterisk/bridge.h"
 #include "asterisk/core_unreal.h"
 #include "asterisk/channel.h"
@@ -425,5 +427,14 @@ int rpt_set_tone_zone(struct ast_channel *chan, const char *tz)
 	ast_channel_zone_set(chan, ast_tone_zone_ref(new_zone));
 	ast_channel_unlock(chan);
 	new_zone = ast_tone_zone_unref(new_zone);
+	return 0;
+}
+
+int dahdi_set_hook(struct ast_channel *chan, int offhook)
+{
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_HOOK, &offhook) == -1) {
+		ast_log(LOG_ERROR, "Can't set hook on %s: %s\n", ast_channel_name(chan), strerror(errno));
+		return -1;
+	}
 	return 0;
 }
