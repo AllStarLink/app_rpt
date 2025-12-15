@@ -1741,7 +1741,7 @@ static int term_supports_clear(void)
 	char *term;
 
 	term = getenv("TERM");
-	/* XXX We should probably query ncurses/termcap DB to be more complete, instead of checking just common TERM types. */
+	/* todo We should probably query ncurses/termcap DB to be more complete, instead of checking just common TERM types. */
 
 	ast_debug(2, "Terminal type: %s\n", S_OR(term, ""));
 
@@ -1801,7 +1801,7 @@ static void voter_display(int fd, const struct voter_pvt *p)
 	ast_cli(fd, " %s \r", str);
 
 	/* Temporarily disable other verbose messages as long as we're running.
-	 * XXX This should probably be done for just *THIS* console, not all of them. */
+	 * todo This should probably be done for just *THIS* console, not all of them. */
 	wasverbose = option_verbose;
 	option_verbose = 0;
 
@@ -2744,7 +2744,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		maxclient = NULL;
 	}
 	if (!maxclient) { /* If nothing there */
-		/* XXX p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
+		/* todo p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
 		 * For now, this prevents a crash from queuing a frame to a NULL channel. */
 		if (!p->owner) {
 			ast_log(LOG_WARNING, "Cannot queue frame, %p has no owner\n", p);
@@ -3644,7 +3644,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	ast_channel_set_rawreadformat(tmp, ast_format_slin);
 	ast_channel_set_readformat(tmp, ast_format_slin);
 	ast_channel_nativeformats_set(tmp, voter_tech.capabilities);
-	/* if (state == AST_STATE_RING) tmp->rings = 1; */
 	ast_channel_tech_pvt_set(tmp, p);
 	ast_channel_unlock(tmp);
 	ast_channel_language_set(tmp, "");
@@ -3789,7 +3788,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			destroyPmrChannel(p->pmrChan);
 		}
 		p->pmrChan = createPmrChannel(&tChan, FRAME_SIZE);
-		p->pmrChan->radioDuplex = 1; /* o->radioduplex; */
+		p->pmrChan->radioDuplex = 1;
 		p->pmrChan->b.loopback = 0;
 		p->pmrChan->b.radioactive = 1;
 		p->pmrChan->txrxblankingtime = 0;
@@ -4049,7 +4048,7 @@ static int reload(void)
 				tChan.txMixA = TX_OUT_COMPOSITE;
 				tChan.b.txboost = 1;
 				p->pmrChan = createPmrChannel(&tChan, FRAME_SIZE);
-				p->pmrChan->radioDuplex = 1; /* o->radioduplex; */
+				p->pmrChan->radioDuplex = 1;
 				p->pmrChan->b.loopback = 0;
 				p->pmrChan->b.radioactive = 1;
 				p->pmrChan->txrxblankingtime = 0;
