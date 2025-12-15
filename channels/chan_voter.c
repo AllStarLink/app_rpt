@@ -1778,7 +1778,7 @@ static int term_supports_clear(void)
 	char *term;
 
 	term = getenv("TERM");
-	/*! 
+	/*!
 	 * \todo We should probably query ncurses/termcap DB to be more complete, instead of checking just common TERM types.
 	 */
 	ast_debug(2, "Terminal type: %s\n", S_OR(term, ""));
