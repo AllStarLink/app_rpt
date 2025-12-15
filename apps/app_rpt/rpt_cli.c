@@ -118,11 +118,10 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
 			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
+			rpt_mutex_unlock(&myrpt->lock);
 			if (!links_copy) {
 				return RESULT_FAILURE;
 			}
-			rpt_mutex_unlock(&myrpt->lock);
-
 			if (myrpt->keyed)
 				input_signal = "YES";
 			else
