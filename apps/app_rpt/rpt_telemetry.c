@@ -624,6 +624,7 @@ static int telm_qwrite_cb(void *obj, void *arg, int flags)
 
 	return 0;
 }
+
 static void send_tele_link(struct rpt *myrpt, char *cmd)
 {
 	int len;
@@ -2376,21 +2377,14 @@ treataslocal:
 			break;
 		}
 		hastx = 0;
-		links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
-			0,									 /* AO2 container flags. */
-			NULL,								 /* Sorting function. NULL means the list will not be sorted */
-			NULL);								 /* Comparison function */
-		if (!links_copy) {
-			rpt_mutex_lock(&myrpt->lock);
-			goto abort;
-		}
+
 		rpt_mutex_lock(&myrpt->lock);
-		/* make our own list of links */
-		if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
-			ao2_cleanup(links_copy);
+		links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
+		if (!links_copy) {
 			goto abort;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
+
 		res = saynode(myrpt, mychannel, myrpt->name);
 		if (myrpt->callmode != CALLMODE_DOWN) {
 			hastx = 1;

@@ -424,21 +424,14 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
-			links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
-				0,									 /* AO2 container flags. */
-				NULL,								 /* Sorting function. NULL means the list will not be sorted */
-				NULL);								 /* Comparison function */
+			rpt_mutex_lock(&myrpt->lock);
+			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 			if (!links_copy) {
 				ast_free(lbuf);
+				rpt_mutex_unlock(&myrpt->lock);
 				return RESULT_FAILURE;
 			}
 			myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
-			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
-				ao2_cleanup(links_copy);
-				ast_free(lbuf);
-				return RESULT_FAILURE;
-			}
 			/* ### GET RPT STATUS STATES WHILE LOCKED ######################## */
 			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
 				parrot_ena = "1"; //"ENABLED";

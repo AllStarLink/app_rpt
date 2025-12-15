@@ -426,6 +426,7 @@ static int rpt_qwrite_cb(void *obj, void *arg, int flags)
 
 	return 0;
 }
+
 int send_link_pl(struct rpt *myrpt, const char *txt)
 {
 	struct ast_frame wf;

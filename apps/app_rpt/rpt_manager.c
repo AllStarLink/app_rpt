@@ -209,16 +209,8 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
 			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
-			links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
-				0,									 /* AO2 container flags. */
-				NULL,								 /* Sorting function. NULL means the list will not be sorted */
-				NULL);								 /* Comparison function */
+			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 			if (!links_copy) {
-				rpt_mutex_unlock(&myrpt->lock);
-				return -1;
-			}
-			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
-				ao2_cleanup(links_copy);
 				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
@@ -503,15 +495,9 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
 
-			links_copy = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
-				0,									 /* AO2 container flags. */
-				NULL,								 /* Sorting function. NULL means the list will not be sorted */
-				NULL);								 /* Comparison function */
+			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 			if (!links_copy) {
-				return -1;
-			}
-			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
-				ao2_cleanup(links_copy);
+				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
 

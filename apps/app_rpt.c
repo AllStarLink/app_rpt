@@ -3645,6 +3645,7 @@ static int rxchannel_qwrite_cb(void *obj, void *arg, int flags)
 	}
 	return 0;
 }
+
 static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 {
 	int ismuted;
