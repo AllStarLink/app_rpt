@@ -597,7 +597,7 @@ void cancel_pfxtone(struct rpt *myrpt)
 	ast_debug(3, "cancel_pfxfone!!");
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		if (telem->mode == PFXTONE) {
+		if (telem->mode == PFXTONE && telem->chan) {
 			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
 		}
 		telem = telem->next;
