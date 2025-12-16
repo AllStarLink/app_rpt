@@ -760,7 +760,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 
 	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
 
-	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAX-Link")) {
+	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAXLink")) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		rpt_link_free(l);
