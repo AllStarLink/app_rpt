@@ -224,7 +224,6 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 		p = ast_channel_tech_pvt(chan);
 		ast_answer(p->chan);
 		ast_answer(p->owner);
-		ast_autoservice_start(p->chan);
 	}
 	chanptr = rpt_chan_channel(myrpt, NULL, chantype);
 	*chanptr = chan;

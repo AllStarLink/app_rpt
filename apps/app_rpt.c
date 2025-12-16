@@ -2933,7 +2933,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN, "TX-PChan")) {
+	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -6840,7 +6840,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_format_cap_append(cap, ast_format_slin, 0);
 
 		/* allocate a pseudo-channel thru asterisk */
-		if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAX-Link")) {
+		if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAXLink")) {
 			ao2_ref(cap, -1);
 			ao2_ref(l, -1);
 			return -1;
