@@ -135,4 +135,10 @@ int dahdi_set_hook(struct ast_channel *chan, int offhook);
 #define dahdi_set_offhook(chan) dahdi_set_hook(chan, 1)
 #define dahdi_set_onhook(chan) dahdi_set_hook(chan, 0)
 
+/*!
+ * \brief Set echo cancellation on DAHDI channel
+ * \param chan
+ * \param ec 0 to disable, non-zero to enable
+ * \retval 0 on success, -1 on failure
+ */
 int dahdi_set_echocancel(struct ast_channel *chan, int ec);
