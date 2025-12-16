@@ -134,3 +134,5 @@ int dahdi_set_hook(struct ast_channel *chan, int offhook);
 
 #define dahdi_set_offhook(chan) dahdi_set_hook(chan, 1)
 #define dahdi_set_onhook(chan) dahdi_set_hook(chan, 0)
+
+int dahdi_set_echocancel(struct ast_channel *chan, int ec);
