@@ -430,10 +430,29 @@ int rpt_set_tone_zone(struct ast_channel *chan, const char *tz)
 	return 0;
 }
 
+int dahdi_rx_offhook(struct ast_channel *chan)
+{
+	struct dahdi_params par;
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_GET_PARAMS, &par) == -1) {
+		ast_log(LOG_ERROR, "Can't get params on %s: %s", ast_channel_name(chan), strerror(errno));
+		return -1;
+	}
+	return par.rxisoffhook;
+}
+
 int dahdi_set_hook(struct ast_channel *chan, int offhook)
 {
 	if (ioctl(ast_channel_fd(chan, 0), DAHDI_HOOK, &offhook) == -1) {
 		ast_log(LOG_ERROR, "Can't set hook on %s: %s\n", ast_channel_name(chan), strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+int dahdi_set_echocancel(struct ast_channel *chan, int ec)
+{
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_ECHOCANCEL, &ec)) {
+		ast_log(LOG_ERROR, "Can't set echocancel on %s: %s\n", ast_channel_name(chan), strerror(errno));
 		return -1;
 	}
 	return 0;

@@ -1295,29 +1295,7 @@ void *rpt_tele_thread(void *this)
 		id_malloc = 0;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
-
-	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
-	}
-
-	ast_format_cap_append(cap, ast_format_slin, 0);
-	/* allocate a local channel thru asterisk and call the correct conference */
-	mychannel = rpt_request_local_chan(cap, "Telem");
-	ao2_ref(cap, -1);
-
-	if (!mychannel) {
-		ast_log(LOG_WARNING, "Unable to obtain local channel (mode: %d)\n", mytele->mode);
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
-	}
-	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	rpt_mutex_lock(&myrpt->lock);
-	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
-	mytele->chan = mychannel;
-
 	/* Wait for previous telemetry to finish before we start so we're not speaking on top of each other. */
 	ast_debug(5, "Queued telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 	while (myrpt->active_telem && ((myrpt->active_telem->mode == PAGE) || (myrpt->active_telem->mode == MDC1200))) {
@@ -1340,6 +1318,27 @@ void *rpt_tele_thread(void *this)
 	}
 
 	ast_debug(5, "Beginning telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
+
+	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+	if (!cap) {
+		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
+	}
+
+	ast_format_cap_append(cap, ast_format_slin, 0);
+	/* allocate a local channel thru asterisk and call the correct conference */
+	mychannel = rpt_request_local_chan(cap, "Telem");
+	ao2_ref(cap, -1);
+
+	if (!mychannel) {
+		ast_log(LOG_WARNING, "Unable to obtain local channel (mode: %d)\n", mytele->mode);
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
+	}
+	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
+	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
+	mytele->chan = mychannel;
 
 	switch (mytele->mode) {
 	case ID1:
