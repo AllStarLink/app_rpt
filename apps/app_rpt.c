@@ -4362,7 +4362,19 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 		struct timeval now;
 
 		if (l->disctime) {
-			continue;
+			/* We are disconnected but still need to read and discard frames */
+			if (who == l->pchan) {
+				struct ast_frame *f;
+				f = ast_read(l->pchan);
+				if (!f) {
+					ast_debug(1, "@@@@ rpt:Hung Up\n");
+					return -1;
+				}
+				ast_frfree(f);
+				return 0;
+			} else {
+					continue;
+			}
 		}
 
 		remrx = 0;
@@ -5436,8 +5448,10 @@ static void *rpt(void *this)
 		if (myrpt->localtxchannel != myrpt->txchannel)
 			cs[n++] = myrpt->localtxchannel;
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			if ((!l->killme) && (!l->disctime) && l->chan) {
-				cs[n++] = l->chan;
+			if (!l->killme) {
+				if (l->chan) {
+					cs[n++] = l->chan;
+				}
 				cs[n++] = l->pchan;
 			}
 		}

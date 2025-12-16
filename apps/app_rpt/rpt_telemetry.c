@@ -1327,7 +1327,6 @@ void *rpt_tele_thread(void *this)
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
-	ast_autoservice_start(mychannel);
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	if (rpt_conf_add(mychannel, myrpt, type)) {
 		ast_log(LOG_WARNING, "Unable to join local channel to conference %s\n", type == RPT_CONF ? RPT_CONF_NAME : RPT_TXCONF_NAME);
