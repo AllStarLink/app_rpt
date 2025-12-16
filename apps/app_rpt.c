@@ -5408,7 +5408,7 @@ static void *rpt(void *this)
 
 			myrpt->lastitx = x;
 			if (myrpt->p.itxctcss) {
-				if (IS_LOCAL(myrpt->rxchannel)) {
+				if (IS_DAHDI_CHAN(myrpt->rxchannel)) {
 					dahdi_radio_set_ctcss_encode(myrpt->localrxchannel, !x);
 				} else if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 					snprintf(str, sizeof(str), "TXCTCSS %d", !(!x));
@@ -7177,21 +7177,16 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	ast_set_read_format(chan, ast_format_slin);
 	rem_rx = 0;
 	remkeyed = 0;
-	/* if we are on 2w loop and are a remote, turn EC on */
-	/*	if (myrpt->remote && myrpt->rxchannel == myrpt->txchannel) {
-			dahdi_set_echocancel(myrpt->localrxchannel, 128);
-		}
-	*/
+
 	answer_newkey_helper(myrpt, chan, phone_mode);
 
-	/*	if (myrpt->rxchannel == myrpt->localrxchannel) {
-			if (dahdi_rx_offhook(myrpt->localrxchannel) == 1) {
-				ast_indicate(chan, AST_CONTROL_RADIO_KEY);
-				myrpt->remoterx = 1;
-				remkeyed = 1;
-			}
+	if (myrpt->rxchannel == myrpt->localrxchannel) {
+		if (dahdi_rx_offhook(myrpt->localrxchannel) == 1) {
+			ast_indicate(chan, AST_CONTROL_RADIO_KEY);
+			myrpt->remoterx = 1;
+			remkeyed = 1;
 		}
-	*/
+	}
 	/* look at callerid to see what node this comes from */
 	if (!ast_channel_caller(chan)->id.number.str) { /* if doesn't have caller id */
 		b1 = "0";

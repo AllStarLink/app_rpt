@@ -1304,20 +1304,6 @@ void *rpt_tele_thread(void *this)
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
-
-	switch (mytele->mode) {
-	case ID1:
-	case PLAYBACK:
-	case TEST_TONE:
-	case STATS_GPS_LEGACY:
-		type = RPT_CONF;
-		strncpy(exten, RPT_CONF_NAME, sizeof(exten));
-		break;
-	default:
-		type = RPT_TXCONF;
-		strncpy(exten, RPT_TXCONF_NAME, sizeof(exten));
-		break;
-	}
 	/* allocate a local channel thru asterisk and call the correct conference */
 	mychannel = rpt_request_local_chan(cap, "Telem");
 	ao2_ref(cap, -1);
@@ -1328,12 +1314,6 @@ void *rpt_tele_thread(void *this)
 		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
-	if (rpt_conf_add(mychannel, myrpt, type)) {
-		ast_log(LOG_WARNING, "Unable to join local channel to conference %s\n", type == RPT_CONF ? RPT_CONF_NAME : RPT_TXCONF_NAME);
-		rpt_mutex_lock(&myrpt->lock);
-		goto abort;
-	}
-
 	rpt_mutex_lock(&myrpt->lock);
 	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
 	mytele->chan = mychannel;
@@ -1360,6 +1340,26 @@ void *rpt_tele_thread(void *this)
 	}
 
 	ast_debug(5, "Beginning telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
+
+	switch (mytele->mode) {
+	case ID1:
+	case PLAYBACK:
+	case TEST_TONE:
+	case STATS_GPS_LEGACY:
+		type = RPT_CONF;
+		strncpy(exten, RPT_CONF_NAME, sizeof(exten));
+		break;
+	default:
+		type = RPT_TXCONF;
+		strncpy(exten, RPT_TXCONF_NAME, sizeof(exten));
+		break;
+	}
+
+	if (rpt_conf_add(mychannel, myrpt, type)) {
+		ast_log(LOG_WARNING, "Unable to join local channel to conference %s\n", type == RPT_CONF ? RPT_CONF_NAME : RPT_TXCONF_NAME);
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort;
+	}
 
 	if (ast_audiohook_volume_set_float(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
 		ast_log(LOG_WARNING, "Setting the volume on channel %s to %2.2f failed", ast_channel_name(mychannel), myrpt->p.telemnomgain);
@@ -1673,11 +1673,6 @@ treataslocal:
 			res = telem_send_ct(myrpt, mychannel, "unlinkedct", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY", 0);
 		}
 		if (hasremote && ((!myrpt->cmdnode[0]) || (!strcmp(myrpt->cmdnode, "aprstt")))) {
-			/* set for all to hear */
-			if (rpt_conf_add(mychannel, myrpt, RPT_CONF)) {
-				rpt_mutex_lock(&myrpt->lock);
-				goto abort;
-			}
 			/* Remote Unkey Courtesy Tone */
 			res = telem_send_ct(myrpt, mychannel, "remotect", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY", 200);
 		}
@@ -1686,11 +1681,6 @@ treataslocal:
 			char mystr[10];
 
 			ast_safe_sleep(mychannel, 200);
-			/* set for all to hear */
-			if (rpt_tx_conf_add_announcer(mychannel, myrpt)) {
-				rpt_mutex_lock(&myrpt->lock);
-				goto abort;
-			}
 			snprintf(mystr, sizeof(mystr), "%04x", myrpt->lastunit);
 			myrpt->lastunit = 0;
 			ast_say_character_str(mychannel, mystr, NULL, ast_channel_language(mychannel));
