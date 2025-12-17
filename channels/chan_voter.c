@@ -2994,8 +2994,8 @@ static void *voter_primary_client(void *data)
 					strcpy(p->primary_challenge, (char *) vph->challenge);
 					p->priconn = 0;
 				} else {
-					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_NONE) ||
-						(ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
+					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
+						(ntohs(vph->payload_type) == VOTER_PAYLOAD_NONE) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
 						mydigest = crc32_bufs(challenge, password);
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
