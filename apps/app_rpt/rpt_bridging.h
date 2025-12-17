@@ -1,11 +1,16 @@
 
-enum rpt_chan_type {
+enum rpt_chan_name {
 	RPT_RXCHAN, /* Receive channel */
 	RPT_TXCHAN, /* Transmit channel */
 	RPT_PCHAN,
 	RPT_LOCALTXCHAN,
 	RPT_MONCHAN, /* Monitor channel */
 	RPT_TXPCHAN,
+};
+
+enum rpt_chan_type {
+	RPT_LOCAL,
+	RPT_TELEMETRY,
 };
 
 /* Each of these corresponds to a member of the rpt_conf structure in app_rpt.h */
@@ -27,7 +32,7 @@ enum rpt_chan_flags {
  * \param chantype
  * \note Do not call if the channel does not exist (safe, but will emit a warning)
  */
-void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype);
+void rpt_hangup(struct rpt *myrpt, enum rpt_chan_name chantype);
 
 /*!
  * \brief Request a repeater channel
@@ -37,7 +42,7 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype);
  * \note myrpt->lock must be held when calling
  * \retval 0 on success, -1 on failure
  */
-int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags);
+int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name chantype, enum rpt_chan_flags flags);
 
 #define rpt_request(data, cap, chantype) __rpt_request(data, cap, chantype, 0)
 
@@ -47,10 +52,10 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
  * \return channel on success
  * \return NULL on failure
  */
-struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, const char *type);
+struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, enum rpt_chan_type type);
 
-#define rpt_request_local_chan(cap, exten) __rpt_request_local_chan(cap, exten, "Local")
-#define rpt_request_telem_chan(cap, exten) __rpt_request_local_chan(cap, exten, "Announcer")
+#define rpt_request_local_chan(cap, exten) __rpt_request_local_chan(cap, exten, RPT_LOCAL)
+#define rpt_request_telem_chan(cap, exten) __rpt_request_local_chan(cap, exten, RPT_TELEMETRY)
 
 /*!
  * \brief Request a repeater channel not associated with a real device
@@ -60,7 +65,7 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
  * \note myrpt->lock must be held when calling
  * \retval 0 on success, -1 on failure
  */
-int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten);
+int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_name chantype, enum rpt_chan_flags flags, const char *exten);
 
 #define rpt_request_pseudo(data, cap, chantype, exten) __rpt_request_local(data, cap, chantype, 0, exten)
 
