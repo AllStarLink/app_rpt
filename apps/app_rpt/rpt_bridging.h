@@ -16,7 +16,7 @@ enum rpt_conf_type {
 
 #define RPT_TXCONF_NAME "TXCONF" /* TX Conference Name */
 #define RPT_CONF_NAME "CONF"	 /* Repeater Conference Name */
-
+#define RPT_CONF_NAME_SIZE 10
 enum rpt_chan_flags {
 	RPT_LINK_CHAN = (1 << 0),
 };

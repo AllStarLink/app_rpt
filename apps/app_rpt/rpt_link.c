@@ -771,6 +771,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 
 	if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
 		ast_hangup(l->chan);
+		ast_hangup(l->pchan);
 		rpt_link_free(l);
 		return -1;
 	}
