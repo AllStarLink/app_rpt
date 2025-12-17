@@ -2994,8 +2994,8 @@ static void *voter_primary_client(void *data)
 					strcpy(p->primary_challenge, (char *) vph->challenge);
 					p->priconn = 0;
 				} else {
-					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) || (ntohs(vph->payload_type) == 0) ||
-						(ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
+					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
+						(ntohs(vph->payload_type) == VOTER_PAYLOAD_NONE) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
 						mydigest = crc32_bufs(challenge, password);
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
@@ -3186,7 +3186,7 @@ static void *voter_xmit(void *data)
 			memset(&audiopacket, 0, sizeof(audiopacket) - sizeof(audiopacket.audio));
 			memset(&audiopacket.audio, 0xff, sizeof(audiopacket.audio));
 			strcpy((char *) audiopacket.vp.challenge, challenge);
-			audiopacket.vp.payload_type = htons(1);
+			audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ULAW);
 			audiopacket.rssi = 0;
 			if (f1) {
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
@@ -3329,7 +3329,7 @@ static void *voter_xmit(void *data)
 				f2 = ast_translate(p->adpcmout, f3, 1);
 				memcpy(audiopacket.audio, f2->data.ptr, f2->datalen);
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				audiopacket.vp.payload_type = htons(3);
+				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
 				for (client = clients; client; client = client->next) {
 					if (client->nodenum != p->nodenum) {
 						continue;
@@ -3421,7 +3421,7 @@ static void *voter_xmit(void *data)
 				}
 				memcpy(audiopacket.audio, nubuf, sizeof(nubuf));
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				audiopacket.vp.payload_type = htons(4);
+				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_NULAW);
 				for (client = clients; client; client = client->next) {
 					if (client->nodenum != p->nodenum) {
 						continue;
@@ -3536,7 +3536,7 @@ static void *voter_xmit(void *data)
 				memset(&audiopacket, 0, sizeof(audiopacket));
 				strcpy((char *) audiopacket.vp.challenge, challenge);
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				audiopacket.vp.payload_type = htons(2);
+				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
 				audiopacket.vp.digest = htonl(client->respdigest);
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				if (IS_CLIENT_PROXY(client)) {
@@ -4963,7 +4963,7 @@ static void *voter_reader(void *data)
 #ifdef ADPCM_LOOPBACK
 							memset(&audiopacket, 0, sizeof(audiopacket));
 							strcpy((char *) audiopacket.vp.challenge, challenge);
-							audiopacket.vp.payload_type = htons(3);
+							audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
 							audiopacket.rssi = 0;
 							memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE + 3);
 							audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
@@ -4988,7 +4988,7 @@ static void *voter_reader(void *data)
 #ifdef NULAW_LOOPBACK
 							memset(&audiopacket, 0, sizeof(audiopacket));
 							strcpy((char *) audiopacket.vp.challenge, challenge);
-							audiopacket.vp.payload_type = htons(4);
+							audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_NULAW);
 							audiopacket.rssi = 0;
 							memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE);
 							audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
