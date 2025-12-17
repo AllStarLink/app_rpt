@@ -31,9 +31,13 @@ int rpt_disable_cdr(struct ast_channel *chan)
 {
 	struct ast_unreal_pvt *p;
 	if (!CHAN_TECH(chan, "Local")) {
-		if (ast_cdr_set_property(ast_channel_name(chan), AST_CDR_FLAG_DISABLE_ALL)) {
-			ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(chan));
-			return -1;
+		if (ast_channel_cdr(chan)) {
+			if (ast_cdr_set_property(ast_channel_name(chan), AST_CDR_FLAG_DISABLE_ALL)) {
+				ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(chan));
+				return -1;
+			}
+		} else {
+			ast_debug(4, "No CDR present on %s\n", ast_channel_name(chan));
 		}
 		return 0;
 	}
@@ -43,16 +47,20 @@ int rpt_disable_cdr(struct ast_channel *chan)
 		ast_log(AST_LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(chan));
 		return -1;
 	}
-	if (!ast_channel_cdr(p->owner)) {
+	if (ast_channel_cdr(p->owner)) {
+		if (ast_cdr_set_property(ast_channel_name(p->owner), AST_CDR_FLAG_DISABLE_ALL)) {
+			ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(p->owner));
+		}
+	} else {
 		ast_debug(4, "No CDR present on %s\n", ast_channel_name(p->owner));
-		return 0;
-	} else if (ast_cdr_set_property(ast_channel_name(p->owner), AST_CDR_FLAG_DISABLE_ALL)) {
-		ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(p->owner));
 	}
-	if (!ast_channel_cdr(p->chan)) {
+
+	if (ast_channel_cdr(p->chan)) {
+		if (ast_cdr_set_property(ast_channel_name(p->chan), AST_CDR_FLAG_DISABLE_ALL)) {
+			ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(p->chan));
+		}
+	} else {
 		ast_debug(4, "No CDR present on %s\n", ast_channel_name(p->chan));
-	} else if (ast_cdr_set_property(ast_channel_name(p->chan), AST_CDR_FLAG_DISABLE_ALL)) {
-		ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(p->chan));
 	}
 
 	return 0;
