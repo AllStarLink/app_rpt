@@ -2877,6 +2877,13 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
+	if (!strncmp(ast_channel_name(myrpt->txchannel), "Local", 5)) {
+		/* IF we have a local channel setup in txchannel, there is no listener
+		 * Autoservice is required to "dump" audio frames.
+		 */
+		ast_autoservice_start(myrpt->txchannel);
+	}
+
 	if (!myrpt->localtxchannel) {
 		if (rpt_request_pseudo(myrpt, cap, RPT_LOCALTXCHAN, "LocalTX")) { /* Listen only link */
 			rpt_hangup_rx_tx(myrpt);
