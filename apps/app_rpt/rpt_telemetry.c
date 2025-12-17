@@ -1328,7 +1328,7 @@ void *rpt_tele_thread(void *this)
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
 	/* allocate a local channel thru asterisk and call the correct conference */
-	mychannel = rpt_request_local_chan(cap, "Telem");
+	mychannel = rpt_request_telem_chan(cap, "Telem");
 	ao2_ref(cap, -1);
 
 	if (!mychannel) {
