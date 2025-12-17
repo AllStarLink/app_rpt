@@ -247,7 +247,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	return 0;
 }
 
-struct ast_channel *rpt_request_local_chan(struct ast_format_cap *cap, const char *exten)
+struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, const char *type)
 {
 	struct ast_channel *chan;
 	struct ast_unreal_pvt *p;

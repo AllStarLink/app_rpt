@@ -47,7 +47,10 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
  * \return channel on success
  * \return NULL on failure
  */
-struct ast_channel *rpt_request_local_chan(struct ast_format_cap *cap, const char *exten);
+struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, const char *type);
+
+#define rpt_request_local_chan(cap, exten) __rpt_request_local_chan(cap, exten, "Local")
+#define rpt_request_telem_chan(cap, exten) __rpt_request_local_chan(cap, exten, "Announcer")
 
 /*!
  * \brief Request a repeater channel not associated with a real device
