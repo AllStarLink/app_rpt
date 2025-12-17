@@ -262,11 +262,12 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
 	ast_debug(1, "Requesting channel %s setup\n", ast_channel_name(chan));
 	ast_set_read_format(chan, ast_format_slin);
 	ast_set_write_format(chan, ast_format_slin);
+	rpt_disable_cdr(chan);
 	if (type == RPT_LOCAL) {
 		/* Local channel needs to be answered.
 		 * Announcer channels auto answer on creation.
 		 */
-		rpt_disable_cdr(chan);
+
 		ast_debug(1, "Requested channel %s cdr disabled\n", ast_channel_name(chan));
 		p = ast_channel_tech_pvt(chan);
 		if (!p || !p->owner || !p->chan) {
