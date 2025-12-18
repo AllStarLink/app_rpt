@@ -5559,30 +5559,26 @@ static void *rpt(void *this)
 				break;
 			}
 			continue;
-		} else if (who == myrpt->txchannel) { /* if it was a read from tx */
+		} else if (who == myrpt->txchannel) { /* if it was a read from tx - Note if rxchannel = txchannel, we won't get here */
 			if (txchannel_read(myrpt)) {
 				break;
 			}
 			continue;
-		} else if (who == myrpt->localtxchannel) { /* if it was a read from pseudo-tx */
+		} else if (who == myrpt->localtxchannel) { /* if it was a read from local-tx */
 			if (localtxchannel_read(myrpt, &myfirst)) {
 				break;
 			}
 			continue;
-		}
-
-		if (process_link_channels(myrpt, who, &myfirst)) {
-			break;
-		}
-
-		if (myrpt->monchannel && who == myrpt->monchannel) {
-			if (monchannel_read(myrpt)) {
-				break;
-			}
 		} else if (who == myrpt->txpchannel) { /* if it was a read from remote tx */
 			if (txpchannel_read(myrpt)) {
 				break;
 			}
+		} else if (myrpt->monchannel && who == myrpt->monchannel) {
+			if (monchannel_read(myrpt)) {
+				break;
+			}
+		} else if (process_link_channels(myrpt, who, &myfirst)) {
+			break;
 		}
 	}
 
