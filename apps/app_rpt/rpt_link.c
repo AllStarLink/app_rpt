@@ -758,7 +758,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		return -1;
 	}
 
-	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
+	rpt_make_call(l->chan, tele, 2000, deststr, "Remote Rx", "remote", myrpt->name);
 
 	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAXLink")) {
 		ao2_ref(cap, -1);
