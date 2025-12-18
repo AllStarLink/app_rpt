@@ -1366,12 +1366,20 @@ void *rpt_call(void *this)
 	myrpt->patch_talking = 0; /* Initialize patch_talking flag */
 	p = ast_channel_tech_pvt(mychannel);
 	ast_debug(1, "Adding talker callback to channel %s, private data %p\n", ast_channel_name(mychannel), p);
-	bridge_chan = ast_channel_internal_bridge_channel(p->chan);
-	bridge_chan->tech_args.talking_threshold = DEFAULT_TALKING_THRESHOLD;
-	bridge_chan->tech_args.silence_threshold = VOX_OFF_DEBOUNCE_COUNT * 20; /* VOX is in 20ms count */
-
-	ast_debug(1, "Got Bridge channel %p\n", bridge_chan);
-	ast_bridge_talk_detector_hook(bridge_chan->features, rpt_handle_talker_cb, myrpt, NULL, AST_BRIDGE_HOOK_REMOVE_ON_PULL);
+	if (p) {
+		bridge_chan = ast_channel_get_bridge_channel(p->chan);
+		if (bridge_chan) {
+			bridge_chan->tech_args.talking_threshold = DEFAULT_TALKING_THRESHOLD;
+			bridge_chan->tech_args.silence_threshold = VOX_OFF_DEBOUNCE_COUNT * 20; /* VOX is in 20ms count */
+			ast_bridge_talk_detector_hook(bridge_chan->features, rpt_handle_talker_cb, myrpt, NULL, AST_BRIDGE_HOOK_REMOVE_ON_PULL);
+			ast_debug(1, "Got Bridge channel %p\n", bridge_chan);
+			ao2_ref(bridge_chan, -1);
+		} else {
+			ast_log(LOG_WARNING, "Failed to get Bridge channel");
+		}
+	} else {
+		ast_log(LOG_WARNING, "Failed to get channel tech private");
+	}
 
 	genchannel = rpt_request_local_chan(cap, "GenChannel");
 	ao2_ref(cap, -1);
