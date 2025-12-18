@@ -5573,7 +5573,7 @@ static void *rpt(void *this)
 			if (txpchannel_read(myrpt)) {
 				break;
 			}
-		} else if (myrpt->monchannel && who == myrpt->monchannel) {
+		} else if (who == myrpt->monchannel) {
 			if (monchannel_read(myrpt)) {
 				break;
 			}
