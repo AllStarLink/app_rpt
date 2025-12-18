@@ -1293,8 +1293,6 @@ void *rpt_tele_thread(void *this)
 		ident = "";
 		id_malloc = 0;
 	}
-	rpt_mutex_unlock(&myrpt->lock);
-	rpt_mutex_lock(&myrpt->lock);
 	/* Wait for previous telemetry to finish before we start so we're not speaking on top of each other. */
 	ast_debug(5, "Queued telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
 	while (myrpt->active_telem && ((myrpt->active_telem->mode == PAGE) || (myrpt->active_telem->mode == MDC1200))) {
@@ -1351,17 +1349,16 @@ void *rpt_tele_thread(void *this)
 		break;
 	}
 
+	if (ast_audiohook_volume_set_float(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
+		ast_log(LOG_WARNING, "Setting the volume on channel %s to %2.2f failed", ast_channel_name(mychannel), myrpt->p.telemnomgain);
+	}
+
 	if (rpt_conf_add(mychannel, myrpt, type)) {
 		ast_log(LOG_WARNING, "Unable to join local channel to conference %s\n", type == RPT_CONF ? RPT_CONF_NAME : RPT_TXCONF_NAME);
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
 
-	if (ast_audiohook_volume_set_float(mychannel, AST_AUDIOHOOK_DIRECTION_WRITE, myrpt->p.telemnomgain)) {
-		ast_log(LOG_WARNING, "Setting the volume on channel %s to %2.2f failed", ast_channel_name(mychannel), myrpt->p.telemnomgain);
-	}
-
-	ast_stopstream(mychannel);
 	res = 0;
 	switch (mytele->mode) {
 	case USEROUT:

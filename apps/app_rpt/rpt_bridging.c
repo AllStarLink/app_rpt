@@ -145,9 +145,9 @@ static const char *rpt_chan_app(enum rpt_chan_name chantype, enum rpt_chan_flags
 {
 	switch (chantype) {
 	case RPT_RXCHAN:
-		return flags & RPT_LINK_CHAN ? "(Link Rx)" : "(Repeater Rx)";
+		return flags & RPT_LINK_CHAN ? "Link Rx" : "Repeater Rx";
 	case RPT_TXCHAN:
-		return flags & RPT_LINK_CHAN ? "(Link Tx)" : "(Repeater Tx)";
+		return flags & RPT_LINK_CHAN ? "Link Tx" : "Repeater Tx";
 	case RPT_PCHAN:
 	case RPT_LOCALTXCHAN:
 	case RPT_MONCHAN:
@@ -213,7 +213,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name cha
 		return -1;
 	}
 
-	if (strcasecmp(tech, "Local")) {
+	if (!IS_LOCAL_NAME(tech)) {
 		rpt_make_call(chan, device, RPT_DIAL_DURATION, tech, rpt_chan_app(chantype, flags), rpt_chan_app_data(chantype), myrpt->name);
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
@@ -230,15 +230,10 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name cha
 
 	switch (chantype) {
 	case RPT_RXCHAN:
-		myrpt->localrxchannel = !strcasecmp(tech, "Local") ? chan : NULL;
+		myrpt->localrxchannel = IS_LOCAL_NAME(tech) ? chan : NULL;
 		break;
 	case RPT_TXCHAN:
-		if (flags & RPT_LINK_CHAN) {
-			/* XXX Dunno if this difference is really necessary, but this is a literal refactor of existing logic... */
-			myrpt->localtxchannel = !strcasecmp(tech, "DAHDI") ? chan : NULL;
-		} else {
-			myrpt->localtxchannel = !strcasecmp(tech, "DAHDI") && strcasecmp(device, "pseudo") ? chan : NULL;
-		}
+		myrpt->localtxchannel = IS_LOCAL_NAME(tech) ? chan : NULL;
 		break;
 	default:
 		break;

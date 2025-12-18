@@ -2496,7 +2496,7 @@ static void *attempt_reconnect(void *data)
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
 		ast_frfree(f1);
 	if (l->chan) {
-		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
+		rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
 		rpt_mutex_lock(&myrpt->lock);
@@ -2885,7 +2885,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	if (!strncmp(ast_channel_name(myrpt->txchannel), "Local", 5)) {
+	if (IS_LOCAL_NAME(ast_channel_name(myrpt->txchannel))) {
 		/* IF we have a local channel setup in txchannel, there is no listener
 		 * Autoservice is required to "dump" audio frames.
 		 */
@@ -2909,13 +2909,11 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_conf_create(myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
 	if (rpt_conf_add(myrpt->localtxchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
 
