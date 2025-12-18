@@ -2916,7 +2916,7 @@ abort3:
 	pthread_exit(NULL);
 }
 
-void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
+void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 {
 	struct rpt_tele *tele;
 	struct rpt_link *mylink = NULL;
@@ -3216,6 +3216,8 @@ void rpt_telemetry(struct rpt *myrpt, int mode, void *data)
 			ast_free(strs);
 			ast_free(lbuf);
 			return;
+		default:
+			break;
 		}
 	}
 	tele = ast_calloc(1, sizeof(struct rpt_tele));
