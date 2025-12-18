@@ -16,7 +16,7 @@ void cancel_pfxtone(struct rpt *myrpt);
 void *rpt_tele_thread(void *this);
 
 /*! \brief More repeater telemetry routines. */
-void rpt_telemetry(struct rpt *myrpt, int mode, void *data);
+void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data);
 
 /*!
  * \brief Register telemetry function
