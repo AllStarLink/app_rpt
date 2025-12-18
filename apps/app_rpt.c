@@ -3903,7 +3903,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			RPT_MUTE_FRAME(f);
 		}
 
-		ismuted = dtmfed; //|| rpt_conf_get_muted(myrpt->dahdirxchannel, myrpt);
+		ismuted = dtmfed || rpt_conf_get_muted(myrpt->localrxchannel, myrpt);
 		dtmfed = 0;
 
 		if (myrpt->p.votertype == 1) {
