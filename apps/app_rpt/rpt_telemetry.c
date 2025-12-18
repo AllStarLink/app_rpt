@@ -1265,7 +1265,6 @@ void *rpt_tele_thread(void *this)
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
 	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
-	char exten[AST_MAX_EXTENSION];
 
 #ifdef	_MDC_ENCODE_H_
 	struct mdcparams *mdcp;
@@ -1346,11 +1345,9 @@ void *rpt_tele_thread(void *this)
 	case TEST_TONE:
 	case STATS_GPS_LEGACY:
 		type = RPT_CONF;
-		strncpy(exten, RPT_CONF_NAME, sizeof(exten));
 		break;
 	default:
 		type = RPT_TXCONF;
-		strncpy(exten, RPT_TXCONF_NAME, sizeof(exten));
 		break;
 	}
 
