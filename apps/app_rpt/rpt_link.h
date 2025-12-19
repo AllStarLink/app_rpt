@@ -81,12 +81,23 @@ void __kickshort(struct rpt *myrpt);
 /*! \brief Updates the active links (channels) list that that the repeater has */
 void rpt_update_links(struct rpt *myrpt);
 
-/*! 
- * \brief Connect a link 
- * \retval -2 Attempt to connect to self 
- * \retval -1 No such node
- * \retval 0 Success
- * \retval 1 No match yet
- * \retval 2 Already connected to this node
+/*!
+ * \brief Connect a link
+ * uses rpt_connect_data structure to pass parameters.
  */
-int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma);
+void *connect_link(void *data);
+
+/*! \brief Free link and associated internal memory.
+ * \param link Link structure to free
+ */
+void rpt_link_free(struct rpt_link *link);
+
+struct rpt_connect_data {
+	struct rpt *myrpt;
+	char *digitbuf;
+	enum link_mode mode;
+	int perma;
+	enum rpt_command_source command_source;
+	struct rpt_link *mylink;
+	pthread_t threadid;
+};

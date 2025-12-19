@@ -419,6 +419,12 @@ int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
 
 int nullfd = -1;
 
+struct rpt_reconnect_data {
+	struct rpt *myrpt;
+	struct rpt_link *l;
+	pthread_t threadid;
+};
+
 int rpt_debug_level(void)
 {
 	return debug;
@@ -2396,30 +2402,42 @@ static char *parse_node_format(char *s, char **restrict s1, char *buf, size_t le
 	return s2;
 }
 
-static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
+static void *attempt_reconnect(void *data)
 {
 	char *s1, *tele;
 	char tmp[300], deststr[325] = "";
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
-	int res = 0;
+	struct rpt_reconnect_data *reconnect_data = data;
+	struct rpt_link *l = reconnect_data->l;
+	struct rpt *myrpt = reconnect_data->myrpt;
 
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
-		return -1;
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_free(reconnect_data);
+		pthread_exit(NULL);
 	}
 	/* cannot apply to echolink */
-	if (!strncasecmp(tmp, "echolink", 8))
-		return 0;
+	if (!strncasecmp(tmp, "echolink", 8)) {
+		ast_free(reconnect_data);
+		pthread_exit(NULL);
+	}
 	/* cannot apply to tlb */
-	if (!strncasecmp(tmp, "tlb", 3))
-		return 0;
+	if (!strncasecmp(tmp, "tlb", 3)) {
+		ast_free(reconnect_data);
+		pthread_exit(NULL);
+	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		return -1;
+		l->retrytimer = RETRY_TIMER_MS;
+		ast_free(reconnect_data);
+		pthread_exit(NULL);
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
@@ -2452,13 +2470,14 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
-		res = -1;
+		l->retrytimer = RETRY_TIMER_MS;
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
-	return res;
+	ast_free(reconnect_data);
+	pthread_exit(NULL);
 }
 
 /* 0 return=continue, 1 return = break, -1 return = error */
@@ -3112,6 +3131,8 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	struct ast_frame *f;
 	int newkeytimer_last, max_retries;
 	struct rpt_link *l;
+	struct rpt_reconnect_data *reconnect_data;
+
 	struct ao2_iterator l_it;
 
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
@@ -3305,7 +3326,15 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		if (!l->chan && !l->retrytimer && l->outbound && !max_retries && l->hasconnected) {
 			rpt_mutex_unlock(&myrpt->lock);
 			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
-				if (attempt_reconnect(myrpt, l) == -1) {
+				reconnect_data = ast_calloc(1, sizeof(struct rpt_reconnect_data));
+				if (!reconnect_data) {
+					rpt_mutex_lock(&myrpt->lock);
+					continue;
+				}
+				reconnect_data->myrpt = myrpt;
+				reconnect_data->l = l;
+				if (ast_pthread_create_detached(&reconnect_data->threadid, NULL, attempt_reconnect, (void *) reconnect_data) < 0) {
+					ast_free(reconnect_data);
 					l->retrytimer = RETRY_TIMER_MS;
 				}
 			} else {

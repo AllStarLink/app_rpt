@@ -86,6 +86,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	int i, r;
+	struct rpt_connect_data *connect_data;
 
 	if (!param)
 		return DC_ERROR;
@@ -96,7 +97,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	ast_copy_string(digitbuf, digits, sizeof(digitbuf));
 
 	ast_debug(7, "@@@@ ilink param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
-
 	switch (myatoi(param)) {
 	case 11:					/* Perm Link off */
 	case 1:					/* Link off */
@@ -150,30 +150,30 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		/* Attempt connection  */
 		perma = (r > 10) ? 1 : 0;
 		mode = (r & 1) ? MODE_TRANSCEIVE : MODE_MONITOR;
-		if ((r == 8) || (r == 18))
+		if ((r == 8) || (r == 18)) {
 			mode = MODE_LOCAL_MONITOR;
-		r = connect_link(myrpt, digitbuf, mode, perma);
-		switch (r) {
-		case -2:				/* Attempt to connect to self */
-			return DC_COMPLETE;	/* Silent error */
+		}
 
-		case 0:
-			myrpt->linkactivityflag = 1;
-			rpt_telem_select(myrpt, command_source, mylink);
-			rpt_telemetry(myrpt, COMPLETE, NULL);
-			return DC_COMPLETE;
-
-		case 1:
-			break;
-
-		case 2:
-			rpt_telem_select(myrpt, command_source, mylink);
-			rpt_telemetry(myrpt, REMALREADY, NULL);
-			return DC_COMPLETE;
-
-		default:
+		connect_data = ast_calloc(1, sizeof(struct rpt_connect_data));
+		if (!connect_data) {
+			return DC_ERROR;
+		}
+		connect_data->myrpt = myrpt;
+		connect_data->digitbuf = ast_strdup(digitbuf);
+		if (!connect_data->digitbuf) {
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			ast_free(connect_data);
+			return DC_ERROR;
+		}
+		connect_data->mode = mode;
+		connect_data->perma = perma;
+		connect_data->command_source = command_source;
+		connect_data->mylink = mylink;
+		if (ast_pthread_create_detached(&connect_data->threadid, NULL, connect_link, (void *) connect_data) < 0) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			ast_free(connect_data);
 			return DC_COMPLETE;
 		}
 		break;
@@ -323,7 +323,24 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			else
 				mode = MODE_MONITOR;
 			perma = (s1[1] == 'P') ? 1 : 0;
-			connect_link(myrpt, s1 + 2, mode, perma);	/* Try to reconnect */
+			connect_data = ast_calloc(1, sizeof(struct rpt_connect_data));
+			if (!connect_data) {
+				break;
+			}
+			connect_data->myrpt = myrpt;
+			connect_data->digitbuf = ast_strdup(s1 + 2);
+			if (!connect_data->digitbuf) {
+				ast_free(connect_data);
+				break;
+			}
+			connect_data->mode = mode;
+			connect_data->perma = perma;
+			connect_data->command_source = command_source;
+			connect_data->mylink = mylink;
+			if (ast_pthread_create_detached(&connect_data->threadid, NULL, connect_link, (void *) connect_data) < 0) {
+				ast_free(connect_data->digitbuf);
+				ast_free(connect_data);
+			}
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
