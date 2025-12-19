@@ -760,10 +760,11 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 
 	case MGRCMD_RPTSTAT:
 		/* Return Nodes: and a comma separated list of nodes */
-		ast_str_set(&str, 0, "Nodes: ");
 		if (!nrpts) {
+			rpt_manager_success(s, m);
 			astman_append(s, "<NONE>\r\n");
 		} else {
+			ast_str_set(&str, 0, "Nodes: ");
 			for (i = 0; i < nrpts; i++) {
 				ast_str_append(&str, 0, "%s", rpt_vars[i].name);
 				if (i < nrpts - 1) {
