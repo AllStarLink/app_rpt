@@ -2418,18 +2418,15 @@ static void *attempt_reconnect(void *data)
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_free(reconnect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	/* cannot apply to echolink */
 	if (!strncasecmp(tmp, "echolink", 8)) {
-		ast_free(reconnect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	/* cannot apply to tlb */
 	if (!strncasecmp(tmp, "tlb", 3)) {
-		ast_free(reconnect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
@@ -2438,8 +2435,7 @@ static void *attempt_reconnect(void *data)
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_free(reconnect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
@@ -2472,14 +2468,17 @@ static void *attempt_reconnect(void *data)
 		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
+		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
+cleanup:
 	ast_free(reconnect_data);
-	pthread_exit(NULL);
+	return NULL;
 }
 
 /* 0 return=continue, 1 return = break, -1 return = error */
