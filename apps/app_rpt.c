@@ -4386,9 +4386,11 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
+					ast_mutex_unlock(&myrpt->lock);
 					return -1;
 				}
 				ast_frfree(f);
+				ast_mutex_unlock(&myrpt->lock);
 				return 0;
 			} else {
 					continue;
