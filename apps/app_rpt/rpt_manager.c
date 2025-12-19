@@ -733,6 +733,7 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	int nrpts = rpt_num_rpts();
 
 	if (!str) {
+		astman_send_error(s, m, "RptStatus Memory allocation failure");
 		return 0;
 	}
 	time(&now);
