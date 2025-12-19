@@ -732,10 +732,10 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	};
 	int nrpts = rpt_num_rpts();
 
-	time(&now);
 	if (!str) {
 		return 0;
 	}
+	time(&now);
 	/* Check for Command */
 	if (ast_strlen_zero(cmd)) {
 		astman_send_error(s, m, "RptStatus missing command");
