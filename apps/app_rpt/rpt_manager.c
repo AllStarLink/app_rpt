@@ -664,9 +664,9 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			astman_append(s, "TxTimeSinceSystemInitialization: %02d:%02d:%02d:%02d\r\n", hours, minutes, seconds,
 						  (int) totaltxtime);
 
-			ast_str_append(&str, 0, "NodesCurrentlyConnectedToUs: ");
+			ast_str_set(&str, 0, "NodesCurrentlyConnectedToUs: ");
 			if (!numoflinks) {
-				ast_str_set(&str, 0, "<NONE>");
+				ast_str_append(&str, 0, "<NONE>");
 			} else {
 				for (j = 0; j < numoflinks; j++) {
 					ast_str_append(&str, 0, "%s", listoflinks[j]);
