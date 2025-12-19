@@ -760,19 +760,19 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 
 	case MGRCMD_RPTSTAT:
 		/* Return Nodes: and a comma separated list of nodes */
-		ast_str_append(&str, 0, "Nodes: ");
-		for (i = 0; i < nrpts; i++) {
-			ast_str_append(&str, 0, "%s", rpt_vars[i].name);
-			if (i < nrpts - 1) {
-				ast_str_append(&str, 0, ",");
-			}
-		}
-		rpt_manager_success(s, m);
-
-		if (!nrpts)
+		if (!nrpts) {
 			astman_append(s, "<NONE>\r\n");
-		else
+		} else {
+			ast_str_append(&str, 0, "Nodes: ");
+			for (i = 0; i < nrpts; i++) {
+				ast_str_append(&str, 0, "%s", rpt_vars[i].name);
+				if (i < nrpts - 1) {
+					ast_str_append(&str, 0, ",");
+				}
+			}
+			rpt_manager_success(s, m);
 			astman_append(s, "%s\r\n", ast_str_buffer(str));
+		}
 
 		uptime = (int) (now - rpt_starttime());
 		hours = uptime / 3600;
