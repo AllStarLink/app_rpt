@@ -564,9 +564,9 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
-int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
+void *connect_link(void *data)
 {
-	char *s, *s1, *tele, *cp;
+	char *s, *s1, *tele, *cp, *node;
 	char tmp[300], deststr[325] = "", modechange = 0;
 	char sx[320], *sy;
 	char **strs; /* List of pointers to links in link list string */
@@ -576,33 +576,53 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	int i, ns, n = 1;
 	int voterlink = 0;
 	struct ast_format_cap *cap;
+	struct rpt_connect_data *connect_data;
 
-	if (strlen(node) < 1)
-		return 1;
+	connect_data = data;
+	node = connect_data->digitbuf;
+
+	if (strlen(node) < 1) {
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
+	}
 
 	if (tlb_query_node_exists(node)) {
-		sprintf(tmp, "tlb/%s/%s", node, myrpt->name);
+		sprintf(tmp, "tlb/%s/%s", node, connect_data->myrpt->name);
 	} else {
 		if (node[0] != '3') {
-			if (node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1)) {
-				if (strlen(node) >= myrpt->longestnode) {
-					return -1;	/* No such node */
+			if (node_lookup(connect_data->myrpt, node, tmp, sizeof(tmp) - 1, 1)) {
+				if (strlen(node) >= connect_data->myrpt->longestnode) {
+					rpt_telem_select(connect_data->myrpt, connect_data->command_source, connect_data->mylink);
+					rpt_telemetry(connect_data->myrpt, CONNFAIL, NULL);
+					ast_free(connect_data->digitbuf);
+					ast_free(connect_data);
+					pthread_exit(NULL); /* No such node */
 				}
-				return 1;		/* No match yet */
+				ast_free(connect_data->digitbuf);
+				ast_free(connect_data);
+				pthread_exit(NULL); /* No match yet */
 			}
 		} else {
 			if (strlen(node) < 7) {
-				return 1;
+				ast_free(connect_data->digitbuf);
+				ast_free(connect_data);
+				pthread_exit(NULL);
 			}
-			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);		
+			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(connect_data->myrpt->p.eloutbound, "el0"), node + 1, node + 1);
 		}
 	}
 
-	if (!strcmp(myrpt->name, node)) { /* Do not allow connections to self */
-		return -2;
+	if (!strcmp(connect_data->myrpt->name, node)) { /* Do not allow connections to self */
+		rpt_telem_select(connect_data->myrpt, connect_data->command_source, connect_data->mylink);
+		rpt_telemetry(connect_data->myrpt, REMALREADY, NULL);
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
 	}
 
-	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node, mode ? "Transceive" : "Monitor", perma ? "Permalink" : "Normal");
+	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node,
+		connect_data->mode ? "Transceive" : "Monitor", connect_data->perma ? "Permalink" : "Normal");
 
 	s = NULL;
 	s1 = tmp;
@@ -621,10 +641,10 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		voterlink = 1;
 		ast_debug(1, "NODE is a VOTER.\n");
 	}
-	rpt_mutex_lock(&myrpt->lock);
-	l = myrpt->links.next;
+	rpt_mutex_lock(&connect_data->myrpt->lock);
+	l = connect_data->myrpt->links.next;
 	/* try to find this one in queue */
-	while (l != &myrpt->links) {
+	while (l != &connect_data->myrpt->links) {
 		if (l->name[0] == '0') {
 			l = l->next;
 			continue;
@@ -636,20 +656,26 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		l = l->next;
 	}
 	/* if found */
-	if (l != &myrpt->links) {
+	if (l != &connect_data->myrpt->links) {
 		/* if already in this mode, just ignore */
-		if ((l->mode == mode) || (!l->chan)) {
-			rpt_mutex_unlock(&myrpt->lock);
-			return 2;			/* Already linked */
+		if ((l->mode == connect_data->mode) || (!l->chan)) {
+			rpt_mutex_unlock(&connect_data->myrpt->lock);
+			rpt_telem_select(connect_data->myrpt, connect_data->command_source, connect_data->mylink);
+			rpt_telemetry(connect_data->myrpt, REMALREADY, NULL);
+			ast_free(connect_data->digitbuf);
+			ast_free(connect_data);
+			pthread_exit(NULL); /* Already linked */
 		}
 		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
-			l->mode = mode;
-			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
-			rpt_mutex_unlock(&myrpt->lock);
-			return 0;
+			l->mode = connect_data->mode;
+			ast_copy_string(connect_data->myrpt->lastlinknode, node, sizeof(connect_data->myrpt->lastlinknode));
+			rpt_mutex_unlock(&connect_data->myrpt->lock);
+			ast_free(connect_data->digitbuf);
+			ast_free(connect_data);
+			pthread_exit(NULL);
 		}
 		reconnects = l->reconnects;
-		rpt_mutex_unlock(&myrpt->lock);
+		rpt_mutex_unlock(&connect_data->myrpt->lock);
 		if (l->chan) {
 			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 		}
@@ -659,15 +685,19 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	} else { /* Check to see if this node is already linked */
 		lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
-			rpt_mutex_unlock(&myrpt->lock);
-			return -1;
+			rpt_mutex_unlock(&connect_data->myrpt->lock);
+			ast_free(connect_data->digitbuf);
+			ast_free(connect_data);
+			pthread_exit(NULL);
 		}
-		n = __mklinklist(myrpt, NULL, &lstr, 0) + 1;
-		rpt_mutex_unlock(&myrpt->lock);
+		n = __mklinklist(connect_data->myrpt, NULL, &lstr, 0) + 1;
+		rpt_mutex_unlock(&connect_data->myrpt->lock);
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
 			ast_free(lstr);
-			return -1;
+			ast_free(connect_data->digitbuf);
+			ast_free(connect_data);
+			pthread_exit(NULL);
 		}
 		ns = finddelim(ast_str_buffer(lstr), strs, n);
 		for (i = 0; i < ns; i++) {
@@ -677,24 +707,30 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 			if (!strcmp(strs[i], node)) {
 				ast_free(lstr);
 				ast_free(strs);
-				return 2; /* Already linked */
+				ast_free(connect_data->digitbuf);
+				ast_free(connect_data);
+				pthread_exit(NULL); /* Already linked */
 			}
 		}
 		ast_free(strs);
 		ast_free(lstr);
 	}
-	ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
+	ast_copy_string(connect_data->myrpt->lastlinknode, node, sizeof(connect_data->myrpt->lastlinknode));
 	/* establish call */
 	l = ast_calloc(1, sizeof(struct rpt_link));
 	if (!l) {
-		return -1;
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
 	}
 	l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!l->linklist) {
 		ast_free(l);
-		return -1;
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
 	}
-	l->mode = mode;
+	l->mode = connect_data->mode;
 	l->outbound = 1;
 	l->thisconnected = 0;
 	voxinit_link(l, 1);
@@ -702,7 +738,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	l->isremote = (s && ast_true(s));
 	if (modechange)
 		l->connected = 1;
-	l->hasconnected = l->perma = perma;
+	l->hasconnected = l->perma = connect_data->perma;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 	l->voterlink = voterlink;
@@ -722,7 +758,9 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
 		rpt_link_free(l);
-		return -1;
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
 	}
 	*tele++ = 0;
 
@@ -730,7 +768,9 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_link_free(l);
-		return -1;
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
@@ -752,49 +792,57 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	}
 	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
-		donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
+		donodelog_fmt(connect_data->myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		rpt_link_free(l);
 		ao2_ref(cap, -1);
-		return -1;
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
 	}
 
-	rpt_make_call(l->chan, tele, 2000, deststr, "Remote Rx", "remote", myrpt->name);
+	rpt_make_call(l->chan, tele, 2000, deststr, "Remote Rx", "remote", connect_data->myrpt->name);
 
 	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAXLink")) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		rpt_link_free(l);
-		return -1;
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
 	}
 
 	ao2_ref(cap, -1);
 
-	if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
+	if (rpt_conf_add(l->pchan, connect_data->myrpt, RPT_CONF)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		rpt_link_free(l);
-		return -1;
+		ast_free(connect_data->digitbuf);
+		ast_free(connect_data);
+		pthread_exit(NULL);
 	}
-	rpt_mutex_lock(&myrpt->lock);
+	rpt_mutex_lock(&connect_data->myrpt->lock);
 	if (tlb_query_node_exists(node)) {
-		init_linkmode(myrpt, l, LINKMODE_TLB);
+		init_linkmode(connect_data->myrpt, l, LINKMODE_TLB);
 	} else if (node[0] == '3') {
-		init_linkmode(myrpt, l, LINKMODE_ECHOLINK);
+		init_linkmode(connect_data->myrpt, l, LINKMODE_ECHOLINK);
 	} else {
 		l->linkmode = 0;
 	}
 	l->reconnects = reconnects;
 	/* insert at end of queue */
 	l->max_retries = MAX_RETRIES;
-	if (perma) {
+	if (connect_data->perma) {
 		l->max_retries = MAX_RETRIES_PERM;
 	}
 	if (l->isremote) {
 		l->retries = l->max_retries + 1;
 	}
 	l->rxlingertimer = RX_LINGER_TIME;
-	rpt_link_add(myrpt, l);
-	__kickshort(myrpt);
-	rpt_mutex_unlock(&myrpt->lock);
-	return 0;
+	rpt_link_add(connect_data->myrpt, l);
+	__kickshort(connect_data->myrpt);
+	rpt_mutex_unlock(&connect_data->myrpt->lock);
+	ast_free(connect_data->digitbuf);
+	ast_free(connect_data);
+	pthread_exit(NULL);
 }
