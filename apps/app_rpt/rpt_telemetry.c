@@ -595,6 +595,7 @@ void cancel_pfxtone(struct rpt *myrpt)
 {
 	struct rpt_tele *telem;
 	ast_debug(3, "cancel_pfxfone!!");
+	rpt_mutex_lock(&myrpt->lock);
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
 		if (telem->mode == PFXTONE && telem->chan) {
@@ -602,6 +603,7 @@ void cancel_pfxtone(struct rpt *myrpt)
 		}
 		telem = telem->next;
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 }
 
 static void send_tele_link(struct rpt *myrpt, char *cmd)
