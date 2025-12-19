@@ -711,7 +711,7 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	int uptime, hours, minutes;
 	time_t now;
 	const char *cmd = astman_get_header(m, "Command");
-	struct ast_str *str;
+	struct ast_str *str = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	enum rpt_manager {
 		MGRCMD_RPTSTAT,
 		MGRCMD_NODESTAT,
@@ -733,7 +733,9 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	int nrpts = rpt_num_rpts();
 
 	time(&now);
-
+	if (!str) {
+		return 0;
+	}
 	/* Check for Command */
 	if (ast_strlen_zero(cmd)) {
 		astman_send_error(s, m, "RptStatus missing command");
