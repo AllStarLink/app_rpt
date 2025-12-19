@@ -763,7 +763,7 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 		if (!nrpts) {
 			astman_append(s, "<NONE>\r\n");
 		} else {
-			ast_str_append(&str, 0, "Nodes: ");
+			ast_str_set(&str, 0, "Nodes: ");
 			for (i = 0; i < nrpts; i++) {
 				ast_str_append(&str, 0, "%s", rpt_vars[i].name);
 				if (i < nrpts - 1) {
