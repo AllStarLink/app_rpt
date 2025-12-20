@@ -3273,8 +3273,8 @@ static void *voter_xmit(void *data)
 						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
 					} else {
-						ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
-							client->respdigest);
+						ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum,
+							client->name, client->respdigest);
 						/* Send the ulaw audio packet over the wire to the client for transmitting */
 						sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
@@ -3346,13 +3346,13 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 							proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(6, "VOTER %i: Sending (proxied) ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
-								client->name, proxy_audiopacket.vp.digest);
+							ast_debug(6, "VOTER %i: Sending (proxied) ADPCM TX audio packet to client %s digest %08x\n",
+								p->nodenum, client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0, (struct sockaddr *) &client->sin,
 								sizeof(client->sin));
 						} else {
-							ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
-								client->respdigest);
+							ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
+								client->name, client->respdigest);
 							/* Send the ADPCM audio packet over the wire to the client for transmitting */
 							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
 								sizeof(client->sin));
@@ -4790,8 +4790,8 @@ static void *voter_reader(void *data)
 								ast_debug(7, "Mix client (ulaw) %s drain index: %d their seq: %d our seq: %d\n", client->name,
 									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno);
 							} else {
-								ast_debug(7, "Mix client (ADPCM) %s drain index: %d their seq: %d our seq: %d\n",
-									client->name, index, ntohl(vph->curtime.vtime_nsec), client->rxseqno_40ms);
+								ast_debug(7, "Mix client (ADPCM) %s drain index: %d their seq: %d our seq: %d\n", client->name,
+									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno_40ms);
 							}
 						}
 					} else {
