@@ -397,7 +397,6 @@ char context[100];
 
 /* DSP filter taps */
 #define NTAPS_PL 6
-#define NTAPS_4K 6
 
 #define	IS_CLIENT_PROXY(x) (x->proxy_sin.sin_family == AF_INET)
 #define	SEND_PRIMARY(x) (x->primary.sin_family == AF_INET)
