@@ -81,7 +81,7 @@ static void rpt_manager_success(struct mansession *s, const struct message *m)
 	}
 }
 
-static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *m, char *str)
+static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *m)
 {
 	int i;
 	int nrpts = rpt_num_rpts();
@@ -117,7 +117,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 	return 0;
 }
 
-static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m, char *str)
+static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 {
 	int i, j, ns, n = 1;
 	char **strs;
@@ -367,7 +367,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m,
 }
 
 /*! \brief Dump statistics to manager session */
-static int rpt_manager_do_stats(struct mansession *s, const struct message *m, char *str)
+static int rpt_manager_do_stats(struct mansession *s, const struct message *m, struct ast_str *str)
 {
 	int i, j, numoflinks;
 	int dailytxtime, dailykerchunks;
@@ -385,7 +385,6 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 	const char *node = astman_get_header(m, "Node");
 	struct rpt *myrpt;
 	int nrpts = rpt_num_rpts();
-
 	static char *not_applicable = "N/A";
 
 	tot_state = ider_state = patch_state = reverse_patch_state = input_signal = not_applicable;
@@ -665,17 +664,17 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 			astman_append(s, "TxTimeSinceSystemInitialization: %02d:%02d:%02d:%02d\r\n", hours, minutes, seconds,
 						  (int) totaltxtime);
 
-			sprintf(str, "NodesCurrentlyConnectedToUs: ");
+			ast_str_set(&str, 0, "NodesCurrentlyConnectedToUs: ");
 			if (!numoflinks) {
-				strcat(str, "<NONE>");
+				ast_str_append(&str, 0, "<NONE>");
 			} else {
 				for (j = 0; j < numoflinks; j++) {
-					sprintf(str + strlen(str), "%s", listoflinks[j]);
+					ast_str_append(&str, 0, "%s", listoflinks[j]);
 					if (j < numoflinks - 1)
-						strcat(str, ",");
+						ast_str_append(&str, 0, ",");
 				}
 			}
-			astman_append(s, "%s\r\n", str);
+			astman_append(s, "%s\r\n", ast_str_buffer(str));
 
 			astman_append(s, "Autopatch: %s\r\n", patch_ena);
 			astman_append(s, "AutopatchState: %s\r\n", patch_state);
@@ -708,12 +707,18 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, c
 
 static int manager_rpt_status(struct mansession *s, const struct message *m)
 {
-	int i, res, len, index;
+	int i, res;
 	int uptime, hours, minutes;
 	time_t now;
 	const char *cmd = astman_get_header(m, "Command");
-	char *str;
-	enum { MGRCMD_RPTSTAT, MGRCMD_NODESTAT, MGRCMD_XSTAT, MGRCMD_SAWSTAT };
+	struct ast_str *str = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	enum rpt_manager {
+		MGRCMD_RPTSTAT,
+		MGRCMD_NODESTAT,
+		MGRCMD_XSTAT,
+		MGRCMD_SAWSTAT
+	};
+	enum rpt_manager index;
 	struct mgrcmdtbl {
 		const char *cmd;
 		int index;
@@ -727,12 +732,11 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	};
 	int nrpts = rpt_num_rpts();
 
+	if (!str) {
+		astman_send_error(s, m, "RptStatus Memory allocation failure");
+		return 0;
+	}
 	time(&now);
-
-	len = 1024;					/* Allocate a working buffer */
-	if (!(str = ast_malloc(len)))
-		return -1;
-
 	/* Check for Command */
 	if (ast_strlen_zero(cmd)) {
 		astman_send_error(s, m, "RptStatus missing command");
@@ -756,33 +760,20 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 
 	case MGRCMD_RPTSTAT:
 		/* Return Nodes: and a comma separated list of nodes */
-		if ((res = snprintf(str, len, "Nodes: ")) > -1)
-			len -= res;
-		else {
-			ast_free(str);
-			return 0;
-		}
-		for (i = 0; i < nrpts; i++) {
-			if (i < nrpts - 1) {
-				if ((res = snprintf(str + strlen(str), len, "%s,", rpt_vars[i].name)) < 0) {
-					ast_free(str);
-					return 0;
-				}
-			} else {
-				if ((res = snprintf(str + strlen(str), len, "%s", rpt_vars[i].name)) < 0) {
-					ast_free(str);
-					return 0;
+		if (!nrpts) {
+			rpt_manager_success(s, m);
+			astman_append(s, "<NONE>\r\n");
+		} else {
+			ast_str_set(&str, 0, "Nodes: ");
+			for (i = 0; i < nrpts; i++) {
+				ast_str_append(&str, 0, "%s", rpt_vars[i].name);
+				if (i < nrpts - 1) {
+					ast_str_append(&str, 0, ",");
 				}
 			}
-			len -= res;
+			rpt_manager_success(s, m);
+			astman_append(s, "%s\r\n", ast_str_buffer(str));
 		}
-
-		rpt_manager_success(s, m);
-
-		if (!nrpts)
-			astman_append(s, "<NONE>\r\n");
-		else
-			astman_append(s, "%s\r\n", str);
 
 		uptime = (int) (now - rpt_starttime());
 		hours = uptime / 3600;
@@ -801,12 +792,12 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 		return res;
 
 	case MGRCMD_XSTAT:
-		res = rpt_manager_do_xstat(s, m, str);
+		res = rpt_manager_do_xstat(s, m);
 		ast_free(str);
 		return res;
 
 	case MGRCMD_SAWSTAT:
-		res = rpt_manager_do_sawstat(s, m, str);
+		res = rpt_manager_do_sawstat(s, m);
 		ast_free(str);
 		return res;
 
