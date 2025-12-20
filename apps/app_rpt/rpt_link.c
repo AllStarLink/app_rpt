@@ -581,9 +581,7 @@ void *connect_link(void *data)
 	char *node = connect_data->digitbuf;
 
 	if (strlen(node) < 1) {
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 
 	if (tlb_query_node_exists(node)) {
@@ -594,19 +592,13 @@ void *connect_link(void *data)
 				if (strlen(node) >= myrpt->longestnode) {
 					rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 					rpt_telemetry(myrpt, CONNFAIL, NULL);
-					ast_free(connect_data->digitbuf);
-					ast_free(connect_data);
-					pthread_exit(NULL); /* No such node */
+					goto cleanup; /* No such node */
 				}
-				ast_free(connect_data->digitbuf);
-				ast_free(connect_data);
-				pthread_exit(NULL); /* No match yet */
+				goto cleanup;
 			}
 		} else {
 			if (strlen(node) < 7) {
-				ast_free(connect_data->digitbuf);
-				ast_free(connect_data);
-				pthread_exit(NULL);
+				goto cleanup;
 			}
 			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);
 		}
@@ -615,9 +607,7 @@ void *connect_link(void *data)
 	if (!strcmp(myrpt->name, node)) { /* Do not allow connections to self */
 		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 		rpt_telemetry(myrpt, REMALREADY, NULL);
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 
 	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node,
@@ -661,17 +651,13 @@ void *connect_link(void *data)
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 			rpt_telemetry(myrpt, REMALREADY, NULL);
-			ast_free(connect_data->digitbuf);
-			ast_free(connect_data);
-			pthread_exit(NULL); /* Already linked */
+			goto cleanup; /* Already linked */
 		}
 		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
 			l->mode = connect_data->mode;
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_free(connect_data->digitbuf);
-			ast_free(connect_data);
-			pthread_exit(NULL);
+			goto cleanup;
 		}
 		reconnects = l->reconnects;
 		rpt_mutex_unlock(&myrpt->lock);
@@ -685,18 +671,14 @@ void *connect_link(void *data)
 		lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_free(connect_data->digitbuf);
-			ast_free(connect_data);
-			pthread_exit(NULL);
+			goto cleanup;
 		}
 		n = __mklinklist(myrpt, NULL, &lstr, 0) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
 			ast_free(lstr);
-			ast_free(connect_data->digitbuf);
-			ast_free(connect_data);
-			pthread_exit(NULL);
+			goto cleanup;
 		}
 		ns = finddelim(ast_str_buffer(lstr), strs, n);
 		for (i = 0; i < ns; i++) {
@@ -706,9 +688,7 @@ void *connect_link(void *data)
 			if (!strcmp(strs[i], node)) {
 				ast_free(lstr);
 				ast_free(strs);
-				ast_free(connect_data->digitbuf);
-				ast_free(connect_data);
-				pthread_exit(NULL); /* Already linked */
+				goto cleanup; /* Already linked */
 			}
 		}
 		ast_free(strs);
@@ -718,16 +698,12 @@ void *connect_link(void *data)
 	/* establish call */
 	l = ast_calloc(1, sizeof(struct rpt_link));
 	if (!l) {
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!l->linklist) {
 		ast_free(l);
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	l->mode = connect_data->mode;
 	l->outbound = 1;
@@ -757,9 +733,7 @@ void *connect_link(void *data)
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
 		rpt_link_free(l);
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	*tele++ = 0;
 
@@ -767,9 +741,7 @@ void *connect_link(void *data)
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_link_free(l);
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
@@ -794,9 +766,7 @@ void *connect_link(void *data)
 		donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		rpt_link_free(l);
 		ao2_ref(cap, -1);
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 
 	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
@@ -805,9 +775,7 @@ void *connect_link(void *data)
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		rpt_link_free(l);
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 
 	ao2_ref(cap, -1);
@@ -817,9 +785,7 @@ void *connect_link(void *data)
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		rpt_link_free(l);
-		ast_free(connect_data->digitbuf);
-		ast_free(connect_data);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {
@@ -842,7 +808,8 @@ void *connect_link(void *data)
 	rpt_link_add(myrpt, l);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
+cleanup:
 	ast_free(connect_data->digitbuf);
 	ast_free(connect_data);
-	pthread_exit(NULL);
+	return NULL;
 }
