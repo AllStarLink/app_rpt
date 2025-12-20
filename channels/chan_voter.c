@@ -420,7 +420,7 @@ char context[100];
 #define VOTER_PAYLOAD_ULAW 1
 #define VOTER_PAYLOAD_GPS 2
 #define VOTER_PAYLOAD_ADPCM 3
-#define VOTER_PAYLOAD_NULAW 4
+#define VOTER_PAYLOAD_FUTURE 4 /* Reserved for future use */
 #define VOTER_PAYLOAD_PING 5
 #define VOTER_PAYLOAD_PROXY 0xf000
 
@@ -527,7 +527,6 @@ struct voter_client {
 	unsigned int ismaster:1;
 	unsigned int curmaster:1;
 	unsigned int doadpcm:1;
-	unsigned int donulaw:1;
 	unsigned int mix:1;
 	unsigned int nodeemp:1;
 	unsigned int noplfilter:1;
@@ -620,8 +619,6 @@ struct voter_pvt {
 	struct ast_dsp *dsp;
 	struct ast_trans_pvt *adpcmin;
 	struct ast_trans_pvt *adpcmout;
-	struct ast_trans_pvt *nuin;
-	struct ast_trans_pvt *nuout;
 	struct ast_trans_pvt *toast;
 	struct ast_trans_pvt *toast1;
 	struct ast_trans_pvt *fromast;
@@ -632,7 +629,6 @@ struct voter_pvt {
 	enum usbradio_carrier_type txtoctype;
 	int order;
 	struct ast_frame *adpcmf1;
-	struct ast_frame *nulawf1;
 	ast_mutex_t xmit_lock;
 	ast_cond_t xmit_cond;
 	pthread_t xmit_thread;
@@ -792,41 +788,6 @@ static int16_t hpass6(int16_t input, float * restrict xv, float * restrict yv)
 		+ (-0.3491861578 * yv[0]) + (2.3932556573 * yv[1])
 		+ (-6.9905126572 * yv[2]) + (11.0685981760 * yv[3])
 		+ (-9.9896695552 * yv[4]) + (4.8664511065 * yv[5]);
-	return ((int) yv[6]);
-}
-
-#define GAIN2   1.080715413e+02
-/*!
- * \brief DSP IIR low pass filter
- *
- * IIR 6 pole low pass filter, 1900Hz corner with 0.5db ripple
- *
- * \param input			Audio value to filter.
- * \param xv			Delay line.
- * \param yv			Delay line.
- * \return 				Filtered value.
- * \todo				This filter needs more documentation.
- */
-static int16_t lpass4(int16_t input, float * restrict xv, float * restrict yv)
-{
-	xv[0] = xv[1];
-	xv[1] = xv[2];
-	xv[2] = xv[3];
-	xv[3] = xv[4];
-	xv[4] = xv[5];
-	xv[5] = xv[6];
-	xv[6] = ((float) input) / GAIN2;
-	yv[0] = yv[1];
-	yv[1] = yv[2];
-	yv[2] = yv[3];
-	yv[3] = yv[4];
-	yv[4] = yv[5];
-	yv[5] = yv[6];
-	yv[6] = (xv[0] + xv[6]) + 6 * (xv[1] + xv[5]) + 15 * (xv[2] + xv[4])
-		+ 20 * xv[3]
-		+ (-0.1802140297 * yv[0]) + (0.7084527003 * yv[1])
-		+ (-1.5847014566 * yv[2]) + (2.3188475168 * yv[3])
-		+ (-2.5392334760 * yv[4]) + (1.6846484378 * yv[5]);
 	return ((int) yv[6]);
 }
 
@@ -1044,12 +1005,6 @@ static int voter_hangup(struct ast_channel *ast)
 	}
 	if (p->fromast) {
 		ast_translator_free_path(p->fromast);
-	}
-	if (p->nuin) {
-		ast_translator_free_path(p->nuin);
-	}
-	if (p->nuout) {
-		ast_translator_free_path(p->nuout);
 	}
 	ast_mutex_lock(&voter_lock);
 	for (q = pvts; q->next; q = q->next) {
@@ -2723,11 +2678,12 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
 			memset(client->audio, 0xff, -i);
 		}
+		/* Calculate the RSSI based on any RSSI samples in the buffer */
 		k = 0;
 		if (i >= 0) {
 			for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
 				k += client->rssi[j];
-				client->rssi[j] = 0;
+				client->rssi[j] = 0; /* After reading an RSSI value, reset the array to 0 */
 			}
 		} else {
 			for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
@@ -2739,7 +2695,13 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				client->rssi[j] = 0;
 			}
 		}
+		/* Take the sum of all the RSSI samples we found, get the average, and set client->lastrssi
+		 * for this client based on the result.
+		 */
 		client->lastrssi = k / FRAME_SIZE;
+		/* If this client's RSSI is has the strongest RSSI, set maxrssi to this new value, and
+		 * mark this client as the strongest (maxclient).
+		 */
 		if (client->lastrssi > maxrssi) {
 			maxrssi = client->lastrssi;
 			maxclient = client;
@@ -3156,32 +3118,39 @@ static void *voter_xmit(void *data)
 			}
 		}
 		mx = 0;
+		/* Loop though all the registered mix mode/mixminus clients and set mx if any of them
+		 * are receiving audio, so we can transmit it.
+		 */
 		if (p->mixminus) {
 			for (client = clients; client; client = client->next) {
+				/* Skip if this client doesn't belong to this instance */
 				if (client->nodenum != p->nodenum) {
 					continue;
 				}
+				/* Skip if we haven't heard from this client recently */
 				if (!client->heardfrom) {
 					continue;
 				}
+				/* Skip if this client isn't authenticated */
 				if (!client->respdigest) {
 					continue;
 				}
+				/* Skip if this client is NOT a mix mode client (IS a normal client) */
 				if (!client->mix) {
 					continue;
 				}
+				/* Skip if this client is using ADPCM audio, instead of ulaw */
 				if (client->doadpcm) {
 					continue;
 				}
-				if (client->donulaw) {
-					continue;
-				}
+				/* If this client received a signal (we calculated its RSSI), set mx */
 				if (client->lastrssi) {
 					mx = 1;
 				}
 			}
 		}
 		/* x will now be set if we are to generate TX output */
+		/* This first "if" will send ulaw audio out all regular or mixminus clients by default. */
 		if (x || mx) {
 			memset(&audiopacket, 0, sizeof(audiopacket) - sizeof(audiopacket.audio));
 			memset(&audiopacket.audio, 0xff, sizeof(audiopacket.audio));
@@ -3191,6 +3160,9 @@ static void *voter_xmit(void *data)
 			if (f1) {
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 			}
+			/* If we compiled with DMWDIAG, replace all the audio samples with those from
+			 * the digital milliwatt array, to generate a 1kHz tone on the transmitter.
+			 */
 #ifdef DMWDIAG
 			for (i = 0; i < FRAME_SIZE; i++) {
 				audiopacket.audio[i] = ulaw_digital_milliwatt[mwp++];
@@ -3200,23 +3172,28 @@ static void *voter_xmit(void *data)
 #endif
 			audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
+			/* Loop through all the clients, to figure out if we should send audio
+			 * to each.
+			 */
 			for (client = clients; client; client = client->next) {
+				/* Skip if this client doesn't belong to this instance */
 				if (client->nodenum != p->nodenum) {
 					continue;
 				}
+				/* Skip if this client is connected from the primary server AND is NOT a mix mode client */
 				if (p->priconn && !client->mix) {
 					continue;
 				}
+				/* Skip if this client isn't authenticated AND it isn't a proxy client (from the redundant server) */
 				if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 					continue;
 				}
+				/* Skip if we haven't heard from this client in a while */
 				if (!client->heardfrom) {
 					continue;
 				}
+				/* Skip if this client IS set to use ADPCM audio (instead of ulaw) */
 				if (client->doadpcm) {
-					continue;
-				}
-				if (client->donulaw) {
 					continue;
 				}
 				if (p->mixminus) {
@@ -3239,9 +3216,6 @@ static void *voter_xmit(void *data)
 							continue;
 						}
 						if (client1->doadpcm) {
-							continue;
-						}
-						if (client1->donulaw) {
 							continue;
 						}
 						if (!client1->lastrssi) {
@@ -3281,6 +3255,7 @@ static void *voter_xmit(void *data)
 				mkpucked(client, &audiopacket.vp.curtime);
 				audiopacket.vp.digest = htonl(client->respdigest);
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+				/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
 				if (client->totransmit && !client->txlockout) {
 					if (IS_CLIENT_PROXY(client)) {
 						memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
@@ -3293,20 +3268,23 @@ static void *voter_xmit(void *data)
 						proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 						proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 						proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-						ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
+						ast_debug(6, "VOTER %i: Sending (proxied) ulaw TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, proxy_audiopacket.vp.digest);
 						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
 					} else {
-						ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
+						ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
 							client->respdigest);
+						/* Send the ulaw audio packet over the wire to the client for transmitting */
 						sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
 					}
+					/* Update when we this client last sent an audio packet */
 					gettimeofday(&client->lastsenttime, NULL);
 				}
 			}
 		}
+		/* This "if" is used by clients configured to use ADPCM audio to the client transmitter */
 		if (x || p->adpcmf1) {
 			if (p->adpcmf1 == NULL) {
 				p->adpcmf1 = ast_frdup(f1);
@@ -3331,18 +3309,23 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
 				for (client = clients; client; client = client->next) {
+					/* Skip if this client doesn't belong to this instance */
 					if (client->nodenum != p->nodenum) {
 						continue;
 					}
+					/* Skip if this client is connected from the primary server AND is NOT a mix mode client */
 					if (p->priconn && !client->mix) {
 						continue;
 					}
+					/* Skip if this client isn't authenticated AND it isn't a proxy client (from the redundant server) */
 					if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
 						continue;
 					}
+					/* Skip if we haven't heard from this client in a while */
 					if (!client->heardfrom) {
 						continue;
 					}
+					/* Skip if this is NOT an ADPCM client (is configured for ulaw audio) */
 					if (!client->doadpcm) {
 						continue;
 					}
@@ -3350,6 +3333,7 @@ static void *voter_xmit(void *data)
 					audiopacket.vp.digest = htonl(client->respdigest);
 					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 #ifndef ADPCM_LOOPBACK
+					/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
 					if (client->totransmit && !client->txlockout) {
 						if (IS_CLIENT_PROXY(client)) {
 							memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
@@ -3362,108 +3346,18 @@ static void *voter_xmit(void *data)
 							proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 							proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
+							ast_debug(6, "VOTER %i: Sending (proxied) ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, proxy_audiopacket.vp.digest);
 							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0, (struct sockaddr *) &client->sin,
 								sizeof(client->sin));
 						} else {
-							ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
+							ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
 								client->respdigest);
+							/* Send the ADPCM audio packet over the wire to the client for transmitting */
 							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
 								sizeof(client->sin));
 						}
-						gettimeofday(&client->lastsenttime, NULL);
-					}
-#endif
-				}
-				ast_frfree(f2);
-			}
-		}
-		if (x || p->nulawf1) {
-			short *sap, s;
-			unsigned char nubuf[FRAME_SIZE];
-
-			if (p->nulawf1 == NULL) {
-				p->nulawf1 = ast_frdup(f1);
-			} else {
-				memset(xmtbuf, 0xff, sizeof(xmtbuf));
-				memset(&fr, 0, sizeof(fr));
-				fr.frametype = AST_FRAME_VOICE;
-				fr.subclass.format = ast_format_ulaw;
-				fr.datalen = FRAME_SIZE;
-				fr.samples = FRAME_SIZE;
-				fr.data.ptr = xmtbuf;
-				fr.src = __PRETTY_FUNCTION__;
-				if (x) {
-					f3 = ast_frcat(p->nulawf1, f1);
-				} else {
-					f3 = ast_frcat(p->nulawf1, &fr);
-				}
-				ast_frfree(p->nulawf1);
-				p->nulawf1 = NULL;
-				f2 = ast_translate(p->nuout, f3, 1);
-				sap = (short *) f2->data.ptr;
-				for (i = 0; i < f2->samples / 2; i++) {
-					s = *sap++;
-					if (s > 14000) {
-						s = 14000;
-					} else if (s < -14000) {
-						s = -14000;
-					}
-					lpass4(s, p->tlpx, p->tlpy);
-					s = *sap++;
-					if (s > 14000) {
-						s = 14000;
-					} else if (s < -14000) {
-						s = -14000;
-					}
-					nubuf[i] = AST_LIN2MU(lpass4(s, p->tlpx, p->tlpy));
-				}
-				memcpy(audiopacket.audio, nubuf, sizeof(nubuf));
-				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_NULAW);
-				for (client = clients; client; client = client->next) {
-					if (client->nodenum != p->nodenum) {
-						continue;
-					}
-					if (p->priconn && !client->mix) {
-						continue;
-					}
-					if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
-						continue;
-					}
-					if (!client->heardfrom) {
-						continue;
-					}
-					if (!client->donulaw) {
-						continue;
-					}
-					mkpucked(client, &audiopacket.vp.curtime);
-					audiopacket.vp.digest = htonl(client->respdigest);
-					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-#ifndef NULAW_LOOPBACK
-					if (client->totransmit && !client->txlockout) {
-						if (IS_CLIENT_PROXY(client)) {
-							memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
-							proxy_audiopacket.vp = audiopacket.vp;
-							proxy_audiopacket.rssi = audiopacket.rssi;
-							memcpy(proxy_audiopacket.audio, audiopacket.audio, sizeof(audiopacket.audio));
-							proxy_audiopacket.vprox.ipaddr = client->proxy_sin.sin_addr.s_addr;
-							proxy_audiopacket.vprox.port = client->proxy_sin.sin_port;
-							proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
-							proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
-							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-							proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(6, "VOTER %i: Sending (proxied) TX audio packet to client %s digest %08x\n", p->nodenum,
-								client->name, proxy_audiopacket.vp.digest);
-							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0,
-								(struct sockaddr *) &client->sin, sizeof(client->sin));
-						} else {
-							ast_debug(6, "VOTER %i: Sending TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
-								client->respdigest);
-							sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
-								sizeof(client->sin));
-						}
+						/* Update when we this client last sent an audio packet */
 						gettimeofday(&client->lastsenttime, NULL);
 					}
 #endif
@@ -3474,6 +3368,7 @@ static void *voter_xmit(void *data)
 		if (f1) {
 			ast_frfree(f1);
 		}
+		/* Process sending ping packets for each client, if necessary */
 		gettimeofday(&tv, NULL);
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
@@ -3519,6 +3414,7 @@ static void *voter_xmit(void *data)
 				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
 		}
+		/* Process ending GPS keepalive packets for each client, if necessary */
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
 				continue;
@@ -3648,20 +3544,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	p->fromast = ast_translator_build_path(ast_format_ulaw, ast_format_slin);
 	if (!p->fromast) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from slinear to ulaw!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
-		return NULL;
-	}
-	p->nuin = ast_translator_build_path(ast_format_ulaw, ast_format_slin);
-	if (!p->nuin) {
-		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from slinear to ulaw!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
-		return NULL;
-	}
-	p->nuout = ast_translator_build_path(ast_format_slin, ast_format_ulaw);
-	if (!p->nuout) {
-		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
 		ast_free(p);
 		return NULL;
@@ -4163,9 +4045,6 @@ static int reload(void)
 			if (!strncasecmp(v->name, "adpcm", 5)) {
 				continue;
 			}
-			if (!strncasecmp(v->name, "nulaw", 5)) {
-				continue;
-			}
 			if (!strncasecmp(v->name, "gpsid", 5)) {
 				continue;
 			}
@@ -4227,7 +4106,6 @@ static int reload(void)
 			client->nodenum = strtoul(ctg, NULL, 0);
 			client->totransmit = 0;
 			client->doadpcm = 0;
-			client->donulaw = 0;
 			client->nodeemp = 0;
 			client->mix = 0;
 			client->curmaster = 0;
@@ -4243,8 +4121,6 @@ static int reload(void)
 					hasmaster = 1;
 				} else if (!strcasecmp(strs[i], "adpcm")) {
 					client->doadpcm = 1;
-				} else if (!strcasecmp(strs[i], "nulaw")) {
-					client->donulaw = 1;
 				} else if (!strcasecmp(strs[i], "nodeemp")) {
 					client->nodeemp = 1;
 				} else if (!strcasecmp(strs[i], "noplfilter")) {
@@ -4406,9 +4282,11 @@ static void voter_xmit_master(void)
 		}
 		client->txseqno++;
 		if (client->rxseqno) {
-			if (!client->doadpcm && !client->donulaw) {
+			if (!client->doadpcm) {
+				/* Increment rxseqno for ulaw clients */
 				client->rxseqno++;
 			} else {
+				/* Increment rxseqno for ADPCM clients */
 				if (client->rxseq40ms) {
 					client->rxseqno += 2;
 				}
@@ -4499,7 +4377,7 @@ static void *voter_timer(void *data)
  * \brief UDP reader thread that processes incoming VOTER protocol packets and updates VOTER state.
  *
  * This thread receives VOTER-format UDP packets, matches them to configured clients,
- * validates/authenticates clients, and handles payloads such as audio (ULAW/ADPCM/NULAW),
+ * validates/authenticates clients, and handles payloads such as audio (ULAW/ADPCM),
  * proxy-encapsulated packets, GPS, and PING.
  *
  * It updates timing and master synchronization state, writes received audio and RSSI into per-client
@@ -4752,8 +4630,7 @@ static void *voter_reader(void *data)
 			if (client && client->heardfrom &&
 				(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))) ||
 					((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))) ||
-					(ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) ||
-					((ntohs(vph->payload_type) == VOTER_PAYLOAD_NULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))))) {
+					(ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY))) {
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
 						break;
@@ -4892,12 +4769,12 @@ static void *voter_reader(void *data)
 						if (!client->rxseqno) {
 							client->rxseqno_40ms = client->rxseqno = ntohl(vph->curtime.vtime_nsec);
 						}
-						/* Figure out whether we are using ADPCM/Nulaw or ulaw, and set the starting drain index.*/
-						if (!client->doadpcm && !client->donulaw) {
+						/* Figure out whether we are using ADPCM or ulaw, and set the starting drain index.*/
+						if (!client->doadpcm) {
 							/* Using ulaw (typical default) */
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno; /* This seems to result in 0? */
 						} else {
-							/* Using ADPCM or Nulaw */
+							/* Using ADPCM */
 							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
 						}
 						index *= FRAME_SIZE;	   /* At least with ulaw, since index already started at 0, this is still 0 */
@@ -4909,11 +4786,11 @@ static void *voter_reader(void *data)
 						index -= (FRAME_SIZE * 4); /* With the min buflen = 160 (so client->buflen = 1280), index = 320 here */
 						if (DEBUG_ATLEAST(5)) {
 							ast_debug(5, "Mix client drain index = %i\n", index);
-							if (!client->doadpcm && !client->donulaw) {
+							if (!client->doadpcm) {
 								ast_debug(7, "Mix client (ulaw) %s drain index: %d their seq: %d our seq: %d\n", client->name,
 									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno);
 							} else {
-								ast_debug(7, "Mix client (ADPCM/Nulaw) %s drain index: %d their seq: %d our seq: %d\n",
+								ast_debug(7, "Mix client (ADPCM) %s drain index: %d their seq: %d our seq: %d\n",
 									client->name, index, ntohl(vph->curtime.vtime_nsec), client->rxseqno_40ms);
 							}
 						}
@@ -4958,7 +4835,7 @@ static void *voter_reader(void *data)
 								buf[sizeof(VOTER_PACKET_HEADER) + i + 1] = 0xff;
 							}
 						}
-						/* If otherwise (RSSI > 0), if ADPCM, translate it. */
+						/* If otherwise (RSSI > 0), if ADPCM audio packet, translate it. */
 						else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) {
 #ifdef ADPCM_LOOPBACK
 							memset(&audiopacket, 0, sizeof(audiopacket));
@@ -4982,37 +4859,7 @@ static void *voter_reader(void *data)
 							fr.src = __PRETTY_FUNCTION__;
 							f1 = ast_translate(p->adpcmin, &fr, 0);
 						}
-						/* If otherwise (RSSI > 0), if Nulaw, translate it. */
-						else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_NULAW) {
-							short s, xbuf[FRAME_SIZE * 2];
-#ifdef NULAW_LOOPBACK
-							memset(&audiopacket, 0, sizeof(audiopacket));
-							strcpy((char *) audiopacket.vp.challenge, challenge);
-							audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_NULAW);
-							audiopacket.rssi = 0;
-							memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE);
-							audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-							audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
-							audiopacket.vp.digest = htonl(client->respdigest);
-							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
-								sizeof(client->sin));
-#endif
-
-							for (i = 0; i < FRAME_SIZE * 2; i += 2) {
-								s = (AST_MULAW((int) (unsigned char) buf[sizeof(VOTER_PACKET_HEADER) + 1 + (i >> 1)])) / 2;
-								xbuf[i] = lpass4(s, p->rlpx, p->rlpy);
-								xbuf[i + 1] = lpass4(s, p->rlpx, p->rlpy);
-							}
-							memset(&fr, 0, sizeof(fr));
-							fr.frametype = AST_FRAME_VOICE;
-							fr.subclass.format = ast_format_slin;
-							fr.datalen = FRAME_SIZE * 4;
-							fr.samples = FRAME_SIZE * 2;
-							fr.data.ptr = xbuf;
-							fr.src = __PRETTY_FUNCTION__;
-							f1 = ast_translate(p->nuin, &fr, 0);
-						}
-						if (!client->doadpcm && !client->donulaw) {
+						if (!client->doadpcm) {
 							index = (index + client->drainindex) % client->buflen;
 						} else {
 							index = (index + client->drainindex_40ms) % client->buflen;
