@@ -1320,7 +1320,7 @@ void *rpt_tele_thread(void *this)
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_mutex_lock(&myrpt->lock);
-		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
+		goto abort; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
@@ -1331,7 +1331,7 @@ void *rpt_tele_thread(void *this)
 	if (!mychannel) {
 		ast_log(LOG_WARNING, "Unable to obtain local channel (mode: %d)\n", mytele->mode);
 		rpt_mutex_lock(&myrpt->lock);
-		goto abort2; /* Didn't set active_telem, so goto abort2, not abort. */
+		goto abort; /* Didn't set active_telem, so goto abort2, not abort. */
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
