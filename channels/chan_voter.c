@@ -332,7 +332,7 @@ Use "core show help voter <command>"" to display usage.
 #include "../apps/app_rpt/pocsag.c"
 
 /* Setting dmwdiag = 1 in voter.conf will force all clients in an instance
- * to send a 1kHz tone. Can be used for setting transmitter deviation.
+ * to send a 1kHz tone at nearly full system deviation.
  */
 unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
 unsigned char mwp;
@@ -1049,7 +1049,7 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 		p->txkey = 1;
 		ast_verb(3, "Channel %s: TX On\n", ast_channel_name(ast));
 		if (p->dmwdiag) {
-			ast_verb(3, "Sending 1kHz test tone to node Voter/%i transmitter(s)", p->nodenum);
+			ast_verb(3, "Sending 1kHz test tone to node Voter/%i transmitter(s)\n", p->nodenum);
 		}
 		break;
 	case AST_CONTROL_RADIO_UNKEY:
@@ -3156,7 +3156,8 @@ static void *voter_xmit(void *data)
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 			}
 			/* If dmwdiag is set in voter.conf, replace all the audio samples with those from
-			 * the digital milliwatt array, to generate a 1kHz tone on the transmitter.
+			 * the digital milliwatt array, to generate a 1kHz tone at nearly full system deviation
+			 * on the transmitter.
 			 */
 			if (p->dmwdiag) {
 				for (i = 0; i < FRAME_SIZE; i++) {
