@@ -2859,6 +2859,21 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
 	int res = 0;
 
+	/* make a conference for the tx */
+	if (rpt_conf_create(myrpt, RPT_TXCONF)) {
+		return -1;
+	}
+
+	/*! \todo Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
+	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
+		res = rpt_conf_create(myrpt, RPT_CONF);
+	} else {
+		res = rpt_conf_create(myrpt, RPT_CONF);
+	}
+	if (res) {
+		return -1;
+	}
+
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
 	}
@@ -2905,12 +2920,6 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	}
 
-	/* make a conference for the tx */
-	if (rpt_conf_create(myrpt, RPT_TXCONF)) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		return -1;
-	}
 	if (rpt_conf_add(myrpt->localtxchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
@@ -2921,19 +2930,6 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
-		return -1;
-	}
-
-	/*! \todo Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
-	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
-		res = rpt_conf_create(myrpt, RPT_CONF);
-	} else {
-		res = rpt_conf_create(myrpt, RPT_CONF);
-	}
-	if (res) {
-		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
 
