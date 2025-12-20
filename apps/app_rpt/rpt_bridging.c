@@ -344,8 +344,7 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 	}
 	ast_debug(3, "Setting up conference '%s' mixing bridge \n", conference_name);
 	conf = ast_bridge_base_new(AST_BRIDGE_CAPABILITY_MULTIMIX,
-		AST_BRIDGE_FLAG_MASQUERADE_ONLY | AST_BRIDGE_FLAG_TRANSFER_BRIDGE_ONLY | AST_BRIDGE_FLAG_INVISIBLE, "app_rpt",
-		conference_name, NULL);
+		AST_BRIDGE_FLAG_MASQUERADE_ONLY | AST_BRIDGE_FLAG_TRANSFER_BRIDGE_ONLY, "app_rpt", conference_name, NULL);
 	if (!conf) {
 		ast_log(LOG_ERROR, "Conference '%s' mixing bridge could not be created.\n", conference_name);
 		return -1;
