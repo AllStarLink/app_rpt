@@ -92,11 +92,12 @@ void *connect_link(void *data);
  */
 void rpt_link_free(struct rpt_link *link);
 
+/*! \brief Structure used to share data with connect_data thread */
 struct rpt_connect_data {
 	struct rpt *myrpt;
-	char *digitbuf;
+	char *digitbuf; /* Node number in string format */
 	enum link_mode mode;
-	int perma;
+	unsigned int perma:1; /* permannet link */
 	enum rpt_command_source command_source;
 	struct rpt_link *mylink;
 	pthread_t threadid;

@@ -560,7 +560,7 @@ struct rpt_link {
 	unsigned int wouldtx:1;
 	unsigned int connected:1;
 	unsigned int hasconnected:1;
-	unsigned int perma:1;
+	unsigned int perma:1; /* permannet link */
 	unsigned int thisconnected:1;
 	unsigned int outbound:1;
 	unsigned int disced:2;

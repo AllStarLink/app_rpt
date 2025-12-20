@@ -419,6 +419,7 @@ int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
 
 int nullfd = -1;
 
+/*! \brief Structure used to share data with attempt_reconnect thread */
 struct rpt_reconnect_data {
 	struct rpt *myrpt;
 	struct rpt_link *l;
@@ -3330,6 +3331,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				reconnect_data = ast_calloc(1, sizeof(struct rpt_reconnect_data));
 				if (!reconnect_data) {
 					rpt_mutex_lock(&myrpt->lock);
+					l->retrytimer = RETRY_TIMER_MS;
 					continue;
 				}
 				reconnect_data->myrpt = myrpt;
