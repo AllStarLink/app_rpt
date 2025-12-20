@@ -745,7 +745,7 @@ struct rpt {
 	ast_mutex_t statpost_lock;
 	struct ast_config *cfg;
 	char reload;
-	char reload1;
+	char reload_request;
 	char deleted;
 	char xlink; /*!< cross link state of a share repeater/remote radio */
 	unsigned int statpost_seqno;
@@ -814,6 +814,15 @@ struct rpt {
 		unsigned int propagate_dtmf:1;
 		unsigned int propagate_phonedtmf:1;
 		unsigned int linktolink:1;
+		unsigned int telemdynamic:1;
+		unsigned int lnkactenable:1;
+		unsigned int nolocallinkct:1;
+		unsigned int nounkeyct:1;
+		unsigned int holdofftelem:1;
+		unsigned int beaconing:1;
+		unsigned int itxctcss:1;
+		unsigned int gpsfeet:1;
+		unsigned int dtmfkey:1;
 		unsigned char civaddr;
 		struct rpt_xlat inxlat;
 		struct rpt_xlat outxlat;
@@ -840,8 +849,6 @@ struct rpt {
 		int simplexpatchdelay;
 		int simplexphonedelay;
 		char telemdefault;
-		unsigned int telemdynamic:1;
-		unsigned int lnkactenable:1;
 		const char *statpost_program;
 		const char *statpost_url;
 		enum rpt_linkmode linkmode[10];
@@ -861,24 +868,17 @@ struct rpt {
 		const char *discpgm;
 		const char *connpgm;
 		const char *mdclog;
-		unsigned int nolocallinkct:1;
-		unsigned int nounkeyct:1;
-		unsigned int holdofftelem:1;
-		unsigned int beaconing:1;
 		int rxburstfreq;
 		int rxbursttime;
 		int rxburstthreshold;
 		int litztime;
 		const char *litzchar;
 		const char *litzcmd;
-		unsigned int itxctcss:1;
-		unsigned int gpsfeet:1;
 		int default_split_2m;
 		int default_split_70cm;
 		int votertype;                                  /*!< \brief 0 none, 1 repeater, 2 voter rx      */
 		int votermode;                                  /*!< \brief 0 none, 1 one shot, 2 continuous    */
-		int votermargin;                                /*!< \brief rssi margin to win a vote           */
-		unsigned int dtmfkey:1;
+		int votermargin;								/*!< \brief rssi margin to win a vote           */
 		char dias;
 		char dusbabek;
 		const char *outstreamcmd;
@@ -910,7 +910,7 @@ struct rpt {
 	char remoteon;
 	char remtxfreqok;
 	unsigned int tounkeyed:1;
-	char tonotify;
+	unsigned int tonotify:1;
 	char dtmfbuf[MAXDTMF];
 	struct ast_str *macrobuf;
 	char rem_dtmfbuf[MAXDTMF];
@@ -922,8 +922,8 @@ struct rpt {
 	char macropatch;					/*!< autopatch via tonemacro state */
 	enum rpt_parrot_states parrotstate;
 	unsigned int parrotonce:1;
-	char linkactivityflag;
-	char rptinactwaskeyedflag;
+	unsigned int linkactivityflag:1;
+	unsigned int rptinactwaskeyedflag:1;
 	char lastitx;
 	char remsetting;
 	char tunetx;
@@ -943,7 +943,8 @@ struct rpt {
 	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	int remote_time_out_reset_unkey_interval_timer, time_out_reset_unkey_interval_timer;
 	enum patch_call_mode callmode;
-	int mustid,tailid;
+	unsigned int mustid:1;
+	unsigned int tailid:1;
 	int rptinacttimer;
 	int tailevent;
 	int dtmfidx, rem_dtmfidx;
@@ -969,10 +970,10 @@ struct rpt {
 	char savednodes[MAXNODESTR];
 	int stopgen;
 	int remstopgen;
-	char patchfarenddisconnect;
-	char patchnoct;
-	char patchquiet;
-	char patchvoxalways;
+	unsigned int patchfarenddisconnect:1;
+	unsigned int patchnoct:1;
+	unsigned int patchquiet:1;
+	unsigned int patchvoxalways:1;
 	char patchcontext[MAXPATCHCONTEXT];
 	char patchexten[AST_MAX_EXTENSION];
 	int patchdialtime;
@@ -1006,9 +1007,9 @@ struct rpt {
 	time_t topkeytime;
 	int topkeylong;
 	struct vox vox;
-	char wasvox;
+	unsigned int wasvox:1;
+	unsigned int voxtostate:1;
 	int voxtotimer;
-	char voxtostate;
 	int linkposttimer;
 	enum keypost keypost;
 	int lastkeytimer;
@@ -1016,15 +1017,14 @@ struct rpt {
 	char inpadtest;
 	int rxlingertimer;
 	char localoverride;
-	char ready;
-	char lastrxburst;
-	char reallykeyed;
-	char dtmfkeyed;
+	unsigned int ready:1;
+	unsigned int lastrxburst:1;
+	unsigned int reallykeyed:1;
+	unsigned int dtmfkeyed:1;
+	unsigned int noduck:1; /*!< \brief no ducking of telemetry  */
+	unsigned int sleepreq:1;
+	unsigned int sleep:1;
 	char dtmfkeybuf[MAXDTMF];
-	char localteleminhibit;		/*!< \brief local telemetry inhibit */
-	char noduck;				/*!< \brief no ducking of telemetry  */
-	char sleepreq;
-	char sleep;
 	struct rpt_link *voted_link; /*!< \brief last winning link or NULL */
 	int  rxrssi;				/*!< \brief rx rssi from the rxchannel */
 	int  voted_rssi;			/*!< \brief last winning rssi */
@@ -1072,9 +1072,9 @@ struct rpt {
 #endif
 	struct rpt_cmd_struct cmdAction;
 	struct timeval paging;
-	char deferid;
-	struct timeval lastlinktime;
+	unsigned int deferid:1;
 	unsigned int last_statpost_failed:1;
+	struct timeval lastlinktime;
 };
 
 struct nodelog {

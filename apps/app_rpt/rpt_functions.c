@@ -909,16 +909,16 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 					myrpt->patchdialtime = atoi(value);
 					break;
 				case 3:		/* farenddisconnect */
-					myrpt->patchfarenddisconnect = atoi(value);
+					myrpt->patchfarenddisconnect = (atoi(value) ? 1 : 0);
 					break;
 				case 4:		/* noct */
-					myrpt->patchnoct = atoi(value);
+					myrpt->patchnoct = (atoi(value) ? 1 : 0);
 					break;
 				case 5:		/* quiet */
-					myrpt->patchquiet = atoi(value);
+					myrpt->patchquiet = (atoi(value) ? 1 : 0);
 					break;
 				case 6:		/* voxalways */
-					myrpt->patchvoxalways = atoi(value);
+					myrpt->patchvoxalways = (atoi(value) ? 1 : 0);
 					break;
 				case 7:		/* exten */
 					ast_copy_string(myrpt->patchexten, value, sizeof(myrpt->patchexten));

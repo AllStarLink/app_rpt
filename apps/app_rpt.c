@@ -5633,7 +5633,7 @@ static int load_config(int reload)
 
 	if (reload) {
 		for (n = 0; n < nrpts; n++) {
-			rpt_vars[n].reload1 = 0;
+			rpt_vars[n].reload_request = 0;
 		}
 	} else {
 		rpt_vars[n].cfg = cfg;
@@ -5694,7 +5694,7 @@ static int load_config(int reload)
 		if (reload) {
 			for (n = 0; n < nrpts; n++) {
 				if (!strcmp(this, rpt_vars[n].name)) {
-					rpt_vars[n].reload1 = 1;
+					rpt_vars[n].reload_request = 1;
 					break;
 				}
 			}
@@ -5765,7 +5765,7 @@ static int load_config(int reload)
 		rpt_vars[n].mdc = mdc_decoder_new(8000);
 #endif
 		if (reload) {
-			rpt_vars[n].reload1 = 1;
+			rpt_vars[n].reload_request = 1;
 			if (n >= nrpts) {
 				nrpts = n + 1;
 			}
@@ -7679,7 +7679,7 @@ static int reload(void)
 	ast_mutex_lock(&rpt_master_lock);
 	load_config(1);
 	for (n = 0; n < nrpts; n++) {
-		if (rpt_vars[n].reload1)
+		if (rpt_vars[n].reload_request)
 			continue;
 		if (rpt_vars[n].rxchannel)
 			ast_softhangup(rpt_vars[n].rxchannel, AST_SOFTHANGUP_DEV);
