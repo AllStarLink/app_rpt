@@ -331,14 +331,11 @@ Use "core show help voter <command>"" to display usage.
 
 #include "../apps/app_rpt/pocsag.c"
 
-/* Un-comment this if you wish Digital milliwatt output rather then real audio
- * when transmitting (for debugging only)
+/* Setting dmwdiag = 1 in voter.conf will force all clients in an instance
+ * to send a 1kHz tone. Can be used for setting transmitter deviation.
  */
-/* #define	DMWDIAG */
-#ifdef DMWDIAG
 unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
 unsigned char mwp;
-#endif
 
 struct ast_flags zeroflag = { 0 };
 
@@ -584,7 +581,7 @@ struct voter_pvt {
 	unsigned int drained_once:1;
 	unsigned int plfilter:1;
 	unsigned int hostdeemp:1;
-	unsigned int duplex:1;
+	unsigned int dmwdiag:1;
 	unsigned int usedtmf:1;
 	unsigned int isprimary:1;
 	unsigned int priconn:1;
@@ -1051,6 +1048,9 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 	case AST_CONTROL_RADIO_KEY:
 		p->txkey = 1;
 		ast_verb(3, "Channel %s: TX On\n", ast_channel_name(ast));
+		if (p->dmwdiag) {
+			ast_verb(3, "Sending 1kHz test tone to node Voter/%i transmitter(s)", p->nodenum);
+		}
 		break;
 	case AST_CONTROL_RADIO_UNKEY:
 		p->txkey = 0;
@@ -3155,16 +3155,16 @@ static void *voter_xmit(void *data)
 			if (f1) {
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 			}
-			/* If we compiled with DMWDIAG, replace all the audio samples with those from
+			/* If dmwdiag is set in voter.conf, replace all the audio samples with those from
 			 * the digital milliwatt array, to generate a 1kHz tone on the transmitter.
 			 */
-#ifdef DMWDIAG
-			for (i = 0; i < FRAME_SIZE; i++) {
-				audiopacket.audio[i] = ulaw_digital_milliwatt[mwp++];
-				if (mwp > 7)
-					mwp = 0;
+			if (p->dmwdiag) {
+				for (i = 0; i < FRAME_SIZE; i++) {
+					audiopacket.audio[i] = ulaw_digital_milliwatt[mwp++];
+					if (mwp > 7)
+						mwp = 0;
+				}
 			}
-#endif
 			audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
 			/* Loop through all the clients, to figure out if we should send audio
@@ -3590,11 +3590,11 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		if (val) {
 			p->hostdeemp = ast_true(val);
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "duplex");
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "dmwdiag");
 		if (val) {
-			p->duplex = ast_true(val);
+			p->dmwdiag = ast_true(val);
 		} else {
-			p->duplex = 1;
+			p->dmwdiag = 0;
 		}
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
@@ -3861,11 +3861,11 @@ static int reload(void)
 		} else {
 			p->hostdeemp = 0;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "duplex");
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "dmwdiag");
 		if (val) {
-			p->duplex = ast_true(val);
+			p->dmwdiag = ast_true(val);
 		} else {
-			p->duplex = 1;
+			p->dmwdiag = 0;
 		}
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
@@ -4016,7 +4016,7 @@ static int reload(void)
 			if (!strcmp(v->name, "hostdeemp")) {
 				continue;
 			}
-			if (!strcmp(v->name, "duplex")) {
+			if (!strcmp(v->name, "dmwdiag")) {
 				continue;
 			}
 			if (!strcmp(v->name, "mixminus")) {
@@ -5180,25 +5180,6 @@ static void *voter_reader(void *data)
 										memset(client->audio, 0xff, -i);
 									}
 								}
-								if (!p->duplex && p->txkey) {
-									p->rxkey = 0;
-									p->lastwon = NULL;
-									memset(silbuf, 0, sizeof(silbuf));
-									memset(&fr, 0, sizeof(fr));
-									fr.frametype = AST_FRAME_VOICE;
-									fr.subclass.format = ast_format_slin;
-									fr.datalen = FRAME_SIZE * 2;
-									fr.samples = FRAME_SIZE;
-									fr.data.ptr = silbuf;
-									fr.src = __PRETTY_FUNCTION__;
-									p->threshold = 0;
-									p->threshcount = 0;
-									p->lingercount = 0;
-									p->winner = 0;
-									incr_drainindex(p);
-									ast_queue_frame(p->owner, &fr);
-									continue;
-								}
 								if (p->plfilter || p->hostdeemp) {
 									short ix;
 									for (i = 0; i < FRAME_SIZE; i++) {
@@ -5251,25 +5232,6 @@ static void *voter_reader(void *data)
 									ast_queue_frame(p->owner, &fr);
 								}
 								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
-							}
-							if (!p->duplex && p->txkey) {
-								p->rxkey = 0;
-								p->lastwon = NULL;
-								memset(silbuf, 0, sizeof(silbuf));
-								memset(&fr, 0, sizeof(fr));
-								fr.frametype = AST_FRAME_VOICE;
-								fr.subclass.format = ast_format_slin;
-								fr.datalen = FRAME_SIZE * 2;
-								fr.samples = FRAME_SIZE;
-								fr.data.ptr = silbuf;
-								fr.src = __PRETTY_FUNCTION__;
-								p->threshold = 0;
-								p->threshcount = 0;
-								p->lingercount = 0;
-								p->winner = 0;
-								incr_drainindex(p);
-								ast_queue_frame(p->owner, &fr);
-								continue;
 							}
 							if (!voter_mix_and_send(p, maxclient, maxrssi)) {
 								continue;
