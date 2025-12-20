@@ -601,10 +601,6 @@ struct voter_pvt {
 	int nstreams;
 	float hpx[NTAPS_PL + 1];
 	float hpy[NTAPS_PL + 1];
-	float rlpx[NTAPS_4K + 1];
-	float rlpy[NTAPS_4K + 1];
-	float tlpx[NTAPS_4K + 1];
-	float tlpy[NTAPS_4K + 1];
 	int32_t hdx;
 	int linger;
 	uint8_t rssi_thresh[MAXTHRESHOLDS];
