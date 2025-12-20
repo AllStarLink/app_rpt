@@ -3274,7 +3274,7 @@ static void *voter_xmit(void *data)
 						sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
 							sizeof(client->sin));
 					}
-					/* Update when we this client last sent an audio packet */
+					/* Update when this client last sent an audio packet */
 					gettimeofday(&client->lastsenttime, NULL);
 				}
 			}
@@ -3352,7 +3352,7 @@ static void *voter_xmit(void *data)
 							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
 								sizeof(client->sin));
 						}
-						/* Update when we this client last sent an audio packet */
+						/* Update when this client last sent an audio packet */
 						gettimeofday(&client->lastsenttime, NULL);
 					}
 #endif
