@@ -670,6 +670,8 @@ void *connect_link(void *data)
 			if (!strcmp(strs[i], node)) {
 				ast_free(lstr);
 				ast_free(strs);
+				rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+				rpt_telemetry(myrpt, REMALREADY, NULL);
 				goto cleanup; /* Already linked */
 			}
 		}
