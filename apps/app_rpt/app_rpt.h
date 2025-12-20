@@ -947,7 +947,7 @@ struct rpt {
 	int tailevent;
 	unsigned int connect_thread_count;
 	int dtmfidx, rem_dtmfidx;
-	int dailytxtime,dailykerchunks,totalkerchunks,dailykeyups,totalkeyups,timeouts;
+	int dailytxtime, dailykerchunks, totalkerchunks, dailykeyups, totalkeyups, timeouts;
 	int totalexecdcommands, dailyexecdcommands;
 	int	retxtimer;
 	int	rerxtimer;
