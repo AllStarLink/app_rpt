@@ -796,5 +796,9 @@ void *connect_link(void *data)
 cleanup:
 	ast_free(connect_data->digitbuf);
 	ast_free(connect_data);
+	myrpt->connect_thread_count--;
+	if (myrpt->connect_thread_count < 0) {
+		myrpt->connect_thread_count = 0;
+	}
 	return NULL;
 }

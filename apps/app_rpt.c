@@ -2479,6 +2479,10 @@ static void *attempt_reconnect(void *data)
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 cleanup:
 	ast_free(reconnect_data);
+	myrpt->connect_thread_count--;
+	if (myrpt->connect_thread_count < 0) {
+		myrpt->connect_thread_count = 0;
+	}
 	return NULL;
 }
 
@@ -3336,9 +3340,11 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				}
 				reconnect_data->myrpt = myrpt;
 				reconnect_data->l = l;
+				myrpt->connect_thread_count++;
 				if (ast_pthread_create_detached(&reconnect_data->threadid, NULL, attempt_reconnect, (void *) reconnect_data) < 0) {
 					ast_free(reconnect_data);
 					l->retrytimer = RETRY_TIMER_MS;
+					myrpt->connect_thread_count--;
 				}
 			} else {
 				l->retries = l->max_retries + 1;
@@ -4754,6 +4760,7 @@ static void *rpt(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->remrx = 0;
 	myrpt->remote_webtransceiver = 0;
+	myrpt->connect_thread_count = 0;
 
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
@@ -5559,9 +5566,14 @@ static void *rpt(void *this)
 
 	myrpt->ready = 0;
 	usleep(100000);
-	/* wait for telem to be done */
-	while (myrpt->tele.next != &myrpt->tele)
+	while (myrpt->tele.next != &myrpt->tele) {
+		/* wait for telem to be done */
 		usleep(50000);
+	}
+	while (myrpt->connect_thread_count) {
+		/* wait for any connect threads to finish */
+		usleep(50000);
+	}
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup(myrpt, RPT_MONCHAN);
 	if (myrpt->parrotchannel) {

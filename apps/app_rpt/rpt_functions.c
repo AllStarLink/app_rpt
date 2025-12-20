@@ -170,9 +170,11 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		connect_data->perma = perma;
 		connect_data->command_source = command_source;
 		connect_data->mylink = mylink;
+		myrpt->connect_thread_count++;
 		if (ast_pthread_create_detached(&connect_data->threadid, NULL, connect_link, (void *) connect_data) < 0) {
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			myrpt->connect_thread_count--;
 			ast_free(connect_data->digitbuf);
 			ast_free(connect_data);
 			return DC_COMPLETE;
