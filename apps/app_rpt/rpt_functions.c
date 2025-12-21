@@ -1677,11 +1677,12 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		return DC_COMPLETE;
 	case 55:					/* Parrot Once if parrot mode is disabled */
-		if (myrpt->p.parrotmode == PARROT_MODE_OFF)
+		if (myrpt->p.parrotmode == PARROT_MODE_OFF) {
 			rpt_mutex_lock(&myrpt->lock);
 			myrpt->parrotonce = 1;
 			rpt_mutex_unlock(&myrpt->lock);
-			return DC_COMPLETE;
+		}
+		return DC_COMPLETE;
 	case 56:					/* RX CTCSS Enable */
 		rpt_radio_rx_set_ctcss_decode(myrpt, 0);
 		if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
