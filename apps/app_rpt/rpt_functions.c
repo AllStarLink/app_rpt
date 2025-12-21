@@ -1060,7 +1060,7 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 		return DC_COMPLETE;
 	case 11:					/* System ID (local only) */
 		rpt_mutex_lock(&myrpt->lock);
-		if (myrpt->p.idtime) {	/* ID time must be non-zero */
+		if (myrpt->p.idtime) { /* ID time must be non-zero */
 			myrpt->mustid = myrpt->tailid = 0;
 			myrpt->idtimer = myrpt->p.idtime;
 		}
