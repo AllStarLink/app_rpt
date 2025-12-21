@@ -97,7 +97,7 @@ struct rpt_connect_data {
 	struct rpt *myrpt;
 	char *digitbuf; /* Node number in string format */
 	enum link_mode mode;
-	unsigned int perma:1; /* permannet link */
+	unsigned int perma:1; /* permanent  link */
 	enum rpt_command_source command_source;
 	struct rpt_link *mylink;
 	pthread_t threadid;
