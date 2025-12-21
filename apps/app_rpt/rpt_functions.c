@@ -1593,7 +1593,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		myrpt->linkactivitytimer = 0;
 		myrpt->linkactivityflag = 0;
 		rpt_mutex_unlock(&myrpt->lock);
-		return DC_COMPLETE;		/* Silent for a reason (only used in macros) */
+		return DC_COMPLETE; /* Silent for a reason (only used in macros) */
 
 	case 48:					/* play page sequence */
 		j = 0;
