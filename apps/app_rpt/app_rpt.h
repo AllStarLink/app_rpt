@@ -744,9 +744,9 @@ struct rpt {
 	ast_mutex_t remlock;
 	ast_mutex_t statpost_lock;
 	struct ast_config *cfg;
-	char reload;
-	char reload_request;
-	char deleted;
+	unsigned int reload:1;
+	unsigned int reload_request:1;
+	unsigned int deleted:1;
 	char xlink; /*!< cross link state of a share repeater/remote radio */
 	unsigned int statpost_seqno;
 
