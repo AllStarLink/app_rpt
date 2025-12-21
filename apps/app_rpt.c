@@ -2877,7 +2877,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
 	}
-
+	ast_autoservice_start(myrpt->rxchannel);
 	if (myrpt->txchanname) {
 		if (rpt_request(myrpt, cap, RPT_TXCHAN)) {
 			rpt_hangup(myrpt, RPT_RXCHAN);
@@ -4960,6 +4960,7 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_ALINKS", -1);
 	myrpt->ready = 1;
 	looptimestart = rpt_tvnow();
+	ast_autoservice_stop(myrpt->rxchannel);
 	while (ms >= 0) {
 		struct ast_channel *who;
 		struct ast_channel *cs[300], *cs1[300];
