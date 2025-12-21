@@ -622,7 +622,7 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			return DC_ERROR;
 		}
 		rpt_mutex_unlock(&myrpt->lock);
-		for (i = 0, j = 0, k = 0, l = 0; digitbuf[i]; i++) {	/* look for N+*N */
+		for (i = 0, j = 0, k = 0, l = 0; digitbuf[i]; i++) { /* look for N+*N */
 			if (digitbuf[i] == '*') {
 				j++;
 				continue;
