@@ -594,6 +594,7 @@ void birdbath(struct rpt *myrpt)
 void cancel_pfxtone(struct rpt *myrpt)
 {
 	struct rpt_tele *telem;
+
 	if (!myrpt->p.dopfxtone) {
 		return;
 	}
