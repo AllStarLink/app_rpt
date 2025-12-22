@@ -872,9 +872,6 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		return;
 	}
 	if (!strcasecmp(strs[0], "PROC")) {
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
-			return;
-		}
 		res = telem_lookup(myrpt, mychannel, "patchup", "PROC");
 		if (res < 0) { /* Then default message */
 			sayfile(mychannel, "rpt/callproceeding");
