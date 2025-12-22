@@ -601,7 +601,6 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 
 	case 4:					/* set tx PL tone */
 		/* can't set tx tone on RBI (rx tone does both) */
-		rpt_mutex_lock(&myrpt->lock);
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_RBI)) {
 			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
@@ -621,7 +620,6 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
 		}
-		rpt_mutex_unlock(&myrpt->lock);
 		for (i = 0, j = 0, k = 0, l = 0; digitbuf[i]; i++) { /* look for N+*N */
 			if (digitbuf[i] == '*') {
 				j++;
@@ -932,7 +930,9 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				case 4:		/* noct */
+					rpt_mutex_lock(&myrpt->lock);
 					myrpt->patchnoct = (atoi(value) ? 1 : 0);
+					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				case 5:		/* quiet */
 					rpt_mutex_lock(&myrpt->lock);
