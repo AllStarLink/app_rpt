@@ -290,6 +290,7 @@
 #include "asterisk/file.h"
 #include "asterisk/logger.h"
 #include "asterisk/bridge.h"
+#include "asterisk/bridge_channel.h"
 #include "asterisk/channel.h"
 #include "asterisk/callerid.h"
 #include "asterisk/pbx.h"
@@ -1334,25 +1335,17 @@ void *rpt_call(void *this)
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
+		return NULL;
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 	myrpt->mydtmf = 0;
 	mychannel = rpt_request_local_chan(cap, "Autopatch");
 
 	if (!mychannel) {
-		ast_log(LOG_WARNING, "Unable to obtain AutoPatch pseudo channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain AutoPatch local channel\n");
 		ao2_ref(cap, -1);
 		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
-	}
-
-	if (rpt_conf_add(mychannel, myrpt, RPT_CONF)) {
-		ast_log(LOG_WARNING, "Unable to place AutoPatch pseudo channel on conference\n");
-		ao2_ref(cap, -1);
-		ast_hangup(mychannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
+		return NULL;
 	}
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 
@@ -1378,41 +1371,29 @@ void *rpt_call(void *this)
 	genchannel = rpt_request_local_chan(cap, "GenChannel");
 	ao2_ref(cap, -1);
 	if (!genchannel) {
-		ast_log(LOG_WARNING, "Unable to obtain Gen pseudo channel\n");
+		ast_log(LOG_WARNING, "Unable to obtain Gen local channel\n");
 		ast_hangup(mychannel);
 		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
+		return NULL;
 	}
 	if (rpt_conf_add(genchannel, myrpt, RPT_CONF)) {
-		ast_log(LOG_WARNING, "Unable to place Gen pseudo channel on conference\n");
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
+		ast_log(LOG_WARNING, "Unable to place Gen local channel on conference\n");
+		goto cleanup;
 	}
 
 	ast_autoservice_start(genchannel);
 	ast_debug(1, "Created Gen channel '%s' and added to conference bridge '%s'\n", ast_channel_name(genchannel), RPT_CONF_NAME);
 
 	if (myrpt->p.tonezone && rpt_set_tone_zone(mychannel, myrpt->p.tonezone)) {
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	if (myrpt->p.tonezone && rpt_set_tone_zone(genchannel, myrpt->p.tonezone)) {
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 
 	/* start dialtone if patchquiet is 0. Special patch modes don't send dial tone */
 	if (!myrpt->patchquiet && !myrpt->patchexten[0] && rpt_play_dialtone(genchannel) < 0) {
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		myrpt->callmode = CALLMODE_DOWN;
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 	stopped = 0;
 	congstarted = 0;
@@ -1466,16 +1447,7 @@ void *rpt_call(void *this)
 				rpt_play_congestion(genchannel);
 			}
 		}
-		res = ast_safe_sleep(mychannel, MSWAIT);
-		if (res < 0) {
-			ast_debug(1, "ast_safe_sleep=%i\n", res);
-			ast_hangup(mychannel);
-			ast_hangup(genchannel);
-			rpt_mutex_lock(&myrpt->lock);
-			myrpt->callmode = CALLMODE_DOWN;
-			rpt_mutex_unlock(&myrpt->lock);
-			pthread_exit(NULL);
-		}
+		usleep(MSWAIT * 1000);
 		dialtimer += MSWAIT;
 	}
 
@@ -1486,13 +1458,14 @@ void *rpt_call(void *this)
 	if (myrpt->callmode == CALLMODE_DOWN) {
 		ast_debug(1, "callmode==0\n");
 		ast_hangup(mychannel);
+		ast_autoservice_stop(genchannel);
 		ast_hangup(genchannel);
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->macropatch = 0;
 		rpt_mutex_unlock(&myrpt->lock);
 		if ((!myrpt->patchquiet) && aborted)
 			rpt_telemetry(myrpt, TERM, NULL);
-		pthread_exit(NULL);
+		return NULL;
 	}
 
 	if (myrpt->p.ourcallerid && *myrpt->p.ourcallerid) {
@@ -1513,24 +1486,20 @@ void *rpt_call(void *this)
 	ast_channel_undefer_dtmf(mychannel);
 	patch_thread_data = ast_calloc(1, sizeof(struct rpt_autopatch));
 	if (!patch_thread_data) {
-		rpt_mutex_lock(&myrpt->lock);
-		myrpt->callmode = CALLMODE_DOWN;
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
+
+	if (rpt_conf_add(mychannel, myrpt, RPT_CONF)) {
+		ast_log(LOG_WARNING, "Unable to place AutoPatch local channel on conference\n");
+		goto cleanup;
+	}
+	ast_debug(1, "Autopatch channel %s placed on CONF", ast_channel_name(mychannel));
 	patch_thread_data->myrpt = myrpt;
 	patch_thread_data->mychannel = mychannel;
 	res = ast_pthread_create(&threadid, NULL, rpt_pbx_autopatch_run, patch_thread_data);
 	if (res < 0) {
 		ast_log(LOG_ERROR, "Unable to start PBX!\n");
-		rpt_mutex_lock(&myrpt->lock);
-		myrpt->callmode = CALLMODE_DOWN;
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_hangup(mychannel);
-		ast_hangup(genchannel);
-		pthread_exit(NULL);
+		goto cleanup;
 	}
 
 	rpt_mutex_lock(&myrpt->lock);
@@ -1589,6 +1558,7 @@ void *rpt_call(void *this)
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
 		pthread_join(threadid, NULL);
 	}
+	ast_autoservice_stop(genchannel);
 	ast_hangup(genchannel);
 
 	rpt_mutex_lock(&myrpt->lock);
@@ -1603,7 +1573,16 @@ void *rpt_call(void *this)
 		}
 	*/
 	ast_free(patch_thread_data);
-	pthread_exit(NULL);
+	return NULL;
+
+cleanup:
+	rpt_mutex_lock(&myrpt->lock);
+	myrpt->callmode = CALLMODE_DOWN;
+	rpt_mutex_unlock(&myrpt->lock);
+	ast_autoservice_stop(genchannel);
+	ast_hangup(mychannel);
+	ast_hangup(genchannel);
+	return NULL;
 }
 
 /*
@@ -4715,7 +4694,7 @@ static void *rpt(void *this)
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
 		if (!myrpt->macrobuf) {
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
+			return NULL;
 		}
 	}
 	rpt_mutex_lock(&myrpt->lock);
@@ -4748,7 +4727,7 @@ static void *rpt(void *this)
 		ast_log(LOG_ERROR, "ioperm(%x) not supported on this architecture\n", myrpt->p.iobase);
 #endif
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		return NULL;
 	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
@@ -4756,7 +4735,7 @@ static void *rpt(void *this)
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_mutex_unlock(&myrpt->lock);
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
-		pthread_exit(NULL);
+		return NULL;
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
@@ -4766,7 +4745,7 @@ static void *rpt(void *this)
 		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		disable_rpt(myrpt); /* Disable repeater */
 		ao2_ref(cap, -1);
-		pthread_exit(NULL);
+		return NULL;
 	}
 
 	ao2_ref(cap, -1);
@@ -4778,7 +4757,7 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup_rx_tx(myrpt);
-		pthread_exit(NULL);
+		return NULL;
 	}
 	/* Now, the idea here is to copy from the physical rx channel buffer
 	   into the pseudo tx buffer, and from the pseudo rx buffer into the
@@ -4840,7 +4819,7 @@ static void *rpt(void *this)
 		if (!(myrpt->dsp = ast_dsp_new())) {
 			rpt_hangup(myrpt, RPT_RXCHAN);
 			myrpt->rpt_thread = AST_PTHREADT_STOP;
-			pthread_exit(NULL);
+			return NULL;
 		}
 		/*! \todo At this point, we have a memory leak, because dsp needs to be freed. */
 		/*! \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
@@ -5780,7 +5759,7 @@ static void *rpt_master(void *ignore)
 
 		if (rpt_vars[i].p.ident && (!*rpt_vars[i].p.ident)) {
 			ast_log(LOG_WARNING, "Did not specify ident for node %s\n", rpt_vars[i].name);
-			pthread_exit(NULL);
+			return NULL;
 		}
 		rpt_vars[i].ready = 0;
 		rpt_vars[i].lastthreadupdatetime = current_time;
@@ -5958,7 +5937,7 @@ static void *rpt_master(void *ignore)
 done:
 	ast_mutex_unlock(&rpt_master_lock);
 	ast_debug(1, "app_rpt master thread exiting\n");
-	pthread_exit(NULL);
+	return NULL;
 }
 
 static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, char *restrict keyed,
