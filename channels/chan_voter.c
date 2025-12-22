@@ -1967,7 +1967,7 @@ static int voter_do_dmwdiag(int fd, int argc, const char *const *argv)
 	} else if (!strcasecmp(argv[3], "n") || !strcasecmp(argv[3], "no")) {
 		newlevel = 0;
 	} else {
-		newlevel = -1;	
+		newlevel = -1;
 	}
 	if (newlevel < 0) {
 		ast_cli(fd, "Error: Invalid dmwdiag mode value specification!!\n");
@@ -1981,7 +1981,7 @@ static int voter_do_dmwdiag(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "VOTER instance %d dmwdiag: was enabled, now disabled\n", p->nodenum);
 		p->dmwdiag = 0;
 	} else {
-		ast_cli(fd, "VOTER instance %d dmwdiag: unchanged, curently %s\n", p->nodenum, (p->dmwdiag) ? "enabled" : "disabled");
+		ast_cli(fd, "VOTER instance %d dmwdiag: unchanged, currently %s\n", p->nodenum, (p->dmwdiag) ? "enabled" : "disabled");
 	}
 	ast_mutex_unlock(&voter_lock);
 	return RESULT_SUCCESS;
