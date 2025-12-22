@@ -2810,6 +2810,7 @@ void rpt_links_init(struct rpt_link *l)
 }
 
 #define rpt_hangup_rx_tx(myrpt) \
+	ast_autoservice_stop(myrpt->rxchannel); \
 	rpt_hangup(myrpt, RPT_RXCHAN); \
 	if (myrpt->txchannel) { \
 		rpt_hangup(myrpt, RPT_TXCHAN); \
@@ -2843,6 +2844,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	ast_autoservice_start(myrpt->rxchannel);
 	if (myrpt->txchanname) {
 		if (rpt_request(myrpt, cap, RPT_TXCHAN)) {
+			ast_autoservice_stop(myrpt->rxchannel);
 			rpt_hangup(myrpt, RPT_RXCHAN);
 			return -1;
 		}
