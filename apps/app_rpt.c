@@ -2858,7 +2858,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, "PChan")) {
+	if (rpt_request_local(myrpt, cap, RPT_PCHAN, "PChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		return -1;
 	}
@@ -2876,7 +2876,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	if (!myrpt->localtxchannel) {
-		if (rpt_request_pseudo(myrpt, cap, RPT_LOCALTXCHAN, "LocalTX")) { /* Listen only link */
+		if (rpt_request_local(myrpt, cap, RPT_LOCALTXCHAN, "LocalTX")) { /* Listen only link */
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			return -1;
@@ -2889,7 +2889,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_MONCHAN, "MonChan")) {
+	if (rpt_request_local(myrpt, cap, RPT_MONCHAN, "MonChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
@@ -2912,7 +2912,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
+	if (rpt_request_local(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -6984,7 +6984,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	i = 3;
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &i, sizeof(char), 0);
 
-	if (rpt_request_pseudo(myrpt, cap, RPT_PCHAN, "PChan")) {
+	if (rpt_request_local(myrpt, cap, RPT_PCHAN, "PChan")) {
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup_rx_tx(myrpt);
 		ao2_ref(cap, -1);
