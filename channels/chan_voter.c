@@ -1963,7 +1963,7 @@ static int voter_do_dmwdiag(int fd, int argc, const char *const *argv)
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SHOWUSAGE;
 	}
-		if (ast_true(argv[3])) {
+	if (ast_true(argv[3])) {
 		newlevel = 1;
 	} else if (ast_false(argv[3])) {
 		newlevel = 0;
