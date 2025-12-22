@@ -40,6 +40,9 @@
 #include "rpt_bridging.h"
 #include "rpt_call.h"
 
+/*!
+ *	\brief used to display "words" in debug messages.
+ */
 static const char *rpt_chan_type_str(enum rpt_chan_name chantype)
 {
 	switch (chantype) {
