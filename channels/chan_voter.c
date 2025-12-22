@@ -1963,14 +1963,11 @@ static int voter_do_dmwdiag(int fd, int argc, const char *const *argv)
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SHOWUSAGE;
 	}
-	if (!strcasecmp(argv[3], "y") || !strcasecmp(argv[3], "yes")) {
+		if (ast_true(argv[3])) {
 		newlevel = 1;
-	} else if (!strcasecmp(argv[3], "n") || !strcasecmp(argv[3], "no")) {
+	} else if (ast_false(argv[3])) {
 		newlevel = 0;
 	} else {
-		newlevel = -1;
-	}
-	if (newlevel < 0) {
 		ast_cli(fd, "Error: Invalid dmwdiag mode value specification!!\n");
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SHOWUSAGE;
