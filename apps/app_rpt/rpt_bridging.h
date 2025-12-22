@@ -67,7 +67,7 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
  */
 int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_name chantype, enum rpt_chan_flags flags, const char *exten);
 
-#define rpt_request_pseudo(data, cap, chantype, exten) __rpt_request_local(data, cap, chantype, 0, exten)
+#define rpt_request_local(data, cap, chantype, exten) __rpt_request_local(data, cap, chantype, 0, exten)
 
 int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
 
