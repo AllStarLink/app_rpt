@@ -336,7 +336,7 @@ Use "core show help voter <command>"" to display usage.
  * full system deviation to all clients (with transmit enabled) in an instance.
  */
 static unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
-unsigned char mwp;
+/* unsigned char mwp; */
 
 struct ast_flags zeroflag = { 0 };
 
@@ -576,6 +576,7 @@ struct voter_pvt {
 	char buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
 	struct ast_module_user *u;
 	struct timeval lastrxtime;
+	unsigned char mwp;
 	/* bit fields */
 	unsigned int txkey:1;
 	unsigned int rxkey:1;
@@ -3257,9 +3258,9 @@ static void *voter_xmit(void *data)
 			 */
 			if (p->dmwdiag) {
 				for (i = 0; i < FRAME_SIZE; i++) {
-					audiopacket.audio[i] = ulaw_digital_milliwatt[mwp++];
-					if (mwp > 7)
-						mwp = 0;
+					audiopacket.audio[i] = ulaw_digital_milliwatt[p->mwp++];
+					if (p->mwp > 7)
+						p->mwp = 0;
 				}
 			}
 			audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
