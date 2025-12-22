@@ -228,6 +228,11 @@ typedef struct {
 #define ADC_HIST_TIME 300 /* Time  in sec. to calculate short term avg, high and low peaks from. */
 #define ADC_HISTORY_DEPTH ADC_HIST_TIME/DAQ_ADC_ACQINT
 
+typedef enum {
+	false,
+	true
+} rpt_bool;
+
 enum keypost {
 	RPT_KEYPOST_NONE,
 	RPT_KEYPOST_ACTIVE
@@ -551,18 +556,21 @@ struct rpt_link {
 	char phonevox;		   /* vox the phone */
 	char phonemonitor;	   /* no tx or funs for the phone */
 	char name[MAXNODESTR]; /* identifier (routing) string */
-	unsigned int lasttx:1;
-	unsigned int lasttx1:1;
-	unsigned int lastrx:1;
-	unsigned int lastrealrx:1;
-	unsigned int lastrx1:1;
-	unsigned int last_frame_sent:1; /* We have written a single frame */
-	unsigned int wouldtx:1;
-	unsigned int connected:1;
-	unsigned int hasconnected:1;
-	unsigned int perma:1; /* permanent link */
-	unsigned int thisconnected:1;
-	unsigned int outbound:1;
+	rpt_bool lasttx:1;
+	rpt_bool lasttx1:1;
+	rpt_bool lastrx:1;
+	rpt_bool lastrealrx:1;
+	rpt_bool lastrx1:1;
+	rpt_bool last_frame_sent:1; /* We have written a single frame */
+	rpt_bool wouldtx:1;
+	rpt_bool connected:1;
+	rpt_bool hasconnected:1;
+	rpt_bool perma:1; /* permanent link */
+	rpt_bool thisconnected:1;
+	rpt_bool outbound:1;
+	rpt_bool killme:1;
+	rpt_bool dtmfed:1;
+	rpt_bool gott:1;
 	unsigned int disced:2;
 	unsigned int killme:1;
 	unsigned int dtmfed:1;
@@ -614,8 +622,8 @@ struct rpt_lstat {
 	char peer[MAXPEERSTR];
 	char name[MAXNODESTR];
 	enum link_mode mode;
-	unsigned int outbound:1;
-	unsigned int thisconnected:1;
+	rpt_bool outbound:1;
+	rpt_bool thisconnected:1;
 	int reconnects;
 	struct timeval connecttime;
 };
@@ -744,9 +752,9 @@ struct rpt {
 	ast_mutex_t remlock;
 	ast_mutex_t statpost_lock;
 	struct ast_config *cfg;
-	unsigned int reload:1;
-	unsigned int reload_request:1;
-	unsigned int deleted:1;
+	rpt_bool reload:1;
+	rpt_bool reload_request:1;
+	rpt_bool deleted:1;
 	char xlink; /*!< cross link state of a share repeater/remote radio */
 	unsigned int statpost_seqno;
 
@@ -808,21 +816,21 @@ struct rpt {
 		int iospeed;
 		char funcchar;
 		char endchar;
-		unsigned int archiveaudio:1;
-		unsigned int nobusyout:1;
-		unsigned int notelemtx:1;
-		unsigned int propagate_dtmf:1;
-		unsigned int propagate_phonedtmf:1;
-		unsigned int linktolink:1;
-		unsigned int telemdynamic:1;
-		unsigned int lnkactenable:1;
-		unsigned int nolocallinkct:1;
-		unsigned int nounkeyct:1;
-		unsigned int holdofftelem:1;
-		unsigned int beaconing:1;
-		unsigned int itxctcss:1;
-		unsigned int gpsfeet:1;
-		unsigned int dtmfkey:1;
+		rpt_bool archiveaudio:1;
+		rpt_bool nobusyout:1;
+		rpt_bool notelemtx:1;
+		rpt_bool propagate_dtmf:1;
+		rpt_bool propagate_phonedtmf:1;
+		rpt_bool linktolink:1;
+		rpt_bool telemdynamic:1;
+		rpt_bool lnkactenable:1;
+		rpt_bool nolocallinkct:1;
+		rpt_bool nounkeyct:1;
+		rpt_bool holdofftelem:1;
+		rpt_bool beaconing:1;
+		rpt_bool itxctcss:1;
+		rpt_bool gpsfeet:1;
+		rpt_bool dtmfkey:1;
 		unsigned char civaddr;
 		struct rpt_xlat inxlat;
 		struct rpt_xlat outxlat;
@@ -909,8 +917,8 @@ struct rpt {
 	char remotetx;
 	char remoteon;
 	char remtxfreqok;
-	unsigned int tounkeyed:1;
-	unsigned int tonotify:1;
+	rpt_bool tounkeyed:1;
+	rpt_bool tonotify:1;
 	char dtmfbuf[MAXDTMF];
 	struct ast_str *macrobuf;
 	char rem_dtmfbuf[MAXDTMF];
@@ -921,9 +929,9 @@ struct rpt {
 	char bargechan;						/*!< barge in channel */
 	char macropatch;					/*!< autopatch via tonemacro state */
 	enum rpt_parrot_states parrotstate;
-	unsigned int parrotonce:1;
-	unsigned int linkactivityflag:1;
-	unsigned int rptinactwaskeyedflag:1;
+	rpt_bool parrotonce:1;
+	rpt_bool linkactivityflag:1;
+	rpt_bool rptinactwaskeyedflag:1;
 	char lastitx;
 	char remsetting;
 	char tunetx;
@@ -943,8 +951,8 @@ struct rpt {
 	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	int remote_time_out_reset_unkey_interval_timer, time_out_reset_unkey_interval_timer;
 	enum patch_call_mode callmode;
-	unsigned int mustid:1;
-	unsigned int tailid:1;
+	rpt_bool mustid:1;
+	rpt_bool tailid:1;
 	int rptinacttimer;
 	int tailevent;
 	int dtmfidx, rem_dtmfidx;
@@ -970,10 +978,10 @@ struct rpt {
 	char savednodes[MAXNODESTR];
 	int stopgen;
 	int remstopgen;
-	unsigned int patchfarenddisconnect:1;
-	unsigned int patchnoct:1;
-	unsigned int patchquiet:1;
-	unsigned int patchvoxalways:1;
+	rpt_bool patchfarenddisconnect:1;
+	rpt_bool patchnoct:1;
+	rpt_bool patchquiet:1;
+	rpt_bool patchvoxalways:1;
 	char patchcontext[MAXPATCHCONTEXT];
 	char patchexten[AST_MAX_EXTENSION];
 	int patchdialtime;
@@ -1007,8 +1015,8 @@ struct rpt {
 	time_t topkeytime;
 	int topkeylong;
 	struct vox vox;
-	unsigned int wasvox:1;
-	unsigned int voxtostate:1;
+	rpt_bool wasvox:1;
+	rpt_bool voxtostate:1;
 	int voxtotimer;
 	int linkposttimer;
 	enum keypost keypost;
@@ -1017,13 +1025,13 @@ struct rpt {
 	char inpadtest;
 	int rxlingertimer;
 	char localoverride;
-	unsigned int ready:1;
-	unsigned int lastrxburst:1;
-	unsigned int reallykeyed:1;
-	unsigned int dtmfkeyed:1;
-	unsigned int noduck:1; /*!< \brief no ducking of telemetry  */
-	unsigned int sleepreq:1;
-	unsigned int sleep:1;
+	rpt_bool ready:1;
+	rpt_bool lastrxburst:1;
+	rpt_bool reallykeyed:1;
+	rpt_bool dtmfkeyed:1;
+	rpt_bool noduck:1; /*!< \brief no ducking of telemetry  */
+	rpt_bool sleepreq:1;
+	rpt_bool sleep:1;
 	char dtmfkeybuf[MAXDTMF];
 	struct rpt_link *voted_link; /*!< \brief last winning link or NULL */
 	int  rxrssi;				/*!< \brief rx rssi from the rxchannel */
@@ -1072,8 +1080,8 @@ struct rpt {
 #endif
 	struct rpt_cmd_struct cmdAction;
 	struct timeval paging;
-	unsigned int deferid:1;
-	unsigned int last_statpost_failed:1;
+	rpt_bool deferid:1;
+	rpt_bool last_statpost_failed:1;
 	struct timeval lastlinktime;
 };
 
