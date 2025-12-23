@@ -249,7 +249,7 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
 {
 	struct ast_channel *chan;
 	struct ast_unreal_pvt *p;
-	char *type_str[2] = { "Local", "Announcer" };
+	char *type_str[3] = { "Local", "Announcer", "Recorder" };
 
 	chan = ast_request(type_str[type], cap, NULL, NULL, exten, NULL);
 	if (!chan) {
@@ -290,39 +290,41 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_na
 	} else {
 		myrpt = data;
 	}
-
-	chan = ast_request("Local", cap, NULL, NULL, exten, NULL);
+	if (chantype == RPT_MONCHAN) {
+		chan = ast_request("Recorder", cap, NULL, NULL, exten, NULL);
+	} else {
+		chan = ast_request("Local", cap, NULL, NULL, exten, NULL);
+	}
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request local channel\n");
 		return -1;
 	}
 	rpt_disable_cdr(chan);
-	p = ast_channel_tech_pvt(chan);
-	if (!p || !p->owner || !p->chan) {
-		ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(chan));
-		ast_hangup(chan);
-		return -1;
-	}
-	ast_answer(p->owner);
-	ast_answer(p->chan);
-	ast_debug(3, "Local channel p->owner %p, p->chan %p, chan %p\n", p->owner, p->chan, chan);
-	ast_debug(3, "Channel states p->owner %d, p->chan %d, chan %d\n", ast_channel_state(p->owner), ast_channel_state(p->chan),
-		ast_channel_state(chan));
-
 	chanptr = rpt_chan_channel(myrpt, link, chantype);
 	*chanptr = chan;
 
 	switch (chantype) {
+	case RPT_MONCHAN:
+		break; /* WE don't need to answer MONCHAN */
 	case RPT_PCHAN:
 		if (!(flags & RPT_LINK_CHAN)) {
 			ast_assert(myrpt != NULL);
 			if (!myrpt->localrxchannel) {
 				myrpt->localrxchannel = chan;
 			}
-		}
-		break;
+		} /* Don't break here we want the default logic for RPT_PCHAN */
 	default:
-		break;
+		p = ast_channel_tech_pvt(chan);
+		if (!p || !p->owner || !p->chan) {
+			ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(chan));
+			ast_hangup(chan);
+			return -1;
+		}
+		ast_answer(p->owner);
+		ast_answer(p->chan);
+		ast_debug(3, "Local channel p->owner %p, p->chan %p, chan %p\n", p->owner, p->chan, chan);
+		ast_debug(3, "Channel states p->owner %d, p->chan %d, chan %d\n", ast_channel_state(p->owner), ast_channel_state(p->chan),
+			ast_channel_state(chan));
 	}
 
 	return 0;

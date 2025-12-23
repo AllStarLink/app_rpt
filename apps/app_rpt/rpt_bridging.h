@@ -11,6 +11,7 @@ enum rpt_chan_name {
 enum rpt_chan_type {
 	RPT_LOCAL,
 	RPT_TELEMETRY,
+	RPT_MONITOR,
 };
 
 /* Each of these corresponds to a member of the rpt_conf structure in app_rpt.h */
@@ -56,6 +57,7 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
 
 #define rpt_request_local_chan(cap, exten) __rpt_request_local_chan(cap, exten, RPT_LOCAL)
 #define rpt_request_telem_chan(cap, exten) __rpt_request_local_chan(cap, exten, RPT_TELEMETRY)
+#define rpt_request_mon_chan(cap, exten) __rpt_request_local_chan(cap, exten, RPT_MONITOR)
 
 /*!
  * \brief Request a repeater channel not associated with a real device
