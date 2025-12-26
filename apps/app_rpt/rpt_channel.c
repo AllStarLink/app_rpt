@@ -54,7 +54,7 @@ int wait_interval(struct rpt *myrpt, enum rpt_delay type, struct ast_channel *ch
 		}
 
 		interval = get_wait_interval(myrpt, type);
-		ast_debug(1, "Delay interval = %d\n", interval);
+		ast_debug(1, "Delay interval = %d on %s\n", interval, ast_channel_name(chan));
 		if (interval && ast_safe_sleep(chan, interval) < 0) {
 			return -1;
 		}
