@@ -5507,18 +5507,20 @@ static void *rpt(void *this)
 			ast_debug(1, "Node %s, vox %d\n", myrpt->name, myrpt->patch_talking);
 			myrpt->wasvox = myrpt->patch_talking;
 			myrpt->voxtostate = 0;
-			if (myrpt->patch_talking)
+			if (myrpt->patch_talking) {
 				myrpt->voxtotimer = myrpt->p.voxtimeout_ms;
-			else
+			} else {
 				myrpt->voxtotimer = 0;
+			}
 		}
 		if (c && !myrpt->macrotimer && starttime && t > starttime) {
 			char cin = c & 0x7f;
 			myrpt->macrotimer = MACROTIME;
 			ast_copy_string(str, str + 1, len);
 			ast_str_truncate(myrpt->macrobuf, len - 1);
-			if ((cin == 'p') || (cin == 'P'))
+			if ((cin == 'p') || (cin == 'P')) {
 				myrpt->macrotimer = MACROPTIME;
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 			donodelog_fmt(myrpt, "DTMF(M),MAIN,%c", cin);
 			local_dtmf_helper(myrpt, c);
@@ -6864,7 +6866,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 
-		if ((phone_mode == 2) && (!phone_vox))
+		if ((phone_mode == RPT_PHONE_MODE_DUMB_DUPLEX) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
 
