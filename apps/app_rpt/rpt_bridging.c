@@ -185,7 +185,6 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name cha
 	struct ast_channel *chan, **chanptr;
 	char *tech, *device;
 	struct rpt *myrpt = data;
-	struct ast_unreal_pvt *p;
 
 	channame = rpt_chan_name(myrpt, chantype);
 
@@ -223,11 +222,8 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name cha
 			ast_hangup(chan);
 			return -1;
 		}
-	} else {
-		p = ast_channel_tech_pvt(chan);
-		ast_answer(p->chan);
-		ast_answer(p->owner);
 	}
+
 	chanptr = rpt_chan_channel(myrpt, NULL, chantype);
 	*chanptr = chan;
 
@@ -248,7 +244,6 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name cha
 struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, enum rpt_chan_type type)
 {
 	struct ast_channel *chan;
-	struct ast_unreal_pvt *p;
 	char *type_str[3] = { "Local", "Announcer", "Recorder" };
 
 	chan = ast_request(type_str[type], cap, NULL, NULL, exten, NULL);
@@ -266,14 +261,6 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
 		 */
 		rpt_disable_cdr(chan);
 		ast_debug(1, "Requested channel %s cdr disabled\n", ast_channel_name(chan));
-		p = ast_channel_tech_pvt(chan);
-		if (!p || !p->owner || !p->chan) {
-			ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(chan));
-			ast_hangup(chan);
-			return NULL;
-		}
-		ast_answer(p->owner);
-		ast_answer(p->chan);
 	}
 	return chan;
 }
@@ -283,7 +270,6 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_na
 	struct rpt *myrpt = NULL;
 	struct rpt_link *link = NULL;
 	struct ast_channel *chan, **chanptr;
-	struct ast_unreal_pvt *p;
 
 	if (flags & RPT_LINK_CHAN) {
 		link = data;
@@ -314,17 +300,7 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_na
 			}
 		} /* Don't break here we want the default logic for RPT_PCHAN */
 	default:
-		p = ast_channel_tech_pvt(chan);
-		if (!p || !p->owner || !p->chan) {
-			ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(chan));
-			ast_hangup(chan);
-			return -1;
-		}
-		ast_answer(p->owner);
-		ast_answer(p->chan);
-		ast_debug(3, "Local channel p->owner %p, p->chan %p, chan %p\n", p->owner, p->chan, chan);
-		ast_debug(3, "Channel states p->owner %d, p->chan %d, chan %d\n", ast_channel_state(p->owner), ast_channel_state(p->chan),
-			ast_channel_state(chan));
+		break;
 	}
 
 	return 0;
@@ -363,6 +339,8 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 {
 	struct ast_bridge *conf = NULL;
 	char conference_name[RPT_CONF_NAME_SIZE] = "";
+	struct ast_unreal_pvt *p;
+	int res;
 
 	switch (type) {
 	case RPT_CONF:
@@ -382,7 +360,10 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 		return -1;
 	}
 	ast_debug(3, "Adding channel %s to conference '%s' mixing bridge \n", ast_channel_name(chan), conference_name);
-	return ast_unreal_channel_push_to_bridge(chan, conf, AST_BRIDGE_CHANNEL_FLAG_IMMOVABLE);
+	res = ast_unreal_channel_push_to_bridge(chan, conf, AST_BRIDGE_CHANNEL_FLAG_IMMOVABLE);
+	p = ast_channel_tech_pvt(chan);
+	ast_answer(p->chan);
+	return res;
 }
 
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
