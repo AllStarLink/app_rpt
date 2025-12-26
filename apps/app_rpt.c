@@ -2479,10 +2479,12 @@ static void *attempt_reconnect(void *data)
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 cleanup:
 	ast_free(reconnect_data);
+	rpt_mutex_lock(&myrpt->lock);
 	myrpt->connect_thread_count--;
 	if (myrpt->connect_thread_count < 0) {
 		myrpt->connect_thread_count = 0;
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	return NULL;
 }
 
@@ -3340,11 +3342,15 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				}
 				reconnect_data->myrpt = myrpt;
 				reconnect_data->l = l;
+				rpt_mutex_lock(&myrpt->lock);
 				myrpt->connect_thread_count++;
+				rpt_mutex_unlock(&myrpt->lock);
 				l->retrytimer = RETRY_TIMER_MS;
 				if (ast_pthread_create_detached(&reconnect_data->threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
 					ast_free(reconnect_data);
+					rpt_mutex_lock(&myrpt->lock);
 					myrpt->connect_thread_count--;
+					rpt_mutex_unlock(&myrpt->lock);
 				}
 			} else {
 				l->retries = l->max_retries + 1;
