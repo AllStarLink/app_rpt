@@ -2871,7 +2871,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 				myrpt->rxchanname);
 			return -1;
 		} else {
-			/* If it is a DAHDI hardware address (Not PSEUDO), use the configured txchannel. */
+			/* If it is a DAHDI hardware channel (Not PSEUDO), use the configured txchannel. */
 			myrpt->localtxchannel = IS_DAHDI_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 		}
 	}
