@@ -3341,9 +3341,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				reconnect_data->myrpt = myrpt;
 				reconnect_data->l = l;
 				myrpt->connect_thread_count++;
+				l->retrytimer = RETRY_TIMER_MS;
 				if (ast_pthread_create_detached(&reconnect_data->threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
 					ast_free(reconnect_data);
-					l->retrytimer = RETRY_TIMER_MS;
 					myrpt->connect_thread_count--;
 				}
 			} else {
