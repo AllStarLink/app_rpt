@@ -1307,11 +1307,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
  */
 static struct ast_frame *voter_read(struct ast_channel *ast)
 {
-	struct voter_pvt *p = ast_channel_tech_pvt(ast);
-
-	memset(&p->fr, 0, sizeof(struct ast_frame));
-	p->fr.frametype = AST_FRAME_NULL;
-	return &p->fr;
+	return &ast_null_frame;
 }
 
 /*!
