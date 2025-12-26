@@ -1145,7 +1145,7 @@ static void statpost(struct rpt *myrpt, char *pairs)
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
 	ast_debug(4, "Making statpost to %s\n", sp->stats_url);
-	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, (void *) sp);
+	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, sp);
 	if (res) {
 		ast_log(LOG_ERROR, "Error creating statpost thread: %s\n", strerror(res));
 		ast_free(sp->stats_url);
@@ -2616,7 +2616,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			myrpt->cidx = 0;
 			myrpt->exten[myrpt->cidx] = 0;
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_pthread_create_detached(&myrpt->rpt_call_thread, NULL, rpt_call, (void *) myrpt);
+			ast_pthread_create_detached(&myrpt->rpt_call_thread, NULL, rpt_call, myrpt);
 			return;
 		}
 	}
@@ -3341,7 +3341,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				reconnect_data->myrpt = myrpt;
 				reconnect_data->l = l;
 				myrpt->connect_thread_count++;
-				if (ast_pthread_create_detached(&reconnect_data->threadid, NULL, attempt_reconnect, (void *) reconnect_data) < 0) {
+				if (ast_pthread_create_detached(&reconnect_data->threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
 					ast_free(reconnect_data);
 					l->retrytimer = RETRY_TIMER_MS;
 					myrpt->connect_thread_count--;
@@ -5839,7 +5839,7 @@ static void *rpt_master(void *ignore)
 		}
 		rpt_vars[i].ready = 0;
 		rpt_vars[i].lastthreadupdatetime = current_time;
-		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
+		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 	}
 	time(&starttime);
 	ast_mutex_lock(&rpt_master_lock);
@@ -5898,7 +5898,7 @@ static void *rpt_master(void *ignore)
 
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
 				rpt_vars[i].lastthreadupdatetime = current_time;
-				ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
+				ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 				/* if (!rpt_vars[i].xlink) */
 				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
 			}
