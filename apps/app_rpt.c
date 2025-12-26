@@ -2482,6 +2482,7 @@ cleanup:
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->connect_thread_count--;
 	if (myrpt->connect_thread_count < 0) {
+		ast_log(AST_LOG_WARNING, "connect thread count is < 0");
 		myrpt->connect_thread_count = 0;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
