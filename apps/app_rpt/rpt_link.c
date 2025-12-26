@@ -564,7 +564,7 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
-void *connect_link(void *data)
+void *rpt_link_connect(void *data)
 {
 	char *s, *s1, *tele, *cp;
 	char tmp[300], deststr[325] = "", modechange = 0;
@@ -594,7 +594,7 @@ void *connect_link(void *data)
 					rpt_telemetry(myrpt, CONNFAIL, NULL);
 					goto cleanup; /* No such node */
 				}
-				goto cleanup;
+				goto cleanup; /* No match yet */
 			}
 		} else {
 			if (strlen(node) < 7) {
@@ -815,6 +815,7 @@ cleanup:
 	ast_free(connect_data);
 	myrpt->connect_thread_count--;
 	if (myrpt->connect_thread_count < 0) {
+		ast_log(AST_LOG_WARNING, "connect thread count is < 0");
 		myrpt->connect_thread_count = 0;
 	}
 	return NULL;
