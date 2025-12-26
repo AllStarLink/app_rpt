@@ -5358,7 +5358,7 @@ static void *rpt(void *this)
 		if (myrpt->exttx && ((myrpt->p.parrotmode != PARROT_MODE_OFF) || myrpt->parrotonce) && (myrpt->parrotstate == PARROT_STATE_IDLE)) {
 			char myfname[300];
 			/* setup audiohook to spy on the pchannel. */
-			ast_verb(1, "Parrot attached to %s\n", ast_channel_name(myrpt->pchannel));
+			ast_verb(4, "Parrot attached to %s\n", ast_channel_name(myrpt->pchannel));
 			snprintf(myfname, sizeof(myfname), PARROTFILE ".wav", myrpt->name, myrpt->parrotcnt);
 			unlink(myfname);
 			myrpt->parrotstate = PARROT_STATE_RECORDING;
