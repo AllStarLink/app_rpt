@@ -564,7 +564,7 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
-int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
+void *rpt_link_connect(void *data)
 {
 	char *s, *s1, *tele, *cp;
 	char tmp[300], deststr[325] = "", modechange = 0;
@@ -576,9 +576,13 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	int i, ns, n = 1;
 	int voterlink = 0;
 	struct ast_format_cap *cap;
+	struct rpt_connect_data *connect_data = data;
+	struct rpt *myrpt = connect_data->myrpt;
+	char *node = connect_data->digitbuf;
 
-	if (strlen(node) < 1)
-		return 1;
+	if (strlen(node) < 1) {
+		goto cleanup;
+	}
 
 	if (tlb_query_node_exists(node)) {
 		sprintf(tmp, "tlb/%s/%s", node, myrpt->name);
@@ -586,23 +590,28 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		if (node[0] != '3') {
 			if (node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1)) {
 				if (strlen(node) >= myrpt->longestnode) {
-					return -1;	/* No such node */
+					rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+					rpt_telemetry(myrpt, CONNFAIL, NULL);
+					goto cleanup; /* No such node */
 				}
-				return 1;		/* No match yet */
+				goto cleanup; /* No match yet */
 			}
 		} else {
 			if (strlen(node) < 7) {
-				return 1;
+				goto cleanup;
 			}
-			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);		
+			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);
 		}
 	}
 
 	if (!strcmp(myrpt->name, node)) { /* Do not allow connections to self */
-		return -2;
+		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+		rpt_telemetry(myrpt, REMALREADY, NULL);
+		goto cleanup;
 	}
 
-	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node, mode ? "Transceive" : "Monitor", perma ? "Permalink" : "Normal");
+	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node,
+		connect_data->mode ? "Transceive" : "Monitor", connect_data->perma ? "Permalink" : "Normal");
 
 	s = NULL;
 	s1 = tmp;
@@ -638,15 +647,17 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	/* if found */
 	if (l != &myrpt->links) {
 		/* if already in this mode, just ignore */
-		if ((l->mode == mode) || (!l->chan)) {
+		if ((l->mode == connect_data->mode) || (!l->chan)) {
 			rpt_mutex_unlock(&myrpt->lock);
-			return 2;			/* Already linked */
+			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+			rpt_telemetry(myrpt, REMALREADY, NULL);
+			goto cleanup; /* Already linked */
 		}
 		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
-			l->mode = mode;
+			l->mode = connect_data->mode;
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
-			return 0;
+			goto cleanup;
 		}
 		reconnects = l->reconnects;
 		rpt_mutex_unlock(&myrpt->lock);
@@ -660,14 +671,14 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
 			rpt_mutex_unlock(&myrpt->lock);
-			return -1;
+			goto cleanup;
 		}
 		n = __mklinklist(myrpt, NULL, &lstr, 0) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
 			ast_free(lstr);
-			return -1;
+			goto cleanup;
 		}
 		ns = finddelim(ast_str_buffer(lstr), strs, n);
 		for (i = 0; i < ns; i++) {
@@ -677,7 +688,9 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 			if (!strcmp(strs[i], node)) {
 				ast_free(lstr);
 				ast_free(strs);
-				return 2; /* Already linked */
+				rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+				rpt_telemetry(myrpt, REMALREADY, NULL);
+				goto cleanup; /* Already linked */
 			}
 		}
 		ast_free(strs);
@@ -687,14 +700,14 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	/* establish call */
 	l = ast_calloc(1, sizeof(struct rpt_link));
 	if (!l) {
-		return -1;
+		goto cleanup;
 	}
 	l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!l->linklist) {
 		ast_free(l);
-		return -1;
+		goto cleanup;
 	}
-	l->mode = mode;
+	l->mode = connect_data->mode;
 	l->outbound = 1;
 	l->thisconnected = 0;
 	voxinit_link(l, 1);
@@ -702,7 +715,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	l->isremote = (s && ast_true(s));
 	if (modechange)
 		l->connected = 1;
-	l->hasconnected = l->perma = perma;
+	l->hasconnected = l->perma = connect_data->perma;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 	l->voterlink = voterlink;
@@ -722,7 +735,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
 		rpt_link_free(l);
-		return -1;
+		goto cleanup;
 	}
 	*tele++ = 0;
 
@@ -730,7 +743,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_link_free(l);
-		return -1;
+		goto cleanup;
 	}
 
 	ast_format_cap_append(cap, ast_format_slin, 0);
@@ -755,7 +768,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		donodelog_fmt(myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		rpt_link_free(l);
 		ao2_ref(cap, -1);
-		return -1;
+		goto cleanup;
 	}
 
 	rpt_make_call(l->chan, tele, 2000, deststr, "(Remote Rx)", "remote", myrpt->name);
@@ -764,7 +777,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
 		rpt_link_free(l);
-		return -1;
+		goto cleanup;
 	}
 
 	ao2_ref(cap, -1);
@@ -774,7 +787,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		rpt_link_free(l);
-		return -1;
+		goto cleanup;
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {
@@ -787,7 +800,7 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	l->reconnects = reconnects;
 	/* insert at end of queue */
 	l->max_retries = MAX_RETRIES;
-	if (perma) {
+	if (connect_data->perma) {
 		l->max_retries = MAX_RETRIES_PERM;
 	}
 	if (l->isremote) {
@@ -797,5 +810,15 @@ int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma)
 	rpt_link_add(myrpt, l);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
-	return 0;
+cleanup:
+	ast_free(connect_data->digitbuf);
+	ast_free(connect_data);
+	rpt_mutex_lock(&myrpt->lock);
+	myrpt->connect_thread_count--;
+	if (myrpt->connect_thread_count < 0) {
+		ast_log(AST_LOG_WARNING, "connect thread count is < 0");
+		myrpt->connect_thread_count = 0;
+	}
+	rpt_mutex_unlock(&myrpt->lock);
+	return NULL;
 }
