@@ -642,8 +642,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			ast_str_set(&str, 0, "NodesCurrentlyConnectedToUs: ");
 			j = 0;
 			numoflinks = ao2_container_count(links_copy);
-			RPT_LIST_TRAVERSE(links_copy, l, l_it)
-			{
+			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				j++;
 				ast_str_append(&str, 0, "%s", l->name);
 				if (j < numoflinks - 1) {
