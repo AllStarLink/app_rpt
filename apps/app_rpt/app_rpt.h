@@ -443,16 +443,6 @@ enum patch_call_mode {
 /* for DNS resolution of node data */
 #define DEFAULT_DNS_NODE_DOMAIN "nodes.allstarlink.org"
 
-#define NRPTSTAT 7
-
-struct rpt_chan_stat {
-	struct timeval last;
-	long long total;
-	unsigned long count;
-	unsigned long largest;
-	struct timeval largest_time;
-};
-
 #define REMOTE_RIG_FT950 "ft950"
 #define REMOTE_RIG_FT897 "ft897"
 #define REMOTE_RIG_FT100 "ft100"
@@ -596,7 +586,6 @@ struct rpt_link {
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
 	struct rpt_frame_queue frame_queue;
-	struct rpt_chan_stat chan_stat[NRPTSTAT];
 	struct vox vox;
 	char wasvox;
 	int voxtotimer;
@@ -628,7 +617,6 @@ struct rpt_lstat {
 	unsigned int thisconnected:1;
 	int reconnects;
 	struct timeval connecttime;
-	struct rpt_chan_stat chan_stat[NRPTSTAT];
 };
 
 struct rpt_tele {
@@ -766,7 +754,6 @@ struct rpt {
 	char *txchanname;
 	char remote;
 	char *remoterig;
-	struct	rpt_chan_stat chan_stat[NRPTSTAT];
 	unsigned int scram;
 #ifdef	_MDC_DECODE_H_
 	mdc_decoder_t *mdc;
@@ -907,7 +894,7 @@ struct rpt {
 		int nldisc;
 		const char *timezone;
 	} p;
-	struct rpt_link links;
+	struct ao2_container *links;
 	int unkeytocttimer;
 	time_t lastkeyedtime;
 	time_t lasttxkeyedtime;
@@ -1132,3 +1119,37 @@ char *rpt_complete_function_list(const char *line, const char *word, int pos, in
 #define RPT_MUTE_FRAME(f) \
 	if (f) \
 	ast_frame_clear(f)
+
+/*!
+* \brief Loops over (traverses) the entries in an AO2 container list.
+* \param container This is a pointer to the AO2 container
+* \param var This is the name of the variable that will hold a pointer to the
+* current list entry on each iteration. It must be declared before calling
+* this macro.
+* \param iterator This is the name of the variable that will be used for
+* the AO2_ITERATOR. It must be declared before calling this macro.
+*
+* This macro is used to loop over (traverse) the entries in an AO2 container list. It uses a
+* \a for loop, and supplies the enclosed code with a pointer to each list
+* entry as it loops. It is typically used as follows:
+* \code
+* static ao2_container container;
+* ao2_iterator_t iterator;
+* ...
+* struct list_entry {
+*    ...
+* }
+* ...
+* struct list_entry *current;
+* ...
+* RPT_LIST_TRAVERSE(&container, current, iterator) {
+*	(do something with current here)
+* }
+* ao2_iterator_destroy(&iterator);
+* \endcode
+
+*/
+
+#define RPT_LIST_TRAVERSE(container, var, iterator) \
+	(iterator) = (container) ? ao2_iterator_init((container), 0) : (struct ao2_iterator) { 0 }; \
+	for (; ((var) = ao2_iterator_next(&(iterator))); ao2_ref((var), -1))
