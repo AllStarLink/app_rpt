@@ -284,7 +284,6 @@
 #include <fnmatch.h>
 #include <curl/curl.h>
 #include <termios.h>
-#include <stdbool.h>
 
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
@@ -986,7 +985,7 @@ static size_t writefunction(char *contents, size_t size, size_t nmemb, void *use
 }
 
 /* Function to check if HTTP status code is in 2xx range */
-static bool is_http_success(int code)
+static rpt_bool is_http_success(int code)
 {
 	return (code >= 200 && code <= 299);
 }
@@ -5559,7 +5558,7 @@ static int load_config(int reload)
 
 	if (reload) {
 		for (n = 0; n < nrpts; n++) {
-			rpt_vars[n].reload1 = 0;
+			rpt_vars[n].reload_request = 0;
 		}
 	} else {
 		rpt_vars[n].cfg = cfg;
@@ -5620,7 +5619,7 @@ static int load_config(int reload)
 		if (reload) {
 			for (n = 0; n < nrpts; n++) {
 				if (!strcmp(this, rpt_vars[n].name)) {
-					rpt_vars[n].reload1 = 1;
+					rpt_vars[n].reload_request = 1;
 					break;
 				}
 			}
@@ -5691,7 +5690,7 @@ static int load_config(int reload)
 		rpt_vars[n].mdc = mdc_decoder_new(8000);
 #endif
 		if (reload) {
-			rpt_vars[n].reload1 = 1;
+			rpt_vars[n].reload_request = 1;
 			if (n >= nrpts) {
 				nrpts = n + 1;
 			}
@@ -5709,7 +5708,7 @@ static int load_config(int reload)
 static void *rpt_master(void *ignore)
 {
 	int i;
-	bool thread_hung[MAXRPTS] = { false };
+	rpt_bool thread_hung[MAXRPTS] = { false };
 	time_t last_thread_time[MAXRPTS] = { 0 };
 	time_t current_time = rpt_time_monotonic();
 	/* init nodelog queue */
@@ -7614,7 +7613,7 @@ static int reload(void)
 	ast_mutex_lock(&rpt_master_lock);
 	load_config(1);
 	for (n = 0; n < nrpts; n++) {
-		if (rpt_vars[n].reload1)
+		if (rpt_vars[n].reload_request)
 			continue;
 		if (rpt_vars[n].rxchannel)
 			ast_softhangup(rpt_vars[n].rxchannel, AST_SOFTHANGUP_DEV);
