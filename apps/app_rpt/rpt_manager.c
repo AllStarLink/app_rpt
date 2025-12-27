@@ -646,19 +646,17 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			{
 				j++;
 				ast_str_append(&str, 0, "%s", l->name);
+				if (j < numoflinks - 1) {
+					ast_str_append(&str, 0, ",");
+				}
 			}
-			(j < numoflinks - 1) {
-				ast_str_append(&str, 0, ",");
-			}
-			if (j > 0) {
-				str[strlen(str) - 1] = '\0'; /* Remove last comma */
-			} else {
-				strcat(str, "<NONE>");
+			if (j == 0) {
+				ast_str_append(&str, 0, "<NONE>");
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_cleanup(links_copy);
 
-			astman_append(s, "%s\r\n", str);
+			astman_append(s, "%s\r\n", ast_str_buffer(str));
 
 			astman_append(s, "Autopatch: %s\r\n", patch_ena);
 			astman_append(s, "AutopatchState: %s\r\n", patch_state);
