@@ -86,12 +86,6 @@ void rpt_update_links(struct rpt *myrpt);
  */
 void rpt_link_free(struct rpt_link *link);
 
-/*!
- * \brief Connect a link
- * uses rpt_connect_data structure to pass parameters.
- */
-void *rpt_link_connect(void *data);
-
 /*! \brief Structure used to share data with connect_data thread */
 struct rpt_connect_data {
 	struct rpt *myrpt;
@@ -100,5 +94,10 @@ struct rpt_connect_data {
 	unsigned int perma:1; /* permanent link */
 	enum rpt_command_source command_source;
 	struct rpt_link *mylink;
-	pthread_t threadid;
 };
+
+/*!
+ * \brief Connect a link
+ * uses rpt_connect_data structure to pass parameters.
+ */
+void *rpt_link_connect(void *data);

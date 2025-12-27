@@ -423,7 +423,6 @@ int nullfd = -1;
 struct rpt_reconnect_data {
 	struct rpt *myrpt;
 	struct rpt_link *l;
-	pthread_t threadid;
 };
 
 int rpt_debug_level(void)
@@ -3141,6 +3140,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	int newkeytimer_last, max_retries;
 	struct rpt_link *l;
 	struct rpt_reconnect_data *reconnect_data;
+	pthread_t reconnect_threadid;
 
 	struct ao2_iterator l_it;
 
@@ -3347,7 +3347,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				myrpt->connect_thread_count++;
 				rpt_mutex_unlock(&myrpt->lock);
 				l->retrytimer = RETRY_TIMER_MS;
-				if (ast_pthread_create_detached(&reconnect_data->threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
+				if (ast_pthread_create_detached(&reconnect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
 					ast_free(reconnect_data);
 					rpt_mutex_lock(&myrpt->lock);
 					myrpt->connect_thread_count--;
