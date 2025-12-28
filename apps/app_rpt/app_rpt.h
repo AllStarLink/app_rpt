@@ -929,11 +929,11 @@ struct rpt {
 	unsigned int parrotcnt;
 	int telemmode;
 	struct ast_channel *rxchannel;	/*!< Channel connected to physical hardware, can be bi-directional */
-	struct ast_channel *txchannel;	/*!< Channel connect to physical hardware if separate otherwise = rchannel */
+	struct ast_channel *txchannel;	/*!< Channel connect to physical hardware if separate otherwise equal to rxchannel */
 	struct ast_channel *monchannel; /*!< Monitor channel used to record activity on the TXCONF */
 	struct ast_channel *pchannel;	/*!< Channel used to copy RX audio into CONF bridge and CONF bridge audio into txpchannel */
 	struct ast_channel *txpchannel; /*!< Channel used to receive RX audio into the TXCONF bridge */
-	struct ast_channel *localrxchannel; /*!< Channel used when in remote configuration for rx can be set equal to pchannel */
+	struct ast_channel *localrxchannel; /*!< Channel used when in remote configuration for rx, may be set equal to pchannel */
 	struct ast_channel *localtxchannel; /*!< Channel used to receive audio from the TXCONF bridge into the txchannel */
 	struct rpt_frame_queue frame_queue;
 	struct rpt_tele tele;

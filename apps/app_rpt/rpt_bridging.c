@@ -43,7 +43,7 @@
 /*!
  *	\brief used to display "words" in debug messages.
  */
-static const char *rpt_chan_type_str(enum rpt_chan_name chantype)
+static const char *rpt_chan_type_str(enum rpt_chan_type chantype)
 {
 	switch (chantype) {
 	case RPT_RXCHAN:
@@ -63,7 +63,7 @@ static const char *rpt_chan_type_str(enum rpt_chan_name chantype)
 	return NULL;
 }
 
-static const char *rpt_chan_name(struct rpt *myrpt, enum rpt_chan_name chantype)
+static const char *rpt_chan_name(struct rpt *myrpt, enum rpt_chan_type chantype)
 {
 	switch (chantype) {
 	case RPT_RXCHAN:
@@ -80,7 +80,7 @@ static const char *rpt_chan_name(struct rpt *myrpt, enum rpt_chan_name chantype)
 	return NULL;
 }
 
-static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link *link, enum rpt_chan_name chantype)
+static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link *link, enum rpt_chan_type chantype)
 {
 	if (myrpt) {
 		switch (chantype) {
@@ -109,9 +109,9 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 	return NULL;
 }
 
-#define RPT_DIAL_DURATION 999
+#define RPT_DIAL_DURATION 999 /* Wait timeout for ast_call() executions */
 
-void rpt_hangup(struct rpt *myrpt, enum rpt_chan_name chantype)
+void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 {
 	struct ast_channel **chanptr = rpt_chan_channel(myrpt, NULL, chantype);
 
@@ -144,7 +144,7 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_name chantype)
 	*chanptr = NULL;
 }
 
-static const char *rpt_chan_app(enum rpt_chan_name chantype, enum rpt_chan_flags flags)
+static const char *rpt_chan_app(enum rpt_chan_type chantype, enum rpt_chan_flags flags)
 {
 	switch (chantype) {
 	case RPT_RXCHAN:
@@ -161,7 +161,7 @@ static const char *rpt_chan_app(enum rpt_chan_name chantype, enum rpt_chan_flags
 	return NULL;
 }
 
-static const char *rpt_chan_app_data(enum rpt_chan_name chantype)
+static const char *rpt_chan_app_data(enum rpt_chan_type chantype)
 {
 	switch (chantype) {
 	case RPT_RXCHAN:
@@ -178,7 +178,7 @@ static const char *rpt_chan_app_data(enum rpt_chan_name chantype)
 	return NULL;
 }
 
-int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name chantype, enum rpt_chan_flags flags)
+int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags)
 {
 	char chanstr[256];
 	const char *channame;
@@ -241,7 +241,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name cha
 	return 0;
 }
 
-struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, enum rpt_chan_type type)
+struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, enum rpt_bridge_chan_type type)
 {
 	struct ast_channel *chan;
 	char *type_str[3] = { "Local", "Announcer", "Recorder" };
@@ -265,7 +265,7 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
 	return chan;
 }
 
-int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_name chantype, enum rpt_chan_flags flags, const char *exten)
+int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten)
 {
 	struct rpt *myrpt = NULL;
 	struct rpt_link *link = NULL;

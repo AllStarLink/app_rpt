@@ -1,5 +1,5 @@
 
-enum rpt_chan_name {
+enum rpt_chan_type {
 	RPT_RXCHAN, /* Receive channel */
 	RPT_TXCHAN, /* Transmit channel */
 	RPT_PCHAN,
@@ -8,7 +8,7 @@ enum rpt_chan_name {
 	RPT_TXPCHAN,
 };
 
-enum rpt_chan_type {
+enum rpt_bridge_chan_type {
 	RPT_LOCAL,
 	RPT_TELEMETRY,
 	RPT_MONITOR,
@@ -33,7 +33,7 @@ enum rpt_chan_flags {
  * \param chantype
  * \note Do not call if the channel does not exist (safe, but will emit a warning)
  */
-void rpt_hangup(struct rpt *myrpt, enum rpt_chan_name chantype);
+void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype);
 
 /*!
  * \brief Request a repeater channel
@@ -43,7 +43,7 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_name chantype);
  * \note myrpt->lock must be held when calling
  * \retval 0 on success, -1 on failure
  */
-int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name chantype, enum rpt_chan_flags flags);
+int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags);
 
 #define rpt_request(data, cap, chantype) __rpt_request(data, cap, chantype, 0)
 
@@ -53,7 +53,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_name cha
  * \return channel on success
  * \return NULL on failure
  */
-struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, enum rpt_chan_type type);
+struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, enum rpt_bridge_chan_type type);
 
 #define rpt_request_local_chan(cap, exten) __rpt_request_local_chan(cap, exten, RPT_LOCAL)
 #define rpt_request_telem_chan(cap, exten) __rpt_request_local_chan(cap, exten, RPT_TELEMETRY)
@@ -67,7 +67,7 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
  * \note myrpt->lock must be held when calling
  * \retval 0 on success, -1 on failure
  */
-int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_name chantype, enum rpt_chan_flags flags, const char *exten);
+int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_type chantype, enum rpt_chan_flags flags, const char *exten);
 
 #define rpt_request_local(data, cap, chantype, exten) __rpt_request_local(data, cap, chantype, 0, exten)
 
@@ -121,7 +121,7 @@ int rpt_stop_tone(struct ast_channel *chan);
  */
 int rpt_set_tone_zone(struct ast_channel *chan, const char *tz);
 
-#define DEFAULT_TALKING_THRESHOLD 160
+#define DEFAULT_TALKING_THRESHOLD 160 /* Bridge talking threshold - setting VOX level for when a user is indicated at "talking" */
 
 /*!
  * \brief Get value of rxisoffhook
