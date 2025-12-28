@@ -4683,7 +4683,7 @@ static inline void voxtostate_to_voxtotimer(struct rpt *myrpt)
 static int sendtext_cb(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
-	char *str = arg;
+	const char *str = arg;
 
 	if (link->chan) {
 		ast_sendtext(link->chan, str);
