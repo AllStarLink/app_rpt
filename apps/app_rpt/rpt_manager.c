@@ -645,7 +645,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				j++;
 				ast_str_append(&str, 0, "%s", l->name);
-				if (j < numoflinks - 1) {
+				if (j < numoflinks) {
 					ast_str_append(&str, 0, ",");
 				}
 			}
