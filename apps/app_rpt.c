@@ -1108,7 +1108,7 @@ static void *perform_statpost(void *data)
 	}
 	myrpt->last_statpost_failed = ((failed) ? 1 : 0);
 
-	ast_debug(3, "Response: %s\n", ast_str_buffer(response_msg));
+	ast_debug(5, "Response: %s\n", ast_str_buffer(response_msg));
 	ast_free(sp->stats_url); /* Free here since parent is not responsible for it. */
 	ast_free(sp);
 	ast_free(response_msg);
@@ -1145,7 +1145,7 @@ static void statpost(struct rpt *myrpt, char *pairs)
 		pairs ? "&" : "", S_OR(pairs, ""));
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
-	ast_debug(4, "Making statpost to %s\n", sp->stats_url);
+	ast_debug(5, "Making statpost to %s\n", sp->stats_url);
 	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, sp);
 	if (res) {
 		ast_log(LOG_ERROR, "Error creating statpost thread: %s\n", strerror(res));
