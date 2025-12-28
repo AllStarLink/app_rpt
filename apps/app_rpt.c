@@ -2882,13 +2882,15 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	if (IS_LOCAL_NAME(ast_channel_name(myrpt->txchannel))) {
-		/* IF we have a local channel setup in txchannel, there is no listener
+		/* IF we have a local channel setup in txchannel this is a hub
+		 * there is no "real" hardware and there is no listener.
 		 * Autoservice is required to "dump" audio frames.
 		 */
 		struct ast_unreal_pvt *p = ast_channel_tech_pvt(myrpt->txchannel);
 		if (!p || !p->chan) {
 			ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(myrpt->txchannel));
 		} else {
+			ast_raw_answer(p->chan);
 			ast_autoservice_start(p->chan);
 		}
 	}
