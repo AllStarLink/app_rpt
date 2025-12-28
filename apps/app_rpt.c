@@ -2854,6 +2854,10 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
+	if (IS_PSEUDO_NAME(myrpt->rxchanname)) {
+		ast_log(LOG_ERROR, "Using DAHDI/Pseudo channel %s is depreciated. Update your rpt.conf to use Local/Pseudo.\n", myrpt->rxchanname);
+		strncpy(myrpt->rxchanname, "Local/pseudo", 13);
+	}
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
 	}
@@ -2866,14 +2870,8 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
-		if (IS_PSEUDO_NAME(myrpt->rxchanname)) {
-			ast_log(LOG_ERROR, "Using DAHDI/Pseudo channel %s is no longer supported. Update your rpt.conf to use Local/Pseudo.\n",
-				myrpt->rxchanname);
-			return -1;
-		} else {
-			/* If it is a DAHDI hardware channel (Not PSEUDO), use the configured txchannel. */
-			myrpt->localtxchannel = IS_DAHDI_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
-		}
+		/* If it is a DAHDI hardware channel (Not PSEUDO), use the configured txchannel. */
+		myrpt->localtxchannel = IS_DAHDI_CHAN_NAME(myrpt->rxchanname) && !IS_PSEUDO_NAME(myrpt->rxchanname) ? myrpt->txchannel : NULL;
 	}
 
 	if (rpt_request_local(myrpt, cap, RPT_PCHAN, "PChan")) {
