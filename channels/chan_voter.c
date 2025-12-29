@@ -268,6 +268,7 @@ N - numeric
 Asterisk CLI commands for this module:
 
 voter display                  -- Displays voter (instance) clients
+voter tune					   -- Replace all client transmit audio with 1kHz tone at full deviation
 voter ping                     -- Client ping
 voter prio                     -- Specify/Query voter client priority value
 voter record                   -- Enable/Specify (or disable) voter recording file
@@ -331,14 +332,11 @@ Use "core show help voter <command>"" to display usage.
 
 #include "../apps/app_rpt/pocsag.c"
 
-/* Un-comment this if you wish Digital milliwatt output rather then real audio
- * when transmitting (for debugging only)
+/* This array is used by the voter tune CLI command to send a 1kHz tone at
+ * full system deviation to all clients (with transmit enabled) in an instance.
  */
-/* #define	DMWDIAG */
-#ifdef DMWDIAG
-unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
-unsigned char mwp;
-#endif
+static unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
+/* unsigned char mwp; */
 
 struct ast_flags zeroflag = { 0 };
 
@@ -578,13 +576,14 @@ struct voter_pvt {
 	char buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
 	struct ast_module_user *u;
 	struct timeval lastrxtime;
+	unsigned char mwp;
 	/* bit fields */
 	unsigned int txkey:1;
 	unsigned int rxkey:1;
 	unsigned int drained_once:1;
 	unsigned int plfilter:1;
 	unsigned int hostdeemp:1;
-	unsigned int duplex:1;
+	unsigned int dmwdiag:1;
 	unsigned int usedtmf:1;
 	unsigned int isprimary:1;
 	unsigned int priconn:1;
@@ -1051,6 +1050,9 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 	case AST_CONTROL_RADIO_KEY:
 		p->txkey = 1;
 		ast_verb(3, "Channel %s: TX On\n", ast_channel_name(ast));
+		if (p->dmwdiag) {
+			ast_verb(3, "Sending 1kHz test tone to node Voter/%i transmitter(s)\n", p->nodenum);
+		}
 		break;
 	case AST_CONTROL_RADIO_UNKEY:
 		p->txkey = 0;
@@ -1685,6 +1687,9 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 /* VOTER Display */
 static int voter_do_display(int fd, int argc, const char *const *argv);
 
+/* VOTER Tune */
+static int voter_do_tune(int fd, int argc, const char *const *argv);
+
 /* VOTER Ping client */
 static int voter_do_ping(int fd, int argc, const char *const *argv);
 
@@ -1907,6 +1912,95 @@ static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli
 		return voter_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(voter_do_display(a->fd, a->argc, a->argv));
+}
+
+/*!
+ * \brief Handle the Asterisk CLI "voter tune" request to enable/disable client
+ * 1kHz test tone.
+ *
+ * This command will replace all audio samples to client transmitters with a
+ * digital milliwatt 1kHz tone that will cause the attached transmitters to
+ * transmit 1kHz at full system deviation (ie. 5kHz).
+ *
+ * \param fd			Asterisk CLI fd
+ * \param argc			Number of arguments
+ * \param argv			Arguments
+ * \return	CLI success, showusage, or failure.
+ */
+static int voter_do_tune(int fd, int argc, const char *const *argv)
+{
+	int newlevel;
+	struct voter_pvt *p;
+
+	if (argc < 3) {
+		return RESULT_SHOWUSAGE;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (p = pvts; p; p = p->next) {
+		if (p->nodenum == atoi(argv[2])) {
+			break;
+		}
+	}
+	if (!p) {
+		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc == 3) {
+		if (p->dmwdiag) {
+			ast_cli(fd, "VOTER instance %d tune: currently set to enabled\n", p->nodenum);
+		} else {
+			ast_cli(fd, "VOTER instance %d tune: currently disabled\n", p->nodenum);
+		}
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SUCCESS;
+	}
+	if (argc != 4) {
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SHOWUSAGE;
+	}
+	if (ast_true(argv[3])) {
+		newlevel = 1;
+	} else if (ast_false(argv[3])) {
+		newlevel = 0;
+	} else {
+		ast_cli(fd, "Error: Invalid tune mode value specification!!\n");
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SHOWUSAGE;
+	}
+	if (p->dmwdiag < newlevel) {
+		ast_cli(fd, "VOTER instance %d tune: was disabled, now enabled\n", p->nodenum);
+		p->dmwdiag = 1;
+	} else if (p->dmwdiag > newlevel) {
+		ast_cli(fd, "VOTER instance %d tune: was enabled, now disabled\n", p->nodenum);
+		p->dmwdiag = 0;
+	} else {
+		ast_cli(fd, "VOTER instance %d tune: unchanged, currently %s\n", p->nodenum, (p->dmwdiag) ? "enabled" : "disabled");
+	}
+	ast_mutex_unlock(&voter_lock);
+	return RESULT_SUCCESS;
+}
+
+/*!
+ * \brief Handle the Asterisk CLI request for "voter tune" usage help.
+ *
+ * \param e				Asterisk CLI entry.
+ * \param cmd			CLI command type.
+ * \param a				Asterisk CLI arguments.
+ * \return				CLI success or failure.
+ */
+static char *handle_cli_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "voter tune";
+		e->usage = "Usage: voter tune instance_id [y/n]\n"
+				   "       Specifies/Queries tune mode (send 1kHz test tone to TX) for VOTER instance\n";
+		return NULL;
+	case CLI_GENERATE:
+		return voter_complete_node_list(a->line, a->word, a->pos, 2);
+	}
+	return res2cli(voter_do_tune(a->fd, a->argc, a->argv));
 }
 
 /*!
@@ -2572,6 +2666,7 @@ static char *handle_cli_txlockout(struct ast_cli_entry *e, int cmd, struct ast_c
  */
 static struct ast_cli_entry voter_cli[] = {
 	AST_CLI_DEFINE(handle_cli_test, "Specify/Query VOTER instance test mode"),
+	AST_CLI_DEFINE(handle_cli_tune, "Specify/Query VOTER tune (send 1kHz tone to TX) test mode"),
 	AST_CLI_DEFINE(handle_cli_prio, "Specify/Query VOTER client priority value"),
 	AST_CLI_DEFINE(handle_cli_record, "Enable/Specify (or disable) VOTER recording file"),
 	AST_CLI_DEFINE(handle_cli_tone, "Sets/Queries TX CTCSS level for specified VOTER instance"),
@@ -3151,16 +3246,16 @@ static void *voter_xmit(void *data)
 			if (f1) {
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 			}
-			/* If we compiled with DMWDIAG, replace all the audio samples with those from
+			/* The voter tune CLI command will replace all the audio samples with those from
 			 * the digital milliwatt array, to generate a 1kHz tone on the transmitter.
 			 */
-#ifdef DMWDIAG
-			for (i = 0; i < FRAME_SIZE; i++) {
-				audiopacket.audio[i] = ulaw_digital_milliwatt[mwp++];
-				if (mwp > 7)
-					mwp = 0;
+			if (p->dmwdiag) {
+				for (i = 0; i < FRAME_SIZE; i++) {
+					audiopacket.audio[i] = ulaw_digital_milliwatt[p->mwp++];
+					if (p->mwp > 7)
+						p->mwp = 0;
+				}
 			}
-#endif
 			audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
 			/* Loop through all the clients, to figure out if we should send audio
@@ -3586,12 +3681,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		if (val) {
 			p->hostdeemp = ast_true(val);
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "duplex");
-		if (val) {
-			p->duplex = ast_true(val);
-		} else {
-			p->duplex = 1;
-		}
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
 			p->mixminus = ast_true(val);
@@ -3832,6 +3921,8 @@ static int reload(void)
 	}
 
 	for (p = pvts; p; p = p->next) {
+		/* Reset dmwdiag to disabled upon reload */
+		p->dmwdiag = 0;
 		oldctcss[0] = 0;
 		strcpy(oldctcss, p->txctcssfreq);
 		sprintf(data, "%d", p->nodenum);
@@ -3856,12 +3947,6 @@ static int reload(void)
 			p->hostdeemp = ast_true(val);
 		} else {
 			p->hostdeemp = 0;
-		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "duplex");
-		if (val) {
-			p->duplex = ast_true(val);
-		} else {
-			p->duplex = 1;
 		}
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
@@ -4010,9 +4095,6 @@ static int reload(void)
 				continue;
 			}
 			if (!strcmp(v->name, "hostdeemp")) {
-				continue;
-			}
-			if (!strcmp(v->name, "duplex")) {
 				continue;
 			}
 			if (!strcmp(v->name, "mixminus")) {
@@ -5176,25 +5258,6 @@ static void *voter_reader(void *data)
 										memset(client->audio, 0xff, -i);
 									}
 								}
-								if (!p->duplex && p->txkey) {
-									p->rxkey = 0;
-									p->lastwon = NULL;
-									memset(silbuf, 0, sizeof(silbuf));
-									memset(&fr, 0, sizeof(fr));
-									fr.frametype = AST_FRAME_VOICE;
-									fr.subclass.format = ast_format_slin;
-									fr.datalen = FRAME_SIZE * 2;
-									fr.samples = FRAME_SIZE;
-									fr.data.ptr = silbuf;
-									fr.src = __PRETTY_FUNCTION__;
-									p->threshold = 0;
-									p->threshcount = 0;
-									p->lingercount = 0;
-									p->winner = 0;
-									incr_drainindex(p);
-									ast_queue_frame(p->owner, &fr);
-									continue;
-								}
 								if (p->plfilter || p->hostdeemp) {
 									short ix;
 									for (i = 0; i < FRAME_SIZE; i++) {
@@ -5247,25 +5310,6 @@ static void *voter_reader(void *data)
 									ast_queue_frame(p->owner, &fr);
 								}
 								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
-							}
-							if (!p->duplex && p->txkey) {
-								p->rxkey = 0;
-								p->lastwon = NULL;
-								memset(silbuf, 0, sizeof(silbuf));
-								memset(&fr, 0, sizeof(fr));
-								fr.frametype = AST_FRAME_VOICE;
-								fr.subclass.format = ast_format_slin;
-								fr.datalen = FRAME_SIZE * 2;
-								fr.samples = FRAME_SIZE;
-								fr.data.ptr = silbuf;
-								fr.src = __PRETTY_FUNCTION__;
-								p->threshold = 0;
-								p->threshcount = 0;
-								p->lingercount = 0;
-								p->winner = 0;
-								incr_drainindex(p);
-								ast_queue_frame(p->owner, &fr);
-								continue;
 							}
 							if (!voter_mix_and_send(p, maxclient, maxrssi)) {
 								continue;
