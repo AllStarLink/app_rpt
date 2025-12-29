@@ -2440,9 +2440,8 @@ static void *attempt_reconnect(void *data)
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	rpt_mutex_lock(&myrpt->lock);
-	/* remove from queue */
 	ao2_ref(l, +1);					  /* We don't want the link to free after removing from the list */
-	rpt_link_remove(myrpt->links, l); /* Note: don't unref - Reusing l */
+	rpt_link_remove(myrpt->links, l); /* remove from queue */
 	rpt_mutex_unlock(&myrpt->lock);
 	parse_node_format(tmp, &s1, sx, sizeof(sx));
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
@@ -2475,7 +2474,7 @@ static void *attempt_reconnect(void *data)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
-	ao2_ref(l, -1);
+	ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 cleanup:
@@ -3360,9 +3359,8 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			continue;
 		}
 		if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
-			/* remove from queue */
-			ao2_ref(l, +1); /* prevent freeing while we finish up */
-			rpt_link_remove(myrpt->links, l);
+			ao2_ref(l, +1);					  /* prevent freeing while we finish up */
+			rpt_link_remove(myrpt->links, l); /* remove from queue */
 			if (!strcmp(myrpt->cmdnode, l->name))
 				myrpt->cmdnode[0] = 0;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -3377,15 +3375,14 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
-			ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
+			ao2_ref(l, -1); /* and drop the extra ref we're holding */
 			rpt_mutex_lock(&myrpt->lock);
 			continue;
 		}
 		if ((!l->chan) && (!l->disctime) && (!l->outbound)) {
 			ast_debug(1, "LINKDISC AA\n");
-			/* remove from queue */
-			ao2_ref(l, +1); /* prevent freeing while we finish up */
-			rpt_link_remove(myrpt->links, l);
+			ao2_ref(l, +1);					  /* prevent freeing while we finish up */
+			rpt_link_remove(myrpt->links, l); /* remove from queue */
 			if (!ao2_container_count(myrpt->links)) {
 				channel_revert(myrpt);
 			}
@@ -3401,7 +3398,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			dodispgm(myrpt, l->name);
 			/* hang-up on call to device */
 			ast_hangup(l->pchan);
-			ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
+			ao2_ref(l, -1); /* and drop the extra ref we're holding */
 			rpt_mutex_lock(&myrpt->lock);
 			continue;
 		}
@@ -4275,9 +4272,8 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	rpt_mutex_lock(&myrpt->lock);
-	/* remove from queue */
-	ao2_ref(l, +1); /* prevent freeing while we finish up */
-	rpt_link_remove(myrpt->links, l);
+	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
+	rpt_link_remove(myrpt->links, l); /* remove from queue */
 	if (!strcmp(myrpt->cmdnode, l->name)) {
 		myrpt->cmdnode[0] = 0;
 	}
@@ -4304,7 +4300,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_hangup(l->pchan);
-	ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
+	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 }
 
 static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
@@ -5392,9 +5388,8 @@ static void *rpt(void *this)
 
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
-				/* remove from queue */
-				ao2_ref(l, +1); /* prevent freeing while we finish up */
-				rpt_link_remove(myrpt->links, l);
+				ao2_ref(l, +1);					  /* prevent freeing while we finish up */
+				rpt_link_remove(myrpt->links, l); /* remove from queue */
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				rpt_mutex_unlock(&myrpt->lock);
@@ -5404,7 +5399,7 @@ static void *rpt(void *this)
 				ast_hangup(l->pchan);
 				rpt_mutex_lock(&myrpt->lock);
 				/* re-start link traversal */
-				ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
+				ao2_ref(l, -1); /* and drop the extra ref we're holding */
 				continue;
 			}
 		}
@@ -5603,14 +5598,13 @@ static void *rpt(void *this)
 
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		/* remove from queue */
-		ao2_ref(l, +1); /* prevent freeing while we finish up */
-		rpt_link_remove(myrpt->links, l);
+		ao2_ref(l, +1);					  /* prevent freeing while we finish up */
+		rpt_link_remove(myrpt->links, l); /* remove from queue */
 		/* hang-up on call to device */
 		if (l->chan)
 			ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		ao2_ref(l, -1); /* 1 for the link reference - freeing the link */
+		ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	}
 	ao2_iterator_destroy(&l_it);
 	if (myrpt->xlink == 1)
