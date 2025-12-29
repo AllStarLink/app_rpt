@@ -2453,6 +2453,7 @@ static void *attempt_reconnect(void *data)
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
 	ast_autoservice_start(l->pchan);  /* We need to dump audio on l->chan while redialing or we recieve long voice queue warnings */
 	rpt_mutex_unlock(&myrpt->lock);
+	ast_autoservice_start(l->pchan); /* We need to dump audio on l->chan while redialing or we receive long voice queue warnings */
 	parse_node_format(tmp, &s1, sx, sizeof(sx));
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
 	tele = strchr(deststr, '/');
@@ -2482,6 +2483,7 @@ static void *attempt_reconnect(void *data)
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
 	}
+	ast_autoservice_stop(l->pchan);
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
 	ast_autoservice_stop(l->pchan);
