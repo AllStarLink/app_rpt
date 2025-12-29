@@ -1999,7 +1999,7 @@ static char *handle_cli_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	case CLI_INIT:
 		e->command = "voter tune";
 		e->usage = "Usage: voter tune instance_id [y/n]\n"
-				   "       Specifies/Queries tune mode (1kHz test tone) for VOTER instance\n";
+				   "       Specifies/Queries tune mode (send 1kHz test tone to TX) for VOTER instance\n";
 		return NULL;
 	case CLI_GENERATE:
 		return voter_complete_node_list(a->line, a->word, a->pos, 2);
@@ -2670,7 +2670,7 @@ static char *handle_cli_txlockout(struct ast_cli_entry *e, int cmd, struct ast_c
  */
 static struct ast_cli_entry voter_cli[] = {
 	AST_CLI_DEFINE(handle_cli_test, "Specify/Query VOTER instance test mode"),
-	AST_CLI_DEFINE(handle_cli_tune, "Specify/Query VOTER tune (1kHz tone) test mode"),
+	AST_CLI_DEFINE(handle_cli_tune, "Specify/Query VOTER tune (send 1kHz tone to TX) test mode"),
 	AST_CLI_DEFINE(handle_cli_prio, "Specify/Query VOTER client priority value"),
 	AST_CLI_DEFINE(handle_cli_record, "Enable/Specify (or disable) VOTER recording file"),
 	AST_CLI_DEFINE(handle_cli_tone, "Sets/Queries TX CTCSS level for specified VOTER instance"),
