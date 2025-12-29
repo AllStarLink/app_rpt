@@ -2914,9 +2914,25 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
+	if (rpt_request_local(myrpt, cap, RPT_RXPCHAN, "RXPChan")) {
+		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		return -1;
+	}
+
 	if (rpt_conf_add(myrpt->pchannel, myrpt, RPT_CONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		return -1;
+	}
+
+	if (rpt_conf_add(myrpt->rxpchannel, myrpt, RPT_CONF)) {
+		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
@@ -2926,6 +2942,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_conf_add(myrpt->monchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
@@ -2933,6 +2950,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_request_local(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
@@ -2940,6 +2958,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_TXPCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 	}
 	return 0;
@@ -3047,6 +3066,9 @@ static inline int rpt_any_hangups(struct rpt *myrpt)
 		return -1;
 	}
 	if (ast_check_hangup(myrpt->txpchannel)) {
+		return -1;
+	}
+	if (ast_check_hangup(myrpt->rxpchannel)) {
 		return -1;
 	}
 	if (myrpt->localtxchannel && ast_check_hangup(myrpt->localtxchannel)) {
@@ -3909,7 +3931,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		}
 		f1 = rpt_frame_queue_helper(&myrpt->frame_queue, f, ismuted);
 		if (f1) {
-			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->pchannel, f1);
+			ast_write(myrpt->localoverride ? myrpt->txpchannel : myrpt->rxpchannel, f1);
 			if (((myrpt->p.duplex < 2 && !myrpt->txkeyed) || myrpt->p.duplex == 3) && myrpt->keyed) {
 				if (myrpt->monstream) {
 					ast_writestream(myrpt->monstream, f1);
@@ -4703,6 +4725,15 @@ static inline int monchannel_read(struct rpt *myrpt)
 	}
 	return hangup_frame_helper(myrpt->monchannel, "monchannel", f);
 }
+static inline int rxpchannel_read(struct rpt *myrpt)
+{
+	struct ast_frame *f = ast_read(myrpt->rxpchannel);
+	if (!f) {
+		ast_debug(1, "@@@@ rpt:Hung Up\n");
+		return -1;
+	}
+	return hangup_frame_helper(myrpt->rxpchannel, "rxpchannel", f);
+}
 
 static inline int txpchannel_read(struct rpt *myrpt)
 {
@@ -5439,6 +5470,7 @@ static void *rpt(void *this)
 		cs[n++] = myrpt->rxchannel;
 		cs[n++] = myrpt->pchannel;
 		cs[n++] = myrpt->txpchannel;
+		cs[n++] = myrpt->rxpchannel;
 		if (myrpt->monchannel)
 			cs[n++] = myrpt->monchannel;
 		if (myrpt->txchannel != myrpt->rxchannel)
@@ -5539,6 +5571,10 @@ static void *rpt(void *this)
 				break;
 			}
 			continue;
+		} else if (who == myrpt->rxpchannel) {
+			if (rxpchannel_read(myrpt)) {
+				break;
+			}
 		} else if (who == myrpt->txchannel) { /* if it was a read from tx - Note if rxchannel = txchannel, we won't get here */
 			if (txchannel_read(myrpt)) {
 				break;
@@ -5577,6 +5613,7 @@ static void *rpt(void *this)
 	}
 	myrpt->parrotstate = PARROT_STATE_IDLE;
 	rpt_hangup(myrpt, RPT_TXPCHAN);
+	rpt_hangup(myrpt, RPT_RXPCHAN);
 	if (myrpt->localtxchannel != myrpt->txchannel) {
 		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 	}

@@ -58,6 +58,8 @@ static const char *rpt_chan_type_str(enum rpt_chan_type chantype)
 		return "monchan";
 	case RPT_TXPCHAN:
 		return "txpchan";
+	case RPT_RXPCHAN:
+		return "rxpchan";
 	}
 	ast_assert(0);
 	return NULL;
@@ -74,6 +76,7 @@ static const char *rpt_chan_name(struct rpt *myrpt, enum rpt_chan_type chantype)
 	case RPT_LOCALTXCHAN:
 	case RPT_MONCHAN:
 	case RPT_TXPCHAN:
+	case RPT_RXPCHAN:
 		return NULL;
 	}
 	ast_assert(0);
@@ -96,6 +99,8 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 			return &myrpt->monchannel;
 		case RPT_TXPCHAN:
 			return &myrpt->txpchannel;
+		case RPT_RXPCHAN:
+			return &myrpt->rxpchannel;
 		}
 	} else if (link) {
 		switch (chantype) {
@@ -155,6 +160,7 @@ static const char *rpt_chan_app(enum rpt_chan_type chantype, enum rpt_chan_flags
 	case RPT_LOCALTXCHAN:
 	case RPT_MONCHAN:
 	case RPT_TXPCHAN:
+	case RPT_RXPCHAN:
 		return NULL;
 	}
 	ast_assert(0);
@@ -172,6 +178,7 @@ static const char *rpt_chan_app_data(enum rpt_chan_type chantype)
 	case RPT_LOCALTXCHAN:
 	case RPT_MONCHAN:
 	case RPT_TXPCHAN:
+	case RPT_RXPCHAN:
 		return NULL;
 	}
 	ast_assert(0);

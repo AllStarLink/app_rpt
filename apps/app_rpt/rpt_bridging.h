@@ -2,10 +2,11 @@
 enum rpt_chan_type {
 	RPT_RXCHAN, /* Receive channel */
 	RPT_TXCHAN, /* Transmit channel */
-	RPT_PCHAN,
+	RPT_PCHAN,	/* CONF to TXCONF */
 	RPT_LOCALTXCHAN,
 	RPT_MONCHAN, /* Monitor channel */
 	RPT_TXPCHAN,
+	RPT_RXPCHAN, /* RXChannel to CONF */
 };
 
 enum rpt_bridge_chan_type {
