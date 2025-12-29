@@ -2450,8 +2450,8 @@ static void *attempt_reconnect(void *data)
 
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* We don't want the link to free after removing from the list */
-	rpt_link_remove(myrpt->links, l); /* remove from queue */		 /* Stop servicng l->pchan while we reconnect */
-	ast_autoservice_start(l->pchan); /* We need to dump audio on l->chan while redialing or we recieve long voice queue warnings */
+	rpt_link_remove(myrpt->links, l); /* remove from queue */
+	ast_autoservice_start(l->pchan);  /* We need to dump audio on l->chan while redialing or we recieve long voice queue warnings */
 	rpt_mutex_unlock(&myrpt->lock);
 	parse_node_format(tmp, &s1, sx, sizeof(sx));
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
@@ -4393,7 +4393,7 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				ast_mutex_unlock(&myrpt->lock);
 				return 0;
 			} else {
-					continue;
+				continue;
 			}
 		}
 
