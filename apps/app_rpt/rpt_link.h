@@ -47,14 +47,21 @@ void send_link_keyquery(struct rpt *myrpt);
  * \param myrpt
  * \param l Link to insert into the repeater's linked list of links
  */
-void rpt_link_add(struct rpt *myrpt, struct rpt_link *l);
+void rpt_link_add(struct ao2_container *links, struct rpt_link *l);
 
 /*!
- * \brief Remove an rpt_link from a rpt
- * \param myrpt
- * \param l Link to remove from the repeater's linked list of links
+ * \brief Remove an rpt_link from a links container
+ * \param links ao2_container to remove the link from
+ * \param l Link to remove from the container
  */
-void rpt_link_remove(struct rpt *myrpt, struct rpt_link *l);
+
+void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
+
+/*!
+ * \brief destroy ao2 object
+ * \param obj rpt_link object called by the ao2_alloc() destructor function
+ */
+void rpt_link_destroy(void *obj);
 
 /*!
  * \brief Create a list of links for this node.
@@ -83,8 +90,3 @@ void rpt_update_links(struct rpt *myrpt);
  * \retval 2 Already connected to this node
  */
 int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma);
-
-/*! \brief Free link and associated internal memory.
- * \param link Link structure to free
- */
-void rpt_link_free(struct rpt_link *link);

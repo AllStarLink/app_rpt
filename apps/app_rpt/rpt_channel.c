@@ -415,10 +415,21 @@ int send_usb_txt(struct rpt *myrpt, char *txt)
 	return 0;
 }
 
+static int rpt_qwrite_cb(void *obj, void *arg, int flags)
+{
+	struct rpt_link *link = obj;
+	struct ast_frame *wf = arg;
+
+	if ((link->chan) && link->name[0] && (link->name[0] != '0')) {
+		rpt_qwrite(link, wf);
+	}
+
+	return 0;
+}
+
 int send_link_pl(struct rpt *myrpt, const char *txt)
 {
 	struct ast_frame wf;
-	struct rpt_link *l;
 	char str[300];
 
 	if (!strcmp(myrpt->p.ctgroup, "0"))
@@ -429,13 +440,7 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	rpt_mutex_lock(&myrpt->lock);
-	l = myrpt->links.next;
-	while (l && (l != &myrpt->links)) {
-		if ((l->chan) && l->name[0] && (l->name[0] != '0')) {
-			rpt_qwrite(l, &wf);
-		}
-		l = l->next;
-	}
+	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_qwrite_cb, &wf);
 	rpt_mutex_unlock(&myrpt->lock);
 	return 0;
 }
