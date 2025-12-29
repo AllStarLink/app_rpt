@@ -7097,7 +7097,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	ao2_ref(cap, -1);
 
 	if (!myrpt->localrxchannel)
-		myrpt->localrxchannel = myrpt->pchannel;
+		myrpt->localrxchannel = myrpt->rxpchannel;
 	if (!myrpt->localtxchannel)
 		myrpt->localtxchannel = myrpt->pchannel;
 
