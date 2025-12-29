@@ -622,13 +622,12 @@ void *rpt_link_connect(void *data)
 		ast_debug(1, "NODE is a VOTER.\n");
 	}
 	rpt_mutex_lock(&myrpt->lock);
-	l = myrpt->links.next;
 	/* try to find this one in queue */
 	l = ao2_callback(connect_data->myrpt->links, 0, link_find_by_name_cb, node);
 	/* if found */
-	if (l != &myrpt->links) {
+	if (l) {
 		/* if already in this mode, just ignore */
-		if ((l->mode == mode) || (!l->chan)) {
+		if ((l->mode == connect_data->mode) || (!l->chan)) {
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 			rpt_telemetry(myrpt, REMALREADY, NULL);
