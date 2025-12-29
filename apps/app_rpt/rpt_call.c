@@ -30,6 +30,7 @@
 int rpt_disable_cdr(struct ast_channel *chan)
 {
 	struct ast_unreal_pvt *p;
+	int res = 0;
 	if (!CHAN_TECH(chan, "Local")) {
 		if (ast_channel_cdr(chan)) {
 			if (ast_cdr_set_property(ast_channel_name(chan), AST_CDR_FLAG_DISABLE_ALL)) {
@@ -44,13 +45,14 @@ int rpt_disable_cdr(struct ast_channel *chan)
 	/* It's a local channel */
 	p = ast_channel_tech_pvt(chan);
 	if (!p) {
-		ast_log(AST_LOG_WARNING, "Local channel %s missing private \n", ast_channel_name(chan));
+		ast_log(AST_LOG_WARNING, "Local channel %s missing private\n", ast_channel_name(chan));
 		return -1;
 	}
 	ao2_lock(p);
 	if (p->owner && ast_channel_cdr(p->owner)) {
 		if (ast_cdr_set_property(ast_channel_name(p->owner), AST_CDR_FLAG_DISABLE_ALL)) {
 			ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(p->owner));
+			res = -1;
 		}
 	} else if (p->owner) {
 		ast_debug(4, "No CDR present on %s\n", ast_channel_name(p->owner));
@@ -59,12 +61,13 @@ int rpt_disable_cdr(struct ast_channel *chan)
 	if (p->chan && ast_channel_cdr(p->chan)) {
 		if (ast_cdr_set_property(ast_channel_name(p->chan), AST_CDR_FLAG_DISABLE_ALL)) {
 			ast_log(AST_LOG_WARNING, "Failed to disable CDR for channel %s\n", ast_channel_name(p->chan));
+			res = -1;
 		}
 	} else if (p->chan) {
 		ast_debug(4, "No CDR present on %s\n", ast_channel_name(p->chan));
 	}
 	ao2_unlock(p);
-	return 0;
+	return res;
 }
 
 int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc, const char *callerid)

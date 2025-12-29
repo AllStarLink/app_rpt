@@ -384,7 +384,9 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 	ast_debug(3, "Adding channel %s to conference '%s' mixing bridge \n", ast_channel_name(chan), conference_name);
 	res = ast_unreal_channel_push_to_bridge(chan, conf, AST_BRIDGE_CHANNEL_FLAG_IMMOVABLE);
 	p = ast_channel_tech_pvt(chan);
-	ast_raw_answer(p->chan); /* We can not wait 500ms for media to start flowing */
+	if (p && p->chan) {
+		ast_raw_answer(p->chan); /* We can not wait 500ms for media to start flowing */
+	}
 	return res;
 }
 
