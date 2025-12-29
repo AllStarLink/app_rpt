@@ -354,7 +354,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				ast_free(connect_data);
 				rpt_mutex_lock(&myrpt->lock);
 				myrpt->connect_thread_count--;
-				assert(myrpt->connect_thread_count >= 0);
+				ast_assert(myrpt->connect_thread_count >= 0);
 				rpt_mutex_unlock(&myrpt->lock);
 			}
 		}
