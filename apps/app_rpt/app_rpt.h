@@ -560,7 +560,7 @@ struct rpt_link {
 	unsigned int wouldtx:1;
 	unsigned int connected:1;
 	unsigned int hasconnected:1;
-	unsigned int perma:1;
+	unsigned int perma:1; /* permanent link */
 	unsigned int thisconnected:1;
 	unsigned int outbound:1;
 	unsigned int disced:2;
@@ -945,9 +945,9 @@ struct rpt {
 	int mustid,tailid;
 	int rptinacttimer;
 	int tailevent;
-	int telemrefcount;
-	int dtmfidx,rem_dtmfidx;
-	int dailytxtime,dailykerchunks,totalkerchunks,dailykeyups,totalkeyups,timeouts;
+	int connect_thread_count;
+	int dtmfidx, rem_dtmfidx;
+	int dailytxtime, dailykerchunks, totalkerchunks, dailykeyups, totalkeyups, timeouts;
 	int totalexecdcommands, dailyexecdcommands;
 	int	retxtimer;
 	int	rerxtimer;

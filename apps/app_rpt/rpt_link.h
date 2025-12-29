@@ -81,12 +81,26 @@ void __kickshort(struct rpt *myrpt);
 /*! \brief Updates the active links (channels) list that that the repeater has */
 void rpt_update_links(struct rpt *myrpt);
 
-/*! 
- * \brief Connect a link 
- * \retval -2 Attempt to connect to self 
- * \retval -1 No such node
- * \retval 0 Success
- * \retval 1 No match yet
- * \retval 2 Already connected to this node
+/*! \brief Free link and associated internal memory.
+ * \param link Link structure to free
  */
-int connect_link(struct rpt *myrpt, char *node, enum link_mode mode, int perma);
+void rpt_link_free(struct rpt_link *link);
+
+/*! \brief Structure used to share data with connect_data thread */
+struct rpt_connect_data {
+	struct rpt *myrpt;
+	char *digitbuf; /* Node number in string format. Thread takes ownership and frees. */
+	enum link_mode mode;
+	unsigned int perma:1; /* permanent link */
+	enum rpt_command_source command_source;
+	struct rpt_link *mylink; /* Must remain valid for thread lifetime or be ref-counted. */
+};
+
+/*!
+ * Thread entry point for establishing a link connection.
+ * \brief Connect a link
+ * \param data Pointer to rpt_connect_data structure. Thread takes ownership and frees.
+ * \return NULL on success, or an error indicator (implementation-specific)
+ * \note Intended for use with pthread_create or similar threading APIs.
+ */
+void *rpt_link_connect(void *data);

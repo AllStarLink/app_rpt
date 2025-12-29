@@ -419,6 +419,12 @@ int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
 
 int nullfd = -1;
 
+/*! \brief Structure used to share data with attempt_reconnect thread */
+struct rpt_reconnect_data {
+	struct rpt *myrpt;
+	struct rpt_link *l;
+};
+
 int rpt_debug_level(void)
 {
 	return debug;
@@ -1138,7 +1144,7 @@ static void statpost(struct rpt *myrpt, char *pairs)
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
 	ast_debug(4, "Making statpost to %s\n", sp->stats_url);
-	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, (void *) sp);
+	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, sp);
 	if (res) {
 		ast_log(LOG_ERROR, "Error creating statpost thread: %s\n", strerror(res));
 		ast_free(sp->stats_url);
@@ -2396,30 +2402,40 @@ static char *parse_node_format(char *s, char **restrict s1, char *buf, size_t le
 	return s2;
 }
 
-static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
+static void *attempt_reconnect(void *data)
 {
 	char *s1, *tele;
 	char tmp[300], deststr[325] = "";
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
-	int res = 0;
+	struct rpt_reconnect_data *reconnect_data = data;
+	struct rpt_link *l = reconnect_data->l;
+	struct rpt *myrpt = reconnect_data->myrpt;
 
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
-		return -1;
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
+		goto cleanup;
 	}
 	/* cannot apply to echolink */
-	if (!strncasecmp(tmp, "echolink", 8))
-		return 0;
+	if (!strncasecmp(tmp, "echolink", 8)) {
+		goto cleanup;
+	}
 	/* cannot apply to tlb */
-	if (!strncasecmp(tmp, "tlb", 3))
-		return 0;
+	if (!strncasecmp(tmp, "tlb", 3)) {
+		goto cleanup;
+	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		return -1;
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
+		goto cleanup;
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
@@ -2452,13 +2468,21 @@ static int attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		rpt_make_call(l->chan, tele, 999, deststr, "(Remote Rx)", "attempt_reconnect", myrpt->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
-		res = -1;
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
-	return res;
+cleanup:
+	ast_free(reconnect_data);
+	rpt_mutex_lock(&myrpt->lock);
+	myrpt->connect_thread_count--;
+	ast_assert(myrpt->connect_thread_count >= 0);
+	rpt_mutex_unlock(&myrpt->lock);
+	return NULL;
 }
 
 /* 0 return=continue, 1 return = break, -1 return = error */
@@ -2591,7 +2615,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			myrpt->cidx = 0;
 			myrpt->exten[myrpt->cidx] = 0;
 			rpt_mutex_unlock(&myrpt->lock);
-			ast_pthread_create_detached(&myrpt->rpt_call_thread, NULL, rpt_call, (void *) myrpt);
+			ast_pthread_create_detached(&myrpt->rpt_call_thread, NULL, rpt_call, myrpt);
 			return;
 		}
 	}
@@ -3112,6 +3136,9 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	struct ast_frame *f;
 	int newkeytimer_last, max_retries;
 	struct rpt_link *l;
+	struct rpt_reconnect_data *reconnect_data;
+	pthread_t reconnect_threadid;
+
 	struct ao2_iterator l_it;
 
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
@@ -3305,8 +3332,24 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 		if (!l->chan && !l->retrytimer && l->outbound && !max_retries && l->hasconnected) {
 			rpt_mutex_unlock(&myrpt->lock);
 			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
-				if (attempt_reconnect(myrpt, l) == -1) {
+				reconnect_data = ast_calloc(1, sizeof(struct rpt_reconnect_data));
+				if (!reconnect_data) {
+					rpt_mutex_lock(&myrpt->lock);
 					l->retrytimer = RETRY_TIMER_MS;
+					continue;
+				}
+				reconnect_data->myrpt = myrpt;
+				reconnect_data->l = l;
+				rpt_mutex_lock(&myrpt->lock);
+				myrpt->connect_thread_count++;
+				rpt_mutex_unlock(&myrpt->lock);
+				l->retrytimer = RETRY_TIMER_MS;
+				if (ast_pthread_create_detached(&reconnect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
+					ast_free(reconnect_data);
+					rpt_mutex_lock(&myrpt->lock);
+					myrpt->connect_thread_count--;
+					ast_assert(myrpt->connect_thread_count >= 0);
+					rpt_mutex_unlock(&myrpt->lock);
 				}
 			} else {
 				l->retries = l->max_retries + 1;
@@ -4722,6 +4765,7 @@ static void *rpt(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->remrx = 0;
 	myrpt->remote_webtransceiver = 0;
+	myrpt->connect_thread_count = 0;
 
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
@@ -5527,9 +5571,14 @@ static void *rpt(void *this)
 
 	myrpt->ready = 0;
 	usleep(100000);
-	/* wait for telem to be done */
-	while (myrpt->tele.next != &myrpt->tele)
+	while (myrpt->tele.next != &myrpt->tele) {
+		/* wait for telem to be done */
 		usleep(50000);
+	}
+	while (myrpt->connect_thread_count) {
+		/* wait for any connect threads to finish */
+		usleep(50000);
+	}
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup(myrpt, RPT_MONCHAN);
 	if (myrpt->parrotchannel) {
@@ -5795,7 +5844,7 @@ static void *rpt_master(void *ignore)
 		}
 		rpt_vars[i].ready = 0;
 		rpt_vars[i].lastthreadupdatetime = current_time;
-		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
+		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 	}
 	time(&starttime);
 	ast_mutex_lock(&rpt_master_lock);
@@ -5854,7 +5903,7 @@ static void *rpt_master(void *ignore)
 
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
 				rpt_vars[i].lastthreadupdatetime = current_time;
-				ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, (void *) &rpt_vars[i]);
+				ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 				/* if (!rpt_vars[i].xlink) */
 				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
 			}
