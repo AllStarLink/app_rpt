@@ -268,7 +268,7 @@ N - numeric
 Asterisk CLI commands for this module:
 
 voter display                  -- Displays voter (instance) clients
-voter dmwdiag				   -- Replace all client transmit audio with 1kHz tone at full deviation
+voter tune					   -- Replace all client transmit audio with 1kHz tone at full deviation
 voter ping                     -- Client ping
 voter prio                     -- Specify/Query voter client priority value
 voter record                   -- Enable/Specify (or disable) voter recording file
@@ -332,7 +332,7 @@ Use "core show help voter <command>"" to display usage.
 
 #include "../apps/app_rpt/pocsag.c"
 
-/* This array is used by the voter dmwdiag CLI command to send a 1kHz tone at
+/* This array is used by the voter tune CLI command to send a 1kHz tone at
  * full system deviation to all clients (with transmit enabled) in an instance.
  */
 static unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
@@ -1691,8 +1691,8 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 /* VOTER Display */
 static int voter_do_display(int fd, int argc, const char *const *argv);
 
-/* VOTER Dmwdiag */
-static int voter_do_dmwdiag(int fd, int argc, const char *const *argv);
+/* VOTER Tune */
+static int voter_do_tune(int fd, int argc, const char *const *argv);
 
 /* VOTER Ping client */
 static int voter_do_ping(int fd, int argc, const char *const *argv);
@@ -1919,7 +1919,7 @@ static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli
 }
 
 /*!
- * \brief Handle the Asterisk CLI "voter dmwdiag" request to enable/disable client
+ * \brief Handle the Asterisk CLI "voter tune" request to enable/disable client
  * 1kHz test tone.
  *
  * This command will replace all audio samples to client transmitters with a
@@ -1931,7 +1931,7 @@ static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli
  * \param argv			Arguments
  * \return	CLI success, showusage, or failure.
  */
-static int voter_do_dmwdiag(int fd, int argc, const char *const *argv)
+static int voter_do_tune(int fd, int argc, const char *const *argv)
 {
 	int newlevel;
 	struct voter_pvt *p;
@@ -1952,9 +1952,9 @@ static int voter_do_dmwdiag(int fd, int argc, const char *const *argv)
 	}
 	if (argc == 3) {
 		if (p->dmwdiag) {
-			ast_cli(fd, "VOTER instance %d dmwdiag: currently set to enabled\n", p->nodenum);
+			ast_cli(fd, "VOTER instance %d tune: currently set to enabled\n", p->nodenum);
 		} else {
-			ast_cli(fd, "VOTER instance %d dmwdiag: currently disabled\n", p->nodenum);
+			ast_cli(fd, "VOTER instance %d tune: currently disabled\n", p->nodenum);
 		}
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
@@ -1968,43 +1968,43 @@ static int voter_do_dmwdiag(int fd, int argc, const char *const *argv)
 	} else if (ast_false(argv[3])) {
 		newlevel = 0;
 	} else {
-		ast_cli(fd, "Error: Invalid dmwdiag mode value specification!!\n");
+		ast_cli(fd, "Error: Invalid tune mode value specification!!\n");
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SHOWUSAGE;
 	}
 	if (p->dmwdiag < newlevel) {
-		ast_cli(fd, "VOTER instance %d dmwdiag: was disabled, now enabled\n", p->nodenum);
+		ast_cli(fd, "VOTER instance %d tune: was disabled, now enabled\n", p->nodenum);
 		p->dmwdiag = 1;
 	} else if (p->dmwdiag > newlevel) {
-		ast_cli(fd, "VOTER instance %d dmwdiag: was enabled, now disabled\n", p->nodenum);
+		ast_cli(fd, "VOTER instance %d tune: was enabled, now disabled\n", p->nodenum);
 		p->dmwdiag = 0;
 	} else {
-		ast_cli(fd, "VOTER instance %d dmwdiag: unchanged, currently %s\n", p->nodenum, (p->dmwdiag) ? "enabled" : "disabled");
+		ast_cli(fd, "VOTER instance %d tune: unchanged, currently %s\n", p->nodenum, (p->dmwdiag) ? "enabled" : "disabled");
 	}
 	ast_mutex_unlock(&voter_lock);
 	return RESULT_SUCCESS;
 }
 
 /*!
- * \brief Handle the Asterisk CLI request for "voter dmwdiag" usage help.
+ * \brief Handle the Asterisk CLI request for "voter tune" usage help.
  *
  * \param e				Asterisk CLI entry.
  * \param cmd			CLI command type.
  * \param a				Asterisk CLI arguments.
  * \return				CLI success or failure.
  */
-static char *handle_cli_dmwdiag(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+static char *handle_cli_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "voter dmwdiag";
-		e->usage = "Usage: voter dmwdiag instance_id [y/n]\n"
-				   "       Specifies/Queries dmwdiag mode for VOTER instance\n";
+		e->command = "voter tune";
+		e->usage = "Usage: voter tune instance_id [y/n]\n"
+				   "       Specifies/Queries tune mode (1kHz test tone) for VOTER instance\n";
 		return NULL;
 	case CLI_GENERATE:
 		return voter_complete_node_list(a->line, a->word, a->pos, 2);
 	}
-	return res2cli(voter_do_dmwdiag(a->fd, a->argc, a->argv));
+	return res2cli(voter_do_tune(a->fd, a->argc, a->argv));
 }
 
 /*!
@@ -2670,7 +2670,7 @@ static char *handle_cli_txlockout(struct ast_cli_entry *e, int cmd, struct ast_c
  */
 static struct ast_cli_entry voter_cli[] = {
 	AST_CLI_DEFINE(handle_cli_test, "Specify/Query VOTER instance test mode"),
-	AST_CLI_DEFINE(handle_cli_dmwdiag, "Specify/Query VOTER dmwdiag test mode"),
+	AST_CLI_DEFINE(handle_cli_tune, "Specify/Query VOTER tune (1kHz tone) test mode"),
 	AST_CLI_DEFINE(handle_cli_prio, "Specify/Query VOTER client priority value"),
 	AST_CLI_DEFINE(handle_cli_record, "Enable/Specify (or disable) VOTER recording file"),
 	AST_CLI_DEFINE(handle_cli_tone, "Sets/Queries TX CTCSS level for specified VOTER instance"),
@@ -3250,7 +3250,7 @@ static void *voter_xmit(void *data)
 			if (f1) {
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 			}
-			/* The voter dmwdiag CLI command will replace all the audio samples with those from
+			/* The voter tune CLI command will replace all the audio samples with those from
 			 * the digital milliwatt array, to generate a 1kHz tone on the transmitter.
 			 */
 			if (p->dmwdiag) {
