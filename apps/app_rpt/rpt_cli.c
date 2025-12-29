@@ -1080,6 +1080,7 @@ static int rpt_show_channels(int fd, int argc, const char *const *argv)
 	DUMP_CHANNEL(txchannel);
 	DUMP_CHANNEL(monchannel);
 	DUMP_CHANNEL(pchannel);
+	DUMP_CHANNEL(rxpchannel);
 	DUMP_CHANNEL(txpchannel);
 	DUMP_CHANNEL(localrxchannel);
 	DUMP_CHANNEL(localtxchannel);

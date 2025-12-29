@@ -277,21 +277,32 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 	struct rpt *myrpt = NULL;
 	struct rpt_link *link = NULL;
 	struct ast_channel *chan, **chanptr;
+	char type_str[] = "Announcer"; /* Longest string for channel type */
 
 	if (flags & RPT_LINK_CHAN) {
 		link = data;
 	} else {
 		myrpt = data;
 	}
-	if (chantype == RPT_MONCHAN) {
-		chan = ast_request("Recorder", cap, NULL, NULL, exten, NULL);
-	} else {
-		chan = ast_request("Local", cap, NULL, NULL, exten, NULL);
+	switch (chantype) {
+	case RPT_MONCHAN:
+	case RPT_PCHAN:
+		strncpy(type_str, "Recorder", sizeof(type_str));
+		break;
+	case RPT_RXPCHAN:
+	case RPT_TXPCHAN:
+		strncpy(type_str, "Announcer", sizeof(type_str));
+		break;
+	default:
+		strncpy(type_str, "Local", sizeof(type_str));
 	}
+
+	chan = ast_request(type_str, cap, NULL, NULL, exten, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request local channel\n");
 		return -1;
 	}
+
 	rpt_disable_cdr(chan);
 	chanptr = rpt_chan_channel(myrpt, link, chantype);
 	*chanptr = chan;
