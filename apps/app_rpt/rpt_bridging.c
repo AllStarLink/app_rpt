@@ -253,6 +253,10 @@ struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const c
 	struct ast_channel *chan;
 	char *type_str[3] = { "Local", "Announcer", "Recorder" };
 
+	if (type >= 3) {
+		ast_log(LOG_ERROR, "Invalid rpt_bridge_chan_type %d\n", type);
+		return NULL;
+	}
 	chan = ast_request(type_str[type], cap, NULL, NULL, exten, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request local channel\n");

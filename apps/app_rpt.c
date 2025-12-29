@@ -2904,6 +2904,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_conf_add(myrpt->localtxchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		return -1;
 	}
 
