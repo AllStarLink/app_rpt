@@ -89,15 +89,18 @@ void rpt_link_free(struct rpt_link *link);
 /*! \brief Structure used to share data with connect_data thread */
 struct rpt_connect_data {
 	struct rpt *myrpt;
-	char *digitbuf; /* Node number in string format */
+	char *digitbuf; /* Node number in string format. Thread takes ownership and frees. */
 	enum link_mode mode;
 	unsigned int perma:1; /* permanent link */
 	enum rpt_command_source command_source;
-	struct rpt_link *mylink;
+	struct rpt_link *mylink; /* Must remain valid for thread lifetime or be ref-counted. */
 };
 
 /*!
+ * Thread entry point for establishing a link connection.
  * \brief Connect a link
- * uses rpt_connect_data structure to pass parameters.
+ * \param data Pointer to rpt_connect_data structure. Thread takes ownership and frees.
+ * \return NULL on success, or an error indicator (implementation-specific)
+ * \note Intended for use with pthread_create or similar threading APIs.
  */
 void *rpt_link_connect(void *data);
