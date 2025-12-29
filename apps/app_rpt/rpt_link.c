@@ -571,7 +571,7 @@ void *rpt_link_connect(void *data)
 	struct rpt *myrpt = connect_data->myrpt;
 	char *node = connect_data->digitbuf;
 
-	if (strlen(node) < 1) {
+	if (ast_strlen_zero(node)) {
 		goto cleanup;
 	}
 
