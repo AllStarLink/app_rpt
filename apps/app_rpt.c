@@ -4158,15 +4158,16 @@ static inline int pchannel_read(struct rpt *myrpt)
 		return -1;
 	}
 	if (f->frametype == AST_FRAME_VOICE) {
-		if (!myrpt->localoverride) {
+		if (!myrpt->localoverride && ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4))) {
+			/* We are in full duplex mode, send pchannel audio to txpchannel
+			 * this audio includes the rxaudio frames to be retransmitted
+			 */
 			ast_write(myrpt->txpchannel, f);
 		}
 	}
 	if (f->frametype == AST_FRAME_CONTROL) {
 		if (f->subclass.integer == AST_CONTROL_HANGUP) {
 			ast_debug(1, "@@@@ rpt:Hung Up\n");
-			ast_frfree(f);
-			return 0;
 		}
 	}
 	ast_frfree(f);
@@ -4735,7 +4736,21 @@ static inline int rxpchannel_read(struct rpt *myrpt)
 		ast_debug(1, "@@@@ rpt:Hung Up\n");
 		return -1;
 	}
-	return hangup_frame_helper(myrpt->rxpchannel, "rxpchannel", f);
+	if (f->frametype == AST_FRAME_VOICE) {
+		if (!myrpt->localoverride && (myrpt->p.duplex != 2) && (myrpt->p.duplex != 4)) {
+			/* We are in 1/2 duplex mode or mode 3, send rxpchannel audio to txpchannel
+			 * this audio excludes the rxaudio frames
+			 */
+			ast_write(myrpt->txpchannel, f);
+		}
+	}
+	if (f->frametype == AST_FRAME_CONTROL) {
+		if (f->subclass.integer == AST_CONTROL_HANGUP) {
+			ast_debug(1, "@@@@ rpt:Hung Up\n");
+		}
+	}
+	ast_free(f);
+	return 0;
 }
 
 static inline int txpchannel_read(struct rpt *myrpt)
