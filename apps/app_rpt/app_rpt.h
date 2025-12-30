@@ -642,7 +642,7 @@ struct rpt_tele {
 		char _filler[8];
 	} submode;
 	unsigned int parrot;
-	char killed;
+	rpt_bool killed:1;
 	pthread_t threadid;
 };
 
@@ -761,7 +761,7 @@ struct rpt {
 	char *name;
 	char *rxchanname;
 	char *txchanname;
-	char remote;
+	rpt_bool remote:1;
 	char *remoterig;
 	unsigned int scram;
 #ifdef	_MDC_DECODE_H_
@@ -774,7 +774,6 @@ struct rpt {
 		const char *acctcode;
 		const char *ident;
 		const char *tonezone;
-		char simple;
 		const char *functions;
 		const char *link_functions;
 		const char *phone_functions;
@@ -816,6 +815,7 @@ struct rpt {
 		int iospeed;
 		char funcchar;
 		char endchar;
+		rpt_bool simple:1;
 		rpt_bool archiveaudio:1;
 		rpt_bool nobusyout:1;
 		rpt_bool notelemtx:1;
@@ -887,10 +887,10 @@ struct rpt {
 		int votertype;                                  /*!< \brief 0 none, 1 repeater, 2 voter rx      */
 		int votermode;                                  /*!< \brief 0 none, 1 one shot, 2 continuous    */
 		int votermargin;								/*!< \brief rssi margin to win a vote           */
-		char dias;
-		char dusbabek;
+		rpt_bool dias:1;
+		rpt_bool dusbabek:1;
+		rpt_bool dopfxtone:1;
 		const char *outstreamcmd;
-		char dopfxtone;
 		const char *events;
 		const char *locallinknodes[MAX_LOCALLINKNODES];
 		int locallinknodesn;
@@ -907,16 +907,16 @@ struct rpt {
 	int unkeytocttimer;
 	time_t lastkeyedtime;
 	time_t lasttxkeyedtime;
-	char keyed;
-	char txkeyed;
-	char rxchankeyed;					/*!< \brief Receiver RxChan Key State */
-	char exttx;
-	char localtx;
-	char remrx;	
-	char remoterx;
-	char remotetx;
-	char remoteon;
-	char remtxfreqok;
+	rpt_bool keyed:1;
+	rpt_bool txkeyed:1;
+	rpt_bool exttx:1;
+	rpt_bool rxchankeyed:1; /*!< \brief Receiver RxChan Key State */
+	rpt_bool localtx:1;
+	rpt_bool remrx:1;
+	rpt_bool remoterx:1;
+	rpt_bool remotetx:1;
+	rpt_bool remoteon:1;
+	rpt_bool remtxfreqok:1;
 	rpt_bool tounkeyed:1;
 	rpt_bool tonotify:1;
 	char dtmfbuf[MAXDTMF];
@@ -967,17 +967,17 @@ struct rpt {
 	int  splitkhz;
 	enum rpt_offset offset;
 	enum rpt_power powerlevel;
-	char txplon;
-	char rxplon;
 	enum rpt_mode remmode;
-	char tunerequest;
 	enum rpt_hf_mode hfscanmode;
 	int hfscanstatus;
-	char hfscanstop;
 	char lastlinknode[MAXNODESTR];
 	char savednodes[MAXNODESTR];
 	int stopgen;
 	int remstopgen;
+	rpt_bool txplon:1;
+	rpt_bool rxplon:1;
+	rpt_bool tunerequest:1;
+	rpt_bool hfscanstop:1;
 	rpt_bool patchfarenddisconnect:1;
 	rpt_bool patchnoct:1;
 	rpt_bool patchquiet:1;
@@ -1015,16 +1015,16 @@ struct rpt {
 	time_t topkeytime;
 	int topkeylong;
 	struct vox vox;
-	rpt_bool wasvox:1;
-	rpt_bool voxtostate:1;
 	int voxtotimer;
 	int linkposttimer;
 	enum keypost keypost;
 	int lastkeytimer;
 	enum newkey rpt_newkey;
-	char inpadtest;
 	int rxlingertimer;
-	char localoverride;
+	rpt_bool inpadtest:1;
+	rpt_bool localoverride:1;
+	rpt_bool wasvox:1;
+	rpt_bool voxtostate:1;
 	rpt_bool ready:1;
 	rpt_bool lastrxburst:1;
 	rpt_bool reallykeyed:1;
