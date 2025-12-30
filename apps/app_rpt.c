@@ -1570,14 +1570,7 @@ void *rpt_call(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = CALLMODE_DOWN;
 	myrpt->macropatch = 0;
-	// channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
-
-	/* first put the channel on the conference in announce mode */
-	/*	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
-			rpt_conf_add(myrpt->pchannel, myrpt, RPT_CONF);
-		}
-	*/
 	ast_free(patch_thread_data);
 	return NULL;
 
@@ -2453,7 +2446,6 @@ static void *attempt_reconnect(void *data)
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
 	ast_autoservice_start(l->pchan); /* We need to dump audio on l->chan while redialing or we receive long voice queue warnings */
 	rpt_mutex_unlock(&myrpt->lock);
-	ast_autoservice_start(l->pchan); /* We need to dump audio on l->chan while redialing or we receive long voice queue warnings */
 	parse_node_format(tmp, &s1, sx, sizeof(sx));
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
 	tele = strchr(deststr, '/');
@@ -2486,7 +2478,6 @@ static void *attempt_reconnect(void *data)
 	ast_autoservice_stop(l->pchan);
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
-	ast_autoservice_stop(l->pchan);
 	ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
@@ -2846,12 +2837,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		return -1;
 	}
 
-	/*! \todo Not sure what to do with types here -> need to verify what these options "mean" in ConfBridge format */
-	if (myrpt->p.duplex == 2 || myrpt->p.duplex == 4) {
-		res = rpt_conf_create(myrpt, RPT_CONF);
-	} else {
-		res = rpt_conf_create(myrpt, RPT_CONF);
-	}
+	res = rpt_conf_create(myrpt, RPT_CONF);
 	if (res) {
 		return -1;
 	}
@@ -4161,6 +4147,7 @@ static inline int pchannel_read(struct rpt *myrpt)
 		if (!myrpt->localoverride && ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4))) {
 			/* We are in full duplex mode, send pchannel audio to txpchannel
 			 * this audio includes the rxaudio frames to be retransmitted
+			 * In DAHDI this was conference join in ANNOUNCER and MONITOR
 			 */
 			ast_write(myrpt->txpchannel, f);
 		}
@@ -4740,6 +4727,7 @@ static inline int rxpchannel_read(struct rpt *myrpt)
 		if (!myrpt->localoverride && (myrpt->p.duplex != 2) && (myrpt->p.duplex != 4)) {
 			/* We are in 1/2 duplex mode or mode 3, send rxpchannel audio to txpchannel
 			 * this audio excludes the rxaudio frames
+			 * In DAHDI this was conference join in TALKER and LISTENER
 			 */
 			ast_write(myrpt->txpchannel, f);
 		}
