@@ -86,6 +86,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	int i, r;
+	struct rpt_connect_data *connect_data;
 
 	if (!param)
 		return DC_ERROR;
