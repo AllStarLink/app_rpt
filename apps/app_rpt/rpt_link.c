@@ -572,7 +572,7 @@ void *rpt_link_connect(void *data)
 	char *node = connect_data->digitbuf;
 
 	if (ast_strlen_zero(node)) {
-		goto cleanup;
+		goto cleanup_no_threadid;
 	}
 
 	if (tlb_query_node_exists(node)) {
@@ -583,13 +583,13 @@ void *rpt_link_connect(void *data)
 				if (strlen(node) >= myrpt->longestnode) {
 					rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 					rpt_telemetry(myrpt, CONNFAIL, NULL);
-					goto cleanup; /* No such node */
+					goto cleanup_no_threadid; /* No such node */
 				}
-				goto cleanup; /* No match yet */
+				goto cleanup_no_threadid; /* No match yet */
 			}
 		} else {
 			if (strlen(node) < 7) {
-				goto cleanup;
+				goto cleanup_no_threadid;
 			}
 			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);
 		}
@@ -598,7 +598,7 @@ void *rpt_link_connect(void *data)
 	if (!strcmp(myrpt->name, node)) { /* Do not allow connections to self */
 		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 		rpt_telemetry(myrpt, REMALREADY, NULL);
-		goto cleanup;
+		goto cleanup_no_threadid;
 	}
 
 	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node,
@@ -626,6 +626,10 @@ void *rpt_link_connect(void *data)
 	l = ao2_callback(connect_data->myrpt->links, 0, link_find_by_name_cb, node);
 	/* if found */
 	if (l) {
+		if (l->connect_threadid) {
+			/* We are already running a connect thread.*/
+			goto cleanup_no_threadid;
+		}
 		/* if already in this mode, just ignore */
 		if ((l->mode == connect_data->mode) || (!l->chan)) {
 			rpt_mutex_unlock(&myrpt->lock);
@@ -639,6 +643,7 @@ void *rpt_link_connect(void *data)
 			rpt_mutex_unlock(&myrpt->lock);
 			goto cleanup;
 		}
+		l->connect_threadid = connect_data->connect_threadid;
 		reconnects = l->reconnects;
 		rpt_mutex_unlock(&myrpt->lock);
 		if (l->chan) {
@@ -652,14 +657,14 @@ void *rpt_link_connect(void *data)
 		lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
 			rpt_mutex_unlock(&myrpt->lock);
-			goto cleanup;
+			goto cleanup_no_threadid;
 		}
 		n = __mklinklist(myrpt, NULL, &lstr, 0) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
 			ast_free(lstr);
-			goto cleanup;
+			goto cleanup_no_threadid;
 		}
 		ns = finddelim(ast_str_buffer(lstr), strs, n);
 		for (i = 0; i < ns; i++) {
@@ -671,7 +676,7 @@ void *rpt_link_connect(void *data)
 				ast_free(strs);
 				rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 				rpt_telemetry(myrpt, REMALREADY, NULL);
-				goto cleanup; /* Already linked */
+				goto cleanup_no_threadid; /* Already linked */
 			}
 		}
 		ast_free(strs);
@@ -681,13 +686,14 @@ void *rpt_link_connect(void *data)
 	/* establish call */
 	l = ao2_alloc(sizeof(struct rpt_link), rpt_link_destroy);
 	if (!l) {
-		goto cleanup;
+		goto cleanup_no_threadid;
 	}
 	l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!l->linklist) {
 		ao2_ref(l, -1);
-		goto cleanup;
+		goto cleanup_no_threadid;
 	}
+	l->connect_threadid = connect_data->connect_threadid;
 	l->mode = connect_data->mode;
 	l->outbound = 1;
 	l->thisconnected = 0;
@@ -793,11 +799,9 @@ void *rpt_link_connect(void *data)
 	__kickshort(connect_data->myrpt);
 	rpt_mutex_unlock(&connect_data->myrpt->lock);
 cleanup:
+	l->connect_threadid = 0;
+cleanup_no_threadid:
 	ast_free(connect_data->digitbuf);
 	ast_free(connect_data);
-	rpt_mutex_lock(&myrpt->lock);
-	myrpt->connect_thread_count--;
-	ast_assert(myrpt->connect_thread_count >= 0);
-	rpt_mutex_unlock(&myrpt->lock);
 	return NULL;
 }
