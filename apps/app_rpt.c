@@ -4739,7 +4739,7 @@ static inline int rxpchannel_read(struct rpt *myrpt)
 			ast_debug(1, "@@@@ rpt:Hung Up\n");
 		}
 	}
-	ast_free(f);
+	ast_frfree(f);
 	return 0;
 }
 
