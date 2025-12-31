@@ -627,6 +627,8 @@ void *rpt_link_connect(void *data)
 	/* if found */
 	if (l) {
 		if (l->connect_threadid) {
+			rpt_mutex_unlock(&myrpt->lock);
+			ao2_ref(l, -1);
 			/* We are already running a connect thread.*/
 			goto cleanup_no_threadid;
 		}
@@ -635,13 +637,13 @@ void *rpt_link_connect(void *data)
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 			rpt_telemetry(myrpt, REMALREADY, NULL);
-			goto cleanup; /* Already linked */
+			goto cleanup_no_threadid; /* Already linked */
 		}
 		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
 			l->mode = connect_data->mode;
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
-			goto cleanup;
+			goto cleanup_no_threadid;
 		}
 		l->connect_threadid = connect_data->connect_threadid;
 		reconnects = l->reconnects;

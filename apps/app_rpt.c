@@ -3338,7 +3338,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				reconnect_data->l = l;
 				if (!l->connect_threadid) {
 					/* We are not currently running a connect/reconnect thread */
-					if (ast_pthread_create_detached(&l->connect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
+					if (ast_pthread_create(&l->connect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
 						ast_free(reconnect_data);
 					}
 				}
@@ -5591,7 +5591,9 @@ static void *rpt(void *this)
 		ast_hangup(l->pchan);
 		if (l->connect_threadid) {
 			/* Wait for any connections to finish */
+			rpt_mutex_unlock(&myrpt->lock);
 			pthread_join(l->connect_threadid, NULL);
+			rpt_mutex_lock(&myrpt->lock);
 		}
 		ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	}
