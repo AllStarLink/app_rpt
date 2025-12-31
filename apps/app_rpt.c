@@ -3340,6 +3340,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 					/* We are not currently running a connect/reconnect thread */
 					if (ast_pthread_create(&l->connect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
 						ast_free(reconnect_data);
+						l->connect_threadid = 0;
 					}
 				}
 			} else {

@@ -338,7 +338,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			connect_data->perma = perma;
 			connect_data->command_source = command_source;
 			connect_data->mylink = mylink;
-			if (ast_pthread_create_detached(&connect_data->connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
+			if (ast_pthread_create(&connect_data->connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
 				ast_free(connect_data->digitbuf);
 				ast_free(connect_data);
 			}
