@@ -808,6 +808,7 @@ void *rpt_link_connect(void *data)
 	ao2_ref(l, -1); /* Release our reference; container now owns it*/
 	__kickshort(connect_data->myrpt);
 	rpt_mutex_unlock(&connect_data->myrpt->lock);
+	l->connect_threadid = 0;
 cleanup:
 	ast_free(connect_data->digitbuf);
 	ast_free(connect_data);
