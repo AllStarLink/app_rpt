@@ -1766,6 +1766,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), ALPHA, 0);
 			break;
 		case '?':				/* Query Page Status */
+			{
 			struct ast_frame wf = {
 				.frametype = AST_FRAME_TEXT,
 				.src = __PRETTY_FUNCTION__,
@@ -1782,6 +1783,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			wf.datalen = strlen(cmd);
 			ast_queue_frame(o->owner, &wf);
 			return 0;
+			}
 		default:
 			return 0;
 		}
