@@ -1360,7 +1360,6 @@ void *rpt_call(void *this)
 	p = ast_channel_tech_pvt(mychannel);
 	ast_debug(1, "Adding talker callback to channel %s, private data %p\n", ast_channel_name(mychannel), p);
 	if (p) {
-		ast_channel_lock(p->chan);
 		bridge_chan = ast_channel_get_bridge_channel(p->chan);
 		if (bridge_chan) {
 			bridge_chan->tech_args.talking_threshold = DEFAULT_TALKING_THRESHOLD;
@@ -1371,7 +1370,6 @@ void *rpt_call(void *this)
 		} else {
 			ast_log(LOG_WARNING, "Failed to get Bridge channel");
 		}
-		ast_channel_unlock(p->chan);
 	} else {
 		ast_log(LOG_WARNING, "Failed to get channel tech private");
 	}
@@ -3715,7 +3713,7 @@ static inline void check_parrot(struct rpt *myrpt)
 
 		if (myrpt->parrotstream) {
 			ast_closestream(myrpt->parrotstream);
-			myrpt->parrotstream = NULL;
+			myrpt->parrotstream = 0;
 		}
 
 		snprintf(myfname, sizeof(myfname), PARROTFILE ".wav", myrpt->name, myrpt->parrotcnt);
@@ -4739,7 +4737,7 @@ static inline int rxpchannel_read(struct rpt *myrpt)
 			ast_debug(1, "@@@@ rpt:Hung Up\n");
 		}
 	}
-	ast_frfree(f);
+	ast_free(f);
 	return 0;
 }
 
