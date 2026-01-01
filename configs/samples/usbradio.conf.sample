@@ -188,7 +188,6 @@ legacyaudioscaling = no     ; If yes, continue to do raw audio sample scaling an
 ;txmixaset=500
 ;txmixbset=500
 ;rxvoiceadj=0.5
-;rxctcssadj=0.5
 ;txctcssadj=200
 ;rxsquelchadj=500
 

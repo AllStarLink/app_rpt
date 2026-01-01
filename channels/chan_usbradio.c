@@ -462,7 +462,6 @@ static int usbradio_indicate(struct ast_channel *chan, int cond_in, const void *
 static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newchan);
 static int usbradio_setoption(struct ast_channel *chan, int option, void *data, int datalen);
 static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s);
-static void store_rxctcssadj(struct chan_usbradio_pvt *o, const char *s);
 static int set_txctcss_level(struct chan_usbradio_pvt *o);
 static void pmrdump(struct chan_usbradio_pvt *o, int fd);
 static void mult_set(struct chan_usbradio_pvt *o);
@@ -787,7 +786,6 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 		CV_UINT("txmixaset", o->txmixaset);
 		CV_UINT("txmixbset", o->txmixbset);
 		CV_F("rxvoiceadj", store_rxvoiceadj(o, v->value));
-		CV_F("rxctcssadj", store_rxctcssadj(o, v->value));
 		CV_UINT("txctcssadj", o->txctcssadj);
 		CV_UINT("rxsquelchadj", o->rxsquelchadj);
 		CV_UINT("txslimsp", o->txslimsp);
