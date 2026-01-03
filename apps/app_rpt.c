@@ -1506,6 +1506,7 @@ void *rpt_call(void *this)
 	res = ast_pthread_create(&threadid, NULL, rpt_pbx_autopatch_run, patch_thread_data);
 	if (res < 0) {
 		ast_log(LOG_ERROR, "Unable to start PBX!\n");
+		ast_free(patch_thread_data);
 		goto cleanup;
 	}
 
