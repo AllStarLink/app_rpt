@@ -873,6 +873,7 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(time_out_reset_unkey_interval, "time_out_reset_unkey_interval", TIMEOUTRESETUNKEYINTERVAL, 0, 3000)
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(time_out_reset_kerchunk_interval, "time_out_reset_kerchunk_interval",
 		TIMEOUTRESETKERCHUNKINTERVAL, 0, 3000);
+	RPT_CONFIG_VAR_INT_DEFAULT(voxtimeout_ms, "voxtimeout", VOX_TIMEOUT_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(voxrecover_ms, "voxrecover", VOX_RECOVER_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexpatchdelay, "simplexpatchdelay", SIMPLEX_PATCH_DELAY);
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexphonedelay, "simplexphonedelay", SIMPLEX_PHONE_DELAY);
