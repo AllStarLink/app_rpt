@@ -2878,10 +2878,12 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		struct ast_unreal_pvt *p = ast_channel_tech_pvt(myrpt->txchannel);
 		if (!p || !p->chan) {
 			ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(myrpt->txchannel));
-		} else {
-			ast_raw_answer(p->chan);
-			ast_autoservice_start(p->chan);
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			return -1;
 		}
+		ast_raw_answer(p->chan);
+		ast_autoservice_start(p->chan);
 	}
 
 	if (!myrpt->localtxchannel) {
