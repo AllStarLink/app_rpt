@@ -1774,9 +1774,12 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 	
 				i = 0;
 				ast_mutex_lock(&o->txqlock);
-				AST_LIST_TRAVERSE(&o->txq, f1, frame_list) if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
-					i++;
+				AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+				    if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
+				        i++;
+				    }
 				}
+
 				ast_mutex_unlock(&o->txqlock);
 				cmd = (i) ? "PAGES" : "NOPAGES";
 				wf.data.ptr = cmd;
