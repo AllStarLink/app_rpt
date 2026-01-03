@@ -597,6 +597,7 @@ struct rpt_link {
 	int		votewinner;		/*!< \brief set if node won the rssi competition */
 	time_t	lastkeytime;
 	time_t	lastunkeytime;
+	pthread_t connect_threadid;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
@@ -945,7 +946,6 @@ struct rpt {
 	int mustid,tailid;
 	int rptinacttimer;
 	int tailevent;
-	int connect_thread_count;
 	int dtmfidx, rem_dtmfidx;
 	int dailytxtime, dailykerchunks, totalkerchunks, dailykeyups, totalkeyups, timeouts;
 	int totalexecdcommands, dailyexecdcommands;
