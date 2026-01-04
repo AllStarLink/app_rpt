@@ -803,10 +803,10 @@ void *rpt_link_connect(void *data)
 	}
 	l->rxlingertimer = RX_LINGER_TIME;
 	rpt_link_add(connect_data->myrpt->links, l);
-	ao2_ref(l, -1); /* Release our reference; container now owns it*/
 	__kickshort(connect_data->myrpt);
 	rpt_mutex_unlock(&connect_data->myrpt->lock);
 	l->connect_in_progress = 0;
+	ao2_ref(l, -1); /* Release our reference; container now owns it*/
 
 cleanup:
 	ast_free(connect_data->digitbuf);
