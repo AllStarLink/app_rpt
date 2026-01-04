@@ -724,7 +724,7 @@ void *rpt_link_connect(void *data)
 	tele = strchr(deststr, '/');
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
-
+		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -733,6 +733,7 @@ void *rpt_link_connect(void *data)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
+		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -757,6 +758,7 @@ void *rpt_link_connect(void *data)
 	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
 		donodelog_fmt(connect_data->myrpt, "LINKFAIL,%s/%s", deststr, tele);
+		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		ao2_ref(cap, -1);
 		goto cleanup;
@@ -767,6 +769,7 @@ void *rpt_link_connect(void *data)
 	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
+		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -777,6 +780,7 @@ void *rpt_link_connect(void *data)
 	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
+		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -802,11 +806,10 @@ void *rpt_link_connect(void *data)
 	ao2_ref(l, -1); /* Release our reference; container now owns it*/
 	__kickshort(connect_data->myrpt);
 	rpt_mutex_unlock(&connect_data->myrpt->lock);
+	l->connect_in_progress = 0;
+
 cleanup:
 	ast_free(connect_data->digitbuf);
 	ast_free(connect_data);
-	if (l) {
-		l->connect_in_progress = 0;
-	}
 	return NULL;
 }
