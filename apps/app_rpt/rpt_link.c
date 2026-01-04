@@ -561,7 +561,7 @@ void *rpt_link_connect(void *data)
 	char tmp[300], deststr[325] = "", modechange = 0;
 	char sx[320], *sy;
 	char **strs; /* List of pointers to links in link list string */
-	struct rpt_link *l;
+	struct rpt_link *l = NULL;
 	struct ast_str *lstr;
 	int reconnects = 0;
 	int i, ns, n = 1;
@@ -626,7 +626,7 @@ void *rpt_link_connect(void *data)
 	l = ao2_callback(connect_data->myrpt->links, 0, link_find_by_name_cb, node);
 	/* if found */
 	if (l) {
-		if (l->connect_threadid) {
+		if (l->connect_in_progress) {
 			rpt_mutex_unlock(&myrpt->lock);
 			ao2_ref(l, -1);
 			/* We are already running a connect thread.*/
@@ -647,7 +647,6 @@ void *rpt_link_connect(void *data)
 			ao2_ref(l, -1);
 			goto cleanup;
 		}
-		l->connect_threadid = connect_data->connect_threadid;
 		reconnects = l->reconnects;
 		rpt_mutex_unlock(&myrpt->lock);
 		if (l->chan) {
@@ -697,7 +696,7 @@ void *rpt_link_connect(void *data)
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
-	l->connect_threadid = connect_data->connect_threadid;
+	l->connect_in_progress = 1;
 	l->mode = connect_data->mode;
 	l->outbound = 1;
 	l->thisconnected = 0;
@@ -726,7 +725,6 @@ void *rpt_link_connect(void *data)
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
 
-		l->connect_threadid = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -735,7 +733,6 @@ void *rpt_link_connect(void *data)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		l->connect_threadid = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -760,7 +757,6 @@ void *rpt_link_connect(void *data)
 	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
 		donodelog_fmt(connect_data->myrpt, "LINKFAIL,%s/%s", deststr, tele);
-		l->connect_threadid = 0;
 		ao2_ref(l, -1);
 		ao2_ref(cap, -1);
 		goto cleanup;
@@ -771,7 +767,6 @@ void *rpt_link_connect(void *data)
 	if (__rpt_request_pseudo(l, cap, RPT_PCHAN, RPT_LINK_CHAN)) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
-		l->connect_threadid = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -782,7 +777,6 @@ void *rpt_link_connect(void *data)
 	if (rpt_conf_add_speaker(l->pchan, myrpt)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		l->connect_threadid = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -808,9 +802,11 @@ void *rpt_link_connect(void *data)
 	ao2_ref(l, -1); /* Release our reference; container now owns it*/
 	__kickshort(connect_data->myrpt);
 	rpt_mutex_unlock(&connect_data->myrpt->lock);
-	l->connect_threadid = 0;
 cleanup:
 	ast_free(connect_data->digitbuf);
 	ast_free(connect_data);
+	if (l) {
+		l->connect_in_progress = 0;
+	}
 	return NULL;
 }

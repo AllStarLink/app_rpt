@@ -87,6 +87,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	struct ao2_iterator l_it;
 	int i, r;
 	struct rpt_connect_data *connect_data;
+	pthread_t connect_threadid;
 
 	if (!param)
 		return DC_ERROR;
@@ -170,7 +171,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		connect_data->perma = perma;
 		connect_data->command_source = command_source;
 		connect_data->mylink = mylink;
-		if (ast_pthread_create(&connect_data->connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
+		if (ast_pthread_create_detached(&connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, CONNFAIL, NULL);
 			ast_free(connect_data->digitbuf);
@@ -338,9 +339,10 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			connect_data->perma = perma;
 			connect_data->command_source = command_source;
 			connect_data->mylink = mylink;
-			if (ast_pthread_create(&connect_data->connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
+			if (ast_pthread_create_detached(&connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
 				ast_free(connect_data->digitbuf);
 				ast_free(connect_data);
+				mylink->connect_in_progress = 0;
 			}
 		}
 		rpt_telem_select(myrpt, command_source, mylink);

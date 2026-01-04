@@ -94,7 +94,6 @@ struct rpt_connect_data {
 	unsigned int perma:1; /* permanent link */
 	enum rpt_command_source command_source;
 	struct rpt_link *mylink; /* Must remain valid for thread lifetime or be ref-counted. */
-	pthread_t connect_threadid;
 };
 
 /*!
