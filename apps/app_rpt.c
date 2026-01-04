@@ -1564,8 +1564,9 @@ void *rpt_call(void *this)
 
 	if (!patch_thread_data->pbx_exited) {
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
-		pthread_join(threadid, NULL);
+		pthread_join(threadid, NULL); /* Wait for thread */
 	} else {
+		pthread_join(threadid, NULL); /* Cleanup thread */
 		ast_hangup(mychannel);
 	}
 	ast_hangup(genchannel);
