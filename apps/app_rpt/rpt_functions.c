@@ -342,7 +342,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			if (ast_pthread_create_detached(&connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
 				ast_free(connect_data->digitbuf);
 				ast_free(connect_data);
-				mylink->connect_in_progress = 0;
 			}
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
