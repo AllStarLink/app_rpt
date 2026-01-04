@@ -2605,7 +2605,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			}
 		}
 	} else { /* if simple */
-		if ((!myrpt->callmode) && (c == myrpt->p.funcchar)) {
+		if ((myrpt->callmode == CALLMODE_DOWN) && (c == myrpt->p.funcchar)) {
 			myrpt->callmode = CALLMODE_DIALING;
 			myrpt->patchnoct = 0;
 			myrpt->patchquiet = 0;
