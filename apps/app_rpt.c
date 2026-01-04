@@ -1564,10 +1564,10 @@ void *rpt_call(void *this)
 
 	if (!patch_thread_data->pbx_exited) {
 		ast_softhangup(mychannel, AST_SOFTHANGUP_DEV);
-		pthread_join(threadid, NULL);
 	} else {
 		ast_hangup(mychannel);
 	}
+	pthread_join(threadid, NULL);
 	ast_hangup(genchannel);
 
 	rpt_mutex_lock(&myrpt->lock);
