@@ -966,6 +966,7 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 	myrpt->callmode = CALLMODE_DIALING;
 	myrpt->cidx = 0;
 	myrpt->exten[myrpt->cidx] = 0;
+	myrpt->calldigittimer = 0;
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_pthread_create_detached(&myrpt->rpt_call_thread, NULL, rpt_call, (void *) myrpt);
 	return DC_COMPLETE;
