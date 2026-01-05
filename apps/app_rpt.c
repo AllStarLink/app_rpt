@@ -2479,10 +2479,7 @@ static void *attempt_reconnect(void *data)
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 cleanup:
 	ast_free(reconnect_data);
-	rpt_mutex_lock(&myrpt->lock);
-	myrpt->connect_thread_count--;
-	ast_assert(myrpt->connect_thread_count >= 0);
-	rpt_mutex_unlock(&myrpt->lock);
+	l->connect_in_progress = 0;
 	return NULL;
 }
 
@@ -3138,9 +3135,8 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 	int newkeytimer_last, max_retries;
 	struct rpt_link *l;
 	struct rpt_reconnect_data *reconnect_data;
-	pthread_t reconnect_threadid;
-
 	struct ao2_iterator l_it;
+	pthread_t connect_threadid;
 
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		int myrx;
@@ -3341,16 +3337,13 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				}
 				reconnect_data->myrpt = myrpt;
 				reconnect_data->l = l;
-				rpt_mutex_lock(&myrpt->lock);
-				myrpt->connect_thread_count++;
-				rpt_mutex_unlock(&myrpt->lock);
-				l->retrytimer = RETRY_TIMER_MS;
-				if (ast_pthread_create_detached(&reconnect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
-					ast_free(reconnect_data);
-					rpt_mutex_lock(&myrpt->lock);
-					myrpt->connect_thread_count--;
-					ast_assert(myrpt->connect_thread_count >= 0);
-					rpt_mutex_unlock(&myrpt->lock);
+				if (!l->connect_in_progress) {
+					/* We are not currently running a connect/reconnect thread */
+					l->connect_in_progress = 1;
+					if (ast_pthread_create_detached(&connect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
+						ast_free(reconnect_data);
+						l->connect_in_progress = 0;
+					}
 				}
 			} else {
 				l->retries = l->max_retries + 1;
@@ -4766,7 +4759,6 @@ static void *rpt(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->remrx = 0;
 	myrpt->remote_webtransceiver = 0;
-	myrpt->connect_thread_count = 0;
 
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
@@ -5576,10 +5568,6 @@ static void *rpt(void *this)
 		/* wait for telem to be done */
 		usleep(50000);
 	}
-	while (myrpt->connect_thread_count) {
-		/* wait for any connect threads to finish */
-		usleep(50000);
-	}
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup(myrpt, RPT_MONCHAN);
 	if (myrpt->parrotchannel) {
@@ -5604,6 +5592,12 @@ static void *rpt(void *this)
 		if (l->chan)
 			ast_hangup(l->chan);
 		ast_hangup(l->pchan);
+		while (l->connect_in_progress) {
+			/* Wait for any connections to finish */
+			rpt_mutex_unlock(&myrpt->lock);
+			usleep(50000);
+			rpt_mutex_lock(&myrpt->lock);
+		}
 		ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	}
 	ao2_iterator_destroy(&l_it);

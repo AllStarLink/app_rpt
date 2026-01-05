@@ -567,6 +567,7 @@ struct rpt_link {
 	unsigned int killme:1;
 	unsigned int dtmfed:1;
 	unsigned int gott:1;
+	unsigned int connect_in_progress:1;
 	long elaptime;
 	int disctime;
 	int	retrytimer;
@@ -596,7 +597,7 @@ struct rpt_link {
 	int		voterlink;      /*!< \brief set if node is defined as a voter rx */
 	int		votewinner;		/*!< \brief set if node won the rssi competition */
 	time_t	lastkeytime;
-	time_t	lastunkeytime;
+	time_t lastunkeytime;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
@@ -945,7 +946,6 @@ struct rpt {
 	int mustid,tailid;
 	int rptinacttimer;
 	int tailevent;
-	int connect_thread_count;
 	int dtmfidx, rem_dtmfidx;
 	int dailytxtime, dailykerchunks, totalkerchunks, dailykeyups, totalkeyups, timeouts;
 	int totalexecdcommands, dailyexecdcommands;

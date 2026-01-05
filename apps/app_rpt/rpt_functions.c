@@ -87,7 +87,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	struct ao2_iterator l_it;
 	int i, r;
 	struct rpt_connect_data *connect_data;
-	pthread_t rpt_connect_threadid;
+	pthread_t connect_threadid;
 
 	if (!param)
 		return DC_ERROR;
@@ -171,16 +171,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		connect_data->perma = perma;
 		connect_data->command_source = command_source;
 		connect_data->mylink = mylink;
-		rpt_mutex_lock(&myrpt->lock);
-		myrpt->connect_thread_count++;
-		rpt_mutex_unlock(&myrpt->lock);
-		if (ast_pthread_create_detached(&rpt_connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
+		if (ast_pthread_create_detached(&connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, CONNFAIL, NULL);
-			rpt_mutex_lock(&myrpt->lock);
-			myrpt->connect_thread_count--;
-			ast_assert(myrpt->connect_thread_count >= 0);
-			rpt_mutex_unlock(&myrpt->lock);
 			ast_free(connect_data->digitbuf);
 			ast_free(connect_data);
 			return DC_COMPLETE;
@@ -346,16 +339,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			connect_data->perma = perma;
 			connect_data->command_source = command_source;
 			connect_data->mylink = mylink;
-			rpt_mutex_lock(&myrpt->lock);
-			myrpt->connect_thread_count++;
-			rpt_mutex_unlock(&myrpt->lock);
-			if (ast_pthread_create_detached(&rpt_connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
+			if (ast_pthread_create_detached(&connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
 				ast_free(connect_data->digitbuf);
 				ast_free(connect_data);
-				rpt_mutex_lock(&myrpt->lock);
-				myrpt->connect_thread_count--;
-				ast_assert(myrpt->connect_thread_count >= 0);
-				rpt_mutex_unlock(&myrpt->lock);
 			}
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
