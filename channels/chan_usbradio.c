@@ -4520,6 +4520,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		CONFIG_UPDATE_INT(txmixaset);
 		CONFIG_UPDATE_INT(txmixbset);
 		CONFIG_UPDATE_FLOAT(rxvoiceadj);
+		CONFIG_UPDATE_FLOAT(rxdummy);
 		CONFIG_UPDATE_INT(txctcssadj);
 		CONFIG_UPDATE_INT(rxsquelchadj);
 		CONFIG_UPDATE_INT(fever);
