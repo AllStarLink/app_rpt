@@ -327,8 +327,6 @@ struct chan_usbradio_pvt {
 	int rxmixerset;
 	int txboost;
 	float rxvoiceadj;
-	float old_rxctcssadj; /* This variable is a placeholder for EEPROM r/w compatibility */
-						  /* This may change when the need for rxvoiceadj is addressed */
 	int txmixaset;
 	int txmixbset;
 	int txctcssadj;
@@ -761,7 +759,6 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	o->txmixaset = 500;
 	o->txmixbset = 500;
 	o->rxvoiceadj = 0.5;
-	o->old_rxctcssadj = 0.5;
 	o->txctcssadj = 200;
 	o->rxsquelchadj = 500;
 	o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
@@ -1214,7 +1211,6 @@ static void *hidthread(void *arg)
 							o->txmixaset = o->eeprom[EEPROM_USER_TXMIXASET];
 							o->txmixbset = o->eeprom[EEPROM_USER_TXMIXBSET];
 							memcpy(&o->rxvoiceadj, &o->eeprom[EEPROM_USER_RXVOICEADJ], sizeof(float));
-							memcpy(&o->old_rxctcssadj, &o->eeprom[EEPROM_USER_RXCTCSSADJ], sizeof(float));
 							o->txctcssadj = o->eeprom[EEPROM_USER_TXCTCSSADJ];
 							o->rxsquelchadj = o->eeprom[EEPROM_USER_RXSQUELCHADJ];
 							ast_log(LOG_NOTICE, "Channel %s: EEPROM Loaded\n", o->name);
@@ -4469,7 +4465,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	struct ast_config *cfg;
 	struct ast_category *category = NULL;
 	struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS | CONFIG_FLAG_NOCACHE };
-	const float old_rxctcssadj = 0.5;
+	const float old_rxctcssadj = 0.5; /* for backward EEPROM format compatibility */
 
 	if (!(cfg = ast_config_load2(CONFIG, "chan_usbradio", config_flags))) {
 		ast_log(LOG_ERROR, "Config file not found: %s\n", CONFIG);
