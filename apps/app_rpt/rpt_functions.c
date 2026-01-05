@@ -601,11 +601,15 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 
 	case 4:					/* set tx PL tone */
 		/* can't set tx tone on RBI (rx tone does both) */
-		if (!strcmp(myrpt->remoterig, REMOTE_RIG_RBI))
+		if (!strcmp(myrpt->remoterig, REMOTE_RIG_RBI)) {
+			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
+		}
 		/* can't set tx tone on ft100 (rx tone does both) */
-		if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100))
+		if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) {
+			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
+		}
 		/*  eventually for the ic706 instead of just throwing the exception
 		   we can check if we are in encode only mode and allow the tx
 		   ctcss code to be changed. but at least the warning message is
@@ -613,9 +617,10 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		 */
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) {
 			ast_log(LOG_WARNING, "Setting IC706 Tx CTCSS Code Not Supported. Set Rx Code for both.\n");
+			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
 		}
-		for (i = 0, j = 0, k = 0, l = 0; digitbuf[i]; i++) {	/* look for N+*N */
+		for (i = 0, j = 0, k = 0, l = 0; digitbuf[i]; i++) { /* look for N+*N */
 			if (digitbuf[i] == '*') {
 				j++;
 				continue;
@@ -641,11 +646,16 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		s = strchr(tmp, '*');
 		if (s)
 			*s = '.';
+
+		rpt_mutex_lock(&myrpt->lock);
 		ast_copy_string(savestr, myrpt->txpl, sizeof(savestr) - 1);
 		ast_copy_string(myrpt->txpl, tmp, sizeof(myrpt->txpl) - 1);
+		rpt_mutex_unlock(&myrpt->lock);
 
 		if (setrem(myrpt) == -1) {
+			rpt_mutex_lock(&myrpt->lock);
 			ast_copy_string(myrpt->txpl, savestr, sizeof(myrpt->txpl) - 1);
+			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
 		}
 		return DC_COMPLETE;
@@ -694,8 +704,10 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		/* can't log in when logged in */
 		if (myrpt->loginlevel[0])
 			return DC_ERROR;
+		rpt_mutex_lock(&myrpt->lock);
 		*myrpt->loginuser = 0;
 		myrpt->loginlevel[0] = 0;
+		rpt_mutex_unlock(&myrpt->lock);
 		cp = ast_strdup(param);
 		cp1 = strchr(cp, ',');
 		if (cp1) {
@@ -903,25 +915,39 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 			if (myrpt->callmode == CALLMODE_DOWN) {
 				switch (index) {
 				case 1:		/* context */
+					rpt_mutex_lock(&myrpt->lock);
 					ast_copy_string(myrpt->patchcontext, value, sizeof(myrpt->patchcontext));
+					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				case 2:		/* dialtime */
+					rpt_mutex_lock(&myrpt->lock);
 					myrpt->patchdialtime = atoi(value);
+					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				case 3:		/* farenddisconnect */
-					myrpt->patchfarenddisconnect = atoi(value);
+					rpt_mutex_lock(&myrpt->lock);
+					myrpt->patchfarenddisconnect = (atoi(value) ? 1 : 0);
+					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				case 4:		/* noct */
-					myrpt->patchnoct = atoi(value);
+					rpt_mutex_lock(&myrpt->lock);
+					myrpt->patchnoct = (atoi(value) ? 1 : 0);
+					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				case 5:		/* quiet */
-					myrpt->patchquiet = atoi(value);
+					rpt_mutex_lock(&myrpt->lock);
+					myrpt->patchquiet = (atoi(value) ? 1 : 0);
+					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				case 6:		/* voxalways */
-					myrpt->patchvoxalways = atoi(value);
+					rpt_mutex_lock(&myrpt->lock);
+					myrpt->patchvoxalways = (atoi(value) ? 1 : 0);
+					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				case 7:		/* exten */
+					rpt_mutex_lock(&myrpt->lock);
 					ast_copy_string(myrpt->patchexten, value, sizeof(myrpt->patchexten));
+					rpt_mutex_unlock(&myrpt->lock);
 					break;
 				default:
 					break;
@@ -1003,6 +1029,7 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 			myrpt->mustid = myrpt->tailid = 0;
 			myrpt->idtimer = myrpt->p.idtime;
 		}
+		rpt_mutex_lock(&myrpt->lock);
 		telem = myrpt->tele.next;
 		while (telem != &myrpt->tele) {
 			if (((telem->mode == ID) || (telem->mode == ID1)) && (!telem->killed)) {
@@ -1012,6 +1039,7 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 			}
 			telem = telem->next;
 		}
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telemetry(myrpt, ID1, NULL);
 		return DC_COMPLETE;
 	case 2:					/* System Time */
@@ -1031,7 +1059,8 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 		rpt_telemetry(myrpt, LASTUSER, NULL);
 		return DC_COMPLETE;
 	case 11:					/* System ID (local only) */
-		if (myrpt->p.idtime) {	/* ID time must be non-zero */
+		rpt_mutex_lock(&myrpt->lock);
+		if (myrpt->p.idtime) { /* ID time must be non-zero */
 			myrpt->mustid = myrpt->tailid = 0;
 			myrpt->idtimer = myrpt->p.idtime;
 		}
@@ -1044,6 +1073,7 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 			}
 			telem = telem->next;
 		}
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telemetry(myrpt, ID, NULL);
 		return DC_COMPLETE;
 	case 12:					/* System Time (local only) */
@@ -1291,7 +1321,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 	case 21: /* Parrot Mode Enable */
 		birdbath(myrpt);
 		if (myrpt->p.parrotmode != PARROT_MODE_ON_ALWAYS) {
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->parrotonce = 0;
+			rpt_mutex_unlock(&myrpt->lock);
 			myrpt->p.parrotmode = PARROT_MODE_ON_COMMAND;
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, COMPLETE, NULL);
@@ -1319,13 +1351,17 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_COMPLETE;
 	case 25:					/* request keying info (brief) */
 		send_link_keyquery(myrpt);
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->topkeylong = 0;
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
 	case 26:					/* request keying info (full) */
 		send_link_keyquery(myrpt);
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->topkeylong = 1;
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
@@ -1389,14 +1425,18 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		i = strlen(digitbuf);
 		if (!i) {
 			ast_debug(5, "Padtest entered");
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->inpadtest = 1;
+			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		} else {
 			ast_debug(5, "Padtest len= %d digits=%s", i, digitbuf);
 			if (digitbuf[i - 1] != myrpt->p.endchar)
 				break;
 			rpt_telemetry(myrpt, ARB_ALPHA, digitbuf);
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->inpadtest = 0;
+			rpt_mutex_unlock(&myrpt->lock);
 			ast_debug(5, "Padtest exited");
 			return DC_COMPLETE;
 		}
@@ -1409,14 +1449,18 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		break;
 	case 34:					/* Local Telem mode Disable */
 		if (myrpt->p.telemdynamic) {
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->telemmode = 0;
+			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telemetry(myrpt, COMPLETE, NULL);
 			return DC_COMPLETE;
 		}
 		break;
 	case 35:					/* Local Telem mode Normal */
 		if (myrpt->p.telemdynamic) {
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->telemmode = 1;
+			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, COMPLETE, NULL);
 			return DC_COMPLETE;
@@ -1534,18 +1578,22 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 
 	case 46:					/* Link activity timer disable */
 		if (myrpt->p.lnkacttime && myrpt->p.lnkactmacro) {
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->linkactivitytimer = 0;
 			myrpt->linkactivityflag = 0;
 			myrpt->p.lnkactenable = 0;
+			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, ARB_ALPHA, (void *) "LATDIS");
 		}
 		return DC_COMPLETE;
 
 	case 47:					/* Link activity flag kill */
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->linkactivitytimer = 0;
 		myrpt->linkactivityflag = 0;
-		return DC_COMPLETE;		/* Silent for a reason (only used in macros) */
+		rpt_mutex_unlock(&myrpt->lock);
+		return DC_COMPLETE; /* Silent for a reason (only used in macros) */
 
 	case 48:					/* play page sequence */
 		j = 0;
@@ -1590,7 +1638,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_COMPLETE;
 
 	case 51:					/* Enable Sleep Mode */
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->sleeptimer = myrpt->p.sleeptime;
+		rpt_mutex_unlock(&myrpt->lock);
 		myrpt->p.s[myrpt->p.sysstate_cur].sleepena = 1;
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "SLPEN");
@@ -1598,15 +1648,19 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 
 	case 52:					/* Disable Sleep Mode */
 		myrpt->p.s[myrpt->p.sysstate_cur].sleepena = 0;
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->sleep = myrpt->sleepreq = 0;
 		myrpt->sleeptimer = myrpt->p.sleeptime;
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "SLPDS");
 		return DC_COMPLETE;
 
 	case 53:					/* Wake up from Sleep Mode */
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->sleep = myrpt->sleepreq = 0;
 		myrpt->sleeptimer = myrpt->p.sleeptime;
+		rpt_mutex_unlock(&myrpt->lock);
 		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, ARB_ALPHA, (void *) "AWAKE");
@@ -1616,13 +1670,18 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, ARB_ALPHA, (void *) "SLEEP");
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->sleepreq = 1;
 			myrpt->sleeptimer = 0;
+			rpt_mutex_unlock(&myrpt->lock);
 		}
 		return DC_COMPLETE;
 	case 55:					/* Parrot Once if parrot mode is disabled */
-		if (myrpt->p.parrotmode == PARROT_MODE_OFF)
+		if (myrpt->p.parrotmode == PARROT_MODE_OFF) {
+			rpt_mutex_lock(&myrpt->lock);
 			myrpt->parrotonce = 1;
+			rpt_mutex_unlock(&myrpt->lock);
+		}
 		return DC_COMPLETE;
 	case 56:					/* RX CTCSS Enable */
 		rpt_radio_rx_set_ctcss_decode(myrpt, 0);
@@ -1641,12 +1700,16 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "RXPLDIS");
 		return DC_COMPLETE;
 	case 58:					/* TX CTCSS on input only Enable */
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->p.itxctcss = 1;
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TXIPLENA");
 		return DC_COMPLETE;
 	case 59:					/* TX CTCSS on input only Disable */
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->p.itxctcss = 0;
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TXIPLDIS");
 		return DC_COMPLETE;
@@ -1726,6 +1789,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		} else {
 			sprintf(string, "PAGE %s %s %s", argv[1], argv[2], argv[3]);
 		}
+		rpt_mutex_lock(&myrpt->lock);
 		telem = myrpt->tele.next;
 		k = 0;
 		while (telem != &myrpt->tele) {
@@ -1737,6 +1801,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			}
 			telem = telem->next;
 		}
+		rpt_mutex_unlock(&myrpt->lock);
 		gettimeofday(&myrpt->paging, NULL);
 		ast_sendtext(myrpt->rxchannel, string);
 		return DC_COMPLETE;
