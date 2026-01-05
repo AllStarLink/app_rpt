@@ -327,7 +327,8 @@ struct chan_usbradio_pvt {
 	int rxmixerset;
 	int txboost;
 	float rxvoiceadj;
-	float rxdummy;
+	float rxdummy;	// This variable is a placeholder for EEPROM r/w compatibility; it was rxctcssadj
+					// This may change when the need for rxvoiceadj is addressed
 	int txmixaset;
 	int txmixbset;
 	int txctcssadj;
