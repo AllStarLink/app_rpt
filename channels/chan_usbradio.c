@@ -226,8 +226,8 @@ struct chan_usbradio_pvt {
 	char lastrx;
 	char rxhidsq;
 	char rxhidctcss;
-	char rxcarrierdetect; // status from pmr channel
-	char rxctcssdecode;	  // status from pmr channel
+	char rxcarrierdetect; /* status from pmr channel */
+	char rxctcssdecode;	  /* status from pmr channel */
 	char rxppsq;
 	char rxppctcss;
 
@@ -289,40 +289,40 @@ struct chan_usbradio_pvt {
 	char rxctcssrelax;
 	float rxctcssgain;
 
-	char txctcssdefault[16]; // for repeater operation
-	char rxctcssfreqs[512];	 // a string
+	char txctcssdefault[16]; /* for repeater operation */
+	char rxctcssfreqs[512];	 /* a string */
 	char txctcssfreqs[512];
 
-	char txctcssfreq[32]; // encode now
-	char rxctcssfreq[32]; // decode now
+	char txctcssfreq[32]; /* encode now */
+	char rxctcssfreq[32]; /* decode now */
 
-	char numrxctcssfreqs; // how many
+	char numrxctcssfreqs; /* how many */
 	char numtxctcssfreqs;
 
-	char *rxctcss[CTCSS_NUM_CODES]; // pointers to strings
+	char *rxctcss[CTCSS_NUM_CODES]; /* pointers to strings */
 	char *txctcss[CTCSS_NUM_CODES];
 
-	int txfreq; // in Hz
+	int txfreq; /* in Hz */
 	int rxfreq;
 
-	//      start remote operation info
-	char set_txctcssdefault[16]; // for remote operation
-	char set_txctcssfreq[16];	 // encode now
-	char set_rxctcssfreq[16];	 // decode now
+	/*      start remote operation info */
+	char set_txctcssdefault[16]; /* for remote operation */
+	char set_txctcssfreq[16];	 /* encode now */
+	char set_rxctcssfreq[16];	 /* decode now */
 
-	char set_numrxctcssfreqs; // how many
+	char set_numrxctcssfreqs; /* how many */
 	char set_numtxctcssfreqs;
 
-	char set_rxctcssfreqs[16]; // a string
+	char set_rxctcssfreqs[16]; /* a string */
 	char set_txctcssfreqs[16];
 
-	char *set_rxctcss; // pointers to strings
+	char *set_rxctcss; /* pointers to strings */
 	char *set_txctcss;
 
-	int set_txfreq; // in Hz
+	int set_txfreq; /* in Hz */
 	int set_rxfreq;
 
-	//      end remote operation info
+	/*      end remote operation info */
 
 	int rxmixerset;
 	int txboost;
@@ -4465,6 +4465,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	struct ast_config *cfg;
 	struct ast_category *category = NULL;
 	struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS | CONFIG_FLAG_NOCACHE };
+	const float old_rxctcssadj = 0.5; /* for backward EEPROM format compatibility */
 
 	if (!(cfg = ast_config_load2(CONFIG, "chan_usbradio", config_flags))) {
 		ast_log(LOG_ERROR, "Config file not found: %s\n", CONFIG);
@@ -4555,6 +4556,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		o->eeprom[EEPROM_USER_TXMIXASET] = o->txmixaset;
 		o->eeprom[EEPROM_USER_TXMIXBSET] = o->txmixbset;
 		memcpy(&o->eeprom[EEPROM_USER_RXVOICEADJ], &o->rxvoiceadj, sizeof(float));
+		memcpy(&o->eeprom[EEPROM_USER_RXCTCSSADJ], &old_rxctcssadj, sizeof(float));
 		o->eeprom[EEPROM_USER_TXCTCSSADJ] = o->txctcssadj;
 		o->eeprom[EEPROM_USER_RXSQUELCHADJ] = o->rxsquelchadj;
 		o->eepromctl = 2; /* request a write */
