@@ -327,6 +327,7 @@ struct chan_usbradio_pvt {
 	int rxmixerset;
 	int txboost;
 	float rxvoiceadj;
+	float rxdummy;
 	int txmixaset;
 	int txmixbset;
 	int txctcssadj;
@@ -1211,6 +1212,7 @@ static void *hidthread(void *arg)
 							o->txmixaset = o->eeprom[EEPROM_USER_TXMIXASET];
 							o->txmixbset = o->eeprom[EEPROM_USER_TXMIXBSET];
 							memcpy(&o->rxvoiceadj, &o->eeprom[EEPROM_USER_RXVOICEADJ], sizeof(float));
+							memcpy(&o->rxdummy, &o->eeprom[EEPROM_USER_RXCTCSSADJ], sizeof(float));
 							o->txctcssadj = o->eeprom[EEPROM_USER_TXCTCSSADJ];
 							o->rxsquelchadj = o->eeprom[EEPROM_USER_RXSQUELCHADJ];
 							ast_log(LOG_NOTICE, "Channel %s: EEPROM Loaded\n", o->name);
@@ -4555,6 +4557,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		o->eeprom[EEPROM_USER_TXMIXASET] = o->txmixaset;
 		o->eeprom[EEPROM_USER_TXMIXBSET] = o->txmixbset;
 		memcpy(&o->eeprom[EEPROM_USER_RXVOICEADJ], &o->rxvoiceadj, sizeof(float));
+		memcpy(&o->eeprom[EEPROM_USER_RXCTCSSADJ], &o->rxdummy, sizeof(float));
 		o->eeprom[EEPROM_USER_TXCTCSSADJ] = o->txctcssadj;
 		o->eeprom[EEPROM_USER_RXSQUELCHADJ] = o->rxsquelchadj;
 		o->eepromctl = 2; /* request a write */
