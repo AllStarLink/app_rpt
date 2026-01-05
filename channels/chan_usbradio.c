@@ -4469,6 +4469,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	struct ast_config *cfg;
 	struct ast_category *category = NULL;
 	struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS | CONFIG_FLAG_NOCACHE };
+	const float old_rxctcssadj = 0.5;
 
 	if (!(cfg = ast_config_load2(CONFIG, "chan_usbradio", config_flags))) {
 		ast_log(LOG_ERROR, "Config file not found: %s\n", CONFIG);
@@ -4559,7 +4560,6 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		o->eeprom[EEPROM_USER_TXMIXASET] = o->txmixaset;
 		o->eeprom[EEPROM_USER_TXMIXBSET] = o->txmixbset;
 		memcpy(&o->eeprom[EEPROM_USER_RXVOICEADJ], &o->rxvoiceadj, sizeof(float));
-		const float old_rxctcssadj = 0.5;
 		memcpy(&o->eeprom[EEPROM_USER_RXCTCSSADJ], &old_rxctcssadj, sizeof(float));
 		o->eeprom[EEPROM_USER_TXCTCSSADJ] = o->txctcssadj;
 		o->eeprom[EEPROM_USER_RXSQUELCHADJ] = o->rxsquelchadj;
