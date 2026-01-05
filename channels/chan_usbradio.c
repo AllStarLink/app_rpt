@@ -226,8 +226,8 @@ struct chan_usbradio_pvt {
 	char lastrx;
 	char rxhidsq;
 	char rxhidctcss;
-	char rxcarrierdetect; // status from pmr channel
-	char rxctcssdecode;	  // status from pmr channel
+	char rxcarrierdetect; /* status from pmr channel */
+	char rxctcssdecode;	  /* status from pmr channel */
 	char rxppsq;
 	char rxppctcss;
 
@@ -289,46 +289,46 @@ struct chan_usbradio_pvt {
 	char rxctcssrelax;
 	float rxctcssgain;
 
-	char txctcssdefault[16]; // for repeater operation
-	char rxctcssfreqs[512];	 // a string
+	char txctcssdefault[16]; /* for repeater operation */
+	char rxctcssfreqs[512];	 /* a string */
 	char txctcssfreqs[512];
 
-	char txctcssfreq[32]; // encode now
-	char rxctcssfreq[32]; // decode now
+	char txctcssfreq[32]; /* encode now */
+	char rxctcssfreq[32]; /* decode now */
 
-	char numrxctcssfreqs; // how many
+	char numrxctcssfreqs; /* how many */
 	char numtxctcssfreqs;
 
-	char *rxctcss[CTCSS_NUM_CODES]; // pointers to strings
+	char *rxctcss[CTCSS_NUM_CODES]; /* pointers to strings */
 	char *txctcss[CTCSS_NUM_CODES];
 
-	int txfreq; // in Hz
+	int txfreq; /* in Hz */
 	int rxfreq;
 
-	//      start remote operation info
-	char set_txctcssdefault[16]; // for remote operation
-	char set_txctcssfreq[16];	 // encode now
-	char set_rxctcssfreq[16];	 // decode now
+	/*      start remote operation info */
+	char set_txctcssdefault[16]; /* for remote operation */
+	char set_txctcssfreq[16];	 /* encode now */
+	char set_rxctcssfreq[16];	 /* decode now */
 
-	char set_numrxctcssfreqs; // how many
+	char set_numrxctcssfreqs; /* how many */
 	char set_numtxctcssfreqs;
 
-	char set_rxctcssfreqs[16]; // a string
+	char set_rxctcssfreqs[16]; /* a string */
 	char set_txctcssfreqs[16];
 
-	char *set_rxctcss; // pointers to strings
+	char *set_rxctcss; /* pointers to strings */
 	char *set_txctcss;
 
-	int set_txfreq; // in Hz
+	int set_txfreq; /* in Hz */
 	int set_rxfreq;
 
-	//      end remote operation info
+	/*      end remote operation info */
 
 	int rxmixerset;
 	int txboost;
 	float rxvoiceadj;
-	float rxdummy; // This variable is a placeholder for EEPROM r/w compatibility; it was rxctcssadj
-				   // This may change when the need for rxvoiceadj is addressed
+	float old_rxctcssadj; /* This variable is a placeholder for EEPROM r/w compatibility */
+						  /* This may change when the need for rxvoiceadj is addressed */
 	int txmixaset;
 	int txmixbset;
 	int txctcssadj;
@@ -761,7 +761,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	o->txmixaset = 500;
 	o->txmixbset = 500;
 	o->rxvoiceadj = 0.5;
-	o->rxdummy = 0.5;
+	o->old_rxctcssadj = 0.5;
 	o->txctcssadj = 200;
 	o->rxsquelchadj = 500;
 	o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
@@ -1214,7 +1214,7 @@ static void *hidthread(void *arg)
 							o->txmixaset = o->eeprom[EEPROM_USER_TXMIXASET];
 							o->txmixbset = o->eeprom[EEPROM_USER_TXMIXBSET];
 							memcpy(&o->rxvoiceadj, &o->eeprom[EEPROM_USER_RXVOICEADJ], sizeof(float));
-							memcpy(&o->rxdummy, &o->eeprom[EEPROM_USER_RXCTCSSADJ], sizeof(float));
+							memcpy(&o->old_rxctcssadj, &o->eeprom[EEPROM_USER_RXCTCSSADJ], sizeof(float));
 							o->txctcssadj = o->eeprom[EEPROM_USER_TXCTCSSADJ];
 							o->rxsquelchadj = o->eeprom[EEPROM_USER_RXSQUELCHADJ];
 							ast_log(LOG_NOTICE, "Channel %s: EEPROM Loaded\n", o->name);
@@ -4559,7 +4559,8 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		o->eeprom[EEPROM_USER_TXMIXASET] = o->txmixaset;
 		o->eeprom[EEPROM_USER_TXMIXBSET] = o->txmixbset;
 		memcpy(&o->eeprom[EEPROM_USER_RXVOICEADJ], &o->rxvoiceadj, sizeof(float));
-		memcpy(&o->eeprom[EEPROM_USER_RXCTCSSADJ], &o->rxdummy, sizeof(float));
+		const float old_rxctcssadj = 0.5;
+		memcpy(&o->eeprom[EEPROM_USER_RXCTCSSADJ], &old_rxctcssadj, sizeof(float));
 		o->eeprom[EEPROM_USER_TXCTCSSADJ] = o->txctcssadj;
 		o->eeprom[EEPROM_USER_RXSQUELCHADJ] = o->rxsquelchadj;
 		o->eepromctl = 2; /* request a write */
