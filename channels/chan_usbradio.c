@@ -760,6 +760,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	o->txmixaset = 500;
 	o->txmixbset = 500;
 	o->rxvoiceadj = 0.5;
+	o->rxdummy = 0.5;
 	o->txctcssadj = 200;
 	o->rxsquelchadj = 500;
 	o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
