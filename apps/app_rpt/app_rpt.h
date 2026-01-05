@@ -1016,13 +1016,12 @@ struct rpt {
 	int topkeylong;
 	struct vox vox;
 	int voxtotimer;
-	char voxtostate;
-	unsigned int patch_talking:1;
 	int linkposttimer;
 	enum keypost keypost;
 	int lastkeytimer;
 	enum newkey rpt_newkey;
 	int rxlingertimer;
+	rpt_bool patch_talking:1;
 	rpt_bool inpadtest:1;
 	rpt_bool localoverride:1;
 	rpt_bool wasvox:1;
