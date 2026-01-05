@@ -546,9 +546,6 @@ int priority_telemetry_pending(struct rpt *myrpt)
  */
 #define telem_done(myrpt, telem) \
 	ast_debug(5, "Ending telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, telem); \
-	if (myrpt->active_telem && myrpt->active_telem != telem) { \
-		ast_log(LOG_WARNING, "Attempting to clear active_telem %p when telem is %p", myrpt->active_telem, telem); \
-	} \
 	if (myrpt->active_telem == telem) { \
 		myrpt->active_telem = NULL; \
 	}
