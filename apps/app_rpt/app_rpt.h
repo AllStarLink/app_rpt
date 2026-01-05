@@ -571,11 +571,8 @@ struct rpt_link {
 	rpt_bool killme:1;
 	rpt_bool dtmfed:1;
 	rpt_bool gott:1;
-	unsigned int disced:2;
-	rpt_bool killme:1;
-	rpt_bool dtmfed:1;
-	rpt_bool gott:1;
 	rpt_bool connect_in_progress:1;
+	unsigned int disced:2;
 	long elaptime;
 	int disctime;
 	int	retrytimer;
