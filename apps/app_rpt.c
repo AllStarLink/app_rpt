@@ -7737,6 +7737,12 @@ static int reload(void)
 	ast_mutex_unlock(&rpt_master_lock);
 	return (0);
 }
-
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application", .support_level = AST_MODULE_SUPPORT_EXTENDED,
-	.load = load_module, .unload = unload_module, .reload = reload, .requires = "res_curl", );
+/* clang-format off */
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application", 
+	.support_level = AST_MODULE_SUPPORT_EXTENDED,
+	.load = load_module, 
+	.unload = unload_module, 
+	.reload = reload, 
+	.requires = "res_curl, bridge_softmix, chan_bridge_media", 
+);
+/* clang-format on */
