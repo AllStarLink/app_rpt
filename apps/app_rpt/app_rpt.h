@@ -997,6 +997,8 @@ struct rpt {
 	time_t disgorgetime;
 	time_t lastthreadrestarttime;
 	time_t lastthreadupdatetime; /* Thread activity timestamp.  Used to detect a "stuck" thread */
+	struct timeval lastthreadms;
+	int maxthreadtime;
 	int macrotimer;
 	char lastnodewhichkeyedusup[MAXNODESTR];
 	int dtmf_local_timer;
