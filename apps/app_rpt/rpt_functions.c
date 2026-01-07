@@ -129,9 +129,10 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		wf.datalen = strlen(DISCSTR) + 1;
 		wf.data.ptr = DISCSTR;
 		if (l->chan) {
-			if (l->thisconnected)
+			if (l->thisconnected) {
 				ast_write(l->chan, &wf);
-			rpt_safe_sleep(myrpt, l->chan, 250);
+				ast_safe_sleep(l->chan, 20);
+			}
 			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 		}
 		myrpt->linkactivityflag = 1;
@@ -266,9 +267,10 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
 			if (l->chan) {
-				if (l->thisconnected)
+				if (l->thisconnected) {
 					ast_write(l->chan, &wf);
-				rpt_safe_sleep(myrpt, l->chan, 250);	/* It's dead already, why check the return value? */
+					ast_safe_sleep(l->chan, 20);
+				}
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 			rpt_mutex_lock(&myrpt->lock);
