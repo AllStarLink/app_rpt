@@ -100,7 +100,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	ast_debug(7, "@@@@ ilink param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 	switch (myatoi(param)) {
 	case 11:					/* Perm Link off */
-	case 1:					/* Link off */
+	case 1: {					/* Link off */
 		struct ast_frame wf;
 		if (strlen(digitbuf) < 1)
 			break;
@@ -129,9 +129,10 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		wf.datalen = strlen(DISCSTR) + 1;
 		wf.data.ptr = DISCSTR;
 		if (l->chan) {
-			if (l->thisconnected)
+			if (l->thisconnected) {
 				ast_write(l->chan, &wf);
-			rpt_safe_sleep(myrpt, l->chan, 250);
+				ast_safe_sleep(l->chan, 20);
+			}
 			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 		}
 		myrpt->linkactivityflag = 1;
@@ -139,6 +140,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		ao2_ref(l, -1);
 		return DC_COMPLETE;
+	}
 	case 2:					/* Link Monitor */
 	case 3:					/* Link transceive */
 	case 12:					/* Link Monitor permanent */
@@ -266,9 +268,10 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
 			if (l->chan) {
-				if (l->thisconnected)
+				if (l->thisconnected) {
 					ast_write(l->chan, &wf);
-				rpt_safe_sleep(myrpt, l->chan, 250);	/* It's dead already, why check the return value? */
+					ast_safe_sleep(l->chan, 20);
+				}
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 			rpt_mutex_lock(&myrpt->lock);
