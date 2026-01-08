@@ -6919,6 +6919,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* insert at end of queue */
 		rpt_mutex_lock(&myrpt->lock);
 		rpt_link_add(myrpt->links, l); /* After putting the link in the link list, other threads can start using it */
+		ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
 		__kickshort(myrpt);
 		myrpt->lastlinktime = rpt_tvnow();
 		rpt_mutex_unlock(&myrpt->lock);
