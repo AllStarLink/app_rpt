@@ -4361,7 +4361,7 @@ int process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_channel *who;
 	struct rpt_link *m;
-	int n = 0, ms = MSWAIT, myfirst = 0;
+	int n = 0, ms, myfirst = 0;
 	struct ast_channel *cs[2];
 	struct ast_frame wf = {
 		.frametype = AST_FRAME_CNG,
@@ -4376,6 +4376,7 @@ int process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	cs[n++] = l->chan;
 	cs[n++] = l->pchan;
 	while (ms >= 0 && !l->disced) {
+		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
 		if (!ms) {
 			/* No channels had activity before the timer expired,
