@@ -1837,7 +1837,6 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	if (!strcmp(str, DISCSTR)) {
 		mylink->disced = 1;
 		mylink->retries = mylink->max_retries + 1;
-		ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
 		return;
 	}
 	if (!strcmp(str, NEWKEYSTR)) {
@@ -4376,7 +4375,7 @@ int process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	n = 0;
 	cs[n++] = l->chan;
 	cs[n++] = l->pchan;
-	while (ms >= 0) {
+	while (ms >= 0 && !l->disced) {
 		who = ast_waitfor_n(cs, n, &ms);
 		if (!ms) {
 			/* No channels had activity before the timer expired,
@@ -4671,6 +4670,8 @@ int process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		}
 		continue;
 	}
+	remote_hangup_helper(myrpt, l);
+	ast_hangup(l->pchan);
 	return 0;
 }
 
