@@ -572,6 +572,7 @@ struct rpt_link {
 	rpt_bool dtmfed:1;
 	rpt_bool gott:1;
 	rpt_bool connect_in_progress:1;
+	rpt_bool reconnect_in_progress:1;
 	unsigned int disced:2;
 	long elaptime;
 	int disctime;
@@ -1123,6 +1124,8 @@ void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
 
+/*! \retval -1 to exit and terminate the node, 0 to continue */
+int process_link_channel(struct rpt *myrpt, struct rpt_link *l);
 /*!
  * \brief Generates a command line completion list for rpt cmd third argument
  */
