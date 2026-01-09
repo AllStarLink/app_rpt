@@ -805,10 +805,10 @@ void *rpt_link_connect(void *data)
 	__kickshort(connect_data->myrpt);
 	rpt_mutex_unlock(&connect_data->myrpt->lock);
 
-	ao2_ref(l, -1); /* Release our reference; container now owns it*/
 	/*! \retval -1 to exit and terminate the node, 0 to continue */
 	process_link_channel(myrpt, l);
 	l->connect_in_progress = 0;
+	ao2_ref(l, -1); /* Release our reference; container now owns it*/
 cleanup:
 	ast_free(connect_data->digitbuf);
 	ast_free(connect_data);
