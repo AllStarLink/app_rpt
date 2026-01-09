@@ -3160,7 +3160,6 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	struct ast_frame *f;
 	int newkeytimer_last, max_retries;
 	struct rpt_reconnect_data *reconnect_data;
-	struct ao2_iterator l_it;
 	pthread_t connect_threadid;
 
 	int myrx;
@@ -3285,7 +3284,6 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		struct ast_str *lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
 			ao2_ref(l, -1);
-			ao2_iterator_destroy(&l_it);
 			return;
 		}
 		init_text_frame(&lf, __PRETTY_FUNCTION__);
@@ -4262,10 +4260,13 @@ static inline void hangup_link_chan(struct rpt_link *l)
  */
 static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
+	int time = 20; /* Run periodic_process_link one last time */
 	rpt_mutex_lock(&myrpt->lock);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
-	ast_safe_sleep(l->chan, MSWAIT);
+	ast_safe_sleep(l->chan, MSWAIT);	   /* allow channel to receive any text messages */
+	periodic_process_link(myrpt, l, time); /* Send all queued text messages */
+	ast_safe_sleep(l->chan, MSWAIT);	   /* allow channel to clear the text messages */
 	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
 		if ((!l->disced) && (!l->outbound)) {
@@ -4344,7 +4345,7 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 }
 
 /*! \retval -1 to exit and terminate the node, 0 to continue */
-int process_link_channel(struct rpt *myrpt, struct rpt_link *l)
+void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_channel *who;
 	struct rpt_link *m;
@@ -4381,13 +4382,12 @@ int process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					return -1;
+					remote_hangup_helper(myrpt, l);
+					break;
 				}
 				ast_frfree(f);
-				break;
-			} else {
-				continue;
 			}
+			continue;
 		}
 
 		remrx = 0;
@@ -4661,9 +4661,8 @@ int process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		}
 		continue;
 	}
-	periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart));
 	remote_hangup_helper(myrpt, l);
-	return 0;
+	return;
 }
 
 static inline int monchannel_read(struct rpt *myrpt)

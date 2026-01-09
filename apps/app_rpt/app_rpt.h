@@ -1124,8 +1124,13 @@ void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
 
-/*! \retval -1 to exit and terminate the node, 0 to continue */
-int process_link_channel(struct rpt *myrpt, struct rpt_link *l);
+/*!
+ * \brief Process link channel activity
+ * \param myrpt Pointer to rpt structure
+ * \param l Pointer to rpt_link structure
+ */
+
+void process_link_channel(struct rpt *myrpt, struct rpt_link *l);
 /*!
  * \brief Generates a command line completion list for rpt cmd third argument
  */
