@@ -88,6 +88,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	int i, r;
 	struct rpt_connect_data *connect_data;
 	pthread_t connect_threadid;
+	struct ast_frame wf;
 
 	if (!param)
 		return DC_ERROR;
@@ -100,8 +101,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	ast_debug(7, "@@@@ ilink param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 	switch (myatoi(param)) {
 	case 11:					/* Perm Link off */
-	case 1:					/* Link off */
-		struct ast_frame wf;
+	case 1:						/* Link off */
 		if (strlen(digitbuf) < 1)
 			break;
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
@@ -130,7 +130,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		wf.data.ptr = DISCSTR;
 		if (l->chan) {
 			if (l->thisconnected)
-				ast_write(l->chan, &wf);
+				rpt_qwrite(l, &wf);
 		}
 		myrpt->linkactivityflag = 1;
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -238,7 +238,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		myrpt->savednodes[0] = 0;
 		/* loop through all links */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			struct ast_frame wf;
 			char c1;
 			if ((l->name[0] <= '0') || (l->name[0] > '9')) { /* Skip any IAXRPT monitoring */
 				continue;
@@ -264,10 +263,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			wf.datalen = strlen(DISCSTR) + 1;
 			wf.data.ptr = DISCSTR;
 			if (l->chan) {
-				if (l->thisconnected)
-					ast_write(l->chan, &wf);
-				rpt_safe_sleep(myrpt, l->chan, 250);	/* It's dead already, why check the return value? */
-				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				if (l->thisconnected) {
+					rpt_qwrite(l, &wf);
+				}
 			}
 			rpt_mutex_lock(&myrpt->lock);
 		}
