@@ -3519,9 +3519,9 @@ static void *voter_xmit(void *data)
 				continue;
 			}
 			/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
-		 	 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
-		 	 * with this packet.
-		 	 */
+			 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
+			 * with this packet.
+			 */
 			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(tv, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
 				memset(&audiopacket, 0, sizeof(audiopacket));
 				strcpy((char *) audiopacket.vp.challenge, challenge);
@@ -3545,8 +3545,7 @@ static void *voter_xmit(void *data)
 					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
 						(struct sockaddr *) &client->sin, sizeof(client->sin));
 				} else {
-					ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name,
-						client->respdigest);
+					ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
 					sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
 						sizeof(client->sin));
 				}
@@ -4562,8 +4561,8 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
-		ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
-			vph->challenge, ntohl(vph->digest));
+		ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
+			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 		client = NULL;
 		if (!check_client_sanity && master_port) {
 			sin.sin_port = htons(master_port);
