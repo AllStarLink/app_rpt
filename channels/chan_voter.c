@@ -2935,7 +2935,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 /*!
  * \brief Manage the UDP-based primary-client keepalive and authentication for a node.
  *
- * Sends periodic authentication and GPS keepalive packets to the configured primary,
+ * Sends periodic authentication and keepalive packets to the configured primary,
  * processes incoming primary responses to establish/maintain a primary session,
  * and updates per-client proxy state when the primary connection is lost.
  *
@@ -2998,13 +2998,17 @@ static void *voter_primary_client(void *data)
 			sendto(pri_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
 		}
+		/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
+		 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
+		 * with this packet.
+		 */
 		if (p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 1000))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
 			strcpy((char *) authpacket.vp.challenge, challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
-			ast_debug(5, "VOTER %i: Sent primary client GPS Keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
+			ast_debug(5, "VOTER %i: Sent primary client keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
@@ -3013,7 +3017,7 @@ static void *voter_primary_client(void *data)
 			p->priconn = 0;
 			digest = 0;
 			p->primary_challenge[0] = 0;
-			ast_verb(3, "VOTER %i: Primary client for %d  Lost connection!!!\n", p->nodenum, p->nodenum);
+			ast_verb(3, "VOTER %i: Primary client for %d Lost connection!!!\n", p->nodenum, p->nodenum);
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
 					continue;
@@ -3034,7 +3038,7 @@ static void *voter_primary_client(void *data)
 
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If set got something worthwhile */
 				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(3, "VOTER %i: Rcvd primary client network packet, len %d payload %d challenge %s digest %08x\n",
+				ast_debug(3, "VOTER %i: Received primary client network packet, len %d payload %d challenge %s digest %08x\n",
 					p->nodenum, (int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 				/* If this is a new session. */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
@@ -3500,7 +3504,7 @@ static void *voter_xmit(void *data)
 				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
 		}
-		/* Process ending GPS keepalive packets for each client, if necessary */
+		/* Process sending keepalive packets for each client, if necessary */
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
 				continue;
@@ -3514,6 +3518,10 @@ static void *voter_xmit(void *data)
 			if (!client->heardfrom) {
 				continue;
 			}
+			/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
+		 	 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
+		 	 * with this packet.
+		 	 */
 			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(tv, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
 				memset(&audiopacket, 0, sizeof(audiopacket));
 				strcpy((char *) audiopacket.vp.challenge, challenge);
@@ -3532,12 +3540,12 @@ static void *voter_xmit(void *data)
 					proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 					proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 					proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-					ast_debug(5, "VOTER %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum,
+					ast_debug(5, "VOTER %i: Sending (proxied) keepalive packet to client %s digest %08x\n", p->nodenum,
 						client->name, proxy_audiopacket.vp.digest);
 					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
 						(struct sockaddr *) &client->sin, sizeof(client->sin));
 				} else {
-					ast_debug(5, "VOTER %i: Sending KEEPALIVE (GPS) packet to client %s digest %08x\n", p->nodenum, client->name,
+					ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name,
 						client->respdigest);
 					sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
 						sizeof(client->sin));
@@ -4554,7 +4562,7 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
-		ast_debug(7, "Rcvd network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
+		ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
 			vph->challenge, ntohl(vph->digest));
 		client = NULL;
 		if (!check_client_sanity && master_port) {
@@ -4786,7 +4794,7 @@ static void *voter_reader(void *data)
 								client->mix = 0;
 							}
 							recvlen -= sizeof(proxy);
-							ast_debug(6, "Now (proxy) rcvd network packet, len %d payload %d challenge %s digest %08x\n",
+							ast_debug(6, "Now (proxy) received network packet, len %d payload %d challenge %s digest %08x\n",
 								(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
 								goto process_gps;
@@ -5426,14 +5434,14 @@ process_gps:
 					}
 					timestuff = (time_t) timetv.tv_sec;
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
-					ast_debug(4, "SysTime:   %s.%06d\n", timestr, (int) timetv.tv_usec);
+					ast_debug(4, "SysTime:    %s.%06d\n", timestr, (int) timetv.tv_usec);
 					/* Display the time from the master client */
 					timestuff = (time_t) master_time.vtime_sec;
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "MasterTime: %s.%09d\n", timestr, master_time.vtime_nsec);
 				}
 				if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
-					ast_debug(5, "Rcvd GPS Keepalive from %s\n", client->name);
+					ast_debug(5, "Received keepalive from %s\n", client->name);
 				} else {
 					vgp = (VOTER_GPS *) (buf + sizeof(VOTER_PACKET_HEADER));
 					if (client->gpsid) {
