@@ -1830,7 +1830,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(str, DISCSTR)) {
-		mylink->disced = 1;
+		mylink->disced = RPT_LINK_DISCONNECT;
 		mylink->retries = mylink->max_retries + 1;
 		ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
 		return;
@@ -4233,7 +4233,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
-		if ((!l->disced) && (!l->outbound)) {
+		if ((l->disced == RPT_LINK_DISCONNECT_NONE) && (!l->outbound)) {
 			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote)
 				l->disctime = 1;
 			else
@@ -4274,7 +4274,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (!l->hasconnected) {
 		rpt_telemetry(myrpt, CONNFAIL, l);
-	} else if (l->disced != 2) {
+	} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
 		rpt_telemetry(myrpt, REMDISC, l);
 	}
 	if (l->hasconnected) {
@@ -6783,7 +6783,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (l != NULL) {
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
-				l->disced = 2;
+				l->disced = RPT_LINK_DISCONNECT_SILENT;
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);
