@@ -3270,7 +3270,6 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		struct ast_frame lf;
 		struct ast_str *lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
-			ao2_ref(l, -1);
 			return;
 		}
 		init_text_frame(&lf, __PRETTY_FUNCTION__);
