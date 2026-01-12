@@ -1829,7 +1829,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(str, DISCSTR)) {
-		mylink->disced = RPT_DISCONNECT;
+		mylink->disced = RPT_LINK_DISCONNECT;
 		mylink->retries = mylink->max_retries + 1;
 		return;
 	}
@@ -3330,7 +3330,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		l->elaptime = 0;
 		if (!l->outbound) {
 			ast_debug(1, "Connection taking to long, giving up on link");
-			l->disced = RPT_DISCONNECT;
+			l->disced = RPT_LINK_DISCONNECT;
 		} else {
 			ast_debug(1, "Connection taking to long, resetting retry timer");
 			l->retrytimer = RETRY_TIMER_MS;
@@ -3348,7 +3348,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		return;
 	}
 	if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
-		l->disced = RPT_DISCONNECT;
+		l->disced = RPT_LINK_DISCONNECT;
 		if (!strcmp(myrpt->cmdnode, l->name))
 			myrpt->cmdnode[0] = 0;
 		if (l->name[0] != '0') {
@@ -3365,7 +3365,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	}
 	if ((!l->chan) && (!l->disctime) && (!l->outbound)) {
 		ast_debug(1, "LINKDISC AA\n");
-		l->disced = RPT_DISCONNECT;
+		l->disced = RPT_LINK_DISCONNECT;
 		if (!ao2_container_count(myrpt->links)) {
 			channel_revert(myrpt);
 		}
@@ -4290,7 +4290,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (!l->hasconnected) {
 		rpt_telemetry(myrpt, CONNFAIL, l);
-	} else if (l->disced != RPT_DISCONNECT_SILENT) {
+	} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
 		rpt_telemetry(myrpt, REMDISC, l);
 	}
 	if (l->hasconnected) {
@@ -4344,7 +4344,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 	looptimestart = rpt_tvnow();
 
-	while (ms >= 0 && l->disced == RPT_DISCONNECT_NONE) {
+	while (ms >= 0 && l->disced == RPT_LINK_DISCONNECT_NONE) {
 		ms = MSWAIT;
 		n = 0;
 		cs[n++] = l->pchan;
@@ -5393,7 +5393,7 @@ static void *rpt(void *this)
 
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
-				l->disced = RPT_DISCONNECT;
+				l->disced = RPT_LINK_DISCONNECT;
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				continue;
@@ -5579,7 +5579,7 @@ static void *rpt(void *this)
 
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		l->disced = RPT_DISCONNECT;
+		l->disced = RPT_LINK_DISCONNECT;
 		/* hang-up on call to device */
 		while (l->connect_in_progress) {
 			/* Wait for any connections to finish */
@@ -6772,7 +6772,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (l != NULL) {
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
-				l->disced = RPT_DISCONNECT_SILENT;
+				l->disced = RPT_LINK_DISCONNECT_SILENT;
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);

@@ -543,10 +543,10 @@ struct rpt_frame_queue {
 	struct ast_frame *lastf1, *lastf2;
 };
 
-enum rpt_disconnect {
-	RPT_DISCONNECT_NONE = 0,
-	RPT_DISCONNECT,
-	RPT_DISCONNECT_SILENT
+enum rpt_link_disconnect {
+	RPT_LINK_DISCONNECT_NONE = 0,
+	RPT_LINK_DISCONNECT,
+	RPT_LINK_DISCONNECT_SILENT
 };
 
 /*! \brief Structure that holds information regarding app_rpt operation */
@@ -578,7 +578,7 @@ struct rpt_link {
 	rpt_bool dtmfed:1;
 	rpt_bool gott:1;
 	rpt_bool connect_in_progress:1;
-	enum rpt_disconnect disced:2;
+	enum rpt_link_disconnect disced:2;
 	long elaptime;
 	int disctime;
 	int	retrytimer;
