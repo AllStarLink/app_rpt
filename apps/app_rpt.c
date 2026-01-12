@@ -420,12 +420,6 @@ int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
 
 int nullfd = -1;
 
-/*! \brief Structure used to share data with attempt_reconnect thread */
-struct rpt_reconnect_data {
-	struct rpt *myrpt;
-	struct rpt_link *l;
-};
-
 int rpt_debug_level(void)
 {
 	return debug;
@@ -2405,17 +2399,14 @@ static char *parse_node_format(char *s, char **restrict s1, char *buf, size_t le
 	return s2;
 }
 
-static void *attempt_reconnect(void *data)
+static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 {
 	char *s1, *tele;
 	char tmp[300], deststr[325] = "";
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
-	struct rpt_reconnect_data *reconnect_data = data;
-	struct rpt_link *l = reconnect_data->l;
-	struct rpt *myrpt = reconnect_data->myrpt;
-
+	ast_debug(1, "Attempting Reconnect");
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
 		rpt_mutex_lock(&myrpt->lock);
@@ -2481,8 +2472,6 @@ static void *attempt_reconnect(void *data)
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 cleanup:
-	ast_free(reconnect_data);
-	l->reconnect_in_progress = 0;
 	return NULL;
 }
 
@@ -3159,10 +3148,8 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 {
 	struct ast_frame *f;
 	int newkeytimer_last, max_retries;
-	struct rpt_reconnect_data *reconnect_data;
-	pthread_t connect_threadid;
-
 	int myrx;
+
 	if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		ast_write(l->chan, f);
@@ -3338,39 +3325,27 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	}
 	l->elaptime += elap;
 	/* if connection has taken too long */
-	if ((l->elaptime > MAXCONNECTTIME) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
-		l->elaptime = 0;
-		rpt_mutex_unlock(&myrpt->lock);
-		if (l->chan)
-			l->disced = 1;
-		rpt_mutex_lock(&myrpt->lock);
-		return;
-	}
 	max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
 
-	if (!l->chan && !l->retrytimer && l->outbound && !max_retries && l->hasconnected) {
-		rpt_mutex_unlock(&myrpt->lock);
-		if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
-			reconnect_data = ast_calloc(1, sizeof(struct rpt_reconnect_data));
-			if (!reconnect_data) {
-				rpt_mutex_lock(&myrpt->lock);
-				l->retrytimer = RETRY_TIMER_MS;
-				return;
-			}
-			reconnect_data->myrpt = myrpt;
-			reconnect_data->l = l;
-			if (!l->reconnect_in_progress) {
-				/* We are not currently running a connect/reconnect thread */
-				l->reconnect_in_progress = 1;
-				if (ast_pthread_create_detached(&connect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
-					ast_free(reconnect_data);
-					l->reconnect_in_progress = 0;
-				}
-			}
+	if ((l->elaptime > MAXCONNECTTIME) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
+		l->elaptime = 0;
+		if (!l->outbound) {
+			ast_debug(1, "Connection taking to long, giving up on link");
+			l->disced = 1;
 		} else {
+			ast_debug(1, "Connection taking to long, resetting retry timer");
+			l->retrytimer = RETRY_TIMER_MS;
+		}
+		return;
+	}
+
+	if (!l->chan && !l->retrytimer && l->outbound && !max_retries && l->hasconnected) {
+		if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
+			attempt_reconnect(myrpt, l);
+		} else {
+			/* We should not retry this node type */
 			l->retries = l->max_retries + 1;
 		}
-		rpt_mutex_lock(&myrpt->lock);
 		return;
 	}
 	if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
@@ -4257,45 +4232,51 @@ static inline void hangup_link_chan(struct rpt_link *l)
 /*!
  * \internal
  * \brief Final cleanup of link prior to node termination
+ * \return 0 if disconnected hangup, 1 if reconnect possible
  */
-static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
+static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	int time = 20; /* Run periodic_process_link one last time */
 	rpt_mutex_lock(&myrpt->lock);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
-	ast_safe_sleep(l->chan, MSWAIT);	   /* allow channel to receive any text messages */
-	periodic_process_link(myrpt, l, time); /* Send all queued text messages */
-	ast_safe_sleep(l->chan, MSWAIT);	   /* allow channel to clear the text messages */
+	if (l->chan) {
+		ast_safe_sleep(l->chan, MSWAIT);	   /* allow channel to receive any text messages */
+		periodic_process_link(myrpt, l, time); /* Send all queued text messages */
+		ast_safe_sleep(l->chan, MSWAIT);	   /* allow channel to clear the text messages */
+	}
 	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
-		if ((!l->disced) && (!l->outbound)) {
-			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote)
-				l->disctime = 1;
-			else
-				l->disctime = DISC_TIME;
-			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
-			rpt_mutex_unlock(&myrpt->lock);
-			return;
-		}
+		if (!l->disced) {
+			if (!l->outbound) {
+				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
+					l->disctime = 1;
+				} else {
+					l->disctime = DISC_TIME;
+				}
+				rpt_mutex_lock(&myrpt->lock);
+				hangup_link_chan(l);
+				rpt_mutex_unlock(&myrpt->lock);
+				return 1;
+			}
 
-		if (l->retrytimer) {
-			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
-			rpt_mutex_unlock(&myrpt->lock);
-			return;
-		}
-		if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
-			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
-			l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
-			l->retrytimer = RETRY_TIMER_MS;
-			l->elaptime = 0;
-			l->connecttime = ast_tv(0, 0); /* no longer connected */
-			l->thisconnected = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			return;
+			if (l->retrytimer) {
+				rpt_mutex_lock(&myrpt->lock);
+				hangup_link_chan(l);
+				rpt_mutex_unlock(&myrpt->lock);
+				return 1;
+			}
+			if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
+				rpt_mutex_lock(&myrpt->lock);
+				hangup_link_chan(l);
+				l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
+				l->retrytimer = RETRY_TIMER_MS;
+				l->elaptime = 0;
+				l->connecttime = ast_tv(0, 0); /* no longer connected */
+				l->thisconnected = 0;
+				rpt_mutex_unlock(&myrpt->lock);
+				return 1;
+			}
 		}
 	}
 
@@ -4329,6 +4310,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	ast_hangup(l->pchan);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
+	return 0;
 }
 
 static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
@@ -4361,13 +4343,15 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	struct timeval now;
 	struct timeval looptimestart;
 
-	n = 0;
-	cs[n++] = l->chan;
-	cs[n++] = l->pchan;
 	looptimestart = rpt_tvnow();
 
 	while (ms >= 0 && !l->disced) {
 		ms = MSWAIT;
+		n = 0;
+		cs[n++] = l->pchan;
+		if (l->chan) {
+			cs[n++] = l->chan;
+		}
 		who = ast_waitfor_n(cs, n, &ms);
 		if (!ms) {
 			/* No channels had activity before the timer expired,
@@ -4382,7 +4366,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					remote_hangup_helper(myrpt, l);
 					break;
 				}
 				ast_frfree(f);
@@ -4445,8 +4428,13 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			f = ast_read(l->chan);
 			if (!f) {
 				ast_debug(3, "Failed to read frame on %s, must've hung up\n", ast_channel_name(l->chan));
-				remote_hangup_helper(myrpt, l);
-				break;
+				/* If IAX disappears, keep running to attempt reconnect if possible */
+				if (remote_hangup_helper(myrpt, l)) {
+					/* A reconnect is possible */
+					continue;
+				}
+				/* A reconnect is not possible */
+				return;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				int ismuted, n1;
@@ -4605,7 +4593,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {
 					ast_frfree(f);
 					ast_debug(3, "Received hangup frame on %s\n", ast_channel_name(l->chan));
-					remote_hangup_helper(myrpt, l);
 					break;
 				}
 			}
@@ -4615,6 +4602,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			struct ast_frame *f;
 			f = ast_read(l->pchan);
 			if (!f) {
+				/* This should never happen, but if it does we need to cleanup */
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
 				break;
 			}
@@ -4661,6 +4649,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		}
 		continue;
 	}
+	/* Link is done: Cleanup channels and link structure */
 	remote_hangup_helper(myrpt, l);
 	return;
 }
@@ -5595,7 +5584,7 @@ static void *rpt(void *this)
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		l->disced = 1;
 		/* hang-up on call to device */
-		while (l->connect_in_progress || l->reconnect_in_progress) {
+		while (l->connect_in_progress) {
 			/* Wait for any connections to finish */
 			rpt_mutex_unlock(&myrpt->lock);
 			usleep(50000);
