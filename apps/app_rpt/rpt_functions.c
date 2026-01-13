@@ -239,10 +239,10 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 
 	case 6: { /* All Links Off, including permalinks */
 		struct ast_frame wf;
+
 		init_text_frame(&wf, "function_ilink:6");
 		wf.datalen = strlen(DISCSTR) + 1;
 		wf.data.ptr = DISCSTR;
-
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
 		/* loop through all links */
