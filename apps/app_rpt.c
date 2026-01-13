@@ -4336,7 +4336,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		.frametype = AST_FRAME_CNG,
 		.src = __PRETTY_FUNCTION__,
 	};
-	struct ao2_iterator l_it2;
+	struct ao2_iterator l_it;
 	int totx;
 	int remnomute, remrx;
 	struct timeval now;
@@ -4375,13 +4375,13 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		remrx = 0;
 		/* see if any other links are receiving */
 		rpt_mutex_lock(&myrpt->lock);
-		RPT_LIST_TRAVERSE(myrpt->links, m, l_it2) {
+		RPT_LIST_TRAVERSE(myrpt->links, m, l_it) {
 			/* if not the link we are currently processing, and not localonly count it */
 			if ((m != l) && (m->lastrx) && (m->mode < 2)) {
 				remrx = 1;
 			}
 		}
-		ao2_iterator_destroy(&l_it2);
+		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 
 		now = rpt_tvnow();
