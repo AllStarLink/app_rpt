@@ -641,14 +641,14 @@ void *rpt_link_connect(void *data)
 			goto cleanup; /* Already linked */
 		}
 		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
-			l->mode = connect_data->mode;
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
+			l->mode = connect_data->mode;
 			ao2_ref(l, -1);
 			goto cleanup;
 		}
-		reconnects = l->reconnects;
 		rpt_mutex_unlock(&myrpt->lock);
+		reconnects = l->reconnects;
 		if (l->chan) {
 			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 		}
