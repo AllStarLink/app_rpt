@@ -5579,16 +5579,16 @@ static void *rpt(void *this)
 
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
+		/* hang-up any running links */
 		l->disced = RPT_LINK_DISCONNECT;
-		/* hang-up on call to device */
-		while (l->connect_in_progress) {
-			/* Wait for any connections to finish */
-			rpt_mutex_unlock(&myrpt->lock);
-			usleep(50000);
-			rpt_mutex_lock(&myrpt->lock);
-		}
 	}
 	ao2_iterator_destroy(&l_it);
+	while (ao2_container_count(myrpt->links) != 0) {
+		/* Wait for the links to close out */
+		rpt_mutex_unlock(&myrpt->lock);
+		usleep(60000);
+		rpt_mutex_lock(&myrpt->lock);
+	}
 	if (myrpt->xlink == 1)
 		myrpt->xlink = 2;
 	rpt_mutex_unlock(&myrpt->lock);
