@@ -795,9 +795,6 @@ void *rpt_link_connect(void *data)
 
 	/* Service the link channel */
 	process_link_channel(myrpt, l);
-	rpt_mutex_lock(&myrpt->lock);
-	__kickshort(myrpt);
-	rpt_mutex_unlock(&myrpt->lock);
 	ao2_ref(l, -1);
 cleanup:
 	ast_free(connect_data->digitbuf);
