@@ -4694,15 +4694,9 @@ static inline int monchannel_read(struct rpt *myrpt)
 			 */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
-				struct ast_unreal_pvt *p = ast_channel_tech_pvt(l->pchan);
-				if (p && p->chan) {
-					if ((dup = ast_frdup(f))) {
-						if (ast_queue_frame(l->pchan, dup)) {
-							ast_log(LOG_ERROR, "ast_queue_frame failed");
-							ast_frfree(dup);
-						}
-					}
-				}
+				ast_audiohook_lock(&l->whisper_audiohook);
+				ast_audiohook_write_frame(&l->whisper_audiohook, AST_AUDIOHOOK_DIRECTION_READ, f);
+				ast_audiohook_unlock(&l->whisper_audiohook);
 			}
 		}
 		ao2_iterator_destroy(&l_it);
@@ -6849,7 +6843,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_set_read_format(l->chan, ast_format_slin);
 		ast_set_write_format(l->chan, ast_format_slin);
 		myrpt->lastlinktime = rpt_tvnow();
-
+		ast_audiohook_init(&l->whisper_audiohook, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 		if (!cap) {
 			ast_log(LOG_ERROR, "Failed to alloc cap\n");

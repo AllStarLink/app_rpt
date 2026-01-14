@@ -5,6 +5,7 @@
 
 #include "asterisk/channel.h" /* includes all the locking stuff needed (lock.h doesn't) */
 #include "asterisk/translate.h"
+#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"

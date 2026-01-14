@@ -9,6 +9,7 @@
 #include <termios.h> /* use B115200 */
 
 #include "asterisk/channel.h"
+#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 #include "rpt_serial.h"

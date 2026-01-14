@@ -11,6 +11,7 @@
 #include "asterisk/file.h"
 #include "asterisk/cli.h"
 #include "asterisk/pbx.h" /* functions */
+#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
