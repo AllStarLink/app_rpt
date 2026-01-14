@@ -4659,6 +4659,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 static inline int monchannel_read(struct rpt *myrpt)
 {
 	struct ast_frame *f = ast_read(myrpt->monchannel);
+	struct ast_frame *dup;
 	struct ao2_iterator l_it;
 
 	if (!f) {
@@ -4683,10 +4684,20 @@ static inline int monchannel_read(struct rpt *myrpt)
 		}
 		/* go thru all the links */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			/* IF we are an altlink() -> !altlink() handled elsewhere */
+			/* IF we are an altlink() -> !altlink() handled elsewhere
+			 * An altlink is something like DVSwitch that wants to hear
+			 * local telemetry on the link channel -> essentially connecting to
+			 * the TXCONF audio
+			 */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
-				ast_write(l->chan, f);
+				dup = ast_frdup(f);
+				if (dup) {
+					if (ast_queue_frame(l->pchan, dup)) {
+						ast_log(LOG_ERROR, "ast_queue_frame failed");
+						ast_frfree(dup);
+					}
+				}
 			}
 		}
 		ao2_iterator_destroy(&l_it);
