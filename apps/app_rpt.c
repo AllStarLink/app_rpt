@@ -4600,6 +4600,12 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					 * If this happens, we're passing voice frames and now sending AST_READIO_KEY messages
 					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
 					 *
+					 *
+					 * IF we are !altlink() -> altlink() handled elsewhere
+					 * An altlink is a DVSwitch, Echolink, or other type where
+					 * the client wants to "hear" the repeater output including
+					 * telemetry.  This copies tx audio from CONF when the link
+					 * is transmitting.
 					 */
 					ast_write(l->chan, f);
 					l->last_frame_sent = 1;
@@ -4643,7 +4649,12 @@ static inline int monchannel_read(struct rpt *myrpt)
 		}
 		/* go thru all the links */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			/* IF we are an altlink() -> !altlink() handled elsewhere */
+			/* IF we are an altlink() -> !altlink() handled elsewhere
+			 * and altlink is a DVSwitch, Echolink, or other type where
+			 * the client wants to "hear" the repeater output including
+			 * telemetry.  This copies TX audio from TXCONF via the MONCHANNEL
+			 * when the link is NOT transmitting.
+			 */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
 				ast_write(l->chan, f);
