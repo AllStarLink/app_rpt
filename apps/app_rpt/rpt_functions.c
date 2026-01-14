@@ -101,7 +101,12 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	switch (myatoi(param)) {
 	case 11:					/* Perm Link off */
 	case 1: {					/* Link off */
-		struct ast_frame wf;
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_TEXT,
+			.src = __PRETTY_FUNCTION__,
+			.datalen = sizeof(DISCSTR),
+			.data.ptr = DISCSTR,
+		};
 
 		if (strlen(digitbuf) < 1)
 			break;
@@ -126,9 +131,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		l->disced = 1;
 		l->hasconnected = 1;
 		rpt_mutex_unlock(&myrpt->lock);
-		init_text_frame(&wf, "function_ilink:1");
-		wf.datalen = strlen(DISCSTR) + 1;
-		wf.data.ptr = DISCSTR;
 		if (l->chan) {
 			if (l->thisconnected)
 				ast_write(l->chan, &wf);
@@ -238,11 +240,12 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		return DC_COMPLETE;
 
 	case 6: { /* All Links Off, including permalinks */
-		struct ast_frame wf;
-
-		init_text_frame(&wf, "function_ilink:6");
-		wf.datalen = strlen(DISCSTR) + 1;
-		wf.data.ptr = DISCSTR;
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_TEXT,
+			.src = __PRETTY_FUNCTION__,
+			.datalen = sizeof(DISCSTR),
+			.data.ptr = DISCSTR,
+		};
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
 		/* loop through all links */
