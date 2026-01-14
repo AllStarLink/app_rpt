@@ -4639,6 +4639,9 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					 */
 					ast_write(l->chan, f);
 					l->last_frame_sent = 1;
+				} else if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
+						   ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
+					ast_write(l->chan, f);
 				}
 			}
 			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
@@ -4691,11 +4694,13 @@ static inline int monchannel_read(struct rpt *myrpt)
 			 */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
-				dup = ast_frdup(f);
-				if (dup) {
-					if (ast_queue_frame(l->pchan, dup)) {
-						ast_log(LOG_ERROR, "ast_queue_frame failed");
-						ast_frfree(dup);
+				struct ast_unreal_pvt *p = ast_channel_tech_pvt(l->pchan);
+				if (p && p->chan) {
+					if ((dup = ast_frdup(f))) {
+						if (ast_queue_frame(l->pchan, dup)) {
+							ast_log(LOG_ERROR, "ast_queue_frame failed");
+							ast_frfree(dup);
+						}
 					}
 				}
 			}
