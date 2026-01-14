@@ -4211,7 +4211,7 @@ static inline void safe_hangup(struct ast_channel *chan)
 	/* myrpt is locked here, so we can trust this will be an atomic operation,
 	 * since we also lock before setting the pbx to NULL */
 	if (ast_channel_pbx(chan)) {
-		ast_log(LOG_WARNING, "Channel %s still has a PBX, requesting hangup for it\n", ast_channel_name(chan));
+		ast_debug(3, "Channel %s still has a PBX, requesting hangup for it\n", ast_channel_name(chan));
 		ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT);
 	} else {
 		ast_debug(3, "Hard hanging up channel %s\n", ast_channel_name(chan));
@@ -4240,11 +4240,14 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	if (l->chan) {
-		ast_safe_sleep(l->chan, MSWAIT);	   /* allow channel to receive any text messages */
-		periodic_process_link(myrpt, l, time); /* Send all queued text messages */
-		ast_safe_sleep(l->chan, MSWAIT);	   /* allow channel to clear the text messages */
+		if (!ast_safe_sleep(l->chan, MSWAIT)) { /* allow channel to receive any text messages */
+			/* Not hungup */
+			periodic_process_link(myrpt, l, time); /* Send all queued text messages */
+			ast_safe_sleep(l->chan, MSWAIT);	   /* Allow the channel to sent the text messages */
+		}
 	}
-	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
+
+	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
 		if (!l->disced) {
 			if (!l->outbound) {
