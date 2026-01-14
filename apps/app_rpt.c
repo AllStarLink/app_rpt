@@ -4665,8 +4665,9 @@ static inline int monchannel_read(struct rpt *myrpt)
 				 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
 				 * the repeater output including telemetry.
 				 */
-
+				rpt_mutex_unlock(&myrpt->lock);
 				ast_write(l->chan, f);
+				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
 		rpt_mutex_unlock(&myrpt->lock);
