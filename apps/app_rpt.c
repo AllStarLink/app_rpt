@@ -6907,7 +6907,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_unlock(&myrpt->lock);
 		ao2_ref(l, -1); /* and drop the ref we're holding */
 
-		return -1;
+		return 0;
 	}
 	/* well, then it is a remote */
 	rpt_mutex_lock(&myrpt->lock);
