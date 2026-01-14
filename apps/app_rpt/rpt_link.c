@@ -789,12 +789,15 @@ void *rpt_link_connect(void *data)
 		l->retries = l->max_retries + 1;
 	}
 	l->rxlingertimer = RX_LINGER_TIME;
-	rpt_link_add(connect_data->myrpt->links, l);
-	__kickshort(connect_data->myrpt);
-	rpt_mutex_unlock(&connect_data->myrpt->lock);
+	rpt_link_add(myrpt->links, l);
+	__kickshort(myrpt);
+	rpt_mutex_unlock(&myrpt->lock);
 
 	/* Service the link channel */
 	process_link_channel(myrpt, l);
+	rpt_mutex_lock(&myrpt->lock);
+	__kickshort(myrpt);
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_ref(l, -1);
 cleanup:
 	ast_free(connect_data->digitbuf);

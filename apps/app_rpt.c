@@ -4325,7 +4325,6 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 }
 
-/*! \retval -1 to exit and terminate the node, 0 to continue */
 void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_channel *who;
@@ -6903,9 +6902,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
 		process_link_channel(myrpt, l);
-		ao2_ref(l, -1); /* and drop the extra ref we're holding */
+		rpt_mutex_lock(&myrpt->lock);
+		__kickshort(myrpt);
+		rpt_mutex_unlock(&myrpt->lock);
+		ao2_ref(l, -1); /* and drop the ref we're holding */
 
-		return -1; /* We can now safely return -1 to the PBX, as the old channel pre-masquerade is what will get killed off */
+		return -1;
 	}
 	/* well, then it is a remote */
 	rpt_mutex_lock(&myrpt->lock);
