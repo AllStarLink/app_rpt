@@ -251,9 +251,9 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, enum rpt_bridge_chan_type type)
 {
 	struct ast_channel *chan;
-	char *type_str[3] = { "Local", "Announcer", "Recorder" };
+	static const char *type_str[3] = { "Local", "Announcer", "Recorder" };
 
-	if (type >= 3) {
+	if (type >= ARRAY_LEN(type_str)) {
 		ast_log(LOG_ERROR, "Invalid rpt_bridge_chan_type %d\n", type);
 		return NULL;
 	}
@@ -384,6 +384,10 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 	}
 	ast_debug(3, "Adding channel %s to conference '%s' mixing bridge \n", ast_channel_name(chan), conference_name);
 	res = ast_unreal_channel_push_to_bridge(chan, conf, AST_BRIDGE_CHANNEL_FLAG_IMMOVABLE);
+	if (res) {
+		ast_log(LOG_ERROR, "Failed to add channel %s to conference '%s'\n", ast_channel_name(chan), conference_name);
+		return res;
+	}
 	p = ast_channel_tech_pvt(chan);
 	if (p && p->chan) {
 		ast_raw_answer(p->chan); /* We can not wait 500ms for media to start flowing */
