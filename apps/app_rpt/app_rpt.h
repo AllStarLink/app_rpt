@@ -543,6 +543,12 @@ struct rpt_frame_queue {
 	struct ast_frame *lastf1, *lastf2;
 };
 
+enum rpt_link_disconnect {
+	RPT_LINK_DISCONNECT_NONE = 0,
+	RPT_LINK_DISCONNECT = 1,
+	RPT_LINK_DISCONNECT_SILENT = 2
+};
+
 /*! \brief Structure that holds information regarding app_rpt operation */
 struct rpt;
 
@@ -572,7 +578,7 @@ struct rpt_link {
 	rpt_bool dtmfed:1;
 	rpt_bool gott:1;
 	rpt_bool connect_in_progress:1;
-	unsigned int disced:2;
+	enum rpt_link_disconnect disced:2; /* NOTE: bit-field is 2 bits => max value 3; keep enum values within range. */
 	long elaptime;
 	int disctime;
 	int	retrytimer;
