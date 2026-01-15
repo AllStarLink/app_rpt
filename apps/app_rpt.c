@@ -4651,15 +4651,16 @@ static inline int monchannel_read(struct rpt *myrpt)
 		}
 		/* go thru all the links */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			/* If we are an altlink():
-			 * This copies repeater tx audio from TXCONF when the repeater is not receiving audio,
-			 * yet still transmitting, allowing these client types to hear the local repeater output.
-			 *
-			 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
-			 * the repeater output including telemetry.
-			 */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
+				/* If we are an altlink():
+				 * This copies repeater tx audio from TXCONF when the repeater is not receiving audio,
+				 * yet still transmitting, allowing these client types to hear the local repeater output.
+				 *
+				 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
+				 * the repeater output including telemetry.
+				 */
+
 				ast_write(l->chan, f);
 			}
 		}
