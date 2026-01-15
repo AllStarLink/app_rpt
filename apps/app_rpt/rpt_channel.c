@@ -16,6 +16,29 @@
 
 extern char *dtmf_tones[];
 
+void rpt_safe_sleep(struct rpt *rpt, struct ast_channel *chan, int ms)
+{
+	struct ast_frame *f;
+	struct ast_channel *cs[2], *w;
+
+	cs[0] = rpt->rxchannel;
+	cs[1] = chan;
+	while (ms > 0) {
+		w = ast_waitfor_n(cs, 2, &ms);
+		if (!w)
+			break;
+		f = ast_read(w);
+		if (!f)
+			break;
+		if ((w == cs[0]) && (f->frametype != AST_FRAME_VOICE) && (f->frametype != AST_FRAME_NULL)) {
+			ast_queue_frame(rpt->rxchannel, f);
+			ast_frfree(f);
+			break;
+		}
+		ast_frfree(f);
+	}
+}
+
 int wait_interval(struct rpt *myrpt, enum rpt_delay type, struct ast_channel *chan)
 {
 	int interval;

@@ -134,7 +134,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (l->chan) {
 			if (l->thisconnected) {
 				ast_write(l->chan, &wf);
-				ast_safe_sleep(l->chan, 20);
+				rpt_safe_sleep(myrpt, l->chan, 20);
 			}
 			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 		}
@@ -276,7 +276,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			if (l->chan) {
 				if (l->thisconnected) {
 					ast_write(l->chan, &wf);
-					ast_safe_sleep(l->chan, 20);
+					rpt_safe_sleep(myrpt, l->chan, 20);
 				}
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
