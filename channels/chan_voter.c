@@ -4696,8 +4696,8 @@ static void *voter_reader(void *data)
 					}
 				}
 			}
-			/* If we've received from a valid client, and they've sent us anything other than
-			 * an auth packet (which would have a payload of 0), tickle the heardfrom flag.
+			/* If we've received a packet from a valid client, and they've sent us anything other
+			 * than an auth packet (which would have a payload of 0), set/reset the heardfrom flag.
 			 */
 			if (client && ntohs(vph->payload_type)) {
 				client->heardfrom = 1;
