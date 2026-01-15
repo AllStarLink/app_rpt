@@ -413,7 +413,7 @@ char context[100];
 #define DIVSAMP (DIVLCM / SAMPRATE)
 
 /* Defines voter payload types. */
-#define VOTER_PAYLOAD_NONE 0
+#define VOTER_PAYLOAD_AUTH 0
 #define VOTER_PAYLOAD_ULAW 1
 #define VOTER_PAYLOAD_GPS 2
 #define VOTER_PAYLOAD_ADPCM 3
@@ -3043,7 +3043,7 @@ static void *voter_primary_client(void *data)
 					p->priconn = 0;
 				} else {
 					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
-						(ntohs(vph->payload_type) == VOTER_PAYLOAD_NONE) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
+						(ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
 						mydigest = crc32_bufs(challenge, password);
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
@@ -4696,6 +4696,9 @@ static void *voter_reader(void *data)
 					}
 				}
 			}
+			/* If we've received from a valid client, and they've sent us anything other than
+			* an auth packet (which would have a payload of 0), tickle the heardfrom flag.
+			*/
 			if (client && ntohs(vph->payload_type)) {
 				client->heardfrom = 1;
 			}
@@ -5453,9 +5456,6 @@ process_gps:
 				}
 				continue;
 			}
-			if (client) {
-				client->heardfrom = 1;
-			}
 		}
 
 		if (no_ast_channel) {
@@ -5464,9 +5464,15 @@ process_gps:
 			 */
 			continue;
 		}
-		/* Otherwise, we just need to send an empty packet to the client. */
+
+		/* This is where authentication of connecting clients happens. Normal incoming packet processing
+		 * takes place above, so the only time we hit the code from here down is when we have a new client
+		 * connecting that hasn't been authenticated yet (which sets vph->digest).
+		 */
 		memset(&authpacket, 0, sizeof(authpacket));
 		memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
+
+		/* If the client is valid, reset some counters, and log that it has successfully connected. */
 		if (client) {
 			client->txseqno = 0;
 			client->txseqno_rxkeyed = 0;
@@ -5474,22 +5480,40 @@ process_gps:
 			client->rxseqno_40ms = 0;
 			client->rxseq40ms = 0;
 			client->drain40ms = 0;
+			ast_log(LOG_NOTICE, "VOTER %u: Client %s connected.\n", client->nodenum, client->name);
 		}
+
+		/* Our unique challenge is created in load_module. Copy our challenge into
+		 * the packet header.
+		 */
 		strcpy((char *) authpacket.vp.challenge, challenge);
+
+		/* Put our current system time into the packet header. */
 		gettimeofday(&tv, NULL);
 		authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
 		authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-		/* Make our digest based on their challenge */
+
+		/* Make our response digest based on the challenge sent by the client, and our host password,
+		 * and put that in the packet header, along with blank flags.
+		 */
 		authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		authpacket.flags = 0;
+
+		/* Do the same for proxy authentication packets. */
 		proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
 		proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-		/* Make our digest based on their challenge */
 		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		proxy_authpacket.flags = 0;
-		if (client && !vph->payload_type) {
+
+		/* If our client is validated, and is sending us an authentication packet, check for and set
+		 * option flags (primarily if the client wants to connect in mix mode).
+		 */
+		if (client && (ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH)) {
 			client->mix = 0;
-			/* If client is sending options/flags */
+			/* The client is sending us options/flags if this is an auth packet with something
+			 * in the payload. Option flags are sent in octet 24 of an auth packet, the same
+			 * position normally occupied by the RSSI value (in an audio packet).
+			 */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
 				if (client->ismaster) {
 					ast_log(LOG_WARNING, "VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n",
@@ -5536,6 +5560,7 @@ process_gps:
 					ast_log(LOG_WARNING, "VOTER client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
 						client->name);
 				}
+				/* Reject the connection. */
 				authpacket.vp.digest = 0;
 				client->heardfrom = 0;
 				client->respdigest = 0;
@@ -5557,7 +5582,23 @@ process_gps:
 				}
 			}
 		}
-		/* Send them the empty packet to get things started. */
+
+		/* We have a new client connecting that hasn't been authenticated, yet. Our authentication
+		 * packet header is loaded with our challenge and our digest (which is based on their
+		 * challenge and our host password).
+		 *
+		 * Figure out if this authentication needs to be sent via a proxy server, or direct, and
+		 * send it accordingly.
+		 *
+		 * The first time we send a packet, we don't know who the client is (since they need to respond
+		 * with their own digest that is based on their password... which we use to match to the
+		 * clients in voter.conf we have configured), so the client name will be UNKNOWN.
+		 *
+		 * When we figure out who this client is, we send another auth packet to acknowledge them, so
+		 * this time the client name will be the matching name from voter.conf.
+		 *
+		 * After a client is authenticated, vph->digest gets set, and we start normal packet processing.
+		 */
 		if (isproxy) {
 			ast_debug(2, "Sending (proxied) initial packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
 				ntohl(authpacket.vp.digest), password);
@@ -5627,6 +5668,9 @@ static int load_module(void)
 
 	run_forever = 1;
 
+	/* Create our host's random challenge string, used for authenticating connections
+	 * with client hardware that wants to connect to us.
+	 */
 	snprintf(challenge, sizeof(challenge), "%ld", ast_random());
 	hasmaster = 0;
 
