@@ -122,7 +122,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		}
 		ast_copy_string(myrpt->lastlinknode, digitbuf, MAXNODESTR - 1);
 		l->retries = l->max_retries + 1;
-		l->disced = 1;
+		l->disced = RPT_LINK_DISCONNECT;
 		l->hasconnected = 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		init_text_frame(&wf, "function_ilink:1");
@@ -259,7 +259,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				strcat(myrpt->savednodes, tmp);
 			}
 			l->retries = l->max_retries + 1;
-			l->disced = 2;		/* Silently disconnect */
+			l->disced = RPT_LINK_DISCONNECT_SILENT; /* Silently disconnect */
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_debug(5, "dumping link %s\n",l->name);
 			init_text_frame(&wf, "function_ilink:6");
