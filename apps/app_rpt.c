@@ -4597,15 +4597,17 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					 * to != RADIO_KEY_NOT_ALLOWED yet. This happens when the reset code forces it to RADIO_ALLOWED. Of course if
 					 * handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some
 					 * point, we'll set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info),
-					 * If this happens, we're passing voice frames and now sending AST_READIO_KEY messages
+					 * If this happens, we're passing voice frames and now sending AST_RADIO_KEY messages
 					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
+					 * Note: RADIO_KEY_NOT_ALLOWED is a case where clients use the presence of audio frames to
+					 * keyup the transmitter.  If not RADIO_KEY_NOT_ALLOWED, the links use control messages to key/unkey.
 					 *
+					 * This copies repeater rx audio from CONF when the repeater is receiving audio.
+					 * When the repeater stops receiving audio we continue to copy frames while transmitting
+					 * if we are NOT an altlink().
 					 *
-					 * IF we are !altlink() -> altlink() handled elsewhere
-					 * An altlink is a DVSwitch, Echolink, or other type where
-					 * the client wants to "hear" the repeater output including
-					 * telemetry.  This copies tx audio from CONF when the link
-					 * is transmitting.
+					 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
+					 * the repeater output including telemetry.
 					 */
 					ast_write(l->chan, f);
 					l->last_frame_sent = 1;
@@ -4649,11 +4651,12 @@ static inline int monchannel_read(struct rpt *myrpt)
 		}
 		/* go thru all the links */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			/* IF we are an altlink() -> !altlink() handled elsewhere
-			 * and altlink is a DVSwitch, Echolink, or other type where
-			 * the client wants to "hear" the repeater output including
-			 * telemetry.  This copies TX audio from TXCONF via the MONCHANNEL
-			 * when the link is NOT transmitting.
+			/* If we are an altlink():
+			 * This copies repeater tx audio from TXCONF when the repeater is not receiving audio,
+			 * yet still transmitting, allowing these client types to hear the local repeater output.
+			 *
+			 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
+			 * the repeater output including telemetry.
 			 */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
