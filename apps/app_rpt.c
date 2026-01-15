@@ -1733,6 +1733,7 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	/* see if this is one in list */
+	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
@@ -1751,11 +1752,13 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 			if (dest) {
 				/* if it is, send it and we're done */
 				ao2_ref(l, -1);
+				rpt_mutex_unlock(&myrpt->lock);
 				ao2_iterator_destroy(&l_it);
 				return 1;
 			}
 		}
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 	return 0;
 }
@@ -2979,7 +2982,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
-
+	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, zl, l_it) {
 		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
 		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
@@ -2995,6 +2998,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
 		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 	zt = myrpt->tele.next;
 	if (zt != &myrpt->tele) {
@@ -4650,6 +4654,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 			outstream_write(myrpt, f);
 		}
 		/* go thru all the links */
+		rpt_mutex_lock(&myrpt->lock);
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
@@ -4660,10 +4665,12 @@ static inline int monchannel_read(struct rpt *myrpt)
 				 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
 				 * the repeater output including telemetry.
 				 */
-
+				rpt_mutex_unlock(&myrpt->lock);
 				ast_write(l->chan, f);
+				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
+		rpt_mutex_unlock(&myrpt->lock);
 		ao2_iterator_destroy(&l_it);
 	}
 	return hangup_frame_helper(myrpt->monchannel, "monchannel", f);
