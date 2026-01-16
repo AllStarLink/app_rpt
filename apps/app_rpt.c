@@ -4662,7 +4662,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 static inline int monchannel_read(struct rpt *myrpt)
 {
 	struct ast_frame *f = ast_read(myrpt->monchannel);
-	struct ast_frame *dup;
 	struct ao2_iterator l_it;
 
 	if (!f) {
@@ -4695,7 +4694,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
 				ast_audiohook_lock(&l->whisper_audiohook);
-				ast_audiohook_write_frame(&l->whisper_audiohook, AST_AUDIOHOOK_DIRECTION_READ, f);
+				ast_audiohook_write_frame(&l->whisper_audiohook, AST_AUDIOHOOK_DIRECTION_WRITE, f);
 				ast_audiohook_unlock(&l->whisper_audiohook);
 			}
 		}
@@ -6843,7 +6842,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_set_read_format(l->chan, ast_format_slin);
 		ast_set_write_format(l->chan, ast_format_slin);
 		myrpt->lastlinktime = rpt_tvnow();
-		ast_audiohook_init(&l->whisper_audiohook, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 		if (!cap) {
 			ast_log(LOG_ERROR, "Failed to alloc cap\n");
@@ -6883,6 +6881,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		}
 
+		ast_audiohook_init(&l->whisper_audiohook, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
+		ast_audiohook_attach(chan, &l->whisper_audiohook); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		doconpgm(myrpt, l->name);
 		if ((phone_mode == RPT_PHONE_MODE_NONE) && (l->name[0] <= '9')) {
@@ -6915,7 +6916,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		myrpt->lastlinktime = rpt_tvnow();
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
+		/* Service the link channel */
 		process_link_channel(myrpt, l);
+		/* call has ended, clean up */
+		ast_audiohook_lock(&l->whisper_audiohook);
+		ast_audiohook_detach(&l->whisper_audiohook);
+		ast_audiohook_unlock(&l->whisper_audiohook);
+		ast_audiohook_destroy(&l->whisper_audiohook);
 		ao2_ref(l, -1); /* and drop the ref we're holding */
 
 		return 0;
