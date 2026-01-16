@@ -413,7 +413,7 @@ char context[100];
 #define DIVSAMP (DIVLCM / SAMPRATE)
 
 /* Defines voter payload types. */
-#define VOTER_PAYLOAD_NONE 0
+#define VOTER_PAYLOAD_AUTH 0
 #define VOTER_PAYLOAD_ULAW 1
 #define VOTER_PAYLOAD_GPS 2
 #define VOTER_PAYLOAD_ADPCM 3
@@ -2935,7 +2935,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 /*!
  * \brief Manage the UDP-based primary-client keepalive and authentication for a node.
  *
- * Sends periodic authentication and GPS keepalive packets to the configured primary,
+ * Sends periodic authentication and keepalive packets to the configured primary,
  * processes incoming primary responses to establish/maintain a primary session,
  * and updates per-client proxy state when the primary connection is lost.
  *
@@ -2998,13 +2998,17 @@ static void *voter_primary_client(void *data)
 			sendto(pri_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
 		}
+		/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
+		 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
+		 * with this packet.
+		 */
 		if (p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 1000))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
 			strcpy((char *) authpacket.vp.challenge, challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
-			ast_debug(5, "VOTER %i: Sent primary client GPS Keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
+			ast_debug(5, "VOTER %i: Sent primary client keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
@@ -3013,7 +3017,7 @@ static void *voter_primary_client(void *data)
 			p->priconn = 0;
 			digest = 0;
 			p->primary_challenge[0] = 0;
-			ast_verb(3, "VOTER %i: Primary client for %d  Lost connection!!!\n", p->nodenum, p->nodenum);
+			ast_verb(3, "VOTER %i: Primary client for %d Lost connection!!!\n", p->nodenum, p->nodenum);
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
 					continue;
@@ -3034,7 +3038,7 @@ static void *voter_primary_client(void *data)
 
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If set got something worthwhile */
 				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(3, "VOTER %i: Rcvd primary client network packet, len %d payload %d challenge %s digest %08x\n",
+				ast_debug(3, "VOTER %i: Received primary client network packet, len %d payload %d challenge %s digest %08x\n",
 					p->nodenum, (int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 				/* If this is a new session. */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
@@ -3043,7 +3047,7 @@ static void *voter_primary_client(void *data)
 					p->priconn = 0;
 				} else {
 					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
-						(ntohs(vph->payload_type) == VOTER_PAYLOAD_NONE) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
+						(ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
 						mydigest = crc32_bufs(challenge, password);
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
@@ -3500,7 +3504,7 @@ static void *voter_xmit(void *data)
 				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
 		}
-		/* Process ending GPS keepalive packets for each client, if necessary */
+		/* Process sending keepalive packets for each client, if necessary */
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
 				continue;
@@ -3514,6 +3518,10 @@ static void *voter_xmit(void *data)
 			if (!client->heardfrom) {
 				continue;
 			}
+			/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
+			 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
+			 * with this packet.
+			 */
 			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(tv, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
 				memset(&audiopacket, 0, sizeof(audiopacket));
 				strcpy((char *) audiopacket.vp.challenge, challenge);
@@ -3532,13 +3540,12 @@ static void *voter_xmit(void *data)
 					proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 					proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 					proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-					ast_debug(5, "VOTER %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum,
+					ast_debug(5, "VOTER %i: Sending (proxied) keepalive packet to client %s digest %08x\n", p->nodenum,
 						client->name, proxy_audiopacket.vp.digest);
 					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
 						(struct sockaddr *) &client->sin, sizeof(client->sin));
 				} else {
-					ast_debug(5, "VOTER %i: Sending KEEPALIVE (GPS) packet to client %s digest %08x\n", p->nodenum, client->name,
-						client->respdigest);
+					ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
 					sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
 						sizeof(client->sin));
 				}
@@ -4554,8 +4561,8 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
-		ast_debug(7, "Rcvd network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
-			vph->challenge, ntohl(vph->digest));
+		ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
+			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 		client = NULL;
 		if (!check_client_sanity && master_port) {
 			sin.sin_port = htons(master_port);
@@ -4696,6 +4703,9 @@ static void *voter_reader(void *data)
 					}
 				}
 			}
+			/* If we've received a packet from a valid client, and they've sent us anything other
+			 * than an auth packet (which would have a payload of 0), set/reset the heardfrom flag.
+			 */
 			if (client && ntohs(vph->payload_type)) {
 				client->heardfrom = 1;
 			}
@@ -4786,7 +4796,7 @@ static void *voter_reader(void *data)
 								client->mix = 0;
 							}
 							recvlen -= sizeof(proxy);
-							ast_debug(6, "Now (proxy) rcvd network packet, len %d payload %d challenge %s digest %08x\n",
+							ast_debug(6, "Now (proxy) received network packet, len %d payload %d challenge %s digest %08x\n",
 								(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
 								goto process_gps;
@@ -5426,14 +5436,14 @@ process_gps:
 					}
 					timestuff = (time_t) timetv.tv_sec;
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
-					ast_debug(4, "SysTime:   %s.%06d\n", timestr, (int) timetv.tv_usec);
+					ast_debug(4, "SysTime:    %s.%06d\n", timestr, (int) timetv.tv_usec);
 					/* Display the time from the master client */
 					timestuff = (time_t) master_time.vtime_sec;
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "MasterTime: %s.%09d\n", timestr, master_time.vtime_nsec);
 				}
 				if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
-					ast_debug(5, "Rcvd GPS Keepalive from %s\n", client->name);
+					ast_debug(5, "Received keepalive from %s\n", client->name);
 				} else {
 					vgp = (VOTER_GPS *) (buf + sizeof(VOTER_PACKET_HEADER));
 					if (client->gpsid) {
@@ -5453,9 +5463,6 @@ process_gps:
 				}
 				continue;
 			}
-			if (client) {
-				client->heardfrom = 1;
-			}
 		}
 
 		if (no_ast_channel) {
@@ -5464,9 +5471,15 @@ process_gps:
 			 */
 			continue;
 		}
-		/* Otherwise, we just need to send an empty packet to the client. */
+
+		/* This is where authentication of connecting clients happens. Normal incoming packet processing
+		 * takes place above, so the only time we hit the code from here down is when we have a new client
+		 * connecting that hasn't been authenticated yet (which sets vph->digest).
+		 */
 		memset(&authpacket, 0, sizeof(authpacket));
 		memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
+
+		/* If the client is valid, reset some counters, and log that it has successfully connected. */
 		if (client) {
 			client->txseqno = 0;
 			client->txseqno_rxkeyed = 0;
@@ -5474,22 +5487,40 @@ process_gps:
 			client->rxseqno_40ms = 0;
 			client->rxseq40ms = 0;
 			client->drain40ms = 0;
+			ast_log(LOG_NOTICE, "VOTER %u: Client %s connected.\n", client->nodenum, client->name);
 		}
+
+		/* Our unique challenge is created in load_module. Copy our challenge into
+		 * the packet header.
+		 */
 		strcpy((char *) authpacket.vp.challenge, challenge);
+
+		/* Put our current system time into the packet header. */
 		gettimeofday(&tv, NULL);
 		authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
 		authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-		/* Make our digest based on their challenge */
+
+		/* Make our response digest based on the challenge sent by the client, and our host password,
+		 * and put that in the packet header, along with blank flags.
+		 */
 		authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		authpacket.flags = 0;
+
+		/* Do the same for proxy authentication packets. */
 		proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
 		proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-		/* Make our digest based on their challenge */
 		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		proxy_authpacket.flags = 0;
-		if (client && !vph->payload_type) {
+
+		/* If our client is validated, and is sending us an authentication packet, check for and set
+		 * option flags (primarily if the client wants to connect in mix mode).
+		 */
+		if (client && (ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH)) {
 			client->mix = 0;
-			/* If client is sending options/flags */
+			/* The client is sending us options/flags if this is an auth packet with something
+			 * in the payload. Option flags are sent in octet 24 of an auth packet, the same
+			 * position normally occupied by the RSSI value (in an audio packet).
+			 */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
 				if (client->ismaster) {
 					ast_log(LOG_WARNING, "VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n",
@@ -5536,6 +5567,7 @@ process_gps:
 					ast_log(LOG_WARNING, "VOTER client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
 						client->name);
 				}
+				/* Reject the connection. */
 				authpacket.vp.digest = 0;
 				client->heardfrom = 0;
 				client->respdigest = 0;
@@ -5557,7 +5589,23 @@ process_gps:
 				}
 			}
 		}
-		/* Send them the empty packet to get things started. */
+
+		/* We have a new client connecting that hasn't been authenticated, yet. Our authentication
+		 * packet header is loaded with our challenge and our digest (which is based on their
+		 * challenge and our host password).
+		 *
+		 * Figure out if this authentication needs to be sent via a proxy server, or direct, and
+		 * send it accordingly.
+		 *
+		 * The first time we send a packet, we don't know who the client is (since they need to respond
+		 * with their own digest that is based on their password... which we use to match to the
+		 * clients in voter.conf we have configured), so the client name will be UNKNOWN.
+		 *
+		 * When we figure out who this client is, we send another auth packet to acknowledge them, so
+		 * this time the client name will be the matching name from voter.conf.
+		 *
+		 * After a client is authenticated, vph->digest gets set, and we start normal packet processing.
+		 */
 		if (isproxy) {
 			ast_debug(2, "Sending (proxied) initial packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
 				ntohl(authpacket.vp.digest), password);
@@ -5627,6 +5675,9 @@ static int load_module(void)
 
 	run_forever = 1;
 
+	/* Create our host's random challenge string, used for authenticating connections
+	 * with client hardware that wants to connect to us.
+	 */
 	snprintf(challenge, sizeof(challenge), "%ld", ast_random());
 	hasmaster = 0;
 

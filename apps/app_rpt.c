@@ -1730,6 +1730,7 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	/* see if this is one in list */
+	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
@@ -1748,11 +1749,13 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 			if (dest) {
 				/* if it is, send it and we're done */
 				ao2_ref(l, -1);
+				rpt_mutex_unlock(&myrpt->lock);
 				ao2_iterator_destroy(&l_it);
 				return 1;
 			}
 		}
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 	return 0;
 }
@@ -2998,7 +3001,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
-
+	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, zl, l_it) {
 		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
 		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
@@ -3014,6 +3017,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
 		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 	zt = myrpt->tele.next;
 	if (zt != &myrpt->tele) {
@@ -4633,9 +4637,17 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					 * to != RADIO_KEY_NOT_ALLOWED yet. This happens when the reset code forces it to RADIO_ALLOWED. Of course if
 					 * handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some
 					 * point, we'll set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info),
-					 * If this happens, we're passing voice frames and now sending AST_READIO_KEY messages
+					 * If this happens, we're passing voice frames and now sending AST_RADIO_KEY messages
 					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
+					 * Note: RADIO_KEY_NOT_ALLOWED is a case where clients use the presence of audio frames to
+					 * keyup the transmitter.  If not RADIO_KEY_NOT_ALLOWED, the links use control messages to key/unkey.
 					 *
+					 * This copies repeater rx audio from CONF when the repeater is receiving audio.
+					 * When the repeater stops receiving audio we continue to copy frames while transmitting
+					 * if we are NOT an altlink().
+					 *
+					 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
+					 * the repeater output including telemetry.
 					 */
 					ast_write(l->chan, f);
 					l->last_frame_sent = 1;
@@ -4685,19 +4697,26 @@ static inline int monchannel_read(struct rpt *myrpt)
 			outstream_write(myrpt, f);
 		}
 		/* go thru all the links */
+		rpt_mutex_lock(&myrpt->lock);
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			/* IF we are an altlink() -> !altlink() handled elsewhere
-			 * An altlink is something like DVSwitch that wants to hear
-			 * local telemetry on the link channel -> essentially connecting to
-			 * the TXCONF audio
-			 */
+			/* IF we are an altlink() -> !altlink() handled elsewhere */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
+				/* If we are an altlink():
+				 * This copies repeater tx audio from TXCONF when the repeater is not receiving audio,
+				 * yet still transmitting, allowing these client types to hear the local repeater output.
+				 *
+				 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
+				 * the repeater output including telemetry.
+				 */
+				rpt_mutex_unlock(&myrpt->lock);
 				ast_audiohook_lock(&l->whisper_audiohook);
 				ast_audiohook_write_frame(&l->whisper_audiohook, AST_AUDIOHOOK_DIRECTION_WRITE, f);
 				ast_audiohook_unlock(&l->whisper_audiohook);
+				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
+		rpt_mutex_unlock(&myrpt->lock);
 		ao2_iterator_destroy(&l_it);
 	}
 	return hangup_frame_helper(myrpt->monchannel, "monchannel", f);
