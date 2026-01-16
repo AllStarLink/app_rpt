@@ -4240,9 +4240,12 @@ static inline void hangup_link_chan(struct rpt_link *l)
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	int time = 20; /* Run periodic_process_link one last time */
-	rpt_mutex_lock(&myrpt->lock);
-	__kickshort(myrpt);
-	rpt_mutex_unlock(&myrpt->lock);
+
+	ast_audiohook_lock(&l->whisper_audiohook);
+	ast_audiohook_detach(&l->whisper_audiohook);
+	ast_audiohook_unlock(&l->whisper_audiohook);
+	ast_audiohook_destroy(&l->whisper_audiohook);
+
 	if (l->chan) {
 		if (!ast_safe_sleep(l->chan, MSWAIT)) { /* allow channel to receive any text messages */
 			/* Not hungup */
@@ -4434,7 +4437,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			if (!f) {
 				ast_debug(3, "Failed to read frame on %s, must've hung up\n", ast_channel_name(l->chan));
 				/* If IAX disappears, keep running to attempt reconnect if possible */
-				l->chan = NULL;
 				if (remote_hangup_helper(myrpt, l)) {
 					/* A reconnect is possible */
 					continue;
@@ -6938,10 +6940,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* Service the link channel */
 		process_link_channel(myrpt, l);
 		/* call has ended, clean up */
-		ast_audiohook_lock(&l->whisper_audiohook);
-		ast_audiohook_detach(&l->whisper_audiohook);
-		ast_audiohook_unlock(&l->whisper_audiohook);
-		ast_audiohook_destroy(&l->whisper_audiohook);
 		ao2_ref(l, -1); /* and drop the ref we're holding */
 
 		return 0;

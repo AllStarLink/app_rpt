@@ -800,10 +800,6 @@ void *rpt_link_connect(void *data)
 	/* Service the link channel */
 	process_link_channel(myrpt, l);
 	/* call has ended, clean up */
-	ast_audiohook_lock(&l->whisper_audiohook);
-	ast_audiohook_detach(&l->whisper_audiohook);
-	ast_audiohook_unlock(&l->whisper_audiohook);
-	ast_audiohook_destroy(&l->whisper_audiohook);
 	ao2_ref(l, -1);
 
 cleanup:
