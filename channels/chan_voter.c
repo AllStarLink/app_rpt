@@ -4364,40 +4364,100 @@ static void voter_xmit_master(void)
  */
 static void *voter_timer(void *data)
 {
-	time_t t;
 	struct voter_pvt *p;
 	struct voter_client *client, *client1;
 	struct timeval tv;
+
+	/* Get the timer handle (fd) for the timer we opened in load_module. */
 	int timingfd = ast_timer_fd(voter_thread_timer);
 
 	while (run_forever && !ast_shutting_down()) {
+		/* Since timeout = -1, ast_waitfor_n_fd will wait forever for our
+		 * timer handle (timingfd) to become ready. It should happen on
+		 * every "tick" (every 20ms)?
+		 */
 		int timeout = -1;
 		ast_waitfor_n_fd(&timingfd, 1, &timeout, NULL);
+
+		/* When the timer is ready, acknowledge it (one event only). This
+		 * timer should be used to keep all our audio in sync (ie for IAX2).
+		 */
 		if (ast_timer_ack(voter_thread_timer, 1) < 0) {
 			ast_log(LOG_ERROR, "Failed to acknowledge timer\n");
 			break;
 		}
 
 		ast_mutex_lock(&voter_lock);
-		time(&t);
+
+		/* If we don't have a master client (using mix mode clients), set
+		 * master_time.vtime_sec from the system clock here. Otherwise,
+		 * master_time.vtime_sec will be set in voter_reader from the
+		 * timestamp embedded in the packets from the master client.
+		 *
+		 * Changed from using time() to using gettimeofday() so that all
+		 * our timing is consistent. The two functions may not return the
+		 * "same time", which could lead to random disconnects of mix mode
+		 * clients. See Issue 902.
+		 */
+		gettimeofday(&tv, NULL);
 		if (!hasmaster) {
-			master_time.vtime_sec = (uint32_t) t;
-		}
-		voter_timing_count++;
-		if (!hasmaster) {
+			master_time.vtime_sec = tv.tv_sec;
+
 			for (p = pvts; p; p = p->next) {
 				memset(p->buf + AST_FRIENDLY_OFFSET, 0xff, FRAME_SIZE);
 				voter_mix_and_send(p, NULL, 0);
 			}
+
 			voter_xmit_master();
-			gettimeofday(&tv, NULL);
+		}
+
+		/* Add a tick to the voter_timing_count every time we pass though. */
+		voter_timing_count++;
+
+		/* Cycle through our Asterisk channels, checking the status of our clients,
+		 * to make sure they are still sending data to us. Disconnect them if we
+		 * haven't heard from them after the timeout period. Additionally, if we lost
+		 * our master timing client, force a disconnect of all remaining clients that
+		 * were connected to that instance (they can't do anything if there is no master).
+		 */
+		for (p = pvts; p; p = p->next) {
+			/* Cycle through each client configured for this channel. */
 			for (client = clients; client; client = client->next) {
+				/* See if it has been too long since we heard from the client, master
+				 * client timing is more strict.
+				 */
 				if (!ast_tvzero(client->lastheardtime) &&
 					(voter_tvdiff_ms(tv, client->lastheardtime) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
 					ast_log(LOG_NOTICE, "VOTER client %s disconnect (timeout)\n", client->name);
 					client->heardfrom = 0;
 					client->respdigest = 0;
 					client->lastheardtime = ast_tv(0, 0);
+
+					/* If this was the master that disconnected, we need to gracefully drop any other
+					 * clients that were connected and associated with this instance.
+					 */
+					if (client->ismaster) {
+						ast_log(LOG_WARNING, "Lost master timing client, dumping remaining clients.\n");
+						for (client1 = clients; client1; client1 = client1->next) {
+							/* Not sure if we need to implement this... have to see if there actually can
+							 * be more than one master client. Un-comment this to only disconnect clients
+							 * belonging to this node number.
+							 */
+							// if (client1->nodenum != client->nodenum) {
+							//		continue;
+							//	}
+							/* Only drop connections we have heard from (not all configured clients
+							 * in voter.conf).
+							 */
+							if (client1->heardfrom) {
+								ast_log(LOG_NOTICE, "Forcing disconnect of client: %s\n", client1->name);
+								client1->heardfrom = 0;
+								client1->respdigest = 0;
+								client1->lastheardtime = ast_tv(0, 0);
+							}
+						}
+						break;
+					}
 				}
 			}
 			if (check_client_sanity) {
@@ -4947,18 +5007,9 @@ static void *voter_reader(void *data)
 							"Client out of bounds! Please file a bug report with the developers if you see this message!\n");
 					}
 					if (client->curmaster) {
-						gettimeofday(&tv, NULL);
-						for (client = clients; client; client = client->next) {
-							if (!ast_tvzero(client->lastheardtime) &&
-								(voter_tvdiff_ms(tv, client->lastheardtime) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
-								ast_log(LOG_NOTICE, "VOTER client %s disconnect (timeout)\n", client->name);
-								client->heardfrom = 0;
-								client->respdigest = 0;
-							}
-							if (!client->heardfrom) {
-								client->lastheardtime.tv_sec = client->lastheardtime.tv_usec = 0;
-							}
-						}
+						/*! \todo VE7FET do we need to check client sanity again here? We're
+						 * already doing most of this in voter_timer
+						 */
 						if (check_client_sanity) {
 							for (client = clients; client; client = client->next) {
 								for (p = pvts; p; p = p->next) {
@@ -5538,7 +5589,8 @@ process_gps:
 				}
 			}
 			if (!client->mix && !hasmaster) {
-				time(&t);
+				gettimeofday(&tv, NULL);
+				t = tv.tv_sec;
 				if (t >= (client->warntime + CLIENT_WARN_SECS)) {
 					client->warntime = t;
 					ast_log(LOG_WARNING, "VOTER client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
@@ -5705,13 +5757,20 @@ static int load_module(void)
 		}
 	}
 
+	/* We open a timer and put the timer handle (fd) in voter_thread_timer. ast_timer_open
+	 * returns null on failure, so throw an error and shutdown if we can't open a timer.
+	 *
+	 * voter_thread_timer is used in the voter_timer thread.
+	 */
 	voter_thread_timer = ast_timer_open();
 	if (!voter_thread_timer) {
 		ast_log(LOG_ERROR, "Failed to open timer\n");
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
-	ast_timer_set_rate(voter_thread_timer, 50); /* 50 ticks per second = every 20ms */
+
+	/* Set voter_thread_timer for 50 ticks/second (every 20ms). */
+	ast_timer_set_rate(voter_thread_timer, 50);
 
 	/* Load the rest of the values from the config file by running reload. */
 	if (reload()) {
