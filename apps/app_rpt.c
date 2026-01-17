@@ -4227,6 +4227,10 @@ static inline void safe_hangup(struct ast_channel *chan)
 static inline void hangup_link_chan(struct rpt_link *l)
 {
 	if (l->chan) {
+		ast_audiohook_lock(&l->whisper_audiohook);
+		ast_audiohook_detach(&l->whisper_audiohook);
+		ast_audiohook_unlock(&l->whisper_audiohook);
+		ast_audiohook_destroy(&l->whisper_audiohook);
 		safe_hangup(l->chan);
 		l->chan = NULL;
 	}
@@ -4240,12 +4244,6 @@ static inline void hangup_link_chan(struct rpt_link *l)
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	int time = 20; /* Run periodic_process_link one last time */
-
-	ast_audiohook_lock(&l->whisper_audiohook);
-	ast_audiohook_detach(&l->whisper_audiohook);
-	ast_audiohook_unlock(&l->whisper_audiohook);
-	ast_audiohook_destroy(&l->whisper_audiohook);
-
 	if (l->chan) {
 		if (!ast_safe_sleep(l->chan, MSWAIT)) { /* allow channel to receive any text messages */
 			/* Not hungup */
@@ -4259,8 +4257,10 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		if (!l->disced) {
 			if (!l->outbound) {
 				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
+					/* NOt an allstar link node */
 					l->disctime = 1;
 				} else {
+					/* An allstar link node */
 					l->disctime = DISC_TIME;
 				}
 				rpt_mutex_lock(&myrpt->lock);
