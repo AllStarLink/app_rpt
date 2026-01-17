@@ -4227,10 +4227,6 @@ static inline void safe_hangup(struct ast_channel *chan)
 static inline void hangup_link_chan(struct rpt_link *l)
 {
 	if (l->chan) {
-		ast_audiohook_lock(&l->whisper_audiohook);
-		ast_audiohook_detach(&l->whisper_audiohook);
-		ast_audiohook_unlock(&l->whisper_audiohook);
-		ast_audiohook_destroy(&l->whisper_audiohook);
 		safe_hangup(l->chan);
 		l->chan = NULL;
 	}
@@ -4295,7 +4291,6 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	if (!strcmp(myrpt->cmdnode, l->name)) {
 		myrpt->cmdnode[0] = 0;
 	}
-	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 
 	if (!l->hasconnected) {
@@ -4316,8 +4311,11 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	/* hang-up on call to device */
 	hangup_link_chan(l);
 	rpt_mutex_unlock(&myrpt->lock);
-
 	ast_hangup(l->pchan);
+	ast_audiohook_lock(&l->whisper_audiohook);
+	ast_audiohook_detach(&l->whisper_audiohook);
+	ast_audiohook_unlock(&l->whisper_audiohook);
+	ast_audiohook_destroy(&l->whisper_audiohook);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	return 0;
 }
@@ -4655,6 +4653,10 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					l->last_frame_sent = 1;
 				} else if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 						   ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
+					/* If we are and alt link, copy audio frames when NOT transmitting, like a "normal" asterisk link.
+					 * If the repeater is not receiving (either remote or local), we use the audiohook to "whisper" any
+					 * repeater output frames into the l->pchan.
+					 */
 					ast_write(l->chan, f);
 				}
 			}
@@ -4701,8 +4703,10 @@ static inline int monchannel_read(struct rpt *myrpt)
 		/* go thru all the links */
 		rpt_mutex_lock(&myrpt->lock);
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			/* IF we are an altlink() -> !altlink() handled elsewhere */
-			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
+			/* IF we are an altlink() and the repeater is not receiving (aka we are in the tail time),
+			 *whisper the output audio onto said link.
+			 */
+			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
 				/* If we are an altlink():
 				 * This copies repeater tx audio from TXCONF when the repeater is not receiving audio,
@@ -4713,7 +4717,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 				 */
 				rpt_mutex_unlock(&myrpt->lock);
 				ast_audiohook_lock(&l->whisper_audiohook);
-				ast_audiohook_write_frame(&l->whisper_audiohook, AST_AUDIOHOOK_DIRECTION_WRITE, f);
+				ast_audiohook_write_frame(&l->whisper_audiohook, AST_AUDIOHOOK_DIRECTION_READ, f);
 				ast_audiohook_unlock(&l->whisper_audiohook);
 				rpt_mutex_lock(&myrpt->lock);
 			}
@@ -6903,7 +6907,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		ast_audiohook_init(&l->whisper_audiohook, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
-		ast_audiohook_attach(chan, &l->whisper_audiohook); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+		ast_audiohook_attach(l->pchan, &l->whisper_audiohook); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
 
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		doconpgm(myrpt, l->name);
