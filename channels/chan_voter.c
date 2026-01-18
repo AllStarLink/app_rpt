@@ -4438,8 +4438,10 @@ static void *voter_timer(void *data)
 					 */
 					if (client->ismaster) {
 						ast_log(LOG_WARNING, "Lost master timing client, dumping remaining clients.\n");
+						/* Reset the current active master flag for this client, since it disconnected. */
+						client->curmaster = 0;
 						for (client1 = clients; client1; client1 = client1->next) {
-							/* Not sure if we need to implement this... have to see if there actually can
+							/*! \todo VE7FET Not sure if we need to implement this... have to see if there actually can
 							 * be more than one master client. Un-comment this to only disconnect clients
 							 * belonging to this node number.
 							 */
@@ -4505,7 +4507,7 @@ static void *voter_reader(void *data)
 	char gps1[300], gps2[300], isproxy;
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
-	int i, j, k, ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
+	int i, j, k, ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0, inactivemaster = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -4599,15 +4601,28 @@ static void *voter_reader(void *data)
 			sin.sin_port = htons(master_port);
 		}
 		isproxy = 0;
+
+		/* If there is no digest in the packet header (vph->digest), the client this packet
+		 * came from isn't authenticated, yet, so we are going to skip all the normal packet
+		 * processing in this IF, and fall through to the authentication process below it.
+		 */
 		if (vph->digest) {
 			gettimeofday(&tv, NULL);
-			/* First see if client is found. */
+			/* First, go through all the clients, and stop when we find an authenticated
+			 * client (has client->digest set) that matches the digest we received on the
+			 * wire (vph->digest).
+			 *
+			 * When we find a match, we'll also update the associated client->lastheard
+			 * time for that client with the current timestamp.
+			 */
 			for (client = clients; client; client = client->next) {
 				if (client->digest == htonl(vph->digest)) {
+					client->lastheardtime = tv;
 					break;
 				}
 			}
-			/* This only displays if the client is sending us receive audio. */
+
+			/* This only displays if the client is sending us ulaw receive audio while in debug. */
 			if (DEBUG_ATLEAST(4) && client && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0) &&
 				ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) {
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
@@ -4615,6 +4630,15 @@ static void *voter_reader(void *data)
 				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
 					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
+
+			/* If we have a valid client to work with, search through the configured Asterisk channels (p),
+			 * and stop when we find one that matches (p->nodenum == client->nodeum).
+			 *
+			 * If we can't find a matching Asterisk channel, we will set some variables to ignore this
+			 * this client. We do this to prevent a client from "looping" through connecting and
+			 * disconnecting endlessly... which is a problem if you have a voter client with offline mode
+			 * configured (and it keeps toggling between online and offline).
+			 */
 			if (client) {
 				/* Search for connected Asterisk channel for this known client. */
 				for (p = pvts; p; p = p->next) {
@@ -4623,7 +4647,7 @@ static void *voter_reader(void *data)
 					}
 				}
 				if (!p) {
-					/* We didn't find an asterisk channel,
+					/* We didn't find an Asterisk channel,
 					 * act like we don't know the client,
 					 * do not respond to messages via no_ast_channel flag.
 					 */
@@ -4635,11 +4659,20 @@ static void *voter_reader(void *data)
 					no_ast_channel = 1;
 					client = NULL;
 				} else {
+					/* Otherwise, we found the channel, and the client is connected to it,
+					 * so make sure our flags are reset.
+					 */
 					logged_no_ast_channel = 0;
 					no_ast_channel = 0;
 				}
 			}
+
+			/* If we have a valid client to work with, we'll do a sanity check on the IP address an port
+			 * that the client is sending from, then proceed with determining who the current active master
+			 * client should be (for voting clients).
+			 */
 			if (client) {
+				/* Do some sanity checks. */
 				if (check_client_sanity && p && !p->priconn) {
 					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
 						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
@@ -4651,55 +4684,116 @@ static void *voter_reader(void *data)
 					}
 				}
 				lastmaster = NULL;
-				/* First, kill all the 'curmaster' flags. */
+				/* Traverse the list of clients and find the one that is the current active
+				 * master client. Store that client's details in the lastmaster array, then
+				 * reset the active master (curmaster) flag, so that we can see if it changed.
+				 *
+				 * We do this every time we come through the loop, about every 20ms for voting
+				 * clients.
+				 */
 				for (client1 = clients; client1; client1 = client1->next) {
 					if (client1->curmaster) {
 						lastmaster = client1;
 						client1->curmaster = 0;
 					}
 				}
-				client->lastheardtime = tv;
-				/* If possible, set it to first 'active' one. */
+
+				/* Traverse the list of clients again, and see if we can find a client that
+				 * is marked as a "master" client in voter.conf, and has been recently active
+				 * (heard from), and mark it as the current active master (curmaster).
+				 */
 				for (client1 = clients; client1; client1 = client1->next) {
+					/* If the client isn't configured to be a master in voter.conf, skip it. */
 					if (!client1->ismaster) {
 						continue;
 					}
+					/* If the client is a potential master client, but the last heard time is
+					 * 0 (ast_tvzero returns true when time is 0,0), skip it.
+					 */
 					if (ast_tvzero(client1->lastheardtime)) {
 						continue;
 					}
+					/* If the client is a potential master client, but the last time we heard
+					 * from it was longer than MASTER_TIMEOUT_MS ago, skip it.
+					 */
 					if (voter_tvdiff_ms(tv, client1->lastheardtime) > MASTER_TIMEOUT_MS) {
 						continue;
 					}
+					/* After all that, this client should be suitable to be designated the
+					 * current active master (curmaster), so set the flag.
+					 */
 					client1->curmaster = 1;
+					/* If the client we just selected as the current active master is different
+					 * than the previous one we stored above (lastmaster), notify of the change.
+					 *
+					 * Or, if we didn't have a lastmaster, we should notify of the change from
+					 * NONE to the current client.
+					 *
+					 * In most cases, once running, the master shouldn't change because there
+					 * really should only be one master client connfigured on the host.
+					 */
 					if (client1 != lastmaster) {
 						ast_log(LOG_NOTICE, "VOTER Master changed from client %s to %s\n",
 							(lastmaster) ? lastmaster->name : "NONE", client1->name);
 					}
+
+					/* If we determined our active master while the client was disconnected
+					 * (below), and it has now connected, log it.
+					 */
+					if (inactivemaster) {
+						ast_log(LOG_NOTICE, "VOTER Master client %s changed from not connected to connected!\n", client1->name);
+						inactivemaster = 0;
+					}
+					/* Exit, once we've set the current active master. */
 					break;
 				}
-				/* If not, just set to to 'one of them'. */
+				/* If we can't find a recently heard from master client to make the current active master,
+				 * (client1 is empty), we will just designate one that is supposed to be a master client
+				 * as the current master, with a note that it is currently not connected.
+				 */
 				if (!client1) {
+					/* If the current client happens to be configured as a master client, set it to
+					 * be the current active master. Otherwise, we'll go look through the client list.
+					 */
 					if (client->ismaster) {
 						client->curmaster = 1;
 					} else {
+						/* Traverse the list of clients, and try and find one that is configured to
+						 * be a master client.
+						 */
 						for (client1 = clients; client1; client1 = client1->next) {
+							/* If this client isn't configured to be a master, skip it. */
 							if (!client1->ismaster) {
 								continue;
 							}
+							/* When we find one that is configured to be a master, set it as the
+							 * current active master, even though it isn't presently connected.
+							 */
 							client1->curmaster = 1;
 							if (client1 != lastmaster) {
-								ast_log(LOG_NOTICE, "VOTER Master changed from client %s to %s (inactive)\n",
+								ast_log(LOG_NOTICE, "VOTER Master changed from client %s to %s (currently disconnected)\n",
 									(lastmaster) ? lastmaster->name : "NONE", client1->name);
+								inactivemaster = 1; /* Set a flag so we can note when this client connects. */
 							}
+							/* Exit, once we've set the current active master. */
 							break;
 						}
 					}
 				}
+				/*! \todo VE7FET this seems like a bad test... we can only get here if
+				 * client is true. So, !client can probably be removed?
+				 */
 				if (!client || (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY)) {
 					client->respdigest = crc32_bufs((char *) vph->challenge, password);
 				}
 				client->sin = sin;
 				memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
+
+				/* If we are supposed to have a master client (hasmaster), but the
+				 * current active master has no longer true, we'll put silence in to
+				 * the audio buffer, set the RSSI to 0, unkey the channel, and do
+				 * some other cleanup.
+				 */
 				if (!client->curmaster && hasmaster) {
 					if (last_master_count && (voter_timing_count > (last_master_count + MAX_MASTER_COUNT))) {
 						ast_log(LOG_NOTICE, "VOTER lost master timing source!!\n");
@@ -4740,17 +4834,21 @@ static void *voter_reader(void *data)
 			if (client && ntohs(vph->payload_type)) {
 				client->heardfrom = 1;
 			}
-			/* If we know the client, find the connection that the audio belongs to and send it there. */
+			/* If we have a valid (authenticated) client, have recently heard from it, and it sent
+			 * us a valid audio or proxy packet, find the corresponding Asterisk channel and
+			 * send it there.
+			 */
 			if (client && client->heardfrom &&
 				(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))) ||
 					((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))) ||
 					(ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY))) {
+				/* Find the matching Asterisk channel for this client. */
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
 						break;
 					}
 				}
-				/* If we found the client. */
+				/* If we found the matching channel. */
 				if (p) {
 					long long btime, ptime, difftime;
 					int index, flen;
