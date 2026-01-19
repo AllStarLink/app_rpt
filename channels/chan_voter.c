@@ -380,7 +380,6 @@ char context[100];
 
 #define MAX_MASTER_COUNT 3
 #define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
-#define CLIENT_WARN_SECS 60
 
 #define DELIMCHR ','
 #define QUOTECHR 34
@@ -538,7 +537,6 @@ struct voter_client {
 	int rxseqno;
 	int rxseqno_40ms;
 	int old_buflen;
-	time_t warntime;
 	char *gpsid;
 	int prio;
 	int prio_override;
@@ -4428,7 +4426,7 @@ static void *voter_timer(void *data)
 				 */
 				if (!ast_tvzero(client->lastheardtime) &&
 					(voter_tvdiff_ms(tv, client->lastheardtime) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
-					ast_log(LOG_NOTICE, "VOTER client %s disconnect (timeout)\n", client->name);
+					ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
 					client->heardfrom = 0;
 					client->respdigest = 0;
 					client->lastheardtime = ast_tv(0, 0);
@@ -4437,7 +4435,7 @@ static void *voter_timer(void *data)
 					 * clients that were connected and associated with this instance.
 					 */
 					if (client->ismaster) {
-						ast_log(LOG_WARNING, "Lost master timing client, dumping remaining clients.\n");
+						ast_log(LOG_WARNING, "Lost master timing client, disconnecting remaining clients.\n");
 						/* Reset the current active master flag for this client, since it disconnected. */
 						client->curmaster = 0;
 						for (client1 = clients; client1; client1 = client1->next) {
@@ -4472,6 +4470,7 @@ static void *voter_timer(void *data)
 							if (!client1->respdigest) {
 								continue;
 							}
+							ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (sanity)\n", client1->nodenum, client1->name);
 							client->respdigest = 0;
 							client->heardfrom = 0;
 							client1->respdigest = 0;
@@ -4733,7 +4732,7 @@ static void *voter_reader(void *data)
 					 * really should only be one master client connfigured on the host.
 					 */
 					if (client1 != lastmaster) {
-						ast_log(LOG_NOTICE, "VOTER Master changed from client %s to %s\n",
+						ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to %s\n", client1->nodenum,
 							(lastmaster) ? lastmaster->name : "NONE", client1->name);
 					}
 
@@ -4741,7 +4740,8 @@ static void *voter_reader(void *data)
 					 * (below), and it has now connected, log it.
 					 */
 					if (inactivemaster) {
-						ast_log(LOG_NOTICE, "VOTER Master client %s changed from not connected to connected!\n", client1->name);
+						ast_log(LOG_NOTICE, "VOTER %u: Master client %s changed from not connected to connected!\n",
+							client1->nodenum, client1->name);
 						inactivemaster = 0;
 					}
 					/* Exit, once we've set the current active master. */
@@ -4771,8 +4771,8 @@ static void *voter_reader(void *data)
 							 */
 							client1->curmaster = 1;
 							if (client1 != lastmaster) {
-								ast_log(LOG_NOTICE, "VOTER Master changed from client %s to %s (currently disconnected)\n",
-									(lastmaster) ? lastmaster->name : "NONE", client1->name);
+								ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to %s (currently disconnected)\n",
+									client1->nodenum, (lastmaster) ? lastmaster->name : "NONE", client1->name);
 								inactivemaster = 1; /* Set a flag so we can note when this client connects. */
 							}
 							/* Exit, once we've set the current active master. */
@@ -5101,8 +5101,8 @@ static void *voter_reader(void *data)
 						client->rxseqno_40ms = 0;
 						client->rxseq40ms = 0;
 						client->drain40ms = 0;
-						ast_log(LOG_ERROR,
-							"Client out of bounds! Please file a bug report with the developers if you see this message!\n");
+						ast_log(LOG_ERROR, "VOTER %u: Client %s out of bounds! Please file a bug report with the developers if you see this message!\n",
+							client->nodenum, client->name);
 					}
 					if (client->curmaster) {
 						/*! \todo VE7FET do we need to check client sanity again here? We're
@@ -5130,6 +5130,7 @@ static void *voter_reader(void *data)
 										if (!client1->respdigest) {
 											continue;
 										}
+										ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (sanity)\n", client1->nodenum, client1->name);
 										client->respdigest = 0;
 										client->heardfrom = 0;
 										client1->respdigest = 0;
@@ -5649,9 +5650,11 @@ process_gps:
 			 */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
 				if (client->ismaster) {
-					ast_log(LOG_WARNING, "VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n",
-						client->name);
+					ast_log(LOG_WARNING, "VOTER %u: Client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n",
+						client->nodenum, client->name);
+					ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (forced)\n", client->nodenum, client->name);
 					authpacket.vp.digest = 0;
+					client->curmaster = 0;
 					client->heardfrom = 0;
 					client->respdigest = 0;
 					continue;
@@ -5681,23 +5684,21 @@ process_gps:
 						continue;
 					} else {
 						client->mix = 1;
-						ast_log(LOG_NOTICE, "Client: %s is sending mix mode flag, setting client to mix mode\n", client->name);
+						ast_log(LOG_NOTICE, "VOTER %u: Client %s is sending mix mode flag, setting client to mix mode\n",
+							client->nodenum, client->name);
 						logged_buflen_too_small = 0;
 					}
 				}
 			}
 			if (!client->mix && !hasmaster) {
-				gettimeofday(&tv, NULL);
-				t = tv.tv_sec;
-				if (t >= (client->warntime + CLIENT_WARN_SECS)) {
-					client->warntime = t;
-					ast_log(LOG_WARNING, "VOTER client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
-						client->name);
-				}
+				ast_log(LOG_WARNING, "VOTER %u: Client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
+					client->nodenum, client->name);
 				/* Reject the connection. */
+				ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (forced)\n", client->nodenum, client->name);
 				authpacket.vp.digest = 0;
 				client->heardfrom = 0;
 				client->respdigest = 0;
+				continue;
 			} else {
 				if (client->ismaster) {
 					authpacket.flags |= 2 | 8;
