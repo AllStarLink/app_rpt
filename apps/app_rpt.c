@@ -3330,60 +3330,64 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	/* if connection has taken too long */
 	max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
 
-	if ((l->elaptime > MAXCONNECTTIME) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
-		l->elaptime = 0;
-		if (!l->outbound) {
-			ast_debug(1, "Connection taking to long, giving up on link");
-			l->disced = RPT_LINK_DISCONNECT;
-		} else {
-			ast_debug(1, "Connection taking to long, resetting retry timer");
-			l->retrytimer = RETRY_TIMER_MS;
+	if (l->outbound) {
+		if ((l->elaptime > MAXCONNECTTIME) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
+			l->elaptime = 0;
+			if (!l->outbound) {
+				ast_debug(1, "Connection taking to long, giving up on link");
+				l->disced = RPT_LINK_DISCONNECT;
+			} else {
+				ast_debug(1, "Connection taking to long, resetting retry timer");
+				l->retrytimer = RETRY_TIMER_MS;
+			}
+			return;
 		}
-		return;
-	}
 
-	if (!l->chan && !l->retrytimer && l->outbound && !max_retries && l->hasconnected) {
-		if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
-			attempt_reconnect(myrpt, l);
-		} else {
-			/* We should not retry this node type */
-			l->retries = l->max_retries + 1;
+		if (!l->chan && !l->retrytimer && !max_retries && l->hasconnected) {
+			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
+				attempt_reconnect(myrpt, l);
+			} else {
+				/* We should not retry this node type */
+				l->retries = l->max_retries + 1;
+			}
+			return;
 		}
-		return;
-	}
-	if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
-		l->disced = RPT_LINK_DISCONNECT;
-		if (!strcmp(myrpt->cmdnode, l->name))
-			myrpt->cmdnode[0] = 0;
-		if (l->name[0] != '0') {
-			if (!l->hasconnected)
-				rpt_telemetry(myrpt, CONNFAIL, l);
-			else
+		if (!l->chan && !l->retrytimer && max_retries) {
+			l->disced = RPT_LINK_DISCONNECT;
+			if (!strcmp(myrpt->cmdnode, l->name))
+				myrpt->cmdnode[0] = 0;
+			if (l->name[0] != '0') {
+				if (!l->hasconnected)
+					rpt_telemetry(myrpt, CONNFAIL, l);
+				else
+					rpt_telemetry(myrpt, REMDISC, l);
+			}
+			if (l->hasconnected)
+				rpt_update_links(myrpt);
+			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
+			/* hang-up on call to device */
+			return;
+		}
+	} else {
+		/* Not outbound */
+		if ((!l->chan) && (!l->disctime)) {
+			ast_debug(1, "LINKDISC AA\n");
+			l->disced = RPT_LINK_DISCONNECT;
+			if (!ao2_container_count(myrpt->links)) {
+				channel_revert(myrpt);
+			}
+			if (!strcmp(myrpt->cmdnode, l->name)) {
+				myrpt->cmdnode[0] = 0;
+			}
+			if (l->name[0] != '0') {
 				rpt_telemetry(myrpt, REMDISC, l);
-		}
-		if (l->hasconnected)
+			}
 			rpt_update_links(myrpt);
-		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
-		/* hang-up on call to device */
-		return;
-	}
-	if ((!l->chan) && (!l->disctime) && (!l->outbound)) {
-		ast_debug(1, "LINKDISC AA\n");
-		l->disced = RPT_LINK_DISCONNECT;
-		if (!ao2_container_count(myrpt->links)) {
-			channel_revert(myrpt);
+			donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
+			dodispgm(myrpt, l->name);
+			/* hang-up on call to device */
+			return;
 		}
-		if (!strcmp(myrpt->cmdnode, l->name)) {
-			myrpt->cmdnode[0] = 0;
-		}
-		if (l->name[0] != '0') {
-			rpt_telemetry(myrpt, REMDISC, l);
-		}
-		rpt_update_links(myrpt);
-		donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
-		dodispgm(myrpt, l->name);
-		/* hang-up on call to device */
-		return;
 	}
 	return;
 }
