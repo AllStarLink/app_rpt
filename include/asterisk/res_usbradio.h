@@ -347,6 +347,17 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device);
 int ast_radio_usb_get_usbdev(const char *devstr);
 
 /*!
+ * \brief Get serial number from device if available
+ *	This function will attempt to get the serial number from a media device
+ *
+ * \param devstr		The USB device string
+ * \param buf			Pointer to buffer for serial number
+ * \param buflen		Length of the serial number buffer
+ * \retval				Length of returned serial number; 0 if no serial
+ */
+int ast_radio_usb_get_serial(const char *devstr, char *buf, size_t buflen);
+
+/*!
  * \brief See if the internal usb_device_list contains the
  * specified device string.
  * \param devstr	Device string to check.

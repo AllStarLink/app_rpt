@@ -203,6 +203,7 @@ struct chan_usbradio_pvt {
 
 	char devicenum;
 	char devstr[128];
+	char serial[128];
 	int spkrmax;
 	int micmax;
 	int micplaymax;
@@ -753,6 +754,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	int opened = 0;
 	int configured = 0;
 	char devstr[sizeof(o->devstr)];
+	char serial[sizeof(o->serial)];
 
 	/* No load defaults */
 	o->rxmixerset = 500;
@@ -764,8 +766,10 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
 
 	devstr[0] = '\0';
+	serial[0] = '\0';
 	if (!reload) {
 		o->devstr[0] = 0;
+		o->serial[0] = 0;
 	}
 
 	if (!cfg) {
@@ -791,11 +795,13 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 		CV_UINT("txslimsp", o->txslimsp);
 		CV_UINT("fever", o->fever);
 		CV_STR("devstr", devstr);
+		CV_STR("serial", serial);
 		CV_END;
 	}
 	if (!reload) {
 		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
 		strcpy(o->devstr, devstr); /* Safe */
+		strcpy(o->serial, serial); /* Safe */
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
@@ -865,6 +871,8 @@ static void *hidthread(void *arg)
 	 * with the usb hid device
 	 */
 	while (!o->stophid) {
+		char serial[sizeof(o->serial)] = { '\0' };
+
 		ast_radio_time(&o->lasthidtime);
 		ast_mutex_lock(&usb_dev_lock);
 		o->hasusb = 0;
@@ -885,6 +893,36 @@ static void *hidthread(void *arg)
 		 * found device.
 		 */
 		ast_radio_time(&o->lasthidtime);
+
+		/* If configuration has a serial number defined, find the device */
+		if (!ast_strlen_zero(o->serial)) {
+			int index;
+			char *index_devstr = NULL;
+
+			for (index = 0;; index++) {
+				index_devstr = ast_radio_usb_get_devstr(index);
+				if (ast_strlen_zero(index_devstr)) {
+					/* if no more devices */
+					break;
+				}
+
+				/* get the device serial number */
+				if (ast_radio_usb_get_serial(index_devstr, serial, sizeof(serial)) == 0) {
+					/* if no serial number */
+					continue;
+				}
+
+				if (strcmp(o->serial, serial) == 0) {
+					/*
+					 * We found a device with the matching serial number, set
+					 * the devstr to the matching device.
+					 */
+					ast_log(LOG_NOTICE, "Matched device serial %s to %s\n", o->serial, o->name);
+					ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
+					break;
+				}
+			}
+		}
 
 		/* Automatically assign a devstr if one was not specified in the configuration. */
 		if (ast_strlen_zero(o->devstr)) {
@@ -915,6 +953,9 @@ static void *hidthread(void *arg)
 				/* We found an unused device assign it to our node */
 				ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
 				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to USBRadio channel\n", o->name, o->devstr);
+				if (ast_radio_usb_get_serial(index_devstr, serial, sizeof(serial)) > 0) {
+					ast_copy_string(o->serial, serial, sizeof(o->serial));
+				}
 				break;
 			}
 			if (ast_strlen_zero(o->devstr)) {
@@ -3648,6 +3689,9 @@ static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 	ast_cli(fd, "Active radio interface is [%s]\n", usbradio_active);
 	ast_mutex_lock(&usb_dev_lock);
 	ast_cli(fd, "Device String is %s\n", o->devstr);
+	if (!ast_strlen_zero(o->serial)) {
+		ast_cli(fd, "Device Serial is %s\n", o->serial);
+	}
 	ast_mutex_unlock(&usb_dev_lock);
 	ast_cli(fd, "Card is %i\n", ast_radio_usb_get_usbdev(o->devstr));
 	ast_cli(fd, "Output A is currently set to ");
@@ -4512,7 +4556,36 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	if (!category) {
 		ast_log(LOG_ERROR, "No category '%s' exists?\n", o->name);
 	} else {
-		CONFIG_UPDATE_STR(devstr);
+		/*
+		 * To simplify channel driver setup we allow the "devstr=" value
+		 * to be empty/blank indicating that we should match the first
+		 * available interface.
+		 *
+		 * This works (and will continue to work) well as long as the
+		 * "devstr=" value in the configuration file remains empty/blank.
+		 * But, if the value is ever provided then we only match interfaces
+		 * with the specified string.  Moving the interface (accidentally
+		 * or intentionally) to a different "port" will result in not
+		 * finding/matching the interface.
+		 *
+		 * To minimize conflicts, we want to avoid writing out the specific
+		 * "devstr=" value to the configuration file unless needed.  Here,
+		 * we check if the current "devstr=" value is empty/blank and
+		 * that there is only a single audio interface connected to the
+		 * system.  If so, we leave the value empty/blank.
+		 */
+		const char *val;
+		char *dev;
+
+		val = ast_variable_retrieve(cfg, o->name, "devstr");
+		dev = ast_radio_usb_get_devstr(1);
+		if (!ast_strlen_zero(val) || !ast_strlen_zero(dev)) {
+			/* if the "devstr=" value exists or there is more than 1 sound device */
+			CONFIG_UPDATE_STR(devstr);
+			if (!ast_strlen_zero(o->serial)) {
+				CONFIG_UPDATE_STR(serial);
+			}
+		}
 		CONFIG_UPDATE_INT(rxmixerset);
 		CONFIG_UPDATE_INT(txmixaset);
 		CONFIG_UPDATE_INT(txmixbset);

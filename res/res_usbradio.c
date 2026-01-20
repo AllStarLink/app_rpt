@@ -598,6 +598,38 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 	return i;
 }
 
+/*!
+ * \brief Get serial number from device if available
+ *	This function will attempt to get the serial number from a media device
+ *
+ * \param devstr		The USB device string
+ * \param buf			Pointer to buffer for serial number
+ * \param buflen		Length of the serial number buffer
+ * \retval				Length of returned serial number; 0 if no serial
+ */
+int ast_radio_usb_get_serial(const char *devstr, char *buf, size_t buflen)
+{
+	struct usb_device *usb_dev;
+	struct usb_dev_handle *usb_handle;
+	int length = 0;
+
+	usb_dev = ast_radio_hid_device_init(devstr);
+	if (!usb_dev) {
+		return 0;
+	}
+
+	if (usb_dev->descriptor.iSerialNumber) {
+		usb_handle = usb_open(usb_dev);
+		if (!usb_handle) {
+			return 0;
+		}
+		length = usb_get_string_simple(usb_handle, usb_dev->descriptor.iSerialNumber, buf, buflen);
+		usb_close(usb_handle);
+	}
+
+	return length;
+}
+
 int ast_radio_usb_list_check(char *devstr)
 {
 	/* See usb_device_list definition for the format */

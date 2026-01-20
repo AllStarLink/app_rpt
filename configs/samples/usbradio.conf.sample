@@ -184,6 +184,7 @@ legacyaudioscaling = no     ; If yes, continue to do raw audio sample scaling an
 
 ;;;;; Tune settings ;;;;;
 ;devstr=
+;serial=
 ;rxmixerset=500
 ;txmixaset=500
 ;txmixbset=500
