@@ -114,7 +114,7 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 	return NULL;
 }
 
-#define RPT_DIAL_DURATION 999 /* Wait timeout for ast_call() executions */
+#define RPT_DIAL_DURATION 999 /*! \brief Wait timeout for ast_call() executions (asterisk may not be using) */
 
 void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 {
@@ -325,7 +325,8 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 			if (!myrpt->localrxchannel) {
 				myrpt->localrxchannel = chan;
 			}
-		} /* Don't break here we want the default logic for RPT_PCHAN */
+		}
+		break;
 	default:
 		break;
 	}

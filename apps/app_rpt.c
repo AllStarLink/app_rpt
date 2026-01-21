@@ -4391,11 +4391,11 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					ast_mutex_unlock(&myrpt->lock);
+					rpt_mutex_unlock(&myrpt->lock);
 					return -1;
 				}
 				ast_frfree(f);
-				ast_mutex_unlock(&myrpt->lock);
+				rpt_mutex_unlock(&myrpt->lock);
 				return 0;
 			} else {
 				continue;
@@ -4765,13 +4765,7 @@ static inline int rxpchannel_read(struct rpt *myrpt)
 			ast_write(myrpt->txpchannel, f);
 		}
 	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "@@@@ rpt:Hung Up\n");
-		}
-	}
-	ast_frfree(f);
-	return 0;
+	return hangup_frame_helper(myrpt->rxpchannel, "rxpchannel", f);
 }
 
 static inline int txpchannel_read(struct rpt *myrpt)
