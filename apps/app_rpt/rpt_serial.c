@@ -416,7 +416,7 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 
 static void rbi_out(struct rpt *myrpt, unsigned char *data)
 {
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_RBI1)) {
+	if (rpt_radio_set_param(myrpt->dahdirxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_RBI1)) {
 		/* if setparam ioctl fails, its probably not a pciradio card */
 		rbi_out_parallel(myrpt, data);
 		return;

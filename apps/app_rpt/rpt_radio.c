@@ -48,7 +48,7 @@ int dahdi_radio_set_ctcss_encode(struct ast_channel *chan, int block)
 	return dahdi_set_radpar(chan, DAHDI_RADPAR_NOENCODE, block);
 }
 
-int rpt_radio_set_param(struct ast_channel *chan, struct rpt *myrpt, enum rpt_radpar par, enum rpt_radpar_data data)
+int rpt_radio_set_param(struct ast_channel *chan, enum rpt_radpar par, enum rpt_radpar_data data)
 {
 	/* rpt_radpar and rpt_radpar_data maps to RPT_RADPAR values exactly,
 	 * so for now we can just pass them on. */
@@ -85,11 +85,11 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 	olddata = prm.data;
 	prm.radpar = DAHDI_RADPAR_REMMODE;
 	if ((asciiflag & 1) && strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
-		if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL_ASCII)) {
+		if (rpt_radio_set_param(myrpt->dahdirxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL_ASCII)) {
 			return -1;
 		}
 	} else {
-		if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL)) {
+		if (rpt_radio_set_param(myrpt->dahdirxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL)) {
 			return -1;
 		}
 	}
@@ -135,7 +135,7 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 		memcpy(rxbuf, prm.buf, prm.index);
 	}
 	index = prm.index;
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE)) {
+	if (rpt_radio_set_param(myrpt->dahdirxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE)) {
 		return -1;
 	}
 	if (asciiflag & 2) {
@@ -143,10 +143,10 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 			return -1;
 		}
 	}
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_UIOMODE, oldmode)) {
+	if (rpt_radio_set_param(myrpt->dahdirxchannel, RPT_RADPAR_UIOMODE, oldmode)) {
 		return -1;
 	}
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, myrpt, RPT_RADPAR_UIODATA, olddata)) {
+	if (rpt_radio_set_param(myrpt->dahdirxchannel, RPT_RADPAR_UIODATA, olddata)) {
 		return -1;
 	}
 	return index;

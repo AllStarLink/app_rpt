@@ -32,7 +32,7 @@ enum rpt_radpar_data {
 	RPT_RADPAR_REM_SERIAL_ASCII = 3,
 };
 
-int rpt_radio_set_param(struct ast_channel *chan, struct rpt *myrpt, enum rpt_radpar par, enum rpt_radpar_data data);
+int rpt_radio_set_param(struct ast_channel *chan, enum rpt_radpar par, enum rpt_radpar_data data);
 
 int rpt_radio_set_remcommand_data(struct ast_channel *chan, unsigned char *data, int len);
 
