@@ -6298,11 +6298,11 @@ static int get_his_ip(struct ast_channel *chan, char *buf, size_t len)
 
 static inline int kenwood_uio_helper(struct rpt *myrpt)
 {
-	if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 3)) {
+	if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIOMODE, 3)) {
 		ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 		return -1;
 	}
-	if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
+	if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIODATA, 3)) {
 		ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 		return -1;
 	}
@@ -7107,7 +7107,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 	iskenwood_pci4 = 0;
 	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->dahditxchannel)) {
-		res = rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE);
+		res = rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE);
 		/* if PCIRADIO and kenwood selected */
 		if ((!res) && (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 			if (kenwood_uio_helper(myrpt)) {
@@ -7124,12 +7124,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			((!strcmp(myrpt->remoterig, REMOTE_RIG_FT897)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) ||
 				(!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_XCAT)) ||
 				(!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)))) {
-			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 1)) {
+			if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIOMODE, 1)) {
 				ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
-			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
+			if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIODATA, 3)) {
 				ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
@@ -7458,7 +7458,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						telem = telem->next;
 					}
 					if (iskenwood_pci4 && myrpt->txchannel == myrpt->dahditxchannel) {
-						if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 1)) {
+						if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIODATA, 1)) {
 							ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 							return -1;
 						}
@@ -7476,7 +7476,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_telemetry(myrpt, UNAUTHTX, NULL);
 			}
 			if (iskenwood_pci4 && myrpt->txchannel == myrpt->dahditxchannel) {
-				if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
+				if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIODATA, 3)) {
 					ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 					return -1;
 				}
