@@ -3724,7 +3724,7 @@ static inline void check_parrot(struct rpt *myrpt)
 
 		if (myrpt->parrotstream) {
 			ast_closestream(myrpt->parrotstream);
-			myrpt->parrotstream = 0;
+			myrpt->parrotstream = NULL;
 		}
 
 		snprintf(myfname, sizeof(myfname), PARROTFILE ".wav", myrpt->name, myrpt->parrotcnt);
