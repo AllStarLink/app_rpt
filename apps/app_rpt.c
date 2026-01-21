@@ -2849,7 +2849,11 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (IS_PSEUDO_NAME(myrpt->rxchanname)) {
 		ast_log(LOG_ERROR, "Using DAHDI/Pseudo channel %s is depreciated. Update your rpt.conf to use Local/Pseudo.\n", myrpt->rxchanname);
-		strncpy(myrpt->rxchanname, "Local/pseudo", 13);
+		ast_free(myrpt->rxchanname);
+		myrpt->rxchanname = ast_strdup("Local/pseudo");
+		if (!myrpt->rxchanname) {
+			return -1;
+		}
 	}
 	if (rpt_request(myrpt, cap, RPT_RXCHAN)) {
 		return -1;
