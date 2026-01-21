@@ -61,7 +61,7 @@ int rpt_radio_set_remcommand_data(struct ast_channel *chan, struct rpt *myrpt, u
 
 	r.radpar = DAHDI_RADPAR_REMCOMMAND;
 	memcpy(&r.data, data, len);
-	if (ioctl(ast_channel_fd(myrpt->dahdirxchannel, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
+	if (ioctl(ast_channel_fd(chan, 0), DAHDI_RADIO_SETPARAM, &r) == -1) {
 		ast_log(LOG_WARNING, "Cannot send RBI command for channel %s: %s\n", ast_channel_name(chan), strerror(errno));
 		return -1;
 	}
