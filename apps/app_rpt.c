@@ -3719,7 +3719,7 @@ static int rxchannel_qwrite_cb(void *obj, void *arg, int flags)
 /*! \brief Check and close parrot files if needed */
 static inline void check_parrot(struct rpt *myrpt)
 {
-	if (!(myrpt->p.parrotmode || myrpt->parrotonce)) {
+	if (!(myrpt->p.parrotmode != PARROT_MODE_OFF || myrpt->parrotonce)) {
 		char myfname[300];
 
 		if (myrpt->parrotstream) {
