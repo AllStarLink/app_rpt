@@ -313,7 +313,7 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 
 	if (flags & RPT_LINK_CHAN) {
 		link = data;
-		strncpy(type_str, "Local", sizeof(type_str));
+		ast_copy_string(type_str, "Announcer", sizeof(type_str));
 	} else {
 		myrpt = data;
 	}
