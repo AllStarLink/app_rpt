@@ -34,6 +34,6 @@ enum rpt_radpar_data {
 
 int rpt_radio_set_param(struct ast_channel *chan, struct rpt *myrpt, enum rpt_radpar par, enum rpt_radpar_data data);
 
-int rpt_radio_set_remcommand_data(struct ast_channel *chan, struct rpt *myrpt, unsigned char *data, int len);
+int rpt_radio_set_remcommand_data(struct ast_channel *chan, unsigned char *data, int len);
 
 int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsigned char *rxbuf, int rxmaxbytes, int asciiflag);

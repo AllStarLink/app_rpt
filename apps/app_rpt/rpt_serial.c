@@ -421,7 +421,7 @@ static void rbi_out(struct rpt *myrpt, unsigned char *data)
 		rbi_out_parallel(myrpt, data);
 		return;
 	}
-	rpt_radio_set_remcommand_data(myrpt->dahdirxchannel, myrpt, data, 5);
+	rpt_radio_set_remcommand_data(myrpt->dahdirxchannel, data, 5);
 }
 
 int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsigned char *rxbuf, int rxmaxbytes, int asciiflag)

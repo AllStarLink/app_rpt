@@ -55,7 +55,7 @@ int rpt_radio_set_param(struct ast_channel *chan, struct rpt *myrpt, enum rpt_ra
 	return dahdi_set_radpar(chan, par, data);
 }
 
-int rpt_radio_set_remcommand_data(struct ast_channel *chan, struct rpt *myrpt, unsigned char *data, int len)
+int rpt_radio_set_remcommand_data(struct ast_channel *chan, unsigned char *data, int len)
 {
 	struct dahdi_radio_param r;
 
