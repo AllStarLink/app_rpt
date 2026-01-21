@@ -1459,7 +1459,7 @@ void *rpt_call(void *this)
 	myrpt->patch_talking = 0; /* Initialize patch_talking flag */
 	p = ast_channel_tech_pvt(mychannel);
 	ast_debug(1, "Adding talker callback to channel %s, private data %p\n", ast_channel_name(mychannel), p);
-	if (p) {
+	if (p && p->chan) {
 		bridge_chan = ast_channel_get_bridge_channel(p->chan);
 		if (bridge_chan) {
 			bridge_chan->tech_args.talking_threshold = DEFAULT_TALKING_THRESHOLD;
