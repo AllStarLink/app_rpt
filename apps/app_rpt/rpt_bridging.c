@@ -139,6 +139,10 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 			ast_debug(2, "Also resetting rxchannel\n");
 			myrpt->rxchannel = NULL;
 		}
+		if (myrpt->localtxchannel && myrpt->localtxchannel == *chanptr) {
+			ast_debug(2, "Also resetting localtxchannel\n");
+			myrpt->localtxchannel = NULL;
+		}
 		break;
 	default:
 		break;
