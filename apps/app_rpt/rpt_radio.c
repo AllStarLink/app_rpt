@@ -73,6 +73,9 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 	int i, index, oldmode, olddata;
 	struct dahdi_radio_param prm;
 
+	if (!myrpt->localrxchannel) {
+		return -1;
+	}
 	prm.radpar = DAHDI_RADPAR_UIOMODE;
 	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1) {
 		return -1;

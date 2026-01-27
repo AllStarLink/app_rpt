@@ -323,7 +323,8 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 		ast_log(LOG_ERROR, "Failed to request local channel\n");
 		return -1;
 	}
-
+	ast_set_read_format(chan, ast_format_slin);
+	ast_set_write_format(chan, ast_format_slin);
 	rpt_disable_cdr(chan);
 	chanptr = rpt_chan_channel(myrpt, link, chantype);
 	*chanptr = chan;

@@ -1264,7 +1264,7 @@ struct rpt_autopatch {
 };
 
 /*!
- * \brief Create an autopatch specific pbx run thread with no_hangup_chan = 1 arg.
+ * \brief Create an autopatch specific pbx run thread.
  * \param data 	Structure of rpt_autopatch
  */
 static void *rpt_pbx_autopatch_run(void *data)

@@ -48,7 +48,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 #define rpt_request(data, cap, chantype) __rpt_request(data, cap, chantype, 0)
 
 /*!
- * \brief Request a pseudo channel
+ * \brief Request a Local channel
  * \param cap
  * \return channel on success
  * \return NULL on failure
