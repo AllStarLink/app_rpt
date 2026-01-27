@@ -1433,6 +1433,10 @@ void *rpt_call(void *this)
 				rpt_play_congestion(genchannel);
 			}
 		}
+
+		/* At this point, genchannel is in autoservice, and mychannel is not connected to any frame generation.
+		 * safesleep is not necessary.
+		 */
 		usleep(MSWAIT * 1000);
 		dialtimer += MSWAIT;
 	}
