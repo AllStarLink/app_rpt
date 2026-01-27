@@ -4776,8 +4776,6 @@ static inline int txpchannel_read(struct rpt *myrpt)
 		return -1;
 	}
 	return hangup_frame_helper(myrpt->txpchannel, "txpchannel", f);
-	/* for now, read the channel, but when done, this should never "hear" anything */
-	//	return wait_for_hangup_helper(myrpt->txpchannel, "txpchannel");
 }
 
 static inline void voxtostate_to_voxtotimer(struct rpt *myrpt)
