@@ -252,16 +252,43 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	return 0;
 }
 
+static const char *rpt_bridge_chan_type_name(enum rpt_bridge_chan_type type)
+{
+	switch (type) {
+	case RPT_LOCAL:
+		return "Local";
+	case RPT_TELEMETRY:
+		return "Announcer";
+	case RPT_MONITOR:
+		return "Recorder";
+	}
+	ast_assert(0);
+	return NULL;
+}
+
+static const char *rpt_chan_type_name(enum rpt_chan_type type, enum rpt_chan_flags flags)
+{
+	if (flags & RPT_LINK_CHAN) {
+		return "Announcer";
+	}
+
+	switch (type) {
+	case RPT_MONCHAN:
+	case RPT_PCHAN:
+		return "Recorder";
+	case RPT_RXPCHAN:
+	case RPT_TXPCHAN:
+		return "Announcer";
+	default:
+		return "Local";
+	}
+}
+
 struct ast_channel *__rpt_request_local_chan(struct ast_format_cap *cap, const char *exten, enum rpt_bridge_chan_type type)
 {
 	struct ast_channel *chan;
-	static const char *type_str[3] = { "Local", "Announcer", "Recorder" };
 
-	if (type >= ARRAY_LEN(type_str)) {
-		ast_log(LOG_ERROR, "Invalid rpt_bridge_chan_type %d\n", type);
-		return NULL;
-	}
-	chan = ast_request(type_str[type], cap, NULL, NULL, exten, NULL);
+	chan = ast_request(rpt_bridge_chan_type_name(type), cap, NULL, NULL, exten, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request local channel\n");
 		return NULL;
@@ -285,28 +312,13 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 	struct rpt *myrpt = NULL;
 	struct rpt_link *link = NULL;
 	struct ast_channel *chan, **chanptr;
-	char type_str[] = "Announcer"; /* Longest string for channel type */
 
 	if (flags & RPT_LINK_CHAN) {
 		link = data;
-		ast_copy_string(type_str, "Announcer", sizeof(type_str));
 	} else {
 		myrpt = data;
-
-		switch (chantype) {
-		case RPT_MONCHAN:
-		case RPT_PCHAN:
-			ast_copy_string(type_str, "Recorder", sizeof(type_str));
-			break;
-		case RPT_RXPCHAN:
-		case RPT_TXPCHAN:
-			ast_copy_string(type_str, "Announcer", sizeof(type_str));
-			break;
-		default:
-			ast_copy_string(type_str, "Local", sizeof(type_str));
-		}
 	}
-	chan = ast_request(type_str, cap, NULL, NULL, exten, NULL);
+	chan = ast_request(rpt_chan_type_name(chantype, flags), cap, NULL, NULL, exten, NULL);
 	if (!chan) {
 		ast_log(LOG_ERROR, "Failed to request local channel\n");
 		return -1;
@@ -337,14 +349,14 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
 {
 	struct ast_bridge *conf = NULL, **confptr;
-	char conference_name[RPT_CONF_NAME_SIZE] = "";
+	const char *conference_name = "";
 	switch (type) {
 	case RPT_CONF:
-		snprintf(conference_name, sizeof(conference_name), RPT_CONF_NAME);
+		conference_name = RPT_CONF_NAME;
 		confptr = &myrpt->rptconf.conf;
 		break;
 	case RPT_TXCONF:
-		snprintf(conference_name, sizeof(conference_name), RPT_TXCONF_NAME);
+		conference_name = RPT_TXCONF_NAME;
 		confptr = &myrpt->rptconf.txconf;
 		break;
 	default:
@@ -366,17 +378,17 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
 {
 	struct ast_bridge *conf = NULL;
-	char conference_name[RPT_CONF_NAME_SIZE] = "";
+	const char *conference_name = "";
 	struct ast_unreal_pvt *p;
 	int res;
 
 	switch (type) {
 	case RPT_CONF:
-		snprintf(conference_name, sizeof(conference_name), RPT_CONF_NAME);
+		conference_name = RPT_CONF_NAME;
 		conf = myrpt->rptconf.conf;
 		break;
 	case RPT_TXCONF:
-		snprintf(conference_name, sizeof(conference_name), RPT_TXCONF_NAME);
+		conference_name = RPT_TXCONF_NAME;
 		conf = myrpt->rptconf.txconf;
 		break;
 	default:
