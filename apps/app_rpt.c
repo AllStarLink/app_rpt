@@ -4382,7 +4382,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			if (who == l->pchan) {
 				struct ast_frame *f;
 
-				rpt_mutex_unlock(&myrpt->lock);
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
