@@ -4392,14 +4392,14 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			/* We are disconnected but still need to read and discard frames */
 			if (who == l->pchan) {
 				struct ast_frame *f;
+
+				rpt_mutex_unlock(&myrpt->lock);
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					rpt_mutex_unlock(&myrpt->lock);
 					return -1;
 				}
 				ast_frfree(f);
-				rpt_mutex_unlock(&myrpt->lock);
 				return 0;
 			} else {
 				continue;
