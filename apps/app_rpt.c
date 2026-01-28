@@ -1733,7 +1733,6 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	/* see if this is one in list */
-	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
@@ -1752,13 +1751,11 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 			if (dest) {
 				/* if it is, send it and we're done */
 				ao2_ref(l, -1);
-				rpt_mutex_unlock(&myrpt->lock);
 				ao2_iterator_destroy(&l_it);
 				return 1;
 			}
 		}
 	}
-	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 	return 0;
 }
@@ -1833,7 +1830,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(str, DISCSTR)) {
-		mylink->disced = RPT_LINK_DISCONNECT;
+		mylink->disced = 1;
 		mylink->retries = mylink->max_retries + 1;
 		ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
 		return;
@@ -2982,7 +2979,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
-	rpt_mutex_lock(&myrpt->lock);
+
 	RPT_LIST_TRAVERSE(myrpt->links, zl, l_it) {
 		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
 		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
@@ -2998,7 +2995,6 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
 		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
 	}
-	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 	zt = myrpt->tele.next;
 	if (zt != &myrpt->tele) {
@@ -4237,7 +4233,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
-		if ((l->disced == RPT_LINK_DISCONNECT_NONE) && (!l->outbound)) {
+		if ((!l->disced) && (!l->outbound)) {
 			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote)
 				l->disctime = 1;
 			else
@@ -4278,7 +4274,7 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (!l->hasconnected) {
 		rpt_telemetry(myrpt, CONNFAIL, l);
-	} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
+	} else if (l->disced != 2) {
 		rpt_telemetry(myrpt, REMDISC, l);
 	}
 	if (l->hasconnected) {
@@ -4601,17 +4597,9 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					 * to != RADIO_KEY_NOT_ALLOWED yet. This happens when the reset code forces it to RADIO_ALLOWED. Of course if
 					 * handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some
 					 * point, we'll set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info),
-					 * If this happens, we're passing voice frames and now sending AST_RADIO_KEY messages
+					 * If this happens, we're passing voice frames and now sending AST_READIO_KEY messages
 					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
-					 * Note: RADIO_KEY_NOT_ALLOWED is a case where clients use the presence of audio frames to
-					 * keyup the transmitter.  If not RADIO_KEY_NOT_ALLOWED, the links use control messages to key/unkey.
 					 *
-					 * This copies repeater rx audio from CONF when the repeater is receiving audio.
-					 * When the repeater stops receiving audio we continue to copy frames while transmitting
-					 * if we are NOT an altlink().
-					 *
-					 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
-					 * the repeater output including telemetry.
 					 */
 					ast_write(l->chan, f);
 					l->last_frame_sent = 1;
@@ -4654,23 +4642,13 @@ static inline int monchannel_read(struct rpt *myrpt)
 			outstream_write(myrpt, f);
 		}
 		/* go thru all the links */
-		rpt_mutex_lock(&myrpt->lock);
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
+			/* IF we are an altlink() -> !altlink() handled elsewhere */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
-				/* If we are an altlink():
-				 * This copies repeater tx audio from TXCONF when the repeater is not receiving audio,
-				 * yet still transmitting, allowing these client types to hear the local repeater output.
-				 *
-				 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
-				 * the repeater output including telemetry.
-				 */
-				rpt_mutex_unlock(&myrpt->lock);
 				ast_write(l->chan, f);
-				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
-		rpt_mutex_unlock(&myrpt->lock);
 		ao2_iterator_destroy(&l_it);
 	}
 	return hangup_frame_helper(myrpt->monchannel, "monchannel", f);
@@ -5853,6 +5831,11 @@ static void *rpt_master(void *ignore)
 		rpt_vars[i].offset = REM_SIMPLEX;
 		rpt_vars[i].powerlevel = REM_LOWPWR;
 		rpt_vars[i].splitkhz = 0;
+
+		if (rpt_vars[i].p.ident && (!*rpt_vars[i].p.ident)) {
+			ast_log(LOG_WARNING, "Did not specify ident for node %s\n", rpt_vars[i].name);
+			pthread_exit(NULL);
+		}
 		rpt_vars[i].ready = 0;
 		rpt_vars[i].lastthreadupdatetime = current_time;
 		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
@@ -6298,11 +6281,11 @@ static int get_his_ip(struct ast_channel *chan, char *buf, size_t len)
 
 static inline int kenwood_uio_helper(struct rpt *myrpt)
 {
-	if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIOMODE, 3)) {
+	if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 3)) {
 		ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 		return -1;
 	}
-	if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIODATA, 3)) {
+	if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
 		ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 		return -1;
 	}
@@ -6322,6 +6305,20 @@ static void answer_newkey_helper(struct rpt *myrpt, struct ast_channel *chan, en
 	}
 }
 
+/**
+ * Attach an incoming PBX channel to a specified repeater node and manage the resulting link or remote session lifecycle.
+ *
+ * This function parses the dialplan argument to locate the target repeater, validates access and caller identity,
+ * and either creates a new link (for non-remote repeaters) or establishes a remote session (for remote repeaters).
+ * It manages channel masquerading, conference/pseudo-channel allocation, authentication timers, telemetry,
+ * I/O and radio parameters, and runs the main event loop for the lifetime of the connection.
+ *
+ * @param chan The incoming PBX channel to attach to the repeater.
+ * @param data Dialplan argument string specifying the repeater node and optional modifiers (e.g., node name, options, alternate macro).
+ *
+ * @returns An integer PBX status: `-1` to indicate termination or error, or another PBX control value when the function returns
+ *          a different dialplan action (e.g., a priority jump). 
+ */
 static int rpt_exec(struct ast_channel *chan, const char *data)
 {
 	int res = -1, i, rem_totx, rem_rx, remkeyed, n;
@@ -6800,7 +6797,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (l != NULL) {
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
-				l->disced = RPT_LINK_DISCONNECT_SILENT;
+				l->disced = 2;
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);
@@ -7107,7 +7104,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 	iskenwood_pci4 = 0;
 	if ((myrpt->iofd < 1) && (myrpt->txchannel == myrpt->dahditxchannel)) {
-		res = rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE);
+		res = rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_NONE);
 		/* if PCIRADIO and kenwood selected */
 		if ((!res) && (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 			if (kenwood_uio_helper(myrpt)) {
@@ -7124,12 +7121,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			((!strcmp(myrpt->remoterig, REMOTE_RIG_FT897)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) ||
 				(!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_XCAT)) ||
 				(!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)))) {
-			if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIOMODE, 1)) {
+			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIOMODE, 1)) {
 				ast_log(LOG_ERROR, "Cannot set UIOMODE on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
 			}
-			if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIODATA, 3)) {
+			if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
 				ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 				rpt_mutex_unlock(&myrpt->lock);
 				return -1;
@@ -7458,7 +7455,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 						telem = telem->next;
 					}
 					if (iskenwood_pci4 && myrpt->txchannel == myrpt->dahditxchannel) {
-						if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIODATA, 1)) {
+						if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 1)) {
 							ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 							return -1;
 						}
@@ -7476,7 +7473,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_telemetry(myrpt, UNAUTHTX, NULL);
 			}
 			if (iskenwood_pci4 && myrpt->txchannel == myrpt->dahditxchannel) {
-				if (rpt_radio_set_param(myrpt->dahditxchannel, RPT_RADPAR_UIODATA, 3)) {
+				if (rpt_radio_set_param(myrpt->dahditxchannel, myrpt, RPT_RADPAR_UIODATA, 3)) {
 					ast_log(LOG_ERROR, "Cannot set UIODATA on %s: %s\n", ast_channel_name(myrpt->dahditxchannel), strerror(errno));
 					return -1;
 				}
