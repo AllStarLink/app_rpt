@@ -268,7 +268,6 @@ N - numeric
 Asterisk CLI commands for this module:
 
 voter display                  -- Displays voter (instance) clients
-voter tune					   -- Replace all client transmit audio with 1kHz tone at full deviation
 voter ping                     -- Client ping
 voter prio                     -- Specify/Query voter client priority value
 voter record                   -- Enable/Specify (or disable) voter recording file
@@ -332,11 +331,14 @@ Use "core show help voter <command>"" to display usage.
 
 #include "../apps/app_rpt/pocsag.c"
 
-/* This array is used by the voter tune CLI command to send a 1kHz tone at
- * full system deviation to all clients (with transmit enabled) in an instance.
+/* Un-comment this if you wish Digital milliwatt output rather then real audio
+ * when transmitting (for debugging only)
  */
-static unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
-/* unsigned char mwp; */
+/* #define	DMWDIAG */
+#ifdef DMWDIAG
+unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
+unsigned char mwp;
+#endif
 
 struct ast_flags zeroflag = { 0 };
 
@@ -413,7 +415,7 @@ char context[100];
 #define DIVSAMP (DIVLCM / SAMPRATE)
 
 /* Defines voter payload types. */
-#define VOTER_PAYLOAD_AUTH 0
+#define VOTER_PAYLOAD_NONE 0
 #define VOTER_PAYLOAD_ULAW 1
 #define VOTER_PAYLOAD_GPS 2
 #define VOTER_PAYLOAD_ADPCM 3
@@ -576,14 +578,13 @@ struct voter_pvt {
 	char buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
 	struct ast_module_user *u;
 	struct timeval lastrxtime;
-	unsigned char mwp;
 	/* bit fields */
 	unsigned int txkey:1;
 	unsigned int rxkey:1;
 	unsigned int drained_once:1;
 	unsigned int plfilter:1;
 	unsigned int hostdeemp:1;
-	unsigned int dmwdiag:1;
+	unsigned int duplex:1;
 	unsigned int usedtmf:1;
 	unsigned int isprimary:1;
 	unsigned int priconn:1;
@@ -1050,9 +1051,6 @@ static int voter_indicate(struct ast_channel *ast, int cond, const void *data, s
 	case AST_CONTROL_RADIO_KEY:
 		p->txkey = 1;
 		ast_verb(3, "Channel %s: TX On\n", ast_channel_name(ast));
-		if (p->dmwdiag) {
-			ast_verb(3, "Sending 1kHz test tone to node Voter/%i transmitter(s)\n", p->nodenum);
-		}
 		break;
 	case AST_CONTROL_RADIO_UNKEY:
 		p->txkey = 0;
@@ -1301,11 +1299,13 @@ static int voter_text(struct ast_channel *ast, const char *text)
 	return 0;
 }
 
-/*!
- * \brief Channel driver read callback to core.
+/**
+ * Provide a null frame for the channel read callback.
  *
- * \param ast			Asterisk channel.
- * \retval 				Asterisk frame.
+ * This read callback always returns the shared global ast_null_frame and does not produce channel-specific frames.
+ *
+ * @param ast Channel for which the read was requested (unused).
+ * @returns Pointer to the global ast_null_frame.
  */
 static struct ast_frame *voter_read(struct ast_channel *ast)
 {
@@ -1687,9 +1687,6 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 /* VOTER Display */
 static int voter_do_display(int fd, int argc, const char *const *argv);
 
-/* VOTER Tune */
-static int voter_do_tune(int fd, int argc, const char *const *argv);
-
 /* VOTER Ping client */
 static int voter_do_ping(int fd, int argc, const char *const *argv);
 
@@ -1912,95 +1909,6 @@ static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli
 		return voter_complete_node_list(a->line, a->word, a->pos, 2);
 	}
 	return res2cli(voter_do_display(a->fd, a->argc, a->argv));
-}
-
-/*!
- * \brief Handle the Asterisk CLI "voter tune" request to enable/disable client
- * 1kHz test tone.
- *
- * This command will replace all audio samples to client transmitters with a
- * digital milliwatt 1kHz tone that will cause the attached transmitters to
- * transmit 1kHz at full system deviation (ie. 5kHz).
- *
- * \param fd			Asterisk CLI fd
- * \param argc			Number of arguments
- * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
- */
-static int voter_do_tune(int fd, int argc, const char *const *argv)
-{
-	int newlevel;
-	struct voter_pvt *p;
-
-	if (argc < 3) {
-		return RESULT_SHOWUSAGE;
-	}
-	ast_mutex_lock(&voter_lock);
-	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
-			break;
-		}
-	}
-	if (!p) {
-		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc == 3) {
-		if (p->dmwdiag) {
-			ast_cli(fd, "VOTER instance %d tune: currently set to enabled\n", p->nodenum);
-		} else {
-			ast_cli(fd, "VOTER instance %d tune: currently disabled\n", p->nodenum);
-		}
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SUCCESS;
-	}
-	if (argc != 4) {
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SHOWUSAGE;
-	}
-	if (ast_true(argv[3])) {
-		newlevel = 1;
-	} else if (ast_false(argv[3])) {
-		newlevel = 0;
-	} else {
-		ast_cli(fd, "Error: Invalid tune mode value specification!!\n");
-		ast_mutex_unlock(&voter_lock);
-		return RESULT_SHOWUSAGE;
-	}
-	if (p->dmwdiag < newlevel) {
-		ast_cli(fd, "VOTER instance %d tune: was disabled, now enabled\n", p->nodenum);
-		p->dmwdiag = 1;
-	} else if (p->dmwdiag > newlevel) {
-		ast_cli(fd, "VOTER instance %d tune: was enabled, now disabled\n", p->nodenum);
-		p->dmwdiag = 0;
-	} else {
-		ast_cli(fd, "VOTER instance %d tune: unchanged, currently %s\n", p->nodenum, (p->dmwdiag) ? "enabled" : "disabled");
-	}
-	ast_mutex_unlock(&voter_lock);
-	return RESULT_SUCCESS;
-}
-
-/*!
- * \brief Handle the Asterisk CLI request for "voter tune" usage help.
- *
- * \param e				Asterisk CLI entry.
- * \param cmd			CLI command type.
- * \param a				Asterisk CLI arguments.
- * \return				CLI success or failure.
- */
-static char *handle_cli_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
-{
-	switch (cmd) {
-	case CLI_INIT:
-		e->command = "voter tune";
-		e->usage = "Usage: voter tune instance_id [y/n]\n"
-				   "       Specifies/Queries tune mode (send 1kHz test tone to TX) for VOTER instance\n";
-		return NULL;
-	case CLI_GENERATE:
-		return voter_complete_node_list(a->line, a->word, a->pos, 2);
-	}
-	return res2cli(voter_do_tune(a->fd, a->argc, a->argv));
 }
 
 /*!
@@ -2666,7 +2574,6 @@ static char *handle_cli_txlockout(struct ast_cli_entry *e, int cmd, struct ast_c
  */
 static struct ast_cli_entry voter_cli[] = {
 	AST_CLI_DEFINE(handle_cli_test, "Specify/Query VOTER instance test mode"),
-	AST_CLI_DEFINE(handle_cli_tune, "Specify/Query VOTER tune (send 1kHz tone to TX) test mode"),
 	AST_CLI_DEFINE(handle_cli_prio, "Specify/Query VOTER client priority value"),
 	AST_CLI_DEFINE(handle_cli_record, "Enable/Specify (or disable) VOTER recording file"),
 	AST_CLI_DEFINE(handle_cli_tone, "Sets/Queries TX CTCSS level for specified VOTER instance"),
@@ -2935,7 +2842,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 /*!
  * \brief Manage the UDP-based primary-client keepalive and authentication for a node.
  *
- * Sends periodic authentication and keepalive packets to the configured primary,
+ * Sends periodic authentication and GPS keepalive packets to the configured primary,
  * processes incoming primary responses to establish/maintain a primary session,
  * and updates per-client proxy state when the primary connection is lost.
  *
@@ -2998,17 +2905,13 @@ static void *voter_primary_client(void *data)
 			sendto(pri_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
 		}
-		/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
-		 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
-		 * with this packet.
-		 */
 		if (p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 1000))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
 			strcpy((char *) authpacket.vp.challenge, challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
-			ast_debug(5, "VOTER %i: Sent primary client keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
+			ast_debug(5, "VOTER %i: Sent primary client GPS Keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 			lasttx = tv;
@@ -3017,7 +2920,7 @@ static void *voter_primary_client(void *data)
 			p->priconn = 0;
 			digest = 0;
 			p->primary_challenge[0] = 0;
-			ast_verb(3, "VOTER %i: Primary client for %d Lost connection!!!\n", p->nodenum, p->nodenum);
+			ast_verb(3, "VOTER %i: Primary client for %d  Lost connection!!!\n", p->nodenum, p->nodenum);
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
 					continue;
@@ -3038,7 +2941,7 @@ static void *voter_primary_client(void *data)
 
 			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If set got something worthwhile */
 				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(3, "VOTER %i: Received primary client network packet, len %d payload %d challenge %s digest %08x\n",
+				ast_debug(3, "VOTER %i: Rcvd primary client network packet, len %d payload %d challenge %s digest %08x\n",
 					p->nodenum, (int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 				/* If this is a new session. */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
@@ -3047,7 +2950,7 @@ static void *voter_primary_client(void *data)
 					p->priconn = 0;
 				} else {
 					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
-						(ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
+						(ntohs(vph->payload_type) == VOTER_PAYLOAD_NONE) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
 						mydigest = crc32_bufs(challenge, password);
 						if (mydigest == ntohl(vph->digest)) {
 							digest = mydigest;
@@ -3250,16 +3153,16 @@ static void *voter_xmit(void *data)
 			if (f1) {
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 			}
-			/* The voter tune CLI command will replace all the audio samples with those from
+			/* If we compiled with DMWDIAG, replace all the audio samples with those from
 			 * the digital milliwatt array, to generate a 1kHz tone on the transmitter.
 			 */
-			if (p->dmwdiag) {
-				for (i = 0; i < FRAME_SIZE; i++) {
-					audiopacket.audio[i] = ulaw_digital_milliwatt[p->mwp++];
-					if (p->mwp > 7)
-						p->mwp = 0;
-				}
+#ifdef DMWDIAG
+			for (i = 0; i < FRAME_SIZE; i++) {
+				audiopacket.audio[i] = ulaw_digital_milliwatt[mwp++];
+				if (mwp > 7)
+					mwp = 0;
 			}
+#endif
 			audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
 			/* Loop through all the clients, to figure out if we should send audio
@@ -3504,7 +3407,7 @@ static void *voter_xmit(void *data)
 				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
 		}
-		/* Process sending keepalive packets for each client, if necessary */
+		/* Process ending GPS keepalive packets for each client, if necessary */
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
 				continue;
@@ -3518,10 +3421,6 @@ static void *voter_xmit(void *data)
 			if (!client->heardfrom) {
 				continue;
 			}
-			/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
-			 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
-			 * with this packet.
-			 */
 			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(tv, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
 				memset(&audiopacket, 0, sizeof(audiopacket));
 				strcpy((char *) audiopacket.vp.challenge, challenge);
@@ -3540,12 +3439,13 @@ static void *voter_xmit(void *data)
 					proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 					proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
 					proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-					ast_debug(5, "VOTER %i: Sending (proxied) keepalive packet to client %s digest %08x\n", p->nodenum,
+					ast_debug(5, "VOTER %i: Sending (proxied) GPS/Keepalive packet to client %s digest %08x\n", p->nodenum,
 						client->name, proxy_audiopacket.vp.digest);
 					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
 						(struct sockaddr *) &client->sin, sizeof(client->sin));
 				} else {
-					ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+					ast_debug(5, "VOTER %i: Sending KEEPALIVE (GPS) packet to client %s digest %08x\n", p->nodenum, client->name,
+						client->respdigest);
 					sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
 						sizeof(client->sin));
 				}
@@ -3687,6 +3587,12 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "hostdeemp");
 		if (val) {
 			p->hostdeemp = ast_true(val);
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "duplex");
+		if (val) {
+			p->duplex = ast_true(val);
+		} else {
+			p->duplex = 1;
 		}
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
@@ -3928,8 +3834,6 @@ static int reload(void)
 	}
 
 	for (p = pvts; p; p = p->next) {
-		/* Reset dmwdiag to disabled upon reload */
-		p->dmwdiag = 0;
 		oldctcss[0] = 0;
 		strcpy(oldctcss, p->txctcssfreq);
 		sprintf(data, "%d", p->nodenum);
@@ -3954,6 +3858,12 @@ static int reload(void)
 			p->hostdeemp = ast_true(val);
 		} else {
 			p->hostdeemp = 0;
+		}
+		val = (char *) ast_variable_retrieve(cfg, (char *) data, "duplex");
+		if (val) {
+			p->duplex = ast_true(val);
+		} else {
+			p->duplex = 1;
 		}
 		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
@@ -4102,6 +4012,9 @@ static int reload(void)
 				continue;
 			}
 			if (!strcmp(v->name, "hostdeemp")) {
+				continue;
+			}
+			if (!strcmp(v->name, "duplex")) {
 				continue;
 			}
 			if (!strcmp(v->name, "mixminus")) {
@@ -4561,8 +4474,8 @@ static void *voter_reader(void *data)
 			continue;
 		}
 		vph = (VOTER_PACKET_HEADER *) buf;
-		ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
-			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
+		ast_debug(7, "Rcvd network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen, ntohs(vph->payload_type),
+			vph->challenge, ntohl(vph->digest));
 		client = NULL;
 		if (!check_client_sanity && master_port) {
 			sin.sin_port = htons(master_port);
@@ -4703,9 +4616,6 @@ static void *voter_reader(void *data)
 					}
 				}
 			}
-			/* If we've received a packet from a valid client, and they've sent us anything other
-			 * than an auth packet (which would have a payload of 0), set/reset the heardfrom flag.
-			 */
 			if (client && ntohs(vph->payload_type)) {
 				client->heardfrom = 1;
 			}
@@ -4796,7 +4706,7 @@ static void *voter_reader(void *data)
 								client->mix = 0;
 							}
 							recvlen -= sizeof(proxy);
-							ast_debug(6, "Now (proxy) received network packet, len %d payload %d challenge %s digest %08x\n",
+							ast_debug(6, "Now (proxy) rcvd network packet, len %d payload %d challenge %s digest %08x\n",
 								(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
 								goto process_gps;
@@ -5268,6 +5178,25 @@ static void *voter_reader(void *data)
 										memset(client->audio, 0xff, -i);
 									}
 								}
+								if (!p->duplex && p->txkey) {
+									p->rxkey = 0;
+									p->lastwon = NULL;
+									memset(silbuf, 0, sizeof(silbuf));
+									memset(&fr, 0, sizeof(fr));
+									fr.frametype = AST_FRAME_VOICE;
+									fr.subclass.format = ast_format_slin;
+									fr.datalen = FRAME_SIZE * 2;
+									fr.samples = FRAME_SIZE;
+									fr.data.ptr = silbuf;
+									fr.src = __PRETTY_FUNCTION__;
+									p->threshold = 0;
+									p->threshcount = 0;
+									p->lingercount = 0;
+									p->winner = 0;
+									incr_drainindex(p);
+									ast_queue_frame(p->owner, &fr);
+									continue;
+								}
 								if (p->plfilter || p->hostdeemp) {
 									short ix;
 									for (i = 0; i < FRAME_SIZE; i++) {
@@ -5320,6 +5249,25 @@ static void *voter_reader(void *data)
 									ast_queue_frame(p->owner, &fr);
 								}
 								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
+							}
+							if (!p->duplex && p->txkey) {
+								p->rxkey = 0;
+								p->lastwon = NULL;
+								memset(silbuf, 0, sizeof(silbuf));
+								memset(&fr, 0, sizeof(fr));
+								fr.frametype = AST_FRAME_VOICE;
+								fr.subclass.format = ast_format_slin;
+								fr.datalen = FRAME_SIZE * 2;
+								fr.samples = FRAME_SIZE;
+								fr.data.ptr = silbuf;
+								fr.src = __PRETTY_FUNCTION__;
+								p->threshold = 0;
+								p->threshcount = 0;
+								p->lingercount = 0;
+								p->winner = 0;
+								incr_drainindex(p);
+								ast_queue_frame(p->owner, &fr);
+								continue;
 							}
 							if (!voter_mix_and_send(p, maxclient, maxrssi)) {
 								continue;
@@ -5436,14 +5384,14 @@ process_gps:
 					}
 					timestuff = (time_t) timetv.tv_sec;
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
-					ast_debug(4, "SysTime:    %s.%06d\n", timestr, (int) timetv.tv_usec);
+					ast_debug(4, "SysTime:   %s.%06d\n", timestr, (int) timetv.tv_usec);
 					/* Display the time from the master client */
 					timestuff = (time_t) master_time.vtime_sec;
 					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "MasterTime: %s.%09d\n", timestr, master_time.vtime_nsec);
 				}
 				if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
-					ast_debug(5, "Received keepalive from %s\n", client->name);
+					ast_debug(5, "Rcvd GPS Keepalive from %s\n", client->name);
 				} else {
 					vgp = (VOTER_GPS *) (buf + sizeof(VOTER_PACKET_HEADER));
 					if (client->gpsid) {
@@ -5463,6 +5411,9 @@ process_gps:
 				}
 				continue;
 			}
+			if (client) {
+				client->heardfrom = 1;
+			}
 		}
 
 		if (no_ast_channel) {
@@ -5471,15 +5422,9 @@ process_gps:
 			 */
 			continue;
 		}
-
-		/* This is where authentication of connecting clients happens. Normal incoming packet processing
-		 * takes place above, so the only time we hit the code from here down is when we have a new client
-		 * connecting that hasn't been authenticated yet (which sets vph->digest).
-		 */
+		/* Otherwise, we just need to send an empty packet to the client. */
 		memset(&authpacket, 0, sizeof(authpacket));
 		memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
-
-		/* If the client is valid, reset some counters, and log that it has successfully connected. */
 		if (client) {
 			client->txseqno = 0;
 			client->txseqno_rxkeyed = 0;
@@ -5487,40 +5432,22 @@ process_gps:
 			client->rxseqno_40ms = 0;
 			client->rxseq40ms = 0;
 			client->drain40ms = 0;
-			ast_log(LOG_NOTICE, "VOTER %u: Client %s connected.\n", client->nodenum, client->name);
 		}
-
-		/* Our unique challenge is created in load_module. Copy our challenge into
-		 * the packet header.
-		 */
 		strcpy((char *) authpacket.vp.challenge, challenge);
-
-		/* Put our current system time into the packet header. */
 		gettimeofday(&tv, NULL);
 		authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
 		authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
-
-		/* Make our response digest based on the challenge sent by the client, and our host password,
-		 * and put that in the packet header, along with blank flags.
-		 */
+		/* Make our digest based on their challenge */
 		authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		authpacket.flags = 0;
-
-		/* Do the same for proxy authentication packets. */
 		proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
 		proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+		/* Make our digest based on their challenge */
 		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		proxy_authpacket.flags = 0;
-
-		/* If our client is validated, and is sending us an authentication packet, check for and set
-		 * option flags (primarily if the client wants to connect in mix mode).
-		 */
-		if (client && (ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH)) {
+		if (client && !vph->payload_type) {
 			client->mix = 0;
-			/* The client is sending us options/flags if this is an auth packet with something
-			 * in the payload. Option flags are sent in octet 24 of an auth packet, the same
-			 * position normally occupied by the RSSI value (in an audio packet).
-			 */
+			/* If client is sending options/flags */
 			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
 				if (client->ismaster) {
 					ast_log(LOG_WARNING, "VOTER client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n",
@@ -5567,7 +5494,6 @@ process_gps:
 					ast_log(LOG_WARNING, "VOTER client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
 						client->name);
 				}
-				/* Reject the connection. */
 				authpacket.vp.digest = 0;
 				client->heardfrom = 0;
 				client->respdigest = 0;
@@ -5589,23 +5515,7 @@ process_gps:
 				}
 			}
 		}
-
-		/* We have a new client connecting that hasn't been authenticated, yet. Our authentication
-		 * packet header is loaded with our challenge and our digest (which is based on their
-		 * challenge and our host password).
-		 *
-		 * Figure out if this authentication needs to be sent via a proxy server, or direct, and
-		 * send it accordingly.
-		 *
-		 * The first time we send a packet, we don't know who the client is (since they need to respond
-		 * with their own digest that is based on their password... which we use to match to the
-		 * clients in voter.conf we have configured), so the client name will be UNKNOWN.
-		 *
-		 * When we figure out who this client is, we send another auth packet to acknowledge them, so
-		 * this time the client name will be the matching name from voter.conf.
-		 *
-		 * After a client is authenticated, vph->digest gets set, and we start normal packet processing.
-		 */
+		/* Send them the empty packet to get things started. */
 		if (isproxy) {
 			ast_debug(2, "Sending (proxied) initial packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
 				ntohl(authpacket.vp.digest), password);
@@ -5675,9 +5585,6 @@ static int load_module(void)
 
 	run_forever = 1;
 
-	/* Create our host's random challenge string, used for authenticating connections
-	 * with client hardware that wants to connect to us.
-	 */
 	snprintf(challenge, sizeof(challenge), "%ld", ast_random());
 	hasmaster = 0;
 
