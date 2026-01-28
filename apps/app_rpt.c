@@ -4388,6 +4388,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					break;
 				}
 				ast_frfree(f);
+				continue;
 			}
 		}
 
@@ -4452,7 +4453,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					continue;
 				}
 				/* A reconnect is not possible */
-				return;
+				break;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				int ismuted, n1;
