@@ -23,7 +23,6 @@ enum rpt_conf_type {
 
 #define RPT_TXCONF_NAME "TXCONF" /* TX Conference Name */
 #define RPT_CONF_NAME "CONF"	 /* Repeater Conference Name */
-#define RPT_CONF_NAME_SIZE 10
 enum rpt_chan_flags {
 	RPT_LINK_CHAN = (1 << 0),
 };
@@ -49,7 +48,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 #define rpt_request(data, cap, chantype) __rpt_request(data, cap, chantype, 0)
 
 /*!
- * \brief Request a pseudo channel
+ * \brief Request a Local channel
  * \param cap
  * \return channel on success
  * \return NULL on failure
@@ -76,19 +75,7 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
 
-/*!
- * \brief Create a conference for repeater channels to join
- * \param myrpt Repeater structure
- * \param type Conference type
- */
 #define rpt_conf_create(myrpt, type) __rpt_conf_create(myrpt, type, __FILE__, __LINE__)
-
-/*!
- * \brief Add a Local channel to a conference (based on type)
- * \param chan Channel to add to conference - must be of type unreal.
- * \param myrpt Repeater structure
- * \param type Conference type
- */
 #define rpt_conf_add(chan, myrpt, type) __rpt_conf_add(chan, myrpt, type, __FILE__, __LINE__)
 
 /*!

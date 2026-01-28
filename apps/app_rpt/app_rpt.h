@@ -742,6 +742,9 @@ struct rpt_cmd_struct {
 	enum rpt_command_source command_source;
 };
 
+struct ast_bridge; /* Forward declaration */
+
+/*! \brief Structure used to manage conference bridges */
 struct rpt_conf {
 	/* Conference bridge channels */
 	struct ast_bridge *conf;

@@ -288,7 +288,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				rxchan = ast_channel_get_by_name(rxchanname);
 			}
 			/* rxchan might've disappeared in the meantime. Verify it still exists before we try to lock it,
-			 * at least unless it's a DAHDI pseudo channel.
+			 * at least unless it's a Local channel.
 			 * XXX This was added to address assertions due to bad locking, but app_rpt should probably
 			 * be globally ref'ing the channel and holding it until it unloads. Should be investigated. */
 			if (rxchan || pseudo) {

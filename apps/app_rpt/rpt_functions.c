@@ -133,8 +133,11 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		l->hasconnected = 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		if (l->chan) {
-			if (l->thisconnected)
-				rpt_qwrite(l, &wf);
+			if (l->thisconnected) {
+				ast_write(l->chan, &wf);
+				rpt_safe_sleep(myrpt, l->chan, 20);
+			}
+			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 		}
 		myrpt->linkactivityflag = 1;
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -273,8 +276,10 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			ast_debug(5, "dumping link %s\n", l->name);
 			if (l->chan) {
 				if (l->thisconnected) {
-					rpt_qwrite(l, &wf);
+					ast_write(l->chan, &wf);
+					rpt_safe_sleep(myrpt, l->chan, 20);
 				}
+				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 			rpt_mutex_lock(&myrpt->lock);
 		}
