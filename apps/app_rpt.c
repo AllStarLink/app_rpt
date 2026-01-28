@@ -4388,10 +4388,10 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					return -1;
+					return;
 				}
 				ast_frfree(f);
-				return 0;
+				return;
 			} else {
 				continue;
 			}
