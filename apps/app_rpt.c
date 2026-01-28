@@ -1463,7 +1463,7 @@ void *rpt_call(void *this)
 	myrpt->patch_talking = 0; /* Initialize patch_talking flag */
 	p = ast_channel_tech_pvt(mychannel);
 	ast_debug(1, "Adding talker callback to channel %s, private data %p\n", ast_channel_name(mychannel), p);
-	if (p) {
+	if (p && p->chan) {
 		bridge_chan = ast_channel_get_bridge_channel(p->chan);
 		if (bridge_chan) {
 			bridge_chan->tech_args.talking_threshold = DEFAULT_TALKING_THRESHOLD;
@@ -2443,7 +2443,6 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* We don't want the link to free after removing from the list */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
-	ast_autoservice_start(l->pchan); /* We need to dump audio on l->chan while redialing or we receive long voice queue warnings */
 	rpt_mutex_unlock(&myrpt->lock);
 	parse_node_format(tmp, &s1, sx, sizeof(sx));
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
@@ -2474,7 +2473,6 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
 	}
-	ast_autoservice_stop(l->pchan);
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
 	ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
@@ -4388,12 +4386,9 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					return;
+					break;
 				}
 				ast_frfree(f);
-				return;
-			} else {
-				continue;
 			}
 		}
 
@@ -5493,15 +5488,6 @@ static void *rpt(void *this)
 			cs[n++] = myrpt->txchannel;
 		if (myrpt->localtxchannel != myrpt->txchannel)
 			cs[n++] = myrpt->localtxchannel;
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			if (!l->killme) {
-				if (l->chan) {
-					cs[n++] = l->chan;
-				}
-				cs[n++] = l->pchan;
-			}
-		}
-		ao2_iterator_destroy(&l_it);
 		if ((myrpt->topkeystate == 1) && ((t - myrpt->topkeytime) > TOPKEYWAIT)) {
 			myrpt->topkeystate = 2;
 			qsort(myrpt->topkey, TOPKEYN, sizeof(struct rpt_topkey), topcompar);
