@@ -312,11 +312,9 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 	struct rpt *myrpt = NULL;
 	struct rpt_link *link = NULL;
 	struct ast_channel *chan, **chanptr;
-	char type_str[] = "Announcer"; /* Longest string for channel type */
 
 	if (flags & RPT_LINK_CHAN) {
 		link = data;
-		strncpy(type_str, "Local", sizeof(type_str));
 	} else {
 		myrpt = data;
 	}

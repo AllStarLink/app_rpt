@@ -4371,12 +4371,12 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			cs[n++] = l->chan;
 		}
 		who = ast_waitfor_n(cs, n, &ms);
+		periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart));
 		if (!ms) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
 			continue;
 		}
-		periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart));
 		if (l->disctime) {
 			/* We are disconnected but still need to read and discard frames */
 			if (who == l->pchan) {
