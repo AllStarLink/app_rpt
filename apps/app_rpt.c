@@ -3162,11 +3162,13 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	int newkeytimer_last, max_retries;
 	int myrx;
 
+	rpt_mutex_lock(&myrpt->lock);
 	if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		ast_write(l->chan, f);
 		ast_frfree(f);
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	update_timer(&l->rxlingertimer, elap, 0);
 
 	/* Update the timer, checking if it expired just now. */
