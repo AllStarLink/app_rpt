@@ -3163,7 +3163,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	int myrx;
 
 	rpt_mutex_lock(&myrpt->lock);
-	if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		ast_write(l->chan, f);
 		ast_frfree(f);

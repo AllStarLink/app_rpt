@@ -270,14 +270,12 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			}
 			l->retries = l->max_retries + 1;
 			l->disced = RPT_LINK_DISCONNECT_SILENT; /* Silently disconnect */
-			rpt_mutex_unlock(&myrpt->lock);
 			ast_debug(5, "dumping link %s\n", l->name);
 			if (l->chan) {
 				if (l->thisconnected) {
 					rpt_qwrite(l, &wf);
 				}
 			}
-			rpt_mutex_lock(&myrpt->lock);
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
