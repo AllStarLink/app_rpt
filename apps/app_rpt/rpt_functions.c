@@ -131,13 +131,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		l->retries = l->max_retries + 1;
 		l->disced = RPT_LINK_DISCONNECT;
 		l->hasconnected = 1;
-		rpt_mutex_unlock(&myrpt->lock);
 		if (l->chan) {
 			if (l->thisconnected) {
 				rpt_qwrite(l, &wf);
 			}
 		}
 		myrpt->linkactivityflag = 1;
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		ao2_ref(l, -1);
