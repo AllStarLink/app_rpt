@@ -195,7 +195,7 @@ AST_TEST_DEFINE(test_ast_str_expansion_from_init_size)
 		info->category = "/apps/app_rpt/";
 		info->summary = "Test ast_str expansion beyond RPT_AST_STR_INIT_SIZE";
 		info->description = "Verifies that ast_str can grow beyond initial size "
-			"when needed (e.g., large link lists)";
+							"when needed (e.g., large link lists)";
 		return AST_TEST_NOT_RUN;
 	case TEST_EXECUTE:
 		break;
@@ -250,7 +250,7 @@ AST_TEST_DEFINE(test_ast_str_null_handling)
 		info->category = "/apps/app_rpt/";
 		info->summary = "Test NULL handling for ast_str allocations";
 		info->description = "Verifies that code properly handles NULL return from ast_str_create "
-			"(simulating out-of-memory conditions)";
+							"(simulating out-of-memory conditions)";
 		return AST_TEST_NOT_RUN;
 	case TEST_EXECUTE:
 		break;
@@ -310,8 +310,8 @@ AST_TEST_DEFINE(test_ast_str_boundary_conditions)
 
 	/* Verify correct storage */
 	if (strlen(ast_str_buffer(str)) != RPT_AST_STR_INIT_SIZE - 1) {
-		ast_test_status_update(test, "Boundary string length incorrect: got %zu, expected %d\n",
-			strlen(ast_str_buffer(str)), RPT_AST_STR_INIT_SIZE - 1);
+		ast_test_status_update(test, "Boundary string length incorrect: got %zu, expected %d\n", strlen(ast_str_buffer(str)),
+			RPT_AST_STR_INIT_SIZE - 1);
 		ast_free(str);
 		return AST_TEST_FAIL;
 	}
