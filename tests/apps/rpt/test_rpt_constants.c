@@ -178,9 +178,7 @@ AST_TEST_DEFINE(test_rpt_ast_str_init_size_consistency)
 
 	/* Verify it's a power-friendly number (multiple of common sizes) */
 	if (RPT_AST_STR_INIT_SIZE % 4 != 0) {
-		ast_test_status_update(test,
-			"NOTE: RPT_AST_STR_INIT_SIZE (%d) is not 4-byte aligned\n",
-			RPT_AST_STR_INIT_SIZE);
+		ast_test_status_update(test, "NOTE: RPT_AST_STR_INIT_SIZE (%d) is not 4-byte aligned\n", RPT_AST_STR_INIT_SIZE);
 		/* Not a failure, just informational */
 	}
 
