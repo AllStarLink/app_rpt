@@ -91,8 +91,7 @@ AST_TEST_DEFINE(test_ast_str_create_with_rpt_init_size)
 	/* Test allocation */
 	str = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!str) {
-		ast_test_status_update(test, "Failed to create ast_str with size %d\n",
-			RPT_AST_STR_INIT_SIZE);
+		ast_test_status_update(test, "Failed to create ast_str with size %d\n", RPT_AST_STR_INIT_SIZE);
 		return AST_TEST_FAIL;
 	}
 
