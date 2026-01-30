@@ -4255,11 +4255,9 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	int time = 20; /* Run periodic_process_link one last time */
 	if (l->chan) {
-		if (!ast_safe_sleep(l->chan, MSWAIT)) { /* allow channel to receive any text messages */
-			/* Not hungup */
-			periodic_process_link(myrpt, l, time); /* Send all queued text messages */
-			ast_safe_sleep(l->chan, MSWAIT);	   /* Allow the channel to sent the text messages */
-		}
+		/* Not hungup */
+		periodic_process_link(myrpt, l, time); /* Send all queued text messages */
+		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
 	}
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
