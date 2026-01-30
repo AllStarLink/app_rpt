@@ -49,7 +49,7 @@ AST_TEST_DEFINE(test_rpt_ast_str_init_size_value)
 		info->category = "/apps/app_rpt/constants/";
 		info->summary = "Test RPT_AST_STR_INIT_SIZE has correct value";
 		info->description = "Regression test to ensure RPT_AST_STR_INIT_SIZE "
-			"maintains its expected value of 500";
+							"maintains its expected value of 500";
 		return AST_TEST_NOT_RUN;
 	case TEST_EXECUTE:
 		break;
@@ -73,7 +73,7 @@ AST_TEST_DEFINE(test_rpt_ast_str_init_size_sufficient)
 		info->category = "/apps/app_rpt/constants/";
 		info->summary = "Test RPT_AST_STR_INIT_SIZE is sufficient for typical use";
 		info->description = "Verifies RPT_AST_STR_INIT_SIZE is large enough for "
-			"typical node lists, key posts, and stat messages without immediate reallocation";
+							"typical node lists, key posts, and stat messages without immediate reallocation";
 		return AST_TEST_NOT_RUN;
 	case TEST_EXECUTE:
 		break;
@@ -87,23 +87,17 @@ AST_TEST_DEFINE(test_rpt_ast_str_init_size_sufficient)
 
 	/* Check minimum size - should be at least 100 bytes */
 	if (RPT_AST_STR_INIT_SIZE < 100) {
-		ast_test_status_update(test,
-			"WARNING: RPT_AST_STR_INIT_SIZE (%d) is very small, may cause frequent reallocations\n",
-			RPT_AST_STR_INIT_SIZE);
+		ast_test_status_update(test, "WARNING: RPT_AST_STR_INIT_SIZE (%d) is very small, may cause frequent reallocations\n", RPT_AST_STR_INIT_SIZE);
 		return AST_TEST_FAIL;
 	}
 
 	/* Check it's not unnecessarily large (wasting memory) */
 	if (RPT_AST_STR_INIT_SIZE > 10000) {
-		ast_test_status_update(test,
-			"WARNING: RPT_AST_STR_INIT_SIZE (%d) is very large, may waste memory\n",
-			RPT_AST_STR_INIT_SIZE);
+		ast_test_status_update(test, "WARNING: RPT_AST_STR_INIT_SIZE (%d) is very large, may waste memory\n", RPT_AST_STR_INIT_SIZE);
 		return AST_TEST_FAIL;
 	}
 
-	ast_test_status_update(test,
-		"RPT_AST_STR_INIT_SIZE (%d) is in reasonable range [100, 10000]\n",
-		RPT_AST_STR_INIT_SIZE);
+	ast_test_status_update(test, "RPT_AST_STR_INIT_SIZE (%d) is in reasonable range [100, 10000]\n", RPT_AST_STR_INIT_SIZE);
 
 	return AST_TEST_PASS;
 }
@@ -116,7 +110,7 @@ AST_TEST_DEFINE(test_rpt_related_constants)
 		info->category = "/apps/app_rpt/constants/";
 		info->summary = "Test other RPT constants are properly defined";
 		info->description = "Verifies related constants like MAXNODES, MAXDTMF, etc. "
-			"are properly defined alongside RPT_AST_STR_INIT_SIZE";
+							"are properly defined alongside RPT_AST_STR_INIT_SIZE";
 		return AST_TEST_NOT_RUN;
 	case TEST_EXECUTE:
 		break;
@@ -126,8 +120,7 @@ AST_TEST_DEFINE(test_rpt_related_constants)
 
 	/* Verify MAXNODES is defined and reasonable */
 	if (MAXNODES < 1 || MAXNODES > 100000) {
-		ast_test_status_update(test,
-			"MAXNODES (%d) is out of reasonable range\n", MAXNODES);
+		ast_test_status_update(test, "MAXNODES (%d) is out of reasonable range\n", MAXNODES);
 		return AST_TEST_FAIL;
 	}
 
@@ -160,7 +153,7 @@ AST_TEST_DEFINE(test_rpt_ast_str_init_size_consistency)
 		info->category = "/apps/app_rpt/constants/";
 		info->summary = "Test RPT_AST_STR_INIT_SIZE is consistent across includes";
 		info->description = "Regression test to ensure the constant has the same value "
-			"regardless of how app_rpt.h is included";
+							"regardless of how app_rpt.h is included";
 		return AST_TEST_NOT_RUN;
 	case TEST_EXECUTE:
 		break;
