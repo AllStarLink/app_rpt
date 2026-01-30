@@ -122,7 +122,7 @@ AST_TEST_DEFINE(test_ast_str_multiple_allocations)
 		info->category = "/apps/app_rpt/";
 		info->summary = "Test multiple ast_str allocations with RPT_AST_STR_INIT_SIZE";
 		info->description = "Verifies multiple ast_str allocations work correctly, "
-			"simulating real-world usage in app_rpt";
+							"simulating real-world usage in app_rpt";
 		return AST_TEST_NOT_RUN;
 	case TEST_EXECUTE:
 		break;
