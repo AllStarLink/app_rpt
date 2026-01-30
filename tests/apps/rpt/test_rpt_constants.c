@@ -58,9 +58,7 @@ AST_TEST_DEFINE(test_rpt_ast_str_init_size_value)
 	ast_test_status_update(test, "Verifying RPT_AST_STR_INIT_SIZE = 500\n");
 
 	if (RPT_AST_STR_INIT_SIZE != 500) {
-		ast_test_status_update(test,
-			"FAIL: RPT_AST_STR_INIT_SIZE is %d, expected 500\n",
-			RPT_AST_STR_INIT_SIZE);
+		ast_test_status_update(test, "FAIL: RPT_AST_STR_INIT_SIZE is %d, expected 500\n", RPT_AST_STR_INIT_SIZE);
 		return AST_TEST_FAIL;
 	}
 
