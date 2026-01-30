@@ -95,8 +95,7 @@ AST_TEST_DEFINE(test_ast_str_create_with_rpt_init_size)
 		return AST_TEST_FAIL;
 	}
 
-	ast_test_status_update(test, "Successfully created ast_str with size %d\n",
-		RPT_AST_STR_INIT_SIZE);
+	ast_test_status_update(test, "Successfully created ast_str with size %d\n", RPT_AST_STR_INIT_SIZE);
 
 	/* Verify we can use the string */
 	ast_str_set(&str, 0, "Test string for RPT");
