@@ -141,8 +141,7 @@ AST_TEST_DEFINE(test_rpt_related_constants)
 
 	/* Verify MAXMACRO is defined and reasonable */
 	if (MAXMACRO < 1 || MAXMACRO > 100000) {
-		ast_test_status_update(test,
-			"MAXMACRO (%d) is out of reasonable range\n", MAXMACRO);
+		ast_test_status_update(test, "MAXMACRO (%d) is out of reasonable range\n", MAXMACRO);
 		return AST_TEST_FAIL;
 	}
 
