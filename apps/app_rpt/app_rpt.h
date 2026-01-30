@@ -1098,7 +1098,7 @@ struct nodelog {
 
 struct statpost {
 	struct rpt *myrpt;
-	char *stats_url;
+	struct ast_str *stats_url;
 };
 
 /*! \brief Whether a channel is using a specified technology */
