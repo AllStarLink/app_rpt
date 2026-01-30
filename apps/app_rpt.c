@@ -1067,7 +1067,7 @@ static void *perform_statpost(void *data)
 		return NULL;
 	}
 
-	response_msg = ast_str_create(50);
+	response_msg = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!response_msg) {
 		ast_free(sp->stats_url);
 		ast_free(sp);
@@ -1118,7 +1118,7 @@ static void statpost(struct rpt *myrpt, struct ast_str *pairs)
 {
 	time_t now;
 	unsigned int seq;
-	int res, len;
+	int res;
 	pthread_t statpost_thread;
 	struct statpost *sp;
 
@@ -1130,10 +1130,7 @@ static void statpost(struct rpt *myrpt, struct ast_str *pairs)
 		return;
 	}
 
-	len = strlen(myrpt->name) + ast_str_strlen(pairs) + strlen(myrpt->p.statpost_url) + 200; /* Add some extra space for formatting,
-																							  * ast_str will expand if we need more
-																							  */
-	sp->stats_url = ast_str_create(len);
+	sp->stats_url = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!sp->stats_url) {
 		ast_free(sp);
 		return;
