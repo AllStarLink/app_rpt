@@ -135,8 +135,7 @@ AST_TEST_DEFINE(test_rpt_related_constants)
 
 	/* Verify MAXDTMF is defined and reasonable */
 	if (MAXDTMF < 1 || MAXDTMF > 1000) {
-		ast_test_status_update(test,
-			"MAXDTMF (%d) is out of reasonable range\n", MAXDTMF);
+		ast_test_status_update(test, "MAXDTMF (%d) is out of reasonable range\n", MAXDTMF);
 		return AST_TEST_FAIL;
 	}
 
