@@ -66,8 +66,7 @@ AST_TEST_DEFINE(test_rpt_ast_str_init_size_defined)
 		return AST_TEST_FAIL;
 	}
 
-	ast_test_status_update(test, "RPT_AST_STR_INIT_SIZE correctly defined as %d\n",
-		RPT_AST_STR_INIT_SIZE);
+	ast_test_status_update(test, "RPT_AST_STR_INIT_SIZE correctly defined as %d\n", RPT_AST_STR_INIT_SIZE);
 
 	return AST_TEST_PASS;
 }
