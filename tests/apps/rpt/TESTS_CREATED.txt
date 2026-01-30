@@ -1,0 +1,182 @@
+===============================================================================
+COMPREHENSIVE TEST SUITE FOR RPT_AST_STR_INIT_SIZE CHANGES
+===============================================================================
+
+Created for commit: "use RPT_AST_STR_INIT_SIZE and eliminate magic numbers"
+
+FILES CREATED:
+===============================================================================
+
+INTEGRATION TESTS:
+------------------
+1. tests/apps/rpt/ast_str_allocation/test-config.yaml
+   - Integration test for ast_str allocations
+   - Tests link establishment, status, and disconnection
+   - Tests real-world usage of RPT_AST_STR_INIT_SIZE
+
+2. tests/apps/rpt/ast_str_allocation/configs/ast1/rpt.conf
+   - RPT configuration for integration test
+
+3. tests/apps/rpt/ast_str_allocation/configs/ast1/extensions.conf
+   - Dialplan for integration test
+
+4. tests/apps/rpt/ast_str_allocation/configs/ast1/iax.conf
+   - IAX2 configuration for integration test
+
+5. tests/apps/rpt/ast_str_allocation/configs/ast1/modules.conf
+   - Module loading configuration for integration test
+
+UNIT TESTS:
+-----------
+6. tests/apps/rpt/test_rpt_ast_str_init.c (352 lines)
+   - Comprehensive unit tests for ast_str allocations
+   - 6 test cases covering:
+     * Constant definition verification
+     * Basic allocation tests
+     * Multiple allocation scenarios
+     * Expansion beyond initial size
+     * NULL handling
+     * Boundary conditions
+
+7. tests/apps/rpt/test_rpt_constants.c (214 lines)
+   - Regression tests for app_rpt constants
+   - 4 test cases covering:
+     * Constant value verification (regression protection)
+     * Size sufficiency validation
+     * Related constants verification
+     * Consistency checks
+
+DOCUMENTATION:
+--------------
+8. tests/apps/rpt/README.md (158 lines)
+   - Comprehensive documentation of all tests
+   - Test case descriptions
+   - Running instructions
+   - Coverage information
+
+9. tests/apps/rpt/TEST_SUMMARY.md (270 lines)
+   - Detailed summary of changes being tested
+   - Test coverage matrix
+   - Test categories breakdown
+   - Running instructions
+   - Maintenance guidelines
+
+10. tests/apps/rpt/TESTS_CREATED.txt (this file)
+    - Quick reference of all files created
+
+CONFIGURATION:
+--------------
+11. tests/apps/rpt/tests.yaml (MODIFIED)
+    - Updated to include new ast_str_allocation test
+
+===============================================================================
+TEST STATISTICS:
+===============================================================================
+
+Total Files Created: 10 new files + 1 modified file
+Total Lines of Code: 566 lines (C unit tests)
+Total Lines of Documentation: 428 lines
+Total Configuration Lines: ~100 lines (YAML + conf files)
+
+Test Coverage:
+- 7/7 code changes covered (100%)
+- 10 unit test cases
+- 4 integration test scenarios
+- Multiple test types: functional, negative, regression, integration
+
+===============================================================================
+TEST TYPES BREAKDOWN:
+===============================================================================
+
+1. FUNCTIONAL TESTS (verify correct behavior)
+   ✓ ast_str allocation succeeds
+   ✓ Multiple allocations work independently
+   ✓ String operations work correctly
+   ✓ Dynamic expansion works
+
+2. NEGATIVE TESTS (verify error handling)
+   ✓ NULL return handling
+   ✓ Boundary condition handling
+   ✓ Error path verification
+
+3. REGRESSION TESTS (prevent future issues)
+   ✓ Constant value verification
+   ✓ Constant sufficiency check
+   ✓ Related constants validation
+   ✓ Consistency verification
+
+4. INTEGRATION TESTS (verify real-world usage)
+   ✓ Link establishment
+   ✓ Link status reporting
+   ✓ Link disconnection
+   ✓ Memory cleanup
+
+===============================================================================
+CODE LOCATIONS TESTED:
+===============================================================================
+
+Header File: apps/app_rpt/app_rpt.h
+  Line 74: #define RPT_AST_STR_INIT_SIZE 500
+
+Source File: apps/app_rpt.c
+  Line 1070: statpost_thread() - response_msg allocation
+  Line 1133: statpost_send() - stats_url allocation
+  Line 3267: rpt_master() - lstr allocation for link lists
+  Line 3416: do_key_post() - str allocation for key posts
+  Line 3446: do_link_post() - str allocation for link posts
+  Line 6825: connect_link_remote() - linklist allocation
+
+All 7 locations have test coverage (100%)
+
+===============================================================================
+ADDITIONAL TESTS BEYOND BASIC COVERAGE:
+===============================================================================
+
+✓ Memory leak prevention
+✓ Edge case testing (boundary conditions)
+✓ Real-world usage pattern simulation
+✓ Multiple simultaneous allocations
+✓ Expansion beyond initial size
+✓ Performance consideration validation
+✓ Regression protection
+✓ Consistency verification
+✓ Related constants validation
+
+===============================================================================
+RUNNING THE TESTS:
+===============================================================================
+
+Integration Tests:
+  cd /path/to/asterisk-testsuite
+  ./runtests.py --test=apps/rpt/ast_str_allocation
+
+Unit Tests:
+  # In Asterisk CLI
+  test show registered
+  test execute category /apps/app_rpt/
+  test execute category /apps/app_rpt/constants/
+
+===============================================================================
+EXPECTED RESULTS:
+===============================================================================
+
+All tests should PASS, confirming:
+1. RPT_AST_STR_INIT_SIZE is correctly defined (value: 500)
+2. All ast_str allocations succeed
+3. Memory is properly managed
+4. Edge cases are handled correctly
+5. No regressions introduced by the refactoring
+
+===============================================================================
+MAINTENANCE:
+===============================================================================
+
+Update tests when:
+- RPT_AST_STR_INIT_SIZE value changes
+- New ast_str allocations added to app_rpt
+- Memory management patterns change
+- New related constants added
+
+===============================================================================
+END OF SUMMARY
+===============================================================================
