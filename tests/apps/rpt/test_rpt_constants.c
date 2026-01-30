@@ -175,9 +175,7 @@ AST_TEST_DEFINE(test_rpt_ast_str_init_size_consistency)
 
 	if (RPT_AST_STR_INIT_SIZE != expected) {
 		ast_test_status_update(test,
-			"Constant mismatch: got %d, expected %d\n",
-			RPT_AST_STR_INIT_SIZE, expected);
-		return AST_TEST_FAIL;
+		ast_test_status_update(test, "Constant mismatch: got %d, expected %d\n", RPT_AST_STR_INIT_SIZE, expected);
 	}
 
 	/* Verify it's a power-friendly number (multiple of common sizes) */
