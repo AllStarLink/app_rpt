@@ -1141,8 +1141,8 @@ static void statpost(struct rpt *myrpt, struct ast_str *pairs)
 
 	time(&now);
 	sp->myrpt = myrpt;
-	ast_str_set(&sp->stats_url, 0, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq),
-		ast_str_buffer(pairs);
+	ast_str_set(&sp->stats_url, 0, "%s?node=%s&time=%u&seqno=%u%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq,
+		ast_str_buffer(pairs));
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
 	ast_debug(4, "Making statpost to %s\n", ast_str_buffer(sp->stats_url));
