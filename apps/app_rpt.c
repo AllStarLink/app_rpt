@@ -4262,7 +4262,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
-		if (!l->disced) {
+		if (l->disced == RPT_LINK_DISCONNECT_NONE) {
 			if (!l->outbound) {
 				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
 					/* NOt an allstar link node */

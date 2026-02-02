@@ -335,7 +335,8 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 			if (!myrpt->localrxchannel) {
 				myrpt->localrxchannel = chan;
 			}
-		} /* Don't break here we want the default logic for RPT_PCHAN */
+		}
+		break;
 	default:
 		break;
 	}
