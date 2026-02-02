@@ -1060,6 +1060,7 @@ static void *perform_statpost(void *data)
 	struct ast_str *response_msg;
 	struct statpost *sp = (struct statpost *) data;
 	struct rpt *myrpt = sp->myrpt;
+	char *url = ast_str_buffer(sp->stats_url);
 
 	if (!curl) {
 		ast_free(sp->stats_url);
@@ -1086,12 +1087,12 @@ static void *perform_statpost(void *data)
 		if (*error_buffer) { /* Anything in the error buffer? */
 			failed = 1;
 			if (!myrpt->last_statpost_failed) {
-				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", ast_str_buffer(sp->stats_url), error_buffer);
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", url, error_buffer);
 			}
 		} else {
 			failed = 1;
 			if (!myrpt->last_statpost_failed) {
-				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", ast_str_buffer(sp->stats_url), curl_easy_strerror(res));
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", url, curl_easy_strerror(res));
 			}
 		}
 	} else {
@@ -1099,8 +1100,7 @@ static void *perform_statpost(void *data)
 		if (!is_http_success(rescode)) {
 			failed = 1;
 			if (!myrpt->last_statpost_failed) {
-				ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld: %s\n", ast_str_buffer(sp->stats_url), rescode,
-					http_status_text(rescode));
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld: %s\n", url, rescode, http_status_text(rescode));
 			}
 		}
 	}
