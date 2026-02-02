@@ -5606,19 +5606,6 @@ static void *rpt(void *this)
 		/* wait for telem to be done */
 		usleep(50000);
 	}
-	rpt_hangup(myrpt, RPT_PCHAN);
-	if (myrpt->monchannel) {
-		rpt_hangup(myrpt, RPT_MONCHAN);
-	}
-	myrpt->parrotstate = PARROT_STATE_IDLE;
-	rpt_hangup(myrpt, RPT_TXPCHAN);
-	rpt_hangup(myrpt, RPT_RXPCHAN);
-	if (myrpt->localtxchannel != myrpt->txchannel) {
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
-	}
-	rpt_hangup_rx_tx(myrpt);
-	rpt_frame_queue_free(&myrpt->frame_queue);
-
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* hang-up any running links */
@@ -5635,6 +5622,20 @@ static void *rpt(void *this)
 		myrpt->xlink = 2;
 	rpt_mutex_unlock(&myrpt->lock);
 	ao2_cleanup(myrpt->links);
+
+	rpt_hangup(myrpt, RPT_PCHAN);
+	if (myrpt->monchannel) {
+		rpt_hangup(myrpt, RPT_MONCHAN);
+	}
+	myrpt->parrotstate = PARROT_STATE_IDLE;
+	rpt_hangup(myrpt, RPT_TXPCHAN);
+	rpt_hangup(myrpt, RPT_RXPCHAN);
+	if (myrpt->localtxchannel != myrpt->txchannel) {
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+	}
+	rpt_hangup_rx_tx(myrpt);
+	rpt_frame_queue_free(&myrpt->frame_queue);
+
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	myrpt->rpt_thread = AST_PTHREADT_STOP;
 	stop_outstream(myrpt);
