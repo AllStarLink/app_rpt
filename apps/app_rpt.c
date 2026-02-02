@@ -1141,8 +1141,8 @@ static void statpost(struct rpt *myrpt, struct ast_str *pairs)
 
 	time(&now);
 	sp->myrpt = myrpt;
-	ast_str_set(&sp->stats_url, 0, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq,
-		ast_str_buffer(pairs) ? "&" : "", S_OR(ast_str_buffer(pairs), ""));
+	ast_str_set(&sp->stats_url, 0, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq),
+		ast_str_buffer(pairs);
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
 	ast_debug(4, "Making statpost to %s\n", ast_str_buffer(sp->stats_url));
@@ -3420,7 +3420,7 @@ static inline void do_key_post(struct rpt *myrpt)
 		return;
 	}
 	time(&now);
-	ast_str_set(&str, 0, "keyed=%d&keytime=%d", myrpt->keyed, myrpt->lastkeyedtime ? ((int) (now - myrpt->lastkeyedtime)) : 0);
+	ast_str_set(&str, 0, "&keyed=%d&keytime=%d", myrpt->keyed, myrpt->lastkeyedtime ? ((int) (now - myrpt->lastkeyedtime)) : 0);
 	rpt_mutex_unlock(&myrpt->lock);
 	statpost(myrpt, str);
 	ast_free(str);
@@ -3448,7 +3448,7 @@ static inline int do_link_post(struct rpt *myrpt)
 		return -1;
 	}
 	nstr = 0;
-	ast_str_set(&str, 0, "%s", "nodes=");
+	ast_str_set(&str, 0, "%s", "&nodes=");
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
