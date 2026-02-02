@@ -2413,21 +2413,22 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
+
 	ast_debug(1, "Attempting Reconnect");
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
-		goto cleanup;
+		return NULL;
 	}
 	/* cannot apply to echolink */
 	if (!strncasecmp(tmp, "echolink", 8)) {
-		goto cleanup;
+		return NULL;
 	}
 	/* cannot apply to tlb */
 	if (!strncasecmp(tmp, "tlb", 3)) {
-		goto cleanup;
+		return NULL;
 	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
@@ -2436,7 +2437,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
-		goto cleanup;
+		return NULL;
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
@@ -2478,7 +2479,6 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
-cleanup:
 	return NULL;
 }
 
