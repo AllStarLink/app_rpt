@@ -5879,6 +5879,10 @@ static void *rpt_master(void *ignore)
 			if (rv) {
 				if (rpt_vars[i].deleted) {
 					rpt_vars[i].name[0] = 0;
+					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
+						pthread_join(rpt_vars[i].rpt_thread, NULL);
+						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+					}
 					continue;
 				}
 				if (ast_shutting_down() || shutting_down) {
@@ -5975,6 +5979,10 @@ static void *rpt_master(void *ignore)
 			for (i = 0; i < nrpts; i++) {
 				if (rpt_vars[i].deleted) {
 					ast_debug(1, "Skipping deleted thread %s\n", rpt_vars[i].name);
+					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
+						pthread_join(rpt_vars[i].rpt_thread, NULL);
+						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+					}
 					done++;
 					continue;
 				}
