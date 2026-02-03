@@ -4773,7 +4773,6 @@ static void *rpt(void *this)
 	if (!myrpt->macrobuf) {
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
 		if (!myrpt->macrobuf) {
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
 	}
@@ -4806,7 +4805,6 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_log(LOG_ERROR, "ioperm(%x) not supported on this architecture\n", myrpt->p.iobase);
 #endif
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
 
@@ -4814,7 +4812,6 @@ static void *rpt(void *this)
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		pthread_exit(NULL);
 	}
 
@@ -4822,7 +4819,6 @@ static void *rpt(void *this)
 
 	if (rpt_setup_channels(myrpt, cap)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		disable_rpt(myrpt); /* Disable repeater */
 		ao2_ref(cap, -1);
 		pthread_exit(NULL);
@@ -4846,7 +4842,6 @@ static void *rpt(void *this)
 
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		disable_rpt(myrpt); /* Disable repeater */
 		pthread_exit(NULL);
 	}
@@ -4909,7 +4904,6 @@ static void *rpt(void *this)
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
 			rpt_hangup(myrpt, RPT_RXCHAN);
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			pthread_exit(NULL);
 		}
 		/*! \todo At this point, we have a memory leak, because dsp needs to be freed. */
@@ -5627,7 +5621,6 @@ static void *rpt(void *this)
 	rpt_mutex_unlock(&myrpt->lock);
 	ao2_cleanup(myrpt->links);
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
-	myrpt->rpt_thread = AST_PTHREADT_STOP;
 	stop_outstream(myrpt);
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
@@ -5882,11 +5875,7 @@ static void *rpt_master(void *ignore)
 				thread_hung[i] = true;
 				ast_log(LOG_WARNING, "RPT thread on %s is hung for %ld seconds.\n", rpt_vars[i].name, current_loop_time);
 			}
-			if ((rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
-				rv = -1;
-			} else {
-				rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
-			}
+			rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
 			if (rv) {
 				if (rpt_vars[i].deleted) {
 					rpt_vars[i].name[0] = 0;
@@ -5911,10 +5900,9 @@ static void *rpt_master(void *ignore)
 				} else {
 					rpt_vars[i].threadrestarts = 0;
 				}
-
+				pthread_join(rpt_vars[i].rpt_thread, NULL);
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
 				rpt_vars[i].lastthreadupdatetime = current_time;
-				pthread_join(rpt_vars[i].rpt_thread, NULL);
 				ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 				/* if (!rpt_vars[i].xlink) */
 				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
@@ -6005,15 +5993,12 @@ static void *rpt_master(void *ignore)
 					done++;
 					continue;
 				}
-				if (!(rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
-					if (pthread_join(rpt_vars[i].rpt_thread, NULL)) {
-						ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(errno));
-					} else {
-						ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
-						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
-						done++;
-					}
+				if (pthread_join(rpt_vars[i].rpt_thread, NULL)) {
+					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(errno));
 				}
+				ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
+				rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+				done++;
 			}
 			ast_mutex_lock(&rpt_master_lock);
 			ast_debug(1, "Joined %d/%d repeater%s so far\n", done, nrpts, ESS(nrpts));

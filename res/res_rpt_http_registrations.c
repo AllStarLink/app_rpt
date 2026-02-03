@@ -580,6 +580,8 @@ static int unload_module(void)
 	pthread_join(refresh_thread, NULL);
 
 	cleanup_registrations();
+	ast_mutex_destroy(&refreshlock);
+	ast_cond_destroy(&refresh_condition);
 	return 0;
 }
 
