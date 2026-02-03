@@ -6012,7 +6012,7 @@ static void *rpt_master(void *ignore)
 					done++;
 					continue;
 				}
-				jrv = pthread_join(rpt_vars[i].rpt_thread, NULL) 
+				jrv = pthread_join(rpt_vars[i].rpt_thread, NULL);
 				if (jrv) {
 					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(jrv));
 				}
