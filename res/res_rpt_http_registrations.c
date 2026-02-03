@@ -559,7 +559,7 @@ static int load_module(void)
 	ast_mutex_init(&refreshlock);
 	ast_cond_init(&refresh_condition, NULL);
 
-	if (ast_pthread_create_background(&refresh_thread, NULL, do_refresh, NULL) < 0) {
+	if (ast_pthread_create(&refresh_thread, NULL, do_refresh, NULL) < 0) {
 		ast_log(LOG_ERROR, "Unable to start refresh thread\n");
 		cleanup_registrations();
 		return AST_MODULE_LOAD_DECLINE;

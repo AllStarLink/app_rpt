@@ -5855,7 +5855,7 @@ static void *rpt_master(void *ignore)
 		rpt_vars[i].splitkhz = 0;
 		rpt_vars[i].ready = 0;
 		rpt_vars[i].lastthreadupdatetime = current_time;
-		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+		ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 	}
 	time(&starttime);
 	ast_mutex_lock(&rpt_master_lock);
@@ -5914,7 +5914,7 @@ static void *rpt_master(void *ignore)
 
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
 				rpt_vars[i].lastthreadupdatetime = current_time;
-				ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+				ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 				/* if (!rpt_vars[i].xlink) */
 				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
 			}
