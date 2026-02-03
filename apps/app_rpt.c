@@ -5815,6 +5815,8 @@ static void *rpt_master(void *ignore)
 
 	/* start a rpt() thread for each repeater that is not a remote */
 	for (i = 0; i < nrpts; i++) {
+		int crv;
+
 		load_rpt_vars(i, 1); /* Load initial config */
 
 		/* if is a remote, dont start a rpt() thread for it */
@@ -5848,7 +5850,10 @@ static void *rpt_master(void *ignore)
 		rpt_vars[i].splitkhz = 0;
 		rpt_vars[i].ready = 0;
 		rpt_vars[i].lastthreadupdatetime = current_time;
-		ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+		crv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+		if (crv) {
+			ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(crv));
+		}
 	}
 	time(&starttime);
 	ast_mutex_lock(&rpt_master_lock);
@@ -5857,7 +5862,7 @@ static void *rpt_master(void *ignore)
 		time_t current_loop_time;
 		current_time = rpt_time_monotonic();
 		for (i = 0; i < nrpts; i++) {
-			int rv;
+			int rv, jrv, crv;
 			if (rpt_vars[i].remote)
 				continue;
 
@@ -5904,12 +5909,18 @@ static void *rpt_master(void *ignore)
 				} else {
 					rpt_vars[i].threadrestarts = 0;
 				}
-				pthread_join(rpt_vars[i].rpt_thread, NULL);
+				jrv = pthread_join(rpt_vars[i].rpt_thread, NULL);
+				if (jrv) {
+					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(jrv));
+				}
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
 				rpt_vars[i].lastthreadupdatetime = current_time;
-				ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
-				/* if (!rpt_vars[i].xlink) */
-				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
+				crv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+				if (crv) {
+					ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(crv));
+				} else {
+					ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
+				}
 			}
 		}
 		for (i = 0; i < nrpts; i++) {
@@ -5974,7 +5985,7 @@ static void *rpt_master(void *ignore)
 		}
 		ast_mutex_unlock(&rpt_master_lock);
 		while (shutting_down) {
-			int done = 0;
+			int done = 0, jrv;
 			ast_debug(1, "app_rpt is unloading, master thread cleaning up %d repeater%s and exiting\n", nrpts, ESS(nrpts));
 			for (i = 0; i < nrpts; i++) {
 				if (rpt_vars[i].deleted) {
@@ -6001,8 +6012,9 @@ static void *rpt_master(void *ignore)
 					done++;
 					continue;
 				}
-				if (pthread_join(rpt_vars[i].rpt_thread, NULL)) {
-					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(errno));
+				jrv = pthread_join(rpt_vars[i].rpt_thread, NULL) 
+				if (jrv) {
+					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(jrv));
 				}
 				ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
 				rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
