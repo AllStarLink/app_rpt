@@ -471,6 +471,9 @@ static void cleanup_registrations(void)
 	AST_RWLIST_WRLOCK(&registrations);
 	AST_LIST_TRAVERSE_SAFE_BEGIN(&registrations, reg, entry) {
 		AST_LIST_REMOVE_CURRENT(entry);
+		if (reg->dnsmgr) {
+			ast_dnsmgr_release(reg->dnsmgr);
+		}
 		ast_free(reg);
 	}
 	AST_LIST_TRAVERSE_SAFE_END;
