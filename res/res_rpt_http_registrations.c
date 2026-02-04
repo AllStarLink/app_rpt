@@ -471,6 +471,7 @@ static void cleanup_registrations(void)
 	AST_RWLIST_WRLOCK(&registrations);
 	AST_LIST_TRAVERSE_SAFE_BEGIN(&registrations, reg, entry) {
 		AST_LIST_REMOVE_CURRENT(entry);
+		ast_free(reg);
 	}
 	AST_LIST_TRAVERSE_SAFE_END;
 	AST_RWLIST_UNLOCK(&registrations);
