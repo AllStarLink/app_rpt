@@ -180,6 +180,7 @@ static char *build_request_data(struct http_registry *reg)
 
 	/* ast_json_object_set steals references (even on errors), so no need to free what we set */
 	if (ast_json_object_set(node, reg->username, register_to_json(reg))) {
+		ast_json_unref(node);
 		return NULL;
 	}
 	nodes = ast_json_object_create();
@@ -188,6 +189,7 @@ static char *build_request_data(struct http_registry *reg)
 		return NULL;
 	}
 	if (ast_json_object_set(nodes, "nodes", node)) {
+		ast_json_unref(nodes);
 		return NULL;
 	}
 
