@@ -285,8 +285,10 @@ static void *do_refresh(void *varg)
 		AST_RWLIST_UNLOCK(&registrations);
 
 		ast_mutex_lock(&refreshlock);
-		ts.tv_sec = (now.tv_sec + register_interval) + 1;
-		ast_cond_timedwait(&refresh_condition, &refreshlock, &ts);
+		if (!module_unloading) {
+			ts.tv_sec = (now.tv_sec + register_interval) + 1;
+			ast_cond_timedwait(&refresh_condition, &refreshlock, &ts);
+		}
 		ast_mutex_unlock(&refreshlock);
 		if (module_unloading) {
 			break;
