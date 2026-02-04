@@ -5862,7 +5862,7 @@ static void *rpt_master(void *ignore)
 		time_t current_loop_time;
 		current_time = rpt_time_monotonic();
 		for (i = 0; i < nrpts; i++) {
-			int rv, jrv, crv;
+			int rv;
 			if (rpt_vars[i].remote)
 				continue;
 
@@ -5909,15 +5909,15 @@ static void *rpt_master(void *ignore)
 				} else {
 					rpt_vars[i].threadrestarts = 0;
 				}
-				jrv = pthread_join(rpt_vars[i].rpt_thread, NULL);
-				if (jrv) {
-					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(jrv));
+				rv = pthread_join(rpt_vars[i].rpt_thread, NULL);
+				if (rv) {
+					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(rv));
 				}
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
 				rpt_vars[i].lastthreadupdatetime = current_time;
-				crv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
-				if (crv) {
-					ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(crv));
+				rv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+				if (rv) {
+					ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(rv));
 				} else {
 					ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
 				}
