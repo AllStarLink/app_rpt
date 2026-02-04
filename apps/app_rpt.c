@@ -1060,6 +1060,7 @@ static void *perform_statpost(void *data)
 	struct ast_str *response_msg;
 	struct statpost *sp = (struct statpost *) data;
 	struct rpt *myrpt = sp->myrpt;
+	char *url = ast_str_buffer(sp->stats_url);
 
 	if (!curl) {
 		ast_free(sp->stats_url);
@@ -1067,7 +1068,7 @@ static void *perform_statpost(void *data)
 		return NULL;
 	}
 
-	response_msg = ast_str_create(50);
+	response_msg = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!response_msg) {
 		ast_free(sp->stats_url);
 		ast_free(sp);
@@ -1075,9 +1076,9 @@ static void *perform_statpost(void *data)
 		return NULL;
 	}
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &response_msg);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_msg);
 	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-	curl_easy_setopt(curl, CURLOPT_URL, sp->stats_url);
+	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
 
@@ -1086,12 +1087,12 @@ static void *perform_statpost(void *data)
 		if (*error_buffer) { /* Anything in the error buffer? */
 			failed = 1;
 			if (!myrpt->last_statpost_failed) {
-				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", sp->stats_url, error_buffer);
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", url, error_buffer);
 			}
 		} else {
 			failed = 1;
 			if (!myrpt->last_statpost_failed) {
-				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", sp->stats_url, curl_easy_strerror(res));
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with error: %s\n", url, curl_easy_strerror(res));
 			}
 		}
 	} else {
@@ -1099,7 +1100,7 @@ static void *perform_statpost(void *data)
 		if (!is_http_success(rescode)) {
 			failed = 1;
 			if (!myrpt->last_statpost_failed) {
-				ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld: %s\n", sp->stats_url, rescode, http_status_text(rescode));
+				ast_log(LOG_WARNING, "statpost to URL '%s' failed with code %ld: %s\n", url, rescode, http_status_text(rescode));
 			}
 		}
 	}
@@ -1113,11 +1114,11 @@ static void *perform_statpost(void *data)
 	return NULL;
 }
 
-static void statpost(struct rpt *myrpt, char *pairs)
+static void statpost(struct rpt *myrpt, struct ast_str *pairs)
 {
 	time_t now;
 	unsigned int seq;
-	int res, len;
+	int res;
 	pthread_t statpost_thread;
 	struct statpost *sp;
 
@@ -1129,20 +1130,22 @@ static void statpost(struct rpt *myrpt, char *pairs)
 		return;
 	}
 
-	len = strlen(pairs) + strlen(myrpt->p.statpost_url) + 200;
-	sp->stats_url = ast_malloc(len);
-
+	sp->stats_url = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	if (!sp->stats_url) {
+		ast_free(sp);
+		return;
+	}
 	ast_mutex_lock(&myrpt->statpost_lock);
 	seq = ++myrpt->statpost_seqno;
 	ast_mutex_unlock(&myrpt->statpost_lock);
 
 	time(&now);
 	sp->myrpt = myrpt;
-	snprintf(sp->stats_url, len, "%s?node=%s&time=%u&seqno=%u%s%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq,
-		pairs ? "&" : "", S_OR(pairs, ""));
+	ast_str_set(&sp->stats_url, 0, "%s?node=%s&time=%u&seqno=%u%s", myrpt->p.statpost_url, myrpt->name, (unsigned int) now, seq,
+		ast_str_buffer(pairs));
 
 	/* Make the actual cURL call in a separate thread, so we can continue without blocking. */
-	ast_debug(4, "Making statpost to %s\n", sp->stats_url);
+	ast_debug(4, "Making statpost to %s\n", ast_str_buffer(sp->stats_url));
 	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, sp);
 	if (res) {
 		ast_log(LOG_ERROR, "Error creating statpost thread: %s\n", strerror(res));
@@ -3410,13 +3413,17 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
  */
 static inline void do_key_post(struct rpt *myrpt)
 {
-	char str[100];
+	struct ast_str *str = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	time_t now;
 
+	if (!str) {
+		return;
+	}
 	time(&now);
-	snprintf(str, sizeof(str), "keyed=%d&keytime=%d", myrpt->keyed, myrpt->lastkeyedtime ? ((int) (now - myrpt->lastkeyedtime)) : 0);
+	ast_str_set(&str, 0, "&keyed=%d&keytime=%d", myrpt->keyed, myrpt->lastkeyedtime ? ((int) (now - myrpt->lastkeyedtime)) : 0);
 	rpt_mutex_unlock(&myrpt->lock);
 	statpost(myrpt, str);
+	ast_free(str);
 	rpt_mutex_lock(&myrpt->lock);
 }
 
@@ -3441,7 +3448,7 @@ static inline int do_link_post(struct rpt *myrpt)
 		return -1;
 	}
 	nstr = 0;
-	ast_str_set(&str, 0, "%s", "nodes=");
+	ast_str_set(&str, 0, "%s", "&nodes=");
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
@@ -3469,7 +3476,7 @@ static inline int do_link_post(struct rpt *myrpt)
 		(int) myrpt->totaltxtime / 1000, myrpt->timeouts, myrpt->totalexecdcommands, myrpt->keyed,
 		myrpt->lastkeyedtime ? ((int) (now - myrpt->lastkeyedtime)) : 0);
 	rpt_mutex_unlock(&myrpt->lock);
-	statpost(myrpt, ast_str_buffer(str));
+	statpost(myrpt, str);
 	rpt_mutex_lock(&myrpt->lock);
 	ast_free(str);
 	return 0;
