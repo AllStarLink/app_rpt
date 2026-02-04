@@ -285,10 +285,11 @@ static void *do_refresh(void *varg)
 		AST_RWLIST_UNLOCK(&registrations);
 
 		ast_mutex_lock(&refreshlock);
-		ts.tv_sec = (now.tv_sec + register_interval) + 1;
-		ast_cond_timedwait(&refresh_condition, &refreshlock, &ts);
+		if (!module_unloading) {
+			ts.tv_sec = (now.tv_sec + register_interval) + 1;
+			ast_cond_timedwait(&refresh_condition, &refreshlock, &ts);
+		}
 		ast_mutex_unlock(&refreshlock);
-
 		if (module_unloading) {
 			break;
 		}
@@ -559,9 +560,11 @@ static int load_module(void)
 	ast_mutex_init(&refreshlock);
 	ast_cond_init(&refresh_condition, NULL);
 
-	if (ast_pthread_create_background(&refresh_thread, NULL, do_refresh, NULL) < 0) {
+	if (ast_pthread_create(&refresh_thread, NULL, do_refresh, NULL) < 0) {
 		ast_log(LOG_ERROR, "Unable to start refresh thread\n");
 		cleanup_registrations();
+		ast_mutex_destroy(&refreshlock);
+		ast_cond_destroy(&refresh_condition);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_cli_register_multiple(rpt_http_cli, ARRAY_LEN(rpt_http_cli));
@@ -580,6 +583,8 @@ static int unload_module(void)
 	pthread_join(refresh_thread, NULL);
 
 	cleanup_registrations();
+	ast_mutex_destroy(&refreshlock);
+	ast_cond_destroy(&refresh_condition);
 	return 0;
 }
 

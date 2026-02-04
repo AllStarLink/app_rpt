@@ -4822,7 +4822,6 @@ static void *rpt(void *this)
 	if (!myrpt->macrobuf) {
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
 		if (!myrpt->macrobuf) {
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			return NULL;
 		}
 	}
@@ -4855,7 +4854,6 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_log(LOG_ERROR, "ioperm(%x) not supported on this architecture\n", myrpt->p.iobase);
 #endif
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		return NULL;
 	}
 
@@ -4863,7 +4861,6 @@ static void *rpt(void *this)
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		return NULL;
 	}
 
@@ -4871,7 +4868,6 @@ static void *rpt(void *this)
 	ast_debug(1, "Setting up channels");
 	if (rpt_setup_channels(myrpt, cap)) {
 		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		disable_rpt(myrpt); /* Disable repeater */
 		ao2_ref(cap, -1);
 		return NULL;
@@ -4895,9 +4891,8 @@ static void *rpt(void *this)
 
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
-		myrpt->rpt_thread = AST_PTHREADT_STOP;
 		disable_rpt(myrpt); /* Disable repeater */
-		pthread_exit(NULL);
+		return NULL;
 	}
 
 	/* Now, the idea here is to copy from the physical rx channel buffer
@@ -4958,7 +4953,6 @@ static void *rpt(void *this)
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
 			rpt_hangup(myrpt, RPT_RXCHAN);
-			myrpt->rpt_thread = AST_PTHREADT_STOP;
 			return NULL;
 		}
 		/*! \todo At this point, we have a memory leak, because dsp needs to be freed. */
@@ -5645,7 +5639,6 @@ static void *rpt(void *this)
 	rpt_frame_queue_free(&myrpt->frame_queue);
 
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
-	myrpt->rpt_thread = AST_PTHREADT_STOP;
 	stop_outstream(myrpt);
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
@@ -5840,6 +5833,8 @@ static void *rpt_master(void *ignore)
 
 	/* start a rpt() thread for each repeater that is not a remote */
 	for (i = 0; i < nrpts; i++) {
+		int crv;
+
 		load_rpt_vars(i, 1); /* Load initial config */
 
 		/* if is a remote, dont start a rpt() thread for it */
@@ -5873,7 +5868,10 @@ static void *rpt_master(void *ignore)
 		rpt_vars[i].splitkhz = 0;
 		rpt_vars[i].ready = 0;
 		rpt_vars[i].lastthreadupdatetime = current_time;
-		ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+		crv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+		if (crv) {
+			ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(crv));
+		}
 	}
 	time(&starttime);
 	ast_mutex_lock(&rpt_master_lock);
@@ -5900,14 +5898,14 @@ static void *rpt_master(void *ignore)
 				thread_hung[i] = true;
 				ast_log(LOG_WARNING, "RPT thread on %s is hung for %ld seconds.\n", rpt_vars[i].name, current_loop_time);
 			}
-			if ((rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
-				rv = -1;
-			} else {
-				rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
-			}
+			rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
 			if (rv) {
 				if (rpt_vars[i].deleted) {
 					rpt_vars[i].name[0] = 0;
+					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
+						pthread_join(rpt_vars[i].rpt_thread, NULL);
+						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+					}
 					continue;
 				}
 				if (ast_shutting_down() || shutting_down) {
@@ -5929,12 +5927,18 @@ static void *rpt_master(void *ignore)
 				} else {
 					rpt_vars[i].threadrestarts = 0;
 				}
-
+				rv = pthread_join(rpt_vars[i].rpt_thread, NULL);
+				if (rv) {
+					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(rv));
+				}
 				rpt_vars[i].lastthreadrestarttime = time(NULL);
 				rpt_vars[i].lastthreadupdatetime = current_time;
-				ast_pthread_create_detached(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
-				/* if (!rpt_vars[i].xlink) */
-				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
+				rv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+				if (rv) {
+					ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(rv));
+				} else {
+					ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
+				}
 			}
 		}
 		for (i = 0; i < nrpts; i++) {
@@ -5999,11 +6003,15 @@ static void *rpt_master(void *ignore)
 		}
 		ast_mutex_unlock(&rpt_master_lock);
 		while (shutting_down) {
-			int done = 0;
+			int done = 0, jrv;
 			ast_debug(1, "app_rpt is unloading, master thread cleaning up %d repeater%s and exiting\n", nrpts, ESS(nrpts));
 			for (i = 0; i < nrpts; i++) {
 				if (rpt_vars[i].deleted) {
 					ast_debug(1, "Skipping deleted thread %s\n", rpt_vars[i].name);
+					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
+						pthread_join(rpt_vars[i].rpt_thread, NULL);
+						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+					}
 					done++;
 					continue;
 				}
@@ -6022,15 +6030,13 @@ static void *rpt_master(void *ignore)
 					done++;
 					continue;
 				}
-				if (!(rpt_vars[i].rpt_thread == AST_PTHREADT_STOP) || (rpt_vars[i].rpt_thread == AST_PTHREADT_NULL)) {
-					if (pthread_join(rpt_vars[i].rpt_thread, NULL)) {
-						ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(errno));
-					} else {
-						ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
-						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
-						done++;
-					}
+				jrv = pthread_join(rpt_vars[i].rpt_thread, NULL);
+				if (jrv) {
+					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(jrv));
 				}
+				ast_debug(1, "Repeater thread %s has now exited\n", rpt_vars[i].name);
+				rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+				done++;
 			}
 			ast_mutex_lock(&rpt_master_lock);
 			ast_debug(1, "Joined %d/%d repeater%s so far\n", done, nrpts, ESS(nrpts));
@@ -7200,7 +7206,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			ao2_ref(cap, -1);
-			pthread_exit(NULL);
+			return -1;
 		}
 	}
 	rpt_mutex_unlock(&myrpt->lock);
