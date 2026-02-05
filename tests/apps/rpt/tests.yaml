@@ -1,4 +1,5 @@
 # Enter tests here in the order they should be considered for execution:
 tests:
-    - test: 'fast_connect_disconnect'
     - test: 'ast_str_allocation'
+    - test: 'fast_connect_disconnect'
+    
