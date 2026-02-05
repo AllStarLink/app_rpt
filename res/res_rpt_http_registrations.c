@@ -216,22 +216,28 @@ static char *build_request_data(struct http_registry *reg)
 static int http_register(struct http_registry *reg)
 {
 	struct ast_str *str;
-	char url[256];
+	struct ast_str *url = ast_str_create(RPT_INITIAL_BUFFER_SIZE);
 	char *data = build_request_data(reg);
 
+	if (!url) {
+		return -1;
+	}
+
 	if (!data) {
+		ast_free(url);
 		return -1;
 	}
 
 	if (reg->port) {
-		snprintf(url, sizeof(url), "https://%s:%d/", reg->hostname, reg->port); /* Registrar's HTTPS port */
+		ast_str_set(&url, 0, "https://%s:%d/", reg->hostname, reg->port);
 	} else {
-		snprintf(url, sizeof(url), "https://%s/", reg->hostname);
+		ast_str_set(&url, 0, "https://%s/", reg->hostname);
 	}
 
-	ast_debug(2, "Making request to %s with data '%s'\n", url, data);
-	str = curl_post(url, "Content-Type: application/json", data);
+	ast_debug(2, "Making request to %s with data '%s'\n", ast_str_buffer(url), data);
+	str = curl_post(ast_str_buffer(url), "Content-Type: application/json", data);
 	ast_json_free(data);
+	ast_free(url);
 
 	if (str) {
 		const char *ipaddr;
