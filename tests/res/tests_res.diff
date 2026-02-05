@@ -1,0 +1,10 @@
+diff --git a/tests/tests.yaml b/tests/tests.yaml
+index 4c8261c..9124368 100644
+--- a/tests/tests.yaml
++++ b/tests/tests.yaml
+@@ -38,4 +38,5 @@ tests:
+     - dir: 'codecs'
+     - dir: 'rtp'
+     - dir: 'tenant_id'
++    - dir: 'extra_gates'
+     - dir: 'res'
