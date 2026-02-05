@@ -64,6 +64,7 @@
  ***/
 
 #define CONFIG_FILE "rpt_http_registrations.conf"
+#define RPT_INITIAL_BUFFER_SIZE 512
 
 /*! \brief Default register interval is once per minute */
 #define DEFAULT_REGISTER_INTERVAL 60
