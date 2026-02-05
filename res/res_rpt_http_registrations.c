@@ -64,6 +64,7 @@
  ***/
 
 #define CONFIG_FILE "rpt_http_registrations.conf"
+#define RPT_INITIAL_BUFFER_SIZE 512
 
 /*! \brief Default register interval is once per minute */
 #define DEFAULT_REGISTER_INTERVAL 60
@@ -100,14 +101,14 @@ static size_t curl_write_string_callback(char *contents, size_t size, size_t nme
 
 static struct ast_str *curl_post(const char *url, const char *header, const char *data)
 {
-	CURL **curl;
+	CURL *curl;
 	CURLcode res;
 	struct ast_str *str;
 	long int http_code;
 	struct curl_slist *slist = NULL;
 	char curl_errbuf[CURL_ERROR_SIZE + 1] = "";
 
-	str = ast_str_create(512);
+	str = ast_str_create(RPT_INITIAL_BUFFER_SIZE);
 	if (!str) {
 		return NULL;
 	}
@@ -180,6 +181,7 @@ static char *build_request_data(struct http_registry *reg)
 
 	/* ast_json_object_set steals references (even on errors), so no need to free what we set */
 	if (ast_json_object_set(node, reg->username, register_to_json(reg))) {
+		ast_json_unref(node);
 		return NULL;
 	}
 	nodes = ast_json_object_create();
@@ -188,6 +190,7 @@ static char *build_request_data(struct http_registry *reg)
 		return NULL;
 	}
 	if (ast_json_object_set(nodes, "nodes", node)) {
+		ast_json_unref(nodes);
 		return NULL;
 	}
 
@@ -472,6 +475,10 @@ static void cleanup_registrations(void)
 	AST_RWLIST_WRLOCK(&registrations);
 	AST_LIST_TRAVERSE_SAFE_BEGIN(&registrations, reg, entry) {
 		AST_LIST_REMOVE_CURRENT(entry);
+		if (reg->dnsmgr) {
+			ast_dnsmgr_release(reg->dnsmgr);
+		}
+		ast_free(reg);
 	}
 	AST_LIST_TRAVERSE_SAFE_END;
 	AST_RWLIST_UNLOCK(&registrations);
@@ -562,6 +569,8 @@ static int load_module(void)
 
 	if (ast_pthread_create(&refresh_thread, NULL, do_refresh, NULL) < 0) {
 		ast_log(LOG_ERROR, "Unable to start refresh thread\n");
+		ast_mutex_destroy(&refreshlock);
+		ast_cond_destroy(&refresh_condition);
 		cleanup_registrations();
 		ast_mutex_destroy(&refreshlock);
 		ast_cond_destroy(&refresh_condition);
