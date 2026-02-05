@@ -1,0 +1,120 @@
+testinfo:
+    summary: 'Test ast_str allocation with RPT_AST_STR_INIT_SIZE'
+    description: |
+        'This test verifies that ast_str structures are properly allocated
+        using RPT_AST_STR_INIT_SIZE constant throughout app_rpt.
+        Tests the following code paths:
+        - Link list management (ast_str allocation for link lists)
+        - Statistics posting (ast_str allocation for stats URLs and responses)
+        - Key posting (ast_str allocation for key post messages)
+
+        This ensures the refactoring from magic numbers to RPT_AST_STR_INIT_SIZE
+        works correctly and doesn''t introduce memory allocation issues.'
+
+test-modules:
+    test-object:
+        config-section: test-object-config
+        typename: 'test_case.TestCaseModule'
+    modules:
+        -
+            config-section: timer-originator
+            typename: 'pluggable_modules.Originator'
+        -
+            config-section: hangup-monitor
+            typename: 'pluggable_modules.HangupMonitor'
+        -
+            config-section: ami-config-1
+            typename: 'pluggable_modules.EventActionModule'
+        -
+            config-section: ami-config-2
+            typename: 'pluggable_modules.EventActionModule'
+        -
+            config-section: ami-config-3
+            typename: 'pluggable_modules.EventActionModule'
+        -
+            config-section: ami-config-4
+            typename: 'pluggable_modules.EventActionModule'
+
+test-object-config:
+    connect-ami: True
+    reactor-timeout: 15
+    stop-after-scenarios: False
+
+timer-originator:
+    channel: 'Local/s@wait'
+    context: 'timer'
+    exten: 'start'
+    priority: '1'
+    trigger: 'ami_connect'
+
+hangup-monitor:
+    ids: '0'
+
+# Test 1: Create a link connection - tests ast_str allocation in link establishment
+ami-config-1:
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'UserEvent'
+                    UserEvent: 'TimerExpired'
+                    TimerEvent: start
+        ami-actions:
+            action:
+                Action: 'Command'
+                Command: 'rpt cmd 1999 ilink 3 1998'
+
+# Test 2: Request link status - tests ast_str allocation for link lists
+ami-config-2:
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'RPT_ALINKS'
+                    Node: '1999'
+                count: 1
+        ami-actions:
+            action:
+                Action: 'Command'
+                Command: 'rpt lstatus 1999'
+
+# Test 3: Disconnect link - tests ast_str cleanup
+ami-config-3:
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'UserEvent'
+                    UserEvent: 'TimerExpired'
+                    TimerEvent: disconnect
+        ami-actions:
+            action:
+                Action: 'Command'
+                Command: 'rpt cmd 1999 ilink 11 1998'
+
+# Test 4: Verify successful disconnect and cleanup
+ami-config-4:
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'RPT_ALINKS'
+                    Node: '1999'
+                    EventValue: '0'
+                count: 2
+        stop_test:
+
+properties:
+    tags:
+        - apps
+        - app_rpt
+        - memory
+    dependencies:
+        - python: 'twisted'
+        - python: 'starpy'
+        - asterisk: 'app_dial'
+        - asterisk: 'app_userevent'
+        - asterisk: 'app_originate'
+        - asterisk: 'app_rpt'
+        - asterisk: 'chan_iax2'
+        - asterisk: 'pbx_config'
