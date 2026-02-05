@@ -28,3 +28,4 @@ jobs:
         run: |
           cd /usr/src/testsuite
           phreaknet runtest apps/rpt
+          phreaknet runtest res/
