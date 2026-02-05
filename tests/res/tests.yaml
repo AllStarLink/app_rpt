@@ -1,4 +1,0 @@
-# Test suite for res modules
-tests:
-    - test: 'http_registrations'
-    - test: 'http_registrations_failure'

@@ -95,6 +95,4 @@ if [ -d /usr/src/testsuite ]; then
 	cd /usr/src/testsuite
 	git apply ../$MYDIR/tests/apps/tests_apps.diff
 	cp -r ../$MYDIR/tests/apps/rpt tests/apps
-	git apply ../$MYDIR/tests/res/tests_res.diff
-	cp -r ../$MYDIR/tests/res tests/res
 fi
