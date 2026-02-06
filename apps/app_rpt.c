@@ -5620,8 +5620,9 @@ static void *rpt(void *this)
 	}
 	if (myrpt->xlink == 1)
 		myrpt->xlink = 2;
-	rpt_mutex_unlock(&myrpt->lock);
 	ao2_cleanup(myrpt->links);
+	myrpt->links = NULL;
+	rpt_mutex_unlock(&myrpt->lock);
 
 	rpt_hangup(myrpt, RPT_PCHAN);
 	if (myrpt->monchannel) {
