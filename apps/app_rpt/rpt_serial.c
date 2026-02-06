@@ -416,12 +416,15 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 
 static void rbi_out(struct rpt *myrpt, unsigned char *data)
 {
-	if (rpt_radio_set_param(myrpt->dahdirxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_RBI1)) {
+	if (!myrpt->localrxchannel) {
+		return;
+	}
+	if (rpt_radio_set_param(myrpt->localrxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_RBI1)) {
 		/* if setparam ioctl fails, its probably not a pciradio card */
 		rbi_out_parallel(myrpt, data);
 		return;
 	}
-	rpt_radio_set_remcommand_data(myrpt->dahdirxchannel, data, 5);
+	rpt_radio_set_remcommand_data(myrpt->localrxchannel, data, 5);
 }
 
 int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsigned char *rxbuf, int rxmaxbytes, int asciiflag)
@@ -489,7 +492,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 	}
 
 	/* if not a DAHDI channel, can't use pciradio stuff */
-	if (myrpt->rxchannel != myrpt->dahdirxchannel) {
+	if (myrpt->rxchannel != myrpt->localrxchannel) {
 		return -1;
 	}
 
