@@ -442,6 +442,7 @@ struct ast_timer *voter_thread_timer = NULL;
 int voter_timing_count = 0;
 int last_master_count = 0;
 int hasmaster = 0;
+int masterconnected = 0;
 
 int maxpvtorder = 0;
 
@@ -4028,6 +4029,7 @@ static int reload(void)
 		}
 	}
 	hasmaster = 0;
+	masterconnected = 0;
 	ctg = NULL;
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL) {
@@ -4438,19 +4440,13 @@ static void *voter_timer(void *data)
 						ast_log(LOG_WARNING, "Lost master timing client, disconnecting remaining clients.\n");
 						/* Reset the current active master flag for this client, since it disconnected. */
 						client->curmaster = 0;
+						masterconnected = 0;
 						for (client1 = clients; client1; client1 = client1->next) {
-							/*! \todo VE7FET Not sure if we need to implement this... have to see if there actually can
-							 * be more than one master client. Un-comment this to only disconnect clients
-							 * belonging to this node number.
-							 */
-							// if (client1->nodenum != client->nodenum) {
-							//		continue;
-							//	}
 							/* Only drop connections we have heard from (not all configured clients
 							 * in voter.conf).
 							 */
 							if (client1->heardfrom) {
-								ast_log(LOG_NOTICE, "Forcing disconnect of client: %s\n", client1->name);
+								ast_log(LOG_WARNING, "Forcing disconnect of client: %s\n", client1->name);
 								client1->heardfrom = 0;
 								client1->respdigest = 0;
 								client1->lastheardtime = ast_tv(0, 0);
@@ -4466,11 +4462,30 @@ static void *voter_timer(void *data)
 						continue;
 					}
 					for (client1 = client->next; client1; client1 = client1->next) {
+						/* Check our original client against the other clients, and see
+						 * if there is a client with the same IP and Port. If the client
+						 * we're checking against isn't connected, skip it. Otherwise, if
+						 * we find a client with the same IP and Port, dump both clients,
+						 * as that is not sane. The IP's could match (if they are behind
+						 * the same NAT, but the UDP port better not).
+						 */
 						if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) && (client1->sin.sin_port == client->sin.sin_port)) {
+							/* If the client isn't connected/authenticated, skip */
 							if (!client1->respdigest) {
 								continue;
 							}
-							ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (sanity)\n", client1->nodenum, client1->name);
+							/* If the IP's of both clients are 0, skip. This can happen on initial
+							 * start, and is a not a problem until everyone is fully connected
+							 */
+							if (!client1->sin.sin_addr.s_addr && !client->sin.sin_addr.s_addr) {
+								continue;
+							}
+
+							ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name,
+								ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port), client1->name,
+								ast_inet_ntoa(client1->sin.sin_addr), ntohs(client1->sin.sin_port));
+							ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
+								client->name, client1->name);
 							client->respdigest = 0;
 							client->heardfrom = 0;
 							client1->respdigest = 0;
@@ -4601,11 +4616,320 @@ static void *voter_reader(void *data)
 		}
 		isproxy = 0;
 
-		/* If there is no digest in the packet header (vph->digest), the client this packet
-		 * came from isn't authenticated, yet, so we are going to skip all the normal packet
-		 * processing in this IF, and fall through to the authentication process below it.
+		if (no_ast_channel) {
+			/* No valid Asterisk channel, do not respond to the client. This prevents the client
+			 * from "looping" through online/offline mode when there is no valid channel in app_rpt
+			 * to connect to.
+			 */
+			continue;
+		}
+
+		/* Go through all the clients, and stop when we find a client the has client->digest set
+		 * (from voter.conf) that matches the digest we received on the wire (vph->digest).
+		 *
+		 * When we find a match, we'll also update the associated client->lastheard time for that
+		 * client with the current timestamp, and set client->heardfrom to true.
+		 *
+		 * Upon initial connect from a client, vph->digest will be 0, so this won't match any
+		 * configured client in voter.conf, triggering the authentication process.
 		 */
-		if (vph->digest) {
+		gettimeofday(&tv, NULL);
+		for (client = clients; client; client = client->next) {
+			if (client->digest == htonl(vph->digest)) {
+				client->lastheardtime = tv;
+				client->heardfrom = 1;
+				break;
+			}
+		}
+
+		/* This is where authentication of connecting clients begins. The first packet from the client
+		 * will have a Payload = 0 and a vph->digest = 0, and we can't match a client. So, build and
+		 * send our initial response packet with our challenge and our digest (based on the challenge
+		 * they sent).
+		 *
+		 * This only runs once for each client, in response to an auth packet with a received digest of 0.
+		 */
+		if (!client && (ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) && !ntohl(vph->digest)) {
+			memset(&authpacket, 0, sizeof(authpacket));
+			memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
+
+			/* Our unique challenge is created in load_module. Copy our challenge into
+			 * the packet header.
+			 */
+			strcpy((char *) authpacket.vp.challenge, challenge);
+
+			/* Put our current system time into the packet header. */
+			gettimeofday(&tv, NULL);
+			authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
+			authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+
+			/* Make our response digest based on the challenge sent by the client, and our host password,
+			 * and put that in the packet header, along with blank flags.
+			 */
+			authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
+			authpacket.flags = 0;
+
+			/* Do the same for proxy authentication packets. */
+			proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
+			proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+			proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
+			proxy_authpacket.flags = 0;
+
+			/* We have a new client connecting that hasn't been authenticated, yet. Our authentication
+			 * packet header is loaded with our challenge and our digest (which is based on their
+			 * challenge and our host password).
+			 *
+			 * Figure out if this authentication needs to be sent via a proxy server, or direct, and
+			 * send it accordingly.
+			 *
+			 * The first time we send a packet, we don't know who the client is (since they need to respond
+			 * with their own digest that is based on their password... which we use to match to the
+			 * clients in voter.conf we have configured), so the client name will be UNKNOWN.
+			 *
+			 * When we figure out who this client is, we send another auth packet to acknowledge them, so
+			 * this time the client name will be the matching name from voter.conf.
+			 *
+			 * After a client is authenticated, vph->digest gets set, and we start normal packet processing.
+			 */
+			/*! \todo VE7FET this is broken (and it appears to have been broken previous to shuffling
+			 * the code around). isproxy is always 0 at this point, so we never send the proper auth
+			 * packet to proxy clients. To be fixed in a future update.
+			 */
+			if (isproxy) {
+				ast_debug(2, "Sending (proxied) initial packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
+					ntohl(authpacket.vp.digest), password);
+				proxy_authpacket.flags = authpacket.flags;
+				proxy_authpacket.vprox.ipaddr = sin.sin_addr.s_addr;
+				proxy_authpacket.vprox.port = sin.sin_port;
+				proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
+				sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
+			} else {
+				ast_debug(2, "Sending initial packet challenge %s digest %08x password %s to client %s\n",
+					authpacket.vp.challenge, ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
+				sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+			}
+			continue;
+		}
+
+		/* If we have a valid client to work with, search through the configured Asterisk channels (p),
+		 * and stop when we find one that matches (p->nodenum == client->nodeum).
+		 *
+		 * If we can't find a matching Asterisk channel, we will set some variables to ignore this
+		 * this client. We do this to prevent a client from "looping" through connecting and
+		 * disconnecting endlessly... which is a problem if you have a voter client with offline mode
+		 * configured (and it keeps toggling between online and offline).
+		 */
+		if (client) {
+			/* Block connections from clients if we are supposed to have a master client (hasmaster), but
+			 * it currently isn't connected (!masterconnected).
+			 *
+			 * Without the master timing source, everything else is pointless.
+			 *
+			 * With only mix-mode clients, hasmaster will be unset, so we don't care, and will continue
+			 * the connection process.
+			 *
+			 * If hasmaster is set, and this is a master client trying to connect, don't block the connection
+			 * attempt.
+			 *
+			 * Once the master client is connected (masterconnected), we'll let everyone else try connecting.
+			 */
+			if (hasmaster && !masterconnected && !client->ismaster) {
+				ast_log(LOG_NOTICE, "Client %s connection blocked until master client connects\n", client->name);
+				continue;
+			}
+
+			/* Search for connected Asterisk channel for this known client. */
+			for (p = pvts; p; p = p->next) {
+				if (p->nodenum == client->nodenum) {
+					break;
+				}
+			}
+			if (!p) {
+				/* We didn't find an Asterisk channel, act like we don't know the client,
+				 * do not respond to messages via no_ast_channel flag.
+				 */
+				if (!logged_no_ast_channel) {
+					ast_log(LOG_WARNING, "Request for voter client %s to node %d with no matching Asterisk channel\n",
+						client->name, client->nodenum);
+					logged_no_ast_channel = 1;
+				}
+				no_ast_channel = 1;
+				client = NULL;
+			} else {
+				/* Otherwise, we found the channel, and the client is connected to it,
+				 * so make sure our flags are reset.
+				 */
+				logged_no_ast_channel = 0;
+				no_ast_channel = 0;
+			}
+		}
+
+		/* After we send the initial packet (above) to the client, it should respond with something
+		 * in vph->digest. We now use this to figure out which client we are talking to.
+		 *
+		 * If our client is validated, and is sending us an authentication packet, check for and set
+		 * option flags (primarily if the client wants to connect in mix mode).
+		 *
+		 * This only runs once for each client, to complete the authentication process. After the client
+		 * is connected, it doesn't send any more authentication packets (until something causes the
+		 * existing connection to break), so "normal" packet processing takes over from here.
+		 */
+		if (client && (ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) && ntohl(vph->digest)) {
+			client->mix = 0;
+			/* The client is sending us options/flags if this is an auth packet with something
+			 * in the payload. Option flags are sent in octet 24 of an auth packet, the same
+			 * position normally occupied by the RSSI value (in an audio packet).
+			 */
+			if (recvlen > sizeof(VOTER_PACKET_HEADER)) {
+				if (client->ismaster) {
+					ast_log(LOG_WARNING, "VOTER %u: Client master timing source %s attempting to authenticate as a mix mode client!! (HUH\?\?)\n",
+						client->nodenum, client->name);
+					ast_log(LOG_WARNING, "VOTER %u: Client %s disconnect (forced)\n", client->nodenum, client->name);
+					authpacket.vp.digest = 0;
+					client->curmaster = 0;
+					client->heardfrom = 0;
+					client->respdigest = 0;
+					continue;
+				}
+				/* Is the mix mode flag being sent by the client? */
+				if (buf[sizeof(VOTER_PACKET_HEADER)] & 32) {
+					/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
+					 * so this is where we check the flags from the client, and update client->mix accordingly.
+					 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
+					 * (buflen * 8, also FRAME_SIZE * 8). This keeps the starting drain index > 0 when we
+					 * configure it.
+					 *
+					 * If a client connects as mix mode, we need to enforce the minimum buflen, otherwise the
+					 * client will connect, but cannot send us audio because the buffer isn't big enough.
+					 *
+					 * Check the buflen, throw an error if it is too small, and block the client from connecting.
+					 */
+					if (client->buflen < (FRAME_SIZE * 8)) {
+						if (!logged_buflen_too_small) {
+							ast_log(LOG_ERROR, "VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
+								client->nodenum, client->name, client->buflen / 8);
+							logged_buflen_too_small = 1;
+						}
+						client->mix = 0;
+						client->heardfrom = 0;
+						client->respdigest = 0;
+						continue;
+					} else {
+						client->mix = 1;
+						ast_log(LOG_NOTICE, "VOTER %u: Client %s is sending mix mode flag, setting client to mix mode\n",
+							client->nodenum, client->name);
+						logged_buflen_too_small = 0;
+					}
+				}
+			}
+
+			/* If the client is configured as a voting client, and there is no master defined
+			 * in voter.conf, throw a warning, and disconnect the client (misconfiguration in
+			 * voter.conf... can't have a voting client with no master timing source).
+			 */
+			if (!client->mix && !hasmaster) {
+				ast_log(LOG_WARNING, "VOTER %u: Client %s attempting to authenticate as GPS-timing-based with no master timing source defined!!\n",
+					client->nodenum, client->name);
+				/* Reject the connection. */
+				ast_log(LOG_WARNING, "VOTER %u: Client %s disconnect (forced)\n", client->nodenum, client->name);
+				authpacket.vp.digest = 0;
+				client->heardfrom = 0;
+				client->respdigest = 0;
+				continue;
+			} else {
+				/* Otherwise, we should be good to continue configuring the client.
+				 *
+				 * Set the flags we are going to send to the client for configuration.
+				 */
+				if (client->ismaster) {
+					authpacket.flags |= 2 | 8;
+				}
+				if (client->doadpcm) {
+					authpacket.flags |= 16;
+				}
+				if (client->mix) {
+					authpacket.flags |= 32;
+				}
+				if (client->nodeemp || (p && p->hostdeemp)) {
+					authpacket.flags |= 1;
+				}
+				if (client->noplfilter) {
+					authpacket.flags |= 4;
+				}
+			}
+
+			/* The sin structure has the IP info received off the wire for the current packet from
+			 * the client. Now that we've validated the client (since we have a valid vph->digest),
+			 * update the client's sin structure with this information.
+			 */
+			client->sin = sin;
+			/*! \todo VE7FET not sure why this is here/needed, when it is dealing with proxy stuff, it probably needs to be moved */
+			memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
+
+			/* Print the address and port the client is connecting from */
+			ast_debug(2, "Client %s connecting from IP: %s:%d\r\n", client->name, ast_inet_ntoa(client->sin.sin_addr),
+				ntohs(client->sin.sin_port));
+
+			/* Mark this client as successfully connected, we'll reset some counters, and then send a
+			 * response packet to the client with the host flags to configure their audio.
+			 */
+			ast_log(LOG_NOTICE, "VOTER %u: Client %s connected.\n", client->nodenum, client->name);
+
+			/* Reset some counters */
+			client->txseqno = 0;
+			client->txseqno_rxkeyed = 0;
+			client->rxseqno = 0;
+			client->rxseqno_40ms = 0;
+			client->rxseq40ms = 0;
+			client->drain40ms = 0;
+
+			/* Mark the client as being heard from */
+			client->heardfrom = 1;
+
+			/* Set the response digest for this client, based on the challenge they sent and our password */
+			client->respdigest = crc32_bufs((char *) vph->challenge, password);
+
+			/* Put our current system time into the packet header. */
+			gettimeofday(&tv, NULL);
+			authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
+			authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+			/* Timestamp when we last heard this client (system time). */
+			client->lastheardtime = tv;
+
+			/* Make our response digest based on the challenge sent by the client, and our host password,
+			 * and put that in the packet header.
+			 */
+			authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
+
+			/* Do the same for proxy authentication packets. */
+			proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
+			proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+			proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
+
+			/* Send the response packet to the client. */
+			/*! \todo VE7FET Remember, isproxy is broken... need to fix that whole thing */
+			if (isproxy) {
+				ast_debug(2, "Sending (proxied) auth/config packet challenge %s digest %08x password %s\n",
+					authpacket.vp.challenge, ntohl(authpacket.vp.digest), password);
+				proxy_authpacket.flags = authpacket.flags;
+				proxy_authpacket.vprox.ipaddr = sin.sin_addr.s_addr;
+				proxy_authpacket.vprox.port = sin.sin_port;
+				proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
+				sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
+			} else {
+				ast_debug(2, "Sending auth/config packet challenge %s digest %08x password %s to client %s\n",
+					authpacket.vp.challenge, ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
+				sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+			}
+			continue;
+		}
+
+		/* Once we have audhenticated the client, we will be allowed to enter this routine, since the client
+		 * no longer will send us authentication packets.
+		 *
+		 * This is the "normal" packet processing routine.
+		 */
+		if (vph->digest && (ntohs(vph->payload_type) != VOTER_PAYLOAD_AUTH)) {
 			gettimeofday(&tv, NULL);
 			/* First, go through all the clients, and stop when we find an authenticated
 			 * client (has client->digest set) that matches the digest we received on the
@@ -4630,42 +4954,6 @@ static void *voter_reader(void *data)
 					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
 
-			/* If we have a valid client to work with, search through the configured Asterisk channels (p),
-			 * and stop when we find one that matches (p->nodenum == client->nodeum).
-			 *
-			 * If we can't find a matching Asterisk channel, we will set some variables to ignore this
-			 * this client. We do this to prevent a client from "looping" through connecting and
-			 * disconnecting endlessly... which is a problem if you have a voter client with offline mode
-			 * configured (and it keeps toggling between online and offline).
-			 */
-			if (client) {
-				/* Search for connected Asterisk channel for this known client. */
-				for (p = pvts; p; p = p->next) {
-					if (p->nodenum == client->nodenum) {
-						break;
-					}
-				}
-				if (!p) {
-					/* We didn't find an Asterisk channel,
-					 * act like we don't know the client,
-					 * do not respond to messages via no_ast_channel flag.
-					 */
-					if (!logged_no_ast_channel) {
-						ast_log(LOG_WARNING, "Request for voter client %s to node %d with no matching Asterisk channel\n",
-							client->name, client->nodenum);
-						logged_no_ast_channel = 1;
-					}
-					no_ast_channel = 1;
-					client = NULL;
-				} else {
-					/* Otherwise, we found the channel, and the client is connected to it,
-					 * so make sure our flags are reset.
-					 */
-					logged_no_ast_channel = 0;
-					no_ast_channel = 0;
-				}
-			}
-
 			/* If we have a valid client to work with, we'll do a sanity check on the IP address an port
 			 * that the client is sending from, then proceed with determining who the current active master
 			 * client should be (for voting clients).
@@ -4673,10 +4961,16 @@ static void *voter_reader(void *data)
 			if (client) {
 				/* Do some sanity checks. */
 				if (check_client_sanity && p && !p->priconn) {
+					/* If the client's IP or port we have stored don't match where the current
+					 * packet came from, drop the client.
+					 */
 					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
 						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
 						client->heardfrom = 0;
 					}
+					/* If this is a proxy client, but we don't have a proxy connection (p->priconn),
+					 * drop the client.
+					 */
 					if (IS_CLIENT_PROXY(client)) {
 						client->heardfrom = 0;
 						client->respdigest = 0;
@@ -4722,6 +5016,10 @@ static void *voter_reader(void *data)
 					 * current active master (curmaster), so set the flag.
 					 */
 					client1->curmaster = 1;
+					/* Set masterconnected, so we can block clients from connecting when there
+					 * is no valid master client (timing source) available.
+					 */
+					masterconnected = 1;
 					/* If the client we just selected as the current active master is different
 					 * than the previous one we stored above (lastmaster), notify of the change.
 					 *
@@ -4736,6 +5034,7 @@ static void *voter_reader(void *data)
 							(lastmaster) ? lastmaster->name : "NONE", client1->name);
 					}
 
+					/*! \todo VE7FET this may no longer be required under new auth process? */
 					/* If we determined our active master while the client was disconnected
 					 * (below), and it has now connected, log it.
 					 */
@@ -4747,6 +5046,7 @@ static void *voter_reader(void *data)
 					/* Exit, once we've set the current active master. */
 					break;
 				}
+				/*! \todo VE7FET this may no longer be required under new auth process? */
 				/* If we can't find a recently heard from master client to make the current active master,
 				 * (client1 is empty), we will just designate one that is supposed to be a master client
 				 * as the current master, with a note that it is currently not connected.
@@ -4780,14 +5080,6 @@ static void *voter_reader(void *data)
 						}
 					}
 				}
-				/*! \todo VE7FET this seems like a bad test... we can only get here if
-				 * client is true. So, !client can probably be removed?
-				 */
-				if (!client || (ntohs(vph->payload_type) != VOTER_PAYLOAD_PROXY)) {
-					client->respdigest = crc32_bufs((char *) vph->challenge, password);
-				}
-				client->sin = sin;
-				memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
 
 				/* If we are supposed to have a master client (hasmaster), but the
 				 * current active master has no longer true, we'll put silence in to
@@ -4796,7 +5088,7 @@ static void *voter_reader(void *data)
 				 */
 				if (!client->curmaster && hasmaster) {
 					if (last_master_count && (voter_timing_count > (last_master_count + MAX_MASTER_COUNT))) {
-						ast_log(LOG_NOTICE, "VOTER lost master timing source!!\n");
+						ast_log(LOG_WARNING, "VOTER lost master timing source!!\n");
 						last_master_count = 0;
 						master_time.vtime_sec = 0;
 						for (client1 = client->next; client1; client1 = client1->next) {
@@ -4828,12 +5120,6 @@ static void *voter_reader(void *data)
 					}
 				}
 			}
-			/* If we've received a packet from a valid client, and they've sent us anything other
-			 * than an auth packet (which would have a payload of 0), set/reset the heardfrom flag.
-			 */
-			if (client && ntohs(vph->payload_type)) {
-				client->heardfrom = 1;
-			}
 			/* If we have a valid (authenticated) client, have recently heard from it, and it sent
 			 * us a valid audio or proxy packet, find the corresponding Asterisk channel and
 			 * send it there.
@@ -4848,7 +5134,7 @@ static void *voter_reader(void *data)
 						break;
 					}
 				}
-				/* If we found the matching channel. */
+				/* If we found the matching Asterisk channel. */
 				if (p) {
 					long long btime, ptime, difftime;
 					int index, flen;
@@ -5110,27 +5396,53 @@ static void *voter_reader(void *data)
 						 */
 						if (check_client_sanity) {
 							for (client = clients; client; client = client->next) {
+								/* Find the matching Asterisk channel for this client */
 								for (p = pvts; p; p = p->next) {
 									if (p->nodenum == client->nodenum) {
 										break;
 									}
 								}
+								/* If there is no matching Asterisk channel, or it is a proxy
+								 * connection, skip.
+								 */
 								if (!p || p->priconn) {
 									continue;
 								}
+								/* If the client isn't connected, skip. */
 								if (!client->respdigest) {
 									continue;
 								}
+								/* Iterate through the client list again. */
 								for (client1 = client->next; client1; client1 = client1->next) {
+									/* Skip the match to the original client we're already on. */
 									if (client1 == client) {
 										continue;
 									}
+									/* Check our original client against the other clients, and see
+									 * if there is a client with the same IP and Port. If the client
+									 * we're checking against isn't connected, skip it. Otherwise, if
+									 * we find a client with the same IP and Port, dump both clients,
+									 * as that is not sane. The IP's could match (if they are behind
+									 * the same NAT, but the UDP port better not).
+									 */
 									if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) &&
 										(client1->sin.sin_port == client->sin.sin_port)) {
+										/* If the client isn't connected/authenticated, skip */
 										if (!client1->respdigest) {
 											continue;
 										}
-										ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (sanity)\n", client1->nodenum, client1->name);
+										/* If the IP's of both clients are 0, skip. This can happen on initial
+										 * start, and is a not a problem until everyone is fully connected
+										 */
+										if (!client1->sin.sin_addr.s_addr && !client->sin.sin_addr.s_addr) {
+											continue;
+										}
+
+										ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name,
+											ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port), client1->name,
+											ast_inet_ntoa(client1->sin.sin_addr), ntohs(client1->sin.sin_port));
+										ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
+											client->name, client1->name);
 										client->respdigest = 0;
 										client->heardfrom = 0;
 										client1->respdigest = 0;
@@ -5457,7 +5769,7 @@ static void *voter_reader(void *data)
 				}
 				continue;
 			}
-			/* If we know the client, and its ping, process it. */
+			/* If we know the client, and it's sending us a ping, process it. */
 			if (client && client->heardfrom && (ntohs(vph->payload_type) == VOTER_PAYLOAD_PING) && (recvlen == sizeof(pingpacket))) {
 				int timediff;
 
@@ -5499,7 +5811,7 @@ static void *voter_reader(void *data)
 				check_ping_done(client);
 				continue;
 			}
-			/* If we know the client, find the connection their audio belongs to and send it there. */
+			/* If we know the client, and this is a GPS/Keepalive packet, process it. */
 			if (client && client->heardfrom && (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) &&
 				((recvlen == sizeof(VOTER_PACKET_HEADER)) || (recvlen == (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_GPS))) ||
 					(recvlen == ((sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_GPS)) - 1)))) {
@@ -5808,6 +6120,7 @@ static int load_module(void)
 	 */
 	snprintf(challenge, sizeof(challenge), "%ld", ast_random());
 	hasmaster = 0;
+	masterconnected = 0;
 
 	/* Do an initial configuration load from the config file. Note we also run reload
 	 * further down.
