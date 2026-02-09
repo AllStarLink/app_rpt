@@ -4433,19 +4433,22 @@ static void *voter_timer(void *data)
 					client->respdigest = 0;
 					client->lastheardtime = ast_tv(0, 0);
 
-					/* If this was the master that disconnected, we need to gracefully drop any other
-					 * clients that were connected and associated with this instance.
+					/* If this was the current master that disconnected, we need to gracefully drop any other
+					 * clients that were connected to the server, since we no longer have a master timing source.
 					 */
-					if (client->ismaster) {
+					if (client->ismaster && client->curmaster) {
 						ast_log(LOG_WARNING, "Lost master timing client, disconnecting remaining clients.\n");
 						/* Reset the current active master flag for this client, since it disconnected. */
+						ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to NONE\n", client->nodenum, client->name);
 						client->curmaster = 0;
 						masterconnected = 0;
 						for (client1 = clients; client1; client1 = client1->next) {
-							/* Only drop connections we have heard from (not all configured clients
-							 * in voter.conf).
+							/* Only drop connections for clients we have heard from (not all configured clients
+							 * in voter.conf), EXCEPT if the client has an ismaster flag (that lets us gracefully
+							 * switch master clients, if multiple are defined (they need to be on the same network
+							 * though)).
 							 */
-							if (client1->heardfrom) {
+							if (client1->heardfrom && !client1->ismaster) {
 								ast_log(LOG_WARNING, "Forcing disconnect of client: %s\n", client1->name);
 								client1->heardfrom = 0;
 								client1->respdigest = 0;
@@ -4521,7 +4524,7 @@ static void *voter_reader(void *data)
 	char gps1[300], gps2[300], isproxy;
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
-	int i, j, k, ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0, inactivemaster = 0;
+	int i, j, k, ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -4924,34 +4927,98 @@ static void *voter_reader(void *data)
 			continue;
 		}
 
-		/* Once we have audhenticated the client, we will be allowed to enter this routine, since the client
+		/* Once we have authenticated the client, we will be allowed to enter this routine, since the client
 		 * no longer will send us authentication packets.
 		 *
 		 * This is the "normal" packet processing routine.
 		 */
 		if (vph->digest && (ntohs(vph->payload_type) != VOTER_PAYLOAD_AUTH)) {
+			/* First figure out who (if applicable) the master client should be, and
+			 * if it has changed.
+			 */
+			lastmaster = NULL;
+			/* Traverse the list of clients and find the one that is the current active
+			 * master client. Store that client's details in the lastmaster array, then
+			 * reset the active master (curmaster) flag, so that we can see if it changed.
+			 *
+			 * We do this every time we come through the loop, about every 20ms for voting
+			 * clients.
+			 */
+			for (client = clients; client; client = client->next) {
+				/* If the client isn't configured to be a master in voter.conf, skip it. */
+				if (!client->ismaster) {
+					continue;
+				}
+				/* If this is the current active master (curmaster), copy it to lastmaster
+				 * and reset the curmaster flag while we iterate on the list of clients.
+				 */
+				if (client->curmaster) {
+					lastmaster = client;
+					client->curmaster = 0;
+					masterconnected = 0;
+				}
+			}
+
+			/* Traverse the list of clients again, and see if we can find a client that
+			 * is marked as a "master" client in voter.conf, and has been recently active
+			 * (heard from), and mark it as the current active master (curmaster).
+			 */
+			for (client1 = clients; client1; client1 = client1->next) {
+				/* If the client isn't configured to be a master in voter.conf, skip it. */
+				if (!client1->ismaster) {
+					continue;
+				}
+				/* If the client is a potential master client, but it has never been heard,
+				 * (ast_tvzero returns true when time is 0,0), skip it.
+				 */
+				if (ast_tvzero(client1->lastheardtime)) {
+					continue;
+				}
+				/* If the client is a potential master client, but the last time we heard
+				 * from it was longer than MASTER_TIMEOUT_MS ago, skip it.
+				 */
+				if (voter_tvdiff_ms(tv, client1->lastheardtime) > MASTER_TIMEOUT_MS) {
+					continue;
+				}
+				/* After all that, this client should be suitable to be designated the
+				 * current active master (curmaster), so set the flag.
+				 */
+				client1->curmaster = 1;
+				/* Set masterconnected, so we can block clients from connecting when there
+				 * is no valid master client (timing source) available.
+				 */
+				masterconnected = 1;
+				/* If the client we just selected as the current active master is different
+				 * than the previous one we stored above (lastmaster), notify of the change.
+				 *
+				 * Or, if we didn't have a lastmaster, we should notify of the change from
+				 * NONE to the current client.
+				 *
+				 * In most cases, once running, the master shouldn't change because there
+				 * really should only be one master client connfigured on the host.
+				 */
+				if (client1 != lastmaster) {
+					ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to %s\n", client1->nodenum,
+						(lastmaster) ? lastmaster->name : "NONE", client1->name);
+				}
+
+				/* Exit, once we've set the current active master. */
+				break;
+			}
+
 			gettimeofday(&tv, NULL);
-			/* First, go through all the clients, and stop when we find an authenticated
+			/* Go through all the clients, and stop when we find an authenticated
 			 * client (has client->digest set) that matches the digest we received on the
-			 * wire (vph->digest).
+			 * wire (vph->digest). This will be the current client.
 			 *
 			 * When we find a match, we'll also update the associated client->lastheard
-			 * time for that client with the current timestamp.
+			 * time for the current client with the current timestamp.
 			 */
 			for (client = clients; client; client = client->next) {
 				if (client->digest == htonl(vph->digest)) {
 					client->lastheardtime = tv;
 					break;
 				}
-			}
-
-			/* This only displays if the client is sending us ulaw receive audio while in debug. */
-			if (DEBUG_ATLEAST(4) && client && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0) &&
-				ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) {
-				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-				strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
-				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
-					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
 
 			/* If we have a valid client to work with, we'll do a sanity check on the IP address an port
@@ -4974,110 +5041,6 @@ static void *voter_reader(void *data)
 					if (IS_CLIENT_PROXY(client)) {
 						client->heardfrom = 0;
 						client->respdigest = 0;
-					}
-				}
-				lastmaster = NULL;
-				/* Traverse the list of clients and find the one that is the current active
-				 * master client. Store that client's details in the lastmaster array, then
-				 * reset the active master (curmaster) flag, so that we can see if it changed.
-				 *
-				 * We do this every time we come through the loop, about every 20ms for voting
-				 * clients.
-				 */
-				for (client1 = clients; client1; client1 = client1->next) {
-					if (client1->curmaster) {
-						lastmaster = client1;
-						client1->curmaster = 0;
-					}
-				}
-
-				/* Traverse the list of clients again, and see if we can find a client that
-				 * is marked as a "master" client in voter.conf, and has been recently active
-				 * (heard from), and mark it as the current active master (curmaster).
-				 */
-				for (client1 = clients; client1; client1 = client1->next) {
-					/* If the client isn't configured to be a master in voter.conf, skip it. */
-					if (!client1->ismaster) {
-						continue;
-					}
-					/* If the client is a potential master client, but the last heard time is
-					 * 0 (ast_tvzero returns true when time is 0,0), skip it.
-					 */
-					if (ast_tvzero(client1->lastheardtime)) {
-						continue;
-					}
-					/* If the client is a potential master client, but the last time we heard
-					 * from it was longer than MASTER_TIMEOUT_MS ago, skip it.
-					 */
-					if (voter_tvdiff_ms(tv, client1->lastheardtime) > MASTER_TIMEOUT_MS) {
-						continue;
-					}
-					/* After all that, this client should be suitable to be designated the
-					 * current active master (curmaster), so set the flag.
-					 */
-					client1->curmaster = 1;
-					/* Set masterconnected, so we can block clients from connecting when there
-					 * is no valid master client (timing source) available.
-					 */
-					masterconnected = 1;
-					/* If the client we just selected as the current active master is different
-					 * than the previous one we stored above (lastmaster), notify of the change.
-					 *
-					 * Or, if we didn't have a lastmaster, we should notify of the change from
-					 * NONE to the current client.
-					 *
-					 * In most cases, once running, the master shouldn't change because there
-					 * really should only be one master client connfigured on the host.
-					 */
-					if (client1 != lastmaster) {
-						ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to %s\n", client1->nodenum,
-							(lastmaster) ? lastmaster->name : "NONE", client1->name);
-					}
-
-					/*! \todo VE7FET this may no longer be required under new auth process? */
-					/* If we determined our active master while the client was disconnected
-					 * (below), and it has now connected, log it.
-					 */
-					if (inactivemaster) {
-						ast_log(LOG_NOTICE, "VOTER %u: Master client %s changed from not connected to connected!\n",
-							client1->nodenum, client1->name);
-						inactivemaster = 0;
-					}
-					/* Exit, once we've set the current active master. */
-					break;
-				}
-				/*! \todo VE7FET this may no longer be required under new auth process? */
-				/* If we can't find a recently heard from master client to make the current active master,
-				 * (client1 is empty), we will just designate one that is supposed to be a master client
-				 * as the current master, with a note that it is currently not connected.
-				 */
-				if (!client1) {
-					/* If the current client happens to be configured as a master client, set it to
-					 * be the current active master. Otherwise, we'll go look through the client list.
-					 */
-					if (client->ismaster) {
-						client->curmaster = 1;
-					} else {
-						/* Traverse the list of clients, and try and find one that is configured to
-						 * be a master client.
-						 */
-						for (client1 = clients; client1; client1 = client1->next) {
-							/* If this client isn't configured to be a master, skip it. */
-							if (!client1->ismaster) {
-								continue;
-							}
-							/* When we find one that is configured to be a master, set it as the
-							 * current active master, even though it isn't presently connected.
-							 */
-							client1->curmaster = 1;
-							if (client1 != lastmaster) {
-								ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to %s (currently disconnected)\n",
-									client1->nodenum, (lastmaster) ? lastmaster->name : "NONE", client1->name);
-								inactivemaster = 1; /* Set a flag so we can note when this client connects. */
-							}
-							/* Exit, once we've set the current active master. */
-							break;
-						}
 					}
 				}
 
@@ -5120,6 +5083,16 @@ static void *voter_reader(void *data)
 					}
 				}
 			}
+
+			/* This only displays if the client is sending us ulaw receive audio while in debug. */
+			if (DEBUG_ATLEAST(4) && client && ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW &&
+				recvlen > sizeof(VOTER_PACKET_HEADER) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
+				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
+				strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
+					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+			}
+
 			/* If we have a valid (authenticated) client, have recently heard from it, and it sent
 			 * us a valid audio or proxy packet, find the corresponding Asterisk channel and
 			 * send it there.
