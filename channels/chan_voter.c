@@ -4571,15 +4571,15 @@ static void *voter_reader(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
-		ms = 50;
-		i = ast_waitfor_n_fd(&udp_socket, 1, &ms, NULL);
+		ms = 50;										 /* 50ms timeout */
+		i = ast_waitfor_n_fd(&udp_socket, 1, &ms, NULL); /* Open UDP socket with 50ms timeout. */
 		ast_mutex_lock(&voter_lock);
 		if (i == -1) {
 			ast_mutex_unlock(&voter_lock);
-			ast_log(LOG_ERROR, "Error in select()\n");
+			ast_log(LOG_ERROR, "Unable to open VOTER UDP socket\n");
 			pthread_exit(NULL);
 		}
-		/* Check all of our nodes to see if any are receiving and have timed out. */
+		/* Check all of our Asterisk channels to see if any are receiving and have now stopped (timed out). */
 		gettimeofday(&tv, NULL);
 		for (p = pvts; p; p = p->next) {
 			if (!p->rxkey) {
@@ -4597,19 +4597,22 @@ static void *voter_reader(void *data)
 				p->lastwon = NULL;
 			}
 		}
+		/*! \todo VE7FET this should not be needed, we bail if i == -1 above? */
 		if (i < 0) {
 			continue;
 		}
-		/* Is there activity on our UDP socket? */
+		/* Is there activity on our UDP socket? Do nothing (continue) if the waitfor fd above returned 0. */
 		if (i != udp_socket) {
 			continue;
 		}
+		/* Get the data from the UDP socket. */
 		fromlen = sizeof(struct sockaddr_in);
 		recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
-		/* If set got something worthwhile. */
+		/* Skip if we got less than a header's worth of data. */
 		if (recvlen < sizeof(VOTER_PACKET_HEADER)) {
 			continue;
 		}
+		/* Put the header of the packet into vph. */
 		vph = (VOTER_PACKET_HEADER *) buf;
 		ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
 			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
@@ -4619,11 +4622,11 @@ static void *voter_reader(void *data)
 		}
 		isproxy = 0;
 
+		/* No valid Asterisk channel, do not respond to the client. This prevents the client
+		 * from "looping" through online/offline mode when there is no valid channel in app_rpt
+		 * to connect to.
+		 */
 		if (no_ast_channel) {
-			/* No valid Asterisk channel, do not respond to the client. This prevents the client
-			 * from "looping" through online/offline mode when there is no valid channel in app_rpt
-			 * to connect to.
-			 */
 			continue;
 		}
 
