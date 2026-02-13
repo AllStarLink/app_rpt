@@ -4710,8 +4710,10 @@ static void *voter_reader(void *data)
 				proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 				sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
 			} else {
-				ast_debug(2, "Sending initial packet challenge %s digest %08x password %s to client %s\n",
-					authpacket.vp.challenge, ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
+				authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
+				ast_debug(2, "Sending initial packet payload %i challenge %s digest %08x password %s to client %s\n",
+					authpacket.vp.payload_type, authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
+					((client) ? client->name : "UNKNOWN"));
 				sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
 			}
 			continue;
@@ -4923,8 +4925,10 @@ static void *voter_reader(void *data)
 				proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 				sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
 			} else {
-				ast_debug(2, "Sending auth/config packet challenge %s digest %08x password %s to client %s\n",
-					authpacket.vp.challenge, ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
+				authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
+				ast_debug(2, "Sending auth/config packet payload %i challenge %s digest %08x password %s to client %s\n",
+					authpacket.vp.payload_type, authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
+					((client) ? client->name : "UNKNOWN"));
 				sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
 			}
 			continue;
