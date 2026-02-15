@@ -229,8 +229,8 @@ typedef struct {
 #define ADC_HISTORY_DEPTH ADC_HIST_TIME/DAQ_ADC_ACQINT
 
 typedef enum {
-	false,
-	true
+	is_false,
+	is_true
 } rpt_bool;
 
 enum keypost {
@@ -592,6 +592,7 @@ struct rpt_link {
 	struct timeval connecttime;
 	struct ast_channel *chan;	
 	struct ast_channel *pchan;
+	struct ast_audiohook whisper_audiohook;
 	struct ast_str *linklist;
 	time_t	linklistreceived;
 	int linklisttimer;
@@ -741,12 +742,13 @@ struct rpt_cmd_struct {
 	enum rpt_command_source command_source;
 };
 
+struct ast_bridge; /* Forward declaration */
+
+/*! \brief Structure used to manage conference bridges */
 struct rpt_conf {
-	/* DAHDI conference numbers */
-	struct {
-		int conf;
-		int txconf;
-	} dahdiconf;
+	/* Conference bridge channels */
+	struct ast_bridge *conf;
+	struct ast_bridge *txconf;
 };
 
 /*! \brief Populate rpt structure with data */
@@ -941,16 +943,21 @@ struct rpt {
 	int  parrottimer;
 	unsigned int parrotcnt;
 	int telemmode;
-	struct ast_channel *rxchannel,*txchannel, *monchannel, *parrotchannel;
-	struct ast_channel *pchannel,*txpchannel, *dahdirxchannel, *dahditxchannel;
-	struct ast_channel *voxchannel;
+	struct ast_channel *rxchannel;		/*!< Channel connected to physical hardware, can be bi-directional */
+	struct ast_channel *txchannel;		/*!< Channel connect to physical hardware if separate otherwise equal to rxchannel */
+	struct ast_channel *monchannel;		/*!< Monitor channel used to record activity on the TXCONF */
+	struct ast_channel *pchannel;		/*!< Channel used to copy CONF bridge audio into txpchannel */
+	struct ast_channel *rxpchannel;		/*!< Channel used to copy RX audio into CONF bridge */
+	struct ast_channel *txpchannel;		/*!< Channel used to receive RX audio into the TXCONF bridge */
+	struct ast_channel *localrxchannel; /*!< Channel used when in remote configuration for rx, may be set equal to pchannel */
+	struct ast_channel *localtxchannel; /*!< Channel used to receive audio from the TXCONF bridge into the txchannel */
 	struct rpt_frame_queue frame_queue;
 	struct rpt_tele tele;
 	struct timeval lasttv,curtv;
-	pthread_t rpt_call_thread,rpt_thread;
-	time_t dtmf_time,rem_dtmf_time,dtmf_time_rem;
-	int calldigittimer;
 	struct rpt_conf rptconf;
+	pthread_t rpt_call_thread, rpt_thread;
+	time_t dtmf_time, rem_dtmf_time, dtmf_time_rem;
+	int calldigittimer;
 	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	int remote_time_out_reset_unkey_interval_timer, time_out_reset_unkey_interval_timer;
 	enum patch_call_mode callmode;
@@ -1024,6 +1031,7 @@ struct rpt {
 	int lastkeytimer;
 	enum newkey rpt_newkey;
 	int rxlingertimer;
+	rpt_bool patch_talking:1;
 	rpt_bool inpadtest:1;
 	rpt_bool localoverride:1;
 	rpt_bool wasvox:1;
@@ -1107,6 +1115,9 @@ struct statpost {
 #define IS_PSEUDO(c) (!strncasecmp(ast_channel_name(c), "DAHDI/pseudo", 12))
 #define IS_PSEUDO_NAME(c) (!strncasecmp(c, "DAHDI/pseudo", 12))
 
+#define IS_LOCAL(c) (!strncasecmp(ast_channel_name(c), "Local", 5))
+#define IS_LOCAL_NAME(c) (!strncasecmp(c, "Local", 5))
+
 int rpt_debug_level(void);
 int rpt_set_debug_level(int newlevel);
 int rpt_num_rpts(void);
@@ -1122,6 +1133,13 @@ void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
 
+/*!
+ * \brief Process link channel activity
+ * \param myrpt Pointer to rpt structure
+ * \param l Pointer to rpt_link structure
+ */
+
+void process_link_channel(struct rpt *myrpt, struct rpt_link *l);
 /*!
  * \brief Generates a command line completion list for rpt cmd third argument
  */
