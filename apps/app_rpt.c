@@ -3174,11 +3174,13 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 
 	rpt_mutex_lock(&myrpt->lock);
 	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+		struct ast_channel *chan = ast_channel_ref(l->chan);
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_write(l->chan, f);
+		ast_write(chan, f);
 		rpt_mutex_lock(&myrpt->lock);
 		ast_frfree(f);
+		ast_channel_unref(chan);
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 	update_timer(&l->rxlingertimer, elap, 0);
