@@ -3175,7 +3175,9 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	rpt_mutex_lock(&myrpt->lock);
 	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
+		rpt_mutex_unlock(&myrpt->lock);
 		ast_write(l->chan, f);
+		rpt_mutex_lock(&myrpt->lock);
 		ast_frfree(f);
 	}
 	rpt_mutex_unlock(&myrpt->lock);
@@ -4520,6 +4522,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 								for (; x < myrpt->p.simplexphonedelay; x++) {
 									f1 = ast_frdup(f);
 									if (!f1) {
+										ast_frfree(f);
 										break;
 									}
 									RPT_MUTE_FRAME(f1);
@@ -4530,6 +4533,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 							}
 							f1 = ast_frdup(f);
 							if (!f1) {
+								ast_frfree(f);
 								break;
 							}
 							memset(&f1->frame_list, 0, sizeof(f1->frame_list));

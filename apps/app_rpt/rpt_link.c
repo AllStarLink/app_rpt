@@ -307,6 +307,7 @@ void rssi_send(struct rpt *myrpt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* otherwise, send it to all of em */
+	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
@@ -316,6 +317,7 @@ void rssi_send(struct rpt *myrpt)
 			rpt_qwrite(l, &wf);
 		}
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 }
 
