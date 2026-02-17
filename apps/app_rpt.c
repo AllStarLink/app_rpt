@@ -1068,6 +1068,8 @@ static void *perform_statpost(void *data)
 		return NULL;
 	}
 
+	long curl_ipresolve_v4 = CURL_IPRESOLVE_V4;
+
 	response_msg = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!response_msg) {
 		ast_free(sp->stats_url);
@@ -1077,7 +1079,7 @@ static void *perform_statpost(void *data)
 	}
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_msg);
-	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_V4);
+	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, curl_ipresolve_v4);
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
