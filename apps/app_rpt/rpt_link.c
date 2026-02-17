@@ -393,85 +393,213 @@ void rpt_link_remove(struct ao2_container *links, struct rpt_link *l)
 	ao2_unlink(links, l);
 }
 
-int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, int alink_format) {
+static int __mklinklist_limit(struct rpt *myrpt, struct ast_str *buf, int bytes, enum __mklinklist_flags flags)
+{
+	int new_len;
+
+	if (!(flags & LIMIT_STRING_LENGTH)) {
+		/* we are not limiting the length */
+		return 0;
+	}
+
+	if (myrpt->p.linkpost_max_message_len == 0) {
+		/* we are not truncating the message size */
+		return 0;
+	}
+
+	if (bytes == 0) {
+		/* we are not appending any characters */
+		return 0;
+	}
+
+	new_len = ast_str_strlen(buf) + bytes;
+	if (new_len > myrpt->p.linkpost_max_message_len) {
+		/* if adding the [string for the] next node might lead to a fragmented IAX2 message frame */
+		return 1;
+	}
+
+	return 0;
+}
+
+static void __mklinklist_mode_adjust(char *cp, int mode)
+{
+	if (*cp == 'T') {
+		*cp = mode;
+	}
+	if ((*cp == 'R') && (mode == 'C')) {
+		*cp = mode;
+	}
+}
+
+int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, enum __mklinklist_flags flags)
+{
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
-	char mode, *links_buf;
-	int i, spos, len, links_count = 0, one_link = 0;
-	if (myrpt->remote)
+	const char *sep = "";
+	char mode, *str;
+	int i, spos, len, links_count = 0;
+
+	if (myrpt->remote) {
 		return 0;
+	}
+
+	spos = ast_str_strlen(*buf); /* current buf size (before we add our stuff) */
+
 	/* go thru all links */
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		/* if is not a real link, ignore it */
 		if (l->name[0] == '0') {
+			/* if is not a real link, ignore it */
 			continue;
 		}
-		if (l->mode == MODE_LOCAL_MONITOR) {
-			continue; /* dont report local modes */
+		if (!(flags & USE_FORMAT_RPT_LINKPOST)) {
+			if (l->mode == MODE_LOCAL_MONITOR) {
+				/* dont report local nodes */
+				continue;
+			}
+			if (l == mylink) {
+				/* dont count our stuff */
+				continue;
+			}
+			if (mylink && !strcmp(l->name, mylink->name)) {
+				continue;
+			}
 		}
-		/* dont count our stuff */
-		if (l == mylink) {
-			continue;
-		}
-		if (mylink && !strcmp(l->name, mylink->name)) {
-			continue;
-		}
-		/* figure out mode to report */
+
+		/* figure out "mode" to report */
 		mode = 'T'; /* use Transceive by default */
 		if (l->mode == MODE_MONITOR) {
 			mode = 'R'; /* indicate RX for our mode */
+		} else if (l->mode == MODE_LOCAL_MONITOR) {
+			mode = 'L'; /* indicate RX for our mode */
 		}
 		if (!l->thisconnected) {
 			mode = 'C'; /* indicate connecting */
 		}
-		spos = ast_str_strlen(*buf); /* current buf size (b4 we add our stuff) */
-		if (spos > 2) {
-			ast_str_append(buf, 0, "%s", ",");
+
+		len = strlen(l->name);
+		if (links_count++ > 0) {
+			sep = ",";
+			len++;
 		}
-	    one_link = 1;
-		if (alink_format) { /* RPT_ALINK format - only show adjacent nodes*/
-			ast_str_append(buf, 0, "%s%c%c", l->name, mode, (l->lastrx1) ? 'K' : 'U');
-		} else { /* RPT_LINK format - show all nodes*/
-			/* add nodes into buffer */
-			if (ast_str_strlen(l->linklist)) {
-				ast_str_append(buf, 0, "%c%s,%s", mode, l->name, ast_str_buffer(l->linklist));
-			} else { /* if no nodes, add this node into buffer */
-				ast_str_append(buf, 0, "%c%s", mode, l->name);
+
+		if (flags & USE_FORMAT_RPT_ALINK) {
+			/*
+			 * RPT_ALINK format
+			 * - show only adjacent nodes
+			 * - for each node, include name, mode, and last keyed status
+			 */
+			if (__mklinklist_limit(myrpt, *buf, len + 2 + sizeof("000000RU"), flags)) {
+				/* if adding the name, mode, lastrx, and separator will result in fragmentation */
+				ast_str_append(buf, 0, "%s%s%c%c", sep, "000000", 'R', 'U');
+				break;
+			}
+
+			/* add the adjacent node */
+			ast_str_append(buf, 0, "%s%s%c%c", sep, l->name, mode, l->lastrx1 ? 'K' : 'U');
+		} else {
+			/*
+			 * RPT_LINK format
+			 * - show all nodes (including those linked)
+			 * - for each node, include mode and name
+			 */
+			if (__mklinklist_limit(myrpt, *buf, len + 1 + sizeof("R000000"), flags)) {
+				/* if adding the name, mode, lastrx, and separator will result in fragmentation */
+				ast_str_append(buf, 0, "%s%c%s", sep, 'R', "000000");
+				break;
+			}
+
+			/* add the adjacent node */
+			ast_str_append(buf, 0, "%s%c%s", sep, mode, l->name);
+
+			/* and append any nodes linked to the adjacent node */
+			str = ast_str_buffer(l->linklist);
+			len = ast_str_strlen(l->linklist);
+			if (len > 0) {
+				int truncated = 0;
+
+				/*
+				 * Check to see if all of the associated / linked nodes can be
+				 * appended to the string.  If not all will fit, chop off those
+				 * nodes that will not result in fragmentation.
+				 */
+				while ((len > 0) && __mklinklist_limit(myrpt, *buf, len + sizeof("R000000"), flags)) {
+					truncated = 1;
+
+					while ((len > 0) && (str[len - 1] != ',')) {
+						--len; /* remove characters of the last link */
+					}
+					if (len > 0) {
+						--len; /* and remove the separator */
+					}
+				}
+
+				if (len > 0) {
+					ast_str_append(buf, 0, ",%.*s", len, str);
+
+					links_count++; /* include the 1st linked node in the count */
+					for (i = 0; i < len; i++) {
+						if (str[i] == ',') {
+							links_count++; /* include the 2nd, 3rd, ... in the count */
+						}
+					}
+				}
+
+				if (truncated) {
+					ast_str_append(buf, 0, ",%c%s", 'R', "000000");
+					break;
+				}
 			}
 		}
-		/* if we are in transceive mode, let all modes stand */
+
+		if (flags & USE_FORMAT_RPT_LINKPOST) {
+			continue;
+		}
+
 		if (mode == 'T') {
 			continue;
 		}
-		/* downgrade everyone on this node if appropriate */
-		links_buf = ast_str_buffer(*buf);
+
+		/* if this node is not in transceive mode, downgrade everyone on this node if appropriate */
+		str = ast_str_buffer(*buf);
 		len = ast_str_strlen(*buf);
-		for (i = spos; i < len; i++) {
-			if (links_buf[i] == 'T') {
-				links_buf[i] = mode;
+		if (flags & USE_FORMAT_RPT_ALINK) {
+			/*
+			 * RPT_ALINK format
+			 *   L <name><mode><keyed>,<name><mode><keyed>
+			 *           ^^^^^^              ^^^^^^
+			 */
+			for (i = len - 1; i >= spos + 2; --i) {
+				/* update <mode> (<mode> is at end of token, just before <keyed>) */
+				__mklinklist_mode_adjust(&str[i - 1], mode);
+
+				/* skip back past <mode><keyed> and then to the previous ',' */
+				i -= 2;
+				while (i >= spos && str[i] != ',') {
+					--i;
+				}
 			}
-			if ((links_buf[i] == 'R') && (mode == 'C')) {
-				links_buf[i] = mode;
+		} else {
+			/*
+			 * RPT_LINK format
+			 *   L <mode><name>,<mode><name>
+			 *     ^^^^^^       ^^^^^^
+			 */
+			for (i = spos; i < len; ++i) {
+				/* update <mode> */
+				__mklinklist_mode_adjust(&str[i], mode);
+
+				/* skip past the <mode> and then to the next "," */
+				while ((i < len) && (str[i] != ',')) {
+					++i;
+				}
 			}
 		}
 	}
 	ao2_iterator_destroy(&l_it);
-	/* After building the string, count number of nodes (commas) in buffer string. The first
-	 * node doesn't have a comma, so we need to add 1 if there is at least one_link.
-	 */
-	links_count = 0;
-	links_buf = ast_str_buffer(*buf);
-	for (i = 0; i < ast_str_strlen(*buf); i++) {
-		if (links_buf[i] == ',') {
-			links_count++;
-		}
-	}
-	if (one_link) { /* The first link in the list has no comma but we have 1 link */
-		links_count++;
-	}
 
 	return links_count;
 }
+
 static int link_set_list_timer_cb(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
@@ -512,7 +640,7 @@ void rpt_update_links(struct rpt *myrpt)
 	}
 
 	rpt_mutex_lock(&myrpt->lock);
-	n = __mklinklist(myrpt, NULL, &buf, 1);
+	n = __mklinklist(myrpt, NULL, &buf, USE_FORMAT_RPT_ALINK);
 	rpt_mutex_unlock(&myrpt->lock);
 	/* parse em */
 	if (n) {
@@ -526,7 +654,7 @@ void rpt_update_links(struct rpt *myrpt)
 
 	ast_str_reset(buf);
 	rpt_mutex_lock(&myrpt->lock);
-	n = __mklinklist(myrpt, NULL, &buf, 0);
+	n = __mklinklist(myrpt, NULL, &buf, USE_FORMAT_RPT_LINK);
 	rpt_mutex_unlock(&myrpt->lock);
 	if (n) {
 		ast_str_set(&obuf, 0, "%d,%s", n, ast_str_buffer(buf));
@@ -658,7 +786,7 @@ void *rpt_link_connect(void *data)
 			rpt_mutex_unlock(&myrpt->lock);
 			goto cleanup;
 		}
-		n = __mklinklist(myrpt, NULL, &lstr, 0) + 1;
+		n = __mklinklist(myrpt, NULL, &lstr, USE_FORMAT_RPT_LINK) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {

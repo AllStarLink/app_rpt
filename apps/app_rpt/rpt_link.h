@@ -64,16 +64,30 @@ void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
 void rpt_link_destroy(void *obj);
 
 /*!
+ * \brief __mklinklist() flags
+ */
+enum __mklinklist_flags {
+	/*! \brief Create RPT_LINK format (<mode><node>) string */
+	USE_FORMAT_RPT_LINK = 0,
+	/*! \brief Create RPT_ALINK format (<node><mode><keystate>) string */
+	USE_FORMAT_RPT_ALINK = (1 << 0),
+	/*! \brief Create RPT_LINKPOST format (<mode><node>) string */
+	USE_FORMAT_RPT_LINKPOST = (1 << 1),
+	/*! \brief Limit string length to avoid fragmentation */
+	LIMIT_STRING_LENGTH = (1 << 8),
+};
+
+/*!
  * \brief Create a list of links for this node.
  * Must be called locked.
  * \param myrpt		Pointer to rpt structure.
  * \param mylink	Pointer to rpt_link structure.
  * \param buf		Pointer to ast_str buffer - link string is generated in this buffer.
- * \param alink_format	Flag to indicate if RPT_ALINK format is returned. If not, RPT_LINK
+ * \param flags		Flags specifying format as the returned string.
  * format is returned. \retval		link count.
  */
 
-int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, int alink_format);
+int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, enum __mklinklist_flags flags);
 
 /*! \brief must be called locked */
 void __kickshort(struct rpt *myrpt);
