@@ -72,6 +72,8 @@ typedef struct {
 #define	MAXMACRO 2048
 #define	MAXNODES 500			  /* Maximum number of nodes allowed in the link list */
 #define	RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
+#define RPT_MAX_TEXT_SIZE 1230	  /* Maximum size of text to send in a single frame preventing  */
+								  /* fragmentation. Must be less than 1232 to allow for frame overhead. */
 #define	LINKLISTTIME 10000
 #define	LINKLISTSHORTTIME 200
 #define	LINKPOSTTIME 30000

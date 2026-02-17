@@ -3315,6 +3315,10 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			__mklinklist(myrpt, l, &lstr, 0);
 			rpt_mutex_unlock(&myrpt->lock);
 			if (l->chan) {
+				if (ast_str_strlen(lstr) + 1 > RPT_MAX_TEXT_SIZE) {
+					ast_debug(5, "Link list frame for node %s is too long, truncating\n", myrpt->name);
+					ast_str_set(&lstr, 0, "%.*s...", RPT_MAX_TEXT_SIZE - 4, ast_str_buffer(lstr));
+				}
 				lf.datalen = ast_str_strlen(lstr) + 1;
 				lf.data.ptr = ast_str_buffer(lstr);
 				rpt_qwrite(l, &lf);
