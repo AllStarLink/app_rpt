@@ -7,7 +7,6 @@
 #include "asterisk.h"
 
 #include "asterisk/channel.h"
-#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 #include "rpt_translate.h"

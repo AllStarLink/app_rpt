@@ -13,7 +13,6 @@
 #include "asterisk/say.h"
 #include "asterisk/indications.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
-#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 

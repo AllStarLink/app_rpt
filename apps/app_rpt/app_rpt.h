@@ -2,6 +2,7 @@
 #define VERSION_MINOR 7
 #define VERSION_PATCH 1
 
+#include "asterisk/audiohook.h"
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
 	converted to use public dsp.h API.
 	Eventually, the app_rpt DSP could should be/will be removed and NATIVE_DSP will be assumed,

@@ -305,7 +305,6 @@
 #include "asterisk/indications.h"
 #include "asterisk/format.h"
 #include "asterisk/dsp.h"
-#include "asterisk/audiohook.h"
 #include "asterisk/core_unreal.h"
 
 #include "app_rpt/app_rpt.h"
@@ -4628,7 +4627,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {
 					ast_frfree(f);
 					ast_debug(3, "Received hangup frame on %s\n", ast_channel_name(l->chan));
-					break;
+					if (remote_hangup_helper(myrpt, l)) {
+						/* A reconnect is possible */
+						continue;
+					}
+					return;
 				}
 			}
 			ast_frfree(f);
@@ -4684,7 +4687,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
 				ast_frfree(f);
-				break;
+				if (remote_hangup_helper(myrpt, l)) {
+					/* A reconnect is possible */
+					continue;
+				}
+				return;
 			}
 			ast_frfree(f);
 			continue;

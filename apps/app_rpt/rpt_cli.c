@@ -12,7 +12,6 @@
 #include "asterisk/pbx.h"
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
-#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
