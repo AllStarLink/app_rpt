@@ -1061,14 +1061,13 @@ static void *perform_statpost(void *data)
 	struct statpost *sp = (struct statpost *) data;
 	struct rpt *myrpt = sp->myrpt;
 	char *url = ast_str_buffer(sp->stats_url);
+	long curl_ipresolve_v4 = CURL_IPRESOLVE_V4;
 
 	if (!curl) {
 		ast_free(sp->stats_url);
 		ast_free(sp);
 		return NULL;
 	}
-
-	long curl_ipresolve_v4 = CURL_IPRESOLVE_V4;
 
 	response_msg = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!response_msg) {
