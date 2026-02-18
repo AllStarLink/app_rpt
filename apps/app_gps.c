@@ -596,7 +596,7 @@ static void *aprs_connection_thread(void *data)
  * \retval 0		Success
  * \retval -1		Failure
  */
-static int report_aprs(const char *ctg, const char *lat, const char *lon, const char *elev)
+static int report_aprs(const char *ctg, char *lat, char *lon, const char *elev)
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment, icon, icon_table;
@@ -758,7 +758,7 @@ static int report_aprs(const char *ctg, const char *lat, const char *lon, const 
  * \retval -1		Failure
  */
 
-static int report_aprstt(const char *ctg, const char *lat, const char *lon, const char *theircall, const char overlay)
+static int report_aprstt(const char *ctg, char *lat, char *lon, const char *theircall, const char overlay)
 {
 	struct ast_config *cfg = NULL;
 	char *call, *comment;

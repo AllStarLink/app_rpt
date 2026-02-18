@@ -1024,7 +1024,7 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 	}
 
 	for (x = 4; x < argc; x++) {
-		const char *name = argv[x];
+		char *name = ast_strdupa(argv[x]);
 		if ((value = strchr(name, '='))) {
 			*value++ = '\0';
 			pbx_builtin_setvar_helper(rpt_vars[thisRpt].rxchannel, name, value);
