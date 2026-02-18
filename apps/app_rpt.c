@@ -1077,7 +1077,11 @@ static void *perform_statpost(void *data)
 	}
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_msg);
-	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_WHATEVER);
+/*
+ *	The option setting below is the default, so there's no need to set it.
+ *
+ *	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_WHATEVER);
+*/
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
