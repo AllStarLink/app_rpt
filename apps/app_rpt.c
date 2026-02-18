@@ -1061,7 +1061,6 @@ static void *perform_statpost(void *data)
 	struct statpost *sp = (struct statpost *) data;
 	struct rpt *myrpt = sp->myrpt;
 	char *url = ast_str_buffer(sp->stats_url);
-	long curl_ipresolve_v4 = CURL_IPRESOLVE_V4;
 
 	if (!curl) {
 		ast_free(sp->stats_url);
@@ -1078,7 +1077,9 @@ static void *perform_statpost(void *data)
 	}
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_msg);
-	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, curl_ipresolve_v4);
+#if 0
+	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_V4);
+#endif
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
