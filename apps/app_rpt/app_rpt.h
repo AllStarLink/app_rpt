@@ -229,8 +229,8 @@ typedef struct {
 #define ADC_HISTORY_DEPTH ADC_HIST_TIME/DAQ_ADC_ACQINT
 
 typedef enum {
-	false,
-	true
+	rpt_false,
+	rpt_true
 } rpt_bool;
 
 enum keypost {

@@ -1079,9 +1079,13 @@ static void *perform_statpost(void *data)
 	}
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_msg);
-	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-	curl_easy_setopt(curl, CURLOPT_URL, url);
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
+	/*
+	 *	The option setting below is the default, so there's no need to set it.
+	 *
+	 *	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_WHATEVER);
+	 */
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
 
 	res = curl_easy_perform(curl);
@@ -5854,7 +5858,7 @@ static int load_config(int reload)
 static void *rpt_master(void *ignore)
 {
 	int i;
-	rpt_bool thread_hung[MAXRPTS] = { false };
+	rpt_bool thread_hung[MAXRPTS] = { rpt_false };
 	time_t last_thread_time[MAXRPTS] = { 0 };
 	time_t current_time = rpt_time_monotonic();
 	/* init nodelog queue */
@@ -5927,14 +5931,14 @@ static void *rpt_master(void *ignore)
 			if (rpt_vars[i].lastthreadupdatetime != last_thread_time[i]) {
 				/*! \todo Implement thread kill/recovery mechanism */
 				if (thread_hung[i]) { /* We were hung and a new update time */
-					thread_hung[i] = false;
+					thread_hung[i] = rpt_false;
 					ast_log(LOG_WARNING, "RPT thread on %s has recovered after %ld seconds.\n", rpt_vars[i].name,
 						current_time - last_thread_time[i]);
 				}
 				last_thread_time[i] = rpt_vars[i].lastthreadupdatetime; /* Only log message one time */
 			}
 			if (current_loop_time > RPT_THREAD_TIMEOUT && !thread_hung[i]) {
-				thread_hung[i] = true;
+				thread_hung[i] = rpt_true;
 				ast_log(LOG_WARNING, "RPT thread on %s is hung for %ld seconds.\n", rpt_vars[i].name, current_loop_time);
 			}
 			rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
