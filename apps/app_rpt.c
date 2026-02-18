@@ -1077,9 +1077,7 @@ static void *perform_statpost(void *data)
 	}
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_msg);
-#if 0
-	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_V4);
-#endif
+	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_WHATEVER);
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
