@@ -819,7 +819,7 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 /*! \brief Processes various telemetry commands that are in the myrpt structure
  * Used extensively when links are built or torn down and other events are processed
  * by the rpt_master threads.
- * returns 1 if PBX, 0 if not
+ * \retval 1 if PBX process handled telemetry command, 0 if not.
  */
 static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
