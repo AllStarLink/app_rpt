@@ -3312,7 +3312,7 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			l->linklisttimer = LINKLISTTIME;
 			ast_str_set(&lstr, 0, "%s", "L ");
 			rpt_mutex_lock(&myrpt->lock);
-			__mklinklist(myrpt, l, &lstr, USE_FORMAT_RPT_LINK|LIMIT_STRING_LENGTH);
+			__mklinklist(myrpt, l, &lstr, USE_FORMAT_RPT_LINK | LIMIT_STRING_LENGTH);
 			rpt_mutex_unlock(&myrpt->lock);
 			if (l->chan) {
 				lf.datalen = ast_str_strlen(lstr) + 1;

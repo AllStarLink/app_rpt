@@ -415,7 +415,8 @@ static int __mklinklist_limit(struct ast_str *buf, int bytes, enum __mklinklist_
 	return 0;
 }
 
-int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, enum __mklinklist_flags flags) {
+int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **buf, enum __mklinklist_flags flags)
+{
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 	const char *sep = "";
@@ -456,7 +457,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		}
 
 		len = strlen(l->name);
-		if (links_count ++ > 0) {
+		if (links_count++ > 0) {
 			sep = ",";
 			len++;
 		}
@@ -466,7 +467,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 			 * RPT_ALINK format
 			 * - show only adjacent nodes
 			 * - for each node, include name, mode, and last rx status
-			*/
+			 */
 			if (__mklinklist_limit(*buf, len + 2, flags)) {
 				/* if adding the name, mode, lastrx, and separator will result in fragmentation */
 				ast_str_append(buf, 0, "%s%s%c%c", sep, "000000", 'R', 'U');
@@ -505,17 +506,17 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 					truncated = 1;
 
 					while ((len > 0) && (str[len - 1] != ',')) {
-						--len;	/* remove characters of the last link */
+						--len; /* remove characters of the last link */
 					}
 					if (len > 0) {
-						--len;	/* and remove the separator */
+						--len; /* and remove the separator */
 					}
 				}
 
 				if (len > 0) {
 					ast_str_append(buf, 0, ",%.*s", len, str);
 
-					links_count++;	/* include the 1st linked node in the count */
+					links_count++; /* include the 1st linked node in the count */
 					for (i = 0; i < len; i++) {
 						if (str[i] == ',') {
 							links_count++; /* include the 2nd, 3rd, ... in the count */

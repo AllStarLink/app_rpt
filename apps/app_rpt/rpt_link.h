@@ -67,15 +67,15 @@ void rpt_link_destroy(void *obj);
  * \brief __mklinklist() flags
  */
 enum __mklinklist_flags {
-    /*! \brief Create RPT_LINK format string */
-    USE_FORMAT_RPT_LINK = 0,
- 
-    /*! \brief Create RPT_ALINK format string */
-    USE_FORMAT_RPT_ALINK = (1 << 0),
- 
-    /*! \brief Limit string length to avoid fragmentation */
-    LIMIT_STRING_LENGTH = (1 << 8),
-}; 
+	/*! \brief Create RPT_LINK format string */
+	USE_FORMAT_RPT_LINK = 0,
+
+	/*! \brief Create RPT_ALINK format string */
+	USE_FORMAT_RPT_ALINK = (1 << 0),
+
+	/*! \brief Limit string length to avoid fragmentation */
+	LIMIT_STRING_LENGTH = (1 << 8),
+};
 
 /*!
  * \brief Create a list of links for this node.
