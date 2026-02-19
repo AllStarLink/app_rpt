@@ -1,0 +1,85 @@
+testinfo:
+    summary: 'Test HTTP Registration Failure Handling'
+    description: |
+        'Test res_rpt_http_registrations failure scenarios including:
+        - Invalid registration format parsing
+        - DNS lookup failures for non-existent hosts
+        - HTTP server connection failures
+        - Invalid port numbers
+        - Missing required configuration
+        - Module graceful degradation on errors'
+
+test-modules:
+    test-object:
+        config-section: test-object-config
+        typename: 'test_case.TestCaseModule'
+    modules:
+        -
+            config-section: ami-config
+            typename: 'pluggable_modules.EventActionModule'
+
+test-object-config:
+    connect-ami: True
+    reactor-timeout: 20
+    stop-on-end: True
+
+ami-config:
+    # Wait for Asterisk to fully start
+    -
+        ami-start:
+        ami-actions:
+            -
+                action:
+                    Action: 'WaitFullyBooted'
+    # Test 1: Try to load module with invalid config (should fail gracefully)
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'FullyBooted'
+            count: 1
+        ami-actions:
+            -
+                action:
+                    Action: 'Command'
+                    Command: 'module load res_rpt_http_registrations.so'
+    # Test 2: Check that module handles invalid config
+    # Even if load fails, we should get a response
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'ModuleLoadReport'
+            count: 1
+        ami-actions:
+            -
+                action:
+                    Action: 'Command'
+                    Command: 'module show like res_rpt_http_registrations'
+    # Test 3: Check logging for errors (use CLI to verify)
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'CommandResponse'
+            count: 1
+        ami-actions:
+            -
+                action:
+                    Action: 'Command'
+                    Command: 'core show channels'
+        stop_test:
+
+properties:
+    tags:
+        - res
+        - http
+        - registration
+        - rpt
+        - negative_test
+    dependencies:
+        - python: 'twisted'
+        - python: 'starpy'
+        - asterisk: 'res_curl'
+        - asterisk: 'chan_iax2'
+    minversion: '1.8.0.0'

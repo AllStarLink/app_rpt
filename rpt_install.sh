@@ -91,6 +91,7 @@ fi
 
 # Add tests to the test suite, if it exists
 if [ -d /usr/src/testsuite ]; then
+	printf "Setting up tests for app_rpt...\n"
 	cd /usr/src/testsuite
 	git apply ../$MYDIR/tests/apps/tests_apps.diff
 	cp -r ../$MYDIR/tests/apps/rpt tests/apps

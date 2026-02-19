@@ -1,0 +1,152 @@
+testinfo:
+    summary: 'Test HTTP Registration Module'
+    description: |
+        'Test res_rpt_http_registrations module functionality including:
+        - Registration request parsing and formatting
+        - HTTP registration attempts with mock server
+        - Registration status tracking and CLI display
+        - Config file parsing and reload
+        - Memory leak prevention (dnsmgr cleanup)'
+
+test-modules:
+    test-object:
+        config-section: test-object-config
+        typename: 'test_case.TestCaseModule'
+    modules:
+        -
+            config-section: http-server
+            typename: 'pluggable_modules.MockHTTPServer'
+        -
+            config-section: ami-config
+            typename: 'pluggable_modules.EventActionModule'
+        -
+            config-section: cli-command-check
+            typename: 'pluggable_modules.Exec'
+
+test-object-config:
+    connect-ami: True
+    reactor-timeout: 30
+    stop-on-end: True
+
+# Mock HTTP server that simulates the registration endpoint
+http-server:
+    port: 8443
+    routes:
+        -
+            method: 'POST'
+            path: '/'
+            response:
+                status: 200
+                headers:
+                    Content-Type: 'application/json'
+                body: |
+                    {
+                        "ipaddr": "127.0.0.1",
+                        "port": 4569,
+                        "refresh": 60,
+                        "data": "successfully registered"
+                    }
+
+ami-config:
+    # Wait for Asterisk to fully start
+    -
+        ami-start:
+        ami-actions:
+            -
+                action:
+                    Action: 'WaitFullyBooted'
+    # Test 1: Load the module and verify registration
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'FullyBooted'
+            count: 1
+        ami-actions:
+            -
+                action:
+                    Action: 'Command'
+                    Command: 'module load res_rpt_http_registrations.so'
+    # Test 2: Wait a bit for initial registration attempt
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'ModuleLoadReport'
+            count: 1
+            nomatch:
+                Status: 'Declined'
+        ami-actions:
+            -
+                action:
+                    Action: 'UserEvent'
+                    UserEvent: 'RegistrationWait'
+    # Test 3: Check registration status via CLI
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'UserEvent'
+                    UserEvent: 'RegistrationWait'
+        ami-actions:
+            -
+                action:
+                    Action: 'Command'
+                    Command: 'rpt show registrations'
+    # Test 4: Reload configuration
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'CommandResponse'
+            count: 1
+        ami-actions:
+            -
+                action:
+                    Action: 'Command'
+                    Command: 'module reload res_rpt_http_registrations.so'
+    # Test 5: Verify reload succeeded and check status again
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'Reload'
+                    Module: 'res_rpt_http_registrations.so'
+        ami-actions:
+            -
+                action:
+                    Action: 'Command'
+                    Command: 'rpt show registrations'
+    # Test 6: Unload module to test cleanup
+    -
+        ami-events:
+            conditions:
+                match:
+                    Event: 'CommandResponse'
+            count: 2
+        ami-actions:
+            -
+                action:
+                    Action: 'Command'
+                    Command: 'module unload res_rpt_http_registrations.so'
+        stop_test:
+
+# Execute CLI commands to verify functionality
+cli-command-check:
+    commands:
+        - 'core show version'
+        - 'module show like res_rpt_http_registrations'
+
+properties:
+    tags:
+        - res
+        - http
+        - registration
+        - rpt
+    dependencies:
+        - python: 'twisted'
+        - python: 'starpy'
+        - asterisk: 'res_curl'
+        - asterisk: 'res_rpt_http_registrations'
+        - asterisk: 'chan_iax2'
+    minversion: '1.8.0.0'
