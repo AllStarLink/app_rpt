@@ -72,8 +72,17 @@ typedef struct {
 #define	MAXMACRO 2048
 #define	MAXNODES 500			  /* Maximum number of nodes allowed in the link list */
 #define	RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
-#define RPT_MAX_TEXT_SIZE 1230	  /* Maximum size of text to send in a single frame preventing  */
-								  /* fragmentation. Must be less than 1232 to allow for frame overhead. */
+
+/*
+ * When sending an AST_FRAME_TEXT frame we want to ensure that the whole
+ * packet is less than the path MTU.  Nominally, a packet is 1500 bytes,
+ * however 1280 bytes is generally considered the safest option and accounts
+ * for MTU overhead introduced by IPv4 over tunnels or PPPoE.  Subtracting
+ * the IPv4 header, UDP header, IAX2 full frame, and text frame metadata,
+ * that leaves us with a maximum length of 1230 bytes.
+ */
+#define RPT_AST_STR_MAX_FRAME_SIZE 1230
+
 #define	LINKLISTTIME 10000
 #define	LINKLISTSHORTTIME 200
 #define	LINKPOSTTIME 30000
