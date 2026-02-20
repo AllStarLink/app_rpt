@@ -69,13 +69,10 @@ void rpt_link_destroy(void *obj);
 enum __mklinklist_flags {
 	/*! \brief Create RPT_LINK format (<mode><node>) string */
 	USE_FORMAT_RPT_LINK = 0,
- 
 	/*! \brief Create RPT_ALINK format (<node><mode><keystate>) string */
 	USE_FORMAT_RPT_ALINK = (1 << 0),
- 
 	/*! \brief Create RPT_LINKPOST format (<mode><node>) string */
 	USE_FORMAT_RPT_LINKPOST = (1 << 1),
- 
 	/*! \brief Limit string length to avoid fragmentation */
 	LIMIT_STRING_LENGTH = (1 << 8),
 };
