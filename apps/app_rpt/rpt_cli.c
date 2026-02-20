@@ -525,7 +525,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			/* ### GET CONNECTED NODE INFO ####################
 			 * Traverse the list of connected nodes
 			 */
-			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
+			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
 
 			j = 0;
 			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
@@ -646,7 +646,7 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
-			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
+			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
 			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {

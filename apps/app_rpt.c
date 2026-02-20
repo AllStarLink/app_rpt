@@ -3316,13 +3316,13 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			l->linklisttimer = LINKLISTTIME;
 			ast_str_set(&lstr, 0, "%s", "L ");
 			rpt_mutex_lock(&myrpt->lock);
-			__mklinklist(myrpt, l, &lstr, 0);
+			__mklinklist(myrpt, l, &lstr, USE_FORMAT_RPT_LINK | LIMIT_STRING_LENGTH);
 			rpt_mutex_unlock(&myrpt->lock);
 			if (l->chan) {
 				lf.datalen = ast_str_strlen(lstr) + 1;
 				lf.data.ptr = ast_str_buffer(lstr);
 				rpt_qwrite(l, &lf);
-				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
+				ast_debug(7, "@@@@ node %s sent node string '%s' to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
 			}
 			ast_free(lstr);
 		}
@@ -3476,12 +3476,12 @@ static inline void do_key_post(struct rpt *myrpt)
  */
 static inline int do_link_post(struct rpt *myrpt)
 {
-	int nstr;
-	char lst;
 	struct ast_str *str;
 	time_t now;
-	struct rpt_link *l;
-	struct ao2_iterator l_it;
+
+	if (!myrpt->p.statpost_url) {
+		return 0;
+	}
 
 	myrpt->linkposttimer = LINKPOSTTIME;
 
@@ -3489,26 +3489,8 @@ static inline int do_link_post(struct rpt *myrpt)
 	if (!str) {
 		return -1;
 	}
-	nstr = 0;
 	ast_str_set(&str, 0, "%s", "&nodes=");
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		/* if is not a real link, ignore it */
-		if (l->name[0] == '0') {
-			continue;
-		}
-		lst = 'T';
-		if (l->mode == MODE_MONITOR)
-			lst = 'R';
-		if (l->mode == MODE_LOCAL_MONITOR)
-			lst = 'L';
-		if (!l->thisconnected)
-			lst = 'C';
-		if (nstr)
-			ast_str_append(&str, 0, "%s", ",");
-		ast_str_append(&str, 0, "%c%s", lst, l->name);
-		nstr = 1;
-	}
-	ao2_iterator_destroy(&l_it);
+	__mklinklist(myrpt, NULL, &str, USE_FORMAT_RPT_LINKPOST);
 	time(&now);
 
 	ast_str_append(&str, 0,
