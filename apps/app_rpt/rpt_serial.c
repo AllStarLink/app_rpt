@@ -492,7 +492,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 	}
 
 	/* if not a DAHDI channel, can't use pciradio stuff */
-	if (myrpt->rxchannel != myrpt->localrxchannel) {
+	if (!myrpt->localrxchannel || !CHAN_TECH(myrpt->localrxchannel, "DAHDI")) {
 		return -1;
 	}
 

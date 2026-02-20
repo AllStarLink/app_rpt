@@ -126,6 +126,7 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
 	/* otherwise, send it to all of em */
+	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* Dont send to IAXRPT client, unless main channel is Voter */
 		if (((l->name[0] == '0') && !CHAN_TECH(myrpt->rxchannel, "voter")) || (l->phonemode)) {
@@ -135,6 +136,7 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 			rpt_qwrite(l, &wf);
 		}
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 }
 
