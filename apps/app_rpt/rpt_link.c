@@ -435,22 +435,26 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 			/* if is not a real link, ignore it */
 			continue;
 		}
-		if (l->mode == MODE_LOCAL_MONITOR) {
-			/* dont report local nodes */
-			continue;
-		}
-		if (l == mylink) {
-			/* dont count our stuff */
-			continue;
-		}
-		if (mylink && !strcmp(l->name, mylink->name)) {
-			continue;
+		if (!(flags & USE_FORMAT_RPT_LINKPOST)) {
+			if (l->mode == MODE_LOCAL_MONITOR) {
+				/* dont report local nodes */
+				continue;
+			}
+			if (l == mylink) {
+				/* dont count our stuff */
+				continue;
+			}
+			if (mylink && !strcmp(l->name, mylink->name)) {
+				continue;
+			}
 		}
 
 		/* figure out "mode" to report */
 		mode = 'T'; /* use Transceive by default */
 		if (l->mode == MODE_MONITOR) {
 			mode = 'R'; /* indicate RX for our mode */
+		} else if (l->mode == MODE_LOCAL_MONITOR) {
+			mode = 'L'; /* indicate RX for our mode */
 		}
 		if (!l->thisconnected) {
 			mode = 'C'; /* indicate connecting */
@@ -466,7 +470,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 			/*
 			 * RPT_ALINK format
 			 * - show only adjacent nodes
-			 * - for each node, include name, mode, and last rx status
+			 * - for each node, include name, mode, and last keyed status
 			 */
 			if (__mklinklist_limit(*buf, len + 2, flags)) {
 				/* if adding the name, mode, lastrx, and separator will result in fragmentation */
@@ -531,17 +535,23 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 			}
 		}
 
-		if (mode != 'T') {
-			/* if this node is not in transceive mode, downgrade everyone on this node if appropriate */
-			str = ast_str_buffer(*buf);
-			len = ast_str_strlen(*buf);
-			for (i = spos; i < len; i++) {
-				if (str[i] == 'T') {
-					str[i] = mode;
-				}
-				if ((str[i] == 'R') && (mode == 'C')) {
-					str[i] = mode;
-				}
+		if (flags & USE_FORMAT_RPT_LINKPOST) {
+			continue;
+		}
+
+		if (mode == 'T') {
+			continue;
+		}
+
+		/* if this node is not in transceive mode, downgrade everyone on this node if appropriate */
+		str = ast_str_buffer(*buf);
+		len = ast_str_strlen(*buf);
+		for (i = spos; i < len; i++) {
+			if (str[i] == 'T') {
+				str[i] = mode;
+			}
+			if ((str[i] == 'R') && (mode == 'C')) {
+				str[i] = mode;
 			}
 		}
 	}
