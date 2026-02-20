@@ -6296,7 +6296,7 @@ static inline int exec_txchannel_read(struct rpt *myrpt)
 	return wait_for_hangup_helper(myrpt->txchannel, "txchannel");
 }
 
-static int parse_caller(const char *b1, const char *hisip, char *s)
+static int parse_caller(const char *b1, char *hisip, char *s)
 {
 	char sx[320];
 	char *s1, *s2, *s3;

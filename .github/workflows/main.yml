@@ -12,7 +12,7 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  container:
+  ubuntu:
     runs-on: ubuntu-latest
     container: 
       image: ghcr.io/allstarlink/asl3-ci:latest
@@ -28,3 +28,25 @@ jobs:
         run: |
           cd /usr/src/testsuite
           phreaknet runtest apps/rpt
+#  archlinux:
+#    runs-on: ubuntu-24.04
+#    name: Arch Linux
+#    container: archlinux:latest
+#    steps:
+#      - name: Build Asterisk
+#        run: |
+#          cd /usr/src
+#          pacman -Syu --noconfirm
+#          pacman -Sy --noconfirm wget libusb libusb-compat alsa-utils
+#          wget https://docs.phreaknet.org/script/phreaknet.sh
+#          chmod +x phreaknet.sh
+#          ./phreaknet.sh make
+#          phreaknet update
+#          phreaknet install --dahdi --disable-vpmadt032 --lightweight --alsa --fast --devmode
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#      - name: Build app_rpt
+#        run: |
+#          cp -r ../app_rpt /usr/src
+#          cd /usr/src/app_rpt
+#          ./rpt_install.sh
