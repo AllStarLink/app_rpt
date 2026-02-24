@@ -1322,6 +1322,7 @@ void *rpt_tele_thread(void *this)
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
+
 	/* allocate a local channel thru asterisk and call the correct conference */
 	mychannel = rpt_request_telem_chan(cap, "Telemetry");
 	ao2_ref(cap, -1);

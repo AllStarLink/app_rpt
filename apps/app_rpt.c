@@ -4675,7 +4675,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					 * to != RADIO_KEY_NOT_ALLOWED yet. This happens when the reset code forces it to RADIO_ALLOWED. Of course if
 					 * handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some
 					 * point, we'll set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info),
-					 * If this happens, we're passing voice frames and now sending AST_READIO_KEY messages
+					 * If this happens, we're passing voice frames and now sending AST_RADIO_KEY messages
 					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
 					 *
 					 */
@@ -4738,15 +4738,13 @@ static inline int monchannel_read(struct rpt *myrpt)
 		rpt_mutex_lock(&myrpt->lock);
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			/* IF we are an altlink() and the repeater is not receiving (aka we are in the tail time),
-			 *whisper the output audio onto said link.
+			 * whisper the output audio onto said link.
 			 */
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
-				rpt_mutex_unlock(&myrpt->lock);
 				ast_audiohook_lock(&l->altaudio);
 				ast_audiohook_write_frame(&l->altaudio, AST_AUDIOHOOK_DIRECTION_READ, f);
 				ast_audiohook_unlock(&l->altaudio);
-				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
 		ao2_iterator_destroy(&l_it);
