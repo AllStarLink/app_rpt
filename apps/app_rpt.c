@@ -4342,10 +4342,10 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	hangup_link_chan(l);
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_hangup(l->pchan);
-	ast_audiohook_lock(&l->whisper_audiohook);
-	ast_audiohook_detach(&l->whisper_audiohook);
-	ast_audiohook_unlock(&l->whisper_audiohook);
-	ast_audiohook_destroy(&l->whisper_audiohook);
+	ast_audiohook_lock(&l->altaudio);
+	ast_audiohook_detach(&l->altaudio);
+	ast_audiohook_unlock(&l->altaudio);
+	ast_audiohook_destroy(&l->altaudio);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	return 0;
 }
@@ -4743,9 +4743,9 @@ static inline int monchannel_read(struct rpt *myrpt)
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
 				rpt_mutex_unlock(&myrpt->lock);
-				ast_audiohook_lock(&l->whisper_audiohook);
-				ast_audiohook_write_frame(&l->whisper_audiohook, AST_AUDIOHOOK_DIRECTION_READ, f);
-				ast_audiohook_unlock(&l->whisper_audiohook);
+				ast_audiohook_lock(&l->altaudio);
+				ast_audiohook_write_frame(&l->altaudio, AST_AUDIOHOOK_DIRECTION_READ, f);
+				ast_audiohook_unlock(&l->altaudio);
 				rpt_mutex_lock(&myrpt->lock);
 			}
 		}
@@ -6928,8 +6928,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		}
 
-		ast_audiohook_init(&l->whisper_audiohook, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
-		ast_audiohook_attach(l->pchan, &l->whisper_audiohook); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+		ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
+		ast_audiohook_attach(l->pchan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
 
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		doconpgm(myrpt, l->name);

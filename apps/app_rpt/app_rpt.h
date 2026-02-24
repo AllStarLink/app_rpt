@@ -593,7 +593,7 @@ struct rpt_link {
 	struct timeval connecttime;
 	struct ast_channel *chan;	
 	struct ast_channel *pchan;
-	struct ast_audiohook whisper_audiohook;
+	struct ast_audiohook altaudio;
 	struct ast_str *linklist;
 	time_t	linklistreceived;
 	int linklisttimer;

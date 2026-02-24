@@ -773,8 +773,8 @@ void *rpt_link_connect(void *data)
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
-	ast_audiohook_init(&l->whisper_audiohook, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
-	ast_audiohook_attach(l->chan, &l->whisper_audiohook); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+	ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
+	ast_audiohook_attach(l->chan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
 
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {
