@@ -17,7 +17,7 @@
 #include "asterisk/dns_srv.h"	/* use for srv dns lookup */
 #include "asterisk/dns_txt.h" /* user for dns lookup */
 #include "asterisk/vector.h" /* required for dns */
-#include "asterisk/utils.h" /* required for ARRAY_LEN */
+#include "asterisk/utils.h"	 /* required for ARRAY_LEN */
 
 #include "app_rpt.h"
 #include <arpa/nameser.h> /* needed for dns - must be after app_rpt.h */

@@ -13,7 +13,6 @@
 #include "asterisk/say.h"
 #include "asterisk/indications.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
-#include "asterisk/audiohook.h"
 
 #include "app_rpt.h"
 
@@ -1319,7 +1318,13 @@ void *rpt_tele_thread(void *this)
 		goto abort;
 	}
 
-	ast_format_cap_append(cap, ast_format_slin, 0);
+	if (ast_format_cap_append(cap, ast_format_slin, 0)) {
+		ast_log(LOG_ERROR, "Failed to append slin to cap\n");
+		ao2_ref(cap, -1);
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort;
+	}
+
 	/* allocate a local channel thru asterisk and call the correct conference */
 	mychannel = rpt_request_telem_chan(cap, "Telemetry");
 	ao2_ref(cap, -1);

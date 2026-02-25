@@ -305,7 +305,6 @@
 #include "asterisk/indications.h"
 #include "asterisk/format.h"
 #include "asterisk/dsp.h"
-#include "asterisk/audiohook.h"
 #include "asterisk/core_unreal.h"
 
 #include "app_rpt/app_rpt.h"
@@ -419,12 +418,6 @@ int rpt_max_dns_node_length = 6;
 int max_chan_stat[] = { 22000, 1000, 22000, 100, 22000, 2000, 22000 };
 
 int nullfd = -1;
-
-/*! \brief Structure used to share data with attempt_reconnect thread */
-struct rpt_reconnect_data {
-	struct rpt *myrpt;
-	struct rpt_link *l;
-};
 
 int rpt_debug_level(void)
 {
@@ -1476,7 +1469,7 @@ void *rpt_call(void *this)
 	myrpt->patch_talking = 0; /* Initialize patch_talking flag */
 	p = ast_channel_tech_pvt(mychannel);
 	ast_debug(1, "Adding talker callback to channel %s, private data %p\n", ast_channel_name(mychannel), p);
-	if (p) {
+	if (p && p->chan) {
 		bridge_chan = ast_channel_get_bridge_channel(p->chan);
 		if (bridge_chan) {
 			bridge_chan->tech_args.talking_threshold = DEFAULT_TALKING_THRESHOLD;
@@ -1851,7 +1844,6 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	if (!strcmp(str, DISCSTR)) {
 		mylink->disced = RPT_LINK_DISCONNECT;
 		mylink->retries = mylink->max_retries + 1;
-		ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
 		return;
 	}
 	if (!strcmp(str, NEWKEYSTR)) {
@@ -2420,31 +2412,35 @@ static char *parse_node_format(char *s, char **restrict s1, char *buf, size_t le
 	return s2;
 }
 
-static void *attempt_reconnect(void *data)
+static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 {
 	char *s1, *tele;
 	char tmp[300], deststr[325] = "";
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
-	struct rpt_reconnect_data *reconnect_data = data;
-	struct rpt_link *l = reconnect_data->l;
-	struct rpt *myrpt = reconnect_data->myrpt;
 
+	ast_debug(1, "Attempting Reconnect");
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
-		goto cleanup;
+		return NULL;
 	}
 	/* cannot apply to echolink */
 	if (!strncasecmp(tmp, "echolink", 8)) {
-		goto cleanup;
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
+		return NULL;
 	}
 	/* cannot apply to tlb */
 	if (!strncasecmp(tmp, "tlb", 3)) {
-		goto cleanup;
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
+		return NULL;
 	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
@@ -2453,14 +2449,13 @@ static void *attempt_reconnect(void *data)
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
-		goto cleanup;
+		return NULL;
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* We don't want the link to free after removing from the list */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
-	ast_autoservice_start(l->pchan); /* We need to dump audio on l->chan while redialing or we receive long voice queue warnings */
 	rpt_mutex_unlock(&myrpt->lock);
 	parse_node_format(tmp, &s1, sx, sizeof(sx));
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
@@ -2491,15 +2486,11 @@ static void *attempt_reconnect(void *data)
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
 	}
-	ast_autoservice_stop(l->pchan);
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
 	ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
-cleanup:
-	ast_free(reconnect_data);
-	l->connect_in_progress = 0;
 	return NULL;
 }
 
@@ -2928,6 +2919,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_request_local(myrpt, cap, RPT_RXPCHAN, "RXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		return -1;
 	}
@@ -2960,6 +2952,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (rpt_request_local(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_TXPCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -3177,234 +3170,220 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 }
 
-static inline void periodic_process_links(struct rpt *myrpt, const int elap)
+static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
 {
 	struct ast_frame *f;
 	int newkeytimer_last, max_retries;
-	struct rpt_link *l;
-	struct rpt_reconnect_data *reconnect_data;
-	struct ao2_iterator l_it;
-	pthread_t connect_threadid;
+	int myrx;
 
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		int myrx;
-		if (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
-			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
-			ast_write(l->chan, f);
-			ast_frfree(f);
-		}
-		update_timer(&l->rxlingertimer, elap, 0);
+	rpt_mutex_lock(&myrpt->lock);
+	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+		struct ast_channel *chan = ast_channel_ref(l->chan);
+		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_write(chan, f);
+		rpt_mutex_lock(&myrpt->lock);
+		ast_frfree(f);
+		ast_channel_unref(chan);
+	}
+	rpt_mutex_unlock(&myrpt->lock);
+	update_timer(&l->rxlingertimer, elap, 0);
 
-		/* Update the timer, checking if it expired just now. */
-		newkeytimer_last = l->newkeytimer;
-		update_timer(&l->newkeytimer, elap, 0);
+	/* Update the timer, checking if it expired just now. */
+	newkeytimer_last = l->newkeytimer;
+	update_timer(&l->newkeytimer, elap, 0);
 
-		/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
-		 * This if statement executes if the newkeytimer just expired.
-		 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey
-		 * to RADIO_KEY_ALLOWED_REDUNDANT or RADIO_KEY_NOT_ALLOWED (because then newkeytimer_last == 0 here)
+	/* Some reverse-engineering comments here from NA debugging issue #46 (inbound calls being keyed when they shouldn't be)
+	 * This if statement executes if the newkeytimer just expired.
+	 * This does NOT include cases like in handle_link_data where we set newkeytimer = 0 explicitly + set newkey
+	 * to RADIO_KEY_ALLOWED_REDUNDANT or RADIO_KEY_NOT_ALLOWED (because then newkeytimer_last == 0 here)
+	 */
+	if (newkeytimer_last > 0 && !l->newkeytimer) { /* Translation: We were timing, and it just expired */
+		/* Issue #46 background:
+		 *
+		 * There is a kind of "handshake" that happens when setting up the IAX2 trunk between two nodes,
+		 * using text frames. NEWKEY1 is part of the handshake (it does not, as the name might imply, indicate that the other
+		 * side should consider either side "keyed" and transmitting... but as I explain below, the lack of sending/receiving
+		 * this can actually lead to a node being improperly keyed).
+		 *
+		 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be
+		 *superfluous) The calling node calls this function once. What this function does is send the text frame NEWKEY1STR to
+		 *the other side. Issue #46 was concerned with a case where this was slightly broken, and the below happened: (A =
+		 *calling node, B = called node)
+		 *
+		 * A									B
+		 *		<- send_newkey
+		 *		<- send_newkey
+		 *		send_newkey ->
+		 *
+		 *		<-- receive !NEWKEY1!
+		 *		<-- receive !NEWKEY1!
+		 *		(MISSING) received !NEWKEY1! ->
+		 *
+		 * Note that the above depiction separates the TX and RX, but there are only 3 text frames involved.
+		 * In issue #46, 3 text frames are sent, but only 2 are really "received".
+		 * And it so happens that the text frame that B doesn't get from A is exactly the text frame
+		 * that is responsible for setting newkeytimer=0 and newkey=RADIO_KEY_NOT_ALLOWED, i.e. if this doesn't happen,
+		 * then we'll hit the WARNING case in the below if statement.  Because this code sets l->link_newkey to
+		 *RADIO_KEY_ALLOWED, There is an unintended radio keyup.
+		 *
+		 * Note that all of these comments are from spending hours debugging this issue and reverse-engineering, but at this
+		 *point I'm pretty confident about these parts of the code, even though I'm not Jim Dixon and he didn't comment any of
+		 *this code originally.
+		 *
+		 * The issue was resolvable by setting jitterbuffer=no in iax.conf. It seems the jitterbuffer was holding received
+		 *text frames in the JB queue until it got something "important" like a voice frame. This is because chan_iax2's
+		 *jitter buffer was stalling improperly until it received a voice frame, because only at that point would it try to
+		 *begin reading from the jitterbuffer queue. This was fixed by falling back to the format negotiated during call setup
+		 *prior to receiving audio.
 		 */
-		if (newkeytimer_last > 0 && !l->newkeytimer) { /* Translation: We were timing, and it just expired */
-			/* Issue #46 background:
-			 *
-			 * There is a kind of "handshake" that happens when setting up the IAX2 trunk between two nodes,
-			 * using text frames. NEWKEY1 is part of the handshake (it does not, as the name might imply, indicate that the other
-			 * side should consider either side "keyed" and transmitting... but as I explain below, the lack of sending/receiving
-			 * this can actually lead to a node being improperly keyed).
-			 *
-			 * Ordinarily, the called node will call the send_newkey function (XXX twice, it seems, one of these may be
-			 *superfluous) The calling node calls this function once. What this function does is send the text frame NEWKEY1STR to
-			 *the other side. Issue #46 was concerned with a case where this was slightly broken, and the below happened: (A =
-			 *calling node, B = called node)
-			 *
-			 * A									B
-			 *		<- send_newkey
-			 *		<- send_newkey
-			 *		send_newkey ->
-			 *
-			 *		<-- receive !NEWKEY1!
-			 *		<-- receive !NEWKEY1!
-			 *		(MISSING) received !NEWKEY1! ->
-			 *
-			 * Note that the above depiction separates the TX and RX, but there are only 3 text frames involved.
-			 * In issue #46, 3 text frames are sent, but only 2 are really "received".
-			 * And it so happens that the text frame that B doesn't get from A is exactly the text frame
-			 * that is responsible for setting newkeytimer=0 and newkey=RADIO_KEY_NOT_ALLOWED, i.e. if this doesn't happen,
-			 * then we'll hit the WARNING case in the below if statement.  Because this code sets l->link_newkey to
-			 *RADIO_KEY_ALLOWED, There is an unintended radio keyup.
-			 *
-			 * Note that all of these comments are from spending hours debugging this issue and reverse-engineering, but at this
-			 *point I'm pretty confident about these parts of the code, even though I'm not Jim Dixon and he didn't comment any of
-			 *this code originally.
-			 *
-			 * The issue was resolvable by setting jitterbuffer=no in iax.conf. It seems the jitterbuffer was holding received
-			 *text frames in the JB queue until it got something "important" like a voice frame. This is because chan_iax2's
-			 *jitter buffer was stalling improperly until it received a voice frame, because only at that point would it try to
-			 *begin reading from the jitterbuffer queue. This was fixed by falling back to the format negotiated during call setup
-			 *prior to receiving audio.
+		if (l->thisconnected) {
+			/* We're connected, but haven't received a NEWKEY1STR text frame yet...
+			 * The newkeytimer expired on a connected (~answered?) node, i.e. handle_link_data hasn't yet gotten called
+			 * to set newkeytimer = 0 and newkey to RADIO_KEY_NOT_ALLOWED, i.e. we haven't received a text frame with
+			 * NEWKEY1STR over the IAX2 channel yet.
 			 */
-			if (l->thisconnected) {
-				/* We're connected, but haven't received a NEWKEY1STR text frame yet...
-				 * The newkeytimer expired on a connected (~answered?) node, i.e. handle_link_data hasn't yet gotten called
-				 * to set newkeytimer = 0 and newkey to RADIO_KEY_NOT_ALLOWED, i.e. we haven't received a text frame with
-				 * NEWKEY1STR over the IAX2 channel yet.
+			if (l->link_newkey == RADIO_KEY_NOT_ALLOWED) {
+				/* This can ripple to have consequences down the line, namely we might start writing voice frames
+				 * across the IAX2 link because of this, basically causing us to be transmitting (keyed).
+				 * If this happens, this indicates a problem upstream, and we should emit a warning here
+				 * since undesired behavior will likely ensue.
+				 * We probably SHOULD just hangup the line right here if we are connected and did not receive the ~!NEWKEY1!
+				 * message as something is wrong with the text messaging part of the connection.
 				 */
-				if (l->link_newkey == RADIO_KEY_NOT_ALLOWED) {
-					/* This can ripple to have consequences down the line, namely we might start writing voice frames
-					 * across the IAX2 link because of this, basically causing us to be transmitting (keyed).
-					 * If this happens, this indicates a problem upstream, and we should emit a warning here
-					 * since undesired behavior will likely ensue.
-					 * We probably SHOULD just hangup the line right here if we are connected and did not receive the ~!NEWKEY1!
-					 * message as something is wrong with the text messaging part of the connection.
-					 */
-					ast_log(LOG_WARNING, "%p newkeytimer expired on connected node, setting newkey from RADIO_KEY_NOT_ALLOWED to RADIO_KEY_ALLOWED.\n",
-						l);
-					l->link_newkey = RADIO_KEY_ALLOWED;
-					if (l->lastrealrx) { /* We were keyed up using newkey mode, need to unkey or we will be stuck keyed up. */
-						rxunkey_helper(myrpt, l);
-					}
+				ast_log(LOG_WARNING,
+					"%p newkeytimer expired on connected node, setting newkey from RADIO_KEY_NOT_ALLOWED to RADIO_KEY_ALLOWED.\n", l);
+				l->link_newkey = RADIO_KEY_ALLOWED;
+				if (l->lastrealrx) { /* We were keyed up using newkey mode, need to unkey or we will be stuck keyed up. */
+					rxunkey_helper(myrpt, l);
 				}
+			}
+		} else {
+			/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms (forever! - probably should
+			 * limit the number of retries here)
+			 */
+			l->newkeytimer = NEWKEYTIME;
+		}
+	}
+	if ((l->linkmode > 1) && (l->linkmode < 0x7ffffffe)) {
+		update_timer(&l->linkmode, elap, 1);
+	}
+	if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && l->lastrealrx && (!l->rxlingertimer)) {
+		rxunkey_helper(myrpt, l);
+	}
+
+	update_timer(&l->voxtotimer, elap, 0);
+
+	if (l->lasttx != l->lasttx1) {
+		if ((l->phonemode == RPT_PHONE_MODE_NONE) || (!l->phonevox))
+			voxinit_link(l, !l->lasttx);
+		l->lasttx1 = l->lasttx;
+	}
+	myrx = l->lastrealrx;
+	if ((l->phonemode != RPT_PHONE_MODE_NONE) && (l->phonevox)) {
+		myrx = myrx || (!AST_LIST_EMPTY(&l->rxq));
+		if (l->voxtotimer <= 0) {
+			if (l->voxtostate) {
+				l->voxtotimer = myrpt->p.voxtimeout_ms;
+				l->voxtostate = 0;
 			} else {
-				/* If not connected yet (maybe a slow link connection?), wait another NEWKEYTIME ms (forever! - probably should
-				 * limit the number of retries here)
-				 */
-				l->newkeytimer = NEWKEYTIME;
+				l->voxtotimer = myrpt->p.voxrecover_ms;
+				l->voxtostate = 1;
 			}
 		}
-		if ((l->linkmode > 1) && (l->linkmode < 0x7ffffffe)) {
-			update_timer(&l->linkmode, elap, 1);
-		}
-		if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && l->lastrealrx && (!l->rxlingertimer)) {
-			rxunkey_helper(myrpt, l);
-		}
+		if (!l->voxtostate)
+			myrx = myrx || l->wasvox;
+	}
+	l->lastrx = myrx;
 
-		update_timer(&l->voxtotimer, elap, 0);
+	update_timer(&l->linklisttimer, elap, 0);
 
-		if (l->lasttx != l->lasttx1) {
-			if ((l->phonemode == RPT_PHONE_MODE_NONE) || (!l->phonevox))
-				voxinit_link(l, !l->lasttx);
-			l->lasttx1 = l->lasttx;
+	if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
+		struct ast_frame lf;
+		struct ast_str *lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
+		if (!lstr) {
+			return;
 		}
-		myrx = l->lastrealrx;
-		if ((l->phonemode != RPT_PHONE_MODE_NONE) && (l->phonevox)) {
-			myrx = myrx || (!AST_LIST_EMPTY(&l->rxq));
-			if (l->voxtotimer <= 0) {
-				if (l->voxtostate) {
-					l->voxtotimer = myrpt->p.voxtimeout_ms;
-					l->voxtostate = 0;
-				} else {
-					l->voxtotimer = myrpt->p.voxrecover_ms;
-					l->voxtostate = 1;
-				}
-			}
-			if (!l->voxtostate)
-				myrx = myrx || l->wasvox;
+		init_text_frame(&lf, __PRETTY_FUNCTION__);
+		l->linklisttimer = LINKLISTTIME;
+		ast_str_set(&lstr, 0, "%s", "L ");
+		rpt_mutex_lock(&myrpt->lock);
+		__mklinklist(myrpt, l, &lstr, 0);
+		rpt_mutex_unlock(&myrpt->lock);
+		if (l->chan) {
+			lf.datalen = ast_str_strlen(lstr) + 1;
+			lf.data.ptr = ast_str_buffer(lstr);
+			rpt_qwrite(l, &lf);
+			ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
 		}
-		l->lastrx = myrx;
-
-		update_timer(&l->linklisttimer, elap, 0);
-
-		if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
-			struct ast_frame lf;
-			struct ast_str *lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
-			if (!lstr) {
-				ao2_ref(l, -1);
-				ao2_iterator_destroy(&l_it);
-				return;
-			}
-			init_text_frame(&lf, __PRETTY_FUNCTION__);
-			l->linklisttimer = LINKLISTTIME;
-			ast_str_set(&lstr, 0, "%s", "L ");
-			rpt_mutex_lock(&myrpt->lock);
-			__mklinklist(myrpt, l, &lstr, 0);
-			rpt_mutex_unlock(&myrpt->lock);
-			if (l->chan) {
-				lf.datalen = ast_str_strlen(lstr) + 1;
-				lf.data.ptr = ast_str_buffer(lstr);
-				rpt_qwrite(l, &lf);
-				ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
-			}
-			ast_free(lstr);
-		}
-		if (l->link_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
-			if ((l->retxtimer += elap) >= REDUNDANT_TX_TIME) {
-				l->retxtimer = 0;
-				if (l->chan && l->phonemode == RPT_PHONE_MODE_NONE) {
-					if (l->lasttx)
-						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
-					else
-						ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
-				}
-			}
-			if ((l->rerxtimer += elap) >= (REDUNDANT_TX_TIME * 5)) {
-				ast_debug(7, "@@@@ rx un-key\n");
-				l->lastrealrx = 0;
-				l->rerxtimer = 0;
-				if (l->lastrx1) {
-					donodelog_fmt(myrpt, "RXUNKEY(T),%s", l->name);
-					if (myrpt->p.duplex)
-						rpt_telemetry(myrpt, LINKUNKEY, l);
-					l->lastrx1 = 0;
-					rpt_update_links(myrpt);
-				}
+		ast_free(lstr);
+	}
+	if (l->link_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
+		if ((l->retxtimer += elap) >= REDUNDANT_TX_TIME) {
+			l->retxtimer = 0;
+			if (l->chan && l->phonemode == RPT_PHONE_MODE_NONE) {
+				if (l->lasttx)
+					ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
+				else
+					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
 			}
 		}
-		update_timer(&l->disctime, elap, 0);
-
-		update_timer(&l->retrytimer, elap, 0);
-
-		/* start tracking connect time */
-		if (ast_tvzero(l->connecttime)) {
-			l->connecttime = rpt_tvnow();
+		if ((l->rerxtimer += elap) >= (REDUNDANT_TX_TIME * 5)) {
+			ast_debug(7, "@@@@ rx un-key\n");
+			l->lastrealrx = 0;
+			l->rerxtimer = 0;
+			if (l->lastrx1) {
+				donodelog_fmt(myrpt, "RXUNKEY(T),%s", l->name);
+				if (myrpt->p.duplex)
+					rpt_telemetry(myrpt, LINKUNKEY, l);
+				l->lastrx1 = 0;
+				rpt_update_links(myrpt);
+			}
 		}
+	}
+	update_timer(&l->disctime, elap, 0);
 
-		/* ignore non-timing channels */
-		if (l->elaptime < 0) {
-			continue;
-		}
-		l->elaptime += elap;
-		/* if connection has taken too long */
+	update_timer(&l->retrytimer, elap, 0);
+
+	/* start tracking connect time */
+	if (ast_tvzero(l->connecttime)) {
+		l->connecttime = rpt_tvnow();
+	}
+
+	/* ignore non-timing channels */
+	if (l->elaptime < 0) {
+		return;
+	}
+	l->elaptime += elap;
+	/* if connection has taken too long */
+	max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
+
+	if (l->outbound) {
 		if ((l->elaptime > MAXCONNECTTIME) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
 			l->elaptime = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			if (l->chan)
-				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-			rpt_mutex_lock(&myrpt->lock);
-			continue;
-		}
-		max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
-
-		if (!l->chan && !l->retrytimer && l->outbound && !max_retries && l->hasconnected) {
-			rpt_mutex_unlock(&myrpt->lock);
-			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
-				reconnect_data = ast_calloc(1, sizeof(struct rpt_reconnect_data));
-				if (!reconnect_data) {
-					rpt_mutex_lock(&myrpt->lock);
-					l->retrytimer = RETRY_TIMER_MS;
-					continue;
-				}
-				reconnect_data->myrpt = myrpt;
-				reconnect_data->l = l;
-				if (!l->connect_in_progress) {
-					/* We are not currently running a connect/reconnect thread */
-					l->connect_in_progress = 1;
-					if (ast_pthread_create_detached(&connect_threadid, NULL, attempt_reconnect, reconnect_data) < 0) {
-						ast_free(reconnect_data);
-						l->connect_in_progress = 0;
-					}
-				}
+			if (!l->outbound) {
+				ast_debug(1, "Connection taking to long, giving up on link");
+				l->disced = RPT_LINK_DISCONNECT;
 			} else {
+				ast_debug(1, "Connection taking to long, resetting retry timer");
+				l->retrytimer = RETRY_TIMER_MS;
+			}
+			return;
+		}
+
+		if (!l->chan && !l->retrytimer && !max_retries && l->hasconnected) {
+			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
+				attempt_reconnect(myrpt, l);
+			} else {
+				/* We should not retry this node type */
 				l->retries = l->max_retries + 1;
 			}
-			rpt_mutex_lock(&myrpt->lock);
-			continue;
+			return;
 		}
-		if (!l->chan && !l->retrytimer && l->outbound && max_retries) {
-			ao2_ref(l, +1);					  /* prevent freeing while we finish up */
-			rpt_link_remove(myrpt->links, l); /* remove from queue */
+		if (!l->chan && !l->retrytimer && max_retries) {
+			l->disced = RPT_LINK_DISCONNECT;
 			if (!strcmp(myrpt->cmdnode, l->name))
 				myrpt->cmdnode[0] = 0;
-			rpt_mutex_unlock(&myrpt->lock);
 			if (l->name[0] != '0') {
 				if (!l->hasconnected)
 					rpt_telemetry(myrpt, CONNFAIL, l);
@@ -3415,22 +3394,19 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 				rpt_update_links(myrpt);
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 			/* hang-up on call to device */
-			ast_hangup(l->pchan);
-			ao2_ref(l, -1); /* and drop the extra ref we're holding */
-			rpt_mutex_lock(&myrpt->lock);
-			continue;
+			return;
 		}
-		if ((!l->chan) && (!l->disctime) && (!l->outbound)) {
+	} else {
+		/* Not outbound */
+		if ((!l->chan) && (!l->disctime)) {
 			ast_debug(1, "LINKDISC AA\n");
-			ao2_ref(l, +1);					  /* prevent freeing while we finish up */
-			rpt_link_remove(myrpt->links, l); /* remove from queue */
+			l->disced = RPT_LINK_DISCONNECT;
 			if (!ao2_container_count(myrpt->links)) {
 				channel_revert(myrpt);
 			}
 			if (!strcmp(myrpt->cmdnode, l->name)) {
 				myrpt->cmdnode[0] = 0;
 			}
-			rpt_mutex_unlock(&myrpt->lock);
 			if (l->name[0] != '0') {
 				rpt_telemetry(myrpt, REMDISC, l);
 			}
@@ -3438,13 +3414,10 @@ static inline void periodic_process_links(struct rpt *myrpt, const int elap)
 			donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
 			dodispgm(myrpt, l->name);
 			/* hang-up on call to device */
-			ast_hangup(l->pchan);
-			ao2_ref(l, -1); /* and drop the extra ref we're holding */
-			rpt_mutex_lock(&myrpt->lock);
-			continue;
+			return;
 		}
 	}
-	ao2_iterator_destroy(&l_it);
+	return;
 }
 
 /*! \brief Post keyup data to a URL configured in myrpt->p.statpost_url.
@@ -4278,7 +4251,7 @@ static inline void safe_hangup(struct ast_channel *chan)
 	/* myrpt is locked here, so we can trust this will be an atomic operation,
 	 * since we also lock before setting the pbx to NULL */
 	if (ast_channel_pbx(chan)) {
-		ast_log(LOG_WARNING, "Channel %s still has a PBX, requesting hangup for it\n", ast_channel_name(chan));
+		ast_debug(3, "Channel %s still has a PBX, requesting hangup for it\n", ast_channel_name(chan));
 		ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT);
 	} else {
 		ast_debug(3, "Hard hanging up channel %s\n", ast_channel_name(chan));
@@ -4298,42 +4271,51 @@ static inline void hangup_link_chan(struct rpt_link *l)
 /*!
  * \internal
  * \brief Final cleanup of link prior to node termination
+ * \return 0 if disconnected hangup, 1 if reconnect possible
  */
-static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
+static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
-	rpt_mutex_lock(&myrpt->lock);
-	__kickshort(myrpt);
-	rpt_mutex_unlock(&myrpt->lock);
+	int time = 20; /* Run periodic_process_link one last time */
+	if (l->chan) {
+		/* Not hungup */
+		periodic_process_link(myrpt, l, time); /* Send all queued text messages */
+		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
+	}
 
-	if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
+	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
-		if ((l->disced == RPT_LINK_DISCONNECT_NONE) && (!l->outbound)) {
-			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote)
-				l->disctime = 1;
-			else
-				l->disctime = DISC_TIME;
-			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
-			rpt_mutex_unlock(&myrpt->lock);
-			return;
-		}
+		if (l->disced == RPT_LINK_DISCONNECT_NONE) {
+			if (!l->outbound) {
+				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
+					/* NOt an allstar link node */
+					l->disctime = 1;
+				} else {
+					/* An allstar link node */
+					l->disctime = DISC_TIME;
+				}
+				rpt_mutex_lock(&myrpt->lock);
+				hangup_link_chan(l);
+				rpt_mutex_unlock(&myrpt->lock);
+				return 1;
+			}
 
-		if (l->retrytimer) {
-			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
-			rpt_mutex_unlock(&myrpt->lock);
-			return;
-		}
-		if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
-			rpt_mutex_lock(&myrpt->lock);
-			hangup_link_chan(l);
-			l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
-			l->retrytimer = RETRY_TIMER_MS;
-			l->elaptime = 0;
-			l->connecttime = ast_tv(0, 0); /* no longer connected */
-			l->thisconnected = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			return;
+			if (l->retrytimer) {
+				rpt_mutex_lock(&myrpt->lock);
+				hangup_link_chan(l);
+				rpt_mutex_unlock(&myrpt->lock);
+				return 1;
+			}
+			if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
+				rpt_mutex_lock(&myrpt->lock);
+				hangup_link_chan(l);
+				l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
+				l->retrytimer = RETRY_TIMER_MS;
+				l->elaptime = 0;
+				l->connecttime = ast_tv(0, 0); /* no longer connected */
+				l->thisconnected = 0;
+				rpt_mutex_unlock(&myrpt->lock);
+				return 1;
+			}
 		}
 	}
 
@@ -4343,7 +4325,6 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	if (!strcmp(myrpt->cmdnode, l->name)) {
 		myrpt->cmdnode[0] = 0;
 	}
-	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 
 	if (!l->hasconnected) {
@@ -4364,9 +4345,13 @@ static void remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	/* hang-up on call to device */
 	hangup_link_chan(l);
 	rpt_mutex_unlock(&myrpt->lock);
-
 	ast_hangup(l->pchan);
+	ast_audiohook_lock(&l->altaudio);
+	ast_audiohook_detach(&l->altaudio);
+	ast_audiohook_unlock(&l->altaudio);
+	ast_audiohook_destroy(&l->altaudio);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
+	return 0;
 }
 
 static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
@@ -4382,50 +4367,64 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 }
 
-/*! \retval -1 to exit and terminate the node, 0 to continue */
-static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *who, char *restrict myfirst)
+void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 {
-	struct rpt_link *l, *m;
+	struct ast_channel *who;
+	struct rpt_link *m;
+	int n = 0, ms = MSWAIT, myfirst = 0;
+	struct ast_channel *cs[2];
 	struct ast_frame wf = {
 		.frametype = AST_FRAME_CNG,
 		.src = __PRETTY_FUNCTION__,
 	};
-	struct ao2_iterator l_it, l_it2;
+	struct ao2_iterator l_it;
 	int totx;
-	/* @@@@@ LOCK @@@@@ */
-	rpt_mutex_lock(&myrpt->lock);
+	int remnomute, remrx;
+	struct timeval now;
+	struct timeval looptimestart;
 
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		int remnomute, remrx;
-		struct timeval now;
+	looptimestart = rpt_tvnow();
 
+	while (ms >= 0 && l->disced == RPT_LINK_DISCONNECT_NONE) {
+		ms = MSWAIT;
+		n = 0;
+		cs[n++] = l->pchan;
+		if (l->chan) {
+			cs[n++] = l->chan;
+		}
+		who = ast_waitfor_n(cs, n, &ms);
+		periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart));
+		if (!ms) {
+			/* No channels had activity before the timer expired,
+			 * so just continue to the next loop. */
+			continue;
+		}
 		if (l->disctime) {
 			/* We are disconnected but still need to read and discard frames */
 			if (who == l->pchan) {
 				struct ast_frame *f;
 
-				rpt_mutex_unlock(&myrpt->lock);
 				f = ast_read(l->pchan);
 				if (!f) {
 					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					return -1;
+					break;
 				}
 				ast_frfree(f);
-				return 0;
-			} else {
 				continue;
 			}
+			continue;
 		}
 
 		remrx = 0;
 		/* see if any other links are receiving */
-		RPT_LIST_TRAVERSE(myrpt->links, m, l_it2) {
+		rpt_mutex_lock(&myrpt->lock);
+		RPT_LIST_TRAVERSE(myrpt->links, m, l_it) {
 			/* if not the link we are currently processing, and not localonly count it */
 			if ((m != l) && (m->lastrx) && (m->mode < 2)) {
 				remrx = 1;
 			}
 		}
-		ao2_iterator_destroy(&l_it2);
+		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 
 		now = rpt_tvnow();
@@ -4447,8 +4446,9 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			if (altlink1(myrpt, l))
 				totx = 1;
 			l->wouldtx = totx;
-			if (l->mode != MODE_TRANSCEIVE)
+			if (l->mode != MODE_TRANSCEIVE) {
 				totx = 0;
+			}
 			if (l->phonemode == RPT_PHONE_MODE_NONE && l->chan && (l->lasttx != totx)) {
 				if (totx && !l->voterlink) {
 					if (l->link_newkey != RADIO_KEY_NOT_ALLOWED)
@@ -4465,17 +4465,18 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 			l->lasttx = totx;
 		}
 
-		rpt_mutex_lock(&myrpt->lock);
 		if (who == l->chan) { /* if it was a read from rx */
 			struct ast_frame *f;
-			rpt_mutex_unlock(&myrpt->lock);
 			f = ast_read(l->chan);
 			if (!f) {
 				ast_debug(3, "Failed to read frame on %s, must've hung up\n", ast_channel_name(l->chan));
-				remote_hangup_helper(myrpt, l);
-				ao2_ref(l, -1);
-				ao2_iterator_destroy(&l_it);
-				return 0;
+				/* If IAX disappears, keep running to attempt reconnect if possible */
+				if (remote_hangup_helper(myrpt, l)) {
+					/* A reconnect is possible */
+					continue;
+				}
+				/* A reconnect is not possible */
+				return;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				int ismuted, n1;
@@ -4521,32 +4522,29 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 								l->voxtotimer = 0;
 						}
 						if (l->lastrealrx || n1) {
-							if (!*myfirst) {
+							if (!myfirst) {
 								x = 0;
 								AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) x++;
 								for (; x < myrpt->p.simplexphonedelay; x++) {
 									f1 = ast_frdup(f);
 									if (!f1) {
-										ao2_ref(l, -1);
-										ao2_iterator_destroy(&l_it);
-										return 0;
+										continue; /* Shorten the delay if we fail one */
 									}
 									RPT_MUTE_FRAME(f1);
 									memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 									AST_LIST_INSERT_TAIL(&l->rxq, f1, frame_list);
 								}
-								*myfirst = 1;
+								myfirst = 1;
 							}
 							f1 = ast_frdup(f);
 							if (!f1) {
-								ao2_ref(l, -1);
-								ao2_iterator_destroy(&l_it);
-								return 0;
+								ast_frfree(f);
+								break;
 							}
 							memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 							AST_LIST_INSERT_TAIL(&l->rxq, f1, frame_list);
 						} else {
-							*myfirst = 0;
+							myfirst = 0;
 						}
 						x = 0;
 						AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) x++;
@@ -4638,25 +4636,22 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 				if (f->subclass.integer == AST_CONTROL_HANGUP) {
 					ast_frfree(f);
 					ast_debug(3, "Received hangup frame on %s\n", ast_channel_name(l->chan));
-					remote_hangup_helper(myrpt, l);
-					ao2_ref(l, -1);
-					ao2_iterator_destroy(&l_it);
-					return 0;
+					if (remote_hangup_helper(myrpt, l)) {
+						/* A reconnect is possible */
+						continue;
+					}
+					return;
 				}
 			}
 			ast_frfree(f);
-			ao2_ref(l, -1);
-			ao2_iterator_destroy(&l_it);
-			return 0;
+			continue;
 		} else if (who == l->pchan) {
 			struct ast_frame *f;
-			rpt_mutex_unlock(&myrpt->lock);
 			f = ast_read(l->pchan);
 			if (!f) {
+				/* This should never happen, but if it does we need to cleanup */
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
-				ao2_ref(l, -1);
-				ao2_iterator_destroy(&l_it);
-				return -1;
+				break;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				float fac = 1.0;
@@ -4685,36 +4680,36 @@ static inline int process_link_channels(struct rpt *myrpt, struct ast_channel *w
 					 * point, we'll set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info),
 					 * If this happens, we're passing voice frames and now sending AST_RADIO_KEY messages
 					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
-					 * Note: RADIO_KEY_NOT_ALLOWED is a case where clients use the presence of audio frames to
-					 * keyup the transmitter.  If not RADIO_KEY_NOT_ALLOWED, the links use control messages to key/unkey.
 					 *
-					 * This copies repeater rx audio from CONF when the repeater is receiving audio.
-					 * When the repeater stops receiving audio we continue to copy frames while transmitting
-					 * if we are NOT an altlink().
-					 *
-					 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
-					 * the repeater output including telemetry.
 					 */
 					ast_write(l->chan, f);
 					l->last_frame_sent = 1;
+				} else if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
+						   ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
+					/* If we are and alt link, copy audio frames when NOT transmitting, like a "normal" asterisk link.
+					 * If the repeater is not receiving (either remote or local), we use the audiohook to "whisper" any
+					 * repeater output frames into the l->pchan.
+					 */
+					ast_write(l->chan, f);
 				}
 			}
 			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
 				ast_frfree(f);
-				ao2_ref(l, -1);
-				ao2_iterator_destroy(&l_it);
-				return -1;
+				if (remote_hangup_helper(myrpt, l)) {
+					/* A reconnect is possible */
+					continue;
+				}
+				return;
 			}
 			ast_frfree(f);
-			ao2_ref(l, -1);
-			ao2_iterator_destroy(&l_it);
-			return 0;
+			continue;
 		}
+		continue;
 	}
-	ao2_iterator_destroy(&l_it);
-	rpt_mutex_unlock(&myrpt->lock);
-	return 0;
+	/* Link is done: Cleanup channels and link structure */
+	remote_hangup_helper(myrpt, l);
+	return;
 }
 
 static inline int monchannel_read(struct rpt *myrpt)
@@ -4745,22 +4740,18 @@ static inline int monchannel_read(struct rpt *myrpt)
 		/* go thru all the links */
 		rpt_mutex_lock(&myrpt->lock);
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			if (l->chan && altlink(myrpt, l) && (!l->lastrx) &&
+			/* IF we are an altlink() and the repeater is not receiving (aka we are in the tail time),
+			 * whisper the output audio onto said link.
+			 */
+			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
-				/* If we are an altlink():
-				 * This copies repeater tx audio from TXCONF when the repeater is not receiving audio,
-				 * yet still transmitting, allowing these client types to hear the local repeater output.
-				 *
-				 * An altlink is a DVSwitch, Echolink, or other type where the client wants to "hear"
-				 * the repeater output including telemetry.
-				 */
-				rpt_mutex_unlock(&myrpt->lock);
-				ast_write(l->chan, f);
-				rpt_mutex_lock(&myrpt->lock);
+				ast_audiohook_lock(&l->altaudio);
+				ast_audiohook_write_frame(&l->altaudio, AST_AUDIOHOOK_DIRECTION_READ, f);
+				ast_audiohook_unlock(&l->altaudio);
 			}
 		}
-		rpt_mutex_unlock(&myrpt->lock);
 		ao2_iterator_destroy(&l_it);
+		rpt_mutex_unlock(&myrpt->lock);
 	}
 	return hangup_frame_helper(myrpt->monchannel, "monchannel", f);
 }
@@ -5451,22 +5442,11 @@ static void *rpt(void *this)
 			rpt_update_boolean(myrpt, "RPT_AUTOPATCHUP", lastpatchup);
 		}
 
-		/* Reconnect */
-
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
-				ao2_ref(l, +1);					  /* prevent freeing while we finish up */
-				rpt_link_remove(myrpt->links, l); /* remove from queue */
+				l->disced = RPT_LINK_DISCONNECT;
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
-				rpt_mutex_unlock(&myrpt->lock);
-				/* hang-up on call to device */
-				if (l->chan)
-					ast_hangup(l->chan);
-				ast_hangup(l->pchan);
-				rpt_mutex_lock(&myrpt->lock);
-				/* re-start link traversal */
-				ao2_ref(l, -1); /* and drop the extra ref we're holding */
 				continue;
 			}
 		}
@@ -5517,15 +5497,6 @@ static void *rpt(void *this)
 			cs[n++] = myrpt->txchannel;
 		if (myrpt->localtxchannel != myrpt->txchannel)
 			cs[n++] = myrpt->localtxchannel;
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			if (!l->killme) {
-				if (l->chan) {
-					cs[n++] = l->chan;
-				}
-				cs[n++] = l->pchan;
-			}
-		}
-		ao2_iterator_destroy(&l_it);
 		if ((myrpt->topkeystate == 1) && ((t - myrpt->topkeytime) > TOPKEYWAIT)) {
 			myrpt->topkeystate = 2;
 			qsort(myrpt->topkey, TOPKEYN, sizeof(struct rpt_topkey), topcompar);
@@ -5548,7 +5519,6 @@ static void *rpt(void *this)
 		}
 		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		rpt_mutex_lock(&myrpt->lock);
-		periodic_process_links(myrpt, elap);
 		if (update_timers(myrpt, elap, totx)) {
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
@@ -5633,8 +5603,6 @@ static void *rpt(void *this)
 			if (monchannel_read(myrpt)) {
 				break;
 			}
-		} else if (process_link_channels(myrpt, who, &myfirst)) {
-			break;
 		}
 	}
 
@@ -5647,6 +5615,24 @@ static void *rpt(void *this)
 		/* wait for telem to be done */
 		usleep(50000);
 	}
+	rpt_mutex_lock(&myrpt->lock);
+	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
+		/* hang-up any running links */
+		l->disced = RPT_LINK_DISCONNECT;
+	}
+	ao2_iterator_destroy(&l_it);
+	while (ao2_container_count(myrpt->links) != 0) {
+		/* Wait for the links to close out */
+		rpt_mutex_unlock(&myrpt->lock);
+		usleep(60000);
+		rpt_mutex_lock(&myrpt->lock);
+	}
+	if (myrpt->xlink == 1)
+		myrpt->xlink = 2;
+	ao2_cleanup(myrpt->links);
+	myrpt->links = NULL;
+	rpt_mutex_unlock(&myrpt->lock);
+
 	rpt_hangup(myrpt, RPT_PCHAN);
 	if (myrpt->monchannel) {
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -5660,27 +5646,6 @@ static void *rpt(void *this)
 	rpt_hangup_rx_tx(myrpt);
 	rpt_frame_queue_free(&myrpt->frame_queue);
 
-	rpt_mutex_lock(&myrpt->lock);
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		ao2_ref(l, +1);					  /* prevent freeing while we finish up */
-		rpt_link_remove(myrpt->links, l); /* remove from queue */
-		/* hang-up on call to device */
-		if (l->chan)
-			ast_hangup(l->chan);
-		ast_hangup(l->pchan);
-		while (l->connect_in_progress) {
-			/* Wait for any connections to finish */
-			rpt_mutex_unlock(&myrpt->lock);
-			usleep(50000);
-			rpt_mutex_lock(&myrpt->lock);
-		}
-		ao2_ref(l, -1); /* and drop the extra ref we're holding */
-	}
-	ao2_iterator_destroy(&l_it);
-	if (myrpt->xlink == 1)
-		myrpt->xlink = 2;
-	rpt_mutex_unlock(&myrpt->lock);
-	ao2_cleanup(myrpt->links);
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	stop_outstream(myrpt);
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
@@ -6925,7 +6890,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_set_read_format(l->chan, ast_format_slin);
 		ast_set_write_format(l->chan, ast_format_slin);
 		myrpt->lastlinktime = rpt_tvnow();
-
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 		if (!cap) {
 			ast_log(LOG_ERROR, "Failed to alloc cap\n");
@@ -6965,6 +6929,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			}
 		}
 
+		ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
+		ast_audiohook_attach(l->pchan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		doconpgm(myrpt, l->name);
 		if ((phone_mode == RPT_PHONE_MODE_NONE) && (l->name[0] <= '9')) {
@@ -6988,24 +6955,21 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		 * Instead, we masquerade the channel here to force the old pointer to the channel
 		 * to become invalid. The old channel, now dead, can then get hung up by the
 		 * PBX thread as normal, while the new channel is what we insert into the list. */
-		chan = ast_channel_yank(chan);
-		if (!chan) {
-			/* l->chan still points to the original chan */
-			ast_log(LOG_ERROR, "Failed to masquerade channel %s\n", ast_channel_name(l->chan));
-			ao2_ref(l, -1);
-			return -1;
-		}
 		l->chan = chan; /* Update pointer to the masqueraded channel. The original channel is dead. */
 
 		/* insert at end of queue */
 		rpt_mutex_lock(&myrpt->lock);
 		rpt_link_add(myrpt->links, l); /* After putting the link in the link list, other threads can start using it */
-		ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
 		__kickshort(myrpt);
 		myrpt->lastlinktime = rpt_tvnow();
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
-		return -1; /* We can now safely return -1 to the PBX, as the old channel pre-masquerade is what will get killed off */
+		/* Service the link channel */
+		process_link_channel(myrpt, l);
+		/* call has ended, clean up */
+		ao2_ref(l, -1); /* and drop the ref we're holding */
+
+		return 0;
 	}
 	/* well, then it is a remote */
 	rpt_mutex_lock(&myrpt->lock);

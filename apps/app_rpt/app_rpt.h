@@ -2,6 +2,8 @@
 #define VERSION_MINOR 7
 #define VERSION_PATCH 1
 
+#include "asterisk/audiohook.h"
+
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
 	converted to use public dsp.h API.
 	Eventually, the app_rpt DSP could should be/will be removed and NATIVE_DSP will be assumed,
@@ -577,7 +579,6 @@ struct rpt_link {
 	rpt_bool killme:1;
 	rpt_bool dtmfed:1;
 	rpt_bool gott:1;
-	rpt_bool connect_in_progress:1;
 	enum rpt_link_disconnect disced:2; /* NOTE: bit-field is 2 bits => max value 3; keep enum values within range. */
 	long elaptime;
 	int disctime;
@@ -592,6 +593,7 @@ struct rpt_link {
 	struct timeval connecttime;
 	struct ast_channel *chan;	
 	struct ast_channel *pchan;
+	struct ast_audiohook altaudio;
 	struct ast_str *linklist;
 	time_t	linklistreceived;
 	int linklisttimer;
@@ -1131,6 +1133,14 @@ void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char
 
 void rpt_event_process(struct rpt *myrpt);
 void *rpt_call(void *this);
+
+/*!
+ * \brief Process link channel activity
+ * \param myrpt Pointer to rpt structure
+ * \param l Pointer to rpt_link structure
+ */
+
+void process_link_channel(struct rpt *myrpt, struct rpt_link *l);
 
 /*!
  * \brief Generates a command line completion list for rpt cmd third argument

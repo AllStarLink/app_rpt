@@ -307,6 +307,7 @@ void rssi_send(struct rpt *myrpt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* otherwise, send it to all of em */
+	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
@@ -316,6 +317,7 @@ void rssi_send(struct rpt *myrpt)
 			rpt_qwrite(l, &wf);
 		}
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_iterator_destroy(&l_it);
 }
 
@@ -626,12 +628,6 @@ void *rpt_link_connect(void *data)
 	l = ao2_callback(connect_data->myrpt->links, 0, link_find_by_name_cb, node);
 	/* if found */
 	if (l) {
-		if (l->connect_in_progress) {
-			rpt_mutex_unlock(&myrpt->lock);
-			ao2_ref(l, -1);
-			/* We are already running a connect thread.*/
-			goto cleanup;
-		}
 		/* if already in this mode, just ignore */
 		if ((l->mode == connect_data->mode) || (!l->chan)) {
 			rpt_mutex_unlock(&myrpt->lock);
@@ -696,7 +692,6 @@ void *rpt_link_connect(void *data)
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
-	l->connect_in_progress = 1;
 	l->mode = connect_data->mode;
 	l->outbound = 1;
 	l->thisconnected = 0;
@@ -724,7 +719,6 @@ void *rpt_link_connect(void *data)
 	tele = strchr(deststr, '/');
 	if (!tele) {
 		ast_log(LOG_WARNING, "link3:Dial number (%s) must be in format tech/number\n", deststr);
-		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -733,7 +727,6 @@ void *rpt_link_connect(void *data)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		ast_log(LOG_ERROR, "Failed to alloc cap\n");
-		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -758,7 +751,6 @@ void *rpt_link_connect(void *data)
 	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
 		donodelog_fmt(connect_data->myrpt, "LINKFAIL,%s/%s", deststr, tele);
-		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		ao2_ref(cap, -1);
 		goto cleanup;
@@ -769,7 +761,6 @@ void *rpt_link_connect(void *data)
 	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAXLink")) {
 		ao2_ref(cap, -1);
 		ast_hangup(l->chan);
-		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -779,10 +770,12 @@ void *rpt_link_connect(void *data)
 	if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
-		l->connect_in_progress = 0;
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
+	ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
+	ast_audiohook_attach(l->chan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {
 		init_linkmode(myrpt, l, LINKMODE_TLB);
@@ -801,11 +794,14 @@ void *rpt_link_connect(void *data)
 		l->retries = l->max_retries + 1;
 	}
 	l->rxlingertimer = RX_LINGER_TIME;
-	rpt_link_add(connect_data->myrpt->links, l);
-	__kickshort(connect_data->myrpt);
-	rpt_mutex_unlock(&connect_data->myrpt->lock);
-	l->connect_in_progress = 0;
-	ao2_ref(l, -1); /* Release our reference; container now owns it*/
+	rpt_link_add(myrpt->links, l);
+	__kickshort(myrpt);
+	rpt_mutex_unlock(&myrpt->lock);
+
+	/* Service the link channel */
+	process_link_channel(myrpt, l);
+	/* call has ended, clean up */
+	ao2_ref(l, -1);
 
 cleanup:
 	ast_free(connect_data->digitbuf);
