@@ -1338,7 +1338,6 @@ void *rpt_call(void *this)
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		myrpt->callmode = CALLMODE_DOWN;
 		return NULL;
 	}
@@ -2445,7 +2444,6 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
@@ -4867,7 +4865,6 @@ static void *rpt(void *this)
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_mutex_unlock(&myrpt->lock);
 		return NULL;
 	}
@@ -6892,7 +6889,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		myrpt->lastlinktime = rpt_tvnow();
 		cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 		if (!cap) {
-			ast_log(LOG_ERROR, "Failed to alloc cap\n");
 			ao2_ref(l, -1);
 			return -1;
 		}
@@ -7069,7 +7065,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		return -1;
 	}
 

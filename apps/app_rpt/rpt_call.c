@@ -113,7 +113,6 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		return;
 	}
 
