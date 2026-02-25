@@ -4524,8 +4524,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 								for (; x < myrpt->p.simplexphonedelay; x++) {
 									f1 = ast_frdup(f);
 									if (!f1) {
-										ast_frfree(f);
-										break;
+										continue; /* Shorten the delay if we fail one */
 									}
 									RPT_MUTE_FRAME(f1);
 									memset(&f1->frame_list, 0, sizeof(f1->frame_list));
