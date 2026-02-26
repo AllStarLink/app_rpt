@@ -71,8 +71,7 @@ typedef struct {
 
 /* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
 #define	MAXDTMF 32
-#define	MAXMACRO 2048
-#define	MAXNODES 500			  /* Maximum number of nodes allowed in the link list */
+#define MAXMACRO 2048
 #define	RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
 
 #define LINKLISTSHORTTIME 200
