@@ -854,7 +854,6 @@ void *rpt_link_connect(void *data)
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		ao2_ref(l, -1);
 		goto cleanup;
 	}

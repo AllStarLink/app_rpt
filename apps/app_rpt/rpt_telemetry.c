@@ -1313,7 +1313,6 @@ void *rpt_tele_thread(void *this)
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
-		ast_log(LOG_ERROR, "Failed to alloc cap\n");
 		rpt_mutex_lock(&myrpt->lock);
 		goto abort;
 	}
