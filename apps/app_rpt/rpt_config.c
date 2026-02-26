@@ -877,7 +877,17 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT_DEFAULT(voxrecover_ms, "voxrecover", VOX_RECOVER_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexpatchdelay, "simplexpatchdelay", SIMPLEX_PATCH_DELAY);
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexphonedelay, "simplexphonedelay", SIMPLEX_PHONE_DELAY);
-	RPT_CONFIG_VAR_DEFAULT(statpost_program, "statpost_program", STATPOST_PROGRAM);
+
+	/* configure how "L" messages are sent */
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(linkpost_max_message_len, "linkpost_max_message_len", 0, 0, 10000);
+	if (rpt_vars[n].p.linkpost_max_message_len && (rpt_vars[n].p.linkpost_max_message_len < 500)) {
+		/* if message truncation enabled, set minimum */
+		rpt_vars[n].p.linkpost_max_message_len = 500;
+	}
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(linkpost_time, "linkpost_time", 60, 10, 600);
+
+	/* configure how we interact with "stats.allstarlink.org" */
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(statpost_time, "statpost_time", 60, 30, 600);
 	RPT_CONFIG_VAR(statpost_url, "statpost_url");
 
 	rpt_vars[n].p.tailmessagetime = retrieve_astcfgint(&rpt_vars[n], cat, "tailmessagetime", 0, 200000000, 0);

@@ -74,9 +74,8 @@ typedef struct {
 #define	MAXMACRO 2048
 #define	MAXNODES 500			  /* Maximum number of nodes allowed in the link list */
 #define	RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
-#define	LINKLISTTIME 10000
-#define	LINKLISTSHORTTIME 200
-#define	LINKPOSTTIME 30000
+
+#define LINKLISTSHORTTIME 200
 #define LINKPOSTSHORTTIME 200
 #define	KEYTIMERTIME 250
 #define	MACROTIME 100
@@ -206,8 +205,6 @@ typedef struct {
 #define	SIMPLEX_PHONE_DELAY 25
 
 #define RX_LINGER_TIME 50
-
-#define	STATPOST_PROGRAM "/usr/bin/wget,-q,--output-document=/dev/null,--no-check-certificate"
 
 #define	ALLOW_LOCAL_CHANNELS
 
@@ -863,8 +860,10 @@ struct rpt {
 		int simplexpatchdelay;
 		int simplexphonedelay;
 		char telemdefault;
-		const char *statpost_program;
+		int linkpost_time;
+		int linkpost_max_message_len;
 		const char *statpost_url;
+		int statpost_time;
 		enum rpt_linkmode linkmode[10];
 		char linkmodedynamic[10];
 		const char *locallist[16];

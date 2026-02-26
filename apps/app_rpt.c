@@ -3305,7 +3305,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			return;
 		}
 		init_text_frame(&lf, __PRETTY_FUNCTION__);
-		l->linklisttimer = LINKLISTTIME;
+		l->linklisttimer = myrpt->p.linkpost_time * 1000;
 		ast_str_set(&lstr, 0, "%s", "L ");
 		rpt_mutex_lock(&myrpt->lock);
 		__mklinklist(myrpt, l, &lstr, 0);
@@ -3449,39 +3449,21 @@ static inline void do_key_post(struct rpt *myrpt)
  */
 static inline int do_link_post(struct rpt *myrpt)
 {
-	int nstr;
-	char lst;
 	struct ast_str *str;
 	time_t now;
-	struct rpt_link *l;
-	struct ao2_iterator l_it;
 
-	myrpt->linkposttimer = LINKPOSTTIME;
+	if (!myrpt->p.statpost_url) {
+		return 0;
+	}
+
+	myrpt->linkposttimer = myrpt->p.statpost_time * 1000;
 
 	str = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!str) {
 		return -1;
 	}
-	nstr = 0;
 	ast_str_set(&str, 0, "%s", "&nodes=");
-	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		/* if is not a real link, ignore it */
-		if (l->name[0] == '0') {
-			continue;
-		}
-		lst = 'T';
-		if (l->mode == MODE_MONITOR)
-			lst = 'R';
-		if (l->mode == MODE_LOCAL_MONITOR)
-			lst = 'L';
-		if (!l->thisconnected)
-			lst = 'C';
-		if (nstr)
-			ast_str_append(&str, 0, "%s", ",");
-		ast_str_append(&str, 0, "%c%s", lst, l->name);
-		nstr = 1;
-	}
-	ao2_iterator_destroy(&l_it);
+	__mklinklist(myrpt, NULL, &str, USE_FORMAT_RPT_LINKPOST);
 	time(&now);
 
 	ast_str_append(&str, 0,

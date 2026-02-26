@@ -1575,7 +1575,7 @@ treataslocal:
 			goto abort;
 		}
 		/* get all the nodes */
-		n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
+		n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
@@ -2414,7 +2414,7 @@ treataslocal:
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* get all the nodes */
-		n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
+		n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		strs = ast_malloc(n * sizeof(char *));
 		if (!strs) {
@@ -3153,7 +3153,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			rpt_mutex_lock(&myrpt->lock);
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* get all the nodes */
-			n = __mklinklist(myrpt, NULL, &lbuf, 0) + 1;
+			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
 			rpt_mutex_unlock(&myrpt->lock);
 			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
