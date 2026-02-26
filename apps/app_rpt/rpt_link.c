@@ -616,8 +616,6 @@ static int link_set_list_timer_cb(void *obj, void *arg, int flags)
 
 void __kickshort(struct rpt *myrpt)
 {
-	/* Go through all links and set their timers to short time. */
-	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_set_list_timer_cb, NULL);
 	if (myrpt->linkposttimer > LINKPOSTSHORTTIME) {
 		myrpt->linkposttimer = LINKPOSTSHORTTIME;
 	}
@@ -923,6 +921,7 @@ void *rpt_link_connect(void *data)
 	l->rxlingertimer = RX_LINGER_TIME;
 	rpt_link_add(myrpt->links, l);
 	__kickshort(myrpt);
+	l->linklisttimer = LINKLISTSHORTTIME;
 	rpt_mutex_unlock(&myrpt->lock);
 
 	/* Service the link channel */

@@ -4581,6 +4581,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					char lconnected = l->connected;
 
 					__kickshort(myrpt);
+					l->linklisttimer = LINKLISTSHORTTIME;
 					myrpt->rxlingertimer = RX_LINGER_TIME;
 					l->connected = 1;
 					l->hasconnected = 1;
@@ -6939,6 +6940,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->lock);
 		rpt_link_add(myrpt->links, l); /* After putting the link in the link list, other threads can start using it */
 		__kickshort(myrpt);
+		l->linklisttimer = LINKLISTSHORTTIME;
 		myrpt->lastlinktime = rpt_tvnow();
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
