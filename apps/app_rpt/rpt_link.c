@@ -609,13 +609,14 @@ static int link_set_list_timer_cb(void *obj, void *arg, int flags)
 	}
 	/* if found matching string */
 	if (link->linklisttimer > LINKLISTSHORTTIME) {
-		link->linklisttimer = LINKLISTSHORTTIME;
+		link->linklisttimer = LINKLISTSHORTTIME + (rand() % 400); /* add 0 - 400 random to "de-sync" linklist messages */
 	}
 	return CMP_MATCH;
 }
 
 void __kickshort(struct rpt *myrpt)
 {
+	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_set_list_timer_cb, NULL);
 	if (myrpt->linkposttimer > LINKPOSTSHORTTIME) {
 		myrpt->linkposttimer = LINKPOSTSHORTTIME;
 	}
@@ -921,7 +922,6 @@ void *rpt_link_connect(void *data)
 	l->rxlingertimer = RX_LINGER_TIME;
 	rpt_link_add(myrpt->links, l);
 	__kickshort(myrpt);
-	l->linklisttimer = LINKLISTSHORTTIME;
 	rpt_mutex_unlock(&myrpt->lock);
 
 	/* Service the link channel */
