@@ -609,7 +609,7 @@ static int link_set_list_timer_cb(void *obj, void *arg, int flags)
 	}
 	/* if found matching string */
 	if (link->linklisttimer > LINKLISTSHORTTIME) {
-		link->linklisttimer = LINKLISTSHORTTIME + (rand() % 400); /* add 0 - 400 random to "de-sync" linklist messages */
+		link->linklisttimer = LINKLISTSHORTTIME + (ast_random() % 400); /* add 0 - 400 random to "de-sync" linklist messages */
 	}
 	return CMP_MATCH;
 }
