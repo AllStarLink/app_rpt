@@ -6695,6 +6695,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			ast_log(LOG_WARNING, "Return Context Invalid, call will return to default|s\n");
 		}
 
+		(void) timeout; /* Avoid unused variable warning for now */
 		/* we are using masq_park here to protect * from touching the channel once we park it.  If the channel comes out of
 		   timeout before we are done announcing and the channel is messed with, Kablooeee.  So we use Masq to prevent this.  */
 
