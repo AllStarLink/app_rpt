@@ -609,14 +609,13 @@ static int link_set_list_timer_cb(void *obj, void *arg, int flags)
 	}
 	/* if found matching string */
 	if (link->linklisttimer > LINKLISTSHORTTIME) {
-		link->linklisttimer = LINKLISTSHORTTIME;
+		link->linklisttimer = LINKLISTSHORTTIME + (ast_random() % 100); /* add 0 - 100 random to "de-sync" linklist messages */
 	}
 	return CMP_MATCH;
 }
 
 void __kickshort(struct rpt *myrpt)
 {
-	/* Go through all links and set their timers to short time. */
 	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_set_list_timer_cb, NULL);
 	if (myrpt->linkposttimer > LINKPOSTSHORTTIME) {
 		myrpt->linkposttimer = LINKPOSTSHORTTIME;

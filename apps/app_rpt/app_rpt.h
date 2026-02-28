@@ -74,7 +74,7 @@ typedef struct {
 #define MAXMACRO 2048
 #define	RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
 
-#define LINKLISTSHORTTIME 200
+#define LINKLISTSHORTTIME 150
 #define LINKPOSTSHORTTIME 200
 #define	KEYTIMERTIME 250
 #define	MACROTIME 100
