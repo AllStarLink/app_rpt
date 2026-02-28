@@ -319,6 +319,7 @@
 #include "app_rpt/rpt_utils.h"
 #include "app_rpt/rpt_daq.h"
 #include "app_rpt/rpt_cli.h"
+#include "app_rpt/rpt_dialplan_functions.h"
 #include "app_rpt/rpt_bridging.h"
 #include "app_rpt/rpt_call.h"
 #include "app_rpt/rpt_capabilities.h"
@@ -7658,6 +7659,7 @@ static int unload_module(void)
 	}
 
 	res = ast_unregister_application(app);
+	res |= rpt_dialplan_funcs_unload();
 	res |= rpt_cleanup_telemetry();
 
 #ifdef _MDC_ENCODE_H_
@@ -7672,7 +7674,7 @@ static int unload_module(void)
 
 static int load_module(void)
 {
-	int res;
+	int res = 0;
 
 	nullfd = open("/dev/null", O_RDWR);
 	if (nullfd == -1) {
@@ -7681,8 +7683,8 @@ static int load_module(void)
 	}
 	ast_pthread_create(&rpt_master_thread, NULL, rpt_master, NULL);
 
-	rpt_cli_load();
-	res = 0;
+	res |= rpt_cli_load();
+	res |= rpt_dialplan_funcs_load();
 	res |= rpt_manager_load();
 	res |= ast_register_application_xml(app, rpt_exec);
 	res |= rpt_init_telemetry();
