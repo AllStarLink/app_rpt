@@ -66,16 +66,17 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
 	char *str = arg;
-	struct ast_frame wf;
-
-	init_text_frame(&wf, __PRETTY_FUNCTION__);
 
 	if (link->name[0] == '0') {
 		return 0;
 	}
 	if (link->chan) {
-		wf.data.ptr = str;
-		wf.datalen = strlen(str) + 1;
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_TEXT,
+			.data.ptr = str,
+			.datalen = strlen(str) + 1,
+			.src = __PRETTY_FUNCTION__,
+		};
 		rpt_qwrite(link, &wf);
 	}
 	return 0;
