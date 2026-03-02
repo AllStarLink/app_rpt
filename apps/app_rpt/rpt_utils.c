@@ -285,10 +285,3 @@ void update_timer(int *timer_ptr, int elap, int end_val)
 		*timer_ptr = end_val;
 	}
 }
-
-void init_text_frame(struct ast_frame *wf, const char *src)
-{
-	memset(wf, 0, sizeof(struct ast_frame));
-	wf->frametype = AST_FRAME_TEXT;
-	wf->src = src;
-}

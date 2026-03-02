@@ -97,6 +97,3 @@ int macro_append(struct rpt *myrpt, const char *cmd);
  * to indicate some code has been executed (a oneshot).
  */
 void update_timer(int *timer_ptr, int elap, int end_val);
-
-/*! \brief Initialize a text frame */
-void init_text_frame(struct ast_frame *wf, const char *src);

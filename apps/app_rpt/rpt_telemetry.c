@@ -625,14 +625,16 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 {
 	int len;
 	char *str;
-	struct ast_frame wf;
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.src = __PRETTY_FUNCTION__,
+	};
 
 	len = ast_asprintf(&str, "T %s %s", myrpt->name, cmd);
 	if (len < 0) {
 		return;
 	}
 
-	init_text_frame(&wf, "send_tele_link");
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
 	/* give it to everyone */
