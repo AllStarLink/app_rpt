@@ -3364,6 +3364,8 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 				l->disced = RPT_LINK_DISCONNECT;
 			} else {
 				ast_debug(1, "Connection taking to long, resetting retry timer");
+				if (l->chan)
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 				l->retrytimer = RETRY_TIMER_MS;
 			}
 			return;
