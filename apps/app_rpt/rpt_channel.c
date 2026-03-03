@@ -405,12 +405,14 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 
 int send_usb_txt(struct rpt *myrpt, char *txt)
 {
-	struct ast_frame wf;
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.datalen = strlen(txt) + 1,
+		.data.ptr = txt,
+		.src = __PRETTY_FUNCTION__,
+	};
 
 	ast_debug(1, "send_usb_txt %s\n", txt);
-	init_text_frame(&wf, "send_usb_txt");
-	wf.datalen = strlen(txt) + 1;
-	wf.data.ptr = txt;
 	ast_write(myrpt->txchannel, &wf);
 	return 0;
 }
@@ -429,16 +431,18 @@ static int rpt_qwrite_cb(void *obj, void *arg, int flags)
 
 int send_link_pl(struct rpt *myrpt, const char *txt)
 {
-	struct ast_frame wf;
 	char str[300];
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.src = __PRETTY_FUNCTION__,
+	};
 
 	if (!strcmp(myrpt->p.ctgroup, "0"))
 		return 0;
 	snprintf(str, sizeof(str), "C %s %s %s", myrpt->name, myrpt->p.ctgroup, txt);
-	ast_debug(1, "send_link_pl %s\n", str);
-	init_text_frame(&wf, "send_link_pl");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
+	ast_debug(1, "send_link_pl %s\n", str);
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_qwrite_cb, &wf);
 	rpt_mutex_unlock(&myrpt->lock);

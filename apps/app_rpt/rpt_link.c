@@ -300,10 +300,13 @@ void rssi_send(struct rpt *myrpt)
 {
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
-	struct ast_frame wf;
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.src = __PRETTY_FUNCTION__,
+	};
 	char str[200];
+
 	sprintf(str, "R %i", myrpt->rxrssi);
-	init_text_frame(&wf, "rssi_send");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* otherwise, send it to all of em */
@@ -336,12 +339,15 @@ static int link_qwrite_cb(void *obj, void *arg, int flags)
 void send_link_dtmf(struct rpt *myrpt, char c)
 {
 	char str[300];
-	struct ast_frame wf;
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.src = __PRETTY_FUNCTION__,
+	};
+
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 
 	snprintf(str, sizeof(str), "D %s %s %d %c", myrpt->cmdnode, myrpt->name, ++(myrpt->dtmfidx), c);
-	init_text_frame(&wf, "send_link_dtmf");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* first, see if our dude is there */
@@ -367,7 +373,10 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 void send_link_keyquery(struct rpt *myrpt)
 {
 	char str[300];
-	struct ast_frame wf;
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.src = __PRETTY_FUNCTION__,
+	};
 
 	rpt_mutex_lock(&myrpt->lock);
 	memset(myrpt->topkey, 0, sizeof(myrpt->topkey));
@@ -375,7 +384,6 @@ void send_link_keyquery(struct rpt *myrpt)
 	time(&myrpt->topkeytime);
 	rpt_mutex_unlock(&myrpt->lock);
 	snprintf(str, sizeof(str), "K? * %s 0 0", myrpt->name);
-	init_text_frame(&wf, "send_link_keyquery");
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* give it to everyone */

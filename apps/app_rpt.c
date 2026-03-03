@@ -1834,11 +1834,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	 */
 	char tmp1[RPT_TMP_SZ + 1], cmd[RPT_CMD_SZ + 1] = "", dest[RPT_DEST_SZ + 1], src[RPT_SRC_SZ + 1], c;
 	int i, seq, res, ts, rest;
-	struct ast_frame wf;
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.data.ptr = str,
+		.datalen = strlen(str) + 1,
+		.src = __PRETTY_FUNCTION__,
+	};
 
-	init_text_frame(&wf, __PRETTY_FUNCTION__);
-	wf.datalen = strlen(str) + 1;
-	wf.data.ptr = str;
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(str, DISCSTR)) {
@@ -3298,20 +3300,23 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	update_timer(&l->linklisttimer, elap, 0);
 
 	if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
-		struct ast_frame lf;
 		struct ast_str *lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
 			return;
 		}
-		init_text_frame(&lf, __PRETTY_FUNCTION__);
 		l->linklisttimer = myrpt->p.linkpost_time * 1000;
 		ast_str_set(&lstr, 0, "%s", "L ");
 		rpt_mutex_lock(&myrpt->lock);
 		__mklinklist(myrpt, l, &lstr, 0);
 		rpt_mutex_unlock(&myrpt->lock);
 		if (l->chan) {
-			lf.datalen = ast_str_strlen(lstr) + 1;
-			lf.data.ptr = ast_str_buffer(lstr);
+			struct ast_frame lf = {
+				.frametype = AST_FRAME_TEXT,
+				.datalen = ast_str_strlen(lstr) + 1,
+				.data.ptr = ast_str_buffer(lstr),
+				.src = __PRETTY_FUNCTION__,
+			};
+
 			rpt_qwrite(l, &lf);
 			ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
 		}
@@ -4101,14 +4106,17 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		}
 		/* if is a Voter device */
 		if (CHAN_TECH(myrpt->rxchannel, "voter")) {
-			struct ast_frame wf;
 			char str[200];
 
 			if (!strcmp(f->data.ptr, "ENDPAGE")) {
 				myrpt->paging = ast_tv(0, 0);
 			} else {
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_TEXT,
+					.src = __PRETTY_FUNCTION__,
+				};
+
 				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
-				init_text_frame(&wf, "voter_text_send");
 				wf.datalen = strlen(str) + 1;
 				wf.data.ptr = str;
 				/* otherwise, send it to all of em */

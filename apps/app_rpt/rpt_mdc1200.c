@@ -112,7 +112,10 @@ void mdc1200_notify(struct rpt *myrpt, char *fromnode, char *data)
 
 void mdc1200_send(struct rpt *myrpt, char *data)
 {
-	struct ast_frame wf;
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.src = __PRETTY_FUNCTION__,
+	};
 	char str[200];
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
@@ -121,7 +124,6 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 		return;
 
 	sprintf(str, "I %s %s", myrpt->name, data);
-	init_text_frame(&wf, "mdc1200_send");
 	wf.data.ptr = str;
 	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 
