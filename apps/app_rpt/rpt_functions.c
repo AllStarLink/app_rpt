@@ -71,7 +71,13 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
 		return 0;
 	}
 	if (link->chan) {
-		ast_sendtext(link->chan, str);
+		struct ast_frame wf = {
+			.frametype = AST_FRAME_TEXT,
+			.data.ptr = str,
+			.datalen = strlen(str) + 1,
+			.src = __PRETTY_FUNCTION__,
+		};
+		rpt_qwrite(link, &wf);
 	}
 	return 0;
 }
