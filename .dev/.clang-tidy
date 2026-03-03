@@ -1,0 +1,10 @@
+Checks: '-*,readability-*'
+CheckOptions:
+ # Minimum lengths
+ - key: readability-identifier-length.MinimumVariableNameLength
+   value: '2'
+ - key: readability-identifier-length.MinimumParameterNameLength
+   value: '3'
+ - key: readability-identifier-length.MinimumMemberNameLength
+   value: '3'
+
