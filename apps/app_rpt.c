@@ -1839,6 +1839,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		.datalen = strlen(str) + 1,
 		.src = __PRETTY_FUNCTION__,
 	};
+
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(str, DISCSTR)) {
@@ -3314,6 +3315,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 				.data.ptr = ast_str_buffer(lstr),
 				.src = __PRETTY_FUNCTION__,
 			};
+
 			rpt_qwrite(l, &lf);
 			ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
 		}
@@ -4112,6 +4114,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 					.frametype = AST_FRAME_TEXT,
 					.src = __PRETTY_FUNCTION__,
 				};
+
 				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
 				wf.datalen = strlen(str) + 1;
 				wf.data.ptr = str;

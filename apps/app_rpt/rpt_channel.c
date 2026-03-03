@@ -411,6 +411,7 @@ int send_usb_txt(struct rpt *myrpt, char *txt)
 		.data.ptr = txt,
 		.src = __PRETTY_FUNCTION__,
 	};
+
 	ast_debug(1, "send_usb_txt %s\n", txt);
 	ast_write(myrpt->txchannel, &wf);
 	return 0;
