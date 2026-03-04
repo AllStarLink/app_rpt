@@ -21,9 +21,11 @@
 /*! \brief Disable CDR for a call */
 int rpt_disable_cdr(struct ast_channel *chan);
 
-int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc, const char *callerid);
+int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data,
+	const char *desc, const char *callerid, const char *node);
 
-int rpt_make_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc, const char *callerid);
+int rpt_make_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc,
+	const char *callerid, const char *node);
 
 /*! \brief Routine to forward a "call" from one channel to another */
 void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom);

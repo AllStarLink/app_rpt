@@ -226,7 +226,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	}
 
 	if (!IS_LOCAL_NAME(tech)) {
-		rpt_make_call(chan, device, RPT_DIAL_DURATION, tech, rpt_chan_app(chantype, flags), rpt_chan_app_data(chantype), myrpt->name);
+		rpt_make_call(chan, device, RPT_DIAL_DURATION, tech, rpt_chan_app(chantype, flags), rpt_chan_app_data(chantype), myrpt->name, "");
 		if (ast_channel_state(chan) != AST_STATE_UP) {
 			ast_log(LOG_ERROR, "Requested channel %s not up?\n", ast_channel_name(chan));
 			ast_hangup(chan);
