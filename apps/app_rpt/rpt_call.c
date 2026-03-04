@@ -88,9 +88,10 @@ int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, cons
 	ast_channel_appl_set(chan, "Rpt");
 	ast_channel_data_set(chan, data);
 
-	/* Set connected to actually set outgoing Caller ID - ast_set_callerid has no effect! */
+	/* Set connected to actually set outgoing Caller ID - ast_set_callerid has no effect on outbound! */
 	ast_channel_connected(chan)->id.number.valid = 1;
 	ast_channel_connected(chan)->id.number.str = ast_strdup(callerid);
+	/* Set the callerid to the called node for visibility on outbound call. */
 	ast_set_callerid(chan, node, NULL, NULL);
 
 	ast_debug(1, "rpt (%s) initiating call to %s/%s on %s\n", data, driver, addr, ast_channel_name(chan));
