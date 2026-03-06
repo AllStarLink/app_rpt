@@ -961,11 +961,10 @@ static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel,
 		donodelog_fmt(myrpt, "TELEMETRY,%s,STATS_TIME", myrpt->name);
 		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY, TELEM_TIME_EXTN);
 		if (context) {
-			if (rpt_telem_datastore(mychannel, t1) < 0) {
+			if (rpt_telem_datastore(mychannel, t1) == 0) {
+				rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
 				return;
-			}
-			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
-			return;
+			} /* If the datastore fails, just use the internal saytime */
 		}
 
 		rpt_say_time(mychannel, t1, myrpt->p.timezone);
@@ -2571,12 +2570,10 @@ treataslocal:
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s", myrpt->name, mytele->mode == STATS_TIME ? "STATS_TIME" : "STATS_TIME_LOCAL");
 		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY, TELEM_TIME_EXTN);
 		if (context) {
-			if (rpt_telem_datastore(mychannel, time(NULL)) < 0) {
-				imdone = 1;
+			if (rpt_telem_datastore(mychannel, time(NULL)) == 0) {
+				rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
 				break;
-			}
-			rpt_do_dialplan(mychannel, TELEM_TIME_EXTN, context);
-			break;
+			} /* If the datastore fails, just use the internal saytime */
 		}
 		rpt_say_time(mychannel, time(NULL), myrpt->p.timezone);
 		imdone = 1;
