@@ -17,8 +17,8 @@ reviews:
   finishing_touches:
     custom:
       - name: "Correct formatting issues"
-        instructions:|
-          Review the changed source files for variable definitions and confirm 1 space following the 
+        instructions: ->
+          Review the changed source files for variable definitions and confirm 1 blank line following the 
           variable definitions and the first line of code.
 
 code_generation:
@@ -29,3 +29,4 @@ code_generation:
         instructions: Use Asterisk style docstrings with Args and Returns sections in the QT format.
 chat:
   art: false
+
