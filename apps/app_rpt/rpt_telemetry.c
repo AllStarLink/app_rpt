@@ -188,14 +188,14 @@ static void rpt_say_time(struct ast_channel *mychannel, time_t t, const char *ti
 /*!
  * \brief Execute dialplan on conference conference
  */
-static void rpt_do_dialplan(struct ast_channel *dpchannel, const char *exten, const char *context)
+static int rpt_do_dialplan(struct ast_channel *dpchannel, const char *exten, const char *context)
 {
 	size_t size = strlen(context) + strlen(exten) + sizeof(",,1");
 	char *sub_location = ast_alloca(size);
 
 	rpt_disable_cdr(dpchannel);
 	snprintf(sub_location, size, "%s,%s,1", context, exten);
-	ast_app_run_sub(NULL, dpchannel, sub_location, NULL, 0);
+	return ast_app_run_sub(NULL, dpchannel, sub_location, NULL, 0);
 }
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink)
@@ -1396,7 +1396,7 @@ void *rpt_tele_thread(void *this)
 		context = rpt_telem_extension(mychannel, myrpt->p.telemetry, TELEMETRY, TELEM_TAIL_FILE_EXTN);
 		if (context) {
 			donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG, Extension %s, Context %s", myrpt->name, TELEM_TAIL_FILE_EXTN, context);
-			rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, context);
+			res = rpt_do_dialplan(mychannel, TELEM_TAIL_FILE_EXTN, context);
 		} else if (myrpt->p.tailmessages[0]) {
 			donodelog_fmt(myrpt, "TELEMETRY,%s,TAILMSG,%s", myrpt->name, myrpt->p.tailmessages[myrpt->tailmessagen]);
 			res = ast_streamfile(mychannel, myrpt->p.tailmessages[myrpt->tailmessagen], ast_channel_language(mychannel));
