@@ -14,12 +14,6 @@ reviews:
     github-checks:
       enabled: true
       timeout_ms: 100000
-  finishing_touches:
-    custom:
-      - name: "Correct formatting issues"
-        instructions: ->
-          Review the changed source files for variable definitions and confirm 1 space following the 
-          variable definitions and the first line of code.
 
 code_generation:
   docstrings:
