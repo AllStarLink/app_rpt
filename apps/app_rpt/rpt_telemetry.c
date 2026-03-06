@@ -193,10 +193,6 @@ static void rpt_do_dialplan(struct ast_channel *dpchannel, const char *exten, co
 	size_t size = strlen(context) + strlen(exten) + sizeof(",,1");
 	char *sub_location = ast_alloca(size);
 
-	if (!sub_location) {
-		ast_log(LOG_ERROR, "Failed to allocate subroutine location for %s@%s\n", exten, context);
-		return;
-	}
 	rpt_disable_cdr(dpchannel);
 	snprintf(sub_location, size, "%s,%s,1", context, exten);
 	ast_app_run_sub(NULL, dpchannel, sub_location, NULL, 0);
