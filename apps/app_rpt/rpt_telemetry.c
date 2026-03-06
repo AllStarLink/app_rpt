@@ -1,7 +1,6 @@
 
 #include "asterisk.h"
 
-#include <asterisk/utils.h>
 #include <search.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -192,7 +191,7 @@ static void rpt_say_time(struct ast_channel *mychannel, time_t t, const char *ti
 static void rpt_do_dialplan(struct ast_channel *dpchannel, const char *exten, const char *context)
 {
 	size_t size = strlen(context) + strlen(exten) + sizeof(",,1");
-	char *sub_location = ast_malloc(size);
+	char *sub_location = ast_alloca(size);
 
 	if (!sub_location) {
 		ast_log(LOG_ERROR, "Failed to allocate subroutine location for %s@%s\n", exten, context);
@@ -201,7 +200,6 @@ static void rpt_do_dialplan(struct ast_channel *dpchannel, const char *exten, co
 	rpt_disable_cdr(dpchannel);
 	snprintf(sub_location, size, "%s,%s,1", context, exten);
 	ast_app_run_sub(NULL, dpchannel, sub_location, NULL, 0);
-	ast_free(sub_location);
 }
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink)
@@ -829,7 +827,6 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 /*! \brief Processes various telemetry commands that are in the myrpt structure
  * Used extensively when links are built or torn down and other events are processed
  * by the rpt_master threads.
- * \retval 1 if PBX process handled telemetry command, 0 if not.
  */
 static void handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *varcmd)
 {
