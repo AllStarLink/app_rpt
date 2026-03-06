@@ -17,7 +17,7 @@ reviews:
   finishing_touches:
     custom:
       - name: "Correct formatting issues"
-        instructions:|
+        instructions: ->
           Review the changed source files for variable definitions and confirm 1 space following the 
           variable definitions and the first line of code.
 
