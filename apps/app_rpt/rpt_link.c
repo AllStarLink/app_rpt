@@ -519,6 +519,10 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 			/* add the adjacent node */
 			ast_str_append(buf, 0, "%s%c%s", sep, mode, l->name);
 
+			if (flags & USE_FORMAT_RPT_LINKPOST) {
+				continue;
+			}
+
 			/* and append any nodes linked to the adjacent node */
 			str = ast_str_buffer(l->linklist);
 			len = ast_str_strlen(l->linklist);
@@ -557,10 +561,6 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 					break;
 				}
 			}
-		}
-
-		if (flags & USE_FORMAT_RPT_LINKPOST) {
-			continue;
 		}
 
 		if (mode == 'T') {

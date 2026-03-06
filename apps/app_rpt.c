@@ -3307,7 +3307,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		l->linklisttimer = myrpt->p.linkpost_time * 1000;
 		ast_str_set(&lstr, 0, "%s", "L ");
 		rpt_mutex_lock(&myrpt->lock);
-		__mklinklist(myrpt, l, &lstr, 0);
+		__mklinklist(myrpt, l, &lstr, USE_FORMAT_RPT_LINK);
 		rpt_mutex_unlock(&myrpt->lock);
 		if (l->chan) {
 			struct ast_frame lf = {
