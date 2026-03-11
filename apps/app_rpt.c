@@ -2485,7 +2485,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	if (found) {
 		ast_log(LOG_WARNING, "attempt_reconnect: another link for node %s exists, not reconnecting\n", l->name);
 		ao2_ref(found, -1);
-		ao2_ref(l, -1);  /* drop the extra ref we're holding */
+		ao2_ref(l, -1); /* drop the extra ref we're holding */
 		return NULL;
 	}
 
@@ -2499,7 +2499,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
-	ao2_ref(l, -1); /* and drop the extra ref we're holding */
+	ao2_ref(l, -1); 					  /* and drop the extra ref we're holding */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 	return NULL;
