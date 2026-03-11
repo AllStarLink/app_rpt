@@ -2485,11 +2485,8 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	if (found) {
 		ast_log(LOG_WARNING, "attempt_reconnect: another link for node %s exists, not reconnecting\n", l->name);
 		ao2_ref(found, -1);
-		ao2_ref(l, -1); /* drop the extra ref we're holding */
-		return NULL;
-	}
-
-	if (l->chan) {
+		l->disced = RPT_LINK_DISCONNECT_SILENT;
+	} else if (l->chan) {
 		rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name);
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
