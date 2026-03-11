@@ -2421,6 +2421,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
+	struct rpt_link *found;
 
 	ast_debug(1, "Attempting Reconnect");
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
@@ -2479,6 +2480,15 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	ao2_ref(cap, -1);
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
 		ast_frfree(f1);
+	/* The link is not on the list, make sure no other links exist for this node since it was removed. */
+	found = ao2_find(myrpt->links, l->name, 0);
+	if (found) {
+		ast_log(LOG_WARNING, "attempt_reconnect: another link for node %s exists, not reconnecting\n", l->name);
+		ao2_ref(found, -1);
+		ao2_ref(l, -1);  /* drop the extra ref we're holding */
+		return NULL;
+	}
+
 	if (l->chan) {
 		rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name);
 	} else {
@@ -2489,7 +2499,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	rpt_link_add(myrpt->links, l); /* put back in queue */
-	ao2_ref(l, -1);				   /* and drop the extra ref we're holding */
+	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 	return NULL;
@@ -6817,7 +6827,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_mutex_lock(&myrpt->lock);
 			/* try to find this one in queue */
 			l = ao2_find(myrpt->links, b1, 0);
-			/* if found */
+			/* if found we already have a connection, do not allow to connect*/
 			if (l != NULL) {
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
