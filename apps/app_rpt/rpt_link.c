@@ -749,13 +749,13 @@ void *rpt_link_connect(void *data)
 	l = ao2_find(connect_data->myrpt->links, node, 0);
 	/* if found */
 	if (l) {
-		/* if already in this mode, just ignore
-		 * NOTE: There is still a chance that a node calls in between the check and the link being placed
+		/* There is still a chance that a node calls in between the check and the link being placed
 		 * on the link list. This "could" result in a duplicate link being created.
 		 * To handle this, we check on attempt_reconnect() for a duplicate node.
 		 */
 
 		if ((l->mode == connect_data->mode) || (!l->chan)) {
+			/* if already in this mode, just ignore */
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 			rpt_telemetry(myrpt, REMALREADY, NULL);
