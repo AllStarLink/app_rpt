@@ -884,7 +884,7 @@ void load_rpt_vars(int n, int init)
 		/* if message truncation enabled, set minimum */
 		rpt_vars[n].p.linkpost_max_message_len = 500;
 	}
-	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(linkpost_time, "linkpost_time", 60, 10, 600);
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(linkpost_time, "linkpost_time", 30, 10, 40);
 
 	/* configure how we interact with "stats.allstarlink.org" */
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(statpost_time, "statpost_time", 60, 30, 600);
