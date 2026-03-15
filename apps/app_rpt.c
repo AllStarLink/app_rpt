@@ -6809,7 +6809,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_mutex_lock(&myrpt->lock);
 			/* try to find this one in queue */
 			l = ao2_find(myrpt->links, b1, 0);
-			/* if found we already have a connection, do not allow to connect*/
+			/* if found we already have a connection, Kill the existing connection */
 			if (l != NULL) {
 				l->killme = 1;
 				l->retries = l->max_retries + 1;

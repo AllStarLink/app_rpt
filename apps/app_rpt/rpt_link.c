@@ -747,13 +747,8 @@ void *rpt_link_connect(void *data)
 	rpt_mutex_lock(&myrpt->lock);
 	/* try to find this one in queue */
 	l = ao2_find(connect_data->myrpt->links, node, 0);
-	/* if found */
 	if (l) {
-		/* There is still a chance that a node calls in between the check and the link being placed
-		 * on the link list. This "could" result in a duplicate link being created.
-		 * To handle this, we check on attempt_reconnect() for a duplicate node.
-		 */
-
+		/* if found */
 		if ((l->mode == connect_data->mode) || (!l->chan)) {
 			/* if already in this mode, just ignore */
 			rpt_mutex_unlock(&myrpt->lock);
