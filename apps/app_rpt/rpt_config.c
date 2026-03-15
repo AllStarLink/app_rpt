@@ -885,7 +885,7 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.linkpost_max_message_len = 500;
 	}
 	/* Due to a limit imposed by HAMVOIP, 40 seconds is the maximum time allowed
-	 * Without the HAMVOIP limitation, the uppder limit could be increased in the future 
+	 * Without the HAMVOIP limitation, the uppder limit could be increased in the future
 	 */
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(linkpost_time, "linkpost_time", 30, 10, 40);
 
