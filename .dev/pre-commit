@@ -16,23 +16,30 @@ else
 fi
 
 # Test clang-format
-clangformatout=$(git clang-format --style=file:./.dev/.clang-format --staged -q)
+git clang-format --style=file:./.dev/.clang-format --staged -q
+
+# Check if any files were reformatted by git clang-format
+CHANGED_FILES=$(git diff --name-only )
 
 # Redirect output to stderr.
 exec 1>&2
 
-if [ "$clangformatout" != "" ]
+if [ -n "$CHANGED_FILES" ]
 then
-    echo "Format error!"
-    echo "Use git clang-format"
+    echo "Staged files were auto-formatted by clang-format. Please review the changes and stage the files again."
+    # Add the reformatted files back to the staging area
+    #git add $CHANGED_FILES
     exit 1
 fi
 
-codespell=$(codespell --skip "./.git" --ignore-words ./.dev/.codespellignore --write-changes)
+codespell --skip "./.git" --ignore-words ./.dev/.codespellignore --write-changes
 
 exec 1>&2
 
-if [ "$codespell" != "" ]
+# Check if any files were reformatted by git clang-format
+CHANGED_FILES=$(git diff --name-only )
+
+if [ -n "$CHANGED_FILES" ]
 then
    echo "Spelling errors!"
    echo "Run codespell"
