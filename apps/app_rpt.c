@@ -6805,12 +6805,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (!isdigit(b1[i]))
 				break;
 		}
-		if (!b1[i]) { /* if not a call-based node number */
+		if (!b1[i]) {
+			/* if not a call-based node number */
 			rpt_mutex_lock(&myrpt->lock);
-			/* try to find this one in queue */
-			l = ao2_find(myrpt->links, b1, 0);
-			/* if found we already have a connection, Kill the existing connection */
+			l = ao2_find(myrpt->links, b1, 0); /* try to find this node in queue of connected nodes */
 			if (l != NULL) {
+				/* if found, we already have a connection, kill the existing connection */
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
 				l->disced = RPT_LINK_DISCONNECT_SILENT;
