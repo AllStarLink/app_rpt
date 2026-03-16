@@ -746,7 +746,7 @@ void *rpt_link_connect(void *data)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	/* try to find this one in queue */
-	l = ao2_find(connect_data->myrpt->links, node, 0);
+	l = ao2_find(myrpt->links, node, 0);
 	if (l) {
 		/* if found */
 		if ((l->mode == connect_data->mode) || (!l->chan)) {
