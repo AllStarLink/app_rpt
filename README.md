@@ -19,15 +19,17 @@ Thank you!
 
 ## Prettifying
 
-Note: This is an optional step. If you are touching existing code in a few places, then it is best to skip prettifying and just let the commit checker check for conformance to the coding standards. 
+Install necessary tools:
+
+`sudo apt install clang-format codespell`
 
 After installing clang-format and codespell, set up the pre-commit workflow.
 
 From the top level project directory, execute:
 
-`cp ./.dev/pre-commit ./.git/hooks/pre-commit`
+`./.dev/install-hooks`
 
-This will enable coding standards to be checked locally.
+This will enable coding standards to be checked locally on each commit.
 
 # Installing
 
