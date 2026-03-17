@@ -27,7 +27,7 @@ STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR)"
 if [ -n "$STAGED_FILES" ]
 then
     echo "Running codespell on staged files..."
-    echo "$STAGED_FILES" | xargs codespell --skip "./.git" --ignore-words ./.dev/.codespellignore --write-changes
+    echo "$STAGED_FILES" | xargs -d '\n' codespell --skip "./.git" --ignore-words ./.dev/.codespellignore --write-changes
 
 else
     echo "No staged files to check."
