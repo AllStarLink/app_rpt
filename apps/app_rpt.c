@@ -2466,7 +2466,6 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->elaptime = 0;
 	l->connecttime = ast_tv(0, 0); /* not connected */
 	l->thisconnected = 0;
-	l->link_newkey = RADIO_KEY_ALLOWED;
 	l->linkmode = 0;
 	l->lastrx1 = 0;
 	l->lastrealrx = 0;
