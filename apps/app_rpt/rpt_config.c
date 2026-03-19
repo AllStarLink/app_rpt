@@ -884,6 +884,10 @@ void load_rpt_vars(int n, int init)
 		/* if message truncation enabled, set minimum */
 		rpt_vars[n].p.linkpost_max_message_len = 500;
 	}
+	/* Due to a limit imposed by some old clients, 40 seconds is the maximum time allowed
+	 * Without the old client limitation, the upper limit could be increased in the future
+	 * Refer to PR #974 for further details
+	 */
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(linkpost_time, "linkpost_time", 30, 10, 40);
 
 	/* configure how we interact with "stats.allstarlink.org" */
