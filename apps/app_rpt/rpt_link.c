@@ -23,6 +23,7 @@
 #include "rpt_vox.h"
 #include "rpt_link.h"
 #include "rpt_telemetry.h"
+#include "rpt_functions.h"
 
 #define ENABLE_CHECK_TLINK_LIST 0
 
@@ -677,21 +678,6 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
-static int link_find_by_name_cb(void *obj, void *arg, int flags)
-{
-	struct rpt_link *link = obj;
-	char *node = arg;
-
-	if (link->name[0] == '0') {
-		return 0;
-	}
-	/* if found matching string */
-	if (!strcmp(link->name, node)) {
-		return CMP_MATCH;
-	}
-	return 0;
-}
-
 void *rpt_link_connect(void *data)
 {
 	char *s, *s1, *tele, *cp;
@@ -760,11 +746,11 @@ void *rpt_link_connect(void *data)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	/* try to find this one in queue */
-	l = ao2_callback(connect_data->myrpt->links, 0, link_find_by_name_cb, node);
-	/* if found */
+	l = ao2_find(myrpt->links, node, 0);
 	if (l) {
-		/* if already in this mode, just ignore */
+		/* if found */
 		if ((l->mode == connect_data->mode) || (!l->chan)) {
+			/* if already in this mode, just ignore */
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 			rpt_telemetry(myrpt, REMALREADY, NULL);
