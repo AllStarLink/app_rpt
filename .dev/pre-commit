@@ -7,36 +7,40 @@
 #
 # To enable this hook, rename this file to "pre-commit".
 
-if git rev-parse --verify HEAD >/dev/null 2>&1
-then
-	against=HEAD
-else
-	# Initial commit: diff against an empty tree object
-	against=$(git hash-object -t tree /dev/null)
-fi
-
-# Test clang-format
-clangformatout=$(git clang-format --style=file:./.dev/.clang-format --staged -q)
-
 # Redirect output to stderr.
 exec 1>&2
 
-if [ "$clangformatout" != "" ]
+BEFORE_DIFF="$(git diff --no-ext-diff --binary)"
+# Test clang-format
+git clang-format --style=file:./.dev/.clang-format --staged -q
+
+# Check if any files were reformatted by git clang-format
+AFTER_DIFF="$(git diff --no-ext-diff --binary)"
+
+if [ "$AFTER_DIFF" != "$BEFORE_DIFF" ]
 then
-    echo "Format error!"
-    echo "Use git clang-format"
+    echo "Staged files were auto-formatted by clang-format. Please review the changes and stage the files again."
     exit 1
 fi
 
-codespell=$(codespell --skip "./.git" --ignore-words ./.dev/.codespellignore --write-changes)
+STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR)"
+if [ -n "$STAGED_FILES" ]
+then
+    echo "Running codespell on staged files..."
+    echo "$STAGED_FILES" | xargs -d '\n' codespell --skip "./.git" --ignore-words ./.dev/.codespellignore --write-changes
 
-exec 1>&2
+else
+    echo "No staged files to check."
+    exit 0
+fi
 
-if [ "$codespell" != "" ]
+# Check if any files were reformatted by git clang-format
+CHANGED_FILES=$(git diff --name-only )
+
+if [ -n "$CHANGED_FILES" ]
 then
    echo "Spelling errors!"
-   echo "Run codespell"
-   echo $codespell
+   echo "Check staged files for fixes."
    exit 1
 fi
 
