@@ -2513,7 +2513,7 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	}
 	nodenum = 0;
 	if (*cp && *++cp) {
-		nodenum = atoi(cp);
+		nodenum = atoi(cp - 1);
 	}
 	p = el_alloc(str);
 	if (p) {

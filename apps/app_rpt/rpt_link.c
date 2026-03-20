@@ -863,7 +863,7 @@ void *rpt_link_connect(void *data)
 		} else {
 			cp = tel1;
 		}
-		strcpy(cp, node);
+		strcpy(cp, node + 1);
 		l->chan = ast_request(deststr, cap, NULL, NULL, tel1, NULL);
 	} else {
 		l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
