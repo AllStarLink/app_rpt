@@ -2475,7 +2475,12 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
 		ast_frfree(f1);
 	if (l->chan) {
-		rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name);
+		if (rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name)) {
+			ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
+			rpt_mutex_lock(&myrpt->lock);
+			l->retrytimer = RETRY_TIMER_MS;
+			rpt_mutex_unlock(&myrpt->lock);
+		}
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
 		rpt_mutex_lock(&myrpt->lock);

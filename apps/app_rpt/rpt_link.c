@@ -876,7 +876,12 @@ void *rpt_link_connect(void *data)
 		goto cleanup;
 	}
 
-	rpt_make_call(l->chan, tele, 2000, deststr, "Remote Rx", "remote", myrpt->name, l->name);
+	if (rpt_make_call(l->chan, tele, 2000, deststr, "Remote Rx", "remote", myrpt->name, l->name)) {
+		ao2_ref(cap, -1);
+		ast_hangup(l->chan);
+		ao2_ref(l, -1);
+		goto cleanup;
+	}
 
 	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAXLink")) {
 		ao2_ref(cap, -1);
