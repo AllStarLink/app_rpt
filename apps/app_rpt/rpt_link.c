@@ -452,8 +452,6 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		return 0;
 	}
 
-	spos = ast_str_strlen(*buf); /* current buf size (before we add our stuff) */
-
 	/* go thru all links */
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
@@ -473,7 +471,7 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 				continue;
 			}
 		}
-
+		spos = ast_str_strlen(*buf); /* current buf size (before we add our stuff) */
 		/* figure out "mode" to report */
 		mode = 'T'; /* use Transceive by default */
 		if (l->mode == MODE_MONITOR) {
