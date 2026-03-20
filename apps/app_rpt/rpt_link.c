@@ -877,9 +877,10 @@ void *rpt_link_connect(void *data)
 	}
 
 	if (rpt_make_call(l->chan, tele, 2000, deststr, "Remote Rx", "remote", myrpt->name, l->name)) {
-		ao2_ref(cap, -1);
+		donodelog_fmt(connect_data->myrpt, "LINKFAIL,%s/%s", deststr, tele);
 		ast_hangup(l->chan);
 		ao2_ref(l, -1);
+		ao2_ref(cap, -1);
 		goto cleanup;
 	}
 
