@@ -2507,13 +2507,13 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	if (!str) {
 		return NULL;
 	}
+	nodenum = 0;
 	cp = strchr(str, '/');
 	if (cp) {
 		*cp++ = 0;
-	}
-	nodenum = 0;
-	if (*cp && *++cp) {
-		nodenum = atoi(cp);
+		if (*cp) {
+			nodenum = atoi(cp);
+		}
 	}
 	p = el_alloc(str);
 	if (p) {
