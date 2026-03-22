@@ -845,6 +845,8 @@ void *rpt_link_connect(void *data)
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
+		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+		rpt_telemetry(myrpt, CONNFAIL, NULL);
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
@@ -869,6 +871,8 @@ void *rpt_link_connect(void *data)
 	if (!l->chan) {
 		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
 		donodelog_fmt(connect_data->myrpt, "LINKFAIL,%s/%s", deststr, tele);
+		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+		rpt_telemetry(myrpt, CONNFAIL, NULL);
 		ao2_ref(l, -1);
 		ao2_ref(cap, -1);
 		goto cleanup;
@@ -876,6 +880,8 @@ void *rpt_link_connect(void *data)
 
 	if (rpt_make_call(l->chan, tele, 2000, deststr, "Remote Rx", "remote", myrpt->name, l->name)) {
 		donodelog_fmt(connect_data->myrpt, "LINKFAIL,%s/%s", deststr, tele);
+		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+		rpt_telemetry(myrpt, CONNFAIL, NULL);
 		ast_hangup(l->chan);
 		ao2_ref(l, -1);
 		ao2_ref(cap, -1);
@@ -884,6 +890,8 @@ void *rpt_link_connect(void *data)
 
 	if (__rpt_request_local(l, cap, RPT_PCHAN, RPT_LINK_CHAN, "IAXLink")) {
 		ao2_ref(cap, -1);
+		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+		rpt_telemetry(myrpt, CONNFAIL, NULL);
 		ast_hangup(l->chan);
 		ao2_ref(l, -1);
 		goto cleanup;
@@ -892,6 +900,8 @@ void *rpt_link_connect(void *data)
 	ao2_ref(cap, -1);
 
 	if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
+		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+		rpt_telemetry(myrpt, CONNFAIL, NULL);
 		ast_hangup(l->chan);
 		ast_hangup(l->pchan);
 		ao2_ref(l, -1);
