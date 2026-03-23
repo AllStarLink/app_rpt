@@ -931,6 +931,9 @@ void *rpt_link_connect(void *data)
 	rpt_link_add(myrpt->links, l);
 	__kickshort(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
+	myrpt->linkactivityflag = 1;
+	rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+	rpt_telemetry(myrpt, COMPLETE, NULL);
 
 	/* Service the link channel */
 	process_link_channel(myrpt, l);
