@@ -7185,7 +7185,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
-			ao2_ref(cap, -1);
 			return -1;
 		}
 	}
