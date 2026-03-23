@@ -7179,6 +7179,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->dtmf_time_rem = 0;
 	myrpt->hfscanmode = HF_SCAN_OFF;
 	myrpt->hfscanstatus = 0;
+	if (!myrpt->macrobuf) {
+		myrpt->macrobuf = ast_str_create(MAXMACRO);
+		if (!myrpt->macrobuf) {
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			return -1;
+		}
+	}
 	if (myrpt->p.startupmacro) {
 		ast_str_set(&myrpt->macrobuf, 0, "PPPP%s", myrpt->p.startupmacro);
 	}
@@ -7192,16 +7201,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->lastitx = !myrpt->lastitx;
 	myrpt->tunerequest = 0;
 	myrpt->tunetx = 0;
-	if (!myrpt->macrobuf) {
-		myrpt->macrobuf = ast_str_create(MAXMACRO);
-		if (!myrpt->macrobuf) {
-			rpt_mutex_unlock(&myrpt->lock);
-			rpt_hangup_rx_tx(myrpt);
-			rpt_hangup(myrpt, RPT_PCHAN);
-			ao2_ref(cap, -1);
-			return -1;
-		}
-	}
 	rpt_mutex_unlock(&myrpt->lock);
 	ast_set_write_format(chan, ast_format_slin);
 	ast_set_read_format(chan, ast_format_slin);
