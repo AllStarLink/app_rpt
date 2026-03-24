@@ -361,7 +361,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			if (!connect_data) {
 				return DC_ERROR;
 			}
-			if (!tlb_query_node_exists(digitbuf)) {
+			if (!tlb_query_node_exists(s1 + 2)) {
 				if (s1[2] != '3') {
 					if (node_lookup(myrpt, s1 + 2, connect_data->nodedata, sizeof(connect_data->nodedata), 1)) {
 						ast_free(connect_data);
@@ -382,6 +382,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			if (ast_pthread_create_detached(&connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
 				ast_free(connect_data->digitbuf);
 				ast_free(connect_data);
+				return DC_ERROR;
 			}
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
