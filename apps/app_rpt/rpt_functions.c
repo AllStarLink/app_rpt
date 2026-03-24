@@ -85,7 +85,7 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
 enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
 	struct rpt_link *mylink)
 {
-	char *s1, *s2, tmp[MAXNODESTR];
+	char *s1, *s2, tmp[MAXNODESTR] = "";
 	char digitbuf[MAXNODESTR], *strs[ARRAY_LEN(myrpt->savednodes)];
 	char perma;
 	enum link_mode mode;
@@ -154,11 +154,15 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 13:					/* Link transceive permanent */
 	case 8:					/* Link Monitor Local Only */
 	case 18:					/* Link Monitor Local Only permanent */
+		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
+			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
+		}
+
 		if (!tlb_query_node_exists(digitbuf)) {
 			/* Not a tlb node */
 			if (digitbuf[0] != '3') {
 				/* Not an echolink node */
-				if (node_lookup(myrpt, digitbuf, tmp, sizeof(tmp) - 1, 1)) {
+				if (node_lookup(myrpt, digitbuf, tmp, sizeof(tmp), 1)) {
 					if (strlen(digitbuf) >= myrpt->longestnode) {
 						rpt_telem_select(myrpt, command_source, mylink);
 						rpt_telemetry(myrpt, CONNFAIL, NULL);
@@ -166,16 +170,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 					}
 					break; /* No match yet */
 				}
-			} else {
-				/* It's an echolink node */
+			} else { /* It's an echolink node */
 				if (strlen(digitbuf) < 7) {
 					break; /* Need 7 digits for echolink */
 				}
 			}
 		}
-		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
-			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
-		}
+
 		r = atoi(param);
 		/* Attempt connection  */
 		perma = (r > 10) ? 1 : 0;

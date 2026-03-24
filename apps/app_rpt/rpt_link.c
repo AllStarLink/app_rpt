@@ -701,7 +701,7 @@ void *rpt_link_connect(void *data)
 	} else {
 		if (node[0] != '3') {
 			/* It's not an echolink node */
-			ast_copy_string(tmp, connect_data->nodedata, sizeof(tmp) - 1);
+			ast_copy_string(tmp, connect_data->nodedata, sizeof(tmp));
 		} else {
 			/* It's an echolink node */
 			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);
