@@ -233,7 +233,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			return DC_COMPLETE;
 		}
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
-			strcpy(digitbuf, myrpt->lastlinknode);
+			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		/* node must at least exist in list */
 		if (!tlb_query_node_exists(digitbuf))  {
 			if (digitbuf[0] != '3') {
