@@ -346,7 +346,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		return DC_COMPLETE;
 
 	case 16:					/* Restore links disconnected with "disconnect all links" command */
-		strcpy(tmp, myrpt->savednodes);	/* Make a copy */
+		ast_copy_string(tmp, myrpt->savednodes, sizeof(tmp)); /* Make a copy */
 		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
 		for (i = 0; tmp[0] && strs[i] && i < ARRAY_LEN(strs); i++) {
 			s1 = strs[i];
@@ -359,13 +359,21 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			perma = (s1[1] == 'P') ? 1 : 0;
 			connect_data = ast_calloc(1, sizeof(struct rpt_connect_data));
 			if (!connect_data) {
-				break;
+				return DC_ERROR;
+			}
+			if (!tlb_query_node_exists(digitbuf)) {
+				if (s1[2] != '3') {
+					if (node_lookup(myrpt, s1 + 2, connect_data->nodedata, sizeof(connect_data->nodedata), 1)) {
+						ast_free(connect_data);
+						return DC_ERROR;
+					}
+				}
 			}
 			connect_data->myrpt = myrpt;
 			connect_data->digitbuf = ast_strdup(s1 + 2);
 			if (!connect_data->digitbuf) {
 				ast_free(connect_data);
-				break;
+				return DC_ERROR;
 			}
 			connect_data->mode = mode;
 			connect_data->perma = perma;
@@ -378,7 +386,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
-		break;
+		return DC_COMPLETE;
 
 	case 200:
 	case 201:
