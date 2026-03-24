@@ -174,7 +174,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			}
 		}
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
-			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf) - 1);
+			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		}
 		r = atoi(param);
 		/* Attempt connection  */
@@ -188,7 +188,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (!connect_data) {
 			return DC_ERROR;
 		}
-		ast_copy_string(connect_data->nodedata, tmp, sizeof(connect_data->nodedata) - 1);
+		ast_copy_string(connect_data->nodedata, tmp, sizeof(connect_data->nodedata));
 		connect_data->myrpt = myrpt;
 		connect_data->digitbuf = ast_strdup(digitbuf);
 		if (!connect_data->digitbuf) {
