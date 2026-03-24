@@ -700,18 +700,10 @@ void *rpt_link_connect(void *data)
 		sprintf(tmp, "tlb/%s/%s", node, myrpt->name);
 	} else {
 		if (node[0] != '3') {
-			if (node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1)) {
-				if (strlen(node) >= myrpt->longestnode) {
-					rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
-					rpt_telemetry(myrpt, CONNFAIL, NULL);
-					goto cleanup; /* No such node */
-				}
-				goto cleanup; /* No match yet */
-			}
+			/* It's not an echolink node */
+			node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1);
 		} else {
-			if (strlen(node) < 7) {
-				goto cleanup;
-			}
+			/* It's an echolink node */
 			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);
 		}
 	}

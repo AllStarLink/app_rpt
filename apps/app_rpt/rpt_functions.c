@@ -154,8 +154,28 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 13:					/* Link transceive permanent */
 	case 8:					/* Link Monitor Local Only */
 	case 18:					/* Link Monitor Local Only permanent */
-		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
+		if (!tlb_query_node_exists(digitbuf)) {
+			/* Not a tlb node */
+			if (digitbuf[0] != '3') {
+				/* Not an echolink node */
+				if (node_lookup(myrpt, digitbuf, NULL, 0, 1)) {
+					if (strlen(digitbuf) >= myrpt->longestnode) {
+						rpt_telem_select(myrpt, command_source, mylink);
+						rpt_telemetry(myrpt, CONNFAIL, NULL);
+						return DC_ERROR; /* No such node */
+					}
+					break; /* No match yet */
+				}
+			} else {
+				/* It's and echolink node */
+				if (strlen(digitbuf) < 7) {
+					break; /* Need 7 digits for echolink */
+				}
+			}
+		}
+		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
 			strcpy(digitbuf, myrpt->lastlinknode);
+		}
 		r = atoi(param);
 		/* Attempt connection  */
 		perma = (r > 10) ? 1 : 0;
@@ -185,9 +205,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			rpt_telemetry(myrpt, CONNFAIL, NULL);
 			ast_free(connect_data->digitbuf);
 			ast_free(connect_data);
-			return DC_COMPLETE;
+			return DC_ERROR;
 		}
-		break;
+		return DC_COMPLETE;
 
 	case 4:					/* Enter Command Mode */
 
@@ -216,8 +236,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (!tlb_query_node_exists(digitbuf))  {
 			if (digitbuf[0] != '3') {
 				if (node_lookup(myrpt, digitbuf, NULL, 0, 1)) {
-					if (strlen(digitbuf) >= myrpt->longestnode)
+					if (strlen(digitbuf) >= myrpt->longestnode) {
 						return DC_ERROR;
+					}
 					break;
 
 				}
