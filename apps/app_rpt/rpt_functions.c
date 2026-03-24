@@ -158,7 +158,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			/* Not a tlb node */
 			if (digitbuf[0] != '3') {
 				/* Not an echolink node */
-				if (node_lookup(myrpt, digitbuf, NULL, 0, 1)) {
+				if (node_lookup(myrpt, digitbuf, tmp, sizeof(tmp) - 1, 1)) {
 					if (strlen(digitbuf) >= myrpt->longestnode) {
 						rpt_telem_select(myrpt, command_source, mylink);
 						rpt_telemetry(myrpt, CONNFAIL, NULL);
@@ -167,14 +167,14 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 					break; /* No match yet */
 				}
 			} else {
-				/* It's and echolink node */
+				/* It's an echolink node */
 				if (strlen(digitbuf) < 7) {
 					break; /* Need 7 digits for echolink */
 				}
 			}
 		}
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
-			strcpy(digitbuf, myrpt->lastlinknode);
+			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf) - 1);
 		}
 		r = atoi(param);
 		/* Attempt connection  */
@@ -188,6 +188,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (!connect_data) {
 			return DC_ERROR;
 		}
+		ast_copy_string(connect_data->nodedata, tmp, sizeof(connect_data->nodedata) - 1);
 		connect_data->myrpt = myrpt;
 		connect_data->digitbuf = ast_strdup(digitbuf);
 		if (!connect_data->digitbuf) {

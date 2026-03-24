@@ -679,7 +679,7 @@ void rpt_update_links(struct rpt *myrpt)
 void *rpt_link_connect(void *data)
 {
 	char *s, *s1, *tele, *cp;
-	char tmp[300], deststr[325] = "", modechange = 0;
+	char tmp[MAXNODESTR], deststr[325] = "", modechange = 0;
 	char sx[320], *sy;
 	char **strs; /* List of pointers to links in link list string */
 	struct rpt_link *l = NULL;
@@ -701,7 +701,7 @@ void *rpt_link_connect(void *data)
 	} else {
 		if (node[0] != '3') {
 			/* It's not an echolink node */
-			node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1);
+			ast_copy_string(tmp, connect_data->nodedata, sizeof(tmp) - 1);
 		} else {
 			/* It's an echolink node */
 			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);
