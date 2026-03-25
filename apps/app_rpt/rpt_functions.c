@@ -51,6 +51,12 @@ char *dtmf_tones[] = {
 
 static char remdtmfstr[] = "0123456789*#ABCD";
 
+enum rpt_find_node_response {
+	RPT_NODE_FOUND,
+	RPT_NODE_NOMATCH_YET,
+	RPT_NO_VALID_NODE
+};
+
 int rpt_link_find_by_name(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
@@ -82,12 +88,38 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
 	return 0;
 }
 
+/*! \brief Find a valid node by its digit buffer
+ *	places the found node data in node_data
+ */
+
+static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitbuf, char *node_data, size_t node_data_size)
+{
+	if (!tlb_query_node_exists(digitbuf)) {
+		/* Not a tlb node */
+		if (digitbuf[0] != '3') {
+			/* Not an echolink node */
+			if (node_lookup(myrpt, digitbuf, node_data, node_data_size, 1)) {
+				if (strlen(digitbuf) >= myrpt->longestnode) {
+					return RPT_NO_VALID_NODE; /* No such node */
+				}
+				return RPT_NODE_NOMATCH_YET; /* No match yet */
+			}
+		} else { /* It's an echolink node */
+			if (strlen(digitbuf) < 7) {
+				return RPT_NODE_NOMATCH_YET; /* Need 7 digits for echolink */
+			}
+		}
+	}
+	return RPT_NODE_FOUND;
+}
+
 enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
 	struct rpt_link *mylink)
 {
 	char *s1, *s2, tmp[MAXNODESTR] = "";
 	char digitbuf[MAXNODESTR], *strs[ARRAY_LEN(myrpt->savednodes)];
 	char perma;
+	enum rpt_find_node_response find_node_response;
 	enum link_mode mode;
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
@@ -158,24 +190,15 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		}
 
-		if (!tlb_query_node_exists(digitbuf)) {
-			/* Not a tlb node */
-			if (digitbuf[0] != '3') {
-				/* Not an echolink node */
-				if (node_lookup(myrpt, digitbuf, tmp, sizeof(tmp), 1)) {
-					if (strlen(digitbuf) >= myrpt->longestnode) {
-						rpt_telem_select(myrpt, command_source, mylink);
-						rpt_telemetry(myrpt, CONNFAIL, NULL);
-						return DC_ERROR; /* No such node */
-					}
-					break; /* No match yet */
-				}
-			} else { /* It's an echolink node */
-				if (strlen(digitbuf) < 7) {
-					break; /* Need 7 digits for echolink */
-				}
-			}
+		find_node_response = rpt_find_node(myrpt, digitbuf, tmp, sizeof(tmp));
+		if (find_node_response == RPT_NODE_NOMATCH_YET) {
+			break;
+		} else if (find_node_response == RPT_NO_VALID_NODE) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			return DC_ERROR;
 		}
+		/* RPT_NODE_FOUND, continue on */
 
 		r = atoi(param);
 		/* Attempt connection  */
@@ -361,14 +384,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			if (!connect_data) {
 				return DC_ERROR;
 			}
-			if (!tlb_query_node_exists(s1 + 2)) {
-				if (s1[2] != '3') {
-					if (node_lookup(myrpt, s1 + 2, connect_data->nodedata, sizeof(connect_data->nodedata), 1)) {
-						ast_free(connect_data);
-						return DC_ERROR;
-					}
-				}
+			find_node_response = rpt_find_node(myrpt, s1 + 2, connect_data->nodedata, sizeof(connect_data->nodedata));
+			if (find_node_response != RPT_NODE_FOUND) {
+				ast_free(connect_data);
+				return DC_ERROR;
 			}
+			/* RPT_NODE_FOUND, continue on */
+
 			connect_data->myrpt = myrpt;
 			connect_data->digitbuf = ast_strdup(s1 + 2);
 			if (!connect_data->digitbuf) {
