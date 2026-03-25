@@ -163,7 +163,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		l = ao2_find(myrpt->links, digitbuf, 0);
 		if (!l) { /* if not found */
 			rpt_mutex_unlock(&myrpt->lock);
-			return DC_ERROR;
+			break;
 		}
 		/* if found */
 		/* must use perm command on perm link */
