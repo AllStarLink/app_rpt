@@ -165,7 +165,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		l = ao2_find(myrpt->links, digitbuf, 0);
 		if (!l) { /* if not found */
 			rpt_mutex_unlock(&myrpt->lock);
-			break;
+			return DC_ERROR;
 		}
 		/* if found */
 		/* must use perm command on perm link */
@@ -349,7 +349,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 7:					/* Identify last node which keyed us up */
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, LASTNODEKEY, NULL);
-		break;
+		return DC_COMPLETE;
 
 #ifdef	_MDC_DECODE_H_
 	case 17:
