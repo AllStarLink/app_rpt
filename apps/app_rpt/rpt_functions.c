@@ -267,19 +267,14 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
 			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		/* node must at least exist in list */
-		if (!tlb_query_node_exists(digitbuf))  {
-			if (digitbuf[0] != '3') {
-				if (node_lookup(myrpt, digitbuf, NULL, 0, 1)) {
-					if (strlen(digitbuf) >= myrpt->longestnode) {
-						return DC_ERROR;
-					}
-					break;
-
-				}
-			} else {
-				if (strlen(digitbuf) < 7)
-					break;
-			}
+		find_node_response = rpt_find_node(myrpt, digitbuf, tmp, sizeof(tmp));
+		if (find_node_response == RPT_CONTINUE) {
+			break;
+		}
+		if (find_node_response == RPT_NODE_NOT_FOUND) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			return DC_ERROR;
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		strcpy(myrpt->lastlinknode, digitbuf);
