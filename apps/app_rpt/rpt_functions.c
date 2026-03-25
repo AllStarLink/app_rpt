@@ -109,7 +109,6 @@ static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitb
 			}
 			return RPT_CONTINUE; /* No match yet */
 		} else {
-			ast_copy_string(node_data, digitbuf, node_data_size);
 			return RPT_MATCH_NODE;
 		}
 	} else { /* It's an echolink node */
@@ -120,7 +119,6 @@ static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitb
 			return RPT_MATCH_EL;
 		}
 	}
-	return RPT_NODE_NOT_FOUND;
 }
 
 enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
@@ -393,16 +391,22 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			perma = (s1[1] == 'P') ? 1 : 0;
 			connect_data = ast_calloc(1, sizeof(struct rpt_connect_data));
 			if (!connect_data) {
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				return DC_ERROR;
 			}
 			find_node_response = rpt_find_node(myrpt, s1 + 2, connect_data->nodedata, sizeof(connect_data->nodedata));
 			if (find_node_response == RPT_NODE_NOT_FOUND) {
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				ast_free(connect_data);
 				return DC_ERROR;
 			}
 
 			if (find_node_response == RPT_CONTINUE) {
 				/* The restore node should always be complete.  If not, it's an error */
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				ast_free(connect_data);
 				return DC_ERROR;
 			}
@@ -412,6 +416,8 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			connect_data->myrpt = myrpt;
 			connect_data->digitbuf = ast_strdup(s1 + 2);
 			if (!connect_data->digitbuf) {
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				ast_free(connect_data);
 				return DC_ERROR;
 			}
@@ -420,6 +426,8 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			connect_data->command_source = command_source;
 			connect_data->mylink = mylink;
 			if (ast_pthread_create_detached(&connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				ast_free(connect_data->digitbuf);
 				ast_free(connect_data);
 				return DC_ERROR;
