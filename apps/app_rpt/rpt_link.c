@@ -707,7 +707,7 @@ void *rpt_link_connect(void *data)
 
 	s = NULL;
 	s1 = connect_data->nodedata;
-	if (strncasecmp(connect_data->nodedata, "tlb", 3)) { /* if not tlb */
+	if (strncasecmp(connect_data->nodedata, "tlb/", 4)) { /* if not tlb */
 		s = connect_data->nodedata;
 		s1 = strsep(&s, ",");
 		if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6) && strncasecmp(s1, "echolink/", 9)) {
