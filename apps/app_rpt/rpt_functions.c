@@ -53,7 +53,7 @@ static char remdtmfstr[] = "0123456789*#ABCD";
 
 enum rpt_find_node_response {
 	RPT_NODE_NOT_FOUND,
-	RPT_CONTINUE,	/* no match yet*/
+	RPT_CONTINUE,	/* no match yet */
 	RPT_MATCH_NODE, /* nodedata will have "radio/..." */
 	RPT_MATCH_EL,	/* nodedata will have "echolink/..." */
 	RPT_MATCH_TLB,	/* nodedata will have "tlb/..." */
@@ -93,7 +93,6 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
 /*! \brief Find a valid node by its digit buffer
  *	places the found node data in node_data
  */
-
 static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitbuf, char *node_data, size_t node_data_size)
 {
 	if (tlb_query_node_exists(digitbuf)) {
@@ -197,7 +196,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 13:					/* Link transceive permanent */
 	case 8:					/* Link Monitor Local Only */
 	case 18:					/* Link Monitor Local Only permanent */
-		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
+		if (digitbuf[0] == '0' && myrpt->lastlinknode[0]) {
 			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		}
 
@@ -394,21 +393,12 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				return DC_ERROR;
 			}
 			find_node_response = rpt_find_node(myrpt, s1 + 2, connect_data->nodedata, sizeof(connect_data->nodedata));
-			if (find_node_response == RPT_NODE_NOT_FOUND) {
+			if (find_node_response == RPT_NODE_NOT_FOUND || find_node_response == RPT_CONTINUE) {
 				rpt_telem_select(myrpt, command_source, mylink);
 				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				ast_free(connect_data);
 				return DC_ERROR;
 			}
-
-			if (find_node_response == RPT_CONTINUE) {
-				/* The restore node should always be complete.  If not, it's an error */
-				rpt_telem_select(myrpt, command_source, mylink);
-				rpt_telemetry(myrpt, CONNFAIL, NULL);
-				ast_free(connect_data);
-				return DC_ERROR;
-			}
-
 			/* RPT_NODE_FOUND, continue on */
 
 			connect_data->myrpt = myrpt;
