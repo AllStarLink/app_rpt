@@ -101,23 +101,23 @@ static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitb
 		return RPT_MATCH_TLB;
 	}
 	/* Not a tlb node */
-	if (digitbuf[0] != '3') {
-		/* Not an echolink node */
-		if (node_lookup(myrpt, digitbuf, node_data, node_data_size, 1)) {
-			if (strlen(digitbuf) >= myrpt->longestnode) {
-				return RPT_NODE_NOT_FOUND; /* No such node */
-			}
-			return RPT_CONTINUE; /* No match yet */
-		} else {
-			return RPT_MATCH_NODE;
-		}
-	} else { /* It's an echolink node */
+	if (digitbuf[0] == '3') {
+		/* It's an echolink node */
 		if (strlen(digitbuf) < 7) {
 			return RPT_CONTINUE; /* Need 7 digits for echolink */
 		} else {
 			snprintf(node_data, node_data_size, "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), digitbuf + 1, digitbuf + 1);
 			return RPT_MATCH_EL;
 		}
+	}
+	/* Not an echolink node */
+	if (node_lookup(myrpt, digitbuf, node_data, node_data_size, 1)) {
+		if (strlen(digitbuf) >= myrpt->longestnode) {
+			return RPT_NODE_NOT_FOUND; /* No such node */
+		}
+		return RPT_CONTINUE; /* No match yet */
+	} else {
+		return RPT_MATCH_NODE;
 	}
 }
 
