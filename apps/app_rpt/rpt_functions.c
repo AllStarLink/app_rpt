@@ -51,6 +51,14 @@ char *dtmf_tones[] = {
 
 static char remdtmfstr[] = "0123456789*#ABCD";
 
+enum rpt_find_node_response {
+	RPT_NODE_NOT_FOUND,
+	RPT_CONTINUE,	/* no match yet */
+	RPT_MATCH_NODE, /* nodedata will have "radio/..." */
+	RPT_MATCH_EL,	/* nodedata will have "echolink/..." */
+	RPT_MATCH_TLB,	/* nodedata will have "tlb/..." */
+};
+
 int rpt_link_find_by_name(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
@@ -82,12 +90,46 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
 	return 0;
 }
 
+/*! \brief Find a valid node by its digit buffer
+ *	places the found node data in node_data
+ */
+static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitbuf, char *node_data, size_t node_data_size)
+{
+	if (tlb_query_node_exists(digitbuf)) {
+		/* TLB Node */
+		if (node_data && node_data_size) {
+			snprintf(node_data, node_data_size, "tlb/%s/%s", digitbuf, myrpt->name);
+		}
+		return RPT_MATCH_TLB;
+	}
+	if (digitbuf[0] == '3') {
+		/* It's an echolink node */
+		if (strlen(digitbuf) < 7) {
+			return RPT_CONTINUE; /* Need 7 digits for echolink */
+		} else {
+			if (node_data && node_data_size) {
+				snprintf(node_data, node_data_size, "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), digitbuf + 1, digitbuf + 1);
+			}
+			return RPT_MATCH_EL;
+		}
+	}
+	if (node_lookup(myrpt, digitbuf, node_data, node_data_size, 1)) {
+		if (strlen(digitbuf) >= myrpt->longestnode) {
+			return RPT_NODE_NOT_FOUND; /* No such node */
+		}
+		return RPT_CONTINUE; /* No match yet */
+	} else {
+		return RPT_MATCH_NODE;
+	}
+}
+
 enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *digits, enum rpt_command_source command_source,
 	struct rpt_link *mylink)
 {
-	char *s1, *s2, tmp[MAXNODESTR];
+	char *s1, *s2, tmp[MAXNODESTR] = "";
 	char digitbuf[MAXNODESTR], *strs[ARRAY_LEN(myrpt->savednodes)];
 	char perma;
+	enum rpt_find_node_response find_node_response;
 	enum link_mode mode;
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
@@ -154,8 +196,21 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 13:					/* Link transceive permanent */
 	case 8:					/* Link Monitor Local Only */
 	case 18:					/* Link Monitor Local Only permanent */
-		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
-			strcpy(digitbuf, myrpt->lastlinknode);
+		if (digitbuf[0] == '0' && myrpt->lastlinknode[0]) {
+			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
+		}
+
+		find_node_response = rpt_find_node(myrpt, digitbuf, tmp, sizeof(tmp));
+		if (find_node_response == RPT_CONTINUE) {
+			break;
+		}
+		if (find_node_response == RPT_NODE_NOT_FOUND) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			return DC_ERROR;
+		}
+		/* One of the node types (TLB, NODE, EL) is found, continue on */
+
 		r = atoi(param);
 		/* Attempt connection  */
 		perma = (r > 10) ? 1 : 0;
@@ -168,6 +223,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (!connect_data) {
 			return DC_ERROR;
 		}
+		ast_copy_string(connect_data->nodedata, tmp, sizeof(connect_data->nodedata));
 		connect_data->myrpt = myrpt;
 		connect_data->digitbuf = ast_strdup(digitbuf);
 		if (!connect_data->digitbuf) {
@@ -185,9 +241,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			rpt_telemetry(myrpt, CONNFAIL, NULL);
 			ast_free(connect_data->digitbuf);
 			ast_free(connect_data);
-			return DC_COMPLETE;
+			return DC_ERROR;
 		}
-		break;
+		return DC_COMPLETE;
 
 	case 4:					/* Enter Command Mode */
 
@@ -211,20 +267,16 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			return DC_COMPLETE;
 		}
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
-			strcpy(digitbuf, myrpt->lastlinknode);
+			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		/* node must at least exist in list */
-		if (!tlb_query_node_exists(digitbuf))  {
-			if (digitbuf[0] != '3') {
-				if (node_lookup(myrpt, digitbuf, NULL, 0, 1)) {
-					if (strlen(digitbuf) >= myrpt->longestnode)
-						return DC_ERROR;
-					break;
-
-				}
-			} else {
-				if (strlen(digitbuf) < 7)
-					break;
-			}
+		find_node_response = rpt_find_node(myrpt, digitbuf, NULL, 0);
+		if (find_node_response == RPT_CONTINUE) {
+			break;
+		}
+		if (find_node_response == RPT_NODE_NOT_FOUND) {
+			rpt_telem_select(myrpt, command_source, mylink);
+			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			return DC_ERROR;
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		strcpy(myrpt->lastlinknode, digitbuf);
@@ -292,7 +344,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 7:					/* Identify last node which keyed us up */
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, LASTNODEKEY, NULL);
-		break;
+		return DC_COMPLETE;
 
 #ifdef	_MDC_DECODE_H_
 	case 17:
@@ -323,7 +375,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		return DC_COMPLETE;
 
 	case 16:					/* Restore links disconnected with "disconnect all links" command */
-		strcpy(tmp, myrpt->savednodes);	/* Make a copy */
+		ast_copy_string(tmp, myrpt->savednodes, sizeof(tmp)); /* Make a copy */
 		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
 		for (i = 0; tmp[0] && strs[i] && i < ARRAY_LEN(strs); i++) {
 			s1 = strs[i];
@@ -336,26 +388,43 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			perma = (s1[1] == 'P') ? 1 : 0;
 			connect_data = ast_calloc(1, sizeof(struct rpt_connect_data));
 			if (!connect_data) {
-				break;
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
+				return DC_ERROR;
 			}
+			find_node_response = rpt_find_node(myrpt, s1 + 2, connect_data->nodedata, sizeof(connect_data->nodedata));
+			if (find_node_response == RPT_NODE_NOT_FOUND || find_node_response == RPT_CONTINUE) {
+				/* The restore node should always be complete.  If not, it's an error */
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
+				ast_free(connect_data);
+				return DC_ERROR;
+			}
+			/* RPT_NODE_FOUND, continue on */
+
 			connect_data->myrpt = myrpt;
 			connect_data->digitbuf = ast_strdup(s1 + 2);
 			if (!connect_data->digitbuf) {
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				ast_free(connect_data);
-				break;
+				return DC_ERROR;
 			}
 			connect_data->mode = mode;
 			connect_data->perma = perma;
 			connect_data->command_source = command_source;
 			connect_data->mylink = mylink;
 			if (ast_pthread_create_detached(&connect_threadid, NULL, rpt_link_connect, (void *) connect_data) < 0) {
+				rpt_telem_select(myrpt, command_source, mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				ast_free(connect_data->digitbuf);
 				ast_free(connect_data);
+				return DC_ERROR;
 			}
 		}
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
-		break;
+		return DC_COMPLETE;
 
 	case 200:
 	case 201:

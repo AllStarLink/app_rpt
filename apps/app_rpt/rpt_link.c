@@ -679,7 +679,7 @@ void rpt_update_links(struct rpt *myrpt)
 void *rpt_link_connect(void *data)
 {
 	char *s, *s1, *tele, *cp;
-	char tmp[300], deststr[325] = "", modechange = 0;
+	char deststr[325] = "", modechange = 0;
 	char sx[320], *sy;
 	char **strs; /* List of pointers to links in link list string */
 	struct rpt_link *l = NULL;
@@ -696,26 +696,6 @@ void *rpt_link_connect(void *data)
 		goto cleanup;
 	}
 
-	if (tlb_query_node_exists(node)) {
-		sprintf(tmp, "tlb/%s/%s", node, myrpt->name);
-	} else {
-		if (node[0] != '3') {
-			if (node_lookup(myrpt, node, tmp, sizeof(tmp) - 1, 1)) {
-				if (strlen(node) >= myrpt->longestnode) {
-					rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
-					rpt_telemetry(myrpt, CONNFAIL, NULL);
-					goto cleanup; /* No such node */
-				}
-				goto cleanup; /* No match yet */
-			}
-		} else {
-			if (strlen(node) < 7) {
-				goto cleanup;
-			}
-			snprintf(tmp, sizeof(tmp), "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), node + 1, node + 1);
-		}
-	}
-
 	if (!strcmp(myrpt->name, node)) { /* Do not allow connections to self */
 		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 		rpt_telemetry(myrpt, REMALREADY, NULL);
@@ -726,9 +706,9 @@ void *rpt_link_connect(void *data)
 		connect_data->mode ? "Transceive" : "Monitor", connect_data->perma ? "Permalink" : "Normal");
 
 	s = NULL;
-	s1 = tmp;
-	if (strncasecmp(tmp, "tlb", 3)) {	/* if not tlb */
-		s = tmp;
+	s1 = connect_data->nodedata;
+	if (strncasecmp(connect_data->nodedata, "tlb/", 4)) { /* if not tlb */
+		s = connect_data->nodedata;
 		s1 = strsep(&s, ",");
 		if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6) && strncasecmp(s1, "echolink/", 9)) {
 			sy = strchr(s1, '/');
