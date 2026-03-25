@@ -394,6 +394,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			}
 			find_node_response = rpt_find_node(myrpt, s1 + 2, connect_data->nodedata, sizeof(connect_data->nodedata));
 			if (find_node_response == RPT_NODE_NOT_FOUND || find_node_response == RPT_CONTINUE) {
+				/* The restore node should always be complete.  If not, it's an error */
 				rpt_telem_select(myrpt, command_source, mylink);
 				rpt_telemetry(myrpt, CONNFAIL, NULL);
 				ast_free(connect_data);
