@@ -97,20 +97,23 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
 static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitbuf, char *node_data, size_t node_data_size)
 {
 	if (tlb_query_node_exists(digitbuf)) {
-		snprintf(node_data, node_data_size, "tlb/%s/%s", digitbuf, myrpt->name);
+		/* TLB Node */
+		if (node_data && node_data_size) {
+			snprintf(node_data, node_data_size, "tlb/%s/%s", digitbuf, myrpt->name);
+		}
 		return RPT_MATCH_TLB;
 	}
-	/* Not a tlb node */
 	if (digitbuf[0] == '3') {
 		/* It's an echolink node */
 		if (strlen(digitbuf) < 7) {
 			return RPT_CONTINUE; /* Need 7 digits for echolink */
 		} else {
-			snprintf(node_data, node_data_size, "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), digitbuf + 1, digitbuf + 1);
+			if (node_data && node_data_size) {
+				snprintf(node_data, node_data_size, "echolink/%s/%s,%s", S_OR(myrpt->p.eloutbound, "el0"), digitbuf + 1, digitbuf + 1);
+			}
 			return RPT_MATCH_EL;
 		}
 	}
-	/* Not an echolink node */
 	if (node_lookup(myrpt, digitbuf, node_data, node_data_size, 1)) {
 		if (strlen(digitbuf) >= myrpt->longestnode) {
 			return RPT_NODE_NOT_FOUND; /* No such node */
@@ -267,7 +270,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
 			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		/* node must at least exist in list */
-		find_node_response = rpt_find_node(myrpt, digitbuf, tmp, sizeof(tmp));
+		find_node_response = rpt_find_node(myrpt, digitbuf, NULL, 0);
 		if (find_node_response == RPT_CONTINUE) {
 			break;
 		}
