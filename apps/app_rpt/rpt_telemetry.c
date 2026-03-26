@@ -2920,9 +2920,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 	case REMDISC:
 		mylink = (struct rpt_link *) data;
-		if (IS_ECHOLINK_NODE(mylink->name) && !myrpt->p.eannmode) {
+		if ((!mylink) || (mylink->name[0] == '0')) {
 			return;
-		} else if ((!mylink) || (mylink->name[0] == '0')) {
+		} else if (IS_ECHOLINK_NODE(mylink->name) && !myrpt->p.eannmode) {
 			return;
 		} else if (!mylink->gott && !mylink->isremote && !mylink->outbound && mylink->chan &&
 				   !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {

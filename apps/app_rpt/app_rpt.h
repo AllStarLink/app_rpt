@@ -1117,7 +1117,7 @@ struct statpost {
 #define IS_LOCAL(c) (!strncasecmp(ast_channel_name(c), "Local", 5))
 #define IS_LOCAL_NAME(c) (!strncasecmp(c, "Local", 5))
 
-#define IS_ECHOLINK_NODE(c) (c && c[0] == '3') /* Echolink node numbers start with 3 */
+#define IS_ECHOLINK_NODE(n) (n && n[0] == '3') /* Echolink node numbers start with 3 */
 
 int rpt_debug_level(void);
 int rpt_set_debug_level(int newlevel);
