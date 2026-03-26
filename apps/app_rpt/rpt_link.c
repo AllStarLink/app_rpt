@@ -893,7 +893,7 @@ void *rpt_link_connect(void *data)
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {
 		init_linkmode(myrpt, l, LINKMODE_TLB);
-	} else if (node[0] == '3') {
+	} else if (IS_ECHOLINK_NODE(node)) {
 		init_linkmode(myrpt, l, LINKMODE_ECHOLINK);
 	} else {
 		l->linkmode = 0;

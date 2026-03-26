@@ -2914,18 +2914,18 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	switch (mode) {
 	case CONNECTED:
 		mylink = (struct rpt_link *) data;
-		if ((mylink->name[0] == '3') && (!myrpt->p.eannmode)) {
+		if (IS_ECHOLINK_NODE(mylink->name) && !myrpt->p.eannmode) {
 			return;
 		}
 		break;
 	case REMDISC:
 		mylink = (struct rpt_link *) data;
-		if ((mylink->name[0] == '3') && (!myrpt->p.eannmode)) {
+		if (IS_ECHOLINK_NODE(mylink->name) && !myrpt->p.eannmode) {
 			return;
 		} else if ((!mylink) || (mylink->name[0] == '0')) {
 			return;
-		} else if (!mylink->gott && !mylink->isremote && !mylink->outbound &&
-				   mylink->chan && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
+		} else if (!mylink->gott && !mylink->isremote && !mylink->outbound && mylink->chan &&
+				   !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
 			return;
 		}
 		break;
