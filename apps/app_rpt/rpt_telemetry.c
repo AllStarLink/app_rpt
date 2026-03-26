@@ -2914,7 +2914,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	switch (mode) {
 	case CONNECTED:
 		mylink = (struct rpt_link *) data;
-		if (IS_ECHOLINK_NODE(mylink->name) && !myrpt->p.eannmode) {
+		if (!mylink) {
+			return;
+		} else if (IS_ECHOLINK_NODE(mylink->name) && !myrpt->p.eannmode) {
 			return;
 		}
 		break;
@@ -2957,6 +2959,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 	case LINKUNKEY:
 		mylink = (struct rpt_link *) data;
+		if (!mylink) {
+			return;
+		}
 		if (myrpt->p.locallinknodesn) {
 			int v, w;
 
