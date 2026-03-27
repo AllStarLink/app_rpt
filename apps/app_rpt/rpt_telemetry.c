@@ -3219,7 +3219,6 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	} else if ((mode == ARB_ALPHA) || (mode == REV_PATCH) ||
 			   (mode == PLAYBACK) || (mode == LOCALPLAY) || (mode == VARCMD) || (mode == METER) || (mode == USEROUT)) {
 		ast_copy_string(tele->param, (char *) data, TELEPARAMSIZE);
-		tele->param[TELEPARAMSIZE - 1] = 0;
 	}
 	if ((mode == REMXXX) || (mode == PAGE) || (mode == MDC1200)) {
 		tele->submode.p = data;
