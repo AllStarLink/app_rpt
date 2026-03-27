@@ -129,8 +129,8 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 	if (!tlb_query_callsign(name, str, sizeof(str))) {
 		tgn = 1;
 	}
-	if (((name[0] != '3') && (tgn != 1)) || ((name[0] == '3') && (myrpt->p.eannmode != 2))
-		|| ((tgn == 1) && (myrpt->p.tannmode != 2))) {
+	if ((!IS_ECHOLINK_NODE(name) && tgn != 1) || (IS_ECHOLINK_NODE(name) && myrpt->p.eannmode != 2) ||
+		((tgn == 1) && (myrpt->p.tannmode != 2))) {
 		val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "nodenames");
 		if (!val)
 			val = NODENAMES;
@@ -146,7 +146,7 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 			return res;
 		return (sayphoneticstr(mychannel, str));
 	}
-	if (name[0] != '3')
+	if (!IS_ECHOLINK_NODE(name))
 		return res;
 	if (myrpt->p.eannmode < 2)
 		return res;

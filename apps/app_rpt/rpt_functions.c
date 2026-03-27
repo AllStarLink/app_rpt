@@ -102,7 +102,7 @@ static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitb
 		}
 		return RPT_MATCH_TLB;
 	}
-	if (digitbuf[0] == '3') {
+	if (IS_ECHOLINK_NODE(digitbuf)) {
 		/* It's an echolink node */
 		if (strlen(digitbuf) < 7) {
 			return RPT_CONTINUE; /* Need 7 digits for echolink */
