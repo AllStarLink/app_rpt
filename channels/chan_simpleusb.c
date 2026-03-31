@@ -549,7 +549,7 @@ static int16_t hpass(int16_t input, float* restrict xv, float* restrict yv)
 /*!
  * \brief Configure our private structure based on the
  * found hardware type.
- * \param o		Pointer chan_usbradio_pvt.
+ * \param o		Pointer chan_simpleusb_pvt.
  * \returns 0	Always returns zero.
  */
 static int hidhdwconfig(struct chan_simpleusb_pvt *o)
@@ -582,7 +582,7 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 		o->hid_gpio_loc = 1;		/* For ALL GPIO */
 		o->valid_gpios = 0xfb;		/* for GPIO 1,2,4,5,6,7,8 (5,6,7,8 for CM-119 only) */
 	} else if (o->hdwtype == 2) {	//NHRC (N1KDO) (dudeusb w/o user GPIO)
-		o->hid_gpio_ctl = 4;		/* set GPIO 3 to output mode */
+		o->hid_gpio_ctl = 0x04;		/* set GPIO 3 to output mode */
 		o->hid_gpio_ctl_loc = 2;	/* For CTL of GPIO */
 		o->hid_io_cor = 2;			/* VOLD DN is COR */
 		o->hid_io_cor_loc = 0;		/* VOL DN COR */
@@ -647,7 +647,7 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
  * \brief Indicate that PTT is activate.
  *	This causes the hidthead to to exit from the loop timer and
  *	evaluate the gpio pins.
- * \param o		Pointer chan_usbradio_pvt.
+ * \param o		Pointer chan_simpleusb_pvt.
  */
 static void kickptt(const struct chan_simpleusb_pvt *o)
 {
@@ -2022,12 +2022,11 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	register int i;
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f = &o->read_f, *f1;
-	struct ast_frame wf1;
 	time_t now;
 	register short *sp, *sp1; 
 	short outbuf[FRAME_SIZE * 2 * 6];
 
-	/* check to the if the hid thread is still processing */
+	/* check if the hid thread is still processing */
 	if (o->lasthidtime) {
 		ast_radio_time(&now);
 		if ((now - o->lasthidtime) > 3) {
@@ -2092,6 +2091,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			ast_free(u);
 			f1 = ast_frdup(f);
 			if (!f1) {
+				ast_mutex_unlock(&o->echolock);
 				return &ast_null_frame;
 			}
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
@@ -2106,7 +2106,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	}
 
 	/* Process the transmit queue */
-
 	for (;;) {
 		num_frames = 0;
 		ast_mutex_lock(&o->txqlock);
@@ -2234,7 +2233,8 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	 * in stereo format.
 	 */
 	res = read(o->sounddev, o->simpleusb_read_buf + o->readpos, sizeof(o->simpleusb_read_buf) - o->readpos);
-	if (res < 0) { /* Audio data not ready, return a NULL frame */
+	if (res < 0) {
+		/* audio data not ready */
 		if (errno != EAGAIN) {
 			o->readerrs = 0;
 			o->hasusb = 0;
@@ -2253,8 +2253,9 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	}
 
 #if DEBUG_CAPTURES == 1
-	if (o->rxcapraw && frxcapraw)
+	if (o->rxcapraw && frxcapraw) {
 		fwrite(o->simpleusb_read_buf + o->readpos, 1, res, frxcapraw);
+	}
 #endif
 
 	if (o->readerrs) {
@@ -2276,11 +2277,14 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) num_frames++;
 		ast_mutex_unlock(&o->txqlock);
 		if (num_frames < 1) {
-			memset(&wf1, 0, sizeof(wf1));
-			wf1.frametype = AST_FRAME_TEXT;
-			wf1.datalen = strlen(ENDPAGE_STR) + 1;
-			wf1.data.ptr = ENDPAGE_STR;
-			ast_queue_frame(o->owner, &wf1);
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_TEXT,
+				.data.ptr = ENDPAGE_STR,
+				.datalen = sizeof(ENDPAGE_STR),
+				.src = __PRETTY_FUNCTION__,
+			};
+
+			ast_queue_frame(o->owner, &wf);
 			o->waspager = 0;
 		}
 	}
@@ -3834,7 +3838,7 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
  * \param ctg			Category.
  * \return				chan_simpleusb_pvt.
  */
-static struct chan_simpleusb_pvt *store_config(const struct ast_config *cfg, const char *ctg)
+static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const char *ctg)
 {
 	const struct ast_variable *v;
 	struct chan_simpleusb_pvt *o;

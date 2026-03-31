@@ -386,7 +386,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					connstate = "ESTABLISHED";
 				else
 					connstate = "CONNECTING";
-				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
+				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_cleanup(links_copy); /* Free the copy container */
@@ -556,7 +556,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				} else {
 					connstate = "CONNECTING";
 				}
-				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%-20s~", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
+				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_cleanup(links_copy); /* Free the copy container */
@@ -1139,7 +1139,7 @@ static int rpt_do_lookup(int fd, int argc, const char *const *argv)
 		myrpt = &rpt_vars[i];
 		node_lookup(myrpt, (char *) argv[2], tmp, sizeof(tmp) - 1, 1);
 		if (strlen(tmp)) {
-			ast_cli(fd, "Node: %-10.10s Data: %-70.70s\n", myrpt->name, tmp);
+			ast_cli(fd, "Node: %-10.10s Data: %s\n", myrpt->name, tmp);
 		}
 	}
 	return RESULT_SUCCESS;

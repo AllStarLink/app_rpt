@@ -60,11 +60,11 @@ static int manager_rpt_local_nodes(struct mansession *s, const struct message *m
 	for (i = 0; i < nrpts; i++) {
 		if (rpt_vars[i].name[0])
 			astman_append(s, "  <node>%s</node>\r\n", rpt_vars[i].name);
-	}							/* for i */
+	}
 	astman_append(s, "</nodes>\r\n");
 	astman_append(s, "\r\n");	/* Properly terminate Manager output */
 	return RESULT_SUCCESS;
-}								/* manager_rpt_local_nodes() */
+}
 
 /*
  * Append Success and ActionID to manager response message
@@ -96,7 +96,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 			rpt_manager_success(ses, m);
 			astman_append(ses, "Node: %s\r\n", node);
 
-			rpt_mutex_lock(&rpt_vars[i].lock);	/* LOCK */
+			rpt_mutex_lock(&rpt_vars[i].lock); /* LOCK */
 
 			RPT_LIST_TRAVERSE(rpt_vars[i].links, l, l_it) {
 				if (l->name[0] == '0') { /* Skip '0' nodes */
@@ -126,12 +126,13 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 	struct rpt_link *l;
 	const char *node = astman_get_header(m, "Node");
 	int nrpts = rpt_num_rpts();
-	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	struct ast_str *lbuf;
 	struct ao2_iterator l_it;
 	struct ao2_container *links_copy;
-
 	char *parrot_ena, *sys_ena, *tot_ena, *link_ena, *patch_ena, *patch_state;
 	char *sch_ena, *user_funs, *tail_type, *iconns, *tot_state, *ider_state, *tel_mode;
+
+	lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!lbuf) {
 		return -1;
 	}
@@ -147,7 +148,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
+			rpt_mutex_lock(&myrpt->lock); /* LOCK */
 
 			ast_copy_string(rxchanname, myrpt->rxchanname, sizeof(rxchanname));
 
@@ -196,12 +197,13 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			}
 
 			if (myrpt->p.telemdynamic) {
-				if (myrpt->telemmode == 0x7fffffff)
+				if (myrpt->telemmode == 0x7fffffff) {
 					tel_mode = "1";
-				else if (myrpt->telemmode == 0x00)
+				} else if (myrpt->telemmode == 0) {
 					tel_mode = "0";
-				else
+				} else {
 					tel_mode = "2";
+				}
 			} else {
 				tel_mode = "3";
 			}
@@ -346,7 +348,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 }
 
 /*! \brief Dump statistics to manager session */
-static int rpt_manager_do_stats(struct mansession *s, const struct message *m, struct ast_str *str)
+static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 {
 	int i, j;
 	int dailytxtime, dailykerchunks;
@@ -366,20 +368,28 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 	struct ao2_container *links_copy;
 	int nrpts = rpt_num_rpts();
 	static char *not_applicable = "N/A";
+	struct ast_str *str;
 
 	tot_state = ider_state = patch_state = reverse_patch_state = input_signal = not_applicable;
 	called_number = lastdtmfcommand = transmitterkeyed = NULL;
 
+	str = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	if (!str) {
+		return -1;
+	}
+
 	time(&now);
 	for (i = 0; i < nrpts; i++) {
 		int numoflinks;
-		if ((node) && (!strcmp(node, rpt_vars[i].name))) {
+
+		if (node && !strcmp(node, rpt_vars[i].name)) {
 			rpt_manager_success(s, m);
 
 			myrpt = &rpt_vars[i];
 			ast_assert(myrpt != NULL);
 
-			if (myrpt->remote) {	/* Remote base ? */
+			if (myrpt->remote) {
+				/* if remote base */
 				char *loginuser, *loginlevel, *freq, *rxpl, *txpl, *modestr;
 				char rxplon = 0, txplon = 0, remoteon, reportfmstuff;
 				enum rpt_mode remmode = REM_MODE_FM;
@@ -389,7 +399,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 
 				loginuser = loginlevel = freq = rxpl = txpl = NULL;
 				/* Make a copy of all stat variables while locked */
-				rpt_mutex_lock(&myrpt->lock);	/* LOCK */
+				rpt_mutex_lock(&myrpt->lock); /* LOCK */
 				if ((remoteon = myrpt->remoteon)) {
 					if (!ast_strlen_zero(myrpt->loginuser))
 						loginuser = ast_strdup(myrpt->loginuser);
@@ -407,7 +417,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 					rxplon = myrpt->rxplon;
 					txplon = myrpt->txplon;
 				}
-				rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
+				rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
 				astman_append(s, "IsRemoteBase: YES\r\n");
 				astman_append(s, "RemoteOn: %s\r\n", (remoteon) ? "YES" : "NO");
 				if (remoteon) {
@@ -476,12 +486,13 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 					astman_append(s, "PowerLevel: %c\r\n", powerlevelc);
 				}
 				astman_append(s, "\r\n");
-				return 0;		/* End of remote base status reporting */
+				ast_free(str);
+				return 0;
 			}
 
 			/* ELSE Process as a repeater node */
 			/* Make a copy of all stat variables while locked */
-			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
+			rpt_mutex_lock(&myrpt->lock); /* LOCK */
 			dailytxtime = myrpt->dailytxtime;
 			totaltxtime = myrpt->totaltxtime;
 			dailykeyups = myrpt->dailykeyups;
@@ -498,6 +509,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 			if (!links_copy) {
 				rpt_mutex_unlock(&myrpt->lock);
+				ast_free(str);
 				return -1;
 			}
 
@@ -636,8 +648,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			totaltxtime %= 60000;
 			seconds = (int) totaltxtime / 1000;
 			totaltxtime %= 1000;
-			astman_append(s, "TxTimeSinceSystemInitialization: %02d:%02d:%02d:%02d\r\n", hours, minutes, seconds,
-						  (int) totaltxtime);
+			astman_append(s, "TxTimeSinceSystemInitialization: %02d:%02d:%02d:%02d\r\n", hours, minutes, seconds, (int) totaltxtime);
 
 			ast_str_set(&str, 0, "NodesCurrentlyConnectedToUs: ");
 			j = 0;
@@ -671,11 +682,13 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m, s
 			if (lastdtmfcommand) {
 				ast_free(lastdtmfcommand);
 			}
-			astman_append(s, "\r\n");	/* We're Done! */
+			astman_append(s, "\r\n");
+			ast_free(str);
 			return 0;
 		}
 	}
 	astman_send_error(s, m, "RptStatus unknown or missing node");
+	ast_free(str);
 	return 0;
 }
 
@@ -689,7 +702,6 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	int uptime, hours, minutes;
 	time_t now;
 	const char *cmd = astman_get_header(m, "Command");
-	struct ast_str *str = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	enum rpt_manager {
 		MGRCMD_RPTSTAT,
 		MGRCMD_NODESTAT,
@@ -710,15 +722,9 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	};
 	int nrpts = rpt_num_rpts();
 
-	if (!str) {
-		astman_send_error(s, m, "RptStatus Memory allocation failure");
-		return 0;
-	}
-	time(&now);
 	/* Check for Command */
 	if (ast_strlen_zero(cmd)) {
 		astman_send_error(s, m, "RptStatus missing command");
-		ast_free(str);
 		return 0;
 	}
 	/* Try to find the command in the table */
@@ -726,13 +732,11 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 		if (!strcmp(mct[i].cmd, cmd))
 			break;
 	}
-
-	if (!mct[i].cmd) {			/* Found or not found ? */
+	if (!mct[i].cmd) {
 		astman_send_error(s, m, "RptStatus unknown command");
-		ast_free(str);
 		return 0;
-	} else
-		index = mct[i].index;
+	}
+	index = mct[i].index;
 
 	switch (index) {			/* Use the index to go to the correct command */
 
@@ -742,6 +746,13 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 			rpt_manager_success(s, m);
 			astman_append(s, "<NONE>\r\n");
 		} else {
+			struct ast_str *str;
+
+			str = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!str) {
+				return -1;
+			}
+
 			ast_str_set(&str, 0, "Nodes: ");
 			for (i = 0; i < nrpts; i++) {
 				ast_str_append(&str, 0, "%s", rpt_vars[i].name);
@@ -751,8 +762,10 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 			}
 			rpt_manager_success(s, m);
 			astman_append(s, "%s\r\n", ast_str_buffer(str));
+			ast_free(str);
 		}
 
+		time(&now);
 		uptime = (int) (now - rpt_starttime());
 		hours = uptime / 3600;
 		uptime %= 3600;
@@ -765,25 +778,22 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 		break;
 
 	case MGRCMD_NODESTAT:
-		res = rpt_manager_do_stats(s, m, str);
-		ast_free(str);
+		res = rpt_manager_do_stats(s, m);
 		return res;
 
 	case MGRCMD_XSTAT:
 		res = rpt_manager_do_xstat(s, m);
-		ast_free(str);
 		return res;
 
 	case MGRCMD_SAWSTAT:
 		res = rpt_manager_do_sawstat(s, m);
-		ast_free(str);
 		return res;
 
 	default:
 		astman_send_error(s, m, "RptStatus invalid command");
 		break;
 	}
-	ast_free(str);
+
 	return 0;
 }
 

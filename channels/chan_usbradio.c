@@ -533,7 +533,7 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
 		o->valid_gpios = 1;		  /* for GPIO 1 */
 	} else if (o->hdwtype == 0) { // dudeusb
-		o->hid_gpio_ctl = 4;	  /* set GPIO 3 to output mode */
+		o->hid_gpio_ctl = 0x04;	  /* set GPIO 3 to output mode */
 		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
 		o->hid_io_cor = 2;		  /* VOLD DN is COR */
 		o->hid_io_cor_loc = 0;	  /* VOL DN COR */
@@ -543,7 +543,7 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
 		o->valid_gpios = 0xfb;	  /* for GPIO 1,2,4,5,6,7,8 (5,6,7,8 for CM-119 only) */
 	} else if (o->hdwtype == 2) { // NHRC (N1KDO) (dudeusb w/o user GPIO)
-		o->hid_gpio_ctl = 4;	  /* set GPIO 3 to output mode */
+		o->hid_gpio_ctl = 0x04;	  /* set GPIO 3 to output mode */
 		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
 		o->hid_io_cor = 2;		  /* VOLD DN is COR */
 		o->hid_io_cor_loc = 0;	  /* VOL DN COR */
@@ -4975,7 +4975,7 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
  * \param ctg			Category.
  * \return				chan_usbradio_pvt.
  */
-static struct chan_usbradio_pvt *store_config(const struct ast_config *cfg, const char *ctg)
+static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char *ctg)
 {
 	const struct ast_variable *v;
 	struct chan_usbradio_pvt *o;

@@ -369,11 +369,10 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 {
 	struct ast_dns_result *result;
 	const struct ast_dns_record *record;
-
 	char domain[256];
 	int res;
 
-	/* will will require at least a node length of 4 digits */
+	/* we require at least a node length of 4 digits */
 	if (strlen(node) < 4) {
 		return -1;
 	}
@@ -532,9 +531,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.nodes, digitbuf);
 	if (val) {
 		if (nodedata && nodedatalength) {
-			//snprintf(str,strmax,val,digitbuf);
-			//snprintf(str, strmax, "%s%s", val, digitbuf);	/*! \todo 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy. */
-			snprintf(nodedata, nodedatalength, "%s", val); // Indeed, generally we only want the first part so for now, ignore the second bit
+			snprintf(nodedata, nodedatalength, "%s", val);
 			ast_debug(4, "Resolved by internal: node %s to %s\n", digitbuf, nodedata);
 		}
 		return 0;
@@ -544,8 +541,6 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 		while (vp) {
 			if (ast_extension_match(vp->name, digitbuf)) {
 				if (nodedata && nodedatalength) {
-					//snprintf(str,strmax,vp->value,digitbuf);
-					//snprintf(str, strmax, "%s%s", vp->value, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
 					snprintf(nodedata, nodedatalength, "%s", vp->value);
 					ast_debug(4, "Resolved by internal/wild: node %s to %s\n", digitbuf, nodedata);
 				}
@@ -556,17 +551,15 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 	}
 
 	/* try to look up the node using dns */
-	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_DNS) {
-		if(!node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
+	if (rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_DNS) {
+		if (!node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
 			ast_debug(4, "Resolved by DNS: node %s to %s\n", digitbuf, nodedata);
 			return 0;
 		}
 	}
 
 	/* try to lookup using the external file(s) */
-	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
-
-		/* lock the node lookup */
+	if (rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
 		ast_mutex_lock(&nodelookuplock);
 		if (!myrpt->p.extnodefilesn) {
 			ast_mutex_unlock(&nodelookuplock);
@@ -618,8 +611,6 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 				if (val) {
 					found = 1;
 					if (nodedata && nodedatalength) {
-						//snprintf(str,strmax,val,digitbuf);
-						//snprintf(str, strmax, "%s%s", val, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
 						snprintf(nodedata, nodedatalength, "%s", val);
 						ast_debug(4, "Resolved from file: node %s to %s\n", digitbuf, nodedata);
 					}
@@ -645,15 +636,15 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 	val = NULL;
 
 	/* try to look up the node using dns */
-	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_DNS) {
-		if(!node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
+	if (rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_DNS) {
+		if (!node_lookup_bydns(digitbuf, nodedata, nodedatalength)) {
 			ast_debug(4, "Forward lookup resolved by DNS: node %s to %s\n", digitbuf, nodedata);
 			return 0;
 		}
 	}
 
 	/* try to lookup using the external file(s) */
-	if(rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
+	if (rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
 		/* see if we have extnodefile setup in the proxy section - if not use the default name */
 		val = (char *) ast_variable_retrieve(cfg, "proxy", "extnodefile");
 		if (!val) {
@@ -816,7 +807,7 @@ void load_rpt_vars(int n, int init)
 	} else { \
 		rpt_vars[n].p.var = default; \
 	}
-	
+
 #define RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(var, name, default_val, min_val, max_val) \
 	val = ast_variable_retrieve(cfg, cat, name); \
 	if (!ast_strlen_zero(val)) { \
@@ -844,11 +835,7 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.var = default; \
 	}
 
-	RPT_CONFIG_VAR(ourcontext, "context");
-	if (!val) {
-		rpt_vars[n].p.ourcontext = cat;
-	}
-
+	RPT_CONFIG_VAR_DEFAULT(ourcontext, "context", cat);
 	RPT_CONFIG_VAR(ourcallerid, "callerid");
 	RPT_CONFIG_VAR(acctcode, "accountcode");
 	RPT_CONFIG_VAR(ident, "idrecording");
@@ -907,10 +894,9 @@ void load_rpt_vars(int n, int init)
 
 	rpt_vars[n].p.tailmessages[0] = 0;
 	rpt_vars[n].p.tailmessagemax = 0;
-
 	val = ast_variable_retrieve(cfg, cat, "tailmessagelist");
 	if (val) {
-		rpt_vars[n].p.tailmessagemax = finddelim((char*) val, (char**) rpt_vars[n].p.tailmessages, 500); /*! \todo This is illegal, cannot cast the const away */
+		rpt_vars[n].p.tailmessagemax = finddelim((char *) val, (char **) rpt_vars[n].p.tailmessages, ARRAY_LEN(rpt_vars[n].p.tailmessages));
 	}
 
 	RPT_CONFIG_VAR(aprstt, "aprstt");
@@ -953,22 +939,26 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(extnodes, "extnodes", EXTNODES);
 
 	val = ast_variable_retrieve(cfg, cat, "extnodefile");
-	rpt_vars[n].p.extnodefilesn = explode_string((char*) S_OR(val, EXTNODEFILE), (char**) rpt_vars[n].p.extnodefiles, ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0); /*! \todo Illegal cast */
+	rpt_vars[n].p.extnodefilesn = explode_string((char *) S_OR(val, EXTNODEFILE), (char **) rpt_vars[n].p.extnodefiles,
+		ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
 
 	/*! \todo Is this memory properly freed? */
 	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
 	if (val) {
-		rpt_vars[n].p.locallinknodesn = explode_string(ast_strdup(val), (char**) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
+		rpt_vars[n].p.locallinknodesn =
+			explode_string(ast_strdup(val), (char **) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "lconn");
 	if (val) {
-		rpt_vars[n].p.nlconn = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
+		rpt_vars[n].p.nlconn =
+			explode_string(strupr(ast_strdup(val)), (char **) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "ldisc");
 	if (val) {
-		rpt_vars[n].p.nldisc = explode_string(strupr(ast_strdup(val)), (char**) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
+		rpt_vars[n].p.nldisc =
+			explode_string(strupr(ast_strdup(val)), (char **) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
 	}
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
@@ -1053,14 +1043,12 @@ void load_rpt_vars(int n, int init)
 #ifdef	__RPT_NOTCH
 	val = ast_variable_retrieve(cfg, this, "rxnotch");
 	if (val) {
-		i = finddelim((char*) val, strs, MAXFILTERS * 2); /*! \todo Illegal cast away of const */
+		i = finddelim((char *) val, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(rpt_vars[n].filters) * 2));
 		i &= ~1;				/* force an even number, rounded down */
 		if (i >= 2) {
 			for (j = 0; j < i; j += 2) {
-				rpt_mknotch(atof(strs[j]), atof(strs[j + 1]),
-							&rpt_vars[n].filters[j >> 1].gain,
-							&rpt_vars[n].filters[j >> 1].const0, &rpt_vars[n].filters[j >> 1].const1,
-							&rpt_vars[n].filters[j >> 1].const2);
+				rpt_mknotch(atof(strs[j]), atof(strs[j + 1]), &rpt_vars[n].filters[j >> 1].gain,
+					&rpt_vars[n].filters[j >> 1].const0, &rpt_vars[n].filters[j >> 1].const1, &rpt_vars[n].filters[j >> 1].const2);
 				sprintf(rpt_vars[n].filters[j >> 1].desc, "%s Hz, BW = %s", strs[j], strs[j + 1]);
 			}
 		}
@@ -1095,7 +1083,7 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "locallist");
 	if (val) {
 		memset(rpt_vars[n].p.locallist, 0, sizeof(rpt_vars[n].p.locallist));
-		rpt_vars[n].p.nlocallist = finddelim((char*) val, (char**) rpt_vars[n].p.locallist, 16); /*! \todo Illegal cast */
+		rpt_vars[n].p.nlocallist = finddelim((char *) val, (char **) rpt_vars[n].p.locallist, ARRAY_LEN(rpt_vars[n].p.locallist));
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "ctgroup");
@@ -1107,8 +1095,8 @@ void load_rpt_vars(int n, int init)
 
 	val = ast_variable_retrieve(cfg, cat, "inxlat");
 	if (val) {
-		memset(&rpt_vars[n].p.inxlat, 0, sizeof(struct rpt_xlat));
-		i = finddelim((char *) val, strs, ARRAY_LEN(strs)); /*! \todo Illegal cast */
+		memset(&rpt_vars[n].p.inxlat, 0, sizeof(rpt_vars[n].p.inxlat));
+		i = finddelim((char *) val, strs, ARRAY_LEN(strs));
 		if (i > 3) {
 			rpt_vars[n].p.dopfxtone = ast_true(strs[3]);
 		}
@@ -1125,8 +1113,8 @@ void load_rpt_vars(int n, int init)
 
 	val = ast_variable_retrieve(cfg, cat, "outxlat");
 	if (val) {
-		memset(&rpt_vars[n].p.outxlat, 0, sizeof(struct rpt_xlat));
-		i = finddelim((char *) val, strs, ARRAY_LEN(strs)); /*! \todo Illegal cast */
+		memset(&rpt_vars[n].p.outxlat, 0, sizeof(rpt_vars[n].p.outxlat));
+		i = finddelim((char *) val, strs, ARRAY_LEN(strs));
 		if (i > 2) {
 			ast_copy_string(rpt_vars[n].p.outxlat.passchars, strs[2], sizeof(rpt_vars[n].p.outxlat.passchars));
 		}
@@ -1163,6 +1151,9 @@ void load_rpt_vars(int n, int init)
 			break;
 		case 4800:
 			rpt_vars[n].p.iospeed = B4800;
+			break;
+		case 9600:
+			rpt_vars[n].p.iospeed = B9600;
 			break;
 		case 19200:
 			rpt_vars[n].p.iospeed = B19200;
@@ -1275,6 +1266,7 @@ void load_rpt_vars(int n, int init)
 					case 0:	/* rptena */
 						rpt_vars[n].p.s[statenum].txdisable = 0;
 						break;
+
 					case 1:	/* rptdis */
 						rpt_vars[n].p.s[statenum].txdisable = 1;
 						break;

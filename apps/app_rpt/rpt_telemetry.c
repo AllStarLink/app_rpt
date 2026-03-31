@@ -1262,10 +1262,6 @@ void *rpt_tele_thread(void *this)
 	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
 	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
-
-#ifdef	_MDC_ENCODE_H_
-	struct mdcparams *mdcp;
-#endif
 	struct ast_format_cap *cap;
 
 	/* get a pointer to myrpt */
@@ -1481,7 +1477,9 @@ void *rpt_tele_thread(void *this)
 		imdone = 1;
 		break;
 #ifdef	_MDC_ENCODE_H_
-	case MDC1200:
+	case MDC1200: {
+		struct mdcparams *mdcp;
+
 		mdcp = (struct mdcparams *) mytele->submode.p;
 		if (mdcp) {
 			if (mdcp->type[0] != 'A') {
@@ -1508,6 +1506,7 @@ void *rpt_tele_thread(void *this)
 		}
 		imdone = 1;
 		break;
+	}
 #endif
 	case UNKEY:
 	case LOCUNKEY:
@@ -2426,8 +2425,9 @@ treataslocal:
 		/* parse em */
 		ns = finddelim(ast_str_buffer(lbuf), strs, n);
 		/* sort em */
-		if (ns)
+		if (ns) {
 			qsort((void *) strs, ns, sizeof(char *), mycompar);
+		}
 		/* wait a little bit */
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			ast_free(strs);
@@ -2890,6 +2890,17 @@ abort3:
 	pthread_exit(NULL);
 }
 
+static const char *rpt_tele_mode_str(enum rpt_tele_mode mode)
+{
+	static const char *mode_str[] = {
+#define TELEMETRY_MODE(name) #name,
+		TELEMETRY_MODES(TELEMETRY_MODE)
+#undef TELEMETRY_MODE
+	};
+
+	return ((mode >= 0) && (mode < ARRAY_LEN(mode_str))) ? mode_str[mode] : "???";
+}
+
 void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 {
 	struct rpt_tele *tele;
@@ -2904,7 +2915,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	struct ast_str *lbuf;
 	struct ao2_iterator l_it;
 
-	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%i\n", mode);
+	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%s\n", rpt_tele_mode_str(mode));
 
 	if ((mode == ID) && is_paging(myrpt)) {
 		myrpt->deferid = 1;
@@ -3169,8 +3180,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			/* parse em */
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
 			/* sort em */
-			if (ns)
+			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
+			}
 			/* go thru all the nodes in list */
 			for (i = 0; i < ns; i++) {
 				char s, m = 'T';

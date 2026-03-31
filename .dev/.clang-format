@@ -160,6 +160,7 @@ StatementMacros:
   - Q_UNUSED
   - QT_REQUIRE_VERSION
   - AST_APP_ARG
+  - TELEMETRY_MODE
 TabWidth:        4
 UseCRLF:         false
 UseTab:          Always

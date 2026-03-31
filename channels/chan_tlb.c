@@ -847,12 +847,14 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		ast_free(str);
 		return -1;
 	}
 	val = (char *) ast_variable_retrieve(cfg, "nodes", str);
 	if (!val) {
 		ast_log(LOG_ERROR, "Node %s not found!\n", str);
 		ast_config_destroy(cfg);
+		ast_free(str);
 		return -1;
 	}
 	sval = ast_strdupa(val);
@@ -862,6 +864,7 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	n = finddelim(sval, strs, ARRAY_LEN(strs));
 	if (n < 3) {
 		ast_verb(3, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
+		ast_free(str);
 		return -1;
 	}
 	
@@ -877,8 +880,8 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	sin.sin_addr.s_addr = inet_addr(strs[1]);
 	sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 	ast_mutex_unlock(&instp->lock);
-	ast_free(str);
 	ast_debug(1, "tlb: Connect request sent to %s (%s:%s)\n", str, strs[1], strs[2]);
+	ast_free(str);
 
 	ast_setstate(ast, AST_STATE_RINGING);
 	
