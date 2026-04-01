@@ -5760,11 +5760,11 @@ static int load_config(int reload)
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
-		if (rpt_vars[n].rxchanname) {
-			ast_free(rpt_vars[n].rxchanname);
-		}
 		if (val) {
 			char *slash, *rxchan = ast_strdup(val);
+			if (rpt_vars[n].rxchanname) {
+				ast_free(rpt_vars[n].rxchanname);
+			}
 			slash = strchr(rxchan, '/');
 			if (!slash) {
 				ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding node '%s'\n", val, this);
@@ -5785,26 +5785,29 @@ static int load_config(int reload)
 		}
 		rpt_vars[n].name = ast_strdup(this);
 		val = ast_variable_retrieve(cfg, this, "txchannel");
-		if (rpt_vars[n].txchanname) {
-			ast_free(rpt_vars[n].txchanname);
-		}
 		if (val) {
-			rpt_vars[n].txchanname = ast_strdup(val);
-		}
+			if (rpt_vars[n].txchanname) {
+				ast_free(rpt_vars[n].txchanname);
+
+				rpt_vars[n].txchanname = ast_strdup(val);
+			}
 		rpt_vars[n].remote = 0;
-		rpt_vars[n].remoterig = "";
+		rpt_vars[n].remoterig = ast_strdup("");
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
 		val = ast_variable_retrieve(cfg, this, "remote");
-		if (rpt_vars[n].remoterig) {
-			ast_free(rpt_vars[n].remoterig);
-		}
 		if (val) {
+			if (rpt_vars[n].remoterig) {
+				ast_free(rpt_vars[n].remoterig);
+			}
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
 		}
 		val = ast_variable_retrieve(cfg, this, "radiotype");
 		if (val) {
+			if (rpt_vars[n].remoterig) {
+				ast_free(rpt_vars[n].remoterig);
+			}
 			rpt_vars[n].remoterig = ast_strdup(val);
 		}
 
@@ -7714,6 +7717,10 @@ static int unload_module(void)
 		if (rpt_vars[i].remoterig) {
 			ast_free(rpt_vars[i].remoterig);
 			rpt_vars[i].remoterig = NULL;
+		}
+		if (rpt_vars[i].macrobuf) {
+			ast_free(rpt_vars[i].macrobuf);
+			rpt_vars[i].macrobuf = NULL;
 		}
 	}
 
