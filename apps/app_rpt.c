@@ -7636,6 +7636,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup_rx_tx(myrpt);
 	closerem(myrpt);
+	if (rpt_vars[i].macrobuf) {
+		ast_free(rpt_vars[i].macrobuf);
+		rpt_vars[i].macrobuf = NULL;
+	}
 	if (myrpt->p.rptnode) {
 		rpt_mutex_lock(&myrpt->lock);
 		for (i = 0; i < nrpts; i++) {
@@ -7717,10 +7721,6 @@ static int unload_module(void)
 		if (rpt_vars[i].remoterig) {
 			ast_free(rpt_vars[i].remoterig);
 			rpt_vars[i].remoterig = NULL;
-		}
-		if (rpt_vars[i].macrobuf) {
-			ast_free(rpt_vars[i].macrobuf);
-			rpt_vars[i].macrobuf = NULL;
 		}
 	}
 
