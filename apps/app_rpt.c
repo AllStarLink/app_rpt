@@ -5640,10 +5640,12 @@ static void *rpt(void *this)
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	stop_outstream(myrpt);
 	/* Free dynamically allocated memory */
+#ifdef NATIVE_DSP
 	if (myrpt->dsp) {
 		ast_dsp_free(myrpt->dsp);
 		myrpt->dsp = NULL;
 	}
+#endif
 	if (myrpt->macrobuf) {
 		ast_free(myrpt->macrobuf);
 		myrpt->macrobuf = NULL;
@@ -5756,11 +5758,9 @@ static int load_config(int reload)
 		}
 		if (rpt_vars[n].macrobuf) {
 			ast_free(rpt_vars[n].macrobuf);
-			rpt_vars[n].macrobuf = NULL;
 		}
 		if (rpt_vars[n].rxchanname) {
 			ast_free(rpt_vars[n].rxchanname);
-			rpt_vars[n].rxchanname = NULL
 		}
 		if (rpt_vars[n].name) {
 			ast_free(rpt_vars[n].name);
@@ -7640,9 +7640,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup_rx_tx(myrpt);
 	closerem(myrpt);
-	if (myrpt.macrobuf) {
-		ast_free(myrpt.macrobuf);
-		myrpt.macrobuf = NULL;
+	if (myrpt->macrobuf) {
+		ast_free(myrpt->macrobuf);
+		myrpt->macrobuf = NULL;
 	}
 	if (myrpt->p.rptnode) {
 		rpt_mutex_lock(&myrpt->lock);
@@ -7710,7 +7710,7 @@ static int unload_module(void)
 		ast_debug(3, "Destroying locks for repeater %s\n", rpt_vars[i].name);
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
-		ast_mutex_destroy(&rpt_vars[i].statpost_lock;
+		ast_mutex_destroy(&rpt_vars[i].statpost_lock);
 		if (rpt_vars[i].rxchanname) {
 			ast_free(rpt_vars[i].rxchanname);
 			rpt_vars[i].rxchanname = NULL;
