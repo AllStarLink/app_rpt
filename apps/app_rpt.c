@@ -5648,23 +5648,6 @@ static void *rpt(void *this)
 		ast_free(myrpt->macrobuf);
 		myrpt->macrobuf = NULL;
 	}
-	if (myrpt->rxchanname) {
-		ast_free(myrpt->rxchanname);
-		myrpt->rxchanname = NULL;
-	}
-	if (myrpt->txchanname) {
-		ast_free(myrpt->txchanname);
-		myrpt->txchanname = NULL;
-	}
-	if (myrpt->name) {
-		ast_free(myrpt->name);
-		myrpt->name = NULL;
-	}
-	if (myrpt->remoterig) {
-		ast_free(myrpt->remoterig);
-		myrpt->remoterig = NULL;
-	}
-	/* Add other frees as needed */
 
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
@@ -7704,7 +7687,22 @@ static int unload_module(void)
 		ast_debug(3, "Destroying locks for repeater %s\n", rpt_vars[i].name);
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
-		/* Lock and unlock in case somebody had the lock */
+		if (rpt_vars[i]->rxchanname) {
+			ast_free(rpt_vars[i]->rxchanname);
+			rpt_vars[i]->rxchanname = NULL;
+		}
+		if (rpt_vars[i]->txchanname) {
+			ast_free(rpt_vars[i]->txchanname);
+			rpt_vars[i]->txchanname = NULL;
+		}
+		if (rpt_vars[i]->name) {
+			ast_free(rpt_vars[i]->name);
+			rpt_vars[i]->name = NULL;
+		}
+		if (rpt_vars[i]->remoterig) {
+			ast_free(rpt_vars[i]->remoterig);
+			rpt_vars[i]->remoterig = NULL;
+		}
 	}
 
 	res = ast_unregister_application(app);
