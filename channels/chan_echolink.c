@@ -269,9 +269,9 @@ struct gsmVoice_t {
 #else
 #error "Unknown byte order"
 #endif
-	uint16_t seqnum; // MUST be stored in network byte order
-	uint32_t time;	 // MUST be stored in network byte order
-	uint32_t ssrc;	 // MUST be stored in network byte order
+	uint16_t seqnum; /* MUST be stored in network byte order */
+	uint32_t time;	 /* MUST be stored in network byte order */
+	uint32_t ssrc;	 /* MUST be stored in network byte order */
 	unsigned char data[BLOCKING_FACTOR * GSM_FRAME_SIZE];
 };
 #pragma pack(pop)

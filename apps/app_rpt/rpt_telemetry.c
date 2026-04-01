@@ -1251,9 +1251,8 @@ void *rpt_tele_thread(void *this)
 	struct ao2_iterator l_it;
 	struct ao2_container *links_copy;
 	int id_malloc = 0, m;
-	char *ident, *nodename;
-	const char *p;
-	const char *context;
+	char *p, *ident, *nodename;
+	const char *context, *val;
 	time_t t, t_mono, was_mono;
 	char **strs;
 	int i, j, k, ns, rbimode;
@@ -1401,9 +1400,9 @@ void *rpt_tele_thread(void *this)
 		break;
 	case IDTALKOVER:
 		ast_debug(7, "Tracepoint IDTALKOVER: in rpt_tele_thread()\n");
-		p = ast_variable_retrieve(myrpt->cfg, nodename, "idtalkover");
-		if (p) {
-			res = telem_any(myrpt, mychannel, p, "IDTALKOVER");
+		val = ast_variable_retrieve(myrpt->cfg, nodename, "idtalkover");
+		if (val) {
+			res = telem_any(myrpt, mychannel, val, "IDTALKOVER");
 		}
 		imdone = 1;
 		break;

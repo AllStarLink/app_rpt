@@ -87,8 +87,9 @@ int get_wait_interval(struct rpt *myrpt, enum rpt_delay type)
 
 	if (wait_times) {
 		wait_times_save = ast_strdup(wait_times);
-		if (!wait_times_save)
+		if (!wait_times_save) {
 			return 0;
+		}
 	}
 
 	switch (type) {

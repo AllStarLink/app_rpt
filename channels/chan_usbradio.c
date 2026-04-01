@@ -510,7 +510,7 @@ static struct ast_channel_tech usbradio_tech = {
 /*!
  * \brief Configure our private structure based on the
  * found hardware type.
- * \param o		Pointer chan_usbradio_pvt.
+ * \param o		Channel private data.
  * \returns 0	Always returns zero.
  */
 static int hidhdwconfig(struct chan_usbradio_pvt *o)
@@ -522,7 +522,8 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 	 *  Apparently, in a REAL CM-108, GPIO really works as a GPIO
 	 */
 
-	if (o->hdwtype == 1) {		  // sphusb
+	if (o->hdwtype == 1) {
+		/* sphusb */
 		o->hid_gpio_ctl = 0x08;	  /* set GPIO4 to output mode */
 		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
 		o->hid_io_cor = 4;		  /* GPIO3 is COR */
@@ -532,7 +533,8 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 		o->hid_io_ptt = 8;		  /* GPIO 4 is PTT */
 		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
 		o->valid_gpios = 1;		  /* for GPIO 1 */
-	} else if (o->hdwtype == 0) { // dudeusb
+	} else if (o->hdwtype == 0) {
+		/* dudeusb */
 		o->hid_gpio_ctl = 0x04;	  /* set GPIO 3 to output mode */
 		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
 		o->hid_io_cor = 2;		  /* VOLD DN is COR */
@@ -542,7 +544,8 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 		o->hid_io_ptt = 4;		  /* GPIO 3 is PTT */
 		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
 		o->valid_gpios = 0xfb;	  /* for GPIO 1,2,4,5,6,7,8 (5,6,7,8 for CM-119 only) */
-	} else if (o->hdwtype == 2) { // NHRC (N1KDO) (dudeusb w/o user GPIO)
+	} else if (o->hdwtype == 2) {
+		/* NHRC (N1KDO) (dudeusb w/o user GPIO) */
 		o->hid_gpio_ctl = 0x04;	  /* set GPIO 3 to output mode */
 		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
 		o->hid_io_cor = 2;		  /* VOLD DN is COR */
@@ -552,7 +555,8 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 		o->hid_io_ptt = 4;		  /* GPIO 3 is PTT */
 		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
 		o->valid_gpios = 0;		  /* for GPIO 1,2,4 */
-	} else if (o->hdwtype == 3) { // custom version
+	} else if (o->hdwtype == 3) {
+		/* custom version */
 		o->hid_gpio_ctl = 0x0c;	  /* set GPIO 3 & 4 to output mode */
 		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
 		o->hid_io_cor = 2;		  /* VOLD DN is COR */
@@ -608,7 +612,7 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
  * \brief Indicate that PTT is activate.
  *	This causes the hidthead to to exit from the loop timer and
  *	evaluate the gpio pins.
- * \param o		Pointer chan_usbradio_pvt.
+ * \param o		Channel private data.
  */
 static void kickptt(const struct chan_usbradio_pvt *o)
 {
@@ -1503,7 +1507,7 @@ static void *hidthread(void *arg)
 
 /*!
  * \brief Get the number of blocks used in the audio output channel.
- * \param o		Pointer chan_usbradio_pvt.
+ * \param o		Channel private data.
  * \returns		Number of blocks that have been used.
  */
 static int used_blocks(struct chan_usbradio_pvt *o)
@@ -1601,7 +1605,7 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
  * and open it again.
  * It initializes the device based on our requirements and triggers
  * reads and writes.
- * \param o		Pointer chan_usbradio_pvt.
+ * \param o		Channel private data.
  * \param mode	The mode to open the file.  This is the flags argument to open.
  * \retval 0	Success.
  * \retval -1	Failed.
