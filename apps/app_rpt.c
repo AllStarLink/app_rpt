@@ -4949,8 +4949,6 @@ static void *rpt(void *this)
 			rpt_hangup(myrpt, RPT_RXCHAN);
 			return NULL;
 		}
-		/*! \todo At this point, we have a memory leak, because dsp needs to be freed. */
-		/*! \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
 		ast_dsp_set_features(myrpt->dsp, DSP_FEATURE_FREQ_DETECT);
 		ast_dsp_set_freqmode(myrpt->dsp, myrpt->p.rxburstfreq, myrpt->p.rxbursttime, myrpt->p.rxburstthreshold, 0);
 #else
@@ -5634,6 +5632,33 @@ static void *rpt(void *this)
 
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	stop_outstream(myrpt);
+	/* Free dynamically allocated memory */
+	if (myrpt->dsp) {
+		ast_dsp_free(myrpt->dsp);
+		myrpt->dsp = NULL;
+	}
+	if (myrpt->macrobuf) {
+		ast_free(myrpt->macrobuf);
+		myrpt->macrobuf = NULL;
+	}
+	if (myrpt->rxchanname) {
+		ast_free(myrpt->rxchanname);
+		myrpt->rxchanname = NULL;
+	}
+	if (myrpt->txchanname) {
+		ast_free(myrpt->txchanname);
+		myrpt->txchanname = NULL;
+	}
+	if (myrpt->name) {
+		ast_free(myrpt->name);
+		myrpt->name = NULL;
+	}
+	if (myrpt->remoterig) {
+		ast_free(myrpt->remoterig);
+		myrpt->remoterig = NULL;
+	}
+	/* Add other frees as needed */
+
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
 }
