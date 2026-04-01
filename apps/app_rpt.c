@@ -5760,6 +5760,9 @@ static int load_config(int reload)
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
+		if (rpt_vars[n].rxchanname) {
+			ast_free(rpt_vars[n].rxchanname);
+		}
 		if (val) {
 			char *slash, *rxchan = ast_strdup(val);
 			slash = strchr(rxchan, '/');
@@ -5777,8 +5780,14 @@ static int load_config(int reload)
 			ast_free(rxchan);
 			rpt_vars[n].rxchanname = ast_strdup(val);
 		}
+		if (rpt_vars[n].name) {
+			ast_free(rpt_vars[n].name);
+		}
 		rpt_vars[n].name = ast_strdup(this);
 		val = ast_variable_retrieve(cfg, this, "txchannel");
+		if (rpt_vars[n].txchanname) {
+			ast_free(rpt_vars[n].txchanname);
+		}
 		if (val) {
 			rpt_vars[n].txchanname = ast_strdup(val);
 		}
@@ -5787,6 +5796,9 @@ static int load_config(int reload)
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
 		val = ast_variable_retrieve(cfg, this, "remote");
+		if (rpt_vars[n].remoterig) {
+			ast_free(rpt_vars[n].remoterig);
+		}
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
@@ -7687,21 +7699,21 @@ static int unload_module(void)
 		ast_debug(3, "Destroying locks for repeater %s\n", rpt_vars[i].name);
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
-		if (rpt_vars[i]->rxchanname) {
-			ast_free(rpt_vars[i]->rxchanname);
-			rpt_vars[i]->rxchanname = NULL;
+		if (rpt_vars[i].rxchanname) {
+			ast_free(rpt_vars[i].rxchanname);
+			rpt_vars[i].rxchanname = NULL;
 		}
-		if (rpt_vars[i]->txchanname) {
-			ast_free(rpt_vars[i]->txchanname);
-			rpt_vars[i]->txchanname = NULL;
+		if (rpt_vars[i].txchanname) {
+			ast_free(rpt_vars[i].txchanname);
+			rpt_vars[i].txchanname = NULL;
 		}
-		if (rpt_vars[i]->name) {
-			ast_free(rpt_vars[i]->name);
-			rpt_vars[i]->name = NULL;
+		if (rpt_vars[i].name) {
+			ast_free(rpt_vars[i].name);
+			rpt_vars[i].name = NULL;
 		}
-		if (rpt_vars[i]->remoterig) {
-			ast_free(rpt_vars[i]->remoterig);
-			rpt_vars[i]->remoterig = NULL;
+		if (rpt_vars[i].remoterig) {
+			ast_free(rpt_vars[i].remoterig);
+			rpt_vars[i].remoterig = NULL;
 		}
 	}
 
