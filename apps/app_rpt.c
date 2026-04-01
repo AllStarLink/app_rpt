@@ -5758,13 +5758,25 @@ static int load_config(int reload)
 			ast_free(rpt_vars[n].macrobuf);
 			rpt_vars[n].macrobuf = NULL;
 		}
+		if (rpt_vars[n].rxchanname) {
+			ast_free(rpt_vars[n].rxchanname);
+			rpt_vars[n].rxchanname = NULL
+		}
+		if (rpt_vars[n].name) {
+			ast_free(rpt_vars[n].name);
+		}
+		if (rpt_vars[n].remoterig) {
+			ast_free(rpt_vars[n].remoterig);
+		}
+
+		if (rpt_vars[n].remoterig) {
+			ast_free(rpt_vars[n].remoterig);
+		}
+
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
 		if (val) {
 			char *slash, *rxchan = ast_strdup(val);
-			if (rpt_vars[n].rxchanname) {
-				ast_free(rpt_vars[n].rxchanname);
-			}
 			slash = strchr(rxchan, '/');
 			if (!slash) {
 				ast_log(LOG_WARNING, "Channel '%s' is invalid, not adding node '%s'\n", val, this);
@@ -5780,34 +5792,26 @@ static int load_config(int reload)
 			ast_free(rxchan);
 			rpt_vars[n].rxchanname = ast_strdup(val);
 		}
-		if (rpt_vars[n].name) {
-			ast_free(rpt_vars[n].name);
-		}
 		rpt_vars[n].name = ast_strdup(this);
 		val = ast_variable_retrieve(cfg, this, "txchannel");
 		if (val) {
 			if (rpt_vars[n].txchanname) {
 				ast_free(rpt_vars[n].txchanname);
-
-				rpt_vars[n].txchanname = ast_strdup(val);
 			}
+			rpt_vars[n].txchanname = ast_strdup(val);
+		}
 		rpt_vars[n].remote = 0;
-		rpt_vars[n].remoterig = ast_strdup("");
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
 		val = ast_variable_retrieve(cfg, this, "remote");
 		if (val) {
-			if (rpt_vars[n].remoterig) {
-				ast_free(rpt_vars[n].remoterig);
-			}
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
+		} else {
+			rpt_vars[n].remoterig = ast_strdup("");
 		}
 		val = ast_variable_retrieve(cfg, this, "radiotype");
 		if (val) {
-			if (rpt_vars[n].remoterig) {
-				ast_free(rpt_vars[n].remoterig);
-			}
 			rpt_vars[n].remoterig = ast_strdup(val);
 		}
 
@@ -7636,9 +7640,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup_rx_tx(myrpt);
 	closerem(myrpt);
-	if (rpt_vars[i].macrobuf) {
-		ast_free(rpt_vars[i].macrobuf);
-		rpt_vars[i].macrobuf = NULL;
+	if (myrpt.macrobuf) {
+		ast_free(myrpt.macrobuf);
+		myrpt.macrobuf = NULL;
 	}
 	if (myrpt->p.rptnode) {
 		rpt_mutex_lock(&myrpt->lock);
@@ -7706,6 +7710,7 @@ static int unload_module(void)
 		ast_debug(3, "Destroying locks for repeater %s\n", rpt_vars[i].name);
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
+		ast_mutex_destroy(&rpt_vars[i].statpost_lock;
 		if (rpt_vars[i].rxchanname) {
 			ast_free(rpt_vars[i].rxchanname);
 			rpt_vars[i].rxchanname = NULL;
