@@ -4124,7 +4124,8 @@ static struct ast_cli_entry cli_simpleusb[] = {
 static int load_config(int reload)
 {
 	struct ast_config *cfg = NULL;
-	char *ctg = NULL, *val;
+	char *ctg = NULL;
+	const char *val;
 	struct ast_flags zeroflag = { reload ? CONFIG_FLAG_FILEUNCHANGED : 0 };
 
 	/* load config file */
@@ -4147,13 +4148,13 @@ static int load_config(int reload)
 	/* load parallel port information */
 	ppfd = -1;
 	pbase = 0;
-	val = (char *) ast_variable_retrieve(cfg, "general", "pport");
+	val = ast_variable_retrieve(cfg, "general", "pport");
 	if (val) {
 		ast_copy_string(pport, val, sizeof(pport) - 1);
 	} else {
 		strcpy(pport, PP_PORT);
 	}
-	val = (char *) ast_variable_retrieve(cfg, "general", "pbase");
+	val = ast_variable_retrieve(cfg, "general", "pbase");
 	if (val) {
 		pbase = strtoul(val, NULL, 0);
 	}

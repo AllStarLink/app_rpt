@@ -1251,7 +1251,8 @@ void *rpt_tele_thread(void *this)
 	struct ao2_iterator l_it;
 	struct ao2_container *links_copy;
 	int id_malloc = 0, m;
-	char *p, *ident, *nodename;
+	char *ident, *nodename;
+	const char *p;
 	const char *context;
 	time_t t, t_mono, was_mono;
 	char **strs;
@@ -1400,7 +1401,7 @@ void *rpt_tele_thread(void *this)
 		break;
 	case IDTALKOVER:
 		ast_debug(7, "Tracepoint IDTALKOVER: in rpt_tele_thread()\n");
-		p = (char *) ast_variable_retrieve(myrpt->cfg, nodename, "idtalkover");
+		p = ast_variable_retrieve(myrpt->cfg, nodename, "idtalkover");
 		if (p) {
 			res = telem_any(myrpt, mychannel, p, "IDTALKOVER");
 		}
@@ -2906,7 +2907,8 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	struct rpt_tele *tele;
 	struct rpt_link *mylink = NULL;
 	int res, i, ns, n = 1;
-	char *v1, *v2, mystr[1024], *p, haslink;
+	char mystr[1024], *p, haslink;
+	const char *v1, *v2;
 	char **strs;
 	struct rpt_link *l;
 	time_t t, t_mono, was_mono;
@@ -2958,8 +2960,8 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		}
 		/* if any of the following are defined, go ahead and do it,
 		   otherwise, dont bother */
-		v1 = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "unlinkedct");
-		v2 = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "remotect");
+		v1 = ast_variable_retrieve(myrpt->cfg, myrpt->name, "unlinkedct");
+		v2 = ast_variable_retrieve(myrpt->cfg, myrpt->name, "remotect");
 		if (telem_lookup(myrpt, NULL, "remotemon", mode == UNKEY ? "UNKEY" : "LOCUNKEY") &&
 			telem_lookup(myrpt, NULL, "remotetx", mode == UNKEY ? "UNKEY" : "LOCUNKEY") &&
 			telem_lookup(myrpt, NULL, "cmdmode", mode == UNKEY ? "UNKEY" : "LOCUNKEY") &&

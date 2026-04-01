@@ -2679,7 +2679,8 @@ static void do_scheduler(struct rpt *myrpt)
 
 	struct ast_tm tmnow;
 	struct ast_variable *skedlist;
-	char *strs[5], *vp, *val, value[100];
+	char *strs[5], *vp, value[100];
+	const char *val;
 
 	memcpy(&myrpt->lasttv, &myrpt->curtv, sizeof(struct timeval));
 
@@ -2789,7 +2790,7 @@ static void do_scheduler(struct rpt *myrpt)
 			ast_debug(1, "Executing scheduler entry %s = %s\n", skedlist->name, skedlist->value);
 			if (atoi(skedlist->name) == 0)
 				return; /* Zero is reserved for the startup macro */
-			val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.macro, skedlist->name);
+			val = ast_variable_retrieve(myrpt->cfg, myrpt->p.macro, skedlist->name);
 			if (!val) {
 				ast_log(LOG_WARNING, "Scheduler could not find macro %s\n", skedlist->name);
 				return; /* Macro not found */
@@ -4801,7 +4802,8 @@ static int sendtext_cb(void *obj, void *arg, int flags)
 static void *rpt(void *this)
 {
 	struct rpt *myrpt = this;
-	char *idtalkover, c, myfirst, *str;
+	char c, myfirst, *str;
+	const char *idtalkover;
 	int len, lastduck = 0;
 	int ms = MSWAIT, lasttx = 0, lastexttx = 0, lastpatchup = 0, val, identqueued, othertelemqueued;
 	int tailmessagequeued, ctqueued, lastmyrx, localmsgqueued;
@@ -4917,7 +4919,7 @@ static void *rpt(void *this)
 	myrpt->lastkeyedtime -= RPT_LOCKOUT_SECS;
 	time(&myrpt->lasttxkeyedtime);
 	myrpt->lasttxkeyedtime -= RPT_LOCKOUT_SECS;
-	idtalkover = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "idtalkover");
+	idtalkover = ast_variable_retrieve(myrpt->cfg, myrpt->name, "idtalkover");
 	myrpt->dtmfidx = -1;
 	myrpt->dtmfbuf[0] = 0;
 	myrpt->rem_dtmfidx = -1;
@@ -5650,7 +5652,8 @@ static int load_config(int reload)
 {
 	int i, n = 0;
 	struct ast_config *cfg;
-	char *val, *this = NULL;
+	char *this = NULL;
+	const char *val;
 	const char *cval;
 
 	cfg = ast_config_load("rpt.conf", config_flags);
@@ -5673,7 +5676,7 @@ static int load_config(int reload)
 	}
 
 	/* load the general settings */
-	val = (char *) ast_variable_retrieve(cfg, "general", "node_lookup_method");
+	val = ast_variable_retrieve(cfg, "general", "node_lookup_method");
 	if (val) {
 		if (!strcasecmp(val, "both")) {
 			rpt_node_lookup_method = LOOKUP_BOTH;
@@ -5699,7 +5702,7 @@ static int load_config(int reload)
 		rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 	}
 	ast_log(LOG_NOTICE, "Domain used for DNS node lookup is: %s", rpt_dns_node_domain);
-	val = (char *) ast_variable_retrieve(cfg, "general", "max_dns_node_length");
+	val = ast_variable_retrieve(cfg, "general", "max_dns_node_length");
 	if (val) {
 		i = atoi(val);
 		if (i < 4) {
@@ -5748,7 +5751,7 @@ static int load_config(int reload)
 			rpt_vars[n].macrobuf = NULL;
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
-		val = (char *) ast_variable_retrieve(cfg, this, "rxchannel");
+		val = ast_variable_retrieve(cfg, this, "rxchannel");
 		if (val) {
 			char *slash, *rxchan = ast_strdup(val);
 			slash = strchr(rxchan, '/');
@@ -5767,7 +5770,7 @@ static int load_config(int reload)
 			rpt_vars[n].rxchanname = ast_strdup(val);
 		}
 		rpt_vars[n].name = ast_strdup(this);
-		val = (char *) ast_variable_retrieve(cfg, this, "txchannel");
+		val = ast_variable_retrieve(cfg, this, "txchannel");
 		if (val) {
 			rpt_vars[n].txchanname = ast_strdup(val);
 		}
@@ -5775,12 +5778,12 @@ static int load_config(int reload)
 		rpt_vars[n].remoterig = "";
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
-		val = (char *) ast_variable_retrieve(cfg, this, "remote");
+		val = ast_variable_retrieve(cfg, this, "remote");
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
 		}
-		val = (char *) ast_variable_retrieve(cfg, this, "radiotype");
+		val = ast_variable_retrieve(cfg, this, "radiotype");
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
 		}
@@ -6424,7 +6427,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	pbx_builtin_setvar_helper(chan, "RPT_STAT_ERR", "");
 
 	if (myrpt == NULL) {
-		char *myadr, *mypfx, dstr[1024];
+		char dstr[1024];
+		const char *myadr, *mypfx;
 		char *s1, *s2;
 		char nodedata[100], xstr[100], tmp1[100];
 		struct ast_config *cfg;
@@ -6438,7 +6442,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			cfg = NULL;
 		}
 		if (cfg && ((!options) || (*options == 'X') || (*options == 'F'))) {
-			myadr = (char *) ast_variable_retrieve(cfg, "proxy", "ipaddr");
+			myadr = ast_variable_retrieve(cfg, "proxy", "ipaddr");
 			if (options && (*options == 'F')) {
 				if (b1 && myadr) {
 					forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
@@ -6498,7 +6502,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				strcpy(tmp2, tmp);
 				if (options && callstr)
 					snprintf(tmp2, sizeof(tmp2) - 1, "0%s%s", callstr, tmp);
-				mypfx = (char *) ast_variable_retrieve(cfg, "proxy", "nodeprefix");
+				mypfx = ast_variable_retrieve(cfg, "proxy", "nodeprefix");
 				if (mypfx)
 					snprintf(dstr, sizeof(dstr) - 1, "radio-proxy@%s%s/%s", mypfx, tmp, tmp2);
 				else

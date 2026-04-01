@@ -79,17 +79,16 @@ int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name
 int get_wait_interval(struct rpt *myrpt, enum rpt_delay type)
 {
 	int interval;
-	char *wait_times;
+	const char *wait_times;
 	char *wait_times_save;
 
 	wait_times_save = NULL;
-	wait_times = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "wait_times");
+	wait_times = ast_variable_retrieve(myrpt->cfg, myrpt->name, "wait_times");
 
 	if (wait_times) {
 		wait_times_save = ast_strdup(wait_times);
 		if (!wait_times_save)
 			return 0;
-
 	}
 
 	switch (type) {
@@ -158,11 +157,12 @@ int get_wait_interval(struct rpt *myrpt, enum rpt_delay type)
 
 int retrieve_memory(struct rpt *myrpt, char *memory)
 {
-	char tmp[15], *s, *s1, *s2, *val;
+	char tmp[15], *s, *s1, *s2;
+	const char *val;
 
 	ast_debug(1, "memory=%s block=%s\n", memory, myrpt->p.memory);
 
-	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.memory, memory);
+	val = ast_variable_retrieve(myrpt->cfg, myrpt->p.memory, memory);
 	if (!val) {
 		return -1;
 	}
@@ -273,14 +273,14 @@ int get_mem_set(struct rpt *myrpt, char *digitbuf)
 void local_dtmfkey_helper(struct rpt *myrpt, char c)
 {
 	int i;
-	char *val;
+	const char *val;
 
 	i = strlen(myrpt->dtmfkeybuf);
 	if (i >= (sizeof(myrpt->dtmfkeybuf) - 1))
 		return;
 	myrpt->dtmfkeybuf[i++] = c;
 	myrpt->dtmfkeybuf[i] = 0;
-	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.dtmfkeys, myrpt->dtmfkeybuf);
+	val = ast_variable_retrieve(myrpt->cfg, myrpt->p.dtmfkeys, myrpt->dtmfkeybuf);
 	if (!val)
 		return;
 	ast_copy_string(myrpt->curdtmfuser, val, sizeof(myrpt->curdtmfuser));
@@ -393,7 +393,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		unsigned short iaxport;
 
 		/* setup the domain to lookup */
-		memset(domain,0, sizeof(domain));
+		memset(domain, 0, sizeof(domain));
 		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.%s", node, rpt_dns_node_domain);
 		if (res < 0) {
 			return -1;
@@ -413,7 +413,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		/* get the response */
 		record = ast_dns_result_get_records(result);
 
-		if(!record) {
+		if (!record) {
 			ast_debug(4, "No SRV records returned for %s\n", domain);
 			ast_dns_result_free(result);
 			return -1;
@@ -443,7 +443,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 			return -1;
 		}
 
-		ipaddress = ast_inet_ntoa(*(struct in_addr*)ast_dns_record_get_data(record));
+		ipaddress = ast_inet_ntoa(*(struct in_addr *) ast_dns_record_get_data(record));
 
 		ast_dns_result_free(result);
 
@@ -483,7 +483,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		/* get the response */
 		record = ast_dns_result_get_records(result);
 
-		if(!record) {
+		if (!record) {
 			ast_dns_result_free(result);
 			return -1;
 		}
@@ -492,18 +492,18 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		text records are in the format
 		"NN=2530" "RT=2023-02-21 17:33:07" "RB=0" "IP=104.153.109.212" "PIP=0" "PT=4569" "RH=register-west"
 		*/
-		txtrecords = ast_dns_txt_get_strings( record);
+		txtrecords = ast_dns_txt_get_strings(record);
 
 		for (txtcount = 0; txtcount < AST_VECTOR_SIZE(txtrecords); txtcount++) {
 			ast_copy_string(tmp, AST_VECTOR_GET(txtrecords, txtcount), sizeof(tmp));
 			if (ast_begins_with(tmp, "NN=")) {
-				ast_copy_string(actualnode,tmp + 3, sizeof(actualnode));
+				ast_copy_string(actualnode, tmp + 3, sizeof(actualnode));
 			}
 			if (ast_begins_with(tmp, "IP=")) {
-				ast_copy_string(ipaddress,tmp + 3, sizeof(ipaddress));
+				ast_copy_string(ipaddress, tmp + 3, sizeof(ipaddress));
 			}
 			if (ast_begins_with(tmp, "PT=")) {
-				ast_copy_string(iaxport,tmp + 3, sizeof(iaxport));
+				ast_copy_string(iaxport, tmp + 3, sizeof(iaxport));
 			}
 		}
 
@@ -521,14 +521,14 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodedatalength, int wilds)
 {
-	char *val;
+	const char *val;
 	int longestnode, i, j, found = 0;
 	struct stat mystat;
 	struct ast_config *ourcfg;
 	struct ast_variable *vp;
 
 	/* try to look it up locally first */
-	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.nodes, digitbuf);
+	val = ast_variable_retrieve(myrpt->cfg, myrpt->p.nodes, digitbuf);
 	if (val) {
 		if (nodedata && nodedatalength) {
 			snprintf(nodedata, nodedatalength, "%s", val);
@@ -581,7 +581,6 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 
 		/* process each external node file */
 		for (i = 0; i < myrpt->p.extnodefilesn; i++) {
-
 			/* see if the external node file exists */
 			if (stat(myrpt->p.extnodefiles[i], &mystat) == -1) {
 				continue;
@@ -607,7 +606,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 
 			/* if we have not found a match, attempt to load a matching node */
 			if (!found) {
-				val = (char *) ast_variable_retrieve(ourcfg, myrpt->p.extnodes, digitbuf);
+				val = ast_variable_retrieve(ourcfg, myrpt->p.extnodes, digitbuf);
 				if (val) {
 					found = 1;
 					if (nodedata && nodedatalength) {
@@ -627,7 +626,8 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 
 int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, size_t nodedatalength)
 {
-	char *val, *efil, *enod, *strs[100];
+	char *efil, *strs[100];
+	const char *enod, *val;
 	int i, n;
 	struct stat mystat;
 	struct ast_config *ourcfg;
@@ -646,13 +646,13 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 	/* try to lookup using the external file(s) */
 	if (rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
 		/* see if we have extnodefile setup in the proxy section - if not use the default name */
-		val = (char *) ast_variable_retrieve(cfg, "proxy", "extnodefile");
+		val = ast_variable_retrieve(cfg, "proxy", "extnodefile");
 		if (!val) {
 			val = EXTNODEFILE;
 		}
 
 		/* see if we have an override for the extnodes section in the proxy section */
-		enod = (char *) ast_variable_retrieve(cfg, "proxy", "extnodes");
+		enod = ast_variable_retrieve(cfg, "proxy", "extnodes");
 		if (!enod) {
 			enod = EXTNODES;
 		}
@@ -676,7 +676,6 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 
 		/* process each external node file */
 		for (i = 0; i < n; i++) {
-
 			/* see if the external node file exists */
 			if (stat(strs[i], &mystat) == -1) {
 				continue;
@@ -690,7 +689,7 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 
 			/* if we have not found a match, attempt to load a matching node */
 			if (!val) {
-				val = (char *) ast_variable_retrieve(ourcfg, enod, digitbuf);
+				val = ast_variable_retrieve(ourcfg, enod, digitbuf);
 			}
 			ast_config_destroy(ourcfg);
 		}
@@ -896,7 +895,8 @@ void load_rpt_vars(int n, int init)
 	rpt_vars[n].p.tailmessagemax = 0;
 	val = ast_variable_retrieve(cfg, cat, "tailmessagelist");
 	if (val) {
-		rpt_vars[n].p.tailmessagemax = finddelim((char *) val, (char **) rpt_vars[n].p.tailmessages, ARRAY_LEN(rpt_vars[n].p.tailmessages));
+		rpt_vars[n].p.tailmessagemax = finddelim((char *) val, (char **) rpt_vars[n].p.tailmessages,
+			ARRAY_LEN(rpt_vars[n].p.tailmessages)); /*! \todo This is illegal, cannot cast the const away */
 	}
 
 	RPT_CONFIG_VAR(aprstt, "aprstt");
@@ -1043,8 +1043,9 @@ void load_rpt_vars(int n, int init)
 #ifdef	__RPT_NOTCH
 	val = ast_variable_retrieve(cfg, this, "rxnotch");
 	if (val) {
-		i = finddelim((char *) val, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(rpt_vars[n].filters) * 2));
-		i &= ~1;				/* force an even number, rounded down */
+		i = finddelim((char *) val, strs,
+			MIN(ARRAY_LEN(strs), ARRAY_LEN(rpt_vars[n].filters) * 2)); /*! \todo This is illegal, cannot cast the const away */
+		i &= ~1;													   /* force an even number, rounded down */
 		if (i >= 2) {
 			for (j = 0; j < i; j += 2) {
 				rpt_mknotch(atof(strs[j]), atof(strs[j + 1]), &rpt_vars[n].filters[j >> 1].gain,
@@ -1083,7 +1084,8 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "locallist");
 	if (val) {
 		memset(rpt_vars[n].p.locallist, 0, sizeof(rpt_vars[n].p.locallist));
-		rpt_vars[n].p.nlocallist = finddelim((char *) val, (char **) rpt_vars[n].p.locallist, ARRAY_LEN(rpt_vars[n].p.locallist));
+		rpt_vars[n].p.nlocallist = finddelim((char *) val, (char **) rpt_vars[n].p.locallist,
+			ARRAY_LEN(rpt_vars[n].p.locallist)); /*! \todo This is illegal, cannot cast the const away */
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "ctgroup");
@@ -1096,7 +1098,7 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "inxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.inxlat, 0, sizeof(rpt_vars[n].p.inxlat));
-		i = finddelim((char *) val, strs, ARRAY_LEN(strs));
+		i = finddelim((char *) val, strs, ARRAY_LEN(strs)); /*! \todo This is illegal, cannot cast the const away */
 		if (i > 3) {
 			rpt_vars[n].p.dopfxtone = ast_true(strs[3]);
 		}
@@ -1114,7 +1116,7 @@ void load_rpt_vars(int n, int init)
 	val = ast_variable_retrieve(cfg, cat, "outxlat");
 	if (val) {
 		memset(&rpt_vars[n].p.outxlat, 0, sizeof(rpt_vars[n].p.outxlat));
-		i = finddelim((char *) val, strs, ARRAY_LEN(strs));
+		i = finddelim((char *) val, strs, ARRAY_LEN(strs)); /*! \todo This is illegal, cannot cast the const away */
 		if (i > 2) {
 			ast_copy_string(rpt_vars[n].p.outxlat.passchars, strs[2], sizeof(rpt_vars[n].p.outxlat.passchars));
 		}
