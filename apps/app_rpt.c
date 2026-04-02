@@ -4994,7 +4994,16 @@ static void *rpt(void *this)
 	if (myrpt->p.rxburstfreq) {
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
-			rpt_hangup(myrpt, RPT_RXCHAN);
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			rpt_hangup(myrpt, RPT_RXPCHAN);
+			rpt_hangup(myrpt, RPT_TXPCHAN);
+			if (myrpt->localtxchannel != myrpt->txchannel) {
+				rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+			}
+			disable_rpt(myrpt); /* Disable repeater */
+			ast_free(myrpt->macrobuf);
 			return NULL;
 		}
 		ast_dsp_set_features(myrpt->dsp, DSP_FEATURE_FREQ_DETECT);
