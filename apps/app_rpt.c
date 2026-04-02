@@ -4820,12 +4820,6 @@ static void *rpt(void *this)
 		mkdir(tmpstr, 0775);
 	}
 	myrpt->ready = 0;
-	if (!myrpt->macrobuf) {
-		myrpt->macrobuf = ast_str_create(MAXMACRO);
-		if (!myrpt->macrobuf) {
-			return NULL;
-		}
-	}
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->remrx = 0;
 	myrpt->remote_webtransceiver = 0;
@@ -4882,6 +4876,7 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup_rx_tx(myrpt);
+		disable_rpt(myrpt); /* Disable repeater */
 		return NULL;
 	}
 	myrpt->links = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
@@ -4893,6 +4888,13 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		disable_rpt(myrpt); /* Disable repeater */
 		return NULL;
+	}
+
+	if (!myrpt->macrobuf) {
+		myrpt->macrobuf = ast_str_create(MAXMACRO);
+		if (!myrpt->macrobuf) {
+			return NULL;
+		}
 	}
 
 	/* Now, the idea here is to copy from the physical rx channel buffer
@@ -5771,6 +5773,11 @@ static int load_config(int reload)
 		if (rpt_vars[n].remoterig) {
 			ast_free(rpt_vars[n].remoterig);
 		}
+		if (reload && rpt_vars[n].deleted) {
+			ast_mutex_destroy(&rpt_vars[n].lock);
+			ast_mutex_destroy(&rpt_vars[n].remlock);
+			ast_mutex_destroy(&rpt_vars[n].statpost_lock);
+		}
 
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
@@ -5807,8 +5814,8 @@ static int load_config(int reload)
 		val = ast_variable_retrieve(cfg, this, "radiotype");
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
-		}
-		if (!rpt_vars[n].remoterig) {
+			rpt_vars[n].remote = 1;
+		} else {
 			rpt_vars[n].remoterig = ast_strdup("");
 		}
 		ast_mutex_init(&rpt_vars[n].lock);
