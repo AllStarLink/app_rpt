@@ -4906,6 +4906,7 @@ static void *rpt(void *this)
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
 		if (!myrpt->macrobuf) {
 			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			rpt_hangup(myrpt, RPT_MONCHAN);
 			rpt_hangup(myrpt, RPT_RXPCHAN);
@@ -4925,6 +4926,7 @@ static void *rpt(void *this)
 
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
@@ -5004,6 +5006,8 @@ static void *rpt(void *this)
 			}
 			disable_rpt(myrpt); /* Disable repeater */
 			ast_free(myrpt->macrobuf);
+			ao2_cleanup(myrpt->links);
+			myrpt->links = NULL;
 			return NULL;
 		}
 		ast_dsp_set_features(myrpt->dsp, DSP_FEATURE_FREQ_DETECT);
@@ -5689,6 +5693,10 @@ static void *rpt(void *this)
 
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	stop_outstream(myrpt);
+	if (myrpt->iofd >= 0) {
+		close(myrpt->iofd);
+		myrpt->iofd = -1;
+	}
 	/* Free dynamically allocated memory */
 #ifdef NATIVE_DSP
 	if (myrpt->dsp) {
@@ -5807,6 +5815,26 @@ static int load_config(int reload)
 		if (n >= MAXRPTS) {
 			ast_log(LOG_ERROR, "Attempting to add repeater node %s would exceed max. number of repeaters (%d)\n", this, MAXRPTS);
 			continue;
+		}
+		/* If we delete a repeater, these alloc strings are to released
+		 *  when it's time to reuse the rpt_var, clean up any left over strings.
+		 */
+		if (reload && rpt_vars[n].deleted == RPT_DELETED_COMPLETE) {
+			ast_mutex_destroy(&rpt_vars[n].lock);
+			ast_mutex_destroy(&rpt_vars[n].remlock);
+			ast_mutex_destroy(&rpt_vars[n].statpost_lock);
+			if (rpt_vars[i].rxchanname) {
+				ast_free(rpt_vars[i].rxchanname);
+			}
+			if (rpt_vars[i].txchanname) {
+				ast_free(rpt_vars[i].txchanname);
+			}
+			if (rpt_vars[i].name) {
+				ast_free(rpt_vars[i].name);
+			}
+			if (rpt_vars[i].remoterig) {
+				ast_free(rpt_vars[i].remoterig);
+			}
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
@@ -5946,8 +5974,12 @@ static void *rpt_master(void *ignore)
 		current_time = rpt_time_monotonic();
 		for (i = 0; i < nrpts; i++) {
 			int rv;
-			if (rpt_vars[i].remote)
+			if (rpt_vars[i].remote) {
+				if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
+					rpt_vars[i].deleted == RPT_DELETED_COMPLETE;
+				}
 				continue;
+			}
 
 			current_loop_time = current_time - rpt_vars[i].lastthreadupdatetime;
 			if (rpt_vars[i].lastthreadupdatetime != last_thread_time[i]) {
