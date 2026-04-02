@@ -5747,7 +5747,7 @@ static int load_config(int reload)
 			for (n = 0; n < nrpts; n++) {
 				if (!strcmp(this, rpt_vars[n].name)) {
 					rpt_vars[n].reload_request = 1;
-					break;
+					break; /* Skip the initialization */
 				}
 			}
 			if (n < nrpts) {
@@ -5764,27 +5764,6 @@ static int load_config(int reload)
 			ast_log(LOG_ERROR, "Attempting to add repeater node %s would exceed max. number of repeaters (%d)\n", this, MAXRPTS);
 			continue;
 		}
-		if (rpt_vars[n].macrobuf) {
-			ast_free(rpt_vars[n].macrobuf);
-		}
-		if (rpt_vars[n].rxchanname) {
-			ast_free(rpt_vars[n].rxchanname);
-		}
-		if (rpt_vars[n].txchanname) {
-			ast_free(rpt_vars[n].txchanname);
-		}
-		if (rpt_vars[n].name) {
-			ast_free(rpt_vars[n].name);
-		}
-		if (rpt_vars[n].remoterig) {
-			ast_free(rpt_vars[n].remoterig);
-		}
-		if (reload && rpt_vars[n].deleted) {
-			ast_mutex_destroy(&rpt_vars[n].lock);
-			ast_mutex_destroy(&rpt_vars[n].remlock);
-			ast_mutex_destroy(&rpt_vars[n].statpost_lock);
-		}
-
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
 		if (val) {
@@ -5835,6 +5814,7 @@ static int load_config(int reload)
 		rpt_vars[n].mdc = mdc_decoder_new(8000);
 #endif
 		if (reload) {
+			/* Reload but didn't find a matching node already loaded */
 			rpt_vars[n].reload_request = 1;
 			if (n >= nrpts) {
 				nrpts = n + 1;
