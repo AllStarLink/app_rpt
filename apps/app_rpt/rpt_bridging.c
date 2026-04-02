@@ -195,6 +195,7 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 	struct ast_channel *chan, **chanptr;
 	char *tech, *device;
 	struct rpt *myrpt = data;
+	int cause = 0;
 
 	channame = rpt_chan_name(myrpt, chantype);
 
@@ -213,9 +214,9 @@ int __rpt_request(void *data, struct ast_format_cap *cap, enum rpt_chan_type cha
 		return -1;
 	}
 
-	chan = ast_request(tech, cap, NULL, NULL, device, NULL);
+	chan = ast_request(tech, cap, NULL, NULL, device, &cause);
 	if (!chan) {
-		ast_log(LOG_ERROR, "Failed to request %s/%s\n", tech, device);
+		ast_log(LOG_ERROR, "Failed to request %s/%s (cause = %d)\n", tech, device, cause);
 		return -1;
 	}
 

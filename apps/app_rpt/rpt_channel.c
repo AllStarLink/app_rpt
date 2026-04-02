@@ -122,7 +122,8 @@ int saynum(struct ast_channel *mychannel, int num)
 int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 {
 	int res = 0, tgn = 0;
-	char *val, fname[300], str[100];
+	char fname[300], str[100];
+	const char *val;
 
 	if (strlen(name) < 1)
 		return (0);
@@ -131,7 +132,7 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 	}
 	if ((!IS_ECHOLINK_NODE(name) && tgn != 1) || (IS_ECHOLINK_NODE(name) && myrpt->p.eannmode != 2) ||
 		((tgn == 1) && (myrpt->p.tannmode != 2))) {
-		val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->name, "nodenames");
+		val = ast_variable_retrieve(myrpt->cfg, myrpt->name, "nodenames");
 		if (!val)
 			val = NODENAMES;
 		snprintf(fname, sizeof(fname) - 1, "%s/%s", val, name);

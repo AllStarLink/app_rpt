@@ -147,15 +147,8 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 
 	ast_debug(7, "@@@@ ilink param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 	switch (myatoi(param)) {
-	case 11:					/* Perm Link off */
-	case 1: {					/* Link off */
-		struct ast_frame wf = {
-			.frametype = AST_FRAME_TEXT,
-			.src = __PRETTY_FUNCTION__,
-			.datalen = sizeof(DISCSTR),
-			.data.ptr = DISCSTR,
-		};
-
+	case 11: /* Perm Link off */
+	case 1:	 /* Link off */
 		if (strlen(digitbuf) < 1)
 			break;
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
@@ -180,6 +173,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		l->hasconnected = 1;
 		if (l->chan) {
 			if (l->thisconnected) {
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_TEXT,
+					.src = __PRETTY_FUNCTION__,
+					.datalen = sizeof(DISCSTR),
+					.data.ptr = DISCSTR,
+				};
+
 				rpt_qwrite(l, &wf);
 			}
 		}
@@ -189,7 +189,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		ao2_ref(l, -1);
 		return DC_COMPLETE;
-	}
 	case 2:					/* Link Monitor */
 	case 3:					/* Link transceive */
 	case 12:					/* Link Monitor permanent */
@@ -296,20 +295,15 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_telemetry(myrpt, FULLSTATUS, NULL);
 		return DC_COMPLETE;
 
-	case 6: { /* All Links Off, including permalinks */
-		struct ast_frame wf = {
-			.frametype = AST_FRAME_TEXT,
-			.src = __PRETTY_FUNCTION__,
-			.datalen = sizeof(DISCSTR),
-			.data.ptr = DISCSTR,
-		};
+	case 6: /* All Links Off, including permalinks */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
 		/* loop through all links */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			char c1;
 
-			if ((l->name[0] <= '0') || (l->name[0] > '9')) { /* Skip any IAXRPT monitoring */
+			if ((l->name[0] <= '0') || (l->name[0] > '9')) {
+				/* Skip any IAXRPT monitoring */
 				continue;
 			}
 			if (l->mode == MODE_TRANSCEIVE)
@@ -330,6 +324,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			ast_debug(5, "dumping link %s\n", l->name);
 			if (l->chan) {
 				if (l->thisconnected) {
+					struct ast_frame wf = {
+						.frametype = AST_FRAME_TEXT,
+						.src = __PRETTY_FUNCTION__,
+						.datalen = sizeof(DISCSTR),
+						.data.ptr = DISCSTR,
+					};
+
 					rpt_qwrite(l, &wf);
 				}
 			}
@@ -340,7 +341,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
-	}
+
 	case 7:					/* Identify last node which keyed us up */
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, LASTNODEKEY, NULL);

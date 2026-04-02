@@ -164,13 +164,14 @@ void daq_init(struct ast_config *cfg)
 	t_next = &daq.hw;
 	var = ast_variable_browse(cfg, "daq-list");
 	while (var) {
-		char *p;
+		const char *p;
+
 		if (strncmp("device", var->name, 6)) {
 			ast_log(LOG_WARNING, "Error in daq_entries stanza on line %d\n", var->lineno);
 			break;
 		}
 		ast_copy_string(s, var->value, sizeof(s) - 1);	/* Make copy of device entry */
-		if (!(p = (char *) ast_variable_retrieve(cfg, s, "hwtype"))) {
+		if (!(p = ast_variable_retrieve(cfg, s, "hwtype"))) {
 			ast_log(LOG_WARNING, "hwtype variable required for %s stanza\n", s);
 			break;
 		}
@@ -178,7 +179,7 @@ void daq_init(struct ast_config *cfg)
 			ast_log(LOG_WARNING, "Type must be uchameleon for %s stanza\n", s);
 			break;
 		}
-		if (!(p = (char *) ast_variable_retrieve(cfg, s, "devnode"))) {
+		if (!(p = ast_variable_retrieve(cfg, s, "devnode"))) {
 			ast_log(LOG_WARNING, "devnode variable required for %s stanza\n", s);
 			break;
 		}

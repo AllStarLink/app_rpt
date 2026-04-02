@@ -3580,7 +3580,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	int i, j;
 	struct voter_pvt *p, *p1;
 	struct ast_channel *tmp = NULL;
-	char *val, *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
+	char *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
+	const char *val;
 	struct ast_config *cfg = NULL;
 
 	if (!ast_format_cap_iscompatible(cap, voter_tech.capabilities)) {
@@ -3673,37 +3674,37 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 	} else {
 		ast_log(LOG_NOTICE, "Loading config from %s\n", config);
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "linger");
+		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
 			p->linger = atoi(val);
 		} else {
 			ast_debug(1, "linger not specified, using default linger = %i\n", DEFAULT_LINGER);
 			p->linger = DEFAULT_LINGER;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "plfilter");
+		val = ast_variable_retrieve(cfg, (char *) data, "plfilter");
 		if (val) {
 			p->plfilter = ast_true(val);
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "hostdeemp");
+		val = ast_variable_retrieve(cfg, (char *) data, "hostdeemp");
 		if (val) {
 			p->hostdeemp = ast_true(val);
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
+		val = ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
 			p->mixminus = ast_true(val);
 		} else {
 			p->mixminus = 0;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "streams");
+		val = ast_variable_retrieve(cfg, (char *) data, "streams");
 		if (val) {
 			cp = ast_strdup(val);
 			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcss");
+		val = ast_variable_retrieve(cfg, (char *) data, "txctcss");
 		if (val) {
 			ast_copy_string(p->txctcssfreq, val, sizeof(p->txctcssfreq));
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
+		val = ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
 		if (val) {
 			p->txctcsslevel = atoi(val);
 		} else {
@@ -3711,7 +3712,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		}
 		p->txctcsslevelset = p->txctcsslevel;
 		p->txtoctype = TOC_NONE;
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txtoctype");
+		val = ast_variable_retrieve(cfg, (char *) data, "txtoctype");
 		if (val) {
 			if (!strcasecmp(val, "phase")) {
 				p->txtoctype = TOC_PHASE;
@@ -3721,7 +3722,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		}
 		/* If this is going to be part of a redundant server configuration, load the primary config directives. */
 		memset(&p->primary, 0, sizeof(p->primary));
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "primary");
+		val = ast_variable_retrieve(cfg, (char *) data, "primary");
 		if (val) {
 			cp = ast_strdup(val);
 			if (!cp) {
@@ -3746,14 +3747,14 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			}
 			ast_free(cp);
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "isprimary");
+		val = ast_variable_retrieve(cfg, (char *) data, "isprimary");
 		if (val) {
 			p->isprimary = ast_true(val);
 			ast_log(LOG_NOTICE, "Channel %s: Found isprimary directive, this instance will be the primary server\n", ast_channel_name(tmp));
 		} else {
 			p->isprimary = 0;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "thresholds");
+		val = ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
 			cp = ast_strdup(val);
 			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
@@ -3777,7 +3778,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			}
 			ast_free(cp);
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "gtxgain");
+		val = ast_variable_retrieve(cfg, (char *) data, "gtxgain");
 		if (!val) {
 			val = DEFAULT_GTXGAIN;
 		}
@@ -3865,7 +3866,8 @@ static int reload(void)
 {
 	struct ast_flags zeroflag = { 0 };
 	int i, n, instance_buflen, buflen, oldtoctype, oldlevel;
-	char *val, *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
+	char *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
+	const char *val;
 	struct voter_pvt *p;
 	struct voter_client *client, *client1;
 	struct ast_config *cfg = NULL;
@@ -3885,14 +3887,14 @@ static int reload(void)
 		ast_log(LOG_NOTICE, "Config load/reload from %s\n", config);
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, "general", "password");
+	val = ast_variable_retrieve(cfg, "general", "password");
 	if (val) {
 		ast_copy_string(password, val, sizeof(password) - 1);
 	} else {
 		password[0] = 0;
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, "general", "context");
+	val = ast_variable_retrieve(cfg, "general", "context");
 	if (val) {
 		ast_copy_string(context, val, sizeof(context) - 1);
 	} else {
@@ -3901,7 +3903,7 @@ static int reload(void)
 	/* We read in buflen from the config file, and * 8 to convert it to bytes. See the
 	 * notes at the top of the source for more information on how/why buflen relates to time.
 	 */
-	val = (char *) ast_variable_retrieve(cfg, "general", "buflen");
+	val = ast_variable_retrieve(cfg, "general", "buflen");
 	if (val) {
 		buflen = strtoul(val, NULL, 0) * 8;
 	} else {
@@ -3913,14 +3915,14 @@ static int reload(void)
 		buflen = FRAME_SIZE * 2;
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, "general", "sanity");
+	val = ast_variable_retrieve(cfg, "general", "sanity");
 	if (val) {
 		check_client_sanity = ast_true(val);
 	} else {
 		check_client_sanity = 1;
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, "general", "puckit");
+	val = ast_variable_retrieve(cfg, "general", "puckit");
 	if (val) {
 		puckit = ast_true(val);
 	} else {
@@ -3936,32 +3938,32 @@ static int reload(void)
 		if (ast_variable_browse(cfg, data) == NULL) {
 			continue;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "linger");
+		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
 			p->linger = atoi(val);
 		} else {
 			ast_debug(1, "linger not specified, using default linger = %i\n", DEFAULT_LINGER);
 			p->linger = DEFAULT_LINGER;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "plfilter");
+		val = ast_variable_retrieve(cfg, (char *) data, "plfilter");
 		if (val) {
 			p->plfilter = ast_true(val);
 		} else {
 			p->plfilter = 0;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "hostdeemp");
+		val = ast_variable_retrieve(cfg, (char *) data, "hostdeemp");
 		if (val) {
 			p->hostdeemp = ast_true(val);
 		} else {
 			p->hostdeemp = 0;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "mixminus");
+		val = ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
 			p->mixminus = ast_true(val);
 		} else {
 			p->mixminus = 0;
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "streams");
+		val = ast_variable_retrieve(cfg, (char *) data, "streams");
 		if (p->nstreams && p->streams[0]) {
 			ast_free(p->streams[0]);
 		}
@@ -3970,14 +3972,14 @@ static int reload(void)
 			cp = ast_strdup(val);
 			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcss");
+		val = ast_variable_retrieve(cfg, (char *) data, "txctcss");
 		if (val) {
 			ast_copy_string(p->txctcssfreq, val, sizeof(p->txctcssfreq));
 		} else {
 			p->txctcssfreq[0] = 0;
 		}
 		oldlevel = p->txctcsslevel;
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
+		val = ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
 		if (val) {
 			p->txctcsslevel = atoi(val);
 		} else {
@@ -3986,7 +3988,7 @@ static int reload(void)
 		p->txctcsslevelset = p->txctcsslevel;
 		oldtoctype = p->txtoctype;
 		p->txtoctype = TOC_NONE;
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "txtoctype");
+		val = ast_variable_retrieve(cfg, (char *) data, "txtoctype");
 		if (val) {
 			if (!strcasecmp(val, "phase")) {
 				p->txtoctype = TOC_PHASE;
@@ -3995,7 +3997,7 @@ static int reload(void)
 			}
 		}
 		p->nthresholds = 0;
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "thresholds");
+		val = ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
 			cp = ast_strdup(val);
 			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
@@ -4019,7 +4021,7 @@ static int reload(void)
 			}
 			ast_free(cp);
 		}
-		val = (char *) ast_variable_retrieve(cfg, (char *) data, "gtxgain");
+		val = ast_variable_retrieve(cfg, (char *) data, "gtxgain");
 		if (!val) {
 			val = DEFAULT_GTXGAIN;
 		}
@@ -4069,7 +4071,7 @@ static int reload(void)
 		if (!strcmp(ctg, "general")) {
 			continue;
 		}
-		val = (char *) ast_variable_retrieve(cfg, ctg, "buflen");
+		val = ast_variable_retrieve(cfg, ctg, "buflen");
 		if (val) {
 			instance_buflen = strtoul(val, NULL, 0) * 8;
 		} else {

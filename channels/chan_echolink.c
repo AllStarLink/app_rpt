@@ -191,6 +191,7 @@ do not use 127.0.0.1
 #define AUTH_ABANDONED_MS 15000
 #define BLOCKING_FACTOR 4
 #define GSM_FRAME_SIZE 33
+#define GSM_SAMPLES 160
 #define QUEUE_OVERLOAD_THRESHOLD_AST 75
 #define QUEUE_OVERLOAD_THRESHOLD_EL 30
 #define MAXPENDING 20
@@ -249,6 +250,7 @@ struct sockaddr_in sin_aprs;
  * \brief Echolink audio packet header.
  * This is the standard RTP packet format.
  */
+#pragma pack(push, 1)
 struct gsmVoice_t {
 #if BYTE_ORDER == BIG_ENDIAN
 	uint8_t version:2;
@@ -257,19 +259,22 @@ struct gsmVoice_t {
 	uint8_t csrc:4;
 	uint8_t marker:1;
 	uint8_t payt:7;
-#else
+#elif BYTE_ORDER == LITTLE_ENDIAN
 	uint8_t csrc:4;
 	uint8_t ext:1;
 	uint8_t pad:1;
 	uint8_t version:2;
 	uint8_t payt:7;
 	uint8_t marker:1;
+#else
+#error "Unknown byte order"
 #endif
-	uint16_t seqnum;
-	uint32_t time;
-	uint32_t ssrc;
+	uint16_t seqnum; /* MUST be stored in network byte order */
+	uint32_t time;	 /* MUST be stored in network byte order */
+	uint32_t ssrc;	 /* MUST be stored in network byte order */
 	unsigned char data[BLOCKING_FACTOR * GSM_FRAME_SIZE];
 };
+#pragma pack(pop)
 
 /*!
  * \brief RTP Control Packet SDES request item.
@@ -291,19 +296,23 @@ struct rtcp_sdes_request {
 /*!
  * \brief RTCP Control Packet common header word.
  */
+#pragma pack(push, 1)
 struct rtcp_common_t {
 #if BYTE_ORDER == BIG_ENDIAN
 	uint8_t version:2;
 	uint8_t p:1;
 	uint8_t count:5;
-#else
+#elif BYTE_ORDER == LITTLE_ENDIAN
 	uint8_t count:5;
 	uint8_t p:1;
 	uint8_t version:2;
+#else
+#error "Unknown byte order"
 #endif
 	uint8_t pt:8;
-	uint16_t length;
+	uint16_t length; // MUST be stored in network byte order
 };
+#pragma pack(pop)
 
 /*!
  * \brief RTP Control Packet SDES item detail.
@@ -906,7 +915,7 @@ static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
 			memcpy(result, found_node, sizeof(*result));
 			return 1;
 		}
-    }
+	}
 
 	return 0;
 }
@@ -1392,7 +1401,6 @@ static void el_destroy(struct el_pvt *pvt)
 		remque(qpast);
 		ast_free(qpast);
 	}
-
 	ast_mutex_unlock(&pvt->lock);
 
 	if (pvt->dsp) {
@@ -1521,6 +1529,7 @@ static int el_hangup(struct ast_channel *ast)
 static int el_indicate(struct ast_channel *ast, int cond, const void *data, size_t datalen)
 {
 	struct el_pvt *pvt = ast_channel_tech_pvt(ast);
+
 	switch (cond) {
 	case AST_CONTROL_RADIO_KEY:
 		pvt->txkey = 1;
@@ -2332,7 +2341,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 			memset(&fr, 0, sizeof(fr));
 			fr.datalen = GSM_FRAME_SIZE;
-			fr.samples = 160;
+			fr.samples = GSM_SAMPLES;
 			fr.frametype = AST_FRAME_VOICE;
 			fr.subclass.format = ast_format_gsm;
 			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
@@ -3145,8 +3154,8 @@ static int do_el_directory(const char *hostname)
 	*/
 	for (;;) {
 		/* read the callsign line
-		 * this line could also contain the end of list identicator
-		*/
+		 * this line could also contain the end of list indicator
+		 */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			break;
 		}

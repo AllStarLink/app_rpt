@@ -38,21 +38,7 @@ void init_linkmode(struct rpt *myrpt, struct rpt_link *mylink, int linktype)
 	if (!mylink) {
 		return;
 	}
-	switch (myrpt->p.linkmode[linktype]) {
-	case LINKMODE_OFF:
-		mylink->linkmode = 0;
-		break;
-	case LINKMODE_ON:
-		mylink->linkmode = 0x7fffffff;
-		break;
-	case LINKMODE_FOLLOW:
-		mylink->linkmode = 0x7ffffffe;
-		break;
-	case LINKMODE_DEMAND:
-		mylink->linkmode = 1;
-		break;
-	default:
-	}
+	set_linkmode(mylink, myrpt->p.linkmode[linktype]);
 }
 
 void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode)

@@ -698,7 +698,7 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 				if (itype == 0) {
 					break;
 				}
-				
+
 				for (i = 0; i < r->nitems; i++) {
 					if (r->item[i].r_item == itype && r->item[i].r_text == NULL) {
 						r->item[i].r_text = (char *) cp;
@@ -820,7 +820,8 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	struct sockaddr_in sin;
 	unsigned short n;
 	struct ast_flags zeroflag = { 0 };
-	char *str, *cp, *val, *sval, *strs[10];
+	char *str, *cp, *sval, *strs[10];
+	const char *val;
 	struct ast_config *cfg = NULL;
 
 	if ((ast_channel_state(ast) != AST_STATE_DOWN) && (ast_channel_state(ast) != AST_STATE_RESERVED)) {
@@ -830,7 +831,7 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	/* When we call, it just works, really, there's no destination...  Just
 	   ring the phone and wait for someone to answer */
 	ast_debug(1, "Calling %s on %s\n", dest, ast_channel_name(ast));
-	
+
 	/* Make sure we have a destination */
 	if (!*dest) {
 		ast_log(LOG_WARNING, "Call on %s failed - no destination.\n", ast_channel_name(ast));
@@ -847,12 +848,14 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		ast_free(str);
 		return -1;
 	}
-	val = (char *) ast_variable_retrieve(cfg, "nodes", str);
+	val = ast_variable_retrieve(cfg, "nodes", str);
 	if (!val) {
 		ast_log(LOG_ERROR, "Node %s not found!\n", str);
 		ast_config_destroy(cfg);
+		ast_free(str);
 		return -1;
 	}
 	sval = ast_strdupa(val);
@@ -862,26 +865,27 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	n = finddelim(sval, strs, ARRAY_LEN(strs));
 	if (n < 3) {
 		ast_verb(3, "Call for node %s on %s, failed. Node not found in database.\n", dest, ast_channel_name(ast));
+		ast_free(str);
 		return -1;
 	}
-	
+
 	ast_mutex_lock(&instp->lock);
 	strcpy(instp->TLB_node_test.ip, strs[1]);
 	instp->TLB_node_test.port = strtoul(strs[2], NULL, 0);
 	do_new_call(instp, p, "OUTBOUND", "OUTBOUND", strs[3]);
-		
+
 	pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall);
-	
+
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(atoi(strs[2]) + 1);
 	sin.sin_addr.s_addr = inet_addr(strs[1]);
 	sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 	ast_mutex_unlock(&instp->lock);
-	ast_free(str);
 	ast_debug(1, "tlb: Connect request sent to %s (%s:%s)\n", str, strs[1], strs[2]);
+	ast_free(str);
 
 	ast_setstate(ast, AST_STATE_RINGING);
-	
+
 	return 0;
 }
 
@@ -986,7 +990,7 @@ static int TLB_hangup(struct ast_channel *ast)
 
 	if (!instp->confmode) {
 		ast_debug(1, "Sent bye to IP address %s\n", p->ip);
-		
+
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->TLB_node_test.ip, p->ip);
 		instp->TLB_node_test.port = p->port;
@@ -994,7 +998,7 @@ static int TLB_hangup(struct ast_channel *ast)
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
 		ast_mutex_unlock(&instp->lock);
-		
+
 		n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 		sin.sin_family = AF_INET;
 		sin.sin_addr.s_addr = inet_addr(p->ip);
@@ -1188,34 +1192,35 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 	int result = -1;
 	struct ast_config *cfg = NULL;
 	struct ast_flags zeroflag = { 0 };
-	char *val, *sval, *strs[10];
+	char *sval, *strs[10];
+	const char *val;
 	int num_substrings;
-	
+
 	/* Make sure that we got a node number to query */
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_ERROR, "Node number not supplied.");
 		return result;
 	}
-	
+
 	/* Make sure that we have a valid query option */
 	if (option != TLB_QUERY_NODE_EXISTS && option != TLB_QUERY_GET_CALLSIGN) {
 		ast_log(LOG_ERROR, "Invalid query option - %i.\n", option);
 		return result;
 	}
-	
+
 	/* Load the config file */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return result;
 	}
-	
+
 	/* Get the node information from the config */
-	val = (char *) ast_variable_retrieve(cfg, "nodes", data);
+	val = ast_variable_retrieve(cfg, "nodes", data);
 	if (!val) {
 		ast_config_destroy(cfg);
 		return result;
 	}
-	
+
 	/* parse the comma delimited returned data 
 	 * format: W1XYZ,192.168.1.1,1234,G726
 	*/
@@ -1227,11 +1232,11 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 		ast_config_destroy(cfg);
 		return result;
 	}
-	
+
 	if (option == TLB_QUERY_GET_CALLSIGN) {
 		ast_copy_string(data, strs[1], *datalen);
 	}
-	
+
 	result = 0;
 
 	/* clean up */
@@ -1684,7 +1689,7 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 		ast_log(LOG_WARNING, "Unable to allocate channel structure.\n");
 		return NULL;
 	}
-	
+
 	capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 
 	ast_channel_tech_set(tmp, &TLB_tech);
@@ -1845,7 +1850,8 @@ static int TLB_do_nodedump(int fd, int argc, const char *const *argv)
  */
 static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 {
-	char c, *s, *sval, *val, *strs[10];
+	char c, *s, *sval, *strs[10];
+	const char *val;
 	int n;
 	struct ast_config *cfg = NULL;
 	struct ast_flags zeroflag = { 0 };
@@ -1863,7 +1869,7 @@ static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 	s = ast_strdupa(argv[3]);
 	strupr(s);
 	if (c == 'n') {
-		val = (char *) ast_variable_retrieve(cfg, "nodes", s);
+		val = ast_variable_retrieve(cfg, "nodes", s);
 		if (!val) {
 			ast_cli(fd, "Error: Entry for %s not found !\n", s);
 			ast_config_destroy(cfg);
@@ -2156,7 +2162,7 @@ static void *TLB_reader(void *data)
 
 	ast_debug(1, "tlb: reader thread started on %s.\n", instp->name);
 	ast_mutex_lock(&instp->lock);
-	
+
 	memset(&fds, 0, sizeof(fds));
 	fds[0].fd = instp->ctrl_sock;
 	fds[0].events = POLLIN;
@@ -2379,7 +2385,7 @@ static void *TLB_reader(void *data)
  */
 static int store_config(struct ast_config *cfg, char *ctg)
 {
-	char *val;
+	const char *val;
 	struct TLB_instance *instp;
 	struct sockaddr_in si_me;
 	pthread_attr_t attr;
@@ -2399,48 +2405,48 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	instp->ctrl_sock = -1;
 	instp->fdr = -1;
 
-	val = (char *) ast_variable_retrieve(cfg, ctg, "ipaddr");
+	val = ast_variable_retrieve(cfg, ctg, "ipaddr");
 	if (val) {
 		ast_copy_string(instp->ipaddr, val, TLB_IP_SIZE);
 	} else {
 		strcpy(instp->ipaddr, "0.0.0.0");
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, ctg, "port");
+	val = ast_variable_retrieve(cfg, ctg, "port");
 	if (val) {
 		ast_copy_string(instp->port, val, TLB_IP_SIZE);
 	} else {
 		strcpy(instp->port, "44966");
 	}
 
-	val = (char *) ast_variable_retrieve(cfg, ctg, "rtcptimeout");
+	val = ast_variable_retrieve(cfg, ctg, "rtcptimeout");
 	if (!val) {
 		instp->rtcptimeout = 15;
 	} else {
 		instp->rtcptimeout = atoi(val);
 	}
-	
-	val = (char *) ast_variable_retrieve(cfg, ctg, "astnode");
+
+	val = ast_variable_retrieve(cfg, ctg, "astnode");
 	if (val) {
 		ast_copy_string(instp->astnode, val, TLB_NAME_SIZE);
 	} else {
 		strcpy(instp->astnode, "1999");
 	}
-	
-	val = (char *) ast_variable_retrieve(cfg, ctg, "context");
+
+	val = ast_variable_retrieve(cfg, ctg, "context");
 	if (val) {
 		ast_copy_string(instp->context, val, TLB_NAME_SIZE);
 	} else {
 		strcpy(instp->context, "tlb-in");
 	}
-	
-	val = (char *) ast_variable_retrieve(cfg, ctg, "call");
+
+	val = ast_variable_retrieve(cfg, ctg, "call");
 	if (!val) {
 		ast_copy_string(instp->mycall, "INVALID", TLB_CALL_SIZE);
 	} else {
 		ast_copy_string(instp->mycall, val, TLB_CALL_SIZE);
 	}
-	
+
 	if (strcmp(instp->mycall, "INVALID") == 0) {
 		ast_log(LOG_ERROR, "INVALID TheLinkBox call");
 		return -1;
@@ -2450,18 +2456,18 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	instp->confmode = 0;
 
-	val = (char *) ast_variable_retrieve(cfg, ctg, "deny");
+	val = ast_variable_retrieve(cfg, ctg, "deny");
 	if (val) {
 		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, ARRAY_LEN(instp->denylist));
 	}
-	val = (char *) ast_variable_retrieve(cfg, ctg, "permit");
+	val = ast_variable_retrieve(cfg, ctg, "permit");
 	if (val) {
 		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, ARRAY_LEN(instp->permitlist));
 	}
 	instp->pref_rxcodec = PREF_RXCODEC;
 	instp->pref_txcodec = PREF_TXCODEC;
 
-	val = (char *) ast_variable_retrieve(cfg, ctg, "codec");
+	val = ast_variable_retrieve(cfg, ctg, "codec");
 	if (val) {
 		if (!strcasecmp(val, "GSM")) {
 			instp->pref_txcodec = TLB_GSM;
