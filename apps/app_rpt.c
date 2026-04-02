@@ -5762,13 +5762,12 @@ static int load_config(int reload)
 		if (rpt_vars[n].rxchanname) {
 			ast_free(rpt_vars[n].rxchanname);
 		}
+		if (rpt_vars[n].txchanname) {
+			ast_free(rpt_vars[n].txchanname);
+		}
 		if (rpt_vars[n].name) {
 			ast_free(rpt_vars[n].name);
 		}
-		if (rpt_vars[n].remoterig) {
-			ast_free(rpt_vars[n].remoterig);
-		}
-
 		if (rpt_vars[n].remoterig) {
 			ast_free(rpt_vars[n].remoterig);
 		}
@@ -5795,23 +5794,21 @@ static int load_config(int reload)
 		rpt_vars[n].name = ast_strdup(this);
 		val = ast_variable_retrieve(cfg, this, "txchannel");
 		if (val) {
-			if (rpt_vars[n].txchanname) {
-				ast_free(rpt_vars[n].txchanname);
-			}
 			rpt_vars[n].txchanname = ast_strdup(val);
 		}
 		rpt_vars[n].remote = 0;
+		rpt_vars[n].remoterig = ast_strdup("");
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
 		val = ast_variable_retrieve(cfg, this, "remote");
 		if (val) {
+			ast_free(rpt_vars[n].remoterig);
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
-		} else {
-			rpt_vars[n].remoterig = ast_strdup("");
 		}
 		val = ast_variable_retrieve(cfg, this, "radiotype");
 		if (val) {
+			ast_free(rpt_vars[n].remoterig);
 			rpt_vars[n].remoterig = ast_strdup(val);
 		}
 
