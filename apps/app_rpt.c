@@ -5797,21 +5797,20 @@ static int load_config(int reload)
 			rpt_vars[n].txchanname = ast_strdup(val);
 		}
 		rpt_vars[n].remote = 0;
-		rpt_vars[n].remoterig = ast_strdup("");
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
 		val = ast_variable_retrieve(cfg, this, "remote");
 		if (val) {
-			ast_free(rpt_vars[n].remoterig);
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
 		}
 		val = ast_variable_retrieve(cfg, this, "radiotype");
 		if (val) {
-			ast_free(rpt_vars[n].remoterig);
 			rpt_vars[n].remoterig = ast_strdup(val);
 		}
-
+		if (!rpt_vars[n].remoterig) {
+			rpt_vars[n].remoterig = ast_strdup("");
+		}
 		ast_mutex_init(&rpt_vars[n].lock);
 		ast_mutex_init(&rpt_vars[n].remlock);
 		ast_mutex_init(&rpt_vars[n].statpost_lock);
