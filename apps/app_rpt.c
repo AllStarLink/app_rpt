@@ -5961,8 +5961,8 @@ static void *rpt_master(void *ignore)
 					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
 						pthread_join(rpt_vars[i].rpt_thread, NULL);
 						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
-						rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
 					}
+					rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
 					continue;
 				}
 				if (ast_shutting_down() || shutting_down) {
