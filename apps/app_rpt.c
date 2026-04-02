@@ -5999,8 +5999,7 @@ static void *rpt_master(void *ignore)
 			}
 		}
 		for (i = 0; i < nrpts; i++) {
-			if (rpt_vars[i].deleted == RPT_DELETED_PENDING || rpt_vars[i].deleted == RPT_DELETED_COMPLETE || rpt_vars[i].remote ||
-				!rpt_vars[i].p.outstreamcmd) {
+			if (rpt_vars[i].deleted != RPT_DELETED_NONE || rpt_vars[i].remote || !rpt_vars[i].p.outstreamcmd) {
 				continue;
 			}
 			if (!rpt_vars[i].outstreampid) {
@@ -6064,7 +6063,7 @@ static void *rpt_master(void *ignore)
 			int done = 0, jrv;
 			ast_debug(1, "app_rpt is unloading, master thread cleaning up %d repeater%s and exiting\n", nrpts, ESS(nrpts));
 			for (i = 0; i < nrpts; i++) {
-				if (rpt_vars[i].deleted == RPT_DELETED_PENDING || rpt_vars[i].deleted == RPT_DELETED_COMPLETE) {
+				if (rpt_vars[i].deleted != RPT_DELETED_NONE) {
 					ast_debug(1, "Skipping deleted thread %s\n", rpt_vars[i].name);
 					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
 						pthread_join(rpt_vars[i].rpt_thread, NULL);
