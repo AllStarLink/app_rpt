@@ -5825,16 +5825,16 @@ static int load_config(int reload)
 			ast_mutex_destroy(&rpt_vars[n].remlock);
 			ast_mutex_destroy(&rpt_vars[n].statpost_lock);
 			if (rpt_vars[n].rxchanname) {
-				ast_free(rpt_vars[i].rxchanname);
+				ast_free(rpt_vars[n].rxchanname);
 			}
 			if (rpt_vars[n].txchanname) {
-				ast_free(rpt_vars[i].txchanname);
+				ast_free(rpt_vars[n].txchanname);
 			}
 			if (rpt_vars[n].name) {
-				ast_free(rpt_vars[i].name);
+				ast_free(rpt_vars[n].name);
 			}
 			if (rpt_vars[n].remoterig) {
-				ast_free(rpt_vars[i].remoterig);
+				ast_free(rpt_vars[n].remoterig);
 			}
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
