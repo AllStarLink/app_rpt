@@ -532,8 +532,6 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 	val = (char *) ast_variable_retrieve(myrpt->cfg, myrpt->p.nodes, digitbuf);
 	if (val) {
 		if (nodedata && nodedatalength) {
-			//snprintf(str,strmax,val,digitbuf);
-			//snprintf(str, strmax, "%s%s", val, digitbuf);	/*! \todo 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy. */
 			snprintf(nodedata, nodedatalength, "%s", val); // Indeed, generally we only want the first part so for now, ignore the second bit
 			ast_debug(4, "Resolved by internal: node %s to %s\n", digitbuf, nodedata);
 		}
@@ -544,8 +542,6 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 		while (vp) {
 			if (ast_extension_match(vp->name, digitbuf)) {
 				if (nodedata && nodedatalength) {
-					//snprintf(str,strmax,vp->value,digitbuf);
-					//snprintf(str, strmax, "%s%s", vp->value, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
 					snprintf(nodedata, nodedatalength, "%s", vp->value);
 					ast_debug(4, "Resolved by internal/wild: node %s to %s\n", digitbuf, nodedata);
 				}
@@ -618,8 +614,6 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 				if (val) {
 					found = 1;
 					if (nodedata && nodedatalength) {
-						//snprintf(str,strmax,val,digitbuf);
-						//snprintf(str, strmax, "%s%s", val, digitbuf);	// 20220111 NA. This may not actually be correct (functionality-wise). Should be verified. For now, it makes the compiler happy.
 						snprintf(nodedata, nodedatalength, "%s", val);
 						ast_debug(4, "Resolved from file: node %s to %s\n", digitbuf, nodedata);
 					}
