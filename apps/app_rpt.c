@@ -5791,12 +5791,11 @@ static int load_config(int reload)
 		rpt_vars[n].remote = 0;
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
-		val = ast_variable_retrieve(cfg, this, "remote");
-		if (val) {
-			rpt_vars[n].remoterig = ast_strdup(val);
-			rpt_vars[n].remote = 1;
+
+		val = (char *) ast_variable_retrieve(cfg, this, "radiotype");
+		if (!val) {
+			val = (char *) ast_variable_retrieve(cfg, this, "remote");
 		}
-		val = ast_variable_retrieve(cfg, this, "radiotype");
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
