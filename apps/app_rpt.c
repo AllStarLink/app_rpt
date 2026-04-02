@@ -5976,7 +5976,7 @@ static void *rpt_master(void *ignore)
 			int rv;
 			if (rpt_vars[i].remote) {
 				if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
-					rpt_vars[i].deleted == RPT_DELETED_COMPLETE;
+					rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
 				}
 				continue;
 			}
