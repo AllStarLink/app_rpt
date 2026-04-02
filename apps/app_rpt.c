@@ -4997,6 +4997,7 @@ static void *rpt(void *this)
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
 			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			rpt_hangup(myrpt, RPT_MONCHAN);
 			rpt_hangup(myrpt, RPT_RXPCHAN);
@@ -5823,16 +5824,16 @@ static int load_config(int reload)
 			ast_mutex_destroy(&rpt_vars[n].lock);
 			ast_mutex_destroy(&rpt_vars[n].remlock);
 			ast_mutex_destroy(&rpt_vars[n].statpost_lock);
-			if (rpt_vars[i].rxchanname) {
+			if (rpt_vars[n].rxchanname) {
 				ast_free(rpt_vars[i].rxchanname);
 			}
-			if (rpt_vars[i].txchanname) {
+			if (rpt_vars[n].txchanname) {
 				ast_free(rpt_vars[i].txchanname);
 			}
-			if (rpt_vars[i].name) {
+			if (rpt_vars[n].name) {
 				ast_free(rpt_vars[i].name);
 			}
-			if (rpt_vars[i].remoterig) {
+			if (rpt_vars[n].remoterig) {
 				ast_free(rpt_vars[i].remoterig);
 			}
 		}
