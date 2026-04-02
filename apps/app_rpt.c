@@ -4886,6 +4886,8 @@ static void *rpt(void *this)
 
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup_rx_tx(myrpt);
 		disable_rpt(myrpt); /* Disable repeater */
 		return NULL;
 	}
@@ -4893,6 +4895,10 @@ static void *rpt(void *this)
 	if (!myrpt->macrobuf) {
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
 		if (!myrpt->macrobuf) {
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup_rx_tx(myrpt);
+			disable_rpt(myrpt); /* Disable repeater */
 			return NULL;
 		}
 	}
