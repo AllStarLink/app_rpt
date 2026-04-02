@@ -1578,6 +1578,7 @@ void *rpt_call(void *this)
 	ast_free(patch_thread_data);
 	return NULL;
 
+cleanup:
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = CALLMODE_DOWN;
 	rpt_mutex_unlock(&myrpt->lock);
@@ -5618,7 +5619,6 @@ static void *rpt(void *this)
 			}
 		}
 	}
-cleanup:
 	/* Terminate and cleanup app_rpt node instance */
 	ast_debug(1, "%s disconnected, cleaning up...\n", myrpt->name);
 
