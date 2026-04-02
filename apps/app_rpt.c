@@ -1578,7 +1578,6 @@ void *rpt_call(void *this)
 	ast_free(patch_thread_data);
 	return NULL;
 
-cleanup:
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->callmode = CALLMODE_DOWN;
 	rpt_mutex_unlock(&myrpt->lock);
@@ -2917,24 +2916,26 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_request_local(myrpt, cap, RPT_RXPCHAN, "RXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		return -1;
 	}
 
 	if (rpt_conf_add(myrpt->pchannel, myrpt, RPT_CONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		return -1;
 	}
 
 	if (rpt_conf_add(myrpt->rxpchannel, myrpt, RPT_CONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		return -1;
 	}
 
@@ -2943,25 +2944,27 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_conf_add(myrpt->monchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		return -1;
 	}
 
 	if (rpt_request_local(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_TXPCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
 		return -1;
 	}
 	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_TXPCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		rpt_hangup(myrpt, RPT_TXPCHAN);
 		return -1;
 	}
 	return 0;
@@ -2971,12 +2974,12 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 static int disable_rpt(struct rpt *myrpt)
 {
 	int n;
-	/* setting rpt_vars[n].deleted = 1 is a slight hack that prevents continual thread restarts.
+	/* setting rpt_vars[n].deleted = RPT_DELETED_PENDING is a slight hack that prevents continual thread restarts.
 	 * This thread cannot successfully be resurrected, so don't even THINK about trying!
 	 * (Maybe add a new var for this?) */
 	for (n = 0; n < nrpts; n++) {
 		if (!strcmp(myrpt->name, rpt_vars[n].name)) {
-			rpt_vars[n].deleted = 1;
+			rpt_vars[n].deleted = RPT_DELETED_PENDING;
 			ast_log(LOG_WARNING, "Disabled broken repeater %s\n", myrpt->name);
 			return 0;
 		}
@@ -4874,8 +4877,12 @@ static void *rpt(void *this)
 	if (myrpt->p.ioport && ((myrpt->iofd = openserial(myrpt, myrpt->p.ioport)) == -1)) {
 		ast_log(LOG_ERROR, "Unable to open %s\n", myrpt->p.ioport);
 		rpt_mutex_unlock(&myrpt->lock);
-		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		rpt_hangup(myrpt, RPT_TXPCHAN);
 		disable_rpt(myrpt); /* Disable repeater */
 		return NULL;
 	}
@@ -4884,7 +4891,10 @@ static void *rpt(void *this)
 		if (!myrpt->macrobuf) {
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_hangup(myrpt, RPT_PCHAN);
-			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+			rpt_hangup(myrpt, RPT_RXPCHAN);
+			rpt_hangup(myrpt, RPT_TXPCHAN);
 			disable_rpt(myrpt); /* Disable repeater */
 			return NULL;
 		}
@@ -4898,7 +4908,10 @@ static void *rpt(void *this)
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		rpt_hangup(myrpt, RPT_TXPCHAN);
 		disable_rpt(myrpt); /* Disable repeater */
 		ast_free(myrpt->macrobuf);
 		return NULL;
@@ -5605,7 +5618,7 @@ static void *rpt(void *this)
 			}
 		}
 	}
-
+cleanup:
 	/* Terminate and cleanup app_rpt node instance */
 	ast_debug(1, "%s disconnected, cleaning up...\n", myrpt->name);
 
@@ -5758,7 +5771,7 @@ static int load_config(int reload)
 			}
 			/* No such node yet, find an empty hole or the next one and fully initialize */
 			for (n = 0; n < nrpts; n++) {
-				if (rpt_vars[n].deleted) {
+				if (rpt_vars[n].deleted == RPT_DELETED_COMPLETE) {
 					break;
 				}
 			}
@@ -5924,11 +5937,12 @@ static void *rpt_master(void *ignore)
 			}
 			rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
 			if (rv) {
-				if (rpt_vars[i].deleted) {
+				if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
 					rpt_vars[i].name[0] = 0;
 					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
 						pthread_join(rpt_vars[i].rpt_thread, NULL);
 						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+						rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
 					}
 					continue;
 				}
@@ -5966,7 +5980,8 @@ static void *rpt_master(void *ignore)
 			}
 		}
 		for (i = 0; i < nrpts; i++) {
-			if (rpt_vars[i].deleted || rpt_vars[i].remote || !rpt_vars[i].p.outstreamcmd) {
+			if (rpt_vars[i].deleted == RPT_DELETED_PENDING || rpt_vars[i].deleted == RPT_DELETED_COMPLETE || rpt_vars[i].remote ||
+				!rpt_vars[i].p.outstreamcmd) {
 				continue;
 			}
 			if (!rpt_vars[i].outstreampid) {
@@ -6030,7 +6045,7 @@ static void *rpt_master(void *ignore)
 			int done = 0, jrv;
 			ast_debug(1, "app_rpt is unloading, master thread cleaning up %d repeater%s and exiting\n", nrpts, ESS(nrpts));
 			for (i = 0; i < nrpts; i++) {
-				if (rpt_vars[i].deleted) {
+				if (rpt_vars[i].deleted == RPT_DELETED_PENDING || rpt_vars[i].deleted == RPT_DELETED_COMPLETE) {
 					ast_debug(1, "Skipping deleted thread %s\n", rpt_vars[i].name);
 					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
 						pthread_join(rpt_vars[i].rpt_thread, NULL);
@@ -7769,10 +7784,10 @@ static int reload(void)
 			continue;
 		if (rpt_vars[n].rxchannel)
 			ast_softhangup(rpt_vars[n].rxchannel, AST_SOFTHANGUP_DEV);
-		rpt_vars[n].deleted = 1;
+		rpt_vars[n].deleted = RPT_DELETED_PENDING;
 	}
 	for (n = 0; n < nrpts; n++)
-		if (!rpt_vars[n].deleted)
+		if (rpt_vars[n].deleted == RPT_DELETED_NONE)
 			rpt_vars[n].reload = 1;
 	ast_mutex_unlock(&rpt_master_lock);
 	return (0);
