@@ -765,7 +765,7 @@ struct rpt {
 	struct ast_config *cfg;
 	rpt_bool reload:1;
 	rpt_bool reload_request:1;
-	enum rpt_deleted_state deleted:2;
+	enum rpt_deleted_state deleted;
 	char xlink; /*!< cross link state of a share repeater/remote radio */
 	unsigned int statpost_seqno;
 
