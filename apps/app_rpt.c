@@ -2918,7 +2918,9 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 
@@ -2926,8 +2928,10 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 
@@ -2935,8 +2939,11 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
+
 		return -1;
 	}
 
@@ -2946,8 +2953,10 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 
@@ -2955,17 +2964,21 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_TXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 	return 0;
@@ -4881,9 +4894,11 @@ static void *rpt(void *this)
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_TXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		disable_rpt(myrpt); /* Disable repeater */
 		return NULL;
 	}
@@ -4893,9 +4908,11 @@ static void *rpt(void *this)
 			rpt_mutex_unlock(&myrpt->lock);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			rpt_hangup(myrpt, RPT_MONCHAN);
-			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 			rpt_hangup(myrpt, RPT_RXPCHAN);
 			rpt_hangup(myrpt, RPT_TXPCHAN);
+			if (myrpt->localtxchannel != myrpt->txchannel) {
+				rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+			}
 			disable_rpt(myrpt); /* Disable repeater */
 			return NULL;
 		}
@@ -4910,9 +4927,11 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
-		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_TXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		disable_rpt(myrpt); /* Disable repeater */
 		ast_free(myrpt->macrobuf);
 		return NULL;
