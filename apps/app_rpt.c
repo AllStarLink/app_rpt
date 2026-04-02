@@ -4879,6 +4879,17 @@ static void *rpt(void *this)
 		disable_rpt(myrpt); /* Disable repeater */
 		return NULL;
 	}
+	if (!myrpt->macrobuf) {
+		myrpt->macrobuf = ast_str_create(MAXMACRO);
+		if (!myrpt->macrobuf) {
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup_rx_tx(myrpt);
+			disable_rpt(myrpt); /* Disable repeater */
+			return NULL;
+		}
+	}
+
 	myrpt->links = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
 		AO2_CONTAINER_ALLOC_OPT_INSERT_BEGIN,  /* AO2 container flags. New items should be added to the front of the list */
 		NULL,								   /* Sorting function. NULL means the list will not be sorted */
@@ -4889,18 +4900,8 @@ static void *rpt(void *this)
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup_rx_tx(myrpt);
 		disable_rpt(myrpt); /* Disable repeater */
+		ast_free(myrpt->macrobuf);
 		return NULL;
-	}
-
-	if (!myrpt->macrobuf) {
-		myrpt->macrobuf = ast_str_create(MAXMACRO);
-		if (!myrpt->macrobuf) {
-			rpt_mutex_unlock(&myrpt->lock);
-			rpt_hangup(myrpt, RPT_PCHAN);
-			rpt_hangup_rx_tx(myrpt);
-			disable_rpt(myrpt); /* Disable repeater */
-			return NULL;
-		}
 	}
 
 	/* Now, the idea here is to copy from the physical rx channel buffer
