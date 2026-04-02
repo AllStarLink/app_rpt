@@ -5742,19 +5742,21 @@ static int load_config(int reload)
 			}
 		}
 		if (i != strlen(this)) {
-			continue; /* Not a node defn */
+			continue; /* Not a node definition: Non numeric values found */
 		}
 		if (reload) {
+			/* If reloading, find the index for the node */
 			for (n = 0; n < nrpts; n++) {
+				/* Look for a matching node already loaded */
 				if (!strcmp(this, rpt_vars[n].name)) {
 					rpt_vars[n].reload_request = 1;
-					break; /* Skip the initialization */
+					break;
 				}
 			}
 			if (n < nrpts) {
-				continue; /* Node already exists. */
+				continue; /* Node exists, Skip the initialization. */
 			}
-			/* No such node yet, find an empty hole or the next one */
+			/* No such node yet, find an empty hole or the next one and fully initialize */
 			for (n = 0; n < nrpts; n++) {
 				if (rpt_vars[n].deleted) {
 					break;
@@ -5814,7 +5816,7 @@ static int load_config(int reload)
 		rpt_vars[n].mdc = mdc_decoder_new(8000);
 #endif
 		if (reload) {
-			/* Reload but didn't find a matching node already loaded */
+			/* Reload but didn't find a matching node loaded */
 			rpt_vars[n].reload_request = 1;
 			if (n >= nrpts) {
 				nrpts = n + 1;
