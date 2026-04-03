@@ -5806,7 +5806,9 @@ static int load_config(int reload)
 			if (n < nrpts) {
 				continue; /* Node exists, Skip the initialization. */
 			}
-			/* No such node yet, find an empty hole or the next one and fully initialize */
+			/* No such node yet, find an empty hole or the next one and fully initialize
+			 * This should never happen: Calling load_config() with reload = 1 but no matching node found
+			 */
 			for (n = 0; n < nrpts; n++) {
 				if (rpt_vars[n].deleted == RPT_DELETED_COMPLETE) {
 					break;
@@ -5817,8 +5819,8 @@ static int load_config(int reload)
 			ast_log(LOG_ERROR, "Attempting to add repeater node %s would exceed max. number of repeaters (%d)\n", this, MAXRPTS);
 			continue;
 		}
-		/* If we delete a repeater, these alloc strings are to released
-		 *  when it's time to reuse the rpt_var, clean up any left over strings.
+		/* If we delete a repeater, these alloc strings need to be released
+		 * when it's time to reuse the rpt_var, clean up any left over strings.
 		 */
 		if (reload && rpt_vars[n].deleted == RPT_DELETED_COMPLETE) {
 			ast_mutex_destroy(&rpt_vars[n].lock);
