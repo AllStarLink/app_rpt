@@ -1224,7 +1224,12 @@ static int voter_text(struct ast_channel *ast, const char *text)
 		case '?':				/* Query Page Status */
 			i = 0;
 			ast_mutex_lock(&o->txqlock);
-			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) if (f1->src && (!strcmp(f1->src, PAGER_SRC))) i++;
+			AST_LIST_TRAVERSE(&o->txq, f1, frame_list)
+			{
+				if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
+					i++;
+				}
+			}
 			ast_mutex_unlock(&o->txqlock);
 			cmd = (i) ? "PAGES" : "NOPAGES";
 			memset(&wf, 0, sizeof(wf));
@@ -3124,7 +3129,10 @@ static void *voter_xmit(void *data)
 		n = x = 0;
 		f2 = NULL;
 		ast_mutex_lock(&p->txqlock);
-		AST_LIST_TRAVERSE(&p->txq, f1, frame_list) n++;
+		AST_LIST_TRAVERSE(&p->txq, f1, frame_list)
+		{
+			n++;
+		}
 		ast_mutex_unlock(&p->txqlock);
 		if (n && ((n > 3) || (!p->txkey))) {
 			x = 1;
@@ -3161,7 +3169,10 @@ static void *voter_xmit(void *data)
 			PmrRx(p->pmrChan, dummybuf1, dummybuf2, xmtbuf1);
 			n = 0;
 			ast_mutex_lock(&p->pagerqlock);
-			AST_LIST_TRAVERSE(&p->pagerq, f1, frame_list) n++;
+			AST_LIST_TRAVERSE(&p->pagerq, f1, frame_list)
+			{
+				n++;
+			}
 			ast_mutex_unlock(&p->pagerqlock);
 			if (p->waspager && (n < 1)) {
 				memset(&wf1, 0, sizeof(wf1));
