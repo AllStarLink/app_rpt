@@ -120,8 +120,9 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
 
-	if (!myrpt->keyed)
+	if (!myrpt->keyed) {
 		return;
+	}
 
 	sprintf(str, "I %s %s", myrpt->name, data);
 	wf.data.ptr = str;
@@ -148,8 +149,9 @@ static const char *my_variable_match(const struct ast_config *config, const char
 
 	if (category) {
 		for (v = ast_variable_browse(config, category); v; v = v->next) {
-			if (!fnmatch(v->name, variable, FNM_CASEFOLD | FNM_NOESCAPE))
+			if (!fnmatch(v->name, variable, FNM_CASEFOLD | FNM_NOESCAPE)) {
 				return v->value;
+			}
 		}
 
 	}
@@ -161,8 +163,9 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 	char *myval;
 	int i;
 
-	if ((data[0] == 'I') && (!strcmp(data, myrpt->lastmdc)))
+	if ((data[0] == 'I') && (!strcmp(data, myrpt->lastmdc))) {
 		return;
+	}
 	myval = (char *) my_variable_match(myrpt->cfg, myrpt->p.mdcmacro, data);
 	if (myval) {
 		ast_verb(4, "MDCMacro for %s doing %s on node %s\n", data, myval, myrpt->name);
@@ -173,8 +176,9 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 			}
 			return;
 		}
-		if (!myrpt->keyed)
+		if (!myrpt->keyed) {
 			return;
+		}
 		macro_append(myrpt, myval);
 	}
 	if (data[0] == 'I') {
@@ -209,10 +213,12 @@ static void mdcgen_release(struct ast_channel *chan, void *params)
 	if (chan) {
 		ast_set_write_format(chan, ps->origwfmt);
 	}
-	if (!ps)
+	if (!ps) {
 		return;
-	if (ps->mdc)
+	}
+	if (ps->mdc) {
 		ast_free(ps->mdc);
+	}
 	ast_free(ps);
 }
 
@@ -221,8 +227,9 @@ static void *mdcgen_alloc(struct ast_channel *chan, void *params)
 	struct mdcgen_pvt *ps;
 	struct mdcparams *p = (struct mdcparams *) params;
 
-	if (!(ps = ast_calloc(1, sizeof(*ps))))
+	if (!(ps = ast_calloc(1, sizeof(*ps)))) {
 		return NULL;
+	}
 	ps->origwfmt = ast_channel_writeformat(chan);	/*! \todo does this need to be freed? */
 	ps->mdc = mdc_encoder_new(8000);
 	if (!ps->mdc) {
@@ -240,11 +247,9 @@ static void *mdcgen_alloc(struct ast_channel *chan, void *params)
 									  p->UnitID >> 8, p->UnitID & 0xff);
 	} else if (p->type[0] == 'A') {
 		mdc_encoder_set_packet(ps->mdc, 0x23, 0, p->UnitID);
-	} else if (p->type[0] == 'K')	// kill a unit W9CR
-	{
+	} else if (p->type[0] == 'K') { // kill a unit W9CR
 		mdc_encoder_set_packet(ps->mdc, (unsigned char) 0x22b, 0x00, p->UnitID);
-	} else if (p->type[0] == 'U')	// UnKill a unit W9CR
-	{
+	} else if (p->type[0] == 'U') { // UnKill a unit W9CR
 		mdc_encoder_set_packet(ps->mdc, 0x2b, 0x0c, p->UnitID);
 	} else {
 		ast_log(LOG_ERROR, "Dont know MDC encode type '%s'\n", p->type);
@@ -265,15 +270,19 @@ static int mdcgen_generator(struct ast_channel *chan, void *data, int len, int s
 	short s, *sp;
 	int i, n;
 
-	if (!samples)
+	if (!samples) {
 		return 1;
-	if (samples > sizeof(ps->cbuf))
+	}
+	if (samples > sizeof(ps->cbuf)) {
 		return -1;
-	if (samples < 0)
+	}
+	if (samples < 0) {
 		samples = 160;
+	}
 	n = mdc_encoder_get_samples(ps->mdc, ps->cbuf, samples);
-	if (n < 1)
+	if (n < 1) {
 		return 1;
+	}
 	sp = (short *) (ps->buf + AST_FRIENDLY_OFFSET);
 	for (i = 0; i < n; i++) {
 		s = ((short) ps->cbuf[i]) - 128;
@@ -318,20 +327,24 @@ int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID,
 	struct ast_frame *f;
 
 	res = mdc1200gen_start(chan, type, UnitID, destID, subcode);
-	if (res)
+	if (res) {
 		return res;
+	}
 
 	while (ast_channel_generatordata(chan)) {
-		if (ast_check_hangup(chan))
+		if (ast_check_hangup(chan)) {
 			return -1;
+		}
 		res = ast_waitfor(chan, 100);
-		if (res <= 0)
+		if (res <= 0) {
 			return -1;
+		}
 		f = ast_read(chan);
-		if (f)
+		if (f) {
 			ast_frfree(f);
-		else
+		} else {
 			return -1;
+		}
 	}
 	return 0;
 }

@@ -2119,8 +2119,9 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	}
 	if (mycodec[0]) {
 		for (i = 0; tlb_codecs[i].name; i++) {
-			if (!strcasecmp(mycodec, tlb_codecs[i].name))
+			if (!strcasecmp(mycodec, tlb_codecs[i].name)) {
 				break;
+			}
 		}
 		if (!tlb_codecs[i].name) {
 			ast_log(LOG_ERROR, "Unknown codec type %s for call %s\n", mycodec, TLB_node_key->call);
@@ -2219,8 +2220,9 @@ static void *TLB_reader(void *data)
 								}
 							} else {
 								/* if permit list specified, default is not to authorize */
-								if (instp->npermitlist)
+								if (instp->npermitlist) {
 									i = 1;
+								}
 							}
 							if (instp->npermitlist) {
 								for (x = 0; x < instp->npermitlist; x++) {
@@ -2323,8 +2325,9 @@ static void *TLB_reader(void *data)
 							/* if codec changed from ours */
 							if (j != tlb_codecs[p->rxcodec].payt) {
 								for (i = 0; tlb_codecs[i].blocking_factor; i++) {
-									if (tlb_codecs[i].payt == j)
+									if (tlb_codecs[i].payt == j) {
 										break;
+									}
 								}
 								if (!tlb_codecs[i].blocking_factor) {
 									ast_log(LOG_ERROR, "tlb:Payload type %d not recognized on channel %s\n", j, (*found_key)->call);
@@ -2493,10 +2496,11 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 	memset((char *) &si_me, 0, sizeof(si_me));
 	si_me.sin_family = AF_INET;
-	if (strcmp(instp->ipaddr, "0.0.0.0") == 0)
+	if (strcmp(instp->ipaddr, "0.0.0.0") == 0) {
 		si_me.sin_addr.s_addr = htonl(INADDR_ANY);
-	else
+	} else {
 		si_me.sin_addr.s_addr = inet_addr(instp->ipaddr);
+	}
 	instp->audio_port = strtoul(instp->port, NULL, 0);
 	si_me.sin_port = htons(instp->audio_port);
 	if (bind(instp->audio_sock, &si_me, sizeof(si_me)) == -1) {

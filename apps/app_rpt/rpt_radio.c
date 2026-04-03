@@ -104,17 +104,20 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 			prm.data = 0;
 			prm.buf[0] = txbuf[i];
 			prm.index = 1;
-			if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+			if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1) {
 				return -1;
+			}
 			usleep(6666);
 		}
 		prm.radpar = DAHDI_RADPAR_REMMODE;
-		if (asciiflag & 1)
+		if (asciiflag & 1) {
 			prm.data = DAHDI_RADPAR_REM_SERIAL_ASCII;
-		else
+		} else {
 			prm.data = DAHDI_RADPAR_REM_SERIAL;
-		if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+		}
+		if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1) {
 			return -1;
+		}
 		prm.radpar = DAHDI_RADPAR_REMCOMMAND;
 		prm.data = rxmaxbytes;
 		prm.buf[0] = txbuf[i];
@@ -125,8 +128,9 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 		memcpy(prm.buf, txbuf, txbytes);
 		prm.index = txbytes;
 	}
-	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1)
+	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1) {
 		return -1;
+	}
 	if (rxbuf) {
 		*rxbuf = 0;
 		memcpy(rxbuf, prm.buf, prm.index);

@@ -297,10 +297,12 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 		return -1;
 	}
 
-	if (!strcmp("inadc", p))
+	if (!strcmp("inadc", p)) {
 		pintype = 1;
-	if ((!strcmp("inp", p)) || (!strcmp("in", p) || (!strcmp("out", p))))
+	}
+	if ((!strcmp("inp", p)) || (!strcmp("in", p) || (!strcmp("out", p)))) {
 		pintype = 2;
+	}
 	if (!pintype) {
 		ast_log(LOG_WARNING, "Pin type must be one of inadc, inp, in, or out for channel %s\n", argv[1]);
 		ast_free(myargs);
@@ -431,8 +433,9 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 				return -1;
 			}
 			rangephrase++;
-			if ((val >= rangemin) && (val <= rangemax))
+			if ((val >= rangemin) && (val <= rangemax)) {
 				break;
+			}
 		}
 		if (i == numranges) {
 			ast_log(LOG_WARNING, "Range missing on meter face %s for value %d\n", argv[2], val);
@@ -938,16 +941,17 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		return 0;
 	}
 	if (!strcasecmp(strs[0], "REMDISC")) {
-
-		if (n < 2)
+		if (n < 2) {
 			return 0;
+		}
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			return 0;
 		}
 		donodelog_fmt(myrpt, "TELEMETRY,%s,REMDISC,%s", myrpt->name, strs[1]);
 		res = saynode(myrpt, mychannel, strs[1]);
-		if (!res)
+		if (!res) {
 			sayfile(mychannel, "rpt/remote_disc");
+		}
 		return 0;
 	}
 	if (!strcasecmp(strs[0], "STATS_TIME")) {
@@ -1592,8 +1596,9 @@ treataslocal:
 		haslink = 0;
 		for (i = 0; i < ns; i++) {
 			char *cpr = strs[i] + 1;
-			if (!strcmp(cpr, myrpt->name))
+			if (!strcmp(cpr, myrpt->name)) {
 				continue;
+			}
 		}
 		ast_free(strs);
 		ast_free(lbuf);
@@ -2005,8 +2010,9 @@ treataslocal:
 		myrpt->remsetting = 0;
 		ast_mutex_unlock(&myrpt->remlock);
 		if (!res) {
-			if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)))
+			if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 				telem_lookup(myrpt, mychannel, "functcomplete", "SETREMOTE");
+			}
 			break;
 		}
 		/* fall thru to invalid freq */
@@ -2606,8 +2612,9 @@ treataslocal:
 			imdone = 1;
 			break;
 		}
-		if (!res)				/* Say "Y" */
+		if (!res) { /* Say "Y" */
 			ast_say_number(mychannel, VERSION_MINOR, "", ast_channel_language(mychannel), (char *) NULL);
+		}
 		if (!res) {
 			res = ast_waitstream(mychannel, "");
 			ast_stopstream(mychannel);
@@ -2869,8 +2876,9 @@ treataslocal:
 		sleep(5);
 		ast_mutex_lock(&locklock);
 		t = get_lockthread(pthread_self());
-		if (t)
+		if (t) {
 			memset(t, 0, sizeof(struct lockthread));
+		}
 		ast_mutex_unlock(&locklock);
 	}
 #endif

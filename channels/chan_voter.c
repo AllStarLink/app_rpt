@@ -1162,8 +1162,9 @@ static void mkpsamples(short* restrict audio, uint32_t x, int* restrict audio_pt
 			audio[(*audio_ptr)++] = (x & (1 << i)) ? ONEVAL : ZEROVAL;
 			*divcnt += DIVSAMP;
 		}
-		if (*divcnt >= divdiv)
+		if (*divcnt >= divdiv) {
 			*divcnt -= divdiv;
+		}
 	}
 }
 
@@ -1223,8 +1224,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 		case '?':				/* Query Page Status */
 			i = 0;
 			ast_mutex_lock(&o->txqlock);
-			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) if (f1->src && (!strcmp(f1->src, PAGER_SRC)))
-				i++;
+			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) if (f1->src && (!strcmp(f1->src, PAGER_SRC))) i++;
 			ast_mutex_unlock(&o->txqlock);
 			cmd = (i) ? "PAGES" : "NOPAGES";
 			memset(&wf, 0, sizeof(wf));
@@ -2853,8 +2853,9 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			f2 = ast_dsp_process(NULL, p->dsp, &fr);
 			if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 				if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
-					if (f2->frametype == AST_FRAME_DTMF_END)
+					if (f2->frametype == AST_FRAME_DTMF_END) {
 						ast_debug(1, "VOTER %d: Received DTMF char %c\n", p->nodenum, f2->subclass.integer);
+					}
 				} else {
 					f2->frametype = AST_FRAME_NULL;
 					f2->subclass.integer = 0;
@@ -2904,8 +2905,9 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		f2 = ast_dsp_process(NULL, p->dsp, f3);
 		if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
-				if (f2->frametype == AST_FRAME_DTMF_END)
+				if (f2->frametype == AST_FRAME_DTMF_END) {
 					ast_debug(1, "VOTER %d: Received DTMF char %c\n", p->nodenum, f2->subclass.integer);
+				}
 			} else {
 				f2->frametype = AST_FRAME_NULL;
 				f2->subclass.integer = 0;
@@ -3256,8 +3258,9 @@ static void *voter_xmit(void *data)
 			if (p->dmwdiag) {
 				for (i = 0; i < FRAME_SIZE; i++) {
 					audiopacket.audio[i] = ulaw_digital_milliwatt[p->mwp++];
-					if (p->mwp > 7)
+					if (p->mwp > 7) {
 						p->mwp = 0;
+					}
 				}
 			}
 			audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);

@@ -18,8 +18,9 @@ void voxinit_rpt(struct rpt *myrpt, char enable)
 	myrpt->vox.noise_energy = 0.0;
 	myrpt->vox.enacount = 0;
 	myrpt->vox.voxena = 0;
-	if (!enable)
+	if (!enable) {
 		myrpt->vox.voxena = -1;
+	}
 	myrpt->vox.lastvox = 0;
 	myrpt->vox.ondebcnt = VOX_ON_DEBOUNCE_COUNT;
 	myrpt->vox.offdebcnt = VOX_OFF_DEBOUNCE_COUNT;
@@ -34,8 +35,9 @@ void voxinit_link(struct rpt_link *mylink, char enable)
 	mylink->vox.noise_energy = 0.0;
 	mylink->vox.enacount = 0;
 	mylink->vox.voxena = 0;
-	if (!enable)
+	if (!enable) {
 		mylink->vox.voxena = -1;
+	}
 	mylink->vox.lastvox = 0;
 	mylink->vox.ondebcnt = VOX_ON_DEBOUNCE_COUNT;
 	mylink->vox.offdebcnt = VOX_OFF_DEBOUNCE_COUNT;
@@ -51,33 +53,35 @@ int dovox(struct vox *v, short *buf, int bs)
 	float energy = 0.0;
 	float threshold = 0.0;
 
-	if (v->voxena < 0)
+	if (v->voxena < 0) {
 		return (v->lastvox);
+	}
 	for (i = 0; i < bs; i++) {
 		esquare += (float) buf[i] * (float) buf[i];
 	}
 	energy = sqrt(esquare);
 
-	if (energy >= v->speech_energy)
+	if (energy >= v->speech_energy) {
 		v->speech_energy += (energy - v->speech_energy) / 4;
-	else
+	} else {
 		v->speech_energy += (energy - v->speech_energy) / 64;
-
-	if (energy >= v->noise_energy)
+	}
+	if (energy >= v->noise_energy) {
 		v->noise_energy += (energy - v->noise_energy) / 64;
-	else
+	} else {
 		v->noise_energy += (energy - v->noise_energy) / 4;
-
-	if (v->voxena)
+	}
+	if (v->voxena) {
 		threshold = v->speech_energy / 8;
-	else {
+	} else {
 		threshold = MAX(v->speech_energy / 16, v->noise_energy * 2);
 		threshold = MIN(threshold, VOX_MAX_THRESHOLD);
 	}
 	threshold = MAX(threshold, VOX_MIN_THRESHOLD);
 	if (energy > threshold) {
-		if (v->voxena)
+		if (v->voxena) {
 			v->noise_energy *= 0.75;
+		}
 		v->voxena = 1;
 	} else
 		v->voxena = 0;
