@@ -122,45 +122,53 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 				rpt_mutex_unlock(&myrpt->lock);
 				return RESULT_FAILURE;
 			}
-			if (myrpt->keyed)
+			if (myrpt->keyed) {
 				input_signal = "YES";
-			else
+			} else {
 				input_signal = "NO";
+			}
 
-			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
+			if (myrpt->p.parrotmode != PARROT_MODE_OFF) {
 				parrot_ena = "ENABLED";
-			else
+			} else {
 				parrot_ena = "DISABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable) {
 				sys_ena = "DISABLED";
-			else
+			} else {
 				sys_ena = "ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable) {
 				tot_ena = "DISABLED";
-			else
+			} else {
 				tot_ena = "ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable) {
 				link_ena = "DISABLED";
-			else
+			} else {
 				link_ena = "ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable) {
 				patch_ena = "DISABLED";
-			else
+			} else {
 				patch_ena = "ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) {
 				sch_ena = "DISABLED";
-			else
+			} else {
 				sch_ena = "ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable) {
 				user_funs = "DISABLED";
-			else
+			} else {
 				user_funs = "ENABLED";
+			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail)
 				tail_type = "ALTERNATE";
@@ -795,8 +803,9 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	string_toupper(to);
 	snprintf(str, sizeof(str) - 1, "M %s %s ", from, to);
 	for (i = 4; i < argc; i++) {
-		if (i > 3)
+		if (i > 3) {
 			strncat(str, " ", sizeof(str) - 1);
+		}
 		strncat(str, argv[i], sizeof(str) - 1);
 	}
 	for (i = 0; i < nrpts; i++) {
@@ -885,8 +894,9 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	string_toupper(nodename);
 	snprintf(str, sizeof(str) - 1, "M %s 0 ", nodename);
 	for (i = 3; i < argc; i++) {
-		if (i > 3)
+		if (i > 3) {
 			strncat(str, " ", sizeof(str) - 1);
+		}
 		strncat(str, argv[i], sizeof(str) - 1);
 	}
 	for (i = 0; i < nrpts; i++) {

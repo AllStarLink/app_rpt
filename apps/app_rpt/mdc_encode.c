@@ -119,11 +119,12 @@ static unsigned long _flip(unsigned long crc, int bitnum)
 
         for (i=1<<(bitnum-1); i; i>>=1)
         {
-                if (crc & i)
-                         crcout |= j;
-                j<<= 1;
-        }
-        return (crcout);
+			if (crc & i) {
+				crcout |= j;
+			}
+			j <<= 1;
+		}
+		return (crcout);
 }
 
 static unsigned long docrc(unsigned char* p, int len) {
@@ -141,18 +142,20 @@ static unsigned long docrc(unsigned char* p, int len) {
                 {
                         bit = crc & 0x8000;
                         crc<<= 1;
-                        if (c & j)
-                                bit^= 0x8000;
-                        if (bit)
-                                crc^= 0x1021;
-                }
-        }       
+						if (c & j) {
+							bit ^= 0x8000;
+						}
+						if (bit) {
+							crc ^= 0x1021;
+						}
+				}
+		}
 
-        crc = _flip(crc, 16);
-        crc ^= 0xffff;
-        crc &= 0xFFFF;;
+		crc = _flip(crc, 16);
+		crc ^= 0xffff;
+		crc &= 0xFFFF;
 
-        return(crc);
+		return (crc);
 }
 
 #endif
@@ -191,18 +194,17 @@ static unsigned char * _enc_str(unsigned char *data)
 	data[4] = ccrc & 0x00ff;
 	data[5] = (ccrc >> 8) & 0x00ff;
 
-	data[6] = 0; 
+	data[6] = 0;
 
-	for(i=0; i<7; i++)
+	for (i = 0; i < 7; i++) {
 		csr[i] = 0;
-
-	for(i=0; i<7; i++)
-	{
+	}
+	for (i = 0; i < 7; i++) {
 		data[i+7] = 0;
-		for(j=0; j<=7; j++)
-		{
-			for(k=6; k > 0; k--)
+		for (j = 0; j <= 7; j++) {
+			for (k = 6; k > 0; k--) {
 				csr[k] = csr[k-1];
+			}
 			csr[0] = (data[i] >> j) & 0x01;
 			b = csr[0] + csr[2] + csr[5] + csr[6];
 			data[i+7] |= (b & 0x01) << j;
@@ -219,30 +221,27 @@ static unsigned char * _enc_str(unsigned char *data)
 
 	k=0;
 	m=0;
-	for(i=0; i<14; i++)
-	{
-		for(j=0; j<=7; j++)
-		{
+	for (i = 0; i < 14; i++) {
+		for (j = 0; j <= 7; j++) {
 			b = 0x01 & (data[i] >> j);
 			lbits[k] = b;
-			k += 16; 
-			if(k > 111)
+			k += 16;
+			if (k > 111) {
 				k = ++m;
+			}
 		}
 	}
 
 	k = 0;
-	for(i=0; i<14; i++)
-	{
+	for (i = 0; i < 14; i++) {
 		data[i] = 0;
-		for(j=7; j>=0; j--)
-		{
-			if(lbits[k])
+		for (j = 7; j >= 0; j--) {
+			if (lbits[k]) {
 				data[i] |= 1<<j;
+			}
 			++k;
 		}
 	}
-
 
 	return &(data[14]);
 }
@@ -254,12 +253,13 @@ int mdc_encoder_set_packet(mdc_encoder_t *encoder,
 {
 	unsigned char *dp;
 
-
-	if(!encoder)
+	if (!encoder) {
 		return -1;
+	}
 
-	if(encoder->loaded)
+	if (encoder->loaded) {
 		return -1;
+	}
 
 	encoder->state = 0;
 
@@ -288,11 +288,13 @@ int mdc_encoder_set_double_packet(mdc_encoder_t *encoder,
 {
 	unsigned char *dp;
 
-	if(!encoder)
+	if (!encoder) {
 		return -1;
+	}
 
-	if(encoder->loaded)
+	if (encoder->loaded) {
 		return -1;
+	}
 
 	encoder->state = 0;
 
@@ -324,16 +326,13 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 
 	encoder->th += encoder->incr;
 
-	if(encoder->th >= TWOPI)
-	{
+	if (encoder->th >= TWOPI) {
 		encoder->th -= TWOPI;
 		encoder->ipos++;
-		if(encoder->ipos > 7)
-		{
+		if (encoder->ipos > 7) {
 			encoder->ipos = 0;
 			encoder->bpos++;
-			if(encoder->bpos > encoder->loaded)
-			{
+			if (encoder->bpos > encoder->loaded) {
 				encoder->state = 0;
 				return 127;
 			}
@@ -341,22 +340,22 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 
 		b = 0x01 & (encoder->data[encoder->bpos] >> (7-(encoder->ipos)));
 
-		if(b != encoder->lb)
-		{
+		if (b != encoder->lb) {
 			encoder->xorb = 1;
 			encoder->lb = b;
-		}
-		else
+		} else {
 			encoder->xorb = 0;
+		}
 	}
 
-	if(encoder->xorb)
+	if (encoder->xorb) {
 		encoder->tth += 1.5 * encoder->incr;
-	else
+	} else {
 		encoder->tth += 1.0 * encoder->incr;
-
-	if(encoder->tth >= TWOPI)
+	}
+	if (encoder->tth >= TWOPI) {
 		encoder->tth -= TWOPI;
+	}
 
 	ofs = (int)(encoder->tth * (256.0 / TWOPI));
 
@@ -369,14 +368,15 @@ int mdc_encoder_get_samples(mdc_encoder_t *encoder,
 {
 	int i;
 
-	if(!encoder)
+	if (!encoder) {
 		return -1;
+	}
 
-	if(!(encoder->loaded))
+	if (!(encoder->loaded)) {
 		return 0;
+	}
 
-	if(encoder->state == 0)
-	{
+	if (encoder->state == 0) {
 		encoder->th = 0.0;
 		encoder->tth = 0.0;
 		encoder->bpos = 0;
@@ -387,11 +387,14 @@ int mdc_encoder_get_samples(mdc_encoder_t *encoder,
 	}
 
 	i = 0;
-	while((i < bufferSize) && encoder->state)
+	while ((i < bufferSize) && encoder->state) {
 		buffer[i++] = _enc_get_samp(encoder);
+	}
 
-	if(encoder->state == 0)
+	if (encoder->state == 0) {
 		encoder->loaded = 0;
+	}
+
 	return i;
 }
 

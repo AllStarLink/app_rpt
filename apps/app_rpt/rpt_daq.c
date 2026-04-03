@@ -30,8 +30,9 @@ static struct daq_entry_tag *daq_open(enum rpt_daq_type type, char *name, char *
 	int fd;
 	struct daq_entry_tag *t;
 
-	if (!name)
+	if (!name) {
 		return NULL;
+	}
 
 	if (!(t = ast_calloc(1, sizeof(struct daq_entry_tag)))) {
 		return NULL;
@@ -65,8 +66,9 @@ static int daq_close(struct daq_entry_tag *t)
 {
 	int res = -1;
 
-	if (!t)
+	if (!t) {
 		return res;
+	}
 
 	switch (t->type) {
 	case DAQ_TYPE_UCHAMELEON:
@@ -85,8 +87,9 @@ struct daq_entry_tag *daq_devtoentry(char *name)
 	struct daq_entry_tag *e = daq.hw;
 
 	while (e) {
-		if (!strcmp(name, e->name))
+		if (!strcmp(name, e->name)) {
 			break;
+		}
 		e = e->next;
 	}
 	return e;
@@ -99,12 +102,14 @@ int uchameleon_reset_minmax(struct daq_entry_tag *t, int pin, int minmax)
 	/* Find the pin */
 	p = t->pinhead;
 	while (p) {
-		if (p->num == pin)
+		if (p->num == pin) {
 			break;
+		}
 		p = p->next;
 	}
-	if (!p)
+	if (!p) {
 		return -1;
+	}
 	ast_mutex_lock(&t->lock);
 	if (minmax) {
 		ast_log(LOG_NOTICE, "Resetting maximum on device %s, pin %d\n", t->name, pin);
@@ -143,8 +148,9 @@ int daq_reset_minmax(char *device, int pin, int minmax)
 	int res = -1;
 	struct daq_entry_tag *t;
 
-	if (!(t = daq_devtoentry(device)))
+	if (!(t = daq_devtoentry(device))) {
 		return -1;
+	}
 	switch (t->type) {
 	case DAQ_TYPE_UCHAMELEON:
 		res = uchameleon_reset_minmax(t, pin, minmax);
@@ -192,8 +198,9 @@ void daq_init(struct ast_config *cfg)
 		t_next = &t->next;
 
 		daq.ndaqs++;
-		if (daq.ndaqs >= MAX_DAQ_ENTRIES)
+		if (daq.ndaqs >= MAX_DAQ_ENTRIES) {
 			break;
+		}
 		var = var->next;
 	}
 
@@ -251,9 +258,11 @@ int handle_userout_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 
 	/* Wait the normal telemetry delay time */
 
-	if (!res)
-		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1)
+	if (!res) {
+		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			goto done;
+		}
+	}
 
 	/* Say the files one by one at argc index 3 */
 	for (i = 3; i < argc && !res; i++) {
