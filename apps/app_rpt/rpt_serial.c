@@ -60,7 +60,7 @@ int serial_open(char *fname, int speed, int stop2)
 	}
 	usleep(100000);
 	ast_debug(3, "Opened serial port %s\n", fname);
-	return (fd);
+	return fd;
 }
 
 int serial_rxready(int fd, int timeoutms)
@@ -229,7 +229,7 @@ int openserial(struct rpt *myrpt, const char *fname)
 	}
 	usleep(100000);
 	ast_debug(1, "Opened serial port %s\n", fname);
-	return (fd);
+	return fd;
 }
 
 /* Doug Hall RBI-1 serial data definitions:
@@ -479,12 +479,12 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 				return (strlen((char *) rxbuf));
 #else
 				ast_log(LOG_WARNING, "%d Serial device not responding on node %s\n", j, myrpt->name);
-				return (j);
+				return j;
 #endif
 			}
 			j = read(myrpt->iofd, &c, 1);
 			if (j < 1) {
-				return (i);
+				return i;
 			}
 			rxbuf[i] = c;
 			if (asciiflag & 1) {
@@ -500,7 +500,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 				ast_debug(3, "%02X ", (unsigned char) rxbuf[j]);
 			ast_debug(3, "\n");
 		}
-		return (i);
+		return i;
 	}
 
 	/* if not a DAHDI channel, can't use pciradio stuff */

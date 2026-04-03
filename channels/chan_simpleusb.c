@@ -517,7 +517,7 @@ static int16_t preemph(int16_t input, int32_t* restrict state)
 	} else if (y < -32767) {
 		y = -32767;
 	}
-	return (y);
+	return y;
 }
 
 /*!
@@ -543,7 +543,7 @@ static int16_t hpass(int16_t input, float* restrict xv, float* restrict yv)
 	yv[3] = (xv[3] - xv[0]) + 3 * (xv[1] - xv[2])
 		+ (0.5999763543 * yv[0]) + (-2.1305919790 * yv[1])
 		+ (2.5161440793 * yv[2]);
-	return ((int) yv[3]);
+	return (int) yv[3];
 }
 
 /*!
@@ -2475,7 +2475,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u')) {
 				f1->frametype = AST_FRAME_NULL;
 				f1->subclass.integer = 0;
-				return (f1);
+				return f1;
 			}
 			if (f1->frametype == AST_FRAME_DTMF_END) {
 				f1->len = ast_tvdiff_ms(ast_radio_tvnow(), o->tonetime);
@@ -2493,7 +2493,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 				}
 			}
 			if (f1) {
-				return (f1);
+				return f1;
 			}
 		}
 	}
@@ -3991,11 +3991,11 @@ static char *res2cli(int r)
 {
 	switch (r) {
 	case RESULT_SUCCESS:
-		return (CLI_SUCCESS);
+		return CLI_SUCCESS;
 	case RESULT_SHOWUSAGE:
-		return (CLI_SHOWUSAGE);
+		return CLI_SHOWUSAGE;
 	default:
-		return (CLI_FAILURE);
+		return CLI_FAILURE;
 	}
 }
 

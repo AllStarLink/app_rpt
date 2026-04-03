@@ -44,7 +44,7 @@ int explode_string(char *str, char *strp[], size_t limit, char delim, char quote
 	strp[i++] = str;
 	if (!*str) {
 		strp[0] = 0;
-		return (0);
+		return 0;
 	}
 	for (; *str && (i < (limit - 1)); str++) {
 		if (quote) {
@@ -75,7 +75,7 @@ char *strupr(char *instr)
 		*str = toupper(*str);
 		str++;
 	}
-	return (instr);
+	return instr;
 }
 
 char *string_toupper(char *str)
@@ -199,11 +199,11 @@ long diskavail(struct rpt *myrpt)
 	struct statfs statfsbuf;
 
 	if (!myrpt->p.archivedir) {
-		return (0);
+		return 0;
 	}
 	if (statfs(myrpt->p.archivedir, &statfsbuf) == -1) {
 		ast_log(LOG_WARNING, "Cannot get filesystem size for %s node %s\n", myrpt->p.archivedir, myrpt->name);
-		return (-1);
+		return -1;
 	}
 	return (statfsbuf.f_bavail);
 }
