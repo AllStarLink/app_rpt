@@ -121,10 +121,7 @@ char *skipchars(char *string, char *charlist)
 
 char *eatwhite(char *s)
 {
-	while ((*s == ' ') || (*s == 0x09)) {	/* get rid of any leading white space */
-		if (!*s) {
-			break;
-		}
+	while ((*s == ' ') || (*s == 0x09)) { /* get rid of any leading white space */
 		s++;
 	}
 	return s;
