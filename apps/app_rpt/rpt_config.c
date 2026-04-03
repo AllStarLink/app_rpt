@@ -94,65 +94,74 @@ int get_wait_interval(struct rpt *myrpt, enum rpt_delay type)
 
 	switch (type) {
 	case DLY_TELEM:
-		if (wait_times)
+		if (wait_times) {
 			interval = retrieve_astcfgint(myrpt, wait_times_save, "telemwait", 500, 5000, 1000);
-		else
+		} else {
 			interval = 1000;
+		}
 		break;
 
 	case DLY_ID:
-		if (wait_times)
+		if (wait_times) {
 			interval = retrieve_astcfgint(myrpt, wait_times_save, "idwait", 250, 5000, 500);
-		else
+		} else {
 			interval = 500;
+		}
 		break;
 
 	case DLY_UNKEY:
-		if (wait_times)
+		if (wait_times) {
 			interval = retrieve_astcfgint(myrpt, wait_times_save, "unkeywait", 50, 5000, 1000);
-		else
+		} else {
 			interval = 1000;
+		}
 		break;
 
 	case DLY_LINKUNKEY:
-		if (wait_times)
+		if (wait_times) {
 			interval = retrieve_astcfgint(myrpt, wait_times_save, "linkunkeywait", 500, 5000, 1000);
-		else
+		} else {
 			interval = 1000;
+		}
 		break;
 
 	case DLY_CALLTERM:
-		if (wait_times)
+		if (wait_times) {
 			interval = retrieve_astcfgint(myrpt, wait_times_save, "calltermwait", 500, 5000, 1500);
-		else
+		} else {
 			interval = 1500;
+		}
 		break;
 
 	case DLY_COMP:
-		if (wait_times)
+		if (wait_times) {
 			interval = retrieve_astcfgint(myrpt, wait_times_save, "compwait", 500, 5000, 200);
-		else
+		} else {
 			interval = 200;
+		}
 		break;
 
 	case DLY_PARROT:
-		if (wait_times)
+		if (wait_times) {
 			interval = retrieve_astcfgint(myrpt, wait_times_save, "parrotwait", 500, 5000, 200);
-		else
+		} else {
 			interval = 200;
+		}
 		break;
 	case DLY_MDC1200:
-		if (wait_times)
+		if (wait_times) {
 			interval = retrieve_astcfgint(myrpt, wait_times_save, "mdc1200wait", 500, 5000, 200);
-		else
+		} else {
 			interval = 350;
+		}
 		break;
 	default:
 		interval = 0;
 		break;
 	}
-	if (wait_times_save)
+	if (wait_times_save) {
 		ast_free(wait_times_save);
+	}
 	return interval;
 }
 
@@ -170,18 +179,21 @@ int retrieve_memory(struct rpt *myrpt, char *memory)
 	ast_copy_string(tmp, val, sizeof(tmp));
 
 	s = strchr(tmp, ',');
-	if (!s)
+	if (!s) {
 		return 1;
+	}
 	*s++ = 0;
 	s1 = strchr(s, ',');
-	if (!s1)
+	if (!s1) {
 		return 1;
+	}
 	*s1++ = 0;
 	s2 = strchr(s1, ',');
-	if (!s2)
+	if (!s2) {
 		s2 = s1;
-	else
+	} else {
 		*s2++ = 0;
+	}
 	ast_copy_string(myrpt->freq, tmp, sizeof(myrpt->freq) - 1);
 	ast_copy_string(myrpt->rxpl, s, sizeof(myrpt->rxpl) - 1);
 	ast_copy_string(myrpt->txpl, s, sizeof(myrpt->rxpl) - 1);
@@ -190,8 +202,9 @@ int retrieve_memory(struct rpt *myrpt, char *memory)
 	myrpt->powerlevel = REM_MEDPWR;
 	myrpt->txplon = myrpt->rxplon = 0;
 	myrpt->splitkhz = 0;
-	if (s2 != s1)
+	if (s2 != s1) {
 		myrpt->splitkhz = atoi(s1);
+	}
 	while (*s2) {
 		switch (*s2++) {
 		case 'A':
@@ -265,8 +278,9 @@ int get_mem_set(struct rpt *myrpt, char *digitbuf)
 	int res = 0;
 	ast_debug(1, " digitbuf=%s\n", digitbuf);
 	res = retrieve_memory(myrpt, digitbuf);
-	if (!res)
+	if (!res) {
 		res = setrem(myrpt);
+	}
 	ast_debug(1, " freq=%s  res=%i\n", myrpt->freq, res);
 	return res;
 }
@@ -277,13 +291,15 @@ void local_dtmfkey_helper(struct rpt *myrpt, char c)
 	const char *val;
 
 	i = strlen(myrpt->dtmfkeybuf);
-	if (i >= (sizeof(myrpt->dtmfkeybuf) - 1))
+	if (i >= (sizeof(myrpt->dtmfkeybuf) - 1)) {
 		return;
+	}
 	myrpt->dtmfkeybuf[i++] = c;
 	myrpt->dtmfkeybuf[i] = 0;
 	val = ast_variable_retrieve(myrpt->cfg, myrpt->p.dtmfkeys, myrpt->dtmfkeybuf);
-	if (!val)
+	if (!val) {
 		return;
+	}
 	ast_copy_string(myrpt->curdtmfuser, val, sizeof(myrpt->curdtmfuser));
 	myrpt->dtmfkeyed = 1;
 	myrpt->dtmfkeybuf[0] = 0;

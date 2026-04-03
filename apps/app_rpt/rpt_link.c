@@ -783,8 +783,9 @@ void *rpt_link_connect(void *data)
 	voxinit_link(l, 1);
 	ast_copy_string(l->name, node, sizeof(l->name));
 	l->isremote = (s && ast_true(s));
-	if (modechange)
+	if (modechange) {
 		l->connected = 1;
+	}
 	l->hasconnected = l->perma = connect_data->perma;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
