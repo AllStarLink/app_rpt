@@ -569,36 +569,36 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 				patch_ena = "ENABLED";
 			}
 
-				if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) {
-					sch_ena = "DISABLED";
-				} else {
-					sch_ena = "ENABLED";
-				}
-				if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable) {
-					user_funs = "DISABLED";
-				} else {
-					user_funs = "ENABLED";
-				}
-				if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail) {
-					tail_type = "ALTERNATE";
-				} else {
-					tail_type = "STANDARD";
-				}
-				if (!myrpt->totimer) {
-					tot_state = "TIMED OUT!";
-				} else if (myrpt->totimer != myrpt->p.totime) {
-					tot_state = "ARMED";
-				} else {
-					tot_state = "RESET";
-				}
+			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) {
+				sch_ena = "DISABLED";
+			} else {
+				sch_ena = "ENABLED";
+			}
+			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable) {
+				user_funs = "DISABLED";
+			} else {
+				user_funs = "ENABLED";
+			}
+			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail) {
+				tail_type = "ALTERNATE";
+			} else {
+				tail_type = "STANDARD";
+			}
+			if (!myrpt->totimer) {
+				tot_state = "TIMED OUT!";
+			} else if (myrpt->totimer != myrpt->p.totime) {
+				tot_state = "ARMED";
+			} else {
+				tot_state = "RESET";
+			}
 
-				if (myrpt->tailid) {
-					ider_state = "QUEUED IN TAIL";
-				} else if (myrpt->mustid) {
-					ider_state = "QUEUED FOR CLEANUP";
-				} else {
-					ider_state = "CLEAN";
-				}
+			if (myrpt->tailid) {
+				ider_state = "QUEUED IN TAIL";
+			} else if (myrpt->mustid) {
+				ider_state = "QUEUED FOR CLEANUP";
+			} else {
+				ider_state = "CLEAN";
+			}
 
 			switch (myrpt->callmode) {
 			case 1:
