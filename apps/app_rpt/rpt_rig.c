@@ -1715,7 +1715,7 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 	enum rpt_mode dflmd = REM_MODE_FM;
 	int rv = 0;
 
-	ast_debug(7, "(%i,%i,%i,%i)\n", m, d, defmode ? *defmode : -1, mars);
+	ast_debug(7, "(%i,%i,%i,%i)\n", m, d, -1, mars);
 
 	/* first test for standard amateur radio bands */
 
@@ -2721,10 +2721,11 @@ int channel_steer(struct rpt *myrpt, char *data)
 {
 	int res = 0;
 
-	ast_debug(1, "remoterig=%s, data=%s\n", myrpt->remoterig, data);
 	if (!myrpt->remoterig) {
 		return 0;
 	}
+	ast_debug(1, "remoterig=%s, data=%s\n", myrpt->remoterig, data);
+
 	if (data <= 0) {
 		res = -1;
 	} else {
