@@ -5903,12 +5903,13 @@ static int load_config(int reload)
 
 	return 0;
 }
-/* Write log messages to the log file */
+
+/*! \brief Write log messages to the log file */
 static void rpt_nodelog(void)
 {
 	for (;;) {
 		struct nodelog *nodep;
-		char datestr[100], fname[1024], *str;
+		char datestr[10], fname[1024], *str;
 		int fd;
 		int n;
 
@@ -5926,7 +5927,7 @@ static void rpt_nodelog(void)
 			continue;
 		}
 		*str++ = '\0';
-		strftime(datestr, sizeof(datestr) - 1, "%Y%m%d", localtime(&nodep->timestamp));
+		strftime(datestr, sizeof(datestr), "%Y%m%d", localtime(&nodep->timestamp));
 		snprintf(fname, sizeof(fname), "%s/%s/%s.txt", nodep->archivedir, nodep->str, datestr);
 		fd = open(fname, O_WRONLY | O_CREAT | O_APPEND, 0644);
 		if (fd == -1) {
@@ -5942,6 +5943,9 @@ static void rpt_nodelog(void)
 		ast_free(nodep);
 	}
 }
+
+/*! \brief Master thread for managing repeater threads */
+
 static void *rpt_master(void *ignore)
 {
 	int i;
@@ -6156,8 +6160,7 @@ static void *rpt_master(void *ignore)
 	}
 
 done:
-	/* Empty the nodelog linked list to the filesystem and free memory */
-	rpt_nodelog();
+	rpt_nodelog(); /* Empty the nodelog to the filesystem and free memory */
 	ast_mutex_unlock(&rpt_master_lock);
 	ast_debug(1, "app_rpt master thread exiting\n");
 	return NULL;
