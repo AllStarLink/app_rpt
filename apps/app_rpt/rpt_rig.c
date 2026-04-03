@@ -1812,9 +1812,7 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		}
 	}
 
-	if (defmode) {
-		*defmode = dflmd;
-	}
+	*defmode = dflmd;
 
 	ast_debug(2, "(%i,%i,%i,%i) returning %i\n", m, d, *defmode, mars, rv);
 
