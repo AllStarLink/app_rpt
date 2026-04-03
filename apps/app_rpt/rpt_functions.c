@@ -137,11 +137,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	struct rpt_connect_data *connect_data;
 	pthread_t connect_threadid;
 
-	if (!param)
+	if (!param) {
 		return DC_ERROR;
+	}
 
-	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable)
+	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable) {
 		return DC_ERROR;
+	}
 
 	ast_copy_string(digitbuf, digits, sizeof(digitbuf));
 
@@ -149,10 +151,12 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	switch (myatoi(param)) {
 	case 11: /* Perm Link off */
 	case 1:	 /* Link off */
-		if (strlen(digitbuf) < 1)
+		if (strlen(digitbuf) < 1) {
 			break;
-		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
+		}
+		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
 			strcpy(digitbuf, myrpt->lastlinknode);
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		/* try to find this one in queue */
 		l = ao2_find(myrpt->links, digitbuf, 0);
@@ -246,8 +250,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 
 	case 4:					/* Enter Command Mode */
 
-		if (strlen(digitbuf) < 1)
+		if (strlen(digitbuf) < 1) {
 			break;
+		}
 		/* if doesn't allow link cmd, or no links active, return */
 		if (!ao2_container_count(myrpt->links)) {
 			return DC_COMPLETE;
@@ -265,8 +270,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			rpt_telemetry(myrpt, REMALREADY, NULL);
 			return DC_COMPLETE;
 		}
-		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0]))
+		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
 			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
+		}
 		/* node must at least exist in list */
 		find_node_response = rpt_find_node(myrpt, digitbuf, NULL, 0);
 		if (find_node_response == RPT_CONTINUE) {
@@ -380,12 +386,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		finddelim(tmp, strs, ARRAY_LEN(strs));	/* convert into substrings */
 		for (i = 0; tmp[0] && strs[i] && i < ARRAY_LEN(strs); i++) {
 			s1 = strs[i];
-			if (s1[0] == 'X')
+			if (s1[0] == 'X') {
 				mode = MODE_TRANSCEIVE;
-			else if (s1[0] == 'L')
+			} else if (s1[0] == 'L') {
 				mode = MODE_LOCAL_MONITOR;
-			else
+			} else {
 				mode = MODE_MONITOR;
+			}
 			perma = (s1[1] == 'P') ? 1 : 0;
 			connect_data = ast_calloc(1, sizeof(struct rpt_connect_data));
 			if (!connect_data) {
@@ -443,11 +450,11 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 213:
 	case 214:
 	case 215:
-		if (((myrpt->p.propagate_dtmf) &&
-			 (command_source == SOURCE_LNK)) ||
+		if (((myrpt->p.propagate_dtmf) && (command_source == SOURCE_LNK)) ||
 			((myrpt->p.propagate_phonedtmf) &&
-			 ((command_source == SOURCE_PHONE) || (command_source == SOURCE_ALT) || (command_source == SOURCE_DPHONE))))
+				((command_source == SOURCE_PHONE) || (command_source == SOURCE_ALT) || (command_source == SOURCE_DPHONE)))) {
 			do_dtmf_local(myrpt, remdtmfstr[myatoi(param) - 200]);
+		}
 	default:
 		return DC_ERROR;
 
@@ -475,25 +482,27 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 
 	ast_debug(7, "%s param=%s digitbuf=%s source=%i\n", myrpt->name, param, digitbuf, command_source);
 
-	if ((!param) || (command_source == SOURCE_RPT) || (command_source == SOURCE_LNK))
+	if ((!param) || (command_source == SOURCE_RPT) || (command_source == SOURCE_LNK)) {
 		return DC_ERROR;
-
+	}
 	p = myatoi(param);
 	pu.i = p;
 
-	if ((p != 99) && (p != 5) && (p != 140) && myrpt->p.authlevel && (!myrpt->loginlevel[0]))
+	if ((p != 99) && (p != 5) && (p != 140) && myrpt->p.authlevel && (!myrpt->loginlevel[0])) {
 		return DC_ERROR;
+	}
 	multimode = multimode_capable(myrpt);
 
 	switch (p) {
 
 	case 1:					/* retrieve memory */
-		if (strlen(digitbuf) < 2)	/* needs 2 digits */
+		if (strlen(digitbuf) < 2) { /* needs 2 digits */
 			break;
-
+		}
 		for (i = 0; i < 2; i++) {
-			if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+			if ((digitbuf[i] < '0') || (digitbuf[i] > '9')) {
 				return DC_ERROR;
+			}
 		}
 		r = get_mem_set(myrpt, digitbuf);
 		if (r < 0) {
@@ -511,31 +520,37 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 				j++;
 				continue;
 			}
-			if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+			if ((digitbuf[i] < '0') || (digitbuf[i] > '9')) {
 				goto invalid_freq;
-			else {
-				if (j == 0)
+			} else {
+				if (j == 0) {
 					l++;		/* # of digits before first * */
-				if (j == 1)
+				}
+				if (j == 1) {
 					k++;		/* # of digits after first * */
+				}
 			}
 		}
 
 		i = strlen(digitbuf) - 1;
 		if (multimode) {
-			if ((j > 2) || (l > 3) || (k > 6))
+			if ((j > 2) || (l > 3) || (k > 6)) {
 				goto invalid_freq;	/* &^@#! */
+			}
 		} else {
-			if ((j > 2) || (l > 4) || (k > 5))
+			if ((j > 2) || (l > 4) || (k > 5)) {
 				goto invalid_freq;	/* &^@#! */
-			if ((!narrow_capable(myrpt)) && (k > 3))
+			}
+			if ((!narrow_capable(myrpt)) && (k > 3)) {
 				goto invalid_freq;
+			}
 		}
 
 		/* Wait for M+*K+* */
 
-		if (j < 2)
+		if (j < 2) {
 			break;				/* Not yet */
+		}
 
 		/* We have a frequency */
 
@@ -559,8 +574,9 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 
 		case 3:
 			if ((!narrow_capable(myrpt)) && (!multimode)) {
-				if ((s2[2] != '0') && (s2[2] != '5'))
+				if ((s2[2] != '0') && (s2[2] != '5')) {
 					goto invalid_freq;
+				}
 			}
 			ht = 0;
 			k = atoi(s2);
@@ -589,12 +605,13 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		m = atoi(mhz);
 		d = atoi(decimals);
 
-		if (check_freq(myrpt, m, d, &defmode))	/* Check to see if frequency entered is legit */
+		if (check_freq(myrpt, m, d, &defmode)) { /* Check to see if frequency entered is legit */
 			goto invalid_freq;
+		}
 
-		if ((defmode == REM_MODE_FM) && (digitbuf[i] == '*'))	/* If FM, user must enter and additional offset digit */
+		if ((defmode == REM_MODE_FM) && (digitbuf[i] == '*')) { /* If FM, user must enter and additional offset digit */
 			break;				/* Not yet */
-
+		}
 		offset = REM_SIMPLEX;	/* Assume simplex */
 
 		if (defmode == REM_MODE_FM) {
@@ -632,8 +649,9 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			ast_copy_string(myrpt->freq, savestr, sizeof(myrpt->freq) - 1);
 			goto invalid_freq;
 		}
-		if (strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))
+		if (strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
 			rpt_telemetry(myrpt, COMPLETE, NULL);
+		}
 		return DC_COMPLETE;
 
 	  invalid_freq:
@@ -646,27 +664,31 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 				j++;
 				continue;
 			}
-			if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+			if ((digitbuf[i] < '0') || (digitbuf[i] > '9')) {
 				return DC_ERROR;
-			else {
-				if (j)
+			} else {
+				if (j) {
 					l++;
-				else
+				} else {
 					k++;
+				}
 			}
 		}
-		if ((j > 1) || (k > 3) || (l > 1))
+		if ((j > 1) || (k > 3) || (l > 1)) {
 			return DC_ERROR;	/* &$@^! */
+		}
 		i = strlen(digitbuf) - 1;
-		if ((j != 1) || (k < 2) || (l != 1))
+		if ((j != 1) || (k < 2) || (l != 1)) {
 			break;				/* Not yet */
+		}
 		ast_debug(1, "PL digits entered %s\n", digitbuf);
 
 		ast_copy_string(tmp, digitbuf, sizeof(tmp));
 		/* see if we have at least 1 */
 		s = strchr(tmp, '*');
-		if (s)
+		if (s) {
 			*s = '.';
+		}
 		ast_copy_string(savestr, myrpt->rxpl, sizeof(savestr) - 1);
 		ast_copy_string(myrpt->rxpl, tmp, sizeof(myrpt->rxpl) - 1);
 		if ((!strcmp(myrpt->remoterig, REMOTE_RIG_RBI)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100))) {
@@ -704,28 +726,31 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 				j++;
 				continue;
 			}
-			if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+			if ((digitbuf[i] < '0') || (digitbuf[i] > '9')) {
 				return DC_ERROR;
-			else {
-				if (j)
+			} else {
+				if (j) {
 					l++;
-				else
+				} else {
 					k++;
+				}
 			}
 		}
-		if ((j > 1) || (k > 3) || (l > 1))
+		if ((j > 1) || (k > 3) || (l > 1)) {
 			return DC_ERROR;	/* &$@^! */
+		}
 		i = strlen(digitbuf) - 1;
-		if ((j != 1) || (k < 2) || (l != 1))
+		if ((j != 1) || (k < 2) || (l != 1)) {
 			break;				/* Not yet */
+		}
 		ast_debug(1, "PL digits entered %s\n", digitbuf);
 
 		ast_copy_string(tmp, digitbuf, sizeof(tmp));
 		/* see if we have at least 1 */
 		s = strchr(tmp, '*');
-		if (s)
+		if (s) {
 			*s = '.';
-
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		ast_copy_string(savestr, myrpt->txpl, sizeof(savestr) - 1);
 		ast_copy_string(myrpt->txpl, tmp, sizeof(myrpt->txpl) - 1);
@@ -740,18 +765,20 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		return DC_COMPLETE;
 
 	case 6:					/* MODE (FM,USB,LSB,AM) */
-		if (strlen(digitbuf) < 1)
+		if (strlen(digitbuf) < 1) {
 			break;
-
-		if (!multimode)
+		}
+		if (!multimode) {
 			return DC_ERROR;	/* Multimode radios only */
+		}
 
 		switch (*digitbuf) {
 		case '1':
 			split_freq(mhz, decimals, myrpt->freq);
 			m = atoi(mhz);
-			if (m < 29)			/* No FM allowed below 29MHz! */
+			if (m < 29) { /* No FM allowed below 29MHz! */
 				return DC_ERROR;
+			}
 			myrpt->remmode = REM_MODE_FM;
 
 			rpt_telemetry(myrpt, REMMODE, NULL);
@@ -776,13 +803,15 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 			return DC_ERROR;
 		}
 
-		if (setrem(myrpt))
+		if (setrem(myrpt)) {
 			return DC_ERROR;
+		}
 		return DC_COMPLETEQUIET;
 	case 99:
 		/* can't log in when logged in */
-		if (myrpt->loginlevel[0])
+		if (myrpt->loginlevel[0]) {
 			return DC_ERROR;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		*myrpt->loginuser = 0;
 		myrpt->loginlevel[0] = 0;
@@ -827,24 +856,28 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		rpt_telemetry(myrpt, REMXXX, pu.p);
 		return DC_COMPLETEQUIET;
 	case 104:					/* Low Power */
-		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706))
+		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) {
 			return DC_ERROR;
+		}
 		myrpt->powerlevel = REM_LOWPWR;
 		setrem(myrpt);
 		rpt_telemetry(myrpt, REMXXX, pu.p);
 		return DC_COMPLETEQUIET;
 	case 105:					/* Medium Power */
-		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706))
+		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) {
 			return DC_ERROR;
-		if (ISRIG_RTX(myrpt->remoterig))
+		}
+		if (ISRIG_RTX(myrpt->remoterig)) {
 			return DC_ERROR;
+		}
 		myrpt->powerlevel = REM_MEDPWR;
 		setrem(myrpt);
 		rpt_telemetry(myrpt, REMXXX, pu.p);
 		return DC_COMPLETEQUIET;
 	case 106:					/* Hi Power */
-		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706))
+		if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) {
 			return DC_ERROR;
+		}
 		myrpt->powerlevel = REM_HIPWR;
 		setrem(myrpt);
 		rpt_telemetry(myrpt, REMXXX, pu.p);
@@ -965,8 +998,9 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 		NULL
 	};
 
-	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
+	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "@@@@ Autopatch up\n");
 
@@ -989,8 +1023,9 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 		paramlength = finddelim(lparam, paramlist, ARRAY_LEN(paramlist));
 		for (i = 0; i < paramlength; i++) {
 			index = matchkeyword(paramlist[i], &value, keywords);
-			if (value)
+			if (value) {
 				value = skipchars(value, "= ");
+			}
 			if (myrpt->callmode == CALLMODE_DOWN) {
 				switch (index) {
 				case 1:		/* context */
@@ -1047,8 +1082,9 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 	/* if on call, force * into current audio stream */
 
 	if ((myrpt->callmode == CALLMODE_CONNECTING) || (myrpt->callmode == CALLMODE_UP)) {
-		if (!nostar)
+		if (!nostar) {
 			myrpt->mydtmf = myrpt->p.funcchar;
+		}
 	}
 	if (myrpt->callmode != CALLMODE_DOWN) {
 		rpt_mutex_unlock(&myrpt->lock);
@@ -1066,8 +1102,9 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 enum rpt_function_response function_autopatchdn(struct rpt *myrpt, char *param, char *digitbuf,
 	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
+	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "@@@@ Autopatch down\n");
 
@@ -1084,8 +1121,9 @@ enum rpt_function_response function_autopatchdn(struct rpt *myrpt, char *param, 
 	channel_revert(myrpt);
 	rpt_mutex_unlock(&myrpt->lock);
 	rpt_telem_select(myrpt, command_source, mylink);
-	if (!myrpt->patchquiet)
+	if (!myrpt->patchquiet) {
 		rpt_telemetry(myrpt, TERM, NULL);
+	}
 	return DC_COMPLETE;
 }
 
@@ -1094,11 +1132,13 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 {
 	struct rpt_tele *telem;
 
-	if (!param)
+	if (!param) {
 		return DC_ERROR;
+	}
 
-	if ((myrpt->p.s[myrpt->p.sysstate_cur].txdisable) || (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable))
+	if ((myrpt->p.s[myrpt->p.sysstate_cur].txdisable) || (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable)) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "@@@@ status param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 
@@ -1112,8 +1152,9 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 		telem = myrpt->tele.next;
 		while (telem != &myrpt->tele) {
 			if (((telem->mode == ID) || (telem->mode == ID1)) && (!telem->killed)) {
-				if (telem->chan)
+				if (telem->chan) {
 					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+				}
 				telem->killed = 1;
 			}
 			telem = telem->next;
@@ -1146,8 +1187,9 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 		telem = myrpt->tele.next;
 		while (telem != &myrpt->tele) {
 			if (((telem->mode == ID) || (telem->mode == ID1)) && (!telem->killed)) {
-				if (telem->chan)
+				if (telem->chan) {
 					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+				}
 				telem->killed = 1;
 			}
 			telem = telem->next;
@@ -1173,17 +1215,20 @@ enum rpt_function_response function_macro(struct rpt *myrpt, char *param, char *
 {
 	const char *val;
 	int i;
-	if (myrpt->remote)
+	if (myrpt->remote) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "@@@@ macro-oni param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 
-	if (strlen(digitbuf) < 1)	/* needs 1 digit */
+	if (strlen(digitbuf) < 1) { /* needs 1 digit */
 		return DC_INDETERMINATE;
+	}
 
 	for (i = 0; i < digitbuf[i]; i++) {
-		if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+		if ((digitbuf[i] < '0') || (digitbuf[i] > '9')) {
 			return DC_ERROR;
+		}
 	}
 
 	if (*digitbuf == '0') {
@@ -1207,13 +1252,15 @@ enum rpt_function_response function_macro(struct rpt *myrpt, char *param, char *
 enum rpt_function_response function_playback(struct rpt *myrpt, char *param, char *digitbuf,
 	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-	if (myrpt->remote)
+	if (myrpt->remote) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "@@@@ playback param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 
-	if (ast_fileexists(param, NULL, ast_channel_language(myrpt->rxchannel)) <= 0)
+	if (ast_fileexists(param, NULL, ast_channel_language(myrpt->rxchannel)) <= 0) {
 		return DC_ERROR;
+	}
 
 	rpt_telem_select(myrpt, command_source, mylink);
 	rpt_telemetry(myrpt, PLAYBACK, param);
@@ -1223,13 +1270,15 @@ enum rpt_function_response function_playback(struct rpt *myrpt, char *param, cha
 enum rpt_function_response function_localplay(struct rpt *myrpt, char *param, char *digitbuf,
 	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-	if (myrpt->remote)
+	if (myrpt->remote) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "@@@@ localplay param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 
-	if (ast_fileexists(param, NULL, ast_channel_language(myrpt->rxchannel)) <= 0)
+	if (ast_fileexists(param, NULL, ast_channel_language(myrpt->rxchannel)) <= 0) {
 		return DC_ERROR;
+	}
 
 	rpt_telemetry(myrpt, LOCALPLAY, param);
 	return DC_COMPLETE;
@@ -1249,14 +1298,16 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 	struct mdcparams *mdcp;
 #endif
 
-	if (!param)
+	if (!param) {
 		return DC_ERROR;
+	}
 
 	ast_copy_string(paramcopy, param, sizeof(paramcopy));
 	argc = explode_string(paramcopy, argv, ARRAY_LEN(argv), ',', 0);
 
-	if (!argc)
+	if (!argc) {
 		return DC_ERROR;
+	}
 
 	switch (myatoi(argv[0])) {
 	case 1:					/* System reset */
@@ -1280,13 +1331,15 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			myrpt->stopgen = 0;
 			rpt_telemetry(myrpt, TEST_TONE, NULL);
 		}
-		if (!myrpt->remote)
+		if (!myrpt->remote) {
 			return DC_COMPLETE;
+		}
 		if (myrpt->remstopgen < 0) {
 			myrpt->remstopgen = 1;
 		} else {
-			if (myrpt->remstopgen)
+			if (myrpt->remstopgen) {
 				break;
+			}
 			myrpt->remstopgen = -1;
 			if (ast_tonepair_start(myrpt->txchannel, 1000.0, 0, 99999999, 7200.0)) {
 				myrpt->remstopgen = 0;
@@ -1300,8 +1353,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_COMPLETE;
 
 	case 6:					/* Simulate COR being activated (phone only) */
-		if (command_source != SOURCE_PHONE)
+		if (command_source != SOURCE_PHONE) {
 			return DC_INDETERMINATE;
+		}
 		return DC_DOKEY;
 
 	case 7:					/* Time out timer enable */
@@ -1349,10 +1403,12 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_COMPLETE;
 
 	case 14:					/* Change System State */
-		if (strlen(digitbuf) == 0)
+		if (strlen(digitbuf) == 0) {
 			break;
-		if ((digitbuf[0] < '0') || (digitbuf[0] > '9'))
+		}
+		if ((digitbuf[0] < '0') || (digitbuf[0] > '9')) {
 			return DC_ERROR;
+		}
 		myrpt->p.sysstate_cur = digitbuf[0] - '0';
 		string[0] = string[1] = 'S';
 		string[2] = myrpt->p.sysstate_cur + '0';
@@ -1446,8 +1502,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_COMPLETE;
 
 	case 27:					/* Reset DAQ minimum */
-		if (argc != 3)
+		if (argc != 3) {
 			return DC_ERROR;
+		}
 		if (!(daq_reset_minmax(argv[1], atoi(argv[2]), 0))) {
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, COMPLETE, NULL);
@@ -1456,8 +1513,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_ERROR;
 
 	case 28:					/* Reset DAQ maximum */
-		if (argc != 3)
+		if (argc != 3) {
 			return DC_ERROR;
+		}
 		if (!(daq_reset_minmax(argv[1], atoi(argv[2]), 1))) {
 			rpt_telem_select(myrpt, command_source, mylink);
 			rpt_telemetry(myrpt, COMPLETE, NULL);
@@ -1467,12 +1525,14 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 
 	case 30:					/* recall memory location on programmable radio */
 
-		if (strlen(digitbuf) < 2)	/* needs 2 digits */
-			break;
+		if (strlen(digitbuf) < 2) { /* needs 2 digits */
+			return DC_ERROR;
+		}
 
 		for (i = 0; i < 2; i++) {
-			if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+			if ((digitbuf[i] < '0') || (digitbuf[i] > '9')) {
 				return DC_ERROR;
+			}
 		}
 
 		r = retrieve_memory(myrpt, digitbuf);
@@ -1483,19 +1543,22 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		if (r > 0) {
 			return DC_ERROR;
 		}
-		if (setrem(myrpt) == -1)
+		if (setrem(myrpt) == -1) {
 			return DC_ERROR;
+		}
 		return DC_COMPLETE;
 
 	case 31:
 		/* set channel. note that it's going to change channel 
 		   then confirm on the new channel! */
-		if (strlen(digitbuf) < 2)	/* needs 2 digits */
+		if (strlen(digitbuf) < 2) { /* needs 2 digits */
 			break;
+		}
 
 		for (i = 0; i < 2; i++) {
-			if ((digitbuf[i] < '0') || (digitbuf[i] > '9'))
+			if ((digitbuf[i] < '0') || (digitbuf[i] > '9')) {
 				return DC_ERROR;
+			}
 		}
 		channel_steer(myrpt, digitbuf);
 		return DC_COMPLETE;
@@ -1510,8 +1573,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			break;
 		} else {
 			ast_debug(5, "Padtest len= %d digits=%s", i, digitbuf);
-			if (digitbuf[i - 1] != myrpt->p.endchar)
+			if (digitbuf[i - 1] != myrpt->p.endchar) {
 				break;
+			}
 			rpt_telemetry(myrpt, ARB_ALPHA, digitbuf);
 			rpt_mutex_lock(&myrpt->lock);
 			myrpt->inpadtest = 0;
@@ -1682,14 +1746,15 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 				j += k + 1;
 				continue;
 			}
-			if (*argv[i] >= '0' && *argv[i] <= '9')
+			if (*argv[i] >= '0' && *argv[i] <= '9') {
 				argv[i] = dtmf_tones[*argv[i] - '0'];
-			else if (*argv[i] >= 'A' && (*argv[i]) <= 'D')
+			} else if (*argv[i] >= 'A' && (*argv[i]) <= 'D') {
 				argv[i] = dtmf_tones[*argv[i] - 'A' + 10];
-			else if (*argv[i] == '*')
+			} else if (*argv[i] == '*') {
 				argv[i] = dtmf_tones[14];
-			else if (*argv[i] == '#')
+			} else if (*argv[i] == '#') {
 				argv[i] = dtmf_tones[15];
+			}
 			j += strlen(argv[i]);
 		}
 		cp = ast_calloc(1, j + 100);
@@ -1697,8 +1762,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			return DC_ERROR;
 		}
 		for (i = 1; i < argc; i++) {
-			if (i != 1)
+			if (i != 1) {
 				strcat(cp, ",");
+			}
 			strcat(cp, argv[i]);
 		}
 		rpt_telemetry(myrpt, PAGE, cp); /* cp is passed to rpt_telem_thread where it is free'd after use */
@@ -1794,8 +1860,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		return DC_COMPLETE;
 #ifdef	_MDC_ENCODE_H_
 	case 60:					/* play MDC1200 burst */
-		if (argc < 3)
+		if (argc < 3) {
 			break;
+		}
 		mdcp = ast_calloc(1, sizeof(struct mdcparams));
 		if (!mdcp) {
 			return DC_ERROR;
@@ -1873,8 +1940,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		k = 0;
 		while (telem != &myrpt->tele) {
 			if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
-				if (telem->chan)
+				if (telem->chan) {
 					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+				}
 				telem->killed = 1;
 				myrpt->deferid = 1;
 			}
@@ -1891,8 +1959,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 enum rpt_function_response function_meter(
 	struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-	if (myrpt->remote)
+	if (myrpt->remote) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "meter param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 
@@ -1904,8 +1973,9 @@ enum rpt_function_response function_meter(
 enum rpt_function_response function_userout(struct rpt *myrpt, char *param, char *digitbuf,
 	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
-	if (myrpt->remote)
+	if (myrpt->remote) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "userout param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 
@@ -1919,8 +1989,9 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
 {
 	char *cp;
 
-	if (myrpt->remote)
+	if (myrpt->remote) {
 		return DC_ERROR;
+	}
 
 	ast_debug(1, "cmd param = %s, digitbuf = %s\n", (param) ? param : "(null)", digitbuf);
 

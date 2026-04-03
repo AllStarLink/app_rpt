@@ -528,8 +528,9 @@ static void tone_detect_init(tone_detect_state_t *s, int freq, int duration, int
 	/* Make sure we will have at least 5 periods at target frequency for analysis.
 	   This may make block larger than expected packet and will make squelching impossible
 	   but at least we will be detecting the tone */
-	if (periods_in_block < 5)
+	if (periods_in_block < 5) {
 		periods_in_block = 5;
+	}
 
 	/* Now calculate final block size. It will contain integer number of periods */
 	s->block_size = periods_in_block * TONE_SAMPLE_RATE / freq;
@@ -770,8 +771,9 @@ void rpt_event_process(struct rpt *myrpt)
 		myval = ast_strdupa(v->value);
 		/* separate out specification into pipe-delimited fields */
 		argc = ast_app_separate_args(myval, '|', argv, sizeof(argv) / sizeof(argv[0]));
-		if (argc < 1)
+		if (argc < 1) {
 			continue;
+		}
 		if (argc != 3) {
 			ast_log(LOG_ERROR, "event exec item malformed: %s\n", v->value);
 			continue;
@@ -796,8 +798,9 @@ void rpt_event_process(struct rpt *myrpt)
 			/* see if this var exists yet */
 			myval = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, v->name);
 			/* if not, set it to zero, in case of the value being self-referenced */
-			if (!myval)
+			if (!myval) {
 				pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, "0");
+			}
 			snprintf(valbuf, sizeof(valbuf) - 1, "$[ %s ]", argv[2]);
 			buf[0] = 0;
 			pbx_substitute_variables_helper(myrpt->rxchannel, valbuf, buf, sizeof(buf) - 1);
@@ -831,20 +834,24 @@ void rpt_event_process(struct rpt *myrpt)
 				}
 				switch (c) {
 				case 'N': /* if no change */
-					if (var1 && (varp == var1p))
+					if (var1 && (varp == var1p)) {
 						cmd = (char *) v->name;
+					}
 					break;
 				case 'I': /* if didn't exist (initial state) */
-					if (!var1)
+					if (!var1) {
 						cmd = (char *) v->name;
+					}
 					break;
 				case 'F': /* transition to false */
-					if (var1 && (var1p == 1) && (varp == 0))
+					if (var1 && (var1p == 1) && (varp == 0)) {
 						cmd = (char *) v->name;
+					}
 					break;
 				case 'T': /* transition to true */
-					if ((var1p == 0) && (varp == 1))
+					if ((var1p == 0) && (varp == 1)) {
 						cmd = (char *) v->name;
+					}
 					break;
 				}
 			}
@@ -884,8 +891,9 @@ void rpt_event_process(struct rpt *myrpt)
 				myrpt->cmdAction.state = CMD_STATE_BUSY;
 				myrpt->cmdAction.functionNumber = thisAction;
 				myrpt->cmdAction.param[0] = 0;
-				if (argc > 1)
+				if (argc > 1) {
 					ast_copy_string(myrpt->cmdAction.param, argv[1], MAXDTMF - 1);
+				}
 				myrpt->cmdAction.digits[0] = 0;
 				if (argc > 2) {
 					ast_copy_string(myrpt->cmdAction.digits, argv[2], MAXDTMF - 1);
@@ -913,17 +921,21 @@ void rpt_event_process(struct rpt *myrpt)
 		myval = ast_strdupa(v->value);
 		/* separate out specification into pipe-delimited fields */
 		argc = ast_app_separate_args(myval, '|', argv, sizeof(argv) / sizeof(argv[0]));
-		if (argc != 3)
+		if (argc != 3) {
 			continue;
+		}
 		action = toupper(*argv[0]);
-		if (!strchr("VGFCS", action))
+		if (!strchr("VGFCS", action)) {
 			continue;
+		}
 		c = *argv[1];
-		if (c == 'E')
+		if (c == 'E') {
 			continue;
+		}
 		var = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, argv[2]);
-		if (!var)
+		if (!var) {
 			continue;
+		}
 		/* set to 1 if var is true */
 		varp = pbx_checkcondition(var) > 0;
 		if (ast_asprintf(&cmpvar, "XX_%s", argv[2]) < 0) {
@@ -933,8 +945,9 @@ void rpt_event_process(struct rpt *myrpt)
 		pbx_builtin_setvar_helper(myrpt->rxchannel, cmpvar, var);
 		ast_free(cmpvar);
 	}
-	if (option_verbose < 5)
+	if (option_verbose < 5) {
 		return;
+	}
 	i = 0;
 	ast_debug(2, "Node Variable dump for node %s:\n", myrpt->name);
 	ast_channel_lock(myrpt->rxchannel);
@@ -1241,8 +1254,9 @@ static void rpt_filter(struct rpt *myrpt, volatile short *buf, int len)
 	for (i = 0; i < len; i++) {
 		for (j = 0; j < MAXFILTERS; j++) {
 			f = &myrpt->filters[j];
-			if (!*f->desc)
+			if (!*f->desc) {
 				continue;
+			}
 			f->x0 = f->x1;
 			f->x1 = f->x2;
 			f->x2 = ((float) buf[i]) / f->gain;
@@ -1421,8 +1435,9 @@ void *rpt_call(void *this)
 				break;
 			}
 			/* bump timer if active */
-			if (myrpt->calldigittimer)
+			if (myrpt->calldigittimer) {
 				myrpt->calldigittimer += MSWAIT;
+			}
 		}
 		if (myrpt->callmode == CALLMODE_FAILED) {
 			if (!congstarted) {
@@ -1451,8 +1466,9 @@ void *rpt_call(void *this)
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->macropatch = 0;
 		rpt_mutex_unlock(&myrpt->lock);
-		if ((!myrpt->patchquiet) && aborted)
+		if ((!myrpt->patchquiet) && aborted) {
 			rpt_telemetry(myrpt, TERM, NULL);
+		}
 		return NULL;
 	}
 
@@ -1494,8 +1510,9 @@ void *rpt_call(void *this)
 	ast_channel_context_set(mychannel, myrpt->patchcontext);
 	ast_channel_exten_set(mychannel, myrpt->exten);
 
-	if (myrpt->p.acctcode)
+	if (myrpt->p.acctcode) {
 		ast_channel_accountcode_set(mychannel, myrpt->p.acctcode);
+	}
 	ast_channel_priority_set(mychannel, 1);
 	ast_channel_undefer_dtmf(mychannel);
 	patch_thread_data = ast_calloc(1, sizeof(struct rpt_autopatch));
@@ -1609,12 +1626,14 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 			return DC_INDETERMINATE;
 		ast_copy_string(function_table_name, myrpt->p.dphone_functions, sizeof(function_table_name));
 	} else if (command_source == SOURCE_ALT) {
-		if (!myrpt->p.alt_functions)
+		if (!myrpt->p.alt_functions) {
 			return DC_INDETERMINATE;
+		}
 		ast_copy_string(function_table_name, myrpt->p.alt_functions, sizeof(function_table_name));
 	} else if (command_source == SOURCE_PHONE) {
-		if (!myrpt->p.phone_functions)
+		if (!myrpt->p.phone_functions) {
 			return DC_INDETERMINATE;
+		}
 		ast_copy_string(function_table_name, myrpt->p.phone_functions, sizeof(function_table_name));
 	} else if (command_source == SOURCE_LNK) {
 		ast_copy_string(function_table_name, myrpt->p.link_functions, sizeof(function_table_name));
@@ -1624,8 +1643,9 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 	/* find context for function table in rpt.conf file */
 	vp = ast_variable_browse(myrpt->cfg, function_table_name);
 	while (vp) {
-		if (!strncasecmp(vp->name, digits, strlen(vp->name)))
+		if (!strncasecmp(vp->name, digits, strlen(vp->name))) {
 			break;
+		}
 		vp = vp->next;
 	}
 	/* if function context not found */
@@ -1633,19 +1653,20 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 		int n;
 
 		n = myrpt->longestfunc;
-		if (command_source == SOURCE_LNK)
+		if (command_source == SOURCE_LNK) {
 			n = myrpt->link_longestfunc;
-		else if (command_source == SOURCE_PHONE)
+		} else if (command_source == SOURCE_PHONE)
 			n = myrpt->phone_longestfunc;
 		else if (command_source == SOURCE_ALT)
 			n = myrpt->alt_longestfunc;
 		else if (command_source == SOURCE_DPHONE)
 			n = myrpt->dphone_longestfunc;
 
-		if (strlen(digits) >= n)
+		if (strlen(digits) >= n) {
 			return DC_ERROR;
-		else
+		} else {
 			return DC_INDETERMINATE;
+		}
 	}
 	/* Found a match, retrieve value part and parse */
 	ast_copy_string(workstring, vp->value, sizeof(workstring));
@@ -1886,10 +1907,12 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			ast_log(LOG_WARNING, "Unable to parse message string %s\n", str);
 			return;
 		}
-		if (!rest)
+		if (!rest) {
 			return;
-		if (strlen(str + rest) < 2)
+		}
+		if (strlen(str + rest) < 2) {
 			return;
+		}
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
 			return;
@@ -1942,17 +1965,20 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			ast_log(LOG_WARNING, "Unable to parse ctcss string %s\n", str);
 			return;
 		}
-		if (!strcmp(myrpt->p.ctgroup, "0"))
+		if (!strcmp(myrpt->p.ctgroup, "0")) {
 			return;
-		if (strcasecmp(myrpt->p.ctgroup, tmp1))
+		}
+		if (strcasecmp(myrpt->p.ctgroup, tmp1)) {
 			return;
+		}
 		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		/* if is from me, ignore */
 		if (!strcmp(src, myrpt->name))
 			return;
 		snprintf(cmd, sizeof(cmd), "TXTONE %.290s", dest);
-		if (IS_XPMR(myrpt))
+		if (IS_XPMR(myrpt)) {
 			send_usb_txt(myrpt, cmd);
+		}
 		return;
 	}
 
@@ -1975,8 +2001,9 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		}
 		/* if not for me, end here */
-		if (strcmp(dest, myrpt->name) && (dest[0] != '*'))
+		if (strcmp(dest, myrpt->name) && (dest[0] != '*')) {
 			return;
+		}
 		if (cmd[1] == '?') {
 			time_t now;
 			int n = 0;
@@ -1988,21 +2015,25 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			snprintf(tmp1, sizeof(tmp1), "K %s %s %d %d", src, myrpt->name, myrpt->keyed, n);
 			wf.data.ptr = tmp1;
 			wf.datalen = strlen(tmp1) + 1;
-			if (mylink->chan)
+			if (mylink->chan) {
 				rpt_qwrite(mylink, &wf);
+			}
 			return;
 		}
-		if (myrpt->topkeystate != 1)
+		if (myrpt->topkeystate != 1) {
 			return;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 		for (i = 0; i < TOPKEYN; i++) {
-			if (!strcmp(myrpt->topkey[i].node, src))
+			if (!strcmp(myrpt->topkey[i].node, src)) {
 				break;
+			}
 		}
 		if (i >= TOPKEYN) {
 			for (i = 0; i < TOPKEYN; i++) {
-				if (!myrpt->topkey[i].node[0])
+				if (!myrpt->topkey[i].node[0]) {
 					break;
+				}
 			}
 		}
 		if (i < TOPKEYN) {
@@ -2051,21 +2082,23 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	rpt_mutex_lock(&myrpt->lock);
 	if ((iswebtransceiver(mylink)) || CHAN_TECH(mylink->chan, "tlb")) {
 		/* if a WebTransceiver node or a TLB node */
-		if (c == myrpt->p.endchar)
+		if (c == myrpt->p.endchar) {
 			myrpt->cmdnode[0] = 0;
-		else if (myrpt->cmdnode[0]) {
+		} else if (myrpt->cmdnode[0]) {
 			cmd[0] = 0;
 			if (!strcmp(myrpt->cmdnode, "aprstt")) {
 				do_aprstt(myrpt);
 			}
 			rpt_mutex_unlock(&myrpt->lock);
-			if (strcmp(myrpt->cmdnode, "aprstt"))
+			if (strcmp(myrpt->cmdnode, "aprstt")) {
 				send_link_dtmf(myrpt, c);
+			}
 			return;
 		}
 	}
-	if (c == myrpt->p.endchar)
+	if (c == myrpt->p.endchar) {
 		myrpt->stopgen = 1;
+	}
 	if (funcchar_common(myrpt, c)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
@@ -2074,10 +2107,12 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		if ((myrpt->callmode == CALLMODE_CONNECTING) || (myrpt->callmode == CALLMODE_UP)) {
 			myrpt->mydtmf = c;
 		}
-		if (myrpt->p.propagate_dtmf)
+		if (myrpt->p.propagate_dtmf) {
 			do_dtmf_local(myrpt, c);
-		if (myrpt->p.propagate_phonedtmf)
+		}
+		if (myrpt->p.propagate_phonedtmf) {
 			do_dtmf_phone(myrpt, mylink, c);
+		}
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	} else if (((myrpt->inpadtest) || (c != myrpt->p.endchar)) && (myrpt->rem_dtmfidx >= 0)) {

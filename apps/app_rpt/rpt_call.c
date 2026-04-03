@@ -150,21 +150,25 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 	cs[0] = chan;
 	cs[1] = dest;
 	for (;;) {
-		if (ast_check_hangup(chan))
+		if (ast_check_hangup(chan)) {
 			break;
-		if (ast_check_hangup(dest))
+		}
+		if (ast_check_hangup(dest)) {
 			break;
+		}
 		ms = 100;
 		w = cs[0];
 		cs[0] = cs[1];
 		cs[1] = w;
 		w = ast_waitfor_n(cs, 2, &ms);
-		if (!w)
+		if (!w) {
 			continue;
+		}
 		if (w == chan) {
 			f = ast_read(chan);
-			if (!f)
+			if (!f) {
 				break;
+			}
 			if ((f->frametype == AST_FRAME_CONTROL) && (f->subclass.integer == AST_CONTROL_HANGUP)) {
 				ast_frfree(f);
 				break;
@@ -174,8 +178,9 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 		}
 		if (w == dest) {
 			f = ast_read(dest);
-			if (!f)
+			if (!f) {
 				break;
+			}
 			if ((f->frametype == AST_FRAME_CONTROL) && (f->subclass.integer == AST_CONTROL_HANGUP)) {
 				ast_frfree(f);
 				break;

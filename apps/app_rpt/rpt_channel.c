@@ -25,11 +25,13 @@ void rpt_safe_sleep(struct rpt *rpt, struct ast_channel *chan, int ms)
 	cs[1] = chan;
 	while (ms > 0) {
 		w = ast_waitfor_n(cs, 2, &ms);
-		if (!w)
+		if (!w) {
 			break;
+		}
 		f = ast_read(w);
-		if (!f)
+		if (!f) {
 			break;
+		}
 		if ((w == cs[0]) && (f->frametype != AST_FRAME_VOICE) && (f->frametype != AST_FRAME_NULL)) {
 			ast_queue_frame(rpt->rxchannel, f);
 			ast_frfree(f);
@@ -49,8 +51,9 @@ int wait_interval(struct rpt *myrpt, enum rpt_delay type, struct ast_channel *ch
 
 	do {
 		while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID)))) {
-			if (ast_safe_sleep(chan, 100) < 0)
+			if (ast_safe_sleep(chan, 100) < 0) {
 				return -1;
+			}
 		}
 
 		interval = get_wait_interval(myrpt, type);
@@ -86,10 +89,11 @@ int saycharstr(struct ast_channel *mychannel, const char *str)
 	int res;
 
 	res = ast_say_character_str(mychannel, str, NULL, ast_channel_language(mychannel), AST_SAY_CASE_NONE);
-	if (!res)
+	if (!res) {
 		res = ast_waitstream(mychannel, "");
-	else
+	} else {
 		ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+	}
 	ast_stopstream(mychannel);
 	return res;
 }
@@ -99,10 +103,11 @@ int sayphoneticstr(struct ast_channel *mychannel, const char *str)
 	int res;
 
 	res = ast_say_phonetic_str(mychannel, str, NULL, ast_channel_language(mychannel));
-	if (!res)
+	if (!res) {
 		res = ast_waitstream(mychannel, "");
-	else
+	} else {
 		ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+	}
 	ast_stopstream(mychannel);
 	return res;
 }
@@ -111,10 +116,11 @@ int saynum(struct ast_channel *mychannel, int num)
 {
 	int res;
 	res = ast_say_number(mychannel, num, NULL, ast_channel_language(mychannel), NULL);
-	if (!res)
+	if (!res) {
 		res = ast_waitstream(mychannel, "");
-	else
+	} else {
 		ast_log(LOG_WARNING, "ast_streamfile failed on %s\n", ast_channel_name(mychannel));
+	}
 	ast_stopstream(mychannel);
 	return res;
 }
@@ -125,32 +131,39 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 	char fname[300], str[100];
 	const char *val;
 
-	if (strlen(name) < 1)
+	if (strlen(name) < 1) {
 		return 0;
+	}
 	if (!tlb_query_callsign(name, str, sizeof(str))) {
 		tgn = 1;
 	}
 	if ((!IS_ECHOLINK_NODE(name) && tgn != 1) || (IS_ECHOLINK_NODE(name) && myrpt->p.eannmode != 2) ||
 		((tgn == 1) && (myrpt->p.tannmode != 2))) {
 		val = ast_variable_retrieve(myrpt->cfg, myrpt->name, "nodenames");
-		if (!val)
+		if (!val) {
 			val = NODENAMES;
+		}
 		snprintf(fname, sizeof(fname) - 1, "%s/%s", val, name);
-		if (ast_fileexists(fname, NULL, ast_channel_language(mychannel)) > 0)
+		if (ast_fileexists(fname, NULL, ast_channel_language(mychannel)) > 0) {
 			return (sayfile(mychannel, fname));
+		}
 		res = sayfile(mychannel, "rpt/node");
-		if (!res)
+		if (!res) {
 			res = ast_say_character_str(mychannel, name, NULL, ast_channel_language(mychannel), AST_SAY_CASE_NONE);
+		}
 	}
 	if (tgn == 1) {
-		if (myrpt->p.tannmode < 2)
+		if (myrpt->p.tannmode < 2) {
 			return res;
+		}
 		return (sayphoneticstr(mychannel, str));
 	}
-	if (!IS_ECHOLINK_NODE(name))
+	if (!IS_ECHOLINK_NODE(name)) {
 		return res;
-	if (myrpt->p.eannmode < 2)
+	}
+	if (myrpt->p.eannmode < 2) {
 		return res;
+	}
 	sprintf(str, "%d", atoi(name + 1));
 	if (elink_query_callsign(str, fname, sizeof(fname))) {
 		return res;
@@ -166,8 +179,9 @@ void do_dtmf_local(struct rpt *myrpt, char c)
 
 	if (c) {
 		snprintf(myrpt->dtmf_local_str + strlen(myrpt->dtmf_local_str), sizeof(myrpt->dtmf_local_str) - 1, "%c", c);
-		if (!myrpt->dtmf_local_timer)
+		if (!myrpt->dtmf_local_timer) {
 			myrpt->dtmf_local_timer = DTMF_LOCAL_STARTTIME;
+		}
 	}
 	/* if at timeout */
 	if (myrpt->dtmf_local_timer == 1) {
@@ -206,12 +220,14 @@ int play_tone_pair(struct ast_channel *chan, int f1, int f2, int duration, int a
 {
 	int res;
 
-	if ((res = ast_tonepair_start(chan, f1, f2, duration, amplitude)))
+	if ((res = ast_tonepair_start(chan, f1, f2, duration, amplitude))) {
 		return res;
+	}
 
 	while (ast_channel_generatordata(chan)) {
-		if (ast_safe_sleep(chan, 1))
+		if (ast_safe_sleep(chan, 1)) {
 			return -1;
+		}
 	}
 
 	return 0;
@@ -227,8 +243,9 @@ static int morse_cat(char *str, int freq, int duration)
 	char *p;
 	int len;
 
-	if (!str)
+	if (!str) {
 		return -1;
+	}
 
 	len = strlen(str);
 	p = str + len;
@@ -341,20 +358,23 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 
 		/* Convert lower case to upper case */
 
-		if ((c >= 'a') && (c <= 'z'))
+		if ((c >= 'a') && (c <= 'z')) {
 			c -= 0x20;
+		}
 
 		/* Can't deal with any char code greater than Z, skip it */
 
-		if (c > 'Z')
+		if (c > 'Z') {
 			continue;
+		}
 
 		/* If space char, wait the inter word time */
 
 		if (c == ' ') {
 			if (!res) {
-				if ((res = morse_cat(str, 0, interwordtime)))
+				if ((res = morse_cat(str, 0, interwordtime))) {
 					break;
+				}
 			}
 			continue;
 		}
@@ -371,18 +391,20 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 		/* Send the character */
 
 		for (; len; len--) {
-			if (!res)
+			if (!res) {
 				res = morse_cat(str, freq, (ddcomb & 1) ? dashtime : dottime);
-			if (!res)
+			}
+			if (!res) {
 				res = morse_cat(str, 0, intralettertime);
+			}
 			ddcomb >>= 1;
 		}
 
 		/* Wait the interletter time */
 
-		if (!res)
+		if (!res) {
 			res = morse_cat(str, 0, interlettertime - intralettertime);
-
+		}
 	}
 
 	/* Wait for all the characters to be sent */
@@ -399,8 +421,9 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 		}
 
 	}
-	if (str)
+	if (str) {
 		ast_free(str);
+	}
 	return res;
 }
 
@@ -438,8 +461,9 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 		.src = __PRETTY_FUNCTION__,
 	};
 
-	if (!strcmp(myrpt->p.ctgroup, "0"))
+	if (!strcmp(myrpt->p.ctgroup, "0")) {
 		return 0;
+	}
 	snprintf(str, sizeof(str), "C %s %s %s", myrpt->name, myrpt->p.ctgroup, txt);
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
