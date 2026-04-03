@@ -41,8 +41,9 @@ int check_freq_xcat(int m, int d, enum rpt_mode *defmode)
 		;
 	} else if ((m >= 420) && (m < 450)) {	/* 70 centimeters */
 		;
-	} else
+	} else {
 		return -1;
+	}
 
 	if (defmode) {
 		*defmode = dflmd;
@@ -184,11 +185,10 @@ static int set_ctcss_freq_xcat(struct rpt *myrpt, char *txtone, char *rxtone)
 
 	rv = civ_cmd(myrpt, cmdstr, 9);
 	if (rv) {
-		return (-1);
+		return -1;
 	}
-
 	if (!rxtone) {
-		return (0);
+		return 0;
 	}
 
 	if (split_ctcss_freq(hertz, decimal, rxtone)) {
@@ -233,7 +233,7 @@ int set_xcat(struct rpt *myrpt)
 	}
 	ast_debug(2, "CTCSS\n");
 	if (!res) {
-		res = set_ctcss_freq_xcat(myrpt, myrpt->txplon ? myrpt->txpl : "0.0", myrpt->rxplon ? myrpt->rxpl : "0.0");	/* Tx/Rx CTCSS */
+		res = set_ctcss_freq_xcat(myrpt, myrpt->txplon ? myrpt->txpl : "0.0", myrpt->rxplon ? myrpt->rxpl : "0.0"); /* Tx/Rx CTCSS */
 	}
 	/* set Freq */
 	ast_debug(2, "Frequency\n");
