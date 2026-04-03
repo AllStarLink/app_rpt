@@ -2917,24 +2917,33 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_request_local(myrpt, cap, RPT_RXPCHAN, "RXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 
 	if (rpt_conf_add(myrpt->pchannel, myrpt, RPT_CONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 
 	if (rpt_conf_add(myrpt->rxpchannel, myrpt, RPT_CONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
+
 		return -1;
 	}
 
@@ -2943,25 +2952,33 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	if (rpt_conf_add(myrpt->monchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 
 	if (rpt_request_local(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
 		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_TXPCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF)) {
 		rpt_hangup_rx_tx(myrpt);
-		rpt_hangup(myrpt, RPT_TXPCHAN);
 		rpt_hangup(myrpt, RPT_PCHAN);
-		rpt_hangup(myrpt, RPT_RXPCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		rpt_hangup(myrpt, RPT_TXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		return -1;
 	}
 	return 0;
@@ -2971,12 +2988,12 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 static int disable_rpt(struct rpt *myrpt)
 {
 	int n;
-	/* setting rpt_vars[n].deleted = 1 is a slight hack that prevents continual thread restarts.
+	/* setting rpt_vars[n].deleted = RPT_DELETED_PENDING is a slight hack that prevents continual thread restarts.
 	 * This thread cannot successfully be resurrected, so don't even THINK about trying!
 	 * (Maybe add a new var for this?) */
 	for (n = 0; n < nrpts; n++) {
 		if (!strcmp(myrpt->name, rpt_vars[n].name)) {
-			rpt_vars[n].deleted = 1;
+			rpt_vars[n].deleted = RPT_DELETED_PENDING;
 			ast_log(LOG_WARNING, "Disabled broken repeater %s\n", myrpt->name);
 			return 0;
 		}
@@ -4820,12 +4837,6 @@ static void *rpt(void *this)
 		mkdir(tmpstr, 0775);
 	}
 	myrpt->ready = 0;
-	if (!myrpt->macrobuf) {
-		myrpt->macrobuf = ast_str_create(MAXMACRO);
-		if (!myrpt->macrobuf) {
-			return NULL;
-		}
-	}
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->remrx = 0;
 	myrpt->remote_webtransceiver = 0;
@@ -4880,10 +4891,34 @@ static void *rpt(void *this)
 	if (myrpt->p.ioport && ((myrpt->iofd = openserial(myrpt, myrpt->p.ioport)) == -1)) {
 		ast_log(LOG_ERROR, "Unable to open %s\n", myrpt->p.ioport);
 		rpt_mutex_unlock(&myrpt->lock);
-		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		rpt_hangup(myrpt, RPT_TXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
+		disable_rpt(myrpt); /* Disable repeater */
 		return NULL;
 	}
+	if (!myrpt->macrobuf) {
+		myrpt->macrobuf = ast_str_create(MAXMACRO);
+		if (!myrpt->macrobuf) {
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			rpt_hangup(myrpt, RPT_RXPCHAN);
+			rpt_hangup(myrpt, RPT_TXPCHAN);
+			if (myrpt->localtxchannel != myrpt->txchannel) {
+				rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+			}
+			disable_rpt(myrpt); /* Disable repeater */
+			return NULL;
+		}
+	}
+
 	myrpt->links = ao2_container_alloc_list(0, /* AO2 object flags. 0 means to use the default behavior */
 		AO2_CONTAINER_ALLOC_OPT_INSERT_BEGIN,  /* AO2 container flags. New items should be added to the front of the list */
 		NULL,								   /* Sorting function. NULL means the list will not be sorted */
@@ -4891,7 +4926,16 @@ static void *rpt(void *this)
 
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_hangup_rx_tx(myrpt);
+		rpt_hangup(myrpt, RPT_PCHAN);
+		rpt_hangup(myrpt, RPT_MONCHAN);
+		rpt_hangup(myrpt, RPT_RXPCHAN);
+		rpt_hangup(myrpt, RPT_TXPCHAN);
+		if (myrpt->localtxchannel != myrpt->txchannel) {
+			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+		}
 		disable_rpt(myrpt); /* Disable repeater */
+		ast_free(myrpt->macrobuf);
 		return NULL;
 	}
 
@@ -4952,11 +4996,21 @@ static void *rpt(void *this)
 	if (myrpt->p.rxburstfreq) {
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
-			rpt_hangup(myrpt, RPT_RXCHAN);
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_hangup_rx_tx(myrpt);
+			rpt_hangup(myrpt, RPT_PCHAN);
+			rpt_hangup(myrpt, RPT_MONCHAN);
+			rpt_hangup(myrpt, RPT_RXPCHAN);
+			rpt_hangup(myrpt, RPT_TXPCHAN);
+			if (myrpt->localtxchannel != myrpt->txchannel) {
+				rpt_hangup(myrpt, RPT_LOCALTXCHAN);
+			}
+			disable_rpt(myrpt); /* Disable repeater */
+			ast_free(myrpt->macrobuf);
+			ao2_cleanup(myrpt->links);
+			myrpt->links = NULL;
 			return NULL;
 		}
-		/*! \todo At this point, we have a memory leak, because dsp needs to be freed. */
-		/*! \todo Find out what the right place is to free dsp, i.e. when myrpt itself goes away. */
 		ast_dsp_set_features(myrpt->dsp, DSP_FEATURE_FREQ_DETECT);
 		ast_dsp_set_freqmode(myrpt->dsp, myrpt->p.rxburstfreq, myrpt->p.rxbursttime, myrpt->p.rxburstthreshold, 0);
 #else
@@ -5598,7 +5652,6 @@ static void *rpt(void *this)
 			}
 		}
 	}
-
 	/* Terminate and cleanup app_rpt node instance */
 	ast_debug(1, "%s disconnected, cleaning up...\n", myrpt->name);
 
@@ -5641,6 +5694,22 @@ static void *rpt(void *this)
 
 	ast_debug(1, "@@@@ rpt:Hung up channel\n");
 	stop_outstream(myrpt);
+	if (myrpt->iofd >= 0) {
+		close(myrpt->iofd);
+		myrpt->iofd = -1;
+	}
+	/* Free dynamically allocated memory */
+#ifdef NATIVE_DSP
+	if (myrpt->dsp) {
+		ast_dsp_free(myrpt->dsp);
+		myrpt->dsp = NULL;
+	}
+#endif
+	if (myrpt->macrobuf) {
+		ast_free(myrpt->macrobuf);
+		myrpt->macrobuf = NULL;
+	}
+
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
 }
@@ -5723,21 +5792,25 @@ static int load_config(int reload)
 			}
 		}
 		if (i != strlen(this)) {
-			continue; /* Not a node defn */
+			continue; /* Not a node definition: Non numeric values found */
 		}
 		if (reload) {
+			/* If reloading, find the index for the node */
 			for (n = 0; n < nrpts; n++) {
+				/* Look for a matching node already loaded */
 				if (!strcmp(this, rpt_vars[n].name)) {
 					rpt_vars[n].reload_request = 1;
 					break;
 				}
 			}
 			if (n < nrpts) {
-				continue; /* Node already exists. */
+				continue; /* Node exists, Skip the initialization. */
 			}
-			/* No such node yet, find an empty hole or the next one */
+			/* No such node yet, find an empty hole or the next one and fully initialize
+			 * This should never happen: Calling load_config() with reload = 1 but no matching node found
+			 */
 			for (n = 0; n < nrpts; n++) {
-				if (rpt_vars[n].deleted) {
+				if (rpt_vars[n].deleted == RPT_DELETED_COMPLETE) {
 					break;
 				}
 			}
@@ -5746,9 +5819,25 @@ static int load_config(int reload)
 			ast_log(LOG_ERROR, "Attempting to add repeater node %s would exceed max. number of repeaters (%d)\n", this, MAXRPTS);
 			continue;
 		}
-		if (rpt_vars[n].macrobuf) {
-			ast_free(rpt_vars[n].macrobuf);
-			rpt_vars[n].macrobuf = NULL;
+		/* If we delete a repeater, these alloc strings need to be released
+		 * when it's time to reuse the rpt_var, clean up any left over strings.
+		 */
+		if (reload && rpt_vars[n].deleted == RPT_DELETED_COMPLETE) {
+			ast_mutex_destroy(&rpt_vars[n].lock);
+			ast_mutex_destroy(&rpt_vars[n].remlock);
+			ast_mutex_destroy(&rpt_vars[n].statpost_lock);
+			if (rpt_vars[n].rxchanname) {
+				ast_free(rpt_vars[n].rxchanname);
+			}
+			if (rpt_vars[n].txchanname) {
+				ast_free(rpt_vars[n].txchanname);
+			}
+			if (rpt_vars[n].name) {
+				ast_free(rpt_vars[n].name);
+			}
+			if (rpt_vars[n].remoterig) {
+				ast_free(rpt_vars[n].remoterig);
+			}
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
@@ -5775,19 +5864,19 @@ static int load_config(int reload)
 			rpt_vars[n].txchanname = ast_strdup(val);
 		}
 		rpt_vars[n].remote = 0;
-		rpt_vars[n].remoterig = "";
 		rpt_vars[n].p.iospeed = B9600;
 		rpt_vars[n].ready = 0;
-		val = ast_variable_retrieve(cfg, this, "remote");
+
+		val = ast_variable_retrieve(cfg, this, "radiotype");
+		if (!val) {
+			val = ast_variable_retrieve(cfg, this, "remote");
+		}
 		if (val) {
 			rpt_vars[n].remoterig = ast_strdup(val);
 			rpt_vars[n].remote = 1;
+		} else {
+			rpt_vars[n].remoterig = ast_strdup("");
 		}
-		val = ast_variable_retrieve(cfg, this, "radiotype");
-		if (val) {
-			rpt_vars[n].remoterig = ast_strdup(val);
-		}
-
 		ast_mutex_init(&rpt_vars[n].lock);
 		ast_mutex_init(&rpt_vars[n].remlock);
 		ast_mutex_init(&rpt_vars[n].statpost_lock);
@@ -5799,6 +5888,7 @@ static int load_config(int reload)
 		rpt_vars[n].mdc = mdc_decoder_new(8000);
 #endif
 		if (reload) {
+			/* Reload but didn't find a matching node loaded */
 			rpt_vars[n].reload_request = 1;
 			if (n >= nrpts) {
 				nrpts = n + 1;
@@ -5887,8 +5977,12 @@ static void *rpt_master(void *ignore)
 		current_time = rpt_time_monotonic();
 		for (i = 0; i < nrpts; i++) {
 			int rv;
-			if (rpt_vars[i].remote)
+			if (rpt_vars[i].remote) {
+				if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
+					rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
+				}
 				continue;
+			}
 
 			current_loop_time = current_time - rpt_vars[i].lastthreadupdatetime;
 			if (rpt_vars[i].lastthreadupdatetime != last_thread_time[i]) {
@@ -5906,12 +6000,13 @@ static void *rpt_master(void *ignore)
 			}
 			rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
 			if (rv) {
-				if (rpt_vars[i].deleted) {
+				if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
 					rpt_vars[i].name[0] = 0;
 					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
 						pthread_join(rpt_vars[i].rpt_thread, NULL);
 						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
 					}
+					rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
 					continue;
 				}
 				if (ast_shutting_down() || shutting_down) {
@@ -5948,7 +6043,7 @@ static void *rpt_master(void *ignore)
 			}
 		}
 		for (i = 0; i < nrpts; i++) {
-			if (rpt_vars[i].deleted || rpt_vars[i].remote || !rpt_vars[i].p.outstreamcmd) {
+			if (rpt_vars[i].deleted != RPT_DELETED_NONE || rpt_vars[i].remote || !rpt_vars[i].p.outstreamcmd) {
 				continue;
 			}
 			if (!rpt_vars[i].outstreampid) {
@@ -6012,7 +6107,7 @@ static void *rpt_master(void *ignore)
 			int done = 0, jrv;
 			ast_debug(1, "app_rpt is unloading, master thread cleaning up %d repeater%s and exiting\n", nrpts, ESS(nrpts));
 			for (i = 0; i < nrpts; i++) {
-				if (rpt_vars[i].deleted) {
+				if (rpt_vars[i].deleted != RPT_DELETED_NONE) {
 					ast_debug(1, "Skipping deleted thread %s\n", rpt_vars[i].name);
 					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
 						pthread_join(rpt_vars[i].rpt_thread, NULL);
@@ -7613,6 +7708,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup_rx_tx(myrpt);
 	closerem(myrpt);
+	if (myrpt->macrobuf) {
+		ast_free(myrpt->macrobuf);
+		myrpt->macrobuf = NULL;
+	}
 	if (myrpt->p.rptnode) {
 		rpt_mutex_lock(&myrpt->lock);
 		for (i = 0; i < nrpts; i++) {
@@ -7679,7 +7778,23 @@ static int unload_module(void)
 		ast_debug(3, "Destroying locks for repeater %s\n", rpt_vars[i].name);
 		ast_mutex_destroy(&rpt_vars[i].lock);
 		ast_mutex_destroy(&rpt_vars[i].remlock);
-		/* Lock and unlock in case somebody had the lock */
+		ast_mutex_destroy(&rpt_vars[i].statpost_lock);
+		if (rpt_vars[i].rxchanname) {
+			ast_free(rpt_vars[i].rxchanname);
+			rpt_vars[i].rxchanname = NULL;
+		}
+		if (rpt_vars[i].txchanname) {
+			ast_free(rpt_vars[i].txchanname);
+			rpt_vars[i].txchanname = NULL;
+		}
+		if (rpt_vars[i].name) {
+			ast_free(rpt_vars[i].name);
+			rpt_vars[i].name = NULL;
+		}
+		if (rpt_vars[i].remoterig) {
+			ast_free(rpt_vars[i].remoterig);
+			rpt_vars[i].remoterig = NULL;
+		}
 	}
 
 	res = ast_unregister_application(app);
@@ -7731,10 +7846,10 @@ static int reload(void)
 			continue;
 		if (rpt_vars[n].rxchannel)
 			ast_softhangup(rpt_vars[n].rxchannel, AST_SOFTHANGUP_DEV);
-		rpt_vars[n].deleted = 1;
+		rpt_vars[n].deleted = RPT_DELETED_PENDING;
 	}
 	for (n = 0; n < nrpts; n++)
-		if (!rpt_vars[n].deleted)
+		if (rpt_vars[n].deleted == RPT_DELETED_NONE)
 			rpt_vars[n].reload = 1;
 	ast_mutex_unlock(&rpt_master_lock);
 	return (0);

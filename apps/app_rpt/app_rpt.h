@@ -751,6 +751,12 @@ struct rpt_conf {
 	struct ast_bridge *txconf;
 };
 
+enum rpt_deleted_state {
+	RPT_DELETED_NONE,
+	RPT_DELETED_PENDING,
+	RPT_DELETED_COMPLETE
+};
+
 /*! \brief Populate rpt structure with data */
 struct rpt {
 	ast_mutex_t lock;
@@ -759,7 +765,7 @@ struct rpt {
 	struct ast_config *cfg;
 	rpt_bool reload:1;
 	rpt_bool reload_request:1;
-	rpt_bool deleted:1;
+	enum rpt_deleted_state deleted;
 	char xlink; /*!< cross link state of a share repeater/remote radio */
 	unsigned int statpost_seqno;
 
