@@ -1715,7 +1715,7 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 	enum rpt_mode dflmd = REM_MODE_FM;
 	int rv = 0;
 
-	ast_debug(7, "(%i,%i,%i,%i)\n", m, d, *defmode, mars);
+	ast_debug(7, "(%i,%i,%i,%i)\n", m, d, defmode ? *defmode : -1, mars);
 
 	/* first test for standard amateur radio bands */
 
@@ -1787,6 +1787,8 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		} else {
 			dflmd = REM_MODE_FM;
 		}
+	} else {
+		rv = -1;
 	}
 
 	/* check expanded coverage */
@@ -1812,9 +1814,11 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		}
 	}
 
-	*defmode = dflmd;
+	if (defmode) {
+		*defmode = dflmd;
+	}
 
-	ast_debug(2, "(%i,%i,%i,%i) returning %i\n", m, d, *defmode, mars, rv);
+	ast_debug(2, "(%i,%i,%i,%i) returning %i\n", m, d, defmode ? *defmode : -1, mars, rv);
 
 	return rv;
 }
