@@ -16,18 +16,21 @@ int matchkeyword(char *string, char **param, char *keywords[])
 	for (i = 0; keywords[i]; i++) {
 		ls = strlen(keywords[i]);
 		if (!ls) {
-			if (param)
+			if (param) {
 				*param = NULL;
+			}
 			return 0;
 		}
 		if (!strncmp(string, keywords[i], ls)) {
-			if (param)
+			if (param) {
 				*param = string + ls;
+			}
 			return i + 1;
 		}
 	}
-	if (param)
+	if (param) {
 		*param = NULL;
+	}
 	return 0;
 }
 
@@ -109,8 +112,9 @@ char *skipchars(char *string, char *charlist)
 				break;
 			}
 		}
-		if (!charlist[i])
+		if (!charlist[i]) {
 			return string;
+		}
 	}
 	return string;
 }
@@ -118,8 +122,9 @@ char *skipchars(char *string, char *charlist)
 char *eatwhite(char *s)
 {
 	while ((*s == ' ') || (*s == 0x09)) {	/* get rid of any leading white space */
-		if (!*s)
+		if (!*s) {
 			break;
+		}
 		s++;
 	}
 	return s;
@@ -147,8 +152,9 @@ int decimals2int(char *fraction)
 	int multiplier = 100000;
 	int res = 0;
 
-	if (!len)
+	if (!len) {
 		return 0;
+	}
 	for (i = 0; i < len; i++, multiplier /= 10)
 		res += (fraction[i] - '0') * multiplier;
 	return res;
@@ -178,14 +184,16 @@ int mycompar(const void *a, const void *b)
 	char **y = (char **) b;
 	int xoff, yoff;
 
-	if ((**x < '0') || (**x > '9'))
+	if ((**x < '0') || (**x > '9')) {
 		xoff = 1;
-	else
+	} else {
 		xoff = 0;
-	if ((**y < '0') || (**y > '9'))
+	}
+	if ((**y < '0') || (**y > '9')) {
 		yoff = 1;
-	else
+	} else {
 		yoff = 0;
+	}
 	return (strcmp((*x) + xoff, (*y) + yoff));
 }
 
@@ -193,8 +201,9 @@ long diskavail(struct rpt *myrpt)
 {
 	struct statfs statfsbuf;
 
-	if (!myrpt->p.archivedir)
+	if (!myrpt->p.archivedir) {
 		return (0);
+	}
 	if (statfs(myrpt->p.archivedir, &statfsbuf) == -1) {
 		ast_log(LOG_WARNING, "Cannot get filesystem size for %s node %s\n", myrpt->p.archivedir, myrpt->name);
 		return (-1);

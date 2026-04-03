@@ -993,8 +993,9 @@ static void *gps_reader(void *data)
 			/* Calculate the check sum */
 			c = 0;
 			for (i = 1; i < sizeof(buf) && buf[i]; i++) {
-				if (buf[i] == '*')
+				if (buf[i] == '*') {
 					break;
+				}
 				c ^= buf[i];
 			}
 			if ((!buf[i]) || (strlen(buf) < (i + 3))) {

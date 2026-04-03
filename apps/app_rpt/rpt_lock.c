@@ -29,8 +29,9 @@ static struct lockthread *get_lockthread(pthread_t id)
 	int i;
 
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
-		if (lockthreads[i].id == id)
+		if (lockthreads[i].id == id) {
 			return (&lockthreads[i]);
+		}
 	}
 	return (NULL);
 }
@@ -40,8 +41,9 @@ static struct lockthread *put_lockthread(pthread_t id)
 	int i;
 
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
-		if (lockthreads[i].id == id)
+		if (lockthreads[i].id == id) {
 			return (&lockthreads[i]);
+		}
 	}
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
 		if (!lockthreads[i].id) {
@@ -85,8 +87,9 @@ static void rpt_mutex_spew(void)
 		}
 		lasttv.tv_sec = lock_ring_copy[j].tv.tv_sec;
 		lasttv.tv_usec = lock_ring_copy[j].tv.tv_usec;
-		if (!lock_ring_copy[j].tv.tv_sec)
+		if (!lock_ring_copy[j].tv.tv_sec) {
 			continue;
+		}
 		if (lock_ring_copy[j].line < 0) {
 			ast_log(LOG_NOTICE, "LOCKDEBUG [#%d] UNLOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n",
 					i - 31, -lock_ring_copy[j].line, lock_ring_copy[j].rpt->name, (int) lock_ring_copy[j].lockthread.id,
@@ -124,8 +127,9 @@ static void _rpt_mutex_lock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	lock_ring[lock_ring_index].rpt = myrpt;
 	memcpy(&lock_ring[lock_ring_index].lockthread, t, sizeof(struct lockthread));
 	lock_ring[lock_ring_index++].line = line;
-	if (lock_ring_index == 32)
+	if (lock_ring_index == 32) {
 		lock_ring_index = 0;
+	}
 	ast_mutex_unlock(&locklock);
 	ast_mutex_lock(lockp);
 }
@@ -155,8 +159,9 @@ static void _rpt_mutex_unlock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	lock_ring[lock_ring_index].rpt = myrpt;
 	memcpy(&lock_ring[lock_ring_index].lockthread, t, sizeof(struct lockthread));
 	lock_ring[lock_ring_index++].line = -line;
-	if (lock_ring_index == 32)
+	if (lock_ring_index == 32) {
 		lock_ring_index = 0;
+	}
 	ast_mutex_unlock(&locklock);
 	ast_mutex_unlock(lockp);
 }
