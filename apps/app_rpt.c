@@ -1662,7 +1662,7 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 	functiondigits = digits + strlen(vp->name);
 	rv = (*function_table[i].function)(myrpt, param, functiondigits, command_source, mylink);
 	ast_debug(7, "rv=%i\n", rv);
-	return (rv);
+	return rv;
 }
 
 static inline void collect_function_digits_post(struct rpt *myrpt, enum rpt_function_response res, const char *cmd, struct rpt_link *mylink)
@@ -7852,7 +7852,7 @@ static int reload(void)
 		if (rpt_vars[n].deleted == RPT_DELETED_NONE)
 			rpt_vars[n].reload = 1;
 	ast_mutex_unlock(&rpt_master_lock);
-	return (0);
+	return 0;
 }
 /* clang-format off */
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application", 

@@ -32,7 +32,7 @@ static int sendkenwood(struct rpt *myrpt, char *txstr, char *rxstr)
 		rxstr[i-- - 1] = 0;
 	}
 	ast_debug(1, "Got from kenwood: %s\n", rxstr);
-	return (i);
+	return i;
 }
 
 /* take a PL frequency and turn it into a code */
@@ -428,16 +428,16 @@ static int sendrxkenwood(struct rpt *myrpt, char *txstr, char *rxstr, char *cmps
 	for (i = 0; i < KENWOOD_RETRIES; i++) {
 		j = sendkenwood(myrpt, txstr, rxstr);
 		if (j < 0) {
-			return (j);
+			return j;
 		}
 		if (j == 0) {
 			continue;
 		}
 		if (!strncmp(rxstr, cmpstr, strlen(cmpstr))) {
-			return (0);
+			return 0;
 		}
 	}
-	return (-1);
+	return -1;
 }
 
 int setkenwood(struct rpt *myrpt)
@@ -1592,7 +1592,7 @@ static int set_ctcss_freq_ft950(struct rpt *myrpt, char *txtone, char *rxtone)
 
 	c = ft950_pltocode(txtone);
 	if (c < 0) {
-		return (-1);
+		return -1;
 	}
 
 	sprintf(cmdstr, "CN0%02d;", c);
@@ -2156,7 +2156,7 @@ static int set_ctcss_mode_ic706(struct rpt *myrpt, char txplon, char rxplon)
 
 	rv = civ_cmd(myrpt, cmdstr, 8);
 	if (rv) {
-		return (-1);
+		return -1;
 	}
 
 	cmdstr[0] = cmdstr[1] = 0xfe;
@@ -2201,11 +2201,11 @@ static int set_ctcss_freq_ic706(struct rpt *myrpt, char *txtone, char *rxtone)
 
 	rv = civ_cmd(myrpt, cmdstr, 9);
 	if (rv) {
-	   return (-1);
+	   return -1;
     }
 
 	if (!rxtone) {
-		return (0);
+		return 0;
     }
 
 	if (split_ctcss_freq(hertz, decimal, rxtone)) {
@@ -2723,7 +2723,7 @@ int channel_steer(struct rpt *myrpt, char *data)
 
 	ast_debug(1, "remoterig=%s, data=%s\n", myrpt->remoterig, data);
 	if (!myrpt->remoterig) {
-		return (0);
+		return 0;
 	}
 	if (data <= 0) {
 		res = -1;
@@ -2748,7 +2748,7 @@ int channel_revert(struct rpt *myrpt)
 	int res = 0;
 	ast_debug(1, "remoterig=%s, nowchan=%02d, waschan=%02d\n", myrpt->remoterig, myrpt->nowchan, myrpt->waschan);
 	if (!myrpt->remoterig) {
-		return (0);
+		return 0;
 	}
 	if (myrpt->nowchan != myrpt->waschan) {
 		char data[8];
@@ -2758,5 +2758,5 @@ int channel_revert(struct rpt *myrpt)
 		channel_steer(myrpt, data);
 		res = 1;
 	}
-	return (res);
+	return res;
 }

@@ -126,7 +126,7 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 	const char *val;
 
 	if (strlen(name) < 1)
-		return (0);
+		return 0;
 	if (!tlb_query_callsign(name, str, sizeof(str))) {
 		tgn = 1;
 	}

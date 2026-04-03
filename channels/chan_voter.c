@@ -1550,11 +1550,11 @@ static char *res2cli(int r)
 {
 	switch (r) {
 	case RESULT_SUCCESS:
-		return (CLI_SUCCESS);
+		return CLI_SUCCESS;
 	case RESULT_SHOWUSAGE:
-		return (CLI_SHOWUSAGE);
+		return CLI_SHOWUSAGE;
 	default:
-		return (CLI_FAILURE);
+		return CLI_FAILURE;
 	}
 }
 

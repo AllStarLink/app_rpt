@@ -30,10 +30,10 @@ static struct lockthread *get_lockthread(pthread_t id)
 
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
 		if (lockthreads[i].id == id) {
-			return (&lockthreads[i]);
+			return &lockthreads[i];
 		}
 	}
-	return (NULL);
+	return NULL;
 }
 
 static struct lockthread *put_lockthread(pthread_t id)
@@ -42,7 +42,7 @@ static struct lockthread *put_lockthread(pthread_t id)
 
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
 		if (lockthreads[i].id == id) {
-			return (&lockthreads[i]);
+			return &lockthreads[i];
 		}
 	}
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
@@ -51,10 +51,10 @@ static struct lockthread *put_lockthread(pthread_t id)
 			lockthreads[i].lastlock = 0;
 			lockthreads[i].lastunlock = 0;
 			lockthreads[i].id = id;
-			return (&lockthreads[i]);
+			return &lockthreads[i];
 		}
 	}
-	return (NULL);
+	return NULL;
 }
 
 /*

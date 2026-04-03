@@ -51,5 +51,5 @@ char is_paging(struct rpt *myrpt)
 
 	if ((!ast_tvzero(myrpt->paging)) && (ast_tvdiff_ms(ast_tvnow(), myrpt->paging) <= 300000))
 		rv = 1;
-	return (rv);
+	return rv;
 }

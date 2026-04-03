@@ -518,7 +518,7 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 	TRACEJ(5, "pmr_rx_frontend()\n");
 
 	if (!mySps->enabled)
-		return (1);
+		return 1;
 
 	decimator = mySps->decimator;
 	decimate = mySps->decimate;
@@ -665,7 +665,7 @@ i16 pmr_gp_fir(t_pmr_sps *mySps)
 	TRACEJ(5, "pmr_gp_fir() %i %i\n", mySps->index, mySps->enabled);
 
 	if (!mySps->enabled)
-		return (1);
+		return 1;
 
 	inputGain = mySps->inputGain;
 	calcAdjust = mySps->calcAdjust;
@@ -823,7 +823,7 @@ i16 gp_inte_00(t_pmr_sps *mySps)
 
 	TRACEJ(5, "gp_inte_00() %i\n", mySps->enabled);
 	if (!mySps->enabled)
-		return (1);
+		return 1;
 
 	input = mySps->source;
 	output = mySps->sink;
@@ -927,7 +927,7 @@ i16 CenterSlicer(t_pmr_sps *mySps)
 
 	TRACEJ(5, "CenterSlicer() %i\n", mySps->enabled);
 	if (!mySps->enabled)
-		return (1);
+		return 1;
 
 	input = mySps->source;
 	output = mySps->sink; // limited output
@@ -1223,7 +1223,7 @@ i16 SigGen(t_pmr_sps *mySps)
 		mySps->b.mute = 0;
 		for (i = 0; i < mySps->nSamples; i++)
 			mySps->sink[(i * numChanOut) + selChanOut] = 0;
-		return (0);
+		return 0;
 	} else if (mySps->state == 2) {
 		// doing turn off
 		mySps->discounterl -= MS_PER_FRAME;
@@ -1232,7 +1232,7 @@ i16 SigGen(t_pmr_sps *mySps)
 			mySps->state = 2;
 		}
 	} else if (mySps->state == 0) {
-		return (0);
+		return 0;
 	}
 
 	ph = mySps->discounteru;
@@ -1387,7 +1387,7 @@ i16 DelayLine(t_pmr_sps *mySps)
 			memset((void *) (mySps->buff), 0, mySps->buffSize * 2);
 			memset((void *) (mySps->sink), 0, mySps->nSamples * 2);
 		}
-		return (0);
+		return 0;
 	}
 
 	input = mySps->source;
@@ -1428,7 +1428,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 	TRACEF(5, "ctcss_detect(%p) %i %i %i %i\n", pChan, pChan->rxCtcss->enabled, 0, pChan->rxCtcss->testIndex, pChan->rxCtcss->decode);
 
 	if (!pChan->rxCtcss->enabled)
-		return (1);
+		return 1;
 
 	relax = pChan->rxCtcss->relax;
 	pInput = pChan->rxCtcss->input;
@@ -1607,7 +1607,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 		}
 	}
 	// TRACEX((1, " ctcss_detect() thit %i %i\n",thit,pChan->rxCtcss->decode));
-	return (0);
+	return 0;
 }
 
 /*
@@ -1644,7 +1644,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan = (t_pmr_chan *) ast_calloc(sizeof(t_pmr_chan), 1);
 	if (pChan == NULL) {
 		ast_log(LOG_ERROR, "createPmrChannel() failed\n");
-		return (NULL);
+		return NULL;
 	}
 
 #if XPMR_PPTP == 1
@@ -3013,7 +3013,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	}
 
 	if (pChan->b.txhalted)
-		return (1);
+		return 1;
 
 	if (pChan->b.startSpecialTone) {
 		pChan->b.startSpecialTone = 0;

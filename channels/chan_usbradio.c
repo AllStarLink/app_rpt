@@ -2455,7 +2455,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u')) {
 				f1->frametype = AST_FRAME_NULL;
 				f1->subclass.integer = 0;
-				return (f1);
+				return f1;
 			}
 			if (f1->frametype == AST_FRAME_DTMF_END) {
 				f1->len = ast_tvdiff_ms(ast_radio_tvnow(), o->tonetime);
@@ -2473,7 +2473,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 				}
 			}
 			if (f1) {
-				return (f1);
+				return f1;
 			}
 		}
 	}
@@ -4708,7 +4708,7 @@ static int mult_calc(int value)
 
 	pot = ((int) (value / 4) * 4) + 2;
 	mult = multx - ((multx * (3 - (value % 4))) / (pot + 2));
-	return (mult);
+	return mult;
 }
 
 #define pd(x) \
@@ -4794,7 +4794,7 @@ static int usbhider(struct chan_usbradio_pvt *o, int opt)
 		ast_radio_hid_set_outputs(o->usb_handle, buf);
 	}
 
-	return (0);
+	return 0;
 }
 #endif
 /*!
@@ -5375,11 +5375,11 @@ static char *res2cli(int r)
 {
 	switch (r) {
 	case RESULT_SUCCESS:
-		return (CLI_SUCCESS);
+		return CLI_SUCCESS;
 	case RESULT_SHOWUSAGE:
-		return (CLI_SHOWUSAGE);
+		return CLI_SHOWUSAGE;
 	default:
-		return (CLI_FAILURE);
+		return CLI_FAILURE;
 	}
 }
 

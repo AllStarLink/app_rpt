@@ -54,7 +54,7 @@ int dovox(struct vox *v, short *buf, int bs)
 	float threshold = 0.0;
 
 	if (v->voxena < 0) {
-		return (v->lastvox);
+		return v->lastvox;
 	}
 	for (i = 0; i < bs; i++) {
 		esquare += (float) buf[i] * (float) buf[i];
@@ -92,5 +92,5 @@ int dovox(struct vox *v, short *buf, int bs)
 		}
 	} else
 		v->enacount = 0;
-	return (v->lastvox);
+	return v->lastvox;
 }

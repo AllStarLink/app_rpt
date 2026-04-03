@@ -73,7 +73,7 @@ static unsigned int _flip(unsigned int crc, int bitnum)
 			 crcout |= j;
 		j<<= 1;
 	}
-	return (crcout);
+	return crcout;
 }
 
 static unsigned int docrc(unsigned char* p, int len) {

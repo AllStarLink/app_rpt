@@ -109,7 +109,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&rpt_vars[i].lock);
 			astman_append(ses, "\r\n");
-			return (0);
+			return 0;
 		}
 	}
 	astman_send_error(ses, m, "RptStatus unknown or missing node");

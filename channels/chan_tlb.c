@@ -1110,7 +1110,7 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 			   0, (struct sockaddr *) &sin, sizeof(sin));
 	}
 	ast_debug(1, "tlb: Sent DTMF digit %c to IP %s, port %u\n", digit, p->ip, p->port & 0xffff);
-	return (0);
+	return 0;
 }
 
 /*!
@@ -1927,11 +1927,11 @@ static char *res2cli(int r)
 {
 	switch (r) {
 	case RESULT_SUCCESS:
-		return (CLI_SUCCESS);
+		return CLI_SUCCESS;
 	case RESULT_SHOWUSAGE:
-		return (CLI_SHOWUSAGE);
+		return CLI_SHOWUSAGE;
 	default:
-		return (CLI_FAILURE);
+		return CLI_FAILURE;
 	}
 }
 

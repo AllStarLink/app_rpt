@@ -123,7 +123,7 @@ static unsigned long _flip(unsigned long crc, int bitnum)
                          crcout |= j;
                 j<<= 1;
         }
-        return (crcout);
+		return crcout;
 }
 
 static unsigned long docrc(unsigned char* p, int len) {
