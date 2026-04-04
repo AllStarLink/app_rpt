@@ -223,6 +223,8 @@ int openserial(struct rpt *myrpt, const char *fname)
 	cfsetospeed(&mode, myrpt->p.iospeed);
 	if (tcsetattr(fd, TCSANOW, &mode)) {
 		ast_log(LOG_WARNING, "Unable to set serial parameters on %s: %s\n", fname, strerror(errno));
+		close(fd);
+		return -1;
 	}
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
 		setdtr(myrpt, fd, 0);

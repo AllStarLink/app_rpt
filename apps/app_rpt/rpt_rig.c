@@ -2726,7 +2726,7 @@ int channel_steer(struct rpt *myrpt, char *data)
 	}
 	ast_debug(1, "remoterig=%s, data=%s\n", myrpt->remoterig, data);
 
-	if (data <= 0 || !data || !*data) {
+	if (!data || !*data) {
 		res = -1;
 	} else {
 		myrpt->nowchan = strtod(data, NULL);
