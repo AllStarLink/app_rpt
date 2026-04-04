@@ -138,15 +138,17 @@ void pptp_init(void)
 void pptp_write(i16 bit, i16 state)
 {
 	if (bit == 0) {
-		if (state)
+		if (state) {
 			ioctl(ppdrvdev, PPDRV_IOC_PINSET, DTX_TP1);
-		else
+		} else {
 			ioctl(ppdrvdev, PPDRV_IOC_PINCLEAR, DTX_TP1);
+		}
 	} else {
-		if (state)
+		if (state) {
 			ioctl(ppdrvdev, PPDRV_IOC_PINSET, DTX_TP2);
-		else
+		} else {
 			ioctl(ppdrvdev, PPDRV_IOC_PINCLEAR, DTX_TP2);
+		}
 	}
 }
 #endif
@@ -169,8 +171,9 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 	TRACEJ(2, " source len = %i\n", slen);
 
 	pd = *dest;
-	if (pd)
+	if (pd) {
 		ast_free(pd);
+	}
 	pd = ast_calloc(slen + 1, 1);
 	memcpy(pd, src, slen);
 	*dest = pd;
@@ -194,8 +197,9 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 		TRACEJ(5, " ptstr[%i] = %p %s\n", i, ptstr[i], ptstr[i]);
 	}
 
-	if (*ptrs)
+	if (*ptrs) {
 		ast_free(*ptrs);
+	}
 	*ptrs = ast_calloc(numsub, sizeof(char *));
 	for (i = 0; i < numsub; i++) {
 		(*ptrs)[i] = ptstr[i];
@@ -260,8 +264,9 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	pChan->rxCtcss->decode = CTCSS_NULL;
 
 	pChan->rxCtcss->testIndex = 0;
-	if (!pChan->rxCtcss->testIndex)
+	if (!pChan->rxCtcss->testIndex) {
 		pChan->rxCtcss->testIndex = 3;
+	}
 
 	pChan->rxctcssfreq[0] = 0; // decode now   CTCSS_RXONLY
 
