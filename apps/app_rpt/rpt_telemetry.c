@@ -1219,7 +1219,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		for (i = 3; i < n; i++) {
 			saynode(myrpt, mychannel, strs[i] + 1);
 			if (*strs[i] == 'T') {
-				sayfile(mychannel, "rpt/tranceive");
+				sayfile(mychannel, "rpt/transceive");
 			} else if (*strs[i] == 'R') {
 				sayfile(mychannel, "rpt/monitor");
 			} else if (*strs[i] == 'L') {
@@ -2374,7 +2374,7 @@ treataslocal:
 			}
 			hastx = 1;
 			res = saynode(myrpt, mychannel, l->name);
-			s = "rpt/tranceive";
+			s = "rpt/transceive";
 			if (l->mode == MODE_MONITOR) {
 				s = "rpt/monitor";
 			}
@@ -2452,7 +2452,7 @@ treataslocal:
 
 			hastx = 1;
 			res = saynode(myrpt, mychannel, strs[i]);
-			s = "rpt/tranceive";
+			s = "rpt/transceive";
 			if (mode == 'R') {
 				s = "rpt/monitor";
 			}
