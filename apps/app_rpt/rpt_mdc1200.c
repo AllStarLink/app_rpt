@@ -211,11 +211,11 @@ void mdc1200_ack_status(struct rpt *myrpt, short UnitID)
 static void mdcgen_release(struct ast_channel *chan, void *params)
 {
 	struct mdcgen_pvt *ps = params;
-	if (chan) {
-		ast_set_write_format(chan, ps->origwfmt);
-	}
 	if (!ps) {
 		return;
+	}
+	if (chan) {
+		ast_set_write_format(chan, ps->origwfmt);
 	}
 	if (ps->mdc) {
 		ast_free(ps->mdc);
