@@ -148,11 +148,9 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 	cur->sc = SYNCH;
 	cur->next = NULL;
 
-	for (i = 0; i < 8; i++)
-	{
-		for (j = 0; j < 2; j++)
-		{
-		      cur->frame[i][j] = IDLE;
+	for (i = 0; i < 8; i++) {
+		for (j = 0; j < 2; j++) {
+			cur->frame[i][j] = IDLE;
 		}
 	}
 	old = cur;  /* Pointer to first batch in the row */
@@ -195,10 +193,8 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 					memset(cur->next,0,sizeof(struct pocsag_batch));
 					cur->next->sc   = SYNCH;
 					cur->next->next = NULL;
-					for (ii = 0; ii < 8; ii++)
-					{
-						for (j = 0; j < 2; j++)
-						{
+					for (ii = 0; ii < 8; ii++) {
+						for (j = 0; j < 2; j++) {
 							cur->next->frame[ii][j] = IDLE;
 						}
 					}

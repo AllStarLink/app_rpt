@@ -171,8 +171,9 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 		ast_verb(4, "MDCMacro for %s doing %s on node %s\n", data, myval, myrpt->name);
 		if ((*myval == 'K') || (*myval == 'k')) {
 			if (!myrpt->keyed) {
-				for (i = 1; myval[i]; i++)
+				for (i = 1; myval[i]; i++) {
 					local_dtmfkey_helper(myrpt, myval[i]);
+				}
 			}
 			return;
 		}

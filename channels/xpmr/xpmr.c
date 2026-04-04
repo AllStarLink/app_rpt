@@ -558,8 +558,9 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 
 		// shift the old samples
 #if 0
-		for (n = nx - 1; n > 0; n--)
+		for (n = nx - 1; n > 0; n--) {
 			x[n] = x[n - 1];
+		}
 #else
 		memmove(x + 1, x, fev1);
 #endif
@@ -567,8 +568,9 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 
 #if XPMR_TRACE_FRONTEND == 1
 		y = 0;
-		for (n = 0; n < nx; n++)
+		for (n = 0; n < nx; n++) {
 			y += fir_rxlpf[mySps->parentChan->rxlpf].coefs[n] * x[n];
+		}
 
 		y = ((y / calcAdjust) * outputGain) / M_Q8;
 		input[i * 2] = y; // debug output LowPass at 48KS/s
@@ -578,12 +580,14 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 			// calculate noise filter output
 			naccum = 0;
 			if (mySps->parentChan->rxNoiseFilType == 0) {
-				for (n = 0; n < taps_fir_bpf_noise_1; n++)
+				for (n = 0; n < taps_fir_bpf_noise_1; n++) {
 					naccum += coef_fir_bpf_noise_1[n] * x[n];
+				}
 				naccum /= DCgainBpfNoise;
 			} else {
-				for (n = 0; n < taps_fir_bpf_noise_2; n++)
+				for (n = 0; n < taps_fir_bpf_noise_2; n++) {
 					naccum += coef_fir_bpf_noise_2[n] * x[n];
+				}
 				naccum /= gain_fir_bpf_noise_2;
 			}
 #if XPMR_TRACE_FRONTEND == 1
@@ -598,8 +602,9 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 			decimator = decimate;
 
 			y = 0;
-			for (n = 0; n < nx; n++)
+			for (n = 0; n < nx; n++) {
 				y += fir_rxlpf[mySps->parentChan->rxlpf].coefs[n] * x[n];
+			}
 
 			y = ((y / calcAdjust) * outputGain) / M_Q8;
 
@@ -728,22 +733,25 @@ i16 pmr_gp_fir(t_pmr_sps *mySps)
 			i16 n;
 			y = 0;
 
-			for (n = nx - 1; n > 0; n--)
+			for (n = nx - 1; n > 0; n--) {
 				x[n] = x[n - 1];
+			}
 			x[0] = (input[i] * inputGain) / M_Q8;
 
 #if 0
 			--decimator;
 			if (decimator <= 0) {
 				decimator = decimate;
-				for (n = 0; n < nx; n++)
+				for (n = 0; n < nx; n++) {
 					y += coef[n] * x[n];
+				}
 				y /= (outputGain * 3);
 				output[ii++] = y;
 			}
 #else
-			for (n = 0; n < nx; n++)
+			for (n = 0; n < nx; n++) {
 				y += coef[n] * x[n];
+			}
 
 			y = ((y / calcAdjust) * outputGain) / M_Q8;
 
@@ -1226,8 +1234,9 @@ i16 SigGen(t_pmr_sps *mySps)
 		mySps->state = 0;
 		mySps->enabled = 0;
 		mySps->b.mute = 0;
-		for (i = 0; i < mySps->nSamples; i++)
+		for (i = 0; i < mySps->nSamples; i++) {
 			mySps->sink[(i * numChanOut) + selChanOut] = 0;
+		}
 		return 0;
 	} else if (mySps->state == 2) {
 		// doing turn off
@@ -1830,8 +1839,9 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan->ptxDebug3 = ast_calloc(numSamples, 2);
 	pChan->pNull = ast_calloc(numSamples, 2);
 
-	for (i = 0; i < numSamples; i++)
+	for (i = 0; i < numSamples; i++) {
 		pChan->pNull[i] = ((i % (numSamples / 2)) * 8000) - 4000;
+	}
 
 	pChan->rxCtcss->pDebug0 = ast_calloc(numSamples, 2);
 	pChan->rxCtcss->pDebug1 = ast_calloc(numSamples, 2);
@@ -3084,13 +3094,15 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 
 	// TRACEF(1,"PmrTx() - outputs \n");
 	if (pChan->txMixA == TX_OUT_OFF || !pChan->txPttOut) {
-		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2)
+		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2) {
 			outputtx[i] = 0;
+		}
 	}
 
 	if (pChan->txMixB == TX_OUT_OFF || !pChan->txPttOut) {
-		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2)
+		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2) {
 			outputtx[i + 1] = 0;
+		}
 	}
 
 #if XPMR_PPTP == 1
