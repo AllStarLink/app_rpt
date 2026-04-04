@@ -2726,7 +2726,7 @@ int channel_steer(struct rpt *myrpt, char *data)
 	}
 	ast_debug(1, "remoterig=%s, data=%s\n", myrpt->remoterig, data);
 
-	if (data <= 0) {
+	if (data <= 0 || !data || !*data) {
 		res = -1;
 	} else {
 		myrpt->nowchan = strtod(data, NULL);
@@ -2747,10 +2747,12 @@ int channel_steer(struct rpt *myrpt, char *data)
 int channel_revert(struct rpt *myrpt)
 {
 	int res = 0;
-	ast_debug(1, "remoterig=%s, nowchan=%02d, waschan=%02d\n", myrpt->remoterig, myrpt->nowchan, myrpt->waschan);
 	if (!myrpt->remoterig) {
 		return 0;
 	}
+
+	ast_debug(1, "remoterig=%s, nowchan=%02d, waschan=%02d\n", myrpt->remoterig, myrpt->nowchan, myrpt->waschan);
+
 	if (myrpt->nowchan != myrpt->waschan) {
 		char data[8];
 		ast_debug(1, "reverting.\n");
