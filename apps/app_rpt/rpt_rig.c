@@ -611,8 +611,9 @@ static int check_freq_kenwood(int m, int d, enum rpt_mode *defmode)
 		;
 	} else if ((m >= 430) && (m < 450)) {	/* 70 centimeters */
 		;
-	} else
+	} else {
 		return -1;
+	}
 
 	if (defmode) {
 		*defmode = dflmd;
@@ -631,8 +632,9 @@ static int check_freq_tm271(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		;
-	} else
+	} else {
 		return -1;
+	}
 
 	if (defmode) {
 		*defmode = dflmd;
@@ -666,8 +668,9 @@ static int check_freq_rbi(int m, int d, enum rpt_mode *defmode)
 		;
 	} else if ((m >= 1240) && (m < 1300)) {	/* 23 centimeters */
 		;
-	} else
+	} else {
 		return -1;
+	}
 
 	if (defmode) {
 		*defmode = dflmd;
@@ -691,13 +694,15 @@ static int check_freq_rtx(int m, int d, enum rpt_mode *defmode, struct rpt *myrp
 			}
 		} else if ((m >= 145) && (m < 148)) {
 			;
-		} else
+		} else {
 			return -1;
+		}
 	} else {
 		if ((m >= 430) && (m < 450)) {	/* 70 centimeters */
 			;
-		} else
+		} else {
 			return -1;
+		}
 	}
 	if (defmode) {
 		*defmode = dflmd;
