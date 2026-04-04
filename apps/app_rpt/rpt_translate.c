@@ -69,45 +69,54 @@ char aprstt_xlat(const char *instr, char *outstr)
 	static char c_xlat[] = { 0, 0, 'C', 'F', 'I', 'L', 'O', 'R', 'V', 'Y' };
 	static char d_xlat[] = { 0, 0, 0, 0, 0, 0, 0, 'S', 0, 'Z' };
 
-	if (strlen(instr) < 4)
+	if (strlen(instr) < 4) {
 		return 0;
+	}
 	lastnum = 0;
 	for (i = 1; instr[i + 2]; i++) {
 		c = instr[i];
 		switch (c) {
 		case 'A':
-			if (!lastnum)
+			if (!lastnum) {
 				return 0;
+			}
 			b = a_xlat[lastnum - '0'];
-			if (!b)
+			if (!b) {
 				return 0;
+			}
 			*outstr++ = b;
 			lastnum = 0;
 			break;
 		case 'B':
-			if (!lastnum)
+			if (!lastnum) {
 				return 0;
+			}
 			b = b_xlat[lastnum - '0'];
-			if (!b)
+			if (!b) {
 				return 0;
+			}
 			*outstr++ = b;
 			lastnum = 0;
 			break;
 		case 'C':
-			if (!lastnum)
+			if (!lastnum) {
 				return 0;
+			}
 			b = c_xlat[lastnum - '0'];
-			if (!b)
+			if (!b) {
 				return 0;
+			}
 			*outstr++ = b;
 			lastnum = 0;
 			break;
 		case 'D':
-			if (!lastnum)
+			if (!lastnum) {
 				return 0;
+			}
 			b = d_xlat[lastnum - '0'];
-			if (!b)
+			if (!b) {
 				return 0;
+			}
 			*outstr++ = b;
 			lastnum = 0;
 			break;
@@ -121,8 +130,9 @@ char aprstt_xlat(const char *instr, char *outstr)
 		case '7':
 		case '8':
 		case '9':
-			if (lastnum)
+			if (lastnum) {
 				*outstr++ = lastnum;
+			}
 			lastnum = c;
 			break;
 		default:
@@ -133,12 +143,14 @@ char aprstt_xlat(const char *instr, char *outstr)
 	overlay = instr[i++];
 	cksum = instr[i];
 	for (i = 0, j = 0; instr[i + 1]; i++) {
-		if ((instr[i] >= '0') && (instr[i] <= '9'))
+		if ((instr[i] >= '0') && (instr[i] <= '9')) {
 			j += (instr[i] - '0');
-		else if ((instr[i] >= 'A') && (instr[i] <= 'D'))
+		} else if ((instr[i] >= 'A') && (instr[i] <= 'D')) {
 			j += (instr[i] - 'A') + 10;
+		}
 	}
-	if ((cksum - '0') != (j % 10))
+	if ((cksum - '0') != (j % 10)) {
 		return 0;
+	}
 	return overlay;
 }

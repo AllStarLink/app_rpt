@@ -58,8 +58,9 @@ static int manager_rpt_local_nodes(struct mansession *s, const struct message *m
 	astman_append(s, "<?xml version=\"1.0\"?>\r\n");
 	astman_append(s, "<nodes>\r\n");
 	for (i = 0; i < nrpts; i++) {
-		if (rpt_vars[i].name[0])
+		if (rpt_vars[i].name[0]) {
 			astman_append(s, "  <node>%s</node>\r\n", rpt_vars[i].name);
+		}
 	}
 	astman_append(s, "</nodes>\r\n");
 	astman_append(s, "\r\n");	/* Properly terminate Manager output */
@@ -108,7 +109,7 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&rpt_vars[i].lock);
 			astman_append(ses, "\r\n");
-			return (0);
+			return 0;
 		}
 	}
 	astman_send_error(ses, m, "RptStatus unknown or missing node");
@@ -163,20 +164,21 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			tail_type = myrpt->p.s[myrpt->p.sysstate_cur].alternatetail ? "1" : "0";
 			iconns = myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns ? "1" : "0";
 
-			if (!myrpt->totimer)
+			if (!myrpt->totimer) {
 				tot_state = "0";	//"TIMED OUT!";
-			else if (myrpt->totimer != myrpt->p.totime)
+			} else if (myrpt->totimer != myrpt->p.totime) {
 				tot_state = "1";	//"ARMED";
-			else
+			} else {
 				tot_state = "2";	//"RESET";
+			}
 
-			if (myrpt->tailid)
+			if (myrpt->tailid) {
 				ider_state = "0";	//"QUEUED IN TAIL";
-			else if (myrpt->mustid)
+			} else if (myrpt->mustid) {
 				ider_state = "1";	//"QUEUED FOR CLEANUP";
-			else
+			} else {
 				ider_state = "2";	//"CLEAN";
-
+			}
 			switch (myrpt->callmode) {
 			case CALLMODE_DIALING:
 				patch_state = "0";	//"DIALING";
@@ -239,10 +241,11 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				connecttime %= 1000L;
 				snprintf(conntime, 20, "%02d:%02d:%02d", hours, minutes, seconds);
 				conntime[20] = 0;
-				if (l->thisconnected)
+				if (l->thisconnected) {
 					connstate = "ESTABLISHED";
-				else
+				} else {
 					connstate = "CONNECTING";
+				}
 				astman_append(ses, "Conn: %-10s%-20s%-12d%-11s%-20s%-20s\r\n", l->name, peer, l->reconnects,
 					(l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
@@ -401,16 +404,21 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 				/* Make a copy of all stat variables while locked */
 				rpt_mutex_lock(&myrpt->lock); /* LOCK */
 				if ((remoteon = myrpt->remoteon)) {
-					if (!ast_strlen_zero(myrpt->loginuser))
+					if (!ast_strlen_zero(myrpt->loginuser)) {
 						loginuser = ast_strdup(myrpt->loginuser);
-					if (!ast_strlen_zero(myrpt->loginlevel))
+					}
+					if (!ast_strlen_zero(myrpt->loginlevel)) {
 						loginlevel = ast_strdup(myrpt->loginlevel);
-					if (!ast_strlen_zero(myrpt->freq))
+					}
+					if (!ast_strlen_zero(myrpt->freq)) {
 						freq = ast_strdup(myrpt->freq);
-					if (!ast_strlen_zero(myrpt->rxpl))
+					}
+					if (!ast_strlen_zero(myrpt->rxpl)) {
 						rxpl = ast_strdup(myrpt->rxpl);
-					if (!ast_strlen_zero(myrpt->txpl))
+					}
+					if (!ast_strlen_zero(myrpt->txpl)) {
 						txpl = ast_strdup(myrpt->txpl);
+					}
 					remmode = myrpt->remmode;
 					offset = myrpt->offset;
 					powerlevel = myrpt->powerlevel;
@@ -520,69 +528,77 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 				}
 			}
 			ao2_iterator_destroy(&l_it);
-			if (myrpt->keyed)
+			if (myrpt->keyed) {
 				input_signal = "YES";
-			else
+			} else {
 				input_signal = "NO";
+			}
 
-			if (myrpt->txkeyed)
+			if (myrpt->txkeyed) {
 				transmitterkeyed = "YES";
-			else
+			} else {
 				transmitterkeyed = "NO";
+			}
 
-			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
+			if (myrpt->p.parrotmode != PARROT_MODE_OFF) {
 				parrot_ena = "ENABLED";
-			else
+			} else {
 				parrot_ena = "DISABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable) {
 				sys_ena = "DISABLED";
-			else
+			} else {
 				sys_ena = "ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable) {
 				tot_ena = "DISABLED";
-			else
+			} else {
 				tot_ena = "ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable)
+			}
+			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable) {
 				link_ena = "DISABLED";
-			else
+			} else {
 				link_ena = "ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable) {
 				patch_ena = "DISABLED";
-			else
+			} else {
 				patch_ena = "ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) {
 				sch_ena = "DISABLED";
-			else
+			} else {
 				sch_ena = "ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable)
+			}
+			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable) {
 				user_funs = "DISABLED";
-			else
+			} else {
 				user_funs = "ENABLED";
-
-			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail)
+			}
+			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail) {
 				tail_type = "ALTERNATE";
-			else
+			} else {
 				tail_type = "STANDARD";
-
-			if (!myrpt->totimer)
+			}
+			if (!myrpt->totimer) {
 				tot_state = "TIMED OUT!";
-			else if (myrpt->totimer != myrpt->p.totime)
+			} else if (myrpt->totimer != myrpt->p.totime) {
 				tot_state = "ARMED";
-			else
+			} else {
 				tot_state = "RESET";
+			}
 
-			if (myrpt->tailid)
+			if (myrpt->tailid) {
 				ider_state = "QUEUED IN TAIL";
-			else if (myrpt->mustid)
+			} else if (myrpt->mustid) {
 				ider_state = "QUEUED FOR CLEANUP";
-			else
+			} else {
 				ider_state = "CLEAN";
+			}
 
 			switch (myrpt->callmode) {
 			case 1:
@@ -631,8 +647,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 			astman_append(s, "KeyupsSinceSystemInitialization: %d\r\n", totalkeyups);
 			astman_append(s, "DtmfCommandsToday: %d\r\n", dailyexecdcommands);
 			astman_append(s, "DtmfCommandsSinceSystemInitialization: %d\r\n", totalexecdcommands);
-			astman_append(s, "LastDtmfCommandExecuted: %s\r\n",
-						  (lastdtmfcommand && strlen(lastdtmfcommand)) ? lastdtmfcommand : not_applicable);
+			astman_append(s, "LastDtmfCommandExecuted: %s\r\n", (lastdtmfcommand && strlen(lastdtmfcommand)) ? lastdtmfcommand : not_applicable);
 
 			hours = dailytxtime / 3600000;
 			dailytxtime %= 3600000;
@@ -670,8 +685,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 
 			astman_append(s, "Autopatch: %s\r\n", patch_ena);
 			astman_append(s, "AutopatchState: %s\r\n", patch_state);
-			astman_append(s, "AutopatchCalledNumber: %s\r\n",
-						  (called_number && strlen(called_number)) ? called_number : not_applicable);
+			astman_append(s, "AutopatchCalledNumber: %s\r\n", (called_number && strlen(called_number)) ? called_number : not_applicable);
 			astman_append(s, "ReversePatchIaxrptConnected: %s\r\n", reverse_patch_state);
 			astman_append(s, "UserLinkingCommands: %s\r\n", link_ena);
 			astman_append(s, "UserFunctions: %s\r\n", user_funs);
@@ -729,8 +743,9 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 	}
 	/* Try to find the command in the table */
 	for (i = 0; mct[i].cmd; i++) {
-		if (!strcmp(mct[i].cmd, cmd))
+		if (!strcmp(mct[i].cmd, cmd)) {
 			break;
+		}
 	}
 	if (!mct[i].cmd) {
 		astman_send_error(s, m, "RptStatus unknown command");
