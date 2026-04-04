@@ -2505,8 +2505,9 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 
 	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 	ao2_ref(cap, -1);
-	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
+	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list))) {
 		ast_frfree(f1);
+	}
 	if (l->chan) {
 		if (rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name)) {
 			ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
@@ -2800,13 +2801,16 @@ static void do_scheduler(struct rpt *myrpt)
 		for (i = 0, vp = value; i < 5; i++) {
 			if (!*vp)
 				break;
-			while ((*vp == ' ') || (*vp == 0x09)) /* get rid of any leading white space */
+			while ((*vp == ' ') || (*vp == 0x09)) { /* get rid of any leading white space */
 				vp++;
+			}
 			strs[i] = vp;										/* save pointer to beginning of substring */
-			while ((*vp != ' ') && (*vp != 0x09) && (*vp != 0)) /* skip over substring */
+			while ((*vp != ' ') && (*vp != 0x09) && (*vp != 0)) { /* skip over substring */
 				vp++;
-			if (*vp)
+			}
+			if (*vp) {
 				*vp++ = 0; /* mark end of substring */
+			}
 		}
 		ast_debug(7, "i = %d, min = %s, hour = %s, mday=%s, mon=%s, wday=%s\n", i, strs[0], strs[1], strs[2], strs[3], strs[4]);
 		if (i == 5) {
@@ -4280,8 +4284,9 @@ static inline int localtxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 				f = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list);
 			}
 		} else {
-			while ((f1 = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list)))
+			while ((f1 = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list))) {
 				ast_frfree(f1);
+			}
 		}
 		ast_write(myrpt->txchannel, f);
 	}
@@ -7706,8 +7711,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 	myrpt->remote_webtransceiver = 0;
 	/* wait for telem to be done */
-	while (myrpt->tele.next != &myrpt->tele)
+	while (myrpt->tele.next != &myrpt->tele) {
 		usleep(50000);
+	}
 	ast_stop_mixmonitor(chan, NULL);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->hfscanmode = HF_SCAN_OFF;
@@ -7877,15 +7883,19 @@ static int reload(void)
 	ast_mutex_lock(&rpt_master_lock);
 	load_config(1);
 	for (n = 0; n < nrpts; n++) {
-		if (rpt_vars[n].reload_request)
+		if (rpt_vars[n].reload_request) {
 			continue;
-		if (rpt_vars[n].rxchannel)
+		}
+		if (rpt_vars[n].rxchannel) {
 			ast_softhangup(rpt_vars[n].rxchannel, AST_SOFTHANGUP_DEV);
+		}
 		rpt_vars[n].deleted = RPT_DELETED_PENDING;
 	}
-	for (n = 0; n < nrpts; n++)
-		if (rpt_vars[n].deleted == RPT_DELETED_NONE)
+	for (n = 0; n < nrpts; n++) {
+		if (rpt_vars[n].deleted == RPT_DELETED_NONE) {
 			rpt_vars[n].reload = 1;
+		}
+	}
 	ast_mutex_unlock(&rpt_master_lock);
 	return 0;
 }

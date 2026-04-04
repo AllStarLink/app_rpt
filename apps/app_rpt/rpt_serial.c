@@ -448,8 +448,9 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 	if (rpt_debug_level()) {
 		ast_debug(7, "ioport=%s baud=%d iofd=0x%x\n", myrpt->p.ioport, myrpt->p.iospeed, myrpt->iofd);
 		ast_debug(7, "String output was %s:\n", txbuf);
-		for (i = 0; i < txbytes; i++)
+		for (i = 0; i < txbytes; i++) {
 			ast_debug(7, "%02X ", (unsigned char) txbuf[i]);
+		}
 		ast_debug(7, "\n");
 	}
 
@@ -496,8 +497,9 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 		}
 		if (rpt_debug_level()) {
 			ast_debug(3, "String returned was:\n");
-			for (j = 0; j < i; j++)
+			for (j = 0; j < i; j++) {
 				ast_debug(3, "%02X ", (unsigned char) rxbuf[j]);
+			}
 			ast_debug(3, "\n");
 		}
 		return i;

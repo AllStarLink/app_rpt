@@ -152,8 +152,9 @@ int decimals2int(char *fraction)
 	if (!len) {
 		return 0;
 	}
-	for (i = 0; i < len; i++, multiplier /= 10)
+	for (i = 0; i < len; i++, multiplier /= 10) {
 		res += (fraction[i] - '0') * multiplier;
+	}
 	return res;
 }
 
