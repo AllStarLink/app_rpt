@@ -54,7 +54,7 @@
 	IIR 	= Infinite Impulse Response (Filter)
 */
 
-// XPMR_FILE_VERSION(__FILE__, "$Revision: 491 $")
+/* XPMR_FILE_VERSION(__FILE__, "$Revision: 491 $") */
 
 #define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
 #if GCC_VERSION > 40600
@@ -80,8 +80,8 @@
 #include "xpmr_coef.h"
 #include "sinetabx.h"
 
-static i16 pmrChanIndex = 0; // count of created pmr instances
-// static i16 pmrSpsIndex=0;
+static i16 pmrChanIndex = 0; /* count of created pmr instances */
+/* static i16 pmrSpsIndex=0; */
 
 #if (DTX_PROG == 1) || XPMR_PPTP == 1
 static int ppdrvdev = 0;
@@ -92,7 +92,7 @@ static int ppdrvdev = 0;
 */
 void strace(i16 point, t_sdbg *sdbg, i16 index, i16 value)
 {
-	// make dbg_trace buffer in structure
+	/* make dbg_trace buffer in structure */
 	if (!sdbg->mode || sdbg->point[point] < 0) {
 		return;
 	} else {
@@ -226,7 +226,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	TRACEF(1, "pChan->pTxCodeSrc %s \n", pChan->pTxCodeSrc);
 	TRACEF(1, "pChan->pTxCodeDefault %s \n", pChan->pTxCodeDefault);
 
-	// printf("code_string_parse() %s / %s / %s / %s \n",pChan->name, pChan->pTxCodeDefault,pChan->pTxCodeSrc,pChan->pRxCodeSrc);
+	/* printf("code_string_parse() %s / %s / %s / %s \n",pChan->name, pChan->pTxCodeDefault,pChan->pTxCodeSrc,pChan->pRxCodeSrc); */
 
 	maxctcssindex = CTCSS_NULL;
 	maxctcsstxfreq = CTCSS_NULL;
@@ -263,7 +263,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	if (!pChan->rxCtcss->testIndex)
 		pChan->rxCtcss->testIndex = 3;
 
-	pChan->rxctcssfreq[0] = 0; // decode now   CTCSS_RXONLY
+	pChan->rxctcssfreq[0] = 0; /* decode now   CTCSS_RXONLY */
 
 	for (i = 0; i < CTCSS_NUM_CODES; i++) {
 		pChan->rxctcss[i] = 0;
@@ -277,7 +277,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	xpmrx(pChan, XXO_LSDCODEPARSE);
 #endif
 
-	// Do Receive Codes String
+	/* Do Receive Codes String */
 	for (i = 0; i < pChan->numrxcodes; i++) {
 		i16 ii, ri, ti;
 		float f;
@@ -354,13 +354,13 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		ptdet = &(pChan->rxCtcss->tdet[i]);
 		ptdet->counterFactor = coef_ctcss_div[i];
 		ptdet->state = 1;
-		ptdet->setpt = (M_Q15 * 0.041); // 0.069
+		ptdet->setpt = (M_Q15 * 0.041); /* 0.069 */
 		ptdet->hyst = (M_Q15 * 0.0130);
-		ptdet->binFactor = (M_Q15 * 0.135); // was 0.140
+		ptdet->binFactor = (M_Q15 * 0.135); /* was 0.140 */
 		ptdet->fudgeFactor = 8;
 	}
 
-	// DEFAULT TX CODE
+	/* DEFAULT TX CODE */
 	TRACEF(1, "code_string_parse() Default Tx Code %s \n", pChan->pTxCodeDefault);
 	pChan->txcodedefaultsmode = SMODE_NULL;
 	p = pChan->pStr = pChan->pTxCodeDefault;
@@ -387,7 +387,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		}
 	}
 
-	// set x for maximum length and just change pointers
+	/* set x for maximum length and just change pointers */
 	TRACEF(1, "code_string_parse() Filter Config \n");
 	pSps = pChan->spsTxLsdLpf;
 	if (pSps->x) {
@@ -419,7 +419,7 @@ i16 code_string_parse(t_pmr_chan *pChan)
 		TRACEF(1, "code_string_parse() Tx Filter Freq Low\n");
 	}
 
-	// CTCSS Rx Decoder Low Pass Filter
+	/* CTCSS Rx Decoder Low Pass Filter */
 	hit = 0;
 	ii = CtcssFreqIndex(203.5);
 	for (i = ii; i < CTCSS_NUM_CODES; i++) {
@@ -551,7 +551,7 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 	for (i = 0; i < samples; i++) {
 		i16 n;
 
-		// shift the old samples
+		/* shift the old samples */
 #if 0
 		for (n = nx - 1; n > 0; n--)
 			x[n] = x[n - 1];
@@ -566,11 +566,11 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 			y += fir_rxlpf[mySps->parentChan->rxlpf].coefs[n] * x[n];
 
 		y = ((y / calcAdjust) * outputGain) / M_Q8;
-		input[i * 2] = y; // debug output LowPass at 48KS/s
+		input[i * 2] = y; /* debug output LowPass at 48KS/s */
 #endif
 
 		if (doNoise) {
-			// calculate noise filter output
+			/* calculate noise filter output */
 			naccum = 0;
 			if (mySps->parentChan->rxNoiseFilType == 0) {
 				for (n = 0; n < taps_fir_bpf_noise_1; n++)
@@ -582,7 +582,7 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 				naccum /= gain_fir_bpf_noise_2;
 			}
 #if XPMR_TRACE_FRONTEND == 1
-			input[i * 2 + 1] = naccum; // output noise filter results
+			input[i * 2 + 1] = naccum; /* output noise filter results */
 #endif
 			npwr += naccum * naccum;
 		}
@@ -612,15 +612,15 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 			else if (y < -32767)
 				y = -32767;
 #endif
-			output[iOutput++] = y; // Rx Baseband decimated
+			output[iOutput++] = y; /* Rx Baseband decimated */
 
-		} // if decimator
+		} /* if decimator */
 	}
 
 	if (doNoise) {
 		npwr = sqrt(npwr) / 16;
 
-		// compOut=Squelched
+		/* compOut=Squelched */
 		if (mySps->blanking)
 			mySps->blanking--;
 		mySps->blanking = 0;
@@ -743,7 +743,7 @@ i16 pmr_gp_fir(t_pmr_sps *mySps)
 			y = ((y / calcAdjust) * outputGain) / M_Q8;
 
 			if (y > 32767)
-				y = 32767; // overflow
+				y = 32767; /* overflow */
 			else if (y < -32767)
 				y = -32767;
 
@@ -764,7 +764,7 @@ i16 pmr_gp_fir(t_pmr_sps *mySps)
 #endif
 		}
 
-		// amplitude detector
+		/* amplitude detector */
 		if (setpt) {
 			i16 accum = y;
 
@@ -836,8 +836,8 @@ i16 gp_inte_00(t_pmr_sps *mySps)
 	coeff01 = ((i16 *) mySps->coef)[1];
 	state00 = ((i32 *) mySps->x)[0];
 
-	// note fixed gain of 2 to compensate for attenuation
-	// in passband
+	/* note fixed gain of 2 to compensate for attenuation */
+	/* in passband */
 
 	for (i = 0; i < npoints; i++) {
 		accum = input[i];
@@ -915,22 +915,22 @@ i16 CenterSlicer(t_pmr_sps *mySps)
 	i32 i;
 	i32 accum;
 
-	i32 amax;  // buffer amplitude maximum
-	i32 amin;  // buffer amplitude minimum
-	i32 apeak; // buffer amplitude peak
+	i32 amax;  /* buffer amplitude maximum */
+	i32 amin;  /* buffer amplitude minimum */
+	i32 apeak; /* buffer amplitude peak */
 	i32 center;
-	i32 setpt; // amplitude set point for peak tracking
+	i32 setpt; /* amplitude set point for peak tracking */
 
-	i32 discounteru; // amplitude detector integrator discharge counter upper
-	i32 discounterl; // amplitude detector integrator discharge counter lower
-	i32 discfactor;	 // amplitude detector integrator discharge factor
+	i32 discounteru; /* amplitude detector integrator discharge counter upper */
+	i32 discounterl; /* amplitude detector integrator discharge counter lower */
+	i32 discfactor;	 /* amplitude detector integrator discharge factor */
 
 	TRACEJ(5, "CenterSlicer() %i\n", mySps->enabled);
 	if (!mySps->enabled)
 		return (1);
 
 	input = mySps->source;
-	output = mySps->sink; // limited output
+	output = mySps->sink; /* limited output */
 	buff = mySps->buff;
 
 	npoints = mySps->nSamples;
@@ -991,9 +991,9 @@ i16 CenterSlicer(t_pmr_sps *mySps)
 		center = (amax + amin) / 2;
 		accum = accum - center;
 
-		output[i] = accum; // sink output unlimited/centered.
+		output[i] = accum; /* sink output unlimited/centered. */
 
-		// do limiter function
+		/* do limiter function */
 		if (accum > inputGainB)
 			accum = inputGainB;
 		else if (accum < -inputGainB)
@@ -1002,10 +1002,10 @@ i16 CenterSlicer(t_pmr_sps *mySps)
 
 #if XPMR_DEBUG0 == 1
 #if 0
-		mySps->parentChan->pRxLsdCen[i] = center;	// trace center ref
+		mySps->parentChan->pRxLsdCen[i] = center;	/* trace center ref */
 #else
 		tfx = 0;
-		if ((tfx++ / 8) & 1) // trace min/max levels
+		if ((tfx++ / 8) & 1) /* trace min/max levels */
 			mySps->parentChan->pRxLsdCen[i] = amax;
 		else
 			mySps->parentChan->pRxLsdCen[i] = amin;
@@ -1040,14 +1040,14 @@ i16 MeasureBlock(t_pmr_sps *mySps)
 	i32 i;
 	i32 accum;
 
-	i16 amax;	   // buffer amplitude maximum
-	i16 amin;	   // buffer amplitude minimum
-	i16 apeak = 0; // buffer amplitude peak (peak to peak)/2
-	i16 setpt;	   // amplitude set point for amplitude comparator
+	i16 amax;	   /* buffer amplitude maximum */
+	i16 amin;	   /* buffer amplitude minimum */
+	i16 apeak = 0; /* buffer amplitude peak (peak to peak)/2 */
+	i16 setpt;	   /* amplitude set point for amplitude comparator */
 
-	i32 discounteru; // amplitude detector integrator discharge counter upper
-	i32 discounterl; // amplitude detector integrator discharge counter lower
-	i32 discfactor;	 // amplitude detector integrator discharge factor
+	i32 discounteru; /* amplitude detector integrator discharge counter upper */
+	i32 discounterl; /* amplitude detector integrator discharge counter lower */
+	i32 discfactor;	 /* amplitude detector integrator discharge factor */
 
 	TRACEJ(5, "MeasureBlock() %i\n", mySps->enabled);
 
@@ -1107,7 +1107,7 @@ i16 MeasureBlock(t_pmr_sps *mySps)
 	else
 		mySps->compOut = 0;
 
-	// TRACEX((1, " -MeasureBlock()=%i\n",mySps->apeak));
+	/* TRACEX((1, " -MeasureBlock()=%i\n",mySps->apeak)); */
 	return 0;
 }
 
@@ -1117,7 +1117,7 @@ i16 MeasureBlock(t_pmr_sps *mySps)
 i16 SoftLimiter(t_pmr_sps *mySps)
 {
 	i16 npoints;
-	// i16 samples, lhit,uhit;
+	/* i16 samples, lhit,uhit; */
 	i16 *input, *output;
 
 	i32 outputGain;
@@ -1125,10 +1125,10 @@ i16 SoftLimiter(t_pmr_sps *mySps)
 	i32 accum;
 	i32 tmp;
 
-	i32 amax; // buffer amplitude maximum
-	i32 amin; // buffer amplitude minimum
-	// i32  apeak;       // buffer amplitude peak
-	i32 setpt; // amplitude set point for amplitude comparator
+	i32 amax; /* buffer amplitude maximum */
+	i32 amin; /* buffer amplitude minimum */
+	/* i32  apeak;       buffer amplitude peak */
+	i32 setpt; /* amplitude set point for amplitude comparator */
 
 	input = mySps->source;
 	output = mySps->sink;
@@ -1145,7 +1145,7 @@ i16 SoftLimiter(t_pmr_sps *mySps)
 
 	for (i = 0; i < npoints; i++) {
 		accum = input[i];
-		// accum=input[i]*mySps->inputGain/256;
+		/* accum=input[i]*mySps->inputGain/256; */
 
 		if (accum > setpt) {
 			tmp = ((accum - setpt) * 4) / 128;
@@ -1206,17 +1206,17 @@ i16 SigGen(t_pmr_sps *mySps)
 			mySps->state = 2;
 	} else if (mySps->option == 2) {
 		i16 shiftfactor = CTCSS_TURN_OFF_SHIFT;
-		// phase shift request
+		/* phase shift request */
 		mySps->option = 0;
 		mySps->state = 2;
-		mySps->discounterl = CTCSS_TURN_OFF_TIME - (2 * MS_PER_FRAME); //
+		mySps->discounterl = CTCSS_TURN_OFF_TIME - (2 * MS_PER_FRAME);
 
 		mySps->discounteru =
 			(mySps->discounteru + (((SAMPLES_PER_SINE * shiftfactor) / 360) * PH_FRACT_FACT)) % (SAMPLES_PER_SINE * PH_FRACT_FACT);
-		// printf("shiftfactor = %i\n",shiftfactor);
-		// shiftfactor+=10;
+		/* printf("shiftfactor = %i\n",shiftfactor); */
+		/* shiftfactor+=10; */
 	} else if (mySps->option == 3) {
-		// stop it and clear the output buffer
+		/* stop it and clear the output buffer */
 		mySps->option = 0;
 		mySps->state = 0;
 		mySps->enabled = 0;
@@ -1225,7 +1225,7 @@ i16 SigGen(t_pmr_sps *mySps)
 			mySps->sink[(i * numChanOut) + selChanOut] = 0;
 		return (0);
 	} else if (mySps->state == 2) {
-		// doing turn off
+		/* doing turn off */
 		mySps->discounterl -= MS_PER_FRAME;
 		if (mySps->discounterl <= 0) {
 			mySps->option = 3;
@@ -1239,12 +1239,12 @@ i16 SigGen(t_pmr_sps *mySps)
 
 	for (i = 0; i < mySps->nSamples; i++) {
 		if (!waveform) {
-			// sine
-			// tmp=(sinetablex[ph/PH_FRACT_FACT]*amplitude)/M_Q16;
+			/* sine */
+			/* tmp=(sinetablex[ph/PH_FRACT_FACT]*amplitude)/M_Q16; */
 			accum = sinetablex[ph / PH_FRACT_FACT];
 			accum = (accum * outputgain) / M_Q8;
 		} else {
-			// square
+			/* square */
 			if (ph > SAMPLES_PER_SINE / 2)
 				accum = outputgain / M_Q8;
 			else
@@ -1276,8 +1276,8 @@ i16 pmrMixer(t_pmr_sps *mySps)
 {
 	i32 accum;
 	i16 i, *input, *inputB, *output;
-	i16 inputGain, inputGainB; // apply to input data   in Q7.8 format
-	i16 outputGain;			   // apply to output data  in Q7.8 format
+	i16 inputGain, inputGainB; /* apply to input data   in Q7.8 format */
+	i16 outputGain;			   /* apply to output data  in Q7.8 format */
 	i16 discounteru, discounterl, amax, amin, setpt, discfactor;
 	i16 npoints, uhit, lhit, apeak, measPeak;
 
@@ -1435,7 +1435,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 
 	thit = hit = -1;
 
-	// TRACEX((1, " ctcss_detect() %i  %i  %i  %i\n", CTCSS_NUM_CODES,0,0,0));
+	/* TRACEX((1, " ctcss_detect() %i  %i  %i  %i\n", CTCSS_NUM_CODES,0,0,0)); */
 
 	for (tnum = 0; tnum < CTCSS_NUM_CODES; tnum++) {
 		i32 accum, peak;
@@ -1444,7 +1444,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 		i16 binFactor;
 
 		TRACEF(6, " ctcss_detect() tnum=%i %i\n", tnum, pChan->rxCtcssMap[tnum]);
-		// if(tnum==14)printf("ctcss_detect() %i %i %i\n",tnum,pChan->rxCtcssMap[tnum], pChan->rxCtcss->decode );
+		/* if(tnum==14)printf("ctcss_detect() %i %i %i\n",tnum,pChan->rxCtcssMap[tnum], pChan->rxCtcss->decode ); */
 
 		if ((pChan->rxCtcssMap[tnum] == CTCSS_NULL) || (pChan->rxCtcss->decode > CTCSS_NULL && (tnum != pChan->rxCtcss->decode)))
 			continue;
@@ -1465,7 +1465,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 
 			ptdet->counter += ptdet->counterFactor;
 
-			accum = pInput[indexNow - 1]; // duuuude's major bug fix!
+			accum = pInput[indexNow - 1]; /* duuuude's major bug fix! */
 
 			ptdet->z[ptdet->zIndex] += (((accum - ptdet->z[ptdet->zIndex]) * binFactor) / M_Q15);
 
@@ -1482,7 +1482,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 				i32 temp0, temp1;
 				i16 x0;
 
-				// differentiate
+				/* differentiate */
 				x0 = ptdet->zd;
 				temp0 = x0 * a1;
 				ptdet->zd = ptdet->peak;
@@ -1583,7 +1583,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 #endif
 	}
 
-	// TRACEX((1, " ctcss_detect() thit %i\n",thit));
+	/* TRACEX((1, " ctcss_detect() thit %i\n",thit)); */
 
 	if (pChan->rxCtcss->BlankingTimer > 0)
 		pChan->rxCtcss->BlankingTimer -= points;
@@ -1606,7 +1606,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 			ptdet->z[0] = ptdet->z[1] = ptdet->z[2] = ptdet->z[3] = 0;
 		}
 	}
-	// TRACEX((1, " ctcss_detect() thit %i %i\n",thit,pChan->rxCtcss->decode));
+	/* TRACEX((1, " ctcss_detect() thit %i %i\n",thit,pChan->rxCtcss->decode)); */
 	return (0);
 }
 
@@ -1618,7 +1618,7 @@ i16 TxTestTone(t_pmr_chan *pChan, i16 function)
 	if (function == 1) {
 		pChan->spsSigGen1->enabled = 1;
 		pChan->spsSigGen1->option = 1;
-		pChan->spsSigGen1->outputGain = (.23125 * M_Q8); // to match *99 level
+		pChan->spsSigGen1->outputGain = (.23125 * M_Q8); /* to match *99 level */
 		pChan->spsTx->source = pChan->spsSigGen1->sink;
 	} else {
 		pChan->spsSigGen1->option = 3;
@@ -1759,7 +1759,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->rxDeEmpEnable = 1;
 
 	pChan->rxCarrierPoint = (pChan->rxSquelchPoint * 32767) / 100;
-	pChan->rxCarrierHyst = 3000; // pChan->rxCarrierPoint/15;
+	pChan->rxCarrierHyst = 3000; /* pChan->rxCarrierPoint/15; */
 
 	pChan->rxDcsDecodeEnable = 0;
 
@@ -1804,7 +1804,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	pChan->prxMeasure = ast_calloc(numSamples, 2);
 
-	pChan->pTxOut = ast_calloc(numSamples, 2 * 2 * 6); // output buffer
+	pChan->pTxOut = ast_calloc(numSamples, 2 * 2 * 6); /* output buffer */
 
 #ifdef HAVE_XPMRX
 	pChan->pLsdEnc = ast_calloc(sizeof(t_encLsd), 1);
@@ -1840,11 +1840,11 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->rxCtcss->tdet[i].pDebug3 = ast_calloc(numSamples, 2);
 	}
 
-	// buffer, 2 bytes per sample, and 16 channels
+	/* buffer, 2 bytes per sample, and 16 channels */
 	pChan->prxDebug = ast_calloc(numSamples * 16, 2);
 	pChan->ptxDebug = ast_calloc(numSamples * 16, 2);
 
-	// TSCOPE CONFIGURATION SETSCOPE configure debug traces and sources for each channel of the output
+	/* TSCOPE CONFIGURATION SETSCOPE configure debug traces and sources for each channel of the output */
 	pChan->sdbg = (t_sdbg *) ast_calloc(sizeof(t_sdbg), 1);
 
 	for (i = 0; i < XPMR_DEBUG_CHANS; i++) {
@@ -1853,7 +1853,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	TRACEF(1, "pChan->tracetype = %i\n", pChan->tracetype);
 
-	if (pChan->tracetype == 1) // CTCSS DECODE
+	if (pChan->tracetype == 1) /* CTCSS DECODE */
 	{
 		pChan->sdbg->source[0] = pChan->pRxDemod;
 		pChan->sdbg->source[1] = pChan->pRxBase;
@@ -1868,7 +1868,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->sdbg->source[10] = pChan->pRxBase;
 		pChan->sdbg->source[11] = pChan->pRxSpeaker;
 	}
-	if (pChan->tracetype == 2) // CTCSS DECODE
+	if (pChan->tracetype == 2) /* CTCSS DECODE */
 	{
 		pChan->sdbg->source[0] = pChan->pRxDemod;
 		pChan->sdbg->source[1] = pChan->pRxBase;
@@ -1886,7 +1886,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->sdbg->trace[13] = TX_PTT_IN;
 		pChan->sdbg->trace[14] = TX_PTT_OUT;
 		pChan->sdbg->source[15] = pChan->pTxLsdLpf;
-	} else if (pChan->tracetype == 3) // DCS DECODE
+	} else if (pChan->tracetype == 3) /* DCS DECODE */
 	{
 		pChan->sdbg->source[0] = pChan->pRxDemod;
 		pChan->sdbg->source[1] = pChan->pRxBase;
@@ -1905,7 +1905,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->sdbg->trace[14] = TX_LSD_GEN;
 		pChan->sdbg->source[14] = pChan->pTxLsd;
 		pChan->sdbg->source[15] = pChan->pTxLsdLpf;
-	} else if (pChan->tracetype == 4) // LSD DECODE
+	} else if (pChan->tracetype == 4) /* LSD DECODE */
 	{
 		pChan->sdbg->source[0] = pChan->pRxDemod;
 		pChan->sdbg->source[1] = pChan->pRxBase;
@@ -1922,10 +1922,10 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->sdbg->trace[12] = TX_PTT_OUT;
 		pChan->sdbg->trace[13] = TX_LSD_CLK;
 		pChan->sdbg->trace[14] = TX_LSD_DAT;
-		// pChan->sdbg->trace  [14]=TX_LSD_GEN;
-		// pChan->sdbg->source [14]=pChan->pTxLsd;
+		/* pChan->sdbg->trace  [14]=TX_LSD_GEN; */
+		/* pChan->sdbg->source [14]=pChan->pTxLsd; */
 		pChan->sdbg->source[15] = pChan->pTxLsdLpf;
-	} else if (pChan->tracetype == 5) // LSD LOGIC
+	} else if (pChan->tracetype == 5) /* LSD LOGIC */
 	{
 		pChan->sdbg->source[0] = pChan->pRxBase;
 		pChan->sdbg->trace[1] = RX_NOISE_TRIG;
@@ -1936,7 +1936,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->sdbg->trace[6] = TX_PTT_OUT;
 		pChan->sdbg->source[7] = pChan->pTxLsdLpf;
 	} else if (pChan->tracetype == 6) {
-		// tx clock skew and jitter buffer
+		/* tx clock skew and jitter buffer */
 		pChan->sdbg->source[0] = pChan->pRxDemod;
 		pChan->sdbg->source[5] = pChan->pTxBase;
 		pChan->sdbg->trace[6] = TX_DEDRIFT_LEAD;
@@ -1944,7 +1944,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->sdbg->trace[8] = TX_DEDRIFT_FACTOR;
 		pChan->sdbg->trace[9] = TX_DEDRIFT_DRIFT;
 	} else if (pChan->tracetype == 7) {
-		// tx path
+		/* tx path */
 		pChan->sdbg->source[0] = pChan->pRxBase;
 		pChan->sdbg->trace[1] = RX_NOISE_TRIG;
 		pChan->sdbg->source[2] = pChan->pRxLsd;
@@ -1970,7 +1970,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 #endif
 
 #ifdef XPMRX_H
-	// LSD GENERATOR
+	/* LSD GENERATOR */
 	pSps = pChan->spsLsdGen = createPmrSps(pChan);
 	pSps->source = NULL;
 	pSps->sink = pChan->pTxLsd;
@@ -1985,7 +1985,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->enabled = 0;
 #endif
 
-	// General Purpose Function Generator
+	/* General Purpose Function Generator */
 	pSps = pChan->spsSigGen1 = createPmrSps(pChan);
 	pSps->sink = pChan->pSigGen1;
 	pSps->numChanOut = 1;
@@ -1993,14 +1993,14 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->sigProc = SigGen;
 	pSps->nSamples = pChan->nSamplesTx;
 	pSps->sampleRate = SAMPLE_RATE_NETWORK;
-	pSps->freq = 10000; // in increments of 0.1 Hz
+	pSps->freq = 10000; /* in increments of 0.1 Hz */
 	pSps->outputGain = (.25 * M_Q8);
 	pSps->option = 0;
 	pSps->interpolate = 1;
 	pSps->decimate = 1;
 	pSps->enabled = 0;
 
-	// CTCSS ENCODER
+	/* CTCSS ENCODER */
 	pSps = pChan->spsSigGen0 = createPmrSps(pChan);
 	pSps->sink = pChan->pTxLsd;
 	pSps->sigProc = SigGen;
@@ -2008,14 +2008,14 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->selChanOut = 0;
 	pSps->nSamples = pChan->nSamplesTx;
 	pSps->sampleRate = SAMPLE_RATE_NETWORK;
-	pSps->freq = 1000; // in 0.1 Hz steps
+	pSps->freq = 1000; /* in 0.1 Hz steps */
 	pSps->outputGain = (0.5 * M_Q8);
 	pSps->option = 0;
 	pSps->interpolate = 1;
 	pSps->decimate = 1;
 	pSps->enabled = 0;
 
-	// Tx LSD Low Pass Filter
+	/* Tx LSD Low Pass Filter */
 	pSps = pChan->spsTxLsdLpf = createPmrSps(pChan);
 	pSps->source = pChan->pTxLsd;
 	pSps->sink = pChan->pTxLsdLpf;
@@ -2029,7 +2029,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->inputGain = (1 * M_Q8);
 	pSps->outputGain = (1 * M_Q8);
 
-	// configure the longer, lower cutoff filter by default
+	/* configure the longer, lower cutoff filter by default */
 	pSps->ncoef = taps_fir_lpf_215_9_88;
 	pSps->size_coef = 2;
 	pSps->coef = (void *) coef_fir_lpf_215_9_88;
@@ -2046,13 +2046,13 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	TRACEF(1, "spsTxLsdLpf = sps \n");
 
-	// RX Process
+	/* RX Process */
 	TRACEF(1, "create rx\n");
 	pSps = NULL;
 
-	// allocate space for first sps and set pointers
+	/* allocate space for first sps and set pointers */
 	pSps = pChan->spsRx = createPmrSps(pChan);
-	pSps->source = NULL; // set when called
+	pSps->source = NULL; /* set when called */
 	pSps->sink = pChan->pRxBase;
 	pSps->sigProc = pmr_rx_frontend;
 	pSps->enabled = 1;
@@ -2080,8 +2080,8 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->debugBuff2 = pChan->prxDebug0;
 #endif
 
-	// allocate space for next sps and set pointers
-	// Rx SubAudible Decoder Low Pass Filter
+	/* allocate space for next sps and set pointers */
+	/* Rx SubAudible Decoder Low Pass Filter */
 	pSps = pChan->spsRxLsd = pSps->nextSps = createPmrSps(pChan);
 	pSps->source = pChan->pRxBase;
 	pSps->sink = pChan->pRxLsd;
@@ -2093,7 +2093,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->decimator = pSps->decimate = 1;
 	pSps->interpolate = 1;
 
-	// configure the larger, lower cutoff filter by default
+	/* configure the larger, lower cutoff filter by default */
 	pSps->ncoef = taps_fir_lpf_215_9_88;
 	pSps->size_coef = 2;
 	pSps->coef = (void *) coef_fir_lpf_215_9_88;
@@ -2110,21 +2110,21 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan->prxCtcssMeasure = pSps->sink;
 	pChan->prxCtcssAdjust = &(pSps->outputGain);
 
-	// CTCSS CenterSlicer
+	/* CTCSS CenterSlicer */
 	pSps = pChan->spsRxLsdNrz = pSps->nextSps = createPmrSps(pChan);
 	pSps->source = pChan->pRxLsd;
 	pSps->sink = pChan->pRxDcTrack;
 	pSps->buff = pChan->pRxLsdLimit;
 	pSps->sigProc = CenterSlicer;
 	pSps->nSamples = pChan->nSamplesRx;
-	pSps->discfactor = LSD_DFS; // centering time constant
+	pSps->discfactor = LSD_DFS; /* centering time constant */
 	pSps->inputGain = (1 * M_Q8);
 	pSps->outputGain = (1 * M_Q8);
-	pSps->setpt = 4900;		// ptp clamp for DC centering
-	pSps->inputGainB = 625; // peak output limiter clip point
+	pSps->setpt = 4900;		/* ptp clamp for DC centering */
+	pSps->inputGainB = 625; /* peak output limiter clip point */
 	pSps->enabled = 0;
 
-	// Rx HPF
+	/* Rx HPF */
 	pSps = pSps->nextSps = createPmrSps(pChan);
 	pChan->spsRxHpf = pSps;
 	pSps->source = pChan->pRxBase;
@@ -2151,14 +2151,14 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan->prxVoiceAdjust = &(pSps->outputGain);
 	pChan->spsRxOut = pSps;
 
-	// allocate space for next sps and set pointers
-	// Rx DeEmp
+	/* allocate space for next sps and set pointers */
+	/* Rx DeEmp */
 	if (pChan->rxDeEmpEnable) {
 		pSps = pSps->nextSps = createPmrSps(pChan);
 		pChan->spsRxDeEmp = pSps;
 		pSps->source = pChan->pRxHpf;
 		pSps->sink = pChan->pRxSpeaker;
-		pChan->spsRxOut = pSps; // OUTPUT STRUCTURE!
+		pChan->spsRxOut = pSps; /* OUTPUT STRUCTURE! */
 		pSps->sigProc = gp_inte_00;
 		pSps->enabled = 1;
 		pSps->nSamples = pChan->nSamplesRx;
@@ -2179,7 +2179,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->prxVoiceMeasure = pSps->sink;
 		pChan->prxVoiceAdjust = &(pSps->outputGain);
 	} else {
-		// force delay to be true
+		/* force delay to be true */
 		if (pChan->rxSquelchDelay == 0)
 			pChan->rxSquelchDelay = 30;
 	}
@@ -2197,7 +2197,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		else
 			pSps->source = pChan->pRxHpf;
 		pSps->sink = pChan->pRxSpeaker;
-		pChan->spsRxOut = pSps; // OUTPUT STRUCTURE!
+		pChan->spsRxOut = pSps; /* OUTPUT STRUCTURE! */
 		pSps->enabled = 1;
 		pSps->b.outzero = 0;
 		pSps->inputGain = 1 * M_Q8;
@@ -2205,7 +2205,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->nSamples = pChan->nSamplesRx;
 		pSps->buffSize = RXSQDELAYBUFSIZE;
 		pSps->buff = ast_calloc(RXSQDELAYBUFSIZE, 2);
-		pSps->buffLead = pChan->rxSquelchDelay * 8; // convert ms to samples
+		pSps->buffLead = pChan->rxSquelchDelay * 8; /* convert ms to samples */
 		pSps->buffInIndex = 0;
 		pSps->buffOutIndex = 0;
 	}
@@ -2231,7 +2231,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->enabled = 1;
 	}
 
-	// tuning measure block
+	/* tuning measure block */
 	pSps = pChan->spsMeasure = pSps->nextSps = createPmrSps(pChan);
 	pSps->source = pChan->spsRx->sink;
 	pSps->sink = pChan->prxMeasure;
@@ -2240,16 +2240,16 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->nSamples = pChan->nSamplesRx;
 	pSps->discfactor = 10;
 
-	pSps->nextSps = NULL; // last sps in chain RX
+	pSps->nextSps = NULL; /* last sps in chain RX */
 
-	// CREATE TRANSMIT CHAIN
+	/* CREATE TRANSMIT CHAIN */
 	TRACEF(1, "create tx\n");
 	inputTmp = NULL;
 	pSps = NULL;
 
-	// allocate space for first sps and set pointers
+	/* allocate space for first sps and set pointers */
 
-	// Tx HPF SubAudible
+	/* Tx HPF SubAudible */
 	if (pChan->txHpfEnable) {
 		pSps = createPmrSps(pChan);
 		pChan->spsTx = pSps;
@@ -2277,7 +2277,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		inputTmp = pChan->pTxHpf;
 	}
 
-	// Tx PreEmphasis
+	/* Tx PreEmphasis */
 	if (pChan->txPreEmpEnable) {
 		if (pSps == NULL)
 			pSps = pChan->spsTx = createPmrSps(pChan);
@@ -2303,11 +2303,11 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		}
 		pSps->calcAdjust = gain_int_hpf_4000_1_2;
 		pSps->inputGain = (1 * M_Q8);
-		pSps->outputGain = (1 * M_Q8); // to match flat at 1KHz
+		pSps->outputGain = (1 * M_Q8); /* to match flat at 1KHz */
 		inputTmp = pSps->sink;
 	}
 
-	// Tx Limiter
+	/* Tx Limiter */
 	if (pChan->txLimiterEnable) {
 		if (pSps == NULL)
 			pSps = pChan->spsTx = createPmrSps(pChan);
@@ -2321,18 +2321,18 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pSps->nSamples = pChan->nSamplesTx;
 		pSps->inputGain = (1 * M_Q8);
 		pSps->outputGain = (1 * M_Q8);
-		pSps->setpt = 12000; // limiting point for 100 modulation
+		pSps->setpt = 12000; /* limiting point for 100 modulation */
 		inputTmp = pSps->sink;
 	}
 
-	// Composite Mix of Voice and LSD
+	/* Composite Mix of Voice and LSD */
 	if ((pChan->txMixA == TX_OUT_COMPOSITE) || (pChan->txMixB == TX_OUT_COMPOSITE)) {
 		if (pSps == NULL)
 			pSps = pChan->spsTx = createPmrSps(pChan);
 		else
 			pSps = pSps->nextSps = createPmrSps(pChan);
 		pSps->source = inputTmp;
-		pSps->sourceB = pChan->pTxLsdLpf; // asdf ??? !!! maw pTxLsdLpf
+		pSps->sourceB = pChan->pTxLsdLpf; /* asdf ??? !!! maw pTxLsdLpf */
 		pSps->sink = pChan->pTxComposite;
 		pSps->sigProc = pmrMixer;
 		pSps->enabled = 1;
@@ -2363,7 +2363,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		}
 	}
 
-	// Chan A Upsampler and Filter
+	/* Chan A Upsampler and Filter */
 	if (pSps == NULL)
 		pSps = pChan->spsTx = createPmrSps(pChan);
 	else
@@ -2382,7 +2382,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	} else if (pChan->txMixA == TX_OUT_AUX) {
 		pSps->source = pChan->pTxHpf;
 	} else {
-		pSps->source = NULL; // maw sph asdf !!! no blow up
+		pSps->source = NULL; /* maw sph asdf !!! no blow up */
 		pSps->source = inputTmp;
 	}
 
@@ -2419,7 +2419,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	else
 		pSps->monoOut = 0;
 
-	// Chan B Upsampler and Filter
+	/* Chan B Upsampler and Filter */
 	if ((pChan->txMixA != pChan->txMixB) && (pChan->txMixB != TX_OUT_OFF)) {
 		if (pSps == NULL)
 			pSps = pChan->spsTx = createPmrSps(pChan);
@@ -2431,7 +2431,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 			pSps->source = pChan->pTxComposite;
 		} else if (pChan->txMixB == TX_OUT_LSD) {
 			pSps->source = pChan->pTxLsdLpf;
-			// pChan->ptxCtcssAdjust=&pSps->inputGain;
+			/* pChan->ptxCtcssAdjust=&pSps->inputGain; */
 		} else if (pChan->txMixB == TX_OUT_VOICE) {
 			pSps->source = inputTmp;
 		} else if (pChan->txMixB == TX_OUT_AUX) {
@@ -2473,7 +2473,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 
 	pSps->nextSps = NULL;
 
-	// Configure Coded Signaling
+	/* Configure Coded Signaling */
 	code_string_parse(pChan);
 
 	pChan->smode = SMODE_NULL;
@@ -2526,7 +2526,7 @@ i16 destroyPmrChannel(t_pmr_chan *pChan)
 		ast_free(pChan->pSigGen1);
 
 #if XPMR_DEBUG0 == 1
-	// if(pChan->prxDebug)ast_free(pChan->prxDebug);
+	/* if(pChan->prxDebug)ast_free(pChan->prxDebug); */
 	if (pChan->ptxDebug)
 		ast_free(pChan->ptxDebug);
 	ast_free(pChan->prxDebug0);
@@ -2689,7 +2689,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 
 #if XPMR_DEBUG0 == 1
 	if (pChan->b.rxCapture) {
-		// if(pChan->prxDebug)memset((void *)pChan->prxDebug,0,pChan->nSamplesRx*XPMR_DEBUG_CHANS*2);
+		/* if(pChan->prxDebug)memset((void *)pChan->prxDebug,0,pChan->nSamplesRx*XPMR_DEBUG_CHANS*2); */
 		if (pChan->ptxDebug)
 			memset((void *) pChan->ptxDebug, 0, pChan->nSamplesRx * XPMR_DEBUG_CHANS * 2);
 
@@ -2699,11 +2699,11 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 #endif
 
 #ifndef XPMR_VOTER
-	pmr_sps = pChan->spsRx; // first sps
+	pmr_sps = pChan->spsRx; /* first sps */
 	pmr_sps->source = input;
 
 	if (outputrx != NULL)
-		pChan->spsRxOut->sink = outputrx; // last sps
+		pChan->spsRxOut->sink = outputrx; /* last sps */
 
 	if (pChan->txrxblankingtimer > 0) {
 		for (i = 0; i < pChan->nSamplesRx * 6; i++)
@@ -2749,7 +2749,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		TRACEC(5, "PmrRx() sps %i\n", i++);
 		pmr_sps->sigProc(pmr_sps);
 		pmr_sps = (t_pmr_sps *) (pmr_sps->nextSps);
-		// pmr_sps=NULL; // sph maw
+		/* pmr_sps=NULL; sph maw */
 	}
 
 	if (pChan->rxCdType == CD_XPMR_VOX) {
@@ -2769,7 +2769,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			pChan->spsRxSquelchDelay->b.outzero = pChan->spsRx->compOut;
 	}
 
-	// stop and start these engines instead to eliminate falsing
+	/* stop and start these engines instead to eliminate falsing */
 	if (pChan->b.ctcssRxEnable && ((!pChan->b.rxhalted || pChan->rxCtcss->decode != CTCSS_NULL || pChan->smode == SMODE_CTCSS) &&
 									  (pChan->smode != SMODE_DCS && pChan->smode != SMODE_LSD))) {
 		ctcss_detect(pChan);
@@ -2829,9 +2829,9 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 #endif
 
 #endif
-	// TRACEX((1, "PmrRx() tx portion.\n"));
+	/* TRACEX((1, "PmrRx() tx portion.\n")); */
 
-	// handle radio transmitter ptt input
+	/* handle radio transmitter ptt input */
 	hit = 0;
 	if (!(pChan->smode == SMODE_DCS || pChan->smode == SMODE_LSD)) {
 		if (pChan->txPttIn && (pChan->txState == CHAN_TXSTATE_IDLE)) {
@@ -2920,7 +2920,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 				pChan->b.reprog = 1;
 			TRACEC(1, "PmrRx() TxOn\n");
 		} else if (pChan->txPttIn && pChan->txState == CHAN_TXSTATE_ACTIVE) {
-			// pChan->smode=SMODE_CTCSS;
+			/* pChan->smode=SMODE_CTCSS; */
 			pChan->smodetimer = pChan->smodetime;
 		} else if (!pChan->txPttIn && pChan->txState == CHAN_TXSTATE_ACTIVE) {
 			TRACEC(1, "txPttIn==0 from CHAN_TXSTATE_ACTIVE\n");
@@ -2968,7 +2968,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		} else if (pChan->txState == CHAN_TXSTATE_COMPLETE) {
 			hit = 1;
 		}
-	} // end of if SMODE==LSD
+	} /* end of if SMODE==LSD */
 
 	if (hit) {
 		pChan->txPttOut = 0;
@@ -3000,7 +3000,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			pChan->txsettletimer = 0;
 	}
 
-	// enable this after we know everything else is working
+	/* enable this after we know everything else is working */
 	if (pChan->txCpuSaver && !pChan->txPttIn && !pChan->txPttOut && pChan->txState == CHAN_TXSTATE_IDLE && !pChan->dd.b.doitnow) {
 		if (!pChan->b.txhalted) {
 			pChan->b.txhalted = 1;
@@ -3043,21 +3043,21 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	}
 
 #ifdef XPMRX_H
-	pChan->spsLsdGen->sigProc(pChan->spsLsdGen); // maw sph ???
+	pChan->spsLsdGen->sigProc(pChan->spsLsdGen); /* maw sph ??? */
 #endif
 
-	// Do Low Speed Data Low Pass Filter
+	/* Do Low Speed Data Low Pass Filter */
 	pChan->spsTxLsdLpf->sigProc(pChan->spsTxLsdLpf);
 
-	// Do Voice
+	/* Do Voice */
 	pmr_sps = pChan->spsTx;
 
-	// get tx data from de-drift process
+	/* get tx data from de-drift process */
 	pChan->dd.option = 0;
 	pChan->dd.ptr = pChan->pTxBase;
 	dedrift(pChan);
 
-	// tx process
+	/* tx process */
 	if (!pChan->spsSigGen1->enabled) {
 		pmr_sps->source = pChan->pTxBase;
 	} else
@@ -3072,12 +3072,12 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 
 	i = 0;
 	while (pmr_sps != NULL && pmr_sps != 0) {
-		// TRACEF(1,"PmrTx() sps %i\n",i++);
+		/* TRACEF(1,"PmrTx() sps %i\n",i++); */
 		pmr_sps->sigProc(pmr_sps);
 		pmr_sps = (t_pmr_sps *) (pmr_sps->nextSps);
 	}
 
-	// TRACEF(1,"PmrTx() - outputs \n");
+	/* TRACEF(1,"PmrTx() - outputs \n"); */
 	if (pChan->txMixA == TX_OUT_OFF || !pChan->txPttOut) {
 		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2)
 			outputtx[i] = 0;
@@ -3096,12 +3096,12 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 #endif
 
 #if XPMR_DEBUG0 == 1
-	// TRACEF(1,"PmrRx() - debug outputs \n");
+	/* TRACEF(1,"PmrRx() - debug outputs \n"); */
 	if (pChan->b.rxCapture) {
 		for (i = 0; i < pChan->nSamplesRx; i++) {
 			pChan->pRxDemod[i] = input[i * 2 * 6];
-			pChan->pTstTxOut[i] = outputtx[i * 2 * 6 + 0]; // txa
-			// pChan->pTstTxOut[i]=outputtx[i*2*6+1]; // txb
+			pChan->pTstTxOut[i] = outputtx[i * 2 * 6 + 0]; /* txa */
+			/* pChan->pTstTxOut[i]=outputtx[i*2*6+1]; txb */
 			TSCOPE((RX_NOISE_TRIG, pChan->sdbg, i, (pChan->rxCarrierDetect * XPMR_TRACE_AMP) - XPMR_TRACE_AMP / 2));
 			TSCOPE((RX_CTCSS_DECODE, pChan->sdbg, i, pChan->rxCtcss->decode * (M_Q14 / CTCSS_NUM_CODES)));
 			TSCOPE((RX_SMODE, pChan->sdbg, i, pChan->smode * (XPMR_TRACE_AMP / 4)));
@@ -3148,12 +3148,12 @@ void ppbinout(u8 chan)
 		i |= BIN_PROG_3;
 
 	ioctl(ppdrvdev, PPDRV_IOC_PINMODE_OUT, BIN_PROG_3 | BIN_PROG_2 | BIN_PROG_1 | BIN_PROG_0);
-	// ioctl(ppdrvdev, PPDRV_IOC_PINCLEAR,    BIN_PROG_3|BIN_PROG_2|BIN_PROG_1|BIN_PROG_0);
-	// ioctl(ppdrvdev, PPDRV_IOC_PINSET, i );
+	/* ioctl(ppdrvdev, PPDRV_IOC_PINCLEAR,    BIN_PROG_3|BIN_PROG_2|BIN_PROG_1|BIN_PROG_0); */
+	/* ioctl(ppdrvdev, PPDRV_IOC_PINSET, i ); */
 	ioctl(ppdrvdev, PPDRV_IOC_PINSET, BIN_PROG_3 | BIN_PROG_2 | BIN_PROG_1 | BIN_PROG_0);
 	ioctl(ppdrvdev, PPDRV_IOC_PINCLEAR, i);
 
-	// ioctl(ppdrvdev, PPDRV_IOC_PINSET, BIN_PROG_3|BIN_PROG_2|BIN_PROG_1|BIN_PROG_0 );
+	/* ioctl(ppdrvdev, PPDRV_IOC_PINSET, BIN_PROG_3|BIN_PROG_2|BIN_PROG_1|BIN_PROG_0 ); */
 	ast_log(LOG_NOTICE, "mask=%i 0x%x\n", i, i);
 #endif
 }
@@ -3226,7 +3226,7 @@ void ppspiout(u32 spidata)
 void progdtx(t_pmr_chan *pChan)
 {
 #if (DTX_PROG == 1)
-	// static u32    progcount=0;
+	/* static u32    progcount=0; */
 
 	u32 reffreq;
 	u32 stepfreq;
@@ -3315,7 +3315,7 @@ void dedrift(t_pmr_chan *pChan)
 		pChan->dd.drift = 0;
 		pChan->dd.factor = pChan->dd.x1 = pChan->dd.x0 = pChan->dd.y1 = pChan->dd.y0 = 0;
 		pChan->dd.txframecnt = pChan->dd.rxframecnt = 0;
-		// clear the buffer too!
+		/* clear the buffer too! */
 		return;
 	} else if (pChan->dd.option == 8) {
 		ast_free(pChan->dd.buff);
@@ -3328,7 +3328,7 @@ void dedrift(t_pmr_chan *pChan)
 		i16 indextweak;
 		i32 accum;
 
-		// WinFilter, IIR Fs=50, Fc=0.1
+		/* WinFilter, IIR Fs=50, Fc=0.1 */
 		const i32 a0 = 26231;
 		const i32 a1 = 26231;
 		const i32 b0 = 32768;
@@ -3339,7 +3339,7 @@ void dedrift(t_pmr_chan *pChan)
 		pChan->dd.skew = pChan->dd.txframecnt - pChan->dd.rxframecnt;
 		pChan->dd.rxframecnt++;
 
-		// pull data from buffer
+		/* pull data from buffer */
 		if ((pChan->dd.outputindex + pChan->dd.framesize) > pChan->dd.buffersize) {
 			i16 dofirst, donext;
 
@@ -3353,7 +3353,7 @@ void dedrift(t_pmr_chan *pChan)
 			memcpy(pChan->dd.ptr, (void *) (pChan->dd.buff + pChan->dd.outputindex), pChan->dd.framesize * 2);
 		}
 
-		// compute clock error and correction factor
+		/* compute clock error and correction factor */
 		if (pChan->dd.outputindex > inputindex) {
 			pChan->dd.lead = (inputindex + pChan->dd.buffersize) - pChan->dd.outputindex;
 		} else {
@@ -3373,14 +3373,14 @@ void dedrift(t_pmr_chan *pChan)
 		indextweak = 0;
 
 #if 1
-		// event sync'd correction
+		/* event sync'd correction */
 		if (pChan->dd.b.doitnow) {
 			pChan->dd.b.doitnow = 0;
 			indextweak = pChan->dd.factor;
 			pChan->dd.factor = pChan->dd.x1 = pChan->dd.x0 = pChan->dd.y1 = pChan->dd.y0 = 0;
 			pChan->dd.timer = 20000 / MS_PER_FRAME;
 		}
-		// coarse lead adjustment if really far out of range
+		/* coarse lead adjustment if really far out of range */
 		else if (pChan->dd.lead >= pChan->dd.framesize * (DDB_FRAMES_IN_BUFF - 2)) {
 			pChan->dd.factor = pChan->dd.x1 = pChan->dd.x0 = pChan->dd.y1 = pChan->dd.y0 = 0;
 			indextweak += (pChan->dd.framesize * 5 / 4);
@@ -3406,7 +3406,7 @@ void dedrift(t_pmr_chan *pChan)
 				accum, inputindex, pChan->dd.outputindex, pChan->dd.lead, pChan->dd.skew);
 #endif
 
-		// set the output index based on lead and clock offset
+		/* set the output index based on lead and clock offset */
 		pChan->dd.outputindex = (pChan->dd.outputindex + pChan->dd.framesize + indextweak) % pChan->dd.buffersize;
 	}
 }
