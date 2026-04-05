@@ -47,8 +47,8 @@
  * \note significant rewrite for modern Asterisk by Naveen Albert <asterisk@phreaknet.org>
  *
  * \note Allison ducking code by W9SH
- * \ported by Adam KC1KCC
- * \ported by Mike N4IRR
+ * \note ported by Adam KC1KCC
+ * \note ported by Mike N4IRR
  *
  * See http://www.zapatatelephony.org/app_rpt.html
  *

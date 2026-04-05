@@ -2093,7 +2093,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pSps->decimator = pSps->decimate = 1;
 	pSps->interpolate = 1;
 
-	// configure the the larger, lower cutoff filter by default
+	// configure the larger, lower cutoff filter by default
 	pSps->ncoef = taps_fir_lpf_215_9_88;
 	pSps->size_coef = 2;
 	pSps->coef = (void *) coef_fir_lpf_215_9_88;
