@@ -911,8 +911,10 @@ struct rpt {
 		const char *eloutbound;
 		int elke;
 		const char *aprstt;
+		char *lconn_buf;
 		const char *lconn[MAX_LSTUFF];
 		int nlconn;
+		char *ldisc_buf;
 		const char *ldisc[MAX_LSTUFF];
 		int nldisc;
 		const char *timezone;

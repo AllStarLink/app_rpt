@@ -760,6 +760,18 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.locallinknodes_buf = NULL;
 	}
 
+	if (rpt_vars[n].p.lconn_buf) {
+		/* The first entry points to the local link node memory allocated in rpt_config.c */
+		ast_free(rpt_vars[n].p.lconn_buf);
+		rpt_vars[n].p.lconn_buf = NULL;
+	}
+
+	if (rpt_vars[n].p.ldisc_buf) {
+		/* The first entry points to the local link node memory allocated in rpt_config.c */
+		ast_free(rpt_vars[n].p.ldisc_buf);
+		rpt_vars[n].p.ldisc_buf = NULL;
+	}
+
 	memset(&rpt_vars[n].p, 0, sizeof(rpt_vars[n].p));
 	if (init) {
 		char *cp;
@@ -980,8 +992,8 @@ void load_rpt_vars(int n, int init)
 	if (val) {
 		char *tmp = ast_strdup(val);
 		if (tmp) {
+			rpt_vars[n].p.lconn_buf = tmp;
 			rpt_vars[n].p.nlconn = explode_string(strupr(tmp), (char **) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
-			ast_free(tmp);
 		}
 	}
 
@@ -989,8 +1001,8 @@ void load_rpt_vars(int n, int init)
 	if (val) {
 		char *tmp = ast_strdup(val);
 		if (tmp) {
+			rpt_vars[n].p.ldisc_buf = tmp;
 			rpt_vars[n].p.nldisc = explode_string(strupr(tmp), (char **) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
-			ast_free(tmp);
 		}
 	}
 
