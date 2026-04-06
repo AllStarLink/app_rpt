@@ -93,7 +93,6 @@ static int rpt_telem_datastore(struct ast_channel *chan, time_t t)
 
 	if (ast_channel_datastore_add(chan, datastore)) {
 		ast_datastore_free(datastore);
-		ast_free(time_data);
 		return -1;
 	}
 
