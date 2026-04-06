@@ -517,7 +517,7 @@ static int16_t preemph(int16_t input, int32_t* restrict state)
 	} else if (y < -32767) {
 		y = -32767;
 	}
-	return (y);
+	return y;
 }
 
 /*!
@@ -543,7 +543,7 @@ static int16_t hpass(int16_t input, float* restrict xv, float* restrict yv)
 	yv[3] = (xv[3] - xv[0]) + 3 * (xv[1] - xv[2])
 		+ (0.5999763543 * yv[0]) + (-2.1305919790 * yv[1])
 		+ (2.5161440793 * yv[2]);
-	return ((int) yv[3]);
+	return (int) yv[3];
 }
 
 /*!
@@ -1034,8 +1034,9 @@ static void *hidthread(void *arg)
 		}
 		/* Double check to see if the device string is assigned to another usb channel */
 		for (ao = simpleusb_default.next; ao && ao->name; ao = ao->next) {
-			if (ao->usbass && (!strcmp(ao->devstr, o->devstr)))
+			if (ao->usbass && (!strcmp(ao->devstr, o->devstr))) {
 				break;
+			}
 		}
 		if (ao) {
 			ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, o->devstr, ao->name);
@@ -1549,9 +1550,10 @@ static int setformat(struct chan_simpleusb_pvt *o, int mode)
 		o->duplex = M_UNSET;
 		o->sounddev = -1;
 	}
-	if (mode == O_CLOSE)		/* we are done */
+	if (mode == O_CLOSE) { /* we are done */
 		return 0;
-		
+	}
+
 	strcpy(device, "/dev/dsp");
 	if (o->devicenum) {
 		sprintf(device, "/dev/dsp%d", o->devicenum);
@@ -1805,8 +1807,9 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), NUMERIC, 0);
 			break;
 		case 'A':				/* Alpha */
-			if (!text[j + 1])
+			if (!text[j + 1]) {
 				return 0;
+			}
 			ast_verb(3, "Channel %s: POCSAG page (%d baud, capcode=%d) ALPHA (%s)\n", o->name, baud, i, text + j + 1);
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), ALPHA, 0);
 			break;
@@ -2444,8 +2447,9 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	}
 
 #if DEBUG_CAPTURES == 1
-	if (o->rxcapraw && frxcapcooked)
+	if (o->rxcapraw && frxcapcooked) {
 		fwrite(o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET, sizeof(short), FRAME_SIZE, frxcapcooked);
+	}
 #endif
 
 	/* reset read pointer for next frame */
@@ -2471,7 +2475,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u')) {
 				f1->frametype = AST_FRAME_NULL;
 				f1->subclass.integer = 0;
-				return (f1);
+				return f1;
 			}
 			if (f1->frametype == AST_FRAME_DTMF_END) {
 				f1->len = ast_tvdiff_ms(ast_radio_tvnow(), o->tonetime);
@@ -2489,7 +2493,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 				}
 			}
 			if (f1) {
-				return (f1);
+				return f1;
 			}
 		}
 	}
@@ -3136,8 +3140,9 @@ static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int 
 
 	ast_tonepair_stop(o->owner);
 	if (ast_tonepair_start(o->owner, 1004.0, 0, 99999999, 7200.0)) {
-		if (fd >= 0)
+		if (fd >= 0) {
 			ast_cli(fd, "Error starting test tone on %s!!\n", simpleusb_active);
+		}
 		return -1;
 	}
 	ast_clear_flag(ast_channel_flags(o->owner), AST_FLAG_WRITE_INT);
@@ -3195,8 +3200,9 @@ static void _menu_rx(int fd, struct chan_simpleusb_pvt *o, const char *str)
 		return;
 	}
 	for (x = 0; str[x]; x++) {
-		if (!isdigit(str[x]))
+		if (!isdigit(str[x])) {
 			break;
+		}
 	}
 	if (str[x] || (sscanf(str, N_FMT(d), &i) < 1) || (i < 0) || (i > 999)) {
 		ast_cli(fd, "Channel %s: Entry Error, Rx Channel Level setting not changed\n", o->name);
@@ -3985,11 +3991,11 @@ static char *res2cli(int r)
 {
 	switch (r) {
 	case RESULT_SUCCESS:
-		return (CLI_SUCCESS);
+		return CLI_SUCCESS;
 	case RESULT_SHOWUSAGE:
-		return (CLI_SHOWUSAGE);
+		return CLI_SHOWUSAGE;
 	default:
-		return (CLI_FAILURE);
+		return CLI_FAILURE;
 	}
 }
 

@@ -79,47 +79,46 @@ mdc_encoder_t * mdc_encoder_new(int sampleRate)
 
 static unsigned long _flip(unsigned long crc, int bitnum)
 {
-        unsigned long i, j=1, crcout=0;
+	unsigned long i, j = 1, crcout = 0;
 
-        for (i=1<<(bitnum-1); i; i>>=1)
-        {
-			if (crc & i) {
-				crcout |= j;
-			}
-			j <<= 1;
+	for (i = 1 << (bitnum - 1); i; i >>= 1) {
+		if (crc & i) {
+			crcout |= j;
 		}
-		return (crcout);
+
+		j <<= 1;
+	}
+
+	return crcout;
 }
 
 static unsigned long docrc(unsigned char* p, int len) {
+	int i, j, c;
+	unsigned long bit;
+	unsigned long crc = 0x0000;
 
-        int i, j, c;
-        unsigned long bit;
-        unsigned long crc = 0x0000;
+	for (i = 0; i < len; i++) {
+		c = (unsigned long) *p++;
+		c = _flip(c, 8);
 
-        for (i=0; i<len; i++)
-        {
-                c = (unsigned long)*p++;
-                c = _flip(c, 8);
+		for (j = 0x80; j; j >>= 1) {
+			bit = crc & 0x8000;
+			crc <<= 1;
+			if (c & j) {
+				bit ^= 0x8000;
+			}
 
-                for (j=0x80; j; j>>=1)
-                {
-                        bit = crc & 0x8000;
-                        crc<<= 1;
-						if (c & j) {
-							bit ^= 0x8000;
-						}
-						if (bit) {
-							crc ^= 0x1021;
-						}
-				}
+			if (bit) {
+				crc ^= 0x1021;
+			}
 		}
+	}
 
-		crc = _flip(crc, 16);
-		crc ^= 0xffff;
-		crc &= 0xFFFF;
+	crc = _flip(crc, 16);
+	crc ^= 0xffff;
+	crc &= 0xFFFF;
 
-		return (crc);
+	return (crc);
 }
 
 #endif
@@ -163,12 +162,14 @@ static unsigned char * _enc_str(unsigned char *data)
 	for (i = 0; i < 7; i++) {
 		csr[i] = 0;
 	}
+
 	for (i = 0; i < 7; i++) {
 		data[i+7] = 0;
 		for (j = 0; j <= 7; j++) {
 			for (k = 6; k > 0; k--) {
 				csr[k] = csr[k-1];
 			}
+
 			csr[0] = (data[i] >> j) & 0x01;
 			b = csr[0] + csr[2] + csr[5] + csr[6];
 			data[i+7] |= (b & 0x01) << j;
@@ -182,6 +183,7 @@ static unsigned char * _enc_str(unsigned char *data)
 			b = 0x01 & (data[i] >> j);
 			lbits[k] = b;
 			k += 16;
+
 			if (k > 111) {
 				k = ++m;
 			}
@@ -195,6 +197,7 @@ static unsigned char * _enc_str(unsigned char *data)
 			if (lbits[k]) {
 				data[i] |= 1<<j;
 			}
+
 			++k;
 		}
 	}
@@ -285,10 +288,12 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 	if (encoder->th >= TWOPI) {
 		encoder->th -= TWOPI;
 		encoder->ipos++;
+
 		if (encoder->ipos > 7) {
 			encoder->ipos = 0;
 			encoder->bpos++;
-			if (encoder->bpos > encoder->loaded) {
+
+			if (encoder->bpos >= encoder->loaded) {
 				encoder->state = 0;
 				return 127;
 			}
@@ -309,6 +314,7 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 	} else {
 		encoder->tth += 1.0 * encoder->incr;
 	}
+
 	if (encoder->tth >= TWOPI) {
 		encoder->tth -= TWOPI;
 	}

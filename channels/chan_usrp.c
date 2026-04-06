@@ -309,8 +309,9 @@ static struct usrp_pvt *usrp_alloc(void *data)
 	si_me.sin_family = AF_INET;
 	si_me.sin_port = htons(atoi(args.myport));
 	si_me.sin_addr.s_addr = htonl(INADDR_ANY);
-	if (!strncmp(ast_inet_ntoa(pvt->si_other.sin_addr), "127.", 4))
+	if (!strncmp(ast_inet_ntoa(pvt->si_other.sin_addr), "127.", 4)) {
 		si_me.sin_addr.s_addr = inet_addr("127.0.0.1");
+	}
 	if (bind(pvt->usrp, &si_me, sizeof(si_me)) == -1) {
 		ast_log(LOG_WARNING, "Unable to bind port for USRP connection %s\n", stream);
 		ast_free(pvt);
@@ -318,8 +319,9 @@ static struct usrp_pvt *usrp_alloc(void *data)
 	}
 	/* TODO: do we need locking for this? */
 	for (o_slot = 0; o_slot < MAX_CHANS; o_slot++) {
-		if (!usrp_channels[o_slot])
+		if (!usrp_channels[o_slot]) {
 			break;
+		}
 	}
 	if (o_slot >= MAX_CHANS) {
 		ast_log(LOG_WARNING, "Unable to find empty usrp_channels[] entry\n");

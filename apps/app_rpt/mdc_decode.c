@@ -43,12 +43,14 @@ mdc_decoder_t * mdc_decoder_new(int sampleRate)
 	int i;
 
 	decoder = ast_calloc(1, sizeof(mdc_decoder_t));
+
 	if (!decoder) {
 		return (mdc_decoder_t *) 0L;
 	}
 
 	decoder->hyst = 3;
 	decoder->incr = (1200.0 * TWOPI) / ((double) sampleRate);
+
 	for (i = 0; i < MDC_ND; i++) {
 		decoder->th[i] = 0.0 + (((double) i) * (TWOPI / (double) MDC_ND));
 	}
@@ -59,23 +61,25 @@ mdc_decoder_t * mdc_decoder_new(int sampleRate)
 static void _clearbits(mdc_decoder_t *decoder, int x)
 {
 	int i;
-	for(i=0; i<112; i++)
+
+	for (i = 0; i < 112; i++) {
 		decoder->bits[x][i] = 0;
+	}
 }
 
 static unsigned int _flip(unsigned int crc, int bitnum)
 {
 	unsigned int i, j=1, crcout=0;
 
-	for (i=1<<(bitnum-1); i; i>>=1)
-	{
+	for (i = 1 << (bitnum - 1); i; i >>= 1) {
 		if (crc & i) {
 			crcout |= j;
 		}
 
 		j<<= 1;
 	}
-	return (crcout);
+
+	return crcout;
 }
 
 static unsigned int docrc(unsigned char* p, int len) {
@@ -85,23 +89,23 @@ static unsigned int docrc(unsigned char* p, int len) {
 	unsigned int bit;
 	unsigned int crc = 0x0000;
 
-	for (i=0; i<len; i++)
-	{
+	for (i = 0; i < len; i++) {
 		c = (unsigned int)*p++;
 		c = _flip(c, 8);
 
-		for (j=0x80; j; j>>=1)
-		{
+		for (j = 0x80; j; j >>= 1) {
 			bit = crc & 0x8000;
 			crc<<= 1;
+
 			if (c & j) {
 				bit^= 0x8000;
 			}
+
 			if (bit) {
 				crc^= 0x1021;
 			}
 		}
-	}	
+	}
 
 	crc = _flip(crc, 16);
 	crc ^= 0xffff;
@@ -130,6 +134,7 @@ static void _procbits(mdc_decoder_t *decoder, int x)
 
 	for (i = 0; i < 14; i++) {
 		data[i] = 0;
+
 		for (j = 0; j < 8; j++) {
 			k = (i*8)+j;
 
@@ -174,6 +179,7 @@ static void _procbits(mdc_decoder_t *decoder, int x)
 				decoder->shcount[x] = 0;
 				_clearbits(decoder, x);
 				break;
+
 			default:
 				break;
 			}
@@ -188,10 +194,12 @@ static void _procbits(mdc_decoder_t *decoder, int x)
 static int _onebits(unsigned int n)
 {
 	int i=0;
+
 	while (n) {
 		++i;
 		n &= (n-1);
 	}
+
 	return i;
 }
 
@@ -203,11 +211,16 @@ static void _shiftin(mdc_decoder_t *decoder, int x)
 	switch (decoder->shstate[x]) {
 	case 0:
 		decoder->synchigh[x] <<= 1;
-		if(decoder->synclow[x] & 0x80000000)
+
+		if (decoder->synclow[x] & 0x80000000) {
 			decoder->synchigh[x] |= 1;
+		}
+
 		decoder->synclow[x] <<= 1;
-		if(bit)
+
+		if (bit) {
 			decoder->synclow[x] |= 1;
+		}
 
 		gcount = _onebits(0x000000ff & (0x00000007 ^ decoder->synchigh[x]));
 		gcount += _onebits(0x092a446f ^ decoder->synclow[x]);
@@ -222,14 +235,18 @@ static void _shiftin(mdc_decoder_t *decoder, int x)
 			decoder->xorb[x] = !(decoder->xorb[x]);
 			_clearbits(decoder, x);
 		}
+
 		return;
+
 	case 1:
 	case 2:
 		decoder->bits[x][decoder->shcount[x]] = bit;
 		decoder->shcount[x]++;
+
 		if (decoder->shcount[x] > 111) {
 			_procbits(decoder, x);
 		}
+
 		return;
 
 	default:
@@ -244,9 +261,11 @@ static void _zcproc(mdc_decoder_t *decoder, int x)
 	case 2:
 	case 4:
 		break;
+
 	case 3:
 		decoder->xorb[x] = !(decoder->xorb[x]);
 		break;
+
 	default:
 		return;
 	}
@@ -283,6 +302,7 @@ int mdc_decoder_process_samples(mdc_decoder_t *decoder,
 				for (k = 0; k < MDC_ND; k++) {
 					decoder->zc[k]++;
 				}
+
 				decoder->level = 1;
 			}
 		} else {
@@ -290,6 +310,7 @@ int mdc_decoder_process_samples(mdc_decoder_t *decoder,
 				for (k = 0; k < MDC_ND; k++) {
 					decoder->zc[k]++;
 				}
+
 				decoder->level = 0;
 			}
 		}
@@ -299,6 +320,7 @@ int mdc_decoder_process_samples(mdc_decoder_t *decoder,
 				for (k = 0; k < MDC_ND; k++) {
 					decoder->zc[k]++;
 				}
+
 				decoder->level = 1;
 			}
 		} else {
@@ -306,6 +328,7 @@ int mdc_decoder_process_samples(mdc_decoder_t *decoder,
 				for (k = 0; k < MDC_ND; k++) {
 					decoder->zc[k]++;
 				}
+
 				decoder->level = 0;
 			}
 		}
@@ -313,6 +336,7 @@ int mdc_decoder_process_samples(mdc_decoder_t *decoder,
 
 		for (j = 0; j < MDC_ND; j++) {
 			decoder->th[j] += decoder->incr;
+
 			if (decoder->th[j] >= TWOPI) {
 				_zcproc(decoder, j);
 				decoder->th[j] -= TWOPI;

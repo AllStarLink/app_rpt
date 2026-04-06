@@ -1681,7 +1681,7 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 	functiondigits = digits + strlen(vp->name);
 	rv = (*function_table[i].function)(myrpt, param, functiondigits, command_source, mylink);
 	ast_debug(7, "rv=%i\n", rv);
-	return (rv);
+	return rv;
 }
 
 static inline void collect_function_digits_post(struct rpt *myrpt, enum rpt_function_response res, const char *cmd, struct rpt_link *mylink)
@@ -2503,8 +2503,9 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 
 	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 	ao2_ref(cap, -1);
-	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list)))
+	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list))) {
 		ast_frfree(f1);
+	}
 	if (l->chan) {
 		if (rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name)) {
 			ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
@@ -2798,13 +2799,16 @@ static void do_scheduler(struct rpt *myrpt)
 		for (i = 0, vp = value; i < 5; i++) {
 			if (!*vp)
 				break;
-			while ((*vp == ' ') || (*vp == 0x09)) /* get rid of any leading white space */
+			while ((*vp == ' ') || (*vp == 0x09)) { /* get rid of any leading white space */
 				vp++;
+			}
 			strs[i] = vp;										/* save pointer to beginning of substring */
-			while ((*vp != ' ') && (*vp != 0x09) && (*vp != 0)) /* skip over substring */
+			while ((*vp != ' ') && (*vp != 0x09) && (*vp != 0)) { /* skip over substring */
 				vp++;
-			if (*vp)
+			}
+			if (*vp) {
 				*vp++ = 0; /* mark end of substring */
+			}
 		}
 		ast_debug(7, "i = %d, min = %s, hour = %s, mday=%s, mon=%s, wday=%s\n", i, strs[0], strs[1], strs[2], strs[3], strs[4]);
 		if (i == 5) {
@@ -4278,8 +4282,9 @@ static inline int localtxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 				f = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list);
 			}
 		} else {
-			while ((f1 = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list)))
+			while ((f1 = AST_LIST_REMOVE_HEAD(&myrpt->txq, frame_list))) {
 				ast_frfree(f1);
+			}
 		}
 		ast_write(myrpt->txchannel, f);
 	}
@@ -5871,6 +5876,10 @@ static int load_config(int reload)
 			if (rpt_vars[n].remoterig) {
 				ast_free(rpt_vars[n].remoterig);
 			}
+
+			if (rpt_vars[n].mdc) {
+				ast_free(rpt_vars[n].mdc);
+			}
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
@@ -5937,6 +5946,47 @@ static int load_config(int reload)
 	return 0;
 }
 
+/*! \brief Write log messages to the log file */
+static void rpt_nodelog(void)
+{
+	for (;;) {
+		struct nodelog *nodep;
+		char datestr[10], fname[1024], *str;
+		int fd;
+		int n;
+
+		ast_mutex_lock(&nodeloglock);
+		nodep = nodelog.next;
+		if (nodep == &nodelog) { /* if nothing in queue */
+			ast_mutex_unlock(&nodeloglock);
+			break;
+		}
+		remque((struct qelem *) nodep);
+		ast_mutex_unlock(&nodeloglock);
+		str = strchr(nodep->str, ' ');
+		if (!str) {
+			ast_free(nodep);
+			continue;
+		}
+		*str++ = '\0';
+		strftime(datestr, sizeof(datestr), "%Y%m%d", localtime(&nodep->timestamp));
+		snprintf(fname, sizeof(fname), "%s/%s/%s.txt", nodep->archivedir, nodep->str, datestr);
+		fd = open(fname, O_WRONLY | O_CREAT | O_APPEND, 0644);
+		if (fd == -1) {
+			ast_log(LOG_ERROR, "Cannot open node log file %s for write: %s", fname, strerror(errno));
+			ast_free(nodep);
+			continue;
+		}
+		n = strlen(str);
+		if (write(fd, str, n) != n) {
+			ast_log(LOG_ERROR, "Cannot write node log file %s for write: %s", fname, strerror(errno));
+		}
+		close(fd);
+		ast_free(nodep);
+	}
+}
+
+/*! \brief Master thread for managing repeater threads */
 static void *rpt_master(void *ignore)
 {
 	int i;
@@ -6100,41 +6150,7 @@ static void *rpt_master(void *ignore)
 			rpt_vars[i].outstreampid = 0;
 			startoutstream(&rpt_vars[i]);
 		}
-		for (;;) {
-			struct nodelog *nodep;
-			char datestr[100], fname[1024], *str;
-			int fd;
-			int n;
-
-			ast_mutex_lock(&nodeloglock);
-			nodep = nodelog.next;
-			if (nodep == &nodelog) { /* if nothing in queue */
-				ast_mutex_unlock(&nodeloglock);
-				break;
-			}
-			remque((struct qelem *) nodep);
-			ast_mutex_unlock(&nodeloglock);
-			str = strchr(nodep->str, ' ');
-			if (!str) {
-				ast_free(nodep);
-				continue;
-			}
-			*str++ = '\0';
-			strftime(datestr, sizeof(datestr) - 1, "%Y%m%d", localtime(&nodep->timestamp));
-			snprintf(fname, sizeof(fname), "%s/%s/%s.txt", nodep->archivedir, nodep->str, datestr);
-			fd = open(fname, O_WRONLY | O_CREAT | O_APPEND, 0644);
-			if (fd == -1) {
-				ast_log(LOG_ERROR, "Cannot open node log file %s for write: %s", fname, strerror(errno));
-				ast_free(nodep);
-				continue;
-			}
-			n = strlen(str);
-			if (write(fd, str, n) != n) {
-				ast_log(LOG_ERROR, "Cannot write node log file %s for write: %s", fname, strerror(errno));
-			}
-			close(fd);
-			ast_free(nodep);
-		}
+		rpt_nodelog();
 		ast_mutex_unlock(&rpt_master_lock);
 		while (shutting_down) {
 			int done = 0, jrv;
@@ -6185,6 +6201,7 @@ static void *rpt_master(void *ignore)
 	}
 
 done:
+	rpt_nodelog(); /* Empty the nodelog to the filesystem and free memory */
 	ast_mutex_unlock(&rpt_master_lock);
 	ast_debug(1, "app_rpt master thread exiting\n");
 	return NULL;
@@ -7684,8 +7701,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 	myrpt->remote_webtransceiver = 0;
 	/* wait for telem to be done */
-	while (myrpt->tele.next != &myrpt->tele)
+	while (myrpt->tele.next != &myrpt->tele) {
 		usleep(50000);
+	}
 	ast_stop_mixmonitor(chan, NULL);
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->hfscanmode = HF_SCAN_OFF;
@@ -7808,6 +7826,11 @@ static int unload_module(void)
 			ast_free(rpt_vars[i].remoterig);
 			rpt_vars[i].remoterig = NULL;
 		}
+
+		if (rpt_vars[i].mdc) {
+			ast_free(rpt_vars[i].mdc);
+			rpt_vars[i].mdc = NULL;
+		}
 	}
 
 	res = ast_unregister_application(app);
@@ -7855,17 +7878,21 @@ static int reload(void)
 	ast_mutex_lock(&rpt_master_lock);
 	load_config(1);
 	for (n = 0; n < nrpts; n++) {
-		if (rpt_vars[n].reload_request)
+		if (rpt_vars[n].reload_request) {
 			continue;
-		if (rpt_vars[n].rxchannel)
+		}
+		if (rpt_vars[n].rxchannel) {
 			ast_softhangup(rpt_vars[n].rxchannel, AST_SOFTHANGUP_DEV);
+		}
 		rpt_vars[n].deleted = RPT_DELETED_PENDING;
 	}
-	for (n = 0; n < nrpts; n++)
-		if (rpt_vars[n].deleted == RPT_DELETED_NONE)
+	for (n = 0; n < nrpts; n++) {
+		if (rpt_vars[n].deleted == RPT_DELETED_NONE) {
 			rpt_vars[n].reload = 1;
+		}
+	}
 	ast_mutex_unlock(&rpt_master_lock);
-	return (0);
+	return 0;
 }
 /* clang-format off */
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application", 

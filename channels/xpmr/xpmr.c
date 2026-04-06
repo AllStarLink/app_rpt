@@ -137,15 +137,17 @@ void pptp_init(void)
 void pptp_write(i16 bit, i16 state)
 {
 	if (bit == 0) {
-		if (state)
+		if (state) {
 			ioctl(ppdrvdev, PPDRV_IOC_PINSET, DTX_TP1);
-		else
+		} else {
 			ioctl(ppdrvdev, PPDRV_IOC_PINCLEAR, DTX_TP1);
+		}
 	} else {
-		if (state)
+		if (state) {
 			ioctl(ppdrvdev, PPDRV_IOC_PINSET, DTX_TP2);
-		else
+		} else {
 			ioctl(ppdrvdev, PPDRV_IOC_PINCLEAR, DTX_TP2);
+		}
 	}
 }
 #endif
@@ -168,8 +170,9 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 	TRACEJ(2, " source len = %i\n", slen);
 
 	pd = *dest;
-	if (pd)
+	if (pd) {
 		ast_free(pd);
+	}
 	pd = ast_calloc(slen + 1, 1);
 	memcpy(pd, src, slen);
 	*dest = pd;
@@ -193,8 +196,9 @@ i16 string_parse(char *src, char **dest, char ***ptrs)
 		TRACEJ(5, " ptstr[%i] = %p %s\n", i, ptstr[i], ptstr[i]);
 	}
 
-	if (*ptrs)
+	if (*ptrs) {
 		ast_free(*ptrs);
+	}
 	*ptrs = ast_calloc(numsub, sizeof(char *));
 	for (i = 0; i < numsub; i++) {
 		(*ptrs)[i] = ptstr[i];
@@ -257,8 +261,9 @@ i16 code_string_parse(t_pmr_chan *pChan)
 	pChan->rxCtcss->decode = CTCSS_NULL;
 
 	pChan->rxCtcss->testIndex = 0;
-	if (!pChan->rxCtcss->testIndex)
+	if (!pChan->rxCtcss->testIndex) {
 		pChan->rxCtcss->testIndex = 3;
+	}
 
 	pChan->rxctcssfreq[0] = 0; /* decode now   CTCSS_RXONLY */
 
@@ -515,7 +520,7 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 	TRACEJ(5, "pmr_rx_frontend()\n");
 
 	if (!mySps->enabled)
-		return (1);
+		return 1;
 
 	decimator = mySps->decimator;
 	decimate = mySps->decimate;
@@ -554,8 +559,9 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 
 #if XPMR_TRACE_FRONTEND == 1
 		y = 0;
-		for (n = 0; n < nx; n++)
+		for (n = 0; n < nx; n++) {
 			y += fir_rxlpf[mySps->parentChan->rxlpf].coefs[n] * x[n];
+		}
 
 		y = ((y / calcAdjust) * outputGain) / M_Q8;
 		input[i * 2] = y; /* debug output LowPass at 48KS/s */
@@ -565,12 +571,14 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 			/* calculate noise filter output */
 			naccum = 0;
 			if (mySps->parentChan->rxNoiseFilType == 0) {
-				for (n = 0; n < taps_fir_bpf_noise_1; n++)
+				for (n = 0; n < taps_fir_bpf_noise_1; n++) {
 					naccum += coef_fir_bpf_noise_1[n] * x[n];
+				}
 				naccum /= DCgainBpfNoise;
 			} else {
-				for (n = 0; n < taps_fir_bpf_noise_2; n++)
+				for (n = 0; n < taps_fir_bpf_noise_2; n++) {
 					naccum += coef_fir_bpf_noise_2[n] * x[n];
+				}
 				naccum /= gain_fir_bpf_noise_2;
 			}
 #if XPMR_TRACE_FRONTEND == 1
@@ -585,8 +593,9 @@ i16 pmr_rx_frontend(t_pmr_sps *mySps)
 			decimator = decimate;
 
 			y = 0;
-			for (n = 0; n < nx; n++)
+			for (n = 0; n < nx; n++) {
 				y += fir_rxlpf[mySps->parentChan->rxlpf].coefs[n] * x[n];
+			}
 
 			y = ((y / calcAdjust) * outputGain) / M_Q8;
 
@@ -657,7 +666,7 @@ i16 pmr_gp_fir(t_pmr_sps *mySps)
 	TRACEJ(5, "pmr_gp_fir() %i %i\n", mySps->index, mySps->enabled);
 
 	if (!mySps->enabled)
-		return (1);
+		return 1;
 
 	inputGain = mySps->inputGain;
 	calcAdjust = mySps->calcAdjust;
@@ -715,12 +724,14 @@ i16 pmr_gp_fir(t_pmr_sps *mySps)
 			i16 n;
 			y = 0;
 
-			for (n = nx - 1; n > 0; n--)
+			for (n = nx - 1; n > 0; n--) {
 				x[n] = x[n - 1];
+			}
 			x[0] = (input[i] * inputGain) / M_Q8;
 
 			for (n = 0; n < nx; n++)
 				y += coef[n] * x[n];
+			}
 
 			y = ((y / calcAdjust) * outputGain) / M_Q8;
 
@@ -804,7 +815,7 @@ i16 gp_inte_00(t_pmr_sps *mySps)
 
 	TRACEJ(5, "gp_inte_00() %i\n", mySps->enabled);
 	if (!mySps->enabled)
-		return (1);
+		return 1;
 
 	input = mySps->source;
 	output = mySps->sink;
@@ -908,7 +919,7 @@ i16 CenterSlicer(t_pmr_sps *mySps)
 
 	TRACEJ(5, "CenterSlicer() %i\n", mySps->enabled);
 	if (!mySps->enabled)
-		return (1);
+		return 1;
 
 	input = mySps->source;
 	output = mySps->sink; /* limited output */
@@ -1168,9 +1179,10 @@ i16 SigGen(t_pmr_sps *mySps)
 		mySps->state = 0;
 		mySps->enabled = 0;
 		mySps->b.mute = 0;
-		for (i = 0; i < mySps->nSamples; i++)
+		for (i = 0; i < mySps->nSamples; i++) {
 			mySps->sink[(i * numChanOut) + selChanOut] = 0;
-		return (0);
+		}
+		return 0;
 	} else if (mySps->state == 2) {
 		/* doing turn off */
 		mySps->discounterl -= MS_PER_FRAME;
@@ -1179,7 +1191,7 @@ i16 SigGen(t_pmr_sps *mySps)
 			mySps->state = 2;
 		}
 	} else if (mySps->state == 0) {
-		return (0);
+		return 0;
 	}
 
 	ph = mySps->discounteru;
@@ -1333,7 +1345,7 @@ i16 DelayLine(t_pmr_sps *mySps)
 			memset((void *) (mySps->buff), 0, mySps->buffSize * 2);
 			memset((void *) (mySps->sink), 0, mySps->nSamples * 2);
 		}
-		return (0);
+		return 0;
 	}
 
 	input = mySps->source;
@@ -1374,7 +1386,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 	TRACEF(5, "ctcss_detect(%p) %i %i %i %i\n", pChan, pChan->rxCtcss->enabled, 0, pChan->rxCtcss->testIndex, pChan->rxCtcss->decode);
 
 	if (!pChan->rxCtcss->enabled)
-		return (1);
+		return 1;
 
 	relax = pChan->rxCtcss->relax;
 	pInput = pChan->rxCtcss->input;
@@ -1547,7 +1559,8 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 			ptdet->z[0] = ptdet->z[1] = ptdet->z[2] = ptdet->z[3] = 0;
 		}
 	}
-	return (0);
+	// TRACEX((1, " ctcss_detect() thit %i %i\n",thit,pChan->rxCtcss->decode));
+	return 0;
 }
 
 /*
@@ -1584,7 +1597,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan = (t_pmr_chan *) ast_calloc(sizeof(t_pmr_chan), 1);
 	if (pChan == NULL) {
 		ast_log(LOG_ERROR, "createPmrChannel() failed\n");
-		return (NULL);
+		return NULL;
 	}
 
 #if XPMR_PPTP == 1
@@ -1765,8 +1778,9 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	pChan->ptxDebug3 = ast_calloc(numSamples, 2);
 	pChan->pNull = ast_calloc(numSamples, 2);
 
-	for (i = 0; i < numSamples; i++)
+	for (i = 0; i < numSamples; i++) {
 		pChan->pNull[i] = ((i % (numSamples / 2)) * 8000) - 4000;
+	}
 
 	pChan->rxCtcss->pDebug0 = ast_calloc(numSamples, 2);
 	pChan->rxCtcss->pDebug1 = ast_calloc(numSamples, 2);
@@ -2905,7 +2919,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	}
 
 	if (pChan->b.txhalted)
-		return (1);
+		return 1;
 
 	if (pChan->b.startSpecialTone) {
 		pChan->b.startSpecialTone = 0;
@@ -2969,13 +2983,15 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 	}
 
 	if (pChan->txMixA == TX_OUT_OFF || !pChan->txPttOut) {
-		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2)
+		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2) {
 			outputtx[i] = 0;
+		}
 	}
 
 	if (pChan->txMixB == TX_OUT_OFF || !pChan->txPttOut) {
-		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2)
+		for (i = 0; i < pChan->nSamplesTx * 2 * 6; i += 2) {
 			outputtx[i + 1] = 0;
+		}
 	}
 
 #if XPMR_PPTP == 1

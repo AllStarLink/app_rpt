@@ -41,6 +41,7 @@ int rpt_disable_cdr(struct ast_channel *chan)
 		} else {
 			ast_debug(4, "No CDR present on %s\n", ast_channel_name(chan));
 		}
+
 		return 0;
 	}
 
@@ -50,8 +51,10 @@ int rpt_disable_cdr(struct ast_channel *chan)
 		ast_log(AST_LOG_WARNING, "Local channel %s missing private\n", ast_channel_name(chan));
 		return -1;
 	}
+
 	ao2_ref(p, +1);
 	ao2_lock(p);
+
 	if (p->owner) {
 		if (ast_channel_cdr(p->owner)) {
 			if (ast_cdr_set_property(ast_channel_name(p->owner), AST_CDR_FLAG_DISABLE_ALL)) {
@@ -73,6 +76,7 @@ int rpt_disable_cdr(struct ast_channel *chan)
 			ast_debug(4, "No CDR present on %s\n", ast_channel_name(p->chan));
 		}
 	}
+
 	ao2_unlock(p);
 	ao2_ref(p, -1);
 	return res;
@@ -101,9 +105,11 @@ int rpt_make_call(struct ast_channel *chan, const char *addr, int timeout, const
 	const char *callerid, const char *node)
 {
 	int res = rpt_setup_call(chan, addr, timeout, driver, data, desc, callerid, node);
+
 	if (res) {
 		return res;
 	}
+
 	return ast_call(chan, addr, timeout);
 }
 
@@ -127,6 +133,7 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 			ao2_ref(cap, -1);
 			return;
 		}
+
 		dest = ast_request("IAX2", cap, NULL, NULL, dialstr, NULL);
 		if (!dest) {
 			ast_log(LOG_ERROR, "Can not create channel for rpt_forward to IAX2/%s\n", dialstr);
@@ -134,6 +141,7 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 			return;
 		}
 	}
+
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(dest));
 	ast_set_read_format(chan, ast_format_slin);
 	ast_set_write_format(chan, ast_format_slin);
@@ -149,42 +157,54 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 	ast_call(dest, dialstr, 999);
 	cs[0] = chan;
 	cs[1] = dest;
+
 	for (;;) {
 		if (ast_check_hangup(chan)) {
 			break;
 		}
+
 		if (ast_check_hangup(dest)) {
 			break;
 		}
+
 		ms = 100;
 		w = cs[0];
 		cs[0] = cs[1];
 		cs[1] = w;
 		w = ast_waitfor_n(cs, 2, &ms);
+
 		if (!w) {
 			continue;
 		}
+
 		if (w == chan) {
 			f = ast_read(chan);
+
 			if (!f) {
 				break;
 			}
+
 			if ((f->frametype == AST_FRAME_CONTROL) && (f->subclass.integer == AST_CONTROL_HANGUP)) {
 				ast_frfree(f);
 				break;
 			}
+
 			ast_write(dest, f);
 			ast_frfree(f);
 		}
+
 		if (w == dest) {
 			f = ast_read(dest);
+
 			if (!f) {
 				break;
 			}
+
 			if ((f->frametype == AST_FRAME_CONTROL) && (f->subclass.integer == AST_CONTROL_HANGUP)) {
 				ast_frfree(f);
 				break;
 			}
+
 			ast_write(chan, f);
 			ast_frfree(f);
 		}
