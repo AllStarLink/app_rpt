@@ -475,22 +475,6 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 		ast_log(LOG_WARNING, "Channel %s: Cannot recvfrom()", ast_channel_name(ast));
 		return NULL;
 	}
-#if 0
-	if (memcmp(&si_them.sin_addr, &pvt->si_other.sin_addr, sizeof(si_them.sin_addr))) {
-		ast_log(LOG_NOTICE, "Received packet from %s, expecting it from %s\n",
-				ast_inet_ntoa(si_them.sin_addr), ast_inet_ntoa(pvt->si_other.sin_addr));
-		pvt->fr.frametype = 0;
-		pvt->fr.subclass.integer = 0;
-		pvt->fr.datalen = 0;
-		pvt->fr.samples = 0;
-		pvt->fr.data.ptr = NULL;
-		pvt->fr.src = __PRETTY_FUNCTION__;
-		pvt->fr.offset = 0;
-		pvt->fr.mallocd = 0;
-		pvt->fr.delivery = ast_tv(0, 0);
-		return &pvt->fr;
-	}
-#endif
 	if (n < sizeof(struct _chan_usrp_bufhdr)) {
 		ast_log(LOG_NOTICE, "Channel %s: Received packet length %d too short\n", ast_channel_name(ast), n);
 	} else {

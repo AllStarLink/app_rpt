@@ -787,9 +787,6 @@ typedef struct t_pmr_chan {
 
 	i16 *prxSquelchAdjust;
 
-	/* i16  *prxNoiseMeasure;   for autotune */
-	/* i32  *prxNoiseAdjust; */
-
 	i16 *prxVoiceMeasure;
 	i32 *prxVoiceAdjust;
 

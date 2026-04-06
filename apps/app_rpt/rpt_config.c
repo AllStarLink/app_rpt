@@ -1419,7 +1419,7 @@ int rpt_is_valid_dns_name(const char *dns_name)
 		if (*ptr == '.') {
 			/* no empty labels */
 			if (label_start) {
-				return 0; /* No empty labels */
+				return 0;
 			}
 			label_length = 0;
 			label_start = 1;

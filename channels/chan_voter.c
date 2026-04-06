@@ -336,7 +336,6 @@ Use "core show help voter <command>"" to display usage.
  * full system deviation to all clients (with transmit enabled) in an instance.
  */
 static unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
-/* unsigned char mwp; */
 
 struct ast_flags zeroflag = { 0 };
 

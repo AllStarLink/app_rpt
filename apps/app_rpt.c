@@ -1619,8 +1619,6 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 
 	ast_debug(7, "digits=%s  source=%d\n", digits, command_source);
 
-	/* ast_debug(1, "@@@@ Digits collected: %s, source: %d\n", digits, command_source); */
-
 	if (command_source == SOURCE_DPHONE) {
 		if (!myrpt->p.dphone_functions)
 			return DC_INDETERMINATE;
@@ -6667,10 +6665,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_set_numeric_var_helper(chan, "RPT_STAT_NOWCHAN", myrpt->nowchan);
 		rpt_set_numeric_var_helper(chan, "RPT_STAT_DUPLEX", myrpt->p.duplex);
 		rpt_set_numeric_var_helper(chan, "RPT_STAT_PARROT", myrpt->p.parrotmode);
-#if 0
-		rpt_set_numeric_var_helper(chan, "RPT_STAT_PHONEVOX", myrpt->phonevox);
-		rpt_set_numeric_var_helper(chan, "RPT_STAT_CONNECTED", myrpt->connected);
-#endif
 		rpt_set_numeric_var_helper(chan, "RPT_STAT_CALLMODE", myrpt->callmode);
 		pbx_builtin_setvar_helper(chan, "RPT_STAT_LASTTONE", myrpt->lasttone);
 #undef rpt_set_numeric_var_helper
@@ -6689,13 +6683,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (options && *options == 'o') {
 		return (channel_revert(myrpt));
 	}
-
-#if 0
-	if ((altp) && (*options == 'Z')) {
-		rpt_push_alt_macro(myrpt, altp);
-		return 0;
-	}
-#endif
 
 	/* if not phone access, must be an IAX connection */
 	if (options && ((*options == 'P') || (*options == 'D') || (*options == 'R') || (*options == 'S'))) {
@@ -6759,7 +6746,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (options && (*options == 'R')) {
 		/* Parts of this section taken from app_parkandannounce */
 		char *return_context;
-		/* int l, m, lot, timeout = 0; */
 		int l, timeout = 0;
 		enum patch_call_mode callmode;
 		char tmp[256], *template;
@@ -6853,12 +6839,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		/* old way: https://github.com/asterisk/asterisk/blob/1.8/apps/app_parkandannounce.c */
 		/* new way: https://github.com/asterisk/asterisk/blob/master/res/parking/parking_applications.c#L890 */
 
-		/* ast_masq_park_call(chan, NULL, timeout, &lot); commented out to avoid compiler error. */
-
-		/* ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context); */
-
-		/* snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1); */
-
 		rpt_telemetry(myrpt, REV_PATCH, tmp);
 
 		ast_free(orig_s);
@@ -6938,7 +6918,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (callstr)
 				b1 = callstr;
 		} else {
-			/* b = chan->cid.cid_name; */
 			b = ast_channel_caller(chan)->id.name.str;
 			b1 = ast_channel_caller(chan)->id.number.str;
 			ast_shrink_phone_number(b1);
@@ -7107,7 +7086,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		b1 = "0";
 		b = NULL;
 	} else {
-		/* b = chan->cid.cid_name; */
 		b = ast_channel_caller(chan)->id.name.str;
 		b1 = ast_channel_caller(chan)->id.number.str;
 		ast_shrink_phone_number(b1);

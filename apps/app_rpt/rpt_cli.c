@@ -530,7 +530,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				tel_mode = "3";
 			}
 
-			/* ### GET CONNECTED NODE INFO ####################
+			/* GET CONNECTED NODE INFO
 			 * Traverse the list of connected nodes
 			 */
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
@@ -570,7 +570,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			ao2_cleanup(links_copy); /* Free the copy container */
 			ast_cli(fd, "\n\n");
 
-			/* ### GET ALL LINKED NODES INFO #################### */
+			/* GET ALL LINKED NODES INFO */
 			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
@@ -596,7 +596,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "\n\n");
 			ast_free(strs);
 
-			/* ### GET VARIABLES INFO #################### */
+			/* GET VARIABLES INFO */
 			j = 0;
 			ast_channel_lock(rpt_vars[i].rxchannel);
 			AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[i].rxchannel), newvariable, entries) {
@@ -606,7 +606,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			ast_channel_unlock(rpt_vars[i].rxchannel);
 			ast_cli(fd, "\n");
 
-			/* ### OUTPUT RPT STATUS STATES ############## */
+			/* OUTPUT RPT STATUS STATES */
 			ast_cli(fd, "parrot_ena=%s\n", parrot_ena);
 			ast_cli(fd, "sys_ena=%s\n", sys_ena);
 			ast_cli(fd, "tot_ena=%s\n", tot_ena);
@@ -876,7 +876,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/*## Send to all nodes */
+/* Send to all nodes */
 
 int rpt_do_sendall(int fd, int argc, const char *const *argv)
 {

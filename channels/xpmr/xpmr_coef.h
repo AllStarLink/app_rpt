@@ -54,17 +54,6 @@ static const u32 dtmf_col[] =
 #define CTCSS_SAMPLE_RATE   8000
 #define TDIV(x) ((CTCSS_SAMPLE_RATE*1000/x)+5)/10
 
-#if 0
-static i32 coef_ctcss[4][5]=
-{
-	/* freq, divisor, integrator, filter */
-	{770,TDIV(770),CTCSS_COEF_INT,0,0},
-	{1000,TDIV(1000),CTCSS_COEF_INT,0,0},
-	{1035,TDIV(1035),CTCSS_COEF_INT,0,0},
-	{0,0,0,0}
-};
-#endif
-
 static i16 coef_ctcss_div[] = {
 	2985, /* 00   067.0 */
 	2782, /* 01   071.9 */
@@ -416,7 +405,6 @@ static const int16_t coef_int_lpf_300_1_2[]={
 /* pre-emphasis differentiator 4000 Hz with 8KS/s */
 /* a0,a1,b0, */
 static const int16_t taps_int_hpf_4000_1_2 = 2;
-/*static const int32_t gain_int_hpf_4000_1_2 = 16384;  per calculations */
 static const int32_t gain_int_hpf_4000_1_2 = 13404; /* hand tweaked for unity gain at 1KHz */
 static const int16_t coef_int_hpf_4000_1_2[]={
 17610,
