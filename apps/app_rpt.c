@@ -5873,6 +5873,9 @@ static int load_config(int reload)
 			if (rpt_vars[n].remoterig) {
 				ast_free(rpt_vars[n].remoterig);
 			}
+			if (rpt_vars[n].mdc) {
+				ast_free(rpt_vars[n].mdc);
+			}
 		}
 		memset(&rpt_vars[n], 0, sizeof(rpt_vars[n]));
 		val = ast_variable_retrieve(cfg, this, "rxchannel");
@@ -7829,6 +7832,10 @@ static int unload_module(void)
 		if (rpt_vars[i].remoterig) {
 			ast_free(rpt_vars[i].remoterig);
 			rpt_vars[i].remoterig = NULL;
+		}
+		if (rpt_vars[n].mdc) {
+			ast_free(rpt_vars[n].mdc);
+			rpt_vars[n].mdc = NULL;
 		}
 	}
 
