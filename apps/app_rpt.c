@@ -5945,7 +5945,6 @@ static void rpt_nodelog(void)
 }
 
 /*! \brief Master thread for managing repeater threads */
-
 static void *rpt_master(void *ignore)
 {
 	int i;
