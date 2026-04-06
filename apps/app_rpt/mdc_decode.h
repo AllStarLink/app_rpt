@@ -40,7 +40,7 @@
 #define TWOPI (2.0 * 3.1415926535)
 #endif
 
-#define MDC_ND 4 /* number of decoders */
+#define MDC_ND 4	   /* number of decoders */
 #define MDC_GDTHRESH 5 /* "good bits" threshold */
 
 #define DIFFERENTIATOR
