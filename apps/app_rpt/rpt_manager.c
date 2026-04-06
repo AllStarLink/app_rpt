@@ -262,12 +262,14 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				ast_free(lbuf);
 				return RESULT_FAILURE;
 			}
+
 			/* parse em */
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
 			/* sort em */
 			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
 			}
+
 			for (j = 0;; j++) {
 				if (!strs[j]) {
 					if (!j) {
@@ -408,15 +410,19 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 					if (!ast_strlen_zero(myrpt->loginuser)) {
 						loginuser = ast_strdup(myrpt->loginuser);
 					}
+
 					if (!ast_strlen_zero(myrpt->loginlevel)) {
 						loginlevel = ast_strdup(myrpt->loginlevel);
 					}
+
 					if (!ast_strlen_zero(myrpt->freq)) {
 						freq = ast_strdup(myrpt->freq);
 					}
+
 					if (!ast_strlen_zero(myrpt->rxpl)) {
 						rxpl = ast_strdup(myrpt->rxpl);
 					}
+
 					if (!ast_strlen_zero(myrpt->txpl)) {
 						txpl = ast_strdup(myrpt->txpl);
 					}
@@ -714,9 +720,11 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 			if (called_number) {
 				ast_free(called_number);
 			}
+
 			if (lastdtmfcommand) {
 				ast_free(lastdtmfcommand);
 			}
+
 			astman_append(s, "\r\n");
 			ast_free(str);
 			return 0;
@@ -768,14 +776,15 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 			break;
 		}
 	}
+
 	if (!mct[i].cmd) {
 		astman_send_error(s, m, "RptStatus unknown command");
 		return 0;
 	}
+
 	index = mct[i].index;
 
-	switch (index) {			/* Use the index to go to the correct command */
-
+	switch (index) { /* Use the index to go to the correct command */
 	case MGRCMD_RPTSTAT:
 		/* Return Nodes: and a comma separated list of nodes */
 		if (!nrpts) {

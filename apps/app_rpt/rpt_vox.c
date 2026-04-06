@@ -83,6 +83,7 @@ int dovox(struct vox *v, short *buf, int bs)
 	}
 
 	threshold = MAX(threshold, VOX_MIN_THRESHOLD);
+
 	if (energy > threshold) {
 		if (v->voxena) {
 			v->noise_energy *= 0.75;

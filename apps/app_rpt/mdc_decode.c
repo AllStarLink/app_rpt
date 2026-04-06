@@ -74,6 +74,7 @@ static unsigned int _flip(unsigned int crc, int bitnum)
 
 		j<<= 1;
 	}
+
 	return crcout;
 }
 
@@ -196,6 +197,7 @@ static int _onebits(unsigned int n)
 		++i;
 		n &= (n-1);
 	}
+
 	return i;
 }
 
@@ -228,7 +230,9 @@ static void _shiftin(mdc_decoder_t *decoder, int x)
 			decoder->xorb[x] = !(decoder->xorb[x]);
 			_clearbits(decoder, x);
 		}
+
 		return;
+
 	case 1:
 	case 2:
 		decoder->bits[x][decoder->shcount[x]] = bit;
@@ -250,9 +254,11 @@ static void _zcproc(mdc_decoder_t *decoder, int x)
 	case 2:
 	case 4:
 		break;
+
 	case 3:
 		decoder->xorb[x] = !(decoder->xorb[x]);
 		break;
+
 	default:
 		return;
 	}

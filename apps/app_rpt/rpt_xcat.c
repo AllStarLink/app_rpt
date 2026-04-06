@@ -219,27 +219,36 @@ int set_xcat(struct rpt *myrpt)
 	if (!res) {
 		res = simple_command_xcat(myrpt, 8, 1);
 	}
+
 	ast_debug(2, "Offset Initial/Simplex\n");
+
 	if (!res) {
 		res = set_offset_xcat(myrpt, REM_SIMPLEX);	/* Offset */
 	}
 	/* set Freq */
 	ast_debug(2, "Frequency\n");
+
 	if (!res) {
 		res = set_freq_xcat(myrpt, myrpt->freq);	/* Frequency */
 	}
+
 	ast_debug(2, "Offset\n");
+
 	if (!res) {
 		res = set_offset_xcat(myrpt, myrpt->offset);	/* Offset */
 	}
+
 	ast_debug(2, "CTCSS\n");
+
 	if (!res) {
 		res = set_ctcss_freq_xcat(myrpt, myrpt->txplon ? myrpt->txpl : "0.0", myrpt->rxplon ? myrpt->rxpl : "0.0"); /* Tx/Rx CTCSS */
 	}
 	/* set Freq */
 	ast_debug(2, "Frequency\n");
+
 	if (!res) {
 		res = set_freq_xcat(myrpt, myrpt->freq);	/* Frequency */
 	}
+
 	return res;
 }

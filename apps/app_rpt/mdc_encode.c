@@ -141,6 +141,7 @@ static unsigned long docrc(unsigned char* p, int len) {
 			if (c & j) {
 				bit ^= 0x8000;
 			}
+
 			if (bit) {
 				crc ^= 0x1021;
 			}
@@ -195,12 +196,14 @@ static unsigned char * _enc_str(unsigned char *data)
 	for (i = 0; i < 7; i++) {
 		csr[i] = 0;
 	}
+
 	for (i = 0; i < 7; i++) {
 		data[i+7] = 0;
 		for (j = 0; j <= 7; j++) {
 			for (k = 6; k > 0; k--) {
 				csr[k] = csr[k-1];
 			}
+
 			csr[0] = (data[i] >> j) & 0x01;
 			b = csr[0] + csr[2] + csr[5] + csr[6];
 			data[i+7] |= (b & 0x01) << j;
@@ -222,6 +225,7 @@ static unsigned char * _enc_str(unsigned char *data)
 			b = 0x01 & (data[i] >> j);
 			lbits[k] = b;
 			k += 16;
+
 			if (k > 111) {
 				k = ++m;
 			}
@@ -349,6 +353,7 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 	} else {
 		encoder->tth += 1.0 * encoder->incr;
 	}
+
 	if (encoder->tth >= TWOPI) {
 		encoder->tth -= TWOPI;
 	}

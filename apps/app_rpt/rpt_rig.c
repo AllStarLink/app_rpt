@@ -43,10 +43,13 @@ static int kenwood_pltocode(char *str)
 
 	s = strchr(str, '.');
 	i = 0;
+
 	if (s) {
 		i = atoi(s + 1);
 	}
+
 	i += atoi(str) * 10;
+
 	switch (i) {
 	case 670:
 		return 1;
@@ -125,6 +128,7 @@ static int kenwood_pltocode(char *str)
 	case 2503:
 		return 39;
 	}
+
 	return -1;
 }
 
@@ -136,10 +140,13 @@ static int tm271_pltocode(char *str)
 
 	s = strchr(str, '.');
 	i = 0;
+
 	if (s) {
 		i = atoi(s + 1);
 	}
+
 	i += atoi(str) * 10;
+
 	switch (i) {
 	case 670:
 		return 0;
@@ -224,6 +231,7 @@ static int tm271_pltocode(char *str)
 	case 2503:
 		return 40;
 	}
+
 	return -1;
 }
 
@@ -235,10 +243,13 @@ static int ft950_pltocode(char *str)
 
 	s = strchr(str, '.');
 	i = 0;
+
 	if (s) {
 		i = atoi(s + 1);
 	}
+
 	i += atoi(str) * 10;
+
 	switch (i) {
 	case 670:
 		return 0;
@@ -323,6 +334,7 @@ static int ft950_pltocode(char *str)
 	case 2503:
 		return 40;
 	}
+
 	return -1;
 }
 
@@ -334,10 +346,13 @@ static int ft100_pltocode(char *str)
 
 	s = strchr(str, '.');
 	i = 0;
+
 	if (s) {
 		i = atoi(s + 1);
 	}
+
 	i += atoi(str) * 10;
+
 	switch (i) {
 	case 670:
 		return 0;
@@ -418,6 +433,7 @@ static int ft100_pltocode(char *str)
 	case 2503:
 		return 38;
 	}
+
 	return -1;
 }
 
@@ -427,16 +443,20 @@ static int sendrxkenwood(struct rpt *myrpt, char *txstr, char *rxstr, char *cmps
 
 	for (i = 0; i < KENWOOD_RETRIES; i++) {
 		j = sendkenwood(myrpt, txstr, rxstr);
+
 		if (j < 0) {
 			return j;
 		}
+
 		if (j == 0) {
 			continue;
 		}
+
 		if (!strncmp(rxstr, cmpstr, strlen(cmpstr))) {
 			return 0;
 		}
 	}
+
 	return -1;
 }
 
@@ -452,8 +472,10 @@ int setkenwood(struct rpt *myrpt)
 	if (sendrxkenwood(myrpt, "VMC 0,0\r", rxstr, "VMC") < 0) {
 		return -1;
 	}
+
 	split_freq(mhz, decimals, myrpt->freq);
 	mysplit = myrpt->splitkhz;
+
 	if (atoi(mhz) > 400) {
 		band = '6';
 		band1 = '1';
@@ -469,31 +491,42 @@ int setkenwood(struct rpt *myrpt)
 			mysplit = myrpt->p.default_split_2m;
 		}
 	}
+
 	sprintf(offset, "%06d000", mysplit);
 	strcpy(freq, "000000");
 	ast_copy_string(freq, decimals, strlen(freq) - 1);
 	myrxpl = myrpt->rxplon;
+
 	if (IS_XPMR(myrpt)) {
 		myrxpl = 0;
 	}
+
 	step = 0;
+
 	if ((decimals[3] != '0') || (decimals[4] != '0')) {
 		step = 1;
 	}
+
 	sprintf(txstr, "VW %c,%05d%s,%d,%d,0,%d,%d,,%02d,,%02d,%s\r",
 			band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
 			(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
+
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VW") < 0) {
 		return -1;
 	}
+
 	sprintf(txstr, "RBN %c\r", band2);
+
 	if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 		return -1;
 	}
+
 	sprintf(txstr, "PC %c,%d\r", band1, powers[(int) myrpt->powerlevel]);
+
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -510,8 +543,10 @@ int set_tmd700(struct rpt *myrpt)
 	if (sendrxkenwood(myrpt, "BC 0,0\r", rxstr, "BC") < 0) {
 		return -1;
 	}
+
 	split_freq(mhz, decimals, myrpt->freq);
 	mysplit = myrpt->splitkhz;
+
 	if (atoi(mhz) > 400) {
 		band = 8;
 		if (!mysplit) {
@@ -523,40 +558,54 @@ int set_tmd700(struct rpt *myrpt)
 			mysplit = myrpt->p.default_split_2m;
 		}
 	}
+
 	sprintf(offset, "%06d000", mysplit);
 	strcpy(freq, "000000");
 	ast_copy_string(freq, decimals, strlen(freq) - 1);
 	step = 0;
+
 	if ((decimals[3] != '0') || (decimals[4] != '0')) {
 		step = 1;
 	}
+
 	myrxpl = myrpt->rxplon;
+
 	if (IS_XPMR(myrpt)) {
 		myrxpl = 0;
 	}
+
 	sprintf(txstr, "VW %d,%05d%s,%d,%d,0,%d,%d,0,%02d,0010,%02d,%s,0\r",
 			band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
 			(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
+
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VW") < 0) {
 		return -1;
 	}
+
 	if (sendrxkenwood(myrpt, "VMC 0,0\r", rxstr, "VMC") < 0) {
 		return -1;
 	}
+
 	sprintf(txstr, "RBN\r");
+
 	if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 		return -1;
 	}
+
 	sprintf(txstr, "RBN %d\r", band);
+
 	if (strncmp(rxstr, txstr, 5)) {
 		if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 			return -1;
 		}
 	}
+
 	sprintf(txstr, "PC 0,%d\r", powers[(int) myrpt->powerlevel]);
+
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -578,10 +627,13 @@ int set_tm271(struct rpt *myrpt)
 	} else {
 		mysplit = myrpt->splitkhz;
 	}
+
 	step = 0;
+
 	if ((decimals[3] != '0') || (decimals[4] != '0')) {
 		step = 1;
 	}
+
 	sprintf(txstr, "VF %04d%s,%d,%d,0,%d,0,0,%02d,00,000,%05d000,0,0\r",
 			atoi(mhz), freq, step, offsets[(int) myrpt->offset], (myrpt->txplon != 0), tm271_pltocode(myrpt->txpl),
 			mysplit);
@@ -589,13 +641,17 @@ int set_tm271(struct rpt *myrpt)
 	if (sendrxkenwood(myrpt, "VM 0\r", rxstr, "VM") < 0) {
 		return -1;
 	}
+
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VF") < 0) {
 		return -1;
 	}
+
 	sprintf(txstr, "PC %d\r", powers[(int) myrpt->powerlevel]);
+
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -704,6 +760,7 @@ static int check_freq_rtx(int m, int d, enum rpt_mode *defmode, struct rpt *myrp
 			return -1;
 		}
 	}
+
 	if (defmode) {
 		*defmode = dflmd;
 	}
@@ -718,6 +775,7 @@ int split_ctcss_freq(char *hertz, char *decimal, char *freq)
 
 	ast_copy_string(freq_copy, freq, sizeof(freq_copy));
 	decp = strchr(freq_copy, '.');
+
 	if (!decp) {
 		return -1;
 	}
@@ -810,6 +868,7 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 	} else {
 		return -1;
 	}
+
 	if (defmode) {
 		*defmode = dflmd;
 	}
@@ -894,6 +953,7 @@ static int set_offset_ft897(struct rpt *myrpt, enum rpt_offset offset)
 	cmdstr[3] = ((mysplit % 10) << 4) + ((mysplit % 100) / 10);
 	cmdstr[4] = 0xf9;			/* command */
 	res = serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
+
 	if (res) {
 		return res;
 	}
@@ -950,8 +1010,8 @@ int set_mode_ft897(struct rpt *myrpt, enum rpt_mode newmode)
 	default:
 		return -1;
 	}
-	cmdstr[4] = 0x07;
 
+	cmdstr[4] = 0x07;
 	return serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
 }
 
@@ -1009,8 +1069,8 @@ static int set_ctcss_freq_ft897(struct rpt *myrpt, char *txtone, char *rxtone)
 		cmdstr[2] = ((h / 100) << 4) + (h % 100) / 10;
 		cmdstr[3] = ((h % 10) << 4) + (d % 10);
 	}
-	cmdstr[4] = 0x0B;
 
+	cmdstr[4] = 0x0B;
 	return serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
 }
 
@@ -1041,6 +1101,7 @@ int set_ft897(struct rpt *myrpt)
 		res = set_freq_ft897(myrpt, myrpt->freq);	/* Frequency */
 		usleep(FT897_SERIAL_DELAY * 2);
 	}
+
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		ast_debug(3, "Offset\n");
 		if (!res) {
@@ -1059,10 +1120,12 @@ int set_ft897(struct rpt *myrpt)
 			usleep(FT897_SERIAL_DELAY);
 		}
 	}
+
 	if ((myrpt->remmode == REM_MODE_USB) || (myrpt->remmode == REM_MODE_LSB)) {
 		ast_debug(3, "Clarifier off\n");
 		simple_command_ft897(myrpt, 0x85);	/* Clarifier off if LSB or USB */
 	}
+
 	return res;
 }
 
@@ -1195,6 +1258,7 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 	} else {
 		return -1;
 	}
+
 	if (defmode) {
 		*defmode = dflmd;
 	}
@@ -1300,6 +1364,7 @@ int set_mode_ft100(struct rpt *myrpt, enum rpt_mode newmode)
 	default:
 		return -1;
 	}
+
 	return simple_command_ft100(myrpt, 0x0c, p1);
 }
 
@@ -1316,6 +1381,7 @@ static int set_ctcss_mode_ft100(struct rpt *myrpt, char txplon, char rxplon)
 	} else {
 		p1 = 0;					/* OFF */
 	}
+
 	return simple_command_ft100(myrpt, 0x92, p1);
 }
 
@@ -1337,6 +1403,7 @@ int set_ft100(struct rpt *myrpt)
 	res = set_mode_ft100(myrpt, myrpt->remmode);	/* Modulation mode */
 
 	ast_debug(3, "Split off\n");
+
 	if (!res) {
 		simple_command_ft100(myrpt, 0x01, 0);	/* Split off */
 	}
@@ -1346,6 +1413,7 @@ int set_ft100(struct rpt *myrpt)
 		res = set_freq_ft100(myrpt, myrpt->freq);	/* Frequency */
 		usleep(FT100_SERIAL_DELAY * 2);
 	}
+
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		ast_debug(3, "Offset\n");
 		if (!res) {
@@ -1364,6 +1432,7 @@ int set_ft100(struct rpt *myrpt)
 			usleep(FT100_SERIAL_DELAY);
 		}
 	}
+
 	return res;
 }
 
@@ -1585,6 +1654,7 @@ static int set_ctcss_mode_ft950(struct rpt *myrpt, char txplon, char rxplon)
 	} else {
 		cmdstr = "CT00;";		/* OFF */
 	}
+
 	return serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);
 }
 
@@ -1625,17 +1695,20 @@ int set_ft950(struct rpt *myrpt)
 	if (!res) {
 		res = set_mode_ft950(myrpt, myrpt->remmode);	/* Modulation mode */
 	}
-	ast_debug(2, "Split off\n");
 
+	ast_debug(2, "Split off\n");
 	cmdstr = "OS00;";
+
 	if (!res) {
 		res = serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);	/* Split off */
 	}
+
 	ast_debug(2, "VFO Modes\n");
 
 	if (!res) {
 		res = serial_remote_io(myrpt, (unsigned char *) "FR0;", 4, NULL, 0, 0);
 	}
+
 	if (!res) {
 		res = serial_remote_io(myrpt, (unsigned char *) "FT2;", 4, NULL, 0, 0);
 	}
@@ -1645,6 +1718,7 @@ int set_ft950(struct rpt *myrpt)
 	if (!res) {
 		res = set_freq_ft950(myrpt, myrpt->freq);	/* Frequency */
 	}
+
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		ast_debug(2, "Offset\n");
 		if (!res) {
@@ -1659,6 +1733,7 @@ int set_ft950(struct rpt *myrpt)
 			res = set_ctcss_mode_ft950(myrpt, myrpt->txplon, myrpt->rxplon);	/* CTCSS mode */
 		}
 	}
+
 	if ((myrpt->remmode == REM_MODE_USB) || (myrpt->remmode == REM_MODE_LSB)) {
 		ast_debug(2, "Clarifier off\n");
 		cmdstr = "RT0;";
@@ -1824,7 +1899,6 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 	}
 
 	ast_debug(2, "(%i,%i,%i,%i) returning %i\n", m, d, defmode ? *defmode : -1, mars, rv);
-
 	return rv;
 }
 
@@ -1837,10 +1911,13 @@ static int ic706_pltocode(char *str)
 
 	s = strchr(str, '.');
 	i = 0;
+
 	if (s) {
 		i = atoi(s + 1);
 	}
+
 	i += atoi(str) * 10;
+
 	switch (i) {
 	case 670:
 		rv = 0;
@@ -1994,7 +2071,6 @@ static int ic706_pltocode(char *str)
 		break;
 	}
 	ast_debug(2, "%i  rv=%i\n", i, rv);
-
 	return rv;
 }
 
@@ -2063,6 +2139,7 @@ static int set_offset_ic706(struct rpt *myrpt, enum rpt_offset offset)
 	}
 
 	mysplit = myrpt->splitkhz * 10;
+
 	if (!mysplit) {
 		if (atoi(mhz) > 400) {
 			mysplit = myrpt->p.default_split_70cm * 10;
@@ -2085,6 +2162,7 @@ static int set_offset_ic706(struct rpt *myrpt, enum rpt_offset offset)
 	cmdstr[8] = 0xfd;
 
 	res = civ_cmd(myrpt, cmdstr, 9);
+
 	if (res) {
 		return res;
 	}
@@ -2139,6 +2217,7 @@ int set_mode_ic706(struct rpt *myrpt, enum rpt_mode newmode)
 	default:
 		return -1;
 	}
+
 	return simple_command_ic706(myrpt, 6, c);
 }
 
@@ -2160,6 +2239,7 @@ static int set_ctcss_mode_ic706(struct rpt *myrpt, char txplon, char rxplon)
 	cmdstr[7] = 0xfd;
 
 	rv = civ_cmd(myrpt, cmdstr, 8);
+
 	if (rv) {
 		return -1;
 	}
@@ -2309,6 +2389,7 @@ int set_ic706(struct rpt *myrpt)
 	if (!res) {
 		res = set_mode_ic706(myrpt, myrpt->remmode);	/* Modulation mode */
 	}
+
 	ast_debug(2, "Split off\n");
 
 	if (!res) {
@@ -2319,6 +2400,7 @@ int set_ic706(struct rpt *myrpt)
 	if (!res) {
 		res = set_freq_ic706(myrpt, myrpt->freq);	/* Frequency */
 	}
+
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		ast_debug(2, "Offset\n");
 		if (!res) {
@@ -2329,6 +2411,7 @@ int set_ic706(struct rpt *myrpt)
 			res = set_ctcss_mode_ic706(myrpt, myrpt->txplon, myrpt->rxplon);	/* CTCSS mode */
 		}
 	}
+
 	return res;
 }
 
@@ -2425,32 +2508,40 @@ int setrem(struct rpt *myrpt)
 			sprintf(str, "J Remote Frequency %s %s\n%s Power\n", myrpt->freq, modes[(int) myrpt->remmode],
 					powerlevels[(int) myrpt->powerlevel]);
 		}
+
 		ast_sendtext(myrpt->remote_webtransceiver, str);
 	}
+
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT897)) {
 		rpt_telemetry(myrpt, SETREMOTE, NULL);
 		res = 0;
 	}
+
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100)) {
 		rpt_telemetry(myrpt, SETREMOTE, NULL);
 		res = 0;
 	}
+
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_FT950)) {
 		rpt_telemetry(myrpt, SETREMOTE, NULL);
 		res = 0;
 	}
+
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_IC706)) {
 		rpt_telemetry(myrpt, SETREMOTE, NULL);
 		res = 0;
 	}
+
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_XCAT)) {
 		rpt_telemetry(myrpt, SETREMOTE, NULL);
 		res = 0;
 	}
+
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) {
 		rpt_telemetry(myrpt, SETREMOTE, NULL);
 		res = 0;
 	}
+
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_TMD700)) {
 		rpt_telemetry(myrpt, SETREMOTE, NULL);
 		res = 0;
@@ -2572,6 +2663,7 @@ char check_tx_freq(struct rpt *myrpt)
 
 	ast_copy_string(limits, limitlist->value, sizeof(limits));
 	finddelim(limits, limit_ranges, ARRAY_LEN(limit_ranges));
+
 	for (i = 0; i < 40 && limit_ranges[i]; i++) {
 		char range[40];
 		char *r, *s;
@@ -2631,8 +2723,8 @@ char check_tx_freq(struct rpt *myrpt)
 			break;
 		}
 	}
-	ast_debug(4, "rv=%i\n", rv);
 
+	ast_debug(4, "rv=%i\n", rv);
 	return rv;
 }
 
@@ -2716,8 +2808,10 @@ int service_scan(struct rpt *myrpt)
 		int myhund = (interval < 0) ? k100 : decimals[0];
 		int myten = (interval < 0) ? k10 : decimals[1];
 		myrpt->hfscanstatus = (myten == '0') ? (myhund - '0') * 100 : (myten - '0') * 10;
-	} else
+	} else {
 		myrpt->hfscanstatus = 0;
+	}
+
 	return res;
 
 }
@@ -2729,6 +2823,7 @@ int channel_steer(struct rpt *myrpt, char *data)
 	if (!myrpt->remoterig) {
 		return 0;
 	}
+
 	ast_debug(1, "remoterig=%s, data=%s\n", myrpt->remoterig, data);
 
 	if (!data || !*data) {
@@ -2745,6 +2840,7 @@ int channel_steer(struct rpt *myrpt, char *data)
 			}
 		}
 	}
+
 	ast_debug(1, "nowchan=%i  res=%i\n", myrpt->nowchan, res);
 	return res;
 }
@@ -2766,5 +2862,6 @@ int channel_revert(struct rpt *myrpt)
 		channel_steer(myrpt, data);
 		res = 1;
 	}
+
 	return res;
 }

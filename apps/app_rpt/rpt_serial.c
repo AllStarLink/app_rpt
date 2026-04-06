@@ -28,16 +28,19 @@ int serial_open(char *fname, int speed, int stop2)
 	int fd;
 
 	fd = open(fname, O_RDWR);
+
 	if (fd == -1) {
 		ast_log(LOG_WARNING, "Cannot open serial port %s\n", fname);
 		return -1;
 	}
 
 	memset(&mode, 0, sizeof(mode));
+
 	if (tcgetattr(fd, &mode)) {
 		ast_log(LOG_WARNING, "Unable to get serial parameters on %s: %s\n", fname, strerror(errno));
 		return -1;
 	}
+
 #ifndef	SOLARIS
 	cfmakeraw(&mode);
 #else
@@ -54,10 +57,12 @@ int serial_open(char *fname, int speed, int stop2)
 
 	cfsetispeed(&mode, speed);
 	cfsetospeed(&mode, speed);
+
 	if (tcsetattr(fd, TCSANOW, &mode)) {
 		ast_log(LOG_WARNING, "Unable to set serial parameters on %s: %s\n", fname, strerror(errno));
 		return -1;
 	}
+
 	usleep(100000);
 	ast_debug(3, "Opened serial port %s\n", fname);
 	return fd;
@@ -82,6 +87,7 @@ int serial_rxflush(int fd, int timeoutms)
 			flushed++;
 		}
 	}
+
 	return (res == -1) ? res : flushed;
 }
 
@@ -93,26 +99,33 @@ int serial_rx(int fd, char *rxbuf, int rxmaxbytes, unsigned timeoutms, char term
 	if ((!rxmaxbytes) || (rxbuf == NULL)) {
 		return 0;
 	}
+
 	memset(rxbuf, 0, rxmaxbytes);
+
 	for (i = 0; i < rxmaxbytes; i++) {
 		if (timeoutms) {
 			res = serial_rxready(fd, timeoutms);
 			if (res < 0) {
 				return -1;
 			}
+
 			if (!res) {
 				break;
 			}
 		}
 		j = read(fd, &c, 1);
+
 		if (j == -1) {
 			ast_log(LOG_WARNING, "read failed: %s\n", strerror(errno));
 			return -1;
 		}
+
 		if (j == 0) {
 			return i;
 		}
+
 		rxbuf[i] = c;
+
 		if (termchr) {
 			rxbuf[i + 1] = 0;
 			if (c == termchr) {
@@ -123,10 +136,13 @@ int serial_rx(int fd, char *rxbuf, int rxmaxbytes, unsigned timeoutms, char term
 	if (i && rpt_debug_level() >= 6) {
 		ast_debug(6, "i = %d\n", i);
 		ast_debug(6, "String returned was:\n");
-		for (j = 0; j < i; j++)
+		for (j = 0; j < i; j++) {
 			ast_debug(6, "%02X ", (unsigned char) rxbuf[j]);
+		}
+
 		ast_debug(6, "\n");
 	}
+
 	return i;
 }
 
@@ -142,6 +158,7 @@ int serial_txstring(int fd, char *txstring)
 		ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -173,23 +190,28 @@ int setdtr(struct rpt *myrpt, int fd, int enable)
 	if (fd < 0) {
 		return -1;
 	}
+
 	if (tcgetattr(fd, &mode)) {
 		ast_log(LOG_WARNING, "Unable to get serial parameters for dtr: %s\n", strerror(errno));
 		return -1;
 	}
+
 	if (enable) {
 		cfsetspeed(&mode, myrpt->p.iospeed);
 	} else {
 		cfsetspeed(&mode, B0);
 		usleep(100000);
 	}
+
 	if (tcsetattr(fd, TCSADRAIN, &mode)) {
 		ast_log(LOG_WARNING, "Unable to set serial parameters for dtr: %s\n", strerror(errno));
 		return -1;
 	}
+
 	if (enable) {
 		usleep(100000);
 	}
+
 	return 0;
 }
 
@@ -199,15 +221,19 @@ int openserial(struct rpt *myrpt, const char *fname)
 	int fd;
 
 	fd = open(fname, O_RDWR);
+
 	if (fd == -1) {
 		ast_log(LOG_WARNING, "Cannot open serial port %s\n", fname);
 		return -1;
 	}
+
 	memset(&mode, 0, sizeof(mode));
+
 	if (tcgetattr(fd, &mode)) {
 		ast_log(LOG_WARNING, "Unable to get serial parameters on %s: %s\n", fname, strerror(errno));
 		return -1;
 	}
+
 #ifndef	SOLARIS
 	cfmakeraw(&mode);
 #else
@@ -226,9 +252,11 @@ int openserial(struct rpt *myrpt, const char *fname)
 		close(fd);
 		return -1;
 	}
+
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
 		setdtr(myrpt, fd, 0);
 	}
+
 	usleep(100000);
 	ast_debug(1, "Opened serial port %s\n", fname);
 	return fd;
@@ -270,6 +298,7 @@ static int rbi_mhztoband(char *str)
 	int i;
 
 	i = atoi(str) / 10;			/* get the 10's of mhz */
+
 	switch (i) {
 	case 2:
 		return 10;
@@ -296,6 +325,7 @@ static int rbi_mhztoband(char *str)
 	default:
 		break;
 	}
+
 	return -1;
 }
 
@@ -307,10 +337,13 @@ static int rbi_pltocode(char *str)
 
 	s = strchr(str, '.');
 	i = 0;
+
 	if (s) {
 		i = atoi(s + 1);
 	}
+
 	i += atoi(str) * 10;
+
 	switch (i) {
 	case 670:
 		return 0;
@@ -389,6 +422,7 @@ static int rbi_pltocode(char *str)
 	case 2503:
 		return 37;
 	}
+
 	return -1;
 }
 
@@ -431,11 +465,13 @@ static void rbi_out(struct rpt *myrpt, unsigned char *data)
 	if (!myrpt->localrxchannel) {
 		return;
 	}
+
 	if (rpt_radio_set_param(myrpt->localrxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_RBI1)) {
 		/* if setparam ioctl fails, its probably not a pciradio card */
 		rbi_out_parallel(myrpt, data);
 		return;
 	}
+
 	rpt_radio_set_remcommand_data(myrpt->localrxchannel, data, 5);
 }
 
@@ -473,7 +509,9 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 		if ((!rxmaxbytes) || (rxbuf == NULL)) {
 			return 0;
 		}
+
 		memset(rxbuf, 0, rxmaxbytes);
+
 		for (i = 0; i < rxmaxbytes; i++) {
 			j = serial_rxready(myrpt->iofd, 1000);
 			if (j < 1) {
@@ -490,6 +528,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 				return i;
 			}
 			rxbuf[i] = c;
+
 			if (asciiflag & 1) {
 				rxbuf[i + 1] = 0;
 				if (c == '\r') {
@@ -497,13 +536,16 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 				}
 			}
 		}
+
 		if (rpt_debug_level()) {
 			ast_debug(3, "String returned was:\n");
+
 			for (j = 0; j < i; j++) {
 				ast_debug(3, "%02X ", (unsigned char) rxbuf[j]);
 			}
 			ast_debug(3, "\n");
 		}
+
 		return i;
 	}
 
@@ -525,6 +567,7 @@ int setrbi(struct rpt *myrpt)
 	if (!myrpt->remoterig) {
 		return 0;
 	}
+
 	if (!myrpt->remoterig[0]) {
 		return 0;
 	}
@@ -532,9 +575,11 @@ int setrbi(struct rpt *myrpt)
 	if (strncmp(myrpt->remoterig, REMOTE_RIG_RBI, 3)) {
 		return 0;
 	}
+
 	if (setrbi_check(myrpt) == -1) {
 		return -1;
 	}
+
 	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp, '.');
 	/* if no decimal, is invalid */
@@ -545,6 +590,7 @@ int setrbi(struct rpt *myrpt)
 	}
 
 	*s++ = 0;
+
 	if (strlen(tmp) < 2) {
 		ast_debug(1, "@@@@ Bad MHz digits: %s\n", tmp);
 		return -1;
@@ -561,6 +607,7 @@ int setrbi(struct rpt *myrpt)
 	}
 
 	band = rbi_mhztoband(tmp);
+
 	if (band == -1) {
 		ast_debug(1, "@@@@ Bad Band: %s\n", tmp);
 		return -1;
@@ -595,20 +642,26 @@ int setrbi(struct rpt *myrpt)
 		txpower = 0x10;
 		break;
 	}
+
 	rbicmd[0] = 0;
 	rbicmd[1] = band | txpower | 0xc0;
 	rbicmd[2] = (*(s - 2) - '0') | txoffset | 0x80;
+
 	if (s[2] == '5') {
 		rbicmd[2] |= 0x40;
 	}
+
 	rbicmd[3] = ((*s - '0') << 4) + (s[1] - '0');
 	rbicmd[4] = rxpl;
+
 	if (myrpt->txplon) {
 		rbicmd[4] |= 0x40;
 	}
+
 	if (myrpt->rxplon) {
 		rbicmd[4] |= 0x80;
 	}
+
 	rbi_out(myrpt, rbicmd);
 	return 0;
 }
@@ -624,6 +677,7 @@ int setrtx(struct rpt *myrpt)
 	if (!myrpt->remoterig) {
 		return 0;
 	}
+
 	if (!myrpt->remoterig[0]) {
 		return 0;
 	}
@@ -645,7 +699,9 @@ int setrtx(struct rpt *myrpt)
 		ast_log(LOG_WARNING, "@@@@ Frequency needs a decimal\n");
 		return -1;
 	}
+
 	*s++ = 0;
+
 	if (strlen(tmp) < 2) {
 		ast_log(LOG_WARNING, "@@@@ Bad MHz digits: %s\n", tmp);
 		return -1;
@@ -662,6 +718,7 @@ int setrtx(struct rpt *myrpt)
 	}
 
 	band = rbi_mhztoband(tmp);
+
 	if (band == -1) {
 		ast_log(LOG_WARNING, "@@@@ Bad Band: %s\n", tmp);
 		return -1;
@@ -682,10 +739,13 @@ int setrtx(struct rpt *myrpt)
 	}
 
 	res = setrtx_check(myrpt);
+
 	if (res < 0) {
 		return res;
 	}
+
 	mysplit = myrpt->splitkhz;
+
 	if (!mysplit) {
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_RTX450)) {
 			mysplit = myrpt->p.default_split_70cm;
@@ -693,20 +753,24 @@ int setrtx(struct rpt *myrpt)
 			mysplit = myrpt->p.default_split_2m;
 		}
 	}
+
 	if (myrpt->offset != REM_SIMPLEX) {
 		ofac = ((float) mysplit) / 1000.0;
 	} else {
 		ofac = 0.0;
 	}
+
 	if (myrpt->offset == REM_MINUS) {
 		ofac = -ofac;
 	}
 
 	txfreq = atof(myrpt->freq) + ofac;
 	pwr = 'L';
+
 	if (myrpt->powerlevel == REM_HIPWR) {
 		pwr = 'H';
 	}
+
 	if (!res) {
 		sprintf(rigstr, "SETFREQ %s %f %s %s %c", myrpt->freq, txfreq,
 				(myrpt->rxplon) ? myrpt->rxpl : "0.0", (myrpt->txplon) ? myrpt->txpl : "0.0", pwr);
@@ -714,6 +778,7 @@ int setrtx(struct rpt *myrpt)
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		res = 0;
 	}
+
 	return 0;
 }
 
@@ -726,14 +791,17 @@ int setxpmr(struct rpt *myrpt, int dotx)
 	if (!myrpt->remoterig) {
 		return 0;
 	}
+
 	if (!myrpt->remoterig[0]) {
 		return 0;
 	}
 	/* must not have rtx hardware */
+
 	if (ISRIG_RTX(myrpt->remoterig)) {
 		return 0;
 	}
 	/* must be a usbradio interface type */
+
 	if (!IS_XPMR(myrpt)) {
 		return 0;
 	}
@@ -753,12 +821,14 @@ int setxpmr(struct rpt *myrpt, int dotx)
 			ast_log(LOG_WARNING, "@@@@ Bad TX PL: %s\n", myrpt->txpl);
 			return -1;
 		}
+
 		sprintf(rigstr, "SETFREQ 0.0 0.0 %s %s L", (myrpt->rxplon) ? myrpt->rxpl : "0.0",
 				(myrpt->txplon) ? myrpt->txpl : "0.0");
 	} else {
 		sprintf(rigstr, "SETFREQ 0.0 0.0 %s 0.0 L", (myrpt->rxplon) ? myrpt->rxpl : "0.0");
 
 	}
+
 	send_usb_txt(myrpt, rigstr);
 	return 0;
 }
@@ -776,6 +846,7 @@ int setrbi_check(struct rpt *myrpt)
 	if (strncmp(myrpt->remoterig, REMOTE_RIG_RBI, 3)) {
 		return 0;
 	}
+
 	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp, '.');
 	/* if no decimal, is invalid */
@@ -786,6 +857,7 @@ int setrbi_check(struct rpt *myrpt)
 	}
 
 	*s++ = 0;
+
 	if (strlen(tmp) < 2) {
 		ast_log(LOG_WARNING, "@@@@ Bad MHz digits: %s\n", tmp);
 		return -1;
@@ -802,6 +874,7 @@ int setrbi_check(struct rpt *myrpt)
 	}
 
 	band = rbi_mhztoband(tmp);
+
 	if (band == -1) {
 		ast_log(LOG_WARNING, "@@@@ Bad Band: %s\n", tmp);
 		return -1;
@@ -813,6 +886,7 @@ int setrbi_check(struct rpt *myrpt)
 		ast_log(LOG_WARNING, "@@@@ Bad TX PL: %s\n", myrpt->txpl);
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -829,6 +903,7 @@ int setrtx_check(struct rpt *myrpt)
 	if (strncmp(myrpt->remoterig, REMOTE_RIG_RBI, 3)) {
 		return 0;
 	}
+
 	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp, '.');
 	/* if no decimal, is invalid */
@@ -839,6 +914,7 @@ int setrtx_check(struct rpt *myrpt)
 	}
 
 	*s++ = 0;
+
 	if (strlen(tmp) < 2) {
 		ast_log(LOG_WARNING, "@@@@ Bad MHz digits: %s\n", tmp);
 		return -1;
@@ -855,6 +931,7 @@ int setrtx_check(struct rpt *myrpt)
 	}
 
 	band = rbi_mhztoband(tmp);
+
 	if (band == -1) {
 		ast_log(LOG_WARNING, "@@@@ Bad Band: %s\n", tmp);
 		return -1;
@@ -873,6 +950,7 @@ int setrtx_check(struct rpt *myrpt)
 		ast_log(LOG_WARNING, "@@@@ Bad RX PL: %s\n", myrpt->rxpl);
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -882,43 +960,56 @@ int civ_cmd(struct rpt *myrpt, unsigned char *cmd, int cmdlen)
 	int i, rv;
 
 	rv = serial_remote_io(myrpt, cmd, cmdlen, rxbuf, (myrpt->p.dusbabek) ? 6 : cmdlen + 6, 0);
+
 	if (rv == -1) {
 		return -1;
 	}
+
 	if (myrpt->p.dusbabek) {
 		if (rxbuf[0] != 0xfe) {
 			return 1;
 		}
+
 		if (rxbuf[1] != 0xfe) {
 			return 1;
 		}
+
 		if (rxbuf[4] != 0xfb) {
 			return 1;
 		}
+
 		if (rxbuf[5] != 0xfd) {
 			return 1;
 		}
+
 		return 0;
 	}
+
 	if (rv != (cmdlen + 6)) {
 		return 1;
 	}
+
 	for (i = 0; i < 6; i++) {
 		if (rxbuf[i] != cmd[i]) {
 			return 1;
 		}
 	}
+
 	if (rxbuf[cmdlen] != 0xfe) {
 		return 1;
 	}
+
 	if (rxbuf[cmdlen + 1] != 0xfe) {
 		return 1;
 	}
+
 	if (rxbuf[cmdlen + 4] != 0xfb) {
 		return 1;
 	}
+
 	if (rxbuf[cmdlen + 5] != 0xfd) {
 		return 1;
 	}
+
 	return 0;
 }
