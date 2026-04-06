@@ -121,8 +121,10 @@ static unsigned long _flip(unsigned long crc, int bitnum)
 		if (crc & i) {
 			crcout |= j;
 		}
+
 		j <<= 1;
 	}
+
 	return crcout;
 }
 
@@ -239,6 +241,7 @@ static unsigned char * _enc_str(unsigned char *data)
 			if (lbits[k]) {
 				data[i] |= 1<<j;
 			}
+
 			++k;
 		}
 	}
@@ -329,9 +332,11 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 	if (encoder->th >= TWOPI) {
 		encoder->th -= TWOPI;
 		encoder->ipos++;
+
 		if (encoder->ipos > 7) {
 			encoder->ipos = 0;
 			encoder->bpos++;
+
 			if (encoder->bpos > encoder->loaded) {
 				encoder->state = 0;
 				return 127;
