@@ -5873,6 +5873,7 @@ static int load_config(int reload)
 			if (rpt_vars[n].remoterig) {
 				ast_free(rpt_vars[n].remoterig);
 			}
+
 			if (rpt_vars[n].mdc) {
 				ast_free(rpt_vars[n].mdc);
 			}
