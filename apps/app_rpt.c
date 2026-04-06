@@ -7747,6 +7747,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		ast_free(myrpt->macrobuf);
 		myrpt->macrobuf = NULL;
 	}
+
+	if (myrpt->p.locallinknodes_buf) {
+		/* The first entry points to the local link node memory allocated in rpt_config.c */
+		ast_free(myrpt->p.locallinknodes_buf);
+		myrpt->p.locallinknodes_buf = NULL;
+	}
+
 	if (myrpt->p.rptnode) {
 		rpt_mutex_lock(&myrpt->lock);
 		for (i = 0; i < nrpts; i++) {

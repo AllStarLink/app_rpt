@@ -905,6 +905,7 @@ struct rpt {
 		rpt_bool dopfxtone:1;
 		const char *outstreamcmd;
 		const char *events;
+		char *locallinknodes_buf;
 		const char *locallinknodes[MAX_LOCALLINKNODES];
 		int locallinknodesn;
 		const char *eloutbound;

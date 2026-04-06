@@ -753,6 +753,13 @@ void load_rpt_vars(int n, int init)
 	}
 	rpt_vars[n].cfg = cfg;
 	cat = rpt_vars[n].name;
+
+	if (rpt_vars[n].p.locallinknodes_buf) {
+		/* The first entry points to the local link node memory allocated in rpt_config.c */
+		ast_free(rpt_vars[n].p.locallinknodes_buf);
+		rpt_vars[n].p.locallinknodes_buf = NULL;
+	}
+
 	memset(&rpt_vars[n].p, 0, sizeof(rpt_vars[n].p));
 	if (init) {
 		char *cp;
@@ -963,9 +970,9 @@ void load_rpt_vars(int n, int init)
 	if (val) {
 		char *tmp = ast_strdup(val);
 		if (tmp) {
+			rpt_vars[n].p.locallinknodes_buf = tmp;
 			rpt_vars[n].p.locallinknodesn =
 				explode_string(tmp, (char **) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
-			ast_free(tmp);
 		}
 	}
 
