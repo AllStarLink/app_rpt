@@ -56,9 +56,11 @@ int dovox(struct vox *v, short *buf, int bs)
 	if (v->voxena < 0) {
 		return v->lastvox;
 	}
+
 	for (i = 0; i < bs; i++) {
 		esquare += (float) buf[i] * (float) buf[i];
 	}
+
 	energy = sqrt(esquare);
 
 	if (energy >= v->speech_energy) {
@@ -66,31 +68,38 @@ int dovox(struct vox *v, short *buf, int bs)
 	} else {
 		v->speech_energy += (energy - v->speech_energy) / 64;
 	}
+
 	if (energy >= v->noise_energy) {
 		v->noise_energy += (energy - v->noise_energy) / 64;
 	} else {
 		v->noise_energy += (energy - v->noise_energy) / 4;
 	}
+
 	if (v->voxena) {
 		threshold = v->speech_energy / 8;
 	} else {
 		threshold = MAX(v->speech_energy / 16, v->noise_energy * 2);
 		threshold = MIN(threshold, VOX_MAX_THRESHOLD);
 	}
+
 	threshold = MAX(threshold, VOX_MIN_THRESHOLD);
 	if (energy > threshold) {
 		if (v->voxena) {
 			v->noise_energy *= 0.75;
 		}
 		v->voxena = 1;
-	} else
+	} else {
 		v->voxena = 0;
+	}
+
 	if (v->lastvox != v->voxena) {
 		if (v->enacount++ >= ((v->lastvox) ? v->offdebcnt : v->ondebcnt)) {
 			v->lastvox = v->voxena;
 			v->enacount = 0;
 		}
-	} else
+	} else {
 		v->enacount = 0;
+	}
+
 	return v->lastvox;
 }

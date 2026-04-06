@@ -179,6 +179,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			} else {
 				ider_state = "2";	//"CLEAN";
 			}
+
 			switch (myrpt->callmode) {
 			case CALLMODE_DIALING:
 				patch_state = "0";	//"DIALING";
@@ -403,7 +404,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 				loginuser = loginlevel = freq = rxpl = txpl = NULL;
 				/* Make a copy of all stat variables while locked */
 				rpt_mutex_lock(&myrpt->lock); /* LOCK */
-				if ((remoteon = myrpt->remoteon)) {
+				if (remoteon = myrpt->remoteon) {
 					if (!ast_strlen_zero(myrpt->loginuser)) {
 						loginuser = ast_strdup(myrpt->loginuser);
 					}
@@ -425,22 +426,26 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 					rxplon = myrpt->rxplon;
 					txplon = myrpt->txplon;
 				}
+
 				rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
 				astman_append(s, "IsRemoteBase: YES\r\n");
 				astman_append(s, "RemoteOn: %s\r\n", (remoteon) ? "YES" : "NO");
-				if (remoteon) {
+				if (remoteon = myrpt->remoteon) {
 					if (loginuser) {
 						astman_append(s, "LogInUser: %s\r\n", loginuser);
 						ast_free(loginuser);
 					}
+
 					if (loginlevel) {
 						astman_append(s, "LogInLevel: %s\r\n", loginlevel);
 						ast_free(loginlevel);
 					}
+
 					if (freq) {
 						astman_append(s, "Freq: %s\r\n", freq);
 						ast_free(freq);
 					}
+
 					reportfmstuff = 0;
 					switch (remmode) {
 					case REM_MODE_FM:
@@ -457,6 +462,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 						modestr = "LSB";
 						break;
 					}
+
 					astman_append(s, "RemMode: %s\r\n", modestr);
 					if (reportfmstuff) {
 						switch (offset) {
@@ -470,16 +476,17 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 							offsetc = '+';
 							break;
 						}
+
 						astman_append(s, "RemOffset: %c\r\n", offsetc);
 						if (rxplon && rxpl) {
 							astman_append(s, "RxPl: %s\r\n", rxpl);
-							ast_free(rxpl);
 						}
+
 						if (txplon && txpl) {
 							astman_append(s, "TxPl: %s\r\n", txpl);
-							ast_free(txpl);
 						}
 					}
+
 					switch (powerlevel) {
 					case REM_LOWPWR:
 						powerlevelc = 'L';
@@ -491,7 +498,16 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 						powerlevelc = 'H';
 						break;
 					}
+
 					astman_append(s, "PowerLevel: %c\r\n", powerlevelc);
+
+					if (txpl) {
+						ast_free(txpl);
+					}
+
+					if (rxpl) {
+						ast_free(rxpl);
+					}
 				}
 				astman_append(s, "\r\n");
 				ast_free(str);
@@ -527,6 +543,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 					break;
 				}
 			}
+
 			ao2_iterator_destroy(&l_it);
 			if (myrpt->keyed) {
 				input_signal = "YES";
@@ -557,6 +574,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 			} else {
 				tot_ena = "ENABLED";
 			}
+
 			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable) {
 				link_ena = "DISABLED";
 			} else {
@@ -574,16 +592,19 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 			} else {
 				sch_ena = "ENABLED";
 			}
+
 			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable) {
 				user_funs = "DISABLED";
 			} else {
 				user_funs = "ENABLED";
 			}
+
 			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail) {
 				tail_type = "ALTERNATE";
 			} else {
 				tail_type = "STANDARD";
 			}
+
 			if (!myrpt->totimer) {
 				tot_state = "TIMED OUT!";
 			} else if (myrpt->totimer != myrpt->p.totime) {

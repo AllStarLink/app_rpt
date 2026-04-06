@@ -187,6 +187,7 @@ static int set_ctcss_freq_xcat(struct rpt *myrpt, char *txtone, char *rxtone)
 	if (rv) {
 		return -1;
 	}
+
 	if (!rxtone) {
 		return 0;
 	}
