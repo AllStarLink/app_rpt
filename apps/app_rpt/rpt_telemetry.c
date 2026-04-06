@@ -1457,7 +1457,7 @@ void *rpt_tele_thread(void *this)
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], mystr[200];
 	float f;
 	unsigned long long u_mono;
-	char gps_data[100], lat[LAT_SZ], lon[LON_SZ], elev[ELEV_SZ], c;
+	char gps_data[100], lat[LAT_SZ + 1], lon[LON_SZ + 1], elev[ELEV_SZ + 1], c;
 	struct ast_str *lbuf = NULL;
 	enum rpt_conf_type type;
 	struct ast_format_cap *cap;
