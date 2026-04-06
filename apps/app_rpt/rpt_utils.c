@@ -15,19 +15,28 @@ int matchkeyword(char *string, char **param, char *keywords[])
 	int i, ls;
 	for (i = 0; keywords[i]; i++) {
 		ls = strlen(keywords[i]);
+
 		if (!ls) {
-			if (param)
+			if (param) {
 				*param = NULL;
+			}
+
 			return 0;
 		}
+
 		if (!strncmp(string, keywords[i], ls)) {
-			if (param)
+			if (param) {
 				*param = string + ls;
+			}
+
 			return i + 1;
 		}
 	}
-	if (param)
+
+	if (param) {
 		*param = NULL;
+	}
+
 	return 0;
 }
 
@@ -39,10 +48,12 @@ int explode_string(char *str, char *strp[], size_t limit, char delim, char quote
 	inquo = 0;
 	i = 0;
 	strp[i++] = str;
+
 	if (!*str) {
 		strp[0] = 0;
-		return (0);
+		return 0;
 	}
+
 	for (; *str && (i < (limit - 1)); str++) {
 		if (quote) {
 			if (*str == quote) {
@@ -55,11 +66,13 @@ int explode_string(char *str, char *strp[], size_t limit, char delim, char quote
 				}
 			}
 		}
+
 		if ((*str == delim) && (!inquo)) {
 			*str = 0;
 			strp[i++] = str + 1;
 		}
 	}
+
 	strp[i] = 0;
 	return i;
 
@@ -68,11 +81,13 @@ int explode_string(char *str, char *strp[], size_t limit, char delim, char quote
 char *strupr(char *instr)
 {
 	char *str = instr;
+
 	while (*str) {
 		*str = toupper(*str);
 		str++;
 	}
-	return (instr);
+
+	return instr;
 }
 
 char *string_toupper(char *str)
@@ -84,6 +99,7 @@ char *string_toupper(char *str)
 			str[i] = toupper(str[i]);
 		}
 	}
+
 	return str;
 }
 /*!
@@ -109,19 +125,21 @@ char *skipchars(char *string, char *charlist)
 				break;
 			}
 		}
-		if (!charlist[i])
+
+		if (!charlist[i]) {
 			return string;
+		}
 	}
+
 	return string;
 }
 
 char *eatwhite(char *s)
 {
-	while ((*s == ' ') || (*s == 0x09)) {	/* get rid of any leading white space */
-		if (!*s)
-			break;
+	while ((*s == ' ') || (*s == 0x09)) { /* get rid of any leading white space */
 		s++;
 	}
+
 	return s;
 }
 
@@ -137,6 +155,7 @@ int myatoi(const char *str)
 	if (sscanf(str, N_FMT(i), &ret) != 1) {
 		return -1;
 	}
+
 	return ret;
 }
 
@@ -147,10 +166,14 @@ int decimals2int(char *fraction)
 	int multiplier = 100000;
 	int res = 0;
 
-	if (!len)
+	if (!len) {
 		return 0;
-	for (i = 0; i < len; i++, multiplier /= 10)
+	}
+
+	for (i = 0; i < len; i++, multiplier /= 10) {
 		res += (fraction[i] - '0') * multiplier;
+	}
+
 	return res;
 }
 
@@ -161,6 +184,7 @@ int split_freq(char *mhz, char *decimals, char *freq)
 
 	ast_copy_string(freq_copy, freq, MAXREMSTR - 1);
 	decp = strchr(freq_copy, '.');
+
 	if (!decp) {
 		return -1;
 	}
@@ -178,14 +202,18 @@ int mycompar(const void *a, const void *b)
 	char **y = (char **) b;
 	int xoff, yoff;
 
-	if ((**x < '0') || (**x > '9'))
+	if ((**x < '0') || (**x > '9')) {
 		xoff = 1;
-	else
+	} else {
 		xoff = 0;
-	if ((**y < '0') || (**y > '9'))
+	}
+
+	if ((**y < '0') || (**y > '9')) {
 		yoff = 1;
-	else
+	} else {
 		yoff = 0;
+	}
+
 	return (strcmp((*x) + xoff, (*y) + yoff));
 }
 
@@ -193,12 +221,15 @@ long diskavail(struct rpt *myrpt)
 {
 	struct statfs statfsbuf;
 
-	if (!myrpt->p.archivedir)
-		return (0);
+	if (!myrpt->p.archivedir) {
+		return 0;
+	}
+
 	if (statfs(myrpt->p.archivedir, &statfsbuf) == -1) {
 		ast_log(LOG_WARNING, "Cannot get filesystem size for %s node %s\n", myrpt->p.archivedir, myrpt->name);
-		return (-1);
+		return -1;
 	}
+
 	return (statfsbuf.f_bavail);
 }
 
@@ -235,6 +266,7 @@ int rpt_time_elapsed(struct timeval *start)
 	now = rpt_tvnow();
 	elap_tv_us = ast_tvsub(now, *start);
 	elap = (elap_tv_us.tv_sec * 1000) + (elap_tv_us.tv_usec / 1000);
+
 	if (elap > 0) {
 		struct timeval elap_tv_ms, residualtime;
 
@@ -242,6 +274,7 @@ int rpt_time_elapsed(struct timeval *start)
 		residualtime = ast_tvsub(elap_tv_us, elap_tv_ms);
 		*start = ast_tvsub(now, residualtime);
 	}
+
 	return elap;
 }
 
@@ -278,9 +311,11 @@ void update_timer(int *timer_ptr, int elap, int end_val)
 	if (!timer_ptr || !*timer_ptr) { /* if the timer value = 0 or we have a null pointer, do not update */
 		return;
 	}
+
 	if (*timer_ptr > end_val) {
 		*timer_ptr -= elap;
 	}
+
 	if (*timer_ptr < end_val) {
 		*timer_ptr = end_val;
 	}

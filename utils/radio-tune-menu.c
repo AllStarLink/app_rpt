@@ -137,7 +137,7 @@ static int explode_string(char *str, char *strp[], size_t limit, char delim, cha
 
 	if (!*str) {
 		strp[0] = 0;
-		return (0);
+		return 0;
 	}
 	for (; *str && (i < (limit - 1)); str++) {
 		if (quote) {
@@ -158,7 +158,7 @@ static int explode_string(char *str, char *strp[], size_t limit, char delim, cha
 		}
 	}
 	strp[i] = 0;
-	return (i);
+	return i;
  }
 
 
@@ -196,7 +196,7 @@ static int doastcmd(char *cmd)
 	}
 	if (pid) {		/* if this is us (the parent) */
 		close(pfd[1]);
-		return (pfd[0]);
+		return pfd[0];
 	}
 	close(pfd[0]);
 
@@ -255,7 +255,7 @@ static int waitfds(int fd1, int fd2, int ms)
 
 	r = select(i + 1, &fds, NULL, NULL, &tv);
 	if (r < 1) {
-		return (r);
+		return r;
 	}
 	if (FD_ISSET(fd1, &fds)) {
 		return (fd1 + 1);
@@ -263,7 +263,7 @@ static int waitfds(int fd1, int fd2, int ms)
 	if ((fd2 > 0) && (FD_ISSET(fd2, &fds))) {
 		return (fd2 + 1);
 	}
-	return (0);
+	return 0;
 }
 
 /*!
@@ -279,7 +279,7 @@ static int getcharfd(int fd)
 	if (read(fd, &c, 1) != 1) {
 		return -1;
 	}
-	return (c);
+	return c;
 }
 
 /*!
@@ -327,7 +327,7 @@ static int getstrfd(int fd, char *str, int max)
 	if (str) {
 		str[i] = 0;
 	}
-	return (i);
+	return i;
 }
 
 

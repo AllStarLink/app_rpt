@@ -611,7 +611,7 @@ static int finddelim(char *str, char *strp[], size_t limit)
 	strp[i++] = str;
 	if (!*str) {
 		strp[0] = 0;
-		return (0);
+		return 0;
 	}
 	for (; *str && (i < (limit - 1)); str++) {
 		if (*str == QUOTECHR) {
@@ -629,7 +629,7 @@ static int finddelim(char *str, char *strp[], size_t limit)
 		}
 	}
 	strp[i] = 0;
-	return (i);
+	return i;
 }
 
 /*!
@@ -751,7 +751,7 @@ static struct eldb *el_db_find_nodenum(const char *nodenum)
 
 	found_key = (struct eldb **) tfind(&key, &el_db_nodenum, compare_eldb_nodenum);
 	if (found_key) {
-		return (*found_key);
+		return *found_key;
 	}
 
 	return NULL;
@@ -773,7 +773,7 @@ static struct eldb *el_db_find_callsign(const char *callsign)
 
 	found_key = (struct eldb **) tfind(&key, &el_db_callsign, compare_eldb_callsign);
 	if (found_key) {
-		return (*found_key);
+		return *found_key;
 	}
 
 	return NULL;
@@ -795,7 +795,7 @@ static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 
 	found_key = (struct eldb **) tfind(&key, &el_db_ipaddr, compare_eldb_ipaddr);
 	if (found_key) {
-		return (*found_key);
+		return *found_key;
 	}
 
 	return NULL;
@@ -879,7 +879,7 @@ static struct eldb *el_db_put(const char *nodenum, const char *ipaddr, const cha
 
 	ast_debug(5, "Directory - Added: Node=%s, Callsign=%s, IP address=%s.\n", nodenum, callsign, ipaddr);
 
-	return (node);
+	return node;
 }
 
 /*!
@@ -2675,11 +2675,11 @@ static char *res2cli(int r)
 {
 	switch (r) {
 	case RESULT_SUCCESS:
-		return (CLI_SUCCESS);
+		return CLI_SUCCESS;
 	case RESULT_SHOWUSAGE:
-		return (CLI_SHOWUSAGE);
+		return CLI_SHOWUSAGE;
 	default:
-		return (CLI_FAILURE);
+		return CLI_FAILURE;
 	}
 }
 
@@ -2963,15 +2963,15 @@ static int el_net_read(int sock, unsigned char *buf1, int buf1len, int compresse
 		if (!compressed) {
 			n = recv(sock, buf1, buf1len - 1, 0);
 			if (n < 1) {
-				return (-1);
+				return -1;
 			}
-			return (n);
+			return n;
 		}
 		memset(buf1, 0, buf1len);
 		memset(buf, 0, sizeof(buf));
 		n = recv(sock, buf, sizeof(buf) - 1, 0);
 		if (n < 0) {
-			return (-1);
+			return -1;
 		}
 		z->next_in = buf;
 		z->avail_in = n;
@@ -3015,7 +3015,7 @@ static int el_net_get_line(int s, char *str, int max, int compressed, struct z_s
 			el_net_get_index = 0;
 			el_net_get_nread = el_net_read(s, buf, sizeof(buf), compressed, z);
 			if ((el_net_get_nread) < 1) {
-				return (el_net_get_nread);
+				return el_net_get_nread;
 			}
 		}
 		if (buf[el_net_get_index] > 126) {
@@ -3031,7 +3031,7 @@ static int el_net_get_line(int s, char *str, int max, int compressed, struct z_s
 			break;
 		}
 	}
-	return (nstr);
+	return nstr;
 }
 
 /*!
@@ -3230,7 +3230,7 @@ static int do_el_directory(const char *hostname)
 	if (dir_compressed) {
 		ast_debug(4, "Got snapshot_id: %s\n", snapshot_id);
 	}
-	return (dir_compressed);
+	return dir_compressed;
 
 cleanup:
 	close(sock);

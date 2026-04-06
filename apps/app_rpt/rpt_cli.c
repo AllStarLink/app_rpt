@@ -657,6 +657,7 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
 			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
 			strs = ast_malloc(n * sizeof(char *));
+
 			if (!strs) {
 				ast_free(lbuf);
 				return RESULT_FAILURE;
@@ -664,10 +665,13 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 			/* parse em */
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
 			/* sort em */
-			if (ns)
+			if (ns) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
+			}
+
 			ast_cli(fd, "\n");
 			ast_cli(fd, "************************* CONNECTED NODES *************************\n\n");
+
 			for (j = 0;; j++) {
 				if (!strs[j]) {
 					if (!j) {
@@ -675,7 +679,9 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 					}
 					break;
 				}
+
 				ast_cli(fd, "%s", strs[j]);
+
 				if (j % 8 == 7) {
 					ast_cli(fd, "\n");
 				} else {
@@ -683,12 +689,14 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 						ast_cli(fd, ", ");
 				}
 			}
+
 			ast_cli(fd, "\n\n");
 			ast_free(strs);
 			ast_free(lbuf);
 			return RESULT_SUCCESS;
 		}
 	}
+
 	ast_free(lbuf);
 	return RESULT_FAILURE;
 }
@@ -700,11 +708,13 @@ static int rpt_do_local_nodes(int fd, int argc, const char *const *argv)
 	int nrpts = rpt_num_rpts();
 
 	ast_cli(fd, "                         \nNode\n----\n");
+
 	for (i = 0; i < nrpts; i++) {
 		if (rpt_vars[i].name[0]) {
 			ast_cli(fd, "%s\n", rpt_vars[i].name);
 		}
 	}							/* for i */
+
 	ast_cli(fd, "\n");
 	return RESULT_SUCCESS;
 }
@@ -718,11 +728,13 @@ static int rpt_do_restart(int fd, int argc, const char *const *argv)
 	if (argc > 2) {
 		return RESULT_SHOWUSAGE;
 	}
+
 	for (i = 0; i < nrpts; i++) {
 		if (rpt_vars[i].rxchannel) {
 			ast_softhangup(rpt_vars[i].rxchannel, AST_SOFTHANGUP_DEV);
 		}
 	}
+
 	return RESULT_FAILURE;
 }
 
@@ -742,9 +754,11 @@ static int rpt_do_fun(int fd, int argc, const char *const *argv)
 			macro_append(myrpt, argv[3]);
 		}
 	}
+
 	if (busy) {
 		ast_cli(fd, "Function decoder busy");
 	}
+
 	return RESULT_FAILURE;
 }
 
@@ -764,6 +778,7 @@ static int rpt_do_playback(int fd, int argc, const char *const *argv)
 			rpt_telemetry(myrpt, PLAYBACK, (void *) argv[3]);
 		}
 	}
+
 	return RESULT_SUCCESS;
 }
 
@@ -782,6 +797,7 @@ static int rpt_do_localplay(int fd, int argc, const char *const *argv)
 			rpt_telemetry(myrpt, LOCALPLAY, (void *) argv[3]);
 		}
 	}
+
 	return RESULT_SUCCESS;
 }
 
@@ -802,12 +818,14 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	string_toupper(from);
 	string_toupper(to);
 	snprintf(str, sizeof(str) - 1, "M %s %s ", from, to);
+
 	for (i = 4; i < argc; i++) {
 		if (i > 3) {
 			strncat(str, " ", sizeof(str) - 1);
 		}
 		strncat(str, argv[i], sizeof(str) - 1);
 	}
+
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(from, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
@@ -817,6 +835,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
+
 	return RESULT_SUCCESS;
 }
 
@@ -843,12 +862,14 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	string_toupper(capcode);
 	string_toupper(text);
 	snprintf(str, sizeof(str) - 1, "PAGE %s %s %s ", baud, capcode, text);
+
 	for (i = 6; i < argc; i++) {
 		if (i > 5) {
 			strncat(str, " ", sizeof(str) - 1);
 		}
 		strncat(str, argv[i], sizeof(str) - 1);
 	}
+
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
@@ -858,6 +879,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 			}
 			/* if we are playing telemetry, stop it now */
 			telem = myrpt->tele.next;
+
 			while (telem != &myrpt->tele) {
 				if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
 					if (telem->chan) {
@@ -866,13 +888,16 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 					telem->killed = 1;
 					myrpt->deferid = 1;
 				}
+
 				telem = telem->next;
 			}
+
 			gettimeofday(&myrpt->paging, NULL);
 			ast_sendtext(myrpt->rxchannel, str);
 			break;
 		}
 	}
+
 	return RESULT_SUCCESS;
 }
 
@@ -893,12 +918,15 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 
 	string_toupper(nodename);
 	snprintf(str, sizeof(str) - 1, "M %s 0 ", nodename);
+
 	for (i = 3; i < argc; i++) {
 		if (i > 3) {
 			strncat(str, " ", sizeof(str) - 1);
 		}
+
 		strncat(str, argv[i], sizeof(str) - 1);
 	}
+
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
@@ -908,6 +936,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 	}
+
 	return RESULT_SUCCESS;
 }
 
@@ -929,6 +958,7 @@ static int rpt_do_fun1(int fd, int argc, const char *const *argv)
 			rpt_push_alt_macro(myrpt, (char *) argv[3]);
 		}
 	}
+
 	return RESULT_FAILURE;
 }
 
@@ -999,14 +1029,14 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 			 */
 			ast_copy_string(rpt_vars[thisRpt].cmdAction.param, argv[4], sizeof(rpt_vars[thisRpt].cmdAction.param));
 		}
+
 		rpt_vars[thisRpt].cmdAction.command_source = SOURCE_RPT;
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_READY;
-	}							/* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
-	else {
+	} else { /* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
 		busy = 1;
-	}							/* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
-	rpt_mutex_unlock(&myrpt->lock);
+	} /* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
 
+	rpt_mutex_unlock(&myrpt->lock);
 	return (busy ? RESULT_FAILURE : RESULT_SUCCESS);
 }								/* rpt_do_cmd() */
 
@@ -1041,6 +1071,7 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 		} else
 			ast_log(LOG_WARNING, "Ignoring entry '%s' with no = \n", name);
 	}
+
 	return 0;
 }
 
@@ -1059,6 +1090,7 @@ static char *rpt_complete_node_list(const char *line, const char *word, int pos,
 			ast_cli_completion_add(ast_strdup(rpt_vars[i].name));
 		}
 	}
+
 	return NULL;
 }
 
@@ -1122,13 +1154,16 @@ static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "Unknown node number %s.\n", argv[3]);
 		return RESULT_FAILURE;
 	}
+
 	i = 0;
 	ast_cli(fd, "Variable listing for node %s:\n", argv[3]);
 	ast_channel_lock(rpt_vars[thisRpt].rxchannel);
+
 	AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[thisRpt].rxchannel), newvariable, entries) {
 		i++;
 		ast_cli(fd, "   %s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 	}
+
 	ast_channel_unlock(rpt_vars[thisRpt].rxchannel);
 	ast_cli(fd, "    -- %d variables\n", i);
 	return 0;
@@ -1152,6 +1187,7 @@ static int rpt_do_lookup(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "Node: %-10.10s Data: %s\n", myrpt->name, tmp);
 		}
 	}
+
 	return RESULT_SUCCESS;
 }
 
@@ -1160,11 +1196,13 @@ static char *res2cli(int r)
 {
 	switch (r) {
 	case RESULT_SUCCESS:
-		return (CLI_SUCCESS);
+		return CLI_SUCCESS;
+
 	case RESULT_SHOWUSAGE:
-		return (CLI_SHOWUSAGE);
+		return CLI_SHOWUSAGE;
+
 	default:
-		return (CLI_SUCCESS);
+		return CLI_SUCCESS;
 	}
 }
 
@@ -1177,9 +1215,11 @@ static char *handle_cli_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"Usage: rpt debug level {0-7}\n"
 			"	Enables debug messages in app_rpt\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return NULL;
 	}
+
 	return res2cli(rpt_do_debug(a->fd, a->argc, a->argv));
 }
 
@@ -1192,9 +1232,11 @@ static char *handle_cli_dump(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"Usage: rpt dump <nodename>\n"
 			"	Dumps struct debug info to log\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_dump(a->fd, a->argc, a->argv));
 }
 
@@ -1207,9 +1249,11 @@ static char *handle_cli_stats(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"Usage: rpt stats <nodename>\n"
 			"	Dumps node statistics to console\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_stats(a->fd, a->argc, a->argv));
 }
 
@@ -1222,9 +1266,11 @@ static char *handle_cli_nodes(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"Usage: rpt nodes <nodename>\n"
 			"	Dumps a list of directly and indirectly connected nodes to the console\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_nodes(a->fd, a->argc, a->argv));
 }
 
@@ -1237,9 +1283,11 @@ static char *handle_cli_xnode(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			"Usage: rpt xnode <nodename>\n"
 			"	Dumps extended node info to the console\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_xnode(a->fd, a->argc, a->argv));
 }
 
@@ -1252,9 +1300,11 @@ static char *handle_cli_local_nodes(struct ast_cli_entry *e, int cmd, struct ast
 			"Usage: rpt localnodes\n"
 			"	Dumps a list of the locally configured node numbers to the console.\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return NULL;
 	}
+
 	return res2cli(rpt_do_local_nodes(a->fd, a->argc, a->argv));
 }
 
@@ -1267,9 +1317,11 @@ static char *handle_cli_lstats(struct ast_cli_entry *e, int cmd, struct ast_cli_
 			"Usage: rpt lstats <nodename>\n"
 			"	Dumps link statistics to console\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_lstats(a->fd, a->argc, a->argv));
 }
 
@@ -1282,9 +1334,11 @@ static char *handle_cli_restart(struct ast_cli_entry *e, int cmd, struct ast_cli
 			"Usage: rpt restart\n"
 			"	Restarts app_rpt\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return NULL;
 	}
+
 	return res2cli(rpt_do_restart(a->fd, a->argc, a->argv));
 }
 
@@ -1297,9 +1351,11 @@ static char *handle_cli_fun(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 			"Usage: rpt fun <nodename> <command>\n"
 			"	Send a DTMF function to a node\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_fun(a->fd, a->argc, a->argv));
 }
 
@@ -1312,9 +1368,11 @@ static char *handle_cli_fun1(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"Usage: rpt fun1 <nodename> <command>\n"
 			"	Send a DTMF function to a node\n";;
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_fun1(a->fd, a->argc, a->argv));
 }
 
@@ -1327,9 +1385,11 @@ static char *handle_cli_playback(struct ast_cli_entry *e, int cmd, struct ast_cl
 			"Usage: rpt playback <nodename> <sound_file_base_name>\n"
 			"	Send an Audio File to a node, send to all other connected nodes (global)\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_playback(a->fd, a->argc, a->argv));
 }
 
@@ -1344,6 +1404,7 @@ static char *handle_cli_cmd(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 				   "	     rpt cmd 2000 localplay rpt/goodafternoon\n"
 				   "	     rpt cmd 2000 status 12\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		switch (a->pos) {
 		case 2:
@@ -1354,6 +1415,7 @@ static char *handle_cli_cmd(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 			return NULL;
 		}
 	}
+
 	return res2cli(rpt_do_cmd(a->fd, a->argc, a->argv));
 }
 
@@ -1367,9 +1429,11 @@ static char *handle_cli_setvar(struct ast_cli_entry *e, int cmd, struct ast_cli_
 			"	Set an Asterisk channel variable for a node.\n"
 			"   Note: variable names are case-sensitive.\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 3);
 	}
+
 	return res2cli(rpt_do_setvar(a->fd, a->argc, a->argv));
 }
 
@@ -1381,9 +1445,11 @@ static char *handle_cli_showvars(struct ast_cli_entry *e, int cmd, struct ast_cl
 		e->usage = "Usage: rpt show variables <nodename>\n"
 			"	Display all the Asterisk channel variables for a node.\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 3);
 	}
+
 	return res2cli(rpt_do_showvars(a->fd, a->argc, a->argv));
 }
 
@@ -1395,9 +1461,11 @@ static char *handle_cli_show_channels(struct ast_cli_entry *e, int cmd, struct a
 		e->usage = "Usage: rpt show channels <nodename>\n"
 			"	Display all the Asterisk channels for a node.\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 3);
 	}
+
 	return res2cli(rpt_show_channels(a->fd, a->argc, a->argv));
 }
 
@@ -1409,9 +1477,11 @@ static char *handle_cli_lookup(struct ast_cli_entry *e, int cmd, struct ast_cli_
 		e->usage = "Usage: rpt lookup <nodename>\n"
 				   "	Display the connection information for a node.\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_lookup(a->fd, a->argc, a->argv));
 }
 
@@ -1424,9 +1494,11 @@ static char *handle_cli_localplay(struct ast_cli_entry *e, int cmd, struct ast_c
 			"Usage: rpt localplay <nodename> <sound_file_base_name>\n"
 			"	Send an audio file to a node, do not send to other connected nodes (local)\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_localplay(a->fd, a->argc, a->argv));
 }
 
@@ -1439,9 +1511,11 @@ static char *handle_cli_sendall(struct ast_cli_entry *e, int cmd, struct ast_cli
 			"Usage: rpt sendall <nodename> <Text Message>\n"
 			"	Send a Text message to all connected nodes\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_sendall(a->fd, a->argc, a->argv));
 }
 
@@ -1454,9 +1528,11 @@ static char *handle_cli_sendtext(struct ast_cli_entry *e, int cmd, struct ast_cl
 			"Usage: rpt sendtext <nodename> <destnodename> <Text Message>\n"
 			"	Send a Text message to a specified node\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_sendtext(a->fd, a->argc, a->argv));
 }
 
@@ -1469,9 +1545,11 @@ static char *handle_cli_page(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"Usage: rpt page <nodename> <baud> <capcode> <[ANT]Text....>\n"
 			"	Send a page to a user on a node, specifying capcode and type/text\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
 	}
+
 	return res2cli(rpt_do_page(a->fd, a->argc, a->argv));
 }
 
@@ -1484,9 +1562,11 @@ static char *handle_cli_show_version(struct ast_cli_entry *e, int cmd, struct as
 			"Usage: rpt show version\n"
 			"	Show the current version of the app_rpt module\n";
 		return NULL;
+
 	case CLI_GENERATE:
 		return NULL;
 	}
+
 	ast_cli(a->fd, "app_rpt version: %d.%d.%d\n", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 	return CLI_SUCCESS;
 }

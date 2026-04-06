@@ -293,7 +293,7 @@ unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned shor
 		cs += buf[i - EEPROM_START_ADDR] = read_eeprom(handle, i);
 	}
 
-	return (cs);
+	return cs;
 }
 
 void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
@@ -730,7 +730,7 @@ unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase,
 	if (haspp == 2) {			/* if its a direct I/O */
 		c = inb(pbase + 1);
 	}
-	return (c);
+	return c;
 #else
 	ast_log(LOG_ERROR, "Parallel port I/O is not supported on this architecture\n");
 	return 0;

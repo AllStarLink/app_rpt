@@ -29,10 +29,12 @@ static struct lockthread *get_lockthread(pthread_t id)
 	int i;
 
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
-		if (lockthreads[i].id == id)
-			return (&lockthreads[i]);
+		if (lockthreads[i].id == id) {
+			return &lockthreads[i];
+		}
 	}
-	return (NULL);
+
+	return NULL;
 }
 
 static struct lockthread *put_lockthread(pthread_t id)
@@ -40,19 +42,22 @@ static struct lockthread *put_lockthread(pthread_t id)
 	int i;
 
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
-		if (lockthreads[i].id == id)
-			return (&lockthreads[i]);
+		if (lockthreads[i].id == id) {
+			return &lockthreads[i];
+		}
 	}
+
 	for (i = 0; i < MAXLOCKTHREAD; i++) {
 		if (!lockthreads[i].id) {
 			lockthreads[i].lockcount = 0;
 			lockthreads[i].lastlock = 0;
 			lockthreads[i].lastunlock = 0;
 			lockthreads[i].id = id;
-			return (&lockthreads[i]);
+			return &lockthreads[i];
 		}
 	}
-	return (NULL);
+
+	return NULL;
 }
 
 /*
@@ -74,6 +79,7 @@ static void rpt_mutex_spew(void)
 	ast_mutex_unlock(&locklock);
 
 	lasttv = ast_tv(0, 0);
+
 	for (i = 0; i < 32; i++) {
 		j = (i + lock_ring_index_copy) % 32;
 		strftime(a, sizeof(a) - 1, "%m/%d/%Y %H:%M:%S", localtime(&lock_ring_copy[j].tv.tv_sec));
@@ -83,10 +89,14 @@ static void rpt_mutex_spew(void)
 				* 1000000;
 			diff += (lock_ring_copy[j].tv.tv_usec - lasttv.tv_usec);
 		}
+
 		lasttv.tv_sec = lock_ring_copy[j].tv.tv_sec;
 		lasttv.tv_usec = lock_ring_copy[j].tv.tv_usec;
-		if (!lock_ring_copy[j].tv.tv_sec)
+
+		if (!lock_ring_copy[j].tv.tv_sec) {
 			continue;
+		}
+
 		if (lock_ring_copy[j].line < 0) {
 			ast_log(LOG_NOTICE, "LOCKDEBUG [#%d] UNLOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n",
 					i - 31, -lock_ring_copy[j].line, lock_ring_copy[j].rpt->name, (int) lock_ring_copy[j].lockthread.id,
@@ -107,10 +117,12 @@ static void _rpt_mutex_lock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	id = pthread_self();
 	ast_mutex_lock(&locklock);
 	t = put_lockthread(id);
+
 	if (!t) {
 		ast_mutex_unlock(&locklock);
 		return;
 	}
+
 	if (t->lockcount) {
 		int lastline = t->lastlock;
 		ast_mutex_unlock(&locklock);
@@ -118,14 +130,18 @@ static void _rpt_mutex_lock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 		rpt_mutex_spew();
 		return;
 	}
+
 	t->lastlock = line;
 	t->lockcount = 1;
 	gettimeofday(&lock_ring[lock_ring_index].tv, NULL);
 	lock_ring[lock_ring_index].rpt = myrpt;
 	memcpy(&lock_ring[lock_ring_index].lockthread, t, sizeof(struct lockthread));
 	lock_ring[lock_ring_index++].line = line;
-	if (lock_ring_index == 32)
+
+	if (lock_ring_index == 32) {
 		lock_ring_index = 0;
+	}
+
 	ast_mutex_unlock(&locklock);
 	ast_mutex_lock(lockp);
 }
@@ -138,10 +154,12 @@ static void _rpt_mutex_unlock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	id = pthread_self();
 	ast_mutex_lock(&locklock);
 	t = put_lockthread(id);
+
 	if (!t) {
 		ast_mutex_unlock(&locklock);
 		return;
 	}
+
 	if (!t->lockcount) {
 		int lastline = t->lastunlock;
 		ast_mutex_unlock(&locklock);
@@ -149,14 +167,18 @@ static void _rpt_mutex_unlock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 		rpt_mutex_spew();
 		return;
 	}
+
 	t->lastunlock = line;
 	t->lockcount = 0;
 	gettimeofday(&lock_ring[lock_ring_index].tv, NULL);
 	lock_ring[lock_ring_index].rpt = myrpt;
 	memcpy(&lock_ring[lock_ring_index].lockthread, t, sizeof(struct lockthread));
 	lock_ring[lock_ring_index++].line = -line;
-	if (lock_ring_index == 32)
+
+	if (lock_ring_index == 32) {
 		lock_ring_index = 0;
+	}
+
 	ast_mutex_unlock(&locklock);
 	ast_mutex_unlock(lockp);
 }

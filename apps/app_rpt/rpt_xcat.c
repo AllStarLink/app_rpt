@@ -25,12 +25,14 @@ int check_freq_xcat(int m, int d, enum rpt_mode *defmode)
 	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (m == 144) {				/* 2 meters */
-		if (d < 10100)
+		if (d < 10100) {
 			return -1;
+		}
 	}
 	if (m == 29) {				/* 10 meters */
-		if (d > 70000)
-		return -1;
+		if (d > 70000) {
+			return -1;
+		}
 	} else if ((m >= 28) && (m < 30)) {
 		;
 	} else if ((m >= 50) && (m < 54)) {
@@ -39,11 +41,13 @@ int check_freq_xcat(int m, int d, enum rpt_mode *defmode)
 		;
 	} else if ((m >= 420) && (m < 450)) {	/* 70 centimeters */
 		;
-	} else
+	} else {
 		return -1;
+	}
 
-	if (defmode)
+	if (defmode) {
 		*defmode = dflmd;
+	}
 
 	return 0;
 }
@@ -74,8 +78,9 @@ static int set_freq_xcat(struct rpt *myrpt, char *newfreq)
 
 	ast_debug(7, "newfreq:%s\n", newfreq);
 
-	if (split_freq(mhz, decimals, newfreq))
+	if (split_freq(mhz, decimals, newfreq)) {
 		return -1;
+	}
 
 	m = atoi(mhz);
 	d = atoi(decimals);
@@ -102,15 +107,17 @@ static int set_offset_xcat(struct rpt *myrpt, enum rpt_offset offset)
 	int mysplit;
 	char mhz[MAXREMSTR], decimal[MAXREMSTR];
 
-	if (split_freq(mhz, decimal, myrpt->freq))
+	if (split_freq(mhz, decimal, myrpt->freq)) {
 		return -1;
+	}
 
 	mysplit = myrpt->splitkhz * 1000;
 	if (!mysplit) {
-		if (atoi(mhz) > 400)
+		if (atoi(mhz) > 400) {
 			mysplit = myrpt->p.default_split_70cm * 1000;
-		else
+		} else {
 			mysplit = myrpt->p.default_split_2m * 1000;
+		}
 	}
 
 	cmdstr[0] = cmdstr[1] = 0xfe;
@@ -124,8 +131,9 @@ static int set_offset_xcat(struct rpt *myrpt, enum rpt_offset offset)
 	cmdstr[9] = (mysplit >> 24) & 0xff;
 	cmdstr[10] = 0xfd;
 
-	if (civ_cmd(myrpt, cmdstr, 11) < 0)
+	if (civ_cmd(myrpt, cmdstr, 11) < 0) {
 		return -1;
+	}
 
 	switch (offset) {
 	case REM_SIMPLEX:
@@ -159,8 +167,9 @@ static int set_ctcss_freq_xcat(struct rpt *myrpt, char *txtone, char *rxtone)
 
 	ast_debug(7, "txtone=%s  rxtone=%s \n", txtone, rxtone);
 
-	if (split_ctcss_freq(hertz, decimal, txtone))
+	if (split_ctcss_freq(hertz, decimal, txtone)) {
 		return -1;
+	}
 
 	h = atoi(hertz);
 	d = atoi(decimal);
@@ -175,14 +184,17 @@ static int set_ctcss_freq_xcat(struct rpt *myrpt, char *txtone, char *rxtone)
 	cmdstr[8] = 0xfd;
 
 	rv = civ_cmd(myrpt, cmdstr, 9);
-	if (rv)
-		return (-1);
-
-	if (!rxtone)
-		return (0);
-
-	if (split_ctcss_freq(hertz, decimal, rxtone))
+	if (rv) {
 		return -1;
+	}
+
+	if (!rxtone) {
+		return 0;
+	}
+
+	if (split_ctcss_freq(hertz, decimal, rxtone)) {
+		return -1;
+	}
 
 	h = atoi(hertz);
 	d = atoi(decimal);
@@ -204,24 +216,39 @@ int set_xcat(struct rpt *myrpt)
 
 	/* set Mode */
 	ast_debug(2, "Mode\n");
-	if (!res)
+	if (!res) {
 		res = simple_command_xcat(myrpt, 8, 1);
+	}
+
 	ast_debug(2, "Offset Initial/Simplex\n");
-	if (!res)
+
+	if (!res) {
 		res = set_offset_xcat(myrpt, REM_SIMPLEX);	/* Offset */
+	}
 	/* set Freq */
 	ast_debug(2, "Frequency\n");
-	if (!res)
+
+	if (!res) {
 		res = set_freq_xcat(myrpt, myrpt->freq);	/* Frequency */
+	}
+
 	ast_debug(2, "Offset\n");
-	if (!res)
+
+	if (!res) {
 		res = set_offset_xcat(myrpt, myrpt->offset);	/* Offset */
+	}
+
 	ast_debug(2, "CTCSS\n");
-	if (!res)
-		res = set_ctcss_freq_xcat(myrpt, myrpt->txplon ? myrpt->txpl : "0.0", myrpt->rxplon ? myrpt->rxpl : "0.0");	/* Tx/Rx CTCSS */
+
+	if (!res) {
+		res = set_ctcss_freq_xcat(myrpt, myrpt->txplon ? myrpt->txpl : "0.0", myrpt->rxplon ? myrpt->rxpl : "0.0"); /* Tx/Rx CTCSS */
+	}
 	/* set Freq */
 	ast_debug(2, "Frequency\n");
-	if (!res)
+
+	if (!res) {
 		res = set_freq_xcat(myrpt, myrpt->freq);	/* Frequency */
+	}
+
 	return res;
 }
