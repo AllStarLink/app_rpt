@@ -825,7 +825,7 @@ void rpt_event_process(struct rpt *myrpt)
 					/* set to 1 if var is true */
 					var1p = ((pbx_checkcondition(var1) > 0));
 				}
-				//                              pbx_builtin_setvar_helper(myrpt->rxchannel,cmpvar,var);
+				/*                              pbx_builtin_setvar_helper(myrpt->rxchannel,cmpvar,var); */
 				ast_free(cmpvar);
 				c = toupper(c);
 				if (!strchr("TFNI", c)) {
@@ -1619,7 +1619,7 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 
 	ast_debug(7, "digits=%s  source=%d\n", digits, command_source);
 
-	// ast_debug(1, "@@@@ Digits collected: %s, source: %d\n", digits, command_source);
+	/* ast_debug(1, "@@@@ Digits collected: %s, source: %d\n", digits, command_source); */
 
 	if (command_source == SOURCE_DPHONE) {
 		if (!myrpt->p.dphone_functions)
@@ -3805,7 +3805,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				/* this zeros out energy and lasthit, but not hit_count. If this proves to be a problem, we can add API to do that. */
 				/*! \todo we need to goertzel_reset on the tone, e.g. we need to add an ast_dsp_freqreset */
 				/*! \todo this may also fix the problem in app_sf where to be reliable we have to free on each match. Test and see */
-				ast_dsp_digitreset(myrpt->dsp); /// NOTE: THIS IS WRONG! See comment above.
+				ast_dsp_digitreset(myrpt->dsp); /* NOTE: THIS IS WRONG! See comment above. */
 #else
 				goertzel_reset(&myrpt->burst_tone_state.tone);
 				myrpt->burst_tone_state.last_hit = 0;
@@ -6711,7 +6711,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		if (memp > 0) {
 			char radiochan;
 			radiochan = strtod(data, NULL);
-			// if(myrpt->nowchan!=0 && radiochan!=myrpt->nowchan && !myrpt->bargechan)
+			/* if(myrpt->nowchan!=0 && radiochan!=myrpt->nowchan && !myrpt->bargechan) */
 
 			if (numlinks > 0 && radiochan != myrpt->nowchan && !myrpt->bargechan) {
 				pbx_builtin_setvar_helper(chan, "RPT_STAT_BUSY", "1");
@@ -6759,7 +6759,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (options && (*options == 'R')) {
 		/* Parts of this section taken from app_parkandannounce */
 		char *return_context;
-		// int l, m, lot, timeout = 0;
+		/* int l, m, lot, timeout = 0; */
 		int l, timeout = 0;
 		enum patch_call_mode callmode;
 		char tmp[256], *template;
@@ -6850,14 +6850,14 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		   timeout before we are done announcing and the channel is messed with, Kablooeee.  So we use Masq to prevent this.  */
 
 		/*! \todo the parking API changed a while ago, this all needs to be completely redone here */
-		// old way: https://github.com/asterisk/asterisk/blob/1.8/apps/app_parkandannounce.c
-		// new way: https://github.com/asterisk/asterisk/blob/master/res/parking/parking_applications.c#L890
+		/* old way: https://github.com/asterisk/asterisk/blob/1.8/apps/app_parkandannounce.c */
+		/* new way: https://github.com/asterisk/asterisk/blob/master/res/parking/parking_applications.c#L890 */
 
-		// ast_masq_park_call(chan, NULL, timeout, &lot); // commented out to avoid compiler error.
+		/* ast_masq_park_call(chan, NULL, timeout, &lot); commented out to avoid compiler error. */
 
-		// ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context);
+		/* ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context); */
 
-		// snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1);
+		/* snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1); */
 
 		rpt_telemetry(myrpt, REV_PATCH, tmp);
 
@@ -6938,7 +6938,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (callstr)
 				b1 = callstr;
 		} else {
-			// b = chan->cid.cid_name;
+			/* b = chan->cid.cid_name; */
 			b = ast_channel_caller(chan)->id.name.str;
 			b1 = ast_channel_caller(chan)->id.number.str;
 			ast_shrink_phone_number(b1);
@@ -7107,7 +7107,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		b1 = "0";
 		b = NULL;
 	} else {
-		// b = chan->cid.cid_name;
+		/* b = chan->cid.cid_name; */
 		b = ast_channel_caller(chan)->id.name.str;
 		b1 = ast_channel_caller(chan)->id.number.str;
 		ast_shrink_phone_number(b1);
