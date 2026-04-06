@@ -310,7 +310,7 @@ struct rtcp_common_t {
 #error "Unknown byte order"
 #endif
 	uint8_t pt:8;
-	uint16_t length; // MUST be stored in network byte order
+	uint16_t length; /* MUST be stored in network byte order */
 };
 #pragma pack(pop)
 

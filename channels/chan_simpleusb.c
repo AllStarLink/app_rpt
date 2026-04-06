@@ -119,10 +119,10 @@ static struct ast_jb_conf global_jbconf;
 #define	PAGER_SRC "PAGER"
 #define	ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 12000
-#define	SAMPRATE 8000			// (Sample Rate)
-#define	DIVLCM 192000			// (Least Common Mult of 512,1200,2400,8000)
+#define SAMPRATE 8000 /* (Sample Rate) */
+#define DIVLCM 192000 /* (Least Common Mult of 512,1200,2400,8000) */
 #define	PREAMBLE_BITS 576
-#define	MESSAGE_BITS 544		// (17 * 32), 1 longword SYNC plus 16 longwords data
+#define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
 #define	ONEVAL -AMPVAL
 #define ZEROVAL AMPVAL
 #define	DIVSAMP (DIVLCM / SAMPRATE)
@@ -2002,7 +2002,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 		return 0;
 	}
 
-	//take the data from the network and save it for processing
+	/* take the data from the network and save it for processing */
 	f1 = ast_frdup(f);
 	if (!f1) {
 		return 0;

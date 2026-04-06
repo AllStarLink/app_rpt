@@ -316,7 +316,7 @@ static struct usrp_pvt *usrp_alloc(void *data)
 		ast_free(pvt);
 		return NULL;
 	}
-	// TODO: do we need locking for this?
+	/* TODO: do we need locking for this? */
 	for (o_slot = 0; o_slot < MAX_CHANS; o_slot++) {
 		if (!usrp_channels[o_slot])
 			break;
@@ -349,7 +349,7 @@ static int usrp_hangup(struct ast_channel *ast)
 	if (p->dsp) {
 		ast_dsp_free(p->dsp);
 	}
-	// TODO: do we need locking for this?
+	/* TODO: do we need locking for this? */
 	for (i = 0; i < MAX_CHANS; i++) {
 		if (usrp_channels[i] == p) {
 			usrp_channels[i] = NULL;
@@ -504,7 +504,7 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 					ast_channel_name(ast), pvt->rxseq, seq);
 			}
 			pvt->rxseq = seq + 1;
-			// TODO: TEXT processing added N4IRR
+			/* TODO: TEXT processing added N4IRR */
 			if (datalen == USRP_VOICE_FRAME_SIZE) {
 				/* Pass received text messages to Asterisk */
 				if (bufhdrp->type == USRP_TYPE_TEXT) {
@@ -546,7 +546,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	int n;
 	char buf[USRP_VOICE_FRAME_SIZE + AST_FRIENDLY_OFFSET + SSO];
 
-	// buffer for constructing frame, plus two ptrs: hdr and data
+	/* buffer for constructing frame, plus two ptrs: hdr and data */
 	char sendbuf[sizeof(struct _chan_usrp_bufhdr) + USRP_VOICE_FRAME_SIZE];
 	struct _chan_usrp_bufhdr *bufhdrp = (struct _chan_usrp_bufhdr *) sendbuf;
 	char *bufdata = &sendbuf[sizeof(struct _chan_usrp_bufhdr)];
