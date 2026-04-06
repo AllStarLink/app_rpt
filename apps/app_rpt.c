@@ -7833,9 +7833,10 @@ static int unload_module(void)
 			ast_free(rpt_vars[i].remoterig);
 			rpt_vars[i].remoterig = NULL;
 		}
-		if (rpt_vars[n].mdc) {
-			ast_free(rpt_vars[n].mdc);
-			rpt_vars[n].mdc = NULL;
+
+		if (rpt_vars[i].mdc) {
+			ast_free(rpt_vars[i].mdc);
+			rpt_vars[i].mdc = NULL;
 		}
 	}
 
