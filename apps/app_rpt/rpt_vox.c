@@ -18,9 +18,11 @@ void voxinit_rpt(struct rpt *myrpt, char enable)
 	myrpt->vox.noise_energy = 0.0;
 	myrpt->vox.enacount = 0;
 	myrpt->vox.voxena = 0;
+
 	if (!enable) {
 		myrpt->vox.voxena = -1;
 	}
+
 	myrpt->vox.lastvox = 0;
 	myrpt->vox.ondebcnt = VOX_ON_DEBOUNCE_COUNT;
 	myrpt->vox.offdebcnt = VOX_OFF_DEBOUNCE_COUNT;
@@ -35,9 +37,11 @@ void voxinit_link(struct rpt_link *mylink, char enable)
 	mylink->vox.noise_energy = 0.0;
 	mylink->vox.enacount = 0;
 	mylink->vox.voxena = 0;
+
 	if (!enable) {
 		mylink->vox.voxena = -1;
 	}
+
 	mylink->vox.lastvox = 0;
 	mylink->vox.ondebcnt = VOX_ON_DEBOUNCE_COUNT;
 	mylink->vox.offdebcnt = VOX_OFF_DEBOUNCE_COUNT;
@@ -88,6 +92,7 @@ int dovox(struct vox *v, short *buf, int bs)
 		if (v->voxena) {
 			v->noise_energy *= 0.75;
 		}
+
 		v->voxena = 1;
 	} else {
 		v->voxena = 0;
