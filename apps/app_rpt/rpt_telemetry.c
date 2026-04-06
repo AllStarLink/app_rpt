@@ -85,11 +85,17 @@ static int rpt_telem_datastore(struct ast_channel *chan, time_t t)
 	}
 	time_data = ast_malloc(sizeof(time_t));
 	if (!time_data) {
+		ast_datastore_free(datastore);
 		return -1;
 	}
 	*time_data = t;
 	datastore->data = time_data;
-	ast_channel_datastore_add(chan, datastore);
+
+	if (ast_channel_datastore_add(chan, datastore)) {
+		ast_datastore_free(datastore);
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -491,11 +497,9 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 						res = saynum(mychannel, decimal);
 					}
 				}
-			}
-			if (metertype == 2) {
+			} else if (metertype == 2) {
 				res = sayfile(mychannel, rangephrase);
-			}
-			if (metertype == 3) {
+			} else if (metertype == 3) {
 				res = sayfile(mychannel, bitphrases[(val) ? 1 : 0]);
 			}
 
