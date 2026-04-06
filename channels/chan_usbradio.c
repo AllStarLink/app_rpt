@@ -1105,7 +1105,7 @@ static void *hidthread(void *arg)
 		if (o->pmrChan == NULL) {
 			t_pmr_chan tChan;
 
-			// ast_log(LOG_NOTICE,"createPmrChannel() %s\n",o->name);
+			/* ast_log(LOG_NOTICE,"createPmrChannel() %s\n",o->name); */
 			memset(&tChan, 0, sizeof(t_pmr_chan));
 
 			tChan.pTxCodeDefault = o->txctcssdefault;
@@ -2167,7 +2167,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		kickptt(o);
 	}
 
-#if 0 // to write 48KS/s stereo tx data to a file
+#if 0 /* to write 48KS/s stereo tx data to a file */
 	if (!ftxoutraw) {
 		ftxoutraw = fopen(TX_CAP_OUT_FILE, "w");
 	}
@@ -2354,7 +2354,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 	/* Check conditions and set receiver active */
 	if (cd && sd) {
-		// if(!o->rxkeyed)o->pmrChan->dd.b.doitnow=1;
+		/* if(!o->rxkeyed)o->pmrChan->dd.b.doitnow=1; */
 		if (!o->rxkeyed) {
 			ast_debug(3, "Channel %s: o->rxkeyed = 1.\n", o->name);
 		}
@@ -2364,7 +2364,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			o->rxoncnt++;
 		}
 	} else {
-		// if(o->rxkeyed)o->pmrChan->dd.b.doitnow=1;
+		/* if(o->rxkeyed)o->pmrChan->dd.b.doitnow=1; */
 		if (o->rxkeyed) {
 			ast_debug(3, "Channel %s: o->rxkeyed = 0.\n", o->name);
 		}
@@ -2870,7 +2870,7 @@ static void tune_flash(int fd, struct chan_usbradio_pvt *o, int intflag)
 	for (i = 0; i < NFLASH; i++) {
 		o->txtestkey = 1;
 		o->pmrChan->txPttIn = 1;
-		TxTestTone(o->pmrChan, 1); // generate 1KHz tone at 7200 peak
+		TxTestTone(o->pmrChan, 1); /* generate 1KHz tone at 7200 peak */
 		if ((fd > 0) && intflag) {
 			if (ast_radio_wait_or_poll(fd, 1000, intflag)) {
 				o->pmrChan->txPttIn = 0;
@@ -2953,8 +2953,8 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 		if (argc == 3) {
 			ast_cli(fd, "Current Signal Strength is %d\n", ((32767 - o->pmrChan->rxRssi) * 1000 / 32767));
 			ast_cli(fd, "Current Squelch setting is %d\n", o->rxsquelchadj);
-			// ast_cli(fd,"Current Raw RSSI        is %d\n",o->pmrChan->rxRssi);
-			// ast_cli(fd,"Current (real) Squelch setting is %d\n",*(o->pmrChan->prxSquelchAdjust));
+			/* ast_cli(fd,"Current Raw RSSI        is %d\n",o->pmrChan->rxRssi); */
+			/* ast_cli(fd,"Current (real) Squelch setting is %d\n",*(o->pmrChan->prxSquelchAdjust)); */
 		} else {
 			i = atoi(argv[3]);
 			if ((i < 0) || (i > 999)) {
@@ -3048,7 +3048,7 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 			mixer_write(o);
 			mult_set(o);
 		}
-		// tune_auxoutput(o,i);
+		/* tune_auxoutput(o,i); */
 	} else if (!strcasecmp(argv[2], "txtone")) {
 		if (argc == 3) {
 			ast_cli(fd, "Current Tx CTCSS modulation setting = %d\n", o->txctcssadj);
@@ -3161,12 +3161,12 @@ static int radio_tune(int fd, int argc, const char *const *argv)
 static int set_txctcss_level(struct chan_usbradio_pvt *o)
 {
 	if (o->txmixa == TX_OUT_LSD) {
-		//      o->txmixaset=(151*o->txctcssadj) / 1000;
+		/*      o->txmixaset=(151*o->txctcssadj) / 1000; */
 		o->txmixaset = o->txctcssadj;
 		mixer_write(o);
 		mult_set(o);
 	} else if (o->txmixb == TX_OUT_LSD) {
-		//      o->txmixbset=(151*o->txctcssadj) / 1000;
+		/*      o->txmixbset=(151*o->txctcssadj) / 1000; */
 		o->txmixbset = o->txctcssadj;
 		mixer_write(o);
 		mult_set(o);
@@ -3219,7 +3219,7 @@ static int radio_set_xpmr_debug(int fd, int argc, const char *const *argv)
 			o->pmrChan->tracelevel = i;
 		}
 	}
-	// add ability to set it for a number of frames after which it reverts
+	/* add ability to set it for a number of frames after which it reverts */
 	ast_cli(fd, "Channel %s: xdebug on tracelevel %i\n", o->name, o->pmrChan->tracelevel);
 
 	return RESULT_SUCCESS;
@@ -3384,7 +3384,7 @@ static void tune_txoutput(struct chan_usbradio_pvt *o, int value, int fd, int in
 {
 	o->txtestkey = 1;
 	o->pmrChan->txPttIn = 1;
-	TxTestTone(o->pmrChan, 1); // generate 1KHz tone at 7200 peak
+	TxTestTone(o->pmrChan, 1); /* generate 1KHz tone at 7200 peak */
 	if (fd > 0) {
 		ast_cli(fd, "Tone output starting on channel %s...\n", o->name);
 		if (ast_radio_wait_or_poll(fd, 5000, intflag)) {
@@ -4304,8 +4304,8 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
  */
 static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
 {
-	const int target = 7200;   // peak
-	const int tolerance = 360; // peak to peak
+	const int target = 7200;   /* peak */
+	const int tolerance = 360; /* peak to peak */
 	const float settingmin = 0.1;
 	const float settingmax = 5;
 	const float settingstart = 1;
@@ -4333,7 +4333,7 @@ static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
 
 	setting = settingstart;
 
-	// ast_cli(fd,"ERROR: NO MEASURE BLOCK.\n");
+	/* ast_cli(fd,"ERROR: NO MEASURE BLOCK.\n"); */
 
 	while (tries < maxtries) {
 		*(o->pmrChan->prxVoiceAdjust) = setting * M_Q8;
@@ -4383,7 +4383,7 @@ static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
  */
 static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 {
-	const int target = 2400; // was 4096 pre 20080205
+	const int target = 2400; /* was 4096 pre 20080205 */
 	const int tolerance = 100;
 	const float settingmin = 0.1;
 	const float settingmax = 8;
@@ -4949,7 +4949,7 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
 		/* printf(" remoted %s %s --> %s \n",o->pmrChan->txctcssdefault,
 		   o->pmrChan->txctcssfreq,o->pmrChan->rxctcssfreq); */
 	} else {
-		// set xpmr pointers to source strings
+		/* set xpmr pointers to source strings */
 
 		o->pmrChan->pTxCodeDefault = o->txctcssdefault;
 		o->pmrChan->pRxCodeSrc = o->rxctcssfreqs;
@@ -5163,7 +5163,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 	if (o->pmrChan == NULL) {
 		t_pmr_chan tChan;
 
-		// ast_log(LOG_NOTICE,"createPmrChannel() %s\n",o->name);
+		/* ast_log(LOG_NOTICE,"createPmrChannel() %s\n",o->name); */
 		memset(&tChan, 0, sizeof(t_pmr_chan));
 
 		tChan.pTxCodeDefault = o->txctcssdefault;
@@ -5328,7 +5328,7 @@ int RxTestIt(struct chan_usbradio_pvt *o)
 
 		if (pChan->rxCtcss->decode && !txEnable) {
 			txEnable = 1;
-			// pChan->inputBlanking=(8000/1000*200);
+			/* pChan->inputBlanking=(8000/1000*200); */
 		} else if (!pChan->rxCtcss->decode && txEnable) {
 			txEnable = 0;
 		}
