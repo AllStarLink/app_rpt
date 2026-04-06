@@ -959,23 +959,32 @@ void load_rpt_vars(int n, int init)
 	rpt_vars[n].p.extnodefilesn = explode_string((char *) S_OR(val, EXTNODEFILE), (char **) rpt_vars[n].p.extnodefiles,
 		ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
 
-	/*! \todo Is this memory properly freed? */
 	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
 	if (val) {
-		rpt_vars[n].p.locallinknodesn =
-			explode_string(ast_strdup(val), (char **) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
+		char *tmp = ast_strdup(val);
+		if (tmp) {
+			rpt_vars[n].p.locallinknodesn =
+				explode_string(tmp, (char **) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
+			ast_free(tmp);
+		}
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "lconn");
 	if (val) {
-		rpt_vars[n].p.nlconn =
-			explode_string(strupr(ast_strdup(val)), (char **) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
+		char *tmp = ast_strdup(val);
+		if (tmp) {
+			rpt_vars[n].p.nlconn = explode_string(strupr(tmp), (char **) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
+			ast_free(tmp);
+		}
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "ldisc");
 	if (val) {
-		rpt_vars[n].p.nldisc =
-			explode_string(strupr(ast_strdup(val)), (char **) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
+		char *tmp = ast_strdup(val);
+		if (tmp) {
+			rpt_vars[n].p.nldisc = explode_string(strupr(tmp), (char **) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
+			ast_free(tmp);
+		}
 	}
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
