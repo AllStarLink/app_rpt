@@ -2358,21 +2358,22 @@ int set_ic706(struct rpt *myrpt)
 	int res = 0, i;
 
 	ast_debug(7, "Set to VFO A iobase=%i\n", myrpt->p.iobase);
-
-	if (!res) {
-		res = simple_command_ic706(myrpt, 7, 0);
-	}
+	res = simple_command_ic706(myrpt, 7, 0);
 
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		i = ic706_pltocode(myrpt->rxpl);
 		if (i == -1) {
 			return -1;
 		}
+
 		ast_debug(1, "Select memory number\n");
+
 		if (!res) {
 			res = select_mem_ic706(myrpt, i + IC706_PL_MEMORY_OFFSET);
 		}
+
 		ast_debug(1, "Transfer memory to VFO\n");
+
 		if (!res) {
 			res = mem2vfo_ic706(myrpt);
 		}
@@ -2393,7 +2394,7 @@ int set_ic706(struct rpt *myrpt)
 	ast_debug(2, "Split off\n");
 
 	if (!res) {
-		simple_command_ic706(myrpt, 0x82, 0);	/* Split off */
+		res = simple_command_ic706(myrpt, 0x82, 0); /* Split off */
 	}
 	ast_debug(2, "Frequency\n");
 
