@@ -406,7 +406,9 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 				loginuser = loginlevel = freq = rxpl = txpl = NULL;
 				/* Make a copy of all stat variables while locked */
 				rpt_mutex_lock(&myrpt->lock); /* LOCK */
-				if (remoteon = myrpt->remoteon) {
+				remoteon = myrpt->remoteon;
+
+				if (remoteon) {
 					if (!ast_strlen_zero(myrpt->loginuser)) {
 						loginuser = ast_strdup(myrpt->loginuser);
 					}
@@ -436,7 +438,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 				rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
 				astman_append(s, "IsRemoteBase: YES\r\n");
 				astman_append(s, "RemoteOn: %s\r\n", (remoteon) ? "YES" : "NO");
-				if (remoteon = myrpt->remoteon) {
+				if (remoteon) {
 					if (loginuser) {
 						astman_append(s, "LogInUser: %s\r\n", loginuser);
 						ast_free(loginuser);
