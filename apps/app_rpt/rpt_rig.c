@@ -1672,7 +1672,7 @@ static int set_ctcss_freq_ft950(struct rpt *myrpt, char *txtone, char *rxtone)
 
 	sprintf(cmdstr, "CN0%02d;", c);
 
-	return serial_remote_io(myrpt, (unsigned char *) cmdstr, 5, NULL, 0, 0);
+	return serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);
 }
 
 int set_ft950(struct rpt *myrpt)
