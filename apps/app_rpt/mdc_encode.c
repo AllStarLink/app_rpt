@@ -337,7 +337,7 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 			encoder->ipos = 0;
 			encoder->bpos++;
 
-			if (encoder->bpos > encoder->loaded) {
+			if (encoder->bpos >= encoder->loaded) {
 				encoder->state = 0;
 				return 127;
 			}
