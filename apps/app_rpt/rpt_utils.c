@@ -311,6 +311,10 @@ int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...)
 	int rc;
 	va_list ap;
 
+	if (*used >= size) {
+		return -1;
+	}
+
 	va_start(ap, fmt);
 	rc = vsnprintf(buf + *used, size - *used, fmt, ap);
 	va_end(ap);

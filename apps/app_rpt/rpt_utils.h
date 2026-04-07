@@ -107,4 +107,4 @@ void update_timer(int *timer_ptr, int elap, int end_val);
  * \retval 0 on success.
  * \retval -1 if the buffer is full or a formatting error occurred.
  */
-int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...);
+int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
