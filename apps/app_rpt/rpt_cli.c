@@ -807,6 +807,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	char str[MAX_TEXTMSG_SIZE];
 	char *from, *to;
 	int nrpts = rpt_num_rpts();
+	int used, rc;
 
 	if (argc < 5) {
 		return RESULT_SHOWUSAGE;
@@ -817,13 +818,20 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 
 	string_toupper(from);
 	string_toupper(to);
-	snprintf(str, sizeof(str) - 1, "M %s %s ", from, to);
+	used = snprintf(str, sizeof(str), "M %s %s ", from, to);
+
+	if (used >= sizeof(str)) {
+		return RESULT_FAILURE;
+	}
 
 	for (i = 4; i < argc; i++) {
-		if (i > 3) {
-			strncat(str, " ", sizeof(str) - 1);
+		rc = snprintf(str + used, sizeof(str) - used, " %s", argv[i]);
+
+		if (rc < 0 || rc >= sizeof(str) - used) {
+			return RESULT_FAILURE;
 		}
-		strncat(str, argv[i], sizeof(str) - 1);
+
+		used += rc;
 	}
 
 	for (i = 0; i < nrpts; i++) {
