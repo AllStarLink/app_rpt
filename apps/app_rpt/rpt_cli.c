@@ -272,7 +272,8 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			j = 0;
 			numoflinks = ao2_container_count(links_copy);
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
-				if (l->name[0] == '0') { /* Skip '0' nodes */
+				if (l->name[0] == '0') {
+					/* Skip '0' nodes */
 					reverse_patch_state = "UP";
 					continue;
 				}
@@ -372,7 +373,8 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				long long connecttime;
 				char conntime[21];
 
-				if (l->name[0] == '0') { /* Skip '0' nodes */
+				if (l->name[0] == '0') {
+					/* Skip '0' nodes */
 					continue;
 				}
 				if (l->chan) {
@@ -575,11 +577,15 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				ast_free(lbuf);
 				return RESULT_FAILURE;
 			}
+
 			/* parse em */
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
+
 			/* sort em */
-			if (ns)
+			if (ns > 1) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
+			}
+
 			for (j = 0;; j++) {
 				if (!strs[j]) {
 					if (!j) {
@@ -588,8 +594,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 					break;
 				}
 				ast_cli(fd, "%s", strs[j]);
-				if (strs[j + 1])
+				if (strs[j + 1]) {
 					ast_cli(fd, ", ");
+				}
 			}
 			ast_cli(fd, "\n\n");
 			ast_free(strs);
@@ -635,8 +642,9 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 	char **strs;
 	struct rpt *myrpt;
 	int nrpts = rpt_num_rpts();
-	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	struct ast_str *lbuf;
 
+	lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!lbuf) {
 		return RESULT_FAILURE;
 	}
@@ -653,16 +661,18 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 			rpt_mutex_lock(&myrpt->lock); /* LOCK */
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
 			rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
-			strs = ast_malloc(n * sizeof(char *));
 
+			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
 				return RESULT_FAILURE;
 			}
+
 			/* parse em */
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
+
 			/* sort em */
-			if (ns) {
+			if (ns > 1) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
 			}
 
@@ -884,13 +894,14 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
+
 			if (!CHAN_TECH(myrpt->rxchannel, "voter") && !CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 				/* ignore channels that cannot accept the paging command */
 				return RESULT_SUCCESS;
 			}
+
 			/* if we are playing telemetry, stop it now */
 			telem = myrpt->tele.next;
-
 			while (telem != &myrpt->tele) {
 				if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
 					if (telem->chan) {
@@ -912,8 +923,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/* ## Send to all nodes */
-
+/* Send to all nodes */
 int rpt_do_sendall(int fd, int argc, const char *const *argv)
 {
 	int i;
@@ -1048,13 +1058,13 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 
 		rpt_vars[thisRpt].cmdAction.command_source = SOURCE_RPT;
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_READY;
-	} else { /* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
+	} else {
 		busy = 1;
-	} /* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
+	}
 
 	rpt_mutex_unlock(&myrpt->lock);
 	return (busy ? RESULT_FAILURE : RESULT_SUCCESS);
-} /* rpt_do_cmd() */
+}
 
 /*! \brief Set a node's main channel variable from the command line */
 static int rpt_do_setvar(int fd, int argc, const char *const *argv)

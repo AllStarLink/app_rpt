@@ -98,7 +98,8 @@ static int rpt_manager_do_sawstat(struct mansession *ses, const struct message *
 			rpt_mutex_lock(&rpt_vars[i].lock); /* LOCK */
 
 			RPT_LIST_TRAVERSE(rpt_vars[i].links, l, l_it) {
-				if (l->name[0] == '0') { /* Skip '0' nodes */
+				if (l->name[0] == '0') {
+					/* Skip '0' nodes */
 					continue;
 				}
 				astman_append(ses, "Conn: %s %d %d %d\r\n", l->name, l->lastrx1,
@@ -188,11 +189,9 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			case CALLMODE_UP:
 				patch_state = "2"; //"UP";
 				break;
-
 			case CALLMODE_FAILED:
 				patch_state = "3"; //"CALL FAILED";
 				break;
-
 			default:
 				patch_state = "4"; //"DOWN";
 			}
@@ -224,7 +223,8 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), l->connecttime);
 				char conntime[21];
 
-				if (l->name[0] == '0') { /* Skip '0' nodes */
+				if (l->name[0] == '0') {
+					/* Skip '0' nodes */
 					continue;
 				}
 				if (l->chan) {
@@ -263,8 +263,9 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 
 			/* parse em */
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
+
 			/* sort em */
-			if (ns) {
+			if (ns > 1) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
 			}
 
@@ -292,18 +293,22 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			} else {
 				rxchan = ast_channel_get_by_name(rxchanname);
 			}
+
 			/* rxchan might've disappeared in the meantime. Verify it still exists before we try to lock it,
 			 * at least unless it's a Local channel.
 			 * XXX This was added to address assertions due to bad locking, but app_rpt should probably
 			 * be globally ref'ing the channel and holding it until it unloads. Should be investigated. */
 			if (rxchan || pseudo) {
 				struct varshead *v;
+				struct ast_channel *rxchannel;
+
 				/* If the module is unloading,
 				 * then rpt_vars[i].rxchannel could become NULL in the middle of all this,
 				 * since this isn't protected by the rpt lock.
 				 * It doesn't need to be either, just save the channel pointer and we're fine.
 				 * The channel itself won't go away since we referred it via ast_channel_get_by_name. */
-				struct ast_channel *rxchannel = rpt_vars[i].rxchannel;
+
+				rxchannel = rpt_vars[i].rxchannel;
 				if (!rxchannel) {
 					ast_log(LOG_WARNING, "Channel disappeared while trying to access\n");
 				} else {
@@ -402,10 +407,10 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 				char offsetc, powerlevelc;
 
 				loginuser = loginlevel = freq = rxpl = txpl = NULL;
-				/* Make a copy of all stat variables while locked */
-				rpt_mutex_lock(&myrpt->lock); /* LOCK */
-				remoteon = myrpt->remoteon;
 
+				/* Make a copy of all stat variables while locked */
+				rpt_mutex_lock(&myrpt->lock);
+				remoteon = myrpt->remoteon;
 				if (remoteon) {
 					if (!ast_strlen_zero(myrpt->loginuser)) {
 						loginuser = ast_strdup(myrpt->loginuser);
@@ -426,14 +431,15 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 					if (!ast_strlen_zero(myrpt->txpl)) {
 						txpl = ast_strdup(myrpt->txpl);
 					}
+
 					remmode = myrpt->remmode;
 					offset = myrpt->offset;
 					powerlevel = myrpt->powerlevel;
 					rxplon = myrpt->rxplon;
 					txplon = myrpt->txplon;
 				}
+				rpt_mutex_unlock(&myrpt->lock);
 
-				rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
 				astman_append(s, "IsRemoteBase: YES\r\n");
 				astman_append(s, "RemoteOn: %s\r\n", (remoteon) ? "YES" : "NO");
 				if (remoteon) {
