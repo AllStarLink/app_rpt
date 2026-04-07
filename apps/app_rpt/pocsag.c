@@ -69,6 +69,10 @@ case NUMERIC:
 		mysize = ((size / 5) + 1) * 5;
 	}
 
+	if (mysize > packed_len * 5) {
+		return -1;
+	}
+
 	for (idx = 0, pi = 0; idx < mysize; idx++, pi = ((idx % 5) ? pi : pi + 1)) {
 		if (idx >= size) {
 			packed[pi] = (packed[pi] << 4) + 3;
