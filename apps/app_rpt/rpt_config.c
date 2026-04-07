@@ -752,7 +752,7 @@ void load_rpt_vars(int n, int init)
 	int i, j, longestnode;
 	struct ast_variable *vp;
 	struct ast_config *cfg;
-	char *strs[100];
+	char *strs[100], *tmp;
 	char s1[256];
 	static char *cs_keywords[] =
 		{ "rptena", "rptdis", "apena", "apdis", "lnkena", "lnkdis", "totena", "totdis", "skena", "skdis",
@@ -986,7 +986,7 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(extnodes, "extnodes", EXTNODES);
 
 	val = ast_variable_retrieve(cfg, cat, "extnodefile");
-	char *tmp = ast_strdup(S_OR(val, EXTNODEFILE));
+	tmp = ast_strdup(S_OR(val, EXTNODEFILE));
 	if (tmp) {
 		rpt_vars[n].p.extnodefilesn =
 			explode_string(tmp, (char **) rpt_vars[n].p.extnodefiles, ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
@@ -994,7 +994,7 @@ void load_rpt_vars(int n, int init)
 	}
 	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
 	if (val) {
-		char *tmp = ast_strdup(val);
+		tmp = ast_strdup(val);
 		if (tmp) {
 			rpt_vars[n].p.locallinknodes_buf = tmp;
 			rpt_vars[n].p.locallinknodesn =
@@ -1004,7 +1004,7 @@ void load_rpt_vars(int n, int init)
 
 	val = ast_variable_retrieve(cfg, cat, "lconn");
 	if (val) {
-		char *tmp = ast_strdup(val);
+		tmp = ast_strdup(val);
 		if (tmp) {
 			rpt_vars[n].p.lconn_buf = tmp;
 			rpt_vars[n].p.nlconn = explode_string(strupr(tmp), (char **) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
@@ -1013,7 +1013,7 @@ void load_rpt_vars(int n, int init)
 
 	val = ast_variable_retrieve(cfg, cat, "ldisc");
 	if (val) {
-		char *tmp = ast_strdup(val);
+		tmp = ast_strdup(val);
 		if (tmp) {
 			rpt_vars[n].p.ldisc_buf = tmp;
 			rpt_vars[n].p.nldisc = explode_string(strupr(tmp), (char **) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
