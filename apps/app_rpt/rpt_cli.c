@@ -820,7 +820,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	string_toupper(to);
 	used = snprintf(str, sizeof(str), "M %s %s ", from, to);
 
-	if (used >= sizeof(str)) {
+	if (used < 0 || used >= sizeof(str)) {
 		return RESULT_FAILURE;
 	}
 
@@ -855,6 +855,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	struct rpt_tele *telem;
 	char *nodename, *baud, *capcode, *text;
 	int nrpts = rpt_num_rpts();
+	int used, rc;
 
 	if (argc < 7) {
 		return RESULT_SHOWUSAGE;
@@ -869,13 +870,20 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	string_toupper(baud);
 	string_toupper(capcode);
 	string_toupper(text);
-	snprintf(str, sizeof(str) - 1, "PAGE %s %s %s ", baud, capcode, text);
+	used = snprintf(str, sizeof(str), "PAGE %s %s %s ", baud, capcode, text);
+
+	if (used < 0 || used >= sizeof(str)) {
+		return RESULT_FAILURE;
+	}
 
 	for (i = 6; i < argc; i++) {
-		if (i > 5) {
-			strncat(str, " ", sizeof(str) - 1);
+		rc = snprintf(str + used, sizeof(str) - used, " %s", argv[i]);
+
+		if (rc < 0 || rc >= sizeof(str) - used) {
+			return RESULT_FAILURE;
 		}
-		strncat(str, argv[i], sizeof(str) - 1);
+
+		used += rc;
 	}
 
 	for (i = 0; i < nrpts; i++) {
@@ -926,6 +934,10 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	nodename = ast_strdupa(argv[2]);
 	string_toupper(nodename);
 	used = snprintf(str, sizeof(str), "M %s 0 ", nodename);
+
+	if (used < 0 || used >= sizeof(str)) {
+		return RESULT_FAILURE;
+	}
 
 	for (i = 3; i < argc; i++) {
 		rc = snprintf(str + used, sizeof(str) - used, " %s", argv[i]);
