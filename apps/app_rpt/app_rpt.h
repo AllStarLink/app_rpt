@@ -794,6 +794,7 @@ struct rpt {
 		const char *extnodes;
 		const char *extnodefiles[MAX_EXTNODEFILES];
 		int  extnodefilesn;
+		char *extnodefiles_buf;
 		const char *patchconnect;
 		const char *lnkactmacro;
 		const char *lnkacttimerwarn;

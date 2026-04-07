@@ -723,6 +723,29 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 	return (val ? 0 : -1);
 }
 
+void rpt_free_config_vars(struct rpt *myrpt)
+{
+	if (myrpt->p.extnodefiles_buf) {
+		ast_free(myrpt->p.extnodefiles_buf);
+		myrpt->p.extnodefiles_buf = NULL;
+	}
+
+	if (myrpt->p.locallinknodes_buf) {
+		ast_free(myrpt->p.locallinknodes_buf);
+		myrpt->p.locallinknodes_buf = NULL;
+	}
+
+	if (myrpt->p.lconn_buf) {
+		ast_free(myrpt->p.lconn_buf);
+		myrpt->p.lconn_buf = NULL;
+	}
+
+	if (myrpt->p.ldisc_buf) {
+		ast_free(myrpt->p.ldisc_buf);
+		myrpt->p.ldisc_buf = NULL;
+	}
+}
+
 void load_rpt_vars(int n, int init)
 {
 	const char *cat, *val;
@@ -757,20 +780,7 @@ void load_rpt_vars(int n, int init)
 	rpt_vars[n].cfg = cfg;
 	cat = rpt_vars[n].name;
 
-	if (rpt_vars[n].p.locallinknodes_buf) {
-		ast_free(rpt_vars[n].p.locallinknodes_buf);
-		rpt_vars[n].p.locallinknodes_buf = NULL;
-	}
-
-	if (rpt_vars[n].p.lconn_buf) {
-		ast_free(rpt_vars[n].p.lconn_buf);
-		rpt_vars[n].p.lconn_buf = NULL;
-	}
-
-	if (rpt_vars[n].p.ldisc_buf) {
-		ast_free(rpt_vars[n].p.ldisc_buf);
-		rpt_vars[n].p.ldisc_buf = NULL;
-	}
+	rpt_free_config_vars(&rpt_vars[n]);
 
 	memset(&rpt_vars[n].p, 0, sizeof(rpt_vars[n].p));
 
@@ -976,9 +986,12 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(extnodes, "extnodes", EXTNODES);
 
 	val = ast_variable_retrieve(cfg, cat, "extnodefile");
-	rpt_vars[n].p.extnodefilesn = explode_string((char *) S_OR(val, EXTNODEFILE), (char **) rpt_vars[n].p.extnodefiles,
-		ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
-
+	char *tmp = ast_strdup(S_OR(val, EXTNODEFILE));
+	if (tmp) {
+		rpt_vars[n].p.extnodefilesn =
+			explode_string(tmp, (char **) rpt_vars[n].p.extnodefiles, ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
+		rpt_vars[n].p.extnodefiles_buf = tmp;
+	}
 	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
 	if (val) {
 		char *tmp = ast_strdup(val);

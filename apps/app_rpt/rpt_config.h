@@ -96,3 +96,6 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval);
 
 /*! \brief Test strings for valid DNS contents */
 int rpt_is_valid_dns_name(const char *dns_name);
+
+/*! \brief Free the configuration variables for a given rpt structure */
+void rpt_free_config_vars(struct rpt *myrpt);

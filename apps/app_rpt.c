@@ -7743,28 +7743,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup_rx_tx(myrpt);
 	closerem(myrpt);
+
 	if (myrpt->macrobuf) {
 		ast_free(myrpt->macrobuf);
 		myrpt->macrobuf = NULL;
 	}
 
-	if (myrpt->p.locallinknodes_buf) {
-		/* The first entry points to the local link node memory allocated in rpt_config.c */
-		ast_free(myrpt->p.locallinknodes_buf);
-		myrpt->p.locallinknodes_buf = NULL;
-	}
-
-	if (myrpt->p.lconn_buf) {
-		/* The first entry points to the local link node memory allocated in rpt_config.c */
-		ast_free(myrpt->p.lconn_buf);
-		myrpt->p.lconn_buf = NULL;
-	}
-
-	if (myrpt->p.ldisc_buf) {
-		/* The first entry points to the local link node memory allocated in rpt_config.c */
-		ast_free(myrpt->p.ldisc_buf);
-		myrpt->p.ldisc_buf = NULL;
-	}
+	rpt_free_config_vars(myrpt);
 
 	if (myrpt->p.rptnode) {
 		rpt_mutex_lock(&myrpt->lock);
