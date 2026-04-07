@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include "pocsag.h"
+#include "asterisk/utils.h"
 
 /* String values for numeric paging */
 static char nstr[] = "0123456789*U -()";
@@ -214,7 +215,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 	cur->frame[curaddr][0] = do_parity_stuff( cur->frame[curaddr][0] );
 
 	if (type != TONE) {
-		mylen = pack_pocsag_string(packed, sizeof(packed) / sizeof(packed[0]), data, size_of_data, type);
+		mylen = pack_pocsag_string(packed, ARRAY_LEN(packed), data, size_of_data, type);
 		if (mylen < 0) {
 			mylen = 0; /* if we had an error packing, just make it empty */
 		}
