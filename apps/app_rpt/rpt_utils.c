@@ -306,6 +306,23 @@ int macro_append(struct rpt *myrpt, const char *cmd)
 	return res;
 }
 
+int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...)
+{
+	int rc;
+	va_list ap;
+
+	va_start(ap, fmt);
+	rc = vsnprintf(buf + *used, size - *used, fmt, ap);
+	va_end(ap);
+
+	if (rc < 0 || (size_t) rc >= size - *used) {
+		return -1;
+	}
+
+	*used += rc;
+	return 0;
+}
+
 void update_timer(int *timer_ptr, int elap, int end_val)
 {
 	if (!timer_ptr || !*timer_ptr) { /* if the timer value = 0 or we have a null pointer, do not update */

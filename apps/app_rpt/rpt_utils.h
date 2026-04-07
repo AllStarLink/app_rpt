@@ -97,3 +97,14 @@ int macro_append(struct rpt *myrpt, const char *cmd);
  * to indicate some code has been executed (a oneshot).
  */
 void update_timer(int *timer_ptr, int elap, int end_val);
+
+/*!
+ * \brief Append a formatted string to a fixed-size buffer, tracking bytes used.
+ * \param buf    The destination buffer.
+ * \param size   Total size of \p buf in bytes.
+ * \param used   Pointer to the number of bytes already written (updated on success).
+ * \param fmt    printf-style format string.
+ * \retval 0 on success.
+ * \retval -1 if the buffer is full or a formatting error occurred.
+ */
+int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...);

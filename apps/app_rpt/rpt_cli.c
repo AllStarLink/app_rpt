@@ -807,7 +807,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	char str[MAX_TEXTMSG_SIZE];
 	char *from, *to;
 	int nrpts = rpt_num_rpts();
-	int used, rc;
+	size_t used;
 
 	if (argc < 5) {
 		return RESULT_SHOWUSAGE;
@@ -825,13 +825,9 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	}
 
 	for (i = 4; i < argc; i++) {
-		rc = snprintf(str + used, sizeof(str) - used, " %s", argv[i]);
-
-		if (rc < 0 || rc >= sizeof(str) - used) {
+		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
 			return RESULT_FAILURE;
 		}
-
-		used += rc;
 	}
 
 	for (i = 0; i < nrpts; i++) {
@@ -855,7 +851,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	struct rpt_tele *telem;
 	char *nodename, *baud, *capcode, *text;
 	int nrpts = rpt_num_rpts();
-	int used, rc;
+	size_t used;
 
 	if (argc < 7) {
 		return RESULT_SHOWUSAGE;
@@ -877,13 +873,9 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	}
 
 	for (i = 6; i < argc; i++) {
-		rc = snprintf(str + used, sizeof(str) - used, " %s", argv[i]);
-
-		if (rc < 0 || rc >= sizeof(str) - used) {
+		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
 			return RESULT_FAILURE;
 		}
-
-		used += rc;
 	}
 
 	for (i = 0; i < nrpts; i++) {
@@ -925,7 +917,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	char str[MAX_TEXTMSG_SIZE];
 	char *nodename;
 	int nrpts = rpt_num_rpts();
-	int used, rc;
+	size_t used;
 
 	if (argc < 4) {
 		return RESULT_SHOWUSAGE;
@@ -940,13 +932,9 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	}
 
 	for (i = 3; i < argc; i++) {
-		rc = snprintf(str + used, sizeof(str) - used, " %s", argv[i]);
-
-		if (rc < 0 || rc >= sizeof(str) - used) {
+		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
 			return RESULT_FAILURE;
 		}
-
-		used += rc;
 	}
 
 	for (i = 0; i < nrpts; i++) {
