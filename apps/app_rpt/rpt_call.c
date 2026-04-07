@@ -105,8 +105,9 @@ int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, cons
 int rpt_make_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc,
 	const char *callerid, const char *node)
 {
-	int res = rpt_setup_call(chan, addr, timeout, driver, data, desc, callerid, node);
+	int res;
 
+	res = rpt_setup_call(chan, addr, timeout, driver, data, desc, callerid, node);
 	if (res) {
 		return res;
 	}
@@ -172,15 +173,14 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 		w = cs[0];
 		cs[0] = cs[1];
 		cs[1] = w;
-		w = ast_waitfor_n(cs, 2, &ms);
 
+		w = ast_waitfor_n(cs, 2, &ms);
 		if (!w) {
 			continue;
 		}
 
 		if (w == chan) {
 			f = ast_read(chan);
-
 			if (!f) {
 				break;
 			}
@@ -196,7 +196,6 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 
 		if (w == dest) {
 			f = ast_read(dest);
-
 			if (!f) {
 				break;
 			}

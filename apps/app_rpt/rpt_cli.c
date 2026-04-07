@@ -104,7 +104,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock); /* LOCK */
+			rpt_mutex_lock(&myrpt->lock);
 			uptime = (int) (now - rpt_starttime());
 			dailytxtime = myrpt->dailytxtime;
 			totaltxtime = myrpt->totaltxtime;
@@ -171,37 +171,43 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 				user_funs = "ENABLED";
 			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail) {
 				tail_type = "ALTERNATE";
-			else
+			} else {
 				tail_type = "STANDARD";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns) {
 				iconns = "DISABLED";
-			else
+			} else {
 				iconns = "ENABLED";
+			}
 
-			if (!myrpt->totimer)
+			if (!myrpt->totimer) {
 				tot_state = "TIMED OUT!";
-			else if (myrpt->totimer != myrpt->p.totime)
+			} else if (myrpt->totimer != myrpt->p.totime) {
 				tot_state = "ARMED";
-			else
+			} else {
 				tot_state = "RESET";
+			}
 
-			if (myrpt->tailid)
+			if (myrpt->tailid) {
 				ider_state = "QUEUED IN TAIL";
-			else if (myrpt->mustid)
+			} else if (myrpt->mustid) {
 				ider_state = "QUEUED FOR CLEANUP";
-			else
+			} else {
 				ider_state = "CLEAN";
+			}
 
 			switch (myrpt->callmode) {
 			case CALLMODE_DIALING:
 				patch_state = "DIALING";
 				break;
+
 			case CALLMODE_CONNECTING:
 				patch_state = "CONNECTING";
 				break;
+
 			case CALLMODE_UP:
 				patch_state = "UP";
 				break;
@@ -272,17 +278,20 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			j = 0;
 			numoflinks = ao2_container_count(links_copy);
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
-				if (l->name[0] == '0') { /* Skip '0' nodes */
+				if (l->name[0] == '0') {
+					/* Skip '0' nodes */
 					reverse_patch_state = "UP";
 					continue;
 				}
+
 				ast_cli(fd, "%s", l->name);
 				if (j % 4 == 3) {
 					ast_cli(fd, "\n");
 					ast_cli(fd, "                                                 : ");
 				} else {
-					if ((numoflinks - 1) - j > 0)
+					if ((numoflinks - 1) - j > 0) {
 						ast_cli(fd, ", ");
+					}
 				}
 				j++;
 			}
@@ -372,14 +381,17 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				long long connecttime;
 				char conntime[21];
 
-				if (l->name[0] == '0') { /* Skip '0' nodes */
+				if (l->name[0] == '0') {
+					/* Skip '0' nodes */
 					continue;
 				}
+
 				if (l->chan) {
 					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", peer, MAXPEERSTR - 1);
 				} else {
 					strcpy(peer, "(none)");
 				}
+
 				connecttime = ast_tvdiff_ms(now, l->connecttime);
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
@@ -389,10 +401,12 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				connecttime %= 1000L;
 				snprintf(conntime, 20, "%02d:%02d:%02d:%02d", hours, minutes, seconds, (int) connecttime);
 				conntime[20] = 0;
-				if (l->thisconnected)
+				if (l->thisconnected) {
 					connstate = "ESTABLISHED";
-				else
+				} else {
 					connstate = "CONNECTING";
+				}
+
 				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
 			ao2_iterator_destroy(&l_it);
@@ -440,72 +454,86 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				rpt_mutex_unlock(&myrpt->lock);
 				return RESULT_FAILURE;
 			}
-			if (myrpt->p.parrotmode != PARROT_MODE_OFF)
+
+			if (myrpt->p.parrotmode != PARROT_MODE_OFF) {
 				parrot_ena = "1"; //"ENABLED";
-			else
+			} else {
 				parrot_ena = "0"; //"DISABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable) {
 				sys_ena = "0"; //"DISABLED";
-			else
+			} else {
 				sys_ena = "1"; //"ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable) {
 				tot_ena = "0"; //"DISABLED";
-			else
+			} else {
 				tot_ena = "1"; //"ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable) {
 				link_ena = "0"; //"DISABLED";
-			else
+			} else {
 				link_ena = "1"; //"ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable) {
 				patch_ena = "0"; //"DISABLED";
-			else
+			} else {
 				patch_ena = "1"; //"ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) {
 				sch_ena = "0"; //"DISABLED";
-			else
+			} else {
 				sch_ena = "1"; //"ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable) {
 				user_funs = "0"; //"DISABLED";
-			else
+			} else {
 				user_funs = "1"; //"ENABLED";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail) {
 				tail_type = "1"; //"ALTERNATE";
-			else
+			} else {
 				tail_type = "0"; //"STANDARD";
+			}
 
-			if (myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns)
+			if (myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns) {
 				iconns = "0"; //"DISABLED";
-			else
+			} else {
 				iconns = "1"; //"ENABLED";
+			}
 
-			if (!myrpt->totimer)
+			if (!myrpt->totimer) {
 				tot_state = "0"; //"TIMED OUT!";
-			else if (myrpt->totimer != myrpt->p.totime)
+			} else if (myrpt->totimer != myrpt->p.totime) {
 				tot_state = "1"; //"ARMED";
-			else
+			} else {
 				tot_state = "2"; //"RESET";
+			}
 
-			if (myrpt->tailid)
+			if (myrpt->tailid) {
 				ider_state = "0"; //"QUEUED IN TAIL";
-			else if (myrpt->mustid)
+			} else if (myrpt->mustid) {
 				ider_state = "1"; //"QUEUED FOR CLEANUP";
-			else
+			} else {
 				ider_state = "2"; //"CLEAN";
+			}
 
 			switch (myrpt->callmode) {
 			case CALLMODE_DIALING:
 				patch_state = "0"; //"DIALING";
 				break;
+
 			case CALLMODE_CONNECTING:
 				patch_state = "1"; //"CONNECTING";
 				break;
+
 			case CALLMODE_UP:
 				patch_state = "2"; //"UP";
 				break;
@@ -519,12 +547,13 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			}
 
 			if (myrpt->p.telemdynamic) {
-				if (myrpt->telemmode == 0x7fffffff)
+				if (myrpt->telemmode == 0x7fffffff) {
 					tel_mode = "1";
-				else if (myrpt->telemmode == 0x00)
+				} else if (myrpt->telemmode == 0x00) {
 					tel_mode = "0";
-				else
+				} else {
 					tel_mode = "2";
+				}
 			} else {
 				tel_mode = "3";
 			}
@@ -533,18 +562,19 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			 * Traverse the list of connected nodes
 			 */
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
+			rpt_mutex_unlock(&myrpt->lock);
 
-			j = 0;
-			rpt_mutex_unlock(&myrpt->lock); // UNLOCK
 			now = rpt_tvnow();
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				int hours, minutes, seconds;
 				long long connecttime = ast_tvdiff_ms(now, l->connecttime);
 				char conntime[21];
 
-				if (l->name[0] == '0') { // Skip '0' nodes
+				if (l->name[0] == '0') {
+					/* Skip '0' nodes */
 					continue;
 				}
+
 				if (l->chan) {
 					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", peer, MAXPEERSTR - 1);
 				} else {
@@ -575,11 +605,15 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				ast_free(lbuf);
 				return RESULT_FAILURE;
 			}
+
 			/* parse em */
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
+
 			/* sort em */
-			if (ns)
+			if (ns > 1) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
+			}
+
 			for (j = 0;; j++) {
 				if (!strs[j]) {
 					if (!j) {
@@ -588,8 +622,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 					break;
 				}
 				ast_cli(fd, "%s", strs[j]);
-				if (strs[j + 1])
+				if (strs[j + 1]) {
 					ast_cli(fd, ", ");
+				}
 			}
 			ast_cli(fd, "\n\n");
 			ast_free(strs);
@@ -635,8 +670,9 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 	char **strs;
 	struct rpt *myrpt;
 	int nrpts = rpt_num_rpts();
-	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	struct ast_str *lbuf;
 
+	lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!lbuf) {
 		return RESULT_FAILURE;
 	}
@@ -650,19 +686,21 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock); /* LOCK */
+			rpt_mutex_lock(&myrpt->lock);
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
-			rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
-			strs = ast_malloc(n * sizeof(char *));
+			rpt_mutex_unlock(&myrpt->lock);
 
+			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
 				return RESULT_FAILURE;
 			}
+
 			/* parse em */
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
+
 			/* sort em */
-			if (ns) {
+			if (ns > 1) {
 				qsort((void *) strs, ns, sizeof(char *), mycompar);
 			}
 
@@ -682,8 +720,9 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 				if (j % 8 == 7) {
 					ast_cli(fd, "\n");
 				} else {
-					if (strs[j + 1])
+					if (strs[j + 1]) {
 						ast_cli(fd, ", ");
+					}
 				}
 			}
 
@@ -884,13 +923,14 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
+
 			if (!CHAN_TECH(myrpt->rxchannel, "voter") && !CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
 				/* ignore channels that cannot accept the paging command */
 				return RESULT_SUCCESS;
 			}
+
 			/* if we are playing telemetry, stop it now */
 			telem = myrpt->tele.next;
-
 			while (telem != &myrpt->tele) {
 				if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
 					if (telem->chan) {
@@ -912,8 +952,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-/* ## Send to all nodes */
-
+/* Send to all nodes */
 int rpt_do_sendall(int fd, int argc, const char *const *argv)
 {
 	int i;
@@ -1048,13 +1087,13 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 
 		rpt_vars[thisRpt].cmdAction.command_source = SOURCE_RPT;
 		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_READY;
-	} else { /* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
+	} else {
 		busy = 1;
-	} /* if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE */
+	}
 
 	rpt_mutex_unlock(&myrpt->lock);
 	return (busy ? RESULT_FAILURE : RESULT_SUCCESS);
-} /* rpt_do_cmd() */
+}
 
 /*! \brief Set a node's main channel variable from the command line */
 static int rpt_do_setvar(int fd, int argc, const char *const *argv)

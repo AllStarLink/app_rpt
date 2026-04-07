@@ -13,9 +13,9 @@
 int matchkeyword(char *string, char **param, char *keywords[])
 {
 	int i, ls;
+
 	for (i = 0; keywords[i]; i++) {
 		ls = strlen(keywords[i]);
-
 		if (!ls) {
 			if (param) {
 				*param = NULL;
@@ -116,6 +116,7 @@ int finddelim(char *str, char *strp[], size_t limit)
 char *skipchars(char *string, char *charlist)
 {
 	int i;
+
 	while (*string) {
 		for (i = 0; charlist[i]; i++) {
 			if (*string == charlist[i]) {
@@ -160,10 +161,11 @@ int myatoi(const char *str)
 int decimals2int(char *fraction)
 {
 	int i;
-	char len = strlen(fraction);
+	char len;
 	int multiplier = 100000;
 	int res = 0;
 
+	len = strlen(fraction);
 	if (!len) {
 		return 0;
 	}
@@ -289,18 +291,22 @@ struct timeval rpt_tvnow(void)
 {
 	struct timeval t;
 	struct timespec ts;
+
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	t = ast_tv(ts.tv_sec, ts.tv_nsec / 1000);
+
 	return t;
 }
 
 int macro_append(struct rpt *myrpt, const char *cmd)
 {
 	int res;
+
 	rpt_mutex_lock(&myrpt->lock);
 	myrpt->macrotimer = MACROTIME;
 	res = ast_str_append(&myrpt->macrobuf, 0, "%s", cmd);
 	rpt_mutex_unlock(&myrpt->lock);
+
 	return res;
 }
 
@@ -327,7 +333,8 @@ int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...)
 
 void update_timer(int *timer_ptr, int elap, int end_val)
 {
-	if (!timer_ptr || !*timer_ptr) { /* if the timer value = 0 or we have a null pointer, do not update */
+	if (!timer_ptr || !*timer_ptr) {
+		/* if the timer value = 0 or we have a null pointer, do not update */
 		return;
 	}
 

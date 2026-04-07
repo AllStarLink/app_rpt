@@ -115,8 +115,8 @@ static void _rpt_mutex_lock(ast_mutex_t *lockp, struct rpt *myrpt, int line)
 
 	id = pthread_self();
 	ast_mutex_lock(&locklock);
-	t = put_lockthread(id);
 
+	t = put_lockthread(id);
 	if (!t) {
 		ast_mutex_unlock(&locklock);
 		return;
@@ -153,8 +153,8 @@ static void _rpt_mutex_unlock(ast_mutex_t *lockp, struct rpt *myrpt, int line)
 
 	id = pthread_self();
 	ast_mutex_lock(&locklock);
-	t = put_lockthread(id);
 
+	t = put_lockthread(id);
 	if (!t) {
 		ast_mutex_unlock(&locklock);
 		return;

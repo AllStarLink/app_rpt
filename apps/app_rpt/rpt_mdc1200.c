@@ -165,6 +165,7 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 	if ((data[0] == 'I') && (!strcmp(data, myrpt->lastmdc))) {
 		return;
 	}
+
 	myval = (char *) my_variable_match(myrpt->cfg, myrpt->p.mdcmacro, data);
 	if (myval) {
 		ast_verb(4, "MDCMacro for %s doing %s on node %s\n", data, myval, myrpt->name);
@@ -181,9 +182,11 @@ void mdc1200_cmd(struct rpt *myrpt, char *data)
 		}
 		macro_append(myrpt, myval);
 	}
+
 	if (data[0] == 'I') {
 		ast_copy_string(myrpt->lastmdc, data, sizeof(myrpt->lastmdc));
 	}
+
 	return;
 }
 
@@ -197,6 +200,7 @@ void mdc1200_ack_status(struct rpt *myrpt, short UnitID)
 	if (!mdcp) {
 		return;
 	}
+
 	mdcp->type[0] = 'A';
 	mdcp->UnitID = UnitID;
 	rpt_telemetry(myrpt, MDC1200, (void *) mdcp);
@@ -210,6 +214,7 @@ void mdc1200_ack_status(struct rpt *myrpt, short UnitID)
 static void mdcgen_release(struct ast_channel *chan, void *params)
 {
 	struct mdcgen_pvt *ps = params;
+
 	if (!ps) {
 		return;
 	}
@@ -349,10 +354,12 @@ int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID,
 		if (ast_check_hangup(chan)) {
 			return -1;
 		}
+
 		res = ast_waitfor(chan, 100);
 		if (res <= 0) {
 			return -1;
 		}
+
 		f = ast_read(chan);
 		if (f) {
 			ast_frfree(f);
@@ -401,6 +408,7 @@ static int mdcgen_exec(struct ast_channel *chan, const char *data)
 			ast_free(tmp);
 			return -1;
 		}
+
 		destid = (short) strtol(args.destid, NULL, 16);
 		subcode = (short) strtol(args.subcode, NULL, 16);
 	}
@@ -410,6 +418,7 @@ static int mdcgen_exec(struct ast_channel *chan, const char *data)
 	res = mdc1200gen(chan, args.type, unitid, destid, subcode);
 	ast_free(tmp);
 	ast_module_user_remove(u);
+
 	return res;
 }
 

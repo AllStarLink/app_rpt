@@ -43,7 +43,6 @@ mdc_decoder_t *mdc_decoder_new(int sampleRate)
 	int i;
 
 	decoder = ast_calloc(1, sizeof(mdc_decoder_t));
-
 	if (!decoder) {
 		return (mdc_decoder_t *) 0L;
 	}

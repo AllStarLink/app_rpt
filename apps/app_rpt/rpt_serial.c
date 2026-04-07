@@ -29,14 +29,12 @@ int serial_open(char *fname, int speed, int stop2)
 	int fd;
 
 	fd = open(fname, O_RDWR);
-
 	if (fd == -1) {
 		ast_log(LOG_WARNING, "Cannot open serial port %s\n", fname);
 		return -1;
 	}
 
 	memset(&mode, 0, sizeof(mode));
-
 	if (tcgetattr(fd, &mode)) {
 		ast_log(LOG_WARNING, "Unable to get serial parameters on %s: %s\n", fname, strerror(errno));
 		return -1;
@@ -114,8 +112,8 @@ int serial_rx(int fd, char *rxbuf, int rxmaxbytes, unsigned timeoutms, char term
 				break;
 			}
 		}
-		j = read(fd, &c, 1);
 
+		j = read(fd, &c, 1);
 		if (j == -1) {
 			ast_log(LOG_WARNING, "read failed: %s\n", strerror(errno));
 			return -1;
@@ -151,10 +149,9 @@ int serial_txstring(int fd, char *txstring)
 {
 	int txbytes;
 
-	txbytes = strlen(txstring);
-
 	ast_debug(6, "sending: %s\n", txstring);
 
+	txbytes = strlen(txstring);
 	if (write(fd, txstring, txbytes) != txbytes) {
 		ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
 		return -1;
@@ -222,14 +219,12 @@ int openserial(struct rpt *myrpt, const char *fname)
 	int fd;
 
 	fd = open(fname, O_RDWR);
-
 	if (fd == -1) {
 		ast_log(LOG_WARNING, "Cannot open serial port %s\n", fname);
 		return -1;
 	}
 
 	memset(&mode, 0, sizeof(mode));
-
 	if (tcgetattr(fd, &mode)) {
 		ast_log(LOG_WARNING, "Unable to get serial parameters on %s: %s\n", fname, strerror(errno));
 		return -1;
@@ -850,6 +845,7 @@ int setrbi_check(struct rpt *myrpt)
 	if (!myrpt->remote) {
 		return 0;
 	}
+
 	/* must have rbi hardware */
 	if (strncmp(myrpt->remoterig, REMOTE_RIG_RBI, 3)) {
 		return 0;
@@ -857,13 +853,11 @@ int setrbi_check(struct rpt *myrpt)
 
 	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp, '.');
-	/* if no decimal, is invalid */
-
 	if (s == NULL) {
+		/* if no decimal, is invalid */
 		ast_log(LOG_WARNING, "@@@@ Frequency needs a decimal\n");
 		return -1;
 	}
-
 	*s++ = 0;
 
 	if (strlen(tmp) < 2) {
@@ -882,14 +876,12 @@ int setrbi_check(struct rpt *myrpt)
 	}
 
 	band = rbi_mhztoband(tmp);
-
 	if (band == -1) {
 		ast_log(LOG_WARNING, "@@@@ Bad Band: %s\n", tmp);
 		return -1;
 	}
 
 	txpl = rbi_pltocode(myrpt->txpl);
-
 	if (txpl == -1) {
 		ast_log(LOG_WARNING, "@@@@ Bad TX PL: %s\n", myrpt->txpl);
 		return -1;
@@ -907,6 +899,7 @@ int setrtx_check(struct rpt *myrpt)
 	if (!myrpt->remote) {
 		return 0;
 	}
+
 	/* must have rbi hardware */
 	if (strncmp(myrpt->remoterig, REMOTE_RIG_RBI, 3)) {
 		return 0;
@@ -914,13 +907,11 @@ int setrtx_check(struct rpt *myrpt)
 
 	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
 	s = strchr(tmp, '.');
-	/* if no decimal, is invalid */
-
 	if (s == NULL) {
+		/* if no decimal, is invalid */
 		ast_log(LOG_WARNING, "@@@@ Frequency needs a decimal\n");
 		return -1;
 	}
-
 	*s++ = 0;
 
 	if (strlen(tmp) < 2) {
@@ -939,21 +930,18 @@ int setrtx_check(struct rpt *myrpt)
 	}
 
 	band = rbi_mhztoband(tmp);
-
 	if (band == -1) {
 		ast_log(LOG_WARNING, "@@@@ Bad Band: %s\n", tmp);
 		return -1;
 	}
 
 	txpl = rbi_pltocode(myrpt->txpl);
-
 	if (txpl == -1) {
 		ast_log(LOG_WARNING, "@@@@ Bad TX PL: %s\n", myrpt->txpl);
 		return -1;
 	}
 
 	rxpl = rbi_pltocode(myrpt->rxpl);
-
 	if (rxpl == -1) {
 		ast_log(LOG_WARNING, "@@@@ Bad RX PL: %s\n", myrpt->rxpl);
 		return -1;
@@ -968,7 +956,6 @@ int civ_cmd(struct rpt *myrpt, unsigned char *cmd, int cmdlen)
 	int i, rv;
 
 	rv = serial_remote_io(myrpt, cmd, cmdlen, rxbuf, (myrpt->p.dusbabek) ? 6 : cmdlen + 6, 0);
-
 	if (rv == -1) {
 		return -1;
 	}

@@ -53,7 +53,8 @@ int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name
 	int ret;
 	char include_zero = 0;
 
-	if (min < 0) { /* If min is negative, this means include 0 as a valid entry */
+	if (min < 0) {
+		/* if min is negative, this means include 0 as a valid entry */
 		min = -min;
 		include_zero = 1;
 	}

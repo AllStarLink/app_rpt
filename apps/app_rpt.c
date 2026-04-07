@@ -1655,12 +1655,13 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 		n = myrpt->longestfunc;
 		if (command_source == SOURCE_LNK) {
 			n = myrpt->link_longestfunc;
-		} else if (command_source == SOURCE_PHONE)
+		} else if (command_source == SOURCE_PHONE) {
 			n = myrpt->phone_longestfunc;
-		else if (command_source == SOURCE_ALT)
+		} else if (command_source == SOURCE_ALT) {
 			n = myrpt->alt_longestfunc;
-		else if (command_source == SOURCE_DPHONE)
+		} else if (command_source == SOURCE_DPHONE) {
 			n = myrpt->dphone_longestfunc;
+		}
 
 		if (strlen(digits) >= n) {
 			return DC_ERROR;
@@ -1950,14 +1951,14 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		mylink->gott = 1;
 
 		/*  If inbound telemetry from a remote node, wake up from sleep if sleep mode is enabled */
-		rpt_mutex_lock(&myrpt->lock); /* LOCK */
+		rpt_mutex_lock(&myrpt->lock);
 		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
 			myrpt->sleeptimer = myrpt->p.sleeptime;
 			if (myrpt->sleep) {
 				myrpt->sleep = 0;
 			}
 		}
-		rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
+		rpt_mutex_unlock(&myrpt->lock);
 
 		rpt_telemetry(myrpt, VARCMD, dest);
 		return;
@@ -3250,6 +3251,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		ast_channel_unref(chan);
 	}
 	rpt_mutex_unlock(&myrpt->lock);
+
 	update_timer(&l->rxlingertimer, elap, 0);
 
 	/* Update the timer, checking if it expired just now. */
@@ -3331,6 +3333,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	if ((l->linkmode > 1) && (l->linkmode < 0x7ffffffe)) {
 		update_timer(&l->linkmode, elap, 1);
 	}
+
 	if ((l->link_newkey == RADIO_KEY_NOT_ALLOWED) && l->lastrealrx && (!l->rxlingertimer)) {
 		rxunkey_helper(myrpt, l);
 	}
@@ -3407,6 +3410,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			}
 		}
 	}
+
 	update_timer(&l->disctime, elap, 0);
 
 	update_timer(&l->retrytimer, elap, 0);
@@ -3587,38 +3591,51 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		myrpt->dailytxtime += elap;
 		myrpt->totaltxtime += elap;
 	}
+
 	i = myrpt->tailtimer;
-
 	update_timer(&myrpt->tailtimer, elap, 0);
-
-	if ((i) && (myrpt->tailtimer == 0))
+	if (i && (myrpt->tailtimer == 0)) {
 		myrpt->tailevent = 1;
+	}
+
 	if (!myrpt->p.s[myrpt->p.sysstate_cur].totdisable) {
 		update_timer(&myrpt->totimer, elap, 0);
 	}
+
 	update_timer(&myrpt->remote_time_out_reset_unkey_interval_timer, elap, 0);
+
 	update_timer(&myrpt->time_out_reset_unkey_interval_timer, elap, 0);
+
 	update_timer(&myrpt->idtimer, elap, 0);
+
 	update_timer(&myrpt->tmsgtimer, elap, 0);
+
 	update_timer(&myrpt->voxtotimer, elap, 0);
+
 	if (myrpt->keyed)
 		myrpt->lastkeytimer = KEYTIMERTIME;
 	else {
 		update_timer(&myrpt->lastkeytimer, elap, 0);
 	}
+
 	myrpt->elketimer += elap;
+
 	if (myrpt->telemmode != 0x7fffffff) {
 		update_timer(&myrpt->telemmode, elap, 1);
 	}
+
 	if (myrpt->exttx) {
 		myrpt->parrottimer = myrpt->p.parrottime;
 	} else {
 		update_timer(&myrpt->parrottimer, elap, 0);
 	}
+
 	update_timer(&myrpt->macrotimer, elap, 0);
+
 	update_timer(&myrpt->dtmf_local_timer, elap, 1);
 
 	do_dtmf_local(myrpt, 0);
+
 	/* Execute scheduler appx. every 2 tenths of a second */
 	if (myrpt->skedtimer <= 0) {
 		myrpt->skedtimer = 200;
@@ -4165,13 +4182,10 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		}
 		/* if is a USB device */
 		if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
-			/* if message parsable */
 			if (sscanf(f->data.ptr, "GPIO" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
 				snprintf(buf, sizeof(buf), "RPT_URI_GPIO%d", i);
 				rpt_update_boolean(myrpt, buf, j);
-			}
-			/* if message parsable */
-			else if (sscanf(f->data.ptr, "PP" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
+			} else if (sscanf(f->data.ptr, "PP" N_FMT(d) N_FMT(d), &i, &j) >= 2) {
 				snprintf(buf, sizeof(buf), "RPT_PP%d", i);
 				rpt_update_boolean(myrpt, buf, j);
 			} else if (!strcmp(f->data.ptr, "ENDPAGE")) {
@@ -4357,7 +4371,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		if (l->disced == RPT_LINK_DISCONNECT_NONE) {
 			if (!l->outbound) {
 				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
-					/* NOt an allstar link node */
+					/* Not an allstar link node */
 					l->disctime = 1;
 				} else {
 					/* An allstar link node */
@@ -5088,7 +5102,6 @@ static void *rpt(void *this)
 	if (myrpt->p.startupmacro) {
 		ast_str_set(&myrpt->macrobuf, 0, "PPPP%s", myrpt->p.startupmacro);
 	}
-	/* @@@@@@@ UNLOCK @@@@@@@ */
 	rpt_mutex_unlock(&myrpt->lock);
 
 	val = 1;
@@ -5116,6 +5129,7 @@ static void *rpt(void *this)
 	rpt_update_boolean(myrpt, "RPT_LINKS", -1);
 	rpt_update_boolean(myrpt, "RPT_ALINKS", -1);
 	myrpt->ready = 1;
+
 	looptimestart = rpt_tvnow();
 	ast_autoservice_stop(myrpt->rxchannel);
 	while (ms >= 0) {
@@ -5684,7 +5698,6 @@ static void *rpt(void *this)
 		} else {
 			rpt_mutex_unlock(&myrpt->lock);
 		}
-		/* @@@@@@ UNLOCK @@@@@ */
 
 		if (who == myrpt->rxchannel) { /* if it was a read from rx */
 			if (rxchannel_read(myrpt, lasttx)) {
@@ -6077,11 +6090,13 @@ static void *rpt_master(void *ignore)
 		rpt_vars[i].splitkhz = 0;
 		rpt_vars[i].ready = 0;
 		rpt_vars[i].lastthreadupdatetime = current_time;
+
 		crv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 		if (crv) {
 			ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(crv));
 		}
 	}
+
 	time(&starttime);
 	ast_mutex_lock(&rpt_master_lock);
 	for (;;) {
