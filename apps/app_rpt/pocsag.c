@@ -55,54 +55,72 @@ for (i = 1; i <= 21; i++, codeword <<= 1) {
 /* pack a string into pocsag codewords */
 static int pack_pocsag_string(uint32_t *packed, size_t packed_len, char *str, int size, int type)
 {
-int mysize,idx,pi,x,n,i,j;
-uint32_t acc;
+	int mysize, idx, pi, x, n, i, j;
+	uint32_t acc;
 
-switch (type) {
-case TONE:
-	return 0;
+	switch (type) {
+	case TONE:
+		return 0;
 
-case NUMERIC:
-	if ((size % 5) == 0) {
-		mysize = size;
-	} else {
-		mysize = ((size / 5) + 1) * 5;
-	}
-
-	if (mysize > packed_len * 5) {
-		return -1;
-	}
-
-	for (idx = 0, pi = 0; idx < mysize; idx++, pi = ((idx % 5) ? pi : pi + 1)) {
-		if (idx >= size) {
-			packed[pi] = (packed[pi] << 4) + 3;
-			continue;
+	case NUMERIC:
+		if ((size % 5) == 0) {
+			mysize = size;
+		} else {
+			mysize = ((size / 5) + 1) * 5;
 		}
-		/* convert from ASCII string */
-		for (i = 0; nstr[i]; i++) {
-			if (nstr[i] == str[idx]) {
-				break;
+
+		if (mysize > packed_len * 5) {
+			return -1;
+		}
+
+		for (idx = 0, pi = 0; idx < mysize; idx++, pi = ((idx % 5) ? pi : pi + 1)) {
+			if (idx >= size) {
+				packed[pi] = (packed[pi] << 4) + 3;
+				continue;
+			}
+			/* convert from ASCII string */
+			for (i = 0; nstr[i]; i++) {
+				if (nstr[i] == str[idx]) {
+					break;
+				}
+			}
+			/* if not found, map to space (0xc) */
+			if (!nstr[i]) {
+				i = 0xc;
+			}
+			/* reverse bits */
+			x = (i & 1) << 3;
+			x += (i & 2) << 1;
+			x += (i & 4) >> 1;
+			x += (i & 8) >> 3;
+			packed[pi] = (packed[pi] << 4) + x;
+		}
+
+		return mysize / 5;
+
+	case ALPHA:
+		/* first, pack string into codewords */
+		for (n = 19, acc = 0, pi = 0, idx = 0; (idx < size && str[idx]); idx++) {
+			for (j = 0; j < 7; j++) {
+				if (str[idx] & (1 << j)) {
+					acc |= (1 << n);
+				}
+
+				if (n-- <= 0) {
+					if (pi >= packed_len) {
+						return -1;
+					}
+					packed[pi++] = acc;
+					acc = 0;
+					n = 19;
+				}
 			}
 		}
-		/* if not found, map to space (0xc) */
-		if (!nstr[i]) {
-			i = 0xc;
-		}
-		/* reverse bits */
-		x = (i & 1) << 3;
-		x += (i & 2) << 1;
-		x += (i & 4) >> 1;
-		x += (i & 8) >> 3;
-		packed[pi] = (packed[pi] << 4) + x;
-	}
+		/* Then add EOT character */
+		i = 4;
 
-	return mysize / 5;
-
-case ALPHA:
-	/* first, pack string into codewords */
-	for (n = 19, acc = 0, pi = 0, idx = 0; (idx < size && str[idx]); idx++) {
 		for (j = 0; j < 7; j++) {
-			if (str[idx] & (1 << j)) {
+			if (i & (1 << j)) {
 				acc |= (1 << n);
 			}
 
@@ -115,48 +133,30 @@ case ALPHA:
 				n = 19;
 			}
 		}
-	}
-	/* Then add EOT character */
-	i = 4;
+		/* If necessary, pad with more EOT characters until done */
+		i = 4;
 
-	for (j = 0; j < 7; j++) {
-		if (i & (1 << j)) {
-			acc |= (1 << n);
-		}
+		while (n >= 0) {
+			for (j = 0; j < 7; j++) {
+				if (i & (1 << j)) {
+					acc |= (1 << n);
+				}
 
-		if (n-- <= 0) {
-			if (pi >= packed_len) {
-				return -1;
-			}
-			packed[pi++] = acc;
-			acc = 0;
-			n = 19;
-		}
-	}
-	/* If necessary, pad with more EOT characters until done */
-	i = 4;
-
-	while (n >= 0) {
-		for (j = 0; j < 7; j++) {
-			if (i & (1 << j)) {
-				acc |= (1 << n);
-			}
-
-			if (n-- <= 0) {
-				break;
+				if (n-- <= 0) {
+					break;
+				}
 			}
 		}
-	}
 
-	if (pi >= packed_len) {
-		return -1;
-	}
+		if (pi >= packed_len) {
+			return -1;
+		}
 
-	packed[pi++] = acc;
-	return pi;
-default:
-	return 0;
-}
+		packed[pi++] = acc;
+		return pi;
+	default:
+		return 0;
+	}
 
 	return 0;
 }
@@ -170,7 +170,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 	uint32_t packed[100];
 
 	cur = ast_calloc(1, sizeof(struct pocsag_batch));
-	if (cur == NULL) {
+	if (!cur) {
 		return NULL;
 	}
 
@@ -226,7 +226,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 
 				if (j == 8) {
 					cur->next = ast_calloc(1, sizeof(struct pocsag_batch));
-					if (cur->next == NULL) {
+					if (!cur->next) {
 						free_batch(old);
 						return NULL;
 					}
