@@ -807,6 +807,8 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	char str[MAX_TEXTMSG_SIZE];
 	char *from, *to;
 	int nrpts = rpt_num_rpts();
+	size_t used;
+	int rc;
 
 	if (argc < 5) {
 		return RESULT_SHOWUSAGE;
@@ -817,13 +819,18 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 
 	string_toupper(from);
 	string_toupper(to);
-	snprintf(str, sizeof(str) - 1, "M %s %s ", from, to);
+	rc = snprintf(str, sizeof(str), "M %s %s ", from, to);
+
+	if (rc < 0 || rc >= sizeof(str)) {
+		return RESULT_FAILURE;
+	}
+
+	used = rc;
 
 	for (i = 4; i < argc; i++) {
-		if (i > 3) {
-			strncat(str, " ", sizeof(str) - 1);
+		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
+			return RESULT_FAILURE;
 		}
-		strncat(str, argv[i], sizeof(str) - 1);
 	}
 
 	for (i = 0; i < nrpts; i++) {
@@ -847,6 +854,8 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	struct rpt_tele *telem;
 	char *nodename, *baud, *capcode, *text;
 	int nrpts = rpt_num_rpts();
+	size_t used;
+	int rc;
 
 	if (argc < 7) {
 		return RESULT_SHOWUSAGE;
@@ -861,13 +870,18 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	string_toupper(baud);
 	string_toupper(capcode);
 	string_toupper(text);
-	snprintf(str, sizeof(str) - 1, "PAGE %s %s %s ", baud, capcode, text);
+	rc = snprintf(str, sizeof(str), "PAGE %s %s %s ", baud, capcode, text);
+
+	if (rc < 0 || rc >= sizeof(str)) {
+		return RESULT_FAILURE;
+	}
+
+	used = rc;
 
 	for (i = 6; i < argc; i++) {
-		if (i > 5) {
-			strncat(str, " ", sizeof(str) - 1);
+		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
+			return RESULT_FAILURE;
 		}
-		strncat(str, argv[i], sizeof(str) - 1);
 	}
 
 	for (i = 0; i < nrpts; i++) {
@@ -909,22 +923,27 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	char str[MAX_TEXTMSG_SIZE];
 	char *nodename;
 	int nrpts = rpt_num_rpts();
+	size_t used;
+	int rc;
 
 	if (argc < 4) {
 		return RESULT_SHOWUSAGE;
 	}
 
 	nodename = ast_strdupa(argv[2]);
-
 	string_toupper(nodename);
-	snprintf(str, sizeof(str) - 1, "M %s 0 ", nodename);
+	rc = snprintf(str, sizeof(str), "M %s 0 ", nodename);
+
+	if (rc < 0 || rc >= sizeof(str)) {
+		return RESULT_FAILURE;
+	}
+
+	used = rc;
 
 	for (i = 3; i < argc; i++) {
-		if (i > 3) {
-			strncat(str, " ", sizeof(str) - 1);
+		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
+			return RESULT_FAILURE;
 		}
-
-		strncat(str, argv[i], sizeof(str) - 1);
 	}
 
 	for (i = 0; i < nrpts; i++) {
