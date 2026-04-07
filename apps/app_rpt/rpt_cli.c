@@ -808,6 +808,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	char *from, *to;
 	int nrpts = rpt_num_rpts();
 	size_t used;
+	int rc;
 
 	if (argc < 5) {
 		return RESULT_SHOWUSAGE;
@@ -818,11 +819,13 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 
 	string_toupper(from);
 	string_toupper(to);
-	used = snprintf(str, sizeof(str), "M %s %s ", from, to);
+	rc = snprintf(str, sizeof(str), "M %s %s ", from, to);
 
-	if (used < 0 || used >= sizeof(str)) {
+	if (rc < 0 || rc >= sizeof(str)) {
 		return RESULT_FAILURE;
 	}
+
+	used = rc;
 
 	for (i = 4; i < argc; i++) {
 		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
@@ -852,6 +855,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	char *nodename, *baud, *capcode, *text;
 	int nrpts = rpt_num_rpts();
 	size_t used;
+	int rc;
 
 	if (argc < 7) {
 		return RESULT_SHOWUSAGE;
@@ -866,11 +870,13 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	string_toupper(baud);
 	string_toupper(capcode);
 	string_toupper(text);
-	used = snprintf(str, sizeof(str), "PAGE %s %s %s ", baud, capcode, text);
+	rc = snprintf(str, sizeof(str), "PAGE %s %s %s ", baud, capcode, text);
 
-	if (used < 0 || used >= sizeof(str)) {
+	if (rc < 0 || rc >= sizeof(str)) {
 		return RESULT_FAILURE;
 	}
+
+	used = rc;
 
 	for (i = 6; i < argc; i++) {
 		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
@@ -918,6 +924,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	char *nodename;
 	int nrpts = rpt_num_rpts();
 	size_t used;
+	int rc;
 
 	if (argc < 4) {
 		return RESULT_SHOWUSAGE;
@@ -925,11 +932,13 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 
 	nodename = ast_strdupa(argv[2]);
 	string_toupper(nodename);
-	used = snprintf(str, sizeof(str), "M %s 0 ", nodename);
+	rc = snprintf(str, sizeof(str), "M %s 0 ", nodename);
 
-	if (used < 0 || used >= sizeof(str)) {
+	if (rc < 0 || rc >= sizeof(str)) {
 		return RESULT_FAILURE;
 	}
+
+	used = rc;
 
 	for (i = 3; i < argc; i++) {
 		if (snprintf_append(str, sizeof(str), &used, " %s", argv[i])) {
