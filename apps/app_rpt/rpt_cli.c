@@ -917,22 +917,24 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	char str[MAX_TEXTMSG_SIZE];
 	char *nodename;
 	int nrpts = rpt_num_rpts();
+	int used, rc;
 
 	if (argc < 4) {
 		return RESULT_SHOWUSAGE;
 	}
 
 	nodename = ast_strdupa(argv[2]);
-
 	string_toupper(nodename);
-	snprintf(str, sizeof(str) - 1, "M %s 0 ", nodename);
+	used = snprintf(str, sizeof(str), "M %s 0 ", nodename);
 
 	for (i = 3; i < argc; i++) {
-		if (i > 3) {
-			strncat(str, " ", sizeof(str) - 1);
+		rc = snprintf(str + used, sizeof(str) - used, " %s", argv[i]);
+
+		if (rc < 0 || rc >= sizeof(str) - used) {
+			return RESULT_FAILURE;
 		}
 
-		strncat(str, argv[i], sizeof(str) - 1);
+		used += rc;
 	}
 
 	for (i = 0; i < nrpts; i++) {
