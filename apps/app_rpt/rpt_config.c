@@ -738,9 +738,11 @@ void load_rpt_vars(int n, int init)
 
 	ast_verb(3, "%s config for repeater %s\n", (init) ? "Loading initial" : "Re-Loading", rpt_vars[n].name);
 	ast_mutex_lock(&rpt_vars[n].lock);
+
 	if (rpt_vars[n].cfg) {
 		ast_config_destroy(rpt_vars[n].cfg);
 	}
+
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
 		ast_mutex_unlock(&rpt_vars[n].lock);
@@ -751,28 +753,27 @@ void load_rpt_vars(int n, int init)
 		ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
 		pthread_exit(NULL);
 	}
+
 	rpt_vars[n].cfg = cfg;
 	cat = rpt_vars[n].name;
 
 	if (rpt_vars[n].p.locallinknodes_buf) {
-		/* The first entry points to the local link node memory allocated in rpt_config.c */
 		ast_free(rpt_vars[n].p.locallinknodes_buf);
 		rpt_vars[n].p.locallinknodes_buf = NULL;
 	}
 
 	if (rpt_vars[n].p.lconn_buf) {
-		/* The first entry points to the local link node memory allocated in rpt_config.c */
 		ast_free(rpt_vars[n].p.lconn_buf);
 		rpt_vars[n].p.lconn_buf = NULL;
 	}
 
 	if (rpt_vars[n].p.ldisc_buf) {
-		/* The first entry points to the local link node memory allocated in rpt_config.c */
 		ast_free(rpt_vars[n].p.ldisc_buf);
 		rpt_vars[n].p.ldisc_buf = NULL;
 	}
 
 	memset(&rpt_vars[n].p, 0, sizeof(rpt_vars[n].p));
+
 	if (init) {
 		char *cp;
 		int savearea = (char *) &rpt_vars[n].p - (char *) &rpt_vars[n];
