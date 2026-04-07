@@ -96,7 +96,7 @@ case NUMERIC:
 
 case ALPHA:
 	/* first, pack string into codewords */
-	for (n = 19, acc = 0, pi = 0, idx = 0; (str[idx] && idx < size); idx++) {
+	for (n = 19, acc = 0, pi = 0, idx = 0; (idx < size && str[idx]); idx++) {
 		for (j = 0; j < 7; j++) {
 			if (str[idx] & (1 << j)) {
 				acc |= (1 << n);
@@ -210,7 +210,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 	cur->frame[curaddr][0] = do_parity_stuff( cur->frame[curaddr][0] );
 
 	if (type != TONE) {
-		mylen = pack_pocsag_string(packed, sizeof(packed), data, size_of_data, type);
+		mylen = pack_pocsag_string(packed, sizeof(packed) / sizeof(packed[0]), data, size_of_data, type);
 		if (mylen < 0) {
 			mylen = 0; /* if we had an error packing, just make it empty */
 		}
