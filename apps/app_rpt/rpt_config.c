@@ -881,6 +881,17 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.var = default; \
 	}
 
+#define RPT_CONFIG_EXPLODE_STRING(buf_var, count_var, arr_var, name, transform) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (val) { \
+		tmp = ast_strdup(val); \
+		if (tmp) { \
+			rpt_vars[n].p.buf_var = tmp; \
+			rpt_vars[n].p.count_var = \
+				explode_string(transform(tmp), (char **) rpt_vars[n].p.arr_var, ARRAY_LEN(rpt_vars[n].p.arr_var), ',', 0); \
+		} \
+	}
+
 	RPT_CONFIG_VAR_DEFAULT(ourcontext, "context", cat);
 	RPT_CONFIG_VAR(ourcallerid, "callerid");
 	RPT_CONFIG_VAR(acctcode, "accountcode");
@@ -992,33 +1003,9 @@ void load_rpt_vars(int n, int init)
 			explode_string(tmp, (char **) rpt_vars[n].p.extnodefiles, ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
 		rpt_vars[n].p.extnodefiles_buf = tmp;
 	}
-	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
-	if (val) {
-		tmp = ast_strdup(val);
-		if (tmp) {
-			rpt_vars[n].p.locallinknodes_buf = tmp;
-			rpt_vars[n].p.locallinknodesn =
-				explode_string(tmp, (char **) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
-		}
-	}
-
-	val = ast_variable_retrieve(cfg, cat, "lconn");
-	if (val) {
-		tmp = ast_strdup(val);
-		if (tmp) {
-			rpt_vars[n].p.lconn_buf = tmp;
-			rpt_vars[n].p.nlconn = explode_string(strupr(tmp), (char **) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
-		}
-	}
-
-	val = ast_variable_retrieve(cfg, cat, "ldisc");
-	if (val) {
-		tmp = ast_strdup(val);
-		if (tmp) {
-			rpt_vars[n].p.ldisc_buf = tmp;
-			rpt_vars[n].p.nldisc = explode_string(strupr(tmp), (char **) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
-		}
-	}
+	RPT_CONFIG_EXPLODE_STRING(locallinknodes_buf, locallinknodesn, locallinknodes, "locallinknodes", )
+	RPT_CONFIG_EXPLODE_STRING(lconn_buf, nlconn, lconn, "lconn", strupr)
+	RPT_CONFIG_EXPLODE_STRING(ldisc_buf, nldisc, ldisc, "ldisc", strupr)
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
 	RPT_CONFIG_VAR(archivedir, "archivedir");
