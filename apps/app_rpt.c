@@ -951,8 +951,7 @@ void rpt_event_process(struct rpt *myrpt)
 	i = 0;
 	ast_debug(2, "Node Variable dump for node %s:\n", myrpt->name);
 	ast_channel_lock(myrpt->rxchannel);
-	AST_LIST_TRAVERSE(ast_channel_varshead(myrpt->rxchannel), newvariable, entries)
-	{
+	AST_LIST_TRAVERSE(ast_channel_varshead(myrpt->rxchannel), newvariable, entries) {
 		i++;
 		ast_debug(2, "   %s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 	}
@@ -4263,7 +4262,10 @@ static inline int localtxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 			if (myrpt->txrealkeyed) {
 				if (!*myfirst && (myrpt->callmode != CALLMODE_DOWN)) {
 					x = 0;
-					AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) x++;
+					AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) {
+						x++;
+					}
+
 					for (; x < myrpt->p.simplexpatchdelay; x++) {
 						f1 = ast_frdup(f);
 						if (!f1) {
@@ -4285,7 +4287,10 @@ static inline int localtxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 				*myfirst = 0;
 			}
 			x = 0;
-			AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) x++;
+			AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) {
+				x++;
+			}
+
 			if (!x) {
 				RPT_MUTE_FRAME(f);
 			} else {
@@ -4581,7 +4586,10 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						if (l->lastrealrx || n1) {
 							if (!myfirst) {
 								x = 0;
-								AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) x++;
+								AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) {
+									x++;
+								}
+
 								for (; x < myrpt->p.simplexphonedelay; x++) {
 									f1 = ast_frdup(f);
 									if (!f1) {
@@ -4604,7 +4612,10 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 							myfirst = 0;
 						}
 						x = 0;
-						AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) x++;
+						AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) {
+							x++;
+						}
+
 						if (!x) {
 							RPT_MUTE_FRAME(f);
 						} else {
@@ -6251,7 +6262,10 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			if (n1) {
 				if (!*myfirst) {
 					x = 0;
-					AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
+					AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) {
+						x++;
+					}
+
 					for (; x < myrpt->p.simplexphonedelay; x++) {
 						f1 = ast_frdup(f);
 						if (!f1) {
@@ -6274,7 +6288,10 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			} else
 				*myfirst = 0;
 			x = 0;
-			AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) x++;
+			AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) {
+				x++;
+			}
+
 			if (!x) {
 				RPT_MUTE_FRAME(f);
 			} else {
