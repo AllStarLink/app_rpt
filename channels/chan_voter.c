@@ -4286,8 +4286,10 @@ static int reload(void)
 				if (clients == NULL) {
 					clients = client;
 				} else {
-					for (client1 = clients; client1->next; client1 = client1->next)
+					for (client1 = clients; client1->next; client1 = client1->next) {
 						;
+					}
+
 					client1->next = client;
 				}
 			}
