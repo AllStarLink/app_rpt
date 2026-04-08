@@ -794,6 +794,7 @@ struct rpt {
 		const char *extnodes;
 		const char *extnodefiles[MAX_EXTNODEFILES];
 		int  extnodefilesn;
+		char *extnodefiles_buf;
 		const char *patchconnect;
 		const char *lnkactmacro;
 		const char *lnkacttimerwarn;
@@ -905,13 +906,16 @@ struct rpt {
 		rpt_bool dopfxtone:1;
 		const char *outstreamcmd;
 		const char *events;
+		char *locallinknodes_buf;
 		const char *locallinknodes[MAX_LOCALLINKNODES];
 		int locallinknodesn;
 		const char *eloutbound;
 		int elke;
 		const char *aprstt;
+		char *lconn_buf;
 		const char *lconn[MAX_LSTUFF];
 		int nlconn;
+		char *ldisc_buf;
 		const char *ldisc[MAX_LSTUFF];
 		int nldisc;
 		const char *timezone;

@@ -7761,10 +7761,14 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	rpt_hangup(myrpt, RPT_PCHAN);
 	rpt_hangup_rx_tx(myrpt);
 	closerem(myrpt);
+
 	if (myrpt->macrobuf) {
 		ast_free(myrpt->macrobuf);
 		myrpt->macrobuf = NULL;
 	}
+
+	rpt_free_config_vars(myrpt);
+
 	if (myrpt->p.rptnode) {
 		rpt_mutex_lock(&myrpt->lock);
 		for (i = 0; i < nrpts; i++) {

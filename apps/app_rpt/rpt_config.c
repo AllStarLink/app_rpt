@@ -723,13 +723,36 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 	return (val ? 0 : -1);
 }
 
+void rpt_free_config_vars(struct rpt *myrpt)
+{
+	if (myrpt->p.extnodefiles_buf) {
+		ast_free(myrpt->p.extnodefiles_buf);
+		myrpt->p.extnodefiles_buf = NULL;
+	}
+
+	if (myrpt->p.locallinknodes_buf) {
+		ast_free(myrpt->p.locallinknodes_buf);
+		myrpt->p.locallinknodes_buf = NULL;
+	}
+
+	if (myrpt->p.lconn_buf) {
+		ast_free(myrpt->p.lconn_buf);
+		myrpt->p.lconn_buf = NULL;
+	}
+
+	if (myrpt->p.ldisc_buf) {
+		ast_free(myrpt->p.ldisc_buf);
+		myrpt->p.ldisc_buf = NULL;
+	}
+}
+
 void load_rpt_vars(int n, int init)
 {
 	const char *cat, *val;
 	int i, j, longestnode;
 	struct ast_variable *vp;
 	struct ast_config *cfg;
-	char *strs[100];
+	char *strs[100], *tmp;
 	char s1[256];
 	static char *cs_keywords[] =
 		{ "rptena", "rptdis", "apena", "apdis", "lnkena", "lnkdis", "totena", "totdis", "skena", "skdis",
@@ -738,9 +761,11 @@ void load_rpt_vars(int n, int init)
 
 	ast_verb(3, "%s config for repeater %s\n", (init) ? "Loading initial" : "Re-Loading", rpt_vars[n].name);
 	ast_mutex_lock(&rpt_vars[n].lock);
+
 	if (rpt_vars[n].cfg) {
 		ast_config_destroy(rpt_vars[n].cfg);
 	}
+
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
 		ast_mutex_unlock(&rpt_vars[n].lock);
@@ -751,9 +776,14 @@ void load_rpt_vars(int n, int init)
 		ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
 		pthread_exit(NULL);
 	}
+
 	rpt_vars[n].cfg = cfg;
 	cat = rpt_vars[n].name;
+
+	rpt_free_config_vars(&rpt_vars[n]);
+
 	memset(&rpt_vars[n].p, 0, sizeof(rpt_vars[n].p));
+
 	if (init) {
 		char *cp;
 		int savearea = (char *) &rpt_vars[n].p - (char *) &rpt_vars[n];
@@ -956,26 +986,38 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(extnodes, "extnodes", EXTNODES);
 
 	val = ast_variable_retrieve(cfg, cat, "extnodefile");
-	rpt_vars[n].p.extnodefilesn = explode_string((char *) S_OR(val, EXTNODEFILE), (char **) rpt_vars[n].p.extnodefiles,
-		ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
-
-	/*! \todo Is this memory properly freed? */
+	tmp = ast_strdup(S_OR(val, EXTNODEFILE));
+	if (tmp) {
+		rpt_vars[n].p.extnodefilesn =
+			explode_string(tmp, (char **) rpt_vars[n].p.extnodefiles, ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
+		rpt_vars[n].p.extnodefiles_buf = tmp;
+	}
 	val = ast_variable_retrieve(cfg, cat, "locallinknodes");
 	if (val) {
-		rpt_vars[n].p.locallinknodesn =
-			explode_string(ast_strdup(val), (char **) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
+		tmp = ast_strdup(val);
+		if (tmp) {
+			rpt_vars[n].p.locallinknodes_buf = tmp;
+			rpt_vars[n].p.locallinknodesn =
+				explode_string(tmp, (char **) rpt_vars[n].p.locallinknodes, ARRAY_LEN(rpt_vars[n].p.locallinknodes), ',', 0);
+		}
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "lconn");
 	if (val) {
-		rpt_vars[n].p.nlconn =
-			explode_string(strupr(ast_strdup(val)), (char **) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
+		tmp = ast_strdup(val);
+		if (tmp) {
+			rpt_vars[n].p.lconn_buf = tmp;
+			rpt_vars[n].p.nlconn = explode_string(strupr(tmp), (char **) rpt_vars[n].p.lconn, ARRAY_LEN(rpt_vars[n].p.lconn), ',', 0);
+		}
 	}
 
 	val = ast_variable_retrieve(cfg, cat, "ldisc");
 	if (val) {
-		rpt_vars[n].p.nldisc =
-			explode_string(strupr(ast_strdup(val)), (char **) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
+		tmp = ast_strdup(val);
+		if (tmp) {
+			rpt_vars[n].p.ldisc_buf = tmp;
+			rpt_vars[n].p.nldisc = explode_string(strupr(tmp), (char **) rpt_vars[n].p.ldisc, ARRAY_LEN(rpt_vars[n].p.ldisc), ',', 0);
+		}
 	}
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
