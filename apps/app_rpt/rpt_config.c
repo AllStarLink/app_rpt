@@ -881,8 +881,11 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.var = default; \
 	}
 
-#define RPT_CONFIG_EXPLODE_STRING(buf_var, count_var, arr_var, name, transform) \
+#define RPT_CONFIG_EXPLODE_STRING(buf_var, count_var, arr_var, name, def_val, transform) \
 	val = ast_variable_retrieve(cfg, cat, name); \
+	if (!val) { \
+		val = def_val; \
+	} \
 	if (val) { \
 		tmp = ast_strdup(val); \
 		if (tmp) { \
@@ -996,16 +999,10 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(nodes, "nodes", NODES);
 	RPT_CONFIG_VAR_DEFAULT(extnodes, "extnodes", EXTNODES);
 
-	val = ast_variable_retrieve(cfg, cat, "extnodefile");
-	tmp = ast_strdup(S_OR(val, EXTNODEFILE));
-	if (tmp) {
-		rpt_vars[n].p.extnodefilesn =
-			explode_string(tmp, (char **) rpt_vars[n].p.extnodefiles, ARRAY_LEN(rpt_vars[n].p.extnodefiles), ',', 0);
-		rpt_vars[n].p.extnodefiles_buf = tmp;
-	}
-	RPT_CONFIG_EXPLODE_STRING(locallinknodes_buf, locallinknodesn, locallinknodes, "locallinknodes", )
-	RPT_CONFIG_EXPLODE_STRING(lconn_buf, nlconn, lconn, "lconn", strupr)
-	RPT_CONFIG_EXPLODE_STRING(ldisc_buf, nldisc, ldisc, "ldisc", strupr)
+	RPT_CONFIG_EXPLODE_STRING(extnodefiles_buf, extnodefilesn, extnodefiles, "extnodefile", EXTNODEFILE, )
+	RPT_CONFIG_EXPLODE_STRING(locallinknodes_buf, locallinknodesn, locallinknodes, "locallinknodes", NULL, )
+	RPT_CONFIG_EXPLODE_STRING(lconn_buf, nlconn, lconn, "lconn", NULL, strupr)
+	RPT_CONFIG_EXPLODE_STRING(ldisc_buf, nldisc, ldisc, "ldisc", NULL, strupr)
 
 	RPT_CONFIG_VAR(patchconnect, "patchconnect");
 	RPT_CONFIG_VAR(archivedir, "archivedir");
