@@ -867,6 +867,18 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].p.var = default_val; \
 	}
 
+/* Helper macro for integer config values with enforced minimum floor */
+#define RPT_CONFIG_VAR_INT_MIN_FLOOR(var, name, default_val, min_floor) \
+	val = ast_variable_retrieve(cfg, cat, name); \
+	if (!ast_strlen_zero(val)) { \
+		rpt_vars[n].p.var = atoi(val); \
+	} else { \
+		rpt_vars[n].p.var = default_val; \
+	} \
+	if (rpt_vars[n].p.var < min_floor) { \
+		rpt_vars[n].p.var = min_floor; \
+	}
+
 #define RPT_CONFIG_VAR_BOOL(var, name) \
 	val = ast_variable_retrieve(cfg, cat, name); \
 	if (!ast_strlen_zero(val)) { \
@@ -886,21 +898,8 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR(acctcode, "accountcode");
 	RPT_CONFIG_VAR(ident, "idrecording");
 
-	RPT_CONFIG_VAR_INT(hangtime, "hangtime");
-	if (!val) {
-		rpt_vars[n].p.hangtime = HANGTIME;
-	}
-	if (rpt_vars[n].p.hangtime < 1) {
-		rpt_vars[n].p.hangtime = 1;
-	}
-
-	RPT_CONFIG_VAR_INT(althangtime, "althangtime");
-	if (!val) {
-		rpt_vars[n].p.althangtime = HANGTIME;
-	}
-	if (rpt_vars[n].p.althangtime < 1) {
-		rpt_vars[n].p.althangtime = 1;
-	}
+	RPT_CONFIG_VAR_INT_MIN_FLOOR(hangtime, "hangtime", HANGTIME, 1);
+	RPT_CONFIG_VAR_INT_MIN_FLOOR(althangtime, "althangtime", HANGTIME, 1);
 
 	RPT_CONFIG_VAR_INT_DEFAULT(totime, "totime", TOTIME);
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(time_out_reset_unkey_interval, "time_out_reset_unkey_interval", TIMEOUTRESETUNKEYINTERVAL, 0, 3000)
