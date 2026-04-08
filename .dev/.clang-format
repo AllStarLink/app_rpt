@@ -58,6 +58,7 @@ ForEachMacros:
   - Q_FOREACH
   - BOOST_FOREACH
   - RPT_LIST_TRAVERSE
+  - AST_LIST_TRAVERSE
 IfMacros:
   - KJ_IF_MAYBE
   - IF

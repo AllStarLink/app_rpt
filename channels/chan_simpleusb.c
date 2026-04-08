@@ -2116,7 +2116,9 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	for (;;) {
 		num_frames = 0;
 		ast_mutex_lock(&o->txqlock);
-		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) num_frames++;
+		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+			num_frames++;
+		}
 		ast_mutex_unlock(&o->txqlock);
 		i = used_blocks(o);
 		if (o->txkeyed) {
@@ -2281,7 +2283,9 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	if (o->waspager) {
 		num_frames = 0;
 		ast_mutex_lock(&o->txqlock);
-		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) num_frames++;
+		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+			num_frames++;
+		}
 		ast_mutex_unlock(&o->txqlock);
 		if (num_frames < 1) {
 			struct ast_frame wf = {
