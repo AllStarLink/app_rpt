@@ -1622,8 +1622,9 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 	// ast_debug(1, "@@@@ Digits collected: %s, source: %d\n", digits, command_source);
 
 	if (command_source == SOURCE_DPHONE) {
-		if (!myrpt->p.dphone_functions)
+		if (!myrpt->p.dphone_functions) {
 			return DC_INDETERMINATE;
+		}
 		ast_copy_string(function_table_name, myrpt->p.dphone_functions, sizeof(function_table_name));
 	} else if (command_source == SOURCE_ALT) {
 		if (!myrpt->p.alt_functions) {
@@ -1914,8 +1915,9 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			return;
 		}
 		/* if is from me, ignore */
-		if (!strcmp(src, myrpt->name))
+		if (!strcmp(src, myrpt->name)) {
 			return;
+		}
 		/* if is for one of my nodes, dont do too much! */
 		for (i = 0; i < nrpts; i++) {
 			if (!strcmp(dest, rpt_vars[i].name)) {
@@ -1940,8 +1942,9 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		/* otherwise, send it to all of em */
 		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		/* if is from me, ignore */
-		if (!strcmp(src, myrpt->name))
+		if (!strcmp(src, myrpt->name)) {
 			return;
+		}
 
 		/* set 'got T message' flag */
 		mylink->gott = 1;
@@ -1973,8 +1976,10 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		}
 		distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
 		/* if is from me, ignore */
-		if (!strcmp(src, myrpt->name))
+		if (!strcmp(src, myrpt->name)) {
 			return;
+		}
+
 		snprintf(cmd, sizeof(cmd), "TXTONE %.290s", dest);
 		if (IS_XPMR(myrpt)) {
 			send_usb_txt(myrpt, cmd);
@@ -2148,8 +2153,9 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 	int res;
 
 	donodelog_fmt(myrpt, "DTMF(P),%s,%c", mylink->name, c);
-	if (mylink->phonemonitor)
+	if (mylink->phonemonitor) {
 		return;
+	}
 
 	rpt_mutex_lock(&myrpt->lock);
 
@@ -2289,8 +2295,9 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum
 		break;
 
 	case DC_DOKEY:
-		if (keyed)
+		if (keyed) {
 			*keyed = 1;
+		}
 		res = 0;
 		break;
 
@@ -2331,8 +2338,10 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	int seq, res;
 
 	/* put string in our buffer */
-	if (!strcmp(str, DISCSTR))
+	if (!strcmp(str, DISCSTR)) {
 		return 0;
+	}
+
 	if (!strcmp(str, NEWKEYSTR)) {
 		if (!myrpt->rpt_newkey) {
 			send_newkey_redundant(myrpt->rxchannel);
