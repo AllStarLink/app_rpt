@@ -1374,7 +1374,7 @@ static char *handle_cli_fun1(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 		e->command = "rpt fun1";
 		e->usage = "Usage: rpt fun1 <nodename> <command>\n"
 				   "	Send a DTMF function to a node\n";
-		;
+
 		return NULL;
 
 	case CLI_GENERATE:

@@ -451,7 +451,6 @@ static uint32_t crc_32_tab[] = { 0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
  * \brief Calculate CRC32
  * \param buf		Pointer to buffer to process
  * \param len		Length of the buffer
- * \param limit		Maximum number of substrings to process.
  * \retval			Calculated CRC32.
  */
 static int32_t crc32_buf(const char *restrict buf, int len)

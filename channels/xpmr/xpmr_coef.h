@@ -38,7 +38,7 @@
  */
 
 #ifndef XPMR_COEF_H
-#define XMPR_COEF_H 1
+#define XPMR_COEF_H 1
 
 // frequencies in 0.1 Hz
 static const u32 dtmf_row[] = { 6970, 7700, 8520, 9410 };

@@ -35,8 +35,8 @@ enum pocsag_msgtype {
 	ALPHA
 };
 
-#define SYNCH 0x7CD215D8;
-#define IDLE 0x7A89C197;
+#define SYNCH 0x7CD215D8
+#define IDLE 0x7A89C197
 
 struct pocsag_batch *make_pocsag_batch(uint32_t ric, char *data, int size_of_data, int type, int toneno);
 void free_batch(struct pocsag_batch *batch);

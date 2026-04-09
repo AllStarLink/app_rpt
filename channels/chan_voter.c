@@ -1388,7 +1388,6 @@ static struct ast_frame *ast_frcat(const struct ast_frame *restrict f1, const st
 	f->datalen = f1->datalen + f2->datalen;
 	f->samples = f1->samples + f2->samples;
 	f->data.ptr = cp + AST_FRIENDLY_OFFSET;
-	;
 	f->mallocd = AST_MALLOCD_HDR | AST_MALLOCD_DATA;
 	f->src = "ast_frcat";
 	f->offset = AST_FRIENDLY_OFFSET;
