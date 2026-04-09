@@ -1,5 +1,6 @@
 
-/*! \file
+/*!
+ * \file
  *
  * \brief XCAT I/O handlers
  */
@@ -15,7 +16,7 @@
 #include "app_rpt.h"
 #include "rpt_serial.h"
 #include "rpt_channel.h" /* use send_usb_txt */
-#include "rpt_utils.h" /* use split_freq */
+#include "rpt_utils.h"	 /* use split_freq */
 #include "rpt_serial.h"
 #include "rpt_xcat.h"
 #include "rpt_rig.h"
@@ -24,12 +25,12 @@ int check_freq_xcat(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 144) {				/* 2 meters */
+	if (m == 144) { /* 2 meters */
 		if (d < 10100) {
 			return -1;
 		}
 	}
-	if (m == 29) {				/* 10 meters */
+	if (m == 29) { /* 10 meters */
 		if (d > 70000) {
 			return -1;
 		}
@@ -39,7 +40,7 @@ int check_freq_xcat(int m, int d, enum rpt_mode *defmode)
 		;
 	} else if ((m >= 144) && (m < 148)) {
 		;
-	} else if ((m >= 420) && (m < 450)) {	/* 70 centimeters */
+	} else if ((m >= 420) && (m < 450)) { /* 70 centimeters */
 		;
 	} else {
 		return -1;
@@ -67,8 +68,8 @@ static int simple_command_xcat(struct rpt *myrpt, char command, char subcommand)
 }
 
 /*
-* Set a new frequency for the xcat
-*/
+ * Set a new frequency for the xcat
+ */
 
 static int set_freq_xcat(struct rpt *myrpt, char *newfreq)
 {
@@ -223,19 +224,19 @@ int set_xcat(struct rpt *myrpt)
 	ast_debug(2, "Offset Initial/Simplex\n");
 
 	if (!res) {
-		res = set_offset_xcat(myrpt, REM_SIMPLEX);	/* Offset */
+		res = set_offset_xcat(myrpt, REM_SIMPLEX); /* Offset */
 	}
 	/* set Freq */
 	ast_debug(2, "Frequency\n");
 
 	if (!res) {
-		res = set_freq_xcat(myrpt, myrpt->freq);	/* Frequency */
+		res = set_freq_xcat(myrpt, myrpt->freq); /* Frequency */
 	}
 
 	ast_debug(2, "Offset\n");
 
 	if (!res) {
-		res = set_offset_xcat(myrpt, myrpt->offset);	/* Offset */
+		res = set_offset_xcat(myrpt, myrpt->offset); /* Offset */
 	}
 
 	ast_debug(2, "CTCSS\n");
@@ -247,7 +248,7 @@ int set_xcat(struct rpt *myrpt)
 	ast_debug(2, "Frequency\n");
 
 	if (!res) {
-		res = set_freq_xcat(myrpt, myrpt->freq);	/* Frequency */
+		res = set_freq_xcat(myrpt, myrpt->freq); /* Frequency */
 	}
 
 	return res;

@@ -1,10 +1,10 @@
 #include "rpt_lock.h"
 
-#ifdef	APP_RPT_LOCK_DEBUG
+#ifdef APP_RPT_LOCK_DEBUG
 
 #warning COMPILING WITH LOCK-DEBUGGING ENABLED!!
 
-#define	MAXLOCKTHREAD 100
+#define MAXLOCKTHREAD 100
 
 struct lockthread {
 	pthread_t id;
@@ -62,7 +62,7 @@ static struct lockthread *put_lockthread(pthread_t id)
 
 /*
  * Functions related to the threading used in app_rpt dealing with locking
-*/
+ */
 
 static void rpt_mutex_spew(void)
 {
@@ -85,8 +85,7 @@ static void rpt_mutex_spew(void)
 		strftime(a, sizeof(a) - 1, "%m/%d/%Y %H:%M:%S", localtime(&lock_ring_copy[j].tv.tv_sec));
 		diff = 0;
 		if (lasttv.tv_sec) {
-			diff = (lock_ring_copy[j].tv.tv_sec - lasttv.tv_sec)
-				* 1000000;
+			diff = (lock_ring_copy[j].tv.tv_sec - lasttv.tv_sec) * 1000000;
 			diff += (lock_ring_copy[j].tv.tv_usec - lasttv.tv_usec);
 		}
 
@@ -98,18 +97,18 @@ static void rpt_mutex_spew(void)
 		}
 
 		if (lock_ring_copy[j].line < 0) {
-			ast_log(LOG_NOTICE, "LOCKDEBUG [#%d] UNLOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n",
-					i - 31, -lock_ring_copy[j].line, lock_ring_copy[j].rpt->name, (int) lock_ring_copy[j].lockthread.id,
-					diff, a, (int) lock_ring_copy[j].tv.tv_usec);
+			ast_log(LOG_NOTICE, "LOCKDEBUG [#%d] UNLOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n", i - 31,
+				-lock_ring_copy[j].line, lock_ring_copy[j].rpt->name, (int) lock_ring_copy[j].lockthread.id, diff, a,
+				(int) lock_ring_copy[j].tv.tv_usec);
 		} else {
-			ast_log(LOG_NOTICE, "LOCKDEBUG [#%d] LOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n",
-					i - 31, lock_ring_copy[j].line, lock_ring_copy[j].rpt->name, (int) lock_ring_copy[j].lockthread.id,
-					diff, a, (int) lock_ring_copy[j].tv.tv_usec);
+			ast_log(LOG_NOTICE, "LOCKDEBUG [#%d] LOCK app_rpt.c:%d node %s pid %x diff %lld us at %s.%06d\n", i - 31,
+				lock_ring_copy[j].line, lock_ring_copy[j].rpt->name, (int) lock_ring_copy[j].lockthread.id, diff, a,
+				(int) lock_ring_copy[j].tv.tv_usec);
 		}
 	}
 }
 
-static void _rpt_mutex_lock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
+static void _rpt_mutex_lock(ast_mutex_t *lockp, struct rpt *myrpt, int line)
 {
 	struct lockthread *t;
 	pthread_t id;
@@ -126,7 +125,8 @@ static void _rpt_mutex_lock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	if (t->lockcount) {
 		int lastline = t->lastlock;
 		ast_mutex_unlock(&locklock);
-		ast_log(LOG_ERROR, "rpt_mutex_lock: Double lock request line %d node %s pid %x, last lock was line %d\n", line, myrpt->name, (int) t->id, lastline);
+		ast_log(LOG_ERROR, "rpt_mutex_lock: Double lock request line %d node %s pid %x, last lock was line %d\n", line,
+			myrpt->name, (int) t->id, lastline);
 		rpt_mutex_spew();
 		return;
 	}
@@ -146,7 +146,7 @@ static void _rpt_mutex_lock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	ast_mutex_lock(lockp);
 }
 
-static void _rpt_mutex_unlock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
+static void _rpt_mutex_unlock(ast_mutex_t *lockp, struct rpt *myrpt, int line)
 {
 	struct lockthread *t;
 	pthread_t id;
@@ -163,7 +163,8 @@ static void _rpt_mutex_unlock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	if (!t->lockcount) {
 		int lastline = t->lastunlock;
 		ast_mutex_unlock(&locklock);
-		ast_log(LOG_ERROR, "rpt_mutex_lock: Double un-lock request line %d node %s pid %x, last un-lock was line %d\n", line, myrpt->name, (int) t->id, lastline);
+		ast_log(LOG_ERROR, "rpt_mutex_lock: Double un-lock request line %d node %s pid %x, last un-lock was line %d\n", line,
+			myrpt->name, (int) t->id, lastline);
 		rpt_mutex_spew();
 		return;
 	}
@@ -183,4 +184,4 @@ static void _rpt_mutex_unlock(ast_mutex_t * lockp, struct rpt *myrpt, int line)
 	ast_mutex_unlock(lockp);
 }
 
-#endif							/* APP_RPT_LOCK_DEBUG */
+#endif /* APP_RPT_LOCK_DEBUG */

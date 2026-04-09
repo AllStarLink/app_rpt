@@ -153,7 +153,6 @@ static const char *my_variable_match(const struct ast_config *config, const char
 				return v->value;
 			}
 		}
-
 	}
 	return NULL;
 }
@@ -206,7 +205,7 @@ void mdc1200_ack_status(struct rpt *myrpt, short UnitID)
 #endif
 #endif
 
-#ifdef	_MDC_ENCODE_H_
+#ifdef _MDC_ENCODE_H_
 
 static void mdcgen_release(struct ast_channel *chan, void *params)
 {
@@ -235,7 +234,7 @@ static void *mdcgen_alloc(struct ast_channel *chan, void *params)
 		return NULL;
 	}
 
-	ps->origwfmt = ast_channel_writeformat(chan);	/*! \todo does this need to be freed? */
+	ps->origwfmt = ast_channel_writeformat(chan); /*! \todo does this need to be freed? */
 	ps->mdc = mdc_encoder_new(8000);
 	if (!ps->mdc) {
 		ast_free(ps);
@@ -249,8 +248,7 @@ static void *mdcgen_alloc(struct ast_channel *chan, void *params)
 	} else if (p->type[0] == 'S') {
 		mdc_encoder_set_packet(ps->mdc, 0x46, p->type[1] - '0', p->UnitID);
 	} else if (p->type[0] == 'C') {
-		mdc_encoder_set_double_packet(ps->mdc, 0x35, 0x89, p->DestID, p->subcode >> 8, p->subcode & 0xff,
-									  p->UnitID >> 8, p->UnitID & 0xff);
+		mdc_encoder_set_double_packet(ps->mdc, 0x35, 0x89, p->DestID, p->subcode >> 8, p->subcode & 0xff, p->UnitID >> 8, p->UnitID & 0xff);
 	} else if (p->type[0] == 'A') {
 		mdc_encoder_set_packet(ps->mdc, 0x23, 0, p->UnitID);
 	} else if (p->type[0] == 'K') { // kill a unit W9CR
@@ -315,9 +313,9 @@ static int mdcgen_generator(struct ast_channel *chan, void *data, int len, int s
 }
 
 static struct ast_generator mdcgen = {
-	alloc:mdcgen_alloc,
-	release:mdcgen_release,
-	generate:mdcgen_generator,
+	alloc : mdcgen_alloc,
+	release : mdcgen_release,
+	generate : mdcgen_generator,
 };
 
 int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
@@ -339,7 +337,6 @@ int mdc1200gen_start(struct ast_channel *chan, char *type, short UnitID, short d
 
 int mdc1200gen(struct ast_channel *chan, char *type, short UnitID, short destID, short subcode)
 {
-
 	int res;
 	struct ast_frame *f;
 
@@ -421,7 +418,7 @@ static char *mdc_app = "MDC1200Gen";
 
 int mdc1200_load(void)
 {
-#ifdef	_MDC_ENCODE_H_
+#ifdef _MDC_ENCODE_H_
 	return ast_register_application_xml(mdc_app, mdcgen_exec);
 #else
 	return 0;
@@ -430,7 +427,7 @@ int mdc1200_load(void)
 
 int mdc1200_unload(void)
 {
-#ifdef	_MDC_ENCODE_H_
+#ifdef _MDC_ENCODE_H_
 	return ast_unregister_application(mdc_app);
 #else
 	return 0;

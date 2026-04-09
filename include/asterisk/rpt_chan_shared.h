@@ -16,7 +16,8 @@
  * at the top of the source tree.
  */
 
-/*! \file
+/*!
+ * \file
  * \brief Radio resources.
  */
 

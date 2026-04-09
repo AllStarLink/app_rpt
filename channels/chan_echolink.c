@@ -22,7 +22,8 @@
  * corrected memory leaks
  */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief Echolink channel driver for Asterisk
  *
@@ -162,7 +163,7 @@ do not use 127.0.0.1
  * assigned node number. In some cases, it matches valid node numbers.  We address this issue
  * by looking up dbget requests in our connected nodes list first.
  *
-*/
+ */
 
 #include "asterisk.h"
 
@@ -178,7 +179,7 @@ do not use 127.0.0.1
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
 #include "asterisk/module.h"
-#include "asterisk/network.h"	/* socket routines */
+#include "asterisk/network.h" /* socket routines */
 #include "asterisk/pbx.h"
 #include "asterisk/dsp.h"
 #include "asterisk/translate.h"
@@ -209,32 +210,32 @@ do not use 127.0.0.1
 #define EL_QTH_SIZE 32
 #define EL_MAX_SERVERS 4
 #define EL_SERVERNAME_SIZE 63
-#define	EL_MAX_INSTANCES 100
-#define	EL_MAX_CALL_LIST 60
-#define	EL_APRS_SERVER "aprs.echolink.org"
-#define	EL_APRS_INTERVAL 600
-#define	EL_APRS_START_DELAY 10
+#define EL_MAX_INSTANCES 100
+#define EL_MAX_CALL_LIST 60
+#define EL_APRS_SERVER "aprs.echolink.org"
+#define EL_APRS_INTERVAL 600
+#define EL_APRS_START_DELAY 10
 
 #define EL_QUERY_IPADDR 1
 #define EL_QUERY_CALLSIGN 2
 
 /*! \brief Echolink directory server port number */
-#define	EL_DIRECTORY_PORT 5200
+#define EL_DIRECTORY_PORT 5200
 
-#define	GPS_VALID_SECS 60
+#define GPS_VALID_SECS 60
 
-#define	ELDB_NODENUMLEN 8
-#define	ELDB_CALLSIGNLEN 12
-#define	ELDB_IPADDRLEN 16
+#define ELDB_NODENUMLEN 8
+#define ELDB_CALLSIGNLEN 12
+#define ELDB_IPADDRLEN 16
 
-#define	DELIMCHR ','
-#define	QUOTECHR 34
+#define DELIMCHR ','
+#define QUOTECHR 34
 
 #define EL_WELCOME_MESSAGE "oNDATA\rWelcome to AllStar Node %s\rEcholink Node %s\rNumber %u\r \r"
-#define EL_INIT_BUFFER sizeof(EL_WELCOME_MESSAGE) \
-		+ 16  		/* ASL & EL nodes #'s */  \
-		+ 80  		/* room for "a" message */ \
-		+ (50 * 8) 	/* room for linked ASL and EL nodes */
+#define EL_INIT_BUFFER \
+	sizeof(EL_WELCOME_MESSAGE) + 16 /* ASL & EL nodes #'s */ \
+		+ 80						/* room for "a" message */ \
+		+ (50 * 8)					/* room for linked ASL and EL nodes */
 
 static const char tdesc[] = "Echolink channel driver";
 static char type[] = "echolink";
@@ -381,20 +382,20 @@ struct el_pending {
  * \brief Count of connections struct.
  * This is used by twalk_r to count the connections.
  */
- struct el_node_count {
+struct el_node_count {
 	struct el_instance *instp;
 	int inbound;
 	int outbound;
- };
+};
 
- /*!
+/*!
  * \brief Lookup for el_node callsign.
  * This is used by twalk_r to look up a node.
  */
- struct el_node_lookup_callsign {
+struct el_node_lookup_callsign {
 	int nodenum;
 	char callsign[EL_CALL_SIZE];
- 	char ipaddr[EL_IP_SIZE];
+	char ipaddr[EL_IP_SIZE];
 };
 
 /*!
@@ -477,12 +478,12 @@ struct el_pvt {
 	char app[16];
 	char stream[80];
 	char ip[EL_IP_SIZE];
-	unsigned int firstsent:1; /* First packet seen from echolink */
+	unsigned int firstsent:1;		/* First packet seen from echolink */
 	unsigned int firstheard:1;		/* First heard from called node */
 	unsigned int last_firstheard:1; /* Rising edge */
-	unsigned int txkey:1;	  /* Transmit keyed */
-	unsigned int hangup:1;	  /* indicate the channel should hang up */
-	int rxkey;				  /* Receive keyed timer */
+	unsigned int txkey:1;			/* Transmit keyed */
+	unsigned int hangup:1;			/* indicate the channel should hang up */
+	int rxkey;						/* Receive keyed timer */
 	int keepalive;
 	int txindex;
 	struct el_rxqast rxqast;
@@ -525,7 +526,8 @@ static int el_login_sleeptime = 0;
 static char *el_config = "echolink.conf";
 static char *rpt_config = "rpt.conf";
 
-static struct ast_channel *el_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
+static struct ast_channel *el_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *data, int *cause);
 static int el_call(struct ast_channel *ast, const char *dest, int timeout);
 static int el_hangup(struct ast_channel *ast);
 static struct ast_frame *el_xread(struct ast_channel *ast);
@@ -564,33 +566,35 @@ static struct ast_channel_tech el_tech = {
 };
 
 /*
-* CLI extensions
-*/
+ * CLI extensions
+ */
 
 static int el_do_dbdump(int fd, int argc, const char *const *argv);
 static int el_do_dbget(int fd, int argc, const char *const *argv);
 static int el_do_show_nodes(int fd, int argc, const char *const *argv);
 static int el_do_show_stats(int fd, int argc, const char *const *argv);
 
-static char dbdump_usage[] = "Usage: echolink dbdump [nodename|callsign|ipaddr]\n" "       Dumps entire echolink db\n";
+static char dbdump_usage[] = "Usage: echolink dbdump [nodename|callsign|ipaddr]\n"
+							 "       Dumps entire echolink db\n";
 
-static char dbget_usage[] = "Usage: echolink dbget <nodename|callsign|ipaddr> <lookup-data>\n" "       Looks up echolink db entry\n";
+static char dbget_usage[] = "Usage: echolink dbget <nodename|callsign|ipaddr> <lookup-data>\n"
+							"       Looks up echolink db entry\n";
 
 static char show_nodes_usage[] = "Usage: echolink show nodes\n";
 
 static char show_stats_usage[] = "Usage: echolink show stats\n";
 
 /*!
- * \brief Get system monotonic 
+ * \brief Get system monotonic
  * This returns the CLOCK_MONOTONIC time
  * \retval		Monotonic seconds.
  */
 static time_t time_monotonic(void)
 {
 	struct timespec ts;
-	
+
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	
+
 	return ts.tv_sec;
 }
 
@@ -645,10 +649,7 @@ static void print_nodes(const void *nodep, const VISIT which, void *closure)
 
 	if ((which == leaf) || (which == postorder)) {
 		fd = closure;
-		ast_cli(*fd, "%s|%s|%s\n",
-				node->nodenum,
-				node->callsign,
-				node->ipaddr);
+		ast_cli(*fd, "%s|%s|%s\n", node->nodenum, node->callsign, node->ipaddr);
 	}
 }
 
@@ -665,11 +666,7 @@ static void print_connected_nodes(const void *nodep, const VISIT which, void *cl
 
 	if ((which == leaf) || (which == postorder)) {
 		fd = closure;
-		ast_cli(*fd, "%7i  %-10s %-15s   %-32s\n",
-				node->nodenum,
-				node->call,
-				node->ip,
-				node->name);
+		ast_cli(*fd, "%7i  %-10s %-15s   %-32s\n", node->nodenum, node->call, node->ip, node->name);
 	}
 }
 
@@ -686,13 +683,8 @@ static void print_node_stats(const void *nodep, const VISIT which, void *closure
 
 	if ((which == leaf) || (which == postorder)) {
 		fd = closure;
-		ast_cli(*fd, "%7i  %10i %10i %10i %10i %7.2f\n",
-				node->nodenum,
-				node->rx_ctrl_packets,
-				node->tx_ctrl_packets,
-				node->rx_audio_packets,
-				node->tx_audio_packets,
-				node->jitter);
+		ast_cli(*fd, "%7i  %10i %10i %10i %10i %7.2f\n", node->nodenum, node->rx_ctrl_packets, node->tx_ctrl_packets,
+			node->rx_audio_packets, node->tx_audio_packets, node->jitter);
 	}
 }
 
@@ -830,7 +822,8 @@ static void el_db_delete_entries(struct eldb *node)
 	}
 
 	if (!(mynode_num == mynode_ip && mynode_ip == mynode_call)) {
-		ast_log(LOG_ERROR, "Echolink internal database corruption removing callsign %s node number=%p node ip=%p node call=%p", node->callsign, mynode_num, mynode_ip, mynode_call);
+		ast_log(LOG_ERROR, "Echolink internal database corruption removing callsign %s node number=%p node ip=%p node call=%p",
+			node->callsign, mynode_num, mynode_ip, mynode_call);
 	}
 
 	ast_free(node);
@@ -892,7 +885,7 @@ static struct eldb *el_db_put(const char *nodenum, const char *ipaddr, const cha
  */
 static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
 {
-	struct el_node_lookup_callsign node_lookup = {0};
+	struct el_node_lookup_callsign node_lookup = { 0 };
 
 	memset(result, 0, sizeof(*result));
 	ast_copy_string(node_lookup.callsign, callsign, sizeof(node_lookup.callsign));
@@ -930,7 +923,7 @@ static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
  */
 static int lookup_node_by_nodenum(const char *nodenum, struct eldb *result)
 {
-	struct el_node_lookup_callsign node_lookup = {0};
+	struct el_node_lookup_callsign node_lookup = { 0 };
 
 	memset(result, 0, sizeof(*result));
 	node_lookup.nodenum = atoi(nodenum);
@@ -1191,7 +1184,7 @@ static void parse_sdes(unsigned char *packet, struct rtcp_sdes_request *r)
 	/* 	the RTP version must be 3 or 1
 	 *	the payload type must be 202
 	 *	the CSRC must be greater than zero
-	*/
+	 */
 	while ((p[0] >> 6 & 3) == 3 || (p[0] >> 6 & 3) == 1) {
 		if ((p[1] == 202) && ((p[0] & 0x1F) > 0)) {
 			unsigned char *cp = p + 8, *lp = cp + (ntohs(*((short *) (p + 2))) + 1) * 4;
@@ -1249,9 +1242,8 @@ static int is_rtcp_bye(const unsigned char *pkt, int len)
 	/* 	the RTP version must be 3 or 1
 	 *	the padding bit must not be set
 	 *	the payload type must be 200 or 201
-	*/
-	if ((((pkt[0] >> 6) & 3) != 3 && ((pkt[0] >> 6) & 3) != 1) ||
-		((pkt[0] & 0x20) != 0) || ((pkt[1] != 200) && (pkt[1] != 201))) {
+	 */
+	if ((((pkt[0] >> 6) & 3) != 3 && ((pkt[0] >> 6) & 3) != 1) || ((pkt[0] & 0x20) != 0) || ((pkt[1] != 200) && (pkt[1] != 201))) {
 		return 0;
 	}
 
@@ -1287,9 +1279,8 @@ static int is_rtcp_sdes(const unsigned char *pkt, int len)
 	/* 	the RTP version must be 3 or 1
 	 *	the padding bit must not be set
 	 *	the payload type must be 200 or 201
-	*/
-	if ((((pkt[0] >> 6) & 3) != 3 && ((pkt[0] >> 6) & 3) != 1) ||
-		((pkt[0] & 0x20) != 0) || ((pkt[1] != 200) && (pkt[1] != 201))) {
+	 */
+	if ((((pkt[0] >> 6) & 3) != 3 && ((pkt[0] >> 6) & 3) != 1) || ((pkt[0] & 0x20) != 0) || ((pkt[1] != 200) && (pkt[1] != 201))) {
 		return 0;
 	}
 
@@ -1336,7 +1327,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 	/* When we call, it just works, really, there's no destination...  Just
 	 * ring the phone and wait for someone to answer
-	*/
+	 */
 
 	/* get the node number in cp */
 	str = ast_strdup(dest);
@@ -1351,7 +1342,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 	/* Advance the pointer past the leading zeros */
 	while (*cp) {
-		if(*cp != '0') {
+		if (*cp != '0') {
 			break;
 		}
 		cp++;
@@ -1598,23 +1589,23 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 
 	/* Process the requested query option */
 	switch (option) {
-		case EL_QUERY_IPADDR:
-			foundnode = el_db_find_nodenum(node);
-			if (foundnode) {
-				ast_copy_string(data, foundnode->ipaddr, *datalen);
-				res = 0;
-			}
-			break;
-		case EL_QUERY_CALLSIGN:
-			/* lookup first in connected table, then echolink database */
-			if (lookup_node_by_nodenum(node, &node_result)) {
-				ast_copy_string(data, node_result.callsign, *datalen);
-				res = 0;
-			}
-			break;
-		default:
-			ast_log(LOG_ERROR, "Option %i is not valid.", option);
-			break;
+	case EL_QUERY_IPADDR:
+		foundnode = el_db_find_nodenum(node);
+		if (foundnode) {
+			ast_copy_string(data, foundnode->ipaddr, *datalen);
+			res = 0;
+		}
+		break;
+	case EL_QUERY_CALLSIGN:
+		/* lookup first in connected table, then echolink database */
+		if (lookup_node_by_nodenum(node, &node_result)) {
+			ast_copy_string(data, node_result.callsign, *datalen);
+			res = 0;
+		}
+		break;
+	default:
+		ast_log(LOG_ERROR, "Option %i is not valid.", option);
+		break;
 	}
 
 	ast_mutex_unlock(&el_db_lock);
@@ -1662,7 +1653,7 @@ static int mycompar(const void *a, const void *b)
  */
 static int el_text(struct ast_channel *ast, const char *text)
 {
-#define	MAXLINKSTRS 250
+#define MAXLINKSTRS 250
 
 	struct el_pvt *pvt = ast_channel_tech_pvt(ast);
 	const char *delim = " ";
@@ -1833,8 +1824,7 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 			instp->audio_all.time = htonl(0);
 			instp->audio_all.ssrc = htonl(instp->mynode);
 
-			sendto(instp->audio_sock, (char *) &instp->audio_all, sizeof(instp->audio_all),
-				   0, (struct sockaddr *) &sin, sizeof(sin));
+			sendto(instp->audio_sock, (char *) &instp->audio_all, sizeof(instp->audio_all), 0, (struct sockaddr *) &sin, sizeof(sin));
 
 			instp->tx_audio_packets++;
 			node->tx_audio_packets++;
@@ -1854,10 +1844,7 @@ static void print_users(const void *nodep, const VISIT which, const int depth)
 
 	if ((which == leaf) || (which == postorder)) {
 		node = *(struct el_node **) nodep;
-		ast_verbose("Echolink user: call=%s,ip=%s,name=%s\n",
-					node->call,
-					node->ip,
-					node->name);
+		ast_verbose("Echolink user: call=%s,ip=%s,name=%s\n", node->call, node->ip, node->name);
 	}
 }
 
@@ -1982,7 +1969,6 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 	int sdes_length;
 
 	if ((which == leaf) || (which == postorder)) {
-
 		if (node->countdown >= 0) {
 			node->countdown--;
 		}
@@ -1990,7 +1976,8 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 		if (node->countdown < 0) {
 			ast_copy_string(instp->el_node_test.ip, node->ip, EL_IP_SIZE);
 			ast_copy_string(instp->el_node_test.call, node->call, EL_CALL_SIZE);
-			ast_log(LOG_WARNING, "Countdown for Callsign %s, IP Address %s is negative.\n", instp->el_node_test.call, instp->el_node_test.ip);
+			ast_log(LOG_WARNING, "Countdown for Callsign %s, IP Address %s is negative.\n", instp->el_node_test.call,
+				instp->el_node_test.ip);
 		}
 		memset(sdes_packet, 0, sizeof(sdes_packet));
 		sdes_length = rtcp_make_sdes(sdes_packet, sizeof(sdes_packet), instp->mycall, instp->myname, instp->astnode);
@@ -2019,7 +2006,6 @@ static void send_text(const void *nodep, const VISIT which, const int depth)
 
 	if ((which == leaf) || (which == postorder)) {
 		if (strncmp(node->ip, node->instp->el_node_test.ip, sizeof(node->ip))) {
-
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons(node->instp->audio_port);
@@ -2054,15 +2040,12 @@ static void send_text_one(struct el_node *node, const char *message)
 
 	node->instp->tx_audio_packets++;
 	node->tx_audio_packets++;
-
 }
 
 /*!
  * \brief Free node.  Empty routine.
  */
-static void free_node(void *nodep)
-{
-}
+static void free_node(void *nodep) {}
 
 /*!
  * \brief Find and delete a node from our internal node list.
@@ -2074,7 +2057,7 @@ static int find_delete(const struct el_node *key)
 {
 	int found = 0;
 	struct el_node **found_key;
-	struct el_node *node ;
+	struct el_node *node;
 	ast_mutex_lock(&el_nodelist_lock);
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
@@ -2111,14 +2094,13 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 	struct el_node key;
 
 	/*
-	* see if this is a text packet
-	* text and data messages start with the preamble oNDATA
-	* it should be in the format "callsign>text message\r"
-	*/
+	 * see if this is a text packet
+	 * text and data messages start with the preamble oNDATA
+	 * it should be in the format "callsign>text message\r"
+	 */
 	ptr = buf + 6;
 	if (!memcmp(buf, "oNDATA", 6) && *ptr != '\r' && (textptr = strchr(ptr, '>')) != NULL) {
 		if ((textptr - ptr) < EL_CALL_SIZE) {
-
 			instp->text_packet = buf;
 			instp->text_packet_len = buf_len;
 			ast_mutex_lock(&el_nodelist_lock);
@@ -2137,8 +2119,8 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 	}
 
 	/*
-	* process commands received from the loopback
-	*/
+	 * process commands received from the loopback
+	 */
 	if (strncmp(fromip, "127.0.0.1", EL_IP_SIZE) != 0) {
 		return;
 	}
@@ -2385,12 +2367,10 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
 		ast_log(LOG_WARNING, "Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s)).\n",
-				ast_format_get_name(frame->subclass.format),
-				ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
-				ast_format_get_name(ast_channel_readformat(ast)),
-				ast_format_get_name(ast_channel_writeformat(ast)));
+			ast_format_get_name(frame->subclass.format), ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
+			ast_format_get_name(ast_channel_readformat(ast)), ast_format_get_name(ast_channel_writeformat(ast)));
 		return 0;
-		}
+	}
 	if (p->txkey || p->txindex) {
 		memcpy(instp->audio_all.data + (GSM_FRAME_SIZE * p->txindex++), frame->data.ptr, GSM_FRAME_SIZE);
 	}
@@ -2444,7 +2424,8 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
  * \param requestor		Pointer to Asterisk channel.
  * \return 				Asterisk channel.
  */
-static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor)
+static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor)
 {
 	struct ast_channel *tmp;
 
@@ -2499,7 +2480,8 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
  * \retval NULL			Failure
  * \return				ast_channel if successful
  */
-static struct ast_channel *el_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause)
+static struct ast_channel *el_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *data, int *cause)
 {
 	int nodenum;
 	struct el_pvt *p;
@@ -2654,10 +2636,8 @@ static int el_do_show_stats(int fd, int argc, const char *const *argv)
 	ast_cli(fd, "Outbound connections %i\n\n", count.outbound);
 
 	ast_cli(fd, "   Node     Rx Ctrl    Tx Ctrl   Rx Audio   Tx Audio Jitter(ms) Bad Packets\n");
-	ast_cli(fd, " System  %10i %10i %10i %10i           %10i\n",
-		instances[0]->rx_ctrl_packets, instances[0]->tx_ctrl_packets,
-		instances[0]->rx_audio_packets, instances[0]->tx_audio_packets,
-		instances[0]->rx_bad_packets);
+	ast_cli(fd, " System  %10i %10i %10i %10i           %10i\n", instances[0]->rx_ctrl_packets, instances[0]->tx_ctrl_packets,
+		instances[0]->rx_audio_packets, instances[0]->tx_audio_packets, instances[0]->rx_bad_packets);
 
 	ast_mutex_lock(&el_nodelist_lock);
 	twalk_r(el_node_list, print_node_stats, &fd);
@@ -2766,12 +2746,9 @@ static char *handle_cli_show_stats(struct ast_cli_entry *e, int cmd, struct ast_
 /*!
  * \brief Define cli entries for this module
  */
-static struct ast_cli_entry el_cli[] = {
-	AST_CLI_DEFINE(handle_cli_dbdump, "Dump entire echolink db"),
-	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry"),
-	AST_CLI_DEFINE(handle_cli_show_nodes, "Show connected nodes"),
-	AST_CLI_DEFINE(handle_cli_show_stats, "Show node statistics")
-};
+static struct ast_cli_entry el_cli[] = { AST_CLI_DEFINE(handle_cli_dbdump, "Dump entire echolink db"),
+	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry"), AST_CLI_DEFINE(handle_cli_show_nodes, "Show connected nodes"),
+	AST_CLI_DEFINE(handle_cli_show_stats, "Show node statistics") };
 
 /*
    If asterisk has a function that writes at least n bytes to a TCP socket,
@@ -2869,15 +2846,8 @@ static int sendcmd(const char *server, const struct el_instance *instp)
 		id = "1.00B";
 	}
 
-	snprintf(buf, LOGINSIZE,
-			 "l%s%c%c%s\rONLINE%s(%d:%2d)\r%s\r%s\r",
-			 instp->mycall,
-			 0xac,
-			 0xac,
-			 instp->mypwd,
-			 id,
-			 p_tm->tm_hour, p_tm->tm_mday,
-			 (instp->login_display[0]) ? instp->login_display : instp->myqth, instp->myemail);
+	snprintf(buf, LOGINSIZE, "l%s%c%c%s\rONLINE%s(%d:%2d)\r%s\r%s\r", instp->mycall, 0xac, 0xac, instp->mypwd, id, p_tm->tm_hour,
+		p_tm->tm_mday, (instp->login_display[0]) ? instp->login_display : instp->myqth, instp->myemail);
 
 	len = strlen(buf);
 	rc = writen(sd, buf, len);
@@ -3071,10 +3041,10 @@ static int do_el_directory(const char *hostname)
 		inflateEnd(&z);
 		return -1;
 	}
-	memset(&dirserver, 0, sizeof(dirserver));	/* Clear struct */
-	dirserver.sin_family = AF_INET;	/* Internet/IP */
+	memset(&dirserver, 0, sizeof(dirserver)); /* Clear struct */
+	dirserver.sin_family = AF_INET;			  /* Internet/IP */
 	dirserver.sin_addr.s_addr = *(unsigned long *) host->h_addr_list[0];
-	dirserver.sin_port = htons(EL_DIRECTORY_PORT);	/* server port */
+	dirserver.sin_port = htons(EL_DIRECTORY_PORT); /* server port */
 	sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
 		ast_log(LOG_ERROR, "Unable to obtain a socket for directory server %s.\n", hostname);
@@ -3103,7 +3073,7 @@ static int do_el_directory(const char *hostname)
 	 * @@@ indicates a full directory, DDD indicates a partial directory.
 	 * If we don't find one of these indicates, the stream is compressed.
 	 * We will decompress the stream and test again.
-	*/
+	 */
 	if (!strncmp(str, "@@@", 3)) {
 		dir_partial = 0;
 		dir_compressed = 0;
@@ -3144,14 +3114,14 @@ static int do_el_directory(const char *hostname)
 	delmode = 0;
 	/* if the returned directory is not partial - we should
 	 * delete all existing directory messages
-	*/
+	 */
 	if (!dir_partial) {
 		ast_debug(4, "Full directory received, deleting all nodes.\n");
 		el_db_delete_all_nodes();
 	}
 	/*
 	 *	process the directory entries
-	*/
+	 */
 	for (;;) {
 		/* read the callsign line
 		 * this line could also contain the end of list indicator
@@ -3214,7 +3184,7 @@ static int do_el_directory(const char *hostname)
 		ast_copy_string(ipaddr, str, sizeof(ipaddr));
 		/* every 10 records, sleep for a short time */
 		if (!(n % 10)) {
-			usleep(2000);		/* To get to dry land */
+			usleep(2000); /* To get to dry land */
 		}
 		/* add this entry to our table */
 		ast_mutex_lock(&el_db_lock);
@@ -3389,8 +3359,9 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	el_node_key->seqnum = 1;
 	el_node_key->instp = instp;
 	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
-		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip, el_node_key->nodenum, el_node_key->name);
-		if (pvt == NULL) {	/* if a new inbound call */
+		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
+			el_node_key->nodenum, el_node_key->name);
+		if (pvt == NULL) { /* if a new inbound call */
 			struct ast_frame fr = {
 				.frametype = AST_FRAME_CONTROL,
 				.subclass.integer = AST_CONTROL_ANSWER,
@@ -3435,8 +3406,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ast_mutex_unlock(&instp->lock);
 		}
 	} else {
-		ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n",
-				el_node_key->call, el_node_key->ip, el_node_key->name);
+		ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n", el_node_key->call, el_node_key->ip,
+			el_node_key->name);
 		ast_free(el_node_key);
 		ast_mutex_unlock(&el_db_lock);
 		return -1;
@@ -3489,12 +3460,11 @@ static void *el_reader(void *data)
 	fds[1].events = POLLIN;
 
 	while (run_forever) {
-
 		/* Send APRS information every EL_APRS_INTERVAL */
 		time(&now);
 		if (instp->aprstime <= now) {
 			instp->aprstime = now + EL_APRS_INTERVAL;
-			if (sin_aprs.sin_port) {	/* a zero port indicates that we never resolved the host name */
+			if (sin_aprs.sin_port) { /* a zero port indicates that we never resolved the host name */
 				char aprsstr[512], aprscall[256], gps_data[100], latc, lonc;
 				unsigned char sdes_packet[256];
 				unsigned long long u_mono;
@@ -3510,15 +3480,13 @@ static void *el_reader(void *data)
 				twalk_r(el_node_list, count_users, &count);
 				ast_mutex_unlock(&el_nodelist_lock);
 				tm = gmtime(&now);
-				if (!count.outbound) {			/* if no outbound users */
-					snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE,
-						"%s [%d/%d]", instp->myqth, count.inbound, instp->maxstns);
-					snprintf(instp->aprs_display, EL_APRS_SIZE,
-						" On @ %02d%02d [%d/%d]", tm->tm_hour, tm->tm_min, count.inbound, instp->maxstns);
+				if (!count.outbound) { /* if no outbound users */
+					snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE, "%s [%d/%d]", instp->myqth, count.inbound, instp->maxstns);
+					snprintf(instp->aprs_display, EL_APRS_SIZE, " On @ %02d%02d [%d/%d]", tm->tm_hour, tm->tm_min, count.inbound,
+						instp->maxstns);
 				} else {
 					snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE, "In Conference %s", instp->lastcall);
-					snprintf(instp->aprs_display, EL_APRS_SIZE,
-						"=N%s @ %02d%02d", instp->lastcall, tm->tm_hour, tm->tm_min);
+					snprintf(instp->aprs_display, EL_APRS_SIZE, "=N%s @ %02d%02d", instp->lastcall, tm->tm_hour, tm->tm_min);
 				}
 				mylat = instp->lat;
 				mylon = instp->lon;
@@ -3558,8 +3526,7 @@ static void *el_reader(void *data)
 				lonmin = (fabs(mylon) - londeg) * 60.0;
 
 				snprintf(aprsstr, sizeof(aprsstr), ")EL-%-6.6s!%02d%05.2f%cE%03d%05.2f%c0PHG%d%d%d%d/%06d/%03d%s", instp->mycall,
-					latdeg, latmin, latc, londeg, lonmin, lonc,
-					instp->power, instp->height, instp->gain, instp->dir,
+					latdeg, latmin, latc, londeg, lonmin, lonc, instp->power, instp->height, instp->gain, instp->dir,
 					(int) ((instp->freq * 1000) + 0.5), (int) (instp->tone + 0.05), instp->aprs_display);
 
 				ast_debug(4, "APRS out%s: %s.\n", from_GPS ? " (GPS)" : "", aprsstr);
@@ -3568,7 +3535,7 @@ static void *el_reader(void *data)
 				sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
 				sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin_aprs, sizeof(sin_aprs));
 				instp->tx_ctrl_packets++;
-			} else {		/* we were unable to resolve the APRS host name - attempt to resolve it now */
+			} else { /* we were unable to resolve the APRS host name - attempt to resolve it now */
 				struct hostent *ahp;
 				struct ast_hostent ah;
 				sin_aprs.sin_family = AF_INET;
@@ -3586,8 +3553,8 @@ static void *el_reader(void *data)
 		}
 		ast_mutex_unlock(&instp->lock);
 		/*
-		* poll for activity
-		*/
+		 * poll for activity
+		 */
 		i = ast_poll(fds, 2, 50);
 		if (i == 0) {
 			ast_mutex_lock(&instp->lock);
@@ -3600,9 +3567,9 @@ static void *el_reader(void *data)
 		}
 		ast_mutex_lock(&instp->lock);
 		/*
-		* process the control socket
-		*/
-		if (fds[0].revents) {	/* if a ctrl packet */
+		 * process the control socket
+		 */
+		if (fds[0].revents) { /* if a ctrl packet */
 			fds[0].revents = 0;
 			instp->rx_ctrl_packets++;
 			fromlen = sizeof(struct sockaddr_in);
@@ -3646,8 +3613,8 @@ static void *el_reader(void *data)
 								ast_copy_string(node->name, name, EL_NAME_SIZE);
 							}
 							node->rx_ctrl_packets++;
-						} else {	/* otherwise its a new request */
-							i = 0;	/* default authorized */
+						} else {   /* otherwise its a new request */
+							i = 0; /* default authorized */
 							if (instp->ndenylist) {
 								for (x = 0; x < instp->ndenylist; x++) {
 									if (!fnmatch(instp->denylist[x], call, FNM_CASEFOLD)) {
@@ -3669,14 +3636,14 @@ static void *el_reader(void *data)
 									}
 								}
 							}
-							if (!i) {	/* if authorized */
+							if (!i) { /* if authorized */
 								i = do_new_call(instp, NULL, call, name);
 								if (i < 0) {
 									/* we failed to create a new call - error reported by do_new_call */
 									i = 0;
 								}
 							}
-							if (i) {	/* if not authorized or do_new_call failed*/
+							if (i) { /* if not authorized or do_new_call failed*/
 								/* first, see if we have one that is ours and not abandoned */
 								for (x = 0; x < MAXPENDING; x++) {
 									if (strcmp(instp->pending[x].fromip, instp->el_node_test.ip)) {
@@ -3696,8 +3663,7 @@ static void *el_reader(void *data)
 										sin1.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
 										sin1.sin_port = htons(instp->ctrl_port);
 										for (i = 0; i < 20; i++) {
-											sendto(instp->ctrl_sock, bye, j,
-												   0, (struct sockaddr *) &sin1, sizeof(sin1));
+											sendto(instp->ctrl_sock, bye, j, 0, (struct sockaddr *) &sin1, sizeof(sin1));
 											instp->tx_ctrl_packets++;
 										}
 										instp->pending[x].fromip[0] = 0;
@@ -3706,7 +3672,7 @@ static void *el_reader(void *data)
 									if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 										instp->aprstime = now;
 									}
-								} else {	/* find empty one */
+								} else { /* find empty one */
 									for (x = 0; x < MAXPENDING; x++) {
 										if (!instp->pending[x].fromip[0]) {
 											break;
@@ -3715,7 +3681,7 @@ static void *el_reader(void *data)
 											break;
 										}
 									}
-									if (x < MAXPENDING) {	/* we found one */
+									if (x < MAXPENDING) { /* we found one */
 										strcpy(instp->pending[x].fromip, instp->el_node_test.ip);
 										instp->pending[x].reqtime = ast_tvnow();
 										time(&now);
@@ -3727,7 +3693,7 @@ static void *el_reader(void *data)
 										}
 									} else {
 										ast_log(LOG_ERROR, "Cannot find open pending echolink request slot for IP Address %s.\n",
-												instp->el_node_test.ip);
+											instp->el_node_test.ip);
 									}
 								}
 							}
@@ -3741,7 +3707,8 @@ static void *el_reader(void *data)
 				} else {
 					if (is_rtcp_bye((unsigned char *) buf, recvlen)) {
 						if (find_delete(&instp->el_node_test)) {
-							ast_verb(4, "Disconnect from IP address %s, Callsign %s.\n", instp->el_node_test.ip, instp->el_node_test.call);
+							ast_verb(4, "Disconnect from IP address %s, Callsign %s.\n", instp->el_node_test.ip,
+								instp->el_node_test.call);
 						}
 					} else {
 						instp->rx_bad_packets++;
@@ -3750,9 +3717,9 @@ static void *el_reader(void *data)
 			}
 		}
 		/*
-		*process the audio socket
-		*/
-		if (fds[1].revents) {	/* if an audio packet */
+		 *process the audio socket
+		 */
+		if (fds[1].revents) { /* if an audio packet */
 			fds[1].revents = 0;
 			instp->rx_audio_packets++;
 			current_packet_time = ast_tvnow();
@@ -3761,7 +3728,7 @@ static void *el_reader(void *data)
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
 				ast_copy_string(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
-				gsmPacket = (struct gsmVoice_t *)&buf;
+				gsmPacket = (struct gsmVoice_t *) &buf;
 				/* packets that start with 0x6f are text packets */
 				if (buf[0] == 0x6f) {
 					process_cmd(buf, recvlen, instp->el_node_test.ip, instp);
@@ -3781,8 +3748,8 @@ static void *el_reader(void *data)
 						}
 						node->last_packet_time = current_packet_time;
 						/*
-						* see if we have a new talker
-						*/
+						 * see if we have a new talker
+						 */
 						if (!instp->current_talker) {
 							instp->current_talker = node;
 							instp->current_talker_start_time = current_packet_time;
@@ -3842,8 +3809,8 @@ static void *el_reader(void *data)
 				instp->current_talker->istimedout = 0;
 				instp->current_talker->isdoubling = 0;
 				instp->current_talker = NULL;
-				instp->current_talker_start_time = (struct timeval) {0};
-				instp->current_talker_last_time = (struct timeval) {0};
+				instp->current_talker_start_time = (struct timeval) { 0 };
+				instp->current_talker_last_time = (struct timeval) { 0 };
 			}
 		}
 	}
@@ -3964,9 +3931,9 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	if (instp->mymessage[0] != '\0') {
 		char *p = instp->mymessage;
 		while ((p = strstr(p, "\\n")) != NULL) {
-			*p = '\n'; /* Replace the literal \n with a newline character */
+			*p = '\n';								  /* Replace the literal \n with a newline character */
 			memmove(p + 1, p + 2, strlen(p + 2) + 1); /* Shift the string to remove the \n */
-			p++; 
+			p++;
 		}
 	}
 
@@ -4230,7 +4197,7 @@ static int unload_module(void)
 	return 0;
 }
 
- static int load_module(void)
+static int load_module(void)
 {
 	struct ast_config *cfg;
 	char *ctg = NULL;

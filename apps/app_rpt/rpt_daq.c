@@ -10,7 +10,7 @@
 #include "app_rpt.h"
 #include "rpt_daq.h"
 #include "rpt_uchameleon.h"
-#include "rpt_utils.h" /* use explode_string */
+#include "rpt_utils.h"	 /* use explode_string */
 #include "rpt_channel.h" /* use wait_interval, sayfile */
 
 /*
@@ -176,7 +176,7 @@ void daq_init(struct ast_config *cfg)
 			ast_log(LOG_WARNING, "Error in daq_entries stanza on line %d\n", var->lineno);
 			break;
 		}
-		ast_copy_string(s, var->value, sizeof(s) - 1);	/* Make copy of device entry */
+		ast_copy_string(s, var->value, sizeof(s) - 1); /* Make copy of device entry */
 		if (!(p = ast_variable_retrieve(cfg, s, "hwtype"))) {
 			ast_log(LOG_WARNING, "hwtype variable required for %s stanza\n", s);
 			break;
@@ -203,7 +203,6 @@ void daq_init(struct ast_config *cfg)
 		}
 		var = var->next;
 	}
-
 }
 
 void daq_uninit(void)
@@ -227,14 +226,14 @@ int handle_userout_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 	char *argv[11];
 	struct daq_entry_tag *t;
 
-	if (!(myargs = ast_strdup(args))) {	/* Make a local copy to slice and dice */
+	if (!(myargs = ast_strdup(args))) { /* Make a local copy to slice and dice */
 		return -1;
 	}
 
 	ast_debug(3, "String: %s\n", myargs);
 
 	argc = explode_string(myargs, argv, ARRAY_LEN(argv), ',', 0);
-	if (argc < 4) {				/* Must have at least 4 arguments */
+	if (argc < 4) { /* Must have at least 4 arguments */
 		ast_log(LOG_WARNING, "Incorrect number of arguments for USEROUT function");
 		ast_free(myargs);
 		return -1;
@@ -266,7 +265,7 @@ int handle_userout_tele(struct rpt *myrpt, struct ast_channel *mychannel, char *
 
 	/* Say the files one by one at argc index 3 */
 	for (i = 3; i < argc && !res; i++) {
-		res = sayfile(mychannel, argv[i]);	/* Say the next word in the list */
+		res = sayfile(mychannel, argv[i]); /* Say the next word in the list */
 	}
 
 done:

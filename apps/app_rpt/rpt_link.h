@@ -1,5 +1,6 @@
 
-/*! \file
+/*!
+ * \file
  *
  * \brief RPT link functions
  */
@@ -107,7 +108,7 @@ struct rpt_connect_data {
 	enum link_mode mode;
 	unsigned int perma:1; /* permanent link */
 	enum rpt_command_source command_source;
-	struct rpt_link *mylink; /* Must remain valid for thread lifetime or be ref-counted. */
+	struct rpt_link *mylink;   /* Must remain valid for thread lifetime or be ref-counted. */
 	char nodedata[MAXNODESTR]; /* Node data from node_lookup() */
 };
 

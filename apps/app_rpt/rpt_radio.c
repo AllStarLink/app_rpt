@@ -111,7 +111,6 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 
 	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 		for (i = 0; i < txbytes - 1; i++) {
-
 			prm.radpar = DAHDI_RADPAR_REMCOMMAND;
 			prm.data = 0;
 			prm.buf[0] = txbuf[i];

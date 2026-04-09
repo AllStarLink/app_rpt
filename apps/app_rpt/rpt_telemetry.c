@@ -9,7 +9,7 @@
 
 #include "asterisk/channel.h"
 #include "asterisk/cli.h"
-#include "asterisk/pbx.h"		/* functions */
+#include "asterisk/pbx.h" /* functions */
 #include "asterisk/say.h"
 #include "asterisk/indications.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
@@ -275,13 +275,13 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 	static char *filter_keywords[] = { "none", "max", "min", "stmin", "stmax", "stavg", NULL };
 	struct daq_entry_tag *entry;
 
-	if (!(myargs = ast_strdup(args))) {	/* Make a local copy to slice and dice */
+	if (!(myargs = ast_strdup(args))) { /* Make a local copy to slice and dice */
 		return -1;
 	}
 
 	i = explode_string(myargs, argv, ARRAY_LEN(argv), ',', 0);
 
-	if ((i != 4) && (i != 3)) {	/* Must have 3 or 4 substrings, no more, no less */
+	if ((i != 4) && (i != 3)) { /* Must have 3 or 4 substrings, no more, no less */
 		ast_log(LOG_WARNING, "Wrong number of arguments for meter telemetry function is: %d s/b 3 or 4", i);
 		ast_free(myargs);
 		return -1;
@@ -353,9 +353,9 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 		return -1;
 	}
 
-	if (!strncmp("scale", meter_face, 5)) {	/* scale function? */
+	if (!strncmp("scale", meter_face, 5)) { /* scale function? */
 		metertype = 1;
-		if ((!(end = strchr(meter_face, ')'))) || (!(start = strchr(meter_face, '('))) || (!end[1]) || (!end[2]) || (end[1] != ',')) {	/* Properly formed? */
+		if ((!(end = strchr(meter_face, ')'))) || (!(start = strchr(meter_face, '('))) || (!end[1]) || (!end[2]) || (end[1] != ',')) { /* Properly formed? */
 			ast_log(LOG_WARNING, "Syntax error in meter face %s\n", argv[2]);
 			ast_free(myargs);
 			ast_free(meter_face);
@@ -379,10 +379,10 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 			ast_free(meter_face);
 			return -1;
 		}
-	} else if (!strncmp("range", meter_face, 5)) {	/* range function */
+	} else if (!strncmp("range", meter_face, 5)) { /* range function */
 		metertype = 2;
 
-		if ((!(end = strchr(meter_face, ')'))) || (!(start = strchr(meter_face, '('))) || (!end[1]) || (!end[2]) || (end[1] != ',')) {	/* Properly formed? */
+		if ((!(end = strchr(meter_face, ')'))) || (!(start = strchr(meter_face, '('))) || (!end[1]) || (!end[2]) || (end[1] != ',')) { /* Properly formed? */
 			ast_log(LOG_WARNING, "Syntax error in meter face %s\n", argv[2]);
 			ast_free(myargs);
 			ast_free(meter_face);
@@ -402,9 +402,9 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 			return -1;
 		}
 
-	} else if (!strncmp("bit", meter_face, 3)) {	/* bit function */
+	} else if (!strncmp("bit", meter_face, 3)) { /* bit function */
 		metertype = 3;
-		if ((!(end = strchr(meter_face, ')'))) || (!(start = strchr(meter_face, '('))) || (!end[1]) || (!end[2]) || (end[1] != ',')) {	/* Properly formed? */
+		if ((!(end = strchr(meter_face, ')'))) || (!(start = strchr(meter_face, '('))) || (!end[1]) || (!end[2]) || (end[1] != ',')) { /* Properly formed? */
 			ast_log(LOG_WARNING, "Syntax error in meter face %s\n", argv[2]);
 			ast_free(myargs);
 			ast_free(meter_face);
@@ -440,7 +440,7 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 		res = daq_do_long(entry, pin, DAQ_CMD_IN, NULL, &val, NULL);
 	}
 
-	if (res) {					/* DAQ Subsystem is down */
+	if (res) { /* DAQ Subsystem is down */
 		ast_free(myargs);
 		ast_free(meter_face);
 		return res;
@@ -478,7 +478,7 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 		}
 	}
 
-	if (rpt_debug_level() >= 3) {			/* Spew the variables */
+	if (rpt_debug_level() >= 3) { /* Spew the variables */
 		ast_debug(3, "device = %d, pin = %d, pintype = %d, metertype = %d\n", device, pin, pintype, metertype);
 		ast_debug(3, "raw value = %d\n", val);
 
@@ -514,11 +514,11 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 	res = 0;
 
 	for (i = 0; i < files && !res; i++) {
-		if (sound_files[i][0] == '?') {	/* Insert sample */
+		if (sound_files[i][0] == '?') { /* Insert sample */
 			if (metertype == 1) {
 				int integer, decimal, precision = 0;
 
-				if ((scalediv >= 10) && (scalediv < 100)) {	/* Adjust precision of decimal places */
+				if ((scalediv >= 10) && (scalediv < 100)) { /* Adjust precision of decimal places */
 					precision = 10;
 				} else if (scalediv >= 100) {
 					precision = 100;
@@ -549,7 +549,7 @@ static int handle_meter_tele(struct rpt *myrpt, struct ast_channel *mychannel, c
 				res = sayfile(mychannel, bitphrases[(val) ? 1 : 0]);
 			}
 		} else {
-			res = sayfile(mychannel, sound_files[i]);	/* Say the next word in the list */
+			res = sayfile(mychannel, sound_files[i]); /* Say the next word in the list */
 		}
 	}
 done:
@@ -710,7 +710,7 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	rpt_telemetry(myrpt, VARCMD, cmd);
 }
 
-/*! Send telemetry tones */
+/*! \brief Send telemetry tones */
 static int send_tone_telemetry(struct ast_channel *chan, const char *tonestring)
 {
 	char *p, *stringp;
@@ -750,7 +750,7 @@ static int send_tone_telemetry(struct ast_channel *chan, const char *tonestring)
 	}
 
 	if (!res) {
-		res = play_tone_pair(chan, 0, 0, 100, 0);	/* This is needed to ensure the last tone segment is timed correctly */
+		res = play_tone_pair(chan, 0, 0, 100, 0); /* This is needed to ensure the last tone segment is timed correctly */
 	}
 
 	if (!res) {
@@ -790,17 +790,17 @@ static int telem_any(struct rpt *myrpt, struct ast_channel *chan, const char *en
 		}
 
 		switch (c) {
-		case 'I':				/* Morse ID */
+		case 'I': /* Morse ID */
 			donodelog_fmt(myrpt, "TELEMETRY,%s,%s(I)", myrpt->name, why);
 			res = send_morse(chan, entry + 2, morsespeed, morseidfreq, morseidampl);
 			break;
 
-		case 'M':				/* Morse Message */
+		case 'M': /* Morse Message */
 			donodelog_fmt(myrpt, "TELEMETRY,%s,%s(M)", myrpt->name, why);
 			res = send_morse(chan, entry + 2, morsespeed, morsefreq, morseampl);
 			break;
 
-		case 'T':				/* Tone sequence */
+		case 'T': /* Tone sequence */
 			donodelog_fmt(myrpt, "TELEMETRY,%s,%s(T),%s", myrpt->name, why, entry + 2);
 			res = send_tone_telemetry(chan, entry + 2);
 			break;
@@ -817,22 +817,12 @@ static int telem_any(struct rpt *myrpt, struct ast_channel *chan, const char *en
 }
 
 /*! \brief Telemetry defaults */
-static struct telem_defaults tele_defs[] = {
-	{ "ct1", "|t(350,0,100,3072)(500,0,100,3072)(660,0,100,3072)" },
-	{ "ct2", "|t(660,880,150,3072)" },
-	{ "ct3", "|t(440,0,150,3072)" },
-	{ "ct4", "|t(550,0,150,3072)" },
-	{ "ct5", "|t(660,0,150,3072)" },
-	{ "ct6", "|t(880,0,150,3072)" },
-	{ "ct7", "|t(660,440,150,3072)" },
-	{ "ct8", "|t(700,1100,150,3072)" },
-	{ "remotemon", "|t(1600,0,75,2048)" },
-	{ "remotetx", "|t(2000,0,75,2048)(0,0,75,0)(1600,0,75,2048)" },
-	{ "cmdmode", "|t(900,904,200,2048)" },
-	{ "functcomplete", "|t(1000,0,100,2048)(0,0,100,0)(1000,0,100,2048)" },
-	{ "remcomplete", "|t(650,0,100,2048)(0,0,100,0)(650,0,100,2048)(0,0,100,0)(650,0,100,2048)" },
-	{ "pfxtone", "|t(350,440,30000,3072)" }
-};
+static struct telem_defaults tele_defs[] = { { "ct1", "|t(350,0,100,3072)(500,0,100,3072)(660,0,100,3072)" },
+	{ "ct2", "|t(660,880,150,3072)" }, { "ct3", "|t(440,0,150,3072)" }, { "ct4", "|t(550,0,150,3072)" }, { "ct5", "|t(660,0,150,3072)" },
+	{ "ct6", "|t(880,0,150,3072)" }, { "ct7", "|t(660,440,150,3072)" }, { "ct8", "|t(700,1100,150,3072)" },
+	{ "remotemon", "|t(1600,0,75,2048)" }, { "remotetx", "|t(2000,0,75,2048)(0,0,75,0)(1600,0,75,2048)" },
+	{ "cmdmode", "|t(900,904,200,2048)" }, { "functcomplete", "|t(1000,0,100,2048)(0,0,100,0)(1000,0,100,2048)" },
+	{ "remcomplete", "|t(650,0,100,2048)(0,0,100,0)(650,0,100,2048)(0,0,100,0)(650,0,100,2048)" }, { "pfxtone", "|t(350,440,30000,3072)" } };
 
 /*! \brief Looks up a telemetry name in the config file, and does a telemetry response as configured.
  * 4 types of telemetry are handled: Morse ID, Morse Message, Tone Sequence, and a File containing a recording.
@@ -899,7 +889,8 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 	return res;
 }
 
-/*! \brief Processes various telemetry commands that are in the myrpt structure
+/*!
+ * \brief Processes various telemetry commands that are in the myrpt structure
  * Used extensively when links are built or torn down and other events are processed
  * by the rpt_master threads.
  * \retval 1 if PBX process handled telemetry command, 0 if not.
@@ -1122,7 +1113,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 			return 0;
 		}
 
-		if (!res) {				/* Say "Y" */
+		if (!res) { /* Say "Y" */
 			ast_say_number(mychannel, vminor, "", ast_channel_language(mychannel), (char *) NULL);
 		}
 
@@ -1712,7 +1703,7 @@ void *rpt_tele_thread(void *this)
 
 		imdone = 1;
 		break;
-#ifdef	_MDC_ENCODE_H_
+#ifdef _MDC_ENCODE_H_
 	case MDC1200: {
 		struct mdcparams *mdcp;
 
@@ -1757,7 +1748,7 @@ void *rpt_tele_thread(void *this)
 		/* Reset the Unkey to CT timer */
 		x = get_wait_interval(myrpt, DLY_UNKEY);
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->unkeytocttimer = x;	/* Must be protected as it is changed below */
+		myrpt->unkeytocttimer = x; /* Must be protected as it is changed below */
 		rpt_mutex_unlock(&myrpt->lock);
 
 		/* If there's one already queued, don't do another */
@@ -1801,7 +1792,7 @@ void *rpt_tele_thread(void *this)
 		}
 
 		/*
-		 * Now, the carrier on the rptr rx should be gone. 
+		 * Now, the carrier on the rptr rx should be gone.
 		 * If it re-appeared, then forget about sending the CT
 		 */
 		if (myrpt->keyed) {
@@ -1809,7 +1800,7 @@ void *rpt_tele_thread(void *this)
 			break;
 		}
 
-		rpt_mutex_lock(&myrpt->lock);	/* Update the kerchunk counters */
+		rpt_mutex_lock(&myrpt->lock); /* Update the kerchunk counters */
 		myrpt->dailykerchunks++;
 		myrpt->totalkerchunks++;
 		rpt_mutex_unlock(&myrpt->lock);
@@ -1935,7 +1926,7 @@ treataslocal:
 			res = telem_send_ct(myrpt, mychannel, "remotect", mytele->mode == UNKEY ? "UNKEY" : "LOCUNKEY", 200);
 		}
 
-#if	defined(_MDC_DECODE_H_) && defined(MDC_SAY_WHEN_DOING_CT)
+#if defined(_MDC_DECODE_H_) && defined(MDC_SAY_WHEN_DOING_CT)
 		if (myrpt->lastunit) {
 			char mystr[10];
 
@@ -2000,7 +1991,7 @@ treataslocal:
 
 				x = get_wait_interval(myrpt, DLY_UNKEY);
 				rpt_mutex_lock(&myrpt->lock);
-				myrpt->unkeytocttimer = x;	/* Must be protected as it is changed below */
+				myrpt->unkeytocttimer = x; /* Must be protected as it is changed below */
 				rpt_mutex_unlock(&myrpt->lock);
 
 				/* Wait for the telemetry timer to expire */
@@ -2022,7 +2013,7 @@ treataslocal:
 			}
 			goto treataslocal;
 		}
-		if (myrpt->p.nolocallinkct) {	/* if no CT if this guy is on local system */
+		if (myrpt->p.nolocallinkct) { /* if no CT if this guy is on local system */
 			int v, w;
 			int nrpts = rpt_num_rpts();
 			w = 0;
@@ -2048,7 +2039,7 @@ treataslocal:
 
 		/* Reset the Unkey to CT timer */
 		x = get_wait_interval(myrpt, DLY_LINKUNKEY);
-		mytele->mylink.linkunkeytocttimer = x;	/* Must be protected as it is changed below */
+		mytele->mylink.linkunkeytocttimer = x; /* Must be protected as it is changed below */
 
 		/* If there's one already queued, don't do another */
 		tlist = myrpt->tele.next;
@@ -2150,7 +2141,8 @@ treataslocal:
 		res = saynode(myrpt, mychannel, mytele->mylink.name);
 
 		if (!res) {
-			res = ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? "rpt/remote_disc" : "rpt/remote_busy"), ast_channel_language(mychannel));
+			res = ast_streamfile(mychannel, ((mytele->mylink.hasconnected) ? "rpt/remote_disc" : "rpt/remote_busy"),
+				ast_channel_language(mychannel));
 		}
 
 		break;
@@ -2417,64 +2409,64 @@ treataslocal:
 		res = 0;
 
 		switch (mytele->submode.i) {
-		case 100:				/* RX PL Off */
+		case 100: /* RX PL Off */
 			sayfile(mychannel, "rpt/rxpl");
 			sayfile(mychannel, "rpt/off");
 			break;
 
-		case 101:				/* RX PL On */
+		case 101: /* RX PL On */
 			sayfile(mychannel, "rpt/rxpl");
 			sayfile(mychannel, "rpt/on");
 			break;
 
-		case 102:				/* TX PL Off */
+		case 102: /* TX PL Off */
 			sayfile(mychannel, "rpt/txpl");
 			sayfile(mychannel, "rpt/off");
 			break;
 
-		case 103:				/* TX PL On */
+		case 103: /* TX PL On */
 			sayfile(mychannel, "rpt/txpl");
 			sayfile(mychannel, "rpt/on");
 			break;
 
-		case 104:				/* Low Power */
+		case 104: /* Low Power */
 			sayfile(mychannel, "rpt/lopwr");
 			break;
 
-		case 105:				/* Medium Power */
+		case 105: /* Medium Power */
 			sayfile(mychannel, "rpt/medpwr");
 			break;
 
-		case 106:				/* Hi Power */
+		case 106: /* Hi Power */
 			sayfile(mychannel, "rpt/hipwr");
 			break;
 
-		case 113:				/* Scan down slow */
+		case 113: /* Scan down slow */
 			sayfile(mychannel, "rpt/down");
 			sayfile(mychannel, "rpt/slow");
 			break;
 
-		case 114:				/* Scan down quick */
+		case 114: /* Scan down quick */
 			sayfile(mychannel, "rpt/down");
 			sayfile(mychannel, "rpt/quick");
 			break;
 
-		case 115:				/* Scan down fast */
+		case 115: /* Scan down fast */
 			sayfile(mychannel, "rpt/down");
 			sayfile(mychannel, "rpt/fast");
 			break;
 
-		case 116:				/* Scan up slow */
+		case 116: /* Scan up slow */
 			sayfile(mychannel, "rpt/up");
 			sayfile(mychannel, "rpt/slow");
 			break;
 
-		case 117:				/* Scan up quick */
+		case 117: /* Scan up quick */
 			sayfile(mychannel, "rpt/up");
 			sayfile(mychannel, "rpt/quick");
 			break;
 
-		case 118:				/* Scan up fast */
+		case 118: /* Scan up fast */
 			sayfile(mychannel, "rpt/up");
 			sayfile(mychannel, "rpt/fast");
 			break;
@@ -2655,7 +2647,7 @@ treataslocal:
 			break;
 		}
 
-		if (myrpt->remmode == REM_MODE_FM) {	/* Mode FM? */
+		if (myrpt->remmode == REM_MODE_FM) { /* Mode FM? */
 			switch (myrpt->offset) {
 			case REM_MINUS:
 				res = sayfile(mychannel, "rpt/minus");
@@ -2672,7 +2664,7 @@ treataslocal:
 			default:
 				break;
 			}
-		} else {				/* Must be USB, LSB, or AM */
+		} else { /* Must be USB, LSB, or AM */
 			switch (myrpt->remmode) {
 			case REM_MODE_USB:
 				res = saycharstr(mychannel, "USB");
@@ -2723,9 +2715,8 @@ treataslocal:
 			}
 		}
 
-		rbimode = ((!strncmp(myrpt->remoterig, REMOTE_RIG_RBI, 3))
-				   || (!strncmp(myrpt->remoterig, REMOTE_RIG_FT100, 3))
-				   || (!strncmp(myrpt->remoterig, REMOTE_RIG_IC706, 3)));
+		rbimode = ((!strncmp(myrpt->remoterig, REMOTE_RIG_RBI, 3)) || (!strncmp(myrpt->remoterig, REMOTE_RIG_FT100, 3)) ||
+				   (!strncmp(myrpt->remoterig, REMOTE_RIG_IC706, 3)));
 
 		if (res || (sayfile(mychannel, "rpt/rxpl") == -1)) {
 			break;
@@ -2733,14 +2724,12 @@ treataslocal:
 			break;
 		} else if ((sayfile(mychannel, "rpt/frequency") == -1) || (saycharstr(mychannel, myrpt->rxpl) == -1)) {
 			break;
-		} else if ((!rbimode) && ((sayfile(mychannel, "rpt/txpl") == -1) ||
-						   (sayfile(mychannel, "rpt/frequency") == -1) || (saycharstr(mychannel, myrpt->txpl) == -1))) {
+		} else if ((!rbimode) && ((sayfile(mychannel, "rpt/txpl") == -1) || (sayfile(mychannel, "rpt/frequency") == -1) ||
+									 (saycharstr(mychannel, myrpt->txpl) == -1))) {
 			break;
-		} else if (myrpt->remmode == REM_MODE_FM) {	/* Mode FM? */
-			if ((sayfile(mychannel, "rpt/rxpl") == -1) ||
-				(sayfile(mychannel, ((myrpt->rxplon) ? "rpt/on" : "rpt/off")) == -1) ||
-				(sayfile(mychannel, "rpt/txpl") == -1)
-				|| (sayfile(mychannel, ((myrpt->txplon) ? "rpt/on" : "rpt/off")) == -1)) {
+		} else if (myrpt->remmode == REM_MODE_FM) { /* Mode FM? */
+			if ((sayfile(mychannel, "rpt/rxpl") == -1) || (sayfile(mychannel, ((myrpt->rxplon) ? "rpt/on" : "rpt/off")) == -1) ||
+				(sayfile(mychannel, "rpt/txpl") == -1) || (sayfile(mychannel, ((myrpt->txplon) ? "rpt/on" : "rpt/off")) == -1)) {
 				break;
 			}
 		}
@@ -2907,11 +2896,11 @@ treataslocal:
 
 		imdone = 1;
 		break;
-	case LASTNODEKEY:			/* Identify last node which keyed us up */
+	case LASTNODEKEY: /* Identify last node which keyed us up */
 		rpt_mutex_lock(&myrpt->lock);
 
 		if (!ast_strlen_zero(myrpt->lastnodewhichkeyedusup)) {
-			p = ast_strdup(myrpt->lastnodewhichkeyedusup);	/* Make a local copy of the node name */
+			p = ast_strdup(myrpt->lastnodewhichkeyedusup); /* Make a local copy of the node name */
 
 			if (!p) {
 				imdone = 1;
@@ -2924,7 +2913,7 @@ treataslocal:
 		rpt_mutex_unlock(&myrpt->lock);
 
 		if (!p) {
-			imdone = 1;			/* no node previously keyed us up, or the node which did has been disconnected */
+			imdone = 1; /* no node previously keyed us up, or the node which did has been disconnected */
 			break;
 		}
 
@@ -2939,7 +2928,7 @@ treataslocal:
 		imdone = 1;
 		break;
 
-	case UNAUTHTX:				/* Say unauthorized transmit frequency */
+	case UNAUTHTX: /* Say unauthorized transmit frequency */
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {
 			break;
 		}
@@ -2948,7 +2937,7 @@ treataslocal:
 		imdone = 1;
 		break;
 
-	case PARROT:				/* Repeat stuff */
+	case PARROT: /* Repeat stuff */
 		snprintf(mystr, sizeof(mystr), PARROTFILE, myrpt->name, mytele->parrot);
 
 		if (ast_fileexists(mystr, NULL, ast_channel_language(mychannel)) <= 0) {
@@ -2991,8 +2980,9 @@ treataslocal:
 			res = ast_stream_and_wait(mychannel, "rpt/timeout-warning", "");
 		}
 
-		if (!res) {				/* Say number of seconds */
-			ast_say_number(mychannel, myrpt->p.remotetimeout - (t - myrpt->last_activity_time), "", ast_channel_language(mychannel), (char *) NULL);
+		if (!res) { /* Say number of seconds */
+			ast_say_number(mychannel, myrpt->p.remotetimeout - (t - myrpt->last_activity_time), "",
+				ast_channel_language(mychannel), (char *) NULL);
 		}
 
 		if (!res) {
@@ -3012,8 +3002,9 @@ treataslocal:
 			res = ast_stream_and_wait(mychannel, "rpt/act-timeout-warning", "");
 		}
 
-		if (!res) {				/* Say number of seconds */
-			ast_say_number(mychannel, myrpt->p.remoteinacttimeout - (t - myrpt->last_activity_time), "", ast_channel_language(mychannel), (char *) NULL);
+		if (!res) { /* Say number of seconds */
+			ast_say_number(mychannel, myrpt->p.remoteinacttimeout - (t - myrpt->last_activity_time), "",
+				ast_channel_language(mychannel), (char *) NULL);
 		}
 
 		if (!res) {
@@ -3065,7 +3056,7 @@ treataslocal:
 			break;
 		}
 
-		if (!res) {				/* Say "X" */
+		if (!res) { /* Say "X" */
 			ast_say_number(mychannel, VERSION_MAJOR, "", ast_channel_language(mychannel), (char *) NULL);
 		}
 
@@ -3406,7 +3397,7 @@ treataslocal:
 	}
 
 	ast_free(mytele);
-#ifdef  APP_RPT_LOCK_DEBUG
+#ifdef APP_RPT_LOCK_DEBUG
 	{
 		struct lockthread *t;
 
@@ -3570,7 +3561,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 	}
 
-	if (!myrpt->remote) {		/* dont do if we are a remote */
+	if (!myrpt->remote) { /* dont do if we are a remote */
 		/* send appropriate commands to everyone on link(s) */
 		switch (mode) {
 		case REMGO:
@@ -3674,7 +3665,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			return;
 
 		case STATS_GPS:
-			
+
 			/* If the app_gps custom function GPS_READ exists, read the GPS position */
 			if (!ast_custom_function_find("GPS_READ")) {
 				return;
@@ -3858,8 +3849,8 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		if (mylink) {
 			memcpy(&tele->mylink, mylink, sizeof(struct rpt_link));
 		}
-	} else if ((mode == ARB_ALPHA) || (mode == REV_PATCH) ||
-			   (mode == PLAYBACK) || (mode == LOCALPLAY) || (mode == VARCMD) || (mode == METER) || (mode == USEROUT)) {
+	} else if ((mode == ARB_ALPHA) || (mode == REV_PATCH) || (mode == PLAYBACK) || (mode == LOCALPLAY) || (mode == VARCMD) ||
+			   (mode == METER) || (mode == USEROUT)) {
 		ast_copy_string(tele->param, (char *) data, TELEPARAMSIZE);
 	}
 

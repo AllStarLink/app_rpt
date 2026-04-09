@@ -18,7 +18,8 @@
  * at the top of the source tree.
  */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief Resource module for chan_usbradio and chan_simpleusb
  *
@@ -62,18 +63,18 @@
 #include <soundcard.h>
 #endif
 
-#include "asterisk/lock.h"			
+#include "asterisk/lock.h"
 #include "asterisk/logger.h"
 #include "asterisk/module.h"
-#include "asterisk/cli.h"			
-#include "asterisk/poll-compat.h" 	/* Used for polling */
+#include "asterisk/cli.h"
+#include "asterisk/poll-compat.h" /* Used for polling */
 #include "asterisk/config.h"
 
 #define CONFIG_FILE "res_usbradio.conf"
 
 AST_MUTEX_DEFINE_STATIC(usb_list_lock);
 
-/*! 
+/*!
  * \var usb_device_list
  * \brief Each device string in usb_device_list is delimited with zero.  The
  * final element is zero.
@@ -81,7 +82,7 @@ AST_MUTEX_DEFINE_STATIC(usb_list_lock);
 static char *usb_device_list = NULL;
 static int usb_device_list_size = 0;
 
-/*! 
+/*!
  * \brief Structure for defined usb devices.
  */
 struct usb_device_entry {
@@ -91,20 +92,20 @@ struct usb_device_entry {
 	AST_LIST_ENTRY(usb_device_entry) entry;
 };
 
-/*! 
+/*!
  * \brief Array of known compatible usb devices.
  */
 const struct usb_device_entry known_devices[] = {
-	{ C108_VENDOR_ID, C108_PRODUCT_ID,   0xfffc, {NULL} },
-	{ C108_VENDOR_ID, C108B_PRODUCT_ID,  0xffff, {NULL} },
-	{ C108_VENDOR_ID, C108AH_PRODUCT_ID, 0xffff, {NULL} },
-	{ C108_VENDOR_ID, C119A_PRODUCT_ID,  0xffff, {NULL} },
-	{ C108_VENDOR_ID, C119B_PRODUCT_ID,  0xffff, {NULL} },
-	{ C108_VENDOR_ID, N1KDO_PRODUCT_ID,  0xff00, {NULL} },
-	{ C108_VENDOR_ID, C119_PRODUCT_ID,   0xffff, {NULL} },
+	{ C108_VENDOR_ID, C108_PRODUCT_ID, 0xfffc, { NULL } },
+	{ C108_VENDOR_ID, C108B_PRODUCT_ID, 0xffff, { NULL } },
+	{ C108_VENDOR_ID, C108AH_PRODUCT_ID, 0xffff, { NULL } },
+	{ C108_VENDOR_ID, C119A_PRODUCT_ID, 0xffff, { NULL } },
+	{ C108_VENDOR_ID, C119B_PRODUCT_ID, 0xffff, { NULL } },
+	{ C108_VENDOR_ID, N1KDO_PRODUCT_ID, 0xff00, { NULL } },
+	{ C108_VENDOR_ID, C119_PRODUCT_ID, 0xffff, { NULL } },
 };
 
-/*! 
+/*!
  * \brief Linked list of user defined usb devices.
  */
 static AST_RWLIST_HEAD_STATIC(user_devices, usb_device_entry);
@@ -207,15 +208,15 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 void ast_radio_hid_set_outputs(struct usb_dev_handle *handle, unsigned char *outputs)
 {
 	usleep(1500);
-	usb_control_msg(handle, USB_ENDPOINT_OUT + USB_TYPE_CLASS + USB_RECIP_INTERFACE, 
-		HID_REPORT_SET, 0 + (HID_RT_OUTPUT << 8), C108_HID_INTERFACE, (char *) outputs, 4, 5000);
+	usb_control_msg(handle, USB_ENDPOINT_OUT + USB_TYPE_CLASS + USB_RECIP_INTERFACE, HID_REPORT_SET, 0 + (HID_RT_OUTPUT << 8),
+		C108_HID_INTERFACE, (char *) outputs, 4, 5000);
 }
 
 void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inputs)
 {
 	usleep(1500);
-	usb_control_msg(handle, USB_ENDPOINT_IN + USB_TYPE_CLASS + USB_RECIP_INTERFACE, 
-		HID_REPORT_GET, 0 + (HID_RT_INPUT << 8), C108_HID_INTERFACE, (char *) inputs, 4, 5000);
+	usb_control_msg(handle, USB_ENDPOINT_IN + USB_TYPE_CLASS + USB_RECIP_INTERFACE, HID_REPORT_GET, 0 + (HID_RT_INPUT << 8),
+		C108_HID_INTERFACE, (char *) inputs, 4, 5000);
 }
 
 /*!
@@ -225,7 +226,7 @@ void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inpu
  *
  *	Four bytes are passed to the device to configure it for an EEPROM read.
  *	The first byte should be 0x80, the fourth byte should be 0x80 or'd with
- *	the address to read.  
+ *	the address to read.
  *
  *	After the address has been set, a get input is done to read the returned
  *	bytes.
@@ -242,10 +243,10 @@ static unsigned short read_eeprom(struct usb_dev_handle *handle, int addr)
 	buf[1] = 0;
 	buf[2] = 0;
 	buf[3] = 0x80 | (addr & 0x3f);
-	
+
 	usleep(500);
 	ast_radio_hid_set_outputs(handle, buf);
-	
+
 	memset(buf, 0, sizeof(buf));
 	usleep(500);
 	ast_radio_hid_get_inputs(handle, buf);
@@ -257,7 +258,7 @@ static unsigned short read_eeprom(struct usb_dev_handle *handle, int addr)
  * 	Write a memory position in the EEPROM attached to the CM-XXX device.
  *	One memory position is two bytes.
  *
- *	Four bytes are passed to the device to write the value.  The first byte 
+ *	Four bytes are passed to the device to write the value.  The first byte
  *	should be 0x80, the second byte should be the lsb of the data, the third
  *	byte is the msb of the data, the fourth byte should be 0xC0 or'd with
  *	the address to write.
@@ -278,7 +279,7 @@ static void write_eeprom(struct usb_dev_handle *handle, int addr, unsigned short
 	buf[1] = data & 0xff;
 	buf[2] = data >> 8;
 	buf[3] = 0xc0 | (addr & 0x3f);
-	
+
 	usleep(2000);
 	ast_radio_hid_set_outputs(handle, buf);
 }
@@ -322,7 +323,7 @@ static int is_known_device(struct usb_device *dev)
 {
 	int index;
 	int matched_entry = 0;
-	
+
 	for (index = 0; index < ARRAY_LEN(known_devices); index++) {
 		if (known_devices[index].idVendor == dev->descriptor.idVendor &&
 			known_devices[index].idProduct == (dev->descriptor.idProduct & known_devices[index].idMask)) {
@@ -344,11 +345,10 @@ static int is_known_device(struct usb_device *dev)
 static int is_user_device(struct usb_device *dev)
 {
 	struct usb_device_entry *device;
-	
+
 	AST_RWLIST_RDLOCK(&user_devices);
 	AST_LIST_TRAVERSE(&user_devices, device, entry) {
-		if (dev->descriptor.idVendor == device->idVendor && 
-			dev->descriptor.idProduct == device->idProduct) {
+		if (dev->descriptor.idVendor == device->idVendor && dev->descriptor.idProduct == device->idProduct) {
 			break;
 		};
 	}
@@ -400,7 +400,7 @@ int ast_radio_hid_device_mklist(void)
 					if (strcasecmp(desdev, devstr)) {
 						continue;
 					}
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)) && !defined(AST_BUILDOPT_LIMEY)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
 					sprintf(str, "/sys/class/sound/card%d/device", i);
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
@@ -494,7 +494,7 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 					if (strcasecmp(desdev, devstr)) {
 						continue;
 					}
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)) && !defined(AST_BUILDOPT_LIMEY)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
 					sprintf(str, "/sys/class/sound/card%d/device", i);
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
@@ -551,7 +551,7 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 	char str[200], desdev[200], *cp;
 
 	for (i = 0; i < 32; i++) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)) && !defined(AST_BUILDOPT_LIMEY)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
 		sprintf(str, "/sys/class/sound/card%d/device", i);
 		memset(desdev, 0, sizeof(desdev));
 		if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
@@ -639,7 +639,7 @@ int ast_radio_usb_list_check(char *devstr)
 	if (!s) {
 		return 0;
 	}
-	
+
 	ast_mutex_lock(&usb_list_lock);
 
 	while (*s) {
@@ -649,18 +649,18 @@ int ast_radio_usb_list_check(char *devstr)
 		}
 		s += strlen(s) + 1;
 	}
-	
+
 	ast_mutex_unlock(&usb_list_lock);
-	
+
 	return res;
 }
 
-char* ast_radio_usb_get_devstr(int index)
+char *ast_radio_usb_get_devstr(int index)
 {
 	/* See usb_device_list definition for the format */
 	char *s = usb_device_list;
 	int devstr_index = 0;
-	
+
 	ast_mutex_lock(&usb_list_lock);
 
 	while (*s) {
@@ -670,9 +670,9 @@ char* ast_radio_usb_get_devstr(int index)
 		devstr_index++;
 		s += strlen(s) + 1;
 	}
-	
+
 	ast_mutex_unlock(&usb_list_lock);
-	
+
 	return s;
 }
 
@@ -721,13 +721,13 @@ unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase,
 	unsigned char c;
 
 	c = 0;
-	if (haspp == 1) {			/* if its a pp dev */
+	if (haspp == 1) { /* if its a pp dev */
 		if (ioctl(ppfd, PPRSTATUS, &c) == -1) {
 			ast_log(LOG_ERROR, "Unable to read pp dev %s\n", pport);
 			c = 0;
 		}
 	}
-	if (haspp == 2) {			/* if its a direct I/O */
+	if (haspp == 2) { /* if its a direct I/O */
 		c = inb(pbase + 1);
 	}
 	return c;
@@ -740,12 +740,12 @@ unsigned char ast_radio_ppread(int haspp, unsigned int ppfd, unsigned int pbase,
 void ast_radio_ppwrite(int haspp, unsigned int ppfd, unsigned int pbase, const char *pport, unsigned char c)
 {
 #ifdef HAVE_SYS_IO
-	if (haspp == 1) {			/* if its a pp dev */
+	if (haspp == 1) { /* if its a pp dev */
 		if (ioctl(ppfd, PPWDATA, &c) == -1) {
 			ast_log(LOG_ERROR, "Unable to write pp dev %s\n", pport);
 		}
 	}
-	if (haspp == 2) {			/* if its a direct I/O */
+	if (haspp == 2) { /* if its a direct I/O */
 		outb(c, pbase);
 	}
 #else
@@ -761,7 +761,7 @@ int ast_radio_poll_input(int fd, int ms)
 	memset(&fds, 0, sizeof(fds));
 	fds[0].fd = fd;
 	fds[0].events = POLLIN;
-	
+
 	return ast_poll(fds, 1, ms);
 }
 
@@ -792,9 +792,9 @@ int ast_radio_wait_or_poll(int fd, int ms, int flag)
 void ast_radio_time(time_t *second)
 {
 	struct timespec ts;
-	
+
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	
+
 	*second = ts.tv_sec;
 }
 
@@ -802,7 +802,7 @@ struct timeval ast_radio_tvnow(void)
 {
 	struct timeval tv;
 	struct timespec ts;
-	
+
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	tv = ast_tv(ts.tv_sec, ts.tv_nsec / 1000);
@@ -810,7 +810,7 @@ struct timeval ast_radio_tvnow(void)
 	return tv;
 }
 
-#define CLIP_SAMP_THRESH       0x7eb0
+#define CLIP_SAMP_THRESH 0x7eb0
 #define CLIP_EVENT_MIN_SAMPLES 3
 int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len)
 {
@@ -847,7 +847,7 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len)
 		}
 	}
 	o->maxbuf[o->index] = max;
-	o->pwrbuf[o->index] = (unsigned int) (pwr / (double)len);
+	o->pwrbuf[o->index] = (unsigned int) (pwr / (double) len);
 	o->clipbuf[o->index] = seq_clips;
 	if (++o->index >= AUDIO_STATS_LEN) {
 		o->index = 0;
@@ -928,12 +928,12 @@ static int load_config(int reload)
 		ast_log(LOG_ERROR, "Config file %s is in an invalid format. Aborting.\n", CONFIG_FILE);
 		return -1;
 	}
-	
+
 	if (reload) {
 		cleanup_user_devices();
 	}
-	
-	/* general section 
+
+	/* general section
 	 * usb_devices format vvvv:pppp,vvvv:pppp where vvvv is usb vendor id and pppp is usb product id
 	 */
 	if ((varval = ast_variable_retrieve(cfg, "general", "usb_devices")) && !ast_strlen_zero(varval)) {
@@ -942,15 +942,14 @@ static int load_config(int reload)
 		char *value;
 		int idVendor;
 		int idProduct;
-		
+
 		value = ast_strdupa(varval);
-		
+
 		/* process the delimited list */
 		while ((item = strsep(&value, ","))) {
-			
 			if (sscanf(item, "%04x:%04x", &idVendor, &idProduct) == 2) {
 				/* allocate space for our device */
-				if(!(device = ast_calloc(1, sizeof(*device)))) {
+				if (!(device = ast_calloc(1, sizeof(*device)))) {
 					break;
 				}
 				device->idVendor = idVendor;
@@ -960,14 +959,14 @@ static int load_config(int reload)
 				AST_RWLIST_WRLOCK(&user_devices);
 				AST_LIST_INSERT_HEAD(&user_devices, device, entry);
 				AST_RWLIST_UNLOCK(&user_devices);
-				
+
 				ast_debug(1, "Loaded user defined usb device %s", item);
 			} else {
-				ast_log(LOG_WARNING,"USB Device descriptor '%s' is in the wrong format", item);
+				ast_log(LOG_WARNING, "USB Device descriptor '%s' is in the wrong format", item);
 			}
 		}
 	}
-	
+
 	ast_config_destroy(cfg);
 
 	return 0;
@@ -990,14 +989,10 @@ static int load_module(void)
 static int unload_module(void)
 {
 	cleanup_user_devices();
-	
+
 	return 0;
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER, "USB Radio Resource",
-	.support_level = AST_MODULE_SUPPORT_EXTENDED,
-	.load = load_module,
-	.unload = unload_module,
-	.reload = reload_module,
-	.load_pri = AST_MODPRI_CHANNEL_DEPEND - 5,
-);
+	.support_level = AST_MODULE_SUPPORT_EXTENDED, .load = load_module, .unload = unload_module, .reload = reload_module,
+	.load_pri = AST_MODPRI_CHANNEL_DEPEND - 5, );

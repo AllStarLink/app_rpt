@@ -16,16 +16,17 @@
  * This program is free software, distributed under the terms of
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
-  * Changes:
+ * Changes:
  * --------
  * 07/3/24 - Danny Lloyd, KB4MDD <kb4mdd@arrl.net>
  * added documentation
-*/
+ */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief TheLinkBox channel driver for Asterisk
- * 
+ *
  * \author Scott Lawson/KI4LKF <ham44865@yahoo.com>
  * \author Jim Dixon, WB6NIL <jim@lambdatel.com>
  *
@@ -48,8 +49,8 @@ Scott, KI4LKF
 Skip, WB6YMH
 
 It is invoked as tlb/identifier (like tlb0 for example)
-Example: 
-Under a node stanza in rpt.conf, 
+Example:
+Under a node stanza in rpt.conf,
 rxchannel=tlb/tlb0
 
 The tlb0 or whatever you put there must match the stanza in the
@@ -62,7 +63,7 @@ tlb.conf file.
 /*
  * Please change this revision number when you make a edit
  * use the simple format YYMMDD
-*/
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -94,11 +95,15 @@ tlb.conf file.
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
 
-#define	MAX_RXKEY_TIME 4
-#define	RTPBUF_SIZE 400			/* actually 320 would be sufficient */
+#define MAX_RXKEY_TIME 4
+#define RTPBUF_SIZE 400 /* actually 320 would be sufficient */
 #define TLB_INIT_STR 40
 
-enum { TLB_GSM, TLB_G726, TLB_ULAW };
+enum {
+	TLB_GSM,
+	TLB_G726,
+	TLB_ULAW
+};
 
 /*!
  * \brief TLB supported CODECs
@@ -110,18 +115,18 @@ struct {
 	int payt;
 	char *name;
 } tlb_codecs[] = {
-	{ 4, 33, 0, 3, "GSM" },		/* GSM */
-	{ 2, 80, 0, 97, "G726" },	/* G726 */
-	{ 2, 160, 0, 0, "ULAW" },	/* ULAW */
-	{ 0, 0, 0, 0, 0 }			/* NO MORE */
+	{ 4, 33, 0, 3, "GSM" },	  /* GSM */
+	{ 2, 80, 0, 97, "G726" }, /* G726 */
+	{ 2, 160, 0, 0, "ULAW" }, /* ULAW */
+	{ 0, 0, 0, 0, 0 }		  /* NO MORE */
 };
 
-#define	PREF_RXCODEC TLB_GSM
-#define	PREF_TXCODEC TLB_ULAW
+#define PREF_RXCODEC TLB_GSM
+#define PREF_TXCODEC TLB_ULAW
 
-#define	KEEPALIVE_TIME 50 * 10	/* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
-#define	AUTH_RETRY_MS 5000
-#define	AUTH_ABANDONED_MS 15000
+#define KEEPALIVE_TIME 50 * 10 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
+#define AUTH_RETRY_MS 5000
+#define AUTH_ABANDONED_MS 15000
 
 #define QUEUE_OVERLOAD_THRESHOLD_AST 25
 #define QUEUE_OVERLOAD_THRESHOLD_EL 20
@@ -134,8 +139,8 @@ struct {
 #define TLB_EMAIL_SIZE 32
 #define TLB_QTH_SIZE 32
 #define TLB_SERVERNAME_SIZE 63
-#define	TLB_MAX_INSTANCES 100
-#define	TLB_MAX_CALL_LIST 30
+#define TLB_MAX_INSTANCES 100
+#define TLB_MAX_CALL_LIST 30
 
 #define TLB_QUERY_NODE_EXISTS 1
 #define TLB_QUERY_GET_CALLSIGN 2
@@ -271,7 +276,7 @@ struct TLB_instance {
 	int ndenylist;
 	char *permitlist[TLB_MAX_CALL_LIST];
 	int npermitlist;
-	short rtcptimeout;				/* missed 10 heartbeats, you're out */
+	short rtcptimeout; /* missed 10 heartbeats, you're out */
 	char fdr_file[FILENAME_MAX];
 	int audio_sock;
 	int ctrl_sock;
@@ -360,7 +365,8 @@ static void *TLB_node_list = NULL;
 
 static char *config = "tlb.conf";
 
-static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
+static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *data, int *cause);
 static int TLB_call(struct ast_channel *ast, const char *dest, int timeout);
 static int TLB_hangup(struct ast_channel *ast);
 static struct ast_frame *TLB_xread(struct ast_channel *ast);
@@ -398,75 +404,57 @@ static struct ast_channel_tech TLB_tech = {
 };
 
 /*
-* CLI extensions
-*/
+ * CLI extensions
+ */
 
 static int TLB_do_nodedump(int fd, int argc, const char *const *argv);
 static int TLB_do_nodeget(int fd, int argc, const char *const *argv);
 
-static char nodedump_usage[] = "Usage: tlb nodedump\n" "       Dumps entire tlb node list\n";
+static char nodedump_usage[] = "Usage: tlb nodedump\n"
+							   "       Dumps entire tlb node list\n";
 
-static char nodeget_usage[] =
-	"Usage: tlb nodeget <nodename|callsign|ipaddr> <lookup-data>\n" "       Looks up tlb node entry\n";
+static char nodeget_usage[] = "Usage: tlb nodeget <nodename|callsign|ipaddr> <lookup-data>\n"
+							  "       Looks up tlb node entry\n";
 
 /*!
  * \brief CRC32 table
  * CRC polynomial 0xedb88320
  */
-static uint32_t crc_32_tab[] = {
-	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
-	0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
-	0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91, 0x1db71064, 0x6ab020f2,
-	0xf3b97148, 0x84be41de, 0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7,
-	0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec, 0x14015c4f, 0x63066cd9,
-	0xfa0f3d63, 0x8d080df5, 0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172,
-	0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b, 0x35b5a8fa, 0x42b2986c,
-	0xdbbbc9d6, 0xacbcf940, 0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59,
-	0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116, 0x21b4f4b5, 0x56b3c423,
-	0xcfba9599, 0xb8bda50f, 0x2802b89e, 0x5f058808, 0xc60cd9b2, 0xb10be924,
-	0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d, 0x76dc4190, 0x01db7106,
-	0x98d220bc, 0xefd5102a, 0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433,
-	0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818, 0x7f6a0dbb, 0x086d3d2d,
-	0x91646c97, 0xe6635c01, 0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e,
-	0x6c0695ed, 0x1b01a57b, 0x8208f4c1, 0xf50fc457, 0x65b0d9c6, 0x12b7e950,
-	0x8bbeb8ea, 0xfcb9887c, 0x62dd1ddf, 0x15da2d49, 0x8cd37cf3, 0xfbd44c65,
-	0x4db26158, 0x3ab551ce, 0xa3bc0074, 0xd4bb30e2, 0x4adfa541, 0x3dd895d7,
-	0xa4d1c46d, 0xd3d6f4fb, 0x4369e96a, 0x346ed9fc, 0xad678846, 0xda60b8d0,
-	0x44042d73, 0x33031de5, 0xaa0a4c5f, 0xdd0d7cc9, 0x5005713c, 0x270241aa,
-	0xbe0b1010, 0xc90c2086, 0x5768b525, 0x206f85b3, 0xb966d409, 0xce61e49f,
-	0x5edef90e, 0x29d9c998, 0xb0d09822, 0xc7d7a8b4, 0x59b33d17, 0x2eb40d81,
-	0xb7bd5c3b, 0xc0ba6cad, 0xedb88320, 0x9abfb3b6, 0x03b6e20c, 0x74b1d29a,
-	0xead54739, 0x9dd277af, 0x04db2615, 0x73dc1683, 0xe3630b12, 0x94643b84,
-	0x0d6d6a3e, 0x7a6a5aa8, 0xe40ecf0b, 0x9309ff9d, 0x0a00ae27, 0x7d079eb1,
-	0xf00f9344, 0x8708a3d2, 0x1e01f268, 0x6906c2fe, 0xf762575d, 0x806567cb,
-	0x196c3671, 0x6e6b06e7, 0xfed41b76, 0x89d32be0, 0x10da7a5a, 0x67dd4acc,
-	0xf9b9df6f, 0x8ebeeff9, 0x17b7be43, 0x60b08ed5, 0xd6d6a3e8, 0xa1d1937e,
-	0x38d8c2c4, 0x4fdff252, 0xd1bb67f1, 0xa6bc5767, 0x3fb506dd, 0x48b2364b,
-	0xd80d2bda, 0xaf0a1b4c, 0x36034af6, 0x41047a60, 0xdf60efc3, 0xa867df55,
-	0x316e8eef, 0x4669be79, 0xcb61b38c, 0xbc66831a, 0x256fd2a0, 0x5268e236,
-	0xcc0c7795, 0xbb0b4703, 0x220216b9, 0x5505262f, 0xc5ba3bbe, 0xb2bd0b28,
-	0x2bb45a92, 0x5cb36a04, 0xc2d7ffa7, 0xb5d0cf31, 0x2cd99e8b, 0x5bdeae1d,
-	0x9b64c2b0, 0xec63f226, 0x756aa39c, 0x026d930a, 0x9c0906a9, 0xeb0e363f,
-	0x72076785, 0x05005713, 0x95bf4a82, 0xe2b87a14, 0x7bb12bae, 0x0cb61b38,
-	0x92d28e9b, 0xe5d5be0d, 0x7cdcefb7, 0x0bdbdf21, 0x86d3d2d4, 0xf1d4e242,
-	0x68ddb3f8, 0x1fda836e, 0x81be16cd, 0xf6b9265b, 0x6fb077e1, 0x18b74777,
-	0x88085ae6, 0xff0f6a70, 0x66063bca, 0x11010b5c, 0x8f659eff, 0xf862ae69,
-	0x616bffd3, 0x166ccf45, 0xa00ae278, 0xd70dd2ee, 0x4e048354, 0x3903b3c2,
-	0xa7672661, 0xd06016f7, 0x4969474d, 0x3e6e77db, 0xaed16a4a, 0xd9d65adc,
-	0x40df0b66, 0x37d83bf0, 0xa9bcae53, 0xdebb9ec5, 0x47b2cf7f, 0x30b5ffe9,
-	0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6, 0xbad03605, 0xcdd70693,
-	0x54de5729, 0x23d967bf, 0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94,
-	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
-};
+static uint32_t crc_32_tab[] = { 0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
+	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988, 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91, 0x1db71064, 0x6ab020f2,
+	0xf3b97148, 0x84be41de, 0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7, 0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec,
+	0x14015c4f, 0x63066cd9, 0xfa0f3d63, 0x8d080df5, 0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172, 0x3c03e4d1, 0x4b04d447,
+	0xd20d85fd, 0xa50ab56b, 0x35b5a8fa, 0x42b2986c, 0xdbbbc9d6, 0xacbcf940, 0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59,
+	0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116, 0x21b4f4b5, 0x56b3c423, 0xcfba9599, 0xb8bda50f, 0x2802b89e, 0x5f058808,
+	0xc60cd9b2, 0xb10be924, 0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d, 0x76dc4190, 0x01db7106, 0x98d220bc, 0xefd5102a,
+	0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433, 0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818, 0x7f6a0dbb, 0x086d3d2d,
+	0x91646c97, 0xe6635c01, 0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e, 0x6c0695ed, 0x1b01a57b, 0x8208f4c1, 0xf50fc457,
+	0x65b0d9c6, 0x12b7e950, 0x8bbeb8ea, 0xfcb9887c, 0x62dd1ddf, 0x15da2d49, 0x8cd37cf3, 0xfbd44c65, 0x4db26158, 0x3ab551ce,
+	0xa3bc0074, 0xd4bb30e2, 0x4adfa541, 0x3dd895d7, 0xa4d1c46d, 0xd3d6f4fb, 0x4369e96a, 0x346ed9fc, 0xad678846, 0xda60b8d0,
+	0x44042d73, 0x33031de5, 0xaa0a4c5f, 0xdd0d7cc9, 0x5005713c, 0x270241aa, 0xbe0b1010, 0xc90c2086, 0x5768b525, 0x206f85b3,
+	0xb966d409, 0xce61e49f, 0x5edef90e, 0x29d9c998, 0xb0d09822, 0xc7d7a8b4, 0x59b33d17, 0x2eb40d81, 0xb7bd5c3b, 0xc0ba6cad,
+	0xedb88320, 0x9abfb3b6, 0x03b6e20c, 0x74b1d29a, 0xead54739, 0x9dd277af, 0x04db2615, 0x73dc1683, 0xe3630b12, 0x94643b84,
+	0x0d6d6a3e, 0x7a6a5aa8, 0xe40ecf0b, 0x9309ff9d, 0x0a00ae27, 0x7d079eb1, 0xf00f9344, 0x8708a3d2, 0x1e01f268, 0x6906c2fe,
+	0xf762575d, 0x806567cb, 0x196c3671, 0x6e6b06e7, 0xfed41b76, 0x89d32be0, 0x10da7a5a, 0x67dd4acc, 0xf9b9df6f, 0x8ebeeff9,
+	0x17b7be43, 0x60b08ed5, 0xd6d6a3e8, 0xa1d1937e, 0x38d8c2c4, 0x4fdff252, 0xd1bb67f1, 0xa6bc5767, 0x3fb506dd, 0x48b2364b,
+	0xd80d2bda, 0xaf0a1b4c, 0x36034af6, 0x41047a60, 0xdf60efc3, 0xa867df55, 0x316e8eef, 0x4669be79, 0xcb61b38c, 0xbc66831a,
+	0x256fd2a0, 0x5268e236, 0xcc0c7795, 0xbb0b4703, 0x220216b9, 0x5505262f, 0xc5ba3bbe, 0xb2bd0b28, 0x2bb45a92, 0x5cb36a04,
+	0xc2d7ffa7, 0xb5d0cf31, 0x2cd99e8b, 0x5bdeae1d, 0x9b64c2b0, 0xec63f226, 0x756aa39c, 0x026d930a, 0x9c0906a9, 0xeb0e363f,
+	0x72076785, 0x05005713, 0x95bf4a82, 0xe2b87a14, 0x7bb12bae, 0x0cb61b38, 0x92d28e9b, 0xe5d5be0d, 0x7cdcefb7, 0x0bdbdf21,
+	0x86d3d2d4, 0xf1d4e242, 0x68ddb3f8, 0x1fda836e, 0x81be16cd, 0xf6b9265b, 0x6fb077e1, 0x18b74777, 0x88085ae6, 0xff0f6a70,
+	0x66063bca, 0x11010b5c, 0x8f659eff, 0xf862ae69, 0x616bffd3, 0x166ccf45, 0xa00ae278, 0xd70dd2ee, 0x4e048354, 0x3903b3c2,
+	0xa7672661, 0xd06016f7, 0x4969474d, 0x3e6e77db, 0xaed16a4a, 0xd9d65adc, 0x40df0b66, 0x37d83bf0, 0xa9bcae53, 0xdebb9ec5,
+	0x47b2cf7f, 0x30b5ffe9, 0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6, 0xbad03605, 0xcdd70693, 0x54de5729, 0x23d967bf,
+	0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94, 0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d };
 
 /*!
  * \brief Calculate CRC32
- * \param buf		Pointer to buffer to process 
+ * \param buf		Pointer to buffer to process
  * \param len		Length of the buffer
  * \param limit		Maximum number of substrings to process.
  * \retval			Calculated CRC32.
  */
-static int32_t crc32_buf(const char* restrict buf, int len)
+static int32_t crc32_buf(const char *restrict buf, int len)
 {
 	register int32_t oldcrc32;
 	register int x = len;
@@ -480,9 +468,9 @@ static int32_t crc32_buf(const char* restrict buf, int len)
 
 /*!
  * \brief Make string uppercase
- * \param str		Pointer to string to process 
+ * \param str		Pointer to string to process
  */
-static void strupr(char* restrict str)
+static void strupr(char *restrict str)
 {
 	while (*str) {
 		*str = toupper(*str);
@@ -526,7 +514,6 @@ static int finddelim(char *str, char *strp[], size_t limit)
 	}
 	strp[i] = 0;
 	return i;
-
 }
 
 /*!
@@ -968,7 +955,7 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 
 		pvt->keepalive = KEEPALIVE_TIME;
 		pvt->instp = instances[n];
-		pvt->instp->confp = pvt;	/* save for conference mode */
+		pvt->instp->confp = pvt; /* save for conference mode */
 		pvt->rxcodec = instances[n]->pref_rxcodec;
 		pvt->txcodec = instances[n]->pref_txcodec;
 	}
@@ -978,7 +965,7 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 /*!
  * \brief Asterisk hangup function.
  * \param ast			Asterisk channel.
- * \retval 0			Always returns 0.			
+ * \retval 0			Always returns 0.
  */
 static int TLB_hangup(struct ast_channel *ast)
 {
@@ -1071,7 +1058,7 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	memset(&pkt, 0, sizeof(pkt));
 
 	/* Get a pointer to the TLB_Node entry and get and
-	 *  increment the seqno for the RTP packet 
+	 *  increment the seqno for the RTP packet
 	 */
 	ast_mutex_lock(&p->instp->lock);
 	strcpy(p->instp->TLB_node_test.ip, p->ip);
@@ -1102,12 +1089,11 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	pkt.payt = 96;
 	pkt.time = htonl(now);
 	pkt.ssrc = htonl(p->instp->call_crc);
-	ast_mutex_lock(&p->lock);	/* needs to be locked, since we are incrementing dtmfseq */
+	ast_mutex_lock(&p->lock); /* needs to be locked, since we are incrementing dtmfseq */
 	sprintf((char *) pkt.data, "DTMF%c %u %u", digit, ++p->dtmfseq, (uint32_t) now);
 	ast_mutex_unlock(&p->lock);
 	for (i = 0; i < DTMF_NPACKETS; i++) {
-		sendto(p->instp->audio_sock, (char *) &pkt, strlen((char *) pkt.data) + 12,
-			   0, (struct sockaddr *) &sin, sizeof(sin));
+		sendto(p->instp->audio_sock, (char *) &pkt, strlen((char *) pkt.data) + 12, 0, (struct sockaddr *) &sin, sizeof(sin));
 	}
 	ast_debug(1, "tlb: Sent DTMF digit %c to IP %s, port %u\n", digit, p->ip, p->port & 0xffff);
 	return 0;
@@ -1117,7 +1103,7 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
  * \brief Asterisk digit begin function.
  * \param ast			Pointer to Asterisk channel.
  * \param digit			Digit processed.
- * \retval -1			
+ * \retval -1
  */
 static int TLB_digit_begin(struct ast_channel *ast, char digit)
 {
@@ -1129,7 +1115,7 @@ static int TLB_digit_begin(struct ast_channel *ast, char digit)
  * \param ast			Pointer to Asterisk channel.
  * \param digit			Digit processed.
  * \param duration		Duration of the digit.
- * \retval -1			
+ * \retval -1
  */
 static int TLB_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
 {
@@ -1178,7 +1164,7 @@ static int TLB_text(struct ast_channel *ast, const char *text)
 /*!
  * \brief Asterisk queryoption function.
  * The calling application should populate the data buffer with the node number
- * to query information. 
+ * to query information.
  * \param chan			Pointer to Asterisk channel.
  * \param option		Query option to be performed.
  *                      1 = query node exists, 2 = query callsign for node
@@ -1221,9 +1207,9 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 		return result;
 	}
 
-	/* parse the comma delimited returned data 
+	/* parse the comma delimited returned data
 	 * format: W1XYZ,192.168.1.1,1234,G726
-	*/
+	 */
 	sval = ast_strdupa(val);
 	strupr(sval);
 	num_substrings = finddelim(sval, strs, ARRAY_LEN(strs));
@@ -1278,8 +1264,8 @@ void send_audio_all_but_one(const void *nodep, const VISIT which, const int dept
 			instp->audio_all_but_one.ssrc = htonl(instp->call_crc);
 
 			sendto(instp->audio_sock, (char *) &instp->audio_all_but_one,
-				   (tlb_codecs[p->txcodec].frame_size * tlb_codecs[p->txcodec].blocking_factor) + 12,
-				   0, (struct sockaddr *) &sin, sizeof(sin));
+				(tlb_codecs[p->txcodec].frame_size * tlb_codecs[p->txcodec].blocking_factor) + 12, 0, (struct sockaddr *) &sin,
+				sizeof(sin));
 		}
 	}
 }
@@ -1317,8 +1303,8 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 			instp->audio_all.ssrc = htonl(instp->call_crc);
 
 			sendto(instp->audio_sock, (char *) &instp->audio_all,
-				   (tlb_codecs[p->txcodec].frame_size * tlb_codecs[p->txcodec].blocking_factor) + 12,
-				   0, (struct sockaddr *) &sin, sizeof(sin));
+				(tlb_codecs[p->txcodec].frame_size * tlb_codecs[p->txcodec].blocking_factor) + 12, 0, (struct sockaddr *) &sin,
+				sizeof(sin));
 		}
 	}
 }
@@ -1353,8 +1339,7 @@ void send_audio_all(const void *nodep, const VISIT which, const int depth)
 		instp->audio_all.ssrc = htonl(instp->call_crc);
 
 		sendto(instp->audio_sock, (char *) &instp->audio_all,
-			   (tlb_codecs[p->txcodec].frame_size * tlb_codecs[p->txcodec].blocking_factor) + 12,
-			   0, (struct sockaddr *) &sin, sizeof(sin));
+			(tlb_codecs[p->txcodec].frame_size * tlb_codecs[p->txcodec].blocking_factor) + 12, 0, (struct sockaddr *) &sin, sizeof(sin));
 	}
 }
 
@@ -1372,7 +1357,6 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 	struct TLB_instance *instp = (*(struct TLB_node **) nodep)->instp;
 
 	if ((which == leaf) || (which == postorder)) {
-
 		if ((*(struct TLB_node **) nodep)->countdown >= 0) {
 			(*(struct TLB_node **) nodep)->countdown--;
 		}
@@ -1396,10 +1380,7 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 /*!
  * \brief Free node.  Empty routine.
  */
-static void free_node(void *nodep)
-{
-
-}
+static void free_node(void *nodep) {}
 
 /*!
  * \brief Find and delete a node from our internal node list.
@@ -1605,7 +1586,8 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			ast_mutex_unlock(&instp->lock);
 
 			if (instp->fdr >= 0) {
-				int res = write(instp->fdr, instp->audio_all_but_one.data, tlb_codecs[p->txcodec].blocking_factor * tlb_codecs[p->txcodec].frame_size);
+				int res = write(instp->fdr, instp->audio_all_but_one.data,
+					tlb_codecs[p->txcodec].blocking_factor * tlb_codecs[p->txcodec].frame_size);
 				if (res <= 0) {
 					ast_log(LOG_WARNING, "write failed: %s\n", strerror(errno));
 				}
@@ -1622,7 +1604,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 		if (p->txkey || p->txindex) {
 			memcpy(instp->audio_all.data + (tlb_codecs[p->txcodec].frame_size * p->txindex++), frame->data.ptr,
-				   tlb_codecs[p->txcodec].frame_size);
+				tlb_codecs[p->txcodec].frame_size);
 		}
 		if (p->txindex >= tlb_codecs[p->txcodec].blocking_factor) {
 			ast_mutex_lock(&instp->lock);
@@ -1677,7 +1659,8 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
  * \param requestor		Pointer to Asterisk channel.
  * \return 				Asterisk channel.
  */
-static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor)
+static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor)
 {
 	struct ast_channel *tmp;
 	struct TLB_instance *instp = i->instp;
@@ -1708,7 +1691,7 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 	ao2_cleanup(capabilities);
 
 	if (state == AST_STATE_RING) {
-			ast_channel_rings_set(tmp, 1);
+		ast_channel_rings_set(tmp, 1);
 	}
 	ast_channel_tech_pvt_set(tmp, i);
 	ast_channel_context_set(tmp, instp->context);
@@ -1739,7 +1722,7 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
  * \param type			Pointer to type of channel to request.
  * \param cap			Pointer to format capabilities for the channel.
  * \param assignedids	Pointer to unique ID string to assign to the channel.
- * \param requestor		Pointer to channel asking for data. 
+ * \param requestor		Pointer to channel asking for data.
  * \param data			Pointer to destination of the call.
  * \param cause			Pointer to cause of failure.
  * \retval NULL			Failure
@@ -2053,14 +2036,13 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 			if (n < 3) {
 				continue;
 			}
-			if ((!strcmp(TLB_node_key->ip, strs[1])) &&
-				(TLB_node_key->port == (unsigned short) strtoul(strs[2], NULL, 0)) && (!strcmp(call, strs[0]))) {
+			if ((!strcmp(TLB_node_key->ip, strs[1])) && (TLB_node_key->port == (unsigned short) strtoul(strs[2], NULL, 0)) &&
+				(!strcmp(call, strs[0]))) {
 				break;
 			}
 		}
 		if (!v) {
-			ast_log(LOG_ERROR, "Cannot find node entry for %s IP addr %s port %u\n",
-					call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
+			ast_log(LOG_ERROR, "Cannot find node entry for %s IP addr %s port %u\n", call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
 			ast_free(TLB_node_key);
 			ast_config_destroy(cfg);
 			return 1;
@@ -2111,8 +2093,8 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 			}
 		}
 	} else {
-		ast_log(LOG_ERROR, "tsearch() failed to add CALL = %s,ip = %s,port = %u\n",
-				TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
+		ast_log(LOG_ERROR, "tsearch() failed to add CALL = %s,ip = %s,port = %u\n", TLB_node_key->call, TLB_node_key->ip,
+			TLB_node_key->port & 0xffff);
 		ast_free(TLB_node_key);
 		ast_mutex_unlock(&instp->lock);
 		return -1;
@@ -2171,11 +2153,10 @@ static void *TLB_reader(void *data)
 	fds[1].events = POLLIN;
 
 	while (run_forever) {
-
 		ast_mutex_unlock(&instp->lock);
 		/*
-		* poll for activity
-		*/
+		 * poll for activity
+		 */
 		i = ast_poll(fds, 2, 50);
 		if (i == 0) {
 			ast_mutex_lock(&instp->lock);
@@ -2187,7 +2168,7 @@ static void *TLB_reader(void *data)
 			break;
 		}
 		ast_mutex_lock(&instp->lock);
-		if (fds[0].revents) {	/* if a ctrl packet */
+		if (fds[0].revents) { /* if a ctrl packet */
 			fds[0].revents = 0;
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(instp->ctrl_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
@@ -2209,8 +2190,8 @@ static void *TLB_reader(void *data)
 						if (found_key) {
 							(*found_key)->countdown = instp->rtcptimeout;
 							(*found_key)->p->firstheard = 1;
-						} else {	/* otherwise its a new request */
-							i = 0;	/* default authorized */
+						} else {   /* otherwise its a new request */
+							i = 0; /* default authorized */
 							if (instp->ndenylist) {
 								for (x = 0; x < instp->ndenylist; x++) {
 									if (!fnmatch(instp->denylist[x], call, FNM_CASEFOLD)) {
@@ -2232,13 +2213,13 @@ static void *TLB_reader(void *data)
 									}
 								}
 							}
-							if (!i) {	/* if authorized */
+							if (!i) { /* if authorized */
 								i = do_new_call(instp, NULL, call, "UNKNOWN", NULL);
 								if (i < 0) {
 									i = 0;
 								}
 							}
-							if (i) {	/* if not authorized */
+							if (i) { /* if not authorized */
 								ast_debug(1, "Sent bye to IP address %s\n", instp->TLB_node_test.ip);
 								x = rtcp_make_bye(bye, sizeof(bye), "UN-AUTHORIZED");
 								sin1.sin_family = AF_INET;
@@ -2259,7 +2240,7 @@ static void *TLB_reader(void *data)
 				}
 			}
 		}
-		if (fds[1].revents) {	/* if an audio packet */
+		if (fds[1].revents) { /* if an audio packet */
 			fds[1].revents = 0;
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(instp->audio_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
@@ -2273,7 +2254,7 @@ static void *TLB_reader(void *data)
 					struct TLB_pvt *p = (*found_key)->p;
 					(*found_key)->countdown = instp->rtcptimeout;
 					p->firstheard = 1;
-					if (recvlen > 12) {	/* if at least a header size and some payload */
+					if (recvlen > 12) { /* if at least a header size and some payload */
 						/* if its a DTMF frame */
 						if ((((struct rtpVoice_t *) buf)->version == 2) && (((struct rtpVoice_t *) buf)->payt == 96)) {
 							uint32_t dseq, dtime;
@@ -2333,24 +2314,19 @@ static void *TLB_reader(void *data)
 									ast_log(LOG_ERROR, "tlb:Payload type %d not recognized on channel %s\n", j, (*found_key)->call);
 									continue;
 								}
-								ast_debug(1,
-									"tlb: channel %s switching to codec %s from codec %s\n",
-									(*found_key)->call,
-									tlb_codecs[i].name,
-									tlb_codecs[p->rxcodec].name);
+								ast_debug(1, "tlb: channel %s switching to codec %s from codec %s\n", (*found_key)->call,
+									tlb_codecs[i].name, tlb_codecs[p->rxcodec].name);
 								p->rxcodec = i;
 								p->codec_change = 1;
 							}
-							if (recvlen ==
-								((tlb_codecs[p->rxcodec].frame_size * tlb_codecs[p->rxcodec].blocking_factor) + 12)) {
+							if (recvlen == ((tlb_codecs[p->rxcodec].frame_size * tlb_codecs[p->rxcodec].blocking_factor) + 12)) {
 								/* break them up for Asterisk */
 								for (i = 0; i < tlb_codecs[p->rxcodec].blocking_factor; i++) {
 									qpast = ast_malloc(sizeof(struct TLB_rxqast));
 									if (qpast) {
-										memcpy(qpast->buf, ((struct rtpVoice_t *) buf)->data +
-											(tlb_codecs[p->rxcodec].frame_size * i), tlb_codecs[p->rxcodec].frame_size);
-										insque((struct qelem *) qpast, (struct qelem *)
-											p->rxqast.qe_back);
+										memcpy(qpast->buf, ((struct rtpVoice_t *) buf)->data + (tlb_codecs[p->rxcodec].frame_size * i),
+											tlb_codecs[p->rxcodec].frame_size);
+										insque((struct qelem *) qpast, (struct qelem *) p->rxqast.qe_back);
 									}
 								}
 							}
@@ -2361,7 +2337,7 @@ static void *TLB_reader(void *data)
 							qpel = ast_malloc(sizeof(struct TLB_rxqtlb));
 							if (qpel) {
 								memcpy(qpel->buf, ((struct rtpVoice_t *) buf)->data,
-									   tlb_codecs[p->rxcodec].blocking_factor * tlb_codecs[p->rxcodec].frame_size);
+									tlb_codecs[p->rxcodec].blocking_factor * tlb_codecs[p->rxcodec].frame_size);
 								ast_copy_string(qpel->fromip, instp->TLB_node_test.ip, TLB_IP_SIZE);
 								qpel->fromport = instp->TLB_node_test.port;
 								insque((struct qelem *) qpel, (struct qelem *) p->rxqtlb.qe_back);
@@ -2379,7 +2355,7 @@ static void *TLB_reader(void *data)
 
 /*!
  * \brief Stores the information from the configuration file to memory.
- * It setup up udp sockets for the TLB ports and starts background 
+ * It setup up udp sockets for the TLB ports and starts background
  * threads for processing connections for this instance and registration.
  * \param cfg		Pointer to struct ast_config.
  * \param ctg		Pointer to category to load.
@@ -2478,7 +2454,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 			instp->pref_txcodec = TLB_G726;
 		} else if (!strcasecmp(val, "ULAW")) {
 			instp->pref_txcodec = TLB_ULAW;
-		}	
+		}
 	}
 
 	instp->audio_sock = -1;

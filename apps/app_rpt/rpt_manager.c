@@ -41,10 +41,8 @@ void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
 		"EventValue: %s\r\n"
 		"LastKeyedTime: %s\r\n"
 		"LastTxKeyedTime: %s\r\n",
-		myrpt->name, ast_channel_name(myrpt->rxchannel), value,
-		ctime_no_newline(&myrpt->lastkeyedtime),
-		ctime_no_newline(&myrpt->lasttxkeyedtime)
-	);
+		myrpt->name, ast_channel_name(myrpt->rxchannel), value, ctime_no_newline(&myrpt->lastkeyedtime),
+		ctime_no_newline(&myrpt->lasttxkeyedtime));
 }
 
 /*!\brief callback to display list of locally configured nodes
@@ -63,7 +61,7 @@ static int manager_rpt_local_nodes(struct mansession *s, const struct message *m
 		}
 	}
 	astman_append(s, "</nodes>\r\n");
-	astman_append(s, "\r\n");	/* Properly terminate Manager output */
+	astman_append(s, "\r\n"); /* Properly terminate Manager output */
 	return RESULT_SUCCESS;
 }
 
@@ -165,38 +163,38 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			iconns = myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns ? "1" : "0";
 
 			if (!myrpt->totimer) {
-				tot_state = "0";	//"TIMED OUT!";
+				tot_state = "0"; //"TIMED OUT!";
 			} else if (myrpt->totimer != myrpt->p.totime) {
-				tot_state = "1";	//"ARMED";
+				tot_state = "1"; //"ARMED";
 			} else {
-				tot_state = "2";	//"RESET";
+				tot_state = "2"; //"RESET";
 			}
 
 			if (myrpt->tailid) {
-				ider_state = "0";	//"QUEUED IN TAIL";
+				ider_state = "0"; //"QUEUED IN TAIL";
 			} else if (myrpt->mustid) {
-				ider_state = "1";	//"QUEUED FOR CLEANUP";
+				ider_state = "1"; //"QUEUED FOR CLEANUP";
 			} else {
-				ider_state = "2";	//"CLEAN";
+				ider_state = "2"; //"CLEAN";
 			}
 
 			switch (myrpt->callmode) {
 			case CALLMODE_DIALING:
-				patch_state = "0";	//"DIALING";
+				patch_state = "0"; //"DIALING";
 				break;
 			case CALLMODE_CONNECTING:
-				patch_state = "1";	//"CONNECTING";
+				patch_state = "1"; //"CONNECTING";
 				break;
 			case CALLMODE_UP:
-				patch_state = "2";	//"UP";
+				patch_state = "2"; //"UP";
 				break;
 
 			case CALLMODE_FAILED:
-				patch_state = "3";	//"CALL FAILED";
+				patch_state = "3"; //"CALL FAILED";
 				break;
 
 			default:
-				patch_state = "4";	//"DOWN";
+				patch_state = "4"; //"DOWN";
 			}
 
 			if (myrpt->p.telemdynamic) {
@@ -759,11 +757,8 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 		int index;
 	};
 	static struct mgrcmdtbl mct[] = {
-		{ "RptStat", MGRCMD_RPTSTAT },
-		{ "NodeStat", MGRCMD_NODESTAT },
-		{ "XStat", MGRCMD_XSTAT },
-		{ "SawStat", MGRCMD_SAWSTAT },
-		{ NULL, 0 }				/* NULL marks end of command table */
+		{ "RptStat", MGRCMD_RPTSTAT }, { "NodeStat", MGRCMD_NODESTAT }, { "XStat", MGRCMD_XSTAT }, { "SawStat", MGRCMD_SAWSTAT },
+		{ NULL, 0 } /* NULL marks end of command table */
 	};
 	int nrpts = rpt_num_rpts();
 

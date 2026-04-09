@@ -1,5 +1,6 @@
 
-/*! \file
+/*!
+ * \file
  *
  * \brief Generic serial I/O routines
  */
@@ -41,7 +42,7 @@ int serial_open(char *fname, int speed, int stop2)
 		return -1;
 	}
 
-#ifndef	SOLARIS
+#ifndef SOLARIS
 	cfmakeraw(&mode);
 #else
 	mode.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
@@ -234,7 +235,7 @@ int openserial(struct rpt *myrpt, const char *fname)
 		return -1;
 	}
 
-#ifndef	SOLARIS
+#ifndef SOLARIS
 	cfmakeraw(&mode);
 #else
 	mode.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
@@ -264,8 +265,8 @@ int openserial(struct rpt *myrpt, const char *fname)
 
 /* Doug Hall RBI-1 serial data definitions:
  *
- * Byte 0: Expansion external outputs 
- * Byte 1: 
+ * Byte 0: Expansion external outputs
+ * Byte 1:
  *	Bits 0-3 are BAND as follows:
  *	Bits 4-5 are POWER bits as follows:
  *		00 - Low Power
@@ -297,7 +298,7 @@ static int rbi_mhztoband(char *str)
 {
 	int i;
 
-	i = atoi(str) / 10;			/* get the 10's of mhz */
+	i = atoi(str) / 10; /* get the 10's of mhz */
 
 	switch (i) {
 	case 2:
@@ -427,8 +428,8 @@ static int rbi_pltocode(char *str)
 }
 
 /*
-* Shift out a formatted serial bit stream
-*/
+ * Shift out a formatted serial bit stream
+ */
 
 static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 {
@@ -444,18 +445,22 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 			d = od & 1;
 			outb(d, myrpt->p.iobase);
 			/* >= 15 us */
-			for (delayvar = 1; delayvar < 15000; delayvar++);
+			for (delayvar = 1; delayvar < 15000; delayvar++)
+				;
 			od >>= 1;
 			outb(d | 2, myrpt->p.iobase);
 			/* >= 30 us */
-			for (delayvar = 1; delayvar < 30000; delayvar++);
+			for (delayvar = 1; delayvar < 30000; delayvar++)
+				;
 			outb(d, myrpt->p.iobase);
 			/* >= 10 us */
-			for (delayvar = 1; delayvar < 10000; delayvar++);
+			for (delayvar = 1; delayvar < 10000; delayvar++)
+				;
 		}
 	}
 	/* >= 50 us */
-	for (delayvar = 1; delayvar < 50000; delayvar++);
+	for (delayvar = 1; delayvar < 50000; delayvar++)
+		;
 #endif /* __i386__ */
 #endif /* HAVE_SYS_IO */
 }
@@ -480,7 +485,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 	int i, j;
 	char c;
 
-#ifdef	FAKE_SERIAL_RESPONSE
+#ifdef FAKE_SERIAL_RESPONSE
 	printf("String output was %s:\n", txbuf);
 #endif
 	if (rpt_debug_level()) {
@@ -492,7 +497,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 		ast_debug(7, "\n");
 	}
 
-	if (myrpt->iofd >= 0) {		/* if to do out a serial port */
+	if (myrpt->iofd >= 0) { /* if to do out a serial port */
 		serial_rxflush(myrpt->iofd, 20);
 		if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD))) {
 			for (i = 0; i < txbytes; i++) {
@@ -515,7 +520,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 		for (i = 0; i < rxmaxbytes; i++) {
 			j = serial_rxready(myrpt->iofd, 1000);
 			if (j < 1) {
-#ifdef	FAKE_SERIAL_RESPONSE
+#ifdef FAKE_SERIAL_RESPONSE
 				strcpy((char *) rxbuf, (char *) txbuf);
 				return (strlen((char *) rxbuf));
 #else
@@ -772,8 +777,8 @@ int setrtx(struct rpt *myrpt)
 	}
 
 	if (!res) {
-		sprintf(rigstr, "SETFREQ %s %f %s %s %c", myrpt->freq, txfreq,
-				(myrpt->rxplon) ? myrpt->rxpl : "0.0", (myrpt->txplon) ? myrpt->txpl : "0.0", pwr);
+		sprintf(rigstr, "SETFREQ %s %f %s %s %c", myrpt->freq, txfreq, (myrpt->rxplon) ? myrpt->rxpl : "0.0",
+			(myrpt->txplon) ? myrpt->txpl : "0.0", pwr);
 		send_usb_txt(myrpt, rigstr);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		res = 0;
@@ -822,11 +827,9 @@ int setxpmr(struct rpt *myrpt, int dotx)
 			return -1;
 		}
 
-		sprintf(rigstr, "SETFREQ 0.0 0.0 %s %s L", (myrpt->rxplon) ? myrpt->rxpl : "0.0",
-				(myrpt->txplon) ? myrpt->txpl : "0.0");
+		sprintf(rigstr, "SETFREQ 0.0 0.0 %s %s L", (myrpt->rxplon) ? myrpt->rxpl : "0.0", (myrpt->txplon) ? myrpt->txpl : "0.0");
 	} else {
 		sprintf(rigstr, "SETFREQ 0.0 0.0 %s 0.0 L", (myrpt->rxplon) ? myrpt->rxpl : "0.0");
-
 	}
 
 	send_usb_txt(myrpt, rigstr);

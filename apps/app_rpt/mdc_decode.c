@@ -8,7 +8,7 @@
  * Author: Matthew Kaufman (matthew@eeph.com)
  *
  * Copyright (c) 2005, 2010  Matthew Kaufman  All rights reserved.
- * 
+ *
  *  This file is part of Matthew Kaufman's MDC Encoder/Decoder Library
  *
  *  The MDC Encoder/Decoder Library is free software; you can
@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include "mdc_decode.h"
 
-mdc_decoder_t * mdc_decoder_new(int sampleRate)
+mdc_decoder_t *mdc_decoder_new(int sampleRate)
 {
 	mdc_decoder_t *decoder;
 	int i;
@@ -69,51 +69,50 @@ static void _clearbits(mdc_decoder_t *decoder, int x)
 
 static unsigned int _flip(unsigned int crc, int bitnum)
 {
-	unsigned int i, j=1, crcout=0;
+	unsigned int i, j = 1, crcout = 0;
 
 	for (i = 1 << (bitnum - 1); i; i >>= 1) {
 		if (crc & i) {
 			crcout |= j;
 		}
 
-		j<<= 1;
+		j <<= 1;
 	}
 
 	return crcout;
 }
 
-static unsigned int docrc(unsigned char* p, int len) {
-
+static unsigned int docrc(unsigned char *p, int len)
+{
 	int i, j;
 	unsigned int c;
 	unsigned int bit;
 	unsigned int crc = 0x0000;
 
 	for (i = 0; i < len; i++) {
-		c = (unsigned int)*p++;
+		c = (unsigned int) *p++;
 		c = _flip(c, 8);
 
 		for (j = 0x80; j; j >>= 1) {
 			bit = crc & 0x8000;
-			crc<<= 1;
+			crc <<= 1;
 
 			if (c & j) {
-				bit^= 0x8000;
+				bit ^= 0x8000;
 			}
 
 			if (bit) {
-				crc^= 0x1021;
+				crc ^= 0x1021;
 			}
 		}
 	}
 
 	crc = _flip(crc, 16);
 	crc ^= 0xffff;
-	crc &= 0xFFFF;;
+	crc &= 0xFFFF;
 
-	return(crc);
+	return crc;
 }
-
 
 static void _procbits(mdc_decoder_t *decoder, int x)
 {
@@ -126,7 +125,7 @@ static void _procbits(mdc_decoder_t *decoder, int x)
 
 	for (i = 0; i < 16; i++) {
 		for (j = 0; j < 7; j++) {
-			k = (j*16) + i;
+			k = (j * 16) + i;
 			lbits[lbc] = decoder->bits[x][k];
 			++lbc;
 		}
@@ -136,10 +135,10 @@ static void _procbits(mdc_decoder_t *decoder, int x)
 		data[i] = 0;
 
 		for (j = 0; j < 8; j++) {
-			k = (i*8)+j;
+			k = (i * 8) + j;
 
 			if (lbits[k]) {
-				data[i] |= 1<<j;
+				data[i] |= 1 << j;
 			}
 		}
 	}
@@ -197,14 +196,13 @@ static void _procbits(mdc_decoder_t *decoder, int x)
 	}
 }
 
-
 static int _onebits(unsigned int n)
 {
-	int i=0;
+	int i = 0;
 
 	while (n) {
 		++i;
-		n &= (n-1);
+		n &= (n - 1);
 	}
 
 	return i;
@@ -265,8 +263,7 @@ static void _shiftin(mdc_decoder_t *decoder, int x)
 
 static void _zcproc(mdc_decoder_t *decoder, int x)
 {
-	switch(decoder->zc[x])
-	{
+	switch (decoder->zc[x]) {
 	case 2:
 	case 4:
 		break;
@@ -282,9 +279,7 @@ static void _zcproc(mdc_decoder_t *decoder, int x)
 	_shiftin(decoder, x);
 }
 
-int mdc_decoder_process_samples(mdc_decoder_t *decoder,
-                                unsigned char *samples,
-                                int numSamples)
+int mdc_decoder_process_samples(mdc_decoder_t *decoder, unsigned char *samples, int numSamples)
 {
 	int i;
 	int j;
@@ -293,7 +288,7 @@ int mdc_decoder_process_samples(mdc_decoder_t *decoder,
 	int d;
 	unsigned char s;
 
-	if(!decoder)
+	if (!decoder)
 		return -1;
 
 	for (i = 0; i < numSamples; i++) {
@@ -302,12 +297,11 @@ int mdc_decoder_process_samples(mdc_decoder_t *decoder,
 #ifdef DIFFERENTIATOR
 		v = (int) s;
 
-		d = v- decoder->lastv;
+		d = v - decoder->lastv;
 		decoder->lastv = v;
 
 		if (decoder->level == 0) {
-			if(d > decoder->hyst)
-			{
+			if (d > decoder->hyst) {
 				for (k = 0; k < MDC_ND; k++) {
 					decoder->zc[k]++;
 				}
@@ -361,10 +355,7 @@ int mdc_decoder_process_samples(mdc_decoder_t *decoder,
 	return 0;
 }
 
-int mdc_decoder_get_packet(mdc_decoder_t *decoder, 
-                           unsigned char *op,
-			   unsigned char *arg,
-			   unsigned short *unitID)
+int mdc_decoder_get_packet(mdc_decoder_t *decoder, unsigned char *op, unsigned char *arg, unsigned short *unitID)
 {
 	if (!decoder) {
 		return -1;
@@ -391,14 +382,8 @@ int mdc_decoder_get_packet(mdc_decoder_t *decoder,
 	return 0;
 }
 
-int mdc_decoder_get_double_packet(mdc_decoder_t *decoder, 
-                           unsigned char *op,
-			   unsigned char *arg,
-			   unsigned short *unitID,
-                           unsigned char *extra0,
-                           unsigned char *extra1,
-                           unsigned char *extra2,
-                           unsigned char *extra3)
+int mdc_decoder_get_double_packet(mdc_decoder_t *decoder, unsigned char *op, unsigned char *arg, unsigned short *unitID,
+	unsigned char *extra0, unsigned char *extra1, unsigned char *extra2, unsigned char *extra3)
 {
 	if (!decoder) {
 		return -1;
@@ -437,4 +422,3 @@ int mdc_decoder_get_double_packet(mdc_decoder_t *decoder,
 
 	return 0;
 }
-

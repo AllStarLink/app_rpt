@@ -43,11 +43,11 @@ int send_link_pl(struct rpt *myrpt, const char *txt);
  * l->link_newkey is set to RADIO_KEY_NOT_ALLOWED, and l->newkeytimer is activate.
  * If the timer expires before receiving NEWKEY1STR, l->link_newkey is set to RADIO_KEY_ALLOWED.
  * NEWKEY1STR causes the repeater to keyup based on AST_FRAME_VOICE detected on IAX2 links.
-*/
+ */
 void send_newkey(struct ast_channel *chan);
 
 /*! \brief send newkey request NEWKEYSTR to caller.  This appears to be a legacy message.
  * If NEWKEYSTR is received on the link, l->link_newkey is set RADIO_KEY_ALLOWED_REDUNDANT,
  * the l->newkeytimer is disabled, and NEWKEYSTR is echoed to the caller.
-*/
+ */
 void send_newkey_redundant(struct ast_channel *chan);

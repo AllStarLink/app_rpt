@@ -41,7 +41,7 @@
  *		n - change pre-emphasis
  *		o - change de-emphasis
  *		p - change plfilter
- *		q - change ptt keying mode 
+ *		q - change ptt keying mode
  *		r - change carrierfrom setting
  *		s - change ctcss from setting
  *		t - change rx on delay
@@ -83,8 +83,8 @@ static void ourhandler(int sig)
 	int i;
 
 	signal(sig, ourhandler);
-	while (waitpid(-1, &i, WNOHANG) > 0);
-
+	while (waitpid(-1, &i, WNOHANG) > 0)
+		;
 }
 
 /*!
@@ -95,7 +95,7 @@ static void ourhandler(int sig)
  * \retval -1		If less than.
  * \retval 1		If greater than.
  */
-  static int qcompar(const void *a, const void *b)
+static int qcompar(const void *a, const void *b)
 {
 	char **sa = (char **) a, **sb = (char **) b;
 	return (strcmp(*sa, *sb));
@@ -132,8 +132,7 @@ static int explode_string(char *str, char *strp[], size_t limit, char delim, cha
 				if (inquo) {
 					*str = 0;
 					inquo = 0;
-				}
-				else {
+				} else {
 					strp[i - 1] = str + 1;
 					inquo = 1;
 				}
@@ -146,7 +145,7 @@ static int explode_string(char *str, char *strp[], size_t limit, char delim, cha
 	}
 	strp[i] = 0;
 	return i;
- }
+}
 
 /*!
  * \brief Execute an asterisk command.
@@ -160,7 +159,7 @@ static int doastcmd(char *cmd)
 {
 	int pfd[2], pid, nullfd;
 
-	 if (pipe(pfd) == -1) {
+	if (pipe(pfd) == -1) {
 		perror("Error: cannot open pipe");
 		return -1;
 	}
@@ -180,7 +179,7 @@ static int doastcmd(char *cmd)
 		perror("Error: cannot fork");
 		return -1;
 	}
-	if (pid) {		/* if this is us (the parent) */
+	if (pid) { /* if this is us (the parent) */
 		close(pfd[1]);
 		return pfd[0];
 	}
@@ -403,8 +402,8 @@ static int astgetresp(char *cmd)
 /*!
  * \brief Menu option to select the usb device.
  */
- static void menu_selectusb(void)
- {
+static void menu_selectusb(void)
+{
 	int i, n, x;
 	char str[100], buf[256], *strs[100];
 
@@ -455,14 +454,13 @@ static int astgetresp(char *cmd)
 	}
 	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "active %s", strs[i - 1]);
 	astgetresp(str);
-
 }
 
 /*!
  * \brief Menu option to swap the usb device.
  */
- static void menu_swapusb(void)
- {
+static void menu_swapusb(void)
+{
 	int i, n, x;
 	char str[100], buf[256], *strs[100];
 
@@ -512,14 +510,13 @@ static int astgetresp(char *cmd)
 	}
 	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune swap %s", strs[i - 1]);
 	astgetresp(str);
-
 }
 
 /*!
  * \brief Menu option to set rxvoice level.
  */
- static void menu_rxvoice(void)
- {
+static void menu_rxvoice(void)
+{
 	int i, x;
 	char str[100];
 
@@ -557,16 +554,14 @@ static int astgetresp(char *cmd)
 			break;
 		}
 	}
-
 }
-
 
 /*!
  * \brief Menu option to set txa level.
  * \param keying	Boolean to indicate if we are currently keying.
  */
- static void menu_txa(int keying)
- {
+static void menu_txa(int keying)
+{
 	char str[100];
 	int i, x;
 
@@ -607,14 +602,13 @@ static int astgetresp(char *cmd)
 		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support f%d", i);
 	}
 	astgetresp(str);
-
 }
 
 /*!
  * \brief Menu option to set txb level.
  * \param keying	Boolean to indicate if we are currently keying.
-*/
- static void menu_txb(int keying)
+ */
+static void menu_txb(int keying)
 {
 	char str[100];
 	int i, x;
@@ -656,7 +650,6 @@ static int astgetresp(char *cmd)
 		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support g%d", i);
 	}
 	astgetresp(str);
-
 }
 
 /*!
@@ -732,11 +725,11 @@ static int menu_signal_type(const char *signal, int selection)
  * \param menu_option	Pointer to the menusupport option to update.
  * \param delay			The current delay setting.
  */
- static int menu_get_delay(const char *delay_type, const char *menu_option, int delay)
+static int menu_get_delay(const char *delay_type, const char *menu_option, int delay)
 {
 	char str[100];
 	int value, x;
-	
+
 	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support %s", menu_option);
 	if (astgetresp(str)) {
 		return delay;
@@ -770,11 +763,9 @@ static int menu_signal_type(const char *signal, int selection)
 /*!
  * \brief Menu option view cos, ctcss and ptt status.
  */
- static void menu_view_status(void)
- {
-
+static void menu_view_status(void)
+{
 	astgetresp(COMMAND_PREFIX "tune menu-support v");
-
 }
 
 /*!
@@ -819,17 +810,15 @@ int main(int argc, char *argv[])
 	}
 
 	for (;;) {
-
 		/* get device parameters from Asterisk */
 		if (astgetline(COMMAND_PREFIX "tune menu-support 0+4", str, sizeof(str) - 1)) {
 			printf("The chan_simpleusb setup information could not be retrieved!\n\n");
 			printf("Verify that Asterisk is running and chan_simpleusb is loaded.\n\n");
 			exit(255);
 		}
-		if (sscanf(str, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", 
-			&txmixaset, &txmixbset, &echomode, &rxboost, &preemphasis, &deemphasis, 
-			&plfilter, &pttmode, &carrierfrom, &ctcssfrom, &rxondelay, &txoffdelay,
-			&rxmixerset, &micplaymax, &spkrmax, &micmax) != 16) {
+		if (sscanf(str, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", &txmixaset, &txmixbset, &echomode, &rxboost,
+				&preemphasis, &deemphasis, &plfilter, &pttmode, &carrierfrom, &ctcssfrom, &rxondelay, &txoffdelay, &rxmixerset,
+				&micplaymax, &spkrmax, &micmax) != 16) {
 			fprintf(stderr, "Error parsing device parameters: %s\n", str);
 			exit(255);
 		}
@@ -876,7 +865,7 @@ int main(int argc, char *argv[])
 		if (fgets(str, sizeof(str) - 1, stdin) == NULL) {
 			break;
 		}
-		if (strlen(str) != 2) {	/* it's 2 because of \n at end */
+		if (strlen(str) != 2) { /* it's 2 because of \n at end */
 			printf("Invalid Entry, try again\n");
 			continue;
 		}
@@ -887,19 +876,19 @@ int main(int argc, char *argv[])
 		}
 
 		switch (str[0]) {
-		case '1':				/* select active usb device */
+		case '1': /* select active usb device */
 			menu_selectusb();
 			break;
-		case '2':				/* set receive level using display */
+		case '2': /* set receive level using display */
 			menu_rxvoice();
 			break;
-		case '3':				/* set transmit level a */
+		case '3': /* set transmit level a */
 			menu_txa(keying);
 			break;
-		case '4':				/* set transmit level b */
+		case '4': /* set transmit level b */
 			menu_txb(keying);
 			break;
-		case 'b':				/* toggle rxboost */
+		case 'b': /* toggle rxboost */
 		case 'B':
 			if (rxboost) {
 				if (astgetresp(COMMAND_PREFIX "tune menu-support m0")) {
@@ -911,7 +900,7 @@ int main(int argc, char *argv[])
 				}
 			}
 			break;
-		case 'c':				/* toggle pre-emphasis */
+		case 'c': /* toggle pre-emphasis */
 		case 'C':
 			if (preemphasis) {
 				if (astgetresp(COMMAND_PREFIX "tune menu-support n0")) {
@@ -923,7 +912,7 @@ int main(int argc, char *argv[])
 				}
 			}
 			break;
-		case 'd':				/* toggle de-emphasis */
+		case 'd': /* toggle de-emphasis */
 		case 'D':
 			if (deemphasis) {
 				if (astgetresp(COMMAND_PREFIX "tune menu-support o0")) {
@@ -935,7 +924,7 @@ int main(int argc, char *argv[])
 				}
 			}
 			break;
-		case 'e':				/* toggle echo mode */
+		case 'e': /* toggle echo mode */
 		case 'E':
 			if (echomode) {
 				if (astgetresp(COMMAND_PREFIX "tune menu-support k0")) {
@@ -947,13 +936,13 @@ int main(int argc, char *argv[])
 				}
 			}
 			break;
-		case 'f':				/* flash - toggle ptt and tone */
+		case 'f': /* flash - toggle ptt and tone */
 		case 'F':
 			if (astgetresp(COMMAND_PREFIX "tune menu-support l")) {
 				exit(255);
 			}
 			break;
-		case 'g':				/* toggle pl filter */
+		case 'g': /* toggle pl filter */
 		case 'G':
 			if (plfilter) {
 				if (astgetresp(COMMAND_PREFIX "tune menu-support p0")) {
@@ -965,7 +954,7 @@ int main(int argc, char *argv[])
 				}
 			}
 			break;
-		case 'h':				/* toggle ptt mode */
+		case 'h': /* toggle ptt mode */
 		case 'H':
 			if (pttmode) {
 				if (astgetresp(COMMAND_PREFIX "tune menu-support q0")) {
@@ -977,7 +966,7 @@ int main(int argc, char *argv[])
 				}
 			}
 			break;
-		case 'i':				/* select carrier from */
+		case 'i': /* select carrier from */
 		case 'I':
 			result = menu_signal_type("Carrier From", carrierfrom);
 			if (result > 0) {
@@ -985,7 +974,7 @@ int main(int argc, char *argv[])
 				astgetresp(str);
 			}
 			break;
-		case 'j':				/* select ctcss from */
+		case 'j': /* select ctcss from */
 		case 'J':
 			result = menu_signal_type("CTCSS From", ctcssfrom);
 			if (result > 0) {
@@ -993,42 +982,42 @@ int main(int argc, char *argv[])
 				astgetresp(str);
 			}
 			break;
-		case 'k':				/* set rx on delay */
+		case 'k': /* set rx on delay */
 		case 'K':
 			result = menu_get_delay("RX On Delay", "t", rxondelay);
 			snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support t%d", result);
 			astgetresp(str);
 			break;
-		case 'l':				/* set tx off delay */
+		case 'l': /* set tx off delay */
 		case 'L':
 			result = menu_get_delay("TX Off Delay", "u", txoffdelay);
 			snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support u%d", result);
 			astgetresp(str);
 			break;
-		case 'p':				/* print current values */
+		case 'p': /* print current values */
 		case 'P':
 			if (astgetresp(COMMAND_PREFIX "tune menu-support 2")) {
 				exit(255);
 			}
 			break;
-		case 'r':				/* display receive audio statistics */
+		case 'r': /* display receive audio statistics */
 		case 'R':
 			astgetresp(COMMAND_PREFIX "tune menu-support y");
 			break;
-		case 's':				/* swap usb device with another device */
+		case 's': /* swap usb device with another device */
 		case 'S':
 			menu_swapusb();
 			break;
-		case 't':				/* toggle test tone */
+		case 't': /* toggle test tone */
 		case 'T':
 			keying = !keying;
 			printf("Transmit Test Tone/Keying is now %s\n", (keying) ? "Enabled" : "Disabled");
 			break;
-		case 'v':				/* view cos, ctcss, and ptt status - live */
+		case 'v': /* view cos, ctcss, and ptt status - live */
 		case 'V':
 			menu_view_status();
 			break;
-		case 'w':				/* write settings to configuration file */
+		case 'w': /* write settings to configuration file */
 		case 'W':
 			if (astgetresp(COMMAND_PREFIX "tune menu-support j")) {
 				exit(255);

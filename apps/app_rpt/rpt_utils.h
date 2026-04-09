@@ -1,11 +1,11 @@
 
-#define	DELIMCHR ','
-#define	QUOTECHR 34
+#define DELIMCHR ','
+#define QUOTECHR 34
 
 /*
-* Match a keyword in a list, and return index of string plus 1 if there was a match,* else return 0.
-* If param is passed in non-null, then it will be set to the first character past the match
-*/
+ * Match a keyword in a list, and return index of string plus 1 if there was a match,* else return 0.
+ * If param is passed in non-null, then it will be set to the first character past the match
+ */
 
 int matchkeyword(char *string, char **param, char *keywords[]);
 
@@ -34,9 +34,9 @@ char *string_toupper(char *str);
 int finddelim(char *str, char *strp[], size_t limit);
 
 /*
-* Skip characters in string which are in charlist, and return a pointer to the
-* first non-matching character
-*/
+ * Skip characters in string which are in charlist, and return a pointer to the
+ * first non-matching character
+ */
 
 char *skipchars(char *string, char *charlist);
 
@@ -58,7 +58,7 @@ int mycompar(const void *a, const void *b);
 
 long diskavail(struct rpt *myrpt);
 
-void rpt_localtime(time_t * t, struct ast_tm *lt, const char *tz);
+void rpt_localtime(time_t *t, struct ast_tm *lt, const char *tz);
 
 time_t rpt_mktime(struct ast_tm *tm, const char *zone);
 
@@ -83,14 +83,16 @@ time_t rpt_time_monotonic(void);
  */
 struct timeval rpt_tvnow(void);
 
-/*! \brief Append a command to the macro buffer
+/*!
+ * \brief Append a command to the macro buffer
  * \param myrpt Pointer to the rpt structure
  * \param cmd Command to append
  * \retval 0 on success, -1 on failure (result of ast_str_append)
  */
 int macro_append(struct rpt *myrpt, const char *cmd);
 
-/*! \brief Do timer value update, limit to end_val
+/*!
+ * \brief Do timer value update, limit to end_val
  * \note Timers can end at any value and will stop and maintain the end value.
  * If the timer value is set to 0, it will maintain 0 and not reset to the end
  * value.  This behavior allows for a timer to reach an value then be set to 0

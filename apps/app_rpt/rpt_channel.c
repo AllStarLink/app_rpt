@@ -62,7 +62,7 @@ int wait_interval(struct rpt *myrpt, enum rpt_delay type, struct ast_channel *ch
 			return -1;
 		}
 		ast_debug(1, "Delay complete\n");
-	/* This is not superfluous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
+		/* This is not superfluous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
 	} while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
 	return 0;
 }
@@ -336,7 +336,7 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 
 	res = 0;
 
-	str = ast_malloc(12 * 8 * strlen(string));	/* 12 chrs/element max, 8 elements/letter max */
+	str = ast_malloc(12 * 8 * strlen(string)); /* 12 chrs/element max, 8 elements/letter max */
 	if (!str)
 		return -1;
 	str[0] = '\0';
@@ -353,7 +353,6 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 	interwordtime = dottime * 7;
 
 	for (; (*string) && (!res); string++) {
-
 		c = *string;
 
 		/* Convert lower case to upper case */
@@ -419,7 +418,6 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 				break;
 			}
 		}
-
 	}
 	if (str) {
 		ast_free(str);

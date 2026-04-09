@@ -10,14 +10,14 @@
 
 #include "asterisk/channel.h"
 #include "asterisk/pbx.h"
-#include "asterisk/cli.h" /* use ast_cli_command */
-#include "asterisk/module.h" /* use ast_module_check */
-#include "asterisk/dns_core.h" /* use for dns lookup */
+#include "asterisk/cli.h"		   /* use ast_cli_command */
+#include "asterisk/module.h"	   /* use ast_module_check */
+#include "asterisk/dns_core.h"	   /* use for dns lookup */
 #include "asterisk/dns_resolver.h" /* use for dns lookup */
-#include "asterisk/dns_srv.h"	/* use for srv dns lookup */
-#include "asterisk/dns_txt.h" /* user for dns lookup */
-#include "asterisk/vector.h" /* required for dns */
-#include "asterisk/utils.h"	 /* required for ARRAY_LEN */
+#include "asterisk/dns_srv.h"	   /* use for srv dns lookup */
+#include "asterisk/dns_txt.h"	   /* user for dns lookup */
+#include "asterisk/vector.h"	   /* required for dns */
+#include "asterisk/utils.h"		   /* required for ARRAY_LEN */
 
 #include "app_rpt.h"
 #include <arpa/nameser.h> /* needed for dns - must be after app_rpt.h */
@@ -25,7 +25,7 @@
 #include "rpt_config.h"
 #include "rpt_manager.h"
 #include "rpt_utils.h" /* use myatoi */
-#include "rpt_rig.h" /* use setrem */
+#include "rpt_rig.h"   /* use setrem */
 
 /*! \brief Echolink queryoption for retrieving call sign */
 #define ECHOLINK_QUERY_CALLSIGN 2
@@ -53,7 +53,7 @@ int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name
 	int ret;
 	char include_zero = 0;
 
-	if (min < 0) {				/* If min is negative, this means include 0 as a valid entry */
+	if (min < 0) { /* If min is negative, this means include 0 as a valid entry */
 		min = -min;
 		include_zero = 1;
 	}
@@ -754,10 +754,8 @@ void load_rpt_vars(int n, int init)
 	struct ast_config *cfg;
 	char *strs[100], *tmp;
 	char s1[256];
-	static char *cs_keywords[] =
-		{ "rptena", "rptdis", "apena", "apdis", "lnkena", "lnkdis", "totena", "totdis", "skena", "skdis",
-		"ufena", "ufdis", "atena", "atdis", "noice", "noicd", "slpen", "slpds", NULL
-	};
+	static char *cs_keywords[] = { "rptena", "rptdis", "apena", "apdis", "lnkena", "lnkdis", "totena", "totdis", "skena", "skdis",
+		"ufena", "ufdis", "atena", "atdis", "noice", "noicd", "slpen", "slpds", NULL };
 
 	ast_verb(3, "%s config for repeater %s\n", (init) ? "Loading initial" : "Re-Loading", rpt_vars[n].name);
 	ast_mutex_lock(&rpt_vars[n].lock);
@@ -797,7 +795,7 @@ void load_rpt_vars(int n, int init)
 		rpt_vars[n].outstreampipe[0] = -1;
 		rpt_vars[n].outstreampipe[1] = -1;
 	}
-#ifdef	__RPT_NOTCH
+#ifdef __RPT_NOTCH
 	/* zot out filters stuff */
 	memset(&rpt_vars[n].filters, 0, sizeof(rpt_vars[n].filters));
 #endif
@@ -943,8 +941,8 @@ void load_rpt_vars(int n, int init)
 	rpt_vars[n].p.tailmessagetime = retrieve_astcfgint(&rpt_vars[n], cat, "tailmessagetime", 0, 200000000, 0);
 	rpt_vars[n].p.tailsquashedtime = retrieve_astcfgint(&rpt_vars[n], cat, "tailsquashedtime", 0, 200000000, 0);
 	rpt_vars[n].p.duplex = retrieve_astcfgint(&rpt_vars[n], cat, "duplex", 0, 4, 2);
-	rpt_vars[n].p.idtime = retrieve_astcfgint(&rpt_vars[n], cat, "idtime", -60000, 2400000, IDTIME);	/* Enforce a min max including zero */
-	rpt_vars[n].p.politeid = retrieve_astcfgint(&rpt_vars[n], cat, "politeid", 30000, 300000, POLITEID);	/* Enforce a min max */
+	rpt_vars[n].p.idtime = retrieve_astcfgint(&rpt_vars[n], cat, "idtime", -60000, 2400000, IDTIME); /* Enforce a min max including zero */
+	rpt_vars[n].p.politeid = retrieve_astcfgint(&rpt_vars[n], cat, "politeid", 30000, 300000, POLITEID); /* Enforce a min max */
 
 	j = retrieve_astcfgint(&rpt_vars[n], cat, "elke", 0, 40000000, 0);
 	rpt_vars[n].p.elke = j * 1210;
@@ -1054,12 +1052,12 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR(mdclog, "mdclog");
 	RPT_CONFIG_VAR_BOOL(lnkactenable, "lnkactenable");
 	RPT_CONFIG_VAR(lnkacttimerwarn, "lnkacttimerwarn");
-	rpt_vars[n].p.lnkacttime = retrieve_astcfgint(&rpt_vars[n], cat, "lnkacttime", 0, 90000, 0);	/* Enforce a min max including zero */
+	rpt_vars[n].p.lnkacttime = retrieve_astcfgint(&rpt_vars[n], cat, "lnkacttime", 0, 90000, 0); /* Enforce a min max including zero */
 
 	RPT_CONFIG_VAR(lnkactmacro, "lnkactmacro");
 	RPT_CONFIG_VAR_BOOL(nolocallinkct, "nolocallinkct");
 
-	rpt_vars[n].p.rptinacttime = retrieve_astcfgint(&rpt_vars[n], cat, "rptinacttime", -120, 90000, 0);	/* Enforce a min max including zero */
+	rpt_vars[n].p.rptinacttime = retrieve_astcfgint(&rpt_vars[n], cat, "rptinacttime", -120, 90000, 0); /* Enforce a min max including zero */
 
 	RPT_CONFIG_VAR(rptinactmacro, "rptinactmacro");
 	RPT_CONFIG_VAR_BOOL(nounkeyct, "nounkeyct");
@@ -1082,7 +1080,7 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(events, "events", "events");
 	RPT_CONFIG_VAR(timezone, "timezone");
 
-#ifdef	__RPT_NOTCH
+#ifdef __RPT_NOTCH
 	val = ast_variable_retrieve(cfg, this, "rxnotch");
 	if (val) {
 		i = finddelim((char *) val, strs,
@@ -1171,8 +1169,8 @@ void load_rpt_vars(int n, int init)
 	}
 
 	RPT_CONFIG_VAR_INT_DEFAULT(sleeptime, "sleeptime", SLEEPTIME);
-	RPT_CONFIG_VAR(csstanzaname, "controlstates"); /* stanza name for control states */
-	RPT_CONFIG_VAR(skedstanzaname, "scheduler"); /* stanza name for scheduler */
+	RPT_CONFIG_VAR(csstanzaname, "controlstates");	/* stanza name for control states */
+	RPT_CONFIG_VAR(skedstanzaname, "scheduler");	/* stanza name for scheduler */
 	RPT_CONFIG_VAR(txlimitsstanzaname, "txlimits"); /* stanza name for txlimits */
 
 	rpt_vars[n].p.iospeed = B9600;
@@ -1297,85 +1295,85 @@ void load_rpt_vars(int n, int init)
 		vp = NULL;
 	}
 
-	for (i = 0; vp && (i < MAX_SYSSTATES); i++) {	/* Iterate over the number of control state lines in the stanza */
+	for (i = 0; vp && (i < MAX_SYSSTATES); i++) { /* Iterate over the number of control state lines in the stanza */
 		int k, nukw, statenum;
 		statenum = atoi(vp->name);
 		ast_copy_string(s1, vp->value, sizeof(s1));
 		nukw = finddelim(s1, strs, ARRAY_LEN(strs));
 
-		for (k = 0; k < nukw; k++) {	/* for each user specified keyword */
-			for (j = 0; cs_keywords[j] != NULL; j++) {	/* try to match to one in our internal table */
+		for (k = 0; k < nukw; k++) {				   /* for each user specified keyword */
+			for (j = 0; cs_keywords[j] != NULL; j++) { /* try to match to one in our internal table */
 				if (!strcmp(strs[k], cs_keywords[j])) {
 					switch (j) {
-					case 0:	/* rptena */
+					case 0: /* rptena */
 						rpt_vars[n].p.s[statenum].txdisable = 0;
 						break;
 
-					case 1:	/* rptdis */
+					case 1: /* rptdis */
 						rpt_vars[n].p.s[statenum].txdisable = 1;
 						break;
 
-					case 2:	/* apena */
+					case 2: /* apena */
 						rpt_vars[n].p.s[statenum].autopatchdisable = 0;
 						break;
 
-					case 3:	/* apdis */
+					case 3: /* apdis */
 						rpt_vars[n].p.s[statenum].autopatchdisable = 1;
 						break;
 
-					case 4:	/* lnkena */
+					case 4: /* lnkena */
 						rpt_vars[n].p.s[statenum].linkfundisable = 0;
 						break;
 
-					case 5:	/* lnkdis */
+					case 5: /* lnkdis */
 						rpt_vars[n].p.s[statenum].linkfundisable = 1;
 						break;
 
-					case 6:	/* totena */
+					case 6: /* totena */
 						rpt_vars[n].p.s[statenum].totdisable = 0;
 						break;
 
-					case 7:	/* totdis */
+					case 7: /* totdis */
 						rpt_vars[n].p.s[statenum].totdisable = 1;
 						break;
 
-					case 8:	/* skena */
+					case 8: /* skena */
 						rpt_vars[n].p.s[statenum].schedulerdisable = 0;
 						break;
 
-					case 9:	/* skdis */
+					case 9: /* skdis */
 						rpt_vars[n].p.s[statenum].schedulerdisable = 1;
 						break;
 
-					case 10:	/* ufena */
+					case 10: /* ufena */
 						rpt_vars[n].p.s[statenum].userfundisable = 0;
 						break;
 
-					case 11:	/* ufdis */
+					case 11: /* ufdis */
 						rpt_vars[n].p.s[statenum].userfundisable = 1;
 						break;
 
-					case 12:	/* atena */
+					case 12: /* atena */
 						rpt_vars[n].p.s[statenum].alternatetail = 1;
 						break;
 
-					case 13:	/* atdis */
+					case 13: /* atdis */
 						rpt_vars[n].p.s[statenum].alternatetail = 0;
 						break;
 
-					case 14:	/* noice */
+					case 14: /* noice */
 						rpt_vars[n].p.s[statenum].noincomingconns = 1;
 						break;
 
-					case 15:	/* noicd */
+					case 15: /* noicd */
 						rpt_vars[n].p.s[statenum].noincomingconns = 0;
 						break;
 
-					case 16:	/* slpen */
+					case 16: /* slpen */
 						rpt_vars[n].p.s[statenum].sleepena = 1;
 						break;
 
-					case 17:	/* slpds */
+					case 17: /* slpds */
 						rpt_vars[n].p.s[statenum].sleepena = 0;
 						break;
 

@@ -1,5 +1,6 @@
 
-/*! \file
+/*!
+ * \file
  *
  * \brief RPT CLI commands
  */
@@ -61,7 +62,7 @@ static int rpt_do_dump(int fd, int argc, const char *const *argv)
 
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
-			rpt_vars[i].disgorgetime = time(NULL) + 10;	/* Do it 10 seconds later */
+			rpt_vars[i].disgorgetime = time(NULL) + 10; /* Do it 10 seconds later */
 			ast_cli(fd, "app_rpt struct dump requested for node %s\n", argv[2]);
 			return RESULT_SUCCESS;
 		}
@@ -103,7 +104,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
+			rpt_mutex_lock(&myrpt->lock); /* LOCK */
 			uptime = (int) (now - rpt_starttime());
 			dailytxtime = myrpt->dailytxtime;
 			totaltxtime = myrpt->totaltxtime;
@@ -241,7 +242,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "DTMF commands today..............................: %d\n", dailyexecdcommands);
 			ast_cli(fd, "DTMF commands since system initialization........: %d\n", totalexecdcommands);
 			ast_cli(fd, "Last DTMF command executed.......................: %s\n",
-					(lastdtmfcommand && strlen(lastdtmfcommand)) ? lastdtmfcommand : not_applicable);
+				(lastdtmfcommand && strlen(lastdtmfcommand)) ? lastdtmfcommand : not_applicable);
 			hours = dailytxtime / 3600000;
 			dailytxtime %= 3600000;
 			minutes = dailytxtime / 60000;
@@ -249,8 +250,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			seconds = dailytxtime / 1000;
 			dailytxtime %= 1000;
 
-			ast_cli(fd, "TX time today....................................: %02d:%02d:%02d:%02d\n", hours, minutes,
-					seconds, dailytxtime);
+			ast_cli(fd, "TX time today....................................: %02d:%02d:%02d:%02d\n", hours, minutes, seconds, dailytxtime);
 
 			hours = (int) totaltxtime / 3600000;
 			totaltxtime %= 3600000;
@@ -259,8 +259,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			seconds = (int) totaltxtime / 1000;
 			totaltxtime %= 1000;
 
-			ast_cli(fd, "TX time since system initialization..............: %02d:%02d:%02d:%02d\n", hours, minutes,
-					seconds, (int) totaltxtime);
+			ast_cli(fd, "TX time since system initialization..............: %02d:%02d:%02d:%02d\n", hours, minutes, seconds, (int) totaltxtime);
 
 			hours = uptime / 3600;
 			uptime %= 3600;
@@ -299,7 +298,7 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			ast_cli(fd, "Autopatch........................................: %s\n", patch_ena);
 			ast_cli(fd, "Autopatch state..................................: %s\n", patch_state);
 			ast_cli(fd, "Autopatch called number..........................: %s\n",
-					(called_number && strlen(called_number)) ? called_number : not_applicable);
+				(called_number && strlen(called_number)) ? called_number : not_applicable);
 			ast_cli(fd, "Reverse patch/IAXRPT connected...................: %s\n", reverse_patch_state);
 			ast_cli(fd, "User linking commands............................: %s\n", link_ena);
 			ast_cli(fd, "User functions...................................: %s\n\n", user_funs);
@@ -447,76 +446,76 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				parrot_ena = "0"; //"DISABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable)
-				sys_ena = "0";	//"DISABLED";
+				sys_ena = "0"; //"DISABLED";
 			else
-				sys_ena = "1";	//"ENABLED";
+				sys_ena = "1"; //"ENABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable)
-				tot_ena = "0";	//"DISABLED";
+				tot_ena = "0"; //"DISABLED";
 			else
-				tot_ena = "1";	//"ENABLED";
+				tot_ena = "1"; //"ENABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable)
-				link_ena = "0";	//"DISABLED";
+				link_ena = "0"; //"DISABLED";
 			else
-				link_ena = "1";	//"ENABLED";
+				link_ena = "1"; //"ENABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable)
-				patch_ena = "0";	//"DISABLED";
+				patch_ena = "0"; //"DISABLED";
 			else
-				patch_ena = "1";	//"ENABLED";
+				patch_ena = "1"; //"ENABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable)
-				sch_ena = "0";	//"DISABLED";
+				sch_ena = "0"; //"DISABLED";
 			else
-				sch_ena = "1";	//"ENABLED";
+				sch_ena = "1"; //"ENABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable)
-				user_funs = "0";	//"DISABLED";
+				user_funs = "0"; //"DISABLED";
 			else
-				user_funs = "1";	//"ENABLED";
+				user_funs = "1"; //"ENABLED";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail)
-				tail_type = "1";	//"ALTERNATE";
+				tail_type = "1"; //"ALTERNATE";
 			else
-				tail_type = "0";	//"STANDARD";
+				tail_type = "0"; //"STANDARD";
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns)
-				iconns = "0";	//"DISABLED";
+				iconns = "0"; //"DISABLED";
 			else
-				iconns = "1";	//"ENABLED";
+				iconns = "1"; //"ENABLED";
 
 			if (!myrpt->totimer)
-				tot_state = "0";	//"TIMED OUT!";
+				tot_state = "0"; //"TIMED OUT!";
 			else if (myrpt->totimer != myrpt->p.totime)
-				tot_state = "1";	//"ARMED";
+				tot_state = "1"; //"ARMED";
 			else
-				tot_state = "2";	//"RESET";
+				tot_state = "2"; //"RESET";
 
 			if (myrpt->tailid)
-				ider_state = "0";	//"QUEUED IN TAIL";
+				ider_state = "0"; //"QUEUED IN TAIL";
 			else if (myrpt->mustid)
-				ider_state = "1";	//"QUEUED FOR CLEANUP";
+				ider_state = "1"; //"QUEUED FOR CLEANUP";
 			else
-				ider_state = "2";	//"CLEAN";
+				ider_state = "2"; //"CLEAN";
 
 			switch (myrpt->callmode) {
 			case CALLMODE_DIALING:
-				patch_state = "0";	//"DIALING";
+				patch_state = "0"; //"DIALING";
 				break;
 			case CALLMODE_CONNECTING:
-				patch_state = "1";	//"CONNECTING";
+				patch_state = "1"; //"CONNECTING";
 				break;
 			case CALLMODE_UP:
-				patch_state = "2";	//"UP";
+				patch_state = "2"; //"UP";
 				break;
 
 			case CALLMODE_FAILED:
-				patch_state = "3";	//"CALL FAILED";
+				patch_state = "3"; //"CALL FAILED";
 				break;
 
 			default:
-				patch_state = "4";	//"DOWN";
+				patch_state = "4"; //"DOWN";
 			}
 
 			if (myrpt->p.telemdynamic) {
@@ -591,7 +590,6 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				ast_cli(fd, "%s", strs[j]);
 				if (strs[j + 1])
 					ast_cli(fd, ", ");
-
 			}
 			ast_cli(fd, "\n\n");
 			ast_free(strs);
@@ -648,14 +646,13 @@ static int rpt_do_nodes(int fd, int argc, const char *const *argv)
 		return RESULT_SHOWUSAGE;
 	}
 
-
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
-			rpt_mutex_lock(&myrpt->lock);	/* LOCK */
+			rpt_mutex_lock(&myrpt->lock); /* LOCK */
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
-			rpt_mutex_unlock(&myrpt->lock);	/* UNLOCK */
+			rpt_mutex_unlock(&myrpt->lock); /* UNLOCK */
 			strs = ast_malloc(n * sizeof(char *));
 
 			if (!strs) {
@@ -713,7 +710,7 @@ static int rpt_do_local_nodes(int fd, int argc, const char *const *argv)
 		if (rpt_vars[i].name[0]) {
 			ast_cli(fd, "%s\n", rpt_vars[i].name);
 		}
-	}							/* for i */
+	} /* for i */
 
 	ast_cli(fd, "\n");
 	return RESULT_SUCCESS;
@@ -897,7 +894,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 			while (telem != &myrpt->tele) {
 				if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
 					if (telem->chan) {
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);	/* Whoosh! */
+						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
 					}
 					telem->killed = 1;
 					myrpt->deferid = 1;
@@ -915,7 +912,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	return RESULT_SUCCESS;
 }
 
-//## Send to all nodes
+/* ## Send to all nodes */
 
 int rpt_do_sendall(int fd, int argc, const char *const *argv)
 {
@@ -982,8 +979,8 @@ static int rpt_do_fun1(int fd, int argc, const char *const *argv)
 }
 
 /*
-* send an app_rpt **command** from the CLI
-*/
+ * send an app_rpt **command** from the CLI
+ */
 
 static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 {
@@ -1004,13 +1001,13 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 			thisRpt = i;
 			myrpt = &rpt_vars[i];
 			break;
-		}						/* if !strcmp... */
-	}							/* for i */
+		} /* if !strcmp... */
+	} /* for i */
 
 	if (thisRpt < 0) {
 		ast_cli(fd, "Unknown node number %s.\n", argv[2]);
 		return RESULT_FAILURE;
-	}							/* if thisRpt < 0 */
+	} /* if thisRpt < 0 */
 
 	/* Look up the action */
 	thisAction = rpt_function_lookup(argv[3]);
@@ -1057,7 +1054,7 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 
 	rpt_mutex_unlock(&myrpt->lock);
 	return (busy ? RESULT_FAILURE : RESULT_SUCCESS);
-}								/* rpt_do_cmd() */
+} /* rpt_do_cmd() */
 
 /*! \brief Set a node's main channel variable from the command line */
 static int rpt_do_setvar(int fd, int argc, const char *const *argv)
@@ -1134,7 +1131,8 @@ static int rpt_show_channels(int fd, int argc, const char *const *argv)
 		return RESULT_FAILURE;
 	}
 
-#define DUMP_CHANNEL(name) ast_cli(fd, "%-25s: %s\n", #name, rpt_vars[this_rpt].name ? ast_channel_name(rpt_vars[this_rpt].name) : "")
+#define DUMP_CHANNEL(name) \
+	ast_cli(fd, "%-25s: %s\n", #name, rpt_vars[this_rpt].name ? ast_channel_name(rpt_vars[this_rpt].name) : "")
 	rpt_mutex_lock(&rpt_vars[this_rpt].lock);
 	ast_cli(fd, "RPT channels for node %s\n", argv[3]);
 	DUMP_CHANNEL(rxchannel);
@@ -1230,9 +1228,8 @@ static char *handle_cli_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt debug level";
-		e->usage =
-			"Usage: rpt debug level {0-7}\n"
-			"	Enables debug messages in app_rpt\n";
+		e->usage = "Usage: rpt debug level {0-7}\n"
+				   "	Enables debug messages in app_rpt\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1247,9 +1244,8 @@ static char *handle_cli_dump(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt dump";
-		e->usage =
-			"Usage: rpt dump <nodename>\n"
-			"	Dumps struct debug info to log\n";
+		e->usage = "Usage: rpt dump <nodename>\n"
+				   "	Dumps struct debug info to log\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1264,9 +1260,8 @@ static char *handle_cli_stats(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt stats";
-		e->usage =
-			"Usage: rpt stats <nodename>\n"
-			"	Dumps node statistics to console\n";
+		e->usage = "Usage: rpt stats <nodename>\n"
+				   "	Dumps node statistics to console\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1281,9 +1276,8 @@ static char *handle_cli_nodes(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt nodes";
-		e->usage =
-			"Usage: rpt nodes <nodename>\n"
-			"	Dumps a list of directly and indirectly connected nodes to the console\n";
+		e->usage = "Usage: rpt nodes <nodename>\n"
+				   "	Dumps a list of directly and indirectly connected nodes to the console\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1298,9 +1292,8 @@ static char *handle_cli_xnode(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt xnode";
-		e->usage =
-			"Usage: rpt xnode <nodename>\n"
-			"	Dumps extended node info to the console\n";
+		e->usage = "Usage: rpt xnode <nodename>\n"
+				   "	Dumps extended node info to the console\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1315,9 +1308,8 @@ static char *handle_cli_local_nodes(struct ast_cli_entry *e, int cmd, struct ast
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt localnodes";
-		e->usage =
-			"Usage: rpt localnodes\n"
-			"	Dumps a list of the locally configured node numbers to the console.\n";
+		e->usage = "Usage: rpt localnodes\n"
+				   "	Dumps a list of the locally configured node numbers to the console.\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1332,9 +1324,8 @@ static char *handle_cli_lstats(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt lstats";
-		e->usage =
-			"Usage: rpt lstats <nodename>\n"
-			"	Dumps link statistics to console\n";
+		e->usage = "Usage: rpt lstats <nodename>\n"
+				   "	Dumps link statistics to console\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1349,9 +1340,8 @@ static char *handle_cli_restart(struct ast_cli_entry *e, int cmd, struct ast_cli
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt restart";
-		e->usage =
-			"Usage: rpt restart\n"
-			"	Restarts app_rpt\n";
+		e->usage = "Usage: rpt restart\n"
+				   "	Restarts app_rpt\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1366,9 +1356,8 @@ static char *handle_cli_fun(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt fun";
-		e->usage =
-			"Usage: rpt fun <nodename> <command>\n"
-			"	Send a DTMF function to a node\n";
+		e->usage = "Usage: rpt fun <nodename> <command>\n"
+				   "	Send a DTMF function to a node\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1383,9 +1372,9 @@ static char *handle_cli_fun1(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt fun1";
-		e->usage =
-			"Usage: rpt fun1 <nodename> <command>\n"
-			"	Send a DTMF function to a node\n";;
+		e->usage = "Usage: rpt fun1 <nodename> <command>\n"
+				   "	Send a DTMF function to a node\n";
+		;
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1400,9 +1389,8 @@ static char *handle_cli_playback(struct ast_cli_entry *e, int cmd, struct ast_cl
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt playback";
-		e->usage =
-			"Usage: rpt playback <nodename> <sound_file_base_name>\n"
-			"	Send an Audio File to a node, send to all other connected nodes (global)\n";
+		e->usage = "Usage: rpt playback <nodename> <sound_file_base_name>\n"
+				   "	Send an Audio File to a node, send to all other connected nodes (global)\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1443,10 +1431,9 @@ static char *handle_cli_setvar(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt set variable";
-		e->usage =
-			"Usage: rpt set variable <nodename> <name=value> [<name=value>...]\n"
-			"	Set an Asterisk channel variable for a node.\n"
-			"   Note: variable names are case-sensitive.\n";
+		e->usage = "Usage: rpt set variable <nodename> <name=value> [<name=value>...]\n"
+				   "	Set an Asterisk channel variable for a node.\n"
+				   "   Note: variable names are case-sensitive.\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1462,7 +1449,7 @@ static char *handle_cli_showvars(struct ast_cli_entry *e, int cmd, struct ast_cl
 	case CLI_INIT:
 		e->command = "rpt show variables";
 		e->usage = "Usage: rpt show variables <nodename>\n"
-			"	Display all the Asterisk channel variables for a node.\n";
+				   "	Display all the Asterisk channel variables for a node.\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1478,7 +1465,7 @@ static char *handle_cli_show_channels(struct ast_cli_entry *e, int cmd, struct a
 	case CLI_INIT:
 		e->command = "rpt show channels";
 		e->usage = "Usage: rpt show channels <nodename>\n"
-			"	Display all the Asterisk channels for a node.\n";
+				   "	Display all the Asterisk channels for a node.\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1509,9 +1496,8 @@ static char *handle_cli_localplay(struct ast_cli_entry *e, int cmd, struct ast_c
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt localplay";
-		e->usage =
-			"Usage: rpt localplay <nodename> <sound_file_base_name>\n"
-			"	Send an audio file to a node, do not send to other connected nodes (local)\n";
+		e->usage = "Usage: rpt localplay <nodename> <sound_file_base_name>\n"
+				   "	Send an audio file to a node, do not send to other connected nodes (local)\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1526,9 +1512,8 @@ static char *handle_cli_sendall(struct ast_cli_entry *e, int cmd, struct ast_cli
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt sendall";
-		e->usage =
-			"Usage: rpt sendall <nodename> <Text Message>\n"
-			"	Send a Text message to all connected nodes\n";
+		e->usage = "Usage: rpt sendall <nodename> <Text Message>\n"
+				   "	Send a Text message to all connected nodes\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1543,9 +1528,8 @@ static char *handle_cli_sendtext(struct ast_cli_entry *e, int cmd, struct ast_cl
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt sendtext";
-		e->usage =
-			"Usage: rpt sendtext <nodename> <destnodename> <Text Message>\n"
-			"	Send a Text message to a specified node\n";
+		e->usage = "Usage: rpt sendtext <nodename> <destnodename> <Text Message>\n"
+				   "	Send a Text message to a specified node\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1560,9 +1544,8 @@ static char *handle_cli_page(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt page";
-		e->usage =
-			"Usage: rpt page <nodename> <baud> <capcode> <[ANT]Text....>\n"
-			"	Send a page to a user on a node, specifying capcode and type/text\n";
+		e->usage = "Usage: rpt page <nodename> <baud> <capcode> <[ANT]Text....>\n"
+				   "	Send a page to a user on a node, specifying capcode and type/text\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1577,9 +1560,8 @@ static char *handle_cli_show_version(struct ast_cli_entry *e, int cmd, struct as
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt show version";
-		e->usage =
-			"Usage: rpt show version\n"
-			"	Show the current version of the app_rpt module\n";
+		e->usage = "Usage: rpt show version\n"
+				   "	Show the current version of the app_rpt module\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1590,29 +1572,21 @@ static char *handle_cli_show_version(struct ast_cli_entry *e, int cmd, struct as
 	return CLI_SUCCESS;
 }
 
-static struct ast_cli_entry rpt_cli[] = {
-	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
-	AST_CLI_DEFINE(handle_cli_dump, "Dump app_rpt structs for debugging"),
-	AST_CLI_DEFINE(handle_cli_stats, "Dump node statistics"),
-	AST_CLI_DEFINE(handle_cli_nodes, "Dump node list"),
-	AST_CLI_DEFINE(handle_cli_xnode, "Dump extended node info"),
+static struct ast_cli_entry rpt_cli[] = { AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
+	AST_CLI_DEFINE(handle_cli_dump, "Dump app_rpt structs for debugging"), AST_CLI_DEFINE(handle_cli_stats, "Dump node statistics"),
+	AST_CLI_DEFINE(handle_cli_nodes, "Dump node list"), AST_CLI_DEFINE(handle_cli_xnode, "Dump extended node info"),
 	AST_CLI_DEFINE(handle_cli_local_nodes, "Dump list of local node numbers"),
-	AST_CLI_DEFINE(handle_cli_lstats, "Dump link statistics"),
-	AST_CLI_DEFINE(handle_cli_restart, "Restart app_rpt"),
-	AST_CLI_DEFINE(handle_cli_playback, "Play Back an Audio File"),
-	AST_CLI_DEFINE(handle_cli_fun, "Execute a DTMF function"),
-	AST_CLI_DEFINE(handle_cli_fun1, "Execute a DTMF function"),
-	AST_CLI_DEFINE(handle_cli_cmd, "Execute a DTMF function"),
+	AST_CLI_DEFINE(handle_cli_lstats, "Dump link statistics"), AST_CLI_DEFINE(handle_cli_restart, "Restart app_rpt"),
+	AST_CLI_DEFINE(handle_cli_playback, "Play Back an Audio File"), AST_CLI_DEFINE(handle_cli_fun, "Execute a DTMF function"),
+	AST_CLI_DEFINE(handle_cli_fun1, "Execute a DTMF function"), AST_CLI_DEFINE(handle_cli_cmd, "Execute a DTMF function"),
 	AST_CLI_DEFINE(handle_cli_setvar, "Set an Asterisk channel variable for a node"),
 	AST_CLI_DEFINE(handle_cli_showvars, "Display Asterisk channel variables for a node"),
 	AST_CLI_DEFINE(handle_cli_show_channels, "Display Asterisk channels for a node"),
 	AST_CLI_DEFINE(handle_cli_localplay, "Playback an audio file (local)"),
 	AST_CLI_DEFINE(handle_cli_sendall, "Send a Text message to all connected nodes"),
 	AST_CLI_DEFINE(handle_cli_sendtext, "Send a Text message to a specified nodes"),
-	AST_CLI_DEFINE(handle_cli_page, "Send a page to a user on a node"),
-	AST_CLI_DEFINE(handle_cli_lookup, "Lookup Allstar nodes"),
-	AST_CLI_DEFINE(handle_cli_show_version, "Show app_rpt version")
-};
+	AST_CLI_DEFINE(handle_cli_page, "Send a page to a user on a node"), AST_CLI_DEFINE(handle_cli_lookup, "Lookup Allstar nodes"),
+	AST_CLI_DEFINE(handle_cli_show_version, "Show app_rpt version") };
 
 int rpt_cli_load(void)
 {

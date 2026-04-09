@@ -23,10 +23,11 @@
  * added dtmf decode
  */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief GNU Radio interface
- * 
+ *
  * \author Jim Dixon <jim@lambdatel.com>, KA1RBI <ikj1234i at yahoo dot-com>
  *
  * \ingroup channel_drivers
@@ -40,12 +41,12 @@
  *
  * Channel connection for Asterisk to GNU Radio/USRP
  *
- * It is invoked as usrp/HISIP:HISPORT[:MYPORT] 	 
- *	  	 
+ * It is invoked as usrp/HISIP:HISPORT[:MYPORT]
+ *
  * HISIP is the IP address (or FQDN) of the GR app
  * HISPORT is the UDP socket of the GR app
- * MYPORT (optional) is the UDP socket that Asterisk listens on for this channel 	 
-*/
+ * MYPORT (optional) is the UDP socket that Asterisk listens on for this channel
+ */
 
 #include "asterisk.h"
 
@@ -73,10 +74,10 @@
 #include "asterisk/dsp.h"
 #include "asterisk/format_cache.h"
 
-#define	MAX_RXKEY_TIME 4
-#define	KEEPALIVE_TIME 50 * 7
-#define	BLOCKING_FACTOR 4
-#define	SSO sizeof(unsigned long)
+#define MAX_RXKEY_TIME 4
+#define KEEPALIVE_TIME 50 * 7
+#define BLOCKING_FACTOR 4
+#define SSO sizeof(unsigned long)
 #define QUEUE_OVERLOAD_THRESHOLD 25
 
 #define USRP_VOICE_FRAME_SIZE (160 * sizeof(short)) /* 0.02 * 8k */
@@ -93,7 +94,7 @@ struct _chan_usrp_bufhdr {
 	uint32_t seq;		/*!< sequence counter */
 	uint32_t memory;	/*!< memory ID or zero (default) */
 	uint32_t keyup;		/*!< tracks PTT state */
-	uint32_t talkgroup;	/*!< trunk TG id */
+	uint32_t talkgroup; /*!< trunk TG id */
 	uint32_t type;		/*!< see above enum */
 	uint32_t mpxid;		/*!< for future use */
 	uint32_t reserved;	/*!< for future use */
@@ -116,24 +117,24 @@ struct usrp_rxq {
  * \brief Descriptor for one of our channels.
  */
 struct usrp_pvt {
-	int usrp;					/* Open UDP socket */
-	struct ast_channel *owner;	/* Channel we belong to, possibly NULL */
-	char stream[80];			/* Our stream */
-	struct sockaddr_in si_other;	/* for UDP sending */
-	char txkey;					/* Indicates tx key */
-	int rxkey;					/* Indicates rx key - implemented as a count down */
-	struct ast_frame fr;		/* "null" frame */
-	struct usrp_rxq rxq;		/* Received data queue */
-	unsigned long rxseq;		/* Received packet sequence number */
-	unsigned long txseq;		/* Transmit packet sequence number */
-	struct ast_module_user *u;	/* Hold a reference to this module */
-	unsigned long writect;		/* Number of packets written */
-	unsigned long readct;		/* Number of packets read */
-	struct ast_dsp *dsp;		/* Reference to dsp processor */
+	int usrp;					 /* Open UDP socket */
+	struct ast_channel *owner;	 /* Channel we belong to, possibly NULL */
+	char stream[80];			 /* Our stream */
+	struct sockaddr_in si_other; /* for UDP sending */
+	char txkey;					 /* Indicates tx key */
+	int rxkey;					 /* Indicates rx key - implemented as a count down */
+	struct ast_frame fr;		 /* "null" frame */
+	struct usrp_rxq rxq;		 /* Received data queue */
+	unsigned long rxseq;		 /* Received packet sequence number */
+	unsigned long txseq;		 /* Transmit packet sequence number */
+	struct ast_module_user *u;	 /* Hold a reference to this module */
+	unsigned long writect;		 /* Number of packets written */
+	unsigned long readct;		 /* Number of packets read */
+	struct ast_dsp *dsp;		 /* Reference to dsp processor */
 	/* bit fields */
-	unsigned int unkey_owed:1;	/* Indicator if we sent a key up packet */
-	unsigned int warned:1;		/* Indicator for warning issued on writes */
-	unsigned int usedtmf:1;		/* Indicator if we decode DTMF */
+	unsigned int unkey_owed:1; /* Indicator if we sent a key up packet */
+	unsigned int warned:1;	   /* Indicator for warning issued on writes */
+	unsigned int usedtmf:1;	   /* Indicator if we decode DTMF */
 };
 
 static struct ast_channel *usrp_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
@@ -168,10 +169,10 @@ static struct ast_channel_tech usrp_tech = {
 	.setoption = usrp_setoption,
 };
 /*!
- * \brief Maximum number of channels supported by this module. 
-*/
+ * \brief Maximum number of channels supported by this module.
+ */
 #define MAX_CHANS 16
-static struct usrp_pvt *usrp_channels[MAX_CHANS] = {NULL};
+static struct usrp_pvt *usrp_channels[MAX_CHANS] = { NULL };
 
 /*!
  * \brief Handle Asterisk CLI request for show.
@@ -198,8 +199,8 @@ static char *handle_usrp_show(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	for (i = 0; i < MAX_CHANS; i++) {
 		pvt = usrp_channels[i];
 		if (pvt) {
-			sprintf(s, "Channel %s: Tx keyed %-3s, Rx keyed %d, Read %lu, Write %lu", pvt->stream, (pvt->txkey) ? "yes" : "no", pvt->rxkey,
-				pvt->readct, pvt->writect);
+			sprintf(s, "Channel %s: Tx keyed %-3s, Rx keyed %d, Read %lu, Write %lu", pvt->stream, (pvt->txkey) ? "yes" : "no",
+				pvt->rxkey, pvt->readct, pvt->writect);
 			ast_cli(a->fd, "%s\n", s);
 		}
 	}
@@ -334,7 +335,7 @@ static struct usrp_pvt *usrp_alloc(void *data)
 /*!
  * \brief Asterisk hangup function.
  * \param ast		Asterisk channel.
- * \retval 0		Always returns 0.			
+ * \retval 0		Always returns 0.
  */
 static int usrp_hangup(struct ast_channel *ast)
 {
@@ -343,7 +344,7 @@ static int usrp_hangup(struct ast_channel *ast)
 
 	p = ast_channel_tech_pvt(ast);
 	ast_debug(1, "usrp hangup(%s)\n", ast_channel_name(ast));
-	
+
 	if (!p) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
@@ -430,7 +431,7 @@ static int usrp_text(struct ast_channel *ast, const char *text)
  * \brief Asterisk digit begin function.
  * \param ast			Asterisk channel.
  * \param digit			Digit processed.
- * \retval 0			
+ * \retval 0
  */
 static int usrp_digit_begin(struct ast_channel *ast, char digit)
 {
@@ -442,7 +443,7 @@ static int usrp_digit_begin(struct ast_channel *ast, char digit)
  * \param ast			Asterisk channel.
  * \param digit			Digit processed.
  * \param duration		Duration of the digit.
- * \retval -1			
+ * \retval -1
  */
 static int usrp_digit_end(struct ast_channel *ast, char digit, unsigned int duration)
 {
@@ -498,12 +499,12 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 	} else {
 		datalen = n - sizeof(struct _chan_usrp_bufhdr);
 		if (memcmp(bufhdrp->eye, "USRP", 4)) {
-			ast_log(LOG_NOTICE, "Channel %s: Received packet from %s with invalid data\n", ast_channel_name(ast), ast_inet_ntoa(si_them.sin_addr));
+			ast_log(LOG_NOTICE, "Channel %s: Received packet from %s with invalid data\n", ast_channel_name(ast),
+				ast_inet_ntoa(si_them.sin_addr));
 		} else {
 			seq = ntohl(bufhdrp->seq);
 			if (seq != pvt->rxseq && seq != 0 && pvt->rxseq != 0) {
-				ast_log(LOG_NOTICE, "Channel %s: Possible data loss, expected seq %lu received %lu\n", 
-					ast_channel_name(ast), pvt->rxseq, seq);
+				ast_log(LOG_NOTICE, "Channel %s: Possible data loss, expected seq %lu received %lu\n", ast_channel_name(ast), pvt->rxseq, seq);
 			}
 			pvt->rxseq = seq + 1;
 			// TODO: TEXT processing added N4IRR
@@ -565,11 +566,9 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
 		ast_log(LOG_WARNING, "Channel %s: Asked to transmit frame type %s, while native formats is %s (read/write = (%s/%s))\n",
-				ast_channel_name(ast), 
-				ast_format_get_name(frame->subclass.format),
-				ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf),
-				ast_format_get_name(ast_channel_readformat(ast)),
-				ast_format_get_name(ast_channel_writeformat(ast)));
+			ast_channel_name(ast), ast_format_get_name(frame->subclass.format),
+			ast_format_cap_get_names(ast_channel_nativeformats(ast), &cap_buf), ast_format_get_name(ast_channel_readformat(ast)),
+			ast_format_get_name(ast_channel_writeformat(ast)));
 		return 0;
 	}
 
@@ -609,7 +608,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			remque((struct qelem *) qp);
 			memcpy(buf + AST_FRIENDLY_OFFSET, qp->buf, USRP_VOICE_FRAME_SIZE);
 			ast_free(qp);
-			
+
 			/* Send the voice data to Asterisk */
 			memset(&fr, 0, sizeof(fr));
 			fr.datalen = USRP_VOICE_FRAME_SIZE;
@@ -662,7 +661,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (!pvt->txkey) {
 		return 0;
 	}
-	
+
 	/* Send a USRP voice packet to the remote app */
 	pvt->writect++;
 	pvt->unkey_owed = 1;
@@ -670,9 +669,8 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	memset(bufhdrp, 0, sizeof(struct _chan_usrp_bufhdr));
 	memcpy(bufhdrp->eye, "USRP", 4);
 	bufhdrp->seq = htonl(pvt->txseq++);
-	bufhdrp->keyup = htonl(1);	/* indicates key up */
-	if (sendto(pvt->usrp, &sendbuf, frame->datalen + sizeof(struct _chan_usrp_bufhdr),
-			   0, &pvt->si_other, sizeof(pvt->si_other)) == -1) {
+	bufhdrp->keyup = htonl(1); /* indicates key up */
+	if (sendto(pvt->usrp, &sendbuf, frame->datalen + sizeof(struct _chan_usrp_bufhdr), 0, &pvt->si_other, sizeof(pvt->si_other)) == -1) {
 		if (!pvt->warned) {
 			ast_log(LOG_WARNING, "sendto: %d\n", errno);
 			pvt->warned = 1;
@@ -741,7 +739,7 @@ static int usrp_setoption(struct ast_channel *chan, int option, void *data, int 
 static struct ast_channel *usrp_new(struct usrp_pvt *i, int state, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor)
 {
 	struct ast_channel *tmp;
-	
+
 	tmp = ast_channel_alloc(1, state, 0, 0, "", "s", context, assignedids, requestor, 0, "usrp/%s", i->stream);
 	if (tmp) {
 		ast_channel_tech_set(tmp, &usrp_tech);
@@ -785,7 +783,7 @@ static struct ast_channel *usrp_new(struct usrp_pvt *i, int state, const struct 
  * \param type			Type of channel to request.
  * \param cap			Format capabilities for the channel.
  * \param assignedids	Unique ID string to assign to the channel.
- * \param requestor		Channel asking for data. 
+ * \param requestor		Channel asking for data.
  * \param data			Destination of the call.
  * \param cause			Cause of failure.
  * \retval NULL			Failure
@@ -820,7 +818,7 @@ static int unload_module(void)
 	ast_cli_unregister_multiple(cli_usrp, ARRAY_LEN(cli_usrp));
 	ao2_cleanup(usrp_tech.capabilities);
 	usrp_tech.capabilities = NULL;
-	
+
 	return 0;
 }
 
@@ -830,15 +828,15 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_format_cap_append(usrp_tech.capabilities, ast_format_slin, 0);
-	
+
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&usrp_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
 		return -1;
 	}
-	
+
 	ast_cli_register_multiple(cli_usrp, ARRAY_LEN(cli_usrp));
-	
+
 	return 0;
 }
 
