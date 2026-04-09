@@ -1433,7 +1433,7 @@ static void *aprstt_sender_thread(void *data)
 			if (this_def_position.is_valid) {
 				selected_position = this_def_position;
 				selected_position.last_updated = now;
-				selected_position.last_updated_mono = now_mono;
+				selected_position.last_updated_mono = time_monotonic();
 			}
 		}
 		ast_mutex_unlock(&position_update_lock);
