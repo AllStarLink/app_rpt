@@ -83,8 +83,9 @@ static void ourhandler(int sig)
 	int i;
 
 	signal(sig, ourhandler);
-	while (waitpid(-1, &i, WNOHANG) > 0)
+	while (waitpid(-1, &i, WNOHANG) > 0) {
 		;
+	}
 }
 
 /*!
