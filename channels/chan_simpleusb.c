@@ -2434,8 +2434,10 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		ast_mutex_lock(&o->echolock);
 		x = 0;
 		/* get count of frames */
-		for (u = (struct usbecho *) o->echoq.q_forw; u != (struct usbecho *) &o->echoq; u = (struct usbecho *) u->q_forw)
+		for (u = (struct usbecho *) o->echoq.q_forw; u != (struct usbecho *) &o->echoq; u = (struct usbecho *) u->q_forw) {
 			x++;
+		}
+
 		if (x < o->echomax) {
 			u = ast_calloc(1, sizeof(struct usbecho));
 			if (u) {

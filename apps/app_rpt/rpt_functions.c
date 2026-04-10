@@ -982,7 +982,17 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 	char *value = NULL;
 	char *paramlist[20];
 
-	static char *keywords[] = { "context", "dialtime", "farenddisconnect", "noct", "quiet", "voxalways", "exten", "nostar", NULL };
+	static char *keywords[] = {
+		"context",
+		"dialtime",
+		"farenddisconnect",
+		"noct",
+		"quiet",
+		"voxalways",
+		"exten",
+		"nostar",
+		NULL,
+	};
 
 	if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable || myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable) {
 		return DC_ERROR;

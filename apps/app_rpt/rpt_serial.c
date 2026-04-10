@@ -462,8 +462,10 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 		}
 	}
 	/* >= 50 us */
-	for (delayvar = 1; delayvar < 50000; delayvar++)
+	for (delayvar = 1; delayvar < 50000; delayvar++) {
 		;
+	}
+
 #endif /* __i386__ */
 #endif /* HAVE_SYS_IO */
 }

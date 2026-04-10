@@ -281,9 +281,7 @@ static void *do_refresh(void *varg)
 
 	for (;;) {
 		struct timeval now = ast_tvnow();
-		struct timespec ts = {
-			0,
-		};
+		struct timespec ts = { 0 };
 
 		ast_debug(3, "Doing periodic registrations\n");
 		AST_RWLIST_RDLOCK(&registrations);
@@ -331,8 +329,7 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 	}
 	ast_cli(a->fd, FORMAT2, "Host", "Username", "Perceived", "Refresh", "State");
 	AST_RWLIST_RDLOCK(&registrations);
-	AST_RWLIST_TRAVERSE(&registrations, reg, entry)
-	{
+	AST_RWLIST_TRAVERSE(&registrations, reg, entry) {
 		if (!ast_sockaddr_isnull(&reg->addr)) {
 			snprintf(perceived, sizeof(perceived), "%s:%d", reg->perceived, reg->perceived_port);
 		} else {
@@ -474,8 +471,7 @@ static void cleanup_registrations(void)
 	struct http_registry *reg;
 	/* Remove all existing ones. */
 	AST_RWLIST_WRLOCK(&registrations);
-	AST_LIST_TRAVERSE_SAFE_BEGIN(&registrations, reg, entry)
-	{
+	AST_LIST_TRAVERSE_SAFE_BEGIN(&registrations, reg, entry) {
 		AST_LIST_REMOVE_CURRENT(entry);
 		if (reg->dnsmgr) {
 			ast_dnsmgr_release(reg->dnsmgr);
