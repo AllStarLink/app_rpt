@@ -4109,9 +4109,13 @@ static char *handle_susb_show_settings(struct ast_cli_entry *e, int cmd, struct 
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry cli_simpleusb[] = { AST_CLI_DEFINE(handle_console_key, "Simulate Rx Signal Present"),
-	AST_CLI_DEFINE(handle_console_unkey, "Simulate Rx Signal Loss"), AST_CLI_DEFINE(handle_susb_tune, "Change susb settings"),
-	AST_CLI_DEFINE(handle_susb_active, "Change commanded device"), AST_CLI_DEFINE(handle_susb_show_settings, "Show device settings") };
+static struct ast_cli_entry cli_simpleusb[] = {
+	AST_CLI_DEFINE(handle_console_key, "Simulate Rx Signal Present"),
+	AST_CLI_DEFINE(handle_console_unkey, "Simulate Rx Signal Loss"),
+	AST_CLI_DEFINE(handle_susb_tune, "Change susb settings"),
+	AST_CLI_DEFINE(handle_susb_active, "Change commanded device"),
+	AST_CLI_DEFINE(handle_susb_show_settings, "Show device settings"),
+};
 
 /*!
  * \brief Load configuration.
@@ -4262,5 +4266,10 @@ static int unload_module(void)
 	return 0;
 }
 
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "SimpleUSB Radio Interface Channel Driver", .support_level = AST_MODULE_SUPPORT_EXTENDED,
-	.load = load_module, .unload = unload_module, .reload = reload_module, .requires = "res_usbradio", );
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "SimpleUSB Radio Interface Channel Driver",
+	.support_level = AST_MODULE_SUPPORT_EXTENDED,
+	.load = load_module,
+	.unload = unload_module,
+	.reload = reload_module,
+	.requires = "res_usbradio",
+);

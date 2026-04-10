@@ -1572,21 +1572,29 @@ static char *handle_cli_show_version(struct ast_cli_entry *e, int cmd, struct as
 	return CLI_SUCCESS;
 }
 
-static struct ast_cli_entry rpt_cli[] = { AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
-	AST_CLI_DEFINE(handle_cli_dump, "Dump app_rpt structs for debugging"), AST_CLI_DEFINE(handle_cli_stats, "Dump node statistics"),
-	AST_CLI_DEFINE(handle_cli_nodes, "Dump node list"), AST_CLI_DEFINE(handle_cli_xnode, "Dump extended node info"),
+static struct ast_cli_entry rpt_cli[] = {
+	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
+	AST_CLI_DEFINE(handle_cli_dump, "Dump app_rpt structs for debugging"),
+	AST_CLI_DEFINE(handle_cli_stats, "Dump node statistics"),
+	AST_CLI_DEFINE(handle_cli_nodes, "Dump node list"),
+	AST_CLI_DEFINE(handle_cli_xnode, "Dump extended node info"),
 	AST_CLI_DEFINE(handle_cli_local_nodes, "Dump list of local node numbers"),
-	AST_CLI_DEFINE(handle_cli_lstats, "Dump link statistics"), AST_CLI_DEFINE(handle_cli_restart, "Restart app_rpt"),
-	AST_CLI_DEFINE(handle_cli_playback, "Play Back an Audio File"), AST_CLI_DEFINE(handle_cli_fun, "Execute a DTMF function"),
-	AST_CLI_DEFINE(handle_cli_fun1, "Execute a DTMF function"), AST_CLI_DEFINE(handle_cli_cmd, "Execute a DTMF function"),
+	AST_CLI_DEFINE(handle_cli_lstats, "Dump link statistics"),
+	AST_CLI_DEFINE(handle_cli_restart, "Restart app_rpt"),
+	AST_CLI_DEFINE(handle_cli_playback, "Play Back an Audio File"),
+	AST_CLI_DEFINE(handle_cli_fun, "Execute a DTMF function"),
+	AST_CLI_DEFINE(handle_cli_fun1, "Execute a DTMF function"),
+	AST_CLI_DEFINE(handle_cli_cmd, "Execute a DTMF function"),
 	AST_CLI_DEFINE(handle_cli_setvar, "Set an Asterisk channel variable for a node"),
 	AST_CLI_DEFINE(handle_cli_showvars, "Display Asterisk channel variables for a node"),
 	AST_CLI_DEFINE(handle_cli_show_channels, "Display Asterisk channels for a node"),
 	AST_CLI_DEFINE(handle_cli_localplay, "Playback an audio file (local)"),
 	AST_CLI_DEFINE(handle_cli_sendall, "Send a Text message to all connected nodes"),
 	AST_CLI_DEFINE(handle_cli_sendtext, "Send a Text message to a specified nodes"),
-	AST_CLI_DEFINE(handle_cli_page, "Send a page to a user on a node"), AST_CLI_DEFINE(handle_cli_lookup, "Lookup Allstar nodes"),
-	AST_CLI_DEFINE(handle_cli_show_version, "Show app_rpt version") };
+	AST_CLI_DEFINE(handle_cli_page, "Send a page to a user on a node"),
+	AST_CLI_DEFINE(handle_cli_lookup, "Lookup Allstar nodes"),
+	AST_CLI_DEFINE(handle_cli_show_version, "Show app_rpt version"),
+};
 
 int rpt_cli_load(void)
 {

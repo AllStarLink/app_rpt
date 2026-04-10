@@ -817,12 +817,22 @@ static int telem_any(struct rpt *myrpt, struct ast_channel *chan, const char *en
 }
 
 /*! \brief Telemetry defaults */
-static struct telem_defaults tele_defs[] = { { "ct1", "|t(350,0,100,3072)(500,0,100,3072)(660,0,100,3072)" },
-	{ "ct2", "|t(660,880,150,3072)" }, { "ct3", "|t(440,0,150,3072)" }, { "ct4", "|t(550,0,150,3072)" }, { "ct5", "|t(660,0,150,3072)" },
-	{ "ct6", "|t(880,0,150,3072)" }, { "ct7", "|t(660,440,150,3072)" }, { "ct8", "|t(700,1100,150,3072)" },
-	{ "remotemon", "|t(1600,0,75,2048)" }, { "remotetx", "|t(2000,0,75,2048)(0,0,75,0)(1600,0,75,2048)" },
-	{ "cmdmode", "|t(900,904,200,2048)" }, { "functcomplete", "|t(1000,0,100,2048)(0,0,100,0)(1000,0,100,2048)" },
-	{ "remcomplete", "|t(650,0,100,2048)(0,0,100,0)(650,0,100,2048)(0,0,100,0)(650,0,100,2048)" }, { "pfxtone", "|t(350,440,30000,3072)" } };
+static struct telem_defaults tele_defs[] = {
+	{ "ct1", "|t(350,0,100,3072)(500,0,100,3072)(660,0,100,3072)" },
+	{ "ct2", "|t(660,880,150,3072)" },
+	{ "ct3", "|t(440,0,150,3072)" },
+	{ "ct4", "|t(550,0,150,3072)" },
+	{ "ct5", "|t(660,0,150,3072)" },
+	{ "ct6", "|t(880,0,150,3072)" },
+	{ "ct7", "|t(660,440,150,3072)" },
+	{ "ct8", "|t(700,1100,150,3072)" },
+	{ "remotemon", "|t(1600,0,75,2048)" },
+	{ "remotetx", "|t(2000,0,75,2048)(0,0,75,0)(1600,0,75,2048)" },
+	{ "cmdmode", "|t(900,904,200,2048)" },
+	{ "functcomplete", "|t(1000,0,100,2048)(0,0,100,0)(1000,0,100,2048)" },
+	{ "remcomplete", "|t(650,0,100,2048)(0,0,100,0)(650,0,100,2048)(0,0,100,0)(650,0,100,2048)" },
+	{ "pfxtone", "|t(350,440,30000,3072)" },
+};
 
 /*! \brief Looks up a telemetry name in the config file, and does a telemetry response as configured.
  * 4 types of telemetry are handled: Morse ID, Morse Message, Tone Sequence, and a File containing a recording.

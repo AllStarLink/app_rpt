@@ -2746,9 +2746,12 @@ static char *handle_cli_show_stats(struct ast_cli_entry *e, int cmd, struct ast_
 /*!
  * \brief Define cli entries for this module
  */
-static struct ast_cli_entry el_cli[] = { AST_CLI_DEFINE(handle_cli_dbdump, "Dump entire echolink db"),
-	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry"), AST_CLI_DEFINE(handle_cli_show_nodes, "Show connected nodes"),
-	AST_CLI_DEFINE(handle_cli_show_stats, "Show node statistics") };
+static struct ast_cli_entry el_cli[] = {
+	AST_CLI_DEFINE(handle_cli_dbdump, "Dump entire echolink db"),
+	AST_CLI_DEFINE(handle_cli_dbget, "Look up echolink db entry"),
+	AST_CLI_DEFINE(handle_cli_show_nodes, "Show connected nodes"),
+	AST_CLI_DEFINE(handle_cli_show_stats, "Show node statistics"),
+};
 
 /*
    If asterisk has a function that writes at least n bytes to a TCP socket,
