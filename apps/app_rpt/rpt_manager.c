@@ -757,11 +757,11 @@ static int manager_rpt_status(struct mansession *s, const struct message *m)
 		int index;
 	};
 	static struct mgrcmdtbl mct[] = {
-		{ "RptStat", MGRCMD_RPTSTAT },	 /*!< RptStat command */
-		{ "NodeStat", MGRCMD_NODESTAT }, /*!< NodeStat command */
-		{ "XStat", MGRCMD_XSTAT },		 /*!< XStat command */
-		{ "SawStat", MGRCMD_SAWSTAT },	 /*!< SawStat command */
-		{ NULL, 0 },					 /*!< NULL marks end of command table */
+		{ "RptStat", MGRCMD_RPTSTAT },
+		{ "NodeStat", MGRCMD_NODESTAT },
+		{ "XStat", MGRCMD_XSTAT },
+		{ "SawStat", MGRCMD_SAWSTAT },
+		{ NULL, 0 },
 	};
 	int nrpts = rpt_num_rpts();
 
