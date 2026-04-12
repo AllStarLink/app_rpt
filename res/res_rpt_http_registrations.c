@@ -17,7 +17,8 @@
  * at the top of the source tree.
  */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief RPT HTTP Registrations
  *
@@ -73,18 +74,18 @@ static int register_interval;
 
 struct http_registry {
 	/* Registration info */
-	struct ast_sockaddr addr;	/*!< Who we connect to for registration purposes */
+	struct ast_sockaddr addr; /*!< Who we connect to for registration purposes */
 	char username[80];
-	char secret[80];			/*!< Password or key name in []'s */
-	int refresh;				/*!< How often to refresh */
-	char registered;			/*!< Registered==1 */
-	struct ast_sockaddr us;			/*!< Who the server thinks we are */
-	struct ast_dnsmgr_entry *dnsmgr;	/*!< DNS refresh manager */
+	char secret[80];				 /*!< Password or key name in []'s */
+	int refresh;					 /*!< How often to refresh */
+	char registered;				 /*!< Registered==1 */
+	struct ast_sockaddr us;			 /*!< Who the server thinks we are */
+	struct ast_dnsmgr_entry *dnsmgr; /*!< DNS refresh manager */
 	char perceived[80];
 	int perceived_port;
 	AST_LIST_ENTRY(http_registry) entry;
-	int port;					/*!< Port of server for registration */
-	int iaxport;				/*!< Our IAX2 bindport */
+	int port;	 /*!< Port of server for registration */
+	int iaxport; /*!< Our IAX2 bindport */
 	char hostname[];
 };
 
@@ -96,7 +97,7 @@ static size_t curl_write_string_callback(char *contents, size_t size, size_t nme
 {
 	struct ast_str **buffer = userdata;
 
-	return  ast_str_append(buffer, 0, "%.*s", (int) (size * nmemb), contents);
+	return ast_str_append(buffer, 0, "%.*s", (int) (size * nmemb), contents);
 }
 
 static struct ast_str *curl_post(const char *url, const char *header, const char *data)
@@ -163,10 +164,7 @@ static struct ast_str *curl_post(const char *url, const char *header, const char
 
 static struct ast_json *register_to_json(struct http_registry *reg)
 {
-	return ast_json_pack("{s: s, s: s, s: i}",
-		"node", reg->username,
-		"passwd", reg->secret,
-		"remote", 0);
+	return ast_json_pack("{s: s, s: s, s: i}", "node", reg->username, "passwd", reg->secret, "remote", 0);
 }
 
 static char *build_request_data(struct http_registry *reg)
@@ -251,8 +249,7 @@ static int http_register(struct http_registry *reg)
 			port = ast_json_integer_get(ast_json_object_get(json, "port"));
 			refresh = ast_json_integer_get(ast_json_object_get(json, "refresh"));
 			data = ast_json_dump_string(ast_json_object_get(json, "data"));
-			ast_debug(2, "Response: ipaddr=%s, port=%d, refresh=%d, data=%s\n",
-				ipaddr, port, refresh, data);
+			ast_debug(2, "Response: ipaddr=%s, port=%d, refresh=%d, data=%s\n", ipaddr, port, refresh, data);
 			if (data && strstr(data, "successfully registered")) {
 				ast_copy_string(reg->perceived, ipaddr, sizeof(reg->perceived));
 				reg->perceived_port = port;
@@ -284,7 +281,7 @@ static void *do_refresh(void *varg)
 
 	for (;;) {
 		struct timeval now = ast_tvnow();
-		struct timespec ts = {0,};
+		struct timespec ts = { 0 };
 
 		ast_debug(3, "Doing periodic registrations\n");
 		AST_RWLIST_RDLOCK(&registrations);
@@ -311,7 +308,7 @@ static void *do_refresh(void *varg)
 static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 #define FORMAT2 "%-45.45s  %-10.10s  %-35.35s %8.8s  %s\n"
-#define FORMAT  "%-45.45s  %-10.10s  %-35.35s %8d  %s\n"
+#define FORMAT "%-45.45s  %-10.10s  %-35.35s %8d  %s\n"
 
 	struct http_registry *reg = NULL;
 	char host[80];
@@ -321,9 +318,8 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "rpt show registrations";
-		e->usage =
-			"Usage: rpt show registrations\n"
-			"       Lists all registration requests and status.\n";
+		e->usage = "Usage: rpt show registrations\n"
+				   "       Lists all registration requests and status.\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -340,11 +336,7 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 			ast_copy_string(perceived, "<Unregistered>", sizeof(perceived));
 		}
 		snprintf(host, sizeof(host), "%s", ast_sockaddr_stringify(&reg->addr));
-		ast_cli(a->fd, FORMAT,
-			host,
-			reg->username,
-			reg->perceived_port ? perceived : "<Unregistered>",
-			reg->refresh,
+		ast_cli(a->fd, FORMAT, host, reg->username, reg->perceived_port ? perceived : "<Unregistered>", reg->refresh,
 			reg->registered ? "Registered" : "Not Registered");
 		counter++;
 	}

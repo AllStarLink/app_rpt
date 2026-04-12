@@ -1,5 +1,6 @@
 
-/*! \file
+/*!
+ * \file
  *
  * \brief RPT link functions
  */
@@ -77,9 +78,8 @@ int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 	if ((myrpt->p.duplex == 3) && mylink->phonemode && myrpt->keyed) {
 		return 0;
 	}
-	if (!mylink->phonemode &&
-		(mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
-		!CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
+	if (!mylink->phonemode && (mylink->name[0] > '0') && (mylink->name[0] <= '9') && !CHAN_TECH(mylink->chan, "echolink") &&
+		!CHAN_TECH(mylink->chan, "tlb")) {
 		/* if doesn't qual as a foreign link */
 		return 0;
 	}
@@ -175,9 +175,8 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	if ((!myrpt->p.duplex && !myrpt->p.linktolink) || (!nonlocals)) {
 		return 0;
 	}
-	if (!mylink->phonemode &&
-		(mylink->name[0] > '0') && (mylink->name[0] <= '9') &&
-		!CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
+	if (!mylink->phonemode && (mylink->name[0] > '0') && (mylink->name[0] <= '9') && !CHAN_TECH(mylink->chan, "echolink") &&
+		!CHAN_TECH(mylink->chan, "tlb")) {
 		/* if doesn't qual as a foreign link */
 		return 1;
 	}
@@ -245,9 +244,7 @@ void FindBestRssi(struct rpt *myrpt)
 	}
 	ao2_iterator_destroy(&l_it);
 
-	if (!myrpt->voted_rssi || (myrpt->voted_link == NULL && !myrpt->votewinner)
-		|| (maxrssi > (myrpt->voted_rssi + myrpt->p.votermargin))
-		) {
+	if (!myrpt->voted_rssi || (myrpt->voted_link == NULL && !myrpt->votewinner) || (maxrssi > (myrpt->voted_rssi + myrpt->p.votermargin))) {
 		newboss = 1;
 		myrpt->votewinner = 0;
 		if (bl == NULL && myrpt->rxchankeyed) {
@@ -797,7 +794,7 @@ void *rpt_link_connect(void *data)
 #ifdef ALLOW_LOCAL_CHANNELS
 		|| !strncasecmp(s1, "local/", 6)
 #endif
-		) {
+	) {
 		ast_copy_string(deststr, s1, sizeof(deststr) - 1);
 	} else {
 		snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);

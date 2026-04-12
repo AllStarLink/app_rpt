@@ -11,7 +11,8 @@
  *
  */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief app_rpt call helper functions
  *

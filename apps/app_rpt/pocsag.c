@@ -31,15 +31,15 @@ static char nstr[] = "0123456789*U -()";
 /* add all the extra check and parity stuff */
 static uint32_t do_parity_stuff(uint32_t codeword)
 {
-int i,p,myword;
+	int i, p, myword;
 
-myword = codeword;
+	myword = codeword;
 
-for (i = 1; i <= 21; i++, codeword <<= 1) {
-	if (codeword & 0x80000000) {
-		codeword ^= 0xED200000;
+	for (i = 1; i <= 21; i++, codeword <<= 1) {
+		if (codeword & 0x80000000) {
+			codeword ^= 0xED200000;
+		}
 	}
-}
 
 	myword |= (codeword >> 21);
 	codeword = myword;
@@ -163,11 +163,10 @@ static int pack_pocsag_string(uint32_t *packed, size_t packed_len, char *str, in
 }
 
 /* make and fill a POCSAG paging batch */
-struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data, 
-	int size_of_data,int type,int toneno)
+struct pocsag_batch *make_pocsag_batch(uint32_t ric, char *data, int size_of_data, int type, int toneno)
 {
-	struct pocsag_batch *cur,*old;
-	int i,ii,j,k,curaddr,mylen;
+	struct pocsag_batch *cur, *old;
+	int i, ii, j, k, curaddr, mylen;
 	uint32_t packed[100];
 
 	cur = ast_calloc(1, sizeof(struct pocsag_batch));
@@ -184,7 +183,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 		}
 	}
 
-	old = cur;  /* Pointer to first batch in the row */
+	old = cur; /* Pointer to first batch in the row */
 
 	curaddr = ric & 7;
 	cur->frame[curaddr][0] = 0;
@@ -212,7 +211,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 		return NULL;
 	}
 
-	cur->frame[curaddr][0] = do_parity_stuff( cur->frame[curaddr][0] );
+	cur->frame[curaddr][0] = do_parity_stuff(cur->frame[curaddr][0]);
 
 	if (type != TONE) {
 		mylen = pack_pocsag_string(packed, ARRAY_LEN(packed), data, size_of_data, type);
@@ -232,7 +231,7 @@ struct pocsag_batch *make_pocsag_batch(uint32_t ric,char *data,
 						return NULL;
 					}
 
-					cur->next->sc   = SYNCH;
+					cur->next->sc = SYNCH;
 					cur->next->next = NULL;
 
 					for (ii = 0; ii < 8; ii++) {
@@ -262,4 +261,3 @@ void free_batch(struct pocsag_batch *batch)
 		ast_free(batch);
 	}
 }
-

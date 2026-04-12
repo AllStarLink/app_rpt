@@ -62,7 +62,7 @@ int wait_interval(struct rpt *myrpt, enum rpt_delay type, struct ast_channel *ch
 			return -1;
 		}
 		ast_debug(1, "Delay complete\n");
-	/* This is not superfluous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
+		/* This is not superfluous... it's checking the same condition, but it might have gone true again after we exited the first loop, so check. */
 	} while (myrpt->p.holdofftelem && (myrpt->keyed || (myrpt->remrx && (type != DLY_ID))));
 	return 0;
 }
@@ -263,65 +263,65 @@ static int morse_cat(char *str, int freq, int duration)
 int send_morse(struct ast_channel *chan, const char *string, int speed, int freq, int amplitude)
 {
 	static struct morse_bits mbits[] = {
-		{ 0, 0 },				/* SPACE */
-		{ 0, 0 },
-		{ 6, 18 },				/* " */
-		{ 0, 0 },
-		{ 7, 72 },				/* $ */
-		{ 0, 0 },
-		{ 0, 0 },
-		{ 6, 30 },				/* ' */
-		{ 5, 13 },				/* ( */
-		{ 6, 29 },				/* ) */
-		{ 0, 0 },
-		{ 5, 10 },				/* + */
-		{ 6, 51 },				/* , */
-		{ 6, 33 },				/* - */
-		{ 6, 42 },				/* . */
-		{ 5, 9 },				/* / */
-		{ 5, 31 },				/* 0 */
-		{ 5, 30 },				/* 1 */
-		{ 5, 28 },				/* 2 */
-		{ 5, 24 },				/* 3 */
-		{ 5, 16 },				/* 4 */
-		{ 5, 0 },				/* 5 */
-		{ 5, 1 },				/* 6 */
-		{ 5, 3 },				/* 7 */
-		{ 5, 7 },				/* 8 */
-		{ 5, 15 },				/* 9 */
-		{ 6, 7 },				/* : */
-		{ 6, 21 },				/* ; */
-		{ 0, 0 },
-		{ 5, 33 },				/* = */
-		{ 0, 0 },
-		{ 6, 12 },				/* ? */
-		{ 0, 0 },
-		{ 2, 2 },				/* A */
-		{ 4, 1 },				/* B */
-		{ 4, 5 },				/* C */
-		{ 3, 1 },				/* D */
-		{ 1, 0 },				/* E */
-		{ 4, 4 },				/* F */
-		{ 3, 3 },				/* G */
-		{ 4, 0 },				/* H */
-		{ 2, 0 },				/* I */
-		{ 4, 14 },				/* J */
-		{ 3, 5 },				/* K */
-		{ 4, 2 },				/* L */
-		{ 2, 3 },				/* M */
-		{ 2, 1 },				/* N */
-		{ 3, 7 },				/* O */
-		{ 4, 6 },				/* P */
-		{ 4, 11 },				/* Q */
-		{ 3, 2 },				/* R */
-		{ 3, 0 },				/* S */
-		{ 1, 1 },				/* T */
-		{ 3, 4 },				/* U */
-		{ 4, 8 },				/* V */
-		{ 3, 6 },				/* W */
-		{ 4, 9 },				/* X */
-		{ 4, 13 },				/* Y */
-		{ 4, 3 }				/* Z */
+		{ 0, 0 },  /* SPACE */
+		{ 0, 0 },  /* */
+		{ 6, 18 }, /* " */
+		{ 0, 0 },  /* */
+		{ 7, 72 }, /* $ */
+		{ 0, 0 },  /* */
+		{ 0, 0 },  /* */
+		{ 6, 30 }, /* ' */
+		{ 5, 13 }, /* ( */
+		{ 6, 29 }, /* ) */
+		{ 0, 0 },  /* */
+		{ 5, 10 }, /* + */
+		{ 6, 51 }, /* , */
+		{ 6, 33 }, /* - */
+		{ 6, 42 }, /* . */
+		{ 5, 9 },  /* / */
+		{ 5, 31 }, /* 0 */
+		{ 5, 30 }, /* 1 */
+		{ 5, 28 }, /* 2 */
+		{ 5, 24 }, /* 3 */
+		{ 5, 16 }, /* 4 */
+		{ 5, 0 },  /* 5 */
+		{ 5, 1 },  /* 6 */
+		{ 5, 3 },  /* 7 */
+		{ 5, 7 },  /* 8 */
+		{ 5, 15 }, /* 9 */
+		{ 6, 7 },  /* : */
+		{ 6, 21 }, /* ; */
+		{ 0, 0 },  /* */
+		{ 5, 33 }, /* = */
+		{ 0, 0 },  /* */
+		{ 6, 12 }, /* ? */
+		{ 0, 0 },  /* */
+		{ 2, 2 },  /* A */
+		{ 4, 1 },  /* B */
+		{ 4, 5 },  /* C */
+		{ 3, 1 },  /* D */
+		{ 1, 0 },  /* E */
+		{ 4, 4 },  /* F */
+		{ 3, 3 },  /* G */
+		{ 4, 0 },  /* H */
+		{ 2, 0 },  /* I */
+		{ 4, 14 }, /* J */
+		{ 3, 5 },  /* K */
+		{ 4, 2 },  /* L */
+		{ 2, 3 },  /* M */
+		{ 2, 1 },  /* N */
+		{ 3, 7 },  /* O */
+		{ 4, 6 },  /* P */
+		{ 4, 11 }, /* Q */
+		{ 3, 2 },  /* R */
+		{ 3, 0 },  /* S */
+		{ 1, 1 },  /* T */
+		{ 3, 4 },  /* U */
+		{ 4, 8 },  /* V */
+		{ 3, 6 },  /* W */
+		{ 4, 9 },  /* X */
+		{ 4, 13 }, /* Y */
+		{ 4, 3 },  /* Z */
 	};
 
 	int dottime;
@@ -336,7 +336,7 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 
 	res = 0;
 
-	str = ast_malloc(12 * 8 * strlen(string));	/* 12 chrs/element max, 8 elements/letter max */
+	str = ast_malloc(12 * 8 * strlen(string)); /* 12 chrs/element max, 8 elements/letter max */
 	if (!str)
 		return -1;
 	str[0] = '\0';
@@ -353,7 +353,6 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 	interwordtime = dottime * 7;
 
 	for (; (*string) && (!res); string++) {
-
 		c = *string;
 
 		/* Convert lower case to upper case */
@@ -419,7 +418,6 @@ int send_morse(struct ast_channel *chan, const char *string, int speed, int freq
 				break;
 			}
 		}
-
 	}
 	if (str) {
 		ast_free(str);

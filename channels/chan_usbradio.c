@@ -20,7 +20,8 @@
  * 20160829      inad            added rxlpf rxhpf txlpf txhpf
  */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief Channel driver for CM108 USB Cards with Radio Interface
  *
@@ -127,7 +128,7 @@
 #include "asterisk/format_cache.h"
 #include "asterisk/format_compatibility.h"
 
-/*! Global jitterbuffer configuration - by default, jb is disabled */
+/*! \brief Global jitterbuffer configuration - by default, jb is disabled */
 static struct ast_jb_conf default_jbconf = {
 	.flags = 0,
 	.max_size = -1,
@@ -332,14 +333,14 @@ struct chan_usbradio_pvt {
 	int txmixbset;
 	int txctcssadj;
 
-	/*! Settings for echoing received audio */
+	/*! \brief Settings for echoing received audio */
 	int echomode;
 	int echoing;
 	ast_mutex_t echolock;
 	struct qelem echoq;
 	int echomax;
 
-	/*! Settings for HID interface */
+	/*! \brief Settings for HID interface */
 	int hdwtype;
 	int hid_gpio_ctl;
 	int hid_gpio_ctl_loc;
@@ -358,7 +359,7 @@ struct chan_usbradio_pvt {
 	int32_t hid_gpio_pulsemask;
 	int32_t hid_gpio_lastmask;
 
-	/*! Track parallel port values */
+	/*! \brief Track parallel port values */
 	int8_t last_pp_in;
 	char had_pp_in;
 
@@ -524,48 +525,48 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o)
 
 	if (o->hdwtype == 1) {
 		/* sphusb */
-		o->hid_gpio_ctl = 0x08;	  /* set GPIO4 to output mode */
-		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
-		o->hid_io_cor = 4;		  /* GPIO3 is COR */
-		o->hid_io_cor_loc = 1;	  /* GPIO3 is COR */
-		o->hid_io_ctcss = 2;	  /* GPIO 2 is External CTCSS */
-		o->hid_io_ctcss_loc = 1;  /* is GPIO 2 */
-		o->hid_io_ptt = 8;		  /* GPIO 4 is PTT */
-		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
-		o->valid_gpios = 1;		  /* for GPIO 1 */
+		o->hid_gpio_ctl = 0x08;	 /* set GPIO4 to output mode */
+		o->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
+		o->hid_io_cor = 4;		 /* GPIO3 is COR */
+		o->hid_io_cor_loc = 1;	 /* GPIO3 is COR */
+		o->hid_io_ctcss = 2;	 /* GPIO 2 is External CTCSS */
+		o->hid_io_ctcss_loc = 1; /* is GPIO 2 */
+		o->hid_io_ptt = 8;		 /* GPIO 4 is PTT */
+		o->hid_gpio_loc = 1;	 /* For ALL GPIO */
+		o->valid_gpios = 1;		 /* for GPIO 1 */
 	} else if (o->hdwtype == 0) {
 		/* dudeusb */
-		o->hid_gpio_ctl = 0x04;	  /* set GPIO 3 to output mode */
-		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
-		o->hid_io_cor = 2;		  /* VOLD DN is COR */
-		o->hid_io_cor_loc = 0;	  /* VOL DN COR */
-		o->hid_io_ctcss = 1;	  /* VOL UP External CTCSS */
-		o->hid_io_ctcss_loc = 0;  /* VOL UP External CTCSS */
-		o->hid_io_ptt = 4;		  /* GPIO 3 is PTT */
-		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
-		o->valid_gpios = 0xfb;	  /* for GPIO 1,2,4,5,6,7,8 (5,6,7,8 for CM-119 only) */
+		o->hid_gpio_ctl = 0x04;	 /* set GPIO 3 to output mode */
+		o->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
+		o->hid_io_cor = 2;		 /* VOLD DN is COR */
+		o->hid_io_cor_loc = 0;	 /* VOL DN COR */
+		o->hid_io_ctcss = 1;	 /* VOL UP External CTCSS */
+		o->hid_io_ctcss_loc = 0; /* VOL UP External CTCSS */
+		o->hid_io_ptt = 4;		 /* GPIO 3 is PTT */
+		o->hid_gpio_loc = 1;	 /* For ALL GPIO */
+		o->valid_gpios = 0xfb;	 /* for GPIO 1,2,4,5,6,7,8 (5,6,7,8 for CM-119 only) */
 	} else if (o->hdwtype == 2) {
 		/* NHRC (N1KDO) (dudeusb w/o user GPIO) */
-		o->hid_gpio_ctl = 0x04;	  /* set GPIO 3 to output mode */
-		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
-		o->hid_io_cor = 2;		  /* VOLD DN is COR */
-		o->hid_io_cor_loc = 0;	  /* VOL DN COR */
-		o->hid_io_ctcss = 1;	  /* VOL UP is External CTCSS */
-		o->hid_io_ctcss_loc = 0;  /* VOL UP CTCSS */
-		o->hid_io_ptt = 4;		  /* GPIO 3 is PTT */
-		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
-		o->valid_gpios = 0;		  /* for GPIO 1,2,4 */
+		o->hid_gpio_ctl = 0x04;	 /* set GPIO 3 to output mode */
+		o->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
+		o->hid_io_cor = 2;		 /* VOLD DN is COR */
+		o->hid_io_cor_loc = 0;	 /* VOL DN COR */
+		o->hid_io_ctcss = 1;	 /* VOL UP is External CTCSS */
+		o->hid_io_ctcss_loc = 0; /* VOL UP CTCSS */
+		o->hid_io_ptt = 4;		 /* GPIO 3 is PTT */
+		o->hid_gpio_loc = 1;	 /* For ALL GPIO */
+		o->valid_gpios = 0;		 /* for GPIO 1,2,4 */
 	} else if (o->hdwtype == 3) {
 		/* custom version */
-		o->hid_gpio_ctl = 0x0c;	  /* set GPIO 3 & 4 to output mode */
-		o->hid_gpio_ctl_loc = 2;  /* For CTL of GPIO */
-		o->hid_io_cor = 2;		  /* VOLD DN is COR */
-		o->hid_io_cor_loc = 0;	  /* VOL DN COR */
-		o->hid_io_ctcss = 2;	  /* GPIO 2 is External CTCSS */
-		o->hid_io_ctcss_loc = 1;  /* is GPIO 2 */
-		o->hid_io_ptt = 4;		  /* GPIO 3 is PTT */
-		o->hid_gpio_loc = 1;	  /* For ALL GPIO */
-		o->valid_gpios = 1;		  /* for GPIO 1 */
+		o->hid_gpio_ctl = 0x0c;	 /* set GPIO 3 & 4 to output mode */
+		o->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
+		o->hid_io_cor = 2;		 /* VOLD DN is COR */
+		o->hid_io_cor_loc = 0;	 /* VOL DN COR */
+		o->hid_io_ctcss = 2;	 /* GPIO 2 is External CTCSS */
+		o->hid_io_ctcss_loc = 1; /* is GPIO 2 */
+		o->hid_io_ptt = 4;		 /* GPIO 3 is PTT */
+		o->hid_gpio_loc = 1;	 /* For ALL GPIO */
+		o->valid_gpios = 1;		 /* for GPIO 1 */
 	}
 	/* validate clipledgpio setting (Clip LED GPIO#) */
 	if (o->clipledgpio) {
@@ -5707,5 +5708,10 @@ static int unload_module(void)
 	return 0;
 }
 
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "USB Console Channel Driver", .support_level = AST_MODULE_SUPPORT_EXTENDED,
-	.load = load_module, .unload = unload_module, .reload = reload_module, .requires = "res_usbradio", );
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "USB Console Channel Driver",
+	.support_level = AST_MODULE_SUPPORT_EXTENDED,
+	.load = load_module,
+	.unload = unload_module,
+	.reload = reload_module,
+	.requires = "res_usbradio",
+);

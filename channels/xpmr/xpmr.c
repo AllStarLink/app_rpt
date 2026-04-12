@@ -33,7 +33,8 @@
  * 20090725 2039 sph@xelatec.com improved rxfrontend and squelch
   */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief Private Land Mobile Radio Channel Voice and Signaling Processor
  *

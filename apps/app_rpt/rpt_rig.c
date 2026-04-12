@@ -507,9 +507,8 @@ int setkenwood(struct rpt *myrpt)
 		step = 1;
 	}
 
-	sprintf(txstr, "VW %c,%05d%s,%d,%d,0,%d,%d,,%02d,,%02d,%s\r",
-			band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
-			(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
+	sprintf(txstr, "VW %c,%05d%s,%d,%d,0,%d,%d,,%02d,,%02d,%s\r", band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
+		(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
 
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VW") < 0) {
 		return -1;
@@ -574,9 +573,8 @@ int set_tmd700(struct rpt *myrpt)
 		myrxpl = 0;
 	}
 
-	sprintf(txstr, "VW %d,%05d%s,%d,%d,0,%d,%d,0,%02d,0010,%02d,%s,0\r",
-			band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
-			(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
+	sprintf(txstr, "VW %d,%05d%s,%d,%d,0,%d,%d,0,%02d,0010,%02d,%s,0\r", band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
+		(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
 
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VW") < 0) {
 		return -1;
@@ -634,9 +632,8 @@ int set_tm271(struct rpt *myrpt)
 		step = 1;
 	}
 
-	sprintf(txstr, "VF %04d%s,%d,%d,0,%d,0,0,%02d,00,000,%05d000,0,0\r",
-			atoi(mhz), freq, step, offsets[(int) myrpt->offset], (myrpt->txplon != 0), tm271_pltocode(myrpt->txpl),
-			mysplit);
+	sprintf(txstr, "VF %04d%s,%d,%d,0,%d,0,0,%02d,00,000,%05d000,0,0\r", atoi(mhz), freq, step, offsets[(int) myrpt->offset],
+		(myrpt->txplon != 0), tm271_pltocode(myrpt->txpl), mysplit);
 
 	if (sendrxkenwood(myrpt, "VM 0\r", rxstr, "VM") < 0) {
 		return -1;
@@ -659,13 +656,13 @@ static int check_freq_kenwood(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 144) {				/* 2 meters */
+	if (m == 144) { /* 2 meters */
 		if (d < 10100) {
 			return -1;
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		;
-	} else if ((m >= 430) && (m < 450)) {	/* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
 		;
 	} else {
 		return -1;
@@ -682,7 +679,7 @@ static int check_freq_tm271(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 144) {				/* 2 meters */
+	if (m == 144) { /* 2 meters */
 		if (d < 10100) {
 			return -1;
 		}
@@ -706,23 +703,23 @@ static int check_freq_rbi(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 50) {				/* 6 meters */
+	if (m == 50) { /* 6 meters */
 		if (d < 10100) {
 			return -1;
 		}
 	} else if ((m >= 51) && (m < 54)) {
 		;
-	} else if (m == 144) {		/* 2 meters */
+	} else if (m == 144) { /* 2 meters */
 		if (d < 10100) {
 			return -1;
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		;
-	} else if ((m >= 222) && (m < 225)) {	/* 1.25 meters */
+	} else if ((m >= 222) && (m < 225)) { /* 1.25 meters */
 		;
-	} else if ((m >= 430) && (m < 450)) {	/* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
 		;
-	} else if ((m >= 1240) && (m < 1300)) {	/* 23 centimeters */
+	} else if ((m >= 1240) && (m < 1300)) { /* 23 centimeters */
 		;
 	} else {
 		return -1;
@@ -743,8 +740,7 @@ static int check_freq_rtx(int m, int d, enum rpt_mode *defmode, struct rpt *myrp
 	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_RTX150)) {
-
-		if (m == 144) {			/* 2 meters */
+		if (m == 144) { /* 2 meters */
 			if (d < 10100) {
 				return -1;
 			}
@@ -754,7 +750,7 @@ static int check_freq_rtx(int m, int d, enum rpt_mode *defmode, struct rpt *myrp
 			return -1;
 		}
 	} else {
-		if ((m >= 430) && (m < 450)) {	/* 70 centimeters */
+		if ((m >= 430) && (m < 450)) { /* 70 centimeters */
 			;
 		} else {
 			return -1;
@@ -787,8 +783,8 @@ int split_ctcss_freq(char *hertz, char *decimal, char *freq)
 }
 
 /*
-* FT-897 I/O handlers
-*/
+ * FT-897 I/O handlers
+ */
 
 /* Check to see that the frequency is valid */
 /* Hard coded limits now, configurable later, maybe? */
@@ -797,42 +793,42 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 1) {				/* 160 meters */
+	if (m == 1) { /* 160 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 80000) {
 			return -1;
 		}
-	} else if (m == 3) {		/* 80 meters */
+	} else if (m == 3) { /* 80 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 50000) {
 			return -1;
 		}
-	} else if (m == 7) {		/* 40 meters */
+	} else if (m == 7) { /* 40 meters */
 		dflmd = REM_MODE_LSB;
 		if (d > 30000) {
 			return -1;
 		}
-	} else if (m == 14) {		/* 20 meters */
+	} else if (m == 14) { /* 20 meters */
 		dflmd = REM_MODE_USB;
 		if (d > 35000) {
 			return -1;
 		}
-	} else if (m == 18) {		/* 17 meters */
+	} else if (m == 18) { /* 17 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 6800) || (d > 16800)) {
 			return -1;
 		}
-	} else if (m == 21) {		/* 15 meters */
+	} else if (m == 21) { /* 15 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 20000) || (d > 45000)) {
 			return -1;
 		}
-	} else if (m == 24) {		/* 12 meters */
+	} else if (m == 24) { /* 12 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 89000) || (d > 99000)) {
 			return -1;
 		}
-	} else if (m == 28) {		/* 10 meters */
+	} else if (m == 28) { /* 10 meters */
 		dflmd = REM_MODE_USB;
 	} else if (m == 29) {
 		if (d >= 51000) {
@@ -843,7 +839,7 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 		if (d > 70000) {
 			return -1;
 		}
-	} else if (m == 50) {		/* 6 meters */
+	} else if (m == 50) { /* 6 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -851,7 +847,7 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 51) && (m < 54)) {
 		dflmd = REM_MODE_FM;
-	} else if (m == 144) {		/* 2 meters */
+	} else if (m == 144) { /* 2 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -859,7 +855,7 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		dflmd = REM_MODE_FM;
-	} else if ((m >= 430) && (m < 450)) {	/* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
 		if (m < 438) {
 			dflmd = REM_MODE_USB;
 		} else {
@@ -877,8 +873,8 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 }
 
 /*
-* Set a new frequency for the FT897
-*/
+ * Set a new frequency for the FT897
+ */
 
 static int set_freq_ft897(struct rpt *myrpt, char *newfreq)
 {
@@ -898,14 +894,13 @@ static int set_freq_ft897(struct rpt *myrpt, char *newfreq)
 
 	/* The FT-897 likes packed BCD frequencies */
 
-	cmdstr[0] = ((m / 100) << 4) + ((m % 100) / 10);	/* 100MHz 10Mhz */
-	cmdstr[1] = ((m % 10) << 4) + (d / 10000);	/* 1MHz 100KHz */
-	cmdstr[2] = (((d % 10000) / 1000) << 4) + ((d % 1000) / 100);	/* 10KHz 1KHz */
-	cmdstr[3] = (((d % 100) / 10) << 4) + (d % 10);	/* 100Hz 10Hz */
-	cmdstr[4] = 0x01;			/* command */
+	cmdstr[0] = ((m / 100) << 4) + ((m % 100) / 10);			  /* 100MHz 10Mhz */
+	cmdstr[1] = ((m % 10) << 4) + (d / 10000);					  /* 1MHz 100KHz */
+	cmdstr[2] = (((d % 10000) / 1000) << 4) + ((d % 1000) / 100); /* 10KHz 1KHz */
+	cmdstr[3] = (((d % 100) / 10) << 4) + (d % 10);				  /* 100Hz 10Hz */
+	cmdstr[4] = 0x01;											  /* command */
 
 	return serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
-
 }
 
 /* ft-897 simple commands */
@@ -919,7 +914,6 @@ int simple_command_ft897(struct rpt *myrpt, char command)
 	cmdstr[4] = command;
 
 	return serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
-
 }
 
 /* ft-897 offset */
@@ -951,7 +945,7 @@ static int set_offset_ft897(struct rpt *myrpt, enum rpt_offset offset)
 	cmdstr[1] = (((mysplit % 1000000) / 100000) << 4) + ((mysplit % 100000) / 10000);
 	cmdstr[2] = (((mysplit % 10000) / 1000) << 4) + ((mysplit % 1000) / 100);
 	cmdstr[3] = ((mysplit % 10) << 4) + ((mysplit % 100) / 10);
-	cmdstr[4] = 0xf9;			/* command */
+	cmdstr[4] = 0xf9; /* command */
 	res = serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
 
 	if (res) {
@@ -1024,13 +1018,13 @@ static int set_ctcss_mode_ft897(struct rpt *myrpt, char txplon, char rxplon)
 	memset(cmdstr, 0, 5);
 
 	if (rxplon && txplon) {
-		cmdstr[0] = 0x2A;		/* Encode and Decode */
+		cmdstr[0] = 0x2A; /* Encode and Decode */
 	} else if (!rxplon && txplon) {
-		cmdstr[0] = 0x4A;		/* Encode only */
+		cmdstr[0] = 0x4A; /* Encode only */
 	} else if (rxplon && !txplon) {
-		cmdstr[0] = 0x3A;		/* Encode only */
+		cmdstr[0] = 0x3A; /* Encode only */
 	} else {
-		cmdstr[0] = 0x8A;		/* OFF */
+		cmdstr[0] = 0x8A; /* OFF */
 	}
 
 	cmdstr[4] = 0x0A;
@@ -1079,51 +1073,51 @@ int set_ft897(struct rpt *myrpt)
 	int res;
 
 	ast_debug(3, "@@@@ lock on\n");
-	res = simple_command_ft897(myrpt, 0x00);	/* LOCK on */
+	res = simple_command_ft897(myrpt, 0x00); /* LOCK on */
 
 	ast_debug(3, "@@@@ ptt off\n");
 	if (!res) {
-		res = simple_command_ft897(myrpt, 0x88);	/* PTT off */
+		res = simple_command_ft897(myrpt, 0x88); /* PTT off */
 	}
 
 	ast_debug(3, "Modulation mode\n");
 	if (!res) {
-		res = set_mode_ft897(myrpt, myrpt->remmode);	/* Modulation mode */
+		res = set_mode_ft897(myrpt, myrpt->remmode); /* Modulation mode */
 	}
 
 	ast_debug(3, "Split off\n");
 	if (!res) {
-		simple_command_ft897(myrpt, 0x82);	/* Split off */
+		simple_command_ft897(myrpt, 0x82); /* Split off */
 	}
 
 	ast_debug(3, "Frequency\n");
 	if (!res) {
-		res = set_freq_ft897(myrpt, myrpt->freq);	/* Frequency */
+		res = set_freq_ft897(myrpt, myrpt->freq); /* Frequency */
 		usleep(FT897_SERIAL_DELAY * 2);
 	}
 
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		ast_debug(3, "Offset\n");
 		if (!res) {
-			res = set_offset_ft897(myrpt, myrpt->offset);	/* Offset if FM */
+			res = set_offset_ft897(myrpt, myrpt->offset); /* Offset if FM */
 			usleep(FT897_SERIAL_DELAY);
 		}
 		if ((!res) && (myrpt->rxplon || myrpt->txplon)) {
 			usleep(FT897_SERIAL_DELAY);
 			ast_debug(3, "CTCSS tone freqs.\n");
-			res = set_ctcss_freq_ft897(myrpt, myrpt->txpl, myrpt->rxpl);	/* CTCSS freqs if CTCSS is enabled */
+			res = set_ctcss_freq_ft897(myrpt, myrpt->txpl, myrpt->rxpl); /* CTCSS freqs if CTCSS is enabled */
 			usleep(FT897_SERIAL_DELAY);
 		}
 		if (!res) {
 			ast_debug(3, "CTCSS mode\n");
-			res = set_ctcss_mode_ft897(myrpt, myrpt->txplon, myrpt->rxplon);	/* CTCSS mode */
+			res = set_ctcss_mode_ft897(myrpt, myrpt->txplon, myrpt->rxplon); /* CTCSS mode */
 			usleep(FT897_SERIAL_DELAY);
 		}
 	}
 
 	if ((myrpt->remmode == REM_MODE_USB) || (myrpt->remmode == REM_MODE_LSB)) {
 		ast_debug(3, "Clarifier off\n");
-		simple_command_ft897(myrpt, 0x85);	/* Clarifier off if LSB or USB */
+		simple_command_ft897(myrpt, 0x85); /* Clarifier off if LSB or USB */
 	}
 
 	return res;
@@ -1131,15 +1125,15 @@ int set_ft897(struct rpt *myrpt)
 
 static int closerem_ft897(struct rpt *myrpt)
 {
-	simple_command_ft897(myrpt, 0x88);	/* PTT off */
+	simple_command_ft897(myrpt, 0x88); /* PTT off */
 	return 0;
 }
 
 /*
-* Bump frequency up or down by a small amount 
-* Return 0 if the new frequnecy is valid, or -1 if invalid
-* Interval is in Hz, resolution is 10Hz 
-*/
+ * Bump frequency up or down by a small amount
+ * Return 0 if the new frequnecy is valid, or -1 if invalid
+ * Interval is in Hz, resolution is 10Hz
+ */
 
 static int multimode_bump_freq_ft897(struct rpt *myrpt, int interval)
 {
@@ -1155,7 +1149,7 @@ static int multimode_bump_freq_ft897(struct rpt *myrpt, int interval)
 	m = atoi(mhz);
 	d = atoi(decimals);
 
-	d += (interval / 10);		/* 10Hz resolution */
+	d += (interval / 10); /* 10Hz resolution */
 	if (d < 0) {
 		m--;
 		d += 100000;
@@ -1177,8 +1171,8 @@ static int multimode_bump_freq_ft897(struct rpt *myrpt, int interval)
 }
 
 /*
-* FT-100 I/O handlers
-*/
+ * FT-100 I/O handlers
+ */
 
 /* Check to see that the frequency is valid */
 /* Hard coded limits now, configurable later, maybe? */
@@ -1187,42 +1181,42 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 1) {				/* 160 meters */
+	if (m == 1) { /* 160 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 80000) {
 			return -1;
 		}
-	} else if (m == 3) {		/* 80 meters */
+	} else if (m == 3) { /* 80 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 50000) {
 			return -1;
 		}
-	} else if (m == 7) {		/* 40 meters */
+	} else if (m == 7) { /* 40 meters */
 		dflmd = REM_MODE_LSB;
 		if (d > 30000) {
 			return -1;
 		}
-	} else if (m == 14) {		/* 20 meters */
+	} else if (m == 14) { /* 20 meters */
 		dflmd = REM_MODE_USB;
 		if (d > 35000) {
 			return -1;
 		}
-	} else if (m == 18) {		/* 17 meters */
+	} else if (m == 18) { /* 17 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 6800) || (d > 16800)) {
 			return -1;
 		}
-	} else if (m == 21) {		/* 15 meters */
+	} else if (m == 21) { /* 15 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 20000) || (d > 45000)) {
 			return -1;
 		}
-	} else if (m == 24) {		/* 12 meters */
+	} else if (m == 24) { /* 12 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 89000) || (d > 99000)) {
 			return -1;
 		}
-	} else if (m == 28) {		/* 10 meters */
+	} else if (m == 28) { /* 10 meters */
 		dflmd = REM_MODE_USB;
 	} else if (m == 29) {
 		if (d >= 51000) {
@@ -1233,7 +1227,7 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 		if (d > 70000) {
 			return -1;
 		}
-	} else if (m == 50) {		/* 6 meters */
+	} else if (m == 50) { /* 6 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1241,7 +1235,7 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 51) && (m < 54)) {
 		dflmd = REM_MODE_FM;
-	} else if (m == 144) {		/* 2 meters */
+	} else if (m == 144) { /* 2 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1249,7 +1243,7 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		dflmd = REM_MODE_FM;
-	} else if ((m >= 430) && (m < 450)) {	/* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
 		if (m < 438) {
 			dflmd = REM_MODE_USB;
 		} else {
@@ -1267,8 +1261,8 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 }
 
 /*
-* Set a new frequency for the ft100
-*/
+ * Set a new frequency for the ft100
+ */
 
 static int set_freq_ft100(struct rpt *myrpt, char *newfreq)
 {
@@ -1288,14 +1282,13 @@ static int set_freq_ft100(struct rpt *myrpt, char *newfreq)
 
 	/* The FT-100 likes packed BCD frequencies */
 
-	cmdstr[0] = (((d % 100) / 10) << 4) + (d % 10);	/* 100Hz 10Hz */
-	cmdstr[1] = (((d % 10000) / 1000) << 4) + ((d % 1000) / 100);	/* 10KHz 1KHz */
-	cmdstr[2] = ((m % 10) << 4) + (d / 10000);	/* 1MHz 100KHz */
-	cmdstr[3] = ((m / 100) << 4) + ((m % 100) / 10);	/* 100MHz 10Mhz */
-	cmdstr[4] = 0x0a;			/* command */
+	cmdstr[0] = (((d % 100) / 10) << 4) + (d % 10);				  /* 100Hz 10Hz */
+	cmdstr[1] = (((d % 10000) / 1000) << 4) + ((d % 1000) / 100); /* 10KHz 1KHz */
+	cmdstr[2] = ((m % 10) << 4) + (d / 10000);					  /* 1MHz 100KHz */
+	cmdstr[3] = ((m / 100) << 4) + ((m % 100) / 10);			  /* 100MHz 10Mhz */
+	cmdstr[4] = 0x0a;											  /* command */
 
 	return serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
-
 }
 
 /* ft-897 simple commands */
@@ -1309,7 +1302,6 @@ int simple_command_ft100(struct rpt *myrpt, unsigned char command, unsigned char
 	cmdstr[4] = command;
 
 	return serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
-
 }
 
 /* ft-897 offset */
@@ -1375,11 +1367,11 @@ static int set_ctcss_mode_ft100(struct rpt *myrpt, char txplon, char rxplon)
 	unsigned char p1;
 
 	if (rxplon) {
-		p1 = 2;					/* Encode and Decode */
+		p1 = 2; /* Encode and Decode */
 	} else if (!rxplon && txplon) {
-		p1 = 1;					/* Encode only */
+		p1 = 1; /* Encode only */
 	} else {
-		p1 = 0;					/* OFF */
+		p1 = 0; /* OFF */
 	}
 
 	return simple_command_ft100(myrpt, 0x92, p1);
@@ -1400,35 +1392,35 @@ int set_ft100(struct rpt *myrpt)
 	int res;
 
 	ast_debug(3, "Modulation mode\n");
-	res = set_mode_ft100(myrpt, myrpt->remmode);	/* Modulation mode */
+	res = set_mode_ft100(myrpt, myrpt->remmode); /* Modulation mode */
 
 	ast_debug(3, "Split off\n");
 
 	if (!res) {
-		simple_command_ft100(myrpt, 0x01, 0);	/* Split off */
+		simple_command_ft100(myrpt, 0x01, 0); /* Split off */
 	}
 
 	ast_debug(3, "Frequency\n");
 	if (!res) {
-		res = set_freq_ft100(myrpt, myrpt->freq);	/* Frequency */
+		res = set_freq_ft100(myrpt, myrpt->freq); /* Frequency */
 		usleep(FT100_SERIAL_DELAY * 2);
 	}
 
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		ast_debug(3, "Offset\n");
 		if (!res) {
-			res = set_offset_ft100(myrpt, myrpt->offset);	/* Offset if FM */
+			res = set_offset_ft100(myrpt, myrpt->offset); /* Offset if FM */
 			usleep(FT100_SERIAL_DELAY);
 		}
 		if ((!res) && (myrpt->rxplon || myrpt->txplon)) {
 			usleep(FT100_SERIAL_DELAY);
 			ast_debug(3, "CTCSS tone freqs.\n");
-			res = set_ctcss_freq_ft100(myrpt, myrpt->txpl, myrpt->rxpl);	/* CTCSS freqs if CTCSS is enabled */
+			res = set_ctcss_freq_ft100(myrpt, myrpt->txpl, myrpt->rxpl); /* CTCSS freqs if CTCSS is enabled */
 			usleep(FT100_SERIAL_DELAY);
 		}
 		if (!res) {
 			ast_debug(3, "CTCSS mode\n");
-			res = set_ctcss_mode_ft100(myrpt, myrpt->txplon, myrpt->rxplon);	/* CTCSS mode */
+			res = set_ctcss_mode_ft100(myrpt, myrpt->txplon, myrpt->rxplon); /* CTCSS mode */
 			usleep(FT100_SERIAL_DELAY);
 		}
 	}
@@ -1438,15 +1430,15 @@ int set_ft100(struct rpt *myrpt)
 
 static int closerem_ft100(struct rpt *myrpt)
 {
-	simple_command_ft100(myrpt, 0x0f, 0);	/* PTT off */
+	simple_command_ft100(myrpt, 0x0f, 0); /* PTT off */
 	return 0;
 }
 
 /*
-* Bump frequency up or down by a small amount 
-* Return 0 if the new frequnecy is valid, or -1 if invalid
-* Interval is in Hz, resolution is 10Hz 
-*/
+ * Bump frequency up or down by a small amount
+ * Return 0 if the new frequnecy is valid, or -1 if invalid
+ * Interval is in Hz, resolution is 10Hz
+ */
 
 static int multimode_bump_freq_ft100(struct rpt *myrpt, int interval)
 {
@@ -1462,7 +1454,7 @@ static int multimode_bump_freq_ft100(struct rpt *myrpt, int interval)
 	m = atoi(mhz);
 	d = atoi(decimals);
 
-	d += (interval / 10);		/* 10Hz resolution */
+	d += (interval / 10); /* 10Hz resolution */
 	if (d < 0) {
 		m--;
 		d += 100000;
@@ -1484,8 +1476,8 @@ static int multimode_bump_freq_ft100(struct rpt *myrpt, int interval)
 }
 
 /*
-* FT-950 I/O handlers
-*/
+ * FT-950 I/O handlers
+ */
 
 /* Check to see that the frequency is valid */
 /* Hard coded limits now, configurable later, maybe? */
@@ -1494,42 +1486,42 @@ static int check_freq_ft950(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 1) {				/* 160 meters */
+	if (m == 1) { /* 160 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 80000) {
 			return -1;
 		}
-	} else if (m == 3) {		/* 80 meters */
+	} else if (m == 3) { /* 80 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 50000) {
 			return -1;
 		}
-	} else if (m == 7) {		/* 40 meters */
+	} else if (m == 7) { /* 40 meters */
 		dflmd = REM_MODE_LSB;
 		if (d > 30000) {
 			return -1;
 		}
-	} else if (m == 14) {		/* 20 meters */
+	} else if (m == 14) { /* 20 meters */
 		dflmd = REM_MODE_USB;
 		if (d > 35000) {
 			return -1;
 		}
-	} else if (m == 18) {		/* 17 meters */
+	} else if (m == 18) { /* 17 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 6800) || (d > 16800)) {
 			return -1;
 		}
-	} else if (m == 21) {		/* 15 meters */
+	} else if (m == 21) { /* 15 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 20000) || (d > 45000)) {
 			return -1;
 		}
-	} else if (m == 24) {		/* 12 meters */
+	} else if (m == 24) { /* 12 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 89000) || (d > 99000)) {
 			return -1;
 		}
-	} else if (m == 28) {		/* 10 meters */
+	} else if (m == 28) { /* 10 meters */
 		dflmd = REM_MODE_USB;
 	} else if (m == 29) {
 		if (d >= 51000) {
@@ -1540,7 +1532,7 @@ static int check_freq_ft950(int m, int d, enum rpt_mode *defmode)
 		if (d > 70000) {
 			return -1;
 		}
-	} else if (m == 50) {		/* 6 meters */
+	} else if (m == 50) { /* 6 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1559,8 +1551,8 @@ static int check_freq_ft950(int m, int d, enum rpt_mode *defmode)
 }
 
 /*
-* Set a new frequency for the ft950
-*/
+ * Set a new frequency for the ft950
+ */
 
 static int set_freq_ft950(struct rpt *myrpt, char *newfreq)
 {
@@ -1580,7 +1572,6 @@ static int set_freq_ft950(struct rpt *myrpt, char *newfreq)
 
 	sprintf(cmdstr, "FA%d%06d;", m, d * 10);
 	return serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);
-
 }
 
 /* ft-950 offset */
@@ -1648,11 +1639,11 @@ static int set_ctcss_mode_ft950(struct rpt *myrpt, char txplon, char rxplon)
 	if (rxplon && txplon) {
 		cmdstr = "CT01;";
 	} else if (!rxplon && txplon) {
-		cmdstr = "CT02;";		/* Encode only */
+		cmdstr = "CT02;"; /* Encode only */
 	} else if (rxplon && !txplon) {
-		cmdstr = "CT02;";		/* Encode only */
+		cmdstr = "CT02;"; /* Encode only */
 	} else {
-		cmdstr = "CT00;";		/* OFF */
+		cmdstr = "CT00;"; /* OFF */
 	}
 
 	return serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);
@@ -1683,24 +1674,24 @@ int set_ft950(struct rpt *myrpt)
 	ast_debug(2, "ptt off\n");
 
 	cmdstr = "MX0;";
-	res = serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);	/* MOX off */
+	res = serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0); /* MOX off */
 
 	ast_debug(2, "select ant. 1\n");
 
 	cmdstr = "AN01;";
-	res = serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);	/* MOX off */
+	res = serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0); /* MOX off */
 
 	ast_debug(2, "Modulation mode\n");
 
 	if (!res) {
-		res = set_mode_ft950(myrpt, myrpt->remmode);	/* Modulation mode */
+		res = set_mode_ft950(myrpt, myrpt->remmode); /* Modulation mode */
 	}
 
 	ast_debug(2, "Split off\n");
 	cmdstr = "OS00;";
 
 	if (!res) {
-		res = serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);	/* Split off */
+		res = serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0); /* Split off */
 	}
 
 	ast_debug(2, "VFO Modes\n");
@@ -1716,37 +1707,37 @@ int set_ft950(struct rpt *myrpt)
 	ast_debug(2, "Frequency\n");
 
 	if (!res) {
-		res = set_freq_ft950(myrpt, myrpt->freq);	/* Frequency */
+		res = set_freq_ft950(myrpt, myrpt->freq); /* Frequency */
 	}
 
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		ast_debug(2, "Offset\n");
 		if (!res) {
-			res = set_offset_ft950(myrpt, myrpt->offset);	/* Offset if FM */
+			res = set_offset_ft950(myrpt, myrpt->offset); /* Offset if FM */
 		}
 		if ((!res) && (myrpt->rxplon || myrpt->txplon)) {
 			ast_debug(2, "CTCSS tone freqs.\n");
-			res = set_ctcss_freq_ft950(myrpt, myrpt->txpl, myrpt->rxpl);	/* CTCSS freqs if CTCSS is enabled */
+			res = set_ctcss_freq_ft950(myrpt, myrpt->txpl, myrpt->rxpl); /* CTCSS freqs if CTCSS is enabled */
 		}
 		if (!res) {
 			ast_debug(2, "CTCSS mode\n");
-			res = set_ctcss_mode_ft950(myrpt, myrpt->txplon, myrpt->rxplon);	/* CTCSS mode */
+			res = set_ctcss_mode_ft950(myrpt, myrpt->txplon, myrpt->rxplon); /* CTCSS mode */
 		}
 	}
 
 	if ((myrpt->remmode == REM_MODE_USB) || (myrpt->remmode == REM_MODE_LSB)) {
 		ast_debug(2, "Clarifier off\n");
 		cmdstr = "RT0;";
-		serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);	/* Clarifier off if LSB or USB */
+		serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0); /* Clarifier off if LSB or USB */
 	}
 	return res;
 }
 
 /*
-* Bump frequency up or down by a small amount 
-* Return 0 if the new frequnecy is valid, or -1 if invalid
-* Interval is in Hz, resolution is 10Hz 
-*/
+ * Bump frequency up or down by a small amount
+ * Return 0 if the new frequnecy is valid, or -1 if invalid
+ * Interval is in Hz, resolution is 10Hz
+ */
 
 static int multimode_bump_freq_ft950(struct rpt *myrpt, int interval)
 {
@@ -1762,7 +1753,7 @@ static int multimode_bump_freq_ft950(struct rpt *myrpt, int interval)
 	m = atoi(mhz);
 	d = atoi(decimals);
 
-	d += (interval / 10);		/* 10Hz resolution */
+	d += (interval / 10); /* 10Hz resolution */
 	if (d < 0) {
 		m--;
 		d += 100000;
@@ -1784,8 +1775,8 @@ static int multimode_bump_freq_ft950(struct rpt *myrpt, int interval)
 }
 
 /*
-* IC-706 I/O handlers
-*/
+ * IC-706 I/O handlers
+ */
 
 /* Check to see that the frequency is valid */
 /* returns 0 if frequency is valid          */
@@ -1799,42 +1790,42 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 
 	/* first test for standard amateur radio bands */
 
-	if (m == 1) {				/* 160 meters */
+	if (m == 1) { /* 160 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 80000) {
 			rv = -1;
 		}
-	} else if (m == 3) {		/* 80 meters */
+	} else if (m == 3) { /* 80 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 50000) {
 			rv = -1;
 		}
-	} else if (m == 7) {		/* 40 meters */
+	} else if (m == 7) { /* 40 meters */
 		dflmd = REM_MODE_LSB;
 		if (d > 30000) {
 			rv = -1;
 		}
-	} else if (m == 14) {		/* 20 meters */
+	} else if (m == 14) { /* 20 meters */
 		dflmd = REM_MODE_USB;
 		if (d > 35000) {
 			rv = -1;
 		}
-	} else if (m == 18) {		/* 17 meters */
+	} else if (m == 18) { /* 17 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 6800) || (d > 16800)) {
 			rv = -1;
 		}
-	} else if (m == 21) {		/* 15 meters */
+	} else if (m == 21) { /* 15 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 20000) || (d > 45000)) {
 			rv = -1;
 		}
-	} else if (m == 24) {		/* 12 meters */
+	} else if (m == 24) { /* 12 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 89000) || (d > 99000)) {
 			rv = -1;
 		}
-	} else if (m == 28) {		/* 10 meters */
+	} else if (m == 28) { /* 10 meters */
 		dflmd = REM_MODE_USB;
 	} else if (m == 29) {
 		if (d >= 51000) {
@@ -1845,7 +1836,7 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		if (d > 70000) {
 			rv = -1;
 		}
-	} else if (m == 50) {		/* 6 meters */
+	} else if (m == 50) { /* 6 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1853,7 +1844,7 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		}
 	} else if ((m >= 51) && (m < 54)) {
 		dflmd = REM_MODE_FM;
-	} else if (m == 144) {		/* 2 meters */
+	} else if (m == 144) { /* 2 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1861,7 +1852,7 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		dflmd = REM_MODE_FM;
-	} else if ((m >= 430) && (m < 450)) {	/* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
 		if (m < 438) {
 			dflmd = REM_MODE_USB;
 		} else {
@@ -1873,22 +1864,22 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 
 	/* check expanded coverage */
 	if (mars && rv < 0) {
-		if ((m >= 450) && (m < 470)) {	/* LMR */
+		if ((m >= 450) && (m < 470)) { /* LMR */
 			dflmd = REM_MODE_FM;
 			rv = 0;
-		} else if ((m >= 148) && (m < 174)) {	/* LMR */
+		} else if ((m >= 148) && (m < 174)) { /* LMR */
 			dflmd = REM_MODE_FM;
 			rv = 0;
-		} else if ((m >= 138) && (m < 144)) {	/* VHF-AM AIRCRAFT */
+		} else if ((m >= 138) && (m < 144)) { /* VHF-AM AIRCRAFT */
 			dflmd = REM_MODE_AM;
 			rv = 0;
-		} else if ((m >= 108) && (m < 138)) {	/* VHF-AM AIRCRAFT */
+		} else if ((m >= 108) && (m < 138)) { /* VHF-AM AIRCRAFT */
 			dflmd = REM_MODE_AM;
 			rv = 0;
-		} else if ((m == 0 && d >= 55000) || (m == 1 && d <= 75000)) {	/* AM BCB */
+		} else if ((m == 0 && d >= 55000) || (m == 1 && d <= 75000)) { /* AM BCB */
 			dflmd = REM_MODE_AM;
 			rv = 0;
-		} else if ((m == 1 && d > 75000) || (m > 1 && m < 30)) {	/* HF SWL */
+		} else if ((m == 1 && d > 75000) || (m > 1 && m < 30)) { /* HF SWL */
 			dflmd = REM_MODE_AM;
 			rv = 0;
 		}
@@ -2091,8 +2082,8 @@ static int simple_command_ic706(struct rpt *myrpt, char command, char subcommand
 }
 
 /*
-* Set a new frequency for the ic706
-*/
+ * Set a new frequency for the ic706
+ */
 
 static int set_freq_ic706(struct rpt *myrpt, char *newfreq)
 {
@@ -2388,7 +2379,7 @@ int set_ic706(struct rpt *myrpt)
 	ast_debug(2, "Modulation mode\n");
 
 	if (!res) {
-		res = set_mode_ic706(myrpt, myrpt->remmode);	/* Modulation mode */
+		res = set_mode_ic706(myrpt, myrpt->remmode); /* Modulation mode */
 	}
 
 	ast_debug(2, "Split off\n");
@@ -2399,17 +2390,17 @@ int set_ic706(struct rpt *myrpt)
 	ast_debug(2, "Frequency\n");
 
 	if (!res) {
-		res = set_freq_ic706(myrpt, myrpt->freq);	/* Frequency */
+		res = set_freq_ic706(myrpt, myrpt->freq); /* Frequency */
 	}
 
 	if ((myrpt->remmode == REM_MODE_FM)) {
 		ast_debug(2, "Offset\n");
 		if (!res) {
-			res = set_offset_ic706(myrpt, myrpt->offset);	/* Offset if FM */
+			res = set_offset_ic706(myrpt, myrpt->offset); /* Offset if FM */
 		}
 		if (!res) {
 			ast_debug(2, "CTCSS mode\n");
-			res = set_ctcss_mode_ic706(myrpt, myrpt->txplon, myrpt->rxplon);	/* CTCSS mode */
+			res = set_ctcss_mode_ic706(myrpt, myrpt->txplon, myrpt->rxplon); /* CTCSS mode */
 		}
 	}
 
@@ -2417,10 +2408,10 @@ int set_ic706(struct rpt *myrpt)
 }
 
 /*
-* Bump frequency up or down by a small amount 
-* Return 0 if the new frequnecy is valid, or -1 if invalid
-* Interval is in Hz, resolution is 10Hz 
-*/
+ * Bump frequency up or down by a small amount
+ * Return 0 if the new frequnecy is valid, or -1 if invalid
+ * Interval is in Hz, resolution is 10Hz
+ */
 
 static int multimode_bump_freq_ic706(struct rpt *myrpt, int interval)
 {
@@ -2437,7 +2428,7 @@ static int multimode_bump_freq_ic706(struct rpt *myrpt, int interval)
 	m = atoi(mhz);
 	d = atoi(decimals);
 
-	d += (interval / 10);		/* 10Hz resolution */
+	d += (interval / 10); /* 10Hz resolution */
 	if (d < 0) {
 		m--;
 		d += 100000;
@@ -2479,7 +2470,7 @@ int setrem(struct rpt *myrpt)
 	char *modes[] = { "FM", "USB", "LSB", "AM" };
 	int i, res = -1;
 
-#if	0
+#if 0
 	printf("FREQ,%s,%s,%s,%s,%s,%s,%d,%d\n", myrpt->freq,
 		   modes[(int) myrpt->remmode],
 		   myrpt->txpl, myrpt->rxpl, offsets[(int) myrpt->offset], powerlevels[(int) myrpt->powerlevel], myrpt->txplon,
@@ -2501,13 +2492,11 @@ int setrem(struct rpt *myrpt)
 			if (myfreq[0] && (myfreq[strlen(myfreq) - 1] == '.')) {
 				strcat(myfreq, "0");
 			}
-			sprintf(str, "J Remote Frequency\n%s FM\n%s Offset\n", (cp) ? myfreq : myrpt->freq,
-					offsets[(int) myrpt->offset]);
+			sprintf(str, "J Remote Frequency\n%s FM\n%s Offset\n", (cp) ? myfreq : myrpt->freq, offsets[(int) myrpt->offset]);
 			sprintf(str + strlen(str), "%s Power\nTX PL %s\nRX PL %s\n", powerlevels[(int) myrpt->powerlevel],
-					(myrpt->txplon) ? myrpt->txpl : "Off", (myrpt->rxplon) ? myrpt->rxpl : "Off");
+				(myrpt->txplon) ? myrpt->txpl : "Off", (myrpt->rxplon) ? myrpt->rxpl : "Off");
 		} else {
-			sprintf(str, "J Remote Frequency %s %s\n%s Power\n", myrpt->freq, modes[(int) myrpt->remmode],
-					powerlevels[(int) myrpt->powerlevel]);
+			sprintf(str, "J Remote Frequency %s %s\n%s Power\n", myrpt->freq, modes[(int) myrpt->remmode], powerlevels[(int) myrpt->powerlevel]);
 		}
 
 		ast_sendtext(myrpt->remote_webtransceiver, str);
@@ -2625,7 +2614,7 @@ char check_tx_freq(struct rpt *myrpt)
 	if (!myrpt->p.txlimitsstanzaname || !myrpt->loginuser[0] || !myrpt->loginlevel[0]) {
 		ast_debug(4, "No tx band table defined, or no user logged in. rv=1\n");
 		rv = 1;
-		return 1;				/* Assume it's ok otherwise */
+		return 1; /* Assume it's ok otherwise */
 	}
 
 	/* Retrieve the band table for the loginlevel */
@@ -2652,8 +2641,7 @@ char check_tx_freq(struct rpt *myrpt)
 	}
 
 	if (!limitlist) {
-		ast_log(LOG_WARNING, "Can't find %s entry in band table stanza %s. rv=0\n", myrpt->loginlevel,
-				myrpt->p.txlimitsstanzaname);
+		ast_log(LOG_WARNING, "Can't find %s entry in band table stanza %s. rv=0\n", myrpt->loginlevel, myrpt->p.txlimitsstanzaname);
 		rv = 0;
 		return 0;
 	}
@@ -2688,9 +2676,9 @@ char check_tx_freq(struct rpt *myrpt)
 		ulimit_decimals = decimals2int(limit_decimals_char);
 
 		if ((radio_mhz >= llimit_mhz) && (radio_mhz <= ulimit_mhz)) {
-			if (radio_mhz == llimit_mhz) {	/* CASE 1: TX freq is in llimit mhz portion of band */
-				if (radio_decimals >= llimit_decimals) {	/* Cannot be below llimit decimals */
-					if (llimit_mhz == ulimit_mhz) {	/* If bandwidth < 1Mhz, check ulimit decimals */
+			if (radio_mhz == llimit_mhz) {				 /* CASE 1: TX freq is in llimit mhz portion of band */
+				if (radio_decimals >= llimit_decimals) { /* Cannot be below llimit decimals */
+					if (llimit_mhz == ulimit_mhz) {		 /* If bandwidth < 1Mhz, check ulimit decimals */
 						if (radio_decimals <= ulimit_decimals) {
 							rv = 1;
 							break;
@@ -2703,17 +2691,17 @@ char check_tx_freq(struct rpt *myrpt)
 						rv = 1;
 						break;
 					}
-				} else {		/* Is below llimit decimals */
+				} else { /* Is below llimit decimals */
 					ast_debug(4, "Invalid TX frequency, debug msg 2\n");
 					rv = 0;
 					break;
 				}
-			} else if (radio_mhz == ulimit_mhz) {	/* CASE 2: TX freq not in llimit mhz portion of band */
+			} else if (radio_mhz == ulimit_mhz) { /* CASE 2: TX freq not in llimit mhz portion of band */
 				if (radio_decimals <= ulimit_decimals) {
 					ast_debug(4, "radio_decimals <= ulimit_decimals\n");
 					rv = 1;
 					break;
-				} else {		/* Is above ulimit decimals */
+				} else { /* Is above ulimit decimals */
 					ast_debug(4, "Invalid TX frequency, debug msg 3\n");
 					rv = 0;
 					break;
@@ -2756,29 +2744,28 @@ int service_scan(struct rpt *myrpt)
 	char mhz[MAXREMSTR], decimals[MAXREMSTR], k10 = 0i, k100 = 0;
 
 	switch (myrpt->hfscanmode) {
-
 	case HF_SCAN_DOWN_SLOW:
-		interval = -10;			/* 100Hz /sec */
+		interval = -10; /* 100Hz /sec */
 		break;
 
 	case HF_SCAN_DOWN_QUICK:
-		interval = -50;			/* 500Hz /sec */
+		interval = -50; /* 500Hz /sec */
 		break;
 
 	case HF_SCAN_DOWN_FAST:
-		interval = -200;		/* 2KHz /sec */
+		interval = -200; /* 2KHz /sec */
 		break;
 
 	case HF_SCAN_UP_SLOW:
-		interval = 10;			/* 100Hz /sec */
+		interval = 10; /* 100Hz /sec */
 		break;
 
 	case HF_SCAN_UP_QUICK:
-		interval = 50;			/* 500 Hz/sec */
+		interval = 50; /* 500 Hz/sec */
 		break;
 
 	case HF_SCAN_UP_FAST:
-		interval = 200;			/* 2KHz /sec */
+		interval = 200; /* 2KHz /sec */
 		break;
 
 	default:
@@ -2814,7 +2801,6 @@ int service_scan(struct rpt *myrpt)
 	}
 
 	return res;
-
 }
 
 int channel_steer(struct rpt *myrpt, char *data)

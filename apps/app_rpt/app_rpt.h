@@ -47,17 +47,17 @@ typedef struct {
 typedef struct {
 	int freq;
 	int block_size;
-	int squelch;				/* Remove (squelch) tone */
+	int squelch; /* Remove (squelch) tone */
 	goertzel_state_t tone;
-	float energy;				/* Accumulated energy of the current block */
-	int samples_pending;		/* Samples remain to complete the current block */
-	int mute_samples;			/* How many additional samples needs to be muted to suppress already detected tone */
+	float energy;		 /* Accumulated energy of the current block */
+	int samples_pending; /* Samples remain to complete the current block */
+	int mute_samples;	 /* How many additional samples needs to be muted to suppress already detected tone */
 
-	int hits_required;			/* How many successive blocks with tone we are looking for */
-	float threshold;			/* Energy of the tone relative to energy from all other signals to consider a hit */
+	int hits_required; /* How many successive blocks with tone we are looking for */
+	float threshold;   /* Energy of the tone relative to energy from all other signals to consider a hit */
 
-	int hit_count;				/* How many successive blocks we consider tone present */
-	int last_hit;				/* Indicates if the last processed block was a hit */
+	int hit_count; /* How many successive blocks we consider tone present */
+	int last_hit;  /* Indicates if the last processed block was a hit */
 
 } tone_detect_state_t;
 #endif
@@ -65,20 +65,20 @@ typedef struct {
 #define TONE_SAMPLE_RATE 8000
 #define TONE_SAMPLES_IN_FRAME 160
 
-#ifdef	__RPT_NOTCH
-#define	MAXFILTERS 10
+#ifdef __RPT_NOTCH
+#define MAXFILTERS 10
 #endif
 
 /* maximum digits in DTMF buffer, and seconds after * for DTMF command timeout */
-#define	MAXDTMF 32
+#define MAXDTMF 32
 #define MAXMACRO 2048
-#define	RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
+#define RPT_AST_STR_INIT_SIZE 500 /* initial guess for ast_str size */
 
 #define LINKLISTSHORTTIME 150
 #define LINKPOSTSHORTTIME 200
-#define	KEYTIMERTIME 250
-#define	MACROTIME 100
-#define	MACROPTIME 500
+#define KEYTIMERTIME 250
+#define MACROTIME 100
+#define MACROPTIME 500
 #define TONEMACRO_REPEAT 'R'
 #define DTMF_TIMEOUT 3
 #define KENWOOD_RETRIES 5
@@ -87,15 +87,15 @@ typedef struct {
 #define TOPKEYMAXSTR 30
 #define NEWKEYTIME 2000
 
-#define	AUTHTELLTIME 7000
-#define	AUTHTXTIME 1000
-#define	AUTHLOGOUTTIME 25000
+#define AUTHTELLTIME 7000
+#define AUTHTXTIME 1000
+#define AUTHLOGOUTTIME 25000
 
-#define	DISC_TIME 10000  /* report disc after 10 seconds of no connect */
-#define	MAX_RETRIES 5
-#define	MAX_RETRIES_PERM 1000000000
+#define DISC_TIME 10000 /* report disc after 10 seconds of no connect */
+#define MAX_RETRIES 5
+#define MAX_RETRIES_PERM 1000000000
 
-#define	REDUNDANT_TX_TIME 2000
+#define REDUNDANT_TX_TIME 2000
 
 #define RETRY_TIMER_MS 5000
 
@@ -120,11 +120,11 @@ typedef struct {
 
 #define MONITOR_DISK_BLOCKS_PER_MINUTE 38
 
-#define	DEFAULT_MONITOR_MIN_DISK_BLOCKS 10000
-#define	DEFAULT_REMOTE_INACT_TIMEOUT (15 * 60)
-#define	DEFAULT_REMOTE_TIMEOUT (60 * 60)
-#define	DEFAULT_REMOTE_TIMEOUT_WARNING (3 * 60)
-#define	DEFAULT_REMOTE_TIMEOUT_WARNING_FREQ 30
+#define DEFAULT_MONITOR_MIN_DISK_BLOCKS 10000
+#define DEFAULT_REMOTE_INACT_TIMEOUT (15 * 60)
+#define DEFAULT_REMOTE_TIMEOUT (60 * 60)
+#define DEFAULT_REMOTE_TIMEOUT_WARNING (3 * 60)
+#define DEFAULT_REMOTE_TIMEOUT_WARNING_FREQ 30
 
 #define DEFAULT_ERXGAIN -3.0
 #define DEFAULT_ETXGAIN 3.0
@@ -132,50 +132,50 @@ typedef struct {
 #define DEFAULT_TTXGAIN 3.0
 #define DEFAULT_LINKMONGAIN 0.0
 
-#define	DEFAULT_EANNMODE 1
-#define	DEFAULT_TANNMODE 1
+#define DEFAULT_EANNMODE 1
+#define DEFAULT_TANNMODE 1
 
-#define	DEFAULT_RXBURST_TIME 250 
-#define	DEFAULT_RXBURST_THRESHOLD 16
+#define DEFAULT_RXBURST_TIME 250
+#define DEFAULT_RXBURST_THRESHOLD 16
 
-#define	DEFAULT_SPLIT_2M 600
-#define	DEFAULT_SPLIT_70CM 5000
+#define DEFAULT_SPLIT_2M 600
+#define DEFAULT_SPLIT_70CM 5000
 
-#define	MAX_TEXTMSG_SIZE 160
+#define MAX_TEXTMSG_SIZE 160
 
-#define	MAX_EXTNODEFILES 50
-#define	MAX_LOCALLINKNODES 50
-#define	MAX_LSTUFF 20
+#define MAX_EXTNODEFILES 50
+#define MAX_LOCALLINKNODES 50
+#define MAX_LSTUFF 20
 
-#define	NODES "nodes"
-#define	EXTNODES "extnodes"
+#define NODES "nodes"
+#define EXTNODES "extnodes"
 #define MEMORY "memory"
 #define MACRO "macro"
-#define	FUNCTIONS "functions"
+#define FUNCTIONS "functions"
 #define TELEMETRY "telemetry"
 #define MORSE "morse"
-#define	TONEMACRO "tonemacro"
-#define	MDCMACRO "mdcmacro"
-#define	DTMFKEYS "dtmfkeys"
-#define	FUNCCHAR '*'
-#define	ENDCHAR '#'
-#define	EXTNODEFILE "/var/lib/asterisk/rpt_extnodes"
-#define	NODENAMES "rpt/nodenames"
-#define	PARROTFILE "/tmp/parrot_%s_%u"
+#define TONEMACRO "tonemacro"
+#define MDCMACRO "mdcmacro"
+#define DTMFKEYS "dtmfkeys"
+#define FUNCCHAR '*'
+#define ENDCHAR '#'
+#define EXTNODEFILE "/var/lib/asterisk/rpt_extnodes"
+#define NODENAMES "rpt/nodenames"
+#define PARROTFILE "/tmp/parrot_%s_%u"
 
-#define	GPS_VALID_SECS 60
-#define	GPS_UPDATE_SECS 30
+#define GPS_VALID_SECS 60
+#define GPS_UPDATE_SECS 30
 
-#define	PARROTTIME 1000
+#define PARROTTIME 1000
 
-#define	TELEM_HANG_TIME 120000
-#define	LINK_HANG_TIME 120000
+#define TELEM_HANG_TIME 120000
+#define LINK_HANG_TIME 120000
 
-#define	DEFAULT_IOBASE 0x378
+#define DEFAULT_IOBASE 0x378
 
-#define	DEFAULT_CIV_ADDR 0x58
+#define DEFAULT_CIV_ADDR 0x58
 
-#define	MAXCONNECTTIME 5000
+#define MAXCONNECTTIME 5000
 
 #define MAXNODESTR 300
 
@@ -189,26 +189,26 @@ typedef struct {
 
 #define REM_SCANTIME 100
 
-#define	DTMF_LOCAL_TIME 250
-#define	DTMF_LOCAL_STARTTIME 500
+#define DTMF_LOCAL_TIME 250
+#define DTMF_LOCAL_STARTTIME 500
 
-#define	IC706_PL_MEMORY_OFFSET 50
+#define IC706_PL_MEMORY_OFFSET 50
 
-#define	VOX_ON_DEBOUNCE_COUNT 3
-#define	VOX_OFF_DEBOUNCE_COUNT 20
-#define	VOX_MAX_THRESHOLD 10000.0
-#define	VOX_MIN_THRESHOLD 3000.0
-#define	VOX_TIMEOUT_MS 10000
-#define	VOX_RECOVER_MS 2000
-#define	SIMPLEX_PATCH_DELAY 25
-#define	SIMPLEX_PHONE_DELAY 25
+#define VOX_ON_DEBOUNCE_COUNT 3
+#define VOX_OFF_DEBOUNCE_COUNT 20
+#define VOX_MAX_THRESHOLD 10000.0
+#define VOX_MIN_THRESHOLD 3000.0
+#define VOX_TIMEOUT_MS 10000
+#define VOX_RECOVER_MS 2000
+#define SIMPLEX_PATCH_DELAY 25
+#define SIMPLEX_PHONE_DELAY 25
 
 #define RX_LINGER_TIME 50
 
-#define	ALLOW_LOCAL_CHANNELS
+#define ALLOW_LOCAL_CHANNELS
 
-#define	DEFAULT_LITZ_TIME 3000
-#define	DEFAULT_LITZ_CHAR "0"
+#define DEFAULT_LITZ_TIME 3000
+#define DEFAULT_LITZ_CHAR "0"
 
 /*
  * DAQ subsystem
@@ -216,13 +216,13 @@ typedef struct {
 
 #define MAX_DAQ_RANGES 16  /* Max number of entries for range() */
 #define MAX_DAQ_ENTRIES 10 /* Max number of DAQ devices */
-#define MAX_DAQ_NAME 32 /* Max length of a device name */
-#define MAX_DAQ_DEV 64 /* Max length of a daq device path */
+#define MAX_DAQ_NAME 32	   /* Max length of a device name */
+#define MAX_DAQ_DEV 64	   /* Max length of a daq device path */
 #define MAX_METER_FILES 10 /* Max number of sound files in a meter def. */
-#define DAQ_RX_TIMEOUT 50 /* Receive time out for DAQ subsystem */ 
-#define DAQ_ADC_ACQINT 10 /* Acquire interval in sec. for ADC channels */
-#define ADC_HIST_TIME 300 /* Time  in sec. to calculate short term avg, high and low peaks from. */
-#define ADC_HISTORY_DEPTH ADC_HIST_TIME/DAQ_ADC_ACQINT
+#define DAQ_RX_TIMEOUT 50  /* Receive time out for DAQ subsystem */
+#define DAQ_ADC_ACQINT 10  /* Acquire interval in sec. for ADC channels */
+#define ADC_HIST_TIME 300  /* Time  in sec. to calculate short term avg, high and low peaks from. */
+#define ADC_HISTORY_DEPTH ADC_HIST_TIME / DAQ_ADC_ACQINT
 
 typedef enum {
 	rpt_false,
@@ -234,7 +234,11 @@ enum keypost {
 	RPT_KEYPOST_ACTIVE
 };
 
-enum {REM_OFF,REM_MONITOR,REM_TX};
+enum {
+	REM_OFF,
+	REM_MONITOR,
+	REM_TX
+};
 
 enum rpt_linkmode {
 	LINKMODE_OFF,
@@ -417,7 +421,7 @@ enum rpt_daq_type {
 };
 
 /* general setting - rpt_node_lookup */
-enum  rpt_dns_method {
+enum rpt_dns_method {
 	LOOKUP_BOTH,
 	LOOKUP_DNS,
 	LOOKUP_FILE
@@ -462,8 +466,8 @@ enum patch_call_mode {
 #define REMOTE_RIG_RTX450 "rtx450"
 #define REMOTE_RIG_PPP16 "ppp16" /* parallel port programmable 16 channels */
 
-#define ISRIG_RTX(x) ((!strcmp(x,REMOTE_RIG_RTX150)) || (!strcmp(x,REMOTE_RIG_RTX450)))
-#define	IS_XPMR(x) (!strncasecmp(x->rxchanname,"rad",3))
+#define ISRIG_RTX(x) ((!strcmp(x, REMOTE_RIG_RTX150)) || (!strcmp(x, REMOTE_RIG_RTX450)))
+#define IS_XPMR(x) (!strncasecmp(x->rxchanname, "rad", 3))
 
 #define MSWAIT 20
 #define HANGTIME 5000
@@ -482,8 +486,8 @@ enum patch_call_mode {
 
 #define MAX_SYSSTATES 10
 
-#define FT897_SERIAL_DELAY 75000		/* # of usec to wait between some serial commands on FT-897 */
-#define FT100_SERIAL_DELAY 75000		/* # of usec to wait between some serial commands on FT-897 */
+#define FT897_SERIAL_DELAY 75000 /* # of usec to wait between some serial commands on FT-897 */
+#define FT100_SERIAL_DELAY 75000 /* # of usec to wait between some serial commands on FT-897 */
 
 #define DISCSTR "!!DISCONNECT!!"
 #define NEWKEYSTR "!NEWKEY!"
@@ -491,10 +495,10 @@ enum patch_call_mode {
 #define IAXKEYSTR "!IAXKEY!"
 
 /*! \brief Repeater link connection newkey handshake state */
-enum newkey { 
-	RADIO_KEY_ALLOWED, /*!< AST_CONTROL_RADIO_KEY is allowed on repeater channel */
+enum newkey {
+	RADIO_KEY_ALLOWED,			 /*!< AST_CONTROL_RADIO_KEY is allowed on repeater channel */
 	RADIO_KEY_ALLOWED_REDUNDANT, /*!< "!NEWKEY!" - AST_CONTROL_RADIO_KEY allowed on the repeater channel */
-	RADIO_KEY_NOT_ALLOWED /*!< "!NEWKEY1!" message - AST_CONTROL_RADIO_KEY are not allowed on the repeater channel */
+	RADIO_KEY_NOT_ALLOWED		 /*!< "!NEWKEY1!" message - AST_CONTROL_RADIO_KEY are not allowed on the repeater channel */
 };
 
 enum link_mode {
@@ -516,28 +520,28 @@ enum rpt_parrot_states {
 };
 
 struct vox {
-	float	speech_energy;
-	float	noise_energy;
-	int	enacount;
-	char	voxena;
-	char	lastvox;
-	int	offdebcnt;
-	int	ondebcnt;
+	float speech_energy;
+	float noise_energy;
+	int enacount;
+	char voxena;
+	char lastvox;
+	int offdebcnt;
+	int ondebcnt;
 };
 
 struct rpt_topkey {
-	char	node[TOPKEYMAXSTR];
-	int	timesince;
-	int	keyed;
+	char node[TOPKEYMAXSTR];
+	int timesince;
+	int keyed;
 };
 
 struct rpt_xlat {
-	char	funccharseq[MAXXLAT];
-	char	endcharseq[MAXXLAT];
-	char	passchars[MAXXLAT];
-	int	funcindex;
-	int	endindex;
-	time_t	lastone;
+	char funccharseq[MAXXLAT];
+	char endcharseq[MAXXLAT];
+	char passchars[MAXXLAT];
+	int funcindex;
+	int endindex;
+	time_t lastone;
 };
 
 struct rpt_frame_queue {
@@ -581,20 +585,20 @@ struct rpt_link {
 	enum rpt_link_disconnect disced:2; /* NOTE: bit-field is 2 bits => max value 3; keep enum values within range. */
 	long elaptime;
 	int disctime;
-	int	retrytimer;
-	int	retxtimer;
-	int	rerxtimer;
-	int	rxlingertimer;
-	int	rssi;
-	int	retries;
-	int	max_retries;
-	int	reconnects;
+	int retrytimer;
+	int retxtimer;
+	int rerxtimer;
+	int rxlingertimer;
+	int rssi;
+	int retries;
+	int max_retries;
+	int reconnects;
 	struct timeval connecttime;
-	struct ast_channel *chan;	
+	struct ast_channel *chan;
 	struct ast_channel *pchan;
 	struct ast_audiohook altaudio;
 	struct ast_str *linklist;
-	time_t	linklistreceived;
+	time_t linklistreceived;
 	int linklisttimer;
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
@@ -606,9 +610,9 @@ struct rpt_link {
 	enum newkey link_newkey;
 	int linkmode;
 	int newkeytimer;
-	int		voterlink;      /*!< \brief set if node is defined as a voter rx */
-	int		votewinner;		/*!< \brief set if node won the rssi competition */
-	time_t	lastkeytime;
+	int voterlink;	/*!< \brief set if node is defined as a voter rx */
+	int votewinner; /*!< \brief set if node won the rssi competition */
+	time_t lastkeytime;
 	time_t lastunkeytime;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
@@ -703,7 +707,6 @@ struct daq_tag {
 	struct daq_entry_tag *hw;
 };
 
-
 /*! \brief Used to store the morse code patterns */
 struct morse_bits {
 	int len;
@@ -775,7 +778,7 @@ struct rpt {
 	rpt_bool remote:1;
 	char *remoterig;
 	unsigned int scram;
-#ifdef	_MDC_DECODE_H_
+#ifdef _MDC_DECODE_H_
 	mdc_decoder_t *mdc;
 #endif
 
@@ -793,7 +796,7 @@ struct rpt {
 		const char *nodes;
 		const char *extnodes;
 		const char *extnodefiles[MAX_EXTNODEFILES];
-		int  extnodefilesn;
+		int extnodefilesn;
 		char *extnodefiles_buf;
 		const char *patchconnect;
 		const char *lnkactmacro;
@@ -898,9 +901,9 @@ struct rpt {
 		const char *litzcmd;
 		int default_split_2m;
 		int default_split_70cm;
-		int votertype;                                  /*!< \brief 0 none, 1 repeater, 2 voter rx      */
-		int votermode;                                  /*!< \brief 0 none, 1 one shot, 2 continuous    */
-		int votermargin;								/*!< \brief rssi margin to win a vote           */
+		int votertype;	 /*!< \brief 0 none, 1 repeater, 2 voter rx      */
+		int votermode;	 /*!< \brief 0 none, 1 one shot, 2 continuous    */
+		int votermargin; /*!< \brief rssi margin to win a vote           */
 		rpt_bool dias:1;
 		rpt_bool dusbabek:1;
 		rpt_bool dopfxtone:1;
@@ -941,10 +944,10 @@ struct rpt {
 	char rem_dtmfbuf[MAXDTMF];
 	char lastdtmfcommand[MAXDTMF];
 	char cmdnode[50];
-	char nowchan;						/*!< channel now */
-	char waschan;						/*!< channel selected initially or by command */
-	char bargechan;						/*!< barge in channel */
-	char macropatch;					/*!< autopatch via tonemacro state */
+	char nowchan;	 /*!< channel now */
+	char waschan;	 /*!< channel selected initially or by command */
+	char bargechan;	 /*!< barge in channel */
+	char macropatch; /*!< autopatch via tonemacro state */
 	enum rpt_parrot_states parrotstate;
 	rpt_bool parrotonce:1;
 	rpt_bool linkactivityflag:1;
@@ -952,7 +955,7 @@ struct rpt {
 	char lastitx;
 	char remsetting;
 	char tunetx;
-	int  parrottimer;
+	int parrottimer;
 	unsigned int parrotcnt;
 	int telemmode;
 	struct ast_channel *rxchannel;		/*!< Channel connected to physical hardware, can be bi-directional */
@@ -965,7 +968,7 @@ struct rpt {
 	struct ast_channel *localtxchannel; /*!< Channel used to receive audio from the TXCONF bridge into the txchannel */
 	struct rpt_frame_queue frame_queue;
 	struct rpt_tele tele;
-	struct timeval lasttv,curtv;
+	struct timeval lasttv, curtv;
 	struct rpt_conf rptconf;
 	pthread_t rpt_call_thread, rpt_thread;
 	time_t dtmf_time, rem_dtmf_time, dtmf_time_rem;
@@ -980,13 +983,13 @@ struct rpt {
 	int dtmfidx, rem_dtmfidx;
 	int dailytxtime, dailykerchunks, totalkerchunks, dailykeyups, totalkeyups, timeouts;
 	int totalexecdcommands, dailyexecdcommands;
-	int	retxtimer;
-	int	rerxtimer;
+	int retxtimer;
+	int rerxtimer;
 	long long totaltxtime;
 	char mydtmf;
 	char exten[AST_MAX_EXTENSION];
-	char freq[MAXREMSTR],rxpl[MAXREMSTR],txpl[MAXREMSTR];
-	int  splitkhz;
+	char freq[MAXREMSTR], rxpl[MAXREMSTR], txpl[MAXREMSTR];
+	int splitkhz;
 	enum rpt_offset offset;
 	enum rpt_power powerlevel;
 	enum rpt_mode remmode;
@@ -1014,7 +1017,7 @@ struct rpt {
 	int link_longestfunc;
 	int longestfunc;
 	int longestnode;
-	int threadrestarts;		
+	int threadrestarts;
 	int tailmessagen;
 	time_t disgorgetime;
 	time_t lastthreadrestarttime;
@@ -1029,7 +1032,7 @@ struct rpt {
 	long authtelltimer;
 	long authtimer;
 	int iofd;
-	time_t start_time,last_activity_time;
+	time_t start_time, last_activity_time;
 	char lasttone[32];
 	struct rpt_tele *active_telem;
 	struct rpt_topkey topkey[TOPKEYN];
@@ -1057,19 +1060,19 @@ struct rpt {
 	rpt_bool sleep:1;
 	char dtmfkeybuf[MAXDTMF];
 	struct rpt_link *voted_link; /*!< \brief last winning link or NULL */
-	int  rxrssi;				/*!< \brief rx rssi from the rxchannel */
-	int  voted_rssi;			/*!< \brief last winning rssi */
-	int  vote_counter;			/*!< \brief count to frame used to vote the winner */
-	int  voter_oneshot;
-	int  votewinner;
-	int  voteremrx;             /* 0 no voters are keyed, 1 at least one voter is keyed */
+	int rxrssi;					 /*!< \brief rx rssi from the rxchannel */
+	int voted_rssi;				 /*!< \brief last winning rssi */
+	int vote_counter;			 /*!< \brief count to frame used to vote the winner */
+	int voter_oneshot;
+	int votewinner;
+	int voteremrx; /* 0 no voters are keyed, 1 at least one voter is keyed */
 	char lastdtmfuser[MAXNODESTR];
 	char curdtmfuser[MAXNODESTR];
-	int  sleeptimer;
-	time_t lastgpstime;			/* monotonic time */
+	int sleeptimer;
+	time_t lastgpstime; /* monotonic time */
 	int outstreampipe[2];
 	int outstreampid;
-	time_t outstreamlasterror;	/*!< \brief set when there is an outstream error and is reset when error cleared */
+	time_t outstreamlasterror; /*!< \brief set when there is an outstream error and is reset when error cleared */
 	struct ast_channel *remote_webtransceiver;
 	struct timeval lastdtmftime;
 	int keyed_time_ms; /*!< Time in milliseconds that a user has been keyed on the local RX */
@@ -1081,23 +1084,22 @@ struct rpt {
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
 	char txrealkeyed;
-#ifdef	__RPT_NOTCH
-	struct rptfilter
-	{
-		char	desc[100];
-		float	x0;
-		float	x1;
-		float	x2;
-		float	y0;
-		float	y1;
-		float	y2;
-		float	gain;
-		float	const0;
-		float	const1;
-		float	const2;
+#ifdef __RPT_NOTCH
+	struct rptfilter {
+		char desc[100];
+		float x0;
+		float x1;
+		float x2;
+		float y0;
+		float y1;
+		float y2;
+		float gain;
+		float const0;
+		float const1;
+		float const2;
 	} filters[MAXFILTERS];
 #endif
-#ifdef	_MDC_DECODE_H_
+#ifdef _MDC_DECODE_H_
 	unsigned short lastunit;
 	char lastmdc[32];
 #endif
@@ -1111,7 +1113,7 @@ struct rpt {
 struct nodelog {
 	struct nodelog *next;
 	struct nodelog *prev;
-	time_t	timestamp;
+	time_t timestamp;
 	char archivedir[MAXNODESTR];
 	char str[MAXNODESTR * 2];
 };

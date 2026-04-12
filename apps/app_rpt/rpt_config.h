@@ -62,7 +62,7 @@ int tlb_query_callsign(const char *node, char *callsign, int callsignlen);
 int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodedatalength, int wilds);
 
 /*!
- * \brief Forward node lookup function.  This function will take the nodelist 
+ * \brief Forward node lookup function.  This function will take the nodelist
  * and try to match the node number that was passed to it.  If it is found, the function requested will succeed.
  * If not, it will fail.  Called when a connection to a remote node is requested.
  * \param  digitbuf		The node number of match
@@ -75,11 +75,12 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 
 int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, size_t nodedatalength);
 
-/*! 
- * \brief This is the initialization function.  This routine takes the data in rpt.conf and setup up the variables needed for each of
- * the repeaters that it finds.  There is some minor sanity checking done on the data passed, but not much.
- * 
- * \note This is kind of a mess to read.  It uses the asterisk native function to read config files and pass back values assigned to keywords.
+/*!
+ * \brief This is the initialization function.  This routine takes the data in rpt.conf and setup up the variables needed for each
+ * of the repeaters that it finds.  There is some minor sanity checking done on the data passed, but not much.
+ *
+ * \note This is kind of a mess to read.  It uses the asterisk native function to read config files and pass back values assigned
+ * to keywords.
  */
 void load_rpt_vars(int n, int init);
 

@@ -1,5 +1,6 @@
 
-/*! \file
+/*!
+ * \file
  *
  * \brief Uchameleon specific routines
  */
@@ -151,10 +152,10 @@ int uchameleon_pin_init(struct daq_entry_tag *t)
 		i = matchkeyword((char *) var2->value, NULL, pin_keywords);
 		ast_debug(3, "Pin = %d, Pintype = %d\n", pin, i);
 		if (i && i < 5) {
-			uchameleon_do_long(t, pin, DAQ_CMD_PINSET, NULL, &i, NULL);	/* Set pin type */
-			uchameleon_do_long(t, pin, DAQ_CMD_MONITOR, NULL, &x, NULL);	/* Monitor off */
+			uchameleon_do_long(t, pin, DAQ_CMD_PINSET, NULL, &i, NULL);	 /* Set pin type */
+			uchameleon_do_long(t, pin, DAQ_CMD_MONITOR, NULL, &x, NULL); /* Monitor off */
 			if (i == DAQ_PT_OUT) {
-				ast_debug(3, "Set output pin %d low\n", pin);	/* Set output pins low */
+				ast_debug(3, "Set output pin %d low\n", pin); /* Set output pins low */
 				uchameleon_do_long(t, pin, DAQ_CMD_OUT, NULL, &x, NULL);
 			}
 		} else
@@ -206,7 +207,7 @@ int uchameleon_pin_init(struct daq_entry_tag *t)
 		}
 
 		if (!strcmp(argv[0], t->name)) {
-			ast_copy_string(p->alarmargs, var->value, sizeof(p->alarmargs));	/* Save the alarm arguments in the pin entry */
+			ast_copy_string(p->alarmargs, var->value, sizeof(p->alarmargs)); /* Save the alarm arguments in the pin entry */
 			ast_debug(1, "Adding alarm %s on pin %d\n", var->name, pin);
 			uchameleon_do_long(t, pin, DAQ_CMD_MONITOR, uchameleon_alarm_handler, &ignorefirst, NULL);
 		}
@@ -214,7 +215,7 @@ int uchameleon_pin_init(struct daq_entry_tag *t)
 	}
 
 	ast_config_destroy(ourcfg);
-	time(&t->adcacqtime);		/* Start ADC Acquisition */
+	time(&t->adcacqtime); /* Start ADC Acquisition */
 	return -0;
 }
 
@@ -238,7 +239,6 @@ int uchameleon_open(struct daq_entry_tag *t)
 	}
 
 	return res;
-
 }
 
 int uchameleon_close(struct daq_entry_tag *t)
@@ -264,7 +264,7 @@ int uchameleon_close(struct daq_entry_tag *t)
 	}
 
 	if (t->fd > 0) {
-		serial_io(t->fd, ledpat, NULL, strlen(ledpat), 0, 0, 0);	/* LED back to flashing */
+		serial_io(t->fd, ledpat, NULL, strlen(ledpat), 0, 0, 0); /* LED back to flashing */
 	}
 	/* Free linked lists */
 
@@ -339,11 +339,11 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, v
 			if (arg1 && *arg1 && (*arg1 < 19)) {
 				while (listp->state) {
 					ast_mutex_unlock(&t->lock);
-					usleep(10 * 1000);	/* Wait */
+					usleep(10 * 1000); /* Wait */
 					ast_mutex_lock(&t->lock);
 				}
 				listp->command = DAQ_CMD_PINSET;
-				listp->pintype = *arg1;	/* Pin redefinition */
+				listp->pintype = *arg1; /* Pin redefinition */
 				listp->valuemin = 255;
 				listp->valuemax = 0;
 				listp->state = DAQ_PS_START;
@@ -362,7 +362,7 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, v
 						}
 						break;
 
-					case DAQ_SUB_STAVG:	/* Short term average */
+					case DAQ_SUB_STAVG: /* Short term average */
 						x = 0;
 						i = listp->adcnextupdate;
 						for (j = 0; j < ADC_HISTORY_DEPTH; j++) {
@@ -379,7 +379,7 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, v
 						}
 						break;
 
-					case DAQ_SUB_STMAX:	/* Short term maximum */
+					case DAQ_SUB_STMAX: /* Short term maximum */
 						x = 0;
 						i = listp->adcnextupdate;
 						for (j = 0; j < ADC_HISTORY_DEPTH; j++) {
@@ -397,7 +397,7 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, v
 						}
 						break;
 
-					case DAQ_SUB_STMIN:	/* Short term minimum */
+					case DAQ_SUB_STMIN: /* Short term minimum */
 						x = 255;
 						i = listp->adcnextupdate;
 						if (i >= ADC_HISTORY_DEPTH) {
@@ -418,13 +418,13 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, v
 						}
 						break;
 
-					case DAQ_SUB_MAX:	/* Max since start or reset */
+					case DAQ_SUB_MAX: /* Max since start or reset */
 						if (arg1) {
 							*arg1 = listp->valuemax;
 						}
 						break;
 
-					case DAQ_SUB_MIN:	/* Min since start or reset */
+					case DAQ_SUB_MIN: /* Min since start or reset */
 						if (arg1) {
 							*arg1 = listp->valuemin;
 						}
@@ -457,7 +457,7 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, v
 
 			while (listp->state) {
 				ast_mutex_unlock(&t->lock);
-				usleep(10 * 1000);	/* Wait */
+				usleep(10 * 1000); /* Wait */
 				ast_mutex_lock(&t->lock);
 			}
 
@@ -486,14 +486,14 @@ int uchameleon_do_long(struct daq_entry_tag *t, int pin, enum rpt_daq_cmd cmd, v
 
 			while (listp->state) {
 				ast_mutex_unlock(&t->lock);
-				usleep(10 * 1000);	/* Wait */
+				usleep(10 * 1000); /* Wait */
 				ast_mutex_lock(&t->lock);
 			}
 			*arg1 = listp->value;
 			ast_mutex_unlock(&t->lock);
 			return 0;
 		}
-	} else {					/* Pin not in list */
+	} else { /* Pin not in list */
 		if (cmd == DAQ_CMD_PINSET) {
 			if (arg1 && *arg1 && (*arg1 < 19)) {
 				/* New pin definition */
@@ -575,7 +575,7 @@ void *uchameleon_monitor_thread(void *this)
 			t->fd = -1;
 			t->active = 0;
 			ast_mutex_unlock(&t->lock);
-			return this;		/* Now, we die */
+			return this; /* Now, we die */
 		}
 		if (res) {
 			ast_debug(5, "Received: %s\n", rxbuff);
@@ -607,7 +607,7 @@ void *uchameleon_monitor_thread(void *this)
 
 							if (p->state == DAQ_PS_IN_MONITOR) {
 								if (!p->alarmmask && !p->ignorefirstalarm && p->monexec) {
-									(*p->monexec) (p);
+									(*p->monexec)(p);
 								}
 								p->ignorefirstalarm = 0;
 							} else
@@ -651,14 +651,14 @@ void *uchameleon_monitor_thread(void *this)
 				p->command = DAQ_CMD_ADC;
 			}
 			if (p->state == DAQ_PS_START) {
-				p->state = DAQ_PS_BUSY;	/* Assume we are busy */
+				p->state = DAQ_PS_BUSY; /* Assume we are busy */
 				switch (p->command) {
 				case DAQ_CMD_OUT:
 					if (p->pintype == DAQ_PT_OUT) {
 						snprintf(txbuff, sizeof(txbuff), "pin %d %s\n", p->num, (p->value) ? "hi" : "lo");
 						ast_debug(3, "DAQ_CMD_OUT: %s\n", txbuff);
 						uchameleon_queue_tx(t, txbuff);
-						p->state = DAQ_PS_IDLE;	/* TX is considered done */
+						p->state = DAQ_PS_IDLE; /* TX is considered done */
 					} else {
 						ast_log(LOG_WARNING, "Wrong pin type for out command\n");
 						p->state = DAQ_PS_IDLE;
@@ -669,7 +669,7 @@ void *uchameleon_monitor_thread(void *this)
 					snprintf(txbuff, sizeof(txbuff), "pin %d monitor %s\n", p->num, p->monexec ? "on" : "off");
 					uchameleon_queue_tx(t, txbuff);
 					if (!p->monexec) {
-						p->state = DAQ_PS_IDLE;	/* Restore to idle channel */
+						p->state = DAQ_PS_IDLE; /* Restore to idle channel */
 					} else {
 						p->state = DAQ_PS_IN_MONITOR;
 					}
@@ -717,8 +717,7 @@ void *uchameleon_monitor_thread(void *this)
 						snprintf(txbuff, sizeof(txbuff), "pin %d in\n", p->num);
 						uchameleon_queue_tx(t, txbuff);
 						if (p->num > 8) {
-							snprintf(txbuff, sizeof(txbuff), "pin %d pullup %d\n", p->num,
-									 (p->pintype == DAQ_PT_INP) ? 1 : 0);
+							snprintf(txbuff, sizeof(txbuff), "pin %d pullup %d\n", p->num, (p->pintype == DAQ_PT_INP) ? 1 : 0);
 							uchameleon_queue_tx(t, txbuff);
 						}
 						p->valuemin = 255;
@@ -741,10 +740,10 @@ void *uchameleon_monitor_thread(void *this)
 					ast_log(LOG_WARNING, "Unrecognized uchameleon command\n");
 					p->state = DAQ_PS_IDLE;
 					break;
-				}				/* switch */
-			}					/* if */
+				} /* switch */
+			} /* if */
 			p = p->next;
-		}						/* while */
+		} /* while */
 
 		/* Transmit queued commands */
 		while (t->txhead) {
@@ -765,12 +764,12 @@ void *uchameleon_monitor_thread(void *this)
 				t->fd = -1;
 				ast_mutex_unlock(&t->lock);
 				ast_log(LOG_ERROR, "Tx failed, terminating monitor thread\n");
-				return this;	/* Now, we die */
+				return this; /* Now, we die */
 			}
 
 			ast_mutex_lock(&t->lock);
-		}						/* while */
+		} /* while */
 		ast_mutex_unlock(&t->lock);
-	}							/* for(;;) */
+	} /* for(;;) */
 	return this;
 }

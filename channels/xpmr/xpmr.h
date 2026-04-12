@@ -27,7 +27,8 @@
  * 20160829      inad            added rxlpf rxhpf txlpf txhpf
  */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief Private Land Mobile Radio Channel Voice and Signaling Processor
  *

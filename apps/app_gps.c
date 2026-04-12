@@ -181,14 +181,14 @@
  *
  */
 
- /* Power, Height, Gain, Dir (direction) codes (PHG)
-  *   DIGITS   0   1   2    3    4    5    6     7     8     9  Units
-  *   -------------------------------------------------------------------
-  *   POWER    0,  1,  4,   9,  16,  25,  36,   49,   64,   81  watts
-  *   HEIGHT  10, 20, 40,  80, 160, 320, 640, 1280, 2560, 5120  feet
-  *   GAIN     0,  1,  2,   3,   4,   5,   6,    7,    8,    9  dB
-  *   DIR   omni, 45, 90, 135, 180, 225, 270,  315,  360,    .  deg
-  */
+/* Power, Height, Gain, Dir (direction) codes (PHG)
+ *   DIGITS   0   1   2    3    4    5    6     7     8     9  Units
+ *   -------------------------------------------------------------------
+ *   POWER    0,  1,  4,   9,  16,  25,  36,   49,   64,   81  watts
+ *   HEIGHT  10, 20, 40,  80, 160, 320, 640, 1280, 2560, 5120  feet
+ *   GAIN     0,  1,  2,   3,   4,   5,   6,    7,    8,    9  dB
+ *   DIR   omni, 45, 90, 135, 180, 225, 270,  315,  360,    .  deg
+ */
 
 #include "asterisk.h"
 
@@ -237,23 +237,23 @@
  ***/
 
 /*! Defines */
-#define	APRS_DEFAULT_SERVER "rotate.aprs.net"
-#define	APRS_DEFAULT_PORT "14580"
+#define APRS_DEFAULT_SERVER "rotate.aprs.net"
+#define APRS_DEFAULT_PORT "14580"
 #define APRS_IS_VERSION "Asterisk app_gps_V3"
-#define	APRS_DEFAULT_COMMENT "Asterisk/app_rpt Node"
-#define	APRSTT_DEFAULT_COMMENT "Asterisk/app_rpt TT Report"
-#define	APRSTT_DEFAULT_OVERLAY '0'
-#define APRS_DEFAULT_ICON_TABLE '/'		/* primary table */
-#define	APRS_DEFAULT_ICON '-'			/* house */
-#define	DEFAULT_TTLIST 10
-#define	DEFAULT_TTOFFSET 10
-#define	TT_LIST_TIMEOUT 3600
-#define	TT_COMMON "/tmp/aprs_ttcommon"
-#define	TT_SUB_COMMON "/tmp/aprs_ttcommon_%s"
-#define	GPS_DEFAULT_BAUDRATE B4800
-#define	GPS_UPDATE_SECS 60
-#define	GPS_VALID_SECS 60
-#define	SERIAL_MAXMS 10000
+#define APRS_DEFAULT_COMMENT "Asterisk/app_rpt Node"
+#define APRSTT_DEFAULT_COMMENT "Asterisk/app_rpt TT Report"
+#define APRSTT_DEFAULT_OVERLAY '0'
+#define APRS_DEFAULT_ICON_TABLE '/' /* primary table */
+#define APRS_DEFAULT_ICON '-'		/* house */
+#define DEFAULT_TTLIST 10
+#define DEFAULT_TTOFFSET 10
+#define TT_LIST_TIMEOUT 3600
+#define TT_COMMON "/tmp/aprs_ttcommon"
+#define TT_SUB_COMMON "/tmp/aprs_ttcommon_%s"
+#define GPS_DEFAULT_BAUDRATE B4800
+#define GPS_UPDATE_SECS 60
+#define GPS_VALID_SECS 60
+#define SERIAL_MAXMS 10000
 
 /*!
  * \brief APRS TT entry.
@@ -285,12 +285,12 @@ static int gps_unlock_shown = 0;
  * \brief Position information structure
  */
 struct position_info {
-	unsigned int is_valid:1;	/* contains valid values indicator */
-	char latitude[25];			/* latitude format DDMM.SSS */
-	char longitude[25];			/* longitude format DDDMM.SSS */
-	char elevation[25];			/* elevation format VVVV.V */
-	time_t last_updated;		/* the ephoh time these values were last updated */
-	time_t last_updated_mono;	/* the monotonic time these values were last updated */
+	unsigned int is_valid:1;  /* contains valid values indicator */
+	char latitude[25];		  /* latitude format DDMM.SSS */
+	char longitude[25];		  /* longitude format DDDMM.SSS */
+	char elevation[25];		  /* elevation format VVVV.V */
+	time_t last_updated;	  /* the ephoh time these values were last updated */
+	time_t last_updated_mono; /* the monotonic time these values were last updated */
 };
 
 static struct position_info current_gps_position;
@@ -309,17 +309,16 @@ enum aprs_sender_type {
  */
 struct aprs_sender_info {
 	AST_LIST_ENTRY(aprs_sender_info) list;
-	enum aprs_sender_type type;					/* sender type enum */
-	char section[50]; 						/* section associated with this aprs thread */
-	pthread_t thread_id;					/* thread id for this sender */
-	ast_cond_t condition;					/* condition indicator for this sender */
-	ast_mutex_t lock;						/* lock for condition */
-	char their_call[50];					/* their callsign for processing */
-	char overlay;							/* the overlay to use with the callsign */
+	enum aprs_sender_type type; /* sender type enum */
+	char section[50];			/* section associated with this aprs thread */
+	pthread_t thread_id;		/* thread id for this sender */
+	ast_cond_t condition;		/* condition indicator for this sender */
+	ast_mutex_t lock;			/* lock for condition */
+	char their_call[50];		/* their callsign for processing */
+	char overlay;				/* the overlay to use with the callsign */
 };
 
 AST_RWLIST_HEAD_STATIC(aprs_sender_list, aprs_sender_info);
-
 
 /*!
  * \brief Get system monotonic
@@ -334,7 +333,6 @@ static time_t time_monotonic(void)
 
 	return ts.tv_sec;
 }
-
 
 /*!
  * \brief Break up a delimited string into a table of substrings
@@ -474,7 +472,7 @@ static void *aprs_connection_thread(void *data)
 	const char *val;
 	struct ast_config *cfg = NULL;
 	struct ast_flags zeroflag = { 0 };
-	struct ast_sockaddr addr = { {0,} };
+	struct ast_sockaddr addr = { { 0 } };
 	struct pollfd fds[1];
 	int res;
 
@@ -553,7 +551,7 @@ static void *aprs_connection_thread(void *data)
 		/* Consume the received data from the APRS-IS server.
 		 * We do not use the returned information at this time.
 		 */
-		 while (run_forever) {
+		while (run_forever) {
 			/*
 			 * poll for activity
 			 * time out after 500ms
@@ -570,7 +568,7 @@ static void *aprs_connection_thread(void *data)
 					ast_debug(4, "APRS-IS: %s\n", buf);
 				}
 			}
-		 }
+		}
 	}
 
 	close(sockfd);
@@ -675,7 +673,7 @@ static int report_aprs(const char *ctg, char *lat, char *lon, const char *elev)
 		return -1;
 	}
 
-    /* Setup the server call sign
+	/* Setup the server call sign
 	 * If the SID is a single character, append 'S'
 	 * If there is no SID, append '-VS'
 	 */
@@ -718,8 +716,8 @@ static int report_aprs(const char *ctg, char *lat, char *lon, const char *elev)
 		elev_str[0] = '\0';
 	}
 
-	snprintf(buf, sizeof(buf), "%s>APSTAR,TCPIP*,qAC,%s:!%s%c%s%cPHG%d%d%d%d%s%s\r\n",
-			call, servercall, lat, icon_table, lon, icon, power, height, gain, dir, elev_str, comment);
+	snprintf(buf, sizeof(buf), "%s>APSTAR,TCPIP*,qAC,%s:!%s%c%s%cPHG%d%d%d%d%s%s\r\n", call, servercall, lat, icon_table, lon,
+		icon, power, height, gain, dir, elev_str, comment);
 
 	ast_mutex_lock(&aprs_socket_lock);
 
@@ -827,8 +825,8 @@ static int report_aprstt(const char *ctg, char *lat, char *lon, const char *thei
 	tm = gmtime(&t);
 
 	snprintf(buf1, sizeof(buf1), "%s-12", theircall);
-	snprintf(buf, sizeof(buf), "%s>APSTAR:;%-9s*%02d%02d%02dz%s%c%sA%s\r\n",
-			call, buf1, tm->tm_hour, tm->tm_min, tm->tm_sec, lat, overlay, lon, comment);
+	snprintf(buf, sizeof(buf), "%s>APSTAR:;%-9s*%02d%02d%02dz%s%c%sA%s\r\n", call, buf1, tm->tm_hour, tm->tm_min, tm->tm_sec, lat,
+		overlay, lon, comment);
 
 	ast_mutex_lock(&aprs_socket_lock);
 
@@ -927,7 +925,7 @@ static void *gps_reader(void *data)
 			close(fd);
 			goto err;
 		}
-#ifndef	SOLARIS
+#ifndef SOLARIS
 		cfmakeraw(&mode);
 #else
 		mode.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
@@ -953,7 +951,6 @@ static void *gps_reader(void *data)
 	/*! \todo we need to deal with someone unplugging the device */
 
 	while (run_forever) {
-
 		/* Read a line from the serial port */
 		res = getserialline(fd, buf, sizeof(buf) - 1);
 		if (res < 0) {
@@ -1044,12 +1041,11 @@ static void *gps_reader(void *data)
 			current_gps_position.last_updated_mono = now_mono;
 			ast_mutex_unlock(&position_update_lock);
 
-			selected_info = & current_gps_position;
+			selected_info = &current_gps_position;
 		}
 
-		ast_debug(5, "Got latitude: %s, longitude: %s, elevation: %s from: %s\n",
-			selected_info->latitude, selected_info->longitude, selected_info->elevation,
-			(selected_info == &current_gps_position) ? "GPS" : "Default");
+		ast_debug(5, "Got latitude: %s, longitude: %s, elevation: %s from: %s\n", selected_info->latitude,
+			selected_info->longitude, selected_info->elevation, (selected_info == &current_gps_position) ? "GPS" : "Default");
 	}
 
 	if (fd != -1) {
@@ -1131,9 +1127,9 @@ static void *aprs_sender_thread(void *data)
 	 * otherwise, we need to build the specific defaults
 	 * for this section.
 	 */
-	 if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
-		 this_def_position = general_def_position;
-	 } else {
+	if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
+		this_def_position = general_def_position;
+	} else {
 		this_def_position.is_valid = 1;
 		lat_decimal_to_DMS(strtof(deflat, NULL), this_def_position.latitude, sizeof(this_def_position.latitude));
 		lon_decimal_to_DMS(strtof(deflon, NULL), this_def_position.longitude, sizeof(this_def_position.longitude));
@@ -1146,7 +1142,7 @@ static void *aprs_sender_thread(void *data)
 		} else {
 			strcpy(this_def_position.elevation, "000.0");
 		}
-	 }
+	}
 
 	memset(&selected_position, 0, sizeof(selected_position));
 	lastupdate_mono = time_monotonic();
@@ -1161,9 +1157,9 @@ static void *aprs_sender_thread(void *data)
 		if (current_gps_position.is_valid) {
 			selected_position = current_gps_position;
 		} else if (this_def_position.is_valid && !ehlert) {
-				selected_position = this_def_position;
-				selected_position.last_updated = time(NULL);
-				selected_position.last_updated_mono = now_mono;
+			selected_position = this_def_position;
+			selected_position.last_updated = time(NULL);
+			selected_position.last_updated_mono = now_mono;
 		}
 		ast_mutex_unlock(&position_update_lock);
 		/*
@@ -1210,7 +1206,7 @@ static void *aprstt_sender_thread(void *data)
 	struct ttentry *ttentries, ttempty;
 	struct position_info this_def_position, selected_position;
 	struct timeval tv;
-	struct timespec ts = {0};
+	struct timespec ts = { 0 };
 	struct aprs_sender_info *sender_entry = data;
 
 	ctg = ast_strdupa(sender_entry->section);
@@ -1278,12 +1274,12 @@ static void *aprstt_sender_thread(void *data)
 	 * otherwise, we need to build the specific defaults
 	 * for this section.
 	 */
-	 if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
-		 this_def_position = general_def_position;
-	 } else {
+	if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
+		this_def_position = general_def_position;
+	} else {
 		this_def_position.is_valid = 1;
 		lat_decimal_to_DMS(strtof((ttlat ? ttlat : deflat), NULL), this_def_position.latitude, sizeof(this_def_position.latitude));
-		lon_decimal_to_DMS(strtof((ttlon? ttlon : deflon), NULL), this_def_position.longitude, sizeof(this_def_position.longitude));
+		lon_decimal_to_DMS(strtof((ttlon ? ttlon : deflon), NULL), this_def_position.longitude, sizeof(this_def_position.longitude));
 		/* See if we have a default elevation */
 		if (defelev) {
 			float eleva, elevd;
@@ -1293,7 +1289,7 @@ static void *aprstt_sender_thread(void *data)
 		} else {
 			strcpy(this_def_position.elevation, "000.0");
 		}
-	 }
+	}
 
 	/*
 	 * Open the common block file for this section.
@@ -1364,7 +1360,7 @@ static void *aprstt_sender_thread(void *data)
 		/* Wait for the aprs_sendtt function to give us data or time out after 500ms */
 		ast_mutex_lock(&sender_entry->lock);
 
-		tv = ast_tvadd(ast_tvnow(), ast_samp2tv(500,1000));	/* Setup the time value for 500ms from now */
+		tv = ast_tvadd(ast_tvnow(), ast_samp2tv(500, 1000)); /* Setup the time value for 500ms from now */
 		ts.tv_sec = tv.tv_sec;
 		ts.tv_nsec = tv.tv_usec * 1000;
 		ast_cond_timedwait(&sender_entry->condition, &sender_entry->lock, &ts);
@@ -1454,7 +1450,7 @@ static void *aprstt_sender_thread(void *data)
 					j += myoffset;
 				}
 				i += (j / 60);
-				if (j < 0){
+				if (j < 0) {
 					snprintf(lat, sizeof(lat), "%04d.%02d%c", (i >= 0) ? i : -i, -j % 60, (i >= 0) ? 'N' : 'S');
 				} else {
 					snprintf(lat, sizeof(lat), "%04d.%02d%c", (i >= 0) ? i : -i, j % 60, (i >= 0) ? 'N' : 'S');
@@ -1505,17 +1501,18 @@ static int gps_read_helper(struct ast_channel *chan, const char *cmd, char *data
 	if (current_gps_position.is_valid) {
 		selected_position = current_gps_position;
 	} else if (general_def_position.is_valid) {
-			selected_position = general_def_position;
-			selected_position.last_updated = time(NULL);
+		selected_position = general_def_position;
+		selected_position.last_updated = time(NULL);
+		selected_position.last_updated_mono = time_monotonic();
 	}
 	ast_mutex_unlock(&position_update_lock);
 	/*
 	 * Format the response if we have a valid position
 	 */
-	if (selected_position.is_valid ) {
+	if (selected_position.is_valid) {
 		snprintf(buf, len, "%llu %llu %s %s %s", (unsigned long long) selected_position.last_updated_mono,
-			(unsigned long long) selected_position.last_updated, selected_position.latitude,
-			selected_position.longitude, selected_position.elevation);
+			(unsigned long long) selected_position.last_updated, selected_position.latitude, selected_position.longitude,
+			selected_position.elevation);
 		return 0;
 	}
 
@@ -1584,7 +1581,7 @@ static int aprs_sendtt_helper(struct ast_channel *chan, const char *function, ch
 
 	sender_entry->overlay = args.overlay[0];
 	ast_copy_string(sender_entry->their_call, value, sizeof(sender_entry->their_call));
-	ast_cond_signal(&sender_entry->condition);	/* Signal the thread to start working */
+	ast_cond_signal(&sender_entry->condition); /* Signal the thread to start working */
 
 	ast_mutex_unlock(&sender_entry->lock);
 
@@ -1619,9 +1616,8 @@ static char *handle_cli_status(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "gps show status";
-		e->usage =
-			"Usage: gps show status\n"
-			"       Displays the GPS status.\n";
+		e->usage = "Usage: gps show status\n"
+				   "       Displays the GPS status.\n";
 		return NULL;
 	case CLI_GENERATE:
 		return NULL;
@@ -1632,17 +1628,14 @@ static char *handle_cli_status(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	}
 
 	ast_mutex_lock(&position_update_lock);
-	ast_cli(a->fd, "GPS: %s, Signal: %s \n",
-		ast_strlen_zero(comport) ? "Disconnected" : "Connected",
+	ast_cli(a->fd, "GPS: %s, Signal: %s \n", ast_strlen_zero(comport) ? "Disconnected" : "Connected",
 		current_gps_position.is_valid ? "Locked" : "Unlocked");
 	if (current_gps_position.is_valid) {
-		ast_cli(a->fd, "Position: %s %s Elevation: %s\n",
-			current_gps_position.latitude, current_gps_position.longitude,
+		ast_cli(a->fd, "Position: %s %s Elevation: %s\n", current_gps_position.latitude, current_gps_position.longitude,
 			current_gps_position.elevation);
 	}
 	if (general_def_position.is_valid) {
-		ast_cli(a->fd, "Default Position: %s %s Elevation: %s\n",
-			general_def_position.latitude, general_def_position.longitude,
+		ast_cli(a->fd, "Default Position: %s %s Elevation: %s\n", general_def_position.latitude, general_def_position.longitude,
 			general_def_position.elevation);
 	}
 	ast_mutex_unlock(&position_update_lock);
@@ -1654,7 +1647,6 @@ static char *handle_cli_status(struct ast_cli_entry *e, int cmd, struct ast_cli_
  * \brief Define cli entries for this module
  */
 static struct ast_cli_entry cli_status = AST_CLI_DEFINE(handle_cli_status, "Display the GPS status");
-
 
 static int unload_module(void)
 {

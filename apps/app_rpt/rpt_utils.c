@@ -40,7 +40,6 @@ int matchkeyword(char *string, char **param, char *keywords[])
 	return 0;
 }
 
-
 int explode_string(char *str, char *strp[], size_t limit, char delim, char quote)
 {
 	int i, inquo;
@@ -75,7 +74,6 @@ int explode_string(char *str, char *strp[], size_t limit, char delim, char quote
 
 	strp[i] = 0;
 	return i;
-
 }
 
 char *strupr(char *instr)
@@ -240,9 +238,9 @@ long diskavail(struct rpt *myrpt)
  If /etc/localtime is not present, you will get
  GMT time! This is especially important on systems
  running embedded linux distributions as they don't usually
- have support for locales. 
+ have support for locales.
 */
-void rpt_localtime(time_t * t, struct ast_tm *lt, const char *tz)
+void rpt_localtime(time_t *t, struct ast_tm *lt, const char *tz)
 {
 	struct timeval tv;
 
@@ -281,9 +279,9 @@ int rpt_time_elapsed(struct timeval *start)
 time_t rpt_time_monotonic(void)
 {
 	struct timespec ts;
-	
+
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	
+
 	return ts.tv_sec;
 }
 

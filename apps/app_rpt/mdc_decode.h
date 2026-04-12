@@ -7,7 +7,7 @@
  * Author: Matthew Kaufman (matthew@eeph.com)
  *
  * Copyright (c) 2005, 2010  Matthew Kaufman  All rights reserved.
- * 
+ *
  *  This file is part of Matthew Kaufman's MDC Encoder/Decoder Library
  *
  *  The MDC Encoder/Decoder Library is free software; you can
@@ -40,8 +40,8 @@
 #define TWOPI (2.0 * 3.1415926535)
 #endif
 
-#define MDC_ND 4	// number of decoders
-#define MDC_GDTHRESH 5  // "good bits" threshold
+#define MDC_ND 4	   /* number of decoders */
+#define MDC_GDTHRESH 5 /* "good bits" threshold */
 
 #define DIFFERENTIATOR
 
@@ -68,7 +68,6 @@ typedef struct {
 	unsigned char extra2;
 	unsigned char extra3;
 } mdc_decoder_t;
-	
 
 /*
  mdc_decoder_new
@@ -79,7 +78,7 @@ typedef struct {
   returns: an mdc_decoder object or null if failure
 
 */
-mdc_decoder_t * mdc_decoder_new(int sampleRate);
+mdc_decoder_t *mdc_decoder_new(int sampleRate);
 
 /*
  mdc_decoder_process_samples
@@ -87,61 +86,48 @@ mdc_decoder_t * mdc_decoder_new(int sampleRate);
  (currently limited to 8-bit unsigned samples)
 
  parameters: mdc_decoder_t *decoder - pointer to the decoder object
-             unsigned char *samples - pointer to 8-bit unsigned samples
-             int numSamples - count of the number of samples in buffer
+			 unsigned char *samples - pointer to 8-bit unsigned samples
+			 int numSamples - count of the number of samples in buffer
 
  returns: 0 if more samples are needed
-         -1 if an error occurs
-          1 if a decoded single packet is available to read
-          2 if a decoded double packet is available to read
+		 -1 if an error occurs
+		  1 if a decoded single packet is available to read
+		  2 if a decoded double packet is available to read
 */
- 
-int mdc_decoder_process_samples(mdc_decoder_t *decoder,
-                                unsigned char *samples,
-                                int numSamples);
 
+int mdc_decoder_process_samples(mdc_decoder_t *decoder, unsigned char *samples, int numSamples);
 
 /*
  mdc_decoder_get_packet
  retrieve last successfully decoded data packet from decoder object
 
  parameters: mdc_decoder_t *decoder - pointer to the decoder object
-             unsigned char *op      - pointer to where to store "opcode"
-             unsigned char *arg     - pointer to where to store "argument"
-             unsigned short *unitID - pointer to where to store "unit ID"
+			 unsigned char *op      - pointer to where to store "opcode"
+			 unsigned char *arg     - pointer to where to store "argument"
+			 unsigned short *unitID - pointer to where to store "unit ID"
 
  returns: -1 if error, 0 otherwise
 */
 
-int mdc_decoder_get_packet(mdc_decoder_t *decoder, 
-                           unsigned char *op,
-			   unsigned char *arg,
-			   unsigned short *unitID);
+int mdc_decoder_get_packet(mdc_decoder_t *decoder, unsigned char *op, unsigned char *arg, unsigned short *unitID);
 
 /*
  mdc_decoder_get_double_packet
  retrieve last successfully decoded double-length packet from decoder object
 
  parameters: mdc_decoder_t *decoder - pointer to the decoder object
-             unsigned char *op      - pointer to where to store "opcode"
-             unsigned char *arg     - pointer to where to store "argument"
-             unsigned short *unitID - pointer to where to store "unit ID"
-             unsigned char *extra0  - pointer to where to store 1st extra byte
-             unsigned char *extra1  - pointer to where to store 2nd extra byte
-             unsigned char *extra2  - pointer to where to store 3rd extra byte
-             unsigned char *extra3  - pointer to where to store 4th extra byte
+			 unsigned char *op      - pointer to where to store "opcode"
+			 unsigned char *arg     - pointer to where to store "argument"
+			 unsigned short *unitID - pointer to where to store "unit ID"
+			 unsigned char *extra0  - pointer to where to store 1st extra byte
+			 unsigned char *extra1  - pointer to where to store 2nd extra byte
+			 unsigned char *extra2  - pointer to where to store 3rd extra byte
+			 unsigned char *extra3  - pointer to where to store 4th extra byte
 
  returns: -1 if error, 0 otherwise
 */
 
-int mdc_decoder_get_double_packet(mdc_decoder_t *decoder, 
-                           unsigned char *op,
-			   unsigned char *arg,
-			   unsigned short *unitID,
-                           unsigned char *extra0,
-                           unsigned char *extra1,
-                           unsigned char *extra2,
-                           unsigned char *extra3);
-
+int mdc_decoder_get_double_packet(mdc_decoder_t *decoder, unsigned char *op, unsigned char *arg, unsigned short *unitID,
+	unsigned char *extra0, unsigned char *extra1, unsigned char *extra2, unsigned char *extra3);
 
 #endif

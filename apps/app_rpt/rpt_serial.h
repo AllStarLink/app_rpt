@@ -1,5 +1,6 @@
 
-/*! \file
+/*!
+ * \file
  *
  * \brief Generic serial I/O routines
  */
@@ -18,12 +19,12 @@ int serial_open(char *fname, int speed, int stop2);
 int serial_rxready(int fd, int timeoutms);
 
 /*
-* Remove all RX characters in the receive buffer
-*
-* Return number of bytes flushed.
-* or  return -1 if error
-*
-*/
+ * Remove all RX characters in the receive buffer
+ *
+ * Return number of bytes flushed.
+ * or  return -1 if error
+ *
+ */
 int serial_rxflush(int fd, int timeoutms);
 
 /*

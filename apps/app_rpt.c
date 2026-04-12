@@ -732,8 +732,8 @@ void donodelog(struct rpt *myrpt, char *str)
 	ast_mutex_unlock(&nodeloglock);
 }
 
-void __attribute__((format(gnu_printf, 5, 6)))
-__donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func, const char *fmt, ...)
+void __attribute__((format(gnu_printf, 5, 6))) __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func,
+	const char *fmt, ...)
 {
 	va_list ap;
 	char *buf;
@@ -1816,7 +1816,8 @@ static inline void handle_callmode_dialing(struct rpt *myrpt, char c)
 	}
 }
 
-/*! \brief Handle the function character. Must be called locked.
+/*!
+ * \brief Handle the function character. Must be called locked.
  * \param myrpt pointer to repeater struct.
  * \param c character to process.
  * \return 1 if the character was processed, 0 otherwise.
@@ -2812,7 +2813,7 @@ static void do_scheduler(struct rpt *myrpt)
 			while ((*vp == ' ') || (*vp == 0x09)) { /* get rid of any leading white space */
 				vp++;
 			}
-			strs[i] = vp;										/* save pointer to beginning of substring */
+			strs[i] = vp;										  /* save pointer to beginning of substring */
 			while ((*vp != ' ') && (*vp != 0x09) && (*vp != 0)) { /* skip over substring */
 				vp++;
 			}
@@ -3486,7 +3487,8 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	return;
 }
 
-/*! \brief Post keyup data to a URL configured in myrpt->p.statpost_url.
+/*!
+ * \brief Post keyup data to a URL configured in myrpt->p.statpost_url.
  * \note Must be called locked.  This is only called when a keypost timer
  * has been reset for a short trigger.  Otherwise this data is included
  * with a link_post message.
@@ -3508,7 +3510,8 @@ static inline void do_key_post(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 }
 
-/*! \brief Post link data to a URL configured in myrpt->p.statpost_url.
+/*!
+ * \brief Post link data to a URL configured in myrpt->p.statpost_url.
  * \note Must be called locked.
  * \param myrpt The rpt structure
  * \retval 0 on success, -1 on failure
@@ -3707,7 +3710,8 @@ static inline void free_frame(struct ast_frame **f)
 	*f = NULL;
 }
 
-/*! \brief Zero data in frame_queue->lastf1 and lastf2 registers (muting audio)
+/*!
+ * \brief Zero data in frame_queue->lastf1 and lastf2 registers (muting audio)
  * \param frame_queue The rpt_frame_queue structure to mute
  */
 static inline void rpt_frame_queue_mute(struct rpt_frame_queue *frame_queue)
@@ -3716,7 +3720,8 @@ static inline void rpt_frame_queue_mute(struct rpt_frame_queue *frame_queue)
 	RPT_MUTE_FRAME(frame_queue->lastf2);
 }
 
-/*! \brief Shifts frames: frame_queue->lastf2 -> return value, lastf1 -> lastf2, f -> lastf1.
+/*!
+ * \brief Shifts frames: frame_queue->lastf2 -> return value, lastf1 -> lastf2, f -> lastf1.
  * \param frame_queue - the rpt structure
  * \param f - the frame to be stored in lastf1
  * \param mute - if true, the frame is muted by filling f, lastf1 and lastf2 with zeros
@@ -3736,7 +3741,8 @@ static inline struct ast_frame *rpt_frame_queue_helper(struct rpt_frame_queue *f
 	return last_frame;
 }
 
-/*! \brief Free frame_queue frames
+/*!
+ * \brief Free frame_queue frames
  * \param frame_queue The rpt_frame_queue structure to free
  */
 static inline void rpt_frame_queue_free(struct rpt_frame_queue *frame_queue)
@@ -3814,9 +3820,11 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			if ((!myrpt->reallykeyed) || myrpt->keyed) {
 				myrpt->lastrxburst = 0;
 #ifdef NATIVE_DSP
-				/* this zeros out energy and lasthit, but not hit_count. If this proves to be a problem, we can add API to do that. */
-				/*! \todo we need to goertzel_reset on the tone, e.g. we need to add an ast_dsp_freqreset */
-				/*! \todo this may also fix the problem in app_sf where to be reliable we have to free on each match. Test and see */
+				/*!
+				 * \brief this zeros out energy and lasthit, but not hit_count. If this proves to be a problem, we can add API to do that.
+				 * \todo we need to goertzel_reset on the tone, e.g. we need to add an ast_dsp_freqreset
+				 * \todo this may also fix the problem in app_sf where to be reliable we have to free on each match. Test and see
+				 */
 				ast_dsp_digitreset(myrpt->dsp); /// NOTE: THIS IS WRONG! See comment above.
 #else
 				goertzel_reset(&myrpt->burst_tone_state.tone);
@@ -6893,14 +6901,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		   timeout before we are done announcing and the channel is messed with, Kablooeee.  So we use Masq to prevent this.  */
 
 		/*! \todo the parking API changed a while ago, this all needs to be completely redone here */
-		// old way: https://github.com/asterisk/asterisk/blob/1.8/apps/app_parkandannounce.c
-		// new way: https://github.com/asterisk/asterisk/blob/master/res/parking/parking_applications.c#L890
+		/* old way: https://github.com/asterisk/asterisk/blob/1.8/apps/app_parkandannounce.c
+		 * new way: https://github.com/asterisk/asterisk/blob/master/res/parking/parking_applications.c#L890
 
-		// ast_masq_park_call(chan, NULL, timeout, &lot); // commented out to avoid compiler error.
+		 * ast_masq_park_call(chan, NULL, timeout, &lot); // commented out to avoid compiler error.
 
-		// ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context);
+		 * ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context);
 
-		// snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1);
+		 * snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1);
+		 */
 
 		rpt_telemetry(myrpt, REV_PATCH, tmp);
 

@@ -11,7 +11,8 @@
  *
  */
 
-/*! \file
+/*!
+ * \file
  *
  * \brief app_rpt call helper functions
  *
@@ -208,7 +209,6 @@ void rpt_forward(struct ast_channel *chan, char *dialstr, char *nodefrom)
 			ast_write(chan, f);
 			ast_frfree(f);
 		}
-
 	}
 	ast_hangup(dest);
 }

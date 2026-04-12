@@ -18,7 +18,7 @@ int dahdi_radio_set_ctcss_encode(struct ast_channel *chan, int block);
 /*! \note Based on DAHDI_RADPAR values in dahdi/user.h */
 enum rpt_radpar {
 	RPT_RADPAR_IGNORECT = 3,
-	RPT_RADPAR_NOENCODE  = 4,
+	RPT_RADPAR_NOENCODE = 4,
 	RPT_RADPAR_UIODATA = 14,
 	RPT_RADPAR_UIOMODE = 15,
 	RPT_RADPAR_REMMODE = 16,

@@ -6,7 +6,7 @@
  * Author: Matthew Kaufman (matthew@eeph.com)
  *
  * Copyright (c) 2005  Matthew Kaufman  All rights reserved.
- * 
+ *
  *  This file is part of Matthew Kaufman's MDC Encoder/Decoder Library
  *
  *  The MDC Encoder/Decoder Library is free software; you can
@@ -35,29 +35,16 @@
 #include <stdlib.h>
 #include "mdc_encode.h"
 
-static unsigned char sin8[] = {
-      127, 130, 133, 136, 139, 142, 145, 148, 151, 154, 157, 160,
-      163, 166, 169, 172, 175, 178, 180, 183, 186, 189, 191, 194,
-      196, 199, 201, 204, 206, 209, 211, 213, 215, 218, 220, 222,
-      224, 226, 227, 229, 231, 233, 234, 236, 237, 239, 240, 241,
-      242, 244, 245, 246, 247, 247, 248, 249, 250, 250, 251, 251,
-      251, 252, 252, 252, 252, 252, 252, 252, 251, 251, 251, 250,
-      250, 249, 248, 247, 247, 246, 245, 244, 242, 241, 240, 239,
-      237, 236, 234, 233, 231, 229, 227, 226, 224, 222, 220, 218,
-      215, 213, 211, 209, 206, 204, 201, 199, 196, 194, 191, 189,
-      186, 183, 180, 178, 175, 172, 169, 166, 163, 160, 157, 154,
-      151, 148, 145, 142, 139, 136, 133, 130, 127, 124, 121, 118,
-      115, 112, 109, 106, 103, 100,  97,  94,  91,  88,  85,  82,
-       79,  76,  74,  71,  68,  65,  63,  60,  58,  55,  53,  50,
-       48,  45,  43,  41,  39,  36,  34,  32,  30,  28,  27,  25, 
-       23,  21,  20,  18,  17,  15,  14,  13,  12,  10,   9,   8,
-        7,   7,   6,   5,   4,   4,   3,   3,   3,   2,   2,   2,
-        2,   2,   2,   2,   3,   3,   3,   4,   4,   5,   6,   7,
-        7,   8,   9,  10,  12,  13,  14,  15,  17,  18,  20,  21,
-       23,  25,  27,  28,  30,  32,  34,  36,  39,  41,  43,  45,
-       48,  50,  53,  55,  58,  60,  63,  65,  68,  71,  74,  76,
-       79,  82,  85,  88,  91,  94,  97, 100, 103, 106, 109, 112,
-      115, 118, 121, 124 };
+static unsigned char sin8[] = { 127, 130, 133, 136, 139, 142, 145, 148, 151, 154, 157, 160, 163, 166, 169, 172, 175, 178, 180,
+	183, 186, 189, 191, 194, 196, 199, 201, 204, 206, 209, 211, 213, 215, 218, 220, 222, 224, 226, 227, 229, 231, 233, 234, 236,
+	237, 239, 240, 241, 242, 244, 245, 246, 247, 247, 248, 249, 250, 250, 251, 251, 251, 252, 252, 252, 252, 252, 252, 252, 251,
+	251, 251, 250, 250, 249, 248, 247, 247, 246, 245, 244, 242, 241, 240, 239, 237, 236, 234, 233, 231, 229, 227, 226, 224, 222,
+	220, 218, 215, 213, 211, 209, 206, 204, 201, 199, 196, 194, 191, 189, 186, 183, 180, 178, 175, 172, 169, 166, 163, 160, 157,
+	154, 151, 148, 145, 142, 139, 136, 133, 130, 127, 124, 121, 118, 115, 112, 109, 106, 103, 100, 97, 94, 91, 88, 85, 82, 79, 76,
+	74, 71, 68, 65, 63, 60, 58, 55, 53, 50, 48, 45, 43, 41, 39, 36, 34, 32, 30, 28, 27, 25, 23, 21, 20, 18, 17, 15, 14, 13, 12,
+	10, 9, 8, 7, 7, 6, 5, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6, 7, 7, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 21,
+	23, 25, 27, 28, 30, 32, 34, 36, 39, 41, 43, 45, 48, 50, 53, 55, 58, 60, 63, 65, 68, 71, 74, 76, 79, 82, 85, 88, 91, 94, 97,
+	100, 103, 106, 109, 112, 115, 118, 121, 124 };
 
 #if 0
 static short sin16[] = {
@@ -95,7 +82,7 @@ static short sin16[] = {
      -6239,  -5467,  -4692,  -3914,  -3134,  -2352,  -1569,   -784 };
 #endif
 
-mdc_encoder_t * mdc_encoder_new(int sampleRate)
+mdc_encoder_t *mdc_encoder_new(int sampleRate)
 {
 	mdc_encoder_t *encoder;
 
@@ -104,14 +91,13 @@ mdc_encoder_t * mdc_encoder_new(int sampleRate)
 		return (mdc_encoder_t *) 0L;
 	}
 
-	encoder->incr = (1200.0 * TWOPI) / ((double)sampleRate);
+	encoder->incr = (1200.0 * TWOPI) / ((double) sampleRate);
 	encoder->loaded = 0;
 
 	return encoder;
 }
 
-
-#ifndef	_MDC_DECODE_H_
+#ifndef _MDC_DECODE_H_
 
 static unsigned long _flip(unsigned long crc, int bitnum)
 {
@@ -128,7 +114,8 @@ static unsigned long _flip(unsigned long crc, int bitnum)
 	return crcout;
 }
 
-static unsigned long docrc(unsigned char* p, int len) {
+static unsigned long docrc(unsigned char *p, int len)
+{
 	int i, j, c;
 	unsigned long bit;
 	unsigned long crc = 0x0000;
@@ -159,7 +146,7 @@ static unsigned long docrc(unsigned char* p, int len) {
 
 #endif
 
-static unsigned char * _enc_leader(unsigned char *data)
+static unsigned char *_enc_leader(unsigned char *data)
 {
 	data[0] = 0x55;
 	data[1] = 0x55;
@@ -178,7 +165,7 @@ static unsigned char * _enc_leader(unsigned char *data)
 	return &(data[12]);
 }
 
-static unsigned char * _enc_str(unsigned char *data)
+static unsigned char *_enc_str(unsigned char *data)
 {
 	unsigned long ccrc;
 	int i, j;
@@ -200,15 +187,15 @@ static unsigned char * _enc_str(unsigned char *data)
 	}
 
 	for (i = 0; i < 7; i++) {
-		data[i+7] = 0;
+		data[i + 7] = 0;
 		for (j = 0; j <= 7; j++) {
 			for (k = 6; k > 0; k--) {
-				csr[k] = csr[k-1];
+				csr[k] = csr[k - 1];
 			}
 
 			csr[0] = (data[i] >> j) & 0x01;
 			b = csr[0] + csr[2] + csr[5] + csr[6];
-			data[i+7] |= (b & 0x01) << j;
+			data[i + 7] |= (b & 0x01) << j;
 		}
 	}
 
@@ -220,8 +207,8 @@ static unsigned char * _enc_str(unsigned char *data)
 	printf("\n");
 #endif
 
-	k=0;
-	m=0;
+	k = 0;
+	m = 0;
 	for (i = 0; i < 14; i++) {
 		for (j = 0; j <= 7; j++) {
 			b = 0x01 & (data[i] >> j);
@@ -239,7 +226,7 @@ static unsigned char * _enc_str(unsigned char *data)
 		data[i] = 0;
 		for (j = 7; j >= 0; j--) {
 			if (lbits[k]) {
-				data[i] |= 1<<j;
+				data[i] |= 1 << j;
 			}
 
 			++k;
@@ -249,10 +236,7 @@ static unsigned char * _enc_str(unsigned char *data)
 	return &(data[14]);
 }
 
-int mdc_encoder_set_packet(mdc_encoder_t *encoder,
-                           unsigned char op,
-			   unsigned char arg,
-			   unsigned short unitID)
+int mdc_encoder_set_packet(mdc_encoder_t *encoder, unsigned char op, unsigned char arg, unsigned short unitID)
 {
 	unsigned char *dp;
 
@@ -280,14 +264,8 @@ int mdc_encoder_set_packet(mdc_encoder_t *encoder,
 	return 0;
 }
 
-int mdc_encoder_set_double_packet(mdc_encoder_t *encoder,
-                                  unsigned char op,
-				  unsigned char arg,
-				  unsigned short unitID,
-				  unsigned char extra0,
-				  unsigned char extra1,
-				  unsigned char extra2,
-				  unsigned char extra3)
+int mdc_encoder_set_double_packet(mdc_encoder_t *encoder, unsigned char op, unsigned char arg, unsigned short unitID,
+	unsigned char extra0, unsigned char extra1, unsigned char extra2, unsigned char extra3)
 {
 	unsigned char *dp;
 
@@ -343,7 +321,7 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 			}
 		}
 
-		b = 0x01 & (encoder->data[encoder->bpos] >> (7-(encoder->ipos)));
+		b = 0x01 & (encoder->data[encoder->bpos] >> (7 - (encoder->ipos)));
 
 		if (b != encoder->lb) {
 			encoder->xorb = 1;
@@ -363,14 +341,12 @@ static unsigned char _enc_get_samp(mdc_encoder_t *encoder)
 		encoder->tth -= TWOPI;
 	}
 
-	ofs = (int)(encoder->tth * (256.0 / TWOPI));
+	ofs = (int) (encoder->tth * (256.0 / TWOPI));
 
 	return sin8[ofs];
 }
 
-int mdc_encoder_get_samples(mdc_encoder_t *encoder,
-                            unsigned char *buffer,
-			    int bufferSize)
+int mdc_encoder_get_samples(mdc_encoder_t *encoder, unsigned char *buffer, int bufferSize)
 {
 	int i;
 
@@ -403,4 +379,3 @@ int mdc_encoder_get_samples(mdc_encoder_t *encoder,
 
 	return i;
 }
-

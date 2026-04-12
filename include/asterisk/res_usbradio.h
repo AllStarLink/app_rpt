@@ -17,8 +17,9 @@
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
  */
- 
- /*! \file
+
+/*!
+ * \file
  * \brief USB sound card resources.
  */
 
@@ -30,37 +31,37 @@
 /*!
  * \brief Defines for interacting with ALSA controls.
  */
-#define	MIXER_PARAM_MIC_PLAYBACK_SW "Mic Playback Switch"
+#define MIXER_PARAM_MIC_PLAYBACK_SW "Mic Playback Switch"
 #define MIXER_PARAM_MIC_PLAYBACK_VOL "Mic Playback Volume"
-#define	MIXER_PARAM_MIC_CAPTURE_SW "Mic Capture Switch"
-#define	MIXER_PARAM_MIC_CAPTURE_VOL "Mic Capture Volume"
-#define	MIXER_PARAM_MIC_BOOST "Auto Gain Control"
-#define	MIXER_PARAM_SPKR_PLAYBACK_SW "Speaker Playback Switch"
-#define	MIXER_PARAM_SPKR_PLAYBACK_VOL "Speaker Playback Volume"
-#define	MIXER_PARAM_SPKR_PLAYBACK_SW_NEW "Headphone Playback Switch"
-#define	MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW "Headphone Playback Volume"
+#define MIXER_PARAM_MIC_CAPTURE_SW "Mic Capture Switch"
+#define MIXER_PARAM_MIC_CAPTURE_VOL "Mic Capture Volume"
+#define MIXER_PARAM_MIC_BOOST "Auto Gain Control"
+#define MIXER_PARAM_SPKR_PLAYBACK_SW "Speaker Playback Switch"
+#define MIXER_PARAM_SPKR_PLAYBACK_VOL "Speaker Playback Volume"
+#define MIXER_PARAM_SPKR_PLAYBACK_SW_NEW "Headphone Playback Switch"
+#define MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW "Headphone Playback Volume"
 
 /*!
  * \brief CMxxx USB device identifiers.
  */
-#define C108_VENDOR_ID		0x0d8c
-#define C108_PRODUCT_ID  	0x000c
-#define C108B_PRODUCT_ID  	0x0012
-#define C108AH_PRODUCT_ID  	0x013c
-#define N1KDO_PRODUCT_ID  	0x6a00
-#define C119_PRODUCT_ID  	0x0008
-#define C119A_PRODUCT_ID  	0x013a
-#define C119B_PRODUCT_ID    0x0013
-#define C108_HID_INTERFACE	3
+#define C108_VENDOR_ID 0x0d8c
+#define C108_PRODUCT_ID 0x000c
+#define C108B_PRODUCT_ID 0x0012
+#define C108AH_PRODUCT_ID 0x013c
+#define N1KDO_PRODUCT_ID 0x6a00
+#define C119_PRODUCT_ID 0x0008
+#define C119A_PRODUCT_ID 0x013a
+#define C119B_PRODUCT_ID 0x0013
+#define C108_HID_INTERFACE 3
 
 /*!
  * \brief CMxxx USB HID device access values.
  */
-#define HID_REPORT_GET		0x01
-#define HID_REPORT_SET		0x09
+#define HID_REPORT_GET 0x01
+#define HID_REPORT_SET 0x09
 
-#define HID_RT_INPUT		0x01
-#define HID_RT_OUTPUT		0x02
+#define HID_RT_INPUT 0x01
+#define HID_RT_OUTPUT 0x02
 
 /*!
  * \brief CM-119B audio adjustment factor
@@ -68,7 +69,7 @@
  *	produces a sound card device that uses the CM-119B chip.
  *	They produced a couple of variations of the URIxB device.
  *	Although the CM-119B was supposed to be the same as the
- *	CM-119A, it did not function the same. As a result the 
+ *	CM-119A, it did not function the same. As a result the
  *	early production models required a different adjustment
  *	factor than the current production models.
  *
@@ -100,24 +101,24 @@
  * \note Some USB devices are not manufacturered with an eeprom.
  *	Never overwrite the manufacture stored information.
  */
-#define	EEPROM_START_ADDR		51	/* Start after the manufacturer info */
-#define	EEPROM_USER_LEN			13
-#define	EEPROM_MAGIC			34329
-#define	EEPROM_USER_MAGIC_ADDR	 0
-#define	EEPROM_USER_RXMIXERSET	 1
-#define	EEPROM_USER_TXMIXASET	 2
-#define	EEPROM_USER_TXMIXBSET	 3
-#define	EEPROM_USER_RXVOICEADJ	 4	/* Requires 2 memory slots, stored as a float */
-#define	EEPROM_USER_RXCTCSSADJ	 6	/* Requires 2 memory slots, stored as a float */
-#define	EEPROM_USER_TXCTCSSADJ	 8
-#define	EEPROM_USER_RXSQUELCHADJ 9
-#define EEPROM_USER_TXDSPLVL	10
-#define EEPROM_USER_SPARE		11	/* Reserved for future use */
-#define	EEPROM_USER_CS_ADDR		12
+#define EEPROM_START_ADDR 51 /* Start after the manufacturer info */
+#define EEPROM_USER_LEN 13
+#define EEPROM_MAGIC 34329
+#define EEPROM_USER_MAGIC_ADDR 0
+#define EEPROM_USER_RXMIXERSET 1
+#define EEPROM_USER_TXMIXASET 2
+#define EEPROM_USER_TXMIXBSET 3
+#define EEPROM_USER_RXVOICEADJ 4 /* Requires 2 memory slots, stored as a float */
+#define EEPROM_USER_RXCTCSSADJ 6 /* Requires 2 memory slots, stored as a float */
+#define EEPROM_USER_TXCTCSSADJ 8
+#define EEPROM_USER_RXSQUELCHADJ 9
+#define EEPROM_USER_TXDSPLVL 10
+#define EEPROM_USER_SPARE 11 /* Reserved for future use */
+#define EEPROM_USER_CS_ADDR 12
 
 /*	Previous versions of this driver assumed 32 gpio pins
  *	the current and prior cm-xxx devices support a maximum of 8 gpio lines.
- *	In some hardware implementations, not all 8 gpio lines are available 
+ *	In some hardware implementations, not all 8 gpio lines are available
  *	to the user.
  */
 #define GPIO_PINCOUNT 8
@@ -152,24 +153,23 @@
  *		(otherwise it will never be full).
  */
 
-#define FRAME_SIZE	160
-
+#define FRAME_SIZE 160
 
 #if defined(__FreeBSD__)
-#define	FRAGS	0x8
+#define FRAGS 0x8
 #else
-#define	FRAGS	( ( (6 * 5) << 16 ) | 0xc )
+#define FRAGS (((6 * 5) << 16) | 0xc)
 #endif
 
 /*
  * XXX text message sizes are probably 256 chars, but i am
  * not sure if there is a suitable definition anywhere.
  */
-#define TEXT_SIZE	256
+#define TEXT_SIZE 256
 
-#define	O_CLOSE	0x444			/* special 'close' mode for device */
+#define O_CLOSE 0x444 /* special 'close' mode for device */
 /* Which sound device to use */
-#if defined( __OpenBSD__ ) || defined( __NetBSD__ )
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 #define DEV_DSP "/dev/audio"
 #else
 #define DEV_DSP "/dev/dsp"
@@ -184,27 +184,28 @@ struct usbecho {
 /* Audio statistics variables. tune-menu "R" and "X" commands display
  * stats data (peak, average, min, max levels and clipped sample count).
  */
-#define AUDIO_STATS_LEN 50 	                	/* number of 20mS frames. 50 => 1 second buf len */
+#define AUDIO_STATS_LEN 50 /* number of 20mS frames. 50 => 1 second buf len */
 struct audiostatistics {
-	unsigned short maxbuf[AUDIO_STATS_LEN]; 	/* peak sample value per frame */
-	unsigned short clipbuf[AUDIO_STATS_LEN];	/* number of clipped samples per frame */
-	unsigned int pwrbuf[AUDIO_STATS_LEN];   	/* total RMS power per frame */
-	short index;                            	/* Index within buffers, updated as frames received */
+	unsigned short maxbuf[AUDIO_STATS_LEN];	 /* peak sample value per frame */
+	unsigned short clipbuf[AUDIO_STATS_LEN]; /* number of clipped samples per frame */
+	unsigned int pwrbuf[AUDIO_STATS_LEN];	 /* total RMS power per frame */
+	short index;							 /* Index within buffers, updated as frames received */
 };
 
 /*
  * Message definition used in usb channel drivers.
  */
-#define USB_UNASSIGNED_FMT	"Device %s is selected, the associated USB device string %s was not found\n"
+#define USB_UNASSIGNED_FMT "Device %s is selected, the associated USB device string %s was not found\n"
 
-/*! \brief Round double number to a long
+/*!
+ * \brief Round double number to a long
  *
- * \note lround for uClibc - wrapper for lround(x) 
+ * \note lround for uClibc - wrapper for lround(x)
  *
  * \param x			Double number to round.
  *
  * \retval 			Rounded number as a long.
-*/
+ */
 long ast_radio_lround(double x);
 
 /*!
@@ -240,7 +241,7 @@ int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devty
  *
  * \param devnum		The ALSA major device number to update.
  * \param param			Pointer to the string mixer device name (control) to retrieve.
- * 
+ *
  * \retval 				The maximum value.
  */
 int ast_radio_amixer_max(int devnum, char *param);
@@ -258,7 +259,7 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2);
 
 /*!
  * \brief Set USB HID outputs
- * 	This routine, depending on the outputs passed can set the GPIO states 
+ * 	This routine, depending on the outputs passed can set the GPIO states
  *	and/or setup the chip to read/write the eeprom.
  *
  *	The passed outputs should be 4 bytes.
@@ -301,12 +302,12 @@ unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned shor
  * 	Writes the memory range associated with user data to the EEPROM.
  *
  *	The user memory segment is from address position 51 to 63.
- *	
+ *
  *  \note Memory positions 0 to 50 are reserved for manufacturer's data.  Do not
  *	write into this segment!
  *
  * \param handle		Pointer to usb_dev_handle associated with the HID.
- * \param buf			Pointer to buffer that contains the the EEPROM data.  
+ * \param buf			Pointer to buffer that contains the the EEPROM data.
  *						The buffer must be an array of 13 unsigned shorts.
  */
 void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
@@ -371,7 +372,7 @@ int ast_radio_usb_list_check(char *devstr);
  * from usb_device_list.
  * \returns			Device string or null if not found.
  */
-char* ast_radio_usb_get_devstr(int index);
+char *ast_radio_usb_get_devstr(int index);
 
 /*!
  * \brief Open the specified parallel port
@@ -438,7 +439,7 @@ int ast_radio_poll_input(int fd, int ms);
 int ast_radio_wait_or_poll(int fd, int ms, int flag);
 
 /*!
- * \brief Get system monotonic 
+ * \brief Get system monotonic
  * This returns the CLOCK_MONOTONIC time
  * \param second	Pointer to time_t to receive the time.
  */
@@ -489,7 +490,7 @@ struct timeval ast_radio_tvnow(void);
  * \param len   	Length of data in sbuf
  * \return 	    	1 if clipping detected, 0 otherwise
  */
-#define CLIP_LED_HOLD_TIME_MS  500
+#define CLIP_LED_HOLD_TIME_MS 500
 int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len);
 
 /*!

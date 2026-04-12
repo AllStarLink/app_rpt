@@ -7,8 +7,10 @@ int setkenwood(struct rpt *myrpt);
 int set_tm271(struct rpt *myrpt);
 int set_tmd700(struct rpt *myrpt);
 
-/*! \brief Split ctcss frequency into hertz and decimal */
-/*! \todo should be in rpt_utils for consistency? */
+/*!
+ * \brief Split ctcss frequency into hertz and decimal
+ * \todo should be in rpt_utils for consistency?
+ */
 int split_ctcss_freq(char *hertz, char *decimal, char *freq);
 
 int set_mode_ft897(struct rpt *myrpt, enum rpt_mode newmode);
@@ -26,8 +28,10 @@ int closerem(struct rpt *myrpt);
 /*! \brief Dispatch to correct RX frequency checker */
 int check_freq(struct rpt *myrpt, int m, int d, enum rpt_mode *defmode);
 
-/*! \brief Check TX frequency before transmitting */
-/*! \retval 1 if tx frequency in ok. */
+/*!
+ * \brief Check TX frequency before transmitting
+ * \retval 1 if tx frequency in ok.
+ */
 char check_tx_freq(struct rpt *myrpt);
 
 /*! \brief Dispatch to correct frequency bumping function */

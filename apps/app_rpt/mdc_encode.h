@@ -5,7 +5,7 @@
  * Author: Matthew Kaufman (matthew@eeph.com)
  *
  * Copyright (c) 2005  Matthew Kaufman  All rights reserved.
- * 
+ *
  *  This file is part of Matthew Kaufman's MDC Encoder/Decoder Library
  *
  *  The MDC Encoder/Decoder Library is free software; you can
@@ -38,7 +38,6 @@
 #define TWOPI (2.0 * 3.1415926535)
 #endif
 
-
 typedef struct {
 	int loaded;
 	int bpos;
@@ -49,9 +48,8 @@ typedef struct {
 	int state;
 	int lb;
 	int xorb;
-	unsigned char data[14+14+5+7];
+	unsigned char data[14 + 14 + 5 + 7];
 } mdc_encoder_t;
-	
 
 /*
  mdc_encoder_new
@@ -62,51 +60,40 @@ typedef struct {
   returns: an mdc_encoder object or null if failure
 
 */
-mdc_encoder_t * mdc_encoder_new(int sampleRate);
-
+mdc_encoder_t *mdc_encoder_new(int sampleRate);
 
 /*
  mdc_encoder_set_packet
  set up a normal-length MDC packet for transmission
 
  parameters: mdc_encoder_t *encoder  - pointer to the encoder object
-	     unsigned char op        - the "opcode"
-	     unsigned char arg       - the "argument"
-	     unsigned short unitID   - the "unit ID
+		 unsigned char op        - the "opcode"
+		 unsigned char arg       - the "argument"
+		 unsigned short unitID   - the "unit ID
 
  returns: -1 for error, 0 otherwise
 
 */
-int mdc_encoder_set_packet(mdc_encoder_t *encoder,
-                           unsigned char op,      
-                           unsigned char arg,
-                           unsigned short unitID);
+int mdc_encoder_set_packet(mdc_encoder_t *encoder, unsigned char op, unsigned char arg, unsigned short unitID);
 
 /*
  mdc_encoder_set_double_packet
  set up a double-length MDC packet for transmission
 
  parameters: mdc_encoder_t *encoder  - pointer to the encoder object
-	     unsigned char op        - the "opcode"
-	     unsigned char arg       - the "argument"
-	     unsigned short unitID   - the "unit ID
-	     unsigned char extra0    - the 1st "extra byte"
-	     unsigned char extra1    - the 2nd "extra byte"
-	     unsigned char extra2    - the 3rd "extra byte"
-	     unsigned char extra3    - the 4th "extra byte"
+		 unsigned char op        - the "opcode"
+		 unsigned char arg       - the "argument"
+		 unsigned short unitID   - the "unit ID
+		 unsigned char extra0    - the 1st "extra byte"
+		 unsigned char extra1    - the 2nd "extra byte"
+		 unsigned char extra2    - the 3rd "extra byte"
+		 unsigned char extra3    - the 4th "extra byte"
 
  returns: -1 for error, 0 otherwise
 
 */
-int mdc_encoder_set_double_packet(mdc_encoder_t *encoder,
-                                  unsigned char op,
-                                  unsigned char arg,
-                                  unsigned short unitID,
-                                  unsigned char extra0,
-                                  unsigned char extra1,
-                                  unsigned char extra2,
-                                  unsigned char extra3);
-
+int mdc_encoder_set_double_packet(mdc_encoder_t *encoder, unsigned char op, unsigned char arg, unsigned short unitID,
+	unsigned char extra0, unsigned char extra1, unsigned char extra2, unsigned char extra3);
 
 /*
  mdc_encoder_get_samples
@@ -114,8 +101,8 @@ int mdc_encoder_set_double_packet(mdc_encoder_t *encoder,
  (currently limited to 8-bit unsigned samples)
 
  parameters: mdc_encoder_t *encoder - the pointer to the encoder object
-	     unsigned char *buffer  - the sample buffer to write into
-	     int bufferSize         - the size (in bytes) of the sample buffer
+		 unsigned char *buffer  - the sample buffer to write into
+		 int bufferSize         - the size (in bytes) of the sample buffer
 
  returns: -1 for error, otherwise returns the number of samples written
 	  into the buffer (will be equal to bufferSize unless the end has
@@ -124,9 +111,6 @@ int mdc_encoder_set_double_packet(mdc_encoder_t *encoder,
 	  a new packet is loaded for transmission
 
 */
-int mdc_encoder_get_samples(mdc_encoder_t *encoder,
-                            unsigned char *buffer,
-                            int bufferSize);
+int mdc_encoder_get_samples(mdc_encoder_t *encoder, unsigned char *buffer, int bufferSize);
 
 #endif
-
