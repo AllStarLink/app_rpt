@@ -600,5 +600,5 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "RPT HTTP Periodic Regist
 	.load = load_module,
 	.unload = unload_module,
 	.reload = reload_module,
-	.requires = "res_curl", 
+	.requires = "res_curl",
 );
