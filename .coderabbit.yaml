@@ -7,10 +7,22 @@ reviews:
     auto_incremental_review: false
     base_branches:
       - master
-    file_path_instructions:
+    path_instructions:
       - path: "**/*.c, **/*.h"
-        instructions: Review the changed source files for variable definitions and confirm 1 blank line following the 
-          variable definitions and the first line of code.
+        instructions: |
+          ENFORCE THESE FORMATTING RULES EXACTLY:
+          1. Use 4-space indentation with HARD TABS (no spaces for indentation)
+          2. Linux brace style: opening brace on new line for functions, same line for control statements
+          3. Maximum 1 empty line between code blocks
+          4. No trailing whitespace
+          5. Pointer alignment on RIGHT (int *ptr NOT int* ptr or int * ptr)
+          6. One blank line after variable definitions before first line of code
+          7. Column limit: 130 characters
+          8. Format must match the project's .dev/.clang-format configuration
+          9. Reject PRs that do not follow these whitespace/formatting rules
+          10. Do not suggest or allow alternative formatting styles
+
+          ALWAYS REQUIRE PROPER FORMATTING ON ALL NEW CODE CHANGES.
   pre_merge_checks:
     docstrings:
       mode: 'off'
@@ -26,4 +38,3 @@ code_generation:
         instructions: Use Asterisk style docstrings with Args and Returns sections in the QT format.
 chat:
   art: false
-
