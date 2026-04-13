@@ -4902,14 +4902,14 @@ static void *voter_reader(void *data)
 					/* If in bounds... index must be positive to be "in bounds" for all clients. */
 					if ((index > 0) && (index < (client->buflen - (FRAME_SIZE * 2)))) {
 						f1 = NULL;
-						/* If no RSSI, just make it quiet. */
 						if (!buf[sizeof(VOTER_PACKET_HEADER)]) {
+							/* If no RSSI, just make it quiet. */
+
 							for (i = 0; i < FRAME_SIZE; i++) {
 								buf[sizeof(VOTER_PACKET_HEADER) + i + 1] = 0xff;
 							}
-						}
-						/* If otherwise (RSSI > 0), if ADPCM audio packet, translate it. */
-						else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) {
+						} else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) {
+							/* If otherwise (RSSI > 0), if ADPCM audio packet, translate it. */
 #ifdef ADPCM_LOOPBACK
 							memset(&audiopacket, 0, sizeof(audiopacket));
 							strcpy((char *) audiopacket.vp.challenge, challenge);
@@ -5122,6 +5122,7 @@ static void *voter_reader(void *data)
 												ast_debug(3, "New threshold %d, client %s, RSSI %d\n", p->threshold,
 													p->lastwon->name, p->lastwon->lastrssi);
 											}
+
 											/* At the same threshold still, if count is enabled and is met. */
 											else if (p->count_thresh[i] && (p->threshcount++ >= p->count_thresh[i])) {
 												ast_debug(3, "Threshold %d time (%d) exceeded, client %s, RSSI %d\n",
@@ -5131,11 +5132,13 @@ static void *voter_reader(void *data)
 												p->lingercount = 0;
 												continue;
 											}
+
 											p->lingercount = 0;
 											maxclient = p->lastwon;
 											maxrssi = maxclient->lastrssi;
 											break;
 										}
+
 										/* If there are no receiving clients to send audio from anymore. */
 										if (i == (p->nthresholds - 1)) {
 											if (DEBUG_ATLEAST(3) && p->threshold) {

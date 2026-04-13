@@ -312,12 +312,14 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				/* Skip any IAXRPT monitoring */
 				continue;
 			}
-			if (l->mode == MODE_TRANSCEIVE)
+			if (l->mode == MODE_TRANSCEIVE) {
 				c1 = 'X';
-			else if (l->mode == MODE_LOCAL_MONITOR)
+			} else if (l->mode == MODE_LOCAL_MONITOR) {
 				c1 = 'L';
-			else
+			} else {
 				c1 = 'M';
+			}
+
 			/* Make a string of disconnected nodes for possible restoration */
 			sprintf(tmp, "%c%c%.290s", c1, (l->perma) ? 'P' : 'T', l->name);
 			if (strlen(tmp) + strlen(myrpt->savednodes) + 1 < MAXNODESTR) {

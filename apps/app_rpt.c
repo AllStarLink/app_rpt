@@ -2740,9 +2740,9 @@ static void do_scheduler(struct rpt *myrpt)
 
 	/* Service the sleep timer */
 	if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) { /* If sleep mode enabled */
-		if (myrpt->sleeptimer)
+		if (myrpt->sleeptimer) {
 			myrpt->sleeptimer--;
-		else {
+		} else {
 			if (!myrpt->sleep)
 				myrpt->sleep = 1; /* ZZZZZZ */
 		}
@@ -2765,9 +2765,9 @@ static void do_scheduler(struct rpt *myrpt)
 	}
 	/* Service repeater inactivity timer */
 	if (myrpt->p.rptinacttime && myrpt->rptinactwaskeyedflag) {
-		if (myrpt->rptinacttimer < myrpt->p.rptinacttime)
+		if (myrpt->rptinacttimer < myrpt->p.rptinacttime) {
 			myrpt->rptinacttimer++;
-		else {
+		} else {
 			myrpt->rptinacttimer = 0;
 			myrpt->rptinactwaskeyedflag = 0;
 			ast_debug(5, "Executing rpt inactivity timer macro %s\n", myrpt->p.rptinactmacro);
@@ -3612,9 +3612,9 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 
 	update_timer(&myrpt->voxtotimer, elap, 0);
 
-	if (myrpt->keyed)
+	if (myrpt->keyed) {
 		myrpt->lastkeytimer = KEYTIMERTIME;
-	else {
+	} else {
 		update_timer(&myrpt->lastkeytimer, elap, 0);
 	}
 
