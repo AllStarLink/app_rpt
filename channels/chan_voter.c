@@ -2537,7 +2537,8 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
 		return RESULT_SUCCESS;
 	}
-	if (argc > 3) { /* Specify list of lockouts */
+	if (argc > 3) {
+		/* Specify list of lockouts */
 		if (!strcasecmp(argv[3], "all")) {
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
@@ -2552,9 +2553,10 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 				}
 				client->txlockout = 0;
 			}
-		} else { /* Must be a comma-delimited list */
+		} else {
+			/* Must be a comma-delimited list */
 			ast_copy_string(str, argv[3], sizeof(str));
-			n = finddelim((char *) argv[3], strs, ARRAY_LEN(strs));
+			n = finddelim(str, strs, ARRAY_LEN(strs));
 			for (i = 0; i < n; i++) {
 				if (!*strs[i]) {
 					continue;

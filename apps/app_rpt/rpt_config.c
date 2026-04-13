@@ -197,7 +197,7 @@ int retrieve_memory(struct rpt *myrpt, char *memory)
 	}
 	ast_copy_string(myrpt->freq, tmp, sizeof(myrpt->freq));
 	ast_copy_string(myrpt->rxpl, s, sizeof(myrpt->rxpl));
-	ast_copy_string(myrpt->txpl, s, sizeof(myrpt->rxpl));
+	ast_copy_string(myrpt->txpl, s, sizeof(myrpt->txpl));
 	myrpt->remmode = REM_MODE_FM;
 	myrpt->offset = REM_SIMPLEX;
 	myrpt->powerlevel = REM_MEDPWR;
