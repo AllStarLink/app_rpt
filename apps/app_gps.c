@@ -1034,9 +1034,9 @@ static void *gps_reader(void *data)
 
 			ast_mutex_lock(&position_update_lock);
 			current_gps_position.is_valid = 1;
-			snprintf(current_gps_position.latitude, sizeof(current_gps_position.latitude) - 1, "%s%s", strs[2], strs[3]);
-			snprintf(current_gps_position.longitude, sizeof(current_gps_position.longitude) - 1, "%s%s", strs[4], strs[5]);
-			snprintf(current_gps_position.elevation, sizeof(current_gps_position.elevation) - 1, "%s%s", strs[9], strs[10]);
+			snprintf(current_gps_position.latitude, sizeof(current_gps_position.latitude), "%s%s", strs[2], strs[3]);
+			snprintf(current_gps_position.longitude, sizeof(current_gps_position.longitude), "%s%s", strs[4], strs[5]);
+			snprintf(current_gps_position.elevation, sizeof(current_gps_position.elevation), "%s%s", strs[9], strs[10]);
 			current_gps_position.last_updated = time(NULL);
 			current_gps_position.last_updated_mono = now_mono;
 			ast_mutex_unlock(&position_update_lock);
@@ -1299,7 +1299,7 @@ static void *aprstt_sender_thread(void *data)
 	if (!strcmp(sender_entry->section, "general")) {
 		strcpy(fname, TT_COMMON);
 	} else {
-		snprintf(fname, sizeof(fname) - 1, TT_SUB_COMMON, sender_entry->section);
+		snprintf(fname, sizeof(fname), TT_SUB_COMMON, sender_entry->section);
 	}
 	if (stat(fname, &mystat) == -1) {
 		mfp = fopen(fname, "w");
@@ -1404,7 +1404,7 @@ static void *aprstt_sender_thread(void *data)
 				}
 			}
 			if (ttslot < ttlist) {
-				ast_copy_string(ttentries[ttslot].call, theircall, sizeof(ttentries[ttslot].call) - 1);
+				ast_copy_string(ttentries[ttslot].call, theircall, sizeof(ttentries[ttslot].call));
 				ttentries[ttslot].last_updated = now;
 			} else {
 				ast_log(LOG_WARNING, "APRStt attempting to add call %s to full list (%d items)\n", theircall, ttlist);

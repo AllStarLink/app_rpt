@@ -2008,7 +2008,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 
 	mycodec[0] = 0;
 	if (codec) {
-		ast_copy_string(mycodec, codec, sizeof(mycodec) - 1);
+		ast_copy_string(mycodec, codec, sizeof(mycodec));
 	}
 	TLB_node_key = ast_malloc(sizeof(struct TLB_node));
 	if (!TLB_node_key) {
@@ -2048,7 +2048,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		}
 		TLB_node_key->nodenum = atoi(v->name);
 		if (n > 3) {
-			ast_copy_string(mycodec, strs[3], sizeof(mycodec) - 1);
+			ast_copy_string(mycodec, strs[3], sizeof(mycodec));
 		}
 	} else {
 		TLB_node_key->nodenum = 0;

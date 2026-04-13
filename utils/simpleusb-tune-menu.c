@@ -453,7 +453,7 @@ static void menu_selectusb(void)
 		printf("USB device not changed\n");
 		return;
 	}
-	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "active %s", strs[i - 1]);
+	snprintf(str, sizeof(str), COMMAND_PREFIX "active %s", strs[i - 1]);
 	astgetresp(str);
 }
 
@@ -509,7 +509,7 @@ static void menu_swapusb(void)
 		printf("USB device not swapped\n");
 		return;
 	}
-	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune swap %s", strs[i - 1]);
+	snprintf(str, sizeof(str), COMMAND_PREFIX "tune swap %s", strs[i - 1]);
 	astgetresp(str);
 }
 
@@ -550,7 +550,7 @@ static void menu_rxvoice(void)
 			printf("Entry Error, Rx voice setting not changed\n");
 			continue;
 		}
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support c%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support c%d", i);
 		if (astgetresp(str)) {
 			break;
 		}
@@ -598,9 +598,9 @@ static void menu_txa(int keying)
 		return;
 	}
 	if (keying) {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support fK%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support fK%d", i);
 	} else {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support f%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support f%d", i);
 	}
 	astgetresp(str);
 }
@@ -646,9 +646,9 @@ static void menu_txb(int keying)
 		return;
 	}
 	if (keying) {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support gK%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support gK%d", i);
 	} else {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support g%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support g%d", i);
 	}
 	astgetresp(str);
 }
@@ -731,7 +731,7 @@ static int menu_get_delay(const char *delay_type, const char *menu_option, int d
 	char str[100];
 	int value, x;
 
-	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support %s", menu_option);
+	snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support %s", menu_option);
 	if (astgetresp(str)) {
 		return delay;
 	}
@@ -798,7 +798,7 @@ int main(int argc, char *argv[])
 	}
 
 	if ((device != NULL) && (strlen(device) > 0)) {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "active %s", device);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "active %s", device);
 		if (astgetline(str, str, sizeof(str) - 1)) {
 			printf("The chan_simpleusb active device could not be set!\n\n");
 			printf("Verify that Asterisk is running and chan_simpleusb is loaded.\n\n");
@@ -971,7 +971,7 @@ int main(int argc, char *argv[])
 		case 'I':
 			result = menu_signal_type("Carrier From", carrierfrom);
 			if (result > 0) {
-				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support r%d", result - 1);
+				snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support r%d", result - 1);
 				astgetresp(str);
 			}
 			break;
@@ -979,20 +979,20 @@ int main(int argc, char *argv[])
 		case 'J':
 			result = menu_signal_type("CTCSS From", ctcssfrom);
 			if (result > 0) {
-				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support s%d", result - 1);
+				snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support s%d", result - 1);
 				astgetresp(str);
 			}
 			break;
 		case 'k': /* set rx on delay */
 		case 'K':
 			result = menu_get_delay("RX On Delay", "t", rxondelay);
-			snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support t%d", result);
+			snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support t%d", result);
 			astgetresp(str);
 			break;
 		case 'l': /* set tx off delay */
 		case 'L':
 			result = menu_get_delay("TX Off Delay", "u", txoffdelay);
-			snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support u%d", result);
+			snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support u%d", result);
 			astgetresp(str);
 			break;
 		case 'p': /* print current values */

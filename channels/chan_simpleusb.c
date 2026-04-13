@@ -4153,7 +4153,7 @@ static int load_config(int reload)
 	pbase = 0;
 	val = ast_variable_retrieve(cfg, "general", "pport");
 	if (val) {
-		ast_copy_string(pport, val, sizeof(pport) - 1);
+		ast_copy_string(pport, val, sizeof(pport));
 	} else {
 		strcpy(pport, PP_PORT);
 	}

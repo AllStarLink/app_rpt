@@ -585,7 +585,7 @@ int setrbi(struct rpt *myrpt)
 		return -1;
 	}
 
-	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
+	ast_copy_string(tmp, myrpt->freq, sizeof(tmp));
 	s = strchr(tmp, '.');
 	/* if no decimal, is invalid */
 
@@ -694,7 +694,7 @@ int setrtx(struct rpt *myrpt)
 	if (!IS_XPMR(myrpt)) {
 		return 0;
 	}
-	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
+	ast_copy_string(tmp, myrpt->freq, sizeof(tmp));
 	s = strchr(tmp, '.');
 	/* if no decimal, is invalid */
 
@@ -851,7 +851,7 @@ int setrbi_check(struct rpt *myrpt)
 		return 0;
 	}
 
-	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
+	ast_copy_string(tmp, myrpt->freq, sizeof(tmp));
 	s = strchr(tmp, '.');
 	if (s == NULL) {
 		/* if no decimal, is invalid */
@@ -905,7 +905,7 @@ int setrtx_check(struct rpt *myrpt)
 		return 0;
 	}
 
-	ast_copy_string(tmp, myrpt->freq, sizeof(tmp) - 1);
+	ast_copy_string(tmp, myrpt->freq, sizeof(tmp));
 	s = strchr(tmp, '.');
 	if (s == NULL) {
 		/* if no decimal, is invalid */

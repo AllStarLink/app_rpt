@@ -176,7 +176,7 @@ void daq_init(struct ast_config *cfg)
 			ast_log(LOG_WARNING, "Error in daq_entries stanza on line %d\n", var->lineno);
 			break;
 		}
-		ast_copy_string(s, var->value, sizeof(s) - 1); /* Make copy of device entry */
+		ast_copy_string(s, var->value, sizeof(s));
 		if (!(p = ast_variable_retrieve(cfg, s, "hwtype"))) {
 			ast_log(LOG_WARNING, "hwtype variable required for %s stanza\n", s);
 			break;

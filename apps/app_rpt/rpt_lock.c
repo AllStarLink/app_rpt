@@ -82,7 +82,7 @@ static void rpt_mutex_spew(void)
 
 	for (i = 0; i < 32; i++) {
 		j = (i + lock_ring_index_copy) % 32;
-		strftime(a, sizeof(a) - 1, "%m/%d/%Y %H:%M:%S", localtime(&lock_ring_copy[j].tv.tv_sec));
+		strftime(a, sizeof(a), "%m/%d/%Y %H:%M:%S", localtime(&lock_ring_copy[j].tv.tv_sec));
 		diff = 0;
 		if (lasttv.tv_sec) {
 			diff = (lock_ring_copy[j].tv.tv_sec - lasttv.tv_sec) * 1000000;

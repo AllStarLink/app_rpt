@@ -471,7 +471,7 @@ static void menu_selectusb(void)
 		printf("USB device not changed\n");
 		return;
 	}
-	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "active %s", strs[i - 1]);
+	snprintf(str, sizeof(str), COMMAND_PREFIX "active %s", strs[i - 1]);
 	astgetresp(str);
 }
 
@@ -527,7 +527,7 @@ static void menu_swapusb(void)
 		printf("USB device not swapped\n");
 		return;
 	}
-	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune swap %s", strs[i - 1]);
+	snprintf(str, sizeof(str), COMMAND_PREFIX "tune swap %s", strs[i - 1]);
 	astgetresp(str);
 }
 
@@ -568,7 +568,7 @@ static void menu_rxvoice(void)
 			printf("Entry Error, Rx voice setting not changed\n");
 			continue;
 		}
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support c%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support c%d", i);
 		if (astgetresp(str)) {
 			break;
 		}
@@ -608,7 +608,7 @@ static void menu_rxsquelch(void)
 		printf("Entry Error, Rx Squelch Level setting not changed\n");
 		return;
 	}
-	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support e%d", i);
+	snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support e%d", i);
 	astgetresp(str);
 }
 
@@ -653,9 +653,9 @@ static void menu_txvoice(int keying)
 		return;
 	}
 	if (keying) {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support fK%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support fK%d", i);
 	} else {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support f%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support f%d", i);
 	}
 	astgetresp(str);
 }
@@ -693,7 +693,7 @@ static void menu_auxvoice(void)
 		printf("Entry Error, Aux Voice Level setting not changed\n");
 		return;
 	}
-	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support g%d", i);
+	snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support g%d", i);
 	astgetresp(str);
 }
 
@@ -739,9 +739,9 @@ static void menu_txtone(int keying)
 		return;
 	}
 	if (keying) {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support hK%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support hK%d", i);
 	} else {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support h%d", i);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support h%d", i);
 	}
 	astgetresp(str);
 }
@@ -798,7 +798,7 @@ static int menu_get_delay(const char *delay_type, const char *menu_option, int d
 	char str[100];
 	int value, x;
 
-	snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support %s", menu_option);
+	snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support %s", menu_option);
 	if (astgetresp(str)) {
 		return delay;
 	}
@@ -903,18 +903,18 @@ static void options_menu(void)
 		case '3': /* select rx demodulation */
 			result = menu_select_value("RX Demodulation", demodulation_type, 3, rxdemod);
 			if (result > 0) {
-				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support u%d", result - 1);
+				snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support u%d", result - 1);
 				astgetresp(str);
 			}
 			break;
 		case '4': /* set rx on delay */
 			result = menu_get_delay("RX On Delay", "q", rxondelay);
-			snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support q%d", result);
+			snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support q%d", result);
 			astgetresp(str);
 			break;
 		case '5': /* set tx off delay */
 			result = menu_get_delay("TX Off Delay", "r", txoffdelay);
-			snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support r%d", result);
+			snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support r%d", result);
 			astgetresp(str);
 			break;
 		case '6': /* toggle txprelim */
@@ -942,14 +942,14 @@ static void options_menu(void)
 		case '8': /* select tx mixer a */
 			result = menu_select_value("TX Mixer A", mixer_type, 5, txmixa);
 			if (result > 0) {
-				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support w%d", result - 1);
+				snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support w%d", result - 1);
 				astgetresp(str);
 			}
 			break;
 		case '9': /* select tx mixer b */
 			result = menu_select_value("TX Mixer B", mixer_type, 5, txmixb);
 			if (result > 0) {
-				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support x%d", result - 1);
+				snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support x%d", result - 1);
 				astgetresp(str);
 			}
 			break;
@@ -992,7 +992,7 @@ int main(int argc, char *argv[])
 	}
 
 	if ((device != NULL) && (strlen(device) > 0)) {
-		snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "active %s", device);
+		snprintf(str, sizeof(str), COMMAND_PREFIX "active %s", device);
 		if (astgetline(str, str, sizeof(str) - 1)) {
 			printf("The chan_usbradio active device could not be set!\n\n");
 			printf("Verify that Asterisk is running and chan_usbradio is loaded.\n\n");
@@ -1179,7 +1179,7 @@ int main(int argc, char *argv[])
 		case 'G':
 			result = menu_select_value("Carrier From", cd_signal_type, 7, carrierfrom);
 			if (result > 0) {
-				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support o%d", result - 1);
+				snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support o%d", result - 1);
 				astgetresp(str);
 			}
 			break;
@@ -1187,7 +1187,7 @@ int main(int argc, char *argv[])
 		case 'H':
 			result = menu_select_value("CTCSS From", sd_signal_type, 6, ctcssfrom);
 			if (result > 0) {
-				snprintf(str, sizeof(str) - 1, COMMAND_PREFIX "tune menu-support p%d", result - 1);
+				snprintf(str, sizeof(str), COMMAND_PREFIX "tune menu-support p%d", result - 1);
 				astgetresp(str);
 			}
 			break;

@@ -795,7 +795,7 @@ void *rpt_link_connect(void *data)
 		|| !strncasecmp(s1, "local/", 6)
 #endif
 	) {
-		ast_copy_string(deststr, s1, sizeof(deststr) - 1);
+		ast_copy_string(deststr, s1, sizeof(deststr));
 	} else {
 		snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
 	}

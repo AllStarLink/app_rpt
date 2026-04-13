@@ -176,7 +176,7 @@ int uchameleon_pin_init(struct daq_entry_tag *t)
 
 		/* Parse alarm entry */
 
-		ast_copy_string(s, var->value, sizeof(s) - 1);
+		ast_copy_string(s, var->value, sizeof(s));
 
 		if (explode_string(s, argv, ARRAY_LEN(argv), ',', 0) != 6) {
 			ast_log(LOG_WARNING, "Alarm arguments must be 6 for %s\n", var->name);

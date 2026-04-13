@@ -1363,7 +1363,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 		return -1;
 	}
 
-	snprintf(buf, sizeof(buf) - 1, "o.conip %s", ipaddr);
+	snprintf(buf, sizeof(buf), "o.conip %s", ipaddr);
 
 	ast_debug(1, "Calling %s/%s on %s.\n", dest, ipaddr, ast_channel_name(ast));
 
@@ -3065,7 +3065,6 @@ static int do_el_directory(const char *hostname)
 		ast_log(LOG_ERROR, "Unable to send to directory server %s.\n", hostname);
 		goto cleanup;
 	}
-	str[strlen(str) - 1] = 0;
 	ast_debug(4, "Sending: %s to %s.\n", str, hostname);
 	if (recv(sock, str, 4, 0) != 4) {
 		ast_log(LOG_ERROR, "Error in directory download (header) on %s.\n", hostname);
@@ -3943,7 +3942,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = ast_variable_retrieve(cfg, ctg, "recfile");
 	if (!val) {
-		ast_copy_string(instp->fdr_file, "/tmp/echolink_recorded.gsm", FILENAME_MAX - 1);
+		ast_copy_string(instp->fdr_file, "/tmp/echolink_recorded.gsm", sizeof(instp->fdr_file));
 	} else {
 		ast_copy_string(instp->fdr_file, val, FILENAME_MAX);
 	}

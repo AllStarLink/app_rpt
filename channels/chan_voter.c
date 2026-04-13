@@ -2553,7 +2553,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 				client->txlockout = 0;
 			}
 		} else { /* Must be a comma-delimited list */
-			ast_copy_string(str, argv[3], sizeof(str) - 1);
+			ast_copy_string(str, argv[3], sizeof(str));
 			n = finddelim((char *) argv[3], strs, ARRAY_LEN(strs));
 			for (i = 0; i < n; i++) {
 				if (!*strs[i]) {
@@ -3729,7 +3729,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 				p->primary.sin_family = AF_INET;
 				p->primary.sin_addr.s_addr = inet_addr(strs[0]);
 				p->primary.sin_port = htons(j);
-				ast_copy_string(p->primary_pswd, strs[1], sizeof(p->primary_pswd) - 1);
+				ast_copy_string(p->primary_pswd, strs[1], sizeof(p->primary_pswd));
 			}
 			ast_free(cp);
 		}
@@ -3875,14 +3875,14 @@ static int reload(void)
 
 	val = ast_variable_retrieve(cfg, "general", "password");
 	if (val) {
-		ast_copy_string(password, val, sizeof(password) - 1);
+		ast_copy_string(password, val, sizeof(password));
 	} else {
 		password[0] = 0;
 	}
 
 	val = ast_variable_retrieve(cfg, "general", "context");
 	if (val) {
-		ast_copy_string(context, val, sizeof(context) - 1);
+		ast_copy_string(context, val, sizeof(context));
 	} else {
 		context[0] = 0;
 	}
@@ -4166,7 +4166,7 @@ static int reload(void)
 					return -1;
 				}
 				client->prio_override = -2;
-				ast_copy_string(client->name, v->name, VOTER_NAME_LEN - 1);
+				ast_copy_string(client->name, v->name, sizeof(client->name));
 				newclient = 1;
 			}
 			client->reload = 1;
@@ -4214,7 +4214,7 @@ static int reload(void)
 			/* This effectively turns buflen into 40ms resolution "steps". */
 			client->buflen -= client->buflen % (FRAME_SIZE * 2);
 			client->digest = crc32_bufs(challenge, strs[0]);
-			ast_copy_string(client->pswd, strs[0], sizeof(client->pswd) - 1);
+			ast_copy_string(client->pswd, strs[0], sizeof(client->pswd));
 			ast_free(cp);
 			if (client->old_buflen && (client->buflen != client->old_buflen)) {
 				client->drainindex = 0;
@@ -4570,7 +4570,7 @@ static void *voter_reader(void *data)
 			if (DEBUG_ATLEAST(4) && client && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0) &&
 				ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) {
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-				strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+				strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
 				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
 					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
@@ -4751,7 +4751,7 @@ static void *voter_reader(void *data)
 								sendto(udp_socket, buf, recvlen - sizeof(proxy), 0, (struct sockaddr *) &psin, sizeof(psin));
 								continue;
 							}
-							ast_copy_string(client->saved_challenge, proxy.challenge, sizeof(client->saved_challenge) - 1);
+							ast_copy_string(client->saved_challenge, proxy.challenge, sizeof(client->saved_challenge));
 							client->proxy_sin = psin;
 							/* Is the mix mode flag being sent by the proxy client? */
 							if (proxy.flags & 32) {
@@ -4796,7 +4796,7 @@ static void *voter_reader(void *data)
 							proxy.ipaddr = sin.sin_addr.s_addr;
 							proxy.port = sin.sin_port;
 							proxy.payload_type = vph->payload_type;
-							ast_copy_string(proxy.challenge, challenge, sizeof(proxy.challenge) - 1);
+							ast_copy_string(proxy.challenge, challenge, sizeof(proxy.challenge));
 							vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy.flags = 0;
 							if (client->ismaster) {
@@ -4888,12 +4888,12 @@ static void *voter_reader(void *data)
 						if (DEBUG_ATLEAST(5) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
 							/* Get the time of the master client so we can display it */
 							timestuff = (time_t) master_time.vtime_sec;
-							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+							strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
 							ast_debug(5, "MasterTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
 							/* Get the system time so we can display it */
 							gettimeofday(&timetv, NULL);
 							timestuff = (time_t) timetv.tv_sec;
-							strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+							strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
 							ast_debug(5, "SysTime:    %s.%03d\n", timestr, (int) timetv.tv_usec / 1000);
 							ast_debug(5, "Time diff between master and client: %lld ns\n", btime - ptime);
 							ast_debug(5, "VOTER drain index: %i\n)", index);
@@ -5242,7 +5242,7 @@ static void *voter_reader(void *data)
 											memcpy(rec.audio, &master_time, sizeof(master_time));
 											fwrite(&rec, 1, sizeof(rec), p->recfp);
 										}
-										ast_copy_string(rec.name, client->name, sizeof(rec.name) - 1);
+										ast_copy_string(rec.name, client->name, sizeof(rec.name));
 										rec.rssi = client->lastrssi;
 										if (i >= 0) {
 											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE);
@@ -5359,7 +5359,7 @@ static void *voter_reader(void *data)
 				ast_verb(1, "PING (%s) Response:   seqno: %u  diff: %d ms\n", client->name, pingpacket.seqno, timediff);
 
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-				strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+				strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
 				/* ast_debug(3, "PING (%s):   seqno: %u %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec)); */
 
 				check_ping_done(client);
@@ -5418,7 +5418,7 @@ process_gps:
 				if (DEBUG_ATLEAST(4)) {
 					/* Get and display GPS Time that the client is sending us */
 					timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+					strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "GPSTime:    %s.%09d from %s\n", timestr, ntohl(vph->curtime.vtime_nsec), client->name);
 					/* Get and display the System time */
 					gettimeofday(&timetv, NULL);
@@ -5428,11 +5428,11 @@ process_gps:
 						timetv.tv_usec -= 1000000;
 					}
 					timestuff = (time_t) timetv.tv_sec;
-					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+					strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "SysTime:    %s.%06d\n", timestr, (int) timetv.tv_usec);
 					/* Display the time from the master client */
 					timestuff = (time_t) master_time.vtime_sec;
-					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+					strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
 					ast_debug(4, "MasterTime: %s.%09d\n", timestr, master_time.vtime_nsec);
 				}
 				if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
@@ -5440,8 +5440,8 @@ process_gps:
 				} else {
 					vgp = (VOTER_GPS *) (buf + sizeof(VOTER_PACKET_HEADER));
 					if (client->gpsid) {
-						snprintf(gps1, sizeof(gps1) - 1, GPS_WORK_FILE, client->gpsid);
-						snprintf(gps2, sizeof(gps2) - 1, GPS_DATA_FILE, client->gpsid);
+						snprintf(gps1, sizeof(gps1), GPS_WORK_FILE, client->gpsid);
+						snprintf(gps2, sizeof(gps2), GPS_DATA_FILE, client->gpsid);
 						gpsfp = fopen(gps1, "w");
 						if (!gpsfp) {
 							ast_log(LOG_ERROR, "Unable to open GPS work file %s!!\n", gps1);
