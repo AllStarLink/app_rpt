@@ -2254,8 +2254,9 @@ static void *TLB_reader(void *data)
 					(*found_key)->countdown = instp->rtcptimeout;
 					p->firstheard = 1;
 					if (recvlen > 12) { /* if at least a header size and some payload */
-						/* if its a DTMF frame */
 						if ((((struct rtpVoice_t *) buf)->version == 2) && (((struct rtpVoice_t *) buf)->payt == 96)) {
+							/* if its a DTMF frame */
+
 							uint32_t dseq, dtime;
 							char dchar;
 
@@ -2298,9 +2299,9 @@ static void *TLB_reader(void *data)
 								}
 							}
 							ast_mutex_unlock(&p->lock);
-						}
-						/* it its a voice frame */
-						else if (((struct rtpVoice_t *) buf)->version == 2) {
+						} else if (((struct rtpVoice_t *) buf)->version == 2) {
+							/* if its a voice frame */
+
 							j = ((struct rtpVoice_t *) buf)->payt;
 							/* if codec changed from ours */
 							if (j != tlb_codecs[p->rxcodec].payt) {

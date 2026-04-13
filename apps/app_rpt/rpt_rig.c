@@ -443,12 +443,9 @@ static int sendrxkenwood(struct rpt *myrpt, char *txstr, char *rxstr, char *cmps
 
 	for (i = 0; i < KENWOOD_RETRIES; i++) {
 		j = sendkenwood(myrpt, txstr, rxstr);
-
 		if (j < 0) {
 			return j;
-		}
-
-		if (j == 0) {
+		} else if (j == 0) {
 			continue;
 		}
 
@@ -495,33 +492,29 @@ int setkenwood(struct rpt *myrpt)
 	sprintf(offset, "%06d000", mysplit);
 	strcpy(freq, "000000");
 	ast_copy_string(freq, decimals, strlen(freq) - 1);
-	myrxpl = myrpt->rxplon;
 
+	myrxpl = myrpt->rxplon;
 	if (IS_XPMR(myrpt)) {
 		myrxpl = 0;
 	}
 
 	step = 0;
-
 	if ((decimals[3] != '0') || (decimals[4] != '0')) {
 		step = 1;
 	}
 
 	sprintf(txstr, "VW %c,%05d%s,%d,%d,0,%d,%d,,%02d,,%02d,%s\r", band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
 		(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
-
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VW") < 0) {
 		return -1;
 	}
 
 	sprintf(txstr, "RBN %c\r", band2);
-
 	if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 		return -1;
 	}
 
 	sprintf(txstr, "PC %c,%d\r", band1, powers[(int) myrpt->powerlevel]);
-
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
@@ -561,21 +554,19 @@ int set_tmd700(struct rpt *myrpt)
 	sprintf(offset, "%06d000", mysplit);
 	strcpy(freq, "000000");
 	ast_copy_string(freq, decimals, strlen(freq) - 1);
-	step = 0;
 
+	step = 0;
 	if ((decimals[3] != '0') || (decimals[4] != '0')) {
 		step = 1;
 	}
 
 	myrxpl = myrpt->rxplon;
-
 	if (IS_XPMR(myrpt)) {
 		myrxpl = 0;
 	}
 
 	sprintf(txstr, "VW %d,%05d%s,%d,%d,0,%d,%d,0,%02d,0010,%02d,%s,0\r", band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
 		(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
-
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VW") < 0) {
 		return -1;
 	}
@@ -585,13 +576,11 @@ int set_tmd700(struct rpt *myrpt)
 	}
 
 	sprintf(txstr, "RBN\r");
-
 	if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 		return -1;
 	}
 
 	sprintf(txstr, "RBN %d\r", band);
-
 	if (strncmp(rxstr, txstr, 5)) {
 		if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 			return -1;
@@ -599,7 +588,6 @@ int set_tmd700(struct rpt *myrpt)
 	}
 
 	sprintf(txstr, "PC 0,%d\r", powers[(int) myrpt->powerlevel]);
-
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
@@ -627,14 +615,12 @@ int set_tm271(struct rpt *myrpt)
 	}
 
 	step = 0;
-
 	if ((decimals[3] != '0') || (decimals[4] != '0')) {
 		step = 1;
 	}
 
 	sprintf(txstr, "VF %04d%s,%d,%d,0,%d,0,0,%02d,00,000,%05d000,0,0\r", atoi(mhz), freq, step, offsets[(int) myrpt->offset],
 		(myrpt->txplon != 0), tm271_pltocode(myrpt->txpl), mysplit);
-
 	if (sendrxkenwood(myrpt, "VM 0\r", rxstr, "VM") < 0) {
 		return -1;
 	}
@@ -644,7 +630,6 @@ int set_tm271(struct rpt *myrpt)
 	}
 
 	sprintf(txstr, "PC %d\r", powers[(int) myrpt->powerlevel]);
-
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
@@ -656,13 +641,15 @@ static int check_freq_kenwood(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 144) { /* 2 meters */
+	if (m == 144) {
+		/* 2 meters */
 		if (d < 10100) {
 			return -1;
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		;
-	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) {
+		/* 70 centimeters */
 		;
 	} else {
 		return -1;
@@ -679,7 +666,8 @@ static int check_freq_tm271(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 144) { /* 2 meters */
+	if (m == 144) {
+		/* 2 meters */
 		if (d < 10100) {
 			return -1;
 		}
@@ -703,23 +691,28 @@ static int check_freq_rbi(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 50) { /* 6 meters */
+	if (m == 50) {
+		/* 6 meters */
 		if (d < 10100) {
 			return -1;
 		}
 	} else if ((m >= 51) && (m < 54)) {
 		;
-	} else if (m == 144) { /* 2 meters */
+	} else if (m == 144) {
+		/* 2 meters */
 		if (d < 10100) {
 			return -1;
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		;
-	} else if ((m >= 222) && (m < 225)) { /* 1.25 meters */
+	} else if ((m >= 222) && (m < 225)) {
+		/* 1.25 meters */
 		;
-	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) {
+		/* 70 centimeters */
 		;
-	} else if ((m >= 1240) && (m < 1300)) { /* 23 centimeters */
+	} else if ((m >= 1240) && (m < 1300)) {
+		/* 23 centimeters */
 		;
 	} else {
 		return -1;
@@ -740,7 +733,8 @@ static int check_freq_rtx(int m, int d, enum rpt_mode *defmode, struct rpt *myrp
 	enum rpt_mode dflmd = REM_MODE_FM;
 
 	if (!strcmp(myrpt->remoterig, REMOTE_RIG_RTX150)) {
-		if (m == 144) { /* 2 meters */
+		if (m == 144) {
+			/* 2 meters */
 			if (d < 10100) {
 				return -1;
 			}
@@ -750,7 +744,8 @@ static int check_freq_rtx(int m, int d, enum rpt_mode *defmode, struct rpt *myrp
 			return -1;
 		}
 	} else {
-		if ((m >= 430) && (m < 450)) { /* 70 centimeters */
+		if ((m >= 430) && (m < 450)) {
+			/* 70 centimeters */
 			;
 		} else {
 			return -1;
@@ -770,8 +765,8 @@ int split_ctcss_freq(char *hertz, char *decimal, char *freq)
 	char *decp;
 
 	ast_copy_string(freq_copy, freq, sizeof(freq_copy));
-	decp = strchr(freq_copy, '.');
 
+	decp = strchr(freq_copy, '.');
 	if (!decp) {
 		return -1;
 	}
@@ -793,42 +788,50 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 1) { /* 160 meters */
+	if (m == 1) {
+		/* 160 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 80000) {
 			return -1;
 		}
-	} else if (m == 3) { /* 80 meters */
+	} else if (m == 3) {
+		/* 80 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 50000) {
 			return -1;
 		}
-	} else if (m == 7) { /* 40 meters */
+	} else if (m == 7) {
+		/* 40 meters */
 		dflmd = REM_MODE_LSB;
 		if (d > 30000) {
 			return -1;
 		}
-	} else if (m == 14) { /* 20 meters */
+	} else if (m == 14) {
+		/* 20 meters */
 		dflmd = REM_MODE_USB;
 		if (d > 35000) {
 			return -1;
 		}
-	} else if (m == 18) { /* 17 meters */
+	} else if (m == 18) {
+		/* 17 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 6800) || (d > 16800)) {
 			return -1;
 		}
-	} else if (m == 21) { /* 15 meters */
+	} else if (m == 21) {
+		/* 15 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 20000) || (d > 45000)) {
 			return -1;
 		}
-	} else if (m == 24) { /* 12 meters */
+	} else if (m == 24) {
+		/* 12 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 89000) || (d > 99000)) {
 			return -1;
 		}
-	} else if (m == 28) { /* 10 meters */
+	} else if (m == 28) {
+		/* 10 meters */
 		dflmd = REM_MODE_USB;
 	} else if (m == 29) {
 		if (d >= 51000) {
@@ -839,7 +842,8 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 		if (d > 70000) {
 			return -1;
 		}
-	} else if (m == 50) { /* 6 meters */
+	} else if (m == 50) {
+		/* 6 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -847,7 +851,8 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 51) && (m < 54)) {
 		dflmd = REM_MODE_FM;
-	} else if (m == 144) { /* 2 meters */
+	} else if (m == 144) {
+		/* 2 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -855,7 +860,8 @@ static int check_freq_ft897(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		dflmd = REM_MODE_FM;
-	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) {
+		/* 70 centimeters */
 		if (m < 438) {
 			dflmd = REM_MODE_USB;
 		} else {
@@ -947,7 +953,6 @@ static int set_offset_ft897(struct rpt *myrpt, enum rpt_offset offset)
 	cmdstr[3] = ((mysplit % 10) << 4) + ((mysplit % 100) / 10);
 	cmdstr[4] = 0xf9; /* command */
 	res = serial_remote_io(myrpt, cmdstr, 5, NULL, 0, 0);
-
 	if (res) {
 		return res;
 	}
@@ -1181,42 +1186,50 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 1) { /* 160 meters */
+	if (m == 1) {
+		/* 160 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 80000) {
 			return -1;
 		}
-	} else if (m == 3) { /* 80 meters */
+	} else if (m == 3) {
+		/* 80 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 50000) {
 			return -1;
 		}
-	} else if (m == 7) { /* 40 meters */
+	} else if (m == 7) {
+		/* 40 meters */
 		dflmd = REM_MODE_LSB;
 		if (d > 30000) {
 			return -1;
 		}
-	} else if (m == 14) { /* 20 meters */
+	} else if (m == 14) {
+		/* 20 meters */
 		dflmd = REM_MODE_USB;
 		if (d > 35000) {
 			return -1;
 		}
-	} else if (m == 18) { /* 17 meters */
+	} else if (m == 18) {
+		/* 17 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 6800) || (d > 16800)) {
 			return -1;
 		}
-	} else if (m == 21) { /* 15 meters */
+	} else if (m == 21) {
+		/* 15 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 20000) || (d > 45000)) {
 			return -1;
 		}
-	} else if (m == 24) { /* 12 meters */
+	} else if (m == 24) {
+		/* 12 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 89000) || (d > 99000)) {
 			return -1;
 		}
-	} else if (m == 28) { /* 10 meters */
+	} else if (m == 28) {
+		/* 10 meters */
 		dflmd = REM_MODE_USB;
 	} else if (m == 29) {
 		if (d >= 51000) {
@@ -1227,7 +1240,8 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 		if (d > 70000) {
 			return -1;
 		}
-	} else if (m == 50) { /* 6 meters */
+	} else if (m == 50) {
+		/* 6 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1235,7 +1249,8 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 51) && (m < 54)) {
 		dflmd = REM_MODE_FM;
-	} else if (m == 144) { /* 2 meters */
+	} else if (m == 144) {
+		/* 2 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1243,7 +1258,8 @@ static int check_freq_ft100(int m, int d, enum rpt_mode *defmode)
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		dflmd = REM_MODE_FM;
-	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) {
+		/* 70 centimeters */
 		if (m < 438) {
 			dflmd = REM_MODE_USB;
 		} else {
@@ -1486,42 +1502,50 @@ static int check_freq_ft950(int m, int d, enum rpt_mode *defmode)
 {
 	enum rpt_mode dflmd = REM_MODE_FM;
 
-	if (m == 1) { /* 160 meters */
+	if (m == 1) {
+		/* 160 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 80000) {
 			return -1;
 		}
-	} else if (m == 3) { /* 80 meters */
+	} else if (m == 3) {
+		/* 80 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 50000) {
 			return -1;
 		}
-	} else if (m == 7) { /* 40 meters */
+	} else if (m == 7) {
+		/* 40 meters */
 		dflmd = REM_MODE_LSB;
 		if (d > 30000) {
 			return -1;
 		}
-	} else if (m == 14) { /* 20 meters */
+	} else if (m == 14) {
+		/* 20 meters */
 		dflmd = REM_MODE_USB;
 		if (d > 35000) {
 			return -1;
 		}
-	} else if (m == 18) { /* 17 meters */
+	} else if (m == 18) {
+		/* 17 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 6800) || (d > 16800)) {
 			return -1;
 		}
-	} else if (m == 21) { /* 15 meters */
+	} else if (m == 21) {
+		/* 15 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 20000) || (d > 45000)) {
 			return -1;
 		}
-	} else if (m == 24) { /* 12 meters */
+	} else if (m == 24) {
+		/* 12 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 89000) || (d > 99000)) {
 			return -1;
 		}
-	} else if (m == 28) { /* 10 meters */
+	} else if (m == 28) {
+		/* 10 meters */
 		dflmd = REM_MODE_USB;
 	} else if (m == 29) {
 		if (d >= 51000) {
@@ -1532,7 +1556,8 @@ static int check_freq_ft950(int m, int d, enum rpt_mode *defmode)
 		if (d > 70000) {
 			return -1;
 		}
-	} else if (m == 50) { /* 6 meters */
+	} else if (m == 50) {
+		/* 6 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1790,42 +1815,50 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 
 	/* first test for standard amateur radio bands */
 
-	if (m == 1) { /* 160 meters */
+	if (m == 1) {
+		/* 160 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 80000) {
 			rv = -1;
 		}
-	} else if (m == 3) { /* 80 meters */
+	} else if (m == 3) {
+		/* 80 meters */
 		dflmd = REM_MODE_LSB;
 		if (d < 50000) {
 			rv = -1;
 		}
-	} else if (m == 7) { /* 40 meters */
+	} else if (m == 7) {
+		/* 40 meters */
 		dflmd = REM_MODE_LSB;
 		if (d > 30000) {
 			rv = -1;
 		}
-	} else if (m == 14) { /* 20 meters */
+	} else if (m == 14) {
+		/* 20 meters */
 		dflmd = REM_MODE_USB;
 		if (d > 35000) {
 			rv = -1;
 		}
-	} else if (m == 18) { /* 17 meters */
+	} else if (m == 18) {
+		/* 17 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 6800) || (d > 16800)) {
 			rv = -1;
 		}
-	} else if (m == 21) { /* 15 meters */
+	} else if (m == 21) {
+		/* 15 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 20000) || (d > 45000)) {
 			rv = -1;
 		}
-	} else if (m == 24) { /* 12 meters */
+	} else if (m == 24) {
+		/* 12 meters */
 		dflmd = REM_MODE_USB;
 		if ((d < 89000) || (d > 99000)) {
 			rv = -1;
 		}
-	} else if (m == 28) { /* 10 meters */
+	} else if (m == 28) {
+		/* 10 meters */
 		dflmd = REM_MODE_USB;
 	} else if (m == 29) {
 		if (d >= 51000) {
@@ -1836,7 +1869,8 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		if (d > 70000) {
 			rv = -1;
 		}
-	} else if (m == 50) { /* 6 meters */
+	} else if (m == 50) {
+		/* 6 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1844,7 +1878,8 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		}
 	} else if ((m >= 51) && (m < 54)) {
 		dflmd = REM_MODE_FM;
-	} else if (m == 144) { /* 2 meters */
+	} else if (m == 144) {
+		/* 2 meters */
 		if (d >= 30000) {
 			dflmd = REM_MODE_FM;
 		} else {
@@ -1852,7 +1887,8 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 		}
 	} else if ((m >= 145) && (m < 148)) {
 		dflmd = REM_MODE_FM;
-	} else if ((m >= 430) && (m < 450)) { /* 70 centimeters */
+	} else if ((m >= 430) && (m < 450)) {
+		/* 70 centimeters */
 		if (m < 438) {
 			dflmd = REM_MODE_USB;
 		} else {
@@ -1864,22 +1900,28 @@ static int check_freq_ic706(int m, int d, enum rpt_mode *defmode, char mars)
 
 	/* check expanded coverage */
 	if (mars && rv < 0) {
-		if ((m >= 450) && (m < 470)) { /* LMR */
+		if ((m >= 450) && (m < 470)) {
+			/* LMR */
 			dflmd = REM_MODE_FM;
 			rv = 0;
-		} else if ((m >= 148) && (m < 174)) { /* LMR */
+		} else if ((m >= 148) && (m < 174)) {
+			/* LMR */
 			dflmd = REM_MODE_FM;
 			rv = 0;
-		} else if ((m >= 138) && (m < 144)) { /* VHF-AM AIRCRAFT */
+		} else if ((m >= 138) && (m < 144)) {
+			/* VHF-AM AIRCRAFT */
 			dflmd = REM_MODE_AM;
 			rv = 0;
-		} else if ((m >= 108) && (m < 138)) { /* VHF-AM AIRCRAFT */
+		} else if ((m >= 108) && (m < 138)) {
+			/* VHF-AM AIRCRAFT */
 			dflmd = REM_MODE_AM;
 			rv = 0;
-		} else if ((m == 0 && d >= 55000) || (m == 1 && d <= 75000)) { /* AM BCB */
+		} else if ((m == 0 && d >= 55000) || (m == 1 && d <= 75000)) {
+			/* AM BCB */
 			dflmd = REM_MODE_AM;
 			rv = 0;
-		} else if ((m == 1 && d > 75000) || (m > 1 && m < 30)) { /* HF SWL */
+		} else if ((m == 1 && d > 75000) || (m > 1 && m < 30)) {
+			/* HF SWL */
 			dflmd = REM_MODE_AM;
 			rv = 0;
 		}
@@ -2696,7 +2738,8 @@ char check_tx_freq(struct rpt *myrpt)
 					rv = 0;
 					break;
 				}
-			} else if (radio_mhz == ulimit_mhz) { /* CASE 2: TX freq not in llimit mhz portion of band */
+			} else if (radio_mhz == ulimit_mhz) {
+				/* CASE 2: TX freq not in llimit mhz portion of band */
 				if (radio_decimals <= ulimit_decimals) {
 					ast_debug(4, "radio_decimals <= ulimit_decimals\n");
 					rv = 1;
@@ -2706,8 +2749,10 @@ char check_tx_freq(struct rpt *myrpt)
 					rv = 0;
 					break;
 				}
-			} else /* CASE 3: TX freq within a multi-Mhz band and ok */
+			} else {
+				/* CASE 3: TX freq within a multi-Mhz band and ok */
 				ast_debug(4, "Valid TX freq within a multi-Mhz band and ok.\n");
+			}
 			rv = 1;
 			break;
 		}

@@ -29,8 +29,9 @@ static int dahdi_set_radpar(struct ast_channel *chan, int param, int data)
 
 static int dahdi_radio_set_ctcss_decode(struct ast_channel *chan, int enable)
 {
-	int res = dahdi_set_radpar(chan, DAHDI_RADPAR_IGNORECT, enable);
+	int res;
 
+	res = dahdi_set_radpar(chan, DAHDI_RADPAR_IGNORECT, enable);
 	if (res) {
 		ast_log(LOG_WARNING, "Failed to set ignore CTCSS/DCS decode: %s\n", strerror(errno));
 	}
@@ -84,21 +85,18 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 	}
 
 	prm.radpar = DAHDI_RADPAR_UIOMODE;
-
 	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1) {
 		return -1;
 	}
 
 	oldmode = prm.data;
 	prm.radpar = DAHDI_RADPAR_UIODATA;
-
 	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_GETPARAM, &prm) == -1) {
 		return -1;
 	}
 
 	olddata = prm.data;
 	prm.radpar = DAHDI_RADPAR_REMMODE;
-
 	if ((asciiflag & 1) && strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
 		if (rpt_radio_set_param(myrpt->localrxchannel, RPT_RADPAR_REMMODE, RPT_RADPAR_REM_SERIAL_ASCII)) {
 			return -1;
@@ -120,17 +118,17 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 			}
 			usleep(6666);
 		}
-		prm.radpar = DAHDI_RADPAR_REMMODE;
 
+		prm.radpar = DAHDI_RADPAR_REMMODE;
 		if (asciiflag & 1) {
 			prm.data = DAHDI_RADPAR_REM_SERIAL_ASCII;
 		} else {
 			prm.data = DAHDI_RADPAR_REM_SERIAL;
 		}
-
 		if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1) {
 			return -1;
 		}
+
 		prm.radpar = DAHDI_RADPAR_REMCOMMAND;
 		prm.data = rxmaxbytes;
 		prm.buf[0] = txbuf[i];
@@ -141,7 +139,6 @@ int rpt_pciradio_serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int t
 		memcpy(prm.buf, txbuf, txbytes);
 		prm.index = txbytes;
 	}
-
 	if (ioctl(ast_channel_fd(myrpt->localrxchannel, 0), DAHDI_RADIO_SETPARAM, &prm) == -1) {
 		return -1;
 	}
