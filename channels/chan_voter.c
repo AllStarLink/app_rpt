@@ -4572,7 +4572,7 @@ static void *voter_reader(void *data)
 			if (DEBUG_ATLEAST(4) && client && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0) &&
 				ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) {
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-				strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
+				strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
 					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
 			}
@@ -4890,12 +4890,12 @@ static void *voter_reader(void *data)
 						if (DEBUG_ATLEAST(5) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
 							/* Get the time of the master client so we can display it */
 							timestuff = (time_t) master_time.vtime_sec;
-							strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
+							strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 							ast_debug(5, "MasterTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
 							/* Get the system time so we can display it */
 							gettimeofday(&timetv, NULL);
 							timestuff = (time_t) timetv.tv_sec;
-							strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
+							strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 							ast_debug(5, "SysTime:    %s.%03d\n", timestr, (int) timetv.tv_usec / 1000);
 							ast_debug(5, "Time diff between master and client: %lld ns\n", btime - ptime);
 							ast_debug(5, "VOTER drain index: %i\n)", index);
@@ -5361,7 +5361,7 @@ static void *voter_reader(void *data)
 				ast_verb(1, "PING (%s) Response:   seqno: %u  diff: %d ms\n", client->name, pingpacket.seqno, timediff);
 
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-				strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
+				strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 				/* ast_debug(3, "PING (%s):   seqno: %u %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec)); */
 
 				check_ping_done(client);
@@ -5420,7 +5420,7 @@ process_gps:
 				if (DEBUG_ATLEAST(4)) {
 					/* Get and display GPS Time that the client is sending us */
 					timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-					strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
+					strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 					ast_debug(4, "GPSTime:    %s.%09d from %s\n", timestr, ntohl(vph->curtime.vtime_nsec), client->name);
 					/* Get and display the System time */
 					gettimeofday(&timetv, NULL);
@@ -5430,11 +5430,11 @@ process_gps:
 						timetv.tv_usec -= 1000000;
 					}
 					timestuff = (time_t) timetv.tv_sec;
-					strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
+					strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 					ast_debug(4, "SysTime:    %s.%06d\n", timestr, (int) timetv.tv_usec);
 					/* Display the time from the master client */
 					timestuff = (time_t) master_time.vtime_sec;
-					strftime(timestr, sizeof(timestr), "%Y %T", localtime((time_t *) &timestuff));
+					strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 					ast_debug(4, "MasterTime: %s.%09d\n", timestr, master_time.vtime_nsec);
 				}
 				if (recvlen == sizeof(VOTER_PACKET_HEADER)) {
