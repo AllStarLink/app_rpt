@@ -892,12 +892,12 @@ void rpt_event_process(struct rpt *myrpt)
 				myrpt->cmdAction.functionNumber = thisAction;
 				myrpt->cmdAction.param[0] = 0;
 				if (argc > 1) {
-					ast_copy_string(myrpt->cmdAction.param, argv[1], MAX(sizeof(myrpt->cmdAction.param), MAXDTMF));
+					ast_copy_string(myrpt->cmdAction.param, argv[1], sizeof(myrpt->cmdAction.param));
 				}
 				myrpt->cmdAction.digits[0] = 0;
 				if (argc > 2) {
-					ast_copy_string(myrpt->cmdAction.digits, argv[2], MAX(sizeof(myrpt->cmdAction.digits), MAXDTMF));
-					snprintf(myrpt->cmdAction.param, MAX(sizeof(myrpt->cmdAction.param), MAXDTMF), "%s,%s", argv[1], argv[2]);
+					ast_copy_string(myrpt->cmdAction.digits, argv[2], sizeof(myrpt->cmdAction.digits));
+					snprintf(myrpt->cmdAction.param, sizeof(myrpt->cmdAction.param), "%s,%s", argv[1], argv[2]);
 				}
 				myrpt->cmdAction.command_source = SOURCE_RPT;
 				myrpt->cmdAction.state = CMD_STATE_READY;
