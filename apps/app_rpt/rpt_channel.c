@@ -143,7 +143,7 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 		if (!val) {
 			val = NODENAMES;
 		}
-		snprintf(fname, sizeof(fname) - 1, "%s/%s", val, name);
+		snprintf(fname, sizeof(fname), "%s/%s", val, name);
 		if (ast_fileexists(fname, NULL, ast_channel_language(mychannel)) > 0) {
 			return (sayfile(mychannel, fname));
 		}
@@ -174,17 +174,26 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 
 void do_dtmf_local(struct rpt *myrpt, char c)
 {
-	int i;
-	char digit;
-
 	if (c) {
-		snprintf(myrpt->dtmf_local_str + strlen(myrpt->dtmf_local_str), sizeof(myrpt->dtmf_local_str) - 1, "%c", c);
+		size_t len;
+
+		len = strlen(myrpt->dtmf_local_str);
+		if (len < sizeof(myrpt->dtmf_local_str) - 1) {
+			/* append DTMF digit */
+			myrpt->dtmf_local_str[len] = c;
+			myrpt->dtmf_local_str[len + 1] = '\0';
+		}
+
 		if (!myrpt->dtmf_local_timer) {
 			myrpt->dtmf_local_timer = DTMF_LOCAL_STARTTIME;
 		}
 	}
+
 	/* if at timeout */
 	if (myrpt->dtmf_local_timer == 1) {
+		int i;
+		char digit;
+
 		ast_debug(7, "time out dtmf_local_timer=%i\n", myrpt->dtmf_local_timer);
 
 		/* if anything in the string */

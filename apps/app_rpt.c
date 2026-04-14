@@ -801,7 +801,7 @@ void rpt_event_process(struct rpt *myrpt)
 			if (!myval) {
 				pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, "0");
 			}
-			snprintf(valbuf, sizeof(valbuf) - 1, "$[ %s ]", argv[2]);
+			snprintf(valbuf, sizeof(valbuf), "$[ %s ]", argv[2]);
 			buf[0] = 0;
 			pbx_substitute_variables_helper(myrpt->rxchannel, valbuf, buf, sizeof(buf) - 1);
 			if (pbx_checkcondition(buf)) {
@@ -892,12 +892,12 @@ void rpt_event_process(struct rpt *myrpt)
 				myrpt->cmdAction.functionNumber = thisAction;
 				myrpt->cmdAction.param[0] = 0;
 				if (argc > 1) {
-					ast_copy_string(myrpt->cmdAction.param, argv[1], MAXDTMF - 1);
+					ast_copy_string(myrpt->cmdAction.param, argv[1], sizeof(myrpt->cmdAction.param));
 				}
 				myrpt->cmdAction.digits[0] = 0;
 				if (argc > 2) {
-					ast_copy_string(myrpt->cmdAction.digits, argv[2], MAXDTMF - 1);
-					snprintf(myrpt->cmdAction.param, MAXDTMF - 1, "%s,%s", argv[1], argv[2]);
+					ast_copy_string(myrpt->cmdAction.digits, argv[2], sizeof(myrpt->cmdAction.digits));
+					snprintf(myrpt->cmdAction.param, sizeof(myrpt->cmdAction.param), "%s,%s", argv[1], argv[2]);
 				}
 				myrpt->cmdAction.command_source = SOURCE_RPT;
 				myrpt->cmdAction.state = CMD_STATE_READY;
@@ -1700,8 +1700,7 @@ static inline void collect_function_digits_post(struct rpt *myrpt, enum rpt_func
 	case DC_COMPLETEQUIET:
 		myrpt->totalexecdcommands++;
 		myrpt->dailyexecdcommands++;
-		ast_copy_string(myrpt->lastdtmfcommand, cmd, MAXDTMF);
-		myrpt->lastdtmfcommand[MAXDTMF - 1] = '\0';
+		ast_copy_string(myrpt->lastdtmfcommand, cmd, sizeof(myrpt->lastdtmfcommand));
 		myrpt->rem_dtmfbuf[0] = 0;
 		myrpt->rem_dtmfidx = -1;
 		myrpt->rem_dtmf_time = 0;
@@ -1735,7 +1734,7 @@ static void do_aprstt(struct rpt *myrpt)
 	char cmd[300] = "";
 	char overlay, aprscall[100], func[100];
 
-	snprintf(cmd, sizeof(cmd) - 1, "A%s", myrpt->dtmfbuf);
+	snprintf(cmd, sizeof(cmd), "A%s", myrpt->dtmfbuf);
 	/*! \todo we need to support all 4 types of APRStt
 	 * we only support the 'A' type for call sign
 	 */
@@ -2043,7 +2042,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			}
 		}
 		if (i < TOPKEYN) {
-			ast_copy_string(myrpt->topkey[i].node, src, TOPKEYMAXSTR - 1);
+			ast_copy_string(myrpt->topkey[i].node, src, sizeof(myrpt->topkey[i].node));
 			myrpt->topkey[i].timesince = ts;
 			myrpt->topkey[i].keyed = seq;
 		}
@@ -2313,8 +2312,7 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum
 	case DC_COMPLETEQUIET:
 		myrpt->totalexecdcommands++;
 		myrpt->dailyexecdcommands++;
-		ast_copy_string(myrpt->lastdtmfcommand, myrpt->dtmfbuf, MAXDTMF);
-		myrpt->lastdtmfcommand[MAXDTMF - 1] = '\0';
+		ast_copy_string(myrpt->lastdtmfcommand, myrpt->dtmfbuf, sizeof(myrpt->lastdtmfcommand));
 		myrpt->dtmfbuf[0] = 0;
 		myrpt->dtmfidx = -1;
 		myrpt->dtmf_time_rem = 0;
@@ -2466,7 +2464,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	struct ast_format_cap *cap;
 
 	ast_debug(1, "Attempting Reconnect");
-	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp) - 1, 1)) {
+	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp), 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
@@ -2635,8 +2633,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 				case DC_COMPLETEQUIET:
 					myrpt->totalexecdcommands++;
 					myrpt->dailyexecdcommands++;
-					ast_copy_string(myrpt->lastdtmfcommand, cmd, MAXDTMF);
-					myrpt->lastdtmfcommand[MAXDTMF - 1] = '\0';
+					ast_copy_string(myrpt->lastdtmfcommand, cmd, sizeof(myrpt->lastdtmfcommand));
 					myrpt->dtmfbuf[0] = 0;
 					myrpt->dtmfidx = -1;
 					myrpt->dtmf_time = 0;
@@ -2663,7 +2660,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			myrpt->patchfarenddisconnect = 0;
 			myrpt->patchdialtime = 0;
 			myrpt->calldigittimer = 0;
-			ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, MAXPATCHCONTEXT - 1);
+			ast_copy_string(myrpt->patchcontext, myrpt->p.ourcontext, sizeof(myrpt->patchcontext));
 			myrpt->cidx = 0;
 			myrpt->exten[myrpt->cidx] = 0;
 			rpt_mutex_unlock(&myrpt->lock);
@@ -6697,12 +6694,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 				strcpy(tmp2, tmp);
 				if (options && callstr)
-					snprintf(tmp2, sizeof(tmp2) - 1, "0%s%s", callstr, tmp);
+					snprintf(tmp2, sizeof(tmp2), "0%s%s", callstr, tmp);
 				mypfx = ast_variable_retrieve(cfg, "proxy", "nodeprefix");
 				if (mypfx)
-					snprintf(dstr, sizeof(dstr) - 1, "radio-proxy@%s%s/%s", mypfx, tmp, tmp2);
+					snprintf(dstr, sizeof(dstr), "radio-proxy@%s%s/%s", mypfx, tmp, tmp2);
 				else
-					snprintf(dstr, sizeof(dstr) - 1, "radio-proxy@%s/%s", tmp, tmp2);
+					snprintf(dstr, sizeof(dstr), "radio-proxy@%s/%s", tmp, tmp2);
 				ast_config_destroy(cfg);
 				rpt_forward(chan, dstr, b1);
 				return -1;
@@ -6960,7 +6957,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		/* look for his reported node string */
-		if (node_lookup(myrpt, b1, tmp, sizeof(tmp) - 1, 0)) {
+		if (node_lookup(myrpt, b1, tmp, sizeof(tmp), 0)) {
 			ast_log(LOG_WARNING, "Reported node %s cannot be found!!\n", b1);
 			return -1;
 		}

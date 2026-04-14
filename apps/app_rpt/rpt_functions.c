@@ -172,7 +172,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			ao2_ref(l, -1);
 			return DC_COMPLETE;
 		}
-		ast_copy_string(myrpt->lastlinknode, digitbuf, MAXNODESTR - 1);
+		ast_copy_string(myrpt->lastlinknode, digitbuf, sizeof(myrpt->lastlinknode));
 		l->retries = l->max_retries + 1;
 		l->disced = RPT_LINK_DISCONNECT;
 		l->hasconnected = 1;
@@ -285,7 +285,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		strcpy(myrpt->lastlinknode, digitbuf);
-		ast_copy_string(myrpt->cmdnode, digitbuf, sizeof(myrpt->cmdnode) - 1);
+		ast_copy_string(myrpt->cmdnode, digitbuf, sizeof(myrpt->cmdnode));
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, REMGO, NULL);
@@ -374,7 +374,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (!s2)
 			break;
 		*s2 = 0;
-		snprintf(tmp, MAX_TEXTMSG_SIZE - 1, "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
+		snprintf(tmp, MIN(sizeof(tmp), MAX_TEXTMSG_SIZE), "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
 		/* otherwise, send it to all of em */
 		ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, tmp);
@@ -638,15 +638,15 @@ enum rpt_function_response function_remote(struct rpt *myrpt, char *param, char 
 		}
 		offsave = myrpt->offset;
 		modesave = myrpt->remmode;
-		ast_copy_string(savestr, myrpt->freq, sizeof(savestr) - 1);
-		ast_copy_string(myrpt->freq, freq, sizeof(myrpt->freq) - 1);
+		ast_copy_string(savestr, myrpt->freq, sizeof(savestr));
+		ast_copy_string(myrpt->freq, freq, sizeof(myrpt->freq));
 		myrpt->offset = offset;
 		myrpt->remmode = defmode;
 
 		if (setrem(myrpt) == -1) {
 			myrpt->offset = offsave;
 			myrpt->remmode = modesave;
-			ast_copy_string(myrpt->freq, savestr, sizeof(myrpt->freq) - 1);
+			ast_copy_string(myrpt->freq, savestr, sizeof(myrpt->freq));
 			goto invalid_freq;
 		}
 		if (strcmp(myrpt->remoterig, REMOTE_RIG_TM271) && strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)) {
@@ -689,13 +689,13 @@ invalid_freq:
 		if (s) {
 			*s = '.';
 		}
-		ast_copy_string(savestr, myrpt->rxpl, sizeof(savestr) - 1);
-		ast_copy_string(myrpt->rxpl, tmp, sizeof(myrpt->rxpl) - 1);
+		ast_copy_string(savestr, myrpt->rxpl, sizeof(savestr));
+		ast_copy_string(myrpt->rxpl, tmp, sizeof(myrpt->rxpl));
 		if ((!strcmp(myrpt->remoterig, REMOTE_RIG_RBI)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_FT100))) {
-			ast_copy_string(myrpt->txpl, tmp, sizeof(myrpt->txpl) - 1);
+			ast_copy_string(myrpt->txpl, tmp, sizeof(myrpt->txpl));
 		}
 		if (setrem(myrpt) == -1) {
-			ast_copy_string(myrpt->rxpl, savestr, sizeof(myrpt->rxpl) - 1);
+			ast_copy_string(myrpt->rxpl, savestr, sizeof(myrpt->rxpl));
 			return DC_ERROR;
 		}
 		return DC_COMPLETE;
@@ -752,13 +752,13 @@ invalid_freq:
 			*s = '.';
 		}
 		rpt_mutex_lock(&myrpt->lock);
-		ast_copy_string(savestr, myrpt->txpl, sizeof(savestr) - 1);
-		ast_copy_string(myrpt->txpl, tmp, sizeof(myrpt->txpl) - 1);
+		ast_copy_string(savestr, myrpt->txpl, sizeof(savestr));
+		ast_copy_string(myrpt->txpl, tmp, sizeof(myrpt->txpl));
 		rpt_mutex_unlock(&myrpt->lock);
 
 		if (setrem(myrpt) == -1) {
 			rpt_mutex_lock(&myrpt->lock);
-			ast_copy_string(myrpt->txpl, savestr, sizeof(myrpt->txpl) - 1);
+			ast_copy_string(myrpt->txpl, savestr, sizeof(myrpt->txpl));
 			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
 		}
@@ -826,7 +826,7 @@ invalid_freq:
 				*cp2 = 0;
 				ast_copy_string(myrpt->loginlevel, cp2 + 1, sizeof(myrpt->loginlevel));
 			}
-			ast_copy_string(myrpt->loginuser, cp1 + 1, sizeof(myrpt->loginuser) - 1);
+			ast_copy_string(myrpt->loginuser, cp1 + 1, sizeof(myrpt->loginuser));
 			rpt_mutex_unlock(&myrpt->lock);
 			donodelog_fmt(myrpt, "LOGIN,%s,%s", myrpt->loginuser, myrpt->loginlevel);
 			ast_debug(1, "loginuser %s level %s\n", myrpt->loginuser, myrpt->loginlevel);
@@ -1911,7 +1911,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			ast_log(LOG_WARNING, "app_gps is not loaded.  APRStt failed\n");
 			return DC_COMPLETE;
 		}
-		snprintf(func, sizeof(func) - 1, "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt ? "general" : myrpt->p.aprstt, argc > 2 ? argv[2][0] : ' ');
+		snprintf(func, sizeof(func), "APRS_SENDTT(%s,%c)", !myrpt->p.aprstt ? "general" : myrpt->p.aprstt, argc > 2 ? argv[2][0] : ' ');
 		/* execute the APRS_SENDTT function in app_gps*/
 		if (!ast_func_write(NULL, func, argv[1])) {
 			if (myatoi(argv[0]) == 63) {

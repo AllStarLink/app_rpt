@@ -97,7 +97,7 @@ void mdc1200_notify(struct rpt *myrpt, char *fromnode, char *data)
 				return;
 			}
 			time(&t);
-			strftime(str, sizeof(str) - 1, "%Y%m%d%H%M%S", localtime(&t));
+			strftime(str, sizeof(str), "%Y%m%d%H%M%S", localtime(&t));
 			fprintf(fp, "%s %s %s\n", str, myrpt->name, data);
 			fl.l_type = F_UNLCK;
 			fcntl(fileno(fp), F_SETLK, &fl);
