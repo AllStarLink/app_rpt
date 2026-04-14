@@ -11,7 +11,7 @@ reviews:
     - path: "**/*.c, **/*.h"
       instructions: |
         ENFORCE THESE FORMATTING RULES EXACTLY:
-        1. Use 4-space indentation with HARD TABS (no spaces for indentation)
+        1. Use 4-space indentation using HARD TABS (no spaces for indentation)
         2. Linux brace style: opening brace on new line for functions, same line for control statements
         3. Maximum 1 empty line between code blocks
         4. No trailing whitespace
