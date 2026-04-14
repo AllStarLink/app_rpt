@@ -374,7 +374,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if (!s2)
 			break;
 		*s2 = 0;
-		snprintf(tmp, MAX(sizeof(tmp), MAX_TEXTMSG_SIZE), "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
+		snprintf(tmp, MIN(sizeof(tmp), MAX_TEXTMSG_SIZE), "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
 		/* otherwise, send it to all of em */
 		ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, tmp);
