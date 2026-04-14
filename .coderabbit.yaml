@@ -19,7 +19,7 @@ reviews:
           6. One blank line after variable definitions before first line of code
           7. Column limit: 130 characters
           8. Format must match the project's .dev/.clang-format configuration
-          9. Reject PRs that do not follow these whitespace/formatting rules
+          9. Request changes to PRs that do not follow these whitespace/formatting rules
           10. Do not suggest or allow alternative formatting styles
 
           ALWAYS REQUIRE PROPER FORMATTING ON ALL NEW CODE CHANGES.
@@ -30,6 +30,10 @@ reviews:
     github-checks:
       enabled: true
       timeout_ms: 100000
+    spellcheck:
+      enabled: true
+    clang:
+      enabled: true
 code_generation:
   docstrings:
     language: en-US
