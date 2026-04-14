@@ -174,14 +174,14 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 
 void do_dtmf_local(struct rpt *myrpt, char c)
 {
-	int i;
-	char digit;
-
 	if (c) {
-		i = strlen(myrpt->dtmf_local_str);
-		if (i < sizeof(myrpt->dtmf_local_str) - 1) {
-			myrpt->dtmf_local_str[i++] = c;
-			myrpt->dtmf_local_str[i] = '\0';
+		size_t len;
+
+		len = strlen(myrpt->dtmf_local_str);
+		if (len < sizeof(myrpt->dtmf_local_str) - 1) {
+			/* append DTMF digit */
+			myrpt->dtmf_local_str[len] = c;
+			myrpt->dtmf_local_str[len + 1] = '\0';
 		}
 
 		if (!myrpt->dtmf_local_timer) {
@@ -191,6 +191,9 @@ void do_dtmf_local(struct rpt *myrpt, char c)
 
 	/* if at timeout */
 	if (myrpt->dtmf_local_timer == 1) {
+		int i;
+		char digit;
+
 		ast_debug(7, "time out dtmf_local_timer=%i\n", myrpt->dtmf_local_timer);
 
 		/* if anything in the string */
