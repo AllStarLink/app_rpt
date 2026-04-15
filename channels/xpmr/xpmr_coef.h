@@ -46,7 +46,7 @@ static const u32 dtmf_col[] = { 12090, 13360, 14770, 16330 };
 
 #define CTCSS_COEF_INT 120
 #define CTCSS_SAMPLE_RATE 8000
-#define TDIV(x) ((CTCSS_SAMPLE_RATE * 1000 / x) + 5) / 10
+#define TDIV(x) ((CTCSS_SAMPLE_RATE * 1000 / (x)) + 5) / 10
 
 #if 0
 static i32 coef_ctcss[4][5]=

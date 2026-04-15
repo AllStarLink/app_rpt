@@ -37,6 +37,7 @@ int serial_open(char *fname, int speed, int stop2)
 	memset(&mode, 0, sizeof(mode));
 	if (tcgetattr(fd, &mode)) {
 		ast_log(LOG_WARNING, "Unable to get serial parameters on %s: %s\n", fname, strerror(errno));
+		close(fd);
 		return -1;
 	}
 

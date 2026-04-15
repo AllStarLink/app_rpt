@@ -1027,7 +1027,7 @@ static int set_ctcss_mode_ft897(struct rpt *myrpt, char txplon, char rxplon)
 	} else if (!rxplon && txplon) {
 		cmdstr[0] = 0x4A; /* Encode only */
 	} else if (rxplon && !txplon) {
-		cmdstr[0] = 0x3A; /* Encode only */
+		cmdstr[0] = 0x3A; /* Decode only */
 	} else {
 		cmdstr[0] = 0x8A; /* OFF */
 	}

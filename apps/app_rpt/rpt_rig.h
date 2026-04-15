@@ -30,7 +30,7 @@ int check_freq(struct rpt *myrpt, int m, int d, enum rpt_mode *defmode);
 
 /*!
  * \brief Check TX frequency before transmitting
- * \retval 1 if tx frequency in ok.
+ * \retval 1 if tx frequency is ok.
  */
 char check_tx_freq(struct rpt *myrpt);
 

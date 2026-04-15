@@ -3,7 +3,7 @@
 #define QUOTECHR 34
 
 /*
- * Match a keyword in a list, and return index of string plus 1 if there was a match,* else return 0.
+ * Match a keyword in a list, and return index of string plus 1 if there was a match, else return 0.
  * If param is passed in non-null, then it will be set to the first character past the match
  */
 
