@@ -46,7 +46,11 @@
 #include <errno.h>
 #include <usb.h>
 #include <search.h>
+
+#define ALSA_PCM_NEW_HW_PARAMS_API
+#define ALSA_PCM_NEW_SW_PARAMS_API
 #include <alsa/asoundlib.h>
+
 #include <linux/ppdev.h>
 #include <linux/parport.h>
 #include <linux/version.h>
@@ -136,6 +140,19 @@ static struct ast_jb_conf global_jbconf;
 #define MS_PER_FRAME 20						   /* 20 ms frames */
 #define MS_TO_FRAMES(ms) ((ms) / MS_PER_FRAME) /* convert ms to frames */
 
+#define ALSA_INDEV "default"
+#define ALSA_OUTDEV "default"
+#define DESIRED_RATE 8000
+
+/* Lets use 160 sample frames, just like GSM.  */
+#define FRAME_SIZE 160
+#define PERIOD_FRAMES 80 /* 80 Frames, at 2 bytes each */
+
+/* When you set the frame size, you have to come up with
+   the right buffer format as well. */
+/* 5 64-byte frames = one frame */
+#define BUFFER_FMT ((buffersize * 10) << 16) | (0x0006);
+
 /* file handles for writing debug audio packets */
 static FILE *frxcapraw = NULL;
 static FILE *frxcapcooked = NULL;
@@ -143,6 +160,7 @@ static FILE *ftxcapraw = NULL;
 
 AST_MUTEX_DEFINE_STATIC(usb_dev_lock);
 AST_MUTEX_DEFINE_STATIC(pp_lock);
+// AST_MUTEX_DEFINE_STATIC(alsalock);
 
 /* variables for communicating with the parallel port */
 static int8_t pp_val;
@@ -336,7 +354,12 @@ struct chan_simpleusb_pvt {
 	struct audiostatistics txaudiostats;
 
 	int legacyaudioscaling;
+	int readdev;
+	int writedev;
+	char indevname[50];
+	char outdevname[50];
 
+	snd_pcm_t *icard, *ocard;
 	ast_mutex_t usblock;
 };
 
@@ -383,6 +406,7 @@ static int simpleusb_setoption(struct ast_channel *chan, int option, void *data,
 static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *cmd);
 static void tune_write(struct chan_simpleusb_pvt *o);
 static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int intflag);
+static snd_pcm_format_t format;
 
 static char *simpleusb_active; /* the active device */
 
@@ -411,6 +435,149 @@ static struct ast_channel_tech simpleusb_tech = {
 	.fixup = simpleusb_fixup,
 	.setoption = simpleusb_setoption,
 };
+
+/*!
+ * \brief Initialize the alsa card.
+ * \param dev		Audio value to filter.
+ * \param stream	The stream we are connecting to
+ * \return 			Sound PCM handle. NULL on failure.
+ */
+static snd_pcm_t *alsa_card_init(struct chan_simpleusb_pvt *pvt, snd_pcm_stream_t stream)
+{
+	int err;
+	int direction;
+	snd_pcm_t *handle = NULL;
+	snd_pcm_hw_params_t *hwparams = NULL;
+	snd_pcm_sw_params_t *swparams = NULL;
+	struct pollfd pfd;
+	snd_pcm_uframes_t period_size = PERIOD_FRAMES * 4;
+	snd_pcm_uframes_t buffer_size = 0;
+	unsigned int rate = DESIRED_RATE;
+	snd_pcm_uframes_t start_threshold, stop_threshold;
+	const char *dev;
+
+	if (stream == SND_PCM_STREAM_CAPTURE) {
+		dev = pvt->indevname;
+	} else {
+		dev = pvt->outdevname;
+	}
+
+	err = snd_pcm_open(&handle, dev, stream, SND_PCM_NONBLOCK);
+	if (err < 0) {
+		ast_log(LOG_ERROR, "snd_pcm_open failed: %s\n", snd_strerror(err));
+		return NULL;
+	} else {
+		ast_debug(1, "Opening device %s in %s mode\n", dev, (stream == SND_PCM_STREAM_CAPTURE) ? "read" : "write");
+	}
+
+	hwparams = ast_alloca(snd_pcm_hw_params_sizeof());
+	memset(hwparams, 0, snd_pcm_hw_params_sizeof());
+	snd_pcm_hw_params_any(handle, hwparams);
+
+	err = snd_pcm_hw_params_set_access(handle, hwparams, SND_PCM_ACCESS_RW_INTERLEAVED);
+	if (err < 0)
+		ast_log(LOG_ERROR, "set_access failed: %s\n", snd_strerror(err));
+
+	err = snd_pcm_hw_params_set_format(handle, hwparams, format);
+	if (err < 0)
+		ast_log(LOG_ERROR, "set_format failed: %s\n", snd_strerror(err));
+
+	err = snd_pcm_hw_params_set_channels(handle, hwparams, 1);
+	if (err < 0)
+		ast_log(LOG_ERROR, "set_channels failed: %s\n", snd_strerror(err));
+
+	direction = 0;
+	err = snd_pcm_hw_params_set_rate_near(handle, hwparams, &rate, &direction);
+	if (rate != DESIRED_RATE)
+		ast_log(LOG_WARNING, "Rate not correct, requested %d, got %u\n", DESIRED_RATE, rate);
+
+	direction = 0;
+	err = snd_pcm_hw_params_set_period_size_near(handle, hwparams, &period_size, &direction);
+	if (err < 0)
+		ast_log(LOG_ERROR, "period_size(%lu frames) is bad: %s\n", period_size, snd_strerror(err));
+	else {
+		ast_debug(1, "Period size is %d\n", err);
+	}
+
+	buffer_size = 4096 * 2; /* period_size * 16; */
+	err = snd_pcm_hw_params_set_buffer_size_near(handle, hwparams, &buffer_size);
+	if (err < 0)
+		ast_log(LOG_WARNING, "Problem setting buffer size of %lu: %s\n", buffer_size, snd_strerror(err));
+	else {
+		ast_debug(1, "Buffer size is set to %d frames\n", err);
+	}
+
+	err = snd_pcm_hw_params(handle, hwparams);
+	if (err < 0)
+		ast_log(LOG_ERROR, "Couldn't set the new hw params: %s\n", snd_strerror(err));
+
+	swparams = ast_alloca(snd_pcm_sw_params_sizeof());
+	memset(swparams, 0, snd_pcm_sw_params_sizeof());
+	snd_pcm_sw_params_current(handle, swparams);
+
+	if (stream == SND_PCM_STREAM_PLAYBACK)
+		start_threshold = period_size;
+	else
+		start_threshold = 1;
+
+	err = snd_pcm_sw_params_set_start_threshold(handle, swparams, start_threshold);
+	if (err < 0)
+		ast_log(LOG_ERROR, "start threshold: %s\n", snd_strerror(err));
+
+	if (stream == SND_PCM_STREAM_PLAYBACK)
+		stop_threshold = buffer_size;
+	else
+		stop_threshold = buffer_size;
+
+	err = snd_pcm_sw_params_set_stop_threshold(handle, swparams, stop_threshold);
+	if (err < 0)
+		ast_log(LOG_ERROR, "stop threshold: %s\n", snd_strerror(err));
+
+	err = snd_pcm_sw_params(handle, swparams);
+	if (err < 0)
+		ast_log(LOG_ERROR, "sw_params: %s\n", snd_strerror(err));
+
+	err = snd_pcm_poll_descriptors_count(handle);
+	if (err <= 0)
+		ast_log(LOG_ERROR, "Unable to get a poll descriptors count, error is %s\n", snd_strerror(err));
+	if (err != 1) {
+		ast_debug(1, "Can't handle more than one device\n");
+	}
+
+	snd_pcm_poll_descriptors(handle, &pfd, err);
+	ast_debug(1, "Acquired fd %d from the poll descriptor\n", pfd.fd);
+
+	if (stream == SND_PCM_STREAM_CAPTURE) {
+		pvt->readdev = pfd.fd;
+	} else {
+		pvt->writedev = pfd.fd;
+	}
+
+	return handle;
+}
+
+/*!
+ * \brief 	Initialize the sound card.
+ * populates the global alsa structure
+ * \return 	write device. -1 on failure.
+ */
+static int soundcard_init(struct chan_simpleusb_pvt *pvt)
+{
+	pvt->icard = alsa_card_init(pvt, SND_PCM_STREAM_CAPTURE);
+	if (!pvt->icard) {
+		ast_log(LOG_ERROR, "Problem opening alsa capture device\n");
+		return -1;
+	}
+
+	pvt->ocard = alsa_card_init(pvt, SND_PCM_STREAM_PLAYBACK);
+
+	if (!pvt->ocard) {
+		ast_log(LOG_ERROR, "Problem opening ALSA playback device\n");
+		return -1;
+	}
+
+	return 1;
+}
 
 /*!
  * \brief FIR Low pass filter.
@@ -550,7 +717,7 @@ static int16_t hpass(int16_t input, float *restrict xv, float *restrict yv)
  * \param o		Channel private data.
  * \returns 0	Always returns zero.
  */
-static int hidhdwconfig(struct chan_simpleusb_pvt *o)
+static int hidhdwconfig(struct chan_simpleusb_pvt *pvt)
 {
 	int i;
 
@@ -559,88 +726,88 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
 	 *  Apparently, in a REAL CM-108, GPIO really works as a GPIO
 	 */
 
-	if (o->hdwtype == 1) {
+	if (pvt->hdwtype == 1) {
 		/* sphusb */
-		o->hid_gpio_ctl = 0x08;	 /* set GPIO4 to output mode */
-		o->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
-		o->hid_io_cor = 4;		 /* GPIO3 is COR */
-		o->hid_io_cor_loc = 1;	 /* GPIO3 is COR */
-		o->hid_io_ctcss = 2;	 /* GPIO 2 is External CTCSS */
-		o->hid_io_ctcss_loc = 1; /* is GPIO 2 */
-		o->hid_io_ptt = 8;		 /* GPIO 4 is PTT */
-		o->hid_gpio_loc = 1;	 /* For ALL GPIO */
-		o->valid_gpios = 1;		 /* for GPIO 1 */
-	} else if (o->hdwtype == 0) {
+		pvt->hid_gpio_ctl = 0x08;  /* set GPIO4 to output mode */
+		pvt->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
+		pvt->hid_io_cor = 4;	   /* GPIO3 is COR */
+		pvt->hid_io_cor_loc = 1;   /* GPIO3 is COR */
+		pvt->hid_io_ctcss = 2;	   /* GPIO 2 is External CTCSS */
+		pvt->hid_io_ctcss_loc = 1; /* is GPIO 2 */
+		pvt->hid_io_ptt = 8;	   /* GPIO 4 is PTT */
+		pvt->hid_gpio_loc = 1;	   /* For ALL GPIO */
+		pvt->valid_gpios = 1;	   /* for GPIO 1 */
+	} else if (pvt->hdwtype == 0) {
 		/* dudeusb */
-		o->hid_gpio_ctl = 0x0c;	 /* set GPIO 3 & 4 to output mode */
-		o->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
-		o->hid_io_cor = 2;		 /* VOLD DN is COR */
-		o->hid_io_cor_loc = 0;	 /* VOL DN COR */
-		o->hid_io_ctcss = 1;	 /* VOL UP External CTCSS */
-		o->hid_io_ctcss_loc = 0; /* VOL UP External CTCSS */
-		o->hid_io_ptt = 4;		 /* GPIO 3 is PTT */
-		o->hid_gpio_loc = 1;	 /* For ALL GPIO */
-		o->valid_gpios = 0xfb;	 /* for GPIO 1,2,4,5,6,7,8 (5,6,7,8 for CM-119 only) */
-	} else if (o->hdwtype == 2) {
+		pvt->hid_gpio_ctl = 0x0c;  /* set GPIO 3 & 4 to output mode */
+		pvt->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
+		pvt->hid_io_cor = 2;	   /* VOLD DN is COR */
+		pvt->hid_io_cor_loc = 0;   /* VOL DN COR */
+		pvt->hid_io_ctcss = 1;	   /* VOL UP External CTCSS */
+		pvt->hid_io_ctcss_loc = 0; /* VOL UP External CTCSS */
+		pvt->hid_io_ptt = 4;	   /* GPIO 3 is PTT */
+		pvt->hid_gpio_loc = 1;	   /* For ALL GPIO */
+		pvt->valid_gpios = 0xfb;   /* for GPIO 1,2,4,5,6,7,8 (5,6,7,8 for CM-119 only) */
+	} else if (pvt->hdwtype == 2) {
 		/* NHRC (N1KDO) (dudeusb w/o user GPIO) */
-		o->hid_gpio_ctl = 0x04;	 /* set GPIO 3 to output mode */
-		o->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
-		o->hid_io_cor = 2;		 /* VOLD DN is COR */
-		o->hid_io_cor_loc = 0;	 /* VOL DN COR */
-		o->hid_io_ctcss = 1;	 /* VOL UP is External CTCSS */
-		o->hid_io_ctcss_loc = 0; /* VOL UP CTCSS */
-		o->hid_io_ptt = 4;		 /* GPIO 3 is PTT */
-		o->hid_gpio_loc = 1;	 /* For ALL GPIO */
-		o->valid_gpios = 0;		 /* for GPIO 1,2,4 */
-	} else if (o->hdwtype == 3) {
+		pvt->hid_gpio_ctl = 0x04;  /* set GPIO 3 to output mode */
+		pvt->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
+		pvt->hid_io_cor = 2;	   /* VOLD DN is COR */
+		pvt->hid_io_cor_loc = 0;   /* VOL DN COR */
+		pvt->hid_io_ctcss = 1;	   /* VOL UP is External CTCSS */
+		pvt->hid_io_ctcss_loc = 0; /* VOL UP CTCSS */
+		pvt->hid_io_ptt = 4;	   /* GPIO 3 is PTT */
+		pvt->hid_gpio_loc = 1;	   /* For ALL GPIO */
+		pvt->valid_gpios = 0;	   /* for GPIO 1,2,4 */
+	} else if (pvt->hdwtype == 3) {
 		/* custom version */
-		o->hid_gpio_ctl = 0x0c;	 /* set GPIO 3 & 4 to output mode */
-		o->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
-		o->hid_io_cor = 2;		 /* VOLD DN is COR */
-		o->hid_io_cor_loc = 0;	 /* VOL DN COR */
-		o->hid_io_ctcss = 2;	 /* GPIO 2 is External CTCSS */
-		o->hid_io_ctcss_loc = 1; /* is GPIO 2 */
-		o->hid_io_ptt = 4;		 /* GPIO 3 is PTT */
-		o->hid_gpio_loc = 1;	 /* For ALL GPIO */
-		o->valid_gpios = 1;		 /* for GPIO 1 */
+		pvt->hid_gpio_ctl = 0x0c;  /* set GPIO 3 & 4 to output mode */
+		pvt->hid_gpio_ctl_loc = 2; /* For CTL of GPIO */
+		pvt->hid_io_cor = 2;	   /* VOLD DN is COR */
+		pvt->hid_io_cor_loc = 0;   /* VOL DN COR */
+		pvt->hid_io_ctcss = 2;	   /* GPIO 2 is External CTCSS */
+		pvt->hid_io_ctcss_loc = 1; /* is GPIO 2 */
+		pvt->hid_io_ptt = 4;	   /* GPIO 3 is PTT */
+		pvt->hid_gpio_loc = 1;	   /* For ALL GPIO */
+		pvt->valid_gpios = 1;	   /* for GPIO 1 */
 	}
 	/* validate clipledgpio setting (Clip LED GPIO#) */
-	if (o->clipledgpio) {
-		if (o->clipledgpio >= GPIO_PINCOUNT || !(o->valid_gpios & (1 << (o->clipledgpio - 1)))) {
-			ast_log(LOG_ERROR, "Channel %s: clipledgpio = GPIO%d not supported\n", o->name, o->clipledgpio);
-			o->clipledgpio = 0;
+	if (pvt->clipledgpio) {
+		if (pvt->clipledgpio >= GPIO_PINCOUNT || !(pvt->valid_gpios & (1 << (pvt->clipledgpio - 1)))) {
+			ast_log(LOG_ERROR, "Channel %s: clipledgpio = GPIO%d not supported\n", pvt->name, pvt->clipledgpio);
+			pvt->clipledgpio = 0;
 		} else {
-			o->hid_gpio_ctl |= 1 << (o->clipledgpio - 1); /* confirm Clip LED GPIO set to output mode */
+			pvt->hid_gpio_ctl |= 1 << (pvt->clipledgpio - 1); /* confirm Clip LED GPIO set to output mode */
 		}
 	}
-	o->hid_gpio_val = 0;
+	pvt->hid_gpio_val = 0;
 	for (i = 0; i < GPIO_PINCOUNT; i++) {
 		/* skip if this one not specified */
-		if (!o->gpios[i]) {
+		if (!pvt->gpios[i]) {
 			continue;
 		}
 		/* skip if not out */
-		if (strncasecmp(o->gpios[i], "out", 3)) {
+		if (strncasecmp(pvt->gpios[i], "out", 3)) {
 			continue;
 		}
 		/* skip if PTT */
-		if ((1 << i) & o->hid_io_ptt) {
-			ast_log(LOG_ERROR, "Channel %s: You can't specify gpio%d, since its the PTT.\n", o->name, i + 1);
+		if ((1 << i) & pvt->hid_io_ptt) {
+			ast_log(LOG_ERROR, "Channel %s: You can't specify gpio%d, since its the PTT.\n", pvt->name, i + 1);
 			continue;
 		}
 		/* skip if not a valid GPIO */
-		if (!(o->valid_gpios & (1 << i))) {
-			ast_log(LOG_ERROR, "Channel %s: You can't specify gpio%d, it is not valid in this configuration.\n", o->name, i + 1);
+		if (!(pvt->valid_gpios & (1 << i))) {
+			ast_log(LOG_ERROR, "Channel %s: You can't specify gpio%d, it is not valid in this configuration.\n", pvt->name, i + 1);
 			continue;
 		}
-		o->hid_gpio_ctl |= (1 << i); /* set this one to output, also */
+		pvt->hid_gpio_ctl |= (1 << i); /* set this one to output, also */
 		/* if default value is 1, set it */
-		if (!strcasecmp(o->gpios[i], "out1")) {
-			o->hid_gpio_val |= (1 << i);
+		if (!strcasecmp(pvt->gpios[i], "out1")) {
+			pvt->hid_gpio_val |= (1 << i);
 		}
 	}
-	if (o->invertptt) {
-		o->hid_gpio_val |= o->hid_io_ptt;
+	if (pvt->invertptt) {
+		pvt->hid_gpio_val |= pvt->hid_io_ptt;
 	}
 	return 0;
 }
@@ -651,20 +818,20 @@ static int hidhdwconfig(struct chan_simpleusb_pvt *o)
  *	evaluate the gpio pins.
  * \param o		Channel private data.
  */
-static void kickptt(const struct chan_simpleusb_pvt *o)
+static void kickptt(const struct chan_simpleusb_pvt *pvt)
 {
 	char c = 0;
 	int res;
 
-	if (!o) {
+	if (!pvt) {
 		return;
 	}
-	if (o->pttkick[1] == -1) {
+	if (pvt->pttkick[1] == -1) {
 		return;
 	}
-	res = write(o->pttkick[1], &c, 1);
+	res = write(pvt->pttkick[1], &c, 1);
 	if (res <= 0) {
-		ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", o->name, strerror(errno));
+		ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", pvt->name, strerror(errno));
 	}
 }
 
@@ -1567,9 +1734,12 @@ static int setformat(struct chan_simpleusb_pvt *o, int mode)
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 	fmt = AFMT_S16_LE;
+	format = SND_PCM_FORMAT_S16_LE;
 #else
 	fmt = AFMT_S16_BE;
+	format = SND_PCM_FORMAT_S16_BE;
 #endif
+
 	res = ioctl(fd, SNDCTL_DSP_SETFMT, &fmt);
 	if (res < 0) {
 		ast_log(LOG_WARNING, "Channel %s: Unable to set format to 16-bit signed\n", o->name);
