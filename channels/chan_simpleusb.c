@@ -160,7 +160,7 @@ static FILE *ftxcapraw = NULL;
 
 AST_MUTEX_DEFINE_STATIC(usb_dev_lock);
 AST_MUTEX_DEFINE_STATIC(pp_lock);
-// AST_MUTEX_DEFINE_STATIC(alsalock);
+AST_MUTEX_DEFINE_STATIC(alsalock);
 
 /* variables for communicating with the parallel port */
 static int8_t pp_val;
@@ -956,57 +956,68 @@ static void *pulserthread(void *arg)
  * \param cfg If provided, will use the provided config. If NULL, cfg will be opened automatically.
  * \param reload 0 for first load, 1 for reload
  */
-static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_config *cfg, int reload)
+static int load_tune_config(struct chan_simpleusb_pvt *pvt, const struct ast_config *cfg, int reload)
 {
 	struct ast_variable *v;
 	struct ast_config *cfg2;
 	int opened = 0;
 	int configured = 0;
-	char devstr[sizeof(o->devstr)];
-	char serial[sizeof(o->serial)];
+	char devstr[sizeof(pvt->devstr)];
+	char serial[sizeof(pvt->serial)];
+	char indevname[sizeof(pvt->indevname)];
+	char outdevname[sizeof(pvt->outdevname)];
 
-	o->rxmixerset = 500;
-	o->txmixaset = 500;
-	o->txmixbset = 500;
+	pvt->rxmixerset = 500;
+	pvt->txmixaset = 500;
+	pvt->txmixbset = 500;
 
 	devstr[0] = '\0';
 	serial[0] = '\0';
+	indevname[0] = '\0';
+	outdevname[0] = '\0';
+
 	if (!reload) {
-		o->devstr[0] = '\0';
-		o->serial[0] = '\0';
+		pvt->devstr[0] = '\0';
+		pvt->serial[0] = '\0';
+		pvt->indevname[0] = '\0';
+		pvt->outdevname[0] = '\0';
 	}
 
 	if (!cfg) {
 		struct ast_flags zeroflag = { 0 };
 		cfg2 = ast_config_load(CONFIG, zeroflag);
 		if (!cfg2) {
-			ast_log(LOG_WARNING, "Can't %sload settings for %s, using default parameters\n", reload ? "re" : "", o->name);
+			ast_log(LOG_WARNING, "Can't %sload settings for %s, using default parameters\n", reload ? "re" : "", pvt->name);
 			return -1;
 		}
 		opened = 1;
 		cfg = cfg2;
 	}
 
-	for (v = ast_variable_browse(cfg, o->name); v; v = v->next) {
+	for (v = ast_variable_browse(cfg, pvt->name); v; v = v->next) {
 		configured = 1;
 		CV_START(v->name, v->value);
-		CV_UINT("rxmixerset", o->rxmixerset);
-		CV_UINT("txmixaset", o->txmixaset);
-		CV_UINT("txmixbset", o->txmixbset);
+		CV_UINT("rxmixerset", pvt->rxmixerset);
+		CV_UINT("txmixaset", pvt->txmixaset);
+		CV_UINT("txmixbset", pvt->txmixbset);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
+		CV_STR("indevname", indevname);
+		CV_STR("outdevname", outdevname);
 		CV_END;
 	}
 	if (!reload) {
 		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
-		strcpy(o->devstr, devstr); /* Safe */
-		strcpy(o->serial, serial); /* Safe */
+		strcpy(pvt->devstr, devstr); /* Safe */
+		strcpy(pvt->serial, serial); /* Safe */
+		strcpy(pvt->indevname, indevname);
+		strcpy(pvt->outdevname, outdevname);
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
 	}
 	if (!configured) {
-		ast_log(LOG_WARNING, "Can't %sload settings for %s (no section available), using default parameters\n", reload ? "re" : "", o->name);
+		ast_log(LOG_WARNING, "Can't %sload settings for %s (no section available), using default parameters\n", reload ? "re" : "", pvt->name);
 		return -1;
 	}
 	return 0;
@@ -1640,6 +1651,57 @@ static int used_blocks(struct chan_simpleusb_pvt *o)
 
 	return o->total_blocks - info.fragments;
 }
+static int alsa_write(struct ast_channel *chan, struct ast_frame *f)
+{
+	static char sizbuf[8000];
+	static int sizpos = 0;
+	int len = sizpos;
+	int res = 0;
+	/* size_t frames = 0; */
+	snd_pcm_state_t state;
+	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(chan);
+
+	ast_mutex_lock(&alsalock);
+
+	/* We have to digest the frame in 160-byte portions */
+	if (f->datalen > sizeof(sizbuf) - sizpos) {
+		ast_log(LOG_WARNING, "Frame too large\n");
+		res = -1;
+	} else {
+		memcpy(sizbuf + sizpos, f->data.ptr, f->datalen);
+		len += f->datalen;
+		state = snd_pcm_state(pvt->ocard);
+		if (state == SND_PCM_STATE_XRUN)
+			snd_pcm_prepare(pvt->ocard);
+		while ((res = snd_pcm_writei(pvt->ocard, sizbuf, len / 2)) == -EAGAIN) {
+			usleep(1);
+		}
+		if (res == -EPIPE) {
+#if DEBUG
+			ast_debug(1, "XRUN write\n");
+#endif
+			snd_pcm_prepare(pvt->ocard);
+			while ((res = snd_pcm_writei(pvt->ocard, sizbuf, len / 2)) == -EAGAIN) {
+				usleep(1);
+			}
+			if (res != len / 2) {
+				ast_log(LOG_ERROR, "Write error: %s\n", snd_strerror(res));
+				res = -1;
+			} else if (res < 0) {
+				ast_log(LOG_ERROR, "Write error %s\n", snd_strerror(res));
+				res = -1;
+			}
+		} else {
+			if (res == -ESTRPIPE)
+				ast_log(LOG_ERROR, "You've got some big problems\n");
+			else if (res < 0)
+				ast_log(LOG_NOTICE, "Error %d on write\n", res);
+		}
+	}
+	ast_mutex_unlock(&alsalock);
+
+	return res >= 0 ? 0 : res;
+}
 
 /*!
  * \brief Write a full frame of audio data to the sound card device.
@@ -2081,12 +2143,14 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
  */
 static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 {
-	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
+	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(c);
 
-	o->stophid = 0;
-	ast_radio_time(&o->lasthidtime);
-	ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+	pvt->stophid = 0;
+	ast_radio_time(&pvt->lasthidtime);
+	ast_pthread_create(&pvt->hidthread, NULL, hidthread, pvt);
 	ast_setstate(c, AST_STATE_UP);
+	snd_pcm_prepare(pvt->icard);
+	snd_pcm_start(pvt->icard);
 	return 0;
 }
 
@@ -2108,17 +2172,17 @@ static int simpleusb_answer(struct ast_channel *c)
  */
 static int simpleusb_hangup(struct ast_channel *c)
 {
-	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
+	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(c);
 
 	ast_channel_tech_pvt_set(c, NULL);
-	o->owner = NULL;
+	pvt->owner = NULL;
 	ast_module_unref(ast_module_info->self);
-	if (o->hookstate) {
-		o->hookstate = 0;
-		setformat(o, O_CLOSE);
+	if (pvt->hookstate) {
+		pvt->hookstate = 0;
+		setformat(pvt, O_CLOSE);
 	}
-	o->stophid = 1;
-	pthread_join(o->hidthread, NULL);
+	pvt->stophid = 1;
+	pthread_join(pvt->hidthread, NULL);
 	return 0;
 }
 
@@ -2131,16 +2195,16 @@ static int simpleusb_hangup(struct ast_channel *c)
  */
 static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 {
-	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
+	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(c);
 	struct ast_frame *f1;
 
-	if (!o->hasusb) {
+	if (!pvt->hasusb) {
 		return 0;
 	}
-	if (o->sounddev < 0) {
-		setformat(o, O_RDWR);
+	if (pvt->sounddev < 0) {
+		setformat(pvt, O_RDWR);
 	}
-	if (o->sounddev < 0) {
+	if (pvt->sounddev < 0) {
 		return 0; /* not fatal */
 	}
 	/*
@@ -2154,21 +2218,21 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	/* Write input data to a file.
 	 * Left channel has the audio, right channel shows txkeyed
 	 */
-	if (ftxcapraw && o->txcapraw) {
+	if (ftxcapraw && pvt->txcapraw) {
 		short i, tbuff[f->datalen];
 		for (i = 0; i < f->datalen; i += 2) {
 			tbuff[i] = ((short *) (f->data.ptr))[i / 2];
-			tbuff[i + 1] = o->txkeyed * 0x1000;
+			tbuff[i + 1] = pvt->txkeyed * 0x1000;
 		}
 		fwrite(tbuff, 2, f->datalen, ftxcapraw);
 	}
 #endif
 
-	if ((!o->txkeyed) && (!o->txtestkey)) {
+	if ((!pvt->txkeyed) && (!pvt->txtestkey)) {
 		return 0;
 	}
 
-	if ((!o->txtestkey) && o->echoing) {
+	if ((!pvt->txtestkey) && pvt->echoing) {
 		return 0;
 	}
 
@@ -2178,9 +2242,9 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 		return 0;
 	}
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-	ast_mutex_lock(&o->txqlock);
-	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
-	ast_mutex_unlock(&o->txqlock);
+	ast_mutex_lock(&pvt->txqlock);
+	AST_LIST_INSERT_TAIL(&pvt->txq, f1, frame_list);
+	ast_mutex_unlock(&pvt->txqlock);
 
 	return 0;
 }
@@ -2194,17 +2258,17 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 {
 	int res, cd, sd, src, num_frames, ispager, doleft, doright;
 	register int i;
-	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
-	struct ast_frame *f = &o->read_f, *f1;
+	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(c);
+	struct ast_frame *f = &pvt->read_f, *f1;
 	time_t now;
 	register short *sp, *sp1;
 	short outbuf[FRAME_SIZE * 2 * 6];
 
 	/* check if the hid thread is still processing */
-	if (o->lasthidtime) {
+	if (pvt->lasthidtime) {
 		ast_radio_time(&now);
-		if ((now - o->lasthidtime) > 3) {
-			ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
+		if ((now - pvt->lasthidtime) > 3) {
+			ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", pvt->name);
 			return NULL;
 		}
 	}
@@ -2214,101 +2278,101 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	f->src = __PRETTY_FUNCTION__;
 
 	/* if USB device not ready, just return NULL frame */
-	if (!o->hasusb) {
-		if (o->rxkeyed) {
+	if (!pvt->hasusb) {
+		if (pvt->rxkeyed) {
 			struct ast_frame wf = {
 				.frametype = AST_FRAME_CONTROL,
 				.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 				.src = __PRETTY_FUNCTION__,
 			};
 
-			o->lastrx = 0;
-			o->rxkeyed = 0;
-			ast_queue_frame(o->owner, &wf);
+			pvt->lastrx = 0;
+			pvt->rxkeyed = 0;
+			ast_queue_frame(pvt->owner, &wf);
 		}
 		return &ast_null_frame;
 	}
 
 	/* If we have stopped echoing, clear the echo queue */
-	if (!o->echomode) {
+	if (!pvt->echomode) {
 		struct qelem *q;
 
-		ast_mutex_lock(&o->echolock);
-		o->echoing = 0;
-		while (o->echoq.q_forw != &o->echoq) {
-			q = o->echoq.q_forw;
+		ast_mutex_lock(&pvt->echolock);
+		pvt->echoing = 0;
+		while (pvt->echoq.q_forw != &pvt->echoq) {
+			q = pvt->echoq.q_forw;
 			remque(q);
 			ast_free(q);
 		}
-		ast_mutex_unlock(&o->echolock);
+		ast_mutex_unlock(&pvt->echolock);
 	}
 
 	/* If we are in echomode and we have stopped receiving audio
 	 * queue up the packets we have stored in the echo queue
 	 * for playback.
 	 */
-	if (o->echomode && (!o->rxkeyed)) {
+	if (pvt->echomode && (!pvt->rxkeyed)) {
 		struct usbecho *u;
 
-		ast_mutex_lock(&o->echolock);
+		ast_mutex_lock(&pvt->echolock);
 		/* if there is something in the queue */
-		if (o->echoq.q_forw != &o->echoq) {
-			u = (struct usbecho *) o->echoq.q_forw;
+		if (pvt->echoq.q_forw != &pvt->echoq) {
+			u = (struct usbecho *) pvt->echoq.q_forw;
 			remque((struct qelem *) u);
 			f->frametype = AST_FRAME_VOICE;
 			f->subclass.format = ast_format_slin;
 			f->samples = FRAME_SIZE;
 			f->datalen = FRAME_SIZE * 2;
 			f->offset = AST_FRIENDLY_OFFSET;
-			f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
+			f->data.ptr = pvt->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
 			memcpy(f->data.ptr, u->data, FRAME_SIZE * 2);
 			ast_free(u);
 			f1 = ast_frdup(f);
 			if (!f1) {
-				ast_mutex_unlock(&o->echolock);
+				ast_mutex_unlock(&pvt->echolock);
 				return &ast_null_frame;
 			}
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-			ast_mutex_lock(&o->txqlock);
-			AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
-			ast_mutex_unlock(&o->txqlock);
-			o->echoing = 1;
+			ast_mutex_lock(&pvt->txqlock);
+			AST_LIST_INSERT_TAIL(&pvt->txq, f1, frame_list);
+			ast_mutex_unlock(&pvt->txqlock);
+			pvt->echoing = 1;
 		} else {
-			o->echoing = 0;
+			pvt->echoing = 0;
 		}
-		ast_mutex_unlock(&o->echolock);
+		ast_mutex_unlock(&pvt->echolock);
 	}
 
 	/* Process the transmit queue */
 	for (;;) {
 		num_frames = 0;
-		ast_mutex_lock(&o->txqlock);
-		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+		ast_mutex_lock(&pvt->txqlock);
+		AST_LIST_TRAVERSE(&pvt->txq, f1, frame_list) {
 			num_frames++;
 		}
-		ast_mutex_unlock(&o->txqlock);
-		i = used_blocks(o);
-		if (o->txkeyed) {
-			ast_debug(7, "blocks used %d, Dest Buffer %d", i, o->simpleusb_write_dst);
+		ast_mutex_unlock(&pvt->txqlock);
+		i = used_blocks(pvt);
+		if (pvt->txkeyed) {
+			ast_debug(7, "blocks used %d, Dest Buffer %d", i, pvt->simpleusb_write_dst);
 		}
-		if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && i <= o->queuesize) {
+		if (num_frames && (num_frames > 3 || (!pvt->txkeyed && !pvt->txtestkey)) && i <= pvt->queuesize) {
 			if (i == 0) { /* We are not keeping the buffer full, add 1 frame */
 				memset(outbuf, 0, sizeof(outbuf));
-				soundcard_writeframe(o, outbuf);
+				soundcard_writeframe(pvt, outbuf);
 				ast_debug(7, "A null frame has been added");
 			}
-			ast_mutex_lock(&o->txqlock);
-			f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
-			ast_mutex_unlock(&o->txqlock);
+			ast_mutex_lock(&pvt->txqlock);
+			f1 = AST_LIST_REMOVE_HEAD(&pvt->txq, frame_list);
+			ast_mutex_unlock(&pvt->txqlock);
 
 			src = 0; /* read position into f1->data */
 			while (src < f1->datalen) {
 				/* Compute spare room in the buffer */
-				int l = sizeof(o->simpleusb_write_buf) - o->simpleusb_write_dst;
+				int l = sizeof(pvt->simpleusb_write_buf) - pvt->simpleusb_write_dst;
 
 				if (f1->datalen - src >= l) {
 					/* enough to fill a frame */
-					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
+					memcpy(pvt->simpleusb_write_buf + pvt->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
 					/* Below is an attempt to match levels to the original CM108 IC which has
 					 * been out of production for over 10 years. Scaling audio to 109.375% will
 					 * result in clipping! Any adjustments for CM1xxx gain differences should be
@@ -2318,10 +2382,10 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 					 * the legacyaudioscaling cfg and related code should be deleted.
 					 */
 					/* Adjust the audio level for CM119 A/B devices */
-					if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
+					if (pvt->legacyaudioscaling && pvt->devtype != C108_PRODUCT_ID) {
 						register int v;
 
-						sp = (short *) o->simpleusb_write_buf;
+						sp = (short *) pvt->simpleusb_write_buf;
 						for (i = 0; i < FRAME_SIZE; i++) {
 							v = *sp;
 							v += v >> 3;   /* add *.125 giving * 1.125 */
@@ -2335,7 +2399,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 						}
 					}
 
-					sp = (short *) o->simpleusb_write_buf;
+					sp = (short *) pvt->simpleusb_write_buf;
 					sp1 = outbuf;
 					doright = 1;
 					doleft = 1;
@@ -2344,42 +2408,42 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 						ispager = 1;
 					}
 					/* If pager audio, determine which channel to store audio */
-					if (o->pager != PAGER_NONE) {
-						doleft = (o->pager == PAGER_A) ? ispager : !ispager;
-						doright = (o->pager == PAGER_B) ? ispager : !ispager;
+					if (pvt->pager != PAGER_NONE) {
+						doleft = (pvt->pager == PAGER_A) ? ispager : !ispager;
+						doright = (pvt->pager == PAGER_B) ? ispager : !ispager;
 					}
 					/* Upsample from 8000 mono to 48000 stereo */
 					for (i = 0; i < FRAME_SIZE; i++) {
 						register short s, v;
 
-						if (o->preemphasis) {
-							s = preemph(sp[i], &o->prestate);
+						if (pvt->preemphasis) {
+							s = preemph(sp[i], &pvt->prestate);
 						} else {
 							s = sp[i];
 						}
-						v = lpass(s, o->flpt);
+						v = lpass(s, pvt->flpt);
 						*sp1++ = (doleft) ? v : 0;
 						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
+						v = lpass(s, pvt->flpt);
 						*sp1++ = (doleft) ? v : 0;
 						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
+						v = lpass(s, pvt->flpt);
 						*sp1++ = (doleft) ? v : 0;
 						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
+						v = lpass(s, pvt->flpt);
 						*sp1++ = (doleft) ? v : 0;
 						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
+						v = lpass(s, pvt->flpt);
 						*sp1++ = (doleft) ? v : 0;
 						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
+						v = lpass(s, pvt->flpt);
 						*sp1++ = (doleft) ? v : 0;
 						*sp1++ = (doright) ? v : 0;
 					}
-					soundcard_writeframe(o, outbuf);
+					soundcard_writeframe(pvt, outbuf);
 					src += l;
-					o->simpleusb_write_dst = 0;
-					if (o->waspager && (!ispager)) {
+					pvt->simpleusb_write_dst = 0;
+					if (pvt->waspager && (!ispager)) {
 						struct ast_frame wf = {
 							.frametype = AST_FRAME_TEXT,
 							.data.ptr = ENDPAGE_STR,
@@ -2387,15 +2451,15 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 							.src = __PRETTY_FUNCTION__,
 						};
 
-						ast_queue_frame(o->owner, &wf);
+						ast_queue_frame(pvt->owner, &wf);
 					}
-					o->waspager = ispager;
+					pvt->waspager = ispager;
 				} else {
 					/* copy residue */
 					l = f1->datalen - src;
-					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
+					memcpy(pvt->simpleusb_write_buf + pvt->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
 					src += l; /* but really, we are done */
-					o->simpleusb_write_dst += l;
+					pvt->simpleusb_write_dst += l;
 				}
 			}
 			ast_frfree(f1);
@@ -2408,52 +2472,52 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	 * Sound data will arrive at 48000 samples per second
 	 * in stereo format.
 	 */
-	res = read(o->sounddev, o->simpleusb_read_buf + o->readpos, sizeof(o->simpleusb_read_buf) - o->readpos);
+	res = read(pvt->sounddev, pvt->simpleusb_read_buf + pvt->readpos, sizeof(pvt->simpleusb_read_buf) - pvt->readpos);
 	if (res < 0) {
 		/* audio data not ready */
 		if (errno != EAGAIN) {
-			o->readerrs = 0;
-			o->hasusb = 0;
+			pvt->readerrs = 0;
+			pvt->hasusb = 0;
 			return &ast_null_frame;
 		}
-		if (o->readerrs++ > READERR_THRESHOLD) {
-			ast_log(LOG_ERROR, "Stuck USB read channel [%s], un-sticking it!\n", o->name);
-			o->readerrs = 0;
-			o->hasusb = 0;
+		if (pvt->readerrs++ > READERR_THRESHOLD) {
+			ast_log(LOG_ERROR, "Stuck USB read channel [%s], un-sticking it!\n", pvt->name);
+			pvt->readerrs = 0;
+			pvt->hasusb = 0;
 			return &ast_null_frame;
 		}
-		if (o->readerrs == 1) {
-			ast_log(LOG_WARNING, "Possibly stuck USB read channel. [%s]\n", o->name);
+		if (pvt->readerrs == 1) {
+			ast_log(LOG_WARNING, "Possibly stuck USB read channel. [%s]\n", pvt->name);
 		}
 		return &ast_null_frame;
 	}
 
 #if DEBUG_CAPTURES == 1
-	if (o->rxcapraw && frxcapraw) {
-		fwrite(o->simpleusb_read_buf + o->readpos, 1, res, frxcapraw);
+	if (pvt->rxcapraw && frxcapraw) {
+		fwrite(pvt->simpleusb_read_buf + pvt->readpos, 1, res, frxcapraw);
 	}
 #endif
 
-	if (o->readerrs) {
-		ast_log(LOG_WARNING, "USB read channel [%s] was not stuck.\n", o->name);
+	if (pvt->readerrs) {
+		ast_log(LOG_WARNING, "USB read channel [%s] was not stuck.\n", pvt->name);
 	}
 
-	o->readerrs = 0;
-	o->readpos += res;
-	if (o->readpos < sizeof(o->simpleusb_read_buf)) { /* not enough samples */
+	pvt->readerrs = 0;
+	pvt->readpos += res;
+	if (pvt->readpos < sizeof(pvt->simpleusb_read_buf)) { /* not enough samples */
 		return &ast_null_frame;
 	}
 
 	/* If we have been sending pager audio, see if
 	 * we are finished.
 	 */
-	if (o->waspager) {
+	if (pvt->waspager) {
 		num_frames = 0;
-		ast_mutex_lock(&o->txqlock);
-		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+		ast_mutex_lock(&pvt->txqlock);
+		AST_LIST_TRAVERSE(&pvt->txq, f1, frame_list) {
 			num_frames++;
 		}
-		ast_mutex_unlock(&o->txqlock);
+		ast_mutex_unlock(&pvt->txqlock);
 		if (num_frames < 1) {
 			struct ast_frame wf = {
 				.frametype = AST_FRAME_TEXT,
@@ -2462,94 +2526,94 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 				.src = __PRETTY_FUNCTION__,
 			};
 
-			ast_queue_frame(o->owner, &wf);
-			o->waspager = 0;
+			ast_queue_frame(pvt->owner, &wf);
+			pvt->waspager = 0;
 		}
 	}
 
 	/* Check for carrier detect - COR active */
 	cd = 1;
-	if ((o->rxcdtype == CD_HID) && (!o->rxhidsq)) {
+	if ((pvt->rxcdtype == CD_HID) && (!pvt->rxhidsq)) {
 		cd = 0;
-	} else if ((o->rxcdtype == CD_HID_INVERT) && o->rxhidsq) {
+	} else if ((pvt->rxcdtype == CD_HID_INVERT) && pvt->rxhidsq) {
 		cd = 0;
-	} else if ((o->rxcdtype == CD_PP) && (!o->rxppsq)) {
+	} else if ((pvt->rxcdtype == CD_PP) && (!pvt->rxppsq)) {
 		cd = 0;
-	} else if ((o->rxcdtype == CD_PP_INVERT) && o->rxppsq) {
+	} else if ((pvt->rxcdtype == CD_PP_INVERT) && pvt->rxppsq) {
 		cd = 0;
 	}
 
 	/* Apply cd turn-on delay, if one specified */
-	if (o->rxondelay && cd && (o->rxoncnt++ < o->rxondelay)) {
+	if (pvt->rxondelay && cd && (pvt->rxoncnt++ < pvt->rxondelay)) {
 		cd = 0;
 	} else if (!cd) {
-		o->rxoncnt = 0;
+		pvt->rxoncnt = 0;
 	}
-	o->rx_cos_active = cd;
+	pvt->rx_cos_active = cd;
 
 	/* Check for SD - CTCSS active */
 	sd = 1;
-	if ((o->rxsdtype == SD_HID) && (!o->rxhidctcss)) {
+	if ((pvt->rxsdtype == SD_HID) && (!pvt->rxhidctcss)) {
 		sd = 0;
-	} else if ((o->rxsdtype == SD_HID_INVERT) && o->rxhidctcss) {
+	} else if ((pvt->rxsdtype == SD_HID_INVERT) && pvt->rxhidctcss) {
 		sd = 0;
-	} else if ((o->rxsdtype == SD_PP) && (!o->rxppctcss)) {
+	} else if ((pvt->rxsdtype == SD_PP) && (!pvt->rxppctcss)) {
 		sd = 0;
-	} else if ((o->rxsdtype == SD_PP_INVERT) && o->rxppctcss) {
+	} else if ((pvt->rxsdtype == SD_PP_INVERT) && pvt->rxppctcss) {
 		sd = 0;
 	}
 
 	/* See if we are overriding CTCSS to active */
-	if (o->rxctcssoverride) {
+	if (pvt->rxctcssoverride) {
 		sd = 1;
 	}
-	o->rx_ctcss_active = sd;
+	pvt->rx_ctcss_active = sd;
 
 	/* Special case where cd and sd have been configured for no */
-	if (o->rxcdtype == CD_IGNORE && o->rxsdtype == SD_IGNORE) {
+	if (pvt->rxcdtype == CD_IGNORE && pvt->rxsdtype == SD_IGNORE) {
 		cd = 0;
 		sd = 0;
 	}
 
 	/* Timer for how long TX has been unkeyed - used with txoffdelay */
-	if (o->txoffdelay) {
-		if (o->txkeyed == 1) {
-			o->txoffcnt = 0; /* If keyed, set this to zero. */
+	if (pvt->txoffdelay) {
+		if (pvt->txkeyed == 1) {
+			pvt->txoffcnt = 0; /* If keyed, set this to zero. */
 		} else {
-			o->txoffcnt++;
-			if (o->txoffcnt > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
-				o->txoffcnt = MS_TO_FRAMES(TX_OFF_DELAY_MAX); /* limit count */
+			pvt->txoffcnt++;
+			if (pvt->txoffcnt > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
+				pvt->txoffcnt = MS_TO_FRAMES(TX_OFF_DELAY_MAX); /* limit count */
 			}
 		}
 	}
 
 	/* Check conditions and set receiver active */
-	o->rxkeyed = sd && cd && ((!o->lasttx) || o->duplex) && (o->txoffcnt >= o->txoffdelay);
+	pvt->rxkeyed = sd && cd && ((!pvt->lasttx) || pvt->duplex) && (pvt->txoffcnt >= pvt->txoffdelay);
 
 	/* Send a message to indicate rx signal detect conditions */
-	if (o->lastrx && (!o->rxkeyed)) {
+	if (pvt->lastrx && (!pvt->rxkeyed)) {
 		struct ast_frame wf = {
 			.frametype = AST_FRAME_CONTROL,
 			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 			.src = __PRETTY_FUNCTION__,
 		};
 
-		o->lastrx = 0;
-		ast_queue_frame(o->owner, &wf);
-		if (o->duplex3) {
-			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
+		pvt->lastrx = 0;
+		ast_queue_frame(pvt->owner, &wf);
+		if (pvt->duplex3) {
+			ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 		}
-	} else if ((!o->lastrx) && (o->rxkeyed)) {
+	} else if ((!pvt->lastrx) && (pvt->rxkeyed)) {
 		struct ast_frame wf = {
 			.frametype = AST_FRAME_CONTROL,
 			.subclass.integer = AST_CONTROL_RADIO_KEY,
 			.src = __PRETTY_FUNCTION__,
 		};
 
-		o->lastrx = 1;
-		ast_queue_frame(o->owner, &wf);
-		if (o->duplex3) {
-			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
+		pvt->lastrx = 1;
+		ast_queue_frame(pvt->owner, &wf);
+		if (pvt->duplex3) {
+			ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
 		}
 	}
 
@@ -2559,37 +2623,37 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
 	 * and returns true if clipping was detected.
 	 */
-	if (ast_radio_check_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
-		if (o->clipledgpio) {
+	if (ast_radio_check_audio((short *) pvt->simpleusb_read_buf, &pvt->rxaudiostats, 12 * FRAME_SIZE)) {
+		if (pvt->clipledgpio) {
 			/* Set Clip LED GPIO pulsetimer if not already set */
-			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
-				o->hid_gpio_pulsetimer[o->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
+			if (!pvt->hid_gpio_pulsetimer[pvt->clipledgpio - 1]) {
+				pvt->hid_gpio_pulsetimer[pvt->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
 			}
 		}
 	}
 
 	/* Downsample received audio from 48000 stereo to 8000 mono */
-	sp = (short *) o->simpleusb_read_buf;
-	sp1 = (short *) (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
+	sp = (short *) pvt->simpleusb_read_buf;
+	sp1 = (short *) (pvt->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
 	for (i = 0; i < FRAME_SIZE; i++) {
-		(void) lpass(*sp++, o->flpr);
+		(void) lpass(*sp++, pvt->flpr);
 		sp++;
-		(void) lpass(*sp++, o->flpr);
+		(void) lpass(*sp++, pvt->flpr);
 		sp++;
-		(void) lpass(*sp++, o->flpr);
+		(void) lpass(*sp++, pvt->flpr);
 		sp++;
-		(void) lpass(*sp++, o->flpr);
+		(void) lpass(*sp++, pvt->flpr);
 		sp++;
-		(void) lpass(*sp++, o->flpr);
+		(void) lpass(*sp++, pvt->flpr);
 		sp++;
-		if (o->plfilter && o->deemphasis) {
-			*sp1++ = hpass6(deemph(lpass(*sp++, o->flpr), &o->destate), o->hpx, o->hpy);
-		} else if (o->deemphasis) {
-			*sp1++ = deemph(lpass(*sp++, o->flpr), &o->destate);
-		} else if (o->plfilter) {
-			*sp1++ = hpass(lpass(*sp++, o->flpr), o->hpx, o->hpy);
+		if (pvt->plfilter && pvt->deemphasis) {
+			*sp1++ = hpass6(deemph(lpass(*sp++, pvt->flpr), &pvt->destate), pvt->hpx, pvt->hpy);
+		} else if (pvt->deemphasis) {
+			*sp1++ = deemph(lpass(*sp++, pvt->flpr), &pvt->destate);
+		} else if (pvt->plfilter) {
+			*sp1++ = hpass(lpass(*sp++, pvt->flpr), pvt->hpx, pvt->hpy);
 		} else {
-			*sp1++ = lpass(*sp++, o->flpr);
+			*sp1++ = lpass(*sp++, pvt->flpr);
 		}
 		sp++;
 	}
@@ -2597,35 +2661,35 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	/* If we are in echomode and receiving audio, store
 	 * it in the echo queue for later playback.
 	 */
-	if (o->echomode && o->rxkeyed && (!o->echoing)) {
+	if (pvt->echomode && pvt->rxkeyed && (!pvt->echoing)) {
 		register int x;
 		struct usbecho *u;
 
-		ast_mutex_lock(&o->echolock);
+		ast_mutex_lock(&pvt->echolock);
 		x = 0;
 		/* get count of frames */
-		for (u = (struct usbecho *) o->echoq.q_forw; u != (struct usbecho *) &o->echoq; u = (struct usbecho *) u->q_forw) {
+		for (u = (struct usbecho *) pvt->echoq.q_forw; u != (struct usbecho *) &pvt->echoq; u = (struct usbecho *) u->q_forw) {
 			x++;
 		}
 
-		if (x < o->echomax) {
+		if (x < pvt->echomax) {
 			u = ast_calloc(1, sizeof(struct usbecho));
 			if (u) {
-				memcpy(u->data, (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET), FRAME_SIZE * 2);
-				insque((struct qelem *) u, o->echoq.q_back);
+				memcpy(u->data, (pvt->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET), FRAME_SIZE * 2);
+				insque((struct qelem *) u, pvt->echoq.q_back);
 			}
 		}
-		ast_mutex_unlock(&o->echolock);
+		ast_mutex_unlock(&pvt->echolock);
 	}
 
 #if DEBUG_CAPTURES == 1
-	if (o->rxcapraw && frxcapcooked) {
-		fwrite(o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET, sizeof(short), FRAME_SIZE, frxcapcooked);
+	if (pvt->rxcapraw && frxcapcooked) {
+		fwrite(pvt->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET, sizeof(short), FRAME_SIZE, frxcapcooked);
 	}
 #endif
 
 	/* reset read pointer for next frame */
-	o->readpos = 0;
+	pvt->readpos = 0;
 	/* Do not return the frame if the channel is not up */
 	if (ast_channel_state(c) != AST_STATE_UP) {
 		return &ast_null_frame;
@@ -2636,13 +2700,13 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	f->offset = AST_FRIENDLY_OFFSET;
 	f->samples = FRAME_SIZE;
 	f->datalen = FRAME_SIZE * 2;
-	f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
-	if (!o->rxkeyed) {
+	f->data.ptr = pvt->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
+	if (!pvt->rxkeyed) {
 		memset(f->data.ptr, 0, f->datalen);
 	}
 	/* Process the audio to see if contains DTMF */
-	if (o->usedtmf && o->dsp) {
-		f1 = ast_dsp_process(c, o->dsp, f);
+	if (pvt->usedtmf && pvt->dsp) {
+		f1 = ast_dsp_process(c, pvt->dsp, f);
 		if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u')) {
 				f1->frametype = AST_FRAME_NULL;
@@ -2650,18 +2714,18 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 				return f1;
 			}
 			if (f1->frametype == AST_FRAME_DTMF_END) {
-				f1->len = ast_tvdiff_ms(ast_radio_tvnow(), o->tonetime);
+				f1->len = ast_tvdiff_ms(ast_radio_tvnow(), pvt->tonetime);
 				if (option_verbose) {
-					ast_log(LOG_NOTICE, "Channel %s: Got DTMF char %c duration %ld ms\n", o->name, f1->subclass.integer, f1->len);
+					ast_log(LOG_NOTICE, "Channel %s: Got DTMF char %c duration %ld ms\n", pvt->name, f1->subclass.integer, f1->len);
 				}
-				o->toneflag = 0;
+				pvt->toneflag = 0;
 			} else {
-				if (o->toneflag) {
+				if (pvt->toneflag) {
 					ast_frfree(f1);
 					f1 = NULL;
 				} else {
-					o->tonetime = ast_radio_tvnow();
-					o->toneflag = 1;
+					pvt->tonetime = ast_radio_tvnow();
+					pvt->toneflag = 1;
 				}
 			}
 			if (f1) {
@@ -2677,13 +2741,13 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	 * the legacyaudioscaling cfg and related code should be deleted.
 	 */
 	/* scale and clip values */
-	if (o->legacyaudioscaling && o->rxvoiceadj > 1.0) {
+	if (pvt->legacyaudioscaling && pvt->rxvoiceadj > 1.0) {
 		register int i, x;
 		register float f1;
 		register int16_t *p = (int16_t *) f->data.ptr;
 
 		for (i = 0; i < f->samples; i++) {
-			f1 = (float) p[i] * o->rxvoiceadj;
+			f1 = (float) p[i] * pvt->rxvoiceadj;
 			x = (int) f1;
 			if (x > 32767) {
 				x = 32767;
@@ -2695,29 +2759,29 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	}
 
 	/* Compute the peak signal if requested */
-	if (o->measure_enabled) {
+	if (pvt->measure_enabled) {
 		register int i;
 		register int32_t accum;
 		register int16_t *p = (int16_t *) f->data.ptr;
 
 		for (i = 0; i < f->samples; i++) {
 			accum = p[i];
-			if (accum > o->amax) {
-				o->amax = accum;
-				o->discounteru = o->discfactor;
-			} else if (--o->discounteru <= 0) {
-				o->discounteru = o->discfactor;
-				o->amax = (int32_t) ((o->amax * 32700) / 32768);
+			if (accum > pvt->amax) {
+				pvt->amax = accum;
+				pvt->discounteru = pvt->discfactor;
+			} else if (--pvt->discounteru <= 0) {
+				pvt->discounteru = pvt->discfactor;
+				pvt->amax = (int32_t) ((pvt->amax * 32700) / 32768);
 			}
-			if (accum < o->amin) {
-				o->amin = accum;
-				o->discounterl = o->discfactor;
-			} else if (--o->discounterl <= 0) {
-				o->discounterl = o->discfactor;
-				o->amin = (int32_t) ((o->amin * 32700) / 32768);
+			if (accum < pvt->amin) {
+				pvt->amin = accum;
+				pvt->discounterl = pvt->discfactor;
+			} else if (--pvt->discounterl <= 0) {
+				pvt->discounterl = pvt->discfactor;
+				pvt->amin = (int32_t) ((pvt->amin * 32700) / 32768);
 			}
 		}
-		o->apeak = (int32_t) (o->amax - o->amin) / 2;
+		pvt->apeak = (int32_t) (pvt->amax - pvt->amin) / 2;
 	}
 	return f;
 }
