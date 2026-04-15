@@ -1663,13 +1663,15 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *pvt, short *data)
 		while ((res = snd_pcm_writei(pvt->ocard, data, FRAME_SIZE)) == -EAGAIN) {
 			usleep(1);
 		}
-		if (res != len) {
-			ast_log(LOG_ERROR, "Write error: %s\n", snd_strerror(res));
-			res = -1;
-		} else if (res < 0) {
+
+		if (res < 0) {
 			ast_log(LOG_ERROR, "Write error %s\n", snd_strerror(res));
 			res = -1;
+		} else if (res != FRAME_SIZE) {
+			ast_log(LOG_ERROR, "Write error: %s\n", snd_strerror(res));
+			res = -1;
 		}
+
 	} else {
 		if (res == -ESTRPIPE) {
 			ast_log(LOG_ERROR, "You've got some big problems\n");
@@ -2006,9 +2008,10 @@ static int simpleusb_hangup(struct ast_channel *c)
 	ast_module_unref(ast_module_info->self);
 	if (pvt->hookstate) {
 		pvt->hookstate = 0;
-		snd_pcm_close(pvt->icard);
-		snd_pcm_close(pvt->ocard);
 	}
+
+	snd_pcm_close(pvt->icard);
+	snd_pcm_close(pvt->ocard);
 	pvt->stophid = 1;
 	pthread_join(pvt->hidthread, NULL);
 	return 0;
@@ -2312,7 +2315,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 
 	if (res < 0) {
 		/* audio data not ready */
-		if (errno != EAGAIN) {
+		if (res != EAGAIN) {
 			pvt->readerrs = 0;
 			pvt->hasusb = 0;
 		} else if (pvt->readerrs++ > READERR_THRESHOLD) {
