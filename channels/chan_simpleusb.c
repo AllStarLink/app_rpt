@@ -142,7 +142,7 @@ static struct ast_jb_conf global_jbconf;
 
 #define ALSA_INDEV "default"
 #define ALSA_OUTDEV "default"
-#define DESIRED_RATE 8000
+#define DESIRED_RATE 48000
 
 /* Lets use 160 sample frames, just like GSM.  */
 #define FRAME_SIZE 160
@@ -573,6 +573,7 @@ static int soundcard_init(struct chan_simpleusb_pvt *pvt)
 
 	if (!pvt->ocard) {
 		ast_log(LOG_ERROR, "Problem opening ALSA playback device\n");
+		alsa_card_close(pvt->icard);
 		return -1;
 	}
 
@@ -1629,7 +1630,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *pvt, short *data)
 {
 	int res;
 	snd_pcm_state_t state;
-	int len = FRAME_SIZE * 2 * 2 * 6;
+	// int len = FRAME_SIZE * 2 * 2 * 6;
 	/*
 	 * Nothing complex to manage the audio device queue.
 	 * If the buffer is full just drop the extra, otherwise write.
@@ -1643,7 +1644,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *pvt, short *data)
 		snd_pcm_prepare(pvt->ocard);
 	}
 
-	while ((res = snd_pcm_writei(pvt->ocard, data, len)) == -EAGAIN) {
+	while ((res = snd_pcm_writei(pvt->ocard, data, 1)) == -EAGAIN) {
 		usleep(1);
 	}
 
@@ -1652,7 +1653,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *pvt, short *data)
 		ast_debug(1, "XRUN write\n");
 #endif
 		snd_pcm_prepare(pvt->ocard);
-		while ((res = snd_pcm_writei(pvt->ocard, data, len)) == -EAGAIN) {
+		while ((res = snd_pcm_writei(pvt->ocard, data, 1)) == -EAGAIN) {
 			usleep(1);
 		}
 		if (res != len) {
