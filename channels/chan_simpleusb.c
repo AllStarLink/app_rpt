@@ -1636,15 +1636,13 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *pvt, short *data)
 {
 	int res;
 	snd_pcm_state_t state;
-	// int len = FRAME_SIZE * 2 * 2 * 6;
-	int len = FRAME_SIZE;
+
 	/*
 	 * Nothing complex to manage the audio device queue.
 	 * If the buffer is full just drop the extra, otherwise write.
 	 * In some cases it might be useful to write anyways after
 	 * a number of failures, to restart the output chain.
 	 */
-
 	ast_mutex_lock(&pvt->alsalock);
 	state = snd_pcm_state(pvt->ocard);
 	if (state == SND_PCM_STATE_XRUN) {
@@ -2310,10 +2308,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		ast_log(LOG_ERROR, "-ESTRPIPE\n");
 		snd_pcm_prepare(pvt->icard);
 	} else if (res < 0) {
-		ast_log(LOG_ERROR, "Read error: %s\n", snd_strerror(res));
-	}
-
-	if (res < 0) {
 		/* audio data not ready */
 		if (res != EAGAIN) {
 			pvt->readerrs = 0;
