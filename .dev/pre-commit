@@ -35,7 +35,11 @@ else
 fi
 
 # Check if any files were reformatted by git clang-format
-CHANGED_FILES=$(git diff --name-only -- $STAGED_FILES)
+CHANGED_FILES="$(
+    printf '%s\n' "$STAGED_FILES" |
+    tr '\n' '\0' |
+    xargs -0 -I{} git diff --name-only -- "{}"
+)"
 
 if [ -n "$CHANGED_FILES" ]
 then
