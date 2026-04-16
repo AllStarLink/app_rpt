@@ -855,7 +855,7 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 
 	string_toupper(from);
 	string_toupper(to);
-	rc = snprintf(str, sizeof(str), "M %s %s ", from, to);
+	rc = snprintf(str, sizeof(str), "M %s %s", from, to);
 
 	if (rc < 0 || rc >= sizeof(str)) {
 		return RESULT_FAILURE;
@@ -906,7 +906,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	string_toupper(baud);
 	string_toupper(capcode);
 	string_toupper(text);
-	rc = snprintf(str, sizeof(str), "PAGE %s %s %s ", baud, capcode, text);
+	rc = snprintf(str, sizeof(str), "PAGE %s %s %s", baud, capcode, text);
 
 	if (rc < 0 || rc >= sizeof(str)) {
 		return RESULT_FAILURE;
@@ -968,7 +968,7 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 
 	nodename = ast_strdupa(argv[2]);
 	string_toupper(nodename);
-	rc = snprintf(str, sizeof(str), "M %s 0 ", nodename);
+	rc = snprintf(str, sizeof(str), "M %s 0", nodename);
 
 	if (rc < 0 || rc >= sizeof(str)) {
 		return RESULT_FAILURE;

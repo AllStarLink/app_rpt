@@ -5015,6 +5015,7 @@ static void *rpt(void *this)
 		}
 		disable_rpt(myrpt); /* Disable repeater */
 		ast_free(myrpt->macrobuf);
+		myrpt->macrobuf = NULL;
 		return NULL;
 	}
 
@@ -5086,6 +5087,7 @@ static void *rpt(void *this)
 			}
 			disable_rpt(myrpt); /* Disable repeater */
 			ast_free(myrpt->macrobuf);
+			myrpt->macrobuf = NULL;
 			ao2_cleanup(myrpt->links);
 			myrpt->links = NULL;
 			return NULL;

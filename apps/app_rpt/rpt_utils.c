@@ -161,7 +161,7 @@ int myatoi(const char *str)
 int decimals2int(char *fraction)
 {
 	int i;
-	char len;
+	size_t len;
 	int multiplier = 100000;
 	int res = 0;
 
