@@ -140,9 +140,7 @@ static struct ast_jb_conf global_jbconf;
 #define MS_PER_FRAME 20						   /* 20 ms frames */
 #define MS_TO_FRAMES(ms) ((ms) / MS_PER_FRAME) /* convert ms to frames */
 
-#define ALSA_INDEV "default"
-#define ALSA_OUTDEV "default"
-#define DESIRED_RATE 48000
+#define ALSA_DESIRED_RATE 48000
 
 /* Lets use 160 sample frames, just like GSM.  */
 #define FRAME_SIZE 160
@@ -445,13 +443,14 @@ static snd_pcm_t *alsa_card_init(struct chan_simpleusb_pvt *pvt, snd_pcm_stream_
 {
 	int err;
 	int direction;
+	int channel_count;
 	snd_pcm_t *handle = NULL;
 	snd_pcm_hw_params_t *hwparams = NULL;
 	snd_pcm_sw_params_t *swparams = NULL;
 	struct pollfd pfd;
-	snd_pcm_uframes_t period_size = PERIOD_FRAMES * 4;
+	snd_pcm_uframes_t period_size = PERIOD_FRAMES * 6;
 	snd_pcm_uframes_t buffer_size = 0;
-	unsigned int rate = DESIRED_RATE;
+	unsigned int rate = ALSA_DESIRED_RATE;
 	snd_pcm_uframes_t start_threshold, stop_threshold;
 	const char *dev;
 
@@ -461,10 +460,13 @@ static snd_pcm_t *alsa_card_init(struct chan_simpleusb_pvt *pvt, snd_pcm_stream_
 	format = SND_PCM_FORMAT_S16_BE;
 #endif
 
+	format = SND_PCM_FORMAT_S16_LE;
 	if (stream == SND_PCM_STREAM_CAPTURE) {
 		dev = pvt->indevname;
+		channel_count = 1;
 	} else {
 		dev = pvt->outdevname;
+		channel_count = 2;
 	}
 
 	err = snd_pcm_open(&handle, dev, stream, SND_PCM_NONBLOCK);
@@ -488,29 +490,37 @@ static snd_pcm_t *alsa_card_init(struct chan_simpleusb_pvt *pvt, snd_pcm_stream_
 	if (err < 0)
 		ast_log(LOG_ERROR, "set_format failed: %s\n", snd_strerror(err));
 
-	err = snd_pcm_hw_params_set_channels(handle, hwparams, 1);
+	err = snd_pcm_hw_params_set_channels(handle, hwparams, channel_count);
 	if (err < 0)
 		ast_log(LOG_ERROR, "set_channels failed: %s\n", snd_strerror(err));
 
 	direction = 0;
 	err = snd_pcm_hw_params_set_rate_near(handle, hwparams, &rate, &direction);
-	if (rate != DESIRED_RATE)
-		ast_log(LOG_WARNING, "Rate not correct, requested %d, got %u\n", DESIRED_RATE, rate);
+	if (rate != ALSA_DESIRED_RATE) {
+		ast_log(LOG_WARNING, "Rate not correct, requested %d, got %u\n", ALSA_DESIRED_RATE, rate);
+	}
 
 	direction = 0;
 	err = snd_pcm_hw_params_set_period_size_near(handle, hwparams, &period_size, &direction);
 	if (err < 0)
 		ast_log(LOG_ERROR, "period_size(%lu frames) is bad: %s\n", period_size, snd_strerror(err));
 	else {
-		ast_debug(1, "Period size is %d\n", err);
+		snd_pcm_uframes_t r_period;
+		int r_dir;
+
+		snd_pcm_hw_params_get_period_size(hwparams, &r_period, &r_dir);
+		ast_debug(1, "Period size is %ld\n", r_period);
 	}
 
-	buffer_size = 4096 * 2; /* period_size * 16; */
+	buffer_size = period_size * 4;
 	err = snd_pcm_hw_params_set_buffer_size_near(handle, hwparams, &buffer_size);
 	if (err < 0)
 		ast_log(LOG_WARNING, "Problem setting buffer size of %lu: %s\n", buffer_size, snd_strerror(err));
 	else {
-		ast_debug(1, "Buffer size is set to %d frames\n", err);
+		snd_pcm_uframes_t buffer;
+
+		snd_pcm_hw_params_get_buffer_size(hwparams, &buffer);
+		ast_debug(1, "Buffer size is set to %ld bytes", buffer);
 	}
 
 	err = snd_pcm_hw_params(handle, hwparams);
@@ -558,7 +568,6 @@ static snd_pcm_t *alsa_card_init(struct chan_simpleusb_pvt *pvt, snd_pcm_stream_
 	} else {
 		pvt->writedev = pfd.fd;
 	}
-
 	return handle;
 }
 
@@ -1067,14 +1076,14 @@ static void *hidthread(void *arg)
 	int res;
 	struct usb_device *usb_dev;
 	struct usb_dev_handle *usb_handle;
-	struct chan_simpleusb_pvt *o = arg, *ao;
+	struct chan_simpleusb_pvt *pvt = arg, *apvt;
 	struct timeval then;
 	struct pollfd rfds[1];
 
 	usb_dev = NULL;
 	usb_handle = NULL;
 	/* enable gpio_set so that we will write GPIO information upon start up */
-	o->gpio_set = 1;
+	pvt->gpio_set = 1;
 
 #ifdef HAVE_SYS_IO
 	if (haspp == 2) {
@@ -1087,14 +1096,14 @@ static void *hidthread(void *arg)
 	 * it enters a processing loop responsible for interacting
 	 * with the usb hid device
 	 */
-	while (!o->stophid) {
-		char serial[sizeof(o->serial)] = { '\0' };
+	while (!pvt->stophid) {
+		char serial[sizeof(pvt->serial)] = { '\0' };
 
-		ast_radio_time(&o->lasthidtime);
+		ast_radio_time(&pvt->lasthidtime);
 		ast_mutex_lock(&usb_dev_lock);
-		o->hasusb = 0;
-		o->usbass = 0;
-		o->devicenum = 0;
+		pvt->hasusb = 0;
+		pvt->usbass = 0;
+		pvt->devicenum = 0;
 		if (usb_handle) {
 			usb_close(usb_handle);
 		}
@@ -1109,10 +1118,10 @@ static void *hidthread(void *arg)
 		 * If no device string is specified, attempt to assign the first
 		 * found device.
 		 */
-		ast_radio_time(&o->lasthidtime);
+		ast_radio_time(&pvt->lasthidtime);
 
 		/* If configuration has a serial number defined, find the device */
-		if (!ast_strlen_zero(o->serial)) {
+		if (!ast_strlen_zero(pvt->serial)) {
 			int index;
 			char *index_devstr = NULL;
 
@@ -1129,58 +1138,58 @@ static void *hidthread(void *arg)
 					continue;
 				}
 
-				if (strcmp(o->serial, serial) == 0) {
+				if (strcmp(pvt->serial, serial) == 0) {
 					/*
 					 * We found a device with the matching serial number, set
 					 * the devstr to the matching device.
 					 */
-					ast_log(LOG_NOTICE, "Matched device serial %s to %s\n", o->serial, o->name);
-					ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
+					ast_log(LOG_NOTICE, "Matched device serial %s to %s\n", pvt->serial, pvt->name);
+					ast_copy_string(pvt->devstr, index_devstr, sizeof(pvt->devstr));
 					break;
 				}
 			}
 		}
 
 		/* Automatically assign a devstr if one was not specified in the configuration. */
-		if (ast_strlen_zero(o->devstr)) {
+		if (ast_strlen_zero(pvt->devstr)) {
 			int index = 0;
 			char *index_devstr = NULL;
 
 			for (;;) {
 				index_devstr = ast_radio_usb_get_devstr(index);
 				if (ast_strlen_zero(index_devstr)) {
-					if (!o->device_error) {
-						ast_log(LOG_ERROR, "Channel %s: No USB devices are available for assignment.\n", o->name);
-						o->device_error = 1;
+					if (!pvt->device_error) {
+						ast_log(LOG_ERROR, "Channel %s: No USB devices are available for assignment.\n", pvt->name);
+						pvt->device_error = 1;
 					}
 					ast_mutex_unlock(&usb_dev_lock);
 					usleep(500000);
 					break;
 				}
 				/* We found an available device - see if it already in use */
-				for (ao = simpleusb_default.next; ao && ao->name; ao = ao->next) {
-					if (ao->usbass && (!strcmp(ao->devstr, index_devstr))) {
+				for (apvt = simpleusb_default.next; apvt && apvt->name; apvt = apvt->next) {
+					if (apvt->usbass && (!strcmp(apvt->devstr, index_devstr))) {
 						break;
 					}
 				}
-				if (ao) {
+				if (apvt) {
 					index++;
 					continue;
 				}
 				/* We found an unused device assign it to our node */
-				ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
-				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to SimpleUSB channel\n", o->name, o->devstr);
+				ast_copy_string(pvt->devstr, index_devstr, sizeof(pvt->devstr));
+				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to SimpleUSB channel\n", pvt->name, pvt->devstr);
 				if (ast_radio_usb_get_serial(index_devstr, serial, sizeof(serial)) > 0) {
-					ast_copy_string(o->serial, serial, sizeof(o->serial));
+					ast_copy_string(pvt->serial, serial, sizeof(pvt->serial));
 				}
 				break;
 			}
-			if (ast_strlen_zero(o->devstr)) {
+			if (ast_strlen_zero(pvt->devstr)) {
 				continue;
 			}
 		}
 
-		if ((!ast_radio_usb_list_check(o->devstr)) || (!find_desc_usb(o->devstr))) {
+		if ((!ast_radio_usb_list_check(pvt->devstr)) || (!find_desc_usb(pvt->devstr))) {
 			/* The device string did not match.
 			 * Now look through the attached devices and see
 			 * one of those is associated with one of our
@@ -1188,9 +1197,9 @@ static void *hidthread(void *arg)
 			 */
 			s = find_installed_usb_match();
 			if (ast_strlen_zero(s)) {
-				if (!o->device_error) {
-					ast_log(LOG_ERROR, "Channel %s: Device string %s was not found.\n", o->name, o->devstr);
-					o->device_error = 1;
+				if (!pvt->device_error) {
+					ast_log(LOG_ERROR, "Channel %s: Device string %s was not found.\n", pvt->name, pvt->devstr);
+					pvt->device_error = 1;
 				}
 				ast_mutex_unlock(&usb_dev_lock);
 				usleep(500000);
@@ -1203,238 +1212,238 @@ static void *hidthread(void *arg)
 				continue;
 			}
 			/* See if this device is already assigned to another usb channel */
-			for (ao = simpleusb_default.next; ao && ao->name; ao = ao->next) {
-				if (ao->usbass && (!strcmp(ao->devstr, s))) {
+			for (apvt = simpleusb_default.next; apvt && apvt->name; apvt = apvt->next) {
+				if (apvt->usbass && (!strcmp(apvt->devstr, s))) {
 					break;
 				}
 			}
-			if (ao) {
-				ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, s, ao->name);
+			if (apvt) {
+				ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", pvt->name, s, apvt->name);
 				ast_mutex_unlock(&usb_dev_lock);
 				usleep(500000);
 				continue;
 			}
-			ast_log(LOG_NOTICE, "Channel %s: Assigned USB device %s to simpleusb channel\n", o->name, s);
-			ast_copy_string(o->devstr, s, sizeof(o->devstr));
+			ast_log(LOG_NOTICE, "Channel %s: Assigned USB device %s to simpleusb channel\n", pvt->name, s);
+			ast_copy_string(pvt->devstr, s, sizeof(pvt->devstr));
 		}
 		/* Double check to see if the device string is assigned to another usb channel */
-		for (ao = simpleusb_default.next; ao && ao->name; ao = ao->next) {
-			if (ao->usbass && (!strcmp(ao->devstr, o->devstr))) {
+		for (apvt = simpleusb_default.next; apvt && apvt->name; apvt = apvt->next) {
+			if (apvt->usbass && (!strcmp(apvt->devstr, pvt->devstr))) {
 				break;
 			}
 		}
-		if (ao) {
-			ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, o->devstr, ao->name);
+		if (apvt) {
+			ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", pvt->name, pvt->devstr, apvt->name);
 			ast_mutex_unlock(&usb_dev_lock);
 			usleep(500000);
 			continue;
 		}
 		/* get the index to the device and assign it to our channel */
-		i = ast_radio_usb_get_usbdev(o->devstr);
+		i = ast_radio_usb_get_usbdev(pvt->devstr);
 		if (i < 0) {
 			ast_mutex_unlock(&usb_dev_lock);
 			usleep(500000);
 			continue;
 		}
-		o->devicenum = i;
-		o->device_error = 0;
-		ast_radio_time(&o->lasthidtime);
-		o->usbass = 1;
+		pvt->devicenum = i;
+		pvt->device_error = 0;
+		ast_radio_time(&pvt->lasthidtime);
+		pvt->usbass = 1;
 		ast_mutex_unlock(&usb_dev_lock);
 		/* set the audio mixer values */
-		o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
-		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
-		o->micplaymax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL);
-		if (o->spkrmax == -1) {
-			o->newname = 1;
-			o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
+		pvt->micmax = ast_radio_amixer_max(pvt->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
+		pvt->spkrmax = ast_radio_amixer_max(pvt->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
+		pvt->micplaymax = ast_radio_amixer_max(pvt->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL);
+		if (pvt->spkrmax == -1) {
+			pvt->newname = 1;
+			pvt->spkrmax = ast_radio_amixer_max(pvt->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
 		}
 		/* initialize the usb device */
-		usb_dev = ast_radio_hid_device_init(o->devstr);
+		usb_dev = ast_radio_hid_device_init(pvt->devstr);
 		if (usb_dev == NULL) {
-			ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
+			ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", pvt->name, pvt->devstr);
 			usleep(500000);
 			continue;
 		}
 		/* open the usb device device */
 		usb_handle = usb_open(usb_dev);
 		if (usb_handle == NULL) {
-			ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
+			ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", pvt->name, pvt->devstr);
 			usleep(500000);
 			continue;
 		}
 		/* attempt to claim the usb hid interface and detach from the kernel */
 		if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 			if (usb_detach_kernel_driver_np(usb_handle, C108_HID_INTERFACE) < 0) {
-				ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
+				ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", pvt->name);
 				usleep(500000);
 				continue;
 			}
 			if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
-				ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
+				ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", pvt->name);
 				usleep(500000);
 				continue;
 			}
 		}
 		/* write initial value to GPIO */
 		memset(buf, 0, sizeof(buf));
-		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-		buf[o->hid_gpio_loc] = o->hid_gpio_val;
+		buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
+		buf[pvt->hid_gpio_loc] = pvt->hid_gpio_val;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		memcpy(bufsave, buf, sizeof(buf));
 		/* setup the pttkick pipe
 		 * this pipe is used for timing the main processing loop
 		 * it also signaled when the ptt changes to exit the timer
 		 */
-		if (o->pttkick[0] != -1) {
-			close(o->pttkick[0]);
-			o->pttkick[0] = -1;
+		if (pvt->pttkick[0] != -1) {
+			close(pvt->pttkick[0]);
+			pvt->pttkick[0] = -1;
 		}
-		if (o->pttkick[1] != -1) {
-			close(o->pttkick[1]);
-			o->pttkick[1] = -1;
+		if (pvt->pttkick[1] != -1) {
+			close(pvt->pttkick[1]);
+			pvt->pttkick[1] = -1;
 		}
-		if (pipe(o->pttkick) == -1) {
-			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
+		if (pipe(pvt->pttkick) == -1) {
+			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", pvt->name);
 			pthread_exit(NULL);
 		}
 		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
-			o->devtype = C108_PRODUCT_ID;
+			pvt->devtype = C108_PRODUCT_ID;
 		} else {
-			o->devtype = usb_dev->descriptor.idProduct;
+			pvt->devtype = usb_dev->descriptor.idProduct;
 		}
-		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
-		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
+		ast_debug(5, "Channel %s: Starting normally.\n", pvt->name);
+		ast_debug(5, "Channel %s: Attached to usb device %s.\n", pvt->name, pvt->devstr);
 
-		mixer_write(o);
-		load_tune_config(o, NULL, 1);
-		mixer_write(o);
+		mixer_write(pvt);
+		load_tune_config(pvt, NULL, 1);
+		mixer_write(pvt);
 
-		ast_mutex_lock(&o->eepromlock);
-		if (o->wanteeprom) {
-			o->eepromctl = 1;
+		ast_mutex_lock(&pvt->eepromlock);
+		if (pvt->wanteeprom) {
+			pvt->eepromctl = 1;
 		}
-		ast_mutex_unlock(&o->eepromlock);
+		ast_mutex_unlock(&pvt->eepromlock);
 
 		//	setformat(o, O_RDWR);
-		o->hasusb = 1;
-		o->had_gpios_in = 0;
+		pvt->hasusb = 1;
+		pvt->had_gpios_in = 0;
 
 		memset(&rfds, 0, sizeof(rfds));
-		rfds[0].fd = o->pttkick[1];
+		rfds[0].fd = pvt->pttkick[1];
 		rfds[0].events = POLLIN;
 
-		ast_radio_time(&o->lasthidtime);
+		ast_radio_time(&pvt->lasthidtime);
 		/* Main processing loop for GPIO
 		 * This loop process every HID_POLL_RATE milliseconds.
 		 * The timer can be interrupted by writing to
 		 * the pttkick pipe.
 		 */
-		while ((!o->stophid) && o->hasusb) {
+		while ((!pvt->stophid) && pvt->hasusb) {
 			then = ast_radio_tvnow();
 			/* poll the pttkick pipe - timeout after HID_POLL_RATE milliseconds */
 			res = ast_poll(rfds, 1, HID_POLL_RATE);
 			if (res < 0) {
-				ast_log(LOG_WARNING, "Channel %s: Poll failed: %s\n", o->name, strerror(errno));
+				ast_log(LOG_WARNING, "Channel %s: Poll failed: %s\n", pvt->name, strerror(errno));
 				usleep(10000);
 				continue;
 			}
 			if (rfds[0].revents) {
 				char c;
 
-				int bytes = read(o->pttkick[0], &c, 1);
+				int bytes = read(pvt->pttkick[0], &c, 1);
 				if (bytes <= 0) {
-					ast_log(LOG_ERROR, "Channel %s: pttkick read failed: %s\n", o->name, strerror(errno));
+					ast_log(LOG_ERROR, "Channel %s: pttkick read failed: %s\n", pvt->name, strerror(errno));
 				}
 			}
 			/* see if we need to process an eeprom read or write */
-			if (o->wanteeprom) {
-				ast_mutex_lock(&o->eepromlock);
-				if (o->eepromctl == 1) { /* to read */
+			if (pvt->wanteeprom) {
+				ast_mutex_lock(&pvt->eepromlock);
+				if (pvt->eepromctl == 1) { /* to read */
 					/* if CS okay */
-					if (!ast_radio_get_eeprom(usb_handle, o->eeprom)) {
-						if (o->eeprom[EEPROM_USER_MAGIC_ADDR] != EEPROM_MAGIC) {
-							ast_log(LOG_ERROR, "Channel %s: EEPROM bad magic number\n", o->name);
+					if (!ast_radio_get_eeprom(usb_handle, pvt->eeprom)) {
+						if (pvt->eeprom[EEPROM_USER_MAGIC_ADDR] != EEPROM_MAGIC) {
+							ast_log(LOG_ERROR, "Channel %s: EEPROM bad magic number\n", pvt->name);
 						} else {
-							o->rxmixerset = o->eeprom[EEPROM_USER_RXMIXERSET];
-							o->txmixaset = o->eeprom[EEPROM_USER_TXMIXASET];
-							o->txmixbset = o->eeprom[EEPROM_USER_TXMIXBSET];
-							ast_log(LOG_NOTICE, "Channel %s: EEPROM Loaded\n", o->name);
-							mixer_write(o);
+							pvt->rxmixerset = pvt->eeprom[EEPROM_USER_RXMIXERSET];
+							pvt->txmixaset = pvt->eeprom[EEPROM_USER_TXMIXASET];
+							pvt->txmixbset = pvt->eeprom[EEPROM_USER_TXMIXBSET];
+							ast_log(LOG_NOTICE, "Channel %s: EEPROM Loaded\n", pvt->name);
+							mixer_write(pvt);
 						}
 					} else {
-						ast_log(LOG_ERROR, "Channel %s: USB adapter has no EEPROM installed or Checksum is bad\n", o->name);
+						ast_log(LOG_ERROR, "Channel %s: USB adapter has no EEPROM installed or Checksum is bad\n", pvt->name);
 					}
 					ast_radio_hid_set_outputs(usb_handle, bufsave);
 				}
-				if (o->eepromctl == 2) { /* to write */
-					ast_radio_put_eeprom(usb_handle, o->eeprom);
+				if (pvt->eepromctl == 2) { /* to write */
+					ast_radio_put_eeprom(usb_handle, pvt->eeprom);
 					ast_radio_hid_set_outputs(usb_handle, bufsave);
-					ast_log(LOG_NOTICE, "Channel %s: USB parameters written to EEPROM\n", o->name);
+					ast_log(LOG_NOTICE, "Channel %s: USB parameters written to EEPROM\n", pvt->name);
 				}
-				o->eepromctl = 0;
-				ast_mutex_unlock(&o->eepromlock);
+				pvt->eepromctl = 0;
+				ast_mutex_unlock(&pvt->eepromlock);
 			}
-			ast_mutex_lock(&o->usblock);
-			buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+			ast_mutex_lock(&pvt->usblock);
+			buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
 			ast_radio_hid_get_inputs(usb_handle, buf);
 			/* See if we are keyed */
-			keyed = !(buf[o->hid_io_cor_loc] & o->hid_io_cor);
-			if (keyed != o->rxhidsq) {
-				ast_debug(2, "Channel %s: Update rxhidsq = %d\n", o->name, keyed);
-				o->rxhidsq = keyed;
+			keyed = !(buf[pvt->hid_io_cor_loc] & pvt->hid_io_cor);
+			if (keyed != pvt->rxhidsq) {
+				ast_debug(2, "Channel %s: Update rxhidsq = %d\n", pvt->name, keyed);
+				pvt->rxhidsq = keyed;
 			}
 			/* See if we are receiving ctcss */
-			ctcssed = !(buf[o->hid_io_ctcss_loc] & o->hid_io_ctcss);
-			if (ctcssed != o->rxhidctcss) {
-				ast_debug(2, "Channel %s: Update rxhidctcss = %d\n", o->name, ctcssed);
-				o->rxhidctcss = ctcssed;
+			ctcssed = !(buf[pvt->hid_io_ctcss_loc] & pvt->hid_io_ctcss);
+			if (ctcssed != pvt->rxhidctcss) {
+				ast_debug(2, "Channel %s: Update rxhidctcss = %d\n", pvt->name, ctcssed);
+				pvt->rxhidctcss = ctcssed;
 			}
-			ast_mutex_lock(&o->txqlock);
-			txreq = !(AST_LIST_EMPTY(&o->txq));
-			ast_mutex_unlock(&o->txqlock);
-			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
-			if (txreq && (!o->lasttx)) {
-				o->hid_gpio_val |= o->hid_io_ptt;
-				if (o->invertptt) {
-					o->hid_gpio_val &= ~o->hid_io_ptt;
+			ast_mutex_lock(&pvt->txqlock);
+			txreq = !(AST_LIST_EMPTY(&pvt->txq));
+			ast_mutex_unlock(&pvt->txqlock);
+			txreq = txreq || pvt->txkeyed || pvt->txtestkey || pvt->echoing;
+			if (txreq && (!pvt->lasttx)) {
+				pvt->hid_gpio_val |= pvt->hid_io_ptt;
+				if (pvt->invertptt) {
+					pvt->hid_gpio_val &= ~pvt->hid_io_ptt;
 				}
-				buf[o->hid_gpio_loc] = o->hid_gpio_val;
-				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+				buf[pvt->hid_gpio_loc] = pvt->hid_gpio_val;
+				buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
-				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", o->name, txreq);
-			} else if ((!txreq) && o->lasttx) {
-				o->hid_gpio_val &= ~o->hid_io_ptt;
-				if (o->invertptt) {
-					o->hid_gpio_val |= o->hid_io_ptt;
+				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", pvt->name, txreq);
+			} else if ((!txreq) && pvt->lasttx) {
+				pvt->hid_gpio_val &= ~pvt->hid_io_ptt;
+				if (pvt->invertptt) {
+					pvt->hid_gpio_val |= pvt->hid_io_ptt;
 				}
-				buf[o->hid_gpio_loc] = o->hid_gpio_val;
-				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+				buf[pvt->hid_gpio_loc] = pvt->hid_gpio_val;
+				buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
-				ast_debug(2, "Channel %s: update PTT = %d.\n", o->name, txreq);
+				ast_debug(2, "Channel %s: update PTT = %d.\n", pvt->name, txreq);
 			}
-			lasttxtmp = o->lasttx;
-			o->lasttx = txreq;
-			ast_radio_time(&o->lasthidtime);
+			lasttxtmp = pvt->lasttx;
+			pvt->lasttx = txreq;
+			ast_radio_time(&pvt->lasthidtime);
 			/* Get the GPIO information */
-			j = buf[o->hid_gpio_loc];
+			j = buf[pvt->hid_gpio_loc];
 			/* If this device is a CM108AH, map the "HOOK" bit (which used to
 			   be GPIO2 in the CM108 into the GPIO position */
-			if (o->devtype == C108AH_PRODUCT_ID) {
+			if (pvt->devtype == C108AH_PRODUCT_ID) {
 				j |= 2; /* set GPIO2 bit */
 				/* if HOOK is asserted, clear GPIO bit */
-				if (buf[o->hid_io_cor_loc] & 0x10) {
+				if (buf[pvt->hid_io_cor_loc] & 0x10) {
 					j &= ~2;
 				}
 			}
 			for (i = 0; i < GPIO_PINCOUNT; i++) {
 				/* if a valid input bit, dont clear it */
-				if ((o->gpios[i]) && (!strcasecmp(o->gpios[i], "in")) && (o->valid_gpios & (1 << i))) {
+				if ((pvt->gpios[i]) && (!strcasecmp(pvt->gpios[i], "in")) && (pvt->valid_gpios & (1 << i))) {
 					continue;
 				}
 				j &= ~(1 << i); /* clear the bit, since its not an input */
 			}
-			if ((!o->had_gpios_in) || (o->last_gpios_in != j)) {
+			if ((!pvt->had_gpios_in) || (pvt->last_gpios_in != j)) {
 				char buf1[100];
 				struct ast_frame fr = {
 					.frametype = AST_FRAME_TEXT,
@@ -1443,27 +1452,27 @@ static void *hidthread(void *arg)
 
 				for (i = 0; i < GPIO_PINCOUNT; i++) {
 					/* skip if not specified */
-					if (!o->gpios[i]) {
+					if (!pvt->gpios[i]) {
 						continue;
 					}
 					/* skip if not input */
-					if (strcasecmp(o->gpios[i], "in")) {
+					if (strcasecmp(pvt->gpios[i], "in")) {
 						continue;
 					}
 					/* skip if not a valid GPIO */
-					if (!(o->valid_gpios & (1 << i))) {
+					if (!(pvt->valid_gpios & (1 << i))) {
 						continue;
 					}
 					/* if bit has changed, or never reported */
-					if ((!o->had_gpios_in) || ((o->last_gpios_in & (1 << i)) != (j & (1 << i)))) {
+					if ((!pvt->had_gpios_in) || ((pvt->last_gpios_in & (1 << i)) != (j & (1 << i)))) {
 						sprintf(buf1, "GPIO%d %d\n", i + 1, (j & (1 << i)) ? 1 : 0);
 						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1);
-						ast_queue_frame(o->owner, &fr);
+						ast_queue_frame(pvt->owner, &fr);
 					}
 				}
-				o->had_gpios_in = 1;
-				o->last_gpios_in = j;
+				pvt->had_gpios_in = 1;
+				pvt->last_gpios_in = j;
 			}
 			/* process the parallel port GPIO */
 			if (haspp) {
@@ -1472,12 +1481,12 @@ static void *hidthread(void *arg)
 				ast_mutex_unlock(&pp_lock);
 				for (i = 10; i <= 15; i++) {
 					/* if a valid input bit, dont clear it */
-					if ((o->pps[i]) && (!strcasecmp(o->pps[i], "in")) && (PP_MASK & (1 << i))) {
+					if ((pvt->pps[i]) && (!strcasecmp(pvt->pps[i], "in")) && (PP_MASK & (1 << i))) {
 						continue;
 					}
 					j &= ~(1 << ppinshift[i]); /* clear the bit, since its not an input */
 				}
-				if ((!o->had_pp_in) || (o->last_pp_in != j)) {
+				if ((!pvt->had_pp_in) || (pvt->last_pp_in != j)) {
 					char buf1[100];
 					struct ast_frame fr = {
 						.frametype = AST_FRAME_TEXT,
@@ -1486,11 +1495,11 @@ static void *hidthread(void *arg)
 
 					for (i = 10; i <= 15; i++) {
 						/* skip if not specified */
-						if (!o->pps[i]) {
+						if (!pvt->pps[i]) {
 							continue;
 						}
 						/* skip if not input */
-						if (strcasecmp(o->pps[i], "in")) {
+						if (strcasecmp(pvt->pps[i], "in")) {
 							continue;
 						}
 						/* skip if not valid */
@@ -1498,88 +1507,88 @@ static void *hidthread(void *arg)
 							continue;
 						}
 						/* if bit has changed, or never reported */
-						if ((!o->had_pp_in) || ((o->last_pp_in & (1 << ppinshift[i])) != (j & (1 << ppinshift[i])))) {
+						if ((!pvt->had_pp_in) || ((pvt->last_pp_in & (1 << ppinshift[i])) != (j & (1 << ppinshift[i])))) {
 							sprintf(buf1, "PP%d %d\n", i, (j & (1 << ppinshift[i])) ? 1 : 0);
 							fr.data.ptr = buf1;
 							fr.datalen = strlen(buf1);
-							ast_queue_frame(o->owner, &fr);
+							ast_queue_frame(pvt->owner, &fr);
 						}
 					}
-					o->had_pp_in = 1;
-					o->last_pp_in = j;
+					pvt->had_pp_in = 1;
+					pvt->last_pp_in = j;
 				}
-				o->rxppsq = o->rxppctcss = 0;
+				pvt->rxppsq = pvt->rxppctcss = 0;
 				for (i = 10; i <= 15; i++) {
-					if ((o->pps[i]) && (!strcasecmp(o->pps[i], "cor")) && (PP_MASK & (1 << i))) {
+					if ((pvt->pps[i]) && (!strcasecmp(pvt->pps[i], "cor")) && (PP_MASK & (1 << i))) {
 						j = k & (1 << ppinshift[i]); /* set the bit accordingly */
-						if (j != o->rxppsq) {
-							ast_debug(2, "Channel %s: update rxppsq = %d\n", o->name, j);
-							o->rxppsq = j;
+						if (j != pvt->rxppsq) {
+							ast_debug(2, "Channel %s: update rxppsq = %d\n", pvt->name, j);
+							pvt->rxppsq = j;
 						}
-					} else if ((o->pps[i]) && (!strcasecmp(o->pps[i], "ctcss")) && (PP_MASK & (1 << i))) {
-						o->rxppctcss = k & (1 << ppinshift[i]); /* set the bit accordingly */
+					} else if ((pvt->pps[i]) && (!strcasecmp(pvt->pps[i], "ctcss")) && (PP_MASK & (1 << i))) {
+						pvt->rxppctcss = k & (1 << ppinshift[i]); /* set the bit accordingly */
 					}
 				}
 			}
 			j = ast_tvdiff_ms(ast_radio_tvnow(), then);
 			/* make output inversion mask (for pulseage) */
-			o->hid_gpio_lastmask = o->hid_gpio_pulsemask;
-			o->hid_gpio_pulsemask = 0;
+			pvt->hid_gpio_lastmask = pvt->hid_gpio_pulsemask;
+			pvt->hid_gpio_pulsemask = 0;
 			for (i = 0; i < GPIO_PINCOUNT; i++) {
-				k = o->hid_gpio_pulsetimer[i];
+				k = pvt->hid_gpio_pulsetimer[i];
 				if (k) {
 					k -= j;
 					if (k < 0) {
 						k = 0;
 					}
-					o->hid_gpio_pulsetimer[i] = k;
+					pvt->hid_gpio_pulsetimer[i] = k;
 				}
 				if (k) {
-					o->hid_gpio_pulsemask |= 1 << i;
+					pvt->hid_gpio_pulsemask |= 1 << i;
 				}
 			}
-			if (o->hid_gpio_pulsemask || o->hid_gpio_lastmask) { /* if anything inverted (temporarily) */
-				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
-				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+			if (pvt->hid_gpio_pulsemask || pvt->hid_gpio_lastmask) { /* if anything inverted (temporarily) */
+				buf[pvt->hid_gpio_loc] = pvt->hid_gpio_val ^ pvt->hid_gpio_pulsemask;
+				buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
-			if (o->gpio_set) {
-				o->gpio_set = 0;
-				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
-				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+			if (pvt->gpio_set) {
+				pvt->gpio_set = 0;
+				buf[pvt->hid_gpio_loc] = pvt->hid_gpio_val ^ pvt->hid_gpio_pulsemask;
+				buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
 			k = 0;
 			if (haspp) {
 				for (i = 2; i <= 9; i++) {
 					/* skip if this one not specified */
-					if (!o->pps[i]) {
+					if (!pvt->pps[i]) {
 						continue;
 					}
 					/* skip if not ptt */
-					if (strncasecmp(o->pps[i], "ptt", 3)) {
+					if (strncasecmp(pvt->pps[i], "ptt", 3)) {
 						continue;
 					}
 					k |= (1 << (i - 2)); /* make mask */
 				}
 			}
-			if (o->lasttx != lasttxtmp) {
-				ast_debug(2, "Channel %s: tx set to %d\n", o->name, o->lasttx);
-				o->hid_gpio_val &= ~o->hid_io_ptt;
+			if (pvt->lasttx != lasttxtmp) {
+				ast_debug(2, "Channel %s: tx set to %d\n", pvt->name, pvt->lasttx);
+				pvt->hid_gpio_val &= ~pvt->hid_io_ptt;
 				ast_mutex_lock(&pp_lock);
 				if (k) {
 					pp_val &= ~k;
 				}
-				if (!o->invertptt) {
-					if (o->lasttx) {
-						o->hid_gpio_val |= o->hid_io_ptt;
+				if (!pvt->invertptt) {
+					if (pvt->lasttx) {
+						pvt->hid_gpio_val |= pvt->hid_io_ptt;
 						if (k) {
 							pp_val |= k;
 						}
 					}
 				} else {
-					if (!o->lasttx) {
-						o->hid_gpio_val |= o->hid_io_ptt;
+					if (!pvt->lasttx) {
+						pvt->hid_gpio_val |= pvt->hid_io_ptt;
 						if (k) {
 							pp_val |= k;
 						}
@@ -1589,38 +1598,39 @@ static void *hidthread(void *arg)
 					ast_radio_ppwrite(haspp, ppfd, pbase, pport, pp_val);
 				}
 				ast_mutex_unlock(&pp_lock);
-				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
-				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+				buf[pvt->hid_gpio_loc] = pvt->hid_gpio_val ^ pvt->hid_gpio_pulsemask;
+				buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
 				memcpy(bufsave, buf, sizeof(buf));
 				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
-			ast_radio_time(&o->lasthidtime);
-			ast_mutex_unlock(&o->usblock);
+			ast_radio_time(&pvt->lasthidtime);
+			ast_mutex_unlock(&pvt->usblock);
 		}
-		o->lasttx = 0;
-		ast_mutex_lock(&o->usblock);
-		o->hid_gpio_val &= ~o->hid_io_ptt;
-		if (o->invertptt) {
-			o->hid_gpio_val |= o->hid_io_ptt;
+		pvt->lasttx = 0;
+		ast_mutex_lock(&pvt->usblock);
+		pvt->hid_gpio_val &= ~pvt->hid_io_ptt;
+		if (pvt->invertptt) {
+			pvt->hid_gpio_val |= pvt->hid_io_ptt;
 		}
-		buf[o->hid_gpio_loc] = o->hid_gpio_val;
-		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+		buf[pvt->hid_gpio_loc] = pvt->hid_gpio_val;
+		buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
-		ast_mutex_unlock(&o->usblock);
+		ast_mutex_unlock(&pvt->usblock);
 	}
 	/* clean up before exiting the thread */
-	o->lasttx = 0;
+	pvt->lasttx = 0;
 	if (usb_handle) {
-		ast_mutex_lock(&o->usblock);
-		o->hid_gpio_val &= ~o->hid_io_ptt;
-		if (o->invertptt) {
-			o->hid_gpio_val |= o->hid_io_ptt;
+		ast_mutex_lock(&pvt->usblock);
+		pvt->hid_gpio_val &= ~pvt->hid_io_ptt;
+		if (pvt->invertptt) {
+			pvt->hid_gpio_val |= pvt->hid_io_ptt;
 		}
-		buf[o->hid_gpio_loc] = o->hid_gpio_val;
-		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+		buf[pvt->hid_gpio_loc] = pvt->hid_gpio_val;
+		buf[pvt->hid_gpio_ctl_loc] = pvt->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
-		ast_mutex_unlock(&o->usblock);
+		ast_mutex_unlock(&pvt->usblock);
 	}
+	ast_debug(2, "Thread for %s is ending\n", pvt->name);
 	pthread_exit(0);
 }
 
@@ -1751,7 +1761,7 @@ static void mkpsamples(short *restrict audio, uint32_t data, int *restrict audio
  */
 static int simpleusb_text(struct ast_channel *c, const char *text)
 {
-	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
+	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(c);
 	char *cmd;
 	int cnt, i, j, audio_samples, divcnt, divdiv, audio_ptr, baud;
 	struct pocsag_batch *batch, *b;
@@ -1768,7 +1778,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 	cmd = ast_alloca(strlen(text) + 10);
 
 	/* print received messages */
-	ast_debug(3, "Channel %s: Console Received usbradio text %s >> \n", o->name, text);
+	ast_debug(3, "Channel %s: Console Received usbradio text %s >> \n", pvt->name, text);
 
 	/* set receive CTCSS */
 	if (!strncmp(text, "RXCTCSS", 7)) {
@@ -1776,8 +1786,8 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 		if (cnt < 2) {
 			return 0;
 		}
-		o->rxctcssoverride = !i;
-		ast_debug(3, "Channel %s: RXCTCSS cmd: %s\n", o->name, text);
+		pvt->rxctcssoverride = !i;
+		ast_debug(3, "Channel %s: RXCTCSS cmd: %s\n", pvt->name, text);
 		return 0;
 	}
 
@@ -1792,23 +1802,23 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 		}
 		i--;
 		/* skip if not valid */
-		if (!(o->valid_gpios & (1 << i))) {
+		if (!(pvt->valid_gpios & (1 << i))) {
 			return 0;
 		}
-		ast_mutex_lock(&o->usblock);
+		ast_mutex_lock(&pvt->usblock);
 		if (j > 1) { /* if to request pulse-age */
-			o->hid_gpio_pulsetimer[i] = j - 1;
+			pvt->hid_gpio_pulsetimer[i] = j - 1;
 		} else {
 			/* clear pulsetimer, if in the middle of running */
-			o->hid_gpio_pulsetimer[i] = 0;
-			o->hid_gpio_val &= ~(1 << i);
+			pvt->hid_gpio_pulsetimer[i] = 0;
+			pvt->hid_gpio_val &= ~(1 << i);
 			if (j) {
-				o->hid_gpio_val |= 1 << i;
+				pvt->hid_gpio_val |= 1 << i;
 			}
-			o->gpio_set = 1;
+			pvt->gpio_set = 1;
 		}
-		ast_mutex_unlock(&o->usblock);
-		kickptt(o);
+		ast_mutex_unlock(&pvt->usblock);
+		kickptt(pvt);
 		return 0;
 	}
 
@@ -1852,21 +1862,21 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 		}
 		switch (text[j]) {
 		case 'T': /* Tone only */
-			ast_verb(3, "Channel %s: POCSAG page (%d baud, capcode=%d) TONE ONLY\n", o->name, baud, i);
+			ast_verb(3, "Channel %s: POCSAG page (%d baud, capcode=%d) TONE ONLY\n", pvt->name, baud, i);
 			batch = make_pocsag_batch(i, NULL, 0, TONE, 0);
 			break;
 		case 'N': /* Numeric */
 			if (!text[j + 1]) {
 				return 0;
 			}
-			ast_verb(3, "Channel %s: POCSAG page (%d baud, capcode=%d) NUMERIC (%s)\n", o->name, baud, i, text + j + 1);
+			ast_verb(3, "Channel %s: POCSAG page (%d baud, capcode=%d) NUMERIC (%s)\n", pvt->name, baud, i, text + j + 1);
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), NUMERIC, 0);
 			break;
 		case 'A': /* Alpha */
 			if (!text[j + 1]) {
 				return 0;
 			}
-			ast_verb(3, "Channel %s: POCSAG page (%d baud, capcode=%d) ALPHA (%s)\n", o->name, baud, i, text + j + 1);
+			ast_verb(3, "Channel %s: POCSAG page (%d baud, capcode=%d) ALPHA (%s)\n", pvt->name, baud, i, text + j + 1);
 			batch = make_pocsag_batch(i, (char *) text + j + 1, strlen(text + j + 1), ALPHA, 0);
 			break;
 		case '?': /* Query Page Status */
@@ -1877,25 +1887,25 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			};
 
 			i = 0;
-			ast_mutex_lock(&o->txqlock);
-			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+			ast_mutex_lock(&pvt->txqlock);
+			AST_LIST_TRAVERSE(&pvt->txq, f1, frame_list) {
 				if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
 					i++;
 				}
 			}
 
-			ast_mutex_unlock(&o->txqlock);
+			ast_mutex_unlock(&pvt->txqlock);
 			cmd = (i) ? "PAGES" : "NOPAGES";
 			wf.data.ptr = cmd;
 			wf.datalen = strlen(cmd);
-			ast_queue_frame(o->owner, &wf);
+			ast_queue_frame(pvt->owner, &wf);
 			return 0;
 		}
 		default:
 			return 0;
 		}
 		if (!batch) {
-			ast_log(LOG_ERROR, "Channel %s: Error creating POCSAG page.\n", o->name);
+			ast_log(LOG_ERROR, "Channel %s: Error creating POCSAG page.\n", pvt->name);
 			return 0;
 		}
 		b = batch;
@@ -1949,14 +1959,14 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 				return 0;
 			}
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-			ast_mutex_lock(&o->txqlock);
-			AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
-			ast_mutex_unlock(&o->txqlock);
+			ast_mutex_lock(&pvt->txqlock);
+			AST_LIST_INSERT_TAIL(&pvt->txq, f1, frame_list);
+			ast_mutex_unlock(&pvt->txqlock);
 		}
 		ast_free(audio);
 		return 0;
 	}
-	ast_log(LOG_ERROR, "Channel %s: Cannot parse simpleusb cmd: %s\n", o->name, text);
+	ast_log(LOG_ERROR, "Channel %s: Cannot parse simpleusb cmd: %s\n", pvt->name, text);
 	return 0;
 }
 
@@ -1974,10 +1984,12 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 
 	pvt->stophid = 0;
 	ast_radio_time(&pvt->lasthidtime);
-	ast_pthread_create(&pvt->hidthread, NULL, hidthread, pvt);
-	ast_setstate(c, AST_STATE_UP);
 	snd_pcm_prepare(pvt->icard);
 	snd_pcm_start(pvt->icard);
+	snd_pcm_prepare(pvt->ocard);
+	snd_pcm_start(pvt->ocard);
+	ast_pthread_create(&pvt->hidthread, NULL, hidthread, pvt);
+	ast_setstate(c, AST_STATE_UP);
 	return 0;
 }
 
@@ -2294,8 +2306,8 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 
 	state = snd_pcm_state(pvt->icard);
 	if ((state != SND_PCM_STATE_PREPARED) && (state != SND_PCM_STATE_RUNNING)) {
-		snd_pcm_prepare(pvt->icard);
-		ast_log(LOG_ERROR, "PCM not ready!!\n");
+		// snd_pcm_prepare(pvt->icard);
+		ast_log(LOG_ERROR, "PCM not ready!! State: %d\n", state);
 	}
 
 	res = snd_pcm_readi(pvt->icard, pvt->simpleusb_read_buf + pvt->readpos, FRAME_SIZE);
@@ -2311,7 +2323,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		/* audio data not ready */
 		if (res != EAGAIN) {
 			pvt->readerrs = 0;
-			pvt->hasusb = 0;
+			// pvt->hasusb = 0;
 		} else if (pvt->readerrs++ > READERR_THRESHOLD) {
 			ast_log(LOG_ERROR, "Stuck USB read channel [%s], un-sticking it!\n", pvt->name);
 			pvt->readerrs = 0;
@@ -3874,37 +3886,37 @@ static void store_pager(struct chan_simpleusb_pvt *o, char *s)
  *
  * \param		chan_simpleusb structure.
  */
-static void mixer_write(struct chan_simpleusb_pvt *o)
+static void mixer_write(struct chan_simpleusb_pvt *pvt)
 {
 	int mic_setting;
 	float f, f1;
 
-	if (o->duplex3) {
-		if (o->duplex3 > o->micplaymax) {
-			o->duplex3 = o->micplaymax;
+	if (pvt->duplex3) {
+		if (pvt->duplex3 > pvt->micplaymax) {
+			pvt->duplex3 = pvt->micplaymax;
 		}
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, o->duplex3, 0);
+		ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, pvt->duplex3, 0);
 	} else {
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, 0, 0);
+		ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, 0, 0);
 	}
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
-	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
-	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
-		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
-		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
+	ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
+	ast_radio_setamixer(pvt->devicenum, (pvt->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
+	ast_radio_setamixer(pvt->devicenum, (pvt->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
+		ast_radio_make_spkr_playback_value(pvt->spkrmax, pvt->txmixaset, pvt->devtype),
+		ast_radio_make_spkr_playback_value(pvt->spkrmax, pvt->txmixbset, pvt->devtype));
 	/* adjust settings based on the device */
-	if (o->devtype == C119B_PRODUCT_ID) {
-		o->rxboost = 1; /*rxboost is always set for this device */
+	if (pvt->devtype == C119B_PRODUCT_ID) {
+		pvt->rxboost = 1; /*rxboost is always set for this device */
 	}
-	mic_setting = o->rxmixerset * o->micmax / AUDIO_ADJUSTMENT;
+	mic_setting = pvt->rxmixerset * pvt->micmax / AUDIO_ADJUSTMENT;
 	/* get interval step size */
-	f = AUDIO_ADJUSTMENT / (float) o->micmax;
+	f = AUDIO_ADJUSTMENT / (float) pvt->micmax;
 
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
+	ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
+	ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_BOOST, pvt->rxboost, 0);
+	ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
 	/* set the received voice adjustment factor */
-	o->rxvoiceadj = 1.0 + (modff(((float) o->rxmixerset) / f, &f1) * .187962);
+	pvt->rxvoiceadj = 1.0 + (modff(((float) pvt->rxmixerset) / f, &f1) * .187962);
 }
 
 /*!
