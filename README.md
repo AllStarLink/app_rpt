@@ -12,7 +12,7 @@ This code implements:
 - Telemetry and monitoring systems
 
 ## Repository Structure
-```
+```text
 app_rpt/
 ├── apps/app_rpt/      # Core repeater application logic
 ├── channels/          # Asterisk channel drivers (radio interfaces)
