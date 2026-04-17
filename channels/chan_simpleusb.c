@@ -2062,7 +2062,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 {
 	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(c);
 	register short *sp, *sp1;
-	short outbuf[FRAME_SIZE * 2 * 6 * 2];
+	short outbuf[FRAME_SIZE * 2 * 6];
 	int src, i, doright, doleft, ispager;
 
 	if (!pvt->hasusb) {
@@ -2129,23 +2129,6 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 		 */
 		PaError res;
 
-		if (pvt->legacyaudioscaling && pvt->devtype != C108_PRODUCT_ID) {
-			register int v;
-
-			sp = (short *) f->data.ptr;
-			for (i = 0; i < FRAME_SIZE; i++) {
-				v = *sp;
-				v += v >> 3;   /* add *.125 giving * 1.125 */
-				v -= *sp >> 5; /* subtract *.03125 giving * 1.09375 */
-				if (v > 32765.0) {
-					v = 32765.0;
-				} else if (v < -32765.0) {
-					v = -32765.0;
-				}
-				*sp++ = v;
-			}
-		}
-
 		sp = (short *) f->data.ptr;
 		sp1 = outbuf;
 		doright = 1;
@@ -2188,8 +2171,12 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 			*sp1++ = (doleft) ? v : 0;
 			*sp1++ = (doright) ? v : 0;
 		}
-		res = Pa_WriteStream(pvt->stream, outbuf, FRAME_SIZE * 2);
-		if (res) {
+		res = Pa_WriteStream(pvt->stream, outbuf, FRAME_SIZE * 6);
+		if (res == paOutputUnderflowed) {
+			memset(outbuf, 0, sizeof(outbuf));
+			ast_debug(1, "PA Underflow, writing a 0 frame");
+			Pa_WriteStream(pvt->stream, outbuf, FRAME_SIZE * 6);
+		} else if (res) {
 			ast_debug(1, "PA Error %s", Pa_GetErrorText(res));
 		}
 
