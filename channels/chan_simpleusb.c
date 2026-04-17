@@ -499,7 +499,7 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 		if (output_params.device == paNoDevice) {
 			ast_log(LOG_ERROR, "No output device found for console device '%s'\n", pvt->name);
 		}
-
+		ast_debug(5, "Opening stream on device %s", pvt->hw_device);
 		res = Pa_OpenStream(&pvt->stream, &input_params, &output_params, SAMPLE_RATE, NUM_SAMPLES, paNoFlag, NULL, NULL);
 		ast_debug(5, "Stream feedback %s", Pa_GetErrorText(res));
 	}
@@ -513,7 +513,7 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 	int ret_val = 0;
 
 	// console_pvt_lock(pvt);
-
+	ast_debug(5, "Starting PA Stream");
 	/* It is possible for console_hangup to be called before the
 	 * stream is started, if this is the case pvt->owner will be NULL
 	 * and start_stream should be aborted. */
@@ -1199,8 +1199,8 @@ static void *hidthread(void *arg)
 			usleep(500000);
 			continue;
 		}
-		o->devicenum = i;
 		snprintf(o->hw_device, sizeof(o->hw_device), "hw:%d", i);
+		o->devicenum = i;
 		o->device_error = 0;
 		ast_radio_time(&o->lasthidtime);
 		o->usbass = 1;
@@ -1911,6 +1911,9 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 	o->stophid = 0;
 	ast_radio_time(&o->lasthidtime);
 	ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+	while (!o->usbass) {
+		usleep(1000);
+	}
 	start_stream(o);
 	ast_setstate(c, AST_STATE_UP);
 	return 0;
