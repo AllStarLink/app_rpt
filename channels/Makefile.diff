@@ -6,7 +6,7 @@ index 0f8d1328c5..c9523f6d69 100644
  $(call MOD_ADD_C,chan_iax2,$(wildcard iax2/*.c))
  iax2/parser.o: _ASTCFLAGS+=$(call get_menuselect_cflags,MALLOC_DEBUG)
  
-+chan_simpleusb.so: LIBS+=-lusb -lasound
++chan_simpleusb.so: LIBS+=-lusb -lasound -lportaudio
 +chan_usbradio.so: LIBS+=-lusb -lasound
 +
  $(call MOD_ADD_C,chan_pjsip,$(wildcard pjsip/*.c))
