@@ -911,6 +911,78 @@ static void cleanup_user_devices(void)
 	AST_RWLIST_UNLOCK(&user_devices);
 }
 
+static int read_card_usbbus(int cardno, char *out, size_t outsz)
+{
+	char path[128];
+	FILE *fp;
+	size_t n;
+
+	if (outsz < 2) {
+		return -1;
+	}
+
+	snprintf(path, sizeof(path), "/proc/asound/card%d/usbbus", cardno);
+
+	fp = fopen(path, "r");
+	if (!fp) {
+		return -1;
+	}
+
+	if (!fgets(out, outsz, fp)) {
+		fclose(fp);
+		return -1;
+	}
+	fclose(fp);
+
+	/* trim trailing whitespace/newlines */
+	n = strlen(out);
+	while (n > 0 && isspace((unsigned char) out[n - 1])) {
+		out[--n] = '\0';
+	}
+
+	return (n > 0) ? 0 : -1;
+}
+
+/*
+ * Returns the libusb device that backs ALSA /proc/asound/card<cardno>/usbbus.
+ * On success: returns a pointer to a libusb struct usb_device.
+ * On failure: returns NULL.
+ *
+ * Notes:
+ * - Uses libusb-0.1 enumeration (usb_init/usb_find_busses/usb_find_devices).
+ * - The returned pointer is owned by libusb's internal device list.
+ */
+struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno)
+{
+	char target[64]; /* usually "001/005" fits easily */
+	struct usb_bus *bus;
+	struct usb_device *dev;
+
+	if (read_card_usbbus(cardno, target, sizeof(target)) != 0) {
+		ast_debug(3, "Unable to read usbbus for card %d (may not be a USB device)\n", cardno);
+		return NULL;
+	}
+
+	usb_init();
+	usb_find_busses();
+	usb_find_devices();
+
+	for (bus = usb_busses; bus; bus = bus->next) {
+		for (dev = bus->devices; dev; dev = dev->next) {
+			char cur[sizeof(bus->dirname) + sizeof(dev->filename) + 1];
+
+			snprintf(cur, sizeof(cur), "%s/%s", bus->dirname, dev->filename);
+
+			/* usbbus content is typically case-insensitive */
+			if (strcasecmp(cur, target) == 0) {
+				return dev;
+			}
+		}
+	}
+	ast_debug(1, "No USB device found matching bus path '%s' for card %d\n", target, cardno);
+	return NULL;
+}
+
 /* Load our configuration */
 static int load_config(int reload)
 {

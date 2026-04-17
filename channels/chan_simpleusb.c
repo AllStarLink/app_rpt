@@ -35,6 +35,8 @@
 
 #include "asterisk.h"
 
+#include <portaudio.h>
+
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -103,6 +105,28 @@
 #include "asterisk/format_cache.h"
 #include "asterisk/format_compatibility.h"
 
+/*!
+ * \brief The sample rate to request from PortAudio
+ *
+ * \todo Make this optional.  If this is only going to talk to 8 kHz endpoints,
+ *       then it makes sense to use 8 kHz natively.
+ */
+#define SAMPLE_RATE 48000 /* PortAudio Sample rate: Hardware likes 48k and is divisible by 6 for a "nice" down conversion. */
+
+/*!
+ * \brief The number of samples to configure the portaudio stream for
+ *
+ * At 48kHz, 960 samples gives a 20ms frames, which aligns with Asterisk's
+ * common frame size after resampling to 8kHz (160 samples @ 2 bytes per sample).
+ */
+#define NUM_SAMPLES 960 /* The number of 2 byte (paInt16) samples per PortAudio "frame" */
+
+/*! \brief Mono Input */
+#define INPUT_CHANNELS 1 /* PortAudio: Mono input for Microphone / RX */
+
+/*! \brief Stereo Output */
+#define OUTPUT_CHANNELS 2 /* PortAudio: Stereo output for Speaker / TX */
+
 /*! \brief Global jitterbuffer configuration - by default, jb is disabled */
 static struct ast_jb_conf default_jbconf = {
 	.flags = 0,
@@ -120,8 +144,8 @@ static struct ast_jb_conf global_jbconf;
 #define PAGER_SRC "PAGER"
 #define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 12000
-#define SAMPRATE 8000 /* (Sample Rate) */
-#define DIVLCM 192000 /* (Least Common Mult of 512,1200,2400,8000) */
+#define SAMPRATE 8000 /* Asterisk sample rate (after down conversion) */
+#define DIVLCM 192000 /* Least Common Mult of 512,1200,2400,8000) */
 #define PREAMBLE_BITS 576
 #define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
 #define ONEVAL -AMPVAL
@@ -171,37 +195,33 @@ static const char *const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "
 struct chan_simpleusb_pvt {
 	struct chan_simpleusb_pvt *next;
 
-	char *name;		  /* the internal name of our channel */
-	int devtype;	  /* actual type of device */
-	int pttkick[2];	  /* ptt kick pipe */
-	int total_blocks; /* total blocks in the output device */
-	int sounddev;
+	char *name;				 /* the internal name of our channel */
+	char hw_device[50];		 /* hardware device name */
+	int devtype;			 /* actual type of device */
+	int pttkick[2];			 /* ptt kick pipe */
 	enum {
 		M_UNSET,
 		M_FULL,
 		M_READ,
 		M_WRITE
 	} duplex;
-	int hookstate;
-	unsigned int queuesize; /* max fragments in queue */
-	unsigned int frags;		/* parameter for SETFRAGMENT */
 
-	int warned; /* various flags used for warnings */
-#define WARN_used_blocks 1
-#define WARN_speed 2
-#define WARN_frag 4
-
-	char devicenum;
+	int warned;				/* various flags used for warnings */
+	int devicenum;
 	char devstr[128];
 	char serial[128];
 	int spkrmax;
 	int micmax;
 	int micplaymax;
 
+	pthread_t audiothread;
 	pthread_t hidthread;
 	int stophid;
 
+	struct usb_device *usb_dev;
 	struct ast_channel *owner;
+
+	PaStream *stream; /*! Current PortAudio stream for this device */
 
 	/* buffers used in simpleusb_write, 2 per int */
 	char simpleusb_write_buf[FRAME_SIZE * 2];
@@ -210,8 +230,8 @@ struct chan_simpleusb_pvt {
 	/* buffers used in simpleusb_read - AST_FRIENDLY_OFFSET space for headers
 	 * plus enough room for a full frame
 	 */
-	char simpleusb_read_buf[FRAME_SIZE * 4 * 6]; /* 2 bytes * 2 channels * 6 for 48K */
-	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET];
+	char simpleusb_read_buf[NUM_SAMPLES * 2];							 /* 2 byte samples for PortAudio - paInt16 */
+	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte frames at 8k */
 	int readpos;			 /* read position above */
 	struct ast_frame read_f; /* returned by simpleusb_read */
 
@@ -292,12 +312,14 @@ struct chan_simpleusb_pvt {
 	char had_pp_in;
 
 	/* bit fields */
+	unsigned int streamstate:1;		/* indicator if stream is started */
 	unsigned int rxcapraw:1;		/* indicator if receive capture is enabled */
 	unsigned int txcapraw:1;		/* indicator if transmit capture is enabled */
 	unsigned int measure_enabled:1; /* indicator if measure mode is enabled */
 	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
 	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
 	unsigned int hasusb:1;			/* indicator for has a USB device */
+	unsigned int internal_audio:1;	/* indicator for non usb audio device */
 	unsigned int usbass:1;			/* indicator for USB device assigned */
 	unsigned int wanteeprom:1;		/* indicator if we should use EEPROM */
 	unsigned int usedtmf:1;			/* indicator is we should decode DTMF */
@@ -315,7 +337,6 @@ struct chan_simpleusb_pvt {
 	ast_mutex_t eepromlock;
 
 	struct usb_dev_handle *usb_handle;
-	int readerrs;
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
@@ -344,10 +365,7 @@ struct chan_simpleusb_pvt {
  * \brief Default channel descriptor
  */
 static struct chan_simpleusb_pvt simpleusb_default = {
-	.sounddev = -1,
 	.duplex = M_FULL,
-	.queuesize = QUEUE_SIZE,
-	.frags = FRAGS,
 	.readpos = 0, /* start here on reads */
 	.wanteeprom = 1,
 	.usedtmf = 1,
@@ -366,7 +384,6 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 
 static int hidhdwconfig(struct chan_simpleusb_pvt *o);
 static void mixer_write(struct chan_simpleusb_pvt *o);
-static int setformat(struct chan_simpleusb_pvt *o, int mode);
 static struct ast_channel *simpleusb_request(const char *type, struct ast_format_cap *cap,
 	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
 static int simpleusb_digit_begin(struct ast_channel *c, char digit);
@@ -383,12 +400,11 @@ static int simpleusb_setoption(struct ast_channel *chan, int option, void *data,
 static void tune_menusupport(int fd, struct chan_simpleusb_pvt *o, const char *cmd);
 static void tune_write(struct chan_simpleusb_pvt *o);
 static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int intflag);
+static void *simpleusb_audio_thread(void *arg);
 
 static char *simpleusb_active; /* the active device */
 
 static const int ppinshift[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 7, 5, 4, 0, 3 };
-
-static const char tdesc[] = "Simple USB (CM108) Radio Channel Driver";
 
 /*!
  * \brief Asterisk channel technology struct.
@@ -397,7 +413,7 @@ static const char tdesc[] = "Simple USB (CM108) Radio Channel Driver";
  */
 static struct ast_channel_tech simpleusb_tech = {
 	.type = "SimpleUSB",
-	.description = tdesc,
+	.description = "Simple USB (CM108) Radio Channel Driver",
 	.requester = simpleusb_request,
 	.send_digit_begin = simpleusb_digit_begin,
 	.send_digit_end = simpleusb_digit_end,
@@ -411,6 +427,125 @@ static struct ast_channel_tech simpleusb_tech = {
 	.fixup = simpleusb_fixup,
 	.setoption = simpleusb_setoption,
 };
+
+static int open_stream(struct chan_simpleusb_pvt *pvt)
+{
+	PaError res = paInternalError;
+
+	if (!strcasecmp(pvt->hw_device, "default")) {
+		ast_debug(1, "Opening stream with default device\n");
+		res = Pa_OpenDefaultStream(&pvt->stream, INPUT_CHANNELS, OUTPUT_CHANNELS, paInt16, SAMPLE_RATE, NUM_SAMPLES, NULL, NULL);
+	} else {
+		ast_debug(1, "Looking for device %s", pvt->hw_device);
+		PaStreamParameters input_params = {
+			.channelCount = INPUT_CHANNELS,
+			.sampleFormat = paInt16,
+			.suggestedLatency = (1.0 / 50.0), /* 20 ms */
+			.device = paNoDevice,
+		};
+		PaStreamParameters output_params = {
+			.channelCount = OUTPUT_CHANNELS,
+			.sampleFormat = paInt16,
+			.suggestedLatency = (1.0 / 50.0), /* 20 ms */
+			.device = paNoDevice,
+		};
+		PaDeviceIndex idx, num_devices;
+		ast_debug(6, "PortAudio host api count %d\n", Pa_GetHostApiCount());
+		num_devices = Pa_GetDeviceCount();
+		if (num_devices < 0) {
+			ast_debug(1, "No devices found\n");
+			return res;
+		} else {
+			ast_debug(6, "%d Devices found\n", num_devices);
+		}
+
+		for (idx = 0; idx < num_devices && (input_params.device == paNoDevice || output_params.device == paNoDevice); idx++) {
+			const PaDeviceInfo *dev = Pa_GetDeviceInfo(idx);
+			ast_debug(1, "Found device %s\n", dev->name);
+			if (dev->maxInputChannels) {
+				if (strlen(pvt->hw_device) && strstr(dev->name, pvt->hw_device)) {
+					ast_debug(5, "Found input device %s\n", dev->name);
+					input_params.device = idx;
+				}
+			}
+
+			if (dev->maxOutputChannels) {
+				if (strlen(pvt->hw_device) && strstr(dev->name, pvt->hw_device)) {
+					ast_debug(5, "Found output device %s\n", dev->name);
+					output_params.device = idx;
+				}
+			}
+		}
+
+		if (input_params.device == paNoDevice) {
+			ast_log(LOG_ERROR, "No input device found for simpleusb device '%s'\n", pvt->name);
+		}
+
+		if (output_params.device == paNoDevice) {
+			ast_log(LOG_ERROR, "No output device found for simpleusb device '%s'\n", pvt->name);
+		}
+		ast_debug(5, "Opening stream on device %s", pvt->hw_device);
+		res = Pa_OpenStream(&pvt->stream, &input_params, &output_params, SAMPLE_RATE, NUM_SAMPLES, paNoFlag, NULL, NULL);
+		ast_debug(5, "Stream feedback %s\n", Pa_GetErrorText(res));
+	}
+
+	return res;
+}
+
+static int start_stream(struct chan_simpleusb_pvt *pvt)
+{
+	PaError res;
+	int ret_val = 0;
+
+	ast_debug(5, "Starting PA Stream");
+	/* It is possible for simpleusb_hangup to be called before the
+	 * stream is started, if this is the case pvt->owner will be NULL
+	 * and start_stream should be aborted. */
+	if (pvt->streamstate || !pvt->owner)
+		goto return_val;
+
+	res = open_stream(pvt);
+	if (res != paNoError) {
+		ast_log(LOG_WARNING, "Failed to open stream - (%d) %s\n", res, Pa_GetErrorText(res));
+		ret_val = -1;
+		goto return_val;
+	}
+
+	res = Pa_StartStream(pvt->stream);
+	if (res != paNoError) {
+		ast_log(LOG_WARNING, "Failed to start stream - (%d) %s\n", res, Pa_GetErrorText(res));
+		Pa_CloseStream(pvt->stream);
+		pvt->stream = NULL;
+		pvt->streamstate = 0;
+		ret_val = -1;
+		goto return_val;
+	}
+	pvt->streamstate = 1;
+
+return_val:
+	return ret_val;
+}
+
+static int stop_stream(struct chan_simpleusb_pvt *pvt)
+{
+	PaError err;
+
+	if (!pvt->streamstate)
+		return 0;
+
+	/* Wait for pvt->thread to exit cleanly, to avoid killing it while it's holding a lock. */
+	err = Pa_AbortStream(pvt->stream);
+	if (err != paNoError) {
+		ast_log(LOG_WARNING, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
+	}
+	err = Pa_CloseStream(pvt->stream);
+	if (err != paNoError) {
+		ast_log(LOG_WARNING, "Pa_CloseStream failed: %s\n", Pa_GetErrorText(err));
+	}
+	pvt->stream = NULL;
+	pvt->streamstate = 0;
+	return 0;
+}
 
 /*!
  * \brief FIR Low pass filter.
@@ -780,7 +915,7 @@ static void *pulserthread(void *arg)
 		}
 		ast_mutex_unlock(&pp_lock);
 	}
-	pthread_exit(0);
+	return NULL;
 }
 
 /*!
@@ -801,6 +936,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	o->rxmixerset = 500;
 	o->txmixaset = 500;
 	o->txmixbset = 500;
+	o->hw_device[0] = '\0';
 
 	devstr[0] = '\0';
 	serial[0] = '\0';
@@ -828,6 +964,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		CV_UINT("txmixbset", o->txmixbset);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
+		CV_STR("audiodev", o->hw_device); /* use audiodevice as opposed to the usb device path (devstr) */
 		CV_END;
 	}
 	if (!reload) {
@@ -845,76 +982,41 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	return 0;
 }
 
-/*!
- * \brief USB sound device GPIO processing thread
- * This thread is responsible for finding and associating the node with the
- * associated usb sound card device.  It performs setup and initialization of
- * the USB device.
- *
- * The CM-XXX USB devices can support up to 8 GPIO pins that can be input or output.
- * It continuously polls the input GPIO pins on the device to see if they have changed.
- * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk
- * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally
- * occurs every HID_POLL_RATE milliseconds.
- *
- * The output PTT (push to talk) GPIO, along with other GPIO outputs are updated as
- * required.
- *
- * If the user has enabled the parallel port for GPIOs, they are polled and updated
- * as appropriate.  An asterisk text frame is raised in the format 'PP%d %d' when
- * GPIOs change. (Parallel port support is not available for all platforms.)
- *
- * This routine also reads and writes to the EPROM attached to the USB device.  The
- * EPROM holds the configuration information (sound level settings) for this device.
- *
- * This routine updates the lasthidtimer during setup and processing.  In the event
- * that this timer update does not occur over a period of 3 seconds, app_rpt will
- * kill the node and restart everything.  This helps to detect problems with a
- * hung USB device.
- *
- * \param argv		chan_simpleusb_pvt structure associated with this thread.
+/*! \brief Find and initialize the audio device.
+ * \param o pointer to private struct
  */
-static void *hidthread(void *arg)
+static int init_audio_device(struct chan_simpleusb_pvt *o)
 {
-	unsigned char buf[4], bufsave[4], keyed, ctcssed, txreq;
-	char *s, lasttxtmp;
-	register int i, j, k;
-	int res;
-	struct usb_device *usb_dev;
-	struct usb_dev_handle *usb_handle;
-	struct chan_simpleusb_pvt *o = arg, *ao;
-	struct timeval then;
-	struct pollfd rfds[1];
+	char serial[sizeof(o->serial)] = { '\0' };
+	char *s;
+	struct chan_simpleusb_pvt *ao;
+	register int i;
 
-	usb_dev = NULL;
-	usb_handle = NULL;
-	/* enable gpio_set so that we will write GPIO information upon start up */
-	o->gpio_set = 1;
+	ast_radio_time(&o->lasthidtime);
+	ast_mutex_lock(&usb_dev_lock);
+	o->hasusb = 0;
+	o->usbass = 0;
+	o->devicenum = 0;
+	o->usb_dev = NULL;
+	o->internal_audio = 0;
 
-#ifdef HAVE_SYS_IO
-	if (haspp == 2) {
-		ioperm(pbase, 2, 1);
-	}
-#endif
-	/* This is the main loop for this thread.
-	 * It performs setup and initialization of the usb device.
-	 * After setup is complete and the device can be accessed,
-	 * it enters a processing loop responsible for interacting
-	 * with the usb hid device
-	 */
-	while (!o->stophid) {
-		char serial[sizeof(o->serial)] = { '\0' };
+	if (o->hw_device[0]) {
+		/* already configured device, extract the device number and usb_dev */
+		if (sscanf(o->hw_device, "hw:%d", &o->devicenum) == 1) {
+			ast_debug(5, "audiodev is defined: %s, Device %d", o->hw_device, o->devicenum);
+			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
+			if (!o->usb_dev) {
+				ast_debug(5, "Unable to find usb device associated with %s", o->hw_device);
+				o->internal_audio = 1;
+			}
 
-		ast_radio_time(&o->lasthidtime);
-		ast_mutex_lock(&usb_dev_lock);
-		o->hasusb = 0;
-		o->usbass = 0;
-		o->devicenum = 0;
-		if (usb_handle) {
-			usb_close(usb_handle);
+		} else {
+			ast_log(LOG_ERROR, "Incorrect audio parameter audiodev (should be hw:0 format), found %s", o->hw_device);
+			ast_mutex_unlock(&usb_dev_lock);
+			return -1;
 		}
-		usb_handle = NULL;
-		usb_dev = NULL;
+	} else {
+		/* use the */
 		ast_radio_hid_device_mklist();
 
 		/* Check to see if our specified device string
@@ -991,7 +1093,7 @@ static void *hidthread(void *arg)
 				break;
 			}
 			if (ast_strlen_zero(o->devstr)) {
-				continue;
+				return -1;
 			}
 		}
 
@@ -1002,20 +1104,20 @@ static void *hidthread(void *arg)
 			 * configured channels.
 			 */
 			s = find_installed_usb_match();
+
 			if (ast_strlen_zero(s)) {
 				if (!o->device_error) {
 					ast_log(LOG_ERROR, "Channel %s: Device string %s was not found.\n", o->name, o->devstr);
 					o->device_error = 1;
 				}
 				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
+				return -1;
 			}
+
 			i = ast_radio_usb_get_usbdev(s);
 			if (i < 0) {
 				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
+				return -1;
 			}
 			/* See if this device is already assigned to another usb channel */
 			for (ao = simpleusb_default.next; ao && ao->name; ao = ao->next) {
@@ -1023,12 +1125,13 @@ static void *hidthread(void *arg)
 					break;
 				}
 			}
+
 			if (ao) {
 				ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, s, ao->name);
 				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
+				return -1;
 			}
+
 			ast_log(LOG_NOTICE, "Channel %s: Assigned USB device %s to simpleusb channel\n", o->name, s);
 			ast_copy_string(o->devstr, s, sizeof(o->devstr));
 		}
@@ -1038,41 +1141,108 @@ static void *hidthread(void *arg)
 				break;
 			}
 		}
+
 		if (ao) {
 			ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, o->devstr, ao->name);
 			ast_mutex_unlock(&usb_dev_lock);
-			usleep(500000);
-			continue;
+			return -1;
 		}
+
 		/* get the index to the device and assign it to our channel */
 		i = ast_radio_usb_get_usbdev(o->devstr);
 		if (i < 0) {
 			ast_mutex_unlock(&usb_dev_lock);
-			usleep(500000);
-			continue;
+			return -1;
 		}
+		snprintf(o->hw_device, sizeof(o->hw_device), "hw:%d", i);
 		o->devicenum = i;
-		o->device_error = 0;
-		ast_radio_time(&o->lasthidtime);
-		o->usbass = 1;
-		ast_mutex_unlock(&usb_dev_lock);
-		/* set the audio mixer values */
-		o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
-		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
-		o->micplaymax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL);
-		if (o->spkrmax == -1) {
-			o->newname = 1;
-			o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
+		o->usb_dev = ast_radio_hid_device_init(o->devstr);
+		if (!o->usb_dev) {
+			ast_log(LOG_ERROR, "Unable to find usb device associated with %s", o->devstr);
+			return -1;
 		}
+	}
+
+	o->device_error = 0;
+	ast_radio_time(&o->lasthidtime);
+	o->usbass = 1;
+	ast_mutex_unlock(&usb_dev_lock);
+	/* set the audio mixer values */
+	o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
+	o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
+	o->micplaymax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL);
+
+	if (o->spkrmax == -1) {
+		o->newname = 1;
+		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
+	}
+
+	return 0;
+}
+
+/*!
+ * \brief USB sound device GPIO processing thread
+ * This thread is responsible for finding and associating the node with the
+ * associated usb sound card device.  It performs setup and initialization of
+ * the USB device.
+ *
+ * The CM-XXX USB devices can support up to 8 GPIO pins that can be input or output.
+ * It continuously polls the input GPIO pins on the device to see if they have changed.
+ * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk
+ * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally
+ * occurs every HID_POLL_RATE milliseconds.
+ *
+ * The output PTT (push to talk) GPIO, along with other GPIO outputs are updated as
+ * required.
+ *
+ * If the user has enabled the parallel port for GPIOs, they are polled and updated
+ * as appropriate.  An asterisk text frame is raised in the format 'PP%d %d' when
+ * GPIOs change. (Parallel port support is not available for all platforms.)
+ *
+ * This routine also reads and writes to the EPROM attached to the USB device.  The
+ * EPROM holds the configuration information (sound level settings) for this device.
+ *
+ * This routine updates the lasthidtimer during setup and processing.  In the event
+ * that this timer update does not occur over a period of 3 seconds, app_rpt will
+ * kill the node and restart everything.  This helps to detect problems with a
+ * hung USB device.
+ *
+ * \param argv		chan_simpleusb_pvt structure associated with this thread.
+ */
+static void *hidthread(void *arg)
+{
+	unsigned char buf[4], bufsave[4], keyed, ctcssed, txreq;
+	char lasttxtmp;
+	register int i, j, k;
+	int res;
+	struct usb_dev_handle *usb_handle = NULL;
+	struct chan_simpleusb_pvt *o = arg;
+	struct timeval then;
+	struct pollfd rfds[1];
+
+	/* enable gpio_set so that we will write GPIO information upon start up */
+	o->gpio_set = 1;
+
+#ifdef HAVE_SYS_IO
+	if (haspp == 2) {
+		ioperm(pbase, 2, 1);
+	}
+#endif
+	/* This is the main loop for this thread.
+	 * It performs setup and initialization of the usb device.
+	 * After setup is complete and the device can be accessed,
+	 * it enters a processing loop responsible for interacting
+	 * with the usb hid device
+	 */
+	while (!o->stophid) {
 		/* initialize the usb device */
-		usb_dev = ast_radio_hid_device_init(o->devstr);
-		if (usb_dev == NULL) {
+		if (o->usb_dev == NULL) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
 			usleep(500000);
 			continue;
 		}
 		/* open the usb device device */
-		usb_handle = usb_open(usb_dev);
+		usb_handle = usb_open(o->usb_dev);
 		if (usb_handle == NULL) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
 			usleep(500000);
@@ -1111,12 +1281,12 @@ static void *hidthread(void *arg)
 		}
 		if (pipe(o->pttkick) == -1) {
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
-			pthread_exit(NULL);
+			return NULL;
 		}
-		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
+		if ((o->usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
 			o->devtype = C108_PRODUCT_ID;
 		} else {
-			o->devtype = usb_dev->descriptor.idProduct;
+			o->devtype = o->usb_dev->descriptor.idProduct;
 		}
 		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
 		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
@@ -1131,7 +1301,6 @@ static void *hidthread(void *arg)
 		}
 		ast_mutex_unlock(&o->eepromlock);
 
-		setformat(o, O_RDWR);
 		o->hasusb = 1;
 		o->had_gpios_in = 0;
 
@@ -1274,6 +1443,11 @@ static void *hidthread(void *arg)
 						sprintf(buf1, "GPIO%d %d\n", i + 1, (j & (1 << i)) ? 1 : 0);
 						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1);
+
+						if (!o->owner) {
+							break;
+						}
+
 						ast_queue_frame(o->owner, &fr);
 					}
 				}
@@ -1317,6 +1491,11 @@ static void *hidthread(void *arg)
 							sprintf(buf1, "PP%d %d\n", i, (j & (1 << ppinshift[i])) ? 1 : 0);
 							fr.data.ptr = buf1;
 							fr.datalen = strlen(buf1);
+
+							if (!o->owner) {
+								break;
+							}
+
 							ast_queue_frame(o->owner, &fr);
 						}
 					}
@@ -1436,42 +1615,7 @@ static void *hidthread(void *arg)
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
 	}
-	pthread_exit(0);
-}
-
-/*!
- * \brief Get the number of blocks used in the audio output channel.
- * \param o		Channel private data.
- * \returns		Number of blocks that have been used.
- */
-static int used_blocks(struct chan_simpleusb_pvt *o)
-{
-	struct audio_buf_info info;
-
-	if (ioctl(o->sounddev, SNDCTL_DSP_GETOSPACE, &info)) {
-		if (!(o->warned & WARN_used_blocks)) {
-			ast_log(LOG_WARNING, "Channel %s: Error reading output space.\n", o->name);
-			o->warned |= WARN_used_blocks;
-		}
-		return 1;
-	}
-
-	/* Set the total blocks */
-	if (o->total_blocks == 0) {
-		ast_debug(1, "Channel %s: fragment total %d, size %d, available %d, bytes %d\n", o->name, info.fragstotal, info.fragsize,
-			info.fragments, info.bytes);
-		o->total_blocks = info.fragments;
-		/* Check the queue size, it cannot exceed the total fragments */
-		if (o->queuesize >= info.fragstotal) {
-			o->queuesize = info.fragstotal - 1;
-			if (o->queuesize < 2) {
-				o->queuesize = QUEUE_SIZE;
-			}
-			ast_debug(1, "Channel %s: Queue size reset to %d\n", o->name, o->queuesize);
-		}
-	}
-
-	return o->total_blocks - info.fragments;
+	return NULL;
 }
 
 /*!
@@ -1484,32 +1628,22 @@ static int used_blocks(struct chan_simpleusb_pvt *o)
  */
 static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 {
-	int res;
+	PaError res;
 
-	/* If the sound device is not open, setformat will open the device */
-	if (o->sounddev < 0) {
-		setformat(o, O_RDWR);
-	}
-	if (o->sounddev < 0) {
-		return 0; /* not fatal */
-	}
 	/*
 	 * Nothing complex to manage the audio device queue.
 	 * If the buffer is full just drop the extra, otherwise write.
 	 * In some cases it might be useful to write anyways after
 	 * a number of failures, to restart the output chain.
 	 */
-	res = used_blocks(o);
-	if (res > o->queuesize) { /* no room to write a block */
-		ast_log(LOG_WARNING, "Channel %s: Sound device write buffer overflow - used %d blocks\n", o->name, res);
-		return 0;
-	}
 
-	res = write(o->sounddev, ((void *) data), FRAME_SIZE * 2 * 2 * 6);
-	if (res < 0) {
-		ast_log(LOG_ERROR, "Channel %s: Sound card write error %s\n", o->name, strerror(errno));
-	} else if (res != FRAME_SIZE * 2 * 2 * 6) {
-		ast_log(LOG_ERROR, "Channel %s: Sound card wrote %d bytes of %d\n", o->name, res, (FRAME_SIZE * 2 * 2 * 6));
+	res = Pa_WriteStream(o->stream, data, NUM_SAMPLES);
+	if (res == paOutputUnderflowed) {
+		short null_buf[NUM_SAMPLES * 2] = { 0 };
+		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
+		Pa_WriteStream(o->stream, null_buf, NUM_SAMPLES);
+	} else if (res < 0) {
+		ast_debug(1, "PortAudio Error %s", Pa_GetErrorText(res));
 	}
 
 	/* Check Tx audio statistics. FRAME_SIZE define refers to 8Ksps mono which is 160 samples
@@ -1522,114 +1656,6 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	ast_radio_check_audio(data, &o->txaudiostats, 12 * FRAME_SIZE);
 
 	return res;
-}
-
-/*!
- * \brief Open the sound card device.
- * If the device is already open, this will close the device
- * and open it again.
- * It initializes the device based on our requirements and triggers
- * reads and writes.
- * \param o		chan_usbradio_pvt.
- * \param mode	The mode to open the file.  This is the flags argument to open.
- * \retval 0	Success.
- * \retval -1	Failed.
- */
-static int setformat(struct chan_simpleusb_pvt *o, int mode)
-{
-	int fmt, desired, res, fd;
-	char device[100];
-
-	/* If the device is open, close it */
-	if (o->sounddev >= 0) {
-		ioctl(o->sounddev, SNDCTL_DSP_RESET, 0);
-		close(o->sounddev);
-		o->duplex = M_UNSET;
-		o->sounddev = -1;
-	}
-	if (mode == O_CLOSE) { /* we are done */
-		return 0;
-	}
-
-	strcpy(device, "/dev/dsp");
-	if (o->devicenum) {
-		sprintf(device, "/dev/dsp%d", o->devicenum);
-	}
-	/* open the device */
-	fd = o->sounddev = open(device, mode | O_NONBLOCK);
-	if (fd < 0) {
-		ast_log(LOG_ERROR, "Channel %s: Unable to open DSP device %d: %s.\n", o->name, o->devicenum, strerror(errno));
-		return -1;
-	}
-	if (o->owner) {
-		ast_channel_internal_fd_set(o->owner, 0, fd);
-	}
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-	fmt = AFMT_S16_LE;
-#else
-	fmt = AFMT_S16_BE;
-#endif
-	res = ioctl(fd, SNDCTL_DSP_SETFMT, &fmt);
-	if (res < 0) {
-		ast_log(LOG_WARNING, "Channel %s: Unable to set format to 16-bit signed\n", o->name);
-		return -1;
-	}
-	/* set our duplex mode based on the way we opened the device. */
-	switch (mode) {
-	case O_RDWR:
-		res = ioctl(fd, SNDCTL_DSP_SETDUPLEX, 0);
-		/* Check to see if duplex set (FreeBSD Bug) */
-		res = ioctl(fd, SNDCTL_DSP_GETCAPS, &fmt);
-		if (res == 0 && (fmt & DSP_CAP_DUPLEX)) {
-			o->duplex = M_FULL;
-		};
-		break;
-	case O_WRONLY:
-		o->duplex = M_WRITE;
-		break;
-	case O_RDONLY:
-		o->duplex = M_READ;
-		break;
-	}
-
-	fmt = 1;
-	res = ioctl(fd, SNDCTL_DSP_STEREO, &fmt);
-	if (res < 0) {
-		ast_log(LOG_WARNING, "Channel %s: Failed to set audio device to stereo\n", o->name);
-		return -1;
-	}
-	fmt = desired = 48000; /* 48000 Hz desired */
-	res = ioctl(fd, SNDCTL_DSP_SPEED, &fmt);
-	if (res < 0) {
-		ast_log(LOG_WARNING, "Channel %s: Failed to set audio device sample rate.\n", o->name);
-		return -1;
-	}
-	if (fmt != desired) {
-		if (!(o->warned & WARN_speed)) {
-			ast_log(LOG_WARNING, "Channel %s: Requested %d Hz, got %d Hz -- sound may be choppy.\n", o->name, desired, fmt);
-			o->warned |= WARN_speed;
-		}
-	}
-	/*
-	 * on Freebsd, SETFRAGMENT does not work very well on some cards.
-	 * Default to use 256 bytes, let the user override
-	 */
-	if (o->frags) {
-		fmt = o->frags;
-		res = ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &fmt);
-		if (res < 0) {
-			if (!(o->warned & WARN_frag)) {
-				ast_log(LOG_WARNING, "Channel %s: Unable to set fragment size -- sound may be choppy.\n", o->name);
-				o->warned |= WARN_frag;
-			}
-		}
-	}
-	/* on some cards, we need SNDCTL_DSP_SETTRIGGER to start outputting */
-	res = PCM_ENABLE_INPUT | PCM_ENABLE_OUTPUT;
-	res = ioctl(fd, SNDCTL_DSP_SETTRIGGER, &res);
-	/* it may fail if we are in half duplex, never mind */
-	return 0;
 }
 
 /*!
@@ -1912,10 +1938,33 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 {
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
+	int res;
 
 	o->stophid = 0;
 	ast_radio_time(&o->lasthidtime);
-	ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+	res = init_audio_device(o);
+	if (res < 0) {
+		ast_log(LOG_ERROR, "Channel %s: Failed initialize the audio device\n", o->name);
+		return -1;
+	}
+	if (!o->internal_audio) {
+		res = ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+		if (res) {
+			ast_log(LOG_ERROR, "Channel %s: Failed to create HID thread: %s\n", o->name, strerror(res));
+			return -1;
+		}
+	}
+
+	res = ast_pthread_create(&o->audiothread, NULL, simpleusb_audio_thread, o);
+	if (res) {
+		ast_log(LOG_ERROR, "Channel %s: Failed to create audio thread: %s\n", o->name, strerror(res));
+		o->stophid = 1;
+		if (o->hidthread != AST_PTHREADT_NULL) {
+			pthread_join(o->hidthread, NULL);
+		}
+		return -1;
+	}
+
 	ast_setstate(c, AST_STATE_UP);
 	return 0;
 }
@@ -1943,12 +1992,15 @@ static int simpleusb_hangup(struct ast_channel *c)
 	ast_channel_tech_pvt_set(c, NULL);
 	o->owner = NULL;
 	ast_module_unref(ast_module_info->self);
-	if (o->hookstate) {
-		o->hookstate = 0;
-		setformat(o, O_CLOSE);
-	}
 	o->stophid = 1;
-	pthread_join(o->hidthread, NULL);
+
+	if (o->hidthread != AST_PTHREADT_NULL) {
+		pthread_join(o->hidthread, NULL);
+	}
+
+	pthread_join(o->audiothread, NULL);
+	o->hidthread = AST_PTHREADT_NULL;
+	o->audiothread = AST_PTHREADT_NULL;
 	return 0;
 }
 
@@ -1964,15 +2016,10 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f1;
 
-	if (!o->hasusb) {
+	if (!o->hasusb && !o->internal_audio) {
 		return 0;
 	}
-	if (o->sounddev < 0) {
-		setformat(o, O_RDWR);
-	}
-	if (o->sounddev < 0) {
-		return 0; /* not fatal */
-	}
+
 	/*
 	 * we could receive a block which is not a multiple of our
 	 * FRAME_SIZE, so buffer it locally and write to the device
@@ -2020,32 +2067,357 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
  * \param ast			Asterisk channel.
  * \retval 				Asterisk frame.
  */
+
 static struct ast_frame *simpleusb_read(struct ast_channel *c)
 {
-	int res, cd, sd, src, num_frames, ispager, doleft, doright;
+	/* This should never be called... */
+	ast_log(LOG_ERROR, "Read function should not be called!");
+	return &ast_null_frame;
+}
+
+/*!
+ * \brief 				PortAudio processing thread.
+ * \param ast			Asterisk channel.
+ * \retval 				Asterisk frame.
+ */
+static void *simpleusb_audio_thread(void *arg)
+{
+	int cd, sd, src, num_frames, ispager, doleft, doright;
+	PaError res;
 	register int i;
-	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
+	struct chan_simpleusb_pvt *o = arg;
 	struct ast_frame *f = &o->read_f, *f1;
 	time_t now;
 	register short *sp, *sp1;
-	short outbuf[FRAME_SIZE * 2 * 6];
+	short outbuf[NUM_SAMPLES * 2]; /* 2 bytes per sample on PortAudio config - paInt16 */
 
-	/* check if the hid thread is still processing */
-	if (o->lasthidtime) {
-		ast_radio_time(&now);
-		if ((now - o->lasthidtime) > 3) {
-			ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
-			return NULL;
-		}
+	ast_debug(5, "Audio thread is starting");
+	if (start_stream(o) < 0) {
+		ast_log(LOG_ERROR, "Channel %s: Failed to start audio stream\n", o->name);
+		return NULL;
 	}
-	/* Set frame defaults */
-	memset(f, 0, sizeof(struct ast_frame));
-	f->frametype = AST_FRAME_NULL;
-	f->src = __PRETTY_FUNCTION__;
+	while (!o->stophid) {
+		/* check if the hid thread is still processing */
+		if (o->lasthidtime && !o->internal_audio) {
+			ast_radio_time(&now);
+			if ((now - o->lasthidtime) > 3) {
+				ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
+				break;
+			}
+		}
+		/* Set frame defaults */
+		memset(f, 0, sizeof(struct ast_frame));
+		f->frametype = AST_FRAME_NULL;
+		f->src = __PRETTY_FUNCTION__;
+		/* if USB device not ready, just return NULL frame */
+		if (!o->hasusb && !o->internal_audio) {
+			if (o->rxkeyed) {
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+					.src = __PRETTY_FUNCTION__,
+				};
 
-	/* if USB device not ready, just return NULL frame */
-	if (!o->hasusb) {
-		if (o->rxkeyed) {
+				o->lastrx = 0;
+				o->rxkeyed = 0;
+
+				if (!o->owner) {
+					break;
+				}
+
+				ast_queue_frame(o->owner, &wf);
+			}
+			continue;
+		}
+
+		/* If we have stopped echoing, clear the echo queue */
+		if (!o->echomode) {
+			struct qelem *q;
+
+			ast_mutex_lock(&o->echolock);
+			o->echoing = 0;
+			while (o->echoq.q_forw != &o->echoq) {
+				q = o->echoq.q_forw;
+				remque(q);
+				ast_free(q);
+			}
+			ast_mutex_unlock(&o->echolock);
+		}
+
+		/* If we are in echomode and we have stopped receiving audio
+		 * queue up the packets we have stored in the echo queue
+		 * for playback.
+		 */
+		if (o->echomode && (!o->rxkeyed)) {
+			struct usbecho *u;
+
+			ast_mutex_lock(&o->echolock);
+			/* if there is something in the queue */
+			if (o->echoq.q_forw != &o->echoq) {
+				u = (struct usbecho *) o->echoq.q_forw;
+				remque((struct qelem *) u);
+				f->frametype = AST_FRAME_VOICE;
+				f->subclass.format = ast_format_slin;
+				f->samples = FRAME_SIZE;
+				f->datalen = FRAME_SIZE * 2;
+				f->offset = AST_FRIENDLY_OFFSET;
+				f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
+				memcpy(f->data.ptr, u->data, FRAME_SIZE * 2);
+				ast_free(u);
+				f1 = ast_frdup(f);
+				if (!f1) {
+					ast_mutex_unlock(&o->echolock);
+					continue;
+				}
+				memset(&f1->frame_list, 0, sizeof(f1->frame_list));
+				ast_mutex_lock(&o->txqlock);
+				AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
+				ast_mutex_unlock(&o->txqlock);
+				o->echoing = 1;
+			} else {
+				o->echoing = 0;
+			}
+			ast_mutex_unlock(&o->echolock);
+		}
+
+		/* Process the transmit queue */
+		for (;;) {
+			num_frames = 0;
+			ast_mutex_lock(&o->txqlock);
+			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+				num_frames++;
+			}
+			ast_mutex_unlock(&o->txqlock);
+			if (o->txkeyed) {
+				ast_debug(7, "blocks used %d, Dest Buffer %d", num_frames, o->simpleusb_write_dst);
+			}
+			if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
+				ast_mutex_lock(&o->txqlock);
+				f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
+				ast_mutex_unlock(&o->txqlock);
+
+				src = 0; /* read position into f1->data */
+				while (src < f1->datalen) {
+					/* Compute spare room in the buffer */
+					int l = sizeof(o->simpleusb_write_buf) - o->simpleusb_write_dst;
+
+					if (f1->datalen - src >= l) {
+						/* enough to fill a frame */
+						memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
+						/* Below is an attempt to match levels to the original CM108 IC which has
+						 * been out of production for over 10 years. Scaling audio to 109.375% will
+						 * result in clipping! Any adjustments for CM1xxx gain differences should be
+						 * made in the mixer settings, not in the audio stream.
+						 * TODO: After the vast majority of existing installs have had a chance to review their
+						 * audio settings and these old scaling/clipping hacks are no longer in significant use
+						 * the legacyaudioscaling cfg and related code should be deleted.
+						 */
+						/* Adjust the audio level for CM119 A/B devices */
+						if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
+							register int v;
+
+							sp = (short *) o->simpleusb_write_buf;
+							for (i = 0; i < FRAME_SIZE; i++) {
+								v = *sp;
+								v += v >> 3;   /* add *.125 giving * 1.125 */
+								v -= *sp >> 5; /* subtract *.03125 giving * 1.09375 */
+								if (v > 32765.0) {
+									v = 32765.0;
+								} else if (v < -32765.0) {
+									v = -32765.0;
+								}
+								*sp++ = v;
+							}
+						}
+
+						sp = (short *) o->simpleusb_write_buf;
+						sp1 = outbuf;
+						doright = 1;
+						doleft = 1;
+						ispager = 0;
+						if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
+							ispager = 1;
+						}
+						/* If pager audio, determine which channel to store audio */
+						if (o->pager != PAGER_NONE) {
+							doleft = (o->pager == PAGER_A) ? ispager : !ispager;
+							doright = (o->pager == PAGER_B) ? ispager : !ispager;
+						}
+						/* Upsample from 8000 mono to 48000 stereo */
+						for (i = 0; i < FRAME_SIZE; i++) {
+							register short s, v;
+
+							if (o->preemphasis) {
+								s = preemph(sp[i], &o->prestate);
+							} else {
+								s = sp[i];
+							}
+							v = lpass(s, o->flpt);
+							*sp1++ = (doleft) ? v : 0;
+							*sp1++ = (doright) ? v : 0;
+							v = lpass(s, o->flpt);
+							*sp1++ = (doleft) ? v : 0;
+							*sp1++ = (doright) ? v : 0;
+							v = lpass(s, o->flpt);
+							*sp1++ = (doleft) ? v : 0;
+							*sp1++ = (doright) ? v : 0;
+							v = lpass(s, o->flpt);
+							*sp1++ = (doleft) ? v : 0;
+							*sp1++ = (doright) ? v : 0;
+							v = lpass(s, o->flpt);
+							*sp1++ = (doleft) ? v : 0;
+							*sp1++ = (doright) ? v : 0;
+							v = lpass(s, o->flpt);
+							*sp1++ = (doleft) ? v : 0;
+							*sp1++ = (doright) ? v : 0;
+						}
+						soundcard_writeframe(o, outbuf);
+						src += l;
+						o->simpleusb_write_dst = 0;
+						if (o->waspager && (!ispager)) {
+							struct ast_frame wf = {
+								.frametype = AST_FRAME_TEXT,
+								.data.ptr = ENDPAGE_STR,
+								.datalen = strlen(ENDPAGE_STR) + 1,
+								.src = __PRETTY_FUNCTION__,
+							};
+
+							if (!o->owner) {
+								break;
+							}
+
+							ast_queue_frame(o->owner, &wf);
+							continue;
+						}
+						o->waspager = ispager;
+					} else {
+						/* copy residue */
+						l = f1->datalen - src;
+						memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
+						src += l; /* but really, we are done */
+						o->simpleusb_write_dst += l;
+					}
+				}
+				ast_frfree(f1);
+				continue;
+			}
+			break;
+		}
+
+		/* Read audio data from the USB sound device.
+		 * Sound data will arrive at 48000 samples per second
+		 * in mono format.
+		 */
+		res = Pa_ReadStream(o->stream, o->simpleusb_read_buf + o->readpos, NUM_SAMPLES);
+		if (res != paNoError) {
+			/* audio data not ready */
+			if (res == paInputOverflowed) {
+				ast_debug(6, "PortAudio read overflow on channel %s\n", o->name);
+				continue;
+			}
+			ast_debug(4, "PortAudio read error on channel %s: %s\n", o->name, Pa_GetErrorText(res));
+			continue;
+		}
+
+#if DEBUG_CAPTURES == 1
+		if (o->rxcapraw && frxcapraw) {
+			fwrite(o->simpleusb_read_buf + o->readpos, sizeof(short), FRAME_SIZE * 6, frxcapraw);
+		}
+#endif
+
+		o->readpos += FRAME_SIZE * 6 * 2;
+		if (o->readpos < sizeof(o->simpleusb_read_buf)) { /* not enough samples */
+			continue;
+		}
+
+		/* If we have been sending pager audio, see if
+		 * we are finished.
+		 */
+		if (o->waspager) {
+			num_frames = 0;
+			ast_mutex_lock(&o->txqlock);
+			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+				num_frames++;
+			}
+			ast_mutex_unlock(&o->txqlock);
+			if (num_frames < 1) {
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_TEXT,
+					.data.ptr = ENDPAGE_STR,
+					.datalen = sizeof(ENDPAGE_STR),
+					.src = __PRETTY_FUNCTION__,
+				};
+
+				if (!o->owner) {
+					break;
+				}
+
+				ast_queue_frame(o->owner, &wf);
+				o->waspager = 0;
+			}
+		}
+
+		/* Check for carrier detect - COR active */
+		cd = 1;
+		if ((o->rxcdtype == CD_HID) && (!o->rxhidsq)) {
+			cd = 0;
+		} else if ((o->rxcdtype == CD_HID_INVERT) && o->rxhidsq) {
+			cd = 0;
+		} else if ((o->rxcdtype == CD_PP) && (!o->rxppsq)) {
+			cd = 0;
+		} else if ((o->rxcdtype == CD_PP_INVERT) && o->rxppsq) {
+			cd = 0;
+		}
+
+		/* Apply cd turn-on delay, if one specified */
+		if (o->rxondelay && cd && (o->rxoncnt++ < o->rxondelay)) {
+			cd = 0;
+		} else if (!cd) {
+			o->rxoncnt = 0;
+		}
+		o->rx_cos_active = cd;
+
+		/* Check for SD - CTCSS active */
+		sd = 1;
+		if ((o->rxsdtype == SD_HID) && (!o->rxhidctcss)) {
+			sd = 0;
+		} else if ((o->rxsdtype == SD_HID_INVERT) && o->rxhidctcss) {
+			sd = 0;
+		} else if ((o->rxsdtype == SD_PP) && (!o->rxppctcss)) {
+			sd = 0;
+		} else if ((o->rxsdtype == SD_PP_INVERT) && o->rxppctcss) {
+			sd = 0;
+		}
+
+		/* See if we are overriding CTCSS to active */
+		if (o->rxctcssoverride) {
+			sd = 1;
+		}
+		o->rx_ctcss_active = sd;
+
+		/* Special case where cd and sd have been configured for no */
+		if (o->rxcdtype == CD_IGNORE && o->rxsdtype == SD_IGNORE) {
+			cd = 0;
+			sd = 0;
+		}
+
+		/* Timer for how long TX has been unkeyed - used with txoffdelay */
+		if (o->txoffdelay) {
+			if (o->txkeyed == 1) {
+				o->txoffcnt = 0; /* If keyed, set this to zero. */
+			} else {
+				o->txoffcnt++;
+				if (o->txoffcnt > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
+					o->txoffcnt = MS_TO_FRAMES(TX_OFF_DELAY_MAX); /* limit count */
+				}
+			}
+		}
+
+		/* Check conditions and set receiver active */
+		o->rxkeyed = sd && cd && ((!o->lasttx) || o->duplex) && (o->txoffcnt >= o->txoffdelay);
+
+		/* Send a message to indicate rx signal detect conditions */
+		if (o->lastrx && (!o->rxkeyed)) {
 			struct ast_frame wf = {
 				.frametype = AST_FRAME_CONTROL,
 				.subclass.integer = AST_CONTROL_RADIO_UNKEY,
@@ -2053,505 +2425,214 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 			};
 
 			o->lastrx = 0;
-			o->rxkeyed = 0;
+
+			if (!o->owner) {
+				break;
+			}
+
 			ast_queue_frame(o->owner, &wf);
-		}
-		return &ast_null_frame;
-	}
-
-	/* If we have stopped echoing, clear the echo queue */
-	if (!o->echomode) {
-		struct qelem *q;
-
-		ast_mutex_lock(&o->echolock);
-		o->echoing = 0;
-		while (o->echoq.q_forw != &o->echoq) {
-			q = o->echoq.q_forw;
-			remque(q);
-			ast_free(q);
-		}
-		ast_mutex_unlock(&o->echolock);
-	}
-
-	/* If we are in echomode and we have stopped receiving audio
-	 * queue up the packets we have stored in the echo queue
-	 * for playback.
-	 */
-	if (o->echomode && (!o->rxkeyed)) {
-		struct usbecho *u;
-
-		ast_mutex_lock(&o->echolock);
-		/* if there is something in the queue */
-		if (o->echoq.q_forw != &o->echoq) {
-			u = (struct usbecho *) o->echoq.q_forw;
-			remque((struct qelem *) u);
-			f->frametype = AST_FRAME_VOICE;
-			f->subclass.format = ast_format_slin;
-			f->samples = FRAME_SIZE;
-			f->datalen = FRAME_SIZE * 2;
-			f->offset = AST_FRIENDLY_OFFSET;
-			f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
-			memcpy(f->data.ptr, u->data, FRAME_SIZE * 2);
-			ast_free(u);
-			f1 = ast_frdup(f);
-			if (!f1) {
-				ast_mutex_unlock(&o->echolock);
-				return &ast_null_frame;
+			if (o->duplex3) {
+				ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 			}
-			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-			ast_mutex_lock(&o->txqlock);
-			AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
-			ast_mutex_unlock(&o->txqlock);
-			o->echoing = 1;
-		} else {
-			o->echoing = 0;
-		}
-		ast_mutex_unlock(&o->echolock);
-	}
-
-	/* Process the transmit queue */
-	for (;;) {
-		num_frames = 0;
-		ast_mutex_lock(&o->txqlock);
-		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
-			num_frames++;
-		}
-		ast_mutex_unlock(&o->txqlock);
-		i = used_blocks(o);
-		if (o->txkeyed) {
-			ast_debug(7, "blocks used %d, Dest Buffer %d", i, o->simpleusb_write_dst);
-		}
-		if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && i <= o->queuesize) {
-			if (i == 0) { /* We are not keeping the buffer full, add 1 frame */
-				memset(outbuf, 0, sizeof(outbuf));
-				soundcard_writeframe(o, outbuf);
-				ast_debug(7, "A null frame has been added");
-			}
-			ast_mutex_lock(&o->txqlock);
-			f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
-			ast_mutex_unlock(&o->txqlock);
-
-			src = 0; /* read position into f1->data */
-			while (src < f1->datalen) {
-				/* Compute spare room in the buffer */
-				int l = sizeof(o->simpleusb_write_buf) - o->simpleusb_write_dst;
-
-				if (f1->datalen - src >= l) {
-					/* enough to fill a frame */
-					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
-					/* Below is an attempt to match levels to the original CM108 IC which has
-					 * been out of production for over 10 years. Scaling audio to 109.375% will
-					 * result in clipping! Any adjustments for CM1xxx gain differences should be
-					 * made in the mixer settings, not in the audio stream.
-					 * TODO: After the vast majority of existing installs have had a chance to review their
-					 * audio settings and these old scaling/clipping hacks are no longer in significant use
-					 * the legacyaudioscaling cfg and related code should be deleted.
-					 */
-					/* Adjust the audio level for CM119 A/B devices */
-					if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
-						register int v;
-
-						sp = (short *) o->simpleusb_write_buf;
-						for (i = 0; i < FRAME_SIZE; i++) {
-							v = *sp;
-							v += v >> 3;   /* add *.125 giving * 1.125 */
-							v -= *sp >> 5; /* subtract *.03125 giving * 1.09375 */
-							if (v > 32765.0) {
-								v = 32765.0;
-							} else if (v < -32765.0) {
-								v = -32765.0;
-							}
-							*sp++ = v;
-						}
-					}
-
-					sp = (short *) o->simpleusb_write_buf;
-					sp1 = outbuf;
-					doright = 1;
-					doleft = 1;
-					ispager = 0;
-					if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
-						ispager = 1;
-					}
-					/* If pager audio, determine which channel to store audio */
-					if (o->pager != PAGER_NONE) {
-						doleft = (o->pager == PAGER_A) ? ispager : !ispager;
-						doright = (o->pager == PAGER_B) ? ispager : !ispager;
-					}
-					/* Upsample from 8000 mono to 48000 stereo */
-					for (i = 0; i < FRAME_SIZE; i++) {
-						register short s, v;
-
-						if (o->preemphasis) {
-							s = preemph(sp[i], &o->prestate);
-						} else {
-							s = sp[i];
-						}
-						v = lpass(s, o->flpt);
-						*sp1++ = (doleft) ? v : 0;
-						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
-						*sp1++ = (doleft) ? v : 0;
-						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
-						*sp1++ = (doleft) ? v : 0;
-						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
-						*sp1++ = (doleft) ? v : 0;
-						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
-						*sp1++ = (doleft) ? v : 0;
-						*sp1++ = (doright) ? v : 0;
-						v = lpass(s, o->flpt);
-						*sp1++ = (doleft) ? v : 0;
-						*sp1++ = (doright) ? v : 0;
-					}
-					soundcard_writeframe(o, outbuf);
-					src += l;
-					o->simpleusb_write_dst = 0;
-					if (o->waspager && (!ispager)) {
-						struct ast_frame wf = {
-							.frametype = AST_FRAME_TEXT,
-							.data.ptr = ENDPAGE_STR,
-							.datalen = strlen(ENDPAGE_STR) + 1,
-							.src = __PRETTY_FUNCTION__,
-						};
-
-						ast_queue_frame(o->owner, &wf);
-					}
-					o->waspager = ispager;
-				} else {
-					/* copy residue */
-					l = f1->datalen - src;
-					memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
-					src += l; /* but really, we are done */
-					o->simpleusb_write_dst += l;
-				}
-			}
-			ast_frfree(f1);
-			continue;
-		}
-		break;
-	}
-
-	/* Read audio data from the USB sound device.
-	 * Sound data will arrive at 48000 samples per second
-	 * in stereo format.
-	 */
-	res = read(o->sounddev, o->simpleusb_read_buf + o->readpos, sizeof(o->simpleusb_read_buf) - o->readpos);
-	if (res < 0) {
-		/* audio data not ready */
-		if (errno != EAGAIN) {
-			o->readerrs = 0;
-			o->hasusb = 0;
-			return &ast_null_frame;
-		}
-		if (o->readerrs++ > READERR_THRESHOLD) {
-			ast_log(LOG_ERROR, "Stuck USB read channel [%s], un-sticking it!\n", o->name);
-			o->readerrs = 0;
-			o->hasusb = 0;
-			return &ast_null_frame;
-		}
-		if (o->readerrs == 1) {
-			ast_log(LOG_WARNING, "Possibly stuck USB read channel. [%s]\n", o->name);
-		}
-		return &ast_null_frame;
-	}
-
-#if DEBUG_CAPTURES == 1
-	if (o->rxcapraw && frxcapraw) {
-		fwrite(o->simpleusb_read_buf + o->readpos, 1, res, frxcapraw);
-	}
-#endif
-
-	if (o->readerrs) {
-		ast_log(LOG_WARNING, "USB read channel [%s] was not stuck.\n", o->name);
-	}
-
-	o->readerrs = 0;
-	o->readpos += res;
-	if (o->readpos < sizeof(o->simpleusb_read_buf)) { /* not enough samples */
-		return &ast_null_frame;
-	}
-
-	/* If we have been sending pager audio, see if
-	 * we are finished.
-	 */
-	if (o->waspager) {
-		num_frames = 0;
-		ast_mutex_lock(&o->txqlock);
-		AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
-			num_frames++;
-		}
-		ast_mutex_unlock(&o->txqlock);
-		if (num_frames < 1) {
+		} else if ((!o->lastrx) && (o->rxkeyed)) {
 			struct ast_frame wf = {
-				.frametype = AST_FRAME_TEXT,
-				.data.ptr = ENDPAGE_STR,
-				.datalen = sizeof(ENDPAGE_STR),
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_RADIO_KEY,
 				.src = __PRETTY_FUNCTION__,
 			};
 
+			o->lastrx = 1;
+
+			if (!o->owner) {
+				break;
+			}
+
 			ast_queue_frame(o->owner, &wf);
-			o->waspager = 0;
-		}
-	}
-
-	/* Check for carrier detect - COR active */
-	cd = 1;
-	if ((o->rxcdtype == CD_HID) && (!o->rxhidsq)) {
-		cd = 0;
-	} else if ((o->rxcdtype == CD_HID_INVERT) && o->rxhidsq) {
-		cd = 0;
-	} else if ((o->rxcdtype == CD_PP) && (!o->rxppsq)) {
-		cd = 0;
-	} else if ((o->rxcdtype == CD_PP_INVERT) && o->rxppsq) {
-		cd = 0;
-	}
-
-	/* Apply cd turn-on delay, if one specified */
-	if (o->rxondelay && cd && (o->rxoncnt++ < o->rxondelay)) {
-		cd = 0;
-	} else if (!cd) {
-		o->rxoncnt = 0;
-	}
-	o->rx_cos_active = cd;
-
-	/* Check for SD - CTCSS active */
-	sd = 1;
-	if ((o->rxsdtype == SD_HID) && (!o->rxhidctcss)) {
-		sd = 0;
-	} else if ((o->rxsdtype == SD_HID_INVERT) && o->rxhidctcss) {
-		sd = 0;
-	} else if ((o->rxsdtype == SD_PP) && (!o->rxppctcss)) {
-		sd = 0;
-	} else if ((o->rxsdtype == SD_PP_INVERT) && o->rxppctcss) {
-		sd = 0;
-	}
-
-	/* See if we are overriding CTCSS to active */
-	if (o->rxctcssoverride) {
-		sd = 1;
-	}
-	o->rx_ctcss_active = sd;
-
-	/* Special case where cd and sd have been configured for no */
-	if (o->rxcdtype == CD_IGNORE && o->rxsdtype == SD_IGNORE) {
-		cd = 0;
-		sd = 0;
-	}
-
-	/* Timer for how long TX has been unkeyed - used with txoffdelay */
-	if (o->txoffdelay) {
-		if (o->txkeyed == 1) {
-			o->txoffcnt = 0; /* If keyed, set this to zero. */
-		} else {
-			o->txoffcnt++;
-			if (o->txoffcnt > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
-				o->txoffcnt = MS_TO_FRAMES(TX_OFF_DELAY_MAX); /* limit count */
+			if (o->duplex3) {
+				ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
 			}
 		}
-	}
 
-	/* Check conditions and set receiver active */
-	o->rxkeyed = sd && cd && ((!o->lasttx) || o->duplex) && (o->txoffcnt >= o->txoffdelay);
-
-	/* Send a message to indicate rx signal detect conditions */
-	if (o->lastrx && (!o->rxkeyed)) {
-		struct ast_frame wf = {
-			.frametype = AST_FRAME_CONTROL,
-			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
-			.src = __PRETTY_FUNCTION__,
-		};
-
-		o->lastrx = 0;
-		ast_queue_frame(o->owner, &wf);
-		if (o->duplex3) {
-			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
-		}
-	} else if ((!o->lastrx) && (o->rxkeyed)) {
-		struct ast_frame wf = {
-			.frametype = AST_FRAME_CONTROL,
-			.subclass.integer = AST_CONTROL_RADIO_KEY,
-			.src = __PRETTY_FUNCTION__,
-		};
-
-		o->lastrx = 1;
-		ast_queue_frame(o->owner, &wf);
-		if (o->duplex3) {
-			ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
-		}
-	}
-
-	/* Check for ADC clipping and input audio statistics before any filtering is done.
-	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
-	 * ast_radio_check_audio() takes the read buffer as received (48K stereo),
-	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
-	 * and returns true if clipping was detected.
-	 */
-	if (ast_radio_check_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
-		if (o->clipledgpio) {
-			/* Set Clip LED GPIO pulsetimer if not already set */
-			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
-				o->hid_gpio_pulsetimer[o->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
+		/* Check for ADC clipping and input audio statistics before any filtering is done.
+		 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
+		 * ast_radio_check_audio() takes the read buffer as received (48K stereo),
+		 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+		 * and returns true if clipping was detected.
+		 */
+		if (ast_radio_check_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+			if (o->clipledgpio) {
+				/* Set Clip LED GPIO pulsetimer if not already set */
+				if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
+					o->hid_gpio_pulsetimer[o->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
+				}
 			}
 		}
-	}
 
-	/* Downsample received audio from 48000 stereo to 8000 mono */
-	sp = (short *) o->simpleusb_read_buf;
-	sp1 = (short *) (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
-	for (i = 0; i < FRAME_SIZE; i++) {
-		(void) lpass(*sp++, o->flpr);
-		sp++;
-		(void) lpass(*sp++, o->flpr);
-		sp++;
-		(void) lpass(*sp++, o->flpr);
-		sp++;
-		(void) lpass(*sp++, o->flpr);
-		sp++;
-		(void) lpass(*sp++, o->flpr);
-		sp++;
-		if (o->plfilter && o->deemphasis) {
-			*sp1++ = hpass6(deemph(lpass(*sp++, o->flpr), &o->destate), o->hpx, o->hpy);
-		} else if (o->deemphasis) {
-			*sp1++ = deemph(lpass(*sp++, o->flpr), &o->destate);
-		} else if (o->plfilter) {
-			*sp1++ = hpass(lpass(*sp++, o->flpr), o->hpx, o->hpy);
-		} else {
-			*sp1++ = lpass(*sp++, o->flpr);
-		}
-		sp++;
-	}
-
-	/* If we are in echomode and receiving audio, store
-	 * it in the echo queue for later playback.
-	 */
-	if (o->echomode && o->rxkeyed && (!o->echoing)) {
-		register int x;
-		struct usbecho *u;
-
-		ast_mutex_lock(&o->echolock);
-		x = 0;
-		/* get count of frames */
-		for (u = (struct usbecho *) o->echoq.q_forw; u != (struct usbecho *) &o->echoq; u = (struct usbecho *) u->q_forw) {
-			x++;
-		}
-
-		if (x < o->echomax) {
-			u = ast_calloc(1, sizeof(struct usbecho));
-			if (u) {
-				memcpy(u->data, (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET), FRAME_SIZE * 2);
-				insque((struct qelem *) u, o->echoq.q_back);
+		/* Downsample received audio from 48000 mono to 8000 mono */
+		sp = (short *) o->simpleusb_read_buf;
+		sp1 = (short *) (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
+		for (i = 0; i < FRAME_SIZE; i++) {
+			(void) lpass(*sp++, o->flpr);
+			(void) lpass(*sp++, o->flpr);
+			(void) lpass(*sp++, o->flpr);
+			(void) lpass(*sp++, o->flpr);
+			(void) lpass(*sp++, o->flpr);
+			if (o->plfilter && o->deemphasis) {
+				*sp1++ = hpass6(deemph(lpass(*sp++, o->flpr), &o->destate), o->hpx, o->hpy);
+			} else if (o->deemphasis) {
+				*sp1++ = deemph(lpass(*sp++, o->flpr), &o->destate);
+			} else if (o->plfilter) {
+				*sp1++ = hpass(lpass(*sp++, o->flpr), o->hpx, o->hpy);
+			} else {
+				*sp1++ = lpass(*sp++, o->flpr);
 			}
 		}
-		ast_mutex_unlock(&o->echolock);
-	}
+
+		/* If we are in echomode and receiving audio, store
+		 * it in the echo queue for later playback.
+		 */
+		if (o->echomode && o->rxkeyed && (!o->echoing)) {
+			register int x;
+			struct usbecho *u;
+
+			ast_mutex_lock(&o->echolock);
+			x = 0;
+			/* get count of frames */
+			for (u = (struct usbecho *) o->echoq.q_forw; u != (struct usbecho *) &o->echoq; u = (struct usbecho *) u->q_forw) {
+				x++;
+			}
+
+			if (x < o->echomax) {
+				u = ast_calloc(1, sizeof(struct usbecho));
+				if (u) {
+					memcpy(u->data, (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET), FRAME_SIZE * 2);
+					insque((struct qelem *) u, o->echoq.q_back);
+				}
+			}
+			ast_mutex_unlock(&o->echolock);
+		}
 
 #if DEBUG_CAPTURES == 1
-	if (o->rxcapraw && frxcapcooked) {
-		fwrite(o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET, sizeof(short), FRAME_SIZE, frxcapcooked);
-	}
+		if (o->rxcapraw && frxcapcooked) {
+			fwrite(o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET, sizeof(short), FRAME_SIZE, frxcapcooked);
+		}
 #endif
 
-	/* reset read pointer for next frame */
-	o->readpos = 0;
-	/* Do not return the frame if the channel is not up */
-	if (ast_channel_state(c) != AST_STATE_UP) {
-		return &ast_null_frame;
-	}
-	/* ok we can build and deliver the frame to the caller */
-	f->frametype = AST_FRAME_VOICE;
-	f->subclass.format = ast_format_slin;
-	f->offset = AST_FRIENDLY_OFFSET;
-	f->samples = FRAME_SIZE;
-	f->datalen = FRAME_SIZE * 2;
-	f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
-	if (!o->rxkeyed) {
-		memset(f->data.ptr, 0, f->datalen);
-	}
-	/* Process the audio to see if contains DTMF */
-	if (o->usedtmf && o->dsp) {
-		f1 = ast_dsp_process(c, o->dsp, f);
-		if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
-			if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u')) {
-				f1->frametype = AST_FRAME_NULL;
-				f1->subclass.integer = 0;
-				return f1;
-			}
-			if (f1->frametype == AST_FRAME_DTMF_END) {
-				f1->len = ast_tvdiff_ms(ast_radio_tvnow(), o->tonetime);
-				if (option_verbose) {
-					ast_log(LOG_NOTICE, "Channel %s: Got DTMF char %c duration %ld ms\n", o->name, f1->subclass.integer, f1->len);
+		/* reset read pointer for next frame */
+		o->readpos = 0;
+		/* Do not return the frame if the channel is not up */
+		if (ast_channel_state(o->owner) != AST_STATE_UP) {
+			continue;
+		}
+		/* ok we can build and deliver the frame to the caller */
+		f->frametype = AST_FRAME_VOICE;
+		f->subclass.format = ast_format_slin;
+		f->offset = AST_FRIENDLY_OFFSET;
+		f->samples = FRAME_SIZE;
+		f->datalen = FRAME_SIZE * 2;
+		f->data.ptr = o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET;
+		if (!o->rxkeyed) {
+			memset(f->data.ptr, 0, f->datalen);
+		}
+		/* Process the audio to see if contains DTMF */
+		if (o->usedtmf && o->dsp) {
+			f1 = ast_dsp_process(o->owner, o->dsp, f);
+			if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
+				if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u')) {
+					f1->frametype = AST_FRAME_NULL;
+					f1->subclass.integer = 0;
+
+					if (!o->owner) {
+						break;
+					}
+
+					ast_queue_frame(o->owner, f1);
+					continue;
 				}
-				o->toneflag = 0;
-			} else {
-				if (o->toneflag) {
-					ast_frfree(f1);
-					f1 = NULL;
+				if (f1->frametype == AST_FRAME_DTMF_END) {
+					f1->len = ast_tvdiff_ms(ast_radio_tvnow(), o->tonetime);
+					if (option_verbose) {
+						ast_log(LOG_NOTICE, "Channel %s: Got DTMF char %c duration %ld ms\n", o->name, f1->subclass.integer, f1->len);
+					}
+					o->toneflag = 0;
 				} else {
-					o->tonetime = ast_radio_tvnow();
-					o->toneflag = 1;
+					if (o->toneflag) {
+						ast_frfree(f1);
+						f1 = NULL;
+					} else {
+						o->tonetime = ast_radio_tvnow();
+						o->toneflag = 1;
+					}
+				}
+				if (!o->owner) {
+					break;
+				}
+				if (f1) {
+					ast_queue_frame(o->owner, f1);
 				}
 			}
-			if (f1) {
-				return f1;
+		}
+
+		/* Raw audio samples should never be clipped or scaled for any reason. Adjustments to
+		 * audio levels should be made only in the USB interface mixer settings.
+		 * TODO: After the vast majority of existing installs have had a chance to review their
+		 * audio settings and these old scaling/clipping hacks are no longer in significant use
+		 * the legacyaudioscaling cfg and related code should be deleted.
+		 */
+		/* scale and clip values */
+		if (o->legacyaudioscaling && o->rxvoiceadj > 1.0) {
+			register int i, x;
+			register float f1;
+			register int16_t *p = (int16_t *) f->data.ptr;
+
+			for (i = 0; i < f->samples; i++) {
+				f1 = (float) p[i] * o->rxvoiceadj;
+				x = (int) f1;
+				if (x > 32767) {
+					x = 32767;
+				} else if (x < -32768) {
+					x = -32768;
+				}
+				p[i] = x;
 			}
 		}
-	}
 
-	/* Raw audio samples should never be clipped or scaled for any reason. Adjustments to
-	 * audio levels should be made only in the USB interface mixer settings.
-	 * TODO: After the vast majority of existing installs have had a chance to review their
-	 * audio settings and these old scaling/clipping hacks are no longer in significant use
-	 * the legacyaudioscaling cfg and related code should be deleted.
-	 */
-	/* scale and clip values */
-	if (o->legacyaudioscaling && o->rxvoiceadj > 1.0) {
-		register int i, x;
-		register float f1;
-		register int16_t *p = (int16_t *) f->data.ptr;
+		/* Compute the peak signal if requested */
+		if (o->measure_enabled) {
+			register int i;
+			register int32_t accum;
+			register int16_t *p = (int16_t *) f->data.ptr;
 
-		for (i = 0; i < f->samples; i++) {
-			f1 = (float) p[i] * o->rxvoiceadj;
-			x = (int) f1;
-			if (x > 32767) {
-				x = 32767;
-			} else if (x < -32768) {
-				x = -32768;
+			for (i = 0; i < f->samples; i++) {
+				accum = p[i];
+				if (accum > o->amax) {
+					o->amax = accum;
+					o->discounteru = o->discfactor;
+				} else if (--o->discounteru <= 0) {
+					o->discounteru = o->discfactor;
+					o->amax = (int32_t) ((o->amax * 32700) / 32768);
+				}
+				if (accum < o->amin) {
+					o->amin = accum;
+					o->discounterl = o->discfactor;
+				} else if (--o->discounterl <= 0) {
+					o->discounterl = o->discfactor;
+					o->amin = (int32_t) ((o->amin * 32700) / 32768);
+				}
 			}
-			p[i] = x;
+			o->apeak = (int32_t) (o->amax - o->amin) / 2;
 		}
-	}
 
-	/* Compute the peak signal if requested */
-	if (o->measure_enabled) {
-		register int i;
-		register int32_t accum;
-		register int16_t *p = (int16_t *) f->data.ptr;
-
-		for (i = 0; i < f->samples; i++) {
-			accum = p[i];
-			if (accum > o->amax) {
-				o->amax = accum;
-				o->discounteru = o->discfactor;
-			} else if (--o->discounteru <= 0) {
-				o->discounteru = o->discfactor;
-				o->amax = (int32_t) ((o->amax * 32700) / 32768);
-			}
-			if (accum < o->amin) {
-				o->amin = accum;
-				o->discounterl = o->discfactor;
-			} else if (--o->discounterl <= 0) {
-				o->discounterl = o->discfactor;
-				o->amin = (int32_t) ((o->amin * 32700) / 32768);
-			}
+		if (!o->owner) {
+			break;
 		}
-		o->apeak = (int32_t) (o->amax - o->amin) / 2;
+		ast_queue_frame(o->owner, f);
 	}
-	return f;
+
+	stop_stream(o);
+	ast_debug(5, "Audio Thread is exiting");
+	return NULL;
 }
-
 /*!
  * \brief Asterisk fixup function.
  * \param oldchan		Old asterisk channel.
@@ -2690,10 +2771,6 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext
 		return NULL;
 	}
 	ast_channel_tech_set(c, &simpleusb_tech);
-	if ((o->sounddev < 0) && o->hasusb) {
-		setformat(o, O_RDWR);
-	}
-	ast_channel_internal_fd_set(c, 0, o->sounddev); /* -1 if device closed, override later */
 	ast_channel_nativeformats_set(c, simpleusb_tech.capabilities);
 	ast_channel_set_readformat(c, ast_format_slin);
 	ast_channel_set_writeformat(c, ast_format_slin);
@@ -3863,6 +3940,8 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 			o->name = ast_strdup(ctg);
 			o->pttkick[0] = -1;
 			o->pttkick[1] = -1;
+			o->audiothread = AST_PTHREADT_NULL;
+			o->hidthread = AST_PTHREADT_NULL;
 			if (!simpleusb_active) {
 				simpleusb_active = o->name;
 			}
@@ -3883,8 +3962,6 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 			continue;
 		}
 
-		CV_UINT("frags", o->frags);
-		CV_UINT("queuesize", o->queuesize);
 		CV_BOOL("invertptt", o->invertptt);
 		CV_F("carrierfrom", store_rxcdtype(o, (char *) v->value));
 		CV_F("ctcssfrom", store_rxsdtype(o, (char *) v->value));
@@ -4176,6 +4253,8 @@ static int reload_module(void)
 
 static int load_module(void)
 {
+	PaError res;
+
 	if (!(simpleusb_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -4196,6 +4275,12 @@ static int load_module(void)
 
 	/* load our module configuration */
 	if (load_config(0)) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	res = Pa_Initialize();
+	if (res != paNoError) {
+		ast_log(LOG_WARNING, "Failed to initialize audio system - (%d) %s\n", res, Pa_GetErrorText(res));
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -4245,10 +4330,6 @@ static int unload_module(void)
 		}
 #endif
 
-		if (o->sounddev >= 0) {
-			close(o->sounddev);
-			o->sounddev = -1;
-		}
 		if (o->dsp) {
 			ast_dsp_free(o->dsp);
 		}
