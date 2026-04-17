@@ -122,8 +122,10 @@
  * portaudio stream, but the portaudio documentation does say that for high
  * performance applications, the data should be written to Pa_WriteStream in
  * the same size as what is used to initialize the stream.
+ * At 48kHz, 960 samples gives a 20ms frame, which aligns with Asterisk's
+ * common frame size after resampling to 8kHz (160 samples).
  */
-#define NUM_SAMPLES 320
+#define NUM_SAMPLES 160
 
 /*! \brief Mono Input */
 #define INPUT_CHANNELS 1
@@ -403,7 +405,6 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 
 static int hidhdwconfig(struct chan_simpleusb_pvt *o);
 static void mixer_write(struct chan_simpleusb_pvt *o);
-static int setformat(struct chan_simpleusb_pvt *o, int mode);
 static struct ast_channel *simpleusb_request(const char *type, struct ast_format_cap *cap,
 	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
 static int simpleusb_digit_begin(struct ast_channel *c, char digit);
@@ -777,83 +778,157 @@ static char *find_installed_usb_match(void)
 static void *stream_monitor(void *data)
 {
 	struct chan_simpleusb_pvt *pvt = data;
-	char buf[NUM_SAMPLES * sizeof(int16_t)];
+	register short *sp, *sp1;
+	char buf[FRAME_SIZE * 6 * 2 * 2];						   /* samples * 6 bytes for 48k * 2 channels */
+	char read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 160 samples * 2 bytes for 8k */
 	PaError res;
 	struct ast_frame f = {
 		.frametype = AST_FRAME_VOICE,
-		.subclass.format = ast_format_slin16,
-		.src = "console_stream_monitor",
-		.data.ptr = buf,
-		.datalen = sizeof(buf),
-		.samples = sizeof(buf) / sizeof(int16_t),
+		.subclass.format = ast_format_slin,
+		.src = "simpleusb_stream_monitor",
+		.data.ptr = read_frame_buf,
+		.datalen = FRAME_SIZE * 2, /* 8khz = 2 bytes per sample */
+		.samples = FRAME_SIZE,
 	};
-
+	ast_debug(1, "Stream reader is started");
 	for (;;) {
 		// Lock
-		res = Pa_ReadStream(pvt->stream, buf, sizeof(buf) / sizeof(int16_t));
+		int i;
+
+		/* Send a message to indicate rx signal detect conditions */
+		if (pvt->lastrx && (!pvt->rxkeyed)) {
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+				.src = __PRETTY_FUNCTION__,
+			};
+
+			pvt->lastrx = 0;
+			ast_queue_frame(pvt->owner, &wf);
+			if (pvt->duplex3) {
+				ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
+			}
+		} else if ((!pvt->lastrx) && (pvt->rxkeyed)) {
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_RADIO_KEY,
+				.src = __PRETTY_FUNCTION__,
+			};
+
+			pvt->lastrx = 1;
+			ast_queue_frame(pvt->owner, &wf);
+			if (pvt->duplex3) {
+				ast_radio_setamixer(pvt->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
+			}
+		}
+		res = Pa_ReadStream(pvt->stream, buf, FRAME_SIZE);
 		// Unlock
 
-		if (!pvt->owner /* || pvt->abort */) {
+		if (!pvt->owner || pvt->abort) {
 			return NULL;
+		}
+		if (res != paNoError) {
+			ast_debug(5, "SimpleUSB ReadStream failed: %s", Pa_GetErrorText(res));
+			continue;
+		}
+		/* Downsample received audio from 48000 stereo to 8000 mono */
+		sp = (short *) buf;
+		sp1 = (short *) (read_frame_buf + AST_FRIENDLY_OFFSET);
+		for (i = 0; i < FRAME_SIZE; i++) {
+			(void) lpass(*sp++, pvt->flpr);
+			sp++;
+			(void) lpass(*sp++, pvt->flpr);
+			sp++;
+			(void) lpass(*sp++, pvt->flpr);
+			sp++;
+			(void) lpass(*sp++, pvt->flpr);
+			sp++;
+			(void) lpass(*sp++, pvt->flpr);
+			sp++;
+			if (pvt->plfilter && pvt->deemphasis) {
+				*sp1++ = hpass6(deemph(lpass(*sp++, pvt->flpr), &pvt->destate), pvt->hpx, pvt->hpy);
+			} else if (pvt->deemphasis) {
+				*sp1++ = deemph(lpass(*sp++, pvt->flpr), &pvt->destate);
+			} else if (pvt->plfilter) {
+				*sp1++ = hpass(lpass(*sp++, pvt->flpr), pvt->hpx, pvt->hpy);
+			} else {
+				*sp1++ = lpass(*sp++, pvt->flpr);
+			}
+			sp++;
 		}
 
 		if (res == paNoError) {
 			ast_queue_frame(pvt->owner, &f);
 		} else {
-			ast_log(LOG_WARNING, "Console ReadStream failed: %s\n", Pa_GetErrorText(res));
+			ast_log(LOG_WARNING, "SimpleUSB ReadStream failed: %s\n", Pa_GetErrorText(res));
 		}
 	}
-
+	ast_debug(1, "Stream reader is ending");
 	return NULL;
 }
 
 static int open_stream(struct chan_simpleusb_pvt *pvt)
 {
-	int res = paInternalError;
+	PaError res = paInternalError;
 
 	if (!strcasecmp(pvt->input_device, "default") && !strcasecmp(pvt->output_device, "default")) {
+		ast_debug(1, "Opening stream with default device");
 		res = Pa_OpenDefaultStream(&pvt->stream, INPUT_CHANNELS, OUTPUT_CHANNELS, paInt16, SAMPLE_RATE, NUM_SAMPLES, NULL, NULL);
 	} else {
+		ast_debug(1, "Looking for device %s", pvt->input_device);
 		PaStreamParameters input_params = {
-			.channelCount = 1,
+			.channelCount = INPUT_CHANNELS,
 			.sampleFormat = paInt16,
 			.suggestedLatency = (1.0 / 50.0), /* 20 ms */
 			.device = paNoDevice,
 		};
 		PaStreamParameters output_params = {
-			.channelCount = 1,
+			.channelCount = OUTPUT_CHANNELS,
 			.sampleFormat = paInt16,
 			.suggestedLatency = (1.0 / 50.0), /* 20 ms */
 			.device = paNoDevice,
 		};
 		PaDeviceIndex idx, num_devices, def_input, def_output;
-
-		if (!(num_devices = Pa_GetDeviceCount()))
+		ast_debug(6, "PA host api count %d", Pa_GetHostApiCount());
+		num_devices = Pa_GetDeviceCount();
+		if (num_devices < 0) {
+			ast_debug(1, "No devices found\n");
 			return res;
+		} else {
+			ast_debug(6, "%d Devices found", num_devices);
+		}
 
 		def_input = Pa_GetDefaultInputDevice();
 		def_output = Pa_GetDefaultOutputDevice();
 
 		for (idx = 0; idx < num_devices && (input_params.device == paNoDevice || output_params.device == paNoDevice); idx++) {
 			const PaDeviceInfo *dev = Pa_GetDeviceInfo(idx);
-
+			ast_debug(1, "Found device %s", dev->name);
 			if (dev->maxInputChannels) {
-				if ((idx == def_input && !strcasecmp(pvt->input_device, "default")) || !strcasecmp(pvt->input_device, dev->name))
+				if ((idx == def_input && !strcasecmp(pvt->input_device, "default")) || !strstr(pvt->input_device, dev->name)) {
+					ast_debug(5, "Found input device %s", dev->name);
 					input_params.device = idx;
+				}
 			}
 
 			if (dev->maxOutputChannels) {
-				if ((idx == def_output && !strcasecmp(pvt->output_device, "default")) || !strcasecmp(pvt->output_device, dev->name))
+				if ((idx == def_output && !strcasecmp(pvt->output_device, "default")) || !strstr(pvt->output_device, dev->name)) {
+					ast_debug(5, "Found output device %s", dev->name);
 					output_params.device = idx;
+				}
 			}
 		}
 
-		if (input_params.device == paNoDevice)
+		if (input_params.device == paNoDevice) {
 			ast_log(LOG_ERROR, "No input device found for console device '%s'\n", pvt->name);
-		if (output_params.device == paNoDevice)
+		}
+
+		if (output_params.device == paNoDevice) {
 			ast_log(LOG_ERROR, "No output device found for console device '%s'\n", pvt->name);
+		}
 
 		res = Pa_OpenStream(&pvt->stream, &input_params, &output_params, SAMPLE_RATE, NUM_SAMPLES, paNoFlag, NULL, NULL);
+		ast_debug(5, "Stream feedback %s", Pa_GetErrorText(res));
 	}
 
 	return res;
@@ -873,7 +948,6 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 		goto return_unlock;
 
 	pvt->streamstate = 1;
-	ast_debug(1, "Starting stream\n");
 
 	res = open_stream(pvt);
 	if (res != paNoError) {
@@ -885,15 +959,23 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 	res = Pa_StartStream(pvt->stream);
 	if (res != paNoError) {
 		ast_log(LOG_WARNING, "Failed to start stream - (%d) %s\n", res, Pa_GetErrorText(res));
+		Pa_CloseStream(pvt->stream);
+		pvt->stream = NULL;
+		pvt->streamstate = 0;
 		ret_val = -1;
 		goto return_unlock;
 	}
 
-	if (ast_pthread_create_background(&pvt->audio_thread, NULL, stream_monitor, pvt)) {
+/*	if (ast_pthread_create_background(&pvt->audio_thread, NULL, stream_monitor, pvt)) {
 		ast_log(LOG_ERROR, "Failed to start stream monitor thread\n");
+		Pa_AbortStream(pvt->stream);
+		Pa_CloseStream(pvt->stream);
+		pvt->stream = NULL;
+		pvt->streamstate = 0;
+		pvt->audio_thread = AST_PTHREADT_NULL;
 		ret_val = -1;
 	}
-
+*/
 return_unlock:
 	// console_pvt_unlock(pvt);
 
@@ -907,16 +989,17 @@ static int stop_stream(struct chan_simpleusb_pvt *pvt)
 
 	pvt->abort = 1;
 	/* Wait for pvt->thread to exit cleanly, to avoid killing it while it's holding a lock. */
+	Pa_AbortStream(pvt->stream);
 	pthread_kill(pvt->audio_thread, SIGURG); /* Wake it up if needed, but don't cancel it */
 	pthread_join(pvt->audio_thread, NULL);
-
+	pvt->audio_thread = AST_PTHREADT_NULL;
 	// console_pvt_lock(pvt);
-	Pa_AbortStream(pvt->stream);
+
 	Pa_CloseStream(pvt->stream);
 	pvt->stream = NULL;
 	pvt->streamstate = 0;
 	// console_pvt_unlock(pvt);
-
+	pvt->abort = 0;
 	return 0;
 }
 
@@ -1023,18 +1106,30 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		CV_STR("outdevname", o->output_device);
 		CV_END;
 	}
+
+	if (!strlen(o->input_device)) {
+		strncpy(o->input_device, "default", sizeof(o->input_device));
+	}
+
+	if (!strlen(o->output_device)) {
+		strncpy(o->output_device, "default", sizeof(o->output_device));
+	}
+
 	if (!reload) {
 		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
 		strcpy(o->devstr, devstr); /* Safe */
 		strcpy(o->serial, serial); /* Safe */
 	}
+
 	if (opened) {
 		ast_config_destroy(cfg2);
 	}
+
 	if (!configured) {
 		ast_log(LOG_WARNING, "Can't %sload settings for %s (no section available), using default parameters\n", reload ? "re" : "", o->name);
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -1324,7 +1419,7 @@ static void *hidthread(void *arg)
 		}
 		ast_mutex_unlock(&o->eepromlock);
 
-		setformat(o, O_RDWR);
+		//		setformat(o, O_RDWR);
 		o->hasusb = 1;
 		o->had_gpios_in = 0;
 
@@ -1633,114 +1728,6 @@ static void *hidthread(void *arg)
 }
 
 /*!
- * \brief Open the sound card device.
- * If the device is already open, this will close the device
- * and open it again.
- * It initializes the device based on our requirements and triggers
- * reads and writes.
- * \param o		chan_usbradio_pvt.
- * \param mode	The mode to open the file.  This is the flags argument to open.
- * \retval 0	Success.
- * \retval -1	Failed.
- */
-static int setformat(struct chan_simpleusb_pvt *o, int mode)
-{
-	int fmt, desired, res, fd;
-	char device[100];
-
-	/* If the device is open, close it */
-	if (o->sounddev >= 0) {
-		ioctl(o->sounddev, SNDCTL_DSP_RESET, 0);
-		close(o->sounddev);
-		o->duplex = M_UNSET;
-		o->sounddev = -1;
-	}
-	if (mode == O_CLOSE) { /* we are done */
-		return 0;
-	}
-
-	strcpy(device, "/dev/dsp");
-	if (o->devicenum) {
-		sprintf(device, "/dev/dsp%d", o->devicenum);
-	}
-	/* open the device */
-	fd = o->sounddev = open(device, mode | O_NONBLOCK);
-	if (fd < 0) {
-		ast_log(LOG_ERROR, "Channel %s: Unable to open DSP device %d: %s.\n", o->name, o->devicenum, strerror(errno));
-		return -1;
-	}
-	if (o->owner) {
-		ast_channel_internal_fd_set(o->owner, 0, fd);
-	}
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-	fmt = AFMT_S16_LE;
-#else
-	fmt = AFMT_S16_BE;
-#endif
-	res = ioctl(fd, SNDCTL_DSP_SETFMT, &fmt);
-	if (res < 0) {
-		ast_log(LOG_WARNING, "Channel %s: Unable to set format to 16-bit signed\n", o->name);
-		return -1;
-	}
-	/* set our duplex mode based on the way we opened the device. */
-	switch (mode) {
-	case O_RDWR:
-		res = ioctl(fd, SNDCTL_DSP_SETDUPLEX, 0);
-		/* Check to see if duplex set (FreeBSD Bug) */
-		res = ioctl(fd, SNDCTL_DSP_GETCAPS, &fmt);
-		if (res == 0 && (fmt & DSP_CAP_DUPLEX)) {
-			o->duplex = M_FULL;
-		};
-		break;
-	case O_WRONLY:
-		o->duplex = M_WRITE;
-		break;
-	case O_RDONLY:
-		o->duplex = M_READ;
-		break;
-	}
-
-	fmt = 1;
-	res = ioctl(fd, SNDCTL_DSP_STEREO, &fmt);
-	if (res < 0) {
-		ast_log(LOG_WARNING, "Channel %s: Failed to set audio device to stereo\n", o->name);
-		return -1;
-	}
-	fmt = desired = 48000; /* 48000 Hz desired */
-	res = ioctl(fd, SNDCTL_DSP_SPEED, &fmt);
-	if (res < 0) {
-		ast_log(LOG_WARNING, "Channel %s: Failed to set audio device sample rate.\n", o->name);
-		return -1;
-	}
-	if (fmt != desired) {
-		if (!(o->warned & WARN_speed)) {
-			ast_log(LOG_WARNING, "Channel %s: Requested %d Hz, got %d Hz -- sound may be choppy.\n", o->name, desired, fmt);
-			o->warned |= WARN_speed;
-		}
-	}
-	/*
-	 * on Freebsd, SETFRAGMENT does not work very well on some cards.
-	 * Default to use 256 bytes, let the user override
-	 */
-	if (o->frags) {
-		fmt = o->frags;
-		res = ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &fmt);
-		if (res < 0) {
-			if (!(o->warned & WARN_frag)) {
-				ast_log(LOG_WARNING, "Channel %s: Unable to set fragment size -- sound may be choppy.\n", o->name);
-				o->warned |= WARN_frag;
-			}
-		}
-	}
-	/* on some cards, we need SNDCTL_DSP_SETTRIGGER to start outputting */
-	res = PCM_ENABLE_INPUT | PCM_ENABLE_OUTPUT;
-	res = ioctl(fd, SNDCTL_DSP_SETTRIGGER, &res);
-	/* it may fail if we are in half duplex, never mind */
-	return 0;
-}
-
-/*!
  * \brief Asterisk digit begin function.
  * \param c				Asterisk channel.
  * \param digit			Digit processed.
@@ -2019,11 +2006,12 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
  */
 static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 {
-	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
+	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(c);
 
-	o->stophid = 0;
-	ast_radio_time(&o->lasthidtime);
-	ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+	pvt->stophid = 0;
+	ast_radio_time(&pvt->lasthidtime);
+	ast_pthread_create(&pvt->hidthread, NULL, hidthread, pvt);
+	start_stream(pvt);
 	ast_setstate(c, AST_STATE_UP);
 	return 0;
 }
@@ -2051,11 +2039,11 @@ static int simpleusb_hangup(struct ast_channel *c)
 	ast_channel_tech_pvt_set(c, NULL);
 	pvt->owner = NULL;
 	ast_module_unref(ast_module_info->self);
-	stop_stream(pvt);
 
 	if (pvt->hookstate) {
 		pvt->hookstate = 0;
-		setformat(pvt, O_CLOSE);
+		stop_stream(pvt);
+		//		setformat(pvt, O_CLOSE);
 	}
 
 	pvt->stophid = 1;
@@ -2072,19 +2060,13 @@ static int simpleusb_hangup(struct ast_channel *c)
  */
 static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 {
-	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
+	struct chan_simpleusb_pvt *pvt = ast_channel_tech_pvt(c);
 	register short *sp, *sp1;
-	short outbuf[FRAME_SIZE * 2 * 6];
-	int src, i, doright, doleft, ispager, l;
+	short outbuf[FRAME_SIZE * 2 * 6 * 2];
+	int src, i, doright, doleft, ispager;
 
-	if (!o->hasusb) {
+	if (!pvt->hasusb) {
 		return 0;
-	}
-	if (o->sounddev < 0) {
-		setformat(o, O_RDWR);
-	}
-	if (o->sounddev < 0) {
-		return 0; /* not fatal */
 	}
 	/*
 	 * we could receive a block which is not a multiple of our
@@ -2097,27 +2079,43 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	/* Write input data to a file.
 	 * Left channel has the audio, right channel shows txkeyed
 	 */
-	if (ftxcapraw && o->txcapraw) {
+	if (ftxcapraw && pvt->txcapraw) {
 		short i, tbuff[f->datalen];
 		for (i = 0; i < f->datalen; i += 2) {
 			tbuff[i] = ((short *) (f->data.ptr))[i / 2];
-			tbuff[i + 1] = o->txkeyed * 0x1000;
+			tbuff[i + 1] = pvt->txkeyed * 0x1000;
 		}
 		fwrite(tbuff, 2, f->datalen, ftxcapraw);
 	}
 #endif
 
-	if ((!o->txkeyed) && (!o->txtestkey)) {
+	if ((!pvt->txkeyed) && (!pvt->txtestkey)) {
 		return 0;
 	}
 
-	if ((!o->txtestkey) && o->echoing) {
+	if ((!pvt->txtestkey) && pvt->echoing) {
 		return 0;
 	}
 
 	// take the data from the network and save it for processing
-
+	ast_debug(5, "I'm writing a frame");
 	src = 0; /* read position into f->data */
+
+	/* Check for ADC clipping and input audio statistics before any filtering is done.
+	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
+	 * ast_radio_check_audio() takes the read buffer as received (48K stereo),
+	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+	 * and returns true if clipping was detected.
+	 */
+	if (ast_radio_check_audio((short *) pvt->simpleusb_read_buf, &pvt->rxaudiostats, 12 * FRAME_SIZE)) {
+		if (pvt->clipledgpio) {
+			/* Set Clip LED GPIO pulsetimer if not already set */
+			if (!pvt->hid_gpio_pulsetimer[pvt->clipledgpio - 1]) {
+				pvt->hid_gpio_pulsetimer[pvt->clipledgpio - 1] = CLIP_LED_HOLD_TIME_MS;
+			}
+		}
+	}
+
 	while (src < f->datalen) {
 		/* Below is an attempt to match levels to the original CM108 IC which has
 		 * been out of production for over 10 years. Scaling audio to 109.375% will
@@ -2129,7 +2127,9 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 		 *
 		 * Adjust the audio level for CM119 A/B devices
 		 */
-		if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
+		PaError res;
+
+		if (pvt->legacyaudioscaling && pvt->devtype != C108_PRODUCT_ID) {
 			register int v;
 
 			sp = (short *) f->data.ptr;
@@ -2156,42 +2156,46 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 			ispager = 1;
 		}
 		/* If pager audio, determine which channel to store audio */
-		if (o->pager != PAGER_NONE) {
-			doleft = (o->pager == PAGER_A) ? ispager : !ispager;
-			doright = (o->pager == PAGER_B) ? ispager : !ispager;
+		if (pvt->pager != PAGER_NONE) {
+			doleft = (pvt->pager == PAGER_A) ? ispager : !ispager;
+			doright = (pvt->pager == PAGER_B) ? ispager : !ispager;
 		}
 		/* Upsample from 8000 mono to 48000 stereo */
 		for (i = 0; i < FRAME_SIZE; i++) {
 			register short s, v;
 
-			if (o->preemphasis) {
-				s = preemph(sp[i], &o->prestate);
+			if (pvt->preemphasis) {
+				s = preemph(sp[i], &pvt->prestate);
 			} else {
 				s = sp[i];
 			}
-			v = lpass(s, o->flpt);
+			v = lpass(s, pvt->flpt);
 			*sp1++ = (doleft) ? v : 0;
 			*sp1++ = (doright) ? v : 0;
-			v = lpass(s, o->flpt);
+			v = lpass(s, pvt->flpt);
 			*sp1++ = (doleft) ? v : 0;
 			*sp1++ = (doright) ? v : 0;
-			v = lpass(s, o->flpt);
+			v = lpass(s, pvt->flpt);
 			*sp1++ = (doleft) ? v : 0;
 			*sp1++ = (doright) ? v : 0;
-			v = lpass(s, o->flpt);
+			v = lpass(s, pvt->flpt);
 			*sp1++ = (doleft) ? v : 0;
 			*sp1++ = (doright) ? v : 0;
-			v = lpass(s, o->flpt);
+			v = lpass(s, pvt->flpt);
 			*sp1++ = (doleft) ? v : 0;
 			*sp1++ = (doright) ? v : 0;
-			v = lpass(s, o->flpt);
+			v = lpass(s, pvt->flpt);
 			*sp1++ = (doleft) ? v : 0;
 			*sp1++ = (doright) ? v : 0;
 		}
-		Pa_WriteStream(o->stream, outbuf, f->samples);
-		src += l;
-		o->simpleusb_write_dst = 0;
-		if (o->waspager && (!ispager)) {
+		res = Pa_WriteStream(pvt->stream, outbuf, FRAME_SIZE * 2);
+		if (res) {
+			ast_debug(1, "PA Error %s", Pa_GetErrorText(res));
+		}
+
+		src += f->datalen; /* Process the frame in one iteration */
+		pvt->simpleusb_write_dst = 0;
+		if (pvt->waspager && (!ispager)) {
 			struct ast_frame wf = {
 				.frametype = AST_FRAME_TEXT,
 				.data.ptr = ENDPAGE_STR,
@@ -2199,9 +2203,9 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 				.src = __PRETTY_FUNCTION__,
 			};
 
-			ast_queue_frame(o->owner, &wf);
+			ast_queue_frame(pvt->owner, &wf);
 		}
-		o->waspager = ispager;
+		pvt->waspager = ispager;
 	}
 	return 0;
 }
@@ -2303,6 +2307,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	 * in stereo format.
 	 */
 	//	res = read(o->sounddev, o->simpleusb_read_buf + o->readpos, sizeof(o->simpleusb_read_buf) - o->readpos);
+	res = 0;
 	if (res < 0) {
 		/* audio data not ready */
 		if (errno != EAGAIN) {
@@ -2754,9 +2759,6 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *pvt, char *e
 		return NULL;
 	}
 	ast_channel_tech_set(c, &simpleusb_tech);
-	if ((pvt->sounddev < 0) && pvt->hasusb) {
-		setformat(pvt, O_RDWR);
-	}
 	ast_channel_internal_fd_set(c, 0, pvt->sounddev); /* -1 if device closed, override later */
 	ast_channel_nativeformats_set(c, simpleusb_tech.capabilities);
 	ast_channel_set_readformat(c, ast_format_slin);
@@ -2774,11 +2776,8 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *pvt, char *e
 			pvt->owner = NULL;
 			c = NULL;
 			/* What about the channel itself ? */
-		} else {
-			start_stream(pvt);
 		}
 	}
-
 	return c;
 }
 
@@ -4244,6 +4243,8 @@ static int reload_module(void)
 
 static int load_module(void)
 {
+	PaError res;
+
 	if (!(simpleusb_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -4264,6 +4265,13 @@ static int load_module(void)
 
 	/* load our module configuration */
 	if (load_config(0)) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	res = Pa_Initialize();
+	if (res != paNoError) {
+		ast_log(LOG_WARNING, "Failed to initialize audio system - (%d) %s\n", res, Pa_GetErrorText(res));
+		Pa_Terminate();
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
