@@ -239,7 +239,7 @@ struct chan_simpleusb_pvt {
 	/* buffers used in simpleusb_read - AST_FRIENDLY_OFFSET space for headers
 	 * plus enough room for a full frame
 	 */
-	char simpleusb_read_buf[FRAME_SIZE * 4 * 6];						 /* 2 channels * 2x frames * 6 for 48K */
+	char simpleusb_read_buf[FRAME_SIZE * 2 * 2 * 6];					 /* 2 channels * 2x frames * 6 for 48K */
 	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte frames at 8k */
 	int readpos;			 /* read position above */
 	struct ast_frame read_f; /* returned by simpleusb_read */
@@ -2393,20 +2393,15 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		}
 	}
 
-	/* Downsample received audio from 48000 stereo to 8000 mono */
+	/* Downsample received audio from 48000 mono to 8000 mono */
 	sp = (short *) o->simpleusb_read_buf;
 	sp1 = (short *) (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
 	for (i = 0; i < FRAME_SIZE; i++) {
 		(void) lpass(*sp++, o->flpr);
-		sp++;
 		(void) lpass(*sp++, o->flpr);
-		sp++;
 		(void) lpass(*sp++, o->flpr);
-		sp++;
 		(void) lpass(*sp++, o->flpr);
-		sp++;
 		(void) lpass(*sp++, o->flpr);
-		sp++;
 		if (o->plfilter && o->deemphasis) {
 			*sp1++ = hpass6(deemph(lpass(*sp++, o->flpr), &o->destate), o->hpx, o->hpy);
 		} else if (o->deemphasis) {
@@ -2416,7 +2411,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		} else {
 			*sp1++ = lpass(*sp++, o->flpr);
 		}
-		sp++;
 	}
 
 	/* If we are in echomode and receiving audio, store
