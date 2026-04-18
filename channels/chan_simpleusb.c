@@ -1915,8 +1915,12 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 	while (!o->usbass) {
 		usleep(1000);
 	}
-
 	start_stream(o);
+
+	if (timerfd_settime(o->sounddev_fd, 0, &o->timer, NULL) < 0) {
+		ast_log(LOG_ERROR, "Failed to start audio polling timer \n");
+	}
+
 	ast_setstate(c, AST_STATE_UP);
 	return 0;
 }
@@ -2119,7 +2123,7 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		if (o->txkeyed) {
 			ast_debug(7, "blocks used %d, Dest Buffer %d", i, o->simpleusb_write_dst);
 		}
-		if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && i <= o->queuesize) {
+		if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
 			ast_mutex_lock(&o->txqlock);
 			f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
 			ast_mutex_unlock(&o->txqlock);
@@ -2236,13 +2240,11 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 		/* audio data not ready */
 		if (errno != paNoError) {
 			o->readerrs = 0;
-			o->hasusb = 0;
 			return &ast_null_frame;
 		}
 		if (o->readerrs++ > READERR_THRESHOLD) {
 			ast_log(LOG_ERROR, "Stuck USB read channel [%s], un-sticking it!\n", o->name);
 			o->readerrs = 0;
-			o->hasusb = 0;
 			return &ast_null_frame;
 		}
 		if (o->readerrs == 1) {
@@ -2692,10 +2694,6 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext
 	o->timer.it_interval.tv_nsec = 20 * 1000 * 1000; /* 20ms polling */
 	o->timer.it_value.tv_sec = 0;
 	o->timer.it_value.tv_nsec = 20 * 1000 * 1000; /* 20ms polling */
-
-	if (timerfd_settime(o->sounddev_fd, 0, &o->timer, NULL) < 0) {
-		ast_log(LOG_ERROR, "Failed to start audio polling timer \n");
-	}
 
 	ast_channel_internal_fd_set(c, 0, o->sounddev_fd); /* -1 if device closed, override later */
 	ast_channel_nativeformats_set(c, simpleusb_tech.capabilities);
