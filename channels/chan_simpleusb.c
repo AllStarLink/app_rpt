@@ -922,7 +922,7 @@ static void *pulserthread(void *arg)
 		}
 		ast_mutex_unlock(&pp_lock);
 	}
-	pthread_exit(0);
+	return NULL;
 }
 
 /*!
@@ -1254,7 +1254,7 @@ static void *hidthread(void *arg)
 		}
 		if (pipe(o->pttkick) == -1) {
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
-			pthread_exit(NULL);
+			return NULL;
 		}
 		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
 			o->devtype = C108_PRODUCT_ID;
@@ -1588,7 +1588,7 @@ static void *hidthread(void *arg)
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
 	}
-	pthread_exit(0);
+	return NULL;
 }
 
 /*!
@@ -2593,7 +2593,7 @@ static void *simpleusb_audio_thread(void *arg)
 		ast_queue_frame(o->owner, f);
 	}
 	ast_debug(5, "Audio Thread is exiting");
-	pthread_exit(0);
+	return NULL;
 }
 /*!
  * \brief Asterisk fixup function.
