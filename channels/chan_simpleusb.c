@@ -42,6 +42,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/timerfd.h>
 #include <fcntl.h>
 #include <sys/time.h>
 #include <stdlib.h>
@@ -195,12 +196,12 @@ static const char *const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "
 struct chan_simpleusb_pvt {
 	struct chan_simpleusb_pvt *next;
 
-	char *name;			/* the internal name of our channel */
-	char hw_device[50]; /* hardware device name */
-	int devtype;		/* actual type of device */
-	int pttkick[2];		/* ptt kick pipe */
-	int total_blocks;	/* total blocks in the output device */
-	int sounddev;
+	char *name;				 /* the internal name of our channel */
+	char hw_device[50];		 /* hardware device name */
+	int devtype;			 /* actual type of device */
+	int pttkick[2];			 /* ptt kick pipe */
+	int sounddev_fd;		 /* Sound device file descriptor */
+	struct itimerspec timer; /* Sound polling timer */
 	enum {
 		M_UNSET,
 		M_FULL,
@@ -321,9 +322,7 @@ struct chan_simpleusb_pvt {
 
 	/* bit fields */
 	unsigned int streamstate:1;		/* indicator if stream is started */
-	unsigned int tx:1;				/* indicator if transmit is enabled */
 	unsigned int rxcapraw:1;		/* indicator if receive capture is enabled */
-	unsigned int rx:1;				/* indicator if receive is enabled */
 	unsigned int txcapraw:1;		/* indicator if transmit capture is enabled */
 	unsigned int measure_enabled:1; /* indicator if measure mode is enabled */
 	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
@@ -375,7 +374,7 @@ struct chan_simpleusb_pvt {
  * \brief Default channel descriptor
  */
 static struct chan_simpleusb_pvt simpleusb_default = {
-	.sounddev = -1,
+	.sounddev_fd = -1,
 	.duplex = M_FULL,
 	.queuesize = QUEUE_SIZE,
 	.frags = FRAGS,
@@ -478,7 +477,8 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 			const PaDeviceInfo *dev = Pa_GetDeviceInfo(idx);
 			ast_debug(1, "Found device %s", dev->name);
 			if (dev->maxInputChannels) {
-				if ((idx == def_input && !strcasecmp(pvt->hw_device, "default")) || !strstr(pvt->hw_device, dev->name)) {
+				if ((idx == def_input && !strcasecmp(pvt->hw_device, "default")) ||
+					(strlen(pvt->hw_device) && !strstr(pvt->hw_device, dev->name))) {
 					ast_debug(5, "Found input device %s", dev->name);
 					input_params.device = idx;
 				}
@@ -1203,7 +1203,7 @@ static void *hidthread(void *arg)
 		o->devicenum = i;
 		o->device_error = 0;
 		ast_radio_time(&o->lasthidtime);
-		o->usbass = 1;
+		o->usbass = 1; /* This is used to hold back setup of PortAudio until the o->hw_device is set up */
 		ast_mutex_unlock(&usb_dev_lock);
 		/* set the audio mixer values */
 		o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
@@ -1609,10 +1609,10 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *pvt, short *data, siz
 	res = Pa_WriteStream(pvt->stream, data, FRAME_SIZE * 6);
 	if (res == paOutputUnderflowed) {
 		memset(data, 0, data_size);
-		ast_debug(6, "PA Underflow, writing a 0 frame");
+		ast_debug(6, "PortAudio Underflow, writing a 0 frame");
 		Pa_WriteStream(pvt->stream, data, FRAME_SIZE * 6);
 	} else if (res < 0) {
-		ast_debug(1, "PA Error %s", Pa_GetErrorText(res));
+		ast_debug(1, "PortAudio Error %s", Pa_GetErrorText(res));
 	}
 
 	/* Check Tx audio statistics. FRAME_SIZE define refers to 8Ksps mono which is 160 samples
@@ -1911,9 +1911,11 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 	o->stophid = 0;
 	ast_radio_time(&o->lasthidtime);
 	ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+
 	while (!o->usbass) {
 		usleep(1000);
 	}
+
 	start_stream(o);
 	ast_setstate(c, AST_STATE_UP);
 	return 0;
@@ -1946,6 +1948,7 @@ static int simpleusb_hangup(struct ast_channel *c)
 		o->hookstate = 0;
 		stop_stream(o);
 	}
+	close(o->sounddev_fd);
 	o->stophid = 1;
 	pthread_join(o->hidthread, NULL);
 	return 0;
@@ -1966,6 +1969,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	if (!o->hasusb) {
 		return 0;
 	}
+
 	/*
 	 * we could receive a block which is not a multiple of our
 	 * FRAME_SIZE, so buffer it locally and write to the device
@@ -2015,7 +2019,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
  */
 static struct ast_frame *simpleusb_read(struct ast_channel *c)
 {
-	int cd, sd, src, num_frames, ispager, doleft, doright;
+	int cd, sd, src, num_frames, ispager, doleft, doright, read_fd;
 	PaError res;
 	register int i;
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
@@ -2023,7 +2027,9 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	time_t now;
 	register short *sp, *sp1;
 	short outbuf[FRAME_SIZE * 2 * 6];
+	uint64_t expirations;
 
+	read_fd = read(o->sounddev_fd, &expirations, sizeof(expirations)); /* just read it to reset */
 	/* check if the hid thread is still processing */
 	if (o->lasthidtime) {
 		ast_radio_time(&now);
@@ -2036,7 +2042,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	memset(f, 0, sizeof(struct ast_frame));
 	f->frametype = AST_FRAME_NULL;
 	f->src = __PRETTY_FUNCTION__;
-
 	/* if USB device not ready, just return NULL frame */
 	if (!o->hasusb) {
 		if (o->rxkeyed) {
@@ -2678,7 +2683,21 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext
 		return NULL;
 	}
 	ast_channel_tech_set(c, &simpleusb_tech);
-	ast_channel_internal_fd_set(c, 0, o->sounddev); /* -1 if device closed, override later */
+	o->sounddev_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+	if (o->sounddev_fd < 0) {
+		ast_log(LOG_ERROR, "Failed to create audio polling timer \n");
+	}
+
+	o->timer.it_interval.tv_sec = 0;
+	o->timer.it_interval.tv_nsec = 20 * 1000 * 1000; /* 20ms polling */
+	o->timer.it_value.tv_sec = 0;
+	o->timer.it_value.tv_nsec = 20 * 1000 * 1000; /* 20ms polling */
+
+	if (timerfd_settime(o->sounddev_fd, 0, &o->timer, NULL) < 0) {
+		ast_log(LOG_ERROR, "Failed to start audio polling timer \n");
+	}
+
+	ast_channel_internal_fd_set(c, 0, o->sounddev_fd); /* -1 if device closed, override later */
 	ast_channel_nativeformats_set(c, simpleusb_tech.capabilities);
 	ast_channel_set_readformat(c, ast_format_slin);
 	ast_channel_set_writeformat(c, ast_format_slin);
@@ -4239,9 +4258,9 @@ static int unload_module(void)
 		}
 #endif
 
-		if (o->sounddev >= 0) {
-			close(o->sounddev);
-			o->sounddev = -1;
+		if (o->sounddev_fd >= 0) {
+			close(o->sounddev_fd);
+			o->sounddev_fd = -1;
 		}
 		if (o->dsp) {
 			ast_dsp_free(o->dsp);
