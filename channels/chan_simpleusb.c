@@ -472,14 +472,15 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 			ast_debug(1, "Found device %s", dev->name);
 			if (dev->maxInputChannels) {
 				if ((idx == def_input && !strcasecmp(pvt->hw_device, "default")) ||
-					(strlen(pvt->hw_device) && !strstr(pvt->hw_device, dev->name))) {
+					(strlen(pvt->hw_device) && strstr(dev->name, pvt->hw_device))) {
 					ast_debug(5, "Found input device %s", dev->name);
 					input_params.device = idx;
 				}
 			}
 
 			if (dev->maxOutputChannels) {
-				if ((idx == def_output && !strcasecmp(pvt->hw_device, "default")) || !strstr(pvt->hw_device, dev->name)) {
+				if ((idx == def_output && !strcasecmp(pvt->hw_device, "default")) ||
+					(strlen(pvt->hw_device) && strstr(dev->name, pvt->hw_device))) {
 					ast_debug(5, "Found output device %s", dev->name);
 					output_params.device = idx;
 				}
