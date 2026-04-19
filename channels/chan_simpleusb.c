@@ -111,7 +111,7 @@
  * \todo Make this optional.  If this is only going to talk to 8 kHz endpoints,
  *       then it makes sense to use 8 kHz natively.
  */
-#define SAMPLE_RATE 48000
+#define SAMPLE_RATE 48000 /* Hardware likes 48k and is divisible by 6 for a "nice" down conversion. */
 
 /*!
  * \brief The number of samples to configure the portaudio stream for
@@ -119,13 +119,13 @@
  * At 48kHz, 960 samples gives a 20ms frame, which aligns with Asterisk's
  * common frame size after resampling to 8kHz (160 samples @ 2 bytes per sample).
  */
-#define NUM_SAMPLES 160
+#define NUM_SAMPLES 960 /* The number of 2 byte (int16) samples per "frame" */
 
 /*! \brief Mono Input */
-#define INPUT_CHANNELS 1
+#define INPUT_CHANNELS 1 /* Mono input for Microphone / RX */
 
 /*! \brief Stereo Output */
-#define OUTPUT_CHANNELS 2
+#define OUTPUT_CHANNELS 2 /* Stereo output for Speaker / TX */
 
 /*! \brief Global jitterbuffer configuration - by default, jb is disabled */
 static struct ast_jb_conf default_jbconf = {
@@ -144,7 +144,7 @@ static struct ast_jb_conf global_jbconf;
 #define PAGER_SRC "PAGER"
 #define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 12000
-#define SAMPRATE 8000 // (Sample Rate)
+#define SAMPRATE 8000 // (Sample Rate after down conversion)
 #define DIVLCM 192000 // (Least Common Mult of 512,1200,2400,8000)
 #define PREAMBLE_BITS 576
 #define MESSAGE_BITS 544 // (17 * 32), 1 longword SYNC plus 16 longwords data
@@ -1634,11 +1634,11 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *pvt, short *data, siz
 	 * a number of failures, to restart the output chain.
 	 */
 
-	res = Pa_WriteStream(pvt->stream, data, FRAME_SIZE * 6);
+	res = Pa_WriteStream(pvt->stream, data, NUM_SAMPLES);
 	if (res == paOutputUnderflowed) {
 		memset(data, 0, data_size);
 		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
-		Pa_WriteStream(pvt->stream, data, FRAME_SIZE * 6);
+		Pa_WriteStream(pvt->stream, data, NUM_SAMPLES);
 	} else if (res < 0) {
 		ast_debug(1, "PortAudio Error %s", Pa_GetErrorText(res));
 	}
@@ -2306,7 +2306,7 @@ static void *simpleusb_audio_thread(void *arg)
 		 * Sound data will arrive at 48000 samples per second
 		 * in mono format.
 		 */
-		res = Pa_ReadStream(o->stream, o->simpleusb_read_buf + o->readpos, FRAME_SIZE * 6);
+		res = Pa_ReadStream(o->stream, o->simpleusb_read_buf + o->readpos, NUM_SAMPLES);
 		if (res != paNoError) {
 			/* audio data not ready */
 			if (res == paInputOverflowed) {
