@@ -943,6 +943,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	o->rxmixerset = 500;
 	o->txmixaset = 500;
 	o->txmixbset = 500;
+	o->hw_device[0] = '\0';
 
 	devstr[0] = '\0';
 	serial[0] = '\0';
@@ -970,6 +971,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		CV_UINT("txmixbset", o->txmixbset);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
+		CV_STR("audiodev", o->hw_device); /* Possibly use this as opposed to the usb device path. Could allow any audio device */
 		CV_END;
 	}
 	if (!reload) {
@@ -987,76 +989,35 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	return 0;
 }
 
-/*!
- * \brief USB sound device GPIO processing thread
- * This thread is responsible for finding and associating the node with the
- * associated usb sound card device.  It performs setup and initialization of
- * the USB device.
- *
- * The CM-XXX USB devices can support up to 8 GPIO pins that can be input or output.
- * It continuously polls the input GPIO pins on the device to see if they have changed.
- * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk
- * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally
- * occurs every HID_POLL_RATE milliseconds.
- *
- * The output PTT (push to talk) GPIO, along with other GPIO outputs are updated as
- * required.
- *
- * If the user has enabled the parallel port for GPIOs, they are polled and updated
- * as appropriate.  An asterisk text frame is raised in the format 'PP%d %d' when
- * GPIOs change. (Parallel port support is not available for all platforms.)
- *
- * This routine also reads and writes to the EPROM attached to the USB device.  The
- * EPROM holds the configuration information (sound level settings) for this device.
- *
- * This routine updates the lasthidtimer during setup and processing.  In the event
- * that this timer update does not occur over a period of 3 seconds, app_rpt will
- * kill the node and restart everything.  This helps to detect problems with a
- * hung USB device.
- *
- * \param argv		chan_simpleusb_pvt structure associated with this thread.
+/*! \brief Find and initialize the audio device.
+ * \param o pointer to private struct
  */
-static void *hidthread(void *arg)
+static int init_audio_device(struct chan_simpleusb_pvt *o)
 {
-	unsigned char buf[4], bufsave[4], keyed, ctcssed, txreq;
-	char *s, lasttxtmp;
-	register int i, j, k;
-	int res;
-	struct usb_device *usb_dev;
-	struct usb_dev_handle *usb_handle;
-	struct chan_simpleusb_pvt *o = arg, *ao;
-	struct timeval then;
-	struct pollfd rfds[1];
+	char serial[sizeof(o->serial)] = { '\0' };
+	char *s;
+	struct chan_simpleusb_pvt *ao;
+	register int i;
 
-	usb_dev = NULL;
-	usb_handle = NULL;
-	/* enable gpio_set so that we will write GPIO information upon start up */
-	o->gpio_set = 1;
+	ast_radio_time(&o->lasthidtime);
+	ast_mutex_lock(&usb_dev_lock);
+	o->hasusb = 0;
+	o->usbass = 0;
+	o->devicenum = 0;
 
-#ifdef HAVE_SYS_IO
-	if (haspp == 2) {
-		ioperm(pbase, 2, 1);
-	}
-#endif
-	/* This is the main loop for this thread.
-	 * It performs setup and initialization of the usb device.
-	 * After setup is complete and the device can be accessed,
-	 * it enters a processing loop responsible for interacting
-	 * with the usb hid device
-	 */
-	while (!o->stophid) {
-		char serial[sizeof(o->serial)] = { '\0' };
-
-		ast_radio_time(&o->lasthidtime);
-		ast_mutex_lock(&usb_dev_lock);
-		o->hasusb = 0;
-		o->usbass = 0;
-		o->devicenum = 0;
-		if (usb_handle) {
-			usb_close(usb_handle);
+	if (o->hw_device[0]) {
+		/* already configured device, extract the device number */
+		/*! \todo Need to figure out how to populate/find the device path from alsa name for access to the HID interface.
+		 * this does not work until we can set the HID path
+		 */
+		if (sscanf(o->hw_device, "hw:%hhd", &o->devicenum)) {
+			ast_debug(5, "hw_device was already configured: %s, Device %d", o->hw_device, o->devicenum);
+		} else {
+			ast_log(LOG_ERROR, "Incorrect audio parameter audiodev (should be hw:0 format), found %s", o->hw_device);
+			return -1;
 		}
-		usb_handle = NULL;
-		usb_dev = NULL;
+
+	} else {
 		ast_radio_hid_device_mklist();
 
 		/* Check to see if our specified device string
@@ -1133,7 +1094,7 @@ static void *hidthread(void *arg)
 				break;
 			}
 			if (ast_strlen_zero(o->devstr)) {
-				continue;
+				return -1;
 			}
 		}
 
@@ -1144,20 +1105,20 @@ static void *hidthread(void *arg)
 			 * configured channels.
 			 */
 			s = find_installed_usb_match();
+
 			if (ast_strlen_zero(s)) {
 				if (!o->device_error) {
 					ast_log(LOG_ERROR, "Channel %s: Device string %s was not found.\n", o->name, o->devstr);
 					o->device_error = 1;
 				}
 				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
+				return -1;
 			}
+
 			i = ast_radio_usb_get_usbdev(s);
 			if (i < 0) {
 				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
+				return -1;
 			}
 			/* See if this device is already assigned to another usb channel */
 			for (ao = simpleusb_default.next; ao && ao->name; ao = ao->next) {
@@ -1165,12 +1126,13 @@ static void *hidthread(void *arg)
 					break;
 				}
 			}
+
 			if (ao) {
 				ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, s, ao->name);
 				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
+				return -1;
 			}
+
 			ast_log(LOG_NOTICE, "Channel %s: Assigned USB device %s to simpleusb channel\n", o->name, s);
 			ast_copy_string(o->devstr, s, sizeof(o->devstr));
 		}
@@ -1180,33 +1142,96 @@ static void *hidthread(void *arg)
 				break;
 			}
 		}
+
 		if (ao) {
 			ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, o->devstr, ao->name);
 			ast_mutex_unlock(&usb_dev_lock);
-			usleep(500000);
-			continue;
+			return -1;
 		}
+
 		/* get the index to the device and assign it to our channel */
 		i = ast_radio_usb_get_usbdev(o->devstr);
 		if (i < 0) {
 			ast_mutex_unlock(&usb_dev_lock);
-			usleep(500000);
-			continue;
+			return -1;
 		}
 		snprintf(o->hw_device, sizeof(o->hw_device), "hw:%d", i);
 		o->devicenum = i;
-		o->device_error = 0;
-		ast_radio_time(&o->lasthidtime);
-		o->usbass = 1; /* This is used to hold back setup of PortAudio until the o->hw_device is set up */
-		ast_mutex_unlock(&usb_dev_lock);
-		/* set the audio mixer values */
-		o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
-		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
-		o->micplaymax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL);
-		if (o->spkrmax == -1) {
-			o->newname = 1;
-			o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
-		}
+	}
+
+	o->device_error = 0;
+	ast_radio_time(&o->lasthidtime);
+	o->usbass = 1;
+	ast_mutex_unlock(&usb_dev_lock);
+	/* set the audio mixer values */
+	o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
+	o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
+	o->micplaymax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL);
+	if (o->spkrmax == -1) {
+		o->newname = 1;
+		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
+	}
+	return 0;
+}
+
+/*!
+ * \brief USB sound device GPIO processing thread
+ * This thread is responsible for finding and associating the node with the
+ * associated usb sound card device.  It performs setup and initialization of
+ * the USB device.
+ *
+ * The CM-XXX USB devices can support up to 8 GPIO pins that can be input or output.
+ * It continuously polls the input GPIO pins on the device to see if they have changed.
+ * The default GPIOs for COS, and CTCSS provide the basic functionality. An asterisk
+ * text frame is raised in the format 'GPIO%d %d' when GPIOs change. Polling generally
+ * occurs every HID_POLL_RATE milliseconds.
+ *
+ * The output PTT (push to talk) GPIO, along with other GPIO outputs are updated as
+ * required.
+ *
+ * If the user has enabled the parallel port for GPIOs, they are polled and updated
+ * as appropriate.  An asterisk text frame is raised in the format 'PP%d %d' when
+ * GPIOs change. (Parallel port support is not available for all platforms.)
+ *
+ * This routine also reads and writes to the EPROM attached to the USB device.  The
+ * EPROM holds the configuration information (sound level settings) for this device.
+ *
+ * This routine updates the lasthidtimer during setup and processing.  In the event
+ * that this timer update does not occur over a period of 3 seconds, app_rpt will
+ * kill the node and restart everything.  This helps to detect problems with a
+ * hung USB device.
+ *
+ * \param argv		chan_simpleusb_pvt structure associated with this thread.
+ */
+static void *hidthread(void *arg)
+{
+	unsigned char buf[4], bufsave[4], keyed, ctcssed, txreq;
+	char lasttxtmp;
+	register int i, j, k;
+	int res;
+	struct usb_device *usb_dev;
+	struct usb_dev_handle *usb_handle;
+	struct chan_simpleusb_pvt *o = arg;
+	struct timeval then;
+	struct pollfd rfds[1];
+
+	usb_dev = NULL;
+	usb_handle = NULL;
+	/* enable gpio_set so that we will write GPIO information upon start up */
+	o->gpio_set = 1;
+
+#ifdef HAVE_SYS_IO
+	if (haspp == 2) {
+		ioperm(pbase, 2, 1);
+	}
+#endif
+	/* This is the main loop for this thread.
+	 * It performs setup and initialization of the usb device.
+	 * After setup is complete and the device can be accessed,
+	 * it enters a processing loop responsible for interacting
+	 * with the usb hid device
+	 */
+	while (!o->stophid) {
 		/* initialize the usb device */
 		usb_dev = ast_radio_hid_device_init(o->devstr);
 		if (usb_dev == NULL) {
@@ -1915,6 +1940,11 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 
 	o->stophid = 0;
 	ast_radio_time(&o->lasthidtime);
+	res = init_audio_device(o);
+	if (res < 0) {
+		ast_log(LOG_ERROR, "Channel %s: Failed initialize the audio device\n", o->name);
+		return -1;
+	}
 	res = ast_pthread_create(&o->hidthread, NULL, hidthread, o);
 	if (res) {
 		ast_log(LOG_ERROR, "Channel %s: Failed to create HID thread: %s\n", o->name, strerror(res));
@@ -1929,10 +1959,6 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 		return -1;
 	}
 
-	while (!o->usbass) { /*! \todo rework the init functions outside of the HID thread to eliminate this */
-		usleep(1000);
-	}
-	start_stream(o);
 	ast_setstate(c, AST_STATE_UP);
 	return 0;
 }
@@ -2061,6 +2087,7 @@ static void *simpleusb_audio_thread(void *arg)
 	short outbuf[FRAME_SIZE * 2 * 6];
 
 	ast_debug(5, "Audio thread is starting");
+	start_stream(o);
 	while (!o->stophid) {
 		/* check if the hid thread is still processing */
 		if (o->lasthidtime) {
