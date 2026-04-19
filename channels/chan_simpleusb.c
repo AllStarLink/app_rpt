@@ -437,7 +437,7 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 {
 	PaError res = paInternalError;
 
-	if (!strcasecmp(pvt->hw_device, "default") && !strcasecmp(pvt->hw_device, "default")) {
+	if (!strcasecmp(pvt->hw_device, "default")) {
 		ast_debug(1, "Opening stream with default device");
 		res = Pa_OpenDefaultStream(&pvt->stream, INPUT_CHANNELS, OUTPUT_CHANNELS, paInt16, SAMPLE_RATE, NUM_SAMPLES, NULL, NULL);
 	} else {
@@ -487,11 +487,11 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 		}
 
 		if (input_params.device == paNoDevice) {
-			ast_log(LOG_ERROR, "No input device found for console device '%s'\n", pvt->name);
+			ast_log(LOG_ERROR, "No input device found for simpleusb device '%s'\n", pvt->name);
 		}
 
 		if (output_params.device == paNoDevice) {
-			ast_log(LOG_ERROR, "No output device found for console device '%s'\n", pvt->name);
+			ast_log(LOG_ERROR, "No output device found for simpleusb device '%s'\n", pvt->name);
 		}
 		ast_debug(5, "Opening stream on device %s", pvt->hw_device);
 		res = Pa_OpenStream(&pvt->stream, &input_params, &output_params, SAMPLE_RATE, NUM_SAMPLES, paNoFlag, NULL, NULL);
@@ -506,7 +506,6 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 	PaError res;
 	int ret_val = 0;
 
-	// console_pvt_lock(pvt);
 	ast_debug(5, "Starting PA Stream");
 	/* It is possible for console_hangup to be called before the
 	 * stream is started, if this is the case pvt->owner will be NULL
@@ -534,7 +533,6 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 	}
 
 return_unlock:
-	// console_pvt_unlock(pvt);
 	return ret_val;
 }
 
@@ -1990,7 +1988,11 @@ static int simpleusb_hangup(struct ast_channel *c)
 		o->hookstate = 0;
 		stop_stream(o);
 	}
-	close(o->sounddev_fd);
+	if (o->sounddev_fd >= 0) {
+		close(o->sounddev_fd);
+		o->sounddev_fd = -1;
+	}
+
 	o->stophid = 1;
 	pthread_join(o->hidthread, NULL);
 	pthread_join(o->audiothread, NULL);
@@ -2087,7 +2089,10 @@ static void *simpleusb_audio_thread(void *arg)
 	short outbuf[FRAME_SIZE * 2 * 6];
 
 	ast_debug(5, "Audio thread is starting");
-	start_stream(o);
+	if (start_stream(o) < 0) {
+		ast_log(LOG_ERROR, "Channel %s: Failed to start audio stream\n", o->name);
+		return NULL;
+	}
 	while (!o->stophid) {
 		/* check if the hid thread is still processing */
 		if (o->lasthidtime) {
@@ -2181,7 +2186,7 @@ static void *simpleusb_audio_thread(void *arg)
 			}
 			ast_mutex_unlock(&o->txqlock);
 			if (o->txkeyed) {
-				ast_debug(7, "blocks used %d, Dest Buffer %d", i, o->simpleusb_write_dst);
+				ast_debug(7, "blocks used %d, Dest Buffer %d", num_frames, o->simpleusb_write_dst);
 			}
 			if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
 				ast_mutex_lock(&o->txqlock);
