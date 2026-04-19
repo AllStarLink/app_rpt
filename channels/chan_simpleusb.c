@@ -119,7 +119,7 @@
  * At 48kHz, 960 samples gives a 20ms frame, which aligns with Asterisk's
  * common frame size after resampling to 8kHz (160 samples @ 2 bytes per sample).
  */
-#define NUM_SAMPLES 960 /* The number of 2 byte (int16) samples per "frame" */
+#define NUM_SAMPLES 960 /* The number of 2 byte (paInt16) samples per "frame" */
 
 /*! \brief Mono Input */
 #define INPUT_CHANNELS 1 /* Mono input for Microphone / RX */
@@ -233,7 +233,7 @@ struct chan_simpleusb_pvt {
 	/* buffers used in simpleusb_read - AST_FRIENDLY_OFFSET space for headers
 	 * plus enough room for a full frame
 	 */
-	char simpleusb_read_buf[FRAME_SIZE * 2 * 6];						 /*  2x frames * 6 for 48K */
+	char simpleusb_read_buf[NUM_SAMPLES * 2];							 /*  2 byte samples for Port Audio - paInt16 */
 	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte frames at 8k */
 	int readpos;			 /* read position above */
 	struct ast_frame read_f; /* returned by simpleusb_read */
@@ -2087,7 +2087,7 @@ static void *simpleusb_audio_thread(void *arg)
 	struct ast_frame *f = &o->read_f, *f1;
 	time_t now;
 	register short *sp, *sp1;
-	short outbuf[FRAME_SIZE * 2 * 6];
+	short outbuf[NUM_SAMPLES * 2]; /* 2 bytes per sample on PortAudio config - paInt16 */
 
 	ast_debug(5, "Audio thread is starting");
 	if (start_stream(o) < 0) {
