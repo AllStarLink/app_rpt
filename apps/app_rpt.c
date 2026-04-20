@@ -5039,6 +5039,7 @@ static void *rpt(void *this)
 	lastexttx = 0;
 	myrpt->keyed = 0;
 	myrpt->txkeyed = 0;
+	myrpt->kerchunked = 0;
 	time(&myrpt->lastkeyedtime);
 	myrpt->lastkeyedtime -= RPT_LOCKOUT_SECS;
 	time(&myrpt->lasttxkeyedtime);
@@ -5218,16 +5219,25 @@ static void *rpt(void *this)
 				}
 			}
 
-			if (myrpt->sleep)
+			if (myrpt->sleep) {
 				myrpt->localtx = 0; /* No RX if asleep */
-			else
+			} else {
 				myrpt->localtx = myrpt->keyed; /* Set localtx to keyed state if awake */
+			}
 		} else {
 			myrpt->localtx = myrpt->keyed; /* If sleep disabled, just copy keyed state to localrx */
 		}
+
+		/* Set the kerchunk timer */
+		if ((myrpt->remrx || myrpt->keyed) && !myrpt->kerchunk_timer) {
+			time(&myrpt->kerchunk_timer);
+		}
+
 		/* Create a "must_id" flag for the cleanup ID */
-		if (myrpt->p.idtime) /* ID time must be non-zero */
+		if (myrpt->p.idtime) { /* ID time must be non-zero */
 			myrpt->mustid |= (myrpt->idtimer) && (myrpt->keyed || myrpt->remrx);
+		}
+
 		if (myrpt->keyed || myrpt->remrx) {
 			/* Set the inactivity was keyed flag and reset its timer */
 			myrpt->rptinactwaskeyedflag = 1;
@@ -5422,8 +5432,8 @@ static void *rpt(void *this)
 			myrpt->macropatch = 0;
 			channel_revert(myrpt);
 		}
-		if (!myrpt->totimer || (!myrpt->mustid && myrpt->p.beaconing)) {
-			/* get rid of tail if timed out or beaconing */
+		if (!myrpt->totimer || (!myrpt->mustid && myrpt->p.beaconing) || !myrpt->kerchunked) {
+			/* get rid of tail if timed out, beaconing, or kerchunked */
 			myrpt->tailtimer = 0;
 		}
 		if (myrpt->totimer) {
@@ -5525,6 +5535,7 @@ static void *rpt(void *this)
 		/* Detect and log keyed to unkeyed transition point */
 		if (!totx && lasttx) {
 			lasttx = 0;
+			myrpt->kerchunked = 0;
 			log_unkeyed(myrpt);
 		}
 		time(&t);

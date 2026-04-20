@@ -3495,6 +3495,10 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	char gps_data[100], lat[25], lon[25], elev[25];
 	struct ast_str *lbuf;
 	struct ao2_iterator l_it;
+	time_t kerchunk_time_stamp;
+
+	kerchunk_time_stamp = myrpt->kerchunk_timer;
+	myrpt->kerchunk_timer = 0;
 
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%s\n", rpt_tele_mode_str(mode));
 
@@ -3546,6 +3550,14 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		if (myrpt->p.nounkeyct) {
 			return;
 		}
+
+		if (time(NULL) - kerchunk_time_stamp < myrpt->p.kerchunktime) {
+			return;
+		}
+
+		if (!myrpt->kerchunked) {
+			myrpt->kerchunked = 1;
+		}
 		/* if any of the following are defined, go ahead and do it,
 		   otherwise, dont bother */
 		v1 = ast_variable_retrieve(myrpt->cfg, myrpt->name, "unlinkedct");
@@ -3565,6 +3577,14 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		mylink = (struct rpt_link *) data;
 
 		if (!mylink) {
+			return;
+		}
+
+		if (myrpt->p.nounkeyct) {
+			return;
+		}
+
+		if (time(NULL) - kerchunk_time_stamp < myrpt->p.kerchunktime) {
 			return;
 		}
 
