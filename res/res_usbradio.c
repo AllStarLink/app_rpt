@@ -959,6 +959,7 @@ struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 	struct usb_device *dev;
 
 	if (read_card_usbbus(cardno, target, sizeof(target)) != 0) {
+		ast_log(LOG_ERROR, "Unable to read card bus");
 		return NULL;
 	}
 

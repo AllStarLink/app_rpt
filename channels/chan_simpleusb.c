@@ -205,11 +205,12 @@ struct chan_simpleusb_pvt {
 		M_READ,
 		M_WRITE
 	} duplex;
-	int hookstate;
+
 	unsigned int queuesize; /* max fragments in queue */
 	unsigned int frags;		/* parameter for SETFRAGMENT */
 	int warned;				/* various flags used for warnings */
-	char devicenum;
+	int hookstate;
+	int devicenum;
 	char devstr[128];
 	char serial[128];
 	int spkrmax;
@@ -1006,16 +1007,20 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 
 	if (o->hw_device[0]) {
 		/* already configured device, extract the device number and usb_dev */
-		if (sscanf(o->hw_device, "hw:%hhd", &o->devicenum)) {
+		if (sscanf(o->hw_device, "hw:%d", &o->devicenum)) {
 			ast_debug(5, "audiodev is defined: %s, Device %d", o->hw_device, o->devicenum);
 			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
+			if (!o->usb_dev) {
+				ast_debug(5, "Unable to find usb device associated with %s", o->hw_device);
+				return -1; /*! \todo mark this as a non usb device, look for I/O somewhere else (GPIO, PP, other?) */
+			}
 
 		} else {
 			ast_log(LOG_ERROR, "Incorrect audio parameter audiodev (should be hw:0 format), found %s", o->hw_device);
 			return -1;
 		}
-
 	} else {
+		/* use the */
 		ast_radio_hid_device_mklist();
 
 		/* Check to see if our specified device string
@@ -1155,6 +1160,11 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 		}
 		snprintf(o->hw_device, sizeof(o->hw_device), "hw:%d", i);
 		o->devicenum = i;
+		o->usb_dev = ast_radio_hid_device_init(o->devstr);
+		if (!o->usb_dev) {
+			ast_log(LOG_ERROR, "Unable to find usb device associated with %s", o->devstr);
+			return -1;
+		}
 	}
 
 	o->device_error = 0;
@@ -1171,7 +1181,6 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
 	}
 
-	o->usb_dev = ast_radio_hid_device_init(o->devstr);
 	return 0;
 }
 
@@ -1210,13 +1219,11 @@ static void *hidthread(void *arg)
 	char lasttxtmp;
 	register int i, j, k;
 	int res;
-	struct usb_device *usb_dev;
 	struct usb_dev_handle *usb_handle;
 	struct chan_simpleusb_pvt *o = arg;
 	struct timeval then;
 	struct pollfd rfds[1];
 
-	usb_dev = NULL;
 	usb_handle = NULL;
 	/* enable gpio_set so that we will write GPIO information upon start up */
 	o->gpio_set = 1;
@@ -1240,7 +1247,7 @@ static void *hidthread(void *arg)
 			continue;
 		}
 		/* open the usb device device */
-		usb_handle = usb_open(usb_dev);
+		usb_handle = usb_open(o->usb_dev);
 		if (usb_handle == NULL) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
 			usleep(500000);
@@ -1281,10 +1288,10 @@ static void *hidthread(void *arg)
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
 			return NULL;
 		}
-		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
+		if ((o->usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
 			o->devtype = C108_PRODUCT_ID;
 		} else {
-			o->devtype = usb_dev->descriptor.idProduct;
+			o->devtype = o->usb_dev->descriptor.idProduct;
 		}
 		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
 		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
