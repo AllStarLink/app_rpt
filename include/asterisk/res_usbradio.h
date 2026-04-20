@@ -516,3 +516,14 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len);
  * \return  		None
  */
 void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *prefix_text);
+
+/*
+ * Returns the libusb device that backs ALSA /proc/asound/card<cardno>/usbbus.
+ * On success: returns a pointer to a libusb struct usb_device.
+ * On failure: returns NULL.
+ *
+ * Notes:
+ * - Uses libusb-0.1 enumeration (usb_init/usb_find_busses/usb_find_devices).
+ * - The returned pointer is owned by libusb's internal device list.
+ */
+struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno);

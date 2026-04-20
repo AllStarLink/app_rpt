@@ -220,6 +220,7 @@ struct chan_simpleusb_pvt {
 	pthread_t hidthread;
 	int stophid;
 
+	struct usb_device *usb_dev;
 	struct ast_channel *owner;
 
 	/*! Current PortAudio stream for this device */
@@ -968,7 +969,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		CV_UINT("txmixbset", o->txmixbset);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
-		CV_STR("audiodev", o->hw_device); /* Possibly use this as opposed to the usb device path. Could allow any audio device */
+		CV_STR("audiodev", o->hw_device); /* Possibly use this as opposed to the usb device path */
 		CV_END;
 	}
 	if (!reload) {
@@ -1001,14 +1002,14 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	o->hasusb = 0;
 	o->usbass = 0;
 	o->devicenum = 0;
+	o->usb_dev = NULL;
 
 	if (o->hw_device[0]) {
-		/* already configured device, extract the device number */
-		/*! \todo Need to figure out how to populate/find the device path from alsa name for access to the HID interface.
-		 * this does not work until we can set the HID path
-		 */
+		/* already configured device, extract the device number and usb_dev */
 		if (sscanf(o->hw_device, "hw:%hhd", &o->devicenum)) {
-			ast_debug(5, "hw_device was already configured: %s, Device %d", o->hw_device, o->devicenum);
+			ast_debug(5, "audiodev is defined: %s, Device %d", o->hw_device, o->devicenum);
+			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
+
 		} else {
 			ast_log(LOG_ERROR, "Incorrect audio parameter audiodev (should be hw:0 format), found %s", o->hw_device);
 			return -1;
@@ -1164,10 +1165,13 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
 	o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
 	o->micplaymax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL);
+
 	if (o->spkrmax == -1) {
 		o->newname = 1;
 		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
 	}
+
+	o->usb_dev = ast_radio_hid_device_init(o->devstr);
 	return 0;
 }
 
@@ -1230,8 +1234,7 @@ static void *hidthread(void *arg)
 	 */
 	while (!o->stophid) {
 		/* initialize the usb device */
-		usb_dev = ast_radio_hid_device_init(o->devstr);
-		if (usb_dev == NULL) {
+		if (o->usb_dev == NULL) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
 			usleep(500000);
 			continue;
