@@ -199,7 +199,6 @@ struct chan_simpleusb_pvt {
 	char hw_device[50];		 /* hardware device name */
 	int devtype;			 /* actual type of device */
 	int pttkick[2];			 /* ptt kick pipe */
-	int sounddev_fd;		 /* Sound device file descriptor */
 	enum {
 		M_UNSET,
 		M_FULL,
@@ -367,7 +366,6 @@ struct chan_simpleusb_pvt {
  * \brief Default channel descriptor
  */
 static struct chan_simpleusb_pvt simpleusb_default = {
-	.sounddev_fd = -1,
 	.duplex = M_FULL,
 	.queuesize = QUEUE_SIZE,
 	.frags = FRAGS,
@@ -1985,13 +1983,10 @@ static int simpleusb_hangup(struct ast_channel *c)
 	ast_channel_tech_pvt_set(c, NULL);
 	o->owner = NULL;
 	ast_module_unref(ast_module_info->self);
+
 	if (o->hookstate) {
 		o->hookstate = 0;
 		stop_stream(o);
-	}
-	if (o->sounddev_fd >= 0) {
-		close(o->sounddev_fd);
-		o->sounddev_fd = -1;
 	}
 
 	o->stophid = 1;
@@ -2766,7 +2761,6 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext
 		return NULL;
 	}
 	ast_channel_tech_set(c, &simpleusb_tech);
-	ast_channel_internal_fd_set(c, 0, o->sounddev_fd); /* -1 if device closed, override later */
 	ast_channel_nativeformats_set(c, simpleusb_tech.capabilities);
 	ast_channel_set_readformat(c, ast_format_slin);
 	ast_channel_set_writeformat(c, ast_format_slin);
@@ -4327,10 +4321,6 @@ static int unload_module(void)
 		}
 #endif
 
-		if (o->sounddev_fd >= 0) {
-			close(o->sounddev_fd);
-			o->sounddev_fd = -1;
-		}
 		if (o->dsp) {
 			ast_dsp_free(o->dsp);
 		}
