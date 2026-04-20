@@ -910,10 +910,6 @@ static void cleanup_user_devices(void)
 	}
 	AST_RWLIST_UNLOCK(&user_devices);
 }
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-#include <usb.h> /* libusb-0.1 */
 
 static int read_card_usbbus(int cardno, char *out, size_t outsz)
 {
@@ -959,7 +955,7 @@ struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 	struct usb_device *dev;
 
 	if (read_card_usbbus(cardno, target, sizeof(target)) != 0) {
-		ast_log(LOG_ERROR, "Unable to read card bus");
+		ast_log(LOG_ERROR, "Unable to read card bus for card %d\n", cardno);
 		return NULL;
 	}
 

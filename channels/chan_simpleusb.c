@@ -323,6 +323,7 @@ struct chan_simpleusb_pvt {
 	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
 	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
 	unsigned int hasusb:1;			/* indicator for has a USB device */
+	unsigned int internal_audio:1;	/* indicator for non usb adudio device */
 	unsigned int usbass:1;			/* indicator for USB device assigned */
 	unsigned int wanteeprom:1;		/* indicator if we should use EEPROM */
 	unsigned int usedtmf:1;			/* indicator is we should decode DTMF */
@@ -455,7 +456,7 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 			.device = paNoDevice,
 		};
 		PaDeviceIndex idx, num_devices, def_input, def_output;
-		ast_debug(6, "PA host api count %d", Pa_GetHostApiCount());
+		ast_debug(6, "PortAudio host api count %d", Pa_GetHostApiCount());
 		num_devices = Pa_GetDeviceCount();
 		if (num_devices < 0) {
 			ast_debug(1, "No devices found\n");
@@ -514,8 +515,6 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 	if (pvt->streamstate || !pvt->owner)
 		goto return_unlock;
 
-	pvt->streamstate = 1;
-
 	res = open_stream(pvt);
 	if (res != paNoError) {
 		ast_log(LOG_WARNING, "Failed to open stream - (%d) %s\n", res, Pa_GetErrorText(res));
@@ -532,6 +531,7 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 		ret_val = -1;
 		goto return_unlock;
 	}
+	pvt->streamstate = 1;
 
 return_unlock:
 	return ret_val;
@@ -1004,6 +1004,7 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	o->usbass = 0;
 	o->devicenum = 0;
 	o->usb_dev = NULL;
+	o->internal_audio = 0;
 
 	if (o->hw_device[0]) {
 		/* already configured device, extract the device number and usb_dev */
@@ -1012,7 +1013,7 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
 			if (!o->usb_dev) {
 				ast_debug(5, "Unable to find usb device associated with %s", o->hw_device);
-				return -1; /*! \todo mark this as a non usb device, look for I/O somewhere else (GPIO, PP, other?) */
+				o->internal_audio = 1;
 			}
 
 		} else {
@@ -1952,17 +1953,21 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 		ast_log(LOG_ERROR, "Channel %s: Failed initialize the audio device\n", o->name);
 		return -1;
 	}
-	res = ast_pthread_create(&o->hidthread, NULL, hidthread, o);
-	if (res) {
-		ast_log(LOG_ERROR, "Channel %s: Failed to create HID thread: %s\n", o->name, strerror(res));
-		return -1;
+	if (!o->internal_audio) {
+		res = ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+		if (res) {
+			ast_log(LOG_ERROR, "Channel %s: Failed to create HID thread: %s\n", o->name, strerror(res));
+			return -1;
+		}
 	}
 
 	res = ast_pthread_create(&o->audiothread, NULL, simpleusb_audio_thread, o);
 	if (res) {
 		ast_log(LOG_ERROR, "Channel %s: Failed to create audio thread: %s\n", o->name, strerror(res));
 		o->stophid = 1;
-		pthread_join(o->hidthread, NULL);
+		if (o->hidthread != PTHREADT_NULL) {
+			pthread_join(o->hidthread, NULL);
+		}
 		return -1;
 	}
 
@@ -2000,7 +2005,9 @@ static int simpleusb_hangup(struct ast_channel *c)
 	}
 
 	o->stophid = 1;
-	pthread_join(o->hidthread, NULL);
+	if (o->hidthread != PTHREADT_NULL) {
+		pthread_join(o->hidthread, NULL);
+	}
 	pthread_join(o->audiothread, NULL);
 	o->hidthread = AST_PTHREADT_NULL;
 	o->audiothread = AST_PTHREADT_NULL;
@@ -2019,7 +2026,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f1;
 
-	if (!o->hasusb) {
+	if (!o->hasusb && !o->internal_audio) {
 		return 0;
 	}
 
@@ -2113,7 +2120,7 @@ static void *simpleusb_audio_thread(void *arg)
 		f->frametype = AST_FRAME_NULL;
 		f->src = __PRETTY_FUNCTION__;
 		/* if USB device not ready, just return NULL frame */
-		if (!o->hasusb) {
+		if (!o->hasusb && !o->internal_audio) {
 			if (o->rxkeyed) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_CONTROL,
