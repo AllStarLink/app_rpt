@@ -3555,8 +3555,8 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			return;
 		}
 
-		if (!myrpt->kerchunked) {
-			myrpt->kerchunked = 1;
+		if (!myrpt->kerchunked_ok) {
+			myrpt->kerchunked_ok = 1;
 		}
 		/* if any of the following are defined, go ahead and do it,
 		   otherwise, dont bother */
