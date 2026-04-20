@@ -3547,10 +3547,6 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			return;
 		}
 
-		if (myrpt->p.nounkeyct) {
-			return;
-		}
-
 		if (myrpt->p.kerchunktime && (time(NULL) - kerchunk_time_stamp) < myrpt->p.kerchunktime) {
 			return;
 		}
@@ -3558,6 +3554,11 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		if (!myrpt->kerchunked || !myrpt->p.kerchunktime) {
 			myrpt->kerchunked = 1;
 		}
+
+		if (myrpt->p.nounkeyct) {
+			return;
+		}
+
 		/* if any of the following are defined, go ahead and do it,
 		   otherwise, dont bother */
 		v1 = ast_variable_retrieve(myrpt->cfg, myrpt->name, "unlinkedct");
@@ -3582,16 +3583,16 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			return;
 		}
 
-		if (myrpt->p.nounkeyct) {
-			return;
-		}
-
 		if (myrpt->p.kerchunktime && (time(NULL) - kerchunk_time_stamp) < myrpt->p.kerchunktime) {
 			return;
 		}
 
 		if (!myrpt->kerchunked || !myrpt->p.kerchunktime) {
 			myrpt->kerchunked = 1;
+		}
+
+		if (myrpt->p.nounkeyct) {
+			return;
 		}
 
 		if (myrpt->p.locallinknodesn) {
