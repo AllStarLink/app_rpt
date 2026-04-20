@@ -3497,9 +3497,6 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	struct ao2_iterator l_it;
 	time_t kerchunk_time_stamp;
 
-	kerchunk_time_stamp = myrpt->kerchunk_timer;
-	myrpt->kerchunk_timer = 0;
-
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%s\n", rpt_tele_mode_str(mode));
 
 	if ((mode == ID) && is_paging(myrpt)) {
@@ -3542,6 +3539,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 	case UNKEY:
 	case LOCUNKEY:
+		kerchunk_time_stamp = myrpt->kerchunk_timer;
+		myrpt->kerchunk_timer = 0;
+
 		/* if voting and the main rx unkeys but a voter link is still active */
 		if (myrpt->p.votertype == 1 && (myrpt->rxchankeyed || myrpt->voteremrx)) {
 			return;
@@ -3551,12 +3551,12 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			return;
 		}
 
-		if (time(NULL) - kerchunk_time_stamp < myrpt->p.kerchunktime) {
+		if (myrpt->p.kerchunktime && (time(NULL) - kerchunk_time_stamp) < myrpt->p.kerchunktime) {
 			return;
 		}
 
-		if (!myrpt->kerchunked_ok) {
-			myrpt->kerchunked_ok = 1;
+		if (!myrpt->kerchunked || !myrpt->p.kerchunktime) {
+			myrpt->kerchunked = 1;
 		}
 		/* if any of the following are defined, go ahead and do it,
 		   otherwise, dont bother */
@@ -3574,8 +3574,10 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 
 	case LINKUNKEY:
-		mylink = (struct rpt_link *) data;
+		kerchunk_time_stamp = myrpt->kerchunk_timer;
+		myrpt->kerchunk_timer = 0;
 
+		mylink = (struct rpt_link *) data;
 		if (!mylink) {
 			return;
 		}
@@ -3584,8 +3586,12 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			return;
 		}
 
-		if (time(NULL) - kerchunk_time_stamp < myrpt->p.kerchunktime) {
+		if (myrpt->p.kerchunktime && (time(NULL) - kerchunk_time_stamp) < myrpt->p.kerchunktime) {
 			return;
+		}
+
+		if (!myrpt->kerchunked || !myrpt->p.kerchunktime) {
+			myrpt->kerchunked = 1;
 		}
 
 		if (myrpt->p.locallinknodesn) {

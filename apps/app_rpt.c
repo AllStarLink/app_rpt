@@ -5039,7 +5039,7 @@ static void *rpt(void *this)
 	lastexttx = 0;
 	myrpt->keyed = 0;
 	myrpt->txkeyed = 0;
-	myrpt->kerchunked_ok = 0;
+	myrpt->kerchunked = 0;
 	time(&myrpt->lastkeyedtime);
 	myrpt->lastkeyedtime -= RPT_LOCKOUT_SECS;
 	time(&myrpt->lasttxkeyedtime);
@@ -5434,7 +5434,7 @@ static void *rpt(void *this)
 			myrpt->macropatch = 0;
 			channel_revert(myrpt);
 		}
-		if (!myrpt->totimer || (!myrpt->mustid && myrpt->p.beaconing) || !myrpt->kerchunked_ok) {
+		if (!myrpt->totimer || (!myrpt->mustid && myrpt->p.beaconing) || !myrpt->kerchunked) {
 			/* get rid of tail if timed out, beaconing, or kerchunked */
 			myrpt->tailtimer = 0;
 		}
@@ -5537,7 +5537,7 @@ static void *rpt(void *this)
 		/* Detect and log keyed to unkeyed transition point */
 		if (!totx && lasttx) {
 			lasttx = 0;
-			myrpt->kerchunked_ok = 0;
+			myrpt->kerchunked = 0;
 			log_unkeyed(myrpt);
 		}
 		time(&t);

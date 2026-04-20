@@ -976,9 +976,9 @@ struct rpt {
 	int calldigittimer;
 	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	int remote_time_out_reset_unkey_interval_timer, time_out_reset_unkey_interval_timer;
-	int kerchunked_ok;	   /*!< \brief Kerchunk timer has passed the kerchunk time */
 	time_t kerchunk_timer; /*!< \brief Kerchunk timer */
 	enum patch_call_mode callmode;
+	rpt_bool kerchunked:1; /*!< \brief Kerchunk timer has passed the kerchunk time */
 	rpt_bool mustid:1;
 	rpt_bool tailid:1;
 	int rptinacttimer;
