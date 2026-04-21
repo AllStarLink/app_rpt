@@ -363,6 +363,15 @@ struct chan_simpleusb_pvt {
 	int legacyaudioscaling;
 
 	ast_mutex_t usblock;
+
+	/* GPIO (gpiochip) support */
+	char gpiodev[64]; /* e.g., /dev/gpiochip0 */
+	int pttline;	  /* output */
+	int corline;	  /* input */
+	int ctcssline;	  /* input (optional, -1 if unused) */
+
+	int gpiochip_fd;
+	int gpio_ptt_fd;
 };
 
 /*!
@@ -971,6 +980,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
 		CV_STR("audiodev", o->hw_device); /* Possibly use this as opposed to the usb device path */
+		CV_STR("gpiodev", o->gpiodev);
 		CV_END;
 	}
 	if (!reload) {
@@ -1965,7 +1975,7 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 	if (res) {
 		ast_log(LOG_ERROR, "Channel %s: Failed to create audio thread: %s\n", o->name, strerror(res));
 		o->stophid = 1;
-		if (o->hidthread != PTHREADT_NULL) {
+		if (o->hidthread != AST_PTHREADT_NULL) {
 			pthread_join(o->hidthread, NULL);
 		}
 		return -1;
@@ -2005,7 +2015,7 @@ static int simpleusb_hangup(struct ast_channel *c)
 	}
 
 	o->stophid = 1;
-	if (o->hidthread != PTHREADT_NULL) {
+	if (o->hidthread != AST_PTHREADT_NULL) {
 		pthread_join(o->hidthread, NULL);
 	}
 	pthread_join(o->audiothread, NULL);
