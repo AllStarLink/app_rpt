@@ -1748,7 +1748,7 @@ static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *
 		*cp++ = 0;
 	}
 	nodenum = 0;
-	if (*cp && *++cp) {
+	if (*cp && *(cp + 1)) {
 		cp1 = strchr(cp, '/');
 		if (cp1) {
 			*cp1++ = 0;
