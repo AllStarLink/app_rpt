@@ -47,6 +47,7 @@
 #include <linux/ppdev.h>
 #include <linux/parport.h>
 #include <linux/version.h>
+#include <linux/gpio.h>
 #include <alsa/asoundlib.h>
 
 #include "asterisk/res_usbradio.h"
@@ -977,6 +978,125 @@ struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 	}
 
 	return NULL;
+}
+
+/* ---------------------------------------------------------------------------
+ * GPIO character device (gpiochip) helpers
+ * These are intended for Raspberry Pi / Linux GPIO via /dev/gpiochipN
+ * No libgpiod dependency.
+ * --------------------------------------------------------------------------- */
+
+int ast_radio_gpiochip_open(const char *path)
+{
+	int fd;
+
+	if (ast_strlen_zero(path)) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd < 0) {
+		ast_log(LOG_ERROR, "Unable to open gpiochip device '%s': %s\n", path, strerror(errno));
+		return -1;
+	}
+
+	return fd;
+}
+
+void ast_radio_gpiochip_close(int chipfd)
+{
+	if (chipfd >= 0) {
+		close(chipfd);
+	}
+}
+
+static int gpiochip_request_line(int chipfd, unsigned int lineoffset, unsigned int flags, int default_value, const char *label, int *outfd)
+{
+	struct gpiohandle_request req;
+
+	if (chipfd < 0 || !outfd) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	memset(&req, 0, sizeof(req));
+	req.lineoffsets[0] = lineoffset;
+	req.lines = 1;
+	req.flags = flags;
+
+	if (!ast_strlen_zero(label)) {
+		ast_copy_string(req.consumer_label, label, sizeof(req.consumer_label));
+	} else {
+		ast_copy_string(req.consumer_label, "res_usbradio", sizeof(req.consumer_label));
+	}
+
+	/* For output requests, default_values is used; harmless for input */
+	req.default_values[0] = default_value ? 1 : 0;
+
+	if (ioctl(chipfd, GPIO_GET_LINEHANDLE_IOCTL, &req) < 0) {
+		ast_log(LOG_ERROR, "GPIO line request failed (line=%u flags=0x%x): %s\n", lineoffset, flags, strerror(errno));
+		return -1;
+	}
+
+	*outfd = req.fd;
+	return 0;
+}
+
+int ast_radio_gpiochip_request_input(int chipfd, unsigned int lineoffset, const char *label, int *linefd)
+{
+	return gpiochip_request_line(chipfd, lineoffset, GPIOHANDLE_REQUEST_INPUT, 0, label, linefd);
+}
+
+int ast_radio_gpiochip_request_output(int chipfd, unsigned int lineoffset, int initial_value, const char *label, int *linefd)
+{
+	return gpiochip_request_line(chipfd, lineoffset, GPIOHANDLE_REQUEST_OUTPUT, initial_value, label, linefd);
+}
+
+void ast_radio_gpiochip_release_line(int linefd)
+{
+	if (linefd >= 0) {
+		close(linefd);
+	}
+}
+
+int ast_radio_gpiochip_get(int linefd, int *value)
+{
+	struct gpiohandle_data data;
+
+	if (linefd < 0 || !value) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	memset(&data, 0, sizeof(data));
+	if (ioctl(linefd, GPIOHANDLE_GET_LINE_VALUES_IOCTL, &data) < 0) {
+		ast_log(LOG_ERROR, "GPIO get failed: %s\n", strerror(errno));
+		return -1;
+	}
+
+	*value = data.values[0] ? 1 : 0;
+	return 0;
+}
+
+int ast_radio_gpiochip_set(int linefd, int value)
+{
+	struct gpiohandle_data data;
+
+	if (linefd < 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	memset(&data, 0, sizeof(data));
+	data.values[0] = value ? 1 : 0;
+
+	if (ioctl(linefd, GPIOHANDLE_SET_LINE_VALUES_IOCTL, &data) < 0) {
+		ast_log(LOG_ERROR, "GPIO set failed: %s\n", strerror(errno));
+		return -1;
+	}
+
+	return 0;
 }
 
 /* Load our configuration */

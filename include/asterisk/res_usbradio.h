@@ -527,3 +527,23 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
  * - The returned pointer is owned by libusb's internal device list.
  */
 struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno);
+
+/* ---------------------------------------------------------------------------
+ * GPIO character device (gpiochip) helpers
+ * These are intended for Raspberry Pi / Linux GPIO via /dev/gpiochipN
+ * No libgpiod dependency.
+ * --------------------------------------------------------------------------- */
+
+int ast_radio_gpiochip_open(const char *path);
+
+void ast_radio_gpiochip_close(int chipfd);
+
+int ast_radio_gpiochip_request_input(int chipfd, unsigned int lineoffset, const char *label, int *linefd);
+
+int ast_radio_gpiochip_request_output(int chipfd, unsigned int lineoffset, int initial_value, const char *label, int *linefd);
+
+void ast_radio_gpiochip_release_line(int linefd);
+
+int ast_radio_gpiochip_get(int linefd, int *value);
+
+int ast_radio_gpiochip_set(int linefd, int value);
