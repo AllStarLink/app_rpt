@@ -977,10 +977,13 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		CV_UINT("rxmixerset", o->rxmixerset);
 		CV_UINT("txmixaset", o->txmixaset);
 		CV_UINT("txmixbset", o->txmixbset);
-		CV_STR("devstr", devstr);
-		CV_STR("serial", serial);
-		CV_STR("audiodev", o->hw_device); /* Possibly use this as opposed to the usb device path */
-		CV_STR("gpiodev", o->gpiodev);
+		CV_UINT("pttline", o->pttline);		/* GPIO output */
+		CV_UINT("corline", o->corline);		/* GPIO input */
+		CV_UINT("ctcssline", o->ctcssline); /* GPIO input */
+		CV_STR("devstr", devstr);			/* USB path */
+		CV_STR("serial", serial);			/* Serial port */
+		CV_STR("audiodev", o->hw_device);	/* ALSA hardware name (hw:x) */
+		CV_STR("gpiodev", o->gpiodev);		/* path to GPIOx file */
 		CV_END;
 	}
 	if (!reload) {
