@@ -14,9 +14,12 @@ This code implements:
 ## Repository Structure
 ```text
 app_rpt/
-├── apps/app_rpt/      # Core repeater application logic
+├── apps/              # Core repeater application logic (app_rpt.c)
+    ├──app_rpt/        # Core repeater application logic support files
 ├── channels/          # Asterisk channel drivers (radio interfaces)
 ├── configs/           # Configuration files and examples
+    ├── rpt/           # Configuration files and examples for AllStarLink
+    ├── samples/       # Configuration file samples
 ├── include/           # Shared header files
 ├── res/               # Asterisk resource modules
 ├── tests/             # Automated test suite
@@ -39,7 +42,7 @@ Thank you!
 
 # Development
 
-## First Time Setup
+## First-time Setup
 
 ### Build Workflow
 1.  Make your changes to the appropriate module files
