@@ -428,13 +428,96 @@ static struct ast_channel_tech simpleusb_tech = {
 	.setoption = simpleusb_setoption,
 };
 
-static int open_stream(struct chan_simpleusb_pvt *pvt)
+/*!
+ * \brief Parse "hw:<card>" or "hw:<card>,<dev>" from anywhere in s.
+ * Returns 1 if found; sets *card; sets *dev to parsed value or -1 if absent.
+ */
+static int parse_hw_anywhere(const char *s, int *card, int *dev)
+{
+	const char *p = s;
+
+	if (!s || !card || !dev) {
+		return 0;
+	}
+
+	while ((p = strstr(p, "hw:")) != NULL) {
+		const char *q = p + 3; /* after "hw:" */
+		int c = 0;
+		int d = -1; /* dev absent by default */
+
+		/* card must start with digit */
+		if (!isdigit((unsigned char) *q)) {
+			p = q;
+			continue;
+		}
+
+		while (isdigit((unsigned char) *q)) {
+			c = c * 10 + (*q - '0');
+			q++;
+		}
+
+		if (*q == ',') {
+			q++;
+			if (!isdigit((unsigned char) *q)) {
+				/* "hw:<card>," is malformed; skip this occurrence */
+				p = q;
+				continue;
+			}
+			d = 0;
+			while (isdigit((unsigned char) *q)) {
+				d = d * 10 + (*q - '0');
+				q++;
+			}
+		}
+
+		*card = c;
+		*dev = d;
+		return 1; /* first valid hw: occurrence */
+	}
+
+	return 0;
+}
+
+/*!
+ * \brief Match rule:
+ * - needle "hw:C" matches any "hw:C" or "hw:C,D" in haystack
+ * - needle "hw:C,D" matches only "hw:C,D" in haystack
+ */
+static int hw_match(const char *haystack, const char *needle)
+{
+	int haystack_c, haystack_d, needle_c, needle_d;
+	const char *p = haystack ? haystack : "";
+
+	if (!parse_hw_anywhere(needle, &needle_c, &needle_d)) {
+		return 0;
+	}
+
+	/* haystack may contain multiple hw: occurrences; scan all */
+	while ((p = strstr(p, "hw:")) != NULL) {
+		if (parse_hw_anywhere(p, &haystack_c, &haystack_d)) {
+			if (haystack_c == needle_c) {
+				if (needle_d < 0) {
+					/* needle is "hw:C" -> accept any dev (including absent) */
+					return 1;
+				} else if (haystack_d == needle_d) {
+					/* needle is "hw:C,D" -> require exact dev match */
+					return 1;
+				}
+			}
+		}
+		p += 3; /* move forward to find next occurrence */
+	}
+
+	return 0;
+}
+
+static int open_stream(struct chan_simpleusb_pvt *o)
 {
 	PaError res = paInternalError;
 
-	if (!strcasecmp(pvt->hw_device, "default")) {
+	if (!strcasecmp(o->hw_device, "default")) {
 		ast_debug(1, "Opening stream with default device\n");
-		res = Pa_OpenDefaultStream(&pvt->stream, INPUT_CHANNELS, OUTPUT_CHANNELS, paInt16, SAMPLE_RATE, NUM_SAMPLES, NULL, NULL);
+		res = Pa_OpenDefaultStream(&o->stream, INPUT_CHANNELS, OUTPUT_CHANNELS, paInt16, SAMPLE_RATE, NUM_SAMPLES, NULL, NULL);
 	} else {
 		PaStreamParameters input_params = {
 			.channelCount = INPUT_CHANNELS,
@@ -449,7 +532,7 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 			.device = paNoDevice,
 		};
 		PaDeviceIndex idx, num_devices;
-		ast_debug(1, "Looking for device %s", pvt->hw_device);
+		ast_debug(1, "Looking for device %s", o->hw_device);
 		ast_debug(6, "PortAudio host api count %d\n", Pa_GetHostApiCount());
 		num_devices = Pa_GetDeviceCount();
 		if (num_devices < 0) {
@@ -463,14 +546,14 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 			const PaDeviceInfo *dev = Pa_GetDeviceInfo(idx);
 			ast_debug(1, "Found device %s\n", dev->name);
 			if (dev->maxInputChannels) {
-				if (strlen(pvt->hw_device) && strstr(dev->name, pvt->hw_device)) {
+				if (hw_match(dev->name, o->hw_device)) {
 					ast_debug(5, "Found input device %s\n", dev->name);
 					input_params.device = idx;
 				}
 			}
 
 			if (dev->maxOutputChannels) {
-				if (strlen(pvt->hw_device) && strstr(dev->name, pvt->hw_device)) {
+				if (hw_match(dev->name, o->hw_device)) {
 					ast_debug(5, "Found output device %s\n", dev->name);
 					output_params.device = idx;
 				}
@@ -478,14 +561,16 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 		}
 
 		if (input_params.device == paNoDevice) {
-			ast_log(LOG_ERROR, "No input device found for simpleusb device '%s'\n", pvt->name);
+			ast_log(LOG_ERROR, "No input device found for simpleusb device '%s'\n", o->name);
+			return res;
 		}
 
 		if (output_params.device == paNoDevice) {
-			ast_log(LOG_ERROR, "No output device found for simpleusb device '%s'\n", pvt->name);
+			ast_log(LOG_ERROR, "No output device found for simpleusb device '%s'\n", o->name);
+			return res;
 		}
-		ast_debug(5, "Opening stream on device %s", pvt->hw_device);
-		res = Pa_OpenStream(&pvt->stream, &input_params, &output_params, SAMPLE_RATE, NUM_SAMPLES, paNoFlag, NULL, NULL);
+		ast_debug(5, "Opening stream on device %s", o->hw_device);
+		res = Pa_OpenStream(&o->stream, &input_params, &output_params, SAMPLE_RATE, NUM_SAMPLES, paNoFlag, NULL, NULL);
 		ast_debug(5, "Stream feedback %s\n", Pa_GetErrorText(res));
 	}
 
@@ -1159,6 +1244,7 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 		o->usb_dev = ast_radio_hid_device_init(o->devstr);
 		if (!o->usb_dev) {
 			ast_log(LOG_ERROR, "Unable to find usb device associated with %s", o->devstr);
+			ast_mutex_unlock(&usb_dev_lock);
 			return -1;
 		}
 	}
@@ -1961,6 +2047,7 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 		o->stophid = 1;
 		if (o->hidthread != AST_PTHREADT_NULL) {
 			pthread_join(o->hidthread, NULL);
+			o->hidthread = AST_PTHREADT_NULL;
 		}
 		return -1;
 	}
@@ -1996,11 +2083,14 @@ static int simpleusb_hangup(struct ast_channel *c)
 
 	if (o->hidthread != AST_PTHREADT_NULL) {
 		pthread_join(o->hidthread, NULL);
+		o->hidthread = AST_PTHREADT_NULL;
 	}
 
-	pthread_join(o->audiothread, NULL);
-	o->hidthread = AST_PTHREADT_NULL;
-	o->audiothread = AST_PTHREADT_NULL;
+	if (o->audiothread != AST_PTHREADT_NULL) {
+		pthread_join(o->audiothread, NULL);
+		o->audiothread = AST_PTHREADT_NULL;
+	}
+
 	return 0;
 }
 
@@ -2287,6 +2377,7 @@ static void *simpleusb_audio_thread(void *arg)
 							}
 
 							ast_queue_frame(o->owner, &wf);
+							o->waspager = ispager;
 							continue;
 						}
 						o->waspager = ispager;
@@ -4343,6 +4434,7 @@ static int unload_module(void)
 		/* XXX what about the memory allocated ? */
 	}
 
+	Pa_Terminate();
 	ao2_cleanup(simpleusb_tech.capabilities);
 	simpleusb_tech.capabilities = NULL;
 
