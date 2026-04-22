@@ -195,10 +195,10 @@ static const char *const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "
 struct chan_simpleusb_pvt {
 	struct chan_simpleusb_pvt *next;
 
-	char *name;				 /* the internal name of our channel */
-	char hw_device[50];		 /* hardware device name */
-	int devtype;			 /* actual type of device */
-	int pttkick[2];			 /* ptt kick pipe */
+	char *name;			/* the internal name of our channel */
+	char hw_device[50]; /* hardware device name */
+	int devtype;		/* actual type of device */
+	int pttkick[2];		/* ptt kick pipe */
 	enum {
 		M_UNSET,
 		M_FULL,
@@ -206,7 +206,7 @@ struct chan_simpleusb_pvt {
 		M_WRITE
 	} duplex;
 
-	int warned;				/* various flags used for warnings */
+	int warned; /* various flags used for warnings */
 	int devicenum;
 	char devstr[128];
 	char serial[128];
@@ -436,7 +436,6 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 		ast_debug(1, "Opening stream with default device\n");
 		res = Pa_OpenDefaultStream(&pvt->stream, INPUT_CHANNELS, OUTPUT_CHANNELS, paInt16, SAMPLE_RATE, NUM_SAMPLES, NULL, NULL);
 	} else {
-		ast_debug(1, "Looking for device %s", pvt->hw_device);
 		PaStreamParameters input_params = {
 			.channelCount = INPUT_CHANNELS,
 			.sampleFormat = paInt16,
@@ -450,6 +449,7 @@ static int open_stream(struct chan_simpleusb_pvt *pvt)
 			.device = paNoDevice,
 		};
 		PaDeviceIndex idx, num_devices;
+		ast_debug(1, "Looking for device %s", pvt->hw_device);
 		ast_debug(6, "PortAudio host api count %d\n", Pa_GetHostApiCount());
 		num_devices = Pa_GetDeviceCount();
 		if (num_devices < 0) {
