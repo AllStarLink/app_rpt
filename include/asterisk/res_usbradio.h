@@ -28,6 +28,8 @@
 #define HAVE_SYS_IO
 #endif
 
+#include <libusb-1.0/libusb.h>
+
 /*!
  * \brief Defines for interacting with ALSA controls.
  */
@@ -266,19 +268,22 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2);
  *
  * \param handle		Pointer to usb_dev_handle associated with the HID.
  * \param outputs		Pointer to buffer that contains the data to send to the HID.
+ * \retval bytes		>= 0 Success, LIBUSB_ERROR* if error
  */
-void ast_radio_hid_set_outputs(struct usb_dev_handle *handle, unsigned char *outputs);
+int ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned char *outputs);
 
 /*!
  * \brief Get USB HID inputs
- * 	This routine will retrieve the GPIO states or data the eeprom.
+ *  This routine will retrieve the GPIO states or data the eeprom.
  *
- *	The passed inputs should be 4 bytes.
+ * The passed inputs should be 4 bytes.
  *
- * \param handle		Pointer to usb_dev_handle associated with the HID.
- * \param inputs		Pointer to buffer that will contain the data received from the HID.
+ * \param handle        Pointer to usb_dev_handle associated with the HID.
+ * \param inputs        Pointer to buffer that will contain the data received from the HID.
+ * \retval bytes		>= 0 Success, LIBUSB_ERROR* if error
+
  */
-void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inputs);
+int ast_radio_hid_get_inputs(struct libusb_device_handle *handle, unsigned char *inputs);
 
 /*!
  * \brief Read user memory segment from the CM-XXX EEPROM.
@@ -295,22 +300,22 @@ void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inpu
  *						the calculated checksum will be zero.  This indicates valid data..
  *						Any	other value indicates bad EEPROM data.
  */
-unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
+unsigned short ast_radio_get_eeprom(struct libusb_device_handle *handle, unsigned short *buf);
 
 /*!
  * \brief Write user memory segment to the CM-XXX EEPROM.
- * 	Writes the memory range associated with user data to the EEPROM.
+ * \tWrites the memory range associated with user data to the EEPROM.
  *
- *	The user memory segment is from address position 51 to 63.
+ *\tThe user memory segment is from address position 51 to 63.
  *
  *  \note Memory positions 0 to 50 are reserved for manufacturer's data.  Do not
- *	write into this segment!
+ *\twrite into this segment!
  *
- * \param handle		Pointer to usb_dev_handle associated with the HID.
- * \param buf			Pointer to buffer that contains the the EEPROM data.
- *						The buffer must be an array of 13 unsigned shorts.
+ * \param handle        Pointer to usb_dev_handle associated with the HID.
+ * \param buf            Pointer to buffer that contains the the EEPROM data.
+ *\t			The buffer must be an array of 13 unsigned shorts.
  */
-void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
+void ast_radio_put_eeprom(struct libusb_device_handle *handle, unsigned short *buf);
 
 /*!
  * \brief Make a list of HID devices.
@@ -335,7 +340,7 @@ int ast_radio_hid_device_mklist(void);
  * \retval 					Returns a usb_device structure with the found device.
  *							If the device was not found, it returns null.
  */
-struct usb_device *ast_radio_hid_device_init(const char *desired_device);
+struct libusb_device *ast_radio_hid_device_init(const char *desired_device);
 
 /*!
  * \brief Get USB device number from device string
@@ -485,13 +490,14 @@ struct timeval ast_radio_tvnow(void);
  *   These define total signal power and peak-to-average power ratio
  *
  * \author      	NR9V
- * \param sbuf  	Rx audio sample buffer
+ * \param sbuf  	Rx audio sample buffer in 48k stereo or mono
  * \param o	    	Rx Audio Stats data structure
  * \param len   	Length of data in sbuf
+ * \param mono  	True if sbuf is mono, False if sbuf is stereo
  * \return 	    	1 if clipping detected, 0 otherwise
  */
 #define CLIP_LED_HOLD_TIME_MS 500
-int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len);
+int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, short mono);
 
 /*!
  * \brief Display receive audio statistics.
@@ -519,12 +525,12 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
 
 /*!
  * \brief Returns the libusb device that backs ALSA /proc/asound/card<cardno>/usbbus.
- * On success: returns a pointer to a libusb struct usb_device.
- * On failure: returns NULL.
+ * \retval usb_device *  Pointer to the libusb device on success.
+ * \retval NULL          If device could not be found.
  *
  * \note
- * - Uses libusb-0.1 enumeration (usb_init/usb_find_busses/usb_find_devices).
+ * - Uses libusb-1.0 enumeration (libusb_init/libusb_get_device_list).
  * - The returned pointer is owned by libusb's internal device list.
  * \param cardno The ALSA card number as found in HW:<cardno>
  */
-struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno);
+struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno);
