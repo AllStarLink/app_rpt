@@ -44,10 +44,8 @@ Thank you!
 
 ## First-time Setup
 
-### Build Workflow
-1.  Make your changes to the appropriate module files
-2.  Run `./rpt_install.sh` to recompile and install updated modules
-3.  Restart Asterisk to test your changes: `systemctl restart asterisk`
+### Build
+Build instructions can be found in the asl3-asterisk repo: https://github.com/AllStarLink/asl3-asterisk/tree/develop/docs
 
 ### Coding Standards
 - Follow existing code style patterns
@@ -75,11 +73,12 @@ This will enable coding standards to be checked locally on each commit.
 3.  Ensure pre-commit hooks pass locally
 4.  Test your changes with the appropriate test cases
 5.  Open a Pull Request describing the change and motivation
-6.  Address any review feedback before merging
+6.  Address any review feedback.
+7.  Once reviewed, the development team will merge the pull request 
 
 # Installing
 
-You can use PhreakScript to install Asterisk automatically, first, then use the `rpt_install.sh` script to properly install the files from this repo.
+Install from source instructions can be found in the asl3-asterisk repo: https://github.com/AllStarLink/asl3-asterisk/tree/develop/docs
 
 ## Automatic Installation
 
