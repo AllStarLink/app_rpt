@@ -370,7 +370,8 @@ int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
  * Calling routine should pass a buffer for nodedata and nodedatalength
  * of sufficient length. A typical response is
  * "radio@123.123.123.123:4569/50000,123.123.123.123
- * This routine uses the SRV or TXT records provided by AllStarLink
+ * This routine uses the SRV records provided by AllStarLink and resolves
+ * the returned host's A record
  *
  * \note This routine can be called by app_rpt multiple times as
  * it constructs the node number.  The routine will only perform a
@@ -399,11 +400,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 	ast_assert(nodedata != NULL);
 	ast_assert(nodedatalength > 0);
 
-	/* AllStarLink supports two mechanisms to resolve node information.
-	 * You can use the SRV record followed by resolving the node name or
-	 * look up the information in the text record.
-	 */
-	/* Resolve the node by using SRV record */
+	/* Resolve the node by using SRV record followed by A record lookup */
 	{
 		char *hostname;
 		const char *ipaddress;
