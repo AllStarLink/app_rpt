@@ -29,6 +29,7 @@
 
 /*** MODULEINFO
 	<depend>alsa</depend>
+	<depend>portaudio</depend>
 	<depend>res_usbradio</depend>
 	<support_level>extended</support_level>
  ***/
@@ -1341,11 +1342,15 @@ static void *hidthread(void *arg)
 		if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 			if (usb_detach_kernel_driver_np(usb_handle, C108_HID_INTERFACE) < 0) {
 				ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
+				usb_close(usb_handle);
+				usb_handle = NULL;
 				usleep(500000);
 				continue;
 			}
 			if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 				ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
+				usb_close(usb_handle);
+				usb_handle = NULL;
 				usleep(500000);
 				continue;
 			}
@@ -1703,6 +1708,8 @@ static void *hidthread(void *arg)
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
+		usb_close(usb_handle);
+		usb_handle = NULL;
 	}
 	return NULL;
 }
@@ -4382,11 +4389,17 @@ static int load_module(void)
 		ast_log(LOG_NOTICE, "susb active device %s not found\n", simpleusb_active);
 		/* XXX we could default to 'dsp' perhaps ? */
 		/* XXX should cleanup allocated memory etc. */
+		Pa_Terminate();
+		ao2_cleanup(simpleusb_tech.capabilities);
+		simpleusb_tech.capabilities = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
 	if (ast_channel_register(&simpleusb_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel type 'usb'\n");
+		Pa_Terminate();
+		ao2_cleanup(simpleusb_tech.capabilities);
+		simpleusb_tech.capabilities = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
