@@ -2607,6 +2607,7 @@ treataslocal:
 		ast_mutex_unlock(&myrpt->remlock);
 		imdone = 1;
 		break;
+
 	case REMSHORTSTATUS:
 	case REMLONGSTATUS:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {

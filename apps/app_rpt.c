@@ -6761,8 +6761,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		if (memp > 0) {
 			char radiochan;
-			radiochan = strtod(data, NULL);
 
+			radiochan = strtod(data, NULL);
 			if (numlinks > 0 && radiochan != myrpt->nowchan && !myrpt->bargechan) {
 				pbx_builtin_setvar_helper(chan, "RPT_STAT_BUSY", "1");
 				ast_log(LOG_NOTICE, "Radio Channel Busy.\n");
@@ -6895,6 +6895,20 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		(void) timeout; /* Avoid unused variable warning for now */
+		/* we are using masq_park here to protect * from touching the channel once we park it.
+		 * If the channel comes out of timeout before we are done announcing and the channel is
+		 * messed with, Kablooeee.  So we use Masq to prevent this.  */
+
+		/*! \todo the parking API changed a while ago, this all needs to be completely redone here */
+		/* old way: https://github.com/asterisk/asterisk/blob/1.8/apps/app_parkandannounce.c
+		 * new way: https://github.com/asterisk/asterisk/blob/master/res/parking/parking_applications.c#L890
+
+		 * ast_masq_park_call(chan, NULL, timeout, &lot); // commented out to avoid compiler error.
+
+		 * ast_verb(3, "Call Parking Called, lot: %d, timeout: %d, context: %s\n", lot, timeout, return_context);
+
+		 * snprintf(tmp,sizeof(tmp) - 1,"%d,%s",lot,template + 1);
+		 */
 
 		rpt_telemetry(myrpt, REV_PATCH, tmp);
 

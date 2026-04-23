@@ -55,8 +55,6 @@
 	IIR 	= Infinite Impulse Response (Filter)
 */
 
-/* XPMR_FILE_VERSION(__FILE__, "$Revision: 491 $") */
-
 #define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
 #if GCC_VERSION > 40600
 #pragma GCC diagnostic push
@@ -1884,8 +1882,7 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 		pChan->sdbg->trace[9] = RX_SMODE;
 		pChan->sdbg->source[10] = pChan->pRxBase;
 		pChan->sdbg->source[11] = pChan->pRxSpeaker;
-	}
-	if (pChan->tracetype == 2) { /* CTCSS DECODE */
+	} else if (pChan->tracetype == 2) { /* CTCSS DECODE */
 		pChan->sdbg->source[0] = pChan->pRxDemod;
 		pChan->sdbg->source[1] = pChan->pRxBase;
 		pChan->sdbg->trace[2] = RX_NOISE_TRIG;

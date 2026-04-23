@@ -1025,7 +1025,6 @@ static void *hidthread(void *arg)
 			continue;
 		}
 		o->devicenum = i;
-		/*! \todo this code does not appear to serve any purpose and can be removed after testing */
 		o->device_error = 0;
 		ast_radio_time(&o->lasthidtime);
 		o->usbass = 1;
