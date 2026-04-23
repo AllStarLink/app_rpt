@@ -937,6 +937,7 @@ void load_rpt_vars(int n, int init)
 
 	/* configure how we interact with "stats.allstarlink.org" */
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(statpost_time, "statpost_time", 60, 30, 600);
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(kerchunktime, "kerchunk_time", 0, 0, 5);
 	RPT_CONFIG_VAR(statpost_url, "statpost_url");
 
 	rpt_vars[n].p.tailmessagetime = retrieve_astcfgint(&rpt_vars[n], cat, "tailmessagetime", 0, 200000000, 0);
