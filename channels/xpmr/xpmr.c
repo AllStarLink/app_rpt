@@ -2407,7 +2407,6 @@ t_pmr_chan *createPmrChannel(t_pmr_chan *tChan, i16 numSamples)
 	} else if (pChan->txMixA == TX_OUT_AUX) {
 		pSps->source = pChan->pTxHpf;
 	} else {
-		pSps->source = NULL; /* maw sph asdf !!! no blow up */
 		pSps->source = inputTmp;
 	}
 
