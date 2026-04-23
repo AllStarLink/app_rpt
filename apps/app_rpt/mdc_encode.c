@@ -200,6 +200,7 @@ static unsigned char *_enc_str(unsigned char *data)
 		}
 	}
 
+	k = 0;
 	m = 0;
 	for (i = 0; i < 14; i++) {
 		for (j = 0; j <= 7; j++) {
