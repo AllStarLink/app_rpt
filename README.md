@@ -73,7 +73,7 @@ This will enable coding standards to be checked locally on each commit.
 3.  Ensure pre-commit hooks pass locally
 4.  Test your changes with the appropriate test cases
 5.  Open a Pull Request describing the change and motivation
-6.  Address any review feedback.
+6.  Address any review feedback
 7.  Once reviewed, the development team will merge the pull request 
 
 # Installing
