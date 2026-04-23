@@ -3539,13 +3539,13 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 	case UNKEY:
 	case LOCUNKEY:
-		kerchunk_time_stamp = myrpt->kerchunk_timer;
-		myrpt->kerchunk_timer = 0;
-
 		/* if voting and the main rx unkeys but a voter link is still active */
 		if (myrpt->p.votertype == 1 && (myrpt->rxchankeyed || myrpt->voteremrx)) {
 			return;
 		}
+
+		kerchunk_time_stamp = myrpt->kerchunk_timer;
+		myrpt->kerchunk_timer = 0;
 
 		if (myrpt->p.kerchunktime && (time(NULL) - kerchunk_time_stamp) < myrpt->p.kerchunktime) {
 			return;
@@ -3575,13 +3575,13 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 
 	case LINKUNKEY:
-		kerchunk_time_stamp = myrpt->kerchunk_timer;
-		myrpt->kerchunk_timer = 0;
-
 		mylink = (struct rpt_link *) data;
 		if (!mylink) {
 			return;
 		}
+
+		kerchunk_time_stamp = myrpt->kerchunk_timer;
+		myrpt->kerchunk_timer = 0;
 
 		if (myrpt->p.kerchunktime && (time(NULL) - kerchunk_time_stamp) < myrpt->p.kerchunktime) {
 			return;
