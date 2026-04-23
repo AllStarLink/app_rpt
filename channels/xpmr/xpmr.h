@@ -156,10 +156,10 @@
 #define M_Q6 0x00000040	 /* 64 */
 #define M_Q5 0x00000020	 /* 32 */
 #define M_Q4 0x00000010	 /* 16 */
-#define M_Q3 0x00000008	 /* 16 */
-#define M_Q2 0x00000004	 /* 16 */
-#define M_Q1 0x00000002	 /* 16 */
-#define M_Q0 0x00000001	 /* 16 */
+#define M_Q3 0x00000008	 /* 8 */
+#define M_Q2 0x00000004	 /* 4 */
+#define M_Q1 0x00000002	 /* 2 */
+#define M_Q0 0x00000001	 /* 1 */
 
 #define RADIANS_PER_CYCLE (2 * M_PI)
 
