@@ -999,6 +999,10 @@ struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 		for (dev = bus->devices; dev; dev = dev->next) {
 			char cur[sizeof(bus->dirname) + sizeof(dev->filename) + 1];
 
+			if (!(is_known_device(dev) || is_user_device(dev))) {
+				continue;
+			}
+
 			snprintf(cur, sizeof(cur), "%s/%s", bus->dirname, dev->filename);
 
 			/* usbbus content is typically case-insensitive */
