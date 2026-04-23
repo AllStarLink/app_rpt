@@ -1087,7 +1087,10 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 
 	if (o->hw_device[0]) {
 		/* already configured device, extract the device number and usb_dev */
-		if (sscanf(o->hw_device, "hw:%d", &o->devicenum) == 1) {
+		if (!strcasecmp(o->hw_device, "default")) {
+			ast_debug(5, "audiodev is defined: default");
+			o->internal_audio = 1;
+		} else if (sscanf(o->hw_device, "hw:%d", &o->devicenum) == 1) {
 			ast_debug(5, "audiodev is defined: %s, Device %d", o->hw_device, o->devicenum);
 			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
 			if (!o->usb_dev) {
@@ -2076,8 +2079,8 @@ static int simpleusb_hangup(struct ast_channel *c)
 {
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 
-	ast_channel_tech_pvt_set(c, NULL);
 	o->owner = NULL;
+	ast_channel_tech_pvt_set(c, NULL);
 	ast_module_unref(ast_module_info->self);
 	o->stophid = 1;
 
