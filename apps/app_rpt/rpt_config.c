@@ -15,7 +15,6 @@
 #include "asterisk/dns_core.h"	   /* use for dns lookup */
 #include "asterisk/dns_resolver.h" /* use for dns lookup */
 #include "asterisk/dns_srv.h"	   /* use for srv dns lookup */
-#include "asterisk/dns_txt.h"	   /* user for dns lookup */
 #include "asterisk/vector.h"	   /* required for dns */
 #include "asterisk/utils.h"		   /* required for ARRAY_LEN */
 
