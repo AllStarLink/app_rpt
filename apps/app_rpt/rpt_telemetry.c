@@ -2607,20 +2607,6 @@ treataslocal:
 		ast_mutex_unlock(&myrpt->remlock);
 		imdone = 1;
 		break;
-#if 0
-		set_mode_ft897(myrpt, REM_MODE_AM);
-		simple_command_ft897(myrpt, 8);
-		if (play_tone(mychannel, 800, 6000, 8192) == -1) {
-			break;
-		}
-		simple_command_ft897(myrpt, 0x88);
-		ast_safe_sleep(mychannel, 500);
-		set_mode_ft897(myrpt, myrpt->remmode);
-		myrpt->tunerequest = 0;
-		ast_mutex_unlock(&myrpt->remlock);
-		imdone = 1;
-		break;
-#endif
 	case REMSHORTSTATUS:
 	case REMLONGSTATUS:
 		if (wait_interval(myrpt, DLY_TELEM, mychannel) == -1) {

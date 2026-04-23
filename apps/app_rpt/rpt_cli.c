@@ -456,94 +456,94 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			}
 
 			if (myrpt->p.parrotmode != PARROT_MODE_OFF) {
-				parrot_ena = "1"; //"ENABLED";
+				parrot_ena = "1"; /*"ENABLED"; */
 			} else {
-				parrot_ena = "0"; //"DISABLED";
+				parrot_ena = "0"; /*"DISABLED"; */
 			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].txdisable) {
-				sys_ena = "0"; //"DISABLED";
+				sys_ena = "0"; /*"DISABLED"; */
 			} else {
-				sys_ena = "1"; //"ENABLED";
+				sys_ena = "1"; /*"ENABLED"; */
 			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].totdisable) {
-				tot_ena = "0"; //"DISABLED";
+				tot_ena = "0"; /*"DISABLED"; */
 			} else {
-				tot_ena = "1"; //"ENABLED";
+				tot_ena = "1"; /*"ENABLED"; */
 			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].linkfundisable) {
-				link_ena = "0"; //"DISABLED";
+				link_ena = "0"; /*"DISABLED"; */
 			} else {
-				link_ena = "1"; //"ENABLED";
+				link_ena = "1"; /*"ENABLED"; */
 			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].autopatchdisable) {
-				patch_ena = "0"; //"DISABLED";
+				patch_ena = "0"; /*"DISABLED"; */
 			} else {
-				patch_ena = "1"; //"ENABLED";
+				patch_ena = "1"; /*"ENABLED"; */
 			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) {
-				sch_ena = "0"; //"DISABLED";
+				sch_ena = "0"; /*"DISABLED"; */
 			} else {
-				sch_ena = "1"; //"ENABLED";
+				sch_ena = "1"; /*"ENABLED"; */
 			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].userfundisable) {
-				user_funs = "0"; //"DISABLED";
+				user_funs = "0"; /*"DISABLED"; */
 			} else {
-				user_funs = "1"; //"ENABLED";
+				user_funs = "1"; /*"ENABLED"; */
 			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].alternatetail) {
-				tail_type = "1"; //"ALTERNATE";
+				tail_type = "1"; /*"ALTERNATE"; */
 			} else {
-				tail_type = "0"; //"STANDARD";
+				tail_type = "0"; /*"STANDARD"; */
 			}
 
 			if (myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns) {
-				iconns = "0"; //"DISABLED";
+				iconns = "0"; /*"DISABLED"; */
 			} else {
-				iconns = "1"; //"ENABLED";
+				iconns = "1"; /*"ENABLED"; */
 			}
 
 			if (!myrpt->totimer) {
-				tot_state = "0"; //"TIMED OUT!";
+				tot_state = "0"; /*"TIMED OUT!"; */
 			} else if (myrpt->totimer != myrpt->p.totime) {
-				tot_state = "1"; //"ARMED";
+				tot_state = "1"; /*"ARMED"; */
 			} else {
-				tot_state = "2"; //"RESET";
+				tot_state = "2"; /*"RESET"; */
 			}
 
 			if (myrpt->tailid) {
-				ider_state = "0"; //"QUEUED IN TAIL";
+				ider_state = "0"; /*"QUEUED IN TAIL"; */
 			} else if (myrpt->mustid) {
-				ider_state = "1"; //"QUEUED FOR CLEANUP";
+				ider_state = "1"; /*"QUEUED FOR CLEANUP"; */
 			} else {
-				ider_state = "2"; //"CLEAN";
+				ider_state = "2"; /*"CLEAN"; */
 			}
 
 			switch (myrpt->callmode) {
 			case CALLMODE_DIALING:
-				patch_state = "0"; //"DIALING";
+				patch_state = "0"; /*"DIALING"; */
 				break;
 
 			case CALLMODE_CONNECTING:
-				patch_state = "1"; //"CONNECTING";
+				patch_state = "1"; /*"CONNECTING"; */
 				break;
 
 			case CALLMODE_UP:
-				patch_state = "2"; //"UP";
+				patch_state = "2"; /*"UP"; */
 				break;
 
 			case CALLMODE_FAILED:
-				patch_state = "3"; //"CALL FAILED";
+				patch_state = "3"; /*"CALL FAILED"; */
 				break;
 
 			default:
-				patch_state = "4"; //"DOWN";
+				patch_state = "4"; /*"DOWN"; */
 			}
 
 			if (myrpt->p.telemdynamic) {

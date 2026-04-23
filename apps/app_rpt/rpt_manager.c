@@ -164,36 +164,36 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			iconns = myrpt->p.s[myrpt->p.sysstate_cur].noincomingconns ? "1" : "0";
 
 			if (!myrpt->totimer) {
-				tot_state = "0"; //"TIMED OUT!";
+				tot_state = "0"; /*"TIMED OUT!"; */
 			} else if (myrpt->totimer != myrpt->p.totime) {
-				tot_state = "1"; //"ARMED";
+				tot_state = "1"; /*"ARMED"; */
 			} else {
-				tot_state = "2"; //"RESET";
+				tot_state = "2"; /*"RESET"; */
 			}
 
 			if (myrpt->tailid) {
-				ider_state = "0"; //"QUEUED IN TAIL";
+				ider_state = "0"; /*"QUEUED IN TAIL"; */
 			} else if (myrpt->mustid) {
-				ider_state = "1"; //"QUEUED FOR CLEANUP";
+				ider_state = "1"; /*"QUEUED FOR CLEANUP"; */
 			} else {
-				ider_state = "2"; //"CLEAN";
+				ider_state = "2"; /*"CLEAN"; */
 			}
 
 			switch (myrpt->callmode) {
 			case CALLMODE_DIALING:
-				patch_state = "0"; //"DIALING";
+				patch_state = "0"; /*"DIALING"; */
 				break;
 			case CALLMODE_CONNECTING:
-				patch_state = "1"; //"CONNECTING";
+				patch_state = "1"; /*"CONNECTING"; */
 				break;
 			case CALLMODE_UP:
-				patch_state = "2"; //"UP";
+				patch_state = "2"; /*"UP"; */
 				break;
 			case CALLMODE_FAILED:
-				patch_state = "3"; //"CALL FAILED";
+				patch_state = "3"; /*"CALL FAILED"; */
 				break;
 			default:
-				patch_state = "4"; //"DOWN";
+				patch_state = "4"; /*"DOWN"; */
 			}
 
 			if (myrpt->p.telemdynamic) {

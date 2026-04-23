@@ -184,13 +184,6 @@ static void _procbits(mdc_decoder_t *decoder, int x)
 		}
 
 	} else {
-#if 0
-		printf("bad: ");
-		for(i=0; i<14; i++)
-			printf("%02x ",data[i]);
-		printf("%x\n",ccrc);
-#endif
-
 		decoder->shstate[x] = 0;
 	}
 }
@@ -230,12 +223,10 @@ static void _shiftin(mdc_decoder_t *decoder, int x)
 		gcount += _onebits(0x092a446f ^ decoder->synclow[x]);
 
 		if (gcount <= MDC_GDTHRESH) {
-			// printf("sync %d  %x %x \n",gcount,decoder->synchigh[x], decoder->synclow[x]);
 			decoder->shstate[x] = 1;
 			decoder->shcount[x] = 0;
 			_clearbits(decoder, x);
 		} else if (gcount >= (40 - MDC_GDTHRESH)) {
-			// printf("isync %d\n",gcount);
 			decoder->shstate[x] = 1;
 			decoder->shcount[x] = 0;
 			decoder->xorb[x] = !(decoder->xorb[x]);
