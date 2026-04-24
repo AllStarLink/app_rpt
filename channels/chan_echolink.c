@@ -4232,15 +4232,16 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	/* start the directory thread */
-	ast_pthread_create(&el_directory_thread, NULL, el_directory, NULL);
-
 	ast_cli_register_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&el_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s.\n", type);
 		return AST_MODULE_LOAD_DECLINE;
 	}
+
+	/* start the directory thread */
+	ast_pthread_create(&el_directory_thread, NULL, el_directory, NULL);
+
 	return 0;
 }
 
