@@ -37,6 +37,7 @@
 #include "asterisk.h"
 
 #include <portaudio.h>
+#include <alsa/asoundlib.h>
 
 #include <stdio.h>
 #include <math.h>
@@ -196,10 +197,10 @@ static const char *const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "
 struct chan_simpleusb_pvt {
 	struct chan_simpleusb_pvt *next;
 
-	char *name;			/* the internal name of our channel */
-	char hw_device[50]; /* hardware device name */
-	int devtype;		/* actual type of device */
-	int pttkick[2];		/* ptt kick pipe */
+	char *name;			 /* the internal name of our channel */
+	char hw_device[100]; /* hardware device name */
+	int devtype;		 /* actual type of device */
+	int pttkick[2];		 /* ptt kick pipe */
 	enum {
 		M_UNSET,
 		M_FULL,
@@ -431,7 +432,7 @@ static struct ast_channel_tech simpleusb_tech = {
 
 /*!
  * \brief Parse "hw:<card>" or "hw:<card>,<dev>" from anywhere in s.
- * Returns 1 if found; sets *card; sets *dev to parsed value or -1 if absent.
+ * \retval 1 if found; sets *card; sets *dev to parsed value or -1 if absent.
  */
 static int parse_hw_anywhere(const char *s, int *card, int *dev)
 {
@@ -616,18 +617,21 @@ static int stop_stream(struct chan_simpleusb_pvt *pvt)
 {
 	PaError err;
 
-	if (!pvt->streamstate)
+	if (!pvt->streamstate) {
 		return 0;
+	}
 
 	/* Wait for pvt->thread to exit cleanly, to avoid killing it while it's holding a lock. */
 	err = Pa_AbortStream(pvt->stream);
 	if (err != paNoError) {
 		ast_log(LOG_WARNING, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
 	}
+
 	err = Pa_CloseStream(pvt->stream);
 	if (err != paNoError) {
 		ast_log(LOG_WARNING, "Pa_CloseStream failed: %s\n", Pa_GetErrorText(err));
 	}
+
 	pvt->stream = NULL;
 	pvt->streamstate = 0;
 	return 0;
@@ -1105,7 +1109,7 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 			return -1;
 		}
 	} else {
-		/* use the */
+		/* use the device string */
 		ast_radio_hid_device_mklist();
 
 		/* Check to see if our specified device string
