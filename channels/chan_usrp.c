@@ -491,25 +491,27 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 				ast_log(LOG_NOTICE, "Channel %s: Possible data loss, expected seq %lu received %lu\n", ast_channel_name(ast), pvt->rxseq, seq);
 			}
 			pvt->rxseq = seq + 1;
-			/* TODO: TEXT processing added N4IRR */
-			if (datalen == USRP_VOICE_FRAME_SIZE) {
-				/* Pass received text messages to Asterisk */
-				if (bufhdrp->type == USRP_TYPE_TEXT) {
+			/* Pass received text messages to Asterisk */
+			if (bufhdrp->type == USRP_TYPE_TEXT) {
+				if (datalen > 0) {
+					size_t textlen = strnlen(bufdata, datalen);
 					struct ast_frame wf = {
 						.frametype = AST_FRAME_TEXT,
 						.data.ptr = bufdata,
-						.datalen = strlen(bufdata) + 1,
+						.datalen = textlen + 1,
 						.src = __PRETTY_FUNCTION__,
 					};
 
+					/* Ensure NUL-termination within the receive buffer */
+					bufdata[textlen] = '\0';
 					ast_queue_frame(ast, &wf);
-				} else {
-					qp = ast_malloc(sizeof(struct usrp_rxq));
-					if (qp) {
-						/* Queue the received voice frame for processing */
-						memcpy(qp->buf, bufdata, sizeof(qp->buf));
-						insque((struct qelem *) qp, (struct qelem *) pvt->rxq.qe_back);
-					}
+				}
+			} else if (datalen == USRP_VOICE_FRAME_SIZE) {
+				qp = ast_malloc(sizeof(struct usrp_rxq));
+				if (qp) {
+					/* Queue the received voice frame for processing */
+					memcpy(qp->buf, bufdata, sizeof(qp->buf));
+					insque((struct qelem *) qp, (struct qelem *) pvt->rxq.qe_back);
 				}
 			}
 		}
