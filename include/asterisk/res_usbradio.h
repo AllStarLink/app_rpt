@@ -233,7 +233,7 @@ long ast_radio_lround(double x);
  */
 int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype);
 
-// Note: must add -lasound to end of linkage
+/* Note: must add -lasound to end of linkage */
 
 /*!
  * \brief Get mixer max value

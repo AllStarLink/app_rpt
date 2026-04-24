@@ -2288,63 +2288,6 @@ static int set_ctcss_mode_ic706(struct rpt *myrpt, char txplon, char rxplon)
 	return (civ_cmd(myrpt, cmdstr, 8));
 }
 
-#if 0
-/* Set transmit and receive ctcss tone frequencies */
-
-static int set_ctcss_freq_ic706(struct rpt *myrpt, char *txtone, char *rxtone)
-{
-	unsigned char cmdstr[10];
-	char hertz[MAXREMSTR], decimal[MAXREMSTR];
-	int h, d, rv;
-
-	memset(cmdstr, 0, 5);
-
-	ast_debug(7, "txtone=%s  rxtone=%s \n", txtone, rxtone);
-
-	if (split_ctcss_freq(hertz, decimal, txtone)) {
-		return -1;
-}
-
-	h = atoi(hertz);
-	d = atoi(decimal);
-
-	cmdstr[0] = cmdstr[1] = 0xfe;
-	cmdstr[2] = myrpt->p.civaddr;
-	cmdstr[3] = 0xe0;
-	cmdstr[4] = 0x1b;
-	cmdstr[5] = 0;
-	cmdstr[6] = ((h / 100) << 4) + (h % 100) / 10;
-	cmdstr[7] = ((h % 10) << 4) + (d % 10);
-	cmdstr[8] = 0xfd;
-
-	rv = civ_cmd(myrpt, cmdstr, 9);
-	if (rv) {
-	   return -1;
-    }
-
-	if (!rxtone) {
-		return 0;
-    }
-
-	if (split_ctcss_freq(hertz, decimal, rxtone)) {
-		return -1;
-    }
-
-	h = atoi(hertz);
-	d = atoi(decimal);
-
-	cmdstr[0] = cmdstr[1] = 0xfe;
-	cmdstr[2] = myrpt->p.civaddr;
-	cmdstr[3] = 0xe0;
-	cmdstr[4] = 0x1b;
-	cmdstr[5] = 1;
-	cmdstr[6] = ((h / 100) << 4) + (h % 100) / 10;
-	cmdstr[7] = ((h % 10) << 4) + (d % 10);
-	cmdstr[8] = 0xfd;
-	return (civ_cmd(myrpt, cmdstr, 9));
-}
-#endif
-
 static int vfo_ic706(struct rpt *myrpt)
 {
 	unsigned char cmdstr[10];
@@ -2512,12 +2455,6 @@ int setrem(struct rpt *myrpt)
 	char *modes[] = { "FM", "USB", "LSB", "AM" };
 	int i, res = -1;
 
-#if 0
-	printf("FREQ,%s,%s,%s,%s,%s,%s,%d,%d\n", myrpt->freq,
-		   modes[(int) myrpt->remmode],
-		   myrpt->txpl, myrpt->rxpl, offsets[(int) myrpt->offset], powerlevels[(int) myrpt->powerlevel], myrpt->txplon,
-		   myrpt->rxplon);
-#endif
 	donodelog_fmt(myrpt, "FREQ,%s,%s,%s,%s,%s,%s,%d,%d", myrpt->freq, modes[(int) myrpt->remmode], myrpt->txpl, myrpt->rxpl,
 		offsets[(int) myrpt->offset], powerlevels[(int) myrpt->powerlevel], myrpt->txplon, myrpt->rxplon);
 	if (myrpt->remote && myrpt->remote_webtransceiver) {

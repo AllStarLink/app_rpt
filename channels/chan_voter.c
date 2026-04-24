@@ -336,7 +336,6 @@ Use "core show help voter <command>"" to display usage.
  * full system deviation to all clients (with transmit enabled) in an instance.
  */
 static unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
-/* unsigned char mwp; */
 
 struct ast_flags zeroflag = { 0 };
 
@@ -5362,7 +5361,6 @@ static void *voter_reader(void *data)
 
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
 				strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
-				/* ast_debug(3, "PING (%s):   seqno: %u %s.%09d\n",client->name,seqno,timestr,ntohl(vph->curtime.vtime_nsec)); */
 
 				check_ping_done(client);
 				continue;

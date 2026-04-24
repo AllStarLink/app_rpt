@@ -318,7 +318,7 @@ static struct usrp_pvt *usrp_alloc(void *data)
 		ast_free(pvt);
 		return NULL;
 	}
-	// TODO: do we need locking for this?
+	/* TODO: do we need locking for this? */
 	for (o_slot = 0; o_slot < MAX_CHANS; o_slot++) {
 		if (!usrp_channels[o_slot]) {
 			break;
@@ -352,7 +352,7 @@ static int usrp_hangup(struct ast_channel *ast)
 	if (p->dsp) {
 		ast_dsp_free(p->dsp);
 	}
-	// TODO: do we need locking for this?
+	/* TODO: do we need locking for this? */
 	for (i = 0; i < MAX_CHANS; i++) {
 		if (usrp_channels[i] == p) {
 			usrp_channels[i] = NULL;
@@ -478,22 +478,6 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 		ast_log(LOG_WARNING, "Channel %s: Cannot recvfrom()", ast_channel_name(ast));
 		return NULL;
 	}
-#if 0
-	if (memcmp(&si_them.sin_addr, &pvt->si_other.sin_addr, sizeof(si_them.sin_addr))) {
-		ast_log(LOG_NOTICE, "Received packet from %s, expecting it from %s\n",
-				ast_inet_ntoa(si_them.sin_addr), ast_inet_ntoa(pvt->si_other.sin_addr));
-		pvt->fr.frametype = 0;
-		pvt->fr.subclass.integer = 0;
-		pvt->fr.datalen = 0;
-		pvt->fr.samples = 0;
-		pvt->fr.data.ptr = NULL;
-		pvt->fr.src = __PRETTY_FUNCTION__;
-		pvt->fr.offset = 0;
-		pvt->fr.mallocd = 0;
-		pvt->fr.delivery = ast_tv(0, 0);
-		return &pvt->fr;
-	}
-#endif
 	if (n < sizeof(struct _chan_usrp_bufhdr)) {
 		ast_log(LOG_NOTICE, "Channel %s: Received packet length %d too short\n", ast_channel_name(ast), n);
 	} else {
@@ -507,7 +491,7 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 				ast_log(LOG_NOTICE, "Channel %s: Possible data loss, expected seq %lu received %lu\n", ast_channel_name(ast), pvt->rxseq, seq);
 			}
 			pvt->rxseq = seq + 1;
-			// TODO: TEXT processing added N4IRR
+			/* TODO: TEXT processing added N4IRR */
 			if (datalen == USRP_VOICE_FRAME_SIZE) {
 				/* Pass received text messages to Asterisk */
 				if (bufhdrp->type == USRP_TYPE_TEXT) {
@@ -549,7 +533,7 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	int n;
 	char buf[USRP_VOICE_FRAME_SIZE + AST_FRIENDLY_OFFSET + SSO];
 
-	// buffer for constructing frame, plus two ptrs: hdr and data
+	/* buffer for constructing frame, plus two ptrs: hdr and data */
 	char sendbuf[sizeof(struct _chan_usrp_bufhdr) + USRP_VOICE_FRAME_SIZE];
 	struct _chan_usrp_bufhdr *bufhdrp = (struct _chan_usrp_bufhdr *) sendbuf;
 	char *bufdata = &sendbuf[sizeof(struct _chan_usrp_bufhdr)];

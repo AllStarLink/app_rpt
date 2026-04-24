@@ -256,9 +256,9 @@ static void *mdcgen_alloc(struct ast_channel *chan, void *params)
 		mdc_encoder_set_double_packet(ps->mdc, 0x35, 0x89, p->DestID, p->subcode >> 8, p->subcode & 0xff, p->UnitID >> 8, p->UnitID & 0xff);
 	} else if (p->type[0] == 'A') {
 		mdc_encoder_set_packet(ps->mdc, 0x23, 0, p->UnitID);
-	} else if (p->type[0] == 'K') { // kill a unit W9CR
+	} else if (p->type[0] == 'K') { /* kill a unit W9CR */
 		mdc_encoder_set_packet(ps->mdc, (unsigned char) 0x22b, 0x00, p->UnitID);
-	} else if (p->type[0] == 'U') { // UnKill a unit W9CR
+	} else if (p->type[0] == 'U') { /* UnKill a unit W9CR */
 		mdc_encoder_set_packet(ps->mdc, 0x2b, 0x0c, p->UnitID);
 	} else {
 		ast_log(LOG_ERROR, "Dont know MDC encode type '%s'\n", p->type);
