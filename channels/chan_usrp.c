@@ -493,14 +493,19 @@ static struct ast_frame *usrp_xread(struct ast_channel *ast)
 			pvt->rxseq = seq + 1;
 			/* Pass received text messages to Asterisk */
 			if (bufhdrp->type == USRP_TYPE_TEXT) {
-				struct ast_frame wf = {
-					.frametype = AST_FRAME_TEXT,
-					.data.ptr = bufdata,
-					.datalen = strlen(bufdata) + 1,
-					.src = __PRETTY_FUNCTION__,
-				};
+				if (datalen > 0) {
+					size_t textlen = strnlen(bufdata, datalen);
+					struct ast_frame wf = {
+						.frametype = AST_FRAME_TEXT,
+						.data.ptr = bufdata,
+						.datalen = textlen + 1,
+						.src = __PRETTY_FUNCTION__,
+					};
 
-				ast_queue_frame(ast, &wf);
+					/* Ensure NUL-termination within the receive buffer */
+					bufdata[textlen] = '\0';
+					ast_queue_frame(ast, &wf);
+				}
 			} else if (datalen == USRP_VOICE_FRAME_SIZE) {
 				qp = ast_malloc(sizeof(struct usrp_rxq));
 				if (qp) {
