@@ -441,26 +441,18 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 			d = od & 1;
 			outb(d, myrpt->p.iobase);
 			/* >= 15 us */
-			for (delayvar = 1; delayvar < 15000; delayvar++) {
-				;
-			}
+			usleep(15);
 			od >>= 1;
 			outb(d | 2, myrpt->p.iobase);
 			/* >= 30 us */
-			for (delayvar = 1; delayvar < 30000; delayvar++) {
-				;
-			}
+			usleep(30);
 			outb(d, myrpt->p.iobase);
 			/* >= 10 us */
-			for (delayvar = 1; delayvar < 10000; delayvar++) {
-				;
-			}
+			usleep(10);
 		}
 	}
 	/* >= 50 us */
-	for (delayvar = 1; delayvar < 50000; delayvar++) {
-		;
-	}
+	usleep(50);
 
 #endif /* __i386__ */
 #endif /* HAVE_SYS_IO */
