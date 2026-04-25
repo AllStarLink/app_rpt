@@ -1273,7 +1273,50 @@ static void *aprstt_sender_thread(void *data)
 	 * If it is [general], we already have the defaults
 	 * otherwise, we need to build the specific defaults
 	 * for this section.
+	 *
+	 * Resolve to ttlat/ttlon first
+	 * fallback is general_def_position if either
+	 * resolved coordinate is missing
 	 */
+#if 1
+	const char *resolved_lat = ttlat ? ttlat : deflat;
+	const char *resolved_lon = ttlon ? ttlon : deflon;
+
+	if (!strcmp(ctg, "general") || !resolved_lat || !resolved_lon) {
+		this_def_position = general_def_position;
+	} else {
+		this_def_position.is_valid = 1;
+		lat_decimal_to_DMS(strtof(resolved_lat, NULL), this_def_position.latitude, sizeof(this_def_position.latitude));
+		lon_decimal_to_DMS(strtof(resolved_lon, NULL), this_def_position.longitude, sizeof(this_def_position.longitude));
+		/* See if we have a default elevation */
+		if (defelev) {
+			float eleva, elevd;
+			eleva = strtof(defelev, NULL);
+			elevd = (eleva - floor(eleva)) * 10 + 0.5;
+			snprintf(this_def_position.elevation, sizeof(this_def_position.elevation), "%03d.%1d", (int) eleva, (int) elevd);
+		} else {
+			strcpy(this_def_position.elevation, "000.0");
+		}
+	}
+#else
+	if (!strcmp(ctg, "general") || !deflat || !deflon) {
+		this_def_position = general_def_position;
+	} else {
+		this_def_position.is_valid = 1;
+		lat_decimal_to_DMS(strtof(deflat, NULL), this_def_position.latitude, sizeof(this_def_position.latitude));
+		lon_decimal_to_DMS(strtof(deflon, NULL), this_def_position.longitude, sizeof(this_def_position.longitude));
+		/* See if we have a default elevation */
+		if (defelev) {
+			float eleva, elevd;
+			eleva = strtof(defelev, NULL);
+			elevd = (eleva - floor(eleva)) * 10 + 0.5;
+			snprintf(this_def_position.elevation, sizeof(this_def_position.elevation), "%03d.%1d", (int) eleva, (int) elevd);
+		} else {
+			strcpy(this_def_position.elevation, "000.0");
+		}
+	}
+#endif
+
 	if (!strcmp(ctg, "general") || !deflat || !deflon) {
 		this_def_position = general_def_position;
 	} else {
