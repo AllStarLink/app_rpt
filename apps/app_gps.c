@@ -1298,23 +1298,6 @@ static void *aprstt_sender_thread(void *data)
 		}
 	}
 
-	if (!strcmp(ctg, "general") || !deflat || !deflon) {
-		this_def_position = general_def_position;
-	} else {
-		this_def_position.is_valid = 1;
-		lat_decimal_to_DMS(strtof((ttlat ? ttlat : deflat), NULL), this_def_position.latitude, sizeof(this_def_position.latitude));
-		lon_decimal_to_DMS(strtof((ttlon ? ttlon : deflon), NULL), this_def_position.longitude, sizeof(this_def_position.longitude));
-		/* See if we have a default elevation */
-		if (defelev) {
-			float eleva, elevd;
-			eleva = strtof(defelev, NULL);
-			elevd = (eleva - floor(eleva)) * 10 + 0.5;
-			snprintf(this_def_position.elevation, sizeof(this_def_position.elevation), "%03d.%1d", (int) eleva, (int) elevd);
-		} else {
-			strcpy(this_def_position.elevation, "000.0");
-		}
-	}
-
 	/*
 	 * Open the common block file for this section.
 	 * We will store the callsign and last update time.
