@@ -7,7 +7,6 @@
 
 #include "asterisk.h"
 
-#include <stdio.h>
 #include <termios.h>
 
 #include "asterisk/utils.h"
