@@ -1127,7 +1127,7 @@ static void *aprs_sender_thread(void *data)
 	 * otherwise, we need to build the specific defaults
 	 * for this section.
 	 */
-	if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
+	if (!strcmp(ctg, "general") || !deflat || !deflon) {
 		this_def_position = general_def_position;
 	} else {
 		this_def_position.is_valid = 1;
@@ -1274,7 +1274,7 @@ static void *aprstt_sender_thread(void *data)
 	 * otherwise, we need to build the specific defaults
 	 * for this section.
 	 */
-	if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
+	if (!strcmp(ctg, "general") || !deflat || !deflon) {
 		this_def_position = general_def_position;
 	} else {
 		this_def_position.is_valid = 1;
