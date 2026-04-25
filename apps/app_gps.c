@@ -1127,7 +1127,7 @@ static void *aprs_sender_thread(void *data)
 	 * otherwise, we need to build the specific defaults
 	 * for this section.
 	 */
-	if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
+	if (!strcmp(ctg, "general") || !deflat || !deflon) {
 		this_def_position = general_def_position;
 	} else {
 		this_def_position.is_valid = 1;
@@ -1198,7 +1198,7 @@ static void *aprstt_sender_thread(void *data)
 	int i, j, ttlist, ttoffset, ttslot, myoffset;
 	char *ctg, c;
 	char *deflat, *deflon, *defelev, ttsplit, *ttlat, *ttlon;
-	const char *val;
+	const char *val, *resolved_lat, *resolved_lon;
 	char fname[200], lat[25], theircall[20], overlay;
 	FILE *mfp;
 	struct stat mystat;
@@ -1273,13 +1273,20 @@ static void *aprstt_sender_thread(void *data)
 	 * If it is [general], we already have the defaults
 	 * otherwise, we need to build the specific defaults
 	 * for this section.
+	 *
+	 * Resolve to ttlat/ttlon first
+	 * fallback is general_def_position if either
+	 * resolved coordinate is missing
 	 */
-	if (!strcmp(ctg, "general") || (!deflat && !deflon)) {
+	resolved_lat = ttlat ? ttlat : deflat;
+	resolved_lon = ttlon ? ttlon : deflon;
+
+	if (!strcmp(ctg, "general") || !resolved_lat || !resolved_lon) {
 		this_def_position = general_def_position;
 	} else {
 		this_def_position.is_valid = 1;
-		lat_decimal_to_DMS(strtof((ttlat ? ttlat : deflat), NULL), this_def_position.latitude, sizeof(this_def_position.latitude));
-		lon_decimal_to_DMS(strtof((ttlon ? ttlon : deflon), NULL), this_def_position.longitude, sizeof(this_def_position.longitude));
+		lat_decimal_to_DMS(strtof(resolved_lat, NULL), this_def_position.latitude, sizeof(this_def_position.latitude));
+		lon_decimal_to_DMS(strtof(resolved_lon, NULL), this_def_position.longitude, sizeof(this_def_position.longitude));
 		/* See if we have a default elevation */
 		if (defelev) {
 			float eleva, elevd;
