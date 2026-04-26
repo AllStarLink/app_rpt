@@ -9,6 +9,10 @@
 
 #include <termios.h>
 
+#ifdef HAVE_SYS_IO
+#include <sys/io.h>
+#endif
+
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
@@ -453,8 +457,7 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 	/* >= 50 us */
 	usleep(50);
 #else
-	;
-
+	ast_log(LOG_ERROR, "Parallel port I/O is not supported on this architecture\n");
 #endif /* HAVE_SYS_IO */
 }
 
