@@ -7,7 +7,21 @@
 
 #include "asterisk.h"
 
+#include <stdio.h>
+#include <ctype.h>
+#include <math.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <sys/time.h>
+#include <stdlib.h>
 #include <termios.h>
+#include <errno.h>
+#include <usb.h>
+#include <linux/ppdev.h>
+#include <linux/parport.h>
+#include <linux/version.h>
 
 #ifdef HAVE_SYS_IO
 #include <sys/io.h>
