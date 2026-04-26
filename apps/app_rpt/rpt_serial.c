@@ -9,6 +9,10 @@
 
 #include <termios.h>
 
+#ifdef HAVE_SYS_IO
+#include <sys/io.h>
+#endif
+
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
@@ -430,7 +434,6 @@ static int rbi_pltocode(char *str)
 static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 {
 #ifdef HAVE_SYS_IO
-#ifdef __i386__
 	int i, j;
 	unsigned char od, d;
 	static volatile long long delayvar;
@@ -441,28 +444,20 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 			d = od & 1;
 			outb(d, myrpt->p.iobase);
 			/* >= 15 us */
-			for (delayvar = 1; delayvar < 15000; delayvar++) {
-				;
-			}
+			usleep(15);
 			od >>= 1;
 			outb(d | 2, myrpt->p.iobase);
 			/* >= 30 us */
-			for (delayvar = 1; delayvar < 30000; delayvar++) {
-				;
-			}
+			usleep(30);
 			outb(d, myrpt->p.iobase);
 			/* >= 10 us */
-			for (delayvar = 1; delayvar < 10000; delayvar++) {
-				;
-			}
+			usleep(10);
 		}
 	}
 	/* >= 50 us */
-	for (delayvar = 1; delayvar < 50000; delayvar++) {
-		;
-	}
-
-#endif /* __i386__ */
+	usleep(50);
+#else
+	ast_log(LOG_ERROR, "Parallel port I/O is not supported on this architecture\n");
 #endif /* HAVE_SYS_IO */
 }
 
