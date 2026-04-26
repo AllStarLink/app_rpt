@@ -9,6 +9,10 @@
 
 #include <termios.h>
 
+#ifdef HAVE_SYS_IO
+#include <sys/io.h>
+#endif
+
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
