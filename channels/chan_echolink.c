@@ -1364,7 +1364,6 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
 	process_cmd(buf, sizeof(buf), "127.0.0.1", instp);
 	ast_mutex_unlock(&instp->lock);
-	p->owner = ast;
 	ast_setstate(ast, AST_STATE_RINGING);
 
 	return 0;
@@ -2427,6 +2426,7 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 			el_destroy(p);
 		}
 	}
+	p->owner = tmp;
 	return tmp;
 }
 
@@ -3300,15 +3300,18 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
-			pvt->owner = chan;
+
 			ast_queue_frame(chan, &fr);
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
 			time(&now);
+
 			if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 				instp->aprstime = now;
 			}
+
 			ast_mutex_unlock(&instp->lock);
+
 		} else {
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
@@ -3317,9 +3320,11 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ast_mutex_lock(&instp->lock);
 			strcpy(instp->lastcall, mynode->callsign);
 			time(&now);
+
 			if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 				instp->aprstime = now;
 			}
+
 			ast_mutex_unlock(&instp->lock);
 		}
 
