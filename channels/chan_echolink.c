@@ -462,20 +462,12 @@ struct el_instance {
 };
 
 /*!
- * \brief Echolink receive queue struct from asterisk.
- */
-struct el_rxqast {
-	struct el_rxqast *qe_forw;
-	struct el_rxqast *qe_back;
-	char buf[GSM_FRAME_SIZE];
-};
-
-/*!
  * \brief Echolink private information.
  * This is stored in the asterisk channel private technology for reference.
  */
 struct el_pvt {
 	struct el_instance *instp;
+	struct ast_channel *owner;
 	char app[16];
 	char stream[80];
 	char ip[EL_IP_SIZE];
@@ -487,7 +479,6 @@ struct el_pvt {
 	int rxkey;						/* Receive keyed timer */
 	int keepalive;
 	int txindex;
-	struct el_rxqast rxqast;
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
 	struct ast_trans_pvt *xpath;
@@ -1373,7 +1364,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 	do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
 	process_cmd(buf, sizeof(buf), "127.0.0.1", instp);
 	ast_mutex_unlock(&instp->lock);
-
+	p->owner = ast;
 	ast_setstate(ast, AST_STATE_RINGING);
 
 	return 0;
@@ -1385,16 +1376,6 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
  */
 static void el_destroy(struct el_pvt *pvt)
 {
-	struct el_rxqast *qpast;
-
-	ast_mutex_lock(&pvt->lock);
-	while (pvt->rxqast.qe_forw != &pvt->rxqast) {
-		qpast = pvt->rxqast.qe_forw;
-		remque(qpast);
-		ast_free(qpast);
-	}
-	ast_mutex_unlock(&pvt->lock);
-
 	if (pvt->dsp) {
 		ast_dsp_free(pvt->dsp);
 	}
@@ -1405,6 +1386,7 @@ static void el_destroy(struct el_pvt *pvt)
 		ast_free(pvt->linkstr);
 	}
 	pvt->linkstr = NULL;
+	pvt->owner = NULL;
 	ast_mutex_lock(&el_nodelist_lock);
 	twalk(el_node_list, send_info);
 	ast_mutex_unlock(&el_nodelist_lock);
@@ -1439,8 +1421,6 @@ static struct el_pvt *el_alloc(const char *data)
 	pvt = ast_calloc(1, sizeof(struct el_pvt));
 	if (pvt) {
 		snprintf(pvt->stream, sizeof(pvt->stream), "%s-%lu", data, instances[n]->seqno++);
-		pvt->rxqast.qe_forw = &pvt->rxqast;
-		pvt->rxqast.qe_back = &pvt->rxqast;
 
 		pvt->keepalive = KEEPALIVE_TIME;
 		pvt->instp = instances[n];
@@ -2248,10 +2228,6 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	struct sockaddr_in sin;
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
 	struct el_instance *instp = p->instp;
-	struct ast_frame fr, *f1, *f2;
-	struct el_rxqast *qpast;
-	int n, x;
-	char buf[GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET];
 
 	if (!p->last_firstheard && p->firstheard) {
 		struct ast_frame fr3 = {
@@ -2287,70 +2263,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 		instp->tx_ctrl_packets++;
 	}
-
-	/* Echolink to Asterisk */
-	if (p->rxqast.qe_forw != &p->rxqast) {
-		for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
-			n++;
-		}
-		if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
-			ast_mutex_lock(&p->lock);
-			while (p->rxqast.qe_forw != &p->rxqast) {
-				qpast = p->rxqast.qe_forw;
-				remque((struct qelem *) qpast);
-				ast_free(qpast);
-			}
-			ast_mutex_unlock(&p->lock);
-			if (p->rxkey) {
-				p->rxkey = 1;
-			}
-		} else {
-			if (!p->rxkey) {
-				struct ast_frame wf = {
-					.frametype = AST_FRAME_CONTROL,
-					.subclass.integer = AST_CONTROL_RADIO_KEY,
-					.src = __PRETTY_FUNCTION__,
-				};
-
-				ast_queue_frame(ast, &wf);
-			}
-			p->rxkey = MAX_RXKEY_TIME;
-			ast_mutex_lock(&p->lock);
-			qpast = p->rxqast.qe_forw;
-			remque((struct qelem *) qpast);
-			ast_mutex_unlock(&p->lock);
-			memcpy(buf + AST_FRIENDLY_OFFSET, qpast->buf, GSM_FRAME_SIZE);
-			ast_free(qpast);
-
-			memset(&fr, 0, sizeof(fr));
-			fr.datalen = GSM_FRAME_SIZE;
-			fr.samples = GSM_SAMPLES;
-			fr.frametype = AST_FRAME_VOICE;
-			fr.subclass.format = ast_format_gsm;
-			fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
-			fr.offset = AST_FRIENDLY_OFFSET;
-			fr.src = __PRETTY_FUNCTION__;
-
-			x = 0;
-			if (p->dsp) {
-				f2 = ast_translate(p->xpath, &fr, 0);
-				f1 = ast_dsp_process(NULL, p->dsp, f2);
-				if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
-					if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
-						if (f1->frametype == AST_FRAME_DTMF_END) {
-							ast_verb(4, "Echolink %s Got DTMF character %c from IP address %s.\n", p->stream, f1->subclass.integer, p->ip);
-						}
-						ast_queue_frame(ast, f1);
-						x = 1;
-					}
-				}
-				ast_frfree(f1);
-			}
-			if (!x) {
-				ast_queue_frame(ast, &fr);
-			}
-		}
-	}
+	ast_mutex_lock(&p->lock);
 	if (p->rxkey == 1) {
 		struct ast_frame wf = {
 			.frametype = AST_FRAME_CONTROL,
@@ -2363,7 +2276,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	if (p->rxkey) {
 		p->rxkey--;
 	}
-
+	ast_mutex_unlock(&p->lock);
 	/* Asterisk to Echolink */
 	if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
@@ -3387,6 +3300,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
+			pvt->owner = chan;
 			ast_queue_frame(chan, &fr);
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
@@ -3434,7 +3348,6 @@ static void *el_reader(void *data)
 	unsigned char bye[40];
 	struct sockaddr_in sin, sin1;
 	int i, j, x;
-	struct el_rxqast *qpast;
 	socklen_t fromlen;
 	ssize_t recvlen;
 	time_t now;
@@ -3738,9 +3651,13 @@ static void *el_reader(void *data)
 				} else {
 					ast_mutex_lock(&el_nodelist_lock);
 					found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
-					ast_mutex_unlock(&el_nodelist_lock);
 					if (found_key) {
+						struct el_pvt *pvt;
+						struct ast_channel *ast;
+
 						node = *found_key;
+						pvt = node->pvt;
+						ast = pvt->owner;
 						node->pvt->firstheard = 1;
 						node->countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
@@ -3784,17 +3701,55 @@ static void *el_reader(void *data)
 						if (recvlen == sizeof(struct gsmVoice_t)) {
 							if (gsmPacket->version == 3 && gsmPacket->payt == 3) {
 								/* break them up for Asterisk */
+								char inbuf[GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET];
 								for (i = 0; i < BLOCKING_FACTOR; i++) {
-									qpast = ast_malloc(sizeof(struct el_rxqast));
-									if (qpast) {
-										memcpy(qpast->buf, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
-										ast_mutex_lock(&node->pvt->lock);
-										insque((struct qelem *) qpast, (struct qelem *) node->pvt->rxqast.qe_back);
-										ast_mutex_unlock(&node->pvt->lock);
+									/* Echolink to Asterisk */
+									struct ast_frame *f1, *f2;
+									struct ast_frame fr = {
+										.datalen = GSM_FRAME_SIZE,
+										.samples = GSM_SAMPLES,
+										.frametype = AST_FRAME_VOICE,
+										.subclass.format = ast_format_gsm,
+										.data.ptr = inbuf + AST_FRIENDLY_OFFSET,
+										.offset = AST_FRIENDLY_OFFSET,
+										.src = __PRETTY_FUNCTION__,
+									};
+									ast_mutex_lock(&pvt->lock);
+									if (!pvt->rxkey) {
+										struct ast_frame wf = {
+											.frametype = AST_FRAME_CONTROL,
+											.subclass.integer = AST_CONTROL_RADIO_KEY,
+											.src = __PRETTY_FUNCTION__,
+										};
+										if (ast) {
+											ast_queue_frame(ast, &wf);
+										}
+									}
+									pvt->rxkey = MAX_RXKEY_TIME;
+									ast_mutex_unlock(&pvt->lock);
+									memcpy(inbuf + AST_FRIENDLY_OFFSET, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
+									x = 0;
+									if (pvt->dsp) {
+										f2 = ast_translate(pvt->xpath, &fr, 0);
+										f1 = ast_dsp_process(NULL, pvt->dsp, f2);
+										if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
+											if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
+												if (f1->frametype == AST_FRAME_DTMF_END) {
+													ast_verb(4, "Echolink %s Got DTMF character %c from IP address %s.\n",
+														pvt->stream, f1->subclass.integer, pvt->ip);
+												}
+												if (ast) {
+													ast_queue_frame(ast, f1);
+													x = 1;
+												}
+											}
+										}
+										ast_frfree(f2); /* We own f2, f1 could be f2 or a control frame that should not be freed */
+									}
+									if (!x && ast) {
+										ast_queue_frame(ast, &fr);
 									}
 								}
-							} else {
-								instp->rx_bad_packets++;
 							}
 						} else {
 							instp->rx_bad_packets++;
@@ -3802,6 +3757,7 @@ static void *el_reader(void *data)
 					} else {
 						instp->rx_bad_packets++;
 					}
+					ast_mutex_unlock(&el_nodelist_lock);
 				}
 			}
 		}
