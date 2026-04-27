@@ -2344,10 +2344,8 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 						x = 1;
 					}
 				}
-
 				ast_frfree(f1);
 			}
-
 			if (!x) {
 				ast_queue_frame(ast, &fr);
 			}

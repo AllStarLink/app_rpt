@@ -2487,26 +2487,15 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 				o->toneflag = 0;
 			} else {
 				if (o->toneflag) {
-					if (f1 != f) {
-						ast_frfree(f1);
-					}
+					ast_frfree(f1);
 					f1 = NULL;
 				} else {
 					o->tonetime = ast_radio_tvnow();
 					o->toneflag = 1;
 				}
 			}
-
 			if (f1) {
-				struct ast_frame *f2;
-
-				f2 = ast_frisolate(f1);
-
-				if (f1 != f) {
-					ast_frfree(f1);
-				}
-
-				return f2;
+				return f1;
 			}
 		}
 	}
