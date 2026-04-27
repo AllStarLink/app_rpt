@@ -3322,15 +3322,16 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			}
 			ast_mutex_unlock(&instp->lock);
 		}
-	} else {
-		ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n", el_node_key->call, el_node_key->ip,
-			el_node_key->name);
-		ast_free(el_node_key);
+
 		ast_mutex_unlock(&el_db_lock);
-		return -1;
+		return 0;
 	}
+
+	ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n", el_node_key->call, el_node_key->ip,
+		el_node_key->name);
+	ast_free(el_node_key);
 	ast_mutex_unlock(&el_db_lock);
-	return 0;
+	return -1;
 }
 
 /*!
