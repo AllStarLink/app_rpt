@@ -2897,6 +2897,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			ast_queue_frame(p->owner, f2);
 			x = 1;
 		}
+
+		if (f2 != f3) {
+			ast_frfree(f2);
+		}
+
 		ast_frfree(f3);
 	}
 	if (!x) {
