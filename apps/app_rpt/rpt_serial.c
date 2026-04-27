@@ -9,9 +9,7 @@
 
 #include <termios.h>
 
-#ifdef HAVE_SYS_IO
 #include <sys/io.h>
-#endif
 
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
@@ -436,7 +434,6 @@ static void rbi_out_parallel(struct rpt *myrpt, unsigned char *data)
 #ifdef HAVE_SYS_IO
 	int i, j;
 	unsigned char od, d;
-	static volatile long long delayvar;
 
 	for (i = 0; i < 5; i++) {
 		od = *data++;
