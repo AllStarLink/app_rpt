@@ -2843,7 +2843,9 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				ast_queue_frame(p->owner, f2);
 				gettimeofday(&p->lastrxtime, NULL);
 			}
-			ast_frfree(f2);
+			if (f2 != &fr) {
+				ast_frfree(f2);
+			}
 		}
 		memset(silbuf, 0, sizeof(silbuf));
 		memset(&fr, 0, sizeof(fr));
@@ -2895,7 +2897,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			ast_queue_frame(p->owner, f2);
 			x = 1;
 		}
-		ast_frfree(f2);
+		ast_frfree(f3);
 	}
 	if (!x) {
 		ast_queue_frame(p->owner, f1);

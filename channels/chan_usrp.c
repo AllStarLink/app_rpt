@@ -622,7 +622,10 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 					}
 					ast_queue_frame(ast, f);
 				}
-				ast_frfree(f);
+
+				if (f != &fr) {
+					ast_frfree(f);
+				}
 			}
 		}
 	}

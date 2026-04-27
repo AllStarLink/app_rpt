@@ -3846,11 +3846,16 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			} else {
 #ifdef NATIVE_DSP
 				struct ast_frame *frame = NULL;
-
+				struct ast_frame *f_dup = ast_frdup(f);
 				/* leave f alone */
-				frame = ast_dsp_process(myrpt->rxchannel, myrpt->dsp, ast_frdup(f));
+				frame = ast_dsp_process(myrpt->rxchannel, myrpt->dsp, f_dup);
 				i = (frame->frametype == AST_FRAME_DTMF && frame->subclass.integer == 'q') ? 1 : 0; /* q indicates frequency hit */
-				ast_frfree(frame);
+
+				if (f_dup != frame) {
+					ast_frfree(frame);
+				}
+
+				ast_frfree(f_dup);
 #else
 				i = tone_detect(&myrpt->burst_tone_state, f->data.ptr, f->samples);
 #endif
