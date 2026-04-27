@@ -2262,20 +2262,6 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 		instp->tx_ctrl_packets++;
 	}
-	ast_mutex_lock(&p->lock);
-	if (p->rxkey == 1) {
-		struct ast_frame wf = {
-			.frametype = AST_FRAME_CONTROL,
-			.subclass.integer = AST_CONTROL_RADIO_UNKEY,
-			.src = __PRETTY_FUNCTION__,
-		};
-
-		ast_queue_frame(ast, &wf);
-	}
-	if (p->rxkey) {
-		p->rxkey--;
-	}
-	ast_mutex_unlock(&p->lock);
 	/* Asterisk to Echolink */
 	if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
@@ -3669,10 +3655,27 @@ static void *el_reader(void *data)
 						node->rx_audio_packets++;
 						/* compute inter-arrival jitter */
 						time_difference = ast_tvdiff_ms(current_packet_time, node->last_packet_time);
+
 						if (time_difference < 2000) {
 							node->jitter = (time_difference + node->jitter) / 2;
 						}
+
 						node->last_packet_time = current_packet_time;
+
+						if (pvt->rxkey == 1) {
+							struct ast_frame wf = {
+								.frametype = AST_FRAME_CONTROL,
+								.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+								.src = __PRETTY_FUNCTION__,
+							};
+
+							ast_queue_frame(ast, &wf);
+						}
+
+						if (pvt->rxkey) {
+							pvt->rxkey--;
+						}
+
 						/*
 						 * see if we have a new talker
 						 */
@@ -3720,38 +3723,44 @@ static void *el_reader(void *data)
 										.offset = AST_FRIENDLY_OFFSET,
 										.src = __PRETTY_FUNCTION__,
 									};
-									ast_mutex_lock(&pvt->lock);
+
 									if (!pvt->rxkey) {
 										struct ast_frame wf = {
 											.frametype = AST_FRAME_CONTROL,
 											.subclass.integer = AST_CONTROL_RADIO_KEY,
 											.src = __PRETTY_FUNCTION__,
 										};
+
 										if (ast) {
 											ast_queue_frame(ast, &wf);
 										}
 									}
+
 									pvt->rxkey = MAX_RXKEY_TIME;
-									ast_mutex_unlock(&pvt->lock);
 									memcpy(inbuf + AST_FRIENDLY_OFFSET, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
 									x = 0;
+
 									if (pvt->dsp) {
 										f2 = ast_translate(pvt->xpath, &fr, 0);
 										f1 = ast_dsp_process(NULL, pvt->dsp, f2);
+
 										if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
 											if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
 												if (f1->frametype == AST_FRAME_DTMF_END) {
 													ast_verb(4, "Echolink %s Got DTMF character %c from IP address %s.\n",
 														pvt->stream, f1->subclass.integer, pvt->ip);
 												}
+
 												if (ast) {
 													ast_queue_frame(ast, f1);
 													x = 1;
 												}
 											}
 										}
+
 										ast_frfree(f2); /* We own f2, f1 could be f2 or a control frame that should not be freed */
 									}
+
 									if (!x && ast) {
 										ast_queue_frame(ast, &fr);
 									}
@@ -3760,9 +3769,11 @@ static void *el_reader(void *data)
 						} else {
 							instp->rx_bad_packets++;
 						}
+
 					} else {
 						instp->rx_bad_packets++;
 					}
+
 					ast_mutex_unlock(&el_nodelist_lock);
 				}
 			}
