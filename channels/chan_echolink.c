@@ -186,7 +186,7 @@ do not use 127.0.0.1
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
 
-#define MAX_RXKEY_TIME 4
+#define MAX_RXKEY_TIME 80	   /* ms */
 #define KEEPALIVE_TIME 50 * 10 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
 #define AUTH_RETRY_MS 5000
 #define AUTH_ABANDONED_MS 15000
@@ -1873,6 +1873,37 @@ static void lookup_node_nodenum(const void *nodep, const VISIT which, void *clos
 }
 
 /*!
+ * \brief Update timers for all nodes
+ * \param nodep		Pointer to el_node struct.
+ * \param which		Enum for VISIT used by twalk.
+ * \param time		Points to decriment time.
+ */
+static void process_timers(const void *nodep, const VISIT which, void *time)
+{
+	const struct el_node *node;
+	struct el_pvt *pvt;
+	int *decr_time = time;
+
+	if ((which == leaf) || (which == postorder)) {
+		node = *(struct el_node **) nodep;
+		pvt = node->pvt;
+		if (pvt->rxkey) {
+			pvt->rxkey -= *decr_time;
+			if (pvt->rxkey <= 0) {
+				struct ast_frame wf = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
+					.src = __PRETTY_FUNCTION__,
+				};
+
+				ast_queue_frame(pvt->owner, &wf);
+				pvt->rxkey = 0;
+			}
+		}
+	}
+}
+
+/*!
  * \brief Lookup node number by callsign for a connected node.
  * \param nodep		Pointer to el_node struct.
  * \param which		Enum for VISIT used by twalk.
@@ -3473,6 +3504,9 @@ static void *el_reader(void *data)
 			run_forever = 0;
 			break;
 		}
+
+		twalk_r(el_node_list, process_timers, &i);
+
 		ast_mutex_lock(&instp->lock);
 		/*
 		 * process the control socket
@@ -3661,20 +3695,6 @@ static void *el_reader(void *data)
 						}
 
 						node->last_packet_time = current_packet_time;
-
-						if (pvt->rxkey == 1) {
-							struct ast_frame wf = {
-								.frametype = AST_FRAME_CONTROL,
-								.subclass.integer = AST_CONTROL_RADIO_UNKEY,
-								.src = __PRETTY_FUNCTION__,
-							};
-
-							ast_queue_frame(ast, &wf);
-						}
-
-						if (pvt->rxkey) {
-							pvt->rxkey--;
-						}
 
 						/*
 						 * see if we have a new talker
