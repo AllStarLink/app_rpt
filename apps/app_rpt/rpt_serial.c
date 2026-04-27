@@ -9,8 +9,6 @@
 
 #include <termios.h>
 
-#include <sys/io.h>
-
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
 #include "asterisk/file.h"
@@ -18,6 +16,11 @@
 #include "asterisk/channel.h"
 
 #include "app_rpt.h"
+
+#ifdef HAVE_SYS_IO
+#include <sys/io.h>
+#endif
+
 #include "rpt_serial.h"
 #include "rpt_channel.h" /* use send_usb_txt */
 #include "rpt_xcat.h"
