@@ -617,7 +617,6 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 						if ((f->subclass.integer == 'm') || (f->subclass.integer == 'u')) {
 							f->frametype = AST_FRAME_NULL;
 							f->subclass.integer = 0;
-							ast_queue_frame(ast, f);
 						}
 						if (f->frametype == AST_FRAME_DTMF_END) {
 							ast_log(LOG_NOTICE, "Channel %s: Got DTMF char %c\n", ast_channel_name(ast), f->subclass.integer);

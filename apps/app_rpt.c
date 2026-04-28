@@ -3848,6 +3848,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				struct ast_frame *frame = NULL;
 				struct ast_frame *f_dup;
 
+				i = 0;
 				/* leave f alone */
 				f_dup = ast_frdup(f);
 				if (f_dup) {
