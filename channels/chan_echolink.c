@@ -187,7 +187,7 @@ do not use 127.0.0.1
 #include "asterisk/format_cache.h"
 
 #define MAX_RXKEY_TIME 320	   /* ms */
-#define KEEPALIVE_TIME 50 * 10 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
+#define KEEPALIVE_TIME 10000   /* ms = 10 seconds heartbeat */
 #define AUTH_RETRY_MS 5000
 #define AUTH_ABANDONED_MS 15000
 #define BLOCKING_FACTOR 4
@@ -2309,16 +2309,13 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 
 /*!
  * \brief Asterisk write function.
- * This routine handles echolink to asterisk and asterisk to echolink.
+ * This routine handles asterisk to echolink.
  * \param ast			Pointer to Asterisk channel.
  * \param frame			Pointer to Asterisk frame to process.
  * \retval 0			Successful.
  */
 static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 {
-	int bye_length;
-	unsigned char bye[50];
-	unsigned short i;
 	struct sockaddr_in sin;
 	struct el_pvt *p = ast_channel_tech_pvt(ast);
 	struct el_instance *instp = p->instp;
@@ -2333,9 +2330,11 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		ast_queue_frame(ast, &fr3);
 		p->last_firstheard = 1;
 	}
+
 	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
 	}
+
 	if (p->hangup) {
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
@@ -2357,6 +2356,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 		instp->tx_ctrl_packets++;
 	}
+
 	/* Asterisk to Echolink */
 	if (ast_format_cap_iscompatible_format(ast_channel_nativeformats(ast), frame->subclass.format) == AST_FORMAT_CMP_NOT_EQUAL) {
 		struct ast_str *cap_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
@@ -2365,9 +2365,11 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			ast_format_get_name(ast_channel_readformat(ast)), ast_format_get_name(ast_channel_writeformat(ast)));
 		return 0;
 	}
+
 	if (p->txkey || p->txindex) {
 		memcpy(instp->audio_all.data + (GSM_FRAME_SIZE * p->txindex++), frame->data.ptr, GSM_FRAME_SIZE);
 	}
+
 	if (p->txindex >= BLOCKING_FACTOR) {
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->el_node_test.ip, p->ip);
@@ -2378,34 +2380,6 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		p->txindex = 0;
 	}
 
-	if (p->keepalive--) {
-		return 0;
-	}
-	p->keepalive = KEEPALIVE_TIME;
-
-	/* Echolink: send heartbeats and drop dead stations */
-	ast_mutex_lock(&instp->lock);
-	instp->el_node_test.ip[0] = '\0';
-	ast_mutex_lock(&el_nodelist_lock);
-	twalk(el_node_list, send_heartbeat);
-	ast_mutex_unlock(&el_nodelist_lock);
-	if (instp->el_node_test.ip[0] != '\0') {
-		if (find_delete(&instp->el_node_test)) {
-			bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
-			memset(&sin, 0, sizeof(sin));
-			sin.sin_family = AF_INET;
-			sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
-			sin.sin_port = htons(instp->ctrl_port);
-			/* send 20 bye packets to insure that they receive this disconnect */
-			for (i = 0; i < 20; i++) {
-				sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
-				instp->tx_ctrl_packets++;
-			}
-			ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
-		}
-		instp->el_node_test.ip[0] = '\0';
-	}
-	ast_mutex_unlock(&instp->lock);
 	return 0;
 }
 
@@ -2435,9 +2409,11 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 	ast_channel_set_rawwriteformat(tmp, ast_format_gsm);
 	ast_channel_set_writeformat(tmp, ast_format_gsm);
 	ast_channel_set_readformat(tmp, ast_format_gsm);
+
 	if (state == AST_STATE_RING) {
 		ast_channel_rings_set(tmp, 1);
 	}
+
 	ast_channel_tech_pvt_set(tmp, pvt);
 	ast_channel_context_set(tmp, pvt->instp->context);
 	ast_channel_exten_set(tmp, pvt->instp->astnode);
@@ -2450,14 +2426,17 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 		snprintf(tmpstr, sizeof(tmpstr), "3%06u", nodenum);
 		ast_set_callerid(tmp, tmpstr, NULL, NULL);
 	}
+
 	pvt->u = ast_module_user_add(tmp);
 	pvt->nodenum = nodenum;
+
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(tmp)) {
 			ast_log(LOG_WARNING, "Unable to start PBX on %s.\n", ast_channel_name(tmp));
 			ast_hangup(tmp);
 		}
 	}
+
 	pvt->owner = tmp;
 	return tmp;
 }
@@ -2505,7 +2484,6 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	}
 
 	p = el_alloc(str);
-
 	if (p) {
 		tmp = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
 		if (!tmp) {
@@ -2534,7 +2512,9 @@ static int el_do_dbdump(int fd, int argc, const char *const *argv)
 	if (argc > 2) {
 		c = tolower(*argv[2]);
 	}
+
 	ast_mutex_lock(&el_db_lock);
+
 	if (c == 'i') {
 		twalk_r(el_db_ipaddr, print_nodes, &fd);
 	} else if (c == 'c') {
@@ -2542,6 +2522,7 @@ static int el_do_dbdump(int fd, int argc, const char *const *argv)
 	} else {
 		twalk_r(el_db_nodenum, print_nodes, &fd);
 	}
+
 	ast_mutex_unlock(&el_db_lock);
 	return RESULT_SUCCESS;
 }
@@ -2566,6 +2547,7 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 
 	c = tolower(*argv[2]);
 	ast_mutex_lock(&el_db_lock);
+
 	if (c == 'i') {
 		/* Lookup node data by IP address */
 		mynode = el_db_find_ipaddr(argv[3]);
@@ -2580,6 +2562,7 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 			mynode = &found_node;
 		}
 	}
+
 	/* Report failure to find node */
 	if (!mynode) {
 		ast_cli(fd, "Error: Entry for %s not found!\n", argv[3]);
@@ -2680,6 +2663,7 @@ static char *handle_cli_dbdump(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	case CLI_GENERATE:
 		return NULL;
 	}
+
 	return res2cli(el_do_dbdump(a->fd, a->argc, a->argv));
 }
 
@@ -2700,6 +2684,7 @@ static char *handle_cli_dbget(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	case CLI_GENERATE:
 		return NULL;
 	}
+
 	return res2cli(el_do_dbget(a->fd, a->argc, a->argv));
 }
 
@@ -2720,6 +2705,7 @@ static char *handle_cli_show_nodes(struct ast_cli_entry *e, int cmd, struct ast_
 	case CLI_GENERATE:
 		return NULL;
 	}
+
 	return res2cli(el_do_show_nodes(a->fd, a->argc, a->argv));
 }
 
@@ -2740,6 +2726,7 @@ static char *handle_cli_show_stats(struct ast_cli_entry *e, int cmd, struct ast_
 	case CLI_GENERATE:
 		return NULL;
 	}
+
 	return res2cli(el_do_show_stats(a->fd, a->argc, a->argv));
 }
 
@@ -2775,12 +2762,15 @@ static int writen(int fd, const char *buffer, int nbytes)
 
 	while (nleft > 0) {
 		nwritten = write(fd, local_ptr, nleft);
+
 		if (nwritten < 0) {
 			return nwritten;
 		}
+
 		nleft -= nwritten;
 		local_ptr += nwritten;
 	}
+
 	return (nbytes - nleft);
 }
 
@@ -2889,12 +2879,13 @@ static void el_db_delete_all_nodes(void)
 	struct eldb *node;
 
 	ast_mutex_lock(&el_db_lock);
+
 	while (el_db_callsign) {
 		node = *(struct eldb **) el_db_callsign;
 		el_db_delete_entries(node);
 	}
-	ast_mutex_unlock(&el_db_lock);
 
+	ast_mutex_unlock(&el_db_lock);
 	ast_assert((!el_db_nodenum && !el_db_callsign && !el_db_ipaddr));
 }
 
@@ -2908,11 +2899,13 @@ static void el_db_delete_call(const char *call)
 
 	ast_debug(5, "Directory - Attempt to delete: Call=%s.\n", call);
 	ast_mutex_lock(&el_db_lock);
+
 	mynode = el_db_find_callsign(call);
 	if (mynode) {
 		ast_debug(5, "Directory - Deleted: Node=%s, Call=%s, IP=%s.\n", mynode->nodenum, mynode->callsign, mynode->ipaddr);
 		el_db_delete_entries(mynode);
 	}
+
 	ast_mutex_unlock(&el_db_lock);
 }
 
@@ -2951,19 +2944,24 @@ static int el_net_read(int sock, unsigned char *buf1, int buf1len, int compresse
 		z->next_out = buf1;
 		z->avail_out = buf1len;
 		r = inflate(z, Z_NO_FLUSH);
+
 		if ((r != Z_OK) && (r != Z_STREAM_END)) {
 			if (z->msg) {
 				ast_log(LOG_ERROR, "Unable to inflate (Zlib): %s.\n", z->msg);
 			} else {
 				ast_log(LOG_ERROR, "Unable to inflate (Zlib).\n");
 			}
+
 			return -1;
 		}
+
 		r = buf1len - z->avail_out;
+
 		if ((!n) || r) {
 			break;
 		}
 	}
+
 	return (buf1len - z->avail_out);
 }
 
@@ -2987,23 +2985,29 @@ static int el_net_get_line(int s, char *str, int max, int compressed, struct z_s
 		if (el_net_get_index >= el_net_get_nread) {
 			el_net_get_index = 0;
 			el_net_get_nread = el_net_read(s, buf, sizeof(buf), compressed, z);
+
 			if ((el_net_get_nread) < 1) {
 				return el_net_get_nread;
 			}
 		}
+
 		if (buf[el_net_get_index] > 126) {
 			buf[el_net_get_index] = ' ';
 		}
+
 		c = buf[el_net_get_index++];
 		str[nstr++] = c & 0x7f;
 		str[nstr] = 0;
+
 		if (c < ' ') {
 			break;
 		}
+
 		if (nstr >= max) {
 			break;
 		}
 	}
+
 	return nstr;
 }
 
@@ -3030,45 +3034,57 @@ static int do_el_directory(const char *hostname)
 	el_net_get_index = 0;
 	el_net_get_nread = 0;
 	memset(&z, 0, sizeof(z));
+
 	if (inflateInit(&z) != Z_OK) {
 		if (z.msg) {
 			ast_log(LOG_ERROR, "Unable to initialize Zlib: %s.\n", z.msg);
 		} else {
 			ast_log(LOG_ERROR, "Unable to initialize Zlib.\n");
 		}
+
 		return -1;
 	}
+
 	host = ast_gethostbyname(hostname, &ah);
+
 	if (!host) {
 		ast_log(LOG_ERROR, "Unable to resolve name for directory server %s.\n", hostname);
 		inflateEnd(&z);
 		return -1;
 	}
+
 	memset(&dirserver, 0, sizeof(dirserver)); /* Clear struct */
 	dirserver.sin_family = AF_INET;			  /* Internet/IP */
 	dirserver.sin_addr.s_addr = *(unsigned long *) host->h_addr_list[0];
 	dirserver.sin_port = htons(EL_DIRECTORY_PORT); /* server port */
+
 	sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
 		ast_log(LOG_ERROR, "Unable to obtain a socket for directory server %s.\n", hostname);
 		inflateEnd(&z);
 		return -1;
 	}
+
 	/* Establish connection */
 	if (connect(sock, (struct sockaddr *) &dirserver, sizeof(dirserver)) < 0) {
 		ast_log(LOG_ERROR, "Unable to connect to directory server %s.\n", hostname);
 		goto cleanup;
 	}
+
 	snprintf(str, sizeof(str), "F%s\r", snapshot_id);
+
 	if (send(sock, str, strlen(str), 0) < 0) {
 		ast_log(LOG_ERROR, "Unable to send to directory server %s.\n", hostname);
 		goto cleanup;
 	}
+
 	ast_debug(4, "Sending: %s to %s.\n", str, hostname);
+
 	if (recv(sock, str, 4, 0) != 4) {
 		ast_log(LOG_ERROR, "Error in directory download (header) on %s.\n", hostname);
 		goto cleanup;
 	}
+
 	dir_compressed = 1;
 	dir_partial = 0;
 	/* Determine if the response is full, partial or the stream is compressed.
@@ -3083,6 +3099,7 @@ static int do_el_directory(const char *hostname)
 		dir_partial = 1;
 		dir_compressed = 0;
 	}
+
 	if (dir_compressed) {
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download (header) on %s.\n", hostname);
@@ -3097,22 +3114,26 @@ static int do_el_directory(const char *hostname)
 			goto cleanup;
 		}
 	}
+
 	/* read the header line with the line count and possibly the snapshot id */
 	if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 		ast_log(LOG_ERROR, "Error in directory download (header) on %s.\n", hostname);
 		goto cleanup;
 	}
+
 	if (dir_compressed) {
 		if (sscanf(str, N_FMT(d) ":" S_FMT(SNAPSHOT_SZ), &rep_lines, snapshot_id) < 2) {
 			ast_log(LOG_ERROR, "Error in parsing header on %s.\n", hostname);
 			goto cleanup;
 		}
+
 	} else {
 		if (sscanf(str, N_FMT(d), &rep_lines) < 1) {
 			ast_log(LOG_ERROR, "Error in parsing header on %s.\n", hostname);
 			goto cleanup;
 		}
 	}
+
 	delmode = 0;
 	/* if the returned directory is not partial - we should
 	 * delete all existing directory messages
@@ -3131,77 +3152,99 @@ static int do_el_directory(const char *hostname)
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			break;
 		}
+
 		if (*str <= ' ') {
 			break;
 		}
+
 		/* see if we are at the end of the current list */
 		if (!strncmp(str, "+++", 3)) {
 			if (delmode) {
 				break;
 			}
+
 			if (!dir_partial) {
 				break;
 			}
+
 			delmode = 1;
 			continue;
 		}
+
 		str_len = strlen(str);
+
 		if (str[str_len - 1] == '\n') {
 			str[str_len - 1] = 0;
 		}
+
 		ast_copy_string(call, str, sizeof(call));
+
 		if (dir_partial) {
 			el_db_delete_call(call);
 			if (delmode) {
 				continue;
 			}
 		}
+
 		/* read the location / status line (we will not use this line) */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s.\n", hostname);
 			el_db_delete_all_nodes();
 			goto cleanup;
 		}
+
 		/* read the node number line */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s.\n", hostname);
 			el_db_delete_all_nodes();
 			goto cleanup;
 		}
+
 		str_len = strlen(str);
+
 		if (str[str_len - 1] == '\n') {
 			str[str_len - 1] = 0;
 		}
+
 		ast_copy_string(nodenum, str, sizeof(nodenum));
+
 		/* read the ip address line */
 		if (el_net_get_line(sock, str, sizeof(str) - 1, dir_compressed, &z) < 1) {
 			ast_log(LOG_ERROR, "Error in directory download on %s.\n", hostname);
 			el_db_delete_all_nodes();
 			goto cleanup;
 		}
+
 		str_len = strlen(str);
+
 		if (str[str_len - 1] == '\n') {
 			str[str_len - 1] = 0;
 		}
+
 		ast_copy_string(ipaddr, str, sizeof(ipaddr));
+
 		/* every 10 records, sleep for a short time */
 		if (!(n % 10)) {
 			usleep(2000); /* To get to dry land */
 		}
+
 		/* add this entry to our table */
 		ast_mutex_lock(&el_db_lock);
 		el_db_put(nodenum, ipaddr, call);
 		ast_mutex_unlock(&el_db_lock);
 		n++;
 	}
+
 	close(sock);
 	inflateEnd(&z);
 	pp = (dir_partial) ? "partial" : "full";
 	cc = (dir_compressed) ? "compressed" : "un-compressed";
 	ast_verb(4, "Directory completed downloading(%s,%s), %d records.\n", pp, cc, n);
+
 	if (dir_compressed) {
 		ast_debug(4, "Got snapshot_id: %s\n", snapshot_id);
 	}
+
 	return dir_compressed;
 
 cleanup:
@@ -3232,24 +3275,31 @@ static void *el_directory(void *data)
 	time_t then, now;
 	curdir = 0;
 	time(&then);
+
 	while (run_forever) {
 		time(&now);
 		el_sleeptime -= (now - then);
 		then = now;
+
 		if (el_sleeptime < 0) {
 			el_sleeptime = 0;
 		}
+
 		if (el_sleeptime) {
 			usleep(200000);
 			continue;
 		}
+
 		if (!instances[0]->elservers[curdir][0]) {
 			if (++curdir >= EL_MAX_SERVERS) {
 				curdir = 0;
 			}
+
 			continue;
 		}
+
 		ast_debug(2, "Trying to do directory download Echolink server %s.\n", instances[0]->elservers[curdir]);
+
 		rc = do_el_directory(instances[0]->elservers[curdir]);
 		if (rc < 0) {
 			if (++curdir >= EL_MAX_SERVERS) {
@@ -3258,12 +3308,14 @@ static void *el_directory(void *data)
 			el_sleeptime = 20;
 			continue;
 		}
+
 		if (rc == 1) {
 			el_sleeptime = 240;
 		} else if (rc == 0) {
 			el_sleeptime = 1800;
 		}
 	}
+
 	ast_debug(1, "Echolink directory thread exited.\n");
 	return NULL;
 }
@@ -3284,6 +3336,7 @@ static void *el_register(void *data)
 
 	time(&then);
 	ast_debug(1, "Echolink registration thread started on %s.\n", instp->name);
+
 	while (run_forever) {
 		time(&now);
 		el_login_sleeptime -= (now - then);
@@ -3291,10 +3344,12 @@ static void *el_register(void *data)
 		if (el_login_sleeptime < 0) {
 			el_login_sleeptime = 0;
 		}
+
 		if (el_login_sleeptime) {
 			usleep(200000);
 			continue;
 		}
+
 		if (i >= EL_MAX_SERVERS) {
 			i = 0;
 		}
@@ -3303,6 +3358,7 @@ static void *el_register(void *data)
 			if (instp->elservers[i][0] != '\0') {
 				break;
 			}
+
 			i++;
 		} while (i < EL_MAX_SERVERS);
 
@@ -3310,12 +3366,14 @@ static void *el_register(void *data)
 			ast_debug(2, "Trying to register with Echolink server %s.\n", instp->elservers[i]);
 			rc = sendcmd(instp->elservers[i++], instp);
 		}
+
 		if (rc == 0) {
 			el_login_sleeptime = 360;
 		} else {
 			el_login_sleeptime = 20;
 		}
 	}
+
 	/* Send a de-register message, but what is the point, Echolink deactivates this node within 6 minutes */
 	ast_debug(1, "Echolink registration thread exited.\n");
 	return NULL;
@@ -3340,14 +3398,17 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	time_t now;
 
 	el_node_key = ast_calloc(1, sizeof(struct el_node));
+
 	if (!el_node_key) {
 		return -1;
 	}
+
 	ast_copy_string(el_node_key->call, call, EL_CALL_SIZE);
 	ast_copy_string(el_node_key->ip, instp->el_node_test.ip, EL_IP_SIZE);
 	ast_copy_string(el_node_key->name, name, EL_NAME_SIZE);
 
 	ast_mutex_lock(&el_db_lock);
+
 	mynode = el_db_find_ipaddr(el_node_key->ip);
 	if (!mynode) {
 		ast_log(LOG_ERROR, "Cannot find database entry for IP address %s, Callsign %s.\n", el_node_key->ip, call);
@@ -3355,14 +3416,17 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 		ast_mutex_unlock(&el_db_lock);
 		return 1;
 	}
+
 	ast_copy_string(nodestr, mynode->nodenum, sizeof(nodestr));
 	el_node_key->nodenum = atoi(nodestr);
 	el_node_key->countdown = instp->rtcptimeout;
 	el_node_key->seqnum = 1;
 	el_node_key->instp = instp;
+
 	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
 			el_node_key->nodenum, el_node_key->name);
+
 		if (pvt == NULL) { /* if a new inbound call */
 			struct ast_frame fr = {
 				.frametype = AST_FRAME_CONTROL,
@@ -3377,9 +3441,11 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
+
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
 			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
+
 			if (!chan) {
 				el_destroy(el_node_key->pvt);
 				ast_free(el_node_key);
@@ -3457,6 +3523,7 @@ static void *el_reader(void *data)
 	uint32_t time_difference;
 	struct timeval start_time;
 	int elap;
+	int heartbeat_timer;
 
 	time(&instp->starttime);
 	instp->aprstime = instp->starttime + EL_APRS_START_DELAY;
@@ -3470,12 +3537,15 @@ static void *el_reader(void *data)
 	fds[1].events = POLLIN;
 
 	start_time = tvnow();
+	heartbeat_timer = KEEPALIVE_TIME;
 
 	while (run_forever) {
 		/* Send APRS information every EL_APRS_INTERVAL */
 		time(&now);
+
 		if (instp->aprstime <= now) {
 			instp->aprstime = now + EL_APRS_INTERVAL;
+
 			if (sin_aprs.sin_port) { /* a zero port indicates that we never resolved the host name */
 				char aprsstr[512], aprscall[256], gps_data[100], latc, lonc;
 				unsigned char sdes_packet[256];
@@ -3492,6 +3562,7 @@ static void *el_reader(void *data)
 				twalk_r(el_node_list, count_users, &count);
 				ast_mutex_unlock(&el_nodelist_lock);
 				tm = gmtime(&now);
+
 				if (!count.outbound) { /* if no outbound users */
 					snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE, "%s [%d/%d]", instp->myqth, count.inbound, instp->maxstns);
 					snprintf(instp->aprs_display, EL_APRS_SIZE, " On @ %02d%02d [%d/%d]", tm->tm_hour, tm->tm_min, count.inbound,
@@ -3500,24 +3571,30 @@ static void *el_reader(void *data)
 					snprintf(instp->login_display, EL_NAME_SIZE + EL_CALL_SIZE, "In Conference %s", instp->lastcall);
 					snprintf(instp->aprs_display, EL_APRS_SIZE, "=N%s @ %02d%02d", instp->lastcall, tm->tm_hour, tm->tm_min);
 				}
+
 				mylat = instp->lat;
 				mylon = instp->lon;
+
 				if (ast_custom_function_find("GPS_READ") && !ast_func_read(NULL, "GPS_READ()", gps_data, sizeof(gps_data))) {
 					/* gps_data format monotonic time, epoch, latitude, longitude, elevation */
 					if (sscanf(gps_data, N_FMT(llu) " %*u " N_FMT(f) N_FMT(c) N_FMT(f) N_FMT(c), &u_mono, &lat, &latc, &lon, &lonc) == 5) {
 						now_mono = time_monotonic();
 						was_mono = (time_t) u_mono;
+
 						if ((was_mono + GPS_VALID_SECS) >= now_mono) {
 							mylat = floor(lat / 100.0);
 							mylat += (lat - (mylat * 100)) / 60.0;
 							mylon = floor(lon / 100.0);
 							mylon += (lon - (mylon * 100)) / 60.0;
+
 							if (latc == 'S') {
 								mylat = -mylat;
 							}
+
 							if (lonc == 'W') {
 								mylon = -mylon;
 							}
+
 							from_GPS = 1;
 						}
 					}
@@ -3547,12 +3624,15 @@ static void *el_reader(void *data)
 				sdes_length = rtcp_make_el_sdes(sdes_packet, sizeof(sdes_packet), aprscall, aprsstr);
 				sendto(instp->ctrl_sock, sdes_packet, sdes_length, 0, (struct sockaddr *) &sin_aprs, sizeof(sin_aprs));
 				instp->tx_ctrl_packets++;
+
 			} else { /* we were unable to resolve the APRS host name - attempt to resolve it now */
 				struct hostent *ahp;
 				struct ast_hostent ah;
+
 				sin_aprs.sin_family = AF_INET;
 				sin_aprs.sin_port = htons(5199);
 				ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
+
 				if (!ahp) {
 					ast_log(LOG_WARNING, "Unable to resolve echolink APRS server IP address %s.\n", EL_APRS_SERVER);
 					memset(&sin_aprs, 0, sizeof(sin_aprs));
@@ -3560,6 +3640,7 @@ static void *el_reader(void *data)
 					memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
 				}
 			}
+
 			el_sleeptime = 0;
 			el_login_sleeptime = 0;
 		}
@@ -3568,6 +3649,7 @@ static void *el_reader(void *data)
 		 * poll for activity
 		 */
 		i = ast_poll(fds, 2, 50);
+
 		if (i == 0) {
 			/* Time out, update the timers */
 			elap = time_elapsed(&start_time);
@@ -3577,6 +3659,7 @@ static void *el_reader(void *data)
 			ast_mutex_lock(&instp->lock);
 			continue;
 		}
+
 		if (i < 0) {
 			ast_log(LOG_ERROR, "Fatal error, poll returned %d: %s\n", i, strerror(errno));
 			run_forever = 0;
@@ -3589,7 +3672,40 @@ static void *el_reader(void *data)
 		twalk_r(el_node_list, process_timers, &elap);
 		ast_mutex_unlock(&el_nodelist_lock);
 
-		ast_mutex_lock(&instp->lock);
+		/* Echolink: send heartbeats and drop dead stations */
+		update_timer(&heartbeat_timer, elap, 0);
+
+		if (!heartbeat_timer) {
+			heartbeat_timer = KEEPALIVE_TIME;
+			ast_mutex_lock(&instp->lock);
+			instp->el_node_test.ip[0] = '\0';
+			ast_mutex_lock(&el_nodelist_lock);
+			twalk(el_node_list, send_heartbeat);
+			ast_mutex_unlock(&el_nodelist_lock);
+
+			if (instp->el_node_test.ip[0] != '\0') {
+				if (find_delete(&instp->el_node_test)) {
+					int bye_length;
+
+					bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
+					memset(&sin, 0, sizeof(sin));
+					sin.sin_family = AF_INET;
+					sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
+					sin.sin_port = htons(instp->ctrl_port);
+
+					/* send 20 bye packets to insure that they receive this disconnect */
+					for (i = 0; i < 20; i++) {
+						sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
+						instp->tx_ctrl_packets++;
+					}
+
+					ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
+				}
+
+				instp->el_node_test.ip[0] = '\0';
+			}
+		}
+
 		/*
 		 * process the control socket
 		 */
@@ -4133,6 +4249,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		ast_log(LOG_ERROR, "Unable to load config %s.\n", rpt_config);
 		return -1;
 	}
+
 	val = ast_variable_retrieve(rpt_cfg, instp->astnode, "totime");
 	if (!val) {
 		instp->timeout_time = 180000;
@@ -4148,31 +4265,38 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		ast_log(LOG_ERROR, "Your Echolink call or password is not correct.\n");
 		return -1;
 	}
+
 	if ((instp->elservers[0][0] == '\0') || (instp->elservers[1][0] == '\0') || (instp->elservers[2][0] == '\0')) {
 		ast_log(LOG_ERROR, "One of the Echolink servers missing.\n");
 		return -1;
 	}
+
 	/* start up the socket listeners */
 	if ((instp->audio_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		ast_log(LOG_WARNING, "Unable to create new socket for echolink audio connection.\n");
 		return -1;
 	}
+
 	if ((instp->ctrl_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		ast_log(LOG_WARNING, "Unable to create new socket for echolink control connection.\n");
 		close(instp->audio_sock);
 		instp->audio_sock = -1;
 		return -1;
 	}
+
 	/* audio channel */
 	memset(&si_me, 0, sizeof(si_me));
 	si_me.sin_family = AF_INET;
+
 	if (strcmp(instp->ipaddr, "0.0.0.0") == 0) {
 		si_me.sin_addr.s_addr = htonl(INADDR_ANY);
 	} else {
 		si_me.sin_addr.s_addr = inet_addr(instp->ipaddr);
 	}
+
 	instp->audio_port = atoi(instp->port);
 	si_me.sin_port = htons(instp->audio_port);
+
 	if (bind(instp->audio_sock, &si_me, sizeof(si_me)) == -1) {
 		ast_log(LOG_WARNING, "Unable to bind port for echolink audio connection\n");
 		close(instp->ctrl_sock);
@@ -4181,9 +4305,11 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->audio_sock = -1;
 		return -1;
 	}
+
 	/* control channel */
 	instp->ctrl_port = instp->audio_port + 1;
 	si_me.sin_port = htons(instp->ctrl_port);
+
 	if (bind(instp->ctrl_sock, &si_me, sizeof(si_me)) == -1) {
 		ast_log(LOG_WARNING, "Unable to bind port for echolink control connection\n");
 		close(instp->ctrl_sock);
@@ -4192,6 +4318,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->audio_sock = -1;
 		return -1;
 	}
+
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
 	fcntl(instp->ctrl_sock, F_SETFL, O_NONBLOCK);
 	/* APRS channel */
@@ -4199,6 +4326,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	sin_aprs.sin_family = AF_INET;
 	sin_aprs.sin_port = htons(5199);
 	ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
+
 	if (!ahp) {
 		/* We could not resolve the host name.  This will be attempted again
 		 * when we need to send an APRS packet
@@ -4208,6 +4336,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	} else {
 		memcpy(&sin_aprs.sin_addr.s_addr, ahp->h_addr, sizeof(in_addr_t));
 	}
+
 	/* start the registration thread */
 	ast_pthread_create(&el_register_thread, NULL, el_register, instp);
 	ast_pthread_create(&instp->el_reader_thread, NULL, el_reader, instp);
@@ -4231,16 +4360,19 @@ static int unload_module(void)
 	int n;
 
 	run_forever = 0;
+
 	if (el_node_list) {
 		ast_mutex_lock(&el_nodelist_lock);
 		tdestroy(el_node_list, free_node);
 		ast_mutex_unlock(&el_nodelist_lock);
 	}
+
 	if (el_db_callsign) {
 		el_db_delete_all_nodes();
 	}
 
 	ast_debug(1, "We have %d Echolink instance%s.\n", ninstances, ESS(ninstances));
+
 	for (n = 0; n < ninstances; n++) {
 		ast_debug(2, "Closing Echolink instance %d.\n", n);
 		if (instances[n]->audio_sock != -1) {
@@ -4275,6 +4407,7 @@ static int unload_module(void)
 	for (n = 0; n < ninstances; n++) {
 		ast_free(instances[n]);
 	}
+
 	return 0;
 }
 
@@ -4292,12 +4425,14 @@ static int load_module(void)
 	if (!(el_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
 		return AST_MODULE_LOAD_DECLINE;
 	}
+
 	ast_format_cap_append(el_tech.capabilities, ast_format_gsm, 0);
 
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL) {
 			continue;
 		}
+
 		if (store_config(cfg, ctg) < 0) {
 			return AST_MODULE_LOAD_DECLINE;
 		}
@@ -4305,6 +4440,7 @@ static int load_module(void)
 	ast_config_destroy(cfg);
 	cfg = NULL;
 	ast_verb(4, "Total of %d Echolink instances found.\n", ninstances);
+
 	if (ninstances < 1) {
 		ast_log(LOG_ERROR, "Cannot run echolink with no instances.\n");
 		return AST_MODULE_LOAD_DECLINE;
