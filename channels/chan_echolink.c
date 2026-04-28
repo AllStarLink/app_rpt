@@ -3682,6 +3682,7 @@ static void *el_reader(void *data)
 			heartbeat_timer = KEEPALIVE_TIME;
 			ast_mutex_lock(&instp->lock);
 			instp->el_node_test.ip[0] = '\0';
+			ast_mutex_unlock(&instp->lock);
 			ast_mutex_lock(&el_nodelist_lock);
 			twalk(el_node_list, send_heartbeat);
 			ast_mutex_unlock(&el_nodelist_lock);
@@ -4013,7 +4014,9 @@ static void *el_reader(void *data)
 				instp->current_talker_last_time = (struct timeval) { 0 };
 			}
 		}
+		ast_mutex_lock(&instp->lock);
 	}
+
 	ast_mutex_unlock(&instp->lock);
 	ast_debug(1, "Echolink read thread exited.\n");
 	return NULL;
