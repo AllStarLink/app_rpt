@@ -186,7 +186,7 @@ do not use 127.0.0.1
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
 
-#define MAX_RXKEY_TIME 80	   /* ms */
+#define MAX_RXKEY_TIME 320	   /* ms */
 #define KEEPALIVE_TIME 50 * 10 /* 50 * 10 * 20ms iax2 = 10,000ms = 10 seconds heartbeat */
 #define AUTH_RETRY_MS 5000
 #define AUTH_ABANDONED_MS 15000
@@ -1871,6 +1871,67 @@ static void lookup_node_nodenum(const void *nodep, const VISIT which, void *clos
 		}
 	}
 }
+/*!
+ * \brief get current time in timeval
+ * \return timeval structure
+ */
+static struct timeval tvnow(void)
+{
+	struct timeval t;
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	t = ast_tv(ts.tv_sec, ts.tv_nsec / 1000);
+
+	return t;
+}
+
+/*!
+ * \brief calculate elapsed time in milliseconds
+ * \param start Pointer to timeval structure of the start time. This will be updated to the current time minus any residual milliseconds.
+ * \return elapsed time in milliseconds
+ */
+static int time_elapsed(struct timeval *start)
+{
+	int elap;
+	struct timeval now, elap_tv_us;
+
+	now = tvnow();
+	elap_tv_us = ast_tvsub(now, *start);
+	elap = (elap_tv_us.tv_sec * 1000) + (elap_tv_us.tv_usec / 1000);
+
+	if (elap > 0) {
+		struct timeval elap_tv_ms, residualtime;
+
+		elap_tv_ms = ast_tv(elap_tv_us.tv_sec, (elap_tv_us.tv_usec / 1000) * 1000);
+		residualtime = ast_tvsub(elap_tv_us, elap_tv_ms);
+		*start = ast_tvsub(now, residualtime);
+	}
+
+	return elap;
+}
+
+/*!
+ * \brief update a count down timer
+ * \param timer_ptr Pointer to the timer value.
+ * \param elap Elapsed time in milliseconds.
+ * \param end_val The value at which the timer ends.
+ */
+static void update_timer(int *timer_ptr, int elap, int end_val)
+{
+	if (!timer_ptr || !*timer_ptr) {
+		/* if the timer value = 0 or we have a null pointer, do not update */
+		return;
+	}
+
+	if (*timer_ptr > end_val) {
+		*timer_ptr -= elap;
+	}
+
+	if (*timer_ptr < end_val) {
+		*timer_ptr = end_val;
+	}
+}
 
 /*!
  * \brief Update timers for all nodes
@@ -1882,21 +1943,24 @@ static void process_timers(const void *nodep, const VISIT which, void *time)
 {
 	const struct el_node *node;
 	struct el_pvt *pvt;
-	int *decr_time = time;
+	int elap = *(int *) time;
 
 	if ((which == leaf) || (which == postorder)) {
 		node = *(struct el_node **) nodep;
 		pvt = node->pvt;
 		if (pvt->rxkey) {
-			pvt->rxkey -= *decr_time;
+			update_timer(&pvt->rxkey, elap, 0);
+			// pvt->rxkey -= *decr_time;
 			if (pvt->rxkey <= 0) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_CONTROL,
 					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 					.src = __PRETTY_FUNCTION__,
 				};
-
-				ast_queue_frame(pvt->owner, &wf);
+				ast_debug(1, "I'm unkeying");
+				if (pvt->owner) {
+					ast_queue_frame(pvt->owner, &wf);
+				}
 				pvt->rxkey = 0;
 			}
 		}
@@ -2394,6 +2458,7 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 			ast_hangup(tmp);
 		}
 	}
+	pvt->owner = tmp;
 	return tmp;
 }
 
@@ -2428,7 +2493,9 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	if (!str) {
 		return NULL;
 	}
+
 	nodenum = 0;
+
 	cp = strchr(str, '/');
 	if (cp) {
 		*cp++ = 0;
@@ -2436,14 +2503,16 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 			nodenum = atoi(cp);
 		}
 	}
+
 	p = el_alloc(str);
+
 	if (p) {
 		tmp = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
 		if (!tmp) {
 			el_destroy(p);
 		}
 	}
-	p->owner = tmp;
+
 	return tmp;
 }
 
@@ -3386,6 +3455,8 @@ static void *el_reader(void *data)
 	struct timeval current_packet_time;
 	struct gsmVoice_t *gsmPacket;
 	uint32_t time_difference;
+	struct timeval start_time;
+	int elap;
 
 	time(&instp->starttime);
 	instp->aprstime = instp->starttime + EL_APRS_START_DELAY;
@@ -3397,6 +3468,8 @@ static void *el_reader(void *data)
 	fds[0].events = POLLIN;
 	fds[1].fd = instp->audio_sock;
 	fds[1].events = POLLIN;
+
+	start_time = tvnow();
 
 	while (run_forever) {
 		/* Send APRS information every EL_APRS_INTERVAL */
@@ -3496,6 +3569,11 @@ static void *el_reader(void *data)
 		 */
 		i = ast_poll(fds, 2, 50);
 		if (i == 0) {
+			/* Time out, update the timers */
+			elap = time_elapsed(&start_time);
+			ast_mutex_lock(&el_nodelist_lock);
+			twalk_r(el_node_list, process_timers, &elap);
+			ast_mutex_unlock(&el_nodelist_lock);
 			ast_mutex_lock(&instp->lock);
 			continue;
 		}
@@ -3505,7 +3583,11 @@ static void *el_reader(void *data)
 			break;
 		}
 
-		twalk_r(el_node_list, process_timers, &i);
+		/* update the timers */
+		elap = time_elapsed(&start_time);
+		ast_mutex_lock(&el_nodelist_lock);
+		twalk_r(el_node_list, process_timers, &elap);
+		ast_mutex_unlock(&el_nodelist_lock);
 
 		ast_mutex_lock(&instp->lock);
 		/*
@@ -3684,7 +3766,7 @@ static void *el_reader(void *data)
 						node = *found_key;
 						pvt = node->pvt;
 						ast = pvt->owner;
-						node->pvt->firstheard = 1;
+						pvt->firstheard = 1;
 						node->countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
 						/* compute inter-arrival jitter */
@@ -3750,7 +3832,7 @@ static void *el_reader(void *data)
 											.subclass.integer = AST_CONTROL_RADIO_KEY,
 											.src = __PRETTY_FUNCTION__,
 										};
-
+										ast_debug(1, "I'm keying up");
 										if (ast) {
 											ast_queue_frame(ast, &wf);
 										}
