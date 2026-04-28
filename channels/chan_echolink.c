@@ -1939,7 +1939,7 @@ static void update_timer(int *timer_ptr, int elap, int end_val)
  * \param which		Enum for VISIT used by twalk.
  * \param time		Points to decriment time.
  */
-static void process_timers(const void *nodep, const VISIT which, void *time)
+static void process_unkey_timers(const void *nodep, const VISIT which, void *time)
 {
 	const struct el_node *node;
 	struct el_pvt *pvt;
@@ -1950,7 +1950,6 @@ static void process_timers(const void *nodep, const VISIT which, void *time)
 		pvt = node->pvt;
 		if (pvt->rxkey) {
 			update_timer(&pvt->rxkey, elap, 0);
-			// pvt->rxkey -= *decr_time;
 			if (pvt->rxkey <= 0) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_CONTROL,
@@ -2429,6 +2428,7 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 
 	pvt->u = ast_module_user_add(tmp);
 	pvt->nodenum = nodenum;
+	pvt->owner = tmp;
 
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(tmp)) {
@@ -2437,7 +2437,6 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 		}
 	}
 
-	pvt->owner = tmp;
 	return tmp;
 }
 
@@ -3491,6 +3490,14 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	return -1;
 }
 
+static void update_unkey_timers(int elap)
+{
+	/* Time out, update the timers */
+	ast_mutex_lock(&el_nodelist_lock);
+	twalk_r(el_node_list, process_unkey_timers, &elap);
+	ast_mutex_unlock(&el_nodelist_lock);
+}
+
 /*!
  * \brief This routine watches the UDP ports for activity.
  * It runs in its own thread and processes RTP / RTCP packets as they arrive.
@@ -3644,18 +3651,17 @@ static void *el_reader(void *data)
 			el_sleeptime = 0;
 			el_login_sleeptime = 0;
 		}
+
 		ast_mutex_unlock(&instp->lock);
 		/*
 		 * poll for activity
 		 */
 		i = ast_poll(fds, 2, 50);
+		elap = time_elapsed(&start_time);
 
 		if (i == 0) {
 			/* Time out, update the timers */
-			elap = time_elapsed(&start_time);
-			ast_mutex_lock(&el_nodelist_lock);
-			twalk_r(el_node_list, process_timers, &elap);
-			ast_mutex_unlock(&el_nodelist_lock);
+			update_unkey_timers(elap);
 			ast_mutex_lock(&instp->lock);
 			continue;
 		}
@@ -3667,10 +3673,7 @@ static void *el_reader(void *data)
 		}
 
 		/* update the timers */
-		elap = time_elapsed(&start_time);
-		ast_mutex_lock(&el_nodelist_lock);
-		twalk_r(el_node_list, process_timers, &elap);
-		ast_mutex_unlock(&el_nodelist_lock);
+		update_unkey_timers(elap);
 
 		/* Echolink: send heartbeats and drop dead stations */
 		update_timer(&heartbeat_timer, elap, 0);
