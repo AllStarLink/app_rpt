@@ -2892,8 +2892,9 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	if (p->dsp && p->usedtmf) {
 		struct ast_frame *f3 = ast_frdup(f1); /* dup f1: ast_dsp_process may mutate the input in place, and we still need f1 below */
 
-		ast_frfree(f1);
-		return 0;
+		if (!f3) {
+			ast_frfree(f1);
+			return 0;
 		}
 
 		f2 = ast_dsp_process(NULL, p->dsp, f3);
