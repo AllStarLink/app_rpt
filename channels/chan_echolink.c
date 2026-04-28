@@ -3841,9 +3841,9 @@ static void *el_reader(void *data)
 									pvt->rxkey = MAX_RXKEY_TIME;
 									memcpy(inbuf + AST_FRIENDLY_OFFSET, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
 									x = 0;
+									f2 = ast_translate(pvt->xpath, &fr, 0);
 
 									if (pvt->dsp) {
-										f2 = ast_translate(pvt->xpath, &fr, 0);
 										f1 = ast_dsp_process(NULL, pvt->dsp, f2);
 
 										if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
@@ -3855,16 +3855,19 @@ static void *el_reader(void *data)
 
 												if (ast) {
 													ast_queue_frame(ast, f1);
+													ast_frfree(f1);
 													x = 1;
 												}
 											}
 										}
-
-										ast_frfree(f2); /* We own f2, f1 could be f2 or a control frame that should not be freed */
 									}
 
-									if (!x && ast) {
-										ast_queue_frame(ast, &fr);
+									if (!x) {
+										if (ast) {
+											ast_queue_frame(ast, f2);
+										}
+
+										ast_frfree(f2);
 									}
 								}
 							}
