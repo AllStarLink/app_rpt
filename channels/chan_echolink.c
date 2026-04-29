@@ -3571,7 +3571,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	return -1;
 }
 
-static void update_unkey_timers(int elap)
+static void update_unkey_timers(const int elap)
 {
 	size_t i;
 	struct pending_vector pending_messages;
@@ -3761,9 +3761,45 @@ static void *el_reader(void *data)
 		i = ast_poll(fds, 2, 50);
 		elap = time_elapsed(&start_time);
 
+		/* Echolink: send heartbeats and drop dead stations */
+		update_timer(&heartbeat_timer, elap, 0);
+
+		if (heartbeat_timer <= 0) {
+			heartbeat_timer = KEEPALIVE_TIME;
+			instp->el_node_test.ip[0] = '\0';
+
+			ast_mutex_lock(&el_nodelist_lock);
+			twalk(el_node_list, send_heartbeat);
+			ast_mutex_unlock(&el_nodelist_lock);
+
+			if (instp->el_node_test.ip[0] != '\0') {
+				if (find_delete(&instp->el_node_test, instp)) {
+					int bye_length;
+
+					bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
+					memset(&sin, 0, sizeof(sin));
+					sin.sin_family = AF_INET;
+					sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
+					sin.sin_port = htons(instp->ctrl_port);
+
+					/* send 20 bye packets to insure that they receive this disconnect */
+					for (i = 0; i < 20; i++) {
+						sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
+						instp->tx_ctrl_packets++;
+					}
+
+					ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
+				}
+
+				instp->el_node_test.ip[0] = '\0';
+			}
+		}
+
+		/* update the node timers */
+		update_unkey_timers(elap);
+
 		if (i == 0) {
 			/* Time out, update the timers */
-			update_unkey_timers(elap);
 			ast_mutex_lock(&instp->lock);
 			continue;
 		}
@@ -3774,9 +3810,6 @@ static void *el_reader(void *data)
 			ast_mutex_lock(&instp->lock);
 			break;
 		}
-
-		/* update the node timers */
-		update_unkey_timers(elap);
 
 		/*
 		 * process the control socket
@@ -4096,40 +4129,6 @@ static void *el_reader(void *data)
 				instp->current_talker = NULL;
 				instp->current_talker_start_time = (struct timeval) { 0 };
 				instp->current_talker_last_time = (struct timeval) { 0 };
-			}
-		}
-
-		/* Echolink: send heartbeats and drop dead stations */
-		update_timer(&heartbeat_timer, elap, 0);
-
-		if (!heartbeat_timer) {
-			heartbeat_timer = KEEPALIVE_TIME;
-			instp->el_node_test.ip[0] = '\0';
-
-			ast_mutex_lock(&el_nodelist_lock);
-			twalk(el_node_list, send_heartbeat);
-			ast_mutex_unlock(&el_nodelist_lock);
-
-			if (instp->el_node_test.ip[0] != '\0') {
-				if (find_delete(&instp->el_node_test, instp)) {
-					int bye_length;
-
-					bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
-					memset(&sin, 0, sizeof(sin));
-					sin.sin_family = AF_INET;
-					sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
-					sin.sin_port = htons(instp->ctrl_port);
-
-					/* send 20 bye packets to insure that they receive this disconnect */
-					for (i = 0; i < 20; i++) {
-						sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
-						instp->tx_ctrl_packets++;
-					}
-
-					ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
-				}
-
-				instp->el_node_test.ip[0] = '\0';
 			}
 		}
 	}
