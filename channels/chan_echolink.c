@@ -545,7 +545,7 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 
 static void send_info(const void *nodep, const VISIT which, const int depth);
 static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_instance *instp);
-static int find_delete(const struct el_node *key);
+static int find_delete(const struct el_node *key, struct el_instance *instp);
 static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *call, const char *name);
 static void lookup_node_nodenum(const void *nodep, const VISIT which, void *closure);
 static void lookup_node_callsign(const void *nodep, const VISIT which, void *closure);
@@ -1477,7 +1477,7 @@ static int el_hangup(struct ast_channel *ast)
 	ast_debug(1, "Sent bye to IP address %s.\n", pvt->ip);
 	ast_mutex_lock(&instp->lock);
 	strcpy(instp->el_node_test.ip, pvt->ip);
-	find_delete(&instp->el_node_test);
+	find_delete(&instp->el_node_test, instp);
 	ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 	pvt->hangup = 0;
 	ast_mutex_unlock(&instp->lock);
@@ -2163,10 +2163,11 @@ static void free_node(void *nodep) {}
 /*!
  * \brief Find and delete a node from our internal node list.
  * \param key			Pointer to Echolink node struct to delete.
+ * \param instp 		Pointer to echolink instance (maybe NULL)
  * \retval 0			If node not found.
  * \retval 1			If node found.
  */
-static int find_delete(const struct el_node *key)
+static int find_delete(const struct el_node *key, struct el_instance *instp)
 {
 	int found = 0;
 	struct el_node **found_key;
@@ -2175,6 +2176,16 @@ static int find_delete(const struct el_node *key)
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
 		node = *found_key;
+		if (instp) {
+			if (instp->current_talker == node) {
+				ast_debug(3, "Current talker %s is disconnecting, clearing current talker.\n", node->call);
+				instp->current_talker->istimedout = 0;
+				instp->current_talker->isdoubling = 0;
+				instp->current_talker = NULL;
+				instp->current_talker_start_time = (struct timeval) { 0 };
+				instp->current_talker_last_time = (struct timeval) { 0 };
+			}
+		}
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
 		found = 1;
 		node->pvt->hangup = 1;
@@ -2302,7 +2313,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 
 		if (strcmp(cmd, "o.dconip") == 0) {
 			ast_copy_string(key.ip, arg1, sizeof(key.ip));
-			if (find_delete(&key)) {
+			if (find_delete(&key, NULL)) {
 				for (i = 0; i < 20; i++) {
 					sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 				}
@@ -3896,7 +3907,7 @@ static void *el_reader(void *data)
 					}
 				} else {
 					if (is_rtcp_bye((unsigned char *) buf, recvlen)) {
-						if (find_delete(&instp->el_node_test)) {
+						if (find_delete(&instp->el_node_test, instp)) {
 							ast_verb(4, "Disconnect from IP address %s, Callsign %s.\n", instp->el_node_test.ip,
 								instp->el_node_test.call);
 						}
@@ -4088,7 +4099,7 @@ static void *el_reader(void *data)
 			ast_mutex_unlock(&el_nodelist_lock);
 
 			if (instp->el_node_test.ip[0] != '\0') {
-				if (find_delete(&instp->el_node_test)) {
+				if (find_delete(&instp->el_node_test, instp)) {
 					int bye_length;
 
 					bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
