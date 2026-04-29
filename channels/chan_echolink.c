@@ -1484,20 +1484,26 @@ static int el_hangup(struct ast_channel *ast)
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = inet_addr(pvt->ip);
 	sin.sin_port = htons(instp->ctrl_port);
+
 	/* send 20 bye packets to insure that they receive this disconnect */
 	for (i = 0; i < 20; i++) {
 		sendto(instp->ctrl_sock, bye, n, 0, (struct sockaddr *) &sin, sizeof(sin));
 		instp->tx_ctrl_packets++;
 	}
+
 	time(&now);
+
 	if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 		instp->aprstime = now;
 	}
+
 	ast_debug(1, "Hanging up (%s).\n", ast_channel_name(ast));
+
 	if (!ast_channel_tech_pvt(ast)) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected.\n");
 		return 0;
 	}
+
 	el_destroy(pvt);
 	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
@@ -4057,15 +4063,12 @@ static void *el_reader(void *data)
 
 		if (!heartbeat_timer) {
 			heartbeat_timer = KEEPALIVE_TIME;
-			ast_mutex_lock(&instp->lock);
 			instp->el_node_test.ip[0] = '\0';
-			ast_mutex_unlock(&instp->lock);
 
 			ast_mutex_lock(&el_nodelist_lock);
 			twalk(el_node_list, send_heartbeat);
 			ast_mutex_unlock(&el_nodelist_lock);
 
-			ast_mutex_lock(&instp->lock);
 			if (instp->el_node_test.ip[0] != '\0') {
 				if (find_delete(&instp->el_node_test)) {
 					int bye_length;
@@ -4087,7 +4090,6 @@ static void *el_reader(void *data)
 
 				instp->el_node_test.ip[0] = '\0';
 			}
-			ast_mutex_unlock(&instp->lock);
 		}
 	}
 
