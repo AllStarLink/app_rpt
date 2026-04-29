@@ -2822,42 +2822,6 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			return 0;
 		}
 
-		if (p->rxkey && p->dsp && p->usedtmf) {
-			struct ast_frame *f3;
-
-			memset(silbuf, 0, sizeof(silbuf));
-			memset(&fr, 0, sizeof(fr));
-			fr.frametype = AST_FRAME_VOICE;
-			fr.subclass.format = ast_format_slin;
-			fr.datalen = FRAME_SIZE * 2;
-			fr.samples = FRAME_SIZE;
-			fr.data.ptr = silbuf;
-			fr.src = __PRETTY_FUNCTION__;
-
-			f3 = ast_frdup(&fr); /* dsp_process frees frame, so dup fr so we still have it later on */
-			if (!f3) {
-				ast_frfree(f1);
-				return 0;
-			}
-
-			f2 = ast_dsp_process(NULL, p->dsp, f3);
-
-			if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
-				if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
-					if (f2->frametype == AST_FRAME_DTMF_END) {
-						ast_debug(1, "VOTER %d: Received DTMF char %c\n", p->nodenum, f2->subclass.integer);
-					}
-				} else {
-					f2->frametype = AST_FRAME_NULL;
-					f2->subclass.integer = 0;
-				}
-				ast_queue_frame(p->owner, f2);
-				gettimeofday(&p->lastrxtime, NULL);
-			}
-
-			ast_frfree(f2);
-		}
-
 		memset(silbuf, 0, sizeof(silbuf));
 		memset(&fr, 0, sizeof(fr));
 		fr.frametype = AST_FRAME_VOICE;
