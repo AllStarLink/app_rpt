@@ -1388,6 +1388,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
  */
 static void el_destroy(struct el_pvt *pvt)
 {
+	ast_mutex_lock(&pvt->lock);
 	if (pvt->dsp) {
 		ast_dsp_free(pvt->dsp);
 	}
@@ -1399,6 +1400,8 @@ static void el_destroy(struct el_pvt *pvt)
 	}
 	pvt->linkstr = NULL;
 	pvt->owner = NULL;
+	ast_mutex_unlock(&pvt->lock);
+
 	ast_mutex_lock(&el_nodelist_lock);
 	twalk(el_node_list, send_info);
 	ast_mutex_unlock(&el_nodelist_lock);
@@ -1432,6 +1435,7 @@ static struct el_pvt *el_alloc(const char *data)
 
 	pvt = ast_calloc(1, sizeof(struct el_pvt));
 	if (pvt) {
+		ast_mutex_init(&pvt->lock);
 		snprintf(pvt->stream, sizeof(pvt->stream), "%s-%lu", data, instances[n]->seqno++);
 
 		pvt->keepalive = KEEPALIVE_TIME;
@@ -2454,9 +2458,11 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 		ast_set_callerid(tmp, tmpstr, NULL, NULL);
 	}
 
+	ast_mutex_lock(&pvt->lock);
 	pvt->u = ast_module_user_add(tmp);
 	pvt->nodenum = nodenum;
 	pvt->owner = tmp;
+	ast_mutex_unlock(&pvt->lock);
 
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(tmp)) {
