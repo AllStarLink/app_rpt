@@ -2824,6 +2824,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 
 		if (p->rxkey && p->dsp && p->usedtmf) {
 			struct ast_frame *f3;
+
 			memset(silbuf, 0, sizeof(silbuf));
 			memset(&fr, 0, sizeof(fr));
 			fr.frametype = AST_FRAME_VOICE;
