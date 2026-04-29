@@ -1409,8 +1409,6 @@ static void el_destroy(void *obj)
 	if (pvt->u) {
 		ast_module_user_remove(pvt->u);
 	}
-
-	ast_free(pvt);
 }
 
 /*!
@@ -1446,6 +1444,7 @@ static struct el_pvt *el_alloc(const char *data)
 		pvt->dsp = ast_dsp_new();
 		if (!pvt->dsp) {
 			ast_log(LOG_ERROR, "Cannot get DSP!\n");
+			ao2_cleanup(pvt);
 			return NULL;
 		}
 		pvt->hangup = 0;
@@ -1454,6 +1453,7 @@ static struct el_pvt *el_alloc(const char *data)
 		pvt->xpath = ast_translator_build_path(ast_format_slin, ast_format_gsm);
 		if (!pvt->xpath) {
 			ast_log(LOG_ERROR, "Cannot get translator!\n");
+			ao2_cleanup(pvt);
 			return NULL;
 		}
 	}
@@ -3748,6 +3748,7 @@ static void *el_reader(void *data)
 		if (i < 0) {
 			ast_log(LOG_ERROR, "Fatal error, poll returned %d: %s\n", i, strerror(errno));
 			run_forever = 0;
+			ast_mutex_lock(&instp->lock);
 			break;
 		}
 
@@ -4464,16 +4465,6 @@ static int unload_module(void)
 	pthread_join(el_directory_thread, NULL);
 	pthread_join(el_register_thread, NULL);
 
-	if (el_node_list) {
-		ast_mutex_lock(&el_nodelist_lock);
-		tdestroy(el_node_list, free_node);
-		ast_mutex_unlock(&el_nodelist_lock);
-	}
-
-	if (el_db_callsign) {
-		el_db_delete_all_nodes();
-	}
-
 	ast_debug(1, "We have %d Echolink instance%s.\n", ninstances, ESS(ninstances));
 
 	for (n = 0; n < ninstances; n++) {
@@ -4495,6 +4486,16 @@ static int unload_module(void)
 		if (instances[n]->permitlist[0]) {
 			ast_free(instances[n]->permitlist[0]);
 		}
+	}
+
+	if (el_node_list) {
+		ast_mutex_lock(&el_nodelist_lock);
+		tdestroy(el_node_list, free_node);
+		ast_mutex_unlock(&el_nodelist_lock);
+	}
+
+	if (el_db_callsign) {
+		el_db_delete_all_nodes();
 	}
 
 	ast_cli_unregister_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
