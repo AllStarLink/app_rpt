@@ -1971,8 +1971,9 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 		if (pvt->rxkey <= 0) {
 			/* The timer has expired, queue up an unkey for the channel */
 			struct ast_channel *chan;
-
+			ast_mutex_lock(&pvt->lock);
 			chan = pvt->owner ? ast_channel_ref(pvt->owner) : NULL;
+			ast_mutex_unlock(&pvt->lock);
 			if (chan) {
 				struct pending_ctrl item = {
 					.chan = chan,
@@ -3901,11 +3902,17 @@ static void *el_reader(void *data)
 					found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
 					if (found_key) {
 						struct el_pvt *pvt;
-						struct ast_channel *ast;
+						struct ast_channel *ast = NULL;
 
 						node = *found_key;
 						pvt = node->pvt;
-						ast = pvt->owner;
+
+						ast_mutex_lock(&pvt->lock);
+						if (pvt->owner) {
+							ast = ast_channel_ref(pvt->owner);
+						}
+						ast_mutex_unlock(&pvt->lock);
+
 						pvt->firstheard = 1;
 						node->countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
@@ -4019,7 +4026,7 @@ static void *el_reader(void *data)
 						} else {
 							instp->rx_bad_packets++;
 						}
-
+						ast_channel_unref(ast);
 					} else {
 						instp->rx_bad_packets++;
 					}
