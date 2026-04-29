@@ -2001,7 +2001,7 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 			pvt->rxkey = 0;
 		}
 
-		ao2_ref(pvt, -1);
+		ao2_cleanup(pvt);
 	}
 }
 
@@ -3453,6 +3453,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	mynode = el_db_find_ipaddr(el_node_key->ip);
 	if (!mynode) {
 		ast_log(LOG_ERROR, "Cannot find database entry for IP address %s, Callsign %s.\n", el_node_key->ip, call);
+		ao2_cleanup(el_node_key->pvt);
+		el_node_key->pvt = NULL;
 		ast_free(el_node_key);
 		ast_mutex_unlock(&el_db_lock);
 		return 1;
@@ -3480,6 +3482,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			pvt = el_alloc(instp->name);
 			if (!pvt) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
+				ao2_cleanup(el_node_key->pvt);
+				el_node_key->pvt = NULL;
 				ast_free(el_node_key);
 				ast_mutex_unlock(&el_db_lock);
 				ast_mutex_unlock(&el_nodelist_lock);
@@ -3493,6 +3497,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 
 			if (!chan) {
 				ao2_cleanup(el_node_key->pvt);
+				el_node_key->pvt = NULL;
 				ast_free(el_node_key);
 				ast_mutex_unlock(&el_db_lock);
 				ast_mutex_unlock(&el_nodelist_lock);
@@ -3534,6 +3539,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 
 	ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n", el_node_key->call, el_node_key->ip,
 		el_node_key->name);
+	ao2_cleanup(el_node_key->pvt);
+	el_node_key->pvt = NULL;
 	ast_free(el_node_key);
 	ast_mutex_unlock(&el_nodelist_lock);
 	ast_mutex_unlock(&el_db_lock);
@@ -3960,7 +3967,7 @@ static void *el_reader(void *data)
 								node->isdoubling = 1;
 								ast_mutex_unlock(&el_nodelist_lock);
 								ast_channel_unref(ast);
-								ao2_ref(pvt, -1);
+								ao2_cleanup(pvt);
 								continue;
 							}
 						}
@@ -3974,7 +3981,7 @@ static void *el_reader(void *data)
 							node->istimedout = 1;
 							ast_mutex_unlock(&el_nodelist_lock);
 							ast_channel_unref(ast);
-							ao2_ref(pvt, -1);
+							ao2_cleanup(pvt);
 							continue;
 						}
 
@@ -4048,7 +4055,7 @@ static void *el_reader(void *data)
 						}
 
 						ast_channel_unref(ast);
-						ao2_ref(pvt, -1);
+						ao2_cleanup(pvt);
 					} else {
 						instp->rx_bad_packets++;
 					}
