@@ -1386,9 +1386,10 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
  * \brief Destroy and free an echolink instance.
  * \param pvt		Pointer to el_pvt struct to release.
  */
-static void el_destroy(struct el_pvt *pvt)
+static void el_destroy(void *obj)
 {
-	ast_mutex_lock(&pvt->lock);
+	struct el_pvt *pvt = obj;
+
 	if (pvt->dsp) {
 		ast_dsp_free(pvt->dsp);
 	}
@@ -1400,12 +1401,15 @@ static void el_destroy(struct el_pvt *pvt)
 	}
 	pvt->linkstr = NULL;
 	pvt->owner = NULL;
-	ast_mutex_unlock(&pvt->lock);
 
 	ast_mutex_lock(&el_nodelist_lock);
 	twalk(el_node_list, send_info);
 	ast_mutex_unlock(&el_nodelist_lock);
-	ast_module_user_remove(pvt->u);
+
+	if (pvt->u) {
+		ast_module_user_remove(pvt->u);
+	}
+
 	ast_free(pvt);
 }
 
@@ -1433,9 +1437,8 @@ static struct el_pvt *el_alloc(const char *data)
 		return NULL;
 	}
 
-	pvt = ast_calloc(1, sizeof(struct el_pvt));
+	pvt = ao2_alloc(sizeof(struct el_pvt), el_destroy);
 	if (pvt) {
-		ast_mutex_init(&pvt->lock);
 		snprintf(pvt->stream, sizeof(pvt->stream), "%s-%lu", data, instances[n]->seqno++);
 
 		pvt->keepalive = KEEPALIVE_TIME;
@@ -1504,8 +1507,8 @@ static int el_hangup(struct ast_channel *ast)
 		return 0;
 	}
 
-	el_destroy(pvt);
 	ast_channel_tech_pvt_set(ast, NULL);
+	ao2_cleanup(pvt);
 	ast_setstate(ast, AST_STATE_DOWN);
 	return 0;
 }
@@ -1976,14 +1979,13 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 			return;
 		}
 
+		ao2_ref(pvt, +1);
 		update_timer(&pvt->rxkey, cl->elap, 0);
 
 		if (pvt->rxkey <= 0) {
 			/* The timer has expired, queue up an unkey for the channel */
 			struct ast_channel *chan;
-			ast_mutex_lock(&pvt->lock);
 			chan = pvt->owner ? ast_channel_ref(pvt->owner) : NULL;
-			ast_mutex_unlock(&pvt->lock);
 			if (chan) {
 				struct pending_ctrl item = {
 					.chan = chan,
@@ -1998,6 +2000,8 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 
 			pvt->rxkey = 0;
 		}
+
+		ao2_ref(pvt, -1);
 	}
 }
 
@@ -2175,6 +2179,8 @@ static int find_delete(const struct el_node *key)
 		found = 1;
 		node->pvt->hangup = 1;
 		tdelete(node, &el_node_list, compare_ip);
+		ao2_cleanup(node->pvt);
+		node->pvt = NULL;
 		ast_free(node);
 	}
 	ast_mutex_unlock(&el_nodelist_lock);
@@ -2464,11 +2470,9 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 		ast_set_callerid(tmp, tmpstr, NULL, NULL);
 	}
 
-	ast_mutex_lock(&pvt->lock);
 	pvt->u = ast_module_user_add(tmp);
 	pvt->nodenum = nodenum;
 	pvt->owner = tmp;
-	ast_mutex_unlock(&pvt->lock);
 
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(tmp)) {
@@ -2526,7 +2530,7 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	if (p) {
 		tmp = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
 		if (!tmp) {
-			el_destroy(p);
+			ao2_cleanup(p);
 		}
 	}
 
@@ -3482,12 +3486,13 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				return -1;
 			}
 
+			ao2_ref(pvt, +1);
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
 			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 
 			if (!chan) {
-				el_destroy(el_node_key->pvt);
+				ao2_cleanup(el_node_key->pvt);
 				ast_free(el_node_key);
 				ast_mutex_unlock(&el_db_lock);
 				ast_mutex_unlock(&el_nodelist_lock);
@@ -3506,6 +3511,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ast_mutex_unlock(&instp->lock);
 
 		} else {
+			ao2_ref(pvt, +1);
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
@@ -3918,12 +3924,10 @@ static void *el_reader(void *data)
 
 						node = *found_key;
 						pvt = node->pvt;
-
-						ast_mutex_lock(&pvt->lock);
+						ao2_ref(pvt, +1);
 						if (pvt->owner) {
 							ast = ast_channel_ref(pvt->owner);
 						}
-						ast_mutex_unlock(&pvt->lock);
 
 						pvt->firstheard = 1;
 						node->countdown = instp->rtcptimeout;
@@ -3955,6 +3959,8 @@ static void *el_reader(void *data)
 								}
 								node->isdoubling = 1;
 								ast_mutex_unlock(&el_nodelist_lock);
+								ast_channel_unref(ast);
+								ao2_ref(pvt, -1);
 								continue;
 							}
 						}
@@ -3967,6 +3973,8 @@ static void *el_reader(void *data)
 							}
 							node->istimedout = 1;
 							ast_mutex_unlock(&el_nodelist_lock);
+							ast_channel_unref(ast);
+							ao2_ref(pvt, -1);
 							continue;
 						}
 
@@ -4038,7 +4046,9 @@ static void *el_reader(void *data)
 						} else {
 							instp->rx_bad_packets++;
 						}
+
 						ast_channel_unref(ast);
+						ao2_ref(pvt, -1);
 					} else {
 						instp->rx_bad_packets++;
 					}
