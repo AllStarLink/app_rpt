@@ -3450,7 +3450,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	ast_mutex_lock(&el_nodelist_lock);
 
 	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
-		ast_mutex_unlock(&el_nodelist_lock);
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
 			el_node_key->nodenum, el_node_key->name);
 
@@ -3466,6 +3465,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
 				ast_free(el_node_key);
 				ast_mutex_unlock(&el_db_lock);
+				ast_mutex_unlock(&el_nodelist_lock);
 				return -1;
 			}
 
@@ -3477,6 +3477,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 				el_destroy(el_node_key->pvt);
 				ast_free(el_node_key);
 				ast_mutex_unlock(&el_db_lock);
+				ast_mutex_unlock(&el_nodelist_lock);
 				return -1;
 			}
 
@@ -3492,7 +3493,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ast_mutex_unlock(&instp->lock);
 
 		} else {
-			ast_mutex_unlock(&el_nodelist_lock);
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
@@ -3509,12 +3509,14 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 		}
 
 		ast_mutex_unlock(&el_db_lock);
+		ast_mutex_unlock(&el_nodelist_lock);
 		return 0;
 	}
 
 	ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n", el_node_key->call, el_node_key->ip,
 		el_node_key->name);
 	ast_free(el_node_key);
+	ast_mutex_unlock(&el_nodelist_lock);
 	ast_mutex_unlock(&el_db_lock);
 	return -1;
 }
@@ -3725,44 +3727,6 @@ static void *el_reader(void *data)
 
 		/* update the node timers */
 		update_unkey_timers(elap);
-
-		/* Echolink: send heartbeats and drop dead stations */
-		update_timer(&heartbeat_timer, elap, 0);
-
-		if (!heartbeat_timer) {
-			heartbeat_timer = KEEPALIVE_TIME;
-			ast_mutex_lock(&instp->lock);
-			instp->el_node_test.ip[0] = '\0';
-			ast_mutex_unlock(&instp->lock);
-
-			ast_mutex_lock(&el_nodelist_lock);
-			twalk(el_node_list, send_heartbeat);
-			ast_mutex_unlock(&el_nodelist_lock);
-
-			ast_mutex_lock(&instp->lock);
-			if (instp->el_node_test.ip[0] != '\0') {
-				if (find_delete(&instp->el_node_test)) {
-					int bye_length;
-
-					bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
-					memset(&sin, 0, sizeof(sin));
-					sin.sin_family = AF_INET;
-					sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
-					sin.sin_port = htons(instp->ctrl_port);
-
-					/* send 20 bye packets to insure that they receive this disconnect */
-					for (i = 0; i < 20; i++) {
-						sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
-						instp->tx_ctrl_packets++;
-					}
-
-					ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
-				}
-
-				instp->el_node_test.ip[0] = '\0';
-			}
-			ast_mutex_unlock(&instp->lock);
-		}
 
 		/*
 		 * process the control socket
@@ -4073,6 +4037,44 @@ static void *el_reader(void *data)
 				instp->current_talker_start_time = (struct timeval) { 0 };
 				instp->current_talker_last_time = (struct timeval) { 0 };
 			}
+		}
+
+		/* Echolink: send heartbeats and drop dead stations */
+		update_timer(&heartbeat_timer, elap, 0);
+
+		if (!heartbeat_timer) {
+			heartbeat_timer = KEEPALIVE_TIME;
+			ast_mutex_lock(&instp->lock);
+			instp->el_node_test.ip[0] = '\0';
+			ast_mutex_unlock(&instp->lock);
+
+			ast_mutex_lock(&el_nodelist_lock);
+			twalk(el_node_list, send_heartbeat);
+			ast_mutex_unlock(&el_nodelist_lock);
+
+			ast_mutex_lock(&instp->lock);
+			if (instp->el_node_test.ip[0] != '\0') {
+				if (find_delete(&instp->el_node_test)) {
+					int bye_length;
+
+					bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
+					memset(&sin, 0, sizeof(sin));
+					sin.sin_family = AF_INET;
+					sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
+					sin.sin_port = htons(instp->ctrl_port);
+
+					/* send 20 bye packets to insure that they receive this disconnect */
+					for (i = 0; i < 20; i++) {
+						sendto(instp->ctrl_sock, bye, bye_length, 0, (struct sockaddr *) &sin, sizeof(sin));
+						instp->tx_ctrl_packets++;
+					}
+
+					ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
+				}
+
+				instp->el_node_test.ip[0] = '\0';
+			}
+			ast_mutex_unlock(&instp->lock);
 		}
 	}
 
@@ -4426,6 +4428,10 @@ static int unload_module(void)
 
 	run_forever = 0;
 
+	/* Wait for all threads to exit */
+	pthread_join(el_directory_thread, NULL);
+	pthread_join(el_register_thread, NULL);
+
 	if (el_node_list) {
 		ast_mutex_lock(&el_nodelist_lock);
 		tdestroy(el_node_list, free_node);
@@ -4458,10 +4464,6 @@ static int unload_module(void)
 			ast_free(instances[n]->permitlist[0]);
 		}
 	}
-
-	/* Wait for all threads to exit */
-	pthread_join(el_directory_thread, NULL);
-	pthread_join(el_register_thread, NULL);
 
 	ast_cli_unregister_multiple(el_cli, sizeof(el_cli) / sizeof(struct ast_cli_entry));
 	/* First, take us out of the channel loop */
