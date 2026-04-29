@@ -1985,6 +1985,7 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 		if (pvt->rxkey <= 0) {
 			/* The timer has expired, queue up an unkey for the channel */
 			struct ast_channel *chan;
+
 			chan = pvt->owner ? ast_channel_ref(pvt->owner) : NULL;
 			if (chan) {
 				struct pending_ctrl item = {
@@ -2172,10 +2173,13 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 	int found = 0;
 	struct el_node **found_key;
 	struct el_node *node;
+
 	ast_mutex_lock(&el_nodelist_lock);
+
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
 		node = *found_key;
+
 		if (instp) {
 			if (instp->current_talker == node) {
 				ast_debug(3, "Current talker %s is disconnecting, clearing current talker.\n", node->call);
@@ -2186,6 +2190,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 				instp->current_talker_last_time = (struct timeval) { 0 };
 			}
 		}
+
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
 		found = 1;
 		node->pvt->hangup = 1;
@@ -2194,6 +2199,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 		node->pvt = NULL;
 		ast_free(node);
 	}
+
 	ast_mutex_unlock(&el_nodelist_lock);
 	return found;
 }
@@ -2250,10 +2256,12 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 	if (strncmp(fromip, "127.0.0.1", EL_IP_SIZE) != 0) {
 		return;
 	}
+
 	ptr = strchr(buf, (int) '\r');
 	if (ptr) {
 		*ptr = '\0';
 	}
+
 	ptr = strchr(buf, (int) '\n');
 	if (ptr) {
 		*ptr = '\0';
@@ -2279,6 +2287,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 				ast_debug(3, "Recording into %s started.\n", instp->fdr_file);
 			}
 		}
+
 		return;
 	}
 
@@ -2306,6 +2315,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 			pack_length = rtcp_make_bye(pack, sizeof(pack), "bye");
 			n = 20;
 		}
+
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(instp->ctrl_port);
@@ -2327,8 +2337,10 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 			}
 			ast_debug(3, "Connect request sent to %s.\n", arg1);
 		}
+
 		return;
 	}
+
 	instp->rx_bad_packets++;
 }
 
@@ -2903,6 +2915,7 @@ static int sendcmd(const char *server, const struct el_instance *instp)
 	}
 
 	buf[0] = '\0';
+
 	while (1) {
 		rc = read(sd, buf, LOGINSIZE);
 		if (rc > 0) {
@@ -2912,6 +2925,7 @@ static int sendcmd(const char *server, const struct el_instance *instp)
 			break;
 		}
 	}
+
 	close(sd);
 
 	if (strncmp(buf, "OK", 2)) {
@@ -2985,6 +2999,7 @@ static int el_net_read(int sock, unsigned char *buf1, int buf1len, int compresse
 			}
 			return n;
 		}
+
 		memset(buf1, 0, buf1len);
 		memset(buf, 0, sizeof(buf));
 		n = recv(sock, buf, sizeof(buf) - 1, 0);
@@ -3098,7 +3113,6 @@ static int do_el_directory(const char *hostname)
 	}
 
 	host = ast_gethostbyname(hostname, &ah);
-
 	if (!host) {
 		ast_log(LOG_ERROR, "Unable to resolve name for directory server %s.\n", hostname);
 		inflateEnd(&z);
@@ -3224,7 +3238,6 @@ static int do_el_directory(const char *hostname)
 		}
 
 		str_len = strlen(str);
-
 		if (str[str_len - 1] == '\n') {
 			str[str_len - 1] = 0;
 		}
@@ -3393,6 +3406,7 @@ static void *el_register(void *data)
 		time(&now);
 		el_login_sleeptime -= (now - then);
 		then = now;
+
 		if (el_login_sleeptime < 0) {
 			el_login_sleeptime = 0;
 		}
@@ -3450,7 +3464,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	time_t now;
 
 	el_node_key = ast_calloc(1, sizeof(struct el_node));
-
 	if (!el_node_key) {
 		return -1;
 	}
@@ -3504,8 +3517,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ao2_ref(pvt, +1);
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
-			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 
+			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
 				ao2_cleanup(el_node_key->pvt);
 				el_node_key->pvt = NULL;
@@ -3677,7 +3690,6 @@ static void *el_reader(void *data)
 					if (sscanf(gps_data, N_FMT(llu) " %*u " N_FMT(f) N_FMT(c) N_FMT(f) N_FMT(c), &u_mono, &lat, &latc, &lon, &lonc) == 5) {
 						now_mono = time_monotonic();
 						was_mono = (time_t) u_mono;
-
 						if ((was_mono + GPS_VALID_SECS) >= now_mono) {
 							mylat = floor(lat / 100.0);
 							mylat += (lat - (mylat * 100)) / 60.0;
@@ -3728,8 +3740,8 @@ static void *el_reader(void *data)
 
 				sin_aprs.sin_family = AF_INET;
 				sin_aprs.sin_port = htons(5199);
-				ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
 
+				ahp = ast_gethostbyname(EL_APRS_SERVER, &ah);
 				if (!ahp) {
 					ast_log(LOG_WARNING, "Unable to resolve echolink APRS server IP address %s.\n", EL_APRS_SERVER);
 					memset(&sin_aprs, 0, sizeof(sin_aprs));
