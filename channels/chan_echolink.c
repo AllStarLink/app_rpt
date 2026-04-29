@@ -185,6 +185,7 @@ do not use 127.0.0.1
 #include "asterisk/translate.h"
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
+#include "asterisk/vector.h"
 
 #define MAX_RXKEY_TIME 320	 /* ms */
 #define KEEPALIVE_TIME 10000 /* ms = 10 seconds heartbeat */
@@ -496,8 +497,20 @@ struct eldb {
 	char ipaddr[ELDB_IPADDRLEN];
 };
 
+struct pending_ctrl {
+	struct ast_channel *chan;			 /* should be ref'd */
+	enum ast_control_frame_type control; /* e.g., AST_CONTROL_RADIO_UNKEY */
+};
+
+struct unkey_walk_closure {
+	int elap;
+	struct pending_vector *pend;
+};
+
 AST_MUTEX_DEFINE_STATIC(el_db_lock);
 AST_MUTEX_DEFINE_STATIC(el_nodelist_lock);
+
+AST_VECTOR(pending_vector, struct pending_ctrl);
 
 struct el_instance *instances[EL_MAX_INSTANCES];
 int ninstances = 0;
@@ -1939,29 +1952,40 @@ static void update_timer(int *timer_ptr, int elap, int end_val)
  * \param which		Enum for VISIT used by twalk.
  * \param time		Points to decriment time.
  */
-static void process_unkey_timers(const void *nodep, const VISIT which, void *time)
+static void process_unkey_timers(const void *nodep, const VISIT which, void *closure)
 {
+	struct unkey_walk_closure *cl = closure;
 	const struct el_node *node;
 	struct el_pvt *pvt;
-	int elap = *(int *) time;
 
 	if ((which == leaf) || (which == postorder)) {
 		node = *(struct el_node **) nodep;
 		pvt = node->pvt;
-		if (pvt->rxkey) {
-			update_timer(&pvt->rxkey, elap, 0);
-			if (pvt->rxkey <= 0) {
-				struct ast_frame wf = {
-					.frametype = AST_FRAME_CONTROL,
-					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
-					.src = __PRETTY_FUNCTION__,
+
+		if (!pvt || !pvt->rxkey) {
+			return;
+		}
+
+		update_timer(&pvt->rxkey, cl->elap, 0);
+
+		if (pvt->rxkey <= 0) {
+			/* The timer has expired, queue up an unkey for the channel */
+			struct ast_channel *chan;
+
+			chan = pvt->owner ? ast_channel_ref(pvt->owner) : NULL;
+			if (chan) {
+				struct pending_ctrl item = {
+					.chan = chan,
+					.control = AST_CONTROL_RADIO_UNKEY,
 				};
-				ast_debug(1, "I'm unkeying");
-				if (pvt->owner) {
-					ast_queue_frame(pvt->owner, &wf);
+
+				if (AST_VECTOR_APPEND(cl->pend, item)) {
+					ast_log(LOG_ERROR, "Unable to append pending control item.\n");
+					ast_channel_unref(chan);
 				}
-				pvt->rxkey = 0;
 			}
+
+			pvt->rxkey = 0;
 		}
 	}
 }
@@ -2293,6 +2317,7 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
 		p->hangup = 0;
 	}
+
 	if (!p->last_firstheard && p->firstheard) {
 		struct ast_frame fr = {
 			.frametype = AST_FRAME_CONTROL,
@@ -2303,6 +2328,7 @@ static struct ast_frame *el_xread(struct ast_channel *ast)
 		ast_queue_frame(ast, &fr);
 		p->last_firstheard = 1;
 	}
+
 	return &ast_null_frame;
 }
 
@@ -2373,6 +2399,7 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		ast_mutex_lock(&instp->lock);
 		strcpy(instp->el_node_test.ip, p->ip);
 		ast_mutex_unlock(&instp->lock);
+
 		ast_mutex_lock(&el_nodelist_lock);
 		twalk(el_node_list, send_audio_only_one);
 		ast_mutex_unlock(&el_nodelist_lock);
@@ -2545,11 +2572,11 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 	}
 
 	c = tolower(*argv[2]);
-	ast_mutex_lock(&el_db_lock);
-
 	if (c == 'i') {
 		/* Lookup node data by IP address */
+		ast_mutex_lock(&el_db_lock);
 		mynode = el_db_find_ipaddr(argv[3]);
+		ast_mutex_unlock(&el_db_lock);
 	} else if (c == 'c') {
 		/* Lookup node data by callsign */
 		if (lookup_node_by_callsign(argv[3], &found_node)) {
@@ -2565,12 +2592,10 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 	/* Report failure to find node */
 	if (!mynode) {
 		ast_cli(fd, "Error: Entry for %s not found!\n", argv[3]);
-		ast_mutex_unlock(&el_db_lock);
 		return RESULT_FAILURE;
 	}
 
 	ast_cli(fd, "%s|%s|%s\n", mynode->nodenum, mynode->callsign, mynode->ipaddr);
-	ast_mutex_unlock(&el_db_lock);
 	return RESULT_SUCCESS;
 }
 
@@ -3422,7 +3447,10 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	el_node_key->seqnum = 1;
 	el_node_key->instp = instp;
 
+	ast_mutex_lock(&el_nodelist_lock);
+
 	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
+		ast_mutex_unlock(&el_nodelist_lock);
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
 			el_node_key->nodenum, el_node_key->name);
 
@@ -3464,6 +3492,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ast_mutex_unlock(&instp->lock);
 
 		} else {
+			ast_mutex_unlock(&el_nodelist_lock);
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
@@ -3492,10 +3521,32 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 
 static void update_unkey_timers(int elap)
 {
-	/* Time out, update the timers */
+	size_t i;
+	struct pending_vector pending_messages;
+	struct unkey_walk_closure closure = {
+		.elap = elap,
+		.pend = &pending_messages,
+	};
+
+	AST_VECTOR_INIT(&pending_messages, 16);
+	/* Unkey timeout, update the timers */
 	ast_mutex_lock(&el_nodelist_lock);
-	twalk_r(el_node_list, process_unkey_timers, &elap);
+	twalk_r(el_node_list, process_unkey_timers, &closure);
 	ast_mutex_unlock(&el_nodelist_lock);
+	/* queue messages outside of lock to prevent potential channel deadlock */
+	for (i = 0; i < AST_VECTOR_SIZE(&pending_messages); ++i) {
+		struct pending_ctrl item = AST_VECTOR_GET(&pending_messages, i);
+		struct ast_frame f = {
+			.frametype = AST_FRAME_CONTROL,
+			.subclass.integer = item.control,
+			.src = __PRETTY_FUNCTION__,
+		};
+
+		ast_queue_frame(item.chan, &f);
+		ast_channel_unref(item.chan);
+	}
+
+	AST_VECTOR_FREE(&pending_messages);
 }
 
 /*!
@@ -3672,7 +3723,7 @@ static void *el_reader(void *data)
 			break;
 		}
 
-		/* update the timers */
+		/* update the node timers */
 		update_unkey_timers(elap);
 
 		/* Echolink: send heartbeats and drop dead stations */
@@ -3683,10 +3734,12 @@ static void *el_reader(void *data)
 			ast_mutex_lock(&instp->lock);
 			instp->el_node_test.ip[0] = '\0';
 			ast_mutex_unlock(&instp->lock);
+
 			ast_mutex_lock(&el_nodelist_lock);
 			twalk(el_node_list, send_heartbeat);
 			ast_mutex_unlock(&el_nodelist_lock);
 
+			ast_mutex_lock(&instp->lock);
 			if (instp->el_node_test.ip[0] != '\0') {
 				if (find_delete(&instp->el_node_test)) {
 					int bye_length;
@@ -3708,6 +3761,7 @@ static void *el_reader(void *data)
 
 				instp->el_node_test.ip[0] = '\0';
 			}
+			ast_mutex_unlock(&instp->lock);
 		}
 
 		/*
@@ -3741,7 +3795,6 @@ static void *el_reader(void *data)
 						}
 						ast_mutex_lock(&el_nodelist_lock);
 						found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
-						ast_mutex_unlock(&el_nodelist_lock);
 						if (found_key) {
 							node = *found_key;
 							node->pvt->firstheard = 1;
@@ -3757,7 +3810,9 @@ static void *el_reader(void *data)
 								ast_copy_string(node->name, name, EL_NAME_SIZE);
 							}
 							node->rx_ctrl_packets++;
+							ast_mutex_unlock(&el_nodelist_lock);
 						} else {   /* otherwise its a new request */
+							ast_mutex_unlock(&el_nodelist_lock);
 							i = 0; /* default authorized */
 							if (instp->ndenylist) {
 								for (x = 0; x < instp->ndenylist; x++) {
@@ -3878,6 +3933,7 @@ static void *el_reader(void *data)
 					process_cmd(buf, recvlen, instp->el_node_test.ip, instp);
 				} else {
 					ast_mutex_lock(&el_nodelist_lock);
+
 					found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
 					if (found_key) {
 						struct el_pvt *pvt;
@@ -3915,6 +3971,7 @@ static void *el_reader(void *data)
 									send_text_one(node, "You are doubling.");
 								}
 								node->isdoubling = 1;
+								ast_mutex_unlock(&el_nodelist_lock);
 								continue;
 							}
 						}
@@ -3926,8 +3983,12 @@ static void *el_reader(void *data)
 								send_text_one(node, "You have timed out.");
 							}
 							node->istimedout = 1;
+							ast_mutex_unlock(&el_nodelist_lock);
 							continue;
 						}
+
+						ast_mutex_unlock(&el_nodelist_lock);
+
 						/* queue the gsm packets */
 						if (recvlen == sizeof(struct gsmVoice_t)) {
 							if (gsmPacket->version == 3 && gsmPacket->payt == 3) {
@@ -3952,7 +4013,7 @@ static void *el_reader(void *data)
 											.subclass.integer = AST_CONTROL_RADIO_KEY,
 											.src = __PRETTY_FUNCTION__,
 										};
-										ast_debug(1, "I'm keying up");
+
 										if (ast) {
 											ast_queue_frame(ast, &wf);
 										}
@@ -3998,12 +4059,11 @@ static void *el_reader(void *data)
 					} else {
 						instp->rx_bad_packets++;
 					}
-
-					ast_mutex_unlock(&el_nodelist_lock);
 				}
 			}
 		}
 		/* check current talker (see if they have stopped talking) */
+		ast_mutex_lock(&instp->lock);
 		if (instp->current_talker) {
 			if (ast_tvdiff_ms(ast_tvnow(), instp->current_talker_last_time) > AUDIO_TIMEOUT) {
 				ast_debug(3, "Station %s stopped talking.\n", instp->current_talker->call);
@@ -4014,7 +4074,6 @@ static void *el_reader(void *data)
 				instp->current_talker_last_time = (struct timeval) { 0 };
 			}
 		}
-		ast_mutex_lock(&instp->lock);
 	}
 
 	ast_mutex_unlock(&instp->lock);
