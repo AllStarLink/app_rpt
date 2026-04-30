@@ -440,7 +440,6 @@ struct el_instance {
 	uint16_t audio_port;
 	uint16_t ctrl_port;
 	unsigned long seqno;
-	struct gsmVoice_t audio_all;
 	struct el_node el_node_test;
 	struct el_pending pending[MAXPENDING];
 	time_t aprstime;
@@ -485,6 +484,8 @@ struct el_pvt {
 	struct ast_trans_pvt *xpath;
 	unsigned int nodenum;
 	struct ast_str *linkstr;
+	struct gsmVoice_t audio;
+	struct el_node el_node_test;
 	ast_mutex_t lock;
 };
 
@@ -1811,26 +1812,27 @@ static void send_audio_only_one(const void *nodep, const VISIT which, const int 
 {
 	struct el_node *node = *(struct el_node **) nodep;
 	struct el_instance *instp = node->instp;
+	struct el_pvt *p = node->pvt;
 	struct sockaddr_in sin;
 
 	if ((which == leaf) || (which == postorder)) {
-		if (strncmp(node->ip, instp->el_node_test.ip, EL_IP_SIZE) == 0) {
+		if (strncmp(node->ip, p->el_node_test.ip, EL_IP_SIZE) == 0) {
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons(instp->audio_port);
 			sin.sin_addr.s_addr = inet_addr(node->ip);
 
-			instp->audio_all.version = 3;
-			instp->audio_all.pad = 0;
-			instp->audio_all.ext = 0;
-			instp->audio_all.csrc = 0;
-			instp->audio_all.marker = 0;
-			instp->audio_all.payt = 3;
-			instp->audio_all.seqnum = htons(node->seqnum++);
-			instp->audio_all.time = htonl(0);
-			instp->audio_all.ssrc = htonl(instp->mynode);
+			p->audio.version = 3;
+			p->audio.pad = 0;
+			p->audio.ext = 0;
+			p->audio.csrc = 0;
+			p->audio.marker = 0;
+			p->audio.payt = 3;
+			p->audio.seqnum = htons(node->seqnum++);
+			p->audio.time = htonl(0);
+			p->audio.ssrc = htonl(instp->mynode);
 
-			sendto(instp->audio_sock, (char *) &instp->audio_all, sizeof(instp->audio_all), 0, (struct sockaddr *) &sin, sizeof(sin));
+			sendto(instp->audio_sock, (char *) &p->audio, sizeof(p->audio), 0, (struct sockaddr *) &sin, sizeof(sin));
 
 			instp->tx_audio_packets++;
 			node->tx_audio_packets++;
@@ -2432,13 +2434,11 @@ static int el_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	}
 
 	if (p->txkey || p->txindex) {
-		memcpy(instp->audio_all.data + (GSM_FRAME_SIZE * p->txindex++), frame->data.ptr, GSM_FRAME_SIZE);
+		memcpy(p->audio.data + (GSM_FRAME_SIZE * p->txindex++), frame->data.ptr, GSM_FRAME_SIZE);
 	}
 
 	if (p->txindex >= BLOCKING_FACTOR) {
-		ast_mutex_lock(&instp->lock);
-		strcpy(instp->el_node_test.ip, p->ip);
-		ast_mutex_unlock(&instp->lock);
+		strcpy(p->el_node_test.ip, p->ip);
 
 		ast_mutex_lock(&el_nodelist_lock);
 		twalk(el_node_list, send_audio_only_one);
