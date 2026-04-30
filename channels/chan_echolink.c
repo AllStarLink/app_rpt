@@ -1508,7 +1508,7 @@ static int el_hangup(struct ast_channel *ast)
 	}
 
 	ast_channel_tech_pvt_set(ast, NULL);
-	ao2_cleanup(pvt);
+	ao2_ref(pvt, -1);
 	ast_setstate(ast, AST_STATE_DOWN);
 	return 0;
 }
@@ -2002,7 +2002,7 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 			pvt->rxkey = 0;
 		}
 
-		ao2_cleanup(pvt);
+		ao2_ref(pvt, -1);
 	}
 }
 
@@ -2195,7 +2195,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 		found = 1;
 		node->pvt->hangup = 1;
 		tdelete(node, &el_node_list, compare_ip);
-		ao2_cleanup(node->pvt);
+		ao2_ref(node->pvt, -1);
 		node->pvt = NULL;
 		ast_free(node);
 	}
@@ -2553,7 +2553,7 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	if (p) {
 		tmp = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
 		if (!tmp) {
-			ao2_cleanup(p);
+			ao2_ref(p, -1);
 		}
 	}
 
@@ -3477,7 +3477,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	mynode = el_db_find_ipaddr(el_node_key->ip);
 	if (!mynode) {
 		ast_log(LOG_ERROR, "Cannot find database entry for IP address %s, Callsign %s.\n", el_node_key->ip, call);
-		ao2_cleanup(el_node_key->pvt);
+		ao2_ref(el_node_key->pvt, -1);
 		el_node_key->pvt = NULL;
 		ast_free(el_node_key);
 		ast_mutex_unlock(&el_db_lock);
@@ -3506,25 +3506,24 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			pvt = el_alloc(instp->name);
 			if (!pvt) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
-				ao2_cleanup(el_node_key->pvt);
+				ao2_ref(el_node_key->pvt, -1);
 				el_node_key->pvt = NULL;
 				ast_free(el_node_key);
-				ast_mutex_unlock(&el_db_lock);
 				ast_mutex_unlock(&el_nodelist_lock);
+				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
 
-			ao2_ref(pvt, +1);
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
 
 			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
-				ao2_cleanup(el_node_key->pvt);
+				ao2_ref(el_node_key->pvt, -1);
 				el_node_key->pvt = NULL;
 				ast_free(el_node_key);
-				ast_mutex_unlock(&el_db_lock);
 				ast_mutex_unlock(&el_nodelist_lock);
+				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
 
@@ -3540,7 +3539,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ast_mutex_unlock(&instp->lock);
 
 		} else {
-			ao2_ref(pvt, +1);
+			ao2_ref(el_node_key->pvt, -1);
 			el_node_key->pvt = pvt;
 			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
@@ -3556,14 +3555,15 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ast_mutex_unlock(&instp->lock);
 		}
 
-		ast_mutex_unlock(&el_db_lock);
 		ast_mutex_unlock(&el_nodelist_lock);
+		ast_mutex_unlock(&el_db_lock);
+
 		return 0;
 	}
 
 	ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n", el_node_key->call, el_node_key->ip,
 		el_node_key->name);
-	ao2_cleanup(el_node_key->pvt);
+	ao2_ref(el_node_key->pvt, -1);
 	el_node_key->pvt = NULL;
 	ast_free(el_node_key);
 	ast_mutex_unlock(&el_nodelist_lock);
@@ -3989,6 +3989,7 @@ static void *el_reader(void *data)
 						node = *found_key;
 						pvt = node->pvt;
 						ao2_ref(pvt, +1);
+
 						if (pvt->owner) {
 							ast = ast_channel_ref(pvt->owner);
 						}
@@ -4023,8 +4024,12 @@ static void *el_reader(void *data)
 								}
 								node->isdoubling = 1;
 								ast_mutex_unlock(&el_nodelist_lock);
-								ast_channel_unref(ast);
-								ao2_cleanup(pvt);
+
+								if (ast) {
+									ast_channel_unref(ast);
+								}
+
+								ao2_ref(pvt, -1);
 								continue;
 							}
 						}
@@ -4037,8 +4042,12 @@ static void *el_reader(void *data)
 							}
 							node->istimedout = 1;
 							ast_mutex_unlock(&el_nodelist_lock);
-							ast_channel_unref(ast);
-							ao2_cleanup(pvt);
+
+							if (ast) {
+								ast_channel_unref(ast);
+							}
+
+							ao2_ref(pvt, -1);
 							continue;
 						}
 
@@ -4049,6 +4058,7 @@ static void *el_reader(void *data)
 							if (gsmPacket->version == 3 && gsmPacket->payt == 3) {
 								/* break them up for Asterisk */
 								char inbuf[GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET];
+
 								for (i = 0; i < BLOCKING_FACTOR; i++) {
 									/* Echolink to Asterisk */
 									struct ast_frame *f1, *f2;
@@ -4111,8 +4121,11 @@ static void *el_reader(void *data)
 							instp->rx_bad_packets++;
 						}
 
-						ast_channel_unref(ast);
-						ao2_cleanup(pvt);
+						if (ast) {
+							ast_channel_unref(ast);
+						}
+
+						ao2_ref(pvt, -1);
 					} else {
 						instp->rx_bad_packets++;
 					}
