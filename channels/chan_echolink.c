@@ -1374,7 +1374,7 @@ static int el_call(struct ast_channel *ast, const char *dest, int timeout)
 
 	/* make the call */
 	ast_mutex_lock(&instp->lock);
-	strcpy(instp->el_node_test.ip, ipaddr);
+	strcpy(p->el_node_test.ip, ipaddr);
 	do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
 	process_cmd(buf, sizeof(buf), "127.0.0.1", instp);
 	ast_mutex_unlock(&instp->lock);
@@ -2121,7 +2121,7 @@ static void send_text(const void *nodep, const VISIT which, const int depth)
 	struct el_node *node = *(struct el_node **) nodep;
 
 	if ((which == leaf) || (which == postorder)) {
-		if (strncmp(node->ip, node->instp->el_node_test.ip, sizeof(node->ip))) {
+		if (strncmp(node->ip, node->pvt->el_node_test.ip, sizeof(node->ip))) {
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons(node->instp->audio_port);
@@ -3469,7 +3469,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	}
 
 	ast_copy_string(el_node_key->call, call, EL_CALL_SIZE);
-	ast_copy_string(el_node_key->ip, instp->el_node_test.ip, EL_IP_SIZE);
+	ast_copy_string(el_node_key->ip, pvt->el_node_test.ip, EL_IP_SIZE);
 	ast_copy_string(el_node_key->name, name, EL_NAME_SIZE);
 
 	ast_mutex_lock(&el_db_lock);
@@ -3515,7 +3515,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			}
 
 			el_node_key->pvt = pvt;
-			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
+			ast_copy_string(el_node_key->pvt->ip, pvt->el_node_test.ip, EL_IP_SIZE);
 
 			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
@@ -3541,7 +3541,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 		} else {
 			ao2_ref(el_node_key->pvt, -1);
 			el_node_key->pvt = pvt;
-			ast_copy_string(el_node_key->pvt->ip, instp->el_node_test.ip, EL_IP_SIZE);
+			ast_copy_string(el_node_key->pvt->ip, pvt->el_node_test.ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
@@ -3769,9 +3769,21 @@ static void *el_reader(void *data)
 			instp->el_node_test.ip[0] = '\0';
 
 			ast_mutex_lock(&el_nodelist_lock);
+			/* If twalk finds a dead node, it puts the IP address in the instp->el_node_test.ip
+			 * field and we disconnect that node after the walk.  This is done to avoid disconnecting
+			 * nodes while we are walking the tree, which can cause deadlocks if we have to acquire
+			 * the node list lock to disconnect a node while we are walking the tree.
+			 */
 			twalk(el_node_list, send_heartbeat);
 			ast_mutex_unlock(&el_nodelist_lock);
 
+			/* If twalk finds multiple dead nodes, the last dead node will be in instp->el_node_test.ip field
+			 * and disconnected.  If there are multiple dead nodes, it will take multiple heartbeat loops to find
+			 * them and kill them off.
+			 */
+
+			/*! \todo Find all dead nodes in one pass and cleanup the process?
+			 */
 			if (instp->el_node_test.ip[0] != '\0') {
 				if (find_delete(&instp->el_node_test, instp)) {
 					int bye_length;
