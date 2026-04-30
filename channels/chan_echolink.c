@@ -1401,7 +1401,9 @@ static void el_destroy(void *obj)
 		ast_free(pvt->linkstr);
 	}
 	pvt->linkstr = NULL;
+	ast_mutex_lock(&pvt->lock);
 	pvt->owner = NULL;
+	ast_mutex_unlock(&pvt->lock);
 
 	ast_mutex_lock(&el_nodelist_lock);
 	twalk(el_node_list, send_info);
@@ -1457,6 +1459,7 @@ static struct el_pvt *el_alloc(const char *data)
 			ao2_cleanup(pvt);
 			return NULL;
 		}
+		ast_mutex_init(&pvt->lock);
 	}
 	return pvt;
 }
@@ -1509,8 +1512,10 @@ static int el_hangup(struct ast_channel *ast)
 	}
 
 	ast_channel_tech_pvt_set(ast, NULL);
+	ast_mutex_destroy(&pvt->lock);
 	ao2_ref(pvt, -1);
 	ast_setstate(ast, AST_STATE_DOWN);
+
 	return 0;
 }
 
@@ -2197,8 +2202,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 		found = 1;
 		node->pvt->hangup = 1;
 		tdelete(node, &el_node_list, compare_ip);
-		ao2_ref(node->pvt, -1);
-		node->pvt = NULL;
+		node->pvt = NULL; /* We've dereferenced the node pvt, by setting it to null.  Hangup will clean up the reference */
 		ast_free(node);
 	}
 
@@ -2480,10 +2484,15 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 		ast_channel_rings_set(tmp, 1);
 	}
 
-	ast_channel_tech_pvt_set(tmp, pvt);
 	ast_channel_context_set(tmp, pvt->instp->context);
 	ast_channel_exten_set(tmp, pvt->instp->astnode);
 	ast_channel_language_set(tmp, "");
+
+	pvt->u = ast_module_user_add(tmp);
+	pvt->nodenum = nodenum;
+	pvt->owner = tmp;
+
+	ast_channel_tech_pvt_set(tmp, pvt);
 	ast_channel_unlock(tmp);
 
 	if (nodenum > 0) {
@@ -2492,10 +2501,6 @@ static struct ast_channel *el_new(struct el_pvt *pvt, int state, unsigned int no
 		snprintf(tmpstr, sizeof(tmpstr), "3%06u", nodenum);
 		ast_set_callerid(tmp, tmpstr, NULL, NULL);
 	}
-
-	pvt->u = ast_module_user_add(tmp);
-	pvt->nodenum = nodenum;
-	pvt->owner = tmp;
 
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(tmp)) {
@@ -3477,8 +3482,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 	mynode = el_db_find_ipaddr(el_node_key->ip);
 	if (!mynode) {
 		ast_log(LOG_ERROR, "Cannot find database entry for IP address %s, Callsign %s.\n", el_node_key->ip, call);
-		ao2_ref(el_node_key->pvt, -1);
-		el_node_key->pvt = NULL;
 		ast_free(el_node_key);
 		ast_mutex_unlock(&el_db_lock);
 		return 1;
@@ -3506,15 +3509,13 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			pvt = el_alloc(instp->name);
 			if (!pvt) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
-				ao2_ref(el_node_key->pvt, -1);
-				el_node_key->pvt = NULL;
 				ast_free(el_node_key);
 				ast_mutex_unlock(&el_nodelist_lock);
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
 			}
 
-			el_node_key->pvt = pvt;
+			el_node_key->pvt = pvt; /* Assign the allocated reference for an inbound call */
 			ast_copy_string(el_node_key->pvt->ip, pvt->el_node_test.ip, EL_IP_SIZE);
 
 			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
@@ -3539,8 +3540,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *pvt, const char
 			ast_mutex_unlock(&instp->lock);
 
 		} else {
-			ao2_ref(el_node_key->pvt, -1);
-			el_node_key->pvt = pvt;
+			el_node_key->pvt = pvt; /* Assign the passed in reference for an outbound call */
 			ast_copy_string(el_node_key->pvt->ip, pvt->el_node_test.ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
 			el_node_key->rx_ctrl_packets++;
@@ -4002,9 +4002,11 @@ static void *el_reader(void *data)
 						pvt = node->pvt;
 						ao2_ref(pvt, +1);
 
+						ast_mutex_lock(&pvt->lock);
 						if (pvt->owner) {
 							ast = ast_channel_ref(pvt->owner);
 						}
+						ast_mutex_unlock(&pvt->lock);
 
 						pvt->firstheard = 1;
 						node->countdown = instp->rtcptimeout;
@@ -4526,6 +4528,7 @@ static int unload_module(void)
 		}
 		if (instances[n]->el_reader_thread) {
 			pthread_join(instances[n]->el_reader_thread, NULL);
+			ast_mutex_destroy(&instances[n]->lock);
 		}
 		if (instances[n]->denylist[0]) {
 			ast_free(instances[n]->denylist[0]);
@@ -4555,6 +4558,8 @@ static int unload_module(void)
 		ast_free(instances[n]);
 	}
 
+	ast_mutex_destroy(&el_nodelist_lock);
+	ast_mutex_destroy(&el_db_lock);
 	return 0;
 }
 
