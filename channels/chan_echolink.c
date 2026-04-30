@@ -2226,6 +2226,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 	int pack_length;
 	unsigned short i, n;
 	struct el_node key;
+	int conn;
 
 	/*
 	 * see if this is a text packet
@@ -2304,18 +2305,12 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 	strtok_r(NULL, delim, &saveptr);
 	strtok_r(NULL, delim, &saveptr);
 
-	if ((strcmp(cmd, "o.conip") == 0) || (strcmp(cmd, "o.dconip") == 0)) {
+	conn = strcmp(cmd, "o.conip");
+
+	if (conn == 0 || strcmp(cmd, "o.dconip") == 0) {
 		if (!arg1) {
 			instp->rx_bad_packets++;
 			return;
-		}
-
-		if (strcmp(cmd, "o.conip") == 0) {
-			n = 1;
-			pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall, instp->myname, instp->astnode);
-		} else {
-			pack_length = rtcp_make_bye(pack, sizeof(pack), "bye");
-			n = 20;
 		}
 
 		memset(&sin, 0, sizeof(sin));
@@ -2323,21 +2318,26 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 		sin.sin_port = htons(instp->ctrl_port);
 		sin.sin_addr.s_addr = inet_addr(arg1);
 
-		if (strcmp(cmd, "o.dconip") == 0) {
+		if (conn == 0) {
+			n = 1;
+			pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall, instp->myname, instp->astnode);
+			for (i = 0; i < n; i++) {
+				sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
+			}
+			ast_debug(3, "Connect request sent to %s.\n", arg1);
+
+		} else { /* It's a disconnect */
+			pack_length = rtcp_make_bye(pack, sizeof(pack), "bye");
+			n = 20;
 			ast_copy_string(key.ip, arg1, sizeof(key.ip));
 			if (find_delete(&key, NULL)) {
-				for (i = 0; i < 20; i++) {
+				for (i = 0; i < n; i++) {
 					sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 				}
 				ast_debug(1, "Disconnect request sent to %s.\n", key.ip);
 			} else {
 				ast_debug(1, "Did not find IP Address %s to request disconnect.\n", key.ip);
 			}
-		} else {
-			for (i = 0; i < n; i++) {
-				sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
-			}
-			ast_debug(3, "Connect request sent to %s.\n", arg1);
 		}
 
 		return;
