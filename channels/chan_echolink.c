@@ -3505,7 +3505,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
 			el_node_key->nodenum, el_node_key->name);
 
-		if (p == NULL) { 
+		if (p == NULL) {
 			/* A new inbound call */
 			struct ast_frame fr = {
 				.frametype = AST_FRAME_CONTROL,
@@ -3546,7 +3546,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			el_node_key->pvt = p;
 			ast_mutex_unlock(&instp->lock);
 
-		} else { 
+		} else {
 			/* A new outbound call*/
 			ao2_ref(p, 1);
 			el_node_key->pvt = p; /* Assign the passed in reference for an outbound call */
