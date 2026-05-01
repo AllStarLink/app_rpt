@@ -485,13 +485,14 @@ struct timeval ast_radio_tvnow(void);
  *   These define total signal power and peak-to-average power ratio
  *
  * \author      	NR9V
- * \param sbuf  	Rx audio sample buffer
+ * \param sbuf  	Rx audio sample buffer in 48k stereo or mono
  * \param o	    	Rx Audio Stats data structure
  * \param len   	Length of data in sbuf
+ * \param mono  	True if sbuf is mono, False if sbuf is stero
  * \return 	    	1 if clipping detected, 0 otherwise
  */
 #define CLIP_LED_HOLD_TIME_MS 500
-int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len);
+int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, short mono);
 
 /*!
  * \brief Display receive audio statistics.
