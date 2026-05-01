@@ -1753,7 +1753,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	 * nice to log a warning but as this does not relate to outgoing network audio it's not
 	 * a major issue. User can check the Tx Audio Stats utility if desired.
 	 */
-	ast_radio_check_audio(data, &o->txaudiostats, 12 * FRAME_SIZE);
+	ast_radio_check_audio(data, &o->txaudiostats, 12 * FRAME_SIZE, 0);
 
 	return res;
 }
@@ -2560,11 +2560,11 @@ static void *simpleusb_audio_thread(void *arg)
 
 		/* Check for ADC clipping and input audio statistics before any filtering is done.
 		 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
-		 * ast_radio_check_audio() takes the read buffer as received (48K stereo),
-		 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
+		 * ast_radio_check_audio() takes the read buffer as received (48K stereo or mono),
+		 * extracts the 48K channel, checks amplitude and distortion characteristics,
 		 * and returns true if clipping was detected.
 		 */
-		if (ast_radio_check_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+		if (ast_radio_check_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 6 * FRAME_SIZE, 1)) {
 			if (o->clipledgpio) {
 				/* Set Clip LED GPIO pulsetimer if not already set */
 				if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {

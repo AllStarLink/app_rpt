@@ -872,24 +872,40 @@ struct timeval ast_radio_tvnow(void)
 
 #define CLIP_SAMP_THRESH 0x7eb0
 #define CLIP_EVENT_MIN_SAMPLES 3
-int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len)
+int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, short mono)
 {
 	unsigned short i, j, val, max = 0, seq_clips = 0;
 	double pwr = 0.0;
 	short buf[FRAME_SIZE], last_clip = -1;
 
-	/* validate len and index */
-	if (len > 12 * FRAME_SIZE) {
-		len = 12 * FRAME_SIZE;
-	}
 	if (o->index >= AUDIO_STATS_LEN) {
 		o->index = 0;
 	}
-	/* Downsample from 48000 stereo to 8000 mono */
-	for (i = 10, j = 0; i < len; i += 12) {
-		buf[j++] = sbuf[i];
+
+	if (mono) {
+		/* validate len and index */
+		if (len > 6 * FRAME_SIZE) {
+			len = 6 * FRAME_SIZE;
+		}
+
+		/* Downsample from 48000 mono to 8000 mono */
+		for (i = 5, j = 0; i < len; i += 6) {
+			buf[j++] = sbuf[i];
+		}
+		len /= 6;
+	} else {
+		/* validate len and index */
+		if (len > 12 * FRAME_SIZE) {
+			len = 12 * FRAME_SIZE;
+		}
+
+		/* Downsample from 48000 stereo to 8000 mono */
+		for (i = 10, j = 0; i < len; i += 12) {
+			buf[j++] = sbuf[i];
+		}
+		len /= 12;
 	}
-	len /= 12;
+
 	/* len should now be 160 */
 	for (i = 0; i < len; i++) {
 		val = abs(buf[i]);
@@ -897,21 +913,27 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len)
 			if (val > max) {
 				max = val;
 			}
+
 			pwr += (double) (val * val);
+
 			if (val > CLIP_SAMP_THRESH) {
 				if (last_clip >= 0 && last_clip + 1 == i) {
 					seq_clips++;
 				}
+
 				last_clip = i;
 			}
 		}
 	}
+
 	o->maxbuf[o->index] = max;
 	o->pwrbuf[o->index] = (unsigned int) (pwr / (double) len);
 	o->clipbuf[o->index] = seq_clips;
+
 	if (++o->index >= AUDIO_STATS_LEN) {
 		o->index = 0;
 	}
+
 	/* return 1 if clipping was detected */
 	return (seq_clips >= CLIP_EVENT_MIN_SAMPLES);
 }
