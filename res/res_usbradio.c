@@ -523,7 +523,6 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	struct usb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
 	int i;
-	FILE *fp;
 
 	usb_init();
 	usb_find_busses();
