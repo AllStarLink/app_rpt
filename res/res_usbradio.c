@@ -528,6 +528,7 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	usb_find_busses();
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
+		sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
 			if (!(is_known_device(dev) || is_user_device(dev))) {
 				continue;
