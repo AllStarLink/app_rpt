@@ -458,6 +458,7 @@ struct el_instance {
 	struct timeval current_talker_start_time;
 	struct timeval current_talker_last_time;
 	pthread_t el_reader_thread;
+	pthread_t el_register_thread;
 };
 
 /*!
@@ -521,7 +522,6 @@ static void *el_db_nodenum = NULL;
 static void *el_db_ipaddr = NULL;
 
 /* Echolink registration thread */
-static pthread_t el_register_thread = 0;
 static pthread_t el_directory_thread = 0;
 static int run_forever = 1;
 static int el_sleeptime = 0;
@@ -1414,6 +1414,7 @@ static void el_destroy(void *obj)
 	if (p->u) {
 		ast_module_user_remove(p->u);
 	}
+	ast_mutex_destroy(&p->lock);
 }
 
 /*!
@@ -1447,6 +1448,7 @@ static struct el_pvt *el_alloc(const char *data)
 		p->keepalive = KEEPALIVE_TIME;
 		p->instp = instances[n];
 		p->dsp = ast_dsp_new();
+		ast_mutex_init(&p->lock);
 
 		if (!p->dsp) {
 			ast_log(LOG_ERROR, "Cannot get DSP!\n");
@@ -1466,9 +1468,8 @@ static struct el_pvt *el_alloc(const char *data)
 			ao2_cleanup(p);
 			return NULL;
 		}
-
-		ast_mutex_init(&p->lock);
 	}
+
 	return p;
 }
 
@@ -1519,7 +1520,6 @@ static int el_hangup(struct ast_channel *chan)
 	}
 
 	ast_channel_tech_pvt_set(chan, NULL);
-	ast_mutex_destroy(&p->lock);
 	ao2_ref(p, -1);
 	ast_setstate(chan, AST_STATE_DOWN);
 
@@ -2000,8 +2000,9 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 		if (p->rxkey <= 0) {
 			/* The timer has expired, queue up an unkey for the channel */
 			struct ast_channel *chan;
-
+			ast_mutex_lock(&p->lock);
 			chan = p->owner ? ast_channel_ref(p->owner) : NULL;
+			ast_mutex_unlock(&p->lock);
 			if (chan) {
 				struct pending_ctrl item = {
 					.chan = chan,
@@ -2343,7 +2344,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 			pack_length = rtcp_make_bye(pack, sizeof(pack), "bye");
 			n = 20;
 			ast_copy_string(key.ip, arg1, sizeof(key.ip));
-			if (find_delete(&key, NULL)) {
+			if (find_delete(&key, instp)) {
 				for (i = 0; i < n; i++) {
 					sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
 				}
@@ -3506,7 +3507,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 	ast_mutex_lock(&el_nodelist_lock);
 
-	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
+	if (tfind(el_node_key, &el_node_list, compare_ip)) {
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
 			el_node_key->nodenum, el_node_key->name);
 
@@ -3571,7 +3572,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 		ast_mutex_unlock(&el_nodelist_lock);
 		ast_mutex_unlock(&el_db_lock);
-
+		tsearch(el_node_key, &el_node_list, compare_ip); /* Add the node to the list  after everything is "happy" */
 		return 0;
 	}
 
@@ -3845,6 +3846,7 @@ static void *el_reader(void *data)
 			instp->rx_ctrl_packets++;
 			fromlen = sizeof(struct sockaddr_in);
 			recvlen = recvfrom(instp->ctrl_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
+			ast_copy_string(node_lookup.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
 				if (is_rtcp_sdes((unsigned char *) buf, recvlen)) {
@@ -4216,7 +4218,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		return -1;
 	}
 
-	ast_mutex_init(&instp->lock);
 	instp->audio_sock = -1;
 	instp->ctrl_sock = -1;
 	instp->fdr = -1;
@@ -4506,7 +4507,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	}
 
 	/* start the registration thread */
-	ast_pthread_create(&el_register_thread, NULL, el_register, instp);
+	ast_pthread_create(&instp->el_register_thread, NULL, el_register, instp);
 	ast_pthread_create(&instp->el_reader_thread, NULL, el_reader, instp);
 	instances[ninstances++] = instp;
 
@@ -4531,7 +4532,6 @@ static int unload_module(void)
 
 	/* Wait for all threads to exit */
 	pthread_join(el_directory_thread, NULL);
-	pthread_join(el_register_thread, NULL);
 
 	ast_debug(1, "We have %d Echolink instance%s.\n", ninstances, ESS(ninstances));
 
@@ -4547,6 +4547,7 @@ static int unload_module(void)
 		}
 		if (instances[n]->el_reader_thread) {
 			pthread_join(instances[n]->el_reader_thread, NULL);
+			pthread_join(instances[n]->el_register_thread, NULL);
 			ast_mutex_destroy(&instances[n]->lock);
 		}
 		if (instances[n]->denylist[0]) {
