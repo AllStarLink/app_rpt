@@ -610,19 +610,22 @@ static int usrp_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 			/* See if we need to check for DTMF */
 			if (pvt->usedtmf && pvt->dsp) {
-				f = ast_dsp_process(ast, pvt->dsp, &fr);
-				if ((f->frametype == AST_FRAME_DTMF_END) || (f->frametype == AST_FRAME_DTMF_BEGIN)) {
-					if ((f->subclass.integer == 'm') || (f->subclass.integer == 'u')) {
-						f->frametype = AST_FRAME_NULL;
-						f->subclass.integer = 0;
+				struct ast_frame *f1 = ast_frdup(&fr);
+				if (f1) {
+					f = ast_dsp_process(ast, pvt->dsp, f1);
+					if ((f->frametype == AST_FRAME_DTMF_END) || (f->frametype == AST_FRAME_DTMF_BEGIN)) {
+						if ((f->subclass.integer == 'm') || (f->subclass.integer == 'u')) {
+							f->frametype = AST_FRAME_NULL;
+							f->subclass.integer = 0;
+						}
+						if (f->frametype == AST_FRAME_DTMF_END) {
+							ast_log(LOG_NOTICE, "Channel %s: Got DTMF char %c\n", ast_channel_name(ast), f->subclass.integer);
+						}
 						ast_queue_frame(ast, f);
 					}
-					if (f->frametype == AST_FRAME_DTMF_END) {
-						ast_log(LOG_NOTICE, "Channel %s: Got DTMF char %c\n", ast_channel_name(ast), f->subclass.integer);
-					}
-					ast_queue_frame(ast, f);
+
+					ast_frfree(f);
 				}
-				ast_frfree(f);
 			}
 		}
 	}
