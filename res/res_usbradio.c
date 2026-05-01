@@ -439,10 +439,6 @@ int ast_radio_hid_device_mklist(void)
 						continue;
 					}
 
-					if (desdev[strlen(desdev) - 1] == '\n') {
-						desdev[strlen(desdev) - 1] = 0;
-					}
-
 					if (strcasecmp(desdev, devstr)) {
 						continue;
 					}
@@ -537,21 +533,12 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 			if (!(is_known_device(dev) || is_user_device(dev))) {
 				continue;
 			}
-			sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
+
 			for (i = 0; i < 32; i++) {
-				sprintf(str, "/proc/asound/card%d/usbbus", i);
-				fp = fopen(str, "r");
-				if (!fp) {
+				if (read_card_usbbus(i, desdev, sizeof(desdev))) {
 					continue;
 				}
-				if ((!fgets(desdev, sizeof(desdev) - 1, fp)) || (!desdev[0])) {
-					fclose(fp);
-					continue;
-				}
-				fclose(fp);
-				if (desdev[strlen(desdev) - 1] == '\n') {
-					desdev[strlen(desdev) - 1] = 0;
-				}
+
 				if (strcasecmp(desdev, devstr)) {
 					continue;
 				}
