@@ -440,7 +440,6 @@ struct el_instance {
 	uint16_t audio_port;
 	uint16_t ctrl_port;
 	unsigned long seqno;
-	struct el_node el_node_test;
 	struct el_pending pending[MAXPENDING];
 	time_t aprstime;
 	time_t starttime;
@@ -485,7 +484,6 @@ struct el_pvt {
 	unsigned int nodenum;
 	struct ast_str *linkstr;
 	struct gsmVoice_t audio;
-	struct el_node node_lookup;
 	ast_mutex_t lock;
 };
 
@@ -545,9 +543,9 @@ static int el_text(struct ast_channel *chan, const char *text);
 static int el_queryoption(struct ast_channel *chan, int option, void *data, int *datalen);
 
 static void send_info(const void *nodep, const VISIT which, const int depth);
-static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_instance *instp);
+static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_instance *instp, struct el_node *node_lookup);
 static int find_delete(const struct el_node *key, struct el_instance *instp);
-static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *call, const char *name);
+static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *call, const char *name, struct el_node *node_lookup);
 static void lookup_node_nodenum(const void *nodep, const VISIT which, void *closure);
 static void lookup_node_callsign(const void *nodep, const VISIT which, void *closure);
 
@@ -1318,6 +1316,7 @@ static int el_call(struct ast_channel *chan, const char *dest, int timeout)
 	struct el_pvt *p = ast_channel_tech_pvt(chan);
 	struct el_instance *instp = p->instp;
 	struct eldb *foundnode;
+	struct el_node node_lookup;
 	char ipaddr[EL_IP_SIZE];
 	char buf[100];
 	char *str, *cp;
@@ -1374,9 +1373,9 @@ static int el_call(struct ast_channel *chan, const char *dest, int timeout)
 
 	/* make the call */
 	ast_mutex_lock(&instp->lock);
-	strcpy(p->node_lookup.ip, ipaddr);
-	do_new_call(instp, p, "OUTBOUND", "OUTBOUND");
-	process_cmd(buf, sizeof(buf), "127.0.0.1", instp);
+	strcpy(node_lookup.ip, ipaddr);
+	do_new_call(instp, p, "OUTBOUND", "OUTBOUND", &node_lookup);
+	process_cmd(buf, sizeof(buf), "127.0.0.1", instp, &node_lookup);
 	ast_mutex_unlock(&instp->lock);
 	ast_setstate(chan, AST_STATE_RINGING);
 
@@ -1485,11 +1484,12 @@ static int el_hangup(struct ast_channel *chan)
 	int i, n;
 	unsigned char bye[50];
 	struct sockaddr_in sin;
+	struct el_node node_lookup;
 	time_t now;
 
 	ast_debug(1, "Sent bye to IP address %s.\n", p->ip);
-	strcpy(p->node_lookup.ip, p->ip);
-	find_delete(&p->node_lookup, instp);
+	strcpy(node_lookup.ip, p->ip);
+	find_delete(&node_lookup, instp);
 	ast_softhangup(chan, AST_SOFTHANGUP_DEV);
 	p->hangup = 0;
 	n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
@@ -1820,15 +1820,16 @@ static int compare_ip(const void *pa, const void *pb)
  * \param which		Enum for VISIT used by twalk.
  * \param depth		Level of the node in the tree.
  */
-static void send_audio_only_one(const void *nodep, const VISIT which, const int depth)
+static void send_audio_only_one(const void *nodep, const VISIT which, void *closure)
 {
 	struct el_node *node = *(struct el_node **) nodep;
 	struct el_instance *instp = node->instp;
 	struct el_pvt *p = node->pvt;
 	struct sockaddr_in sin;
+	struct el_node *node_lookup = closure;
 
 	if ((which == leaf) || (which == postorder)) {
-		if (strncmp(node->ip, p->node_lookup.ip, EL_IP_SIZE) == 0) {
+		if (strncmp(node->ip, node_lookup->ip, EL_IP_SIZE) == 0) {
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons(instp->audio_port);
@@ -2086,13 +2087,14 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
  * \brief Send a heartbeat packet to connected nodes.
  * \param nodep		Pointer to eldb struct.
  * \param which		Enum for VISIT used by twalk.
- * \param depth		Level of the node in the tree.
+ * \param closure	Pointer to el_node struct for lookup.
  */
-static void send_heartbeat(const void *nodep, const VISIT which, const int depth)
+static void send_heartbeat(const void *nodep, const VISIT which, void *closure)
 {
 	struct el_node *node = *(struct el_node **) nodep;
 	struct el_instance *instp = node->instp;
 	struct sockaddr_in sin;
+	struct el_node *node_lookup = closure;
 	unsigned char sdes_packet[256];
 	int sdes_length;
 
@@ -2102,10 +2104,9 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 		}
 
 		if (node->heartbeat_countdown < 0) {
-			ast_copy_string(instp->el_node_test.ip, node->ip, EL_IP_SIZE);
-			ast_copy_string(instp->el_node_test.call, node->call, EL_CALL_SIZE);
-			ast_log(LOG_WARNING, "Countdown for Callsign %s, IP Address %s is negative.\n", instp->el_node_test.call,
-				instp->el_node_test.ip);
+			ast_copy_string(node_lookup->ip, node->ip, EL_IP_SIZE);
+			ast_copy_string(node_lookup->call, node->call, EL_CALL_SIZE);
+			ast_log(LOG_WARNING, "Countdown for Callsign %s, IP Address %s is negative.\n", node_lookup->call, node_lookup->ip);
 		}
 
 		memset(sdes_packet, 0, sizeof(sdes_packet));
@@ -2126,15 +2127,16 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
  * \brief Send text message to connected nodes except sender.
  * \param nodep		Pointer to el_node struct.
  * \param which		Enum for VISIT used by twalk.
- * \param depth		Level of the node in the tree.
+ * \param closure	Pointer to el_node struct for lookup.
  */
-static void send_text(const void *nodep, const VISIT which, const int depth)
+static void send_text(const void *nodep, const VISIT which, void *closure)
 {
 	struct sockaddr_in sin;
 	struct el_node *node = *(struct el_node **) nodep;
+	struct el_node *node_lookup = closure;
 
 	if ((which == leaf) || (which == postorder)) {
-		if (strncmp(node->ip, node->pvt->node_lookup.ip, sizeof(node->ip))) {
+		if (strncmp(node->ip, node_lookup->ip, sizeof(node->ip))) {
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons(node->instp->audio_port);
@@ -2225,11 +2227,12 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
  *	o.conip <IPaddress>    (request a connect)
  *	o.dconip <IPaddress>   (request a disconnect)
  *	o.rec                  (turn on/off recording)
- * \param buf			Pointer to buffer with command data.
- * \param fromip		Pointer to ip address that sent the command.
- * \param instp			Pointer to Echolink instance.
+ * \param buf			   Pointer to buffer with command data.
+ * \param fromip		   Pointer to ip address that sent the command.
+ * \param instp			   Pointer to Echolink instance.
+ * \param node_lookup	   Pointer to Echolink node struct for lookup.
  */
-static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_instance *instp)
+static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_instance *instp, struct el_node *node_lookup)
 {
 	char *cmd, *arg1;
 	const char *delim = " ";
@@ -2252,7 +2255,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 			instp->text_packet = buf;
 			instp->text_packet_len = buf_len;
 			ast_mutex_lock(&el_nodelist_lock);
-			twalk(el_node_list, send_text);
+			twalk_r(el_node_list, send_text, node_lookup);
 			ast_mutex_unlock(&el_nodelist_lock);
 			instp->text_packet = NULL;
 			instp->text_packet_len = 0;
@@ -2448,10 +2451,11 @@ static int el_xwrite(struct ast_channel *chan, struct ast_frame *frame)
 	}
 
 	if (p->txindex >= BLOCKING_FACTOR) {
-		strcpy(p->node_lookup.ip, p->ip);
+		struct el_node node_lookup;
 
+		strcpy(node_lookup.ip, p->ip);
 		ast_mutex_lock(&el_nodelist_lock);
-		twalk(el_node_list, send_audio_only_one);
+		twalk_r(el_node_list, send_audio_only_one, &node_lookup);
 		ast_mutex_unlock(&el_nodelist_lock);
 		p->txindex = 0;
 	}
@@ -3462,11 +3466,12 @@ static void *el_register(void *data)
  * \param pvt			Pointer to echolink private data.
  * \param call			Pointer to callsign.
  * \param name			Pointer to name associated with the callsign.
+ * \param node_lookup	Pointer to el_node struct with the ip address to use for this call.
  * \retval 1 			if not successful.
  * \retval 0 			if successful.
  * \retval -1			if memory allocation error.
  */
-static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *call, const char *name)
+static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *call, const char *name, struct el_node *node_lookup)
 {
 	struct el_node *el_node_key;
 	struct ast_channel *chan;
@@ -3480,7 +3485,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	}
 
 	ast_copy_string(el_node_key->call, call, EL_CALL_SIZE);
-	ast_copy_string(el_node_key->ip, p->node_lookup.ip, EL_IP_SIZE);
+	ast_copy_string(el_node_key->ip, node_lookup->ip, EL_IP_SIZE);
 	ast_copy_string(el_node_key->name, name, EL_NAME_SIZE);
 
 	ast_mutex_lock(&el_db_lock);
@@ -3522,7 +3527,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 				return -1;
 			}
 
-			ast_copy_string(el_node_key->pvt->ip, p->node_lookup.ip, EL_IP_SIZE);
+			ast_copy_string(el_node_key->pvt->ip, node_lookup->ip, EL_IP_SIZE);
 
 			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
@@ -3550,7 +3555,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			/* A new outbound call*/
 			ao2_ref(p, 1);
 			el_node_key->pvt = p; /* Assign the passed in reference for an outbound call */
-			ast_copy_string(el_node_key->pvt->ip, p->node_lookup.ip, EL_IP_SIZE);
+			ast_copy_string(el_node_key->pvt->ip, node_lookup->ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_lock(&instp->lock);
@@ -3772,33 +3777,35 @@ static void *el_reader(void *data)
 		update_timer(&heartbeat_timer, elap, 0);
 
 		if (heartbeat_timer <= 0) {
+			struct el_node node_lookup;
+
 			heartbeat_timer = KEEPALIVE_TIME;
-			instp->el_node_test.ip[0] = '\0';
+			node_lookup.ip[0] = '\0';
 
 			ast_mutex_lock(&el_nodelist_lock);
-			/* If twalk finds a dead node, it puts the IP address in the instp->el_node_test.ip
+			/* If twalk finds a dead node, it puts the IP address in the node_lookup.ip
 			 * field and we disconnect that node after the walk.  This is done to avoid disconnecting
 			 * nodes while we are walking the tree, which can cause deadlocks if we have to acquire
 			 * the node list lock to disconnect a node while we are walking the tree.
 			 */
-			twalk(el_node_list, send_heartbeat);
+			twalk_r(el_node_list, send_heartbeat, &node_lookup);
 			ast_mutex_unlock(&el_nodelist_lock);
 
-			/* If twalk finds multiple dead nodes, the last dead node will be in instp->el_node_test.ip field
+			/* If twalk finds multiple dead nodes, the last dead node will be in node_lookup.ip field
 			 * and disconnected.  If there are multiple dead nodes, it will take multiple heartbeat loops to find
 			 * them and kill them off.
 			 */
 
 			/*! \todo Find all dead nodes in one pass and cleanup the process?
 			 */
-			if (instp->el_node_test.ip[0] != '\0') {
-				if (find_delete(&instp->el_node_test, instp)) {
+			if (node_lookup.ip[0] != '\0') {
+				if (find_delete(&node_lookup, instp)) {
 					int bye_length;
 
 					bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
 					memset(&sin, 0, sizeof(sin));
 					sin.sin_family = AF_INET;
-					sin.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
+					sin.sin_addr.s_addr = inet_addr(node_lookup.ip);
 					sin.sin_port = htons(instp->ctrl_port);
 
 					/* send 20 bye packets to insure that they receive this disconnect */
@@ -3807,10 +3814,8 @@ static void *el_reader(void *data)
 						instp->tx_ctrl_packets++;
 					}
 
-					ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", instp->el_node_test.call);
+					ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", node_lookup.call);
 				}
-
-				instp->el_node_test.ip[0] = '\0';
 			}
 		}
 
@@ -3834,6 +3839,8 @@ static void *el_reader(void *data)
 		 * process the control socket
 		 */
 		if (fds[0].revents) { /* if a ctrl packet */
+			struct el_node node_lookup;
+
 			fds[0].revents = 0;
 			instp->rx_ctrl_packets++;
 			fromlen = sizeof(struct sockaddr_in);
@@ -3863,9 +3870,9 @@ static void *el_reader(void *data)
 						}
 
 						ast_mutex_lock(&el_nodelist_lock);
-						ast_copy_string(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
+						ast_copy_string(node_lookup.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
 
-						found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
+						found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
 						if (found_key) {
 							node = *found_key;
 							node->pvt->firstheard = 1;
@@ -3906,7 +3913,7 @@ static void *el_reader(void *data)
 								}
 							}
 							if (!i) { /* if authorized */
-								i = do_new_call(instp, NULL, call, name);
+								i = do_new_call(instp, NULL, call, name, &node_lookup);
 								if (i < 0) {
 									/* we failed to create a new call - error reported by do_new_call */
 									i = 0;
@@ -3915,7 +3922,7 @@ static void *el_reader(void *data)
 							if (i) { /* if not authorized or do_new_call failed*/
 								/* first, see if we have one that is ours and not abandoned */
 								for (x = 0; x < MAXPENDING; x++) {
-									if (strcmp(instp->pending[x].fromip, instp->el_node_test.ip)) {
+									if (strcmp(instp->pending[x].fromip, node_lookup.ip)) {
 										continue;
 									}
 									if (ast_tvdiff_ms(ast_tvnow(), instp->pending[x].reqtime) < AUTH_ABANDONED_MS) {
@@ -3925,11 +3932,11 @@ static void *el_reader(void *data)
 								if (x < MAXPENDING) {
 									/* if its time, send un-auth */
 									if (ast_tvdiff_ms(ast_tvnow(), instp->pending[x].reqtime) >= AUTH_RETRY_MS) {
-										ast_debug(1, "Sent bye to IP address %s.\n", instp->el_node_test.ip);
+										ast_debug(1, "Sent bye to IP address %s.\n", node_lookup.ip);
 										j = rtcp_make_bye(bye, sizeof(bye), "UN-AUTHORIZED");
 										memset(&sin1, 0, sizeof(sin1));
 										sin1.sin_family = AF_INET;
-										sin1.sin_addr.s_addr = inet_addr(instp->el_node_test.ip);
+										sin1.sin_addr.s_addr = inet_addr(node_lookup.ip);
 										sin1.sin_port = htons(instp->ctrl_port);
 										for (i = 0; i < 20; i++) {
 											sendto(instp->ctrl_sock, bye, j, 0, (struct sockaddr *) &sin1, sizeof(sin1));
@@ -3951,7 +3958,7 @@ static void *el_reader(void *data)
 										}
 									}
 									if (x < MAXPENDING) { /* we found one */
-										strcpy(instp->pending[x].fromip, instp->el_node_test.ip);
+										strcpy(instp->pending[x].fromip, node_lookup.ip);
 										instp->pending[x].reqtime = ast_tvnow();
 										time(&now);
 										if (instp->starttime < (now - EL_APRS_START_DELAY)) {
@@ -3962,7 +3969,7 @@ static void *el_reader(void *data)
 										}
 									} else {
 										ast_log(LOG_ERROR, "Cannot find open pending echolink request slot for IP Address %s.\n",
-											instp->el_node_test.ip);
+											node_lookup.ip);
 									}
 								}
 							}
@@ -3975,9 +3982,8 @@ static void *el_reader(void *data)
 					}
 				} else {
 					if (is_rtcp_bye((unsigned char *) buf, recvlen)) {
-						if (find_delete(&instp->el_node_test, instp)) {
-							ast_verb(4, "Disconnect from IP address %s, Callsign %s.\n", instp->el_node_test.ip,
-								instp->el_node_test.call);
+						if (find_delete(&node_lookup, instp)) {
+							ast_verb(4, "Disconnect from IP address %s, Callsign %s.\n", node_lookup.ip, node_lookup.call);
 						}
 					} else {
 						instp->rx_bad_packets++;
@@ -3989,6 +3995,8 @@ static void *el_reader(void *data)
 		 *process the audio socket
 		 */
 		if (fds[1].revents) { /* if an audio packet */
+			struct el_node node_lookup;
+
 			fds[1].revents = 0;
 			instp->rx_audio_packets++;
 			current_packet_time = ast_tvnow();
@@ -3996,15 +4004,15 @@ static void *el_reader(void *data)
 			recvlen = recvfrom(instp->audio_sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 			if (recvlen > 0) {
 				buf[recvlen] = '\0';
-				ast_copy_string(instp->el_node_test.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
+				ast_copy_string(node_lookup.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
 				gsmPacket = (struct gsmVoice_t *) &buf;
 				/* packets that start with 0x6f are text packets */
 				if (buf[0] == 0x6f) {
-					process_cmd(buf, recvlen, instp->el_node_test.ip, instp);
+					process_cmd(buf, recvlen, node_lookup.ip, instp, &node_lookup);
 				} else {
 					ast_mutex_lock(&el_nodelist_lock);
 
-					found_key = (struct el_node **) tfind(&instp->el_node_test, &el_node_list, compare_ip);
+					found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
 					if (found_key) {
 						struct el_pvt *p;
 						struct ast_channel *chan = NULL;
