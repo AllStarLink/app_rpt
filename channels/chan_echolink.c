@@ -3527,9 +3527,9 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 				return -1;
 			}
 
-			ast_copy_string(el_node_key->pvt->ip, node_lookup->ip, EL_IP_SIZE);
+			ast_copy_string(p->ip, node_lookup->ip, EL_IP_SIZE);
 
-			chan = el_new(el_node_key->pvt, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
+			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
 				ao2_ref(p, -1);
 				ast_free(el_node_key);
