@@ -3507,7 +3507,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 	ast_mutex_lock(&el_nodelist_lock);
 
-	if (tfind(el_node_key, &el_node_list, compare_ip)) {
+	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
 			el_node_key->nodenum, el_node_key->name);
 
@@ -3522,7 +3522,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			p = el_alloc(instp->name);
 			if (!p) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
-				ast_free(el_node_key);
+				find_delete(el_node_key, instp);
 				ast_mutex_unlock(&el_nodelist_lock);
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
@@ -3533,7 +3533,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
 				ao2_ref(p, -1);
-				ast_free(el_node_key);
+				find_delete(el_node_key, instp);
 				ast_mutex_unlock(&el_nodelist_lock);
 				ast_mutex_unlock(&el_db_lock);
 				return -1;
@@ -3572,7 +3572,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 		ast_mutex_unlock(&el_nodelist_lock);
 		ast_mutex_unlock(&el_db_lock);
-		tsearch(el_node_key, &el_node_list, compare_ip); /* Add the node to the list  after everything is "happy" */
 		return 0;
 	}
 
