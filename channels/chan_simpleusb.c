@@ -582,20 +582,18 @@ static int open_stream(struct chan_simpleusb_pvt *o)
 static int start_stream(struct chan_simpleusb_pvt *pvt)
 {
 	PaError res;
-	int ret_val = 0;
 
 	ast_debug(5, "Starting PA Stream");
 	/* It is possible for simpleusb_hangup to be called before the
 	 * stream is started, if this is the case pvt->owner will be NULL
 	 * and start_stream should be aborted. */
 	if (pvt->streamstate || !pvt->owner)
-		goto return_val;
+		return -1;
 
 	res = open_stream(pvt);
 	if (res != paNoError) {
 		ast_log(LOG_WARNING, "Failed to open stream - (%d) %s\n", res, Pa_GetErrorText(res));
-		ret_val = -1;
-		goto return_val;
+		return -1;
 	}
 
 	res = Pa_StartStream(pvt->stream);
@@ -604,13 +602,11 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 		Pa_CloseStream(pvt->stream);
 		pvt->stream = NULL;
 		pvt->streamstate = 0;
-		ret_val = -1;
-		goto return_val;
+		return -1;
 	}
 	pvt->streamstate = 1;
 
-return_val:
-	return ret_val;
+	return 0;
 }
 
 static int stop_stream(struct chan_simpleusb_pvt *pvt)
@@ -1379,6 +1375,8 @@ static void *hidthread(void *arg)
 		}
 		if (pipe(o->pttkick) == -1) {
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
+			usb_close(usb_handle);
+			usb_handle = NULL;
 			return NULL;
 		}
 		if ((o->usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
@@ -2231,6 +2229,7 @@ static void *simpleusb_audio_thread(void *arg)
 
 				ast_queue_frame(o->owner, &wf);
 			}
+			usleep(10000);
 			continue;
 		}
 
