@@ -390,7 +390,7 @@ static int read_card_usbbus(int cardno, char *out, size_t outsz)
 		return -1;
 	}
 
-	if (!fgets(out, outsz, fp)) {
+	if (!fgets(out, outsz, fp) || !out[0]) {
 		fclose(fp);
 		return -1;
 	}
@@ -432,85 +432,87 @@ int ast_radio_hid_device_mklist(void)
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			if (is_known_device(dev) || is_user_device(dev)) {
-				sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
-				for (i = 0; i < 32; i++) {
-					if (read_card_usbbus(i, desdev, sizeof(desdev))) {
-						continue;
-					}
+			if (!dev || !(is_known_device(dev) || is_user_device(dev))) {
+				continue;
+			}
 
-					if (strcasecmp(desdev, devstr)) {
-						continue;
-					}
+			snprintf(devstr, sizeof(devstr), "%s/%s", usb_bus->dirname, dev->filename);
+			for (i = 0; i < 32; i++) {
+				if (read_card_usbbus(i, desdev, sizeof(desdev))) {
+					continue;
+				}
+
+				if (strcasecmp(desdev, devstr)) {
+					continue;
+				}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
-					sprintf(str, "/sys/class/sound/card%d/device", i);
-					memset(desdev, 0, sizeof(desdev));
+				sprintf(str, "/sys/class/sound/card%d/device", i);
+				memset(desdev, 0, sizeof(desdev));
 
-					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-						continue;
-					}
+				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+					continue;
+				}
 
-					cp = strrchr(desdev, '/');
-					if (!cp) {
-						continue;
-					}
-					cp++;
+				cp = strrchr(desdev, '/');
+				if (!cp) {
+					continue;
+				}
+				cp++;
 #else
-					if (i) {
-						sprintf(str, "/sys/class/sound/dsp%d/device", i);
-					} else {
-						strcpy(str, "/sys/class/sound/dsp/device");
-					}
+				if (i) {
+					sprintf(str, "/sys/class/sound/dsp%d/device", i);
+				} else {
+					strcpy(str, "/sys/class/sound/dsp/device");
+				}
 
+				memset(desdev, 0, sizeof(desdev));
+				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+					sprintf(str, "/sys/class/sound/controlC%d/device", i);
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-						sprintf(str, "/sys/class/sound/controlC%d/device", i);
-						memset(desdev, 0, sizeof(desdev));
-						if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-							continue;
-						}
-					}
-
-					cp = strrchr(desdev, '/');
-
-					if (cp) {
-						*cp = 0;
-					} else {
 						continue;
 					}
+				}
 
-					cp = strrchr(desdev, '/');
-					if (!cp) {
-						continue;
-					}
-					cp++;
+				cp = strrchr(desdev, '/');
+
+				if (cp) {
+					*cp = 0;
+				} else {
+					continue;
+				}
+
+				cp = strrchr(desdev, '/');
+				if (!cp) {
+					continue;
+				}
+				cp++;
 #endif
-					break;
-				}
-
-				if (i >= 32) {
-					ast_mutex_unlock(&usb_list_lock);
-					return -1;
-				}
-
-				usb_device_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
-
-				if (!usb_device_list) {
-					ast_mutex_unlock(&usb_list_lock);
-					return -1;
-				}
-
-				usb_device_list_size += strlen(cp) + 2;
-				i = 0;
-
-				while (usb_device_list[i]) {
-					i += strlen(usb_device_list + i) + 1;
-				}
-
-				strcat(usb_device_list + i, cp);
-				usb_device_list[strlen(cp) + i + 1] = 0;
+				break;
 			}
+
+			if (i >= 32) {
+				ast_mutex_unlock(&usb_list_lock);
+				return -1;
+			}
+
+			usb_device_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
+
+			if (!usb_device_list) {
+				ast_mutex_unlock(&usb_list_lock);
+				return -1;
+			}
+
+			usb_device_list_size += strlen(cp) + 2;
+			i = 0;
+
+			while (usb_device_list[i]) {
+				i += strlen(usb_device_list + i) + 1;
+			}
+
+			strcat(usb_device_list + i, cp);
+			usb_device_list[strlen(cp) + i + 1] = 0;
 		}
 	}
 	ast_mutex_unlock(&usb_list_lock);
@@ -529,11 +531,11 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			if (!(is_known_device(dev) || is_user_device(dev))) {
+			if (!dev || !(is_known_device(dev) || is_user_device(dev))) {
 				continue;
 			}
 
-			sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
+			snprintf(devstr, sizeof(devstr), "%s/%s", usb_bus->dirname, dev->filename);
 
 			for (i = 0; i < 32; i++) {
 				if (read_card_usbbus(i, desdev, sizeof(desdev))) {
