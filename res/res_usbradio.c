@@ -432,6 +432,8 @@ int ast_radio_hid_device_mklist(void)
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
+			char *new_list;
+
 			if (!dev || !(is_known_device(dev) || is_user_device(dev))) {
 				continue;
 			}
@@ -497,13 +499,14 @@ int ast_radio_hid_device_mklist(void)
 				return -1;
 			}
 
-			usb_device_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
+			new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
 
-			if (!usb_device_list) {
+			if (!new_list) {
 				ast_mutex_unlock(&usb_list_lock);
 				return -1;
 			}
 
+			usb_device_list = new_list;
 			usb_device_list_size += strlen(cp) + 2;
 			i = 0;
 
