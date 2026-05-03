@@ -4426,6 +4426,15 @@ static int unload_module(void)
 
 	for (o = simpleusb_default.next; o; o = o->next) {
 #if DEBUG_CAPTURES == 1
+		o->stophid = 1;
+		if (o->audiothread != AST_PTHREADT_NULL) {
+			pthread_join(o->audiothread, NULL); /* wait for audio thread to end */
+			o->audiothread = AST_PTHREADT_NULL;
+		}
+		if (o->hidthread != AST_PTHREADT_NULL) {
+			pthread_join(o->hidthread, NULL);
+			o->hidthread = AST_PTHREADT_NULL;
+		}
 		if (frxcapraw) {
 			fclose(frxcapraw);
 			frxcapraw = NULL;
@@ -4449,7 +4458,7 @@ static int unload_module(void)
 		if (o->owner) { /* XXX how ??? */
 			return -1;
 		}
-		/* XXX what about the thread ? */
+
 		/* XXX what about the memory allocated ? */
 	}
 
