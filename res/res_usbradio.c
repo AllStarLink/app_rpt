@@ -434,7 +434,7 @@ int ast_radio_hid_device_mklist(void)
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
 			char *new_list;
 
-			if (!dev || !(is_known_device(dev) || is_user_device(dev))) {
+			if (!(is_known_device(dev) || is_user_device(dev))) {
 				continue;
 			}
 
@@ -534,7 +534,7 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	usb_find_devices();
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			if (!dev || !(is_known_device(dev) || is_user_device(dev))) {
+			if (!(is_known_device(dev) || is_user_device(dev))) {
 				continue;
 			}
 
