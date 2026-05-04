@@ -2088,9 +2088,6 @@ static int simpleusb_hangup(struct ast_channel *c)
 {
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 
-	o->owner = NULL;
-	ast_channel_tech_pvt_set(c, NULL);
-	ast_module_unref(ast_module_info->self);
 	o->stophid = 1;
 
 	if (o->hidthread != AST_PTHREADT_NULL) {
@@ -2102,6 +2099,10 @@ static int simpleusb_hangup(struct ast_channel *c)
 		pthread_join(o->audiothread, NULL);
 		o->audiothread = AST_PTHREADT_NULL;
 	}
+
+	o->owner = NULL;
+	ast_channel_tech_pvt_set(c, NULL);
+	ast_module_unref(ast_module_info->self);
 
 	return 0;
 }
@@ -4425,8 +4426,10 @@ static int unload_module(void)
 	ast_cli_unregister_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
 
 	for (o = simpleusb_default.next; o; o = o->next) {
-#if DEBUG_CAPTURES == 1
 		o->stophid = 1;
+		if (o->owner) {
+			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
+		}
 		if (o->audiothread != AST_PTHREADT_NULL) {
 			pthread_join(o->audiothread, NULL); /* wait for audio thread to end */
 			o->audiothread = AST_PTHREADT_NULL;
@@ -4435,25 +4438,8 @@ static int unload_module(void)
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
 		}
-		if (frxcapraw) {
-			fclose(frxcapraw);
-			frxcapraw = NULL;
-		}
-		if (frxcapcooked) {
-			fclose(frxcapraw);
-			frxcapcooked = NULL;
-		}
-		if (ftxcapraw) {
-			fclose(ftxcapraw);
-			ftxcapraw = NULL;
-		}
-#endif
-
 		if (o->dsp) {
 			ast_dsp_free(o->dsp);
-		}
-		if (o->owner) {
-			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
 		}
 		if (o->owner) { /* XXX how ??? */
 			return -1;
@@ -4461,6 +4447,21 @@ static int unload_module(void)
 
 		/* XXX what about the memory allocated ? */
 	}
+
+#if DEBUG_CAPTURES == 1
+	if (frxcapraw) {
+		fclose(frxcapraw);
+		frxcapraw = NULL;
+	}
+	if (frxcapcooked) {
+		fclose(frxcapraw);
+		frxcapcooked = NULL;
+	}
+	if (ftxcapraw) {
+		fclose(ftxcapraw);
+		ftxcapraw = NULL;
+	}
+#endif
 
 	Pa_Terminate();
 	ao2_cleanup(simpleusb_tech.capabilities);
