@@ -417,8 +417,9 @@ struct el_instance {
 	char port[EL_IP_SIZE];
 	char astnode[EL_NAME_SIZE];
 	char context[EL_NAME_SIZE];
-	/* missed 10 heartbeats, you're out */
-	short rtcptimeout;
+	short rtcptimeout; /*!< rtcptimeout: Maximum number of missed heartbeat intervals before considering
+						* the Echolink connection as timed out. Used to detect and handle lost connections.
+						*/
 	float lat;
 	float lon;
 	float freq;
