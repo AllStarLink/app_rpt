@@ -1402,10 +1402,7 @@ static void el_destroy(void *obj)
 		ast_free(p->linkstr);
 	}
 
-	ast_mutex_lock(&p->lock);
 	p->linkstr = NULL;
-	p->owner = NULL;
-	ast_mutex_unlock(&p->lock);
 
 	ast_mutex_lock(&el_nodelist_lock);
 	twalk(el_node_list, send_info);
@@ -2000,6 +1997,7 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 		if (p->rxkey <= 0) {
 			/* The timer has expired, queue up an unkey for the channel */
 			struct ast_channel *chan;
+
 			ast_mutex_lock(&p->lock);
 			chan = p->owner ? ast_channel_ref(p->owner) : NULL;
 			ast_mutex_unlock(&p->lock);
