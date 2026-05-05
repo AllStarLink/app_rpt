@@ -50,7 +50,6 @@
 #include <errno.h>
 #include <usb.h>
 #include <search.h>
-#include <alsa/asoundlib.h>
 #include <linux/ppdev.h>
 #include <linux/parport.h>
 #include <linux/version.h>
@@ -441,7 +440,7 @@ static int64_t now_ms(void)
 	return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-static PaError read_with_timeout(PaStream *s, void *buf, unsigned long frames, int timeout_ms)
+static PaError read_with_timeout(PaStream *s, void *buf, long frames, int timeout_ms)
 {
 	int64_t start;
 	char *out = buf;
@@ -456,11 +455,11 @@ static PaError read_with_timeout(PaStream *s, void *buf, unsigned long frames, i
 			return (PaError) avail;
 		}
 
-		if (avail == 0) {
+		if (avail < frames) {
 			if ((now_ms() - start) > timeout_ms) {
-				return paTimedOut; // not a real PortAudio error code; use your own
+				return paTimedOut;
 			}
-			usleep(500); // 1ms
+			usleep(500); // .5ms
 			continue;
 		}
 
@@ -493,6 +492,12 @@ static int parse_hw_anywhere(const char *s, int *card, int *dev)
 		}
 
 		while (isdigit((unsigned char) *q)) {
+			if (c > 9999) {
+				/* reasonable upper bound for card numbers */
+				p = q;
+				break;
+			}
+
 			c = c * 10 + (*q - '0');
 			q++;
 		}
@@ -1443,6 +1448,8 @@ static void *hidthread(void *arg)
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
 			usb_close(usb_handle);
 			usb_handle = NULL;
+			stop_stream(o);
+			o->audio_ready = 0;
 			return NULL;
 		}
 		if ((o->usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
@@ -1808,7 +1815,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
 		Pa_WriteStream(o->stream, null_buf, NUM_SAMPLES);
 	} else if (res < 0) {
-		ast_debug(1, "PortAudio Error %s", Pa_GetErrorText(res));
+		ast_debug(2, "Pa_WriteStream Error %s", Pa_GetErrorText(res));
 	}
 
 	/* Check Tx audio statistics. FRAME_SIZE define refers to 8Ksps mono which is 160 samples
@@ -2236,7 +2243,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 static struct ast_frame *simpleusb_read(struct ast_channel *c)
 {
 	/* This should never be called... */
-	ast_log(LOG_ERROR, "Read function should not be called!");
+	ast_debug(1, "Read function should not be called!");
 	return &ast_null_frame;
 }
 
@@ -2496,7 +2503,7 @@ static void *simpleusb_audio_thread(void *arg)
 				if (res == paInputOverflowed) {
 					ast_debug(6, "PortAudio read overflow on channel %s\n", o->name);
 				} else {
-					ast_log(LOG_ERROR, "PortAudio became unavailable on channel %s : %s\n", o->name, Pa_GetErrorText(res));
+					ast_log(LOG_ERROR, "Pa_ReadStream Error on channel %s : %s\n", o->name, Pa_GetErrorText(res));
 					break; /* Close the stream and retry */
 				}
 			}
@@ -4518,7 +4525,7 @@ static int unload_module(void)
 		frxcapraw = NULL;
 	}
 	if (frxcapcooked) {
-		fclose(frxcapraw);
+		fclose(frxcapcooked);
 		frxcapcooked = NULL;
 	}
 	if (ftxcapraw) {
