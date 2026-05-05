@@ -460,7 +460,7 @@ static PaError read_with_timeout(PaStream *s, void *buf, unsigned long frames, i
 			if ((now_ms() - start) > timeout_ms) {
 				return paTimedOut; // not a real PortAudio error code; use your own
 			}
-			usleep(1000); // 1ms
+			usleep(500); // 1ms
 			continue;
 		}
 
@@ -2496,7 +2496,7 @@ static void *simpleusb_audio_thread(void *arg)
 				if (res == paInputOverflowed) {
 					ast_debug(6, "PortAudio read overflow on channel %s\n", o->name);
 				} else {
-					ast_log(LOG_ERROR, "PortAudio became unavailable on channel %s\n", o->name);
+					ast_log(LOG_ERROR, "PortAudio became unavailable on channel %s : %s\n", o->name, Pa_GetErrorText(res));
 					break; /* Close the stream and retry */
 				}
 			}
