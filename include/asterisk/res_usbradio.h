@@ -488,7 +488,7 @@ struct timeval ast_radio_tvnow(void);
  * \param sbuf  	Rx audio sample buffer in 48k stereo or mono
  * \param o	    	Rx Audio Stats data structure
  * \param len   	Length of data in sbuf
- * \param mono  	True if sbuf is mono, False if sbuf is stero
+ * \param mono  	True if sbuf is mono, False if sbuf is stereo
  * \return 	    	1 if clipping detected, 0 otherwise
  */
 #define CLIP_LED_HOLD_TIME_MS 500
