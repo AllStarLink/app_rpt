@@ -230,9 +230,8 @@ struct chan_simpleusb_pvt {
 	/* buffers used in simpleusb_read - AST_FRIENDLY_OFFSET space for headers
 	 * plus enough room for a full frame
 	 */
-	char simpleusb_read_buf[NUM_SAMPLES * 2];							 /* 2 byte samples for PortAudio - paInt16 */
+	char simpleusb_read_buf[NUM_SAMPLES * 2];							 /* 1 byte samples for PortAudio in mono - paInt16 */
 	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte frames at 8k */
-	int readpos;			 /* read position above */
 	struct ast_frame read_f; /* returned by simpleusb_read */
 
 	/* queue used to hold packets to transmit */
@@ -312,25 +311,25 @@ struct chan_simpleusb_pvt {
 	char had_pp_in;
 
 	/* bit fields */
-	unsigned int streamstate:1;		/* indicator if stream is started */
-	unsigned int rxcapraw:1;		/* indicator if receive capture is enabled */
-	unsigned int txcapraw:1;		/* indicator if transmit capture is enabled */
-	unsigned int measure_enabled:1; /* indicator if measure mode is enabled */
-	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
-	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
-	unsigned int hasusb:1;			/* indicator for has a USB device */
-	unsigned int usbass:1;			/* indicator for USB device assigned */
-	unsigned int wanteeprom:1;		/* indicator if we should use EEPROM */
-	unsigned int usedtmf:1;			/* indicator is we should decode DTMF */
-	unsigned int invertptt:1;		/* indicator if we need to invert ptt */
-	unsigned int rxboost:1;			/* indicator if receive boost is needed */
-	unsigned int plfilter:1;		/* indicator if we need a pl filter */
-	unsigned int deemphasis:1;		/* indicator if we need deemphasis filter */
-	unsigned int preemphasis:1;		/* indicator if we need preemphasis filter */
-	unsigned int rx_cos_active:1;	/* indicator if cos is active - active state after processing */
-	unsigned int rx_ctcss_active:1; /* indicator if ctcss is active - active state after processing */
-	unsigned int audio_ready:1;		/* indicator if audio device has been initialized */
-	unsigned int stopthreads:1;		/* indicator to stop usb/audio threads */
+	unsigned int streamstate:1;			   /* indicator if stream is started */
+	unsigned int rxcapraw:1;			   /* indicator if receive capture is enabled */
+	unsigned int txcapraw:1;			   /* indicator if transmit capture is enabled */
+	unsigned int measure_enabled:1;		   /* indicator if measure mode is enabled */
+	unsigned int device_error:1;		   /* indicator set when we cannot find the USB device */
+	unsigned int newname:1;				   /* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
+	unsigned int hasusb:1;				   /* indicator for has a USB device */
+	unsigned int usbass:1;				   /* indicator for USB device assigned */
+	unsigned int wanteeprom:1;			   /* indicator if we should use EEPROM */
+	unsigned int usedtmf:1;				   /* indicator is we should decode DTMF */
+	unsigned int invertptt:1;			   /* indicator if we need to invert ptt */
+	unsigned int rxboost:1;				   /* indicator if receive boost is needed */
+	unsigned int plfilter:1;			   /* indicator if we need a pl filter */
+	unsigned int deemphasis:1;			   /* indicator if we need deemphasis filter */
+	unsigned int preemphasis:1;			   /* indicator if we need preemphasis filter */
+	unsigned int rx_cos_active:1;		   /* indicator if cos is active - active state after processing */
+	unsigned int rx_ctcss_active:1;		   /* indicator if ctcss is active - active state after processing */
+	volatile sig_atomic_t stophidthread;   /* indicator to stop hid thread */
+	volatile sig_atomic_t stopaudiothread; /* indicator to stop audio thread */
 
 	/* EEPROM access variables */
 	unsigned short eeprom[EEPROM_USER_LEN];
@@ -367,7 +366,6 @@ struct chan_simpleusb_pvt {
  */
 static struct chan_simpleusb_pvt simpleusb_default = {
 	.duplex = M_FULL,
-	.readpos = 0, /* start here on reads */
 	.wanteeprom = 1,
 	.usedtmf = 1,
 	.rxondelay = 0,
@@ -439,13 +437,12 @@ static int64_t now_ms(void)
 	return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-static PaError Pa_ReadStream_with_timeout(PaStream *s, void *buf, long frames, int timeout_ms)
+static PaError Pa_ReadStream_with_timeout(PaStream *s, char *buf, long frames, int timeout_ms, volatile sig_atomic_t *stop)
 {
 	int64_t start;
-	char *out = buf;
 
 	start = now_ms();
-	while (1) {
+	while (!(*stop)) {
 		long avail;
 		PaError err;
 
@@ -458,13 +455,15 @@ static PaError Pa_ReadStream_with_timeout(PaStream *s, void *buf, long frames, i
 			if ((now_ms() - start) > timeout_ms) {
 				return paTimedOut;
 			}
-			usleep(500); // .5ms
+			usleep(500); /*.5ms */
 			continue;
 		}
 
-		err = Pa_ReadStream(s, out, frames);
+		err = Pa_ReadStream(s, buf, frames);
 		return err;
 	}
+
+	return paTimedOut;
 }
 
 /*!
@@ -1371,19 +1370,13 @@ static void *hidthread(void *arg)
 	 * it enters a processing loop responsible for interacting
 	 * with the usb hid device
 	 */
-	while (!o->stopthreads) {
-		ast_debug(2, "hidthread is restarting/starting");
+	while (!o->stophidthread) {
+		ast_debug(5, "hidthread is entering outer loop");
 
 		/* try to initialize the usb device */
 		res = init_audio_device(o);
 		if (res < 0) {
 			ast_log(LOG_ERROR, "Channel %s: Failed initialize the audio device\n", o->name);
-			usleep(DEVICE_RETRY);
-			continue;
-		}
-
-		if (start_stream(o) < 0) {
-			ast_log(LOG_ERROR, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
 			usleep(DEVICE_RETRY);
 			continue;
 		}
@@ -1440,15 +1433,15 @@ static void *hidthread(void *arg)
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
 			usb_close(usb_handle);
 			usb_handle = NULL;
-			stop_stream(o);
-			o->audio_ready = 0;
 			return NULL;
 		}
+
 		if ((o->usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
 			o->devtype = C108_PRODUCT_ID;
 		} else {
 			o->devtype = o->usb_dev->descriptor.idProduct;
 		}
+
 		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
 		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
 
@@ -1464,7 +1457,6 @@ static void *hidthread(void *arg)
 
 		o->hasusb = 1;
 		o->had_gpios_in = 0;
-		o->audio_ready = 1;
 		memset(&rfds, 0, sizeof(rfds));
 		rfds[0].fd = o->pttkick[1];
 		rfds[0].events = POLLIN;
@@ -1475,7 +1467,7 @@ static void *hidthread(void *arg)
 		 * The timer can be interrupted by writing to
 		 * the pttkick pipe.
 		 */
-		while ((!o->stopthreads) && o->hasusb) {
+		while ((!o->stophidthread) && o->hasusb) {
 			then = ast_radio_tvnow();
 			/* poll the pttkick pipe - timeout after HID_POLL_RATE milliseconds */
 			res = ast_poll(rfds, 1, HID_POLL_RATE);
@@ -1760,7 +1752,6 @@ static void *hidthread(void *arg)
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
-		stop_stream(o);
 	}
 	/* clean up before exiting the thread */
 	o->lasttx = 0;
@@ -2104,8 +2095,8 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	int res;
 
-	o->stopthreads = 0;
-	o->audio_ready = 0;
+	o->stophidthread = 0;
+	o->stopaudiothread = 0;
 	ast_radio_time(&o->lasthidtime);
 
 	res = ast_pthread_create(&o->hidthread, NULL, hidthread, o);
@@ -2117,7 +2108,7 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 	res = ast_pthread_create(&o->audiothread, NULL, simpleusb_audio_thread, o);
 	if (res) {
 		ast_log(LOG_ERROR, "Channel %s: Failed to create audio thread: %s\n", o->name, strerror(res));
-		o->stopthreads = 1;
+		o->stophidthread = 1;
 		if (o->hidthread != AST_PTHREADT_NULL) {
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
@@ -2149,16 +2140,16 @@ static int simpleusb_hangup(struct ast_channel *c)
 {
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 
-	o->stopthreads = 1;
-
-	if (o->hidthread != AST_PTHREADT_NULL) {
-		pthread_join(o->hidthread, NULL);
-		o->hidthread = AST_PTHREADT_NULL;
-	}
-
+	o->stopaudiothread = 1;
 	if (o->audiothread != AST_PTHREADT_NULL) {
 		pthread_join(o->audiothread, NULL);
 		o->audiothread = AST_PTHREADT_NULL;
+	}
+
+	o->stophidthread = 1;
+	if (o->hidthread != AST_PTHREADT_NULL) {
+		pthread_join(o->hidthread, NULL);
+		o->hidthread = AST_PTHREADT_NULL;
 	}
 
 	o->owner = NULL;
@@ -2257,22 +2248,30 @@ static void *simpleusb_audio_thread(void *arg)
 
 	ast_debug(5, "Audio thread is starting");
 
-	while (!o->stopthreads) {
+	while (!o->stopaudiothread) {
 		/* wait for audio device to be initialized */
-		if (!o->audio_ready) {
+		ast_debug(5, "Audio thread entered outer loop");
+		if (!o->hasusb) {
 			ast_debug(5, "Audio not ready");
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 
-		while (!o->stopthreads && o->audio_ready) {
+		if (start_stream(o) < 0) {
+			ast_log(LOG_ERROR, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
+			o->hasusb = 0;
+			usleep(DEVICE_RETRY);
+			continue;
+		}
+
+		while (!o->stopaudiothread && o->hasusb) {
 			/* check if the hid thread is still processing */
 			if (o->lasthidtime) {
 				ast_radio_time(&now);
 				if ((now - o->lasthidtime) > 3) {
 					ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
 					usleep(DEVICE_RETRY);
-					continue;
+					break;
 				}
 			}
 			/* Set frame defaults */
@@ -2509,7 +2508,7 @@ static void *simpleusb_audio_thread(void *arg)
 			 * in mono format.  We should always have 20ms frames, 100ms timeout
 			 * as a reasonable max wait time.
 			 */
-			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf + o->readpos, NUM_SAMPLES, 60);
+			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf, NUM_SAMPLES, 60, &o->stopaudiothread);
 			if (res != paNoError) {
 				/* audio data not ready */
 				if (res == paInputOverflowed) {
@@ -2522,14 +2521,9 @@ static void *simpleusb_audio_thread(void *arg)
 
 #if DEBUG_CAPTURES == 1
 			if (o->rxcapraw && frxcapraw) {
-				fwrite(o->simpleusb_read_buf + o->readpos, sizeof(short), FRAME_SIZE * 6, frxcapraw);
+				fwrite(o->simpleusb_read_buf, sizeof(short), FRAME_SIZE * 6, frxcapraw);
 			}
 #endif
-
-			o->readpos += FRAME_SIZE * 6 * 2;
-			if (o->readpos < sizeof(o->simpleusb_read_buf)) { /* not enough samples */
-				continue;
-			}
 
 			/* If we have been sending pager audio, see if
 			 * we are finished.
@@ -2633,7 +2627,7 @@ static void *simpleusb_audio_thread(void *arg)
 				if (o->duplex3) {
 					ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 				}
-			} else if (!o->lastrx && (o->rxkeyed)) {
+			} else if (!o->lastrx && o->rxkeyed) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_CONTROL,
 					.subclass.integer = AST_CONTROL_RADIO_KEY,
@@ -2717,7 +2711,6 @@ static void *simpleusb_audio_thread(void *arg)
 #endif
 
 			/* reset read pointer for next frame */
-			o->readpos = 0;
 			/* Do not return the frame if the channel is not up */
 			if (ast_channel_state(o->owner) != AST_STATE_UP) {
 				continue;
@@ -2823,8 +2816,8 @@ static void *simpleusb_audio_thread(void *arg)
 		}
 
 stream_restart:
-		o->audio_ready = 0;
 		o->hasusb = 0;
+		stop_stream(o);
 	}
 
 	ast_debug(2, "Audio Thread has exited");
@@ -4505,14 +4498,11 @@ static int unload_module(void)
 
 	stoppulser = 1;
 
-	ast_channel_unregister(&simpleusb_tech);
-	ast_cli_unregister_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
-
 	for (o = simpleusb_default.next; o; o = o->next) {
-		o->stopthreads = 1;
 		if (o->owner) {
 			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
 		}
+
 		if (o->audiothread != AST_PTHREADT_NULL) {
 			pthread_join(o->audiothread, NULL); /* wait for audio thread to end */
 			o->audiothread = AST_PTHREADT_NULL;
@@ -4523,9 +4513,6 @@ static int unload_module(void)
 		}
 		if (o->dsp) {
 			ast_dsp_free(o->dsp);
-		}
-		if (o->owner) { /* XXX how ??? */
-			return -1;
 		}
 
 		/* XXX what about the memory allocated ? */
@@ -4545,7 +4532,8 @@ static int unload_module(void)
 		ftxcapraw = NULL;
 	}
 #endif
-
+	ast_channel_unregister(&simpleusb_tech);
+	ast_cli_unregister_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
 	ao2_cleanup(simpleusb_tech.capabilities);
 	simpleusb_tech.capabilities = NULL;
 
