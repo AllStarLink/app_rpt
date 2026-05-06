@@ -520,8 +520,8 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
 
 /*!
  * \brief Returns the libusb device that backs ALSA /proc/asound/card<cardno>/usbbus.
- * On success: returns a pointer to a libusb struct usb_device.
- * On failure: returns NULL.
+ * \retval usb_device *  Pointer to the libusb device on success.
+ * \retval NULL          If device could not be found.
  *
  * \note
  * - Uses libusb-0.1 enumeration (usb_init/usb_find_busses/usb_find_devices).

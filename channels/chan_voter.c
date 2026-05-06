@@ -402,14 +402,14 @@ char context[100];
 #define PAGER_SRC "PAGER"
 #define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 30000
-#define SAMPRATE 8000 /* (Sample Rate) */
+#define AST_SAMPLE_RATE 8000 /* (Sample Rate) */
 #define DIVLCM 192000 /* (A common multiple of 512,1200,2400,8000) */
 #define PREAMBLE_BITS 576
 #define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
 /* We have to send "inverted"... probably because of inverting AMP in Voter board. */
 #define ONEVAL AMPVAL
 #define ZEROVAL -AMPVAL
-#define DIVSAMP (DIVLCM / SAMPRATE)
+#define DIVSAMP (DIVLCM / AST_SAMPLE_RATE)
 
 /* Defines voter payload types. */
 #define VOTER_PAYLOAD_AUTH 0
@@ -1224,9 +1224,9 @@ static int voter_text(struct ast_channel *ast, const char *text)
 			i++;
 		}
 		/* Get number of samples to alloc for audio. */
-		audio_samples = (SAMPRATE * (PREAMBLE_BITS + (MESSAGE_BITS * i))) / baud;
+		audio_samples = (AST_SAMPLE_RATE * (PREAMBLE_BITS + (MESSAGE_BITS * i))) / baud;
 		/* Pad end with 250ms of silence on each side. */
-		audio_samples += SAMPRATE / 2;
+		audio_samples += AST_SAMPLE_RATE / 2;
 		/* Also pad up to FRAME_SIZE. */
 		audio_samples += audio_samples % FRAME_SIZE;
 		audio = ast_calloc(1, (audio_samples * sizeof(short)) + 10);
@@ -1236,7 +1236,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 		}
 		divdiv = DIVLCM / baud;
 		divcnt = 0;
-		audio_ptr = SAMPRATE / 4;
+		audio_ptr = AST_SAMPLE_RATE / 4;
 		for (i = 0; i < (PREAMBLE_BITS / 32); i++) {
 			mkpsamples(audio, 0xaaaaaaaa, &audio_ptr, &divcnt, divdiv);
 		}
