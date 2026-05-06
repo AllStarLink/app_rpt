@@ -112,7 +112,7 @@
  * \todo Make this optional.  If this is only going to talk to 8 kHz endpoints,
  *       then it makes sense to use 8 kHz natively.
  */
-#define SAMPLE_RATE 48000 /* PortAudio Sample rate: Hardware likes 48k and is divisible by 6 for a "nice" down conversion. */
+#define PA_SAMPLE_RATE 48000 /* PortAudio Sample rate: Hardware likes 48k and is divisible by 6 for a "nice" down conversion. */
 
 /*!
  * \brief The number of samples to configure the portaudio stream for
@@ -145,13 +145,13 @@ static struct ast_jb_conf global_jbconf;
 #define PAGER_SRC "PAGER"
 #define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 12000
-#define SAMPRATE 8000 /* Asterisk sample rate (after down conversion) */
+#define AST_SAMPLE_RATE 8000 /* Asterisk sample rate (after down conversion) */
 #define DIVLCM 192000 /* Least Common Mult of 512,1200,2400,8000) */
 #define PREAMBLE_BITS 576
 #define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
 #define ONEVAL -AMPVAL
 #define ZEROVAL AMPVAL
-#define DIVSAMP (DIVLCM / SAMPRATE)
+#define DIVSAMP (DIVLCM / AST_SAMPLE_RATE)
 
 #define QUEUE_SIZE 5 /* 100 milliseconds of sound card output buffer */
 
@@ -230,7 +230,7 @@ struct chan_simpleusb_pvt {
 	/* buffers used in simpleusb_read - AST_FRIENDLY_OFFSET space for headers
 	 * plus enough room for a full frame
 	 */
-	char simpleusb_read_buf[NUM_SAMPLES * 2];							 /* 1 byte samples for PortAudio in mono - paInt16 */
+	char simpleusb_read_buf[NUM_SAMPLES * 2];							 /* 2 bytes samples for PortAudio in mono - paInt16 */
 	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte frames at 8k */
 	struct ast_frame read_f; /* returned by simpleusb_read */
 
@@ -561,7 +561,7 @@ static int open_stream(struct chan_simpleusb_pvt *o)
 
 	if (!strcasecmp(o->hw_device, "default")) {
 		ast_debug(1, "Opening stream with default device\n");
-		res = Pa_OpenDefaultStream(&o->stream, INPUT_CHANNELS, OUTPUT_CHANNELS, paInt16, SAMPLE_RATE, NUM_SAMPLES, NULL, NULL);
+		res = Pa_OpenDefaultStream(&o->stream, INPUT_CHANNELS, OUTPUT_CHANNELS, paInt16, PA_SAMPLE_RATE, NUM_SAMPLES, NULL, NULL);
 	} else {
 		PaStreamParameters input_params = {
 			.channelCount = INPUT_CHANNELS,
@@ -576,7 +576,7 @@ static int open_stream(struct chan_simpleusb_pvt *o)
 			.device = paNoDevice,
 		};
 		PaDeviceIndex idx, num_devices;
-		ast_debug(1, "Looking for device %s", o->hw_device);
+		ast_debug(1, "Looking for device %s\n", o->hw_device);
 		ast_debug(6, "PortAudio host api count %d\n", Pa_GetHostApiCount());
 		num_devices = Pa_GetDeviceCount();
 		if (num_devices < 0) {
@@ -614,7 +614,7 @@ static int open_stream(struct chan_simpleusb_pvt *o)
 			return res;
 		}
 		ast_debug(5, "Opening stream on device %s", o->hw_device);
-		res = Pa_OpenStream(&o->stream, &input_params, &output_params, SAMPLE_RATE, NUM_SAMPLES, paNoFlag, NULL, NULL);
+		res = Pa_OpenStream(&o->stream, &input_params, &output_params, PA_SAMPLE_RATE, NUM_SAMPLES, paNoFlag, NULL, NULL);
 		ast_debug(5, "Stream feedback %s\n", Pa_GetErrorText(res));
 	}
 
@@ -667,7 +667,7 @@ static int stop_stream(struct chan_simpleusb_pvt *pvt)
 		return 0;
 	}
 
-	/* Wait for pvt->thread to exit cleanly, to avoid killing it while it's holding a lock. */
+	/* Abort and close the stream */
 	err = Pa_AbortStream(pvt->stream);
 	if (err != paNoError) {
 		ast_log(LOG_WARNING, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
@@ -1136,16 +1136,16 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	if (o->hw_device[0]) {
 		/* already configured device, extract the device number and usb_dev */
 		if (!strcasecmp(o->hw_device, "default")) {
-			ast_debug(5, "audiodev is defined: default");
+			ast_debug(5, "audiodev is defined: default\n");
 		} else if (sscanf(o->hw_device, "hw:%d", &o->devicenum) == 1) {
 			ast_debug(5, "audiodev is defined: %s, Device %d", o->hw_device, o->devicenum);
 			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
 			if (!o->usb_dev) {
-				ast_debug(5, "Unable to find usb device associated with %s", o->hw_device);
+				ast_debug(5, "Unable to find usb device associated with %s\n", o->hw_device);
 			}
 
 		} else {
-			ast_log(LOG_ERROR, "Incorrect audio parameter audiodev (should be hw:0 format), found %s", o->hw_device);
+			ast_log(LOG_ERROR, "Incorrect audio parameter audiodev (should be hw:0 format), found %s\n", o->hw_device);
 			ast_mutex_unlock(&usb_dev_lock);
 			return -1;
 		}
@@ -2025,9 +2025,9 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			i++;
 		}
 		/* get number of samples to alloc for audio */
-		audio_samples = (SAMPRATE * (PREAMBLE_BITS + (MESSAGE_BITS * i))) / baud;
+		audio_samples = (AST_SAMPLE_RATE * (PREAMBLE_BITS + (MESSAGE_BITS * i))) / baud;
 		/* pad end with 250ms of silence */
-		audio_samples += SAMPRATE / 4;
+		audio_samples += AST_SAMPLE_RATE / 4;
 		/* also pad up to FRAME_SIZE */
 		audio_samples += audio_samples % FRAME_SIZE;
 		audio = ast_calloc(1, (audio_samples * sizeof(short)) + 10);
