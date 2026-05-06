@@ -235,7 +235,7 @@ struct chan_simpleusb_pvt {
 	/* buffers used in Pa_ReadStream - AST_FRIENDLY_OFFSET space for headers
 	 * plus enough room for a full frame
 	 */
-	char simpleusb_read_buf[PA_NUM_FRAMES * 2];							 /* 2 bytes samples for PortAudio in mono - paInt16 */
+	short simpleusb_read_buf[PA_NUM_FRAMES];							 /* 2 bytes samples for PortAudio in mono - paInt16 */
 	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte frames at 8k */
 	struct ast_frame read_f; /* returned by simpleusb_read */
 
@@ -286,8 +286,8 @@ struct chan_simpleusb_pvt {
 	int txmixbset;
 
 	/*! \brief Settings for echoing received audio */
-	int echomode;
-	int echoing;
+	char echomode;
+	char echoing;
 	ast_mutex_t echolock;
 	struct qelem echoq;
 	int echomax;
@@ -442,7 +442,7 @@ static int64_t now_ms(void)
 	return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-static PaError Pa_ReadStream_with_timeout(PaStream *s, char *buf, long frames, int timeout_ms, volatile sig_atomic_t *stop)
+static PaError Pa_ReadStream_with_timeout(PaStream *s, short *buf, long frames, int timeout_ms, volatile sig_atomic_t *stop)
 {
 	int64_t start;
 
@@ -1537,7 +1537,7 @@ static void *hidthread(void *arg)
 			txreq = !(AST_LIST_EMPTY(&o->txq));
 			ast_mutex_unlock(&o->txqlock);
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
-			if (txreq && (!o->lasttx)) {
+			if (txreq && !o->lasttx) {
 				o->hid_gpio_val |= o->hid_io_ptt;
 				if (o->invertptt) {
 					o->hid_gpio_val &= ~o->hid_io_ptt;
@@ -1546,7 +1546,7 @@ static void *hidthread(void *arg)
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_radio_hid_set_outputs(usb_handle, buf);
 				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", o->name, txreq);
-			} else if ((!txreq) && o->lasttx) {
+			} else if (!txreq && o->lasttx) {
 				o->hid_gpio_val &= ~o->hid_io_ptt;
 				if (o->invertptt) {
 					o->hid_gpio_val |= o->hid_io_ptt;
@@ -2251,7 +2251,7 @@ static void *simpleusb_audio_thread(void *arg)
 	struct ast_frame *f = &o->read_f, *f1;
 	time_t now;
 	register short *sp, *sp1;
-	short outbuf[PA_NUM_FRAMES * 2]; /* 2 bytes per sample on PortAudio config - paInt16 */
+	short outbuf[PA_NUM_FRAMES * 2]; /* 2 bytes per frame on PortAudio config - paInt16 * 2 channels */
 
 	ast_debug(5, "Audio thread is starting\n");
 
@@ -2658,7 +2658,7 @@ static void *simpleusb_audio_thread(void *arg)
 			 * extracts the 48K channel, checks amplitude and distortion characteristics,
 			 * and returns true if clipping was detected.
 			 */
-			if (ast_radio_check_audio((short *) o->simpleusb_read_buf, &o->rxaudiostats, 6 * FRAME_SIZE, 1)) {
+			if (ast_radio_check_audio(o->simpleusb_read_buf, &o->rxaudiostats, 6 * FRAME_SIZE, 1)) {
 				if (o->clipledgpio) {
 					/* Set Clip LED GPIO pulsetimer if not already set */
 					if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
@@ -2668,7 +2668,7 @@ static void *simpleusb_audio_thread(void *arg)
 			}
 
 			/* Downsample received audio from 48000 mono to 8000 mono */
-			sp = (short *) o->simpleusb_read_buf;
+			sp = o->simpleusb_read_buf;
 			sp1 = (short *) (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
 			for (i = 0; i < FRAME_SIZE; i++) {
 				(void) lpass(*sp++, o->flpr);
