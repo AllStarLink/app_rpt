@@ -876,7 +876,7 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, sho
 	}
 
 	if (mono) {
-		/* validate len and index */
+		/* validate len and index for mono audio */
 		if (len > 6 * FRAME_SIZE) {
 			len = 6 * FRAME_SIZE;
 		}
@@ -887,7 +887,7 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, sho
 		}
 		len /= 6;
 	} else {
-		/* validate len and index */
+		/* validate len and index for stereo audio */
 		if (len > 12 * FRAME_SIZE) {
 			len = 12 * FRAME_SIZE;
 		}

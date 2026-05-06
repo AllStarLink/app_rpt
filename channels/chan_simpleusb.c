@@ -440,7 +440,7 @@ static int64_t now_ms(void)
 	return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-static PaError read_with_timeout(PaStream *s, void *buf, long frames, int timeout_ms)
+static PaError Pa_ReadStream_with_timeout(PaStream *s, void *buf, long frames, int timeout_ms)
 {
 	int64_t start;
 	char *out = buf;
@@ -1078,10 +1078,6 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 
 	devstr[0] = '\0';
 	serial[0] = '\0';
-	if (!reload) {
-		o->devstr[0] = '\0';
-		o->serial[0] = '\0';
-	}
 
 	if (!cfg) {
 		struct ast_flags zeroflag = { 0 };
@@ -2495,9 +2491,10 @@ static void *simpleusb_audio_thread(void *arg)
 
 			/* Read audio data from the USB sound device.
 			 * Sound data will arrive at 48000 samples per second
-			 * in mono format.
+			 * in mono format.  We should always have 20ms frames, 100ms timeout
+			 * as a reasonable max wait time.
 			 */
-			res = read_with_timeout(o->stream, o->simpleusb_read_buf + o->readpos, NUM_SAMPLES, 100);
+			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf + o->readpos, NUM_SAMPLES, 100);
 			if (res != paNoError) {
 				/* audio data not ready */
 				if (res == paInputOverflowed) {
@@ -2605,7 +2602,7 @@ static void *simpleusb_audio_thread(void *arg)
 			o->rxkeyed = sd && cd && ((!o->lasttx) || o->duplex) && (o->txoffcnt >= o->txoffdelay);
 
 			/* Send a message to indicate rx signal detect conditions */
-			if (o->lastrx && (!o->rxkeyed)) {
+			if (o->lastrx && !o->rxkeyed) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_CONTROL,
 					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
@@ -2621,7 +2618,7 @@ static void *simpleusb_audio_thread(void *arg)
 				if (o->duplex3) {
 					ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 				}
-			} else if ((!o->lastrx) && (o->rxkeyed)) {
+			} else if (!o->lastrx && (o->rxkeyed)) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_CONTROL,
 					.subclass.integer = AST_CONTROL_RADIO_KEY,
