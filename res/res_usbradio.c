@@ -131,11 +131,15 @@ int ast_radio_amixer_max(int devnum, char *param)
 
 	sprintf(str, "hw:%d", devnum);
 
-	if (snd_hctl_open(&hctl, str, 0)) {
+	if (snd_hctl_open(&hctl, str, 0) < 0) {
 		return -1;
 	}
 
-	snd_hctl_load(hctl);
+	if (snd_hctl_load(hctl) < 0) {
+		snd_hctl_close(hctl);
+		return -1;
+	}
+
 	snd_ctl_elem_id_alloca(&id);
 	snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
 	snd_ctl_elem_id_set_name(id, param);
@@ -176,11 +180,14 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 
 	sprintf(str, "hw:%d", devnum);
 
-	if (snd_hctl_open(&hctl, str, 0)) {
+	if (snd_hctl_open(&hctl, str, 0) < 0) {
 		return -1;
 	}
 
-	snd_hctl_load(hctl);
+	if (snd_hctl_load(hctl) < 0) {
+		snd_hctl_close(hctl);
+		return -1;
+	}
 	snd_ctl_elem_id_alloca(&id);
 	snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
 	snd_ctl_elem_id_set_name(id, param);
@@ -420,6 +427,7 @@ int ast_radio_hid_device_mklist(void)
 	if (usb_device_list) {
 		ast_free(usb_device_list);
 	}
+	usb_device_list_size = 0;
 	usb_device_list = ast_calloc(1, 2);
 
 	if (!usb_device_list) {
