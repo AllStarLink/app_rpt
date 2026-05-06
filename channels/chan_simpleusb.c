@@ -319,7 +319,6 @@ struct chan_simpleusb_pvt {
 	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
 	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
 	unsigned int hasusb:1;			/* indicator for has a USB device */
-	unsigned int internal_audio:1;	/* indicator for non usb audio device */
 	unsigned int usbass:1;			/* indicator for USB device assigned */
 	unsigned int wanteeprom:1;		/* indicator if we should use EEPROM */
 	unsigned int usedtmf:1;			/* indicator is we should decode DTMF */
@@ -1134,19 +1133,16 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	o->usbass = 0;
 	o->devicenum = 0;
 	o->usb_dev = NULL;
-	o->internal_audio = 0;
 
 	if (o->hw_device[0]) {
 		/* already configured device, extract the device number and usb_dev */
 		if (!strcasecmp(o->hw_device, "default")) {
 			ast_debug(5, "audiodev is defined: default");
-			o->internal_audio = 1;
 		} else if (sscanf(o->hw_device, "hw:%d", &o->devicenum) == 1) {
 			ast_debug(5, "audiodev is defined: %s, Device %d", o->hw_device, o->devicenum);
 			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
 			if (!o->usb_dev) {
 				ast_debug(5, "Unable to find usb device associated with %s", o->hw_device);
-				o->internal_audio = 1;
 			}
 
 		} else {
@@ -1392,12 +1388,12 @@ static void *hidthread(void *arg)
 			continue;
 		}
 
-		o->audio_ready = 1;
 		if (o->usb_dev == NULL) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
 			usleep(DEVICE_RETRY);
 			continue;
 		}
+
 		/* open the usb device device */
 		usb_handle = usb_open(o->usb_dev);
 		if (usb_handle == NULL) {
@@ -1468,7 +1464,7 @@ static void *hidthread(void *arg)
 
 		o->hasusb = 1;
 		o->had_gpios_in = 0;
-
+		o->audio_ready = 1;
 		memset(&rfds, 0, sizeof(rfds));
 		rfds[0].fd = o->pttkick[1];
 		rfds[0].events = POLLIN;
@@ -2184,7 +2180,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f1;
 
-	if (!o->hasusb && !o->internal_audio) {
+	if (!o->hasusb) {
 		return 0;
 	}
 
@@ -2271,7 +2267,7 @@ static void *simpleusb_audio_thread(void *arg)
 
 		while (!o->stopthreads && o->audio_ready) {
 			/* check if the hid thread is still processing */
-			if (o->lasthidtime && !o->internal_audio) {
+			if (o->lasthidtime) {
 				ast_radio_time(&now);
 				if ((now - o->lasthidtime) > 3) {
 					ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
@@ -2284,7 +2280,7 @@ static void *simpleusb_audio_thread(void *arg)
 			f->frametype = AST_FRAME_NULL;
 			f->src = __PRETTY_FUNCTION__;
 			/* if USB device not ready, just return NULL frame */
-			if (!o->hasusb && !o->internal_audio) {
+			if (!o->hasusb) {
 				if (o->rxkeyed) {
 					struct ast_frame wf = {
 						.frametype = AST_FRAME_CONTROL,
@@ -2355,16 +2351,34 @@ static void *simpleusb_audio_thread(void *arg)
 
 			/* Process the transmit queue */
 			for (;;) {
+				long frames_available;
+
 				num_frames = 0;
 				ast_mutex_lock(&o->txqlock);
 				AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
 					num_frames++;
 				}
+
 				ast_mutex_unlock(&o->txqlock);
 				if (o->txkeyed) {
 					ast_debug(7, "blocks used %d, Dest Buffer %d", num_frames, o->simpleusb_write_dst);
 				}
-				if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
+				/* Check for room in the write buffer.  If the device goes unavailable or
+				 * there is not room in the buffer, Pa_WriteStream will hang.
+				 */
+				frames_available = Pa_GetStreamWriteAvailable(o->stream);
+
+				if (frames_available < 0) {
+					if (frames_available != paOutputUnderflowed) {
+						/* Underflow handled in soundcard_writeframe
+						 * all other errors require restart
+						 */
+						ast_debug(2, "Pa_GetStreamWriteAvailable error %s", Pa_GetErrorText(frames_available));
+						goto stream_restart;
+					}
+				}
+
+				if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && (frames_available >= FRAME_SIZE)) {
 					ast_mutex_lock(&o->txqlock);
 					f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
 					ast_mutex_unlock(&o->txqlock);
@@ -2452,6 +2466,7 @@ static void *simpleusb_audio_thread(void *arg)
 									/* Underflow handled in soundcard_writeframe
 									 * all other errors require restart
 									 */
+									ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
 									goto stream_restart;
 								}
 							}
@@ -2494,7 +2509,7 @@ static void *simpleusb_audio_thread(void *arg)
 			 * in mono format.  We should always have 20ms frames, 100ms timeout
 			 * as a reasonable max wait time.
 			 */
-			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf + o->readpos, NUM_SAMPLES, 100);
+			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf + o->readpos, NUM_SAMPLES, 60);
 			if (res != paNoError) {
 				/* audio data not ready */
 				if (res == paInputOverflowed) {
