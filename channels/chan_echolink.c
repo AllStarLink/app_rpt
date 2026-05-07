@@ -1374,10 +1374,15 @@ static int el_call(struct ast_channel *chan, const char *dest, int timeout)
 
 	/* make the call */
 	strcpy(node_lookup.ip, ipaddr);
-	do_new_call(instp, p, "OUTBOUND", "OUTBOUND", &node_lookup);
+	if (do_new_call(instp, p, "OUTBOUND", "OUTBOUND", &node_lookup) != 0) {
+		ast_log(LOG_WARNING, "Failed to initialize outbound call state for %s/%s.\n", dest, ipaddr);
+		return -1;
+	}
+
 	ast_mutex_lock(&instp->lock);
 	process_cmd(buf, sizeof(buf), "127.0.0.1", instp, &node_lookup);
 	ast_mutex_unlock(&instp->lock);
+
 	ast_setstate(chan, AST_STATE_RINGING);
 
 	return 0;
@@ -3541,13 +3546,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			ast_queue_frame(chan, &fr);
 			el_node_key->rx_ctrl_packets++;
 
-			ast_mutex_lock(&instp->lock);
-			time(&now);
-			if (instp->starttime < (now - EL_APRS_START_DELAY)) {
-				instp->aprstime = now;
-			}
-			ast_mutex_unlock(&instp->lock);
-
 			ao2_ref(p, 1);
 			el_node_key->pvt = p;
 		} else {
@@ -3557,18 +3555,21 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			ast_copy_string(el_node_key->pvt->ip, node_lookup->ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
 			el_node_key->rx_ctrl_packets++;
-
-			ast_mutex_lock(&instp->lock);
-			strcpy(instp->lastcall, mynode->callsign);
-			time(&now);
-			if (instp->starttime < (now - EL_APRS_START_DELAY)) {
-				instp->aprstime = now;
-			}
-			ast_mutex_unlock(&instp->lock);
 		}
 
 		ast_mutex_unlock(&el_nodelist_lock);
 		ast_mutex_unlock(&el_db_lock);
+
+		ast_mutex_lock(&instp->lock);
+		time(&now);
+		if (p != NULL) {
+			strcpy(instp->lastcall, mynode->callsign);
+		}
+		if (instp->starttime < (now - EL_APRS_START_DELAY)) {
+			instp->aprstime = now;
+		}
+		ast_mutex_unlock(&instp->lock);
+
 		return 0;
 	}
 
