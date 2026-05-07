@@ -380,7 +380,7 @@ static int is_user_device(struct usb_device *dev)
 	return device ? 1 : 0;
 }
 
-static int read_card_usbbus(int cardno, char *out, size_t outsz)
+static int read_card_usbbus(int cardno, char *out, int outsz)
 {
 	char path[128];
 	FILE *fp;
@@ -908,6 +908,14 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, sho
 	}
 
 	/* len should now be 160 */
+	if (len == 0) {
+		/* Something went wrong */
+		if (++o->index >= AUDIO_STATS_LEN) {
+			o->index = 0;
+		}
+		return 0;
+	}
+
 	for (i = 0; i < len; i++) {
 		val = abs(buf[i]);
 		if (val) {
