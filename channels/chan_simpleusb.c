@@ -115,17 +115,14 @@
 #define PA_SAMPLE_RATE 48000 /* PortAudio Sample rate: Hardware likes 48k and is divisible by 6 for a "nice" down conversion. */
 
 /*!
- * \brief The number of samples to configure the portaudio stream for
+ * \brief The number of samples to configure the PortAudio stream for.
  *
- * At 48kHz, 960 samples gives a 20ms frames, which aligns with Asterisk's
+ * At 48kHz, 960 samples gives a 20ms frame, which aligns with Asterisk's
  * common frame size after resampling to 8kHz (160 samples @ 2 bytes per sample).
+ * The number of short (2 byte) with paInt16 samples per PortAudio "frame".
+ * This is 1920 bytes for stereo, or 960 bytes for mono
  */
-#define PA_NUM_FRAMES \
-	960 /* The number of 2 byte (paInt16) \
-		 * samples per PortAudio "frame". \
-		 * This is 1920 bytes for stereo, \
-		 * or 960 bytes for mono \
-		 */
+#define PA_NUM_SAMPLES FRAME_SIZE * 6 /* Number of samples to read/write from PortAudio stream per Asterisk frame at 48k */
 
 /*! \brief Mono Input */
 #define PA_INPUT_CHANNELS 1 /* PortAudio: Mono input for Microphone / RX */
@@ -228,15 +225,11 @@ struct chan_simpleusb_pvt {
 
 	PaStream *stream; /*! Current PortAudio stream for this device */
 
-	/* buffers used in Pa_WriteStream, 2 per int */
-	char simpleusb_write_buf[FRAME_SIZE * 2];
+	char simpleusb_write_buf[FRAME_SIZE * 2]; /* buffer used for Asterisk to PA frames in 8k mono */
 
 	int simpleusb_write_dst;
-	/* buffers used in Pa_ReadStream - AST_FRIENDLY_OFFSET space for headers
-	 * plus enough room for a full frame
-	 */
-	short simpleusb_read_buf[PA_NUM_FRAMES];							 /* 2 bytes samples for PortAudio in mono - paInt16 */
-	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte frames at 8k */
+	short simpleusb_read_buf[PA_NUM_SAMPLES]; /* 1 short (2 byte) samples for PortAudio config with paInt16 * 1 channel (mono) */
+	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte samples at 8k */
 	struct ast_frame read_f; /* returned by simpleusb_read */
 
 	/* queue used to hold packets to transmit */
@@ -567,7 +560,7 @@ static int open_stream(struct chan_simpleusb_pvt *o)
 
 	if (!strcasecmp(o->hw_device, "default")) {
 		ast_debug(1, "Opening stream with default device\n");
-		res = Pa_OpenDefaultStream(&o->stream, PA_INPUT_CHANNELS, PA_OUTPUT_CHANNELS, paInt16, PA_SAMPLE_RATE, PA_NUM_FRAMES, NULL, NULL);
+		res = Pa_OpenDefaultStream(&o->stream, PA_INPUT_CHANNELS, PA_OUTPUT_CHANNELS, paInt16, PA_SAMPLE_RATE, PA_NUM_SAMPLES, NULL, NULL);
 	} else {
 		PaStreamParameters input_params = {
 			.channelCount = PA_INPUT_CHANNELS,
@@ -620,7 +613,7 @@ static int open_stream(struct chan_simpleusb_pvt *o)
 			return res;
 		}
 		ast_debug(5, "Opening stream on device %s", o->hw_device);
-		res = Pa_OpenStream(&o->stream, &input_params, &output_params, PA_SAMPLE_RATE, PA_NUM_FRAMES, paNoFlag, NULL, NULL);
+		res = Pa_OpenStream(&o->stream, &input_params, &output_params, PA_SAMPLE_RATE, PA_NUM_SAMPLES, paNoFlag, NULL, NULL);
 		ast_debug(5, "Stream feedback %s\n", Pa_GetErrorText(res));
 	}
 
@@ -1798,11 +1791,11 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	 * a number of failures, to restart the output chain.
 	 */
 
-	res = Pa_WriteStream(o->stream, data, PA_NUM_FRAMES);
+	res = Pa_WriteStream(o->stream, data, PA_NUM_SAMPLES);
 	if (res == paOutputUnderflowed) {
-		short null_buf[PA_NUM_FRAMES * 2] = { 0 };
+		short null_buf[PA_NUM_SAMPLES * 2] = { 0 };
 		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
-		Pa_WriteStream(o->stream, null_buf, PA_NUM_FRAMES);
+		Pa_WriteStream(o->stream, null_buf, PA_NUM_SAMPLES);
 	} else if (res < 0) {
 		ast_debug(2, "Pa_WriteStream Error %s", Pa_GetErrorText(res));
 	}
@@ -2251,7 +2244,7 @@ static void *simpleusb_audio_thread(void *arg)
 	struct ast_frame *f = &o->read_f, *f1;
 	time_t now;
 	register short *sp, *sp1;
-	short outbuf[PA_NUM_FRAMES * 2]; /* 2 bytes per frame on PortAudio config - paInt16 * 2 channels */
+	short outbuf[PA_NUM_SAMPLES * 2]; /* 1 short (2 bytes) per sample on PortAudio config with paInt16 * 2 channels */
 
 	ast_debug(5, "Audio thread is starting\n");
 
@@ -2515,7 +2508,7 @@ static void *simpleusb_audio_thread(void *arg)
 			 * in mono format.  We should always have 20ms frames, 100ms timeout
 			 * as a reasonable max wait time.
 			 */
-			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf, PA_NUM_FRAMES, 60, &o->stopaudiothread);
+			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf, PA_NUM_SAMPLES, 60, &o->stopaudiothread);
 			if (res != paNoError) {
 				/* audio data not ready */
 				if (res == paInputOverflowed) {
