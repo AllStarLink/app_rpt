@@ -557,6 +557,7 @@ static int hw_match(const char *haystack, const char *needle)
 static int open_stream(struct chan_simpleusb_pvt *o)
 {
 	PaError res = paInternalError;
+	const PaStreamInfo *si;
 
 	if (!strcasecmp(o->hw_device, "default")) {
 		ast_debug(1, "Opening stream with default device\n");
@@ -614,7 +615,12 @@ static int open_stream(struct chan_simpleusb_pvt *o)
 		}
 		ast_debug(5, "Opening stream on device %s", o->hw_device);
 		res = Pa_OpenStream(&o->stream, &input_params, &output_params, PA_SAMPLE_RATE, PA_NUM_FRAMES, paNoFlag, NULL, NULL);
-		ast_debug(5, "Stream feedback %s\n", Pa_GetErrorText(res));
+		ast_debug(5, "Stream feedback: %s\n", Pa_GetErrorText(res));
+		si = Pa_GetStreamInfo(o->stream);
+		if (si) {
+			ast_debug(5, "Stream output latency: %.3f ms\n", si->outputLatency * 1000.0);
+			ast_debug(5, "Stream input latency: %.3f ms\n", si->inputLatency * 1000.0);
+		}
 	}
 
 	return res;
