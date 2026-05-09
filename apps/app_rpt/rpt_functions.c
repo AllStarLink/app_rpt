@@ -13,6 +13,9 @@
 #include "asterisk/cli.h"
 #include "asterisk/pbx.h" /* functions */
 
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+
 #include "app_rpt.h"
 #include "rpt_lock.h"
 #include "rpt_utils.h"
@@ -89,6 +92,25 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
 		rpt_qwrite(link, &wf);
 	}
 	return 0;
+}
+
+#define HMAC_HASH_SIZE 32
+#define HMAC_HEX_SIZE (HMAC_HASH_SIZE * 2 + 1)
+
+static void rpt_compute_hmac(const char *key, const char *data, char *hex_out, size_t hex_out_size)
+{
+	unsigned char hash[HMAC_HASH_SIZE];
+	unsigned int hash_len = 0;
+	const char *hmac_key = key ? key : "";
+	int i;
+
+	HMAC(EVP_sha256(), hmac_key, strlen(hmac_key),
+		(const unsigned char *) data, strlen(data), hash, &hash_len);
+
+	for (i = 0; i < HMAC_HASH_SIZE && (i * 2 + 2) < (int) hex_out_size; i++) {
+		sprintf(hex_out + (i * 2), "%02x", hash[i]);
+	}
+	hex_out[HMAC_HASH_SIZE * 2] = '\0';
 }
 
 /*! \brief Find a valid node by its digit buffer
@@ -380,6 +402,53 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, tmp);
 
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
+
+	case 20: /* Send Remote Command */
+		if (!param)
+			break;
+		s1 = strchr(param, ',');
+		if (!s1)
+			break;
+		*s1 = 0;
+		s2 = strchr(s1 + 1, ',');
+		if (!s2)
+			break;
+		*s2 = 0;
+		{
+			char hash_hex[HMAC_HEX_SIZE];
+			char *dest_node = s1 + 1;
+			char *cmd_digits = s2 + 1;
+
+			if (!ao2_container_count(myrpt->links)) {
+				return DC_ERROR;
+			}
+			rpt_compute_hmac(myrpt->p.remote_cmd_code, cmd_digits, hash_hex, sizeof(hash_hex));
+			snprintf(tmp, sizeof(tmp), "R %s %s %s %s", myrpt->name, dest_node, hash_hex, cmd_digits);
+			rpt_mutex_lock(&myrpt->lock);
+			if (!strcmp(dest_node, "0")) {
+				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, tmp);
+			} else {
+				l = ao2_find(myrpt->links, dest_node, 0);
+				if (l) {
+					if (l->chan) {
+						struct ast_frame wf = {
+							.frametype = AST_FRAME_TEXT,
+							.data.ptr = tmp,
+							.datalen = strlen(tmp) + 1,
+							.src = __PRETTY_FUNCTION__,
+						};
+						rpt_qwrite(l, &wf);
+					}
+					ao2_ref(l, -1);
+				} else {
+					rpt_mutex_unlock(&myrpt->lock);
+					return DC_ERROR;
+				}
+			}
+			rpt_mutex_unlock(&myrpt->lock);
+		}
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
 

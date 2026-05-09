@@ -1095,6 +1095,58 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 	return (busy ? RESULT_FAILURE : RESULT_SUCCESS);
 }
 
+static int rpt_do_remotecmd(int fd, int argc, const char *const *argv)
+{
+	int i;
+	int busy = 0;
+	int thisRpt = -1;
+	int thisAction;
+	struct rpt *myrpt = NULL;
+	int nrpts = rpt_num_rpts();
+	char param_buf[MAXMACRO];
+
+	if (argc != 5) {
+		return RESULT_SHOWUSAGE;
+	}
+
+	for (i = 0; i < nrpts; i++) {
+		if (!strcmp(argv[2], rpt_vars[i].name)) {
+			thisRpt = i;
+			myrpt = &rpt_vars[i];
+			break;
+		}
+	}
+
+	if (thisRpt < 0) {
+		ast_cli(fd, "Unknown node number %s.\n", argv[2]);
+		return RESULT_FAILURE;
+	}
+
+	thisAction = rpt_function_lookup("ilink");
+	if (thisAction < 0) {
+		ast_cli(fd, "ilink function not found.\n");
+		return RESULT_FAILURE;
+	}
+
+	snprintf(param_buf, sizeof(param_buf), "20,%s,%s", argv[3], argv[4]);
+
+	rpt_mutex_lock(&myrpt->lock);
+
+	if (rpt_vars[thisRpt].cmdAction.state == CMD_STATE_IDLE) {
+		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_BUSY;
+		rpt_vars[thisRpt].cmdAction.functionNumber = thisAction;
+		ast_copy_string(rpt_vars[thisRpt].cmdAction.param, param_buf, sizeof(rpt_vars[thisRpt].cmdAction.param));
+		rpt_vars[thisRpt].cmdAction.digits[0] = 0;
+		rpt_vars[thisRpt].cmdAction.command_source = SOURCE_RPT;
+		rpt_vars[thisRpt].cmdAction.state = CMD_STATE_READY;
+	} else {
+		busy = 1;
+	}
+
+	rpt_mutex_unlock(&myrpt->lock);
+	return (busy ? RESULT_FAILURE : RESULT_SUCCESS);
+}
+
 /*! \brief Set a node's main channel variable from the command line */
 static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 {
@@ -1465,6 +1517,25 @@ static char *handle_cli_cmd(struct ast_cli_entry *e, int cmd, struct ast_cli_arg
 	return res2cli(rpt_do_cmd(a->fd, a->argc, a->argv));
 }
 
+static char *handle_cli_remotecmd(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "rpt remotecmd";
+		e->usage = "Usage: rpt remotecmd <nodename> <targetnodeno|0> <dtmf-digits>\n"
+				   "	Send an authenticated remote command to a connected node.\n"
+				   "	Use 0 as target to send to all connected nodes.\n"
+				   "	i.e. rpt remotecmd 2000 2001 *81\n"
+				   "	     rpt remotecmd 2000 0 *81\n";
+		return NULL;
+
+	case CLI_GENERATE:
+		return rpt_complete_node_list(a->line, a->word, a->pos, 2);
+	}
+
+	return res2cli(rpt_do_remotecmd(a->fd, a->argc, a->argv));
+}
+
 static char *handle_cli_setvar(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	switch (cmd) {
@@ -1624,6 +1695,7 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_fun, "Execute a DTMF function"),
 	AST_CLI_DEFINE(handle_cli_fun1, "Execute a DTMF function"),
 	AST_CLI_DEFINE(handle_cli_cmd, "Execute a DTMF function"),
+	AST_CLI_DEFINE(handle_cli_remotecmd, "Send an authenticated remote command to a node"),
 	AST_CLI_DEFINE(handle_cli_setvar, "Set an Asterisk channel variable for a node"),
 	AST_CLI_DEFINE(handle_cli_showvars, "Display Asterisk channel variables for a node"),
 	AST_CLI_DEFINE(handle_cli_show_channels, "Display Asterisk channels for a node"),

@@ -1010,6 +1010,7 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR(eloutbound, "eloutbound");
 	RPT_CONFIG_VAR_DEFAULT(events, "events", "events");
 	RPT_CONFIG_VAR(timezone, "timezone");
+	RPT_CONFIG_VAR(remote_cmd_code, "remote_cmd_code");
 
 #ifdef __RPT_NOTCH
 	val = ast_variable_retrieve(cfg, this, "rxnotch");

@@ -922,6 +922,7 @@ struct rpt {
 		const char *ldisc[MAX_LSTUFF];
 		int nldisc;
 		const char *timezone;
+		const char *remote_cmd_code; /*!< \brief Shared code word for HMAC authentication of remote commands (ilink,20) */
 	} p;
 	struct ao2_container *links;
 	int unkeytocttimer;

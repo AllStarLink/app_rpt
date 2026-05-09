@@ -175,6 +175,7 @@
  *  16 - Reconnect links disconnected with "disconnect all links"
  *  17 - MDC test (for diag purposes)
  *  18 - Permanently Connect specified link -- local monitor only
+ *  20 - Send Remote Command (20,<destnodeno or 0 (for all)>,<DTMF digits to execute>)
 
  *  200 thru 215 - (Send DTMF 0-9,*,#,A-D) (200=0, 201=1, 210=*, etc)
  *
@@ -283,6 +284,8 @@
 #include <fnmatch.h>
 #include <curl/curl.h>
 #include <termios.h>
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
 
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
@@ -1844,6 +1847,27 @@ static int funcchar_common(struct rpt *myrpt, char c)
 	return 0;
 }
 
+static void local_dtmf_helper(struct rpt *myrpt, char c_in);
+
+#define HMAC_HASH_SIZE 32
+#define HMAC_HEX_SIZE (HMAC_HASH_SIZE * 2 + 1)
+
+static void rpt_compute_hmac(const char *key, const char *data, char *hex_out, size_t hex_out_size)
+{
+	unsigned char hash[HMAC_HASH_SIZE];
+	unsigned int hash_len = 0;
+	const char *hmac_key = key ? key : "";
+	int i;
+
+	HMAC(EVP_sha256(), hmac_key, strlen(hmac_key),
+		(const unsigned char *) data, strlen(data), hash, &hash_len);
+
+	for (i = 0; i < HMAC_HASH_SIZE && (i * 2 + 2) < (int) hex_out_size; i++) {
+		sprintf(hex_out + (i * 2), "%02x", hash[i]);
+	}
+	hex_out[HMAC_HASH_SIZE * 2] = '\0';
+}
+
 static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *str)
 {
 	/* XXX cmd, dst, and src should be validated. Why is remote_data src[300] in other locations?
@@ -1981,6 +2005,93 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		if (IS_XPMR(myrpt)) {
 			send_usb_txt(myrpt, cmd);
 		}
+		return;
+	}
+
+	if (!strncmp(str, "RA ", 3)) {
+		rest = 0;
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_SRC_SZ) S_FMT(RPT_DEST_SZ) "%n", cmd, src, dest, &rest) < 3) {
+			ast_log(LOG_WARNING, "Unable to parse remote command response %s\n", str);
+			return;
+		}
+		if (!strcmp(src, myrpt->name)) {
+			return;
+		}
+		if (strcmp(dest, myrpt->name) && strcmp(dest, "0")) {
+			distribute_to_all_links(myrpt, mylink, src, dest, &wf);
+			return;
+		}
+		if (rest && str[rest]) {
+			ast_verb(3, "Remote command response from %s: %s\n", src, str + rest);
+			if (!strncmp(str + rest, "OK", 2)) {
+				rpt_telemetry(myrpt, COMPLETE, NULL);
+			} else if (!strncmp(str + rest, "DENIED", 6)) {
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
+			}
+		}
+		return;
+	}
+
+	if (*str == 'R') {
+		char recv_hash[HMAC_HEX_SIZE];
+		char calc_hash[HMAC_HEX_SIZE];
+		char *digits_start;
+		char ra_response[MAXNODESTR];
+
+		rest = 0;
+		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_SRC_SZ) S_FMT(RPT_DEST_SZ) "%n", cmd, src, dest, &rest) < 3) {
+			ast_log(LOG_WARNING, "Unable to parse remote command string %s\n", str);
+			return;
+		}
+		if (!rest) {
+			return;
+		}
+		if (!strcmp(src, myrpt->name)) {
+			return;
+		}
+		if (strcmp(dest, myrpt->name) && strcmp(dest, "0")) {
+			distribute_to_all_links(myrpt, mylink, src, dest, &wf);
+			return;
+		}
+		if (strcmp(dest, myrpt->name) && !strcmp(dest, "0")) {
+			distribute_to_all_links(myrpt, mylink, src, NULL, &wf);
+		}
+
+		if (sscanf(str + rest, "%64s %n", recv_hash, &i) < 1) {
+			ast_log(LOG_WARNING, "Unable to parse remote command hash from %s\n", src);
+			return;
+		}
+		digits_start = str + rest + i;
+		while (*digits_start == ' ') {
+			digits_start++;
+		}
+		if (!*digits_start) {
+			ast_log(LOG_WARNING, "Empty remote command digits from %s\n", src);
+			return;
+		}
+
+		rpt_compute_hmac(myrpt->p.remote_cmd_code, digits_start, calc_hash, sizeof(calc_hash));
+
+		if (strcmp(recv_hash, calc_hash)) {
+			ast_log(LOG_WARNING, "Remote command HMAC mismatch from node %s (denied)\n", src);
+			snprintf(ra_response, sizeof(ra_response), "RA %s %s DENIED", myrpt->name, src);
+			rpt_mutex_lock(&myrpt->lock);
+			ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, ra_response);
+			rpt_mutex_unlock(&myrpt->lock);
+			return;
+		}
+
+		ast_verb(3, "Remote command from %s accepted: %s\n", src, digits_start);
+		donodelog_fmt(myrpt, "REMOTECMD,%s,%s", src, digits_start);
+
+		for (i = 0; digits_start[i]; i++) {
+			local_dtmf_helper(myrpt, digits_start[i]);
+		}
+
+		snprintf(ra_response, sizeof(ra_response), "RA %s %s OK", myrpt->name, src);
+		rpt_mutex_lock(&myrpt->lock);
+		ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, ra_response);
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 
