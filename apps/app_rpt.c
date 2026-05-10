@@ -351,34 +351,35 @@
 					<option name="X">
 						<para>Normal endpoint mode WITHOUT security check.
 						Only specify this if you have checked security already (like with an IAX2 user/password or
- something).</para>
+						something).</para>
 					</option>
 					<option name="R">
 						<para>announce-string[|timeout[|timeout-destination]] - Amateur Radio</para>
 						<para>Reverse Autopatch. Caller is put on hold, and announcement (as specified by the 'announce-string')
- is played on radio system. Users of radio system can access autopatch, dial specified code, and pick up call. Announce-string is
- list of names of recordings, or <literal>PARKED</literal> to substitute code for un-parking or <literal>NODE</literal> to
- substitute node number.</para>
+						is played on radio system. Users of radio system can access autopatch, dial specified code, and pick
+						up call.  Announce-string is list of names of recordings, or <literal>PARKED</literal> to substitute
+						code for un-parking or <literal>NODE</literal> to substitute node number.</para>
 					</option>
 					<option name="P">
 						<para>Phone Control mode. This allows a regular phone user to have full control and audio access to the
- radio system. For the user to have DTMF control, the 'phone_functions' parameter must be specified for the node in 'rpt.conf'. An
- additional function (cop,6) must be listed so that PTT control is available.</para>
+						radio system. For the user to have DTMF control, the 'phone_functions' parameter must be specified for
+						the node in 'rpt.conf'. An additional function (cop,6) must be listed so that PTT control is available.</para>
 					</option>
 					<option name="D">
 						<para>Dumb Phone Control mode. This allows a regular phone user to have full control and audio access to
- the radio system. In this mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not
- generally recommended in this mode), the 'dphone_functions' parameter must be specified for the node in 'rpt.conf'. Otherwise no
- DTMF control will be available to the phone user.</para>
+						the radio system. In this mode, the PTT is activated for the entire length of the call. For the user to
+						have DTMF control (not generally recommended in this mode), the 'dphone_functions' parameter must be
+						specified for the node in 'rpt.conf'. Otherwise no DTMF control will be available to the phone user.</para>
 					</option>
 					<option name="S">
 						<para>Simplex Dumb Phone Control mode. This allows a regular phone user audio-only access to the radio
- system. In this mode, the transmitter is toggled on and off when the phone user presses the funcchar (*) key on the telephone
- set. In addition, the transmitter will turn off if the endchar (#) key is pressed. When a user first calls in, the transmitter
- will be off, and the user can listen for radio traffic. When the user wants to transmit, they press the * key, start talking,
- then press the * key again or the # key to turn the transmitter off.  No other functions can be executed by the user on the phone
- when this mode is selected. Note: If your radio system is full-duplex, we recommend using either P or D modes as they provide
- more flexibility.</para>
+						system. In this mode, the transmitter is toggled on and off when the phone user presses the funcchar (*)
+						key on the telephone set. In addition, the transmitter will turn off if the endchar (#) key is pressed.
+						When a user first calls in, the transmitter will be off, and the user can listen for radio traffic. When
+						the user wants to transmit, they press the * key, start talking, then press the * key again or the # key
+						to turn the transmitter off.  No other functions can be executed by the user on the phone when this mode
+						is selected. Note: If your radio system is full-duplex, we recommend using either P or D modes as they
+						provide more flexibility.</para>
 					</option>
 					<option name="V">
 						<para>Set Asterisk channel variable for specified node (e.g. Rpt(2000|V|foo=bar))</para>
@@ -1055,6 +1056,54 @@ static const char *http_status_text(long code)
 	}
 }
 
+static int rpt_iax_registry_family(const char *node)
+{
+	char funcbuf[128];
+	char addrbuf[128];
+	struct ast_sockaddr sa;
+
+	if (ast_strlen_zero(node)) {
+		return AF_UNSPEC;
+	}
+
+	snprintf(funcbuf, sizeof(funcbuf), "RPT_REGISTRY(%s)", node);
+	addrbuf[0] = '\0';
+	if ((ast_func_read(NULL, funcbuf, addrbuf, sizeof(addrbuf)) < 0) || ast_strlen_zero(addrbuf)) {
+		/*
+		 * if "rpt_http_register" module not available OR not registered then
+		 * we check was registered by "chan_iax2".
+		 */
+		snprintf(funcbuf, sizeof(funcbuf), "IAXREGISTRY(%s)", node);
+		addrbuf[0] = '\0';
+		if ((ast_func_read(NULL, funcbuf, addrbuf, sizeof(addrbuf)) < 0) || ast_strlen_zero(addrbuf)) {
+			/* if "chan_iax2" module not available OR not registered */
+			return AF_UNSPEC;
+		}
+	}
+
+	if (ast_strlen_zero(addrbuf)) {
+		return AF_UNSPEC;
+	}
+
+	if (!strcmp(addrbuf, "MULTIPLE")) {
+		return AF_INET6;
+	}
+
+	if (!ast_sockaddr_parse(&sa, addrbuf, 0)) {
+		return AF_UNSPEC;
+	}
+
+	if (ast_sockaddr_is_ipv4(&sa)) {
+		return AF_INET;
+	}
+
+	if (ast_sockaddr_is_ipv6(&sa)) {
+		return AF_INET6;
+	}
+
+	return AF_UNSPEC;
+}
+
 static void *perform_statpost(void *data)
 {
 	int failed = 0;
@@ -1066,7 +1115,18 @@ static void *perform_statpost(void *data)
 	struct statpost *sp = (struct statpost *) data;
 	struct rpt *myrpt = sp->myrpt;
 	char *url = ast_str_buffer(sp->stats_url);
+	int family;
 
+	/* identify the address family that was used to register the node */
+	family = rpt_iax_registry_family(myrpt->name);
+	if (family == AF_UNSPEC) {
+		/* if not registered */
+		ast_free(sp->stats_url);
+		ast_free(sp);
+		return NULL;
+	}
+
+	curl = curl_easy_init();
 	if (!curl) {
 		ast_free(sp->stats_url);
 		ast_free(sp);
@@ -1080,16 +1140,15 @@ static void *perform_statpost(void *data)
 		curl_easy_cleanup(curl);
 		return NULL;
 	}
+
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_msg);
-	/*
-	 *	The option setting below is the default, so there's no need to set it.
-	 *
-	 *	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_WHATEVER);
-	 */
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
+
+	/* ensure that we post using the same address family that was used to register */
+	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, family == AF_INET ? (long) CURL_IPRESOLVE_V4 : (long) CURL_IPRESOLVE_V6);
 
 	res = curl_easy_perform(curl);
 	if (res != CURLE_OK) {

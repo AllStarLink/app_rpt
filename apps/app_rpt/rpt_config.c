@@ -1,30 +1,34 @@
 
 #include "asterisk.h"
 
-#include <sys/stat.h>
-#include <math.h>
-#include <termios.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-
 #include "asterisk/channel.h"
 #include "asterisk/pbx.h"
 #include "asterisk/cli.h"		   /* use ast_cli_command */
 #include "asterisk/module.h"	   /* use ast_module_check */
 #include "asterisk/dns_core.h"	   /* use for dns lookup */
+#include "asterisk/dns_query_set.h" /* use for dns lookup */
 #include "asterisk/dns_resolver.h" /* use for dns lookup */
 #include "asterisk/dns_srv.h"	   /* use for srv dns lookup */
 #include "asterisk/vector.h"	   /* required for dns */
 #include "asterisk/utils.h"		   /* required for ARRAY_LEN */
 
 #include "app_rpt.h"
-#include <arpa/nameser.h> /* needed for dns - must be after app_rpt.h */
 #include "rpt_lock.h"
 #include "rpt_config.h"
 #include "rpt_manager.h"
 #include "rpt_utils.h" /* use myatoi */
 #include "rpt_rig.h"   /* use setrem */
+
+#include <arpa/nameser.h> /* needed for dns - must be after app_rpt.h */
+#include <ctype.h>
+#include <ifaddrs.h>
+#include <math.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <termios.h>
 
 /*! \brief Echolink queryoption for retrieving call sign */
 #define ECHOLINK_QUERY_CALLSIGN 2
@@ -369,8 +373,7 @@ int tlb_query_callsign(const char *node, char *callsign, int callsignlen)
  * Calling routine should pass a buffer for nodedata and nodedatalength
  * of sufficient length. A typical response is
  * "radio@123.123.123.123:4569/50000,123.123.123.123
- * This routine uses the SRV records provided by AllStarLink and resolves
- * the returned host's A record
+ * This routine uses the SRV and A/AAAA records provided by AllStarLink
  *
  * \note This routine can be called by app_rpt multiple times as
  * it constructs the node number.  The routine will only perform a
@@ -389,6 +392,16 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 	const struct ast_dns_record *record;
 	char domain[256];
 	int res;
+	char *hostname;
+	unsigned short iaxport;
+	RAII_VAR(struct ast_dns_query_set *, queries, ast_dns_query_set_create(), ao2_cleanup);
+	int i;
+	int have_v4 = 0;
+	int have_v6 = 0;
+	struct ifaddrs *ifap = NULL;
+	struct ifaddrs *ifp;
+	char addr_v4[AST_SOCKADDR_BUFLEN] = "";
+	char addr_v6[AST_SOCKADDR_BUFLEN] = "";
 
 	/* we require at least a node length of 4 digits */
 	if (strlen(node) < 4) {
@@ -399,71 +412,178 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 	ast_assert(nodedata != NULL);
 	ast_assert(nodedatalength > 0);
 
-	/* Resolve the node by using SRV record followed by A record lookup */
-	{
-		char *hostname;
-		const char *ipaddress;
-		unsigned short iaxport;
+	/* To resolve node information we first lookup the SRV record */
 
-		/* setup the domain to lookup */
-		memset(domain, 0, sizeof(domain));
-		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.%s", node, rpt_dns_node_domain);
-		if (res < 0) {
-			return -1;
-		}
-
-		ast_debug(4, "Resolving DNS SRV records for: %s\n", domain);
-
-		if (ast_dns_resolve(domain, T_SRV, C_IN, &result)) {
-			ast_log(LOG_ERROR, "DNS SRV request failed\n");
-			return -1;
-		}
-		if (!result) {
-			ast_debug(4, "No SRV results returned for %s\n", domain);
-			return -1;
-		}
-
-		/* get the response */
-		record = ast_dns_result_get_records(result);
-
-		if (!record) {
-			ast_debug(4, "No SRV records returned for %s\n", domain);
-			ast_dns_result_free(result);
-			return -1;
-		}
-
-		hostname = ast_strdupa(ast_dns_srv_get_host(record));
-		iaxport = ast_dns_srv_get_port(record);
-
-		ast_debug(4, "Resolving A record for host: %s, port: %d\n", hostname, iaxport);
-
-		ast_dns_result_free(result);
-
-		if (ast_dns_resolve(hostname, T_A, C_IN, &result)) {
-			ast_log(LOG_ERROR, "DNS resolve request failed\n");
-			return -1;
-		}
-		if (!result) {
-			ast_debug(4, "No A results returned for %s\n", hostname);
-			return -1;
-		}
-
-		/* get the response */
-		record = ast_dns_result_get_records(result);
-		if (!record) {
-			ast_debug(4, "No A records returned for %s\n", hostname);
-			ast_dns_result_free(result);
-			return -1;
-		}
-
-		ipaddress = ast_inet_ntoa(*(struct in_addr *) ast_dns_record_get_data(record));
-
-		ast_dns_result_free(result);
-
-		/* format the response */
-		memset(nodedata, 0, nodedatalength);
-		snprintf(nodedata, nodedatalength, "radio@%s:%d/%s,%s", ipaddress, iaxport, node, ipaddress);
+	res = snprintf(domain, sizeof(domain), "_iax._udp.%s.%s", node, rpt_dns_node_domain);
+	if (res < 0) {
+		return -1;
 	}
+
+	ast_debug(4, "Resolving DNS SRV records for: %s\n", domain);
+
+	if (ast_dns_resolve(domain, T_SRV, C_IN, &result)) {
+		ast_log(LOG_ERROR, "DNS SRV request failed\n");
+		return -1;
+	}
+	if (!result) {
+		ast_debug(4, "No SRV results returned for %s\n", domain);
+		return -1;
+	}
+
+	/* get the response */
+	record = ast_dns_result_get_records(result);
+	if (!record) {
+		ast_debug(4, "No SRV records returned for %s\n", domain);
+		ast_dns_result_free(result);
+		return -1;
+	}
+
+	hostname = ast_strdupa(ast_dns_srv_get_host(record));
+	iaxport = ast_dns_srv_get_port(record);
+
+	ast_dns_result_free(result);
+
+	if (!queries) {
+		ast_log(LOG_ERROR, "Couldn't allocate DNS query structure\n");
+		return -1;
+	}
+
+	/* determine what types of DNS records we should be querying (A?, AAAA?) */
+
+	if (getifaddrs(&ifap) == -1) {
+		ast_log(LOG_ERROR, "getifaddrs() failed: %s\n", strerror(errno));
+		return -1;
+	}
+
+	for (ifp = ifap; ifp != NULL; ifp = ifp->ifa_next) {
+		if (!ifp->ifa_addr) {
+			continue;
+		}
+
+		switch (ifp->ifa_addr->sa_family) {
+		case AF_INET: {
+			const struct sockaddr_in *sin = (struct sockaddr_in *) ifp->ifa_addr;
+
+			if (have_v4) {
+				/* if we are already querying for A records */
+				continue;
+			}
+
+			if ((sin->sin_addr.s_addr & htonl(0xFF000000)) == htonl(0x7F000000)) {
+				/* skip 127.0.0.0/8 (loopback) */
+				break;
+			}
+
+			if ((sin->sin_addr.s_addr & htonl(IN_CLASSB_NET)) == htonl(0xA9FE0000)) {
+				/* skip 169.254.0.0/16 (linklocal) */
+				break;
+			}
+
+			if (ast_dns_query_set_add(queries, hostname, T_A, C_IN)) {
+				ast_log(LOG_ERROR, "Couldn't add 'A' DNS query for '%s'\n", hostname);
+				freeifaddrs(ifap);
+				return -1;
+			}
+
+			have_v4 = 1;
+			break;
+		}
+
+		case AF_INET6: {
+			const struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) ifp->ifa_addr;
+
+			if (have_v6) {
+				/* if we are already querying for AAAA records */
+				continue;
+			}
+
+			if (IN6_IS_ADDR_LOOPBACK(&sin6->sin6_addr)) {
+				/* skip ::1 (loopback) */
+				break;
+			}
+
+			if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr)) {
+				/* skip linklocal */
+				break;
+			}
+
+			if (ast_dns_query_set_add(queries, hostname, T_AAAA, C_IN)) {
+				ast_log(LOG_ERROR, "Couldn't add 'AAAA' DNS query for '%s'\n", hostname);
+				freeifaddrs(ifap);
+				return -1;
+			}
+
+			have_v6 = 1;
+			break;
+		}
+
+		default:
+			break;
+		}
+
+		if (have_v4 && have_v6) {
+			break;
+		}
+	}
+
+	freeifaddrs(ifap);
+
+	/* and query for the A/AAAA records associated with the node */
+
+	ast_debug(4, "Resolving %s%s%s records for host: %s, port: %d\n", have_v6 ? "AAAA" : "", have_v6 && have_v4 ? "/" : "",
+		have_v4 ? "A" : "", hostname, iaxport);
+
+	if (ast_query_set_resolve(queries)) {
+		ast_log(LOG_ERROR, "Query set resolve failure for '%s'\n", hostname);
+		return -1;
+	}
+
+	for (i = 0; i < ast_dns_query_set_num_queries(queries); ++i) {
+		struct ast_dns_query *query;
+		struct ast_dns_result *result;
+		const struct ast_dns_record *record;
+
+		query = ast_dns_query_set_get(queries, i);
+		result = ast_dns_query_get_result(query);
+		for (record = ast_dns_result_get_records(result); record != NULL; record = ast_dns_record_get_next(record)) {
+			size_t data_size = ast_dns_record_get_data_size(record);
+			const unsigned char *data = (unsigned char *) ast_dns_record_get_data(record);
+			int rr_type = ast_dns_record_get_rr_type(record);
+
+			if (rr_type == T_A && data_size == 4) {
+				if (addr_v4[0]) {
+					/* if we already have an A record reply */
+					continue;
+				}
+				inet_ntop(AF_INET, data, addr_v4, sizeof(addr_v4));
+			} else if (rr_type == T_AAAA && data_size == 16) {
+				if (addr_v6[0]) {
+					/* if we already have an AAAA record reply */
+					continue;
+				}
+				inet_ntop(AF_INET6, data, addr_v6, sizeof(addr_v6));
+			} else {
+				ast_debug(3, "Unrecognized rr_type '%u' or data_size '%zu' from DNS query for host '%s'\n", rr_type, data_size, hostname);
+				continue;
+			}
+		}
+
+		if (addr_v4[0] && addr_v6[0]) {
+			break;
+		}
+	}
+
+	if (addr_v6[0] && addr_v4[0]) {
+		snprintf(nodedata, nodedatalength, "radio@([%s]:%d,%s:%d)/%s,([%s],%s)", addr_v6, iaxport, addr_v4, iaxport, node, addr_v6, addr_v4);
+	} else if (addr_v6[0]) {
+		snprintf(nodedata, nodedatalength, "radio@[%s]:%d/%s,[%s]", addr_v6, iaxport, node, addr_v6);
+	} else if (addr_v4[0]) {
+		snprintf(nodedata, nodedatalength, "radio@%s:%d/%s,%s", addr_v4, iaxport, node, addr_v4);
+	} else {
+		ast_debug(4, "No A/AAAA results returned for %s\n", hostname);
+		return -1;
+	}
+
 	return 0;
 }
 
