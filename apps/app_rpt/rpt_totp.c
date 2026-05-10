@@ -7,8 +7,9 @@
 #include <time.h>
 
 #include "asterisk/logger.h"
-#include "asterisk/sha1.h"
 #include "asterisk/utils.h"
+
+#include <openssl/sha.h>
 
 #include "rpt_totp.h"
 
@@ -23,15 +24,15 @@ static int hmac_sha1(const uint8_t *key, size_t keylen,
 	uint8_t ipad[HMAC_BLOCK];
 	uint8_t opad[HMAC_BLOCK];
 	uint8_t inner[HMAC_HASH];
-	SHA1Context sha;
+	SHA_CTX sha;
 	size_t i;
 
 	memset(k, 0, sizeof(k));
 	if (keylen > HMAC_BLOCK) {
 		/* Per RFC 2104: if key longer than block, replace with H(key). */
-		if (SHA1Reset(&sha) != 0 ||
-			SHA1Input(&sha, key, keylen) != 0 ||
-			SHA1Result(&sha, k) != 0) {
+		if (SHA1_Init(&sha) != 1 ||
+			SHA1_Update(&sha, key, keylen) != 1 ||
+			SHA1_Final(k, &sha) != 1) {
 			return -1;
 		}
 	} else {
@@ -43,17 +44,17 @@ static int hmac_sha1(const uint8_t *key, size_t keylen,
 		opad[i] = k[i] ^ 0x5c;
 	}
 
-	if (SHA1Reset(&sha) != 0 ||
-		SHA1Input(&sha, ipad, HMAC_BLOCK) != 0 ||
-		SHA1Input(&sha, msg, msglen) != 0 ||
-		SHA1Result(&sha, inner) != 0) {
+	if (SHA1_Init(&sha) != 1 ||
+		SHA1_Update(&sha, ipad, HMAC_BLOCK) != 1 ||
+		SHA1_Update(&sha, msg, msglen) != 1 ||
+		SHA1_Final(inner, &sha) != 1) {
 		return -1;
 	}
 
-	if (SHA1Reset(&sha) != 0 ||
-		SHA1Input(&sha, opad, HMAC_BLOCK) != 0 ||
-		SHA1Input(&sha, inner, HMAC_HASH) != 0 ||
-		SHA1Result(&sha, out) != 0) {
+	if (SHA1_Init(&sha) != 1 ||
+		SHA1_Update(&sha, opad, HMAC_BLOCK) != 1 ||
+		SHA1_Update(&sha, inner, HMAC_HASH) != 1 ||
+		SHA1_Final(out, &sha) != 1) {
 		return -1;
 	}
 
