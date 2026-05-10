@@ -110,3 +110,45 @@ void update_timer(int *timer_ptr, int elap, int end_val);
  * \retval -1 if the buffer is full or a formatting error occurred.
  */
 int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+
+/*!
+ * \brief Parse a node address into destination, extra, and optional flag fields.
+ *
+ * Parses strings of the form "deststr,extra[,flag]". An absent flag is NULL.
+ *
+ * IAX destinations may use hostspec/extension or user@hostspec/extension, with
+ * an optional IAX2/ prefix. A hostspec may be a parenthesized address list.
+ * If no explicit port is present, ":4569" is inserted before the extension's '/'.
+ *
+ *   radio@a.b.c.d/12345,NONE
+ *   radio@a.b.c.d:4570/12345,NONE
+ *   radio@[aa:bb:cc:...:ff]/12345,NONE
+ *   radio@[aa:bb:cc:...:ff]:4570/12345,NONE
+ *   radio@(a.b.c.d,[aa:bb:cc:...:ff]):4569/491303,NONE
+ *   radio@mycall.dyndns.org:4569/63001,NONE,VOTE    ; simple voter
+ *
+ *   peer.example/12345,NONE
+ *   (peer1,peer2):4570/12345,NONE
+ *
+ *   IAX2/peer.example/12345,NONE
+ *   IAX2/(peer1,peer2)/12345,NONE
+ *
+ * Non-IAX channel destinations are left unchanged. TLB destinations may omit
+ * the comma and extra field, in which case extra is NULL.
+ *
+ *   echolink/el0/009999,009999
+ *   tlb/1101/12345
+ *
+ * \param nodestr Node address string to parse; must be a valid, writable string.
+ * \param deststr Output pointer for the destination string.
+ * \param extra Output pointer for the reported address field, excluding the flag.
+ * \param flag Output pointer for the optional flag, such as VOTE or yes.
+ * All three output pointers must be non-NULL.
+ * \param buf Buffer used when deststr must be rewritten to add the default port.
+ * \param len Size of buf.
+ *
+ * \retval 0 Success.
+ * \retval -1 Missing top-level comma separator for a non-TLB destination,
+ * malformed destination string, or insufficient buffer space for the rewrite.
+ */
+int parse_node_format(char *nodestr, char **deststr, char **extra, char **flag, char *buf, size_t len);
