@@ -6,6 +6,7 @@
 #include <strings.h>
 #include <time.h>
 
+#include "asterisk/channel.h"	/* required for AST_MAX_EXTENSION via app_rpt.h */
 #include "asterisk/config.h"
 #include "asterisk/lock.h"
 #include "asterisk/logger.h"
