@@ -2036,7 +2036,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		char recv_hash[HMAC_HEX_SIZE];
 		char calc_hash[HMAC_HEX_SIZE];
 		char *digits_start;
-		char ra_response[MAXNODESTR];
+		char ra_response[MAXNODESTR * 2];
 
 		rest = 0;
 		if (sscanf(str, S_FMT(RPT_CMD_SZ) S_FMT(RPT_SRC_SZ) S_FMT(RPT_DEST_SZ) "%n", cmd, src, dest, &rest) < 3) {
