@@ -4,7 +4,9 @@
 #include <sys/vfs.h> /* use statfs */
 
 #include "asterisk/channel.h" /* includes all the locking stuff needed (lock.h doesn't) */
+#include "asterisk/strings.h"
 #include "asterisk/translate.h"
+#include "asterisk/utils.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
@@ -350,4 +352,96 @@ void update_timer(int *timer_ptr, int elap, int end_val)
 	if (*timer_ptr < end_val) {
 		*timer_ptr = end_val;
 	}
+}
+
+int parse_node_format(char *nodestr, char **deststr, char **extra, char *buf, size_t len)
+{
+	char *p;
+	char *hostspec;
+	char *slash = NULL;
+	int has_port = 0;
+
+	*deststr = NULL;
+	*extra = NULL;
+
+	/*
+	 * Find the comma separating the destination from the extra. If the destination
+	 * contains a parenthesized multi-address hostspec, skip commas inside hostspec:
+	 *
+	 *   radio@(addr1,addr2):4569/12345,NONE
+	 *               ^skip             ^find
+	 */
+	p = nodestr + strcspn(nodestr, "@/,");
+	if (*p == '@' && p[1] == '(') {
+		char *close;
+
+		close = strchr(p + 2, ')');
+		if (!close) {
+			/* if no matching close paren */
+			return -1;
+		}
+
+		p = close + 1; /* move our search beyond the close paren */
+	}
+
+	p = strchr(p, ',');
+	if (!p) {
+		/* if no comma */
+		return -1;
+	}
+	*p = '\0';
+
+	*deststr = nodestr;
+	*extra = p + 1;
+
+	/*
+	 * Only rewrite user@hostspec/extra forms.
+	 *
+	 * This avoids rewriting:
+	 *
+	 *   echolink/el0/009999
+	 *   tlb/1101/12345
+	 *   local/...
+	 */
+	p = *deststr + strcspn(*deststr, "@/");
+	if (*p != '@') {
+		return 0;
+	}
+
+	hostspec = p + 1;
+	for (p = hostspec; *p && !slash; p++) {
+		switch (*p) {
+		case '(':
+			p = strchr(p + 1, ')');
+			if (!p) {
+				return -1;
+			}
+			break;
+		case '[':
+			p = strchr(p + 1, ']');
+			if (!p) {
+				return -1;
+			}
+			break;
+		case ':':
+			has_port = 1;
+			break;
+		case '/':
+			slash = p;
+			break;
+		}
+	}
+
+	if (!slash || has_port) {
+		return 0;
+	}
+
+	/*
+	 * Add default IAX2 port before /extra.
+	 */
+	*slash = '\0';
+	snprintf(buf, len, "%s:4569/%s", *deststr, slash + 1);
+	*deststr = buf;
+
+	return 0;
 }

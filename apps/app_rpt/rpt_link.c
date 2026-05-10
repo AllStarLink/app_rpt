@@ -699,9 +699,9 @@ void rpt_update_links(struct rpt *myrpt)
 
 void *rpt_link_connect(void *data)
 {
-	char *s, *s1, *tele, *cp;
+	char *s1, *s2, *tele, *cp;
 	char deststr[325] = "", modechange = 0;
-	char sx[320], *sy;
+	char sx[320];
 	char **strs; /* List of pointers to links in link list string */
 	struct rpt_link *l = NULL;
 	struct ast_str *lstr;
@@ -712,6 +712,26 @@ void *rpt_link_connect(void *data)
 	struct rpt_connect_data *connect_data = data;
 	struct rpt *myrpt = connect_data->myrpt;
 	char *node = connect_data->digitbuf;
+
+	/*
+	 * connect_data->nodedata -> s1
+	 *
+	 *   radio@10.0.1.244/491304,NONE
+	 *     -> radio@10.0.1.244:4569/491304
+	 *
+	 *   radio@10.0.1.244:4573/491304,NONE
+	 *     -> radio@10.0.1.244:4573/491304
+	 *
+	 *   radio@(10.0.1.243,[2601:5c2:200:47:a071:3bdd:5c2b:b279]):4572/491303,NONE
+	 *     -> radio@(10.0.1.243,[2601:5c2:200:47:a071:3bdd:5c2b:b279]):4572/491303
+	 *
+	 *   echolink/el0/009999,009999
+	 *     -> echolink/el0/009999
+	 *
+	 *   tlb/1101/66244
+	 *     -> tlb/1101/66244
+	 *
+	 */
 
 	if (ast_strlen_zero(node)) {
 		goto cleanup;
@@ -726,23 +746,15 @@ void *rpt_link_connect(void *data)
 	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node,
 		connect_data->mode ? "Transceive" : "Monitor", connect_data->perma ? "Permalink" : "Normal");
 
-	s = NULL;
-	s1 = connect_data->nodedata;
-	if (strncasecmp(connect_data->nodedata, "tlb/", 4)) { /* if not tlb */
-		s = connect_data->nodedata;
-		s1 = strsep(&s, ",");
-		if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6) && strncasecmp(s1, "echolink/", 9)) {
-			sy = strchr(s1, '/');
-			*sy = 0;
-			snprintf(sx, sizeof(sx), "%s:4569/%s", s1, sy + 1);
-			s1 = sx;
-		}
-		strsep(&s, ",");
+	if (parse_node_format(connect_data->nodedata, &s1, &s2, sx, sizeof(sx))) {
+		goto cleanup;
 	}
-	if (s && strcmp(s, "VOTE") == 0) {
+
+	if (s2 && strcmp(s2, "VOTE") == 0) {
 		voterlink = 1;
 		ast_debug(1, "NODE is a VOTER.\n");
 	}
+
 	rpt_mutex_lock(&myrpt->lock);
 	/* try to find this one in queue */
 	l = ao2_find(myrpt->links, node, 0);
@@ -817,7 +829,7 @@ void *rpt_link_connect(void *data)
 	l->thisconnected = 0;
 	voxinit_link(l, 1);
 	ast_copy_string(l->name, node, sizeof(l->name));
-	l->isremote = (s && ast_true(s));
+	l->isremote = (s2 && ast_true(s2));
 	if (modechange) {
 		l->connected = 1;
 	}
