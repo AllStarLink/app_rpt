@@ -116,7 +116,7 @@ typedef struct {
 #define LAT_SZ 24
 #define ELEV_SZ 24
 
-#define MAXPEERSTR 31
+#define MAXPEERSTR 40 /* v4 = (4*3)+3+1 = 16 or v6 = (8*4)+7+1 = 40 */
 #define MAXREMSTR 15
 
 #define MONITOR_DISK_BLOCKS_PER_MINUTE 38

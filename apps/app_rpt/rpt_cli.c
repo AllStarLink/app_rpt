@@ -343,7 +343,6 @@ static int rpt_compare_node(const void *obj_left, const void *obj_right, int fla
 static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 {
 	int i;
-	char *connstate;
 	struct rpt *myrpt;
 	struct rpt_link *l;
 	int nrpts = rpt_num_rpts();
@@ -382,8 +381,8 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 
-			ast_cli(fd, "NODE      PEER                RECONNECTS  DIRECTION  CONNECT TIME        CONNECT STATE\n");
-			ast_cli(fd, "----      ----                ----------  ---------  ------------        -------------\n");
+			ast_cli(fd, "%-10s%-39s%-12s%-11s%-20s%s\n", "NODE", "PEER", "RECONNECTS", "DIRECTION", "CONNECT TIME", "CONNECT STATE");
+			ast_cli(fd, "%-10s%-39s%-12s%-11s%-20s%s\n", "----", "----", "----------", "---------", "------------", "-------------");
 
 			/* Traverse the list of connected nodes */
 			now = rpt_tvnow();
@@ -392,6 +391,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				int hours, minutes, seconds;
 				long long connecttime;
 				char conntime[21];
+				char *connstate, *permstate;
 
 				if (l->name[0] == '0') {
 					/* Skip '0' nodes */
@@ -407,15 +407,10 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				connecttime %= 60000L;
 				seconds = connecttime / 1000L;
 				connecttime %= 1000L;
-				snprintf(conntime, 20, "%02d:%02d:%02d:%02d", hours, minutes, seconds, (int) connecttime);
-				conntime[20] = 0;
-				if (l->thisconnected) {
-					connstate = "ESTABLISHED";
-				} else {
-					connstate = "CONNECTING";
-				}
-
-				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
+				snprintf(conntime, sizeof(conntime), "%02d:%02d:%02d:%02d", hours, minutes, seconds, (int) connecttime);
+				connstate = (l->thisconnected) ?  "ESTABLISHED" : "CONNECTING";
+				permstate = (l->max_retries >= MAX_RETRIES_PERM) ?  " (permanent)" : "";
+				ast_cli(fd, "%-10s%-39s%-12d%-11s%-20s%s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate, permstate);
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_cleanup(links_copy); /* Free the copy container */
@@ -430,11 +425,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 	int i, j, n = 1;
 	unsigned int ns;
 	char **strs;
-	char peer[MAXPEERSTR];
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
 	struct ast_channel *rxchannel = NULL;
-	char *connstate;
 	struct rpt_link *l;
 	int nrpts = rpt_num_rpts();
 	struct ast_str *lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
@@ -585,9 +578,11 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 			now = rpt_tvnow();
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
+				char peer[MAXPEERSTR];
 				int hours, minutes, seconds;
 				long long connecttime = ast_tvzero(l->connecttime) ? 0 : ast_tvdiff_ms(now, l->connecttime);
 				char conntime[21];
+				char *connstate, *permstate;
 
 				if (l->name[0] == '0') {
 					/* Skip '0' nodes */
@@ -595,6 +590,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				}
 
 				rpt_link_peer_ip(myrpt, l, peer, sizeof(peer));
+
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;
@@ -603,12 +599,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 				connecttime %= 1000;
 				snprintf(conntime, 20, "%02d:%02d:%02d", hours, minutes, seconds);
 				conntime[20] = 0;
-				if (l->thisconnected) {
-					connstate = "ESTABLISHED";
-				} else {
-					connstate = "CONNECTING";
-				}
-				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
+				connstate = (l->thisconnected) ?  "ESTABLISHED" : "CONNECTING";
+				permstate = (l->max_retries >= MAX_RETRIES_PERM) ?  " (permanent)" : "";
+				ast_cli(fd, "%-10s%-39s%-12d%-11s%-20s%s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate, permstate);
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_cleanup(links_copy); /* Free the copy container */

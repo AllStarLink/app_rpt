@@ -259,7 +259,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 				} else {
 					connstate = "CONNECTING";
 				}
-				astman_append(ses, "Conn: %-10s%-20s%-12d%-11s%-20s%-20s\r\n", l->name, peer, l->reconnects,
+				astman_append(ses, "Conn: %-10s%-39s%-12d%-11s%-20s%-20s\r\n", l->name, peer, l->reconnects,
 					(l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
 			/* destroy our local link queue */
