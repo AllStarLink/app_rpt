@@ -26,6 +26,7 @@
 #include "rpt_functions.h"
 #include "rpt_rig.h"
 #include "rpt_radio.h"
+#include "rpt_auth.h"
 
 /*!
  * \brief DTMF Tones - frequency pairs used to generate them along with the required timings
@@ -2004,4 +2005,64 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
 		}
 	}
 	return DC_COMPLETE;
+}
+
+enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *digitbuf,
+	enum rpt_command_source command_source, struct rpt_link *mylink)
+{
+	const char *digits = digitbuf ? digitbuf : "";
+	size_t len = strlen(digits);
+	size_t i;
+	int rc;
+
+	if (myrpt->remote) {
+		return DC_ERROR;
+	}
+
+	ast_debug(1, "auth param=%s digitbuf_len=%zu source=%d\n", (param) ? param : "(null)", len, command_source);
+
+	/* Bare prefix: status — courtesy tone only, details via CLI ("rpt auth show <node>") */
+	if (len == 0) {
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETEQUIET;
+	}
+
+	/* Logout: lone '*' */
+	if (len == 1 && digits[0] == '*') {
+		rpt_auth_logout(myrpt);
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETEQUIET;
+	}
+
+	/* Login: exactly 4-digit user-id followed by 6-digit OTP, all decimal */
+	if (len != 10) {
+		return DC_ERROR;
+	}
+	for (i = 0; i < 10; i++) {
+		if (digits[i] < '0' || digits[i] > '9') {
+			return DC_ERROR;
+		}
+	}
+
+	{
+		char user_id4[5], otp6[7];
+
+		memcpy(user_id4, digits, 4);
+		user_id4[4] = '\0';
+		memcpy(otp6, digits + 4, 6);
+		otp6[6] = '\0';
+
+		rc = rpt_auth_login(myrpt, user_id4, otp6);
+	}
+
+	if (rc == RPT_AUTH_LOGIN_OK) {
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETEQUIET;
+	}
+
+	/* RPT_AUTH_LOGIN_BAD / _LOCKED / _DISABLED → standard error tone via DC_ERROR */
+	return DC_ERROR;
 }
