@@ -382,8 +382,8 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 
-			ast_cli(fd, "NODE      PEER                RECONNECTS  DIRECTION  CONNECT TIME        CONNECT STATE\n");
-			ast_cli(fd, "----      ----                ----------  ---------  ------------        -------------\n");
+			ast_cli(fd, "%-10s%-41s%-12s%-11s%-20s%s\n", "NODE", "PEER", "RECONNECTS", "DIRECTION", "CONNECT TIME", "CONNECT STATE");
+			ast_cli(fd, "%-10s%-41s%-12s%-11s%-20s%s\n", "----", "----", "----------", "---------", "------------", "-------------");
 
 			/* Traverse the list of connected nodes */
 			now = rpt_tvnow();
@@ -411,15 +411,14 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 				connecttime %= 60000L;
 				seconds = connecttime / 1000L;
 				connecttime %= 1000L;
-				snprintf(conntime, 20, "%02d:%02d:%02d:%02d", hours, minutes, seconds, (int) connecttime);
-				conntime[20] = 0;
+				snprintf(conntime, sizeof(conntime), "%02d:%02d:%02d:%02d", hours, minutes, seconds, (int) connecttime);
 				if (l->thisconnected) {
 					connstate = "ESTABLISHED";
 				} else {
 					connstate = "CONNECTING";
 				}
 
-				ast_cli(fd, "%-10s%-20s%-12d%-11s%-20s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
+				ast_cli(fd, "%-10s%-41s%-12d%-11s%-20s%s\n", l->name, peer, l->reconnects, (l->outbound) ? "OUT" : "IN", conntime, connstate);
 			}
 			ao2_iterator_destroy(&l_it);
 			ao2_cleanup(links_copy); /* Free the copy container */
