@@ -355,34 +355,35 @@
 					<option name="X">
 						<para>Normal endpoint mode WITHOUT security check.
 						Only specify this if you have checked security already (like with an IAX2 user/password or
- something).</para>
+						something).</para>
 					</option>
 					<option name="R">
 						<para>announce-string[|timeout[|timeout-destination]] - Amateur Radio</para>
 						<para>Reverse Autopatch. Caller is put on hold, and announcement (as specified by the 'announce-string')
- is played on radio system. Users of radio system can access autopatch, dial specified code, and pick up call. Announce-string is
- list of names of recordings, or <literal>PARKED</literal> to substitute code for un-parking or <literal>NODE</literal> to
- substitute node number.</para>
+						is played on radio system. Users of radio system can access autopatch, dial specified code, and pick
+						up call.  Announce-string is list of names of recordings, or <literal>PARKED</literal> to substitute
+						code for un-parking or <literal>NODE</literal> to substitute node number.</para>
 					</option>
 					<option name="P">
 						<para>Phone Control mode. This allows a regular phone user to have full control and audio access to the
- radio system. For the user to have DTMF control, the 'phone_functions' parameter must be specified for the node in 'rpt.conf'. An
- additional function (cop,6) must be listed so that PTT control is available.</para>
+						radio system. For the user to have DTMF control, the 'phone_functions' parameter must be specified for
+						the node in 'rpt.conf'. An additional function (cop,6) must be listed so that PTT control is available.</para>
 					</option>
 					<option name="D">
 						<para>Dumb Phone Control mode. This allows a regular phone user to have full control and audio access to
- the radio system. In this mode, the PTT is activated for the entire length of the call. For the user to have DTMF control (not
- generally recommended in this mode), the 'dphone_functions' parameter must be specified for the node in 'rpt.conf'. Otherwise no
- DTMF control will be available to the phone user.</para>
+						the radio system. In this mode, the PTT is activated for the entire length of the call. For the user to
+						have DTMF control (not generally recommended in this mode), the 'dphone_functions' parameter must be
+						specified for the node in 'rpt.conf'. Otherwise no DTMF control will be available to the phone user.</para>
 					</option>
 					<option name="S">
 						<para>Simplex Dumb Phone Control mode. This allows a regular phone user audio-only access to the radio
- system. In this mode, the transmitter is toggled on and off when the phone user presses the funcchar (*) key on the telephone
- set. In addition, the transmitter will turn off if the endchar (#) key is pressed. When a user first calls in, the transmitter
- will be off, and the user can listen for radio traffic. When the user wants to transmit, they press the * key, start talking,
- then press the * key again or the # key to turn the transmitter off.  No other functions can be executed by the user on the phone
- when this mode is selected. Note: If your radio system is full-duplex, we recommend using either P or D modes as they provide
- more flexibility.</para>
+						system. In this mode, the transmitter is toggled on and off when the phone user presses the funcchar (*)
+						key on the telephone set. In addition, the transmitter will turn off if the endchar (#) key is pressed.
+						When a user first calls in, the transmitter will be off, and the user can listen for radio traffic. When
+						the user wants to transmit, they press the * key, start talking, then press the * key again or the # key
+						to turn the transmitter off.  No other functions can be executed by the user on the phone when this mode
+						is selected. Note: If your radio system is full-duplex, we recommend using either P or D modes as they
+						provide more flexibility.</para>
 					</option>
 					<option name="V">
 						<para>Set Asterisk channel variable for specified node (e.g. Rpt(2000|V|foo=bar))</para>
@@ -1061,6 +1062,54 @@ static const char *http_status_text(long code)
 	}
 }
 
+static int rpt_iax_registry_family(const char *node)
+{
+	char funcbuf[128];
+	char addrbuf[128];
+	struct ast_sockaddr sa;
+
+	if (ast_strlen_zero(node)) {
+		return AF_UNSPEC;
+	}
+
+	snprintf(funcbuf, sizeof(funcbuf), "RPT_REGISTRY(%s)", node);
+	addrbuf[0] = '\0';
+	if ((ast_func_read(NULL, funcbuf, addrbuf, sizeof(addrbuf)) < 0) || ast_strlen_zero(addrbuf)) {
+		/*
+		 * if "rpt_http_register" module not available OR not registered then
+		 * we check was registered by "chan_iax2".
+		 */
+		snprintf(funcbuf, sizeof(funcbuf), "IAXREGISTRY(%s)", node);
+		addrbuf[0] = '\0';
+		if ((ast_func_read(NULL, funcbuf, addrbuf, sizeof(addrbuf)) < 0) || ast_strlen_zero(addrbuf)) {
+			/* if "chan_iax2" module not available OR not registered */
+			return AF_UNSPEC;
+		}
+	}
+
+	if (ast_strlen_zero(addrbuf)) {
+		return AF_UNSPEC;
+	}
+
+	if (!strcmp(addrbuf, "MULTIPLE")) {
+		return AF_INET6;
+	}
+
+	if (!ast_sockaddr_parse(&sa, addrbuf, 0)) {
+		return AF_UNSPEC;
+	}
+
+	if (ast_sockaddr_is_ipv4(&sa)) {
+		return AF_INET;
+	}
+
+	if (ast_sockaddr_is_ipv6(&sa)) {
+		return AF_INET6;
+	}
+
+	return AF_UNSPEC;
+}
+
 static void *perform_statpost(void *data)
 {
 	int failed = 0;
@@ -1072,7 +1121,18 @@ static void *perform_statpost(void *data)
 	struct statpost *sp = (struct statpost *) data;
 	struct rpt *myrpt = sp->myrpt;
 	char *url = ast_str_buffer(sp->stats_url);
+	int family;
 
+	/* identify the address family that was used to register the node */
+	family = rpt_iax_registry_family(myrpt->name);
+	if (family == AF_UNSPEC) {
+		/* if not registered */
+		ast_free(sp->stats_url);
+		ast_free(sp);
+		return NULL;
+	}
+
+	curl = curl_easy_init();
 	if (!curl) {
 		ast_free(sp->stats_url);
 		ast_free(sp);
@@ -1086,16 +1146,15 @@ static void *perform_statpost(void *data)
 		curl_easy_cleanup(curl);
 		return NULL;
 	}
+
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunction);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_msg);
-	/*
-	 *	The option setting below is the default, so there's no need to set it.
-	 *
-	 *	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, (long)CURL_IPRESOLVE_WHATEVER);
-	 */
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
+
+	/* ensure that we post using the same address family that was used to register */
+	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, family == AF_INET ? (long) CURL_IPRESOLVE_V4 : (long) CURL_IPRESOLVE_V6);
 
 	res = curl_easy_perform(curl);
 	if (res != CURLE_OK) {
@@ -2474,35 +2533,9 @@ static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict ke
 	return 0;
 }
 
-/*!
- * \brief Create dial string from parsed channel name
- * \param[in] s Input string
- * \param[out] s1
- * \param[out] buf
- * \param len
- * \return s2
- */
-static char *parse_node_format(char *s, char **restrict s1, char *buf, size_t len)
-{
-	char *s2;
-
-	*s1 = strsep(&s, ",");
-	if (!strchr(*s1, ':') && strchr(*s1, '/') && strncasecmp(*s1, "local/", 6)) {
-		char *sy = strchr(*s1, '/');
-		*sy = 0;
-		snprintf(buf, len, "%s:4569/%s", *s1, sy + 1);
-		*s1 = buf;
-	}
-	s2 = strsep(&s, ",");
-	if (!s2) {
-		return NULL;
-	}
-	return s2;
-}
-
 static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 {
-	char *s1, *tele;
+	char *s1, *s2, *tele;
 	char tmp[300], deststr[325] = "";
 	char sx[320];
 	struct ast_frame *f1;
@@ -2540,9 +2573,15 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
-	parse_node_format(tmp, &s1, sx, sizeof(sx));
+	if (parse_node_format(tmp, &s1, &s2, sx, sizeof(sx))) {
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
+		return NULL;
+	}
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
 	tele = strchr(deststr, '/');
+
 	/* tele must be non-NULL here since deststr always contains at least 'IAX2/' */
 	*tele++ = 0;
 	l->elaptime = 0;
@@ -3531,10 +3570,10 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		if ((l->elaptime > MAXCONNECTTIME) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
 			l->elaptime = 0;
 			if (!l->outbound) {
-				ast_debug(1, "Connection taking to long, giving up on link");
+				ast_debug(1, "Connection taking too long, giving up on link");
 				l->disced = RPT_LINK_DISCONNECT;
 			} else {
-				ast_debug(1, "Connection taking to long, resetting retry timer");
+				ast_debug(1, "Connection taking too long, resetting retry timer");
 				l->retrytimer = RETRY_TIMER_MS;
 			}
 			return;
@@ -6600,7 +6639,11 @@ static int parse_caller(const char *b1, char *hisip, char *s)
 	char sx[320];
 	char *s1, *s2, *s3;
 
-	s2 = parse_node_format(s, &s1, sx, sizeof(sx));
+	if (parse_node_format(s, &s1, &s2, sx, sizeof(sx))) {
+		ast_log(LOG_WARNING, "Reported node %s not in correct format\n", b1);
+		return -1;
+	}
+
 	if (!s2) {
 		ast_log(LOG_WARNING, "Reported node %s not in correct format\n", b1);
 		return -1;
@@ -6782,13 +6825,19 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (options && (*options == 'F')) {
 				if (b1 && myadr) {
 					forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
+
 					ast_copy_string(xstr, nodedata, sizeof(xstr));
-					s2 = parse_node_format(xstr, &s1, sx, sizeof(sx));
+					if (parse_node_format(xstr, &s1, &s2, sx, sizeof(sx))) {
+						ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
+						return -1;
+					}
+
 					if (!s2) {
 						ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 						ast_config_destroy(cfg);
 						return -1;
 					}
+
 					nodedata[0] = '\0';
 					if (!strcmp(s2, myadr)) {
 						forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
@@ -6825,12 +6874,19 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					return -1;
 				}
 			}
-			s2 = parse_node_format(xstr, &s1, sx, sizeof(sx));
+
+			if (parse_node_format(xstr, &s1, &s2, sx, sizeof(sx))) {
+				ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
+				ast_config_destroy(cfg);
+				return -1;
+			}
+
 			if (!s2) {
 				ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 				ast_config_destroy(cfg);
 				return -1;
 			}
+
 			if (options && (*options == 'F')) {
 				ast_config_destroy(cfg);
 				rpt_forward(chan, s1, b1);
