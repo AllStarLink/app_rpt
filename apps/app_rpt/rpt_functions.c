@@ -2007,11 +2007,24 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
 	return DC_COMPLETE;
 }
 
+/*
+ * param selects the sub-command:
+ *   "a" — authenticate (login):  expects exactly 10 trailing digits
+ *                                 (4-digit user-id + 6-digit OTP)
+ *   "s" — status:                no trailing digits expected
+ *   "l" — logout:                no trailing digits expected
+ *
+ * Example rpt.conf entries (assuming funcchar='*'):
+ *   A1 = auth,a    ; *A1<10 digits>   login
+ *   A2 = auth,s    ; *A2              status query
+ *   A3 = auth,l    ; *A3              logout
+ */
 enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *digitbuf,
 	enum rpt_command_source command_source, struct rpt_link *mylink)
 {
 	const char *digits = digitbuf ? digitbuf : "";
 	size_t len = strlen(digits);
+	const char *subcmd = (param && *param) ? param : "";
 	size_t i;
 	int rc;
 
@@ -2019,29 +2032,25 @@ enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *d
 		return DC_ERROR;
 	}
 
-	ast_debug(1, "auth param=%s digitbuf_len=%zu source=%d\n", (param) ? param : "(null)", len, command_source);
+	ast_debug(1, "auth subcmd=%s digitbuf_len=%zu source=%d\n", subcmd, len, command_source);
 
-	/* Still collecting digits — wait for more.
-	 * Valid final lengths: 1 ('*' logout) or 10 (4-digit user + 6-digit OTP).
-	 * Anything shorter is indeterminate (except '*'). */
-	if (len == 0) {
-		return DC_INDETERMINATE;
+	if (!strcasecmp(subcmd, "s")) {
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETEQUIET;
 	}
 
-	/* Logout: lone '*' */
-	if (len == 1 && digits[0] == '*') {
+	if (!strcasecmp(subcmd, "l")) {
 		rpt_auth_logout(myrpt);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETEQUIET;
 	}
 
-	/* Still collecting — need exactly 10 decimal digits for login */
+	/* Default / "a" — login: need exactly 10 decimal digits */
 	if (len < 10) {
 		return DC_INDETERMINATE;
 	}
-
-	/* Too many digits — reject */
 	if (len != 10) {
 		return DC_ERROR;
 	}
@@ -2068,6 +2077,5 @@ enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *d
 		return DC_COMPLETEQUIET;
 	}
 
-	/* RPT_AUTH_LOGIN_BAD / _LOCKED / _DISABLED → standard error tone via DC_ERROR */
 	return DC_ERROR;
 }

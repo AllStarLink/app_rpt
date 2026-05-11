@@ -26,13 +26,13 @@ It is per-node, per-user, additive, sliding-timeout, and uses standard RFC 6238 
 
 ## 1.2 Wire format on the radio
 
-You pick a DTMF prefix in `rpt.conf` for the auth function. Throughout this doc we use `*A` as the example prefix, but you can use anything (e.g. `*99`, `B`, `#7`, etc.).
+You pick DTMF prefixes in `rpt.conf` for the auth sub-commands. Throughout this doc we use `*A1`, `*A2`, `*A3` as the example prefixes, but you can use anything (e.g. `*991`, `*992`, `*993`, etc.).
 
 | Keyed by user            | Meaning                                                                |
 |--------------------------|------------------------------------------------------------------------|
-| `*A<id4><otp6>`          | Login. `<id4>` = exactly 4 decimal digits. `<otp6>` = exactly 6 decimal digits. |
-| `*A*`                    | Logout (clears the session for this node).                             |
-| `*A`                     | Status — courtesy tone only, no on-air detail. Use the CLI for detail.|
+| `*A1<id4><otp6>`         | Login. `<id4>` = exactly 4 decimal digits. `<otp6>` = exactly 6 decimal digits. |
+| `*A2`                    | Status — courtesy tone only, no on-air detail. Use the CLI for detail.|
+| `*A3`                    | Logout (clears the session for this node).                             |
 
 Total login length is always exactly 10 digits after the prefix. There is **no separator** between the user-id and OTP — this was a deliberate design choice to keep the format short.
 
@@ -67,15 +67,17 @@ Only `auth_users` is required. If you omit it, the feature is silently disabled 
 
 ### 1.3.2 rpt.conf — function table entry
 
-The `auth` function must be reachable from the **default** functions stanza, otherwise unauthenticated users cannot log in. Add one line to your active `[functions]`:
+The `auth` function must be reachable from the **default** functions stanza, otherwise unauthenticated users cannot log in. Add three entries to your active `[functions]`, one per sub-command:
 
 ```ini
 [functions-main](!)
 ; ... your existing entries ...
-*A = auth,
+A1 = auth,a
+A2 = auth,s
+A3 = auth,l
 ```
 
-The trailing comma is required by the existing parser (action,param syntax with empty param).
+The `param` after the comma selects the sub-command: `a` = authenticate (login), `s` = status, `l` = logout.
 
 ### 1.3.3 rpt.conf — privileged command stanzas
 
@@ -163,10 +165,10 @@ Reloading clears any active sessions and re-reads `rpt_auth.conf`.
 User wants to run a privileged command, e.g. `*99` which is in `[functions-admin]`:
 
 1. User opens their authenticator app, sees current code, e.g. `849203`.
-2. User keys `*A1234849203` on the radio. Hears courtesy tone — they are now authenticated for ~5 minutes (or whatever `auth_timeout` is).
+2. User keys `*A11234849203` on the radio. Hears courtesy tone — they are now authenticated for ~5 minutes (or whatever `auth_timeout` is).
 3. User keys `*99`. It executes (cop,5).
 4. Each successful command refreshes the timeout (sliding window). User stays logged in as long as they keep using authed commands.
-5. When done, user keys `*A*` to log out explicitly. (Or just walks away — session expires after `auth_timeout` seconds of inactivity.)
+5. When done, user keys `*A3` to log out explicitly. (Or just walks away — session expires after `auth_timeout` seconds of inactivity.)
 
 If the OTP is wrong, the user hears the error tone. Each failure increments their failed-attempt counter. After `auth_lockout_threshold` failures, that user-id is locked out for `auth_lockout_duration` seconds (even if they then key the correct code).
 
@@ -198,7 +200,7 @@ Both support tab completion of the node name.
 
 - **Logs.** All auth events go to the Asterisk log: successful logins (with user-id, **never** the OTP), failed logins (with user-id and reason), lockouts triggered, lockouts expired, sessions cleared by timeout. The OTP digits themselves are never logged. The user-id is logged because you need to know which account is being attacked.
 
-- **Disabling without reconfig.** To temporarily disable auth without touching the function table, comment out `auth_users` in `rpt.conf` and reload. All login attempts will return error. The `*A` prefix will still consume DTMF input but produce only error tones.
+- **Disabling without reconfig.** To temporarily disable auth without touching the function table, comment out `auth_users` in `rpt.conf` and reload. All login attempts will return error. The `A1`/`A2`/`A3` prefixes will still consume DTMF input but produce only error tones.
 
 - **What if `rpt_auth.conf` has a syntax error or is unreadable?** The feature is silently disabled at load time, a warning is logged, and login attempts return error. The node continues to run normally for unauthenticated users.
 
@@ -227,7 +229,7 @@ echo "SECRET: $SECRET"
 echo "otpauth://totp/test:1234?secret=$SECRET&issuer=test&algorithm=SHA1&digits=6&period=30" \
     | qrencode -t ANSIUTF8
 
-# 2. Configure (edit rpt.conf with the auth_* keys, *A in [functions-main], and a [functions-admin] stanza)
+# 2. Configure (edit rpt.conf with the auth_* keys, A1/A2/A3 in [functions-main], and a [functions-admin] stanza)
 sudo tee /etc/asterisk/rpt_auth.conf >/dev/null <<EOF
 [users]
 1234 = $SECRET, functions-admin
@@ -239,7 +241,7 @@ sudo chmod 0640         /etc/asterisk/rpt_auth.conf
 asterisk -rx "module reload app_rpt.so"
 
 # 4. Scan the QR with your phone, get a code, then simulate the DTMF via CLI
-asterisk -rx "rpt fun <node> *A1234<6-digit-code-from-phone>"
+asterisk -rx "rpt fun <node> *A11234<6-digit-code-from-phone>"
 
 # 5. Verify session
 asterisk -rx "rpt auth show <node>"
@@ -248,7 +250,7 @@ asterisk -rx "rpt auth show <node>"
 asterisk -rx "rpt fun <node> *99"
 
 # 7. Log out
-asterisk -rx "rpt fun <node> *A*"
+asterisk -rx "rpt fun <node> *A3"
 asterisk -rx "rpt auth show <node>"   # should show no session
 ```
 
@@ -349,7 +351,13 @@ This is a simple input parser delegating to `rpt_auth_*`. It's a top-level funct
 - **Permission scope.** Auth changes the dispatch path itself; conceptually it's not "control operator" territory.
 - **Future-proofing.** If we later add `auth_token`, `auth_revoke_user`, etc., they fit naturally as siblings in `function_table[]`.
 
-The handler accepts three input shapes (see Part 1 §1.2). The 10-digit login path validates strict ASCII-decimal before splitting into 4+6 and calling `rpt_auth_login()`.
+The handler uses the `param` field from `rpt.conf` to select the sub-command:
+
+- `param="a"` (or empty/default) — **login.** Waits for exactly 10 trailing decimal digits (returns `DC_INDETERMINATE` while collecting), splits into 4-digit user-id + 6-digit OTP, calls `rpt_auth_login()`.
+- `param="s"` — **status.** Fires immediately (no trailing digits needed), plays a COMPLETE courtesy tone.
+- `param="l"` — **logout.** Fires immediately, calls `rpt_auth_logout()`, plays a COMPLETE courtesy tone.
+
+This design avoids the problem of single-character prefix matching — because each sub-command has its own prefix in the function table (e.g. `A1`, `A2`, `A3`), the framework's prefix matching in `collect_function_digits` doesn't fire until the full prefix is collected. The login path then returns `DC_INDETERMINATE` until all 10 digits arrive.
 
 A subtle but important detail: **all four failure modes (`BAD`, `LOCKED`, `DISABLED`, malformed) return identical `DC_ERROR`.** The on-air feedback is bit-for-bit indistinguishable. This prevents an attacker from learning whether a user-id is valid (vs. unknown) or whether they've been locked out (vs. just wrong code). The only place the distinction surfaces is in the logs and CLI, which live behind the system administrator's access control.
 
