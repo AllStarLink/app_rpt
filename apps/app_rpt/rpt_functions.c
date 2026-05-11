@@ -2021,11 +2021,11 @@ enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *d
 
 	ast_debug(1, "auth param=%s digitbuf_len=%zu source=%d\n", (param) ? param : "(null)", len, command_source);
 
-	/* Bare prefix: status — courtesy tone only, details via CLI ("rpt auth show <node>") */
+	/* Still collecting digits — wait for more.
+	 * Valid final lengths: 1 ('*' logout) or 10 (4-digit user + 6-digit OTP).
+	 * Anything shorter is indeterminate (except '*'). */
 	if (len == 0) {
-		rpt_telem_select(myrpt, command_source, mylink);
-		rpt_telemetry(myrpt, COMPLETE, NULL);
-		return DC_COMPLETEQUIET;
+		return DC_INDETERMINATE;
 	}
 
 	/* Logout: lone '*' */
@@ -2036,7 +2036,12 @@ enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *d
 		return DC_COMPLETEQUIET;
 	}
 
-	/* Login: exactly 4-digit user-id followed by 6-digit OTP, all decimal */
+	/* Still collecting — need exactly 10 decimal digits for login */
+	if (len < 10) {
+		return DC_INDETERMINATE;
+	}
+
+	/* Too many digits — reject */
 	if (len != 10) {
 		return DC_ERROR;
 	}
