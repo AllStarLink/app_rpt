@@ -173,6 +173,7 @@ do not use 127.0.0.1
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 #include <math.h>
 
@@ -186,6 +187,7 @@ do not use 127.0.0.1
 #include "asterisk/cli.h"
 #include "asterisk/format_cache.h"
 #include "asterisk/vector.h"
+#include "asterisk/timing.h"
 
 #define MAX_RXKEY_TIME 320	 /* ms */
 #define KEEPALIVE_TIME 10000 /* ms = 10 seconds heartbeat */
@@ -463,6 +465,15 @@ struct el_instance {
 };
 
 /*!
+ * \brief Echolink receive queue struct from asterisk.
+ */
+struct el_rxqast {
+	struct el_rxqast *qe_forw;
+	struct el_rxqast *qe_back;
+	char buf[GSM_FRAME_SIZE];
+};
+
+/*!
  * \brief Echolink private information.
  * This is stored in the asterisk channel private technology for reference.
  */
@@ -480,6 +491,8 @@ struct el_pvt {
 	int rxkey;						/* Receive keyed timer */
 	int keepalive;
 	int txindex;
+	struct ast_timer *timer;		/* Timer for receive audio */	
+	struct el_rxqast rxqast;		/* Received data queue */
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
 	struct ast_trans_pvt *xpath;
@@ -1395,6 +1408,19 @@ static int el_call(struct ast_channel *chan, const char *dest, int timeout)
 static void el_destroy(void *obj)
 {
 	struct el_pvt *p = obj;
+	struct el_rxqast *qpast;
+
+	ast_mutex_lock(&p->lock);
+	while (p->rxqast.qe_forw != &p->rxqast) {
+		qpast = p->rxqast.qe_forw;
+		remque(qpast);
+		ast_free(qpast);
+	}
+	ast_mutex_unlock(&p->lock);
+
+	if (p->timer) {
+		ast_timer_close(p->timer);
+	}
 
 	if (p->dsp) {
 		ast_dsp_free(p->dsp);
@@ -1448,6 +1474,8 @@ static struct el_pvt *el_alloc(const char *data)
 	if (p) {
 		snprintf(p->stream, sizeof(p->stream), "%s-%lu", data, instances[n]->seqno++);
 
+		p->rxqast.qe_forw = &p->rxqast;
+		p->rxqast.qe_back = &p->rxqast;
 		p->keepalive = KEEPALIVE_TIME;
 		p->instp = instances[n];
 		p->dsp = ast_dsp_new();
@@ -2371,7 +2399,16 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
  */
 static struct ast_frame *el_xread(struct ast_channel *chan)
 {
+	struct el_rxqast *qpast;
 	struct el_pvt *p = ast_channel_tech_pvt(chan);
+	struct ast_frame fr, *f1, *f2;
+	char buf[AST_FRIENDLY_OFFSET + GSM_FRAME_SIZE];
+	int n;
+
+	if ((ast_timer_ack(p->timer, 1) < 0)) {
+		ast_log(LOG_WARNING, "Timer ack failed.\n");
+		return NULL;
+	}
 
 	if (p->hangup) {
 		ast_softhangup(chan, AST_SOFTHANGUP_DEV);
@@ -2387,6 +2424,70 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 
 		ast_queue_frame(chan, &fr);
 		p->last_firstheard = 1;
+	}
+
+	
+	/* Echolink to Asterisk */
+	if (p->rxqast.qe_forw != &p->rxqast) {
+		for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
+			n++;
+		}
+		if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
+			ast_mutex_lock(&p->lock);
+			while (p->rxqast.qe_forw != &p->rxqast) {
+				qpast = p->rxqast.qe_forw;
+				remque((struct qelem *) qpast);
+				ast_free(qpast);
+			}
+			ast_mutex_unlock(&p->lock);
+			if (p->rxkey) {
+				p->rxkey = 1;
+			}
+			return &ast_null_frame;
+		}
+		if (!p->rxkey) {
+			struct ast_frame wf = {
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_RADIO_KEY,
+				.src = __PRETTY_FUNCTION__,
+			};
+
+			ast_queue_frame(chan, &wf);
+		}
+		p->rxkey = MAX_RXKEY_TIME;
+		ast_mutex_lock(&p->lock);
+		qpast = p->rxqast.qe_forw;
+		remque((struct qelem *) qpast);
+		ast_mutex_unlock(&p->lock);
+		memcpy(buf + AST_FRIENDLY_OFFSET, qpast->buf, GSM_FRAME_SIZE);
+		ast_free(qpast);
+
+		memset(&fr, 0, sizeof(fr));
+		fr.datalen = GSM_FRAME_SIZE;
+		fr.samples = GSM_SAMPLES;
+		fr.frametype = AST_FRAME_VOICE;
+		fr.subclass.format = ast_format_gsm;
+		fr.data.ptr = buf + AST_FRIENDLY_OFFSET;
+		fr.offset = AST_FRIENDLY_OFFSET;
+		fr.src = __PRETTY_FUNCTION__;
+
+		if (p->dsp) {
+			f2 = ast_translate(p->xpath, &fr, 0);
+			f1 = ast_dsp_process(NULL, p->dsp, f2);
+			if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
+				if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
+					if (f1->frametype == AST_FRAME_DTMF_END) {
+						ast_verb(4, "Echolink %s Got DTMF character %c from IP address %s.\n", p->stream, f1->subclass.integer, p->ip);
+					}
+
+					return f1;
+				}
+			}
+
+			return f2;
+		}
+
+		return ast_frdup(&fr);
 	}
 
 	return &ast_null_frame;
@@ -2488,6 +2589,14 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 		return NULL;
 	}
 
+	if (!(p->timer = ast_timer_open())) {
+		ast_log(LOG_ERROR, "Unable to open timer.\n");
+		ast_hangup(chan);
+		return NULL;
+	}
+	ast_timer_set_rate(p->timer, 50); /* Rate in per second - 50/second = 20ms */
+
+	ast_channel_set_fd(chan, 0, ast_timer_fd(p->timer));
 	ast_channel_tech_set(chan, &el_tech);
 	ast_channel_nativeformats_set(chan, el_tech.capabilities);
 	ast_channel_set_rawreadformat(chan, ast_format_gsm);
@@ -4089,65 +4198,21 @@ static void *el_reader(void *data)
 						if (recvlen == sizeof(struct gsmVoice_t)) {
 							if (gsmPacket->version == 3 && gsmPacket->payt == 3) {
 								/* break them up for Asterisk */
-								char inbuf[GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET];
+								struct el_rxqast *qpast;
 
 								for (i = 0; i < BLOCKING_FACTOR; i++) {
 									/* Echolink to Asterisk */
-									struct ast_frame *f1, *f2;
-									struct ast_frame fr = {
-										.datalen = GSM_FRAME_SIZE,
-										.samples = GSM_SAMPLES,
-										.frametype = AST_FRAME_VOICE,
-										.subclass.format = ast_format_gsm,
-										.data.ptr = inbuf + AST_FRIENDLY_OFFSET,
-										.offset = AST_FRIENDLY_OFFSET,
-										.src = __PRETTY_FUNCTION__,
-									};
-
-									if (!p->rxkey) {
-										struct ast_frame wf = {
-											.frametype = AST_FRAME_CONTROL,
-											.subclass.integer = AST_CONTROL_RADIO_KEY,
-											.src = __PRETTY_FUNCTION__,
-										};
-
-										if (chan) {
-											ast_queue_frame(chan, &wf);
-										}
-									}
-
-									p->rxkey = MAX_RXKEY_TIME;
-									memcpy(inbuf + AST_FRIENDLY_OFFSET, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
-									x = 0;
-									f2 = ast_translate(p->xpath, &fr, 0);
-
-									if (p->dsp) {
-										f1 = ast_dsp_process(NULL, p->dsp, f2);
-
-										if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
-											if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
-												if (f1->frametype == AST_FRAME_DTMF_END) {
-													ast_verb(4, "Echolink %s Got DTMF character %c from IP address %s.\n",
-														p->stream, f1->subclass.integer, p->ip);
-												}
-
-												if (chan) {
-													ast_queue_frame(chan, f1);
-													ast_frfree(f1);
-													x = 1;
-												}
-											}
-										}
-									}
-
-									if (!x) {
-										if (chan) {
-											ast_queue_frame(chan, f2);
-										}
-
-										ast_frfree(f2);
+									qpast = ast_malloc(sizeof(struct el_rxqast));
+									if (qpast) {
+										memcpy(qpast->buf, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
+										ast_mutex_lock(&node->pvt->lock);
+										insque((struct qelem *) qpast, (struct qelem *) node->pvt->rxqast.qe_back);
+										ast_mutex_unlock(&node->pvt->lock);
 									}
 								}
+
+							} else {
+								instp->rx_bad_packets++;
 							}
 						} else {
 							instp->rx_bad_packets++;
