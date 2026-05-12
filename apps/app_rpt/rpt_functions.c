@@ -1856,6 +1856,22 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TXIPLDIS");
 		return DC_COMPLETE;
+	case 66: /* Set CTCSS frequencies dynamically */
+		if (argc < 2) {
+			break;
+		}
+		if (!CHAN_TECH(myrpt->rxchannel, "radio") && !CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
+			break;
+		}
+		if (argc >= 3) {
+			snprintf(string, sizeof(string), "SETCTCSS %s %s", argv[1], argv[2]);
+		} else {
+			snprintf(string, sizeof(string), "SETCTCSS %s", argv[1]);
+		}
+		ast_sendtext(myrpt->rxchannel, string);
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, COMPLETE, NULL);
+		return DC_COMPLETE;
 #ifdef _MDC_ENCODE_H_
 	case 60: /* play MDC1200 burst */
 		if (argc < 3) {
