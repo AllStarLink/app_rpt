@@ -1361,6 +1361,11 @@ static void *hidthread(void *arg)
 	struct chan_simpleusb_pvt *o = arg;
 	struct timeval then;
 	struct pollfd rfds[1];
+	int init_audio_failed = 0;
+	int init_hid_failed = 0;
+	int open_device_failed = 0;
+	int detach_failed = 0;
+	int claim_failed = 0;
 
 	ast_debug(2, "hidthread has started");
 	/* enable gpio_set so that we will write GPIO information upon start up */
@@ -1383,13 +1388,21 @@ static void *hidthread(void *arg)
 		/* try to initialize the usb device */
 		res = init_audio_device(o);
 		if (res < 0) {
-			ast_log(LOG_ERROR, "Channel %s: Failed initialize the audio device\n", o->name);
+			if (!init_audio_failed) {
+				ast_log(LOG_ERROR, "Channel %s: Failed initialize the audio device\n", o->name);
+				init_audio_failed = 1;
+			}
+
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 
 		if (o->usb_dev == NULL) {
-			ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
+			if (!init_hid_failed) {
+				ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
+				init_hid_failed = 1;
+			}
+
 			usleep(DEVICE_RETRY);
 			continue;
 		}
@@ -1397,21 +1410,33 @@ static void *hidthread(void *arg)
 		/* open the usb device device */
 		usb_handle = usb_open(o->usb_dev);
 		if (usb_handle == NULL) {
-			ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
+			if (!open_device_failed) {
+				ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
+				open_device_failed = 1;
+			}
+
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 		/* attempt to claim the usb hid interface and detach from the kernel */
 		if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 			if (usb_detach_kernel_driver_np(usb_handle, C108_HID_INTERFACE) < 0) {
-				ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
+				if (!detach_failed) {
+					ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
+					detach_failed = 1;
+				}
+
 				usb_close(usb_handle);
 				usb_handle = NULL;
 				usleep(DEVICE_RETRY);
 				continue;
 			}
 			if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
-				ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
+				if (!claim_failed) {
+					ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
+					detach_failed = 1;
+				}
+
 				usb_close(usb_handle);
 				usb_handle = NULL;
 				usleep(DEVICE_RETRY);
@@ -1469,6 +1494,14 @@ static void *hidthread(void *arg)
 		rfds[0].events = POLLIN;
 
 		ast_radio_time(&o->lasthidtime);
+
+		/* Reset the failure flags, we succeded */
+		init_audio_failed = 0;
+		init_hid_failed = 0;
+		open_device_failed = 0;
+		detach_failed = 0;
+		claim_failed = 0;
+
 		/* Main processing loop for GPIO
 		 * This loop process every HID_POLL_RATE milliseconds.
 		 * The timer can be interrupted by writing to
