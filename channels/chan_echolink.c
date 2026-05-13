@@ -491,8 +491,8 @@ struct el_pvt {
 	int rxkey;						/* Receive keyed timer */
 	int keepalive;
 	int txindex;
-	struct ast_timer *timer;		/* Timer for receive audio */	
-	struct el_rxqast rxqast;		/* Received data queue */
+	struct ast_timer *timer; /* Timer for receive audio */	
+	struct el_rxqast rxqast; /* Received data queue */
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
 	struct ast_trans_pvt *xpath;
@@ -2426,25 +2426,27 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 		p->last_firstheard = 1;
 	}
 
-	
 	/* Echolink to Asterisk */
+	ast_mutex_lock(&p->lock);
 	if (p->rxqast.qe_forw != &p->rxqast) {
 		for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 			n++;
 		}
 		if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
-			ast_mutex_lock(&p->lock);
 			while (p->rxqast.qe_forw != &p->rxqast) {
 				qpast = p->rxqast.qe_forw;
 				remque((struct qelem *) qpast);
 				ast_free(qpast);
 			}
-			ast_mutex_unlock(&p->lock);
+
 			if (p->rxkey) {
 				p->rxkey = 1;
 			}
+
+			ast_mutex_unlock(&p->lock);
 			return &ast_null_frame;
 		}
+
 		if (!p->rxkey) {
 			struct ast_frame wf = {
 				.frametype = AST_FRAME_CONTROL,
@@ -2454,8 +2456,8 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 
 			ast_queue_frame(chan, &wf);
 		}
+
 		p->rxkey = MAX_RXKEY_TIME;
-		ast_mutex_lock(&p->lock);
 		qpast = p->rxqast.qe_forw;
 		remque((struct qelem *) qpast);
 		ast_mutex_unlock(&p->lock);
@@ -2490,6 +2492,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 		return ast_frdup(&fr);
 	}
 
+	ast_mutex_unlock(&p->lock);
 	return &ast_null_frame;
 }
 
@@ -4205,9 +4208,9 @@ static void *el_reader(void *data)
 									qpast = ast_malloc(sizeof(struct el_rxqast));
 									if (qpast) {
 										memcpy(qpast->buf, gsmPacket->data + (GSM_FRAME_SIZE * i), GSM_FRAME_SIZE);
-										ast_mutex_lock(&node->pvt->lock);
-										insque((struct qelem *) qpast, (struct qelem *) node->pvt->rxqast.qe_back);
-										ast_mutex_unlock(&node->pvt->lock);
+										ast_mutex_lock(&p->lock);
+										insque((struct qelem *) qpast, (struct qelem *) p->rxqast.qe_back);
+										ast_mutex_unlock(&p->lock);
 									}
 								}
 
