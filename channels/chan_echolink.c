@@ -2431,20 +2431,19 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	if (p->rxqast.qe_forw != &p->rxqast) {
 		for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 			n++;
-		}
-		if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
-			while (p->rxqast.qe_forw != &p->rxqast) {
-				qpast = p->rxqast.qe_forw;
-				remque((struct qelem *) qpast);
-				ast_free(qpast);
-			}
+			if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
+				while (p->rxqast.qe_forw != &p->rxqast) {
+					qpast = p->rxqast.qe_forw;
+					remque((struct qelem *) qpast);
+					ast_free(qpast);
+				}
+				if (p->rxkey) {
+					p->rxkey = 1;
+				}
 
-			if (p->rxkey) {
-				p->rxkey = 1;
+				ast_mutex_unlock(&p->lock);
+				return &ast_null_frame;
 			}
-
-			ast_mutex_unlock(&p->lock);
-			return &ast_null_frame;
 		}
 
 		if (!p->rxkey) {
