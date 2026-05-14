@@ -1495,7 +1495,7 @@ static void *hidthread(void *arg)
 
 		ast_radio_time(&o->lasthidtime);
 
-		/* Reset the failure flags, we succeded */
+		/* Reset the failure flags, we succeeded */
 		init_audio_failed = 0;
 		init_hid_failed = 0;
 		open_device_failed = 0;
