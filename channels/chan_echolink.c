@@ -1477,7 +1477,8 @@ static struct el_pvt *el_alloc(const char *data)
 	p = ao2_alloc(sizeof(struct el_pvt), el_destroy);
 	if (p) {
 		snprintf(p->stream, sizeof(p->stream), "%s-%lu", data, instances[n]->seqno++);
-
+		p->pipe[0] = -1;
+		p->pipe[1] = -1;
 		p->rxqast.qe_forw = &p->rxqast;
 		p->rxqast.qe_back = &p->rxqast;
 		p->keepalive = KEEPALIVE_TIME;
