@@ -491,7 +491,7 @@ struct el_pvt {
 	int rxkey;						/* Receive keyed timer */
 	int keepalive;
 	int txindex;
-	struct ast_timer *timer; /* Timer for receive audio */
+	int pipe[2];             /* Timer for receive audio */
 	struct el_rxqast rxqast; /* Received data queue */
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
@@ -1418,8 +1418,12 @@ static void el_destroy(void *obj)
 	}
 	ast_mutex_unlock(&p->lock);
 
-	if (p->timer) {
-		ast_timer_close(p->timer);
+	if (p->pipe[0] != -1) {
+		close(p->pipe[0]);
+	}
+
+	if (p->pipe[1] != -1) {
+		close(p->pipe[1]);
 	}
 
 	if (p->dsp) {
@@ -2403,11 +2407,12 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	struct el_pvt *p = ast_channel_tech_pvt(chan);
 	struct ast_frame fr, *f1, *f2;
 	char buf[AST_FRIENDLY_OFFSET + GSM_FRAME_SIZE];
-	int n;
+	char c;
+	int n, bytes;
 
-	if ((ast_timer_ack(p->timer, 1) < 0)) {
-		ast_log(LOG_WARNING, "Timer ack failed.\n");
-		return NULL;
+	bytes = read(p->pipe[0], &c, 1);
+	if (bytes <= 0) {
+		ast_log(LOG_ERROR, "Channel %s: pipe read failed: %s\n", p->app, strerror(errno));
 	}
 
 	if (p->hangup) {
@@ -2591,14 +2596,13 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 		return NULL;
 	}
 
-	if (!(p->timer = ast_timer_open())) {
-		ast_log(LOG_ERROR, "Unable to open timer.\n");
+	if (pipe(p->pipe) == -1) {
+		ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", p->app);
 		ast_hangup(chan);
 		return NULL;
 	}
-	ast_timer_set_rate(p->timer, 50); /* Rate in per second - 50/second = 20ms */
 
-	ast_channel_set_fd(chan, 0, ast_timer_fd(p->timer));
+	ast_channel_set_fd(chan, 0, p->pipe[0]);
 	ast_channel_tech_set(chan, &el_tech);
 	ast_channel_nativeformats_set(chan, el_tech.capabilities);
 	ast_channel_set_rawreadformat(chan, ast_format_gsm);
@@ -4201,6 +4205,8 @@ static void *el_reader(void *data)
 							if (gsmPacket->version == 3 && gsmPacket->payt == 3) {
 								/* break them up for Asterisk */
 								struct el_rxqast *qpast;
+								char c = 0;
+								int res;
 
 								for (i = 0; i < BLOCKING_FACTOR; i++) {
 									/* Echolink to Asterisk */
@@ -4210,6 +4216,11 @@ static void *el_reader(void *data)
 										ast_mutex_lock(&p->lock);
 										insque((struct qelem *) qpast, (struct qelem *) p->rxqast.qe_back);
 										ast_mutex_unlock(&p->lock);
+										res = write(p->pipe[1], &c, 1);
+
+										if (res <= 0) {
+											ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", p->app, strerror(errno));
+										}
 									}
 								}
 
