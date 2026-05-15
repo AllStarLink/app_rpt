@@ -2596,7 +2596,7 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 		return NULL;
 	}
 
-	if (pipe(p->pipe) == -1) {
+	if (pipe2(p->pipe, O_NONBLOCK) == -1) {
 		ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", p->app);
 		ast_hangup(chan);
 		return NULL;
