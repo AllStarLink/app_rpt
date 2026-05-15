@@ -491,7 +491,7 @@ struct el_pvt {
 	int rxkey;						/* Receive keyed timer */
 	int keepalive;
 	int txindex;
-	int pipe[2];			 /* Timer for receive audio */
+	int pipe[2];			 /* Pipe for receive audio from el_reader to Asterisk */
 	struct el_rxqast rxqast; /* Received data queue */
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
