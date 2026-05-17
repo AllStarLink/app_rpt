@@ -392,6 +392,11 @@ struct chan_usbradio_pvt {
 	unsigned int rxctcssoverride:1; /* indicator if receive ctcss override is enabled */
 	unsigned int rx_cos_active:1;	/* indicator if cos is active - active state after processing */
 	unsigned int rx_ctcss_active:1; /* indicator if ctcss is active - active state after processing */
+	unsigned int ctcss_override_active:1; /* indicator if dynamic CTCSS override is in effect */
+
+	char override_rxctcssfreqs[512];  /* dynamic RX CTCSS frequency string */
+	char override_txctcssfreqs[512];  /* dynamic TX CTCSS frequency string */
+	char override_txctcssdefault[16]; /* dynamic TX CTCSS default tone */
 
 	/* EEPROM access variables */
 	unsigned short eeprom[EEPROM_USER_LEN];
@@ -1779,6 +1784,22 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 			o->pmrChan->b.txCtcssOff = !x;
 		}
 		ast_debug(3, "Channel %s: TXCTCSS cmd: %s\n", o->name, text);
+		return 0;
+	}
+
+	/* set CTCSS frequencies dynamically */
+	if (strcmp(cmd, "SETCTCSS") == 0) {
+		if (!strcasecmp(rxs, "default")) {
+			o->ctcss_override_active = 0;
+			ast_debug(3, "Channel %s: SETCTCSS reverted to config defaults\n", o->name);
+		} else {
+			ast_copy_string(o->override_rxctcssfreqs, rxs, sizeof(o->override_rxctcssfreqs));
+			ast_copy_string(o->override_txctcssfreqs, txs, sizeof(o->override_txctcssfreqs));
+			ast_copy_string(o->override_txctcssdefault, txs, sizeof(o->override_txctcssdefault));
+			o->ctcss_override_active = 1;
+			ast_debug(3, "Channel %s: SETCTCSS rx=%s tx=%s\n", o->name, rxs, txs);
+		}
+		xpmr_config(o);
 		return 0;
 	}
 
@@ -4827,6 +4848,13 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
 
 		o->pmrChan->rxfreq = o->set_rxfreq;
 		o->pmrChan->txfreq = o->set_txfreq;
+	} else if (o->ctcss_override_active) {
+		o->pmrChan->pTxCodeDefault = o->override_txctcssdefault;
+		o->pmrChan->pRxCodeSrc = o->override_rxctcssfreqs;
+		o->pmrChan->pTxCodeSrc = o->override_txctcssfreqs;
+
+		o->pmrChan->rxfreq = o->rxfreq;
+		o->pmrChan->txfreq = o->txfreq;
 	} else {
 		/* set xpmr pointers to source strings */
 

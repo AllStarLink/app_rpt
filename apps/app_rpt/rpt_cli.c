@@ -23,6 +23,7 @@
 #include "rpt_manager.h"
 #include "rpt_telemetry.h"
 #include "rpt_functions.h"
+#include "rpt_auth.h"
 
 extern struct rpt rpt_vars[MAXRPTS];
 
@@ -1682,6 +1683,79 @@ static char *handle_cli_show_version(struct ast_cli_entry *e, int cmd, struct as
 	return CLI_SUCCESS;
 }
 
+static int rpt_do_auth_show(int fd, int argc, const char *const *argv)
+{
+	int i;
+	int nrpts = rpt_num_rpts();
+	char status[256];
+
+	if (argc != 4) {
+		return RESULT_SHOWUSAGE;
+	}
+
+	for (i = 0; i < nrpts; i++) {
+		if (!strcmp(argv[3], rpt_vars[i].name)) {
+			rpt_auth_status(&rpt_vars[i], status, sizeof(status));
+			ast_cli(fd, "Node %s auth: %s\n", argv[3], status);
+			return RESULT_SUCCESS;
+		}
+	}
+	ast_cli(fd, "Node %s not found\n", argv[3]);
+	return RESULT_FAILURE;
+}
+
+static int rpt_do_auth_logout(int fd, int argc, const char *const *argv)
+{
+	int i;
+	int nrpts = rpt_num_rpts();
+
+	if (argc != 4) {
+		return RESULT_SHOWUSAGE;
+	}
+
+	for (i = 0; i < nrpts; i++) {
+		if (!strcmp(argv[3], rpt_vars[i].name)) {
+			rpt_auth_logout(&rpt_vars[i]);
+			ast_cli(fd, "Node %s auth session cleared\n", argv[3]);
+			return RESULT_SUCCESS;
+		}
+	}
+	ast_cli(fd, "Node %s not found\n", argv[3]);
+	return RESULT_FAILURE;
+}
+
+static char *handle_cli_auth_show(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "rpt auth show";
+		e->usage = "Usage: rpt auth show <nodename>\n"
+				   "	Show TOTP auth session status for the given node.\n";
+		return NULL;
+
+	case CLI_GENERATE:
+		return rpt_complete_node_list(a->line, a->word, a->pos, 3);
+	}
+
+	return res2cli(rpt_do_auth_show(a->fd, a->argc, a->argv));
+}
+
+static char *handle_cli_auth_logout(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+{
+	switch (cmd) {
+	case CLI_INIT:
+		e->command = "rpt auth logout";
+		e->usage = "Usage: rpt auth logout <nodename>\n"
+				   "	Force-clear the active TOTP auth session for the given node.\n";
+		return NULL;
+
+	case CLI_GENERATE:
+		return rpt_complete_node_list(a->line, a->word, a->pos, 3);
+	}
+
+	return res2cli(rpt_do_auth_logout(a->fd, a->argc, a->argv));
+}
+
 static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_debug, "Enable app_rpt debugging"),
 	AST_CLI_DEFINE(handle_cli_dump, "Dump app_rpt structs for debugging"),
@@ -1705,6 +1779,8 @@ static struct ast_cli_entry rpt_cli[] = {
 	AST_CLI_DEFINE(handle_cli_page, "Send a page to a user on a node"),
 	AST_CLI_DEFINE(handle_cli_lookup, "Lookup Allstar nodes"),
 	AST_CLI_DEFINE(handle_cli_show_version, "Show app_rpt version"),
+	AST_CLI_DEFINE(handle_cli_auth_show, "Show TOTP auth session status for a node"),
+	AST_CLI_DEFINE(handle_cli_auth_logout, "Force-logout TOTP auth session for a node"),
 };
 
 int rpt_cli_load(void)

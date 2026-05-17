@@ -25,6 +25,7 @@
 #include "rpt_manager.h"
 #include "rpt_utils.h" /* use myatoi */
 #include "rpt_rig.h"   /* use setrem */
+#include "rpt_auth.h"  /* TOTP per-user authentication */
 
 /*! \brief Echolink queryoption for retrieving call sign */
 #define ECHOLINK_QUERY_CALLSIGN 2
@@ -675,6 +676,8 @@ void rpt_free_config_vars(struct rpt *myrpt)
 		ast_free(myrpt->p.ldisc_buf);
 		myrpt->p.ldisc_buf = NULL;
 	}
+
+	rpt_auth_free(myrpt);
 }
 
 void load_rpt_vars(int n, int init)
@@ -1011,6 +1014,12 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_DEFAULT(events, "events", "events");
 	RPT_CONFIG_VAR(timezone, "timezone");
 	RPT_CONFIG_VAR(remote_cmd_code, "remote_cmd_code");
+	RPT_CONFIG_VAR(auth_users, "auth_users");
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(auth_timeout, "auth_timeout", 300, 30, 86400);
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(auth_lockout_threshold, "auth_lockout_threshold", 5, 0, 1000);
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(auth_lockout_duration, "auth_lockout_duration", 60, 0, 86400);
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(auth_otp_step, "auth_otp_step", 30, 10, 120);
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(auth_otp_window, "auth_otp_window", 1, 0, 3);
 
 #ifdef __RPT_NOTCH
 	val = ast_variable_retrieve(cfg, this, "rxnotch");
@@ -1319,6 +1328,8 @@ void load_rpt_vars(int n, int init)
 		vp = vp->next;
 	}
 	ast_mutex_unlock(&rpt_vars[n].lock);
+
+	rpt_auth_reload(&rpt_vars[n]);
 }
 
 int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
