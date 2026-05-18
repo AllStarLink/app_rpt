@@ -4188,6 +4188,7 @@ static void *el_reader(void *data)
 								}
 
 								ao2_ref(p, -1);
+								ast_mutex_lock(&instp->lock);
 								continue;
 							}
 						}
@@ -4206,6 +4207,7 @@ static void *el_reader(void *data)
 							}
 
 							ao2_ref(p, -1);
+							ast_mutex_lock(&instp->lock);
 							continue;
 						}
 
