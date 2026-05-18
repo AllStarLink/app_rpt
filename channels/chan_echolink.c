@@ -617,6 +617,24 @@ static time_t time_monotonic(void)
 }
 
 /*!
+ * \brief Wake the el channel for frame processing.
+ * \param p		Pointer channel private data.
+ */
+
+static void el_wake_channel(struct el_pvt *p)
+{
+	char c = 0;
+	int res;
+
+	if (p->pipe[1] != -1) {
+		res = write(p->pipe[1], &c, 1);
+		if (res <= 0) {
+			ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", p->app, strerror(errno));
+		}
+	}
+}
+
+/*!
  * \brief Break up a delimited string into a table of substrings.
  * Uses defines for the delimiters: QUOTECHR and DELIMCHR.
  * \param str		Pointer to string to process (it will be modified).
@@ -2249,6 +2267,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
 		found = 1;
 		node->pvt->hangup = 1;
+		el_wake_channel(node->pvt);
 		tdelete(node, &el_node_list, compare_ip);
 		ao2_ref(node->pvt, -1);
 		node->pvt = NULL;
@@ -2513,17 +2532,6 @@ static int el_xwrite(struct ast_channel *chan, struct ast_frame *frame)
 	struct sockaddr_in sin;
 	struct el_pvt *p = ast_channel_tech_pvt(chan);
 	struct el_instance *instp = p->instp;
-
-	if (!p->last_firstheard && p->firstheard) {
-		struct ast_frame fr3 = {
-			.frametype = AST_FRAME_CONTROL,
-			.subclass.integer = AST_CONTROL_ANSWER,
-			.src = __PRETTY_FUNCTION__,
-		};
-
-		ast_queue_frame(chan, &fr3);
-		p->last_firstheard = 1;
-	}
 
 	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
@@ -3991,6 +3999,7 @@ static void *el_reader(void *data)
 						if (found_key) {
 							node = *found_key;
 							node->pvt->firstheard = 1;
+							el_wake_channel(node->pvt);
 							node->heartbeat_countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
 							if (strncmp((*found_key)->call, call, EL_CALL_SIZE - 1) != 0) {
@@ -4143,6 +4152,7 @@ static void *el_reader(void *data)
 						ast_mutex_unlock(&p->lock);
 
 						p->firstheard = 1;
+						el_wake_channel(p);
 						node->heartbeat_countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
 						/* compute inter-arrival jitter */
@@ -4206,8 +4216,6 @@ static void *el_reader(void *data)
 							if (gsmPacket->version == 3 && gsmPacket->payt == 3) {
 								/* break them up for Asterisk */
 								struct el_rxqast *qpast;
-								char c = 0;
-								int res;
 
 								for (i = 0; i < BLOCKING_FACTOR; i++) {
 									/* Echolink to Asterisk */
@@ -4217,11 +4225,7 @@ static void *el_reader(void *data)
 										ast_mutex_lock(&p->lock);
 										insque((struct qelem *) qpast, (struct qelem *) p->rxqast.qe_back);
 										ast_mutex_unlock(&p->lock);
-										res = write(p->pipe[1], &c, 1);
-
-										if (res <= 0) {
-											ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", p->app, strerror(errno));
-										}
+										el_wake_channel(p);
 									}
 								}
 
