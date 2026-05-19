@@ -663,7 +663,7 @@ static void kickptt(const struct chan_simpleusb_pvt *o)
 		return;
 	}
 	res = write(o->pttkick[1], &c, 1);
-	if (res <= 0) {
+	if (res <= 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
 		ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", o->name, strerror(errno));
 	}
 }
@@ -1159,7 +1159,7 @@ static void *hidthread(void *arg)
 				char c;
 
 				int bytes = read(o->pttkick[0], &c, 1);
-				if (bytes <= 0) {
+				if (bytes <= 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
 					ast_log(LOG_ERROR, "Channel %s: pttkick read failed: %s\n", o->name, strerror(errno));
 				}
 			}
