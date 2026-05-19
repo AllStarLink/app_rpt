@@ -43,7 +43,7 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <usb.h>
+#include <libusb-1.0/libusb.h>
 #include <linux/ppdev.h>
 #include <linux/parport.h>
 #include <linux/version.h>
@@ -81,6 +81,16 @@ AST_MUTEX_DEFINE_STATIC(usb_list_lock);
  */
 static char *usb_device_list = NULL;
 static int usb_device_list_size = 0;
+static struct libusb_context *usb_ctx = NULL;
+
+static int ast_radio_libusb_init(void)
+{
+	if (usb_ctx) {
+		return 0;
+	}
+
+	return libusb_init(&usb_ctx);
+}
 
 /*!
  * \brief Structure for defined usb devices.
@@ -225,18 +235,18 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 	return 0;
 }
 
-void ast_radio_hid_set_outputs(struct usb_dev_handle *handle, unsigned char *outputs)
+void ast_radio_hid_set_outputs(usb_dev_handle *handle, unsigned char *outputs)
 {
 	usleep(1500);
-	usb_control_msg(handle, USB_ENDPOINT_OUT + USB_TYPE_CLASS + USB_RECIP_INTERFACE, HID_REPORT_SET, 0 + (HID_RT_OUTPUT << 8),
-		C108_HID_INTERFACE, (char *) outputs, 4, 5000);
+	libusb_control_transfer(handle, LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, HID_REPORT_SET,
+		0 + (HID_RT_OUTPUT << 8), C108_HID_INTERFACE, outputs, 4, 5000);
 }
 
-void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inputs)
+void ast_radio_hid_get_inputs(usb_dev_handle *handle, unsigned char *inputs)
 {
 	usleep(1500);
-	usb_control_msg(handle, USB_ENDPOINT_IN + USB_TYPE_CLASS + USB_RECIP_INTERFACE, HID_REPORT_GET, 0 + (HID_RT_INPUT << 8),
-		C108_HID_INTERFACE, (char *) inputs, 4, 5000);
+	libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, HID_REPORT_GET,
+		0 + (HID_RT_INPUT << 8), C108_HID_INTERFACE, inputs, 4, 5000);
 }
 
 /*!
@@ -255,7 +265,7 @@ void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inpu
  * \param addr			Integer address to read from the EEPROM.  The valid
  *						range is 0 to 63.
  */
-static unsigned short read_eeprom(struct usb_dev_handle *handle, int addr)
+static unsigned short read_eeprom(usb_dev_handle *handle, int addr)
 {
 	unsigned char buf[4];
 
@@ -291,7 +301,7 @@ static unsigned short read_eeprom(struct usb_dev_handle *handle, int addr)
  *						range is 0 to 63.
  * \param data			Unsigned short data to store.
  */
-static void write_eeprom(struct usb_dev_handle *handle, int addr, unsigned short data)
+static void write_eeprom(usb_dev_handle *handle, int addr, unsigned short data)
 {
 	unsigned char buf[4];
 
@@ -304,7 +314,7 @@ static void write_eeprom(struct usb_dev_handle *handle, int addr, unsigned short
 	ast_radio_hid_set_outputs(handle, buf);
 }
 
-unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
+unsigned short ast_radio_get_eeprom(usb_dev_handle *handle, unsigned short *buf)
 {
 	int i;
 	unsigned short cs;
@@ -318,7 +328,7 @@ unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned shor
 	return cs;
 }
 
-void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
+void ast_radio_put_eeprom(usb_dev_handle *handle, unsigned short *buf)
 {
 	int i;
 	unsigned short cs;
@@ -342,14 +352,19 @@ void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf)
  * \return 0	does not matches
  * \return 1	matches
  */
-static int is_known_device(struct usb_device *dev)
+static int is_known_device(usb_device *dev)
 {
 	int index;
 	int matched_entry = 0;
+	struct libusb_device_descriptor desc;
+
+	if (libusb_get_device_descriptor(dev, &desc) < 0) {
+		return 0;
+	}
 
 	for (index = 0; index < ARRAY_LEN(known_devices); index++) {
-		if (known_devices[index].idVendor == dev->descriptor.idVendor &&
-			known_devices[index].idProduct == (dev->descriptor.idProduct & known_devices[index].idMask)) {
+		if (known_devices[index].idVendor == desc.idVendor &&
+			known_devices[index].idProduct == (desc.idProduct & known_devices[index].idMask)) {
 			matched_entry = 1;
 			break;
 		};
@@ -365,18 +380,22 @@ static int is_known_device(struct usb_device *dev)
  * \return 0	does not matches
  * \return 1	matches
  */
-static int is_user_device(struct usb_device *dev)
+static int is_user_device(usb_device *dev)
 {
 	struct usb_device_entry *device;
+	struct libusb_device_descriptor desc;
+
+	if (libusb_get_device_descriptor(dev, &desc) < 0) {
+		return 0;
+	}
 
 	AST_RWLIST_RDLOCK(&user_devices);
 	AST_LIST_TRAVERSE(&user_devices, device, entry) {
-		if (dev->descriptor.idVendor == device->idVendor && dev->descriptor.idProduct == device->idProduct) {
+		if (desc.idVendor == device->idVendor && desc.idProduct == device->idProduct) {
 			break;
 		};
 	}
 	AST_RWLIST_UNLOCK(&user_devices);
-
 	return device ? 1 : 0;
 }
 
@@ -416,10 +435,14 @@ static int read_card_usbbus(int cardno, char *out, int outsz)
 
 int ast_radio_hid_device_mklist(void)
 {
-	struct usb_bus *usb_bus;
-	struct usb_device *dev;
+	usb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
 	int i;
+	struct libusb_device **list = NULL;
+	ssize_t count;
+	size_t dev_index;
+	unsigned int busnum;
+	unsigned int devaddr;
 
 	ast_mutex_lock(&usb_list_lock);
 
@@ -435,174 +458,200 @@ int ast_radio_hid_device_mklist(void)
 		return -1;
 	}
 
-	usb_init();
-	usb_find_busses();
-	usb_find_devices();
-	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
-		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			char *new_list;
+	if (ast_radio_libusb_init() < 0) {
+		ast_mutex_unlock(&usb_list_lock);
+		return -1;
+	}
 
-			if (!(is_known_device(dev) || is_user_device(dev))) {
+	count = libusb_get_device_list(usb_ctx, &list);
+	if (count < 0) {
+		ast_mutex_unlock(&usb_list_lock);
+		return -1;
+	}
+
+	for (dev_index = 0; dev_index < count; dev_index++) {
+		dev = list[dev_index];
+		char *new_list;
+
+		if (!(is_known_device(dev) || is_user_device(dev))) {
+			continue;
+		}
+
+		busnum = libusb_get_bus_number(dev);
+		devaddr = libusb_get_device_address(dev);
+		snprintf(devstr, sizeof(devstr), "%03u/%03u", busnum, devaddr);
+		for (i = 0; i < 32; i++) {
+			if (read_card_usbbus(i, desdev, sizeof(desdev))) {
 				continue;
 			}
 
-			snprintf(devstr, sizeof(devstr), "%s/%s", usb_bus->dirname, dev->filename);
-			for (i = 0; i < 32; i++) {
-				if (read_card_usbbus(i, desdev, sizeof(desdev))) {
-					continue;
-				}
-
-				if (strcasecmp(desdev, devstr)) {
-					continue;
-				}
+			if (strcasecmp(desdev, devstr)) {
+				continue;
+			}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
-				sprintf(str, "/sys/class/sound/card%d/device", i);
-				memset(desdev, 0, sizeof(desdev));
+			sprintf(str, "/sys/class/sound/card%d/device", i);
+			memset(desdev, 0, sizeof(desdev));
 
-				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-					continue;
-				}
+			if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+				continue;
+			}
 
-				cp = strrchr(desdev, '/');
-				if (!cp) {
-					continue;
-				}
-				cp++;
+			cp = strrchr(desdev, '/');
+			if (!cp) {
+				continue;
+			}
+			cp++;
 #else
-				if (i) {
-					sprintf(str, "/sys/class/sound/dsp%d/device", i);
-				} else {
-					strcpy(str, "/sys/class/sound/dsp/device");
-				}
+			if (i) {
+				sprintf(str, "/sys/class/sound/dsp%d/device", i);
+			} else {
+				strcpy(str, "/sys/class/sound/dsp/device");
+			}
 
+			memset(desdev, 0, sizeof(desdev));
+			if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+				sprintf(str, "/sys/class/sound/controlC%d/device", i);
 				memset(desdev, 0, sizeof(desdev));
 				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-					sprintf(str, "/sys/class/sound/controlC%d/device", i);
-					memset(desdev, 0, sizeof(desdev));
-					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-						continue;
-					}
-				}
-
-				cp = strrchr(desdev, '/');
-
-				if (cp) {
-					*cp = 0;
-				} else {
 					continue;
 				}
+			}
 
-				cp = strrchr(desdev, '/');
-				if (!cp) {
-					continue;
-				}
-				cp++;
+			cp = strrchr(desdev, '/');
+
+			if (cp) {
+				*cp = 0;
+			} else {
+				continue;
+			}
+
+			cp = strrchr(desdev, '/');
+			if (!cp) {
+				continue;
+			}
+			cp++;
 #endif
-				break;
-			}
-
-			if (i >= 32) {
-				ast_mutex_unlock(&usb_list_lock);
-				return -1;
-			}
-
-			new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
-
-			if (!new_list) {
-				ast_mutex_unlock(&usb_list_lock);
-				return -1;
-			}
-
-			usb_device_list = new_list;
-			usb_device_list_size += strlen(cp) + 2;
-			i = 0;
-
-			while (usb_device_list[i]) {
-				i += strlen(usb_device_list + i) + 1;
-			}
-
-			strcat(usb_device_list + i, cp);
-			usb_device_list[strlen(cp) + i + 1] = 0;
+			break;
 		}
+
+		if (i >= 32) {
+			libusb_free_device_list(list, 1);
+			ast_mutex_unlock(&usb_list_lock);
+			return -1;
+		}
+
+		new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
+
+		if (!new_list) {
+			libusb_free_device_list(list, 1);
+			ast_mutex_unlock(&usb_list_lock);
+			return -1;
+		}
+
+		usb_device_list = new_list;
+		usb_device_list_size += strlen(cp) + 2;
+		i = 0;
+
+		while (usb_device_list[i]) {
+			i += strlen(usb_device_list + i) + 1;
+		}
+
+		strcat(usb_device_list + i, cp);
+		usb_device_list[strlen(cp) + i + 1] = 0;
 	}
+
+	libusb_free_device_list(list, 1);
 	ast_mutex_unlock(&usb_list_lock);
 	return 0;
 }
 
-struct usb_device *ast_radio_hid_device_init(const char *desired_device)
+usb_device *ast_radio_hid_device_init(const char *desired_device)
 {
-	struct usb_bus *usb_bus;
-	struct usb_device *dev;
+	usb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
 	int i;
+	struct libusb_device **list = NULL;
+	ssize_t count;
+	size_t dev_index;
+	unsigned int busnum;
+	unsigned int devaddr;
 
-	usb_init();
-	usb_find_busses();
-	usb_find_devices();
-	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
-		for (dev = usb_bus->devices; dev; dev = dev->next) {
-			if (!(is_known_device(dev) || is_user_device(dev))) {
+	if (ast_radio_libusb_init() < 0) {
+		return NULL;
+	}
+
+	count = libusb_get_device_list(usb_ctx, &list);
+	if (count < 0) {
+		return NULL;
+	}
+
+	for (dev_index = 0; dev_index < count; dev_index++) {
+		dev = list[dev_index];
+		if (!(is_known_device(dev) || is_user_device(dev))) {
+			continue;
+		}
+
+		busnum = libusb_get_bus_number(dev);
+		devaddr = libusb_get_device_address(dev);
+		snprintf(devstr, sizeof(devstr), "%03u/%03u", busnum, devaddr);
+
+		for (i = 0; i < 32; i++) {
+			if (read_card_usbbus(i, desdev, sizeof(desdev))) {
 				continue;
 			}
 
-			snprintf(devstr, sizeof(devstr), "%s/%s", usb_bus->dirname, dev->filename);
-
-			for (i = 0; i < 32; i++) {
-				if (read_card_usbbus(i, desdev, sizeof(desdev))) {
-					continue;
-				}
-
-				if (strcasecmp(desdev, devstr)) {
-					continue;
-				}
+			if (strcasecmp(desdev, devstr)) {
+				continue;
+			}
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
-				sprintf(str, "/sys/class/sound/card%d/device", i);
-				memset(desdev, 0, sizeof(desdev));
-				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-					continue;
-				}
-				cp = strrchr(desdev, '/');
-				if (!cp) {
-					continue;
-				}
-				cp++;
-#else
-				if (i) {
-					sprintf(str, "/sys/class/sound/dsp%d/device", i);
-				} else {
-					strcpy(str, "/sys/class/sound/dsp/device");
-				}
-				memset(desdev, 0, sizeof(desdev));
-				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-					sprintf(str, "/sys/class/sound/controlC%d/device", i);
-					memset(desdev, 0, sizeof(desdev));
-					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-						continue;
-					}
-				}
-				cp = strrchr(desdev, '/');
-				if (cp) {
-					*cp = 0;
-				} else {
-					continue;
-				}
-				cp = strrchr(desdev, '/');
-				if (!cp) {
-					continue;
-				}
-				cp++;
-#endif
-				break;
-			}
-			if (i >= 32) {
+			sprintf(str, "/sys/class/sound/card%d/device", i);
+			memset(desdev, 0, sizeof(desdev));
+			if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
 				continue;
 			}
-			if (!strcmp(cp, desired_device)) {
-				return dev;
+			cp = strrchr(desdev, '/');
+			if (!cp) {
+				continue;
 			}
+			cp++;
+#else
+			if (i) {
+				sprintf(str, "/sys/class/sound/dsp%d/device", i);
+			} else {
+				strcpy(str, "/sys/class/sound/dsp/device");
+			}
+			memset(desdev, 0, sizeof(desdev));
+			if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+				sprintf(str, "/sys/class/sound/controlC%d/device", i);
+				memset(desdev, 0, sizeof(desdev));
+				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+					continue;
+				}
+			}
+			cp = strrchr(desdev, '/');
+			if (cp) {
+				*cp = 0;
+			} else {
+				continue;
+			}
+			cp = strrchr(desdev, '/');
+			if (!cp) {
+				continue;
+			}
+			cp++;
+#endif
+			break;
+		}
+		if (i >= 32) {
+			continue;
+		}
+		if (!strcmp(cp, desired_device)) {
+			libusb_free_device_list(list, 0);
+			return dev;
 		}
 	}
+	libusb_free_device_list(list, 0);
 	return NULL;
 }
 
@@ -670,22 +719,30 @@ int ast_radio_usb_get_usbdev(const char *devstr)
  */
 int ast_radio_usb_get_serial(const char *devstr, char *buf, size_t buflen)
 {
-	struct usb_device *usb_dev;
-	struct usb_dev_handle *usb_handle;
+	usb_device *usb_dev;
+	usb_dev_handle *usb_handle;
+	struct libusb_device_descriptor desc;
 	int length = 0;
+
+	if (ast_radio_libusb_init() < 0) {
+		return 0;
+	}
 
 	usb_dev = ast_radio_hid_device_init(devstr);
 	if (!usb_dev) {
 		return 0;
 	}
 
-	if (usb_dev->descriptor.iSerialNumber) {
-		usb_handle = usb_open(usb_dev);
-		if (!usb_handle) {
+	if (libusb_get_device_descriptor(usb_dev, &desc) < 0) {
+		return 0;
+	}
+
+	if (desc.iSerialNumber) {
+		if (libusb_open(usb_dev, &usb_handle) < 0) {
 			return 0;
 		}
-		length = usb_get_string_simple(usb_handle, usb_dev->descriptor.iSerialNumber, buf, buflen);
-		usb_close(usb_handle);
+		length = libusb_get_string_descriptor_ascii(usb_handle, desc.iSerialNumber, (unsigned char *) buf, buflen);
+		libusb_close(usb_handle);
 	}
 
 	return length;
@@ -1008,40 +1065,57 @@ static void cleanup_user_devices(void)
  * On failure: returns NULL.
  *
  * Notes:
- * - Uses libusb-0.1 enumeration (usb_init/usb_find_busses/usb_find_devices).
+ * - Uses libusb-1.0 enumeration (libusb_init/libusb_get_device_list).
  * - The returned pointer is owned by libusb's internal device list.
  */
-struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno)
+usb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 {
 	char target[64]; /* usually "001/005" fits easily */
-	struct usb_bus *bus;
-	struct usb_device *dev;
+	usb_device *dev;
 
 	if (read_card_usbbus(cardno, target, sizeof(target)) != 0) {
 		ast_debug(3, "Unable to read usbbus for card %d (may not be a USB device)\n", cardno);
 		return NULL;
 	}
 
-	usb_init();
-	usb_find_busses();
-	usb_find_devices();
+	if (ast_radio_libusb_init() < 0) {
+		return NULL;
+	}
 
-	for (bus = usb_busses; bus; bus = bus->next) {
-		for (dev = bus->devices; dev; dev = dev->next) {
-			char cur[sizeof(bus->dirname) + sizeof(dev->filename) + 1];
+	{
+		struct libusb_device **list = NULL;
+		ssize_t count;
+		size_t dev_index;
+		unsigned int busnum;
+		unsigned int devaddr;
+
+		count = libusb_get_device_list(usb_ctx, &list);
+		if (count < 0) {
+			return NULL;
+		}
+
+		for (dev_index = 0; dev_index < count; dev_index++) {
+			dev = list[dev_index];
+			char cur[16];
 
 			if (!(is_known_device(dev) || is_user_device(dev))) {
 				continue;
 			}
 
-			snprintf(cur, sizeof(cur), "%s/%s", bus->dirname, dev->filename);
+			busnum = libusb_get_bus_number(dev);
+			devaddr = libusb_get_device_address(dev);
+			snprintf(cur, sizeof(cur), "%03u/%03u", busnum, devaddr);
 
 			/* usbbus content is typically case-insensitive */
 			if (strcasecmp(cur, target) == 0) {
+				libusb_free_device_list(list, 0);
 				return dev;
 			}
 		}
+
+		libusb_free_device_list(list, 0);
 	}
+
 	ast_debug(1, "No USB device found matching bus path '%s' for card %d\n", target, cardno);
 	return NULL;
 }
@@ -1114,6 +1188,11 @@ static int reload_module(void)
 
 static int load_module(void)
 {
+	if (ast_radio_libusb_init() < 0) {
+		ast_log(LOG_ERROR, "Unable to initialize libusb\n");
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
 	if (load_config(0)) {
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -1124,6 +1203,11 @@ static int load_module(void)
 static int unload_module(void)
 {
 	cleanup_user_devices();
+
+	if (usb_ctx) {
+		libusb_exit(usb_ctx);
+		usb_ctx = NULL;
+	}
 
 	return 0;
 }

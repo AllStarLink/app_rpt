@@ -48,7 +48,7 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <usb.h>
+#include <libusb-1.0/libusb.h>
 #include <search.h>
 #include <alsa/asoundlib.h>
 #include <linux/ppdev.h>
@@ -398,7 +398,7 @@ struct chan_usbradio_pvt {
 	char eepromctl;
 	ast_mutex_t eepromlock;
 
-	struct usb_dev_handle *usb_handle;
+	usb_dev_handle *usb_handle;
 	int readerrs;
 	struct timeval tonetime;
 	int toneflag;
@@ -853,8 +853,8 @@ static void *hidthread(void *arg)
 	char *s, lasttxtmp;
 	register int i, j, k;
 	int res;
-	struct usb_device *usb_dev;
-	struct usb_dev_handle *usb_handle;
+	usb_device *usb_dev;
+	usb_dev_handle *usb_handle;
 	struct chan_usbradio_pvt *o = arg, *ao;
 	struct timeval then;
 	struct pollfd rfds[1];
@@ -884,7 +884,7 @@ static void *hidthread(void *arg)
 		o->usbass = 0;
 		o->devicenum = 0;
 		if (usb_handle) {
-			usb_close(usb_handle);
+			libusb_close(usb_handle);
 		}
 		usb_handle = NULL;
 		usb_dev = NULL;
@@ -1044,20 +1044,19 @@ static void *hidthread(void *arg)
 			continue;
 		}
 		/* open the usb device device */
-		usb_handle = usb_open(usb_dev);
-		if (usb_handle == NULL) {
+		if (libusb_open(usb_dev, &usb_handle) < 0) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
 			usleep(500000);
 			continue;
 		}
 		/* attempt to claim the usb hid interface and detach from the kernel */
-		if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
-			if (usb_detach_kernel_driver_np(usb_handle, C108_HID_INTERFACE) < 0) {
+		if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
+			if (libusb_detach_kernel_driver(usb_handle, C108_HID_INTERFACE) < 0) {
 				ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
 				usleep(500000);
 				continue;
 			}
-			if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
+			if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 				ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
 				usleep(500000);
 				continue;
@@ -1085,10 +1084,17 @@ static void *hidthread(void *arg)
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
 			pthread_exit(NULL);
 		}
-		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
-			o->devtype = C108_PRODUCT_ID;
-		} else {
-			o->devtype = usb_dev->descriptor.idProduct;
+		{
+			struct libusb_device_descriptor desc;
+
+			if (libusb_get_device_descriptor(usb_dev, &desc) < 0) {
+				ast_log(LOG_ERROR, "Channel %s: Unable to read USB device descriptor\n", o->name);
+				o->devtype = 0;
+			} else if ((desc.idProduct & 0xfffc) == C108_PRODUCT_ID) {
+				o->devtype = C108_PRODUCT_ID;
+			} else {
+				o->devtype = desc.idProduct;
+			}
 		}
 		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
 		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
