@@ -1109,10 +1109,11 @@ static void *hidthread(void *arg)
 			close(o->pttkick[1]);
 			o->pttkick[1] = -1;
 		}
-		if (pipe(o->pttkick) == -1) {
+		if (pipe2(o->pttkick, O_NONBLOCK) == -1) {
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
 			pthread_exit(NULL);
 		}
+
 		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
 			o->devtype = C108_PRODUCT_ID;
 		} else {
