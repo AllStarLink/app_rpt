@@ -2043,8 +2043,10 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 	if ((which == leaf) || (which == postorder)) {
 		node = *(struct el_node **) nodep;
 		p = node->pvt;
+		ast_mutex_lock(&p->lock);
 
 		if (!p || !p->rxkey) {
+			ast_mutex_unlock(&p->lock);
 			return;
 		}
 
@@ -2055,9 +2057,7 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 			/* The timer has expired, queue up an unkey for the channel */
 			struct ast_channel *chan;
 
-			ast_mutex_lock(&p->lock);
 			chan = p->owner ? ast_channel_ref(p->owner) : NULL;
-			ast_mutex_unlock(&p->lock);
 			if (chan) {
 				struct pending_ctrl item = {
 					.chan = chan,
@@ -2073,6 +2073,7 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 			p->rxkey = 0;
 		}
 
+		ast_mutex_unlock(&p->lock);
 		ao2_ref(p, -1);
 	}
 }
@@ -2471,7 +2472,10 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 			}
 		}
 
+		qpast = p->rxqast.qe_forw;
+		remque((struct qelem *) qpast);
 		if (!p->rxkey) {
+			ast_mutex_unlock(&p->lock);
 			struct ast_frame wf = {
 				.frametype = AST_FRAME_CONTROL,
 				.subclass.integer = AST_CONTROL_RADIO_KEY,
@@ -2479,12 +2483,12 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 			};
 
 			ast_queue_frame(chan, &wf);
+		} else {
+			ast_mutex_unlock(&p->lock);
 		}
 
 		p->rxkey = MAX_RXKEY_TIME;
-		qpast = p->rxqast.qe_forw;
-		remque((struct qelem *) qpast);
-		ast_mutex_unlock(&p->lock);
+
 		memcpy(buf + AST_FRIENDLY_OFFSET, qpast->buf, GSM_FRAME_SIZE);
 		ast_free(qpast);
 
