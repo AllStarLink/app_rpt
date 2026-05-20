@@ -2425,7 +2425,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 {
 	struct el_rxqast *qpast;
 	struct el_pvt *p = ast_channel_tech_pvt(chan);
-	struct ast_frame fr, *f1, *f2;
+	struct ast_frame fr, *f1, *f2, *f3;
 	char buf[AST_FRIENDLY_OFFSET + GSM_FRAME_SIZE];
 	char c;
 	int n, bytes;
@@ -2499,6 +2499,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 
 		if (p->dsp) {
 			f2 = ast_translate(p->xpath, &fr, 0);
+			f3 = ast_frdup(f2); /* Keep a copy of the translated frame in case we need to return it.  ast_dsp_process can modify the frame we pass in. */
 			f1 = ast_dsp_process(NULL, p->dsp, f2);
 			if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
 				if ((f1->subclass.integer != 'm') && (f1->subclass.integer != 'u')) {
@@ -2506,14 +2507,19 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 						ast_verb(4, "Echolink %s Got DTMF character %c from IP address %s.\n", p->stream, f1->subclass.integer, p->ip);
 					}
 
-					return f1;
+					if (f3) {
+						/* Free the duplicate frame as we are not using it */
+						ast_frfree(f3);
+					}
+
+					return f1; /* The caller will free this frame */
 				}
 			}
 
-			return ast_frdup(&fr);
+			return f3; /* The caller will free this frame */
 		}
 
-		return ast_frdup(&fr);
+		return ast_frdup(&fr); /* The caller will free this frame */
 	}
 
 	ast_mutex_unlock(&p->lock);
