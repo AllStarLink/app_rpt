@@ -2455,6 +2455,8 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	/* Echolink to Asterisk */
 	ast_mutex_lock(&p->lock);
 	if (p->rxqast.qe_forw != &p->rxqast) {
+		int need_key = 0;
+
 		for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 			n++;
 			if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
@@ -2474,8 +2476,11 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 
 		qpast = p->rxqast.qe_forw;
 		remque((struct qelem *) qpast);
-		if (!p->rxkey) {
-			ast_mutex_unlock(&p->lock);
+		need_key = !p->rxkey;
+		p->rxkey = MAX_RXKEY_TIME;
+		ast_mutex_unlock(&p->lock);
+
+		if (need_key) {
 			struct ast_frame wf = {
 				.frametype = AST_FRAME_CONTROL,
 				.subclass.integer = AST_CONTROL_RADIO_KEY,
@@ -2483,11 +2488,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 			};
 
 			ast_queue_frame(chan, &wf);
-		} else {
-			ast_mutex_unlock(&p->lock);
 		}
-
-		p->rxkey = MAX_RXKEY_TIME;
 
 		memcpy(buf + AST_FRIENDLY_OFFSET, qpast->buf, GSM_FRAME_SIZE);
 		ast_free(qpast);
