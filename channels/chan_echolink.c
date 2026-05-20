@@ -2510,7 +2510,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 				}
 			}
 
-			return f2;
+			return ast_frdup(&fr);
 		}
 
 		return ast_frdup(&fr);
