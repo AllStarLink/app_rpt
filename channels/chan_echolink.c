@@ -2492,7 +2492,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 		}
 	}
 
-	qpast = (p->rxqast.qe_forw != &p->rxqast) ?  p->rxqast.qe_forw : NULL;
+	qpast = (p->rxqast.qe_forw != &p->rxqast) ? p->rxqast.qe_forw : NULL;
 	if (qpast) {
 		remque((struct qelem *) qpast);
 		need_key = !p->rxkey;
