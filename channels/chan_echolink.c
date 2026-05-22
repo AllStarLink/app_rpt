@@ -2489,6 +2489,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 			if (p->rxkey) {
 				p->rxkey = 1;
 			}
+			break;
 		}
 	}
 
