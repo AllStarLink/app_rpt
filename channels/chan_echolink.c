@@ -616,9 +616,9 @@ static time_t time_monotonic(void)
 }
 
 enum wake_reason {
-    START,
-    AUDIO,
-    HANGUP,
+	START,
+	AUDIO,
+	HANGUP,
 };
 
 /*!
