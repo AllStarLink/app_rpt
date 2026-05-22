@@ -2043,10 +2043,9 @@ static void update_timer(int *timer_ptr, int elap, int end_val)
 static void process_unkey_timers(const void *nodep, const VISIT which, void *closure)
 {
 	struct unkey_walk_closure *cl = closure;
-	const struct el_node *node;
 
 	if ((which == leaf) || (which == postorder)) {
-		node = *(struct el_node **) nodep;
+		const struct el_node *node = *(struct el_node **) nodep;
 		struct el_pvt *p = node->pvt;
 
 		if (!p) {
