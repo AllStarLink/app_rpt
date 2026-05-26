@@ -218,7 +218,7 @@ do not use 127.0.0.1
 #define EL_APRS_SERVER "aprs.echolink.org"
 #define EL_APRS_INTERVAL 600
 #define EL_APRS_START_DELAY 10
-#define EL_DELAY 8 /* Number of frames to buffer before starting an rx event */
+#define EL_DELAY (BLOCKING_FACTOR * 1) /* Number of frames to buffer before starting an rx event */
 
 #define EL_QUERY_IPADDR 1
 #define EL_QUERY_CALLSIGN 2
@@ -2410,10 +2410,12 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	int n;
 	int need_key;
 
-	if ((ast_timer_ack(p->timer, 1) < 0)) {
-		ast_log(LOG_WARNING, "Timer ack failed. \n");
-		return NULL;
-	}
+	if (ast_timer_get_event(p->timer) == AST_TIMING_EVENT_EXPIRED) {
+		if ((ast_timer_ack(p->timer, 1) < 0)) {
+			ast_log(LOG_WARNING, "Timer ack failed. \n");
+			return NULL;
+		}
+	}       
 
 	for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 		n++;
@@ -2569,6 +2571,7 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	const struct ast_channel *requestor)
 {
 	struct ast_channel *chan;
+	int rate;
 
 	chan = ast_channel_alloc(1, state, 0, 0, "", p->instp->astnode, p->instp->context, assignedids, requestor, 0, "echolink/%s", p->stream);
 	if (!chan) {
@@ -2576,19 +2579,23 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 		return NULL;
 	}
 
-	if (!(p->timer = ast_timer_open())) {
-		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
-		ast_hangup(chan);
-		return NULL;
-	}
-	ast_timer_set_rate(p->timer, 50);
-	ast_channel_set_fd(chan, 0, ast_timer_fd(p->timer));
 	ast_channel_tech_set(chan, &el_tech);
 	ast_channel_nativeformats_set(chan, el_tech.capabilities);
 	ast_channel_set_rawreadformat(chan, ast_format_gsm);
 	ast_channel_set_rawwriteformat(chan, ast_format_gsm);
 	ast_channel_set_writeformat(chan, ast_format_gsm);
 	ast_channel_set_readformat(chan, ast_format_gsm);
+
+	p->timer = ast_timer_open();
+	if (!p->timer) {
+		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
+		ast_hangup(chan);
+		return NULL;
+	}
+
+	rate = 1000 / ast_format_get_default_ms(ast_format_gsm);
+	ast_timer_set_rate(p->timer, rate);
+	ast_channel_set_fd(chan, 0, ast_timer_fd(p->timer));
 
 	if (state == AST_STATE_RING) {
 		ast_channel_rings_set(chan, 1);
