@@ -345,6 +345,16 @@ struct rtcp_t {
 	} r;
 };
 
+/*! \brief Global jitterbuffer configuration - by default, jb is disabled */
+static struct ast_jb_conf default_jbconf = {
+	.flags = 0,
+	.max_size = 1000,
+	.resync_threshold = 500,
+	.impl = "fixed",
+};
+
+static struct ast_jb_conf global_jbconf;
+
 /* forward definitions */
 struct el_instance;
 struct el_pvt;
@@ -2610,6 +2620,7 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	ast_channel_set_rawwriteformat(chan, ast_format_gsm);
 	ast_channel_set_writeformat(chan, ast_format_gsm);
 	ast_channel_set_readformat(chan, ast_format_gsm);
+	ast_jb_configure(chan, &global_jbconf);
 
 	if (state == AST_STATE_RING) {
 		ast_channel_rings_set(chan, 1);
@@ -3998,6 +4009,7 @@ static void *el_reader(void *data)
 									.src = __PRETTY_FUNCTION__,
 								};
 								struct ast_channel *chan = NULL;
+
 								ast_mutex_lock(&p->lock);
 								if (p->owner) {
 									chan = ast_channel_ref(p->owner);
@@ -4005,6 +4017,7 @@ static void *el_reader(void *data)
 
 								p->firstheard = 1;
 								ast_mutex_unlock(&p->lock);
+
 								if (chan) {
 									ast_queue_frame(chan, &fr);
 									ast_channel_unref(chan);
@@ -4702,6 +4715,9 @@ static int load_module(void)
 	}
 
 	ast_format_cap_append(el_tech.capabilities, ast_format_gsm, 0);
+
+	/* Copy the default jb config over global_jbconf */
+	memcpy(&global_jbconf, &default_jbconf, sizeof(struct ast_jb_conf));
 
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL) {
