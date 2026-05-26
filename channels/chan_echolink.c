@@ -218,6 +218,7 @@ do not use 127.0.0.1
 #define EL_APRS_SERVER "aprs.echolink.org"
 #define EL_APRS_INTERVAL 600
 #define EL_APRS_START_DELAY 10
+#define EL_DELAY 8 /* Number of frames to buffer before starting an rx event */
 
 #define EL_QUERY_IPADDR 1
 #define EL_QUERY_CALLSIGN 2
@@ -344,16 +345,6 @@ struct rtcp_t {
 		} sdes;
 	} r;
 };
-
-/*! \brief Global jitterbuffer configuration - by default, jb is disabled */
-static struct ast_jb_conf default_jbconf = {
-	.flags = 0,
-	.max_size = 1000,
-	.resync_threshold = 500,
-	.impl = "fixed",
-};
-
-static struct ast_jb_conf global_jbconf;
 
 /* forward definitions */
 struct el_instance;
@@ -499,7 +490,6 @@ struct el_pvt {
 	int rxkey;						/* Receive keyed timer */
 	int keepalive;
 	int txindex;
-	int pipe[2];			 /* Pipe for receive audio from el_reader to Asterisk */
 	struct ast_timer *timer;
 	struct el_rxqast rxqast; /* Received data queue */
 	struct ast_dsp *dsp;
@@ -623,24 +613,6 @@ static time_t time_monotonic(void)
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	return ts.tv_sec;
-}
-
-/*!
- * \brief Wake the el channel for frame processing.
- * \param p		Pointer channel private data.
- */
-static void el_wake_channel(struct el_pvt *p)
-{
-	char c = 0;
-	int res;
-
-	/*	if (p->pipe[1] != -1) {
-			res = write(p->pipe[1], &c, 1);
-			if (res <= 0) {
-				ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", p->stream, strerror(errno));
-			}
-		}
-			*/
 }
 
 /*!
@@ -1449,14 +1421,6 @@ static void el_destroy(void *obj)
 		ast_timer_close(p->timer);
 	}
 
-	if (p->pipe[0] != -1) {
-		close(p->pipe[0]);
-	}
-
-	if (p->pipe[1] != -1) {
-		close(p->pipe[1]);
-	}
-
 	if (p->dsp) {
 		ast_dsp_free(p->dsp);
 	}
@@ -1508,8 +1472,6 @@ static struct el_pvt *el_alloc(const char *data)
 	p = ao2_alloc(sizeof(struct el_pvt), el_destroy);
 	if (p) {
 		snprintf(p->stream, sizeof(p->stream), "%s-%lu", data, instances[n]->seqno++);
-		p->pipe[0] = -1;
-		p->pipe[1] = -1;
 		p->rxqast.qe_forw = &p->rxqast;
 		p->rxqast.qe_back = &p->rxqast;
 		p->keepalive = KEEPALIVE_TIME;
@@ -1577,7 +1539,6 @@ static int el_hangup(struct ast_channel *chan)
 	}
 
 	ast_debug(1, "Hanging up (%s).\n", ast_channel_name(chan));
-
 	if (!ast_channel_tech_pvt(chan)) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected.\n");
 		return 0;
@@ -2446,21 +2407,13 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	struct el_pvt *p = ast_channel_tech_pvt(chan);
 	struct ast_frame f_gsm;
 	char buf[AST_FRIENDLY_OFFSET + GSM_FRAME_SIZE];
-	char c;
-	int n, bytes;
+	int n;
 	int need_key;
 
 	if ((ast_timer_ack(p->timer, 1) < 0)) {
 		ast_log(LOG_WARNING, "Timrer ack failed. \n");
 		return NULL;
 	}
-
-	/*	bytes = read(p->pipe[0], &c, 1);
-		if (bytes <= 0) {
-			ast_log(LOG_ERROR, "Channel %s: pipe read failed: %s\n", p->stream, strerror(errno));
-			return &ast_null_frame;
-		}
-	*/
 
 	for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 		n++;
@@ -2477,6 +2430,10 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 			}
 			break;
 		}
+	}
+
+	if (n < EL_DELAY && !p->rxkey) { /* we need a bit of buffer to start sending audio */
+		return &ast_null_frame;
 	}
 
 	qpast = (p->rxqast.qe_forw != &p->rxqast) ? p->rxqast.qe_forw : NULL;
@@ -2619,20 +2576,12 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 		return NULL;
 	}
 
-	/*	if (pipe2(p->pipe, O_NONBLOCK) == -1) {
-			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", p->stream);
-			ast_hangup(chan);
-			return NULL;
-		}
-	*/
-
 	if (!(p->timer = ast_timer_open())) {
 		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
 		ast_hangup(chan);
 		return NULL;
 	}
 	ast_timer_set_rate(p->timer, 50);
-	//	ast_channel_set_fd(chan, 0, p->pipe[0]);
 	ast_channel_set_fd(chan, 0, ast_timer_fd(p->timer));
 	ast_channel_tech_set(chan, &el_tech);
 	ast_channel_nativeformats_set(chan, el_tech.capabilities);
@@ -2640,7 +2589,6 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	ast_channel_set_rawwriteformat(chan, ast_format_gsm);
 	ast_channel_set_writeformat(chan, ast_format_gsm);
 	ast_channel_set_readformat(chan, ast_format_gsm);
-	ast_jb_configure(chan, &global_jbconf);
 
 	if (state == AST_STATE_RING) {
 		ast_channel_rings_set(chan, 1);
@@ -4281,7 +4229,6 @@ static void *el_reader(void *data)
 										ast_mutex_lock(&p->lock);
 										insque((struct qelem *) qpast, (struct qelem *) p->rxqast.qe_back);
 										ast_mutex_unlock(&p->lock);
-										el_wake_channel(p);
 									}
 								}
 
@@ -4735,9 +4682,6 @@ static int load_module(void)
 	}
 
 	ast_format_cap_append(el_tech.capabilities, ast_format_gsm, 0);
-
-	/* Copy the default jb config over global_jbconf */
-	memcpy(&global_jbconf, &default_jbconf, sizeof(struct ast_jb_conf));
 
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
 		if (ctg == NULL) {
