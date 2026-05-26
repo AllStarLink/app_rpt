@@ -500,6 +500,7 @@ struct el_pvt {
 	int keepalive;
 	int txindex;
 	int pipe[2];			 /* Pipe for receive audio from el_reader to Asterisk */
+	struct ast_timer *timer;
 	struct el_rxqast rxqast; /* Received data queue */
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
@@ -633,12 +634,13 @@ static void el_wake_channel(struct el_pvt *p)
 	char c = 0;
 	int res;
 
-	if (p->pipe[1] != -1) {
-		res = write(p->pipe[1], &c, 1);
-		if (res <= 0) {
-			ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", p->stream, strerror(errno));
+	/*	if (p->pipe[1] != -1) {
+			res = write(p->pipe[1], &c, 1);
+			if (res <= 0) {
+				ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", p->stream, strerror(errno));
+			}
 		}
-	}
+			*/
 }
 
 /*!
@@ -1442,6 +1444,10 @@ static void el_destroy(void *obj)
 		ast_free(qpast);
 	}
 	ast_mutex_unlock(&p->lock);
+
+	if (p->timer) {
+		ast_timer_close(p->timer);
+	}
 
 	if (p->pipe[0] != -1) {
 		close(p->pipe[0]);
@@ -2444,11 +2450,17 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	int n, bytes;
 	int need_key;
 
-	bytes = read(p->pipe[0], &c, 1);
-	if (bytes <= 0) {
-		ast_log(LOG_ERROR, "Channel %s: pipe read failed: %s\n", p->stream, strerror(errno));
-		return &ast_null_frame;
+	if ((ast_timer_ack(p->timer, 1) < 0)) {
+		ast_log(LOG_WARNING, "Timrer ack failed. \n");
+		return NULL;
 	}
+
+	/*	bytes = read(p->pipe[0], &c, 1);
+		if (bytes <= 0) {
+			ast_log(LOG_ERROR, "Channel %s: pipe read failed: %s\n", p->stream, strerror(errno));
+			return &ast_null_frame;
+		}
+	*/
 
 	for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 		n++;
@@ -2607,13 +2619,21 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 		return NULL;
 	}
 
-	if (pipe2(p->pipe, O_NONBLOCK) == -1) {
-		ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", p->stream);
+	/*	if (pipe2(p->pipe, O_NONBLOCK) == -1) {
+			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", p->stream);
+			ast_hangup(chan);
+			return NULL;
+		}
+	*/
+
+	if (!(p->timer = ast_timer_open())) {
+		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
 		ast_hangup(chan);
 		return NULL;
 	}
-
-	ast_channel_set_fd(chan, 0, p->pipe[0]);
+	ast_timer_set_rate(p->timer, 50);
+	//	ast_channel_set_fd(chan, 0, p->pipe[0]);
+	ast_channel_set_fd(chan, 0, ast_timer_fd(p->timer));
 	ast_channel_tech_set(chan, &el_tech);
 	ast_channel_nativeformats_set(chan, el_tech.capabilities);
 	ast_channel_set_rawreadformat(chan, ast_format_gsm);
