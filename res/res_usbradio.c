@@ -235,14 +235,14 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 	return 0;
 }
 
-void ast_radio_hid_set_outputs(usb_dev_handle *handle, unsigned char *outputs)
+void ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned char *outputs)
 {
 	usleep(1500);
 	libusb_control_transfer(handle, LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, HID_REPORT_SET,
 		0 + (HID_RT_OUTPUT << 8), C108_HID_INTERFACE, outputs, 4, 5000);
 }
 
-void ast_radio_hid_get_inputs(usb_dev_handle *handle, unsigned char *inputs)
+void ast_radio_hid_get_inputs(struct libusb_device_handle *handle, unsigned char *inputs)
 {
 	usleep(1500);
 	libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, HID_REPORT_GET,
@@ -261,11 +261,11 @@ void ast_radio_hid_get_inputs(usb_dev_handle *handle, unsigned char *inputs)
  *	After the address has been set, a get input is done to read the returned
  *	bytes.
  *
- * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param handle		Pointer to libusb_device_handle associated with the HID.
  * \param addr			Integer address to read from the EEPROM.  The valid
  *						range is 0 to 63.
  */
-static unsigned short read_eeprom(usb_dev_handle *handle, int addr)
+static unsigned short read_eeprom(struct libusb_device_handle *handle, int addr)
 {
 	unsigned char buf[4];
 
@@ -296,12 +296,12 @@ static unsigned short read_eeprom(usb_dev_handle *handle, int addr)
  * \note This routine will write to any valid memory address.  Never write
  *	to address 0 to 50.  These are reserved for manufacturer data.
  *
- * \param handle		Pointer to usb_dev_handle associated with the HID.
+ * \param handle		Pointer to libusb_device_handle associated with the HID.
  * \param addr			Integer address to read from the EEPROM.  The valid
  *						range is 0 to 63.
  * \param data			Unsigned short data to store.
  */
-static void write_eeprom(usb_dev_handle *handle, int addr, unsigned short data)
+static void write_eeprom(struct libusb_device_handle *handle, int addr, unsigned short data)
 {
 	unsigned char buf[4];
 
@@ -314,7 +314,7 @@ static void write_eeprom(usb_dev_handle *handle, int addr, unsigned short data)
 	ast_radio_hid_set_outputs(handle, buf);
 }
 
-unsigned short ast_radio_get_eeprom(usb_dev_handle *handle, unsigned short *buf)
+unsigned short ast_radio_get_eeprom(struct libusb_device_handle *handle, unsigned short *buf)
 {
 	int i;
 	unsigned short cs;
@@ -328,7 +328,7 @@ unsigned short ast_radio_get_eeprom(usb_dev_handle *handle, unsigned short *buf)
 	return cs;
 }
 
-void ast_radio_put_eeprom(usb_dev_handle *handle, unsigned short *buf)
+void ast_radio_put_eeprom(struct libusb_device_handle *handle, unsigned short *buf)
 {
 	int i;
 	unsigned short cs;
@@ -352,7 +352,7 @@ void ast_radio_put_eeprom(usb_dev_handle *handle, unsigned short *buf)
  * \return 0	does not matches
  * \return 1	matches
  */
-static int is_known_device(usb_device *dev)
+static int is_known_device(struct libusb_device *dev)
 {
 	int index;
 	int matched_entry = 0;
@@ -380,7 +380,7 @@ static int is_known_device(usb_device *dev)
  * \return 0	does not matches
  * \return 1	matches
  */
-static int is_user_device(usb_device *dev)
+static int is_user_device(struct libusb_device *dev)
 {
 	struct usb_device_entry *device;
 	struct libusb_device_descriptor desc;
@@ -435,7 +435,7 @@ static int read_card_usbbus(int cardno, char *out, int outsz)
 
 int ast_radio_hid_device_mklist(void)
 {
-	usb_device *dev;
+	struct libusb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
 	int i;
 	struct libusb_device **list = NULL;
@@ -566,9 +566,9 @@ int ast_radio_hid_device_mklist(void)
 	return 0;
 }
 
-usb_device *ast_radio_hid_device_init(const char *desired_device)
+struct libusb_device *ast_radio_hid_device_init(const char *desired_device)
 {
-	usb_device *dev;
+	struct libusb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
 	int i;
 	struct libusb_device **list = NULL;
@@ -719,8 +719,8 @@ int ast_radio_usb_get_usbdev(const char *devstr)
  */
 int ast_radio_usb_get_serial(const char *devstr, char *buf, size_t buflen)
 {
-	usb_device *usb_dev;
-	usb_dev_handle *usb_handle;
+	struct libusb_device *usb_dev;
+	struct libusb_device_handle *usb_handle;
 	struct libusb_device_descriptor desc;
 	int length = 0;
 
@@ -1068,10 +1068,10 @@ static void cleanup_user_devices(void)
  * - Uses libusb-1.0 enumeration (libusb_init/libusb_get_device_list).
  * - The returned pointer is owned by libusb's internal device list.
  */
-usb_device *ast_radio_usb_device_from_alsa_card(int cardno)
+struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 {
 	char target[64]; /* usually "001/005" fits easily */
-	usb_device *dev;
+	struct libusb_device *dev;
 
 	if (read_card_usbbus(cardno, target, sizeof(target)) != 0) {
 		ast_debug(3, "Unable to read usbbus for card %d (may not be a USB device)\n", cardno);

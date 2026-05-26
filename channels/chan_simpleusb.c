@@ -220,7 +220,7 @@ struct chan_simpleusb_pvt {
 	pthread_t audiothread;
 	pthread_t hidthread;
 
-	usb_device *usb_dev;
+	struct libusb_device *usb_dev;
 	struct ast_channel *owner;
 
 	PaStream *stream; /*! Current PortAudio stream for this device */
@@ -334,7 +334,7 @@ struct chan_simpleusb_pvt {
 	char eepromctl;
 	ast_mutex_t eepromlock;
 
-	usb_dev_handle *usb_handle;
+	struct libusb_device_handle *usb_handle;
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
@@ -1357,7 +1357,7 @@ static void *hidthread(void *arg)
 	char lasttxtmp;
 	register int i, j, k;
 	int res;
-	usb_dev_handle *usb_handle = NULL;
+	struct libusb_device_handle *usb_handle = NULL;
 	struct chan_simpleusb_pvt *o = arg;
 	struct timeval then;
 	struct pollfd rfds[1];

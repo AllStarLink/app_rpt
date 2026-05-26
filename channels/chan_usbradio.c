@@ -398,7 +398,7 @@ struct chan_usbradio_pvt {
 	char eepromctl;
 	ast_mutex_t eepromlock;
 
-	usb_dev_handle *usb_handle;
+	struct libusb_device_handle *usb_handle;
 	int readerrs;
 	struct timeval tonetime;
 	int toneflag;
@@ -853,8 +853,8 @@ static void *hidthread(void *arg)
 	char *s, lasttxtmp;
 	register int i, j, k;
 	int res;
-	usb_device *usb_dev;
-	usb_dev_handle *usb_handle;
+	struct libusb_device *usb_dev;
+	struct libusb_device_handle *usb_handle;
 	struct chan_usbradio_pvt *o = arg, *ao;
 	struct timeval then;
 	struct pollfd rfds[1];

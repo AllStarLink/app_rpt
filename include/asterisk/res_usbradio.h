@@ -30,9 +30,6 @@
 
 #include <libusb-1.0/libusb.h>
 
-typedef struct libusb_device_handle usb_dev_handle;
-typedef struct libusb_device usb_device;
-
 /*!
  * \brief Defines for interacting with ALSA controls.
  */
@@ -272,7 +269,7 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2);
  * \param handle		Pointer to usb_dev_handle associated with the HID.
  * \param outputs		Pointer to buffer that contains the data to send to the HID.
  */
-void ast_radio_hid_set_outputs(usb_dev_handle *handle, unsigned char *outputs);
+void ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned char *outputs);
 
 /*!
  * \brief Get USB HID inputs
@@ -283,7 +280,7 @@ void ast_radio_hid_set_outputs(usb_dev_handle *handle, unsigned char *outputs);
  * \param handle        Pointer to usb_dev_handle associated with the HID.
  * \param inputs        Pointer to buffer that will contain the data received from the HID.
  */
-void ast_radio_hid_get_inputs(usb_dev_handle *handle, unsigned char *inputs);
+void ast_radio_hid_get_inputs(struct libusb_device_handle *handle, unsigned char *inputs);
 
 /*!
  * \brief Read user memory segment from the CM-XXX EEPROM.
@@ -300,7 +297,7 @@ void ast_radio_hid_get_inputs(usb_dev_handle *handle, unsigned char *inputs);
  *						the calculated checksum will be zero.  This indicates valid data..
  *						Any	other value indicates bad EEPROM data.
  */
-unsigned short ast_radio_get_eeprom(usb_dev_handle *handle, unsigned short *buf);
+unsigned short ast_radio_get_eeprom(struct libusb_device_handle *handle, unsigned short *buf);
 
 /*!
  * \brief Write user memory segment to the CM-XXX EEPROM.
@@ -315,7 +312,7 @@ unsigned short ast_radio_get_eeprom(usb_dev_handle *handle, unsigned short *buf)
  * \param buf            Pointer to buffer that contains the the EEPROM data.
  *\t			The buffer must be an array of 13 unsigned shorts.
  */
-void ast_radio_put_eeprom(usb_dev_handle *handle, unsigned short *buf);
+void ast_radio_put_eeprom(struct libusb_device_handle *handle, unsigned short *buf);
 
 /*!
  * \brief Make a list of HID devices.
@@ -340,7 +337,7 @@ int ast_radio_hid_device_mklist(void);
  * \retval 					Returns a usb_device structure with the found device.
  *							If the device was not found, it returns null.
  */
-usb_device *ast_radio_hid_device_init(const char *desired_device);
+struct libusb_device *ast_radio_hid_device_init(const char *desired_device);
 
 /*!
  * \brief Get USB device number from device string
@@ -533,4 +530,4 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
  * - The returned pointer is owned by libusb's internal device list.
  * \param cardno The ALSA card number as found in HW:<cardno>
  */
-usb_device *ast_radio_usb_device_from_alsa_card(int cardno);
+struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno);
