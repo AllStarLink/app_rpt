@@ -2411,7 +2411,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	int need_key;
 
 	if ((ast_timer_ack(p->timer, 1) < 0)) {
-		ast_log(LOG_WARNING, "Timrer ack failed. \n");
+		ast_log(LOG_WARNING, "Timer ack failed. \n");
 		return NULL;
 	}
 
