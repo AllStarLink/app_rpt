@@ -218,6 +218,7 @@ do not use 127.0.0.1
 #define EL_APRS_SERVER "aprs.echolink.org"
 #define EL_APRS_INTERVAL 600
 #define EL_APRS_START_DELAY 10
+#define EL_DELAY (BLOCKING_FACTOR * 1) /* Number of frames to buffer before starting an rx event */
 
 #define EL_QUERY_IPADDR 1
 #define EL_QUERY_CALLSIGN 2
@@ -483,15 +484,13 @@ struct el_pvt {
 	char app[16];
 	char stream[80];
 	char ip[EL_IP_SIZE];
-	unsigned int firstsent:1;		/* First packet seen from echolink */
-	unsigned int firstheard:1;		/* First heard from called node */
-	unsigned int answered:1;		/* Indicates the call has been answered */
-	unsigned int txkey:1;			/* Transmit keyed */
-	unsigned int hangup:1;			/* Indicates the channel should hang up */
+	int firstsent;					/* First packet seen from echolink */
+	int firstheard;					/* First heard from called node */
+	int txkey;						/* Transmit keyed */
 	int rxkey;						/* Receive keyed timer */
 	int keepalive;
 	int txindex;
-	int pipe[2];			 /* Pipe for receive audio from el_reader to Asterisk */
+	struct ast_timer *timer;
 	struct el_rxqast rxqast; /* Received data queue */
 	struct ast_dsp *dsp;
 	struct ast_module_user *u;
@@ -614,23 +613,6 @@ static time_t time_monotonic(void)
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	return ts.tv_sec;
-}
-
-/*!
- * \brief Wake the el channel for frame processing.
- * \param p		Pointer channel private data.
- */
-static void el_wake_channel(struct el_pvt *p)
-{
-	char c = 0;
-	int res;
-
-	if (p->pipe[1] != -1) {
-		res = write(p->pipe[1], &c, 1);
-		if (res <= 0) {
-			ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", p->stream, strerror(errno));
-		}
-	}
 }
 
 /*!
@@ -1435,12 +1417,8 @@ static void el_destroy(void *obj)
 	}
 	ast_mutex_unlock(&p->lock);
 
-	if (p->pipe[0] != -1) {
-		close(p->pipe[0]);
-	}
-
-	if (p->pipe[1] != -1) {
-		close(p->pipe[1]);
+	if (p->timer) {
+		ast_timer_close(p->timer);
 	}
 
 	if (p->dsp) {
@@ -1494,8 +1472,6 @@ static struct el_pvt *el_alloc(const char *data)
 	p = ao2_alloc(sizeof(struct el_pvt), el_destroy);
 	if (p) {
 		snprintf(p->stream, sizeof(p->stream), "%s-%lu", data, instances[n]->seqno++);
-		p->pipe[0] = -1;
-		p->pipe[1] = -1;
 		p->rxqast.qe_forw = &p->rxqast;
 		p->rxqast.qe_back = &p->rxqast;
 		p->keepalive = KEEPALIVE_TIME;
@@ -1543,10 +1519,6 @@ static int el_hangup(struct ast_channel *chan)
 	ast_debug(1, "Sent bye to IP address %s.\n", p->ip);
 	strcpy(node_lookup.ip, p->ip);
 	find_delete(&node_lookup, instp);
-	ast_mutex_lock(&p->lock);
-	p->hangup = 0;
-	ast_mutex_unlock(&p->lock);
-	ast_softhangup(chan, AST_SOFTHANGUP_DEV);
 	n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 
 	memset(&sin, 0, sizeof(sin));
@@ -1567,7 +1539,6 @@ static int el_hangup(struct ast_channel *chan)
 	}
 
 	ast_debug(1, "Hanging up (%s).\n", ast_channel_name(chan));
-
 	if (!ast_channel_tech_pvt(chan)) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected.\n");
 		return 0;
@@ -2257,7 +2228,6 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 	if (found_key) {
 		struct el_node *node = *found_key;
 		struct el_pvt *p = node->pvt;
-		int wake = 0;
 
 		if (instp) {
 			if (instp->current_talker == node) {
@@ -2274,14 +2244,10 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 		found = 1;
 
 		ast_mutex_lock(&p->lock);
-		if (!p->hangup) {
-			p->hangup = 1;
-			wake = 1;
+		if (p->owner) {
+			ast_softhangup(p->owner, AST_SOFTHANGUP_DEV);
 		}
 		ast_mutex_unlock(&p->lock);
-		if (wake) {
-			el_wake_channel(p);
-		}
 
 		tdelete(node, &el_node_list, compare_ip);
 		ao2_ref(p, -1);
@@ -2441,40 +2407,14 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	struct el_pvt *p = ast_channel_tech_pvt(chan);
 	struct ast_frame f_gsm;
 	char buf[AST_FRIENDLY_OFFSET + GSM_FRAME_SIZE];
-	char c;
-	int n, bytes;
+	int n;
 	int need_key;
 
-	bytes = read(p->pipe[0], &c, 1);
-	if (bytes <= 0) {
-		ast_log(LOG_ERROR, "Channel %s: pipe read failed: %s\n", p->stream, strerror(errno));
-		return &ast_null_frame;
-	}
-
-	ast_mutex_lock(&p->lock);
-
-	if (p->hangup) {
-		p->hangup = 0;
-		ast_mutex_unlock(&p->lock);
-
-		ast_debug(3, "Channel %s: hangup\n", p->stream);
-		ast_softhangup(chan, AST_SOFTHANGUP_DEV);
-		return &ast_null_frame;
-	}
-
-	if (!p->answered && p->firstheard) {
-		struct ast_frame fr = {
-			.frametype = AST_FRAME_CONTROL,
-			.subclass.integer = AST_CONTROL_ANSWER,
-			.src = __PRETTY_FUNCTION__,
-		};
-
-		p->answered = 1;
-		ast_mutex_unlock(&p->lock);
-
-		ast_debug(3, "Channel %s: answer\n", p->stream);
-		ast_queue_frame(chan, &fr);
-		return &ast_null_frame;
+	if (ast_timer_get_event(p->timer) == AST_TIMING_EVENT_EXPIRED) {
+		if ((ast_timer_ack(p->timer, 1) < 0)) {
+			ast_log(LOG_WARNING, "Timer ack failed. \n");
+			return NULL;
+		}
 	}
 
 	for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
@@ -2487,10 +2427,15 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 				ast_free(qpast);
 			}
 			if (p->rxkey) {
+				/* rxkey is a timer, set it to "done" */
 				p->rxkey = 1;
 			}
 			break;
 		}
+	}
+
+	if (n < EL_DELAY && !p->rxkey) { /* we need a bit of buffer to start sending audio */
+		return &ast_null_frame;
 	}
 
 	qpast = (p->rxqast.qe_forw != &p->rxqast) ? p->rxqast.qe_forw : NULL;
@@ -2565,18 +2510,9 @@ static int el_xwrite(struct ast_channel *chan, struct ast_frame *frame)
 	struct sockaddr_in sin;
 	struct el_pvt *p = ast_channel_tech_pvt(chan);
 	struct el_instance *instp = p->instp;
-	int need_hangup = 0;
 
 	if (frame->frametype != AST_FRAME_VOICE) {
 		return 0;
-	}
-
-	ast_mutex_lock(&p->lock);
-	need_hangup = p->hangup;
-	p->hangup = 0;
-	ast_mutex_unlock(&p->lock);
-	if (need_hangup) {
-		ast_softhangup(chan, AST_SOFTHANGUP_DEV);
 	}
 
 	if (!p->firstsent) {
@@ -2635,6 +2571,7 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	const struct ast_channel *requestor)
 {
 	struct ast_channel *chan;
+	int rate;
 
 	chan = ast_channel_alloc(1, state, 0, 0, "", p->instp->astnode, p->instp->context, assignedids, requestor, 0, "echolink/%s", p->stream);
 	if (!chan) {
@@ -2642,19 +2579,23 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 		return NULL;
 	}
 
-	if (pipe2(p->pipe, O_NONBLOCK) == -1) {
-		ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", p->stream);
-		ast_hangup(chan);
-		return NULL;
-	}
-
-	ast_channel_set_fd(chan, 0, p->pipe[0]);
 	ast_channel_tech_set(chan, &el_tech);
 	ast_channel_nativeformats_set(chan, el_tech.capabilities);
 	ast_channel_set_rawreadformat(chan, ast_format_gsm);
 	ast_channel_set_rawwriteformat(chan, ast_format_gsm);
 	ast_channel_set_writeformat(chan, ast_format_gsm);
 	ast_channel_set_readformat(chan, ast_format_gsm);
+
+	p->timer = ast_timer_open();
+	if (!p->timer) {
+		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
+		ast_hangup(chan);
+		return NULL;
+	}
+
+	rate = 1000 / ast_format_get_default_ms(ast_format_gsm);
+	ast_timer_set_rate(p->timer, rate);
+	ast_channel_set_fd(chan, 0, ast_timer_fd(p->timer));
 
 	if (state == AST_STATE_RING) {
 		ast_channel_rings_set(chan, 1);
@@ -4035,16 +3976,28 @@ static void *el_reader(void *data)
 						if (found_key) {
 							struct el_node *node = *found_key;
 							struct el_pvt *p = node->pvt;
-							int wake = 0;
 
-							ast_mutex_lock(&p->lock);
-							if (!p->answered && !p->firstheard) {
+							if (!p->firstheard) {
+								struct ast_frame fr = {
+									.frametype = AST_FRAME_CONTROL,
+									.subclass.integer = AST_CONTROL_ANSWER,
+									.src = __PRETTY_FUNCTION__,
+								};
+								struct ast_channel *chan = NULL;
+
+								ast_mutex_lock(&p->lock);
+								if (p->owner) {
+									chan = ast_channel_ref(p->owner);
+								}
+
 								p->firstheard = 1;
-								wake = 1;
-							}
-							ast_mutex_unlock(&p->lock);
-							if (wake) {
-								el_wake_channel(p);
+								ast_mutex_unlock(&p->lock);
+
+								if (chan) {
+									ast_queue_frame(chan, &fr);
+									ast_channel_unref(chan);
+								}
+								ast_debug(3, "Channel %s: answer\n", p->stream);
 							}
 
 							node->heartbeat_countdown = instp->rtcptimeout;
@@ -4188,7 +4141,6 @@ static void *el_reader(void *data)
 						struct el_node *node = *found_key;
 						struct el_pvt *p = node->pvt;
 						struct ast_channel *chan = NULL;
-						int wake = 0;
 
 						ao2_ref(p, +1);
 
@@ -4196,13 +4148,18 @@ static void *el_reader(void *data)
 						if (p->owner) {
 							chan = ast_channel_ref(p->owner);
 						}
-						if (!p->answered && !p->firstheard) {
-							p->firstheard = 1;
-							wake = 1;
-						}
 						ast_mutex_unlock(&p->lock);
-						if (wake) {
-							el_wake_channel(p);
+
+						if (!p->firstheard && chan) {
+							struct ast_frame fr = {
+								.frametype = AST_FRAME_CONTROL,
+								.subclass.integer = AST_CONTROL_ANSWER,
+								.src = __PRETTY_FUNCTION__,
+							};
+
+							p->firstheard = 1;
+							ast_debug(3, "Channel %s: answer\n", p->stream);
+							ast_queue_frame(chan, &fr);
 						}
 
 						node->heartbeat_countdown = instp->rtcptimeout;
@@ -4279,7 +4236,6 @@ static void *el_reader(void *data)
 										ast_mutex_lock(&p->lock);
 										insque((struct qelem *) qpast, (struct qelem *) p->rxqast.qe_back);
 										ast_mutex_unlock(&p->lock);
-										el_wake_channel(p);
 									}
 								}
 
