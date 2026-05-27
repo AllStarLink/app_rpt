@@ -1586,7 +1586,6 @@ static void *hidthread(void *arg)
 				}
 				buf[o->hid_gpio_loc] = o->hid_gpio_val;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				ast_radio_hid_set_outputs(usb_handle, buf);
 				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", o->name, txreq);
 			} else if (!txreq && o->lasttx) {
 				o->hid_gpio_val &= ~o->hid_io_ptt;
@@ -1595,7 +1594,6 @@ static void *hidthread(void *arg)
 				}
 				buf[o->hid_gpio_loc] = o->hid_gpio_val;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				ast_radio_hid_set_outputs(usb_handle, buf);
 				ast_debug(2, "Channel %s: update PTT = %d.\n", o->name, txreq);
 			}
 			lasttxtmp = o->lasttx;
@@ -1734,13 +1732,11 @@ static void *hidthread(void *arg)
 			if (o->hid_gpio_pulsemask || o->hid_gpio_lastmask) { /* if anything inverted (temporarily) */
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
 			if (o->gpio_set) {
 				o->gpio_set = 0;
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
 			k = 0;
 			if (haspp) {
@@ -1785,8 +1781,8 @@ static void *hidthread(void *arg)
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				memcpy(bufsave, buf, sizeof(buf));
-				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
+			ast_radio_hid_set_outputs(usb_handle, buf);
 			ast_radio_time(&o->lasthidtime);
 			ast_mutex_unlock(&o->usblock);
 		}
