@@ -647,11 +647,12 @@ struct libusb_device *ast_radio_hid_device_init(const char *desired_device)
 			continue;
 		}
 		if (!strcmp(cp, desired_device)) {
-			libusb_free_device_list(list, 0);
+			libusb_ref_device(dev);
+			libusb_free_device_list(list, 1);
 			return dev;
 		}
 	}
-	libusb_free_device_list(list, 0);
+	libusb_free_device_list(list, 1);
 	return NULL;
 }
 
@@ -1108,12 +1109,13 @@ struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 
 			/* usbbus content is typically case-insensitive */
 			if (strcasecmp(cur, target) == 0) {
-				libusb_free_device_list(list, 0);
+				libusb_ref_device(dev);
+				libusb_free_device_list(list, 1);
 				return dev;
 			}
 		}
 
-		libusb_free_device_list(list, 0);
+		libusb_free_device_list(list, 1);
 	}
 
 	ast_debug(1, "No USB device found matching bus path '%s' for card %d\n", target, cardno);

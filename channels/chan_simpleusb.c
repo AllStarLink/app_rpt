@@ -616,10 +616,12 @@ static int open_stream(struct chan_simpleusb_pvt *o)
 		ast_debug(5, "Opening stream on device %s", o->hw_device);
 		res = Pa_OpenStream(&o->stream, &input_params, &output_params, PA_SAMPLE_RATE, PA_NUM_FRAMES, paNoFlag, NULL, NULL);
 		ast_debug(5, "Stream feedback: %s\n", Pa_GetErrorText(res));
-		si = Pa_GetStreamInfo(o->stream);
-		if (si) {
-			ast_debug(5, "Stream output latency: %.3f ms\n", si->outputLatency * 1000.0);
-			ast_debug(5, "Stream input latency: %.3f ms\n", si->inputLatency * 1000.0);
+		if (res == paNoError) {
+			si = Pa_GetStreamInfo(o->stream);
+			if (si) {
+				ast_debug(5, "Stream output latency: %.3f ms\n", si->outputLatency * 1000.0);
+				ast_debug(5, "Stream input latency: %.3f ms\n", si->inputLatency * 1000.0);
+			}
 		}
 	}
 
@@ -1433,7 +1435,7 @@ static void *hidthread(void *arg)
 			if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 				if (!claim_failed) {
 					ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
-					detach_failed = 1;
+					claim_failed = 1;
 				}
 
 				libusb_close(usb_handle);
