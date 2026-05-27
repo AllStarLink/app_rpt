@@ -2415,7 +2415,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 			ast_log(LOG_WARNING, "Timer ack failed. \n");
 			return NULL;
 		}
-	}       
+	}
 
 	for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 		n++;
