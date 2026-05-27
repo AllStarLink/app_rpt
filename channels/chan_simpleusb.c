@@ -425,9 +425,6 @@ static struct ast_channel_tech simpleusb_tech = {
 	.setoption = simpleusb_setoption,
 };
 
-#include <time.h>
-#include <unistd.h>
-
 static int64_t now_ms(void)
 {
 	struct timespec ts;
@@ -4549,14 +4546,18 @@ static int unload_module(void)
 
 	for (o = simpleusb_default.next; o; o = no) {
 		no = o->next; /* Keep track of next object after free */
+
 		if (o->owner) {
 			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
 		}
 
+		o->stopaudiothread = 1;
 		if (o->audiothread != AST_PTHREADT_NULL) {
 			pthread_join(o->audiothread, NULL); /* wait for audio thread to end */
 			o->audiothread = AST_PTHREADT_NULL;
 		}
+
+		o->stophidthread = 1;
 		if (o->hidthread != AST_PTHREADT_NULL) {
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
