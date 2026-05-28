@@ -77,6 +77,12 @@ int rpt_base32_decode(const char *in, uint8_t *out, size_t outlen)
 		char c = *p;
 
 		if (c == '=') {
+			const char *q;
+			for (q = p + 1; *q; q++) {
+				if (*q != '=') {
+					return -1;
+				}
+			}
 			break;
 		}
 		if (c >= 'A' && c <= 'Z') {
