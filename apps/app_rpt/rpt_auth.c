@@ -331,10 +331,10 @@ void rpt_auth_free(struct rpt *myrpt)
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
-const char *rpt_auth_active_set(struct rpt *myrpt)
+int rpt_auth_active_set(struct rpt *myrpt, char *buf, size_t buflen)
 {
 	struct rpt_auth_state *st;
-	const char *ret = NULL;
+	int ret = 0;
 	time_t now = time(NULL);
 
 	rpt_mutex_lock(&myrpt->lock);
@@ -345,7 +345,8 @@ const char *rpt_auth_active_set(struct rpt *myrpt)
 				st->session_user, myrpt->name);
 			clear_session_locked(st);
 		} else {
-			ret = st->session_command_set;
+			ast_copy_string(buf, st->session_command_set, buflen);
+			ret = 1;
 		}
 	}
 	rpt_mutex_unlock(&myrpt->lock);

@@ -24,12 +24,12 @@ void rpt_auth_reload(struct rpt *myrpt);
 /*! \brief Free all auth state for a node.  Called at module unload / node teardown. */
 void rpt_auth_free(struct rpt *myrpt);
 
-/*! \brief Return the active command-set stanza name, or NULL if no session.
- *  Pointer is valid until the next rpt_auth_reload / rpt_auth_logout / session
- *  expiry on this node, which (per locking contract) cannot race with the
- *  caller's use as long as the caller is on the per-node DTMF dispatch path.
+/*! \brief Copy the active command-set stanza name into buf, or return 0 if no session.
+ *  Returns 1 if an active session exists (buf populated), 0 otherwise.
+ *  Copies under lock so the returned string is caller-owned and safe from
+ *  concurrent rpt_auth_logout / rpt_auth_reload on the CLI thread.
  *  Internally checks expiry and clears stale sessions. */
-const char *rpt_auth_active_set(struct rpt *myrpt);
+int rpt_auth_active_set(struct rpt *myrpt, char *buf, size_t buflen);
 
 /*! \brief Refresh the sliding session timeout.  No-op if no active session. */
 void rpt_auth_touch(struct rpt *myrpt);
