@@ -1,8 +1,8 @@
 /*
  * RFC 6238 TOTP (Time-based One-Time Password) verification for app_rpt.
  *
- * Self-contained: depends only on Asterisk's public SHA-1 primitives
- * (<asterisk/sha1.h>) and standard C.  No OpenSSL link dependency.
+ * Depends on OpenSSL's SHA-1 primitives (<openssl/sha.h>) and standard C.
+ * Requires linking against libcrypto (-lcrypto).
  *
  * Used by rpt_auth.c to validate DTMF-entered authentication codes.
  */

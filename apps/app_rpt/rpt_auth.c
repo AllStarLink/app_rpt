@@ -446,10 +446,10 @@ int rpt_auth_login(struct rpt *myrpt, const char *user_id4, const char *otp6)
 	st->session_longestfunc = compute_longestfunc_locked(myrpt, u->command_set);
 	st->session_expires = now + effective_timeout(myrpt);
 	u->fail_count = 0;
-	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_log(LOG_NOTICE, "rpt_auth: user %s authenticated on node %s, set=%s\n",
 		user_id4, myrpt->name, u->command_set);
+	rpt_mutex_unlock(&myrpt->lock);
 	return RPT_AUTH_LOGIN_OK;
 }
 

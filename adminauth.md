@@ -272,7 +272,7 @@ These were locked in early conversation with the user and drove every subsequent
 6. **Configurable lockout.** Defends against brute-forcing OTP via DTMF (the search space is only 10⁶).
 7. **Fixed 4-digit user-id, no separator.** Keeps DTMF input short and unambiguous (10 digits, period).
 8. **First-match-wins, admin-managed collision avoidance.** Matches the existing function-table semantics; no new tie-break logic.
-9. **No new external dependencies.** Use Asterisk's built-in SHA1 primitives. No OpenSSL, no libcrypt.
+9. **Minimal external dependencies.** Uses OpenSSL's SHA-1 primitives (`<openssl/sha.h>`, linked via `-lcrypto`) since Asterisk no longer exports `asterisk/sha1.h`. No other crypto libraries required.
 
 ## 2.2 File map
 
@@ -292,12 +292,12 @@ The split between `rpt_totp.*` and `rpt_auth.*` is deliberate: `rpt_totp` is a l
 
 ## 2.3 The TOTP layer (`rpt_totp.c`)
 
-Why we wrote our own instead of pulling in OpenSSL/libcrypt: the project already builds against Asterisk's `asterisk/sha1.h`, which gives us `SHA1Reset/Input/Result`. That's the only crypto primitive HMAC-SHA1 needs. Adding an external dep would inflate the build dependencies for ~150 lines of well-understood code.
+Why we wrote our own HMAC-SHA1 rather than pulling in a higher-level crypto library: the only primitive needed is SHA-1, and Asterisk no longer exports `asterisk/sha1.h`. The implementation uses OpenSSL's `<openssl/sha.h>` (`SHA1_Init`/`SHA1_Update`/`SHA1_Final`) and links against `-lcrypto`, which is already a build dependency of Asterisk itself. This keeps the code to ~150 lines of well-understood HMAC construction with no additional library beyond what the build system already provides.
 
 Three things live here:
 
 1. **`base32_decode()`** — RFC 4648 base32, case-insensitive, ignores `=` padding. Returns the raw secret bytes.
-2. **`hmac_sha1()`** — standard HMAC construction over Asterisk's SHA1 primitive. Block size 64, output size 20.
+2. **`hmac_sha1()`** — standard HMAC construction over OpenSSL's SHA1 primitive. Block size 64, output size 20.
 3. **`rpt_totp_verify()`** — implements the RFC 6238 verification algorithm:
    - Compute `T = floor(now / step)`.
    - For each counter in `[T-window, T+window]`:
