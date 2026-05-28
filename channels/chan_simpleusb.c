@@ -1800,7 +1800,7 @@ static void *hidthread(void *arg)
 		o->hid_gpio_val &= ~o->hid_io_ptt;
 		if (o->invertptt) {
 			o->hid_gpio_val |= o->hid_io_ptt;
-			buf[o->hid_gpio_loc] = o->hid_gpio_val  ^ o->hid_gpio_pulsemask;;
+			buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 			buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		}
 		ast_radio_hid_set_outputs(usb_handle, buf);
