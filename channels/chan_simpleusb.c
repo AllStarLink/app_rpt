@@ -1513,7 +1513,7 @@ static void *hidthread(void *arg)
 		 * the pttkick pipe.
 		 */
 		while ((!o->stophidthread) && o->hasusb) {
-			int write = 0;
+			int gpio_write = 0;
 
 			then = ast_radio_tvnow();
 			/* poll the pttkick pipe - timeout after HID_POLL_RATE milliseconds */
@@ -1577,8 +1577,6 @@ static void *hidthread(void *arg)
 			ast_mutex_lock(&o->txqlock);
 			txreq = !(AST_LIST_EMPTY(&o->txq));
 			ast_mutex_unlock(&o->txqlock);
-			buf[o->hid_gpio_loc] = o->hid_gpio_val;
-			buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
 
 			if (txreq && !o->lasttx) {
@@ -1589,7 +1587,7 @@ static void *hidthread(void *arg)
 				buf[o->hid_gpio_loc] = o->hid_gpio_val;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", o->name, txreq);
-				write = 1;
+				gpio_write = 1;
 			} else if (!txreq && o->lasttx) {
 				o->hid_gpio_val &= ~o->hid_io_ptt;
 				if (o->invertptt) {
@@ -1598,7 +1596,7 @@ static void *hidthread(void *arg)
 				buf[o->hid_gpio_loc] = o->hid_gpio_val;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				ast_debug(2, "Channel %s: update PTT = %d.\n", o->name, txreq);
-				write = 1;
+				gpio_write = 1;
 			}
 			lasttxtmp = o->lasttx;
 			o->lasttx = txreq;
@@ -1736,13 +1734,13 @@ static void *hidthread(void *arg)
 			if (o->hid_gpio_pulsemask || o->hid_gpio_lastmask) { /* if anything inverted (temporarily) */
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				write = 1;
+				gpio_write = 1;
 			}
 			if (o->gpio_set) {
 				o->gpio_set = 0;
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				write = 1;
+				gpio_write = 1;
 			}
 			k = 0;
 			if (haspp) {
@@ -1787,10 +1785,10 @@ static void *hidthread(void *arg)
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				memcpy(bufsave, buf, sizeof(buf));
-				write = 1;
+				gpio_write = 1;
 			}
 
-			if (write) {
+			if (gpio_write) {
 				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
 
