@@ -1575,6 +1575,9 @@ static void *hidthread(void *arg)
 			ast_mutex_lock(&o->txqlock);
 			txreq = !(AST_LIST_EMPTY(&o->txq));
 			ast_mutex_unlock(&o->txqlock);
+			buf[o->hid_gpio_loc] = o->hid_gpio_val;
+			buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
 			if (txreq && !o->lasttx) {
 				o->hid_gpio_val |= o->hid_io_ptt;
@@ -1779,6 +1782,7 @@ static void *hidthread(void *arg)
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 				memcpy(bufsave, buf, sizeof(buf));
 			}
+
 			ast_radio_hid_set_outputs(usb_handle, buf);
 			ast_radio_time(&o->lasthidtime);
 			ast_mutex_unlock(&o->usblock);
@@ -1788,9 +1792,9 @@ static void *hidthread(void *arg)
 		o->hid_gpio_val &= ~o->hid_io_ptt;
 		if (o->invertptt) {
 			o->hid_gpio_val |= o->hid_io_ptt;
+			buf[o->hid_gpio_loc] = o->hid_gpio_val  ^ o->hid_gpio_pulsemask;;
+			buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		}
-		buf[o->hid_gpio_loc] = o->hid_gpio_val;
-		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
 
