@@ -20,7 +20,6 @@
 
 #define RPT_AUTH_USER_ID_LEN 4
 #define RPT_AUTH_OTP_LEN 6
-#define RPT_AUTH_MAX_USERS 64
 #define RPT_AUTH_USERS_SECTION "users"
 
 #define RPT_AUTH_DEFAULT_TIMEOUT 300
@@ -39,7 +38,7 @@ struct rpt_auth_user {
 };
 
 struct rpt_auth_state {
-	struct rpt_auth_user users[RPT_AUTH_MAX_USERS];
+	struct rpt_auth_user *users;
 	int nusers;
 
 	int session_active;
@@ -140,6 +139,8 @@ static void free_users_locked(struct rpt_auth_state *st)
 			st->users[i].command_set = NULL;
 		}
 	}
+	ast_free(st->users);
+	st->users = NULL;
 	st->nusers = 0;
 }
 
@@ -208,6 +209,7 @@ static void load_users_locked(struct rpt *myrpt, struct rpt_auth_state *st)
 	struct ast_config *cfg;
 	struct ast_flags config_flags = { 0 };
 	struct ast_variable *vp;
+	int count = 0;
 
 	free_users_locked(st);
 
@@ -226,14 +228,24 @@ static void load_users_locked(struct rpt *myrpt, struct rpt_auth_state *st)
 	}
 
 	for (vp = ast_variable_browse(cfg, RPT_AUTH_USERS_SECTION); vp; vp = vp->next) {
+		count++;
+	}
+
+	if (count == 0) {
+		ast_config_destroy(cfg);
+		return;
+	}
+
+	st->users = ast_calloc(count, sizeof(*st->users));
+	if (!st->users) {
+		ast_config_destroy(cfg);
+		return;
+	}
+
+	for (vp = ast_variable_browse(cfg, RPT_AUTH_USERS_SECTION); vp; vp = vp->next) {
 		char *secret = NULL;
 		char *cmdset = NULL;
 
-		if (st->nusers >= RPT_AUTH_MAX_USERS) {
-			ast_log(LOG_WARNING, "rpt_auth: %s has more than %d users; truncating\n",
-				myrpt->p.auth_users, RPT_AUTH_MAX_USERS);
-			break;
-		}
 		if (!valid_user_id(vp->name)) {
 			ast_log(LOG_WARNING, "rpt_auth: skipping malformed user id '%s'\n", vp->name);
 			continue;

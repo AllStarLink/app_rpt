@@ -112,7 +112,7 @@ Each line: `<id4> = <BASE32_SECRET>, <stanza_name>`
 - **`<BASE32_SECRET>`** — RFC 4648 uppercase base32. Optional `=` padding. This is the same encoding every standard TOTP app consumes.
 - **`<stanza_name>`** — the name of a `[functions-...]` stanza in `rpt.conf`. No leading bracket.
 
-Whitespace around the `,` is tolerated. Comment lines start with `;`. Maximum 64 users per file.
+Whitespace around the `,` is tolerated. Comment lines start with `;`.
 
 **Permissions are critical.** This file contains shared secrets equivalent to passwords:
 
@@ -409,7 +409,7 @@ Two commands: `rpt auth show <node>` and `rpt auth logout <node>`. Both follow t
 
 - **Don't move `rpt_auth_reload()` back inside the lock.** It will deadlock — `rpt_auth_reload` takes the lock itself, and the recursive-mutex behavior is not portable here.
 - **Don't change the `DC_ERROR`-uniformity in `function_auth`.** It is a deliberate security property, documented inline. Adding distinct telemetry for "locked" vs "bad code" leaks information.
-- **Don't shrink `MAX_USERS` below the documented limit without checking deployments.** Growing it is fine; shrinking will silently truncate legitimate user tables on reload.
+- **The user array is dynamically allocated based on the number of entries in `rpt_auth.conf`.** There is no hard cap; memory is the only limit.
 - **Don't read `myrpt->auth` directly from outside `rpt_auth.c`.** It is an opaque pointer. Add accessor functions to `rpt_auth.h` if you need new behavior.
 - **The authed-stanza walk in `collect_function_digits` MUST come before the source walk.** Reversing them quietly breaks the "authed-first" guarantee that admins are designing their stanzas around. If you're tempted to "optimize" this, don't.
 - **The dispatch path is the hottest path in app_rpt.** Any new work added to `collect_function_digits` runs on every DTMF event. The current additions are O(1) when no session is active and O(n_authed_entries) when a session exists. Keep it that way.
