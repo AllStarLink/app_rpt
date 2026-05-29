@@ -188,49 +188,6 @@ static int parse_user_value(const char *value, char **out_secret, char **out_set
 	}
 	return 0;
 }
-	comma = strchr(value, ',');
-	if (!comma) {
-		return -1;
-	}
-
-	secret_start = value;
-	while (*secret_start == ' ' || *secret_start == '\t') {
-		secret_start++;
-	}
-	secret_end = comma;
-	while (secret_end > secret_start && (secret_end[-1] == ' ' || secret_end[-1] == '\t')) {
-		secret_end--;
-	}
-	set_start = comma + 1;
-	while (*set_start == ' ' || *set_start == '\t') {
-		set_start++;
-	}
-	set_end = set_start + strlen(set_start);
-	while (set_end > set_start && (set_end[-1] == ' ' || set_end[-1] == '\t')) {
-		set_end--;
-	}
-
-	slen = (size_t) (secret_end - secret_start);
-	clen = (size_t) (set_end - set_start);
-	if (slen == 0 || clen == 0) {
-		return -1;
-	}
-
-	*out_secret = ast_malloc(slen + 1);
-	*out_set = ast_malloc(clen + 1);
-	if (!*out_secret || !*out_set) {
-		ast_free(*out_secret);
-		ast_free(*out_set);
-		*out_secret = NULL;
-		*out_set = NULL;
-		return -1;
-	}
-	memcpy(*out_secret, secret_start, slen);
-	(*out_secret)[slen] = '\0';
-	memcpy(*out_set, set_start, clen);
-	(*out_set)[clen] = '\0';
-	return 0;
-}
 
 static int valid_user_id(const char *name)
 {
