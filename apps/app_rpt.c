@@ -1648,7 +1648,7 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 	 * No-op when no active session.
 	 */
 	vp = NULL;
-	if (rpt_auth_active_set(myrpt, authed_stanza_buf, sizeof(authed_stanza_buf))) {
+	if (rpt_auth_get_active_stanza(myrpt, authed_stanza_buf, sizeof(authed_stanza_buf))) {
 		struct ast_variable *avp = ast_variable_browse(myrpt->cfg, authed_stanza_buf);
 		while (avp) {
 			if (!strncasecmp(avp->name, digits, strlen(avp->name))) {

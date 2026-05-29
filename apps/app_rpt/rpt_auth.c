@@ -156,14 +156,38 @@ static struct rpt_auth_user *find_user_locked(struct rpt_auth_state *st, const c
 
 static int parse_user_value(const char *value, char **out_secret, char **out_set)
 {
-	const char *comma;
-	const char *secret_start, *secret_end;
-	const char *set_start, *set_end;
-	size_t slen, clen;
+	char *tmp, *secret, *set;
 
-	if (!value) {
+	if (ast_strlen_zero(value)) {
 		return -1;
 	}
+	tmp = ast_strdupa(value);
+
+	secret = strsep(&tmp, ",");
+	set = tmp;
+
+	if (!set) {
+		return -1;
+	}
+
+	secret = ast_strip(secret);
+	set = ast_strip(set);
+
+	if (ast_strlen_zero(secret) || ast_strlen_zero(set)) {
+		return -1;
+	}
+
+	*out_secret = ast_strdup(secret);
+	*out_set = ast_strdup(set);
+	if (!*out_secret || !*out_set) {
+		ast_free(*out_secret);
+		ast_free(*out_set);
+		*out_secret = NULL;
+		*out_set = NULL;
+		return -1;
+	}
+	return 0;
+}
 	comma = strchr(value, ',');
 	if (!comma) {
 		return -1;
@@ -331,7 +355,7 @@ void rpt_auth_free(struct rpt *myrpt)
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
-int rpt_auth_active_set(struct rpt *myrpt, char *buf, size_t buflen)
+int rpt_auth_get_active_stanza(struct rpt *myrpt, char *buf, size_t buflen)
 {
 	struct rpt_auth_state *st;
 	int ret = 0;

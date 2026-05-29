@@ -29,7 +29,7 @@ void rpt_auth_free(struct rpt *myrpt);
  *  Copies under lock so the returned string is caller-owned and safe from
  *  concurrent rpt_auth_logout / rpt_auth_reload on the CLI thread.
  *  Internally checks expiry and clears stale sessions. */
-int rpt_auth_active_set(struct rpt *myrpt, char *buf, size_t buflen);
+int rpt_auth_get_active_stanza(struct rpt *myrpt, char *buf, size_t buflen);
 
 /*! \brief Refresh the sliding session timeout.  No-op if no active session. */
 void rpt_auth_touch(struct rpt *myrpt);
