@@ -18,7 +18,7 @@ jobs:
       image: ghcr.io/allstarlink/asl3-ci:latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Build app_rpt
         run: |
           cp -r ../app_rpt /usr/src
