@@ -1,7 +1,7 @@
 /*
  * RFC 6238 TOTP (Time-based One-Time Password) verification for app_rpt.
  *
- * Depends on OpenSSL's SHA-1 primitives (<openssl/sha.h>) and standard C.
+ * Depends on OpenSSL 3.0+ EVP_MAC API (<openssl/evp.h>) and standard C.
  * Requires linking against libcrypto (-lcrypto).
  *
  * Used by rpt_auth.c to validate DTMF-entered authentication codes.
@@ -29,7 +29,7 @@ enum rpt_totp_result {
  * Computes TOTP for steps [now/step - window .. now/step + window] using the
  * given base32-encoded shared secret, and compares each candidate against the
  * supplied 6-digit OTP string.  On match, *last_counter is updated to the
- * matched counter so the caller can persist it and reject re-use within the
+ * matched counter so the caller can persist it and reject reuse within the
  * same or earlier step (in-window replay protection).
  *
  * \param secret_b32 Base32-encoded shared secret (RFC 4648, padding optional,

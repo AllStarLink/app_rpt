@@ -9,56 +9,51 @@
 #include "asterisk/logger.h"
 #include "asterisk/utils.h"
 
-#include <openssl/sha.h>
+#include <openssl/evp.h>
+#include <openssl/params.h>
 
 #include "rpt_totp.h"
 
-#define HMAC_BLOCK 64
 #define HMAC_HASH 20
 
 static int hmac_sha1(const uint8_t *key, size_t keylen,
 	const uint8_t *msg, size_t msglen,
 	uint8_t out[HMAC_HASH])
 {
-	uint8_t k[HMAC_BLOCK];
-	uint8_t ipad[HMAC_BLOCK];
-	uint8_t opad[HMAC_BLOCK];
-	uint8_t inner[HMAC_HASH];
-	SHA_CTX sha;
-	size_t i;
+	EVP_MAC *mac = NULL;
+	EVP_MAC_CTX *ctx = NULL;
+	OSSL_PARAM params[2];
+	size_t outlen = 0;
+	int ret = -1;
 
-	memset(k, 0, sizeof(k));
-	if (keylen > HMAC_BLOCK) {
-		/* Per RFC 2104: if key longer than block, replace with H(key). */
-		if (SHA1_Init(&sha) != 1 ||
-			SHA1_Update(&sha, key, keylen) != 1 ||
-			SHA1_Final(k, &sha) != 1) {
-			return -1;
-		}
-	} else {
-		memcpy(k, key, keylen);
-	}
-
-	for (i = 0; i < HMAC_BLOCK; i++) {
-		ipad[i] = k[i] ^ 0x36;
-		opad[i] = k[i] ^ 0x5c;
-	}
-
-	if (SHA1_Init(&sha) != 1 ||
-		SHA1_Update(&sha, ipad, HMAC_BLOCK) != 1 ||
-		SHA1_Update(&sha, msg, msglen) != 1 ||
-		SHA1_Final(inner, &sha) != 1) {
+	mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+	if (!mac) {
 		return -1;
 	}
 
-	if (SHA1_Init(&sha) != 1 ||
-		SHA1_Update(&sha, opad, HMAC_BLOCK) != 1 ||
-		SHA1_Update(&sha, inner, HMAC_HASH) != 1 ||
-		SHA1_Final(out, &sha) != 1) {
-		return -1;
+	ctx = EVP_MAC_CTX_new(mac);
+	if (!ctx) {
+		goto out;
 	}
 
-	return 0;
+	params[0] = OSSL_PARAM_construct_utf8_string("digest", "SHA1", 0);
+	params[1] = OSSL_PARAM_construct_end();
+
+	if (EVP_MAC_init(ctx, key, keylen, params) != 1) {
+		goto out;
+	}
+	if (EVP_MAC_update(ctx, msg, msglen) != 1) {
+		goto out;
+	}
+	if (EVP_MAC_final(ctx, out, &outlen, HMAC_HASH) != 1) {
+		goto out;
+	}
+
+	ret = 0;
+out:
+	EVP_MAC_CTX_free(ctx);
+	EVP_MAC_free(mac);
+	return ret;
 }
 
 int rpt_base32_decode(const char *in, uint8_t *out, size_t outlen)
