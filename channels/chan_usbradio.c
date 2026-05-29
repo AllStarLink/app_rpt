@@ -2095,7 +2095,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
 	 * and returns true if clipping was detected.
 	 */
-	if (ast_radio_check_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE)) {
+	if (ast_radio_check_audio((short *) o->usbradio_read_buf, &o->rxaudiostats, 12 * FRAME_SIZE, 0)) {
 		if (o->clipledgpio) {
 			/* Set Clip LED GPIO pulsetimer if not already set */
 			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
@@ -2199,7 +2199,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	 * nice to log a warning but as this does not relate to outgoing network audio it's not
 	 * a major issue. User can check the Tx Audio Stats utility if desired.
 	 */
-	ast_radio_check_audio((short *) o->usbradio_write_buf, &o->txaudiostats, 12 * FRAME_SIZE);
+	ast_radio_check_audio((short *) o->usbradio_write_buf, &o->txaudiostats, 12 * FRAME_SIZE, 0);
 
 #if DEBUG_CAPTURES == 1 && XPMR_DEBUG0 == 1
 	if (frxcaptrace && o->rxcap2 && o->pmrChan->b.radioactive) {

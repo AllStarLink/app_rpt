@@ -485,13 +485,14 @@ struct timeval ast_radio_tvnow(void);
  *   These define total signal power and peak-to-average power ratio
  *
  * \author      	NR9V
- * \param sbuf  	Rx audio sample buffer
+ * \param sbuf  	Rx audio sample buffer in 48k stereo or mono
  * \param o	    	Rx Audio Stats data structure
  * \param len   	Length of data in sbuf
+ * \param mono  	True if sbuf is mono, False if sbuf is stereo
  * \return 	    	1 if clipping detected, 0 otherwise
  */
 #define CLIP_LED_HOLD_TIME_MS 500
-int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len);
+int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, short mono);
 
 /*!
  * \brief Display receive audio statistics.
@@ -516,3 +517,15 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len);
  * \return  		None
  */
 void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *prefix_text);
+
+/*!
+ * \brief Returns the libusb device that backs ALSA /proc/asound/card<cardno>/usbbus.
+ * \retval usb_device *  Pointer to the libusb device on success.
+ * \retval NULL          If device could not be found.
+ *
+ * \note
+ * - Uses libusb-0.1 enumeration (usb_init/usb_find_busses/usb_find_devices).
+ * - The returned pointer is owned by libusb's internal device list.
+ * \param cardno The ALSA card number as found in HW:<cardno>
+ */
+struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno);
