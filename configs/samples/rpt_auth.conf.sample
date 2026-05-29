@@ -29,7 +29,7 @@
 ;
 ; Whitespace around commas is tolerated. Lines starting with ';' are comments.
 ;
-; Maximum users per file: 64.
+; No hard limit on user count; memory is allocated dynamically.
 ;
 ; Algorithm parameters (TOTP step, window, etc.) are NOT per-user — they are
 ; configured per-node in rpt.conf via the auth_otp_step / auth_otp_window keys.
