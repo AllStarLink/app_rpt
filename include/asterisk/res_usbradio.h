@@ -268,8 +268,9 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2);
  *
  * \param handle		Pointer to usb_dev_handle associated with the HID.
  * \param outputs		Pointer to buffer that contains the data to send to the HID.
+ * \retval bytes		>= 0 Success, LIBUSB_ERROR* if error
  */
-void ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned char *outputs);
+int ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned char *outputs);
 
 /*!
  * \brief Get USB HID inputs
@@ -279,8 +280,10 @@ void ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned cha
  *
  * \param handle        Pointer to usb_dev_handle associated with the HID.
  * \param inputs        Pointer to buffer that will contain the data received from the HID.
+ * \retval bytes		>= 0 Success, LIBUSB_ERROR* if error
+
  */
-void ast_radio_hid_get_inputs(struct libusb_device_handle *handle, unsigned char *inputs);
+int ast_radio_hid_get_inputs(struct libusb_device_handle *handle, unsigned char *inputs);
 
 /*!
  * \brief Read user memory segment from the CM-XXX EEPROM.

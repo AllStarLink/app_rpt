@@ -235,18 +235,18 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 	return 0;
 }
 
-void ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned char *outputs)
+int ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned char *outputs)
 {
 	usleep(1500);
-	libusb_control_transfer(handle, LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, HID_REPORT_SET,
-		0 + (HID_RT_OUTPUT << 8), C108_HID_INTERFACE, outputs, 4, 50);
+	return libusb_control_transfer(handle, LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE,
+		HID_REPORT_SET, 0 + (HID_RT_OUTPUT << 8), C108_HID_INTERFACE, outputs, 4, 50);
 }
 
-void ast_radio_hid_get_inputs(struct libusb_device_handle *handle, unsigned char *inputs)
+int ast_radio_hid_get_inputs(struct libusb_device_handle *handle, unsigned char *inputs)
 {
 	usleep(1500);
-	libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, HID_REPORT_GET,
-		0 + (HID_RT_INPUT << 8), C108_HID_INTERFACE, inputs, 4, 50);
+	return libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE,
+		HID_REPORT_GET, 0 + (HID_RT_INPUT << 8), C108_HID_INTERFACE, inputs, 4, 50);
 }
 
 /*!

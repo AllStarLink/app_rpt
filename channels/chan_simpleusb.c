@@ -1561,7 +1561,9 @@ static void *hidthread(void *arg)
 			}
 			ast_mutex_lock(&o->usblock);
 			buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-			ast_radio_hid_get_inputs(usb_handle, buf);
+			if (ast_radio_hid_get_inputs(usb_handle, buf) < 0) {
+				ast_log(LOG_ERROR, "Channel %s: Failed to get HID inputs\n", o->name);
+			}
 			/* See if we are keyed */
 			keyed = !(buf[o->hid_io_cor_loc] & o->hid_io_cor);
 			if (keyed != o->rxhidsq) {
@@ -1789,7 +1791,9 @@ static void *hidthread(void *arg)
 			}
 
 			if (gpio_write) {
-				ast_radio_hid_set_outputs(usb_handle, buf);
+				if (ast_radio_hid_set_outputs(usb_handle, buf) < 0) {
+					ast_log(LOG_ERROR, "Channel %s: Failed to set HID outputs\n", o->name);
+				}
 			}
 
 			ast_radio_time(&o->lasthidtime);
