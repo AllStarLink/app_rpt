@@ -331,6 +331,7 @@
 #include "app_rpt/rpt_telemetry.h"
 #include "app_rpt/rpt_link.h"
 #include "app_rpt/rpt_functions.h"
+#include "app_rpt/rpt_auth.h"
 #include "app_rpt/rpt_manager.h"
 #include "app_rpt/rpt_translate.h"
 #include "app_rpt/rpt_xcat.h"
@@ -660,6 +661,7 @@ const struct function_table_tag function_table[] = {
 	{ "meter", function_meter, 1 },
 	{ "userout", function_userout, 1 },
 	{ "cmd", function_cmd, 0 },
+	{ "auth", function_auth, 0 },
 };
 
 int rpt_function_lookup(const char *f)
@@ -1611,6 +1613,7 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 	int i, rv;
 	char *stringp, *action, *param, *functiondigits;
 	char function_table_name[30] = "";
+	char authed_stanza_buf[30] = "";
 	char workstring[200];
 
 	struct ast_variable *vp;
@@ -1637,13 +1640,34 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 	} else {
 		ast_copy_string(function_table_name, myrpt->p.functions, sizeof(function_table_name));
 	}
-	/* find context for function table in rpt.conf file */
-	vp = ast_variable_browse(myrpt->cfg, function_table_name);
-	while (vp) {
-		if (!strncasecmp(vp->name, digits, strlen(vp->name))) {
-			break;
+
+	/*
+	 * Authed-stanza first-match-wins walk (additive privileged command set).
+	 * Per design: per-node session, additive, authed entries take priority over
+	 * the source stanza on prefix collision (admin's responsibility to avoid).
+	 * No-op when no active session.
+	 */
+	vp = NULL;
+	if (rpt_auth_get_active_stanza(myrpt, authed_stanza_buf, sizeof(authed_stanza_buf))) {
+		struct ast_variable *avp = ast_variable_browse(myrpt->cfg, authed_stanza_buf);
+		while (avp) {
+			if (!strncasecmp(avp->name, digits, strlen(avp->name))) {
+				vp = avp;
+				break;
+			}
+			avp = avp->next;
 		}
-		vp = vp->next;
+	}
+
+	/* Fall through to source stanza if no authed match */
+	if (!vp) {
+		vp = ast_variable_browse(myrpt->cfg, function_table_name);
+		while (vp) {
+			if (!strncasecmp(vp->name, digits, strlen(vp->name))) {
+				break;
+			}
+			vp = vp->next;
+		}
 	}
 	/* if function context not found */
 	if (!vp) {
@@ -1658,6 +1682,14 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 			n = myrpt->alt_longestfunc;
 		} else if (command_source == SOURCE_DPHONE) {
 			n = myrpt->dphone_longestfunc;
+		}
+
+		/* Authed stanza may extend the "have we collected enough digits?" gate */
+		{
+			int an = rpt_auth_longestfunc(myrpt);
+			if (an > n) {
+				n = an;
+			}
 		}
 
 		if (strlen(digits) >= n) {
@@ -1681,6 +1713,12 @@ static enum rpt_function_response collect_function_digits(struct rpt *myrpt, cha
 	functiondigits = digits + strlen(vp->name);
 	rv = (*function_table[i].function)(myrpt, param, functiondigits, command_source, mylink);
 	ast_debug(7, "rv=%i\n", rv);
+
+	/* Refresh sliding session timeout on any successful function dispatch */
+	if (rv == DC_COMPLETE || rv == DC_COMPLETEQUIET || rv == DC_DOKEY) {
+		rpt_auth_touch(myrpt);
+	}
+
 	return rv;
 }
 
