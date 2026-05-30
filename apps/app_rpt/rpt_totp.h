@@ -16,11 +16,11 @@
 
 /*! \brief Result codes from rpt_totp_verify. */
 enum rpt_totp_result {
-	RPT_TOTP_OK = 0,            /*!< OTP matched within window. */
-	RPT_TOTP_BAD_OTP = -1,      /*!< OTP did not match any step in window. */
-	RPT_TOTP_REPLAY = -2,       /*!< OTP matched but counter <= last_counter. */
-	RPT_TOTP_BAD_SECRET = -3,   /*!< secret_b32 failed to decode. */
-	RPT_TOTP_BAD_PARAM = -4,    /*!< invalid argument (NULL, bad otp length, etc.) */
+	RPT_TOTP_OK = 0,		  /*!< OTP matched within window. */
+	RPT_TOTP_BAD_OTP = -1,	  /*!< OTP did not match any step in window. */
+	RPT_TOTP_REPLAY = -2,	  /*!< OTP matched but counter <= last_counter. */
+	RPT_TOTP_BAD_SECRET = -3, /*!< secret_b32 failed to decode. */
+	RPT_TOTP_BAD_PARAM = -4,  /*!< invalid argument (NULL, bad otp length, etc.) */
 };
 
 /*!
@@ -51,9 +51,7 @@ enum rpt_totp_result {
  * \retval RPT_TOTP_BAD_SECRET secret_b32 invalid
  * \retval RPT_TOTP_BAD_PARAM  bad argument
  */
-int rpt_totp_verify(const char *secret_b32, const char *otp6,
-	uint64_t *last_counter, time_t now,
-	int step_seconds, int window_steps);
+int rpt_totp_verify(const char *secret_b32, const char *otp6, uint64_t *last_counter, time_t now, int step_seconds, int window_steps);
 
 /*!
  * \brief Decode an RFC 4648 base32 string to bytes.

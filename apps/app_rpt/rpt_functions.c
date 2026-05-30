@@ -2019,8 +2019,8 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
  *   A2 = auth,s    ; *A2              status query
  *   A3 = auth,l    ; *A3              logout
  */
-enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *digitbuf,
-	enum rpt_command_source command_source, struct rpt_link *mylink)
+enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
+	struct rpt_link *mylink)
 {
 	const char *digits = digitbuf ? digitbuf : "";
 	size_t len = strlen(digits);

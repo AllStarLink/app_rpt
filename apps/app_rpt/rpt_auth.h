@@ -42,9 +42,9 @@ int rpt_auth_longestfunc(struct rpt *myrpt);
 /*! \brief Result codes from rpt_auth_login. */
 enum rpt_auth_login_result {
 	RPT_AUTH_LOGIN_OK = 0,
-	RPT_AUTH_LOGIN_BAD = -1,        /*!< unknown user, bad OTP, replay, or bad secret */
-	RPT_AUTH_LOGIN_LOCKED = -2,     /*!< user is currently locked out */
-	RPT_AUTH_LOGIN_DISABLED = -3,   /*!< feature disabled (no auth_users) */
+	RPT_AUTH_LOGIN_BAD = -1,	  /*!< unknown user, bad OTP, replay, or bad secret */
+	RPT_AUTH_LOGIN_LOCKED = -2,	  /*!< user is currently locked out */
+	RPT_AUTH_LOGIN_DISABLED = -3, /*!< feature disabled (no auth_users) */
 };
 
 /*! \brief Attempt login.

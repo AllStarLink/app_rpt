@@ -16,9 +16,7 @@
 
 #define HMAC_HASH 20
 
-static int hmac_sha1(const uint8_t *key, size_t keylen,
-	const uint8_t *msg, size_t msglen,
-	uint8_t out[HMAC_HASH])
+static int hmac_sha1(const uint8_t *key, size_t keylen, const uint8_t *msg, size_t msglen, uint8_t out[HMAC_HASH])
 {
 	EVP_MAC *mac = NULL;
 	EVP_MAC_CTX *ctx = NULL;
@@ -123,17 +121,13 @@ static int totp_at(const uint8_t *key, size_t keylen, uint64_t counter)
 
 	/* RFC 4226 dynamic truncation. */
 	offset = hash[HMAC_HASH - 1] & 0x0f;
-	bin = ((uint32_t) (hash[offset] & 0x7f) << 24) |
-		((uint32_t) hash[offset + 1] << 16) |
-		((uint32_t) hash[offset + 2] << 8) |
-		((uint32_t) hash[offset + 3]);
+	bin = ((uint32_t) (hash[offset] & 0x7f) << 24) | ((uint32_t) hash[offset + 1] << 16) | ((uint32_t) hash[offset + 2] << 8) |
+		  ((uint32_t) hash[offset + 3]);
 
 	return (int) (bin % 1000000U);
 }
 
-int rpt_totp_verify(const char *secret_b32, const char *otp6,
-	uint64_t *last_counter, time_t now,
-	int step_seconds, int window_steps)
+int rpt_totp_verify(const char *secret_b32, const char *otp6, uint64_t *last_counter, time_t now, int step_seconds, int window_steps)
 {
 	uint8_t key[64];
 	int keylen;
@@ -162,12 +156,8 @@ int rpt_totp_verify(const char *secret_b32, const char *otp6,
 		return RPT_TOTP_BAD_SECRET;
 	}
 
-	presented = (otp6[0] - '0') * 100000 +
-		(otp6[1] - '0') * 10000 +
-		(otp6[2] - '0') * 1000 +
-		(otp6[3] - '0') * 100 +
-		(otp6[4] - '0') * 10 +
-		(otp6[5] - '0');
+	presented = (otp6[0] - '0') * 100000 + (otp6[1] - '0') * 10000 + (otp6[2] - '0') * 1000 + (otp6[3] - '0') * 100 +
+				(otp6[4] - '0') * 10 + (otp6[5] - '0');
 
 	base_counter = (uint64_t) (now / step_seconds);
 
@@ -211,11 +201,7 @@ static const struct {
 	time_t t;
 	const char *expected;
 } rfc6238_vectors[] = {
-	{          59, "287082" },
-	{  1111111109, "081804" },
-	{  1111111111, "050471" },
-	{  1234567890, "005924" },
-	{  2000000000, "279037" },
+	{ 59, "287082" }, { 1111111109, "081804" }, { 1111111111, "050471" }, { 1234567890, "005924" }, { 2000000000, "279037" },
 	/* RFC's 20000000000 vector exceeds 32-bit time_t; skip on those builds. */
 };
 
@@ -227,11 +213,9 @@ int rpt_totp_selftest(void)
 
 	for (i = 0; i < ARRAY_LEN(rfc6238_vectors); i++) {
 		uint64_t last = 0;
-		int rc = rpt_totp_verify(secret, rfc6238_vectors[i].expected,
-			&last, rfc6238_vectors[i].t, 30, 0);
+		int rc = rpt_totp_verify(secret, rfc6238_vectors[i].expected, &last, rfc6238_vectors[i].t, 30, 0);
 		if (rc != RPT_TOTP_OK) {
-			ast_log(LOG_ERROR, "rpt_totp selftest vector %zu (t=%ld) failed: rc=%d\n",
-				i, (long) rfc6238_vectors[i].t, rc);
+			ast_log(LOG_ERROR, "rpt_totp selftest vector %zu (t=%ld) failed: rc=%d\n", i, (long) rfc6238_vectors[i].t, rc);
 			failures++;
 		}
 	}
@@ -242,8 +226,7 @@ int rpt_totp_selftest(void)
 		int rc1 = rpt_totp_verify(secret, "287082", &last, 59, 30, 0);
 		int rc2 = rpt_totp_verify(secret, "287082", &last, 59, 30, 0);
 		if (rc1 != RPT_TOTP_OK || rc2 != RPT_TOTP_REPLAY) {
-			ast_log(LOG_ERROR, "rpt_totp selftest replay check failed: rc1=%d rc2=%d\n",
-				rc1, rc2);
+			ast_log(LOG_ERROR, "rpt_totp selftest replay check failed: rc1=%d rc2=%d\n", rc1, rc2);
 			failures++;
 		}
 	}
@@ -267,8 +250,7 @@ int rpt_totp_selftest(void)
 			last = 0;
 			rc_window = rpt_totp_verify(secret, buf, &last, 59, 30, 1);
 			if (rc_strict != RPT_TOTP_BAD_OTP || rc_window != RPT_TOTP_OK) {
-				ast_log(LOG_ERROR, "rpt_totp selftest window check failed: strict=%d window=%d\n",
-					rc_strict, rc_window);
+				ast_log(LOG_ERROR, "rpt_totp selftest window check failed: strict=%d window=%d\n", rc_strict, rc_window);
 				failures++;
 			}
 		}

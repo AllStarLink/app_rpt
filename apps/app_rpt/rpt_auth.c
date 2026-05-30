@@ -6,7 +6,7 @@
 #include <strings.h>
 #include <time.h>
 
-#include "asterisk/channel.h"	/* required for AST_MAX_EXTENSION via app_rpt.h */
+#include "asterisk/channel.h" /* required for AST_MAX_EXTENSION via app_rpt.h */
 #include "asterisk/config.h"
 #include "asterisk/lock.h"
 #include "asterisk/logger.h"
@@ -251,8 +251,7 @@ static void load_users_locked(struct rpt *myrpt, struct rpt_auth_state *st)
 			continue;
 		}
 		if (parse_user_value(vp->value, &secret, &cmdset) != 0) {
-			ast_log(LOG_WARNING, "rpt_auth: skipping user %s: bad value (need 'secret,command_set')\n",
-				vp->name);
+			ast_log(LOG_WARNING, "rpt_auth: skipping user %s: bad value (need 'secret,command_set')\n", vp->name);
 			continue;
 		}
 
@@ -266,8 +265,7 @@ static void load_users_locked(struct rpt *myrpt, struct rpt_auth_state *st)
 	}
 
 	ast_config_destroy(cfg);
-	ast_log(LOG_NOTICE, "rpt_auth: loaded %d user(s) from %s for node %s\n",
-		st->nusers, myrpt->p.auth_users, myrpt->name);
+	ast_log(LOG_NOTICE, "rpt_auth: loaded %d user(s) from %s for node %s\n", st->nusers, myrpt->p.auth_users, myrpt->name);
 }
 
 static int compute_longestfunc_locked(struct rpt *myrpt, const char *stanza)
@@ -334,8 +332,7 @@ int rpt_auth_get_active_stanza(struct rpt *myrpt, char *buf, size_t buflen)
 	st = myrpt->auth;
 	if (st && st->session_active) {
 		if (now >= st->session_expires) {
-			ast_log(LOG_NOTICE, "rpt_auth: session for user %s expired on node %s\n",
-				st->session_user, myrpt->name);
+			ast_log(LOG_NOTICE, "rpt_auth: session for user %s expired on node %s\n", st->session_user, myrpt->name);
 			clear_session_locked(st);
 		} else {
 			ast_copy_string(buf, st->session_command_set, buflen);
@@ -400,16 +397,14 @@ int rpt_auth_login(struct rpt *myrpt, const char *user_id4, const char *otp6)
 	u = find_user_locked(st, user_id4);
 	if (!u) {
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_log(LOG_NOTICE, "rpt_auth: login attempt for unknown user %s on node %s\n",
-			user_id4, myrpt->name);
+		ast_log(LOG_NOTICE, "rpt_auth: login attempt for unknown user %s on node %s\n", user_id4, myrpt->name);
 		return RPT_AUTH_LOGIN_BAD;
 	}
 
 	if (u->lockout_until > now) {
 		long remaining = (long) (u->lockout_until - now);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_log(LOG_NOTICE, "rpt_auth: user %s locked out for %ld more seconds on node %s\n",
-			user_id4, remaining, myrpt->name);
+		ast_log(LOG_NOTICE, "rpt_auth: user %s locked out for %ld more seconds on node %s\n", user_id4, remaining, myrpt->name);
 		return RPT_AUTH_LOGIN_LOCKED;
 	}
 
@@ -419,12 +414,10 @@ int rpt_auth_login(struct rpt *myrpt, const char *user_id4, const char *otp6)
 		if (threshold > 0 && u->fail_count >= threshold) {
 			u->lockout_until = now + duration;
 			u->fail_count = 0;
-			ast_log(LOG_WARNING, "rpt_auth: user %s locked out for %d s on node %s\n",
-				user_id4, duration, myrpt->name);
+			ast_log(LOG_WARNING, "rpt_auth: user %s locked out for %d s on node %s\n", user_id4, duration, myrpt->name);
 		}
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_log(LOG_NOTICE, "rpt_auth: login failed for user %s on node %s (totp rc=%d)\n",
-			user_id4, myrpt->name, rc);
+		ast_log(LOG_NOTICE, "rpt_auth: login failed for user %s on node %s (totp rc=%d)\n", user_id4, myrpt->name, rc);
 		return RPT_AUTH_LOGIN_BAD;
 	}
 
@@ -441,8 +434,7 @@ int rpt_auth_login(struct rpt *myrpt, const char *user_id4, const char *otp6)
 	st->session_expires = now + effective_timeout(myrpt);
 	u->fail_count = 0;
 
-	ast_log(LOG_NOTICE, "rpt_auth: user %s authenticated on node %s, set=%s\n",
-		user_id4, myrpt->name, u->command_set);
+	ast_log(LOG_NOTICE, "rpt_auth: user %s authenticated on node %s, set=%s\n", user_id4, myrpt->name, u->command_set);
 	rpt_mutex_unlock(&myrpt->lock);
 	return RPT_AUTH_LOGIN_OK;
 }
@@ -486,10 +478,8 @@ void rpt_auth_status(struct rpt *myrpt, char *outbuf, size_t outlen)
 	} else if (now >= st->session_expires) {
 		snprintf(outbuf, outlen, "session expired");
 	} else {
-		snprintf(outbuf, outlen, "user=%s set=%s remaining=%lds",
-			st->session_user,
-			st->session_command_set ? st->session_command_set : "(none)",
-			(long) (st->session_expires - now));
+		snprintf(outbuf, outlen, "user=%s set=%s remaining=%lds", st->session_user,
+			st->session_command_set ? st->session_command_set : "(none)", (long) (st->session_expires - now));
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 }
