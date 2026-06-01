@@ -627,8 +627,10 @@ static void kickptt(const struct chan_usbradio_pvt *o)
 		return;
 	}
 	res = write(o->pttkick[1], &c, 1);
-	if (res <= 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+	if (res < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
 		ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", o->name, strerror(errno));
+	} else if (res == 0) {
+		ast_log(LOG_ERROR, "Channel %s: Write returned 0 bytes unexpectedly\n", o->name);
 	}
 }
 
@@ -1229,8 +1231,10 @@ static void *hidthread(void *arg)
 				char c;
 
 				int bytes = read(o->pttkick[0], &c, 1);
-				if (bytes <= 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+				if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
 					ast_log(LOG_ERROR, "Channel %s: pttkick read failed: %s\n", o->name, strerror(errno));
+				} else if (bytes == 0) {
+					ast_log(LOG_ERROR, "Channel %s: pttkick pipe closed unexpectedly\n", o->name);
 				}
 			}
 			/* see if we need to process an eeprom read or write */
