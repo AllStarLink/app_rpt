@@ -6660,25 +6660,29 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
 			}
 		}
-		if (b1 && !ast_strlen_zero(nodedata) && myadr && cfg) {
+		if (cfg && b1 && !ast_strlen_zero(nodedata) && myadr) {
 			ast_copy_string(xstr, nodedata, sizeof(xstr));
 			if (!options) {
 				char hisip[100] = "";
 				if (*b1 < '1') {
 					ast_log(LOG_WARNING, "Connect attempt from invalid node number\n");
+					ast_config_destroy(cfg);
 					return -1;
 				}
 				if (get_his_ip(chan, hisip, sizeof(hisip))) {
+					ast_config_destroy(cfg);
 					return -1;
 				}
 				/* look for his reported node string */
 				forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
 				if (ast_strlen_zero(nodedata)) {
 					ast_log(LOG_WARNING, "Reported node %s cannot be found!!\n", b1);
+					ast_config_destroy(cfg);
 					return -1;
 				}
 				ast_copy_string(tmp1, nodedata, sizeof(tmp1));
 				if (parse_caller(b1, hisip, tmp1)) {
+					ast_config_destroy(cfg);
 					return -1;
 				}
 			}
@@ -6708,6 +6712,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_forward(chan, dstr, b1);
 				return -1;
 			}
+		}
+		if (cfg) {
 			ast_config_destroy(cfg);
 		}
 		pbx_builtin_setvar_helper(chan, "RPT_STAT_ERR", "NODE_NOT_FOUND");
