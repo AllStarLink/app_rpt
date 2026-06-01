@@ -6660,7 +6660,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
 			}
 		}
-		if (b1 && !ast_strlen_zero(nodedata) && myadr && cfg) {
+		if (cfg && b1 && !ast_strlen_zero(nodedata) && myadr) {
 			ast_copy_string(xstr, nodedata, sizeof(xstr));
 			if (!options) {
 				char hisip[100] = "";
@@ -6712,6 +6712,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_forward(chan, dstr, b1);
 				return -1;
 			}
+		}
+		if (cfg) {
 			ast_config_destroy(cfg);
 		}
 		pbx_builtin_setvar_helper(chan, "RPT_STAT_ERR", "NODE_NOT_FOUND");
