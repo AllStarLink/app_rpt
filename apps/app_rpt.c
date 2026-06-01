@@ -4559,7 +4559,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					continue;
 				}
 				/* A reconnect is not possible */
-				break;
+				return;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				int ismuted, n1;
@@ -4729,7 +4729,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						/* A reconnect is possible */
 						continue;
 					}
-					break;
+					return;
 				}
 			}
 			ast_frfree(f);
@@ -4789,7 +4789,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					/* A reconnect is possible */
 					continue;
 				}
-				break;
+				return;
 			}
 			ast_frfree(f);
 			continue;
