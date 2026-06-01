@@ -4559,7 +4559,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					continue;
 				}
 				/* A reconnect is not possible */
-				return;
+				break;
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				int ismuted, n1;
@@ -4729,7 +4729,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						/* A reconnect is possible */
 						continue;
 					}
-					return;
+					break;
 				}
 			}
 			ast_frfree(f);
@@ -4789,7 +4789,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					/* A reconnect is possible */
 					continue;
 				}
-				return;
+				break;
 			}
 			ast_frfree(f);
 			continue;
@@ -7094,6 +7094,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		/* make a conference for the tx */
 		if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
+			ast_hangup(l->pchan);
 			ao2_ref(l, -1);
 			return -1;
 		}
@@ -7107,6 +7108,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
+					ast_hangup(l->pchan);
 					ao2_ref(l, -1);
 					return -1;
 				}
