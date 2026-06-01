@@ -1137,7 +1137,7 @@ static void *hidthread(void *arg)
 		o->had_gpios_in = 0;
 
 		memset(&rfds, 0, sizeof(rfds));
-		rfds[0].fd = o->pttkick[1];
+		rfds[0].fd = o->pttkick[0];
 		rfds[0].events = POLLIN;
 
 		ast_radio_time(&o->lasthidtime);
