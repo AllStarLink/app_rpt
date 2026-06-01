@@ -627,8 +627,10 @@ static void kickptt(const struct chan_usbradio_pvt *o)
 		return;
 	}
 	res = write(o->pttkick[1], &c, 1);
-	if (res <= 0) {
+	if (res < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
 		ast_log(LOG_ERROR, "Channel %s: Write failed: %s\n", o->name, strerror(errno));
+	} else if (res == 0) {
+		ast_log(LOG_ERROR, "Channel %s: Write returned 0 bytes unexpectedly\n", o->name);
 	}
 }
 
@@ -1081,7 +1083,7 @@ static void *hidthread(void *arg)
 			close(o->pttkick[1]);
 			o->pttkick[1] = -1;
 		}
-		if (pipe(o->pttkick) == -1) {
+		if (pipe2(o->pttkick, O_NONBLOCK) == -1) {
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
 			pthread_exit(NULL);
 		}
@@ -1207,7 +1209,7 @@ static void *hidthread(void *arg)
 		o->had_gpios_in = 0;
 
 		memset(&rfds, 0, sizeof(rfds));
-		rfds[0].fd = o->pttkick[1];
+		rfds[0].fd = o->pttkick[0];
 		rfds[0].events = POLLIN;
 
 		ast_radio_time(&o->lasthidtime);
@@ -1229,8 +1231,10 @@ static void *hidthread(void *arg)
 				char c;
 
 				int bytes = read(o->pttkick[0], &c, 1);
-				if (bytes <= 0) {
+				if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
 					ast_log(LOG_ERROR, "Channel %s: pttkick read failed: %s\n", o->name, strerror(errno));
+				} else if (bytes == 0) {
+					ast_log(LOG_ERROR, "Channel %s: pttkick pipe closed unexpectedly\n", o->name);
 				}
 			}
 			/* see if we need to process an eeprom read or write */
