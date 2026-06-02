@@ -4342,7 +4342,7 @@ static inline void safe_hangup(struct ast_channel *chan)
 	}
 }
 
-/*! \note myrpt->lock must be held when calling */
+/*! \note myrpt->lock must not be held when calling */
 static inline void hangup_link_chan(struct rpt_link *l)
 {
 	if (l->chan) {
@@ -4376,21 +4376,17 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 					/* An allstar link node */
 					l->disctime = DISC_TIME;
 				}
-				rpt_mutex_lock(&myrpt->lock);
 				hangup_link_chan(l);
-				rpt_mutex_unlock(&myrpt->lock);
 				return 1;
 			}
 
 			if (l->retrytimer) {
-				rpt_mutex_lock(&myrpt->lock);
 				hangup_link_chan(l);
-				rpt_mutex_unlock(&myrpt->lock);
 				return 1;
 			}
 			if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
-				rpt_mutex_lock(&myrpt->lock);
 				hangup_link_chan(l);
+				rpt_mutex_lock(&myrpt->lock);
 				l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
 				l->retrytimer = RETRY_TIMER_MS;
 				l->elaptime = 0;
@@ -4424,10 +4420,8 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
-	rpt_mutex_lock(&myrpt->lock);
 	/* hang-up on call to device */
 	hangup_link_chan(l);
-	rpt_mutex_unlock(&myrpt->lock);
 	ast_hangup(l->pchan);
 	ast_audiohook_lock(&l->altaudio);
 	ast_audiohook_detach(&l->altaudio);
@@ -7100,6 +7094,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		/* make a conference for the tx */
 		if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
+			ast_hangup(l->pchan);
 			ao2_ref(l, -1);
 			return -1;
 		}
@@ -7113,6 +7108,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
+					ast_hangup(l->pchan);
 					ao2_ref(l, -1);
 					return -1;
 				}
