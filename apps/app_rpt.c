@@ -4492,7 +4492,7 @@ static inline void safe_hangup(struct ast_channel *chan)
 	}
 }
 
-/*! \note myrpt->lock must be held when calling */
+/*! \note myrpt->lock must not be held when calling */
 static inline void hangup_link_chan(struct rpt_link *l)
 {
 	if (l->chan) {
@@ -4526,21 +4526,17 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 					/* An allstar link node */
 					l->disctime = DISC_TIME;
 				}
-				rpt_mutex_lock(&myrpt->lock);
 				hangup_link_chan(l);
-				rpt_mutex_unlock(&myrpt->lock);
 				return 1;
 			}
 
 			if (l->retrytimer) {
-				rpt_mutex_lock(&myrpt->lock);
 				hangup_link_chan(l);
-				rpt_mutex_unlock(&myrpt->lock);
 				return 1;
 			}
 			if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
-				rpt_mutex_lock(&myrpt->lock);
 				hangup_link_chan(l);
+				rpt_mutex_lock(&myrpt->lock);
 				l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
 				l->retrytimer = RETRY_TIMER_MS;
 				l->elaptime = 0;
@@ -4574,10 +4570,8 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
-	rpt_mutex_lock(&myrpt->lock);
 	/* hang-up on call to device */
 	hangup_link_chan(l);
-	rpt_mutex_unlock(&myrpt->lock);
 	ast_hangup(l->pchan);
 	ast_audiohook_lock(&l->altaudio);
 	ast_audiohook_detach(&l->altaudio);
@@ -6810,25 +6804,29 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
 			}
 		}
-		if (b1 && !ast_strlen_zero(nodedata) && myadr && cfg) {
+		if (cfg && b1 && !ast_strlen_zero(nodedata) && myadr) {
 			ast_copy_string(xstr, nodedata, sizeof(xstr));
 			if (!options) {
 				char hisip[100] = "";
 				if (*b1 < '1') {
 					ast_log(LOG_WARNING, "Connect attempt from invalid node number\n");
+					ast_config_destroy(cfg);
 					return -1;
 				}
 				if (get_his_ip(chan, hisip, sizeof(hisip))) {
+					ast_config_destroy(cfg);
 					return -1;
 				}
 				/* look for his reported node string */
 				forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
 				if (ast_strlen_zero(nodedata)) {
 					ast_log(LOG_WARNING, "Reported node %s cannot be found!!\n", b1);
+					ast_config_destroy(cfg);
 					return -1;
 				}
 				ast_copy_string(tmp1, nodedata, sizeof(tmp1));
 				if (parse_caller(b1, hisip, tmp1)) {
+					ast_config_destroy(cfg);
 					return -1;
 				}
 			}
@@ -6858,6 +6856,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_forward(chan, dstr, b1);
 				return -1;
 			}
+		}
+		if (cfg) {
 			ast_config_destroy(cfg);
 		}
 		pbx_builtin_setvar_helper(chan, "RPT_STAT_ERR", "NODE_NOT_FOUND");
@@ -7244,6 +7244,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		/* make a conference for the tx */
 		if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
+			ast_hangup(l->pchan);
 			ao2_ref(l, -1);
 			return -1;
 		}
@@ -7257,6 +7258,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
+					ast_hangup(l->pchan);
 					ao2_ref(l, -1);
 					return -1;
 				}
