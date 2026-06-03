@@ -40,6 +40,9 @@ enum rpt_function_response function_userout(struct rpt *myrpt, char *param, char
 /*! \brief Execute shell command */
 enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source, struct rpt_link *mylink);
 
+/*! \brief TOTP per-user authentication: login (id4+otp6), logout (*), status (empty) */
+enum rpt_function_response function_auth(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source, struct rpt_link *mylink);
+
 /*! \brief AO2 callback to find an rpt_link by name */
 int rpt_link_find_by_name(void *obj, void *arg, int flags);
 
