@@ -2494,7 +2494,7 @@ static void *simpleusb_audio_thread(void *arg)
 					}
 				}
 
-				if (num_frames && (num_frames < 3) && (o->txkeyed || o->txtestkey)) {
+				if ((num_frames <= 3) && (o->txkeyed || o->txtestkey)) {
 					/* waiting for 3 frames in the buffer. This is "normal" */
 					last_frame_time = ast_radio_tvnow();
 				}
