@@ -4367,7 +4367,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
-		if (l->disced == RPT_LINK_DISCONNECT_NONE) {
+		if (l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down()) {
 			if (!l->outbound) {
 				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
 					/* Not an allstar link node */
@@ -5740,19 +5740,9 @@ static void *rpt(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* hang-up any running links */
-		l->disced = RPT_LINK_DISCONNECT;
+		l->disced = RPT_LINK_DISCONNECT_SILENT;
 	}
 	ao2_iterator_destroy(&l_it);
-	while (ao2_container_count(myrpt->links) != 0) {
-		/* Wait for the links to close out */
-		rpt_mutex_unlock(&myrpt->lock);
-		usleep(60000);
-		rpt_mutex_lock(&myrpt->lock);
-	}
-	if (myrpt->xlink == 1)
-		myrpt->xlink = 2;
-	ao2_cleanup(myrpt->links);
-	myrpt->links = NULL;
 	rpt_mutex_unlock(&myrpt->lock);
 
 	rpt_hangup(myrpt, RPT_PCHAN);
@@ -5785,6 +5775,24 @@ static void *rpt(void *this)
 		ast_free(myrpt->macrobuf);
 		myrpt->macrobuf = NULL;
 	}
+
+	rpt_mutex_lock(&myrpt->lock);
+	while (ao2_container_count(myrpt->links) != 0) {
+		/* Wait for the links to close out */
+		rpt_mutex_unlock(&myrpt->lock);
+		usleep(60000);
+		rpt_mutex_lock(&myrpt->lock);
+
+	}
+
+	if (myrpt->xlink == 1) {
+		myrpt->xlink = 2;
+	}
+
+	rpt_mutex_unlock(&myrpt->lock);
+
+	ao2_cleanup(myrpt->links);
+	myrpt->links = NULL;
 
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
