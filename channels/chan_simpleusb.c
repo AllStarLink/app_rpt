@@ -1590,6 +1590,7 @@ static void *hidthread(void *arg)
 			}
 			ast_mutex_lock(&o->usblock);
 			buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+			ast_mutex_unlock(&o->usblock);
 			ast_radio_hid_get_inputs(usb_handle, buf);
 			/* See if we are keyed */
 			keyed = !(buf[o->hid_io_cor_loc] & o->hid_io_cor);
@@ -1690,8 +1691,9 @@ static void *hidthread(void *arg)
 				}
 				o->had_gpios_in = 1;
 				o->last_gpios_in = j;
+				ast_mutex_unlock(&o->usblock);
 			}
-			ast_mutex_unlock(&o->usblock);
+			
 			/* process the parallel port GPIO */
 			if (haspp) {
 				ast_mutex_lock(&pp_lock);
@@ -1838,7 +1840,6 @@ static void *hidthread(void *arg)
 			}
 
 			ast_radio_time(&o->lasthidtime);
-			ast_mutex_unlock(&o->usblock);
 		}
 		o->lasttx = 0;
 		ast_mutex_lock(&o->usblock);
