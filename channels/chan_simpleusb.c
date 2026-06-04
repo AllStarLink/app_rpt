@@ -1693,7 +1693,7 @@ static void *hidthread(void *arg)
 				o->last_gpios_in = j;
 				ast_mutex_unlock(&o->usblock);
 			}
-			
+
 			/* process the parallel port GPIO */
 			if (haspp) {
 				ast_mutex_lock(&pp_lock);
