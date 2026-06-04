@@ -428,9 +428,6 @@ static struct ast_channel_tech simpleusb_tech = {
 	.setoption = simpleusb_setoption,
 };
 
-#include <time.h>
-#include <unistd.h>
-
 static int64_t now_ms(void)
 {
 	struct timespec ts;
@@ -1852,9 +1849,9 @@ static void *hidthread(void *arg)
 		}
 		buf[o->hid_gpio_loc] = o->hid_gpio_val;
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
-
+		ast_radio_hid_set_outputs(usb_handle, buf);
+		
 		if (usb_handle) {
 			usb_close(usb_handle);
 			usb_handle = NULL;
