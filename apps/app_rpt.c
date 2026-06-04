@@ -5782,7 +5782,6 @@ static void *rpt(void *this)
 		rpt_mutex_unlock(&myrpt->lock);
 		usleep(60000);
 		rpt_mutex_lock(&myrpt->lock);
-
 	}
 
 	if (myrpt->xlink == 1) {
