@@ -1851,7 +1851,7 @@ static void *hidthread(void *arg)
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_mutex_unlock(&o->usblock);
 		ast_radio_hid_set_outputs(usb_handle, buf);
-		
+
 		if (usb_handle) {
 			usb_close(usb_handle);
 			usb_handle = NULL;
