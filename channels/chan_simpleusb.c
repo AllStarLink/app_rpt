@@ -80,6 +80,7 @@
 #define N_FMT(duf) "%30" #duf /* Maximum sscanf conversion to numeric strings */
 #define HID_POLL_RATE 50
 #define DEVICE_RETRY 500000 /* Retry time in uS when USB device is missing */
+#define MAX_FRAME_DELAY 200 /* 200ms (.2s) max time to queue audio frames before resetting usb audio */
 #ifdef __linux
 #include <linux/soundcard.h>
 #elif defined(__FreeBSD__)
@@ -249,8 +250,10 @@ struct chan_simpleusb_pvt {
 	char lasttx;
 	char txkeyed; /* tx key request from upper layers */
 	char txtestkey;
+	char audio_thread_ready;
 
 	time_t lasthidtime;
+	time_t lastaudiotime;
 	struct ast_dsp *dsp;
 
 	short flpt[NTAPS + 1];
@@ -435,7 +438,7 @@ static int64_t now_ms(void)
 	return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-static PaError Pa_ReadStream_with_timeout(PaStream *s, short *buf, long frames, int timeout_ms, volatile sig_atomic_t *stop)
+static PaError Pa_ReadStream_with_timeout(PaStream *s, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
 {
 	int64_t start;
 
@@ -1019,7 +1022,7 @@ static char *find_installed_usb_match(void)
 static void *pulserthread(void *arg)
 {
 	struct timeval now, then;
-	register int i, j, k;
+	int i, j, k;
 
 #ifdef HAVE_SYS_IO
 	if (haspp == 2) {
@@ -1359,7 +1362,7 @@ static void *hidthread(void *arg)
 {
 	unsigned char buf[4], bufsave[4], keyed, ctcssed, txreq;
 	char lasttxtmp;
-	register int i, j, k;
+	int i, j, k;
 	int res;
 	struct usb_dev_handle *usb_handle = NULL;
 	struct chan_simpleusb_pvt *o = arg;
@@ -1438,7 +1441,7 @@ static void *hidthread(void *arg)
 			if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 				if (!claim_failed) {
 					ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
-					detach_failed = 1;
+					claim_failed = 1;
 				}
 
 				usb_close(usb_handle);
@@ -1449,8 +1452,10 @@ static void *hidthread(void *arg)
 		}
 		/* write initial value to GPIO */
 		memset(buf, 0, sizeof(buf));
+		ast_mutex_lock(&o->usblock);
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		buf[o->hid_gpio_loc] = o->hid_gpio_val;
+		ast_mutex_unlock(&o->usblock);
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		memcpy(bufsave, buf, sizeof(buf));
 		/* setup the pttkick pipe
@@ -1512,9 +1517,20 @@ static void *hidthread(void *arg)
 		 * the pttkick pipe.
 		 */
 		while ((!o->stophidthread) && o->hasusb) {
-			int hid_write = 0;
+			int gpio_write = 0;
+			time_t audio_time_now = 0;
 
 			then = ast_radio_tvnow();
+			if (o->lastaudiotime) {
+				/* HID thread monitors audio thread */
+				ast_radio_time(&audio_time_now);
+				if ((audio_time_now - o->lastaudiotime) > 1) {
+					ast_log(LOG_ERROR, "Channel %s: Audio process has died or is not responding.\n", o->name);
+					o->hasusb = 0;
+					break;
+				}
+			}
+
 			/* poll the pttkick pipe - timeout after HID_POLL_RATE milliseconds */
 			res = ast_poll(rfds, 1, HID_POLL_RATE);
 			if (res < 0) {
@@ -1525,17 +1541,23 @@ static void *hidthread(void *arg)
 			if (rfds[0].revents) {
 				char c;
 				int nbytes = 0;
-				int bytes;
+				int bytes, i;
 
 				/* Get all events in the buffer - if we missed a state change it will not make
 				 * it to the hardware anyways.
 				 */
-				ioctl(o->pttkick[0], FIONREAD, &nbytes);
-				bytes = read(o->pttkick[0], &c, nbytes);
-				if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-					ast_log(LOG_ERROR, "Channel %s: pttkick read failed: %s\n", o->name, strerror(errno));
-				} else if (bytes == 0) {
-					ast_log(LOG_ERROR, "Channel %s: pttkick pipe closed unexpectedly\n", o->name);
+				if (ioctl(o->pttkick[0], FIONREAD, &nbytes) == -1) {
+					ast_log(LOG_ERROR, "Channel %s: FIONREAD failed: %s\n", o->name, strerror(errno));
+					nbytes = 0;
+				}
+
+				for (i = 0; i < nbytes; i++) {
+					bytes = read(o->pttkick[0], &c, 1);
+					if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+						ast_log(LOG_ERROR, "Channel %s: pttkick read failed: %s\n", o->name, strerror(errno));
+					} else if (bytes == 0) {
+						ast_log(LOG_ERROR, "Channel %s: pttkick pipe closed unexpectedly\n", o->name);
+					}
 				}
 			}
 			/* see if we need to process an eeprom read or write */
@@ -1584,26 +1606,32 @@ static void *hidthread(void *arg)
 
 			txreq = !(AST_LIST_EMPTY(&o->txq));
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
-			if (txreq && !o->lasttx) {
+			lasttxtmp = o->lasttx;
+
+			if (txreq && !lasttxtmp) {
+				ast_mutex_lock(&o->usblock);
 				o->hid_gpio_val |= o->hid_io_ptt;
 				if (o->invertptt) {
 					o->hid_gpio_val &= ~o->hid_io_ptt;
 				}
 				buf[o->hid_gpio_loc] = o->hid_gpio_val;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				hid_write = 1;
+				ast_mutex_unlock(&o->usblock);
+				gpio_write = 1;
 				ast_debug(2, "Channel %s: update PTT = %d on channel.\n", o->name, txreq);
-			} else if (!txreq && o->lasttx) {
+			} else if (!txreq && lasttxtmp) {
+				ast_mutex_lock(&o->usblock);
 				o->hid_gpio_val &= ~o->hid_io_ptt;
 				if (o->invertptt) {
 					o->hid_gpio_val |= o->hid_io_ptt;
 				}
 				buf[o->hid_gpio_loc] = o->hid_gpio_val;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				hid_write = 1;
+				ast_mutex_unlock(&o->usblock);
+				gpio_write = 1;
 				ast_debug(2, "Channel %s: update PTT = %d.\n", o->name, txreq);
 			}
-			lasttxtmp = o->lasttx;
+
 			o->lasttx = txreq;
 			ast_radio_time(&o->lasthidtime);
 			/* Get the GPIO information */
@@ -1631,6 +1659,7 @@ static void *hidthread(void *arg)
 					.src = __PRETTY_FUNCTION__,
 				};
 
+				ast_mutex_lock(&o->usblock);
 				for (i = 0; i < GPIO_PINCOUNT; i++) {
 					/* skip if not specified */
 					if (!o->gpios[i]) {
@@ -1651,13 +1680,18 @@ static void *hidthread(void *arg)
 						fr.datalen = strlen(buf1);
 
 						if (o->owner) {
-							ast_queue_frame(o->owner, &fr);
+							struct ast_channel *owner = o->owner;
+
+							ast_mutex_unlock(&o->usblock);
+							ast_queue_frame(owner, &fr);
+							ast_mutex_lock(&o->usblock);
 						}
 					}
 				}
 				o->had_gpios_in = 1;
 				o->last_gpios_in = j;
 			}
+			ast_mutex_unlock(&o->usblock);
 			/* process the parallel port GPIO */
 			if (haspp) {
 				ast_mutex_lock(&pp_lock);
@@ -1697,7 +1731,9 @@ static void *hidthread(void *arg)
 							fr.datalen = strlen(buf1);
 
 							if (o->owner) {
-								ast_queue_frame(o->owner, &fr);
+								struct ast_channel *owner = o->owner;
+
+								ast_queue_frame(owner, &fr);
 							}
 						}
 					}
@@ -1720,6 +1756,7 @@ static void *hidthread(void *arg)
 				}
 			}
 			j = ast_tvdiff_ms(ast_radio_tvnow(), then);
+			ast_mutex_lock(&o->usblock);
 			/* make output inversion mask (for pulseage) */
 			o->hid_gpio_lastmask = o->hid_gpio_pulsemask;
 			o->hid_gpio_pulsemask = 0;
@@ -1739,14 +1776,15 @@ static void *hidthread(void *arg)
 			if (o->hid_gpio_pulsemask || o->hid_gpio_lastmask) { /* if anything inverted (temporarily) */
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				hid_write = 1;
+				gpio_write = 1;
 			}
 			if (o->gpio_set) {
 				o->gpio_set = 0;
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
-				hid_write = 1;
+				gpio_write = 1;
 			}
+			ast_mutex_unlock(&o->usblock);
 			k = 0;
 			if (haspp) {
 				for (i = 2; i <= 9; i++) {
@@ -1765,6 +1803,7 @@ static void *hidthread(void *arg)
 				ast_debug(2, "Channel %s: tx set to %d\n", o->name, o->lasttx);
 				o->hid_gpio_val &= ~o->hid_io_ptt;
 				ast_mutex_lock(&pp_lock);
+				ast_mutex_lock(&o->usblock);
 				if (k) {
 					pp_val &= ~k;
 				}
@@ -1786,14 +1825,15 @@ static void *hidthread(void *arg)
 				if (k) {
 					ast_radio_ppwrite(haspp, ppfd, pbase, pport, pp_val);
 				}
-				ast_mutex_unlock(&pp_lock);
 				buf[o->hid_gpio_loc] = o->hid_gpio_val ^ o->hid_gpio_pulsemask;
 				buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
+				ast_mutex_unlock(&o->usblock);
+				ast_mutex_unlock(&pp_lock);
 				memcpy(bufsave, buf, sizeof(buf));
-				hid_write = 1;
+				gpio_write = 1;
 			}
 
-			if (hid_write) {
+			if (gpio_write) {
 				ast_radio_hid_set_outputs(usb_handle, buf);
 			}
 
@@ -2160,6 +2200,8 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 
 	o->stophidthread = 0;
 	o->stopaudiothread = 0;
+	o->audio_thread_ready = 0;
+
 	ast_radio_time(&o->lasthidtime);
 
 	res = ast_pthread_create(&o->hidthread, NULL, hidthread, o);
@@ -2234,7 +2276,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f1;
 
-	if (!o->hasusb) {
+	if (!o->hasusb || !o->audio_thread_ready) {
 		return 0;
 	}
 
@@ -2259,11 +2301,11 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	}
 #endif
 
-	if ((!o->txkeyed) && (!o->txtestkey)) {
+	if (!o->txkeyed && !o->txtestkey) {
 		return 0;
 	}
 
-	if ((!o->txtestkey) && o->echoing) {
+	if (!o->txtestkey && o->echoing) {
 		return 0;
 	}
 
@@ -2272,6 +2314,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	if (!f1) {
 		return 0;
 	}
+
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	ast_mutex_lock(&o->txqlock);
 	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
@@ -2302,14 +2345,16 @@ static void *simpleusb_audio_thread(void *arg)
 {
 	int cd, sd, src, num_frames, ispager, doleft, doright;
 	PaError res;
-	register int i;
+	int i;
 	struct chan_simpleusb_pvt *o = arg;
 	struct ast_frame *f = &o->read_f, *f1;
 	time_t now;
-	register short *sp, *sp1;
+	struct timeval last_frame_time;
+	short *sp, *sp1;
 	short outbuf[PA_NUM_FRAMES * 2]; /* 1 short (2 bytes) per sample on PortAudio config with paInt16 * 2 channels */
 
 	ast_debug(5, "Audio thread is starting\n");
+	ast_radio_time(&o->lastaudiotime);
 
 	while (!o->stopaudiothread) {
 		/* wait for audio device to be initialized */
@@ -2327,16 +2372,21 @@ static void *simpleusb_audio_thread(void *arg)
 			continue;
 		}
 
+		o->audio_thread_ready = 1;
+		last_frame_time = ast_radio_tvnow();
+
 		while (!o->stopaudiothread && o->hasusb) {
 			/* check if the hid thread is still processing */
 			if (o->lasthidtime) {
 				ast_radio_time(&now);
-				if ((now - o->lasthidtime) > 3) {
+				if ((now - o->lasthidtime) > 1) {
 					ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
 					usleep(DEVICE_RETRY);
 					break;
 				}
 			}
+
+			ast_radio_time(&o->lastaudiotime);
 			/* Set frame defaults */
 			memset(f, 0, sizeof(struct ast_frame));
 			f->frametype = AST_FRAME_NULL;
@@ -2440,11 +2490,15 @@ static void *simpleusb_audio_thread(void *arg)
 					}
 				}
 
+				if (num_frames && (num_frames < 3) && (o->txkeyed || o->txtestkey)) {
+					/* waiting for 3 frames in the buffer. This is "normal" */
+					last_frame_time = ast_radio_tvnow();
+				}
+
 				if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && (frames_available >= PA_NUM_FRAMES)) {
 					ast_mutex_lock(&o->txqlock);
 					f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
 					ast_mutex_unlock(&o->txqlock);
-
 					src = 0; /* read position into f1->data */
 					while (src < f1->datalen) {
 						/* Compute spare room in the buffer */
@@ -2533,6 +2587,7 @@ static void *simpleusb_audio_thread(void *arg)
 								}
 							}
 
+							last_frame_time = ast_radio_tvnow();
 							src += l;
 							o->simpleusb_write_dst = 0;
 							if (o->waspager && (!ispager)) {
@@ -2563,15 +2618,21 @@ static void *simpleusb_audio_thread(void *arg)
 					ast_frfree(f1);
 					continue;
 				}
+
+				break;
+			}
+
+			if (num_frames && (ast_tvdiff_ms(ast_radio_tvnow(), last_frame_time) > MAX_FRAME_DELAY)) {
+				ast_log(LOG_ERROR, "Audio thread has not processed audio for over %d ms, restarting stream.\n", MAX_FRAME_DELAY);
 				break;
 			}
 
 			/* Read audio data from the USB sound device.
 			 * Sound data will arrive at 48000 samples per second
-			 * in mono format.  We should always have 20ms frames, 100ms timeout
+			 * in mono format.  We should always have 20ms frames, 40ms timeout
 			 * as a reasonable max wait time.
 			 */
-			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf, PA_NUM_FRAMES, 60, &o->stopaudiothread);
+			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf, PA_NUM_FRAMES, 40, &o->stopaudiothread);
 			if (res != paNoError) {
 				/* audio data not ready */
 				if (res == paInputOverflowed) {
@@ -2882,14 +2943,20 @@ stream_restart:
 		o->hasusb = 0;
 		stop_stream(o);
 
+		ast_mutex_lock(&o->txqlock);
 		while ((f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
 			ast_frfree(f1);
 		}
+
+		ast_mutex_unlock(&o->txqlock);
 	}
 
+	ast_mutex_lock(&o->txqlock);
 	while ((f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
 		ast_frfree(f1);
 	}
+	ast_mutex_unlock(&o->txqlock);
+	o->audio_thread_ready = 0;
 	ast_debug(2, "Audio Thread has exited");
 	return NULL;
 }
