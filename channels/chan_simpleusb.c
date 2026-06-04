@@ -1156,6 +1156,8 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
 			if (!o->usb_dev) {
 				ast_debug(5, "Unable to find usb device associated with %s\n", o->hw_device);
+				ast_mutex_unlock(&usb_dev_lock);
+				return -1;
 			}
 
 		} else {
@@ -1241,6 +1243,7 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 				break;
 			}
 			if (ast_strlen_zero(o->devstr)) {
+				ast_mutex_unlock(&usb_dev_lock);
 				return -1;
 			}
 		}
