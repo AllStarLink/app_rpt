@@ -231,7 +231,7 @@ struct chan_simpleusb_pvt {
 	int simpleusb_write_dst;
 	short simpleusb_read_buf[PA_NUM_FRAMES]; /* 1 short (2 byte) samples for PortAudio config with paInt16 * 1 channel (mono) */
 	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte samples at 8k */
-	struct ast_frame read_f; /* returned by simpleusb_read */
+	struct ast_frame read_f;											 /* returned by simpleusb_read */
 
 	/* queue used to hold packets to transmit */
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
@@ -1217,7 +1217,6 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 						ast_log(LOG_ERROR, "Channel %s: No USB devices are available for assignment.\n", o->name);
 						o->device_error = 1;
 					}
-					ast_mutex_unlock(&usb_dev_lock);
 					usleep(DEVICE_RETRY);
 					break;
 				}
@@ -1516,7 +1515,7 @@ static void *hidthread(void *arg)
 		 * The timer can be interrupted by writing to
 		 * the pttkick pipe.
 		 */
-		while ((!o->stophidthread) && o->hasusb) {
+		while (!o->stophidthread && o->hasusb) {
 			int gpio_write = 0;
 			time_t audio_time_now = 0;
 
@@ -1526,8 +1525,6 @@ static void *hidthread(void *arg)
 				ast_radio_time(&audio_time_now);
 				if ((audio_time_now - o->lastaudiotime) > 1) {
 					ast_log(LOG_ERROR, "Channel %s: Audio process has died or is not responding.\n", o->name);
-					o->hasusb = 0;
-					break;
 				}
 			}
 
@@ -2338,6 +2335,32 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 }
 
 /*!
+ * \brief 		Flush the audio stream buffer.
+ * \param o		Private structure for the channel.
+ */
+static void flush_stream_buffer(struct chan_simpleusb_pvt *o)
+{
+	struct ast_frame *f;
+
+	ast_mutex_lock(&o->txqlock);
+	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
+		ast_frfree(f);
+	}
+	ast_mutex_unlock(&o->txqlock);
+}
+
+/*!
+ * \brief		Cleanup the audio stream. Stop audio stream and flush the audio stream buffer.
+ * \param o		Private structure for the channel.
+ */
+static void stream_cleanup(struct chan_simpleusb_pvt *o)
+{
+	stop_stream(o);
+	o->audio_thread_ready = 0;
+	flush_stream_buffer(o);
+}
+
+/*!
  * \brief 				PortAudio processing thread.
  * \param ast			Asterisk channel.
  * \retval 				Asterisk frame.
@@ -2360,19 +2383,22 @@ static void *simpleusb_audio_thread(void *arg)
 	while (!o->stopaudiothread) {
 		/* wait for audio device to be initialized */
 		ast_debug(5, "Audio thread entered outer loop\n");
+		ast_radio_time(&o->lastaudiotime);
+
 		if (!o->hasusb) {
 			ast_debug(5, "Audio not ready");
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 
-		if (start_stream(o) < 0) {
+		if (!o->streamstate && start_stream(o) < 0) {
 			ast_log(LOG_ERROR, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
 			o->hasusb = 0;
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 
+		flush_stream_buffer(o);
 		o->audio_thread_ready = 1;
 		last_frame_time = ast_radio_tvnow();
 
@@ -2383,6 +2409,8 @@ static void *simpleusb_audio_thread(void *arg)
 				if ((now - o->lasthidtime) > 1) {
 					ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
 					usleep(DEVICE_RETRY);
+					o->hasusb = 0;
+					stream_cleanup(o);
 					break;
 				}
 			}
@@ -2487,7 +2515,8 @@ static void *simpleusb_audio_thread(void *arg)
 						 * all other errors require restart
 						 */
 						ast_debug(2, "Pa_GetStreamWriteAvailable error %s", Pa_GetErrorText(frames_available));
-						goto stream_restart;
+						o->hasusb = 0;
+						stream_cleanup(o);
 					}
 				}
 
@@ -2584,7 +2613,8 @@ static void *simpleusb_audio_thread(void *arg)
 									 * all other errors require restart
 									 */
 									ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
-									goto stream_restart;
+									o->hasusb = 0;
+									stream_cleanup(o);
 								}
 							}
 
@@ -2625,6 +2655,8 @@ static void *simpleusb_audio_thread(void *arg)
 
 			if (num_frames && (ast_tvdiff_ms(ast_radio_tvnow(), last_frame_time) > MAX_FRAME_DELAY)) {
 				ast_log(LOG_ERROR, "Audio thread has not processed audio for over %d ms, restarting stream.\n", MAX_FRAME_DELAY);
+				o->hasusb = 0;
+				stream_cleanup(o);
 				break;
 			}
 
@@ -2640,6 +2672,8 @@ static void *simpleusb_audio_thread(void *arg)
 					ast_debug(6, "PortAudio read overflow on channel %s\n", o->name);
 				} else {
 					ast_log(LOG_ERROR, "Pa_ReadStream Error on channel %s : %s\n", o->name, Pa_GetErrorText(res));
+					o->hasusb = 0;
+					stream_cleanup(o);
 					break; /* Close the stream and retry */
 				}
 			}
@@ -2939,25 +2973,8 @@ static void *simpleusb_audio_thread(void *arg)
 				ast_queue_frame(o->owner, f);
 			}
 		}
-
-stream_restart:
-		o->hasusb = 0;
-		stop_stream(o);
-
-		ast_mutex_lock(&o->txqlock);
-		while ((f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
-			ast_frfree(f1);
-		}
-
-		ast_mutex_unlock(&o->txqlock);
 	}
-
-	ast_mutex_lock(&o->txqlock);
-	while ((f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
-		ast_frfree(f1);
-	}
-	ast_mutex_unlock(&o->txqlock);
-	o->audio_thread_ready = 0;
+	stream_cleanup(o);
 	ast_debug(2, "Audio Thread has exited");
 	return NULL;
 }
