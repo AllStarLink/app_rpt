@@ -435,6 +435,10 @@ int __mklinklist(struct rpt *myrpt, struct rpt_link *mylink, struct ast_str **bu
 		return 0;
 	}
 
+	if (!myrpt->links) {
+		return 0;
+	}
+
 	/* go thru all links */
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
