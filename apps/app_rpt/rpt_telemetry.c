@@ -2766,6 +2766,10 @@ treataslocal:
 		hastx = 0;
 
 		rpt_mutex_lock(&myrpt->lock);
+		if (!myrpt->links) {
+			goto abort;
+		}
+
 		links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 
 		if (!links_copy) {

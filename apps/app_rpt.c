@@ -5764,6 +5764,15 @@ static void *rpt(void *this)
 		close(myrpt->iofd);
 		myrpt->iofd = -1;
 	}
+
+	rpt_mutex_lock(&myrpt->lock);
+	while (ao2_container_count(myrpt->links) != 0) {
+		/* Wait for the links to close out */
+		rpt_mutex_unlock(&myrpt->lock);
+		usleep(60000);
+		rpt_mutex_lock(&myrpt->lock);
+	}
+
 	/* Free dynamically allocated memory */
 #ifdef NATIVE_DSP
 	if (myrpt->dsp) {
@@ -5776,22 +5785,13 @@ static void *rpt(void *this)
 		myrpt->macrobuf = NULL;
 	}
 
-	rpt_mutex_lock(&myrpt->lock);
-	while (ao2_container_count(myrpt->links) != 0) {
-		/* Wait for the links to close out */
-		rpt_mutex_unlock(&myrpt->lock);
-		usleep(60000);
-		rpt_mutex_lock(&myrpt->lock);
-	}
-
 	if (myrpt->xlink == 1) {
 		myrpt->xlink = 2;
 	}
 
-	rpt_mutex_unlock(&myrpt->lock);
-
 	ao2_cleanup(myrpt->links);
 	myrpt->links = NULL;
+	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
