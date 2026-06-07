@@ -210,17 +210,13 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 
 			if (!myrpt->links) {
 				ast_free(lbuf);
+				rpt_mutex_unlock(&myrpt->lock);
 				return RESULT_FAILURE;
 			}
 
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
-
-			if (!myrpt->links) {
-				rpt_mutex_unlock(&myrpt->lock);
-				return RESULT_FAILURE;
-			}
 
 			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 			rpt_mutex_unlock(&myrpt->lock);
@@ -555,6 +551,7 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 
 			if (!myrpt->links) {
 				rpt_mutex_unlock(&myrpt->lock);
+				ast_free(str);
 				return -1;
 			}
 

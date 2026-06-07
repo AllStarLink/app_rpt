@@ -456,6 +456,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			rpt_mutex_lock(&myrpt->lock);
 
 			if (!myrpt->links) {
+				ast_free(lbuf);
 				rpt_mutex_unlock(&myrpt->lock);
 				return RESULT_FAILURE;
 			}
