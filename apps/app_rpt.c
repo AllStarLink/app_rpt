@@ -6128,8 +6128,9 @@ static void *rpt_master(void *ignore)
 				thread_hung[i] = rpt_true;
 				ast_log(LOG_WARNING, "RPT thread on %s is hung for %ld seconds.\n", rpt_vars[i].name, current_loop_time);
 			}
-			rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
-			if (rv) {
+
+			rv = pthread_tryjoin_np(rpt_vars[i].rpt_thread, 0); /* Check thread status by trying to join it */
+			if (rv != EBUSY) {
 				if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
 					rpt_vars[i].name[0] = 0;
 					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
