@@ -6130,47 +6130,47 @@ static void *rpt_master(void *ignore)
 			}
 
 			rv = pthread_tryjoin_np(rpt_vars[i].rpt_thread, 0); /* Check thread status by trying to join it */
-			if (rv != EBUSY) {
-				if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
-					rpt_vars[i].name[0] = 0;
-					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
-						pthread_join(rpt_vars[i].rpt_thread, NULL);
-						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
-					}
-					rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
-					continue;
-				}
-				if (ast_shutting_down() || shutting_down) {
-					continue; /* Don't restart thread if we're unloading the module */
-				}
-				if (time(NULL) - rpt_vars[i].lastthreadrestarttime <= 5) {
-					if (rpt_vars[i].threadrestarts >= 5) {
-						/* This is way off-nominal here. The original code just called exit(1) which
-						 * is totally not cool... so this is a little bit saner. */
-						ast_log(LOG_ERROR, "Continual RPT thread restarts, stopping repeaters\n");
-						stop_repeaters();
-						/* Not necessary to set shutting_down to 1, since we're the only thread that uses that, and we're exiting */
-						ast_mutex_unlock(&rpt_master_lock);
-						return NULL; /* The module will have to be unloaded and loaded again to start the repeaters */
-					} else {
-						ast_log(LOG_WARNING, "RPT thread restarted on %s\n", rpt_vars[i].name);
-						rpt_vars[i].threadrestarts++;
-					}
+			if (rv == EBUSY) {
+				continue; /* Thread is still running, nothing to do */
+			}
+			if (rv == 0) {
+				rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+			} else {
+				ast_log(LOG_WARNING, "Failed to query %s thread: %s\n", rpt_vars[i].name, strerror(rv));
+				continue;
+			}
+
+			if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
+				rpt_vars[i].name[0] = 0;
+				rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
+				continue;
+			}
+			if (ast_shutting_down() || shutting_down) {
+				continue; /* Don't restart thread if we're unloading the module */
+			}
+			if (time(NULL) - rpt_vars[i].lastthreadrestarttime <= 5) {
+				if (rpt_vars[i].threadrestarts >= 5) {
+					/* This is way off-nominal here. The original code just called exit(1) which
+					 * is totally not cool... so this is a little bit saner. */
+					ast_log(LOG_ERROR, "Continual RPT thread restarts, stopping repeaters\n");
+					stop_repeaters();
+					/* Not necessary to set shutting_down to 1, since we're the only thread that uses that, and we're exiting */
+					ast_mutex_unlock(&rpt_master_lock);
+					return NULL; /* The module will have to be unloaded and loaded again to start the repeaters */
 				} else {
-					rpt_vars[i].threadrestarts = 0;
+					ast_log(LOG_WARNING, "RPT thread restarted on %s\n", rpt_vars[i].name);
+					rpt_vars[i].threadrestarts++;
 				}
-				rv = pthread_join(rpt_vars[i].rpt_thread, NULL);
-				if (rv) {
-					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(rv));
-				}
-				rpt_vars[i].lastthreadrestarttime = time(NULL);
-				rpt_vars[i].lastthreadupdatetime = current_time;
-				rv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
-				if (rv) {
-					ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(rv));
-				} else {
-					ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
-				}
+			} else {
+				rpt_vars[i].threadrestarts = 0;
+			}
+			rpt_vars[i].lastthreadrestarttime = time(NULL);
+			rpt_vars[i].lastthreadupdatetime = current_time;
+			rv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
+			if (rv) {
+				ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(rv));
+			} else {
+				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
 			}
 		}
 		for (i = 0; i < nrpts; i++) {
