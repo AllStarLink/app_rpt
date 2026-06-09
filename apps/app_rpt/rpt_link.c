@@ -334,6 +334,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	snprintf(str, sizeof(str), "D %s %s %d %c", myrpt->cmdnode, myrpt->name, ++(myrpt->dtmfidx), c);
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
+
 	ast_mutex_lock(&myrpt->lock);
 	/* first, see if our dude is there */
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
@@ -353,14 +354,13 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	ao2_iterator_destroy(&l_it);
 
 	/* if not, give it to everyone */
-	rpt_mutex_lock(&myrpt->lock);
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 
-	rpt_mutex_unlock(&myrpt->lock);
 	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_qwrite_cb, &wf);
+	rpt_mutex_unlock(&myrpt->lock);
 }
 
 void send_link_keyquery(struct rpt *myrpt)
