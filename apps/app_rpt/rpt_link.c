@@ -348,6 +348,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 			}
 			ao2_ref(l, -1);
 			ao2_iterator_destroy(&l_it);
+			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
 	}
