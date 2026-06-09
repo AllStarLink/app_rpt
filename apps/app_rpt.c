@@ -4216,8 +4216,12 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
 				wf.datalen = strlen(str) + 1;
 				wf.data.ptr = str;
+				rpt_mutex_lock(&myrpt->lock);
 				/* otherwise, send it to all of em */
-				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rxchannel_qwrite_cb, &wf);
+				if (myrpt->links) {
+					ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rxchannel_qwrite_cb, &wf);
+				}
+				rpt_mutex_unlock(&myrpt->lock);
 			}
 		}
 	}
@@ -5195,7 +5199,9 @@ static void *rpt(void *this)
 
 			rpt_mutex_lock(&myrpt->lock);
 			myrpt->voteremrx = 0; /* no voter remotes keyed */
-			ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, sendtext_cb, &tmpstr);
+			if (myrpt->links) {
+				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, sendtext_cb, &tmpstr);
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		rpt_mutex_lock(&myrpt->lock);
@@ -6134,9 +6140,14 @@ static void *rpt_master(void *ignore)
 				}
 				last_thread_time[i] = rpt_vars[i].lastthreadupdatetime; /* Only log message one time */
 			}
+
 			if (current_loop_time > RPT_THREAD_TIMEOUT && !thread_hung[i]) {
 				thread_hung[i] = rpt_true;
 				ast_log(LOG_WARNING, "RPT thread on %s is hung for %ld seconds.\n", rpt_vars[i].name, current_loop_time);
+			}
+
+			if (!rpt_vars[i].rpt_thread || rpt_vars[i].rpt_thread == AST_PTHREADT_NULL) {
+				continue; /* Thread is not running, nothing to do */
 			}
 
 			rv = pthread_tryjoin_np(rpt_vars[i].rpt_thread, 0); /* Check thread status by trying to join it */
