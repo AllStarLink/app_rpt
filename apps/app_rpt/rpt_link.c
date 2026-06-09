@@ -335,7 +335,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 
-	ast_mutex_lock(&myrpt->lock);
+	rpt_mutex_lock(&myrpt->lock);
 	/* first, see if our dude is there */
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
