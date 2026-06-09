@@ -1,0 +1,48 @@
+;
+; rpt_auth.conf — TOTP per-user authentication for app_rpt
+;
+; Path is configured per-node in rpt.conf via the "auth_users" key, e.g.:
+;     auth_users = /etc/asterisk/rpt_auth.conf
+;
+; If "auth_users" is unset or this file is missing/unreadable, the auth
+; feature is silently disabled and all login attempts return DC_ERROR.
+;
+; SECURITY: This file contains shared TOTP secrets. Restrict it strictly:
+;     chown root:asterisk /etc/asterisk/rpt_auth.conf
+;     chmod 0640         /etc/asterisk/rpt_auth.conf
+;
+; Format
+; ------
+;   [users]
+;   <id4> = <BASE32_SECRET>,<command_set_stanza>
+;
+; - <id4>               Exactly 4 ASCII decimal digits (e.g. 1234). Must be
+;                       unique within the file. Leading zeros are significant.
+; - <BASE32_SECRET>     RFC 4648 base32 (uppercase, optional '=' padding).
+;                       This is the same encoding Google Authenticator,
+;                       Authy, FreeOTP, etc. consume. Generate with e.g.:
+;                           head -c 20 /dev/urandom | base32
+;                       and feed the same string to the user's authenticator
+;                       app (or render as an otpauth:// QR code).
+; - <command_set_stanza> Name of a [functions-...] stanza in rpt.conf that
+;                       this user is granted access to upon successful login.
+;
+; Whitespace around commas is tolerated. Lines starting with ';' are comments.
+;
+; No hard limit on user count; memory is allocated dynamically.
+;
+; Algorithm parameters (TOTP step, window, etc.) are NOT per-user — they are
+; configured per-node in rpt.conf via the auth_otp_step / auth_otp_window keys.
+;
+
+[users]
+; --- Examples (replace before deploying!) ---
+
+; User 1234 — admin, granted totp-admin
+;1234 = JBSWY3DPEHPK3PXP, totp-admin
+
+; User 5678 — control op, granted totp-operator
+;5678 = KRSXG5BAMFRGGZDFMZTWQ2LK, totp-operator
+
+; User 9999 — read-only diagnostics, granted totp-diag
+;9999 = NB2HI4DTHIXS653XO4XHSZLOOQ, totp-diag

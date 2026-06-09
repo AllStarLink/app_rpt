@@ -765,6 +765,8 @@ struct rpt {
 	ast_mutex_t lock;
 	ast_mutex_t remlock;
 	ast_mutex_t statpost_lock;
+	/*! \brief Per-node TOTP authentication state (opaque, see rpt_auth.c). */
+	struct rpt_auth_state *auth;
 	struct ast_config *cfg;
 	rpt_bool reload:1;
 	rpt_bool reload_request:1;
@@ -922,6 +924,18 @@ struct rpt {
 		const char *ldisc[MAX_LSTUFF];
 		int nldisc;
 		const char *timezone;
+		/*! \brief Path to rpt_auth.conf (TOTP user secrets); NULL disables the feature. */
+		const char *auth_users;
+		/*! \brief Sliding session timeout, seconds (default 300). */
+		int auth_timeout;
+		/*! \brief Failed-login attempts before lockout; 0 disables lockout (default 5). */
+		int auth_lockout_threshold;
+		/*! \brief Lockout duration, seconds (default 60). */
+		int auth_lockout_duration;
+		/*! \brief TOTP time step in seconds (RFC 6238; default 30). */
+		int auth_otp_step;
+		/*! \brief TOTP step window for clock skew tolerance (default 1). */
+		int auth_otp_window;
 	} p;
 	struct ao2_container *links;
 	int unkeytocttimer;
