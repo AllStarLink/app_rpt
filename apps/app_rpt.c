@@ -1755,8 +1755,14 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 {
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
+
 	/* see if this is one in list */
 	rpt_mutex_lock(&myrpt->lock);
+	if (!myrpt->links) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return -1;
+	}
+
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
@@ -3081,24 +3087,28 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
+
 	rpt_mutex_lock(&myrpt->lock);
-	RPT_LIST_TRAVERSE(myrpt->links, zl, l_it) {
-		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
-		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
-		ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
-		ast_debug(2, "        link->connected %d\n", zl->connected);
-		ast_debug(2, "        link->hasconnected %d\n", zl->hasconnected);
-		ast_debug(2, "        link->outbound %d\n", zl->outbound);
-		ast_debug(2, "        link->disced %d\n", zl->disced);
-		ast_debug(2, "        link->killme %d\n", zl->killme);
-		ast_debug(2, "        link->disctime %d\n", zl->disctime);
-		ast_debug(2, "        link->retrytimer %d\n", zl->retrytimer);
-		ast_debug(2, "        link->retries = %d\n", zl->retries);
-		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
-		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
+	if (myrpt->links) {
+		RPT_LIST_TRAVERSE(myrpt->links, zl, l_it) {
+			ast_debug(2, "*** Link Name: %s ***\n", zl->name);
+			ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
+			ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
+			ast_debug(2, "        link->connected %d\n", zl->connected);
+			ast_debug(2, "        link->hasconnected %d\n", zl->hasconnected);
+			ast_debug(2, "        link->outbound %d\n", zl->outbound);
+			ast_debug(2, "        link->disced %d\n", zl->disced);
+			ast_debug(2, "        link->killme %d\n", zl->killme);
+			ast_debug(2, "        link->disctime %d\n", zl->disctime);
+			ast_debug(2, "        link->retrytimer %d\n", zl->retrytimer);
+			ast_debug(2, "        link->retries = %d\n", zl->retries);
+			ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
+			ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
+		}
+		ao2_iterator_destroy(&l_it);
 	}
+
 	rpt_mutex_unlock(&myrpt->lock);
-	ao2_iterator_destroy(&l_it);
 	zt = myrpt->tele.next;
 	if (zt != &myrpt->tele) {
 		ast_debug(2, "*** Telemetry Queue ***\n");

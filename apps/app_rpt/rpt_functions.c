@@ -158,7 +158,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
 			strcpy(digitbuf, myrpt->lastlinknode);
 		}
+
 		rpt_mutex_lock(&myrpt->lock);
+		if (!myrpt->links) {
+			rpt_mutex_unlock(&myrpt->lock);
+			break;
+		}
+
 		/* try to find this one in queue */
 		l = ao2_find(myrpt->links, digitbuf, 0);
 		if (!l) { /* if not found */
@@ -255,7 +261,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			break;
 		}
 		/* if doesn't allow link cmd, or no links active, return */
-		if (!ao2_container_count(myrpt->links)) {
+		if (!myrpt->links || !ao2_container_count(myrpt->links)) {
 			return DC_COMPLETE;
 		}
 		if ((command_source != SOURCE_RPT) && (command_source != SOURCE_PHONE) && (command_source != SOURCE_ALT) &&
@@ -304,6 +310,12 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 6: /* All Links Off, including permalinks */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
+
+		if (!myrpt->links) {
+			rpt_mutex_unlock(&myrpt->lock);
+			return DC_COMPLETE;
+		}
+
 		/* loop through all links */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			char c1;
@@ -376,9 +388,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		*s2 = 0;
 		snprintf(tmp, MIN(sizeof(tmp), MAX_TEXTMSG_SIZE), "M %s %s %s", myrpt->name, s1 + 1, s2 + 1);
 		rpt_mutex_lock(&myrpt->lock);
-		/* otherwise, send it to all of em */
-		ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, tmp);
 
+		if (!myrpt->links) {
+			rpt_mutex_unlock(&myrpt->lock);
+			return DC_COMPLETE;
+		}
+
+		ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, tmp);
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;

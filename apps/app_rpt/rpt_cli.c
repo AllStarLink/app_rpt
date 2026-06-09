@@ -369,6 +369,12 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 
 			/* Make a copy of all stat variables while locked */
 			rpt_mutex_lock(&myrpt->lock);
+			if (!myrpt->links) {
+				ao2_cleanup(links_copy);
+				rpt_mutex_unlock(&myrpt->lock);
+				return RESULT_FAILURE;
+			}
+
 			if (ao2_container_dup(links_copy, myrpt->links, OBJ_NOLOCK)) {
 				ao2_cleanup(links_copy);
 				rpt_mutex_unlock(&myrpt->lock);
@@ -778,6 +784,7 @@ static int rpt_do_restart(int fd, int argc, const char *const *argv)
 		return RESULT_SHOWUSAGE;
 	}
 
+	/* hanging up on the rx channel causes the rpt() thread to restart */
 	for (i = 0; i < nrpts; i++) {
 		if (rpt_vars[i].rxchannel) {
 			ast_softhangup(rpt_vars[i].rxchannel, AST_SOFTHANGUP_DEV);
@@ -800,6 +807,7 @@ static int rpt_do_fun(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
+
 			macro_append(myrpt, argv[3]);
 		}
 	}
@@ -824,7 +832,10 @@ static int rpt_do_playback(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
-			rpt_telemetry(myrpt, PLAYBACK, (void *) argv[3]);
+
+			if (myrpt->ready) {
+				rpt_telemetry(myrpt, PLAYBACK, (void *) argv[3]);
+			}
 		}
 	}
 
@@ -843,7 +854,10 @@ static int rpt_do_localplay(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
-			rpt_telemetry(myrpt, LOCALPLAY, (void *) argv[3]);
+
+			if (myrpt->ready) {
+				rpt_telemetry(myrpt, LOCALPLAY, (void *) argv[3]);
+			}
 		}
 	}
 
@@ -885,8 +899,14 @@ static int rpt_do_sendtext(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(from, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
+
 			rpt_mutex_lock(&myrpt->lock);
 			/* otherwise, send it to all of em */
+			if (!myrpt->links) {
+				rpt_mutex_unlock(&myrpt->lock);
+				return RESULT_FAILURE;
+			}
+
 			ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, &str);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
@@ -998,8 +1018,14 @@ int rpt_do_sendall(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
+
 			rpt_mutex_lock(&myrpt->lock);
 			/* otherwise, send it to all of em */
+			if (!myrpt->links) {
+				rpt_mutex_unlock(&myrpt->lock);
+				return RESULT_FAILURE;
+			}
+
 			ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, &str);
 			rpt_mutex_unlock(&myrpt->lock);
 		}
@@ -1023,6 +1049,7 @@ static int rpt_do_fun1(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(argv[2], rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
+
 			rpt_push_alt_macro(myrpt, (char *) argv[3]);
 		}
 	}
@@ -1060,6 +1087,12 @@ static int rpt_do_cmd(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "Unknown node number %s.\n", argv[2]);
 		return RESULT_FAILURE;
 	} /* if thisRpt < 0 */
+
+	if (!myrpt->ready) {
+		/* Don't accept comamands for a node that is not ready */
+		ast_cli(fd, "Node %s is not ready.\n", argv[2]);
+		return RESULT_FAILURE;
+	}
 
 	/* Look up the action */
 	thisAction = rpt_function_lookup(argv[3]);

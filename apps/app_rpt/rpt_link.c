@@ -212,7 +212,7 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 
 int linkcount(struct rpt *myrpt)
 {
-	return ao2_container_count(myrpt->links);
+	return myrpt->links ? ao2_container_count(myrpt->links) : 0;
 }
 
 void FindBestRssi(struct rpt *myrpt)
@@ -334,6 +334,7 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	snprintf(str, sizeof(str), "D %s %s %d %c", myrpt->cmdnode, myrpt->name, ++(myrpt->dtmfidx), c);
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
+	ast_mutex_lock(&myrpt->lock);
 	/* first, see if our dude is there */
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
@@ -350,7 +351,15 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 		}
 	}
 	ao2_iterator_destroy(&l_it);
+
 	/* if not, give it to everyone */
+	rpt_mutex_lock(&myrpt->lock);
+	if (!myrpt->links) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return;
+	}
+
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_qwrite_cb, &wf);
 }
 
@@ -371,8 +380,16 @@ void send_link_keyquery(struct rpt *myrpt)
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* give it to everyone */
+	rpt_mutex_lock(&myrpt->lock);
+	if (!myrpt->links) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return;
+	}
+
+	rpt_mutex_unlock(&myrpt->lock);
 	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_qwrite_cb, &wf);
 }
+
 void rpt_link_add(struct ao2_container *links, struct rpt_link *l)
 {
 	ast_assert(l != NULL);

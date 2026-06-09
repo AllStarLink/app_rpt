@@ -3643,7 +3643,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 		case REMDISC:
 			mylink = (struct rpt_link *) data;
-			if ((!mylink) || (mylink->name[0] == '0')) {
+			if (!mylink || !myrpt->links || mylink->name[0] == '0') {
 				return;
 			}
 
@@ -3757,6 +3757,11 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 		case STATUS:
 			rpt_mutex_lock(&myrpt->lock);
+			if (!myrpt->links) {
+				rpt_mutex_unlock(&myrpt->lock);
+				return;
+			}
+
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
 			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
