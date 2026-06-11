@@ -150,6 +150,12 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
 
+			if (!myrpt->links) {
+				ast_free(lbuf);
+				rpt_mutex_unlock(&myrpt->lock);
+				return RESULT_FAILURE;
+			}
+
 			ast_copy_string(rxchanname, myrpt->rxchanname, sizeof(rxchanname));
 
 			/* Get RPT status states while locked */
@@ -211,6 +217,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 			/* Get connected node info */
 			/* Traverse the list of connected nodes */
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
+
 			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 			rpt_mutex_unlock(&myrpt->lock);
 			if (!links_copy) {
@@ -529,6 +536,13 @@ static int rpt_manager_do_stats(struct mansession *s, const struct message *m)
 			/* ELSE Process as a repeater node */
 			/* Make a copy of all stat variables while locked */
 			rpt_mutex_lock(&myrpt->lock);
+
+			if (!myrpt->links) {
+				rpt_mutex_unlock(&myrpt->lock);
+				ast_free(str);
+				return -1;
+			}
+
 			dailytxtime = myrpt->dailytxtime;
 			totaltxtime = myrpt->totaltxtime;
 			dailykeyups = myrpt->dailykeyups;

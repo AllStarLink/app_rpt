@@ -1793,8 +1793,14 @@ static int distribute_to_all_links(struct rpt *myrpt, struct rpt_link *mylink, c
 {
 	struct rpt_link *l;
 	struct ao2_iterator l_it;
+
 	/* see if this is one in list */
 	rpt_mutex_lock(&myrpt->lock);
+	if (!myrpt->links) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return -1;
+	}
+
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
 			continue;
@@ -3119,24 +3125,28 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "myrpt->p.parrotmode = %d\n", (int) myrpt->p.parrotmode);
 	ast_debug(2, "myrpt->parrotonce = %d\n", (int) myrpt->parrotonce);
 	ast_debug(2, "myrpt->rpt_newkey =%d\n", myrpt->rpt_newkey);
+
 	rpt_mutex_lock(&myrpt->lock);
-	RPT_LIST_TRAVERSE(myrpt->links, zl, l_it) {
-		ast_debug(2, "*** Link Name: %s ***\n", zl->name);
-		ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
-		ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
-		ast_debug(2, "        link->connected %d\n", zl->connected);
-		ast_debug(2, "        link->hasconnected %d\n", zl->hasconnected);
-		ast_debug(2, "        link->outbound %d\n", zl->outbound);
-		ast_debug(2, "        link->disced %d\n", zl->disced);
-		ast_debug(2, "        link->killme %d\n", zl->killme);
-		ast_debug(2, "        link->disctime %d\n", zl->disctime);
-		ast_debug(2, "        link->retrytimer %d\n", zl->retrytimer);
-		ast_debug(2, "        link->retries = %d\n", zl->retries);
-		ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
-		ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
+	if (myrpt->links) {
+		RPT_LIST_TRAVERSE(myrpt->links, zl, l_it) {
+			ast_debug(2, "*** Link Name: %s ***\n", zl->name);
+			ast_debug(2, "        link->lasttx %d\n", zl->lasttx);
+			ast_debug(2, "        link->lastrx %d\n", zl->lastrx);
+			ast_debug(2, "        link->connected %d\n", zl->connected);
+			ast_debug(2, "        link->hasconnected %d\n", zl->hasconnected);
+			ast_debug(2, "        link->outbound %d\n", zl->outbound);
+			ast_debug(2, "        link->disced %d\n", zl->disced);
+			ast_debug(2, "        link->killme %d\n", zl->killme);
+			ast_debug(2, "        link->disctime %d\n", zl->disctime);
+			ast_debug(2, "        link->retrytimer %d\n", zl->retrytimer);
+			ast_debug(2, "        link->retries = %d\n", zl->retries);
+			ast_debug(2, "        link->reconnects = %d\n", zl->reconnects);
+			ast_debug(2, "        link->link_newkey = %d\n", zl->link_newkey);
+		}
+		ao2_iterator_destroy(&l_it);
 	}
+
 	rpt_mutex_unlock(&myrpt->lock);
-	ao2_iterator_destroy(&l_it);
 	zt = myrpt->tele.next;
 	if (zt != &myrpt->tele) {
 		ast_debug(2, "*** Telemetry Queue ***\n");
@@ -4244,8 +4254,12 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				snprintf(str, sizeof(str), "V %s %s", myrpt->name, (char *) f->data.ptr);
 				wf.datalen = strlen(str) + 1;
 				wf.data.ptr = str;
+				rpt_mutex_lock(&myrpt->lock);
 				/* otherwise, send it to all of em */
-				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rxchannel_qwrite_cb, &wf);
+				if (myrpt->links) {
+					ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rxchannel_qwrite_cb, &wf);
+				}
+				rpt_mutex_unlock(&myrpt->lock);
 			}
 		}
 	}
@@ -4405,7 +4419,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
-		if (l->disced == RPT_LINK_DISCONNECT_NONE) {
+		if (l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down()) {
 			if (!l->outbound) {
 				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
 					/* Not an allstar link node */
@@ -5223,7 +5237,9 @@ static void *rpt(void *this)
 
 			rpt_mutex_lock(&myrpt->lock);
 			myrpt->voteremrx = 0; /* no voter remotes keyed */
-			ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, sendtext_cb, &tmpstr);
+			if (myrpt->links) {
+				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, sendtext_cb, &tmpstr);
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
 		rpt_mutex_lock(&myrpt->lock);
@@ -5778,19 +5794,9 @@ static void *rpt(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* hang-up any running links */
-		l->disced = RPT_LINK_DISCONNECT;
+		l->disced = RPT_LINK_DISCONNECT_SILENT;
 	}
 	ao2_iterator_destroy(&l_it);
-	while (ao2_container_count(myrpt->links) != 0) {
-		/* Wait for the links to close out */
-		rpt_mutex_unlock(&myrpt->lock);
-		usleep(60000);
-		rpt_mutex_lock(&myrpt->lock);
-	}
-	if (myrpt->xlink == 1)
-		myrpt->xlink = 2;
-	ao2_cleanup(myrpt->links);
-	myrpt->links = NULL;
 	rpt_mutex_unlock(&myrpt->lock);
 
 	rpt_hangup(myrpt, RPT_PCHAN);
@@ -5812,6 +5818,15 @@ static void *rpt(void *this)
 		close(myrpt->iofd);
 		myrpt->iofd = -1;
 	}
+
+	rpt_mutex_lock(&myrpt->lock);
+	while (ao2_container_count(myrpt->links) != 0) {
+		/* Wait for the links to close out */
+		rpt_mutex_unlock(&myrpt->lock);
+		usleep(60000);
+		rpt_mutex_lock(&myrpt->lock);
+	}
+
 	/* Free dynamically allocated memory */
 #ifdef NATIVE_DSP
 	if (myrpt->dsp) {
@@ -5823,6 +5838,14 @@ static void *rpt(void *this)
 		ast_free(myrpt->macrobuf);
 		myrpt->macrobuf = NULL;
 	}
+
+	if (myrpt->xlink == 1) {
+		myrpt->xlink = 2;
+	}
+
+	ao2_cleanup(myrpt->links);
+	myrpt->links = NULL;
+	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
 	return NULL;
@@ -6155,52 +6178,58 @@ static void *rpt_master(void *ignore)
 				}
 				last_thread_time[i] = rpt_vars[i].lastthreadupdatetime; /* Only log message one time */
 			}
+
 			if (current_loop_time > RPT_THREAD_TIMEOUT && !thread_hung[i]) {
 				thread_hung[i] = rpt_true;
 				ast_log(LOG_WARNING, "RPT thread on %s is hung for %ld seconds.\n", rpt_vars[i].name, current_loop_time);
 			}
-			rv = pthread_kill(rpt_vars[i].rpt_thread, 0); /* Check thread status by sending signal 0 */
+
+			if (!rpt_vars[i].rpt_thread || rpt_vars[i].rpt_thread == AST_PTHREADT_NULL) {
+				continue; /* Thread is not running, nothing to do */
+			}
+
+			rv = pthread_tryjoin_np(rpt_vars[i].rpt_thread, 0); /* Check thread status by trying to join it */
+			if (rv == EBUSY) {
+				continue; /* Thread is still running, nothing to do */
+			}
+			if (rv == 0) {
+				rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
+			} else {
+				ast_log(LOG_WARNING, "Failed to query %s thread: %s\n", rpt_vars[i].name, strerror(rv));
+				continue;
+			}
+
+			if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
+				rpt_vars[i].name[0] = 0;
+				rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
+				continue;
+			}
+			if (ast_shutting_down() || shutting_down) {
+				continue; /* Don't restart thread if we're unloading the module */
+			}
+			if (time(NULL) - rpt_vars[i].lastthreadrestarttime <= 5) {
+				if (rpt_vars[i].threadrestarts >= 5) {
+					/* This is way off-nominal here. The original code just called exit(1) which
+					 * is totally not cool... so this is a little bit saner. */
+					ast_log(LOG_ERROR, "Continual RPT thread restarts, stopping repeaters\n");
+					stop_repeaters();
+					/* Not necessary to set shutting_down to 1, since we're the only thread that uses that, and we're exiting */
+					ast_mutex_unlock(&rpt_master_lock);
+					return NULL; /* The module will have to be unloaded and loaded again to start the repeaters */
+				} else {
+					ast_log(LOG_WARNING, "RPT thread restarted on %s\n", rpt_vars[i].name);
+					rpt_vars[i].threadrestarts++;
+				}
+			} else {
+				rpt_vars[i].threadrestarts = 0;
+			}
+			rpt_vars[i].lastthreadrestarttime = time(NULL);
+			rpt_vars[i].lastthreadupdatetime = current_time;
+			rv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
 			if (rv) {
-				if (rpt_vars[i].deleted == RPT_DELETED_PENDING) {
-					rpt_vars[i].name[0] = 0;
-					if (rpt_vars[i].rpt_thread != AST_PTHREADT_NULL) {
-						pthread_join(rpt_vars[i].rpt_thread, NULL);
-						rpt_vars[i].rpt_thread = AST_PTHREADT_NULL;
-					}
-					rpt_vars[i].deleted = RPT_DELETED_COMPLETE;
-					continue;
-				}
-				if (ast_shutting_down() || shutting_down) {
-					continue; /* Don't restart thread if we're unloading the module */
-				}
-				if (time(NULL) - rpt_vars[i].lastthreadrestarttime <= 5) {
-					if (rpt_vars[i].threadrestarts >= 5) {
-						/* This is way off-nominal here. The original code just called exit(1) which
-						 * is totally not cool... so this is a little bit saner. */
-						ast_log(LOG_ERROR, "Continual RPT thread restarts, stopping repeaters\n");
-						stop_repeaters();
-						/* Not necessary to set shutting_down to 1, since we're the only thread that uses that, and we're exiting */
-						ast_mutex_unlock(&rpt_master_lock);
-						return NULL; /* The module will have to be unloaded and loaded again to start the repeaters */
-					} else {
-						ast_log(LOG_WARNING, "RPT thread restarted on %s\n", rpt_vars[i].name);
-						rpt_vars[i].threadrestarts++;
-					}
-				} else {
-					rpt_vars[i].threadrestarts = 0;
-				}
-				rv = pthread_join(rpt_vars[i].rpt_thread, NULL);
-				if (rv) {
-					ast_log(LOG_WARNING, "Failed to join %s thread: %s\n", rpt_vars[i].name, strerror(rv));
-				}
-				rpt_vars[i].lastthreadrestarttime = time(NULL);
-				rpt_vars[i].lastthreadupdatetime = current_time;
-				rv = ast_pthread_create(&rpt_vars[i].rpt_thread, NULL, rpt, &rpt_vars[i]);
-				if (rv) {
-					ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(rv));
-				} else {
-					ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
-				}
+				ast_log(LOG_WARNING, "Failed to create %s thread: %s\n", rpt_vars[i].name, strerror(rv));
+			} else {
+				ast_log(LOG_WARNING, "rpt_thread restarted on node %s\n", rpt_vars[i].name);
 			}
 		}
 		for (i = 0; i < nrpts; i++) {

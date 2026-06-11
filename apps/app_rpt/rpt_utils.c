@@ -303,6 +303,11 @@ int macro_append(struct rpt *myrpt, const char *cmd)
 	int res;
 
 	rpt_mutex_lock(&myrpt->lock);
+	if (!myrpt->macrobuf) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return -1;
+	}
+
 	myrpt->macrotimer = MACROTIME;
 	res = ast_str_append(&myrpt->macrobuf, 0, "%s", cmd);
 	rpt_mutex_unlock(&myrpt->lock);

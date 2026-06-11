@@ -718,7 +718,11 @@ static void send_tele_link(struct rpt *myrpt, char *cmd)
 	/* give it to everyone */
 	wf.data.ptr = str;
 	wf.datalen = len + 1;
-	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, telm_qwrite_cb, &wf);
+	rpt_mutex_lock(&myrpt->lock);
+	if (myrpt->links) {
+		ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, telm_qwrite_cb, &wf);
+	}
+	rpt_mutex_unlock(&myrpt->lock);
 	ast_free(str);
 
 	rpt_telemetry(myrpt, VARCMD, cmd);
@@ -2766,6 +2770,10 @@ treataslocal:
 		hastx = 0;
 
 		rpt_mutex_lock(&myrpt->lock);
+		if (!myrpt->links) {
+			goto abort;
+		}
+
 		links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 
 		if (!links_copy) {
@@ -3639,7 +3647,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 		case REMDISC:
 			mylink = (struct rpt_link *) data;
-			if ((!mylink) || (mylink->name[0] == '0')) {
+			if (!mylink || !myrpt->links || mylink->name[0] == '0') {
 				return;
 			}
 
@@ -3753,6 +3761,11 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 		case STATUS:
 			rpt_mutex_lock(&myrpt->lock);
+			if (!myrpt->links) {
+				rpt_mutex_unlock(&myrpt->lock);
+				return;
+			}
+
 			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
 			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
