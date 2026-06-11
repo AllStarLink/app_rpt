@@ -336,6 +336,11 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	wf.data.ptr = str;
 
 	rpt_mutex_lock(&myrpt->lock);
+	if (!myrpt->links) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return;
+	}
+
 	/* first, see if our dude is there */
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		if (l->name[0] == '0') {
@@ -355,11 +360,6 @@ void send_link_dtmf(struct rpt *myrpt, char c)
 	ao2_iterator_destroy(&l_it);
 
 	/* if not, give it to everyone */
-	if (!myrpt->links) {
-		rpt_mutex_unlock(&myrpt->lock);
-		return;
-	}
-
 	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_qwrite_cb, &wf);
 	rpt_mutex_unlock(&myrpt->lock);
 }

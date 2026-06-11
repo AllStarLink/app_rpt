@@ -105,6 +105,11 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 			/* Make a copy of all stat variables while locked */
 			myrpt = &rpt_vars[i];
 			rpt_mutex_lock(&myrpt->lock);
+			if (!myrpt->links) {
+				rpt_mutex_unlock(&myrpt->lock);
+				return RESULT_FAILURE;
+			}
+
 			uptime = (int) (now - rpt_starttime());
 			dailytxtime = myrpt->dailytxtime;
 			totaltxtime = myrpt->totaltxtime;
@@ -118,12 +123,6 @@ static int rpt_do_stats(int fd, int argc, const char *const *argv)
 
 			/* Traverse the list of connected nodes */
 			reverse_patch_state = "DOWN";
-
-			if (!myrpt->links) {
-				rpt_mutex_unlock(&myrpt->lock);
-				return RESULT_FAILURE;
-			}
-
 			links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 			if (!links_copy) {
 				rpt_mutex_unlock(&myrpt->lock);
