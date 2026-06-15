@@ -4178,6 +4178,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						if (!strcasecmp(f->data.ptr, myrpt->p.locallist[x])) {
 							myrpt->localoverride = 1;
 							myrpt->keyed = 0;
+							myrpt->keyupdelaytimer = 0;
 							myrpt->keyupinactivitytimer = myrpt->p.keyupdelay_inactivity_time;
 							break;
 						}
@@ -4215,6 +4216,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		/* if RX un-key */
 		if (f->subclass.integer == AST_CONTROL_RADIO_UNKEY) {
 			char asleep;
+			int was_keyed;
 			/* clear rx channel rssi */
 			myrpt->rxrssi = 0;
 			asleep = myrpt->p.s[myrpt->p.sysstate_cur].sleepena & myrpt->sleep;
@@ -4227,16 +4229,26 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				}
 			}
 			send_link_pl(myrpt, "0");
+			was_keyed = myrpt->keyed;
 			myrpt->reallykeyed = 0;
 			myrpt->keyed = 0;
-			myrpt->keyupinactivitytimer = myrpt->p.keyupdelay_inactivity_time;
 			myrpt->keyupdelaytimer = 0;
+
+			if (was_keyed) {
+				myrpt->keyupinactivitytimer = myrpt->p.keyupdelay_inactivity_time;
+			}
+
 			if ((myrpt->p.duplex > 1) && (!asleep) && myrpt->localoverride) {
 				rpt_telemetry(myrpt, LOCUNKEY, NULL);
 			}
+
 			myrpt->localoverride = 0;
-			time(&myrpt->lastkeyedtime);
-			myrpt->keypost = RPT_KEYPOST_ACTIVE;
+
+			if (was_keyed) {
+				time(&myrpt->lastkeyedtime);
+				myrpt->keypost = RPT_KEYPOST_ACTIVE;
+			}
+
 			myrpt->lastdtmfuser[0] = 0;
 			strcpy(myrpt->lastdtmfuser, myrpt->curdtmfuser);
 			myrpt->curdtmfuser[0] = 0;
