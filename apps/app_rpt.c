@@ -4970,7 +4970,12 @@ static void *rpt(void *this)
 
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+		if (telem->chan) {
+			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+		} else {
+			telem->killed = 1;
+		}
+
 		telem = telem->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
@@ -7733,8 +7738,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					telem = myrpt->tele.next;
 					while (telem != &myrpt->tele) {
 						if (telem->mode == ACT_TIMEOUT_WARNING && !telem->killed) {
-							if (telem->chan)
+							if (telem->chan) {
 								ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
+							}
 							telem->killed = 1;
 						}
 						telem = telem->next;
