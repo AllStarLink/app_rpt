@@ -624,16 +624,10 @@ void flush_telem(struct rpt *myrpt)
 
 	while (telem != &myrpt->tele) {
 		if (telem->mode != SETREMOTE) {
-			if (telem->chan) {
-				ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-
-				if (myrpt->active_telem == telem) {
-					/* If we are the active telemetry, we need to clean it up */
-					telem_done(myrpt, telem);
-				}
-
-			} else {
-				telem->killed = 1;
+			rpt_kill_telem(telem);
+			if (myrpt->active_telem == telem) {
+				/* If we are the active telemetry, we need to clean it up */
+				telem_done(myrpt, telem);
 			}
 		}
 
@@ -652,16 +646,10 @@ void birdbath(struct rpt *myrpt)
 
 	while (telem != &myrpt->tele) {
 		if (telem->mode == PARROT) {
-			if (telem->chan) {
-				ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-
-				if (myrpt->active_telem == telem) {
-					/* If we are the active telemetry, we need to clean it up */
-					telem_done(myrpt, telem);
-				}
-
-			} else {
-				telem->killed = 1;
+			rpt_kill_telem(telem);
+			if (myrpt->active_telem == telem) {
+				/* If we are the active telemetry, we need to clean it up */
+				telem_done(myrpt, telem);
 			}
 		}
 
@@ -669,6 +657,15 @@ void birdbath(struct rpt *myrpt)
 	}
 
 	rpt_mutex_unlock(&myrpt->lock);
+}
+
+void rpt_kill_telem(struct rpt_tele *telem)
+{
+	if (telem->chan) {
+		ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
+	}
+
+	telem->killed = 1;
 }
 
 void cancel_pfxtone(struct rpt *myrpt)
@@ -685,15 +682,10 @@ void cancel_pfxtone(struct rpt *myrpt)
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
 		if (telem->mode == PFXTONE) {
-			if (telem->chan) {
-				ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-				if (myrpt->active_telem == telem) {
-					/* If we are the active telemetry, we need to clean it up */
-					telem_done(myrpt, telem);
-				}
-			} else {
-				/* We don't have a channel yet */
-				telem->killed = 1;
+			rpt_kill_telem(telem);
+			if (myrpt->active_telem == telem) {
+				/* If we are the active telemetry, we need to clean it up */
+				telem_done(myrpt, telem);
 			}
 		}
 		telem = telem->next;

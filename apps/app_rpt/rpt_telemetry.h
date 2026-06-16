@@ -27,3 +27,9 @@ int rpt_init_telemetry(void);
  * \brief Unregister telemtery functions
  */
 int rpt_cleanup_telemetry(void);
+
+/*!
+ * \brief Kill a telemetry entry
+ * \param telem The telemetry entry to kill
+ */
+void rpt_kill_telem(struct rpt_tele *telem);
