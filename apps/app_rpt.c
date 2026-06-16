@@ -3595,8 +3595,27 @@ static inline int do_link_post(struct rpt *myrpt)
 	return 0;
 }
 
-static inline void rpt_keyed_set_actual(struct rpt *myrpt)
+/*!
+ * \brief Set the keyed state of the rpt structure with a delay.
+ * \note This function will delay the keyed state for a specified time.
+ * \param myrpt The rpt structure
+ * \param delay Set the delay if not 0, keyup if 0
+ */
+static inline void rpt_keyed(struct rpt *myrpt, int delay)
 {
+	if (delay) {
+		if (myrpt->keyed) {
+			return;
+		}
+
+		if (delay && myrpt->p.keyupdelay_time > 0 && myrpt->p.keyupdelay_inactivity_time > 0 && myrpt->keyupinactivitytimer <= 0) {
+			myrpt->keyupdelaytimer = myrpt->p.keyupdelay_time;
+			ast_debug(6, "[%s] delaying keyed state for %d ms\n", myrpt->name, myrpt->p.keyupdelay_time);
+			return;
+		}
+	}
+
+	/* Set the actual keyed state */
 	myrpt->keyed = 1;
 	time(&myrpt->lastkeyedtime);
 	myrpt->keypost = RPT_KEYPOST_ACTIVE;
@@ -3604,24 +3623,9 @@ static inline void rpt_keyed_set_actual(struct rpt *myrpt)
 	myrpt->keyupinactivitytimer = myrpt->p.keyupdelay_inactivity_time;
 }
 
-static inline void rpt_keyed_set_with_delay(struct rpt *myrpt)
-{
-	if (myrpt->keyed) {
-		return;
-	}
-
-	if (myrpt->p.keyupdelay_time > 0 && myrpt->p.keyupdelay_inactivity_time > 0 && myrpt->keyupinactivitytimer <= 0) {
-		myrpt->keyupdelaytimer = myrpt->p.keyupdelay_time;
-		ast_debug(6, "[%s] delaying keyed state for %d ms\n", myrpt->name, myrpt->p.keyupdelay_time);
-		return;
-	}
-
-	rpt_keyed_set_actual(myrpt);
-}
-
 static inline int update_timers(struct rpt *myrpt, const int elap, const int totx)
 {
-	int i;
+	int last_time;
 
 	update_timer(&myrpt->linkposttimer, elap, 0);
 	if (myrpt->linkposttimer <= 0) {
@@ -3659,9 +3663,9 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 		myrpt->totaltxtime += elap;
 	}
 
-	i = myrpt->tailtimer;
+	last_time = myrpt->tailtimer;
 	update_timer(&myrpt->tailtimer, elap, 0);
-	if (i && (myrpt->tailtimer == 0)) {
+	if (last_time && (myrpt->tailtimer == 0)) {
 		myrpt->tailevent = 1;
 	}
 
@@ -3673,11 +3677,11 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 
 	update_timer(&myrpt->time_out_reset_unkey_interval_timer, elap, 0);
 
-	i = myrpt->keyupdelaytimer;
+	last_time = myrpt->keyupdelaytimer;
 	update_timer(&myrpt->keyupdelaytimer, elap, 0);
 
-	if (i && !myrpt->keyupdelaytimer && !myrpt->keyed) {
-		rpt_keyed_set_actual(myrpt);
+	if (last_time && !myrpt->keyupdelaytimer && !myrpt->keyed) {
+		rpt_keyed(myrpt, 0);
 	}
 
 	update_timer(&myrpt->keyupinactivitytimer, elap, 0);
@@ -3945,7 +3949,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				if ((!i) && myrpt->lastrxburst) {
 					ast_debug(1, "Node %s now keyed after Rx Burst\n", myrpt->name);
 					myrpt->linkactivitytimer = 0;
-					rpt_keyed_set_with_delay(myrpt);
+					rpt_keyed(myrpt, 1);
 				}
 				myrpt->lastrxburst = i;
 			}
@@ -3959,7 +3963,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				myrpt->dtmfkeyed = 0;
 				myrpt->dtmfkeybuf[0] = 0;
 				myrpt->linkactivitytimer = 0;
-				rpt_keyed_set_with_delay(myrpt);
+				rpt_keyed(myrpt, 1);
 			}
 		}
 #ifdef _MDC_DECODE_H_
@@ -4132,7 +4136,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 
 				if ((!myrpt->p.rxburstfreq) && (!myrpt->p.dtmfkey)) {
 					myrpt->linkactivitytimer = 0;
-					rpt_keyed_set_with_delay(myrpt);
+					rpt_keyed(myrpt, 1);
 				}
 			}
 			if (myrpt->p.archivedir) {
