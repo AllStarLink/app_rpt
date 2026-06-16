@@ -623,9 +623,8 @@ void flush_telem(struct rpt *myrpt)
 	telem = myrpt->tele.next;
 
 	while (telem != &myrpt->tele) {
-		if (telem->mode != SETREMOTE && telem->chan) {
-			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-
+		if (telem->mode != SETREMOTE) {
+			rpt_kill_telem(telem);
 			if (myrpt->active_telem == telem) {
 				/* If we are the active telemetry, we need to clean it up */
 				telem_done(myrpt, telem);
@@ -646,9 +645,8 @@ void birdbath(struct rpt *myrpt)
 	telem = myrpt->tele.next;
 
 	while (telem != &myrpt->tele) {
-		if (telem->mode == PARROT && telem->chan) {
-			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-
+		if (telem->mode == PARROT) {
+			rpt_kill_telem(telem);
 			if (myrpt->active_telem == telem) {
 				/* If we are the active telemetry, we need to clean it up */
 				telem_done(myrpt, telem);
@@ -659,6 +657,15 @@ void birdbath(struct rpt *myrpt)
 	}
 
 	rpt_mutex_unlock(&myrpt->lock);
+}
+
+void rpt_kill_telem(struct rpt_tele *telem)
+{
+	if (telem->chan) {
+		ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
+	}
+
+	telem->killed = 1;
 }
 
 void cancel_pfxtone(struct rpt *myrpt)
@@ -674,15 +681,13 @@ void cancel_pfxtone(struct rpt *myrpt)
 
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		if (telem->mode == PFXTONE && telem->chan) {
-			ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
-
+		if (telem->mode == PFXTONE) {
+			rpt_kill_telem(telem);
 			if (myrpt->active_telem == telem) {
 				/* If we are the active telemetry, we need to clean it up */
 				telem_done(myrpt, telem);
 			}
 		}
-
 		telem = telem->next;
 	}
 
@@ -1514,8 +1519,8 @@ void *rpt_tele_thread(void *this)
 
 	rpt_mutex_unlock(&myrpt->lock);
 
-	while ((mytele->mode != SETREMOTE) && (mytele->mode != UNKEY) && (mytele->mode != LINKUNKEY) && (mytele->mode != LOCUNKEY) &&
-		   (mytele->mode != COMPLETE) && (mytele->mode != REMGO) && (mytele->mode != REMCOMPLETE)) {
+	while (!mytele->killed && (mytele->mode != SETREMOTE) && (mytele->mode != UNKEY) && (mytele->mode != LINKUNKEY) &&
+		   (mytele->mode != LOCUNKEY) && (mytele->mode != COMPLETE) && (mytele->mode != REMGO) && (mytele->mode != REMCOMPLETE)) {
 		rpt_mutex_lock(&myrpt->lock);
 
 		if ((!myrpt->active_telem) && (myrpt->tele.prev == mytele)) {
@@ -1529,6 +1534,10 @@ void *rpt_tele_thread(void *this)
 	}
 
 	ast_debug(5, "Beginning telemetry, active_telem = %p, mytele = %p\n", myrpt->active_telem, mytele);
+	if (mytele->killed) {
+		rpt_mutex_lock(&myrpt->lock);
+		goto abort;
+	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {

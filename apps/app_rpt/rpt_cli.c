@@ -966,10 +966,7 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 			telem = myrpt->tele.next;
 			while (telem != &myrpt->tele) {
 				if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
-					if (telem->chan) {
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
-					}
-					telem->killed = 1;
+					rpt_kill_telem(telem);
 					myrpt->deferid = 1;
 				}
 

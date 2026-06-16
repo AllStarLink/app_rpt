@@ -1169,10 +1169,7 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 		telem = myrpt->tele.next;
 		while (telem != &myrpt->tele) {
 			if (((telem->mode == ID) || (telem->mode == ID1)) && (!telem->killed)) {
-				if (telem->chan) {
-					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
-				}
-				telem->killed = 1;
+				rpt_kill_telem(telem);
 			}
 			telem = telem->next;
 		}
@@ -1204,10 +1201,7 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 		telem = myrpt->tele.next;
 		while (telem != &myrpt->tele) {
 			if (((telem->mode == ID) || (telem->mode == ID1)) && (!telem->killed)) {
-				if (telem->chan) {
-					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
-				}
-				telem->killed = 1;
+				rpt_kill_telem(telem);
 			}
 			telem = telem->next;
 		}
@@ -1956,10 +1950,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		k = 0;
 		while (telem != &myrpt->tele) {
 			if (((telem->mode == ID) || (telem->mode == ID1) || (telem->mode == IDTALKOVER)) && (!telem->killed)) {
-				if (telem->chan) {
-					ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
-				}
-				telem->killed = 1;
+				rpt_kill_telem(telem);
 				myrpt->deferid = 1;
 			}
 			telem = telem->next;

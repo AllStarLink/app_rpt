@@ -337,6 +337,7 @@
 #include "app_rpt/rpt_xcat.h"
 #include "app_rpt/rpt_rig.h"
 #include "app_rpt/rpt_radio.h"
+#include "app_rpt/rpt_telemetry.h"
 
 /*** DOCUMENTATION
 	<application name="Rpt" language="en_US">
@@ -4970,7 +4971,7 @@ static void *rpt(void *this)
 
 	telem = myrpt->tele.next;
 	while (telem != &myrpt->tele) {
-		ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV);
+		rpt_kill_telem(telem);
 		telem = telem->next;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
@@ -5488,23 +5489,21 @@ static void *rpt(void *this)
 			telem = myrpt->tele.next;
 			while (telem != &myrpt->tele) {
 				if (telem->mode == ID && !telem->killed) {
-					telem->killed = 1;
+					rpt_kill_telem(telem);
 					hasid = 1;
-					if (telem->chan) {
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
-					}
 				}
+
 				if (telem->mode == TAILMSG && !telem->killed) {
-					telem->killed = 1;
-					if (telem->chan) {
-						ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
-					}
+					rpt_kill_telem(telem);
 				}
+
 				if (telem->mode == IDTALKOVER) {
 					hastalkover = 1;
 				}
+
 				telem = telem->next;
 			}
+
 			if (hasid && !hastalkover) {
 				ast_debug(6, "Tracepoint IDTALKOVER\n");
 				rpt_mutex_unlock(&myrpt->lock);
@@ -7733,9 +7732,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					telem = myrpt->tele.next;
 					while (telem != &myrpt->tele) {
 						if (telem->mode == ACT_TIMEOUT_WARNING && !telem->killed) {
-							if (telem->chan)
-								ast_softhangup(telem->chan, AST_SOFTHANGUP_DEV); /* Whoosh! */
-							telem->killed = 1;
+							rpt_kill_telem(telem);
 						}
 						telem = telem->next;
 					}
