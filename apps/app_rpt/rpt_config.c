@@ -857,7 +857,8 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexphonedelay, "simplexphonedelay", SIMPLEX_PHONE_DELAY);
 	RPT_CONFIG_VAR_INT_MIN_FLOOR(keyupdelay_time, "keyupdelay", 0, 0);
 	RPT_CONFIG_VAR_INT_MIN_FLOOR(keyupdelay_inactivity_time, "keyupdelay_inactivity", 0, 0);
-
+	/* Convert to milliseconds for internal use */
+	rpt_vars[n].p.keyupdelay_inactivity_time = rpt_vars[n].p.keyupdelay_inactivity_time * 1000;
 	/* configure how "L" messages are sent */
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(linkpost_max_message_len, "linkpost_max_message_len", 0, 0, 10000);
 	if (rpt_vars[n].p.linkpost_max_message_len && (rpt_vars[n].p.linkpost_max_message_len < 500)) {

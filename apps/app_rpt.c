@@ -3608,7 +3608,7 @@ static inline void rpt_keyed(struct rpt *myrpt, int delay)
 			return;
 		}
 
-		if (delay && myrpt->p.keyupdelay_time > 0 && myrpt->p.keyupdelay_inactivity_time > 0 && myrpt->keyupinactivitytimer <= 0) {
+		if (myrpt->p.keyupdelay_time > 0 && myrpt->p.keyupdelay_inactivity_time > 0 && myrpt->keyupinactivitytimer <= 0) {
 			myrpt->keyupdelaytimer = myrpt->p.keyupdelay_time;
 			ast_debug(6, "[%s] delaying keyed state for %d ms\n", myrpt->name, myrpt->p.keyupdelay_time);
 			return;
