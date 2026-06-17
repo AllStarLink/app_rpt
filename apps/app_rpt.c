@@ -3608,9 +3608,9 @@ static inline void rpt_keyed(struct rpt *myrpt, int delay)
 			return;
 		}
 
-		if (myrpt->p.keyupdelay_time > 0 && myrpt->p.keyupdelay_inactivity_time > 0 && myrpt->keyupinactivitytimer <= 0) {
-			myrpt->keyupdelaytimer = myrpt->p.keyupdelay_time;
-			ast_debug(6, "[%s] delaying keyed state for %d ms\n", myrpt->name, myrpt->p.keyupdelay_time);
+		if (myrpt->p.first_keyup_min_time > 0 && myrpt->p.first_keyup_inactivity_time > 0 && myrpt->first_keyup_inactivity_timer <= 0) {
+			myrpt->first_keyup_timer = myrpt->p.first_keyup_min_time;
+			ast_debug(6, "[%s] delaying keyed state for %d ms\n", myrpt->name, myrpt->p.first_keyup_min_time);
 			return;
 		}
 	}
@@ -3619,8 +3619,8 @@ static inline void rpt_keyed(struct rpt *myrpt, int delay)
 	myrpt->keyed = 1;
 	time(&myrpt->lastkeyedtime);
 	myrpt->keypost = RPT_KEYPOST_ACTIVE;
-	myrpt->keyupdelaytimer = 0;
-	myrpt->keyupinactivitytimer = myrpt->p.keyupdelay_inactivity_time;
+	myrpt->first_keyup_timer = 0;
+	myrpt->first_keyup_inactivity_timer = myrpt->p.first_keyup_inactivity_time;
 }
 
 static inline int update_timers(struct rpt *myrpt, const int elap, const int totx)
@@ -3677,14 +3677,13 @@ static inline int update_timers(struct rpt *myrpt, const int elap, const int tot
 
 	update_timer(&myrpt->time_out_reset_unkey_interval_timer, elap, 0);
 
-	last_time = myrpt->keyupdelaytimer;
-	update_timer(&myrpt->keyupdelaytimer, elap, 0);
-
-	if (last_time && !myrpt->keyupdelaytimer && !myrpt->keyed) {
+	last_time = myrpt->first_keyup_timer;
+	update_timer(&myrpt->first_keyup_timer, elap, 0);
+	if (last_time && !myrpt->first_keyup_timer && !myrpt->keyed) {
 		rpt_keyed(myrpt, 0);
 	}
 
-	update_timer(&myrpt->keyupinactivitytimer, elap, 0);
+	update_timer(&myrpt->first_keyup_inactivity_timer, elap, 0);
 
 	update_timer(&myrpt->idtimer, elap, 0);
 
@@ -4182,8 +4181,8 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 						if (!strcasecmp(f->data.ptr, myrpt->p.locallist[x])) {
 							myrpt->localoverride = 1;
 							myrpt->keyed = 0;
-							myrpt->keyupdelaytimer = 0;
-							myrpt->keyupinactivitytimer = myrpt->p.keyupdelay_inactivity_time;
+							myrpt->first_keyup_timer = 0;
+							myrpt->first_keyup_inactivity_timer = myrpt->p.first_keyup_inactivity_time;
 							break;
 						}
 					}
@@ -4236,10 +4235,10 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			was_keyed = myrpt->keyed;
 			myrpt->reallykeyed = 0;
 			myrpt->keyed = 0;
-			myrpt->keyupdelaytimer = 0;
+			myrpt->first_keyup_timer = 0;
 
 			if (was_keyed) {
-				myrpt->keyupinactivitytimer = myrpt->p.keyupdelay_inactivity_time;
+				myrpt->first_keyup_inactivity_timer = myrpt->p.first_keyup_inactivity_time;
 			}
 
 			if ((myrpt->p.duplex > 1) && (!asleep) && myrpt->localoverride) {
@@ -5123,8 +5122,8 @@ static void *rpt(void *this)
 	lastexttx = 0;
 	myrpt->keyed = 0;
 	myrpt->txkeyed = 0;
-	myrpt->keyupdelaytimer = 0;
-	myrpt->keyupinactivitytimer = myrpt->p.keyupdelay_inactivity_time;
+	myrpt->first_keyup_timer = 0;
+	myrpt->first_keyup_inactivity_timer = myrpt->p.first_keyup_inactivity_time;
 	time(&myrpt->lastkeyedtime);
 	myrpt->lastkeyedtime -= RPT_LOCKOUT_SECS;
 	time(&myrpt->lasttxkeyedtime);
