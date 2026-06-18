@@ -484,8 +484,6 @@ int send_link_pl(struct rpt *myrpt, const char *txt)
 void send_newkey(struct ast_channel *chan)
 {
 	ast_assert(chan != NULL);
-	/* app_sendtext locks the channel before calling ast_sendtext,
-	 * do this to prevent simultaneous channel servicing which can cause an assertion. */
 	if (ast_sendtext(chan, NEWKEY1STR)) {
 		ast_log(LOG_WARNING, "Failed to send text %s on %s\n", NEWKEY1STR, ast_channel_name(chan));
 	}
