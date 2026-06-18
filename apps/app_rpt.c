@@ -4932,17 +4932,6 @@ static inline void voxtostate_to_voxtotimer(struct rpt *myrpt)
 	}
 }
 
-static int sendtext_cb(void *obj, void *arg, int flags)
-{
-	struct rpt_link *link = obj;
-	const char *str = arg;
-
-	if (link->chan) {
-		ast_sendtext(link->chan, str);
-	}
-	return 0;
-}
-
 /* single thread with one file (request) to dial */
 static void *rpt(void *this)
 {
@@ -5239,7 +5228,7 @@ static void *rpt(void *this)
 			rpt_mutex_lock(&myrpt->lock);
 			myrpt->voteremrx = 0; /* no voter remotes keyed */
 			if (myrpt->links) {
-				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, sendtext_cb, &tmpstr);
+				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, &tmpstr);
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		}
