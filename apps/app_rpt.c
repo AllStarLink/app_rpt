@@ -2593,7 +2593,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 	}
 
 	chan = ast_channel_ref(myrpt->rxchannel);
-	rpt_manager_trigger(myrpt, "DTMF", tone);
+	rpt_manager_trigger(myrpt, chan, "DTMF", tone);
 	ast_channel_unref(chan);
 	donodelog_fmt(myrpt, "DTMF,MAIN,%c", c);
 	if (c == myrpt->p.endchar) {
