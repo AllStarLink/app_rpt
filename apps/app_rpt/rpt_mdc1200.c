@@ -75,8 +75,15 @@ void mdc1200_notify(struct rpt *myrpt, char *fromnode, char *data)
 	char str[50];
 	struct flock fl;
 	time_t t;
+	struct ast_channel *chan;
 
+	if (!myrpt->rxchannel) {
+		return;
+	}
+
+	chan = ast_channel_ref(myrpt->rxchannel);
 	rpt_manager_trigger(myrpt, "MDC-1200", data);
+	ast_channel_unref(chan);
 
 	if (!fromnode) {
 		ast_verb(4, "Got MDC-1200 data %s from local system (%s)\n", data, myrpt->name);

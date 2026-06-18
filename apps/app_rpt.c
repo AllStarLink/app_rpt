@@ -2582,12 +2582,19 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 {
 	enum rpt_function_response res;
 	char cmd[MAXDTMF + 1] = "", c, tone[10];
+	struct ast_channel *chan;
 
 	c = c_in & 0x7f;
 
 	snprintf(tone, sizeof(tone), "%c", c);
-	rpt_manager_trigger(myrpt, "DTMF", tone);
 
+	if (!myrpt->rxchannel) {
+		return;
+	}
+
+	chan = ast_channel_ref(myrpt->rxchannel);
+	rpt_manager_trigger(myrpt, "DTMF", tone);
+	ast_channel_unref(chan);
 	donodelog_fmt(myrpt, "DTMF,MAIN,%c", c);
 	if (c == myrpt->p.endchar) {
 		/* if in simple mode, kill autopatch */
