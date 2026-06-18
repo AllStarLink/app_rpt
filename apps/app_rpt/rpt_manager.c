@@ -23,7 +23,7 @@ static char *ctime_no_newline(const time_t *clock, char *buf, size_t size)
 	char *cp;
 	size_t len;
 
-	if (!clock || !buf || size == 0) {
+	if (!clock || !buf || size < 27) {
 		return NULL;
 	}
 
