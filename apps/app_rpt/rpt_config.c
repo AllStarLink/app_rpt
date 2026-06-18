@@ -536,9 +536,8 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 			}
 
 			ourcfg = ast_config_load(myrpt->p.extnodefiles[i], config_flags);
-
-			/* if file is not there, try the next one */
-			if (!ourcfg) {
+			if (!ourcfg || (ourcfg == CONFIG_STATUS_FILEINVALID)) {
+				/* if file is not present or not valid, try the next one */
 				continue;
 			}
 
