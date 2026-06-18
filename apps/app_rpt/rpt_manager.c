@@ -18,14 +18,21 @@
 
 extern struct rpt rpt_vars[MAXRPTS];
 
-static char *ctime_no_newline(const time_t *clock)
+static char *ctime_no_newline(const time_t *clock, char *buf, size_t size)
 {
-	static char buf[32];
 	char *cp;
 	size_t len;
 
+	if (!clock || !buf || size == 0) {
+		return NULL;
+	}
+
 	cp = ctime_r(clock, buf);
-	len = strnlen(buf, sizeof(buf));
+	if (!cp) {
+		return NULL;
+	}
+
+	len = strnlen(buf, size);
 	if ((len > 0) && (buf[--len] == '\n')) {
 		buf[len] = '\0';
 	}
@@ -35,14 +42,18 @@ static char *ctime_no_newline(const time_t *clock)
 
 void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
 {
+	char lastkeybuf[32] = "", lasttxkeybuf[32] = "";
+
+	ctime_no_newline(&myrpt->lastkeyedtime, lastkeybuf, sizeof(lastkeybuf));
+	ctime_no_newline(&myrpt->lasttxkeyedtime, lasttxkeybuf, sizeof(lasttxkeybuf));
+
 	manager_event(EVENT_FLAG_CALL, event,
 		"Node: %s\r\n"
 		"Channel: %s\r\n"
 		"EventValue: %s\r\n"
 		"LastKeyedTime: %s\r\n"
 		"LastTxKeyedTime: %s\r\n",
-		myrpt->name, ast_channel_name(myrpt->rxchannel), value, ctime_no_newline(&myrpt->lastkeyedtime),
-		ctime_no_newline(&myrpt->lasttxkeyedtime));
+		myrpt->name, ast_channel_name(myrpt->rxchannel), value, lastkeybuf, lasttxkeybuf);
 }
 
 /*!\brief callback to display list of locally configured nodes
