@@ -40,7 +40,7 @@ static char *ctime_no_newline(const time_t *clock, char *buf, size_t size)
 	return cp;
 }
 
-void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
+void rpt_manager_trigger(struct rpt *myrpt, struct ast_channel *chan, char *event, char *value)
 {
 	char lastkeybuf[32] = "", lasttxkeybuf[32] = "";
 
@@ -53,7 +53,7 @@ void rpt_manager_trigger(struct rpt *myrpt, char *event, char *value)
 		"EventValue: %s\r\n"
 		"LastKeyedTime: %s\r\n"
 		"LastTxKeyedTime: %s\r\n",
-		myrpt->name, ast_channel_name(myrpt->rxchannel), value, lastkeybuf, lasttxkeybuf);
+		myrpt->name, ast_channel_name(chan), value, lastkeybuf, lasttxkeybuf);
 }
 
 /*!\brief callback to display list of locally configured nodes

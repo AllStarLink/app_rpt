@@ -1369,7 +1369,7 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 
 	chan = ast_channel_ref(myrpt->rxchannel);
 	pbx_builtin_setvar_helper(chan, varname, buf);
-	rpt_manager_trigger(myrpt, varname, buf);
+	rpt_manager_trigger(myrpt, chan, varname, buf);
 	if (newval >= 0) {
 		rpt_event_process(myrpt);
 	}

@@ -82,7 +82,7 @@ void mdc1200_notify(struct rpt *myrpt, char *fromnode, char *data)
 	}
 
 	chan = ast_channel_ref(myrpt->rxchannel);
-	rpt_manager_trigger(myrpt, "MDC-1200", data);
+	rpt_manager_trigger(myrpt, chan, "MDC-1200", data);
 	ast_channel_unref(chan);
 
 	if (!fromnode) {

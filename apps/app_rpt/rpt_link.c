@@ -667,10 +667,10 @@ void rpt_update_links(struct rpt *myrpt)
 
 	chan = ast_channel_ref(myrpt->rxchannel);
 	pbx_builtin_setvar_helper(chan, "RPT_ALINKS", ast_str_buffer(obuf));
-	rpt_manager_trigger(myrpt, "RPT_ALINKS", ast_str_buffer(obuf));
+	rpt_manager_trigger(myrpt, chan, "RPT_ALINKS", ast_str_buffer(obuf));
 	ast_str_set(&obuf, 0, "%d", n);
 	pbx_builtin_setvar_helper(chan, "RPT_NUMALINKS", ast_str_buffer(obuf));
-	rpt_manager_trigger(myrpt, "RPT_NUMALINKS", ast_str_buffer(obuf));
+	rpt_manager_trigger(myrpt, chan, "RPT_NUMALINKS", ast_str_buffer(obuf));
 	ast_str_reset(buf);
 	rpt_mutex_lock(&myrpt->lock);
 	n = __mklinklist(myrpt, NULL, &buf, USE_FORMAT_RPT_LINK);
@@ -679,10 +679,10 @@ void rpt_update_links(struct rpt *myrpt)
 		ast_str_set(&obuf, 0, "%d,%s", n, ast_str_buffer(buf));
 	}
 	pbx_builtin_setvar_helper(chan, "RPT_LINKS", ast_str_buffer(obuf));
-	rpt_manager_trigger(myrpt, "RPT_LINKS", ast_str_buffer(obuf));
+	rpt_manager_trigger(myrpt, chan, "RPT_LINKS", ast_str_buffer(obuf));
 	ast_str_set(&obuf, 0, "%d", n);
 	pbx_builtin_setvar_helper(chan, "RPT_NUMLINKS", ast_str_buffer(obuf));
-	rpt_manager_trigger(myrpt, "RPT_NUMLINKS", ast_str_buffer(obuf));
+	rpt_manager_trigger(myrpt, chan, "RPT_NUMLINKS", ast_str_buffer(obuf));
 	rpt_event_process(myrpt);
 	ast_channel_unref(chan);
 
