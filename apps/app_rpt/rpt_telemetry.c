@@ -3534,7 +3534,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 
 	case VARCMD:
-		if (myrpt->telemmode < 2 && strncasecmp((char *) data, "STATUS,", 7)) {
+		if (myrpt->telemmode < 2) {
 			return;
 		}
 
