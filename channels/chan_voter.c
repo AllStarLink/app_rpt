@@ -3006,7 +3006,7 @@ static void *voter_primary_client(void *data)
 				/* If this is a new session. */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
 					resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
-					snprintf(p->primary_challenge, sizeof(p->primary_challenge), "%s", (char *) vph->challenge);
+					snprintf(p->primary_challenge, sizeof(p->primary_challenge), "%.*s", (int) sizeof(vph->challenge) - 1, vph->challenge);
 					p->priconn = 0;
 				} else {
 					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||

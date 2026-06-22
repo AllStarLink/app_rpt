@@ -1933,6 +1933,8 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		return DC_COMPLETE;
 	case 65: /* send POCSAG page */
+		int written;
+
 		if (argc < 3) {
 			break;
 		}
@@ -1940,11 +1942,18 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			/* ignore if not a USB channel */
 			break;
 		}
+
 		if (argc > 5) {
-			snprintf(string, sizeof(string), "PAGE %s %s %s %s %s", argv[1], argv[2], argv[3], argv[4], argv[5]);
+			written = snprintf(string, sizeof(string), "PAGE %s %s %s %s %s", argv[1], argv[2], argv[3], argv[4], argv[5]);
 		} else {
-			snprintf(string, sizeof(string), "PAGE %s %s %s", argv[1], argv[2], argv[3]);
+			written = snprintf(string, sizeof(string), "PAGE %s %s %s", argv[1], argv[2], argv[3]);
 		}
+
+		if (written < 0 || written >= sizeof(string)) {
+			ast_log(LOG_WARNING, "app_rpt: POCSAG PAGE message too long, command rejected\n");
+			return DC_ERROR;
+		}
+
 		rpt_mutex_lock(&myrpt->lock);
 		telem = myrpt->tele.next;
 		k = 0;
