@@ -1062,9 +1062,7 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	ast_mutex_lock(&p->instp->lock);
 	strcpy(p->instp->TLB_node_test.ip, p->ip);
 	p->instp->TLB_node_test.port = p->port;
-	ast_mutex_lock(&p->instp->lock);
 	found_key = (struct TLB_node **) tfind(&p->instp->TLB_node_test, &TLB_node_list, compare_ip);
-	ast_mutex_unlock(&p->instp->lock);
 	if (found_key) {
 		pkt.seqnum = htons((*(struct TLB_node **) found_key)->seqnum++);
 	}
