@@ -164,7 +164,7 @@ int saynode(struct rpt *myrpt, struct ast_channel *mychannel, char *name)
 	if (myrpt->p.eannmode < 2) {
 		return res;
 	}
-	sprintf(str, "%d", atoi(name + 1));
+	snprintf(str, sizeof(str), "%d", atoi(name + 1));
 	if (elink_query_callsign(str, fname, sizeof(fname))) {
 		return res;
 	}

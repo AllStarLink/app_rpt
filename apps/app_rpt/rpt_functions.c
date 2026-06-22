@@ -159,7 +159,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			break;
 		}
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
-			strcpy(digitbuf, myrpt->lastlinknode);
+			snprintf(digitbuf, sizeof(digitbuf), "%s", myrpt->lastlinknode);
 		}
 
 		rpt_mutex_lock(&myrpt->lock);
@@ -336,7 +336,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			}
 
 			/* Make a string of disconnected nodes for possible restoration */
-			sprintf(tmp, "%c%c%.290s", c1, (l->perma) ? 'P' : 'T', l->name);
+			snprintf(tmp, sizeof(tmp), "%c%c%.290s", c1, (l->perma) ? 'P' : 'T', l->name);
 			if (strlen(tmp) + strlen(myrpt->savednodes) + 1 < MAXNODESTR) {
 				if (myrpt->savednodes[0])
 					strcat(myrpt->savednodes, ",");
@@ -1901,10 +1901,10 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		/* go thru all the specs */
 		for (i = 1; i < argc; i++) {
 			if (sscanf(argv[i], "%*[Gg]%*[Pp]%*[Ii]%*[oO]" N_FMT(d) "%*[=:]" N_FMT(d), &j, &k) == 2) {
-				sprintf(string, "GPIO %d %d", j, k);
+				snprintf(string, sizeof(string), "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else if (sscanf(argv[i], "%*2[pP]" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
-				sprintf(string, "PP %d %d", j, k);
+				snprintf(string, sizeof(string), "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else {
 				ast_log(LOG_WARNING, "Invalid command COP %s, %s", argv[0], argv[i]);
@@ -1941,9 +1941,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			break;
 		}
 		if (argc > 5) {
-			sprintf(string, "PAGE %s %s %s %s %s", argv[1], argv[2], argv[3], argv[4], argv[5]);
+			snprintf(string, sizeof(string), "PAGE %s %s %s %s %s", argv[1], argv[2], argv[3], argv[4], argv[5]);
 		} else {
-			sprintf(string, "PAGE %s %s %s", argv[1], argv[2], argv[3]);
+			snprintf(string, sizeof(string), "PAGE %s %s %s", argv[1], argv[2], argv[3]);
 		}
 		rpt_mutex_lock(&myrpt->lock);
 		telem = myrpt->tele.next;

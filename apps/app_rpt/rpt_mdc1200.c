@@ -124,7 +124,7 @@ void mdc1200_send(struct rpt *myrpt, char *data)
 		return;
 	}
 
-	sprintf(str, "I %s %s", myrpt->name, data);
+	snprintf(str, sizeof(str), "I %s %s", myrpt->name, data);
 	wf.data.ptr = str;
 	wf.datalen = strlen(str) + 1; /* Isuani, 20141001 */
 

@@ -2953,7 +2953,7 @@ static void *voter_primary_client(void *data)
 		if (!p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 500))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
-			strcpy((char *) authpacket.vp.challenge, challenge);
+			snprintf((char *) authpacket.vp.challenge, sizeof(authpacket.vp.challenge), "%s", challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.flags = 32;
 			ast_debug(3, "VOTER %i: Sent primary client auth to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
@@ -2968,7 +2968,7 @@ static void *voter_primary_client(void *data)
 		if (p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 1000))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
-			strcpy((char *) authpacket.vp.challenge, challenge);
+			snprintf((char *) authpacket.vp.challenge, sizeof(authpacket.vp.challenge), "%s", challenge);
 			authpacket.vp.digest = htonl(resp_digest);
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
 			ast_debug(5, "VOTER %i: Sent primary client keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
@@ -3006,7 +3006,7 @@ static void *voter_primary_client(void *data)
 				/* If this is a new session. */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
 					resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
-					strcpy(p->primary_challenge, (char *) vph->challenge);
+					snprintf(p->primary_challenge, sizeof(p->primary_challenge), "%s", (char *) vph->challenge);
 					p->priconn = 0;
 				} else {
 					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
@@ -3211,7 +3211,7 @@ static void *voter_xmit(void *data)
 		if (x || mx) {
 			memset(&audiopacket, 0, sizeof(audiopacket) - sizeof(audiopacket.audio));
 			memset(&audiopacket.audio, 0xff, sizeof(audiopacket.audio));
-			strcpy((char *) audiopacket.vp.challenge, challenge);
+			snprintf((char *) audiopacket.vp.challenge, sizeof(audiopacket.vp.challenge), "%s", challenge);
 			audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ULAW);
 			audiopacket.rssi = 0;
 			if (f1) {
@@ -3461,7 +3461,7 @@ static void *voter_xmit(void *data)
 				}
 				pingpacket.txtime = tv;
 				pingpacket.starttime = client->ping_txtime;
-				strcpy((char *) pingpacket.vp.challenge, challenge);
+				snprintf((char *) pingpacket.vp.challenge, sizeof(pingpacket.vp.challenge), "%s", challenge);
 				pingpacket.vp.payload_type = htons(VOTER_PAYLOAD_PING);
 				pingpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				pingpacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
@@ -3492,7 +3492,7 @@ static void *voter_xmit(void *data)
 			 */
 			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(tv, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
 				memset(&audiopacket, 0, sizeof(audiopacket));
-				strcpy((char *) audiopacket.vp.challenge, challenge);
+				snprintf((char *) audiopacket.vp.challenge, sizeof(audiopacket.vp.challenge), "%s", challenge);
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
 				audiopacket.vp.digest = htonl(client->respdigest);
@@ -3901,8 +3901,8 @@ static int reload(void)
 		/* Reset dmwdiag to disabled upon reload */
 		p->dmwdiag = 0;
 		oldctcss[0] = 0;
-		strcpy(oldctcss, p->txctcssfreq);
-		sprintf(data, "%d", p->nodenum);
+		snprintf(oldctcss, sizeof(oldctcss), "%s", p->txctcssfreq);
+		snprintf(data, sizeof(data), "%d", p->nodenum);
 		if (ast_variable_browse(cfg, data) == NULL) {
 			continue;
 		}
@@ -4729,7 +4729,7 @@ static void *voter_reader(void *data)
 							isproxy = 1;
 							if (!p->isprimary) {
 								vph->digest = htonl(client->respdigest);
-								strcpy((char *) vph->challenge, challenge);
+								snprintf((char *) vph->challenge, sizeof(vph->challenge), "%s", challenge);
 								sendto(udp_socket, buf, recvlen - sizeof(proxy), 0, (struct sockaddr *) &psin, sizeof(psin));
 								continue;
 							}
@@ -4894,7 +4894,7 @@ static void *voter_reader(void *data)
 							/* If otherwise (RSSI > 0), if ADPCM audio packet, translate it. */
 #ifdef ADPCM_LOOPBACK
 							memset(&audiopacket, 0, sizeof(audiopacket));
-							strcpy((char *) audiopacket.vp.challenge, challenge);
+							snprintf((char *) audiopacket.vp.challenge, sizeof(audiopacket.vp.challenge), "%s", challenge);
 							audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
 							audiopacket.rssi = 0;
 							memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE + 3);
@@ -5259,12 +5259,13 @@ static void *voter_reader(void *data)
 								}
 								stream.curtime = master_time;
 								memcpy(stream.audio, p->buf + AST_FRIENDLY_OFFSET, FRAME_SIZE);
-								sprintf(stream.str, "%s", maxclient->name);
+								snprintf(stream.str, sizeof(stream.str), "%s", maxclient->name);
 								for (client = clients; client; client = client->next) {
 									if (client->nodenum != p->nodenum) {
 										continue;
 									}
-									sprintf(stream.str + strlen(stream.str), ",%s=%d", client->name, client->lastrssi);
+									snprintf(stream.str + strlen(stream.str), sizeof(stream.str) - strlen(stream.str), ",%s=%d",
+										client->name, client->lastrssi);
 								}
 								for (i = 0; i < p->nstreams; i++) {
 									cp = ast_strdup(p->streams[i]);
@@ -5467,7 +5468,7 @@ process_gps:
 		/* Our unique challenge is created in load_module. Copy our challenge into
 		 * the packet header.
 		 */
-		strcpy((char *) authpacket.vp.challenge, challenge);
+		snprintf((char *) authpacket.vp.challenge, sizeof(authpacket.vp.challenge), "%s", challenge);
 
 		/* Put our current system time into the packet header. */
 		gettimeofday(&tv, NULL);

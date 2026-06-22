@@ -773,7 +773,7 @@ int setrtx(struct rpt *myrpt)
 	}
 
 	if (!res) {
-		sprintf(rigstr, "SETFREQ %s %f %s %s %c", myrpt->freq, txfreq, (myrpt->rxplon) ? myrpt->rxpl : "0.0",
+		snprintf(rigstr, sizeof(rigstr), "SETFREQ %s %f %s %s %c", myrpt->freq, txfreq, (myrpt->rxplon) ? myrpt->rxpl : "0.0",
 			(myrpt->txplon) ? myrpt->txpl : "0.0", pwr);
 		send_usb_txt(myrpt, rigstr);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
@@ -823,9 +823,10 @@ int setxpmr(struct rpt *myrpt, int dotx)
 			return -1;
 		}
 
-		sprintf(rigstr, "SETFREQ 0.0 0.0 %s %s L", (myrpt->rxplon) ? myrpt->rxpl : "0.0", (myrpt->txplon) ? myrpt->txpl : "0.0");
+		snprintf(rigstr, sizeof(rigstr), "SETFREQ 0.0 0.0 %s %s L", (myrpt->rxplon) ? myrpt->rxpl : "0.0",
+			(myrpt->txplon) ? myrpt->txpl : "0.0");
 	} else {
-		sprintf(rigstr, "SETFREQ 0.0 0.0 %s 0.0 L", (myrpt->rxplon) ? myrpt->rxpl : "0.0");
+		snprintf(rigstr, sizeof(rigstr), "SETFREQ 0.0 0.0 %s 0.0 L", (myrpt->rxplon) ? myrpt->rxpl : "0.0");
 	}
 
 	send_usb_txt(myrpt, rigstr);

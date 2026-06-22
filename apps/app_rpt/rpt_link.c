@@ -290,7 +290,7 @@ void rssi_send(struct rpt *myrpt)
 	};
 	char str[200];
 
-	sprintf(str, "R %i", myrpt->rxrssi);
+	snprintf(str, sizeof(str), "R %i", myrpt->rxrssi);
 	wf.datalen = strlen(str) + 1;
 	wf.data.ptr = str;
 	/* otherwise, send it to all of em */
@@ -718,7 +718,7 @@ void *rpt_link_connect(void *data)
 		if (!strchr(s1, ':') && strchr(s1, '/') && strncasecmp(s1, "local/", 6) && strncasecmp(s1, "echolink/", 9)) {
 			sy = strchr(s1, '/');
 			*sy = 0;
-			sprintf(sx, "%s:4569/%s", s1, sy + 1);
+			snprintf(sx, sizeof(sx), "%s:4569/%s", s1, sy + 1);
 			s1 = sx;
 		}
 		strsep(&s, ",");

@@ -129,7 +129,7 @@ int ast_radio_amixer_max(int devnum, char *param)
 	snd_hctl_elem_t *elem;
 	snd_ctl_elem_info_t *info;
 
-	sprintf(str, "hw:%d", devnum);
+	snprintf(str, sizeof(str), "hw:%d", devnum);
 	if (snd_hctl_open(&hctl, str, 0)) {
 		return -1;
 	}
@@ -168,7 +168,7 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 	snd_hctl_elem_t *elem;
 	snd_ctl_elem_info_t *info;
 
-	sprintf(str, "hw:%d", devnum);
+	snprintf(str, sizeof(str), "hw:%d", devnum);
 	if (snd_hctl_open(&hctl, str, 0)) {
 		return -1;
 	}
@@ -382,9 +382,9 @@ int ast_radio_hid_device_mklist(void)
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
 			if (is_known_device(dev) || is_user_device(dev)) {
-				sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
+				snprintf(devstr, sizeof(devstr), "%s/%s", usb_bus->dirname, dev->filename);
 				for (i = 0; i < 32; i++) {
-					sprintf(str, "/proc/asound/card%d/usbbus", i);
+					snprintf(str, sizeof(str), "/proc/asound/card%d/usbbus", i);
 					fp = fopen(str, "r");
 					if (!fp) {
 						continue;
@@ -401,7 +401,7 @@ int ast_radio_hid_device_mklist(void)
 						continue;
 					}
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
-					sprintf(str, "/sys/class/sound/card%d/device", i);
+					snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
 						continue;
@@ -413,13 +413,13 @@ int ast_radio_hid_device_mklist(void)
 					cp++;
 #else
 					if (i) {
-						sprintf(str, "/sys/class/sound/dsp%d/device", i);
+						snprintf(str, sizeof(str), "/sys/class/sound/dsp%d/device", i);
 					} else {
-						strcpy(str, "/sys/class/sound/dsp/device");
+						snprintf(str, sizeof(str), "/sys/class/sound/dsp/device");
 					}
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-						sprintf(str, "/sys/class/sound/controlC%d/device", i);
+						snprintf(str, sizeof(str), "/sys/class/sound/controlC%d/device", i);
 						memset(desdev, 0, sizeof(desdev));
 						if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
 							continue;
@@ -476,9 +476,9 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
 		for (dev = usb_bus->devices; dev; dev = dev->next) {
 			if (is_known_device(dev) || is_user_device(dev)) {
-				sprintf(devstr, "%s/%s", usb_bus->dirname, dev->filename);
+				snprintf(devstr, sizeof(devstr), "%s/%s", usb_bus->dirname, dev->filename);
 				for (i = 0; i < 32; i++) {
-					sprintf(str, "/proc/asound/card%d/usbbus", i);
+					snprintf(str, sizeof(str), "/proc/asound/card%d/usbbus", i);
 					fp = fopen(str, "r");
 					if (!fp) {
 						continue;
@@ -495,7 +495,7 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 						continue;
 					}
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
-					sprintf(str, "/sys/class/sound/card%d/device", i);
+					snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
 						continue;
@@ -507,13 +507,13 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 					cp++;
 #else
 					if (i) {
-						sprintf(str, "/sys/class/sound/dsp%d/device", i);
+						snprintf(str, sizeof(str), "/sys/class/sound/dsp%d/device", i);
 					} else {
-						strcpy(str, "/sys/class/sound/dsp/device");
+						snprintf(str, sizeof(str), "/sys/class/sound/dsp/device");
 					}
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-						sprintf(str, "/sys/class/sound/controlC%d/device", i);
+						snprintf(str, sizeof(str), "/sys/class/sound/controlC%d/device", i);
 						memset(desdev, 0, sizeof(desdev));
 						if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
 							continue;
@@ -552,7 +552,7 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 
 	for (i = 0; i < 32; i++) {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
-		sprintf(str, "/sys/class/sound/card%d/device", i);
+		snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 		memset(desdev, 0, sizeof(desdev));
 		if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
 			continue;
@@ -564,13 +564,13 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 		cp++;
 #else
 		if (i) {
-			sprintf(str, "/sys/class/sound/dsp%d/device", i);
+			snprintf(str, sizeof(str), "/sys/class/sound/dsp%d/device", i);
 		} else {
-			strcpy(str, "/sys/class/sound/dsp/device");
+			snprintf(str, sizeof(str), "/sys/class/sound/dsp/device");
 		}
 		memset(desdev, 0, sizeof(desdev));
 		if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-			sprintf(str, "/sys/class/sound/controlC%d/device", i);
+			snprintf(str, sizeof(str), "/sys/class/sound/controlC%d/device", i);
 			memset(desdev, 0, sizeof(desdev));
 			if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
 				continue;
@@ -889,7 +889,8 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
 	dmin = minpwr ? 10 * log10(minpwr * scale) : -96.0;
 	dmax = maxpwr ? 10 * log10(maxpwr * scale) : -96.0;
 	/* Print stats */
-	sprintf(s1, "%sAudioStats: Pk %5.1f  Avg Pwr %3.0f  Min %3.0f  Max %3.0f  dBFS  ClipCnt %u", prefix_text, dpk, tpwr, dmin, dmax, clipcnt);
+	snprintf(s1, sizeof(s1), "%sAudioStats: Pk %5.1f  Avg Pwr %3.0f  Min %3.0f  Max %3.0f  dBFS  ClipCnt %u", prefix_text, dpk,
+		tpwr, dmin, dmax, clipcnt);
 	if (fd >= 0) {
 		ast_cli(fd, "%s\n", s1);
 	} else {

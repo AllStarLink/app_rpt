@@ -1596,12 +1596,12 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 
 	if (thit > CTCSS_NULL && pChan->rxCtcss->decode <= CTCSS_NULL && !pChan->rxCtcss->BlankingTimer) {
 		pChan->rxCtcss->decode = thit;
-		sprintf(pChan->rxctcssfreq, "%.1f", freq_ctcss[thit]);
+		snprintf(pChan->rxctcssfreq, sizeof(pChan->rxctcssfreq), "%.1f", freq_ctcss[thit]);
 		TRACEC(1, "ctcss decode  %i  %.1f\n", thit, freq_ctcss[thit]);
 	} else if (thit <= CTCSS_NULL && pChan->rxCtcss->decode > CTCSS_NULL) {
 		pChan->rxCtcss->BlankingTimer = SAMPLE_RATE_NETWORK / 5;
 		pChan->rxCtcss->decode = CTCSS_NULL;
-		strcpy(pChan->rxctcssfreq, "0");
+		snprintf(pChan->rxctcssfreq, sizeof(pChan->rxctcssfreq), "0");
 		TRACEC(1, "ctcss decode  NULL\n");
 		for (tnum = 0; tnum < CTCSS_NUM_CODES; tnum++) {
 			t_tdet *ptdet = NULL;
@@ -2907,7 +2907,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			}
 
 			memset(pChan->txctcssfreq, 0, sizeof(pChan->txctcssfreq));
-			sprintf(pChan->txctcssfreq, "%.1f", f);
+			snprintf(pChan->txctcssfreq, sizeof(pChan->txctcssfreq), "%.1f", f);
 			pChan->b.txCtcssReady = 1;
 
 			pChan->txState = CHAN_TXSTATE_ACTIVE;

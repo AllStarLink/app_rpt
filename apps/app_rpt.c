@@ -1407,7 +1407,7 @@ void *rpt_call(void *this)
 	 */
 
 	if (myrpt->patchexten[0]) {
-		strcpy(myrpt->exten, myrpt->patchexten);
+		snprintf(myrpt->exten, sizeof(myrpt->exten), "%s", myrpt->patchexten);
 		myrpt->callmode = CALLMODE_CONNECTING;
 	}
 	while ((myrpt->callmode == CALLMODE_DIALING) || (myrpt->callmode == CALLMODE_FAILED)) {
@@ -2035,7 +2035,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			return;
 		}
 		if (dest[0] == '0') {
-			strcpy(dest, myrpt->name);
+			snprintf(dest, sizeof(dest), "%s", myrpt->name);
 		}
 		/* if not for me, redistribute to all links */
 		if (strcmp(dest, myrpt->name)) {
@@ -2109,7 +2109,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		}
 	}
 	if (dest[0] == '0') {
-		strcpy(dest, myrpt->name);
+		snprintf(dest, sizeof(dest), "%s", myrpt->name);
 	}
 
 	/* if not for me, redistribute to all links */
@@ -4208,7 +4208,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 			time(&myrpt->lastkeyedtime);
 			myrpt->keypost = RPT_KEYPOST_ACTIVE;
 			myrpt->lastdtmfuser[0] = 0;
-			strcpy(myrpt->lastdtmfuser, myrpt->curdtmfuser);
+			snprintf(myrpt->lastdtmfuser, sizeof(myrpt->lastdtmfuser), "%s", myrpt->curdtmfuser);
 			myrpt->curdtmfuser[0] = 0;
 			if (myrpt->monstream && (myrpt->p.duplex < 2)) {
 				ast_closestream(myrpt->monstream);
@@ -5242,7 +5242,8 @@ static void *rpt(void *this)
 				if (l->voterlink)
 					myrpt->voteremrx = 1;
 				if ((l->name[0] > '0') && (l->name[0] <= '9'))		/* Ignore '0' nodes */
-					strcpy(myrpt->lastnodewhichkeyedusup, l->name); /* Note the node which is doing the key up */
+					snprintf(myrpt->lastnodewhichkeyedusup, sizeof(myrpt->lastnodewhichkeyedusup), "%s",
+						l->name); /* Note the node which is doing the key up */
 			}
 		}
 		ao2_iterator_destroy(&l_it);
@@ -6749,7 +6750,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (!strcmp(myadr, s2)) { /* if we have it.. */
 				char tmp2[512];
 
-				strcpy(tmp2, tmp);
+				snprintf(tmp2, sizeof(tmp2), "%s", tmp);
 				if (options && callstr)
 					snprintf(tmp2, sizeof(tmp2), "0%s%s", callstr, tmp);
 				mypfx = ast_variable_retrieve(cfg, "proxy", "nodeprefix");
