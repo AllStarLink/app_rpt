@@ -757,7 +757,7 @@ void __attribute__((format(gnu_printf, 5, 6))) __donodelog_fmt(struct rpt *myrpt
 }
 
 /*! \brief Routine to process events for rpt_master threads */
-void rpt_event_process(struct rpt *myrpt)
+void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 {
 	char *myval, *argv[5], *cmpvar, *var, *var1, *cmd, c;
 	char buf[1000], valbuf[500], action;
@@ -789,6 +789,7 @@ void rpt_event_process(struct rpt *myrpt)
 		/* start indicating no command to do */
 		cmd = NULL;
 		c = toupper(*argv[1]);
+
 		if (c == 'E') { /* if to merely evaluate the statement */
 			if (!strncasecmp(v->name, "RPT", 3)) {
 				ast_log(LOG_ERROR, "%s is not a valid name for an event variable!!!!\n", v->name);
@@ -799,19 +800,19 @@ void rpt_event_process(struct rpt *myrpt)
 				continue;
 			}
 			/* see if this var exists yet */
-			myval = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, v->name);
+			myval = (char *) pbx_builtin_getvar_helper(chan, v->name);
 			/* if not, set it to zero, in case of the value being self-referenced */
 			if (!myval) {
-				pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, "0");
+				pbx_builtin_setvar_helper(chan, v->name, "0");
 			}
 			snprintf(valbuf, sizeof(valbuf), "$[ %s ]", argv[2]);
 			buf[0] = 0;
-			pbx_substitute_variables_helper(myrpt->rxchannel, valbuf, buf, sizeof(buf) - 1);
+			pbx_substitute_variables_helper(chan, valbuf, buf, sizeof(buf) - 1);
 			if (pbx_checkcondition(buf)) {
 				cmd = "TRUE";
 			}
 		} else {
-			var = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, argv[2]);
+			var = (char *) pbx_builtin_getvar_helper(chan, argv[2]);
 			if (!var) {
 				ast_log(LOG_ERROR, "Event variable %s not found\n", argv[2]);
 				continue;
@@ -822,7 +823,7 @@ void rpt_event_process(struct rpt *myrpt)
 				if (ast_asprintf(&cmpvar, "XX_%s", argv[2]) < 0) {
 					return;
 				}
-				var1 = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, cmpvar);
+				var1 = (char *) pbx_builtin_getvar_helper(chan, cmpvar);
 				var1p = !varp; /* start with it being opposite */
 				if (var1) {
 					/* set to 1 if var is true */
@@ -859,7 +860,7 @@ void rpt_event_process(struct rpt *myrpt)
 			}
 		}
 		if (action == 'V') { /* set a variable */
-			pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, cmd ? "1" : "0");
+			pbx_builtin_setvar_helper(chan, v->name, cmd ? "1" : "0");
 			continue;
 		} else if (action == 'G') { /* set a global variable */
 			pbx_builtin_setvar_helper(NULL, v->name, cmd ? "1" : "0");
@@ -934,7 +935,7 @@ void rpt_event_process(struct rpt *myrpt)
 		if (c == 'E') {
 			continue;
 		}
-		var = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, argv[2]);
+		var = (char *) pbx_builtin_getvar_helper(chan, argv[2]);
 		if (!var) {
 			continue;
 		}
@@ -943,8 +944,8 @@ void rpt_event_process(struct rpt *myrpt)
 		if (ast_asprintf(&cmpvar, "XX_%s", argv[2]) < 0) {
 			return;
 		}
-		var1 = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, cmpvar);
-		pbx_builtin_setvar_helper(myrpt->rxchannel, cmpvar, var);
+		var1 = (char *) pbx_builtin_getvar_helper(chan, cmpvar);
+		pbx_builtin_setvar_helper(chan, cmpvar, var);
 		ast_free(cmpvar);
 	}
 	if (option_verbose < 5) {
@@ -952,12 +953,12 @@ void rpt_event_process(struct rpt *myrpt)
 	}
 	i = 0;
 	ast_debug(2, "Node Variable dump for node %s:\n", myrpt->name);
-	ast_channel_lock(myrpt->rxchannel);
-	AST_LIST_TRAVERSE(ast_channel_varshead(myrpt->rxchannel), newvariable, entries) {
+	ast_channel_lock(chan);
+	AST_LIST_TRAVERSE(ast_channel_varshead(chan), newvariable, entries) {
 		i++;
 		ast_debug(2, "   %s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 	}
-	ast_channel_unlock(myrpt->rxchannel);
+	ast_channel_unlock(chan);
 	ast_debug(2, "    -- %d variables\n", i);
 }
 

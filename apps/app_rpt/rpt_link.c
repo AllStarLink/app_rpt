@@ -690,7 +690,7 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_str_set(&obuf, 0, "%d", n);
 	pbx_builtin_setvar_helper(chan, "RPT_NUMLINKS", ast_str_buffer(obuf));
 	rpt_manager_trigger(myrpt, chan, "RPT_NUMLINKS", ast_str_buffer(obuf));
-	rpt_event_process(myrpt);
+	rpt_event_process(myrpt, chan);
 	ast_channel_unref(chan);
 
 	ast_free(buf);
