@@ -38,6 +38,7 @@
 
 #include "rpt_bridging.h"
 #include "rpt_call.h"
+#include "rpt_lock.h"
 
 /*!
  *	\brief used to display "words" in debug messages.
