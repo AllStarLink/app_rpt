@@ -118,6 +118,7 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 {
 	struct ast_channel **chanptr = rpt_chan_channel(myrpt, NULL, chantype);
+	rpt_mutex_lock(&myrpt->lock);
 
 	if (!*chanptr) {
 		ast_log(LOG_WARNING, "No %s channel to hang up\n", rpt_chan_type_str(chantype));
@@ -150,6 +151,7 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 	ast_debug(2, "Hanging up channel %s\n", ast_channel_name(*chanptr));
 	ast_hangup(*chanptr);
 	*chanptr = NULL;
+	rpt_mutex_unlock(&myrpt->lock);
 }
 
 static const char *rpt_chan_app(enum rpt_chan_type chantype, enum rpt_chan_flags flags)

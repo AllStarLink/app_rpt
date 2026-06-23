@@ -7904,6 +7904,8 @@ static int stop_repeaters(void)
 			continue;
 		}
 		ast_verb(3, "Hanging up repeater %s\n", rpt_vars[i].name);
+		rpt_mutex_lock(&myrpt->lock);
+
 		if (myrpt->rxchannel) {
 			ast_verb(4, "Hanging up channel %s\n", ast_channel_name(myrpt->rxchannel));
 			ast_channel_lock(myrpt->rxchannel);
@@ -7912,6 +7914,8 @@ static int stop_repeaters(void)
 			myrpt->rxchannel = NULL; /* If we aborted the repeater but haven't unloaded, this channel handle is not valid anymore
 										in a future call to stop_repeaters() */
 		}
+
+		rpt_mutex_unlock(&myrpt->lock);
 	}
 	return 0;
 }
