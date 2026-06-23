@@ -2588,11 +2588,12 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 
 	snprintf(tone, sizeof(tone), "%c", c);
 
+	rpt_mutex_lock(&myrpt->lock);
 	if (!myrpt->rxchannel) {
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 
-	rpt_mutex_lock(&myrpt->lock);
 	chan = ast_channel_ref(myrpt->rxchannel);
 	rpt_mutex_unlock(&myrpt->lock);
 	if (!chan) {

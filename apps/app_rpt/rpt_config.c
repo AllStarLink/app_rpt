@@ -1363,11 +1363,12 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 		buf[0] = '1';
 	}
 
+	rpt_mutex_lock(&myrpt->lock);
 	if (!myrpt->rxchannel) {
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 
-	rpt_mutex_lock(&myrpt->lock);
 	chan = ast_channel_ref(myrpt->rxchannel);
 	rpt_mutex_unlock(&myrpt->lock);
 	if (!chan) {

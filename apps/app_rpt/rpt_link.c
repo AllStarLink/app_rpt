@@ -661,6 +661,7 @@ void rpt_update_links(struct rpt *myrpt)
 	if (!myrpt->rxchannel) {
 		ast_free(buf);
 		ast_free(obuf);
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 
