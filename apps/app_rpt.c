@@ -2592,7 +2592,13 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 		return;
 	}
 
+	rpt_mutex_lock(&myrpt->lock);
 	chan = ast_channel_ref(myrpt->rxchannel);
+	rpt_mutex_unlock(&myrpt->lock);
+	if (!chan) {
+		return;
+	}
+
 	rpt_manager_trigger(myrpt, chan, "DTMF", tone);
 	ast_channel_unref(chan);
 	donodelog_fmt(myrpt, "DTMF,MAIN,%c", c);

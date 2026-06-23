@@ -653,7 +653,6 @@ void rpt_update_links(struct rpt *myrpt)
 
 	rpt_mutex_lock(&myrpt->lock);
 	n = __mklinklist(myrpt, NULL, &buf, USE_FORMAT_RPT_ALINK);
-	rpt_mutex_unlock(&myrpt->lock);
 	/* parse em */
 	if (n) {
 		ast_str_set(&obuf, 0, "%d,%s", n, ast_str_buffer(buf));
@@ -666,6 +665,13 @@ void rpt_update_links(struct rpt *myrpt)
 	}
 
 	chan = ast_channel_ref(myrpt->rxchannel);
+	rpt_mutex_unlock(&myrpt->lock);
+	if (!chan) {
+		ast_free(buf);
+		ast_free(obuf);
+		return;
+	}
+
 	pbx_builtin_setvar_helper(chan, "RPT_ALINKS", ast_str_buffer(obuf));
 	rpt_manager_trigger(myrpt, chan, "RPT_ALINKS", ast_str_buffer(obuf));
 	ast_str_set(&obuf, 0, "%d", n);
