@@ -123,6 +123,7 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 
 	if (!*chanptr) {
 		ast_log(LOG_WARNING, "No %s channel to hang up\n", rpt_chan_type_str(chantype));
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 
