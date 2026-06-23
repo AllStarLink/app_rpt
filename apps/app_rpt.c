@@ -7896,6 +7896,8 @@ static int stop_repeaters(void)
 
 	for (i = 0; i < nrpts; i++) {
 		struct rpt *myrpt = &rpt_vars[i];
+		struct ast_channel *chan = NULL;
+
 		if (!myrpt) {
 			ast_debug(1, "No RPT at index %d?\n", i);
 			continue;
@@ -7907,16 +7909,22 @@ static int stop_repeaters(void)
 		rpt_mutex_lock(&myrpt->lock);
 
 		if (myrpt->rxchannel) {
-			ast_verb(4, "Hanging up channel %s\n", ast_channel_name(myrpt->rxchannel));
-			ast_channel_lock(myrpt->rxchannel);
-			ast_softhangup(myrpt->rxchannel, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
-			ast_channel_unlock(myrpt->rxchannel);
+			chan = ast_channel_ref(myrpt->rxchannel);
 			myrpt->rxchannel = NULL; /* If we aborted the repeater but haven't unloaded, this channel handle is not valid anymore
 										in a future call to stop_repeaters() */
 		}
 
 		rpt_mutex_unlock(&myrpt->lock);
+
+		if (chan) {
+			ast_verb(4, "Hanging up channel %s\n", ast_channel_name(chan));
+			ast_channel_lock(chan);
+			ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
+			ast_channel_unlock(chan);
+			ast_channel_unref(chan);
+		}
 	}
+
 	return 0;
 }
 
