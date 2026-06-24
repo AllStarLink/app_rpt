@@ -388,8 +388,10 @@ static int append_register(const char *hostname, const char *username, const cha
 {
 	struct http_registry *reg;
 	static int iaxport = 0;
+	size_t size;
 
-	if (!(reg = ast_calloc(1, sizeof(*reg) + strlen(hostname) + 1))) {
+	size = strlen(hostname);
+	if (!(reg = ast_calloc(1, sizeof(*reg) + size + 1))) {
 		return -1;
 	}
 
@@ -400,8 +402,7 @@ static int append_register(const char *hostname, const char *username, const cha
 	}
 
 	ast_copy_string(reg->username, username, sizeof(reg->username));
-	strcpy(reg->hostname, hostname); /* Note: This is safe because we size it to the size of "hostname" at allocation.*/
-
+	ast_copy_string(reg->hostname, hostname, size);
 	if (secret) {
 		ast_copy_string(reg->secret, secret, sizeof(reg->secret));
 	}
