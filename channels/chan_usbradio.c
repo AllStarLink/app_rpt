@@ -2267,9 +2267,9 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	}
 
 	if (o->pmrChan->rptnum && (o->pmrChan->pLsdCtl->cs[o->pmrChan->rptnum].b.rxkeyed != o->rxlsddecode)) {
-		ast_log(LOG_NOTICE, "Channel %s: rxLSDecode = %s.\n", o->name, o->pmrChan->rxctcssfreq);
+		ast_debug(3, "Channel %s: rxLSDecode = %s.\n", o->name, o->pmrChan->rxctcssfreq);
 		o->rxlsddecode = o->pmrChan->pLsdCtl->cs[o->pmrChan->rptnum].b.rxkeyed;
-		as_copy_string(o->rxctcssfreq, o->pmrChan->rxctcssfreq, sizeof(o->rxctcssfreq));
+		ast_copy_string(o->rxctcssfreq, o->pmrChan->rxctcssfreq, sizeof(o->rxctcssfreq));
 	}
 
 	if ((o->pmrChan->rptnum > 0 && o->pmrChan->smode == SMODE_LSD && o->pmrChan->pLsdCtl->cs[o->pmrChan->rptnum].b.rxkeyed) ||

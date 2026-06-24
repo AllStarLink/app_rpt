@@ -1933,6 +1933,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		return DC_COMPLETE;
 	case 65: /* send POCSAG page */
+	{
 		int written;
 
 		if (argc < 3) {
@@ -1968,6 +1969,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		gettimeofday(&myrpt->paging, NULL);
 		ast_sendtext(myrpt->rxchannel, string);
 		return DC_COMPLETE;
+	}
 	}
 	return DC_INDETERMINATE;
 }
