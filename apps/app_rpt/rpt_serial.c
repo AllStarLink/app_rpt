@@ -517,7 +517,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 			j = serial_rxready(myrpt->iofd, 1000);
 			if (j < 1) {
 #ifdef FAKE_SERIAL_RESPONSE
-				strcpy((char *) rxbuf, (char *) txbuf);
+				ast_copy_string((char *) rxbuf, (char *) txbuf, rxmaxbytes);
 				return (strlen((char *) rxbuf));
 #else
 				ast_log(LOG_WARNING, "%d Serial device not responding on node %s\n", j, myrpt->name);

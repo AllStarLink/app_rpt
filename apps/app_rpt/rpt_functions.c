@@ -293,7 +293,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			return DC_ERROR;
 		}
 		rpt_mutex_lock(&myrpt->lock);
-		strcpy(myrpt->lastlinknode, digitbuf);
+		ast_copy_string(myrpt->lastlinknode, digitbuf, sizeof(myrpt->lastlinknode));
 		ast_copy_string(myrpt->cmdnode, digitbuf, sizeof(myrpt->cmdnode));
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);

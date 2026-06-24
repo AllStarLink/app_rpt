@@ -400,7 +400,7 @@ static int append_register(const char *hostname, const char *username, const cha
 	}
 
 	ast_copy_string(reg->username, username, sizeof(reg->username));
-	strcpy(reg->hostname, hostname); /* Note: This is safe */
+	ast_copy_string(reg->hostname, hostname, sizeof(reg->hostname)); /* Note: This is safe */
 
 	if (secret) {
 		ast_copy_string(reg->secret, secret, sizeof(reg->secret));

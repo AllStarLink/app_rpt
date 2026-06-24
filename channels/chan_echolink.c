@@ -4082,7 +4082,7 @@ static void *el_reader(void *data)
 										}
 									}
 									if (x < MAXPENDING) { /* we found one */
-										strcpy(instp->pending[x].fromip, node_lookup.ip);
+										ast_copy_string(instp->pending[x].fromip, node_lookup.ip, sizeof(instp->pending[x].fromip));
 										instp->pending[x].reqtime = ast_tvnow();
 										time(&now);
 										if (instp->starttime < (now - EL_APRS_START_DELAY)) {

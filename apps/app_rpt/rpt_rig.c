@@ -2460,7 +2460,7 @@ int setrem(struct rpt *myrpt)
 	if (myrpt->remote && myrpt->remote_webtransceiver) {
 		if (myrpt->remmode == REM_MODE_FM) {
 			char myfreq[MAXREMSTR], *cp;
-			strcpy(myfreq, myrpt->freq);
+			ast_copy_string(myfreq, myrpt->freq, sizeof(myfreq));
 			cp = strchr(myfreq, '.');
 			for (i = strlen(myfreq) - 1; i >= 0; i--) {
 				if (myfreq[i] != '0') {

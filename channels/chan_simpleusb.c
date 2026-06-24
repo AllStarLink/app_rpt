@@ -834,8 +834,8 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	}
 	if (!reload) {
 		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
-		strcpy(o->devstr, devstr); /* Safe */
-		strcpy(o->serial, serial); /* Safe */
+		ast_copy_string(o->devstr, devstr, sizeof(o->devstr)); /* Safe */
+		ast_copy_string(o->serial, serial, sizeof(o->serial)); /* Safe */
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
@@ -2865,9 +2865,9 @@ static int usb_device_swap(int fd, const char *other)
 		return -1;
 	}
 	ast_mutex_lock(&usb_dev_lock);
-	strcpy(tmp, p->devstr);
+	ast_copy_string(tmp, p->devstr, sizeof(tmp));
 	d = p->devicenum;
-	strcpy(p->devstr, o->devstr);
+	ast_copy_string(p->devstr, o->devstr, sizeof(p->devstr));
 	p->devicenum = o->devicenum;
 	ast_copy_string(o->devstr, tmp, sizeof(o->devstr));
 	o->devicenum = d;
