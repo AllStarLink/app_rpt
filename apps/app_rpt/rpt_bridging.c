@@ -118,9 +118,10 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 
 void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 {
-	struct ast_channel **chanptr = rpt_chan_channel(myrpt, NULL, chantype);
-	rpt_mutex_lock(&myrpt->lock);
+	struct ast_channel **chanptr;
 
+	rpt_mutex_lock(&myrpt->lock);
+	chanptr = rpt_chan_channel(myrpt, NULL, chantype);
 	if (!*chanptr) {
 		ast_log(LOG_WARNING, "No %s channel to hang up\n", rpt_chan_type_str(chantype));
 		rpt_mutex_unlock(&myrpt->lock);

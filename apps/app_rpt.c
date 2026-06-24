@@ -788,8 +788,8 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 		}
 		/* start indicating no command to do */
 		cmd = NULL;
-		c = toupper(*argv[1]);
 
+		c = toupper(*argv[1]);
 		if (c == 'E') { /* if to merely evaluate the statement */
 			if (!strncasecmp(v->name, "RPT", 3)) {
 				ast_log(LOG_ERROR, "%s is not a valid name for an event variable!!!!\n", v->name);
@@ -2603,6 +2603,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 
 	rpt_manager_trigger(myrpt, chan, "DTMF", tone);
 	ast_channel_unref(chan);
+
 	donodelog_fmt(myrpt, "DTMF,MAIN,%c", c);
 	if (c == myrpt->p.endchar) {
 		/* if in simple mode, kill autopatch */
