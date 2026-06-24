@@ -390,8 +390,8 @@ static int append_register(const char *hostname, const char *username, const cha
 	static int iaxport = 0;
 	size_t size;
 
-	size = strlen(hostname);
-	if (!(reg = ast_calloc(1, sizeof(*reg) + size + 1))) {
+	size = strlen(hostname) + 1;
+	if (!(reg = ast_calloc(1, sizeof(*reg) + size))) {
 		return -1;
 	}
 
