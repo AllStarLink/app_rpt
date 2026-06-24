@@ -3005,7 +3005,7 @@ static void *voter_primary_client(void *data)
 				/* If this is a new session. */
 				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
 					resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
-					ast_copy_string((char *) p->primary_challenge, (char *) vph->challenge, sizeof(p->primary_challenge));
+					ast_copy_string(p->primary_challenge, (char *) vph->challenge, sizeof(p->primary_challenge));
 					p->priconn = 0;
 				} else {
 					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
@@ -4732,7 +4732,7 @@ static void *voter_reader(void *data)
 								sendto(udp_socket, buf, recvlen - sizeof(proxy), 0, (struct sockaddr *) &psin, sizeof(psin));
 								continue;
 							}
-							ast_copy_string((char *) client->saved_challenge, proxy.challenge, sizeof(client->saved_challenge));
+							ast_copy_string(client->saved_challenge, proxy.challenge, sizeof(client->saved_challenge));
 							client->proxy_sin = psin;
 							/* Is the mix mode flag being sent by the proxy client? */
 							if (proxy.flags & 32) {
@@ -4893,7 +4893,7 @@ static void *voter_reader(void *data)
 							/* If otherwise (RSSI > 0), if ADPCM audio packet, translate it. */
 #ifdef ADPCM_LOOPBACK
 							memset(&audiopacket, 0, sizeof(audiopacket));
-							ast_copy_string(audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
+							ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
 							audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
 							audiopacket.rssi = 0;
 							memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE + 3);
