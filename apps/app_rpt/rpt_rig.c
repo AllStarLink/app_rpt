@@ -2472,8 +2472,9 @@ int setrem(struct rpt *myrpt)
 				strcat(myfreq, "0");
 			}
 			snprintf(str, sizeof(str), "J Remote Frequency\n%s FM\n%s Offset\n", (cp) ? myfreq : myrpt->freq, offsets[(int) myrpt->offset]);
-			snprintf(str + strlen(str), sizeof(str) - strlen(str), "%s Power\nTX PL %s\nRX PL %s\n",
-				powerlevels[(int) myrpt->powerlevel], (myrpt->txplon) ? myrpt->txpl : "Off", (myrpt->rxplon) ? myrpt->rxpl : "Off");
+			i = strlen(str);
+			snprintf(str + i, sizeof(str) - i, "%s Power\nTX PL %s\nRX PL %s\n", powerlevels[(int) myrpt->powerlevel],
+				(myrpt->txplon) ? myrpt->txpl : "Off", (myrpt->rxplon) ? myrpt->rxpl : "Off");
 		} else {
 			snprintf(str, sizeof(str), "J Remote Frequency %s %s\n%s Power\n", myrpt->freq, modes[(int) myrpt->remmode],
 				powerlevels[(int) myrpt->powerlevel]);
