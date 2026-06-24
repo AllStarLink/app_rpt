@@ -509,7 +509,7 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 					if (i) {
 						snprintf(str, sizeof(str), "/sys/class/sound/dsp%d/device", i);
 					} else {
-						as_copy_string(str, "/sys/class/sound/dsp/device", sizeof(str));
+						ast_copy_string(str, "/sys/class/sound/dsp/device", sizeof(str));
 					}
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
@@ -566,7 +566,7 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 		if (i) {
 			snprintf(str, sizeof(str), "/sys/class/sound/dsp%d/device", i);
 		} else {
-			as_copy_string(str, "/sys/class/sound/dsp/device", sizeof(str));
+			ast_copy_string(str, "/sys/class/sound/dsp/device", sizeof(str));
 		}
 		memset(desdev, 0, sizeof(desdev));
 		if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
