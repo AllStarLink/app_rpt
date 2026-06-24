@@ -4480,9 +4480,6 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
 		rpt_telemetry(myrpt, REMDISC, l);
 	}
-	if (l->hasconnected) {
-		rpt_update_links(myrpt);
-	}
 	donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 	if (l->hasconnected) {
 		dodispgm(myrpt, l->name);
@@ -4492,6 +4489,11 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	/* hang-up on call to device */
 	hangup_link_chan(l);
 	ast_hangup(l->pchan);
+
+	if (l->hasconnected) {
+		rpt_update_links(myrpt);
+	}
+
 	ast_audiohook_lock(&l->altaudio);
 	ast_audiohook_detach(&l->altaudio);
 	ast_audiohook_unlock(&l->altaudio);
