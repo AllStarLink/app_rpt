@@ -560,7 +560,7 @@ static int rtcp_make_sdes(unsigned char *pkt, int pkt_len, const char *call)
 	memcpy(ap, line, l);
 	ap += l;
 
-	snprintf(line, sizeof(line), "%s", call);
+	ast_copy_string(line, call, sizeof(line));
 	*ap++ = 2;
 	*ap++ = l = strlen(line);
 	memcpy(ap, line, l);
@@ -856,7 +856,7 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	}
 
 	ast_mutex_lock(&instp->lock);
-	snprintf(instp->TLB_node_test.ip, sizeof(instp->TLB_node_test.ip), "%s", strs[1]);
+	ast_copy_string(instp->TLB_node_test.ip, strs[1], sizeof(instp->TLB_node_test.ip));
 	instp->TLB_node_test.port = strtoul(strs[2], NULL, 0);
 	do_new_call(instp, p, "OUTBOUND", "OUTBOUND", strs[3]);
 
@@ -922,7 +922,6 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 {
 	struct TLB_pvt *pvt;
 	int n;
-	char stream[80];
 
 	if (ast_strlen_zero(data)) {
 		return NULL;
@@ -941,8 +940,7 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 	pvt = ast_calloc(1, sizeof(struct TLB_pvt));
 	if (pvt) {
 		ast_mutex_init(&pvt->lock);
-		snprintf(stream, sizeof(stream), "%s-%lu", (char *) data, instances[n]->seqno++);
-		snprintf(pvt->stream, sizeof(pvt->stream), "%s", stream);
+		snprintf(pvt->stream, sizeof(pvt->stream), "%s-%lu", (char *) data, instances[n]->seqno++);
 		pvt->rxqast.qe_forw = &pvt->rxqast;
 		pvt->rxqast.qe_back = &pvt->rxqast;
 
@@ -978,7 +976,7 @@ static int TLB_hangup(struct ast_channel *ast)
 		ast_debug(1, "Sent bye to IP address %s\n", p->ip);
 
 		ast_mutex_lock(&instp->lock);
-		snprintf(instp->TLB_node_test.ip, sizeof(instp->TLB_node_test.ip), "%s", p->ip);
+		ast_copy_string(instp->TLB_node_test.ip, p->ip, sizeof(instp->TLB_node_test.ip));
 		instp->TLB_node_test.port = p->port;
 		find_delete(&instp->TLB_node_test);
 		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
@@ -1060,7 +1058,7 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	 *  increment the seqno for the RTP packet
 	 */
 	ast_mutex_lock(&p->instp->lock);
-	snprintf(p->instp->TLB_node_test.ip, sizeof(p->instp->TLB_node_test.ip), "%s", p->ip);
+	ast_copy_string(p->instp->TLB_node_test.ip, p->ip, sizeof(p->instp->TLB_node_test.ip));
 	p->instp->TLB_node_test.port = p->port;
 	ast_mutex_lock(&p->instp->lock);
 	found_key = (struct TLB_node **) tfind(&p->instp->TLB_node_test, &TLB_node_list, compare_ip);
@@ -1610,7 +1608,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			if (instp->confmode) {
 				twalk(TLB_node_list, send_audio_all);
 			} else {
-				snprintf(instp->TLB_node_test.ip, sizeof(instp->TLB_node_test.ip), "%s", p->ip);
+				ast_copy_string(instp->TLB_node_test.ip, p->ip, sizeof(instp->TLB_node_test.ip));
 				instp->TLB_node_test.port = p->port;
 				twalk(TLB_node_list, send_audio_only_one);
 			}

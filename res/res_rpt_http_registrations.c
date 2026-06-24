@@ -335,7 +335,7 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 		} else {
 			ast_copy_string(perceived, "<Unregistered>", sizeof(perceived));
 		}
-		snprintf(host, sizeof(host), "%s", ast_sockaddr_stringify(&reg->addr));
+		ast_copy_string(host, ast_sockaddr_stringify(&reg->addr), sizeof(host));
 		ast_cli(a->fd, FORMAT, host, reg->username, reg->perceived_port ? perceived : "<Unregistered>", reg->refresh,
 			reg->registered ? "Registered" : "Not Registered");
 		counter++;

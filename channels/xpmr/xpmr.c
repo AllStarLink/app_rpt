@@ -1601,7 +1601,7 @@ i16 ctcss_detect(t_pmr_chan *pChan)
 	} else if (thit <= CTCSS_NULL && pChan->rxCtcss->decode > CTCSS_NULL) {
 		pChan->rxCtcss->BlankingTimer = SAMPLE_RATE_NETWORK / 5;
 		pChan->rxCtcss->decode = CTCSS_NULL;
-		snprintf(pChan->rxctcssfreq, sizeof(pChan->rxctcssfreq), "0");
+		ast_copy_string(pChan->rxctcssfreq, "0", sizeof(pChan->rxctcssfreq));
 		TRACEC(1, "ctcss decode  NULL\n");
 		for (tnum = 0; tnum < CTCSS_NUM_CODES; tnum++) {
 			t_tdet *ptdet = NULL;

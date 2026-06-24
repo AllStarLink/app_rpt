@@ -159,7 +159,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			break;
 		}
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
-			snprintf(digitbuf, sizeof(digitbuf), "%s", myrpt->lastlinknode);
+			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		}
 
 		rpt_mutex_lock(&myrpt->lock);

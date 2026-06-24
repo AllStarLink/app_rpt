@@ -480,7 +480,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 	val = ast_variable_retrieve(myrpt->cfg, myrpt->p.nodes, digitbuf);
 	if (val) {
 		if (nodedata && nodedatalength) {
-			snprintf(nodedata, nodedatalength, "%s", val);
+			ast_copy_string(nodedata, val, nodedatalength);
 			ast_debug(4, "Resolved by internal: node %s to %s\n", digitbuf, nodedata);
 		}
 		return 0;
@@ -490,7 +490,7 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 		while (vp) {
 			if (ast_extension_match(vp->name, digitbuf)) {
 				if (nodedata && nodedatalength) {
-					snprintf(nodedata, nodedatalength, "%s", vp->value);
+					ast_copy_string(nodedata, vp->value, nodedatalength);
 					ast_debug(4, "Resolved by internal/wild: node %s to %s\n", digitbuf, nodedata);
 				}
 				return 0;
