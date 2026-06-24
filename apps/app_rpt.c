@@ -757,7 +757,7 @@ void __attribute__((format(gnu_printf, 5, 6))) __donodelog_fmt(struct rpt *myrpt
 }
 
 /*! \brief Routine to process events for rpt_master threads */
-void rpt_event_process(struct rpt *myrpt)
+void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 {
 	char *myval, *argv[5], *cmpvar, *var, *var1, *cmd, c;
 	char buf[1000], valbuf[500], action;
@@ -788,6 +788,7 @@ void rpt_event_process(struct rpt *myrpt)
 		}
 		/* start indicating no command to do */
 		cmd = NULL;
+
 		c = toupper(*argv[1]);
 		if (c == 'E') { /* if to merely evaluate the statement */
 			if (!strncasecmp(v->name, "RPT", 3)) {
@@ -799,19 +800,19 @@ void rpt_event_process(struct rpt *myrpt)
 				continue;
 			}
 			/* see if this var exists yet */
-			myval = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, v->name);
+			myval = (char *) pbx_builtin_getvar_helper(chan, v->name);
 			/* if not, set it to zero, in case of the value being self-referenced */
 			if (!myval) {
-				pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, "0");
+				pbx_builtin_setvar_helper(chan, v->name, "0");
 			}
 			snprintf(valbuf, sizeof(valbuf), "$[ %s ]", argv[2]);
 			buf[0] = 0;
-			pbx_substitute_variables_helper(myrpt->rxchannel, valbuf, buf, sizeof(buf) - 1);
+			pbx_substitute_variables_helper(chan, valbuf, buf, sizeof(buf) - 1);
 			if (pbx_checkcondition(buf)) {
 				cmd = "TRUE";
 			}
 		} else {
-			var = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, argv[2]);
+			var = (char *) pbx_builtin_getvar_helper(chan, argv[2]);
 			if (!var) {
 				ast_log(LOG_ERROR, "Event variable %s not found\n", argv[2]);
 				continue;
@@ -822,7 +823,7 @@ void rpt_event_process(struct rpt *myrpt)
 				if (ast_asprintf(&cmpvar, "XX_%s", argv[2]) < 0) {
 					return;
 				}
-				var1 = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, cmpvar);
+				var1 = (char *) pbx_builtin_getvar_helper(chan, cmpvar);
 				var1p = !varp; /* start with it being opposite */
 				if (var1) {
 					/* set to 1 if var is true */
@@ -859,7 +860,7 @@ void rpt_event_process(struct rpt *myrpt)
 			}
 		}
 		if (action == 'V') { /* set a variable */
-			pbx_builtin_setvar_helper(myrpt->rxchannel, v->name, cmd ? "1" : "0");
+			pbx_builtin_setvar_helper(chan, v->name, cmd ? "1" : "0");
 			continue;
 		} else if (action == 'G') { /* set a global variable */
 			pbx_builtin_setvar_helper(NULL, v->name, cmd ? "1" : "0");
@@ -934,7 +935,7 @@ void rpt_event_process(struct rpt *myrpt)
 		if (c == 'E') {
 			continue;
 		}
-		var = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, argv[2]);
+		var = (char *) pbx_builtin_getvar_helper(chan, argv[2]);
 		if (!var) {
 			continue;
 		}
@@ -943,8 +944,8 @@ void rpt_event_process(struct rpt *myrpt)
 		if (ast_asprintf(&cmpvar, "XX_%s", argv[2]) < 0) {
 			return;
 		}
-		var1 = (char *) pbx_builtin_getvar_helper(myrpt->rxchannel, cmpvar);
-		pbx_builtin_setvar_helper(myrpt->rxchannel, cmpvar, var);
+		var1 = (char *) pbx_builtin_getvar_helper(chan, cmpvar);
+		pbx_builtin_setvar_helper(chan, cmpvar, var);
 		ast_free(cmpvar);
 	}
 	if (option_verbose < 5) {
@@ -952,12 +953,12 @@ void rpt_event_process(struct rpt *myrpt)
 	}
 	i = 0;
 	ast_debug(2, "Node Variable dump for node %s:\n", myrpt->name);
-	ast_channel_lock(myrpt->rxchannel);
-	AST_LIST_TRAVERSE(ast_channel_varshead(myrpt->rxchannel), newvariable, entries) {
+	ast_channel_lock(chan);
+	AST_LIST_TRAVERSE(ast_channel_varshead(chan), newvariable, entries) {
 		i++;
 		ast_debug(2, "   %s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 	}
-	ast_channel_unlock(myrpt->rxchannel);
+	ast_channel_unlock(chan);
 	ast_debug(2, "    -- %d variables\n", i);
 }
 
@@ -2582,11 +2583,26 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 {
 	enum rpt_function_response res;
 	char cmd[MAXDTMF + 1] = "", c, tone[10];
+	struct ast_channel *chan;
 
 	c = c_in & 0x7f;
 
 	snprintf(tone, sizeof(tone), "%c", c);
-	rpt_manager_trigger(myrpt, "DTMF", tone);
+
+	rpt_mutex_lock(&myrpt->lock);
+	if (!myrpt->rxchannel) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return;
+	}
+
+	chan = ast_channel_ref(myrpt->rxchannel);
+	rpt_mutex_unlock(&myrpt->lock);
+	if (!chan) {
+		return;
+	}
+
+	rpt_manager_trigger(myrpt, chan, "DTMF", tone);
+	ast_channel_unref(chan);
 
 	donodelog_fmt(myrpt, "DTMF,MAIN,%c", c);
 	if (c == myrpt->p.endchar) {
@@ -7881,6 +7897,8 @@ static int stop_repeaters(void)
 
 	for (i = 0; i < nrpts; i++) {
 		struct rpt *myrpt = &rpt_vars[i];
+		struct ast_channel *chan = NULL;
+
 		if (!myrpt) {
 			ast_debug(1, "No RPT at index %d?\n", i);
 			continue;
@@ -7889,15 +7907,25 @@ static int stop_repeaters(void)
 			continue;
 		}
 		ast_verb(3, "Hanging up repeater %s\n", rpt_vars[i].name);
+		rpt_mutex_lock(&myrpt->lock);
+
 		if (myrpt->rxchannel) {
-			ast_verb(4, "Hanging up channel %s\n", ast_channel_name(myrpt->rxchannel));
-			ast_channel_lock(myrpt->rxchannel);
-			ast_softhangup(myrpt->rxchannel, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
-			ast_channel_unlock(myrpt->rxchannel);
+			chan = ast_channel_ref(myrpt->rxchannel);
 			myrpt->rxchannel = NULL; /* If we aborted the repeater but haven't unloaded, this channel handle is not valid anymore
 										in a future call to stop_repeaters() */
 		}
+
+		rpt_mutex_unlock(&myrpt->lock);
+
+		if (chan) {
+			ast_verb(4, "Hanging up channel %s\n", ast_channel_name(chan));
+			ast_channel_lock(chan);
+			ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT); /* Hanging up one channel will signal the thread to abort */
+			ast_channel_unlock(chan);
+			ast_channel_unref(chan);
+		}
 	}
+
 	return 0;
 }
 

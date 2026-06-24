@@ -1160,7 +1160,14 @@ void donodelog(struct rpt *myrpt, char *str);
 #define donodelog_fmt(myrpt, fmt, ...) __donodelog_fmt(myrpt, __FILE__, __LINE__, __FUNCTION__, fmt, __VA_ARGS__)
 void __donodelog_fmt(struct rpt *myrpt, const char *file, int lineno, const char *func, const char *fmt, ...);
 
-void rpt_event_process(struct rpt *myrpt);
+/*!
+ * \brief Process RPT events for a repeater using a caller-owned channel reference.
+ *
+ * \param myrpt Non-NULL reference to the repeater structure.
+ * \param chan  Non-NULL channel reference that remains valid for the duration of this call.
+ */
+void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan);
+
 void *rpt_call(void *this);
 
 /*!

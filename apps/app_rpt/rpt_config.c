@@ -1349,6 +1349,7 @@ int rpt_push_alt_macro(struct rpt *myrpt, char *sptr)
 
 void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 {
+	struct ast_channel *chan;
 	char buf[2];
 
 	if (!varname || !*varname) {
@@ -1361,11 +1362,24 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 		buf[0] = '1';
 	}
 
-	pbx_builtin_setvar_helper(myrpt->rxchannel, varname, buf);
-	rpt_manager_trigger(myrpt, varname, buf);
-	if (newval >= 0) {
-		rpt_event_process(myrpt);
+	rpt_mutex_lock(&myrpt->lock);
+	if (!myrpt->rxchannel) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return;
 	}
+
+	chan = ast_channel_ref(myrpt->rxchannel);
+	rpt_mutex_unlock(&myrpt->lock);
+	if (!chan) {
+		return;
+	}
+
+	pbx_builtin_setvar_helper(chan, varname, buf);
+	rpt_manager_trigger(myrpt, chan, varname, buf);
+	if (newval >= 0) {
+		rpt_event_process(myrpt, chan);
+	}
+	ast_channel_unref(chan);
 }
 
 int rpt_is_valid_dns_name(const char *dns_name)
