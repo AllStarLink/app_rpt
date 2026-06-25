@@ -400,7 +400,6 @@ int ast_radio_hid_device_mklist(void)
 					if (strcasecmp(desdev, devstr)) {
 						continue;
 					}
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
 					snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
@@ -411,32 +410,6 @@ int ast_radio_hid_device_mklist(void)
 						continue;
 					}
 					cp++;
-#else
-					if (i) {
-						snprintf(str, sizeof(str), "/sys/class/sound/dsp%d/device", i);
-					} else {
-						ast_copy_string(str, "/sys/class/sound/dsp/device", sizeof(str));
-					}
-					memset(desdev, 0, sizeof(desdev));
-					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-						snprintf(str, sizeof(str), "/sys/class/sound/controlC%d/device", i);
-						memset(desdev, 0, sizeof(desdev));
-						if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-							continue;
-						}
-					}
-					cp = strrchr(desdev, '/');
-					if (cp) {
-						*cp = 0;
-					} else {
-						continue;
-					}
-					cp = strrchr(desdev, '/');
-					if (!cp) {
-						continue;
-					}
-					cp++;
-#endif
 					break;
 				}
 				if (i >= 32) {
@@ -494,7 +467,6 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 					if (strcasecmp(desdev, devstr)) {
 						continue;
 					}
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
 					snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 					memset(desdev, 0, sizeof(desdev));
 					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
@@ -505,32 +477,6 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 						continue;
 					}
 					cp++;
-#else
-					if (i) {
-						snprintf(str, sizeof(str), "/sys/class/sound/dsp%d/device", i);
-					} else {
-						ast_copy_string(str, "/sys/class/sound/dsp/device", sizeof(str));
-					}
-					memset(desdev, 0, sizeof(desdev));
-					if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-						snprintf(str, sizeof(str), "/sys/class/sound/controlC%d/device", i);
-						memset(desdev, 0, sizeof(desdev));
-						if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-							continue;
-						}
-					}
-					cp = strrchr(desdev, '/');
-					if (cp) {
-						*cp = 0;
-					} else {
-						continue;
-					}
-					cp = strrchr(desdev, '/');
-					if (!cp) {
-						continue;
-					}
-					cp++;
-#endif
 					break;
 				}
 				if (i >= 32) {
@@ -551,7 +497,6 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 	char str[200], desdev[200], *cp;
 
 	for (i = 0; i < 32; i++) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)) && !defined(AST_BUILDOPT_LIMEY)
 		snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 		memset(desdev, 0, sizeof(desdev));
 		if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
@@ -562,32 +507,6 @@ int ast_radio_usb_get_usbdev(const char *devstr)
 			continue;
 		}
 		cp++;
-#else
-		if (i) {
-			snprintf(str, sizeof(str), "/sys/class/sound/dsp%d/device", i);
-		} else {
-			ast_copy_string(str, "/sys/class/sound/dsp/device", sizeof(str));
-		}
-		memset(desdev, 0, sizeof(desdev));
-		if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-			snprintf(str, sizeof(str), "/sys/class/sound/controlC%d/device", i);
-			memset(desdev, 0, sizeof(desdev));
-			if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
-				continue;
-			}
-		}
-		cp = strrchr(desdev, '/');
-		if (cp) {
-			*cp = 0;
-		} else {
-			continue;
-		}
-		cp = strrchr(desdev, '/');
-		if (!cp) {
-			continue;
-		}
-		cp++;
-#endif
 		if (!strcasecmp(cp, devstr)) {
 			break;
 		}
