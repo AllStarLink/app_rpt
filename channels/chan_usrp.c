@@ -199,8 +199,8 @@ static char *handle_usrp_show(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 	for (i = 0; i < MAX_CHANS; i++) {
 		pvt = usrp_channels[i];
 		if (pvt) {
-			sprintf(s, "Channel %s: Tx keyed %-3s, Rx keyed %d, Read %lu, Write %lu", pvt->stream, (pvt->txkey) ? "yes" : "no",
-				pvt->rxkey, pvt->readct, pvt->writect);
+			snprintf(s, sizeof(s), "Channel %s: Tx keyed %-3s, Rx keyed %d, Read %lu, Write %lu", pvt->stream,
+				(pvt->txkey) ? "yes" : "no", pvt->rxkey, pvt->readct, pvt->writect);
 			ast_cli(a->fd, "%s\n", s);
 		}
 	}

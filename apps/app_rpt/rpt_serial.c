@@ -517,7 +517,7 @@ int serial_remote_io(struct rpt *myrpt, unsigned char *txbuf, int txbytes, unsig
 			j = serial_rxready(myrpt->iofd, 1000);
 			if (j < 1) {
 #ifdef FAKE_SERIAL_RESPONSE
-				strcpy((char *) rxbuf, (char *) txbuf);
+				ast_copy_string((char *) rxbuf, (char *) txbuf, rxmaxbytes);
 				return (strlen((char *) rxbuf));
 #else
 				ast_log(LOG_WARNING, "%d Serial device not responding on node %s\n", j, myrpt->name);
@@ -773,7 +773,7 @@ int setrtx(struct rpt *myrpt)
 	}
 
 	if (!res) {
-		sprintf(rigstr, "SETFREQ %s %f %s %s %c", myrpt->freq, txfreq, (myrpt->rxplon) ? myrpt->rxpl : "0.0",
+		snprintf(rigstr, sizeof(rigstr), "SETFREQ %s %f %s %s %c", myrpt->freq, txfreq, (myrpt->rxplon) ? myrpt->rxpl : "0.0",
 			(myrpt->txplon) ? myrpt->txpl : "0.0", pwr);
 		send_usb_txt(myrpt, rigstr);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
@@ -823,9 +823,10 @@ int setxpmr(struct rpt *myrpt, int dotx)
 			return -1;
 		}
 
-		sprintf(rigstr, "SETFREQ 0.0 0.0 %s %s L", (myrpt->rxplon) ? myrpt->rxpl : "0.0", (myrpt->txplon) ? myrpt->txpl : "0.0");
+		snprintf(rigstr, sizeof(rigstr), "SETFREQ 0.0 0.0 %s %s L", (myrpt->rxplon) ? myrpt->rxpl : "0.0",
+			(myrpt->txplon) ? myrpt->txpl : "0.0");
 	} else {
-		sprintf(rigstr, "SETFREQ 0.0 0.0 %s 0.0 L", (myrpt->rxplon) ? myrpt->rxpl : "0.0");
+		snprintf(rigstr, sizeof(rigstr), "SETFREQ 0.0 0.0 %s 0.0 L", (myrpt->rxplon) ? myrpt->rxpl : "0.0");
 	}
 
 	send_usb_txt(myrpt, rigstr);

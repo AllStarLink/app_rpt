@@ -159,7 +159,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			break;
 		}
 		if ((digitbuf[0] == '0') && (myrpt->lastlinknode[0])) {
-			strcpy(digitbuf, myrpt->lastlinknode);
+			ast_copy_string(digitbuf, myrpt->lastlinknode, sizeof(digitbuf));
 		}
 
 		rpt_mutex_lock(&myrpt->lock);
@@ -293,7 +293,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			return DC_ERROR;
 		}
 		rpt_mutex_lock(&myrpt->lock);
-		strcpy(myrpt->lastlinknode, digitbuf);
+		ast_copy_string(myrpt->lastlinknode, digitbuf, sizeof(myrpt->lastlinknode));
 		ast_copy_string(myrpt->cmdnode, digitbuf, sizeof(myrpt->cmdnode));
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -336,7 +336,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			}
 
 			/* Make a string of disconnected nodes for possible restoration */
-			sprintf(tmp, "%c%c%.290s", c1, (l->perma) ? 'P' : 'T', l->name);
+			snprintf(tmp, sizeof(tmp), "%c%c%.290s", c1, (l->perma) ? 'P' : 'T', l->name);
 			if (strlen(tmp) + strlen(myrpt->savednodes) + 1 < MAXNODESTR) {
 				if (myrpt->savednodes[0])
 					strcat(myrpt->savednodes, ",");
@@ -1901,10 +1901,10 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		/* go thru all the specs */
 		for (i = 1; i < argc; i++) {
 			if (sscanf(argv[i], "%*[Gg]%*[Pp]%*[Ii]%*[oO]" N_FMT(d) "%*[=:]" N_FMT(d), &j, &k) == 2) {
-				sprintf(string, "GPIO %d %d", j, k);
+				snprintf(string, sizeof(string), "GPIO %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else if (sscanf(argv[i], "%*2[pP]" N_FMT(d) "=" N_FMT(d), &j, &k) == 2) {
-				sprintf(string, "PP %d %d", j, k);
+				snprintf(string, sizeof(string), "PP %d %d", j, k);
 				ast_sendtext(myrpt->rxchannel, string);
 			} else {
 				ast_log(LOG_WARNING, "Invalid command COP %s, %s", argv[0], argv[i]);
@@ -1933,6 +1933,9 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		}
 		return DC_COMPLETE;
 	case 65: /* send POCSAG page */
+	{
+		int written;
+
 		if (argc < 3) {
 			break;
 		}
@@ -1940,11 +1943,18 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			/* ignore if not a USB channel */
 			break;
 		}
+
 		if (argc > 5) {
-			sprintf(string, "PAGE %s %s %s %s %s", argv[1], argv[2], argv[3], argv[4], argv[5]);
+			written = snprintf(string, sizeof(string), "PAGE %s %s %s %s %s", argv[1], argv[2], argv[3], argv[4], argv[5]);
 		} else {
-			sprintf(string, "PAGE %s %s %s", argv[1], argv[2], argv[3]);
+			written = snprintf(string, sizeof(string), "PAGE %s %s %s", argv[1], argv[2], argv[3]);
 		}
+
+		if (written < 0 || written >= sizeof(string)) {
+			ast_log(LOG_WARNING, "app_rpt: POCSAG PAGE message too long, command rejected\n");
+			return DC_ERROR;
+		}
+
 		rpt_mutex_lock(&myrpt->lock);
 		telem = myrpt->tele.next;
 		k = 0;
@@ -1959,6 +1969,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 		gettimeofday(&myrpt->paging, NULL);
 		ast_sendtext(myrpt->rxchannel, string);
 		return DC_COMPLETE;
+	}
 	}
 	return DC_INDETERMINATE;
 }

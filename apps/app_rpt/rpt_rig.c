@@ -489,7 +489,7 @@ int setkenwood(struct rpt *myrpt)
 		}
 	}
 
-	sprintf(offset, "%06d000", mysplit);
+	snprintf(offset, sizeof(offset), "%06d000", mysplit);
 	strcpy(freq, "000000");
 	ast_copy_string(freq, decimals, strlen(freq) - 1);
 
@@ -503,18 +503,18 @@ int setkenwood(struct rpt *myrpt)
 		step = 1;
 	}
 
-	sprintf(txstr, "VW %c,%05d%s,%d,%d,0,%d,%d,,%02d,,%02d,%s\r", band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
-		(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
+	snprintf(txstr, sizeof(txstr), "VW %c,%05d%s,%d,%d,0,%d,%d,,%02d,,%02d,%s\r", band, atoi(mhz), freq, step,
+		offsets[(int) myrpt->offset], (myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VW") < 0) {
 		return -1;
 	}
 
-	sprintf(txstr, "RBN %c\r", band2);
+	snprintf(txstr, sizeof(txstr), "RBN %c\r", band2);
 	if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 		return -1;
 	}
 
-	sprintf(txstr, "PC %c,%d\r", band1, powers[(int) myrpt->powerlevel]);
+	snprintf(txstr, sizeof(txstr), "PC %c,%d\r", band1, powers[(int) myrpt->powerlevel]);
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
@@ -551,7 +551,7 @@ int set_tmd700(struct rpt *myrpt)
 		}
 	}
 
-	sprintf(offset, "%06d000", mysplit);
+	snprintf(offset, sizeof(offset), "%06d000", mysplit);
 	strcpy(freq, "000000");
 	ast_copy_string(freq, decimals, strlen(freq) - 1);
 
@@ -565,8 +565,8 @@ int set_tmd700(struct rpt *myrpt)
 		myrxpl = 0;
 	}
 
-	sprintf(txstr, "VW %d,%05d%s,%d,%d,0,%d,%d,0,%02d,0010,%02d,%s,0\r", band, atoi(mhz), freq, step, offsets[(int) myrpt->offset],
-		(myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
+	snprintf(txstr, sizeof(txstr), "VW %d,%05d%s,%d,%d,0,%d,%d,0,%02d,0010,%02d,%s,0\r", band, atoi(mhz), freq, step,
+		offsets[(int) myrpt->offset], (myrpt->txplon != 0), myrxpl, kenwood_pltocode(myrpt->txpl), kenwood_pltocode(myrpt->rxpl), offset);
 	if (sendrxkenwood(myrpt, txstr, rxstr, "VW") < 0) {
 		return -1;
 	}
@@ -575,19 +575,19 @@ int set_tmd700(struct rpt *myrpt)
 		return -1;
 	}
 
-	sprintf(txstr, "RBN\r");
+	snprintf(txstr, sizeof(txstr), "RBN\r");
 	if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 		return -1;
 	}
 
-	sprintf(txstr, "RBN %d\r", band);
+	snprintf(txstr, sizeof(txstr), "RBN %d\r", band);
 	if (strncmp(rxstr, txstr, 5)) {
 		if (sendrxkenwood(myrpt, txstr, rxstr, "RBN") < 0) {
 			return -1;
 		}
 	}
 
-	sprintf(txstr, "PC 0,%d\r", powers[(int) myrpt->powerlevel]);
+	snprintf(txstr, sizeof(txstr), "PC 0,%d\r", powers[(int) myrpt->powerlevel]);
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
@@ -619,8 +619,8 @@ int set_tm271(struct rpt *myrpt)
 		step = 1;
 	}
 
-	sprintf(txstr, "VF %04d%s,%d,%d,0,%d,0,0,%02d,00,000,%05d000,0,0\r", atoi(mhz), freq, step, offsets[(int) myrpt->offset],
-		(myrpt->txplon != 0), tm271_pltocode(myrpt->txpl), mysplit);
+	snprintf(txstr, sizeof(txstr), "VF %04d%s,%d,%d,0,%d,0,0,%02d,00,000,%05d000,0,0\r", atoi(mhz), freq, step,
+		offsets[(int) myrpt->offset], (myrpt->txplon != 0), tm271_pltocode(myrpt->txpl), mysplit);
 	if (sendrxkenwood(myrpt, "VM 0\r", rxstr, "VM") < 0) {
 		return -1;
 	}
@@ -629,7 +629,7 @@ int set_tm271(struct rpt *myrpt)
 		return -1;
 	}
 
-	sprintf(txstr, "PC %d\r", powers[(int) myrpt->powerlevel]);
+	snprintf(txstr, sizeof(txstr), "PC %d\r", powers[(int) myrpt->powerlevel]);
 	if (sendrxkenwood(myrpt, txstr, rxstr, "PC") < 0) {
 		return -1;
 	}
@@ -1595,7 +1595,7 @@ static int set_freq_ft950(struct rpt *myrpt, char *newfreq)
 	m = atoi(mhz);
 	d = atoi(decimals);
 
-	sprintf(cmdstr, "FA%d%06d;", m, d * 10);
+	snprintf(cmdstr, sizeof(cmdstr), "FA%d%06d;", m, d * 10);
 	return serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);
 }
 
@@ -1686,7 +1686,7 @@ static int set_ctcss_freq_ft950(struct rpt *myrpt, char *txtone, char *rxtone)
 		return -1;
 	}
 
-	sprintf(cmdstr, "CN0%02d;", c);
+	snprintf(cmdstr, sizeof(cmdstr), "CN0%02d;", c);
 
 	return serial_remote_io(myrpt, (unsigned char *) cmdstr, strlen(cmdstr), NULL, 0, 0);
 }
@@ -2460,7 +2460,7 @@ int setrem(struct rpt *myrpt)
 	if (myrpt->remote && myrpt->remote_webtransceiver) {
 		if (myrpt->remmode == REM_MODE_FM) {
 			char myfreq[MAXREMSTR], *cp;
-			strcpy(myfreq, myrpt->freq);
+			ast_copy_string(myfreq, myrpt->freq, sizeof(myfreq));
 			cp = strchr(myfreq, '.');
 			for (i = strlen(myfreq) - 1; i >= 0; i--) {
 				if (myfreq[i] != '0') {
@@ -2471,11 +2471,13 @@ int setrem(struct rpt *myrpt)
 			if (myfreq[0] && (myfreq[strlen(myfreq) - 1] == '.')) {
 				strcat(myfreq, "0");
 			}
-			sprintf(str, "J Remote Frequency\n%s FM\n%s Offset\n", (cp) ? myfreq : myrpt->freq, offsets[(int) myrpt->offset]);
-			sprintf(str + strlen(str), "%s Power\nTX PL %s\nRX PL %s\n", powerlevels[(int) myrpt->powerlevel],
+			snprintf(str, sizeof(str), "J Remote Frequency\n%s FM\n%s Offset\n", (cp) ? myfreq : myrpt->freq, offsets[(int) myrpt->offset]);
+			i = strlen(str);
+			snprintf(str + i, sizeof(str) - i, "%s Power\nTX PL %s\nRX PL %s\n", powerlevels[(int) myrpt->powerlevel],
 				(myrpt->txplon) ? myrpt->txpl : "Off", (myrpt->rxplon) ? myrpt->rxpl : "Off");
 		} else {
-			sprintf(str, "J Remote Frequency %s %s\n%s Power\n", myrpt->freq, modes[(int) myrpt->remmode], powerlevels[(int) myrpt->powerlevel]);
+			snprintf(str, sizeof(str), "J Remote Frequency %s %s\n%s Power\n", myrpt->freq, modes[(int) myrpt->remmode],
+				powerlevels[(int) myrpt->powerlevel]);
 		}
 
 		ast_sendtext(myrpt->remote_webtransceiver, str);
@@ -2801,7 +2803,7 @@ int channel_steer(struct rpt *myrpt, char *data)
 		myrpt->nowchan = strtod(data, NULL);
 		if (!strcmp(myrpt->remoterig, REMOTE_RIG_PPP16)) {
 			char string[16];
-			sprintf(string, "SETCHAN %d ", myrpt->nowchan);
+			snprintf(string, sizeof(string), "SETCHAN %d ", myrpt->nowchan);
 			send_usb_txt(myrpt, string);
 		} else {
 			if (get_mem_set(myrpt, data)) {
@@ -2826,7 +2828,7 @@ int channel_revert(struct rpt *myrpt)
 	if (myrpt->nowchan != myrpt->waschan) {
 		char data[8];
 		ast_debug(1, "reverting.\n");
-		sprintf(data, "%02d", myrpt->waschan);
+		snprintf(data, sizeof(data), "%02d", myrpt->waschan);
 		myrpt->nowchan = myrpt->waschan;
 		channel_steer(myrpt, data);
 		res = 1;

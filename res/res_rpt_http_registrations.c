@@ -335,7 +335,7 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 		} else {
 			ast_copy_string(perceived, "<Unregistered>", sizeof(perceived));
 		}
-		snprintf(host, sizeof(host), "%s", ast_sockaddr_stringify(&reg->addr));
+		ast_copy_string(host, ast_sockaddr_stringify(&reg->addr), sizeof(host));
 		ast_cli(a->fd, FORMAT, host, reg->username, reg->perceived_port ? perceived : "<Unregistered>", reg->refresh,
 			reg->registered ? "Registered" : "Not Registered");
 		counter++;
@@ -388,8 +388,10 @@ static int append_register(const char *hostname, const char *username, const cha
 {
 	struct http_registry *reg;
 	static int iaxport = 0;
+	size_t size;
 
-	if (!(reg = ast_calloc(1, sizeof(*reg) + strlen(hostname) + 1))) {
+	size = strlen(hostname) + 1;
+	if (!(reg = ast_calloc(1, sizeof(*reg) + size))) {
 		return -1;
 	}
 
@@ -400,8 +402,7 @@ static int append_register(const char *hostname, const char *username, const cha
 	}
 
 	ast_copy_string(reg->username, username, sizeof(reg->username));
-	strcpy(reg->hostname, hostname); /* Note: This is safe */
-
+	ast_copy_string(reg->hostname, hostname, size);
 	if (secret) {
 		ast_copy_string(reg->secret, secret, sizeof(reg->secret));
 	}

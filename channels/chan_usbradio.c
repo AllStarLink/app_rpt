@@ -807,8 +807,8 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	}
 	if (!reload) {
 		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
-		strcpy(o->devstr, devstr); /* Safe */
-		strcpy(o->serial, serial); /* Safe */
+		ast_copy_string(o->devstr, devstr, sizeof(o->devstr));
+		ast_copy_string(o->serial, serial, sizeof(o->serial));
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
@@ -1620,9 +1620,9 @@ static int setformat(struct chan_usbradio_pvt *o, int mode)
 		return 0;
 	}
 
-	strcpy(device, "/dev/dsp");
+	ast_copy_string(device, "/dev/dsp", sizeof(device));
 	if (o->devicenum) {
-		sprintf(device, "/dev/dsp%d", o->devicenum);
+		snprintf(device, sizeof(device), "/dev/dsp%d", o->devicenum);
 	}
 	/* open the device */
 	fd = o->sounddev = open(device, mode | O_NONBLOCK);
@@ -1861,8 +1861,8 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 		o->set_txfreq = round(tx * (double) 1000000);
 		o->set_rxfreq = round(rx * (double) 1000000);
 		o->pmrChan->txpower = (pwr == 'H');
-		strcpy(o->set_rxctcssfreqs, rxpl); /* Safe */
-		strcpy(o->set_txctcssfreqs, txpl); /* Safe */
+		ast_copy_string(o->set_rxctcssfreqs, rxpl, sizeof(o->set_rxctcssfreqs));
+		ast_copy_string(o->set_txctcssfreqs, txpl, sizeof(o->set_txctcssfreqs));
 
 		o->remoted = 1;
 		xpmr_config(o);
@@ -2240,7 +2240,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	if (o->pmrChan->b.ctcssRxEnable && o->pmrChan->rxCtcss->decode != o->rxctcssdecode) {
 		ast_debug(3, "Channel %s: rxctcssdecode = %i.\n", o->name, o->pmrChan->rxCtcss->decode);
 		o->rxctcssdecode = o->pmrChan->rxCtcss->decode;
-		strcpy(o->rxctcssfreq, o->pmrChan->rxctcssfreq);
+		ast_copy_string(o->rxctcssfreq, o->pmrChan->rxctcssfreq, sizeof(o->rxctcssfreq));
 	}
 
 	/* Check for SD - CTCSS active */
@@ -2263,13 +2263,13 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	if (o->pmrChan->decDcs->decode != o->rxdcsdecode) {
 		ast_debug(3, "Channel %s: rxdcsdecode = %s.\n", o->name, o->pmrChan->rxctcssfreq);
 		o->rxdcsdecode = o->pmrChan->decDcs->decode;
-		strcpy(o->rxctcssfreq, o->pmrChan->rxctcssfreq);
+		ast_copy_string(o->rxctcssfreq, o->pmrChan->rxctcssfreq, sizeof(o->rxctcssfreq));
 	}
 
 	if (o->pmrChan->rptnum && (o->pmrChan->pLsdCtl->cs[o->pmrChan->rptnum].b.rxkeyed != o->rxlsddecode)) {
-		ast_log(LOG_NOTICE, "Channel %s: rxLSDecode = %s.\n", o->name, o->pmrChan->rxctcssfreq);
+		ast_debug(3, "Channel %s: rxLSDecode = %s.\n", o->name, o->pmrChan->rxctcssfreq);
 		o->rxlsddecode = o->pmrChan->pLsdCtl->cs[o->pmrChan->rptnum].b.rxkeyed;
-		strcpy(o->rxctcssfreq, o->pmrChan->rxctcssfreq);
+		ast_copy_string(o->rxctcssfreq, o->pmrChan->rxctcssfreq, sizeof(o->rxctcssfreq));
 	}
 
 	if ((o->pmrChan->rptnum > 0 && o->pmrChan->smode == SMODE_LSD && o->pmrChan->pLsdCtl->cs[o->pmrChan->rptnum].b.rxkeyed) ||
@@ -2793,9 +2793,9 @@ static int usb_device_swap(int fd, const char *other)
 		return -1;
 	}
 	ast_mutex_lock(&usb_dev_lock);
-	strcpy(tmp, p->devstr);
+	ast_copy_string(tmp, p->devstr, sizeof(tmp));
 	d = p->devicenum;
-	strcpy(p->devstr, o->devstr);
+	ast_copy_string(p->devstr, o->devstr, sizeof(p->devstr));
 	p->devicenum = o->devicenum;
 	ast_copy_string(o->devstr, tmp, sizeof(o->devstr));
 	o->devicenum = d;
@@ -4969,7 +4969,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 		CV_END;
 
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			sprintf(buf, "gpio%d", i + 1);
+			snprintf(buf, sizeof(buf), "gpio%d", i + 1);
 			if (!strcmp(v->name, buf)) {
 				o->gpios[i] = ast_strdup(v->value);
 			}
@@ -4978,7 +4978,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 			if (!((1 << i) & PP_MASK)) {
 				continue;
 			}
-			sprintf(buf, "pp%d", i);
+			snprintf(buf, sizeof(buf), "pp%d", i);
 			if (!strcasecmp(v->name, buf)) {
 				o->pps[i] = ast_strdup(v->value);
 				haspp = 1;

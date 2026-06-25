@@ -1385,7 +1385,7 @@ static int el_call(struct ast_channel *chan, const char *dest, int timeout)
 	ast_debug(1, "Calling %s/%s on %s.\n", dest, ipaddr, ast_channel_name(chan));
 
 	/* make the call */
-	strcpy(node_lookup.ip, ipaddr);
+	ast_copy_string(node_lookup.ip, ipaddr, sizeof(node_lookup.ip));
 	if (do_new_call(instp, p, "OUTBOUND", "OUTBOUND", &node_lookup) != 0) {
 		ast_log(LOG_WARNING, "Failed to initialize outbound call state for %s/%s.\n", dest, ipaddr);
 		return -1;
@@ -1517,7 +1517,7 @@ static int el_hangup(struct ast_channel *chan)
 	time_t now;
 
 	ast_debug(1, "Sent bye to IP address %s.\n", p->ip);
-	strcpy(node_lookup.ip, p->ip);
+	ast_copy_string(node_lookup.ip, p->ip, sizeof(node_lookup.ip));
 	find_delete(&node_lookup, instp);
 	n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 
@@ -2548,7 +2548,7 @@ static int el_xwrite(struct ast_channel *chan, struct ast_frame *frame)
 	if (p->txindex >= BLOCKING_FACTOR) {
 		struct el_node node_lookup;
 
-		strcpy(node_lookup.ip, p->ip);
+		ast_copy_string(node_lookup.ip, p->ip, sizeof(node_lookup.ip));
 		ast_mutex_lock(&el_nodelist_lock);
 		twalk_r(el_node_list, send_audio_only_one, &node_lookup);
 		ast_mutex_unlock(&el_nodelist_lock);
@@ -3665,7 +3665,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 		ast_mutex_lock(&instp->lock);
 		time(&now);
 		if (p != NULL) {
-			strcpy(instp->lastcall, mynode->callsign);
+			ast_copy_string(instp->lastcall, mynode->callsign, sizeof(instp->lastcall));
 		}
 		if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 			instp->aprstime = now;
@@ -4082,7 +4082,7 @@ static void *el_reader(void *data)
 										}
 									}
 									if (x < MAXPENDING) { /* we found one */
-										strcpy(instp->pending[x].fromip, node_lookup.ip);
+										ast_copy_string(instp->pending[x].fromip, node_lookup.ip, sizeof(instp->pending[x].fromip));
 										instp->pending[x].reqtime = ast_tvnow();
 										time(&now);
 										if (instp->starttime < (now - EL_APRS_START_DELAY)) {
