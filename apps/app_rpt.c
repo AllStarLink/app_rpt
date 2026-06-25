@@ -4484,14 +4484,16 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 
-	if (!l->hasconnected) {
-		rpt_telemetry(myrpt, CONNFAIL, l);
-	} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
-		rpt_telemetry(myrpt, REMDISC, l);
-	}
-	donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
-	if (l->hasconnected && (l->disced != RPT_LINK_DISCONNECT)) {
-		dodispgm(myrpt, l->name);
+	if (l->disced != RPT_LINK_DISCONNECT) {
+		if (!l->hasconnected) {
+			rpt_telemetry(myrpt, CONNFAIL, l);
+		} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
+			rpt_telemetry(myrpt, REMDISC, l);
+		}
+		if (l->hasconnected) {
+			dodispgm(myrpt, l->name);
+		}
+		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
