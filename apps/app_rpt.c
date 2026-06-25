@@ -3531,8 +3531,9 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 					rpt_telemetry(myrpt, REMDISC, l);
 				}
 			}
-			if (l->hasconnected)
+			if (l->hasconnected) {
 				rpt_update_links(myrpt);
+			}
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 			/* hang-up on call to device */
 			return;
