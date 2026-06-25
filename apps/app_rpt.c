@@ -4493,7 +4493,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		rpt_telemetry(myrpt, REMDISC, l);
 	}
 	donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
-	if (l->hasconnected) {
+	if (l->hasconnected && (l->disced != RPT_LINK_DISCONNECT)) {
 		dodispgm(myrpt, l->name);
 	}
 	rpt_frame_queue_free(&l->frame_queue);
