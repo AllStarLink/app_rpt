@@ -3293,11 +3293,14 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 }
 
-static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
+/*!
+ * \brief Send all text messages in a link's text queue
+ * \param myrpt Pointer to the rpt structure
+ * \param l Pointer to the link structure
+ */
+static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_frame *f;
-	int newkeytimer_last, max_retries;
-	int myrx;
 
 	rpt_mutex_lock(&myrpt->lock);
 	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
@@ -3310,6 +3313,14 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		ast_channel_unref(chan);
 	}
 	rpt_mutex_unlock(&myrpt->lock);
+}
+
+static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
+{
+	int newkeytimer_last, max_retries;
+	int myrx;
+
+	link_process_textq(myrpt, l);
 
 	update_timer(&l->rxlingertimer, elap, 0);
 
@@ -4428,21 +4439,7 @@ static inline void hangup_link_chan(struct rpt_link *l)
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	if (l->chan) {
-		struct ast_frame *f;
-
-		/* Not hungup */
-		rpt_mutex_lock(&myrpt->lock);
-		while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
-			struct ast_channel *chan = ast_channel_ref(l->chan);
-			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_write(chan, f);
-			rpt_mutex_lock(&myrpt->lock);
-			ast_frfree(f);
-			ast_channel_unref(chan);
-		}
-		rpt_mutex_unlock(&myrpt->lock);
-
+		link_process_textq(myrpt, l);
 		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
 	}
 
