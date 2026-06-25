@@ -478,8 +478,7 @@ int ast_radio_hid_device_mklist(void)
 			}
 
 			if (i >= 32) {
-				ast_mutex_unlock(&usb_list_lock);
-				return -1;
+				continue;
 			}
 
 			new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
