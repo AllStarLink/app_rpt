@@ -4463,10 +4463,9 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 				hangup_link_chan(l);
 				return 1;
 			}
-			if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
+			if (l->outbound && (l->retries++ < l->max_retries) && l->hasconnected) {
 				hangup_link_chan(l);
 				rpt_mutex_lock(&myrpt->lock);
-				l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
 				l->retrytimer = RETRY_TIMER_MS;
 				l->elaptime = 0;
 				l->connecttime = ast_tv(0, 0); /* no longer connected */
