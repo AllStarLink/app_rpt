@@ -4427,10 +4427,22 @@ static inline void hangup_link_chan(struct rpt_link *l)
  */
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
-	int time = 20; /* Run periodic_process_link one last time */
 	if (l->chan) {
+		struct ast_frame *f;
+
 		/* Not hungup */
-		periodic_process_link(myrpt, l, time); /* Send all queued text messages */
+		rpt_mutex_lock(&myrpt->lock);
+		while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+			struct ast_channel *chan = ast_channel_ref(l->chan);
+			f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
+			rpt_mutex_unlock(&myrpt->lock);
+			ast_write(chan, f);
+			rpt_mutex_lock(&myrpt->lock);
+			ast_frfree(f);
+			ast_channel_unref(chan);
+		}
+		rpt_mutex_unlock(&myrpt->lock);
+
 		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
 	}
 
