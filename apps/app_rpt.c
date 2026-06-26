@@ -1943,6 +1943,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		ast_str_set(&mylink->linklist, 0, "%s", str + 2); /* Dropping the "L " of the message */
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_debug(7, "@@@@ node %s received node list %s from node %s\n", myrpt->name, str, mylink->name);
+		rpt_update_links(myrpt);
 		return;
 	}
 	if (*str == 'M') {
