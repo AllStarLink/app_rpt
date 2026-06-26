@@ -3781,7 +3781,12 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 				return;
 			}
 
-			ast_str_set(&lbuf, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			if (mode == STATUS) {
+				ast_str_set(&lbuf, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			} else {
+				ast_str_set(&lbuf, 0, "LOCALSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+			}
+
 			/* make our own list of links */
 			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 				char s;
@@ -3828,8 +3833,11 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 				ast_free(lbuf);
 				return;
 			}
-
-			ast_str_set(&lbuf2, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			if (mode == FULLSTATUS) {
+				ast_str_set(&lbuf2, 0, "FULLSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+			} else {
+				ast_str_set(&lbuf2, 0, "LOCALFULLSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+			}
 
 			/* get all the nodes */
 			rpt_mutex_lock(&myrpt->lock);
