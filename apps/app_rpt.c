@@ -3293,11 +3293,14 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 }
 
-static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
+/*!
+ * \brief Send all text messages in a link's text queue
+ * \param myrpt Pointer to the rpt structure
+ * \param l Pointer to the link structure
+ */
+static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_frame *f;
-	int newkeytimer_last, max_retries;
-	int myrx;
 
 	rpt_mutex_lock(&myrpt->lock);
 	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
@@ -3310,6 +3313,14 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		ast_channel_unref(chan);
 	}
 	rpt_mutex_unlock(&myrpt->lock);
+}
+
+static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
+{
+	int newkeytimer_last, max_retries;
+	int myrx;
+
+	link_process_textq(myrpt, l);
 
 	update_timer(&l->rxlingertimer, elap, 0);
 
@@ -3520,8 +3531,10 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 					rpt_telemetry(myrpt, REMDISC, l);
 				}
 			}
-			if (l->hasconnected)
+			if (l->hasconnected) {
 				rpt_update_links(myrpt);
+				dodispgm(myrpt, l->name);
+			}
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 			/* hang-up on call to device */
 			return;
@@ -4427,10 +4440,8 @@ static inline void hangup_link_chan(struct rpt_link *l)
  */
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
-	int time = 20; /* Run periodic_process_link one last time */
 	if (l->chan) {
-		/* Not hungup */
-		periodic_process_link(myrpt, l, time); /* Send all queued text messages */
+		link_process_textq(myrpt, l);
 		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
 	}
 
@@ -4453,10 +4464,9 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 				hangup_link_chan(l);
 				return 1;
 			}
-			if (l->outbound && (l->retries++ < l->max_retries) && (l->hasconnected)) {
+			if (l->outbound && (l->retries++ < l->max_retries) && l->hasconnected) {
 				hangup_link_chan(l);
 				rpt_mutex_lock(&myrpt->lock);
-				l->hasconnected = 1; /*! \todo BUGBUG XXX l->hasconnected has to be true to get here, why set it again? Is this a typo? */
 				l->retrytimer = RETRY_TIMER_MS;
 				l->elaptime = 0;
 				l->connecttime = ast_tv(0, 0); /* no longer connected */
@@ -4475,14 +4485,16 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 
-	if (!l->hasconnected) {
-		rpt_telemetry(myrpt, CONNFAIL, l);
-	} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
-		rpt_telemetry(myrpt, REMDISC, l);
-	}
-	donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
-	if (l->hasconnected) {
-		dodispgm(myrpt, l->name);
+	if (l->disced != RPT_LINK_DISCONNECT) {
+		if (!l->hasconnected) {
+			rpt_telemetry(myrpt, CONNFAIL, l);
+		} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
+			rpt_telemetry(myrpt, REMDISC, l);
+		}
+		if (l->hasconnected) {
+			dodispgm(myrpt, l->name);
+		}
+		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
