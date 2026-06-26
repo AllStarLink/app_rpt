@@ -1416,7 +1416,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		return 0;
 	}
 
-	if (!strcasecmp(strs[0], "STATUS")) {
+	if (!strcasecmp(strs[0], "STATUS") || !strcasecmp(strs[0], "LOCALSTATUS")) {
 		if (n < 3) {
 			return 0;
 		}
@@ -3497,7 +3497,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	time_t t, t_mono, was_mono;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
-	struct ast_str *lbuf;
+	struct ast_str *lbuf, *lbuf2;
 	struct ao2_iterator l_it;
 
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%s\n", rpt_tele_mode_str(mode));
@@ -3534,7 +3534,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 
 	case VARCMD:
-		if (myrpt->telemmode < 2 && strncasecmp((char *) data, "STATUS,", 7)) {
+		if (myrpt->telemmode < 2 && strncasecmp((char *) data, "LOCALSTATUS,", 12)) {
 			return;
 		}
 
@@ -3769,13 +3769,24 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			return;
 
 		case STATUS:
+		case LOCALSTATUS:
 			rpt_mutex_lock(&myrpt->lock);
 			if (!myrpt->links) {
 				rpt_mutex_unlock(&myrpt->lock);
 				return;
 			}
 
-			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf) {
+				return;
+			}
+
+			if (mode == STATUS) {
+				ast_str_set(&lbuf, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			} else {
+				ast_str_set(&lbuf, 0, "LOCALSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+			}
+
 			/* make our own list of links */
 			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 				char s;
@@ -3795,21 +3806,38 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 					s = 'C';
 				}
 
-				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
+				ast_str_append(&lbuf, 0, ",%c%s", s, l->name);
 			}
 
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
-			send_tele_link(myrpt, mystr);
+
+			if (mode == STATUS) {
+				send_tele_link(myrpt, ast_str_buffer(lbuf));
+			} else {
+				rpt_telemetry(myrpt, VARCMD, ast_str_buffer(lbuf));
+			}
+
+			ast_free(lbuf);
 			return;
 
 		case FULLSTATUS:
+		case LOCALFULLSTATUS:
 			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 			if (!lbuf) {
 				return;
 			}
 
-			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			lbuf2 = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf2) {
+				ast_free(lbuf);
+				return;
+			}
+			if (mode == FULLSTATUS) {
+				ast_str_set(&lbuf2, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			} else {
+				ast_str_set(&lbuf2, 0, "LOCALSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+			}
 
 			/* get all the nodes */
 			rpt_mutex_lock(&myrpt->lock);
@@ -3847,12 +3875,18 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 					s = 'C';
 				}
 
-				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, strs[i]);
+				ast_str_append(&lbuf2, 0, ",%c%s", s, strs[i]);
 			}
 
-			send_tele_link(myrpt, mystr);
+			if (mode == FULLSTATUS) {
+				send_tele_link(myrpt, ast_str_buffer(lbuf2));
+			} else {
+				rpt_telemetry(myrpt, VARCMD, ast_str_buffer(lbuf2));
+			}
+
 			ast_free(strs);
 			ast_free(lbuf);
+			ast_free(lbuf2);
 			return;
 
 		default:

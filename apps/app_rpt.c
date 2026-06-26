@@ -81,6 +81,8 @@
  *  5 - Last (dtmf) user
  *  11 - Force ID (local only)
  *  12 - Give Time of Day (local only)
+ *  13 - System status report (local only version of ILINK, 5)
+ *  14 - Full System status report (local only version of ILINK, 15)
  *
  * cop (control operator) cmds:
  *
