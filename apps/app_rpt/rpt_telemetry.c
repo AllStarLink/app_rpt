@@ -3834,9 +3834,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 				return;
 			}
 			if (mode == FULLSTATUS) {
-				ast_str_set(&lbuf2, 0, "FULLSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+				ast_str_set(&lbuf2, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			} else {
-				ast_str_set(&lbuf2, 0, "LOCALFULLSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+				ast_str_set(&lbuf2, 0, "LOCALSTATUS,%s,%d", myrpt->name, myrpt->callmode);
 			}
 
 			/* get all the nodes */
