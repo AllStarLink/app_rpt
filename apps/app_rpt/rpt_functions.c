@@ -310,11 +310,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_telemetry(myrpt, FULLSTATUS, NULL);
 		return DC_COMPLETE;
 
-	case 25: /* Local Status */
-		rpt_telem_select(myrpt, command_source, mylink);
-		rpt_telemetry(myrpt, LOCALSTATUS, NULL);
-		return DC_COMPLETE;
-
 	case 6: /* All Links Off, including permalinks */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
@@ -1216,6 +1211,11 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 	case 12: /* System Time (local only) */
 		rpt_telemetry(myrpt, STATS_TIME_LOCAL, NULL);
 		return DC_COMPLETE;
+	case 13: /* Local System status (ILINK, 5) */
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, LOCALSTATUS, NULL);
+		return DC_COMPLETE;
+
 	case 99: /* GPS data announced locally */
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, STATS_GPS_LEGACY, NULL);

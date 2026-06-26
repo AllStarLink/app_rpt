@@ -3497,7 +3497,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	time_t t, t_mono, was_mono;
 	unsigned long long u_mono;
 	char gps_data[100], lat[25], lon[25], elev[25];
-	struct ast_str *lbuf;
+	struct ast_str *lbuf, *lbuf2;
 	struct ao2_iterator l_it;
 
 	ast_debug(6, "Tracepoint rpt_telemetry() entered mode=%s\n", rpt_tele_mode_str(mode));
@@ -3775,7 +3775,12 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 				return;
 			}
 
-			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf) {
+				return;
+			}
+
+			ast_str_set(&lbuf, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
 			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 				char s;
@@ -3795,12 +3800,13 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 					s = 'C';
 				}
 
-				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
+				ast_str_append(&lbuf, 0, ",%c%s", s, l->name);
 			}
 
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
-			send_tele_link(myrpt, mystr);
+			send_tele_link(myrpt, ast_str_buffer(lbuf));
+			ast_free(lbuf);
 			return;
 
 		case LOCALSTATUS:
@@ -3810,7 +3816,12 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 				return;
 			}
 
-			snprintf(mystr, sizeof(mystr), "LOCALSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf) {
+				return;
+			}
+
+			ast_str_set(&lbuf, 0, "LOCALSTATUS,%s,%d", myrpt->name, myrpt->callmode);
 			/* make our own list of links */
 			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 				char s;
@@ -3829,13 +3840,13 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 				if (!l->thisconnected) {
 					s = 'C';
 				}
-
-				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
+				ast_str_append(&lbuf, 0, ",%c%s", s, l->name);
 			}
 
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
-			rpt_telemetry(myrpt, VARCMD, mystr);
+			rpt_telemetry(myrpt, VARCMD, ast_str_buffer(lbuf));
+			ast_free(lbuf);
 			return;
 
 		case FULLSTATUS:
@@ -3844,7 +3855,13 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 				return;
 			}
 
-			snprintf(mystr, sizeof(mystr), "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+			lbuf2 = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf2) {
+				ast_free(lbuf);
+				return;
+			}
+
+			ast_str_set(&lbuf2, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
 
 			/* get all the nodes */
 			rpt_mutex_lock(&myrpt->lock);
@@ -3882,12 +3899,13 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 					s = 'C';
 				}
 
-				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, strs[i]);
+				ast_str_append(&lbuf2, 0, ",%c%s", s, strs[i]);
 			}
 
-			send_tele_link(myrpt, mystr);
+			send_tele_link(myrpt, ast_str_buffer(lbuf2));
 			ast_free(strs);
 			ast_free(lbuf);
+			ast_free(lbuf2);
 			return;
 
 		default:
