@@ -1416,7 +1416,7 @@ static int handle_varcmd_tele(struct rpt *myrpt, struct ast_channel *mychannel, 
 		return 0;
 	}
 
-	if (!strcasecmp(strs[0], "STATUS")) {
+	if (!strcasecmp(strs[0], "STATUS") || !strcasecmp(strs[0], "LOCALSTATUS")) {
 		if (n < 3) {
 			return 0;
 		}
@@ -3534,7 +3534,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 
 	case VARCMD:
-		if (myrpt->telemmode < 2 && strncasecmp((char *) data, "STATUS,", 7)) {
+		if (myrpt->telemmode < 2 && strncasecmp((char *) data, "LOCALSTATUS,", 12)) {
 			return;
 		}
 
@@ -3801,6 +3801,41 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			ao2_iterator_destroy(&l_it);
 			rpt_mutex_unlock(&myrpt->lock);
 			send_tele_link(myrpt, mystr);
+			return;
+
+		case LOCALSTATUS:
+			rpt_mutex_lock(&myrpt->lock);
+			if (!myrpt->links) {
+				rpt_mutex_unlock(&myrpt->lock);
+				return;
+			}
+
+			snprintf(mystr, sizeof(mystr), "LOCALSTATUS,%s,%d", myrpt->name, myrpt->callmode);
+			/* make our own list of links */
+			RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
+				char s;
+
+				if (l->name[0] == '0') {
+					continue;
+				}
+
+				s = 'T';
+				if (l->mode == MODE_MONITOR) {
+					s = 'R';
+				} else if (l->mode == MODE_LOCAL_MONITOR) {
+					s = 'L';
+				}
+
+				if (!l->thisconnected) {
+					s = 'C';
+				}
+
+				snprintf(mystr + strlen(mystr), sizeof(mystr), ",%c%s", s, l->name);
+			}
+
+			ao2_iterator_destroy(&l_it);
+			rpt_mutex_unlock(&myrpt->lock);
+			rpt_telemetry(myrpt, VARCMD, mystr);
 			return;
 
 		case FULLSTATUS:

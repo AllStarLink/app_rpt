@@ -310,6 +310,11 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_telemetry(myrpt, FULLSTATUS, NULL);
 		return DC_COMPLETE;
 
+	case 25: /* Local Status */
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, LOCALSTATUS, NULL);
+		return DC_COMPLETE;
+
 	case 6: /* All Links Off, including permalinks */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
