@@ -3908,6 +3908,65 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			ast_free(lbuf2);
 			return;
 
+		case LOCALFULLSTATUS:
+			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf) {
+				return;
+			}
+
+			lbuf2 = ast_str_create(RPT_AST_STR_INIT_SIZE);
+			if (!lbuf2) {
+				ast_free(lbuf);
+				return;
+			}
+
+			ast_str_set(&lbuf2, 0, "STATUS,%s,%d", myrpt->name, myrpt->callmode);
+
+			/* get all the nodes */
+			rpt_mutex_lock(&myrpt->lock);
+			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
+			rpt_mutex_unlock(&myrpt->lock);
+
+			/* parse em */
+			strs = ast_malloc(n * sizeof(char *));
+			if (!strs) {
+				ast_free(lbuf);
+				return;
+			}
+			ns = finddelim(ast_str_buffer(lbuf), strs, n);
+
+			/* sort em */
+			if (ns > 1) {
+				qsort((void *) strs, ns, sizeof(char *), mycompar);
+			}
+
+			/* go thru all the nodes in list */
+			for (i = 0; i < ns; i++) {
+				char s, m = 'T';
+
+				/* if a mode spec at first, handle it */
+				if ((*strs[i] < '0') || (*strs[i] > '9')) {
+					m = *strs[i];
+					strs[i]++;
+				}
+
+				s = 'T';
+
+				if (m == 'R') {
+					s = 'R';
+				} else if (m == 'C') {
+					s = 'C';
+				}
+
+				ast_str_append(&lbuf2, 0, ",%c%s", s, strs[i]);
+			}
+
+			rpt_telemetry(myrpt, VARCMD, ast_str_buffer(lbuf));
+			ast_free(strs);
+			ast_free(lbuf);
+			ast_free(lbuf2);
+			return;
+
 		default:
 			break;
 		}

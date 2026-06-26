@@ -1215,6 +1215,10 @@ enum rpt_function_response function_status(struct rpt *myrpt, char *param, char 
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, LOCALSTATUS, NULL);
 		return DC_COMPLETE;
+	case 14: /* Local Full System status (ILINK, 15) */
+		rpt_telem_select(myrpt, command_source, mylink);
+		rpt_telemetry(myrpt, LOCALFULLSTATUS, NULL);
+		return DC_COMPLETE;
 
 	case 99: /* GPS data announced locally */
 		rpt_telem_select(myrpt, command_source, mylink);
