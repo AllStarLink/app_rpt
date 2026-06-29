@@ -1563,8 +1563,6 @@ void *rpt_tele_thread(void *this)
 
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(mychannel));
 	ast_channel_ref(mychannel); /* Create a reference to prevent channel from being freed too soon */
-	ast_set_callerid(mychannel, myrpt->p.rptnode, "", NULL);
-
 	mytele->chan = mychannel;
 
 	switch (mytele->mode) {
