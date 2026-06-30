@@ -3557,6 +3557,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
 			dodispgm(myrpt, l->name);
 			/* hang-up on call to device */
+
 			return;
 		}
 	}
@@ -4456,7 +4457,8 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 					/* An allstar link node */
 					l->disctime = DISC_TIME;
 				}
-				goto cleanup;
+				hangup_link_chan(l);
+				return 1;
 			}
 
 			if (l->retrytimer) {
@@ -4476,41 +4478,6 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		}
 	}
 
-cleanup:
-	rpt_mutex_lock(&myrpt->lock);
-	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
-	rpt_link_remove(myrpt->links, l); /* remove from queue */
-	if (!strcmp(myrpt->cmdnode, l->name)) {
-		myrpt->cmdnode[0] = 0;
-	}
-	rpt_mutex_unlock(&myrpt->lock);
-
-	if (l->disced != RPT_LINK_DISCONNECT) {
-		if (!l->hasconnected) {
-			rpt_telemetry(myrpt, CONNFAIL, l);
-		} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
-			rpt_telemetry(myrpt, REMDISC, l);
-		}
-		if (l->hasconnected) {
-			dodispgm(myrpt, l->name);
-		}
-		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
-	}
-	rpt_frame_queue_free(&l->frame_queue);
-
-	/* hang-up on call to device */
-	hangup_link_chan(l);
-	ast_hangup(l->pchan);
-
-	if (l->hasconnected) {
-		rpt_update_links(myrpt);
-	}
-
-	ast_audiohook_lock(&l->altaudio);
-	ast_audiohook_detach(&l->altaudio);
-	ast_audiohook_unlock(&l->altaudio);
-	ast_audiohook_destroy(&l->altaudio);
-	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	return 0;
 }
 
@@ -4806,7 +4773,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						/* A reconnect is possible */
 						continue;
 					}
-					return;
+					break;
 				}
 			}
 			ast_frfree(f);
@@ -4866,7 +4833,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					/* A reconnect is possible */
 					continue;
 				}
-				return;
+				break;
 			}
 			ast_frfree(f);
 			continue;
@@ -4874,7 +4841,41 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		continue;
 	}
 	/* Link is done: Cleanup channels and link structure */
-	remote_hangup_helper(myrpt, l);
+	rpt_mutex_lock(&myrpt->lock);
+	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
+	rpt_link_remove(myrpt->links, l); /* remove from queue */
+	if (!strcmp(myrpt->cmdnode, l->name)) {
+		myrpt->cmdnode[0] = 0;
+	}
+	rpt_mutex_unlock(&myrpt->lock);
+
+	if (l->disced != RPT_LINK_DISCONNECT) {
+		if (!l->hasconnected) {
+			rpt_telemetry(myrpt, CONNFAIL, l);
+		} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
+			rpt_telemetry(myrpt, REMDISC, l);
+		}
+		if (l->hasconnected) {
+			dodispgm(myrpt, l->name);
+		}
+		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
+	}
+	rpt_frame_queue_free(&l->frame_queue);
+
+	/* hang-up on call to device */
+	hangup_link_chan(l);
+	ast_hangup(l->pchan);
+
+	if (l->hasconnected) {
+		rpt_update_links(myrpt);
+	}
+
+	ast_audiohook_lock(&l->altaudio);
+	ast_audiohook_detach(&l->altaudio);
+	ast_audiohook_unlock(&l->altaudio);
+	ast_audiohook_destroy(&l->altaudio);
+	ao2_ref(l, -1); /* and drop the extra ref we're holding */
+
 	return;
 }
 
