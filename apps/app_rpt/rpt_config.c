@@ -854,7 +854,10 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_INT_DEFAULT(voxrecover_ms, "voxrecover", VOX_RECOVER_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexpatchdelay, "simplexpatchdelay", SIMPLEX_PATCH_DELAY);
 	RPT_CONFIG_VAR_INT_DEFAULT(simplexphonedelay, "simplexphonedelay", SIMPLEX_PHONE_DELAY);
-
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(first_keyup_min_time, "first_keyup_min_time", 0, 0, 1000);
+	RPT_CONFIG_VAR_INT_MIN_FLOOR(first_keyup_inactivity_time, "first_keyup_inactivity_time", 0, 0);
+	/* Convert to milliseconds for internal use */
+	rpt_vars[n].p.first_keyup_inactivity_time = rpt_vars[n].p.first_keyup_inactivity_time * 1000;
 	/* configure how "L" messages are sent */
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(linkpost_max_message_len, "linkpost_max_message_len", 0, 0, 10000);
 	if (rpt_vars[n].p.linkpost_max_message_len && (rpt_vars[n].p.linkpost_max_message_len < 500)) {

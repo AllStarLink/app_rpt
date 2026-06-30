@@ -810,6 +810,8 @@ struct rpt {
 		int totime;
 		int time_out_reset_unkey_interval;
 		int time_out_reset_kerchunk_interval;
+		int first_keyup_min_time;
+		int first_keyup_inactivity_time;
 		int idtime;
 		int tailmessagetime;
 		int tailsquashedtime;
@@ -993,6 +995,8 @@ struct rpt {
 	rpt_bool mustid:1;
 	rpt_bool tailid:1;
 	int rptinacttimer;
+	int first_keyup_timer;
+	int first_keyup_inactivity_timer;
 	int tailevent;
 	int dtmfidx, rem_dtmfidx;
 	int dailytxtime, dailykerchunks, totalkerchunks, dailykeyups, totalkeyups, timeouts;
