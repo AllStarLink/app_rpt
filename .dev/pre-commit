@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Antigravity pre‑commit hook: warn if committing directly to a protected branch (master/main)
+# pre‑commit hook: warn if committing directly to a protected branch
 # This script should be symlinked or referenced by the actual Git hook.
 # Redirect output to stderr.
 exec 1>&2
