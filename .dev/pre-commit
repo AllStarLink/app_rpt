@@ -7,19 +7,29 @@ exec 1>&2
 # Get the current branch name (fallback to HEAD if detached)
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
 
-# List of branch names that are typically protected. Add more if needed.
-protected_branches=("master" "main" "dev")
-
-for pb in "${protected_branches[@]}" 
-do
-  if [[ "$branch" == "$pb" ]] 
-  then
-    echo "          Warning: You are committing directly to the protected branch '$branch'."
-    echo "          Please create a new feature branch first (e.g., git checkout -b feature/your-task) and open a PR."
-    echo "          Commit aborted."
-    exit 1
-  fi
-done
+# Detect protected branches via GitHub rulesets (requires gh CLI)
+# If gh fails or returns no rules, fall back to a static list.
+if command -v gh >/dev/null 2>&1; then
+	# gh ruleset check returns lines starting with '-' for each rule
+	PROTECTED_COUNT=$(gh ruleset check "$branch" 2>/dev/null | grep -c '^-')
+	if [ "$PROTECTED_COUNT" -gt 0 ]; then
+		echo "          Warning: You are committing directly to a protected branch '$branch' (detected via GitHub rules)."
+		echo "          Please create a new feature branch first (e.g., git checkout -b feature/your-task) and open a PR."
+		echo "          Commit aborted."
+		exit 1
+	fi
+else
+	# Fallback static list
+	protected_branches=("master" "main" "dev")
+	for pb in "${protected_branches[@]}"; do
+		if [[ "$branch" == "$pb" ]]; then
+			echo "          Warning: You are committing directly to the protected branch '$branch'."
+			echo "          Please create a new feature branch first (e.g., git checkout -b feature/your-task) and open a PR."
+			echo "          Commit aborted."
+			exit 1
+		fi
+	done
+fi
 
 BEFORE_DIFF="$(git diff --no-ext-diff --binary)"
 # Test clang-format
