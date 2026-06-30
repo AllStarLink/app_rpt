@@ -4456,8 +4456,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 					/* An allstar link node */
 					l->disctime = DISC_TIME;
 				}
-				hangup_link_chan(l);
-				return 1;
+				goto cleanup;
 			}
 
 			if (l->retrytimer) {
@@ -4477,6 +4476,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		}
 	}
 
+cleanup:
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
