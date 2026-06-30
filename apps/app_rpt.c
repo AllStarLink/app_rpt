@@ -2776,7 +2776,7 @@ static void queue_id(struct rpt *myrpt)
 
 static void do_scheduler(struct rpt *myrpt)
 {
-	int i, res;
+	int i;
 
 	struct ast_tm tmnow;
 	struct ast_variable *skedlist;
@@ -2785,16 +2785,19 @@ static void do_scheduler(struct rpt *myrpt)
 
 	memcpy(&myrpt->lasttv, &myrpt->curtv, sizeof(struct timeval));
 
-	if ((res = gettimeofday(&myrpt->curtv, NULL)) < 0)
-		ast_debug(1, "Scheduler gettime of day returned: %s\n", strerror(res));
+	if (gettimeofday(&myrpt->curtv, NULL) < 0) {
+		ast_debug(1, "Scheduler gettime of day returned: %s\n", strerror(errno));
+	}
 
 	/* Try to get close to a 1 second resolution */
 
-	if (myrpt->lasttv.tv_sec == myrpt->curtv.tv_sec)
+	if (myrpt->lasttv.tv_sec == myrpt->curtv.tv_sec) {
 		return;
+	}
 
 	/* Service the sleep timer */
-	if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) { /* If sleep mode enabled */
+	if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
+		/* If sleep mode enabled */
 		if (myrpt->sleeptimer) {
 			myrpt->sleeptimer--;
 		} else {
@@ -2812,7 +2815,7 @@ static void do_scheduler(struct rpt *myrpt)
 		}
 		if (myrpt->linkactivitytimer >= myrpt->p.lnkacttime) {
 			/* Execute lnkactmacro */
-			ast_debug(5, "Executing link activity timer macro %s\n", myrpt->p.lnkactmacro);
+			ast_debug(5, "Node=%s, executing link activity timer macro %s\n", myrpt->name, myrpt->p.lnkactmacro);
 			macro_append(myrpt, myrpt->p.lnkactmacro);
 			myrpt->linkactivitytimer = 0;
 			myrpt->linkactivityflag = 0;
@@ -2825,7 +2828,7 @@ static void do_scheduler(struct rpt *myrpt)
 		} else {
 			myrpt->rptinacttimer = 0;
 			myrpt->rptinactwaskeyedflag = 0;
-			ast_debug(5, "Executing rpt inactivity timer macro %s\n", myrpt->p.rptinactmacro);
+			ast_debug(5, "Node=%s, executing rpt inactivity timer macro %s\n", myrpt->name, myrpt->p.rptinactmacro);
 			macro_append(myrpt, myrpt->p.rptinactmacro);
 		}
 	}
@@ -2846,62 +2849,85 @@ static void do_scheduler(struct rpt *myrpt)
 	}
 
 	/* Code below only executes once per minute */
-	if (myrpt->remote) { /* Don't schedule if remote */
+	if (myrpt->remote) {
+		/* Don't schedule if remote */
 		return;
-	} else if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) { /* Don't schedule if disabled */
+	} else if (myrpt->p.s[myrpt->p.sysstate_cur].schedulerdisable) {
+		/* Don't schedule if disabled */
 		return;
-	} else if (ast_strlen_zero(myrpt->p.skedstanzaname)) { /* No stanza means we do nothing */
+	} else if (ast_strlen_zero(myrpt->p.skedstanzaname)) {
+		/* No stanza means we do nothing */
 		return;
 	}
 
 	/* get pointer to linked list of scheduler entries */
 	skedlist = ast_variable_browse(myrpt->cfg, myrpt->p.skedstanzaname);
 
-	ast_debug(7, "Time now: %02d:%02d %02d %02d %02d\n", tmnow.tm_hour, tmnow.tm_min, tmnow.tm_mday, tmnow.tm_mon + 1, tmnow.tm_wday);
+	ast_debug(7, "Node=%s, section=%s, now=%02d %02d %02d %02d %02d\n", myrpt->name, myrpt->p.skedstanzaname, tmnow.tm_min,
+		tmnow.tm_hour, tmnow.tm_mday, tmnow.tm_mon + 1, tmnow.tm_wday);
+
 	/* walk the list */
 	for (; skedlist; skedlist = skedlist->next) {
-		ast_debug(7, "Scheduler entry %s = %s being considered\n", skedlist->name, skedlist->value);
+		ast_debug(7, "  considering scheduler entry %s = %s\n", skedlist->name, skedlist->value);
 		ast_copy_string(value, skedlist->value, sizeof(value));
 		/* point to the substrings for minute, hour, dom, month, and dow */
 		for (i = 0, vp = value; i < 5; i++) {
-			if (!*vp)
+			if (!*vp) {
 				break;
-			while ((*vp == ' ') || (*vp == 0x09)) { /* get rid of any leading white space */
+			}
+
+			/* get rid of any leading white space */
+			while (isblank((unsigned char) *vp)) {
 				vp++;
 			}
-			strs[i] = vp;										  /* save pointer to beginning of substring */
-			while ((*vp != ' ') && (*vp != 0x09) && (*vp != 0)) { /* skip over substring */
+
+			/* save pointer to beginning of substring */
+			strs[i] = vp;
+
+			/* skip over substring */
+			while ((*vp != 0) && !isspace((unsigned char) *vp)) {
 				vp++;
 			}
+
+			/* mark end of substring */
 			if (*vp) {
-				*vp++ = 0; /* mark end of substring */
+				*vp++ = 0;
 			}
 		}
-		ast_debug(7, "i = %d, min = %s, hour = %s, mday=%s, mon=%s, wday=%s\n", i, strs[0], strs[1], strs[2], strs[3], strs[4]);
 		if (i == 5) {
-			if ((*strs[0] != '*') && (atoi(strs[0]) != tmnow.tm_min))
+			if ((*strs[0] != '*') && (atoi(strs[0]) != tmnow.tm_min)) {
 				continue;
-			if ((*strs[1] != '*') && (atoi(strs[1]) != tmnow.tm_hour))
+			}
+			if ((*strs[1] != '*') && (atoi(strs[1]) != tmnow.tm_hour)) {
 				continue;
-			if ((*strs[2] != '*') && (atoi(strs[2]) != tmnow.tm_mday))
+			}
+			if ((*strs[2] != '*') && (atoi(strs[2]) != tmnow.tm_mday)) {
 				continue;
-			if ((*strs[3] != '*') && (atoi(strs[3]) != tmnow.tm_mon + 1))
+			}
+			if ((*strs[3] != '*') && (atoi(strs[3]) != tmnow.tm_mon + 1)) {
 				continue;
-			if (atoi(strs[4]) == 7)
+			}
+			if (atoi(strs[4]) == 7) {
 				strs[4] = "0";
-			if ((*strs[4] != '*') && (atoi(strs[4]) != tmnow.tm_wday))
+			}
+			if ((*strs[4] != '*') && (atoi(strs[4]) != tmnow.tm_wday)) {
 				continue;
-			ast_debug(1, "Executing scheduler entry %s = %s\n", skedlist->name, skedlist->value);
-			if (atoi(skedlist->name) == 0)
-				return; /* Zero is reserved for the startup macro */
+			}
+			if (atoi(skedlist->name) == 0) {
+				/* Zero is reserved for the startup macro */
+				ast_log(LOG_WARNING, "Node=%s, scheduler will not execute macro %s\n", myrpt->name, skedlist->name);
+				continue;
+			}
 			val = ast_variable_retrieve(myrpt->cfg, myrpt->p.macro, skedlist->name);
 			if (!val) {
-				ast_log(LOG_WARNING, "Scheduler could not find macro %s\n", skedlist->name);
-				return; /* Macro not found */
+				ast_log(LOG_WARNING, "Node=%s, scheduler could not find macro %s\n", myrpt->name, skedlist->name);
+				continue;
 			}
+			ast_debug(1, "Node=%s, executing scheduler entry %s = %s\n", myrpt->name, skedlist->name, skedlist->value);
 			macro_append(myrpt, val);
 		} else {
-			ast_log(LOG_WARNING, "Malformed scheduler entry in rpt.conf: %s = %s\n", skedlist->name, skedlist->value);
+			ast_log(LOG_WARNING, "Node=%s, malformed scheduler entry in rpt.conf: %s = %s\n", myrpt->name, skedlist->name,
+				skedlist->value);
 		}
 	}
 }
