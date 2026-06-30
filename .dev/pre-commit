@@ -19,16 +19,9 @@ if command -v gh >/dev/null 2>&1; then
 		exit 1
 	fi
 else
-	# Fallback static list
-	protected_branches=("master" "main" "dev")
-	for pb in "${protected_branches[@]}"; do
-		if [[ "$branch" == "$pb" ]]; then
-			echo "          Warning: You are committing directly to the protected branch '$branch'."
-			echo "          Please create a new feature branch first (e.g., git checkout -b feature/your-task) and open a PR."
-			echo "          Commit aborted."
-			exit 1
-		fi
-	done
+	echo "          Please install GitHub CLI"
+	echo "          Commit aborted."
+	exit 1
 fi
 
 BEFORE_DIFF="$(git diff --no-ext-diff --binary)"
