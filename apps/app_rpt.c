@@ -4,7 +4,7 @@
  * Copyright (C) 2002-2014, Jim Dixon, WB6NIL
  *
  * Jim Dixon, WB6NIL <jim@lambdatel.com>
- * Serious contributions by Steve Rodgers, WA6ZFT <hwstar@rodgers.sdcoxmail.com>
+ * Serious contributions by Steve RoDgers, WA6ZFT <hwstar@rodgers.sdcoxmail.com>
  *
  * See http://www.asterisk.org for more information about
  * the Asterisk project. Please do not directly contact

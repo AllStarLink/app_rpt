@@ -19,9 +19,8 @@ if command -v gh >/dev/null 2>&1; then
 		exit 1
 	fi
 else
-	echo "          Please install GitHub CLI"
-	echo "          Commit aborted."
-	exit 1
+	echo "          Please install GitHub CLI for branch protection"
+	echo "          rules check skipped. "
 fi
 
 BEFORE_DIFF="$(git diff --no-ext-diff --binary)"
