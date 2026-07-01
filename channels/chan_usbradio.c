@@ -329,6 +329,7 @@ struct chan_usbradio_pvt {
 	int rxmixerset;
 	int txboost;
 	float rxvoiceadj;
+	float rxctcssadj;
 	int txmixaset;
 	int txmixbset;
 	int txctcssadj;
@@ -464,6 +465,7 @@ static int usbradio_indicate(struct ast_channel *chan, int cond_in, const void *
 static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newchan);
 static int usbradio_setoption(struct ast_channel *chan, int option, void *data, int datalen);
 static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s);
+static void store_rxctcssadj(struct chan_usbradio_pvt *o, const char *s);
 static int set_txctcss_level(struct chan_usbradio_pvt *o);
 static void pmrdump(struct chan_usbradio_pvt *o, int fd);
 static void mult_set(struct chan_usbradio_pvt *o);
@@ -768,6 +770,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	o->txmixaset = 500;
 	o->txmixbset = 500;
 	o->rxvoiceadj = 0.5;
+	o->rxctcssadj = 0.5;
 	o->txctcssadj = 200;
 	o->rxsquelchadj = 500;
 	o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
@@ -797,6 +800,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 		CV_UINT("txmixaset", o->txmixaset);
 		CV_UINT("txmixbset", o->txmixbset);
 		CV_F("rxvoiceadj", store_rxvoiceadj(o, v->value));
+		CV_F("rxctcssadj", store_rxctcssadj(o, v->value));
 		CV_UINT("txctcssadj", o->txctcssadj);
 		CV_UINT("rxsquelchadj", o->rxsquelchadj);
 		CV_UINT("txslimsp", o->txslimsp);
@@ -1154,7 +1158,8 @@ static void *hidthread(void *arg)
 			o->pmrChan->txCpuSaver = o->txcpusaver;
 
 			*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / AUDIO_ADJUSTMENT;
-			*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
+			*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8; /* updates xpmr outputGain */
+			*(o->pmrChan->prxCtcssAdjust) = o->rxctcssadj * M_Q8; /* updates xpmr outputGain */
 			o->pmrChan->rxCtcss->relax = o->rxctcssrelax;
 			o->pmrChan->txTocType = o->txtoctype;
 
@@ -1250,6 +1255,9 @@ static void *hidthread(void *arg)
 							o->txmixaset = o->eeprom[EEPROM_USER_TXMIXASET];
 							o->txmixbset = o->eeprom[EEPROM_USER_TXMIXBSET];
 							memcpy(&o->rxvoiceadj, &o->eeprom[EEPROM_USER_RXVOICEADJ], sizeof(float));
+							*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8; /* updates xpmr outputGain */
+							memcpy(&o->rxctcssadj, &o->eeprom[EEPROM_USER_RXCTCSSADJ], sizeof(float));
+							*(o->pmrChan->prxCtcssAdjust) = o->rxctcssadj * M_Q8; /* updates xpmr outputGain */
 							o->txctcssadj = o->eeprom[EEPROM_USER_TXCTCSSADJ];
 							o->rxsquelchadj = o->eeprom[EEPROM_USER_RXSQUELCHADJ];
 							ast_log(LOG_NOTICE, "Channel %s: EEPROM Loaded\n", o->name);
@@ -2476,6 +2484,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
 {
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(newchan);
+
 	ast_log(LOG_WARNING, "Channel %s: Fixup received.\n", o->name);
 	o->owner = newchan;
 	return 0;
@@ -3292,6 +3301,7 @@ static void store_rxsdtype(struct chan_usbradio_pvt *o, const char *s)
 static void store_rxgain(struct chan_usbradio_pvt *o, const char *s)
 {
 	float f;
+
 	sscanf(s, N_FMT(f), &f);
 	o->rxgain = f;
 }
@@ -3304,8 +3314,22 @@ static void store_rxgain(struct chan_usbradio_pvt *o, const char *s)
 static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s)
 {
 	float f;
+
 	sscanf(s, N_FMT(f), &f);
 	o->rxvoiceadj = f;
+}
+
+/*!
+ * \brief Store receive ctcss adjustment.
+ * \param o				Private struct.
+ * \param s				New setting.
+ */
+static void store_rxctcssadj(struct chan_usbradio_pvt *o, const char *s)
+{
+	float f;
+
+	sscanf(s, N_FMT(f), &f);
+	o->rxctcssadj = f;
 }
 
 /*!
@@ -3632,7 +3656,7 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
 		o->rxvoiceadj = 0.5 + (modff(((float) i) / f, &f1) * .093981);
 	}
-	*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
+	*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8; /* updates xpmr outputGain */
 	ast_cli(fd, "Changed rx voice setting to %d\n", i);
 }
 
@@ -4287,7 +4311,7 @@ static void tune_rxvoice(int fd, struct chan_usbradio_pvt *o, int intflag)
 	setting = settingstart;
 
 	while (tries < maxtries) {
-		*(o->pmrChan->prxVoiceAdjust) = setting * M_Q8;
+		*(o->pmrChan->prxVoiceAdjust) = setting * M_Q8; /* updates xpmr outputGain */
 		if (ast_radio_wait_or_poll(fd, 10, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
@@ -4355,7 +4379,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 	setting = settingstart;
 
 	while (tries < maxtries) {
-		*(o->pmrChan->prxCtcssAdjust) = setting * M_Q8;
+		*(o->pmrChan->prxCtcssAdjust) = setting * M_Q8; /* updates xpmr outputGain */
 		if (ast_radio_wait_or_poll(fd, 10, intflag)) {
 			o->pmrChan->b.tuning = 0;
 			return;
@@ -4387,6 +4411,7 @@ static void tune_rxctcss(int fd, struct chan_usbradio_pvt *o, int intflag)
 		ast_cli(fd, "ERROR: RX CTCSS GAIN ADJUST FAILED.\n");
 	} else {
 		ast_cli(fd, "INFO: RX CTCSS GAIN ADJUST SUCCESS.\n");
+		o->rxctcssadj = setting;
 	}
 
 	if (o->rxcdtype == CD_XPMR_NOISE) {
@@ -4464,7 +4489,6 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	struct ast_config *cfg;
 	struct ast_category *category = NULL;
 	struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS | CONFIG_FLAG_NOCACHE };
-	const float old_rxctcssadj = 0.5; /* for backward EEPROM format compatibility */
 
 	if (!(cfg = ast_config_load2(CONFIG, "chan_usbradio", config_flags))) {
 		ast_log(LOG_ERROR, "Config file not found: %s\n", CONFIG);
@@ -4545,6 +4569,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		CONFIG_UPDATE_INT(txmixaset);
 		CONFIG_UPDATE_INT(txmixbset);
 		CONFIG_UPDATE_FLOAT(rxvoiceadj);
+		CONFIG_UPDATE_FLOAT(rxctcssadj);
 		CONFIG_UPDATE_INT(txctcssadj);
 		CONFIG_UPDATE_INT(rxsquelchadj);
 		CONFIG_UPDATE_INT(fever);
@@ -4584,7 +4609,7 @@ static void tune_write(struct chan_usbradio_pvt *o)
 		o->eeprom[EEPROM_USER_TXMIXASET] = o->txmixaset;
 		o->eeprom[EEPROM_USER_TXMIXBSET] = o->txmixbset;
 		memcpy(&o->eeprom[EEPROM_USER_RXVOICEADJ], &o->rxvoiceadj, sizeof(float));
-		memcpy(&o->eeprom[EEPROM_USER_RXCTCSSADJ], &old_rxctcssadj, sizeof(float));
+		memcpy(&o->eeprom[EEPROM_USER_RXCTCSSADJ], &o->rxctcssadj, sizeof(float));
 		o->eeprom[EEPROM_USER_TXCTCSSADJ] = o->txctcssadj;
 		o->eeprom[EEPROM_USER_RXSQUELCHADJ] = o->rxsquelchadj;
 		o->eepromctl = 2; /* request a write */
@@ -4707,6 +4732,7 @@ static void pmrdump(struct chan_usbradio_pvt *o, int fd)
 	pd(o->txboost);
 
 	pf(o->rxvoiceadj);
+	pf(o->rxctcssadj);
 	pd(o->rxsquelchadj);
 
 	ps(o->txctcssdefault);
@@ -5110,7 +5136,8 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 		o->pmrChan->txCpuSaver = o->txcpusaver;
 
 		*(o->pmrChan->prxSquelchAdjust) = ((999 - o->rxsquelchadj) * 32767) / AUDIO_ADJUSTMENT;
-		*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8;
+		*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8; /* updates xpmr outputGain */
+		*(o->pmrChan->prxCtcssAdjust) = o->rxctcssadj * M_Q8; /* updates xpmr outputGain */
 		o->pmrChan->rxCtcss->relax = o->rxctcssrelax;
 		o->pmrChan->txTocType = o->txtoctype;
 
