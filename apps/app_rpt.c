@@ -3536,8 +3536,6 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 				dodispgm(myrpt, l->name);
 			}
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
-			/* hang-up on call to device */
-			return;
 		}
 	} else {
 		/* Not outbound */
@@ -3556,9 +3554,6 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			rpt_update_links(myrpt);
 			donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
 			dodispgm(myrpt, l->name);
-			/* hang-up on call to device */
-
-			return;
 		}
 	}
 	return;
