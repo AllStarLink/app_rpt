@@ -4556,7 +4556,7 @@ static void *voter_reader(void *data)
 	char gps1[300], gps2[300], isproxy;
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
-	int i, j, k, ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
+	int fd, i, j, k, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -4603,15 +4603,20 @@ static void *voter_reader(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
-		ms = 50;										 /* 50ms timeout */
-		i = ast_waitfor_n_fd(&udp_socket, 1, &ms, NULL); /* Open UDP socket with 50ms timeout. */
+		timeout_ms = 50;										 /* 50ms timeout */
+		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL); /* Poll the UDP socket, looking for data */
 		ast_mutex_lock(&voter_lock);
-		if (i == -1) {
-			ast_mutex_unlock(&voter_lock);
-			ast_log(LOG_ERROR, "Unable to open VOTER UDP socket\n");
-			pthread_exit(NULL);
+		/* Check the returned fd and see if there is a datagram ready to process.
+		 * fd will be positive (and equal to udp_socket) if there is activity on the UDP socket.
+		 * If fd is negative, there was an error, timeout, or no activity, and we should skip (continue) and
+		 * wait (try again).
+		 */
+		if (fd < 0) {
+			continue;
 		}
-		/* Check all of our Asterisk channels to see if any are receiving and have now stopped (timed out). */
+		/* When we get here, fd is the file descriptor for the UDP socket, with a datagram ready to process.
+		 *
+		 * First, check all of our Asterisk channels to see if any were receiving and have now stopped (timed out). */
 		gettimeofday(&tv, NULL);
 		for (p = pvts; p; p = p->next) {
 			if (!p->rxkey) {
@@ -4629,15 +4634,7 @@ static void *voter_reader(void *data)
 				p->lastwon = NULL;
 			}
 		}
-		/*! \todo VE7FET this should not be needed, we bail if i == -1 above? */
-		if (i < 0) {
-			continue;
-		}
-		/* Is there activity on our UDP socket? Do nothing (continue) if the waitfor fd above returned 0. */
-		if (i != udp_socket) {
-			continue;
-		}
-		/* Get the data from the UDP socket. */
+		 /* Go get the datagram from the UDP port, and start processing. */
 		fromlen = sizeof(struct sockaddr_in);
 		recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 		/* Handle recvfrom() errors */
