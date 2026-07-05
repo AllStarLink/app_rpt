@@ -4121,6 +4121,7 @@ static int reload(void)
 			cp = ast_strdup(v->value);
 			if (!cp) {
 				close(udp_socket);
+				udp_socket = -1;
 				ast_config_destroy(cfg);
 				ast_mutex_unlock(&voter_lock);
 				return -1;
@@ -4148,6 +4149,7 @@ static int reload(void)
 				if (!client) {
 					ast_free(cp);
 					close(udp_socket);
+					udp_socket = -1;
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4210,6 +4212,7 @@ static int reload(void)
 				client->audio = ast_realloc(client->audio, client->buflen);
 				if (!client->audio) {
 					close(udp_socket);
+					udp_socket = -1;
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4219,6 +4222,7 @@ static int reload(void)
 				client->audio = ast_malloc(client->buflen);
 				if (!client->audio) {
 					close(udp_socket);
+					udp_socket = -1;
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4229,6 +4233,7 @@ static int reload(void)
 				client->rssi = ast_realloc(client->rssi, client->buflen);
 				if (!client->rssi) {
 					close(udp_socket);
+					udp_socket = -1;
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4238,6 +4243,7 @@ static int reload(void)
 				client->rssi = ast_calloc(1, client->buflen);
 				if (!client->rssi) {
 					close(udp_socket);
+					udp_socket = -1;
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4265,6 +4271,8 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
+			close(udp_socket);
+			udp_socket = -1;
 			ast_mutex_unlock(&voter_lock);
 			return -1;
 		}
@@ -4278,6 +4286,8 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
+				close(udp_socket);
+				udp_socket = -1;
 				ast_mutex_unlock(&voter_lock);
 				return -1;
 			}
@@ -6145,6 +6155,7 @@ static int load_module(void)
 	if (bind(udp_socket, &sin, sizeof(sin)) == -1) {
 		ast_log(LOG_ERROR, "Unable to bind port for VOTER audio connection: %s\n", strerror(errno));
 		close(udp_socket);
+		udp_socket = -1;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -6156,6 +6167,7 @@ static int load_module(void)
 		if (setsockopt(udp_socket, IPPROTO_IP, IP_TOS, &i, sizeof(i))) {
 			ast_log(LOG_ERROR, "Can't setsockopt: IP_TOS: %s\n", strerror(errno));
 			close(udp_socket);
+			udp_socket = -1;
 			return AST_MODULE_LOAD_DECLINE;
 		}
 	}
@@ -6197,6 +6209,7 @@ static int load_module(void)
 		ast_timer_close(voter_thread_timer);
 		voter_thread_timer = NULL;
 		close(udp_socket);
+		udp_socket = -1;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_format_cap_append(voter_tech.capabilities, ast_format_slin, 0);
@@ -6207,6 +6220,7 @@ static int load_module(void)
 		ast_timer_close(voter_thread_timer);
 		voter_thread_timer = NULL;
 		close(udp_socket);
+		udp_socket = -1;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	nullfd = open("/dev/null", O_RDWR);
