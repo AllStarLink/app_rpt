@@ -5112,7 +5112,7 @@ static void *voter_reader(void *data)
 			if (client && client->heardfrom &&
 				(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))) ||
 					((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))) ||
-					(ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY))) {
+					((ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) && ((size_t) recvlen >= (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER)))))) {
 				/* Find the matching Asterisk channel for this client. */
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
