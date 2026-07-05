@@ -3851,6 +3851,8 @@ static int reload(void)
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load/reload config %s\n", config);
+		close(udp_socket);
+		udp_socket = -1;
 		ast_mutex_unlock(&voter_lock);
 		return -1;
 	} else {
@@ -6173,8 +6175,15 @@ static int load_module(void)
 	/* Set voter_thread_timer for 50 ticks/second (every 20ms). */
 	ast_timer_set_rate(voter_thread_timer, VOTER_TICKS);
 
-	/* Load the rest of the values from the config file by running reload. */
+	/* Load the rest of the values from the config file by running reload.
+	 * reload() will return 0 on success, or a non-zero value on failure.
+	 * If it returns non-zero, we will abort loading the module.
+	 * We won't close the UDP socket here, because reload() will do that if it fails,
+	 * avoiding a double-close of the socket.
+	 */
 	if (reload()) {
+		ast_timer_close(voter_thread_timer);
+		voter_thread_timer = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -6186,6 +6195,7 @@ static int load_module(void)
 
 	if (!(voter_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
 		ast_timer_close(voter_thread_timer);
+		voter_thread_timer = NULL;
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -6195,6 +6205,7 @@ static int load_module(void)
 	if (ast_channel_register(&voter_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
 		ast_timer_close(voter_thread_timer);
+		voter_thread_timer = NULL;
 		close(udp_socket);
 		return AST_MODULE_LOAD_DECLINE;
 	}
