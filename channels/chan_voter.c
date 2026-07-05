@@ -357,6 +357,10 @@ char context[100];
 #define PING_TIME_MS 250
 #define PING_TIMEOUT_MS 3000
 
+/* Voter thread timer */
+/* voter_thread_timer is set for 50 ticks/second (every 20ms) */
+#define VOTER_TICKS 50
+
 /* Buffer definitions
  * FRAME_SIZE 160 --> 160 octets of ulaw audio (20ms @ 8k samples/sec) = 160 audio samples
  * ADPCM_FRAME_SIZE 163 --> 163 octets of IMA-ADPCM audio (40ms @ 8k samples/sec) = 320 audio samples
@@ -6167,7 +6171,7 @@ static int load_module(void)
 	}
 
 	/* Set voter_thread_timer for 50 ticks/second (every 20ms). */
-	ast_timer_set_rate(voter_thread_timer, 50);
+	ast_timer_set_rate(voter_thread_timer, VOTER_TICKS);
 
 	/* Load the rest of the values from the config file by running reload. */
 	if (reload()) {
