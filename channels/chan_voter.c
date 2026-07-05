@@ -422,6 +422,22 @@ char context[100];
 #define VOTER_PAYLOAD_PING 5
 #define VOTER_PAYLOAD_PROXY 0xf000
 
+/* Define voter packet flags. */
+enum voter_auth_flags {
+    /*! \brief Send flat audio (nodeemp or hostdeemp) (aka Flag 1) */
+    FLAG_FLATAUDIO = (1 << 0),
+    /*! \brief Send audio always (master) (aka Flag 2) */
+    FLAG_SENDALWAYS = (1 << 1),
+    /*! \brief Do not filter CTCSS (noplfilter) (aka Flag 4) */
+    FLAG_NOCTCSSFILTER = (1 << 2),
+    /*! \brief Master timing source (do not delay sending audio packet) (master) (aka Flag 8) */
+    FLAG_MASTERTIMING = (1 << 3),
+    /*! \brief Use ADPCM rather than ulaw (adpcm) (aka Flag 16) */
+    FLAG_ADPCM = (1 << 4),
+    /*! \brief Request "mix" option to host (mixminus) (aka Flag 32) */
+    FLAG_MIX = (1 << 5),
+};
+
 /* vdesc and type are used when Asterisk interacts with our module. */
 static const char vdesc[] = "radio Voter channel driver";
 static char type[] = "voter";
@@ -2957,7 +2973,7 @@ static void *voter_primary_client(void *data)
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
 			ast_copy_string((char *) authpacket.vp.challenge, challenge, sizeof(authpacket.vp.challenge));
 			authpacket.vp.digest = htonl(resp_digest);
-			authpacket.flags = 32;
+			authpacket.flags = FLAG_MIX;
 			ast_debug(3, "VOTER %i: Sent primary client auth to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
@@ -4821,7 +4837,7 @@ static void *voter_reader(void *data)
 					continue;
 				}
 				/* Is the mix mode flag being sent by the client? */
-				if (buf[sizeof(VOTER_PACKET_HEADER)] & 32) {
+				if (buf[sizeof(VOTER_PACKET_HEADER)] & FLAG_MIX) {
 					/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
 					 * so this is where we check the flags from the client, and update client->mix accordingly.
 					 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
@@ -4870,20 +4886,21 @@ static void *voter_reader(void *data)
 				 *
 				 * Set the flags we are going to send to the client for configuration.
 				 */
+				authpacket.flags = 0;
 				if (client->ismaster) {
-					authpacket.flags |= 2 | 8;
+					authpacket.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
 				}
 				if (client->doadpcm) {
-					authpacket.flags |= 16;
+					authpacket.flags |= FLAG_ADPCM;
 				}
 				if (client->mix) {
-					authpacket.flags |= 32;
+					authpacket.flags |= FLAG_MIX;
 				}
 				if (client->nodeemp || (p && p->hostdeemp)) {
-					authpacket.flags |= 1;
+					authpacket.flags |= FLAG_FLATAUDIO;
 				}
 				if (client->noplfilter) {
-					authpacket.flags |= 4;
+					authpacket.flags |= FLAG_NOCTCSSFILTER;
 				}
 			}
 
@@ -5180,7 +5197,7 @@ static void *voter_reader(void *data)
 							ast_copy_string(client->saved_challenge, proxy.challenge, sizeof(client->saved_challenge));
 							client->proxy_sin = psin;
 							/* Is the mix mode flag being sent by the proxy client? */
-							if (proxy.flags & 32) {
+							if (proxy.flags & FLAG_MIX) {
 								/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
 								 * so this is where we check the flags from the client, and update client->mix accordingly.
 								 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
@@ -5226,19 +5243,19 @@ static void *voter_reader(void *data)
 							vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
 							proxy.flags = 0;
 							if (client->ismaster) {
-								proxy.flags |= 2 | 8;
+								proxy.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
 							}
 							if (client->doadpcm) {
-								proxy.flags |= 16;
+								proxy.flags |= FLAG_ADPCM;
 							}
 							if (client->mix) {
-								proxy.flags |= 32;
+								proxy.flags |= FLAG_MIX;
 							}
 							if (client->nodeemp || p->hostdeemp) {
-								proxy.flags |= 1;
+								proxy.flags |= FLAG_FLATAUDIO;
 							}
 							if (client->noplfilter) {
-								proxy.flags |= 4;
+								proxy.flags |= FLAG_NOCTCSSFILTER;
 							}
 							vph->digest = htonl(crc32_bufs(p->primary_challenge, client->pswd));
 							memmove(buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER),
@@ -5836,19 +5853,19 @@ static void *voter_reader(void *data)
 					vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
 					proxy.flags = 0;
 					if (client->ismaster) {
-						proxy.flags |= 2 | 8;
+						proxy.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
 					}
 					if (client->doadpcm) {
-						proxy.flags |= 16;
+						proxy.flags |= FLAG_ADPCM;
 					}
 					if (client->mix) {
-						proxy.flags |= 32;
+						proxy.flags |= FLAG_MIX;
 					}
 					if (client->nodeemp || p->hostdeemp) {
-						proxy.flags |= 1;
+						proxy.flags |= FLAG_FLATAUDIO;
 					}
 					if (client->noplfilter) {
-						proxy.flags |= 4;
+						proxy.flags |= FLAG_NOCTCSSFILTER;
 					}
 					vph->digest = htonl(crc32_bufs(p->primary_challenge, client->pswd));
 					memmove(buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), buf + sizeof(VOTER_PACKET_HEADER),
@@ -5973,7 +5990,7 @@ process_gps:
 					continue;
 				}
 				/* Is the mix mode flag being sent by the client? */
-				if (buf[sizeof(VOTER_PACKET_HEADER)] & 32) {
+				if (buf[sizeof(VOTER_PACKET_HEADER)] & FLAG_MIX) {
 					/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
 					 * so this is where we check the flags from the client, and update client->mix accordingly.
 					 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
@@ -6013,20 +6030,21 @@ process_gps:
 				client->respdigest = 0;
 				continue;
 			} else {
+				authpacket.flags = 0;
 				if (client->ismaster) {
-					authpacket.flags |= 2 | 8;
+					authpacket.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
 				}
 				if (client->doadpcm) {
-					authpacket.flags |= 16;
+					authpacket.flags |= FLAG_ADPCM;
 				}
 				if (client->mix) {
-					authpacket.flags |= 32;
+					authpacket.flags |= FLAG_MIX;
 				}
 				if (client->nodeemp || (p && p->hostdeemp)) {
-					authpacket.flags |= 1;
+					authpacket.flags |= FLAG_FLATAUDIO;
 				}
 				if (client->noplfilter) {
-					authpacket.flags |= 4;
+					authpacket.flags |= FLAG_NOCTCSSFILTER;
 				}
 			}
 		}
