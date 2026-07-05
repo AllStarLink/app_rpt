@@ -4608,8 +4608,13 @@ static void *voter_reader(void *data)
 		/* Get the data from the UDP socket. */
 		fromlen = sizeof(struct sockaddr_in);
 		recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
+		/* Handle recvfrom() errors */
+		if (recvlen < 0) {
+			ast_log(LOG_ERROR, "recvfrom() failed: %s\n", strerror(errno));
+			continue;
+		}
 		/* Skip if we got less than a header's worth of data. */
-		if (recvlen < sizeof(VOTER_PACKET_HEADER)) {
+		if ((size_t) recvlen < sizeof(VOTER_PACKET_HEADER)) {
 			continue;
 		}
 		/* Put the header of the packet into vph. */
