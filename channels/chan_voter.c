@@ -4400,23 +4400,22 @@ static void *voter_timer(void *data)
 	struct voter_client *client, *client1;
 	struct timeval tv;
 
-	/* Get the timer handle (fd) for the timer we opened in load_module. */
-	int timingfd = ast_timer_fd(voter_thread_timer);
-
 	while (run_forever && !ast_shutting_down()) {
-		/* Since timeout = -1, ast_waitfor_n_fd will wait forever for our
-		 * timer handle (timingfd) to become ready. It should happen on
-		 * every "tick" (every 20ms)?
-		 */
-		int timeout = -1;
-		ast_waitfor_n_fd(&timingfd, 1, &timeout, NULL);
+		/* Check and acknowledge our thread timer. This timer keeps our audio in sync (for IAX2). */
+		{
+			int timer_fd = ast_timer_fd(voter_thread_timer);
+			int timeout_ms = -1; /* block until the timer fires */
 
-		/* When the timer is ready, acknowledge it (one event only). This
-		 * timer should be used to keep all our audio in sync (ie for IAX2).
-		 */
-		if (ast_timer_ack(voter_thread_timer, 1) < 0) {
-			ast_log(LOG_ERROR, "Failed to acknowledge timer\n");
-			break;
+			if (ast_waitfor_n_fd(&timer_fd, 1, &timeout_ms, NULL) < 0) {
+				ast_log(LOG_ERROR, "Failed to wait on VOTER thread timer.\n");
+				break;
+			}
+			if (ast_timer_get_event(voter_thread_timer) == AST_TIMING_EVENT_EXPIRED) {
+				if (ast_timer_ack(voter_thread_timer, 1) < 0) {
+					ast_log(LOG_ERROR, "Failed to acknowledge timer.\n");
+					break;
+				}
+			}
 		}
 
 		ast_mutex_lock(&voter_lock);
@@ -4532,6 +4531,7 @@ static void *voter_timer(void *data)
 		}
 		ast_mutex_unlock(&voter_lock);
 	}
+	ast_log(LOG_WARNING, "VOTER: Timer thread exited.\n");
 	return NULL;
 }
 
