@@ -6074,6 +6074,7 @@ process_gps:
 			proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
 			sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
 		} else {
+			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
 			ast_debug(2, "Sending initial packet challenge %s digest %08x password %s to client %s\n", authpacket.vp.challenge,
 				ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
 			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
