@@ -4667,7 +4667,7 @@ static void *voter_reader(void *data)
 			/* Our unique challenge is created in load_module. Copy our challenge into
 			 * the packet header.
 			 */
-			strcpy((char *) authpacket.vp.challenge, challenge);
+			ast_copy_string((char *) authpacket.vp.challenge, challenge, sizeof(authpacket.vp.challenge));
 
 			/* Put our current system time into the packet header. */
 			gettimeofday(&tv, NULL);
