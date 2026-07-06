@@ -4516,7 +4516,8 @@ static void *voter_timer(void *data)
 								continue;
 							}
 
-							char *client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr)); /* save the string so we can call ast_inet_ntoa again */
+							/* Save the IP string so we can call ast_inet_ntoa again */
+							char *client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr));
 							char *client1_ip = ast_strdupa(ast_inet_ntoa(client1->sin.sin_addr));
 							ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name, client_ip,
 								ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
@@ -4605,7 +4606,7 @@ static void *voter_reader(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
-		timeout_ms = 50; /* 50ms timeout */
+		timeout_ms = 50;										  /* 50ms timeout */
 		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL); /* Poll the UDP socket, looking for data */
 		ast_mutex_lock(&voter_lock);
 		/* Check the returned fd and see if there is a datagram ready to process.
@@ -5456,9 +5457,8 @@ static void *voter_reader(void *data)
 											continue;
 										}
 
-										char *client_ip =
-											ast_strdupa(ast_inet_ntoa(client->sin.sin_addr)); /* save the string so we can call
-												ast_inet_ntoa again */
+										/* Save the IP string so we can call ast_inet_ntoa again */
+										char *client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr));
 										char *client1_ip = ast_strdupa(ast_inet_ntoa(client1->sin.sin_addr));
 										ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name, client_ip,
 											ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
