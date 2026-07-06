@@ -424,18 +424,19 @@ char context[100];
 
 /* Define voter packet flags. */
 enum voter_auth_flags {
-    /*! \brief Send flat audio (nodeemp or hostdeemp) (aka Flag 1) */
-    FLAG_FLATAUDIO = (1 << 0),
-    /*! \brief Send audio always (master) (aka Flag 2) */
-    FLAG_SENDALWAYS = (1 << 1),
-    /*! \brief Do not filter CTCSS (noplfilter) (aka Flag 4) */
-    FLAG_NOCTCSSFILTER = (1 << 2),
-    /*! \brief Master timing source (do not delay sending audio packet) (master) (aka Flag 8) */
-    FLAG_MASTERTIMING = (1 << 3),
-    /*! \brief Use ADPCM rather than ulaw (adpcm) (aka Flag 16) */
-    FLAG_ADPCM = (1 << 4),
-    /*! \brief Request "mix" option to host (mixminus) (aka Flag 32) */
-    FLAG_MIX = (1 << 5),
+  /*! \brief Send flat audio (nodeemp or hostdeemp) (aka Flag 1) */
+  FLAG_FLATAUDIO = (1 << 0),
+  /*! \brief Send audio always (master) (aka Flag 2) */
+  FLAG_SENDALWAYS = (1 << 1),
+  /*! \brief Do not filter CTCSS (noplfilter) (aka Flag 4) */
+  FLAG_NOCTCSSFILTER = (1 << 2),
+  /*! \brief Master timing source (do not delay sending audio packet) (master)
+     (aka Flag 8) */
+  FLAG_MASTERTIMING = (1 << 3),
+  /*! \brief Use ADPCM rather than ulaw (adpcm) (aka Flag 16) */
+  FLAG_ADPCM = (1 << 4),
+  /*! \brief Request "mix" option to host (mixminus) (aka Flag 32) */
+  FLAG_MIX = (1 << 5),
 };
 
 /* vdesc and type are used when Asterisk interacts with our module. */
@@ -4517,9 +4518,8 @@ static void *voter_timer(void *data)
 
 							char *client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr)); /* save the string so we can call ast_inet_ntoa again */
 							char *client1_ip = ast_strdupa(ast_inet_ntoa(client1->sin.sin_addr));
-							ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n",
-								client->name, client_ip, ntohs(client->sin.sin_port),
-								client1->name, client1_ip, ntohs(client1->sin.sin_port));
+							ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name, client_ip,
+								ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
 							ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
 								client->name, client1->name);
 							client->respdigest = 0;
@@ -4605,7 +4605,7 @@ static void *voter_reader(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
-		timeout_ms = 50;										 /* 50ms timeout */
+		timeout_ms = 50;										/* 50ms timeout */
 		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL); /* Poll the UDP socket, looking for data */
 		ast_mutex_lock(&voter_lock);
 		/* Check the returned fd and see if there is a datagram ready to process.
@@ -4636,7 +4636,7 @@ static void *voter_reader(void *data)
 				p->lastwon = NULL;
 			}
 		}
-		 /* Go get the datagram from the UDP port, and start processing. */
+		/* Go get the datagram from the UDP port, and start processing. */
 		fromlen = sizeof(struct sockaddr_in);
 		recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 		/* Handle recvfrom() errors */
@@ -5144,7 +5144,8 @@ static void *voter_reader(void *data)
 			if (client && client->heardfrom &&
 				(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))) ||
 					((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))) ||
-					((ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) && ((size_t) recvlen >= (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER)))))) {
+					((ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) &&
+						((size_t) recvlen >= (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER)))))) {
 				/* Find the matching Asterisk channel for this client. */
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
@@ -5455,11 +5456,11 @@ static void *voter_reader(void *data)
 											continue;
 										}
 
-										char *client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr)); /* save the string so we can call ast_inet_ntoa again */
+										char *client_ip =
+											ast_strdupa(ast_inet_ntoa(client->sin.sin_addr)); /* save the string so we can call ast_inet_ntoa again */
 										char *client1_ip = ast_strdupa(ast_inet_ntoa(client1->sin.sin_addr));
-										ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n",
-											client->name, client_ip, ntohs(client->sin.sin_port),
-											client1->name, client1_ip, ntohs(client1->sin.sin_port));
+										ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name, client_ip,
+											ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
 										ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
 											client->name, client1->name);
 										client->respdigest = 0;
