@@ -1247,7 +1247,7 @@ static int voter_text(struct ast_channel *ast, const char *text)
 		/* Pad end with 250ms of silence on each side. */
 		audio_samples += SAMPRATE / 2;
 		/* Also pad up to FRAME_SIZE. */
-		audio_samples += audio_samples % FRAME_SIZE;
+		audio_samples += (FRAME_SIZE - (audio_samples % FRAME_SIZE)) % FRAME_SIZE;
 		audio = ast_calloc(1, (audio_samples * sizeof(short)) + 10);
 		if (!audio) {
 			free_batch(batch);
