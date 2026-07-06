@@ -4853,18 +4853,18 @@ static void *voter_reader(void *data)
 						if (!logged_buflen_too_small) {
 							ast_log(LOG_ERROR, "VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
 								client->nodenum, client->name, client->buflen / 8);
-							logged_buflen_too_small = 1;
+							logged_buflen_too_small = 1; /* Only want to log this once */
 						}
 						client->mix = 0;
 						client->heardfrom = 0;
 						client->respdigest = 0;
 						continue;
-					} else {
-						client->mix = 1;
-						ast_log(LOG_NOTICE, "VOTER %u: Client %s is sending mix mode flag, setting client to mix mode\n",
-							client->nodenum, client->name);
-						logged_buflen_too_small = 0;
 					}
+					/* If client->buflen is sane, set the mix mode flag. */
+					client->mix = 1;
+					ast_log(LOG_NOTICE, "VOTER %u: Client %s is sending mix mode flag, setting client to mix mode\n",
+						client->nodenum, client->name);
+					logged_buflen_too_small = 0;
 				}
 			}
 
@@ -4881,27 +4881,26 @@ static void *voter_reader(void *data)
 				client->heardfrom = 0;
 				client->respdigest = 0;
 				continue;
-			} else {
-				/* Otherwise, we should be good to continue configuring the client.
-				 *
-				 * Set the flags we are going to send to the client for configuration.
-				 */
-				authpacket.flags = 0;
-				if (client->ismaster) {
-					authpacket.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
-				}
-				if (client->doadpcm) {
-					authpacket.flags |= FLAG_ADPCM;
-				}
-				if (client->mix) {
-					authpacket.flags |= FLAG_MIX;
-				}
-				if (client->nodeemp || (p && p->hostdeemp)) {
-					authpacket.flags |= FLAG_FLATAUDIO;
-				}
-				if (client->noplfilter) {
-					authpacket.flags |= FLAG_NOCTCSSFILTER;
-				}
+			}
+			/* Otherwise, we should be good to continue configuring the client.
+			 *
+			 * Set the flags we are going to send to the client for configuration.
+			 */
+			authpacket.flags = 0;
+			if (client->ismaster) {
+				authpacket.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
+			}
+			if (client->doadpcm) {
+				authpacket.flags |= FLAG_ADPCM;
+			}
+			if (client->mix) {
+				authpacket.flags |= FLAG_MIX;
+			}
+			if (client->nodeemp || (p && p->hostdeemp)) {
+				authpacket.flags |= FLAG_FLATAUDIO;
+			}
+			if (client->noplfilter) {
+				authpacket.flags |= FLAG_NOCTCSSFILTER;
 			}
 
 			/* The sin structure has the IP info received off the wire for the current packet from
@@ -4909,7 +4908,7 @@ static void *voter_reader(void *data)
 			 * update the client's sin structure with this information.
 			 */
 			client->sin = sin;
-			/*! \todo VE7FET not sure why this is here/needed, when it is dealing with proxy stuff, it probably needs to be moved */
+			/*Reset the client->proxy_sin IP structure to zero to prevent stale proxy IP information. */
 			memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
 
 			/* Print the address and port the client is connecting from */
