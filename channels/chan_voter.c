@@ -4400,6 +4400,8 @@ static void *voter_timer(void *data)
 	struct voter_pvt *p;
 	struct voter_client *client, *client1;
 	struct timeval tv;
+	char *client_ip;
+	char *client1_ip;
 
 	while (run_forever && !ast_shutting_down()) {
 		/* Check and acknowledge our thread timer. This timer keeps our audio in sync (for IAX2). */
@@ -4517,8 +4519,8 @@ static void *voter_timer(void *data)
 							}
 
 							/* Save the IP string so we can call ast_inet_ntoa again */
-							char *client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr));
-							char *client1_ip = ast_strdupa(ast_inet_ntoa(client1->sin.sin_addr));
+							client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr));
+							client1_ip = ast_strdupa(ast_inet_ntoa(client1->sin.sin_addr));
 							ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name, client_ip,
 								ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
 							ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
@@ -4557,6 +4559,8 @@ static void *voter_reader(void *data)
 {
 	char buf[4096], timestr[100], hasmastered, *cp, *cp1;
 	char gps1[300], gps2[300], isproxy;
+	char *client_ip;
+	char *client1_ip;
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
 	int fd, i, j, k, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
@@ -5458,8 +5462,8 @@ static void *voter_reader(void *data)
 										}
 
 										/* Save the IP string so we can call ast_inet_ntoa again */
-										char *client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr));
-										char *client1_ip = ast_strdupa(ast_inet_ntoa(client1->sin.sin_addr));
+										client_ip = ast_strdupa(ast_inet_ntoa(client->sin.sin_addr));
+										client1_ip = ast_strdupa(ast_inet_ntoa(client1->sin.sin_addr));
 										ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name, client_ip,
 											ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
 										ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
