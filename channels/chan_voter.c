@@ -4658,9 +4658,10 @@ static void *voter_reader(void *data)
 		}
 		isproxy = 0;
 
-		/* No valid Asterisk channel, do not respond to the client. This prevents the client
-		 * from "looping" through online/offline mode when there is no valid channel in app_rpt
-		 * to connect to.
+		/* We check (further down) during authentication to see if a client can connect to a valid Asterisk channel,
+		 * and update no_ast_channel accordingly. If we didn't find a valid Asterisk channel, we do not want to
+		 * respond to the client. By not responding, we prevent the client from "looping" through online/offline
+		 * mode when there is no valid channel in app_rpt to connect to.
 		 */
 		if (no_ast_channel) {
 			continue;
