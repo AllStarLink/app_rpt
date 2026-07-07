@@ -3860,7 +3860,6 @@ static int reload(void)
 	struct ast_config *cfg = NULL;
 	struct ast_variable *v;
 
-	ast_mutex_lock(&voter_lock);
 	for (client = clients; client; client = client->next) {
 		client->reload = 0;
 		client->old_buflen = client->buflen;
@@ -3868,7 +3867,6 @@ static int reload(void)
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load/reload config %s\n", config);
-		ast_mutex_unlock(&voter_lock);
 		return -1;
 	} else {
 		ast_log(LOG_NOTICE, "Config load/reload from %s\n", config);
@@ -4137,7 +4135,6 @@ static int reload(void)
 			if (!cp) {
 				ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 				ast_config_destroy(cfg);
-				ast_mutex_unlock(&voter_lock);
 				return -1;
 			}
 			n = finddelim(cp, strs, ARRAY_LEN(strs));
@@ -4164,7 +4161,6 @@ static int reload(void)
 					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_free(cp);
 					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
 					return -1;
 				}
 				client->prio_override = -2;
@@ -4226,7 +4222,6 @@ static int reload(void)
 				if (!client->audio) {
 					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
 					return -1;
 				}
 				memset(client->audio, 0xff, client->buflen);
@@ -4235,7 +4230,6 @@ static int reload(void)
 				if (!client->audio) {
 					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
 					return -1;
 				}
 				memset(client->audio, 0xff, client->buflen);
@@ -4245,7 +4239,6 @@ static int reload(void)
 				if (!client->rssi) {
 					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
 					return -1;
 				}
 				memset(client->rssi, 0, client->buflen);
@@ -4254,7 +4247,6 @@ static int reload(void)
 				if (!client->rssi) {
 					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
-					ast_mutex_unlock(&voter_lock);
 					return -1;
 				}
 			}
@@ -4280,7 +4272,6 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
-			ast_mutex_unlock(&voter_lock);
 			return -1;
 		}
 		for (client1 = clients; client1; client1 = client1->next) {
@@ -4293,7 +4284,6 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
-				ast_mutex_unlock(&voter_lock);
 				return -1;
 			}
 		}
@@ -4325,7 +4315,6 @@ static int reload(void)
 		ast_free(client);
 		client = clients;
 	}
-	ast_mutex_unlock(&voter_lock);
 	return 0;
 }
 
@@ -4403,7 +4392,7 @@ static void *voter_timer(void *data)
 		if (ast_timer_get_event(voter_thread_timer) == AST_TIMING_EVENT_EXPIRED) {
 			if (ast_timer_ack(voter_thread_timer, 1) < 0) {
 				ast_log(LOG_ERROR, "Failed to acknowledge timer.\n");
-			break;
+				break;
 			}
 		}
 
@@ -6204,6 +6193,7 @@ static int load_module(void)
 	 * reload() will return 0 on success, or a non-zero value on failure.
 	 * If it returns non-zero, we will abort loading the module.
 	 */
+	ast_mutex_lock(&voter_lock);
 	if (reload()) {
 		ast_log(LOG_ERROR, "Failed to reload configuration\n");
 		ast_timer_close(voter_thread_timer);
@@ -6212,6 +6202,7 @@ static int load_module(void)
 		udp_socket = -1;
 		return AST_MODULE_LOAD_DECLINE;
 	}
+	ast_mutex_unlock(&voter_lock);
 
 	ast_cli_register_multiple(voter_cli, ARRAY_LEN(voter_cli));
 
