@@ -1171,6 +1171,12 @@ usb_device_ready:
 		}
 		if (pipe2(o->pttkick, O_NONBLOCK) == -1) {
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
+			usb_close(usb_handle);
+			usb_handle = NULL;
+			ast_mutex_lock(&usb_dev_lock);
+			o->usbass = 0;
+			o->hasusb = 0;
+			ast_mutex_unlock(&usb_dev_lock);
 			pthread_exit(NULL);
 		}
 		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
@@ -1887,12 +1893,13 @@ static int usbradio_hangup(struct ast_channel *c)
 	ast_channel_tech_pvt_set(c, NULL);
 	o->owner = NULL;
 	ast_module_unref(ast_module_info->self);
+	o->stophid = 1;
+	kickptt(o);
+	pthread_join(o->hidthread, NULL);
 	if (o->hookstate) {
 		o->hookstate = 0;
-		usbradio_stop_audio(o);
 	}
-	o->stophid = 1;
-	pthread_join(o->hidthread, NULL);
+	usbradio_stop_audio(o);
 	return 0;
 }
 
@@ -2576,7 +2583,9 @@ static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, 
 	}
 	ast_channel_tech_set(c, &usbradio_tech);
 	if (!o->pa.active && o->hasusb) {
-		usbradio_start_audio(o);
+		if (usbradio_start_audio(o) < 0) {
+			return NULL;
+		}
 	}
 	ast_channel_nativeformats_set(c, usbradio_tech.capabilities);
 	ast_channel_set_readformat(c, ast_format_slin);
