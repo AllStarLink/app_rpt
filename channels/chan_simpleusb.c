@@ -29,14 +29,12 @@
 
 /*** MODULEINFO
 	<depend>alsa</depend>
-	<depend>portaudio</depend>
 	<depend>res_usbradio</depend>
 	<support_level>extended</support_level>
  ***/
 
 #include "asterisk.h"
 
-#include <portaudio.h>
 #include <alsa/asoundlib.h>
 
 #include <stdio.h>
@@ -81,13 +79,6 @@
 #define HID_POLL_RATE 50
 #define DEVICE_RETRY 500000 /* Retry time in uS when USB device is missing */
 #define MAX_FRAME_DELAY 200 /* 200ms (.2s) max time to queue audio frames before resetting usb audio */
-#ifdef __linux
-#include <linux/soundcard.h>
-#elif defined(__FreeBSD__)
-#include <sys/soundcard.h>
-#else
-#include <soundcard.h>
-#endif
 
 #include "asterisk/lock.h"
 #include "asterisk/frame.h"
@@ -107,29 +98,7 @@
 #include "asterisk/format_cache.h"
 #include "asterisk/format_compatibility.h"
 
-/*!
- * \brief The sample rate to request from PortAudio
- *
- * \todo Make this optional.  If this is only going to talk to 8 kHz endpoints,
- *       then it makes sense to use 8 kHz natively if possible.
- */
-#define PA_SAMPLE_RATE 48000 /* PortAudio Sample rate: Hardware likes 48k and is divisible by 6 for a "nice" down conversion. */
-
-/*!
- * \brief The number of samples to configure the PortAudio stream for.
- *
- * At 48kHz, 960 samples gives a 20ms frame, which aligns with Asterisk's
- * common frame size after resampling to 8kHz (160 samples @ 2 bytes per sample).
- * The number of short (2 byte) with paInt16 samples per PortAudio "frame".
- * This is 1920 bytes for stereo, or 960 bytes for mono
- */
-#define PA_NUM_FRAMES FRAME_SIZE * 6 /* Number of samples to read/write from PortAudio stream per Asterisk frame at 48k */
-
-/*! \brief Mono Input */
-#define PA_INPUT_CHANNELS 1 /* PortAudio: Mono input for Microphone / RX */
-
-/*! \brief Stereo Output */
-#define PA_OUTPUT_CHANNELS 2 /* PortAudio: Stereo output for Speaker / TX */
+#define PA_NUM_FRAMES AST_RADIO_PA_FRAMES_PER_BUFFER
 
 /*! \brief Global jitterbuffer configuration - by default, jb is disabled */
 static struct ast_jb_conf default_jbconf = {
@@ -224,7 +193,7 @@ struct chan_simpleusb_pvt {
 	struct usb_device *usb_dev;
 	struct ast_channel *owner;
 
-	PaStream *stream; /*! Current PortAudio stream for this device */
+	struct ast_radio_pa_stream pa;
 
 	char simpleusb_write_buf[FRAME_SIZE * 2]; /* buffer used for Asterisk to PA frames in 8k mono */
 
@@ -312,7 +281,6 @@ struct chan_simpleusb_pvt {
 	char had_pp_in;
 
 	/* bit fields */
-	unsigned int streamstate:1;			   /* indicator if stream is started */
 	unsigned int rxcapraw:1;			   /* indicator if receive capture is enabled */
 	unsigned int txcapraw:1;			   /* indicator if transmit capture is enabled */
 	unsigned int measure_enabled:1;		   /* indicator if measure mode is enabled */
@@ -428,267 +396,37 @@ static struct ast_channel_tech simpleusb_tech = {
 	.setoption = simpleusb_setoption,
 };
 
-static int64_t now_ms(void)
-{
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
-static PaError Pa_ReadStream_with_timeout(PaStream *s, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
-{
-	int64_t start;
-
-	start = now_ms();
-	while (!(*stop)) {
-		long avail;
-		PaError err;
-
-		avail = Pa_GetStreamReadAvailable(s);
-		if (avail < 0) {
-			return (PaError) avail;
-		}
-
-		if ((now_ms() - start) > timeout_ms) {
-			return paTimedOut;
-		}
-
-		if (avail < frames) {
-			usleep(500); /*.5ms */
-			continue;
-		}
-
-		err = Pa_ReadStream(s, buf, frames);
-		return err;
-	}
-
-	return paTimedOut;
-}
-
-/*!
- * \brief Parse "hw:<card>" or "hw:<card>,<dev>" from anywhere in s.
- * \retval 1 if found; sets *card; sets *dev to parsed value or -1 if absent.
- */
-static int parse_hw_anywhere(const char *s, int *card, int *dev)
-{
-	const char *p = s;
-
-	if (!s || !card || !dev) {
-		return 0;
-	}
-
-	while ((p = strstr(p, "hw:")) != NULL) {
-		const char *q = p + 3; /* after "hw:" */
-		int c = 0;
-		int d = -1; /* dev absent by default */
-
-		/* card must start with digit */
-		if (!isdigit((unsigned char) *q)) {
-			p = q;
-			continue;
-		}
-
-		while (isdigit((unsigned char) *q)) {
-			if (c > 9999) {
-				/* reasonable upper bound for card numbers */
-				p = q;
-				break;
-			}
-
-			c = c * 10 + (*q - '0');
-			q++;
-		}
-
-		if (*q == ',') {
-			q++;
-			if (!isdigit((unsigned char) *q)) {
-				/* "hw:<card>," is malformed; skip this occurrence */
-				p = q;
-				continue;
-			}
-			d = 0;
-			while (isdigit((unsigned char) *q)) {
-				d = d * 10 + (*q - '0');
-				q++;
-			}
-		}
-
-		*card = c;
-		*dev = d;
-		return 1; /* first valid hw: occurrence */
-	}
-
-	return 0;
-}
-
-/*!
- * \brief Match rule:
- * - needle "hw:C" matches any "hw:C" or "hw:C,D" in haystack
- * - needle "hw:C,D" matches only "hw:C,D" in haystack
- */
-static int hw_match(const char *haystack, const char *needle)
-{
-	int haystack_c, haystack_d, needle_c, needle_d;
-	const char *p = haystack ? haystack : "";
-
-	if (!parse_hw_anywhere(needle, &needle_c, &needle_d)) {
-		return 0;
-	}
-
-	/* haystack may contain multiple hw: occurrences; scan all */
-	while ((p = strstr(p, "hw:")) != NULL) {
-		if (parse_hw_anywhere(p, &haystack_c, &haystack_d)) {
-			if (haystack_c == needle_c) {
-				if (needle_d < 0) {
-					/* needle is "hw:C" -> accept any dev (including absent) */
-					return 1;
-				} else if (haystack_d == needle_d) {
-					/* needle is "hw:C,D" -> require exact dev match */
-					return 1;
-				}
-			}
-		}
-		p += 3; /* move forward to find next occurrence */
-	}
-
-	return 0;
-}
-
-static int open_stream(struct chan_simpleusb_pvt *o)
-{
-	PaError res = paInternalError;
-	const PaStreamInfo *si;
-
-	if (!strcasecmp(o->hw_device, "default")) {
-		ast_debug(1, "Opening stream with default device\n");
-		res = Pa_OpenDefaultStream(&o->stream, PA_INPUT_CHANNELS, PA_OUTPUT_CHANNELS, paInt16, PA_SAMPLE_RATE, PA_NUM_FRAMES, NULL, NULL);
-	} else {
-		PaStreamParameters input_params = {
-			.channelCount = PA_INPUT_CHANNELS,
-			.sampleFormat = paInt16,
-			.suggestedLatency = (1.0 / 50.0), /* 20 ms */
-			.device = paNoDevice,
-		};
-		PaStreamParameters output_params = {
-			.channelCount = PA_OUTPUT_CHANNELS,
-			.sampleFormat = paInt16,
-			.suggestedLatency = (1.0 / 50.0), /* 20 ms */
-			.device = paNoDevice,
-		};
-		PaDeviceIndex idx, num_devices;
-		ast_debug(1, "Looking for device %s\n", o->hw_device);
-		ast_debug(5, "PortAudio host api count %d\n", Pa_GetHostApiCount());
-		num_devices = Pa_GetDeviceCount();
-		if (num_devices < 0) {
-			ast_debug(1, "No devices found\n");
-			return res;
-		} else {
-			ast_debug(6, "%d Devices found\n", num_devices);
-		}
-
-		for (idx = 0; idx < num_devices && (input_params.device == paNoDevice || output_params.device == paNoDevice); idx++) {
-			const PaDeviceInfo *dev = Pa_GetDeviceInfo(idx);
-			ast_debug(1, "Found device %s\n", dev->name);
-			if (dev->maxInputChannels) {
-				if (hw_match(dev->name, o->hw_device)) {
-					ast_debug(5, "Found input device %s\n", dev->name);
-					input_params.device = idx;
-				}
-			}
-
-			if (dev->maxOutputChannels) {
-				if (hw_match(dev->name, o->hw_device)) {
-					ast_debug(5, "Found output device %s\n", dev->name);
-					output_params.device = idx;
-				}
-			}
-		}
-
-		if (input_params.device == paNoDevice) {
-			ast_log(LOG_ERROR, "No input device found for simpleusb device '%s'\n", o->name);
-			return res;
-		}
-
-		if (output_params.device == paNoDevice) {
-			ast_log(LOG_ERROR, "No output device found for simpleusb device '%s'\n", o->name);
-			return res;
-		}
-		ast_debug(5, "Opening stream on device %s", o->hw_device);
-		res = Pa_OpenStream(&o->stream, &input_params, &output_params, PA_SAMPLE_RATE, PA_NUM_FRAMES, paNoFlag, NULL, NULL);
-		ast_debug(5, "Stream feedback: %s\n", Pa_GetErrorText(res));
-		if (res == paNoError) {
-			si = Pa_GetStreamInfo(o->stream);
-			if (si) {
-				ast_debug(5, "Stream output latency: %.3f ms\n", si->outputLatency * 1000.0);
-				ast_debug(5, "Stream input latency: %.3f ms\n", si->inputLatency * 1000.0);
-			}
-		}
-	}
-
-	return res;
-}
-
 static int start_stream(struct chan_simpleusb_pvt *pvt)
 {
 	PaError res;
 
 	ast_debug(5, "Starting PA Stream");
-	/* It is possible for simpleusb_hangup to be called before the
-	 * stream is started, if this is the case pvt->owner will be NULL
-	 * and start_stream should be aborted. */
-	if (pvt->streamstate || !pvt->owner)
-		return -1;
-
-	res = Pa_Initialize();
-	if (res != paNoError) {
-		ast_log(LOG_WARNING, "Failed to initialize audio system - (%d) %s\n", res, Pa_GetErrorText(res));
+	if (pvt->pa.active || !pvt->owner) {
 		return -1;
 	}
 
-	res = open_stream(pvt);
+	ast_copy_string(pvt->pa.hw_device, pvt->hw_device, sizeof(pvt->pa.hw_device));
+	pvt->pa.input_channels = 1;
+
+	res = ast_radio_pa_open(&pvt->pa);
 	if (res != paNoError) {
 		ast_log(LOG_WARNING, "Failed to open stream - (%d) %s\n", res, Pa_GetErrorText(res));
-		Pa_Terminate();
 		return -1;
 	}
 
-	res = Pa_StartStream(pvt->stream);
+	res = ast_radio_pa_start(&pvt->pa);
 	if (res != paNoError) {
 		ast_log(LOG_WARNING, "Failed to start stream - (%d) %s\n", res, Pa_GetErrorText(res));
-		Pa_CloseStream(pvt->stream);
-		pvt->stream = NULL;
-		pvt->streamstate = 0;
-		Pa_Terminate();
+		ast_radio_pa_stop(&pvt->pa);
 		return -1;
 	}
 
-	pvt->streamstate = 1;
 	return 0;
 }
 
-static int stop_stream(struct chan_simpleusb_pvt *pvt)
+static void stop_stream(struct chan_simpleusb_pvt *pvt)
 {
-	PaError err;
-
-	if (!pvt->streamstate) {
-		return 0;
-	}
-
-	/* Abort and close the stream */
-	err = Pa_AbortStream(pvt->stream);
-	if (err != paNoError) {
-		ast_log(LOG_WARNING, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
-	}
-
-	err = Pa_CloseStream(pvt->stream);
-	if (err != paNoError) {
-		ast_log(LOG_WARNING, "Pa_CloseStream failed: %s\n", Pa_GetErrorText(err));
-	}
-
-	pvt->stream = NULL;
-	pvt->streamstate = 0;
-	Pa_Terminate();
-	return 0;
+	ast_radio_pa_stop(&pvt->pa);
 }
 
 /*!
@@ -1078,6 +816,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	int configured = 0;
 	char devstr[sizeof(o->devstr)];
 	char serial[sizeof(o->serial)];
+	char hw_device[sizeof(o->hw_device)];
 
 	o->rxmixerset = 500;
 	o->txmixaset = 500;
@@ -1085,6 +824,7 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 
 	devstr[0] = '\0';
 	serial[0] = '\0';
+	hw_device[0] = '\0';
 
 	if (!cfg) {
 		struct ast_flags zeroflag = { 0 };
@@ -1105,15 +845,18 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		CV_UINT("txmixbset", o->txmixbset);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
-		if (o->devstr[0] == '\0') {
-			CV_STR("audiodev", o->hw_device); /* use audiodevice as opposed to the usb device path (devstr) */
-		}
+		CV_STR("audiodev", hw_device); /* use audiodevice as opposed to the usb device path (devstr) */
 		CV_END;
 	}
 	if (!reload) {
 		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
 		ast_copy_string(o->devstr, devstr, sizeof(o->devstr)); /* Safe */
 		ast_copy_string(o->serial, serial, sizeof(o->serial)); /* Safe */
+		if (ast_strlen_zero(devstr)) {
+			ast_copy_string(o->hw_device, hw_device, sizeof(o->hw_device));
+		} else {
+			o->hw_device[0] = '\0';
+		}
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
@@ -1133,7 +876,8 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	char serial[sizeof(o->serial)] = { '\0' };
 	char *s;
 	struct chan_simpleusb_pvt *ao;
-	register int i;
+	int i;
+	int subdev;
 
 	ast_radio_time(&o->lasthidtime);
 	ast_mutex_lock(&usb_dev_lock);
@@ -1148,7 +892,7 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 			ast_log(LOG_ERROR, "audiodev=default is not supported for SimpleUSB until HID-less startup is implemented\n");
 			ast_mutex_unlock(&usb_dev_lock);
 			return -1;
-		} else if (sscanf(o->hw_device, "hw:%d", &o->devicenum) == 1) {
+		} else if (ast_radio_parse_hw_anywhere(o->hw_device, &o->devicenum, &subdev)) {
 			ast_debug(5, "audiodev is defined: %s, Device %d", o->hw_device, o->devicenum);
 			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
 			if (!o->usb_dev) {
@@ -1156,9 +900,17 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 				ast_mutex_unlock(&usb_dev_lock);
 				return -1;
 			}
+			for (ao = simpleusb_default.next; ao && ao->name; ao = ao->next) {
+				if (ao != o && ao->usbass && ao->devicenum == o->devicenum) {
+					ast_log(LOG_ERROR, "Channel %s: Audio device %s is already assigned to channel %s\n",
+						o->name, o->hw_device, ao->name);
+					ast_mutex_unlock(&usb_dev_lock);
+					return -1;
+				}
+			}
 
 		} else {
-			ast_log(LOG_ERROR, "Incorrect audio parameter audiodev (should be hw:0 format), found %s\n", o->hw_device);
+			ast_log(LOG_ERROR, "Incorrect audio parameter audiodev (should be hw:0 or hw:0,0 format), found %s\n", o->hw_device);
 			ast_mutex_unlock(&usb_dev_lock);
 			return -1;
 		}
@@ -1471,6 +1223,11 @@ static void *hidthread(void *arg)
 		}
 		if (pipe2(o->pttkick, O_NONBLOCK) == -1) {
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
+			ast_mutex_lock(&usb_dev_lock);
+			o->usbass = 0;
+			o->hasusb = 0;
+			o->usb_dev = NULL;
+			ast_mutex_unlock(&usb_dev_lock);
 			usb_close(usb_handle);
 			usb_handle = NULL;
 			return NULL;
@@ -1525,6 +1282,8 @@ static void *hidthread(void *arg)
 				ast_radio_time(&audio_time_now);
 				if ((audio_time_now - o->lastaudiotime) > 1) {
 					ast_log(LOG_ERROR, "Channel %s: Audio process has died or is not responding.\n", o->name);
+					o->hasusb = 0;
+					break;
 				}
 			}
 
@@ -1893,11 +1652,9 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	 * a number of failures, to restart the output chain.
 	 */
 
-	res = Pa_WriteStream(o->stream, data, PA_NUM_FRAMES);
+	res = ast_radio_pa_write(&o->pa, data, PA_NUM_FRAMES);
 	if (res == paOutputUnderflowed) {
-		short null_buf[PA_NUM_FRAMES * 2] = { 0 };
 		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
-		Pa_WriteStream(o->stream, null_buf, PA_NUM_FRAMES);
 	} else if (res < 0) {
 		ast_debug(2, "Pa_WriteStream Error %s", Pa_GetErrorText(res));
 	}
@@ -2391,7 +2148,7 @@ static void *simpleusb_audio_thread(void *arg)
 			continue;
 		}
 
-		if (!o->streamstate && start_stream(o) < 0) {
+		if (!o->pa.active && start_stream(o) < 0) {
 			ast_log(LOG_ERROR, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
 			o->hasusb = 0;
 			usleep(DEVICE_RETRY);
@@ -2507,7 +2264,7 @@ static void *simpleusb_audio_thread(void *arg)
 				/* Check for room in the write buffer.  If the device goes unavailable or
 				 * there is not room in the buffer, Pa_WriteStream will hang.
 				 */
-				frames_available = Pa_GetStreamWriteAvailable(o->stream);
+				frames_available = ast_radio_pa_write_available(&o->pa);
 
 				if (frames_available < 0) {
 					if (frames_available != paOutputUnderflowed) {
@@ -2517,6 +2274,7 @@ static void *simpleusb_audio_thread(void *arg)
 						ast_debug(2, "Pa_GetStreamWriteAvailable error %s", Pa_GetErrorText(frames_available));
 						o->hasusb = 0;
 						stream_cleanup(o);
+						break;
 					}
 				}
 
@@ -2615,6 +2373,7 @@ static void *simpleusb_audio_thread(void *arg)
 									ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
 									o->hasusb = 0;
 									stream_cleanup(o);
+									break;
 								}
 							}
 
@@ -2647,6 +2406,9 @@ static void *simpleusb_audio_thread(void *arg)
 						}
 					}
 					ast_frfree(f1);
+					if (!o->hasusb) {
+						break;
+					}
 					continue;
 				}
 
@@ -2660,16 +2422,23 @@ static void *simpleusb_audio_thread(void *arg)
 				break;
 			}
 
+			if (!o->hasusb || !o->pa.active) {
+				break;
+			}
+
 			/* Read audio data from the USB sound device.
 			 * Sound data will arrive at 48000 samples per second
 			 * in mono format.  We should always have 20ms frames, 40ms timeout
 			 * as a reasonable max wait time.
 			 */
-			res = Pa_ReadStream_with_timeout(o->stream, o->simpleusb_read_buf, PA_NUM_FRAMES, 40, &o->stopaudiothread);
+			res = ast_radio_pa_read(&o->pa, o->simpleusb_read_buf, PA_NUM_FRAMES, 40, &o->stopaudiothread);
 			if (res != paNoError) {
 				/* audio data not ready */
 				if (res == paInputOverflowed) {
 					ast_debug(6, "PortAudio read overflow on channel %s\n", o->name);
+				} else if (res == paTimedOut) {
+					ast_debug(6, "PortAudio read timeout on channel %s\n", o->name);
+					continue;
 				} else {
 					ast_log(LOG_ERROR, "Pa_ReadStream Error on channel %s : %s\n", o->name, Pa_GetErrorText(res));
 					o->hasusb = 0;
@@ -4650,6 +4419,7 @@ static int load_module(void)
 static int unload_module(void)
 {
 	struct chan_simpleusb_pvt *o, *no;
+	int i;
 
 	stoppulser = 1;
 
@@ -4658,6 +4428,9 @@ static int unload_module(void)
 		if (o->owner) {
 			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
 		}
+		o->stopaudiothread = 1;
+		o->stophidthread = 1;
+		kickptt(o);
 
 		if (o->audiothread != AST_PTHREADT_NULL) {
 			pthread_join(o->audiothread, NULL); /* wait for audio thread to end */
@@ -4670,9 +4443,14 @@ static int unload_module(void)
 		if (o->dsp) {
 			ast_dsp_free(o->dsp);
 		}
+		for (i = 0; i < GPIO_PINCOUNT; i++) {
+			ast_free(o->gpios[i]);
+		}
+		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
+			ast_free(o->pps[i]);
+		}
+		ast_free(o->name);
 		ast_free(o);
-
-		/* XXX what about the memory allocated ? */
 	}
 
 #if DEBUG_CAPTURES == 1
