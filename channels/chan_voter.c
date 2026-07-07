@@ -3868,8 +3868,6 @@ static int reload(void)
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load/reload config %s\n", config);
-		close(udp_socket);
-		udp_socket = -1;
 		ast_mutex_unlock(&voter_lock);
 		return -1;
 	} else {
@@ -4137,8 +4135,7 @@ static int reload(void)
 			}
 			cp = ast_strdup(v->value);
 			if (!cp) {
-				close(udp_socket);
-				udp_socket = -1;
+				ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 				ast_config_destroy(cfg);
 				ast_mutex_unlock(&voter_lock);
 				return -1;
@@ -4164,9 +4161,8 @@ static int reload(void)
 			if (!client) {
 				client = ast_calloc(1, sizeof(struct voter_client));
 				if (!client) {
+					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_free(cp);
-					close(udp_socket);
-					udp_socket = -1;
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4228,8 +4224,7 @@ static int reload(void)
 			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
 				client->audio = ast_realloc(client->audio, client->buflen);
 				if (!client->audio) {
-					close(udp_socket);
-					udp_socket = -1;
+					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4238,8 +4233,7 @@ static int reload(void)
 			} else if (!client->audio) {
 				client->audio = ast_malloc(client->buflen);
 				if (!client->audio) {
-					close(udp_socket);
-					udp_socket = -1;
+					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4249,8 +4243,7 @@ static int reload(void)
 			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
 				client->rssi = ast_realloc(client->rssi, client->buflen);
 				if (!client->rssi) {
-					close(udp_socket);
-					udp_socket = -1;
+					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4259,8 +4252,7 @@ static int reload(void)
 			} else if (!client->rssi) {
 				client->rssi = ast_calloc(1, client->buflen);
 				if (!client->rssi) {
-					close(udp_socket);
-					udp_socket = -1;
+					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
 					ast_mutex_unlock(&voter_lock);
 					return -1;
@@ -4288,8 +4280,6 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
-			close(udp_socket);
-			udp_socket = -1;
 			ast_mutex_unlock(&voter_lock);
 			return -1;
 		}
@@ -4303,8 +4293,6 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
-				close(udp_socket);
-				udp_socket = -1;
 				ast_mutex_unlock(&voter_lock);
 				return -1;
 			}
@@ -4405,19 +4393,17 @@ static void *voter_timer(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		/* Check and acknowledge our thread timer. This timer keeps our audio in sync (for IAX2). */
-		{
-			int timer_fd = ast_timer_fd(voter_thread_timer);
-			int timeout_ms = -1; /* block until the timer fires */
+		int timer_fd = ast_timer_fd(voter_thread_timer);
+		int timeout_ms = -1; /* block until the timer fires */
 
-			if (ast_waitfor_n_fd(&timer_fd, 1, &timeout_ms, NULL) < 0) {
-				ast_log(LOG_ERROR, "Failed to wait on VOTER thread timer.\n");
-				break;
-			}
-			if (ast_timer_get_event(voter_thread_timer) == AST_TIMING_EVENT_EXPIRED) {
-				if (ast_timer_ack(voter_thread_timer, 1) < 0) {
-					ast_log(LOG_ERROR, "Failed to acknowledge timer.\n");
-					break;
-				}
+		if (ast_waitfor_n_fd(&timer_fd, 1, &timeout_ms, NULL) < 0) {
+			ast_log(LOG_ERROR, "Failed to wait on VOTER thread timer.\n");
+			break;
+		}
+		if (ast_timer_get_event(voter_thread_timer) == AST_TIMING_EVENT_EXPIRED) {
+			if (ast_timer_ack(voter_thread_timer, 1) < 0) {
+				ast_log(LOG_ERROR, "Failed to acknowledge timer.\n");
+			break;
 			}
 		}
 
@@ -6154,7 +6140,7 @@ static int load_module(void)
 	 */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
-		return 1;
+		return AST_MODULE_LOAD_DECLINE;
 	}
 
 	if ((udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
@@ -6207,6 +6193,7 @@ static int load_module(void)
 	if (!voter_thread_timer) {
 		ast_log(LOG_ERROR, "Failed to open timer\n");
 		close(udp_socket);
+		udp_socket = -1;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -6216,12 +6203,13 @@ static int load_module(void)
 	/* Load the rest of the values from the config file by running reload.
 	 * reload() will return 0 on success, or a non-zero value on failure.
 	 * If it returns non-zero, we will abort loading the module.
-	 * We won't close the UDP socket here, because reload() will do that if it fails,
-	 * avoiding a double-close of the socket.
 	 */
 	if (reload()) {
+		ast_log(LOG_ERROR, "Failed to reload configuration\n");
 		ast_timer_close(voter_thread_timer);
 		voter_thread_timer = NULL;
+		close(udp_socket);
+		udp_socket = -1;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -6253,7 +6241,7 @@ static int load_module(void)
 	if (nullfd < 0) {
 		ast_log(LOG_ERROR, "Failed to open null fd: %s\n", strerror(errno));
 	}
-	return 0;
+	return AST_MODULE_LOAD_SUCCESS;
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Voter Radio Channel Driver",
