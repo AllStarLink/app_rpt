@@ -2001,12 +2001,15 @@ static int simpleusb_hangup(struct ast_channel *c)
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 
 	o->stopaudiothread = 1;
+	kickptt(o);
 	if (o->audiothread != AST_PTHREADT_NULL) {
 		pthread_join(o->audiothread, NULL);
 		o->audiothread = AST_PTHREADT_NULL;
 	}
+	stop_stream(o);
 
 	o->stophidthread = 1;
+	kickptt(o);
 	if (o->hidthread != AST_PTHREADT_NULL) {
 		pthread_join(o->hidthread, NULL);
 		o->hidthread = AST_PTHREADT_NULL;
@@ -4436,6 +4439,7 @@ static int unload_module(void)
 			pthread_join(o->audiothread, NULL); /* wait for audio thread to end */
 			o->audiothread = AST_PTHREADT_NULL;
 		}
+		stop_stream(o);
 		if (o->hidthread != AST_PTHREADT_NULL) {
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
