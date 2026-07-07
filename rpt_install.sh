@@ -47,7 +47,12 @@ git apply /tmp/channels_Makefile.diff
 cp ../$MYDIR/utils/Makefile.diff /tmp/utils_makefile.diff
 git apply /tmp/utils_makefile.diff
 
-git apply ../$MYDIR/res/Makefile.diff
+tmpdiff="$(mktemp)" || exit 1
+trap 'rm -f "$tmpdiff"' EXIT
+cp "../$MYDIR/res/Makefile.diff" "$tmpdiff" || exit 1
+if ! git apply "$tmpdiff"; then
+	patch -p1 < "$tmpdiff" || exit 1
+fi
 
 echoerr() {
 	printf "\e[31;1m%s\e[0m\n" "$*" >&2;
