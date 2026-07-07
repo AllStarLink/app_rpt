@@ -1,13 +1,14 @@
 name: "Pre-commit checks"
 
 on:
-   pull_request:
+   pull_request_target:
       types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
   actions: write
   pull-requests: write
+  issues: write
 
 jobs:
    codespell:
