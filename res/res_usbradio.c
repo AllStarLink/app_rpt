@@ -1180,6 +1180,10 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 	}
 
 	if (res != paNoError) {
+		if (ps->stream) {
+			Pa_CloseStream(ps->stream);
+			ps->stream = NULL;
+		}
 		ast_radio_pa_shutdown();
 		return res;
 	}
