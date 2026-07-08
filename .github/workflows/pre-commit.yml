@@ -42,5 +42,6 @@ jobs:
           thread-comments: ${{ github.event_name == 'pull_request' && startsWith(github.repository, 'AllStarLink/') && 'update' }}
           # only use step summary when event is triggered from a fork
           step-summary: ${{ !startsWith(github.repository, 'AllStarLink/') }}
+      - name: Fail fast?!
         if: steps.linter.outputs.checks-failed > 0
         run: exit 1      
