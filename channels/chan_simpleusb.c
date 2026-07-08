@@ -902,8 +902,7 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 			}
 			for (ao = simpleusb_default.next; ao && ao->name; ao = ao->next) {
 				if (ao != o && ao->usbass && ao->devicenum == o->devicenum) {
-					ast_log(LOG_ERROR, "Channel %s: Audio device %s is already assigned to channel %s\n",
-						o->name, o->hw_device, ao->name);
+					ast_log(LOG_ERROR, "Channel %s: Audio device %s is already assigned to channel %s\n", o->name, o->hw_device, ao->name);
 					ast_mutex_unlock(&usb_dev_lock);
 					return -1;
 				}
