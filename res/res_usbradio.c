@@ -119,7 +119,18 @@ long ast_radio_lround(double x)
 
 int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype)
 {
+	spkrmax = ast_radio_mixer_limit(spkrmax);
 	return (request_value * spkrmax) / AUDIO_ADJUSTMENT;
+}
+
+int ast_radio_mixer_limit(int limit)
+{
+	if (limit > 0) {
+		return limit;
+	}
+
+	ast_log(LOG_WARNING, "Mixer max lookup failed, using default %d\n", AST_RADIO_MIXER_MAX_DEFAULT);
+	return AST_RADIO_MIXER_MAX_DEFAULT;
 }
 
 int ast_radio_amixer_max(int devnum, char *param)
