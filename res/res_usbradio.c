@@ -1094,6 +1094,7 @@ static int match_card_id(const char *devname, int card)
 static int pa_device_matches(const PaDeviceInfo *dev, const char *hw_device, int want_input, int want_output)
 {
 	int card, devnum;
+	int hay_card, hay_dev;
 
 	if (!dev || !hw_device || !hw_device[0]) {
 		return 0;
@@ -1111,11 +1112,20 @@ static int pa_device_matches(const PaDeviceInfo *dev, const char *hw_device, int
 		return 1;
 	}
 
-	if (ast_radio_parse_hw_anywhere(hw_device, &card, &devnum) && match_card_id(dev->name, card)) {
+	if (!ast_radio_parse_hw_anywhere(hw_device, &card, &devnum) || !match_card_id(dev->name, card)) {
+		return 0;
+	}
+
+	/* Card-id fallback is only unambiguous for hw:C; hw:C,D must match subdevice too. */
+	if (devnum < 0) {
 		return 1;
 	}
 
-	return 0;
+	if (!ast_radio_parse_hw_anywhere(dev->name, &hay_card, &hay_dev)) {
+		return 0;
+	}
+
+	return hay_card == card && hay_dev == devnum;
 }
 
 static PaDeviceIndex pa_find_device(const char *hw_device, int want_input, int want_output)
