@@ -1957,7 +1957,7 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
  */
 static struct ast_frame *usbradio_read(struct ast_channel *c)
 {
-	PaError pres;
+	PaError pa_res;
 	int oldpttout;
 	int cd, sd;
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
@@ -2039,12 +2039,12 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		}
 	}
 
-	pres = ast_radio_pa_read(&o->pa, (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
-	if (pres != paNoError) {
-		if (pres == paTimedOut || pres == paInputOverflowed) {
+	pa_res = ast_radio_pa_read(&o->pa, (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
+	if (pa_res != paNoError) {
+		if (pa_res == paTimedOut || pa_res == paInputOverflowed) {
 			return &ast_null_frame;
 		}
-		ast_log(LOG_ERROR, "Channel %s: PortAudio read error %s\n", o->name, Pa_GetErrorText(pres));
+		ast_log(LOG_ERROR, "Channel %s: PortAudio read error %s\n", o->name, Pa_GetErrorText(pa_res));
 		o->hasusb = 0;
 		return &ast_null_frame;
 	}
