@@ -39,7 +39,8 @@ jobs:
           style: 'file:./.dev/.clang-format'  # Use .clang-format config file
           tidy-checks: '-*' # Use .clang-tidy config file
           # only 'update' a single comment in a pull request thread.
-          thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
-      - name: Fail fast?!
+          thread-comments: ${{ github.event_name == 'pull_request' && startsWith(github.repository, 'AllStarLink/') && 'update' }}
+          # only use step summary when event is triggered from a fork
+          step-summary: ${{ !startsWith(github.repository, 'AllStarLink/') }}
         if: steps.linter.outputs.checks-failed > 0
         run: exit 1      
