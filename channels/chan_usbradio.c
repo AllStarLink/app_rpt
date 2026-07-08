@@ -757,6 +757,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	int configured = 0;
 	char devstr[sizeof(o->devstr)];
 	char serial[sizeof(o->serial)];
+	char hw_device[sizeof(o->hw_device)];
 
 	/* No load defaults */
 	o->rxmixerset = 500;
@@ -770,6 +771,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 
 	devstr[0] = '\0';
 	serial[0] = '\0';
+	hw_device[0] = '\0';
 	if (!reload) {
 		o->devstr[0] = 0;
 		o->serial[0] = 0;
@@ -801,15 +803,18 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 		CV_UINT("fever", o->fever);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
-		if (o->devstr[0] == '\0') {
-			CV_STR("audiodev", o->hw_device);
-		}
+		CV_STR("audiodev", hw_device);
 		CV_END;
 	}
 	if (!reload) {
 		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
 		ast_copy_string(o->devstr, devstr, sizeof(o->devstr));
 		ast_copy_string(o->serial, serial, sizeof(o->serial));
+		if (ast_strlen_zero(devstr)) {
+			ast_copy_string(o->hw_device, hw_device, sizeof(o->hw_device));
+		} else {
+			o->hw_device[0] = '\0';
+		}
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
@@ -957,12 +962,13 @@ static void *hidthread(void *arg)
 				ast_radio_time(&o->lasthidtime);
 				o->usbass = 1;
 				ast_mutex_unlock(&usb_dev_lock);
-				o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
+				o->micmax = ast_radio_mixer_limit(ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL));
 				o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
 				if (o->spkrmax == -1) {
 					o->newname = 1;
 					o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
 				}
+				o->spkrmax = ast_radio_mixer_limit(o->spkrmax);
 				goto usb_device_ready;
 			}
 			if (!o->device_error) {
