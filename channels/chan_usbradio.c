@@ -102,7 +102,6 @@
 #include "./xpmrx/bitweight.h"
 #endif
 
-
 #include "asterisk/lock.h"
 #include "asterisk/frame.h"
 #include "asterisk/logger.h"
@@ -175,11 +174,11 @@ static const char *const mixer_type[] = { "no", "voice", "tone", "composite", "a
 struct chan_usbradio_pvt {
 	struct chan_usbradio_pvt *next;
 
-	char *name;		  /* the internal name of our channel */
+	char *name;			 /* the internal name of our channel */
 	char hw_device[100]; /* ALSA/PortAudio device (hw:N or hw:N,M) */
-	int devtype;	  /* actual type of device */
-	int pttkick[2];	  /* ptt kick pipe */
-	int total_blocks; /* legacy queue depth hint for TX buffering */
+	int devtype;		 /* actual type of device */
+	int pttkick[2];		 /* ptt kick pipe */
+	int total_blocks;	 /* legacy queue depth hint for TX buffering */
 	struct ast_radio_pa_stream pa;
 	enum {
 		M_UNSET,
@@ -937,8 +936,7 @@ static void *hidthread(void *arg)
 			if (ast_radio_parse_hw_anywhere(o->hw_device, &i, &subdev)) {
 				for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
 					if (ao != o && ao->usbass && ao->devicenum == i) {
-						ast_log(LOG_ERROR, "Channel %s: Audio device %s is already assigned to channel %s\n",
-							o->name, o->hw_device, ao->name);
+						ast_log(LOG_ERROR, "Channel %s: Audio device %s is already assigned to channel %s\n", o->name, o->hw_device, ao->name);
 						ast_mutex_unlock(&usb_dev_lock);
 						usleep(500000);
 						continue;
@@ -2041,8 +2039,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		}
 	}
 
-	pres = ast_radio_pa_read(&o->pa, (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET),
-		AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
+	pres = ast_radio_pa_read(&o->pa, (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
 	if (pres != paNoError) {
 		if (pres == paTimedOut || pres == paInputOverflowed) {
 			return &ast_null_frame;

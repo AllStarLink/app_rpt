@@ -402,7 +402,7 @@ char context[100];
 #define ENDPAGE_STR "ENDPAGE"
 #define AMPVAL 30000
 #define AST_SAMPLE_RATE 8000 /* (Sample Rate) */
-#define DIVLCM 192000 /* (A common multiple of 512,1200,2400,8000) */
+#define DIVLCM 192000		 /* (A common multiple of 512,1200,2400,8000) */
 #define PREAMBLE_BITS 576
 #define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
 /* We have to send "inverted"... probably because of inverting AMP in Voter board. */
