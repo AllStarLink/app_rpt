@@ -6235,9 +6235,33 @@ static int load_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
+/*!
+ * \brief Reload the VOTER channel module
+ *
+ * This function is called when the module is reloaded. It locks the voter_lock mutex,
+ * calls the reload() function to reload the configuration, and unlocks the mutex.
+ * If reload() fails, it logs an error and closes the UDP socket.
+ *
+ *	 \return 				0 on success; non-zero on failure (typically -1 if the configuration could not be reloaded).
+ */
+static int asterisk_reload(void)
+{
+	int res;
+
+	ast_mutex_lock(&voter_lock);
+	res = reload();
+	if (res) {
+		ast_log(LOG_ERROR, "Failed to reload configuration\n");
+		close(udp_socket);
+		udp_socket = -1;
+	}
+	ast_mutex_unlock(&voter_lock);
+	return res; /* Return the result of the reload operation back to Asterisk*/
+}
+
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Voter Radio Channel Driver",
 	.support_level = AST_MODULE_SUPPORT_EXTENDED,
 	.load = load_module,
 	.unload = unload_module,
-	.reload = reload,
+	.reload = asterisk_reload,
 );
