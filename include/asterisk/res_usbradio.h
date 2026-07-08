@@ -570,7 +570,6 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps);
 PaError ast_radio_pa_start(struct ast_radio_pa_stream *ps);
 void ast_radio_pa_stop(struct ast_radio_pa_stream *ps);
 
-PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms,
-	volatile sig_atomic_t *stop);
+PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop);
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames);
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);

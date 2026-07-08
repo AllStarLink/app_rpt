@@ -1186,8 +1186,8 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 			return paDeviceUnavailable;
 		}
 
-		res = Pa_OpenStream(&ps->stream, &input_params, &output_params, AST_RADIO_PA_SAMPLE_RATE,
-			AST_RADIO_PA_FRAMES_PER_BUFFER, paNoFlag, NULL, NULL);
+		res = Pa_OpenStream(&ps->stream, &input_params, &output_params, AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER,
+			paNoFlag, NULL, NULL);
 	}
 
 	if (res != paNoError) {
@@ -1201,8 +1201,7 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 
 	si = Pa_GetStreamInfo(ps->stream);
 	if (si) {
-		ast_debug(5, "PortAudio stream latency in %.3f ms out %.3f ms\n", si->inputLatency * 1000.0,
-			si->outputLatency * 1000.0);
+		ast_debug(5, "PortAudio stream latency in %.3f ms out %.3f ms\n", si->inputLatency * 1000.0, si->outputLatency * 1000.0);
 	}
 
 	return res;
@@ -1248,8 +1247,7 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 	ast_radio_pa_shutdown();
 }
 
-PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms,
-	volatile sig_atomic_t *stop)
+PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
 {
 	int64_t start;
 	PaError err;
