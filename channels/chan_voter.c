@@ -6200,6 +6200,7 @@ static int load_module(void)
 		voter_thread_timer = NULL;
 		close(udp_socket);
 		udp_socket = -1;
+		ast_mutex_unlock(&voter_lock);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_mutex_unlock(&voter_lock);
