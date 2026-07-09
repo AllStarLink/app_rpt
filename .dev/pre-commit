@@ -13,14 +13,13 @@ if command -v gh >/dev/null 2>&1; then
 	# gh ruleset check returns lines starting with '-' for each rule
 	PROTECTED_COUNT=$(gh ruleset check "$branch" 2>/dev/null | grep -c '^-')
 	if [ "$PROTECTED_COUNT" -gt 0 ]; then
-		echo "          Warning: You are committing directly to a protected branch '$branch' (detected via GitHub rules)."
+		echo "          Warning: You are trying to commit directly to a protected branch '$branch' (detected via GitHub rules)."
 		echo "          Please create a new feature branch first (e.g., git checkout -b feature/your-task) and open a PR."
 		echo "          Commit aborted."
 		exit 1
 	fi
 else
-	echo "          Please install GitHub CLI for branch protection"
-	echo "          rules check skipped. "
+	echo "          Branch protection rule checks not available, Please install GitHub CLI (gh)"
 fi
 
 BEFORE_DIFF="$(git diff --no-ext-diff --binary)"
