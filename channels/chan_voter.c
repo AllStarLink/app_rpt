@@ -4173,7 +4173,6 @@ static int reload(void)
 			client->totransmit = 0;
 			client->doadpcm = 0;
 			client->nodeemp = 0;
-			client->mix = 0;
 			client->curmaster = 0;
 			client->ismaster = 0;
 			client->noplfilter = 0;
@@ -4185,6 +4184,7 @@ static int reload(void)
 				} else if (!strcasecmp(strs[i], "master")) {
 					client->ismaster = 1;
 					hasmaster = 1;
+					client->mix = 0; // Reset the mix flag if the config changed to now be a voting client
 				} else if (!strcasecmp(strs[i], "adpcm")) {
 					client->doadpcm = 1;
 				} else if (!strcasecmp(strs[i], "nodeemp")) {
