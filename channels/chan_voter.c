@@ -2966,7 +2966,7 @@ static void *voter_primary_client(void *data)
 	p->primary_challenge[0] = 0;
 	while (run_forever && !ast_shutting_down() && !p->kill_primary_thread) {
 		ast_mutex_unlock(&voter_lock);
-		ms = 100; /* 100ms timeout */
+		ms = 100;										  /* 100ms timeout */
 		fd = ast_waitfor_n_fd(&pri_socket, 1, &ms, NULL); /* Poll the UDP socket, looking for data */
 		ast_mutex_lock(&voter_lock);
 		/* Check the returned fd and see if there is a datagram ready to process.
