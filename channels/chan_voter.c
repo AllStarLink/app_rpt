@@ -1413,25 +1413,32 @@ static struct ast_frame *ast_frcat(const struct ast_frame *restrict f1, const st
 }
 
 /*!
- * \brief Poll the specified fd for input for the specified milliseconds.
+ * \brief Poll the specified Asterisk CLI fd for input for the specified milliseconds.
  *
  * Used exclusively with the "voter display" CLI command to refresh the display.
  *
- * \param fd			File descriptor.
+ * \param fd			Asterisk CLI file descriptor.
  * \param ms			Milliseconds to wait.
- * \return  -1, 1, 0    Needs to be defined.
+ * \return  -1, 1, 0	Failure, key pressed (exit), timeout (refresh CLI display).
  */
 static int rad_rxwait(int fd, int ms)
 {
 	int myms = ms, x;
 
 	x = ast_waitfor_n_fd(&fd, 1, &myms, NULL);
-	if (x == -1) {
+	/* This is the error path, if ast_waitfor_n_fd fails (it returns a negative value). */
+	if (x < 0) {
 		return -1;
 	}
+	/* When the fd is returned, a key has been pressed in the CLI, and we exit
+	 * the voter_display.
+	 */
 	if (x == fd) {
 		return 1;
 	}
+	/* This is the "normal" (timeout) case where voter_display is running and watching a
+	 * VOTER instance's activity, refreshing every "ms" timeout period.
+	 */
 	return 0;
 }
 
@@ -2928,7 +2935,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 static void *voter_primary_client(void *data)
 {
 	struct voter_pvt *p = (struct voter_pvt *) data;
-	int i, pri_socket, ms;
+	int fd, pri_socket, ms;
 	char buf[4096];
 	struct sockaddr_in sin;
 	socklen_t fromlen;
@@ -2959,14 +2966,22 @@ static void *voter_primary_client(void *data)
 	p->primary_challenge[0] = 0;
 	while (run_forever && !ast_shutting_down() && !p->kill_primary_thread) {
 		ast_mutex_unlock(&voter_lock);
-		ms = 100;
-		i = ast_waitfor_n_fd(&pri_socket, 1, &ms, NULL);
+		ms = 100; /* 100ms timeout */
+		fd = ast_waitfor_n_fd(&pri_socket, 1, &ms, NULL); /* Poll the UDP socket, looking for data */
 		ast_mutex_lock(&voter_lock);
-		if (i == -1) {
-			ast_mutex_unlock(&voter_lock);
-			ast_log(LOG_ERROR, "VOTER %i: Error in select()\n", p->nodenum);
-			pthread_exit(NULL);
+		/* Check the returned fd and see if there is a datagram ready to process.
+		 * fd will be positive (and equal to pri_socket) if there is activity on the UDP socket.
+		 * If fd is negative, there was an error, timeout, or no activity, and we should skip (continue) and
+		 * wait (try again).
+		 *
+		 * Note: fd can never be 0, since we are only waiting on one socket (pri_socket), and that socket is always positive.
+		 */
+		/* ast_waitfor_n_fd() returns -1 on both timeout and error; use errno to tell them apart. */
+
+		if (fd < 0) {
+			continue;
 		}
+
 		gettimeofday(&tv, NULL);
 		memset(&authpacket, 0, sizeof(authpacket));
 		if (!p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 500))) {
@@ -3011,37 +3026,43 @@ static void *voter_primary_client(void *data)
 				client->heardfrom = 0;
 			}
 		}
-		if (i < 0) {
+
+		/* Only process a datagram if the socket was actually ready. */
+		if (fd != pri_socket) {
 			continue;
 		}
-		if (i == pri_socket) {
-			fromlen = sizeof(struct sockaddr_in);
-			recvlen = recvfrom(pri_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 
-			if (recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If set got something worthwhile */
-				vph = (VOTER_PACKET_HEADER *) buf;
-				ast_debug(3, "VOTER %i: Received primary client network packet, len %d payload %d challenge %s digest %08x\n",
-					p->nodenum, (int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
-				/* If this is a new session. */
-				if (strcmp((char *) vph->challenge, p->primary_challenge)) {
-					resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
-					ast_copy_string(p->primary_challenge, (char *) vph->challenge, sizeof(p->primary_challenge));
-					p->priconn = 0;
-				} else {
-					if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
-						(ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
-						mydigest = crc32_bufs(challenge, password);
-						if (mydigest == ntohl(vph->digest)) {
-							digest = mydigest;
-							if (!p->priconn) {
-								ast_verb(3, "VOTER %i: Primary client connected (with challenge=%s)\n", p->nodenum, p->primary_challenge);
-							}
-							p->priconn = 1;
-							lastrx = tv;
-						} else {
-							p->priconn = 0;
-							digest = 0;
+		/* At this point fd == pri_socket, there is data available to process. */
+		fromlen = sizeof(struct sockaddr_in);
+		recvlen = recvfrom(pri_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
+
+		if (recvlen < 0) {
+			ast_log(LOG_ERROR, "recvfrom() failed: %s\n", strerror(errno));
+			continue;
+		}
+		if ((size_t) recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If we got something worthwhile */
+			vph = (VOTER_PACKET_HEADER *) buf;
+			ast_debug(3, "VOTER %i: Received primary client network packet, len %d payload %d challenge %s digest %08x\n",
+				p->nodenum, (int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
+			/* If this is a new session. */
+			if (strcmp((char *) vph->challenge, p->primary_challenge)) {
+				resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
+				ast_copy_string(p->primary_challenge, (char *) vph->challenge, sizeof(p->primary_challenge));
+				p->priconn = 0;
+			} else {
+				if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
+					(ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
+					mydigest = crc32_bufs(challenge, password);
+					if (mydigest == ntohl(vph->digest)) {
+						digest = mydigest;
+						if (!p->priconn) {
+							ast_verb(3, "VOTER %i: Primary client connected (with challenge=%s)\n", p->nodenum, p->primary_challenge);
 						}
+						p->priconn = 1;
+						lastrx = tv;
+					} else {
+						p->priconn = 0;
+						digest = 0;
 					}
 				}
 			}
@@ -4591,14 +4612,16 @@ static void *voter_reader(void *data)
 		/* Check the returned fd and see if there is a datagram ready to process.
 		 * fd will be positive (and equal to udp_socket) if there is activity on the UDP socket.
 		 * If fd is negative, there was an error, timeout, or no activity, and we should skip (continue) and
-		 * wait (try again).
+		 * wait (try again). We can get a socket error when a client disconnects, so we don't want to exit the thread on a socket error.
+		 *
+		 * Note: fd can never be 0, since we are only waiting on one socket (pri_socket), and that socket is always positive.
 		 */
+
 		if (fd < 0) {
 			continue;
 		}
-		/* When we get here, fd is the file descriptor for the UDP socket, with a datagram ready to process.
-		 *
-		 * First, check all of our Asterisk channels to see if any were receiving and have now stopped (timed out). */
+
+		/* First, check all of our Asterisk channels to see if any were receiving and have now stopped (timed out). */
 		gettimeofday(&tv, NULL);
 		for (p = pvts; p; p = p->next) {
 			if (!p->rxkey) {
@@ -4616,7 +4639,15 @@ static void *voter_reader(void *data)
 				p->lastwon = NULL;
 			}
 		}
-		/* Go get the datagram from the UDP port, and start processing. */
+
+		/* Only process a datagram if the socket was actually ready. */
+		if (fd != udp_socket) {
+			continue;
+		}
+
+		/* When we get here, fd is the file descriptor for the UDP socket, with a datagram ready to process.
+		 * We will call recvfrom() to get the datagram, and then process it.
+		 */
 		fromlen = sizeof(struct sockaddr_in);
 		recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
 		/* Handle recvfrom() errors */
