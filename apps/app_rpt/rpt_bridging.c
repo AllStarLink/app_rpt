@@ -415,10 +415,57 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 	return res;
 }
 
+struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan)
+{
+	struct ast_bridge *bridge;
+	struct ast_bridge_channel *bridge_channel = NULL;
+	struct ast_bridge_channel *iter;
+
+	if (!chan) {
+		return NULL;
+	}
+
+	// 1. Fetch the bridge associated with the channel (increments ref count)
+	bridge = ast_channel_get_bridge(chan);
+	if (!bridge) {
+		return NULL; // Channel is not currently in a bridge
+	}
+
+	// 2. Lock the bridge to safely inspect its channel list
+	ast_bridge_lock(bridge);
+
+	AST_LIST_TRAVERSE(&bridge->channels, iter, entry) {
+		if (iter->chan == chan) {
+			bridge_channel = iter;
+			// Bump reference count so it doesn't vanish when we unlock the bridge
+			ao2_ref(bridge_channel, +1);
+			break;
+		}
+	}
+
+	ast_bridge_unlock(bridge);
+
+	// 3. Decrement the reference count of the bridge we fetched
+	ao2_ref(bridge, -1);
+
+	return bridge_channel; // Returns ao2 reference-tracked bridge_channel object
+}
+
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
 {
-	/*! \todo: Do we need to check mute? What should it do?*/
-	return 0;
+	struct ast_bridge_channel *bc = rpt_get_bridge_channel_from_chan(chan);
+	char mute = 0;
+
+	if (bc) {
+		ast_bridge_channel_lock(bc);
+		if (bc->features && bc->features->mute) {
+			mute = 1;
+		}
+		ast_bridge_channel_unlock(bc);
+		ao2_ref(bc, -1);
+	}
+
+	return mute;
 }
 
 int rpt_play_tone(struct ast_channel *chan, const char *tone)

@@ -164,3 +164,9 @@ int dahdi_set_hook(struct ast_channel *chan, int offhook);
  * \retval 0 on success, -1 on failure
  */
 int dahdi_set_echocancel(struct ast_channel *chan, int ec);
+
+/*!
+ * \brief get bridge channel from an asterisk channel
+ * \param chan the asterisk channel.
+ */
+struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan);
