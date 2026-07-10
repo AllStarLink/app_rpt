@@ -418,6 +418,7 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan)
 {
 	struct ast_unreal_pvt *p;
+	struct ast_channel *chan;
 	struct ast_bridge_channel *bridge_channel = NULL;
 
 	if (!chan) {
@@ -428,10 +429,11 @@ struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *
 	if (!p || !p->chan) {
 		return NULL;
 	}
-
-	ast_channel_lock(p->chan);
-	bridge_channel = ast_channel_get_bridge_channel(p->chan);
-	ast_channel_unlock(p->chan);
+	chan = ast_channel_ref(p->chan);
+	ast_channel_lock(chan);
+	bridge_channel = ast_channel_get_bridge_channel(chan);
+	ast_channel_unlock(chan);
+	ast_channel_unref(chan);
 
 	return bridge_channel;
 }
