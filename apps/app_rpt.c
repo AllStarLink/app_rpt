@@ -2547,6 +2547,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	*tele++ = 0;
 	l->elaptime = 0;
 	l->connecttime = ast_tv(0, 0); /* not connected */
+	l->lastkeytime = 0;
 	l->thisconnected = 0;
 	l->linkmode = 0;
 	l->lastrx1 = 0;
@@ -4539,6 +4540,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 				l->retrytimer = RETRY_TIMER_MS;
 				l->elaptime = 0;
 				l->connecttime = ast_tv(0, 0); /* no longer connected */
+				l->lastkeytime = 0;
 				l->thisconnected = 0;
 				rpt_mutex_unlock(&myrpt->lock);
 				return 1;
