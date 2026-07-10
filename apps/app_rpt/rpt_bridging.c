@@ -417,38 +417,23 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 
 struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan)
 {
-	struct ast_bridge *bridge;
+	struct ast_unreal_pvt *p;
 	struct ast_bridge_channel *bridge_channel = NULL;
-	struct ast_bridge_channel *iter;
 
 	if (!chan) {
 		return NULL;
 	}
 
-	// 1. Fetch the bridge associated with the channel (increments ref count)
-	bridge = ast_channel_get_bridge(chan);
-	if (!bridge) {
-		return NULL; // Channel is not currently in a bridge
+	p = ast_channel_tech_pvt(chan);
+	if (!p || !p->chan) {
+		return NULL;
 	}
 
-	// 2. Lock the bridge to safely inspect its channel list
-	ast_bridge_lock(bridge);
+	ast_channel_lock(p->chan);
+	bridge_channel = ast_channel_get_bridge_channel(p->chan);
+	ast_channel_unlock(p->chan);
 
-	AST_LIST_TRAVERSE(&bridge->channels, iter, entry) {
-		if (iter->chan == chan) {
-			bridge_channel = iter;
-			// Bump reference count so it doesn't vanish when we unlock the bridge
-			ao2_ref(bridge_channel, +1);
-			break;
-		}
-	}
-
-	ast_bridge_unlock(bridge);
-
-	// 3. Decrement the reference count of the bridge we fetched
-	ao2_ref(bridge, -1);
-
-	return bridge_channel; // Returns ao2 reference-tracked bridge_channel object
+	return bridge_channel;
 }
 
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
