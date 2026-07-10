@@ -2976,7 +2976,7 @@ static void *voter_primary_client(void *data)
 		 *
 		 * Note: fd can never be 0, since we are only waiting on one socket (pri_socket), and that socket is always positive.
 		 */
-		/* ast_waitfor_n_fd() returns -1 on both timeout and error; use errno to tell them apart. */
+		/* ast_waitfor_n_fd() returns -1 on both timeout and error. */
 
 		if (fd < 0) {
 			continue;
