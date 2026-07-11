@@ -2970,17 +2970,8 @@ static void *voter_primary_client(void *data)
 		fd = ast_waitfor_n_fd(&pri_socket, 1, &ms, NULL); /* Poll the UDP socket, looking for data */
 		ast_mutex_lock(&voter_lock);
 		/* Check the returned fd and see if there is a datagram ready to process.
-		 * fd will be positive (and equal to pri_socket) if there is activity on the UDP socket.
-		 * If fd is negative, there was an error, timeout, or no activity, and we should skip (continue) and
-		 * wait (try again).
-		 *
-		 * Note: fd can never be 0, since we are only waiting on one socket (pri_socket), and that socket is always positive.
+		 * fd will be positive (and equal to pri_socket) if there is valid activity on the UDP socket.
 		 */
-		/* ast_waitfor_n_fd() returns -1 on both timeout and error. */
-
-		if (fd < 0) {
-			continue;
-		}
 
 		gettimeofday(&tv, NULL);
 		memset(&authpacket, 0, sizeof(authpacket));
@@ -3027,7 +3018,7 @@ static void *voter_primary_client(void *data)
 			}
 		}
 
-		/* Only process a datagram if the socket was actually ready. */
+		/* Only process a datagram if the socket is ready with valid data, otherwise skip (continue). */
 		if (fd != pri_socket) {
 			continue;
 		}
@@ -4610,16 +4601,8 @@ static void *voter_reader(void *data)
 		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL); /* Poll the UDP socket, looking for data */
 		ast_mutex_lock(&voter_lock);
 		/* Check the returned fd and see if there is a datagram ready to process.
-		 * fd will be positive (and equal to udp_socket) if there is activity on the UDP socket.
-		 * If fd is negative, there was an error, timeout, or no activity, and we should skip (continue) and
-		 * wait (try again). We can get a socket error when a client disconnects, so we don't want to exit the thread on a socket error.
-		 *
-		 * Note: fd can never be 0, since we are only waiting on one socket (pri_socket), and that socket is always positive.
+		 * fd will be positive (and equal to udp_socket) if there is valid activity on the UDP socket.
 		 */
-
-		if (fd < 0) {
-			continue;
-		}
 
 		/* First, check all of our Asterisk channels to see if any were receiving and have now stopped (timed out). */
 		gettimeofday(&tv, NULL);
@@ -4640,7 +4623,7 @@ static void *voter_reader(void *data)
 			}
 		}
 
-		/* Only process a datagram if the socket was actually ready. */
+		/* Only process a datagram if the socket is ready with valid data, otherwise skip (continue). */
 		if (fd != udp_socket) {
 			continue;
 		}
