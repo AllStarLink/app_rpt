@@ -3848,6 +3848,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
+				ast_free(lbuf2);
 				return;
 			}
 			ns = finddelim(ast_str_buffer(lbuf), strs, n);
