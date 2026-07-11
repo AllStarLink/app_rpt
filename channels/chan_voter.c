@@ -6151,7 +6151,8 @@ static int load_module(void)
 	/* Do an initial configuration load from the config file. Note we also run reload
 	 * further down.
 	 */
-	if (!(cfg = ast_config_load(config, zeroflag))) {
+	cfg = ast_config_load(config, zeroflag);
+	if (!cfg || cfg == CONFIG_STATUS_FILEINVALID) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
