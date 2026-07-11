@@ -4397,15 +4397,25 @@ static void *voter_timer(void *data)
 		int timer_fd = ast_timer_fd(voter_thread_timer);
 		int timeout_ms = -1; /* block until the timer fires */
 
+		if (timer_fd < 0) {
+			ast_log(LOG_ERROR, "Failed to get pollable thread timer fd.\n");
+			break;
+		}
+
 		if (ast_waitfor_n_fd(&timer_fd, 1, &timeout_ms, NULL) < 0) {
 			ast_log(LOG_ERROR, "Failed to wait on VOTER thread timer.\n");
 			break;
 		}
-		if (ast_timer_get_event(voter_thread_timer) == AST_TIMING_EVENT_EXPIRED) {
+		if (ast_timer_get_event(voter_thread_timer) != AST_TIMING_EVENT_EXPIRED) {
 			if (ast_timer_ack(voter_thread_timer, 1) < 0) {
 				ast_log(LOG_ERROR, "Failed to acknowledge timer.\n");
 				break;
 			}
+			continue;
+		}
+		if (ast_timer_ack(voter_thread_timer, 1) < 0) {
+			ast_log(LOG_ERROR, "Failed to acknowledge timer.\n");
+			break;
 		}
 
 		ast_mutex_lock(&voter_lock);
