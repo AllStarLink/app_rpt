@@ -3778,6 +3778,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 			lbuf = ast_str_create(RPT_AST_STR_INIT_SIZE);
 			if (!lbuf) {
+				rpt_mutex_unlock(&myrpt->lock);
 				return;
 			}
 
