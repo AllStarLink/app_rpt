@@ -4592,6 +4592,20 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		if (!ms) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
+			if (l->disctime && l->pchan) {
+				struct ast_frame *f;
+				int ms_drain = 0;
+				struct ast_channel *cs_drain[1] = { l->pchan };
+
+				if (ast_waitfor_n(cs_drain, 1, &ms_drain) == l->pchan) {
+					f = ast_read(l->pchan);
+					if (!f) {
+						ast_debug(1, "@@@@ rpt:Hung Up\n");
+						break;
+					}
+					ast_frfree(f);
+				}
+			}
 			continue;
 		}
 		if (l->disctime) {
@@ -4606,6 +4620,20 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				}
 				ast_frfree(f);
 				continue;
+			}
+			if (l->pchan) {
+				struct ast_frame *f;
+				int ms_drain = 0;
+				struct ast_channel *cs_drain[1] = { l->pchan };
+
+				if (ast_waitfor_n(cs_drain, 1, &ms_drain) == l->pchan) {
+					f = ast_read(l->pchan);
+					if (!f) {
+						ast_debug(1, "@@@@ rpt:Hung Up\n");
+						break;
+					}
+					ast_frfree(f);
+				}
 			}
 			continue;
 		}
