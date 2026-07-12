@@ -1429,9 +1429,9 @@ static struct ast_frame *ast_frcat(const struct ast_frame *restrict f1, const st
 static int rad_rxwait(int fd, int ms)
 {
 	struct pollfd fds[1];
+	int res, timeout;
 	fds[0].fd = fd;			// Asterisk CLI file descriptor
 	fds[0].events = POLLIN; // Monitor for incoming data
-	int res, timeout;
 
 	timeout = ms; // Timeout in milliseconds
 
