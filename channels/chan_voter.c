@@ -1417,29 +1417,52 @@ static struct ast_frame *ast_frcat(const struct ast_frame *restrict f1, const st
  *
  * Used exclusively with the "voter display" CLI command to refresh the display.
  *
+ * Polls the Asterisk CLI file descriptor for input. If a key is pressed, the function returns 1
+ * to exit the voter_display. Returns 0 if the timeout expires, which is used to refresh the CLI
+ * display. Returns -1 on error. If we get an EINTR signal, we just simulate a timeout by returning 0
+ * and will just try again on the next iteration.
+ *
  * \param fd			Asterisk CLI file descriptor.
  * \param ms			Milliseconds to wait.
  * \return  -1, 1, 0	Failure, key pressed (exit), timeout (refresh CLI display).
  */
 static int rad_rxwait(int fd, int ms)
 {
-	int myms = ms, x;
+	struct pollfd fds[1];
+	fds[0].fd = fd;         // Asterisk CLI file descriptor
+	fds[0].events = POLLIN; // Monitor for incoming data
+	int res, timeout = ms;  // Timeout in milliseconds
 
-	x = ast_waitfor_n_fd(&fd, 1, &myms, NULL);
-	/* This is the error path, if ast_waitfor_n_fd fails (it returns a negative value). */
-	if (x < 0) {
-		return -1;
-	}
-	/* When the fd is returned, a key has been pressed in the CLI, and we exit
-	 * the voter_display.
-	 */
-	if (x == fd) {
+	/* Poll the fd. Wait for a keypress to exit. */
+	res = ast_poll(fds, 1, timeout);
+
+	if (res < 0) {
+		if (errno == EINTR) {
+			/* The poll was interrupted by a signal (e.g., a process hang-up or
+			 * reload). This is normal operation, just simulate a timeout by returning 0.
+			 */
+			ast_log(LOG_NOTICE, "Poll interrupted by a signal, retrying...\n");
+			return 0;
+		} else {
+			/* Log the actual system-level error */
+			ast_log(LOG_ERROR, "ast_poll failed: %s (%d)\n", strerror(errno), errno);
+			/* Handle the critical failure by returning -1 to indicate an error condition */
+			return -1;
+		}
+	} else if (res == 0) {
+		/* Timeout reached, no events occurred (no key pressed), return 0 to indicate a refresh of the CLI display */
+		return 0;
+	} else {
+		/* When we get here, a key has been pressed. Check for polling errors, otherwise return 1 to
+		 * indicate a key was pressed so that we can exit the voter_display CLI command gracefully.
+		 */
+		if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+			/* Handle error conditions for a specific file descriptor */
+			ast_log(LOG_WARNING, "Error or hangup on descriptor %d\n", fds[0].fd);
+			return -1;
+		}
 		return 1;
 	}
-	/* This is the "normal" (timeout) case where voter_display is running and watching a
-	 * VOTER instance's activity, refreshing every "ms" timeout period.
-	 */
-	return 0;
 }
 
 /*!
