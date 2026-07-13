@@ -1,14 +1,26 @@
-#!/bin/sh
-#
-# An example hook script to verify what is about to be committed.
-# Called by "git commit" with no arguments.  The hook should
-# exit with non-zero status after issuing an appropriate message if
-# it wants to stop the commit.
-#
-# To enable this hook, rename this file to "pre-commit".
-
+#!/usr/bin/env bash
+# pre‑commit hook: warn if committing directly to a protected branch
+# This script should be symlinked or referenced by the actual Git hook.
 # Redirect output to stderr.
 exec 1>&2
+
+# Get the current branch name (fallback to HEAD if detached)
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+
+# Detect protected branches via GitHub rulesets (requires gh CLI)
+# If gh fails or returns no rules, fall back to a static list.
+if command -v gh >/dev/null 2>&1; then
+	# gh ruleset check returns lines starting with '-' for each rule
+	PROTECTED_COUNT=$(gh ruleset check "$branch" 2>/dev/null | grep -c '^-')
+	if [ "$PROTECTED_COUNT" -gt 0 ]; then
+		echo "          Warning: You are trying to commit directly to a protected branch '$branch' (detected via GitHub rules)."
+		echo "          Please create a new feature branch first (e.g., git checkout -b feature/your-task) and open a PR."
+		echo "          Commit aborted."
+		exit 1
+	fi
+else
+	echo "          Branch protection rule checks not available, Please install GitHub CLI (gh)"
+fi
 
 BEFORE_DIFF="$(git diff --no-ext-diff --binary)"
 # Test clang-format
@@ -49,4 +61,3 @@ then
    echo "Please review the changes and stage the files again."
    exit 1
 fi
-
