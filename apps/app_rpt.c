@@ -4898,8 +4898,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
 				ast_frfree(f);
 				if (remote_hangup_helper(myrpt, l)) {
-					/* A reconnect is possible */
-					continue;
+					/* A reconnect is never possible on pchan hangup */
+					break;
 				}
 				break;
 			}
