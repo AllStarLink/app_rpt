@@ -6295,7 +6295,7 @@ static int load_module(void)
  *
  *	 \return 				0 on success; non-zero on failure (typically -1 if the configuration could not be reloaded).
  */
-static int asterisk_reload(void)
+static int reload_module(void)
 {
 	int res;
 
@@ -6312,5 +6312,5 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Voter Radio Channel Driv
 	.support_level = AST_MODULE_SUPPORT_EXTENDED,
 	.load = load_module,
 	.unload = unload_module,
-	.reload = asterisk_reload,
+	.reload = reload_module,
 );
