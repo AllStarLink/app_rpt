@@ -4425,16 +4425,11 @@ static void *voter_timer(void *data)
 			ast_log(LOG_ERROR, "Failed to wait on VOTER thread timer.\n");
 			break;
 		}
-		if (ast_timer_get_event(voter_thread_timer) != AST_TIMING_EVENT_EXPIRED) {
+		if (ast_timer_get_event(voter_thread_timer) == AST_TIMING_EVENT_EXPIRED) {
 			if (ast_timer_ack(voter_thread_timer, 1) < 0) {
 				ast_log(LOG_ERROR, "Failed to acknowledge timer.\n");
 				break;
 			}
-			continue;
-		}
-		if (ast_timer_ack(voter_thread_timer, 1) < 0) {
-			ast_log(LOG_ERROR, "Failed to acknowledge timer.\n");
-			break;
 		}
 
 		ast_mutex_lock(&voter_lock);
