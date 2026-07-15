@@ -4366,6 +4366,19 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 	return 0;
 }
 
+static inline int hangup_frame_helper(struct ast_channel *chan, const char *chantype, struct ast_frame *f)
+{
+	if (f->frametype == AST_FRAME_CONTROL) {
+		if (f->subclass.integer == AST_CONTROL_HANGUP) {
+			ast_debug(1, "%s (%s) received hangup frame\n", ast_channel_name(chan), chantype);
+			ast_frfree(f);
+			return -1;
+		}
+	}
+	ast_frfree(f);
+	return 0;
+}
+
 static inline int pchannel_read(struct rpt *myrpt)
 {
 	struct ast_frame *f = ast_read(myrpt->pchannel);
@@ -4382,26 +4395,7 @@ static inline int pchannel_read(struct rpt *myrpt)
 			ast_write(myrpt->txpchannel, f);
 		}
 	}
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "@@@@ rpt:Hung Up\n");
-		}
-	}
-	ast_frfree(f);
-	return 0;
-}
-
-static inline int hangup_frame_helper(struct ast_channel *chan, const char *chantype, struct ast_frame *f)
-{
-	if (f->frametype == AST_FRAME_CONTROL) {
-		if (f->subclass.integer == AST_CONTROL_HANGUP) {
-			ast_debug(1, "%s (%s) received hangup frame\n", ast_channel_name(chan), chantype);
-			ast_frfree(f);
-			return -1;
-		}
-	}
-	ast_frfree(f);
-	return 0;
+	return hangup_frame_helper(myrpt->pchannel, "pchannel", f);
 }
 
 static inline int wait_for_hangup_helper(struct ast_channel *chan, const char *chantype)
