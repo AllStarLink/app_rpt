@@ -1245,7 +1245,7 @@ enum rpt_function_response function_macro(struct rpt *myrpt, char *param, char *
 		return DC_INDETERMINATE;
 	}
 
-	for (i = 0; i < digitbuf[i]; i++) {
+	for (i = 0; digitbuf[i]; i++) {
 		if ((digitbuf[i] < '0') || (digitbuf[i] > '9')) {
 			return DC_ERROR;
 		}
