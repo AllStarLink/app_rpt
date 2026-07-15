@@ -3451,7 +3451,7 @@ treataslocal:
 	}
 #endif
 	myrpt->noduck = 0;
-	pthread_exit(NULL);
+	return NULL;
 abort:
 	telem_done(myrpt, mytele);
 abort2:
@@ -3471,7 +3471,7 @@ abort3:
 		ast_channel_unref(mychannel);
 	}
 
-	pthread_exit(NULL);
+	return NULL;
 }
 
 static const char *rpt_tele_mode_str(enum rpt_tele_mode mode)
