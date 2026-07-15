@@ -958,17 +958,24 @@ static void *hidthread(void *arg)
 					continue;
 				}
 				o->devicenum = i;
+				{
+					int use_newname = 0;
+
+					if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
+						if (!o->device_error) {
+							ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
+							o->device_error = 1;
+						}
+						ast_mutex_unlock(&usb_dev_lock);
+						usleep(500000);
+						continue;
+					}
+					o->newname = use_newname;
+				}
 				o->device_error = 0;
 				ast_radio_time(&o->lasthidtime);
 				o->usbass = 1;
 				ast_mutex_unlock(&usb_dev_lock);
-				o->micmax = ast_radio_mixer_limit(ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL));
-				o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
-				if (o->spkrmax == -1) {
-					o->newname = 1;
-					o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
-				}
-				o->spkrmax = ast_radio_mixer_limit(o->spkrmax);
 				goto usb_device_ready;
 			}
 			if (!o->device_error) {
@@ -1116,17 +1123,24 @@ static void *hidthread(void *arg)
 		}
 		o->devicenum = i;
 		snprintf(o->hw_device, sizeof(o->hw_device), "hw:%d", i);
+		{
+			int use_newname = 0;
+
+			if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
+				if (!o->device_error) {
+					ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
+					o->device_error = 1;
+				}
+				ast_mutex_unlock(&usb_dev_lock);
+				usleep(500000);
+				continue;
+			}
+			o->newname = use_newname;
+		}
 		o->device_error = 0;
 		ast_radio_time(&o->lasthidtime);
 		o->usbass = 1;
 		ast_mutex_unlock(&usb_dev_lock);
-		/* set the audio mixer values */
-		o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
-		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
-		if (o->spkrmax == -1) {
-			o->newname = 1;
-			o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
-		}
 		/* initialize the usb device */
 		usb_dev = ast_radio_hid_device_init(o->devstr);
 		if (usb_dev == NULL) {
