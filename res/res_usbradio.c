@@ -444,6 +444,8 @@ int ast_radio_hid_device_mklist(void)
 	struct usb_bus *usb_bus;
 	struct usb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
+	ssize_t linklen;
+	size_t cplen;
 	int i;
 
 	ast_mutex_lock(&usb_list_lock);
@@ -483,9 +485,11 @@ int ast_radio_hid_device_mklist(void)
 
 				snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 				memset(desdev, 0, sizeof(desdev));
-				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+				linklen = readlink(str, desdev, sizeof(desdev) - 1);
+				if (linklen == -1) {
 					continue;
 				}
+				desdev[linklen] = '\0';
 				cp = strrchr(desdev, '/');
 				if (!cp) {
 					continue;
@@ -498,22 +502,23 @@ int ast_radio_hid_device_mklist(void)
 				continue;
 			}
 
-			new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
+			cplen = strlen(cp);
+			new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + cplen);
 			if (!new_list) {
 				ast_mutex_unlock(&usb_list_lock);
 				return -1;
 			}
 
 			usb_device_list = new_list;
-			usb_device_list_size += strlen(cp) + 2;
+			usb_device_list_size += cplen + 2;
 			i = 0;
 
 			while (usb_device_list[i]) {
 				i += strlen(usb_device_list + i) + 1;
 			}
 
-			memcpy(usb_device_list + i, cp, strlen(cp) + 1);
-			usb_device_list[strlen(cp) + i + 1] = 0;
+			memcpy(usb_device_list + i, cp, cplen + 1);
+			usb_device_list[i + cplen + 1] = 0;
 		}
 	}
 	ast_mutex_unlock(&usb_list_lock);
@@ -525,6 +530,7 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	struct usb_bus *usb_bus;
 	struct usb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
+	ssize_t linklen;
 	int i;
 
 	usb_init();
@@ -549,9 +555,11 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 
 				snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 				memset(desdev, 0, sizeof(desdev));
-				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+				linklen = readlink(str, desdev, sizeof(desdev) - 1);
+				if (linklen == -1) {
 					continue;
 				}
+				desdev[linklen] = '\0';
 				cp = strrchr(desdev, '/');
 				if (!cp) {
 					continue;

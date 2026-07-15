@@ -23,7 +23,11 @@
  * \brief USB sound card resources.
  */
 
-/*! \note <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
+/*! \note <sys/io.h> is not portable to all architectures; guard parallel-port helpers with HAVE_SYS_IO */
+#if __has_include(<sys/io.h>)
+#define HAVE_SYS_IO
+#endif
+
 #include <portaudio.h>
 
 /*!
