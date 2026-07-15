@@ -417,39 +417,52 @@ static int getserialchar(int fd)
 }
 
 /*!
- * \brief Get a line of characters from serial device.
+ * \brief Read one complete NMEA sentence from serial device.
  *
- * Get one line of characters from the serial device.  Timeout after SERIAL_MAXMS.
+ * Discards bytes until a '$' start-of-sentence marker is found, then reads
+ * until end-of-line.  This keeps the reader aligned when pseudo-serial bridges
+ * deliver data mid-stream.
  *
  * \param fd		File descriptor to read.
  * \param str		Pointer to string buffer.
- * \param max		Maximum characters to read.
+ * \param max		Maximum characters to read (including NUL terminator).
  *
  * \retval 			Number of characters read, 0 for time out or -1 for error.
  */
-
-static int getserialline(int fd, char *str, int max)
+static int getnmea_line(int fd, char *str, int max)
 {
 	int i;
 	char c;
 
-	for (i = 0; (i < max) && run_forever; i++) {
+	if (max < 2) {
+		return -1;
+	}
+
+	/* Resync to the start of the next NMEA sentence. */
+	while (run_forever) {
 		c = getserialchar(fd);
-		/* See if we timed out or received an error */
 		if (c < 1) {
 			return c;
 		}
-		if ((i == 0) && (c < ' ')) {
-			i--;
-			continue;
+		if (c == '$') {
+			break;
 		}
-		/* Any character < ' ' indicates the end of line */
+		ast_debug(5, "GPS discarding byte 0x%02x while resyncing to NMEA sentence\n", (unsigned char) c);
+	}
+
+	str[0] = '$';
+	for (i = 1; (i < max - 1) && run_forever; i++) {
+		c = getserialchar(fd);
+		if (c < 1) {
+			str[i] = '\0';
+			return c;
+		}
 		if (c < ' ') {
 			break;
 		}
 		str[i] = c;
 	}
-	str[i] = 0;
+	str[i] = '\0';
 
 	return i;
 }
@@ -894,11 +907,10 @@ static void lon_decimal_to_DMS(float dec, char *value, int len)
 static void format_def_elevation(const char *defelev, char *elevation, size_t elen)
 {
 	if (defelev) {
-		float eleva, elevd;
+		float eleva;
 
 		eleva = strtof(defelev, NULL);
-		elevd = (eleva - floor(eleva)) * 10 + 0.5;
-		snprintf(elevation, elen, "%03d.%1dM", (int) eleva, (int) elevd);
+		snprintf(elevation, elen, "%.1fM", eleva);
 	} else {
 		ast_copy_string(elevation, "000.0M", elen);
 	}
@@ -916,11 +928,11 @@ static int is_gga_sentence(const char *sentence)
 	}
 
 	len = strlen(sentence);
-	if (len < 6) {
+	if (len != 6 || strcasecmp(sentence + 3, "GGA")) {
 		return 0;
 	}
 
-	return !strcasecmp(sentence + len - 3, "GGA");
+	return 1;
 }
 
 /*!
@@ -1048,8 +1060,8 @@ static void *gps_reader(void *data)
 			}
 		}
 
-		/* Read a line from the serial port */
-		res = getserialline(fd, buf, sizeof(buf) - 1);
+		/* Read a complete NMEA sentence from the serial port */
+		res = getnmea_line(fd, buf, sizeof(buf));
 		if (res < 0) {
 			ast_log(LOG_WARNING, "GPS serial read error on %s, reconnecting\n", comport);
 			close(fd);
@@ -1087,7 +1099,7 @@ static void *gps_reader(void *data)
 			}
 			/* Validate the GPS data */
 			if (buf[0] != '$') {
-				ast_log(LOG_WARNING, "GPS Invalid data format (no '$' at beginning)\n");
+				ast_debug(1, "GPS reader lost NMEA framing on %s\n", comport);
 				continue;
 			}
 			/* Calculate the check sum */
@@ -1100,11 +1112,11 @@ static void *gps_reader(void *data)
 			}
 			star_idx = i;
 			if ((!buf[star_idx]) || (strlen(buf) < (star_idx + 3))) {
-				ast_log(LOG_WARNING, "GPS Invalid data format (checksum format)\n");
+				ast_debug(1, "GPS ignoring truncated NMEA sentence: %s\n", buf);
 				continue;
 			}
 			if ((sscanf(buf + star_idx + 1, "%x", &rx_checksum) != 1) || (c != rx_checksum)) {
-				ast_log(LOG_WARNING, "GPS Invalid checksum\n");
+				ast_debug(1, "GPS ignoring NMEA sentence with bad checksum: %s\n", buf);
 				continue;
 			}
 
@@ -1424,6 +1436,7 @@ static void *aprstt_sender_thread(void *data)
 		memset(&ttempty, 0, sizeof(ttempty));
 		if (fseek(mfp, 0, SEEK_END)) {
 			ast_log(LOG_ERROR, "Can not seek aprstt common block file %s: %s\n", fname, strerror(errno));
+			fclose(mfp);
 			return NULL;
 		}
 		for (i = mystat.st_size; i < (sizeof(struct ttentry) * ttlist); i += sizeof(struct ttentry)) {
