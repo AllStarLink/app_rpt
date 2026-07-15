@@ -4170,7 +4170,6 @@ static int reload(void)
 			}
 			cp = ast_strdup(v->value);
 			if (!cp) {
-				ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 				ast_config_destroy(cfg);
 				return -1;
 			}
@@ -4195,7 +4194,6 @@ static int reload(void)
 			if (!client) {
 				client = ast_calloc(1, sizeof(struct voter_client));
 				if (!client) {
-					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_free(cp);
 					ast_config_destroy(cfg);
 					return -1;
@@ -4257,7 +4255,6 @@ static int reload(void)
 			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
 				client->audio = ast_realloc(client->audio, client->buflen);
 				if (!client->audio) {
-					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
 					return -1;
 				}
@@ -4265,7 +4262,6 @@ static int reload(void)
 			} else if (!client->audio) {
 				client->audio = ast_malloc(client->buflen);
 				if (!client->audio) {
-					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
 					return -1;
 				}
@@ -4274,7 +4270,6 @@ static int reload(void)
 			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
 				client->rssi = ast_realloc(client->rssi, client->buflen);
 				if (!client->rssi) {
-					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
 					return -1;
 				}
@@ -4282,7 +4277,6 @@ static int reload(void)
 			} else if (!client->rssi) {
 				client->rssi = ast_calloc(1, client->buflen);
 				if (!client->rssi) {
-					ast_log(LOG_ERROR, "VOTER: Memory allocation failure while reloading configuration\n");
 					ast_config_destroy(cfg);
 					return -1;
 				}
