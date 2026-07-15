@@ -119,18 +119,47 @@ long ast_radio_lround(double x)
 
 int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype)
 {
-	spkrmax = ast_radio_mixer_limit(spkrmax);
+	if (spkrmax <= 0) {
+		return 0;
+	}
 	return (request_value * spkrmax) / AUDIO_ADJUSTMENT;
 }
 
-int ast_radio_mixer_limit(int limit)
+int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micplaymax, int *newname)
 {
-	if (limit > 0) {
-		return limit;
+	int rv;
+
+	if (!micmax || !spkrmax || !micplaymax || !newname) {
+		return -1;
 	}
 
-	ast_log(LOG_WARNING, "Mixer max lookup failed, using default %d\n", AST_RADIO_MIXER_MAX_DEFAULT);
-	return AST_RADIO_MIXER_MAX_DEFAULT;
+	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_MIC_CAPTURE_VOL);
+	if (rv <= 0) {
+		ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (%s)\n", devnum, MIXER_PARAM_MIC_CAPTURE_VOL);
+		return -1;
+	}
+	*micmax = rv;
+
+	*newname = 0;
+	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
+	if (rv <= 0) {
+		rv = ast_radio_amixer_max(devnum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
+		if (rv <= 0) {
+			ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (speaker playback)\n", devnum);
+			return -1;
+		}
+		*newname = 1;
+	}
+	*spkrmax = rv;
+
+	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_MIC_PLAYBACK_VOL);
+	if (rv <= 0) {
+		ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (%s)\n", devnum, MIXER_PARAM_MIC_PLAYBACK_VOL);
+		return -1;
+	}
+	*micplaymax = rv;
+
+	return 0;
 }
 
 int ast_radio_amixer_max(int devnum, char *param)

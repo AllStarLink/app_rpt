@@ -84,14 +84,6 @@
 #define AUDIO_ADJUSTMENT 1000
 
 /*!
- * \brief Default ALSA mixer maximum when hardware lookup fails.
- *
- * CM108-class devices commonly expose a 0-31 capture range; use this
- * instead of propagating -1 into volume scaling math.
- */
-#define AST_RADIO_MIXER_MAX_DEFAULT 31
-
-/*!
  * \brief EEPROM memory layout
  *	The AT93C46 eeprom has 64 addresses that contain 2 bytes (one word).
  *	The CMxxx sound card device will use this eeprom to read manuafacturer
@@ -257,13 +249,21 @@ int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devty
 int ast_radio_amixer_max(int devnum, char *param);
 
 /*!
- * \brief Return a usable mixer maximum for volume scaling.
+ * \brief Query required ALSA mixer maximums for a USB radio device.
  *
- * \param limit Value from ast_radio_amixer_max(), or another mixer limit.
+ * Reads mic capture, speaker playback (with alternate control name), and
+ * mic playback limits. Fails when any required limit is unavailable.
  *
- * \retval limit if positive, otherwise AST_RADIO_MIXER_MAX_DEFAULT.
+ * \param devnum ALSA card number.
+ * \param micmax Returned Mic Capture Volume maximum.
+ * \param spkrmax Returned Speaker Playback Volume maximum.
+ * \param micplaymax Returned Mic Playback Volume maximum.
+ * \param newname Set to 1 when the alternate speaker control name is used.
+ *
+ * \retval 0 on success.
+ * \retval -1 if any required mixer limit is unavailable.
  */
-int ast_radio_mixer_limit(int limit);
+int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micplaymax, int *newname);
 
 /*!
  * \brief Set mixer
