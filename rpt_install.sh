@@ -34,25 +34,29 @@ printf "Script is now the latest version\n"
 ls -d -v */ | grep "^asterisk" | tail -1
 cd $( ls -d -v */ | grep "^asterisk" | tail -1 )
 
-apt-get install -y libusb-dev # chan_simpleusb and chan_usbradio require libusb-dev on Debian
-modprobe snd-pcm-oss # /dev/dsp1 needs to exist for chan_simpleusb and chan_usbradio to work
-echo "snd-pcm-oss" >> /etc/modules # load module at startup for USB
+apt-get install -y libusb-dev libasound2-dev libportaudio2 portaudio19-dev # USB radio drivers and PortAudio
 
-cp ../$MYDIR/apps/Makefile.diff /tmp/app_Makefile.diff
-git apply /tmp/app_Makefile.diff
+apply_diff() {
+	src="$1"
+	tmpdiff="$(mktemp)" || exit 1
 
-cp ../$MYDIR/channels/Makefile.diff /tmp/channels_Makefile.diff
-git apply /tmp/channels_Makefile.diff
+	cp "$src" "$tmpdiff" || {
+		rm -f "$tmpdiff"
+		exit 1
+	}
+	if ! git apply "$tmpdiff"; then
+		patch -p1 < "$tmpdiff" || {
+			rm -f "$tmpdiff"
+			exit 1
+		}
+	fi
+	rm -f "$tmpdiff"
+}
 
-cp ../$MYDIR/utils/Makefile.diff /tmp/utils_makefile.diff
-git apply /tmp/utils_makefile.diff
-
-tmpdiff="$(mktemp)" || exit 1
-trap 'rm -f "$tmpdiff"' EXIT
-cp "../$MYDIR/res/Makefile.diff" "$tmpdiff" || exit 1
-if ! git apply "$tmpdiff"; then
-	patch -p1 < "$tmpdiff" || exit 1
-fi
+apply_diff "../$MYDIR/apps/Makefile.diff"
+apply_diff "../$MYDIR/channels/Makefile.diff"
+apply_diff "../$MYDIR/utils/Makefile.diff"
+apply_diff "../$MYDIR/res/Makefile.diff"
 
 echoerr() {
 	printf "\e[31;1m%s\e[0m\n" "$*" >&2;
