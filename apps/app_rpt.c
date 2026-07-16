@@ -5835,12 +5835,10 @@ static void *rpt(void *this)
 			if (rxchannel_read(myrpt, lasttx)) {
 				break;
 			}
-			continue;
 		} else if (who == myrpt->pchannel) { /* if it was a read from pseudo */
 			if (pchannel_read(myrpt)) {
 				break;
 			}
-			continue;
 		} else if (who == myrpt->rxpchannel) {
 			if (rxpchannel_read(myrpt)) {
 				break;
@@ -5849,12 +5847,10 @@ static void *rpt(void *this)
 			if (txchannel_read(myrpt)) {
 				break;
 			}
-			continue;
 		} else if (who == myrpt->localtxchannel) { /* if it was a read from local-tx */
 			if (localtxchannel_read(myrpt, &myfirst)) {
 				break;
 			}
-			continue;
 		} else if (who == myrpt->txpchannel) { /* if it was a read from remote tx */
 			if (txpchannel_read(myrpt)) {
 				break;
