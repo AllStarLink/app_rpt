@@ -1036,13 +1036,12 @@ static void *hidthread(void *arg)
 		o->usbass = 1;
 		ast_mutex_unlock(&usb_dev_lock);
 		/* set the audio mixer values */
-		o->micmax = ast_radio_mixer_limit(ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL));
+		o->micmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL);
 		o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
 		if (o->spkrmax == -1) {
 			o->newname = 1;
 			o->spkrmax = ast_radio_amixer_max(o->devicenum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
 		}
-		o->spkrmax = ast_radio_mixer_limit(o->spkrmax);
 		/* initialize the usb device */
 		usb_dev = ast_radio_hid_device_init(o->devstr);
 		if (usb_dev == NULL) {
