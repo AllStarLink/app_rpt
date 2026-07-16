@@ -2765,8 +2765,8 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 
 static void queue_id(struct rpt *myrpt)
 {
-	if (myrpt->p.idtime) { /* ID time must be non-zero */
-		myrpt->mustid = myrpt->tailid = 0;
+	myrpt->mustid = myrpt->tailid = 0;
+	if (myrpt->p.idtime) {				  /* ID time must be non-zero */
 		myrpt->idtimer = myrpt->p.idtime; /* Reset our ID timer */
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telemetry(myrpt, ID, NULL);
@@ -5363,8 +5363,12 @@ static void *rpt(void *this)
 			myrpt->localtx = myrpt->keyed; /* If sleep disabled, just copy keyed state to localrx */
 		}
 		/* Create a "must_id" flag for the cleanup ID */
-		if (myrpt->p.idtime) /* ID time must be non-zero */
-			myrpt->mustid |= (myrpt->idtimer) && (myrpt->keyed || myrpt->remrx);
+		if (myrpt->p.idtime) { /* ID time must be non-zero */
+			myrpt->mustid |= myrpt->idtimer && (myrpt->keyed || myrpt->remrx);
+		} else {
+			myrpt->mustid = 0;
+		}
+
 		if (myrpt->keyed || myrpt->remrx) {
 			/* Set the inactivity was keyed flag and reset its timer */
 			myrpt->rptinactwaskeyedflag = 1;
@@ -5603,10 +5607,11 @@ static void *rpt(void *this)
 		/* else if at ID time limit, do it right over the top of them */
 		/* If beaconing is enabled, always id when the timer expires */
 		/* Lastly, if the repeater has been keyed, and the ID timer is expired, do a clean up ID */
-		if (((myrpt->mustid) || (myrpt->p.beaconing)) && (!myrpt->idtimer))
+		if ((myrpt->mustid || myrpt->p.beaconing) && !myrpt->idtimer) {
 			queue_id(myrpt);
+		}
 
-		if ((myrpt->p.idtime && totx && (!myrpt->exttx) && (myrpt->idtimer <= myrpt->p.politeid) && myrpt->tailtimer)) { /* ID time must be non-zero */
+		if ((myrpt->p.idtime && totx && !myrpt->exttx && (myrpt->idtimer <= myrpt->p.politeid) && myrpt->tailtimer)) { /* ID time must be non-zero */
 			myrpt->tailid = 1;
 		}
 
