@@ -238,7 +238,7 @@ static int rpt_manager_do_xstat(struct mansession *ses, const struct message *m)
 
 			RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 				int hours, minutes, seconds;
-				long long connecttime = ast_tvdiff_ms(rpt_tvnow(), l->connecttime);
+				long long connecttime = ast_tvzero(l->connecttime) ? 0 : ast_tvdiff_ms(rpt_tvnow(), l->connecttime);
 				char conntime[21];
 
 				if (l->name[0] == '0') {
