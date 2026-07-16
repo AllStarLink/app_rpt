@@ -781,7 +781,6 @@ struct rpt {
 	char *txchanname;
 	rpt_bool remote:1;
 	char *remoterig;
-	unsigned int scram;
 #ifdef _MDC_DECODE_H_
 	mdc_decoder_t *mdc;
 #endif

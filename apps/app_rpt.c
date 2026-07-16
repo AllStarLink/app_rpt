@@ -5266,7 +5266,7 @@ static void *rpt(void *this)
 	ast_autoservice_stop(myrpt->rxchannel);
 	while (ms >= 0) {
 		struct ast_channel *who;
-		struct ast_channel *cs[300], *cs1[300];
+		struct ast_channel *cs[8];
 		int totx = 0, elap = 0, n, x;
 		time_t t, t_mono;
 		struct rpt_link *l;
@@ -5769,12 +5769,7 @@ static void *rpt(void *this)
 			myrpt->topkeystate = 3;
 		}
 		ms = MSWAIT;
-		for (x = 0; x < n; x++) {
-			int s = -(-x - myrpt->scram - 1) % n;
-			cs1[x] = cs[s];
-		}
-		myrpt->scram++;
-		who = ast_waitfor_n(cs1, n, &ms);
+		who = ast_waitfor_n(cs, n, &ms);
 		if (who == NULL) {
 			ms = 0;
 		}
