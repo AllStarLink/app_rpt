@@ -1355,9 +1355,6 @@ PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned l
 
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames)
 {
-	PaError res;
-	short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS];
-
 	if (!ps || !ps->stream || !data) {
 		return paBadStreamPtr;
 	}
@@ -1367,19 +1364,7 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 		return paBufferTooBig;
 	}
 
-	res = Pa_WriteStream(ps->stream, data, frames);
-	if (res == paOutputUnderflowed) {
-		PaError retry;
-
-		memset(null_buf, 0, sizeof(null_buf));
-		retry = Pa_WriteStream(ps->stream, null_buf, frames);
-		if (retry < 0 && retry != paOutputUnderflowed) {
-			return retry;
-		}
-		return paNoError;
-	}
-
-	return res;
+	return Pa_WriteStream(ps->stream, data, frames);
 }
 
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps)
