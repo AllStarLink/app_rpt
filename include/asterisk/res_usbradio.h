@@ -23,10 +23,12 @@
  * \brief USB sound card resources.
  */
 
-/*! \note <sys/io.h> is not portable to all architectures, so don't call non-portable functions if we don't have them */
+/*! \note <sys/io.h> is not portable to all architectures; guard parallel-port helpers with HAVE_SYS_IO */
 #if __has_include(<sys/io.h>)
 #define HAVE_SYS_IO
 #endif
+
+#include <portaudio.h>
 
 /*!
  * \brief Defines for interacting with ALSA controls.
@@ -245,6 +247,23 @@ int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devty
  * \retval 				The maximum value.
  */
 int ast_radio_amixer_max(int devnum, char *param);
+
+/*!
+ * \brief Query required ALSA mixer maximums for a USB radio device.
+ *
+ * Reads mic capture, speaker playback (with alternate control name), and
+ * mic playback limits. Fails when any required limit is unavailable.
+ *
+ * \param devnum ALSA card number.
+ * \param micmax Returned Mic Capture Volume maximum.
+ * \param spkrmax Returned Speaker Playback Volume maximum.
+ * \param micplaymax Returned Mic Playback Volume maximum.
+ * \param newname Set to 1 when the alternate speaker control name is used.
+ *
+ * \retval 0 on success.
+ * \retval -1 if any required mixer limit is unavailable.
+ */
+int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micplaymax, int *newname);
 
 /*!
  * \brief Set mixer
@@ -529,3 +548,32 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
  * \param cardno The ALSA card number as found in HW:<cardno>
  */
 struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno);
+
+#define AST_RADIO_PA_SAMPLE_RATE 48000
+#define AST_RADIO_PA_FRAMES_PER_BUFFER (FRAME_SIZE * 6)
+#define AST_RADIO_PA_OUTPUT_CHANNELS 2
+
+/*!
+ * \brief PortAudio stream state shared by chan_simpleusb and chan_usbradio.
+ */
+struct ast_radio_pa_stream {
+	PaStream *stream;
+	int active;
+	unsigned int input_channels; /*!< 1 for mono RX, 2 for stereo RX */
+	char hw_device[100];
+};
+
+int ast_radio_pa_startup(void);
+void ast_radio_pa_shutdown(void);
+void ast_radio_pa_shutdown_all(void);
+
+int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev);
+int ast_radio_hw_match(const char *haystack, const char *needle);
+
+PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps);
+PaError ast_radio_pa_start(struct ast_radio_pa_stream *ps);
+void ast_radio_pa_stop(struct ast_radio_pa_stream *ps);
+
+PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop);
+PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames);
+long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);

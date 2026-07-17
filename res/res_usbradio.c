@@ -28,6 +28,7 @@
 
 /*** MODULEINFO
 	<depend>alsa</depend>
+	<depend>portaudio</depend>
 	<support_level>extended</support_level>
  ***/
 
@@ -48,6 +49,7 @@
 #include <linux/parport.h>
 #include <linux/version.h>
 #include <alsa/asoundlib.h>
+#include <portaudio.h>
 
 #include "asterisk/res_usbradio.h"
 
@@ -117,7 +119,47 @@ long ast_radio_lround(double x)
 
 int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype)
 {
+	if (spkrmax <= 0) {
+		return 0;
+	}
 	return (request_value * spkrmax) / AUDIO_ADJUSTMENT;
+}
+
+int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micplaymax, int *newname)
+{
+	int rv;
+
+	if (!micmax || !spkrmax || !micplaymax || !newname) {
+		return -1;
+	}
+
+	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_MIC_CAPTURE_VOL);
+	if (rv <= 0) {
+		ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (%s)\n", devnum, MIXER_PARAM_MIC_CAPTURE_VOL);
+		return -1;
+	}
+	*micmax = rv;
+
+	*newname = 0;
+	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_SPKR_PLAYBACK_VOL);
+	if (rv <= 0) {
+		rv = ast_radio_amixer_max(devnum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
+		if (rv <= 0) {
+			ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (speaker playback)\n", devnum);
+			return -1;
+		}
+		*newname = 1;
+	}
+	*spkrmax = rv;
+
+	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_MIC_PLAYBACK_VOL);
+	if (rv <= 0) {
+		ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (%s)\n", devnum, MIXER_PARAM_MIC_PLAYBACK_VOL);
+		return -1;
+	}
+	*micplaymax = rv;
+
+	return 0;
 }
 
 int ast_radio_amixer_max(int devnum, char *param)
@@ -151,7 +193,10 @@ int ast_radio_amixer_max(int devnum, char *param)
 	}
 
 	snd_ctl_elem_info_alloca(&info);
-	snd_hctl_elem_info(elem, info);
+	if (snd_hctl_elem_info(elem, info) < 0) {
+		snd_hctl_close(hctl);
+		return -1;
+	}
 	type = snd_ctl_elem_info_get_type(info);
 	rv = 0;
 
@@ -199,7 +244,10 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2)
 	}
 
 	snd_ctl_elem_info_alloca(&info);
-	snd_hctl_elem_info(elem, info);
+	if (snd_hctl_elem_info(elem, info) < 0) {
+		snd_hctl_close(hctl);
+		return -1;
+	}
 	type = snd_ctl_elem_info_get_type(info);
 	snd_ctl_elem_value_alloca(&control);
 	snd_ctl_elem_value_set_id(control, id);
@@ -425,6 +473,8 @@ int ast_radio_hid_device_mklist(void)
 	struct usb_bus *usb_bus;
 	struct usb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
+	ssize_t linklen;
+	size_t cplen;
 	int i;
 
 	ast_mutex_lock(&usb_list_lock);
@@ -464,11 +514,11 @@ int ast_radio_hid_device_mklist(void)
 
 				snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 				memset(desdev, 0, sizeof(desdev));
-
-				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+				linklen = readlink(str, desdev, sizeof(desdev) - 1);
+				if (linklen == -1) {
 					continue;
 				}
-
+				desdev[linklen] = '\0';
 				cp = strrchr(desdev, '/');
 				if (!cp) {
 					continue;
@@ -481,23 +531,23 @@ int ast_radio_hid_device_mklist(void)
 				continue;
 			}
 
-			new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + strlen(cp));
-
+			cplen = strlen(cp);
+			new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + cplen);
 			if (!new_list) {
 				ast_mutex_unlock(&usb_list_lock);
 				return -1;
 			}
 
 			usb_device_list = new_list;
-			usb_device_list_size += strlen(cp) + 2;
+			usb_device_list_size += cplen + 2;
 			i = 0;
 
 			while (usb_device_list[i]) {
 				i += strlen(usb_device_list + i) + 1;
 			}
 
-			strcat(usb_device_list + i, cp);
-			usb_device_list[strlen(cp) + i + 1] = 0;
+			memcpy(usb_device_list + i, cp, cplen + 1);
+			usb_device_list[i + cplen + 1] = 0;
 		}
 	}
 	ast_mutex_unlock(&usb_list_lock);
@@ -509,6 +559,7 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 	struct usb_bus *usb_bus;
 	struct usb_device *dev;
 	char devstr[10000], str[200], desdev[200], *cp;
+	ssize_t linklen;
 	int i;
 
 	usb_init();
@@ -530,11 +581,14 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 				if (strcasecmp(desdev, devstr)) {
 					continue;
 				}
+
 				snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
 				memset(desdev, 0, sizeof(desdev));
-				if (readlink(str, desdev, sizeof(desdev) - 1) == -1) {
+				linklen = readlink(str, desdev, sizeof(desdev) - 1);
+				if (linklen == -1) {
 					continue;
 				}
+				desdev[linklen] = '\0';
 				cp = strrchr(desdev, '/');
 				if (!cp) {
 					continue;
@@ -542,11 +596,9 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 				cp++;
 				break;
 			}
-
 			if (i >= 32) {
 				continue;
 			}
-
 			if (!strcmp(cp, desired_device)) {
 				return dev;
 			}
@@ -926,6 +978,388 @@ static void cleanup_user_devices(void)
 }
 
 /*
+ * PortAudio helpers shared by chan_simpleusb and chan_usbradio.
+ */
+AST_MUTEX_DEFINE_STATIC(pa_lock);
+static int pa_refcount;
+
+static int64_t pa_now_ms(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+int ast_radio_pa_startup(void)
+{
+	PaError res;
+
+	ast_mutex_lock(&pa_lock);
+	if (pa_refcount == 0) {
+		res = Pa_Initialize();
+		if (res != paNoError) {
+			ast_mutex_unlock(&pa_lock);
+			ast_log(LOG_WARNING, "Failed to initialize PortAudio - (%d) %s\n", res, Pa_GetErrorText(res));
+			return -1;
+		}
+	}
+	pa_refcount++;
+	ast_mutex_unlock(&pa_lock);
+	return 0;
+}
+
+void ast_radio_pa_shutdown(void)
+{
+	ast_mutex_lock(&pa_lock);
+	if (pa_refcount > 0) {
+		pa_refcount--;
+		if (pa_refcount == 0) {
+			Pa_Terminate();
+		}
+	}
+	ast_mutex_unlock(&pa_lock);
+}
+
+void ast_radio_pa_shutdown_all(void)
+{
+	ast_mutex_lock(&pa_lock);
+	if (pa_refcount > 0) {
+		Pa_Terminate();
+		pa_refcount = 0;
+	}
+	ast_mutex_unlock(&pa_lock);
+}
+
+int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev)
+{
+	const char *p = s;
+
+	if (!s || !card || !dev) {
+		return 0;
+	}
+
+	while ((p = strstr(p, "hw:")) != NULL) {
+		const char *q = p + 3;
+		int c = 0;
+		int d = -1;
+
+		if (!isdigit((unsigned char) *q)) {
+			p = q;
+			continue;
+		}
+
+		while (isdigit((unsigned char) *q)) {
+			if (c > 9999) {
+				p = q;
+				break;
+			}
+			c = c * 10 + (*q - '0');
+			q++;
+		}
+
+		if (*q == ',') {
+			q++;
+			if (!isdigit((unsigned char) *q)) {
+				p = q;
+				continue;
+			}
+			d = 0;
+			while (isdigit((unsigned char) *q)) {
+				d = d * 10 + (*q - '0');
+				q++;
+			}
+		}
+
+		*card = c;
+		*dev = d;
+		return 1;
+	}
+
+	return 0;
+}
+
+int ast_radio_hw_match(const char *haystack, const char *needle)
+{
+	int haystack_c, haystack_d, needle_c, needle_d;
+	const char *p = haystack ? haystack : "";
+
+	if (!ast_radio_parse_hw_anywhere(needle, &needle_c, &needle_d)) {
+		return 0;
+	}
+
+	while ((p = strstr(p, "hw:")) != NULL) {
+		if (ast_radio_parse_hw_anywhere(p, &haystack_c, &haystack_d)) {
+			if (haystack_c == needle_c) {
+				if (needle_d < 0 || haystack_d == needle_d) {
+					return 1;
+				}
+			}
+		}
+		p += 3;
+	}
+
+	return 0;
+}
+
+static int match_card_id(const char *devname, int card)
+{
+	char path[128], id[64];
+	FILE *fp;
+	size_t n;
+
+	snprintf(path, sizeof(path), "/proc/asound/card%d/id", card);
+	fp = fopen(path, "r");
+	if (!fp) {
+		return 0;
+	}
+
+	if (!fgets(id, sizeof(id), fp) || !id[0]) {
+		fclose(fp);
+		return 0;
+	}
+	fclose(fp);
+
+	n = strlen(id);
+	while (n > 0 && isspace((unsigned char) id[n - 1])) {
+		id[--n] = '\0';
+	}
+
+	return n > 0 && strstr(devname, id) != NULL;
+}
+
+static int pa_device_matches(const PaDeviceInfo *dev, const char *hw_device, int want_input, int want_output)
+{
+	int card, devnum;
+	int hay_card, hay_dev;
+
+	if (!dev || !hw_device || !hw_device[0]) {
+		return 0;
+	}
+
+	if (want_input && !dev->maxInputChannels) {
+		return 0;
+	}
+
+	if (want_output && !dev->maxOutputChannels) {
+		return 0;
+	}
+
+	if (ast_radio_hw_match(dev->name, hw_device)) {
+		return 1;
+	}
+
+	if (!ast_radio_parse_hw_anywhere(hw_device, &card, &devnum) || !match_card_id(dev->name, card)) {
+		return 0;
+	}
+
+	/* Card-id fallback is only unambiguous for hw:C; hw:C,D must match subdevice too. */
+	if (devnum < 0) {
+		return 1;
+	}
+
+	if (!ast_radio_parse_hw_anywhere(dev->name, &hay_card, &hay_dev)) {
+		return 0;
+	}
+
+	return hay_card == card && hay_dev == devnum;
+}
+
+static PaDeviceIndex pa_find_device(const char *hw_device, int want_input, int want_output)
+{
+	PaDeviceIndex idx, num_devices;
+
+	num_devices = Pa_GetDeviceCount();
+	if (num_devices < 0) {
+		return paNoDevice;
+	}
+
+	for (idx = 0; idx < num_devices; idx++) {
+		const PaDeviceInfo *dev = Pa_GetDeviceInfo(idx);
+
+		if (pa_device_matches(dev, hw_device, want_input, want_output)) {
+			return idx;
+		}
+	}
+
+	return paNoDevice;
+}
+
+PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
+{
+	PaError res = paInternalError;
+	const PaStreamInfo *si;
+
+	if (!ps) {
+		return paBadStreamPtr;
+	}
+
+	ps->stream = NULL;
+	ps->active = 0;
+
+	if (ast_radio_pa_startup() < 0) {
+		return paInternalError;
+	}
+
+	if (!strcasecmp(ps->hw_device, "default")) {
+		res = Pa_OpenDefaultStream(&ps->stream, ps->input_channels, AST_RADIO_PA_OUTPUT_CHANNELS, paInt16,
+			AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER, NULL, NULL);
+	} else {
+		PaStreamParameters input_params = {
+			.channelCount = ps->input_channels,
+			.sampleFormat = paInt16,
+			.suggestedLatency = (1.0 / 50.0),
+			.device = paNoDevice,
+		};
+		PaStreamParameters output_params = {
+			.channelCount = AST_RADIO_PA_OUTPUT_CHANNELS,
+			.sampleFormat = paInt16,
+			.suggestedLatency = (1.0 / 50.0),
+			.device = paNoDevice,
+		};
+
+		input_params.device = pa_find_device(ps->hw_device, 1, 0);
+		output_params.device = pa_find_device(ps->hw_device, 0, 1);
+
+		if (input_params.device == paNoDevice) {
+			ast_log(LOG_ERROR, "No PortAudio input device found for '%s'\n", ps->hw_device);
+			ast_radio_pa_shutdown();
+			return paDeviceUnavailable;
+		}
+
+		if (output_params.device == paNoDevice) {
+			ast_log(LOG_ERROR, "No PortAudio output device found for '%s'\n", ps->hw_device);
+			ast_radio_pa_shutdown();
+			return paDeviceUnavailable;
+		}
+
+		res = Pa_OpenStream(&ps->stream, &input_params, &output_params, AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER,
+			paNoFlag, NULL, NULL);
+	}
+
+	if (res != paNoError) {
+		if (ps->stream) {
+			Pa_CloseStream(ps->stream);
+			ps->stream = NULL;
+		}
+		ast_radio_pa_shutdown();
+		return res;
+	}
+
+	si = Pa_GetStreamInfo(ps->stream);
+	if (si) {
+		ast_debug(5, "PortAudio stream latency in %.3f ms out %.3f ms\n", si->inputLatency * 1000.0, si->outputLatency * 1000.0);
+	}
+
+	return res;
+}
+
+PaError ast_radio_pa_start(struct ast_radio_pa_stream *ps)
+{
+	PaError res;
+
+	if (!ps || !ps->stream) {
+		return paBadStreamPtr;
+	}
+
+	res = Pa_StartStream(ps->stream);
+	if (res == paNoError) {
+		ps->active = 1;
+	}
+	return res;
+}
+
+void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
+{
+	PaError err;
+
+	if (!ps || !ps->stream) {
+		return;
+	}
+
+	if (ps->active) {
+		err = Pa_AbortStream(ps->stream);
+		if (err != paNoError) {
+			ast_log(LOG_WARNING, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
+		}
+	}
+
+	err = Pa_CloseStream(ps->stream);
+	if (err != paNoError) {
+		ast_log(LOG_WARNING, "Pa_CloseStream failed: %s\n", Pa_GetErrorText(err));
+	}
+
+	ps->stream = NULL;
+	ps->active = 0;
+	ast_radio_pa_shutdown();
+}
+
+PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
+{
+	int64_t start;
+	PaError err;
+
+	if (!ps || !ps->stream || !buf) {
+		return paBadStreamPtr;
+	}
+
+	start = pa_now_ms();
+	while (!stop || !(*stop)) {
+		long avail = Pa_GetStreamReadAvailable(ps->stream);
+
+		if (avail < 0) {
+			return (PaError) avail;
+		}
+
+		if ((pa_now_ms() - start) > timeout_ms) {
+			return paTimedOut;
+		}
+
+		if ((unsigned long) avail < frames) {
+			usleep(500);
+			continue;
+		}
+
+		err = Pa_ReadStream(ps->stream, buf, frames);
+		return err;
+	}
+
+	return paTimedOut;
+}
+
+PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames)
+{
+	PaError res;
+	short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS];
+
+	if (!ps || !ps->stream || !data) {
+		return paBadStreamPtr;
+	}
+
+	if (frames > AST_RADIO_PA_FRAMES_PER_BUFFER) {
+		ast_log(LOG_WARNING, "ast_radio_pa_write: frames %lu exceeds buffer capacity\n", frames);
+		return paBufferTooBig;
+	}
+
+	res = Pa_WriteStream(ps->stream, data, frames);
+	if (res == paOutputUnderflowed) {
+		memset(null_buf, 0, sizeof(null_buf));
+		Pa_WriteStream(ps->stream, null_buf, frames);
+	}
+
+	return res;
+}
+
+long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps)
+{
+	if (!ps || !ps->stream) {
+		return -1;
+	}
+
+	return Pa_GetStreamWriteAvailable(ps->stream);
+}
+
+/*
  * Returns the libusb device that backs ALSA /proc/asound/card<cardno>/usbbus.
  * On success: returns a pointer to a libusb struct usb_device.
  * On failure: returns NULL.
@@ -1047,6 +1481,7 @@ static int load_module(void)
 static int unload_module(void)
 {
 	cleanup_user_devices();
+	ast_radio_pa_shutdown_all();
 
 	return 0;
 }
