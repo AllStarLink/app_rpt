@@ -135,7 +135,6 @@ int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micp
 
 	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_MIC_CAPTURE_VOL);
 	if (rv <= 0) {
-		ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (%s)\n", devnum, MIXER_PARAM_MIC_CAPTURE_VOL);
 		return -1;
 	}
 	*micmax = rv;
@@ -145,7 +144,6 @@ int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micp
 	if (rv <= 0) {
 		rv = ast_radio_amixer_max(devnum, MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
 		if (rv <= 0) {
-			ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (speaker playback)\n", devnum);
 			return -1;
 		}
 		*newname = 1;
@@ -154,7 +152,6 @@ int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micp
 
 	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_MIC_PLAYBACK_VOL);
 	if (rv <= 0) {
-		ast_log(LOG_ERROR, "Mixer limit not available for hw:%d (%s)\n", devnum, MIXER_PARAM_MIC_PLAYBACK_VOL);
 		return -1;
 	}
 	*micplaymax = rv;
@@ -1031,6 +1028,31 @@ void ast_radio_pa_shutdown_all(void)
 	ast_mutex_unlock(&pa_lock);
 }
 
+#define AST_RADIO_HW_CARD_MAX 9999
+#define AST_RADIO_HW_DEV_MAX 255
+
+static int parse_hw_field(const char **q, int max_value, int *out)
+{
+	int value = 0;
+
+	if (!q || !*q || !out || !isdigit((unsigned char) **q)) {
+		return 0;
+	}
+
+	while (isdigit((unsigned char) **q)) {
+		int digit = **q - '0';
+
+		if (value > max_value / 10 || value * 10 + digit > max_value) {
+			return 0;
+		}
+		value = value * 10 + digit;
+		(*q)++;
+	}
+
+	*out = value;
+	return 1;
+}
+
 int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev)
 {
 	const char *p = s;
@@ -1041,33 +1063,19 @@ int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev)
 
 	while ((p = strstr(p, "hw:")) != NULL) {
 		const char *q = p + 3;
-		int c = 0;
+		int c;
 		int d = -1;
 
-		if (!isdigit((unsigned char) *q)) {
+		if (!parse_hw_field(&q, AST_RADIO_HW_CARD_MAX, &c)) {
 			p = q;
 			continue;
 		}
 
-		while (isdigit((unsigned char) *q)) {
-			if (c > 9999) {
-				p = q;
-				break;
-			}
-			c = c * 10 + (*q - '0');
-			q++;
-		}
-
 		if (*q == ',') {
 			q++;
-			if (!isdigit((unsigned char) *q)) {
+			if (!parse_hw_field(&q, AST_RADIO_HW_DEV_MAX, &d)) {
 				p = q;
 				continue;
-			}
-			d = 0;
-			while (isdigit((unsigned char) *q)) {
-				d = d * 10 + (*q - '0');
-				q++;
 			}
 		}
 
@@ -1343,8 +1351,14 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 
 	res = Pa_WriteStream(ps->stream, data, frames);
 	if (res == paOutputUnderflowed) {
+		PaError retry;
+
 		memset(null_buf, 0, sizeof(null_buf));
-		Pa_WriteStream(ps->stream, null_buf, frames);
+		retry = Pa_WriteStream(ps->stream, null_buf, frames);
+		if (retry < 0 && retry != paOutputUnderflowed) {
+			return retry;
+		}
+		return paNoError;
 	}
 
 	return res;
