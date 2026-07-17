@@ -1062,18 +1062,21 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 		}
 	}
 
-	o->device_error = 0;
-	ast_radio_time(&o->lasthidtime);
 	{
 		int use_newname = 0;
 
 		if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
-			ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
+			if (!o->device_error) {
+				ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
+				o->device_error = 1;
+			}
 			ast_mutex_unlock(&usb_dev_lock);
 			return -1;
 		}
 		o->newname = use_newname;
 	}
+	o->device_error = 0;
+	ast_radio_time(&o->lasthidtime);
 	o->usbass = 1;
 	ast_mutex_unlock(&usb_dev_lock);
 	return 0;
