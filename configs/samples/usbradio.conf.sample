@@ -185,6 +185,8 @@ legacyaudioscaling = no     ; If yes, continue to do raw audio sample scaling an
 ;;;;; Tune settings ;;;;;
 ;devstr=
 ;serial=
+;audiodev=hw:0             ; Optional ALSA device for PortAudio audio (hw:N or hw:N,M).
+                            ; Use instead of devstr when binding audio by card number.
 ;rxmixerset=500
 ;txmixaset=500
 ;txmixbset=500
