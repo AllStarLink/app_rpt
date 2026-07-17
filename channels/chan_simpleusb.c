@@ -1954,6 +1954,7 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 {
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 	int res;
+	int hid_started_here = 0;
 
 	o->stophidthread = 0;
 	o->stopaudiothread = 0;
@@ -1961,19 +1962,24 @@ static int simpleusb_call(struct ast_channel *c, const char *dest, int timeout)
 
 	ast_radio_time(&o->lasthidtime);
 
-	res = ast_pthread_create(&o->hidthread, NULL, hidthread, o);
-	if (res) {
-		ast_log(LOG_ERROR, "Channel %s: Failed to create HID thread: %s\n", o->name, strerror(res));
-		return -1;
+	if (o->hidthread == AST_PTHREADT_NULL) {
+		res = ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+		if (res) {
+			ast_log(LOG_ERROR, "Channel %s: Failed to create HID thread: %s\n", o->name, strerror(res));
+			return -1;
+		}
+		hid_started_here = 1;
 	}
 
 	res = ast_pthread_create(&o->audiothread, NULL, simpleusb_audio_thread, o);
 	if (res) {
 		ast_log(LOG_ERROR, "Channel %s: Failed to create audio thread: %s\n", o->name, strerror(res));
-		o->stophidthread = 1;
-		if (o->hidthread != AST_PTHREADT_NULL) {
-			pthread_join(o->hidthread, NULL);
-			o->hidthread = AST_PTHREADT_NULL;
+		if (hid_started_here) {
+			o->stophidthread = 1;
+			if (o->hidthread != AST_PTHREADT_NULL) {
+				pthread_join(o->hidthread, NULL);
+				o->hidthread = AST_PTHREADT_NULL;
+			}
 		}
 		return -1;
 	}
@@ -2009,13 +2015,6 @@ static int simpleusb_hangup(struct ast_channel *c)
 		o->audiothread = AST_PTHREADT_NULL;
 	}
 	stop_stream(o);
-
-	o->stophidthread = 1;
-	kickptt(o);
-	if (o->hidthread != AST_PTHREADT_NULL) {
-		pthread_join(o->hidthread, NULL);
-		o->hidthread = AST_PTHREADT_NULL;
-	}
 
 	o->owner = NULL;
 	ast_channel_tech_pvt_set(c, NULL);
