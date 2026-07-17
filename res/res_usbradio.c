@@ -1010,16 +1010,6 @@ static void pa_lib_release(void)
 	ast_mutex_unlock(&pa_lock);
 }
 
-static void pa_lib_release_all(void)
-{
-	ast_mutex_lock(&pa_lock);
-	if (pa_refcount > 0) {
-		Pa_Terminate();
-		pa_refcount = 0;
-	}
-	ast_mutex_unlock(&pa_lock);
-}
-
 #define AST_RADIO_HW_CARD_MAX 9999
 #define AST_RADIO_HW_DEV_MAX 255
 
@@ -1490,7 +1480,9 @@ static int load_module(void)
 static int unload_module(void)
 {
 	cleanup_user_devices();
-	pa_lib_release_all();
+	ast_mutex_lock(&pa_lock);
+	ast_assert(pa_refcount == 0);
+	ast_mutex_unlock(&pa_lock);
 
 	return 0;
 }
