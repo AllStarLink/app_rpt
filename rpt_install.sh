@@ -45,7 +45,7 @@ apply_diff() {
 		exit 1
 	}
 	if ! git apply "$tmpdiff"; then
-		patch -p1 < "$tmpdiff" || {
+		patch --batch --forward -p1 < "$tmpdiff" || {
 			rm -f "$tmpdiff"
 			exit 1
 		}
