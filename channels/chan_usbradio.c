@@ -939,13 +939,19 @@ static void *hidthread(void *arg)
 			int subdev;
 
 			if (ast_radio_parse_hw_anywhere(o->hw_device, &i, &subdev)) {
+				int card_in_use = 0;
+
 				for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
 					if (ao != o && ao->usbass && ao->devicenum == i) {
 						ast_log(LOG_ERROR, "Channel %s: Audio device %s is already assigned to channel %s\n", o->name, o->hw_device, ao->name);
-						ast_mutex_unlock(&usb_dev_lock);
-						usleep(500000);
-						continue;
+						card_in_use = 1;
+						break;
 					}
+				}
+				if (card_in_use) {
+					ast_mutex_unlock(&usb_dev_lock);
+					usleep(500000);
+					continue;
 				}
 				usb_dev = ast_radio_usb_device_from_alsa_card(i);
 				if (!usb_dev) {
@@ -1647,7 +1653,7 @@ static int used_blocks(struct chan_usbradio_pvt *o)
 	}
 
 	if (avail < AST_RADIO_PA_FRAMES_PER_BUFFER) {
-		return o->total_blocks;
+		return o->total_blocks + 1;
 	}
 
 	return 0;
@@ -1692,6 +1698,7 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
 	if (res < 0 && res != paOutputUnderflowed) {
 		ast_log(LOG_ERROR, "Channel %s: PortAudio write error %s\n", o->name, Pa_GetErrorText(res));
+		usbradio_stop_audio(o);
 		return 0;
 	}
 
@@ -1913,7 +1920,10 @@ static int usbradio_hangup(struct ast_channel *c)
 	ast_module_unref(ast_module_info->self);
 	o->stophid = 1;
 	kickptt(o);
-	pthread_join(o->hidthread, NULL);
+	if (o->hidthread != AST_PTHREADT_NULL) {
+		pthread_join(o->hidthread, NULL);
+		o->hidthread = AST_PTHREADT_NULL;
+	}
 	if (o->hookstate) {
 		o->hookstate = 0;
 	}
@@ -2066,6 +2076,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		}
 		ast_log(LOG_ERROR, "Channel %s: PortAudio read error %s\n", o->name, Pa_GetErrorText(pa_res));
 		o->hasusb = 0;
+		usbradio_stop_audio(o);
 		return &ast_null_frame;
 	}
 
@@ -2599,11 +2610,6 @@ static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, 
 		return NULL;
 	}
 	ast_channel_tech_set(c, &usbradio_tech);
-	if (!o->pa.active && o->hasusb) {
-		if (usbradio_start_audio(o) < 0) {
-			return NULL;
-		}
-	}
 	ast_channel_nativeformats_set(c, usbradio_tech.capabilities);
 	ast_channel_set_readformat(c, ast_format_slin);
 	ast_channel_set_writeformat(c, ast_format_slin);
@@ -2612,6 +2618,12 @@ static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, 
 
 	o->owner = c;
 	ast_module_ref(ast_module_info->self);
+	if (!o->pa.active && o->hasusb) {
+		if (usbradio_start_audio(o) < 0) {
+			ast_hangup(c);
+			return NULL;
+		}
+	}
 	ast_jb_configure(c, &global_jbconf);
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(c)) {
@@ -4886,6 +4898,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 			o->name = ast_strdup(ctg);
 			o->pttkick[0] = -1;
 			o->pttkick[1] = -1;
+			o->hidthread = AST_PTHREADT_NULL;
 			o->hw_device[0] = '\0';
 			if (!usbradio_active) {
 				usbradio_active = o->name;
@@ -5513,10 +5526,6 @@ static int unload_module(void)
 	ast_cli_unregister_multiple(cli_usbradio, sizeof(cli_usbradio) / sizeof(struct ast_cli_entry));
 
 	for (o = usbradio_default.next; o; o = o->next) {
-		if (o->pmrChan) {
-			destroyPmrChannel(o->pmrChan);
-		}
-
 #if DEBUG_CAPTURES == 1
 		if (frxcapraw) {
 			fclose(frxcapraw);
@@ -5549,8 +5558,15 @@ static int unload_module(void)
 		}
 		o->stophid = 1;
 		kickptt(o);
-		pthread_join(o->hidthread, NULL);
+		if (o->hidthread != AST_PTHREADT_NULL) {
+			pthread_join(o->hidthread, NULL);
+			o->hidthread = AST_PTHREADT_NULL;
+		}
 		usbradio_stop_audio(o);
+		if (o->pmrChan) {
+			destroyPmrChannel(o->pmrChan);
+			o->pmrChan = NULL;
+		}
 		if (o->dsp) {
 			ast_dsp_free(o->dsp);
 		}
