@@ -563,10 +563,6 @@ struct ast_radio_pa_stream {
 	char hw_device[100];
 };
 
-int ast_radio_pa_startup(void);
-void ast_radio_pa_shutdown(void);
-void ast_radio_pa_shutdown_all(void);
-
 int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev);
 int ast_radio_hw_match(const char *haystack, const char *needle);
 

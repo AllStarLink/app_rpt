@@ -119,19 +119,13 @@ long ast_radio_lround(double x)
 
 int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype)
 {
-	if (spkrmax <= 0) {
-		return 0;
-	}
+	/* spkrmax is validated by ast_radio_init_mixer_limits() before use. */
 	return (request_value * spkrmax) / AUDIO_ADJUSTMENT;
 }
 
 int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micplaymax, int *newname)
 {
 	int rv;
-
-	if (!micmax || !spkrmax || !micplaymax || !newname) {
-		return -1;
-	}
 
 	rv = ast_radio_amixer_max(devnum, MIXER_PARAM_MIC_CAPTURE_VOL);
 	if (rv <= 0) {
@@ -510,7 +504,6 @@ int ast_radio_hid_device_mklist(void)
 				}
 
 				snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
-				memset(desdev, 0, sizeof(desdev));
 				linklen = readlink(str, desdev, sizeof(desdev) - 1);
 				if (linklen == -1) {
 					continue;
@@ -580,7 +573,6 @@ struct usb_device *ast_radio_hid_device_init(const char *desired_device)
 				}
 
 				snprintf(str, sizeof(str), "/sys/class/sound/card%d/device", i);
-				memset(desdev, 0, sizeof(desdev));
 				linklen = readlink(str, desdev, sizeof(desdev) - 1);
 				if (linklen == -1) {
 					continue;
@@ -988,7 +980,7 @@ static int64_t pa_now_ms(void)
 	return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-int ast_radio_pa_startup(void)
+static int pa_lib_acquire(void)
 {
 	PaError res;
 
@@ -1006,7 +998,7 @@ int ast_radio_pa_startup(void)
 	return 0;
 }
 
-void ast_radio_pa_shutdown(void)
+static void pa_lib_release(void)
 {
 	ast_mutex_lock(&pa_lock);
 	if (pa_refcount > 0) {
@@ -1018,7 +1010,7 @@ void ast_radio_pa_shutdown(void)
 	ast_mutex_unlock(&pa_lock);
 }
 
-void ast_radio_pa_shutdown_all(void)
+static void pa_lib_release_all(void)
 {
 	ast_mutex_lock(&pa_lock);
 	if (pa_refcount > 0) {
@@ -1223,7 +1215,7 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 	ps->stream = NULL;
 	ps->active = 0;
 
-	if (ast_radio_pa_startup() < 0) {
+	if (pa_lib_acquire() < 0) {
 		return paInternalError;
 	}
 
@@ -1249,13 +1241,13 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 
 		if (input_params.device == paNoDevice) {
 			ast_log(LOG_ERROR, "No PortAudio input device found for '%s'\n", ps->hw_device);
-			ast_radio_pa_shutdown();
+			pa_lib_release();
 			return paDeviceUnavailable;
 		}
 
 		if (output_params.device == paNoDevice) {
 			ast_log(LOG_ERROR, "No PortAudio output device found for '%s'\n", ps->hw_device);
-			ast_radio_pa_shutdown();
+			pa_lib_release();
 			return paDeviceUnavailable;
 		}
 
@@ -1268,7 +1260,7 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 			Pa_CloseStream(ps->stream);
 			ps->stream = NULL;
 		}
-		ast_radio_pa_shutdown();
+		pa_lib_release();
 		return res;
 	}
 
@@ -1317,7 +1309,7 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 
 	ps->stream = NULL;
 	ps->active = 0;
-	ast_radio_pa_shutdown();
+	pa_lib_release();
 }
 
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
@@ -1498,7 +1490,7 @@ static int load_module(void)
 static int unload_module(void)
 {
 	cleanup_user_devices();
-	ast_radio_pa_shutdown_all();
+	pa_lib_release_all();
 
 	return 0;
 }
