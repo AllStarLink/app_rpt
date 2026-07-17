@@ -1890,7 +1890,12 @@ static int usbradio_call(struct ast_channel *c, const char *dest, int timeout)
 
 	o->stophid = 0;
 	ast_radio_time(&o->lasthidtime);
-	ast_pthread_create(&o->hidthread, NULL, hidthread, o);
+	if (o->hidthread == AST_PTHREADT_NULL) {
+		if (ast_pthread_create(&o->hidthread, NULL, hidthread, o)) {
+			ast_log(LOG_ERROR, "Channel %s: Failed to create HID thread\n", o->name);
+			return -1;
+		}
+	}
 	ast_setstate(c, AST_STATE_UP);
 	return 0;
 }
@@ -1918,12 +1923,7 @@ static int usbradio_hangup(struct ast_channel *c)
 	ast_channel_tech_pvt_set(c, NULL);
 	o->owner = NULL;
 	ast_module_unref(ast_module_info->self);
-	o->stophid = 1;
 	kickptt(o);
-	if (o->hidthread != AST_PTHREADT_NULL) {
-		pthread_join(o->hidthread, NULL);
-		o->hidthread = AST_PTHREADT_NULL;
-	}
 	if (o->hookstate) {
 		o->hookstate = 0;
 	}
