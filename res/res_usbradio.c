@@ -1053,6 +1053,19 @@ static int parse_hw_field(const char **q, int max_value, int *out)
 	return 1;
 }
 
+static int hw_token_boundary_ok(char c)
+{
+	if (c == '\0') {
+		return 1;
+	}
+	if (isspace((unsigned char) c)) {
+		return 1;
+	}
+
+	/* Trailing punctuation in PA/ALSA device name strings, not part of hw:C,D. */
+	return strchr("):],;.-", c) != NULL;
+}
+
 int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev)
 {
 	const char *p = s;
@@ -1077,6 +1090,11 @@ int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev)
 				p = q;
 				continue;
 			}
+		}
+
+		if (!hw_token_boundary_ok(*q)) {
+			p = q;
+			continue;
 		}
 
 		*card = c;
