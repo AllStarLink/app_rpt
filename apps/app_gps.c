@@ -445,12 +445,15 @@ static int getnmea_line(int fd, char *buf, size_t buflen)
 		}
 		if (c == '$') {
 			/* Resync to the start of the next NMEA sentence. */
+			buf[0] = c;
 			break;
 		}
 		ast_debug(5, "Waiting for start of NMEA sentence, ignoring 0x%02x\n", (unsigned char) c);
 	}
+	if (!run_forever) {
+		return -1;
+	}
 
-	buf[0] = c;
 	for (i = 1; (i < (int) buflen - 1) && run_forever; i++) {
 		c = getserialchar(fd);
 		if (c < 1) {
