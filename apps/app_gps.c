@@ -424,45 +424,45 @@ static int getserialchar(int fd)
  * deliver data mid-stream.
  *
  * \param fd		File descriptor to read.
- * \param str		Pointer to string buffer.
- * \param max		Maximum characters to read (including NUL terminator).
+ * \param buf		Buffer for the NMEA sentence.
+ * \param buflen	Buffer size (including NUL terminator).
  *
  * \retval 			Number of characters read, 0 for time out or -1 for error.
  */
-static int getnmea_line(int fd, char *str, int max)
+static int getnmea_line(int fd, char *buf, size_t buflen)
 {
 	int i;
 	char c;
 
-	if (max < 2) {
+	if (buflen < 2) {
 		return -1;
 	}
 
-	/* Resync to the start of the next NMEA sentence. */
 	while (run_forever) {
 		c = getserialchar(fd);
 		if (c < 1) {
 			return c;
 		}
 		if (c == '$') {
+			/* Resync to the start of the next NMEA sentence. */
 			break;
 		}
-		ast_debug(5, "GPS discarding byte 0x%02x while resyncing to NMEA sentence\n", (unsigned char) c);
+		ast_debug(5, "Waiting for start of NMEA sentence, ignoring 0x%02x\n", (unsigned char) c);
 	}
 
-	str[0] = '$';
-	for (i = 1; (i < max - 1) && run_forever; i++) {
+	buf[0] = c;
+	for (i = 1; (i < (int) buflen - 1) && run_forever; i++) {
 		c = getserialchar(fd);
 		if (c < 1) {
-			str[i] = '\0';
+			buf[i] = '\0';
 			return c;
 		}
 		if (c < ' ') {
 			break;
 		}
-		str[i] = c;
+		buf[i] = c;
 	}
-	str[i] = '\0';
+	buf[i] = '\0';
 
 	return i;
 }
@@ -943,7 +943,7 @@ static int is_gga_sentence(const char *sentence)
  */
 static int aprs_lat_apply_offset(const char *in_lat, int minute_offset, char *out_lat, size_t out_len)
 {
-	char work[25];
+	char latbuf[25]; /* scratch copy of DDMM.mmN/S before parsing */
 	char dir;
 	int deg;
 	double minutes, decimal;
@@ -952,15 +952,15 @@ static int aprs_lat_apply_offset(const char *in_lat, int minute_offset, char *ou
 		return 0;
 	}
 
-	ast_copy_string(work, in_lat, sizeof(work));
-	dir = work[strlen(work) - 1];
+	ast_copy_string(latbuf, in_lat, sizeof(latbuf));
+	dir = latbuf[strlen(latbuf) - 1];
 	if (dir != 'N' && dir != 'S') {
 		return 0;
 	}
-	work[strlen(work) - 1] = '\0';
+	latbuf[strlen(latbuf) - 1] = '\0';
 
-	deg = (work[0] - '0') * 10 + (work[1] - '0');
-	minutes = strtod(work + 2, NULL);
+	deg = (latbuf[0] - '0') * 10 + (latbuf[1] - '0');
+	minutes = strtod(latbuf + 2, NULL);
 	if (minutes < 0.0 || minutes >= 60.0) {
 		return 0;
 	}
@@ -1007,16 +1007,7 @@ static int gps_serial_open(void)
 		close(fd);
 		return -1;
 	}
-#ifndef SOLARIS
 	cfmakeraw(&mode);
-#else
-	mode.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
-	mode.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-	mode.c_cflag &= ~(CSIZE | PARENB | CRTSCTS);
-	mode.c_cflag |= CS8;
-	mode.c_cc[VTIME] = 3;
-	mode.c_cc[VMIN] = 1;
-#endif
 
 	cfsetispeed(&mode, baudrate);
 	cfsetospeed(&mode, baudrate);
@@ -1552,6 +1543,8 @@ static void *aprstt_sender_thread(void *data)
 				if ((selected_position.last_updated + GPS_VALID_SECS) >= now) {
 					report_aprstt(ctg, lat, selected_position.longitude, theircall, overlay);
 				}
+			} else {
+				ast_debug(2, "APRS_SENDTT: unable to apply latitude offset to '%s'\n", selected_position.latitude);
 			}
 		}
 	}
@@ -1863,7 +1856,7 @@ static int load_module(void)
 			baudrate = B57600;
 			break;
 		default:
-			ast_log(LOG_ERROR, "%s is not valid baud rate, using %d\n", val, 4800);
+			ast_log(LOG_ERROR, "%s is not a supported baud rate, using %d\n", val, 4800);
 			baudrate = GPS_DEFAULT_BAUDRATE;
 			break;
 		}
