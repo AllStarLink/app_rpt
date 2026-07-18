@@ -4897,10 +4897,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
 				ast_debug(1, "@@@@ rpt:Hung Up\n");
 				ast_frfree(f);
-				if (remote_hangup_helper(myrpt, l)) {
-					/* A reconnect is never possible on pchan hangup */
-					break;
-				}
+				remote_hangup_helper(myrpt, l); /* A reconnect is never possible on pchan hangup */
 				break;
 			}
 			ast_frfree(f);
