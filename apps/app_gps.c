@@ -432,38 +432,38 @@ static int getserialchar(int fd)
 static int getnmea_line(int fd, char *buf, size_t buflen)
 {
 	int i;
-	char c;
+	int ch;
 
 	if (buflen < 2) {
 		return -1;
 	}
 
 	while (run_forever) {
-		c = getserialchar(fd);
-		if (c < 1) {
-			return c;
+		ch = getserialchar(fd);
+		if (ch < 1) {
+			return ch;
 		}
-		if (c == '$') {
+		if (ch == '$') {
 			/* Resync to the start of the next NMEA sentence. */
-			buf[0] = c;
+			buf[0] = (char) ch;
 			break;
 		}
-		ast_debug(5, "Waiting for start of NMEA sentence, ignoring 0x%02x\n", (unsigned char) c);
+		ast_debug(5, "Waiting for start of NMEA sentence, ignoring 0x%02x\n", (unsigned char) ch);
 	}
 	if (!run_forever) {
 		return -1;
 	}
 
 	for (i = 1; (i < (int) buflen - 1) && run_forever; i++) {
-		c = getserialchar(fd);
-		if (c < 1) {
+		ch = getserialchar(fd);
+		if (ch < 1) {
 			buf[i] = '\0';
-			return c;
+			return ch;
 		}
-		if (c < ' ') {
+		if (ch < ' ') {
 			break;
 		}
-		buf[i] = c;
+		buf[i] = (char) ch;
 	}
 	buf[i] = '\0';
 
@@ -939,12 +939,12 @@ static int is_gga_sentence(const char *sentence)
 }
 
 /*!
- * \brief Apply a minute offset to an APRS-format latitude string.
+ * \brief Apply a hundredths-of-minute offset to an APRS-format latitude string.
  *
  * \retval 1 on success
  * \retval 0 on parse failure
  */
-static int aprs_lat_apply_offset(const char *in_lat, int minute_offset, char *out_lat, size_t out_len)
+static int aprs_lat_apply_offset(const char *in_lat, int hundredth_minute_offset, char *out_lat, size_t out_len)
 {
 	char latbuf[25]; /* scratch copy of DDMM.mmN/S before parsing */
 	char dir;
@@ -972,7 +972,7 @@ static int aprs_lat_apply_offset(const char *in_lat, int minute_offset, char *ou
 	if (dir == 'S') {
 		decimal = -decimal;
 	}
-	decimal += minute_offset / 60.0;
+	decimal += hundredth_minute_offset / 6000.0;
 
 	if (decimal >= 0.0) {
 		dir = 'N';
@@ -1395,6 +1395,11 @@ static void *aprstt_sender_thread(void *data)
 	 * Open the common block file for this section.
 	 * We will store the callsign and last update time.
 	 */
+	if (ttlist <= 0) {
+		ast_log(LOG_ERROR, "APRStt ttlist must be greater than zero\n");
+		return NULL;
+	}
+
 	mfp = NULL;
 	if (!strcmp(sender_entry->section, "general")) {
 		strcpy(fname, TT_COMMON);
