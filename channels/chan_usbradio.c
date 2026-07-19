@@ -178,6 +178,9 @@ struct chan_usbradio_pvt {
 	char hw_device[100]; /* ALSA/PortAudio device (hw:N or hw:N,M) */
 	int devtype;		 /* actual type of device */
 	int pttkick[2];		 /* ptt kick pipe */
+	int tickpipe[2];	 /* read loop wakeup pipe */
+	pthread_t tickthread;
+	int stoptick;
 	int total_blocks;	 /* legacy queue depth hint for TX buffering */
 	struct ast_radio_pa_stream pa;
 	enum {
@@ -627,6 +630,69 @@ static void kickptt(const struct chan_usbradio_pvt *o)
 	} else if (res == 0) {
 		ast_log(LOG_ERROR, "Channel %s: Write returned 0 bytes unexpectedly\n", o->name);
 	}
+}
+
+static void usbradio_stop_tick(struct chan_usbradio_pvt *o)
+{
+	char c = 0;
+
+	if (!o) {
+		return;
+	}
+	if (o->stoptick) {
+		return;
+	}
+	o->stoptick = 1;
+	if (o->tickpipe[1] >= 0) {
+		(void) write(o->tickpipe[1], &c, 1);
+	}
+	if (o->tickthread != AST_PTHREADT_NULL) {
+		pthread_join(o->tickthread, NULL);
+		o->tickthread = AST_PTHREADT_NULL;
+	}
+	if (o->tickpipe[0] >= 0) {
+		close(o->tickpipe[0]);
+		o->tickpipe[0] = -1;
+	}
+	if (o->tickpipe[1] >= 0) {
+		close(o->tickpipe[1]);
+		o->tickpipe[1] = -1;
+	}
+}
+
+static void *usbradio_tick_thread(void *arg)
+{
+	struct chan_usbradio_pvt *o = arg;
+	char c = 0;
+
+	while (!o->stoptick) {
+		if (o->tickpipe[1] >= 0) {
+			(void) write(o->tickpipe[1], &c, 1);
+		}
+		usleep(20000);
+	}
+	return NULL;
+}
+
+static int usbradio_start_tick(struct chan_usbradio_pvt *o, struct ast_channel *c)
+{
+	if (o->tickpipe[0] >= 0) {
+		return 0;
+	}
+	o->tickpipe[0] = -1;
+	o->tickpipe[1] = -1;
+	o->stoptick = 0;
+	if (pipe2(o->tickpipe, O_NONBLOCK) == -1) {
+		ast_log(LOG_ERROR, "Channel %s: tick pipe failed: %s\n", o->name, strerror(errno));
+		return -1;
+	}
+	ast_channel_internal_fd_set(c, 0, o->tickpipe[0]);
+	if (ast_pthread_create(&o->tickthread, NULL, usbradio_tick_thread, o)) {
+		ast_log(LOG_ERROR, "Channel %s: Failed to create tick thread\n", o->name);
+		usbradio_stop_tick(o);
+		return -1;
+	}
+	return 0;
 }
 
 /*!
@@ -1627,39 +1693,6 @@ usb_device_ready:
 }
 
 /*!
- * \brief Get the number of blocks used in the audio output channel.
- * \param o		Channel private data.
- * \returns		Number of blocks that have been used.
- */
-static int used_blocks(struct chan_usbradio_pvt *o)
-{
-	long avail;
-
-	if (!o->pa.active) {
-		return 0;
-	}
-
-	avail = ast_radio_pa_write_available(&o->pa);
-	if (avail < 0) {
-		if (!(o->warned & WARN_used_blocks)) {
-			ast_log(LOG_WARNING, "Channel %s: Error reading PortAudio output space.\n", o->name);
-			o->warned |= WARN_used_blocks;
-		}
-		return o->queuesize + 1;
-	}
-
-	if (o->total_blocks == 0) {
-		o->total_blocks = o->queuesize ? o->queuesize : QUEUE_SIZE;
-	}
-
-	if (avail < AST_RADIO_PA_FRAMES_PER_BUFFER) {
-		return o->total_blocks + 1;
-	}
-
-	return 0;
-}
-
-/*!
  * \brief Write a full frame of audio data to the sound card device.
  * \note The input data must be formatted as stereo at 48000 samples per second.
  *		 FRAME_SIZE * 2 * 2 * 6 (2 bytes per sample, 2 channels, 6 for upsample to 48K)
@@ -1670,7 +1703,6 @@ static int used_blocks(struct chan_usbradio_pvt *o)
 static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 {
 	PaError res;
-	short outbuf[FRAME_SIZE * 2 * 6];
 
 	if (!o->pa.active) {
 		if (usbradio_start_audio(o) < 0) {
@@ -1682,21 +1714,13 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 		return 0;
 	}
 
-	if (used_blocks(o) > o->queuesize) {
-		if (o->pmrChan->txPttIn || o->pmrChan->txPttOut) {
-			ast_log(LOG_WARNING, "Channel %s: Sound device write buffer overflow\n", o->name);
-		}
-		return 0;
-	}
-
-	if (used_blocks(o) == 0) {
-		memset(outbuf, 0, sizeof(outbuf));
-		ast_radio_pa_write(&o->pa, outbuf, AST_RADIO_PA_FRAMES_PER_BUFFER);
-		ast_debug(7, "A null frame has been added");
-	}
-
 	res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
-	if (res < 0 && res != paOutputUnderflowed) {
+	if (res == paOutputUnderflowed) {
+		short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
+
+		ast_debug(6, "Channel %s: PortAudio write underflow, priming with silence\n", o->name);
+		ast_radio_pa_write(&o->pa, null_buf, AST_RADIO_PA_FRAMES_PER_BUFFER);
+	} else if (res != paNoError) {
 		ast_log(LOG_ERROR, "Channel %s: PortAudio write error %s\n", o->name, Pa_GetErrorText(res));
 		usbradio_stop_audio(o);
 		return 0;
@@ -1920,10 +1944,16 @@ static int usbradio_hangup(struct ast_channel *c)
 {
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
 
+	usbradio_stop_tick(o);
+	o->stophid = 1;
+	kickptt(o);
+	if (o->hidthread != AST_PTHREADT_NULL) {
+		pthread_join(o->hidthread, NULL);
+		o->hidthread = AST_PTHREADT_NULL;
+	}
 	ast_channel_tech_pvt_set(c, NULL);
 	o->owner = NULL;
 	ast_module_unref(ast_module_info->self);
-	kickptt(o);
 	if (o->hookstate) {
 		o->hookstate = 0;
 	}
@@ -2002,6 +2032,15 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			return NULL;
 		}
 	}
+	/* Drain tick pipe wakeups. */
+	if (o->tickpipe[0] >= 0) {
+		char drain[32];
+
+		while (read(o->tickpipe[0], drain, sizeof(drain)) > 0) {
+			;
+		}
+	}
+
 	/* Set frame defaults */
 	memset(f, 0, sizeof(struct ast_frame));
 	f->frametype = AST_FRAME_NULL;
@@ -2069,15 +2108,31 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		}
 	}
 
-	pa_res = ast_radio_pa_read(&o->pa, (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
+	if (o->pa.input_channels == 1) {
+		short mono_buf[AST_RADIO_PA_FRAMES_PER_BUFFER];
+		short *stereo = (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET);
+		int i;
+
+		pa_res = ast_radio_pa_read(&o->pa, mono_buf, AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
+		if (pa_res == paNoError) {
+			for (i = AST_RADIO_PA_FRAMES_PER_BUFFER - 1; i >= 0; i--) {
+				stereo[i * 2] = mono_buf[i];
+				stereo[i * 2 + 1] = mono_buf[i];
+			}
+		}
+	} else {
+		pa_res = ast_radio_pa_read(&o->pa, (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
+	}
 	if (pa_res != paNoError) {
 		if (pa_res == paTimedOut || pa_res == paInputOverflowed) {
+			/* No RX audio available; still run PTT/TX processing with silence. */
+			memset(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 0, sizeof(o->usbradio_read_buf) - AST_FRIENDLY_OFFSET);
+		} else {
+			ast_log(LOG_ERROR, "Channel %s: PortAudio read error %s\n", o->name, Pa_GetErrorText(pa_res));
+			o->hasusb = 0;
+			usbradio_stop_audio(o);
 			return &ast_null_frame;
 		}
-		ast_log(LOG_ERROR, "Channel %s: PortAudio read error %s\n", o->name, Pa_GetErrorText(pa_res));
-		o->hasusb = 0;
-		usbradio_stop_audio(o);
-		return &ast_null_frame;
 	}
 
 #if DEBUG_CAPTURES == 1
@@ -2614,9 +2669,17 @@ static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, 
 	ast_channel_set_readformat(c, ast_format_slin);
 	ast_channel_set_writeformat(c, ast_format_slin);
 	ast_channel_tech_pvt_set(c, o);
-	ast_channel_unlock(c);
-
 	o->owner = c;
+	o->tickpipe[0] = -1;
+	o->tickpipe[1] = -1;
+	o->tickthread = AST_PTHREADT_NULL;
+	o->stoptick = 0;
+	if (usbradio_start_tick(o, c) < 0) {
+		ast_channel_unlock(c);
+		ast_hangup(c);
+		return NULL;
+	}
+	ast_channel_unlock(c);
 	ast_module_ref(ast_module_info->self);
 	if (!o->pa.active && o->hasusb) {
 		if (usbradio_start_audio(o) < 0) {
@@ -4898,6 +4961,10 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 			o->name = ast_strdup(ctg);
 			o->pttkick[0] = -1;
 			o->pttkick[1] = -1;
+			o->tickpipe[0] = -1;
+			o->tickpipe[1] = -1;
+			o->tickthread = AST_PTHREADT_NULL;
+			o->stoptick = 0;
 			o->hidthread = AST_PTHREADT_NULL;
 			o->hw_device[0] = '\0';
 			if (!usbradio_active) {
@@ -5556,6 +5623,7 @@ static int unload_module(void)
 		if (o->owner) {
 			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
 		}
+		usbradio_stop_tick(o);
 		o->stophid = 1;
 		kickptt(o);
 		if (o->hidthread != AST_PTHREADT_NULL) {
