@@ -181,7 +181,7 @@ struct chan_usbradio_pvt {
 	int tickpipe[2];	 /* read loop wakeup pipe */
 	pthread_t tickthread;
 	int stoptick;
-	int total_blocks;	 /* legacy queue depth hint for TX buffering */
+	int total_blocks; /* legacy queue depth hint for TX buffering */
 	struct ast_radio_pa_stream pa;
 	enum {
 		M_UNSET,
