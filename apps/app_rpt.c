@@ -5608,7 +5608,7 @@ static void *rpt(void *this)
 			queue_id(myrpt);
 		}
 
-		if ((myrpt->p.idtime && totx && !myrpt->exttx && (myrpt->idtimer <= myrpt->p.politeid) && myrpt->tailtimer)) { /* ID time must be non-zero */
+		if (myrpt->p.idtime && totx && !myrpt->exttx && (myrpt->idtimer <= myrpt->p.politeid) && myrpt->tailtimer) { /* ID time must be non-zero */
 			myrpt->tailid = 1;
 		}
 
