@@ -1241,6 +1241,15 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 			return paDeviceUnavailable;
 		}
 
+		{
+			const PaDeviceInfo *in_dev = Pa_GetDeviceInfo(input_params.device);
+
+			if (in_dev && ps->input_channels > (unsigned int) in_dev->maxInputChannels) {
+				ps->input_channels = in_dev->maxInputChannels ? (unsigned int) in_dev->maxInputChannels : 1;
+				input_params.channelCount = ps->input_channels;
+			}
+		}
+
 		res = Pa_OpenStream(&ps->stream, &input_params, &output_params, AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER,
 			paNoFlag, NULL, NULL);
 	}
