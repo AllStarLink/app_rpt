@@ -552,14 +552,20 @@ struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno);
 #define AST_RADIO_PA_SAMPLE_RATE 48000
 #define AST_RADIO_PA_FRAMES_PER_BUFFER (FRAME_SIZE * 6)
 #define AST_RADIO_PA_OUTPUT_CHANNELS 2
+#define AST_RADIO_PA_48K_MONO_SAMPLES (6 * FRAME_SIZE)
+#define AST_RADIO_PA_48K_STEREO_SAMPLES (12 * FRAME_SIZE)
 
 /*!
  * \brief PortAudio stream state shared by chan_simpleusb and chan_usbradio.
+ *
+ * After ast_radio_pa_open(), use ps->input_channels for RX buffer layout.
+ * ast_radio_pa_read() and ast_radio_pa_write() take frames per channel
+ * (typically AST_RADIO_PA_FRAMES_PER_BUFFER). TX is always stereo interleaved.
  */
 struct ast_radio_pa_stream {
 	PaStream *stream;
 	int active;
-	unsigned int input_channels; /*!< 1 for mono RX, 2 for stereo RX */
+	unsigned int input_channels; /*!< Actual RX channel count after ast_radio_pa_open() */
 	char hw_device[100];
 };
 
@@ -573,3 +579,14 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps);
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop);
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames);
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);
+
+/*!
+ * \brief Check RX clipping/stats on a 48 kHz buffer from PortAudio.
+ * \param input_channels ps->input_channels after ast_radio_pa_open()
+ */
+int ast_radio_check_audio_pa_rx(short *sbuf, struct audiostatistics *o, unsigned int input_channels);
+
+/*!
+ * \brief Check clipping/stats on a normalized 48 kHz stereo interleaved buffer.
+ */
+int ast_radio_check_audio_stereo_48k(short *sbuf, struct audiostatistics *o);

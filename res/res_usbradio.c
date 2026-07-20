@@ -910,6 +910,20 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, sho
 	return (seq_clips >= CLIP_EVENT_MIN_SAMPLES);
 }
 
+int ast_radio_check_audio_pa_rx(short *sbuf, struct audiostatistics *o, unsigned int input_channels)
+{
+	if (input_channels == 1) {
+		return ast_radio_check_audio(sbuf, o, AST_RADIO_PA_48K_MONO_SAMPLES, 1);
+	}
+
+	return ast_radio_check_audio(sbuf, o, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
+}
+
+int ast_radio_check_audio_stereo_48k(short *sbuf, struct audiostatistics *o)
+{
+	return ast_radio_check_audio(sbuf, o, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
+}
+
 void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *prefix_text)
 {
 	unsigned int i, pk = 0, pwr = 0, minpwr = 0x40000000, maxpwr = 0, clipcnt = 0;
@@ -1193,6 +1207,20 @@ static PaDeviceIndex pa_find_device(const char *hw_device, int want_input, int w
 	return paNoDevice;
 }
 
+static void pa_clamp_input_channels(PaDeviceIndex device, unsigned int *input_channels)
+{
+	const PaDeviceInfo *in_dev;
+
+	if (!input_channels || device == paNoDevice) {
+		return;
+	}
+
+	in_dev = Pa_GetDeviceInfo(device);
+	if (in_dev && *input_channels > (unsigned int) in_dev->maxInputChannels) {
+		*input_channels = in_dev->maxInputChannels ? (unsigned int) in_dev->maxInputChannels : 1;
+	}
+}
+
 PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 {
 	PaError res = paInternalError;
@@ -1210,6 +1238,7 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 	}
 
 	if (!strcasecmp(ps->hw_device, "default")) {
+		pa_clamp_input_channels(Pa_GetDefaultInputDevice(), &ps->input_channels);
 		res = Pa_OpenDefaultStream(&ps->stream, ps->input_channels, AST_RADIO_PA_OUTPUT_CHANNELS, paInt16,
 			AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER, NULL, NULL);
 	} else {
@@ -1241,14 +1270,8 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 			return paDeviceUnavailable;
 		}
 
-		{
-			const PaDeviceInfo *in_dev = Pa_GetDeviceInfo(input_params.device);
-
-			if (in_dev && ps->input_channels > (unsigned int) in_dev->maxInputChannels) {
-				ps->input_channels = in_dev->maxInputChannels ? (unsigned int) in_dev->maxInputChannels : 1;
-				input_params.channelCount = ps->input_channels;
-			}
-		}
+		pa_clamp_input_channels(input_params.device, &ps->input_channels);
+		input_params.channelCount = ps->input_channels;
 
 		res = Pa_OpenStream(&ps->stream, &input_params, &output_params, AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER,
 			paNoFlag, NULL, NULL);
@@ -1267,6 +1290,8 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 	if (si) {
 		ast_debug(5, "PortAudio stream latency in %.3f ms out %.3f ms\n", si->inputLatency * 1000.0, si->outputLatency * 1000.0);
 	}
+
+	ast_debug(3, "PortAudio opened '%s' with %u input and %u output channel(s)\n", ps->hw_device, ps->input_channels, AST_RADIO_PA_OUTPUT_CHANNELS);
 
 	return res;
 }
