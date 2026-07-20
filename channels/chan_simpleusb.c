@@ -414,6 +414,8 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 		return -1;
 	}
 
+	ast_assert(pvt->pa.input_channels == 1);
+
 	res = ast_radio_pa_start(&pvt->pa);
 	if (res != paNoError) {
 		ast_log(LOG_WARNING, "Failed to start stream - (%d) %s\n", res, Pa_GetErrorText(res));
@@ -1637,11 +1639,11 @@ static void *hidthread(void *arg)
 
 /*!
  * \brief Write a full frame of audio data to the sound card device.
- * \note The input data must be formatted as stereo at 48000 samples per second.
- *		 FRAME_SIZE * 2 * 2 * 6 (2 bytes per sample, 2 channels, 6 for upsample to 48K)
+ * \note data is 48 kHz stereo interleaved. ast_radio_pa_write() takes frames
+ *       per channel (PA_NUM_FRAMES); the buffer holds PA_NUM_FRAMES * 2 samples.
  * \param o		Channel private data.
  * \param data	Audio data to write.
- * \returns		Number bytes written.
+ * \returns		PaError from ast_radio_pa_write().
  */
 static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 {
@@ -1661,14 +1663,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 		ast_debug(2, "Pa_WriteStream Error %s", Pa_GetErrorText(res));
 	}
 
-	/* Check Tx audio statistics. FRAME_SIZE define refers to 8Ksps mono which is 160 samples
-	 * per 20mS USB frame. ast_radio_check_audio() takes the write buffer (48K stereo),
-	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
-	 * and returns true if clipping was detected. If local Tx audio is clipped it might be
-	 * nice to log a warning but as this does not relate to outgoing network audio it's not
-	 * a major issue. User can check the Tx Audio Stats utility if desired.
-	 */
-	ast_radio_check_audio(data, &o->txaudiostats, 12 * FRAME_SIZE, 0);
+	ast_radio_check_audio_stereo_48k(data, &o->txaudiostats);
 
 	return res;
 }
@@ -2577,13 +2572,8 @@ static void *simpleusb_audio_thread(void *arg)
 				}
 			}
 
-			/* Check for ADC clipping and input audio statistics before any filtering is done.
-			 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
-			 * ast_radio_check_audio() takes the read buffer as received (48K stereo or mono),
-			 * extracts the 48K channel, checks amplitude and distortion characteristics,
-			 * and returns true if clipping was detected.
-			 */
-			if (ast_radio_check_audio(o->simpleusb_read_buf, &o->rxaudiostats, 6 * FRAME_SIZE, 1)) {
+			/* RX stats on the mono PortAudio capture buffer. */
+			if (ast_radio_check_audio_pa_rx(o->simpleusb_read_buf, &o->rxaudiostats, o->pa.input_channels)) {
 				if (o->clipledgpio) {
 					/* Set Clip LED GPIO pulsetimer if not already set */
 					if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
