@@ -96,6 +96,8 @@
 #define MS_PER_FRAME 20						   /* 20 ms frames */
 #define MS_TO_FRAMES(ms) ((ms) / MS_PER_FRAME) /* convert ms to frames */
 
+#define USBRADIO_48K_STEREO_BYTES (FRAME_SIZE * 2 * 2 * 6)
+
 #include "./xpmr/xpmr.h"
 #ifdef HAVE_XPMRX
 #include "./xpmrx/xpmrx.h"
@@ -211,12 +213,12 @@ struct chan_usbradio_pvt {
 	struct ast_channel *owner;
 
 	/* buffer used in usbradio_write, 2 per int by 2 channels by 6 times oversampling (48KS/s) */
-	char usbradio_write_buf[FRAME_SIZE * 2 * 2 * 6];
+	char usbradio_write_buf[USBRADIO_48K_STEREO_BYTES];
 
 	/* buffers used in usbradio_read - AST_FRIENDLY_OFFSET space for headers
-	 * plus enough room for a full frame
+	 * plus enough room for a full 48 kHz stereo PortAudio frame
 	 */
-	char usbradio_read_buf[FRAME_SIZE * (2 * 12) + AST_FRIENDLY_OFFSET]; /* 2 bytes * 2 channels * 6 for 48K */
+	char usbradio_read_buf[AST_RADIO_PA_48K_STEREO_SAMPLES * (int) sizeof(short) + AST_FRIENDLY_OFFSET];
 	char usbradio_read_buf_8k[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET];
 	int readpos;			 /* read position above */
 	struct ast_frame read_f; /* returned by usbradio_read */
@@ -447,6 +449,7 @@ static int hidhdwconfig(struct chan_usbradio_pvt *o);
 static void mixer_write(struct chan_usbradio_pvt *o);
 static int usbradio_start_audio(struct chan_usbradio_pvt *o);
 static void usbradio_stop_audio(struct chan_usbradio_pvt *o);
+static PaError usbradio_read_pa_stereo(struct chan_usbradio_pvt *o);
 static struct ast_channel *usbradio_request(const char *type, struct ast_format_cap *cap,
 	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
 static int usbradio_digit_begin(struct ast_channel *c, char digit);
@@ -1694,11 +1697,11 @@ usb_device_ready:
 
 /*!
  * \brief Write a full frame of audio data to the sound card device.
- * \note The input data must be formatted as stereo at 48000 samples per second.
- *		 FRAME_SIZE * 2 * 2 * 6 (2 bytes per sample, 2 channels, 6 for upsample to 48K)
+ * \note data is 48 kHz stereo interleaved. ast_radio_pa_write() takes frames
+ *       per channel (AST_RADIO_PA_FRAMES_PER_BUFFER).
  * \param o		chan_usbradio_pvt.
  * \param data	Audio data to write.
- * \returns		Number bytes written.
+ * \returns		Byte count written on success, 0 on failure.
  */
 static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 {
@@ -1726,7 +1729,35 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 		return 0;
 	}
 
-	return FRAME_SIZE * 2 * 2 * 6;
+	return USBRADIO_48K_STEREO_BYTES;
+}
+
+/*!
+ * \brief Read one PortAudio frame into the 48 kHz stereo workspace.
+ *
+ * When hardware opened with one input channel, duplicate mono samples to both
+ * channels so downstream PmrRx and stats code always see stereo layout.
+ */
+static PaError usbradio_read_pa_stereo(struct chan_usbradio_pvt *o)
+{
+	short *stereo = (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET);
+	PaError pa_res;
+
+	if (o->pa.input_channels == 1) {
+		short mono_buf[AST_RADIO_PA_FRAMES_PER_BUFFER];
+		int i;
+
+		pa_res = ast_radio_pa_read(&o->pa, mono_buf, AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
+		if (pa_res == paNoError) {
+			for (i = AST_RADIO_PA_FRAMES_PER_BUFFER - 1; i >= 0; i--) {
+				stereo[i * 2] = mono_buf[i];
+				stereo[i * 2 + 1] = mono_buf[i];
+			}
+		}
+		return pa_res;
+	}
+
+	return ast_radio_pa_read(&o->pa, stereo, AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
 }
 
 /*!
@@ -2108,21 +2139,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		}
 	}
 
-	if (o->pa.input_channels == 1) {
-		short mono_buf[AST_RADIO_PA_FRAMES_PER_BUFFER];
-		short *stereo = (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET);
-		int i;
-
-		pa_res = ast_radio_pa_read(&o->pa, mono_buf, AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
-		if (pa_res == paNoError) {
-			for (i = AST_RADIO_PA_FRAMES_PER_BUFFER - 1; i >= 0; i--) {
-				stereo[i * 2] = mono_buf[i];
-				stereo[i * 2 + 1] = mono_buf[i];
-			}
-		}
-	} else {
-		pa_res = ast_radio_pa_read(&o->pa, (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), AST_RADIO_PA_FRAMES_PER_BUFFER, 40, NULL);
-	}
+	pa_res = usbradio_read_pa_stereo(o);
 	if (pa_res != paNoError) {
 		if (pa_res == paTimedOut || pa_res == paInputOverflowed) {
 			/* No RX audio available; still run PTT/TX processing with silence. */
@@ -2137,20 +2154,15 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 #if DEBUG_CAPTURES == 1
 	if (o->rxcapraw && frxcapraw) {
-		fwrite(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 1, FRAME_SIZE * 2 * 2 * 6, frxcapraw);
+		fwrite(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 1, USBRADIO_48K_STEREO_BYTES, frxcapraw);
 	}
 #endif
 
 	o->readerrs = 0;
 	o->readpos = sizeof(o->usbradio_read_buf);
 
-	/* Check for ADC clipping and input audio statistics before any filtering is done.
-	 * FRAME_SIZE define refers to 8Ksps mono which is 160 samples per 20mS USB frame.
-	 * ast_radio_check_audio() takes the read buffer as received (48K stereo),
-	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
-	 * and returns true if clipping was detected.
-	 */
-	if (ast_radio_check_audio((short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), &o->rxaudiostats, 12 * FRAME_SIZE, 0)) {
+	/* RX stats on the normalized 48 kHz stereo workspace. */
+	if (ast_radio_check_audio_stereo_48k((short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), &o->rxaudiostats)) {
 		if (o->clipledgpio) {
 			/* Set Clip LED GPIO pulsetimer if not already set */
 			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
@@ -2174,7 +2186,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		register float v;
 		register int i;
 
-		for (i = 0; i < FRAME_SIZE * 2 * 6; i++) {
+		for (i = 0; i < AST_RADIO_PA_48K_STEREO_SAMPLES; i++) {
 			v = ((float) *sp) * 0.800;
 			*sp++ = (int) v;
 		}
@@ -2245,14 +2257,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	/* Write the received audio to the sound card */
 	soundcard_writeframe(o, (short *) o->usbradio_write_buf);
 
-	/* Check Tx audio statistics. FRAME_SIZE define refers to 8Ksps mono which is 160 samples
-	 * per 20mS USB frame. ast_radio_check_audio() takes the write buffer (48K stereo),
-	 * extracts the mono 48K channel, checks amplitude and distortion characteristics,
-	 * and returns true if clipping was detected. If local Tx audio is clipped it might be
-	 * nice to log a warning but as this does not relate to outgoing network audio it's not
-	 * a major issue. User can check the Tx Audio Stats utility if desired.
-	 */
-	ast_radio_check_audio((short *) o->usbradio_write_buf, &o->txaudiostats, 12 * FRAME_SIZE, 0);
+	ast_radio_check_audio_stereo_48k((short *) o->usbradio_write_buf, &o->txaudiostats);
 
 #if DEBUG_CAPTURES == 1 && XPMR_DEBUG0 == 1
 	if (frxcaptrace && o->rxcap2 && o->pmrChan->b.radioactive) {
