@@ -949,6 +949,7 @@ static int aprs_lat_apply_offset(const char *in_lat, int hundredth_minute_offset
 	char latbuf[25]; /* scratch copy of DDMM.mmN/S before parsing */
 	char dir;
 	int deg;
+	size_t len;
 	double minutes, decimal;
 
 	if (ast_strlen_zero(in_lat) || strlen(in_lat) < 4) {
@@ -956,11 +957,12 @@ static int aprs_lat_apply_offset(const char *in_lat, int hundredth_minute_offset
 	}
 
 	ast_copy_string(latbuf, in_lat, sizeof(latbuf));
-	dir = latbuf[strlen(latbuf) - 1];
+	len = strlen(latbuf);
+	dir = latbuf[len - 1];
 	if (dir != 'N' && dir != 'S') {
 		return 0;
 	}
-	latbuf[strlen(latbuf) - 1] = '\0';
+	latbuf[len - 1] = '\0';
 
 	deg = (latbuf[0] - '0') * 10 + (latbuf[1] - '0');
 	minutes = strtod(latbuf + 2, NULL);
