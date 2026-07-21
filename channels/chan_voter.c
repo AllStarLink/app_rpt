@@ -909,7 +909,7 @@ static void mkpucked(const struct voter_client *client, VTIME *dst)
 /*!
  * \brief Increment the drain index for the specified instance.
  *
- * Call this routine with voter_locked locked.
+ * Call this routine with voter_lock locked.
  *
  * \param p				Pointer to voter_pvt struct.
  */
@@ -1667,9 +1667,6 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if (!client->heardfrom) {
-				continue;
-			}
 			if (IS_CLIENT_PROXY(client)) {
 				astman_append(ses, "Client: %s", client->name);
 				if (client->mix) {
@@ -1681,12 +1678,12 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 				if (client->curmaster) {
 					astman_append(ses, " ActiveMaster");
 				}
+				if (!client->heardfrom) {
+					astman_append(ses, " Inactive");
+				}
 				astman_append(ses, "\r\n");
 				astman_append(ses, "IP: %s:%d (Proxied)\r\n", ast_inet_ntoa(client->proxy_sin.sin_addr), ntohs(client->proxy_sin.sin_port));
 			} else {
-				if (!client->respdigest) {
-					continue;
-				}
 				astman_append(ses, "Client: %s", client->name);
 				if (client->mix) {
 					astman_append(ses, " Mix");
@@ -1696,6 +1693,9 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 				}
 				if (client->curmaster) {
 					astman_append(ses, " ActiveMaster");
+				}
+				if (!client->heardfrom) {
+					astman_append(ses, " Inactive");
 				}
 				astman_append(ses, "\r\n");
 				astman_append(ses, "IP: %s:%d\r\n", ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
@@ -1837,6 +1837,7 @@ static void voter_display(int fd, const struct voter_pvt *p)
 		if (hasmaster && (!master_time.vtime_sec)) {
 			ast_cli(fd, "*** WARNING -- LOSS OF MASTER TIMING SOURCE ***\n\n");
 		}
+		ast_mutex_lock(&voter_lock);
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
 				continue;
@@ -1888,6 +1889,25 @@ static void voter_display(int fd, const struct voter_pvt *p)
 			ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
 		}
 		ast_cli(fd, "\n\n");
+		ast_cli(fd, "Inactive Clients:\n\n");
+		for (client = clients; client; client = client->next) {
+			/* If the client isn't associated to the requested voter instance, skip. */
+			if (client->nodenum != p->nodenum) {
+				continue;
+			}
+			/* If this is a proxied client, skip. */
+			if (p->priconn && !client->mix) {
+				continue;
+			}
+			/* If we HAVE heard from the client, it is active, so skip. */
+			if (client->heardfrom) {
+				continue;
+			}
+			/* Print the client name, the IP and port should normally be 0.0.0.0:0 */
+			ast_cli(fd, "%10.10s -- %s:%d\n", client->name, ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
+		}
+		ast_cli(fd, "\n\n");
+		ast_mutex_unlock(&voter_lock);
 	}
 	option_verbose = wasverbose;
 }
@@ -1908,6 +1928,7 @@ static int voter_do_display(int fd, int argc, const char *const *argv)
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
 		if (p->nodenum == atoi(argv[2])) {
 			break;
@@ -1915,8 +1936,10 @@ static int voter_do_display(int fd, int argc, const char *const *argv)
 	}
 	if (!p) {
 		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
+	ast_mutex_unlock(&voter_lock);
 	voter_display(fd, p);
 	return RESULT_SUCCESS;
 }
@@ -2711,7 +2734,7 @@ static struct ast_cli_entry voter_cli[] = {
 /*!
  * \brief Mix and send audio packet.
  *
- * This routine must be called with voter_locked locked.
+ * This routine must be called with voter_lock locked.
  *
  * \param p				Pointer to voter_pvt struct.
  * \param maxclient		Pointer to voter_client struct.
