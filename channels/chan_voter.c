@@ -1934,12 +1934,11 @@ static int voter_do_display(int fd, int argc, const char *const *argv)
 			break;
 		}
 	}
+	ast_mutex_unlock(&voter_lock);
 	if (!p) {
 		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
-		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
-	ast_mutex_unlock(&voter_lock);
 	voter_display(fd, p);
 	return RESULT_SUCCESS;
 }
