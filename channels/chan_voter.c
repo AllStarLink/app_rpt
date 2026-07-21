@@ -1667,36 +1667,23 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
+			astman_append(ses, "Client: %s", client->name);
+			if (client->mix) {
+				astman_append(ses, " Mix");
+			}
+			if (client->ismaster) {
+				astman_append(ses, " Master");
+			}
+			if (client->curmaster) {
+				astman_append(ses, " ActiveMaster");
+			}
+			if (!client->heardfrom) {
+				astman_append(ses, " Inactive");
+			}
 			if (IS_CLIENT_PROXY(client)) {
-				astman_append(ses, "Client: %s", client->name);
-				if (client->mix) {
-					astman_append(ses, " Mix");
-				}
-				if (client->ismaster) {
-					astman_append(ses, " Master");
-				}
-				if (client->curmaster) {
-					astman_append(ses, " ActiveMaster");
-				}
-				if (!client->heardfrom) {
-					astman_append(ses, " Inactive");
-				}
 				astman_append(ses, "\r\n");
 				astman_append(ses, "IP: %s:%d (Proxied)\r\n", ast_inet_ntoa(client->proxy_sin.sin_addr), ntohs(client->proxy_sin.sin_port));
 			} else {
-				astman_append(ses, "Client: %s", client->name);
-				if (client->mix) {
-					astman_append(ses, " Mix");
-				}
-				if (client->ismaster) {
-					astman_append(ses, " Master");
-				}
-				if (client->curmaster) {
-					astman_append(ses, " ActiveMaster");
-				}
-				if (!client->heardfrom) {
-					astman_append(ses, " Inactive");
-				}
 				astman_append(ses, "\r\n");
 				astman_append(ses, "IP: %s:%d\r\n", ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
 			}
