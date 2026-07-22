@@ -454,7 +454,10 @@ static int getnmea_line(int fd, char *buf, size_t buflen)
 		return -1;
 	}
 
-	for (i = 1; (i < (int) buflen - 1) && run_forever; i++) {
+	for (i = 1; i < (int) buflen - 1; i++) {
+		if (!run_forever) {
+			return -1;
+		}
 		ch = getserialchar(fd);
 		if (ch < 1) {
 			buf[i] = '\0';
@@ -464,6 +467,9 @@ static int getnmea_line(int fd, char *buf, size_t buflen)
 			break;
 		}
 		buf[i] = (char) ch;
+	}
+	if (!run_forever) {
+		return -1;
 	}
 	buf[i] = '\0';
 
