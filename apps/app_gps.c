@@ -40,6 +40,8 @@
  * to generate the password: https://n5dux.com/ham/aprs-passcode/
  *
  * app_gps can connect to a serial GPS receiver to get position information.
+ * If gpsd_host is configured, position is read from a local gpsd JSON stream
+ * (TCP port 2947 by default) instead of a serial NMEA device.
  * If a GPS receiver is not configured, it can provide default position information
  * entered in the gps.conf file.  It decodes NMEA-0183 GGA sentences ($GPGGA,
  * $GNGGA, etc.).
@@ -252,9 +254,12 @@
 #define TT_COMMON "/tmp/aprs_ttcommon"
 #define TT_SUB_COMMON "/tmp/aprs_ttcommon_%s"
 #define GPS_DEFAULT_BAUDRATE B4800
+#define GPS_DEFAULT_GPSD_PORT 2947
+#define GPS_MAX_GPSD_PORT 65535
 #define GPS_UPDATE_SECS 60
 #define GPS_VALID_SECS 60
 #define SERIAL_MAXMS 10000
+#define JSON_KEY(x) "\"" #x "\":"
 
 /*!
  * \brief APRS TT entry.
@@ -276,8 +281,19 @@ static int run_forever = 1;
 
 /* Global configuration information */
 static char *comport, *server, *port;
+static char *gpsd_host = NULL;
 static int baudrate;
+static int gpsd_port = GPS_DEFAULT_GPSD_PORT;
+static int gpsd_sockfd = -1;
 static int sockfd = -1;
+
+enum gps_source_type {
+	GPS_SOURCE_NONE = 0,
+	GPS_SOURCE_SERIAL,
+	GPS_SOURCE_GPSD,
+};
+
+static enum gps_source_type gps_source = GPS_SOURCE_NONE;
 
 /* Message flags */
 static int gps_unlock_shown = 0;
@@ -908,6 +924,268 @@ static void lon_decimal_to_DMS(float dec, char *value, int len)
 	londeg = (int) fabs(dec);
 	lonmin = (fabs(dec) - londeg) * 60.0;
 	snprintf(value, len, "%03d%05.2f%c", londeg, lonmin, direction);
+}
+
+/*!
+ * \brief Extract a float JSON field value from a gpsd line.
+ *
+ * \param pattern Field match string, typically from JSON_KEY().
+ */
+static int gpsd_json_get_float(const char *json, const char *pattern, float *out)
+{
+	const char *p;
+
+	p = strstr(json, pattern);
+	if (!p) {
+		return -1;
+	}
+	p += strlen(pattern);
+	while (*p == ' ') {
+		p++;
+	}
+	if (!strncmp(p, "null", 4)) {
+		return -1;
+	}
+	*out = strtof(p, NULL);
+	return 0;
+}
+
+/*!
+ * \brief Extract an integer JSON field value from a gpsd line.
+ *
+ * \param pattern Field match string, typically from JSON_KEY().
+ */
+static int gpsd_json_get_int(const char *json, const char *pattern, int *out)
+{
+	float value;
+
+	if (gpsd_json_get_float(json, pattern, &value)) {
+		return -1;
+	}
+	*out = (int) value;
+	return 0;
+}
+
+/*!
+ * \brief Store a validated GPS position in the global structure.
+ */
+static void gps_position_update(float lat, float lon, float elev_m)
+{
+	char elevation[25];
+	time_t now_mono = time_monotonic();
+
+	snprintf(elevation, sizeof(elevation), "%.1fM", elev_m);
+
+	ast_mutex_lock(&position_update_lock);
+	current_gps_position.is_valid = 1;
+	lat_decimal_to_DMS(lat, current_gps_position.latitude, sizeof(current_gps_position.latitude));
+	lon_decimal_to_DMS(lon, current_gps_position.longitude, sizeof(current_gps_position.longitude));
+	ast_copy_string(current_gps_position.elevation, elevation, sizeof(current_gps_position.elevation));
+	current_gps_position.last_updated = time(NULL);
+	current_gps_position.last_updated_mono = now_mono;
+	ast_mutex_unlock(&position_update_lock);
+
+	if (gps_unlock_shown) {
+		ast_log(LOG_NOTICE, "GPS locked\n");
+		gps_unlock_shown = 0;
+	}
+
+	ast_debug(5, "Got latitude: %s, longitude: %s, elevation: %s from: gpsd\n", current_gps_position.latitude,
+		current_gps_position.longitude, current_gps_position.elevation);
+}
+
+/*!
+ * \brief Read one newline-terminated line from a socket.
+ *
+ * Characters beyond \a len are discarded until the terminating newline.
+ */
+static int gpsd_read_line(int fd, char *buf, size_t len)
+{
+	size_t i = 0;
+	ssize_t res;
+	char c;
+
+	if (len < 2) {
+		return -1;
+	}
+
+	while (run_forever) {
+		res = read(fd, &c, 1);
+		if (res < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			return -1;
+		}
+		if (res == 0) {
+			return -1;
+		}
+		if (c == '\n') {
+			buf[i] = '\0';
+			return (int) i;
+		}
+		if (c != '\r' && i < len - 1) {
+			buf[i++] = c;
+		}
+	}
+
+	return -1;
+}
+
+/*!
+ * \brief Connect to gpsd and enable JSON watch mode.
+ */
+static int gpsd_open(void)
+{
+	int fd;
+	struct ast_sockaddr addr = { { 0 } };
+	static const char watchcmd[] = "?WATCH={\"enable\":true,\"json\":true}\n";
+	ssize_t wrote;
+
+	fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0) {
+		ast_log(LOG_WARNING, "Cannot open gpsd socket: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (ast_sockaddr_resolve_first_af(&addr, gpsd_host, PARSE_PORT_IGNORE, AST_AF_INET)) {
+		ast_log(LOG_WARNING, "gpsd host %s cannot be resolved\n", gpsd_host);
+		close(fd);
+		return -1;
+	}
+	ast_sockaddr_set_port(&addr, gpsd_port);
+
+	if (ast_connect(fd, &addr) < 0) {
+		ast_log(LOG_WARNING, "Cannot connect to gpsd at %s:%d: %s\n", gpsd_host, gpsd_port, strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	wrote = write(fd, watchcmd, sizeof(watchcmd) - 1);
+	if (wrote < 0) {
+		ast_log(LOG_WARNING, "Cannot enable gpsd JSON watch on %s:%d: %s\n", gpsd_host, gpsd_port, strerror(errno));
+		close(fd);
+		return -1;
+	}
+	if (wrote != (ssize_t) (sizeof(watchcmd) - 1)) {
+		ast_log(LOG_WARNING, "Incomplete gpsd JSON watch on %s:%d\n", gpsd_host, gpsd_port);
+		close(fd);
+		return -1;
+	}
+
+	gpsd_sockfd = fd;
+	ast_log(LOG_NOTICE, "GPS connected via gpsd at %s:%d\n", gpsd_host, gpsd_port);
+	return fd;
+}
+
+/*!
+ * \brief Parse a gpsd TPV JSON line and update position when fixed.
+ */
+static void gpsd_handle_tpv(const char *line)
+{
+	int mode = 0;
+	float lat = 0.0, lon = 0.0, elev = 0.0;
+
+	if (!strstr(line, JSON_KEY(class) "\"TPV\"") && !strstr(line, JSON_KEY(class) " \"TPV\"")) {
+		return;
+	}
+
+	if (gpsd_json_get_int(line, JSON_KEY(mode), &mode) || mode < 2) {
+		if (!gps_unlock_shown) {
+			ast_log(LOG_WARNING, "GPS data not available (signal not locked)\n");
+			gps_unlock_shown = 1;
+		}
+		ast_mutex_lock(&position_update_lock);
+		current_gps_position.is_valid = 0;
+		ast_mutex_unlock(&position_update_lock);
+		return;
+	}
+
+	if (gpsd_json_get_float(line, JSON_KEY(lat), &lat) || gpsd_json_get_float(line, JSON_KEY(lon), &lon)) {
+		ast_debug(1, "GPS ignoring incomplete gpsd TPV: %s\n", line);
+		return;
+	}
+
+	if (gpsd_json_get_float(line, JSON_KEY(altMSL), &elev)) {
+		gpsd_json_get_float(line, JSON_KEY(alt), &elev);
+	}
+
+	gps_position_update(lat, lon, elev);
+}
+
+/*!
+ * \brief gpsd processing thread.
+ */
+static void *gpsd_reader(void *data)
+{
+	char buf[2048];
+	int fd = -1;
+	struct pollfd fds[1];
+
+	while (run_forever) {
+		if (fd < 0) {
+			fd = gpsd_open();
+			if (fd < 0) {
+				ast_mutex_lock(&position_update_lock);
+				current_gps_position.is_valid = 0;
+				ast_mutex_unlock(&position_update_lock);
+				sleep(2);
+				continue;
+			}
+		}
+
+		memset(&fds, 0, sizeof(fds));
+		fds[0].fd = fd;
+		fds[0].events = POLLIN;
+
+		if (ast_poll(fds, 1, 1000) < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			ast_log(LOG_WARNING, "GPS gpsd poll error on %s:%d, reconnecting\n", gpsd_host, gpsd_port);
+			close(fd);
+			fd = -1;
+			gpsd_sockfd = -1;
+			ast_mutex_lock(&position_update_lock);
+			current_gps_position.is_valid = 0;
+			ast_mutex_unlock(&position_update_lock);
+			sleep(1);
+			continue;
+		}
+
+		if (!(fds[0].revents & POLLIN)) {
+			time_t now_mono = time_monotonic();
+
+			ast_mutex_lock(&position_update_lock);
+			if (current_gps_position.last_updated_mono + GPS_VALID_SECS < now_mono) {
+				current_gps_position.is_valid = 0;
+			}
+			ast_mutex_unlock(&position_update_lock);
+			continue;
+		}
+
+		if (gpsd_read_line(fd, buf, sizeof(buf)) < 1) {
+			ast_log(LOG_WARNING, "GPS gpsd read error on %s:%d, reconnecting\n", gpsd_host, gpsd_port);
+			close(fd);
+			fd = -1;
+			gpsd_sockfd = -1;
+			ast_mutex_lock(&position_update_lock);
+			current_gps_position.is_valid = 0;
+			ast_mutex_unlock(&position_update_lock);
+			sleep(1);
+			continue;
+		}
+
+		gpsd_handle_tpv(buf);
+	}
+
+	if (fd != -1) {
+		close(fd);
+	}
+	gpsd_sockfd = -1;
+
+	ast_debug(2, "%s has exited\n", __FUNCTION__);
+	return NULL;
 }
 
 /*!
@@ -1730,8 +2008,19 @@ static char *handle_cli_status(struct ast_cli_entry *e, int cmd, struct ast_cli_
 	}
 
 	ast_mutex_lock(&position_update_lock);
-	ast_cli(a->fd, "GPS: %s, Signal: %s \n", ast_strlen_zero(comport) ? "Disconnected" : "Connected",
-		current_gps_position.is_valid ? "Locked" : "Unlocked");
+	switch (gps_source) {
+	case GPS_SOURCE_GPSD:
+		ast_cli(a->fd, "GPS: Connected via gpsd %s:%d, Signal: %s \n", gpsd_host, gpsd_port,
+			current_gps_position.is_valid ? "Locked" : "Unlocked");
+		break;
+	case GPS_SOURCE_SERIAL:
+		ast_cli(a->fd, "GPS: Connected, Signal: %s \n", current_gps_position.is_valid ? "Locked" : "Unlocked");
+		break;
+	case GPS_SOURCE_NONE:
+	default:
+		ast_cli(a->fd, "GPS: Disconnected, Signal: %s \n", current_gps_position.is_valid ? "Locked" : "Unlocked");
+		break;
+	}
 	if (current_gps_position.is_valid) {
 		ast_cli(a->fd, "Position: %s %s Elevation: %s\n", current_gps_position.latitude, current_gps_position.longitude,
 			current_gps_position.elevation);
@@ -1760,14 +2049,25 @@ static int unload_module(void)
 	if (sockfd != -1) {
 		shutdown(sockfd, SHUT_RDWR);
 	}
+	if (gpsd_sockfd != -1) {
+		shutdown(gpsd_sockfd, SHUT_RDWR);
+	}
 	ast_debug(2, "Waiting for aprs_connection_thread to exit\n");
 	pthread_join(aprs_connection_thread_id, NULL);
 
-	if (comport) {
+	if (gps_source != GPS_SOURCE_NONE) {
 		ast_debug(2, "Waiting for gps_reader_thread to exit\n");
 		pthread_join(gps_reader_thread_id, NULL);
-		ast_free(comport);
 	}
+	if (comport) {
+		ast_free(comport);
+		comport = NULL;
+	}
+	if (gpsd_host) {
+		ast_free(gpsd_host);
+		gpsd_host = NULL;
+	}
+	gps_source = GPS_SOURCE_NONE;
 
 	/* Shutdown and clean up sender threads */
 	AST_RWLIST_WRLOCK(&aprs_sender_list);
@@ -1810,6 +2110,8 @@ static int load_module(void)
 
 	struct ast_flags zeroflag = { 0 };
 
+	run_forever = 1;
+
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_NOTICE, "Unable to load config %s\n", config);
 		return AST_MODULE_LOAD_DECLINE;
@@ -1819,6 +2121,35 @@ static int load_module(void)
 		comport = ast_strdup(val);
 	} else {
 		comport = NULL;
+	}
+	val = ast_variable_retrieve(cfg, "general", "gpsd_host");
+	if (val && !ast_strlen_zero(val)) {
+		gpsd_host = ast_strdup(val);
+	}
+	val = ast_variable_retrieve(cfg, "general", "gpsd_port");
+	if (val && !ast_strlen_zero(val)) {
+		char *endptr = NULL;
+		long port_num;
+
+		errno = 0;
+		port_num = strtol(val, &endptr, 10);
+		if (errno || endptr == val || *endptr || port_num <= 0 || port_num > GPS_MAX_GPSD_PORT) {
+			ast_log(LOG_ERROR, "gpsd_port %s is not valid, using %d\n", val, GPS_DEFAULT_GPSD_PORT);
+			gpsd_port = GPS_DEFAULT_GPSD_PORT;
+		} else {
+			gpsd_port = (int) port_num;
+		}
+	}
+	/* Select a single GPS source after both options have been parsed. */
+	if (gpsd_host) {
+		gps_source = GPS_SOURCE_GPSD;
+		if (comport) {
+			ast_log(LOG_NOTICE, "gpsd_host configured; ignoring comport %s\n", comport);
+			ast_free(comport);
+			comport = NULL;
+		}
+	} else if (comport) {
+		gps_source = GPS_SOURCE_SERIAL;
 	}
 	val = ast_variable_retrieve(cfg, "general", "lat");
 	if (val) {
@@ -1897,10 +2228,12 @@ static int load_module(void)
 		ast_config_destroy(cfg);
 		return -1;
 	}
-	/* If we have a comport specified, start the GPS processing thread */
-	if (comport) {
-		if (ast_pthread_create(&gps_reader_thread_id, NULL, gps_reader, NULL)) {
-			ast_log(LOG_ERROR, "Cannot create APRS reader thread");
+	/* If we have a GPS source configured, start the GPS processing thread */
+	if (gps_source != GPS_SOURCE_NONE) {
+		void *(*reader)(void *) = (gps_source == GPS_SOURCE_GPSD) ? gpsd_reader : gps_reader;
+
+		if (ast_pthread_create(&gps_reader_thread_id, NULL, reader, NULL)) {
+			ast_log(LOG_ERROR, "Cannot create GPS reader thread");
 			ast_config_destroy(cfg);
 			return -1;
 		}
