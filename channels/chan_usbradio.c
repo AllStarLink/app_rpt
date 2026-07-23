@@ -1007,7 +1007,7 @@ static void *hidthread(void *arg)
 		if (o->hw_device[0] && ast_strlen_zero(o->devstr)) {
 			int subdev;
 
-			if (ast_radio_parse_hw_anywhere(o->hw_device, &i, &subdev)) {
+			if (ast_radio_parse_alsa_hw_device(o->hw_device, &i, &subdev)) {
 				int card_in_use = 0;
 
 				for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
@@ -2162,7 +2162,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	o->readpos = sizeof(o->usbradio_read_buf);
 
 	/* RX stats on the normalized 48 kHz stereo workspace. */
-	if (ast_radio_check_audio_stereo_48k((short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), &o->rxaudiostats)) {
+	if (ast_radio_check_audio((short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET), &o->rxaudiostats, AST_RADIO_PA_48K_STEREO_SAMPLES, 0)) {
 		if (o->clipledgpio) {
 			/* Set Clip LED GPIO pulsetimer if not already set */
 			if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
@@ -2257,7 +2257,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	/* Write the received audio to the sound card */
 	soundcard_writeframe(o, (short *) o->usbradio_write_buf);
 
-	ast_radio_check_audio_stereo_48k((short *) o->usbradio_write_buf, &o->txaudiostats);
+	ast_radio_check_audio((short *) o->usbradio_write_buf, &o->txaudiostats, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
 
 #if DEBUG_CAPTURES == 1 && XPMR_DEBUG0 == 1
 	if (frxcaptrace && o->rxcap2 && o->pmrChan->b.radioactive) {
