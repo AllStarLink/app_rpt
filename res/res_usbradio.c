@@ -910,20 +910,6 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, sho
 	return (seq_clips >= CLIP_EVENT_MIN_SAMPLES);
 }
 
-int ast_radio_check_audio_pa_rx(short *sbuf, struct audiostatistics *o, unsigned int input_channels)
-{
-	if (input_channels == 1) {
-		return ast_radio_check_audio(sbuf, o, AST_RADIO_PA_48K_MONO_SAMPLES, 1);
-	}
-
-	return ast_radio_check_audio(sbuf, o, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
-}
-
-int ast_radio_check_audio_stereo_48k(short *sbuf, struct audiostatistics *o)
-{
-	return ast_radio_check_audio(sbuf, o, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
-}
-
 void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *prefix_text)
 {
 	unsigned int i, pk = 0, pwr = 0, minpwr = 0x40000000, maxpwr = 0, clipcnt = 0;
@@ -1062,7 +1048,11 @@ static int hw_token_boundary_ok(char c)
 	return strchr("):],;.-", c) != NULL;
 }
 
-int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev)
+/*!
+ * \brief Parse "hw:<card>" or "hw:<card>,<dev>" from anywhere in s.
+ * \retval 1 if found; sets *card; sets *dev to parsed value or -1 if absent.
+ */
+int ast_radio_parse_alsa_hw_device(const char *s, int *card, int *dev)
 {
 	const char *p = s;
 
@@ -1101,17 +1091,17 @@ int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev)
 	return 0;
 }
 
-int ast_radio_hw_match(const char *haystack, const char *needle)
+static int pa_hw_match(const char *haystack, const char *needle)
 {
 	int haystack_c, haystack_d, needle_c, needle_d;
 	const char *p = haystack ? haystack : "";
 
-	if (!ast_radio_parse_hw_anywhere(needle, &needle_c, &needle_d)) {
+	if (!ast_radio_parse_alsa_hw_device(needle, &needle_c, &needle_d)) {
 		return 0;
 	}
 
 	while ((p = strstr(p, "hw:")) != NULL) {
-		if (ast_radio_parse_hw_anywhere(p, &haystack_c, &haystack_d)) {
+		if (ast_radio_parse_alsa_hw_device(p, &haystack_c, &haystack_d)) {
 			if (haystack_c == needle_c) {
 				if (needle_d < 0 || haystack_d == needle_d) {
 					return 1;
@@ -1167,11 +1157,11 @@ static int pa_device_matches(const PaDeviceInfo *dev, const char *hw_device, int
 		return 0;
 	}
 
-	if (ast_radio_hw_match(dev->name, hw_device)) {
+	if (pa_hw_match(dev->name, hw_device)) {
 		return 1;
 	}
 
-	if (!ast_radio_parse_hw_anywhere(hw_device, &card, &devnum) || !match_card_id(dev->name, card)) {
+	if (!ast_radio_parse_alsa_hw_device(hw_device, &card, &devnum) || !match_card_id(dev->name, card)) {
 		return 0;
 	}
 
@@ -1180,7 +1170,7 @@ static int pa_device_matches(const PaDeviceInfo *dev, const char *hw_device, int
 		return 1;
 	}
 
-	if (!ast_radio_parse_hw_anywhere(dev->name, &hay_card, &hay_dev)) {
+	if (!ast_radio_parse_alsa_hw_device(dev->name, &hay_card, &hay_dev)) {
 		return 0;
 	}
 

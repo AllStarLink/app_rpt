@@ -569,8 +569,11 @@ struct ast_radio_pa_stream {
 	char hw_device[100];
 };
 
-int ast_radio_parse_hw_anywhere(const char *s, int *card, int *dev);
-int ast_radio_hw_match(const char *haystack, const char *needle);
+/*!
+ * \brief Parse "hw:<card>" or "hw:<card>,<dev>" from anywhere in s.
+ * \retval 1 if found; sets *card; sets *dev to parsed value or -1 if absent.
+ */
+int ast_radio_parse_alsa_hw_device(const char *s, int *card, int *dev);
 
 PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps);
 PaError ast_radio_pa_start(struct ast_radio_pa_stream *ps);
@@ -579,14 +582,3 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps);
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop);
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames);
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);
-
-/*!
- * \brief Check RX clipping/stats on a 48 kHz buffer from PortAudio.
- * \param input_channels ps->input_channels after ast_radio_pa_open()
- */
-int ast_radio_check_audio_pa_rx(short *sbuf, struct audiostatistics *o, unsigned int input_channels);
-
-/*!
- * \brief Check clipping/stats on a normalized 48 kHz stereo interleaved buffer.
- */
-int ast_radio_check_audio_stereo_48k(short *sbuf, struct audiostatistics *o);
