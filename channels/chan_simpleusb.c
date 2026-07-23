@@ -1997,6 +1997,7 @@ static int simpleusb_hangup(struct ast_channel *c)
 	struct chan_simpleusb_pvt *o = ast_channel_tech_pvt(c);
 
 	o->stopaudiothread = 1;
+	/* Wake HID's poll so PTT drops promptly instead of waiting for HID_POLL_RATE. */
 	kickptt(o);
 	if (o->audiothread != AST_PTHREADT_NULL) {
 		pthread_join(o->audiothread, NULL);
