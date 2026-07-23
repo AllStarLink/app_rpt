@@ -98,8 +98,6 @@
 #include "asterisk/format_cache.h"
 #include "asterisk/format_compatibility.h"
 
-#define PA_NUM_FRAMES AST_RADIO_PA_FRAMES_PER_BUFFER
-
 /*! \brief Global jitterbuffer configuration - by default, jb is disabled */
 static struct ast_jb_conf default_jbconf = {
 	.flags = 0,
@@ -198,7 +196,7 @@ struct chan_simpleusb_pvt {
 	char simpleusb_write_buf[FRAME_SIZE * 2]; /* buffer used for Asterisk to PA frames in 8k mono */
 
 	int simpleusb_write_dst;
-	short simpleusb_read_buf[PA_NUM_FRAMES]; /* 1 short (2 byte) samples for PortAudio config with paInt16 * 1 channel (mono) */
+	short simpleusb_read_buf[AST_RADIO_PA_FRAMES_PER_BUFFER]; /* 1 short (2 byte) samples for PortAudio config with paInt16 * 1 channel (mono) */
 	char simpleusb_read_frame_buf[FRAME_SIZE * 2 + AST_FRIENDLY_OFFSET]; /* 2 byte samples at 8k */
 	struct ast_frame read_f;											 /* returned by simpleusb_read */
 
@@ -424,11 +422,6 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 	}
 
 	return 0;
-}
-
-static void stop_stream(struct chan_simpleusb_pvt *pvt)
-{
-	ast_radio_pa_stop(&pvt->pa);
 }
 
 /*!
@@ -1640,7 +1633,7 @@ static void *hidthread(void *arg)
 /*!
  * \brief Write a full frame of audio data to the sound card device.
  * \note data is 48 kHz stereo interleaved. ast_radio_pa_write() takes frames
- *       per channel (PA_NUM_FRAMES); the buffer holds PA_NUM_FRAMES * 2 samples.
+ *       per channel (AST_RADIO_PA_FRAMES_PER_BUFFER); the buffer holds AST_RADIO_PA_FRAMES_PER_BUFFER * 2 samples.
  * \param o		Channel private data.
  * \param data	Audio data to write.
  * \returns		PaError from ast_radio_pa_write().
@@ -1656,7 +1649,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	 * a number of failures, to restart the output chain.
 	 */
 
-	res = ast_radio_pa_write(&o->pa, data, PA_NUM_FRAMES);
+	res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
 	if (res == paOutputUnderflowed) {
 		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
 	} else if (res < 0) {
@@ -2009,7 +2002,7 @@ static int simpleusb_hangup(struct ast_channel *c)
 		pthread_join(o->audiothread, NULL);
 		o->audiothread = AST_PTHREADT_NULL;
 	}
-	stop_stream(o);
+	ast_radio_pa_stop(&o->pa);
 
 	o->owner = NULL;
 	ast_channel_tech_pvt_set(c, NULL);
@@ -2111,7 +2104,7 @@ static void flush_stream_buffer(struct chan_simpleusb_pvt *o)
  */
 static void stream_cleanup(struct chan_simpleusb_pvt *o)
 {
-	stop_stream(o);
+	ast_radio_pa_stop(&o->pa);
 	o->audio_thread_ready = 0;
 	flush_stream_buffer(o);
 }
@@ -2131,7 +2124,7 @@ static void *simpleusb_audio_thread(void *arg)
 	time_t now;
 	struct timeval last_frame_time;
 	short *sp, *sp1;
-	short outbuf[PA_NUM_FRAMES * 2]; /* 1 short (2 bytes) per sample on PortAudio config with paInt16 * 2 channels */
+	short outbuf[AST_RADIO_PA_FRAMES_PER_BUFFER * 2]; /* 1 short (2 bytes) per sample on PortAudio config with paInt16 * 2 channels */
 
 	ast_debug(5, "Audio thread is starting\n");
 	ast_radio_time(&o->lastaudiotime);
@@ -2282,7 +2275,7 @@ static void *simpleusb_audio_thread(void *arg)
 					last_frame_time = ast_radio_tvnow();
 				}
 
-				if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && (frames_available >= PA_NUM_FRAMES)) {
+				if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && (frames_available >= AST_RADIO_PA_FRAMES_PER_BUFFER)) {
 					ast_mutex_lock(&o->txqlock);
 					f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
 					ast_mutex_unlock(&o->txqlock);
@@ -2430,7 +2423,7 @@ static void *simpleusb_audio_thread(void *arg)
 			 * in mono format.  We should always have 20ms frames, 40ms timeout
 			 * as a reasonable max wait time.
 			 */
-			res = ast_radio_pa_read(&o->pa, o->simpleusb_read_buf, PA_NUM_FRAMES, 40, &o->stopaudiothread);
+			res = ast_radio_pa_read(&o->pa, o->simpleusb_read_buf, AST_RADIO_PA_FRAMES_PER_BUFFER, 40, &o->stopaudiothread);
 			if (res != paNoError) {
 				/* audio data not ready */
 				if (res == paInputOverflowed) {
@@ -4430,7 +4423,7 @@ static int unload_module(void)
 			pthread_join(o->audiothread, NULL); /* wait for audio thread to end */
 			o->audiothread = AST_PTHREADT_NULL;
 		}
-		stop_stream(o);
+		ast_radio_pa_stop(&o->pa);
 		if (o->hidthread != AST_PTHREADT_NULL) {
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
@@ -4439,10 +4432,14 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			ast_free(o->gpios[i]);
+			if (o->gpios[i]) {
+				ast_free(o->gpios[i]);
+			}
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			ast_free(o->pps[i]);
+			if (o->pps[i]) {
+				ast_free(o->pps[i]);
+			}
 		}
 		ast_free(o->name);
 		ast_free(o);
