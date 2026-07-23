@@ -894,7 +894,7 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 			ast_log(LOG_ERROR, "audiodev=default is not supported for SimpleUSB until HID-less startup is implemented\n");
 			ast_mutex_unlock(&usb_dev_lock);
 			return -1;
-		} else if (ast_radio_parse_hw_anywhere(o->hw_device, &o->devicenum, &subdev)) {
+		} else if (ast_radio_parse_alsa_hw_device(o->hw_device, &o->devicenum, &subdev)) {
 			ast_debug(5, "audiodev is defined: %s, Device %d", o->hw_device, o->devicenum);
 			o->usb_dev = ast_radio_usb_device_from_alsa_card(o->devicenum);
 			if (!o->usb_dev) {
@@ -1663,7 +1663,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 		ast_debug(2, "Pa_WriteStream Error %s", Pa_GetErrorText(res));
 	}
 
-	ast_radio_check_audio_stereo_48k(data, &o->txaudiostats);
+	ast_radio_check_audio(data, &o->txaudiostats, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
 
 	return res;
 }
@@ -2573,7 +2573,7 @@ static void *simpleusb_audio_thread(void *arg)
 			}
 
 			/* RX stats on the mono PortAudio capture buffer. */
-			if (ast_radio_check_audio_pa_rx(o->simpleusb_read_buf, &o->rxaudiostats, o->pa.input_channels)) {
+			if (ast_radio_check_audio(o->simpleusb_read_buf, &o->rxaudiostats, AST_RADIO_PA_48K_MONO_SAMPLES, 1)) {
 				if (o->clipledgpio) {
 					/* Set Clip LED GPIO pulsetimer if not already set */
 					if (!o->hid_gpio_pulsetimer[o->clipledgpio - 1]) {
