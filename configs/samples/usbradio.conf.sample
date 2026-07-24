@@ -120,6 +120,9 @@
                             ; AKA ("reverse burst") before unkeying TX
                             ; notone - encode CTCSS and stop sending tone before unkeying TX
                             ; AKA ("chicken burst")
+                            ; With duplex=1 (full duplex), notone/phase begin when local
+                            ; COS drops so CTCSS does not ride app_rpt hangtime. Half duplex
+                            ; still applies the burst when PTT is released (fixed ~600ms).
 
 ;txmixa = composite         ; Left channel output: no,voice,tone,composite,auxvoice
                             ; no - Do not output anything
