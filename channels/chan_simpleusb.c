@@ -1647,17 +1647,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 	 */
 
 	res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
-	if (res == paOutputUnderflowed) {
-		short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
-
-		/*
-		 * Prime the stream with one silence frame so the USB buffer does not
-		 * stay empty (choppy TX). Same recovery as pre-PortAudio-API simpleusb;
-		 * move into ast_radio_pa_write() in PR #1113 so usbradio shares it.
-		 */
-		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
-		ast_radio_pa_write(&o->pa, null_buf, AST_RADIO_PA_FRAMES_PER_BUFFER);
-	} else if (res < 0) {
+	if (res < 0 && res != paOutputUnderflowed) {
 		ast_debug(2, "Pa_WriteStream Error %s", Pa_GetErrorText(res));
 	}
 
