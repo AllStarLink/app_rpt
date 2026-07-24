@@ -2850,7 +2850,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			} else {
 				f = pChan->txctcssdefault_value;
 			}
-			if (f && pChan->spsSigGen0->freq != f * 10) {
+			if (f && pChan->spsSigGen0->freq != f * 10 && !pChan->b.txCtcssHangMuted) {
 				pChan->spsSigGen0->freq = f * 10;
 				pChan->spsSigGen0->option = 1;
 			}
@@ -2871,6 +2871,8 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 				pChan->rxCtcssMap[pChan->rxCtcss->decode]);
 			pChan->dd.b.doitnow = 1;
 			pChan->spsSigGen0->freq = 0;
+			pChan->b.txHadRxCarrier = 0;
+			pChan->b.txCtcssHangMuted = 0;
 			if (pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit) {
 				if (pChan->rxCtcss->decode > CTCSS_NULL) {
 					if (pChan->rxCtcssMap[pChan->rxCtcss->decode] != CTCSS_RXONLY) {
@@ -2934,10 +2936,33 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			TRACEC(1, "PmrRx() TxOn\n");
 		} else if (pChan->txPttIn && pChan->txState == CHAN_TXSTATE_ACTIVE) {
 			pChan->smodetimer = pChan->smodetime;
+
+			/*
+			 * Full duplex: app_rpt hangtime keeps txPttIn asserted after the user
+			 * unkeys, so classic TOC (which waits for txPttIn to drop) never runs
+			 * until hangtime ends. Start notone/phase turn-off when local COS drops
+			 * so CTCSS ends at the start of hang instead of riding until PTT drops.
+			 * Half duplex blanks RX while keyed, so COS cannot be used that way.
+			 */
+			if (pChan->radioDuplex && pChan->rxCarrierDetect) {
+				pChan->b.txHadRxCarrier = 1;
+			}
+			if (pChan->radioDuplex && pChan->b.txHadRxCarrier && !pChan->rxCarrierDetect && !pChan->b.txCtcssHangMuted &&
+				pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable && pChan->txTocType != TOC_NONE) {
+				pChan->b.txCtcssHangMuted = 1;
+				if (pChan->txTocType == TOC_NOTONE) {
+					pChan->spsSigGen0->option = 3;
+					TRACEC(1, "Tx CTCSS off on COS drop (notone).\n");
+				} else {
+					pChan->spsSigGen0->option = 2;
+					TRACEC(1, "Tx CTCSS phase turn-off on COS drop.\n");
+				}
+			}
 		} else if (!pChan->txPttIn && pChan->txState == CHAN_TXSTATE_ACTIVE) {
 			TRACEC(1, "txPttIn==0 from CHAN_TXSTATE_ACTIVE\n");
 			if (pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit) {
-				if (pChan->txTocType == TOC_NONE || !pChan->b.ctcssTxEnable) {
+				if (pChan->txTocType == TOC_NONE || !pChan->b.ctcssTxEnable || pChan->b.txCtcssHangMuted) {
+					/* Immediate off, or tone already dropped at COS for duplex hang. */
 					TRACEC(1, "Tx Off Immediate.\n");
 					pChan->spsSigGen0->option = 3;
 					pChan->txBufferClear = 3;
@@ -2962,6 +2987,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			if (pChan->txPttIn && pChan->smode == SMODE_CTCSS) {
 				TRACEC(1, "Tx Key During HangTime\n");
 				pChan->txState = CHAN_TXSTATE_ACTIVE;
+				pChan->b.txCtcssHangMuted = 0;
 				pChan->spsSigGen0->option = 1;
 				pChan->spsSigGen0->enabled = 1;
 				pChan->spsSigGen0->discounterl = 0;
@@ -2988,6 +3014,8 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		pChan->txPttOut = 0;
 		pChan->spsSigGen0->option = 3;
 		pChan->txrxblankingtimer = pChan->txrxblankingtime;
+		pChan->b.txHadRxCarrier = 0;
+		pChan->b.txCtcssHangMuted = 0;
 		TRACEC(1, "PmrRx() txrxblankingtimer=%i\n", pChan->txrxblankingtimer);
 		pChan->txState = CHAN_TXSTATE_IDLE;
 		if (pChan->spsTxLsdLpf) {
