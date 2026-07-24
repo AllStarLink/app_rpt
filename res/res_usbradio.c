@@ -1362,8 +1362,6 @@ PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned l
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames)
 {
 	PaError res;
-	PaError prime_res;
-	short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS];
 
 	if (!ps || !ps->stream || !data) {
 		return paBadStreamPtr;
@@ -1376,12 +1374,14 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 
 	res = Pa_WriteStream(ps->stream, data, frames);
 	if (res == paOutputUnderflowed) {
+		PaError prime_res;
+		short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
+
 		/*
 		 * Prime the stream with one silence frame so the USB buffer does not
 		 * stay empty (choppy TX). See #593 / #598. Propagate a real failure
 		 * from the silence write so callers can restart the stream.
 		 */
-		memset(null_buf, 0, sizeof(null_buf));
 		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
 		prime_res = Pa_WriteStream(ps->stream, null_buf, frames);
 		if (prime_res != paNoError) {
