@@ -76,12 +76,6 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
 
 /*!
- * \brief Get the bridge channel associated with the underlying Asterisk channel.
- * \note Returns a ref-counted bridge channel object that must be released with ao2_ref(..., -1).
- */
-struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan);
-
-/*!
  * \brief Create a conference for repeater channels to join
  * \param myrpt Repeater structure
  * \param type Conference type

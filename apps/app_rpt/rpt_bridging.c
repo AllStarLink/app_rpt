@@ -415,7 +415,12 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 	return res;
 }
 
-struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan)
+/*!
+ * \brief Get the bridge channel associated with the underlying Asterisk channel.
+ * \note Returns a ref-counted bridge channel object that must be released with ao2_ref(..., -1).
+ */
+
+static struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan)
 {
 	struct ast_unreal_pvt *p;
 	struct ast_channel *pchan;
@@ -441,7 +446,7 @@ struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
 {
 	struct ast_bridge_channel *bc = rpt_get_bridge_channel_from_chan(chan);
-	char mute = 0;
+	int mute = 0;
 
 	if (bc) {
 		ast_bridge_channel_lock(bc);
