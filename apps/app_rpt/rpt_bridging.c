@@ -415,10 +415,49 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 	return res;
 }
 
+/*!
+ * \brief Get the bridge channel associated with the underlying Asterisk channel.
+ * \note Returns a ref-counted bridge channel object that must be released with ao2_ref(..., -1).
+ */
+
+static struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan)
+{
+	struct ast_unreal_pvt *p;
+	struct ast_channel *pchan;
+	struct ast_bridge_channel *bridge_channel = NULL;
+
+	if (!chan) {
+		return NULL;
+	}
+
+	p = ast_channel_tech_pvt(chan);
+	if (!p || !p->chan) {
+		return NULL;
+	}
+	pchan = ast_channel_ref(p->chan); /* The :2 side of the local channel */
+	ast_channel_lock(pchan);
+	bridge_channel = ast_channel_get_bridge_channel(pchan);
+	ast_channel_unlock(pchan);
+	ast_channel_unref(pchan);
+
+	return bridge_channel;
+}
+
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)
 {
-	/*! \todo: Do we need to check mute? What should it do?*/
-	return 0;
+	struct ast_bridge_channel *bc = rpt_get_bridge_channel_from_chan(chan);
+	int mute = 0;
+
+	if (bc) {
+		ast_bridge_channel_lock(bc);
+		if (bc->features && bc->features->mute) {
+			mute = 1;
+		}
+		ast_bridge_channel_unlock(bc);
+		ao2_ref(bc, -1);
+	}
+
+	return mute;
 }
 
 int rpt_play_tone(struct ast_channel *chan, const char *tone)
