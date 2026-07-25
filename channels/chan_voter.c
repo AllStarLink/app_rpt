@@ -2228,8 +2228,8 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 			 * Otherwise, just display the client(s) priority value (client->prio) from voter.conf.
 			 */
 			if (client->prio_override > PRIO_DEFAULT) {
-				ast_cli(fd, "Client %s: current priority: %d, configured priority: %d, override priority: %d\n", client->name, client->prio_override,
-					client->prio, client->prio_override);
+				ast_cli(fd, "Client %s: current priority: %d, configured priority: %d, override priority: %d\n", client->name,
+					client->prio_override, client->prio, client->prio_override);
 			} else {
 				ast_cli(fd, "Client %s: current/configured priority: %d (not overridden)\n", client->name, client->prio);
 			}
@@ -2260,10 +2260,11 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 			 * Otherwise, just display the client(s) priority value (client->prio) from voter.conf.
 			 */
 			if (client->prio_override > PRIO_DEFAULT) {
-				ast_cli(fd, "VOTER instance %d, client %s: current priority: %d, configured priority: %d, override priority: %d\n", p->nodenum, client->name,
-					client->prio_override, client->prio, client->prio_override);
+				ast_cli(fd, "VOTER instance %d, client %s: current priority: %d, configured priority: %d, override priority: %d\n",
+					p->nodenum, client->name, client->prio_override, client->prio, client->prio_override);
 			} else {
-				ast_cli(fd, "VOTER instance %d, client %s: current/configured priority: %d (not overridden)\n", p->nodenum, client->name, client->prio);
+				ast_cli(fd, "VOTER instance %d, client %s: current/configured priority: %d (not overridden)\n", p->nodenum,
+					client->name, client->prio);
 			}
 		}
 		if (!foundit) {
@@ -2317,8 +2318,8 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 				ast_cli(fd, "VOTER instance %d client %s prio (override): previous level: %d, new level: %d\n", p->nodenum,
 					client->name, client->prio_override, newlevel);
 			} else {
-				ast_cli(fd, "VOTER instance %d client %s prio (override): previous level: <default>, new level: %d\n",
-					p->nodenum, client->name, newlevel);
+				ast_cli(fd, "VOTER instance %d client %s prio (override): previous level: <default>, new level: %d\n", p->nodenum,
+					client->name, newlevel);
 			}
 		} else {
 			ast_cli(fd, "VOTER instance %d client %s prio (override) disabled\n", p->nodenum, client->name);
@@ -5604,7 +5605,8 @@ static void *voter_reader(void *data)
 								 * the client was locked out in voter.conf, make sure it wasn't overridden to a normal priority
 								 * (>= 0) using the CLI.
 								 */
-								if (client->prio_override == PRIO_LOCKOUT || (client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
+								if (client->prio_override == PRIO_LOCKOUT ||
+									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
 								k = 0;
@@ -5623,8 +5625,8 @@ static void *voter_reader(void *data)
 								}
 								client->lastrssi = k / FRAME_SIZE;
 								maxprio = thisprio = 0;
-								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden priority,
-								 * otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden
+								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
 								 */
 								if (maxclient) {
 									if (maxclient->prio_override > PRIO_DEFAULT) {
@@ -5633,8 +5635,8 @@ static void *voter_reader(void *data)
 										maxprio = maxclient->prio;
 									}
 								}
-								/* If client has an overridden priority (> -2/PRIO_DEFAULT), set thisprio with the overridden priority,
-								 * otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+								/* If client has an overridden priority (> -2/PRIO_DEFAULT), set thisprio with the overridden
+								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
 								 */
 								if (client->prio_override > PRIO_DEFAULT) {
 									thisprio = client->prio_override;
@@ -5664,7 +5666,8 @@ static void *voter_reader(void *data)
 								 * the client was locked out in voter.conf, make sure it wasn't overridden to a normal priority
 								 * (>= 0) using the CLI.
 								 */
-								if (client->prio_override == PRIO_LOCKOUT || (client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
+								if (client->prio_override == PRIO_LOCKOUT ||
+									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
 								i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
@@ -5687,8 +5690,8 @@ static void *voter_reader(void *data)
 							memset(p->buf + AST_FRIENDLY_OFFSET, 0xff, FRAME_SIZE);
 							if (maxclient) {
 								int maxprio, lastprio;
-								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden priority,
-								 * otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden
+								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
 								 */
 								if (maxclient->prio_override > PRIO_DEFAULT) {
 									maxprio = maxclient->prio_override;
@@ -5696,8 +5699,9 @@ static void *voter_reader(void *data)
 									maxprio = maxclient->prio;
 								}
 								lastprio = 0;
-								/* If the lastwon client has an overridden priority (> -2/PRIO_DEFAULT), set lastprio with the overridden priority,
-								 * otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+								/* If the lastwon client has an overridden priority (> -2/PRIO_DEFAULT), set lastprio with the
+								 * overridden priority, otherwise, use the priority from voter.conf (normally 0, if not
+								 * specifically set).
 								 */
 								if (p->lastwon) {
 									if (p->lastwon->prio_override > PRIO_DEFAULT) {
