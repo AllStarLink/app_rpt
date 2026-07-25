@@ -448,7 +448,6 @@ static struct chan_usbradio_pvt usbradio_default = {
 static int hidhdwconfig(struct chan_usbradio_pvt *o);
 static void mixer_write(struct chan_usbradio_pvt *o);
 static int usbradio_start_audio(struct chan_usbradio_pvt *o);
-static void usbradio_stop_audio(struct chan_usbradio_pvt *o);
 static PaError usbradio_read_pa_stereo(struct chan_usbradio_pvt *o);
 static struct ast_channel *usbradio_request(const char *type, struct ast_format_cap *cap,
 	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause);
@@ -926,11 +925,6 @@ static int usbradio_start_audio(struct chan_usbradio_pvt *o)
 	return 0;
 }
 
-static void usbradio_stop_audio(struct chan_usbradio_pvt *o)
-{
-	ast_radio_pa_stop(&o->pa);
-}
-
 /*!
  * \brief USB sound device GPIO processing thread
  * This thread is responsible for finding and associating the node with the
@@ -966,6 +960,7 @@ static void *hidthread(void *arg)
 	char *s, lasttxtmp;
 	int i, j, k;
 	int res;
+	int use_newname = 0;
 	struct usb_device *usb_dev;
 	struct usb_dev_handle *usb_handle;
 	struct chan_usbradio_pvt *o = arg, *ao;
@@ -1033,20 +1028,16 @@ static void *hidthread(void *arg)
 					continue;
 				}
 				o->devicenum = i;
-				{
-					int use_newname = 0;
-
-					if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
-						if (!o->device_error) {
-							ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
-							o->device_error = 1;
-						}
-						ast_mutex_unlock(&usb_dev_lock);
-						usleep(500000);
-						continue;
+				if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
+					if (!o->device_error) {
+						ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
+						o->device_error = 1;
 					}
-					o->newname = use_newname;
+					ast_mutex_unlock(&usb_dev_lock);
+					usleep(500000);
+					continue;
 				}
+				o->newname = use_newname;
 				o->device_error = 0;
 				ast_radio_time(&o->lasthidtime);
 				o->usbass = 1;
@@ -1198,20 +1189,16 @@ static void *hidthread(void *arg)
 		}
 		o->devicenum = i;
 		snprintf(o->hw_device, sizeof(o->hw_device), "hw:%d", i);
-		{
-			int use_newname = 0;
-
-			if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
-				if (!o->device_error) {
-					ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
-					o->device_error = 1;
-				}
-				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
+		if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
+			if (!o->device_error) {
+				ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
+				o->device_error = 1;
 			}
-			o->newname = use_newname;
+			ast_mutex_unlock(&usb_dev_lock);
+			usleep(500000);
+			continue;
 		}
+		o->newname = use_newname;
 		o->device_error = 0;
 		ast_radio_time(&o->lasthidtime);
 		o->usbass = 1;
@@ -1717,15 +1704,14 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 		return 0;
 	}
 
+	/*
+	 * ast_radio_pa_write() already primes one silence frame on
+	 * paOutputUnderflowed (#593 / #598). Treat that as success here.
+	 */
 	res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
-	if (res == paOutputUnderflowed) {
-		short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
-
-		ast_debug(6, "Channel %s: PortAudio write underflow, priming with silence\n", o->name);
-		ast_radio_pa_write(&o->pa, null_buf, AST_RADIO_PA_FRAMES_PER_BUFFER);
-	} else if (res != paNoError) {
+	if (res < 0 && res != paOutputUnderflowed) {
 		ast_log(LOG_ERROR, "Channel %s: PortAudio write error %s\n", o->name, Pa_GetErrorText(res));
-		usbradio_stop_audio(o);
+		ast_radio_pa_stop(&o->pa);
 		return 0;
 	}
 
@@ -1988,7 +1974,7 @@ static int usbradio_hangup(struct ast_channel *c)
 	if (o->hookstate) {
 		o->hookstate = 0;
 	}
-	usbradio_stop_audio(o);
+	ast_radio_pa_stop(&o->pa);
 	return 0;
 }
 
@@ -2147,7 +2133,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		} else {
 			ast_log(LOG_ERROR, "Channel %s: PortAudio read error %s\n", o->name, Pa_GetErrorText(pa_res));
 			o->hasusb = 0;
-			usbradio_stop_audio(o);
+			ast_radio_pa_stop(&o->pa);
 			return &ast_null_frame;
 		}
 	}
@@ -5591,6 +5577,7 @@ static int load_module(void)
 static int unload_module(void)
 {
 	struct chan_usbradio_pvt *o;
+	int i;
 
 	stoppulser = 1;
 
@@ -5635,13 +5622,23 @@ static int unload_module(void)
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
 		}
-		usbradio_stop_audio(o);
+		ast_radio_pa_stop(&o->pa);
 		if (o->pmrChan) {
 			destroyPmrChannel(o->pmrChan);
 			o->pmrChan = NULL;
 		}
 		if (o->dsp) {
 			ast_dsp_free(o->dsp);
+		}
+		for (i = 0; i < GPIO_PINCOUNT; i++) {
+			if (o->gpios[i]) {
+				ast_free(o->gpios[i]);
+			}
+		}
+		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
+			if (o->pps[i]) {
+				ast_free(o->pps[i]);
+			}
 		}
 	}
 
