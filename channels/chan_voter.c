@@ -422,6 +422,11 @@ char context[100];
 #define VOTER_PAYLOAD_PING 5
 #define VOTER_PAYLOAD_PROXY 0xf000
 
+/* Define voter priority levels. */
+#define PRIO_NORMAL 0	/* Clients with a priority of 0 are "normal" and have no special priority */
+#define PRIO_LOCKOUT -1 /* Clients with a priority of -1 are "locked out" from selection */
+#define PRIO_DEFAULT -2 /* A priority of -2 uses the client's default priority (often 0) */
+
 /* Define voter packet flags. */
 enum voter_auth_flags {
 	/*! \brief Send flat audio (nodeemp or hostdeemp) (aka Flag 1) */
@@ -1841,8 +1846,8 @@ static void voter_display(int fd, const struct voter_pvt *p)
 			rssi = client->lastrssi;
 			thresh = (rssi * ncols) / 256;
 			for (j = 0; j < ncols; j++) {
-				if (client->prio_override == -1) {
-					str[j] = 'X';
+				if ((client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL) || client->prio_override == PRIO_LOCKOUT) {
+					str[j] = 'X'; /* Display "X" if the client is locked out */
 				} else if (j < thresh) {
 					str[j] = '=';
 				} else if (j == thresh) {
@@ -2194,10 +2199,12 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 	struct voter_pvt *p;
 	struct voter_client *client;
 
+	/* Not enough arguments supplied, show usage. */
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
 	ast_mutex_lock(&voter_lock);
+	/* Look for a matching voter instance */
 	for (p = pvts; p; p = p->next) {
 		if (p->nodenum == atoi(argv[2])) {
 			break;
@@ -2208,37 +2215,56 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
+	/* If just the instance is supplied (voter prio <instance>), this is a query, display the
+	 * priority values for all clients in that instance.
+	 */
 	if (argc == 3) {
 		ast_cli(fd, "VOTER instance %d priority values:\n\n", p->nodenum);
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if (client->prio_override > -2) {
-				ast_cli(fd, "Client %s: eff_prio: %d, prio: %d, override_prio: %d\n", client->name, client->prio_override,
-					client->prio, client->prio_override);
+			/* If the client's priority has been overridden (prio_override isn't default), display the overridden value.
+			 * Otherwise, just display the client(s) priority value (client->prio) from voter.conf.
+			 */
+			if (client->prio_override > PRIO_DEFAULT) {
+				ast_cli(fd, "Client %s: current priority: %d, configured priority: %d, override priority: %d\n", client->name,
+					client->prio_override, client->prio, client->prio_override);
 			} else {
-				ast_cli(fd, "Client %s: prio: %d (not overridden)\n", client->name, client->prio);
+				ast_cli(fd, "Client %s: current/configured priority: %d (not overridden)\n", client->name, client->prio);
 			}
 		}
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
+	/* If the instance and either "all" or a specific client name are provided, display the current priority
+	 * values. ie:
+	 * voter prio <instance> all - displays all client priority information (similar to just providing the instance alone)
+	 * voter prio <instance> <client> - displays a particular client's priority information
+	 */
 	if (argc == 4) {
 		foundit = 0;
 		for (client = clients; client; client = client->next) {
+			/* Skip the client if its instance doesn't match the instance we're working on. */
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
+			/* This is "negative logic", as strcasecmp() returns 0 on a match, so this
+			 * will skip (continue) if "all" or valid client name are NOT provided.
+			 */
 			if (strcasecmp(argv[3], "all") && strcasecmp(argv[3], client->name)) {
 				continue;
 			}
 			foundit = 1;
-			if (client->prio_override > -2) {
-				ast_cli(fd, "VOTER instance %d, client %s: eff_prio: %d, prio: %d, override_prio: %d\n", p->nodenum, client->name,
-					client->prio_override, client->prio, client->prio_override);
+			/* If the client's priority has been overridden (prio_override isn't default), display the overridden value.
+			 * Otherwise, just display the client(s) priority value (client->prio) from voter.conf.
+			 */
+			if (client->prio_override > PRIO_DEFAULT) {
+				ast_cli(fd, "VOTER instance %d, client %s: current priority: %d, configured priority: %d, override priority: %d\n",
+					p->nodenum, client->name, client->prio_override, client->prio, client->prio_override);
 			} else {
-				ast_cli(fd, "VOTER instance %d, client %s: prio: %d (not overridden)\n", p->nodenum, client->name, client->prio);
+				ast_cli(fd, "VOTER instance %d, client %s: current/configured priority: %d (not overridden)\n", p->nodenum,
+					client->name, client->prio);
 			}
 		}
 		if (!foundit) {
@@ -2247,6 +2273,9 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
+	/* The last case will be to change a client's priority value, however, if too many arguments are provided,
+	 * just show usage.
+	 */
 	if (argc != 5) {
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SHOWUSAGE;
@@ -2256,30 +2285,41 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 		if (client->nodenum != p->nodenum) {
 			continue;
 		}
+		/* This is "negative logic", as strcasecmp() returns 0 on a match, so this
+		 * will skip (continue) if "all" or valid client name are NOT provided.
+		 */
 		if (strcasecmp(argv[3], "all") && strcasecmp(argv[3], client->name)) {
 			continue;
 		}
-		if (!strcasecmp(argv[4], "off") || !strncasecmp(argv[4], "dis", 3)) {
-			newlevel = -2;
+		/* If the keyword "off" or "disable" (matching "dis") is provided, lockout this client.
+		 * Equivalent of specifying -1 as the priority.
+		 * If the keyword "on" or "enable" (matching "ena") is provided, re-enable the client,
+		 * setting the priority to default/normal (0). Remember, strncasecmp() returns 0 on a match.
+		 */
+		if (!strncasecmp(argv[4], "off", 3) || !strncasecmp(argv[4], "dis", 3)) {
+			newlevel = PRIO_LOCKOUT;
+		} else if (!strncasecmp(argv[4], "on", 2) || !strncasecmp(argv[4], "ena", 3)) {
+			newlevel = PRIO_NORMAL;
 		} else {
 			if (sscanf(argv[4], N_FMT(d), &newlevel) < 1) {
-				ast_cli(fd, "Error: Invalid priority value specification!!\n");
+				ast_cli(fd, "Error: Invalid priority value specification entered!!\n");
 				ast_mutex_unlock(&voter_lock);
 				return RESULT_SUCCESS;
 			}
 		}
-		if (newlevel < -2) {
+		/* If the new level specified is < -2 (PRIO_DEFAULT), that's invalid. */
+		if (newlevel < PRIO_DEFAULT) {
 			ast_cli(fd, "Error: Invalid priority value specification!!\n");
 			ast_mutex_unlock(&voter_lock);
 			return RESULT_SUCCESS;
 		}
-		if (newlevel > -2) {
-			if (client->prio_override > -2) {
+		if (newlevel > PRIO_DEFAULT) {
+			if (client->prio_override > PRIO_DEFAULT) {
 				ast_cli(fd, "VOTER instance %d client %s prio (override): previous level: %d, new level: %d\n", p->nodenum,
 					client->name, client->prio_override, newlevel);
 			} else {
-				ast_cli(fd, "VOTER instance %d client %s prio (override): previous level: <disabled>, new level: %d\n",
-					p->nodenum, client->name, newlevel);
+				ast_cli(fd, "VOTER instance %d client %s prio (override): previous level: <default>, new level: %d\n", p->nodenum,
+					client->name, newlevel);
 			}
 		} else {
 			ast_cli(fd, "VOTER instance %d client %s prio (override) disabled\n", p->nodenum, client->name);
@@ -2718,7 +2758,8 @@ static struct ast_cli_entry voter_cli[] = {
 /****************************END OF ASTERISK CLI FUNCTIONS****************************/
 
 /*!
- * \brief Mix and send audio packet.
+ * \brief Mix and send audio packet. This function is only used for mix mode clients. Voting
+ * clients use the voter_reader thread directly to send audio packets.
  *
  * This routine must be called with voter_lock locked.
  *
@@ -2750,21 +2791,35 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		return 0;
 	}
 	maxprio = 0;
+	/* Traverse the client list and find the client with the highest priority. */
 	for (client = clients; client; client = client->next) {
+		/* If the client doesn't belong to this VOTER instance, skip it. */
 		if (client->nodenum != p->nodenum) {
 			continue;
 		}
+		/* If the client is NOT a mix client, skip it (skip VOTER clients). */
 		if (!client->mix) {
 			continue;
 		}
-		if (client->prio_override == -1) {
+		/* If the client is locked out, skip. We check to see if the client was locked out
+		 * on the CLI (client->prio_override), or locked out in voter.conf (client->prio). If
+		 * the client was locked out in voter.conf, make sure it wasn't overridden to a normal priority
+		 * (>= 0) using the CLI.
+		 */
+		if (client->prio_override == PRIO_LOCKOUT || (client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 			continue;
 		}
-		if (client->prio_override > -2) {
+		/* If the client has an overridden priority (> -2/PRIO_DEFAULT), set i with the overridden priority,
+		 * otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+		 */
+		if (client->prio_override > PRIO_DEFAULT) {
 			i = client->prio_override;
 		} else {
 			i = client->prio;
 		}
+		/* Update maxprio with the highest priority found. If no clients have a priority configured,
+		 * maxprio will be 0 (everyone is equal).
+		 */
 		if (i > maxprio) {
 			maxprio = i;
 		}
@@ -2772,25 +2827,43 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	/* f1 now contains the voted-upon audio in slinear */
 	for (client = clients; client; client = client->next) {
 		short *sp1, *sp2;
+		/* If the client doesn't belong to this VOTER instance, skip it. */
 		if (client->nodenum != p->nodenum) {
 			continue;
 		}
+		/* If the client is NOT a mix client, skip it (skip VOTER clients). */
 		if (!client->mix) {
 			continue;
 		}
-		if (client->prio_override == -1) {
+		/* If the client is locked out, skip. We check to see if the client was locked out
+		 * on the CLI (client->prio_override), or locked out in voter.conf (client->prio). If
+		 * the client was locked out in voter.conf, make sure it wasn't overridden to a normal priority
+		 * (>= 0) using the CLI.
+		 */
+		if (client->prio_override == PRIO_LOCKOUT || (client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 			continue;
 		}
+		/* maxprio will only be set (> 0) if a client has a priority configured or is overridden
+		 * via the CLI. Normally, all clients default to equal priority (0), so maxprio would be 0.
+		 */
 		if (maxprio) {
-			if (client->prio_override > -2) {
+			/* If the client has an overridden priority (> -2/PRIO_DEFAULT), set i with the overridden priority,
+			 * otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+			 */
+			if (client->prio_override > PRIO_DEFAULT) {
 				i = client->prio_override;
 			} else {
 				i = client->prio;
 			}
+			/* If this client's priority is less than the maxprio we found above, skip. */
 			if (i < maxprio) {
 				continue;
 			}
 		}
+		/* At this point, we should have selected the client with the highest configured
+		 * priority (if there were any priorities configured). We will now proceed
+		 * to send the audio from this highest priority client.
+		 */
 		i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
 		if (i >= 0) {
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
@@ -4207,7 +4280,8 @@ static int reload(void)
 					ast_config_destroy(cfg);
 					return -1;
 				}
-				client->prio_override = -2;
+				/* When initializing a client, set the CLI priority override to PRIO_DEFAULT (-2). */
+				client->prio_override = PRIO_DEFAULT;
 				ast_copy_string(client->name, v->name, sizeof(client->name));
 				newclient = 1;
 			}
@@ -4220,7 +4294,7 @@ static int reload(void)
 			client->curmaster = 0;
 			client->ismaster = 0;
 			client->noplfilter = 0;
-			client->prio = 0;
+			client->prio = PRIO_NORMAL; /* Default "normal" priority is 0 */
 			client->gpsid = 0;
 			for (i = 1; i < n; i++) {
 				if (!strcasecmp(strs[i], "transmit")) {
@@ -4246,9 +4320,17 @@ static int reload(void)
 				} else if (!strncasecmp(strs[i], "prio", 4)) {
 					cp1 = strchr(strs[i], '=');
 					if (cp1) {
-						client->prio = strtoul(cp1 + 1, NULL, 0);
-						if (client->prio < -1) {
-							client->prio = 0;
+						/* Set the priority level of the client, if specified. Priorities
+						 * >=1 give more priority to this client. The default for clients
+						 * (if not specified) is 0. A priority of -1 will disable the
+						 * client.
+						 */
+						client->prio = strtol(cp1 + 1, NULL, 0);
+						/* A priority < -1 (PRIO_LOCKOUT) is invalid, so ignore it and set the priority
+						 * to 0 (normal).
+						 */
+						if (client->prio < PRIO_LOCKOUT) {
+							client->prio = PRIO_NORMAL;
 						}
 					}
 				}
@@ -5510,13 +5592,21 @@ static void *voter_reader(void *data)
 								int maxprio, thisprio;
 
 								startagain = 0;
+								/* If the client doesn't belong to this VOTER instance, skip it. */
 								if (client->nodenum != p->nodenum) {
 									continue;
 								}
+								/* If this is a mix client, skip it. */
 								if (client->mix) {
 									continue;
 								}
-								if (client->prio_override == -1) {
+								/* If the client is locked out, skip. We check to see if the client was locked out
+								 * on the CLI (client->prio_override), or locked out in voter.conf (client->prio). If
+								 * the client was locked out in voter.conf, make sure it wasn't overridden to a normal priority
+								 * (>= 0) using the CLI.
+								 */
+								if (client->prio_override == PRIO_LOCKOUT ||
+									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
 								k = 0;
@@ -5535,18 +5625,25 @@ static void *voter_reader(void *data)
 								}
 								client->lastrssi = k / FRAME_SIZE;
 								maxprio = thisprio = 0;
+								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden
+								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+								 */
 								if (maxclient) {
-									if (maxclient->prio_override > -2) {
+									if (maxclient->prio_override > PRIO_DEFAULT) {
 										maxprio = maxclient->prio_override;
 									} else {
 										maxprio = maxclient->prio;
 									}
 								}
-								if (client->prio_override > -2) {
+								/* If client has an overridden priority (> -2/PRIO_DEFAULT), set thisprio with the overridden
+								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+								 */
+								if (client->prio_override > PRIO_DEFAULT) {
 									thisprio = client->prio_override;
 								} else {
 									thisprio = client->prio;
 								}
+								/* Check and set if this is the client with the highest RSSI. */
 								if (((client->lastrssi > maxrssi) && (thisprio == maxprio)) || (client->lastrssi && (thisprio > maxprio))) {
 									maxrssi = client->lastrssi;
 									maxclient = client;
@@ -5556,13 +5653,21 @@ static void *voter_reader(void *data)
 								}
 							}
 							for (client = clients; client; client = client->next) {
+								/* If the client doesn't belong to this VOTER instance, skip it. */
 								if (client->nodenum != p->nodenum) {
 									continue;
 								}
+								/* If this is a mix client, skip it. */
 								if (client->mix) {
 									continue;
 								}
-								if (client->prio_override == -1) {
+								/* If the client is locked out, skip. We check to see if the client was locked out
+								 * on the CLI (client->prio_override), or locked out in voter.conf (client->prio). If
+								 * the client was locked out in voter.conf, make sure it wasn't overridden to a normal priority
+								 * (>= 0) using the CLI.
+								 */
+								if (client->prio_override == PRIO_LOCKOUT ||
+									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
 								i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
@@ -5585,15 +5690,21 @@ static void *voter_reader(void *data)
 							memset(p->buf + AST_FRIENDLY_OFFSET, 0xff, FRAME_SIZE);
 							if (maxclient) {
 								int maxprio, lastprio;
-
-								if (maxclient->prio_override > -2) {
+								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden
+								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
+								 */
+								if (maxclient->prio_override > PRIO_DEFAULT) {
 									maxprio = maxclient->prio_override;
 								} else {
 									maxprio = maxclient->prio;
 								}
 								lastprio = 0;
+								/* If the lastwon client has an overridden priority (> -2/PRIO_DEFAULT), set lastprio with the
+								 * overridden priority, otherwise, use the priority from voter.conf (normally 0, if not
+								 * specifically set).
+								 */
 								if (p->lastwon) {
-									if (p->lastwon->prio_override > -2) {
+									if (p->lastwon->prio_override > PRIO_DEFAULT) {
 										lastprio = p->lastwon->prio_override;
 									} else {
 										lastprio = p->lastwon->prio;
@@ -5808,6 +5919,7 @@ static void *voter_reader(void *data)
 								}
 								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
 							}
+							/* Go send any audio from mix clients. */
 							if (!voter_mix_and_send(p, maxclient, maxrssi)) {
 								continue;
 							}
