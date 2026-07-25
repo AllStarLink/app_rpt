@@ -425,7 +425,7 @@ char context[100];
 /* Define voter priority levels. */
 #define PRIO_NORMAL 0	/* Clients with a priority of 0 are "normal" and have no special priority */
 #define PRIO_LOCKOUT -1 /* Clients with a priority of -1 are "locked out" from selection */
-#define PRIO_DEFAULT -2 /* A priority of -2 is uses the client's default priority (often 0) */
+#define PRIO_DEFAULT -2 /* A priority of -2 uses the client's default priority (often 0) */
 
 /* Define voter packet flags. */
 enum voter_auth_flags {
