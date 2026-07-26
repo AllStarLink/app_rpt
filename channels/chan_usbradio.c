@@ -175,12 +175,12 @@ static const char *const mixer_type[] = { "no", "voice", "tone", "composite", "a
 struct chan_usbradio_pvt {
 	struct chan_usbradio_pvt *next;
 
-	char *name;			 /* the internal name of our channel */
-	char hw_device[100]; /* ALSA/PortAudio device (hw:N or hw:N,M) */
-	int devtype;		 /* actual type of device */
-	int pttkick[2];		 /* ptt kick pipe */
+	char *name;				 /* the internal name of our channel */
+	char hw_device[100];	 /* ALSA/PortAudio device (hw:N or hw:N,M) */
+	int devtype;			 /* actual type of device */
+	int pttkick[2];			 /* ptt kick pipe */
 	struct ast_timer *timer; /* 20 ms channel wakeup (PTT / DSP tick) */
-	int total_blocks; /* legacy queue depth hint for TX buffering */
+	int total_blocks;		 /* legacy queue depth hint for TX buffering */
 	struct ast_radio_pa_stream pa;
 	enum {
 		M_UNSET,
