@@ -1224,7 +1224,9 @@ static void *hidthread(void *arg)
 			ast_mutex_unlock(&usb_dev_lock);
 			usb_close(usb_handle);
 			usb_handle = NULL;
-			return NULL;
+			/* Stay in hidthread and retry; call() only starts the thread once. */
+			usleep(DEVICE_RETRY);
+			continue;
 		}
 
 		if ((o->usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
