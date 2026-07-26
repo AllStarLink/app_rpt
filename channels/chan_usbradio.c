@@ -1220,7 +1220,9 @@ usb_device_ready:
 			o->usbass = 0;
 			o->hasusb = 0;
 			ast_mutex_unlock(&usb_dev_lock);
-			return NULL;
+			/* Stay in hidthread and retry; call() only starts the thread once. */
+			usleep(500000);
+			continue;
 		}
 		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
 			o->devtype = C108_PRODUCT_ID;
