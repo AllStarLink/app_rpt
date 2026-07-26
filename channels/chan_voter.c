@@ -1665,8 +1665,8 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 		}
 		rpt_manager_success(ses, m);
 		astman_append(ses, "Node: %d\r\n", p->nodenum);
-		if (p->lastwon) {
-			astman_append(ses, "Voted: %s\r\n", p->lastwon->name);
+		if (p->winner) {
+			astman_append(ses, "Voted: %s\r\n", p->winner->name);
 		}
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
