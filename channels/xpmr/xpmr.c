@@ -2942,10 +2942,19 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			 * unkeys, so classic TOC (which waits for txPttIn to drop) never runs
 			 * until hangtime ends. Start notone/phase turn-off when local COS drops
 			 * so CTCSS ends at the start of hang instead of riding until PTT drops.
+			 * If COS returns while hangtime still holds PTT, restore CTCSS so the
+			 * next keyed period is not left muted until PTT finally drops.
 			 * Half duplex blanks RX while keyed, so COS cannot be used that way.
 			 */
 			if (pChan->radioDuplex && pChan->rxCarrierDetect) {
 				pChan->b.txHadRxCarrier = 1;
+				if (pChan->b.txCtcssHangMuted && pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
+					pChan->b.txCtcssHangMuted = 0;
+					pChan->spsSigGen0->option = 1;
+					pChan->spsSigGen0->enabled = 1;
+					pChan->spsSigGen0->discounterl = 0;
+					TRACEC(1, "Tx CTCSS restore on COS reassert during hang.\n");
+				}
 			}
 			if (pChan->radioDuplex && pChan->b.txHadRxCarrier && !pChan->rxCarrierDetect && !pChan->b.txCtcssHangMuted &&
 				pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable && pChan->txTocType != TOC_NONE) {
