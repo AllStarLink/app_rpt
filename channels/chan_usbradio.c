@@ -777,7 +777,7 @@ static void *pulserthread(void *arg)
 		}
 		ast_mutex_unlock(&pp_lock);
 	}
-	pthread_exit(0);
+	return NULL;
 }
 
 /*!
@@ -1226,7 +1226,7 @@ usb_device_ready:
 			o->usbass = 0;
 			o->hasusb = 0;
 			ast_mutex_unlock(&usb_dev_lock);
-			pthread_exit(NULL);
+			return NULL;
 		}
 		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
 			o->devtype = C108_PRODUCT_ID;
@@ -1648,7 +1648,7 @@ usb_device_ready:
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
 	}
-	pthread_exit(0);
+	return NULL;
 }
 
 /*!
@@ -2005,7 +2005,7 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 static struct ast_frame *usbradio_read(struct ast_channel *c)
 {
 	PaError pa_res;
-	int oldpttout;
+	int lastpttout;
 	int cd, sd;
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
 	struct ast_frame *f = &o->read_f, *f1;
@@ -2157,9 +2157,9 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 		o->pmrChan->txPttIn = 0;
 		ast_debug(3, "Channel %s: txPttIn = %i.\n", o->name, o->pmrChan->txPttIn);
 	}
-	oldpttout = o->pmrChan->txPttOut;
+	lastpttout = o->pmrChan->txPttOut;
 
-	if (oldpttout && (!o->didpmrtx)) {
+	if (lastpttout && (!o->didpmrtx)) {
 		if (o->notxcnt > 1) {
 			memset(o->usbradio_write_buf, 0, sizeof(o->usbradio_write_buf));
 			PmrTx(o->pmrChan, o->usbradio_write_buf);
@@ -2174,7 +2174,7 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	PmrRx(o->pmrChan, (i16 *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET),
 		(i16 *) (o->usbradio_read_buf_8k + AST_FRIENDLY_OFFSET), o->usbradio_write_buf);
 
-	if (oldpttout != o->pmrChan->txPttOut) {
+	if (lastpttout != o->pmrChan->txPttOut) {
 		ast_debug(3, "Channel %s: txPttOut = %i.\n", o->name, o->pmrChan->txPttOut);
 		kickptt(o);
 	}
