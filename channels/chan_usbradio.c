@@ -367,6 +367,7 @@ struct chan_usbradio_pvt {
 	unsigned int lsdtxpolarity:1;	/* indicator for lsd transmit polarity */
 	unsigned int radioactive:1;		/* indicator for active radio channel */
 	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
+	unsigned int usb_faulted:1;		/* set after USB/audio failure; cleared on recovery NOTICE */
 	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
 	unsigned int hasusb:1;			/* indicator for has a USB device */
 	unsigned int usbass:1;			/* indicator for USB device assigned */
@@ -469,6 +470,21 @@ static int xpmr_set_tx_soft_limiter(struct chan_usbradio_pvt *o, int setpoint);
 #if DEBUG_FILETEST == 1
 static int RxTestIt(struct chan_usbradio_pvt *o);
 #endif
+
+/*!
+ * \brief Log once when USB/audio returns after a prior failure.
+ */
+static void usbradio_log_usb_recovered(struct chan_usbradio_pvt *o)
+{
+	const char *dev;
+
+	if (!o->usb_faulted) {
+		return;
+	}
+	dev = !ast_strlen_zero(o->devstr) ? o->devstr : o->hw_device;
+	ast_log(LOG_NOTICE, "Channel %s: USB radio device recovered (%s)\n", o->name, !ast_strlen_zero(dev) ? dev : "unknown");
+	o->usb_faulted = 0;
+}
 
 static char *usbradio_active; /* the active device */
 
@@ -990,6 +1006,7 @@ static void *hidthread(void *arg)
 					if (!o->device_error) {
 						ast_log(LOG_ERROR, "Channel %s: No USB device for audiodev %s\n", o->name, o->hw_device);
 						o->device_error = 1;
+						o->usb_faulted = 1;
 					}
 					ast_mutex_unlock(&usb_dev_lock);
 					usleep(500000);
@@ -1000,6 +1017,7 @@ static void *hidthread(void *arg)
 					if (!o->device_error) {
 						ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
 						o->device_error = 1;
+						o->usb_faulted = 1;
 					}
 					ast_mutex_unlock(&usb_dev_lock);
 					usleep(500000);
@@ -1015,6 +1033,7 @@ static void *hidthread(void *arg)
 			if (!o->device_error) {
 				ast_log(LOG_ERROR, "Channel %s: Invalid audiodev '%s' (use hw:N or hw:N,M)\n", o->name, o->hw_device);
 				o->device_error = 1;
+				o->usb_faulted = 1;
 			}
 			ast_mutex_unlock(&usb_dev_lock);
 			usleep(500000);
@@ -1071,6 +1090,7 @@ static void *hidthread(void *arg)
 					if (!o->device_error) {
 						ast_log(LOG_ERROR, "Channel %s: No USB devices are available for assignment.\n", o->name);
 						o->device_error = 1;
+						o->usb_faulted = 1;
 					}
 					ast_mutex_unlock(&usb_dev_lock);
 					usleep(500000);
@@ -1110,6 +1130,7 @@ static void *hidthread(void *arg)
 				if (!o->device_error) {
 					ast_log(LOG_ERROR, "Channel %s: Device string %s was not found.\n", o->name, o->devstr);
 					o->device_error = 1;
+					o->usb_faulted = 1;
 				}
 				ast_mutex_unlock(&usb_dev_lock);
 				usleep(500000);
@@ -1161,6 +1182,7 @@ static void *hidthread(void *arg)
 			if (!o->device_error) {
 				ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
 				o->device_error = 1;
+				o->usb_faulted = 1;
 			}
 			ast_mutex_unlock(&usb_dev_lock);
 			usleep(500000);
@@ -1175,6 +1197,7 @@ static void *hidthread(void *arg)
 		usb_dev = ast_radio_hid_device_init(o->devstr);
 		if (usb_dev == NULL) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
+			o->usb_faulted = 1;
 			usleep(500000);
 			continue;
 		}
@@ -1182,6 +1205,7 @@ usb_device_ready:
 		/* open the usb device device */
 		if (libusb_open(usb_dev, &usb_handle) < 0) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
+			o->usb_faulted = 1;
 			usleep(500000);
 			continue;
 		}
@@ -1189,11 +1213,13 @@ usb_device_ready:
 		if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 			if (libusb_detach_kernel_driver(usb_handle, C108_HID_INTERFACE) < 0) {
 				ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
+				o->usb_faulted = 1;
 				usleep(500000);
 				continue;
 			}
 			if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 				ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
+				o->usb_faulted = 1;
 				usleep(500000);
 				continue;
 			}
@@ -1225,6 +1251,7 @@ usb_device_ready:
 			o->hasusb = 0;
 			ast_mutex_unlock(&usb_dev_lock);
 			/* Stay in hidthread and retry; call() only starts the thread once. */
+			o->usb_faulted = 1;
 			usleep(500000);
 			continue;
 		}
@@ -1360,9 +1387,11 @@ usb_device_ready:
 			ast_mutex_lock(&usb_dev_lock);
 			o->usbass = 0;
 			ast_mutex_unlock(&usb_dev_lock);
+			o->usb_faulted = 1;
 			usleep(500000);
 			continue;
 		}
+		usbradio_log_usb_recovered(o);
 		o->hasusb = 1;
 		o->had_gpios_in = 0;
 
@@ -1698,7 +1727,8 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	 */
 	res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
 	if (res < 0 && res != paOutputUnderflowed) {
-		ast_log(LOG_ERROR, "Channel %s: PortAudio write error %s\n", o->name, Pa_GetErrorText(res));
+		ast_log(LOG_ERROR, "Channel %s: PortAudio write failed (%s); restarting audio stream\n", o->name, Pa_GetErrorText(res));
+		o->usb_faulted = 1;
 		ast_radio_pa_stop(&o->pa);
 		return 0;
 	}
@@ -2119,7 +2149,8 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 			/* No RX audio available; still run PTT/TX processing with silence. */
 			memset(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 0, sizeof(o->usbradio_read_buf) - AST_FRIENDLY_OFFSET);
 		} else {
-			ast_log(LOG_ERROR, "Channel %s: PortAudio read error %s\n", o->name, Pa_GetErrorText(pa_res));
+			ast_log(LOG_ERROR, "Channel %s: PortAudio read failed (%s); restarting audio stream\n", o->name, Pa_GetErrorText(pa_res));
+			o->usb_faulted = 1;
 			o->hasusb = 0;
 			ast_radio_pa_stop(&o->pa);
 			return &ast_null_frame;
