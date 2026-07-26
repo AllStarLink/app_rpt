@@ -180,7 +180,6 @@ struct chan_usbradio_pvt {
 	int devtype;			 /* actual type of device */
 	int pttkick[2];			 /* ptt kick pipe */
 	struct ast_timer *timer; /* 20 ms channel wakeup (PTT / DSP tick) */
-	int total_blocks;		 /* legacy queue depth hint for TX buffering */
 	struct ast_radio_pa_stream pa;
 	enum {
 		M_UNSET,
@@ -191,11 +190,6 @@ struct chan_usbradio_pvt {
 	int hookstate;
 	unsigned int queuesize; /* max fragments in queue */
 	unsigned int frags;		/* parameter for SETFRAGMENT */
-
-	int warned; /* various flags used for warnings */
-#define WARN_used_blocks 1
-#define WARN_speed 2
-#define WARN_frag 4
 
 	char devicenum;
 	char devstr[128];
@@ -1647,6 +1641,9 @@ usb_device_ready:
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
+		/* Hangup joins this thread; release HID so the next call can reopen it. */
+		usb_close(usb_handle);
+		usb_handle = NULL;
 	}
 	return NULL;
 }
