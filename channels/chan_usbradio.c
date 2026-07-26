@@ -1654,7 +1654,8 @@ usb_device_ready:
 /*!
  * \brief Write a full frame of audio data to the sound card device.
  * \note data is 48 kHz stereo interleaved. ast_radio_pa_write() takes frames
- *       per channel (AST_RADIO_PA_FRAMES_PER_BUFFER).
+ *       per channel (AST_RADIO_PA_FRAMES_PER_BUFFER); interleaved sample count
+ *       is frames * AST_RADIO_PA_OUTPUT_CHANNELS (== AST_RADIO_PA_48K_STEREO_SAMPLES).
  * \param o		chan_usbradio_pvt.
  * \param data	Audio data to write.
  * \returns		Byte count written on success, 0 on failure.
@@ -1684,7 +1685,7 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 		return 0;
 	}
 
-	return AST_RADIO_PA_48K_STEREO_SAMPLES * (int) sizeof(short);
+	return AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS * (int) sizeof(short);
 }
 
 /*!
@@ -2108,7 +2109,8 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 
 #if DEBUG_CAPTURES == 1
 	if (o->rxcapraw && frxcapraw) {
-		fwrite(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 1, AST_RADIO_PA_48K_STEREO_SAMPLES * sizeof(short), frxcapraw);
+		fwrite(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 1,
+			AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS * sizeof(short), frxcapraw);
 	}
 #endif
 
