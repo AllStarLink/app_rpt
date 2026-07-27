@@ -857,8 +857,8 @@ static void options_menu(void)
 		printf("3) Change RX Demodulation (currently '%s')\n", demodulation_type[rxdemod]);
 		printf("4) Change RX On Delay (currently '%d')\n", rxondelay);
 		printf("5) Change TX Off Delay (currently '%d')\n", txoffdelay);
-		printf("6) Toggle TX Prelimiting (currently '%s')\n", rxboost ? "enabled" : "disabled");
-		printf("7) Toggle TX Limiting Only (currently '%s')\n", txboost ? "enabled" : "disabled");
+		printf("6) Toggle TX Prelimiting (currently '%s')\n", txprelim ? "enabled" : "disabled");
+		printf("7) Toggle TX Limiting Only (currently '%s')\n", txlimonly ? "enabled" : "disabled");
 		printf("8) Change TX Mixer A (currently '%s')\n", mixer_type[txmixa]);
 		printf("9) Change Tx Mixer B (currently '%s')\n", mixer_type[txmixb]);
 		printf("0) Exit Menu\n");
