@@ -2875,7 +2875,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		 * priority (if there were any priorities configured). We will now proceed
 		 * to send the audio from this highest priority client.
 		 */
-		 /* Calculate the bytes available before the ring-buffer wraps. */
+		/* Calculate the bytes available before the ring-buffer wraps. */
 		i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
 		if (i >= 0) {
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
@@ -5864,7 +5864,7 @@ static void *voter_reader(void *data)
 											break;
 										}
 									}
-								/* When testing is complete, reset the test index and cycle. */
+									/* When testing is complete, reset the test index and cycle. */
 								} else {
 									p->testcycle = 0;
 									p->testindex = 0;
