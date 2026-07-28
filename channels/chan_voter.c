@@ -2758,16 +2758,18 @@ static struct ast_cli_entry voter_cli[] = {
 /****************************END OF ASTERISK CLI FUNCTIONS****************************/
 
 /*!
- * \brief Mix and send audio packet. This function is only used for mix mode clients. Voting
- * clients use the voter_reader thread directly to send audio packets.
+ * \brief Mix and send audio packets. The voter_reader thread will call this function,
+ * sending us the audio and RSSI from the current selected voting client (if voting is used).
+ * This function then mixes the audio from all the clients that are receiving and selected,
+ * (including mix mode clients) and sends it to the Asterisk core.
  *
  * This routine must be called with voter_lock locked.
  *
- * \param p				Pointer to voter_pvt struct.
- * \param maxclient		Pointer to voter_client struct.
- * \param maxrssi		Maximum RSSI value.
- * \retval 0			Successful.
- * \retval 1			Successful.
+ * \param p				Pointer to the current voter instance (channel).
+ * \param maxclient		Pointer to the voted client (typically sent from voter_reader).
+ * \param maxrssi		Maximum RSSI value of the voted client (typically sent from voter_reader).
+ * \retval				0 if this function has an error or there was no audio/winner processed.
+ * \retval				1 if this function is successful.
  */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
@@ -2786,12 +2788,21 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	fr.offset = AST_FRIENDLY_OFFSET;
 	fr.src = __PRETTY_FUNCTION__;
 	f1 = ast_translate(p->toast, &fr, 0);
+	/* f1 now contains the voted-upon audio in slinear */
 	if (!f1) {
 		ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to send to Asterisk\n", p->nodenum);
 		return 0;
 	}
+
+	/* Reset the priority value for mix mode clients, so we can see if any of them have
+	 * higher priority to send audio (below).
+	 */
 	maxprio = 0;
-	/* Traverse the client list and find the client with the highest priority. */
+	/* Traverse the client list and find the highest priority greater than 0 among eligible mix
+	 * clients to process.
+	 * If maxprio remains 0, all eligible clients will be processed.
+	 * If all eligible clients are tied at maxprio, they will be processed.
+	 */
 	for (client = clients; client; client = client->next) {
 		/* If the client doesn't belong to this VOTER instance, skip it. */
 		if (client->nodenum != p->nodenum) {
@@ -2824,7 +2835,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			maxprio = i;
 		}
 	}
-	/* f1 now contains the voted-upon audio in slinear */
+
 	for (client = clients; client; client = client->next) {
 		short *sp1, *sp2;
 		/* If the client doesn't belong to this VOTER instance, skip it. */
@@ -2860,10 +2871,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				continue;
 			}
 		}
-		/* At this point, we should have selected the client with the highest configured
+		/* At this point, we should have selected the mix client with the highest configured
 		 * priority (if there were any priorities configured). We will now proceed
 		 * to send the audio from this highest priority client.
 		 */
+		/* Calculate the bytes available before the ring-buffer wraps. */
 		i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
 		if (i >= 0) {
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
@@ -2941,9 +2953,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		}
 		ast_frfree(f2);
 	}
+	/* If this instance came from a proxy server, reset maxclient to NULL. */
 	if (p->priconn) {
 		maxclient = NULL;
 	}
+	/* Reset a bunch of stuff if maxclient is NULL. */
 	if (!maxclient) { /* If nothing there */
 		/*!
 		 * \todo p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
@@ -2972,9 +2986,14 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		ast_frfree(f1);
 		return 0;
 	}
+	/* At this point, maxclient has been set to the strongest mix client, or the voted client
+	 * (maxclient) was sent to us from voter_reader. Update the VOTER instance state to reflect
+	 * the new winner, and queue the audio frame to Asterisk.
+	 */
 	p->winner = maxclient;
 	incr_drainindex(p);
 	gettimeofday(&p->lastrxtime, NULL);
+	/* If the channel isn't keyed, tell Asterisk to key it. */
 	if (!p->rxkey) {
 		struct ast_frame fr = {
 			.frametype = AST_FRAME_CONTROL,
@@ -2984,17 +3003,22 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 
 		ast_queue_frame(p->owner, &fr);
 	}
+	/* Assert the effective "COS". */
 	p->rxkey = 1;
 	x = 0;
 
+	/* Process any DTMF in the audio. */
 	if (p->dsp && p->usedtmf) {
-		struct ast_frame *f3 = ast_frdup(f1); /* dup f1: ast_dsp_process may mutate the input in place, and we still need f1 below */
-
+		/* Duplicate f1: ast_dsp_process may mutate the input in place, and we still need f1 below */
+		struct ast_frame *f3 = ast_frdup(f1);
 		if (!f3) {
 			ast_frfree(f1);
 			return 0;
 		}
 
+		/* Send the audio frame (f3) to Asterisk for DTMF processing. It will also mute the DTMF
+		 * tone from the audio as part of the processing. Return the result into f2.
+		 */
 		f2 = ast_dsp_process(NULL, p->dsp, f3);
 		if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
@@ -3171,7 +3195,7 @@ static void *voter_primary_client(void *data)
 }
 
 /*!
- * \brief Manage and dispatch transmit activity for a single VOTER instance.
+ * \brief Manage and dispatch transmit activity from the Asterisk core for a single VOTER instance.
  *
  * Runs the per-node transmit worker: consumes queued Asterisk frames and pager frames,
  * integrates PMR channel input, performs optional mix-minus and format conversions,
@@ -4722,9 +4746,14 @@ static void *voter_reader(void *data)
 		/* First, check all of our Asterisk channels to see if any were receiving and have now stopped (timed out). */
 		gettimeofday(&tv, NULL);
 		for (p = pvts; p; p = p->next) {
+			/* If the instance is already un-keyed, skip. */
 			if (!p->rxkey) {
 				continue;
 			}
+			/* This is the actual logic to determine when to stop receiving, and de-assert the
+			 * effective "COS". Compare the time we last received a datagram from the client with
+			 * RX_TIMEOUT_MS, and de-key accordingly.
+			 */
 			if (voter_tvdiff_ms(tv, p->lastrxtime) > RX_TIMEOUT_MS) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_CONTROL,
@@ -4733,6 +4762,7 @@ static void *voter_reader(void *data)
 				};
 				ast_debug(3, "A VOTER on %d was receiving but now has stopped (RX_TIMEOUT_MS)!\n", p->nodenum);
 				ast_queue_frame(p->owner, &wf);
+				/* De-assert COS and reset p->lastwon for next time. */
 				p->rxkey = 0;
 				p->lastwon = NULL;
 			}
@@ -5198,7 +5228,7 @@ static void *voter_reader(void *data)
 				}
 
 				/* If we are supposed to have a master client (hasmaster), but the
-				 * current active master has no longer true, we'll put silence in to
+				 * current active master is no longer true, we'll put silence in to
 				 * the audio buffer, set the RSSI to 0, unkey the channel, and do
 				 * some other cleanup.
 				 */
@@ -5207,11 +5237,18 @@ static void *voter_reader(void *data)
 						ast_log(LOG_WARNING, "VOTER lost master timing source!!\n");
 						last_master_count = 0;
 						master_time.vtime_sec = 0;
+						/* Scan through the clients and fill the audio buffer with silence,
+						 * and set RSSI to 0.
+						 */
 						for (client1 = client->next; client1; client1 = client1->next) {
 							memset(client1->audio, 0xff, client1->buflen);
 							memset(client1->rssi, 0, client1->buflen);
 						}
+						/* Scan through all the VOTER instances. */
 						for (p = pvts; p; p = p->next) {
+							/* If the instance is keyed (COS asserted according to p->rxkey),
+							 * tell Asterisk to un-key the channel.
+							 */
 							if (p->rxkey) {
 								struct ast_frame wf = {
 									.frametype = AST_FRAME_CONTROL,
@@ -5221,6 +5258,7 @@ static void *voter_reader(void *data)
 
 								ast_queue_frame(p->owner, &wf);
 							}
+							/* De-assert COS and reset p->lastwon for next time. */
 							p->lastwon = NULL;
 							p->rxkey = 0;
 							ast_mutex_lock(&p->txqlock);
@@ -5760,19 +5798,35 @@ static void *voter_reader(void *data)
 									maxclient = p->lastwon;
 									maxrssi = maxclient->lastrssi;
 								}
-								if (p->voter_test > 0) { /* Perform cyclic selection. */
-									/* See how many clients are eligible to cycle through. */
+								/* VOTER test mode initiated by the voter test CLI command. Only applies
+								 * to voting clients (not mix mode operation).
+								 * voter_test = 0 is normal voting operation
+								 * voter_test = 1 randomly pick which client of all that are receiving at
+								 * the max RSSI value to use
+								 * voter_test > 1 cycle thru all the clients that are receiving at the max
+								 * RSSI value with a cycle time of (test mode - 1) frames. In other words,
+								 * if you set it to 2, it will change every single time. If you set it to
+								 * 11, it will change every 10 times. This is serious torture test.
+								 */
+								if (p->voter_test > 0) { /* Perform cyclic test mode. */
+									/* Count the number of clients at maxrssi to see how many to cycle through. */
 									for (i = 0, client = clients; client; client = client->next) {
+										/* If the client doesn't belong to this VOTER instance, skip it. */
 										if (client->nodenum != p->nodenum) {
 											continue;
 										}
+										/* If this is a mix client, skip it. */
 										if (client->mix) {
 											continue;
 										}
+										/* Count the clients at maxrssi. */
 										if (client->lastrssi == maxrssi) {
 											i++;
 										}
 									}
+									/* Randomly cycle through all the clients at maxrssi, or
+									 * cycle every test_mode - 1 frames.
+									 */
 									if (p->voter_test == 1) {
 										p->testindex = random() % i;
 									} else {
@@ -5785,22 +5839,32 @@ static void *voter_reader(void *data)
 											}
 										}
 									}
+									/* Count the number of clients still at maxrssi, and stop when
+									 * we reach the testindex computed above?
+									 */
 									for (i = 0, client = clients; client; client = client->next) {
+										/* If the client doesn't belong to this VOTER instance, skip it. */
 										if (client->nodenum != p->nodenum) {
 											continue;
 										}
+										/* If this is a mix client, skip it. */
 										if (client->mix) {
 											continue;
 										}
+										/* If this is client isn't at maxrssi, skip it. */
 										if (client->lastrssi != maxrssi) {
 											continue;
 										}
+										/* See if the current number of clients matches p->testindex,
+										 * and stop if it does.
+										 */
 										if (i++ == p->testindex) {
 											maxclient = client;
 											maxrssi = client->lastrssi;
 											break;
 										}
 									}
+									/* When testing is complete, reset the test index and cycle. */
 								} else {
 									p->testcycle = 0;
 									p->testindex = 0;
@@ -5822,20 +5886,32 @@ static void *voter_reader(void *data)
 									ast_queue_frame(p->owner, &fr);
 									continue;
 								}
+								/* Calculate the bytes available before the ring-buffer wraps. */
 								i = (int) maxclient->buflen - ((int) maxclient->drainindex + FRAME_SIZE);
+								/* Copy the audio frame from the voted client into the channel (ring) buffer. */
 								if (i >= 0) {
 									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE);
 								} else {
 									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE + i);
 									memcpy(p->buf + AST_FRIENDLY_OFFSET + (maxclient->buflen - i), maxclient->audio, -i);
 								}
+								/* Cycle through all the clients, if recording has been enabled with voter record,
+								 * write the audio and RSSI for each client to the specified file.
+								 * Finish by writing silence into the client's audio buffer (so we don't leave
+								 * old audio in the ring buffer).
+								 */
 								for (client = clients; client; client = client->next) {
+									/* If the client doesn't belong to this VOTER instance, skip it. */
 									if (client->nodenum != p->nodenum) {
 										continue;
 									}
+									/* If this is a mix client, skip it. */
 									if (client->mix) {
 										continue;
 									}
+									/* If a file pointer was set with voter record, write out the raw audio
+									 * and RSSI for each client to the specified file.
+									 */
 									if (p->recfp) {
 										if (!hasmastered) {
 											hasmastered = 1;
@@ -5855,6 +5931,7 @@ static void *voter_reader(void *data)
 										}
 										fwrite(&rec, 1, sizeof(rec), p->recfp);
 									}
+									/* Replace the audio in the ring buffer for each client with silence. */
 									if (i >= 0) {
 										memset(client->audio + client->drainindex, 0xff, FRAME_SIZE);
 									} else {
@@ -5862,6 +5939,9 @@ static void *voter_reader(void *data)
 										memset(client->audio, 0xff, -i);
 									}
 								}
+								/* If the PL filter or host de-emphasis options are set for this instance,
+								 * run the audio through their respective DSP filters.
+								 */
 								if (p->plfilter || p->hostdeemp) {
 									short ix;
 									for (i = 0; i < FRAME_SIZE; i++) {
@@ -5876,12 +5956,21 @@ static void *voter_reader(void *data)
 										p->buf[AST_FRIENDLY_OFFSET + i] = AST_LIN2MU(ix);
 									}
 								}
+								/*!
+								 * \todo VE7FET we should remove "streams" support. It was associated
+								 * with votmond and votermon, which are no longer supported.
+								 */
+								/* This next bit is used to stream the audio from the current buffer
+								 * (which should be the voted client?) to the stream(s) as defined
+								 * in voter.conf.
+								 */
 								stream.curtime = master_time;
 								memcpy(stream.audio, p->buf + AST_FRIENDLY_OFFSET, FRAME_SIZE);
 								ast_copy_string(stream.str, maxclient->name, sizeof(stream.str));
 								for (client = clients; client; client = client->next) {
 									int size;
 
+									/* If the client doesn't belong to this VOTER instance, skip it. */
 									if (client->nodenum != p->nodenum) {
 										continue;
 									}
@@ -5907,6 +5996,7 @@ static void *voter_reader(void *data)
 									sendto(udp_socket, &stream, sizeof(stream), 0, (struct sockaddr *) &sin_stream, sizeof(sin_stream));
 									ast_free(cp);
 								}
+								/* Update p->lastwon if the current selected maxclient has changed. */
 								if (maxclient != p->lastwon) {
 									p->lastwon = maxclient;
 									ast_debug(1, "VOTER client %s selected for node %d\n", maxclient->name, p->nodenum);
@@ -5919,7 +6009,9 @@ static void *voter_reader(void *data)
 								}
 								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
 							}
-							/* Go send any audio from mix clients. */
+							/* For the current channel (p), send our current voted client (maxclient),
+							 * and its RSSI (maxrssi) to voter_mix_and_send to be sent to Asterisk.
+							 */
 							if (!voter_mix_and_send(p, maxclient, maxrssi)) {
 								continue;
 							}
