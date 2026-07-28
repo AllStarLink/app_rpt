@@ -2768,8 +2768,8 @@ static struct ast_cli_entry voter_cli[] = {
  * \param p				Pointer to the current voter instance (channel).
  * \param maxclient		Pointer to the voted client (typically sent from voter_reader).
  * \param maxrssi		Maximum RSSI value of the voted client (typically sent from voter_reader).
- * \retval 0			Return 0 if this function has an error or there was no audio/winner processed.
- * \retval 1			Return 1 if this function is successful.
+ * \retval				0 if this function has an error or there was no audio/winner processed.
+ * \retval				1 if this function is successful.
  */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
