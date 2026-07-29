@@ -1,4 +1,5 @@
 #define TELEM_DATASTORE "telemetry"
+#define IS_ECHOLINK_NODE_TELEM(n) (n[0] == '3') /* Echolink node numbers start with 3 */
 
 void rpt_telem_select(struct rpt *myrpt, int command_source, struct rpt_link *mylink);
 
