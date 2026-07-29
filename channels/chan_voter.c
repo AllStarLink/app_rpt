@@ -336,6 +336,9 @@ Use "core show help voter <command>"" to display usage.
  */
 static unsigned char ulaw_digital_milliwatt[8] = { 0x1e, 0x0b, 0x0b, 0x1e, 0x9e, 0x8b, 0x8b, 0x9e };
 
+/* ulaw silence is represented as a 0xff byte */
+#define ULAW_SILENCE 0xff
+
 struct ast_flags zeroflag = { 0 };
 
 #define XPMR_VOTER
@@ -349,7 +352,7 @@ char challenge[VOTER_CHALLENGE_LEN];
 char password[VOTER_PASSWORD_LEN];
 char context[100];
 
-/* Timeout definitions in ms*/
+/* Timeout definitions in ms */
 #define RX_TIMEOUT_MS 200
 #define CLIENT_TIMEOUT_MS 3000
 #define MASTER_TIMEOUT_MS 100
@@ -2884,10 +2887,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			memcpy(p->buf + AST_FRIENDLY_OFFSET + (client->buflen - i), client->audio, -i);
 		}
 		if (i >= 0) {
-			memset(client->audio + client->drainindex, 0xff, FRAME_SIZE);
+			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
 		} else {
-			memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
-			memset(client->audio, 0xff, -i);
+			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
+			memset(client->audio, ULAW_SILENCE, -i);
 		}
 		/* Calculate the RSSI based on any RSSI samples in the buffer */
 		k = 0;
@@ -3372,7 +3375,7 @@ static void *voter_xmit(void *data)
 		/* This first "if" will send ulaw audio out all regular or mixminus clients by default. */
 		if (x || mx) {
 			memset(&audiopacket, 0, sizeof(audiopacket) - sizeof(audiopacket.audio));
-			memset(&audiopacket.audio, 0xff, sizeof(audiopacket.audio));
+			memset(&audiopacket.audio, ULAW_SILENCE, sizeof(audiopacket.audio));
 			ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
 			audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ULAW);
 			audiopacket.rssi = 0;
@@ -3509,7 +3512,7 @@ static void *voter_xmit(void *data)
 			if (p->adpcmf1 == NULL) {
 				p->adpcmf1 = ast_frdup(f1);
 			} else {
-				memset(xmtbuf, 0xff, sizeof(xmtbuf));
+				memset(xmtbuf, ULAW_SILENCE, sizeof(xmtbuf));
 				memset(&fr, 0, sizeof(fr));
 				fr.frametype = AST_FRAME_VOICE;
 				fr.subclass.format = ast_format_ulaw;
@@ -4373,14 +4376,14 @@ static int reload(void)
 					ast_config_destroy(cfg);
 					return -1;
 				}
-				memset(client->audio, 0xff, client->buflen);
+				memset(client->audio, ULAW_SILENCE, client->buflen);
 			} else if (!client->audio) {
 				client->audio = ast_malloc(client->buflen);
 				if (!client->audio) {
 					ast_config_destroy(cfg);
 					return -1;
 				}
-				memset(client->audio, 0xff, client->buflen);
+				memset(client->audio, ULAW_SILENCE, client->buflen);
 			}
 			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
 				client->rssi = ast_realloc(client->rssi, client->buflen);
@@ -4564,7 +4567,7 @@ static void *voter_timer(void *data)
 			master_time.vtime_sec = tv.tv_sec;
 
 			for (p = pvts; p; p = p->next) {
-				memset(p->buf + AST_FRIENDLY_OFFSET, 0xff, FRAME_SIZE);
+				memset(p->buf + AST_FRIENDLY_OFFSET, ULAW_SILENCE, FRAME_SIZE);
 				voter_mix_and_send(p, NULL, 0);
 			}
 
@@ -5241,7 +5244,7 @@ static void *voter_reader(void *data)
 						 * and set RSSI to 0.
 						 */
 						for (client1 = client->next; client1; client1 = client1->next) {
-							memset(client1->audio, 0xff, client1->buflen);
+							memset(client1->audio, ULAW_SILENCE, client1->buflen);
 							memset(client1->rssi, 0, client1->buflen);
 						}
 						/* Scan through all the VOTER instances. */
@@ -5496,7 +5499,7 @@ static void *voter_reader(void *data)
 							/* If no RSSI, just make it quiet. */
 
 							for (i = 0; i < FRAME_SIZE; i++) {
-								buf[sizeof(VOTER_PACKET_HEADER) + i + 1] = 0xff;
+								buf[sizeof(VOTER_PACKET_HEADER) + i + 1] = ULAW_SILENCE;
 							}
 						} else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) {
 							/* If otherwise (RSSI > 0), if ADPCM audio packet, translate it. */
@@ -5725,7 +5728,7 @@ static void *voter_reader(void *data)
 							if (!maxclient) {
 								maxrssi = 0;
 							}
-							memset(p->buf + AST_FRIENDLY_OFFSET, 0xff, FRAME_SIZE);
+							memset(p->buf + AST_FRIENDLY_OFFSET, ULAW_SILENCE, FRAME_SIZE);
 							if (maxclient) {
 								int maxprio, lastprio;
 								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden
@@ -5925,18 +5928,18 @@ static void *voter_reader(void *data)
 											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE);
 										} else {
 											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + i);
-											memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
+											memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
 											memcpy(rec.audio + FRAME_SIZE + i, client->audio, -i);
-											memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
+											memset(client->audio, ULAW_SILENCE, -i);
 										}
 										fwrite(&rec, 1, sizeof(rec), p->recfp);
 									}
 									/* Replace the audio in the ring buffer for each client with silence. */
 									if (i >= 0) {
-										memset(client->audio + client->drainindex, 0xff, FRAME_SIZE);
+										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
 									} else {
-										memset(client->audio + client->drainindex, 0xff, FRAME_SIZE + i);
-										memset(client->audio, 0xff, -i);
+										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
+										memset(client->audio, ULAW_SILENCE, -i);
 									}
 								}
 								/* If the PL filter or host de-emphasis options are set for this instance,
