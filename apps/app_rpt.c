@@ -6260,6 +6260,7 @@ static void *rpt_master(void *ignore)
 			if (current_loop_time > RPT_THREAD_TIMEOUT && !thread_hung[i]) {
 				thread_hung[i] = rpt_true;
 				ast_log(LOG_WARNING, "RPT thread on %s is hung for %ld seconds.\n", rpt_vars[i].name, current_loop_time);
+				ast_assert(0); /* Why are we hung coredump */
 			}
 
 			if (!rpt_vars[i].rpt_thread || rpt_vars[i].rpt_thread == AST_PTHREADT_NULL) {
