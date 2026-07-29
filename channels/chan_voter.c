@@ -5930,7 +5930,7 @@ static void *voter_reader(void *data)
 											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + i);
 											memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
 											memcpy(rec.audio + FRAME_SIZE + i, client->audio, -i);
-											memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
+											memset(client->audio, ULAW_SILENCE, -i);
 										}
 										fwrite(&rec, 1, sizeof(rec), p->recfp);
 									}
