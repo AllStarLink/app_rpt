@@ -367,7 +367,6 @@ struct chan_usbradio_pvt {
 	unsigned int lsdtxpolarity:1;	/* indicator for lsd transmit polarity */
 	unsigned int radioactive:1;		/* indicator for active radio channel */
 	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
-	unsigned int usb_faulted:1;		/* set after USB/audio failure; cleared on recovery NOTICE */
 	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
 	unsigned int hasusb:1;			/* indicator for has a USB device */
 	unsigned int usbass:1;			/* indicator for USB device assigned */
@@ -382,6 +381,8 @@ struct chan_usbradio_pvt {
 	unsigned int rxctcssoverride:1; /* indicator if receive ctcss override is enabled */
 	unsigned int rx_cos_active:1;	/* indicator if cos is active - active state after processing */
 	unsigned int rx_ctcss_active:1; /* indicator if ctcss is active - active state after processing */
+	/* Whole-word latch shared by HID/audio paths (not a bit-field). */
+	volatile sig_atomic_t usb_faulted; /* set after USB/audio failure; cleared on recovery NOTICE */
 
 	/* EEPROM access variables */
 	unsigned short eeprom[EEPROM_USER_LEN];
@@ -477,13 +478,15 @@ static int RxTestIt(struct chan_usbradio_pvt *o);
 static void usbradio_log_usb_recovered(struct chan_usbradio_pvt *o)
 {
 	const char *dev;
+	sig_atomic_t was_faulted;
 
-	if (!o->usb_faulted) {
+	was_faulted = o->usb_faulted;
+	o->usb_faulted = 0;
+	if (!was_faulted) {
 		return;
 	}
 	dev = !ast_strlen_zero(o->devstr) ? o->devstr : o->hw_device;
 	ast_log(LOG_NOTICE, "Channel %s: USB radio device recovered (%s)\n", o->name, !ast_strlen_zero(dev) ? dev : "unknown");
-	o->usb_faulted = 0;
 }
 
 static char *usbradio_active; /* the active device */
@@ -1729,6 +1732,8 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	if (res < 0 && res != paOutputUnderflowed) {
 		ast_log(LOG_ERROR, "Channel %s: PortAudio write failed (%s); restarting audio stream\n", o->name, Pa_GetErrorText(res));
 		o->usb_faulted = 1;
+		/* Force HID reinit so recovery NOTICE clears the latch. */
+		o->hasusb = 0;
 		ast_radio_pa_stop(&o->pa);
 		return 0;
 	}

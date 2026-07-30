@@ -284,7 +284,6 @@ struct chan_simpleusb_pvt {
 	unsigned int txcapraw:1;			   /* indicator if transmit capture is enabled */
 	unsigned int measure_enabled:1;		   /* indicator if measure mode is enabled */
 	unsigned int device_error:1;		   /* indicator set when we cannot find the USB device */
-	unsigned int usb_faulted:1;			   /* set after USB/audio failure; cleared on recovery NOTICE */
 	unsigned int newname:1;				   /* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
 	unsigned int hasusb:1;				   /* indicator for has a USB device */
 	unsigned int usbass:1;				   /* indicator for USB device assigned */
@@ -297,6 +296,8 @@ struct chan_simpleusb_pvt {
 	unsigned int preemphasis:1;			   /* indicator if we need preemphasis filter */
 	unsigned int rx_cos_active:1;		   /* indicator if cos is active - active state after processing */
 	unsigned int rx_ctcss_active:1;		   /* indicator if ctcss is active - active state after processing */
+	/* Whole-word latch shared by HID/audio threads (not a bit-field). */
+	volatile sig_atomic_t usb_faulted;	   /* set after USB/audio failure; cleared on recovery NOTICE */
 	volatile sig_atomic_t stophidthread;   /* indicator to stop hid thread */
 	volatile sig_atomic_t stopaudiothread; /* indicator to stop audio thread */
 
@@ -376,13 +377,15 @@ static void *simpleusb_audio_thread(void *arg);
 static void simpleusb_log_usb_recovered(struct chan_simpleusb_pvt *o)
 {
 	const char *dev;
+	sig_atomic_t was_faulted;
 
-	if (!o->usb_faulted) {
+	was_faulted = o->usb_faulted;
+	o->usb_faulted = 0;
+	if (!was_faulted) {
 		return;
 	}
 	dev = !ast_strlen_zero(o->devstr) ? o->devstr : o->hw_device;
 	ast_log(LOG_NOTICE, "Channel %s: USB radio device recovered (%s)\n", o->name, !ast_strlen_zero(dev) ? dev : "unknown");
-	o->usb_faulted = 0;
 }
 
 static char *simpleusb_active; /* the active device */
