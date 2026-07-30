@@ -857,21 +857,25 @@ static int finddelim(char *str, char *strp[], size_t limit)
 }
 
 /*!
- * \brief Determine difference in two timevals in milliseconds.
+ * \brief Determine difference between the start time (starttime) and end time (endtime), in milliseconds.
  *
- * \param x				First timeval.
- * \param y				Second timeval.
- * \return      		Difference in milliseconds.
+ * If time has advanced (endtime is later than starttime), the difference is returned in positive milliseconds.
+ * If the times are equal, 0 is returned.
+ * If the endtime is earlier than the starttime, INT32_MAX is returned.
+ *
+ * \param endtime				Ending timeval reference to compare to starting timeval.
+ * \param starttime				Starting timeval reference.
+ * \return      				Difference in milliseconds.
  */
-static unsigned int voter_tvdiff_ms(const struct timeval x, const struct timeval y)
+static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct timeval starttime)
 {
-	int i;
+	int timediffms;
 
-	i = ast_tvdiff_ms(x, y);
-	if (i < 0) {
-		i = INT32_MAX;
+	timediffms = ast_tvdiff_ms(endtime, starttime);
+	if (timediffms < 0) {
+		timediffms = INT32_MAX;
 	}
-	return i;
+	return timediffms;
 }
 
 /*!
@@ -2050,7 +2054,7 @@ static char *handle_cli_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 }
 
 /*!
- * \brief See if the ping request has completed.
+ * \brief Print the ping statistics when the ping test to a client has completed.
  *
  * This used in conjunction with the CLI "voter ping" command. It will print the results of the ping test.
  *
@@ -2058,15 +2062,18 @@ static char *handle_cli_tune(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
  */
 static void check_ping_done(struct voter_client *client)
 {
-	float p, q;
+	float pktsrcvd, avgtime;
 
+	/* If no pings were requested (client->pings_requested is 0), just return. */
 	if (!client->pings_requested) {
 		return;
 	}
 	if (!client->ping_abort) {
+		/* If we haven't sent all the requested pings yet, return to keep going. */
 		if (client->pings_sent < client->pings_requested) {
 			return;
 		}
+		/* Check if the ping timed out, and log if it did. Otherwise, keep going. */
 		if (voter_tvdiff_ms(ast_tvnow(), (ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) > PING_TIMEOUT_MS) {
 			ast_log(LOG_WARNING, "\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
 		} else {
@@ -2075,28 +2082,36 @@ static void check_ping_done(struct voter_client *client)
 			}
 		}
 	} else {
-		ast_log(LOG_WARNING, "\nPING (%s): ABORTED!!\n", client->name);
+		ast_verb(1, "\nPING (%s): ABORTED!!\n", client->name);
 		client->ping_abort = 0;
 	}
+	/* Calculate the percentage of packets returned. pktsrcvd will be 100.0 if we got everything back.
+	 * If we got less than 100.0% packets back, we can calculate the packet loss.
+	 */
 	if (client->pings_sent) {
-		p = 100.0 * (float) (client->pings_received - client->pings_oos) / (float) client->pings_sent;
+		pktsrcvd = 100.0 * (float) (client->pings_received - client->pings_oos) / (float) client->pings_sent;
 	} else {
-		p = 0.0;
+		pktsrcvd = 0.0;
 	}
+	/* Calculate the average ping time of the received packets. */
 	if (client->pings_received) {
-		q = (float) client->pings_total_ms / (float) client->pings_received;
+		avgtime = (float) client->pings_total_ms / (float) client->pings_received;
 	} else {
-		q = 0;
+		avgtime = 0;
 	}
 	ast_verb(1, "\nPING (%s): Packets tx: %d, rx: %d, oos: %d, Avg.: %0.3f ms\n", client->name, client->pings_sent,
-		client->pings_received, client->pings_oos, q);
+		client->pings_received, client->pings_oos, avgtime);
 	ast_verb(1, "PING (%s): Worst: %d ms, Best: %d ms, %0.1f%% Packets successfully received (%0.1f%% loss)\n", client->name,
-		client->pings_worst, client->pings_best, p, 100.0 - p);
+		client->pings_worst, client->pings_best, pktsrcvd, 100.0 - pktsrcvd);
 	client->pings_requested = 0;
 }
 
 /*!
  * \brief Handle the Asterisk CLI "voter ping" request to start or stop a ping sequence for a named VOTER client.
+ *
+ * voter ping will default to sending 8 pings to a client, if the number of pings is not specified. If the number
+ * of pings is specified as 0, the ping sequence will be aborted. If a ping sequence is already in progress for a client,
+ * a new ping sequence will not be started until the previous one has completed.
  *
  * \param fd   			Asterisk CLI file descriptor used for command output.
  * \param argc 			Number of CLI arguments.
@@ -2108,33 +2123,44 @@ static void check_ping_done(struct voter_client *client)
 static int voter_do_ping(int fd, int argc, const char *const *argv)
 {
 	struct voter_client *client;
-	int npings = 8;
+	int npings = 8; /* Default to 8 pings if none are specified */
 
+	/* If there aren't enough arguments provided, show the command usage. */
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
 
+	/* Traverse the client list to find the matching client provided in argv[2]. */
 	for (client = clients; client; client = client->next) {
+		/* Skip clients connected via proxy. */
 		if (IS_CLIENT_PROXY(client)) {
 			continue;
 		}
+		/* Skip clients that aren't connected. */
 		if (!client->heardfrom) {
 			continue;
 		}
+		/* Skip clients that aren't authenticated. */
 		if (!client->respdigest) {
 			continue;
 		}
+		/* Stop when we find a matching client (remember strcasecmp returns 0 on a match). */
 		if (!strcasecmp(client->name, argv[2])) {
 			break;
 		}
 	}
+	/* If we didn't find a matching client, say so and we're done. */
 	if (!client) {
 		ast_cli(fd, "VOTER client %s not found or not connected\n", argv[2]);
 		return RESULT_SUCCESS;
 	}
+	/* If we received a specified ping count, use it. */
 	if (argc > 3) {
 		npings = atoi(argv[3]);
 	}
+	/* If the number of pings is 0 or less, abort the ping test. If there is already
+	 * a ping test in progress to this client, throw a notice.
+	 */
 	if (npings <= 0) {
 		client->ping_abort = 1;
 		return RESULT_SUCCESS;
@@ -2142,6 +2168,7 @@ static int voter_do_ping(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "VOTER client %s already pinging!!\n", argv[2]);
 		return RESULT_SUCCESS;
 	}
+	/* When we are done, clean up after ourselves. */
 	client->pings_sent = 0;
 	client->pings_received = 0;
 	client->pings_oos = 0;
@@ -3215,7 +3242,7 @@ static void *voter_xmit(void *data)
 	i32 l;
 	struct ast_frame fr, *f1, *f2, *f3, wf1;
 	struct voter_client *client, *client1;
-	struct timeval tv;
+	struct timeval currenttime;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -3591,40 +3618,61 @@ static void *voter_xmit(void *data)
 		if (f1) {
 			ast_frfree(f1);
 		}
+		/* Get the current time for ping and keeplive packet tracking. */
+		currenttime = ast_tvnow();
 		/* Process sending ping packets for each client, if necessary */
-		gettimeofday(&tv, NULL);
+		ast_mutex_lock(&voter_lock);
 		for (client = clients; client; client = client->next) {
+			/* Skip if this client doesn't belong to this instance. */
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
+			/* Skip clients that aren't authenticated. */
 			if (!client->respdigest) {
 				continue;
 			}
+			/* Skip clients that aren't connected. */
 			if (!client->heardfrom) {
 				continue;
 			}
+			/* Skip clients connected via a proxy. */
 			if (IS_CLIENT_PROXY(client)) {
 				continue;
 			}
+			/* If we are pinging a client, see if we're finished yet. If we are, the
+			 * results will be printed, and client->pings_requested is going to be set
+			 * to 0, causing us to continue skipping this client (stop pinging).
+			 */
 			check_ping_done(client);
+			/* Skip clients that we're not pinging (client->pings_requested will be 0). */
 			if (!client->pings_requested) {
 				continue;
 			}
+			/* If we've already sent more pings to a client than we need to, skip (we should
+			 * already be done!).
+			 */
 			if (client->pings_sent >= client->pings_requested) {
 				continue;
 			}
-			if (voter_tvdiff_ms(tv, client->ping_txtime) >= (PING_TIME_MS * client->pings_sent)) {
+			/* At this point, we have outstanding pings to send to this client, so do it. */
+			if (voter_tvdiff_ms(currenttime, client->ping_txtime) >= (PING_TIME_MS * client->pings_sent)) {
+				/* If we haven't sent any pings to the client yet, let's get started. */
 				if (!client->pings_sent) {
-					client->ping_txtime = ast_tvnow();
+					/* Timestamp when we sent the first ping (client->ping_txtime). */
+					client->ping_txtime = currenttime;
 					memset(&client->ping_last_rxtime, 0, sizeof(client->ping_last_rxtime));
 				}
+				/* Increment the number of ping packets we've sent to this client. */
 				client->pings_sent++;
+				/* Build and send the ping packet to the client. */
 				memset(&pingpacket, 0, sizeof(pingpacket));
 				pingpacket.seqno = ++client->ping_seqno;
 				for (i = 0; i < sizeof(pingpacket.filler); i++) {
 					pingpacket.filler[i] = (pingpacket.seqno & 0xff) + i;
 				}
-				pingpacket.txtime = tv;
+				/* Set the time this packet was sent to the current time. */
+				pingpacket.txtime = currenttime;
+				/* Set the start time to when we sent the first packet (from above). */
 				pingpacket.starttime = client->ping_txtime;
 				ast_copy_string((char *) pingpacket.vp.challenge, challenge, sizeof(pingpacket.vp.challenge));
 				pingpacket.vp.payload_type = htons(VOTER_PAYLOAD_PING);
@@ -3634,9 +3682,11 @@ static void *voter_xmit(void *data)
 				pingpacket.vp.digest = htonl(client->respdigest);
 				pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+				/* Send the ping packet on the wire. */
 				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
 		}
+		ast_mutex_unlock(&voter_lock);
 		/* Process sending keepalive packets for each client, if necessary */
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
@@ -3655,7 +3705,7 @@ static void *voter_xmit(void *data)
 			 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
 			 * with this packet.
 			 */
-			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(tv, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
+			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(currenttime, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
 				memset(&audiopacket, 0, sizeof(audiopacket));
 				ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
@@ -6028,20 +6078,30 @@ static void *voter_reader(void *data)
 				int timediff;
 
 				memcpy(&pingpacket, buf, sizeof(pingpacket));
-				gettimeofday(&client->ping_last_rxtime, NULL);
+				/* Mark when this packet was received. */
+				client->ping_last_rxtime = ast_tvnow();
 				/* If ping not for this session */
 				if (voter_tvdiff_ms(client->ping_txtime, pingpacket.starttime)) {
 					continue;
 				}
+				/* Check if the packet we received is out of sequence, log a warning, and increment
+				 * the OOS counter accordingly.
+				 */
 				if (client->ping_last_seqno && (pingpacket.seqno < (client->ping_last_seqno + 1))) {
 					ast_log(LOG_WARNING, "PING (%s): Packets out of sequence!!\n", client->name);
 					client->pings_oos++;
 				}
+				/* Check that the packet we received (client->ping_last_rxtime) was after when the
+				 * packet was sent (pingpacket.txtime). timediff should be positive if this was the
+				 * case, otherwise, log a warning and continue to the next packet without processing
+				 * this one.
+				 */
 				timediff = ast_tvdiff_ms(client->ping_last_rxtime, pingpacket.txtime);
 				if (timediff < 0) {
 					ast_log(LOG_WARNING, "PING (%s): Packet has invalid time (diff=%d)!!\n", client->name, timediff);
 					continue;
 				}
+				/* Update counters and statistics, based on the latest packet received. */
 				client->ping_last_seqno = pingpacket.seqno;
 				client->pings_received++;
 				client->pings_total_ms += timediff;
@@ -6057,11 +6117,10 @@ static void *voter_reader(void *data)
 				if (timediff > client->pings_worst) {
 					client->pings_worst = timediff;
 				}
+				/* Print the sequence number and ping time for this latest packet from the client. */
 				ast_verb(1, "PING (%s) Response:   seqno: %u  diff: %d ms\n", client->name, pingpacket.seqno, timediff);
 
-				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-				strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
-
+				/* If we are pinging a client, see if we're finished yet. If we are, the results will be printed. */
 				check_ping_done(client);
 				continue;
 			}
