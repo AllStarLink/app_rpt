@@ -569,6 +569,11 @@ done:
 	return 0;
 }
 
+/** \brief Check if there is any priority telemetry pending
+ * \note Must be called locked with myrpt->lock held
+ * \param myrpt The repeater structure
+ * \return 1 if priority telemetry is pending, 0 otherwise
+ */
 int priority_telemetry_pending(struct rpt *myrpt)
 {
 	struct rpt_tele *telem;
@@ -577,8 +582,6 @@ int priority_telemetry_pending(struct rpt *myrpt)
 	if (!myrpt) {
 		return 0;
 	}
-
-	rpt_mutex_lock(&myrpt->lock);
 
 	/* Traverse the telemetry list looking for override_tot flag */
 	telem = myrpt->tele.next;
@@ -600,7 +603,6 @@ int priority_telemetry_pending(struct rpt *myrpt)
 		telem = telem->next;
 	}
 
-	rpt_mutex_unlock(&myrpt->lock);
 	return pending;
 }
 
