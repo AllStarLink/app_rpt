@@ -3025,7 +3025,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	 */
 	p->winner = maxclient;
 	incr_drainindex(p);
-	gettimeofday(&p->lastrxtime, NULL);
+	p->lastrxtime = ast_radio_tvnow();
 	/* If the channel isn't keyed, tell Asterisk to key it. */
 	if (!p->rxkey) {
 		struct ast_frame fr = {
@@ -3105,7 +3105,7 @@ static void *voter_primary_client(void *data)
 	socklen_t fromlen;
 	ssize_t recvlen;
 	struct voter_client *client;
-	struct timeval tv, lasttx, lastrx;
+	struct timeval lasttx, lastrx;
 	VOTER_PACKET_HEADER *vph;
 	uint32_t resp_digest, digest, mydigest;
 #pragma pack(push)
@@ -3137,9 +3137,8 @@ static void *voter_primary_client(void *data)
 		 * fd will be positive (and equal to pri_socket) if there is valid activity on the UDP socket.
 		 */
 
-		gettimeofday(&tv, NULL);
 		memset(&authpacket, 0, sizeof(authpacket));
-		if (!p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 500))) {
+		if (!p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(ast_radio_tvnow(), lasttx) >= 500))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
 			ast_copy_string((char *) authpacket.vp.challenge, challenge, sizeof(authpacket.vp.challenge));
@@ -3148,13 +3147,13 @@ static void *voter_primary_client(void *data)
 			ast_debug(3, "VOTER %i: Sent primary client auth to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
-			lasttx = tv;
+			lasttx = ast_radio_tvnow();
 		}
 		/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
 		 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
 		 * with this packet.
 		 */
-		if (p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(tv, lasttx) >= 1000))) {
+		if (p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(ast_radio_tvnow(), lasttx) >= 1000))) {
 			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
 			ast_copy_string((char *) authpacket.vp.challenge, challenge, sizeof(authpacket.vp.challenge));
@@ -3163,9 +3162,9 @@ static void *voter_primary_client(void *data)
 			ast_debug(5, "VOTER %i: Sent primary client keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
 				ntohs(p->primary.sin_port));
 			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
-			lasttx = tv;
+			lasttx = ast_radio_tvnow();
 		}
-		if (p->priconn && (ast_tvzero(lastrx) || (voter_tvdiff_ms(tv, lastrx) >= 2000))) {
+		if (p->priconn && (ast_tvzero(lastrx) || (voter_tvdiff_ms(ast_radio_tvnow(), lastrx) >= 2000))) {
 			p->priconn = 0;
 			digest = 0;
 			p->primary_challenge[0] = 0;
@@ -3214,7 +3213,7 @@ static void *voter_primary_client(void *data)
 							ast_verb(3, "VOTER %i: Primary client connected (with challenge=%s)\n", p->nodenum, p->primary_challenge);
 						}
 						p->priconn = 1;
-						lastrx = tv;
+						lastrx = ast_radio_tvnow();
 					} else {
 						p->priconn = 0;
 						digest = 0;
@@ -3680,7 +3679,6 @@ static void *voter_xmit(void *data)
 				ast_copy_string((char *) pingpacket.vp.challenge, challenge, sizeof(pingpacket.vp.challenge));
 				pingpacket.vp.payload_type = htons(VOTER_PAYLOAD_PING);
 				pingpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				pingpacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
 				mkpucked(client, &pingpacket.vp.curtime);
 				pingpacket.vp.digest = htonl(client->respdigest);
 				pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
@@ -4579,7 +4577,7 @@ static void *voter_timer(void *data)
 {
 	struct voter_pvt *p;
 	struct voter_client *client, *client1;
-	struct timeval tv;
+	struct timeval mix_time;
 	char client_ip[INET_ADDRSTRLEN];
 	char client1_ip[INET_ADDRSTRLEN];
 
@@ -4611,14 +4609,17 @@ static void *voter_timer(void *data)
 		 * master_time.vtime_sec will be set in voter_reader from the
 		 * timestamp embedded in the packets from the master client.
 		 *
-		 * Changed from using time() to using gettimeofday() so that all
-		 * our timing is consistent. The two functions may not return the
-		 * "same time", which could lead to random disconnects of mix mode
-		 * clients. See Issue 902.
+		 * We're using system clock (wall time), since this time gets
+		 * put in the packet header sent to the client, which in turn
+		 * uses it in its status display.
+		 *
+		 * Initialize master_time.vtime_nsec to 0, since we don't have a
+		 * master client, and it gets used for a sequence number later.
 		 */
-		gettimeofday(&tv, NULL);
+		mix_time = ast_tvnow();
 		if (!hasmaster) {
-			master_time.vtime_sec = tv.tv_sec;
+			master_time.vtime_sec = mix_time.tv_sec;
+			master_time.vtime_nsec = 0;
 
 			for (p = pvts; p; p = p->next) {
 				memset(p->buf + AST_FRIENDLY_OFFSET, ULAW_SILENCE, FRAME_SIZE);
@@ -4644,7 +4645,7 @@ static void *voter_timer(void *data)
 				 * client timing is more strict.
 				 */
 				if (!ast_tvzero(client->lastheardtime) &&
-					(voter_tvdiff_ms(tv, client->lastheardtime) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
+					(voter_tvdiff_ms(ast_radio_tvnow(), client->lastheardtime) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
 					ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
 					client->heardfrom = 0;
 					client->respdigest = 0;
@@ -4750,7 +4751,7 @@ static void *voter_reader(void *data)
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
-	struct timeval tv, timetv;
+	struct timeval systemtime, timetv;
 	FILE *gpsfp;
 	struct voter_client *client = NULL, *client1, *maxclient, *lastmaster;
 	VOTER_PACKET_HEADER *vph;
@@ -4801,7 +4802,6 @@ static void *voter_reader(void *data)
 		 */
 
 		/* First, check all of our Asterisk channels to see if any were receiving and have now stopped (timed out). */
-		gettimeofday(&tv, NULL);
 		for (p = pvts; p; p = p->next) {
 			/* If the instance is already un-keyed, skip. */
 			if (!p->rxkey) {
@@ -4811,7 +4811,7 @@ static void *voter_reader(void *data)
 			 * effective "COS". Compare the time we last received a datagram from the client with
 			 * RX_TIMEOUT_MS, and de-key accordingly.
 			 */
-			if (voter_tvdiff_ms(tv, p->lastrxtime) > RX_TIMEOUT_MS) {
+			if (voter_tvdiff_ms(ast_radio_tvnow(), p->lastrxtime) > RX_TIMEOUT_MS) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_CONTROL,
 					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
@@ -4872,10 +4872,9 @@ static void *voter_reader(void *data)
 		 * Upon initial connect from a client, vph->digest will be 0, so this won't match any
 		 * configured client in voter.conf, triggering the authentication process.
 		 */
-		gettimeofday(&tv, NULL);
 		for (client = clients; client; client = client->next) {
 			if (client->digest == htonl(vph->digest)) {
-				client->lastheardtime = tv;
+				client->lastheardtime = ast_radio_tvnow();
 				client->heardfrom = 1;
 				break;
 			}
@@ -4897,10 +4896,13 @@ static void *voter_reader(void *data)
 			 */
 			ast_copy_string((char *) authpacket.vp.challenge, challenge, sizeof(authpacket.vp.challenge));
 
-			/* Put our current system time into the packet header. */
-			gettimeofday(&tv, NULL);
-			authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
-			authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+			/* Put our current system time into the packet header. We use
+			 * wall time because the client pulls the time from the packet
+			 * header for use in its status display.
+			 */
+			systemtime = ast_tvnow();
+			authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
+			authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
 
 			/* Make our response digest based on the challenge sent by the client, and our host password,
 			 * and put that in the packet header, along with blank flags.
@@ -4909,8 +4911,8 @@ static void *voter_reader(void *data)
 			authpacket.flags = 0;
 
 			/* Do the same for proxy authentication packets. */
-			proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
-			proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+			proxy_authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
+			proxy_authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
 			proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 			proxy_authpacket.flags = 0;
 
@@ -5130,12 +5132,15 @@ static void *voter_reader(void *data)
 			/* Set the response digest for this client, based on the challenge they sent and our password */
 			client->respdigest = crc32_bufs((char *) vph->challenge, password);
 
-			/* Put our current system time into the packet header. */
-			gettimeofday(&tv, NULL);
-			authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
-			authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+			/* Put our current system time into the packet header. We use
+			 * wall time since the client uses the time from the packet
+			 * header for its status display.
+			 */
+			systemtime = ast_tvnow();
+			authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
+			authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
 			/* Timestamp when we last heard this client (system time). */
-			client->lastheardtime = tv;
+			client->lastheardtime = ast_radio_tvnow();
 
 			/* Make our response digest based on the challenge sent by the client, and our host password,
 			 * and put that in the packet header.
@@ -5143,8 +5148,8 @@ static void *voter_reader(void *data)
 			authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 
 			/* Do the same for proxy authentication packets. */
-			proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
-			proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+			proxy_authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
+			proxy_authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
 			proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 
 			/* Send the response packet to the client. */
@@ -5217,7 +5222,7 @@ static void *voter_reader(void *data)
 				/* If the client is a potential master client, but the last time we heard
 				 * from it was longer than MASTER_TIMEOUT_MS ago, skip it.
 				 */
-				if (voter_tvdiff_ms(tv, client1->lastheardtime) > MASTER_TIMEOUT_MS) {
+				if (voter_tvdiff_ms(ast_radio_tvnow(), client1->lastheardtime) > MASTER_TIMEOUT_MS) {
 					continue;
 				}
 				/* After all that, this client should be suitable to be designated the
@@ -5246,7 +5251,6 @@ static void *voter_reader(void *data)
 				break;
 			}
 
-			gettimeofday(&tv, NULL);
 			/* Go through all the clients, and stop when we find an authenticated
 			 * client (has client->digest set) that matches the digest we received on the
 			 * wire (vph->digest). This will be the current client.
@@ -5256,7 +5260,7 @@ static void *voter_reader(void *data)
 			 */
 			for (client = clients; client; client = client->next) {
 				if (client->digest == htonl(vph->digest)) {
-					client->lastheardtime = tv;
+					client->lastheardtime = ast_radio_tvnow();
 					break;
 				}
 			}
@@ -5294,6 +5298,7 @@ static void *voter_reader(void *data)
 						ast_log(LOG_WARNING, "VOTER lost master timing source!!\n");
 						last_master_count = 0;
 						master_time.vtime_sec = 0;
+						master_time.vtime_nsec = 0;
 						/* Scan through the clients and fill the audio buffer with silence,
 						 * and set RSSI to 0.
 						 */
@@ -5361,7 +5366,7 @@ static void *voter_reader(void *data)
 					long long btime, ptime, difftime;
 					int index, flen;
 
-					gettimeofday(&client->lastheardtime, NULL); /* Timestamp when we last heard this client (system time). */
+					client->lastheardtime = ast_radio_tvnow(); /* Timestamp when we last heard this client */
 					if (client->curmaster) {
 						if (!master_time.vtime_sec) {
 							for (p = pvts; p; p = p->next) {
@@ -5538,7 +5543,7 @@ static void *voter_reader(void *data)
 							strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 							ast_debug(5, "MasterTime: %s.%03d\n", timestr, master_time.vtime_nsec / 1000000);
 							/* Get the system time so we can display it */
-							gettimeofday(&timetv, NULL);
+							timetv = ast_tvnow();
 							timestuff = (time_t) timetv.tv_sec;
 							strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 							ast_debug(5, "SysTime:    %s.%03d\n", timestr, (int) timetv.tv_usec / 1000);
@@ -6132,7 +6137,7 @@ static void *voter_reader(void *data)
 			if (client && client->heardfrom && (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) &&
 				((recvlen == sizeof(VOTER_PACKET_HEADER)) || (recvlen == (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_GPS))) ||
 					(recvlen == ((sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_GPS)) - 1)))) {
-				gettimeofday(&client->lastheardtime, NULL);
+				client->lastheardtime = ast_radio_tvnow();
 				client->lastgpstime.vtime_sec = ntohl(vph->curtime.vtime_sec);
 				client->lastgpstime.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
 				for (p = pvts; p; p = p->next) {
@@ -6184,7 +6189,7 @@ process_gps:
 					strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 					ast_debug(4, "GPSTime:    %s.%09d from %s\n", timestr, ntohl(vph->curtime.vtime_nsec), client->name);
 					/* Get and display the System time */
-					gettimeofday(&timetv, NULL);
+					timetv = ast_tvnow();
 					timetv.tv_usec = ((timetv.tv_usec + 10000) / 20000) * 20000;
 					if (timetv.tv_usec >= 1000000) {
 						timetv.tv_sec++;
@@ -6252,9 +6257,9 @@ process_gps:
 		ast_copy_string((char *) authpacket.vp.challenge, challenge, sizeof(authpacket.vp.challenge));
 
 		/* Put our current system time into the packet header. */
-		gettimeofday(&tv, NULL);
-		authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
-		authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+		systemtime = ast_tvnow();
+		authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
+		authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
 
 		/* Make our response digest based on the challenge sent by the client, and our host password,
 		 * and put that in the packet header, along with blank flags.
@@ -6263,8 +6268,8 @@ process_gps:
 		authpacket.flags = 0;
 
 		/* Do the same for proxy authentication packets. */
-		proxy_authpacket.vp.curtime.vtime_sec = htonl(tv.tv_sec);
-		proxy_authpacket.vp.curtime.vtime_nsec = htonl(tv.tv_usec * 1000);
+		proxy_authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
+		proxy_authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
 		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		proxy_authpacket.flags = 0;
 
