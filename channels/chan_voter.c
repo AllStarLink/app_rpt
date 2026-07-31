@@ -310,6 +310,10 @@ Use "core show help voter <command>"" to display usage.
 #include <fnmatch.h>
 #include <math.h>
 
+#include <usb.h> /* Dependency for res_usbradio.h to avoid compiler errors */
+#include "asterisk/res_usbradio.h"
+#include "asterisk/rpt_chan_shared.h"
+
 #include "asterisk/lock.h"
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
@@ -328,7 +332,6 @@ Use "core show help voter <command>"" to display usage.
 #include "asterisk/format_cache.h"
 #include "asterisk/format_compatibility.h"
 #include "asterisk/timing.h"
-#include "asterisk/rpt_chan_shared.h"
 #include "../apps/app_rpt/pocsag.c"
 
 /* This array is used by the voter tune CLI command to send a 1kHz tone at
@@ -2074,7 +2077,7 @@ static void check_ping_done(struct voter_client *client)
 			return;
 		}
 		/* Check if the ping timed out, and log if it did. Otherwise, keep going. */
-		if (voter_tvdiff_ms(ast_tvnow(), (ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) > PING_TIMEOUT_MS) {
+		if (voter_tvdiff_ms(ast_radio_tvnow(), (ast_tvzero(client->ping_last_rxtime)) ? client->ping_txtime : client->ping_last_rxtime) > PING_TIMEOUT_MS) {
 			ast_log(LOG_WARNING, "\nPING (%s): RESPONSE TIMEOUT!!\n", client->name);
 		} else {
 			if (client->pings_received < client->pings_requested) {
@@ -3530,7 +3533,7 @@ static void *voter_xmit(void *data)
 							sizeof(client->sin));
 					}
 					/* Update when this client last sent an audio packet */
-					gettimeofday(&client->lastsenttime, NULL);
+					client->lastsenttime = ast_radio_tvnow();
 				}
 			}
 		}
@@ -3608,7 +3611,7 @@ static void *voter_xmit(void *data)
 								sizeof(client->sin));
 						}
 						/* Update when this client last sent an audio packet */
-						gettimeofday(&client->lastsenttime, NULL);
+						client->lastsenttime = ast_radio_tvnow();
 					}
 #endif
 				}
@@ -3619,7 +3622,7 @@ static void *voter_xmit(void *data)
 			ast_frfree(f1);
 		}
 		/* Get the current time for ping and keeplive packet tracking. */
-		currenttime = ast_tvnow();
+		currenttime = ast_radio_tvnow();
 		/* Process sending ping packets for each client, if necessary */
 		ast_mutex_lock(&voter_lock);
 		for (client = clients; client; client = client->next) {
@@ -3732,7 +3735,8 @@ static void *voter_xmit(void *data)
 					sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
 						sizeof(client->sin));
 				}
-				gettimeofday(&client->lastsenttime, NULL);
+				/* Update when this client last sent a keepalive packet */
+				client->lastsenttime = ast_radio_tvnow();
 			}
 		}
 	}
@@ -6079,7 +6083,7 @@ static void *voter_reader(void *data)
 
 				memcpy(&pingpacket, buf, sizeof(pingpacket));
 				/* Mark when this packet was received. */
-				client->ping_last_rxtime = ast_tvnow();
+				client->ping_last_rxtime = ast_radio_tvnow();
 				/* If ping not for this session */
 				if (voter_tvdiff_ms(client->ping_txtime, pingpacket.starttime)) {
 					continue;
