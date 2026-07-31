@@ -310,7 +310,6 @@ Use "core show help voter <command>"" to display usage.
 #include <fnmatch.h>
 #include <math.h>
 
-#include <usb.h> /* Dependency for res_usbradio.h to avoid compiler errors */
 #include "asterisk/res_usbradio.h"
 #include "asterisk/rpt_chan_shared.h"
 

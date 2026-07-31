@@ -28,6 +28,7 @@
 #define HAVE_SYS_IO
 #endif
 
+#include <usb.h>
 #include <portaudio.h>
 
 /*!
