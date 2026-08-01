@@ -2920,7 +2920,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		 * to send the audio from this highest priority client.
 		 */
 		/* Calculate the bytes available before the ring-buffer wraps. */
-		i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
+		i = client->buflen - (client->drainindex + FRAME_SIZE);
 		if (i >= 0) {
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
 		} else {
@@ -5602,7 +5602,7 @@ static void *voter_reader(void *data)
 							index = (index + client->drainindex_40ms) % client->buflen;
 						}
 						flen = (f1) ? f1->datalen : FRAME_SIZE;
-						i = (int) client->buflen - (index + flen);
+						i = client->buflen - (index + flen);
 						if (i >= 0) {
 							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen);
 							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen);
@@ -5722,7 +5722,7 @@ static void *voter_reader(void *data)
 									continue;
 								}
 								k = 0;
-								i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
+								i = client->buflen - (client->drainindex + FRAME_SIZE);
 								if (i >= 0) {
 									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
 										k += client->rssi[j];
@@ -5782,7 +5782,7 @@ static void *voter_reader(void *data)
 									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
-								i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
+								i = client->buflen - (client->drainindex + FRAME_SIZE);
 								if (i >= 0) {
 									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
 										client->rssi[j] = 0;
@@ -5978,7 +5978,7 @@ static void *voter_reader(void *data)
 									continue;
 								}
 								/* Calculate the bytes available before the ring-buffer wraps. */
-								i = (int) maxclient->buflen - ((int) maxclient->drainindex + FRAME_SIZE);
+								i = maxclient->buflen - (maxclient->drainindex + FRAME_SIZE);
 								/* Copy the audio frame from the voted client into the channel (ring) buffer. */
 								if (i >= 0) {
 									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE);
