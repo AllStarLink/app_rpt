@@ -46,7 +46,6 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <usb.h>
 #include <search.h>
 #include <linux/ppdev.h>
 #include <linux/parport.h>
