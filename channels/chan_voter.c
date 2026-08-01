@@ -5798,6 +5798,11 @@ static void *voter_reader(void *data)
 							}
 							if (!maxclient) {
 								maxrssi = 0;
+								/* Ensure the test cycle and index are reset when no client is selected
+								 * to prevent stale values.
+								 */
+								p->testcycle = 0;
+								p->testindex = 0;
 							}
 							memset(p->buf + AST_FRIENDLY_OFFSET, ULAW_SILENCE, FRAME_SIZE);
 							if (maxclient) {
@@ -5900,16 +5905,24 @@ static void *voter_reader(void *data)
 									}
 									/* Randomly cycle through all the clients at maxrssi, or
 									 * cycle every test_mode - 1 frames.
+									 *
+									 * If we didn't find any suitable clients (i == 0), we
+									 * won't do anything.
 									 */
-									if (p->voter_test == 1) {
-										p->testindex = random() % i;
+									if (i == 0) {
+										p->testcycle = 0;
+										p->testindex = 0;
 									} else {
-										p->testcycle++;
-										if (p->testcycle >= (p->voter_test - 1)) {
-											p->testcycle = 0;
-											p->testindex++;
-											if (p->testindex >= i) {
-												p->testindex = 0;
+										if (p->voter_test == 1) {
+											p->testindex = ast_random() % i;
+										} else {
+											p->testcycle++;
+											if (p->testcycle >= (p->voter_test - 1)) {
+												p->testcycle = 0;
+												p->testindex++;
+												if (p->testindex >= i) {
+													p->testindex = 0;
+												}
 											}
 										}
 									}
@@ -5943,6 +5956,10 @@ static void *voter_reader(void *data)
 									p->testcycle = 0;
 									p->testindex = 0;
 								}
+								/*!
+								 * \todo VE7FET is this dead code? We are nested inside a
+								 * if (maxclient) already?
+								 */
 								if (!maxclient) { /* If nothing there */
 									memset(silbuf, 0, sizeof(silbuf));
 									memset(&fr, 0, sizeof(fr));
