@@ -5898,8 +5898,8 @@ static void *voter_reader(void *data)
 										if (client->mix) {
 											continue;
 										}
-										/* Count the clients at maxrssi. */
-										if (client->lastrssi == maxrssi) {
+										/* Count the clients at maxrssi (clients also must have a positive RSSI). */
+										if (client->lastrssi > 0 && client->lastrssi == maxrssi) {
 											i++;
 										}
 									}
@@ -5938,8 +5938,8 @@ static void *voter_reader(void *data)
 										if (client->mix) {
 											continue;
 										}
-										/* If this is client isn't at maxrssi, skip it. */
-										if (client->lastrssi != maxrssi) {
+										/* If this is client isn't at maxrssi, or has a non-positive RSSI, skip it. */
+										if (client->lastrssi <= 0 || client->lastrssi != maxrssi) {
 											continue;
 										}
 										/* See if the current number of clients matches p->testindex,
