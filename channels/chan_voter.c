@@ -2817,7 +2817,7 @@ static struct ast_cli_entry voter_cli[] = {
  */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
-	int i, j, k, x, maxprio, haslastaudio;
+	int i, j, x, maxprio, haslastaudio, buffer_bytes_avail, rssi_sum;
 	struct ast_frame fr, *f1, *f2;
 	struct voter_client *client;
 	short silbuf[FRAME_SIZE];
@@ -2920,40 +2920,40 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		 * to send the audio from this highest priority client.
 		 */
 		/* Calculate the bytes available before the ring-buffer wraps. */
-		i = client->buflen - (client->drainindex + FRAME_SIZE);
-		if (i >= 0) {
+		buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
+		if (buffer_bytes_avail >= 0) {
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
 		} else {
-			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE + i);
-			memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + i), client->audio, -i);
+			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
+			memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + buffer_bytes_avail), client->audio, -buffer_bytes_avail);
 		}
-		if (i >= 0) {
+		if (buffer_bytes_avail >= 0) {
 			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
 		} else {
-			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
-			memset(client->audio, ULAW_SILENCE, -i);
+			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
+			memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
 		}
 		/* Calculate the RSSI based on any RSSI samples in the buffer */
-		k = 0;
-		if (i >= 0) {
+		rssi_sum = 0;
+		if (buffer_bytes_avail >= 0) {
 			for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-				k += client->rssi[j];
+				rssi_sum += client->rssi[j];
 				client->rssi[j] = 0; /* After reading an RSSI value, reset the array to 0 */
 			}
 		} else {
-			for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
-				k += client->rssi[j];
+			for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
+				rssi_sum += client->rssi[j];
 				client->rssi[j] = 0;
 			}
-			for (j = 0; j < -i; j++) {
-				k += client->rssi[j];
+			for (j = 0; j < -buffer_bytes_avail; j++) {
+				rssi_sum += client->rssi[j];
 				client->rssi[j] = 0;
 			}
 		}
 		/* Take the sum of all the RSSI samples we found, get the average, and set client->lastrssi
 		 * for this client based on the result.
 		 */
-		client->lastrssi = k / FRAME_SIZE;
+		client->lastrssi = rssi_sum / FRAME_SIZE;
 		/* If this client's RSSI is has the strongest RSSI, set maxrssi to this new value, and
 		 * mark this client as the strongest (maxclient).
 		 */
@@ -4759,7 +4759,7 @@ static void *voter_reader(void *data)
 	char client1_ip[INET_ADDRSTRLEN];
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
-	int fd, i, j, k, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
+	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0, buffer_bytes_avail;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -5701,7 +5701,7 @@ static void *voter_reader(void *data)
 							maxrssi = 0;
 							maxclient = NULL;
 							for (client = clients; client; client = (startagain) ? clients : client->next) {
-								int maxprio, thisprio;
+								int maxprio, thisprio, rssi_sum;
 
 								startagain = 0;
 								/* If the client doesn't belong to this VOTER instance, skip it. */
@@ -5721,21 +5721,25 @@ static void *voter_reader(void *data)
 									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
-								k = 0;
-								i = client->buflen - (client->drainindex + FRAME_SIZE);
-								if (i >= 0) {
+								/* Calculate the RSSI based on any RSSI samples in the buffer */
+								rssi_sum = 0;
+								buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
+								if (buffer_bytes_avail >= 0) {
 									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-										k += client->rssi[j];
+										rssi_sum += client->rssi[j];
 									}
 								} else {
-									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
-										k += client->rssi[j];
+									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
+										rssi_sum += client->rssi[j];
 									}
-									for (j = 0; j < -i; j++) {
-										k += client->rssi[j];
+									for (j = 0; j < -buffer_bytes_avail; j++) {
+										rssi_sum += client->rssi[j];
 									}
 								}
-								client->lastrssi = k / FRAME_SIZE;
+								/* Take the sum of all the RSSI samples we found, get the average, and set client->lastrssi
+								 * for this client based on the result.
+								 */
+								client->lastrssi = rssi_sum / FRAME_SIZE;
 								maxprio = thisprio = 0;
 								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden
 								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
@@ -5782,16 +5786,17 @@ static void *voter_reader(void *data)
 									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
-								i = client->buflen - (client->drainindex + FRAME_SIZE);
-								if (i >= 0) {
+								/* Zero out all the RSSI values for the client. */
+								buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
+								if (buffer_bytes_avail >= 0) {
 									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
 										client->rssi[j] = 0;
 									}
 								} else {
-									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
+									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
 										client->rssi[j] = 0;
 									}
-									for (j = 0; j < -i; j++) {
+									for (j = 0; j < -buffer_bytes_avail; j++) {
 										client->rssi[j] = 0;
 									}
 								}
@@ -5978,13 +5983,13 @@ static void *voter_reader(void *data)
 									continue;
 								}
 								/* Calculate the bytes available before the ring-buffer wraps. */
-								i = maxclient->buflen - (maxclient->drainindex + FRAME_SIZE);
+								buffer_bytes_avail = maxclient->buflen - (maxclient->drainindex + FRAME_SIZE);
 								/* Copy the audio frame from the voted client into the channel (ring) buffer. */
-								if (i >= 0) {
+								if (buffer_bytes_avail >= 0) {
 									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE);
 								} else {
-									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE + i);
-									memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + i), maxclient->audio, -i);
+									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE + buffer_bytes_avail);
+									memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + buffer_bytes_avail), maxclient->audio, -buffer_bytes_avail);
 								}
 								/* Cycle through all the clients, if recording has been enabled with voter record,
 								 * write the audio and RSSI for each client to the specified file.
@@ -6012,22 +6017,22 @@ static void *voter_reader(void *data)
 										}
 										ast_copy_string(rec.name, client->name, sizeof(rec.name));
 										rec.rssi = client->lastrssi;
-										if (i >= 0) {
+										if (buffer_bytes_avail >= 0) {
 											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE);
 										} else {
-											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + i);
-											memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
-											memcpy(rec.audio + FRAME_SIZE + i, client->audio, -i);
-											memset(client->audio, ULAW_SILENCE, -i);
+											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
+											memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
+											memcpy(rec.audio + FRAME_SIZE + buffer_bytes_avail, client->audio, -buffer_bytes_avail);
+											memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
 										}
 										fwrite(&rec, 1, sizeof(rec), p->recfp);
 									}
 									/* Replace the audio in the ring buffer for each client with silence. */
-									if (i >= 0) {
+									if (buffer_bytes_avail >= 0) {
 										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
 									} else {
-										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
-										memset(client->audio, ULAW_SILENCE, -i);
+										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
+										memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
 									}
 								}
 								/* If the PL filter or host de-emphasis options are set for this instance,
