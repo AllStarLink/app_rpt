@@ -2925,7 +2925,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
 		} else {
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE + i);
-			memcpy(p->buf + AST_FRIENDLY_OFFSET + (client->buflen - i), client->audio, -i);
+			memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + i), client->audio, -i);
 		}
 		if (i >= 0) {
 			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
@@ -5984,7 +5984,7 @@ static void *voter_reader(void *data)
 									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE);
 								} else {
 									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE + i);
-									memcpy(p->buf + AST_FRIENDLY_OFFSET + (maxclient->buflen - i), maxclient->audio, -i);
+									memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + i), maxclient->audio, -i);
 								}
 								/* Cycle through all the clients, if recording has been enabled with voter record,
 								 * write the audio and RSSI for each client to the specified file.
