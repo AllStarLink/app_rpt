@@ -6005,6 +6005,8 @@ static void *voter_reader(void *data)
 									if (client->mix) {
 										continue;
 									}
+									/* Calculate the bytes available before the ring-buffer wraps. */
+									buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
 									/* If a file pointer was set with voter record, write out the raw audio
 									 * and RSSI for each client to the specified file.
 									 */
