@@ -5359,9 +5359,17 @@ static void *voter_reader(void *data)
 			if (DEBUG_ATLEAST(4) && client && ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW &&
 				recvlen > sizeof(VOTER_PACKET_HEADER) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-				strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
-				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
-					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+				/* If this is a mix client, timestuff will be 0 (GPS epoch). Rather than displaying the
+				 * GPS epoch date (from 1969), just print "No time sent".
+				 */
+				if (!timestuff) {
+					ast_debug(4, "Client %s sending time: No time sent, RSSI: %d\n", client->name,
+						(unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+				} else {
+					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+					ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
+						ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+				}
 			}
 
 			/* If we have a valid (authenticated) client, have recently heard from it, and it sent
@@ -6226,10 +6234,16 @@ process_gps:
 				client->lastmastergpstime.vtime_sec = mastergps_time.vtime_sec;
 				client->lastmastergpstime.vtime_nsec = mastergps_time.vtime_nsec;
 				if (DEBUG_ATLEAST(4)) {
-					/* Get and display GPS Time that the client is sending us */
+					/* Get and display GPS Time that the client is sending us. If this is
+					 * a mix client, timestuff will be 0 (GPS epoch). Rather than displaying
+					 * the GPS epoch date (from 1969), just print "No time sent". */
 					timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-					strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
-					ast_debug(4, "GPSTime:    %s.%09d from %s\n", timestr, ntohl(vph->curtime.vtime_nsec), client->name);
+					if (!timestuff) {
+						ast_debug(4, "GPSTime:    No time sent from %s\n", client->name);
+					} else {
+						strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
+						ast_debug(4, "GPSTime:    %s.%09d from %s\n", timestr, ntohl(vph->curtime.vtime_nsec), client->name);
+					}
 					/* Get and display the System time */
 					timetv = ast_tvnow();
 					timetv.tv_usec = ((timetv.tv_usec + 10000) / 20000) * 20000;
