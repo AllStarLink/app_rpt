@@ -4831,9 +4831,12 @@ static void *voter_reader(void *data)
 				};
 				ast_debug(3, "A VOTER on %d was receiving but now has stopped (RX_TIMEOUT_MS)!\n", p->nodenum);
 				ast_queue_frame(p->owner, &wf);
-				/* De-assert COS and reset p->lastwon for next time. */
+				/* De-assert COS and reset parameters for next time. */
 				p->rxkey = 0;
 				p->lastwon = NULL;
+				p->threshold = 0;
+				p->threshcount = 0;
+				p->lingercount = 0;
 			}
 		}
 
@@ -5332,8 +5335,11 @@ static void *voter_reader(void *data)
 
 								ast_queue_frame(p->owner, &wf);
 							}
-							/* De-assert COS and reset p->lastwon for next time. */
+							/* De-assert COS and reset parameters for next time. */
 							p->lastwon = NULL;
+							p->threshold = 0;
+							p->threshcount = 0;
+							p->lingercount = 0;
 							p->rxkey = 0;
 							ast_mutex_lock(&p->txqlock);
 							while ((f1 = AST_LIST_REMOVE_HEAD(&p->txq, frame_list)) != NULL) {
