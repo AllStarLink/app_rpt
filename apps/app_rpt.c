@@ -2557,8 +2557,8 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 
-	/* rpt_make_call is blocking, long dns lookups result in exceptionally long queue warnings 
-	 * autoservice handles "eating" the frames and eliminating the warning. 
+	/* rpt_make_call is blocking, long dns lookups result in exceptionally long queue warnings
+	 * autoservice handles "eating" the frames and eliminating the warning.
 	 */
 	ast_autoservice_start(l->pchan);
 	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
