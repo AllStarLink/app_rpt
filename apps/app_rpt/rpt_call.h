@@ -38,9 +38,8 @@ int rpt_disable_cdr(struct ast_channel *chan);
  * \param desc Short description of the call purpose (for logging)
  * \param callerid Caller ID number/string to set on the outgoing call
  * \param node Node name or extension to set on the channel for visibility
- * \return 0 on success, non-zero on error
  */
-int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data,
+void rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data,
 	const char *desc, const char *callerid, const char *node);
 
 /*! \brief Setup the channel and place an outbound RPT call
@@ -58,7 +57,8 @@ int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, cons
  * \param callerid Caller ID number/string to set on the outgoing call
  * \param node Node name or extension to set on the channel for visibility
  * \return 0 on success, negative on error (returns result of rpt_setup_call() or ast_call())
- * \note Calls to this function call DNS lookup and is "blocking" up to DNS timeout time.
+ * \note This function may perform a blocking DNS lookup during call setup.
+ *       The lookup can block until the DNS timeout expires.
  */
 int rpt_make_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc,
 	const char *callerid, const char *node);
