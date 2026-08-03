@@ -83,8 +83,7 @@ int rpt_disable_cdr(struct ast_channel *chan)
 	return res;
 }
 
-void rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data,
-	const char *desc, const char *callerid, const char *node)
+void rpt_setup_call(struct ast_channel *chan, const char *addr, const char *driver, const char *data, const char *callerid, const char *node)
 {
 	ast_debug(1, "Requested channel %s\n", ast_channel_name(chan));
 	ast_set_read_format(chan, ast_format_slin);
@@ -104,7 +103,7 @@ void rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, con
 int rpt_make_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc,
 	const char *callerid, const char *node)
 {
-	rpt_setup_call(chan, addr, timeout, driver, data, desc, callerid, node);
+	rpt_setup_call(chan, addr, driver, data, callerid, node);
 	return ast_call(chan, addr, timeout);
 }
 

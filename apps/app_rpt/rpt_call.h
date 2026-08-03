@@ -32,15 +32,12 @@ int rpt_disable_cdr(struct ast_channel *chan);
  *
  * \param chan Channel initiating the outbound call
  * \param addr Destination address (driver-specific dial string or endpoint)
- * \param timeout Call timeout in seconds (used when actually placing the call)
  * \param driver Driver/protocol name (for logging; may be part of addr)
  * \param data Application data to set on the channel (rpt node/type)
- * \param desc Short description of the call purpose (for logging)
  * \param callerid Caller ID number/string to set on the outgoing call
  * \param node Node name or extension to set on the channel for visibility
  */
-void rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data,
-	const char *desc, const char *callerid, const char *node);
+void rpt_setup_call(struct ast_channel *chan, const char *addr, const char *driver, const char *data, const char *callerid, const char *node);
 
 /*! \brief Setup the channel and place an outbound RPT call
  *
