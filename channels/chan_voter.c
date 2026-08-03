@@ -5616,15 +5616,15 @@ static void *voter_reader(void *data)
 							index = (index + client->drainindex_40ms) % client->buflen;
 						}
 						flen = (f1) ? f1->datalen : FRAME_SIZE;
-						i = client->buflen - (index + flen);
-						if (i >= 0) {
+						buffer_bytes_avail = client->buflen - (index + flen);
+						if (buffer_bytes_avail >= 0) {
 							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen);
 							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen);
 						} else {
-							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen + i);
-							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen + i);
-							memcpy(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + i), -i);
-							memset(client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], -i);
+							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen + buffer_bytes_avail);
+							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen + buffer_bytes_avail);
+							memcpy(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + buffer_bytes_avail), -buffer_bytes_avail);
+							memset(client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], -buffer_bytes_avail);
 						}
 						if (f1) {
 							ast_frfree(f1);
