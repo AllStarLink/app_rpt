@@ -2557,6 +2557,10 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
 
+	/* rpt_make_call is blocking, long dns lookups result in exceptionally long queue warnings
+	 * autoservice handles "eating" the frames and eliminating the warning.
+	 */
+	ast_autoservice_start(l->pchan);
 	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
 	ao2_ref(cap, -1);
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list))) {
@@ -2577,6 +2581,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		l->retrytimer = RETRY_TIMER_MS;
 		rpt_mutex_unlock(&myrpt->lock);
 	}
+	ast_autoservice_stop(l->pchan);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 	return NULL;
 }
@@ -4588,21 +4593,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		if (!ms) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
-			continue;
-		}
-		if (l->disctime) {
-			/* We are disconnected but still need to read and discard frames */
-			if (who == l->pchan) {
-				struct ast_frame *f;
-
-				f = ast_read(l->pchan);
-				if (!f) {
-					ast_debug(1, "@@@@ rpt:Hung Up\n");
-					break;
-				}
-				ast_frfree(f);
-				continue;
-			}
 			continue;
 		}
 

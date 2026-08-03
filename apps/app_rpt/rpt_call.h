@@ -22,9 +22,41 @@
 /*! \brief Disable CDR for a call */
 int rpt_disable_cdr(struct ast_channel *chan);
 
-int rpt_setup_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data,
-	const char *desc, const char *callerid, const char *node);
+/*! \brief Prepare a channel for an outbound RPT call
+ *
+ * Sets channel read/write formats, disables CDRs where appropriate,
+ * attaches the "Rpt" application and application data to the channel,
+ * and sets the connected Caller ID and displayed extension for the
+ * outgoing call so that the remote side sees the expected caller
+ * information and node/extension.
+ *
+ * \param chan Channel initiating the outbound call
+ * \param addr Destination address (driver-specific dial string or endpoint)
+ * \param driver Driver/protocol name (for logging; may be part of addr)
+ * \param data Application data to set on the channel (rpt node/type)
+ * \param callerid Caller ID number/string to set on the outgoing call
+ * \param node Node name or extension to set on the channel for visibility
+ */
+void rpt_setup_call(struct ast_channel *chan, const char *addr, const char *driver, const char *data, const char *callerid, const char *node);
 
+/*! \brief Setup the channel and place an outbound RPT call
+ *
+ * This is a convenience wrapper that calls rpt_setup_call() to prepare
+ * the channel and then invokes ast_call() to actually create the
+ * outbound channel to the specified address.
+ *
+ * \param chan Channel initiating the outbound call
+ * \param addr Destination address (driver-specific dial string or endpoint)
+ * \param timeout Call timeout in seconds (passed to ast_call)
+ * \param driver Driver/protocol name (for logging; may be part of addr)
+ * \param data Application data to set on the channel (rpt node/type)
+ * \param desc Short description of the call purpose (for logging)
+ * \param callerid Caller ID number/string to set on the outgoing call
+ * \param node Node name or extension to set on the channel for visibility
+ * \return 0 on success, negative on error (returns result of rpt_setup_call() or ast_call())
+ * \note This function may perform a blocking DNS lookup during call setup.
+ *       The lookup can block until the DNS timeout expires.
+ */
 int rpt_make_call(struct ast_channel *chan, const char *addr, int timeout, const char *driver, const char *data, const char *desc,
 	const char *callerid, const char *node);
 
