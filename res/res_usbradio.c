@@ -1388,7 +1388,7 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 		 */
 		frames_available = ast_radio_pa_write_available(ps);
 
-		if (frames_available >= frames) {
+		if ((frames_available > 0) && (frames_available >= frames)) {
 			ast_debug(6, "PortAudio write stream underflow, priming with %ld silence frames\n", frames);
 			prime_res = Pa_WriteStream(ps->stream, null_buf, frames);
 			if (prime_res != paNoError) {
