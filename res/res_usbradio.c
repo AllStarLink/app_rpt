@@ -1368,7 +1368,7 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 	}
 
 	if (frames > AST_RADIO_PA_FRAMES_PER_BUFFER) {
-		ast_log(LOG_WARNING, "ast_radio_pa_write: frames %lu exceeds buffer capacity\n", frames);
+		ast_log(LOG_WARNING, "ast_radio_pa_write: PortAudio frames %lu exceeds buffer capacity\n", frames);
 		return paBufferTooBig;
 	}
 

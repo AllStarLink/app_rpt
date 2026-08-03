@@ -156,7 +156,7 @@
  *		(otherwise it will never be full).
  */
 
-#define FRAME_SIZE 160
+#define FRAME_SIZE 160 /* Samples per Asterisk Frame */
 
 #if defined(__FreeBSD__)
 #define FRAGS 0x8
