@@ -6005,27 +6005,6 @@ static void *voter_reader(void *data)
 									p->testcycle = 0;
 									p->testindex = 0;
 								}
-								/*!
-								 * \todo VE7FET is this dead code? We are nested inside a
-								 * if (maxclient) already?
-								 */
-								if (!maxclient) { /* If nothing there */
-									memset(silbuf, 0, sizeof(silbuf));
-									memset(&fr, 0, sizeof(fr));
-									fr.frametype = AST_FRAME_VOICE;
-									fr.subclass.format = ast_format_slin;
-									fr.datalen = FRAME_SIZE * 2;
-									fr.samples = FRAME_SIZE;
-									fr.data.ptr = silbuf;
-									fr.src = __PRETTY_FUNCTION__;
-									p->threshold = 0;
-									p->threshcount = 0;
-									p->lingercount = 0;
-									p->winner = 0;
-									incr_drainindex(p);
-									ast_queue_frame(p->owner, &fr);
-									continue;
-								}
 								/* Figure out where in the ring buffer we are. */
 								buffer_bytes_avail = maxclient->buflen - (maxclient->drainindex + FRAME_SIZE);
 								/* Copy the audio frame from the voted client into the channel (ring) buffer. */
