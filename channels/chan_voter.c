@@ -4067,14 +4067,16 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
  * Note that on initial start, load_module runs this one time, before voter_request
  * loads the rest of the config file.
  *
- * \retval  			0 Success — configuration loaded and applied.
- * \retval 				-1 Failure — configuration load or allocation error;
- *						existing state is left unchanged where possible.
+ * \retval  			AST_MODULE_LOAD_SUCCESS (0) — configuration loaded and applied.
+ * \retval 				AST_MODULE_LOAD_FAILURE (-1) — configuration, validation,
+ *						authentication, or allocation error; existing state is left
+ *						unchanged, where possible.
  */
 static int reload(void)
 {
 	struct ast_flags zeroflag = { 0 };
 	int i, n, instance_buflen, buflen, oldtoctype, oldlevel;
+	uint8_t *newaudio, *newrssi;
 	char *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
 	const char *val;
 	struct voter_pvt *p;
@@ -4089,7 +4091,7 @@ static int reload(void)
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load/reload config %s\n", config);
-		return -1;
+		return AST_MODULE_LOAD_FAILURE;
 	} else {
 		ast_log(LOG_NOTICE, "Config load/reload from %s\n", config);
 	}
@@ -4356,7 +4358,7 @@ static int reload(void)
 			cp = ast_strdup(v->value);
 			if (!cp) {
 				ast_config_destroy(cfg);
-				return -1;
+				return AST_MODULE_LOAD_FAILURE;
 			}
 			n = finddelim(cp, strs, ARRAY_LEN(strs));
 			if (n < 1) {
@@ -4375,13 +4377,14 @@ static int reload(void)
 				}
 			}
 			newclient = 0;
-			/* If a new one, alloc its space. */
+			/* If this is a new client, alloc its space. */
 			if (!client) {
 				client = ast_calloc(1, sizeof(struct voter_client));
+				/* Abort if allocation fails. */
 				if (!client) {
 					ast_free(cp);
 					ast_config_destroy(cfg);
-					return -1;
+					return AST_MODULE_LOAD_FAILURE;
 				}
 				/* When initializing a client, set the CLI priority override to PRIO_DEFAULT (-2). */
 				client->prio_override = PRIO_DEFAULT;
@@ -4443,37 +4446,71 @@ static int reload(void)
 			client->digest = crc32_bufs(challenge, strs[0]);
 			ast_copy_string(client->pswd, strs[0], sizeof(client->pswd));
 			ast_free(cp);
-			if (client->old_buflen && (client->buflen != client->old_buflen)) {
+			/* If we have a new buflen, and it isn't the same as the old one, or the
+			 * client->audio or client->rssi buffers are NULL (missing), we may need
+			 * to reallocate/allocate buffers.
+			 * If any of the allocations fail, we abort the reload and return AST_MODULE_LOAD_FAILURE,
+			 * leaving the existing buffers intact.
+			 */
+			if (!client->audio || !client->rssi || (client->old_buflen && (client->buflen != client->old_buflen))) {
+				/* If there is an existing audio buffer, reallocate in case the size changed,
+				 * otherwise allocate a new one. */
+				if (client->audio) {
+					newaudio = ast_realloc(client->audio, client->buflen);
+					/* Abort if allocation fails.*/
+					if (!newaudio) {
+						if (newclient) {
+							ast_free(client);
+						}
+						ast_config_destroy(cfg);
+						return AST_MODULE_LOAD_FAILURE;
+					}
+					client->audio = newaudio;
+				} else {
+					/* Create a new audio buffer. */
+					client->audio = ast_malloc(client->buflen);
+					/* Abort if allocation fails.*/
+					if (!client->audio) {
+						if (newclient) {
+							ast_free(client);
+						}
+						ast_config_destroy(cfg);
+						return AST_MODULE_LOAD_FAILURE;
+					}
+				}
+				/* Write silence into the new buffer. */
+				memset(client->audio, ULAW_SILENCE, client->buflen);
+				/* If there is an existing RSSI buffer, reallocate in case the size changed,
+				 * otherwise allocate a new one. */
+				if (client->rssi) {
+					newrssi = ast_realloc(client->rssi, client->buflen);
+					/* Abort if allocation fails.*/
+					if (!newrssi) {
+						if (newclient) {
+							ast_free(client->audio);
+							ast_free(client);
+						}
+						ast_config_destroy(cfg);
+						return AST_MODULE_LOAD_FAILURE;
+					}
+					client->rssi = newrssi;
+					/* Clear/reset the existing RSSI buffer. */
+					memset(client->rssi, 0, client->buflen);
+				} else {
+					/* Create a new RSSI buffer, note ast_calloc() will initialize to zero. */
+					client->rssi = ast_calloc(1, client->buflen);
+					/* Abort if allocation fails.*/
+					if (!client->rssi) {
+						if (newclient) {
+							ast_free(client->audio);
+							ast_free(client);
+						}
+						ast_config_destroy(cfg);
+						return AST_MODULE_LOAD_FAILURE;
+					}
+				}
+				/* Reset the ring buffer index. */
 				client->drainindex = 0;
-			}
-			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->audio = ast_realloc(client->audio, client->buflen);
-				if (!client->audio) {
-					ast_config_destroy(cfg);
-					return -1;
-				}
-				memset(client->audio, ULAW_SILENCE, client->buflen);
-			} else if (!client->audio) {
-				client->audio = ast_malloc(client->buflen);
-				if (!client->audio) {
-					ast_config_destroy(cfg);
-					return -1;
-				}
-				memset(client->audio, ULAW_SILENCE, client->buflen);
-			}
-			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->rssi = ast_realloc(client->rssi, client->buflen);
-				if (!client->rssi) {
-					ast_config_destroy(cfg);
-					return -1;
-				}
-				memset(client->rssi, 0, client->buflen);
-			} else if (!client->rssi) {
-				client->rssi = ast_calloc(1, client->buflen);
-				if (!client->rssi) {
-					ast_config_destroy(cfg);
-					return -1;
-				}
 			}
 			/* If a new client, add it into list. */
 			if (newclient) {
@@ -4497,7 +4534,7 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
-			return -1;
+			return AST_MODULE_LOAD_FAILURE;
 		}
 		for (client1 = clients; client1; client1 = client1->next) {
 			if (!client1->reload) {
@@ -4509,7 +4546,7 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
-				return -1;
+				return AST_MODULE_LOAD_FAILURE;
 			}
 		}
 	}
@@ -4540,7 +4577,7 @@ static int reload(void)
 		ast_free(client);
 		client = clients;
 	}
-	return 0;
+	return AST_MODULE_LOAD_SUCCESS;
 }
 
 /*!
@@ -6523,9 +6560,9 @@ static int unload_module(void)
  * reader and timer threads, allocates channel format capabilities, and registers
  * the channel driver so the Voter channel becomes available to Asterisk.
  *
- * \return 				0 on success; non-zero on failure (typically AST_MODULE_LOAD_DECLINE for
- *         				module load errors, or
- *						1 if the configuration could not be loaded).
+ * \return 				AST_MODULE_LOAD_SUCCESS (0) on success
+ *						AST_MODULE_LOAD_DECLINE (1) for module load errors, or if
+ *						the configuration could not be loaded.
  */
 static int load_module(void)
 {
