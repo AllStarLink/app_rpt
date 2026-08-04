@@ -117,7 +117,7 @@ time period (the first 160 samples of the abstracted buffer (which is the physic
 drainindex + 159) and whichever one, if any that has the largest RSSI average greater then zero is selected
 as the audio source for that frame. The corresponding audio buffer's contents (in the corresponding offsets)
 are presented to Asterisk, then ALL the clients corresponding RSSI data is set to 0, ALL the clients corresponding
-audio is set to quiet (0x7f). The overwriting of the buffers after their use/examination is done so that the
+audio is set to quiet (0xff). The overwriting of the buffers after their use/examination is done so that the
 next time those positions in the physical buffer are examined, they will not contain any data that was not actually
 put there, since all client's buffers are significant regardless of whether they were populated or not. This
 allows for the true 'connectionless-ness' of this protocol implementation.
@@ -2817,7 +2817,7 @@ static struct ast_cli_entry voter_cli[] = {
  */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
-	int i, j, k, x, maxprio, haslastaudio;
+	int i, j, x, maxprio, haslastaudio, buffer_bytes_avail, rssi_sum;
 	struct ast_frame fr, *f1, *f2;
 	struct voter_client *client;
 	short silbuf[FRAME_SIZE];
@@ -2919,41 +2919,53 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		 * priority (if there were any priorities configured). We will now proceed
 		 * to send the audio from this highest priority client.
 		 */
-		/* Calculate the bytes available before the ring-buffer wraps. */
-		i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
-		if (i >= 0) {
+		/* Figure out where in the ring buffer we are.
+		 * If buffer_bytes_avail is positive, we still have data available to process, send the
+		 * audio to the Asterisk channel, and then replace it with silence.
+		 * If buffer_bytes_avail is negative, we have wrapped around the ring buffer. Get the
+		 * remaining bytes from the end of the buffer, and then get the rest from the beginning of the buffer.
+		 * After sending that audio to the Asterisk channel, replace it with silence.
+		 */
+		buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
+		if (buffer_bytes_avail >= 0) {
+			/* Send the audio to the Asterisk channel, then replace it with silence. */
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
-		} else {
-			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE + i);
-			memcpy(p->buf + AST_FRIENDLY_OFFSET + (client->buflen - i), client->audio, -i);
-		}
-		if (i >= 0) {
 			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
 		} else {
-			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
-			memset(client->audio, ULAW_SILENCE, -i);
+			/* The buffer has wrapped, get the audio from the end of the buffer, and then get the rest from the beginning,
+			 * send it to the Asterisk channel, then replace it with silence.
+			 */
+			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
+			memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + buffer_bytes_avail), client->audio, -buffer_bytes_avail);
+			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
+			memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
 		}
+
 		/* Calculate the RSSI based on any RSSI samples in the buffer */
-		k = 0;
-		if (i >= 0) {
+		rssi_sum = 0;
+		if (buffer_bytes_avail >= 0) {
+			/* Get the RSSI samples from the buffer and sum them. Replace with 0 after reading. */
 			for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-				k += client->rssi[j];
-				client->rssi[j] = 0; /* After reading an RSSI value, reset the array to 0 */
-			}
-		} else {
-			for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
-				k += client->rssi[j];
+				rssi_sum += client->rssi[j];
 				client->rssi[j] = 0;
 			}
-			for (j = 0; j < -i; j++) {
-				k += client->rssi[j];
+		} else {
+			/* The buffer has wrapped, get the RSSI samples from the end of the buffer, and then get
+			 * the rest from the beginning, add them to the sum, and replace with 0 after reading.
+			 */
+			for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
+				rssi_sum += client->rssi[j];
+				client->rssi[j] = 0;
+			}
+			for (j = 0; j < -buffer_bytes_avail; j++) {
+				rssi_sum += client->rssi[j];
 				client->rssi[j] = 0;
 			}
 		}
 		/* Take the sum of all the RSSI samples we found, get the average, and set client->lastrssi
 		 * for this client based on the result.
 		 */
-		client->lastrssi = k / FRAME_SIZE;
+		client->lastrssi = rssi_sum / FRAME_SIZE;
 		/* If this client's RSSI is has the strongest RSSI, set maxrssi to this new value, and
 		 * mark this client as the strongest (maxclient).
 		 */
@@ -4759,7 +4771,7 @@ static void *voter_reader(void *data)
 	char client1_ip[INET_ADDRSTRLEN];
 	struct sockaddr_in sin, sin_stream, psin;
 	struct voter_pvt *p;
-	int fd, i, j, k, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
+	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0, buffer_bytes_avail;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -4831,9 +4843,12 @@ static void *voter_reader(void *data)
 				};
 				ast_debug(3, "A VOTER on %d was receiving but now has stopped (RX_TIMEOUT_MS)!\n", p->nodenum);
 				ast_queue_frame(p->owner, &wf);
-				/* De-assert COS and reset p->lastwon for next time. */
+				/* De-assert COS and reset parameters for next time. */
 				p->rxkey = 0;
 				p->lastwon = NULL;
+				p->threshold = 0;
+				p->threshcount = 0;
+				p->lingercount = 0;
 			}
 		}
 
@@ -5332,8 +5347,11 @@ static void *voter_reader(void *data)
 
 								ast_queue_frame(p->owner, &wf);
 							}
-							/* De-assert COS and reset p->lastwon for next time. */
+							/* De-assert COS and reset parameters for next time. */
 							p->lastwon = NULL;
+							p->threshold = 0;
+							p->threshcount = 0;
+							p->lingercount = 0;
 							p->rxkey = 0;
 							ast_mutex_lock(&p->txqlock);
 							while ((f1 = AST_LIST_REMOVE_HEAD(&p->txq, frame_list)) != NULL) {
@@ -5353,9 +5371,17 @@ static void *voter_reader(void *data)
 			if (DEBUG_ATLEAST(4) && client && ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW &&
 				recvlen > sizeof(VOTER_PACKET_HEADER) && ((unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)) > 0)) {
 				timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-				strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
-				ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
-					ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+				/* If this is a mix client, timestuff will be 0 (GPS epoch). Rather than displaying the
+				 * GPS epoch date (from 1969), just print "No time sent".
+				 */
+				if (!timestuff) {
+					ast_debug(4, "Client %s sending time: No time sent, RSSI: %d\n", client->name,
+						(unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+				} else {
+					strftime(timestr, sizeof(timestr) - 1, "%Y %T", localtime((time_t *) &timestuff));
+					ast_debug(4, "Client %s sending time: %s.%03d, RSSI: %d\n", client->name, timestr,
+						ntohl(vph->curtime.vtime_nsec) / 1000000, (unsigned char) *(buf + sizeof(VOTER_PACKET_HEADER)));
+				}
 			}
 
 			/* If we have a valid (authenticated) client, have recently heard from it, and it sent
@@ -5602,15 +5628,22 @@ static void *voter_reader(void *data)
 							index = (index + client->drainindex_40ms) % client->buflen;
 						}
 						flen = (f1) ? f1->datalen : FRAME_SIZE;
-						i = (int) client->buflen - (index + flen);
-						if (i >= 0) {
+						/* Figure out where in the ring buffer we are. */
+						buffer_bytes_avail = client->buflen - (index + flen);
+						/* If buffer_bytes_avail is positive, just keep filling client->audio and client->rssi
+						 * from the buffer.
+						 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the data from the end of the
+						 * buffer, then wrap around and get the rest from the beginning of the buffer.
+						 */
+						if (buffer_bytes_avail >= 0) {
 							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen);
 							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen);
 						} else {
-							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen + i);
-							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen + i);
-							memcpy(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + i), -i);
-							memset(client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], -i);
+							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen + buffer_bytes_avail);
+							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen + buffer_bytes_avail);
+							memcpy(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + buffer_bytes_avail),
+								-buffer_bytes_avail);
+							memset(client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], -buffer_bytes_avail);
 						}
 						if (f1) {
 							ast_frfree(f1);
@@ -5701,7 +5734,7 @@ static void *voter_reader(void *data)
 							maxrssi = 0;
 							maxclient = NULL;
 							for (client = clients; client; client = (startagain) ? clients : client->next) {
-								int maxprio, thisprio;
+								int maxprio, thisprio, rssi_sum;
 
 								startagain = 0;
 								/* If the client doesn't belong to this VOTER instance, skip it. */
@@ -5721,21 +5754,31 @@ static void *voter_reader(void *data)
 									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
-								k = 0;
-								i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
-								if (i >= 0) {
+								/* Calculate the RSSI based on any RSSI samples in the buffer */
+								rssi_sum = 0;
+								/* Figure out where in the ring buffer we are.*/
+								buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
+								/* If buffer_bytes_avail is positive, just keep getting RSSI values from the buffer
+								 * and add them to the sum.
+								 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the RSSI data
+								 * from the end of the buffer, then wrap around and get the rest from the beginning of the buffer.
+								 */
+								if (buffer_bytes_avail >= 0) {
 									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-										k += client->rssi[j];
+										rssi_sum += client->rssi[j];
 									}
 								} else {
-									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
-										k += client->rssi[j];
+									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
+										rssi_sum += client->rssi[j];
 									}
-									for (j = 0; j < -i; j++) {
-										k += client->rssi[j];
+									for (j = 0; j < -buffer_bytes_avail; j++) {
+										rssi_sum += client->rssi[j];
 									}
 								}
-								client->lastrssi = k / FRAME_SIZE;
+								/* Take the sum of all the RSSI samples we found, get the average, and set client->lastrssi
+								 * for this client based on the result.
+								 */
+								client->lastrssi = rssi_sum / FRAME_SIZE;
 								maxprio = thisprio = 0;
 								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden
 								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
@@ -5782,22 +5825,33 @@ static void *voter_reader(void *data)
 									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
-								i = (int) client->buflen - ((int) client->drainindex + FRAME_SIZE);
-								if (i >= 0) {
+								/* Zero out all the RSSI values for the client, starting with figuring out where
+								 * in the ring buffer we are.
+								 * If buffer_bytes_avail is positive, just keep zeroing out the RSSI values in the buffer.
+								 * If buffer_bytes_avail is negative, the buffer has wrapped. Zero out the RSSI data
+								 * from the end of the buffer, then wrap around and zero out the rest from the beginning.
+								 */
+								buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
+								if (buffer_bytes_avail >= 0) {
 									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
 										client->rssi[j] = 0;
 									}
 								} else {
-									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + i); j++) {
+									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
 										client->rssi[j] = 0;
 									}
-									for (j = 0; j < -i; j++) {
+									for (j = 0; j < -buffer_bytes_avail; j++) {
 										client->rssi[j] = 0;
 									}
 								}
 							}
 							if (!maxclient) {
 								maxrssi = 0;
+								/* Ensure the test cycle and index are reset when no client is selected
+								 * to prevent stale values.
+								 */
+								p->testcycle = 0;
+								p->testindex = 0;
 							}
 							memset(p->buf + AST_FRIENDLY_OFFSET, ULAW_SILENCE, FRAME_SIZE);
 							if (maxclient) {
@@ -5893,23 +5947,31 @@ static void *voter_reader(void *data)
 										if (client->mix) {
 											continue;
 										}
-										/* Count the clients at maxrssi. */
-										if (client->lastrssi == maxrssi) {
+										/* Count the clients at maxrssi (clients also must have a positive RSSI). */
+										if (client->lastrssi > 0 && client->lastrssi == maxrssi) {
 											i++;
 										}
 									}
 									/* Randomly cycle through all the clients at maxrssi, or
 									 * cycle every test_mode - 1 frames.
+									 *
+									 * If we didn't find any suitable clients (i == 0), we
+									 * won't do anything.
 									 */
-									if (p->voter_test == 1) {
-										p->testindex = random() % i;
+									if (i == 0) {
+										p->testcycle = 0;
+										p->testindex = 0;
 									} else {
-										p->testcycle++;
-										if (p->testcycle >= (p->voter_test - 1)) {
-											p->testcycle = 0;
-											p->testindex++;
-											if (p->testindex >= i) {
-												p->testindex = 0;
+										if (p->voter_test == 1) {
+											p->testindex = ast_random() % i;
+										} else {
+											p->testcycle++;
+											if (p->testcycle >= (p->voter_test - 1)) {
+												p->testcycle = 0;
+												p->testindex++;
+												if (p->testindex >= i) {
+													p->testindex = 0;
+												}
 											}
 										}
 									}
@@ -5925,8 +5987,8 @@ static void *voter_reader(void *data)
 										if (client->mix) {
 											continue;
 										}
-										/* If this is client isn't at maxrssi, skip it. */
-										if (client->lastrssi != maxrssi) {
+										/* If this is client isn't at maxrssi, or has a non-positive RSSI, skip it. */
+										if (client->lastrssi <= 0 || client->lastrssi != maxrssi) {
 											continue;
 										}
 										/* See if the current number of clients matches p->testindex,
@@ -5943,6 +6005,10 @@ static void *voter_reader(void *data)
 									p->testcycle = 0;
 									p->testindex = 0;
 								}
+								/*!
+								 * \todo VE7FET is this dead code? We are nested inside a
+								 * if (maxclient) already?
+								 */
 								if (!maxclient) { /* If nothing there */
 									memset(silbuf, 0, sizeof(silbuf));
 									memset(&fr, 0, sizeof(fr));
@@ -5960,14 +6026,19 @@ static void *voter_reader(void *data)
 									ast_queue_frame(p->owner, &fr);
 									continue;
 								}
-								/* Calculate the bytes available before the ring-buffer wraps. */
-								i = (int) maxclient->buflen - ((int) maxclient->drainindex + FRAME_SIZE);
+								/* Figure out where in the ring buffer we are. */
+								buffer_bytes_avail = maxclient->buflen - (maxclient->drainindex + FRAME_SIZE);
 								/* Copy the audio frame from the voted client into the channel (ring) buffer. */
-								if (i >= 0) {
+								/* If buffer_bytes_avail is positive, get the audio from the current position and
+								 * put it in the Asterisk channel buffer.
+								 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the audio
+								 * from the end of the buffer, then wrap around and get the rest from the beginning.
+								 */
+								if (buffer_bytes_avail >= 0) {
 									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE);
 								} else {
-									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE + i);
-									memcpy(p->buf + AST_FRIENDLY_OFFSET + (maxclient->buflen - i), maxclient->audio, -i);
+									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE + buffer_bytes_avail);
+									memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + buffer_bytes_avail), maxclient->audio, -buffer_bytes_avail);
 								}
 								/* Cycle through all the clients, if recording has been enabled with voter record,
 								 * write the audio and RSSI for each client to the specified file.
@@ -5983,6 +6054,8 @@ static void *voter_reader(void *data)
 									if (client->mix) {
 										continue;
 									}
+									/* Figure out where in the ring buffer we are. */
+									buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
 									/* If a file pointer was set with voter record, write out the raw audio
 									 * and RSSI for each client to the specified file.
 									 */
@@ -5995,22 +6068,29 @@ static void *voter_reader(void *data)
 										}
 										ast_copy_string(rec.name, client->name, sizeof(rec.name));
 										rec.rssi = client->lastrssi;
-										if (i >= 0) {
+										/* If buffer_bytes_avail is positive, get the audio from the current position.
+										 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the audio
+										 * from the end of the buffer, then wrap around and get the rest from the beginning.
+										 */
+										if (buffer_bytes_avail >= 0) {
 											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE);
 										} else {
-											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + i);
-											memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
-											memcpy(rec.audio + FRAME_SIZE + i, client->audio, -i);
-											memset(client->audio, ULAW_SILENCE, -i);
+											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
+											memcpy(rec.audio + FRAME_SIZE + buffer_bytes_avail, client->audio, -buffer_bytes_avail);
 										}
+										/* Write out the buffer to the recording file. */
 										fwrite(&rec, 1, sizeof(rec), p->recfp);
 									}
-									/* Replace the audio in the ring buffer for each client with silence. */
-									if (i >= 0) {
+									/* Replace the audio in the ring buffer for each client with silence.
+									 * If buffer_bytes_avail is positive, just keep zeroing out the audio in the buffer.
+									 * If buffer_bytes_avail is negative, the buffer has wrapped. Zero out the audio
+									 * from the end of the buffer, then wrap around and zero out the rest from the beginning.
+									 */
+									if (buffer_bytes_avail >= 0) {
 										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
 									} else {
-										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + i);
-										memset(client->audio, ULAW_SILENCE, -i);
+										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
+										memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
 									}
 								}
 								/* If the PL filter or host de-emphasis options are set for this instance,
@@ -6196,10 +6276,16 @@ process_gps:
 				client->lastmastergpstime.vtime_sec = mastergps_time.vtime_sec;
 				client->lastmastergpstime.vtime_nsec = mastergps_time.vtime_nsec;
 				if (DEBUG_ATLEAST(4)) {
-					/* Get and display GPS Time that the client is sending us */
+					/* Get and display GPS Time that the client is sending us. If this is
+					 * a mix client, timestuff will be 0 (GPS epoch). Rather than displaying
+					 * the GPS epoch date (from 1969), just print "No time sent". */
 					timestuff = (time_t) ntohl(vph->curtime.vtime_sec);
-					strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
-					ast_debug(4, "GPSTime:    %s.%09d from %s\n", timestr, ntohl(vph->curtime.vtime_nsec), client->name);
+					if (!timestuff) {
+						ast_debug(4, "GPSTime:    No time sent from %s\n", client->name);
+					} else {
+						strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
+						ast_debug(4, "GPSTime:    %s.%09d from %s\n", timestr, ntohl(vph->curtime.vtime_nsec), client->name);
+					}
 					/* Get and display the System time */
 					timetv = ast_tvnow();
 					timetv.tv_usec = ((timetv.tv_usec + 10000) / 20000) * 20000;
