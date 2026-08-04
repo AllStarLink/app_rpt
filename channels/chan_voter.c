@@ -4784,7 +4784,6 @@ static void *voter_reader(void *data)
 	VOTER_REC rec;
 	VOTER_STREAM stream;
 	time_t timestuff, t;
-	short silbuf[FRAME_SIZE];
 #pragma pack(push)
 #pragma pack(1)
 #ifdef ADPCM_LOOPBACK
