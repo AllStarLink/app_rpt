@@ -1654,6 +1654,7 @@ usb_device_ready:
  * \note data is 48 kHz stereo interleaved. ast_radio_pa_write() takes frames
  *       per channel (AST_RADIO_PA_FRAMES_PER_BUFFER); interleaved sample count
  *       is frames * AST_RADIO_PA_OUTPUT_CHANNELS (== AST_RADIO_PA_48K_STEREO_SAMPLES).
+ * 		 pa frames are a single sample per frame, while asterisk frames are 160 samples per frame.
  * \param o		chan_usbradio_pvt.
  * \param data	Audio data to write.
  * \returns		Byte count written on success, 0 on failure.

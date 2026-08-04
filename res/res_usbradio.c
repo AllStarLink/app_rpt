@@ -1359,7 +1359,7 @@ PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned l
 	return paTimedOut;
 }
 
-PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames)
+PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long pa_frames)
 {
 	PaError res;
 
@@ -1367,25 +1367,36 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 		return paBadStreamPtr;
 	}
 
-	if (frames > AST_RADIO_PA_FRAMES_PER_BUFFER) {
-		ast_log(LOG_WARNING, "ast_radio_pa_write: frames %lu exceeds buffer capacity\n", frames);
+	if (pa_frames > AST_RADIO_PA_FRAMES_PER_BUFFER) {
+		ast_log(LOG_WARNING, "ast_radio_pa_write: PortAudio frames %lu exceeds buffer capacity\n", pa_frames);
 		return paBufferTooBig;
 	}
 
-	res = Pa_WriteStream(ps->stream, data, frames);
+	res = Pa_WriteStream(ps->stream, data, pa_frames);
 	if (res == paOutputUnderflowed) {
 		PaError prime_res;
+		/* The data size depends on how many channels are set up in a frame.  We have a max of 2 channels
+		 * If only channel, the buffer is 2x what is needed
+		 */
 		short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
+		long frames_available;
 
 		/*
 		 * Prime the stream with one silence frame so the USB buffer does not
 		 * stay empty (choppy TX). See #593 / #598. Propagate a real failure
 		 * from the silence write so callers can restart the stream.
 		 */
-		ast_debug(6, "PortAudio write stream underflow, writing a 0 frame");
-		prime_res = Pa_WriteStream(ps->stream, null_buf, frames);
-		if (prime_res != paNoError) {
-			return prime_res;
+		frames_available = ast_radio_pa_write_available(ps);
+
+		if ((frames_available > 0) && (frames_available >= pa_frames)) {
+			ast_debug(6, "PortAudio write stream underflow, priming with %ld silence frames\n", pa_frames);
+			prime_res = Pa_WriteStream(ps->stream, null_buf, pa_frames);
+			if (prime_res != paNoError) {
+				return prime_res;
+			}
+		} else {
+			ast_debug(6, "PortAudio write stream underflow, Unable to prime with %ld silence frames, only %ld available\n",
+				pa_frames, frames_available);
 		}
 	}
 

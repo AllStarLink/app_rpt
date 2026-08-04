@@ -2255,15 +2255,10 @@ static void *simpleusb_audio_thread(void *arg)
 				frames_available = ast_radio_pa_write_available(&o->pa);
 
 				if (frames_available < 0) {
-					if (frames_available != paOutputUnderflowed) {
-						/* Underflow handled in soundcard_writeframe
-						 * all other errors require restart
-						 */
-						ast_debug(2, "Pa_GetStreamWriteAvailable error %s", Pa_GetErrorText(frames_available));
-						o->hasusb = 0;
-						stream_cleanup(o);
-						break;
-					}
+					ast_debug(2, "Pa_GetStreamWriteAvailable error %s", Pa_GetErrorText(frames_available));
+					o->hasusb = 0;
+					stream_cleanup(o);
+					break;
 				}
 
 				if ((num_frames <= 3) && (o->txkeyed || o->txtestkey)) {
