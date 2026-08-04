@@ -1376,7 +1376,7 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 	if (res == paOutputUnderflowed) {
 		PaError prime_res;
 		/* The data size depends on how many channels are set up in a frame.  We have a max of 2 channels
-		 * If only channel, the buffer is 2x what is needed
+		 * If only one channel, the buffer is 2x what is needed
 		 */
 		short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
 		long frames_available;
