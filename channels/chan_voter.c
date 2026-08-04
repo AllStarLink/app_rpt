@@ -117,7 +117,7 @@ time period (the first 160 samples of the abstracted buffer (which is the physic
 drainindex + 159) and whichever one, if any that has the largest RSSI average greater then zero is selected
 as the audio source for that frame. The corresponding audio buffer's contents (in the corresponding offsets)
 are presented to Asterisk, then ALL the clients corresponding RSSI data is set to 0, ALL the clients corresponding
-audio is set to quiet (0x7f). The overwriting of the buffers after their use/examination is done so that the
+audio is set to quiet (0xff). The overwriting of the buffers after their use/examination is done so that the
 next time those positions in the physical buffer are examined, they will not contain any data that was not actually
 put there, since all client's buffers are significant regardless of whether they were populated or not. This
 allows for the true 'connectionless-ness' of this protocol implementation.
@@ -2919,28 +2919,40 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		 * priority (if there were any priorities configured). We will now proceed
 		 * to send the audio from this highest priority client.
 		 */
-		/* Calculate the bytes available before the ring-buffer wraps. */
+		/* Figure out where in the ring buffer we are.
+		 * If buffer_bytes_avail is positive, we still have data available to process, send the
+		 * audio to the Asterisk channel, and then replace it with silence.
+		 * If buffer_bytes_avail is negative, we have wrapped around the ring buffer. Get the
+		 * remaining bytes from the end of the buffer, and then get the rest from the beginning of the buffer.
+		 * After sending that audio to the Asterisk channel, replace it with silence.
+		 */
 		buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
 		if (buffer_bytes_avail >= 0) {
+			/* Send the audio to the Asterisk channel, then replace it with silence. */
 			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
-		} else {
-			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
-			memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + buffer_bytes_avail), client->audio, -buffer_bytes_avail);
-		}
-		if (buffer_bytes_avail >= 0) {
 			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
 		} else {
+			/* The buffer has wrapped, get the audio from the end of the buffer, and then get the rest from the beginning,
+			 * send it to the Asterisk channel, then replace it with silence.
+			 */
+			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
+			memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + buffer_bytes_avail), client->audio, -buffer_bytes_avail);
 			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
 			memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
 		}
+
 		/* Calculate the RSSI based on any RSSI samples in the buffer */
 		rssi_sum = 0;
 		if (buffer_bytes_avail >= 0) {
+			/* Get the RSSI samples from the buffer and sum them. Replace with 0 after reading. */
 			for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
 				rssi_sum += client->rssi[j];
-				client->rssi[j] = 0; /* After reading an RSSI value, reset the array to 0 */
+				client->rssi[j] = 0;
 			}
 		} else {
+			/* The buffer has wrapped, get the RSSI samples from the end of the buffer, and then get
+			 * the rest from the beginning, add them to the sum, and replace with 0 after reading.
+			 */
 			for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
 				rssi_sum += client->rssi[j];
 				client->rssi[j] = 0;
@@ -5616,7 +5628,13 @@ static void *voter_reader(void *data)
 							index = (index + client->drainindex_40ms) % client->buflen;
 						}
 						flen = (f1) ? f1->datalen : FRAME_SIZE;
+						/* Figure out where in the ring buffer we are. */
 						buffer_bytes_avail = client->buflen - (index + flen);
+						/* If buffer_bytes_avail is positive, just keep filling client->audio and client->rssi
+						 * from the buffer.
+						 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the data from the end of the
+						 * buffer, then wrap around and get the rest from the beginning of the buffer.
+						 */
 						if (buffer_bytes_avail >= 0) {
 							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen);
 							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen);
@@ -5738,7 +5756,13 @@ static void *voter_reader(void *data)
 								}
 								/* Calculate the RSSI based on any RSSI samples in the buffer */
 								rssi_sum = 0;
+								/* Figure out where in the ring buffer we are.*/
 								buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
+								/* If buffer_bytes_avail is positive, just keep getting RSSI values from the buffer
+								 * and add them to the sum.
+								 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the RSSI data
+								 * from the end of the buffer, then wrap around and get the rest from the beginning of the buffer.
+								 */
 								if (buffer_bytes_avail >= 0) {
 									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
 										rssi_sum += client->rssi[j];
@@ -5801,7 +5825,12 @@ static void *voter_reader(void *data)
 									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
-								/* Zero out all the RSSI values for the client. */
+								/* Zero out all the RSSI values for the client, starting with figuring out where
+								 * in the ring buffer we are.
+								 * If buffer_bytes_avail is positive, just keep zeroing out the RSSI values in the buffer.
+								 * If buffer_bytes_avail is negative, the buffer has wrapped. Zero out the RSSI data
+								 * from the end of the buffer, then wrap around and zero out the rest from the beginning.
+								 */
 								buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
 								if (buffer_bytes_avail >= 0) {
 									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
@@ -5997,9 +6026,14 @@ static void *voter_reader(void *data)
 									ast_queue_frame(p->owner, &fr);
 									continue;
 								}
-								/* Calculate the bytes available before the ring-buffer wraps. */
+								/* Figure out where in the ring buffer we are. */
 								buffer_bytes_avail = maxclient->buflen - (maxclient->drainindex + FRAME_SIZE);
 								/* Copy the audio frame from the voted client into the channel (ring) buffer. */
+								/* If buffer_bytes_avail is positive, get the audio from the current position and
+								 * put it in the Asterisk channel buffer.
+								 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the audio
+								 * from the end of the buffer, then wrap around and get the rest from the beginning.
+								 */
 								if (buffer_bytes_avail >= 0) {
 									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE);
 								} else {
@@ -6020,7 +6054,7 @@ static void *voter_reader(void *data)
 									if (client->mix) {
 										continue;
 									}
-									/* Calculate the bytes available before the ring-buffer wraps. */
+									/* Figure out where in the ring buffer we are. */
 									buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
 									/* If a file pointer was set with voter record, write out the raw audio
 									 * and RSSI for each client to the specified file.
@@ -6034,17 +6068,24 @@ static void *voter_reader(void *data)
 										}
 										ast_copy_string(rec.name, client->name, sizeof(rec.name));
 										rec.rssi = client->lastrssi;
+										/* If buffer_bytes_avail is positive, get the audio from the current position.
+										 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the audio
+										 * from the end of the buffer, then wrap around and get the rest from the beginning.
+										 */
 										if (buffer_bytes_avail >= 0) {
 											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE);
 										} else {
 											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
-											memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
 											memcpy(rec.audio + FRAME_SIZE + buffer_bytes_avail, client->audio, -buffer_bytes_avail);
-											memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
 										}
+										/* Write out the buffer to the recording file. */
 										fwrite(&rec, 1, sizeof(rec), p->recfp);
 									}
-									/* Replace the audio in the ring buffer for each client with silence. */
+									/* Replace the audio in the ring buffer for each client with silence.
+									 * If buffer_bytes_avail is positive, just keep zeroing out the audio in the buffer.
+									 * If buffer_bytes_avail is negative, the buffer has wrapped. Zero out the audio
+									 * from the end of the buffer, then wrap around and zero out the rest from the beginning.
+									 */
 									if (buffer_bytes_avail >= 0) {
 										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
 									} else {
