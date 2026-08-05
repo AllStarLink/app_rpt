@@ -879,6 +879,10 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	o->hasusb = 0;
 	o->usbass = 0;
 	o->devicenum = 0;
+
+	if (o->usb_dev) {
+		libusb_unref_device(o->usb_dev);
+	}
 	o->usb_dev = NULL;
 
 	if (o->hw_device[0]) {
@@ -1218,6 +1222,9 @@ static void *hidthread(void *arg)
 			ast_mutex_lock(&usb_dev_lock);
 			o->usbass = 0;
 			o->hasusb = 0;
+			if (o->usb_dev) {
+				libusb_unref_device(o->usb_dev);
+			}
 			o->usb_dev = NULL;
 			ast_mutex_unlock(&usb_dev_lock);
 			libusb_close(usb_handle);
@@ -2004,7 +2011,9 @@ static int simpleusb_hangup(struct ast_channel *c)
 		pthread_join(o->hidthread, NULL);
 		o->hidthread = AST_PTHREADT_NULL;
 	}
-
+	if (o->usb_dev) {
+		libusb_unref_device(o->usb_dev);
+	}
 	o->owner = NULL;
 	ast_channel_tech_pvt_set(c, NULL);
 	ast_module_unref(ast_module_info->self);
@@ -4355,6 +4364,10 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_format_cap_append(simpleusb_tech.capabilities, ast_format_slin, 0);
+
+	if (ast_radio_libusb_init() < 0) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
 
 	if (ast_radio_hid_device_mklist()) {
 		ast_log(LOG_ERROR, "Unable to make hid list\n");

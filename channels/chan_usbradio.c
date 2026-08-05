@@ -956,8 +956,7 @@ static void *hidthread(void *arg)
 		if (usb_handle) {
 			libusb_close(usb_handle);
 		}
-		usb_handle = NULL;
-		usb_dev = NULL;
+
 		ast_radio_hid_device_mklist();
 
 		/* audiodev without devstr: bind HID to ALSA card number */
@@ -1654,6 +1653,11 @@ usb_device_ready:
 		libusb_close(usb_handle);
 		usb_handle = NULL;
 	}
+
+	if (usb_dev) {
+		libusb_unref_device(usb_dev);
+	}
+
 	return NULL;
 }
 
@@ -1952,6 +1956,7 @@ static int usbradio_hangup(struct ast_channel *c)
 		o->hookstate = 0;
 	}
 	ast_radio_pa_stop(&o->pa);
+
 	return 0;
 }
 
@@ -5505,6 +5510,10 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_format_cap_append(usbradio_tech.capabilities, ast_format_slin, 0);
+
+	if (ast_radio_libusb_init() < 0) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
 
 	if (ast_radio_hid_device_mklist()) {
 		ast_log(LOG_ERROR, "Unable to make hid list\n");

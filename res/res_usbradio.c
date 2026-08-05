@@ -84,7 +84,6 @@ AST_MUTEX_DEFINE_STATIC(usb_list_lock);
 static char *usb_device_list = NULL;
 static int usb_device_list_size = 0;
 static struct libusb_context *usb_ctx = NULL;
-struct libusb_device *usb_dev;
 
 /*!
  * \brief Structure for defined usb devices.
@@ -114,7 +113,7 @@ const struct usb_device_entry known_devices[] = {
  */
 static AST_RWLIST_HEAD_STATIC(user_devices, usb_device_entry);
 
-static int ast_radio_libusb_init(void)
+int ast_radio_libusb_init(void)
 {
 	if (usb_ctx) {
 		return 0;
@@ -507,11 +506,6 @@ int ast_radio_hid_device_mklist(void)
 		return -1;
 	}
 
-	if (ast_radio_libusb_init() < 0) {
-		ast_mutex_unlock(&usb_list_lock);
-		return -1;
-	}
-
 	count = libusb_get_device_list(usb_ctx, &list);
 	if (count < 0) {
 		ast_mutex_unlock(&usb_list_lock);
@@ -550,29 +544,29 @@ int ast_radio_hid_device_mklist(void)
 			}
 			cp++;
 			break;
-
-			if (i >= 32) {
-				continue;
-			}
-
-			cplen = strlen(cp);
-			new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + cplen);
-			if (!new_list) {
-				ast_mutex_unlock(&usb_list_lock);
-				return -1;
-			}
-
-			usb_device_list = new_list;
-			usb_device_list_size += cplen + 2;
-			i = 0;
-
-			while (usb_device_list[i]) {
-				i += strlen(usb_device_list + i) + 1;
-			}
-
-			memcpy(usb_device_list + i, cp, cplen + 1);
-			usb_device_list[i + cplen + 1] = 0;
 		}
+		if (i >= 32) {
+			continue;
+		}
+
+		cplen = strlen(cp);
+		new_list = ast_realloc(usb_device_list, usb_device_list_size + 2 + cplen);
+		if (!new_list) {
+			libusb_free_device_list(list, 1);
+			ast_mutex_unlock(&usb_list_lock);
+			return -1;
+		}
+
+		usb_device_list = new_list;
+		usb_device_list_size += cplen + 2;
+		i = 0;
+
+		while (usb_device_list[i]) {
+			i += strlen(usb_device_list + i) + 1;
+		}
+
+		memcpy(usb_device_list + i, cp, cplen + 1);
+		usb_device_list[i + cplen + 1] = 0;
 	}
 
 	libusb_free_device_list(list, 1);
@@ -592,7 +586,7 @@ struct libusb_device *ast_radio_hid_device_init(const char *desired_device)
 	unsigned int busnum;
 	unsigned int devaddr;
 
-	if (ast_radio_libusb_init() < 0) {
+	if (!usb_ctx) {
 		return NULL;
 	}
 
@@ -636,6 +630,8 @@ struct libusb_device *ast_radio_hid_device_init(const char *desired_device)
 			continue;
 		}
 		if (!strcmp(cp, desired_device)) {
+			libusb_ref_device(dev);
+			libusb_free_device_list(list, 1);
 			return dev;
 		}
 	}
@@ -685,7 +681,7 @@ int ast_radio_usb_get_serial(const char *devstr, char *buf, size_t buflen)
 	struct libusb_device_descriptor desc;
 	int length = 0;
 
-	if (ast_radio_libusb_init() < 0) {
+	if (!usb_ctx) {
 		return 0;
 	}
 	usb_dev = ast_radio_hid_device_init(devstr);
@@ -703,6 +699,9 @@ int ast_radio_usb_get_serial(const char *devstr, char *buf, size_t buflen)
 		}
 		length = libusb_get_string_descriptor_ascii(usb_handle, desc.iSerialNumber, (unsigned char *) buf, buflen);
 		libusb_close(usb_handle);
+	}
+	if (length < 0) {
+		length = 0;
 	}
 
 	return length;
@@ -1473,7 +1472,8 @@ long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps)
  *
  * Notes:
  * - Uses libusb-1.0 enumeration (libusb_init/libusb_get_device_list).
- * - The returned pointer is owned by libusb's internal device list.
+ * - The returned device is reference-counted. The caller must release it with
+ *   libusb_unref_device() when it is no longer needed.
  */
 struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 {
@@ -1485,7 +1485,7 @@ struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno)
 		return NULL;
 	}
 
-	if (ast_radio_libusb_init() < 0) {
+	if (!usb_ctx) {
 		return NULL;
 	}
 
@@ -1590,9 +1590,11 @@ static int load_config(int reload)
 
 static int reload_module(void)
 {
-	if (ast_radio_libusb_init() < 0) {
-		ast_log(LOG_ERROR, "Unable to initialize libusb\n");
-		return AST_MODULE_LOAD_DECLINE;
+	if (!usb_ctx) {
+		if (ast_radio_libusb_init() < 0) {
+			ast_log(LOG_ERROR, "Unable to initialize libusb\n");
+			return AST_MODULE_LOAD_DECLINE;
+		}
 	}
 
 	if (load_config(0)) {

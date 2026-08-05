@@ -586,3 +586,9 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps);
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop);
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames);
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);
+
+/*!
+ * \brief initialize the usb_ctx register for access to usb devices.
+ * \retval 0 on success, -1 on failure.
+ */
+int ast_radio_libusb_init(void);
