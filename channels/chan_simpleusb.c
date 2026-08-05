@@ -4451,6 +4451,10 @@ static int unload_module(void)
 			}
 		}
 		ast_free(o->name);
+		if (o->usb_dev) {
+			libusb_unref_device(o->usb_dev);
+			o->usbdev = NULL;
+		}
 		ast_free(o);
 	}
 

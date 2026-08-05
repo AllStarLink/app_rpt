@@ -589,6 +589,6 @@ long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);
 
 /*!
  * \brief initialize the usb_ctx register for access to usb devices.
- * \retval 0 on success, -1 on failure.
+ * \retval libusb_init status 0 on success, negative on failure.
  */
 int ast_radio_libusb_init(void);
