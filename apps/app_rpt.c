@@ -377,7 +377,7 @@
 					</option>
 					<option name="S">
 						<para>Simplex Dumb Phone Control mode. This allows a regular phone user audio-only access to the radio
- system. In this mode, the transmitter is toggled on and off when the phone user presses the funcchar (*) key on the telephone
+ system. In this mode, the transmitter is toggled on and off when the phone user presses one of the funcchars (*) keys on the telephone
  set. In addition, the transmitter will turn off if the endchar (#) key is pressed. When a user first calls in, the transmitter
  will be off, and the user can listen for radio traffic. When the user wants to transmit, they press the * key, start talking,
  then press the * key again or the # key to turn the transmitter off.  No other functions can be executed by the user on the phone
@@ -1862,6 +1862,17 @@ static inline void handle_callmode_dialing(struct rpt *myrpt, char c)
 }
 
 /*!
+ * \brief Determine whether a character is one of the configured function (lead-in) characters.
+ * \param myrpt pointer to repeater struct.
+ * \param c character to check.
+ * \return 1 if c is a configured function character, 0 otherwise.
+ */
+static int rpt_is_funcchar(struct rpt *myrpt, char c)
+{
+	return c && strchr(myrpt->p.funcchars, c) != NULL;
+}
+
+/*!
  * \brief Handle the function character. Must be called locked.
  * \param myrpt pointer to repeater struct.
  * \param c character to process.
@@ -1882,7 +1893,7 @@ static int funcchar_common(struct rpt *myrpt, char c)
 			time(&myrpt->dtmf_time);
 			return 1;
 		}
-		if (c == myrpt->p.funcchar) {
+		if (rpt_is_funcchar(myrpt, c)) {
 			myrpt->rem_dtmfidx = 0;
 			myrpt->rem_dtmfbuf[myrpt->rem_dtmfidx] = 0;
 			time(&myrpt->rem_dtmf_time);
@@ -2211,7 +2222,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 			return;
 		}
 
-		if (c == myrpt->p.funcchar) {				  /* If lead-in char */
+		if (rpt_is_funcchar(myrpt, c)) {				  /* If lead-in char */
 			mylink->lastrealrx = !mylink->lastrealrx; /* Toggle keying state */
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
@@ -2294,7 +2305,7 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum
 	/* if decode not active */
 	if (myrpt->dtmfidx == -1) {
 		/* if not lead-in digit, dont worry */
-		if (c != myrpt->p.funcchar) {
+		if (!rpt_is_funcchar(myrpt, c)) {
 			if (!myrpt->p.propagate_dtmf) {
 				rpt_mutex_lock(&myrpt->lock);
 				do_dtmf_local(myrpt, c);
@@ -2313,9 +2324,9 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum
 		myrpt->dtmfbuf[0] = 0;
 		myrpt->dtmf_time_rem = now;
 	}
-	if (c == myrpt->p.funcchar) {
+	if (rpt_is_funcchar(myrpt, c)) {
 		/* if star at beginning, or 2 together, erase buffer */
-		if ((myrpt->dtmfidx < 1) || (myrpt->dtmfbuf[myrpt->dtmfidx - 1] == myrpt->p.funcchar)) {
+		if ((myrpt->dtmfidx < 1) || rpt_is_funcchar(myrpt, myrpt->dtmfbuf[myrpt->dtmfidx - 1])) {
 			myrpt->dtmfidx = 0;
 			myrpt->dtmfbuf[0] = 0;
 			myrpt->dtmf_time_rem = now;
@@ -2449,11 +2460,11 @@ static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict ke
 {
 	int res;
 
-	if (phonemode == RPT_PHONE_MODE_DUMB_SIMPLEX) { /* simplex phonemode, funcchar key/unkey toggle */
-		if (keyed && *keyed && ((c == myrpt->p.funcchar) || (c == myrpt->p.endchar))) {
+	if (phonemode == RPT_PHONE_MODE_DUMB_SIMPLEX) { /* simplex phonemode, funcchars key/unkey toggle */
+		if (keyed && *keyed && (rpt_is_funcchar(myrpt, c) || (c == myrpt->p.endchar))) {
 			*keyed = 0; /* UNKEY */
 			return 0;
-		} else if (keyed && !*keyed && (c == myrpt->p.funcchar)) {
+		} else if (keyed && !*keyed && rpt_is_funcchar(myrpt, c)) {
 			*keyed = 1; /* KEY */
 			return 0;
 		}
@@ -2660,7 +2671,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			time(&myrpt->dtmf_time);
 			return;
 		}
-		if ((!myrpt->inpadtest) && (c == myrpt->p.funcchar)) {
+		if ((!myrpt->inpadtest) && rpt_is_funcchar(myrpt, c)) {
 			if (myrpt->p.dopfxtone && (myrpt->dtmfidx == -1))
 				rpt_telemetry(myrpt, PFXTONE, NULL);
 			myrpt->dtmfidx = 0;
@@ -2719,7 +2730,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			}
 		}
 	} else { /* if simple */
-		if ((myrpt->callmode == CALLMODE_DOWN) && (c == myrpt->p.funcchar)) {
+		if ((myrpt->callmode == CALLMODE_DOWN) && rpt_is_funcchar(myrpt, c)) {
 			myrpt->callmode = CALLMODE_DIALING;
 			myrpt->patchnoct = 0;
 			myrpt->patchquiet = 0;

@@ -157,7 +157,8 @@ typedef struct {
 #define TONEMACRO "tonemacro"
 #define MDCMACRO "mdcmacro"
 #define DTMFKEYS "dtmfkeys"
-#define FUNCCHAR '*'
+#define FUNCCHARS "*"
+#define MAXFUNCCHARS 16
 #define ENDCHAR '#'
 #define EXTNODEFILE "/var/lib/asterisk/rpt_extnodes"
 #define NODENAMES "rpt/nodenames"
@@ -833,7 +834,7 @@ struct rpt {
 		int iobase;
 		const char *ioport;
 		int iospeed;
-		char funcchar;
+		char funcchars[MAXFUNCCHARS];
 		char endchar;
 		rpt_bool simple:1;
 		rpt_bool archiveaudio:1;

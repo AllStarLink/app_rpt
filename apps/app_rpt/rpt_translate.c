@@ -30,7 +30,7 @@ char func_xlat(struct rpt *myrpt, char c, struct rpt_xlat *xlat)
 		if (!xlat->funccharseq[xlat->funcindex]) {
 			xlat->funcindex = 0;
 			xlat->endindex = 0;
-			return myrpt->p.funcchar;
+			return myrpt->p.funcchars[0];
 		}
 	} else {
 		xlat->funcindex = 0;
