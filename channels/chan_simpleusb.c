@@ -46,6 +46,7 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <search.h>
 #include <linux/ppdev.h>
 #include <linux/parport.h>
@@ -297,7 +298,7 @@ struct chan_simpleusb_pvt {
 	unsigned int rx_cos_active:1;		   /* indicator if cos is active - active state after processing */
 	unsigned int rx_ctcss_active:1;		   /* indicator if ctcss is active - active state after processing */
 	/* Whole-word latch shared by HID/audio threads (not a bit-field). */
-	volatile sig_atomic_t usb_faulted;	   /* set after USB/audio failure; cleared on recovery NOTICE */
+	volatile sig_atomic_t usb_faulted;	   /* set after USB/audio failure; cleared on recovery log */
 	volatile sig_atomic_t stophidthread;   /* indicator to stop hid thread */
 	volatile sig_atomic_t stopaudiothread; /* indicator to stop audio thread */
 
@@ -372,6 +373,30 @@ static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int 
 static void *simpleusb_audio_thread(void *arg);
 
 /*!
+ * \brief Log a USB/audio fault and set the recovery latch.
+ *
+ * First occurrence (already_logged == 0) uses LOG_ERROR; repeats use DEBUG
+ * so retry loops do not spam. Returns 1 for storing into a rate-limit latch.
+ */
+static int __attribute__((format(printf, 3, 4))) simpleusb_log_fault(struct chan_simpleusb_pvt *o, int already_logged, const char *fmt, ...)
+{
+	va_list ap;
+	char buf[512];
+
+	o->usb_faulted = 1;
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+
+	if (already_logged) {
+		ast_debug(1, "%s", buf);
+	} else {
+		ast_log(LOG_ERROR, "%s", buf);
+	}
+	return 1;
+}
+
+/*!
  * \brief Log once when USB/audio returns after a prior failure.
  */
 static void simpleusb_log_usb_recovered(struct chan_simpleusb_pvt *o)
@@ -385,7 +410,8 @@ static void simpleusb_log_usb_recovered(struct chan_simpleusb_pvt *o)
 		return;
 	}
 	dev = !ast_strlen_zero(o->devstr) ? o->devstr : o->hw_device;
-	ast_log(LOG_NOTICE, "Channel %s: USB radio device recovered (%s)\n", o->name, !ast_strlen_zero(dev) ? dev : "unknown");
+	/* Match fault priority so ERROR-level logs pair fault with recovery. */
+	ast_log(LOG_ERROR, "Channel %s: USB radio device recovered (%s)\n", o->name, !ast_strlen_zero(dev) ? dev : "unknown");
 }
 
 static char *simpleusb_active; /* the active device */
@@ -984,11 +1010,8 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 			for (;;) {
 				index_devstr = ast_radio_usb_get_devstr(index);
 				if (ast_strlen_zero(index_devstr)) {
-					if (!o->device_error) {
-						ast_log(LOG_ERROR, "Channel %s: No USB devices are available for assignment.\n", o->name);
-						o->device_error = 1;
-						o->usb_faulted = 1;
-					}
+					o->device_error =
+						simpleusb_log_fault(o, o->device_error, "Channel %s: No USB devices are available for assignment.\n", o->name);
 					usleep(DEVICE_RETRY);
 					break;
 				}
@@ -1025,11 +1048,8 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 			s = find_installed_usb_match();
 
 			if (ast_strlen_zero(s)) {
-				if (!o->device_error) {
-					ast_log(LOG_ERROR, "Channel %s: Device string %s was not found.\n", o->name, o->devstr);
-					o->device_error = 1;
-					o->usb_faulted = 1;
-				}
+				o->device_error =
+					simpleusb_log_fault(o, o->device_error, "Channel %s: Device string %s was not found.\n", o->name, o->devstr);
 				ast_mutex_unlock(&usb_dev_lock);
 				return -1;
 			}
@@ -1085,11 +1105,8 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	}
 
 	if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
-		if (!o->device_error) {
-			ast_log(LOG_ERROR, "Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
-			o->device_error = 1;
-			o->usb_faulted = 1;
-		}
+		o->device_error = simpleusb_log_fault(o, o->device_error, "Channel %s: Cannot use audio device %s without mixer limits\n",
+			o->name, o->hw_device);
 		ast_mutex_unlock(&usb_dev_lock);
 		return -1;
 	}
@@ -1145,6 +1162,7 @@ static void *hidthread(void *arg)
 	int open_device_failed = 0;
 	int detach_failed = 0;
 	int claim_failed = 0;
+	int pipe_failed = 0;
 
 	ast_debug(2, "hidthread has started");
 	/* enable gpio_set so that we will write GPIO information upon start up */
@@ -1167,59 +1185,34 @@ static void *hidthread(void *arg)
 		/* try to initialize the usb device */
 		res = init_audio_device(o);
 		if (res < 0) {
-			if (!init_audio_failed) {
-				ast_log(LOG_ERROR, "Channel %s: Failed initialize the audio device\n", o->name);
-				init_audio_failed = 1;
-				o->usb_faulted = 1;
-			}
-
+			init_audio_failed = simpleusb_log_fault(o, init_audio_failed, "Channel %s: Failed initialize the audio device\n", o->name);
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 
 		if (o->usb_dev == NULL) {
-			if (!init_hid_failed) {
-				ast_log(LOG_ERROR, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
-				init_hid_failed = 1;
-				o->usb_faulted = 1;
-			}
-
+			init_hid_failed = simpleusb_log_fault(o, init_hid_failed, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 
 		/* open the usb device device */
 		if (libusb_open(o->usb_dev, &usb_handle) < 0) {
-			if (!open_device_failed) {
-				ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
-				open_device_failed = 1;
-				o->usb_faulted = 1;
-			}
-
+			open_device_failed = simpleusb_log_fault(o, open_device_failed, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 		/* attempt to claim the usb hid interface and detach from the kernel */
 		if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 			if (libusb_detach_kernel_driver(usb_handle, C108_HID_INTERFACE) < 0) {
-				if (!detach_failed) {
-					ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
-					detach_failed = 1;
-					o->usb_faulted = 1;
-				}
-
+				detach_failed = simpleusb_log_fault(o, detach_failed, "Channel %s: Is not able to detach the USB device\n", o->name);
 				libusb_close(usb_handle);
 				usb_handle = NULL;
 				usleep(DEVICE_RETRY);
 				continue;
 			}
 			if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
-				if (!claim_failed) {
-					ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
-					claim_failed = 1;
-					o->usb_faulted = 1;
-				}
-
+				claim_failed = simpleusb_log_fault(o, claim_failed, "Channel %s: Is not able to claim the USB device\n", o->name);
 				libusb_close(usb_handle);
 				usb_handle = NULL;
 				usleep(DEVICE_RETRY);
@@ -1247,7 +1240,7 @@ static void *hidthread(void *arg)
 			o->pttkick[1] = -1;
 		}
 		if (pipe2(o->pttkick, O_NONBLOCK) == -1) {
-			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
+			pipe_failed = simpleusb_log_fault(o, pipe_failed, "Channel %s: Is not able to create a pipe\n", o->name);
 			ast_mutex_lock(&usb_dev_lock);
 			o->usbass = 0;
 			o->hasusb = 0;
@@ -1260,7 +1253,6 @@ static void *hidthread(void *arg)
 			libusb_close(usb_handle);
 			usb_handle = NULL;
 			/* Stay in hidthread and retry; call() only starts the thread once. */
-			o->usb_faulted = 1;
 			usleep(DEVICE_RETRY);
 			continue;
 		}
@@ -1305,6 +1297,7 @@ static void *hidthread(void *arg)
 		open_device_failed = 0;
 		detach_failed = 0;
 		claim_failed = 0;
+		pipe_failed = 0;
 
 		/* Main processing loop for GPIO
 		 * This loop process every HID_POLL_RATE milliseconds.
@@ -1320,8 +1313,7 @@ static void *hidthread(void *arg)
 				/* HID thread monitors audio thread */
 				ast_radio_time(&audio_time_now);
 				if ((audio_time_now - o->lastaudiotime) > 1) {
-					ast_log(LOG_ERROR, "Channel %s: Audio process has died or is not responding.\n", o->name);
-					o->usb_faulted = 1;
+					simpleusb_log_fault(o, 0, "Channel %s: Audio process has died or is not responding.\n", o->name);
 					o->hasusb = 0;
 					break;
 				}
@@ -2169,6 +2161,7 @@ static void *simpleusb_audio_thread(void *arg)
 	struct timeval last_frame_time;
 	short *sp, *sp1;
 	short outbuf[AST_RADIO_PA_FRAMES_PER_BUFFER * 2]; /* 1 short (2 bytes) per sample on PortAudio config with paInt16 * 2 channels */
+	int start_stream_failed = 0;
 
 	ast_debug(5, "Audio thread is starting\n");
 	ast_radio_time(&o->lastaudiotime);
@@ -2185,12 +2178,13 @@ static void *simpleusb_audio_thread(void *arg)
 		}
 
 		if (!o->pa.active && start_stream(o) < 0) {
-			ast_log(LOG_ERROR, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
-			o->usb_faulted = 1;
+			start_stream_failed =
+				simpleusb_log_fault(o, start_stream_failed, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
 			o->hasusb = 0;
 			usleep(DEVICE_RETRY);
 			continue;
 		}
+		start_stream_failed = 0;
 
 		flush_stream_buffer(o);
 		o->audio_thread_ready = 1;
@@ -2201,9 +2195,8 @@ static void *simpleusb_audio_thread(void *arg)
 			if (o->lasthidtime) {
 				ast_radio_time(&now);
 				if ((now - o->lasthidtime) > 1) {
-					ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
+					simpleusb_log_fault(o, 0, "Channel %s: HID process has died or is not responding.\n", o->name);
 					usleep(DEVICE_RETRY);
-					o->usb_faulted = 1;
 					o->hasusb = 0;
 					stream_cleanup(o);
 					break;
@@ -2465,8 +2458,7 @@ static void *simpleusb_audio_thread(void *arg)
 			}
 
 			if (num_frames && (ast_tvdiff_ms(ast_radio_tvnow(), last_frame_time) > MAX_FRAME_DELAY)) {
-				ast_log(LOG_ERROR, "Audio thread has not processed audio for over %d ms, restarting stream.\n", MAX_FRAME_DELAY);
-				o->usb_faulted = 1;
+				simpleusb_log_fault(o, 0, "Audio thread has not processed audio for over %d ms, restarting stream.\n", MAX_FRAME_DELAY);
 				o->hasusb = 0;
 				stream_cleanup(o);
 				break;
@@ -2490,8 +2482,8 @@ static void *simpleusb_audio_thread(void *arg)
 					ast_debug(6, "PortAudio read timeout on channel %s\n", o->name);
 					continue;
 				} else {
-					ast_log(LOG_ERROR, "Channel %s: PortAudio read failed (%s); restarting audio stream\n", o->name, Pa_GetErrorText(res));
-					o->usb_faulted = 1;
+					simpleusb_log_fault(o, 0, "Channel %s: PortAudio read failed (%s); restarting audio stream\n", o->name,
+						Pa_GetErrorText(res));
 					o->hasusb = 0;
 					stream_cleanup(o);
 					break; /* Close the stream and retry */
