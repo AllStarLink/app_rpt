@@ -4088,9 +4088,9 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
  * Also note that reload() is called with voter_lock locked, so client and instance
  * list traversal and modifications are safe.
  *
- * \retval  			0 Success — configuration loaded and applied.
- * \retval 				-1 Failure — configuration load or allocation error;
- *						existing state is left unchanged where possible.
+ * \retval  			AST_MODULE_LOAD_SUCCESS (0) — configuration loaded and applied.
+ * \retval 				AST_MODULE_LOAD_FAILURE (-1) — configuration, validation,
+ *						authentication, or allocation error.
  */
 static int reload(void)
 {
@@ -4115,7 +4115,7 @@ static int reload(void)
 	/* Attempt to load/reload voter.conf. */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load/reload config %s\n", config);
-		return -1;
+		return AST_MODULE_LOAD_FAILURE;
 	} else {
 		ast_log(LOG_NOTICE, "Config load/reload from %s\n", config);
 	}
@@ -4449,7 +4449,7 @@ static int reload(void)
 			cp = ast_strdup(v->value);
 			if (!cp) {
 				ast_config_destroy(cfg);
-				return -1;
+				return AST_MODULE_LOAD_FAILURE;
 			}
 			n = finddelim(cp, strs, ARRAY_LEN(strs));
 			if (n < 1) {
@@ -4482,7 +4482,7 @@ static int reload(void)
 				if (!client) {
 					ast_free(cp);
 					ast_config_destroy(cfg);
-					return -1;
+					return AST_MODULE_LOAD_FAILURE;
 				}
 				ast_debug(1, "New VOTER client %s is being allocated space\n", v->name);
 				/* When initializing a client, set the CLI priority override to PRIO_DEFAULT (-2). */
@@ -4568,7 +4568,7 @@ static int reload(void)
 				client->audio = ast_realloc(client->audio, client->buflen);
 				if (!client->audio) {
 					ast_config_destroy(cfg);
-					return -1;
+					return AST_MODULE_LOAD_FAILURE;
 				}
 				/* Fill the new buffer with silence. */
 				memset(client->audio, ULAW_SILENCE, client->buflen);
@@ -4577,7 +4577,7 @@ static int reload(void)
 				client->audio = ast_malloc(client->buflen);
 				if (!client->audio) {
 					ast_config_destroy(cfg);
-					return -1;
+					return AST_MODULE_LOAD_FAILURE;
 				}
 				/* Fill the new buffer with silence. */
 				memset(client->audio, ULAW_SILENCE, client->buflen);
@@ -4587,7 +4587,7 @@ static int reload(void)
 				client->rssi = ast_realloc(client->rssi, client->buflen);
 				if (!client->rssi) {
 					ast_config_destroy(cfg);
-					return -1;
+					return AST_MODULE_LOAD_FAILURE;
 				}
 				/* Fill the new RSSI buffer with zeros. */
 				memset(client->rssi, 0, client->buflen);
@@ -4598,7 +4598,7 @@ static int reload(void)
 				client->rssi = ast_calloc(1, client->buflen);
 				if (!client->rssi) {
 					ast_config_destroy(cfg);
-					return -1;
+					return AST_MODULE_LOAD_FAILURE;
 				}
 			}
 			/* If this is a new client, add it into list. */
@@ -4626,7 +4626,7 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
-			return -1;
+			return AST_MODULE_LOAD_FAILURE;
 		}
 		for (client1 = clients; client1; client1 = client1->next) {
 			if (!client1->reload) {
@@ -4638,7 +4638,7 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
-				return -1;
+				return AST_MODULE_LOAD_FAILURE;
 			}
 		}
 	}
@@ -4672,7 +4672,7 @@ static int reload(void)
 		ast_free(client);
 		client = clients;
 	}
-	return 0;
+	return AST_MODULE_LOAD_SUCCESS;
 }
 
 /*!
@@ -6655,9 +6655,9 @@ static int unload_module(void)
  * reader and timer threads, allocates channel format capabilities, and registers
  * the channel driver so the Voter channel becomes available to Asterisk.
  *
- * \return 				0 on success; non-zero on failure (typically AST_MODULE_LOAD_DECLINE for
- *         				module load errors, or
- *						1 if the configuration could not be loaded).
+ * \return 				AST_MODULE_LOAD_SUCCESS (0) on success
+ *         				AST_MODULE_LOAD_DECLINE (1) for module load errors, or if
+ *						the configuration could not be loaded).
  */
 static int load_module(void)
 {
