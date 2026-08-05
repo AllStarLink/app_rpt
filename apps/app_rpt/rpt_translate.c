@@ -12,11 +12,12 @@
 #include "app_rpt.h"
 #include "rpt_translate.h"
 
-char func_xlat(struct rpt *myrpt, char c, struct rpt_xlat *xlat)
+char func_xlat(struct rpt *myrpt, char c, struct rpt_xlat *xlat, int *funcmatch)
 {
 	time_t now;
 	int gotone;
 
+	*funcmatch = 0;
 	time(&now);
 	gotone = 0;
 	/* if too much time, reset the state machine */
@@ -30,6 +31,7 @@ char func_xlat(struct rpt *myrpt, char c, struct rpt_xlat *xlat)
 		if (!xlat->funccharseq[xlat->funcindex]) {
 			xlat->funcindex = 0;
 			xlat->endindex = 0;
+			*funcmatch = 1;
 			return myrpt->p.funcchars[0];
 		}
 	} else {

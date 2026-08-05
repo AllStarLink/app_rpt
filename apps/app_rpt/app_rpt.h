@@ -990,6 +990,7 @@ struct rpt {
 	struct rpt_conf rptconf;
 	pthread_t rpt_call_thread, rpt_thread;
 	time_t dtmf_time, rem_dtmf_time, dtmf_time_rem;
+	time_t functime, rem_functime; /*!< \brief last progress timestamp for the funcchars sequence matcher */
 	int calldigittimer;
 	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	int remote_time_out_reset_unkey_interval_timer, time_out_reset_unkey_interval_timer;
@@ -1001,6 +1002,7 @@ struct rpt {
 	int first_keyup_inactivity_timer;
 	int tailevent;
 	int dtmfidx, rem_dtmfidx;
+	int funcidx, rem_funcidx; /*!< \brief funcchars sequence match progress: funcidx for the local/remote-base stream, rem_funcidx for the link/phone stream */
 	int dailytxtime, dailykerchunks, totalkerchunks, dailykeyups, totalkeyups, timeouts;
 	int totalexecdcommands, dailyexecdcommands;
 	int retxtimer;
