@@ -4127,6 +4127,7 @@ static int reload(void)
 	 * in the load_module() function, and are immutable after the module
 	 * is loaded.
 	 */
+	ast_debug(1, "Loading [general] options from voter.conf\n");
 	val = ast_variable_retrieve(cfg, "general", "password");
 	if (val) {
 		ast_copy_string(password, val, sizeof(password));
@@ -4168,10 +4169,8 @@ static int reload(void)
 	 * linger, plfilter, hostdeemp, mixminus, streams, txctcss, txctcsslevel,
 	 * txtoctype, thresholds, gtxgain
 	 */
+	ast_debug(1, "Loading per-instance options for each VOTER instance from voter.conf\n");
 	for (p = pvts; p; p = p->next) {
-		/* Reset dmwdiag to disabled for the instance upon reload. */
-		p->dmwdiag = 0;
-
 		/* The name of the instance must be the channel node number,
 		 * use that as the key to look up the instance in the config.
 		 * If we can't find the instance in the config, skip.
@@ -4182,6 +4181,9 @@ static int reload(void)
 		if (ast_variable_browse(cfg, data) == NULL) {
 			continue;
 		}
+		ast_debug(1, "Loading instance options for VOTER instance %i\n", p->nodenum);
+		/* Reset dmwdiag to disabled for the instance upon reload. */
+		p->dmwdiag = 0;
 		/* Load the linger value, or set it to default if it is unset. */
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
@@ -4297,6 +4299,7 @@ static int reload(void)
 		 * we need to recreate the PMR channel.
 		 */
 		if (strcmp(oldctcss, p->txctcssfreq) || (oldtoctype != p->txtoctype) || (oldlevel != p->txctcsslevel)) {
+			ast_debug(1, "VOTER %i: CTCSS frequency, level, or turn off code type changed, recreating PMR channel\n", p->nodenum);
 			t_pmr_chan tChan;
 
 			if (p->pmrChan) {
@@ -4462,8 +4465,10 @@ static int reload(void)
 				 * treat it as a new client.
 				 */
 				if (client->digest == crc32_bufs(challenge, strs[0])) {
+					ast_debug(1, "Existing client %s found, attached to VOTER instance %s\n", client->name, ctg);
 					/* If has moved to another instance, free this one, and treat as new. */
 					if (client->nodenum != strtoul(ctg, NULL, 0)) {
+						ast_debug(1, "Existing client %s has moved from VOTER instance %i to %s, freeing to treat as new\n", client->name, client->nodenum, ctg);
 						client->reload = 0;
 						client = NULL;
 					}
@@ -4479,6 +4484,7 @@ static int reload(void)
 					ast_config_destroy(cfg);
 					return -1;
 				}
+				ast_debug(1, "New VOTER client %s is being allocated space\n", v->name);
 				/* When initializing a client, set the CLI priority override to PRIO_DEFAULT (-2). */
 				client->prio_override = PRIO_DEFAULT;
 				/* This is a new client, so v->name is the client name, copy that into client->name. */
@@ -4490,6 +4496,7 @@ static int reload(void)
 			client->reload = 1;
 			client->buflen = instance_buflen;
 			client->nodenum = strtoul(ctg, NULL, 0); /* The category name is the node number */
+			/* Reset the per-client variables. */
 			client->totransmit = 0;
 			client->doadpcm = 0;
 			client->nodeemp = 0;
@@ -4501,6 +4508,7 @@ static int reload(void)
 			/* n from above was the number of strings (variables) we parsed out of the client options.
 			 * Now, we will iterate through them all, and set the corresponding client array variables.
 			 */
+			ast_debug(1, "Loading options for VOTER client %s, %i options found\n", client->name, n);
 			for (i = 1; i < n; i++) {
 				if (!strcasecmp(strs[i], "transmit")) {
 					client->totransmit = 1;
@@ -4551,6 +4559,8 @@ static int reload(void)
 			ast_free(cp);
 			/* Check to see if the buflen has changed. If it has, reset the drain index. */
 			if (client->old_buflen && (client->buflen != client->old_buflen)) {
+				ast_debug(1, "VOTER client %s buflen changed from %i to %i, resetting drain index\n", client->name,
+					client->old_buflen, client->buflen);
 				client->drainindex = 0;
 			}
 			/* If the audio buffer exists and the buflen has changed, reallocate it. */
@@ -4593,6 +4603,7 @@ static int reload(void)
 			}
 			/* If this is a new client, add it into list. */
 			if (newclient) {
+				ast_debug(1, "Adding new VOTER client %s to client list\n", client->name);
 				if (clients == NULL) {
 					clients = client;
 				} else {
@@ -4607,6 +4618,7 @@ static int reload(void)
 	}
 	ast_config_destroy(cfg);
 	/* Traverse the client list and perform validation checks. */
+	ast_debug(1, "Performing validation checks on VOTER clients\n");
 	for (client = clients; client; client = client->next) {
 		if (!client->reload) {
 			continue;
@@ -4631,6 +4643,7 @@ static int reload(void)
 		}
 	}
 	/* Remove all the clients that are no longer in the config and free their memory. */
+	ast_debug(1, "Removing outdated VOTER clients (moved or removed)\n");
 	for (client = clients; client; client = client->next) {
 		if (client->reload) {
 			continue;
@@ -4646,6 +4659,7 @@ static int reload(void)
 		}
 		for (client1 = clients; client1; client1 = client1->next) {
 			if (client1->next == client) {
+				ast_debug(1, "Checking if VOTER client %s should be removed from VOTER instance %i\n", client->name, client->nodenum);
 				break;
 			}
 		}
@@ -4654,6 +4668,7 @@ static int reload(void)
 		} else {
 			clients = NULL;
 		}
+		ast_debug(1, "Removing outdated VOTER client %s from VOTER instance %i\n", client->name, client->nodenum);
 		ast_free(client);
 		client = clients;
 	}
