@@ -953,8 +953,15 @@ static void *hidthread(void *arg)
 		o->hasusb = 0;
 		o->usbass = 0;
 		o->devicenum = 0;
+
 		if (usb_handle) {
 			libusb_close(usb_handle);
+			usb_handle = NULL;
+		}
+
+		if (usb_dev) {
+			libusb_unref_device(usb_dev);
+			usb_dev = NULL;
 		}
 
 		ast_radio_hid_device_mklist();
@@ -5512,6 +5519,7 @@ static int load_module(void)
 	ast_format_cap_append(usbradio_tech.capabilities, ast_format_slin, 0);
 
 	if (ast_radio_libusb_init() < 0) {
+		ast_log(LOG_ERROR, "Unable to initialize libusb\n");
 		return AST_MODULE_LOAD_DECLINE;
 	}
 

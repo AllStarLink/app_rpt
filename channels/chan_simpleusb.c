@@ -883,8 +883,8 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 	if (o->usb_dev) {
 		libusb_unref_device(o->usb_dev);
 	}
-	o->usb_dev = NULL;
 
+	o->usb_dev = NULL;
 	if (o->hw_device[0]) {
 		/* already configured device, extract the device number and usb_dev */
 		if (!strcasecmp(o->hw_device, "default")) {
@@ -2013,6 +2013,7 @@ static int simpleusb_hangup(struct ast_channel *c)
 	}
 	if (o->usb_dev) {
 		libusb_unref_device(o->usb_dev);
+		o->usb_dev = NULL;
 	}
 	o->owner = NULL;
 	ast_channel_tech_pvt_set(c, NULL);
@@ -4366,9 +4367,11 @@ static int load_module(void)
 	ast_format_cap_append(simpleusb_tech.capabilities, ast_format_slin, 0);
 
 	if (ast_radio_libusb_init() < 0) {
+		ast_log(LOG_ERROR, "Unable to initialize libusb\n");
+		ao2_cleanup(simpleusb_tech.capabilities);
+		simpleusb_tech.capabilities = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
-
 	if (ast_radio_hid_device_mklist()) {
 		ast_log(LOG_ERROR, "Unable to make hid list\n");
 		return AST_MODULE_LOAD_DECLINE;

@@ -506,12 +506,16 @@ int ast_radio_hid_device_mklist(void)
 		return -1;
 	}
 
+	if (!usb_ctx) {
+		ast_mutex_unlock(&usb_list_lock);
+		return -1;
+	}
+
 	count = libusb_get_device_list(usb_ctx, &list);
 	if (count < 0) {
 		ast_mutex_unlock(&usb_list_lock);
 		return -1;
 	}
-
 	for (dev_index = 0; dev_index < count; dev_index++) {
 		char *new_list;
 
@@ -690,16 +694,19 @@ int ast_radio_usb_get_serial(const char *devstr, char *buf, size_t buflen)
 	}
 
 	if (libusb_get_device_descriptor(usb_dev, &desc) < 0) {
+		libusb_unref_device(usb_dev);
 		return 0;
 	}
 
 	if (desc.iSerialNumber) {
 		if (libusb_open(usb_dev, &usb_handle) < 0) {
+			libusb_unref_device(usb_dev);
 			return 0;
 		}
 		length = libusb_get_string_descriptor_ascii(usb_handle, desc.iSerialNumber, (unsigned char *) buf, buflen);
 		libusb_close(usb_handle);
 	}
+	libusb_unref_device(usb_dev);
 	if (length < 0) {
 		length = 0;
 	}

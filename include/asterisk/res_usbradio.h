@@ -355,7 +355,8 @@ int ast_radio_hid_device_mklist(void);
  * \note It will only evaluate USB devices known to work with this application.
  *
  * \param desired_device	Pointer to a string that contains the device string to find.
- * \retval 					Returns a usb_device structure with the found device.
+ * \retval 					Returns a libusb_device structure with the found device.
+ * 							This device has a libusb_ref_device and must be freed with libusb_unref_device by the caller.
  *							If the device was not found, it returns null.
  */
 struct libusb_device *ast_radio_hid_device_init(const char *desired_device);
