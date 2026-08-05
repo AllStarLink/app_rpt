@@ -387,7 +387,7 @@ struct chan_usbradio_pvt {
 	char eepromctl;
 	ast_mutex_t eepromlock;
 
-	struct usb_dev_handle *usb_handle;
+	struct libusb_device_handle *usb_handle;
 	int readerrs;
 	struct timeval tonetime;
 	int toneflag;
@@ -923,8 +923,8 @@ static void *hidthread(void *arg)
 	int i, j, k;
 	int res;
 	int use_newname = 0;
-	struct usb_device *usb_dev;
-	struct usb_dev_handle *usb_handle;
+	struct libusb_device *usb_dev;
+	struct libusb_device_handle *usb_handle;
 	struct chan_usbradio_pvt *o = arg, *ao;
 	struct timeval then;
 	struct pollfd rfds[1];
@@ -954,7 +954,7 @@ static void *hidthread(void *arg)
 		o->usbass = 0;
 		o->devicenum = 0;
 		if (usb_handle) {
-			usb_close(usb_handle);
+			libusb_close(usb_handle);
 		}
 		usb_handle = NULL;
 		usb_dev = NULL;
@@ -1174,20 +1174,19 @@ static void *hidthread(void *arg)
 		}
 usb_device_ready:
 		/* open the usb device device */
-		usb_handle = usb_open(usb_dev);
-		if (usb_handle == NULL) {
+		if (libusb_open(usb_dev, &usb_handle) < 0) {
 			ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
 			usleep(500000);
 			continue;
 		}
 		/* attempt to claim the usb hid interface and detach from the kernel */
-		if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
-			if (usb_detach_kernel_driver_np(usb_handle, C108_HID_INTERFACE) < 0) {
+		if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
+			if (libusb_detach_kernel_driver(usb_handle, C108_HID_INTERFACE) < 0) {
 				ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
 				usleep(500000);
 				continue;
 			}
-			if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
+			if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 				ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
 				usleep(500000);
 				continue;
@@ -1213,7 +1212,7 @@ usb_device_ready:
 		}
 		if (pipe2(o->pttkick, O_NONBLOCK) == -1) {
 			ast_log(LOG_ERROR, "Channel %s: Is not able to create a pipe\n", o->name);
-			usb_close(usb_handle);
+			libusb_close(usb_handle);
 			usb_handle = NULL;
 			ast_mutex_lock(&usb_dev_lock);
 			o->usbass = 0;
@@ -1223,12 +1222,21 @@ usb_device_ready:
 			usleep(500000);
 			continue;
 		}
-		if ((usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
-			o->devtype = C108_PRODUCT_ID;
-		} else {
-			o->devtype = usb_dev->descriptor.idProduct;
+
+		{
+			struct libusb_device_descriptor desc;
+
+			if (libusb_get_device_descriptor(usb_dev, &desc) < 0) {
+				ast_log(LOG_ERROR, "Channel %s: Unable to read USB device descriptor\n", o->name);
+				o->devtype = 0;
+			} else if ((desc.idProduct & 0xfffc) == C108_PRODUCT_ID) {
+				o->devtype = C108_PRODUCT_ID;
+			} else {
+				o->devtype = desc.idProduct;
+			}
 		}
 		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
+
 		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
 		/* setup the xmpr subsystem */
 		if (o->pmrChan == NULL) {
@@ -1643,7 +1651,7 @@ usb_device_ready:
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
 		/* Hangup joins this thread; release HID so the next call can reopen it. */
-		usb_close(usb_handle);
+		libusb_close(usb_handle);
 		usb_handle = NULL;
 	}
 	return NULL;

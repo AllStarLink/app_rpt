@@ -5,7 +5,7 @@
  snmp/agent.o: _ASTCFLAGS+=-fPIC
  res_snmp.o: _ASTCFLAGS+=-fPIC
  
-+res_usbradio.so: LIBS+=-lusb -lasound -lportaudio
++res_usbradio.so: LIBS+=-lusb-1.0 -lasound -lportaudio
 +
  MODULE_EXCLUDE=ENABLE_SRTP_AES_192 ENABLE_SRTP_AES_256 ENABLE_SRTP_AES_GCM
  

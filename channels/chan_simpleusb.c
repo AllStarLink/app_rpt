@@ -187,7 +187,7 @@ struct chan_simpleusb_pvt {
 	pthread_t audiothread;
 	pthread_t hidthread;
 
-	struct usb_device *usb_dev;
+	struct libusb_device *usb_dev;
 	struct ast_channel *owner;
 
 	struct ast_radio_pa_stream pa;
@@ -302,7 +302,7 @@ struct chan_simpleusb_pvt {
 	char eepromctl;
 	ast_mutex_t eepromlock;
 
-	struct usb_dev_handle *usb_handle;
+	struct libusb_device_handle *usb_handle;
 	struct timeval tonetime;
 	int toneflag;
 	int duplex3;
@@ -1108,7 +1108,7 @@ static void *hidthread(void *arg)
 	char lasttxtmp;
 	int i, j, k;
 	int res;
-	struct usb_dev_handle *usb_handle = NULL;
+	struct libusb_device_handle *usb_handle = NULL;
 	struct chan_simpleusb_pvt *o = arg;
 	struct timeval then;
 	struct pollfd rfds[1];
@@ -1159,8 +1159,7 @@ static void *hidthread(void *arg)
 		}
 
 		/* open the usb device device */
-		usb_handle = usb_open(o->usb_dev);
-		if (usb_handle == NULL) {
+		if (libusb_open(o->usb_dev, &usb_handle) < 0) {
 			if (!open_device_failed) {
 				ast_log(LOG_ERROR, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
 				open_device_failed = 1;
@@ -1170,25 +1169,25 @@ static void *hidthread(void *arg)
 			continue;
 		}
 		/* attempt to claim the usb hid interface and detach from the kernel */
-		if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
-			if (usb_detach_kernel_driver_np(usb_handle, C108_HID_INTERFACE) < 0) {
+		if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
+			if (libusb_detach_kernel_driver(usb_handle, C108_HID_INTERFACE) < 0) {
 				if (!detach_failed) {
 					ast_log(LOG_ERROR, "Channel %s: Is not able to detach the USB device\n", o->name);
 					detach_failed = 1;
 				}
 
-				usb_close(usb_handle);
+				libusb_close(usb_handle);
 				usb_handle = NULL;
 				usleep(DEVICE_RETRY);
 				continue;
 			}
-			if (usb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
+			if (libusb_claim_interface(usb_handle, C108_HID_INTERFACE) < 0) {
 				if (!claim_failed) {
 					ast_log(LOG_ERROR, "Channel %s: Is not able to claim the USB device\n", o->name);
 					claim_failed = 1;
 				}
 
-				usb_close(usb_handle);
+				libusb_close(usb_handle);
 				usb_handle = NULL;
 				usleep(DEVICE_RETRY);
 				continue;
@@ -1221,19 +1220,25 @@ static void *hidthread(void *arg)
 			o->hasusb = 0;
 			o->usb_dev = NULL;
 			ast_mutex_unlock(&usb_dev_lock);
-			usb_close(usb_handle);
+			libusb_close(usb_handle);
 			usb_handle = NULL;
 			/* Stay in hidthread and retry; call() only starts the thread once. */
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 
-		if ((o->usb_dev->descriptor.idProduct & 0xfffc) == C108_PRODUCT_ID) {
-			o->devtype = C108_PRODUCT_ID;
-		} else {
-			o->devtype = o->usb_dev->descriptor.idProduct;
-		}
+		{
+			struct libusb_device_descriptor desc;
 
+			if (libusb_get_device_descriptor(o->usb_dev, &desc) < 0) {
+				ast_log(LOG_ERROR, "Channel %s: Unable to read USB device descriptor\n", o->name);
+				o->devtype = 0;
+			} else if ((desc.idProduct & 0xfffc) == C108_PRODUCT_ID) {
+				o->devtype = C108_PRODUCT_ID;
+			} else {
+				o->devtype = desc.idProduct;
+			}
+		}
 		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
 		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
 
@@ -1604,7 +1609,7 @@ static void *hidthread(void *arg)
 		ast_radio_hid_set_outputs(usb_handle, buf);
 
 		if (usb_handle) {
-			usb_close(usb_handle);
+			libusb_close(usb_handle);
 			usb_handle = NULL;
 		}
 	}
@@ -1620,7 +1625,7 @@ static void *hidthread(void *arg)
 		buf[o->hid_gpio_ctl_loc] = o->hid_gpio_ctl;
 		ast_radio_hid_set_outputs(usb_handle, buf);
 		ast_mutex_unlock(&o->usblock);
-		usb_close(usb_handle);
+		libusb_close(usb_handle);
 		usb_handle = NULL;
 	}
 
