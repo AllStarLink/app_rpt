@@ -4328,8 +4328,9 @@ static int reload(void)
 		 * we need to recreate the PMR channel.
 		 */
 		if (strcmp(oldctcss, p->txctcssfreq) || (oldtoctype != p->txtoctype) || (oldlevel != p->txctcsslevel)) {
-			ast_debug(1, "VOTER %i: CTCSS frequency, level, or turn off code type changed, recreating PMR channel\n", p->nodenum);
 			t_pmr_chan tChan;
+			
+			ast_debug(1, "VOTER %i: CTCSS frequency, level, or turn off code type changed, recreating PMR channel\n", p->nodenum);
 
 			if (p->pmrChan) {
 				destroyPmrChannel(p->pmrChan);
