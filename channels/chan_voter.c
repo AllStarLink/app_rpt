@@ -4079,12 +4079,22 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 static void voter_client_free(struct voter_client *client)
 {
 	struct voter_client **target;
+	struct voter_pvt *p;
 
 	for (target = &clients; *target && *target != client; target = &(*target)->next) {
 		;
 	}
 	if (!*target) {
 		return;
+	}
+
+	for (p = pvts; p; p = p->next) {
+		if (p->lastwon == client) {
+			p->lastwon = NULL;
+			p->threshold = 0;
+			p->threshcount = 0;
+			p->lingercount = 0;
+		}
 	}
 
 	*target = client->next;
