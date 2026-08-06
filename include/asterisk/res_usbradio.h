@@ -28,8 +28,9 @@
 #define HAVE_SYS_IO
 #endif
 
-#include <usb.h>
+#include <libusb-1.0/libusb.h>
 #include <portaudio.h>
+#include <signal.h>
 
 /*!
  * \brief Defines for interacting with ALSA controls.
@@ -286,8 +287,9 @@ int ast_radio_setamixer(int devnum, char *param, int v1, int v2);
  *
  * \param handle		Pointer to usb_dev_handle associated with the HID.
  * \param outputs		Pointer to buffer that contains the data to send to the HID.
+ * \retval bytes >= 0 Success, LIBUSB_ERROR* if error
  */
-void ast_radio_hid_set_outputs(struct usb_dev_handle *handle, unsigned char *outputs);
+int ast_radio_hid_set_outputs(struct libusb_device_handle *handle, unsigned char *outputs);
 
 /*!
  * \brief Get USB HID inputs
@@ -297,8 +299,9 @@ void ast_radio_hid_set_outputs(struct usb_dev_handle *handle, unsigned char *out
  *
  * \param handle		Pointer to usb_dev_handle associated with the HID.
  * \param inputs		Pointer to buffer that will contain the data received from the HID.
+ * \retval bytes >= 0 Success, LIBUSB_ERROR* if error
  */
-void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inputs);
+int ast_radio_hid_get_inputs(struct libusb_device_handle *handle, unsigned char *inputs);
 
 /*!
  * \brief Read user memory segment from the CM-XXX EEPROM.
@@ -315,7 +318,7 @@ void ast_radio_hid_get_inputs(struct usb_dev_handle *handle, unsigned char *inpu
  *						the calculated checksum will be zero.  This indicates valid data..
  *						Any	other value indicates bad EEPROM data.
  */
-unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
+unsigned short ast_radio_get_eeprom(struct libusb_device_handle *handle, unsigned short *buf);
 
 /*!
  * \brief Write user memory segment to the CM-XXX EEPROM.
@@ -330,7 +333,7 @@ unsigned short ast_radio_get_eeprom(struct usb_dev_handle *handle, unsigned shor
  * \param buf			Pointer to buffer that contains the the EEPROM data.
  *						The buffer must be an array of 13 unsigned shorts.
  */
-void ast_radio_put_eeprom(struct usb_dev_handle *handle, unsigned short *buf);
+void ast_radio_put_eeprom(struct libusb_device_handle *handle, unsigned short *buf);
 
 /*!
  * \brief Make a list of HID devices.
@@ -352,10 +355,11 @@ int ast_radio_hid_device_mklist(void);
  * \note It will only evaluate USB devices known to work with this application.
  *
  * \param desired_device	Pointer to a string that contains the device string to find.
- * \retval 					Returns a usb_device structure with the found device.
+ * \retval 					Returns a libusb_device structure with the found device.
+ * 							This device has a libusb_ref_device and must be freed with libusb_unref_device by the caller.
  *							If the device was not found, it returns null.
  */
-struct usb_device *ast_radio_hid_device_init(const char *desired_device);
+struct libusb_device *ast_radio_hid_device_init(const char *desired_device);
 
 /*!
  * \brief Get USB device number from device string
@@ -548,7 +552,7 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
  * - The returned pointer is owned by libusb's internal device list.
  * \param cardno The ALSA card number as found in HW:<cardno>
  */
-struct usb_device *ast_radio_usb_device_from_alsa_card(int cardno);
+struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno);
 
 #define AST_RADIO_PA_SAMPLE_RATE 48000
 #define AST_RADIO_PA_FRAMES_PER_BUFFER (FRAME_SIZE * 6)
@@ -583,3 +587,9 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps);
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop);
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames);
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);
+
+/*!
+ * \brief initialize the usb_ctx register for access to usb devices.
+ * \retval libusb_init status 0 on success, negative on failure.
+ */
+int ast_radio_libusb_init(void);
