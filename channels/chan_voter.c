@@ -4075,6 +4075,35 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 }
 
 /*!
+ * \brief Helper function to free memory allocations when clients are removed.
+ *
+ * \param client       Pointer to the voter_client structure to be freed.
+ */
+static void voter_client_free(struct voter_client *client)
+{
+	struct voter_client **target;
+
+	for (target = &clients; *target && *target != client; target = &(*target)->next) {
+		;
+	}
+	if (!*target) {
+		return;
+	}
+
+	*target = client->next;
+	if (client->audio) {
+		ast_free(client->audio);
+	}
+	if (client->rssi) {
+		ast_free(client->rssi);
+	}
+	if (client->gpsid) {
+		ast_free(client->gpsid);
+	}
+	ast_free(client);
+}
+
+/*!
  * \brief Reload VOTER driver configuration from disk and apply changes.
  *
  * Parses the configured voter.conf, updates per-instance (pvts) and per-client
@@ -4626,6 +4655,7 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
+			voter_client_free(client);
 			return AST_MODULE_LOAD_FAILURE;
 		}
 		for (client1 = clients; client1; client1 = client1->next) {
@@ -4638,6 +4668,8 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
+				voter_client_free(client);
+				voter_client_free(client1);
 				return AST_MODULE_LOAD_FAILURE;
 			}
 		}
@@ -4650,15 +4682,7 @@ static int reload(void)
 		if (client->reload) {
 			continue;
 		}
-		if (client->audio) {
-			ast_free(client->audio);
-		}
-		if (client->rssi) {
-			ast_free(client->rssi);
-		}
-		if (client->gpsid) {
-			ast_free(client->gpsid);
-		}
+		voter_client_free(client);
 		for (client1 = clients; client1; client1 = client1->next) {
 			if (client1->next == client) {
 				ast_debug(1, "Checking if VOTER client %s should be removed from VOTER instance %i\n", client->name, client->nodenum);
@@ -4672,7 +4696,7 @@ static int reload(void)
 			clients = next;
 		}
 		ast_debug(1, "Removing outdated VOTER client %s from VOTER instance %i\n", client->name, client->nodenum);
-		ast_free(client);
+		voter_client_free(client);
 		/* Continue from saved next without dereferencing freed client */
 		client = next;
 	}
@@ -6760,12 +6784,8 @@ static int load_module(void)
 	ast_mutex_lock(&voter_lock);
 	if (reload()) {
 		ast_log(LOG_ERROR, "Failed to reload configuration\n");
-		ast_timer_close(voter_thread_timer);
-		voter_thread_timer = NULL;
-		close(udp_socket);
-		udp_socket = -1;
 		ast_mutex_unlock(&voter_lock);
-		return AST_MODULE_LOAD_DECLINE;
+		return AST_MODULE_LOAD_FAILURE;
 	}
 	ast_mutex_unlock(&voter_lock);
 
@@ -6805,9 +6825,11 @@ static int load_module(void)
  *
  * This function is called when the module is reloaded. It locks the voter_lock mutex,
  * calls the reload() function to reload the configuration, and unlocks the mutex.
- * If reload() fails, it logs an error and preserves the existing socket and running configuration.
+ * If reload() fails, it logs an error and returns AST_MODULE_LOAD_FAILURE back to Asterisk,
+ * otherwise, it returns AST_MODULE_LOAD_SUCCESS.
  *
- *	 \return 				0 on success; non-zero on failure (typically -1 if the configuration could not be reloaded).
+ *	 \return 			AST_MODULE_LOAD_SUCCESS (0) on success
+ *         				AST_MODULE_LOAD_FAILURE (-1) on failure if the configuration could not be reloaded
  */
 static int reload_module(void)
 {
@@ -6817,9 +6839,11 @@ static int reload_module(void)
 	res = reload();
 	if (res) {
 		ast_log(LOG_ERROR, "Failed to reload configuration\n");
+		ast_mutex_unlock(&voter_lock);
+		return AST_MODULE_LOAD_FAILURE;
 	}
 	ast_mutex_unlock(&voter_lock);
-	return res; /* Return the result of the reload operation back to Asterisk*/
+	return AST_MODULE_LOAD_SUCCESS;
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Voter Radio Channel Driver",
