@@ -201,6 +201,7 @@ struct chan_usbradio_pvt {
 	pthread_t audiothread;
 	int stophid;
 	volatile sig_atomic_t stopaudiothread;
+	volatile sig_atomic_t hasusb; /* HID/audio liveness; not a bit-field (cross-thread) */
 	char audio_thread_ready;
 	time_t lastaudiotime;
 
@@ -376,7 +377,6 @@ struct chan_usbradio_pvt {
 	unsigned int radioactive:1;		/* indicator for active radio channel */
 	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
 	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
-	unsigned int hasusb:1;			/* indicator for has a USB device */
 	unsigned int usbass:1;			/* indicator for USB device assigned */
 	unsigned int wanteeprom:1;		/* indicator if we should use EEPROM */
 	unsigned int usedtmf:1;			/* indicator is we should decode DTMF */
@@ -2033,7 +2033,8 @@ static int usbradio_hangup(struct ast_channel *c)
 static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 {
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
-	struct ast_frame *f1;
+	struct ast_frame *f1, *f2;
+	int qlen = 0;
 
 	if (!o->hasusb || !o->audio_thread_ready) {
 		return 0;
@@ -2057,12 +2058,24 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 		return 0;
 	}
 
+	if (f->frametype != AST_FRAME_VOICE || f->datalen != FRAME_SIZE * 2 || !f->data.ptr) {
+		return 0;
+	}
+
 	f1 = ast_frdup(f);
 	if (!f1) {
 		return 0;
 	}
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	ast_mutex_lock(&o->txqlock);
+	AST_LIST_TRAVERSE(&o->txq, f2, frame_list) {
+		qlen++;
+	}
+	if (qlen >= QUEUE_SIZE) {
+		ast_mutex_unlock(&o->txqlock);
+		ast_frfree(f1);
+		return 0;
+	}
 	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
 	ast_mutex_unlock(&o->txqlock);
 
@@ -2075,7 +2088,8 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
  */
 static struct ast_frame *usbradio_read(struct ast_channel *c)
 {
-	ast_debug(1, "Read function should not be called!");
+	(void) c;
+	ast_debug(1, "Read function should not be called!\n");
 	return &ast_null_frame;
 }
 
@@ -2198,6 +2212,7 @@ static void *usbradio_audio_thread(void *arg)
 						ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
 					}
 				}
+				stream_cleanup(o);
 				break;
 			}
 
