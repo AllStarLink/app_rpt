@@ -4383,17 +4383,21 @@ static int reload(void)
 		if (!strcmp(ctg, "general")) {
 			continue;
 		}
-		/*! \todo VE7FET Shouldn't the instance buflen be loaded above with the other
-		 * instance options?  It is not a client option, it is an instance option.
+		/* This loads the buflen for the instance. This is here on purpose, and not
+		 * loaded above with the rest of the instance variables so that we can apply
+		 * it to all the clients associated with the instance. If we load it above,
+		 * the value gets overwritten on every loop iteration, and could also result
+		 * in an undefined value being set.
 		 */
-		/* This loads the buflen for the instance. */
 		val = ast_variable_retrieve(cfg, ctg, "buflen");
 		if (val) {
+			/* Multiply by 8 to convert from frames to bytes. */
 			instance_buflen = strtoul(val, NULL, 0) * 8;
 		} else {
-			ast_debug(1, "Per-instance buflen not specified, using global buflen\n");
+			ast_debug(1, "Per-instance buflen not specified, using global buflen for instance %s\n", ctg);
 			instance_buflen = buflen;
 		}
+		/* Ensure buflen is at least 320 (voter.conf buflen = 40), or two "frames" of ulaw audio.*/
 		if (instance_buflen < (FRAME_SIZE * 2)) {
 			instance_buflen = FRAME_SIZE * 2;
 		}
@@ -4523,8 +4527,14 @@ static int reload(void)
 			}
 			/* Reset a number of variables, so they can be reloaded. */
 			client->reload = 1;
+			/* Assign the instance buflen to each client associated to the instance. If
+			 * a per-instance buflen wasn't specified, the global one gets used.
+			 */
 			client->buflen = instance_buflen;
-			client->nodenum = strtoul(ctg, NULL, 0); /* The category name is the node number */
+			/* This effectively turns buflen into 40ms resolution "steps". */
+			client->buflen -= client->buflen % (FRAME_SIZE * 2);
+			/* The category name is the node number, assign the client to the correct node. */
+			client->nodenum = strtoul(ctg, NULL, 0);
 			/* Reset the per-client variables. */
 			client->totransmit = 0;
 			client->doadpcm = 0;
@@ -4577,8 +4587,6 @@ static int reload(void)
 					}
 				}
 			}
-			/* This effectively turns buflen into 40ms resolution "steps". */
-			client->buflen -= client->buflen % (FRAME_SIZE * 2);
 			/* Remember, the first element in the strs array is the client secret. Use
 			 * that to create a unique digest for the client, and store it in the client
 			 * array. Also, copy the client secret into the client->pswd.
