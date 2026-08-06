@@ -4501,7 +4501,8 @@ static int reload(void)
 					ast_debug(1, "Existing client %s found, attached to VOTER instance %s\n", client->name, ctg);
 					/* If has moved to another instance, free this one, and treat as new. */
 					if (client->nodenum != strtoul(ctg, NULL, 0)) {
-						ast_debug(1, "Existing client %s has moved from VOTER instance %i to %s, freeing to treat as new\n", client->name, client->nodenum, ctg);
+						ast_debug(1, "Existing client %s has moved from VOTER instance %i to %s, freeing to treat as new\n",
+							client->name, client->nodenum, ctg);
 						client->reload = 0;
 						client = NULL;
 					}
