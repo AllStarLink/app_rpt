@@ -155,6 +155,8 @@ pthread_t pulserid;
 static const char *const cd_signal_type[] = { "no", "N/A", "N/A", "usb", "usbinvert", "pp", "ppinvert" };
 static const char *const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "pp", "ppinvert" };
 
+static short silence_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
+
 /*!
  * \brief Descriptor for one of our channels.
  * There is one used for 'default' values (from the [general] entry in
@@ -2265,136 +2267,150 @@ static void *simpleusb_audio_thread(void *arg)
 					/* waiting for 3 frames in the buffer. This is "normal" */
 					last_frame_time = ast_radio_tvnow();
 				}
+				if (frames_available >= AST_RADIO_PA_FRAMES_PER_BUFFER) {
+					if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
+						ast_mutex_lock(&o->txqlock);
+						f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
+						ast_mutex_unlock(&o->txqlock);
+						src = 0; /* read position into f1->data */
+						while (src < f1->datalen) {
+							/* Compute spare room in the buffer */
+							int l = sizeof(o->simpleusb_write_buf) - o->simpleusb_write_dst;
 
-				if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey)) && (frames_available >= AST_RADIO_PA_FRAMES_PER_BUFFER)) {
-					ast_mutex_lock(&o->txqlock);
-					f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
-					ast_mutex_unlock(&o->txqlock);
-					src = 0; /* read position into f1->data */
-					while (src < f1->datalen) {
-						/* Compute spare room in the buffer */
-						int l = sizeof(o->simpleusb_write_buf) - o->simpleusb_write_dst;
+							if (f1->datalen - src >= l) {
+								/* enough to fill a frame */
+								memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
+								/* Below is an attempt to match levels to the original CM108 IC which has
+								 * been out of production for over 10 years. Scaling audio to 109.375% will
+								 * result in clipping! Any adjustments for CM1xxx gain differences should be
+								 * made in the mixer settings, not in the audio stream.
+								 * TODO: After the vast majority of existing installs have had a chance to review their
+								 * audio settings and these old scaling/clipping hacks are no longer in significant use
+								 * the legacyaudioscaling cfg and related code should be deleted.
+								 */
+								/* Adjust the audio level for CM119 A/B devices */
+								if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
+									register int v;
 
-						if (f1->datalen - src >= l) {
-							/* enough to fill a frame */
-							memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
-							/* Below is an attempt to match levels to the original CM108 IC which has
-							 * been out of production for over 10 years. Scaling audio to 109.375% will
-							 * result in clipping! Any adjustments for CM1xxx gain differences should be
-							 * made in the mixer settings, not in the audio stream.
-							 * TODO: After the vast majority of existing installs have had a chance to review their
-							 * audio settings and these old scaling/clipping hacks are no longer in significant use
-							 * the legacyaudioscaling cfg and related code should be deleted.
-							 */
-							/* Adjust the audio level for CM119 A/B devices */
-							if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
-								register int v;
+									sp = (short *) o->simpleusb_write_buf;
+									for (i = 0; i < FRAME_SIZE; i++) {
+										v = *sp;
+										v += v >> 3;   /* add *.125 giving * 1.125 */
+										v -= *sp >> 5; /* subtract *.03125 giving * 1.09375 */
+										if (v > 32765.0) {
+											v = 32765.0;
+										} else if (v < -32765.0) {
+											v = -32765.0;
+										}
+										*sp++ = v;
+									}
+								}
 
 								sp = (short *) o->simpleusb_write_buf;
+								sp1 = outbuf;
+								doright = 1;
+								doleft = 1;
+								ispager = 0;
+								if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
+									ispager = 1;
+								}
+								/* If pager audio, determine which channel to store audio */
+								if (o->pager != PAGER_NONE) {
+									doleft = (o->pager == PAGER_A) ? ispager : !ispager;
+									doright = (o->pager == PAGER_B) ? ispager : !ispager;
+								}
+								/* Upsample from 8000 mono to 48000 stereo */
 								for (i = 0; i < FRAME_SIZE; i++) {
-									v = *sp;
-									v += v >> 3;   /* add *.125 giving * 1.125 */
-									v -= *sp >> 5; /* subtract *.03125 giving * 1.09375 */
-									if (v > 32765.0) {
-										v = 32765.0;
-									} else if (v < -32765.0) {
-										v = -32765.0;
+									register short s, v;
+
+									if (o->preemphasis) {
+										s = preemph(sp[i], &o->prestate);
+									} else {
+										s = sp[i];
 									}
-									*sp++ = v;
+									v = lpass(s, o->flpt);
+									*sp1++ = (doleft) ? v : 0;
+									*sp1++ = (doright) ? v : 0;
+									v = lpass(s, o->flpt);
+									*sp1++ = (doleft) ? v : 0;
+									*sp1++ = (doright) ? v : 0;
+									v = lpass(s, o->flpt);
+									*sp1++ = (doleft) ? v : 0;
+									*sp1++ = (doright) ? v : 0;
+									v = lpass(s, o->flpt);
+									*sp1++ = (doleft) ? v : 0;
+									*sp1++ = (doright) ? v : 0;
+									v = lpass(s, o->flpt);
+									*sp1++ = (doleft) ? v : 0;
+									*sp1++ = (doright) ? v : 0;
+									v = lpass(s, o->flpt);
+									*sp1++ = (doleft) ? v : 0;
+									*sp1++ = (doright) ? v : 0;
 								}
-							}
 
-							sp = (short *) o->simpleusb_write_buf;
-							sp1 = outbuf;
-							doright = 1;
-							doleft = 1;
-							ispager = 0;
-							if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
-								ispager = 1;
-							}
-							/* If pager audio, determine which channel to store audio */
-							if (o->pager != PAGER_NONE) {
-								doleft = (o->pager == PAGER_A) ? ispager : !ispager;
-								doright = (o->pager == PAGER_B) ? ispager : !ispager;
-							}
-							/* Upsample from 8000 mono to 48000 stereo */
-							for (i = 0; i < FRAME_SIZE; i++) {
-								register short s, v;
-
-								if (o->preemphasis) {
-									s = preemph(sp[i], &o->prestate);
-								} else {
-									s = sp[i];
+								res = soundcard_writeframe(o, outbuf);
+								if (res != paNoError) {
+									/* audio data not ready */
+									if (res != paOutputUnderflowed) {
+										/* Underflow handled in soundcard_writeframe
+										 * all other errors require restart
+										 */
+										ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
+										o->hasusb = 0;
+										stream_cleanup(o);
+										break;
+									}
 								}
-								v = lpass(s, o->flpt);
-								*sp1++ = (doleft) ? v : 0;
-								*sp1++ = (doright) ? v : 0;
-								v = lpass(s, o->flpt);
-								*sp1++ = (doleft) ? v : 0;
-								*sp1++ = (doright) ? v : 0;
-								v = lpass(s, o->flpt);
-								*sp1++ = (doleft) ? v : 0;
-								*sp1++ = (doright) ? v : 0;
-								v = lpass(s, o->flpt);
-								*sp1++ = (doleft) ? v : 0;
-								*sp1++ = (doright) ? v : 0;
-								v = lpass(s, o->flpt);
-								*sp1++ = (doleft) ? v : 0;
-								*sp1++ = (doright) ? v : 0;
-								v = lpass(s, o->flpt);
-								*sp1++ = (doleft) ? v : 0;
-								*sp1++ = (doright) ? v : 0;
-							}
 
-							res = soundcard_writeframe(o, outbuf);
-							if (res != paNoError) {
-								/* audio data not ready */
-								if (res != paOutputUnderflowed) {
-									/* Underflow handled in soundcard_writeframe
-									 * all other errors require restart
-									 */
-									ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
-									o->hasusb = 0;
-									stream_cleanup(o);
-									break;
-								}
-							}
+								last_frame_time = ast_radio_tvnow();
+								src += l;
+								o->simpleusb_write_dst = 0;
+								if (o->waspager && (!ispager)) {
+									struct ast_frame wf = {
+										.frametype = AST_FRAME_TEXT,
+										.data.ptr = ENDPAGE_STR,
+										.datalen = strlen(ENDPAGE_STR) + 1,
+										.src = __PRETTY_FUNCTION__,
+									};
 
-							last_frame_time = ast_radio_tvnow();
-							src += l;
-							o->simpleusb_write_dst = 0;
-							if (o->waspager && (!ispager)) {
-								struct ast_frame wf = {
-									.frametype = AST_FRAME_TEXT,
-									.data.ptr = ENDPAGE_STR,
-									.datalen = strlen(ENDPAGE_STR) + 1,
-									.src = __PRETTY_FUNCTION__,
-								};
+									if (o->owner) {
+										ast_queue_frame(o->owner, &wf);
+									}
 
-								if (o->owner) {
-									ast_queue_frame(o->owner, &wf);
+									o->waspager = ispager;
+									continue;
 								}
 
 								o->waspager = ispager;
-								continue;
+							} else {
+								/* copy residue */
+								l = f1->datalen - src;
+								memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
+								src += l; /* but really, we are done */
+								o->simpleusb_write_dst += l;
 							}
-
-							o->waspager = ispager;
-						} else {
-							/* copy residue */
-							l = f1->datalen - src;
-							memcpy(o->simpleusb_write_buf + o->simpleusb_write_dst, (char *) f1->data.ptr + src, l);
-							src += l; /* but really, we are done */
-							o->simpleusb_write_dst += l;
+						}
+						ast_frfree(f1);
+						if (!o->hasusb) {
+							break;
+						}
+						continue;
+					}
+					/* No tx frames to write, write silence to keep the audio channel active */
+					res = soundcard_writeframe(o, silence_buf);
+					if (res != paNoError) {
+						/* audio data not ready */
+						if (res != paOutputUnderflowed) {
+							/* Underflow handled in soundcard_writeframe
+							 * all other errors require restart
+							 */
+							ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
+							o->hasusb = 0;
+							stream_cleanup(o);
+							break;
 						}
 					}
-					ast_frfree(f1);
-					if (!o->hasusb) {
-						break;
-					}
-					continue;
 				}
-
 				break;
 			}
 
