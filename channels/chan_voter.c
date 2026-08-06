@@ -4586,10 +4586,13 @@ static int reload(void)
 			client->digest = crc32_bufs(challenge, strs[0]);
 			ast_copy_string(client->pswd, strs[0], sizeof(client->pswd));
 			ast_free(cp);
-			/* Check to see if the buflen has changed. If it has, reset the drain index. */
+			/* Check to see if the buflen has changed. If it has, reset the drain index.
+			 * Note we have to divide by 8 to convert back from bytes to match what is in
+			 * voter.conf.
+			 */
 			if (client->old_buflen && (client->buflen != client->old_buflen)) {
 				ast_debug(1, "VOTER client %s buflen changed from %i to %i, resetting drain index\n", client->name,
-					client->old_buflen, client->buflen);
+					client->old_buflen / 8, client->buflen / 8);
 				client->drainindex = 0;
 			}
 			/* If the audio buffer exists and the buflen has changed, reallocate it. */
