@@ -4695,28 +4695,12 @@ static int reload(void)
 	}
 	/* Remove all the clients that are no longer in the config and free their memory. */
 	ast_debug(1, "Removing outdated VOTER clients (moved or removed)\n");
-	for (client = clients; client; client = client->next) {
-		/* Save client->next before unlinking so iteration can continue safely */
+	for (client = clients; client;) {
 		struct voter_client *next = client->next;
-		if (client->reload) {
-			continue;
+		if (!client->reload) {
+			ast_debug(1, "Removing outdated VOTER client %s from VOTER instance %i\n", client->name, client->nodenum);
+			voter_client_free(client);
 		}
-		voter_client_free(client);
-		for (client1 = clients; client1; client1 = client1->next) {
-			if (client1->next == client) {
-				ast_debug(1, "Checking if VOTER client %s should be removed from VOTER instance %i\n", client->name, client->nodenum);
-				break;
-			}
-		}
-		if (client1) {
-			client1->next = next;
-		} else {
-			/* Removed head; set list head to saved next */
-			clients = next;
-		}
-		ast_debug(1, "Removing outdated VOTER client %s from VOTER instance %i\n", client->name, client->nodenum);
-		voter_client_free(client);
-		/* Continue from saved next without dereferencing freed client */
 		client = next;
 	}
 	return AST_MODULE_LOAD_SUCCESS;
