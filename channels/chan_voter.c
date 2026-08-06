@@ -4261,7 +4261,6 @@ static int reload(void)
 		/* Backup the old CTCSS frequency, so we can tell if it changed when
 		 * we read in the txctcss variable.
 		 */
-		oldctcss[0] = 0;
 		ast_copy_string(oldctcss, p->txctcssfreq, sizeof(oldctcss));
 		val = ast_variable_retrieve(cfg, (char *) data, "txctcss");
 		if (val) {
@@ -4373,19 +4372,15 @@ static int reload(void)
 	/* Reset the hasmaster and masterconnected flags, so they can be re-evaluated later. */
 	hasmaster = 0;
 	masterconnected = 0;
-	/* Reset the config file category pointer. */
-	ctg = NULL;
+
 	/* Passing ast_category_browse a second arg of NULL tells it to start from the
 	 * first category, and pass the current category on subsequent loop iterations.
 	 *
 	 * This is going to go through the instances again, this time looking for client
 	 * definitions, and loading them (and their options) into the clients list.
 	 */
+	ctg = NULL;
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
-		/* If there are no more categories (instances), skip. */
-		if (ctg == NULL) {
-			continue;
-		}
 		/* If the category is [general], skip it. strcmp returns 0 on a match. */
 		if (!strcmp(ctg, "general")) {
 			continue;
