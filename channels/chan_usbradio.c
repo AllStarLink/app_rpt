@@ -96,6 +96,7 @@
 #define MS_PER_FRAME 20						   /* 20 ms frames */
 #define MS_TO_FRAMES(ms) ((ms) / MS_PER_FRAME) /* convert ms to frames */
 #define DEVICE_RETRY 500000					   /* Retry time in uS when USB device is missing */
+#define MAX_FRAME_DELAY 200					   /* max ms with undrained TX before USB audio reset */
 
 #include "./xpmr/xpmr.h"
 #ifdef HAVE_XPMRX
@@ -2120,15 +2121,15 @@ static void stream_cleanup(struct chan_usbradio_pvt *o)
 /*!
  * \brief Feed queued Asterisk TX frames into XPMR (PmrTx / dedrift buffer).
  *
- * Multiple TX frames may arrive between RX ticks; dedrift absorbs the skew.
- * Returns whether at least one frame was fed this cycle.
+ * Feeds at most \a max_frames frames so a stuck PortAudio TX path can leave
+ * backlog in txq for the MAX_FRAME_DELAY watchdog. Returns frames fed.
  */
-static int usbradio_feed_tx_queue(struct chan_usbradio_pvt *o)
+static int usbradio_feed_tx_queue(struct chan_usbradio_pvt *o, int max_frames)
 {
 	struct ast_frame *f1;
 	int fed = 0;
 
-	for (;;) {
+	while (fed < max_frames) {
 		ast_mutex_lock(&o->txqlock);
 		f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
 		ast_mutex_unlock(&o->txqlock);
@@ -2136,8 +2137,8 @@ static int usbradio_feed_tx_queue(struct chan_usbradio_pvt *o)
 			break;
 		}
 		PmrTx(o->pmrChan, (short *) f1->data.ptr);
-		fed = 1;
 		ast_frfree(f1);
+		fed++;
 	}
 	return fed;
 }
@@ -2154,9 +2155,12 @@ static void *usbradio_audio_thread(void *arg)
 	PaError pa_res;
 	int lastpttout;
 	int cd, sd;
+	int num_frames;
+	long frames_available;
 	struct chan_usbradio_pvt *o = arg;
 	struct ast_frame *f = &o->read_f, *f1;
 	time_t now;
+	struct timeval last_frame_time;
 
 	ast_debug(5, "Audio thread is starting\n");
 	ast_radio_time(&o->lastaudiotime);
@@ -2178,6 +2182,7 @@ static void *usbradio_audio_thread(void *arg)
 
 		flush_tx_queue(o);
 		o->audio_thread_ready = 1;
+		last_frame_time = ast_radio_tvnow();
 
 		while (!o->stopaudiothread && o->hasusb) {
 			if (o->lasthidtime) {
@@ -2248,9 +2253,43 @@ static void *usbradio_audio_thread(void *arg)
 				ast_mutex_unlock(&o->echolock);
 			}
 
-			/* Drain Asterisk TX into XPMR before the RX/PmrRx tick. */
-			if (usbradio_feed_tx_queue(o)) {
-				o->didpmrtx = 1;
+			/*
+			 * Drain Asterisk TX into XPMR when PortAudio has room. If the device
+			 * claims OK but the hardware TX buffer is not draining, txq backs up
+			 * and MAX_FRAME_DELAY restarts the stream (same idea as simpleusb).
+			 */
+			num_frames = 0;
+			ast_mutex_lock(&o->txqlock);
+			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+				num_frames++;
+			}
+			ast_mutex_unlock(&o->txqlock);
+
+			frames_available = ast_radio_pa_write_available(&o->pa);
+			if (frames_available < 0) {
+				ast_debug(2, "Channel %s: Pa_GetStreamWriteAvailable error %s\n", o->name, Pa_GetErrorText(frames_available));
+				o->hasusb = 0;
+				stream_cleanup(o);
+				break;
+			}
+
+			if ((num_frames <= 3) && (o->txkeyed || o->txtestkey)) {
+				/* Waiting for a few frames in the buffer is normal while keyed. */
+				last_frame_time = ast_radio_tvnow();
+			}
+
+			if (num_frames && frames_available >= AST_RADIO_PA_FRAMES_PER_BUFFER) {
+				if (usbradio_feed_tx_queue(o, 1)) {
+					o->didpmrtx = 1;
+				}
+				last_frame_time = ast_radio_tvnow();
+			}
+
+			if (num_frames && (ast_tvdiff_ms(ast_radio_tvnow(), last_frame_time) > MAX_FRAME_DELAY)) {
+				ast_log(LOG_ERROR, "Channel %s: Audio thread has not drained TX for over %d ms, restarting stream.\n", o->name, MAX_FRAME_DELAY);
+				o->hasusb = 0;
+				stream_cleanup(o);
+				break;
 			}
 
 			pa_res = usbradio_read_pa_stereo(o);
@@ -2285,6 +2324,15 @@ static void *usbradio_audio_thread(void *arg)
 				}
 			}
 
+			/* Below is an attempt to match levels to the original CM108 IC which has been
+			 * out of production for over 10 years. Scaling all rx audio to 80% results in a 20%
+			 * loss in dynamic range, added quantization noise, a 2dB reduction in outgoing IAX
+			 * audio levels, and inconsistency with Simpleusb. Adjustments for CM1xxx IC gain
+			 * differences should be made in the mixer settings, not in the audio stream.
+			 * TODO: After the vast majority of existing installs have had a chance to review their
+			 * audio settings and these old scaling/clipping hacks are no longer in significant use
+			 * the legacyaudioscaling cfg and related code should be deleted.
+			 */
 			/* Decrease the audio level for CM119 A/B devices */
 			if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
 				register short *sp = (short *) (o->usbradio_read_buf + AST_FRIENDLY_OFFSET);
@@ -2334,6 +2382,14 @@ static void *usbradio_audio_thread(void *arg)
 			}
 #endif
 
+			/* Below is an attempt to match levels to the original CM108 IC which has been
+			 * out of production for over 10 years. Scaling audio to 110% will result in clipping!
+			 * Any adjustments for CM1xxx IC gain differences should be made in the mixer
+			 * settings, not in the audio stream.
+			 * TODO: After the vast majority of existing installs have had a chance to review their
+			 * audio settings and these old scaling/clipping hacks are no longer in significant use
+			 * the legacyaudioscaling cfg and related code should be deleted.
+			 */
 			/* For the CM108 adjust the audio level */
 			if (o->legacyaudioscaling && o->devtype != C108_PRODUCT_ID) {
 				register short *sp = o->usbradio_write_buf;
