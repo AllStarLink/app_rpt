@@ -4329,7 +4329,6 @@ static int reload(void)
 		 */
 		if (strcmp(oldctcss, p->txctcssfreq) || (oldtoctype != p->txtoctype) || (oldlevel != p->txctcsslevel)) {
 			t_pmr_chan tChan;
-			
 			ast_debug(1, "VOTER %i: CTCSS frequency, level, or turn off code type changed, recreating PMR channel\n", p->nodenum);
 
 			if (p->pmrChan) {
