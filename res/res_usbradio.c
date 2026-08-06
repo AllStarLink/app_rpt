@@ -1597,11 +1597,9 @@ static int load_config(int reload)
 
 static int reload_module(void)
 {
-	if (!usb_ctx) {
-		if (ast_radio_libusb_init() < 0) {
-			ast_log(LOG_ERROR, "Unable to initialize libusb\n");
-			return AST_MODULE_LOAD_DECLINE;
-		}
+	if (ast_radio_libusb_init() < 0) {
+		ast_log(LOG_ERROR, "Unable to initialize libusb\n");
+		return AST_MODULE_LOAD_DECLINE;
 	}
 
 	if (load_config(0)) {

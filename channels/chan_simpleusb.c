@@ -882,9 +882,9 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 
 	if (o->usb_dev) {
 		libusb_unref_device(o->usb_dev);
+		o->usb_dev = NULL;
 	}
 
-	o->usb_dev = NULL;
 	if (o->hw_device[0]) {
 		/* already configured device, extract the device number and usb_dev */
 		if (!strcasecmp(o->hw_device, "default")) {
@@ -1224,8 +1224,9 @@ static void *hidthread(void *arg)
 			o->hasusb = 0;
 			if (o->usb_dev) {
 				libusb_unref_device(o->usb_dev);
+				o->usb_dev = NULL;
 			}
-			o->usb_dev = NULL;
+
 			ast_mutex_unlock(&usb_dev_lock);
 			libusb_close(usb_handle);
 			usb_handle = NULL;
