@@ -4078,16 +4078,25 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
  */
 static void voter_client_free(struct voter_client *client)
 {
-	struct voter_client **target;
+	struct voter_client *prev;
 	struct voter_pvt *p;
 
-	for (target = &clients; *target && *target != client; target = &(*target)->next) {
-		;
-	}
-	if (!*target) {
-		return;
+	if (client == clients) {
+		/* If we are removing the client at the start of the list */
+		clients = client->next;
+	} else {
+		for (prev = clients; prev; prev = prev->next) {
+			if (prev->next == client) {
+				/* Remove the client from the middle of the list */
+				prev->next = client->next;
+				break;
+			}
+		}
 	}
 
+	/* Reset some variables in the instance that the client we are removing
+	 * was attached to, to prevent stale data.
+	 */
 	for (p = pvts; p; p = p->next) {
 		if (p->lastwon == client) {
 			p->lastwon = NULL;
@@ -4097,7 +4106,7 @@ static void voter_client_free(struct voter_client *client)
 		}
 	}
 
-	*target = client->next;
+	/* Free the client's audio, RSSI, and GPS ID buffers. */
 	if (client->audio) {
 		ast_free(client->audio);
 	}
