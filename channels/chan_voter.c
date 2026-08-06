@@ -3788,7 +3788,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 {
 	int i, j;
 	struct voter_pvt *p, *p1;
-	struct ast_channel *astchanptr = NULL;
+	struct ast_channel *chan = NULL;
 	char *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
 	const char *val;
 	struct ast_config *cfg = NULL;
@@ -3866,9 +3866,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	 * endpoint: channel prefix "voter/%s" (where %s is the node number)
 	 * __FILE__: source file name (set to to the node identifier string, aka node number, for debugging)
 	 */
-	astchanptr =
-		ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s", (char *) data);
-	if (!astchanptr) {
+	chan = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s", (char *) data);
+	if (!chan) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot alloc new Asterisk channel\n", p->nodenum);
 		ast_free(p);
 		return NULL;
@@ -3881,17 +3880,17 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	}
 	pvts = p;
 	ast_mutex_unlock(&voter_lock);
-	ast_channel_tech_set(astchanptr, &voter_tech);
-	ast_channel_set_rawwriteformat(astchanptr, ast_format_slin);
-	ast_channel_set_writeformat(astchanptr, ast_format_slin);
-	ast_channel_set_rawreadformat(astchanptr, ast_format_slin);
-	ast_channel_set_readformat(astchanptr, ast_format_slin);
-	ast_channel_nativeformats_set(astchanptr, voter_tech.capabilities);
-	ast_channel_tech_pvt_set(astchanptr, p);
-	ast_channel_unlock(astchanptr);
-	ast_channel_language_set(astchanptr, "");
-	p->owner = astchanptr;
-	p->u = ast_module_user_add(astchanptr);
+	ast_channel_tech_set(chan, &voter_tech);
+	ast_channel_set_rawwriteformat(chan, ast_format_slin);
+	ast_channel_set_writeformat(chan, ast_format_slin);
+	ast_channel_set_rawreadformat(chan, ast_format_slin);
+	ast_channel_set_readformat(chan, ast_format_slin);
+	ast_channel_nativeformats_set(chan, voter_tech.capabilities);
+	ast_channel_tech_pvt_set(chan, p);
+	ast_channel_unlock(chan);
+	ast_channel_language_set(chan, "");
+	p->owner = chan;
+	p->u = ast_module_user_add(chan);
 	/* Load the configuration for this node. Note that not all variables are loaded here,
 	 * some are loaded in the reload function, which is also executed on initial start.
 	 */
@@ -3955,7 +3954,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			}
 			j = finddelim(cp, strs, ARRAY_LEN(strs));
 			if (j < 2) {
-				ast_log(LOG_ERROR, "Channel %s: primary config not specified properly in %s\n", ast_channel_name(astchanptr), config);
+				ast_log(LOG_ERROR, "Channel %s: primary config not specified properly in %s\n", ast_channel_name(chan), config);
 			} else {
 				cp1 = strchr(strs[0], ':');
 				if (cp1) {
@@ -3963,8 +3962,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 					j = atoi(cp1 + 1);
 				} else {
 					j = listen_port;
-					ast_log(LOG_NOTICE, "Channel %s: Primary UDP port not configured, using default port %i\n",
-						ast_channel_name(astchanptr), j);
+					ast_log(LOG_NOTICE, "Channel %s: Primary UDP port not configured, using default port %i\n", ast_channel_name(chan), j);
 				}
 				p->primary.sin_family = AF_INET;
 				p->primary.sin_addr.s_addr = inet_addr(strs[0]);
@@ -3976,8 +3974,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		val = ast_variable_retrieve(cfg, (char *) data, "isprimary");
 		if (val) {
 			p->isprimary = ast_true(val);
-			ast_log(LOG_NOTICE, "Channel %s: Found isprimary directive, this instance will be the primary server\n",
-				ast_channel_name(astchanptr));
+			ast_log(LOG_NOTICE, "Channel %s: Found isprimary directive, this instance will be the primary server\n", ast_channel_name(chan));
 		} else {
 			p->isprimary = 0;
 		}
@@ -4071,7 +4068,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	if (SEND_PRIMARY(p)) {
 		ast_pthread_create(&p->primary_thread, NULL, voter_primary_client, p);
 	}
-	return astchanptr;
+	return chan;
 }
 
 /*!
