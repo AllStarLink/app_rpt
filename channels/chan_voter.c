@@ -5529,10 +5529,8 @@ static void *voter_reader(void *data)
 						last_master_count = 0;
 						master_time.vtime_sec = 0;
 						master_time.vtime_nsec = 0;
-						/* Scan through the clients and fill the audio buffer with silence,
-						 * and set RSSI to 0.
-						 */
-						for (client1 = client->next; client1; client1 = client1->next) {
+						/* Fill the audio buffer with silence and set RSSI to 0 for all clients. */
+						for (client1 = clients; client1; client1 = client1->next) {
 							memset(client1->audio, ULAW_SILENCE, client1->buflen);
 							memset(client1->rssi, 0, client1->buflen);
 						}
