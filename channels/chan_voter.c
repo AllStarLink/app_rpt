@@ -4074,6 +4074,9 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 /*!
  * \brief Helper function to free memory allocations when clients are removed.
  *
+ * Must be called with voter_lock locked, as it modifies the global clients list
+ * and per-instance state.
+ *
  * \param client       Pointer to the voter_client structure to be freed.
  */
 static void voter_client_free(struct voter_client *client)
@@ -4116,7 +4119,29 @@ static void voter_client_free(struct voter_client *client)
 	if (client->gpsid) {
 		ast_free(client->gpsid);
 	}
+	ast_debug(1, "Freeing client %s from the client list\n", client->name);
 	ast_free(client);
+}
+
+/*!
+ * \brief Helper function to free memory allocations of all clients in the
+ * client list when called.
+ *
+ * Must be called with voter_lock locked, as it modifies the global clients list.
+ *
+ */
+
+static void voter_client_free_all(void)
+{
+	struct voter_client *client, *next;
+
+	ast_debug(1, "Freeing all clients in the client list\n");
+	/* Traverse the client list, freeing each client and its associated memory. */
+	for (client = clients; client; client = next) {
+		next = client->next;
+		voter_client_free(client);
+	}
+	clients = NULL;
 }
 
 /*!
@@ -4141,6 +4166,7 @@ static int reload(void)
 {
 	struct ast_flags zeroflag = { 0 };
 	int i, n, instance_buflen, buflen, oldtoctype, oldlevel;
+	uint8_t *tempbuf;
 	char *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
 	const char *val;
 	struct voter_pvt *p;
@@ -4493,6 +4519,7 @@ static int reload(void)
 			cp = ast_strdup(v->value);
 			if (!cp) {
 				ast_config_destroy(cfg);
+				voter_client_free_all();
 				return AST_MODULE_LOAD_FAILURE;
 			}
 			n = finddelim(cp, strs, ARRAY_LEN(strs));
@@ -4527,6 +4554,7 @@ static int reload(void)
 				if (!client) {
 					ast_free(cp);
 					ast_config_destroy(cfg);
+					voter_client_free_all();
 					return AST_MODULE_LOAD_FAILURE;
 				}
 				ast_debug(1, "New VOTER client %s is being allocated space\n", v->name);
@@ -4615,13 +4643,19 @@ static int reload(void)
 					client->old_buflen / 8, client->buflen / 8);
 				client->drainindex = 0;
 			}
-			/* If the audio buffer exists and the buflen has changed, reallocate it. */
+			/* If the audio buffer exists and the buflen has changed, reallocate it.
+			 * We use a temporary buffer for the reallocation to preserve the original buffer
+			 * if re-allocation fails (which would return a null pointer, while leaving the
+			 * original buffer intact).
+			 */
 			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->audio = ast_realloc(client->audio, client->buflen);
-				if (!client->audio) {
+				tempbuf = ast_realloc(client->audio, client->buflen);
+				if (!tempbuf) {
 					ast_config_destroy(cfg);
+					voter_client_free_all();
 					return AST_MODULE_LOAD_FAILURE;
 				}
+				client->audio = tempbuf;
 				/* Fill the new buffer with silence. */
 				memset(client->audio, ULAW_SILENCE, client->buflen);
 				/* If the audio buffer doesn't exist, allocate it. */
@@ -4629,18 +4663,31 @@ static int reload(void)
 				client->audio = ast_malloc(client->buflen);
 				if (!client->audio) {
 					ast_config_destroy(cfg);
+					/* If we fail to allocate the audio buffer, free the new client,
+					 * since it doesn't exist in the clients list, yet. Then free all
+					 * other clients */
+					if (newclient) {
+						voter_client_free(client);
+					}
+					voter_client_free_all();
 					return AST_MODULE_LOAD_FAILURE;
 				}
 				/* Fill the new buffer with silence. */
 				memset(client->audio, ULAW_SILENCE, client->buflen);
 			}
-			/* If the RSSI buffer exists and the buflen has changed, reallocate it. */
+			/* If the RSSI buffer exists and the buflen has changed, reallocate it.
+			 * We use a temporary buffer for the reallocation to preserve the original buffer
+			 * if re-allocation fails (which would return a null pointer, while leaving the
+			 * original buffer intact).
+			 */
 			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->rssi = ast_realloc(client->rssi, client->buflen);
-				if (!client->rssi) {
+				tempbuf = ast_realloc(client->rssi, client->buflen);
+				if (!tempbuf) {
 					ast_config_destroy(cfg);
+					voter_client_free_all();
 					return AST_MODULE_LOAD_FAILURE;
 				}
+				client->rssi = tempbuf;
 				/* Fill the new RSSI buffer with zeros. */
 				memset(client->rssi, 0, client->buflen);
 				/* If the RSSI buffer doesn't exist, allocate it. Note that ast_calloc will
@@ -4650,6 +4697,13 @@ static int reload(void)
 				client->rssi = ast_calloc(1, client->buflen);
 				if (!client->rssi) {
 					ast_config_destroy(cfg);
+					/* If we fail to allocate the RSSI buffer, free the new client,
+					 * since it doesn't exist in the clients list, yet. Then free all
+					 * other clients */
+					if (newclient) {
+						voter_client_free(client);
+					}
+					voter_client_free_all();
 					return AST_MODULE_LOAD_FAILURE;
 				}
 			}
@@ -4678,7 +4732,8 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
-			voter_client_free(client);
+			// voter_client_free(client);
+			voter_client_free_all();
 			return AST_MODULE_LOAD_FAILURE;
 		}
 		for (client1 = clients; client1; client1 = client1->next) {
@@ -4691,8 +4746,9 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
-				voter_client_free(client);
-				voter_client_free(client1);
+				// voter_client_free(client);
+				// voter_client_free(client1);
+				voter_client_free_all();
 				return AST_MODULE_LOAD_FAILURE;
 			}
 		}
