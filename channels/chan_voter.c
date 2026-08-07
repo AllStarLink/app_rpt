@@ -3030,7 +3030,8 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		p->threshold = 0;
 		p->threshcount = 0;
 		p->lingercount = 0;
-		p->winner = 0;
+		p->winner = NULL;
+		p->lastwon = NULL;
 		incr_drainindex(p);
 		ast_queue_frame(p->owner, &fr);
 		ast_frfree(f1);
@@ -5047,6 +5048,7 @@ static void *voter_reader(void *data)
 				/* De-assert COS and reset parameters for next time. */
 				p->rxkey = 0;
 				p->lastwon = NULL;
+				p->winner = NULL;
 				p->threshold = 0;
 				p->threshcount = 0;
 				p->lingercount = 0;
@@ -5550,6 +5552,7 @@ static void *voter_reader(void *data)
 							}
 							/* De-assert COS and reset parameters for next time. */
 							p->lastwon = NULL;
+							p->winner = NULL;
 							p->threshold = 0;
 							p->threshcount = 0;
 							p->lingercount = 0;
