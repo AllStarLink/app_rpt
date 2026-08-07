@@ -6169,6 +6169,13 @@ static void *voter_reader(void *data)
 										if (p->voter_test == 1) {
 											p->testindex = ast_random() % i;
 										} else {
+											/* If the test index is out of bounds (number of
+											 * candidates becomes smaller than the previously set
+											 * index), reset it. */
+											if (p->testindex >= i) {
+												p->testindex = 0;
+												p->testcycle = 0;
+											}
 											p->testcycle++;
 											if (p->testcycle >= (p->voter_test - 1)) {
 												p->testcycle = 0;
