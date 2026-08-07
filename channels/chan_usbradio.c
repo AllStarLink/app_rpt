@@ -1963,8 +1963,7 @@ static int usbradio_hangup(struct ast_channel *c)
 static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 {
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
-	struct ast_frame *f1, *f2;
-	int qlen = 0;
+	struct ast_frame *f1;
 
 	if (!o->hasusb || !o->audio_thread_ready) {
 		return 0;
@@ -1998,14 +1997,6 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 	}
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	ast_mutex_lock(&o->txqlock);
-	AST_LIST_TRAVERSE(&o->txq, f2, frame_list) {
-		qlen++;
-	}
-	if (qlen >= QUEUE_SIZE) {
-		ast_mutex_unlock(&o->txqlock);
-		ast_frfree(f1);
-		return 0;
-	}
 	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
 	ast_mutex_unlock(&o->txqlock);
 
