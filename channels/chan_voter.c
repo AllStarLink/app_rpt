@@ -2662,6 +2662,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
 		if (p->nodenum == atoi(argv[2])) {
 			break;
@@ -2669,6 +2670,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 	}
 	if (!p) {
 		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
 	if (argc > 3) {
@@ -2746,6 +2748,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 		ast_cli(fd, "No clients are currently able to transmit\n");
 	}
 	ast_cli(fd, "\n");
+	ast_mutex_unlock(&voter_lock);
 	return RESULT_SUCCESS;
 }
 
@@ -3388,6 +3391,7 @@ static void *voter_xmit(void *data)
 		 * are receiving audio, so we can transmit it.
 		 */
 		if (p->mixminus) {
+			ast_mutex_lock(&voter_lock);
 			for (client = clients; client; client = client->next) {
 				/* Skip if this client doesn't belong to this instance */
 				if (client->nodenum != p->nodenum) {
@@ -3414,6 +3418,7 @@ static void *voter_xmit(void *data)
 					mx = 1;
 				}
 			}
+			ast_mutex_unlock(&voter_lock);
 		}
 		/* x will now be set if we are to generate TX output */
 		/* This first "if" will send ulaw audio out all regular or mixminus clients by default. */
@@ -3442,6 +3447,7 @@ static void *voter_xmit(void *data)
 			/* Loop through all the clients, to figure out if we should send audio
 			 * to each.
 			 */
+			ast_mutex_lock(&voter_lock);
 			for (client = clients; client; client = client->next) {
 				/* Skip if this client doesn't belong to this instance */
 				if (client->nodenum != p->nodenum) {
@@ -3550,6 +3556,7 @@ static void *voter_xmit(void *data)
 					client->lastsenttime = ast_radio_tvnow();
 				}
 			}
+			ast_mutex_unlock(&voter_lock);
 		}
 		/* This "if" is used by clients configured to use ADPCM audio to the client transmitter */
 		if (x || p->adpcmf1) {
@@ -3575,6 +3582,7 @@ static void *voter_xmit(void *data)
 				memcpy(audiopacket.audio, f2->data.ptr, f2->datalen);
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
+				ast_mutex_lock(&voter_lock);
 				for (client = clients; client; client = client->next) {
 					/* Skip if this client doesn't belong to this instance */
 					if (client->nodenum != p->nodenum) {
@@ -3629,6 +3637,7 @@ static void *voter_xmit(void *data)
 					}
 #endif
 				}
+				ast_mutex_unlock(&voter_lock);
 				ast_frfree(f2);
 			}
 		}
@@ -3702,7 +3711,6 @@ static void *voter_xmit(void *data)
 				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 			}
 		}
-		ast_mutex_unlock(&voter_lock);
 		/* Process sending keepalive packets for each client, if necessary */
 		for (client = clients; client; client = client->next) {
 			if (client->nodenum != p->nodenum) {
@@ -3752,6 +3760,7 @@ static void *voter_xmit(void *data)
 				client->lastsenttime = ast_radio_tvnow();
 			}
 		}
+		ast_mutex_unlock(&voter_lock);
 	}
 	pthread_exit(NULL);
 }
