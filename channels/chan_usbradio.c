@@ -1954,19 +1954,18 @@ static int usbradio_call(struct ast_channel *c, const char *dest, int timeout)
 {
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
 
-	o->stophid = 0;
-	o->stopaudiothread = 0;
-	o->audio_thread_ready = 0;
-	ast_radio_time(&o->lasthidtime);
-	ast_radio_time(&o->lastaudiotime);
-
 	if (o->hidthread == AST_PTHREADT_NULL) {
+		o->stophid = 0;
+		ast_radio_time(&o->lasthidtime);
 		if (ast_pthread_create(&o->hidthread, NULL, hidthread, o)) {
 			ast_log(LOG_ERROR, "Channel %s: Failed to create HID thread\n", o->name);
 			return -1;
 		}
 	}
 	if (o->audiothread == AST_PTHREADT_NULL) {
+		o->stopaudiothread = 0;
+		o->audio_thread_ready = 0;
+		ast_radio_time(&o->lastaudiotime);
 		if (ast_pthread_create(&o->audiothread, NULL, usbradio_audio_thread, o)) {
 			ast_log(LOG_ERROR, "Channel %s: Failed to create audio thread\n", o->name);
 			o->stophid = 1;
@@ -2624,8 +2623,8 @@ static void *usbradio_audio_thread(void *arg)
 					}
 					if (f1) {
 						ast_queue_frame(o->owner, f1);
+						continue;
 					}
-					continue;
 				}
 			}
 
