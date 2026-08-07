@@ -2519,13 +2519,11 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	/* cannot apply to echolink */
 	if (!strncasecmp(tmp, "echolink", 8)) {
-		ast_autoservice_stop(l->pchan);
-		return NULL;
+		goto retry;
 	}
 	/* cannot apply to tlb */
 	if (!strncasecmp(tmp, "tlb", 3)) {
-		ast_autoservice_stop(l->pchan);
-		return NULL;
+		goto retry;
 	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
