@@ -2515,32 +2515,22 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	ast_autoservice_start(l->pchan);
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp), 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
-		rpt_mutex_lock(&myrpt->lock);
-		l->retrytimer = RETRY_TIMER_MS;
-		rpt_mutex_unlock(&myrpt->lock);
-		return NULL;
+		goto retry;
 	}
 	/* cannot apply to echolink */
 	if (!strncasecmp(tmp, "echolink", 8)) {
-		rpt_mutex_lock(&myrpt->lock);
-		l->retrytimer = RETRY_TIMER_MS;
-		rpt_mutex_unlock(&myrpt->lock);
+		ast_autoservice_stop(l->pchan);
 		return NULL;
 	}
 	/* cannot apply to tlb */
 	if (!strncasecmp(tmp, "tlb", 3)) {
-		rpt_mutex_lock(&myrpt->lock);
-		l->retrytimer = RETRY_TIMER_MS;
-		rpt_mutex_unlock(&myrpt->lock);
+		ast_autoservice_stop(l->pchan);
 		return NULL;
 	}
 
 	cap = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!cap) {
-		rpt_mutex_lock(&myrpt->lock);
-		l->retrytimer = RETRY_TIMER_MS;
-		rpt_mutex_unlock(&myrpt->lock);
-		return NULL;
+		goto retry;
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
@@ -2573,15 +2563,23 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 			l->retrytimer = RETRY_TIMER_MS;
 			l->chan = NULL;
 			rpt_mutex_unlock(&myrpt->lock);
+			ast_autoservice_stop(l->pchan);
+			return NULL;
 		}
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
-		rpt_mutex_lock(&myrpt->lock);
-		l->retrytimer = RETRY_TIMER_MS;
-		rpt_mutex_unlock(&myrpt->lock);
+		goto retry;
 	}
+
 	ast_autoservice_stop(l->pchan);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
+	return NULL;
+
+retry:
+	rpt_mutex_lock(&myrpt->lock);
+	l->retrytimer = RETRY_TIMER_MS;
+	rpt_mutex_unlock(&myrpt->lock);
+	ast_autoservice_stop(l->pchan);
 	return NULL;
 }
 
