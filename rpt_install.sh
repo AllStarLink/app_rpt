@@ -34,7 +34,7 @@ printf "Script is now the latest version\n"
 ls -d -v */ | grep "^asterisk" | tail -1
 cd $( ls -d -v */ | grep "^asterisk" | tail -1 )
 
-apt-get install -y libusb-dev libasound2-dev libportaudio2 portaudio19-dev # USB radio drivers and PortAudio
+apt-get install -y libusb-1.0-0-dev libasound2-dev libportaudio2 portaudio19-dev # USB radio drivers and PortAudio
 
 apply_diff() {
 	src="$1"
