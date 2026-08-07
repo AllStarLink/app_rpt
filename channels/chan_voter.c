@@ -352,7 +352,7 @@ struct ast_flags zeroflag = { 0 };
 #define VOTER_NAME_LEN 50
 char challenge[VOTER_CHALLENGE_LEN];
 char password[VOTER_PASSWORD_LEN];
-char context[100];
+static char context[AST_MAX_EXTENSION] = "default";
 
 /* Timeout definitions in ms */
 #define RX_TIMEOUT_MS 200
@@ -1444,10 +1444,10 @@ static int rad_rxwait(int fd, int ms)
 {
 	struct pollfd fds[1];
 	int res, timeout;
-	fds[0].fd = fd;			// Asterisk CLI file descriptor
-	fds[0].events = POLLIN; // Monitor for incoming data
+	fds[0].fd = fd;			/* Asterisk CLI file descriptor */
+	fds[0].events = POLLIN; /* Monitor for incoming data */
 
-	timeout = ms; // Timeout in milliseconds
+	timeout = ms; /* Timeout in milliseconds */
 
 	/* Poll the fd. Wait for a keypress to exit. */
 	res = ast_poll(fds, 1, timeout);
@@ -3788,7 +3788,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 {
 	int i, j;
 	struct voter_pvt *p, *p1;
-	struct ast_channel *tmp = NULL;
+	struct ast_channel *chan = NULL;
 	char *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
 	const char *val;
 	struct ast_config *cfg = NULL;
@@ -3851,8 +3851,23 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_free(p);
 		return NULL;
 	}
-	tmp = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s", (char *) data);
-	if (!tmp) {
+	/* Allocate a new Asterisk channel for this voter instance and get the assigned pointer. The channel request
+	 * we send includes the following:
+	 * needqueue: 1
+	 * (initial) state: AST_STATE_DOWN
+	 * CID number: 0
+	 * CID name: 0
+	 * acctcode: ""
+	 * extension: (starting extension) node identifier string (aka node number)
+	 * context: (starting context in extensions.conf) (defaults to unset)
+	 * assignedids: assignedids
+	 * requestor: requestor
+	 * amaflag: 0 (unset/default)
+	 * endpoint: channel prefix "voter/%s" (where %s is the node number)
+	 * __FILE__: source file name (set to to the node identifier string, aka node number, for debugging)
+	 */
+	chan = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s", (char *) data);
+	if (!chan) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot alloc new Asterisk channel\n", p->nodenum);
 		ast_free(p);
 		return NULL;
@@ -3865,17 +3880,17 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	}
 	pvts = p;
 	ast_mutex_unlock(&voter_lock);
-	ast_channel_tech_set(tmp, &voter_tech);
-	ast_channel_set_rawwriteformat(tmp, ast_format_slin);
-	ast_channel_set_writeformat(tmp, ast_format_slin);
-	ast_channel_set_rawreadformat(tmp, ast_format_slin);
-	ast_channel_set_readformat(tmp, ast_format_slin);
-	ast_channel_nativeformats_set(tmp, voter_tech.capabilities);
-	ast_channel_tech_pvt_set(tmp, p);
-	ast_channel_unlock(tmp);
-	ast_channel_language_set(tmp, "");
-	p->owner = tmp;
-	p->u = ast_module_user_add(tmp);
+	ast_channel_tech_set(chan, &voter_tech);
+	ast_channel_set_rawwriteformat(chan, ast_format_slin);
+	ast_channel_set_writeformat(chan, ast_format_slin);
+	ast_channel_set_rawreadformat(chan, ast_format_slin);
+	ast_channel_set_readformat(chan, ast_format_slin);
+	ast_channel_nativeformats_set(chan, voter_tech.capabilities);
+	ast_channel_tech_pvt_set(chan, p);
+	ast_channel_unlock(chan);
+	ast_channel_language_set(chan, "");
+	p->owner = chan;
+	p->u = ast_module_user_add(chan);
 	/* Load the configuration for this node. Note that not all variables are loaded here,
 	 * some are loaded in the reload function, which is also executed on initial start.
 	 */
@@ -3939,7 +3954,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			}
 			j = finddelim(cp, strs, ARRAY_LEN(strs));
 			if (j < 2) {
-				ast_log(LOG_ERROR, "Channel %s: primary config not specified properly in %s\n", ast_channel_name(tmp), config);
+				ast_log(LOG_ERROR, "Channel %s: primary config not specified properly in %s\n", ast_channel_name(chan), config);
 			} else {
 				cp1 = strchr(strs[0], ':');
 				if (cp1) {
@@ -3947,7 +3962,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 					j = atoi(cp1 + 1);
 				} else {
 					j = listen_port;
-					ast_log(LOG_NOTICE, "Channel %s: Primary UDP port not configured, using default port %i\n", ast_channel_name(tmp), j);
+					ast_log(LOG_NOTICE, "Channel %s: Primary UDP port not configured, using default port %i\n", ast_channel_name(chan), j);
 				}
 				p->primary.sin_family = AF_INET;
 				p->primary.sin_addr.s_addr = inet_addr(strs[0]);
@@ -3959,7 +3974,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		val = ast_variable_retrieve(cfg, (char *) data, "isprimary");
 		if (val) {
 			p->isprimary = ast_true(val);
-			ast_log(LOG_NOTICE, "Channel %s: Found isprimary directive, this instance will be the primary server\n", ast_channel_name(tmp));
+			ast_log(LOG_NOTICE, "Channel %s: Found isprimary directive, this instance will be the primary server\n", ast_channel_name(chan));
 		} else {
 			p->isprimary = 0;
 		}
@@ -4053,7 +4068,80 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	if (SEND_PRIMARY(p)) {
 		ast_pthread_create(&p->primary_thread, NULL, voter_primary_client, p);
 	}
-	return tmp;
+	return chan;
+}
+
+/*!
+ * \brief Helper function to free memory allocations when clients are removed.
+ *
+ * Must be called with voter_lock locked, as it modifies the global clients list
+ * and per-instance state.
+ *
+ * \param client       Pointer to the voter_client structure to be freed.
+ */
+static void voter_client_free(struct voter_client *client)
+{
+	struct voter_client *prev;
+	struct voter_pvt *p;
+
+	if (client == clients) {
+		/* If we are removing the client at the start of the list */
+		clients = client->next;
+	} else {
+		for (prev = clients; prev; prev = prev->next) {
+			if (prev->next == client) {
+				/* Remove the client from the middle of the list */
+				prev->next = client->next;
+				break;
+			}
+		}
+	}
+
+	/* Reset some variables in the instance that the client we are removing
+	 * was attached to, to prevent stale data.
+	 */
+	for (p = pvts; p; p = p->next) {
+		if (p->lastwon == client) {
+			p->lastwon = NULL;
+			p->threshold = 0;
+			p->threshcount = 0;
+			p->lingercount = 0;
+		}
+	}
+
+	/* Free the client's audio, RSSI, and GPS ID buffers. */
+	if (client->audio) {
+		ast_free(client->audio);
+	}
+	if (client->rssi) {
+		ast_free(client->rssi);
+	}
+	if (client->gpsid) {
+		ast_free(client->gpsid);
+	}
+	ast_debug(1, "Freeing client %s from the client list\n", client->name);
+	ast_free(client);
+}
+
+/*!
+ * \brief Helper function to free memory allocations of all clients in the
+ * client list when called.
+ *
+ * Must be called with voter_lock locked, as it modifies the global clients list.
+ *
+ */
+
+static void voter_client_free_all(void)
+{
+	struct voter_client *client, *next;
+
+	ast_debug(1, "Freeing all clients in the client list\n");
+	/* Traverse the client list, freeing each client and its associated memory. */
+	for (client = clients; client; client = next) {
+		next = client->next;
+		voter_client_free(client);
+	}
+	clients = NULL;
 }
 
 /*!
@@ -4067,14 +4155,18 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
  * Note that on initial start, load_module runs this one time, before voter_request
  * loads the rest of the config file.
  *
- * \retval  			0 Success — configuration loaded and applied.
- * \retval 				-1 Failure — configuration load or allocation error;
- *						existing state is left unchanged where possible.
+ * Also note that reload() is called with voter_lock locked, so client and instance
+ * list traversal and modifications are safe.
+ *
+ * \retval  			AST_MODULE_LOAD_SUCCESS (0) — configuration loaded and applied.
+ * \retval 				AST_MODULE_LOAD_FAILURE (-1) — configuration, validation,
+ *						authentication, or allocation error.
  */
 static int reload(void)
 {
 	struct ast_flags zeroflag = { 0 };
 	int i, n, instance_buflen, buflen, oldtoctype, oldlevel;
+	uint8_t *tempbuf;
 	char *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
 	const char *val;
 	struct voter_pvt *p;
@@ -4082,18 +4174,31 @@ static int reload(void)
 	struct ast_config *cfg = NULL;
 	struct ast_variable *v;
 
+	/* Traverse the client list, resetting client->reload to 0 for each of them,
+	 * and copying the current client->buflen to client->old_buflen, so we can
+	 * detect changes in buffer length.
+	 */
 	for (client = clients; client; client = client->next) {
 		client->reload = 0;
 		client->old_buflen = client->buflen;
 	}
 
+	/* Attempt to load/reload voter.conf. */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load/reload config %s\n", config);
-		return -1;
+		return AST_MODULE_LOAD_FAILURE;
 	} else {
 		ast_log(LOG_NOTICE, "Config load/reload from %s\n", config);
 	}
 
+	/* We only load/reload the following [general] options in this function:
+	 * password, buflen, sanity, puckit
+	 *
+	 * The other [general] options, bindaddr, port, and utos are loaded
+	 * in the load_module() function, and are immutable after the module
+	 * is loaded.
+	 */
+	ast_debug(1, "Loading [general] options from voter.conf\n");
 	val = ast_variable_retrieve(cfg, "general", "password");
 	if (val) {
 		ast_copy_string(password, val, sizeof(password));
@@ -4101,12 +4206,6 @@ static int reload(void)
 		password[0] = 0;
 	}
 
-	val = ast_variable_retrieve(cfg, "general", "context");
-	if (val) {
-		ast_copy_string(context, val, sizeof(context));
-	} else {
-		context[0] = 0;
-	}
 	/* We read in buflen from the config file, and * 8 to convert it to bytes. See the
 	 * notes at the top of the source for more information on how/why buflen relates to time.
 	 */
@@ -4136,15 +4235,27 @@ static int reload(void)
 		puckit = 0;
 	}
 
+	/* Load/reload the following options that are associated with each defined
+	 * VOTER instance from voter.conf:
+	 * linger, plfilter, hostdeemp, mixminus, streams, txctcss, txctcsslevel,
+	 * txtoctype, thresholds, gtxgain
+	 */
+	ast_debug(1, "Loading per-instance options for each VOTER instance from voter.conf\n");
 	for (p = pvts; p; p = p->next) {
-		/* Reset dmwdiag to disabled upon reload */
-		p->dmwdiag = 0;
-		oldctcss[0] = 0;
-		ast_copy_string(oldctcss, p->txctcssfreq, sizeof(oldctcss));
+		/* The name of the instance must be the channel node number,
+		 * use that as the key to look up the instance in the config.
+		 * If we can't find the instance in the config, skip.
+		 * This will load the node number into the "config group", so
+		 * we can load the instance-specific variables from the config group.
+		 */
 		snprintf(data, sizeof(data), "%d", p->nodenum);
 		if (ast_variable_browse(cfg, data) == NULL) {
 			continue;
 		}
+		ast_debug(1, "Loading instance options for VOTER instance %i\n", p->nodenum);
+		/* Reset dmwdiag to disabled for the instance upon reload. */
+		p->dmwdiag = 0;
+		/* Load the linger value, or set it to default if it is unset. */
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
 			p->linger = atoi(val);
@@ -4152,18 +4263,21 @@ static int reload(void)
 			ast_debug(1, "linger not specified, using default linger = %i\n", DEFAULT_LINGER);
 			p->linger = DEFAULT_LINGER;
 		}
+		/* Check if the plfilter is to be enabled, it is disabled by default. */
 		val = ast_variable_retrieve(cfg, (char *) data, "plfilter");
 		if (val) {
 			p->plfilter = ast_true(val);
 		} else {
 			p->plfilter = 0;
 		}
+		/* Check if hostdeemp is to be enabled, it is disabled by default. */
 		val = ast_variable_retrieve(cfg, (char *) data, "hostdeemp");
 		if (val) {
 			p->hostdeemp = ast_true(val);
 		} else {
 			p->hostdeemp = 0;
 		}
+		/* Check if mixminus is to be enabled, it is disabled by default. */
 		val = ast_variable_retrieve(cfg, (char *) data, "mixminus");
 		if (val) {
 			p->mixminus = ast_true(val);
@@ -4179,13 +4293,23 @@ static int reload(void)
 			cp = ast_strdup(val);
 			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
 		}
+		/* Backup the old CTCSS frequency, so we can tell if it changed when
+		 * we read in the txctcss variable.
+		 */
+		ast_copy_string(oldctcss, p->txctcssfreq, sizeof(oldctcss));
 		val = ast_variable_retrieve(cfg, (char *) data, "txctcss");
 		if (val) {
 			ast_copy_string(p->txctcssfreq, val, sizeof(p->txctcssfreq));
 		} else {
 			p->txctcssfreq[0] = 0;
 		}
+		/* Backup the old CTCSS level, so we can tell if it changed when
+		 * we read in the txctcsslevel variable.
+		 */
 		oldlevel = p->txctcsslevel;
+		/* Load the txctcsslevel value, or set it to a default level of 62.
+		 * Why 62?
+		 */
 		val = ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
 		if (val) {
 			p->txctcsslevel = atoi(val);
@@ -4193,7 +4317,13 @@ static int reload(void)
 			p->txctcsslevel = 62;
 		}
 		p->txctcsslevelset = p->txctcsslevel;
+		/* Backup the old CTCSS turn off code type, so we can tell if it changed when
+		 * we read in the txtoctype variable.
+		 */
 		oldtoctype = p->txtoctype;
+		/* Set the default CTCSS turn off code type to NONE, and overwrite it
+		 * with PHASE or NOTONE, if either of the respective options are set.
+		 */
 		p->txtoctype = TOC_NONE;
 		val = ast_variable_retrieve(cfg, (char *) data, "txtoctype");
 		if (val) {
@@ -4203,6 +4333,7 @@ static int reload(void)
 				p->txtoctype = TOC_NOTONE;
 			}
 		}
+		/* Reset thresholds to 0 before we read in and parse any thresholds values. */
 		p->nthresholds = 0;
 		val = ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
@@ -4228,14 +4359,18 @@ static int reload(void)
 			}
 			ast_free(cp);
 		}
+		/* Load the gtxgain value, or set it to a default if it is unset. */
 		val = ast_variable_retrieve(cfg, (char *) data, "gtxgain");
 		if (!val) {
 			val = DEFAULT_GTXGAIN;
 		}
 		p->gtxgain = pow(10.0, atof(val) / 20.0);
-		/* If new CTCSS frequency */
+		/* If new CTCSS frequency, CTCSS turn off code, or CTCSS level were specified,
+		 * we need to recreate the PMR channel.
+		 */
 		if (strcmp(oldctcss, p->txctcssfreq) || (oldtoctype != p->txtoctype) || (oldlevel != p->txctcsslevel)) {
 			t_pmr_chan tChan;
+			ast_debug(1, "VOTER %i: CTCSS frequency, level, or turn off code type changed, recreating PMR channel\n", p->nodenum);
 
 			if (p->pmrChan) {
 				destroyPmrChannel(p->pmrChan);
@@ -4269,27 +4404,47 @@ static int reload(void)
 			}
 		}
 	}
+	/* Reset the hasmaster and masterconnected flags, so they can be re-evaluated later. */
 	hasmaster = 0;
 	masterconnected = 0;
+
+	/* Passing ast_category_browse a second arg of NULL tells it to start from the
+	 * first category, and pass the current category on subsequent loop iterations.
+	 *
+	 * This is going to go through the instances again, this time looking for client
+	 * definitions, and loading them (and their options) into the clients list.
+	 */
 	ctg = NULL;
 	while ((ctg = ast_category_browse(cfg, ctg)) != NULL) {
-		if (ctg == NULL) {
-			continue;
-		}
+		/* If the category is [general], skip it. strcmp returns 0 on a match. */
 		if (!strcmp(ctg, "general")) {
 			continue;
 		}
+		/* This loads the buflen for the instance. This is here on purpose, and not
+		 * loaded above with the rest of the instance variables so that we can apply
+		 * it to all the clients associated with the instance. If we load it above,
+		 * the value gets overwritten on every loop iteration, and could also result
+		 * in an undefined value being set.
+		 */
 		val = ast_variable_retrieve(cfg, ctg, "buflen");
 		if (val) {
+			/* Multiply by 8 to convert from frames to bytes. */
 			instance_buflen = strtoul(val, NULL, 0) * 8;
 		} else {
-			ast_debug(1, "Per-instance buflen not specified, using global buflen\n");
+			ast_debug(1, "Per-instance buflen not specified, using global buflen for instance %s\n", ctg);
 			instance_buflen = buflen;
 		}
+		/* Ensure buflen is at least 320 (voter.conf buflen = 40), or two "frames" of ulaw audio.*/
 		if (instance_buflen < (FRAME_SIZE * 2)) {
 			instance_buflen = FRAME_SIZE * 2;
 		}
+		/* Load all the variables for the instance, and iterate on them. */
 		for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
+			/* Now things get fun... we are going to skip every time we find
+			 * any valid instance or client variable name. In the end, this should
+			 * leave us with something that isn't a client or instance variable,
+			 * which would be the client name (since it can be "anything").
+			 */
 			if (!strcmp(v->name, "txctcsslevel")) {
 				continue;
 			}
@@ -4353,21 +4508,39 @@ static int reload(void)
 			if (!strncasecmp(v->name, "prio", 4)) {
 				continue;
 			}
+			/* At this point, v->name should be the client name, and
+			 * v->value should be the client's options.
+			 *
+			 * We'll make a copy of the options (and abort if that fails),
+			 * then use the copy and split it on the "," delimiter into the
+			 * strs array, and n will be the number of elements found in the array.
+			 * If n < 1, we skip this client and continue to the next one.
+			 */
 			cp = ast_strdup(v->value);
 			if (!cp) {
 				ast_config_destroy(cfg);
-				return -1;
+				voter_client_free_all();
+				return AST_MODULE_LOAD_FAILURE;
 			}
 			n = finddelim(cp, strs, ARRAY_LEN(strs));
 			if (n < 1) {
 				continue;
 			}
-			/* See if we "know" this client already. */
+			/* See if we "know" this client already. The first element in the strs array is the
+			 * client secret (password). We can feed that into crc32_bufs to get a digest, and see
+			 * if it matches any existing client.
+			 */
 			for (client = clients; client; client = client->next) {
-				/* If this is the one whose digest matches one currently being looked at. */
+				/* Stop if we find a matching client that we know. Or if we have seen it before,
+				 * but it doesn't belong to this node number any more, reset the client array to
+				 * treat it as a new client.
+				 */
 				if (client->digest == crc32_bufs(challenge, strs[0])) {
+					ast_debug(1, "Existing client %s found, attached to VOTER instance %s\n", client->name, ctg);
 					/* If has moved to another instance, free this one, and treat as new. */
 					if (client->nodenum != strtoul(ctg, NULL, 0)) {
+						ast_debug(1, "Existing client %s has moved from VOTER instance %i to %s, freeing to treat as new\n",
+							client->name, client->nodenum, ctg);
 						client->reload = 0;
 						client = NULL;
 					}
@@ -4375,22 +4548,34 @@ static int reload(void)
 				}
 			}
 			newclient = 0;
-			/* If a new one, alloc its space. */
+			/* If we don't know this client, treat it as new, and alloc its space. Abort if that fails. */
 			if (!client) {
 				client = ast_calloc(1, sizeof(struct voter_client));
 				if (!client) {
 					ast_free(cp);
 					ast_config_destroy(cfg);
-					return -1;
+					voter_client_free_all();
+					return AST_MODULE_LOAD_FAILURE;
 				}
+				ast_debug(1, "New VOTER client %s is being allocated space\n", v->name);
 				/* When initializing a client, set the CLI priority override to PRIO_DEFAULT (-2). */
 				client->prio_override = PRIO_DEFAULT;
+				/* This is a new client, so v->name is the client name, copy that into client->name. */
 				ast_copy_string(client->name, v->name, sizeof(client->name));
+				/* Set a flag indicating this is a new client. */
 				newclient = 1;
 			}
+			/* Reset a number of variables, so they can be reloaded. */
 			client->reload = 1;
+			/* Assign the instance buflen to each client associated to the instance. If
+			 * a per-instance buflen wasn't specified, the global one gets used.
+			 */
 			client->buflen = instance_buflen;
+			/* This effectively turns buflen into 40ms resolution "steps". */
+			client->buflen -= client->buflen % (FRAME_SIZE * 2);
+			/* The category name is the node number, assign the client to the correct node. */
 			client->nodenum = strtoul(ctg, NULL, 0);
+			/* Reset the per-client variables. */
 			client->totransmit = 0;
 			client->doadpcm = 0;
 			client->nodeemp = 0;
@@ -4399,13 +4584,17 @@ static int reload(void)
 			client->noplfilter = 0;
 			client->prio = PRIO_NORMAL; /* Default "normal" priority is 0 */
 			client->gpsid = 0;
+			/* n from above was the number of strings (variables) we parsed out of the client options.
+			 * Now, we will iterate through them all, and set the corresponding client array variables.
+			 */
+			ast_debug(1, "Loading options for VOTER client %s, %i options found\n", client->name, n);
 			for (i = 1; i < n; i++) {
 				if (!strcasecmp(strs[i], "transmit")) {
 					client->totransmit = 1;
 				} else if (!strcasecmp(strs[i], "master")) {
 					client->ismaster = 1;
 					hasmaster = 1;
-					client->mix = 0; // Reset the mix flag if the config changed to now be a voting client
+					client->mix = 0; /* Reset the mix flag if the config changed to now be a voting client */
 				} else if (!strcasecmp(strs[i], "adpcm")) {
 					client->doadpcm = 1;
 				} else if (!strcasecmp(strs[i], "nodeemp")) {
@@ -4438,45 +4627,89 @@ static int reload(void)
 					}
 				}
 			}
-			/* This effectively turns buflen into 40ms resolution "steps". */
-			client->buflen -= client->buflen % (FRAME_SIZE * 2);
+			/* Remember, the first element in the strs array is the client secret. Use
+			 * that to create a unique digest for the client, and store it in the client
+			 * array. Also, copy the client secret into the client->pswd.
+			 */
 			client->digest = crc32_bufs(challenge, strs[0]);
 			ast_copy_string(client->pswd, strs[0], sizeof(client->pswd));
 			ast_free(cp);
+			/* Check to see if the buflen has changed. If it has, reset the drain index.
+			 * Note we have to divide by 8 to convert back from bytes to match what is in
+			 * voter.conf.
+			 */
 			if (client->old_buflen && (client->buflen != client->old_buflen)) {
+				ast_debug(1, "VOTER client %s buflen changed from %i to %i, resetting drain index\n", client->name,
+					client->old_buflen / 8, client->buflen / 8);
 				client->drainindex = 0;
 			}
+			/* If the audio buffer exists and the buflen has changed, reallocate it.
+			 * We use a temporary buffer for the reallocation to preserve the original buffer
+			 * if re-allocation fails (which would return a null pointer, while leaving the
+			 * original buffer intact).
+			 */
 			if (client->audio && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->audio = ast_realloc(client->audio, client->buflen);
-				if (!client->audio) {
+				tempbuf = ast_realloc(client->audio, client->buflen);
+				if (!tempbuf) {
 					ast_config_destroy(cfg);
-					return -1;
+					voter_client_free_all();
+					return AST_MODULE_LOAD_FAILURE;
 				}
+				client->audio = tempbuf;
+				/* Fill the new buffer with silence. */
 				memset(client->audio, ULAW_SILENCE, client->buflen);
+				/* If the audio buffer doesn't exist, allocate it. */
 			} else if (!client->audio) {
 				client->audio = ast_malloc(client->buflen);
 				if (!client->audio) {
 					ast_config_destroy(cfg);
-					return -1;
+					/* If we fail to allocate the audio buffer, free the new client,
+					 * since it doesn't exist in the clients list, yet. Then free all
+					 * other clients */
+					if (newclient) {
+						voter_client_free(client);
+					}
+					voter_client_free_all();
+					return AST_MODULE_LOAD_FAILURE;
 				}
+				/* Fill the new buffer with silence. */
 				memset(client->audio, ULAW_SILENCE, client->buflen);
 			}
+			/* If the RSSI buffer exists and the buflen has changed, reallocate it.
+			 * We use a temporary buffer for the reallocation to preserve the original buffer
+			 * if re-allocation fails (which would return a null pointer, while leaving the
+			 * original buffer intact).
+			 */
 			if (client->rssi && client->old_buflen && (client->buflen != client->old_buflen)) {
-				client->rssi = ast_realloc(client->rssi, client->buflen);
-				if (!client->rssi) {
+				tempbuf = ast_realloc(client->rssi, client->buflen);
+				if (!tempbuf) {
 					ast_config_destroy(cfg);
-					return -1;
+					voter_client_free_all();
+					return AST_MODULE_LOAD_FAILURE;
 				}
+				client->rssi = tempbuf;
+				/* Fill the new RSSI buffer with zeros. */
 				memset(client->rssi, 0, client->buflen);
+				/* If the RSSI buffer doesn't exist, allocate it. Note that ast_calloc will
+				 * automatically initialize the memory to zero.
+				 */
 			} else if (!client->rssi) {
 				client->rssi = ast_calloc(1, client->buflen);
 				if (!client->rssi) {
 					ast_config_destroy(cfg);
-					return -1;
+					/* If we fail to allocate the RSSI buffer, free the new client,
+					 * since it doesn't exist in the clients list, yet. Then free all
+					 * other clients */
+					if (newclient) {
+						voter_client_free(client);
+					}
+					voter_client_free_all();
+					return AST_MODULE_LOAD_FAILURE;
 				}
 			}
-			/* If a new client, add it into list. */
+			/* If this is a new client, add it into list. */
 			if (newclient) {
+				ast_debug(1, "Adding new VOTER client %s to client list\n", client->name);
 				if (clients == NULL) {
 					clients = client;
 				} else {
@@ -4490,6 +4723,8 @@ static int reload(void)
 		}
 	}
 	ast_config_destroy(cfg);
+	/* Traverse the client list and perform validation checks. */
+	ast_debug(1, "Performing validation checks on VOTER clients\n");
 	for (client = clients; client; client = client->next) {
 		if (!client->reload) {
 			continue;
@@ -4497,7 +4732,8 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
-			return -1;
+			voter_client_free_all();
+			return AST_MODULE_LOAD_FAILURE;
 		}
 		for (client1 = clients; client1; client1 = client1->next) {
 			if (!client1->reload) {
@@ -4509,38 +4745,22 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
-				return -1;
+				voter_client_free_all();
+				return AST_MODULE_LOAD_FAILURE;
 			}
 		}
 	}
-	/* Remove all the clients that are no longer in the config. */
-	for (client = clients; client; client = client->next) {
-		if (client->reload) {
-			continue;
+	/* Remove all the clients that are no longer in the config and free their memory. */
+	ast_debug(1, "Removing outdated VOTER clients (moved or removed)\n");
+	for (client = clients; client;) {
+		struct voter_client *next = client->next;
+		if (!client->reload) {
+			ast_debug(1, "Removing outdated VOTER client %s from VOTER instance %i\n", client->name, client->nodenum);
+			voter_client_free(client);
 		}
-		if (client->audio) {
-			ast_free(client->audio);
-		}
-		if (client->rssi) {
-			ast_free(client->rssi);
-		}
-		if (client->gpsid) {
-			ast_free(client->gpsid);
-		}
-		for (client1 = clients; client1; client1 = client1->next) {
-			if (client1->next == client) {
-				break;
-			}
-		}
-		if (client1) {
-			client1->next = client->next;
-		} else {
-			clients = NULL;
-		}
-		ast_free(client);
-		client = clients;
+		client = next;
 	}
-	return 0;
+	return AST_MODULE_LOAD_SUCCESS;
 }
 
 /*!
@@ -6501,9 +6721,9 @@ static int unload_module(void)
  * reader and timer threads, allocates channel format capabilities, and registers
  * the channel driver so the Voter channel becomes available to Asterisk.
  *
- * \return 				0 on success; non-zero on failure (typically AST_MODULE_LOAD_DECLINE for
- *         				module load errors, or
- *						1 if the configuration could not be loaded).
+ * \return 				AST_MODULE_LOAD_SUCCESS (0) on success
+ *         				AST_MODULE_LOAD_DECLINE (1) for module load errors, or if
+ *						the configuration could not be loaded).
  */
 static int load_module(void)
 {
@@ -6539,6 +6759,13 @@ static int load_module(void)
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
+
+	/* Load the [general] options bindaddr, port, and utos here one time. They are immutable
+	 * and cannot be changed without restarting the module.
+	 *
+	 * The other [general] options, buflen, password, sanity, and puckit are
+	 * loaded in reload() so they can be changed at runtime with a reload.
+	 */
 	val = ast_variable_retrieve(cfg, "general", "port");
 	if (val) {
 		listen_port = (uint16_t) strtoul(val, NULL, 0);
@@ -6595,12 +6822,8 @@ static int load_module(void)
 	ast_mutex_lock(&voter_lock);
 	if (reload()) {
 		ast_log(LOG_ERROR, "Failed to reload configuration\n");
-		ast_timer_close(voter_thread_timer);
-		voter_thread_timer = NULL;
-		close(udp_socket);
-		udp_socket = -1;
 		ast_mutex_unlock(&voter_lock);
-		return AST_MODULE_LOAD_DECLINE;
+		return AST_MODULE_LOAD_FAILURE;
 	}
 	ast_mutex_unlock(&voter_lock);
 
@@ -6640,9 +6863,11 @@ static int load_module(void)
  *
  * This function is called when the module is reloaded. It locks the voter_lock mutex,
  * calls the reload() function to reload the configuration, and unlocks the mutex.
- * If reload() fails, it logs an error and preserves the existing socket and running configuration.
+ * If reload() fails, it logs an error and returns AST_MODULE_LOAD_FAILURE back to Asterisk,
+ * otherwise, it returns AST_MODULE_LOAD_SUCCESS.
  *
- *	 \return 				0 on success; non-zero on failure (typically -1 if the configuration could not be reloaded).
+ *	 \return 			AST_MODULE_LOAD_SUCCESS (0) on success
+ *         				AST_MODULE_LOAD_FAILURE (-1) on failure if the configuration could not be reloaded
  */
 static int reload_module(void)
 {
@@ -6652,9 +6877,11 @@ static int reload_module(void)
 	res = reload();
 	if (res) {
 		ast_log(LOG_ERROR, "Failed to reload configuration\n");
+		ast_mutex_unlock(&voter_lock);
+		return AST_MODULE_LOAD_FAILURE;
 	}
 	ast_mutex_unlock(&voter_lock);
-	return res; /* Return the result of the reload operation back to Asterisk*/
+	return AST_MODULE_LOAD_SUCCESS;
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Voter Radio Channel Driver",
