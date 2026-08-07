@@ -393,7 +393,6 @@ static char context[AST_MAX_EXTENSION] = "default";
 #define DELIMCHR ','
 #define QUOTECHR 34
 
-#define MAXSTREAMS 50
 #define MAXTHRESHOLDS 20
 
 #define GPS_WORK_FILE "/tmp/gps%s.tmp"
@@ -518,12 +517,6 @@ typedef struct {
 } VOTER_REC;
 
 typedef struct {
-	VTIME curtime;
-	uint8_t audio[FRAME_SIZE];
-	char str[152];
-} VOTER_STREAM;
-
-typedef struct {
 	uint32_t ipaddr;
 	uint16_t port;
 	uint16_t payload_type;
@@ -623,8 +616,6 @@ struct voter_pvt {
 	int testcycle;
 	int testindex;
 	struct voter_client *lastwon;
-	char *streams[MAXSTREAMS];
-	int nstreams;
 	float hpx[NTAPS_PL + 1];
 	float hpy[NTAPS_PL + 1];
 	int32_t hdx;
@@ -3919,11 +3910,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		} else {
 			p->mixminus = 0;
 		}
-		val = ast_variable_retrieve(cfg, (char *) data, "streams");
-		if (val) {
-			cp = ast_strdup(val);
-			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
-		}
 		val = ast_variable_retrieve(cfg, (char *) data, "txctcss");
 		if (val) {
 			ast_copy_string(p->txctcssfreq, val, sizeof(p->txctcssfreq));
@@ -4237,7 +4223,7 @@ static int reload(void)
 
 	/* Load/reload the following options that are associated with each defined
 	 * VOTER instance from voter.conf:
-	 * linger, plfilter, hostdeemp, mixminus, streams, txctcss, txctcsslevel,
+	 * linger, plfilter, hostdeemp, mixminus, txctcss, txctcsslevel,
 	 * txtoctype, thresholds, gtxgain
 	 */
 	ast_debug(1, "Loading per-instance options for each VOTER instance from voter.conf\n");
@@ -4283,15 +4269,6 @@ static int reload(void)
 			p->mixminus = ast_true(val);
 		} else {
 			p->mixminus = 0;
-		}
-		val = ast_variable_retrieve(cfg, (char *) data, "streams");
-		if (p->nstreams && p->streams[0]) {
-			ast_free(p->streams[0]);
-		}
-		p->nstreams = 0;
-		if (val) {
-			cp = ast_strdup(val);
-			p->nstreams = finddelim(cp, p->streams, ARRAY_LEN(p->streams));
 		}
 		/* Backup the old CTCSS frequency, so we can tell if it changed when
 		 * we read in the txctcss variable.
@@ -4452,9 +4429,6 @@ static int reload(void)
 				continue;
 			}
 			if (!strcmp(v->name, "txtoctype")) {
-				continue;
-			}
-			if (!strcmp(v->name, "streams")) {
 				continue;
 			}
 			if (!strcmp(v->name, "thresholds")) {
@@ -4985,11 +4959,11 @@ static void *voter_timer(void *data)
  */
 static void *voter_reader(void *data)
 {
-	char buf[4096], timestr[100], hasmastered, *cp, *cp1;
+	char buf[4096], timestr[100], hasmastered;
 	char gps1[300], gps2[300], isproxy;
 	char client_ip[INET_ADDRSTRLEN];
 	char client1_ip[INET_ADDRSTRLEN];
-	struct sockaddr_in sin, sin_stream, psin;
+	struct sockaddr_in sin, psin;
 	struct voter_pvt *p;
 	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0, buffer_bytes_avail;
 	struct ast_frame *f1, fr;
@@ -5002,7 +4976,6 @@ static void *voter_reader(void *data)
 	VOTER_PROXY_HEADER proxy;
 	VOTER_GPS *vgp;
 	VOTER_REC rec;
-	VOTER_STREAM stream;
 	time_t timestuff, t;
 #pragma pack(push)
 #pragma pack(1)
@@ -6307,46 +6280,6 @@ static void *voter_reader(void *data)
 										}
 										p->buf[AST_FRIENDLY_OFFSET + i] = AST_LIN2MU(ix);
 									}
-								}
-								/*!
-								 * \todo VE7FET we should remove "streams" support. It was associated
-								 * with votmond and votermon, which are no longer supported.
-								 */
-								/* This next bit is used to stream the audio from the current buffer
-								 * (which should be the voted client?) to the stream(s) as defined
-								 * in voter.conf.
-								 */
-								stream.curtime = master_time;
-								memcpy(stream.audio, p->buf + AST_FRIENDLY_OFFSET, FRAME_SIZE);
-								ast_copy_string(stream.str, maxclient->name, sizeof(stream.str));
-								for (client = clients; client; client = client->next) {
-									int size;
-
-									/* If the client doesn't belong to this VOTER instance, skip it. */
-									if (client->nodenum != p->nodenum) {
-										continue;
-									}
-
-									size = strlen(stream.str);
-									snprintf(stream.str + size, sizeof(stream.str) - size, ",%s=%d", client->name, client->lastrssi);
-								}
-								for (i = 0; i < p->nstreams; i++) {
-									cp = ast_strdup(p->streams[i]);
-									if (!cp) {
-										break;
-									}
-									cp1 = strchr(cp, ':');
-									if (cp1) {
-										*cp1 = 0;
-										j = atoi(cp1 + 1);
-									} else {
-										j = listen_port;
-									}
-									sin_stream.sin_family = AF_INET;
-									sin_stream.sin_addr.s_addr = inet_addr(cp);
-									sin_stream.sin_port = htons(j);
-									sendto(udp_socket, &stream, sizeof(stream), 0, (struct sockaddr *) &sin_stream, sizeof(sin_stream));
-									ast_free(cp);
 								}
 								/* Update p->lastwon if the current selected maxclient has changed. */
 								if (maxclient != p->lastwon) {
