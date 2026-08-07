@@ -2509,7 +2509,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	struct ast_format_cap *cap;
 
 	ast_debug(1, "Attempting Reconnect");
-	/* rpt_make_call is blocking, long dns lookups result in exceptionally long queue warnings
+	/* rpt_make_call and node_lookup are blocking, long dns lookups result in exceptionally long queue warnings
 	 * autoservice handles "eating" the frames and eliminating the warning.
 	 */
 	ast_autoservice_start(l->pchan);
