@@ -1444,10 +1444,10 @@ static int rad_rxwait(int fd, int ms)
 {
 	struct pollfd fds[1];
 	int res, timeout;
-	fds[0].fd = fd;			// Asterisk CLI file descriptor
-	fds[0].events = POLLIN; // Monitor for incoming data
+	fds[0].fd = fd;			/* Asterisk CLI file descriptor */
+	fds[0].events = POLLIN; /* Monitor for incoming data */
 
-	timeout = ms; // Timeout in milliseconds
+	timeout = ms; /* Timeout in milliseconds */
 
 	/* Poll the fd. Wait for a keypress to exit. */
 	res = ast_poll(fds, 1, timeout);
@@ -4594,7 +4594,7 @@ static int reload(void)
 				} else if (!strcasecmp(strs[i], "master")) {
 					client->ismaster = 1;
 					hasmaster = 1;
-					client->mix = 0; // Reset the mix flag if the config changed to now be a voting client
+					client->mix = 0; /* Reset the mix flag if the config changed to now be a voting client */
 				} else if (!strcasecmp(strs[i], "adpcm")) {
 					client->doadpcm = 1;
 				} else if (!strcasecmp(strs[i], "nodeemp")) {
@@ -4732,7 +4732,6 @@ static int reload(void)
 		if (client->digest == 0) {
 			ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER client %s has invalid authentication digest (can not be 0)!!!\n",
 				client->name);
-			// voter_client_free(client);
 			voter_client_free_all();
 			return AST_MODULE_LOAD_FAILURE;
 		}
@@ -4746,8 +4745,6 @@ static int reload(void)
 			if (client->digest == client1->digest) {
 				ast_log(LOG_ERROR, "Can not load chan_voter -- VOTER clients %s and %s have same authentication digest!!!\n",
 					client->name, client1->name);
-				// voter_client_free(client);
-				// voter_client_free(client1);
 				voter_client_free_all();
 				return AST_MODULE_LOAD_FAILURE;
 			}
