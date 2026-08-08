@@ -122,79 +122,6 @@ next time those positions in the physical buffer are examined, they will not con
 put there, since all client's buffers are significant regardless of whether they were populated or not. This
 allows for the true 'connectionless-ness' of this protocol implementation.
 
-
-Redundant "Proxy" Mode:
-
-A "Redundant" (backup) server may be set up, so that if the "primary" server fails,
-clients can detect this failure, and connect to the designated "backup" (or "secondary")
-server.
-
-Needless to say, since Internet connectivity is not by any means guaranteed to be consistent,
-it is possible for some clients to have working connectivity to the "primary" server and not
-others, even though the "primary" server is functional.
-
-If this was to occur, actual voting and/or simulcast clients would have a "broken" system
-(being that all the clients need to be on the same server for any sort of functional operation).
-
-To eliminate this possibility, functionality has been added so that a "secondary" server
-will "proxy" (forward) all of its VOTER packets to the "primary" (if the "primary" is
-on line), and the "primary" will generate all of the outbound VOTER packets, which (for clients
-"connected" to the "secondary" server) get sent to the "secondary" server to distribution to
-its clients.
-
-This allows for a "unity" of all of the clients on a network, even though they may be connected
-to different servers.
-
-In addition, it is assumed that "permanent linking" (at least of some sort) will be provided between
-the channel side of the chan_voter instances (presumably through a "perma-link" provided by app_rpt).
-When the "secondary" is "proxying" (to the "primary") it does not provide direct connectivity to/from
-its locally-connected clients, thus allowing them to "connect" via the "primary" server instead. In
-"normal" mode, it works "normally".
-
-The operation is performed by more-or-less "encapsulating" the VOTER packets received by the "secondary"
-server, and forwarding them on to the "primary" server, where they are "un-encapsulated" and appear to
-that serer to be coming from clients connected directly to it (and keeps track of which ones are connected
-in this manner, etc). When it needs to send VOTER packets to a client connected through the "secondary",
-it "encapsulates" them, and sends them to the "secondary", where they get "un-encapsulated" and sent
-to their associated connected clients, based upon information in the "encapsulation".
-
-If the "secondary" server loses (or does not make) connection to the "primary", it operates as normal, until
-such time as it can make the connection.
-
-The server redundancy feature is local to each chan_voter instance.
-
-For each chan_voter instance served by both the "primary" and "secondary" servers, the client
-list (parameters, etc) *MUST* be identical.
-
-In addition, the following things must be added uniquely on each server:
-
-In the "primary" server, there needs to be a "primary connectivity" client specified for each
-"secondary" server for which it is "primary". Basically, this is a client that does NOTHING other
-then providing a means by which the "secondary" can determine whether the "primary" is on line.
-It is a standard chan_voter client, with nothing else specified other then its password. Again,
-although it is a "legitimate" client (technically), its only purpose *MUST* be to allow the secondary
-server to connect to it.
-
-The "primary" server also needs to have the following in all of its instances that require redundancy:
-
-isprimary = y
-
-The "secondary" server needs to have the following in all of its instances that require redundancy:
-
-primary = 12.34.56.78:1667,mypswd
-
-(where 12.34.56.78:1667 is the IPADDDR:PORT of the "primary" server, and mypswd is the password of the
-"primary connectivity" client)
-
-Note: Master timing sources *MUST* be local to their associated server, and therefore, can not be operated
-in a redundant configuration. If a radio needs server redundancy, it CAN NOT be connected to a master timing
-source. Also, the master timing source MUST be associated with a chan_voter instance that DOES NOT have
-redundancy configured for it, even if a separate instance needs to be created just for this purpose.
-
-Also, if Non-GPS-based operation is all that is needed, just the use of redundancy within the clients is
-sufficient, and does not require any use of the server redundancy features.
-
-
 "hostdeemp" (app_rpt duplex=3) mode:
 
 As of Voter board firmware 1.19 (7/19/2013), there is a set of options in both the firmware ("Offline Menu item
@@ -401,9 +328,6 @@ static char context[AST_MAX_EXTENSION] = "default";
 /* DSP filter taps */
 #define NTAPS_PL 6
 
-#define IS_CLIENT_PROXY(x) (x->proxy_sin.sin_family == AF_INET)
-#define SEND_PRIMARY(x) (x->primary.sin_family == AF_INET)
-
 /* Defines for constructing POCSAG paging packets */
 #define PAGER_SRC "PAGER"
 #define ENDPAGE_STR "ENDPAGE"
@@ -424,7 +348,7 @@ static char context[AST_MAX_EXTENSION] = "default";
 #define VOTER_PAYLOAD_ADPCM 3
 #define VOTER_PAYLOAD_FUTURE 4 /* Reserved for future use */
 #define VOTER_PAYLOAD_PING 5
-#define VOTER_PAYLOAD_PROXY 0xf000
+#define VOTER_PAYLOAD_PROXY 0xf000 /* Proxy no longer used */
 
 /* Define voter priority levels. */
 #define PRIO_NORMAL 0	/* Clients with a priority of 0 are "normal" and have no special priority */
@@ -515,14 +439,6 @@ typedef struct {
 	uint8_t audio[FRAME_SIZE];
 	uint8_t rssi;
 } VOTER_REC;
-
-typedef struct {
-	uint32_t ipaddr;
-	uint16_t port;
-	uint16_t payload_type;
-	uint8_t flags;
-	char challenge[VOTER_CHALLENGE_LEN];
-} VOTER_PROXY_HEADER;
 #pragma pack(pop)
 
 /*!
@@ -569,7 +485,6 @@ struct voter_client {
 	struct timeval lastsenttime;
 	VTIME lastgpstime;
 	VTIME lastmastergpstime;
-	struct sockaddr_in proxy_sin;
 	char saved_challenge[VOTER_CHALLENGE_LEN];
 	short lastaudio[FRAME_SIZE];
 	struct timeval ping_txtime;
@@ -646,9 +561,6 @@ struct voter_pvt {
 	ast_cond_t xmit_cond;
 	pthread_t xmit_thread;
 	pthread_t primary_thread;
-	struct sockaddr_in primary;
-	char primary_pswd[VOTER_NAME_LEN];
-	char primary_challenge[VOTER_CHALLENGE_LEN];
 	float gtxgain;
 	FILE *recfp;
 	short lastaudio[FRAME_SIZE];
@@ -1016,10 +928,6 @@ static int voter_hangup(struct ast_channel *ast)
 		ast_cond_signal(&p->xmit_cond);
 		ast_mutex_unlock(&p->xmit_lock);
 		pthread_join(p->xmit_thread, NULL);
-	}
-	if (p->primary_thread) {
-		p->kill_primary_thread = 1;
-		pthread_join(p->primary_thread, NULL);
 	}
 	ast_mutex_unlock(&voter_lock);
 	ast_free(p);
@@ -1524,9 +1432,6 @@ static char *voter_complete_connected_client_list(const char *line, const char *
 	}
 	ast_mutex_lock(&voter_lock);
 	for (client = clients; client; client = client->next) {
-		if (IS_CLIENT_PROXY(client)) {
-			continue;
-		}
 		if (!client->heardfrom) {
 			continue;
 		}
@@ -1685,13 +1590,8 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 			if (!client->heardfrom) {
 				astman_append(ses, " Inactive");
 			}
-			if (IS_CLIENT_PROXY(client)) {
-				astman_append(ses, "\r\n");
-				astman_append(ses, "IP: %s:%d (Proxied)\r\n", ast_inet_ntoa(client->proxy_sin.sin_addr), ntohs(client->proxy_sin.sin_port));
-			} else {
-				astman_append(ses, "\r\n");
-				astman_append(ses, "IP: %s:%d\r\n", ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
-			}
+			astman_append(ses, "\r\n");
+			astman_append(ses, "IP: %s:%d\r\n", ast_inet_ntoa(client->sin.sin_addr), ntohs(client->sin.sin_port));
 			astman_append(ses, "RSSI: %d\r\n", client->lastrssi);
 		}
 	}
@@ -1834,10 +1734,7 @@ static void voter_display(int fd, const struct voter_pvt *p)
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if (p->priconn && !client->mix) {
-				continue;
-			}
-			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
+			if (!client->respdigest) {
 				continue;
 			}
 			if (!client->heardfrom) {
@@ -1869,10 +1766,7 @@ static void voter_display(int fd, const struct voter_pvt *p)
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if (p->priconn && !client->mix) {
-				continue;
-			}
-			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
+			if (!client->respdigest) {
 				continue;
 			}
 			if (!client->heardfrom) {
@@ -2127,10 +2021,6 @@ static int voter_do_ping(int fd, int argc, const char *const *argv)
 	ast_mutex_lock(&voter_lock);
 	/* Traverse the client list to find the matching client provided in argv[2]. */
 	for (client = clients; client; client = client->next) {
-		/* Skip clients connected via proxy. */
-		if (IS_CLIENT_PROXY(client)) {
-			continue;
-		}
 		/* Skip clients that aren't connected. */
 		if (!client->heardfrom) {
 			continue;
@@ -2210,7 +2100,7 @@ static char *handle_cli_ping(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 }
 
 /*!
- * \brief Handle the Asterisl CLI "voter prio" request to update or display per-client
+ * \brief Handle the Asterisk CLI "voter prio" request to update or display per-client
  *        priority settings for a VOTER instance.
  *
  * When invoked with just an instance number, prints all clients and their effective/override
@@ -3104,148 +2994,6 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 }
 
 /*!
- * \brief Manage the UDP-based primary-client keepalive and authentication for a node.
- *
- * Sends periodic authentication and keepalive packets to the configured primary,
- * processes incoming primary responses to establish/maintain a primary session,
- * and updates per-client proxy state when the primary connection is lost.
- *
- * \note This is only used for redundant server applications
- * \param data 			Pointer to the per-node state struct (struct voter_pvt *).
- * \return     			NULL when the thread exits.
- */
-static void *voter_primary_client(void *data)
-{
-	struct voter_pvt *p = (struct voter_pvt *) data;
-	int fd, pri_socket, ms;
-	char buf[4096];
-	struct sockaddr_in sin;
-	socklen_t fromlen;
-	ssize_t recvlen;
-	struct voter_client *client;
-	struct timeval lasttx, lastrx, currenttime;
-	VOTER_PACKET_HEADER *vph;
-	uint32_t resp_digest, digest, mydigest;
-#pragma pack(push)
-#pragma pack(1)
-	struct {
-		VOTER_PACKET_HEADER vp;
-		char flags;
-	} authpacket;
-#pragma pack(pop)
-
-	ast_debug(3, "VOTER %i: Primary client thread started\n", p->nodenum);
-	if ((pri_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-		ast_log(LOG_ERROR, "Unable to create new socket for VOTER primary connection for instance %d\n", p->nodenum);
-		pthread_exit(NULL);
-		return NULL;
-	}
-	resp_digest = 0;
-	digest = 0;
-	lasttx = (struct timeval) { 0 };
-	lastrx = (struct timeval) { 0 };
-	ast_mutex_lock(&voter_lock);
-	p->primary_challenge[0] = 0;
-	while (run_forever && !ast_shutting_down() && !p->kill_primary_thread) {
-		ast_mutex_unlock(&voter_lock);
-		ms = 100;										  /* 100ms timeout */
-		fd = ast_waitfor_n_fd(&pri_socket, 1, &ms, NULL); /* Poll the UDP socket, looking for data */
-		ast_mutex_lock(&voter_lock);
-		/* Check the returned fd and see if there is a datagram ready to process.
-		 * fd will be positive (and equal to pri_socket) if there is valid activity on the UDP socket.
-		 */
-
-		currenttime = ast_radio_tvnow();
-		memset(&authpacket, 0, sizeof(authpacket));
-		if (!p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(currenttime, lasttx) >= 500))) {
-			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
-			ast_copy_string((char *) authpacket.vp.challenge, challenge, sizeof(authpacket.vp.challenge));
-			authpacket.vp.digest = htonl(resp_digest);
-			authpacket.flags = FLAG_MIX;
-			ast_debug(3, "VOTER %i: Sent primary client auth to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
-				ntohs(p->primary.sin_port));
-			sendto(pri_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
-			lasttx = currenttime;
-		}
-		/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
-		 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
-		 * with this packet.
-		 */
-		if (p->priconn && (ast_tvzero(lasttx) || (voter_tvdiff_ms(currenttime, lasttx) >= 1000))) {
-			authpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-			authpacket.vp.curtime.vtime_nsec = htonl(voter_timing_count);
-			ast_copy_string((char *) authpacket.vp.challenge, challenge, sizeof(authpacket.vp.challenge));
-			authpacket.vp.digest = htonl(resp_digest);
-			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
-			ast_debug(5, "VOTER %i: Sent primary client keepalive to %s:%d\n", p->nodenum, ast_inet_ntoa(p->primary.sin_addr),
-				ntohs(p->primary.sin_port));
-			sendto(pri_socket, &authpacket, sizeof(authpacket) - 1, 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
-			lasttx = currenttime;
-		}
-		if (p->priconn && (ast_tvzero(lastrx) || (voter_tvdiff_ms(currenttime, lastrx) >= 2000))) {
-			p->priconn = 0;
-			digest = 0;
-			p->primary_challenge[0] = 0;
-			ast_verb(3, "VOTER %i: Primary client for %d Lost connection!!!\n", p->nodenum, p->nodenum);
-			for (client = clients; client; client = client->next) {
-				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				if (!IS_CLIENT_PROXY(client)) {
-					continue;
-				}
-				client->respdigest = 0;
-				client->heardfrom = 0;
-			}
-		}
-
-		/* Only process a datagram if the socket is ready with valid data, otherwise skip (continue). */
-		if (fd != pri_socket) {
-			continue;
-		}
-
-		/* At this point fd == pri_socket, there is data available to process. */
-		fromlen = sizeof(struct sockaddr_in);
-		recvlen = recvfrom(pri_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
-
-		if (recvlen < 0) {
-			ast_log(LOG_ERROR, "recvfrom() failed: %s\n", strerror(errno));
-			continue;
-		}
-		if ((size_t) recvlen >= sizeof(VOTER_PACKET_HEADER)) { /* If we got something worthwhile */
-			vph = (VOTER_PACKET_HEADER *) buf;
-			ast_debug(3, "VOTER %i: Received primary client network packet, len %d payload %d challenge %s digest %08x\n",
-				p->nodenum, (int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
-			/* If this is a new session. */
-			if (strcmp((char *) vph->challenge, p->primary_challenge)) {
-				resp_digest = crc32_bufs((char *) vph->challenge, p->primary_pswd);
-				ast_copy_string(p->primary_challenge, (char *) vph->challenge, sizeof(p->primary_challenge));
-				p->priconn = 0;
-			} else {
-				if (!digest || !vph->digest || (digest != ntohl(vph->digest)) ||
-					(ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) || (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS)) {
-					mydigest = crc32_bufs(challenge, password);
-					if (mydigest == ntohl(vph->digest)) {
-						digest = mydigest;
-						if (!p->priconn) {
-							ast_verb(3, "VOTER %i: Primary client connected (with challenge=%s)\n", p->nodenum, p->primary_challenge);
-						}
-						p->priconn = 1;
-						lastrx = ast_radio_tvnow();
-					} else {
-						p->priconn = 0;
-						digest = 0;
-					}
-				}
-			}
-		}
-	}
-	pthread_exit(NULL);
-	return NULL;
-}
-
-/*!
  * \brief Manage and dispatch transmit activity from the Asterisk core for a single VOTER instance.
  *
  * Runs the per-node transmit worker: consumes queued Asterisk frames and pager frames,
@@ -3272,12 +3020,6 @@ static void *voter_xmit(void *data)
 		char rssi;
 		char audio[FRAME_SIZE + 3];
 	} audiopacket;
-	struct {
-		VOTER_PACKET_HEADER vp;
-		VOTER_PROXY_HEADER vprox;
-		char rssi;
-		char audio[FRAME_SIZE + 3];
-	} proxy_audiopacket;
 	struct {
 		VOTER_PACKET_HEADER vp;
 		unsigned int seqno;
@@ -3454,12 +3196,8 @@ static void *voter_xmit(void *data)
 				if (client->nodenum != p->nodenum) {
 					continue;
 				}
-				/* Skip if this client is connected from the primary server AND is NOT a mix mode client */
-				if (p->priconn && !client->mix) {
-					continue;
-				}
-				/* Skip if this client isn't authenticated AND it isn't a proxy client (from the redundant server) */
-				if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
+				/* Skip if this client isn't authenticated */
+				if (!client->respdigest) {
 					continue;
 				}
 				/* Skip if we haven't heard from this client in a while */
@@ -3531,28 +3269,12 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
 				if (client->totransmit && !client->txlockout) {
-					if (IS_CLIENT_PROXY(client)) {
-						memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
-						proxy_audiopacket.vp = audiopacket.vp;
-						proxy_audiopacket.rssi = audiopacket.rssi;
-						memcpy(proxy_audiopacket.audio, audiopacket.audio, sizeof(audiopacket.audio));
-						proxy_audiopacket.vprox.ipaddr = client->proxy_sin.sin_addr.s_addr;
-						proxy_audiopacket.vprox.port = client->proxy_sin.sin_port;
-						proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
-						proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
-						proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-						proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-						ast_debug(6, "VOTER %i: Sending (proxied) ulaw TX audio packet to client %s digest %08x\n", p->nodenum,
-							client->name, proxy_audiopacket.vp.digest);
-						sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
-							sizeof(client->sin));
-					} else {
-						ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum,
-							client->name, client->respdigest);
-						/* Send the ulaw audio packet over the wire to the client for transmitting */
-						sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
-							sizeof(client->sin));
-					}
+					ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum,
+						client->name, client->respdigest);
+					/* Send the ulaw audio packet over the wire to the client for transmitting */
+					sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
+						sizeof(client->sin));
+					
 					/* Update when this client last sent an audio packet */
 					client->lastsenttime = ast_radio_tvnow();
 				}
@@ -3589,12 +3311,8 @@ static void *voter_xmit(void *data)
 					if (client->nodenum != p->nodenum) {
 						continue;
 					}
-					/* Skip if this client is connected from the primary server AND is NOT a mix mode client */
-					if (p->priconn && !client->mix) {
-						continue;
-					}
-					/* Skip if this client isn't authenticated AND it isn't a proxy client (from the redundant server) */
-					if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
+					/* Skip if this client isn't authenticated */
+					if (!client->respdigest) {
 						continue;
 					}
 					/* Skip if we haven't heard from this client in a while */
@@ -3611,28 +3329,12 @@ static void *voter_xmit(void *data)
 #ifndef ADPCM_LOOPBACK
 					/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
 					if (client->totransmit && !client->txlockout) {
-						if (IS_CLIENT_PROXY(client)) {
-							memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
-							proxy_audiopacket.vp = audiopacket.vp;
-							proxy_audiopacket.rssi = audiopacket.rssi;
-							memcpy(proxy_audiopacket.audio, audiopacket.audio, sizeof(audiopacket.audio));
-							proxy_audiopacket.vprox.ipaddr = client->proxy_sin.sin_addr.s_addr;
-							proxy_audiopacket.vprox.port = client->proxy_sin.sin_port;
-							proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
-							proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
-							proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-							proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-							ast_debug(6, "VOTER %i: Sending (proxied) ADPCM TX audio packet to client %s digest %08x\n",
-								p->nodenum, client->name, proxy_audiopacket.vp.digest);
-							sendto(udp_socket, &proxy_audiopacket, sizeof(proxy_audiopacket), 0, (struct sockaddr *) &client->sin,
-								sizeof(client->sin));
-						} else {
-							ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
-								client->name, client->respdigest);
-							/* Send the ADPCM audio packet over the wire to the client for transmitting */
-							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
-								sizeof(client->sin));
-						}
+						ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
+							client->name, client->respdigest);
+						/* Send the ADPCM audio packet over the wire to the client for transmitting */
+						sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
+							sizeof(client->sin));
+						
 						/* Update when this client last sent an audio packet */
 						client->lastsenttime = ast_radio_tvnow();
 					}
@@ -3660,10 +3362,6 @@ static void *voter_xmit(void *data)
 			}
 			/* Skip clients that aren't connected. */
 			if (!client->heardfrom) {
-				continue;
-			}
-			/* Skip clients connected via a proxy. */
-			if (IS_CLIENT_PROXY(client)) {
 				continue;
 			}
 			/* If we are pinging a client, see if we're finished yet. If we are, the
@@ -3717,10 +3415,7 @@ static void *voter_xmit(void *data)
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
-			if (!client->respdigest && !IS_CLIENT_PROXY(client)) {
-				continue;
-			}
-			if (p->priconn && !client->mix && !IS_CLIENT_PROXY(client)) {
+			if (!client->respdigest) {
 				continue;
 			}
 			if (!client->heardfrom) {
@@ -3737,26 +3432,10 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
 				audiopacket.vp.digest = htonl(client->respdigest);
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				if (IS_CLIENT_PROXY(client)) {
-					memset(&proxy_audiopacket, 0, sizeof(proxy_audiopacket));
-					proxy_audiopacket.vp = audiopacket.vp;
-					proxy_audiopacket.rssi = audiopacket.rssi;
-					memcpy(proxy_audiopacket.audio, audiopacket.audio, sizeof(audiopacket.audio));
-					proxy_audiopacket.vprox.ipaddr = client->proxy_sin.sin_addr.s_addr;
-					proxy_audiopacket.vprox.port = client->proxy_sin.sin_port;
-					proxy_audiopacket.vprox.payload_type = proxy_audiopacket.vp.payload_type;
-					proxy_audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
-					proxy_audiopacket.vp.digest = htonl(crc32_bufs(client->saved_challenge, client->pswd));
-					proxy_audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-					ast_debug(5, "VOTER %i: Sending (proxied) keepalive packet to client %s digest %08x\n", p->nodenum,
-						client->name, proxy_audiopacket.vp.digest);
-					sendto(udp_socket, &proxy_audiopacket, sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), 0,
-						(struct sockaddr *) &client->sin, sizeof(client->sin));
-				} else {
-					ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-					sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
-						sizeof(client->sin));
-				}
+				ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+				sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
+					sizeof(client->sin));
+				
 				/* Update when this client last sent a keepalive packet */
 				client->lastsenttime = ast_radio_tvnow();
 			}
@@ -3787,7 +3466,7 @@ static void *voter_xmit(void *data)
 static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
 	const struct ast_channel *requestor, const char *data, int *cause)
 {
-	int i, j;
+	int i;
 	struct voter_pvt *p, *p1;
 	struct ast_channel *chan = NULL;
 	char *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
@@ -3940,40 +3619,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 				p->txtoctype = TOC_NOTONE;
 			}
 		}
-		/* If this is going to be part of a redundant server configuration, load the primary config directives. */
-		memset(&p->primary, 0, sizeof(p->primary));
-		val = ast_variable_retrieve(cfg, (char *) data, "primary");
-		if (val) {
-			cp = ast_strdup(val);
-			if (!cp) {
-				return NULL;
-			}
-			j = finddelim(cp, strs, ARRAY_LEN(strs));
-			if (j < 2) {
-				ast_log(LOG_ERROR, "Channel %s: primary config not specified properly in %s\n", ast_channel_name(chan), config);
-			} else {
-				cp1 = strchr(strs[0], ':');
-				if (cp1) {
-					*cp1 = 0;
-					j = atoi(cp1 + 1);
-				} else {
-					j = listen_port;
-					ast_log(LOG_NOTICE, "Channel %s: Primary UDP port not configured, using default port %i\n", ast_channel_name(chan), j);
-				}
-				p->primary.sin_family = AF_INET;
-				p->primary.sin_addr.s_addr = inet_addr(strs[0]);
-				p->primary.sin_port = htons(j);
-				ast_copy_string(p->primary_pswd, strs[1], sizeof(p->primary_pswd));
-			}
-			ast_free(cp);
-		}
-		val = ast_variable_retrieve(cfg, (char *) data, "isprimary");
-		if (val) {
-			p->isprimary = ast_true(val);
-			ast_log(LOG_NOTICE, "Channel %s: Found isprimary directive, this instance will be the primary server\n", ast_channel_name(chan));
-		} else {
-			p->isprimary = 0;
-		}
 		val = ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
 			cp = ast_strdup(val);
@@ -4061,9 +3706,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	}
 	ast_config_destroy(cfg);
 	ast_pthread_create(&p->xmit_thread, NULL, voter_xmit, p);
-	if (SEND_PRIMARY(p)) {
-		ast_pthread_create(&p->primary_thread, NULL, voter_primary_client, p);
-	}
 	return chan;
 }
 
@@ -4457,12 +4099,6 @@ static int reload(void)
 				continue;
 			}
 			if (!strcmp(v->name, "linger")) {
-				continue;
-			}
-			if (!strcmp(v->name, "primary")) {
-				continue;
-			}
-			if (!strcmp(v->name, "isprimary")) {
 				continue;
 			}
 			if (!strncasecmp(v->name, "transmit", 8)) {
@@ -4970,10 +4606,10 @@ static void *voter_timer(void *data)
 static void *voter_reader(void *data)
 {
 	char buf[4096], timestr[100], hasmastered;
-	char gps1[300], gps2[300], isproxy;
+	char gps1[300], gps2[300];
 	char client_ip[INET_ADDRSTRLEN];
 	char client1_ip[INET_ADDRSTRLEN];
-	struct sockaddr_in sin, psin;
+	struct sockaddr_in sin;
 	struct voter_pvt *p;
 	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0, buffer_bytes_avail;
 	struct ast_frame *f1, fr;
@@ -4983,7 +4619,6 @@ static void *voter_reader(void *data)
 	FILE *gpsfp;
 	struct voter_client *client = NULL, *client1, *maxclient, *lastmaster;
 	VOTER_PACKET_HEADER *vph;
-	VOTER_PROXY_HEADER proxy;
 	VOTER_GPS *vgp;
 	VOTER_REC rec;
 	time_t timestuff, t;
@@ -5000,11 +4635,6 @@ static void *voter_reader(void *data)
 		VOTER_PACKET_HEADER vp;
 		char flags;
 	} authpacket;
-	struct {
-		VOTER_PACKET_HEADER vp;
-		VOTER_PROXY_HEADER vprox;
-		char flags;
-	} proxy_authpacket;
 	struct {
 		VOTER_PACKET_HEADER vp;
 		unsigned int seqno;
@@ -5082,7 +4712,6 @@ static void *voter_reader(void *data)
 		if (!check_client_sanity && master_port) {
 			sin.sin_port = htons(master_port);
 		}
-		isproxy = 0;
 
 		/* We check (further down) during authentication to see if a client can connect to a valid Asterisk channel,
 		 * and update no_ast_channel accordingly. If we didn't find a valid Asterisk channel, we do not want to
@@ -5119,7 +4748,6 @@ static void *voter_reader(void *data)
 		 */
 		if (!client && (ntohs(vph->payload_type) == VOTER_PAYLOAD_AUTH) && !ntohl(vph->digest)) {
 			memset(&authpacket, 0, sizeof(authpacket));
-			memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
 
 			/* Our unique challenge is created in load_module. Copy our challenge into
 			 * the packet header.
@@ -5140,18 +4768,9 @@ static void *voter_reader(void *data)
 			authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 			authpacket.flags = 0;
 
-			/* Do the same for proxy authentication packets. */
-			proxy_authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
-			proxy_authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
-			proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
-			proxy_authpacket.flags = 0;
-
 			/* We have a new client connecting that hasn't been authenticated, yet. Our authentication
 			 * packet header is loaded with our challenge and our digest (which is based on their
 			 * challenge and our host password).
-			 *
-			 * Figure out if this authentication needs to be sent via a proxy server, or direct, and
-			 * send it accordingly.
 			 *
 			 * The first time we send a packet, we don't know who the client is (since they need to respond
 			 * with their own digest that is based on their password... which we use to match to the
@@ -5162,25 +4781,13 @@ static void *voter_reader(void *data)
 			 *
 			 * After a client is authenticated, vph->digest gets set, and we start normal packet processing.
 			 */
-			/*! \todo VE7FET this is broken (and it appears to have been broken previous to shuffling
-			 * the code around). isproxy is always 0 at this point, so we never send the proper auth
-			 * packet to proxy clients. To be fixed in a future update.
-			 */
-			if (isproxy) {
-				ast_debug(2, "Sending (proxied) initial packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
-					ntohl(authpacket.vp.digest), password);
-				proxy_authpacket.flags = authpacket.flags;
-				proxy_authpacket.vprox.ipaddr = sin.sin_addr.s_addr;
-				proxy_authpacket.vprox.port = sin.sin_port;
-				proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
-				sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
-			} else {
-				authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
-				ast_debug(2, "Sending initial packet payload %i challenge %s digest %08x password %s to client %s\n",
-					authpacket.vp.payload_type, authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
+
+			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
+			ast_debug(2, "Sending initial packet payload %i challenge %s digest %08x password %s to client %s\n",
+				authpacket.vp.payload_type, authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
 					((client) ? client->name : "UNKNOWN"));
-				sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
-			}
+			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+			
 			continue;
 		}
 
@@ -5336,8 +4943,6 @@ static void *voter_reader(void *data)
 			 * update the client's sin structure with this information.
 			 */
 			client->sin = sin;
-			/*Reset the client->proxy_sin IP structure to zero to prevent stale proxy IP information. */
-			memset(&client->proxy_sin, 0, sizeof(client->proxy_sin));
 
 			/* Print the address and port the client is connecting from */
 			ast_debug(2, "Client %s connecting from IP: %s:%d\r\n", client->name, ast_inet_ntoa(client->sin.sin_addr),
@@ -5377,28 +4982,13 @@ static void *voter_reader(void *data)
 			 */
 			authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 
-			/* Do the same for proxy authentication packets. */
-			proxy_authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
-			proxy_authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
-			proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
-
 			/* Send the response packet to the client. */
-			/*! \todo VE7FET Remember, isproxy is broken... need to fix that whole thing */
-			if (isproxy) {
-				ast_debug(2, "Sending (proxied) auth/config packet challenge %s digest %08x password %s\n",
-					authpacket.vp.challenge, ntohl(authpacket.vp.digest), password);
-				proxy_authpacket.flags = authpacket.flags;
-				proxy_authpacket.vprox.ipaddr = sin.sin_addr.s_addr;
-				proxy_authpacket.vprox.port = sin.sin_port;
-				proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
-				sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
-			} else {
-				authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
-				ast_debug(2, "Sending auth/config packet payload %i challenge %s digest %08x password %s to client %s\n",
-					authpacket.vp.payload_type, authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
+			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
+			ast_debug(2, "Sending auth/config packet payload %i challenge %s digest %08x password %s to client %s\n",
+				authpacket.vp.payload_type, authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
 					((client) ? client->name : "UNKNOWN"));
-				sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
-			}
+			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+			
 			continue;
 		}
 
@@ -5501,20 +5091,13 @@ static void *voter_reader(void *data)
 			 */
 			if (client) {
 				/* Do some sanity checks. */
-				if (check_client_sanity && p && !p->priconn) {
+				if (check_client_sanity && p) {
 					/* If the client's IP or port we have stored don't match where the current
 					 * packet came from, drop the client.
 					 */
 					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
 						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
 						client->heardfrom = 0;
-					}
-					/* If this is a proxy client, but we don't have a proxy connection (p->priconn),
-					 * drop the client.
-					 */
-					if (IS_CLIENT_PROXY(client)) {
-						client->heardfrom = 0;
-						client->respdigest = 0;
 					}
 				}
 
@@ -5587,14 +5170,11 @@ static void *voter_reader(void *data)
 			}
 
 			/* If we have a valid (authenticated) client, have recently heard from it, and it sent
-			 * us a valid audio or proxy packet, find the corresponding Asterisk channel and
-			 * send it there.
+			 * us a valid audio packet, find the corresponding Asterisk channel and send it there.
 			 */
 			if (client && client->heardfrom &&
 				(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))) ||
-					((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))) ||
-					((ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) &&
-						((size_t) recvlen >= (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER)))))) {
+					((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))))) {
 				/* Find the matching Asterisk channel for this client. */
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
@@ -5626,93 +5206,6 @@ static void *voter_reader(void *data)
 						}
 					} else {
 						if (!master_time.vtime_sec) {
-							continue;
-						}
-						if (ntohs(vph->payload_type) == VOTER_PAYLOAD_PROXY) {
-							memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
-							memmove(buf + sizeof(VOTER_PACKET_HEADER), buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER),
-								recvlen - (sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER)));
-							vph->payload_type = proxy.payload_type;
-							psin.sin_family = AF_INET;
-							psin.sin_addr.s_addr = proxy.ipaddr;
-							psin.sin_port = proxy.port;
-							isproxy = 1;
-							if (!p->isprimary) {
-								vph->digest = htonl(client->respdigest);
-								ast_copy_string((char *) vph->challenge, challenge, sizeof(vph->challenge));
-								sendto(udp_socket, buf, recvlen - sizeof(proxy), 0, (struct sockaddr *) &psin, sizeof(psin));
-								continue;
-							}
-							ast_copy_string(client->saved_challenge, proxy.challenge, sizeof(client->saved_challenge));
-							client->proxy_sin = psin;
-							/* Is the mix mode flag being sent by the proxy client? */
-							if (proxy.flags & FLAG_MIX) {
-								/* The CLIENT has to send us flags to tell us it is configured for mix mode (GPS PPS = NONE)
-								 * so this is where we check the flags from the client, and update client->mix accordingly.
-								 * Mix mode requires a buflen >= 160 in voter.conf, which is equivalent to client->buflen = 1280
-								 * (buflen * 8, also FRAME_SIZE * 8). This keeps the starting drain index > 0 when we
-								 * configure it.
-								 *
-								 * If a client connects as mix mode, we need to enforce the minimum buflen, otherwie the
-								 * client will connect, but cannot send us audio because the buffer isn't big enough.
-								 *
-								 * Check the buflen, throw an error if it is too small, and block the client from connecting.
-								 */
-								if (client->buflen < (FRAME_SIZE * 8)) {
-									if (!logged_buflen_too_small) {
-										ast_log(LOG_ERROR, "VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
-											client->nodenum, client->name, client->buflen / 8);
-										logged_buflen_too_small = 1;
-									}
-									client->mix = 0;
-									client->heardfrom = 0;
-									client->respdigest = 0;
-									continue;
-								} else {
-									client->mix = 1;
-									ast_log(LOG_NOTICE,
-										"Client: %s (proxy) is sending mix mode flag, setting client to mix mode\n", client->name);
-									logged_buflen_too_small = 0;
-								}
-							} else {
-								client->mix = 0;
-							}
-							recvlen -= sizeof(proxy);
-							ast_debug(6, "Now (proxy) received network packet, len %d payload %d challenge %s digest %08x\n",
-								(int) recvlen, ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
-							if (ntohs(vph->payload_type) == VOTER_PAYLOAD_GPS) {
-								goto process_gps;
-							}
-						} else if (p->priconn && !client->mix) {
-							memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
-							proxy.ipaddr = sin.sin_addr.s_addr;
-							proxy.port = sin.sin_port;
-							proxy.payload_type = vph->payload_type;
-							ast_copy_string(proxy.challenge, challenge, sizeof(proxy.challenge));
-							vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
-							proxy.flags = 0;
-							if (client->ismaster) {
-								proxy.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
-							}
-							if (client->doadpcm) {
-								proxy.flags |= FLAG_ADPCM;
-							}
-							if (client->mix) {
-								proxy.flags |= FLAG_MIX;
-							}
-							if (client->nodeemp || p->hostdeemp) {
-								proxy.flags |= FLAG_FLATAUDIO;
-							}
-							if (client->noplfilter) {
-								proxy.flags |= FLAG_NOCTCSSFILTER;
-							}
-							vph->digest = htonl(crc32_bufs(p->primary_challenge, client->pswd));
-							memmove(buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER),
-								buf + sizeof(VOTER_PACKET_HEADER), recvlen - sizeof(VOTER_PACKET_HEADER));
-							memcpy(buf + sizeof(VOTER_PACKET_HEADER), &proxy, sizeof(proxy));
-							ast_debug(3, "Sent outproxy to %s:%d for %s payload %d digest %08x\n", ast_inet_ntoa(p->primary.sin_addr),
-								ntohs(p->primary.sin_port), client->name, ntohs(proxy.payload_type), ntohl(vph->digest));
-							sendto(udp_socket, buf, recvlen + sizeof(proxy), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
 							continue;
 						}
 					}
@@ -5876,10 +5369,8 @@ static void *voter_reader(void *data)
 										break;
 									}
 								}
-								/* If there is no matching Asterisk channel, or it is a proxy
-								 * connection, skip.
-								 */
-								if (!p || p->priconn) {
+								/* If there is no matching Asterisk channel, skip. */
+								if (!p) {
 									continue;
 								}
 								/* If the client isn't connected, skip. */
@@ -6388,39 +5879,7 @@ static void *voter_reader(void *data)
 				if (client->curmaster) {
 					mastergps_time.vtime_sec = ntohl(vph->curtime.vtime_sec);
 					mastergps_time.vtime_nsec = ntohl(vph->curtime.vtime_nsec);
-				} else if (p && p->priconn && !client->mix) {
-					memcpy(&proxy, buf + sizeof(VOTER_PACKET_HEADER), sizeof(proxy));
-					proxy.ipaddr = sin.sin_addr.s_addr;
-					proxy.port = sin.sin_port;
-					proxy.payload_type = vph->payload_type;
-					ast_copy_string(proxy.challenge, challenge, sizeof(challenge));
-					vph->payload_type = htons(VOTER_PAYLOAD_PROXY);
-					proxy.flags = 0;
-					if (client->ismaster) {
-						proxy.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
-					}
-					if (client->doadpcm) {
-						proxy.flags |= FLAG_ADPCM;
-					}
-					if (client->mix) {
-						proxy.flags |= FLAG_MIX;
-					}
-					if (client->nodeemp || p->hostdeemp) {
-						proxy.flags |= FLAG_FLATAUDIO;
-					}
-					if (client->noplfilter) {
-						proxy.flags |= FLAG_NOCTCSSFILTER;
-					}
-					vph->digest = htonl(crc32_bufs(p->primary_challenge, client->pswd));
-					memmove(buf + sizeof(VOTER_PACKET_HEADER) + sizeof(VOTER_PROXY_HEADER), buf + sizeof(VOTER_PACKET_HEADER),
-						recvlen - sizeof(VOTER_PACKET_HEADER));
-					memcpy(buf + sizeof(VOTER_PACKET_HEADER), &proxy, sizeof(proxy));
-					ast_debug(3, "Sent outproxy to %s:%d for %s payload %d digest %08x\n", ast_inet_ntoa(p->primary.sin_addr),
-						ntohs(p->primary.sin_port), client->name, ntohs(proxy.payload_type), ntohl(vph->digest));
-					sendto(udp_socket, buf, recvlen + sizeof(proxy), 0, (struct sockaddr *) &p->primary, sizeof(p->primary));
-					continue;
 				}
-process_gps:
 				client->lastmastergpstime.vtime_sec = mastergps_time.vtime_sec;
 				client->lastmastergpstime.vtime_nsec = mastergps_time.vtime_nsec;
 				if (DEBUG_ATLEAST(4)) {
@@ -6484,7 +5943,6 @@ process_gps:
 		 * connecting that hasn't been authenticated yet (which sets vph->digest).
 		 */
 		memset(&authpacket, 0, sizeof(authpacket));
-		memset(&proxy_authpacket, 0, sizeof(proxy_authpacket));
 
 		/* If the client is valid, reset some counters, and log that it has successfully connected. */
 		if (client) {
@@ -6512,12 +5970,6 @@ process_gps:
 		 */
 		authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
 		authpacket.flags = 0;
-
-		/* Do the same for proxy authentication packets. */
-		proxy_authpacket.vp.curtime.vtime_sec = htonl(systemtime.tv_sec);
-		proxy_authpacket.vp.curtime.vtime_nsec = htonl(systemtime.tv_usec * 1000);
-		proxy_authpacket.vp.digest = htonl(crc32_bufs((char *) vph->challenge, password));
-		proxy_authpacket.flags = 0;
 
 		/* If our client is validated, and is sending us an authentication packet, check for and set
 		 * option flags (primarily if the client wants to connect in mix mode).
@@ -6603,9 +6055,6 @@ process_gps:
 		 * packet header is loaded with our challenge and our digest (which is based on their
 		 * challenge and our host password).
 		 *
-		 * Figure out if this authentication needs to be sent via a proxy server, or direct, and
-		 * send it accordingly.
-		 *
 		 * The first time we send a packet, we don't know who the client is (since they need to respond
 		 * with their own digest that is based on their password... which we use to match to the
 		 * clients in voter.conf we have configured), so the client name will be UNKNOWN.
@@ -6615,20 +6064,10 @@ process_gps:
 		 *
 		 * After a client is authenticated, vph->digest gets set, and we start normal packet processing.
 		 */
-		if (isproxy) {
-			ast_debug(2, "Sending (proxied) initial packet challenge %s digest %08x password %s\n", authpacket.vp.challenge,
-				ntohl(authpacket.vp.digest), password);
-			proxy_authpacket.flags = authpacket.flags;
-			proxy_authpacket.vprox.ipaddr = sin.sin_addr.s_addr;
-			proxy_authpacket.vprox.port = sin.sin_port;
-			proxy_authpacket.vp.payload_type = htons(VOTER_PAYLOAD_PROXY);
-			sendto(udp_socket, &proxy_authpacket, sizeof(proxy_authpacket), 0, (struct sockaddr *) &psin, sizeof(psin));
-		} else {
-			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
-			ast_debug(2, "Sending initial packet challenge %s digest %08x password %s to client %s\n", authpacket.vp.challenge,
-				ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
-			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
-		}
+		authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
+		ast_debug(2, "Sending initial packet challenge %s digest %08x password %s to client %s\n", authpacket.vp.challenge,
+			ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
+		sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
 		continue;
 	}
 	ast_mutex_unlock(&voter_lock);
