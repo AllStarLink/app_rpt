@@ -1100,7 +1100,7 @@ enum rpt_function_response function_autopatchup(struct rpt *myrpt, char *param, 
 
 	if ((myrpt->callmode == CALLMODE_CONNECTING) || (myrpt->callmode == CALLMODE_UP)) {
 		if (!nostar) {
-			myrpt->mydtmf = myrpt->p.funcchar;
+			myrpt->mydtmf = myrpt->p.funcchars[0];
 		}
 	}
 	if (myrpt->callmode != CALLMODE_DOWN) {
@@ -2043,7 +2043,7 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
  *   "s" — status:                no trailing digits expected
  *   "l" — logout:                no trailing digits expected
  *
- * Example rpt.conf entries (assuming funcchar='*'):
+ * Example rpt.conf entries (assuming funcchars='*'):
  *   A1 = auth,a    ; *A1<10 digits>   login
  *   A2 = auth,s    ; *A2              status query
  *   A3 = auth,l    ; *A3              logout
