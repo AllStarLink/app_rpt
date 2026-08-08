@@ -1372,13 +1372,14 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 	if (ps->active) {
 		err = Pa_AbortStream(ps->stream);
 		if (err != paNoError) {
-			ast_log(LOG_WARNING, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
+			/* Common after USB yank; Abort/Close often fail once the host device is gone. */
+			ast_debug(3, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
 		}
 	}
 
 	err = Pa_CloseStream(ps->stream);
 	if (err != paNoError) {
-		ast_log(LOG_WARNING, "Pa_CloseStream failed: %s\n", Pa_GetErrorText(err));
+		ast_debug(3, "Pa_CloseStream failed: %s\n", Pa_GetErrorText(err));
 	}
 
 	ps->stream = NULL;
