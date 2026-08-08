@@ -33,19 +33,6 @@
 #include <signal.h>
 
 /*!
- * \brief Defines for interacting with ALSA controls.
- */
-#define MIXER_PARAM_MIC_PLAYBACK_SW "Mic Playback Switch"
-#define MIXER_PARAM_MIC_PLAYBACK_VOL "Mic Playback Volume"
-#define MIXER_PARAM_MIC_CAPTURE_SW "Mic Capture Switch"
-#define MIXER_PARAM_MIC_CAPTURE_VOL "Mic Capture Volume"
-#define MIXER_PARAM_MIC_BOOST "Auto Gain Control"
-#define MIXER_PARAM_SPKR_PLAYBACK_SW "Speaker Playback Switch"
-#define MIXER_PARAM_SPKR_PLAYBACK_VOL "Speaker Playback Volume"
-#define MIXER_PARAM_SPKR_PLAYBACK_SW_NEW "Headphone Playback Switch"
-#define MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW "Headphone Playback Volume"
-
-/*!
  * \brief CMxxx USB device identifiers.
  */
 #define C108_VENDOR_ID 0x0d8c
@@ -179,6 +166,208 @@
 #define DEV_DSP "/dev/dsp"
 #endif
 
+/*!
+ * \brief Optional hardware capabilities required by a channel driver
+ *
+ * USB capture and playback are always required and are therefore implicit.
+ * Multiple flags use AND semantics: every requested capability must be
+ * available for a device to match.
+ */
+enum ast_radio_device_capability {
+	AST_RADIO_CAP_NONE = 0,
+	AST_RADIO_CAP_CM108_HID = (1U << 0),
+	AST_RADIO_CAP_PARALLEL = (1U << 1),
+};
+
+/*!
+ * \brief Criteria supplied when requesting a USB radio device
+ *
+ * Selection precedence is serial, then devstr, then automatic assignment.
+ * A configured selector that has no current match does not fall back to a
+ * lower-priority selector.
+ */
+struct ast_radio_device_request {
+	const char *devstr;					  /*!< Optional sysfs topology or ALSA device selector */
+	const char *serial;					  /*!< Optional USB serial number; takes precedence over devstr */
+	const char *owner;					  /*!< Required channel instance name used for diagnostics */
+	unsigned int required_caps;			  /*!< ORed ast_radio_device_capability values; all are required */
+	unsigned int minimum_input_channels;  /*!< Minimum PortAudio input channels required */
+	unsigned int minimum_output_channels; /*!< Minimum PortAudio output channels required */
+};
+
+/*!
+ * \brief Result of a USB radio device acquisition attempt
+ */
+enum ast_radio_device_result {
+	AST_RADIO_DEVICE_READY,			 /*!< A viable device was exclusively leased and returned */
+	AST_RADIO_DEVICE_WAIT,			 /*!< No viable, available device currently satisfies the request */
+	AST_RADIO_DEVICE_CONFLICT,		 /*!< The explicitly selected device is leased to another owner */
+	AST_RADIO_DEVICE_INVALID_CONFIG, /*!< The request contains malformed or unsupported selector syntax */
+	AST_RADIO_DEVICE_ERROR,			 /*!< Discovery failed because of an internal or system error */
+};
+
+/*! \brief Return a printable description of a device acquisition result */
+const char *ast_radio_device_result_str(enum ast_radio_device_result result);
+
+enum ast_radio_mixer_capability {
+	AST_RADIO_MIXER_CAPTURE_VOLUME = (1U << 0),
+	AST_RADIO_MIXER_CAPTURE_SWITCH = (1U << 1),
+	AST_RADIO_MIXER_PLAYBACK_VOLUME = (1U << 2),
+	AST_RADIO_MIXER_PLAYBACK_SWITCH = (1U << 3),
+};
+
+struct ast_radio_mixer_element {
+	const char *name;		   /*!< ALSA simple mixer element name */
+	unsigned int index;		   /*!< ALSA simple mixer element index */
+	unsigned int capabilities; /*!< ORed ast_radio_mixer_capability values */
+	long capture_min;		   /*!< Minimum capture-volume value */
+	long capture_max;		   /*!< Maximum capture-volume value */
+	long playback_min;		   /*!< Minimum playback-volume value */
+	long playback_max;		   /*!< Maximum playback-volume value */
+};
+
+struct ast_radio_mixer_path {
+	unsigned int element; /*!< Index into ast_radio_device.mixer_elements */
+	int channel;		  /*!< ALSA simple mixer channel identifier */
+};
+
+/*!
+ * \brief Resolved USB radio device information and exclusive lease
+ *
+ * The identity and endpoint fields are populated by
+ * ast_radio_device_acquire(). The caller may use them to open the HID and
+ * audio subsystems. The caller must stop using any derived subsystem handles
+ * before passing this object to ast_radio_device_release().
+ *
+ * String fields are owned by res_usbradio, remain valid for the lifetime of
+ * the lease, and must not be modified or freed by callers.
+ *
+ * Fields documented as internal are owned by res_usbradio and must not be
+ * inspected or modified by callers.
+ */
+struct ast_radio_device {
+	/* Device identity and capabilities */
+	const char *devstr;		   /*!< Canonical sysfs topology identity */
+	const char *serial;		   /*!< USB serial number, or NULL when unavailable */
+	unsigned short vendor_id;  /*!< USB vendor identifier */
+	unsigned short product_id; /*!< USB product identifier */
+	unsigned int capabilities; /*!< Available ast_radio_device_capability values */
+
+	/* ALSA PCM endpoints */
+	int alsa_card;					/*!< Resolved ALSA card number */
+	int alsa_capture_device;		/*!< Resolved ALSA capture PCM device number */
+	int alsa_playback_device;		/*!< Resolved ALSA playback PCM device number */
+	const char *alsa_capture_name;	/*!< ALSA capture endpoint name */
+	const char *alsa_playback_name; /*!< ALSA playback endpoint name */
+
+	/* ALSA mixer elements and logical paths */
+	struct ast_radio_mixer_element *mixer_elements;	   /*!< Unique ALSA mixer elements */
+	size_t mixer_element_count;						   /*!< Number of mixer elements */
+	struct ast_radio_mixer_path *mixer_rx_paths;	   /*!< Capture input paths (Mic Capture on CM108) */
+	size_t mixer_rx_path_count;						   /*!< Number of RX paths */
+	struct ast_radio_mixer_path *mixer_tx_paths;	   /*!< Playback output paths (Speaker/Headphone on CM108) */
+	size_t mixer_tx_path_count;						   /*!< Number of TX paths */
+	struct ast_radio_mixer_path *mixer_sidetone_paths; /*!< Optional capture-to-playback paths (Mic Playback on CM108) */
+	size_t mixer_sidetone_path_count;				   /*!< Number of sidetone paths */
+	struct ast_radio_mixer_path *mixer_rx_boost_paths; /*!< Optional input gain/AGC switch paths */
+	size_t mixer_rx_boost_path_count;				   /*!< Number of receive-boost paths */
+
+	/* libusb device reference and current transport address */
+	struct libusb_device *usb_device; /*!< Referenced libusb device for the lease lifetime */
+	unsigned int usb_bus;			  /*!< Current libusb bus number */
+	unsigned int usb_address;		  /*!< Current, potentially ephemeral USB address */
+
+	/* PortAudio endpoints; two valid indices imply one library reference held by the lease */
+	PaDeviceIndex pa_input_device;	 /*!< PortAudio input index, or paNoDevice */
+	PaDeviceIndex pa_output_device;	 /*!< PortAudio output index, or paNoDevice */
+	unsigned int pa_input_channels;	 /*!< Maximum PortAudio input channels */
+	unsigned int pa_output_channels; /*!< Maximum PortAudio output channels */
+
+	/* Internal lease bookkeeping */
+	void *private_data; /*!< Internal res_usbradio lease bookkeeping */
+};
+
+/*!
+ * \brief Determine whether an acquired device is usable through PortAudio
+ */
+static inline int ast_radio_device_pa_ready(const struct ast_radio_device *device)
+{
+	return device && device->pa_input_device != paNoDevice && device->pa_output_device != paNoDevice;
+}
+
+/*!
+ * \brief Acquire an exclusive lease on a USB radio device
+ *
+ * \param request Device selection criteria and required capabilities
+ * \param[out] device Acquired device on AST_RADIO_DEVICE_READY; NULL for every other result
+ *
+ * \note The caller must release a returned device with ast_radio_device_release()
+ *
+ * \return An ast_radio_device_result describing the acquisition attempt
+ */
+enum ast_radio_device_result ast_radio_device_acquire(const struct ast_radio_device_request *request, struct ast_radio_device **device);
+
+/*! \brief Return the number of active leases created by automatic assignment */
+unsigned int ast_radio_device_automatic_count(void);
+
+/*!
+ * \brief Atomically exchange two active USB radio device leases
+ *
+ * Callers must stop using all subsystem handles derived from both devices
+ * before exchanging the leases.
+ *
+ * \param first First device lease pointer to exchange
+ * \param second Second device lease pointer to exchange
+ *
+ * \retval 0 on success
+ * \retval -1 when either pointer does not identify an active lease
+ */
+int ast_radio_device_swap(struct ast_radio_device **first, struct ast_radio_device **second);
+
+/*!
+ * \brief Release a USB radio device lease
+ *
+ * The caller must first stop using all subsystem handles derived from the
+ * device. Passing NULL is permitted and has no effect.
+ *
+ * \param device Device lease returned by ast_radio_device_acquire()
+ */
+void ast_radio_device_release(struct ast_radio_device *device);
+
+/*! \brief Return the mixer element referenced by a device path */
+const struct ast_radio_mixer_element *ast_radio_device_mixer_element(const struct ast_radio_device *device,
+	const struct ast_radio_mixer_path *path);
+
+/*! \brief Return the maximum value for one mixer path capability */
+long ast_radio_device_mixer_max(const struct ast_radio_device *device, const struct ast_radio_mixer_path *path, unsigned int capability);
+
+/*! \brief Scale an AUDIO_ADJUSTMENT setting into one mixer path range */
+long ast_radio_device_mixer_scale(const struct ast_radio_device *device, const struct ast_radio_mixer_path *path,
+	unsigned int capability, int setting);
+
+/*!
+ * \brief Set one control on a discovered mixer path
+ *
+ * \param device Device lease returned by ast_radio_device_acquire()
+ * \param path Mixer path belonging to the acquired device
+ * \param capability One ast_radio_mixer_capability value selecting the control
+ * \param value ALSA volume value or zero/nonzero switch state
+ *
+ * \retval 0 on success
+ * \retval -1 for an invalid path or when the mixer control cannot be updated
+ */
+int ast_radio_device_set_mixer(const struct ast_radio_device *device, const struct ast_radio_mixer_path *path,
+	unsigned int capability, long value);
+
+/*!
+ * \brief Set one control across a collection of discovered mixer paths
+ *
+ * \retval 0 when every path was updated
+ * \retval -1 when any path could not be updated
+ */
+int ast_radio_device_set_mixer_paths(const struct ast_radio_device *device, const struct ast_radio_mixer_path *paths,
+	size_t path_count, unsigned int capability, long value);
+
 struct usbecho {
 	struct qelem *q_forw;
 	struct qelem *q_prev;
@@ -211,72 +400,6 @@ struct audiostatistics {
  * \retval 			Rounded number as a long.
  */
 long ast_radio_lround(double x);
-
-/*!
- * \brief Calculate the speaker playback volume value.
- * 	Calculates the speaker playback volume.
- *
- *	The calling routine passes the maximum setting for
- *	for the speaker output.  This routine scales the
- *	requested value against the maximum.
- *
- *	Some devices may require a different scaling divisor.
- *	This routine can be customized for the requirements
- *	for new devices.
- *
- *	In some implementations, the scaling factor has been
- *	determined by spkrmax - 20 * log(ratio) or spkrmax - 10 * log(ratio).
- *	Discussions with radio engineers indicate that we should
- *	be using a linear scale.  FM deviation is linear.
- *
- * \param spkrmax		Speaker maximum value.
- * \param request_value	Requested volume value.
- * \param devtype		USB device type.
- *
- * \retval 				The calculated volume value.
- */
-int ast_radio_make_spkr_playback_value(int spkrmax, int request_value, int devtype);
-
-/* Note: must add -lasound to end of linkage */
-
-/*!
- * \brief Get mixer max value
- * 	Gets the mixer max value from ALSA for the specified device and control.
- *
- * \param devnum		The ALSA major device number to update.
- * \param param			Pointer to the string mixer device name (control) to retrieve.
- *
- * \retval 				The maximum value.
- */
-int ast_radio_amixer_max(int devnum, char *param);
-
-/*!
- * \brief Query required ALSA mixer maximums for a USB radio device.
- *
- * Reads mic capture, speaker playback (with alternate control name), and
- * mic playback limits. Fails when any required limit is unavailable.
- *
- * \param devnum ALSA card number.
- * \param micmax Returned Mic Capture Volume maximum.
- * \param spkrmax Returned Speaker Playback Volume maximum.
- * \param micplaymax Returned Mic Playback Volume maximum.
- * \param newname Set to 1 when the alternate speaker control name is used.
- *
- * \retval 0 on success.
- * \retval -1 if any required mixer limit is unavailable.
- */
-int ast_radio_init_mixer_limits(int devnum, int *micmax, int *spkrmax, int *micplaymax, int *newname);
-
-/*!
- * \brief Set mixer
- * 	Sets the mixer values for the specified device and control.
- *
- * \param devnum		The ALSA major device number to update.
- * \param param			Pointer to the string mixer device name (control) to update.
- * \param v1			Value 1 to set.  Values: 0-99 (percent) or 0-1 for baboon.
- * \param v2			Value 2 to set or zero if only one value.
- */
-int ast_radio_setamixer(int devnum, char *param, int v1, int v2);
 
 /*!
  * \brief Set USB HID outputs
@@ -334,69 +457,6 @@ unsigned short ast_radio_get_eeprom(struct libusb_device_handle *handle, unsigne
  *						The buffer must be an array of 13 unsigned shorts.
  */
 void ast_radio_put_eeprom(struct libusb_device_handle *handle, unsigned short *buf);
-
-/*!
- * \brief Make a list of HID devices.
- * Populates usb_device_list with a list of devices that we
- * know that are compatible.
- *
- * Each device string in usb_device_list is delimited with zero.  The
- * final element is zero.
- *
- * \retval 0	List was created.
- * \retval -1	List was not created.
- */
-int ast_radio_hid_device_mklist(void);
-
-/*!
- * \brief Initialize a USB device.
- * 	Searches for a USB device that matches the passed device string.
- *
- * \note It will only evaluate USB devices known to work with this application.
- *
- * \param desired_device	Pointer to a string that contains the device string to find.
- * \retval 					Returns a libusb_device structure with the found device.
- * 							This device has a libusb_ref_device and must be freed with libusb_unref_device by the caller.
- *							If the device was not found, it returns null.
- */
-struct libusb_device *ast_radio_hid_device_init(const char *desired_device);
-
-/*!
- * \brief Get USB device number from device string
- * 	Checks the symbolic links to see if the device string exists.
- *
- * \param devstr		Pointer to a string that contains the device string to find.
- * \retval 				Returns an index for the found device number.
- * \retval -1			If the device was not found.
- */
-int ast_radio_usb_get_usbdev(const char *devstr);
-
-/*!
- * \brief Get serial number from device if available
- *	This function will attempt to get the serial number from a media device
- *
- * \param devstr		The USB device string
- * \param buf			Pointer to buffer for serial number
- * \param buflen		Length of the serial number buffer
- * \retval				Length of returned serial number; 0 if no serial
- */
-int ast_radio_usb_get_serial(const char *devstr, char *buf, size_t buflen);
-
-/*!
- * \brief See if the internal usb_device_list contains the
- * specified device string.
- * \param devstr	Device string to check.
- * \retval 0		Device string was not found.
- * \retval 1		Device string was found.
- */
-int ast_radio_usb_list_check(char *devstr);
-
-/*!
- * \brief Get a device string at the specified index
- * from usb_device_list.
- * \returns			Device string or null if not found.
- */
-char *ast_radio_usb_get_devstr(int index);
 
 /*!
  * \brief Open the specified parallel port
@@ -542,18 +602,6 @@ int ast_radio_check_audio(short *sbuf, struct audiostatistics *o, short len, sho
  */
 void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *prefix_text);
 
-/*!
- * \brief Returns the libusb device that backs ALSA /proc/asound/card<cardno>/usbbus.
- * \retval usb_device *  Pointer to the libusb device on success.
- * \retval NULL          If device could not be found.
- *
- * \note
- * - Uses libusb-0.1 enumeration (usb_init/usb_find_busses/usb_find_devices).
- * - The returned pointer is owned by libusb's internal device list.
- * \param cardno The ALSA card number as found in HW:<cardno>
- */
-struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno);
-
 #define AST_RADIO_PA_SAMPLE_RATE 48000
 #define AST_RADIO_PA_FRAMES_PER_BUFFER (FRAME_SIZE * 6)
 #define AST_RADIO_PA_OUTPUT_CHANNELS 2
@@ -563,36 +611,25 @@ struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno);
 /*!
  * \brief PortAudio stream state shared by chan_simpleusb and chan_usbradio.
  *
- * After ast_radio_pa_open(), use ps->input_channels for RX buffer layout and
- * ps->output_channels for TX. Callers still pass stereo interleaved TX to
- * ast_radio_pa_write(); mono hardware is downmixed there (AIOC and similar).
+ * Set ps->input_channels to the required RX channel count before calling
+ * ast_radio_pa_open_device(). After opening, use ps->input_channels for RX
+ * buffer layout and ps->output_channels for TX. Callers still pass stereo
+ * interleaved TX to ast_radio_pa_write(); mono hardware is downmixed there.
  * ast_radio_pa_read() and ast_radio_pa_write() take frames per channel
  * (typically AST_RADIO_PA_FRAMES_PER_BUFFER).
  */
 struct ast_radio_pa_stream {
 	PaStream *stream;
 	int active;
-	unsigned int input_channels;  /*!< Actual RX channel count after ast_radio_pa_open() */
-	unsigned int output_channels; /*!< Actual TX channel count after ast_radio_pa_open() */
-	char hw_device[100];
+	unsigned int input_channels;  /*!< Required and actual RX channel count for ast_radio_pa_open_device() */
+	unsigned int output_channels; /*!< Actual TX channel count after ast_radio_pa_open_device() */
 };
 
-/*!
- * \brief Parse "hw:<card>" or "hw:<card>,<dev>" from anywhere in s.
- * \retval 1 if found; sets *card; sets *dev to parsed value or -1 if absent.
- */
-int ast_radio_parse_alsa_hw_device(const char *s, int *card, int *dev);
-
-PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps);
+/* Open a stream using the exact PortAudio endpoints held by a device lease */
+PaError ast_radio_pa_open_device(struct ast_radio_pa_stream *ps, const struct ast_radio_device *device);
 PaError ast_radio_pa_start(struct ast_radio_pa_stream *ps);
 void ast_radio_pa_stop(struct ast_radio_pa_stream *ps);
 
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop);
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames);
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);
-
-/*!
- * \brief initialize the usb_ctx register for access to usb devices.
- * \retval libusb_init status 0 on success, negative on failure.
- */
-int ast_radio_libusb_init(void);
