@@ -1282,7 +1282,6 @@ static void *hidthread(void *arg)
 		}
 		ast_mutex_unlock(&o->eepromlock);
 
-		simpleusb_log_usb_recovered(o);
 		o->hasusb = 1;
 		o->had_gpios_in = 0;
 		memset(&rfds, 0, sizeof(rfds));
@@ -2188,6 +2187,8 @@ static void *simpleusb_audio_thread(void *arg)
 
 		flush_stream_buffer(o);
 		o->audio_thread_ready = 1;
+		/* Audio path is up; pair any prior fault with a single recovery log. */
+		simpleusb_log_usb_recovered(o);
 		last_frame_time = ast_radio_tvnow();
 
 		while (!o->stopaudiothread && o->hasusb) {
