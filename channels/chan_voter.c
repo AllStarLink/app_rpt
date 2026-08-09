@@ -3256,12 +3256,11 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
 				if (client->totransmit && !client->txlockout) {
-					ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum,
-						client->name, client->respdigest);
+					ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
+						client->respdigest);
 					/* Send the ulaw audio packet over the wire to the client for transmitting */
-					sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin,
-						sizeof(client->sin));
-					
+					sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
+
 					/* Update when this client last sent an audio packet */
 					client->lastsenttime = ast_radio_tvnow();
 				}
@@ -3319,9 +3318,8 @@ static void *voter_xmit(void *data)
 						ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, client->respdigest);
 						/* Send the ADPCM audio packet over the wire to the client for transmitting */
-						sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
-							sizeof(client->sin));
-						
+						sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
+
 						/* Update when this client last sent an audio packet */
 						client->lastsenttime = ast_radio_tvnow();
 					}
@@ -3420,9 +3418,8 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.digest = htonl(client->respdigest);
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin,
-					sizeof(client->sin));
-				
+				sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
+
 				/* Update when this client last sent a keepalive packet */
 				client->lastsenttime = ast_radio_tvnow();
 			}
@@ -4770,11 +4767,9 @@ static void *voter_reader(void *data)
 			 */
 
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
-			ast_debug(2, "Sending initial packet payload %i challenge %s digest %08x password %s to client %s\n",
-				authpacket.vp.payload_type, authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
-					((client) ? client->name : "UNKNOWN"));
+			ast_debug(2, "Sending initial packet payload %i challenge %s digest %08x password %s to client %s\n", authpacket.vp.payload_type,
+				authpacket.vp.challenge, ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
 			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
-			
 			continue;
 		}
 
@@ -4973,9 +4968,8 @@ static void *voter_reader(void *data)
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
 			ast_debug(2, "Sending auth/config packet payload %i challenge %s digest %08x password %s to client %s\n",
 				authpacket.vp.payload_type, authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
-					((client) ? client->name : "UNKNOWN"));
+				((client) ? client->name : "UNKNOWN"));
 			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
-			
 			continue;
 		}
 
