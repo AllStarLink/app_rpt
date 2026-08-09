@@ -4767,8 +4767,9 @@ static void *voter_reader(void *data)
 			 */
 
 			authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
-			ast_debug(2, "Sending initial packet payload %i challenge %s digest %08x password %s to client %s\n", authpacket.vp.payload_type,
-				ntohs(authpacket.vp.challenge), ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
+			ast_debug(2, "Sending initial packet payload %i challenge %s digest %08x password %s to client %s\n",
+				ntohs(authpacket.vp.payload_type), authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
+				((client) ? client->name : "UNKNOWN"));
 			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
 			continue;
 		}
