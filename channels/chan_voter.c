@@ -348,7 +348,6 @@ static char context[AST_MAX_EXTENSION] = "default";
 #define VOTER_PAYLOAD_ADPCM 3
 #define VOTER_PAYLOAD_FUTURE 4 /* Reserved for future use */
 #define VOTER_PAYLOAD_PING 5
-#define VOTER_PAYLOAD_PROXY 0xf000 /* Proxy no longer used */
 
 /* Define voter priority levels. */
 #define PRIO_NORMAL 0	/* Clients with a priority of 0 are "normal" and have no special priority */
@@ -521,12 +520,9 @@ struct voter_pvt {
 	unsigned int hostdeemp:1;
 	unsigned int dmwdiag:1;
 	unsigned int usedtmf:1;
-	unsigned int isprimary:1;
-	unsigned int priconn:1;
 	unsigned int mixminus:1;
 	unsigned int waspager:1;
 	unsigned int kill_xmit_thread:1;
-	unsigned int kill_primary_thread:1;
 
 	int testcycle;
 	int testindex;
@@ -560,7 +556,6 @@ struct voter_pvt {
 	ast_mutex_t xmit_lock;
 	ast_cond_t xmit_cond;
 	pthread_t xmit_thread;
-	pthread_t primary_thread;
 	float gtxgain;
 	FILE *recfp;
 	short lastaudio[FRAME_SIZE];
@@ -1410,9 +1405,9 @@ static char *voter_complete_static_client_list(const char *line, const char *wor
 /*!
  * \brief Populate Asterisk CLI completions with names of currently connected, authenticated clients
  *
- * Scans the global client list and, for each non-proxy client that has been heard
- * from and has a valid response digest, adds the client's name as a completion
- * if it starts with the provided word prefix and the cursor is at the end of the line.
+ * Scans the global client list and, for each client that has been heard from and has a valid
+ * response digest, adds the client's name as a completion if it starts with the provided word
+ * prefix and the cursor is at the end of the line.
  *
  * Used with the "voter ping" CLI command. Issuing a "voter ping ?" will show all connected clients.
  *
@@ -1779,10 +1774,6 @@ static void voter_display(int fd, const struct voter_pvt *p)
 		for (client = clients; client; client = client->next) {
 			/* If the client isn't associated to the requested voter instance, skip. */
 			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			/* If this is a proxied client, skip. */
-			if (p->priconn && !client->mix) {
 				continue;
 			}
 			/* If we HAVE heard from the client, it is active, so skip. */
@@ -2893,10 +2884,6 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		}
 		ast_frfree(f2);
 	}
-	/* If this instance came from a proxy server, reset maxclient to NULL. */
-	if (p->priconn) {
-		maxclient = NULL;
-	}
 	/* Reset a bunch of stuff if maxclient is NULL. */
 	if (!maxclient) { /* If nothing there */
 		/*!
@@ -2998,7 +2985,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
  *
  * Runs the per-node transmit worker: consumes queued Asterisk frames and pager frames,
  * integrates PMR channel input, performs optional mix-minus and format conversions,
- * and sends TX audio, keepalive, ping, and proxy packets to connected clients.
+ * and sends TX audio, keepalive, and ping packets to connected clients.
  *
  * \param data Pointer to the per-node voter_pvt instance.
  */
@@ -3451,7 +3438,7 @@ static void *voter_xmit(void *data)
  * Allocates and initializes per-node private state, translators, DSP, channel
  * formats, and loads node configuration from voter.conf. The function registers
  * the new channel with Asterisk, links the private state to the channel, and
- * starts per-node worker threads (transmit and optional primary/keepalive).
+ * starts per-node worker threads (transmit and optional keepalive).
  *
  * Note that on initial start, load_module runs reload first, before this function.
  *
@@ -4593,7 +4580,7 @@ static void *voter_timer(void *data)
  *
  * This thread receives VOTER-format UDP packets, matches them to configured clients,
  * validates/authenticates clients, and handles payloads such as audio (ULAW/ADPCM),
- * proxy-encapsulated packets, GPS, and PING.
+ * GPS, and PING.
  *
  * It updates timing and master synchronization state, writes received audio and RSSI into per-client
  * circular buffers, performs RSSI-based selection and threshold/linger logic per node, queues
@@ -4886,7 +4873,7 @@ static void *voter_reader(void *data)
 					 */
 					if (client->buflen < (FRAME_SIZE * 8)) {
 						if (!logged_buflen_too_small) {
-							ast_log(LOG_ERROR, "VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
+							ast_log(LOG_ERROR, "VOTER %u: Mix-mode client %s rejected: buflen=%d (<160). Fix voter.conf.\n",
 								client->nodenum, client->name, client->buflen / 8);
 							logged_buflen_too_small = 1; /* Only want to log this once */
 						}
@@ -6006,7 +5993,7 @@ static void *voter_reader(void *data)
 					 */
 					if (client->buflen < (FRAME_SIZE * 8)) {
 						if (!logged_buflen_too_small) {
-							ast_log(LOG_ERROR, "VOTER %u: Mix-mode client %s (proxy) rejected: buflen=%d (<160). Fix voter.conf.\n",
+							ast_log(LOG_ERROR, "VOTER %u: Mix-mode client %s rejected: buflen=%d (<160). Fix voter.conf.\n",
 								client->nodenum, client->name, client->buflen / 8);
 							logged_buflen_too_small = 1;
 						}
