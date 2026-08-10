@@ -160,6 +160,9 @@ pthread_t pulserid;
 static const char *const cd_signal_type[] = { "no", "dsp", "vox", "usb", "usbinvert", "pp", "ppinvert" };
 static const char *const sd_signal_type[] = { "no", "usb", "usbinvert", "dsp", "pp", "ppinvert" };
 
+/* Keep the PortAudio TX buffer fed when no outbound audio is available. */
+static short silence_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
+
 /*! \brief demodulation type */
 static const char *const demodulation_type[] = { "no", "speaker", "flat" };
 
@@ -1723,8 +1726,13 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 		}
 	}
 
+	/*
+	 * Always write something so the USB TX buffer does not intentionally
+	 * underrun (same idea as simpleusb #1161). Radio PTT is HID-gated;
+	 * when unkeyed, feed silence instead of the XPMR TX buffer.
+	 */
 	if (!o->pmrChan->txPttIn && !o->pmrChan->txPttOut) {
-		return 0;
+		data = silence_buf;
 	}
 
 	/*
@@ -2171,6 +2179,8 @@ static void *usbradio_audio_thread(void *arg)
 		}
 
 		flush_tx_queue(o);
+		/* Prime one silence frame so a late first wake-up does not underrun. */
+		ast_radio_pa_write(&o->pa, silence_buf, AST_RADIO_PA_FRAMES_PER_BUFFER);
 		o->audio_thread_ready = 1;
 		last_frame_time = ast_radio_tvnow();
 
