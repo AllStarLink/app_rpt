@@ -1411,7 +1411,7 @@ usb_device_ready:
 				/* HID thread monitors audio thread */
 				ast_radio_time(&audio_time_now);
 				if ((audio_time_now - o->lastaudiotime) > 3) {
-					ast_log(LOG_ERROR, "Channel %s: Audio process has died or is not responding.\n", o->name);
+					usbradio_log_fault(o, 0, "Channel %s: Audio process has died or is not responding.\n", o->name);
 					o->hasusb = 0;
 					break;
 				}
@@ -2172,7 +2172,7 @@ static void *usbradio_audio_thread(void *arg)
 		}
 
 		if (!o->pa.active && usbradio_start_audio(o) < 0) {
-			ast_log(LOG_ERROR, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
+			usbradio_log_fault(o, 0, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
 			o->hasusb = 0;
 			usleep(DEVICE_RETRY);
 			continue;
@@ -2188,7 +2188,7 @@ static void *usbradio_audio_thread(void *arg)
 			if (o->lasthidtime) {
 				ast_radio_time(&now);
 				if ((now - o->lasthidtime) > 3) {
-					ast_log(LOG_ERROR, "Channel %s: HID process has died or is not responding.\n", o->name);
+					usbradio_log_fault(o, 0, "Channel %s: HID process has died or is not responding.\n", o->name);
 					o->hasusb = 0;
 					stream_cleanup(o);
 					break;
@@ -2268,6 +2268,7 @@ static void *usbradio_audio_thread(void *arg)
 			frames_available = ast_radio_pa_write_available(&o->pa);
 			if (frames_available < 0) {
 				ast_debug(2, "Channel %s: Pa_GetStreamWriteAvailable error %s\n", o->name, Pa_GetErrorText(frames_available));
+				o->usb_faulted = 1;
 				o->hasusb = 0;
 				stream_cleanup(o);
 				break;
@@ -2286,7 +2287,8 @@ static void *usbradio_audio_thread(void *arg)
 			}
 
 			if (num_frames && (ast_tvdiff_ms(ast_radio_tvnow(), last_frame_time) > MAX_FRAME_DELAY)) {
-				ast_log(LOG_ERROR, "Channel %s: Audio thread has not drained TX for over %d ms, restarting stream.\n", o->name, MAX_FRAME_DELAY);
+				usbradio_log_fault(o, 0, "Channel %s: Audio thread has not drained TX for over %d ms, restarting stream.\n",
+					o->name, MAX_FRAME_DELAY);
 				o->hasusb = 0;
 				stream_cleanup(o);
 				break;
@@ -2298,7 +2300,8 @@ static void *usbradio_audio_thread(void *arg)
 					/* No RX audio available; still run PTT/TX processing with silence. */
 					memset(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 0, sizeof(o->usbradio_read_buf) - AST_FRIENDLY_OFFSET);
 				} else {
-					ast_log(LOG_ERROR, "Channel %s: PortAudio read error %s\n", o->name, Pa_GetErrorText(pa_res));
+					usbradio_log_fault(o, 0, "Channel %s: PortAudio read failed (%s); restarting audio stream\n", o->name,
+						Pa_GetErrorText(pa_res));
 					o->hasusb = 0;
 					stream_cleanup(o);
 					break;
