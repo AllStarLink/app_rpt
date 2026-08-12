@@ -157,7 +157,8 @@ typedef struct {
 #define TONEMACRO "tonemacro"
 #define MDCMACRO "mdcmacro"
 #define DTMFKEYS "dtmfkeys"
-#define FUNCCHAR '*'
+#define FUNCCHARS "*"
+#define MAXFUNCCHARS 16
 #define ENDCHAR '#'
 #define EXTNODEFILE "/var/lib/asterisk/rpt_extnodes"
 #define NODENAMES "rpt/nodenames"
@@ -833,7 +834,7 @@ struct rpt {
 		int iobase;
 		const char *ioport;
 		int iospeed;
-		char funcchar;
+		char funcchars[MAXFUNCCHARS];
 		char endchar;
 		rpt_bool simple:1;
 		rpt_bool archiveaudio:1;
@@ -989,6 +990,7 @@ struct rpt {
 	struct rpt_conf rptconf;
 	pthread_t rpt_call_thread, rpt_thread;
 	time_t dtmf_time, rem_dtmf_time, dtmf_time_rem;
+	time_t functime, rem_functime; /*!< \brief last progress timestamp for the funcchars sequence matcher */
 	int calldigittimer;
 	int tailtimer, totimer, idtimer, cidx, scantimer, tmsgtimer, skedtimer, linkactivitytimer, elketimer;
 	int remote_time_out_reset_unkey_interval_timer, time_out_reset_unkey_interval_timer;
@@ -1000,6 +1002,7 @@ struct rpt {
 	int first_keyup_inactivity_timer;
 	int tailevent;
 	int dtmfidx, rem_dtmfidx;
+	int funcidx, rem_funcidx; /*!< \brief funcchars sequence match progress: funcidx for the local/remote-base stream, rem_funcidx for the link/phone stream */
 	int dailytxtime, dailykerchunks, totalkerchunks, dailykeyups, totalkeyups, timeouts;
 	int totalexecdcommands, dailyexecdcommands;
 	int retxtimer;
