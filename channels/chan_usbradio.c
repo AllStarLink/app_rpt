@@ -2114,6 +2114,9 @@ static void stream_cleanup(struct chan_usbradio_pvt *o)
 	ast_radio_pa_stop(&o->pa);
 	o->audio_thread_ready = 0;
 	flush_tx_queue(o);
+	if (o->pmrChan) {
+		dedrift_reset(o->pmrChan);
+	}
 }
 
 /*!
@@ -2179,6 +2182,9 @@ static void *usbradio_audio_thread(void *arg)
 		}
 
 		flush_tx_queue(o);
+		if (o->pmrChan) {
+			dedrift_reset(o->pmrChan);
+		}
 		/* Prime one silence frame so a late first wake-up does not underrun. */
 		ast_radio_pa_write(&o->pa, silence_buf, AST_RADIO_PA_FRAMES_PER_BUFFER);
 		o->audio_thread_ready = 1;
@@ -2410,7 +2416,15 @@ static void *usbradio_audio_thread(void *arg)
 				}
 			}
 
-			soundcard_writeframe(o, o->usbradio_write_buf);
+			/*
+			 * One frame per 20 ms tick. When unkeyed, soundcard_writeframe()
+			 * substitutes silence; ast_radio_pa_write() primes one more on
+			 * underrun. Do not fill remaining PA room; that adds TX delay.
+			 */
+			if (!soundcard_writeframe(o, o->usbradio_write_buf)) {
+				stream_cleanup(o);
+				break;
+			}
 			ast_radio_check_audio(o->usbradio_write_buf, &o->txaudiostats, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
 
 #if DEBUG_CAPTURES == 1 && XPMR_DEBUG0 == 1

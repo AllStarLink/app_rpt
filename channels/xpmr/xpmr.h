@@ -953,6 +953,7 @@ i16 MeasureBlock(t_pmr_sps *mySps);
 
 void dedrift(t_pmr_chan *pChan);
 void dedrift_write(t_pmr_chan *pChan, i16 *src);
+void dedrift_reset(t_pmr_chan *pChan);
 
 void ppspiout(u32 spidata);
 void progdtx(t_pmr_chan *pChan);
