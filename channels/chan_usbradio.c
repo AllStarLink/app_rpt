@@ -2416,43 +2416,16 @@ static void *usbradio_audio_thread(void *arg)
 				}
 			}
 
+			/*
+			 * One frame per 20 ms tick. When unkeyed, soundcard_writeframe()
+			 * substitutes silence; ast_radio_pa_write() primes one more on
+			 * underrun. Do not fill remaining PA room; that adds TX delay.
+			 */
 			if (!soundcard_writeframe(o, o->usbradio_write_buf)) {
 				stream_cleanup(o);
 				break;
 			}
 			ast_radio_check_audio(o->usbradio_write_buf, &o->txaudiostats, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
-
-			/*
-			 * Unkeyed: fill remaining PortAudio room with silence so a late USB
-			 * read does not underrun (simpleusb #1161). Do not call PmrRx again;
-			 * that would advance RX timers. Keyed TX stays one XPMR frame per tick
-			 * until PmrGetTx exists.
-			 */
-			if (!o->pmrChan->txPttIn && !o->pmrChan->txPttOut) {
-				int fill_failed = 0;
-
-				while (!fill_failed) {
-					frames_available = ast_radio_pa_write_available(&o->pa);
-					if (frames_available < 0) {
-						ast_debug(2, "Channel %s: Pa_GetStreamWriteAvailable error %s\n", o->name, Pa_GetErrorText(frames_available));
-						o->usb_faulted = 1;
-						o->hasusb = 0;
-						fill_failed = 1;
-						break;
-					}
-					if (frames_available < AST_RADIO_PA_FRAMES_PER_BUFFER) {
-						break;
-					}
-					if (!soundcard_writeframe(o, silence_buf)) {
-						fill_failed = 1;
-						break;
-					}
-				}
-				if (fill_failed) {
-					stream_cleanup(o);
-					break;
-				}
-			}
 
 #if DEBUG_CAPTURES == 1 && XPMR_DEBUG0 == 1
 			if (frxcaptrace && o->rxcap2 && o->pmrChan->b.radioactive) {
