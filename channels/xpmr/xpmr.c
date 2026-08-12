@@ -3491,6 +3491,32 @@ void dedrift(t_pmr_chan *pChan)
 
 /*
  */
+void dedrift_reset(t_pmr_chan *pChan)
+{
+	size_t bytes;
+
+	if (!pChan || !pChan->dd.buff) {
+		return;
+	}
+
+	bytes = pChan->dd.buffersize > 0 ? (size_t) pChan->dd.buffersize * sizeof(i16)
+									 : (size_t) DDB_FRAME_SIZE * DDB_FRAMES_IN_BUFF * sizeof(i16);
+	memset(pChan->dd.buff, 0, bytes);
+	pChan->dd.inputindex = 0;
+	pChan->dd.outputindex = 0;
+	pChan->dd.skew = pChan->dd.lead = pChan->dd.err = 0;
+	pChan->dd.accum = 0;
+	pChan->dd.z1 = 0;
+	pChan->dd.lock = 0;
+	pChan->dd.b.txlock = pChan->dd.b.rxlock = 0;
+	pChan->dd.b.twiddle = pChan->dd.b.doitnow = 0;
+	pChan->dd.initcnt = 2;
+	pChan->dd.timer = 10000 / 20;
+	pChan->dd.drift = 0;
+	pChan->dd.factor = pChan->dd.x1 = pChan->dd.x0 = pChan->dd.y1 = pChan->dd.y0 = 0;
+	pChan->dd.txframecnt = pChan->dd.rxframecnt = 0;
+}
+
 void dedrift_write(t_pmr_chan *pChan, i16 *src)
 {
 	void *vptr;
