@@ -2569,6 +2569,17 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		goto retry;
 	}
 
+	if (rpt_conf_restore(l->pchan, myrpt, RPT_CONF)) {
+		ast_log(LOG_WARNING, "Unable to restore %s to conference after reconnect to %s\n", ast_channel_name(l->pchan), l->name);
+		ast_hangup(l->chan);
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		l->chan = NULL;
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_autoservice_stop(l->pchan);
+		return NULL;
+	}
+
 	ast_autoservice_stop(l->pchan);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 	return NULL;
@@ -4489,8 +4500,12 @@ static inline void safe_hangup(struct ast_channel *chan)
 }
 
 /*! \note myrpt->lock must not be held when calling */
-static inline void hangup_link_chan(struct rpt_link *l)
+static inline void hangup_link_chan(struct rpt *myrpt, struct rpt_link *l)
 {
+	/* Park pchan out of CONF so mix audio cannot fill Announcer/IAXLink while IAX is down. */
+	if (l->pchan) {
+		rpt_conf_remove(l->pchan, myrpt, RPT_CONF);
+	}
 	if (l->chan) {
 		safe_hangup(l->chan);
 		l->chan = NULL;
@@ -4520,16 +4535,16 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 					/* An allstar link node */
 					l->disctime = DISC_TIME;
 				}
-				hangup_link_chan(l);
+				hangup_link_chan(myrpt, l);
 				return 1;
 			}
 
 			if (l->retrytimer) {
-				hangup_link_chan(l);
+				hangup_link_chan(myrpt, l);
 				return 1;
 			}
 			if (l->outbound && (l->retries++ < l->max_retries) && l->hasconnected) {
-				hangup_link_chan(l);
+				hangup_link_chan(myrpt, l);
 				rpt_mutex_lock(&myrpt->lock);
 				l->retrytimer = RETRY_TIMER_MS;
 				l->elaptime = 0;
@@ -4909,7 +4924,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	rpt_frame_queue_free(&l->frame_queue);
 
 	/* hang-up on call to device */
-	hangup_link_chan(l);
+	hangup_link_chan(myrpt, l);
 	ast_hangup(l->pchan);
 
 	if (l->hasconnected) {

@@ -29,6 +29,7 @@
 #include <dahdi/user.h>
 
 #include "asterisk/bridge.h"
+#include "asterisk/bridge_channel.h"
 #include "asterisk/core_unreal.h"
 #include "asterisk/channel.h"
 #include "asterisk/indications.h"
@@ -378,6 +379,33 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 	return 0;
 }
 
+/*!
+ * \brief Get the bridge channel associated with the underlying Asterisk channel.
+ * \note Returns a ref-counted bridge channel object that must be released with ao2_ref(..., -1).
+ */
+static struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan)
+{
+	struct ast_unreal_pvt *p;
+	struct ast_channel *pchan;
+	struct ast_bridge_channel *bridge_channel = NULL;
+
+	if (!chan) {
+		return NULL;
+	}
+
+	p = ast_channel_tech_pvt(chan);
+	if (!p || !p->chan) {
+		return NULL;
+	}
+	pchan = ast_channel_ref(p->chan); /* The :2 side of the local channel */
+	ast_channel_lock(pchan);
+	bridge_channel = ast_channel_get_bridge_channel(pchan);
+	ast_channel_unlock(pchan);
+	ast_channel_unref(pchan);
+
+	return bridge_channel;
+}
+
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
 {
 	struct ast_bridge *conf = NULL;
@@ -415,32 +443,64 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 	return res;
 }
 
-/*!
- * \brief Get the bridge channel associated with the underlying Asterisk channel.
- * \note Returns a ref-counted bridge channel object that must be released with ao2_ref(..., -1).
- */
-
-static struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_channel *chan)
+int __rpt_conf_remove(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
 {
+	struct ast_bridge *conf = NULL;
+	const char *conference_name = "";
 	struct ast_unreal_pvt *p;
-	struct ast_channel *pchan;
-	struct ast_bridge_channel *bridge_channel = NULL;
+	struct ast_bridge_channel *bc;
+	int res;
 
-	if (!chan) {
-		return NULL;
+	switch (type) {
+	case RPT_CONF:
+		conference_name = RPT_CONF_NAME;
+		conf = myrpt->rptconf.conf;
+		break;
+	case RPT_TXCONF:
+		conference_name = RPT_TXCONF_NAME;
+		conf = myrpt->rptconf.txconf;
+		break;
+	default:
+		__builtin_unreachable();
+		return -1;
 	}
+	if (!chan || !conf) {
+		return 0;
+	}
+
+	bc = rpt_get_bridge_channel_from_chan(chan);
+	if (!bc) {
+		return 0;
+	}
+	ao2_ref(bc, -1);
 
 	p = ast_channel_tech_pvt(chan);
 	if (!p || !p->chan) {
-		return NULL;
+		return 0;
 	}
-	pchan = ast_channel_ref(p->chan); /* The :2 side of the local channel */
-	ast_channel_lock(pchan);
-	bridge_channel = ast_channel_get_bridge_channel(pchan);
-	ast_channel_unlock(pchan);
-	ast_channel_unref(pchan);
 
-	return bridge_channel;
+	ast_debug(3, "Removing channel %s from conference '%s' mixing bridge\n", ast_channel_name(chan), conference_name);
+	res = ast_bridge_remove(conf, p->chan);
+	if (res) {
+		ast_debug(3, "Channel %s was not removed from conference '%s'\n", ast_channel_name(chan), conference_name);
+		return 0;
+	}
+	return 0;
+}
+
+int __rpt_conf_restore(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
+{
+	struct ast_bridge_channel *bc;
+
+	if (!chan) {
+		return -1;
+	}
+	bc = rpt_get_bridge_channel_from_chan(chan);
+	if (bc) {
+		ao2_ref(bc, -1);
+		return 0;
+	}
+	return __rpt_conf_add(chan, myrpt, type, file, line);
 }
 
 int rpt_conf_get_muted(struct ast_channel *chan, struct rpt *myrpt)

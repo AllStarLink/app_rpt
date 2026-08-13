@@ -90,6 +90,22 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
  */
 #define rpt_conf_add(chan, myrpt, type) __rpt_conf_add(chan, myrpt, type, __FILE__, __LINE__)
 
+int __rpt_conf_remove(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
+
+int __rpt_conf_restore(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
+
+/*!
+ * \brief Remove a Local channel from a conference if it is a member.
+ * \retval 0 if removed or already absent, -1 on failure
+ */
+#define rpt_conf_remove(chan, myrpt, type) __rpt_conf_remove(chan, myrpt, type, __FILE__, __LINE__)
+
+/*!
+ * \brief Re-add a Local channel to a conference if it is not already a member.
+ * \retval 0 on success or already a member, -1 on failure
+ */
+#define rpt_conf_restore(chan, myrpt, type) __rpt_conf_restore(chan, myrpt, type, __FILE__, __LINE__)
+
 /*!
  * \param chan Channel to play tone on
  * \param tone tone type (e.g., "dial", "congestion")
