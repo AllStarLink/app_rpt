@@ -522,19 +522,42 @@ int __rpt_conf_remove(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf
 
 int __rpt_conf_restore(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
 {
+	struct ast_bridge *conf = NULL;
+	struct ast_bridge *bc_bridge;
 	struct ast_bridge_channel *bc;
 	enum bridge_channel_state state;
 
 	if (!chan) {
 		return -1;
 	}
+
+	switch (type) {
+	case RPT_CONF:
+		conf = myrpt->rptconf.conf;
+		break;
+	case RPT_TXCONF:
+		conf = myrpt->rptconf.txconf;
+		break;
+	default:
+		__builtin_unreachable();
+		return -1;
+	}
+	if (!conf) {
+		return -1;
+	}
+
 	bc = rpt_get_bridge_channel_from_chan(chan);
 	if (bc) {
 		ast_bridge_channel_lock(bc);
+		bc_bridge = bc->bridge;
 		state = bc->state;
 		ast_bridge_channel_unlock(bc);
 		ao2_ref(bc, -1);
-		if (state == BRIDGE_CHANNEL_STATE_WAIT) {
+		if (bc_bridge && bc_bridge != conf) {
+			ast_log(LOG_WARNING, "Channel %s is in a different bridge; cannot restore to conference\n", ast_channel_name(chan));
+			return -1;
+		}
+		if (bc_bridge == conf && state == BRIDGE_CHANNEL_STATE_WAIT) {
 			return 0;
 		}
 		if (rpt_wait_until_unbridged(chan, RPT_CONF_UNBRIDGE_TIMEOUT_MS)) {
