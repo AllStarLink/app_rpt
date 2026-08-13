@@ -563,14 +563,17 @@ struct libusb_device *ast_radio_usb_device_from_alsa_card(int cardno);
 /*!
  * \brief PortAudio stream state shared by chan_simpleusb and chan_usbradio.
  *
- * After ast_radio_pa_open(), use ps->input_channels for RX buffer layout.
+ * After ast_radio_pa_open(), use ps->input_channels for RX buffer layout and
+ * ps->output_channels for TX. Callers still pass stereo interleaved TX to
+ * ast_radio_pa_write(); mono hardware is downmixed there (AIOC and similar).
  * ast_radio_pa_read() and ast_radio_pa_write() take frames per channel
- * (typically AST_RADIO_PA_FRAMES_PER_BUFFER). TX is always stereo interleaved.
+ * (typically AST_RADIO_PA_FRAMES_PER_BUFFER).
  */
 struct ast_radio_pa_stream {
 	PaStream *stream;
 	int active;
-	unsigned int input_channels; /*!< Actual RX channel count after ast_radio_pa_open() */
+	unsigned int input_channels;  /*!< Actual RX channel count after ast_radio_pa_open() */
+	unsigned int output_channels; /*!< Actual TX channel count after ast_radio_pa_open() */
 	char hw_device[100];
 };
 
