@@ -2765,11 +2765,19 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 
 static void queue_id(struct rpt *myrpt)
 {
+	enum rpt_tele_mode mode = ID;
+	const char *idtalkover;
+
 	myrpt->mustid = myrpt->tailid = 0;
 	if (myrpt->p.idtime) {				  /* ID time must be non-zero */
+		idtalkover = ast_variable_retrieve(myrpt->cfg, myrpt->name, "idtalkover");
+		if ((myrpt->keyed || myrpt->remrx || myrpt->localoverride) && !ast_strlen_zero(idtalkover)) {
+			mode = IDTALKOVER;
+		}
+
 		myrpt->idtimer = myrpt->p.idtime; /* Reset our ID timer */
 		rpt_mutex_unlock(&myrpt->lock);
-		rpt_telemetry(myrpt, ID, NULL);
+		rpt_telemetry(myrpt, mode, NULL);
 		rpt_mutex_lock(&myrpt->lock);
 	}
 }
