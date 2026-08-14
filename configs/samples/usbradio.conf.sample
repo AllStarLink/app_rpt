@@ -137,6 +137,8 @@
                             ; tone - CTCSS tone only
                             ; composite - voice and tone
                             ; auxvoice - auxiliary voice output at headphone level for monitoring
+                            ; On mono TX devices (AIOC), A/B cannot be split; the inactive
+                            ; side is mirrored so the PortAudio downmix stays full level.
 
 ; Audio filters 
 ;rxlpf = 0                  ; Receiver Audio Low Pass Filter 0,1 2
