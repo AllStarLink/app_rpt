@@ -886,6 +886,8 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
  * XPMR always writes stereo. Default txmixa=composite / txmixb=no zeros
  * the right channel, so the res_usbradio L/R average drops ~6 dB.
  * Duplicate the active mix onto both sides (XPMR monoOut) instead.
+ * Differing voice+tone is left on L/R so the average forms composite;
+ * other differing pairs keep A and disable B.
  */
 static void usbradio_adjust_txmix_for_mono(struct chan_usbradio_pvt *o)
 {
@@ -913,7 +915,19 @@ static void usbradio_adjust_txmix_for_mono(struct chan_usbradio_pvt *o)
 			mono_sps = o->pmrChan->spsTxOutA;
 		}
 	} else if (a != b) {
-		ast_log(LOG_WARNING, "Channel %s: txmixa/txmixb differ on mono TX; using A for both (cannot split sources)\n", o->name);
+		/* Voice+tone on A/B is composite once PortAudio averages L/R. */
+		if ((a == TX_OUT_VOICE && b == TX_OUT_LSD) || (a == TX_OUT_LSD && b == TX_OUT_VOICE)) {
+			ast_log(LOG_WARNING, "Channel %s: mono TX device; voice+tone A/B averaged into composite (both sources kept)\n", o->name);
+			o->txmixa = TX_OUT_COMPOSITE;
+			o->txmixb = TX_OUT_COMPOSITE;
+			if (o->pmrChan) {
+				o->pmrChan->txMixA = TX_OUT_COMPOSITE;
+				o->pmrChan->txMixB = TX_OUT_COMPOSITE;
+			}
+			return;
+		}
+
+		ast_log(LOG_WARNING, "Channel %s: unsupported txmixa/txmixb pair on mono TX; keeping A, disabling B\n", o->name);
 		b = a;
 		if (o->pmrChan) {
 			mono_sps = o->pmrChan->spsTxOutA;
