@@ -2500,19 +2500,31 @@ static char *parse_node_format(char *s, char **restrict s1, char *buf, size_t le
 	return s2;
 }
 
-static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
+/*! \brief Detached reconnect worker context (takes ownership of link ref) */
+struct rpt_reconnect_data {
+	struct rpt *myrpt;
+	struct rpt_link *l;
+};
+
+/*!
+ * \brief Blocking DNS/dial for an outbound link reconnect.
+ * \note Runs on a detached thread so process_link_channel can stay on waitfor.
+ *       Do not autoservice pchan here — the link waitfor thread keeps reading it.
+ */
+static void *attempt_reconnect(void *data)
 {
+	struct rpt_reconnect_data *rd = data;
+	struct rpt *myrpt = rd->myrpt;
+	struct rpt_link *l = rd->l;
 	char *s1, *tele;
 	char tmp[300], deststr[325] = "";
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
+	struct ast_channel *newchan = NULL;
 
-	ast_debug(1, "Attempting Reconnect");
-	/* rpt_make_call and node_lookup are blocking, long dns lookups result in exceptionally long queue warnings
-	 * autoservice handles "eating" the frames and eliminating the warning.
-	 */
-	ast_autoservice_start(l->pchan);
+	ast_debug(1, "Attempting Reconnect (async) to %s\n", l->name);
+
 	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp), 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
 		goto retry;
@@ -2537,6 +2549,13 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	tele = strchr(deststr, '/');
 	/* tele must be non-NULL here since deststr always contains at least 'IAX2/' */
 	*tele++ = 0;
+
+	rpt_mutex_lock(&myrpt->lock);
+	if (l->killme || l->chan || (l->disced != RPT_LINK_DISCONNECT_NONE)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		ao2_ref(cap, -1);
+		goto done;
+	}
 	l->elaptime = 0;
 	l->connecttime = ast_tv(0, 0); /* not connected */
 	l->lastkeytime = 0;
@@ -2548,37 +2567,95 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->rxlingertimer = RX_LINGER_TIME;
 	l->newkeytimer = NEWKEYTIME;
 	l->link_newkey = RADIO_KEY_NOT_ALLOWED;
-	l->chan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
-	ao2_ref(cap, -1);
 	while ((f1 = AST_LIST_REMOVE_HEAD(&l->textq, frame_list))) {
 		ast_frfree(f1);
 	}
-	if (l->chan) {
-		if (rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name)) {
-			ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
-			ast_hangup(l->chan);
-			rpt_mutex_lock(&myrpt->lock);
-			l->retrytimer = RETRY_TIMER_MS;
-			l->chan = NULL;
-			rpt_mutex_unlock(&myrpt->lock);
-			ast_autoservice_stop(l->pchan);
-			return NULL;
-		}
-	} else {
+	rpt_mutex_unlock(&myrpt->lock);
+
+	newchan = ast_request(deststr, cap, NULL, NULL, tele, NULL);
+	ao2_ref(cap, -1);
+	if (!newchan) {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
 		goto retry;
 	}
+	if (rpt_make_call(newchan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name)) {
+		ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
+		ast_hangup(newchan);
+		goto retry;
+	}
 
-	ast_autoservice_stop(l->pchan);
+	rpt_mutex_lock(&myrpt->lock);
+	if (l->killme || l->chan || (l->disced != RPT_LINK_DISCONNECT_NONE)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_hangup(newchan);
+		goto done;
+	}
+	l->chan = newchan;
+	l->reconnecting = 0;
+	rpt_mutex_unlock(&myrpt->lock);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
-	return NULL;
+	goto cleanup;
 
 retry:
 	rpt_mutex_lock(&myrpt->lock);
-	l->retrytimer = RETRY_TIMER_MS;
+	if (!l->killme && (l->disced == RPT_LINK_DISCONNECT_NONE)) {
+		l->retrytimer = RETRY_TIMER_MS;
+	}
+	l->reconnecting = 0;
 	rpt_mutex_unlock(&myrpt->lock);
-	ast_autoservice_stop(l->pchan);
+	goto cleanup;
+
+done:
+	rpt_mutex_lock(&myrpt->lock);
+	l->reconnecting = 0;
+	rpt_mutex_unlock(&myrpt->lock);
+
+cleanup:
+	ao2_ref(l, -1);
+	ast_free(rd);
 	return NULL;
+}
+
+/*!
+ * \brief Start a detached reconnect worker if one is not already running.
+ * \retval 0 if worker started or already running, -1 if thread create failed
+ */
+static int schedule_reconnect(struct rpt *myrpt, struct rpt_link *l)
+{
+	pthread_t tid;
+	struct rpt_reconnect_data *rd;
+
+	rpt_mutex_lock(&myrpt->lock);
+	if (l->reconnecting || l->chan) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return 0;
+	}
+	l->reconnecting = 1;
+	rpt_mutex_unlock(&myrpt->lock);
+
+	rd = ast_calloc(1, sizeof(*rd));
+	if (!rd) {
+		rpt_mutex_lock(&myrpt->lock);
+		l->reconnecting = 0;
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
+		return -1;
+	}
+	rd->myrpt = myrpt;
+	rd->l = l;
+	ao2_ref(l, +1);
+
+	if (ast_pthread_create_detached(&tid, NULL, attempt_reconnect, rd)) {
+		ast_log(LOG_WARNING, "Unable to start reconnect thread for %s\n", l->name);
+		rpt_mutex_lock(&myrpt->lock);
+		l->reconnecting = 0;
+		l->retrytimer = RETRY_TIMER_MS;
+		rpt_mutex_unlock(&myrpt->lock);
+		ao2_ref(l, -1);
+		ast_free(rd);
+		return -1;
+	}
+	return 0;
 }
 
 /* 0 return=continue, 1 return = break, -1 return = error */
@@ -3548,16 +3625,16 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			return;
 		}
 
-		if (!l->chan && !l->retrytimer && !max_retries && l->hasconnected) {
+		if (!l->chan && !l->retrytimer && !l->reconnecting && !max_retries && l->hasconnected) {
 			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
-				attempt_reconnect(myrpt, l);
+				schedule_reconnect(myrpt, l);
 			} else {
 				/* We should not retry this node type */
 				l->retries = l->max_retries + 1;
 			}
 			return;
 		}
-		if (!l->chan && !l->retrytimer && max_retries) {
+		if (!l->chan && !l->retrytimer && !l->reconnecting && max_retries) {
 			l->disced = RPT_LINK_DISCONNECT;
 			if (!strcmp(myrpt->cmdnode, l->name))
 				myrpt->cmdnode[0] = 0;
@@ -4915,6 +4992,28 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 	}
 	rpt_frame_queue_free(&l->frame_queue);
+
+	/* Ensure any detached reconnect worker has finished before we hang up. */
+	rpt_mutex_lock(&myrpt->lock);
+	l->killme = 1;
+	rpt_mutex_unlock(&myrpt->lock);
+	{
+		int waited_ms = 0;
+
+		while (waited_ms < 30000) {
+			rpt_mutex_lock(&myrpt->lock);
+			if (!l->reconnecting) {
+				rpt_mutex_unlock(&myrpt->lock);
+				break;
+			}
+			rpt_mutex_unlock(&myrpt->lock);
+			usleep(10000);
+			waited_ms += 10;
+		}
+		if (l->reconnecting) {
+			ast_log(LOG_WARNING, "Timed out waiting for reconnect thread for node %s\n", l->name);
+		}
+	}
 
 	/* hang-up on call to device */
 	hangup_link_chan(l);
