@@ -2569,17 +2569,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		goto retry;
 	}
 
-	if (rpt_conf_restore(l->pchan, myrpt, RPT_CONF)) {
-		ast_log(LOG_WARNING, "Unable to restore %s to conference after reconnect to %s\n", ast_channel_name(l->pchan), l->name);
-		ast_hangup(l->chan);
-		rpt_mutex_lock(&myrpt->lock);
-		l->retrytimer = RETRY_TIMER_MS;
-		l->chan = NULL;
-		rpt_mutex_unlock(&myrpt->lock);
-		ast_autoservice_stop(l->pchan);
-		return NULL;
-	}
-
+	/* Leave l->pchan parked until AST_CONTROL_ANSWER restores it to RPT_CONF. */
 	ast_autoservice_stop(l->pchan);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 	return NULL;
@@ -4521,7 +4511,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	if (l->chan) {
 		link_process_textq(myrpt, l);
-		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
+		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
 	}
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
@@ -4821,6 +4811,15 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						doconpgm(myrpt, l->name);
 					} else
 						l->reconnects++;
+					/* Re-add parked pchan only after the peer has answered. */
+					if (l->pchan && rpt_conf_restore(l->pchan, myrpt, RPT_CONF)) {
+						ast_log(LOG_WARNING, "Unable to restore %s to conference after answer from %s\n", ast_channel_name(l->pchan), l->name);
+						ast_frfree(f);
+						if (remote_hangup_helper(myrpt, l)) {
+							continue;
+						}
+						break;
+					}
 				}
 				/* if RX key */
 				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->link_newkey != RADIO_KEY_NOT_ALLOWED)) {
@@ -5335,7 +5334,7 @@ static void *rpt(void *this)
 				myrpt->remrx = 1;
 				if (l->voterlink)
 					myrpt->voteremrx = 1;
-				if ((l->name[0] > '0') && (l->name[0] <= '9'))		/* Ignore '0' nodes */
+				if ((l->name[0] > '0') && (l->name[0] <= '9')) /* Ignore '0' nodes */
 					ast_copy_string(myrpt->lastnodewhichkeyedusup, l->name, sizeof(myrpt->lastnodewhichkeyedusup));
 			}
 		}

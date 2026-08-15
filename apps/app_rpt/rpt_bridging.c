@@ -381,6 +381,43 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 	return 0;
 }
 
+int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
+{
+	struct ast_bridge *conf = NULL;
+	const char *conference_name = "";
+	struct ast_unreal_pvt *p;
+	int res;
+
+	switch (type) {
+	case RPT_CONF:
+		conference_name = RPT_CONF_NAME;
+		conf = myrpt->rptconf.conf;
+		break;
+	case RPT_TXCONF:
+		conference_name = RPT_TXCONF_NAME;
+		conf = myrpt->rptconf.txconf;
+		break;
+	default:
+		__builtin_unreachable();
+		return -1;
+	}
+	if (!conf) {
+		ast_log(LOG_ERROR, "Conference '%s' mixing bridge doesn't exist, can't add channel %s\n", conference_name, ast_channel_name(chan));
+		return -1;
+	}
+	ast_debug(3, "Adding channel %s to conference '%s' mixing bridge \n", ast_channel_name(chan), conference_name);
+	res = ast_unreal_channel_push_to_bridge(chan, conf, AST_BRIDGE_CHANNEL_FLAG_IMMOVABLE);
+	if (res) {
+		ast_log(LOG_ERROR, "Failed to add channel %s to conference '%s'\n", ast_channel_name(chan), conference_name);
+		return res;
+	}
+	p = ast_channel_tech_pvt(chan);
+	if (p && p->chan) {
+		ast_raw_answer(p->chan); /* We can not wait 500ms for media to start flowing */
+	}
+	return res;
+}
+
 /*!
  * \brief Get the bridge channel associated with the underlying Asterisk channel.
  * \note Returns a ref-counted bridge channel object that must be released with ao2_ref(..., -1).
@@ -432,43 +469,6 @@ static int rpt_wait_until_unbridged(struct ast_channel *chan, int timeout_ms)
 		}
 		usleep(1000);
 	}
-}
-
-int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
-{
-	struct ast_bridge *conf = NULL;
-	const char *conference_name = "";
-	struct ast_unreal_pvt *p;
-	int res;
-
-	switch (type) {
-	case RPT_CONF:
-		conference_name = RPT_CONF_NAME;
-		conf = myrpt->rptconf.conf;
-		break;
-	case RPT_TXCONF:
-		conference_name = RPT_TXCONF_NAME;
-		conf = myrpt->rptconf.txconf;
-		break;
-	default:
-		__builtin_unreachable();
-		return -1;
-	}
-	if (!conf) {
-		ast_log(LOG_ERROR, "Conference '%s' mixing bridge doesn't exist, can't add channel %s\n", conference_name, ast_channel_name(chan));
-		return -1;
-	}
-	ast_debug(3, "Adding channel %s to conference '%s' mixing bridge \n", ast_channel_name(chan), conference_name);
-	res = ast_unreal_channel_push_to_bridge(chan, conf, AST_BRIDGE_CHANNEL_FLAG_IMMOVABLE);
-	if (res) {
-		ast_log(LOG_ERROR, "Failed to add channel %s to conference '%s'\n", ast_channel_name(chan), conference_name);
-		return res;
-	}
-	p = ast_channel_tech_pvt(chan);
-	if (p && p->chan) {
-		ast_raw_answer(p->chan); /* We can not wait 500ms for media to start flowing */
-	}
-	return res;
 }
 
 int __rpt_conf_remove(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
