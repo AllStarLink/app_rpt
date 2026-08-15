@@ -3037,7 +3037,6 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		pChan->txrxblankingtimer = pChan->txrxblankingtime;
 		pChan->b.txCtcssHangMuted = 0;
 		pChan->b.txCtcssOff = 0;
-		__atomic_store_n(&pChan->txCtcssInputReq, TXCTCSS_INPUT_REQ_NONE, __ATOMIC_RELEASE);
 		TRACEC(1, "PmrRx() txrxblankingtimer=%i\n", pChan->txrxblankingtimer);
 		pChan->txState = CHAN_TXSTATE_IDLE;
 		if (pChan->spsTxLsdLpf) {
