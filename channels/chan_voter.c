@@ -3704,6 +3704,9 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 			cp = ast_strdup(val);
 			if (!cp) {
 				p->nthresholds = 0;
+				p->threshold = 0;
+				p->threshcount = 0;
+				p->lingercount = 0;
 			} else {
 				/* Split the coma delimited string (cp), return the pointers in strs, and set p->nthresholds
 				 * with the number of thresholds we found.
@@ -4130,9 +4133,14 @@ static int reload(void)
 				p->txtoctype = TOC_NOTONE;
 			}
 		}
-		/* Reset thresholds count to 0 before we read in and parse any thresholds values. */
+		/* Reset thresholds count and any active runtime threshold state before we read in and parse
+		 * the replacement threshold list. This prevents stale entries from being referenced when the
+		 * number of configured thresholds shrinks on reload.
+		 */
+		p->threshold = 0;
+		p->threshcount = 0;
+		p->lingercount = 0;
 		p->nthresholds = 0;
-		val = ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		/* Look for, and process the thresholds = setting. */
 		val = ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
@@ -4140,6 +4148,9 @@ static int reload(void)
 			cp = ast_strdup(val);
 			if (!cp) {
 				p->nthresholds = 0;
+				p->threshold = 0;
+				p->threshcount = 0;
+				p->lingercount = 0;
 			} else {
 				/* Split the coma delimited string (cp), return the pointers in strs, and set p->nthresholds
 				 * with the number of thresholds we found.
