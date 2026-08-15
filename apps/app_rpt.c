@@ -4787,6 +4787,20 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				if (f->subclass.integer == AST_CONTROL_ANSWER) {
 					char lconnected = l->connected;
 
+					/*
+					 * Restore parked pchan before committing connected state.
+					 * On failure leave retries untouched so remote_hangup_helper
+					 * still honors max_retries instead of resetting the budget.
+					 */
+					if (l->pchan && rpt_conf_restore(l->pchan, myrpt, RPT_CONF)) {
+						ast_log(LOG_WARNING, "Unable to restore %s to conference after answer from %s\n", ast_channel_name(l->pchan), l->name);
+						ast_frfree(f);
+						if (remote_hangup_helper(myrpt, l)) {
+							continue;
+						}
+						break;
+					}
+
 					__kickshort(myrpt);
 					myrpt->rxlingertimer = RX_LINGER_TIME;
 					l->connected = 1;
@@ -4811,15 +4825,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						doconpgm(myrpt, l->name);
 					} else
 						l->reconnects++;
-					/* Re-add parked pchan only after the peer has answered. */
-					if (l->pchan && rpt_conf_restore(l->pchan, myrpt, RPT_CONF)) {
-						ast_log(LOG_WARNING, "Unable to restore %s to conference after answer from %s\n", ast_channel_name(l->pchan), l->name);
-						ast_frfree(f);
-						if (remote_hangup_helper(myrpt, l)) {
-							continue;
-						}
-						break;
-					}
 				}
 				/* if RX key */
 				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->link_newkey != RADIO_KEY_NOT_ALLOWED)) {
