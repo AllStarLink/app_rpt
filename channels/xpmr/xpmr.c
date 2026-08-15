@@ -2914,6 +2914,23 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			pChan->txState = CHAN_TXSTATE_ACTIVE;
 			pChan->txPttOut = 1;
 
+			/*
+			 * Consume an input-only request that arrived while TX was idle.
+			 * An OFF request here suppresses CTCSS without a TOC because no
+			 * tone has yet been transmitted in this keyed period.
+			 */
+			{
+				sig_atomic_t input_req = __atomic_exchange_n(&pChan->txCtcssInputReq, TXCTCSS_INPUT_REQ_NONE, __ATOMIC_ACQ_REL);
+
+				if (input_req == TXCTCSS_INPUT_REQ_OFF) {
+					pChan->b.txCtcssHangMuted = 1;
+					pChan->b.txCtcssOff = 1;
+					pChan->spsSigGen0->option = 3;
+				} else if (input_req == TXCTCSS_INPUT_REQ_ON) {
+					pChan->b.txCtcssOff = 0;
+				}
+			}
+
 			pChan->txsettletimer = pChan->txsettletime;
 
 			if (pChan->spsTxOutA) {
@@ -2959,16 +2976,18 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 							} else {
 								f = pChan->txctcssdefault_value;
 							}
-							if (!f) {
+							if (f <= 0) {
 								f = pChan->txctcssdefault_value;
 							}
-							if (f) {
+							if (f > 0) {
 								pChan->spsSigGen0->freq = f * 10;
+								pChan->spsSigGen0->option = 1;
+								pChan->spsSigGen0->enabled = 1;
+								pChan->spsSigGen0->discounterl = 0;
+								TRACEC(1, "Tx CTCSS restore on TXCTCSS on during hang.\n");
+							} else {
+								TRACEC(1, "Tx CTCSS restore skipped: no valid frequency.\n");
 							}
-							pChan->spsSigGen0->option = 1;
-							pChan->spsSigGen0->enabled = 1;
-							pChan->spsSigGen0->discounterl = 0;
-							TRACEC(1, "Tx CTCSS restore on TXCTCSS on during hang.\n");
 						}
 					}
 				} else if (input_req == TXCTCSS_INPUT_REQ_OFF) {

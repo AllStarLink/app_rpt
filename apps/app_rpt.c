@@ -5706,13 +5706,15 @@ static void *rpt(void *this)
 			char str[16];
 
 			myrpt->lastitx = x;
-			if (myrpt->p.itxctcss) {
-				if (IS_DAHDI_CHAN(myrpt->rxchannel)) {
+			if (IS_DAHDI_CHAN(myrpt->rxchannel)) {
+				/* Preserve the existing legacy DAHDI behavior. */
+				if (myrpt->p.itxctcss) {
 					dahdi_radio_set_ctcss_encode(myrpt->localrxchannel, !x);
-				} else if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
-					snprintf(str, sizeof(str), "TXCTCSS %d", !(!x));
-					ast_sendtext(myrpt->rxchannel, str);
 				}
+			} else if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
+				/* Disabled input-only mode always means CTCSS enabled. */
+				snprintf(str, sizeof(str), "TXCTCSS %d", !myrpt->p.itxctcss || !!x);
+				ast_sendtext(myrpt->rxchannel, str);
 			}
 		}
 		/* If we have a new active telemetry message and a channel */
