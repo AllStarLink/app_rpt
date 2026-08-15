@@ -3639,7 +3639,12 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
 			if (ast_str_to_int(val, &config_linger) == 0) {
-				p->linger = config_linger;
+				if (config_linger >= 0 && config_linger <= UINT16_MAX) {
+					p->linger = config_linger;
+				} else {
+					ast_log(LOG_NOTICE, "linger out of range, using default linger = %i\n", DEFAULT_LINGER);
+					p->linger = DEFAULT_LINGER;
+				}
 			} else {
 				ast_debug(3, "Unable to convert %s to int\n", val);
 				p->linger = DEFAULT_LINGER;
@@ -3697,10 +3702,14 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		if (val) {
 			/* If it is set, make a copy into cp. */
 			cp = ast_strdup(val);
-			/* Split the coma delimited string (cp), return the pointers in strs, and set p->nthresholds
-			 * with the number of thresholds we found.
-			 */
-			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			if (!cp) {
+				p->nthresholds = 0;
+			} else {
+				/* Split the coma delimited string (cp), return the pointers in strs, and set p->nthresholds
+				 * with the number of thresholds we found.
+				 */
+				p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			}
 			/* Now we need to process each threshold setting we found. They should contain one
 			 * or more MIN_RSSI (rssi_thresh) values, and then optionally REASSESS_FRAMES (count_thresh)
 			 * and/or LINGER_FRAMES (linger_thresh).
@@ -3711,7 +3720,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 				 */
 				cp1 = strchr(strs[i], '=');
 				/* Set the linger threshold (LINGER_FRAMES) to whatever p->linger has been
-				 * set to. If no linger value was specified in voter.conf, it defults to 6.
+				 * set to. If no linger value was specified in voter.conf, it defaults to 6.
 				 */
 				p->linger_thresh[i] = p->linger;
 				/* If we have a REASSESS_FRAMES, process it. */
@@ -3728,7 +3737,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 						 */
 						if (cp2[1]) {
 							if (ast_str_to_int(cp2 + 1, &config_linger_thresh) == 0) {
-								if (config_linger_thresh >= 0) {
+								if (config_linger_thresh >= 0 && config_linger_thresh <= UINT16_MAX) {
 									p->linger_thresh[i] = (uint16_t) config_linger_thresh;
 								} else {
 									ast_log(LOG_NOTICE,
@@ -3745,7 +3754,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 					 */
 					if (cp1[1]) {
 						if (ast_str_to_int(cp1 + 1, &config_count_thresh) == 0) {
-							if (config_count_thresh >= 0) {
+							if (config_count_thresh >= 0 && config_count_thresh <= UINT16_MAX) {
 								p->count_thresh[i] = (uint16_t) config_count_thresh;
 							} else {
 								ast_log(LOG_NOTICE,
@@ -3755,6 +3764,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 
 						} else {
 							ast_debug(3, "Unable to convert %s to int\n", cp1 + 1);
+							ast_log(LOG_ERROR, "thresholds found, REASSESS_FRAMES parameter error, setting to 5\n");
+							p->count_thresh[i] = 5;
 						}
 					}
 				}
@@ -3763,11 +3774,13 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 					if (config_rssi_thresh >= 1 && config_rssi_thresh <= 255) {
 						p->rssi_thresh[i] = (uint8_t) config_rssi_thresh;
 					} else {
-						ast_log(LOG_NOTICE, "thresholds found, MIN_RSSI paramater out of range (1-255), setting to 255\n ");
+						ast_log(LOG_NOTICE, "thresholds found, MIN_RSSI parameter out of range (1-255), setting to 255\n ");
 						p->rssi_thresh[i] = 255;
 					}
 				} else {
 					ast_debug(3, "Unable to convert %s to int\n", strs[i]);
+					ast_log(LOG_ERROR, "thresholds found, MIN_RSSI parameter error, setting to 255\n");
+					p->rssi_thresh[i] = 255;
 				}
 			}
 			ast_free(cp);
@@ -4032,7 +4045,12 @@ static int reload(void)
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
 			if (ast_str_to_int(val, &config_linger) == 0) {
-				p->linger = config_linger;
+				if (config_linger >= 0 && config_linger <= UINT16_MAX) {
+					p->linger = config_linger;
+				} else {
+					ast_log(LOG_NOTICE, "linger out of range, using default linger = %i\n", DEFAULT_LINGER);
+					p->linger = DEFAULT_LINGER;
+				}
 			} else {
 				ast_debug(3, "Unable to convert %s to int\n", val);
 				p->linger = DEFAULT_LINGER;
@@ -4120,10 +4138,14 @@ static int reload(void)
 		if (val) {
 			/* If it is set, make a copy into cp. */
 			cp = ast_strdup(val);
-			/* Split the coma delimited string (cp), return the pointers in strs, and set p->nthresholds
-			 * with the number of thresholds we found.
-			 */
-			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			if (!cp) {
+				p->nthresholds = 0;
+			} else {
+				/* Split the coma delimited string (cp), return the pointers in strs, and set p->nthresholds
+				 * with the number of thresholds we found.
+				 */
+				p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			}
 			/* Now we need to process each threshold setting we found. They should contain one
 			 * or more MIN_RSSI (rssi_thresh) values, and then optionally REASSESS_FRAMES (count_thresh)
 			 * and/or LINGER_FRAMES (linger_thresh).
@@ -4134,7 +4156,7 @@ static int reload(void)
 				 */
 				cp1 = strchr(strs[i], '=');
 				/* Set the linger threshold (LINGER_FRAMES) to whatever p->linger has been
-				 * set to. If no linger value was specified in voter.conf, it defults to 6.
+				 * set to. If no linger value was specified in voter.conf, it defaults to 6.
 				 */
 				p->linger_thresh[i] = p->linger;
 				/* If we have a REASSESS_FRAMES, process it. */
@@ -4151,7 +4173,7 @@ static int reload(void)
 						 */
 						if (cp2[1]) {
 							if (ast_str_to_int(cp2 + 1, &config_linger_thresh) == 0) {
-								if (config_linger_thresh >= 0) {
+								if (config_linger_thresh >= 0 && config_linger_thresh <= UINT16_MAX) {
 									p->linger_thresh[i] = (uint16_t) config_linger_thresh;
 								} else {
 									ast_log(LOG_NOTICE,
@@ -4168,7 +4190,7 @@ static int reload(void)
 					 */
 					if (cp1[1]) {
 						if (ast_str_to_int(cp1 + 1, &config_count_thresh) == 0) {
-							if (config_count_thresh >= 0) {
+							if (config_count_thresh >= 0 && config_count_thresh <= UINT16_MAX) {
 								p->count_thresh[i] = (uint16_t) config_count_thresh;
 							} else {
 								ast_log(LOG_NOTICE,
@@ -4178,6 +4200,8 @@ static int reload(void)
 
 						} else {
 							ast_debug(3, "Unable to convert %s to int\n", cp1 + 1);
+							ast_log(LOG_ERROR, "thresholds found, REASSESS_FRAMES parameter error, setting to 5\n");
+							p->count_thresh[i] = 5;
 						}
 					}
 				}
@@ -4186,11 +4210,13 @@ static int reload(void)
 					if (config_rssi_thresh >= 1 && config_rssi_thresh <= 255) {
 						p->rssi_thresh[i] = (uint8_t) config_rssi_thresh;
 					} else {
-						ast_log(LOG_NOTICE, "thresholds found, MIN_RSSI paramater out of range (1-255), setting to 255\n ");
+						ast_log(LOG_NOTICE, "thresholds found, MIN_RSSI parameter out of range (1-255), setting to 255\n ");
 						p->rssi_thresh[i] = 255;
 					}
 				} else {
 					ast_debug(3, "Unable to convert %s to int\n", strs[i]);
+					ast_log(LOG_ERROR, "thresholds found, MIN_RSSI parameter error, setting to 255\n");
+					p->rssi_thresh[i] = 255;
 				}
 			}
 			ast_free(cp);
