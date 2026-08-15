@@ -1853,12 +1853,20 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 		return 0;
 	}
 
-	/* set transmit CTCSS */
+	/* set transmit CTCSS (app_rpt itxctcss → TXCTCSS 0/1) */
 	if (strcmp(cmd, "TXCTCSS") == 0) {
 		u8 x;
 		x = strtod(rxs, NULL);
 		if (o && o->pmrChan) {
-			o->pmrChan->b.txCtcssOff = !x;
+			if (x) {
+				/* Input activity present — restore encode if muted for hang. */
+				o->pmrChan->b.txCtcssInputOnReq = 1;
+				o->pmrChan->b.txCtcssInputOffReq = 0;
+			} else {
+				/* No remrx/localtx/call/parrot — TOC or mute while PTT may still be held. */
+				o->pmrChan->b.txCtcssInputOffReq = 1;
+				o->pmrChan->b.txCtcssInputOnReq = 0;
+			}
 		}
 		ast_debug(3, "Channel %s: TXCTCSS cmd: %s\n", o->name, text);
 		return 0;

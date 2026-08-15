@@ -843,8 +843,9 @@ typedef struct t_pmr_chan {
 		unsigned txCtcssInhibit:1;
 		unsigned txCtcssReady:1;
 		unsigned txCtcssOff:1;
-		unsigned txHadRxCarrier:1;	 /*!< Saw local RX carrier during this TX cycle */
-		unsigned txCtcssHangMuted:1; /*!< CTCSS already turned off on COS drop (duplex hang) */
+		unsigned txCtcssHangMuted:1;   /*!< CTCSS already TOC'd/muted for input-only end */
+		unsigned txCtcssInputOffReq:1; /*!< app_rpt TXCTCSS off — run TOC or mute while PTT held */
+		unsigned txCtcssInputOnReq:1;  /*!< app_rpt TXCTCSS on — restore encode while PTT held */
 
 		unsigned rxkeyed:1;
 		unsigned rxhalted:1;
