@@ -392,8 +392,8 @@ void send_link_keyquery(struct rpt *myrpt)
 		return;
 	}
 
-	rpt_mutex_unlock(&myrpt->lock);
 	ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, link_qwrite_cb, &wf);
+	rpt_mutex_unlock(&myrpt->lock);
 }
 
 void rpt_link_add(struct ao2_container *links, struct rpt_link *l)

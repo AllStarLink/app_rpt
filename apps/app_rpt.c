@@ -2726,6 +2726,9 @@ static int schedule_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	l->reconnecting = 1;
 	rpt_mutex_unlock(&myrpt->lock);
 
+	/* Reap any finished worker for this link before starting another. */
+	rpt_join_link_reconnect(l);
+
 	rd = ast_calloc(1, sizeof(*rd));
 	if (!rd) {
 		rpt_mutex_lock(&myrpt->lock);
@@ -5100,26 +5103,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_lock(&myrpt->lock);
 	l->killme = 1;
 	rpt_mutex_unlock(&myrpt->lock);
-	{
-		int waited_ms = 0;
-		int still_reconnecting = 0;
-
-		rpt_join_link_reconnect(l);
-		while (waited_ms < 30000) {
-			rpt_mutex_lock(&myrpt->lock);
-			still_reconnecting = l->reconnecting;
-			if (!still_reconnecting) {
-				rpt_mutex_unlock(&myrpt->lock);
-				break;
-			}
-			rpt_mutex_unlock(&myrpt->lock);
-			usleep(10000);
-			waited_ms += 10;
-		}
-		if (still_reconnecting) {
-			ast_log(LOG_WARNING, "Timed out waiting for reconnect thread for node %s\n", l->name);
-		}
-	}
+	rpt_join_link_reconnect(l);
 
 	/* hang-up on call to device */
 	hangup_link_chan(l);
