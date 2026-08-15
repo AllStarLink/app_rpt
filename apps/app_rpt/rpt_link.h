@@ -27,6 +27,11 @@ void tele_link_remove(struct rpt *myrpt, struct rpt_tele *t);
 
 int altlink1(struct rpt *myrpt, struct rpt_link *mylink);
 
+/*!
+ * \brief Queue a TEXT frame onto a link for later write.
+ * \note Caller must hold the owning repeater's myrpt->lock so inserts stay
+ *       synchronized with link_process_textq removal and reconnect cleanup.
+ */
 void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
 
 int linkcount(struct rpt *myrpt);

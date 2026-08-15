@@ -588,7 +588,7 @@ struct rpt_link {
 	long elaptime;
 	int disctime;
 	int retrytimer;
-	/*! \brief Non-zero while a detached reconnect worker owns outbound dial for this link */
+	/*! \brief Non-zero while a joinable reconnect worker owns outbound dial for this link */
 	int reconnecting;
 	int retxtimer;
 	int rerxtimer;

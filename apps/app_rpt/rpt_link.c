@@ -195,6 +195,11 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	return 0;
 }
 
+/*!
+ * \brief Queue a TEXT frame onto a link for later write.
+ * \note Caller must hold myrpt->lock so inserts stay synchronized with
+ *       link_process_textq removal and reconnect worker textq cleanup.
+ */
 void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 {
 	struct ast_frame *f1;

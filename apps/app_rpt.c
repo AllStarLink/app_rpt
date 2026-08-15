@@ -2065,9 +2065,11 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 			snprintf(tmp1, sizeof(tmp1), "K %s %s %d %d", src, myrpt->name, myrpt->keyed, n);
 			wf.data.ptr = tmp1;
 			wf.datalen = strlen(tmp1) + 1;
+			rpt_mutex_lock(&myrpt->lock);
 			if (mylink->chan) {
 				rpt_qwrite(mylink, &wf);
 			}
+			rpt_mutex_unlock(&myrpt->lock);
 			return;
 		}
 		if (myrpt->topkeystate != 1) {
@@ -2500,16 +2502,109 @@ static char *parse_node_format(char *s, char **restrict s1, char *buf, size_t le
 	return s2;
 }
 
-/*! \brief Detached reconnect worker context (takes ownership of link ref) */
+/*! \brief Joinable reconnect worker context (takes ownership of link ref until thread exits) */
 struct rpt_reconnect_data {
 	struct rpt *myrpt;
 	struct rpt_link *l;
+	pthread_t thread;
+	AST_LIST_ENTRY(rpt_reconnect_data) entry;
 };
+
+static AST_LIST_HEAD_STATIC(reconnect_threads, rpt_reconnect_data);
+
+/*!
+ * \brief Join and free one reconnect worker removed from the tracking list.
+ * \note Caller must not hold reconnect_threads.lock. rd must not be on the list.
+ */
+static void rpt_join_reconnect_data(struct rpt_reconnect_data *rd)
+{
+	if (!rd) {
+		return;
+	}
+	pthread_join(rd->thread, NULL);
+	ast_free(rd);
+}
+
+/*!
+ * \brief Join every reconnect worker tracked for a link.
+ * \note Safe if none are running. Blocks until DNS/dial finishes for each match.
+ */
+static void rpt_join_link_reconnect(struct rpt_link *l)
+{
+	struct rpt_reconnect_data *rd;
+	struct rpt_reconnect_data *cur;
+	AST_LIST_HEAD_NOLOCK(, rpt_reconnect_data)
+	local = {
+		0,
+	};
+
+	AST_LIST_LOCK(&reconnect_threads);
+	AST_LIST_TRAVERSE_SAFE_BEGIN(&reconnect_threads, cur, entry) {
+		if (cur->l == l) {
+			AST_LIST_REMOVE_CURRENT(entry);
+			AST_LIST_INSERT_TAIL(&local, cur, entry);
+		}
+	}
+	AST_LIST_TRAVERSE_SAFE_END;
+	AST_LIST_UNLOCK(&reconnect_threads);
+
+	while ((rd = AST_LIST_REMOVE_HEAD(&local, entry))) {
+		rpt_join_reconnect_data(rd);
+	}
+}
+
+/*!
+ * \brief Join all outstanding reconnect workers.
+ * \note Call before destroying any struct rpt locks or name used by workers.
+ */
+static void rpt_wait_reconnect_threads(void)
+{
+	struct rpt_reconnect_data *rd;
+
+	for (;;) {
+		AST_LIST_LOCK(&reconnect_threads);
+		rd = AST_LIST_REMOVE_HEAD(&reconnect_threads, entry);
+		AST_LIST_UNLOCK(&reconnect_threads);
+		if (!rd) {
+			break;
+		}
+		rpt_join_reconnect_data(rd);
+	}
+}
+
+/*!
+ * \brief Join reconnect workers that reference a specific repeater.
+ * \note Used when reloading/reusing a deleted rpt slot before destroying its locks.
+ */
+static void rpt_wait_reconnect_threads_for_rpt(struct rpt *myrpt)
+{
+	struct rpt_reconnect_data *rd;
+	struct rpt_reconnect_data *cur;
+	AST_LIST_HEAD_NOLOCK(, rpt_reconnect_data)
+	local = {
+		0,
+	};
+
+	AST_LIST_LOCK(&reconnect_threads);
+	AST_LIST_TRAVERSE_SAFE_BEGIN(&reconnect_threads, cur, entry) {
+		if (cur->myrpt == myrpt) {
+			AST_LIST_REMOVE_CURRENT(entry);
+			AST_LIST_INSERT_TAIL(&local, cur, entry);
+		}
+	}
+	AST_LIST_TRAVERSE_SAFE_END;
+	AST_LIST_UNLOCK(&reconnect_threads);
+
+	while ((rd = AST_LIST_REMOVE_HEAD(&local, entry))) {
+		rpt_join_reconnect_data(rd);
+	}
+}
 
 /*!
  * \brief Blocking DNS/dial for an outbound link reconnect.
- * \note Runs on a detached thread so process_link_channel can stay on waitfor.
+ * \note Runs on a joinable worker so process_link_channel can stay on waitfor.
  *       Do not autoservice pchan here — the link waitfor thread keeps reading it.
+ *       Caller tracks rd on reconnect_threads and joins/frees it; do not free rd here.
  */
 static void *attempt_reconnect(void *data)
 {
@@ -2612,17 +2707,15 @@ done:
 
 cleanup:
 	ao2_ref(l, -1);
-	ast_free(rd);
 	return NULL;
 }
 
 /*!
- * \brief Start a detached reconnect worker if one is not already running.
+ * \brief Start a joinable reconnect worker if one is not already running.
  * \retval 0 if worker started or already running, -1 if thread create failed
  */
 static int schedule_reconnect(struct rpt *myrpt, struct rpt_link *l)
 {
-	pthread_t tid;
 	struct rpt_reconnect_data *rd;
 
 	rpt_mutex_lock(&myrpt->lock);
@@ -2645,7 +2738,15 @@ static int schedule_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	rd->l = l;
 	ao2_ref(l, +1);
 
-	if (ast_pthread_create_detached(&tid, NULL, attempt_reconnect, rd)) {
+	/*
+	 * Hold the list lock across create so a concurrent join either sees a
+	 * valid pthread_t or finds no entry (create failed and removed).
+	 */
+	AST_LIST_LOCK(&reconnect_threads);
+	AST_LIST_INSERT_TAIL(&reconnect_threads, rd, entry);
+	if (ast_pthread_create(&rd->thread, NULL, attempt_reconnect, rd)) {
+		AST_LIST_REMOVE(&reconnect_threads, rd, entry);
+		AST_LIST_UNLOCK(&reconnect_threads);
 		ast_log(LOG_WARNING, "Unable to start reconnect thread for %s\n", l->name);
 		rpt_mutex_lock(&myrpt->lock);
 		l->reconnecting = 0;
@@ -2655,6 +2756,7 @@ static int schedule_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		ast_free(rd);
 		return -1;
 	}
+	AST_LIST_UNLOCK(&reconnect_threads);
 	return 0;
 }
 
@@ -3557,7 +3659,6 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		ast_str_set(&lstr, 0, "%s", "L ");
 		rpt_mutex_lock(&myrpt->lock);
 		__mklinklist(myrpt, l, &lstr, USE_FORMAT_RPT_LINK);
-		rpt_mutex_unlock(&myrpt->lock);
 		if (l->chan) {
 			struct ast_frame lf = {
 				.frametype = AST_FRAME_TEXT,
@@ -3566,9 +3667,11 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 				.src = __PRETTY_FUNCTION__,
 			};
 
+			/* Hold myrpt->lock so textq insert stays synchronized with reconnect cleanup. */
 			rpt_qwrite(l, &lf);
 			ast_debug(7, "@@@@ node %s sent node string %s to node %s\n", myrpt->name, ast_str_buffer(lstr), l->name);
 		}
+		rpt_mutex_unlock(&myrpt->lock);
 		ast_free(lstr);
 	}
 	if (l->link_newkey == RADIO_KEY_ALLOWED_REDUNDANT) {
@@ -4993,16 +5096,19 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
-	/* Ensure any detached reconnect worker has finished before we hang up. */
+	/* Ensure any reconnect worker has finished before we hang up / free link state. */
 	rpt_mutex_lock(&myrpt->lock);
 	l->killme = 1;
 	rpt_mutex_unlock(&myrpt->lock);
 	{
 		int waited_ms = 0;
+		int still_reconnecting = 0;
 
+		rpt_join_link_reconnect(l);
 		while (waited_ms < 30000) {
 			rpt_mutex_lock(&myrpt->lock);
-			if (!l->reconnecting) {
+			still_reconnecting = l->reconnecting;
+			if (!still_reconnecting) {
 				rpt_mutex_unlock(&myrpt->lock);
 				break;
 			}
@@ -5010,7 +5116,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			usleep(10000);
 			waited_ms += 10;
 		}
-		if (l->reconnecting) {
+		if (still_reconnecting) {
 			ast_log(LOG_WARNING, "Timed out waiting for reconnect thread for node %s\n", l->name);
 		}
 	}
@@ -6132,6 +6238,8 @@ static int load_config(int reload)
 		 * when it's time to reuse the rpt_var, clean up any left over strings.
 		 */
 		if (reload && rpt_vars[n].deleted == RPT_DELETED_COMPLETE) {
+			/* Join workers that still reference this repeater before destroying locks/name. */
+			rpt_wait_reconnect_threads_for_rpt(&rpt_vars[n]);
 			ast_mutex_destroy(&rpt_vars[n].lock);
 			ast_mutex_destroy(&rpt_vars[n].remlock);
 			ast_mutex_destroy(&rpt_vars[n].statpost_lock);
@@ -8111,6 +8219,9 @@ static int unload_module(void)
 	ast_debug(1, "Waiting for master thread to exit\n");
 	pthread_join(rpt_master_thread, NULL); /* All pseudo channels need to be hung up before we can unload the Rpt() application */
 	ast_debug(1, "Master thread has now exited\n");
+
+	/* Join reconnect workers before destroying locks/name they may still reference. */
+	rpt_wait_reconnect_threads();
 
 	/* Destroy the locks subsequently, after repeater threads have exited. Otherwise they will still be in use. */
 	for (i = 0; i < nrpts; i++) {
