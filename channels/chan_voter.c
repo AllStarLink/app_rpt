@@ -5806,17 +5806,20 @@ static void *voter_reader(void *data)
 									for (i = 0; i < p->nthresholds; i++) {
 										/* If meets criteria. */
 										if (p->lastwon->lastrssi >= p->rssi_thresh[i]) {
-											/* If not at same threshold, change to new one. */
+											/* If not at same threshold, change to new one. p->threshold is the
+											 * index number of the thresholds loaded in from thresholds = in voter.conf,
+											 * starting at "1".
+											 */
 											if ((i + 1) != p->threshold) {
 												p->threshold = i + 1;
 												p->threshcount = 0;
-												ast_debug(3, "New threshold %d, client %s, RSSI %d\n", p->threshold,
-													p->lastwon->name, p->lastwon->lastrssi);
+												ast_debug(3, "Threshold criteria changed! Now using threshold criteria %d for client %s with RSSI %d\n",
+													p->threshold, p->lastwon->name, p->lastwon->lastrssi);
 											}
 
 											/* At the same threshold still, if count is enabled and is met. */
 											else if (p->count_thresh[i] && (p->threshcount++ >= p->count_thresh[i])) {
-												ast_debug(3, "Threshold %d time (%d) exceeded, client %s, RSSI %d\n",
+												ast_debug(3, "Threshold criteria %d REASSESS_FRAMES (%d) exceeded for client %s, RSSI %d, resetting count\n",
 													p->threshold, p->count_thresh[i], p->lastwon->name, p->lastwon->lastrssi);
 												p->threshold = 0;
 												p->threshcount = 0;
@@ -5833,7 +5836,7 @@ static void *voter_reader(void *data)
 										/* If there are no receiving clients to send audio from anymore. */
 										if (i == (p->nthresholds - 1)) {
 											if (DEBUG_ATLEAST(3) && p->threshold) {
-												ast_debug(3, "Nothing matches criteria any more\n");
+												ast_debug(3, "No more thresholds to consider for client %s\n", p->lastwon->name);
 											}
 											if (p->threshold) {
 												p->lingercount = p->linger_thresh[p->threshold - 1];
