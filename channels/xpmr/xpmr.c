@@ -2951,6 +2951,20 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 						pChan->b.txCtcssHangMuted = 0;
 						pChan->b.txCtcssOff = 0;
 						if (pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
+							f = 0;
+							if (pChan->rxCtcss->decode > CTCSS_NULL) {
+								if (pChan->rxCtcssMap[pChan->rxCtcss->decode] != CTCSS_RXONLY) {
+									f = freq_ctcss[pChan->rxCtcssMap[pChan->rxCtcss->decode]];
+								}
+							} else {
+								f = pChan->txctcssdefault_value;
+							}
+							if (!f) {
+								f = pChan->txctcssdefault_value;
+							}
+							if (f) {
+								pChan->spsSigGen0->freq = f * 10;
+							}
 							pChan->spsSigGen0->option = 1;
 							pChan->spsSigGen0->enabled = 1;
 							pChan->spsSigGen0->discounterl = 0;
