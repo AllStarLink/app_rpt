@@ -33,7 +33,7 @@
 #include "asterisk/bridge_channel.h"
 #include "asterisk/core_unreal.h"
 #include "asterisk/channel.h"
-#include "asterisk/timeval.h"
+#include "asterisk/utils.h"
 #include "asterisk/indications.h"
 #include "asterisk/format_cache.h" /* use ast_format_slin */
 
