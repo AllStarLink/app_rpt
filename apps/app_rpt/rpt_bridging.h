@@ -75,6 +75,10 @@ int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *fi
 
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
 
+int __rpt_conf_remove(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
+
+int __rpt_conf_restore(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
+
 /*!
  * \brief Create a conference for repeater channels to join
  * \param myrpt Repeater structure
@@ -89,10 +93,6 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
  * \param type Conference type
  */
 #define rpt_conf_add(chan, myrpt, type) __rpt_conf_add(chan, myrpt, type, __FILE__, __LINE__)
-
-int __rpt_conf_remove(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
-
-int __rpt_conf_restore(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
 
 /*!
  * \brief Remove a Local channel from a conference if it is a member.
