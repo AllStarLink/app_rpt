@@ -2706,6 +2706,7 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 {
 	int i, hit;
 	float f = 0;
+	sig_atomic_t input_req;
 	t_pmr_sps *pmr_sps;
 
 	TRACEC(5, "PmrRx(%p %p %p %p)\n", pChan, input, outputrx, outputtx);
@@ -2919,16 +2920,14 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			 * An OFF request here suppresses CTCSS without a TOC because no
 			 * tone has yet been transmitted in this keyed period.
 			 */
-			{
-				sig_atomic_t input_req = __atomic_exchange_n(&pChan->txCtcssInputReq, TXCTCSS_INPUT_REQ_NONE, __ATOMIC_ACQ_REL);
+			input_req = __atomic_exchange_n(&pChan->txCtcssInputReq, TXCTCSS_INPUT_REQ_NONE, __ATOMIC_ACQ_REL);
 
-				if (input_req == TXCTCSS_INPUT_REQ_OFF) {
-					pChan->b.txCtcssHangMuted = 1;
-					pChan->b.txCtcssOff = 1;
-					pChan->spsSigGen0->option = 3;
-				} else if (input_req == TXCTCSS_INPUT_REQ_ON) {
-					pChan->b.txCtcssOff = 0;
-				}
+			if (input_req == TXCTCSS_INPUT_REQ_OFF) {
+				pChan->b.txCtcssHangMuted = 1;
+				pChan->b.txCtcssOff = 1;
+				pChan->spsSigGen0->option = 3;
+			} else if (input_req == TXCTCSS_INPUT_REQ_ON) {
+				pChan->b.txCtcssOff = 0;
 			}
 
 			pChan->txsettletimer = pChan->txsettletime;
@@ -2960,54 +2959,52 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			 * Classic mode (itxctcss off) never sends these requests; TOC runs
 			 * at actual txPttIn drop below.
 			 */
-			{
-				sig_atomic_t input_req = __atomic_exchange_n(&pChan->txCtcssInputReq, TXCTCSS_INPUT_REQ_NONE, __ATOMIC_ACQ_REL);
+			input_req = __atomic_exchange_n(&pChan->txCtcssInputReq, TXCTCSS_INPUT_REQ_NONE, __ATOMIC_ACQ_REL);
 
-				if (input_req == TXCTCSS_INPUT_REQ_ON) {
-					if (pChan->b.txCtcssHangMuted || pChan->b.txCtcssOff) {
-						pChan->b.txCtcssHangMuted = 0;
-						pChan->b.txCtcssOff = 0;
-						if (pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
-							f = 0;
-							if (pChan->rxCtcss->decode > CTCSS_NULL) {
-								/* RX-only codes leave f unset — do not encode. */
-								if (pChan->rxCtcssMap[pChan->rxCtcss->decode] != CTCSS_RXONLY) {
-									f = freq_ctcss[pChan->rxCtcssMap[pChan->rxCtcss->decode]];
-								}
-							} else {
-								/* No decoded code — use the configured default TX tone. */
-								f = pChan->txctcssdefault_value;
+			if (input_req == TXCTCSS_INPUT_REQ_ON) {
+				if (pChan->b.txCtcssHangMuted || pChan->b.txCtcssOff) {
+					pChan->b.txCtcssHangMuted = 0;
+					pChan->b.txCtcssOff = 0;
+					if (pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
+						f = 0;
+						if (pChan->rxCtcss->decode > CTCSS_NULL) {
+							/* RX-only codes leave f unset — do not encode. */
+							if (pChan->rxCtcssMap[pChan->rxCtcss->decode] != CTCSS_RXONLY) {
+								f = freq_ctcss[pChan->rxCtcssMap[pChan->rxCtcss->decode]];
 							}
-							if (f > 0) {
-								pChan->spsSigGen0->freq = f * 10;
-								pChan->spsSigGen0->option = 1;
-								pChan->spsSigGen0->enabled = 1;
-								pChan->spsSigGen0->discounterl = 0;
-								TRACEC(1, "Tx CTCSS restore on TXCTCSS on during hang.\n");
-							} else {
-								TRACEC(1, "Tx CTCSS restore skipped: no valid frequency.\n");
-							}
-						}
-					}
-				} else if (input_req == TXCTCSS_INPUT_REQ_OFF) {
-					if (!pChan->b.txCtcssHangMuted && pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
-						pChan->b.txCtcssHangMuted = 1;
-						if (pChan->txTocType == TOC_NOTONE) {
-							/* Keep mute clear so chicken-burst silence is clean. */
-							pChan->b.txCtcssOff = 0;
-							pChan->spsSigGen0->option = 3;
-							TRACEC(1, "Tx CTCSS notone on TXCTCSS off.\n");
-						} else if (pChan->txTocType == TOC_PHASE) {
-							pChan->b.txCtcssOff = 0;
-							pChan->spsSigGen0->option = 2;
-							TRACEC(1, "Tx CTCSS phase turn-off on TXCTCSS off.\n");
 						} else {
-							pChan->b.txCtcssOff = 1;
-							TRACEC(1, "Tx CTCSS mute on TXCTCSS off.\n");
+							/* No decoded code — use the configured default TX tone. */
+							f = pChan->txctcssdefault_value;
 						}
-					} else if (!pChan->b.txCtcssHangMuted) {
-						pChan->b.txCtcssOff = 1;
+						if (f > 0) {
+							pChan->spsSigGen0->freq = f * 10;
+							pChan->spsSigGen0->option = 1;
+							pChan->spsSigGen0->enabled = 1;
+							pChan->spsSigGen0->discounterl = 0;
+							TRACEC(1, "Tx CTCSS restore on TXCTCSS on during hang.\n");
+						} else {
+							TRACEC(1, "Tx CTCSS restore skipped: no valid frequency.\n");
+						}
 					}
+				}
+			} else if (input_req == TXCTCSS_INPUT_REQ_OFF) {
+				if (!pChan->b.txCtcssHangMuted && pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
+					pChan->b.txCtcssHangMuted = 1;
+					if (pChan->txTocType == TOC_NOTONE) {
+						/* Keep mute clear so chicken-burst silence is clean. */
+						pChan->b.txCtcssOff = 0;
+						pChan->spsSigGen0->option = 3;
+						TRACEC(1, "Tx CTCSS notone on TXCTCSS off.\n");
+					} else if (pChan->txTocType == TOC_PHASE) {
+						pChan->b.txCtcssOff = 0;
+						pChan->spsSigGen0->option = 2;
+						TRACEC(1, "Tx CTCSS phase turn-off on TXCTCSS off.\n");
+					} else {
+						pChan->b.txCtcssOff = 1;
+						TRACEC(1, "Tx CTCSS mute on TXCTCSS off.\n");
+					}
+				} else if (!pChan->b.txCtcssHangMuted) {
+					pChan->b.txCtcssOff = 1;
 				}
 			}
 		} else if (!pChan->txPttIn && pChan->txState == CHAN_TXSTATE_ACTIVE) {
