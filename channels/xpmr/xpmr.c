@@ -2970,13 +2970,12 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 						if (pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
 							f = 0;
 							if (pChan->rxCtcss->decode > CTCSS_NULL) {
+								/* RX-only codes leave f unset — do not encode. */
 								if (pChan->rxCtcssMap[pChan->rxCtcss->decode] != CTCSS_RXONLY) {
 									f = freq_ctcss[pChan->rxCtcssMap[pChan->rxCtcss->decode]];
 								}
 							} else {
-								f = pChan->txctcssdefault_value;
-							}
-							if (f <= 0) {
+								/* No decoded code — use the configured default TX tone. */
 								f = pChan->txctcssdefault_value;
 							}
 							if (f > 0) {
