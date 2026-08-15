@@ -1858,15 +1858,8 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 		u8 x;
 		x = strtod(rxs, NULL);
 		if (o && o->pmrChan) {
-			if (x) {
-				/* Input activity present — restore encode if muted for hang. */
-				o->pmrChan->b.txCtcssInputOnReq = 1;
-				o->pmrChan->b.txCtcssInputOffReq = 0;
-			} else {
-				/* No remrx/localtx/call/parrot — TOC or mute while PTT may still be held. */
-				o->pmrChan->b.txCtcssInputOffReq = 1;
-				o->pmrChan->b.txCtcssInputOnReq = 0;
-			}
+			/* Single atomic replaces paired on/off bits so PmrRx cannot see a torn pair. */
+			__atomic_store_n(&o->pmrChan->txCtcssInputReq, x ? TXCTCSS_INPUT_REQ_ON : TXCTCSS_INPUT_REQ_OFF, __ATOMIC_RELEASE);
 		}
 		ast_debug(3, "Channel %s: TXCTCSS cmd: %s\n", o->name, text);
 		return 0;

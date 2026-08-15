@@ -2943,38 +2943,39 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 			 * Classic mode (itxctcss off) never sends these requests; TOC runs
 			 * at actual txPttIn drop below.
 			 */
-			if (pChan->b.txCtcssInputOnReq) {
-				pChan->b.txCtcssInputOnReq = 0;
-				if (pChan->b.txCtcssHangMuted || pChan->b.txCtcssOff) {
-					pChan->b.txCtcssHangMuted = 0;
-					pChan->b.txCtcssOff = 0;
-					if (pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
-						pChan->spsSigGen0->option = 1;
-						pChan->spsSigGen0->enabled = 1;
-						pChan->spsSigGen0->discounterl = 0;
-						TRACEC(1, "Tx CTCSS restore on TXCTCSS on during hang.\n");
+			{
+				sig_atomic_t input_req = __atomic_exchange_n(&pChan->txCtcssInputReq, TXCTCSS_INPUT_REQ_NONE, __ATOMIC_ACQ_REL);
+
+				if (input_req == TXCTCSS_INPUT_REQ_ON) {
+					if (pChan->b.txCtcssHangMuted || pChan->b.txCtcssOff) {
+						pChan->b.txCtcssHangMuted = 0;
+						pChan->b.txCtcssOff = 0;
+						if (pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
+							pChan->spsSigGen0->option = 1;
+							pChan->spsSigGen0->enabled = 1;
+							pChan->spsSigGen0->discounterl = 0;
+							TRACEC(1, "Tx CTCSS restore on TXCTCSS on during hang.\n");
+						}
 					}
-				}
-			}
-			if (pChan->b.txCtcssInputOffReq) {
-				pChan->b.txCtcssInputOffReq = 0;
-				if (!pChan->b.txCtcssHangMuted && pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
-					pChan->b.txCtcssHangMuted = 1;
-					if (pChan->txTocType == TOC_NOTONE) {
-						/* Keep mute clear so chicken-burst silence is clean. */
-						pChan->b.txCtcssOff = 0;
-						pChan->spsSigGen0->option = 3;
-						TRACEC(1, "Tx CTCSS notone on TXCTCSS off.\n");
-					} else if (pChan->txTocType == TOC_PHASE) {
-						pChan->b.txCtcssOff = 0;
-						pChan->spsSigGen0->option = 2;
-						TRACEC(1, "Tx CTCSS phase turn-off on TXCTCSS off.\n");
-					} else {
+				} else if (input_req == TXCTCSS_INPUT_REQ_OFF) {
+					if (!pChan->b.txCtcssHangMuted && pChan->smode == SMODE_CTCSS && !pChan->b.txCtcssInhibit && pChan->b.ctcssTxEnable) {
+						pChan->b.txCtcssHangMuted = 1;
+						if (pChan->txTocType == TOC_NOTONE) {
+							/* Keep mute clear so chicken-burst silence is clean. */
+							pChan->b.txCtcssOff = 0;
+							pChan->spsSigGen0->option = 3;
+							TRACEC(1, "Tx CTCSS notone on TXCTCSS off.\n");
+						} else if (pChan->txTocType == TOC_PHASE) {
+							pChan->b.txCtcssOff = 0;
+							pChan->spsSigGen0->option = 2;
+							TRACEC(1, "Tx CTCSS phase turn-off on TXCTCSS off.\n");
+						} else {
+							pChan->b.txCtcssOff = 1;
+							TRACEC(1, "Tx CTCSS mute on TXCTCSS off.\n");
+						}
+					} else if (!pChan->b.txCtcssHangMuted) {
 						pChan->b.txCtcssOff = 1;
-						TRACEC(1, "Tx CTCSS mute on TXCTCSS off.\n");
 					}
-				} else if (!pChan->b.txCtcssHangMuted) {
-					pChan->b.txCtcssOff = 1;
 				}
 			}
 		} else if (!pChan->txPttIn && pChan->txState == CHAN_TXSTATE_ACTIVE) {
@@ -3035,8 +3036,8 @@ i16 PmrRx(t_pmr_chan *pChan, i16 *input, i16 *outputrx, i16 *outputtx)
 		pChan->spsSigGen0->option = 3;
 		pChan->txrxblankingtimer = pChan->txrxblankingtime;
 		pChan->b.txCtcssHangMuted = 0;
-		pChan->b.txCtcssInputOffReq = 0;
-		pChan->b.txCtcssInputOnReq = 0;
+		pChan->b.txCtcssOff = 0;
+		__atomic_store_n(&pChan->txCtcssInputReq, TXCTCSS_INPUT_REQ_NONE, __ATOMIC_RELEASE);
 		TRACEC(1, "PmrRx() txrxblankingtimer=%i\n", pChan->txrxblankingtimer);
 		pChan->txState = CHAN_TXSTATE_IDLE;
 		if (pChan->spsTxLsdLpf) {
