@@ -3524,7 +3524,8 @@ static void *voter_xmit(void *data)
 static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
 	const struct ast_channel *requestor, const char *data, int *cause)
 {
-	int i, config_linger, config_ctcss, ctg_int, config_linger_thresh, config_count_thresh, config_rssi_thresh;
+	int i, ctg_int;
+	uint config_linger, config_ctcss, config_linger_thresh, config_count_thresh, config_rssi_thresh;
 	struct voter_pvt *p, *p1;
 	struct ast_channel *chan = NULL;
 	char *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
@@ -3638,8 +3639,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_log(LOG_NOTICE, "Loading config from %s\n", config);
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
-			if (ast_str_to_int(val, &config_linger) == 0) {
-				if (config_linger >= 0 && config_linger <= UINT16_MAX) {
+			if (ast_str_to_uint(val, &config_linger) == 0) {
+				if (config_linger <= UINT16_MAX) {
 					p->linger = config_linger;
 				} else {
 					ast_log(LOG_NOTICE, "linger out of range, using default linger = %i\n", DEFAULT_LINGER);
@@ -3647,6 +3648,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 				}
 			} else {
 				ast_debug(3, "Unable to convert %s to int\n", val);
+				ast_log(LOG_ERROR, "linger parameter error, using default linger = %i\n", DEFAULT_LINGER);
 				p->linger = DEFAULT_LINGER;
 			}
 		} else {
@@ -3673,8 +3675,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		}
 		val = ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
 		if (val) {
-			if (ast_str_to_int(val, &config_ctcss) == 0) {
-				if (config_ctcss >= 0 && config_ctcss <= 250) {
+			if (ast_str_to_uint(val, &config_ctcss) == 0) {
+				if (config_ctcss <= 250) {
 					p->txctcsslevel = config_ctcss;
 				} else {
 					ast_log(LOG_NOTICE, "txctcsslevel %i out of range, using default 62\n", config_ctcss);
@@ -3682,6 +3684,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 				}
 			} else {
 				ast_debug(3, "Unable to convert %s to int\n", val);
+				ast_log(LOG_ERROR, "txctcsslevel parameter error, setting txctcsslevel = 62\n");
 				p->txctcsslevel = 62;
 			}
 		} else {
@@ -3739,8 +3742,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 						 * for this threshold.
 						 */
 						if (cp2[1]) {
-							if (ast_str_to_int(cp2 + 1, &config_linger_thresh) == 0) {
-								if (config_linger_thresh >= 0 && config_linger_thresh <= UINT16_MAX) {
+							if (ast_str_to_uint(cp2 + 1, &config_linger_thresh) == 0) {
+								if (config_linger_thresh <= UINT16_MAX) {
 									p->linger_thresh[i] = (uint16_t) config_linger_thresh;
 								} else {
 									ast_log(LOG_NOTICE,
@@ -3749,6 +3752,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 								}
 							} else {
 								ast_debug(3, "Unable to convert %s to int\n", cp2 + 1);
+								ast_log(LOG_ERROR, "thresholds found, LINGER_FRAMES parameter error, setting to 6\n");
+								p->linger_thresh[i] = 6;
 							}
 						}
 					}
@@ -3756,8 +3761,8 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 					 * for this threshold.
 					 */
 					if (cp1[1]) {
-						if (ast_str_to_int(cp1 + 1, &config_count_thresh) == 0) {
-							if (config_count_thresh >= 0 && config_count_thresh <= UINT16_MAX) {
+						if (ast_str_to_uint(cp1 + 1, &config_count_thresh) == 0) {
+							if (config_count_thresh <= UINT16_MAX) {
 								p->count_thresh[i] = (uint16_t) config_count_thresh;
 							} else {
 								ast_log(LOG_NOTICE,
@@ -3773,7 +3778,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 					}
 				}
 				/* Get the MIN_RSSI for this threshold, and update p->rssi_thresh. */
-				if (ast_str_to_int(strs[i], &config_rssi_thresh) == 0) {
+				if (ast_str_to_uint(strs[i], &config_rssi_thresh) == 0) {
 					if (config_rssi_thresh >= 1 && config_rssi_thresh <= 255) {
 						p->rssi_thresh[i] = (uint8_t) config_rssi_thresh;
 					} else {
@@ -3953,8 +3958,8 @@ static void voter_client_free_all(void)
 static int reload(void)
 {
 	struct ast_flags zeroflag = { 0 };
-	int i, n, instance_buflen, buflen, oldtoctype, oldlevel, config_linger, config_ctcss, config_rssi_thresh,
-		config_linger_thresh, config_count_thresh;
+	int i, n, instance_buflen, buflen, oldtoctype, oldlevel;
+	uint config_linger, config_ctcss, config_linger_thresh, config_count_thresh, config_rssi_thresh;
 	uint8_t *tempbuf;
 	char *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
 	const char *val;
@@ -4047,8 +4052,8 @@ static int reload(void)
 		/* Load the linger value, or set it to default if it is unset. */
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
-			if (ast_str_to_int(val, &config_linger) == 0) {
-				if (config_linger >= 0 && config_linger <= UINT16_MAX) {
+			if (ast_str_to_uint(val, &config_linger) == 0) {
+				if (config_linger <= UINT16_MAX) {
 					p->linger = config_linger;
 				} else {
 					ast_log(LOG_NOTICE, "linger out of range, using default linger = %i\n", DEFAULT_LINGER);
@@ -4056,6 +4061,7 @@ static int reload(void)
 				}
 			} else {
 				ast_debug(3, "Unable to convert %s to int\n", val);
+				ast_log(LOG_ERROR, "linger parameter error, using default linger = %i\n", DEFAULT_LINGER);
 				p->linger = DEFAULT_LINGER;
 			}
 		} else {
@@ -4102,8 +4108,8 @@ static int reload(void)
 		 */
 		val = ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
 		if (val) {
-			if (ast_str_to_int(val, &config_ctcss) == 0) {
-				if (config_ctcss >= 0 && config_ctcss <= 250) {
+			if (ast_str_to_uint(val, &config_ctcss) == 0) {
+				if (config_ctcss <= 250) {
 					p->txctcsslevel = config_ctcss;
 				} else {
 					ast_log(LOG_NOTICE, "txctcsslevel %i out of range, using default 62\n", config_ctcss);
@@ -4111,6 +4117,7 @@ static int reload(void)
 				}
 			} else {
 				ast_debug(3, "Unable to convert %s to int\n", val);
+				ast_log(LOG_ERROR, "txctcsslevel parameter error, setting txctcsslevel = 62\n");
 				p->txctcsslevel = 62;
 			}
 		} else {
@@ -4183,8 +4190,8 @@ static int reload(void)
 						 * for this threshold.
 						 */
 						if (cp2[1]) {
-							if (ast_str_to_int(cp2 + 1, &config_linger_thresh) == 0) {
-								if (config_linger_thresh >= 0 && config_linger_thresh <= UINT16_MAX) {
+							if (ast_str_to_uint(cp2 + 1, &config_linger_thresh) == 0) {
+								if (config_linger_thresh <= UINT16_MAX) {
 									p->linger_thresh[i] = (uint16_t) config_linger_thresh;
 								} else {
 									ast_log(LOG_NOTICE,
@@ -4193,6 +4200,7 @@ static int reload(void)
 								}
 							} else {
 								ast_debug(3, "Unable to convert %s to int\n", cp2 + 1);
+								ast_log(LOG_ERROR, "thresholds found, LINGER_FRAMES parameter error, setting to 6\n");
 							}
 						}
 					}
@@ -4200,8 +4208,8 @@ static int reload(void)
 					 * for this threshold.
 					 */
 					if (cp1[1]) {
-						if (ast_str_to_int(cp1 + 1, &config_count_thresh) == 0) {
-							if (config_count_thresh >= 0 && config_count_thresh <= UINT16_MAX) {
+						if (ast_str_to_uint(cp1 + 1, &config_count_thresh) == 0) {
+							if (config_count_thresh <= UINT16_MAX) {
 								p->count_thresh[i] = (uint16_t) config_count_thresh;
 							} else {
 								ast_log(LOG_NOTICE,
@@ -4217,7 +4225,7 @@ static int reload(void)
 					}
 				}
 				/* Get the MIN_RSSI for this threshold, and update p->rssi_thresh. */
-				if (ast_str_to_int(strs[i], &config_rssi_thresh) == 0) {
+				if (ast_str_to_uint(strs[i], &config_rssi_thresh) == 0) {
 					if (config_rssi_thresh >= 1 && config_rssi_thresh <= 255) {
 						p->rssi_thresh[i] = (uint8_t) config_rssi_thresh;
 					} else {
