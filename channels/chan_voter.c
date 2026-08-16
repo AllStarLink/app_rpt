@@ -243,6 +243,7 @@ Use "core show help voter <command>"" to display usage.
 #include "asterisk/lock.h"
 #include "asterisk/channel.h"
 #include "asterisk/config.h"
+#include "asterisk/conversions.h"
 #include "asterisk/logger.h"
 #include "asterisk/module.h"
 #include "asterisk/pbx.h"
@@ -397,7 +398,7 @@ int last_master_count = 0;
 int hasmaster = 0;
 int masterconnected = 0;
 
-int maxpvtorder = 0;
+int maxpvtorder = 0; /* Counter of the number of voter instances loaded from voter.conf. */
 
 /*! This is just a horrendous KLUDGE!! Some Garmin LVC-18 GPS "pucks" sometimes get exactly
  * 1 second off!! Some don't do it at all, while others do it constantly. Others do it once
@@ -551,7 +552,7 @@ struct voter_pvt {
 	int txctcsslevel;
 	int txctcsslevelset;
 	enum usbradio_carrier_type txtoctype;
-	int order;
+	int order; /* The order our channel instance was loaded from voter.conf. */
 	struct ast_frame *adpcmf1;
 	ast_mutex_t xmit_lock;
 	ast_cond_t xmit_cond;
@@ -1526,22 +1527,30 @@ static void rpt_manager_success(struct mansession *s, const struct message *m)
  */
 static int manager_voter_status(struct mansession *ses, const struct message *m)
 {
-	int i, j, n;
+	int i, j, nodecount, requested_node;
 	struct voter_pvt *p;
 	struct voter_client *client;
-	const char *node = astman_get_header(m, "Node");
+	const char *node = astman_get_header(m, "Node"); /* Get the node list from the manager message. */
 	char *str, *strs[100];
 
 	ast_mutex_lock(&voter_lock);
 	str = NULL;
+	/* If we got a node list, make a copy.*/
 	if (node) {
 		str = ast_strdup(node);
 	}
-	n = 0;
+	nodecount = 0;
+	/* Take the copy of the node list, split it into individual node numbers, and count them. */
 	if (str) {
-		n = finddelim(str, strs, ARRAY_LEN(strs));
+		nodecount = finddelim(str, strs, ARRAY_LEN(strs));
 	}
+	/* maxpvtorder is the number of voter instances loaded. p->order is the order the particular
+	 * voter instance was loaded in.
+	 *
+	 * Loop through all the loaded voter instances, printing their status to the AMI session.
+	 */
 	for (j = 1; j <= maxpvtorder; j++) {
+		/* Stop when we get to the end of the loaded voter instances. */
 		for (p = pvts; p; p = p->next) {
 			if (p->order == j) {
 				break;
@@ -1550,19 +1559,27 @@ static int manager_voter_status(struct mansession *ses, const struct message *m)
 		if (!p) {
 			continue;
 		}
-		if (node && *node && str && n) {
-			for (i = 0; i < n; i++) {
+		/* Identify all the nodes the AMI session is requesting status for. */
+		if (node && *node && str && nodecount) {
+			for (i = 0; i < nodecount; i++) {
 				if (!*strs[i]) {
 					continue;
 				}
-				if (atoi(strs[i]) == p->nodenum) {
-					break;
+				/* Convert the node number from a string to an integer. */
+				if (ast_str_to_int(strs[i], &requested_node) == 0) {
+					if (requested_node == p->nodenum) {
+						break;
+					}
+				} else {
+					ast_debug(3, "Unable to convert %s to int\n", strs[i]);
+					continue;
 				}
 			}
-			if (i >= n) {
+			if (i >= nodecount) {
 				continue;
 			}
 		}
+		/* Return the status of the node and all it's associated clients. */
 		rpt_manager_success(ses, m);
 		astman_append(ses, "Node: %d\r\n", p->nodenum);
 		if (p->winner) {
@@ -1795,25 +1812,34 @@ static void voter_display(int fd, const struct voter_pvt *p)
  * \param fd   			Asterisk CLI file descriptor.
  * \param argc 			Number of arguments in argv.
  * \param argv 			Argument array; argv[2] is expected to contain the node number to display.
- * \return     			RESULT_SUCCESS if the node was found or when a not-found message was printed,
- *             			RESULT_SHOWUSAGE if insufficient arguments were provided.
+ * \return     			RESULT_SUCCESS on normal handling,
+ *						RESULT_SHOWUSAGE if arguments are insufficient or invalid.
  */
 static int voter_do_display(int fd, int argc, const char *const *argv)
 {
 	struct voter_pvt *p;
+	int requested_node;
 
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	/* Attempt to convert the requested node number from the CLI from a string to an integer */
+	if (ast_str_to_int(argv[2], &requested_node)) {
+		ast_debug(3, "Unable to convert %s to int\n", argv[2]);
+		return RESULT_SHOWUSAGE;
+	}
 	ast_mutex_lock(&voter_lock);
+	/* Loop through the voter instances to find the matching request, and send it
+	 * to voter_display.
+	 */
 	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
+		if (requested_node == p->nodenum) {
 			break;
 		}
 	}
 	ast_mutex_unlock(&voter_lock);
 	if (!p) {
-		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i not found\n", requested_node);
 		return RESULT_SUCCESS;
 	}
 	voter_display(fd, p);
@@ -1853,24 +1879,30 @@ static char *handle_cli_display(struct ast_cli_entry *e, int cmd, struct ast_cli
  * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
  * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+ * \return     			RESULT_SUCCESS on normal handling,
+ *						RESULT_SHOWUSAGE if arguments are insufficient or invalid.
  */
 static int voter_do_tune(int fd, int argc, const char *const *argv)
 {
-	int newlevel;
+	int newlevel, requested_node;
 	struct voter_pvt *p;
 
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	/* Attempt to convert the requested node number from the CLI from a string to an integer */
+	if (ast_str_to_int(argv[2], &requested_node)) {
+		ast_debug(3, "Unable to convert %s to int\n", argv[2]);
+		return RESULT_SHOWUSAGE;
+	}
 	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
+		if (requested_node == p->nodenum) {
 			break;
 		}
 	}
 	if (!p) {
-		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i not found\n", requested_node);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
@@ -1996,13 +2028,12 @@ static void check_ping_done(struct voter_client *client)
  * \param argc 			Number of CLI arguments.
  * \param argv 			CLI argument vector; argv[2] is the client name, argv[3] (optional) is ping count.
  * \return     			RESULT_SUCCESS on normal handling,
- *						RESULT_SHOWUSAGE if arguments are insufficient, or
- *						RESULT_FAILURE on error.
+ *						RESULT_SHOWUSAGE if arguments are insufficient or invalid.
  */
 static int voter_do_ping(int fd, int argc, const char *const *argv)
 {
 	struct voter_client *client;
-	int npings = 8; /* Default to 8 pings if none are specified */
+	int requested_pings, npings = 8; /* Default to 8 pings if none are specified */
 
 	/* If there aren't enough arguments provided, show the command usage. */
 	if (argc < 3) {
@@ -2031,20 +2062,22 @@ static int voter_do_ping(int fd, int argc, const char *const *argv)
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
-	/* If we received a specified ping count, use it. */
+	/* If we received a specified ping count, use it.
+	 * If the number of pings is 0 or less, abort the ping test. If there is already
+	 * a ping test in progress to this client, throw a notice. */
 	if (argc > 3) {
-		npings = atoi(argv[3]);
-	}
-	/* If the number of pings is 0 or less, abort the ping test. If there is already
-	 * a ping test in progress to this client, throw a notice.
-	 */
-	if (argc > 3) {
-		if (atoi(argv[3]) <= 0) {
+		/* Convert the requested number of pings from the CLI from a string to an integer */
+		if (ast_str_to_int(argv[3], &requested_pings) == 0) {
+			npings = requested_pings;
+		} else {
+			ast_debug(3, "Unable to convert %s to int\n", argv[3]);
+			ast_mutex_unlock(&voter_lock);
+			return RESULT_SHOWUSAGE;
+		}
+		if (requested_pings <= 0) {
 			client->ping_abort = 1;
 			ast_mutex_unlock(&voter_lock);
 			return RESULT_SUCCESS;
-		} else {
-			npings = atoi(argv[3]);
 		}
 	}
 	/* If we are already pinging, ignore the new value. */
@@ -2106,12 +2139,12 @@ static char *handle_cli_ping(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
  *             			- argv[2]: instance number
  *             			- argv[3] (optional): client name or "all"
  *             			- argv[4] (optional): priority value or "off"/"disable"
- * \return     			RESULT_SHOWUSAGE when the argument count or format is incorrect,
- *             			RESULT_SUCCESS otherwise.
+ * \return     			RESULT_SUCCESS on normal handling,
+ *						RESULT_SHOWUSAGE if arguments are insufficient or invalid.
  */
 static int voter_do_prio(int fd, int argc, const char *const *argv)
 {
-	int newlevel, foundit;
+	int newlevel, foundit, requested_node;
 	struct voter_pvt *p;
 	struct voter_client *client;
 
@@ -2119,15 +2152,20 @@ static int voter_do_prio(int fd, int argc, const char *const *argv)
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	/* Attempt to convert the requested node number from the CLI from a string to an integer */
+	if (ast_str_to_int(argv[2], &requested_node)) {
+		ast_debug(3, "Unable to convert %s to int\n", argv[2]);
+		return RESULT_SHOWUSAGE;
+	}
 	ast_mutex_lock(&voter_lock);
 	/* Look for a matching voter instance */
 	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
+		if (requested_node == p->nodenum) {
 			break;
 		}
 	}
 	if (!p) {
-		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i not found\n", requested_node);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
@@ -2285,23 +2323,30 @@ static char *handle_cli_prio(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
  * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
  * \param argv			Arguments
- * \return				CLI success, showusage, or failure.
+ * \return     			RESULT_SUCCESS on normal handling,
+ *						RESULT_SHOWUSAGE if arguments are insufficient or invalid.
  */
 static int voter_do_record(int fd, int argc, const char *const *argv)
 {
 	struct voter_pvt *p;
+	int requested_node;
 
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	/* Attempt to convert the requested node number from the CLI from a string to an integer */
+	if (ast_str_to_int(argv[2], &requested_node)) {
+		ast_debug(3, "Unable to convert %s to int\n", argv[2]);
+		return RESULT_SHOWUSAGE;
+	}
 	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
+		if (requested_node == p->nodenum) {
 			break;
 		}
 	}
 	if (!p) {
-		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i not found\n", requested_node);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
@@ -2310,7 +2355,7 @@ static int voter_do_record(int fd, int argc, const char *const *argv)
 			fclose(p->recfp);
 		}
 		p->recfp = NULL;
-		ast_cli(fd, "VOTER instance %s recording disabled\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i recording disabled\n", requested_node);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
@@ -2320,11 +2365,11 @@ static int voter_do_record(int fd, int argc, const char *const *argv)
 	}
 	p->recfp = fopen(argv[3], "w");
 	if (!p->recfp) {
-		ast_cli(fd, "VOTER instance %s Record: Could not open file %s\n", argv[2], argv[3]);
+		ast_cli(fd, "VOTER instance %i Record: Could not open file %s\n", requested_node, argv[3]);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
-	ast_cli(fd, "VOTER instance %s Record: Recording enabled info file %s\n", argv[2], argv[3]);
+	ast_cli(fd, "VOTER instance %i Record: Recording enabled info file %s\n", requested_node, argv[3]);
 	ast_mutex_unlock(&voter_lock);
 	return RESULT_SUCCESS;
 }
@@ -2367,24 +2412,30 @@ static char *handle_cli_record(struct ast_cli_entry *e, int cmd, struct ast_cli_
  * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
  * \param argv			Arguments
- * \return	CLI success, showusage, or failure.
+ * \return     			RESULT_SUCCESS on normal handling,
+ *						RESULT_SHOWUSAGE if arguments are insufficient or invalid.
  */
 static int voter_do_test(int fd, int argc, const char *const *argv)
 {
-	int newlevel;
+	int newlevel, requested_node, requested_level;
 	struct voter_pvt *p;
 
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	/* Attempt to convert the requested node number from the CLI from a string to an integer */
+	if (ast_str_to_int(argv[2], &requested_node)) {
+		ast_debug(3, "Unable to convert %s to int\n", argv[2]);
+		return RESULT_SHOWUSAGE;
+	}
 	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
+		if (requested_node == p->nodenum) {
 			break;
 		}
 	}
 	if (!p) {
-		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i not found\n", requested_node);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
@@ -2401,7 +2452,13 @@ static int voter_do_test(int fd, int argc, const char *const *argv)
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SHOWUSAGE;
 	}
-	newlevel = atoi(argv[3]);
+	if (ast_str_to_int(argv[3], &requested_level) == 0) {
+		newlevel = requested_level;
+	} else {
+		ast_debug(3, "Unable to convert %s to int\n", argv[3]);
+		ast_mutex_unlock(&voter_lock);
+		return RESULT_SHOWUSAGE;
+	}
 	if (newlevel < 0) {
 		ast_cli(fd, "Error: Invalid test mode value specification!!\n");
 		ast_mutex_unlock(&voter_lock);
@@ -2446,29 +2503,35 @@ static char *handle_cli_test(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
  * \param fd			Asterisk CLI fd
  * \param argc			Number of arguments
  * \param argv			Arguments
- * \return				CLI success, showusage, or failure.
+ * \return     			RESULT_SUCCESS on normal handling,
+ *						RESULT_SHOWUSAGE if arguments are insufficient or invalid.
  */
 static int voter_do_tone(int fd, int argc, const char *const *argv)
 {
-	int newlevel;
+	int newlevel, requested_node, requested_level;
 	struct voter_pvt *p;
 
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	/* Attempt to convert the requested node number from the CLI from a string to an integer */
+	if (ast_str_to_int(argv[2], &requested_node)) {
+		ast_debug(3, "Unable to convert %s to int\n", argv[2]);
+		return RESULT_SHOWUSAGE;
+	}
 	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
+		if (requested_node == p->nodenum) {
 			break;
 		}
 	}
 	if (!p) {
-		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i not found\n", requested_node);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
 	if (!p->pmrChan) {
-		ast_cli(fd, "VOTER instance %s does not have CTCSS enabled\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i does not have CTCSS enabled\n", requested_node);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
@@ -2480,7 +2543,13 @@ static int voter_do_tone(int fd, int argc, const char *const *argv)
 	if (!strcasecmp(argv[3], "default")) {
 		newlevel = p->txctcsslevelset;
 	} else {
-		newlevel = atoi(argv[3]);
+		if (ast_str_to_int(argv[3], &requested_level) == 0) {
+			newlevel = requested_level;
+		} else {
+			ast_debug(3, "Unable to convert %s to int\n", argv[3]);
+			ast_mutex_unlock(&voter_lock);
+			return RESULT_SHOWUSAGE;
+		}
 		if ((newlevel < 0) || (newlevel > 250)) {
 			ast_mutex_unlock(&voter_lock);
 			return RESULT_SHOWUSAGE;
@@ -2530,12 +2599,12 @@ static char *handle_cli_tone(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
  * \param argc 			Number of command arguments.
  * \param argv 			Argument vector; argv[2] is the node number and argv[3] (optional)
  *             			is the lockout specification as described above.
- * \return     			`RESULT_SHOWUSAGE` if arguments are insufficient, `RESULT_SUCCESS`
- *             			on successful processing, or `RESULT_FAILURE` on error.
+ * \return     			RESULT_SUCCESS on normal handling,
+ *						RESULT_SHOWUSAGE if arguments are insufficient or invalid.
  */
 static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 {
-	int i, n, newval;
+	int i, n, newval, requested_node;
 	char str[300], *strs[100];
 	struct voter_pvt *p;
 	struct voter_client *client;
@@ -2543,14 +2612,19 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 	if (argc < 3) {
 		return RESULT_SHOWUSAGE;
 	}
+	/* Attempt to convert the requested node number from the CLI from a string to an integer */
+	if (ast_str_to_int(argv[2], &requested_node)) {
+		ast_debug(3, "Unable to convert %s to int\n", argv[2]);
+		return RESULT_SHOWUSAGE;
+	}
 	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
-		if (p->nodenum == atoi(argv[2])) {
+		if (requested_node == p->nodenum) {
 			break;
 		}
 	}
 	if (!p) {
-		ast_cli(fd, "VOTER instance %s not found\n", argv[2]);
+		ast_cli(fd, "VOTER instance %i not found\n", requested_node);
 		ast_mutex_unlock(&voter_lock);
 		return RESULT_SUCCESS;
 	}
@@ -2602,7 +2676,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 			}
 		}
 	}
-	ast_cli(fd, "\nFull list of TX locked out clients for VOTER instance %s:\n", argv[2]);
+	ast_cli(fd, "\nFull list of TX locked out clients for VOTER instance %i:\n", requested_node);
 	for (n = 0, client = clients; client; client = client->next) {
 		if (client->nodenum != p->nodenum) {
 			continue;
@@ -2615,7 +2689,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 	if (!n) {
 		ast_cli(fd, "No clients are currently locked out\n");
 	}
-	ast_cli(fd, "\nFull list of normally transmitting clients for VOTER instance %s:\n", argv[2]);
+	ast_cli(fd, "\nFull list of normally transmitting clients for VOTER instance %i:\n", requested_node);
 	for (n = 0, client = clients; client; client = client->next) {
 		if (client->nodenum != p->nodenum) {
 			continue;
@@ -3450,7 +3524,8 @@ static void *voter_xmit(void *data)
 static struct ast_channel *voter_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
 	const struct ast_channel *requestor, const char *data, int *cause)
 {
-	int i;
+	int i, ctg_int;
+	uint config_linger, config_ctcss, config_linger_thresh, config_count_thresh, config_rssi_thresh;
 	struct voter_pvt *p, *p1;
 	struct ast_channel *chan = NULL;
 	char *cp, *cp1, *cp2, *strs[MAXTHRESHOLDS], *ctg;
@@ -3564,7 +3639,18 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_log(LOG_NOTICE, "Loading config from %s\n", config);
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
-			p->linger = atoi(val);
+			if (ast_str_to_uint(val, &config_linger) == 0) {
+				if (config_linger <= UINT16_MAX) {
+					p->linger = config_linger;
+				} else {
+					ast_log(LOG_NOTICE, "linger out of range, using default linger = %i\n", DEFAULT_LINGER);
+					p->linger = DEFAULT_LINGER;
+				}
+			} else {
+				ast_debug(3, "Unable to convert %s to int\n", val);
+				ast_log(LOG_ERROR, "linger parameter error, using default linger = %i\n", DEFAULT_LINGER);
+				p->linger = DEFAULT_LINGER;
+			}
 		} else {
 			ast_debug(1, "linger not specified, using default linger = %i\n", DEFAULT_LINGER);
 			p->linger = DEFAULT_LINGER;
@@ -3589,7 +3675,18 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		}
 		val = ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
 		if (val) {
-			p->txctcsslevel = atoi(val);
+			if (ast_str_to_uint(val, &config_ctcss) == 0) {
+				if (config_ctcss <= 250) {
+					p->txctcsslevel = config_ctcss;
+				} else {
+					ast_log(LOG_NOTICE, "txctcsslevel %i out of range, using default 62\n", config_ctcss);
+					p->txctcsslevel = 62;
+				}
+			} else {
+				ast_debug(3, "Unable to convert %s to int\n", val);
+				ast_log(LOG_ERROR, "txctcsslevel parameter error, setting txctcsslevel = 62\n");
+				p->txctcsslevel = 62;
+			}
 		} else {
 			p->txctcsslevel = 62;
 		}
@@ -3603,27 +3700,96 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 				p->txtoctype = TOC_NOTONE;
 			}
 		}
+		/* Look for, and process the thresholds = setting. */
 		val = ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
+			/* If it is set, make a copy into cp. */
 			cp = ast_strdup(val);
-			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			if (!cp) {
+				p->nthresholds = 0;
+				p->threshold = 0;
+				p->threshcount = 0;
+				p->lingercount = 0;
+			} else {
+				/* Split the coma delimited string (cp), return the pointers in strs, and set p->nthresholds
+				 * with the number of thresholds we found.
+				 */
+				p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			}
+			/* Now we need to process each threshold setting we found. They should contain one
+			 * or more MIN_RSSI (rssi_thresh) values, and then optionally REASSESS_FRAMES (count_thresh)
+			 * and/or LINGER_FRAMES (linger_thresh).
+			 */
 			for (i = 0; i < p->nthresholds; i++) {
+				/* Look for a = in the threshold definition, indicating REASSESS_FRAMES was specified,
+				 * and set cp1 with the pointer.
+				 */
 				cp1 = strchr(strs[i], '=');
+				/* Set the linger threshold (LINGER_FRAMES) to whatever p->linger has been
+				 * set to. If no linger value was specified in voter.conf, it defaults to 6.
+				 */
 				p->linger_thresh[i] = p->linger;
+				/* If we have a REASSESS_FRAMES, process it. */
 				if (cp1) {
 					*cp1 = 0;
+					/* Look for a : in the threshold definition, indicating we have LINGER_FRAMES
+					 * specified, and set cp2 with the pointer.
+					 */
 					cp2 = strchr(cp1 + 1, ':');
 					if (cp2) {
 						*cp2 = 0;
+						/* Get the value of LINGER_FRAMES, if it exists, and update p->linger_thresh
+						 * for this threshold.
+						 */
 						if (cp2[1]) {
-							p->linger_thresh[i] = (uint16_t) atoi(cp2 + 1);
+							if (ast_str_to_uint(cp2 + 1, &config_linger_thresh) == 0) {
+								if (config_linger_thresh <= UINT16_MAX) {
+									p->linger_thresh[i] = (uint16_t) config_linger_thresh;
+								} else {
+									ast_log(LOG_NOTICE,
+										"thresholds found, LINGER_FRAMES parameter out of range (<0), setting to 6\n");
+									p->linger_thresh[i] = 6;
+								}
+							} else {
+								ast_debug(3, "Unable to convert %s to int\n", cp2 + 1);
+								ast_log(LOG_ERROR, "thresholds found, LINGER_FRAMES parameter error, setting to 6\n");
+								p->linger_thresh[i] = 6;
+							}
 						}
 					}
+					/* Get the value of REASSESS_FRAMES, if it exists, and update p->count_thresh
+					 * for this threshold.
+					 */
 					if (cp1[1]) {
-						p->count_thresh[i] = (uint16_t) atoi(cp1 + 1);
+						if (ast_str_to_uint(cp1 + 1, &config_count_thresh) == 0) {
+							if (config_count_thresh <= UINT16_MAX) {
+								p->count_thresh[i] = (uint16_t) config_count_thresh;
+							} else {
+								ast_log(LOG_NOTICE,
+									"thresholds found, REASSESS_FRAMES parameter out of range (<0), setting to 5\n");
+								p->count_thresh[i] = 5;
+							}
+
+						} else {
+							ast_debug(3, "Unable to convert %s to int\n", cp1 + 1);
+							ast_log(LOG_ERROR, "thresholds found, REASSESS_FRAMES parameter error, setting to 5\n");
+							p->count_thresh[i] = 5;
+						}
 					}
 				}
-				p->rssi_thresh[i] = (uint8_t) atoi(strs[i]);
+				/* Get the MIN_RSSI for this threshold, and update p->rssi_thresh. */
+				if (ast_str_to_uint(strs[i], &config_rssi_thresh) == 0) {
+					if (config_rssi_thresh >= 1 && config_rssi_thresh <= 255) {
+						p->rssi_thresh[i] = (uint8_t) config_rssi_thresh;
+					} else {
+						ast_log(LOG_NOTICE, "thresholds found, MIN_RSSI parameter out of range (1-255), setting to 255\n ");
+						p->rssi_thresh[i] = 255;
+					}
+				} else {
+					ast_debug(3, "Unable to convert %s to int\n", strs[i]);
+					ast_log(LOG_ERROR, "thresholds found, MIN_RSSI parameter error, setting to 255\n");
+					p->rssi_thresh[i] = 255;
+				}
 			}
 			ast_free(cp);
 		}
@@ -3674,9 +3840,14 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		if (!isdigit(ctg[0])) {
 			continue;
 		}
+		/* Attempt to convert the requested category from a string to an integer */
+		if (ast_str_to_int(ctg, &ctg_int)) {
+			ast_debug(3, "Unable to convert %s to int\n", ctg);
+			continue;
+		}
 		ast_mutex_lock(&voter_lock);
 		for (p1 = pvts; p1; p1 = p1->next) {
-			if (p1->nodenum == atoi(ctg)) {
+			if (p1->nodenum == ctg_int) {
 				break;
 			}
 		}
@@ -3788,6 +3959,7 @@ static int reload(void)
 {
 	struct ast_flags zeroflag = { 0 };
 	int i, n, instance_buflen, buflen, oldtoctype, oldlevel;
+	uint config_linger, config_ctcss, config_linger_thresh, config_count_thresh, config_rssi_thresh;
 	uint8_t *tempbuf;
 	char *ctg, *cp, *cp1, *cp2, *strs[40], newclient, data[100], oldctcss[100];
 	const char *val;
@@ -3880,7 +4052,18 @@ static int reload(void)
 		/* Load the linger value, or set it to default if it is unset. */
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
 		if (val) {
-			p->linger = atoi(val);
+			if (ast_str_to_uint(val, &config_linger) == 0) {
+				if (config_linger <= UINT16_MAX) {
+					p->linger = config_linger;
+				} else {
+					ast_log(LOG_NOTICE, "linger out of range, using default linger = %i\n", DEFAULT_LINGER);
+					p->linger = DEFAULT_LINGER;
+				}
+			} else {
+				ast_debug(3, "Unable to convert %s to int\n", val);
+				ast_log(LOG_ERROR, "linger parameter error, using default linger = %i\n", DEFAULT_LINGER);
+				p->linger = DEFAULT_LINGER;
+			}
 		} else {
 			ast_debug(1, "linger not specified, using default linger = %i\n", DEFAULT_LINGER);
 			p->linger = DEFAULT_LINGER;
@@ -3925,7 +4108,18 @@ static int reload(void)
 		 */
 		val = ast_variable_retrieve(cfg, (char *) data, "txctcsslevel");
 		if (val) {
-			p->txctcsslevel = atoi(val);
+			if (ast_str_to_uint(val, &config_ctcss) == 0) {
+				if (config_ctcss <= 250) {
+					p->txctcsslevel = config_ctcss;
+				} else {
+					ast_log(LOG_NOTICE, "txctcsslevel %i out of range, using default 62\n", config_ctcss);
+					p->txctcsslevel = 62;
+				}
+			} else {
+				ast_debug(3, "Unable to convert %s to int\n", val);
+				ast_log(LOG_ERROR, "txctcsslevel parameter error, setting txctcsslevel = 62\n");
+				p->txctcsslevel = 62;
+			}
 		} else {
 			p->txctcsslevel = 62;
 		}
@@ -3946,29 +4140,103 @@ static int reload(void)
 				p->txtoctype = TOC_NOTONE;
 			}
 		}
-		/* Reset thresholds to 0 before we read in and parse any thresholds values. */
+		/* Reset thresholds count and any active runtime threshold state before we read in and parse
+		 * the replacement threshold list. This prevents stale entries from being referenced when the
+		 * number of configured thresholds shrinks on reload.
+		 */
+		p->threshold = 0;
+		p->threshcount = 0;
+		p->lingercount = 0;
 		p->nthresholds = 0;
+		/* Look for, and process the thresholds = setting. */
 		val = ast_variable_retrieve(cfg, (char *) data, "thresholds");
 		if (val) {
+			/* If it is set, make a copy into cp. */
 			cp = ast_strdup(val);
-			p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			if (!cp) {
+				p->nthresholds = 0;
+				p->threshold = 0;
+				p->threshcount = 0;
+				p->lingercount = 0;
+			} else {
+				/* Split the coma delimited string (cp), return the pointers in strs, and set p->nthresholds
+				 * with the number of thresholds we found.
+				 */
+				p->nthresholds = finddelim(cp, strs, MIN(ARRAY_LEN(strs), ARRAY_LEN(p->linger_thresh)));
+			}
+			/* Now we need to process each threshold setting we found. They should contain one
+			 * or more MIN_RSSI (rssi_thresh) values, and then optionally REASSESS_FRAMES (count_thresh)
+			 * and/or LINGER_FRAMES (linger_thresh).
+			 */
 			for (i = 0; i < p->nthresholds; i++) {
+				/* Look for a = in the threshold definition, indicating REASSESS_FRAMES was specified,
+				 * and set cp1 with the pointer.
+				 */
 				cp1 = strchr(strs[i], '=');
+				/* Set the linger threshold (LINGER_FRAMES) to whatever p->linger has been
+				 * set to. If no linger value was specified in voter.conf, it defaults to 6.
+				 */
 				p->linger_thresh[i] = p->linger;
+				/* If we have a REASSESS_FRAMES, process it. */
 				if (cp1) {
 					*cp1 = 0;
+					/* Look for a : in the threshold definition, indicating we have LINGER_FRAMES
+					 * specified, and set cp2 with the pointer.
+					 */
 					cp2 = strchr(cp1 + 1, ':');
 					if (cp2) {
 						*cp2 = 0;
+						/* Get the value of LINGER_FRAMES, if it exists, and update p->linger_thresh
+						 * for this threshold.
+						 */
 						if (cp2[1]) {
-							p->linger_thresh[i] = (uint16_t) atoi(cp2 + 1);
+							if (ast_str_to_uint(cp2 + 1, &config_linger_thresh) == 0) {
+								if (config_linger_thresh <= UINT16_MAX) {
+									p->linger_thresh[i] = (uint16_t) config_linger_thresh;
+								} else {
+									ast_log(LOG_NOTICE,
+										"thresholds found, LINGER_FRAMES parameter out of range (<0), setting to 6\n");
+									p->linger_thresh[i] = 6;
+								}
+							} else {
+								ast_debug(3, "Unable to convert %s to int\n", cp2 + 1);
+								ast_log(LOG_ERROR, "thresholds found, LINGER_FRAMES parameter error, setting to 6\n");
+							}
 						}
 					}
+					/* Get the value of REASSESS_FRAMES, if it exists, and update p->count_thresh
+					 * for this threshold.
+					 */
 					if (cp1[1]) {
-						p->count_thresh[i] = (uint16_t) atoi(cp1 + 1);
+						if (ast_str_to_uint(cp1 + 1, &config_count_thresh) == 0) {
+							if (config_count_thresh <= UINT16_MAX) {
+								p->count_thresh[i] = (uint16_t) config_count_thresh;
+							} else {
+								ast_log(LOG_NOTICE,
+									"thresholds found, REASSESS_FRAMES parameter out of range (<0), setting to 5\n");
+								p->count_thresh[i] = 5;
+							}
+
+						} else {
+							ast_debug(3, "Unable to convert %s to int\n", cp1 + 1);
+							ast_log(LOG_ERROR, "thresholds found, REASSESS_FRAMES parameter error, setting to 5\n");
+							p->count_thresh[i] = 5;
+						}
 					}
 				}
-				p->rssi_thresh[i] = (uint8_t) atoi(strs[i]);
+				/* Get the MIN_RSSI for this threshold, and update p->rssi_thresh. */
+				if (ast_str_to_uint(strs[i], &config_rssi_thresh) == 0) {
+					if (config_rssi_thresh >= 1 && config_rssi_thresh <= 255) {
+						p->rssi_thresh[i] = (uint8_t) config_rssi_thresh;
+					} else {
+						ast_log(LOG_NOTICE, "thresholds found, MIN_RSSI parameter out of range (1-255), setting to 255\n ");
+						p->rssi_thresh[i] = 255;
+					}
+				} else {
+					ast_debug(3, "Unable to convert %s to int\n", strs[i]);
+					ast_log(LOG_ERROR, "thresholds found, MIN_RSSI parameter error, setting to 255\n");
+					p->rssi_thresh[i] = 255;
+				}
 			}
 			ast_free(cp);
 		}
@@ -5557,17 +5825,20 @@ static void *voter_reader(void *data)
 									for (i = 0; i < p->nthresholds; i++) {
 										/* If meets criteria. */
 										if (p->lastwon->lastrssi >= p->rssi_thresh[i]) {
-											/* If not at same threshold, change to new one. */
+											/* If not at same threshold, change to new one. p->threshold is the
+											 * index number of the thresholds loaded in from thresholds = in voter.conf,
+											 * starting at "1".
+											 */
 											if ((i + 1) != p->threshold) {
 												p->threshold = i + 1;
 												p->threshcount = 0;
-												ast_debug(3, "New threshold %d, client %s, RSSI %d\n", p->threshold,
-													p->lastwon->name, p->lastwon->lastrssi);
+												ast_debug(3, "Threshold criteria changed! Now using threshold criteria %d for client %s with RSSI %d\n",
+													p->threshold, p->lastwon->name, p->lastwon->lastrssi);
 											}
 
 											/* At the same threshold still, if count is enabled and is met. */
 											else if (p->count_thresh[i] && (p->threshcount++ >= p->count_thresh[i])) {
-												ast_debug(3, "Threshold %d time (%d) exceeded, client %s, RSSI %d\n",
+												ast_debug(3, "Threshold criteria %d REASSESS_FRAMES (%d) exceeded for client %s, RSSI %d, resetting count\n",
 													p->threshold, p->count_thresh[i], p->lastwon->name, p->lastwon->lastrssi);
 												p->threshold = 0;
 												p->threshcount = 0;
@@ -5584,7 +5855,7 @@ static void *voter_reader(void *data)
 										/* If there are no receiving clients to send audio from anymore. */
 										if (i == (p->nthresholds - 1)) {
 											if (DEBUG_ATLEAST(3) && p->threshold) {
-												ast_debug(3, "Nothing matches criteria any more\n");
+												ast_debug(3, "No more thresholds to consider for client %s\n", p->lastwon->name);
 											}
 											if (p->threshold) {
 												p->lingercount = p->linger_thresh[p->threshold - 1];
