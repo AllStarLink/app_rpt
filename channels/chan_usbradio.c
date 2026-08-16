@@ -140,7 +140,7 @@ static struct ast_jb_conf global_jbconf;
 static FILE *frxcapraw = NULL, *frxcaptrace = NULL, *frxoutraw = NULL;
 static FILE *ftxcapraw = NULL, *ftxcaptrace = NULL, *ftxoutraw = NULL;
 
-AST_MUTEX_DEFINE_STATIC(usb_dev_lock);
+AST_MUTEX_DEFINE_STATIC(device_swap_lock);
 AST_MUTEX_DEFINE_STATIC(pp_lock);
 
 /* variables for communicating with the parallel port */
@@ -180,7 +180,6 @@ struct chan_usbradio_pvt {
 	struct chan_usbradio_pvt *next;
 
 	char *name;				 /* the internal name of our channel */
-	char hw_device[100];	 /* ALSA/PortAudio device (hw:N or hw:N,M) */
 	int devtype;			 /* actual type of device */
 	int pttkick[2];			 /* ptt kick pipe */
 	struct ast_radio_pa_stream pa;
@@ -194,12 +193,8 @@ struct chan_usbradio_pvt {
 	unsigned int queuesize; /* max fragments in queue */
 	unsigned int frags;		/* parameter for SETFRAGMENT */
 
-	char devicenum;
 	char devstr[128];
 	char serial[128];
-	int spkrmax;
-	int micmax;
-	int micplaymax;
 
 	pthread_t hidthread;
 	pthread_t audiothread;
@@ -208,8 +203,20 @@ struct chan_usbradio_pvt {
 	volatile sig_atomic_t hasusb; /* HID/audio liveness; not a bit-field (cross-thread) */
 	char audio_thread_ready;
 	time_t lastaudiotime;
+	enum {
+		DEVICE_SWAP_IDLE,	   /*!< No device swap requested */
+		DEVICE_SWAP_QUIESCING, /*!< Device handles are stopping */
+		DEVICE_SWAP_READY,	   /*!< Device is ready for lease exchange */
+	} swap_state;
+	unsigned int swap_audio_ready:1; /*!< PortAudio stopped for pending swap */
+	ast_mutex_t swap_lock;			 /* protects device swap state */
 
 	struct ast_channel *owner;
+
+	/* Shared USB radio device lease */
+	struct ast_radio_device *radio_device;
+	ast_mutex_t device_lock;
+	enum ast_radio_device_result device_error;
 
 	/* Outbound 8 kHz frames from Asterisk, drained by the audio thread into PmrTx. */
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
@@ -379,9 +386,6 @@ struct chan_usbradio_pvt {
 	unsigned int lsdrxpolarity:1;	/* indicator for lsd receive polarity */
 	unsigned int lsdtxpolarity:1;	/* indicator for lsd transmit polarity */
 	unsigned int radioactive:1;		/* indicator for active radio channel */
-	unsigned int device_error:1;	/* indicator set when we cannot find the USB device */
-	unsigned int newname:1;			/* indicator that we should use MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW */
-	unsigned int usbass:1;			/* indicator for USB device assigned */
 	unsigned int wanteeprom:1;		/* indicator if we should use EEPROM */
 	unsigned int usedtmf:1;			/* indicator is we should decode DTMF */
 	unsigned int invertptt:1;		/* indicator if we need to invert ptt */
@@ -401,7 +405,6 @@ struct chan_usbradio_pvt {
 	char eepromctl;
 	ast_mutex_t eepromlock;
 
-	struct libusb_device_handle *usb_handle;
 	int readerrs;
 	struct timeval tonetime;
 	int toneflag;
@@ -511,12 +514,41 @@ static int __attribute__((format(printf, 3, 4))) usbradio_log_fault(struct chan_
 	return 1;
 }
 
+static void usbradio_device_identity(struct chan_usbradio_pvt *o, char *devstr, size_t devstr_size, char *serial,
+	size_t serial_size, int *alsa_card)
+{
+	if (devstr && devstr_size) {
+		devstr[0] = '\0';
+	}
+	if (serial && serial_size) {
+		serial[0] = '\0';
+	}
+	if (alsa_card) {
+		*alsa_card = -1;
+	}
+
+	/* Acquired device identity */
+	ast_mutex_lock(&o->device_lock);
+	if (o->radio_device) {
+		if (devstr && devstr_size) {
+			ast_copy_string(devstr, o->radio_device->devstr, devstr_size);
+		}
+		if (serial && serial_size && o->radio_device->serial) {
+			ast_copy_string(serial, o->radio_device->serial, serial_size);
+		}
+		if (alsa_card) {
+			*alsa_card = o->radio_device->alsa_card;
+		}
+	}
+	ast_mutex_unlock(&o->device_lock);
+}
+
 /*!
  * \brief Log once when USB/audio returns after a prior failure.
  */
 static void usbradio_log_usb_recovered(struct chan_usbradio_pvt *o)
 {
-	const char *dev;
+	char devstr[sizeof(o->devstr)];
 	sig_atomic_t was_faulted;
 
 	was_faulted = o->usb_faulted;
@@ -524,9 +556,10 @@ static void usbradio_log_usb_recovered(struct chan_usbradio_pvt *o)
 	if (!was_faulted) {
 		return;
 	}
-	dev = !ast_strlen_zero(o->devstr) ? o->devstr : o->hw_device;
+
 	/* Match fault priority so ERROR-level logs pair fault with recovery. */
-	ast_log(LOG_ERROR, "Channel %s: USB radio device recovered (%s)\n", o->name, !ast_strlen_zero(dev) ? dev : "unknown");
+	usbradio_device_identity(o, devstr, sizeof(devstr), NULL, 0, NULL);
+	ast_log(LOG_ERROR, "Channel %s: USB radio device recovered (%s)\n", o->name, S_OR(devstr, "unknown"));
 }
 
 static char *usbradio_active; /* the active device */
@@ -704,46 +737,6 @@ static struct chan_usbradio_pvt *find_desc(const char *dev)
 }
 
 /*!
- * \brief Search our configured channels to find the
- *	one with the matching USB descriptor.
- * \param o		chan_usbradio_pvt.
- * \returns		Private structure that matches or NULL if not found.
- */
-static struct chan_usbradio_pvt *find_desc_usb(const char *devstr)
-{
-	struct chan_usbradio_pvt *o = NULL;
-
-	if (!devstr) {
-		ast_log(LOG_WARNING, "USB Descriptor is null.\n");
-	}
-
-	for (o = usbradio_default.next; o && devstr && strcmp(o->devstr, devstr) != 0; o = o->next)
-		;
-
-	return o;
-}
-
-/*!
- * \brief Search installed devices for a match with
- *	one of our configured channels.
- * \returns		Matching device string, or NULL.
- */
-static char *find_installed_usb_match(void)
-{
-	struct chan_usbradio_pvt *o = NULL;
-	char *match = NULL;
-
-	for (o = usbradio_default.next; o; o = o->next) {
-		if (ast_radio_usb_list_check(o->devstr)) {
-			match = o->devstr;
-			break;
-		}
-	}
-
-	return match;
-}
-
-/*!
  * \brief Parallel port processing thread.
  *	This thread evaluates the timers configured for each
  *  configured parallel port pin.
@@ -811,7 +804,6 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	int configured = 0;
 	char devstr[sizeof(o->devstr)];
 	char serial[sizeof(o->serial)];
-	char hw_device[sizeof(o->hw_device)];
 
 	/* No load defaults */
 	o->rxmixerset = 500;
@@ -825,11 +817,9 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 
 	devstr[0] = '\0';
 	serial[0] = '\0';
-	hw_device[0] = '\0';
 	if (!reload) {
 		o->devstr[0] = 0;
 		o->serial[0] = 0;
-		o->hw_device[0] = '\0';
 	}
 
 	if (!cfg) {
@@ -857,18 +847,12 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 		CV_UINT("fever", o->fever);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
-		CV_STR("audiodev", hw_device);
 		CV_END;
 	}
 	if (!reload) {
 		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
 		ast_copy_string(o->devstr, devstr, sizeof(o->devstr));
 		ast_copy_string(o->serial, serial, sizeof(o->serial));
-		if (ast_strlen_zero(devstr)) {
-			ast_copy_string(o->hw_device, hw_device, sizeof(o->hw_device));
-		} else {
-			o->hw_device[0] = '\0';
-		}
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
@@ -958,24 +942,183 @@ static void usbradio_adjust_txmix_for_mono(struct chan_usbradio_pvt *o)
 	}
 }
 
+static void usbradio_release_device(struct chan_usbradio_pvt *o)
+{
+	ast_mutex_lock(&o->device_lock);
+	if (o->radio_device) {
+		ast_radio_device_release(o->radio_device);
+		o->radio_device = NULL;
+	}
+	ast_mutex_unlock(&o->device_lock);
+}
+
+static void usbradio_swap_begin(struct chan_usbradio_pvt *o)
+{
+	ast_mutex_lock(&o->swap_lock);
+	o->swap_audio_ready = 0;
+	o->swap_state = DEVICE_SWAP_QUIESCING;
+	ast_mutex_unlock(&o->swap_lock);
+}
+
+static void usbradio_swap_audio_stopped(struct chan_usbradio_pvt *o)
+{
+	ast_mutex_lock(&o->swap_lock);
+	if (o->swap_state == DEVICE_SWAP_QUIESCING) {
+		o->swap_audio_ready = 1;
+	}
+	ast_mutex_unlock(&o->swap_lock);
+}
+
+static int usbradio_swap_hid_wait(struct chan_usbradio_pvt *o)
+{
+	int swapping;
+
+	ast_mutex_lock(&o->swap_lock);
+	swapping = o->swap_state == DEVICE_SWAP_QUIESCING;
+	while (swapping && !o->swap_audio_ready && !o->stophid) {
+		ast_mutex_unlock(&o->swap_lock);
+		usleep(10000);
+		ast_mutex_lock(&o->swap_lock);
+		swapping = o->swap_state == DEVICE_SWAP_QUIESCING;
+	}
+	if (swapping && o->swap_audio_ready) {
+		o->swap_state = DEVICE_SWAP_READY;
+	} else {
+		swapping = 0;
+	}
+	while (o->swap_state == DEVICE_SWAP_READY && !o->stophid) {
+		ast_mutex_unlock(&o->swap_lock);
+		usleep(10000);
+		ast_mutex_lock(&o->swap_lock);
+	}
+	ast_mutex_unlock(&o->swap_lock);
+	return swapping;
+}
+
+static int usbradio_swap_ready(struct chan_usbradio_pvt *o)
+{
+	int ready;
+
+	ast_mutex_lock(&o->swap_lock);
+	ready = o->swap_state == DEVICE_SWAP_READY;
+	ast_mutex_unlock(&o->swap_lock);
+	return ready;
+}
+
+static void usbradio_swap_finish(struct chan_usbradio_pvt *o)
+{
+	ast_mutex_lock(&o->swap_lock);
+	o->swap_audio_ready = 0;
+	o->swap_state = DEVICE_SWAP_IDLE;
+	ast_mutex_unlock(&o->swap_lock);
+}
+
+static void usbradio_mixer_limits(struct chan_usbradio_pvt *o, int *rx_max, int *tx_max, int *sidetone_max)
+{
+	*rx_max = 0;
+	*tx_max = 0;
+	*sidetone_max = 0;
+
+	ast_mutex_lock(&o->device_lock);
+	if (o->radio_device) {
+		*rx_max = ast_radio_device_mixer_max(o->radio_device, o->radio_device->mixer_rx_paths, AST_RADIO_MIXER_CAPTURE_VOLUME);
+		*tx_max = ast_radio_device_mixer_max(o->radio_device, o->radio_device->mixer_tx_paths, AST_RADIO_MIXER_PLAYBACK_VOLUME);
+		*sidetone_max = ast_radio_device_mixer_max(o->radio_device, o->radio_device->mixer_sidetone_paths, AST_RADIO_MIXER_PLAYBACK_VOLUME);
+	}
+	ast_mutex_unlock(&o->device_lock);
+}
+
+/* Control receive-audio monitoring into playback (Mic Playback Switch on CM108) */
+static void usbradio_set_sidetone_switch(struct chan_usbradio_pvt *o, int enabled)
+{
+	ast_mutex_lock(&o->device_lock);
+	if (o->radio_device) {
+		ast_radio_device_set_mixer_paths(o->radio_device, o->radio_device->mixer_sidetone_paths,
+			o->radio_device->mixer_sidetone_path_count, AST_RADIO_MIXER_PLAYBACK_SWITCH, enabled);
+	}
+	ast_mutex_unlock(&o->device_lock);
+}
+
+/* Control receive input level and optional gain/AGC */
+static void usbradio_set_rx_mixer(struct chan_usbradio_pvt *o, long volume)
+{
+	ast_mutex_lock(&o->device_lock);
+	if (o->radio_device) {
+		ast_radio_device_set_mixer_paths(o->radio_device, o->radio_device->mixer_rx_paths, o->radio_device->mixer_rx_path_count,
+			AST_RADIO_MIXER_CAPTURE_VOLUME, volume);
+		ast_radio_device_set_mixer_paths(o->radio_device, o->radio_device->mixer_rx_boost_paths,
+			o->radio_device->mixer_rx_boost_path_count, AST_RADIO_MIXER_PLAYBACK_SWITCH, o->rxboost);
+	}
+	ast_mutex_unlock(&o->device_lock);
+}
+
+/*! \brief Acquire and initialize the configured USB radio device */
+static int init_audio_device(struct chan_usbradio_pvt *o)
+{
+	struct ast_radio_device *radio_device;
+	struct ast_radio_device_request request = {
+		.devstr = o->devstr,
+		.serial = o->serial,
+		.owner = o->name,
+		.required_caps = AST_RADIO_CAP_CM108_HID,
+		.minimum_input_channels = 1,
+		.minimum_output_channels = 1,
+	};
+	enum ast_radio_device_result result;
+	int automatic;
+
+	automatic = ast_strlen_zero(request.serial) && ast_strlen_zero(request.devstr);
+	result = ast_radio_device_acquire(&request, &radio_device);
+	if (result != AST_RADIO_DEVICE_READY) {
+		if (o->device_error != result) {
+			usbradio_log_fault(o, 0, "Channel %s: %s\n", o->name, ast_radio_device_result_str(result));
+		}
+		o->device_error = result;
+		return -1;
+	}
+
+	/* Required receive and transmit mixer limits */
+	if (ast_radio_device_mixer_max(radio_device, radio_device->mixer_rx_paths, AST_RADIO_MIXER_CAPTURE_VOLUME) <= 0 ||
+		ast_radio_device_mixer_max(radio_device, radio_device->mixer_tx_paths, AST_RADIO_MIXER_PLAYBACK_VOLUME) <= 0) {
+		usbradio_log_fault(o, 0, "Channel %s: Cannot use USB radio device %s without mixer limits\n", o->name, radio_device->devstr);
+		ast_radio_device_release(radio_device);
+		o->device_error = AST_RADIO_DEVICE_ERROR;
+		return -1;
+	}
+
+	/* Acquired device publication without configured selector changes */
+	ast_mutex_lock(&o->device_lock);
+	o->radio_device = radio_device;
+	ast_mutex_unlock(&o->device_lock);
+	o->device_error = AST_RADIO_DEVICE_READY;
+
+	if (automatic) {
+		ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s\n", o->name, radio_device->devstr);
+	}
+	return 0;
+}
+
 static int usbradio_start_audio(struct chan_usbradio_pvt *o)
 {
+	char devstr[sizeof(o->devstr)];
 	PaError res;
 
 	if (o->pa.active) {
 		return 0;
 	}
 
-	if (!o->hw_device[0]) {
-		snprintf(o->hw_device, sizeof(o->hw_device), "hw:%d", (int) (unsigned char) o->devicenum);
+	/* Exact PortAudio endpoints from the active device lease */
+	ast_mutex_lock(&o->device_lock);
+	if (!o->radio_device) {
+		ast_mutex_unlock(&o->device_lock);
+		return -1;
 	}
-
-	ast_copy_string(o->pa.hw_device, o->hw_device, sizeof(o->pa.hw_device));
-	o->pa.input_channels = 2;
-
-	res = ast_radio_pa_open(&o->pa);
+	ast_copy_string(devstr, o->radio_device->devstr, sizeof(devstr));
+	o->pa.input_channels = o->radio_device->pa_input_channels >= 2 ? 2 : 1;
+	res = ast_radio_pa_open_device(&o->pa, o->radio_device);
+	ast_mutex_unlock(&o->device_lock);
 	if (res != paNoError) {
-		ast_log(LOG_WARNING, "Channel %s: Unable to open PortAudio stream %s (%s)\n", o->name, o->hw_device, Pa_GetErrorText(res));
+		ast_log(LOG_WARNING, "Channel %s: Unable to open PortAudio stream for %s (%s)\n", o->name, devstr, Pa_GetErrorText(res));
 		return -1;
 	}
 
@@ -983,7 +1126,7 @@ static int usbradio_start_audio(struct chan_usbradio_pvt *o)
 
 	res = ast_radio_pa_start(&o->pa);
 	if (res != paNoError) {
-		ast_log(LOG_WARNING, "Channel %s: Unable to start PortAudio stream %s (%s)\n", o->name, o->hw_device, Pa_GetErrorText(res));
+		ast_log(LOG_WARNING, "Channel %s: Unable to start PortAudio stream for %s (%s)\n", o->name, devstr, Pa_GetErrorText(res));
 		ast_radio_pa_stop(&o->pa);
 		return -1;
 	}
@@ -993,9 +1136,8 @@ static int usbradio_start_audio(struct chan_usbradio_pvt *o)
 
 /*!
  * \brief USB sound device GPIO processing thread
- * This thread is responsible for finding and associating the node with the
- * associated usb sound card device.  It performs setup and initialization of
- * the USB device.
+ * This thread uses the USB radio device assigned by res_usbradio and performs
+ * setup and initialization of its HID interface.
  *
  * The CM-XXX USB devices can support up to 8 GPIO pins that can be input or output.
  * It continuously polls the input GPIO pins on the device to see if they have changed.
@@ -1023,23 +1165,19 @@ static int usbradio_start_audio(struct chan_usbradio_pvt *o)
 static void *hidthread(void *arg)
 {
 	unsigned char buf[4], bufsave[4], keyed, ctcssed;
-	char *s, lasttxtmp;
+	char lasttxtmp;
 	int i, j, k;
 	int res;
-	int use_newname = 0;
-	int init_hid_failed = 0;
 	int open_device_failed = 0;
 	int detach_failed = 0;
 	int claim_failed = 0;
 	int pipe_failed = 0;
 	int start_audio_failed = 0;
-	struct libusb_device *usb_dev;
 	struct libusb_device_handle *usb_handle;
-	struct chan_usbradio_pvt *o = arg, *ao;
+	struct chan_usbradio_pvt *o = arg;
 	struct timeval then;
 	struct pollfd rfds[1];
 
-	usb_dev = NULL;
 	usb_handle = NULL;
 	/* enable gpio_set so that we will write GPIO information upon start up */
 	o->gpio_set = 1;
@@ -1056,230 +1194,32 @@ static void *hidthread(void *arg)
 	 * with the usb hid device
 	 */
 	while (!o->stophid) {
-		char serial[sizeof(o->serial)] = { '\0' };
-
 		ast_radio_time(&o->lasthidtime);
-		ast_mutex_lock(&usb_dev_lock);
+
+		/* Prior device teardown */
 		o->hasusb = 0;
-		o->usbass = 0;
-		o->devicenum = 0;
 
 		if (usb_handle) {
 			libusb_close(usb_handle);
 			usb_handle = NULL;
 		}
 
-		if (usb_dev) {
-			libusb_unref_device(usb_dev);
-			usb_dev = NULL;
+		/* Park the lease after both HID and audio have stopped for a device swap */
+		if (usbradio_swap_hid_wait(o)) {
+			continue;
 		}
+		usbradio_release_device(o);
 
-		ast_radio_hid_device_mklist();
-
-		/* audiodev without devstr: bind HID to ALSA card number */
-		if (o->hw_device[0] && ast_strlen_zero(o->devstr)) {
-			int subdev;
-
-			if (ast_radio_parse_alsa_hw_device(o->hw_device, &i, &subdev)) {
-				int card_in_use = 0;
-
-				for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
-					if (ao != o && ao->usbass && ao->devicenum == i) {
-						ast_log(LOG_ERROR, "Channel %s: Audio device %s is already assigned to channel %s\n", o->name, o->hw_device, ao->name);
-						card_in_use = 1;
-						break;
-					}
-				}
-				if (card_in_use) {
-					ast_mutex_unlock(&usb_dev_lock);
-					usleep(500000);
-					continue;
-				}
-				usb_dev = ast_radio_usb_device_from_alsa_card(i);
-				if (!usb_dev) {
-					o->device_error =
-						usbradio_log_fault(o, o->device_error, "Channel %s: No USB device for audiodev %s\n", o->name, o->hw_device);
-					ast_mutex_unlock(&usb_dev_lock);
-					usleep(500000);
-					continue;
-				}
-				o->devicenum = i;
-				if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
-					o->device_error = usbradio_log_fault(o, o->device_error,
-						"Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
-					ast_mutex_unlock(&usb_dev_lock);
-					usleep(500000);
-					continue;
-				}
-				o->newname = use_newname;
-				o->device_error = 0;
-				ast_radio_time(&o->lasthidtime);
-				o->usbass = 1;
-				ast_mutex_unlock(&usb_dev_lock);
-				goto usb_device_ready;
-			}
-			o->device_error =
-				usbradio_log_fault(o, o->device_error, "Channel %s: Invalid audiodev '%s' (use hw:N or hw:N,M)\n", o->name, o->hw_device);
-			ast_mutex_unlock(&usb_dev_lock);
+		/* Shared USB radio device discovery and reservation */
+		if (!o->radio_device && init_audio_device(o)) {
 			usleep(500000);
 			continue;
 		}
 
-		/* Check to see if our specified device string
-		 * matches to a device that is attached to this system, or exists
-		 * in our channel configuration.
-		 *
-		 * If no device string is specified, attempt to assign the first
-		 * found device.
-		 */
-		ast_radio_time(&o->lasthidtime);
-
-		/* If configuration has a serial number defined, find the device */
-		if (!ast_strlen_zero(o->serial)) {
-			int index;
-			char *index_devstr = NULL;
-
-			for (index = 0;; index++) {
-				index_devstr = ast_radio_usb_get_devstr(index);
-				if (ast_strlen_zero(index_devstr)) {
-					/* if no more devices */
-					break;
-				}
-
-				/* get the device serial number */
-				if (ast_radio_usb_get_serial(index_devstr, serial, sizeof(serial)) == 0) {
-					/* if no serial number */
-					continue;
-				}
-
-				if (strcmp(o->serial, serial) == 0) {
-					/*
-					 * We found a device with the matching serial number, set
-					 * the devstr to the matching device.
-					 */
-					ast_log(LOG_NOTICE, "Matched device serial %s to %s\n", o->serial, o->name);
-					ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
-					break;
-				}
-			}
-		}
-
-		/* Automatically assign a devstr if one was not specified in the configuration. */
-		if (ast_strlen_zero(o->devstr)) {
-			int index = 0;
-			char *index_devstr = NULL;
-
-			for (;;) {
-				index_devstr = ast_radio_usb_get_devstr(index);
-				if (ast_strlen_zero(index_devstr)) {
-					o->device_error =
-						usbradio_log_fault(o, o->device_error, "Channel %s: No USB devices are available for assignment.\n", o->name);
-					ast_mutex_unlock(&usb_dev_lock);
-					usleep(500000);
-					break;
-				}
-				/* We found an available device - see if it already in use */
-				for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
-					if (ao->usbass && (!strcmp(ao->devstr, index_devstr))) {
-						break;
-					}
-				}
-				if (ao) {
-					index++;
-					continue;
-				}
-				/* We found an unused device assign it to our node */
-				ast_copy_string(o->devstr, index_devstr, sizeof(o->devstr));
-				ast_log(LOG_NOTICE, "Channel %s: Automatically assigned USB device %s to USBRadio channel\n", o->name, o->devstr);
-				if (ast_radio_usb_get_serial(index_devstr, serial, sizeof(serial)) > 0) {
-					ast_copy_string(o->serial, serial, sizeof(o->serial));
-				}
-				break;
-			}
-			if (ast_strlen_zero(o->devstr)) {
-				continue;
-			}
-		}
-
-		if ((!ast_radio_usb_list_check(o->devstr)) || (!find_desc_usb(o->devstr))) {
-			/* The device string did not match.
-			 * Now look through the attached devices and see
-			 * one of those is associated with one of our
-			 * configured channels.
-			 */
-			s = find_installed_usb_match();
-			if (ast_strlen_zero(s)) {
-				o->device_error =
-					usbradio_log_fault(o, o->device_error, "Channel %s: Device string %s was not found.\n", o->name, o->devstr);
-				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
-			}
-			i = ast_radio_usb_get_usbdev(s);
-			if (i < 0) {
-				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
-			}
-			/* See if this device is already assigned to another usb channel */
-			for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
-				if (ao->usbass && (!strcmp(ao->devstr, s))) {
-					break;
-				}
-			}
-			if (ao) {
-				ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, s, ao->name);
-				ast_mutex_unlock(&usb_dev_lock);
-				usleep(500000);
-				continue;
-			}
-			ast_log(LOG_NOTICE, "Channel %s: Assigned USB device %s to usbradio channel\n", o->name, s);
-			ast_copy_string(o->devstr, s, sizeof(o->devstr));
-		}
-		/* Double check to see if the device string is assigned to another usb channel */
-		for (ao = usbradio_default.next; ao && ao->name; ao = ao->next) {
-			if (ao->usbass && (!strcmp(ao->devstr, o->devstr))) {
-				break;
-			}
-		}
-		if (ao) {
-			ast_log(LOG_ERROR, "Channel %s: Device string %s is already assigned to channel %s", o->name, o->devstr, ao->name);
-			ast_mutex_unlock(&usb_dev_lock);
-			usleep(500000);
-			continue;
-		}
-		/* get the index to the device and assign it to our channel */
-		i = ast_radio_usb_get_usbdev(o->devstr);
-		if (i < 0) {
-			ast_mutex_unlock(&usb_dev_lock);
-			usleep(500000);
-			continue;
-		}
-		o->devicenum = i;
-		snprintf(o->hw_device, sizeof(o->hw_device), "hw:%d", i);
-		if (ast_radio_init_mixer_limits(o->devicenum, &o->micmax, &o->spkrmax, &o->micplaymax, &use_newname) < 0) {
-			o->device_error = usbradio_log_fault(o, o->device_error,
-				"Channel %s: Cannot use audio device %s without mixer limits\n", o->name, o->hw_device);
-			ast_mutex_unlock(&usb_dev_lock);
-			usleep(500000);
-			continue;
-		}
-		o->newname = use_newname;
-		o->device_error = 0;
-		ast_radio_time(&o->lasthidtime);
-		o->usbass = 1;
-		ast_mutex_unlock(&usb_dev_lock);
-		/* initialize the usb device */
-		usb_dev = ast_radio_hid_device_init(o->devstr);
-		if (usb_dev == NULL) {
-			init_hid_failed = usbradio_log_fault(o, init_hid_failed, "Channel %s: Cannot initialize device %s\n", o->name, o->devstr);
-			usleep(500000);
-			continue;
-		}
-usb_device_ready:
-		/* open the usb device device */
-		if (libusb_open(usb_dev, &usb_handle) < 0) {
-			open_device_failed = usbradio_log_fault(o, open_device_failed, "Channel %s: Cannot open device %s\n", o->name, o->devstr);
+		/* Open the USB device */
+		if (libusb_open(o->radio_device->usb_device, &usb_handle) < 0) {
+			open_device_failed =
+				usbradio_log_fault(o, open_device_failed, "Channel %s: Cannot open device %s\n", o->name, o->radio_device->devstr);
 			usleep(500000);
 			continue;
 		}
@@ -1318,30 +1258,21 @@ usb_device_ready:
 			pipe_failed = usbradio_log_fault(o, pipe_failed, "Channel %s: Is not able to create a pipe\n", o->name);
 			libusb_close(usb_handle);
 			usb_handle = NULL;
-			ast_mutex_lock(&usb_dev_lock);
-			o->usbass = 0;
 			o->hasusb = 0;
-			ast_mutex_unlock(&usb_dev_lock);
 			/* Stay in hidthread and retry; call() only starts the thread once. */
 			usleep(500000);
 			continue;
 		}
 
-		{
-			struct libusb_device_descriptor desc;
-
-			if (libusb_get_device_descriptor(usb_dev, &desc) < 0) {
-				ast_log(LOG_ERROR, "Channel %s: Unable to read USB device descriptor\n", o->name);
-				o->devtype = 0;
-			} else if ((desc.idProduct & 0xfffc) == C108_PRODUCT_ID) {
-				o->devtype = C108_PRODUCT_ID;
-			} else {
-				o->devtype = desc.idProduct;
-			}
+		/* Existing HID product-family mapping */
+		if ((o->radio_device->product_id & 0xfffc) == C108_PRODUCT_ID) {
+			o->devtype = C108_PRODUCT_ID;
+		} else {
+			o->devtype = o->radio_device->product_id;
 		}
 		ast_debug(5, "Channel %s: Starting normally.\n", o->name);
 
-		ast_debug(5, "Channel %s: Attached to usb device %s.\n", o->name, o->devstr);
+		ast_debug(5, "Channel %s: Attached to USB device %s.\n", o->name, o->radio_device->devstr);
 		/* setup the xmpr subsystem */
 		if (o->pmrChan == NULL) {
 			t_pmr_chan tChan;
@@ -1454,16 +1385,11 @@ usb_device_ready:
 		ast_mutex_unlock(&o->eepromlock);
 
 		if (usbradio_start_audio(o) < 0) {
-			start_audio_failed =
-				usbradio_log_fault(o, start_audio_failed, "Channel %s: Unable to start audio for %s\n", o->name, o->hw_device);
-			ast_mutex_lock(&usb_dev_lock);
-			o->usbass = 0;
-			ast_mutex_unlock(&usb_dev_lock);
+			start_audio_failed = usbradio_log_fault(o, start_audio_failed, "Channel %s: Unable to start audio stream\n", o->name);
 			usleep(500000);
 			continue;
 		}
 		/* Reset the failure flags, we succeeded */
-		init_hid_failed = 0;
 		open_device_failed = 0;
 		detach_failed = 0;
 		claim_failed = 0;
@@ -1779,9 +1705,7 @@ usb_device_ready:
 		usb_handle = NULL;
 	}
 
-	if (usb_dev) {
-		libusb_unref_device(usb_dev);
-	}
+	usbradio_release_device(o);
 
 	return NULL;
 }
@@ -2192,6 +2116,7 @@ static void flush_tx_queue(struct chan_usbradio_pvt *o)
 static void stream_cleanup(struct chan_usbradio_pvt *o)
 {
 	ast_radio_pa_stop(&o->pa);
+	usbradio_swap_audio_stopped(o);
 	o->audio_thread_ready = 0;
 	flush_tx_queue(o);
 	if (o->pmrChan) {
@@ -2202,8 +2127,7 @@ static void stream_cleanup(struct chan_usbradio_pvt *o)
 /*!
  * \brief Feed queued Asterisk TX frames into XPMR (PmrTx / dedrift buffer).
  *
- * Feeds at most \a max_frames frames so a stuck PortAudio TX path can leave
- * backlog in txq for the MAX_FRAME_DELAY watchdog. Returns frames fed.
+ * Feeds at most \a max_frames frames. Returns frames fed.
  */
 static int usbradio_feed_tx_queue(struct chan_usbradio_pvt *o, int max_frames)
 {
@@ -2237,6 +2161,7 @@ static void *usbradio_audio_thread(void *arg)
 	int lastpttout;
 	int cd, sd;
 	int num_frames;
+	int tx_write_ready;
 	long frames_available;
 	struct chan_usbradio_pvt *o = arg;
 	struct ast_frame *f = &o->read_f, *f1;
@@ -2250,12 +2175,13 @@ static void *usbradio_audio_thread(void *arg)
 		ast_radio_time(&o->lastaudiotime);
 
 		if (!o->hasusb) {
+			usbradio_swap_audio_stopped(o);
 			usleep(DEVICE_RETRY);
 			continue;
 		}
 
 		if (!o->pa.active && usbradio_start_audio(o) < 0) {
-			usbradio_log_fault(o, 0, "Channel %s: Failed to start audio stream %s\n", o->name, o->hw_device);
+			usbradio_log_fault(o, 0, "Channel %s: Failed to start audio stream\n", o->name);
 			o->hasusb = 0;
 			usleep(DEVICE_RETRY);
 			continue;
@@ -2300,11 +2226,26 @@ static void *usbradio_audio_thread(void *arg)
 						ast_queue_frame(o->owner, &wf);
 					}
 					if (o->duplex3) {
-						ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
+						usbradio_set_sidetone_switch(o, 0);
 					}
 				}
 				stream_cleanup(o);
 				break;
+			}
+
+			/* One PortAudio input block for loop pacing */
+			pa_res = usbradio_read_pa_stereo(o);
+			if (pa_res != paNoError) {
+				if (pa_res == paTimedOut || pa_res == paInputOverflowed) {
+					/* RX silence when no input block is available */
+					memset(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 0, sizeof(o->usbradio_read_buf) - AST_FRIENDLY_OFFSET);
+				} else {
+					usbradio_log_fault(o, 0, "Channel %s: PortAudio read failed (%s); restarting audio stream\n", o->name,
+						Pa_GetErrorText(pa_res));
+					o->hasusb = 0;
+					stream_cleanup(o);
+					break;
+				}
 			}
 
 			/* If we have stopped echoing, clear the echo queue */
@@ -2321,8 +2262,19 @@ static void *usbradio_audio_thread(void *arg)
 				ast_mutex_unlock(&o->echolock);
 			}
 
+			/* PortAudio output capacity check */
+			frames_available = ast_radio_pa_write_available(&o->pa);
+			if (frames_available < 0) {
+				ast_debug(2, "Channel %s: Pa_GetStreamWriteAvailable error %s\n", o->name, Pa_GetErrorText(frames_available));
+				o->usb_faulted = 1;
+				o->hasusb = 0;
+				stream_cleanup(o);
+				break;
+			}
+			tx_write_ready = frames_available >= AST_RADIO_PA_FRAMES_PER_BUFFER;
+
 			/* Echo playback feeds PmrTx directly (same as pre-thread path). */
-			if (o->echomode && (!o->rxkeyed)) {
+			if (tx_write_ready && o->echomode && (!o->rxkeyed)) {
 				struct usbecho *u;
 
 				ast_mutex_lock(&o->echolock);
@@ -2351,47 +2303,26 @@ static void *usbradio_audio_thread(void *arg)
 			}
 			ast_mutex_unlock(&o->txqlock);
 
-			frames_available = ast_radio_pa_write_available(&o->pa);
-			if (frames_available < 0) {
-				ast_debug(2, "Channel %s: Pa_GetStreamWriteAvailable error %s\n", o->name, Pa_GetErrorText(frames_available));
-				o->usb_faulted = 1;
-				o->hasusb = 0;
-				stream_cleanup(o);
-				break;
-			}
-
-			if ((num_frames <= 3) && (o->txkeyed || o->txtestkey)) {
-				/* Waiting for a few frames in the buffer is normal while keyed. */
+			/* Intentional keyed TX queue cushion */
+			if (num_frames <= 3 && (o->txkeyed || o->txtestkey)) {
 				last_frame_time = ast_radio_tvnow();
 			}
 
-			if (num_frames && frames_available >= AST_RADIO_PA_FRAMES_PER_BUFFER) {
+			/* One queued frame per available output block */
+			if (tx_write_ready && num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
 				if (usbradio_feed_tx_queue(o, 1)) {
 					o->didpmrtx = 1;
+					last_frame_time = ast_radio_tvnow();
 				}
-				last_frame_time = ast_radio_tvnow();
 			}
 
-			if (num_frames && (ast_tvdiff_ms(ast_radio_tvnow(), last_frame_time) > MAX_FRAME_DELAY)) {
+			/* Stream restart after 200 ms without TX queue progress */
+			if (num_frames && ast_tvdiff_ms(ast_radio_tvnow(), last_frame_time) > MAX_FRAME_DELAY) {
 				usbradio_log_fault(o, 0, "Channel %s: Audio thread has not drained TX for over %d ms, restarting stream.\n",
 					o->name, MAX_FRAME_DELAY);
 				o->hasusb = 0;
 				stream_cleanup(o);
 				break;
-			}
-
-			pa_res = usbradio_read_pa_stereo(o);
-			if (pa_res != paNoError) {
-				if (pa_res == paTimedOut || pa_res == paInputOverflowed) {
-					/* No RX audio available; still run PTT/TX processing with silence. */
-					memset(o->usbradio_read_buf + AST_FRIENDLY_OFFSET, 0, sizeof(o->usbradio_read_buf) - AST_FRIENDLY_OFFSET);
-				} else {
-					usbradio_log_fault(o, 0, "Channel %s: PortAudio read failed (%s); restarting audio stream\n", o->name,
-						Pa_GetErrorText(pa_res));
-					o->hasusb = 0;
-					stream_cleanup(o);
-					break;
-				}
 			}
 
 #if DEBUG_CAPTURES == 1
@@ -2497,15 +2428,17 @@ static void *usbradio_audio_thread(void *arg)
 			}
 
 			/*
-			 * One frame per 20 ms tick. When unkeyed, soundcard_writeframe()
-			 * substitutes silence; ast_radio_pa_write() primes one more on
-			 * underrun. Do not fill remaining PA room; that adds TX delay.
+			 * Write one frame when PortAudio has room. When unkeyed,
+			 * soundcard_writeframe() substitutes silence. Do not fill remaining
+			 * PortAudio room; that adds TX delay.
 			 */
-			if (!soundcard_writeframe(o, o->usbradio_write_buf)) {
-				stream_cleanup(o);
-				break;
+			if (tx_write_ready) {
+				if (!soundcard_writeframe(o, o->usbradio_write_buf)) {
+					stream_cleanup(o);
+					break;
+				}
+				ast_radio_check_audio(o->usbradio_write_buf, &o->txaudiostats, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
 			}
-			ast_radio_check_audio(o->usbradio_write_buf, &o->txaudiostats, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
 
 #if DEBUG_CAPTURES == 1 && XPMR_DEBUG0 == 1
 			if (frxcaptrace && o->rxcap2 && o->pmrChan->b.radioactive) {
@@ -2655,7 +2588,7 @@ static void *usbradio_audio_thread(void *arg)
 					ast_queue_frame(o->owner, &wf);
 				}
 				if (o->duplex3) {
-					ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
+					usbradio_set_sidetone_switch(o, 0);
 				}
 			} else if ((!o->lastrx) && (o->rxkeyed)) {
 				struct ast_frame wf = {
@@ -2675,7 +2608,7 @@ static void *usbradio_audio_thread(void *arg)
 				}
 				o->count_rssi_update = 1;
 				if (o->duplex3) {
-					ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 1, 0);
+					usbradio_set_sidetone_switch(o, 1);
 				}
 			}
 
@@ -2762,6 +2695,7 @@ static void *usbradio_audio_thread(void *arg)
 
 			ast_queue_frame(o->owner, f);
 		}
+		stream_cleanup(o);
 	}
 
 	stream_cleanup(o);
@@ -3040,11 +2974,14 @@ static int radio_active(int fd, int argc, const char *const *argv)
 	} else {
 		struct chan_usbradio_pvt *o;
 		if (!strcmp(argv[2], "show")) {
-			ast_mutex_lock(&usb_dev_lock);
 			for (o = usbradio_default.next; o; o = o->next) {
-				ast_cli(fd, "Device [%s] exists as device=%s card=%d\n", o->name, o->devstr, ast_radio_usb_get_usbdev(o->devstr));
+				char devstr[sizeof(o->devstr)];
+				int alsa_card;
+
+				usbradio_device_identity(o, devstr, sizeof(devstr), NULL, 0, &alsa_card);
+				ast_cli(fd, "Device [%s] is assigned to device=%s card=%d\n", o->name,
+					ast_strlen_zero(devstr) ? "unassigned" : devstr, alsa_card);
 			}
-			ast_mutex_unlock(&usb_dev_lock);
 			return RESULT_SUCCESS;
 		}
 		o = find_desc(argv[2]);
@@ -3071,14 +3008,15 @@ static int radio_active(int fd, int argc, const char *const *argv)
  */
 static int usb_device_swap(int fd, const char *other)
 {
-	int d;
-	char tmp[128];
-	struct chan_usbradio_pvt *p = NULL, *o = find_desc(usbradio_active);
+	struct chan_usbradio_pvt *p, *o;
+	int attempts;
+	int result;
 
-	if (o == NULL) {
+	if (!other) {
 		return -1;
 	}
-	if (!other) {
+	o = find_desc(usbradio_active);
+	if (o == NULL) {
 		return -1;
 	}
 	p = find_desc(other);
@@ -3090,19 +3028,60 @@ static int usb_device_swap(int fd, const char *other)
 		ast_cli(fd, "You can't swap active device with itself!!\n");
 		return -1;
 	}
-	ast_mutex_lock(&usb_dev_lock);
-	ast_copy_string(tmp, p->devstr, sizeof(tmp));
-	d = p->devicenum;
-	ast_copy_string(p->devstr, o->devstr, sizeof(p->devstr));
-	p->devicenum = o->devicenum;
-	ast_copy_string(o->devstr, tmp, sizeof(o->devstr));
-	o->devicenum = d;
+
+	/* Serialize the complete device swap transaction */
+	ast_mutex_lock(&device_swap_lock);
+	if (!o->hasusb || !p->hasusb) {
+		ast_cli(fd, "Both channels must have assigned USB devices before they can be swapped.\n");
+		ast_mutex_unlock(&device_swap_lock);
+		return -1;
+	}
+
+	/* Stop both device handles while retaining their shared leases */
+	usbradio_swap_begin(o);
+	usbradio_swap_begin(p);
 	o->hasusb = 0;
-	o->usbass = 0;
 	p->hasusb = 0;
-	p->usbass = 0;
+	kickptt(o);
+	kickptt(p);
+
+	/* Wait for the HID and PortAudio handles to close */
+	for (attempts = 0; attempts < 500; attempts++) {
+		if (usbradio_swap_ready(o) && usbradio_swap_ready(p)) {
+			break;
+		}
+		usleep(10000);
+	}
+	if (attempts == 500) {
+		usbradio_swap_finish(o);
+		usbradio_swap_finish(p);
+		ast_cli(fd, "Timed out waiting for both USB devices to stop.\n");
+		ast_mutex_unlock(&device_swap_lock);
+		return -1;
+	}
+
+	/* Exchange the parked leases and use their identities for future requests */
+	ast_mutex_lock(&o->device_lock);
+	ast_mutex_lock(&p->device_lock);
+	result = ast_radio_device_swap(&o->radio_device, &p->radio_device);
+	if (!result) {
+		ast_copy_string(o->devstr, o->radio_device->devstr, sizeof(o->devstr));
+		ast_copy_string(o->serial, S_OR(o->radio_device->serial, ""), sizeof(o->serial));
+		ast_copy_string(p->devstr, p->radio_device->devstr, sizeof(p->devstr));
+		ast_copy_string(p->serial, S_OR(p->radio_device->serial, ""), sizeof(p->serial));
+	}
+	ast_mutex_unlock(&p->device_lock);
+	ast_mutex_unlock(&o->device_lock);
+	usbradio_swap_finish(o);
+	usbradio_swap_finish(p);
+
+	if (result) {
+		ast_cli(fd, "Unable to exchange USB device leases.\n");
+		ast_mutex_unlock(&device_swap_lock);
+		return -1;
+	}
 	ast_cli(fd, "USB Devices successfully swapped.\n");
-	ast_mutex_unlock(&usb_dev_lock);
+	ast_mutex_unlock(&device_swap_lock);
 	return 0;
 }
 
@@ -3683,6 +3662,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 	int target;
 	int tolerance = 2750;
 	int setting = 0, tries = 0, tmpdiscfactor, meas, measnoise;
+	int micmax, spkrmax, micplaymax;
 	float settingmax, f;
 
 	if (o->rxdemod == RX_AUDIO_SPEAKER && o->rxcdtype == CD_XPMR_NOISE) {
@@ -3695,7 +3675,12 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		target = 23000;
 	}
 
-	settingmax = o->micmax;
+	usbradio_mixer_limits(o, &micmax, &spkrmax, &micplaymax);
+	if (micmax <= 0) {
+		ast_cli(fd, "ERROR: RX mixer is unavailable.\n");
+		return;
+	}
+	settingmax = micmax;
 
 	o->fever = 1;
 	o->pmrChan->fever = 1;
@@ -3707,8 +3692,7 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 	ast_cli(fd, "tune rxnoise maxtries=%i, target=%i, tolerance=%i\n", maxtries, target, tolerance);
 
 	while (tries < maxtries) {
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, setting, 0);
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
+		usbradio_set_rx_mixer(o, setting);
 
 		if (ast_radio_wait_or_poll(fd, 100, intflag)) {
 			o->pmrChan->b.tuning = 0;
@@ -3770,13 +3754,13 @@ static void tune_rxinput(int fd, struct chan_usbradio_pvt *o, int setsql, int in
 		return;
 	}
 
-	ast_cli(fd, "DONE tries=%i, setting=%i, meas=%i, sqnoise=%i\n", tries, ((setting * 1000) + (o->micmax / 2)) / o->micmax, meas, measnoise);
+	ast_cli(fd, "DONE tries=%i, setting=%i, meas=%i, sqnoise=%i\n", tries, ((setting * 1000) + (micmax / 2)) / micmax, meas, measnoise);
 
 	if (meas < (target - tolerance) || meas > (target + tolerance)) {
 		ast_cli(fd, "ERROR: RX INPUT ADJUST FAILED.\n");
 	} else {
 		ast_cli(fd, "INFO: RX INPUT ADJUST SUCCESS.\n");
-		o->rxmixerset = ((setting * 1000) + (o->micmax / 2)) / o->micmax;
+		o->rxmixerset = ((setting * 1000) + (micmax / 2)) / micmax;
 
 		if (o->rxcdtype == CD_XPMR_NOISE) {
 			int normRssi = ((32767 - o->pmrChan->rxRssi) * AUDIO_ADJUSTMENT / 32767);
@@ -3909,6 +3893,7 @@ static void tune_rxtx_status(int fd, struct chan_usbradio_pvt *o)
 static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 {
 	int i, x;
+	int micmax, spkrmax, micplaymax;
 	float f, f1;
 	int adjustment;
 
@@ -3932,17 +3917,21 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
 	if (o->rxdemod == RX_AUDIO_FLAT) {
 		o->rxvoiceadj = (float) i / 200.0;
 	} else {
+		usbradio_mixer_limits(o, &micmax, &spkrmax, &micplaymax);
+		if (micmax <= 0) {
+			ast_cli(fd, "RX mixer is unavailable.\n");
+			return;
+		}
 		o->rxmixerset = i;
 		/* adjust settings based on the device */
 		if (o->devtype == C119B_PRODUCT_ID) {
 			o->rxboost = 1; /*rxboost is always set for this device */
 		}
-		adjustment = o->rxmixerset * o->micmax / AUDIO_ADJUSTMENT;
+		adjustment = o->rxmixerset * micmax / AUDIO_ADJUSTMENT;
 		/* get interval step size */
-		f = AUDIO_ADJUSTMENT / (float) o->micmax;
+		f = AUDIO_ADJUSTMENT / (float) micmax;
 
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, adjustment, 0);
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
+		usbradio_set_rx_mixer(o, adjustment);
 		o->rxvoiceadj = 0.5 + (modff(((float) i) / f, &f1) * .093981);
 	}
 	*(o->pmrChan->prxVoiceAdjust) = o->rxvoiceadj * M_Q8; /* updates xpmr outputGain */
@@ -3956,14 +3945,17 @@ static void _menu_rxvoice(int fd, struct chan_usbradio_pvt *o, const char *str)
  */
 static void _menu_print(int fd, struct chan_usbradio_pvt *o)
 {
+	char devstr[sizeof(o->devstr)];
+	char serial[sizeof(o->serial)];
+	int alsa_card;
+
+	usbradio_device_identity(o, devstr, sizeof(devstr), serial, sizeof(serial), &alsa_card);
 	ast_cli(fd, "Active radio interface is [%s]\n", usbradio_active);
-	ast_mutex_lock(&usb_dev_lock);
-	ast_cli(fd, "Device String is %s\n", o->devstr);
-	if (!ast_strlen_zero(o->serial)) {
-		ast_cli(fd, "Device Serial is %s\n", o->serial);
+	ast_cli(fd, "Device String is %s\n", ast_strlen_zero(devstr) ? "unassigned" : devstr);
+	if (!ast_strlen_zero(serial)) {
+		ast_cli(fd, "Device Serial is %s\n", serial);
 	}
-	ast_mutex_unlock(&usb_dev_lock);
-	ast_cli(fd, "Card is %i\n", ast_radio_usb_get_usbdev(o->devstr));
+	ast_cli(fd, "Card is %i\n", alsa_card);
 	ast_cli(fd, "Output A is currently set to ");
 	if (o->txmixa == TX_OUT_COMPOSITE) {
 		ast_cli(fd, "composite.\n");
@@ -4237,6 +4229,7 @@ static void _menu_txtone(int fd, struct chan_usbradio_pvt *o, const char *cstr)
 static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cmd)
 {
 	int x, oldverbose, flatrx, txhasctcss;
+	int micmax, spkrmax, micplaymax;
 	struct chan_usbradio_pvt *oy = NULL;
 
 	oldverbose = option_verbose;
@@ -4251,6 +4244,7 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 	}
 	switch (cmd[0]) {
 	case '0': /* return audio processing configuration */
+		usbradio_mixer_limits(o, &micmax, &spkrmax, &micplaymax);
 		/* note: to maintain backward compatibility for those expecting a specific # of
 		   values to be returned (and in a specific order).  So, we only add to the end
 		   of the returned list.  Also, once an update has been released we can't change
@@ -4259,12 +4253,12 @@ static void tune_menusupport(int fd, struct chan_usbradio_pvt *o, const char *cm
 			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d,%d\n", flatrx, txhasctcss,
 				o->echomode, o->rxboost, o->txboost, o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay, o->txprelim,
 				o->txlimonly, o->rxdemod, o->txmixa, o->txmixb, o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset,
-				o->txmixbset, o->txctcssadj, o->micplaymax, o->spkrmax, o->micmax, o->txslimsp);
+				o->txmixbset, o->txctcssadj, micplaymax, spkrmax, micmax, o->txslimsp);
 		} else if (!strcmp(cmd, "0+9")) {
 			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%d,%d,%d,%d,%d,%d,%d\n", flatrx, txhasctcss, o->echomode,
 				o->rxboost, o->txboost, o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay, o->txprelim, o->txlimonly,
 				o->rxdemod, o->txmixa, o->txmixb, o->rxmixerset, o->rxvoiceadj, o->rxsquelchadj, o->txmixaset, o->txmixbset,
-				o->txctcssadj, o->micplaymax, o->spkrmax, o->micmax);
+				o->txctcssadj, micplaymax, spkrmax, micmax);
 		} else {
 			ast_cli(fd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", flatrx, txhasctcss, o->echomode, o->rxboost, o->txboost,
 				o->rxcdtype, o->rxsdtype, o->rxondelay, o->txoffdelay, o->txprelim, o->txlimonly, o->rxdemod, o->txmixa, o->txmixb);
@@ -4824,34 +4818,38 @@ static void tune_write(struct chan_usbradio_pvt *o)
 	if (!category) {
 		ast_log(LOG_ERROR, "No category '%s' exists?\n", o->name);
 	} else {
-		/*
-		 * To simplify channel driver setup we allow the "devstr=" value
-		 * to be empty/blank indicating that we should match the first
-		 * available interface.
-		 *
-		 * This works (and will continue to work) well as long as the
-		 * "devstr=" value in the configuration file remains empty/blank.
-		 * But, if the value is ever provided then we only match interfaces
-		 * with the specified string.  Moving the interface (accidentally
-		 * or intentionally) to a different "port" will result in not
-		 * finding/matching the interface.
-		 *
-		 * To minimize conflicts, we want to avoid writing out the specific
-		 * "devstr=" value to the configuration file unless needed.  Here,
-		 * we check if the current "devstr=" value is empty/blank and
-		 * that there is only a single audio interface connected to the
-		 * system.  If so, we leave the value empty/blank.
-		 */
-		const char *val;
-		char *dev;
+		char assigned_devstr[sizeof(o->devstr)];
+		char assigned_serial[sizeof(o->serial)];
+		int automatic;
 
-		val = ast_variable_retrieve(cfg, o->name, "devstr");
-		dev = ast_radio_usb_get_devstr(1);
-		if (!ast_strlen_zero(val) || !ast_strlen_zero(dev)) {
-			/* if the "devstr=" value exists or there is more than 1 sound device */
+		/*
+		 * To simplify channel driver setup, blank "devstr=" and "serial="
+		 * values request automatic assignment of the first compatible USB
+		 * radio device.
+		 *
+		 * We preserve that automatic configuration when only one active lease
+		 * was assigned automatically. When multiple leases were assigned
+		 * automatically, their assignment order is indeterminate, so save this
+		 * channel's acquired identity as an explicit selector.
+		 *
+		 * Explicit selectors are saved unchanged. A topology-based devstr may
+		 * stop matching if the interface is moved to another USB port, while a
+		 * serial selector continues to take precedence over devstr.
+		 */
+		automatic = ast_strlen_zero(o->devstr) && ast_strlen_zero(o->serial);
+		if (!automatic) {
 			CONFIG_UPDATE_STR(devstr);
-			if (!ast_strlen_zero(o->serial)) {
+			if (!ast_strlen_zero(o->serial) || ast_variable_retrieve(cfg, o->name, "serial")) {
 				CONFIG_UPDATE_STR(serial);
+			}
+		} else if (ast_radio_device_automatic_count() > 1) {
+			usbradio_device_identity(o, assigned_devstr, sizeof(assigned_devstr), assigned_serial, sizeof(assigned_serial), NULL);
+			if (!ast_strlen_zero(assigned_serial)) {
+				if (tune_variable_update(cfg, CONFIG, category, "serial", assigned_serial)) {
+					ast_log(LOG_WARNING, "Failed to update serial\n");
+				}
+			} else if (!ast_strlen_zero(assigned_devstr) && tune_variable_update(cfg, CONFIG, category, "devstr", assigned_devstr)) {
+				ast_log(LOG_WARNING, "Failed to update devstr\n");
 			}
 		}
 		CONFIG_UPDATE_INT(rxmixerset);
@@ -4914,29 +4912,64 @@ static void tune_write(struct chan_usbradio_pvt *o)
  */
 static void mixer_write(struct chan_usbradio_pvt *o)
 {
-	int mic_setting;
+	const struct ast_radio_mixer_element *element;
+	struct ast_radio_device *device;
+	int requested;
+	long sidetone_max;
+	size_t path_index;
 
-	if (o->duplex3) {
-		if (o->duplex3 > o->micplaymax) {
-			o->duplex3 = o->micplaymax;
-		}
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, o->duplex3, 0);
-	} else {
-		ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_VOL, 0, 0);
+	ast_mutex_lock(&o->device_lock);
+	device = o->radio_device;
+	if (!device) {
+		ast_mutex_unlock(&o->device_lock);
+		return;
 	}
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_PLAYBACK_SW, 0, 0);
-	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW, 1, 0);
-	ast_radio_setamixer(o->devicenum, (o->newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,
-		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixaset, o->devtype),
-		ast_radio_make_spkr_playback_value(o->spkrmax, o->txmixbset, o->devtype));
+
+	/* Receive sidetone paths (Mic Playback controls on CM108) */
+	sidetone_max = ast_radio_device_mixer_max(device, device->mixer_sidetone_paths, AST_RADIO_MIXER_PLAYBACK_VOLUME);
+	if (o->duplex3 > sidetone_max) {
+		o->duplex3 = sidetone_max;
+	}
+	ast_radio_device_set_mixer_paths(device, device->mixer_sidetone_paths, device->mixer_sidetone_path_count,
+		AST_RADIO_MIXER_PLAYBACK_VOLUME, o->duplex3);
+	ast_radio_device_set_mixer_paths(device, device->mixer_sidetone_paths, device->mixer_sidetone_path_count,
+		AST_RADIO_MIXER_PLAYBACK_SWITCH, 0);
+
+	/* Transmitter output paths (Speaker/Headphone controls on CM108)
+	 * txmixaset (MIXA) controls mixer_tx_paths[0], and txmixbset (MIXB) controls
+	 * mixer_tx_paths[1] when a second path is present. Additional paths are unchanged.
+	 */
+	for (path_index = 0; path_index < device->mixer_tx_path_count && path_index < 2; path_index++) {
+		element = ast_radio_device_mixer_element(device, &device->mixer_tx_paths[path_index]);
+		if (!element) {
+			continue;
+		}
+		requested = path_index ? o->txmixbset : o->txmixaset;
+		ast_radio_device_set_mixer(device, &device->mixer_tx_paths[path_index], AST_RADIO_MIXER_PLAYBACK_SWITCH, 1);
+		ast_radio_device_set_mixer(device, &device->mixer_tx_paths[path_index], AST_RADIO_MIXER_PLAYBACK_VOLUME,
+			ast_radio_device_mixer_scale(device, &device->mixer_tx_paths[path_index], AST_RADIO_MIXER_PLAYBACK_VOLUME, requested));
+	}
+
 	/* adjust settings based on the device */
 	if (o->devtype == C119B_PRODUCT_ID) {
 		o->rxboost = 1; /*rxboost is always set for this device */
 	}
-	mic_setting = o->rxmixerset * o->micmax / AUDIO_ADJUSTMENT;
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_VOL, mic_setting, 0);
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_BOOST, o->rxboost, 0);
-	ast_radio_setamixer(o->devicenum, MIXER_PARAM_MIC_CAPTURE_SW, 1, 0);
+
+	/* Receiver input paths (Mic Capture controls on CM108) */
+	for (path_index = 0; path_index < device->mixer_rx_path_count; path_index++) {
+		element = ast_radio_device_mixer_element(device, &device->mixer_rx_paths[path_index]);
+		if (!element) {
+			continue;
+		}
+		ast_radio_device_set_mixer(device, &device->mixer_rx_paths[path_index], AST_RADIO_MIXER_CAPTURE_VOLUME,
+			ast_radio_device_mixer_scale(device, &device->mixer_rx_paths[path_index], AST_RADIO_MIXER_CAPTURE_VOLUME, o->rxmixerset));
+		ast_radio_device_set_mixer(device, &device->mixer_rx_paths[path_index], AST_RADIO_MIXER_CAPTURE_SWITCH, 1);
+	}
+
+	/* Optional receiver input gain/AGC paths */
+	ast_radio_device_set_mixer_paths(device, device->mixer_rx_boost_paths, device->mixer_rx_boost_path_count,
+		AST_RADIO_MIXER_PLAYBACK_SWITCH, o->rxboost);
+	ast_mutex_unlock(&o->device_lock);
 }
 
 /*!
@@ -4995,18 +5028,23 @@ static void pmrdump(struct chan_usbradio_pvt *o, int fd)
 {
 	t_pmr_chan *p;
 	int i;
+	int micmax, spkrmax, micplaymax;
 
 	p = o->pmrChan;
 
 	ast_cli(fd, "\nodump()\n");
 
-	pd(o->devicenum);
-	ast_mutex_lock(&usb_dev_lock);
-	ps(o->devstr);
-	ast_mutex_unlock(&usb_dev_lock);
+	/* Acquired device identity */
+	ast_mutex_lock(&o->device_lock);
+	if (o->radio_device) {
+		ast_cli(fd, "radio_device->devstr = %s\n", o->radio_device->devstr);
+		ast_cli(fd, "radio_device->alsa_card = %d\n", o->radio_device->alsa_card);
+	}
+	ast_mutex_unlock(&o->device_lock);
 
-	pd(o->micmax);
-	pd(o->spkrmax);
+	usbradio_mixer_limits(o, &micmax, &spkrmax, &micplaymax);
+	pd(micmax);
+	pd(spkrmax);
 
 	pd(o->rxdemod);
 	pd(o->rxcdtype);
@@ -5201,7 +5239,6 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 			o->pttkick[1] = -1;
 			o->hidthread = AST_PTHREADT_NULL;
 			o->audiothread = AST_PTHREADT_NULL;
-			o->hw_device[0] = '\0';
 			if (!usbradio_active) {
 				usbradio_active = o->name;
 			}
@@ -5211,7 +5248,9 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 	ast_mutex_init(&o->echolock);
 	ast_mutex_init(&o->eepromlock);
 	ast_mutex_init(&o->usblock);
+	ast_mutex_init(&o->device_lock);
 	ast_mutex_init(&o->txqlock);
+	ast_mutex_init(&o->swap_lock);
 	o->echomax = DEFAULT_ECHO_MAX;
 	/* fill other fields from configuration */
 	for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
@@ -5780,16 +5819,6 @@ static int load_module(void)
 	}
 	ast_format_cap_append(usbradio_tech.capabilities, ast_format_slin, 0);
 
-	if (ast_radio_libusb_init() < 0) {
-		ast_log(LOG_ERROR, "Unable to initialize libusb\n");
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
-	if (ast_radio_hid_device_mklist()) {
-		ast_log(LOG_ERROR, "Unable to make hid list\n");
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
 	usbradio_active = NULL;
 
 	/* Copy the default jb config over global_jbconf */
@@ -5877,6 +5906,7 @@ static int unload_module(void)
 			o->hidthread = AST_PTHREADT_NULL;
 		}
 		ast_radio_pa_stop(&o->pa);
+		usbradio_release_device(o);
 		if (o->pmrChan) {
 			destroyPmrChannel(o->pmrChan);
 			o->pmrChan = NULL;
