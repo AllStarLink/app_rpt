@@ -123,8 +123,6 @@ static struct ast_jb_conf global_jbconf;
 #define ZEROVAL AMPVAL
 #define DIVSAMP (DIVLCM / AST_SAMPLE_RATE)
 
-#define QUEUE_SIZE 5 /* 100 milliseconds of sound card output buffer */
-
 #define CONFIG "simpleusb.conf"				   /* default config file */
 #define RX_ON_DELAY_MAX 60000				   /* in ms, 60000ms, 60 seconds, 1 minute */
 #define TX_OFF_DELAY_MAX 60000				   /* in ms, 60000ms, 60 seconds, 1 minute */

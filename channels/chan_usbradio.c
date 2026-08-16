@@ -132,8 +132,6 @@ static struct ast_jb_conf default_jbconf = {
 
 static struct ast_jb_conf global_jbconf;
 
-#define QUEUE_SIZE 20 /* 400 milliseconds of sound card output buffer */
-
 #define CONFIG "usbradio.conf" /* default config file */
 
 /* file handles for writing debug audio packets */
@@ -190,8 +188,6 @@ struct chan_usbradio_pvt {
 		M_WRITE
 	} duplex;
 	int hookstate;
-	unsigned int queuesize; /* max fragments in queue */
-	unsigned int frags;		/* parameter for SETFRAGMENT */
 
 	char devstr[128];
 	char serial[128];
@@ -432,8 +428,6 @@ struct chan_usbradio_pvt {
  */
 static struct chan_usbradio_pvt usbradio_default = {
 	.duplex = M_UNSET,
-	.queuesize = QUEUE_SIZE,
-	.frags = FRAGS,
 	.readpos = AST_FRIENDLY_OFFSET, /* start here on reads */
 	.wanteeprom = 1,
 	.usedtmf = 1,
@@ -5264,8 +5258,6 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 			continue;
 		}
 
-		CV_UINT("frags", o->frags);
-		CV_UINT("queuesize", o->queuesize);
 		CV_BOOL("rxcpusaver", o->rxcpusaver);
 		CV_BOOL("txcpusaver", o->txcpusaver);
 		CV_BOOL("invertptt", o->invertptt);

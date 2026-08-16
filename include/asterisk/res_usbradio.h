@@ -119,38 +119,9 @@
  *
  *  FRAME_SIZE	the size of an audio frame, in samples.
  *		160 is used almost universally, so you should not change it.
- *
- *  FRAGS	the argument for the SETFRAGMENT ioctl.
- *		Overridden by the 'frags' parameter.
- *
- *		Bits 0-7 are the base-2 log of the device's block size,
- *		bits 16-31 are the number of blocks in the driver's queue.
- *		There are a lot of differences in the way this parameter
- *		is supported by different drivers, so you may need to
- *		experiment a bit with the value.
- *		A good default for linux is 30 blocks of 64 bytes, which
- *		results in 6 frames of 320 bytes (160 samples).
- *		FreeBSD works decently with blocks of 256 or 512 bytes,
- *		leaving the number unspecified.
- *		Note that this only refers to the device buffer size,
- *		this module will then try to keep the length of audio
- *		buffered within small constraints.
- *
- *  QUEUE_SIZE	The max number of blocks actually allowed in the device
- *		driver's buffer, irrespective of the available number.
- *		Overridden by the 'queuesize' parameter.
- *
- *		Should be >=2, and at most as large as the hw queue above
- *		(otherwise it will never be full).
  */
 
 #define FRAME_SIZE 160 /* Samples per Asterisk Frame */
-
-#if defined(__FreeBSD__)
-#define FRAGS 0x8
-#else
-#define FRAGS (((6 * 5) << 16) | 0xc)
-#endif
 
 /*
  * XXX text message sizes are probably 256 chars, but i am
@@ -159,12 +130,6 @@
 #define TEXT_SIZE 256
 
 #define O_CLOSE 0x444 /* special 'close' mode for device */
-/* Which sound device to use */
-#if defined(__OpenBSD__) || defined(__NetBSD__)
-#define DEV_DSP "/dev/audio"
-#else
-#define DEV_DSP "/dev/dsp"
-#endif
 
 /*!
  * \brief Optional hardware capabilities required by a channel driver

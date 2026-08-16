@@ -60,14 +60,6 @@
 #include <sys/io.h>
 #endif
 
-#ifdef __linux
-#include <linux/soundcard.h>
-#elif defined(__FreeBSD__)
-#include <sys/soundcard.h>
-#else
-#include <soundcard.h>
-#endif
-
 #include "asterisk/lock.h"
 #include "asterisk/logger.h"
 #include "asterisk/module.h"
