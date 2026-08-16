@@ -1867,6 +1867,8 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 	case 58: /* TX CTCSS on input only Enable */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->p.itxctcss = 1;
+		/* Force the main loop to publish the current aggregate input state. */
+		myrpt->lastitx = -1;
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TXIPLENA");
@@ -1874,6 +1876,8 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 	case 59: /* TX CTCSS on input only Disable */
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->p.itxctcss = 0;
+		/* Force an explicit CTCSS enable to clear a prior input-only request. */
+		myrpt->lastitx = -1;
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, ARB_ALPHA, (void *) "TXIPLDIS");

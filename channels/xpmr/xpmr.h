@@ -38,6 +38,13 @@
 #ifndef XPMR_H
 #define XPMR_H 1
 
+#include <signal.h>
+
+/*! Cross-thread TXCTCSS request values for t_pmr_chan::txCtcssInputReq */
+#define TXCTCSS_INPUT_REQ_NONE 0
+#define TXCTCSS_INPUT_REQ_ON 1
+#define TXCTCSS_INPUT_REQ_OFF 2
+
 #define XPMR_DEV 0 /* when running in test mode */
 
 #define XPMR_TRACE_OVFLW 0
@@ -843,8 +850,7 @@ typedef struct t_pmr_chan {
 		unsigned txCtcssInhibit:1;
 		unsigned txCtcssReady:1;
 		unsigned txCtcssOff:1;
-		unsigned txHadRxCarrier:1;	 /*!< Saw local RX carrier during this TX cycle */
-		unsigned txCtcssHangMuted:1; /*!< CTCSS already turned off on COS drop (duplex hang) */
+		unsigned txCtcssHangMuted:1; /*!< CTCSS already TOC'd/muted for input-only end */
 
 		unsigned rxkeyed:1;
 		unsigned rxhalted:1;
@@ -855,6 +861,13 @@ typedef struct t_pmr_chan {
 		unsigned pttwas:1;
 		unsigned txboost:1;
 	} b;
+
+	/*!
+	 * \brief Cross-thread TXCTCSS request from app_rpt itxctcss.
+	 * Written by chan_usbradio text path; consumed in PmrRx via atomic exchange.
+	 * Values: TXCTCSS_INPUT_REQ_NONE / _ON / _OFF.
+	 */
+	volatile sig_atomic_t txCtcssInputReq;
 
 	i16 *pRxDemod; /* buffers */
 	i16 *pRxBase;  /* decimated lpf input */

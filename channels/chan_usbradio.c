@@ -1857,12 +1857,15 @@ static int usbradio_text(struct ast_channel *c, const char *text)
 		return 0;
 	}
 
-	/* set transmit CTCSS */
+	/* set transmit CTCSS (app_rpt itxctcss → TXCTCSS 0/1) */
 	if (strcmp(cmd, "TXCTCSS") == 0) {
-		u8 x;
-		x = strtod(rxs, NULL);
+		if (cnt < 2 || (strcmp(rxs, "0") && strcmp(rxs, "1"))) {
+			ast_log(LOG_WARNING, "Channel %s: Invalid TXCTCSS command: %s\n", o->name, text);
+			return 0;
+		}
 		if (o && o->pmrChan) {
-			o->pmrChan->b.txCtcssOff = !x;
+			/* Single atomic replaces paired on/off bits so PmrRx cannot see a torn pair. */
+			__atomic_store_n(&o->pmrChan->txCtcssInputReq, rxs[0] == '1' ? TXCTCSS_INPUT_REQ_ON : TXCTCSS_INPUT_REQ_OFF, __ATOMIC_RELEASE);
 		}
 		ast_debug(3, "Channel %s: TXCTCSS cmd: %s\n", o->name, text);
 		return 0;
