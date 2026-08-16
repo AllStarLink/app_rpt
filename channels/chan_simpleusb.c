@@ -460,6 +460,11 @@ static int start_stream(struct chan_simpleusb_pvt *pvt)
 
 	ast_assert(pvt->pa.input_channels == 1);
 
+	if (pvt->pa.output_channels == 1 && pvt->pager != PAGER_NONE) {
+		ast_log(LOG_WARNING, "Channel %s: pager=a/b needs stereo TX; device opened with 1 output channel, sending pager and repeater audio together\n",
+			pvt->name);
+	}
+
 	res = ast_radio_pa_start(&pvt->pa);
 	if (res != paNoError) {
 		ast_log(LOG_WARNING, "Failed to start stream - (%d) %s\n", res, Pa_GetErrorText(res));
@@ -2357,8 +2362,11 @@ static void *simpleusb_audio_thread(void *arg)
 								if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
 									ispager = 1;
 								}
-								/* If pager audio, determine which channel to store audio */
-								if (o->pager != PAGER_NONE) {
+								/* If pager audio, determine which channel to store audio.
+								 * Mono URIs cannot split A/B; keep both sides live so the
+								 * res_usbradio downmix stays full level.
+								 */
+								if (o->pager != PAGER_NONE && o->pa.output_channels > 1) {
 									doleft = (o->pager == PAGER_A) ? ispager : !ispager;
 									doright = (o->pager == PAGER_B) ? ispager : !ispager;
 								}

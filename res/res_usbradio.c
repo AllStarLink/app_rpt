@@ -1271,6 +1271,24 @@ static void pa_clamp_input_channels(PaDeviceIndex device, unsigned int *input_ch
 	}
 }
 
+/*!
+ * \brief Cap requested TX channels to what PortAudio reports for the device.
+ * Mono URIs (AIOC) advertise maxOutputChannels=1; CM108-class devices report 2.
+ */
+static void pa_clamp_output_channels(PaDeviceIndex device, unsigned int *output_channels)
+{
+	const PaDeviceInfo *out_dev;
+
+	if (!output_channels || device == paNoDevice) {
+		return;
+	}
+
+	out_dev = Pa_GetDeviceInfo(device);
+	if (out_dev && *output_channels > (unsigned int) out_dev->maxOutputChannels) {
+		*output_channels = out_dev->maxOutputChannels ? (unsigned int) out_dev->maxOutputChannels : 1;
+	}
+}
+
 PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 {
 	PaError res = paInternalError;
@@ -1282,6 +1300,7 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 
 	ps->stream = NULL;
 	ps->active = 0;
+	ps->output_channels = AST_RADIO_PA_OUTPUT_CHANNELS;
 
 	if (pa_lib_acquire() < 0) {
 		return paInternalError;
@@ -1289,8 +1308,9 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 
 	if (!strcasecmp(ps->hw_device, "default")) {
 		pa_clamp_input_channels(Pa_GetDefaultInputDevice(), &ps->input_channels);
-		res = Pa_OpenDefaultStream(&ps->stream, ps->input_channels, AST_RADIO_PA_OUTPUT_CHANNELS, paInt16,
-			AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER, NULL, NULL);
+		pa_clamp_output_channels(Pa_GetDefaultOutputDevice(), &ps->output_channels);
+		res = Pa_OpenDefaultStream(&ps->stream, ps->input_channels, ps->output_channels, paInt16, AST_RADIO_PA_SAMPLE_RATE,
+			AST_RADIO_PA_FRAMES_PER_BUFFER, NULL, NULL);
 	} else {
 		PaStreamParameters input_params = {
 			.channelCount = ps->input_channels,
@@ -1299,7 +1319,7 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 			.device = paNoDevice,
 		};
 		PaStreamParameters output_params = {
-			.channelCount = AST_RADIO_PA_OUTPUT_CHANNELS,
+			.channelCount = ps->output_channels,
 			.sampleFormat = paInt16,
 			.suggestedLatency = (1.0 / 50.0),
 			.device = paNoDevice,
@@ -1322,6 +1342,8 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 
 		pa_clamp_input_channels(input_params.device, &ps->input_channels);
 		input_params.channelCount = ps->input_channels;
+		pa_clamp_output_channels(output_params.device, &ps->output_channels);
+		output_params.channelCount = ps->output_channels;
 
 		res = Pa_OpenStream(&ps->stream, &input_params, &output_params, AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER,
 			paNoFlag, NULL, NULL);
@@ -1341,7 +1363,7 @@ PaError ast_radio_pa_open(struct ast_radio_pa_stream *ps)
 		ast_debug(5, "PortAudio stream latency in %.3f ms out %.3f ms\n", si->inputLatency * 1000.0, si->outputLatency * 1000.0);
 	}
 
-	ast_debug(3, "PortAudio opened '%s' with %u input and %u output channel(s)\n", ps->hw_device, ps->input_channels, AST_RADIO_PA_OUTPUT_CHANNELS);
+	ast_debug(3, "PortAudio opened '%s' with %u input and %u output channel(s)\n", ps->hw_device, ps->input_channels, ps->output_channels);
 
 	return res;
 }
@@ -1423,6 +1445,8 @@ PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned l
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long pa_frames)
 {
 	PaError res;
+	const short *tx = data;
+	short mono_buf[AST_RADIO_PA_FRAMES_PER_BUFFER];
 
 	if (!ps || !ps->stream || !data) {
 		return paBadStreamPtr;
@@ -1433,12 +1457,23 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 		return paBufferTooBig;
 	}
 
-	res = Pa_WriteStream(ps->stream, data, pa_frames);
+	/*
+	 * Callers always pass stereo interleaved samples. Mono URIs (AIOC) open
+	 * with one output channel; average L/R like OSS/ALSA plug conversion did.
+	 */
+	if (ps->output_channels == 1) {
+		unsigned long i;
+
+		for (i = 0; i < pa_frames; i++) {
+			mono_buf[i] = (short) (((int) data[i * 2] + (int) data[i * 2 + 1]) / 2);
+		}
+		tx = mono_buf;
+	}
+
+	res = Pa_WriteStream(ps->stream, tx, pa_frames);
 	if (res == paOutputUnderflowed) {
 		PaError prime_res;
-		/* The data size depends on how many channels are set up in a frame.  We have a max of 2 channels
-		 * If only one channel, the buffer is 2x what is needed
-		 */
+		/* Sized for stereo; unused half is fine when priming mono. */
 		short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
 		long frames_available;
 
@@ -1449,7 +1484,7 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 		 */
 		frames_available = ast_radio_pa_write_available(ps);
 
-		if ((frames_available > 0) && (frames_available >= pa_frames)) {
+		if ((frames_available > 0) && (frames_available >= (long) pa_frames)) {
 			ast_debug(6, "PortAudio write stream underflow, priming with %ld silence frames\n", pa_frames);
 			prime_res = Pa_WriteStream(ps->stream, null_buf, pa_frames);
 			if (prime_res != paNoError) {

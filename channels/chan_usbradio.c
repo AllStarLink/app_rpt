@@ -880,6 +880,84 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	return 0;
 }
 
+/*!
+ * \brief Keep full TX level on mono PortAudio devices.
+ *
+ * XPMR always writes stereo. Default txmixa=composite / txmixb=no zeros
+ * the right channel, so the res_usbradio L/R average drops ~6 dB.
+ * Duplicate the active mix onto both sides (XPMR monoOut) instead.
+ * Differing voice+tone is left on L/R so the average forms composite;
+ * other differing pairs keep A and disable B.
+ */
+static void usbradio_adjust_txmix_for_mono(struct chan_usbradio_pvt *o)
+{
+	enum radio_tx_mix a = o->txmixa;
+	enum radio_tx_mix b = o->txmixb;
+	t_pmr_sps *mono_sps = NULL;
+
+	if (o->pa.output_channels != 1) {
+		return;
+	}
+
+	if (a == TX_OUT_OFF && b == TX_OUT_OFF) {
+		return;
+	}
+
+	if (a == TX_OUT_OFF) {
+		/* B holds the configured source; duplicate it to both channels. */
+		a = b;
+		if (o->pmrChan) {
+			mono_sps = o->pmrChan->spsTxOutB;
+		}
+	} else if (b == TX_OUT_OFF) {
+		b = a;
+		if (o->pmrChan) {
+			mono_sps = o->pmrChan->spsTxOutA;
+		}
+	} else if (a != b) {
+		/* Voice+tone on A/B is composite once PortAudio averages L/R. */
+		if ((a == TX_OUT_VOICE && b == TX_OUT_LSD) || (a == TX_OUT_LSD && b == TX_OUT_VOICE)) {
+			ast_log(LOG_WARNING, "Channel %s: mono TX device; voice+tone A/B averaged into composite (both sources kept)\n", o->name);
+			o->txmixa = TX_OUT_COMPOSITE;
+			o->txmixb = TX_OUT_COMPOSITE;
+			if (o->pmrChan) {
+				o->pmrChan->txMixA = TX_OUT_COMPOSITE;
+				o->pmrChan->txMixB = TX_OUT_COMPOSITE;
+			}
+			return;
+		}
+
+		ast_log(LOG_WARNING, "Channel %s: unsupported txmixa/txmixb pair on mono TX; keeping A, disabling B\n", o->name);
+		b = a;
+		if (o->pmrChan) {
+			mono_sps = o->pmrChan->spsTxOutA;
+			if (o->pmrChan->spsTxOutB) {
+				o->pmrChan->spsTxOutB->enabled = 0;
+			}
+		}
+	} else if (o->pmrChan) {
+		/* A == B already; createPmrChannel set monoOut, reinforce it. */
+		mono_sps = o->pmrChan->spsTxOutA;
+	}
+
+	if (a != o->txmixa || b != o->txmixb) {
+		ast_log(LOG_WARNING, "Channel %s: mono TX device; forcing equal A/B mix so PortAudio downmix stays full level\n", o->name);
+	}
+
+	o->txmixa = a;
+	o->txmixb = b;
+
+	if (o->pmrChan) {
+		o->pmrChan->txMixA = a;
+		o->pmrChan->txMixB = b;
+	}
+
+	if (mono_sps) {
+		/* Write L and R so (L+R)/2 is full level. */
+		mono_sps->monoOut = 1;
+	}
+}
+
 static int usbradio_start_audio(struct chan_usbradio_pvt *o)
 {
 	PaError res;
@@ -900,6 +978,8 @@ static int usbradio_start_audio(struct chan_usbradio_pvt *o)
 		ast_log(LOG_WARNING, "Channel %s: Unable to open PortAudio stream %s (%s)\n", o->name, o->hw_device, Pa_GetErrorText(res));
 		return -1;
 	}
+
+	usbradio_adjust_txmix_for_mono(o);
 
 	res = ast_radio_pa_start(&o->pa);
 	if (res != paNoError) {

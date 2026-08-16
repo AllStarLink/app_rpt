@@ -91,6 +91,7 @@
 ;preemphasis = no           ; Perform standard 6db/octave pre-emphasis
 
 ;pager = no                 ; no,a,b (e.g. pager = b means "put the normal repeat audio on channel A, and the pager audio on channel B")
+                            ; Ignored on mono TX devices (AIOC); pager and repeater audio share the one output.
 
 ;duplex3 = 0                ; duplex 3 gain setting (0 to disable)
 
