@@ -2569,6 +2569,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		goto retry;
 	}
 
+	/* Leave l->pchan parked until AST_CONTROL_ANSWER restores it to RPT_CONF. */
 	ast_autoservice_stop(l->pchan);
 	ast_log(LOG_NOTICE, "Reconnect Attempt to %s in progress\n", l->name);
 	return NULL;
@@ -4497,8 +4498,12 @@ static inline void safe_hangup(struct ast_channel *chan)
 }
 
 /*! \note myrpt->lock must not be held when calling */
-static inline void hangup_link_chan(struct rpt_link *l)
+static inline void hangup_link_chan(struct rpt *myrpt, struct rpt_link *l)
 {
+	/* Park pchan out of CONF so mix audio cannot fill Announcer/IAXLink while IAX is down. */
+	if (l->pchan) {
+		rpt_conf_remove(l->pchan, myrpt, RPT_CONF);
+	}
 	if (l->chan) {
 		safe_hangup(l->chan);
 		l->chan = NULL;
@@ -4514,7 +4519,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	if (l->chan) {
 		link_process_textq(myrpt, l);
-		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
+		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
 	}
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
@@ -4528,16 +4533,16 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 					/* An allstar link node */
 					l->disctime = DISC_TIME;
 				}
-				hangup_link_chan(l);
+				hangup_link_chan(myrpt, l);
 				return 1;
 			}
 
 			if (l->retrytimer) {
-				hangup_link_chan(l);
+				hangup_link_chan(myrpt, l);
 				return 1;
 			}
 			if (l->outbound && (l->retries++ < l->max_retries) && l->hasconnected) {
-				hangup_link_chan(l);
+				hangup_link_chan(myrpt, l);
 				rpt_mutex_lock(&myrpt->lock);
 				l->retrytimer = RETRY_TIMER_MS;
 				l->elaptime = 0;
@@ -4790,6 +4795,20 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				if (f->subclass.integer == AST_CONTROL_ANSWER) {
 					char lconnected = l->connected;
 
+					/*
+					 * Restore parked pchan before committing connected state.
+					 * On failure leave retries untouched so remote_hangup_helper
+					 * still honors max_retries instead of resetting the budget.
+					 */
+					if (l->pchan && rpt_conf_restore(l->pchan, myrpt, RPT_CONF)) {
+						ast_log(LOG_WARNING, "Unable to restore %s to conference after answer from %s\n", ast_channel_name(l->pchan), l->name);
+						ast_frfree(f);
+						if (remote_hangup_helper(myrpt, l)) {
+							continue;
+						}
+						break;
+					}
+
 					__kickshort(myrpt);
 					myrpt->rxlingertimer = RX_LINGER_TIME;
 					l->connected = 1;
@@ -4917,7 +4936,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	rpt_frame_queue_free(&l->frame_queue);
 
 	/* hang-up on call to device */
-	hangup_link_chan(l);
+	hangup_link_chan(myrpt, l);
 	ast_hangup(l->pchan);
 
 	if (l->hasconnected) {
@@ -5328,7 +5347,7 @@ static void *rpt(void *this)
 				myrpt->remrx = 1;
 				if (l->voterlink)
 					myrpt->voteremrx = 1;
-				if ((l->name[0] > '0') && (l->name[0] <= '9'))		/* Ignore '0' nodes */
+				if ((l->name[0] > '0') && (l->name[0] <= '9')) /* Ignore '0' nodes */
 					ast_copy_string(myrpt->lastnodewhichkeyedusup, l->name, sizeof(myrpt->lastnodewhichkeyedusup));
 			}
 		}
