@@ -4513,8 +4513,21 @@ static inline void hangup_link_chan(struct rpt_link *l)
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	if (l->chan) {
+		/*
+		 * Flush pending link text, then give IAX a short drain window.
+		 * ast_safe_sleep already autoservices l->chan; also autoservice
+		 * pchan so softmix does not fill Announcer/IAXLink unread while
+		 * this waitfor thread is blocked (key/unkey / periodic work still
+		 * stall for the sleep duration — reconnect DNS is handled elsewhere).
+		 */
 		link_process_textq(myrpt, l);
-		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
+		if (l->pchan) {
+			ast_autoservice_start(l->pchan);
+		}
+		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
+		if (l->pchan) {
+			ast_autoservice_stop(l->pchan);
+		}
 	}
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
