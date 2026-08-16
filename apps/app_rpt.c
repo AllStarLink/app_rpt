@@ -5719,7 +5719,7 @@ static void *rpt(void *this)
 				if (myrpt->p.itxctcss) {
 					dahdi_radio_set_ctcss_encode(myrpt->localrxchannel, !x);
 				}
-			} else if (CHAN_TECH(myrpt->rxchannel, "radio") || CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
+			} else if (CHAN_TECH(myrpt->rxchannel, "radio")) {
 				/* Disabled input-only mode always means CTCSS enabled. */
 				snprintf(str, sizeof(str), "TXCTCSS %d", !myrpt->p.itxctcss || !!x);
 				ast_sendtext(myrpt->rxchannel, str);
