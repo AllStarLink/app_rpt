@@ -7238,7 +7238,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		l->max_retries = MAX_RETRIES;
 
 		if (ast_channel_state(chan) != AST_STATE_UP) {
-			ast_answer(chan);
+			if (ast_answer(chan) < 0) {
+				ast_log(LOG_WARNING, "Cannot answer channel %s\n", ast_channel_name(chan));
+				ast_hangup(l->pchan);
+				ao2_ref(l, -1);
+				return -1;
+			}
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
