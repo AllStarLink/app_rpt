@@ -3002,6 +3002,31 @@ static void rpt_stop_channel_autoservice(struct rpt *myrpt)
 	}
 }
 
+static void rpt_start_channel_autoservice(struct rpt *myrpt)
+{
+	if (myrpt->rxchannel) {
+		ast_autoservice_start(myrpt->rxchannel);
+	}
+	if (myrpt->txchannel && myrpt->txchannel != myrpt->rxchannel) {
+		ast_autoservice_start(myrpt->txchannel);
+	}
+	if (myrpt->pchannel) {
+		ast_autoservice_start(myrpt->pchannel);
+	}
+	if (myrpt->localtxchannel && myrpt->localtxchannel != myrpt->txchannel) {
+		ast_autoservice_start(myrpt->localtxchannel);
+	}
+	if (myrpt->monchannel) {
+		ast_autoservice_start(myrpt->monchannel);
+	}
+	if (myrpt->rxpchannel) {
+		ast_autoservice_start(myrpt->rxpchannel);
+	}
+	if (myrpt->txpchannel) {
+		ast_autoservice_start(myrpt->txpchannel);
+	}
+}
+
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
 	int res = 0;
@@ -5915,6 +5940,7 @@ static void *rpt(void *this)
 	ast_debug(1, "%s disconnected, cleaning up...\n", myrpt->name);
 
 	myrpt->ready = 0;
+	rpt_start_channel_autoservice(myrpt);
 	usleep(100000);
 	while (myrpt->tele.next != &myrpt->tele) {
 		/* wait for telem to be done */
@@ -5928,6 +5954,7 @@ static void *rpt(void *this)
 	ao2_iterator_destroy(&l_it);
 	rpt_mutex_unlock(&myrpt->lock);
 
+	rpt_stop_channel_autoservice(myrpt);
 	rpt_hangup(myrpt, RPT_PCHAN);
 	if (myrpt->monchannel) {
 		rpt_hangup(myrpt, RPT_MONCHAN);
