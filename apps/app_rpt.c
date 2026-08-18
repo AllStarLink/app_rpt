@@ -7240,19 +7240,17 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 		ao2_ref(cap, -1);
 
-		/* make a conference for the tx */
-		if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
-			ast_hangup(l->pchan);
-			ao2_ref(l, -1);
-			return -1;
-		}
-
 		if ((phone_mode == RPT_PHONE_MODE_DUMB_DUPLEX) && (!phone_vox))
 			l->lastrealrx = 1;
 		l->max_retries = MAX_RETRIES;
 
 		if (ast_channel_state(chan) != AST_STATE_UP) {
-			ast_answer(chan);
+			if (ast_answer(chan) < 0) {
+				ast_log(LOG_WARNING, "Cannot answer channel %s\n", ast_channel_name(chan));
+				ast_hangup(l->pchan);
+				ao2_ref(l, -1);
+				return -1;
+			}
 			if (l->name[0] > '9') {
 				if (ast_safe_sleep(chan, 500) == -1) {
 					ast_debug(3, "Channel %s hung up\n", ast_channel_name(chan));
@@ -7261,6 +7259,13 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					return -1;
 				}
 			}
+		}
+
+		/* make a conference for the tx */
+		if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
+			ast_hangup(l->pchan);
+			ao2_ref(l, -1);
+			return -1;
 		}
 
 		ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
