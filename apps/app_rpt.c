@@ -4528,7 +4528,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	 * This is done to prevent any stale links from being shared while the node
 	 * is attempting to reconnect (and is not "really" connected)
 	 */
-	if (ast_str_len(l->linklist) > 0) {
+	if (ast_str_strlen(l->linklist) > 0) {
 		rpt_mutex_lock(&myrpt->lock);
 		ast_str_reset(l->linklist);
 		rpt_mutex_unlock(&myrpt->lock);
