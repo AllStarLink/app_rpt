@@ -4529,7 +4529,9 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	 * is attempting to reconnect (and is not "really" connected)
 	 */
 	if (ast_str_len(l->linklist) > 0) {
+		rpt_mutex_lock(&myrpt->lock);
 		ast_str_reset(l->linklist);
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_update_links(myrpt);
 	}
 
