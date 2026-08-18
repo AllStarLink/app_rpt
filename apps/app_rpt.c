@@ -4520,7 +4520,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		 */
 		ast_autoservice_start(l->pchan);
 		link_process_textq(myrpt, l);
-		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
+		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
 		ast_autoservice_stop(l->pchan);
 	}
 
