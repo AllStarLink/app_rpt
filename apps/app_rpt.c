@@ -4528,7 +4528,10 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	 * This is done to prevent any stale links from being shared while the node
 	 * is attempting to reconnect (and is not "really" connected)
 	 */
-	ast_str_reset(l->linklist);
+	if (ast_str_len(l->linklist) > 0) {
+		ast_str_reset(l->linklist);
+		rpt_update_links(myrpt);
+	}
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
