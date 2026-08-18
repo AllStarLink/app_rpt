@@ -4524,6 +4524,12 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		ast_autoservice_stop(l->pchan);
 	}
 
+	/* When the node is disconnected we need to clear the list of links.
+	 * This is done to prevent any stale links from being shared while the node
+	 * is attempting to reconnect (and is not "really" connected)
+	 */
+	ast_str_reset(l->linklist);
+
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
 		if (l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down()) {
