@@ -4513,8 +4513,15 @@ static inline void hangup_link_chan(struct rpt_link *l)
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	if (l->chan) {
+		/* This will be a "long" delay, dump any audio in the l->pchan
+		 * as we are now about to close down the link channel.  If we don't
+		 * autoservice, l->pchan can report long voice queue and add unnecessary delay audio
+		 * on a reconnect
+		 */
+		ast_autoservice_start(l->pchan);
 		link_process_textq(myrpt, l);
 		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
+		ast_autoservice_stop(l->pchan);
 	}
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
