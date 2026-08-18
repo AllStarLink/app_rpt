@@ -2966,6 +2966,9 @@ static void _load_rpt_vars_by_rpt(struct rpt *myrpt, int force)
 
 #define rpt_hangup_rx_tx(myrpt) \
 	ast_autoservice_stop(myrpt->rxchannel); \
+	if (myrpt->txchannel && myrpt->txchannel != myrpt->rxchannel) { \
+		ast_autoservice_stop(myrpt->txchannel); \
+	} \
 	rpt_hangup(myrpt, RPT_RXCHAN); \
 	if (myrpt->txchannel) { \
 		rpt_hangup(myrpt, RPT_TXCHAN); \
@@ -2973,6 +2976,31 @@ static void _load_rpt_vars_by_rpt(struct rpt *myrpt, int force)
 
 #define IS_DAHDI_CHAN(c) (CHAN_TECH(c, "DAHDI"))
 #define IS_DAHDI_CHAN_NAME(s) (!strncasecmp(s, "DAHDI", 5))
+
+static void rpt_stop_channel_autoservice(struct rpt *myrpt)
+{
+	if (myrpt->rxchannel) {
+		ast_autoservice_stop(myrpt->rxchannel);
+	}
+	if (myrpt->txchannel && myrpt->txchannel != myrpt->rxchannel) {
+		ast_autoservice_stop(myrpt->txchannel);
+	}
+	if (myrpt->pchannel) {
+		ast_autoservice_stop(myrpt->pchannel);
+	}
+	if (myrpt->localtxchannel && myrpt->localtxchannel != myrpt->txchannel) {
+		ast_autoservice_stop(myrpt->localtxchannel);
+	}
+	if (myrpt->monchannel) {
+		ast_autoservice_stop(myrpt->monchannel);
+	}
+	if (myrpt->rxpchannel) {
+		ast_autoservice_stop(myrpt->rxpchannel);
+	}
+	if (myrpt->txpchannel) {
+		ast_autoservice_stop(myrpt->txpchannel);
+	}
+}
 
 static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 {
@@ -3002,9 +3030,12 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	ast_autoservice_start(myrpt->rxchannel);
 	if (myrpt->txchanname) {
 		if (rpt_request(myrpt, cap, RPT_TXCHAN)) {
-			ast_autoservice_stop(myrpt->rxchannel);
+			rpt_stop_channel_autoservice(myrpt);
 			rpt_hangup(myrpt, RPT_RXCHAN);
 			return -1;
+		}
+		if (myrpt->txchannel != myrpt->rxchannel) {
+			ast_autoservice_start(myrpt->txchannel);
 		}
 	} else {
 		myrpt->txchannel = myrpt->rxchannel;
@@ -3013,9 +3044,11 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	if (rpt_request_local(myrpt, cap, RPT_PCHAN, "PChan")) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		return -1;
 	}
+	ast_autoservice_start(myrpt->pchannel);
 
 	if (IS_LOCAL_NAME(ast_channel_name(myrpt->txchannel))) {
 		/* IF we have a local channel setup in txchannel this is a hub
@@ -3025,6 +3058,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		struct ast_unreal_pvt *p = ast_channel_tech_pvt(myrpt->txchannel);
 		if (!p || !p->chan) {
 			ast_log(LOG_WARNING, "Local channel %s missing endpoints\n", ast_channel_name(myrpt->txchannel));
+			rpt_stop_channel_autoservice(myrpt);
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			return -1;
@@ -3035,13 +3069,16 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 
 	if (!myrpt->localtxchannel) {
 		if (rpt_request_local(myrpt, cap, RPT_LOCALTXCHAN, "LocalTX")) { /* Listen only link */
+			rpt_stop_channel_autoservice(myrpt);
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			return -1;
 		}
+		ast_autoservice_start(myrpt->localtxchannel);
 	}
 
 	if (rpt_conf_add(myrpt->localtxchannel, myrpt, RPT_TXCONF)) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
@@ -3049,13 +3086,16 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	if (rpt_request_local(myrpt, cap, RPT_MONCHAN, "MonChan")) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		return -1;
 	}
+	ast_autoservice_start(myrpt->monchannel);
 
 	if (rpt_request_local(myrpt, cap, RPT_RXPCHAN, "RXPChan")) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -3064,8 +3104,10 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 		return -1;
 	}
+	ast_autoservice_start(myrpt->rxpchannel);
 
 	if (rpt_conf_add(myrpt->pchannel, myrpt, RPT_CONF)) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -3077,6 +3119,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	if (rpt_conf_add(myrpt->rxpchannel, myrpt, RPT_CONF)) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -3084,13 +3127,11 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		if (myrpt->localtxchannel != myrpt->txchannel) {
 			rpt_hangup(myrpt, RPT_LOCALTXCHAN);
 		}
-
 		return -1;
 	}
 
-	/*! \todo Need to verify always setting MONCHAN to TXCONF is "ok" or how to deal at dialtime*/
-
 	if (rpt_conf_add(myrpt->monchannel, myrpt, RPT_TXCONF)) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -3102,6 +3143,7 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 	}
 
 	if (rpt_request_local(myrpt, cap, RPT_TXPCHAN, "TXPChan")) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -3111,7 +3153,10 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 		}
 		return -1;
 	}
+	ast_autoservice_start(myrpt->txpchannel);
+
 	if (rpt_conf_add(myrpt->txpchannel, myrpt, RPT_TXCONF)) {
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -5100,6 +5145,7 @@ static void *rpt(void *this)
 	if (myrpt->p.ioport && ((myrpt->iofd = openserial(myrpt, myrpt->p.ioport)) == -1)) {
 		ast_log(LOG_ERROR, "Unable to open %s\n", myrpt->p.ioport);
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -5115,6 +5161,7 @@ static void *rpt(void *this)
 		myrpt->macrobuf = ast_str_create(MAXMACRO);
 		if (!myrpt->macrobuf) {
 			rpt_mutex_unlock(&myrpt->lock);
+			rpt_stop_channel_autoservice(myrpt);
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			rpt_hangup(myrpt, RPT_MONCHAN);
@@ -5135,6 +5182,7 @@ static void *rpt(void *this)
 
 	if (!myrpt->links) {
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_stop_channel_autoservice(myrpt);
 		rpt_hangup_rx_tx(myrpt);
 		rpt_hangup(myrpt, RPT_PCHAN);
 		rpt_hangup(myrpt, RPT_MONCHAN);
@@ -5209,6 +5257,7 @@ static void *rpt(void *this)
 #ifdef NATIVE_DSP
 		if (!(myrpt->dsp = ast_dsp_new())) {
 			rpt_mutex_unlock(&myrpt->lock);
+			rpt_stop_channel_autoservice(myrpt);
 			rpt_hangup_rx_tx(myrpt);
 			rpt_hangup(myrpt, RPT_PCHAN);
 			rpt_hangup(myrpt, RPT_MONCHAN);
@@ -5262,7 +5311,7 @@ static void *rpt(void *this)
 	myrpt->ready = 1;
 
 	looptimestart = rpt_tvnow();
-	ast_autoservice_stop(myrpt->rxchannel);
+	rpt_stop_channel_autoservice(myrpt);
 	while (ms >= 0) {
 		struct ast_channel *who;
 		struct ast_channel *cs[8];
