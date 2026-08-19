@@ -916,7 +916,7 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
 			cmdbuf = ast_strdupa(cmd);
-			if (rpt_break_args(cmdbuf, cmd_argv, ARRAY_LEN(cmd_argv)) > 0) {
+			if (ast_app_separate_args(cmdbuf, ' ', cmd_argv, ARRAY_LEN(cmd_argv)) > 0) {
 				ast_safe_execvp(1, cmd_argv[0], cmd_argv);
 			}
 		}
