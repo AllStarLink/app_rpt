@@ -912,12 +912,15 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 			rpt_mutex_unlock(&myrpt->lock);
 		} else if (action == 'S') { /* execute a shell command */
 			char *cmdbuf;
-			char *cmd_argv[32];
+			int argc;
+			char *argv[32];
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
 			cmdbuf = ast_strdupa(cmd);
-			if (ast_app_separate_args(cmdbuf, ' ', cmd_argv, ARRAY_LEN(cmd_argv)) > 0) {
-				ast_safe_execvp(1, cmd_argv[0], cmd_argv);
+			argc = ast_app_separate_args(cmdbuf, ' ', argv, ARRAY_LEN(argv) - 1);
+			argv[argc] = NULL;
+			if (argc > 0) {
+				ast_safe_execvp(1, argv[0], argv);
 			}
 		}
 	}

@@ -2030,9 +2030,12 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
 		} else {
 			char *parambuf;
 			char *argv[32];
+			int argc;
 
 			parambuf = ast_strdupa(param);
-			if (ast_app_separate_args(parambuf, ' ', argv, ARRAY_LEN(argv)) > 0) {
+			argc = ast_app_separate_args(parambuf, ' ', argv, ARRAY_LEN(argv) - 1);
+			argv[argc] = NULL;
+			if (argc > 0) {
 				if (ast_safe_execvp(1, argv[0], argv) < 0) {
 					return DC_ERROR;
 				}
