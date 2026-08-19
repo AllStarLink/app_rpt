@@ -3,10 +3,8 @@
 
 #include <sys/vfs.h> /* use statfs */
 
-#include "asterisk/app.h"
 #include "asterisk/channel.h" /* includes all the locking stuff needed (lock.h doesn't) */
 #include "asterisk/translate.h"
-#include "asterisk/utils.h"
 
 #include "app_rpt.h"
 #include "rpt_lock.h"
