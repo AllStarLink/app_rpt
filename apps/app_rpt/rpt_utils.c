@@ -365,7 +365,7 @@ static void *safe_system_thread_worker(void *data)
 	return NULL;
 }
 
-int rpt_safe_system_thread(const char *cmd)
+int rpt_safe_system(const char *cmd)
 {
 	pthread_t threadid;
 	char *cmd_copy;

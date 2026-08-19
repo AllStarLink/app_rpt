@@ -116,4 +116,4 @@ int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...) 
  * \param cmd Command string to execute
  * \retval 0 on success, -1 on failure
  */
-int rpt_safe_system_thread(const char *cmd);
+int rpt_safe_system(const char *cmd);

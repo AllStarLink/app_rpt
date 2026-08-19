@@ -917,7 +917,7 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 			if (ast_asprintf(&cp, "%s &", cmd) < 0) {
 				return;
 			}
-			rpt_safe_system_thread(cp);
+			rpt_safe_system(cp);
 			ast_free(cp);
 		}
 	}
@@ -974,7 +974,7 @@ static void dodispgm(struct rpt *myrpt, char *them)
 	if (ast_asprintf(&a, "%s %s %s &", myrpt->p.discpgm, myrpt->name, them) < 0) {
 		return;
 	}
-	rpt_safe_system_thread(a);
+	rpt_safe_system(a);
 	ast_free(a);
 }
 
@@ -988,7 +988,7 @@ static void doconpgm(struct rpt *myrpt, char *them)
 	if (ast_asprintf(&a, "%s %s %s &", myrpt->p.connpgm, myrpt->name, them) < 0) {
 		return;
 	}
-	rpt_safe_system_thread(a);
+	rpt_safe_system(a);
 	ast_free(a);
 	return;
 }
