@@ -2033,7 +2033,10 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
 			if (ast_asprintf(&cp, "%s &", param) < 0) {
 				return DC_ERROR;
 			}
-			rpt_safe_system_thread(cp);
+			if (rpt_safe_system_thread(cp) < 0) {
+				ast_free(cp);
+				return DC_ERROR;
+			}
 			ast_free(cp);
 		}
 	}
