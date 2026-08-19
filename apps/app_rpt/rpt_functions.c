@@ -2036,6 +2036,8 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
 				if (ast_safe_execvp(1, argv[0], argv) < 0) {
 					return DC_ERROR;
 				}
+			} else {
+				return DC_ERROR;
 			}
 		}
 	}
