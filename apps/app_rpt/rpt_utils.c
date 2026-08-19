@@ -1,6 +1,7 @@
 
 #include "asterisk.h"
 
+#include <ctype.h>
 #include <sys/vfs.h> /* use statfs */
 
 #include "asterisk/channel.h" /* includes all the locking stuff needed (lock.h doesn't) */
@@ -350,4 +351,48 @@ void update_timer(int *timer_ptr, int elap, int end_val)
 	if (*timer_ptr < end_val) {
 		*timer_ptr = end_val;
 	}
+}
+
+int rpt_break_args(char *str, char *argv[], int max_argv)
+{
+	int argc = 0;
+	char *p = str;
+	char quote = 0;
+
+	if (!str || max_argv < 1) {
+		if (argv && max_argv > 0) {
+			argv[0] = NULL;
+		}
+		return 0;
+	}
+
+	while (*p && argc < max_argv - 1) {
+		while (*p && isspace((unsigned char) *p)) {
+			p++;
+		}
+		if (!*p) {
+			break;
+		}
+
+		if (*p == '\'' || *p == '"') {
+			quote = *p++;
+			argv[argc++] = p;
+			while (*p && *p != quote) {
+				p++;
+			}
+			if (*p) {
+				*p++ = '\0';
+			}
+		} else {
+			argv[argc++] = p;
+			while (*p && !isspace((unsigned char) *p)) {
+				p++;
+			}
+			if (*p) {
+				*p++ = '\0';
+			}
+		}
+	}
+	argv[argc] = NULL;
+	return argc;
 }

@@ -110,3 +110,12 @@ void update_timer(int *timer_ptr, int elap, int end_val);
  * \retval -1 if the buffer is full or a formatting error occurred.
  */
 int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+
+/*!
+ * \brief Break up a command string into an array of argument pointers for execvp.
+ * \param str Command string (will be modified)
+ * \param argv Array of pointers to arguments
+ * \param max_argv Maximum capacity of argv array, including NULL terminator
+ * \return Number of arguments parsed (argc), excluding NULL terminator
+ */
+int rpt_break_args(char *str, char *argv[], int max_argv);
