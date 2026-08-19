@@ -2965,10 +2965,6 @@ static void _load_rpt_vars_by_rpt(struct rpt *myrpt, int force)
 }
 
 #define rpt_hangup_rx_tx(myrpt) \
-	ast_autoservice_stop(myrpt->rxchannel); \
-	if (myrpt->txchannel && myrpt->txchannel != myrpt->rxchannel) { \
-		ast_autoservice_stop(myrpt->txchannel); \
-	} \
 	rpt_hangup(myrpt, RPT_RXCHAN); \
 	if (myrpt->txchannel) { \
 		rpt_hangup(myrpt, RPT_TXCHAN); \
