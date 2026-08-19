@@ -5358,7 +5358,7 @@ static void *voter_reader(void *data)
 						ast_copy_string(client_ip, ast_inet_ntoa(client->sin.sin_addr), sizeof(client_ip));
 						ast_copy_string(list_ip, ast_inet_ntoa(sin.sin_addr), sizeof(list_ip));
 						ast_debug(2, "Packet from client %s at IP: %s:%d doesn't match client list IP: %s:%d\r\n", client->name,
-							client_ip, ntohs(client->sin.sin_port), list_ip, ntohs(sin.sin_port));
+							list_ip, ntohs(sin.sin_port), client_ip, ntohs(client->sin.sin_port));
 						ast_log(LOG_ERROR, "Packet from client %s doesn't match client list IP! Resetting client connections (sanity)\n",
 							client->name);
 						/* Dump the client by resetting the respdigest and heardfrom, forcing it to
