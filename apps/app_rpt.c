@@ -966,7 +966,7 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 
 static void dodispgm(struct rpt *myrpt, char *them)
 {
-	char *argv[32];
+	char *argv[4];
 
 	if (!myrpt->p.discpgm) {
 		return;
@@ -981,7 +981,7 @@ static void dodispgm(struct rpt *myrpt, char *them)
 
 static void doconpgm(struct rpt *myrpt, char *them)
 {
-	char *argv[32];
+	char *argv[4];
 
 	if (!myrpt->p.connpgm) {
 		return;

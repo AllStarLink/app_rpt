@@ -1,7 +1,6 @@
 
 #include "asterisk.h"
 
-#include <ctype.h>
 #include <sys/vfs.h> /* use statfs */
 
 #include "asterisk/channel.h" /* includes all the locking stuff needed (lock.h doesn't) */
