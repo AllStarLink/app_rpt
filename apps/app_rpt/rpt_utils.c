@@ -390,6 +390,10 @@ int rpt_break_args(char *str, char *argv[], int max_argv)
 			}
 			if (*p) {
 				*p++ = '\0';
+			} else {
+				/* Hit end-of-string before closing quote */
+				ast_log(LOG_WARNING, "Unterminated quote in command: %s\n", str);
+				break;
 			}
 		}
 	}
