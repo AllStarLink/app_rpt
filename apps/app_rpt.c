@@ -911,14 +911,17 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		} else if (action == 'S') { /* execute a shell command */
-			char *cp;
+			char *cmdbuf;
+			int argc;
+			char *argv[32];
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
-			if (ast_asprintf(&cp, "%s &", cmd) < 0) {
-				return;
+			cmdbuf = ast_strdupa(cmd);
+			argc = ast_app_separate_args(cmdbuf, ' ', argv, ARRAY_LEN(argv) - 1);
+			argv[argc] = NULL;
+			if (argc > 0) {
+				ast_safe_execvp(1, argv[0], argv);
 			}
-			ast_safe_system(cp);
-			ast_free(cp);
 		}
 	}
 	for (v = ast_variable_browse(myrpt->cfg, myrpt->p.events); v; v = v->next) {
@@ -966,31 +969,32 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 
 static void dodispgm(struct rpt *myrpt, char *them)
 {
-	char *a;
+	char *argv[4];
 
 	if (!myrpt->p.discpgm) {
 		return;
 	}
-	if (ast_asprintf(&a, "%s %s %s &", myrpt->p.discpgm, myrpt->name, them) < 0) {
-		return;
-	}
-	ast_safe_system(a);
-	ast_free(a);
+
+	argv[0] = ast_strdupa(myrpt->p.discpgm);
+	argv[1] = myrpt->name;
+	argv[2] = them;
+	argv[3] = NULL;
+	ast_safe_execvp(1, argv[0], argv);
 }
 
 static void doconpgm(struct rpt *myrpt, char *them)
 {
-	char *a;
+	char *argv[4];
 
 	if (!myrpt->p.connpgm) {
 		return;
 	}
-	if (ast_asprintf(&a, "%s %s %s &", myrpt->p.connpgm, myrpt->name, them) < 0) {
-		return;
-	}
-	ast_safe_system(a);
-	ast_free(a);
-	return;
+
+	argv[0] = ast_strdupa(myrpt->p.connpgm);
+	argv[1] = myrpt->name;
+	argv[2] = them;
+	argv[3] = NULL;
+	ast_safe_execvp(1, argv[0], argv);
 }
 
 /*! \brief Store the output of libcurl (the OK is sent to stdout) */
