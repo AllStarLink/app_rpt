@@ -380,7 +380,7 @@ int rpt_safe_system_thread(const char *cmd)
 		return -1;
 	}
 
-	if (ast_pthread_create_detached(&threadid, NULL, safe_system_thread_worker, cmd_copy) < 0) {
+	if (ast_pthread_create_detached(&threadid, NULL, safe_system_thread_worker, cmd_copy) != 0) {
 		ast_log(LOG_ERROR, "Failed to create thread for safe system command: %s\n", cmd);
 		ast_free(cmd_copy);
 		return -1;
