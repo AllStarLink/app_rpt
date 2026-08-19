@@ -4520,8 +4520,19 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		 */
 		ast_autoservice_start(l->pchan);
 		link_process_textq(myrpt, l);
-		ast_safe_sleep(l->chan, MSWAIT * 10);  /* Allow the channel to send the text messages */
+		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
 		ast_autoservice_stop(l->pchan);
+	}
+
+	/* When the node is disconnected we need to clear the list of links.
+	 * This is done to prevent any stale links from being shared while the node
+	 * is attempting to reconnect (and is not "really" connected)
+	 */
+	if (ast_str_strlen(l->linklist) > 0) {
+		rpt_mutex_lock(&myrpt->lock);
+		ast_str_reset(l->linklist);
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_update_links(myrpt);
 	}
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
