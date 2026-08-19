@@ -911,14 +911,12 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 		} else if (action == 'S') { /* execute a shell command */
-			char *cp;
+			char *const argv[1] = {
+				(char *) cmd,
+			};
 
 			ast_verb(3, "Event on node %s doing shell command %s for condition %s\n", myrpt->name, cmd, v->value);
-			if (ast_asprintf(&cp, "%s &", cmd) < 0) {
-				return;
-			}
-			rpt_safe_system(cp);
-			ast_free(cp);
+			ast_safe_execvp(1, cmd, argv);
 		}
 	}
 	for (v = ast_variable_browse(myrpt->cfg, myrpt->p.events); v; v = v->next) {
@@ -966,30 +964,32 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 
 static void dodispgm(struct rpt *myrpt, char *them)
 {
-	char *a;
+	char *const argv[3] = {
+		(char *) myrpt->p.discpgm,
+		myrpt->name,
+		them,
+	};
 
 	if (!myrpt->p.discpgm) {
 		return;
 	}
-	if (ast_asprintf(&a, "%s %s %s &", myrpt->p.discpgm, myrpt->name, them) < 0) {
-		return;
-	}
-	rpt_safe_system(a);
-	ast_free(a);
+
+	ast_safe_execvp(1, myrpt->p.discpgm, argv);
 }
 
 static void doconpgm(struct rpt *myrpt, char *them)
 {
-	char *a;
+	char *const argv[3] = {
+		(char *) myrpt->p.connpgm,
+		myrpt->name,
+		them,
+	};
 
 	if (!myrpt->p.connpgm) {
 		return;
 	}
-	if (ast_asprintf(&a, "%s %s %s &", myrpt->p.connpgm, myrpt->name, them) < 0) {
-		return;
-	}
-	rpt_safe_system(a);
-	ast_free(a);
+
+	ast_safe_execvp(1, myrpt->p.connpgm, argv);
 	return;
 }
 

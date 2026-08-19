@@ -353,38 +353,3 @@ void update_timer(int *timer_ptr, int elap, int end_val)
 		*timer_ptr = end_val;
 	}
 }
-
-static void *safe_system_thread_worker(void *data)
-{
-	char *cmd = (char *) data;
-
-	if (cmd) {
-		ast_safe_system(cmd);
-		ast_free(cmd);
-	}
-	return NULL;
-}
-
-int rpt_safe_system(const char *cmd)
-{
-	pthread_t threadid;
-	char *cmd_copy;
-
-	if (ast_strlen_zero(cmd)) {
-		return -1;
-	}
-
-	cmd_copy = ast_strdup(cmd);
-	if (!cmd_copy) {
-		ast_log(LOG_ERROR, "Failed to allocate memory for safe system command: %s\n", cmd);
-		return -1;
-	}
-
-	if (ast_pthread_create_detached(&threadid, NULL, safe_system_thread_worker, cmd_copy) != 0) {
-		ast_log(LOG_ERROR, "Failed to create thread for safe system command: %s\n", cmd);
-		ast_free(cmd_copy);
-		return -1;
-	}
-
-	return 0;
-}

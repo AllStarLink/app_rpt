@@ -2018,8 +2018,6 @@ enum rpt_function_response function_userout(struct rpt *myrpt, char *param, char
 enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *digitbuf, enum rpt_command_source command_source,
 	struct rpt_link *mylink)
 {
-	char *cp;
-
 	if (myrpt->remote) {
 		return DC_ERROR;
 	}
@@ -2030,14 +2028,13 @@ enum rpt_function_response function_cmd(struct rpt *myrpt, char *param, char *di
 		if (*param == '#') { /* to execute asterisk cli command */
 			ast_cli_command(rpt_nullfd(), param + 2);
 		} else {
-			if (ast_asprintf(&cp, "%s &", param) < 0) {
+			char *const argv[1] = {
+				(char *) param,
+			};
+
+			if (ast_safe_execvp(1, param, argv) < 0) {
 				return DC_ERROR;
 			}
-			if (rpt_safe_system(cp) < 0) {
-				ast_free(cp);
-				return DC_ERROR;
-			}
-			ast_free(cp);
 		}
 	}
 	return DC_COMPLETE;
