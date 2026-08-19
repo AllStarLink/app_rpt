@@ -110,3 +110,10 @@ void update_timer(int *timer_ptr, int elap, int end_val);
  * \retval -1 if the buffer is full or a formatting error occurred.
  */
 int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+
+/*!
+ * \brief Execute a shell command asynchronously in a detached thread using ast_safe_system
+ * \param cmd Command string to execute
+ * \retval 0 on success, -1 on failure
+ */
+int rpt_safe_system_thread(const char *cmd);
