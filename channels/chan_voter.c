@@ -4794,10 +4794,15 @@ static void *voter_timer(void *data)
 				}
 			}
 			if (check_client_sanity) {
+				/* Traverse the client list. */
 				for (client = clients; client; client = client->next) {
+					/* If the client isn't authenticated, skip. */
 					if (!client->respdigest) {
 						continue;
 					}
+					/* Traverse the client list again, starting at the "next" client, so that we can
+					 * compare to the original client we started with.
+					 */
 					for (client1 = client->next; client1; client1 = client1->next) {
 						/* Check our original client against the other clients, and see
 						 * if there is a client with the same IP and Port. If the client
@@ -4807,11 +4812,11 @@ static void *voter_timer(void *data)
 						 * the same NAT, but the UDP port better not).
 						 */
 						if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) && (client1->sin.sin_port == client->sin.sin_port)) {
-							/* If the client isn't connected/authenticated, skip */
+							/* If the "next" or rest of the clients in the list aren't connected/authenticated, skip */
 							if (!client1->respdigest) {
 								continue;
 							}
-							/* If the IP's of both clients are 0, skip. This can happen on initial
+							/* If the IP's of both clients are 0 (0.0.0.0), skip. This can happen on initial
 							 * start, and is a not a problem until everyone is fully connected
 							 */
 							if (!client1->sin.sin_addr.s_addr && !client->sin.sin_addr.s_addr) {
@@ -4825,6 +4830,9 @@ static void *voter_timer(void *data)
 								ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
 							ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
 								client->name, client1->name);
+							/* Dump both conflicting clients by resetting their respdigest and heardfrom, forcing them
+							 * to re-authenticate.
+							 */
 							client->respdigest = 0;
 							client->heardfrom = 0;
 							client1->respdigest = 0;
@@ -4860,7 +4868,7 @@ static void *voter_reader(void *data)
 	char buf[4096], timestr[100], hasmastered;
 	char gps1[300], gps2[300];
 	char client_ip[INET_ADDRSTRLEN];
-	char client1_ip[INET_ADDRSTRLEN];
+	char list_ip[INET_ADDRSTRLEN];
 	struct sockaddr_in sin;
 	struct voter_pvt *p;
 	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0, buffer_bytes_avail;
@@ -5347,6 +5355,16 @@ static void *voter_reader(void *data)
 					 */
 					if ((client->sin.sin_addr.s_addr && (client->sin.sin_addr.s_addr != sin.sin_addr.s_addr)) ||
 						(client->sin.sin_port && (client->sin.sin_port != sin.sin_port))) {
+						ast_copy_string(client_ip, ast_inet_ntoa(client->sin.sin_addr), sizeof(client_ip));
+						ast_copy_string(list_ip, ast_inet_ntoa(sin.sin_addr), sizeof(list_ip));
+						ast_debug(2, "Packet from client %s at IP: %s:%d doesn't match client list IP: %s:%d\r\n", client->name,
+							client_ip, ntohs(client->sin.sin_port), list_ip, ntohs(sin.sin_port));
+						ast_log(LOG_ERROR, "Packet from client %s doesn't match client list IP! Resetting client connections (sanity)\n",
+							client->name);
+						/* Dump the client by resetting the respdigest and heardfrom, forcing it to
+						 * re-authenticate.
+						 */
+						client->respdigest = 0;
 						client->heardfrom = 0;
 					}
 				}
@@ -5608,66 +5626,6 @@ static void *voter_reader(void *data)
 							client->nodenum, client->name);
 					}
 					if (client->curmaster) {
-						/*! \todo VE7FET do we need to check client sanity again here? We're
-						 * already doing most of this in voter_timer
-						 */
-						if (check_client_sanity) {
-							for (client = clients; client; client = client->next) {
-								/* Find the matching Asterisk channel for this client */
-								for (p = pvts; p; p = p->next) {
-									if (p->nodenum == client->nodenum) {
-										break;
-									}
-								}
-								/* If there is no matching Asterisk channel, skip. */
-								if (!p) {
-									continue;
-								}
-								/* If the client isn't connected, skip. */
-								if (!client->respdigest) {
-									continue;
-								}
-								/* Iterate through the client list again. */
-								for (client1 = client->next; client1; client1 = client1->next) {
-									/* Skip the match to the original client we're already on. */
-									if (client1 == client) {
-										continue;
-									}
-									/* Check our original client against the other clients, and see
-									 * if there is a client with the same IP and Port. If the client
-									 * we're checking against isn't connected, skip it. Otherwise, if
-									 * we find a client with the same IP and Port, dump both clients,
-									 * as that is not sane. The IP's could match (if they are behind
-									 * the same NAT, but the UDP port better not).
-									 */
-									if ((client1->sin.sin_addr.s_addr == client->sin.sin_addr.s_addr) &&
-										(client1->sin.sin_port == client->sin.sin_port)) {
-										/* If the client isn't connected/authenticated, skip */
-										if (!client1->respdigest) {
-											continue;
-										}
-										/* If the IP's of both clients are 0, skip. This can happen on initial
-										 * start, and is a not a problem until everyone is fully connected
-										 */
-										if (!client1->sin.sin_addr.s_addr && !client->sin.sin_addr.s_addr) {
-											continue;
-										}
-
-										/* Copy the IP strings into fixed buffers so we can reuse them safely. */
-										ast_copy_string(client_ip, ast_inet_ntoa(client->sin.sin_addr), sizeof(client_ip));
-										ast_copy_string(client1_ip, ast_inet_ntoa(client1->sin.sin_addr), sizeof(client1_ip));
-										ast_debug(2, "Client %s IP: %s:%d = client %s IP: %s:%d\r\n", client->name, client_ip,
-											ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
-										ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
-											client->name, client1->name);
-										client->respdigest = 0;
-										client->heardfrom = 0;
-										client1->respdigest = 0;
-										client1->heardfrom = 0;
-									}
-								}
-							}
-						}
 						hasmastered = 0;
 						voter_xmit_master();
 						for (p = pvts; p; p = p->next) {
