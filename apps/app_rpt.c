@@ -5240,14 +5240,19 @@ static void *rpt(void *this)
 	ast_channel_setoption(myrpt->rxchannel, AST_OPTION_TONE_VERIFY, &val, sizeof(char), 0);
 
 	donodelog(myrpt, "STARTUP");
-	if (myrpt->remoterig && !ISRIG_RTX(myrpt->remoterig))
+	if (myrpt->remoterig && !ISRIG_RTX(myrpt->remoterig)) {
 		setrem(myrpt);
+	}
+
 	/* wait for telem to be done */
+	ast_autoservice_stop(myrpt->rxchannel);
 	while ((ms >= 0) && (myrpt->tele.next != &myrpt->tele)) {
 		if (ast_safe_sleep(myrpt->rxchannel, 50) == -1) {
 			ms = -1;
 		}
 	}
+	ast_autoservice_start(myrpt->rxchannel);
+
 	lastmyrx = 0;
 	myfirst = 0;
 	myrpt->lastitx = -1;
