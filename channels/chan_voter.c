@@ -780,6 +780,34 @@ static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct t
 }
 
 /*!
+ * \brief Reset the client that is passed in to force it to re-authenticate.
+ *
+ * Helper function used to clean up client connections and force re-authentication when a client
+ * needs to be dropped (such as failing a sanity check).
+ *
+ * If the client is a master voting client, also reset its connected flag.
+ *
+ * This function must be called with voter_lock locked, as it manipulates the client list.
+ *
+ * \param client                               Client connection to reset.
+ * \return                                     None.
+ */
+static void voter_client_reset_connection(struct voter_client *client)
+{
+	/* If we are cleaning up a master client, reset the masterconnected flag. */
+	if (client->curmaster) {
+		masterconnected = 0;
+	}
+	/* Clean up the rest of the timers and flags when we reset a client, forcing it to
+	 * re-authenticate.
+	 */
+	client->respdigest = 0;
+	client->heardfrom = 0;
+	client->lastheardtime = ast_tv(0, 0);
+	client->curmaster = 0;
+}
+
+/*!
  * \brief Determine the Garmin puck (GPS) offset time.
  *
  *	Calculates the difference in time between the master GPS
@@ -4763,19 +4791,19 @@ static void *voter_timer(void *data)
 				if (!ast_tvzero(client->lastheardtime) && (voter_tvdiff_ms(ast_radio_tvnow(), client->lastheardtime) >
 															  ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
 					ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
-					client->heardfrom = 0;
-					client->respdigest = 0;
-					client->lastheardtime = ast_tv(0, 0);
 
 					/* If this was the current master that disconnected, we need to gracefully drop any other
 					 * clients that were connected to the server, since we no longer have a master timing source.
 					 */
 					if (client->ismaster && client->curmaster) {
 						ast_log(LOG_WARNING, "Lost master timing client, disconnecting remaining clients.\n");
-						/* Reset the current active master flag for this client, since it disconnected. */
+						/* Reset the current active master flag for this client, since it disconnected (this
+						 * will be taken care of in voter_client_reset_connection).
+						 */
 						ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to NONE\n", client->nodenum, client->name);
-						client->curmaster = 0;
-						masterconnected = 0;
+						/* Dump the master client, forcing re-authentication. */
+						voter_client_reset_connection(client);
+						/* Traverse the client list to look for other clients. */
 						for (client1 = clients; client1; client1 = client1->next) {
 							/* Only drop connections for clients we have heard from (not all configured clients
 							 * in voter.conf), EXCEPT if the client has an ismaster flag (that lets us gracefully
@@ -4784,11 +4812,18 @@ static void *voter_timer(void *data)
 							 */
 							if (client1->heardfrom && !client1->ismaster) {
 								ast_log(LOG_WARNING, "Forcing disconnect of client: %s\n", client1->name);
-								client1->heardfrom = 0;
-								client1->respdigest = 0;
-								client1->lastheardtime = ast_tv(0, 0);
+								/* Dump the remaining clients, forcing re-authentication. */
+								voter_client_reset_connection(client1);
 							}
 						}
+						break;
+					} else {
+						/* If this was just a regular client that timed out, clean up the connection. We
+						 * clean up "normal" clients after cleaning up any master clients, since the
+						 * voter_client_reset_connection function will also reset the masterconnected flag,
+						 * and we don't want to do that without the other necessary cleanup above.
+						 */
+						voter_client_reset_connection(client);
 						break;
 					}
 				}
@@ -4830,13 +4865,9 @@ static void *voter_timer(void *data)
 								ntohs(client->sin.sin_port), client1->name, client1_ip, ntohs(client1->sin.sin_port));
 							ast_log(LOG_ERROR, "Client %s and client %s have same IP and port! Resetting client connections (sanity)\n",
 								client->name, client1->name);
-							/* Dump both conflicting clients by resetting their respdigest and heardfrom, forcing them
-							 * to re-authenticate.
-							 */
-							client->respdigest = 0;
-							client->heardfrom = 0;
-							client1->respdigest = 0;
-							client1->heardfrom = 0;
+							/* Dump both conflicting clients, forcing them to re-authenticate. */
+							voter_client_reset_connection(client);
+							voter_client_reset_connection(client1);
 						}
 					}
 				}
@@ -5125,9 +5156,8 @@ static void *voter_reader(void *data)
 						client->nodenum, client->name);
 					ast_log(LOG_WARNING, "VOTER %u: Client %s disconnect (forced)\n", client->nodenum, client->name);
 					authpacket.vp.digest = 0;
-					client->curmaster = 0;
-					client->heardfrom = 0;
-					client->respdigest = 0;
+					/* Dump the client, forcing it to re-authenticate. */
+					voter_client_reset_connection(client);
 					continue;
 				}
 				/* Is the mix mode flag being sent by the client? */
@@ -5149,9 +5179,9 @@ static void *voter_reader(void *data)
 								client->nodenum, client->name, client->buflen / 8);
 							logged_buflen_too_small = 1; /* Only want to log this once */
 						}
+						/* Reset the mix flag and dump the client, forcing it to re-authenticate. */
 						client->mix = 0;
-						client->heardfrom = 0;
-						client->respdigest = 0;
+						voter_client_reset_connection(client);
 						continue;
 					}
 					/* If client->buflen is sane, set the mix mode flag. */
@@ -5172,8 +5202,8 @@ static void *voter_reader(void *data)
 				/* Reject the connection. */
 				ast_log(LOG_WARNING, "VOTER %u: Client %s disconnect (forced)\n", client->nodenum, client->name);
 				authpacket.vp.digest = 0;
-				client->heardfrom = 0;
-				client->respdigest = 0;
+				/* Dump the client, forcing it to re-authenticate. */
+				voter_client_reset_connection(client);
 				continue;
 			}
 			/* Otherwise, we should be good to continue configuring the client.
@@ -5364,8 +5394,7 @@ static void *voter_reader(void *data)
 						/* Dump the client by resetting the respdigest and heardfrom, forcing it to
 						 * re-authenticate.
 						 */
-						client->respdigest = 0;
-						client->heardfrom = 0;
+						voter_client_reset_connection(client);
 					}
 				}
 
@@ -6197,9 +6226,8 @@ static void *voter_reader(void *data)
 						client->nodenum, client->name);
 					ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (forced)\n", client->nodenum, client->name);
 					authpacket.vp.digest = 0;
-					client->curmaster = 0;
-					client->heardfrom = 0;
-					client->respdigest = 0;
+					/* Dump the client, forcing it to re-authenticate. */
+					voter_client_reset_connection(client);
 					continue;
 				}
 				/* Is the mix mode flag being sent by the client? */
@@ -6221,9 +6249,9 @@ static void *voter_reader(void *data)
 								client->nodenum, client->name, client->buflen / 8);
 							logged_buflen_too_small = 1;
 						}
+						/* Reset the mix flag and dump the client, forcing it to re-authenticate. */
 						client->mix = 0;
-						client->heardfrom = 0;
-						client->respdigest = 0;
+						voter_client_reset_connection(client);
 						continue;
 					} else {
 						client->mix = 1;
@@ -6239,8 +6267,8 @@ static void *voter_reader(void *data)
 				/* Reject the connection. */
 				ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (forced)\n", client->nodenum, client->name);
 				authpacket.vp.digest = 0;
-				client->heardfrom = 0;
-				client->respdigest = 0;
+				/* Dump the client, forcing it to re-authenticate. */
+				voter_client_reset_connection(client);
 				continue;
 			} else {
 				authpacket.flags = 0;
