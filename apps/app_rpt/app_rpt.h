@@ -1,6 +1,6 @@
 #define VERSION_MAJOR 3
 #define VERSION_MINOR 10
-#define VERSION_PATCH 3
+#define VERSION_PATCH 4
 
 #include "asterisk/audiohook.h"
 
