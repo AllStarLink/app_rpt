@@ -782,12 +782,12 @@ static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct t
 /*!
  * \brief Reset the client that is passed in to force it to re-authenticate.
  *
- * Helper function used to clean up client connections and force re-authentication when a client
+ * This helper function is used to clean up client connections and force re-authentication when a client
  * needs to be dropped (such as failing a sanity check).
  *
  * If the client is a master voting client, also reset its connected flag.
  *
- * This function must be called with voter_lock locked, as it manipulates the client list.
+ * This function must be called with voter_lock locked, as it manipulates client variables.
  *
  * \param client                               Client connection to reset.
  * \return                                     None.
