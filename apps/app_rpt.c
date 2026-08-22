@@ -2523,10 +2523,14 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	/* cannot apply to echolink */
 	if (!strncasecmp(tmp, "echolink", 8)) {
+		/* We should not retry this node type */
+		l->retries = l->max_retries + 1;
 		goto retry;
 	}
 	/* cannot apply to tlb */
 	if (!strncasecmp(tmp, "tlb", 3)) {
+		/* We should not retry this node type */
+		l->retries = l->max_retries + 1;
 		goto retry;
 	}
 
