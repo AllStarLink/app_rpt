@@ -780,6 +780,54 @@ static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct t
 }
 
 /*!
+ * \brief Process the RSSI buffer for the client that is passed in and return the average RSSI.
+ *
+ * This helper function is used to calculate the average RSSI from all the RSSI values in the
+ * ring buffer for a client. Once values are read, they are cleared (replaced with 0), to prevent
+ * stale data persisting in the ring buffer that would affect future calls.
+ *
+ * This function must be called with voter_lock locked, as it manipulates client variables.
+ *
+ * \param client                               Client to process RSSI for.
+ * \return                                     Average RSSI from all samples in the ring buffer.
+ */
+static int get_avg_rssi(struct voter_client *client)
+{
+	int rssi_sum = 0, avg_rssi = 0, buffer_bytes_avail = 0, j;
+
+	/* Figure out where in the ring buffer we are. */
+	buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
+
+	/* Calculate the RSSI based on any RSSI samples in the buffer. When buffer_bytes_avail is >= 0,
+	 * we have at least a full FRAME_SIZE of samples to read, so we just do a straight read. When
+	 * buffer_bytes_avail is <0, the buffer has "wrapped", so we read the samples up to the end of the
+	 * buffer, and then get the rest from the beginning.
+	 */
+	if (buffer_bytes_avail >= 0) {
+		/* Get the RSSI samples from the beginning of the buffer and sum them. Replace with 0 after reading. */
+		for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
+			rssi_sum += client->rssi[j];
+			client->rssi[j] = 0;
+		}
+	} else {
+		/* The buffer has wrapped, get the RSSI samples from the end of the buffer, and then get
+		 * the rest from the beginning, add them to the sum, and replace with 0 after reading.
+		 */
+		for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
+			rssi_sum += client->rssi[j];
+			client->rssi[j] = 0;
+		}
+		for (j = 0; j < -buffer_bytes_avail; j++) {
+			rssi_sum += client->rssi[j];
+			client->rssi[j] = 0;
+		}
+	}
+	/* Take the sum of all the RSSI samples we found, get the average, and return the result for this client. */
+	avg_rssi = rssi_sum / FRAME_SIZE;
+	return avg_rssi;
+}
+
+/*!
  * \brief Reset the client that is passed in to force it to re-authenticate.
  *
  * This helper function is used to clean up client connections and force re-authentication when a client
@@ -2794,7 +2842,7 @@ static struct ast_cli_entry voter_cli[] = {
  */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
-	int i, j, x, maxprio, haslastaudio, buffer_bytes_avail, rssi_sum;
+	int i, j, x, maxprio, haslastaudio, buffer_bytes_avail;
 	struct ast_frame fr, *f1, *f2;
 	struct voter_client *client;
 	short silbuf[FRAME_SIZE];
@@ -2918,31 +2966,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
 		}
 
-		/* Calculate the RSSI based on any RSSI samples in the buffer */
-		rssi_sum = 0;
-		if (buffer_bytes_avail >= 0) {
-			/* Get the RSSI samples from the buffer and sum them. Replace with 0 after reading. */
-			for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-				rssi_sum += client->rssi[j];
-				client->rssi[j] = 0;
-			}
-		} else {
-			/* The buffer has wrapped, get the RSSI samples from the end of the buffer, and then get
-			 * the rest from the beginning, add them to the sum, and replace with 0 after reading.
-			 */
-			for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
-				rssi_sum += client->rssi[j];
-				client->rssi[j] = 0;
-			}
-			for (j = 0; j < -buffer_bytes_avail; j++) {
-				rssi_sum += client->rssi[j];
-				client->rssi[j] = 0;
-			}
-		}
-		/* Take the sum of all the RSSI samples we found, get the average, and set client->lastrssi
-		 * for this client based on the result.
+		/* Calculate the RSSI based on any RSSI samples in the buffer.
+		 * Set client->lastrssi for this client based on the result.
 		 */
-		client->lastrssi = rssi_sum / FRAME_SIZE;
+		client->lastrssi = get_avg_rssi(client);
+
 		/* If this client's RSSI is has the strongest RSSI, set maxrssi to this new value, and
 		 * mark this client as the strongest (maxclient).
 		 */
@@ -5664,7 +5692,7 @@ static void *voter_reader(void *data)
 							maxrssi = 0;
 							maxclient = NULL;
 							for (client = clients; client; client = (startagain) ? clients : client->next) {
-								int maxprio, thisprio, rssi_sum;
+								int maxprio, thisprio;
 
 								startagain = 0;
 								/* If the client doesn't belong to this VOTER instance, skip it. */
@@ -5684,31 +5712,11 @@ static void *voter_reader(void *data)
 									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
-								/* Calculate the RSSI based on any RSSI samples in the buffer */
-								rssi_sum = 0;
-								/* Figure out where in the ring buffer we are.*/
-								buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
-								/* If buffer_bytes_avail is positive, just keep getting RSSI values from the buffer
-								 * and add them to the sum.
-								 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the RSSI data
-								 * from the end of the buffer, then wrap around and get the rest from the beginning of the buffer.
+								/* Calculate the RSSI based on any RSSI samples in the buffer.
+								 * Set client->lastrssi for this client based on the result.
 								 */
-								if (buffer_bytes_avail >= 0) {
-									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-										rssi_sum += client->rssi[j];
-									}
-								} else {
-									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
-										rssi_sum += client->rssi[j];
-									}
-									for (j = 0; j < -buffer_bytes_avail; j++) {
-										rssi_sum += client->rssi[j];
-									}
-								}
-								/* Take the sum of all the RSSI samples we found, get the average, and set client->lastrssi
-								 * for this client based on the result.
-								 */
-								client->lastrssi = rssi_sum / FRAME_SIZE;
+								client->lastrssi = get_avg_rssi(client);
+
 								maxprio = thisprio = 0;
 								/* If maxclient has an overridden priority (> -2/PRIO_DEFAULT), set maxprio with the overridden
 								 * priority, otherwise, use the priority from voter.conf (normally 0, if not specifically set).
@@ -5755,25 +5763,8 @@ static void *voter_reader(void *data)
 									(client->prio == PRIO_LOCKOUT && client->prio_override < PRIO_NORMAL)) {
 									continue;
 								}
-								/* Zero out all the RSSI values for the client, starting with figuring out where
-								 * in the ring buffer we are.
-								 * If buffer_bytes_avail is positive, just keep zeroing out the RSSI values in the buffer.
-								 * If buffer_bytes_avail is negative, the buffer has wrapped. Zero out the RSSI data
-								 * from the end of the buffer, then wrap around and zero out the rest from the beginning.
-								 */
-								buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
-								if (buffer_bytes_avail >= 0) {
-									for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-										client->rssi[j] = 0;
-									}
-								} else {
-									for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
-										client->rssi[j] = 0;
-									}
-									for (j = 0; j < -buffer_bytes_avail; j++) {
-										client->rssi[j] = 0;
-									}
-								}
+								/* Zero the RSSI ring buffer (ignore the returned average RSSI). */
+								(void) get_avg_rssi(client);
 							}
 							if (!maxclient) {
 								maxrssi = 0;
