@@ -1942,7 +1942,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	if (*str == 'L') {
-		if (strlen(str) < 3) {
+		if (strlen(str) < 2) {
 			return;
 		}
 		rpt_mutex_lock(&myrpt->lock);
