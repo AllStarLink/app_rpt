@@ -600,7 +600,6 @@ struct rpt_link {
 	struct ast_channel *pchan;
 	struct ast_audiohook altaudio;
 	struct ast_str *linklist;
-	time_t linklistreceived;
 	int linklisttimer;
 	int linkunkeytocttimer;
 	struct timeval lastlinktv;
