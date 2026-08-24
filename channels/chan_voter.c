@@ -372,6 +372,21 @@ enum voter_auth_flags {
 	FLAG_MIX = (1 << 5),
 };
 
+/* Define voter ring buffer processing flags. */
+enum voter_buffer_dir_flags {
+	/*! \brief Copy from a ring buffer to a linear buffer */
+	TO_LINEAR,
+	/*! \brief Copy from a linear buffer to a ring buffer */
+	TO_RING
+};
+
+enum voter_buffer_silence_flags {
+	/*! \brief Don't clear the buffer (writing silence) after processing */
+	NO_SILENCE,
+	/*! \brief Clear the buffer by replacing samples with silence after processing */
+	DO_SILENCE
+};
+
 /* vdesc and type are used when Asterisk interacts with our module. */
 static const char vdesc[] = "radio Voter channel driver";
 static char type[] = "voter";
@@ -792,7 +807,7 @@ static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct t
  * \param buffer_len     Length of the ring buffer.
  * \param sample_len     Number of samples to copy.
  * \param to_ring        Non-zero when copying from the linear buffer to the ring buffer.
- * \param zero_it	 Non-zero when the ring buffer needs to be cleared by filling with zeros.
+ * \param zero_it	 	 Non-zero when the ring buffer needs to be cleared by filling with zeros.
  */
 static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, uint8_t *rssi_buffer, uint8_t rssi_data, int index,
 	int buffer_len, size_t sample_len, int to_ring, int zero_it)
@@ -3023,7 +3038,8 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		 * samples with silence afterwards.
 		 */
 
-		voter_buffer_process(client->audio, p->buf + AST_FRIENDLY_OFFSET, NULL, 0, client->drainindex, client->buflen, FRAME_SIZE, 0, 1);
+		voter_buffer_process(client->audio, p->buf + AST_FRIENDLY_OFFSET, NULL, 0, client->drainindex, client->buflen, FRAME_SIZE,
+			TO_LINEAR, DO_SILENCE);
 
 		/* Calculate the RSSI based on any RSSI samples in the buffer.
 		 * Set client->lastrssi for this client based on the result.
@@ -5746,7 +5762,7 @@ static void *voter_reader(void *data)
 						 * the data into the appropriate ring buffers.
 						 */
 						voter_buffer_process(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1),
-							client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], index, client->buflen, flen, 1, 0);
+							client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], index, client->buflen, flen, TO_RING, NO_SILENCE);
 						/* At this point, for ADPCM audio clients, we've copied the audio packets off the wire
 						 * into the client's ring buffer, so we don't need f1 any longer.
 						 */
@@ -6023,7 +6039,7 @@ static void *voter_reader(void *data)
 								}
 								/* Process the selected voting client's (maxclient) audio, sending it to the Asterisk channel buffer. */
 								voter_buffer_process(maxclient->audio, p->buf + AST_FRIENDLY_OFFSET, NULL, 0,
-									maxclient->drainindex, maxclient->buflen, FRAME_SIZE, 0, 0);
+									maxclient->drainindex, maxclient->buflen, FRAME_SIZE, TO_LINEAR, NO_SILENCE);
 								/* Cycle through all the clients, if recording has been enabled with voter record,
 								 * write the audio and RSSI for each client to the specified file.
 								 * Finish by writing silence into the client's audio buffer (so we don't leave
@@ -6052,7 +6068,7 @@ static void *voter_reader(void *data)
 										 * in this case.
 										 */
 										voter_buffer_process(client->audio, rec.audio, NULL, 0, client->drainindex,
-											client->buflen, FRAME_SIZE, 0, 0);
+											client->buflen, FRAME_SIZE, TO_LINEAR, NO_SILENCE);
 										/* Write out the buffer to the recording file. */
 										fwrite(&rec, 1, sizeof(rec), p->recfp);
 									}
@@ -6062,7 +6078,8 @@ static void *voter_reader(void *data)
 									 * Calling voter_buffer_process with the second arg of NULL will skip the linear->ring copy
 									 * process, and just fill client->audio with silence (zero_it flag is true).
 									 */
-									voter_buffer_process(client->audio, NULL, NULL, 0, client->drainindex, client->buflen, FRAME_SIZE, 1, 1);
+									voter_buffer_process(client->audio, NULL, NULL, 0, client->drainindex, client->buflen,
+										FRAME_SIZE, TO_RING, DO_SILENCE);
 								}
 								/* If the PL filter or host de-emphasis options are set for this instance,
 								 * run the audio through their respective DSP filters.
