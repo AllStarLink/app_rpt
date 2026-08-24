@@ -509,7 +509,7 @@ struct voter_pvt {
 	unsigned int nodenum; /* Node number associated with this instance */
 	struct voter_pvt *next;
 	struct ast_frame fr;
-	char buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
+	uint8_t buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
 	struct ast_module_user *u;
 	struct timeval lastrxtime;
 	unsigned char mwp;
@@ -777,6 +777,82 @@ static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct t
 		timediffms = INT32_MAX;
 	}
 	return timediffms;
+}
+
+/*!
+ * \brief This helper function is used to service the ring buffers.
+ * In some cases, we send processed data to the Asterisk channel, in other cases
+ * we read in packets off the wire from clients and store it in the client's
+ * ring buffers for recording, and we can also write out the ring buffer to a file
+ * for recording VOTER data.
+ *
+ * \param ring_buffer    Ring buffer to read from or write to.
+ * \param linear_buffer  Linear sample buffer to read from or write to.
+ * \param index          Starting index in the ring buffer.
+ * \param buffer_len     Length of the ring buffer.
+ * \param sample_len     Number of samples to copy.
+ * \param to_ring        Non-zero when copying from the linear buffer to the ring buffer.
+ * \param zero_it	 Non-zero when the ring buffer needs to be cleared by filling with zeros.
+ */
+static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, uint8_t *rssi_buffer, uint8_t rssi_data, int index,
+	int buffer_len, size_t sample_len, int to_ring, int zero_it)
+{
+	int buffer_bytes_avail;
+
+	/* Determine how many bytes are available in the ring buffer to process. When buffer_bytes_avail is >= 0,
+	 * we have at least a full FRAME_SIZE of samples to read/write, so we just do a straight read/write. When
+	 * buffer_bytes_avail is <0, the buffer has "wrapped", so we read/write the samples up to the end of the
+	 * buffer, and then get/put the rest from the beginning.
+	 *
+	 * Client buffers are the "ring buffers".
+	 * Asterisk channel/file are the "linear buffers".
+	 */
+	buffer_bytes_avail = buffer_len - (index + sample_len);
+
+	if (buffer_bytes_avail >= 0) {
+		/* At least a full FRAME_INDEX is available, so do a straight copy. */
+		if (to_ring) {
+			/* Copy the data from a linear buffer into a ring buffer, but only if linear_buffer is not NULL.
+			 * This allows is to pass a NULL for linear_buffer, if we just want to be able to write silence
+			 * into the client's ring buffer (by setting the zero_it flag on its own).
+			 */
+			if (linear_buffer) {
+				memcpy(ring_buffer + index, linear_buffer, sample_len);
+			}
+			/* If we are reading data off the wire, we have to read in the client's RSSI data too. */
+			if (rssi_data) {
+				memset(rssi_buffer + index, rssi_data, sample_len);
+			}
+		} else {
+			/* Copy the data from a ring buffer into a linear buffer. */
+			memcpy(linear_buffer, ring_buffer + index, sample_len);
+		}
+		/* When zero_it is true, replace the existing values in the ring buffer with silence. Note,
+		 * we only ever need to wipe the ring buffer, not a linear buffer.
+		 */
+		if (zero_it) {
+			memset(ring_buffer + index, ULAW_SILENCE, sample_len);
+		}
+	} else {
+		/* The buffer has "wrapped", so process the end of the buffer, then loop to the beginning for the rest. */
+		if (to_ring) {
+			if (linear_buffer) {
+				memcpy(ring_buffer + index, linear_buffer, sample_len + buffer_bytes_avail);
+				memcpy(ring_buffer, linear_buffer + (sample_len + buffer_bytes_avail), -buffer_bytes_avail);
+			}
+			if (rssi_data) {
+				memset(rssi_buffer + index, rssi_data, sample_len + buffer_bytes_avail);
+				memset(rssi_buffer, rssi_data, -buffer_bytes_avail);
+			}
+		} else {
+			memcpy(linear_buffer, ring_buffer + index, sample_len + buffer_bytes_avail);
+			memcpy(linear_buffer + (sample_len + buffer_bytes_avail), ring_buffer, -buffer_bytes_avail);
+		}
+		if (zero_it) {
+			memset(ring_buffer + index, ULAW_SILENCE, sample_len + buffer_bytes_avail);
+			memset(ring_buffer, ULAW_SILENCE, -buffer_bytes_avail);
+		}
+	}
 }
 
 /*!
@@ -2842,7 +2918,7 @@ static struct ast_cli_entry voter_cli[] = {
  */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
-	int i, j, x, maxprio, haslastaudio, buffer_bytes_avail;
+	int i, j, x, maxprio, haslastaudio;
 	struct ast_frame fr, *f1, *f2;
 	struct voter_client *client;
 	short silbuf[FRAME_SIZE];
@@ -2940,31 +3016,14 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				continue;
 			}
 		}
-		/* At this point, we should have selected the mix client with the highest configured
-		 * priority (if there were any priorities configured). We will now proceed
-		 * to send the audio from this highest priority client.
+		/* At this point, we will have selected the mix client with the highest configured
+		 * priority (if there were any priorities configured), or we will iterate on all mix
+		 * clients if they have equal (ie unset) priorities. Process the audio from the selected
+		 * client, or clients, sending it to the Asterisk channel buffer and replacing the audio
+		 * samples with silence afterwards.
 		 */
-		/* Figure out where in the ring buffer we are.
-		 * If buffer_bytes_avail is positive, we still have data available to process, send the
-		 * audio to the Asterisk channel, and then replace it with silence.
-		 * If buffer_bytes_avail is negative, we have wrapped around the ring buffer. Get the
-		 * remaining bytes from the end of the buffer, and then get the rest from the beginning of the buffer.
-		 * After sending that audio to the Asterisk channel, replace it with silence.
-		 */
-		buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
-		if (buffer_bytes_avail >= 0) {
-			/* Send the audio to the Asterisk channel, then replace it with silence. */
-			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE);
-			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
-		} else {
-			/* The buffer has wrapped, get the audio from the end of the buffer, and then get the rest from the beginning,
-			 * send it to the Asterisk channel, then replace it with silence.
-			 */
-			memcpy(p->buf + AST_FRIENDLY_OFFSET, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
-			memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + buffer_bytes_avail), client->audio, -buffer_bytes_avail);
-			memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
-			memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
-		}
+
+		voter_buffer_process(client->audio, p->buf + AST_FRIENDLY_OFFSET, NULL, 0, client->drainindex, client->buflen, FRAME_SIZE, 0, 1);
 
 		/* Calculate the RSSI based on any RSSI samples in the buffer.
 		 * Set client->lastrssi for this client based on the result.
@@ -2992,17 +3051,30 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			ast_frfree(f1);
 			return 0;
 		}
+		/* sp1 points to f1, the current accumulated audio in slin PCM. */
 		sp1 = f1->data.ptr;
+		/* sp2 points to f2, the current mix client's translated audio. */
 		sp2 = f2->data.ptr;
 		if (!haslastaudio) {
 			memcpy(p->lastaudio, sp1, FRAME_SIZE * 2);
 			haslastaudio = 1;
 		}
 		memcpy(client->lastaudio, sp2, FRAME_SIZE * 2);
+		/* This is the actual audio mixing stage. This loop combines the 20ms (160 samples (FRAME_SIZE))
+		 * audio frames, while allowing a configured higher-priority client to take exclusive
+		 * precedence instead of being mixed with existing audio. The completed f1 is then either
+		 * sent onward or replaced with silence if no usable client exists.
+		 */
 		for (i = 0; i < FRAME_SIZE; i++) {
 			if (maxprio && client->lastrssi) {
+				/* If a higher priority mix client is active, and this client has
+				 * RSSI, it replaces the accumulated audio.
+				 */
 				j = sp2[i];
 			} else {
+				/* Otherwise, it adds the client's audio to the accumulated audio
+				 * (mixing it in).
+				 */
 				j = sp1[i] + sp2[i];
 			}
 			if (j > 32767) {
@@ -3014,8 +3086,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		}
 		ast_frfree(f2);
 	}
-	/* Reset a bunch of stuff if maxclient is NULL. */
-	if (!maxclient) { /* If nothing there */
+	/* When maxclient is NULL, no voting or mix-mode client supplied usable
+	 * audio for this cycle. If this is the case, we create a 20ms (160 sample (FRAME_SIZE))
+	 * silent slin audio frame and queue it to the Asterisk channel.
+	 */
+	if (!maxclient) {
 		/*!
 		 * \todo p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
 		 * For now, this prevents a crash from queuing a frame to a NULL channel.
@@ -3039,8 +3114,13 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		p->lingercount = 0;
 		p->winner = NULL;
 		p->lastwon = NULL;
+		/* Advance each client's ring buffer drain position, ensuring the buffers continue
+		 * moving forward, even during silence.
+		 */
 		incr_drainindex(p);
+		/* Queue the silence frame to Asterisk. */
 		ast_queue_frame(p->owner, &fr);
+		/* Free the frame, and return 0, indicating no actual client audio was processed. */
 		ast_frfree(f1);
 		return 0;
 	}
@@ -3093,6 +3173,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 
 		ast_frfree(f2);
 	}
+	/* If x == 0, no DTMF was detected, so just queue the normal audio frame to
+	 * Asterisk. If x == 1, DTMF was detected (and processed by the DSP), so we
+	 * create and queue a silent slin frame instead, muting the DTMF from being
+	 * transmitted.
+	 */
 	if (!x) {
 		ast_queue_frame(p->owner, f1);
 	} else {
@@ -4924,13 +5009,14 @@ static void *voter_timer(void *data)
  */
 static void *voter_reader(void *data)
 {
-	char buf[4096], timestr[100], hasmastered;
+	uint8_t buf[4096];
+	char timestr[100], hasmastered;
 	char gps1[300], gps2[300];
 	char client_ip[INET_ADDRSTRLEN];
 	char list_ip[INET_ADDRSTRLEN];
 	struct sockaddr_in sin;
 	struct voter_pvt *p;
-	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0, buffer_bytes_avail;
+	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
@@ -5642,29 +5728,28 @@ static void *voter_reader(void *data)
 							fr.src = __PRETTY_FUNCTION__;
 							f1 = ast_translate(p->adpcmin, &fr, 0);
 						}
+						/* Figure out and set what ring buffer index (drainindex) to use,
+						 * based on whether this is a ulaw or ADPCM client.
+						 */
 						if (!client->doadpcm) {
 							index = (index + client->drainindex) % client->buflen;
 						} else {
 							index = (index + client->drainindex_40ms) % client->buflen;
 						}
-						flen = (f1) ? f1->datalen : FRAME_SIZE;
-						/* Figure out where in the ring buffer we are. */
-						buffer_bytes_avail = client->buflen - (index + flen);
-						/* If buffer_bytes_avail is positive, just keep filling client->audio and client->rssi
-						 * from the buffer.
-						 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the data from the end of the
-						 * buffer, then wrap around and get the rest from the beginning of the buffer.
+						/* Set the sample length, based on whether ulaw or ADPCM audio is being used by
+						 * the client. If f1 exists, it contains translated ADPCM audio, so flen becomes the
+						 * length of the ADPCM buffer. If f1 is null, we're using ulaw audio, so flen
+						 * becomes the standard FRAME_SIZE.
 						 */
-						if (buffer_bytes_avail >= 0) {
-							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen);
-							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen);
-						} else {
-							memcpy(client->audio + index, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1), flen + buffer_bytes_avail);
-							memset(client->rssi + index, buf[sizeof(VOTER_PACKET_HEADER)], flen + buffer_bytes_avail);
-							memcpy(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1) + (flen + buffer_bytes_avail),
-								-buffer_bytes_avail);
-							memset(client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], -buffer_bytes_avail);
-						}
+						flen = (f1) ? f1->datalen : FRAME_SIZE;
+						/* Read the packets off the wire for each client, and process the audio and RSSI, putting
+						 * the data into the appropriate ring buffers.
+						 */
+						voter_buffer_process(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1),
+							client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], index, client->buflen, flen, 1, 0);
+						/* At this point, for ADPCM audio clients, we've copied the audio packets off the wire
+						 * into the client's ring buffer, so we don't need f1 any longer.
+						 */
 						if (f1) {
 							ast_frfree(f1);
 						}
@@ -5936,20 +6021,9 @@ static void *voter_reader(void *data)
 									p->testcycle = 0;
 									p->testindex = 0;
 								}
-								/* Figure out where in the ring buffer we are. */
-								buffer_bytes_avail = maxclient->buflen - (maxclient->drainindex + FRAME_SIZE);
-								/* Copy the audio frame from the voted client into the channel (ring) buffer. */
-								/* If buffer_bytes_avail is positive, get the audio from the current position and
-								 * put it in the Asterisk channel buffer.
-								 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the audio
-								 * from the end of the buffer, then wrap around and get the rest from the beginning.
-								 */
-								if (buffer_bytes_avail >= 0) {
-									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE);
-								} else {
-									memcpy(p->buf + AST_FRIENDLY_OFFSET, maxclient->audio + maxclient->drainindex, FRAME_SIZE + buffer_bytes_avail);
-									memcpy(p->buf + AST_FRIENDLY_OFFSET + (FRAME_SIZE + buffer_bytes_avail), maxclient->audio, -buffer_bytes_avail);
-								}
+								/* Process the selected voting client's (maxclient) audio, sending it to the Asterisk channel buffer. */
+								voter_buffer_process(maxclient->audio, p->buf + AST_FRIENDLY_OFFSET, NULL, 0,
+									maxclient->drainindex, maxclient->buflen, FRAME_SIZE, 0, 0);
 								/* Cycle through all the clients, if recording has been enabled with voter record,
 								 * write the audio and RSSI for each client to the specified file.
 								 * Finish by writing silence into the client's audio buffer (so we don't leave
@@ -5964,11 +6038,6 @@ static void *voter_reader(void *data)
 									if (client->mix) {
 										continue;
 									}
-									/* Figure out where in the ring buffer we are. */
-									buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
-									/* If a file pointer was set with voter record, write out the raw audio
-									 * and RSSI for each client to the specified file.
-									 */
 									if (p->recfp) {
 										if (!hasmastered) {
 											hasmastered = 1;
@@ -5978,30 +6047,22 @@ static void *voter_reader(void *data)
 										}
 										ast_copy_string(rec.name, client->name, sizeof(rec.name));
 										rec.rssi = client->lastrssi;
-										/* If buffer_bytes_avail is positive, get the audio from the current position.
-										 * If buffer_bytes_avail is negative, the buffer has wrapped. Get the audio
-										 * from the end of the buffer, then wrap around and get the rest from the beginning.
+										/* Copy the client->audio into rec.audio for each client (to_ring flag is false).
+										 * We don't want to overwrite the client->audio buffer with silence (zero_it is false)
+										 * in this case.
 										 */
-										if (buffer_bytes_avail >= 0) {
-											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE);
-										} else {
-											memcpy(rec.audio, client->audio + client->drainindex, FRAME_SIZE + buffer_bytes_avail);
-											memcpy(rec.audio + FRAME_SIZE + buffer_bytes_avail, client->audio, -buffer_bytes_avail);
-										}
+										voter_buffer_process(client->audio, rec.audio, NULL, 0, client->drainindex,
+											client->buflen, FRAME_SIZE, 0, 0);
 										/* Write out the buffer to the recording file. */
 										fwrite(&rec, 1, sizeof(rec), p->recfp);
 									}
-									/* Replace the audio in the ring buffer for each client with silence.
-									 * If buffer_bytes_avail is positive, just keep zeroing out the audio in the buffer.
-									 * If buffer_bytes_avail is negative, the buffer has wrapped. Zero out the audio
-									 * from the end of the buffer, then wrap around and zero out the rest from the beginning.
+									/* Now that we wrote out any necessary recordings, we are done with the audio. Replace
+									 * the audio in the ring buffer for each client with silence.
+									 *
+									 * Calling voter_buffer_process with the second arg of NULL will skip the linear->ring copy
+									 * process, and just fill client->audio with silence (zero_it flag is true).
 									 */
-									if (buffer_bytes_avail >= 0) {
-										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE);
-									} else {
-										memset(client->audio + client->drainindex, ULAW_SILENCE, FRAME_SIZE + buffer_bytes_avail);
-										memset(client->audio, ULAW_SILENCE, -buffer_bytes_avail);
-									}
+									voter_buffer_process(client->audio, NULL, NULL, 0, client->drainindex, client->buflen, FRAME_SIZE, 1, 1);
 								}
 								/* If the PL filter or host de-emphasis options are set for this instance,
 								 * run the audio through their respective DSP filters.
