@@ -812,7 +812,7 @@ static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct t
  * \param zero_it	 	 Non-zero when the ring buffer needs to be cleared by filling with zeros.
  */
 static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, uint8_t *rssi_buffer, uint8_t rssi_data, int index,
-	int buffer_len, size_t sample_len, int to_ring, int zero_it)
+	int buffer_len, size_t sample_len, enum voter_buffer_dir_flags direction, enum voter_buffer_silence_flags silence)
 {
 	int buffer_bytes_avail;
 
@@ -828,10 +828,10 @@ static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, u
 
 	if (buffer_bytes_avail >= 0) {
 		/* At least a full FRAME_INDEX is available, so do a straight copy. */
-		if (to_ring) {
+		if (direction == TO_RING) {
 			/* Copy the data from a linear buffer into a ring buffer, but only if linear_buffer is not NULL.
 			 * This allows is to pass a NULL for linear_buffer, if we just want to be able to write silence
-			 * into the client's ring buffer (by setting the zero_it flag on its own).
+			 * into the client's ring buffer (by setting the silence flag on its own).
 			 */
 			if (linear_buffer) {
 				memcpy(ring_buffer + index, linear_buffer, sample_len);
@@ -844,15 +844,15 @@ static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, u
 			/* Copy the data from a ring buffer into a linear buffer. */
 			memcpy(linear_buffer, ring_buffer + index, sample_len);
 		}
-		/* When zero_it is true, replace the existing values in the ring buffer with silence. Note,
+		/* When silence is true, replace the existing values in the ring buffer with silence. Note,
 		 * we only ever need to wipe the ring buffer, not a linear buffer.
 		 */
-		if (zero_it) {
+		if (silence == DO_SILENCE) {
 			memset(ring_buffer + index, ULAW_SILENCE, sample_len);
 		}
 	} else {
 		/* The buffer has "wrapped", so process the end of the buffer, then loop to the beginning for the rest. */
-		if (to_ring) {
+		if (direction == TO_RING) {
 			if (linear_buffer) {
 				memcpy(ring_buffer + index, linear_buffer, sample_len + buffer_bytes_avail);
 				memcpy(ring_buffer, linear_buffer + (sample_len + buffer_bytes_avail), -buffer_bytes_avail);
@@ -865,7 +865,7 @@ static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, u
 			memcpy(linear_buffer, ring_buffer + index, sample_len + buffer_bytes_avail);
 			memcpy(linear_buffer + (sample_len + buffer_bytes_avail), ring_buffer, -buffer_bytes_avail);
 		}
-		if (zero_it) {
+		if (silence == DO_SILENCE) {
 			memset(ring_buffer + index, ULAW_SILENCE, sample_len + buffer_bytes_avail);
 			memset(ring_buffer, ULAW_SILENCE, -buffer_bytes_avail);
 		}
