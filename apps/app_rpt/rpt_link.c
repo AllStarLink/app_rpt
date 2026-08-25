@@ -697,6 +697,43 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
+/*!
+ * \brief Wait for an outbound link channel to reach AST_STATE_UP.
+ *
+ * Outbound Echolink and TLB calls return from ast_call while still ringing;
+ * the remote answer arrives asynchronously via channel read processing.
+ *
+ * \return 0 if the channel is up, -1 on hangup or timeout.
+ */
+static int rpt_wait_for_link_up(struct ast_channel *chan, int timeout_ms)
+{
+	int elapsed = 0;
+	const int poll_ms = 50;
+	struct ast_frame *f;
+
+	while (elapsed < timeout_ms) {
+		if (ast_check_hangup(chan)) {
+			return -1;
+		}
+		if (ast_channel_state(chan) == AST_STATE_UP) {
+			return 0;
+		}
+		if (ast_waitfor(chan, poll_ms) == chan) {
+			f = ast_read(chan);
+			if (!f) {
+				return -1;
+			}
+			ast_frfree(f);
+			if (ast_channel_state(chan) == AST_STATE_UP) {
+				return 0;
+			}
+		}
+		elapsed += poll_ms;
+	}
+
+	return ast_channel_state(chan) == AST_STATE_UP ? 0 : -1;
+}
+
 void *rpt_link_connect(void *data)
 {
 	char *s, *s1, *tele, *cp;
@@ -902,8 +939,8 @@ void *rpt_link_connect(void *data)
 	ao2_ref(cap, -1);
 
 	if (ast_channel_state(l->chan) != AST_STATE_UP) {
-		if (ast_answer(l->chan) < 0) {
-			ast_log(LOG_WARNING, "Cannot answer channel %s\n", ast_channel_name(l->chan));
+		if (rpt_wait_for_link_up(l->chan, MAXCONNECTTIME) < 0) {
+			ast_log(LOG_WARNING, "Link channel %s not up after dial\n", ast_channel_name(l->chan));
 			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 			rpt_telemetry(myrpt, CONNFAIL, NULL);
 			ast_hangup(l->pchan);
@@ -921,15 +958,6 @@ void *rpt_link_connect(void *data)
 				ao2_ref(l, -1);
 				goto cleanup;
 			}
-		}
-		if (ast_channel_state(l->chan) != AST_STATE_UP) {
-			ast_log(LOG_WARNING, "Link channel %s not up after dial\n", ast_channel_name(l->chan));
-			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
-			rpt_telemetry(myrpt, CONNFAIL, NULL);
-			ast_hangup(l->pchan);
-			ast_hangup(l->chan);
-			ao2_ref(l, -1);
-			goto cleanup;
 		}
 	}
 
