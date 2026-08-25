@@ -901,6 +901,38 @@ void *rpt_link_connect(void *data)
 
 	ao2_ref(cap, -1);
 
+	if (ast_channel_state(l->chan) != AST_STATE_UP) {
+		if (ast_answer(l->chan) < 0) {
+			ast_log(LOG_WARNING, "Cannot answer channel %s\n", ast_channel_name(l->chan));
+			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			ast_hangup(l->pchan);
+			ast_hangup(l->chan);
+			ao2_ref(l, -1);
+			goto cleanup;
+		}
+		if (l->name[0] > '9') {
+			if (ast_safe_sleep(l->chan, 500) == -1) {
+				ast_debug(3, "Channel %s hung up\n", ast_channel_name(l->chan));
+				rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+				rpt_telemetry(myrpt, CONNFAIL, NULL);
+				ast_hangup(l->pchan);
+				ast_hangup(l->chan);
+				ao2_ref(l, -1);
+				goto cleanup;
+			}
+		}
+		if (ast_channel_state(l->chan) != AST_STATE_UP) {
+			ast_log(LOG_WARNING, "Link channel %s not up after dial\n", ast_channel_name(l->chan));
+			rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
+			rpt_telemetry(myrpt, CONNFAIL, NULL);
+			ast_hangup(l->pchan);
+			ast_hangup(l->chan);
+			ao2_ref(l, -1);
+			goto cleanup;
+		}
+	}
+
 	if (rpt_conf_add(l->pchan, myrpt, RPT_CONF)) {
 		rpt_telem_select(myrpt, connect_data->command_source, connect_data->mylink);
 		rpt_telemetry(myrpt, CONNFAIL, NULL);
