@@ -701,7 +701,8 @@ void rpt_update_links(struct rpt *myrpt)
  * \brief Wait for an outbound link channel to reach AST_STATE_UP.
  *
  * Outbound Echolink and TLB calls return from ast_call while still ringing;
- * the remote answer arrives asynchronously via channel read processing.
+ * the remote answer arrives asynchronously via AST_CONTROL_ANSWER.  That
+ * frame is re-queued so process_link_channel() can perform link setup.
  *
  * \return 0 if the channel is up, -1 on hangup or timeout.
  */
@@ -710,6 +711,11 @@ static int rpt_wait_for_link_up(struct ast_channel *chan, int timeout_ms)
 	int elapsed = 0;
 	const int poll_ms = 50;
 	struct ast_frame *f;
+	struct ast_frame answer = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_ANSWER,
+		.src = __PRETTY_FUNCTION__,
+	};
 
 	while (elapsed < timeout_ms) {
 		if (ast_check_hangup(chan)) {
@@ -721,6 +727,15 @@ static int rpt_wait_for_link_up(struct ast_channel *chan, int timeout_ms)
 		if (ast_waitfor(chan, poll_ms) > 0) {
 			f = ast_read(chan);
 			if (!f) {
+				return -1;
+			}
+			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_ANSWER) {
+				ast_frfree(f);
+				ast_queue_frame(chan, &answer);
+				return 0;
+			}
+			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
+				ast_frfree(f);
 				return -1;
 			}
 			ast_frfree(f);
