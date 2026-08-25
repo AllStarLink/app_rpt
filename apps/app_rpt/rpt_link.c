@@ -718,7 +718,7 @@ static int rpt_wait_for_link_up(struct ast_channel *chan, int timeout_ms)
 		if (ast_channel_state(chan) == AST_STATE_UP) {
 			return 0;
 		}
-		if (ast_waitfor(chan, poll_ms) == chan) {
+		if (ast_waitfor(chan, poll_ms) > 0) {
 			f = ast_read(chan);
 			if (!f) {
 				return -1;
