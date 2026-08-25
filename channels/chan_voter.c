@@ -808,8 +808,8 @@ static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct t
  * \param index          Starting index in the ring buffer.
  * \param buffer_len     Length of the ring buffer.
  * \param sample_len     Number of samples to copy.
- * \param to_ring        Non-zero when copying from the linear buffer to the ring buffer.
- * \param zero_it	 	 Non-zero when the ring buffer needs to be cleared by filling with zeros.
+ * \param direction      Non-zero when copying from the linear buffer to the ring buffer.
+ * \param silence	 	 Non-zero when the ring buffer needs to be cleared by filling with zeros.
  */
 static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, uint8_t *rssi_buffer, uint8_t rssi_data, int index,
 	int buffer_len, size_t sample_len, enum voter_buffer_dir_flags direction, enum voter_buffer_silence_flags silence)
@@ -876,8 +876,8 @@ static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, u
  * \brief Process the RSSI buffer for the client that is passed in and return the average RSSI.
  *
  * This helper function is used to calculate the average RSSI from all the RSSI values in the
- * ring buffer for a client. Once values are read, they are cleared (replaced with 0), to prevent
- * stale data persisting in the ring buffer that would affect future calls.
+ * ring buffer for a client. Once values are read, they are optionally cleared (replaced with 0),
+ * to prevent stale data persisting in the ring buffer that would affect future calls.
  *
  * This function must be called with voter_lock locked, as it manipulates client variables.
  *
@@ -887,39 +887,26 @@ static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, u
  */
 static int get_avg_rssi(struct voter_client *client, int consume)
 {
-	int rssi_sum = 0, avg_rssi = 0, buffer_bytes_avail = 0, j;
+	int rssi_sum = 0, avg_rssi = 0, i, index = 0;
 
-	/* Figure out where in the ring buffer we are. */
-	buffer_bytes_avail = client->buflen - (client->drainindex + FRAME_SIZE);
-
-	/* Calculate the RSSI based on any RSSI samples in the buffer. When buffer_bytes_avail is >= 0,
-	 * we have at least a full FRAME_SIZE of samples to read, so we just do a straight read. When
-	 * buffer_bytes_avail is <0, the buffer has "wrapped", so we read the samples up to the end of the
-	 * buffer, and then get the rest from the beginning.
-	 */
-	if (buffer_bytes_avail >= 0) {
-		/* Get the RSSI samples from the beginning of the buffer and sum them. Replace with 0 after reading. */
-		for (j = client->drainindex; j < client->drainindex + FRAME_SIZE; j++) {
-			rssi_sum += client->rssi[j];
-			if (consume) {
-				client->rssi[j] = 0;
-			}
-		}
-	} else {
-		/* The buffer has wrapped, get the RSSI samples from the end of the buffer, and then get
-		 * the rest from the beginning, add them to the sum, and replace with 0 after reading.
+	for (i = 0; i < FRAME_SIZE; i++) {
+		/* Calculate our index in the ring buffer. Normally, this expression will
+		 * return index = (client->drainindex + i), and we advance through the ring buffer.
+		 * However, when (client->drainindex + i) == client->buflen, then the modulo operator
+		 * makes this expression return index = 0, wrapping index back to the beginning of
+		 * the ring buffer (at which point we continue advancing from the beginning).
 		 */
-		for (j = client->drainindex; j < client->drainindex + (FRAME_SIZE + buffer_bytes_avail); j++) {
-			rssi_sum += client->rssi[j];
-			if (consume) {
-				client->rssi[j] = 0;
-			}
-		}
-		for (j = 0; j < -buffer_bytes_avail; j++) {
-			rssi_sum += client->rssi[j];
-			if (consume) {
-				client->rssi[j] = 0;
-			}
+		index = (client->drainindex + i) % client->buflen;
+
+		/* Sum up all the RSSI values we have in the buffer. */
+		rssi_sum += client->rssi[index];
+
+		/* Optionally, clear the value after we read it, so we don't leave stale data behind. We
+		 * normally do this, but there is a case with multiple clients and priorities where we
+		 * need to leave the data in place while we figure out who the actual winner is.
+		 */
+		if (consume) {
+			client->rssi[index] = 0;
 		}
 	}
 	/* Take the sum of all the RSSI samples we found, get the average, and return the result for this client. */
