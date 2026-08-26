@@ -808,8 +808,10 @@ static unsigned int voter_tvdiff_ms(const struct timeval endtime, const struct t
  * \param index          Starting index in the ring buffer.
  * \param buffer_len     Length of the ring buffer.
  * \param sample_len     Number of samples to copy.
- * \param direction      Non-zero when copying from the linear buffer to the ring buffer.
- * \param silence	 	 Non-zero when the ring buffer needs to be cleared by filling with zeros.
+ * \param direction      TO_RING when copying from the linear buffer to the ring buffer; TO_LINEAR
+ *						 when copying from the ring buffer to an Asterisk channel/file.
+ * \param silence	 	 DO_SILENCE when the ring buffer needs to be cleared by filling with zeros;
+ * 						 NO_SILENCE when the ring buffer doesn't need to be cleared.
  */
 static void voter_buffer_process(uint8_t *ring_buffer, uint8_t *linear_buffer, uint8_t *rssi_buffer, uint8_t rssi_data, int index,
 	int buffer_len, size_t sample_len, enum voter_buffer_dir_flags direction, enum voter_buffer_silence_flags silence)
