@@ -892,11 +892,17 @@ static int get_avg_rssi(struct voter_client *client, int consume)
 	int rssi_sum = 0, avg_rssi = 0, i, index = 0;
 
 	for (i = 0; i < FRAME_SIZE; i++) {
-		/* Calculate our index in the ring buffer. Normally, this expression will
-		 * return index = (client->drainindex + i), and we advance through the ring buffer.
-		 * However, when (client->drainindex + i) == client->buflen, then the modulo operator
+		/* Calculate our index in the ring buffer.
+		 * When (client->drainindex + i) < client->buflen, the expression will return an
+		 * index = (client->drainindex + i), and we advance through the ring buffer.
+		 *
+		 * When (client->drainindex + i) == client->buflen, then the modulo operator
 		 * makes this expression return index = 0, wrapping index back to the beginning of
-		 * the ring buffer (at which point we continue advancing from the beginning).
+		 * the ring buffer.
+		 *
+		 * Then, for any remaining samples (until i < FRAME_SIZE) where
+		 * (client->drainindex + i) > client->buflen, the expression starts by returning
+		 * index = 1, and continues advancing from the beginning of the ring buffer.
 		 */
 		index = (client->drainindex + i) % client->buflen;
 
