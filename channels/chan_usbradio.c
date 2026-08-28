@@ -2300,13 +2300,8 @@ static void *usbradio_audio_thread(void *arg)
 			}
 			ast_mutex_unlock(&o->txqlock);
 
-			/* Intentional keyed TX queue cushion */
-			if (num_frames <= 3 && (o->txkeyed || o->txtestkey)) {
-				last_frame_time = ast_radio_tvnow();
-			}
-
 			/* One queued frame per available output block */
-			if (tx_write_ready && num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
+			if (tx_write_ready) {
 				if (usbradio_feed_tx_queue(o, 1)) {
 					o->didpmrtx = 1;
 					last_frame_time = ast_radio_tvnow();
