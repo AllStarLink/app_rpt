@@ -2342,13 +2342,8 @@ static void *usbradio_audio_thread(void *arg)
 			}
 			ast_mutex_unlock(&o->txqlock);
 
-			/* Intentional keyed TX queue cushion */
-			if (num_frames <= 3 && (o->txkeyed || o->txtestkey)) {
-				last_frame_time = ast_radio_tvnow();
-			}
-
 			/* One queued frame per available output block */
-			if (tx_write_ready && num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
+			if (tx_write_ready) {
 				if (usbradio_feed_tx_queue(o, 1)) {
 					o->didpmrtx = 1;
 					last_frame_time = ast_radio_tvnow();
@@ -2365,11 +2360,11 @@ static void *usbradio_audio_thread(void *arg)
 			ast_mutex_unlock(&o->txqlock);
 			if (!txq_threshold_logged) {
 				if (txq_high_water > TXQ_DELAY_LOG_FRAMES) {
-					ast_debug(3, "Channel %s: TX queue large, frames >= %u\n", o->name, txq_high_water);
+					ast_log(LOG_NOTICE, "Channel %s: TX queue large, frames >= %u\n", o->name, txq_high_water);
 					txq_threshold_logged = 1;
 				}
 			} else if (!txq_depth) {
-				ast_debug(3, "Channel %s: TX queue drained, max frames = %u\n", o->name, txq_high_water);
+				ast_log(LOG_NOTICE, "Channel %s: TX queue drained, max frames = %u\n", o->name, txq_high_water);
 				txq_threshold_logged = 0;
 			}
 
