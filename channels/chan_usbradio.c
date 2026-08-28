@@ -2360,11 +2360,11 @@ static void *usbradio_audio_thread(void *arg)
 			ast_mutex_unlock(&o->txqlock);
 			if (!txq_threshold_logged) {
 				if (txq_high_water > TXQ_DELAY_LOG_FRAMES) {
-					ast_log(LOG_NOTICE, "Channel %s: TX queue large, frames >= %u\n", o->name, txq_high_water);
+					ast_debug(3, "Channel %s: TX queue large, frames >= %u\n", o->name, txq_high_water);
 					txq_threshold_logged = 1;
 				}
 			} else if (!txq_depth) {
-				ast_log(LOG_NOTICE, "Channel %s: TX queue drained, max frames = %u\n", o->name, txq_high_water);
+				ast_debug(3, "Channel %s: TX queue drained, max frames = %u\n", o->name, txq_high_water);
 				txq_threshold_logged = 0;
 			}
 
