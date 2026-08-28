@@ -2090,8 +2090,11 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 		return 0;
 	}
 
-	/* PortAudio and XPMR are fed silence separately; do not let idle zero
-	 * frames prevent an accumulated TX queue from draining. */
+	/* Asterisk may deliver a burst of frames during connection changes, leaving
+	 * TX audio queued after unkey.  Continuing to queue idle silence at the same
+	 * rate that the audio thread drains txq would preserve that backlog and its
+	 * associated delay indefinitely.  PortAudio and XPMR are fed silence
+	 * separately, so discard exact-silence frames while TX is unkeyed. */
 	if (!o->txkeyed && !o->txtestkey && usbradio_frame_is_silence(f)) {
 		return 0;
 	}
