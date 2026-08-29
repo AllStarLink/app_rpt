@@ -97,6 +97,7 @@
 #define MS_TO_FRAMES(ms) ((ms) / MS_PER_FRAME) /* convert ms to frames */
 #define DEVICE_RETRY 500000					   /* Retry time in uS when USB device is missing */
 #define MAX_FRAME_DELAY 200					   /* max ms with undrained TX before USB audio reset */
+#define TXQ_DELAY_LOG_FRAMES 5				   /* queued frames allowed before the delay is logged */
 
 #include "./xpmr/xpmr.h"
 #ifdef HAVE_XPMRX
@@ -217,6 +218,8 @@ struct chan_usbradio_pvt {
 	/* Outbound 8 kHz frames from Asterisk, drained by the audio thread into PmrTx. */
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
 	ast_mutex_t txqlock;
+	unsigned int txq_depth;
+	unsigned int txq_high_water;
 
 	/* TX workspace: 48 kHz stereo interleaved samples (PortAudio / PmrTx) */
 	short usbradio_write_buf[AST_RADIO_PA_48K_STEREO_SAMPLES];
@@ -2033,6 +2036,23 @@ static int usbradio_hangup(struct ast_channel *c)
 }
 
 /*!
+ * \brief Test a validated 8 kHz signed-linear frame for exact digital silence.
+ */
+static int usbradio_frame_is_silence(const struct ast_frame *f)
+{
+	const short *samples = f->data.ptr;
+	int i;
+
+	for (i = 0; i < FRAME_SIZE; i++) {
+		if (samples[i]) {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+/*!
  * \brief Asterisk write function.
  * Queues outbound 8 kHz frames for the audio thread / XPMR (non-blocking).
  * \param ast			Asterisk channel.
@@ -2070,13 +2090,27 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 		return 0;
 	}
 
+	/* Asterisk may deliver a burst of frames during connection changes, leaving
+	 * TX audio queued after unkey.  Continuing to queue idle silence at the same
+	 * rate that the audio thread drains txq would preserve that backlog and its
+	 * associated delay indefinitely.  PortAudio and XPMR are fed silence
+	 * separately, so discard exact-silence frames while TX is unkeyed. */
+	if (!o->txkeyed && !o->txtestkey && usbradio_frame_is_silence(f)) {
+		return 0;
+	}
+
 	f1 = ast_frdup(f);
 	if (!f1) {
 		return 0;
 	}
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
+
 	ast_mutex_lock(&o->txqlock);
 	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
+	o->txq_depth++;
+	if (o->txq_depth > o->txq_high_water) {
+		o->txq_high_water = o->txq_depth;
+	}
 	ast_mutex_unlock(&o->txqlock);
 
 	return 0;
@@ -2104,6 +2138,8 @@ static void flush_tx_queue(struct chan_usbradio_pvt *o)
 	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
 		ast_frfree(f);
 	}
+	o->txq_depth = 0;
+	o->txq_high_water = 0;
 	ast_mutex_unlock(&o->txqlock);
 }
 
@@ -2134,6 +2170,11 @@ static int usbradio_feed_tx_queue(struct chan_usbradio_pvt *o, int max_frames)
 	while (fed < max_frames) {
 		ast_mutex_lock(&o->txqlock);
 		f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
+		if (f1) {
+			if (o->txq_depth) {
+				o->txq_depth--;
+			}
+		}
 		ast_mutex_unlock(&o->txqlock);
 		if (!f1) {
 			break;
@@ -2159,6 +2200,9 @@ static void *usbradio_audio_thread(void *arg)
 	int cd, sd;
 	int num_frames;
 	int tx_write_ready;
+	unsigned int txq_depth;
+	unsigned int txq_high_water;
+	int txq_threshold_logged;
 	long frames_available;
 	struct chan_usbradio_pvt *o = arg;
 	struct ast_frame *f = &o->read_f, *f1;
@@ -2192,6 +2236,7 @@ static void *usbradio_audio_thread(void *arg)
 		ast_radio_pa_write(&o->pa, silence_buf, AST_RADIO_PA_FRAMES_PER_BUFFER);
 		o->audio_thread_ready = 1;
 		last_frame_time = ast_radio_tvnow();
+		txq_threshold_logged = 0;
 
 		while (!o->stopaudiothread && o->hasusb) {
 			if (o->lasthidtime) {
@@ -2300,17 +2345,30 @@ static void *usbradio_audio_thread(void *arg)
 			}
 			ast_mutex_unlock(&o->txqlock);
 
-			/* Intentional keyed TX queue cushion */
-			if (num_frames <= 3 && (o->txkeyed || o->txtestkey)) {
-				last_frame_time = ast_radio_tvnow();
-			}
-
 			/* One queued frame per available output block */
-			if (tx_write_ready && num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
+			if (tx_write_ready) {
 				if (usbradio_feed_tx_queue(o, 1)) {
 					o->didpmrtx = 1;
 					last_frame_time = ast_radio_tvnow();
 				}
+			}
+
+			/* Report one threshold crossing and the eventual peak when this queue episode drains. */
+			ast_mutex_lock(&o->txqlock);
+			txq_depth = o->txq_depth;
+			txq_high_water = o->txq_high_water;
+			if (!txq_depth) {
+				o->txq_high_water = 0;
+			}
+			ast_mutex_unlock(&o->txqlock);
+			if (!txq_threshold_logged) {
+				if (txq_high_water > TXQ_DELAY_LOG_FRAMES) {
+					ast_debug(3, "Channel %s: TX queue large, frames >= %u\n", o->name, txq_high_water);
+					txq_threshold_logged = 1;
+				}
+			} else if (!txq_depth) {
+				ast_debug(3, "Channel %s: TX queue drained, max frames = %u\n", o->name, txq_high_water);
+				txq_threshold_logged = 0;
 			}
 
 			/* Stream restart after 200 ms without TX queue progress */
