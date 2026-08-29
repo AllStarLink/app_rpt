@@ -31,6 +31,7 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
 
 /*!
  * \brief Stop reconnect retries after an intentional disconnect.
+ * \param l Link to demote and mark disconnected
  *
  * Demotes permanent links off MAX_RETRIES_PERM, marks retries exhausted,
  * clears perma, and sets disced so hangup/reconnect paths will not redial.
