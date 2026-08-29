@@ -210,6 +210,32 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
 }
 
+void rpt_link_stop_retries(struct rpt_link *l)
+{
+	l->perma = 0;
+	if (l->max_retries > MAX_RETRIES) {
+		l->max_retries = MAX_RETRIES;
+	}
+	l->retries = l->max_retries + 1;
+	l->disced = RPT_LINK_DISCONNECT;
+}
+
+int rpt_link_send_disconnect(struct ast_channel *chan)
+{
+	struct ast_frame wf = {
+		.frametype = AST_FRAME_TEXT,
+		.src = __PRETTY_FUNCTION__,
+		.datalen = sizeof(DISCSTR),
+		.data.ptr = DISCSTR,
+	};
+
+	if (!chan) {
+		return -1;
+	}
+	ast_write(chan, &wf);
+	return 0;
+}
+
 int linkcount(struct rpt *myrpt)
 {
 	return myrpt->links ? ao2_container_count(myrpt->links) : 0;
