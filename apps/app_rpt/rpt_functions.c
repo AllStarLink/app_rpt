@@ -182,11 +182,19 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			return DC_COMPLETE;
 		}
 		ast_copy_string(myrpt->lastlinknode, digitbuf, sizeof(myrpt->lastlinknode));
-		l->retries = l->max_retries + 1;
-		l->disced = RPT_LINK_DISCONNECT;
-		l->hasconnected = 1;
-		if (l->chan) {
-			if (l->thisconnected) {
+		/*
+		 * Send !!DISCONNECT!! before setting disced. If disced is set first,
+		 * process_link_channel can exit without flushing textq and the peer only
+		 * sees hangup — permanent links then immediately reconnect (#1216).
+		 */
+		{
+			struct ast_channel *chan = NULL;
+
+			if (l->chan && l->thisconnected) {
+				chan = ast_channel_ref(l->chan);
+			}
+			rpt_mutex_unlock(&myrpt->lock);
+			if (chan) {
 				struct ast_frame wf = {
 					.frametype = AST_FRAME_TEXT,
 					.src = __PRETTY_FUNCTION__,
@@ -194,9 +202,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 					.data.ptr = DISCSTR,
 				};
 
-				rpt_qwrite(l, &wf);
+				ast_write(chan, &wf);
+				ast_safe_sleep(chan, MSWAIT * 10);
+				ast_channel_unref(chan);
 			}
+			rpt_mutex_lock(&myrpt->lock);
 		}
+		rpt_link_stop_retries(l);
 		myrpt->linkactivityflag = 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -311,6 +323,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		return DC_COMPLETE;
 
 	case 6: /* All Links Off, including permalinks */
+	{
+		struct ast_channel **chans = NULL;
+		struct rpt_link **links_snap = NULL;
+		int nchans = 0;
+		int nlinks = 0;
+		int maxchans = 0;
+
 		rpt_mutex_lock(&myrpt->lock);
 		myrpt->savednodes[0] = 0;
 
@@ -319,7 +338,19 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			return DC_COMPLETE;
 		}
 
-		/* loop through all links */
+		maxchans = ao2_container_count(myrpt->links);
+		if (maxchans > 0) {
+			chans = ast_calloc(maxchans, sizeof(*chans));
+			links_snap = ast_calloc(maxchans, sizeof(*links_snap));
+			if (!chans || !links_snap) {
+				ast_free(chans);
+				ast_free(links_snap);
+				rpt_mutex_unlock(&myrpt->lock);
+				return DC_ERROR;
+			}
+		}
+
+		/* Snapshot selected links (and channels) under lock; I/O and updates use the snapshot. */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			char c1;
 
@@ -342,28 +373,39 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 					strcat(myrpt->savednodes, ",");
 				strcat(myrpt->savednodes, tmp);
 			}
-			l->retries = l->max_retries + 1;
-			l->disced = RPT_LINK_DISCONNECT_SILENT; /* Silently disconnect */
 			ast_debug(5, "dumping link %s\n", l->name);
-			if (l->chan) {
-				if (l->thisconnected) {
-					struct ast_frame wf = {
-						.frametype = AST_FRAME_TEXT,
-						.src = __PRETTY_FUNCTION__,
-						.datalen = sizeof(DISCSTR),
-						.data.ptr = DISCSTR,
-					};
-
-					rpt_qwrite(l, &wf);
-				}
+			if (nlinks < maxchans) {
+				ao2_ref(l, +1);
+				links_snap[nlinks++] = l;
+			}
+			if (l->chan && l->thisconnected && nchans < maxchans) {
+				chans[nchans++] = ast_channel_ref(l->chan);
 			}
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
+
+		for (i = 0; i < nchans; i++) {
+			rpt_link_send_disconnect(chans[i]);
+			ast_channel_unref(chans[i]);
+		}
+		ast_free(chans);
+
+		rpt_mutex_lock(&myrpt->lock);
+		for (i = 0; i < nlinks; i++) {
+			/* Silent variant of stop_retries (no REMDISC telemetry path). */
+			rpt_link_stop_retries(links_snap[i]);
+			links_snap[i]->disced = RPT_LINK_DISCONNECT_SILENT;
+			ao2_ref(links_snap[i], -1);
+		}
+		rpt_mutex_unlock(&myrpt->lock);
+		ast_free(links_snap);
+
 		ast_debug(1, "Nodes disconnected: %s\n", myrpt->savednodes);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
+	}
 
 	case 7: /* Identify last node which keyed us up */
 		rpt_telem_select(myrpt, command_source, mylink);

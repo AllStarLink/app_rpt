@@ -1913,8 +1913,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	ast_debug(5, "Received text over link: '%s'\n", str);
 
 	if (!strcmp(str, DISCSTR)) {
-		mylink->disced = RPT_LINK_DISCONNECT;
-		mylink->retries = mylink->max_retries + 1;
+		/* Peer asked us to drop this link; demote permalinks so #574 infinite
+		 * retry cannot resurrect it, then softhangup so teardown sees disced set.
+		 */
+		rpt_link_stop_retries(mylink);
+		if (mylink->chan) {
+			ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
+		}
 		return;
 	}
 	if (!strcmp(str, NEWKEYSTR)) {
@@ -3424,7 +3429,7 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 
 static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
 {
-	int newkeytimer_last, max_retries;
+	int newkeytimer_last;
 	int myrx;
 
 	link_process_textq(myrpt, l);
@@ -3603,8 +3608,6 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	}
 	l->elaptime += elap;
 	/* if connection has taken too long */
-	max_retries = l->retries++ >= l->max_retries && l->max_retries != MAX_RETRIES_PERM;
-
 	if (l->outbound) {
 		if ((l->elaptime > MAXCONNECTTIME) && ((!l->chan) || (ast_channel_state(l->chan) != AST_STATE_UP))) {
 			l->elaptime = 0;
@@ -3618,16 +3621,24 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			return;
 		}
 
-		if (!l->chan && !l->retrytimer && !max_retries && l->hasconnected) {
-			if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
-				attempt_reconnect(myrpt, l);
-			} else {
-				/* We should not retry this node type */
-				l->retries = l->max_retries + 1;
+		/*
+		 * Reconnect only while the channel is down. Count attempts here — not on every
+		 * tick while connected (that exhausted MAX_RETRIES within ~100ms after ANSWER).
+		 * Permanent links never give up unless rpt_link_stop_retries() demoted them.
+		 */
+		if (!l->chan && !l->retrytimer && l->hasconnected) {
+			int give_up = (l->max_retries != MAX_RETRIES_PERM) && (l->retries >= l->max_retries);
+
+			if (!give_up) {
+				if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
+					l->retries++;
+					attempt_reconnect(myrpt, l);
+				} else {
+					/* Unsupported node type (e.g. permanent EchoLink/TLB) — demote and stop. */
+					rpt_link_stop_retries(l);
+				}
+				return;
 			}
-			return;
-		}
-		if (!l->chan && !l->retrytimer && max_retries) {
 			l->disced = RPT_LINK_DISCONNECT;
 			if (!strcmp(myrpt->cmdnode, l->name))
 				myrpt->cmdnode[0] = 0;
@@ -4608,6 +4619,28 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
 		/* If neither echolink nor tlb */
 		if (l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down()) {
+			struct ast_frame *f;
+
+			/* !!DISCONNECT!! may still be queued ahead of hangup; honor it before redialing. */
+			while (ast_waitfor(l->chan, 0) > 0) {
+				f = ast_read(l->chan);
+				if (!f) {
+					break;
+				}
+				if (f->frametype == AST_FRAME_TEXT && f->data.ptr && f->datalen >= (int) (sizeof(DISCSTR) - 1) &&
+					!strncmp(f->data.ptr, DISCSTR, sizeof(DISCSTR) - 1)) {
+					rpt_link_stop_retries(l);
+					ast_frfree(f);
+					break;
+				}
+				if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
+					ast_frfree(f);
+					break;
+				}
+				ast_frfree(f);
+			}
+		}
+		if (l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down()) {
 			if (!l->outbound) {
 				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
 					/* Not an allstar link node */
@@ -4624,7 +4657,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 				hangup_link_chan(l);
 				return 1;
 			}
-			if (l->outbound && (l->retries++ < l->max_retries) && l->hasconnected) {
+			if (l->outbound && l->hasconnected && (l->max_retries == MAX_RETRIES_PERM || l->retries < l->max_retries)) {
 				hangup_link_chan(l);
 				rpt_mutex_lock(&myrpt->lock);
 				l->retrytimer = RETRY_TIMER_MS;
@@ -4997,6 +5030,13 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		continue;
 	}
 	/* Link is done: Cleanup channels and link structure */
+	/* Flush !!DISCONNECT!! (or other textq) before hangup so the peer sees it. */
+	if (l->chan) {
+		ast_autoservice_start(l->pchan);
+		link_process_textq(myrpt, l);
+		ast_safe_sleep(l->chan, MSWAIT * 10);
+		ast_autoservice_stop(l->pchan);
+	}
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */

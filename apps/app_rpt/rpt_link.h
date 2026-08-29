@@ -29,6 +29,21 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink);
 
 void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
 
+/*!
+ * \brief Stop reconnect retries after an intentional disconnect.
+ *
+ * Demotes permanent links off MAX_RETRIES_PERM, marks retries exhausted,
+ * clears perma, and sets disced so hangup/reconnect paths will not redial.
+ */
+void rpt_link_stop_retries(struct rpt_link *l);
+
+/*!
+ * \brief Send !!DISCONNECT!! immediately on a referenced channel (bypasses textq).
+ * \param chan Channel to write (must be referenced by caller; lock must not be held)
+ * \retval 0 if write attempted, -1 if channel missing
+ */
+int rpt_link_send_disconnect(struct ast_channel *chan);
+
 int linkcount(struct rpt *myrpt);
 
 /*! \brief Considers repeater received RSSI and all voter link RSSI information and set values in myrpt structure. */
