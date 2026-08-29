@@ -331,7 +331,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		int maxchans = 0;
 
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->savednodes[0] = 0;
 
 		if (!myrpt->links) {
 			rpt_mutex_unlock(&myrpt->lock);
@@ -349,6 +348,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				return DC_ERROR;
 			}
 		}
+
+		/* Clear only after snapshot alloc succeeds so a prior ilink 6 restore list survives OOM. */
+		myrpt->savednodes[0] = 0;
 
 		/* Snapshot selected links (and channels) under lock; I/O and updates use the snapshot. */
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
