@@ -4616,31 +4616,35 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		rpt_update_links(myrpt);
 	}
 
-	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb")) {
-		/* If neither echolink nor tlb */
-		if (l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down()) {
-			struct ast_frame *f;
+	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb") && l->disced == RPT_LINK_DISCONNECT_NONE &&
+		!ast_shutting_down()) {
+		struct ast_frame *f;
 
-			/* !!DISCONNECT!! may still be queued ahead of hangup; honor it before redialing. */
-			while (ast_waitfor(l->chan, 0) > 0) {
-				f = ast_read(l->chan);
-				if (!f) {
-					break;
-				}
-				if (f->frametype == AST_FRAME_TEXT && f->data.ptr && f->datalen >= (int) (sizeof(DISCSTR) - 1) &&
-					!strncmp(f->data.ptr, DISCSTR, sizeof(DISCSTR) - 1)) {
-					rpt_link_stop_retries(l);
-					ast_frfree(f);
-					break;
-				}
-				if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
-					ast_frfree(f);
-					break;
-				}
-				ast_frfree(f);
+		/*
+		 * Receiver path: peer may have sent !!DISCONNECT!! before HANGUP.
+		 * Drain pending text so we honor an intentional drop before redialing
+		 * a permanent outbound link. (Not waiting after we ourselves sent DISCSTR.)
+		 */
+		while (!ast_shutting_down() && ast_waitfor(l->chan, 0) > 0) {
+			f = ast_read(l->chan);
+			if (!f) {
+				break;
 			}
+			if (f->frametype == AST_FRAME_TEXT && f->data.ptr && f->datalen >= (int) (sizeof(DISCSTR) - 1) &&
+				!strncmp(f->data.ptr, DISCSTR, sizeof(DISCSTR) - 1)) {
+				rpt_link_stop_retries(l);
+				ast_frfree(f);
+				break;
+			}
+			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
+				ast_frfree(f);
+				break;
+			}
+			ast_frfree(f);
 		}
-		if (l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down()) {
+
+		/* Drain may have set disced via !!DISCONNECT!! — only redial if still clear. */
+		if (l->disced == RPT_LINK_DISCONNECT_NONE) {
 			if (!l->outbound) {
 				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
 					/* Not an allstar link node */
@@ -5030,12 +5034,13 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		continue;
 	}
 	/* Link is done: Cleanup channels and link structure */
-	/* Flush !!DISCONNECT!! (or other textq) before hangup so the peer sees it. */
+	/*
+	 * Flush any remaining textq (e.g. if !!DISCONNECT!! was queued rather than
+	 * written directly). No sleep — DISCSTR for intentional drops is sent before
+	 * disced is set so we are not relying on a delay here.
+	 */
 	if (l->chan) {
-		ast_autoservice_start(l->pchan);
 		link_process_textq(myrpt, l);
-		ast_safe_sleep(l->chan, MSWAIT * 10);
-		ast_autoservice_stop(l->pchan);
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
