@@ -188,16 +188,13 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		 * process_link_channel can exit without flushing textq and the peer only
 		 * sees hangup — permanent links then immediately reconnect (#1216).
 		 */
-		chan = NULL;
 		if (l->chan && l->thisconnected) {
 			chan = ast_channel_ref(l->chan);
-		}
-		rpt_mutex_unlock(&myrpt->lock);
-		if (chan) {
+			rpt_mutex_unlock(&myrpt->lock);
 			rpt_link_send_disconnect(chan);
 			ast_channel_unref(chan);
+			rpt_mutex_lock(&myrpt->lock);
 		}
-		rpt_mutex_lock(&myrpt->lock);
 		rpt_link_stop_retries(l);
 		myrpt->linkactivityflag = 1;
 		rpt_mutex_unlock(&myrpt->lock);
@@ -314,10 +311,8 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 
 	case 6: /* All Links Off, including permalinks */
 	{
-		struct ast_channel **chans = NULL;
 		struct ao2_container *links_copy = NULL;
-		int nchans = 0;
-		int maxchans = 0;
+		struct ao2_container *chans = NULL;
 
 		rpt_mutex_lock(&myrpt->lock);
 
@@ -331,14 +326,11 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
 		}
-		maxchans = ao2_container_count(links_copy);
-		if (maxchans > 0) {
-			chans = ast_calloc(maxchans, sizeof(*chans));
-			if (!chans) {
-				ao2_ref(links_copy, -1);
-				rpt_mutex_unlock(&myrpt->lock);
-				return DC_ERROR;
-			}
+		chans = ao2_container_alloc_list(0, 0, NULL, NULL);
+		if (!chans) {
+			ao2_ref(links_copy, -1);
+			rpt_mutex_unlock(&myrpt->lock);
+			return DC_ERROR;
 		}
 
 		/* Clear only after snapshot succeeds so a prior ilink 6 restore list survives OOM. */
@@ -367,18 +359,19 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				strcat(myrpt->savednodes, tmp);
 			}
 			ast_debug(5, "dumping link %s\n", l->name);
-			if (chans && l->chan && l->thisconnected && nchans < maxchans) {
-				chans[nchans++] = ast_channel_ref(l->chan);
+			if (l->chan && l->thisconnected) {
+				/* ao2_link holds the channel so hangup cannot free it before we write. */
+				ao2_link(chans, l->chan);
 			}
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 
-		for (i = 0; i < nchans; i++) {
-			rpt_link_send_disconnect(chans[i]);
-			ast_channel_unref(chans[i]);
+		RPT_LIST_TRAVERSE(chans, chan, l_it) {
+			rpt_link_send_disconnect(chan);
 		}
-		ast_free(chans);
+		ao2_iterator_destroy(&l_it);
+		ao2_ref(chans, -1);
 
 		rpt_mutex_lock(&myrpt->lock);
 		RPT_LIST_TRAVERSE(links_copy, l, l_it) {

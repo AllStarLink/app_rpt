@@ -3624,12 +3624,12 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		/*
 		 * Reconnect only while the channel is down. Count attempts here — not on every
 		 * tick while connected (that exhausted MAX_RETRIES within ~100ms after ANSWER).
-		 * Permanent links never give up unless rpt_link_stop_retries() demoted them.
+		 * Permanent links keep trying unless rpt_link_stop_retries() demoted them.
 		 */
 		if (!l->chan && !l->retrytimer && l->hasconnected) {
-			int give_up = (l->max_retries != MAX_RETRIES_PERM) && (l->retries >= l->max_retries);
+			int try_reconnect = (l->max_retries == MAX_RETRIES_PERM) || (l->retries < l->max_retries);
 
-			if (!give_up) {
+			if (try_reconnect) {
 				if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
 					l->retries++;
 					attempt_reconnect(myrpt, l);
@@ -4621,24 +4621,23 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		struct ast_frame *f;
 
 		/*
-		 * Receiver path: peer may have sent !!DISCONNECT!! before HANGUP.
-		 * Drain pending text so we honor an intentional drop before redialing
-		 * a permanent outbound link. (Not waiting after we ourselves sent DISCSTR.)
+		 * Receiver path: peer may have sent !!DISCONNECT!! before or after HANGUP.
+		 * Drain the queue so we honor an exact DISCSTR before redialing a permanent
+		 * outbound link. Do not stop at the first of DISCSTR or HANGUP.
 		 */
 		while (!ast_shutting_down() && ast_waitfor(l->chan, 0) > 0) {
+			char discbuf[sizeof(DISCSTR) + 1];
+
 			f = ast_read(l->chan);
 			if (!f) {
 				break;
 			}
-			if (f->frametype == AST_FRAME_TEXT && f->data.ptr && f->datalen >= (int) (sizeof(DISCSTR) - 1) &&
-				!strncmp(f->data.ptr, DISCSTR, sizeof(DISCSTR) - 1)) {
-				rpt_link_stop_retries(l);
-				ast_frfree(f);
-				break;
-			}
-			if (f->frametype == AST_FRAME_CONTROL && f->subclass.integer == AST_CONTROL_HANGUP) {
-				ast_frfree(f);
-				break;
+			if (f->frametype == AST_FRAME_TEXT && f->data.ptr && f->datalen > 0 && f->datalen < (int) sizeof(discbuf)) {
+				memcpy(discbuf, f->data.ptr, f->datalen);
+				discbuf[f->datalen] = '\0';
+				if (!strcmp(discbuf, DISCSTR)) {
+					rpt_link_stop_retries(l);
+				}
 			}
 			ast_frfree(f);
 		}
@@ -5035,9 +5034,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	/* Link is done: Cleanup channels and link structure */
 	/*
-	 * Flush any remaining textq (e.g. if !!DISCONNECT!! was queued rather than
-	 * written directly). No sleep — DISCSTR for intentional drops is sent before
-	 * disced is set so we are not relying on a delay here.
+	 * Flush leftover textq (key, keepalive, etc.). !!DISCONNECT!! is written
+	 * with rpt_link_send_disconnect(), not queued.
 	 */
 	if (l->chan) {
 		link_process_textq(myrpt, l);
