@@ -4461,6 +4461,7 @@ static inline int hangup_frame_helper(struct ast_channel *chan, const char *chan
 static inline int pchannel_read(struct rpt *myrpt)
 {
 	struct ast_unreal_pvt *p;
+	struct ast_channel *pchan = NULL;
 	struct ast_frame *f = ast_read(myrpt->pchannel);
 
 	if (!f) {
@@ -4469,11 +4470,27 @@ static inline int pchannel_read(struct rpt *myrpt)
 	}
 
 	p = ast_channel_tech_pvt(myrpt->pchannel);
-	if (!p || !p->chan || !ast_channel_is_bridged(p->chan)) {
+	if (p) {
+		ao2_lock(p);
+		if (p->chan) {
+			pchan = ast_channel_ref(p->chan);
+		}
+		ao2_unlock(p);
+	}
+
+	if (!pchan) {
 		ast_debug(1, "%s pchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->pchannel));
 		ast_frfree(f);
 		return -1;
 	}
+
+	if (!ast_channel_is_bridged(pchan)) {
+		ast_channel_unref(pchan);
+		ast_debug(1, "%s pchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->pchannel));
+		ast_frfree(f);
+		return -1;
+	}
+	ast_channel_unref(pchan);
 
 	if (f->frametype == AST_FRAME_VOICE) {
 		if (!myrpt->localoverride && ((myrpt->p.duplex == 2) || (myrpt->p.duplex == 4))) {
@@ -5077,11 +5094,38 @@ static inline int monchannel_read(struct rpt *myrpt)
 
 static inline int rxpchannel_read(struct rpt *myrpt)
 {
+	struct ast_unreal_pvt *p;
+	struct ast_channel *pchan = NULL;
 	struct ast_frame *f = ast_read(myrpt->rxpchannel);
+
 	if (!f) {
 		ast_debug(1, "@@@@ rpt:Hung Up\n");
 		return -1;
 	}
+
+	p = ast_channel_tech_pvt(myrpt->rxpchannel);
+	if (p) {
+		ao2_lock(p);
+		if (p->chan) {
+			pchan = ast_channel_ref(p->chan);
+		}
+		ao2_unlock(p);
+	}
+
+	if (!pchan) {
+		ast_debug(1, "%s rxpchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->rxpchannel));
+		ast_frfree(f);
+		return -1;
+	}
+
+	if (!ast_channel_is_bridged(pchan)) {
+		ast_channel_unref(pchan);
+		ast_debug(1, "%s rxpchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->rxpchannel));
+		ast_frfree(f);
+		return -1;
+	}
+	ast_channel_unref(pchan);
+
 	if (f->frametype == AST_FRAME_VOICE) {
 		if (!myrpt->localoverride && (myrpt->p.duplex != 2) && (myrpt->p.duplex != 4)) {
 			/* We are in 1/2 duplex mode or mode 3, send rxpchannel audio to txpchannel
@@ -5097,6 +5141,7 @@ static inline int rxpchannel_read(struct rpt *myrpt)
 static inline int txpchannel_read(struct rpt *myrpt)
 {
 	struct ast_unreal_pvt *p;
+	struct ast_channel *pchan = NULL;
 	struct ast_frame *f = ast_read(myrpt->txpchannel);
 
 	if (!f) {
@@ -5105,11 +5150,27 @@ static inline int txpchannel_read(struct rpt *myrpt)
 	}
 
 	p = ast_channel_tech_pvt(myrpt->txpchannel);
-	if (!p || !p->chan || !ast_channel_is_bridged(p->chan)) {
-		ast_debug(1, "%s pchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->pchannel));
+	if (p) {
+		ao2_lock(p);
+		if (p->chan) {
+			pchan = ast_channel_ref(p->chan);
+		}
+		ao2_unlock(p);
+	}
+
+	if (!pchan) {
+		ast_debug(1, "%s txpchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->txpchannel));
 		ast_frfree(f);
 		return -1;
 	}
+
+	if (!ast_channel_is_bridged(pchan)) {
+		ast_channel_unref(pchan);
+		ast_debug(1, "%s txpchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->txpchannel));
+		ast_frfree(f);
+		return -1;
+	}
+	ast_channel_unref(pchan);
 
 	return hangup_frame_helper(myrpt->txpchannel, "txpchannel", f);
 }
