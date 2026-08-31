@@ -4680,6 +4680,13 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			cs[n++] = l->chan;
 		}
 		who = ast_waitfor_n(cs, n, &ms);
+
+		/* Make sure the pchannel is still bridged */
+		if (!ast_channel_is_bridged(l->pchan)) {
+			ast_debug(1, "Link %s pchan %s is no longer bridged, exiting link processing\n", l->name, ast_channel_name(l->pchan));
+			break;
+		}
+
 		periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart));
 		if (!ms) {
 			/* No channels had activity before the timer expired,
