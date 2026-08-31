@@ -6020,13 +6020,11 @@ static void *rpt(void *this)
 
 	if (myrpt->rptconf.conf) {
 		ast_bridge_destroy(myrpt->rptconf.conf, 0);
-		ao2_cleanup(myrpt->rptconf.conf);
 		myrpt->rptconf.conf = NULL;
 	}
 
 	if (myrpt->rptconf.txconf) {
 		ast_bridge_destroy(myrpt->rptconf.txconf, 0);
-		ao2_cleanup(myrpt->rptconf.txconf);
 		myrpt->rptconf.txconf = NULL;
 	}
 
