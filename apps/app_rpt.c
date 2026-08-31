@@ -4467,13 +4467,9 @@ static inline int pchannel_read(struct rpt *myrpt)
 		ast_debug(1, "@@@@ rpt:Hung Up\n");
 		return -1;
 	}
-	p = ast_channel_tech_pvt(myrpt->pchannel);
-	if (!p || !p->chan) {
-		ast_frfree(f);
-		return -1;
-	}
 
-	if (!ast_channel_is_bridged(p->chan)) {
+	p = ast_channel_tech_pvt(myrpt->pchannel);
+	if (!p || !p->chan || !ast_channel_is_bridged(p->chan)) {
 		ast_debug(1, "%s pchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->pchannel));
 		ast_frfree(f);
 		return -1;
@@ -5109,12 +5105,7 @@ static inline int txpchannel_read(struct rpt *myrpt)
 	}
 
 	p = ast_channel_tech_pvt(myrpt->txpchannel);
-	if (!p || !p->chan) {
-		ast_frfree(f);
-		return -1;
-	}
-
-	if (!ast_channel_is_bridged(p->chan)) {
+	if (!p || !p->chan || !ast_channel_is_bridged(p->chan)) {
 		ast_debug(1, "%s pchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->pchannel));
 		ast_frfree(f);
 		return -1;
