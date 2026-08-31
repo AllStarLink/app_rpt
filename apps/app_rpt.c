@@ -4673,6 +4673,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	looptimestart = rpt_tvnow();
 
 	while (ms >= 0 && l->disced == RPT_LINK_DISCONNECT_NONE) {
+		struct ast_unreal_pvt *p;
+
 		ms = MSWAIT;
 		n = 0;
 		cs[n++] = l->pchan;
@@ -4682,7 +4684,12 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		who = ast_waitfor_n(cs, n, &ms);
 
 		/* Make sure the pchannel is still bridged */
-		if (!ast_channel_is_bridged(l->pchan)) {
+		p = ast_channel_tech_pvt(l->pchan);
+		if (!p || !p->chan) {
+			break;
+		}
+
+		if (!ast_channel_is_bridged(p->chan)) {
 			ast_debug(1, "Link %s pchan %s is no longer bridged, exiting link processing\n", l->name, ast_channel_name(l->pchan));
 			break;
 		}
