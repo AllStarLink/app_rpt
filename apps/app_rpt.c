@@ -6017,6 +6017,19 @@ static void *rpt(void *this)
 
 	ao2_cleanup(myrpt->links);
 	myrpt->links = NULL;
+
+	if (myrpt->rptconf.conf) {
+		ast_bridge_destroy(myrpt->rptconf.conf, 0);
+		ao2_cleanup(myrpt->rptconf.conf);
+		myrpt->rptconf.conf = NULL;
+	}
+
+	if (myrpt->rptconf.txconf) {
+		ast_bridge_destroy(myrpt->rptconf.txconf, 0);
+		ao2_cleanup(myrpt->rptconf.txconf);
+		myrpt->rptconf.txconf = NULL;
+	}
+
 	rpt_mutex_unlock(&myrpt->lock);
 
 	ast_debug(1, "%s thread now exiting...\n", myrpt->name);
