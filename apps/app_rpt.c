@@ -4626,18 +4626,13 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		 * outbound link. Do not stop at the first of DISCSTR or HANGUP.
 		 */
 		while (!ast_shutting_down() && ast_waitfor(l->chan, 0) > 0) {
-			char discbuf[sizeof(DISCSTR) + 1];
-
 			f = ast_read(l->chan);
 			if (!f) {
 				break;
 			}
-			if (f->frametype == AST_FRAME_TEXT && f->data.ptr && f->datalen > 0 && f->datalen < (int) sizeof(discbuf)) {
-				memcpy(discbuf, f->data.ptr, f->datalen);
-				discbuf[f->datalen] = '\0';
-				if (!strcmp(discbuf, DISCSTR)) {
-					rpt_link_stop_retries(l);
-				}
+			if (f->frametype == AST_FRAME_TEXT && f->data.ptr && (f->datalen == (int) sizeof(DISCSTR)) &&
+				!strncmp(f->data.ptr, DISCSTR, sizeof(DISCSTR))) {
+				rpt_link_stop_retries(l);
 			}
 			ast_frfree(f);
 		}
