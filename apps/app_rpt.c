@@ -4575,6 +4575,18 @@ static inline void hangup_link_chan(struct rpt_link *l)
 	}
 }
 
+static void rpt_link_hangup_wait(struct rpt *myrpt, struct rpt_link *l)
+{
+	/* This will be a "long" delay, dump any audio in the l->pchan
+	 * as we are now about to close down the link channel.  If we don't
+	 * autoservice, l->pchan can report long voice queue and add unnecessary delay audio
+	 * on a reconnect
+	 */
+	ast_autoservice_start(l->pchan);
+	link_process_textq(myrpt, l);
+	ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
+	ast_autoservice_stop(l->pchan);
+}
 /*!
  * \internal
  * \brief Final cleanup of link prior to node termination
@@ -4588,10 +4600,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		 * autoservice, l->pchan can report long voice queue and add unnecessary delay audio
 		 * on a reconnect
 		 */
-		ast_autoservice_start(l->pchan);
-		link_process_textq(myrpt, l);
-		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
-		ast_autoservice_stop(l->pchan);
+		rpt_link_hangup_wait(myrpt, l);
 	}
 
 	/* When the node is disconnected we need to clear the list of links.
