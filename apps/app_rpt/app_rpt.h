@@ -1126,6 +1126,7 @@ struct rpt {
 	rpt_bool deferid:1;
 	rpt_bool last_statpost_failed:1;
 	struct timeval lastlinktime;
+	volatile int eligible_remrx_cnt; /* Count of receiving links with mode < 2 */
 };
 
 struct nodelog {

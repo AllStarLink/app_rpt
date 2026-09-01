@@ -3422,6 +3422,23 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
+static inline void rpt_update_link_rx_state(struct rpt *myrpt, struct rpt_link *l, int new_lastrx)
+{
+	if (l->lastrx == new_lastrx) {
+		return;
+	}
+
+	/* Only count links with mode < 2 (MODE_MONITOR & MODE_TRANSCEIVE) */
+	if (l->mode < 2) {
+		if (new_lastrx) {
+			ast_atomic_fetchadd_int(&myrpt->eligible_remrx_cnt, 1);
+		} else {
+			ast_atomic_fetchadd_int(&myrpt->eligible_remrx_cnt, -1);
+		}
+	}
+	l->lastrx = new_lastrx;
+}
+
 static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
 {
 	int newkeytimer_last, max_retries;
@@ -3537,7 +3554,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		if (!l->voxtostate)
 			myrx = myrx || l->wasvox;
 	}
-	l->lastrx = myrx;
+	rpt_update_link_rx_state(myrpt, l, myrx);
 
 	update_timer(&l->linklisttimer, elap, 0);
 
@@ -4657,14 +4674,12 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_channel *who;
-	struct rpt_link *m;
 	int n = 0, ms = MSWAIT, myfirst = 0;
 	struct ast_channel *cs[2];
 	struct ast_frame wf = {
 		.frametype = AST_FRAME_CNG,
 		.src = __PRETTY_FUNCTION__,
 	};
-	struct ao2_iterator l_it;
 	int totx;
 	int remnomute, remrx;
 	struct timeval now;
@@ -4673,6 +4688,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	looptimestart = rpt_tvnow();
 
 	while (ms >= 0 && l->disced == RPT_LINK_DISCONNECT_NONE) {
+		int active_rx_count;
 		ms = MSWAIT;
 		n = 0;
 		cs[n++] = l->pchan;
@@ -4689,24 +4705,12 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 		remrx = 0;
 		/* see if any other links are receiving */
-		if (myrpt->remrx) {
-			if (!l->lastrx) {
-				/* myrpt->remrx is true and this link is NOT receiving,
-				 * so another link MUST be receiving. No lock needed! */
-				remrx = 1;
-			} else {
-				/* Only lock if THIS link is receiving and we need to verify
-				 * whether a SECOND link is also receiving. */
-				rpt_mutex_lock(&myrpt->lock);
-				RPT_LIST_TRAVERSE(myrpt->links, m, l_it) {
-					/* if not the link we are currently processing, and not localonly count it */
-					if ((m != l) && (m->lastrx) && (m->mode < 2)) {
-						remrx = 1;
-					}
-				}
-				ao2_iterator_destroy(&l_it);
-				rpt_mutex_unlock(&myrpt->lock);
-			}
+		active_rx_count = ast_atomic_fetchadd_int(&myrpt->eligible_remrx_cnt, 0);
+		/* If this current link is active and eligible, subtract 1 to check if ANOTHER eligible link is receiving */
+		if (l->lastrx && l->mode < 2) {
+			remrx = (active_rx_count > 1);
+		} else {
+			remrx = (active_rx_count > 0);
 		}
 
 		now = rpt_tvnow();
@@ -4993,6 +4997,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		continue;
 	}
 	/* Link is done: Cleanup channels and link structure */
+	rpt_update_link_rx_state(myrpt, l, 0);
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
