@@ -3225,7 +3225,7 @@ static inline void dump_rpt(struct rpt *myrpt, const int lasttx, const int laste
 	ast_debug(2, "lastexttx = %d\n", lastexttx);
 	ast_debug(2, "elap = %d\n", elap);
 	ast_debug(2, "totx = %d\n", totx);
-
+	ast_debug(2, "myrpt->eligible_remrx_cnt = %d\n", myrpt->eligible_remrx_cnt);
 	ast_debug(2, "myrpt->keyed = %d\n", myrpt->keyed);
 	ast_debug(2, "myrpt->localtx = %d\n", myrpt->localtx);
 	ast_debug(2, "myrpt->callmode = %d\n", myrpt->callmode);
