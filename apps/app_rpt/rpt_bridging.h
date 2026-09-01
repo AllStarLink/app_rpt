@@ -71,9 +71,19 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 
 #define rpt_request_local(data, cap, chantype, exten) __rpt_request_local(data, cap, chantype, 0, exten)
 
+void __rpt_conf_destroy(struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
+
 int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
 
 int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line);
+
+/*!
+ * \brief Destroy a conference
+ * \param myrpt Repeater structure
+ * \param type Conference type
+ * \note myrpt->lock must be held when calling
+ */
+#define rpt_conf_destroy(myrpt, type) __rpt_conf_destroy(myrpt, type, __FILE__, __LINE__)
 
 /*!
  * \brief Create a conference for repeater channels to join

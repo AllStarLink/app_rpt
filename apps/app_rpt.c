@@ -6018,15 +6018,8 @@ static void *rpt(void *this)
 	ao2_cleanup(myrpt->links);
 	myrpt->links = NULL;
 
-	if (myrpt->rptconf.conf) {
-		ast_bridge_destroy(myrpt->rptconf.conf, 0);
-		myrpt->rptconf.conf = NULL;
-	}
-
-	if (myrpt->rptconf.txconf) {
-		ast_bridge_destroy(myrpt->rptconf.txconf, 0);
-		myrpt->rptconf.txconf = NULL;
-	}
+	rpt_conf_destroy(myrpt, RPT_CONF);
+	rpt_conf_destroy(myrpt, RPT_TXCONF);
 
 	rpt_mutex_unlock(&myrpt->lock);
 
