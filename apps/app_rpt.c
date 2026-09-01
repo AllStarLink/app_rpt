@@ -4472,8 +4472,11 @@ static int rpt_channel_is_bridged(struct ast_channel *chan)
 		return 0;
 	}
 
-	if (!ast_channel_tech(chan)->type || strcmp(ast_channel_tech(chan)->type, "Local")) {
+	if (!ast_channel_tech(chan)->type || (strcmp(ast_channel_tech(chan)->type, "Local") && strcmp(ast_channel_tech(chan)->type, "Announcer") &&
+											 strcmp(ast_channel_tech(chan)->type, "Recorder"))) {
 		/* Channel is not a Local (unreal) channel */
+		ast_debug(1, "rpt_channel_is_bridged: Channel %s is not a Local channel: type %s\n", ast_channel_name(chan),
+			ast_channel_tech(chan)->type);
 		return 0;
 	}
 
@@ -5131,7 +5134,7 @@ static inline int rxpchannel_read(struct rpt *myrpt)
 	}
 
 	if (!rpt_channel_is_bridged(myrpt->rxpchannel)) {
-		ast_debug(1, "%s rxpchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->pchannel));
+		ast_debug(1, "%s rxpchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->rxpchannel));
 		ast_frfree(f);
 		return -1;
 	}
@@ -5157,7 +5160,7 @@ static inline int txpchannel_read(struct rpt *myrpt)
 	}
 
 	if (!rpt_channel_is_bridged(myrpt->txpchannel)) {
-		ast_debug(1, "%s txpchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->pchannel));
+		ast_debug(1, "%s txpchan %s is no longer bridged, exiting repeater processing\n", myrpt->name, ast_channel_name(myrpt->txpchannel));
 		ast_frfree(f);
 		return -1;
 	}
