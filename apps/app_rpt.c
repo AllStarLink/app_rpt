@@ -5004,17 +5004,23 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
-	/* hang-up on call to device */
+	/* 1. Detach audiohook while l->chan is still valid */
+	ast_audiohook_lock(&l->altaudio);
+	ast_audiohook_detach(&l->altaudio);
+	ast_audiohook_unlock(&l->altaudio);
+
+	/* 2. Hang-up the channels */
 	hangup_link_chan(l);
-	ast_hangup(l->pchan);
+	if (l->pchan) {
+		ast_hangup(l->pchan);
+		l->pchan = NULL;
+	}
 
 	if (l->hasconnected) {
 		rpt_update_links(myrpt);
 	}
 
-	ast_audiohook_lock(&l->altaudio);
-	ast_audiohook_detach(&l->altaudio);
-	ast_audiohook_unlock(&l->altaudio);
+	/* 3. Destroy audiohook resources */
 	ast_audiohook_destroy(&l->altaudio);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 
