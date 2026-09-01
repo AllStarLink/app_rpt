@@ -3422,6 +3422,21 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
+static inline void rpt_update_link_mode(struct rpt *myrpt, struct rpt_link *l, int new_mode)
+{
+	if (l->last_mode == new_mode) {
+		return;
+	}
+	if (l->lastrx) {
+		if (l->last_mode < 2 && new_mode >= 2) {
+			ast_atomic_fetchadd_int(&myrpt->eligible_remrx_cnt, -1);
+		} else if (l->last_mode >= 2 && new_mode < 2) {
+			ast_atomic_fetchadd_int(&myrpt->eligible_remrx_cnt, 1);
+		}
+	}
+	l->last_mode = new_mode;
+}
+
 static inline void rpt_update_link_rx_state(struct rpt *myrpt, struct rpt_link *l, int new_lastrx)
 {
 	if (l->lastrx == new_lastrx) {
@@ -3554,6 +3569,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		if (!l->voxtostate)
 			myrx = myrx || l->wasvox;
 	}
+	rpt_update_link_mode(myrpt, l, l->mode);
 	rpt_update_link_rx_state(myrpt, l, myrx);
 
 	update_timer(&l->linklisttimer, elap, 0);

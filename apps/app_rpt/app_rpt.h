@@ -564,6 +564,7 @@ struct rpt_link {
 	struct rpt_link *next;
 	struct rpt_link *prev;
 	enum link_mode mode;
+	enum link_mode last_mode;
 	char isremote;
 	enum rpt_phone_mode phonemode;
 	char phonevox;		   /* vox the phone */
