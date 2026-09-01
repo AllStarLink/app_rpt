@@ -349,6 +349,27 @@ int __rpt_request_local(void *data, struct ast_format_cap *cap, enum rpt_chan_ty
 	return 0;
 }
 
+void __rpt_conf_destroy(struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
+{
+	switch (type) {
+	case RPT_CONF:
+		if (myrpt->rptconf.conf) {
+			ast_bridge_destroy(myrpt->rptconf.conf, 0);
+			myrpt->rptconf.conf = NULL;
+		}
+		break;
+	case RPT_TXCONF:
+		if (myrpt->rptconf.txconf) {
+			ast_bridge_destroy(myrpt->rptconf.txconf, 0);
+			myrpt->rptconf.txconf = NULL;
+		}
+		break;
+	default:
+		__builtin_unreachable();
+		break;
+	}
+}
+
 int __rpt_conf_create(struct rpt *myrpt, enum rpt_conf_type type, const char *file, int line)
 {
 	struct ast_bridge *conf = NULL, **confptr;
