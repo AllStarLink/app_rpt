@@ -4965,6 +4965,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					 */
 					if (ast_write(l->chan, f)) {
 						ast_debug(1, "ast_write failed on %s, breaking loop\n", ast_channel_name(l->chan));
+						ast_frfree(f);
 						break;
 					}
 
@@ -4977,6 +4978,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					 */
 					if (ast_write(l->chan, f)) {
 						ast_debug(1, "ast_write failed on %s, breaking loop\n", ast_channel_name(l->chan));
+						ast_frfree(f);
 						break;
 					}
 				}
