@@ -697,21 +697,6 @@ void rpt_update_links(struct rpt *myrpt)
 	ast_free(obuf);
 }
 
-static inline void rpt_update_link_mode(struct rpt *myrpt, struct rpt_link *l, int new_mode)
-{
-	if (l->mode == new_mode) {
-		return;
-	}
-	if (l->lastrx) {
-		if (l->mode < 2 && new_mode >= 2) {
-			ast_atomic_fetchadd_int(&myrpt->eligible_remrx_cnt, -1);
-		} else if (l->mode >= 2 && new_mode < 2) {
-			ast_atomic_fetchadd_int(&myrpt->eligible_remrx_cnt, 1);
-		}
-	}
-	l->mode = new_mode;
-}
-
 void *rpt_link_connect(void *data)
 {
 	char *s, *s1, *tele, *cp;
@@ -774,7 +759,7 @@ void *rpt_link_connect(void *data)
 		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
-			rpt_update_link_mode(myrpt, l, connect_data->mode);
+			l->mode = connect_data->mode;
 			ao2_ref(l, -1);
 			goto cleanup;
 		}
@@ -822,12 +807,14 @@ void *rpt_link_connect(void *data)
 	if (!l) {
 		goto cleanup;
 	}
+
 	l->linklist = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!l->linklist) {
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
-	rpt_update_link_mode(myrpt, l, connect_data->mode);
+
+	l->mode = connect_data->mode;
 	l->outbound = 1;
 	l->thisconnected = 0;
 	voxinit_link(l, 1);
