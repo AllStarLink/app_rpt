@@ -2328,9 +2328,10 @@ treataslocal:
 		} else if (!strcmp(myrpt->remoterig, REMOTE_RIG_RBI) || !strcmp(myrpt->remoterig, REMOTE_RIG_PPP16)) {
 #ifdef HAVE_SYS_IO
 			if (ioperm(myrpt->p.iobase, 1, 1) == -1) {
-				rpt_mutex_unlock(&myrpt->lock);
+				rpt_mutex_unlock(&myrpt->remlock);
 				ast_log(LOG_WARNING, "Can't get io permission on IO port %x hex\n", myrpt->p.iobase);
 				res = -1;
+				break;
 			} else {
 				res = setrbi(myrpt);
 			}
