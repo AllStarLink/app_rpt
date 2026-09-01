@@ -2937,7 +2937,7 @@ static struct ast_cli_entry voter_cli[] = {
  */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
-	int i, j, x, maxprio, haslastaudio;
+	int i, j, dtmfdetect, maxprio, haslastaudio;
 	struct ast_frame fr, *f1, *f2;
 	struct voter_client *client;
 	short silbuf[FRAME_SIZE];
@@ -3098,6 +3098,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				 */
 				j = sp1[i] + sp2[i];
 			}
+			/* Clamp the audio samples to the slin audio range. */
 			if (j > 32767) {
 				j = 32767;
 			} else if (j < -32767) {
@@ -3164,7 +3165,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	}
 	/* Assert the effective "COS". */
 	p->rxkey = 1;
-	x = 0;
+	dtmfdetect = 0;
 
 	/* Process any DTMF in the audio. */
 	if (p->dsp && p->usedtmf) {
@@ -3175,33 +3176,36 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			return 0;
 		}
 
-		/* Send the audio frame (f3) to Asterisk for DTMF processing. It will also mute the DTMF
+		/* Send the audio frame (f3) to Asterisk DSP for DTMF processing. It will also mute the DTMF
 		 * tone from the audio as part of the processing. Return the result into f2.
 		 */
 		f2 = ast_dsp_process(NULL, p->dsp, f3);
 		if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
 				if (f2->frametype == AST_FRAME_DTMF_END) {
+					/* DTMF was detected in the audio, so print it. */
 					ast_debug(1, "VOTER %d: Received DTMF char %c\n", p->nodenum, f2->subclass.integer);
 				}
 			} else {
 				f2->frametype = AST_FRAME_NULL;
 				f2->subclass.integer = 0;
 			}
+			/* After processing, queue the frame to the Asterisk channel. */
 			ast_queue_frame(p->owner, f2);
-			x = 1;
+			dtmfdetect = 1;
 		}
 
 		ast_frfree(f2);
 	}
-	/* If x == 0, no DTMF was detected, so just queue the normal audio frame to
-	 * Asterisk. If x == 1, DTMF was detected (and processed by the DSP), so we
+	/* If dtmfdetect == 0, no DTMF was detected, so just queue the normal audio frame to
+	 * Asterisk. If dtmfdetect == 1, DTMF was detected (and processed by the DSP), so we
 	 * create and queue a silent slin frame instead, muting the DTMF from being
 	 * transmitted.
 	 */
-	if (!x) {
+	if (!dtmfdetect) {
 		ast_queue_frame(p->owner, f1);
 	} else {
+		/* Send a silent frame to Asterisk. */
 		memset(silbuf, 0, sizeof(silbuf));
 		memset(&fr, 0, sizeof(fr));
 		fr.frametype = AST_FRAME_VOICE;
@@ -3223,15 +3227,21 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
  * integrates PMR channel input, performs optional mix-minus and format conversions,
  * and sends TX audio, keepalive, and ping packets to connected clients.
  *
+ * - txact is a flag for when current transmit/PMR/pager audio activity exists
+ * - mixminus_act is a flag for when mix-minus audio needs to be sent because
+ *   active mix clients exist
+ * - p->pmrChan is non-NULL if the channel requires audio processing (such as adding CTCSS, or
+ *   paging)
+ *
  * \param data Pointer to the per-node voter_pvt instance.
  */
 static void *voter_xmit(void *data)
 {
 	struct voter_pvt *p = (struct voter_pvt *) data;
-	int i, n, x, mx;
+	int i, txqueue, txact, mixminus_act;
 	i16 dummybuf1[FRAME_SIZE * 12], xmtbuf1[FRAME_SIZE * 12];
 	i16 xmtbuf[FRAME_SIZE], dummybuf2[FRAME_SIZE], xmtbuf2[FRAME_SIZE];
-	i32 l;
+	i32 mixaudio;
 	struct ast_frame fr, *f1, *f2, *f3, wf1;
 	struct voter_client *client, *client1;
 	struct timeval currenttime;
@@ -3260,30 +3270,46 @@ static void *voter_xmit(void *data)
 			p->drained_once = 1;
 			continue;
 		}
-		n = x = 0;
+		txqueue = txact = 0;
 		f2 = NULL;
+		/* Count the frames in the transmit queue (p->txq). */
 		ast_mutex_lock(&p->txqlock);
 		AST_LIST_TRAVERSE(&p->txq, f1, frame_list) {
-			n++;
+			txqueue++;
 		}
 		ast_mutex_unlock(&p->txqlock);
-		if (n && ((n > 3) || (!p->txkey))) {
-			x = 1;
+		/* If there are more than 3 frames queued, OR there is
+		 * at least one frame, and the transmitter is not keyed,
+		 * assert our transmit activity flag (txact), remove one
+		 * frame (f2). Send it to the pmrChan for processing
+		 * (typically adding CTCSS), if required, and request to
+		 * key the transmitter.
+		 */
+		if (txqueue && ((txqueue > 3) || (!p->txkey))) {
+			txact = 1;
 			ast_mutex_lock(&p->txqlock);
 			f2 = AST_LIST_REMOVE_HEAD(&p->txq, frame_list);
 			ast_mutex_unlock(&p->txqlock);
 			if (p->pmrChan) {
-				p->pmrChan->txPttIn = 1;
+				p->pmrChan->txPttIn = 1; /* Request to key the transmitter. */
 				PmrTx(p->pmrChan, (i16 *) f2->data.ptr);
 				ast_frfree(f2);
 			}
 		}
 		f1 = NULL;
-		/* x will be set here if there was actual transmit activity */
-		if (!x && p->pmrChan) {
-			p->pmrChan->txPttIn = 0;
+		/* txact will be set here if there is transmit activity taking place. If
+		 * we are done transmitting, txact will be false, and we request pmrChan to
+		 * un-key the transmitter (if pmrChan needs to be notified).
+		 */
+		if (!txact && p->pmrChan) {
+			p->pmrChan->txPttIn = 0; /* Request to un-key the transmitter. */
 		}
-		if (x && (!p->pmrChan)) {
+		/* If we have transmit activity taking place (frames to send), but we
+		 * don't need to process it through pmrChan, copy the frame into the
+		 * transmit buffer (xmtbuf), and translate the frame (f2) from slin to
+		 * ulaw, and put the result in f1 for later processing (sending to clients).
+		 */
+		if (txact && (!p->pmrChan)) {
 			memcpy(xmtbuf, f2->data.ptr, sizeof(xmtbuf));
 			f1 = ast_translate(p->fromast, f2, 1);
 			if (!f1) {
@@ -3292,21 +3318,37 @@ static void *voter_xmit(void *data)
 				continue;
 			}
 		}
+		/* Select the audio from a PMR-enabled instance. Pager audio takes
+		 * precedence, otherwise normal PMR-processed audio is used. If
+		 * neither is active, send pmrChan silence.
+		 */
 		if (p->pmrChan) {
-			if (p->pmrChan->txPttOut && (!x)) {
+			/* If the transmitter is still keyed by the pmrChan, but we are
+			 * finished sending audio frames, send pmrChan silent frames so
+			 * that it can un-key cleanly.
+			 */
+			if (p->pmrChan->txPttOut && (!txact)) {
 				memset(xmtbuf, 0, sizeof(xmtbuf));
 				if (p->pmrChan) {
 					PmrTx(p->pmrChan, xmtbuf);
 				}
 			}
+			/* Advance the PMR processing cycle, and put the processed audio
+			 * from the pmrChan in xmtbuf1.
+			 */
 			PmrRx(p->pmrChan, dummybuf1, dummybuf2, xmtbuf1);
-			n = 0;
+			txqueue = 0;
+			/* Count the frames in the pager queue (p->pagerq). */
 			ast_mutex_lock(&p->pagerqlock);
 			AST_LIST_TRAVERSE(&p->pagerq, f1, frame_list) {
-				n++;
+				txqueue++;
 			}
 			ast_mutex_unlock(&p->pagerqlock);
-			if (p->waspager && (n < 1)) {
+			/* When we run out of pager frames to send, send the
+			 * end string (ENDPAGE_STR) text event to the Asterisk
+			 * channel and clear p->waspager.
+			 */
+			if (p->waspager && (txqueue < 1)) {
 				memset(&wf1, 0, sizeof(wf1));
 				wf1.frametype = AST_FRAME_TEXT;
 				wf1.src = __PRETTY_FUNCTION__;
@@ -3315,7 +3357,11 @@ static void *voter_xmit(void *data)
 				ast_queue_frame(p->owner, &wf1);
 				p->waspager = 0;
 			}
-			if (n) {
+			/* If there are pager frames to send, take one out of the
+			 * queue and translate it from slin to ulaw, putting the
+			 * result in f1 for use later, and keep p->waspager set.
+			 */
+			if (txqueue) {
 				ast_mutex_lock(&p->pagerqlock);
 				f3 = AST_LIST_REMOVE_HEAD(&p->pagerq, frame_list);
 				f1 = ast_translate(p->fromast, f3, 1);
@@ -3326,10 +3372,16 @@ static void *voter_xmit(void *data)
 					continue;
 				}
 				ast_mutex_unlock(&p->pagerqlock);
-				x = 1;
+				txact = 1;
 				p->waspager = 1;
 			} else {
-				x = p->pmrChan->txPttOut;
+				/* If there was no paging activity, reset txact based on
+				 * the keying status sent back from pmrChan, and process the
+				 * normal PMR output. Pull samples out of the xmtbuf1, and
+				 * run it through a limiter, building a slin Asterisk frame
+				 * based on xmtbuf.
+				 */
+				txact = p->pmrChan->txPttOut;
 				for (i = 0; i < FRAME_SIZE; i++) {
 					xmtbuf[i] = xmtbuf1[i * 2];
 					if (xmtbuf[i] > 28000) {
@@ -3338,6 +3390,9 @@ static void *voter_xmit(void *data)
 						xmtbuf[i] = -28000;
 					}
 				}
+				/* Translate the slin audio in xmtbuf to ulaw, and put the
+				 * result in f1 for use later.
+				 */
 				memset(&fr, 0, sizeof(fr));
 				fr.frametype = AST_FRAME_VOICE;
 				fr.subclass.format = ast_format_slin;
@@ -3352,9 +3407,11 @@ static void *voter_xmit(void *data)
 				}
 			}
 		}
-		mx = 0;
-		/* Loop though all the registered mix mode/mixminus clients and set mx if any of them
-		 * are receiving audio, so we can transmit it.
+		mixminus_act = 0;
+		/* Now we loop though all the registered mix mode/mixminus clients and set
+		 * mixminus_act if any of them are active (receiving audio), so we can process
+		 * it for transmit. p->mixminus will be true if there are mixminus clients
+		 * defined in voter.conf.
 		 */
 		if (p->mixminus) {
 			ast_mutex_lock(&voter_lock);
@@ -3379,21 +3436,31 @@ static void *voter_xmit(void *data)
 				if (client->doadpcm) {
 					continue;
 				}
-				/* If this client received a signal (we calculated its RSSI), set mx */
+				/* If this client received a signal (we calculated its RSSI), set mixminus_act */
 				if (client->lastrssi) {
-					mx = 1;
+					mixminus_act = 1;
 				}
 			}
 			ast_mutex_unlock(&voter_lock);
 		}
-		/* x will now be set if we are to generate TX output */
-		/* This first "if" will send ulaw audio out all regular or mixminus clients by default. */
-		if (x || mx) {
+		/* txact will still be set if we are to generate TX output.
+		 *
+		 * This first "if" will build a packet to send ulaw audio out all regular
+		 * or mixminus clients by default.
+		 */
+		if (txact || mixminus_act) {
+			/* Start by initializing the memory locations we will use for our packet
+			 * with zeros/silence.
+			 */
 			memset(&audiopacket, 0, sizeof(audiopacket) - sizeof(audiopacket.audio));
 			memset(&audiopacket.audio, ULAW_SILENCE, sizeof(audiopacket.audio));
+			/* Build the packet header, and set the payload to ulaw. */
 			ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
 			audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ULAW);
 			audiopacket.rssi = 0;
+			/* We should have audio ready to go in f1 at this point, from a variety of
+			 * sources (above). Copy full FRAME_SIZE frames into the packet we are constructing.
+			 */
 			if (f1) {
 				memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 			}
@@ -3408,6 +3475,7 @@ static void *voter_xmit(void *data)
 					}
 				}
 			}
+			/* Timestamp our packet with master time (for voting clients). */
 			audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
 			/* Loop through all the clients, to figure out if we should send audio
@@ -3431,45 +3499,79 @@ static void *voter_xmit(void *data)
 				if (client->doadpcm) {
 					continue;
 				}
+				/* If mixminus is configured for this channel, figure out which
+				 * clients need audio sent to them (the "minus" client won't get
+				 * audio).
+				 */
 				if (p->mixminus) {
 					memcpy(xmtbuf2, xmtbuf, sizeof(xmtbuf2));
 					i = 0;
+					/* Traverse the client list. */
 					for (client1 = clients; client1; client1 = client1->next) {
+						/* Skip if this is the "mixminus" client that shouldn't
+						 * receive audio.
+						 */
 						if (client1 == client) {
 							continue;
 						}
+						/* Skip if this client doesn't belong to this instance. */
 						if (client1->nodenum != p->nodenum) {
 							continue;
 						}
+						/* Skip if we haven't heard from this client recently. */
 						if (!client1->heardfrom) {
 							continue;
 						}
+						/* Skip if this client isn't authenticated. */
 						if (!client1->respdigest) {
 							continue;
 						}
+						/* Skip if this is a normal voting client (can't do
+						 * mixminus with them)
+						 */
 						if (!client1->mix) {
 							continue;
 						}
+						/* Skip if this is an ADPCM client (mixminus is only
+						 * supported for ulaw clients).
+						 */
 						if (client1->doadpcm) {
 							continue;
 						}
+						/* Skip if the client isn't receiving anything. */
 						if (!client1->lastrssi) {
 							continue;
 						}
+						/* Build the mixed audio for the client. xmtbuf2 initially
+						 * contains the current transmit audio. client1->lastaudio
+						 * contains the last audio frame received from another mix-
+						 * mode client. The received audio is added to the outgoing
+						 * audio so it can be sent to the current client.
+						 *
+						 * The current client is excluded (above), which is the "minus"
+						 * part of mixminus... each client receives the combined audio
+						 * from the other clients, but not its own audio.
+						 */
 						for (i = 0; i < FRAME_SIZE; i++) {
-							l = xmtbuf2[i] + client1->lastaudio[i];
-							if (l > 32767) {
-								l = 32767;
+							mixaudio = xmtbuf2[i] + client1->lastaudio[i];
+							/* Clamp the audio samples to the slin audio range. */
+							if (mixaudio > 32767) {
+								mixaudio = 32767;
 							}
-							if (l < -32767) {
-								l = -32767;
+							if (mixaudio < -32767) {
+								mixaudio = -32767;
 							}
-							xmtbuf2[i] = l;
+							/* Put the result back into xmtbuf2 for later transmission. */
+							xmtbuf2[i] = mixaudio;
 						}
 					}
-					if (!x && !i) {
+					/*! \todo VE7FET AI flagged this, see Issue #1215 */
+					if (!txact && !i) {
 						continue;
 					}
+					/* Take xmtbuf2 (mixminus audio), translate it from slin to ulaw, and
+					 * put it in the audio packet we are building.
+					 */
 					memset(&fr, 0, sizeof(fr));
 					fr.frametype = AST_FRAME_VOICE;
 					fr.subclass.format = ast_format_slin;
@@ -3487,14 +3589,22 @@ static void *voter_xmit(void *data)
 					}
 					memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
 				}
+				/* Fudge time for Garmin GPS pucks, if needed. */
 				mkpucked(client, &audiopacket.vp.curtime);
 				audiopacket.vp.digest = htonl(client->respdigest);
+				/*! \todo VE7FET we set vtime_nsec above... which is probably redundant when
+				 * we do it here, this time taking into account the client type. Confirm and remove
+				 * the line above, if necessary.
+				 */
+				/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
+				 * nsec from the master timing source (for voting clients).
+				 */
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
 				if (client->totransmit && !client->txlockout) {
 					ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
 						client->respdigest);
-					/* Send the ulaw audio packet over the wire to the client for transmitting */
+					/* FINALLY, send the ulaw audio packet over the wire to the client for transmitting */
 					sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 
 					/* Update when this client last sent an audio packet */
@@ -3504,7 +3614,16 @@ static void *voter_xmit(void *data)
 			ast_mutex_unlock(&voter_lock);
 		}
 		/* This "if" is used by clients configured to use ADPCM audio to the client transmitter */
-		if (x || p->adpcmf1) {
+		/*! \todo VE7FET should this really be ||, or should it be &&? We already processed ulaw audio above,
+		 * so it seems strange to be running this code for non-ADPCM clients? However, we only set p->adpcmf1
+		 * in this conditional, so we really can only get in here if txact is true?
+		 */
+		if (txact || p->adpcmf1) {
+			/* If p->adpcmf1 is NULL (first time), copy f1 (which should contain ulaw audio from various branches
+			 * above) into it. On the next iteration, we process the accumulated audio into ADPCM format.
+			 * If p->adpcmf1 is non-NULL (subsequent iterations), concatenate either new audio (f1 if txact),
+			 * or silence (if no new transmit activity), then encode to ADPCM for transmission.
+			 */
 			if (p->adpcmf1 == NULL) {
 				p->adpcmf1 = ast_frdup(f1);
 			} else {
@@ -3516,18 +3635,24 @@ static void *voter_xmit(void *data)
 				fr.samples = FRAME_SIZE;
 				fr.data.ptr = xmtbuf;
 				fr.src = __PRETTY_FUNCTION__;
-				if (x) {
+				if (txact) {
 					f3 = ast_frcat(p->adpcmf1, f1);
 				} else {
 					f3 = ast_frcat(p->adpcmf1, &fr);
 				}
 				ast_frfree(p->adpcmf1);
 				p->adpcmf1 = NULL;
+				/* Build the packet to send to the ADPCM client. Start by translating the audio
+				 * in f3 from ulaw to ADPCM.
+				 */
 				f2 = ast_translate(p->adpcmout, f3, 1);
+				/* Put the translated audio into the packet we're going to send. */
 				memcpy(audiopacket.audio, f2->data.ptr, f2->datalen);
+				/* Timestamp the packet. */
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
 				ast_mutex_lock(&voter_lock);
+				/* Traverse the client list, and determine which clients to send to. */
 				for (client = clients; client; client = client->next) {
 					/* Skip if this client doesn't belong to this instance */
 					if (client->nodenum != p->nodenum) {
@@ -3545,15 +3670,19 @@ static void *voter_xmit(void *data)
 					if (!client->doadpcm) {
 						continue;
 					}
+					/* Fudge time for Garmin GPS pucks, if needed. */
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
+					/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
+					 * nsec from the master timing source (for voting clients).
+					 */
 					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 #ifndef ADPCM_LOOPBACK
 					/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
 					if (client->totransmit && !client->txlockout) {
 						ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, client->respdigest);
-						/* Send the ADPCM audio packet over the wire to the client for transmitting */
+						/* Finally, send the ADPCM audio packet over the wire to the client for transmitting. */
 						sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 
 						/* Update when this client last sent an audio packet */
@@ -3565,6 +3694,7 @@ static void *voter_xmit(void *data)
 				ast_frfree(f2);
 			}
 		}
+		/* Clean up, as we are done sending audio packets. */
 		if (f1) {
 			ast_frfree(f1);
 		}
@@ -3633,12 +3763,15 @@ static void *voter_xmit(void *data)
 		}
 		/* Process sending keepalive packets for each client, if necessary */
 		for (client = clients; client; client = client->next) {
+			/* Skip if the client doesn't belong to this instance. */
 			if (client->nodenum != p->nodenum) {
 				continue;
 			}
+			/* Skip if the client isn't authenticated. */
 			if (!client->respdigest) {
 				continue;
 			}
+			/* Skip if we haven't heard from the client recently. */
 			if (!client->heardfrom) {
 				continue;
 			}
