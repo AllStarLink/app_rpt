@@ -4952,34 +4952,36 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 					}
 				}
 				/* foop */
-				if (l->chan && !ast_check_hangup(l->chan) && (l->lastrx || (!altlink(myrpt, l))) &&
-					((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
-					/* Reverse-engineering comments from NA debugging issue #46:
-					 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey is set
-					 * to != RADIO_KEY_NOT_ALLOWED yet. This happens when the reset code forces it to RADIO_ALLOWED. Of course if
-					 * handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer, then at some
-					 * point, we'll set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the code for more info),
-					 * If this happens, we're passing voice frames and now sending AST_RADIO_KEY messages
-					 * so we're keyed up and transmitting, essentially, which we don't want to happen.
-					 *
-					 */
-					if (ast_write(l->chan, f)) {
-						ast_debug(1, "ast_write failed on %s, breaking loop\n", ast_channel_name(l->chan));
-						ast_frfree(f);
-						break;
+				if (l->chan && !ast_check_hangup(l->chan)) {
+					int write_frame = 0;
+					if ((l->lastrx || (!altlink(myrpt, l))) &&
+						((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
+						/* Reverse-engineering comments from NA debugging issue #46:
+						 * We may be receiving frames from channel drivers but we discard them and don't pass them on if newkey is
+						 * set to != RADIO_KEY_NOT_ALLOWED yet. This happens when the reset code forces it to RADIO_ALLOWED. Of
+						 * course if handle_link_data is never called to set newkey to RADIO_KEY_NOT_ALLOWED and stop newkeytimer,
+						 * then at some point, we'll set newkey = RADIO_KEY_ALLOWED forcibly (see comments in that part of the
+						 * code for more info), If this happens, we're passing voice frames and now sending AST_RADIO_KEY messages
+						 * so we're keyed up and transmitting, essentially, which we don't want to happen.
+						 *
+						 */
+						write_frame = 1;
+						l->last_frame_sent = 1;
+					} else if (altlink(myrpt, l) && (!l->lastrx) &&
+							   ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
+						/* If we are and alt link, copy audio frames when NOT transmitting, like a "normal" asterisk link.
+						 * If the repeater is not receiving (either remote or local), we use the audiohook to "whisper" any
+						 * repeater output frames into the l->pchan.
+						 */
+						write_frame = 1;
 					}
 
-					l->last_frame_sent = 1;
-				} else if (l->chan && !ast_check_hangup(l->chan) && altlink(myrpt, l) && (!l->lastrx) &&
-						   ((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
-					/* If we are and alt link, copy audio frames when NOT transmitting, like a "normal" asterisk link.
-					 * If the repeater is not receiving (either remote or local), we use the audiohook to "whisper" any
-					 * repeater output frames into the l->pchan.
-					 */
-					if (ast_write(l->chan, f)) {
-						ast_debug(1, "ast_write failed on %s, breaking loop\n", ast_channel_name(l->chan));
-						ast_frfree(f);
-						break;
+					if (write_frame) {
+						if (ast_write(l->chan, f)) {
+							ast_debug(1, "ast_write failed on %s, breaking loop\n", ast_channel_name(l->chan));
+							ast_frfree(f);
+							break;
+						}
 					}
 				}
 			}
