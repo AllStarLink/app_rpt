@@ -774,7 +774,7 @@ void *rpt_link_connect(void *data)
 		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
 			rpt_mutex_unlock(&myrpt->lock);
-			l->mode = connect_data->mode;
+			rpt_update_link_mode(myrpt, l, connect_data->mode);
 			ao2_ref(l, -1);
 			goto cleanup;
 		}
