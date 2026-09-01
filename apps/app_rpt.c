@@ -4689,15 +4689,25 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 		remrx = 0;
 		/* see if any other links are receiving */
-		rpt_mutex_lock(&myrpt->lock);
-		RPT_LIST_TRAVERSE(myrpt->links, m, l_it) {
-			/* if not the link we are currently processing, and not localonly count it */
-			if ((m != l) && (m->lastrx) && (m->mode < 2)) {
+		if (myrpt->remrx) {
+			if (!l->lastrx) {
+				/* myrpt->remrx is true and this link is NOT receiving,
+				 * so another link MUST be receiving. No lock needed! */
 				remrx = 1;
+			} else {
+				/* Only lock if THIS link is receiving and we need to verify
+				 * whether a SECOND link is also receiving. */
+				rpt_mutex_lock(&myrpt->lock);
+				RPT_LIST_TRAVERSE(myrpt->links, m, l_it) {
+					/* if not the link we are currently processing, and not localonly count it */
+					if ((m != l) && (m->lastrx) && (m->mode < 2)) {
+						remrx = 1;
+					}
+				}
+				ao2_iterator_destroy(&l_it);
+				rpt_mutex_unlock(&myrpt->lock);
 			}
 		}
-		ao2_iterator_destroy(&l_it);
-		rpt_mutex_unlock(&myrpt->lock);
 
 		now = rpt_tvnow();
 		if ((who == l->chan) || (!l->lastlinktv.tv_sec) || (ast_tvdiff_ms(now, l->lastlinktv) >= 19)) {
