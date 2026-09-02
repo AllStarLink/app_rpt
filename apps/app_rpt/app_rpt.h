@@ -595,6 +595,7 @@ struct rpt_link {
 	int retries;
 	int max_retries;
 	int reconnects;
+	int audiohook_init;
 	struct timeval connecttime;
 	struct ast_channel *chan;
 	struct ast_channel *pchan;
