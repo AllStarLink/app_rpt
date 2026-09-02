@@ -5017,16 +5017,17 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 	}
 	rpt_frame_queue_free(&l->frame_queue);
-	hangup_link_chan(l);
 
+	/* 1. Remove audiohook while l->chan is still valid */
+	if (ast_channel_audiohooks(l->pchan)) {
+		ast_audiohook_remove(l->pchan, &l->altaudio);
+	}
+
+	/* 2. Hang-up the channels */
+	hangup_link_chan(l);
 	if (l->pchan) {
 		ast_hangup(l->pchan);
 		l->pchan = NULL;
-	}
-
-	if (!l->audiohook_init) {
-		ast_debug(1, "Audio hook initialized, destroying ...\n");
-		ast_audiohook_destroy(&l->altaudio);
 	}
 
 	if (l->hasconnected) {
@@ -5034,6 +5035,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	/* 3. Destroy audiohook resources */
+	ast_audiohook_destroy(&l->altaudio);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 
 	return;
@@ -7382,7 +7384,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 
-		l->audiohook_init = ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
+		ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
 		ast_audiohook_attach(l->pchan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
 
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);

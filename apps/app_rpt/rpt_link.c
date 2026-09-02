@@ -909,7 +909,7 @@ void *rpt_link_connect(void *data)
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
-	l->audiohook_init = ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
+	ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
 	ast_audiohook_attach(l->chan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
 
 	rpt_mutex_lock(&myrpt->lock);
