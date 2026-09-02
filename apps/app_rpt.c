@@ -5018,10 +5018,10 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
-	/* 1. Detach audiohook while l->chan is still valid */
-	ast_audiohook_lock(&l->altaudio);
-	ast_audiohook_detach(&l->altaudio);
-	ast_audiohook_unlock(&l->altaudio);
+	/* 1. Remove audiohook while l->chan is still valid */
+	if (ast_channel_audiohooks(l->pchan)) {
+		ast_audiohook_remove(l->pchan, &l->altaudio);
+	}
 
 	/* 2. Hang-up the channels */
 	hangup_link_chan(l);
