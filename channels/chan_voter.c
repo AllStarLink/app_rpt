@@ -674,18 +674,44 @@ static int32_t crc32_bufs(char *restrict buf, char *restrict buf1)
 
 #define GAIN1 1.745882764e+00
 /*!
- * \brief DSP IIR high pass filter
+ * \brief DSP IIR 6-pole 300Hz High Pass Filter
  *
- * IIR 6 pole high pass filter, 300Hz corner with 0.5db ripple
+ * Filter Type and Order:
+ * 		6th order (6-pole) IIR Chebyshev Type I high pass filter
+ * Key Specifications:
+ * 		Corner Frequency: 300Hz @ 8kHz sample rate
+ *		Passband Edge: ~300Hz (ripple boundary)
+ *		Passband Ripple: +/-0.5dB
+ *		Attenuation Rate: ~120dB/decade (6th order)
+ *		Filter Shape: Steep high-pass response with equiripple passband response
+ *		Assumed Sample Rate: 8kHz (standard for Asterisk voice channels)
+ * Operation:
+ *		The filter uses two delay lines, xv for input history, and yv for output history:
+ *		1) Input shift cascades the new input through a 7-tap input history buffer,
+ *		normalized by GAIN1.
+ *		2) Output shift cascades previous outputs through a 6-tap output history buffer.
+ *		3) The difference equation computes the filtered output.
  *
- * \param input			Audio value to filter.
- * \param xv			Delay line.
- * \param yv			Delay line.
- * \return 				Filtered value.
- * \todo				This filter needs more documentation.
+ * The symmetric input coefficients (1, -6, 15, -20, 15, -6, 1) are binomial coefficients,
+ * typical of filters using numerical optimization methods.
+ *
+ * Why this design?
+ *		The 0.5dB ripple tolerance trades the flat passband response for:
+ *			- steeper transition from stopband to passband
+ *			- faster rolloff below 300Hz compared with Butterworth
+ *			- excellent DC rejection, while preserving voice frequencies above 350Hz
+ *		This filter is optimized for radio/voice applications where you need aggressive
+ *		low-frequency rejection (hum, rumble, CTCSS) without introducing phase distortion
+ *		audible in speech.
+ *
+ * \param input			Input audio value to filter.
+ * \param xv			Input history delay line.
+ * \param yv			Output history delay line.
+ * \return 				Output filtered audio value.
  */
 static int16_t hpass6(int16_t input, float *restrict xv, float *restrict yv)
 {
+	/* Input shift. */
 	xv[0] = xv[1];
 	xv[1] = xv[2];
 	xv[2] = xv[3];
@@ -693,36 +719,69 @@ static int16_t hpass6(int16_t input, float *restrict xv, float *restrict yv)
 	xv[4] = xv[5];
 	xv[5] = xv[6];
 	xv[6] = ((float) input) / GAIN1;
+	/* Output shift. */
 	yv[0] = yv[1];
 	yv[1] = yv[2];
 	yv[2] = yv[3];
 	yv[3] = yv[4];
 	yv[4] = yv[5];
 	yv[5] = yv[6];
+	/* Difference equation. */
 	yv[6] = (xv[0] + xv[6]) - 6 * (xv[1] + xv[5]) + 15 * (xv[2] + xv[4]) - 20 * xv[3] + (-0.3491861578 * yv[0]) + (2.3932556573 * yv[1]) +
 			(-6.9905126572 * yv[2]) + (11.0685981760 * yv[3]) + (-9.9896695552 * yv[4]) + (4.8664511065 * yv[5]);
 	return ((int) yv[6]);
 }
 
 /*!
- * \brief De-emphasis filter
+ * \brief DSP IIR 6dB/octave De-emphasis Filter
  *
- * Perform standard 6db/octave de-emphasis.
- * FIR integrator at 8000 samples/second.
+ * Filter Type and Order:
+ * 		1st order (single-pole) IIR low-pass filter, which implements standard
+ *		de-emphasis response with -6dB/octave attenuation.
+ * Key Specifications:
+ *		Type: IIR low-pass (Butterworth, maximally flat)
+ * 		Corner Frequency: 300Hz @ 8kHz sample rate
+ *		Passband Edge: DC to 300Hz (flat)
+ *		Passband Ripple: 0dB (flat)
+ *		Attenuation Rate: -6dB/octave (-20dB/decade)
+ *		Stopband Response: -5.7dB @ 500Hz, -18.6dB @ 4kHz
+ *		Implementation: 1 state variable + 3 multiply-accumulate operations
+ *		Assumed Sample Rate: 8kHz (standard for Asterisk voice channels)
+ * Operation:
+ *		The filter uses a single state accumulator and performs two operations per
+ *		sample.
  *
- * \param input			Audio value to filter.
- * \param state			State variable.
- * \return 				Filtered value.
- * \todo				This filter needs more documentation.
+ * Why this design?
+ *		This is the standard de-emphasis compensation used in radio systems. This
+ *		filter attenuates the high frequencies received removing both the boost
+ *		added by the transmitting end pre-emphasis, and high-frequency noise.
+ *
+ *		This design is optimized for 8kHz telephone (Asterisk voice channels), where
+ *		the 300Hz corner preserves speech intelligibility while significantly attenuating
+ *		hiss and high-frequency noise above 1kHz.
+ *
+ *		This extremely simple one=pole structure makes it computationally efficient for
+ *		real-time processing.
+ *
+ * \param input			Input audio value to filter.
+ * \param state0		State variable; persistent feedback signal.
+ * \return 				Output filtered audio value.
  */
 static int16_t deemp1(int16_t input, int32_t *restrict state0)
 {
 	register int32_t accum;
 	register int16_t output;
 
+	/* state0 stores the internal feedback (accumulator state) from previous samples. It
+	 * implements the pole of the filter. It persists across calls, allowing the IIR recursion
+	 * to continue across multiple audio samples. Without the state0 variable, each
+	 * sample would be processed independently without any frequency-dependent filtering,
+	 * it would just be a pass-through gain stage. The state is what makes this an IIR
+	 * filter with memory.
+	 */
 	accum = input;
-	*state0 = accum + (*state0 * 25889) / M_Q15;
-	accum = (*state0 * 6878) / (M_Q15 / 4);
+	*state0 = accum + (*state0 * 25889) / M_Q15; /* Feedback (pole) ~0.79028 */
+	accum = (*state0 * 6878) / (M_Q15 / 4);		 /* Feedforward (gain) ~0.84021 */
 	output = accum;
 	return output;
 }
