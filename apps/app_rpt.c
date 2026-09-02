@@ -3662,8 +3662,9 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		if ((!l->chan) && (!l->disctime)) {
 			ast_debug(1, "LINKDISC AA\n");
 			l->disced = RPT_LINK_DISCONNECT;
-			if (l->chan) {
-				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+			if (l->pchan) { /* This will cause the channel process loop to exit */
+				ast_hangup(l->pchan);
+				l->pchan = NULL;
 			}
 			if (!ao2_container_count(myrpt->links)) {
 				channel_revert(myrpt);
@@ -4697,7 +4698,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 	looptimestart = rpt_tvnow();
 
-	while (ms >= 0) {
+	while (ms >= 0 && l->pchan) {
 		ms = MSWAIT;
 		n = 0;
 		cs[n++] = l->pchan;
