@@ -700,9 +700,8 @@ static int32_t crc32_bufs(char *restrict buf, char *restrict buf1)
  *			- steeper transition from stopband to passband
  *			- faster rolloff below 300Hz compared with Butterworth
  *			- excellent DC rejection, while preserving voice frequencies above 350Hz
- *		This filter is optimized for radio/voice applications where you need aggressive
- *		low-frequency rejection (hum, rumble, CTCSS) without introducing phase distortion
- *		audible in speech.
+ *		This filter is optimized for radio/voice applications where aggressive low-frequency
+ *		rejection (hum, rumble, CTCSS) is prioritized, while preserving speech intelligibility.
  *
  * \param input			Input audio value to filter.
  * \param xv			Input history delay line.
@@ -739,13 +738,13 @@ static int16_t hpass6(int16_t input, float *restrict xv, float *restrict yv)
  * 		1st order (single-pole) IIR low-pass filter, which implements standard
  *		de-emphasis response with -6dB/octave attenuation.
  * Key Specifications:
- *		Type: IIR low-pass (Butterworth, maximally flat)
+ *		Type: IIR low-pass
  * 		Corner Frequency: 300Hz @ 8kHz sample rate
- *		Passband Edge: DC to 300Hz (flat)
- *		Passband Ripple: 0dB (flat)
+ *		Passband: Frequencies below 300Hz, with attenuation approaching -3dB at 300Hz
+ *		Passband Ripple: None
  *		Attenuation Rate: -6dB/octave (-20dB/decade)
  *		Stopband Response: -5.7dB @ 500Hz, -18.6dB @ 4kHz
- *		Implementation: 1 state variable + 3 multiply-accumulate operations
+ *		Implementation: 1 state variable + 2 multiply/divide stages and 1 addition
  *		Assumed Sample Rate: 8kHz (standard for Asterisk voice channels)
  * Operation:
  *		The filter uses a single state accumulator and performs two operations per
