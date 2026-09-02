@@ -184,6 +184,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		ast_copy_string(myrpt->lastlinknode, digitbuf, sizeof(myrpt->lastlinknode));
 		l->retries = l->max_retries + 1;
 		l->disced = RPT_LINK_DISCONNECT;
+		if (l->chan) {
+			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+		}
 		l->hasconnected = 1;
 		if (l->chan) {
 			if (l->thisconnected) {
@@ -344,6 +347,9 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			}
 			l->retries = l->max_retries + 1;
 			l->disced = RPT_LINK_DISCONNECT_SILENT; /* Silently disconnect */
+			if (l->chan) {
+				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+			}
 			ast_debug(5, "dumping link %s\n", l->name);
 			if (l->chan) {
 				if (l->thisconnected) {

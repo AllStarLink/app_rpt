@@ -1914,6 +1914,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 
 	if (!strcmp(str, DISCSTR)) {
 		mylink->disced = RPT_LINK_DISCONNECT;
+		if (mylink->chan) {
+			ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
+		}
+		if ((mylink->max_retries == MAX_RETRIES_PERM) || mylink->perma) {
+			mylink->max_retries = MAX_RETRIES;
+			mylink->perma = 0;
+		}
 		mylink->retries = mylink->max_retries + 1;
 		return;
 	}
@@ -3611,6 +3618,9 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			if (!l->outbound) {
 				ast_debug(1, "Connection taking to long, giving up on link");
 				l->disced = RPT_LINK_DISCONNECT;
+				if (l->chan) {
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				}
 			} else {
 				ast_debug(1, "Connection taking to long, resetting retry timer");
 				l->retrytimer = RETRY_TIMER_MS;
@@ -3629,6 +3639,9 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		}
 		if (!l->chan && !l->retrytimer && max_retries) {
 			l->disced = RPT_LINK_DISCONNECT;
+			if (l->chan) {
+				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+			}
 			if (!strcmp(myrpt->cmdnode, l->name))
 				myrpt->cmdnode[0] = 0;
 			if (l->name[0] != '0') {
@@ -3649,6 +3662,9 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 		if ((!l->chan) && (!l->disctime)) {
 			ast_debug(1, "LINKDISC AA\n");
 			l->disced = RPT_LINK_DISCONNECT;
+			if (l->chan) {
+				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+			}
 			if (!ao2_container_count(myrpt->links)) {
 				channel_revert(myrpt);
 			}
@@ -4681,7 +4697,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 	looptimestart = rpt_tvnow();
 
-	while (ms >= 0 && l->disced == RPT_LINK_DISCONNECT_NONE) {
+	while (ms >= 0) {
 		ms = MSWAIT;
 		n = 0;
 		cs[n++] = l->pchan;
@@ -5829,6 +5845,9 @@ static void *rpt(void *this)
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
 				l->disced = RPT_LINK_DISCONNECT;
+				if (l->chan) {
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				}
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				continue;
@@ -5995,6 +6014,9 @@ static void *rpt(void *this)
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* hang-up any running links */
 		l->disced = RPT_LINK_DISCONNECT_SILENT;
+		if (l->chan) {
+			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+		}
 	}
 	ao2_iterator_destroy(&l_it);
 	rpt_mutex_unlock(&myrpt->lock);
@@ -7291,6 +7313,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
 				l->disced = RPT_LINK_DISCONNECT_SILENT;
+				if (l->chan) {
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				}
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);
