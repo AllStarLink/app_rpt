@@ -3671,20 +3671,27 @@ static void *voter_xmit(void *data)
 			}
 			ast_mutex_unlock(&voter_lock);
 		}
-		/* This "if" is used by clients configured to use ADPCM audio to the client transmitter */
-		/*! \todo VE7FET should this really be ||, or should it be &&? We already processed ulaw audio above,
-		 * so it seems strange to be running this code for non-ADPCM clients? However, we only set p->adpcmf1
-		 * in this conditional, so we really can only get in here if txact is true?
+		/* This block is used by clients configured to use ADPCM audio to the client transmitter. It
+		 * is entered if there is new activity (txact = 1), OR there is no txact, but p->adpcmf1 is
+		 * not null (flushing a buffered frame).
+		 *
+		 * On the first iteration, when txact=1 and p->adpcmf1 is NULL, we store the current frame
+		 * (f1) into p->adpcmf1. f1 should contain ulaw audio from various branches above.
+		 *
+		 * On the next iteration, when p->adpcmf1 is not NULL, we enter the else block, which concatenates
+		 * the next ulaw frame from the buffer (f1), or a silence frame, into f3. We reset p->adpcmf1 = NULL,
+		 * translate the concatenated frame (f3) from ulaw to ADPCM (storing it in f2), stuff it in an audio
+		 * packet, and send it to the ADPCM clients.
+		 *
+		 * If there is no txact, and p->adpcmf1 is NULL (by default), we do nothing and skip.
 		 */
 		if (txact || p->adpcmf1) {
-			/* If p->adpcmf1 is NULL (first time), copy f1 (which should contain ulaw audio from various branches
-			 * above) into it. On the next iteration, we process the accumulated audio into ADPCM format.
-			 * If p->adpcmf1 is non-NULL (subsequent iterations), concatenate either new audio (f1 if txact),
-			 * or silence (if no new transmit activity), then encode to ADPCM for transmission.
-			 */
+			/* First time in, we copy the ulaw frame (f1) into p->adpcmf1. */
 			if (p->adpcmf1 == NULL) {
 				p->adpcmf1 = ast_frdup(f1);
+				/* Subsequent entries into this block, p->adpcmf1 != NULL, so we run this else block. */
 			} else {
+				/* Build a silence frame. */
 				memset(xmtbuf, ULAW_SILENCE, sizeof(xmtbuf));
 				memset(&fr, 0, sizeof(fr));
 				fr.frametype = AST_FRAME_VOICE;
@@ -3693,15 +3700,21 @@ static void *voter_xmit(void *data)
 				fr.samples = FRAME_SIZE;
 				fr.data.ptr = xmtbuf;
 				fr.src = __PRETTY_FUNCTION__;
+				/* If txact is still true, we should have another f1 ulaw frame, concatenate it with
+				 * the previous frame already in p->adpcmf1, and store the result in f3 as a full audio
+				 * frame. If txact is no longer true, we fill the other half of the audio frame with
+				 * silence.
+				 */
 				if (txact) {
 					f3 = ast_frcat(p->adpcmf1, f1);
 				} else {
 					f3 = ast_frcat(p->adpcmf1, &fr);
 				}
+				/* Clean up our buffers on the second pass through, since we don't need them anymore. */
 				ast_frfree(p->adpcmf1);
 				p->adpcmf1 = NULL;
 				/* Build the packet to send to the ADPCM client. Start by translating the audio
-				 * in f3 from ulaw to ADPCM.
+				 * in f3 from ulaw to ADPCM, and store it in f2.
 				 */
 				f2 = ast_translate(p->adpcmout, f3, 1);
 				/* Put the translated audio into the packet we're going to send. */
@@ -3749,6 +3762,7 @@ static void *voter_xmit(void *data)
 #endif
 				}
 				ast_mutex_unlock(&voter_lock);
+				/* Clean up, we're done with the ADPCM audio frame. */
 				ast_frfree(f2);
 			}
 		}
