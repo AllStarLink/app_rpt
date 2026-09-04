@@ -210,17 +210,35 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
 }
 
-void rpt_link_stop_retries(struct rpt_link *l)
+static void rpt_link_demote_retries(struct rpt_link *l)
 {
 	l->perma = 0;
 	if (l->max_retries > MAX_RETRIES) {
 		l->max_retries = MAX_RETRIES;
 	}
 	l->retries = l->max_retries + 1;
-	l->disced = RPT_LINK_DISCONNECT;
 }
 
-int rpt_link_send_disconnect(struct ast_channel *chan)
+static void rpt_link_stop_retries_common(struct rpt_link *l, enum rpt_link_disconnect disced)
+{
+	rpt_link_demote_retries(l);
+	l->disced = disced;
+	if (l->chan) {
+		ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+	}
+}
+
+void rpt_link_stop_retries(struct rpt_link *l)
+{
+	rpt_link_stop_retries_common(l, RPT_LINK_DISCONNECT);
+}
+
+void rpt_link_stop_retries_silent(struct rpt_link *l)
+{
+	rpt_link_stop_retries_common(l, RPT_LINK_DISCONNECT_SILENT);
+}
+
+void rpt_link_queue_disconnect(struct rpt_link *l)
 {
 	struct ast_frame wf = {
 		.frametype = AST_FRAME_TEXT,
@@ -229,11 +247,7 @@ int rpt_link_send_disconnect(struct ast_channel *chan)
 		.data.ptr = DISCSTR,
 	};
 
-	if (!chan) {
-		return -1;
-	}
-	ast_write(chan, &wf);
-	return 0;
+	rpt_qwrite(l, &wf);
 }
 
 int linkcount(struct rpt *myrpt)

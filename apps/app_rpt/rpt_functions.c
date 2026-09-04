@@ -136,7 +136,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	enum rpt_find_node_response find_node_response;
 	enum link_mode mode;
 	struct rpt_link *l;
-	struct ast_channel *chan;
 	struct ao2_iterator l_it;
 	int i, r;
 	struct rpt_connect_data *connect_data;
@@ -184,18 +183,17 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		}
 		ast_copy_string(myrpt->lastlinknode, digitbuf, sizeof(myrpt->lastlinknode));
 		/*
-		 * Send !!DISCONNECT!! before setting disced. If disced is set first,
-		 * process_link_channel can exit without flushing textq and the peer only
-		 * sees hangup — permanent links then immediately reconnect (#1216).
+		 * Queue !!DISCONNECT!! for the link thread, then demote/softhangup.
+		 * Cross-thread ast_write is unsafe while process_link_channel owns
+		 * the channel in ast_waitfor_n; textq is flushed in remote_hangup_helper
+		 * after softhangup wakes that thread (#1216 / #932).
 		 */
 		if (l->chan && l->thisconnected) {
-			chan = ast_channel_ref(l->chan);
-			rpt_mutex_unlock(&myrpt->lock);
-			rpt_link_send_disconnect(chan);
-			ast_channel_unref(chan);
-			rpt_mutex_lock(&myrpt->lock);
+			rpt_link_queue_disconnect(l);
 		}
+		rpt_mutex_unlock(&myrpt->lock);
 		rpt_link_stop_retries(l);
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->linkactivityflag = 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -312,7 +310,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 	case 6: /* All Links Off, including permalinks */
 	{
 		struct ao2_container *links_copy = NULL;
-		struct ao2_container *chans = NULL;
 
 		rpt_mutex_lock(&myrpt->lock);
 
@@ -323,12 +320,6 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 
 		links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
 		if (!links_copy) {
-			rpt_mutex_unlock(&myrpt->lock);
-			return DC_ERROR;
-		}
-		chans = ao2_container_alloc_list(0, 0, NULL, NULL);
-		if (!chans) {
-			ao2_ref(links_copy, -1);
 			rpt_mutex_unlock(&myrpt->lock);
 			return DC_ERROR;
 		}
@@ -360,30 +351,19 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			}
 			ast_debug(5, "dumping link %s\n", l->name);
 			if (l->chan && l->thisconnected) {
-				/* ao2_link holds the channel so hangup cannot free it before we write. */
-				ao2_link(chans, l->chan);
+				rpt_link_queue_disconnect(l);
 			}
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 
-		RPT_LIST_TRAVERSE(chans, chan, l_it) {
-			rpt_link_send_disconnect(chan);
-		}
-		ao2_iterator_destroy(&l_it);
-		ao2_ref(chans, -1);
-
-		rpt_mutex_lock(&myrpt->lock);
 		RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 			if ((l->name[0] <= '0') || (l->name[0] > '9')) {
 				continue;
 			}
-			/* Silent variant of stop_retries (no REMDISC telemetry path). */
-			rpt_link_stop_retries(l);
-			l->disced = RPT_LINK_DISCONNECT_SILENT;
+			rpt_link_stop_retries_silent(l);
 		}
 		ao2_iterator_destroy(&l_it);
-		rpt_mutex_unlock(&myrpt->lock);
 		ao2_ref(links_copy, -1);
 
 		ast_debug(1, "Nodes disconnected: %s\n", myrpt->savednodes);
