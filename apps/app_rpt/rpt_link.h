@@ -34,16 +34,23 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
  * \param l Link to demote and mark disconnected
  *
  * Demotes permanent links off MAX_RETRIES_PERM, marks retries exhausted,
- * clears perma, and sets disced so hangup/reconnect paths will not redial.
+ * clears perma, sets disced, and softhangups the link channel so
+ * process_link_channel leaves via hangup (remote_hangup_helper flushes textq).
+ * Do not call while holding a channel lock.
  */
 void rpt_link_stop_retries(struct rpt_link *l);
 
 /*!
- * \brief Send !!DISCONNECT!! immediately on a referenced channel (bypasses textq).
- * \param chan Channel to write (must be referenced by caller; lock must not be held)
- * \retval 0 if write attempted, -1 if channel missing
+ * \brief Like rpt_link_stop_retries(), but sets RPT_LINK_DISCONNECT_SILENT.
+ * \param l Link to demote and mark disconnected silently
  */
-int rpt_link_send_disconnect(struct ast_channel *chan);
+void rpt_link_stop_retries_silent(struct rpt_link *l);
+
+/*!
+ * \brief Queue !!DISCONNECT!! on the link textq for the link thread to flush.
+ * \param l Link whose textq receives DISCSTR (safe from other threads)
+ */
+void rpt_link_queue_disconnect(struct rpt_link *l);
 
 int linkcount(struct rpt *myrpt);
 

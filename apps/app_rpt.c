@@ -1914,12 +1914,10 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 
 	if (!strcmp(str, DISCSTR)) {
 		/* Peer asked us to drop this link; demote permalinks so #574 infinite
-		 * retry cannot resurrect it, then softhangup so teardown sees disced set.
+		 * retry cannot resurrect it. stop_retries softhangups so teardown
+		 * runs through remote_hangup_helper (textq flush).
 		 */
 		rpt_link_stop_retries(mylink);
-		if (mylink->chan) {
-			ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
-		}
 		return;
 	}
 	if (!strcmp(str, NEWKEYSTR)) {
@@ -4602,6 +4600,27 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		ast_autoservice_start(l->pchan);
 		link_process_textq(myrpt, l);
 		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
+
+		/*
+		 * Receiver path: peer may have sent !!DISCONNECT!! before or after HANGUP.
+		 * Drain pending TEXT while pchan stays on autoservice so we honor an exact
+		 * DISCSTR before redialing a permanent outbound link.
+		 */
+		if (!CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb") && l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down()) {
+			struct ast_frame *f;
+
+			while (!ast_shutting_down() && ast_waitfor(l->chan, 0) > 0) {
+				f = ast_read(l->chan);
+				if (!f) {
+					break;
+				}
+				if (f->frametype == AST_FRAME_TEXT && f->data.ptr && (f->datalen == (int) sizeof(DISCSTR)) &&
+					!strncmp(f->data.ptr, DISCSTR, sizeof(DISCSTR))) {
+					rpt_link_stop_retries(l);
+				}
+				ast_frfree(f);
+			}
+		}
 		ast_autoservice_stop(l->pchan);
 	}
 
@@ -4618,54 +4637,33 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb") && l->disced == RPT_LINK_DISCONNECT_NONE &&
 		!ast_shutting_down()) {
-		struct ast_frame *f;
-
-		/*
-		 * Receiver path: peer may have sent !!DISCONNECT!! before or after HANGUP.
-		 * Drain the queue so we honor an exact DISCSTR before redialing a permanent
-		 * outbound link. Do not stop at the first of DISCSTR or HANGUP.
-		 */
-		while (!ast_shutting_down() && ast_waitfor(l->chan, 0) > 0) {
-			f = ast_read(l->chan);
-			if (!f) {
-				break;
+		/* Drain may have set disced via !!DISCONNECT!! — only redial if still clear. */
+		if (!l->outbound) {
+			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
+				/* Not an allstar link node */
+				l->disctime = 1;
+			} else {
+				/* An allstar link node */
+				l->disctime = DISC_TIME;
 			}
-			if (f->frametype == AST_FRAME_TEXT && f->data.ptr && (f->datalen == (int) sizeof(DISCSTR)) &&
-				!strncmp(f->data.ptr, DISCSTR, sizeof(DISCSTR))) {
-				rpt_link_stop_retries(l);
-			}
-			ast_frfree(f);
+			hangup_link_chan(l);
+			return 1;
 		}
 
-		/* Drain may have set disced via !!DISCONNECT!! — only redial if still clear. */
-		if (l->disced == RPT_LINK_DISCONNECT_NONE) {
-			if (!l->outbound) {
-				if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
-					/* Not an allstar link node */
-					l->disctime = 1;
-				} else {
-					/* An allstar link node */
-					l->disctime = DISC_TIME;
-				}
-				hangup_link_chan(l);
-				return 1;
-			}
-
-			if (l->retrytimer) {
-				hangup_link_chan(l);
-				return 1;
-			}
-			if (l->outbound && l->hasconnected && (l->max_retries == MAX_RETRIES_PERM || l->retries < l->max_retries)) {
-				hangup_link_chan(l);
-				rpt_mutex_lock(&myrpt->lock);
-				l->retrytimer = RETRY_TIMER_MS;
-				l->elaptime = 0;
-				l->connecttime = ast_tv(0, 0); /* no longer connected */
-				l->lastkeytime = 0;
-				l->thisconnected = 0;
-				rpt_mutex_unlock(&myrpt->lock);
-				return 1;
-			}
+		if (l->retrytimer) {
+			hangup_link_chan(l);
+			return 1;
+		}
+		if (l->outbound && l->hasconnected && (l->max_retries == MAX_RETRIES_PERM || l->retries < l->max_retries)) {
+			hangup_link_chan(l);
+			rpt_mutex_lock(&myrpt->lock);
+			l->retrytimer = RETRY_TIMER_MS;
+			l->elaptime = 0;
+			l->connecttime = ast_tv(0, 0); /* no longer connected */
+			l->lastkeytime = 0;
+			l->thisconnected = 0;
+			rpt_mutex_unlock(&myrpt->lock);
+			return 1;
 		}
 	}
 
@@ -4703,7 +4701,12 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 	looptimestart = rpt_tvnow();
 
-	while (ms >= 0 && l->disced == RPT_LINK_DISCONNECT_NONE) {
+	/*
+	 * Stay in the loop after an intentional disconnect while the channel is
+	 * still up so softhangup reaches remote_hangup_helper (textq flush).
+	 * Exit once disced is set and the channel is already gone (reconnect give-up).
+	 */
+	while (ms >= 0 && (l->disced == RPT_LINK_DISCONNECT_NONE || l->chan)) {
 		ms = MSWAIT;
 		n = 0;
 		cs[n++] = l->pchan;
@@ -5029,8 +5032,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	/* Link is done: Cleanup channels and link structure */
 	/*
-	 * Flush leftover textq (key, keepalive, etc.). !!DISCONNECT!! is written
-	 * with rpt_link_send_disconnect(), not queued.
+	 * Flush leftover textq (keys, keepalive, !!DISCONNECT!! queued via
+	 * rpt_link_queue_disconnect). remote_hangup_helper usually flushed already.
 	 */
 	if (l->chan) {
 		link_process_textq(myrpt, l);
@@ -5857,6 +5860,9 @@ static void *rpt(void *this)
 
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
+				if (l->chan) {
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				}
 				l->disced = RPT_LINK_DISCONNECT;
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
@@ -6023,6 +6029,9 @@ static void *rpt(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* hang-up any running links */
+		if (l->chan) {
+			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+		}
 		l->disced = RPT_LINK_DISCONNECT_SILENT;
 	}
 	ao2_iterator_destroy(&l_it);
@@ -7320,6 +7329,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
 				l->disced = RPT_LINK_DISCONNECT_SILENT;
+				if (l->chan) {
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				}
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);
