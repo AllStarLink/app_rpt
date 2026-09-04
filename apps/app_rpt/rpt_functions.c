@@ -197,6 +197,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 				rpt_qwrite(l, &wf);
 			}
 		}
+
 		myrpt->linkactivityflag = 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);

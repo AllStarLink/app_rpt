@@ -1914,6 +1914,13 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 
 	if (!strcmp(str, DISCSTR)) {
 		mylink->disced = RPT_LINK_DISCONNECT;
+		if (mylink->chan) {
+			ast_softhangup(mylink->chan, AST_SOFTHANGUP_DEV);
+		}
+		if ((mylink->max_retries == MAX_RETRIES_PERM) || mylink->perma) {
+			mylink->max_retries = MAX_RETRIES;
+			mylink->perma = 0;
+		}
 		mylink->retries = mylink->max_retries + 1;
 		return;
 	}
@@ -3422,10 +3429,11 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
-static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
+static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
 {
 	int newkeytimer_last, max_retries;
 	int myrx;
+	int rv = 0;
 
 	link_process_textq(myrpt, l);
 
@@ -3544,7 +3552,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 		struct ast_str *lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
-			return;
+			return rv;
 		}
 		l->linklisttimer = myrpt->p.linkpost_time * 1000;
 		ast_str_set(&lstr, 0, "%s", "L ");
@@ -3599,7 +3607,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 
 	/* ignore non-timing channels */
 	if (l->elaptime < 0) {
-		return;
+		return rv;
 	}
 	l->elaptime += elap;
 	/* if connection has taken too long */
@@ -3611,11 +3619,14 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			if (!l->outbound) {
 				ast_debug(1, "Connection taking to long, giving up on link");
 				l->disced = RPT_LINK_DISCONNECT;
+				if (l->chan) {
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				}
 			} else {
 				ast_debug(1, "Connection taking to long, resetting retry timer");
 				l->retrytimer = RETRY_TIMER_MS;
 			}
-			return;
+			return rv;
 		}
 
 		if (!l->chan && !l->retrytimer && !max_retries && l->hasconnected) {
@@ -3625,7 +3636,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 				/* We should not retry this node type */
 				l->retries = l->max_retries + 1;
 			}
-			return;
+			return rv;
 		}
 		if (!l->chan && !l->retrytimer && max_retries) {
 			l->disced = RPT_LINK_DISCONNECT;
@@ -3641,6 +3652,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			if (l->hasconnected) {
 				rpt_update_links(myrpt);
 				dodispgm(myrpt, l->name);
+				rv = -1;
 			}
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 		}
@@ -3661,9 +3673,10 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			rpt_update_links(myrpt);
 			donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
 			dodispgm(myrpt, l->name);
+			rv = -1;
 		}
 	}
-	return;
+	return rv;
 }
 
 /*!
@@ -4575,6 +4588,20 @@ static inline void hangup_link_chan(struct rpt_link *l)
 	}
 }
 
+static void rpt_link_hangup_wait(struct rpt *myrpt, struct rpt_link *l)
+{
+	/* This will be a "long" delay, dump any audio in the l->pchan
+	 * as we are now about to close down the link channel.  If we don't
+	 * autoservice, l->pchan can report long voice queue and add unnecessary delay audio
+	 * on a reconnect
+	 */
+	if (l->chan) {
+		ast_autoservice_start(l->pchan);
+		link_process_textq(myrpt, l);
+		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
+		ast_autoservice_stop(l->pchan);
+	}
+}
 /*!
  * \internal
  * \brief Final cleanup of link prior to node termination
@@ -4582,17 +4609,12 @@ static inline void hangup_link_chan(struct rpt_link *l)
  */
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
-	if (l->chan) {
-		/* This will be a "long" delay, dump any audio in the l->pchan
-		 * as we are now about to close down the link channel.  If we don't
-		 * autoservice, l->pchan can report long voice queue and add unnecessary delay audio
-		 * on a reconnect
-		 */
-		ast_autoservice_start(l->pchan);
-		link_process_textq(myrpt, l);
-		ast_safe_sleep(l->chan, MSWAIT * 10); /* Allow the channel to send the text messages */
-		ast_autoservice_stop(l->pchan);
-	}
+	/* This will be a "long" delay, dump any audio in the l->pchan
+	 * as we are now about to close down the link channel.  If we don't
+	 * autoservice, l->pchan can report long voice queue and add unnecessary delay audio
+	 * on a reconnect
+	 */
+	rpt_link_hangup_wait(myrpt, l);
 
 	/* When the node is disconnected we need to clear the list of links.
 	 * This is done to prevent any stale links from being shared while the node
@@ -4672,7 +4694,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 	looptimestart = rpt_tvnow();
 
-	while (ms >= 0 && l->disced == RPT_LINK_DISCONNECT_NONE) {
+	while (ms >= 0) {
 		ms = MSWAIT;
 		n = 0;
 		cs[n++] = l->pchan;
@@ -4680,7 +4702,9 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			cs[n++] = l->chan;
 		}
 		who = ast_waitfor_n(cs, n, &ms);
-		periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart));
+		if (periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart))) {
+			break;
+		}
 		if (!ms) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
@@ -4727,7 +4751,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
-					if (l->last_frame_sent) {
+					if (l->last_frame_sent && l->chan) {
 						if (ast_write(l->chan, &wf)) {
 							ast_debug(1, "ast_write failed on %s, breaking loop\n", ast_channel_name(l->chan));
 							break;
@@ -5019,16 +5043,17 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	rpt_frame_queue_free(&l->frame_queue);
 
 	/* 1. Remove audiohook while l->chan is still valid */
-	if (ast_channel_audiohooks(l->pchan)) {
-		ast_audiohook_remove(l->pchan, &l->altaudio);
-	}
-
-	/* 2. Hang-up the channels */
-	hangup_link_chan(l);
 	if (l->pchan) {
+		if (ast_channel_audiohooks(l->pchan)) {
+			ast_audiohook_remove(l->pchan, &l->altaudio);
+		}
+
+		/* 2. Hang-up the channels */
 		ast_hangup(l->pchan);
 		l->pchan = NULL;
 	}
+
+	hangup_link_chan(l);
 
 	if (l->hasconnected) {
 		rpt_update_links(myrpt);
@@ -5820,6 +5845,9 @@ static void *rpt(void *this)
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
 				l->disced = RPT_LINK_DISCONNECT;
+				if (l->chan) {
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				}
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				continue;
@@ -5986,6 +6014,9 @@ static void *rpt(void *this)
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* hang-up any running links */
 		l->disced = RPT_LINK_DISCONNECT_SILENT;
+		if (l->chan) {
+			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+		}
 	}
 	ao2_iterator_destroy(&l_it);
 	rpt_mutex_unlock(&myrpt->lock);
@@ -7282,6 +7313,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				l->killme = 1;
 				l->retries = l->max_retries + 1;
 				l->disced = RPT_LINK_DISCONNECT_SILENT;
+				if (l->chan) {
+					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+				}
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);

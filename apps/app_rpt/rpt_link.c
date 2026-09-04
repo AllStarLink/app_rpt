@@ -770,6 +770,9 @@ void *rpt_link_connect(void *data)
 		}
 		l->retries = l->max_retries + 1;
 		l->disced = RPT_LINK_DISCONNECT_SILENT;
+		if (l->chan) {
+			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+		}
 		modechange = 1;
 		ao2_ref(l, -1);
 	} else { /* Check to see if this node is already linked */
