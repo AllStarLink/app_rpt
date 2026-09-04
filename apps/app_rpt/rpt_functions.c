@@ -182,21 +182,18 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 			return DC_COMPLETE;
 		}
 		ast_copy_string(myrpt->lastlinknode, digitbuf, sizeof(myrpt->lastlinknode));
-		l->retries = l->max_retries + 1;
-		l->disced = RPT_LINK_DISCONNECT;
-		l->hasconnected = 1;
-		if (l->chan) {
-			if (l->thisconnected) {
-				struct ast_frame wf = {
-					.frametype = AST_FRAME_TEXT,
-					.src = __PRETTY_FUNCTION__,
-					.datalen = sizeof(DISCSTR),
-					.data.ptr = DISCSTR,
-				};
-
-				rpt_qwrite(l, &wf);
-			}
+		/*
+		 * Queue !!DISCONNECT!! for the link thread, then demote/softhangup.
+		 * Cross-thread ast_write is unsafe while process_link_channel owns
+		 * the channel in ast_waitfor_n; textq is flushed in remote_hangup_helper
+		 * after softhangup wakes that thread (#1216 / #932).
+		 */
+		if (l->chan && l->thisconnected) {
+			rpt_link_queue_disconnect(l);
 		}
+		rpt_mutex_unlock(&myrpt->lock);
+		rpt_link_stop_retries(l);
+		rpt_mutex_lock(&myrpt->lock);
 		myrpt->linkactivityflag = 1;
 		rpt_mutex_unlock(&myrpt->lock);
 		rpt_telem_select(myrpt, command_source, mylink);
@@ -311,16 +308,26 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		return DC_COMPLETE;
 
 	case 6: /* All Links Off, including permalinks */
+	{
+		struct ao2_container *links_copy = NULL;
+
 		rpt_mutex_lock(&myrpt->lock);
-		myrpt->savednodes[0] = 0;
 
 		if (!myrpt->links) {
 			rpt_mutex_unlock(&myrpt->lock);
 			return DC_COMPLETE;
 		}
 
-		/* loop through all links */
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
+		links_copy = ao2_container_clone(myrpt->links, OBJ_NOLOCK);
+		if (!links_copy) {
+			rpt_mutex_unlock(&myrpt->lock);
+			return DC_ERROR;
+		}
+
+		/* Clear only after snapshot succeeds so a prior ilink 6 restore list survives OOM. */
+		myrpt->savednodes[0] = 0;
+
+		RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 			char c1;
 
 			if ((l->name[0] <= '0') || (l->name[0] > '9')) {
@@ -342,28 +349,28 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 					strcat(myrpt->savednodes, ",");
 				strcat(myrpt->savednodes, tmp);
 			}
-			l->retries = l->max_retries + 1;
-			l->disced = RPT_LINK_DISCONNECT_SILENT; /* Silently disconnect */
 			ast_debug(5, "dumping link %s\n", l->name);
-			if (l->chan) {
-				if (l->thisconnected) {
-					struct ast_frame wf = {
-						.frametype = AST_FRAME_TEXT,
-						.src = __PRETTY_FUNCTION__,
-						.datalen = sizeof(DISCSTR),
-						.data.ptr = DISCSTR,
-					};
-
-					rpt_qwrite(l, &wf);
-				}
+			if (l->chan && l->thisconnected) {
+				rpt_link_queue_disconnect(l);
 			}
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
+
+		RPT_LIST_TRAVERSE(links_copy, l, l_it) {
+			if ((l->name[0] <= '0') || (l->name[0] > '9')) {
+				continue;
+			}
+			rpt_link_stop_retries_silent(l);
+		}
+		ao2_iterator_destroy(&l_it);
+		ao2_ref(links_copy, -1);
+
 		ast_debug(1, "Nodes disconnected: %s\n", myrpt->savednodes);
 		rpt_telem_select(myrpt, command_source, mylink);
 		rpt_telemetry(myrpt, COMPLETE, NULL);
 		return DC_COMPLETE;
+	}
 
 	case 7: /* Identify last node which keyed us up */
 		rpt_telem_select(myrpt, command_source, mylink);
