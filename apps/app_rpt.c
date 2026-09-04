@@ -3652,6 +3652,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 			if (l->hasconnected) {
 				rpt_update_links(myrpt);
 				dodispgm(myrpt, l->name);
+				rv = -1;
 			}
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 		}
