@@ -3640,9 +3640,6 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 		}
 		if (!l->chan && !l->retrytimer && max_retries) {
 			l->disced = RPT_LINK_DISCONNECT;
-			if (l->chan) {
-				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-			}
 			if (!strcmp(myrpt->cmdnode, l->name))
 				myrpt->cmdnode[0] = 0;
 			if (l->name[0] != '0') {
