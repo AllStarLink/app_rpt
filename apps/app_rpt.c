@@ -377,7 +377,7 @@
 					</option>
 					<option name="S">
 						<para>Simplex Dumb Phone Control mode. This allows a regular phone user audio-only access to the radio
- system. In this mode, the transmitter is toggled on and off when the phone user presses the funcchar (*) key on the telephone
+ system. In this mode, the transmitter is toggled on and off when the phone user presses one of the funcchars (*) keys on the telephone
  set. In addition, the transmitter will turn off if the endchar (#) key is pressed. When a user first calls in, the transmitter
  will be off, and the user can listen for radio traffic. When the user wants to transmit, they press the * key, start talking,
  then press the * key again or the # key to turn the transmitter off.  No other functions can be executed by the user on the phone
@@ -1866,13 +1866,50 @@ static inline void handle_callmode_dialing(struct rpt *myrpt, char c)
 }
 
 /*!
+ * \brief Feed a character through the funcchars lead-in sequence matcher.
+ *
+ * The configured funcchars directive is a sequence (e.g. "*123") that must be entered in full,
+ * in order, to trigger the function lead-in. Each independent DTMF stream (e.g. the local/remote-base
+ * stream vs. the link/phone stream) must track its own progress through the sequence, so idx/last
+ * are owned by the caller (myrpt->funcidx/functime or myrpt->rem_funcidx/rem_functime) and must be
+ * fed every character of that stream exactly once, in order, or match progress will be corrupted.
+ *
+ * \param myrpt pointer to repeater struct.
+ * \param c character to process.
+ * \param idx pointer to this stream's sequence-match progress index.
+ * \param last pointer to this stream's last-progress timestamp.
+ * \return 1 if c completed the configured funcchars sequence, 0 otherwise.
+ */
+static int rpt_funcchars_match(struct rpt *myrpt, char c, int *idx, time_t *last)
+{
+	time_t now;
+
+	time(&now);
+	if (*idx && ((now - *last) > MAXXLATTIME)) {
+		*idx = 0;
+	}
+	if (c && (c == myrpt->p.funcchars[*idx])) {
+		*last = now;
+		(*idx)++;
+		if (!myrpt->p.funcchars[*idx]) {
+			*idx = 0;
+			return 1;
+		}
+	} else {
+		*idx = 0;
+	}
+	return 0;
+}
+
+/*!
  * \brief Handle the function character. Must be called locked.
  * \param myrpt pointer to repeater struct.
  * \param c character to process.
+ * \param funcmatch 1 if c just completed the funcchars lead-in sequence for this stream, 0 otherwise.
  * \return 1 if the character was processed, 0 otherwise.
  */
 
-static int funcchar_common(struct rpt *myrpt, char c)
+static int funcchar_common(struct rpt *myrpt, char c, int funcmatch)
 {
 	if (myrpt->callmode == CALLMODE_DIALING) {
 		handle_callmode_dialing(myrpt, c);
@@ -1886,7 +1923,7 @@ static int funcchar_common(struct rpt *myrpt, char c)
 			time(&myrpt->dtmf_time);
 			return 1;
 		}
-		if (c == myrpt->p.funcchar) {
+		if (funcmatch) {
 			myrpt->rem_dtmfidx = 0;
 			myrpt->rem_dtmfbuf[myrpt->rem_dtmfidx] = 0;
 			time(&myrpt->rem_dtmf_time);
@@ -1902,7 +1939,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	 * Is this a typo here?  Why would dest be any bigger than src?
 	 */
 	char tmp1[RPT_TMP_SZ + 1], cmd[RPT_CMD_SZ + 1] = "", dest[RPT_DEST_SZ + 1], src[RPT_SRC_SZ + 1], c;
-	int i, seq, res, ts, rest;
+	int i, seq, res, ts, rest, funcmatch = 0;
 	struct ast_frame wf = {
 		.frametype = AST_FRAME_TEXT,
 		.data.ptr = str,
@@ -2129,9 +2166,12 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 		return;
 	}
 	donodelog_fmt(myrpt, "DTMF,%s,%c", mylink->name, c);
-	c = func_xlat(myrpt, c, &myrpt->p.outxlat);
+	c = func_xlat(myrpt, c, &myrpt->p.outxlat, &funcmatch);
 	if (!c) {
 		return;
+	}
+	if (!funcmatch) {
+		funcmatch = rpt_funcchars_match(myrpt, c, &myrpt->rem_funcidx, &myrpt->rem_functime);
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	if ((iswebtransceiver(mylink)) || CHAN_TECH(mylink->chan, "tlb")) {
@@ -2153,7 +2193,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 	if (c == myrpt->p.endchar) {
 		myrpt->stopgen = 1;
 	}
-	if (funcchar_common(myrpt, c)) {
+	if (funcchar_common(myrpt, c, funcmatch)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
@@ -2199,7 +2239,7 @@ static inline void cmdnode_helper(struct rpt *myrpt, char *cmd)
 static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, char c)
 {
 	char cmd[300];
-	int res;
+	int res, funcmatch;
 
 	donodelog_fmt(myrpt, "DTMF(P),%s,%c", mylink->name, c);
 	if (mylink->phonemonitor) {
@@ -2207,6 +2247,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 	}
 
 	rpt_mutex_lock(&myrpt->lock);
+	funcmatch = rpt_funcchars_match(myrpt, c, &myrpt->rem_funcidx, &myrpt->rem_functime);
 
 	if (mylink->phonemode == RPT_PHONE_MODE_DUMB_SIMPLEX) { /*If in simplex dumb phone mode */
 		if (c == myrpt->p.endchar) {						/* If end char */
@@ -2215,7 +2256,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 			return;
 		}
 
-		if (c == myrpt->p.funcchar) {				  /* If lead-in char */
+		if (funcmatch) {				  /* If lead-in sequence complete */
 			mylink->lastrealrx = !mylink->lastrealrx; /* Toggle keying state */
 			rpt_mutex_unlock(&myrpt->lock);
 			return;
@@ -2241,7 +2282,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 		send_link_dtmf(myrpt, c);
 		return;
 	}
-	if (funcchar_common(myrpt, c)) {
+	if (funcchar_common(myrpt, c, funcmatch)) {
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
@@ -2274,7 +2315,7 @@ static void handle_link_phone_dtmf(struct rpt *myrpt, struct rpt_link *mylink, c
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
-static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum rpt_phone_mode phonemode)
+static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum rpt_phone_mode phonemode, int funcmatch)
 {
 	time_t now;
 	int res = 0, src;
@@ -2297,8 +2338,8 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum
 	}
 	/* if decode not active */
 	if (myrpt->dtmfidx == -1) {
-		/* if not lead-in digit, dont worry */
-		if (c != myrpt->p.funcchar) {
+		/* if lead-in sequence not complete, dont worry */
+		if (!funcmatch) {
 			if (!myrpt->p.propagate_dtmf) {
 				rpt_mutex_lock(&myrpt->lock);
 				do_dtmf_local(myrpt, c);
@@ -2316,15 +2357,6 @@ static int handle_remote_dtmf_digit(struct rpt *myrpt, char c, char *keyed, enum
 		myrpt->dtmfidx = 0;
 		myrpt->dtmfbuf[0] = 0;
 		myrpt->dtmf_time_rem = now;
-	}
-	if (c == myrpt->p.funcchar) {
-		/* if star at beginning, or 2 together, erase buffer */
-		if ((myrpt->dtmfidx < 1) || (myrpt->dtmfbuf[myrpt->dtmfidx - 1] == myrpt->p.funcchar)) {
-			myrpt->dtmfidx = 0;
-			myrpt->dtmfbuf[0] = 0;
-			myrpt->dtmf_time_rem = now;
-			return 0;
-		}
 	}
 	myrpt->dtmfbuf[myrpt->dtmfidx++] = c;
 	myrpt->dtmfbuf[myrpt->dtmfidx] = 0;
@@ -2383,7 +2415,7 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 {
 	/* Should src[300] be src[30] as in handle_link_data?*/
 	char cmd[RPT_CMD_SZ + 1], dest[RPT_DEST_SZ + 1], src[RPT_SRC_SZ + 1], c;
-	int seq, res;
+	int seq, res, funcmatch = 0;
 
 	/* put string in our buffer */
 	if (!strcmp(str, DISCSTR)) {
@@ -2436,10 +2468,13 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 	if (strcmp(dest, myrpt->name))
 		return 0;
 	donodelog_fmt(myrpt, "DTMF,%c", c);
-	c = func_xlat(myrpt, c, &myrpt->p.outxlat);
+	c = func_xlat(myrpt, c, &myrpt->p.outxlat, &funcmatch);
 	if (!c)
 		return 0;
-	res = handle_remote_dtmf_digit(myrpt, c, NULL, RPT_PHONE_MODE_NONE);
+	if (!funcmatch) {
+		funcmatch = rpt_funcchars_match(myrpt, c, &myrpt->funcidx, &myrpt->functime);
+	}
+	res = handle_remote_dtmf_digit(myrpt, c, NULL, RPT_PHONE_MODE_NONE, funcmatch);
 	if (res != 1)
 		return res;
 	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)))
@@ -2451,13 +2486,14 @@ static int handle_remote_data(struct rpt *myrpt, const char *str)
 
 static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict keyed, enum rpt_phone_mode phonemode)
 {
-	int res;
+	int res, funcmatch;
 
-	if (phonemode == RPT_PHONE_MODE_DUMB_SIMPLEX) { /* simplex phonemode, funcchar key/unkey toggle */
-		if (keyed && *keyed && ((c == myrpt->p.funcchar) || (c == myrpt->p.endchar))) {
+	funcmatch = rpt_funcchars_match(myrpt, c, &myrpt->funcidx, &myrpt->functime);
+	if (phonemode == RPT_PHONE_MODE_DUMB_SIMPLEX) { /* simplex phonemode, funcchars key/unkey toggle */
+		if (keyed && *keyed && (funcmatch || (c == myrpt->p.endchar))) {
 			*keyed = 0; /* UNKEY */
 			return 0;
-		} else if (keyed && !*keyed && (c == myrpt->p.funcchar)) {
+		} else if (keyed && !*keyed && funcmatch) {
 			*keyed = 1; /* KEY */
 			return 0;
 		}
@@ -2468,7 +2504,7 @@ static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict ke
 		}
 	}
 	donodelog_fmt(myrpt, "DTMF(P),%c", c);
-	res = handle_remote_dtmf_digit(myrpt, c, keyed, phonemode);
+	res = handle_remote_dtmf_digit(myrpt, c, keyed, phonemode, funcmatch);
 	if (res != 1)
 		return res;
 	if ((!strcmp(myrpt->remoterig, REMOTE_RIG_TM271)) || (!strcmp(myrpt->remoterig, REMOTE_RIG_KENWOOD)))
@@ -2586,7 +2622,7 @@ retry:
 }
 
 /* 0 return=continue, 1 return = break, -1 return = error */
-static void local_dtmf_helper(struct rpt *myrpt, char c_in)
+static void local_dtmf_helper(struct rpt *myrpt, char c_in, int funcmatch)
 {
 	enum rpt_function_response res;
 	char cmd[MAXDTMF + 1] = "", c, tone[10];
@@ -2659,7 +2695,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			time(&myrpt->dtmf_time);
 			return;
 		}
-		if ((!myrpt->inpadtest) && (c == myrpt->p.funcchar)) {
+		if ((!myrpt->inpadtest) && funcmatch) {
 			if (myrpt->p.dopfxtone && (myrpt->dtmfidx == -1))
 				rpt_telemetry(myrpt, PFXTONE, NULL);
 			myrpt->dtmfidx = 0;
@@ -2718,7 +2754,7 @@ static void local_dtmf_helper(struct rpt *myrpt, char c_in)
 			}
 		}
 	} else { /* if simple */
-		if ((myrpt->callmode == CALLMODE_DOWN) && (c == myrpt->p.funcchar)) {
+		if ((myrpt->callmode == CALLMODE_DOWN) && funcmatch) {
 			myrpt->callmode = CALLMODE_DIALING;
 			myrpt->patchnoct = 0;
 			myrpt->patchquiet = 0;
@@ -4231,7 +4267,7 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 		dtmfed = 1;
 		myrpt->lastdtmftime = rpt_tvnow();
 	} else if (f->frametype == AST_FRAME_DTMF) {
-		int x;
+		int x, funcmatch = 0;
 		char c = (char) f->subclass.integer; /* get DTMF char */
 		ast_frfree(f);
 		x = ast_tvdiff_ms(rpt_tvnow(), myrpt->lastdtmftime);
@@ -4247,9 +4283,13 @@ static inline int rxchannel_read(struct rpt *myrpt, const int lasttx)
 				local_dtmfkey_helper(myrpt, c);
 			return 0;
 		}
-		c = func_xlat(myrpt, c, &myrpt->p.inxlat);
-		if (c)
-			local_dtmf_helper(myrpt, c);
+		c = func_xlat(myrpt, c, &myrpt->p.inxlat, &funcmatch);
+		if (c) {
+			if (!funcmatch) {
+				funcmatch = rpt_funcchars_match(myrpt, c, &myrpt->funcidx, &myrpt->functime);
+			}
+			local_dtmf_helper(myrpt, c, funcmatch);
+		}
 		return 0;
 	} else if (f->frametype == AST_FRAME_CONTROL) {
 		if (f->subclass.integer == AST_CONTROL_HANGUP) {
@@ -5937,7 +5977,7 @@ static void *rpt(void *this)
 			}
 			rpt_mutex_unlock(&myrpt->lock);
 			donodelog_fmt(myrpt, "DTMF(M),MAIN,%c", cin);
-			local_dtmf_helper(myrpt, c);
+			local_dtmf_helper(myrpt, c, rpt_funcchars_match(myrpt, cin, &myrpt->funcidx, &myrpt->functime));
 		} else {
 			rpt_mutex_unlock(&myrpt->lock);
 		}
@@ -7990,7 +8030,8 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				myrpt->macrotimer = MACROPTIME;
 			rpt_mutex_unlock(&myrpt->lock);
 			donodelog_fmt(myrpt, "DTMF(M),%c", c);
-			if (handle_remote_dtmf_digit(myrpt, c, &keyed, RPT_PHONE_MODE_NONE) == -1)
+			if (handle_remote_dtmf_digit(myrpt, c, &keyed, RPT_PHONE_MODE_NONE,
+				rpt_funcchars_match(myrpt, c, &myrpt->funcidx, &myrpt->functime)) == -1)
 				break;
 			continue;
 		} else {
