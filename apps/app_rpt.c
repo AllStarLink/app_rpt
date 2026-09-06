@@ -3425,7 +3425,11 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
-static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
+/*!
+ * \retval 0 keep process_link_channel running
+ * \retval -1 link is finished (inbound timeout or outbound retries exhausted)
+ */
+static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, const int elap)
 {
 	int newkeytimer_last;
 	int myrx;
@@ -3547,7 +3551,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 	if ((!l->linklisttimer) && (l->name[0] != '0') && (!l->isremote)) {
 		struct ast_str *lstr = ast_str_create(RPT_AST_STR_INIT_SIZE);
 		if (!lstr) {
-			return;
+			return 0;
 		}
 		l->linklisttimer = myrpt->p.linkpost_time * 1000;
 		ast_str_set(&lstr, 0, "%s", "L ");
@@ -3602,7 +3606,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 
 	/* ignore non-timing channels */
 	if (l->elaptime < 0) {
-		return;
+		return 0;
 	}
 	l->elaptime += elap;
 	/* if connection has taken too long */
@@ -3616,7 +3620,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 				ast_debug(1, "Connection taking to long, resetting retry timer");
 				l->retrytimer = RETRY_TIMER_MS;
 			}
-			return;
+			return 0;
 		}
 
 		/*
@@ -3635,7 +3639,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 					/* Unsupported node type (e.g. permanent EchoLink/TLB) — demote and stop. */
 					rpt_link_stop_retries(l);
 				}
-				return;
+				return 0;
 			}
 			l->disced = RPT_LINK_DISCONNECT;
 			if (!strcmp(myrpt->cmdnode, l->name))
@@ -3652,6 +3656,7 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 				dodispgm(myrpt, l->name);
 			}
 			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
+			return -1;
 		}
 	} else {
 		/* Not outbound */
@@ -3670,9 +3675,10 @@ static inline void periodic_process_link(struct rpt *myrpt, struct rpt_link *l, 
 			rpt_update_links(myrpt);
 			donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
 			dodispgm(myrpt, l->name);
+			return -1;
 		}
 	}
-	return;
+	return 0;
 }
 
 /*!
@@ -4635,36 +4641,47 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		rpt_update_links(myrpt);
 	}
 
-	if (l->chan && !CHAN_TECH(l->chan, "echolink") && !CHAN_TECH(l->chan, "tlb") && l->disced == RPT_LINK_DISCONNECT_NONE &&
-		!ast_shutting_down()) {
-		/* Drain may have set disced via !!DISCONNECT!! — only redial if still clear. */
-		if (!l->outbound) {
-			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
-				/* Not an allstar link node */
-				l->disctime = 1;
-			} else {
-				/* An allstar link node */
-				l->disctime = DISC_TIME;
-			}
-			hangup_link_chan(l);
-			return 1;
-		}
+	if (!l->chan || CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb") || ast_shutting_down()) {
+		return 0;
+	}
 
-		if (l->retrytimer) {
-			hangup_link_chan(l);
-			return 1;
+	/*
+	 * Inbound links stay in process_link_channel after chan is gone so
+	 * periodic_process_link can run LINKDISC AA once disctime expires.
+	 * That must happen even when DISCSTR already set disced.
+	 */
+	if (!l->outbound) {
+		if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
+			/* Not an allstar link node */
+			l->disctime = 1;
+		} else {
+			/* An allstar link node */
+			l->disctime = DISC_TIME;
 		}
-		if (l->outbound && l->hasconnected && (l->max_retries == MAX_RETRIES_PERM || l->retries < l->max_retries)) {
-			hangup_link_chan(l);
-			rpt_mutex_lock(&myrpt->lock);
-			l->retrytimer = RETRY_TIMER_MS;
-			l->elaptime = 0;
-			l->connecttime = ast_tv(0, 0); /* no longer connected */
-			l->lastkeytime = 0;
-			l->thisconnected = 0;
-			rpt_mutex_unlock(&myrpt->lock);
-			return 1;
-		}
+		hangup_link_chan(l);
+		return 1;
+	}
+
+	/* Intentional outbound disconnect: do not redial. */
+	if (l->disced != RPT_LINK_DISCONNECT_NONE) {
+		hangup_link_chan(l);
+		return 0;
+	}
+
+	if (l->retrytimer) {
+		hangup_link_chan(l);
+		return 1;
+	}
+	if (l->hasconnected && (l->max_retries == MAX_RETRIES_PERM || l->retries < l->max_retries)) {
+		hangup_link_chan(l);
+		rpt_mutex_lock(&myrpt->lock);
+		l->retrytimer = RETRY_TIMER_MS;
+		l->elaptime = 0;
+		l->connecttime = ast_tv(0, 0); /* no longer connected */
+		l->lastkeytime = 0;
+		l->thisconnected = 0;
+		rpt_mutex_unlock(&myrpt->lock);
+		return 1;
 	}
 
 	return 0;
@@ -4702,19 +4719,26 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	looptimestart = rpt_tvnow();
 
 	/*
-	 * Stay in the loop after an intentional disconnect while the channel is
-	 * still up so softhangup reaches remote_hangup_helper (textq flush).
-	 * Exit once disced is set and the channel is already gone (reconnect give-up).
+	 * Do not exit on disced or !chan. softhangup must reach remote_hangup_helper,
+	 * and inbound links must keep ticking until disctime expires (LINKDISC AA).
+	 * periodic_process_link returns -1 when that timeout/give-up path finishes.
 	 */
-	while (ms >= 0 && (l->disced == RPT_LINK_DISCONNECT_NONE || l->chan)) {
+	while (ms >= 0) {
 		ms = MSWAIT;
 		n = 0;
-		cs[n++] = l->pchan;
+		if (l->pchan) {
+			cs[n++] = l->pchan;
+		}
 		if (l->chan) {
 			cs[n++] = l->chan;
 		}
+		if (!n) {
+			break;
+		}
 		who = ast_waitfor_n(cs, n, &ms);
-		periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart));
+		if (periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart))) {
+			break;
+		}
 		if (!ms) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
@@ -4761,7 +4785,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						ast_indicate(l->chan, AST_CONTROL_RADIO_KEY);
 				} else {
 					ast_indicate(l->chan, AST_CONTROL_RADIO_UNKEY);
-					if (l->last_frame_sent) {
+					if (l->last_frame_sent && l->chan) {
 						if (ast_write(l->chan, &wf)) {
 							ast_debug(1, "ast_write failed on %s, breaking loop\n", ast_channel_name(l->chan));
 							break;
@@ -5860,10 +5884,7 @@ static void *rpt(void *this)
 
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
-				if (l->chan) {
-					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-				}
-				l->disced = RPT_LINK_DISCONNECT;
+				rpt_link_stop_retries(l);
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				continue;
@@ -6029,10 +6050,7 @@ static void *rpt(void *this)
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 		/* hang-up any running links */
-		if (l->chan) {
-			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-		}
-		l->disced = RPT_LINK_DISCONNECT_SILENT;
+		rpt_link_stop_retries_silent(l);
 	}
 	ao2_iterator_destroy(&l_it);
 	rpt_mutex_unlock(&myrpt->lock);
@@ -7327,11 +7345,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			if (l != NULL) {
 				/* if found, we already have a connection, kill the existing connection */
 				l->killme = 1;
-				l->retries = l->max_retries + 1;
-				l->disced = RPT_LINK_DISCONNECT_SILENT;
-				if (l->chan) {
-					ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-				}
+				rpt_link_stop_retries_silent(l);
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);

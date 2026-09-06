@@ -34,8 +34,9 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
  * \param l Link to demote and mark disconnected
  *
  * Demotes permanent links off MAX_RETRIES_PERM, marks retries exhausted,
- * clears perma, sets disced, and softhangups the link channel so
- * process_link_channel leaves via hangup (remote_hangup_helper flushes textq).
+ * clears perma, sets disced, and softhangups the link channel.
+ * process_link_channel stays until hangup (textq flush) and, for inbound
+ * links, until disctime expires so LINKDISC AA can run.
  * Do not call while holding a channel lock.
  */
 void rpt_link_stop_retries(struct rpt_link *l);
