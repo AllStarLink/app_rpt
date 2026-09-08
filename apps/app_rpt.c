@@ -3426,6 +3426,28 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 }
 
 /*!
+ * \brief Finish an inbound link after chan is gone (LINKDISC AA side effects).
+ * Used after disctime expires, or immediately on intentional inbound DISCSTR.
+ */
+static void inbound_link_finished(struct rpt *myrpt, struct rpt_link *l)
+{
+	ast_debug(1, "LINKDISC AA\n");
+	l->disced = RPT_LINK_DISCONNECT;
+	if (!ao2_container_count(myrpt->links)) {
+		channel_revert(myrpt);
+	}
+	if (!strcmp(myrpt->cmdnode, l->name)) {
+		myrpt->cmdnode[0] = 0;
+	}
+	if (l->name[0] != '0') {
+		rpt_telemetry(myrpt, REMDISC, l);
+	}
+	rpt_update_links(myrpt);
+	donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
+	dodispgm(myrpt, l->name);
+}
+
+/*!
  * \retval 0 keep process_link_channel running
  * \retval -1 link is finished (inbound timeout or outbound retries exhausted)
  */
@@ -3661,20 +3683,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 	} else {
 		/* Not outbound */
 		if ((!l->chan) && (!l->disctime)) {
-			ast_debug(1, "LINKDISC AA\n");
-			l->disced = RPT_LINK_DISCONNECT;
-			if (!ao2_container_count(myrpt->links)) {
-				channel_revert(myrpt);
-			}
-			if (!strcmp(myrpt->cmdnode, l->name)) {
-				myrpt->cmdnode[0] = 0;
-			}
-			if (l->name[0] != '0') {
-				rpt_telemetry(myrpt, REMDISC, l);
-			}
-			rpt_update_links(myrpt);
-			donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
-			dodispgm(myrpt, l->name);
+			inbound_link_finished(myrpt, l);
 			return -1;
 		}
 	}
@@ -4646,11 +4655,15 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	/*
-	 * Inbound links stay in process_link_channel after chan is gone so
-	 * periodic_process_link can run LINKDISC AA once disctime expires.
-	 * That must happen even when DISCSTR already set disced.
+	 * Unexpected inbound loss parks on disctime so periodic LINKDISC AA can run.
+	 * Intentional inbound disconnect (disced already set) skips that grace period.
 	 */
 	if (!l->outbound) {
+		if (l->disced != RPT_LINK_DISCONNECT_NONE) {
+			hangup_link_chan(l);
+			inbound_link_finished(myrpt, l);
+			return 0;
+		}
 		if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
 			/* Not an allstar link node */
 			l->disctime = 1;
@@ -4719,8 +4732,9 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	looptimestart = rpt_tvnow();
 
 	/*
-	 * Do not exit on disced or !chan. softhangup must reach remote_hangup_helper,
-	 * and inbound links must keep ticking until disctime expires (LINKDISC AA).
+	 * Do not exit on disced or !chan. softhangup must reach remote_hangup_helper.
+	 * Unexpected inbound loss keeps ticking until disctime expires (LINKDISC AA);
+	 * intentional inbound DISCSTR finishes immediately in remote_hangup_helper.
 	 * periodic_process_link returns -1 when that timeout/give-up path finishes.
 	 */
 	while (ms >= 0) {
