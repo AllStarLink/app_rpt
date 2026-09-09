@@ -210,7 +210,7 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f)
 	AST_LIST_INSERT_TAIL(&l->textq, f1, frame_list);
 }
 
-static void rpt_link_demote_retries(struct rpt_link *l)
+void rpt_link_demote_retries(struct rpt_link *l)
 {
 	l->perma = 0;
 	if (l->max_retries > MAX_RETRIES) {
