@@ -78,8 +78,7 @@ int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 	if ((myrpt->p.duplex == 3) && mylink->phonemode && myrpt->keyed) {
 		return 0;
 	}
-	if (!mylink->phonemode && (mylink->name[0] > '0') && (mylink->name[0] <= '9') && !CHAN_TECH(mylink->chan, "echolink") &&
-		!CHAN_TECH(mylink->chan, "tlb")) {
+	if (!mylink->phonemode && rpt_valid_ASLNode(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
 		/* if doesn't qual as a foreign link */
 		return 0;
 	}
@@ -175,8 +174,7 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	if ((!myrpt->p.duplex && !myrpt->p.linktolink) || (!nonlocals)) {
 		return 0;
 	}
-	if (!mylink->phonemode && (mylink->name[0] > '0') && (mylink->name[0] <= '9') && !CHAN_TECH(mylink->chan, "echolink") &&
-		!CHAN_TECH(mylink->chan, "tlb")) {
+	if (!mylink->phonemode && rpt_valid_ASLNode(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
 		/* if doesn't qual as a foreign link */
 		return 1;
 	}
