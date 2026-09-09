@@ -7008,7 +7008,15 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 
 	if (options && (*options == 'V' || *options == 'v')) {
 		if (callstr && myrpt->rxchannel) {
-			pbx_builtin_setvar(myrpt->rxchannel, callstr);
+			struct ast_channel *rxchan;
+
+			rpt_mutex_lock(&myrpt->lock);
+			rxchan = ast_channel_ref(myrpt->rxchannel);
+			rpt_mutex_unlock(&myrpt->lock);
+			if (rxchan) {
+				pbx_builtin_setvar(rxchan, callstr);
+				ast_channel_unref(rxchan);
+			}
 		}
 		return 0;
 	}
