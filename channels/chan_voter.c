@@ -284,7 +284,7 @@ static char context[AST_MAX_EXTENSION] = "default";
 
 /* Timeout definitions in ms */
 #define RX_TIMEOUT_MS 200
-#define CLIENT_TIMEOUT_MS 3000
+#define CLIENT_TIMEOUT_MS 4600 /* GPS_FORCE_TIME in RTCM is 1500ms,  1500*3 = 4500 for 2 missed packets + 100ms for jitter */
 #define MASTER_TIMEOUT_MS 100
 #define TX_KEEPALIVE_MS 1000
 #define PING_TIME_MS 250
