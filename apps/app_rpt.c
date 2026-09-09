@@ -7237,10 +7237,10 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		rpt_mutex_lock(&myrpt->lock);
 		while ((!ast_tvzero(myrpt->lastlinktime)) && (ast_tvdiff_ms(rpt_tvnow(), myrpt->lastlinktime) < 250)) {
 			rpt_mutex_unlock(&myrpt->lock);
-			if (ast_check_hangup(myrpt->rxchannel)) {
+			if (ast_check_hangup(chan)) {
 				return -1;
 			}
-			if (ast_safe_sleep(myrpt->rxchannel, 100) == -1) {
+			if (ast_safe_sleep(chan, 100) == -1) {
 				return -1;
 			}
 			rpt_mutex_lock(&myrpt->lock);
