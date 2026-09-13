@@ -3425,10 +3425,16 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 }
 
 /*!
- * \brief Finish an inbound link after chan is gone (LINKDISC AA side effects).
- * Used after disctime expires, or immediately on intentional inbound DISCSTR.
+ * \brief LINKDISC AA side effects after a link is finished (discpgm, log, update).
+ *
+ * Used after inbound disctime expiry, intentional inbound DISCSTR, and intentional
+ * outbound disconnect. Do not call for _SILENT.
+ *
+ * REMDISC is not played here: rpt_telemetry(REMDISC) suppresses local play while a
+ * same-named link is still in myrpt->links. process_link_channel cleanup announces
+ * REMDISC after rpt_link_remove().
  */
-static void inbound_link_finished(struct rpt *myrpt, struct rpt_link *l)
+static void link_disconnect_finished(struct rpt *myrpt, struct rpt_link *l)
 {
 	ast_debug(1, "LINKDISC AA\n");
 	l->disced = RPT_LINK_DISCONNECT;
@@ -3437,9 +3443,6 @@ static void inbound_link_finished(struct rpt *myrpt, struct rpt_link *l)
 	}
 	if (!strcmp(myrpt->cmdnode, l->name)) {
 		myrpt->cmdnode[0] = 0;
-	}
-	if (l->name[0] != '0') {
-		rpt_telemetry(myrpt, REMDISC, l);
 	}
 	rpt_update_links(myrpt);
 	donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
@@ -3645,12 +3648,17 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 		}
 
 		/*
-		 * Intentional disconnect and channel already gone: finish so the link
-		 * thread exits and tears down pchan (no disctime wait on local disconnect).
+		 * Intentional disconnect and channel already gone: run LINKDISC AA
+		 * (discpgm/log) unless silent, then finish so the link thread tears
+		 * down pchan. REMDISC plays later in process_link_channel cleanup
+		 * after rpt_link_remove() (haslink guard).
 		 */
 		if (!l->chan && l->disced != RPT_LINK_DISCONNECT_NONE) {
 			if (!strcmp(myrpt->cmdnode, l->name)) {
 				myrpt->cmdnode[0] = 0;
+			}
+			if (l->disced == RPT_LINK_DISCONNECT) {
+				link_disconnect_finished(myrpt, l);
 			}
 			return -1;
 		}
@@ -3692,7 +3700,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 	} else {
 		/* Not outbound */
 		if ((!l->chan) && (!l->disctime)) {
-			inbound_link_finished(myrpt, l);
+			link_disconnect_finished(myrpt, l);
 			return -1;
 		}
 	}
@@ -4670,7 +4678,9 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	if (!l->outbound) {
 		if (l->disced != RPT_LINK_DISCONNECT_NONE) {
 			hangup_link_chan(l);
-			inbound_link_finished(myrpt, l);
+			if (l->disced == RPT_LINK_DISCONNECT) {
+				link_disconnect_finished(myrpt, l);
+			}
 			return 0;
 		}
 		if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
@@ -4684,9 +4694,12 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		return 1;
 	}
 
-	/* Intentional outbound disconnect: do not redial. */
+	/* Intentional outbound disconnect: do not redial; announce unless silent. */
 	if (l->disced != RPT_LINK_DISCONNECT_NONE) {
 		hangup_link_chan(l);
+		if (l->disced == RPT_LINK_DISCONNECT) {
+			link_disconnect_finished(myrpt, l);
+		}
 		return 0;
 	}
 
@@ -5111,16 +5124,25 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 
-	if (l->disced != RPT_LINK_DISCONNECT) {
+	/*
+	 * Play REMDISC/CONNFAIL only after rpt_link_remove() above. rpt_telemetry(REMDISC)
+	 * no-ops while a same-named link remains in myrpt->links (haslink guard) — that is
+	 * why connect telem worked but disconnect did not when announced from
+	 * link_disconnect_finished. Skip _SILENT. discpgm/LINKDISC log for intentional
+	 * disconnect already ran in link_disconnect_finished.
+	 */
+	if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
 		if (!l->hasconnected) {
 			rpt_telemetry(myrpt, CONNFAIL, l);
-		} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
+		} else if (l->name[0] != '0') {
 			rpt_telemetry(myrpt, REMDISC, l);
 		}
-		if (l->hasconnected) {
-			dodispgm(myrpt, l->name);
+		if (l->disced != RPT_LINK_DISCONNECT) {
+			if (l->hasconnected) {
+				dodispgm(myrpt, l->name);
+			}
+			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 		}
-		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
