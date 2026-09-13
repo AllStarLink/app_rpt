@@ -358,7 +358,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_mutex_unlock(&myrpt->lock);
 
 		RPT_LIST_TRAVERSE(links_copy, l, l_it) {
-			if ((l->name[0] <= '0') || (l->name[0] > '9')) {
+			if (!rpt_valid_ASLNode(l->name)) {
 				continue;
 			}
 			rpt_link_stop_retries_silent(l);
