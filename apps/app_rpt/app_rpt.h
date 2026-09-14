@@ -1225,4 +1225,4 @@ char *rpt_complete_function_list(const char *line, const char *word, int pos, in
 	(iterator) = (container) ? ao2_iterator_init((container), 0) : (struct ao2_iterator) { 0 }; \
 	for (; ((var) = ao2_iterator_next(&(iterator))); ao2_ref((var), -1))
 
-#define rpt_valid_ASLNode(name) ((name[0] > '0') && (name[0] <= '9'))
+#define rpt_is_ASLNode(name) (((name)[0] > '0') && ((name)[0] <= '9'))
