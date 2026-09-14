@@ -4671,6 +4671,9 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	if (ast_shutting_down()) {
+		/* Skip REMDISC / discpgm / LINKDISC in process_link_channel cleanup. */
+		l->disced = RPT_LINK_DISCONNECT_SILENT;
+		hangup_link_chan(l);
 		return 0;
 	}
 	if (l->chan && (CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb"))) {
