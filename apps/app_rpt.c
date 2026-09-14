@@ -3699,9 +3699,19 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 		}
 	} else {
 		/* Not outbound */
-		if ((!l->chan) && (!l->disctime)) {
-			link_disconnect_finished(myrpt, l);
-			return -1;
+		if (!l->chan) {
+			/*
+			 * Inbound reconnect found this entry and set killme + silent stop:
+			 * leave without LINKDISC AA / discpgm so the replacement is quiet.
+			 * Unexpected loss still waits for disctime, then runs AA.
+			 */
+			if (l->killme || l->disced == RPT_LINK_DISCONNECT_SILENT) {
+				return -1;
+			}
+			if (!l->disctime) {
+				link_disconnect_finished(myrpt, l);
+				return -1;
+			}
 		}
 	}
 	return 0;
@@ -4667,13 +4677,18 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		rpt_update_links(myrpt);
 	}
 
-	if (!l->chan || CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb") || ast_shutting_down()) {
+	if (ast_shutting_down()) {
+		return 0;
+	}
+	if (l->chan && (CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb"))) {
 		return 0;
 	}
 
 	/*
-	 * Unexpected inbound loss parks on disctime so periodic LINKDISC AA can run.
-	 * Intentional inbound DISCSTR (disced already set) finishes immediately.
+	 * Unexpected inbound loss parks on disctime so the link stays in myrpt->links
+	 * for DISC_TIME. A flaky peer that reconnects can find this entry (killme +
+	 * silent) and avoid discpgm/REMDISC noise. Intentional (disced set) finishes
+	 * immediately — separate from that grace window.
 	 */
 	if (!l->outbound) {
 		if (l->disced != RPT_LINK_DISCONNECT_NONE) {
@@ -4683,12 +4698,14 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 			}
 			return 0;
 		}
-		if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
-			/* Not an allstar link node */
-			l->disctime = 1;
-		} else {
-			/* An allstar link node */
-			l->disctime = DISC_TIME;
+		if (!l->disctime) {
+			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
+				/* Not an allstar link node */
+				l->disctime = 1;
+			} else {
+				/* An allstar link node */
+				l->disctime = DISC_TIME;
+			}
 		}
 		hangup_link_chan(l);
 		return 1;
@@ -4757,8 +4774,9 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	 * Do not exit on disced or !chan alone.
 	 * Intentional disconnect: flush textq (incl. !!DISCONNECT!!) on a live channel,
 	 * wait briefly for TX, then softhangup (#1236). Unexpected inbound loss parks
-	 * on disctime until LINKDISC AA. disctime is not used for local disconnect.
-	 * periodic_process_link returns -1 when that timeout/give-up path finishes.
+	 * on disctime (link stays listed) until expiry or a flaky reconnect sets killme
+	 * silent and leaves without discpgm/REMDISC. disctime is not used for local
+	 * intentional disconnect. periodic_process_link returns -1 when finished.
 	 */
 	while (ms >= 0) {
 		ms = MSWAIT;
@@ -5947,7 +5965,9 @@ static void *rpt(void *this)
 
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
-				rpt_link_stop_retries(l);
+				/* Silent: inbound reconnect replaces this entry within disctime grace. */
+				rpt_link_stop_retries_silent(l);
+				l->disctime = 0;
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				continue;
@@ -7409,6 +7429,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				/* if found, we already have a connection, kill the existing connection */
 				l->killme = 1;
 				rpt_link_stop_retries_silent(l);
+				l->disctime = 0; /* do not wait out unexpected-loss grace */
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);
