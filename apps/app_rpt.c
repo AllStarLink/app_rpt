@@ -967,35 +967,28 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 	ast_debug(2, "    -- %d variables\n", i);
 }
 
-static void dodispgm(struct rpt *myrpt, char *them)
+static void _exec_conn_disc_pgm(struct rpt *myrpt, char *them, const char *pgm)
 {
-	char *argv[4];
+	int argc;
+	char *argv[32];
+	char *str;
 
-	if (!myrpt->p.discpgm) {
+	if (!pgm) {
 		return;
 	}
 
-	argv[0] = ast_strdupa(myrpt->p.discpgm);
-	argv[1] = myrpt->name;
-	argv[2] = them;
-	argv[3] = NULL;
-	ast_safe_execvp(1, argv[0], argv);
-}
-
-static void doconpgm(struct rpt *myrpt, char *them)
-{
-	char *argv[4];
-
-	if (!myrpt->p.connpgm) {
-		return;
+	str = ast_strdupa(pgm);
+	argc = ast_app_separate_args(str, ' ', argv, ARRAY_LEN(argv) - 2 - 1);
+	if (argc > 0 && !ast_strlen_zero(argv[0])) {
+		argv[argc++] = myrpt->name;
+		argv[argc++] = them;
+		argv[argc] = NULL;
+		ast_safe_execvp(1, argv[0], argv);
 	}
-
-	argv[0] = ast_strdupa(myrpt->p.connpgm);
-	argv[1] = myrpt->name;
-	argv[2] = them;
-	argv[3] = NULL;
-	ast_safe_execvp(1, argv[0], argv);
 }
+
+#define doconpgm(myrpt, them) _exec_conn_disc_pgm(myrpt, them, myrpt->p.connpgm);
+#define dodispgm(myrpt, them) _exec_conn_disc_pgm(myrpt, them, myrpt->p.discpgm);
 
 /*! \brief Store the output of libcurl (the OK is sent to stdout) */
 static size_t writefunction(char *contents, size_t size, size_t nmemb, void *userdata)
@@ -3671,7 +3664,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 			int try_reconnect = (l->max_retries == MAX_RETRIES_PERM) || (l->retries < l->max_retries);
 
 			if (try_reconnect) {
-				if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
+				if (IS_NODE_EXTEN(l->name) && (!l->isremote)) {
 					l->retries++;
 					attempt_reconnect(myrpt, l);
 				} else {
@@ -4699,7 +4692,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 			return 0;
 		}
 		if (!l->disctime) {
-			if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
+			if (!IS_NODE_EXTEN(l->name) || l->isremote) {
 				/* Not an allstar link node */
 				l->disctime = 1;
 			} else {
@@ -5164,14 +5157,13 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
-	/* 1. Remove audiohook while l->chan is still valid */
-	if (ast_channel_audiohooks(l->pchan)) {
-		ast_audiohook_remove(l->pchan, &l->altaudio);
-	}
-
-	/* 2. Hang-up the channels */
+	/* 1. Hang-up the channels */
 	hangup_link_chan(l);
 	if (l->pchan) {
+		if (ast_channel_audiohooks(l->pchan)) {
+			/* Remove audiohook while l->pchan is still valid */
+			ast_audiohook_remove(l->pchan, &l->altaudio);
+		}
 		ast_hangup(l->pchan);
 		l->pchan = NULL;
 	}
@@ -5180,7 +5172,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		rpt_update_links(myrpt);
 	}
 
-	/* 3. Destroy audiohook resources */
+	/* 2. Destroy audiohook resources */
 	ast_audiohook_destroy(&l->altaudio);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 
@@ -5591,8 +5583,9 @@ static void *rpt(void *this)
 				myrpt->remrx = 1;
 				if (l->voterlink)
 					myrpt->voteremrx = 1;
-				if ((l->name[0] > '0') && (l->name[0] <= '9'))		/* Ignore '0' nodes */
+				if (IS_NODE_EXTEN(l->name)) { /* Ignore '0' nodes */
 					ast_copy_string(myrpt->lastnodewhichkeyedusup, l->name, sizeof(myrpt->lastnodewhichkeyedusup));
+				}
 			}
 		}
 		ao2_iterator_destroy(&l_it);
@@ -7155,8 +7148,18 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	}
 
 	if (options && (*options == 'V' || *options == 'v')) {
+		rpt_mutex_lock(&myrpt->lock);
 		if (callstr && myrpt->rxchannel) {
-			pbx_builtin_setvar(myrpt->rxchannel, callstr);
+			struct ast_channel *rxchan;
+
+			rxchan = ast_channel_ref(myrpt->rxchannel);
+			rpt_mutex_unlock(&myrpt->lock);
+			if (rxchan) {
+				pbx_builtin_setvar(rxchan, callstr);
+				ast_channel_unref(rxchan);
+			}
+		} else {
+			rpt_mutex_unlock(&myrpt->lock);
 		}
 		return 0;
 	}

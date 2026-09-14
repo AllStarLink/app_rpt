@@ -78,8 +78,7 @@ int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 	if ((myrpt->p.duplex == 3) && mylink->phonemode && myrpt->keyed) {
 		return 0;
 	}
-	if (!mylink->phonemode && (mylink->name[0] > '0') && (mylink->name[0] <= '9') && !CHAN_TECH(mylink->chan, "echolink") &&
-		!CHAN_TECH(mylink->chan, "tlb")) {
+	if (!mylink->phonemode && IS_NODE_EXTEN(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
 		/* if doesn't qual as a foreign link */
 		return 0;
 	}
@@ -175,8 +174,7 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	if ((!myrpt->p.duplex && !myrpt->p.linktolink) || (!nonlocals)) {
 		return 0;
 	}
-	if (!mylink->phonemode && (mylink->name[0] > '0') && (mylink->name[0] <= '9') && !CHAN_TECH(mylink->chan, "echolink") &&
-		!CHAN_TECH(mylink->chan, "tlb")) {
+	if (!mylink->phonemode && IS_NODE_EXTEN(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
 		/* if doesn't qual as a foreign link */
 		return 1;
 	}
@@ -939,7 +937,7 @@ void *rpt_link_connect(void *data)
 		goto cleanup;
 	}
 	ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
-	ast_audiohook_attach(l->chan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+	ast_audiohook_attach(l->pchan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
 
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {
