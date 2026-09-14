@@ -3647,7 +3647,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 			int try_reconnect = (l->max_retries == MAX_RETRIES_PERM) || (l->retries < l->max_retries);
 
 			if (try_reconnect) {
-				if ((l->name[0] > '0') && (l->name[0] <= '9') && (!l->isremote)) {
+				if (IS_NODE_EXTEN(l->name) && (!l->isremote)) {
 					l->retries++;
 					attempt_reconnect(myrpt, l);
 				} else {
@@ -4657,7 +4657,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 			inbound_link_finished(myrpt, l);
 			return 0;
 		}
-		if ((l->name[0] <= '0') || (l->name[0] > '9') || l->isremote) {
+		if (!IS_NODE_EXTEN(l->name) || l->isremote) {
 			/* Not an allstar link node */
 			l->disctime = 1;
 		} else {
@@ -5516,8 +5516,9 @@ static void *rpt(void *this)
 				myrpt->remrx = 1;
 				if (l->voterlink)
 					myrpt->voteremrx = 1;
-				if ((l->name[0] > '0') && (l->name[0] <= '9'))		/* Ignore '0' nodes */
+				if (IS_NODE_EXTEN(l->name)) { /* Ignore '0' nodes */
 					ast_copy_string(myrpt->lastnodewhichkeyedusup, l->name, sizeof(myrpt->lastnodewhichkeyedusup));
+				}
 			}
 		}
 		ao2_iterator_destroy(&l_it);
