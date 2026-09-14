@@ -967,35 +967,28 @@ void rpt_event_process(struct rpt *myrpt, struct ast_channel *chan)
 	ast_debug(2, "    -- %d variables\n", i);
 }
 
-static void dodispgm(struct rpt *myrpt, char *them)
+static void _exec_conn_disc_pgm(struct rpt *myrpt, char *them, const char *pgm)
 {
-	char *argv[4];
+	int argc;
+	char *argv[32];
+	char *str;
 
-	if (!myrpt->p.discpgm) {
+	if (!pgm) {
 		return;
 	}
 
-	argv[0] = ast_strdupa(myrpt->p.discpgm);
-	argv[1] = myrpt->name;
-	argv[2] = them;
-	argv[3] = NULL;
-	ast_safe_execvp(1, argv[0], argv);
-}
-
-static void doconpgm(struct rpt *myrpt, char *them)
-{
-	char *argv[4];
-
-	if (!myrpt->p.connpgm) {
-		return;
+	str = ast_strdupa(pgm);
+	argc = ast_app_separate_args(str, ' ', argv, ARRAY_LEN(argv) - 2 - 1);
+	if (argc > 0 && !ast_strlen_zero(argv[0])) {
+		argv[argc++] = myrpt->name;
+		argv[argc++] = them;
+		argv[argc] = NULL;
+		ast_safe_execvp(1, argv[0], argv);
 	}
-
-	argv[0] = ast_strdupa(myrpt->p.connpgm);
-	argv[1] = myrpt->name;
-	argv[2] = them;
-	argv[3] = NULL;
-	ast_safe_execvp(1, argv[0], argv);
 }
+
+#define doconpgm(myrpt, them) _exec_conn_disc_pgm(myrpt, them, myrpt->p.connpgm);
+#define dodispgm(myrpt, them) _exec_conn_disc_pgm(myrpt, them, myrpt->p.discpgm);
 
 /*! \brief Store the output of libcurl (the OK is sent to stdout) */
 static size_t writefunction(char *contents, size_t size, size_t nmemb, void *userdata)
