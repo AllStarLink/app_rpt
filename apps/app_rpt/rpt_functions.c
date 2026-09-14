@@ -330,7 +330,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		RPT_LIST_TRAVERSE(links_copy, l, l_it) {
 			char c1;
 
-			if (!rpt_is_ASLNode(l->name)) {
+			if (!IS_NODE_EXTEN(l->name)) {
 				/* Skip any IAXRPT monitoring */
 				continue;
 			}
@@ -358,7 +358,7 @@ enum rpt_function_response function_ilink(struct rpt *myrpt, char *param, char *
 		rpt_mutex_unlock(&myrpt->lock);
 
 		RPT_LIST_TRAVERSE(links_copy, l, l_it) {
-			if (!rpt_is_ASLNode(l->name)) {
+			if (!IS_NODE_EXTEN(l->name)) {
 				continue;
 			}
 			rpt_link_stop_retries_silent(l);
@@ -1641,7 +1641,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			return DC_ERROR;
 		}
 		src = LINKMODE_OFF;
-		if (!rpt_is_ASLNode(mylink->name)) {
+		if (!IS_NODE_EXTEN(mylink->name)) {
 			src = LINKMODE_GUI;
 		}
 		if (mylink->phonemode) {
@@ -1663,7 +1663,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			return DC_ERROR;
 		}
 		src = 0;
-		if (!rpt_is_ASLNode(mylink->name)) {
+		if (!IS_NODE_EXTEN(mylink->name)) {
 			src = LINKMODE_GUI;
 		}
 		if (mylink->phonemode) {
@@ -1685,7 +1685,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			return DC_ERROR;
 		}
 		src = 0;
-		if (!rpt_is_ASLNode(mylink->name)) {
+		if (!IS_NODE_EXTEN(mylink->name)) {
 			src = LINKMODE_GUI;
 		}
 		if (mylink->phonemode) {
@@ -1707,7 +1707,7 @@ enum rpt_function_response function_cop(struct rpt *myrpt, char *param, char *di
 			return DC_ERROR;
 		}
 		src = 0;
-		if (!rpt_is_ASLNode(mylink->name)) {
+		if (!IS_NODE_EXTEN(mylink->name)) {
 			src = LINKMODE_GUI;
 		}
 		if (mylink->phonemode) {
