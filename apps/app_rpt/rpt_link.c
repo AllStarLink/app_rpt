@@ -797,6 +797,7 @@ void *rpt_link_connect(void *data)
 		reconnects = l->reconnects;
 		/* Demote before hangup so permalinks cannot redial during mode change. */
 		rpt_link_stop_retries_silent(l);
+		l->killme = 1; /* replace in place: no discpgm; new link follows */
 		modechange = 1;
 		ao2_ref(l, -1);
 	} else { /* Check to see if this node is already linked */

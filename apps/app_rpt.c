@@ -3695,7 +3695,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 		if (!l->chan) {
 			/*
 			 * Inbound reconnect found this entry and set killme + silent stop:
-			 * leave without LINKDISC AA / discpgm so the replacement is quiet.
+			 * leave without REMDISC; cleanup skips discpgm when killme is set.
 			 * Unexpected loss still waits for disctime, then runs AA.
 			 */
 			if (l->killme || l->disced == RPT_LINK_DISCONNECT_SILENT) {
@@ -4671,7 +4671,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	if (ast_shutting_down()) {
-		/* Skip REMDISC / discpgm / LINKDISC in process_link_channel cleanup. */
+		/* No REMDISC; cleanup also skips discpgm while shutting down. */
 		l->disced = RPT_LINK_DISCONNECT_SILENT;
 		hangup_link_chan(l);
 		return 0;
@@ -5139,11 +5139,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	rpt_mutex_unlock(&myrpt->lock);
 
 	/*
-	 * Play REMDISC/CONNFAIL only after rpt_link_remove() above. rpt_telemetry(REMDISC)
-	 * no-ops while a same-named link remains in myrpt->links (haslink guard) — that is
-	 * why connect telem worked but disconnect did not when announced from
-	 * link_disconnect_finished. Skip _SILENT. discpgm/LINKDISC log for intentional
-	 * disconnect already ran in link_disconnect_finished.
+	 * REMDISC/CONNFAIL only after rpt_link_remove() (haslink guard). Skip telem for
+	 * _SILENT (e.g. ilink 6 "all links off" uses COMPLETE instead of per-link REMDISC).
+	 * discpgm still runs for _SILENT — Allan: silent means no telem, not no discpgm.
+	 * Skip discpgm only for killme (flaky reconnect replace) / Asterisk shutdown.
+	 * RPT_LINK_DISCONNECT already ran discpgm in link_disconnect_finished().
 	 */
 	if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
 		if (!l->hasconnected) {
@@ -5151,12 +5151,12 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		} else if (l->name[0] != '0') {
 			rpt_telemetry(myrpt, REMDISC, l);
 		}
-		if (l->disced != RPT_LINK_DISCONNECT) {
-			if (l->hasconnected) {
-				dodispgm(myrpt, l->name);
-			}
-			donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
+	}
+	if (l->disced != RPT_LINK_DISCONNECT && !l->killme && !ast_shutting_down()) {
+		if (l->hasconnected) {
+			dodispgm(myrpt, l->name);
 		}
+		donodelog_fmt(myrpt, l->hasconnected ? "LINKDISC,%s" : "LINKFAIL,%s", l->name);
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
@@ -6128,8 +6128,9 @@ static void *rpt(void *this)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		/* hang-up any running links */
+		/* hang-up any running links without per-link telem/discpgm storm */
 		rpt_link_stop_retries_silent(l);
+		l->killme = 1;
 	}
 	ao2_iterator_destroy(&l_it);
 	rpt_mutex_unlock(&myrpt->lock);
