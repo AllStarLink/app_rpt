@@ -1907,8 +1907,7 @@ static void handle_link_data(struct rpt *myrpt, struct rpt_link *mylink, char *s
 
 	if (!strcmp(str, DISCSTR)) {
 		/* Peer asked us to drop this link; demote permalinks so #574 infinite
-		 * retry cannot resurrect it. stop_retries softhangups so teardown
-		 * runs through remote_hangup_helper (textq flush).
+		 * retry cannot resurrect it. Link thread softhangups after textq flush (#1236).
 		 */
 		rpt_link_stop_retries(mylink);
 		return;
@@ -3419,10 +3418,16 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 }
 
 /*!
- * \brief Finish an inbound link after chan is gone (LINKDISC AA side effects).
- * Used after disctime expires, or immediately on intentional inbound DISCSTR.
+ * \brief LINKDISC AA side effects after a link is finished (discpgm, log, update).
+ *
+ * Used after inbound disctime expiry, intentional inbound DISCSTR, and intentional
+ * outbound disconnect. Do not call for _SILENT.
+ *
+ * REMDISC is not played here: rpt_telemetry(REMDISC) suppresses local play while a
+ * same-named link is still in myrpt->links. process_link_channel cleanup announces
+ * REMDISC after rpt_link_remove().
  */
-static void inbound_link_finished(struct rpt *myrpt, struct rpt_link *l)
+static void link_disconnect_finished(struct rpt *myrpt, struct rpt_link *l)
 {
 	ast_debug(1, "LINKDISC AA\n");
 	l->disced = RPT_LINK_DISCONNECT;
@@ -3431,9 +3436,6 @@ static void inbound_link_finished(struct rpt *myrpt, struct rpt_link *l)
 	}
 	if (!strcmp(myrpt->cmdnode, l->name)) {
 		myrpt->cmdnode[0] = 0;
-	}
-	if (l->name[0] != '0') {
-		rpt_telemetry(myrpt, REMDISC, l);
 	}
 	rpt_update_links(myrpt);
 	donodelog_fmt(myrpt, "LINKDISC,%s", l->name);
@@ -3639,6 +3641,21 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 		}
 
 		/*
+		 * Intentional disconnect and channel already gone: run LINKDISC AA
+		 * (discpgm/log) unless silent, then finish so the link thread tears
+		 * down pchan. REMDISC plays later in process_link_channel cleanup
+		 * after rpt_link_remove() (haslink guard).
+		 */
+		if (!l->chan && l->disced != RPT_LINK_DISCONNECT_NONE) {
+			if (!strcmp(myrpt->cmdnode, l->name)) {
+				myrpt->cmdnode[0] = 0;
+			}
+			if (l->disced == RPT_LINK_DISCONNECT) {
+				link_disconnect_finished(myrpt, l);
+			}
+			return -1;
+		}
+		/*
 		 * Reconnect only while the channel is down. Count attempts here — not on every
 		 * tick while connected (that exhausted MAX_RETRIES within ~100ms after ANSWER).
 		 * Permanent links keep trying unless rpt_link_stop_retries() demoted them.
@@ -3675,9 +3692,19 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 		}
 	} else {
 		/* Not outbound */
-		if ((!l->chan) && (!l->disctime)) {
-			inbound_link_finished(myrpt, l);
-			return -1;
+		if (!l->chan) {
+			/*
+			 * Inbound reconnect found this entry and set killme + silent stop:
+			 * leave without REMDISC; cleanup skips discpgm when killme is set.
+			 * Unexpected loss still waits for disctime, then runs AA.
+			 */
+			if (l->killme || l->disced == RPT_LINK_DISCONNECT_SILENT) {
+				return -1;
+			}
+			if (!l->disctime) {
+				link_disconnect_finished(myrpt, l);
+				return -1;
+			}
 		}
 	}
 	return 0;
@@ -4643,34 +4670,49 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		rpt_update_links(myrpt);
 	}
 
-	if (!l->chan || CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb") || ast_shutting_down()) {
+	if (ast_shutting_down()) {
+		/* No REMDISC; cleanup also skips discpgm while shutting down. */
+		l->disced = RPT_LINK_DISCONNECT_SILENT;
+		hangup_link_chan(l);
+		return 0;
+	}
+	if (l->chan && (CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb"))) {
 		return 0;
 	}
 
 	/*
-	 * Unexpected inbound loss parks on disctime so periodic LINKDISC AA can run.
-	 * Intentional inbound disconnect (disced already set) skips that grace period.
+	 * Unexpected inbound loss parks on disctime so the link stays in myrpt->links
+	 * for DISC_TIME. A flaky peer that reconnects can find this entry (killme +
+	 * silent) and avoid discpgm/REMDISC noise. Intentional (disced set) finishes
+	 * immediately — separate from that grace window.
 	 */
 	if (!l->outbound) {
 		if (l->disced != RPT_LINK_DISCONNECT_NONE) {
 			hangup_link_chan(l);
-			inbound_link_finished(myrpt, l);
+			if (l->disced == RPT_LINK_DISCONNECT) {
+				link_disconnect_finished(myrpt, l);
+			}
 			return 0;
 		}
-		if (!IS_NODE_EXTEN(l->name) || l->isremote) {
-			/* Not an allstar link node */
-			l->disctime = 1;
-		} else {
-			/* An allstar link node */
-			l->disctime = DISC_TIME;
+		if (!l->disctime) {
+			if (!IS_NODE_EXTEN(l->name) || l->isremote) {
+				/* Not an allstar link node */
+				l->disctime = 1;
+			} else {
+				/* An allstar link node */
+				l->disctime = DISC_TIME;
+			}
 		}
 		hangup_link_chan(l);
 		return 1;
 	}
 
-	/* Intentional outbound disconnect: do not redial. */
+	/* Intentional outbound disconnect: do not redial; announce unless silent. */
 	if (l->disced != RPT_LINK_DISCONNECT_NONE) {
 		hangup_link_chan(l);
+		if (l->disced == RPT_LINK_DISCONNECT) {
+			link_disconnect_finished(myrpt, l);
+		}
 		return 0;
 	}
 
@@ -4725,10 +4767,12 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	looptimestart = rpt_tvnow();
 
 	/*
-	 * Do not exit on disced or !chan. softhangup must reach remote_hangup_helper.
-	 * Unexpected inbound loss keeps ticking until disctime expires (LINKDISC AA);
-	 * intentional inbound DISCSTR finishes immediately in remote_hangup_helper.
-	 * periodic_process_link returns -1 when that timeout/give-up path finishes.
+	 * Do not exit on disced or !chan alone.
+	 * Intentional disconnect: flush textq (incl. !!DISCONNECT!!) on a live channel,
+	 * wait briefly for TX, then softhangup (#1236). Unexpected inbound loss parks
+	 * on disctime (link stays listed) until expiry or a flaky reconnect sets killme
+	 * silent and leaves without discpgm/REMDISC. disctime is not used for local
+	 * intentional disconnect. periodic_process_link returns -1 when finished.
 	 */
 	while (ms >= 0) {
 		ms = MSWAIT;
@@ -4745,6 +4789,23 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		who = ast_waitfor_n(cs, n, &ms);
 		if (periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart))) {
 			break;
+		}
+		/*
+		 * After demote/disced, flush any remaining textq (incl. !!DISCONNECT!!)
+		 * on a live channel, wait briefly for TX, then softhangup (#1236).
+		 */
+		if (l->disced != RPT_LINK_DISCONNECT_NONE && l->chan && !ast_check_hangup(l->chan)) {
+			if (l->pchan) {
+				ast_autoservice_start(l->pchan);
+			}
+			link_process_textq(myrpt, l);
+			ast_safe_sleep(l->chan, MSWAIT * 10);
+			if (l->pchan) {
+				ast_autoservice_stop(l->pchan);
+			}
+			if (l->chan) {
+				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
+			}
 		}
 		if (!ms) {
 			/* No channels had activity before the timer expired,
@@ -5077,12 +5138,21 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_unlock(&myrpt->lock);
 
-	if (l->disced != RPT_LINK_DISCONNECT) {
+	/*
+	 * REMDISC/CONNFAIL only after rpt_link_remove() (haslink guard). Skip telem for
+	 * _SILENT (e.g. ilink 6 "all links off" uses COMPLETE instead of per-link REMDISC).
+	 * discpgm still runs for _SILENT — Allan: silent means no telem, not no discpgm.
+	 * Skip discpgm only for killme (flaky reconnect replace) / Asterisk shutdown.
+	 * RPT_LINK_DISCONNECT already ran discpgm in link_disconnect_finished().
+	 */
+	if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
 		if (!l->hasconnected) {
 			rpt_telemetry(myrpt, CONNFAIL, l);
-		} else if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
+		} else if (l->name[0] != '0') {
 			rpt_telemetry(myrpt, REMDISC, l);
 		}
+	}
+	if (l->disced != RPT_LINK_DISCONNECT && !l->killme && !ast_shutting_down()) {
 		if (l->hasconnected) {
 			dodispgm(myrpt, l->name);
 		}
@@ -5891,7 +5961,9 @@ static void *rpt(void *this)
 
 		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
 			if (l->killme) {
-				rpt_link_stop_retries(l);
+				/* Silent: inbound reconnect replaces this entry within disctime grace. */
+				rpt_link_stop_retries_silent(l);
+				l->disctime = 0;
 				if (!strcmp(myrpt->cmdnode, l->name))
 					myrpt->cmdnode[0] = 0;
 				continue;
@@ -6056,8 +6128,9 @@ static void *rpt(void *this)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-		/* hang-up any running links */
+		/* hang-up any running links without per-link telem/discpgm storm */
 		rpt_link_stop_retries_silent(l);
+		l->killme = 1;
 	}
 	ao2_iterator_destroy(&l_it);
 	rpt_mutex_unlock(&myrpt->lock);
@@ -7363,6 +7436,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				/* if found, we already have a connection, kill the existing connection */
 				l->killme = 1;
 				rpt_link_stop_retries_silent(l);
+				l->disctime = 0; /* do not wait out unexpected-loss grace */
 				reconnects = l->reconnects;
 				reconnects++;
 				ao2_ref(l, -1);

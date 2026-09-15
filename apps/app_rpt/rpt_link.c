@@ -221,9 +221,11 @@ void rpt_link_stop_retries_common(struct rpt_link *l, enum rpt_link_disconnect d
 {
 	rpt_link_demote_retries(l);
 	l->disced = disced;
-	if (l->chan) {
-		ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-	}
+	/*
+	 * Do not softhangup here. Queued !!DISCONNECT!! (and other textq frames) must
+	 * be written by the link thread before the channel is hung up (#1236).
+	 * Do not arm disctime — that timer is only for unexpected inbound loss.
+	 */
 }
 
 void rpt_link_queue_disconnect(struct rpt_link *l)
@@ -793,11 +795,9 @@ void *rpt_link_connect(void *data)
 		}
 		rpt_mutex_unlock(&myrpt->lock);
 		reconnects = l->reconnects;
-		if (l->chan) {
-			ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-		}
-		l->retries = l->max_retries + 1;
-		l->disced = RPT_LINK_DISCONNECT_SILENT;
+		/* Demote before hangup so permalinks cannot redial during mode change. */
+		rpt_link_stop_retries_silent(l);
+		l->killme = 1; /* replace in place: no discpgm; new link follows */
 		modechange = 1;
 		ao2_ref(l, -1);
 	} else { /* Check to see if this node is already linked */

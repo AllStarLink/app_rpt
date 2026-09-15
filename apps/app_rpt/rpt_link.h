@@ -35,8 +35,11 @@ void rpt_qwrite(struct rpt_link *l, struct ast_frame *f);
  * \param disced Disconnect flavor (RPT_LINK_DISCONNECT or _SILENT)
  *
  * Demotes permanent links off MAX_RETRIES_PERM, marks retries exhausted,
- * clears perma, sets disced, and softhangups the link channel.
- * Do not call while holding a channel lock.
+ * clears perma, and sets disced. Does not softhangup and does not arm disctime.
+ * The link thread flushes textq (if any) then softhangups (#1236).
+ *
+ * \note Locking: does not take myrpt->lock and does not touch the channel, so it
+ * is safe with or without myrpt->lock held. Do not call while holding a channel lock.
  */
 void rpt_link_stop_retries_common(struct rpt_link *l, enum rpt_link_disconnect disced);
 
