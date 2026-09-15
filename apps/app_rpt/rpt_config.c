@@ -922,8 +922,18 @@ void load_rpt_vars(int n, int init)
 	RPT_CONFIG_VAR_COND_DEFAULT(phone_functions, "phone_functions", 0, rpt_vars[n].p.functions);
 	RPT_CONFIG_VAR_COND_DEFAULT(dphone_functions, "dphone_functions", 0, rpt_vars[n].p.functions);
 	RPT_CONFIG_VAR(alt_functions, "alt_functions");
-	RPT_CONFIG_VAR_CHAR_DEFAULT(funcchar, "funcchar", FUNCCHAR);
+	val = ast_variable_retrieve(cfg, cat, "funcchars");
+	if (!val) {
+		val = ast_variable_retrieve(cfg, cat, "funcchar"); /* accepted as a compatibility alias for funcchars */
+	}
+	ast_copy_string(rpt_vars[n].p.funcchars, val ? val : FUNCCHARS, sizeof(rpt_vars[n].p.funcchars));
 	RPT_CONFIG_VAR_CHAR_DEFAULT(endchar, "endchar", ENDCHAR);
+	if (strchr(rpt_vars[n].p.funcchars, rpt_vars[n].p.endchar)) {
+		ast_mutex_unlock(&rpt_vars[n].lock);
+		ast_log(LOG_ERROR, "endchar '%c' must not also appear in funcchars '%s' for node %s.  Radio Repeater disabled.\n",
+			rpt_vars[n].p.endchar, rpt_vars[n].p.funcchars, cat);
+		pthread_exit(NULL);
+	}
 	RPT_CONFIG_VAR_BOOL(nobusyout, "nobusyout");
 	RPT_CONFIG_VAR_BOOL(notelemtx, "notelemtx");
 	RPT_CONFIG_VAR_BOOL(propagate_dtmf, "propagate_dtmf");
