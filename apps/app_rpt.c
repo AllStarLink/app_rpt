@@ -5143,10 +5143,14 @@ static inline int monchannel_read(struct rpt *myrpt)
 			/* IF we are an altlink() and the repeater is not receiving (aka we are in the tail time),
 			 * whisper the output audio onto said link.
 			 */
+			ast_audiohook_lock(&l->altaudio);
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2")) &&
 				l->altaudio.status == AST_AUDIOHOOK_STATUS_RUNNING) {
+				ast_audiohook_unlock(&l->altaudio);
 				ast_audiohook_write_frame(&l->altaudio, AST_AUDIOHOOK_DIRECTION_READ, f);
+			} else {
+				ast_audiohook_unlock(&l->altaudio);
 			}
 		}
 		ao2_iterator_destroy(&l_it);
