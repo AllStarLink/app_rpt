@@ -6207,15 +6207,15 @@ static int load_config(int reload)
 	if (!cfg) {
 		if (reload) {
 			ast_log(LOG_ERROR,
-				"Unable to open radio repeater configuration rpt.conf. Reload aborted; existing configuration remains active.\n");
+				"Unable to open radio repeater configuration rpt.conf. Reload aborted; existing state preserved.\n");
 		} else {
 			ast_log(LOG_ERROR, "Unable to open radio repeater configuration rpt.conf. Radio Repeater disabled.\n");
 		}
 		return -1;
 	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
 		if (reload) {
-			ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf. Reload aborted; existing "
-							   "configuration remains active.\n");
+			ast_log(LOG_ERROR,
+				"Errors detected in the radio repeater configuration rpt.conf. Reload aborted; existing state preserved.\n");
 		} else {
 			ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf. Radio Repeater disabled.\n");
 		}
