@@ -836,6 +836,10 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		ast_free(str);
 		return -1;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format\n", config);
+		ast_free(str);
+		return -1;
 	}
 	val = ast_variable_retrieve(cfg, "nodes", str);
 	if (!val) {
@@ -1192,6 +1196,9 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 	/* Load the config file */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		return result;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format\n", config);
 		return result;
 	}
 
@@ -1797,6 +1804,9 @@ static int TLB_do_nodedump(int fd, int argc, const char *const *argv)
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
 		return RESULT_FAILURE;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format\n", config);
+		return RESULT_FAILURE;
 	}
 	for (v = ast_variable_browse(cfg, "nodes"); v; v = v->next) {
 		if (!v->value) {
@@ -1842,6 +1852,9 @@ static int TLB_do_nodeget(int fd, int argc, const char *const *argv)
 	c = tolower(*argv[2]);
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		return RESULT_FAILURE;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format\n", config);
 		return RESULT_FAILURE;
 	}
 	s = ast_strdupa(argv[3]);
@@ -2017,6 +2030,10 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	/* find the node that matches the ipaddr and call */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		ast_free(TLB_node_key);
+		return -1;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format\n", config);
 		ast_free(TLB_node_key);
 		return -1;
 	}
@@ -2548,6 +2565,9 @@ static int load_module(void)
 
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		return AST_MODULE_LOAD_DECLINE;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format\n", config);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 

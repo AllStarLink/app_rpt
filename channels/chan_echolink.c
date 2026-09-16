@@ -4691,6 +4691,9 @@ static int load_module(void)
 	if (!(cfg = ast_config_load(el_config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s.\n", el_config);
 		return AST_MODULE_LOAD_DECLINE;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format. Aborting.\n", el_config);
+		return AST_MODULE_LOAD_DECLINE;
 	}
 
 	if (!(el_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
