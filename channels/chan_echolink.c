@@ -4506,7 +4506,10 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	/* load settings from app_rpt rpt.conf */
 	if (!(rpt_cfg = ast_config_load(rpt_config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s.\n", rpt_config);
-		return -1;
+		goto config_error;
+	} else if (rpt_cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format. Aborting.\n", rpt_config);
+		goto config_error;
 	}
 
 	val = ast_variable_retrieve(rpt_cfg, instp->astnode, "totime");
@@ -4612,6 +4615,12 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	ast_debug(1, "Echolink/%s emailID set to %s.\n", instp->name, instp->myemail);
 
 	return 0;
+
+config_error:
+	ast_free(instp->denylist[0]);
+	ast_free(instp->permitlist[0]);
+	ast_free(instp);
+	return -1;
 }
 
 static int unload_module(void)
