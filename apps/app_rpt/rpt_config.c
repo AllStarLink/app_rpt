@@ -697,30 +697,26 @@ void load_rpt_vars(int n, int init)
 	if (!cfg) {
 		if (init) {
 			ast_log(LOG_ERROR, "Unable to open radio repeater configuration rpt.conf. Radio Repeater disabled.\n");
-		} else {
-			ast_log(LOG_ERROR,
-				"Unable to open radio repeater configuration rpt.conf. Reload for repeater %s aborted; "
-				"existing state preserved.\n",
-				rpt_vars[n].name);
-		}
-		ast_mutex_unlock(&rpt_vars[n].lock);
-		if (init) {
+			ast_mutex_unlock(&rpt_vars[n].lock);
 			pthread_exit(NULL);
 		}
+		ast_log(LOG_ERROR,
+			"Unable to open radio repeater configuration rpt.conf. Reload for repeater %s aborted; "
+			"existing state preserved.\n",
+			rpt_vars[n].name);
+		ast_mutex_unlock(&rpt_vars[n].lock);
 		return;
 	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
 		if (init) {
 			ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf. Radio Repeater disabled.\n");
-		} else {
-			ast_log(LOG_ERROR,
-				"Errors detected in the radio repeater configuration rpt.conf. Reload for repeater %s aborted; "
-				"existing state preserved.\n",
-				rpt_vars[n].name);
-		}
-		ast_mutex_unlock(&rpt_vars[n].lock);
-		if (init) {
+			ast_mutex_unlock(&rpt_vars[n].lock);
 			pthread_exit(NULL);
 		}
+		ast_log(LOG_ERROR,
+			"Errors detected in the radio repeater configuration rpt.conf. Reload for repeater %s aborted; "
+			"existing state preserved.\n",
+			rpt_vars[n].name);
+		ast_mutex_unlock(&rpt_vars[n].lock);
 		return;
 	}
 

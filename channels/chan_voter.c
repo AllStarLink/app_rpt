@@ -1155,6 +1155,9 @@ static int voter_hangup(struct ast_channel *ast)
 		pthread_join(p->xmit_thread, NULL);
 	}
 	ast_mutex_unlock(&voter_lock);
+	if (p->u) {
+		ast_module_user_remove(p->u);
+	}
 	ast_free(p);
 	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);

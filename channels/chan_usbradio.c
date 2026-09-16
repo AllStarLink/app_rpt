@@ -807,7 +807,7 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	int txctcssadj = 200;
 	int rxsquelchadj = 500;
 	int txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
-	int fever = o->fever;
+	int fever = o->fever; /* Preserve the current value when the tune file omits it. */
 	char devstr[sizeof(o->devstr)];
 	char serial[sizeof(o->serial)];
 
