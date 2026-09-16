@@ -6205,10 +6205,20 @@ static int load_config(int reload)
 
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
-		ast_log(LOG_ERROR, "Unable to open radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
+		if (reload) {
+			ast_log(LOG_ERROR,
+				"Unable to open radio repeater configuration rpt.conf. Reload aborted; existing configuration remains active.\n");
+		} else {
+			ast_log(LOG_ERROR, "Unable to open radio repeater configuration rpt.conf. Radio Repeater disabled.\n");
+		}
 		return -1;
 	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
-		ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf.  Radio Repeater disabled.\n");
+		if (reload) {
+			ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf. Reload aborted; existing "
+							   "configuration remains active.\n");
+		} else {
+			ast_log(LOG_ERROR, "Errors detected in the radio repeater configuration rpt.conf. Radio Repeater disabled.\n");
+		}
 		return -1;
 	}
 
@@ -8375,7 +8385,10 @@ static int reload(void)
 	int n;
 
 	ast_mutex_lock(&rpt_master_lock);
-	load_config(1);
+	if (load_config(1)) {
+		ast_mutex_unlock(&rpt_master_lock);
+		return AST_MODULE_RELOAD_ERROR;
+	}
 	for (n = 0; n < nrpts; n++) {
 		if (rpt_vars[n].reload_request) {
 			continue;
@@ -8391,7 +8404,7 @@ static int reload(void)
 		}
 	}
 	ast_mutex_unlock(&rpt_master_lock);
-	return 0;
+	return AST_MODULE_RELOAD_SUCCESS;
 }
 /* clang-format off */
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application", 
