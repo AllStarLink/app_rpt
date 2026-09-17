@@ -6199,6 +6199,20 @@ static void *rpt(void *this)
 /* Forward declaration */
 static int stop_repeaters(void);
 
+static int is_valid_dns_node_domain(const char *dns_name)
+{
+	size_t dns_name_length;
+	size_t max_lookup_length;
+
+	if (!rpt_is_valid_dns_name(dns_name)) {
+		return 0;
+	}
+
+	dns_name_length = strlen(dns_name);
+	max_lookup_length = MAX_DNS_NODE_DOMAIN_LEN + (dns_name[dns_name_length - 1] == '.');
+	return sizeof("_iax._udp.") - 1 + MAX_DNS_NODE_LABEL_LEN + 1 + dns_name_length <= max_lookup_length;
+}
+
 static int load_config(int reload)
 {
 	int i, n = 0;
@@ -6254,7 +6268,7 @@ static int load_config(int reload)
 
 	cval = ast_variable_retrieve(cfg, "general", "dns_node_domain");
 	if (cval) {
-		if (rpt_is_valid_dns_name(cval)) {
+		if (is_valid_dns_node_domain(cval)) {
 			dns_node_domain = cval;
 		} else {
 			ast_log(LOG_ERROR, "Configuration error: dns_node_domain value %s is not a valid format", cval);

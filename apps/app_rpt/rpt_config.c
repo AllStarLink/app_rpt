@@ -410,7 +410,10 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		ast_mutex_lock(&dns_node_domain_lock);
 		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.%s", node, rpt_dns_node_domain);
 		ast_mutex_unlock(&dns_node_domain_lock);
-		if (res < 0 || (size_t) res >= sizeof(domain) || (size_t) res > MAX_DNS_NODE_DOMAIN_LEN) {
+		if (res < 0 || (size_t) res >= sizeof(domain)) {
+			return -1;
+		}
+		if ((size_t) res > MAX_DNS_NODE_DOMAIN_LEN + (domain[res - 1] == '.')) {
 			return -1;
 		}
 
