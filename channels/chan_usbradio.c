@@ -469,8 +469,8 @@ static int usbradio_write(struct ast_channel *chan, struct ast_frame *f);
 static int usbradio_indicate(struct ast_channel *chan, int cond_in, const void *data, size_t datalen);
 static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newchan);
 static int usbradio_setoption(struct ast_channel *chan, int option, void *data, int datalen);
-static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s);
-static void store_rxctcssadj(struct chan_usbradio_pvt *o, const char *s);
+static void store_rxvoiceadj(float *rxvoiceadj, const char *s);
+static void store_rxctcssadj(float *rxctcssadj, const char *s);
 static int set_txctcss_level(struct chan_usbradio_pvt *o);
 static void pmrdump(struct chan_usbradio_pvt *o, int fd);
 static void mult_set(struct chan_usbradio_pvt *o);
@@ -799,31 +799,29 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	struct ast_config *cfg2;
 	int opened = 0;
 	int configured = 0;
+	int rxmixerset = 500;
+	int txmixaset = 500;
+	int txmixbset = 500;
+	float rxvoiceadj = 0.5;
+	float rxctcssadj = 0.5;
+	int txctcssadj = 200;
+	int rxsquelchadj = 500;
+	int txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
+	int fever = o->fever; /* Preserve the current value when the tune file omits it. */
 	char devstr[sizeof(o->devstr)];
 	char serial[sizeof(o->serial)];
 
-	/* No load defaults */
-	o->rxmixerset = 500;
-	o->txmixaset = 500;
-	o->txmixbset = 500;
-	o->rxvoiceadj = 0.5;
-	o->rxctcssadj = 0.5;
-	o->txctcssadj = 200;
-	o->rxsquelchadj = 500;
-	o->txslimsp = DEFAULT_TX_SOFT_LIMITER_SETPOINT;
-
 	devstr[0] = '\0';
 	serial[0] = '\0';
-	if (!reload) {
-		o->devstr[0] = 0;
-		o->serial[0] = 0;
-	}
 
 	if (!cfg) {
 		struct ast_flags zeroflag = { 0 };
 		cfg2 = ast_config_load(CONFIG, zeroflag);
 		if (!cfg2) {
 			ast_log(LOG_WARNING, "Can't %sload settings for %s, using default parameters\n", reload ? "re" : "", o->name);
+			return -1;
+		} else if (cfg2 == CONFIG_STATUS_FILEINVALID) {
+			ast_log(LOG_ERROR, "Config file %s is in an invalid format. Aborting.\n", CONFIG);
 			return -1;
 		}
 		opened = 1;
@@ -833,23 +831,18 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	for (v = ast_variable_browse(cfg, o->name); v; v = v->next) {
 		configured = 1;
 		CV_START(v->name, v->value);
-		CV_UINT("rxmixerset", o->rxmixerset);
-		CV_UINT("txmixaset", o->txmixaset);
-		CV_UINT("txmixbset", o->txmixbset);
-		CV_F("rxvoiceadj", store_rxvoiceadj(o, v->value));
-		CV_F("rxctcssadj", store_rxctcssadj(o, v->value));
-		CV_UINT("txctcssadj", o->txctcssadj);
-		CV_UINT("rxsquelchadj", o->rxsquelchadj);
-		CV_UINT("txslimsp", o->txslimsp);
-		CV_UINT("fever", o->fever);
+		CV_UINT("rxmixerset", rxmixerset);
+		CV_UINT("txmixaset", txmixaset);
+		CV_UINT("txmixbset", txmixbset);
+		CV_F("rxvoiceadj", store_rxvoiceadj(&rxvoiceadj, v->value));
+		CV_F("rxctcssadj", store_rxctcssadj(&rxctcssadj, v->value));
+		CV_UINT("txctcssadj", txctcssadj);
+		CV_UINT("rxsquelchadj", rxsquelchadj);
+		CV_UINT("txslimsp", txslimsp);
+		CV_UINT("fever", fever);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
 		CV_END;
-	}
-	if (!reload) {
-		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
-		ast_copy_string(o->devstr, devstr, sizeof(o->devstr));
-		ast_copy_string(o->serial, serial, sizeof(o->serial));
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
@@ -857,6 +850,20 @@ static int load_tune_config(struct chan_usbradio_pvt *o, const struct ast_config
 	if (!configured) {
 		ast_log(LOG_WARNING, "Can't %sload settings for %s (no section available), using default parameters\n", reload ? "re" : "", o->name);
 		return -1;
+	}
+	o->rxmixerset = rxmixerset;
+	o->txmixaset = txmixaset;
+	o->txmixbset = txmixbset;
+	o->rxvoiceadj = rxvoiceadj;
+	o->rxctcssadj = rxctcssadj;
+	o->txctcssadj = txctcssadj;
+	o->rxsquelchadj = rxsquelchadj;
+	o->txslimsp = txslimsp;
+	o->fever = fever;
+	if (!reload) {
+		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
+		ast_copy_string(o->devstr, devstr, sizeof(o->devstr));
+		ast_copy_string(o->serial, serial, sizeof(o->serial));
 	}
 	return 0;
 }
@@ -3631,28 +3638,28 @@ static void store_rxgain(struct chan_usbradio_pvt *o, const char *s)
 
 /*!
  * \brief Store receive voice adjustment.
- * \param o				Private struct.
+ * \param rxvoiceadj		Receive voice adjustment.
  * \param s				New setting.
  */
-static void store_rxvoiceadj(struct chan_usbradio_pvt *o, const char *s)
+static void store_rxvoiceadj(float *rxvoiceadj, const char *s)
 {
 	float f;
 
 	sscanf(s, N_FMT(f), &f);
-	o->rxvoiceadj = f;
+	*rxvoiceadj = f;
 }
 
 /*!
  * \brief Store receive ctcss adjustment.
- * \param o				Private struct.
+ * \param rxctcssadj		Receive CTCSS adjustment.
  * \param s				New setting.
  */
-static void store_rxctcssadj(struct chan_usbradio_pvt *o, const char *s)
+static void store_rxctcssadj(float *rxctcssadj, const char *s)
 {
 	float f;
 
 	sscanf(s, N_FMT(f), &f);
-	o->rxctcssadj = f;
+	*rxctcssadj = f;
 }
 
 /*!

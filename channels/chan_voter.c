@@ -1155,6 +1155,9 @@ static int voter_hangup(struct ast_channel *ast)
 		pthread_join(p->xmit_thread, NULL);
 	}
 	ast_mutex_unlock(&voter_lock);
+	if (p->u) {
+		ast_module_user_remove(p->u);
+	}
 	ast_free(p);
 	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
@@ -4002,6 +4005,12 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	 */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load config %s\n", config);
+		ast_hangup(chan);
+		return NULL;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format\n", config);
+		ast_hangup(chan);
+		return NULL;
 	} else {
 		ast_log(LOG_NOTICE, "Loading config from %s\n", config);
 		val = ast_variable_retrieve(cfg, (char *) data, "linger");
@@ -4347,6 +4356,9 @@ static int reload(void)
 	/* Attempt to load/reload voter.conf. */
 	if (!(cfg = ast_config_load(config, zeroflag))) {
 		ast_log(LOG_ERROR, "Unable to load/reload config %s\n", config);
+		return AST_MODULE_LOAD_FAILURE;
+	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format\n", config);
 		return AST_MODULE_LOAD_FAILURE;
 	} else {
 		ast_log(LOG_NOTICE, "Config load/reload from %s\n", config);

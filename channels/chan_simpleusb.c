@@ -855,12 +855,11 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	struct ast_config *cfg2;
 	int opened = 0;
 	int configured = 0;
+	int rxmixerset = 500;
+	int txmixaset = 500;
+	int txmixbset = 500;
 	char devstr[sizeof(o->devstr)];
 	char serial[sizeof(o->serial)];
-
-	o->rxmixerset = 500;
-	o->txmixaset = 500;
-	o->txmixbset = 500;
 
 	devstr[0] = '\0';
 	serial[0] = '\0';
@@ -871,6 +870,9 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 		if (!cfg2) {
 			ast_log(LOG_WARNING, "Can't %sload settings for %s, using default parameters\n", reload ? "re" : "", o->name);
 			return -1;
+		} else if (cfg2 == CONFIG_STATUS_FILEINVALID) {
+			ast_log(LOG_ERROR, "Config file %s is in an invalid format. Aborting.\n", CONFIG);
+			return -1;
 		}
 		opened = 1;
 		cfg = cfg2;
@@ -879,17 +881,12 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	for (v = ast_variable_browse(cfg, o->name); v; v = v->next) {
 		configured = 1;
 		CV_START(v->name, v->value);
-		CV_UINT("rxmixerset", o->rxmixerset);
-		CV_UINT("txmixaset", o->txmixaset);
-		CV_UINT("txmixbset", o->txmixbset);
+		CV_UINT("rxmixerset", rxmixerset);
+		CV_UINT("txmixaset", txmixaset);
+		CV_UINT("txmixbset", txmixbset);
 		CV_STR("devstr", devstr);
 		CV_STR("serial", serial);
 		CV_END;
-	}
-	if (!reload) {
-		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
-		ast_copy_string(o->devstr, devstr, sizeof(o->devstr)); /* Safe */
-		ast_copy_string(o->serial, serial, sizeof(o->serial)); /* Safe */
 	}
 	if (opened) {
 		ast_config_destroy(cfg2);
@@ -897,6 +894,14 @@ static int load_tune_config(struct chan_simpleusb_pvt *o, const struct ast_confi
 	if (!configured) {
 		ast_log(LOG_WARNING, "Can't %sload settings for %s (no section available), using default parameters\n", reload ? "re" : "", o->name);
 		return -1;
+	}
+	o->rxmixerset = rxmixerset;
+	o->txmixaset = txmixaset;
+	o->txmixbset = txmixbset;
+	if (!reload) {
+		/* Using the ternary operator in CV_STR won't work, due to butchering the sizeof, so copy after if needed */
+		ast_copy_string(o->devstr, devstr, sizeof(o->devstr)); /* Safe */
+		ast_copy_string(o->serial, serial, sizeof(o->serial)); /* Safe */
 	}
 	return 0;
 }
