@@ -143,3 +143,9 @@ struct rpt_connect_data {
  * \note Intended for use with pthread_create or similar threading APIs.
  */
 void *rpt_link_connect(void *data);
+
+/*!
+ * \brief Demote retries, stop permanent and non permanent retries.
+ * \param l Link to demote retries
+ */
+void rpt_link_demote_retries(struct rpt_link *l);
