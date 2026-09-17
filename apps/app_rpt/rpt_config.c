@@ -386,7 +386,7 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 {
 	struct ast_dns_result *result;
 	const struct ast_dns_record *record;
-	char domain[sizeof("_iax._udp.") - 1 + MAX_DNS_NODE_LABEL_LEN + 1 + MAX_DNS_NODE_DOMAIN_LEN + 1];
+	char domain[DNS_SRV_LOOKUP_NAME_BUFSIZE];
 	int res;
 	size_t node_length = strlen(node);
 
@@ -413,6 +413,11 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		if (res < 0 || (size_t) res >= sizeof(domain)) {
 			return -1;
 		}
+		/*
+		 * Relative DNS presentation names are limited to 253 characters.
+		 * Absolute names may be 254 when they end with the root '.'.
+		 * This is not truncation: res == 254 is accepted only with a trailing root dot.
+		 */
 		if ((size_t) res > MAX_DNS_NODE_DOMAIN_LEN + (domain[res - 1] == '.')) {
 			return -1;
 		}

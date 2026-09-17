@@ -6209,8 +6209,10 @@ static int is_valid_dns_node_domain(const char *dns_name)
 	}
 
 	dns_name_length = strlen(dns_name);
+	/* Relative names max 253; absolute names may be 254 with a trailing root '.' */
 	max_lookup_length = MAX_DNS_NODE_DOMAIN_LEN + (dns_name[dns_name_length - 1] == '.');
-	return sizeof("_iax._udp.") - 1 + MAX_DNS_NODE_LABEL_LEN + 1 + dns_name_length <= max_lookup_length;
+	/* "_iax._udp." + max node label + "." + configured domain */
+	return sizeof("_iax._udp.") - 1 + MAX_DNS_NODE_LABEL_LEN + sizeof(".") - 1 + dns_name_length <= max_lookup_length;
 }
 
 static int load_config(int reload)

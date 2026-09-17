@@ -454,8 +454,11 @@ enum patch_call_mode {
 
 /* for DNS resolution of node data */
 #define DEFAULT_DNS_NODE_DOMAIN "nodes.allstarlink.org"
-#define MAX_DNS_NODE_DOMAIN_LEN 253
+#define MAX_DNS_NODE_DOMAIN_LEN 253 /* relative presentation max; absolute may be 254 with root '.' */
 #define MAX_DNS_NODE_LABEL_LEN 63
+/* "_iax._udp." + <node label> + "." + <domain> + NUL */
+#define DNS_SRV_LOOKUP_NAME_BUFSIZE \
+	(sizeof("_iax._udp.") - 1 + MAX_DNS_NODE_LABEL_LEN + sizeof(".") - 1 + MAX_DNS_NODE_DOMAIN_LEN + 1)
 
 /*! \brief Publish the domain used for DNS node lookups */
 void rpt_set_dns_node_domain(const char *dns_name);
