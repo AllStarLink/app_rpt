@@ -452,7 +452,11 @@ enum patch_call_mode {
 #define DEFAULT_TLB_LINK_MODE LINKMODE_DEMAND
 #define DEFAULT_TLB_LINK_MODE_DYNAMIC 1
 
-/* for DNS resolution of node data */
+/* for DNS resolution of node data
+ * MAX_DNS_* values are DNS presentation/wire protocol limits (RFC 1035), not
+ * arbitrary local buffer choices. Absolute names may be 254 with a trailing root '.'.
+ * Using ast_str would not remove the need to enforce these caps before querying.
+ */
 #define DEFAULT_DNS_NODE_DOMAIN "nodes.allstarlink.org"
 #define MAX_DNS_NODE_DOMAIN_LEN 253 /* relative presentation max; absolute may be 254 with root '.' */
 #define MAX_DNS_NODE_LABEL_LEN 63
