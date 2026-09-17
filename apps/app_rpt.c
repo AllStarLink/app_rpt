@@ -419,7 +419,6 @@ static int shutting_down = 0;
 
 /* general settings */
 enum rpt_dns_method rpt_node_lookup_method = DEFAULT_NODE_LOOKUP_METHOD;
-const char *rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 int rpt_max_dns_node_length = 6;
 
 static int nullfd = -1;
@@ -6207,6 +6206,7 @@ static int load_config(int reload)
 	char *this = NULL;
 	const char *val;
 	const char *cval;
+	const char *dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 
 	cfg = ast_config_load("rpt.conf", config_flags);
 	if (!cfg) {
@@ -6254,16 +6254,14 @@ static int load_config(int reload)
 
 	cval = ast_variable_retrieve(cfg, "general", "dns_node_domain");
 	if (cval) {
-		if (rpt_is_valid_dns_name(val)) {
-			rpt_dns_node_domain = val;
+		if (rpt_is_valid_dns_name(cval)) {
+			dns_node_domain = cval;
 		} else {
 			ast_log(LOG_ERROR, "Configuration error: dns_node_domain value %s is not a valid format", cval);
-			rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 		}
-	} else {
-		rpt_dns_node_domain = DEFAULT_DNS_NODE_DOMAIN;
 	}
-	ast_log(LOG_NOTICE, "Domain used for DNS node lookup is: %s", rpt_dns_node_domain);
+	rpt_set_dns_node_domain(dns_node_domain);
+	ast_log(LOG_NOTICE, "Domain used for DNS node lookup is: %s", dns_node_domain);
 	val = ast_variable_retrieve(cfg, "general", "max_dns_node_length");
 	if (val) {
 		i = atoi(val);

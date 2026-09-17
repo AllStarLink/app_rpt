@@ -454,6 +454,11 @@ enum patch_call_mode {
 
 /* for DNS resolution of node data */
 #define DEFAULT_DNS_NODE_DOMAIN "nodes.allstarlink.org"
+#define MAX_DNS_NODE_DOMAIN_LEN 253
+#define MAX_DNS_NODE_LABEL_LEN 63
+
+/*! \brief Publish the domain used for DNS node lookups */
+void rpt_set_dns_node_domain(const char *dns_name);
 
 #define REMOTE_RIG_FT950 "ft950"
 #define REMOTE_RIG_FT897 "ft897"
