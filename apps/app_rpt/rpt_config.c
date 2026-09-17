@@ -34,18 +34,16 @@
 #define TLB_QUERY_NODE_EXISTS 1
 #define TLB_QUERY_GET_CALLSIGN 2
 
-/*! \brief DNS max overall and per-label sizes (RFC1035) */
-#define MAX_DNS_NODE_DOMAIN_LEN 253
-#define MAX_DNS_NODE_LABEL_LEN 63
-
 extern struct rpt rpt_vars[MAXRPTS];
 extern enum rpt_dns_method rpt_node_lookup_method;
-extern char *rpt_dns_node_domain;
 extern int rpt_max_dns_node_length;
 
 static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 
 AST_MUTEX_DEFINE_STATIC(nodelookuplock);
+AST_MUTEX_DEFINE_STATIC(dns_node_domain_lock);
+
+static char rpt_dns_node_domain[MAX_DNS_NODE_DOMAIN_LEN + 1] = DEFAULT_DNS_NODE_DOMAIN;
 
 int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name, int min, int max, int defl)
 {
@@ -388,11 +386,12 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 {
 	struct ast_dns_result *result;
 	const struct ast_dns_record *record;
-	char domain[256];
+	char domain[DNS_SRV_LOOKUP_NAME_BUFSIZE];
 	int res;
+	size_t node_length = strlen(node);
 
 	/* we require at least a node length of 4 digits */
-	if (strlen(node) < 4) {
+	if (node_length < 4 || node_length > MAX_DNS_NODE_LABEL_LEN) {
 		return -1;
 	}
 
@@ -408,8 +407,18 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 
 		/* setup the domain to lookup */
 		memset(domain, 0, sizeof(domain));
+		ast_mutex_lock(&dns_node_domain_lock);
 		res = snprintf(domain, sizeof(domain), "_iax._udp.%s.%s", node, rpt_dns_node_domain);
-		if (res < 0) {
+		ast_mutex_unlock(&dns_node_domain_lock);
+		if (res < 0 || (size_t) res >= sizeof(domain)) {
+			return -1;
+		}
+		/*
+		 * Relative DNS presentation names are limited to 253 characters.
+		 * Absolute names may be 254 when they end with the root '.'.
+		 * This is not truncation: res == 254 is accepted only with a trailing root dot.
+		 */
+		if ((size_t) res > MAX_DNS_NODE_DOMAIN_LEN + (domain[res - 1] == '.')) {
 			return -1;
 		}
 
@@ -1399,6 +1408,13 @@ void rpt_update_boolean(struct rpt *myrpt, char *varname, int newval)
 		rpt_event_process(myrpt, chan);
 	}
 	ast_channel_unref(chan);
+}
+
+void rpt_set_dns_node_domain(const char *dns_name)
+{
+	ast_mutex_lock(&dns_node_domain_lock);
+	ast_copy_string(rpt_dns_node_domain, dns_name, sizeof(rpt_dns_node_domain));
+	ast_mutex_unlock(&dns_node_domain_lock);
 }
 
 int rpt_is_valid_dns_name(const char *dns_name)
