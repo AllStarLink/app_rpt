@@ -5167,10 +5167,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	/* 1. Hang-up the channels */
 	hangup_link_chan(l);
 	if (l->pchan) {
-		if (ast_channel_audiohooks(l->pchan)) {
-			/* Remove audiohook while l->pchan is still valid */
-			ast_audiohook_remove(l->pchan, &l->altaudio);
-		}
 		ast_hangup(l->pchan);
 		l->pchan = NULL;
 	}
