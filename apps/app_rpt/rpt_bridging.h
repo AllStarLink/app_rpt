@@ -123,7 +123,7 @@ int rpt_play_tone(struct ast_channel *chan, const char *tone);
 
 /*!
  * \brief Get if channel is muted in conference
- * \param chan
+ * \param chan Unreal channel in the conference (Local/Announcer/Recorder). Non-unreal channels return not muted.
  * \param myrpt
  * \retval 0 if not muted, 1 if muted
  */

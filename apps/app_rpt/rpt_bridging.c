@@ -437,7 +437,20 @@ int __rpt_conf_add(struct ast_channel *chan, struct rpt *myrpt, enum rpt_conf_ty
 }
 
 /*!
+ * \brief True if chan uses ast_unreal_pvt (Local / Announcer / Recorder).
+ *
+ * rpt_get_bridge_channel_from_chan() casts tech_pvt to ast_unreal_pvt. Calling that
+ * on IAX2/TLB/EchoLink/Voter/etc. reads unrelated private data as p->chan and can
+ * SIGSEGV in __ao2_ref (#1248).
+ */
+static int is_unreal_channel(struct ast_channel *chan)
+{
+	return CHAN_TECH(chan, "Local") || CHAN_TECH(chan, "Announcer") || CHAN_TECH(chan, "Recorder");
+}
+
+/*!
  * \brief Get the bridge channel associated with the underlying Asterisk channel.
+ * \param chan An unreal channel (Local/Announcer/Recorder) whose ;2 side is bridged.
  * \note Returns a ref-counted bridge channel object that must be released with ao2_ref(..., -1).
  */
 
@@ -447,7 +460,7 @@ static struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_ch
 	struct ast_channel *pchan;
 	struct ast_bridge_channel *bridge_channel = NULL;
 
-	if (!chan) {
+	if (!chan || !is_unreal_channel(chan)) {
 		return NULL;
 	}
 
@@ -455,7 +468,7 @@ static struct ast_bridge_channel *rpt_get_bridge_channel_from_chan(struct ast_ch
 	if (!p || !p->chan) {
 		return NULL;
 	}
-	pchan = ast_channel_ref(p->chan); /* The :2 side of the local channel */
+	pchan = ast_channel_ref(p->chan); /* The :2 side of the unreal channel */
 	ast_channel_lock(pchan);
 	bridge_channel = ast_channel_get_bridge_channel(pchan);
 	ast_channel_unlock(pchan);

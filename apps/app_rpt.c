@@ -4966,7 +4966,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 							f = AST_LIST_REMOVE_HEAD(&l->rxq, frame_list);
 						}
 					}
-					ismuted = rpt_conf_get_muted(l->chan, myrpt);
+					/* Mute lives on the conference unreal leg (pchan), not the link tech channel. */
+					ismuted = rpt_conf_get_muted(l->pchan, myrpt);
 					/* if not receiving, zero-out audio */
 					ismuted |= (!l->lastrx);
 					if (l->dtmfed &&
