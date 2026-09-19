@@ -4781,16 +4781,32 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	while (ms >= 0) {
 		ms = MSWAIT;
 		n = 0;
-		if (l->pchan) {
-			cs[n++] = l->pchan;
-		}
+		/*
+		 * Order matters: ast_waitfor_nandfds() builds its pollfd array channel by
+		 * channel and lets later channels "override previous winners", so when both
+		 * channels are ready only the last one gets its fd recorded via
+		 * ast_channel_fdno_set(). l->pchan carries the whisper audiohook framehook's
+		 * timer fd (added by ast_audiohook_attach() on an extended fd slot), and that
+		 * timer is only acknowledged when the framehook sees ast_channel_fdno() equal
+		 * to its own slot. Poll l->pchan last so it wins the tie and the timer gets
+		 * acked; otherwise the timer fd stays readable, ast_waitfor_n() stops blocking
+		 * and this loop free-runs at 100% CPU.
+		 */
 		if (l->chan) {
 			cs[n++] = l->chan;
+		}
+		if (l->pchan) {
+			cs[n++] = l->pchan;
 		}
 		if (!n) {
 			break;
 		}
 		who = ast_waitfor_n(cs, n, &ms);
+		if (!who) {
+			/* No winner: ast_waitfor_n() can return NULL without touching ms
+			 * (e.g. interrupted poll), so do not spin on a stale timeout. */
+			ms = 0;
+		}
 		if (periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart))) {
 			break;
 		}
@@ -7555,8 +7571,17 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 
+		/*
+		 * Only attach the whisper audiohook when the link could actually use it
+		 * (see link_may_altlink). Attaching it also installs Asterisk's whisper
+		 * framehook, which adds a timer fd to l->pchan and leaks a frame per tick;
+		 * links that can never be an altlink would pay that for nothing.
+		 */
 		ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
-		ast_audiohook_attach(l->pchan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+		if (link_may_altlink(l)) {
+			/* If this fails, altlink() repeater tx audio will be missing - not fatal */
+			ast_audiohook_attach(l->pchan, &l->altaudio);
+		}
 
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		doconpgm(myrpt, l->name);
