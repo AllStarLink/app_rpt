@@ -200,6 +200,7 @@ struct chan_simpleusb_pvt {
 	/* queue used to hold packets to transmit */
 	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
 	ast_mutex_t txqlock;
+	unsigned int txq_depth; /* frames queued; updated under txqlock */
 
 	char lastrx;
 	char rxhidsq;
@@ -1348,7 +1349,9 @@ static void *hidthread(void *arg)
 				o->rxhidctcss = ctcssed;
 			}
 
-			txreq = !(AST_LIST_EMPTY(&o->txq));
+			ast_mutex_lock(&o->txqlock);
+			txreq = o->txq_depth != 0;
+			ast_mutex_unlock(&o->txqlock);
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
 			lasttxtmp = o->lasttx;
 
@@ -1915,6 +1918,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 			ast_mutex_lock(&o->txqlock);
 			AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
+			o->txq_depth++;
 			ast_mutex_unlock(&o->txqlock);
 		}
 		ast_free(audio);
@@ -2059,6 +2063,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	ast_mutex_lock(&o->txqlock);
 	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
+	o->txq_depth++;
 	ast_mutex_unlock(&o->txqlock);
 
 	return 0;
@@ -2089,6 +2094,7 @@ static void flush_stream_buffer(struct chan_simpleusb_pvt *o)
 	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
 		ast_frfree(f);
 	}
+	o->txq_depth = 0;
 	ast_mutex_unlock(&o->txqlock);
 }
 
@@ -2231,6 +2237,7 @@ static void *simpleusb_audio_thread(void *arg)
 					memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 					ast_mutex_lock(&o->txqlock);
 					AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
+					o->txq_depth++;
 					ast_mutex_unlock(&o->txqlock);
 					o->echoing = 1;
 				} else {
@@ -2245,10 +2252,7 @@ static void *simpleusb_audio_thread(void *arg)
 
 				num_frames = 0;
 				ast_mutex_lock(&o->txqlock);
-				AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
-					num_frames++;
-				}
-
+				num_frames = (int) o->txq_depth;
 				ast_mutex_unlock(&o->txqlock);
 				if (o->txkeyed) {
 					ast_debug(7, "blocks used %d, Dest Buffer %d", num_frames, o->simpleusb_write_dst);
@@ -2274,7 +2278,13 @@ static void *simpleusb_audio_thread(void *arg)
 					if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
 						ast_mutex_lock(&o->txqlock);
 						f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
+						if (f1 && o->txq_depth) {
+							o->txq_depth--;
+						}
 						ast_mutex_unlock(&o->txqlock);
+						if (!f1) {
+							break;
+						}
 						src = 0; /* read position into f1->data */
 						while (src < f1->datalen) {
 							/* Compute spare room in the buffer */
@@ -2464,11 +2474,8 @@ static void *simpleusb_audio_thread(void *arg)
 			 * we are finished.
 			 */
 			if (o->waspager) {
-				num_frames = 0;
 				ast_mutex_lock(&o->txqlock);
-				AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
-					num_frames++;
-				}
+				num_frames = (int) o->txq_depth;
 				ast_mutex_unlock(&o->txqlock);
 				if (num_frames < 1) {
 					struct ast_frame wf = {
