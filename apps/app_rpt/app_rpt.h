@@ -949,6 +949,12 @@ struct rpt {
 	rpt_bool rxchankeyed:1; /*!< \brief Receiver RxChan Key State */
 	rpt_bool localtx:1;
 	rpt_bool remrx:1;
+	/*! \brief Count of links with lastrx currently true (drives remrx). */
+	unsigned int remrx_links;
+	/*! \brief Count of links with lastrx and mode MONITOR/TRANSCEIVE (mode < LOCAL_MONITOR). */
+	unsigned int remrx_links_txable;
+	/*! \brief Count of voter links with lastrx (drives voteremrx). */
+	unsigned int voteremrx_links;
 	rpt_bool remoterx:1;
 	rpt_bool remotetx:1;
 	rpt_bool remoteon:1;
