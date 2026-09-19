@@ -44,8 +44,206 @@ extern char *rpt_dns_node_domain;
 extern int rpt_max_dns_node_length;
 
 static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
+/*! Cached extnode configs are never rewritten, so comments are not retained. */
+static struct ast_flags extnode_config_flags = { 0 };
 
 AST_MUTEX_DEFINE_STATIC(nodelookuplock);
+
+/*! Distinct nodelist paths across repeaters (aggregate of per-rpt extnodefile lists). */
+#define EXTNODE_CACHE_SLOTS (MAX_EXTNODEFILES * 4)
+
+/*! Bumped whenever a shared extnode cache slot is dropped or replaced. Start at 1 so
+ * an unset myrpt->extnode_longest_gen (0) always forces the first longestnode pass. */
+static unsigned int extnode_cache_generation = 1;
+
+/*! Monotonic clock for LRU eviction among occupied cache slots. */
+static unsigned int extnode_cache_clock;
+
+/*! Path-keyed cache of external nodelist configs (shared across repeaters). */
+static struct extnode_cache_entry {
+	char path[PATH_MAX];
+	dev_t st_dev;
+	ino_t st_ino;
+	off_t st_size;
+	struct timespec mtime;
+	struct timespec ctime;
+	unsigned int last_used;
+	struct ast_config *cfg;
+} extnode_cfgs[EXTNODE_CACHE_SLOTS];
+
+static void extnode_cache_bump_generation(void)
+{
+	extnode_cache_generation++;
+	if (!extnode_cache_generation) {
+		extnode_cache_generation = 1;
+	}
+}
+
+static unsigned int extnode_cache_touch(void)
+{
+	extnode_cache_clock++;
+	if (!extnode_cache_clock) {
+		extnode_cache_clock = 1;
+	}
+	return extnode_cache_clock;
+}
+
+static void extnode_stat_timespec(struct timespec *out, const struct stat *st, int use_ctime)
+{
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+	*out = use_ctime ? st->st_ctimespec : st->st_mtimespec;
+#else
+	*out = use_ctime ? st->st_ctim : st->st_mtim;
+#endif
+}
+
+static int extnode_timespec_equal(const struct timespec *a, const struct timespec *b)
+{
+	return a->tv_sec == b->tv_sec && a->tv_nsec == b->tv_nsec;
+}
+
+/*! Caller must hold nodelookuplock. */
+static int extnode_cache_find_path(const char *path)
+{
+	int i;
+
+	for (i = 0; i < EXTNODE_CACHE_SLOTS; i++) {
+		if (extnode_cfgs[i].path[0] && !strcmp(extnode_cfgs[i].path, path)) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+/*! Caller must hold nodelookuplock. */
+static void extnode_slot_drop(int i, int *reloaded)
+{
+	if (i < 0 || i >= EXTNODE_CACHE_SLOTS) {
+		return;
+	}
+	if (extnode_cfgs[i].cfg) {
+		ast_config_destroy(extnode_cfgs[i].cfg);
+		extnode_cfgs[i].cfg = NULL;
+		extnode_cache_bump_generation();
+		if (reloaded) {
+			*reloaded = 1;
+		}
+	}
+	extnode_cfgs[i].st_dev = 0;
+	extnode_cfgs[i].st_ino = 0;
+	extnode_cfgs[i].st_size = 0;
+	extnode_cfgs[i].mtime.tv_sec = 0;
+	extnode_cfgs[i].mtime.tv_nsec = 0;
+	extnode_cfgs[i].ctime.tv_sec = 0;
+	extnode_cfgs[i].ctime.tv_nsec = 0;
+	extnode_cfgs[i].last_used = 0;
+	extnode_cfgs[i].path[0] = '\0';
+}
+
+static void extnode_cache_invalidate(void)
+{
+	int i;
+
+	ast_mutex_lock(&nodelookuplock);
+	for (i = 0; i < EXTNODE_CACHE_SLOTS; i++) {
+		extnode_slot_drop(i, NULL);
+	}
+	ast_mutex_unlock(&nodelookuplock);
+}
+
+/*! Caller must hold nodelookuplock. Returns free slot index, or evicts least-recently-used. */
+static int extnode_cache_alloc_slot(int *reloaded)
+{
+	int i;
+	int lru = -1;
+	unsigned int oldest = 0;
+
+	for (i = 0; i < EXTNODE_CACHE_SLOTS; i++) {
+		if (!extnode_cfgs[i].path[0]) {
+			return i;
+		}
+		if (lru < 0 || extnode_cfgs[i].last_used < oldest) {
+			lru = i;
+			oldest = extnode_cfgs[i].last_used;
+		}
+	}
+	extnode_slot_drop(lru, reloaded);
+	return lru;
+}
+
+static int extnode_identity_match(const struct extnode_cache_entry *e, const char *path, const struct stat *st,
+	const struct timespec *mtime, const struct timespec *ctime)
+{
+	return e->cfg && !strcmp(e->path, path) && e->st_dev == st->st_dev && e->st_ino == st->st_ino && e->st_size == st->st_size &&
+		   extnode_timespec_equal(&e->mtime, mtime) && extnode_timespec_equal(&e->ctime, ctime);
+}
+
+/*!
+ * \brief Load or reuse an extnode config file keyed by path and file identity.
+ * \note Caller must hold nodelookuplock.
+ * \param path Path to the nodelist file
+ * \param reloaded Set to 1 if a cached entry was dropped or freshly loaded (may be NULL)
+ * \retval config on success
+ * \retval NULL if missing or invalid
+ */
+static struct ast_config *extnode_cached_load(const char *path, int *reloaded)
+{
+	struct stat st;
+	struct timespec mtime;
+	struct timespec ctime;
+	struct ast_config *ourcfg;
+	int i;
+
+	if (reloaded) {
+		*reloaded = 0;
+	}
+	if (!path) {
+		return NULL;
+	}
+	i = extnode_cache_find_path(path);
+	if (stat(path, &st) == -1) {
+		if (i >= 0) {
+			extnode_slot_drop(i, reloaded);
+		}
+		return NULL;
+	}
+	extnode_stat_timespec(&mtime, &st, 0);
+	extnode_stat_timespec(&ctime, &st, 1);
+	if (i >= 0 && extnode_identity_match(&extnode_cfgs[i], path, &st, &mtime, &ctime)) {
+		extnode_cfgs[i].last_used = extnode_cache_touch();
+		return extnode_cfgs[i].cfg;
+	}
+	if (i >= 0) {
+		extnode_slot_drop(i, reloaded);
+	} else {
+		i = extnode_cache_alloc_slot(reloaded);
+	}
+	ourcfg = ast_config_load(path, extnode_config_flags);
+	if (!ourcfg || ourcfg == CONFIG_STATUS_FILEMISSING || ourcfg == CONFIG_STATUS_FILEUNCHANGED || ourcfg == CONFIG_STATUS_FILEINVALID) {
+		return NULL;
+	}
+	extnode_cfgs[i].cfg = ourcfg;
+	extnode_cfgs[i].st_dev = st.st_dev;
+	extnode_cfgs[i].st_ino = st.st_ino;
+	extnode_cfgs[i].st_size = st.st_size;
+	extnode_cfgs[i].mtime = mtime;
+	extnode_cfgs[i].ctime = ctime;
+	extnode_cfgs[i].last_used = extnode_cache_touch();
+	ast_copy_string(extnode_cfgs[i].path, path, sizeof(extnode_cfgs[i].path));
+	extnode_cache_bump_generation();
+	if (reloaded) {
+		*reloaded = 1;
+	}
+	return ourcfg;
+}
+
+/*! Caller must hold nodelookuplock. */
+static struct ast_config *extnode_cache_get(const char *path)
+{
+	int i = extnode_cache_find_path(path);
+
+	return (i >= 0) ? extnode_cfgs[i].cfg : NULL;
+}
 
 int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name, int min, int max, int defl)
 {
@@ -472,7 +670,6 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 {
 	const char *val;
 	int longestnode, i, j, found = 0;
-	struct stat mystat;
 	struct ast_config *ourcfg;
 	struct ast_variable *vp;
 
@@ -509,50 +706,29 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 
 	/* try to lookup using the external file(s) */
 	if (rpt_node_lookup_method == LOOKUP_BOTH || rpt_node_lookup_method == LOOKUP_FILE) {
+		int reloaded_any = 0;
+		int need_longest;
+		const char *extnodes_section;
+
 		ast_mutex_lock(&nodelookuplock);
 		if (!myrpt->p.extnodefilesn) {
 			ast_mutex_unlock(&nodelookuplock);
 			return -1;
 		}
 
-		/* determine longest node length again */
-		longestnode = 0;
-		vp = ast_variable_browse(myrpt->cfg, myrpt->p.nodes);
-		while (vp) {
-			j = strlen(vp->name);
-			if (*vp->name == '_') {
-				j--;
-			}
-			longestnode = MAX(longestnode, j);
-			vp = vp->next;
-		}
 		found = 0;
+		extnodes_section = S_OR(myrpt->p.extnodes, "");
 
-		/* process each external node file */
+		/* process each external node file (path-keyed cache) */
 		for (i = 0; i < myrpt->p.extnodefilesn; i++) {
-			/* see if the external node file exists */
-			if (stat(myrpt->p.extnodefiles[i], &mystat) == -1) {
+			int reloaded = 0;
+
+			ourcfg = extnode_cached_load(myrpt->p.extnodefiles[i], &reloaded);
+			reloaded_any |= reloaded;
+			if (!ourcfg) {
 				continue;
 			}
 
-			ourcfg = ast_config_load(myrpt->p.extnodefiles[i], config_flags);
-			if (!ourcfg || (ourcfg == CONFIG_STATUS_FILEINVALID)) {
-				/* if file is not present or not valid, try the next one */
-				continue;
-			}
-
-			/* determine the longest node */
-			vp = ast_variable_browse(ourcfg, myrpt->p.extnodes);
-			while (vp) {
-				j = strlen(vp->name);
-				if (*vp->name == '_') {
-					j--;
-				}
-				longestnode = MAX(longestnode, j);
-				vp = vp->next;
-			}
-
-			/* if we have not found a match, attempt to load a matching node */
 			if (!found) {
 				val = ast_variable_retrieve(ourcfg, myrpt->p.extnodes, digitbuf);
 				if (val) {
@@ -563,9 +739,40 @@ int node_lookup(struct rpt *myrpt, char *digitbuf, char *nodedata, size_t nodeda
 					}
 				}
 			}
-			ast_config_destroy(ourcfg);
 		}
-		myrpt->longestnode = MAX(longestnode, rpt_max_dns_node_length);
+
+		need_longest = reloaded_any || myrpt->extnode_longest_gen != extnode_cache_generation ||
+					   strcmp(myrpt->extnode_longest_section, extnodes_section);
+		if (need_longest) {
+			longestnode = 0;
+			vp = ast_variable_browse(myrpt->cfg, myrpt->p.nodes);
+			while (vp) {
+				j = strlen(vp->name);
+				if (*vp->name == '_') {
+					j--;
+				}
+				longestnode = MAX(longestnode, j);
+				vp = vp->next;
+			}
+			for (i = 0; i < myrpt->p.extnodefilesn; i++) {
+				ourcfg = extnode_cache_get(myrpt->p.extnodefiles[i]);
+				if (!ourcfg) {
+					continue;
+				}
+				vp = ast_variable_browse(ourcfg, myrpt->p.extnodes);
+				while (vp) {
+					j = strlen(vp->name);
+					if (*vp->name == '_') {
+						j--;
+					}
+					longestnode = MAX(longestnode, j);
+					vp = vp->next;
+				}
+			}
+			myrpt->longestnode = MAX(longestnode, rpt_max_dns_node_length);
+			myrpt->extnode_longest_gen = extnode_cache_generation;
+			ast_copy_string(myrpt->extnode_longest_section, extnodes_section, sizeof(myrpt->extnode_longest_section));
+		}
 		ast_mutex_unlock(&nodelookuplock);
 	}
 
@@ -656,6 +863,10 @@ int forward_node_lookup(char *digitbuf, struct ast_config *cfg, char *nodedata, 
 
 void rpt_free_config_vars(struct rpt *myrpt)
 {
+	extnode_cache_invalidate();
+	myrpt->extnode_longest_gen = 0;
+	myrpt->extnode_longest_section[0] = '\0';
+
 	if (myrpt->p.extnodefiles_buf) {
 		ast_free(myrpt->p.extnodefiles_buf);
 		myrpt->p.extnodefiles_buf = NULL;

@@ -144,6 +144,8 @@ typedef struct {
 #define MAX_TEXTMSG_SIZE 160
 
 #define MAX_EXTNODEFILES 50
+/*! Seconds to reuse a link's dialstring on reconnect before re-resolving DNS/file. */
+#define RECONNECT_NODEDATA_TTL_SEC 300
 #define MAX_LOCALLINKNODES 50
 #define MAX_LSTUFF 20
 
@@ -615,6 +617,10 @@ struct rpt_link {
 	int votewinner; /*!< \brief set if node won the rssi competition */
 	time_t lastkeytime;
 	time_t lastunkeytime;
+	/*! \brief Cached node_lookup dialstring for reconnect (TTL via cached_nodedata_mono). */
+	char cached_nodedata[MAXNODESTR];
+	/*! \brief Monotonic time when cached_nodedata was last refreshed. */
+	time_t cached_nodedata_mono;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
@@ -1035,6 +1041,10 @@ struct rpt {
 	int link_longestfunc;
 	int longestfunc;
 	int longestnode;
+	/*! \brief Shared extnode cache generation last used to compute longestnode. */
+	unsigned int extnode_longest_gen;
+	/*! \brief extnodes section name used for that longestnode computation. */
+	char extnode_longest_section[80];
 	int threadrestarts;
 	int tailmessagen;
 	time_t disgorgetime;

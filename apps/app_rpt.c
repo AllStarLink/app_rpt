@@ -2506,15 +2506,24 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	char sx[320];
 	struct ast_frame *f1;
 	struct ast_format_cap *cap;
+	time_t now_mono;
 
 	ast_debug(1, "Attempting Reconnect");
 	/* rpt_make_call and node_lookup are blocking, long dns lookups result in exceptionally long queue warnings
 	 * autoservice handles "eating" the frames and eliminating the warning.
 	 */
 	ast_autoservice_start(l->pchan);
-	if (node_lookup(myrpt, l->name, tmp, sizeof(tmp), 1)) {
+	now_mono = rpt_time_monotonic();
+	if (l->cached_nodedata[0] && (now_mono - l->cached_nodedata_mono) < RECONNECT_NODEDATA_TTL_SEC) {
+		ast_copy_string(tmp, l->cached_nodedata, sizeof(tmp));
+		ast_debug(1, "attempt_reconnect: using cached dialstring for %s\n", l->name);
+	} else if (node_lookup(myrpt, l->name, tmp, sizeof(tmp), 1)) {
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
+		l->cached_nodedata[0] = '\0';
 		goto retry;
+	} else {
+		ast_copy_string(l->cached_nodedata, tmp, sizeof(l->cached_nodedata));
+		l->cached_nodedata_mono = rpt_time_monotonic();
 	}
 	/* cannot apply to echolink */
 	if (!strncasecmp(tmp, "echolink", 8)) {
@@ -2563,12 +2572,14 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 			rpt_mutex_lock(&myrpt->lock);
 			l->retrytimer = RETRY_TIMER_MS;
 			l->chan = NULL;
+			l->cached_nodedata[0] = '\0';
 			rpt_mutex_unlock(&myrpt->lock);
 			ast_autoservice_stop(l->pchan);
 			return NULL;
 		}
 	} else {
 		ast_verb(3, "Unable to place call to %s/%s\n", deststr, tele);
+		l->cached_nodedata[0] = '\0';
 		goto retry;
 	}
 
@@ -3640,6 +3651,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 			} else {
 				ast_debug(1, "Connection taking to long, resetting retry timer");
 				l->retrytimer = RETRY_TIMER_MS;
+				l->cached_nodedata[0] = '\0';
 			}
 			return 0;
 		}

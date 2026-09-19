@@ -732,6 +732,7 @@ void *rpt_link_connect(void *data)
 	char *s, *s1, *tele, *cp;
 	char deststr[325] = "", modechange = 0;
 	char sx[320], *sy;
+	char nodedata_save[MAXNODESTR];
 	char **strs; /* List of pointers to links in link list string */
 	struct rpt_link *l = NULL;
 	struct ast_str *lstr;
@@ -755,6 +756,9 @@ void *rpt_link_connect(void *data)
 
 	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node,
 		connect_data->mode ? "Transceive" : "Monitor", connect_data->perma ? "Permalink" : "Normal");
+
+	/* Snapshot dialstring before strsep mutates connect_data->nodedata. */
+	ast_copy_string(nodedata_save, connect_data->nodedata, sizeof(nodedata_save));
 
 	s = NULL;
 	s1 = connect_data->nodedata;
@@ -845,6 +849,9 @@ void *rpt_link_connect(void *data)
 	l->thisconnected = 0;
 	voxinit_link(l, 1);
 	ast_copy_string(l->name, node, sizeof(l->name));
+	/* Preserve pre-strsep dialstring for reconnect without re-lookup. */
+	ast_copy_string(l->cached_nodedata, nodedata_save, sizeof(l->cached_nodedata));
+	l->cached_nodedata_mono = rpt_time_monotonic();
 	l->isremote = (s && ast_true(s));
 	if (modechange) {
 		l->connected = 1;
