@@ -553,6 +553,9 @@ struct rpt_frame_queue {
 	struct ast_frame *lastf1, *lastf2;
 };
 
+/*! Voice-frame FIFO used for simplex delay queues (with parallel depth counters). */
+typedef AST_LIST_HEAD_NOLOCK(, ast_frame) rpt_framelist_t;
+
 enum rpt_link_disconnect {
 	RPT_LINK_DISCONNECT_NONE = 0,
 	RPT_LINK_DISCONNECT = 1,
@@ -632,7 +635,9 @@ struct rpt_link {
 	int votewinner; /*!< \brief set if node won the rssi competition */
 	time_t lastkeytime;
 	time_t lastunkeytime;
-	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
+	rpt_framelist_t rxq;
+	/*! \brief O(1) length of rxq (simplex phone delay). */
+	unsigned int rxq_depth;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
 
@@ -1116,8 +1121,12 @@ struct rpt {
 #else
 	tone_detect_state_t burst_tone_state;
 #endif
-	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
-	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
+	rpt_framelist_t txq;
+	/*! \brief O(1) length of txq (simplex patch delay). */
+	unsigned int txq_depth;
+	rpt_framelist_t rxq;
+	/*! \brief O(1) length of rxq (remote phone delay). */
+	unsigned int rxq_depth;
 	char txrealkeyed;
 #ifdef __RPT_NOTCH
 	struct rptfilter {
