@@ -2345,11 +2345,8 @@ static void *usbradio_audio_thread(void *arg)
 			 * claims OK but the hardware TX buffer is not draining, txq backs up
 			 * and MAX_FRAME_DELAY restarts the stream (same idea as simpleusb).
 			 */
-			num_frames = 0;
 			ast_mutex_lock(&o->txqlock);
-			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
-				num_frames++;
-			}
+			num_frames = (int) o->txq_depth;
 			ast_mutex_unlock(&o->txqlock);
 
 			/* One queued frame per available output block */
