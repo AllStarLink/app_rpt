@@ -75,8 +75,7 @@ int link_may_altlink(struct rpt_link *mylink)
 	 * is created and a channel never changes technology. A plain node to node link
 	 * therefore can never be an altlink, so it never needs the whisper audiohook.
 	 */
-	if (!mylink->phonemode && IS_NODE_EXTEN(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") &&
-		!CHAN_TECH(mylink->chan, "tlb")) {
+	if (!mylink->phonemode && IS_NODE_EXTEN(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
 		return 0;
 	}
 	return 1;
