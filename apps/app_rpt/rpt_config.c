@@ -868,8 +868,8 @@ void load_rpt_vars(int n, int init)
 		TIMEOUTRESETKERCHUNKINTERVAL, 0, 3000);
 	RPT_CONFIG_VAR_INT_DEFAULT(voxtimeout_ms, "voxtimeout", VOX_TIMEOUT_MS);
 	RPT_CONFIG_VAR_INT_DEFAULT(voxrecover_ms, "voxrecover", VOX_RECOVER_MS);
-	RPT_CONFIG_VAR_INT_DEFAULT(simplexpatchdelay, "simplexpatchdelay", SIMPLEX_PATCH_DELAY);
-	RPT_CONFIG_VAR_INT_DEFAULT(simplexphonedelay, "simplexphonedelay", SIMPLEX_PHONE_DELAY);
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(simplexpatchdelay, "simplexpatchdelay", SIMPLEX_PATCH_DELAY, 0, 1000);
+	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(simplexphonedelay, "simplexphonedelay", SIMPLEX_PHONE_DELAY, 0, 1000);
 	RPT_CONFIG_VAR_INT_DEFAULT_MIN_MAX(first_keyup_min_time, "first_keyup_min_time", 0, 0, 1000);
 	RPT_CONFIG_VAR_INT_MIN_FLOOR(first_keyup_inactivity_time, "first_keyup_inactivity_time", 0, 0);
 	/* Convert to milliseconds for internal use */
