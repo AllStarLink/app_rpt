@@ -12,6 +12,18 @@ void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode);
 int altlink(struct rpt *myrpt, struct rpt_link *mylink);
 
 /*!
+ * \brief Whether a link could ever qualify as an altlink()
+ * \param mylink Link to test (mylink->chan must be set)
+ * \retval 0 altlink() is guaranteed to return 0 for the life of this link
+ * \retval 1 altlink() may return 1 at some point
+ *
+ * Mirrors the early-out in altlink() that depends only on values fixed when the
+ * link is set up (phonemode, name and channel technology). Used to avoid
+ * attaching the altlink whisper audiohook to links that can never use it.
+ */
+int link_may_altlink(struct rpt_link *mylink);
+
+/*!
  * \brief Add an rpt_tele to a rpt
  * \param myrpt
  * \param t Telemetry to insert into the repeater's linked list of telemetries

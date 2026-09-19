@@ -64,6 +64,23 @@ void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode)
 	}
 }
 
+int link_may_altlink(struct rpt_link *mylink)
+{
+	if (!mylink || !mylink->chan) {
+		return 0;
+	}
+	/*
+	 * Same test as the early-out in altlink() below, but limited to the inputs that
+	 * are fixed for the life of the link: phonemode and name are set when the link
+	 * is created and a channel never changes technology. A plain node to node link
+	 * therefore can never be an altlink, so it never needs the whisper audiohook.
+	 */
+	if (!mylink->phonemode && IS_NODE_EXTEN(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
+		return 0;
+	}
+	return 1;
+}
+
 int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 {
 	if (!myrpt) {
@@ -937,8 +954,17 @@ void *rpt_link_connect(void *data)
 		ao2_ref(l, -1);
 		goto cleanup;
 	}
+	/*
+	 * Only attach the whisper audiohook when the link could actually use it
+	 * (see link_may_altlink). Attaching it also installs Asterisk's whisper
+	 * framehook, which adds a timer fd to l->pchan and leaks a frame per tick;
+	 * links that can never be an altlink would pay that for nothing.
+	 */
 	ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
-	ast_audiohook_attach(l->pchan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+	if (link_may_altlink(l)) {
+		/* If this fails, altlink() repeater tx audio will be missing - not fatal */
+		ast_audiohook_attach(l->pchan, &l->altaudio);
+	}
 
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {
