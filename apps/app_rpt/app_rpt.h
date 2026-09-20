@@ -3,6 +3,7 @@
 #define VERSION_PATCH 5
 
 #include "asterisk/audiohook.h"
+#include "asterisk/slinfactory.h"
 
 /* 99% of the DSP code in app_rpt exists in dsp.c as private functions. This code can mostly be
 	converted to use public dsp.h API.
@@ -204,6 +205,8 @@ typedef struct {
 #define SIMPLEX_PHONE_DELAY 25
 
 #define RX_LINGER_TIME 50
+/*! \brief Most altlink() repeater audio to hold for a link, in samples (1s of slin) */
+#define ALTAUDIO_MAX_BACKLOG 8000
 
 #define ALLOW_LOCAL_CHANNELS
 
@@ -598,7 +601,20 @@ struct rpt_link {
 	struct timeval connecttime;
 	struct ast_channel *chan;
 	struct ast_channel *pchan;
-	struct ast_audiohook altaudio;
+	/*!
+	 * \brief Repeater tx audio to be mixed into what we forward to an altlink().
+	 *
+	 * Fed by monchannel_read() on the rpt() thread, drained and mixed into the
+	 * l->pchan frame by process_link_channel() on the link thread; altaudio_lock
+	 * covers both. Deliberately NOT an ast_audiohook: Asterisk's whisper hook
+	 * mixes into frames *written* to a channel, we need the audio on the frames
+	 * we *read* from l->pchan, and attaching a whisper hook also installs the
+	 * whisper framehook, which puts an extra timer fd on l->pchan that
+	 * process_link_channel() cannot acknowledge. See the comment on the poll
+	 * order in process_link_channel(). Do not turn this back into an audiohook.
+	 */
+	struct ast_slinfactory altaudio;
+	ast_mutex_t altaudio_lock;
 	struct ast_str *linklist;
 	int linklisttimer;
 	int linkunkeytocttimer;
