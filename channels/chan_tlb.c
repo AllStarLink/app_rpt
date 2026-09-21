@@ -129,7 +129,7 @@ struct {
 #define AUTH_ABANDONED_MS 15000
 
 #define QUEUE_OVERLOAD_THRESHOLD_AST 25
-#define QUEUE_OVERLOAD_THRESHOLD_EL 20
+#define QUEUE_OVERLOAD_THRESHOLD_TLB 20
 #define DTMF_NPACKETS 5
 
 #define TLB_IP_SIZE 16
@@ -1569,7 +1569,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 			m++;
 		}
 
-		if (m > QUEUE_OVERLOAD_THRESHOLD_EL) {
+		if (m > QUEUE_OVERLOAD_THRESHOLD_TLB) {
 			while (p->rxqtlb.qe_forw != &p->rxqtlb) {
 				qptlb = p->rxqtlb.qe_forw;
 				remque((struct qelem *) qptlb);
