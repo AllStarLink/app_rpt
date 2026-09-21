@@ -6795,7 +6795,8 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 				f = AST_LIST_REMOVE_HEAD(&myrpt->rxq, frame_list);
 			}
 		}
-		ismuted = rpt_conf_get_muted(chan, myrpt);
+		/* Mute lives on the conference unreal leg (pchannel), not the inbound chan. */
+		ismuted = rpt_conf_get_muted(myrpt->pchannel, myrpt);
 		/* if not transmitting, zero-out audio */
 		ismuted |= (!myrpt->remotetx);
 		if (*dtmfed && (phone_mode != RPT_PHONE_MODE_NONE)) {
