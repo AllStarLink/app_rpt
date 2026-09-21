@@ -2180,6 +2180,9 @@ static int usbradio_feed_tx_queue(struct chan_usbradio_pvt *o, int max_frames)
 		if (f1) {
 			if (o->txq_depth) {
 				o->txq_depth--;
+			} else {
+				ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
+				o->txq_depth = 0;
 			}
 		}
 		ast_mutex_unlock(&o->txqlock);

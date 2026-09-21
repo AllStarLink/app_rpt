@@ -2278,8 +2278,13 @@ static void *simpleusb_audio_thread(void *arg)
 					if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
 						ast_mutex_lock(&o->txqlock);
 						f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
-						if (f1 && o->txq_depth) {
-							o->txq_depth--;
+						if (f1) {
+							if (o->txq_depth) {
+								o->txq_depth--;
+							} else {
+								ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
+								o->txq_depth = 0;
+							}
 						}
 						ast_mutex_unlock(&o->txqlock);
 						if (!f1) {
