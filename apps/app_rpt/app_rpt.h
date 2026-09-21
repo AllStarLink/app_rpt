@@ -615,6 +615,7 @@ struct rpt_link {
 	 */
 	struct ast_slinfactory altaudio;
 	ast_mutex_t altaudio_lock;
+	int altaudio_enabled;
 	struct ast_str *linklist;
 	int linklisttimer;
 	int linkunkeytocttimer;

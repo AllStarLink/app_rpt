@@ -64,22 +64,32 @@ void set_linkmode(struct rpt_link *mylink, enum rpt_linkmode linkmode)
 	}
 }
 
+int link_may_altlink(struct rpt_link *mylink)
+{
+	if (!mylink || !mylink->chan) {
+		return 0;
+	}
+	/*
+	 * Same test as the early-out in altlink() below, but limited to the inputs that
+	 * are fixed for the life of the link: phonemode and name are set when the link
+	 * is created and a channel never changes technology. A plain node to node link
+	 * therefore can never be an altlink, so it never needs the whisper audiohook.
+	 */
+	if (!mylink->phonemode && IS_NODE_EXTEN(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
+		return 0;
+	}
+	return 1;
+}
+
 int altlink(struct rpt *myrpt, struct rpt_link *mylink)
 {
 	if (!myrpt) {
 		return 0;
 	}
-	if (!mylink) {
-		return 0;
-	}
-	if (!mylink->chan) {
+	if (!link_may_altlink(mylink)) {
 		return 0;
 	}
 	if ((myrpt->p.duplex == 3) && mylink->phonemode && myrpt->keyed) {
-		return 0;
-	}
-	if (!mylink->phonemode && IS_NODE_EXTEN(mylink->name) && !CHAN_TECH(mylink->chan, "echolink") && !CHAN_TECH(mylink->chan, "tlb")) {
-		/* if doesn't qual as a foreign link */
 		return 0;
 	}
 	if ((myrpt->p.duplex < 2) && (myrpt->tele.next == &myrpt->tele)) {
@@ -938,7 +948,11 @@ void *rpt_link_connect(void *data)
 		goto cleanup;
 	}
 	ast_mutex_init(&l->altaudio_lock);
-	ast_slinfactory_init_with_format(&l->altaudio, ast_format_slin);
+	/* Only create and attache the factory if a link can actually use it. */
+	if (link_may_altlink(l)) {
+		ast_slinfactory_init_with_format(&l->altaudio, ast_format_slin);
+		l->altaudio_enabled = 1;
+	}
 
 	rpt_mutex_lock(&myrpt->lock);
 	if (tlb_query_node_exists(node)) {

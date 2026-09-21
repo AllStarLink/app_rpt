@@ -4041,7 +4041,11 @@ static inline void mix_altaudio(struct rpt_link *l, struct ast_frame *f)
 {
 	short buf[1024];
 
-	if (!f->data.ptr || f->samples <= 0 || f->samples != f->datalen / 2 || f->samples > (int) ARRAY_LEN(buf)) {
+	if (!l || !l->altaudio_enabled) {
+		return;
+	}
+
+	if (!f || !f->data.ptr || f->samples <= 0 || f->samples != f->datalen / 2 || f->samples > (int) ARRAY_LEN(buf)) {
 		return;
 	}
 
@@ -5215,10 +5219,13 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	/* 2. Destroy the altlink mixing buffer */
-	ast_mutex_lock(&l->altaudio_lock);
-	ast_slinfactory_destroy(&l->altaudio);
-	ast_mutex_unlock(&l->altaudio_lock);
-	ast_mutex_destroy(&l->altaudio_lock);
+	if (l->altaudio_enabled) {
+		ast_mutex_lock(&l->altaudio_lock);
+		ast_slinfactory_destroy(&l->altaudio);
+		ast_mutex_unlock(&l->altaudio_lock);
+		ast_mutex_destroy(&l->altaudio_lock);
+		l->altaudio_enabled = 0;
+	}
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 
 	return;
@@ -5255,6 +5262,9 @@ static inline int monchannel_read(struct rpt *myrpt)
 			/* IF we are an altlink() and the repeater is not receiving (aka we are in the tail time),
 			 * whisper the output audio onto said link.
 			 */
+			if (!l->altaudio_enabled) {
+				continue;
+			}
 			ast_mutex_lock(&l->altaudio_lock);
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
@@ -7600,7 +7610,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		ast_mutex_init(&l->altaudio_lock);
-		ast_slinfactory_init_with_format(&l->altaudio, ast_format_slin);
+		/* Only create and attache the factory if a link can actually use it. */
+		if (link_may_altlink(l)) {
+			ast_slinfactory_init_with_format(&l->altaudio, ast_format_slin);
+			l->altaudio_enabled = 1;
+		}
 
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		doconpgm(myrpt, l->name);
