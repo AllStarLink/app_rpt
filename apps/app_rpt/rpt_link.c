@@ -427,9 +427,24 @@ void rpt_link_add(struct ao2_container *links, struct rpt_link *l)
 	ao2_link(links, l);
 }
 
-void rpt_link_remove(struct ao2_container *links, struct rpt_link *l)
+/*! Decrement an remrx aggregate; log and clamp if already zero (unsigned wrap guard). */
+static void remrx_count_dec(struct rpt *myrpt, unsigned int *counter, const char *name)
+{
+	if (*counter > 0) {
+		(*counter)--;
+		return;
+	}
+	ast_log(LOG_ERROR, "Node %s: %s underflow while adjusting remrx aggregates\n", myrpt->name, name);
+	*counter = 0;
+}
+
+void rpt_link_remove(struct rpt *myrpt, struct ao2_container *links, struct rpt_link *l)
 {
 	ast_assert(l != NULL);
+	/* Drop from remrx aggregates before unlink so a keyed link cannot linger. */
+	if (myrpt) {
+		rpt_link_set_lastrx(myrpt, l, 0);
+	}
 	ao2_unlink(links, l);
 }
 
@@ -443,14 +458,12 @@ void rpt_link_set_lastrx(struct rpt *myrpt, struct rpt_link *l, int rx)
 	}
 
 	if (l->lastrx) {
-		if (myrpt->remrx_links) {
-			myrpt->remrx_links--;
+		remrx_count_dec(myrpt, &myrpt->remrx_links, "remrx_links");
+		if (l->mode < MODE_LOCAL_MONITOR) {
+			remrx_count_dec(myrpt, &myrpt->remrx_links_txable, "remrx_links_txable");
 		}
-		if (l->mode < MODE_LOCAL_MONITOR && myrpt->remrx_links_txable) {
-			myrpt->remrx_links_txable--;
-		}
-		if (l->voterlink && myrpt->voteremrx_links) {
-			myrpt->voteremrx_links--;
+		if (l->voterlink) {
+			remrx_count_dec(myrpt, &myrpt->voteremrx_links, "voteremrx_links");
 		}
 	}
 	l->lastrx = keyed;
@@ -466,8 +479,9 @@ void rpt_link_set_lastrx(struct rpt *myrpt, struct rpt_link *l, int rx)
 			ast_copy_string(myrpt->lastnodewhichkeyedusup, l->name, sizeof(myrpt->lastnodewhichkeyedusup));
 		}
 	}
-	myrpt->remrx = myrpt->remrx_links != 0;
-	myrpt->voteremrx = myrpt->voteremrx_links != 0;
+	/* > 0 so a prior underflow cannot leave remrx latched after clamp-to-zero. */
+	myrpt->remrx = myrpt->remrx_links > 0;
+	myrpt->voteremrx = myrpt->voteremrx_links > 0;
 }
 
 void rpt_link_set_mode(struct rpt *myrpt, struct rpt_link *l, enum link_mode mode)
@@ -483,8 +497,8 @@ void rpt_link_set_mode(struct rpt *myrpt, struct rpt_link *l, enum link_mode mod
 	was_txable = l->mode < MODE_LOCAL_MONITOR;
 	now_txable = mode < MODE_LOCAL_MONITOR;
 	if (l->lastrx && was_txable != now_txable) {
-		if (was_txable && myrpt->remrx_links_txable) {
-			myrpt->remrx_links_txable--;
+		if (was_txable) {
+			remrx_count_dec(myrpt, &myrpt->remrx_links_txable, "remrx_links_txable");
 		} else if (now_txable) {
 			myrpt->remrx_links_txable++;
 		}
