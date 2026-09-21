@@ -5203,7 +5203,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
-	/* 1. Hang-up the channels */
+	/* Hang-up the channels */
 	hangup_link_chan(l);
 	if (l->pchan) {
 		ast_hangup(l->pchan);
