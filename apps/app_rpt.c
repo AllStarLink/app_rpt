@@ -4119,13 +4119,13 @@ static inline int rpt_framelist_pad_silent(rpt_framelist_t *fl, struct ast_frame
 		return -1;
 	}
 	while (fl->depth < target) {
-		struct ast_frame *f1 = ast_frdup(template);
+		struct ast_frame *f = ast_frdup(template);
 
-		if (!f1) {
+		if (!f) {
 			return -1;
 		}
-		RPT_MUTE_FRAME(f1);
-		rpt_framelist_enqueue(fl, f1);
+		RPT_MUTE_FRAME(f);
+		rpt_framelist_enqueue(fl, f);
 	}
 	return 0;
 }
