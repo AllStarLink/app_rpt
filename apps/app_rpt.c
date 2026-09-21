@@ -4027,6 +4027,40 @@ static inline void rpt_frame_queue_free(struct rpt_frame_queue *frame_queue)
 	free_frame(&frame_queue->lastf2);
 }
 
+/*!
+ * \brief Mix queued altlink() repeater audio into a frame read from l->pchan
+ * \param l The link being serviced
+ * \param f Signed linear frame to mix into, modified in place
+ *
+ * Counterpart to the ast_slinfactory_feed() in monchannel_read(). This is what the
+ * whisper audiohook used to do for us inside ast_read(): take the same number of
+ * samples and saturating-add them into the frame. Frames that are not 16 bit signed
+ * linear, or are implausibly large, are left alone.
+ */
+static inline void mix_altaudio(struct rpt_link *l, struct ast_frame *f)
+{
+	short buf[1024];
+
+	if (!l || !l->altaudio_enabled) {
+		return;
+	}
+
+	if (!f || !f->data.ptr || f->samples <= 0 || f->samples != f->datalen / 2 || f->samples > (int) ARRAY_LEN(buf)) {
+		return;
+	}
+
+	ast_mutex_lock(&l->altaudio_lock);
+	if (ast_slinfactory_available(&l->altaudio) >= (unsigned int) f->samples && ast_slinfactory_read(&l->altaudio, buf, f->samples)) {
+		short *dst = f->data.ptr;
+		int i;
+
+		for (i = 0; i < f->samples; i++) {
+			ast_slinear_saturated_add(&dst[i], &buf[i]);
+		}
+	}
+	ast_mutex_unlock(&l->altaudio_lock);
+}
+
 static int rxchannel_qwrite_cb(void *obj, void *arg, int flags)
 {
 	struct rpt_link *link = obj;
@@ -5067,6 +5101,14 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			}
 			if (f->frametype == AST_FRAME_VOICE) {
 				float fac = 1.0;
+
+				/*
+				 * Mix in any repeater tx audio queued for this link by monchannel_read().
+				 * Done before the tx gain adjustment below, which is where the whisper
+				 * audiohook used to apply it (inside ast_read).
+				 */
+				mix_altaudio(l, f);
+
 				if (l->chan) {
 					if (CHAN_TECH(l->chan, "echolink")) {
 						fac = myrpt->p.etxgain;
@@ -5164,13 +5206,9 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
-	/* 1. Hang-up the channels */
+	/* Hang-up the channels */
 	hangup_link_chan(l);
 	if (l->pchan) {
-		if (ast_channel_audiohooks(l->pchan)) {
-			/* Remove audiohook while l->pchan is still valid */
-			ast_audiohook_remove(l->pchan, &l->altaudio);
-		}
 		ast_hangup(l->pchan);
 		l->pchan = NULL;
 	}
@@ -5179,8 +5217,14 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		rpt_update_links(myrpt);
 	}
 
-	/* 2. Destroy audiohook resources */
-	ast_audiohook_destroy(&l->altaudio);
+	/* 2. Destroy the altlink mixing buffer */
+	if (l->altaudio_enabled) {
+		ast_mutex_lock(&l->altaudio_lock);
+		ast_slinfactory_destroy(&l->altaudio);
+		ast_mutex_unlock(&l->altaudio_lock);
+		ast_mutex_destroy(&l->altaudio_lock);
+		l->altaudio_enabled = 0;
+	}
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 
 	return;
@@ -5217,13 +5261,23 @@ static inline int monchannel_read(struct rpt *myrpt)
 			/* IF we are an altlink() and the repeater is not receiving (aka we are in the tail time),
 			 * whisper the output audio onto said link.
 			 */
-			ast_audiohook_lock(&l->altaudio);
-			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
-				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2")) &&
-				l->altaudio.status == AST_AUDIOHOOK_STATUS_RUNNING) {
-				ast_audiohook_write_frame(&l->altaudio, AST_AUDIOHOOK_DIRECTION_READ, f);
+			if (!l->altaudio_enabled) {
+				continue;
 			}
-			ast_audiohook_unlock(&l->altaudio);
+			ast_mutex_lock(&l->altaudio_lock);
+			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
+				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
+				/*
+				 * Drop the backlog if the link thread has stopped draining, so a
+				 * wedged or busy link cannot grow this without bound.
+				 */
+				if (ast_slinfactory_available(&l->altaudio) > ALTAUDIO_MAX_BACKLOG) {
+					ast_debug(1, "Flushing altlink audio backlog for node %s\n", l->name);
+					ast_slinfactory_flush(&l->altaudio);
+				}
+				ast_slinfactory_feed(&l->altaudio, f);
+			}
+			ast_mutex_unlock(&l->altaudio_lock);
 		}
 		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
@@ -7554,8 +7608,12 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			return -1;
 		}
 
-		ast_audiohook_init(&l->altaudio, AST_AUDIOHOOK_TYPE_WHISPER, "Broadcast", 0);
-		ast_audiohook_attach(l->pchan, &l->altaudio); /* If this fails, altlink() repeater tx audio will be missing - not fatal */
+		ast_mutex_init(&l->altaudio_lock);
+		/* Only create and attache the factory if a link can actually use it. */
+		if (link_may_altlink(l)) {
+			ast_slinfactory_init_with_format(&l->altaudio, ast_format_slin);
+			l->altaudio_enabled = 1;
+		}
 
 		donodelog_fmt(myrpt, "LINK%s,%s", l->phonemode ? "(P)" : "", l->name);
 		doconpgm(myrpt, l->name);
@@ -8412,11 +8470,11 @@ static int reload(void)
 	return AST_MODULE_RELOAD_SUCCESS;
 }
 /* clang-format off */
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application", 
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application",
 	.support_level = AST_MODULE_SUPPORT_EXTENDED,
-	.load = load_module, 
-	.unload = unload_module, 
-	.reload = reload, 
-	.requires = "res_curl, bridge_softmix, chan_bridge_media", 
+	.load = load_module,
+	.unload = unload_module,
+	.reload = reload,
+	.requires = "res_curl, bridge_softmix, chan_bridge_media",
 );
 /* clang-format on */
