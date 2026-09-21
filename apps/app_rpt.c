@@ -5217,16 +5217,16 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		rpt_update_links(myrpt);
 	}
 
-	/* 2. Destroy the altlink mixing buffer */
+	/* Destroy the altlink mixing buffer */
 	if (l->altaudio_enabled) {
 		ast_mutex_lock(&l->altaudio_lock);
 		ast_slinfactory_destroy(&l->altaudio);
 		ast_mutex_unlock(&l->altaudio_lock);
-		ast_mutex_destroy(&l->altaudio_lock);
 		l->altaudio_enabled = 0;
 	}
-	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 
+	ast_mutex_destroy(&l->altaudio_lock);
+	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	return;
 }
 
@@ -7609,7 +7609,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		}
 
 		ast_mutex_init(&l->altaudio_lock);
-		/* Only create and attache the factory if a link can actually use it. */
+		/* Only create and attach the factory if a link can actually use it. */
 		if (link_may_altlink(l)) {
 			ast_slinfactory_init_with_format(&l->altaudio, ast_format_slin);
 			l->altaudio_enabled = 1;
