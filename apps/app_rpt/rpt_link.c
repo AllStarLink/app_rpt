@@ -948,7 +948,7 @@ void *rpt_link_connect(void *data)
 		goto cleanup;
 	}
 	ast_mutex_init(&l->altaudio_lock);
-	/* Only create and attache the factory if a link can actually use it. */
+	/* Only create and attach the factory if a link can actually use it. */
 	if (link_may_altlink(l)) {
 		ast_slinfactory_init_with_format(&l->altaudio, ast_format_slin);
 		l->altaudio_enabled = 1;
