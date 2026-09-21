@@ -5217,7 +5217,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		rpt_update_links(myrpt);
 	}
 
-	/* 2. Destroy the altlink mixing buffer */
+	/* Destroy the altlink mixing buffer */
 	if (l->altaudio_enabled) {
 		ast_mutex_lock(&l->altaudio_lock);
 		ast_slinfactory_destroy(&l->altaudio);
