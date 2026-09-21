@@ -198,9 +198,11 @@ struct chan_simpleusb_pvt {
 	struct ast_frame read_f;											 /* returned by simpleusb_read */
 
 	/* queue used to hold packets to transmit */
-	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
-	ast_mutex_t txqlock;
-	unsigned int txq_depth; /* frames queued; updated under txqlock */
+	struct {
+		AST_LIST_HEAD_NOLOCK(, ast_frame) list;
+		ast_mutex_t lock;
+		unsigned int depth; /* frames queued; updated under lock */
+	} txq;
 
 	char lastrx;
 	char rxhidsq;
@@ -1349,9 +1351,9 @@ static void *hidthread(void *arg)
 				o->rxhidctcss = ctcssed;
 			}
 
-			ast_mutex_lock(&o->txqlock);
-			txreq = o->txq_depth != 0;
-			ast_mutex_unlock(&o->txqlock);
+			ast_mutex_lock(&o->txq.lock);
+			txreq = o->txq.depth != 0;
+			ast_mutex_unlock(&o->txq.lock);
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
 			lasttxtmp = o->lasttx;
 
@@ -1844,14 +1846,14 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			};
 
 			i = 0;
-			ast_mutex_lock(&o->txqlock);
-			AST_LIST_TRAVERSE(&o->txq, f1, frame_list) {
+			ast_mutex_lock(&o->txq.lock);
+			AST_LIST_TRAVERSE(&o->txq.list, f1, frame_list) {
 				if (f1->src && (!strcmp(f1->src, PAGER_SRC))) {
 					i++;
 				}
 			}
 
-			ast_mutex_unlock(&o->txqlock);
+			ast_mutex_unlock(&o->txq.lock);
 			cmd = (i) ? "PAGES" : "NOPAGES";
 			wf.data.ptr = cmd;
 			wf.datalen = strlen(cmd);
@@ -1916,10 +1918,10 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 				return 0;
 			}
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-			ast_mutex_lock(&o->txqlock);
-			AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
-			o->txq_depth++;
-			ast_mutex_unlock(&o->txqlock);
+			ast_mutex_lock(&o->txq.lock);
+			AST_LIST_INSERT_TAIL(&o->txq.list, f1, frame_list);
+			o->txq.depth++;
+			ast_mutex_unlock(&o->txq.lock);
 		}
 		ast_free(audio);
 		return 0;
@@ -2061,10 +2063,10 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	}
 
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-	ast_mutex_lock(&o->txqlock);
-	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
-	o->txq_depth++;
-	ast_mutex_unlock(&o->txqlock);
+	ast_mutex_lock(&o->txq.lock);
+	AST_LIST_INSERT_TAIL(&o->txq.list, f1, frame_list);
+	o->txq.depth++;
+	ast_mutex_unlock(&o->txq.lock);
 
 	return 0;
 }
@@ -2090,12 +2092,12 @@ static void flush_stream_buffer(struct chan_simpleusb_pvt *o)
 {
 	struct ast_frame *f;
 
-	ast_mutex_lock(&o->txqlock);
-	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
+	ast_mutex_lock(&o->txq.lock);
+	while ((f = AST_LIST_REMOVE_HEAD(&o->txq.list, frame_list))) {
 		ast_frfree(f);
 	}
-	o->txq_depth = 0;
-	ast_mutex_unlock(&o->txqlock);
+	o->txq.depth = 0;
+	ast_mutex_unlock(&o->txq.lock);
 }
 
 /*!
@@ -2235,10 +2237,10 @@ static void *simpleusb_audio_thread(void *arg)
 						continue;
 					}
 					memset(&f1->frame_list, 0, sizeof(f1->frame_list));
-					ast_mutex_lock(&o->txqlock);
-					AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
-					o->txq_depth++;
-					ast_mutex_unlock(&o->txqlock);
+					ast_mutex_lock(&o->txq.lock);
+					AST_LIST_INSERT_TAIL(&o->txq.list, f1, frame_list);
+					o->txq.depth++;
+					ast_mutex_unlock(&o->txq.lock);
 					o->echoing = 1;
 				} else {
 					o->echoing = 0;
@@ -2251,9 +2253,9 @@ static void *simpleusb_audio_thread(void *arg)
 				long frames_available;
 
 				num_frames = 0;
-				ast_mutex_lock(&o->txqlock);
-				num_frames = (int) o->txq_depth;
-				ast_mutex_unlock(&o->txqlock);
+				ast_mutex_lock(&o->txq.lock);
+				num_frames = (int) o->txq.depth;
+				ast_mutex_unlock(&o->txq.lock);
 				if (o->txkeyed) {
 					ast_debug(7, "blocks used %d, Dest Buffer %d", num_frames, o->simpleusb_write_dst);
 				}
@@ -2276,17 +2278,17 @@ static void *simpleusb_audio_thread(void *arg)
 				}
 				if (frames_available >= AST_RADIO_PA_FRAMES_PER_BUFFER) {
 					if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
-						ast_mutex_lock(&o->txqlock);
-						f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
+						ast_mutex_lock(&o->txq.lock);
+						f1 = AST_LIST_REMOVE_HEAD(&o->txq.list, frame_list);
 						if (f1) {
-							if (o->txq_depth) {
-								o->txq_depth--;
+							if (o->txq.depth) {
+								o->txq.depth--;
 							} else {
 								ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
-								o->txq_depth = 0;
+								o->txq.depth = 0;
 							}
 						}
-						ast_mutex_unlock(&o->txqlock);
+						ast_mutex_unlock(&o->txq.lock);
 						if (!f1) {
 							break;
 						}
@@ -2479,9 +2481,9 @@ static void *simpleusb_audio_thread(void *arg)
 			 * we are finished.
 			 */
 			if (o->waspager) {
-				ast_mutex_lock(&o->txqlock);
-				num_frames = (int) o->txq_depth;
-				ast_mutex_unlock(&o->txqlock);
+				ast_mutex_lock(&o->txq.lock);
+				num_frames = (int) o->txq.depth;
+				ast_mutex_unlock(&o->txq.lock);
 				if (num_frames < 1) {
 					struct ast_frame wf = {
 						.frametype = AST_FRAME_TEXT,
@@ -4174,7 +4176,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 	o->echoq.q_forw = o->echoq.q_back = &o->echoq;
 	ast_mutex_init(&o->echolock);
 	ast_mutex_init(&o->eepromlock);
-	ast_mutex_init(&o->txqlock);
+	ast_mutex_init(&o->txq.lock);
 	ast_mutex_init(&o->usblock);
 	ast_mutex_init(&o->device_lock);
 	ast_mutex_init(&o->swap_lock);

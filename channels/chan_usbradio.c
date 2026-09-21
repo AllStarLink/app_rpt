@@ -216,10 +216,12 @@ struct chan_usbradio_pvt {
 	enum ast_radio_device_result device_error;
 
 	/* Outbound 8 kHz frames from Asterisk, drained by the audio thread into PmrTx. */
-	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
-	ast_mutex_t txqlock;
-	unsigned int txq_depth;
-	unsigned int txq_high_water;
+	struct {
+		AST_LIST_HEAD_NOLOCK(, ast_frame) list;
+		ast_mutex_t lock;
+		unsigned int depth;
+		unsigned int high_water;
+	} txq;
 
 	/* TX workspace: 48 kHz stereo interleaved samples (PortAudio / PmrTx) */
 	short usbradio_write_buf[AST_RADIO_PA_48K_STEREO_SAMPLES];
@@ -2112,13 +2114,13 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 	}
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 
-	ast_mutex_lock(&o->txqlock);
-	AST_LIST_INSERT_TAIL(&o->txq, f1, frame_list);
-	o->txq_depth++;
-	if (o->txq_depth > o->txq_high_water) {
-		o->txq_high_water = o->txq_depth;
+	ast_mutex_lock(&o->txq.lock);
+	AST_LIST_INSERT_TAIL(&o->txq.list, f1, frame_list);
+	o->txq.depth++;
+	if (o->txq.depth > o->txq.high_water) {
+		o->txq.high_water = o->txq.depth;
 	}
-	ast_mutex_unlock(&o->txqlock);
+	ast_mutex_unlock(&o->txq.lock);
 
 	return 0;
 }
@@ -2141,13 +2143,13 @@ static void flush_tx_queue(struct chan_usbradio_pvt *o)
 {
 	struct ast_frame *f;
 
-	ast_mutex_lock(&o->txqlock);
-	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
+	ast_mutex_lock(&o->txq.lock);
+	while ((f = AST_LIST_REMOVE_HEAD(&o->txq.list, frame_list))) {
 		ast_frfree(f);
 	}
-	o->txq_depth = 0;
-	o->txq_high_water = 0;
-	ast_mutex_unlock(&o->txqlock);
+	o->txq.depth = 0;
+	o->txq.high_water = 0;
+	ast_mutex_unlock(&o->txq.lock);
 }
 
 /*!
@@ -2175,17 +2177,17 @@ static int usbradio_feed_tx_queue(struct chan_usbradio_pvt *o, int max_frames)
 	int fed = 0;
 
 	while (fed < max_frames) {
-		ast_mutex_lock(&o->txqlock);
-		f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
+		ast_mutex_lock(&o->txq.lock);
+		f1 = AST_LIST_REMOVE_HEAD(&o->txq.list, frame_list);
 		if (f1) {
-			if (o->txq_depth) {
-				o->txq_depth--;
+			if (o->txq.depth) {
+				o->txq.depth--;
 			} else {
 				ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
-				o->txq_depth = 0;
+				o->txq.depth = 0;
 			}
 		}
-		ast_mutex_unlock(&o->txqlock);
+		ast_mutex_unlock(&o->txq.lock);
 		if (!f1) {
 			break;
 		}
@@ -2348,9 +2350,9 @@ static void *usbradio_audio_thread(void *arg)
 			 * claims OK but the hardware TX buffer is not draining, txq backs up
 			 * and MAX_FRAME_DELAY restarts the stream (same idea as simpleusb).
 			 */
-			ast_mutex_lock(&o->txqlock);
-			num_frames = (int) o->txq_depth;
-			ast_mutex_unlock(&o->txqlock);
+			ast_mutex_lock(&o->txq.lock);
+			num_frames = (int) o->txq.depth;
+			ast_mutex_unlock(&o->txq.lock);
 
 			/* One queued frame per available output block */
 			if (tx_write_ready) {
@@ -2361,13 +2363,13 @@ static void *usbradio_audio_thread(void *arg)
 			}
 
 			/* Report one threshold crossing and the eventual peak when this queue episode drains. */
-			ast_mutex_lock(&o->txqlock);
-			txq_depth = o->txq_depth;
-			txq_high_water = o->txq_high_water;
+			ast_mutex_lock(&o->txq.lock);
+			txq_depth = o->txq.depth;
+			txq_high_water = o->txq.high_water;
 			if (!txq_depth) {
-				o->txq_high_water = 0;
+				o->txq.high_water = 0;
 			}
-			ast_mutex_unlock(&o->txqlock);
+			ast_mutex_unlock(&o->txq.lock);
 			if (!txq_threshold_logged) {
 				if (txq_high_water > TXQ_DELAY_LOG_FRAMES) {
 					ast_debug(3, "Channel %s: TX queue large, frames >= %u\n", o->name, txq_high_water);
@@ -5311,7 +5313,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 	ast_mutex_init(&o->eepromlock);
 	ast_mutex_init(&o->usblock);
 	ast_mutex_init(&o->device_lock);
-	ast_mutex_init(&o->txqlock);
+	ast_mutex_init(&o->txq.lock);
 	ast_mutex_init(&o->swap_lock);
 	o->echomax = DEFAULT_ECHO_MAX;
 	/* fill other fields from configuration */
