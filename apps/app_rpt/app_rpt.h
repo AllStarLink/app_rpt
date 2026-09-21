@@ -144,8 +144,11 @@ typedef struct {
 #define MAX_TEXTMSG_SIZE 160
 
 #define MAX_EXTNODEFILES 50
-/*! Seconds to reuse a link's dialstring on reconnect before re-resolving DNS/file. */
-#define RECONNECT_NODEDATA_TTL_SEC 300
+/*!
+ * Seconds to reuse a link's dialstring on reconnect before re-resolving.
+ * Kept at the AllStar DNS SRV TTL (60s) so reconnects do not outlive the record.
+ */
+#define RECONNECT_NODEDATA_TTL_SEC 60
 #define MAX_LOCALLINKNODES 50
 #define MAX_LSTUFF 20
 
