@@ -4820,9 +4820,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		if (!n) {
 			break;
 		}
-
 		who = ast_waitfor_n(cs, n, &ms);
-
 		if (periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart))) {
 			break;
 		}
