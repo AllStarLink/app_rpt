@@ -554,11 +554,14 @@ struct rpt_frame_queue {
 };
 
 /*!
- * Voice-frame FIFO used for simplex delay queues (with parallel depth counters).
- * Typedef keeps the shared enqueue/dequeue helpers readable; other lists (e.g. textq)
- * that do not need a depth counter keep the expanded AST_LIST_HEAD_NOLOCK form.
+ * Counted voice-frame FIFO for simplex delay queues.
+ * Depth lives with the list so helpers always get a matched pair.
+ * Other lists (e.g. textq) that do not need a depth keep AST_LIST_HEAD_NOLOCK.
  */
-typedef AST_LIST_HEAD_NOLOCK(, ast_frame) rpt_framelist_t;
+typedef struct rpt_framelist {
+	AST_LIST_HEAD_NOLOCK(, ast_frame) list;
+	unsigned int depth;
+} rpt_framelist_t;
 
 enum rpt_link_disconnect {
 	RPT_LINK_DISCONNECT_NONE = 0,
@@ -640,8 +643,6 @@ struct rpt_link {
 	time_t lastkeytime;
 	time_t lastunkeytime;
 	rpt_framelist_t rxq;
-	/*! \brief O(1) length of rxq (simplex phone delay). */
-	unsigned int rxq_depth;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
 
@@ -1126,11 +1127,7 @@ struct rpt {
 	tone_detect_state_t burst_tone_state;
 #endif
 	rpt_framelist_t txq;
-	/*! \brief O(1) length of txq (simplex patch delay). */
-	unsigned int txq_depth;
 	rpt_framelist_t rxq;
-	/*! \brief O(1) length of rxq (remote phone delay). */
-	unsigned int rxq_depth;
 	char txrealkeyed;
 #ifdef __RPT_NOTCH
 	struct rptfilter {

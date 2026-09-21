@@ -3552,7 +3552,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 	}
 	myrx = l->lastrealrx;
 	if ((l->phonemode != RPT_PHONE_MODE_NONE) && (l->phonevox)) {
-		myrx = myrx || (!AST_LIST_EMPTY(&l->rxq));
+		myrx = myrx || (l->rxq.depth != 0);
 		if (l->voxtotimer <= 0) {
 			if (l->voxtostate) {
 				l->voxtotimer = myrpt->p.voxtimeout_ms;
@@ -4062,49 +4062,49 @@ static inline void mix_altaudio(struct rpt_link *l, struct ast_frame *f)
 }
 
 /*! Voice-frame FIFO helpers (O(1) depth instead of AST_LIST_TRAVERSE counts). */
-static inline void rpt_framelist_enqueue(rpt_framelist_t *q, unsigned int *depth, struct ast_frame *f)
+static inline void rpt_framelist_enqueue(rpt_framelist_t *fl, struct ast_frame *f)
 {
-	if (!q || !depth || !f) {
-		ast_log(LOG_ERROR, "rpt_framelist_enqueue: NULL q/depth/frame\n");
+	if (!fl || !f) {
+		ast_log(LOG_ERROR, "rpt_framelist_enqueue: NULL framelist/frame\n");
 		return;
 	}
 	memset(&f->frame_list, 0, sizeof(f->frame_list));
-	AST_LIST_INSERT_TAIL(q, f, frame_list);
-	(*depth)++;
+	AST_LIST_INSERT_TAIL(&fl->list, f, frame_list);
+	fl->depth++;
 }
 
-static inline struct ast_frame *rpt_framelist_dequeue(rpt_framelist_t *q, unsigned int *depth)
+static inline struct ast_frame *rpt_framelist_dequeue(rpt_framelist_t *fl)
 {
 	struct ast_frame *f;
 
-	if (!q || !depth) {
-		ast_log(LOG_ERROR, "rpt_framelist_dequeue: NULL q/depth\n");
+	if (!fl) {
+		ast_log(LOG_ERROR, "rpt_framelist_dequeue: NULL framelist\n");
 		return NULL;
 	}
-	f = AST_LIST_REMOVE_HEAD(q, frame_list);
+	f = AST_LIST_REMOVE_HEAD(&fl->list, frame_list);
 	if (f) {
-		if (*depth) {
-			(*depth)--;
+		if (fl->depth) {
+			fl->depth--;
 		} else {
 			ast_log(LOG_ERROR, "rpt_framelist_dequeue: depth underflow\n");
-			*depth = 0;
+			fl->depth = 0;
 		}
 	}
 	return f;
 }
 
-static inline void rpt_framelist_flush(rpt_framelist_t *q, unsigned int *depth)
+static inline void rpt_framelist_flush(rpt_framelist_t *fl)
 {
 	struct ast_frame *f;
 
-	if (!q || !depth) {
-		ast_log(LOG_ERROR, "rpt_framelist_flush: NULL q/depth\n");
+	if (!fl) {
+		ast_log(LOG_ERROR, "rpt_framelist_flush: NULL framelist\n");
 		return;
 	}
-	while ((f = AST_LIST_REMOVE_HEAD(q, frame_list))) {
+	while ((f = AST_LIST_REMOVE_HEAD(&fl->list, frame_list))) {
 		ast_frfree(f);
 	}
-	*depth = 0;
+	fl->depth = 0;
 }
 
 /*!
@@ -4112,20 +4112,20 @@ static inline void rpt_framelist_flush(rpt_framelist_t *q, unsigned int *depth)
  * \retval 0 success (or already deep enough)
  * \retval -1 allocation failure (partial pad may remain)
  */
-static inline int rpt_framelist_pad_silent(rpt_framelist_t *q, unsigned int *depth, struct ast_frame *template, unsigned int target)
+static inline int rpt_framelist_pad_silent(rpt_framelist_t *fl, struct ast_frame *template, unsigned int target)
 {
-	if (!q || !depth || !template) {
-		ast_log(LOG_ERROR, "rpt_framelist_pad_silent: NULL q/depth/template\n");
+	if (!fl || !template) {
+		ast_log(LOG_ERROR, "rpt_framelist_pad_silent: NULL framelist/template\n");
 		return -1;
 	}
-	while (*depth < target) {
+	while (fl->depth < target) {
 		struct ast_frame *f1 = ast_frdup(template);
 
 		if (!f1) {
 			return -1;
 		}
 		RPT_MUTE_FRAME(f1);
-		rpt_framelist_enqueue(q, depth, f1);
+		rpt_framelist_enqueue(fl, f1);
 	}
 	return 0;
 }
@@ -4134,18 +4134,18 @@ static inline int rpt_framelist_pad_silent(rpt_framelist_t *q, unsigned int *dep
  * \brief Dequeue head for playback, or mute in-place frame if FIFO empty.
  * Frees the inbound frame when replacing it with a queued one.
  */
-static inline struct ast_frame *rpt_framelist_take_or_mute(rpt_framelist_t *q, unsigned int *depth, struct ast_frame *f)
+static inline struct ast_frame *rpt_framelist_take_or_mute(rpt_framelist_t *fl, struct ast_frame *f)
 {
-	if (!q || !depth || !f) {
-		ast_log(LOG_ERROR, "rpt_framelist_take_or_mute: NULL q/depth/frame\n");
+	if (!fl || !f) {
+		ast_log(LOG_ERROR, "rpt_framelist_take_or_mute: NULL framelist/frame\n");
 		return f;
 	}
-	if (!*depth) {
+	if (!fl->depth) {
 		RPT_MUTE_FRAME(f);
 		return f;
 	}
 	ast_frfree(f);
-	return rpt_framelist_dequeue(q, depth);
+	return rpt_framelist_dequeue(fl);
 }
 
 static int rxchannel_qwrite_cb(void *obj, void *arg, int flags)
@@ -4674,7 +4674,7 @@ static inline int localtxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 		if (myrpt->p.duplex < 2) {
 			if (myrpt->txrealkeyed) {
 				if (!*myfirst && (myrpt->callmode != CALLMODE_DOWN)) {
-					if (rpt_framelist_pad_silent(&myrpt->txq, &myrpt->txq_depth, f, myrpt->p.simplexpatchdelay)) {
+					if (rpt_framelist_pad_silent(&myrpt->txq, f, myrpt->p.simplexpatchdelay)) {
 						ast_frfree(f);
 						return 0;
 					}
@@ -4684,13 +4684,13 @@ static inline int localtxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 				if (!f1) {
 					return 0;
 				}
-				rpt_framelist_enqueue(&myrpt->txq, &myrpt->txq_depth, f1);
+				rpt_framelist_enqueue(&myrpt->txq, f1);
 			} else {
 				*myfirst = 0;
 			}
-			f = rpt_framelist_take_or_mute(&myrpt->txq, &myrpt->txq_depth, f);
+			f = rpt_framelist_take_or_mute(&myrpt->txq, f);
 		} else {
-			rpt_framelist_flush(&myrpt->txq, &myrpt->txq_depth);
+			rpt_framelist_flush(&myrpt->txq);
 		}
 		ast_write(myrpt->txchannel, f);
 	}
@@ -5025,7 +5025,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						if (l->lastrealrx || n1) {
 							if (!myfirst) {
 								/* Best-effort pad; shorten delay if alloc fails mid-pad. */
-								rpt_framelist_pad_silent(&l->rxq, &l->rxq_depth, f, myrpt->p.simplexphonedelay);
+								rpt_framelist_pad_silent(&l->rxq, f, myrpt->p.simplexphonedelay);
 								myfirst = 1;
 							}
 							f1 = ast_frdup(f);
@@ -5033,11 +5033,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 								ast_frfree(f);
 								break;
 							}
-							rpt_framelist_enqueue(&l->rxq, &l->rxq_depth, f1);
+							rpt_framelist_enqueue(&l->rxq, f1);
 						} else {
 							myfirst = 0;
 						}
-						f = rpt_framelist_take_or_mute(&l->rxq, &l->rxq_depth, f);
+						f = rpt_framelist_take_or_mute(&l->rxq, f);
 					}
 					/* Mute lives on the conference unreal leg (pchan), not the link tech channel. */
 					ismuted = rpt_conf_get_muted(l->pchan, myrpt);
@@ -5995,7 +5995,7 @@ static void *rpt(void *this)
 		myrpt->txrealkeyed = totx;
 		/* Control op tx disable overrides everything prior to this. */
 		/* Hold up the TX as long as there are frames in the tx queue */
-		totx = totx || (!AST_LIST_EMPTY(&myrpt->txq));
+		totx = totx || (myrpt->txq.depth != 0);
 		/* if in 1/2 or 3/4 duplex, give rx priority */
 		if ((myrpt->p.duplex < 2) && (!myrpt->p.linktolink) && (!myrpt->p.dias) && (myrpt->keyed)) {
 			totx = 0;
@@ -6795,7 +6795,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 			}
 			if (n1) {
 				if (!*myfirst) {
-					if (rpt_framelist_pad_silent(&myrpt->rxq, &myrpt->rxq_depth, f, myrpt->p.simplexphonedelay)) {
+					if (rpt_framelist_pad_silent(&myrpt->rxq, f, myrpt->p.simplexphonedelay)) {
 						ast_frfree(f);
 						return 0;
 					}
@@ -6806,10 +6806,10 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 					ast_frfree(f);
 					return -1;
 				}
-				rpt_framelist_enqueue(&myrpt->rxq, &myrpt->rxq_depth, f1);
+				rpt_framelist_enqueue(&myrpt->rxq, f1);
 			} else
 				*myfirst = 0;
-			f = rpt_framelist_take_or_mute(&myrpt->rxq, &myrpt->rxq_depth, f);
+			f = rpt_framelist_take_or_mute(&myrpt->rxq, f);
 		}
 		/* Mute lives on the conference unreal leg (pchannel), not the inbound chan. */
 		ismuted = rpt_conf_get_muted(myrpt->pchannel, myrpt);
@@ -8089,7 +8089,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		update_timer(&myrpt->voxtotimer, elap, 0);
 		myrx = keyed;
 		if (phone_mode != RPT_PHONE_MODE_NONE && phone_vox) {
-			myrx = (!AST_LIST_EMPTY(&myrpt->rxq));
+			myrx = (myrpt->rxq.depth != 0);
 			if (myrpt->voxtotimer <= 0) {
 				voxtostate_to_voxtotimer(myrpt);
 			}
