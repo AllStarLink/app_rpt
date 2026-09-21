@@ -427,15 +427,21 @@ void rpt_link_add(struct ao2_container *links, struct rpt_link *l)
 	ao2_link(links, l);
 }
 
-/*! Decrement an remrx aggregate; log and clamp if already zero (unsigned wrap guard). */
-static void remrx_count_dec(struct rpt *myrpt, unsigned int *counter, const char *name)
+/*! Adjust an remrx aggregate by +1/-1; log and clamp on underflow (unsigned wrap guard). */
+static void remrx_count_ref(struct rpt *myrpt, unsigned int *counter, int delta, const char *name)
 {
-	if (*counter > 0) {
-		(*counter)--;
+	if (delta > 0) {
+		(*counter)++;
 		return;
 	}
-	ast_log(LOG_ERROR, "Node %s: %s underflow while adjusting remrx aggregates\n", myrpt->name, name);
-	*counter = 0;
+	if (delta < 0) {
+		if (*counter > 0) {
+			(*counter)--;
+			return;
+		}
+		ast_log(LOG_ERROR, "Node %s: %s underflow while adjusting remrx aggregates\n", myrpt->name, name);
+		*counter = 0;
+	}
 }
 
 void rpt_link_remove(struct ao2_container *links, struct rpt_link *l)
@@ -454,22 +460,22 @@ void rpt_link_set_lastrx(struct rpt *myrpt, struct rpt_link *l, int rx)
 	}
 
 	if (l->lastrx) {
-		remrx_count_dec(myrpt, &myrpt->remrx_links, "remrx_links");
+		remrx_count_ref(myrpt, &myrpt->remrx_links, -1, "remrx_links");
 		if (l->mode < MODE_LOCAL_MONITOR) {
-			remrx_count_dec(myrpt, &myrpt->remrx_links_txable, "remrx_links_txable");
+			remrx_count_ref(myrpt, &myrpt->remrx_links_txable, -1, "remrx_links_txable");
 		}
 		if (l->voterlink) {
-			remrx_count_dec(myrpt, &myrpt->voteremrx_links, "voteremrx_links");
+			remrx_count_ref(myrpt, &myrpt->voteremrx_links, -1, "voteremrx_links");
 		}
 	}
 	l->lastrx = keyed;
 	if (keyed) {
-		myrpt->remrx_links++;
+		remrx_count_ref(myrpt, &myrpt->remrx_links, +1, "remrx_links");
 		if (l->mode < MODE_LOCAL_MONITOR) {
-			myrpt->remrx_links_txable++;
+			remrx_count_ref(myrpt, &myrpt->remrx_links_txable, +1, "remrx_links_txable");
 		}
 		if (l->voterlink) {
-			myrpt->voteremrx_links++;
+			remrx_count_ref(myrpt, &myrpt->voteremrx_links, +1, "voteremrx_links");
 		}
 		if (IS_NODE_EXTEN(l->name)) {
 			ast_copy_string(myrpt->lastnodewhichkeyedusup, l->name, sizeof(myrpt->lastnodewhichkeyedusup));
@@ -494,9 +500,9 @@ void rpt_link_set_mode(struct rpt *myrpt, struct rpt_link *l, enum link_mode mod
 	now_txable = mode < MODE_LOCAL_MONITOR;
 	if (l->lastrx && was_txable != now_txable) {
 		if (was_txable) {
-			remrx_count_dec(myrpt, &myrpt->remrx_links_txable, "remrx_links_txable");
+			remrx_count_ref(myrpt, &myrpt->remrx_links_txable, -1, "remrx_links_txable");
 		} else if (now_txable) {
-			myrpt->remrx_links_txable++;
+			remrx_count_ref(myrpt, &myrpt->remrx_links_txable, +1, "remrx_links_txable");
 		}
 	}
 	l->mode = mode;
