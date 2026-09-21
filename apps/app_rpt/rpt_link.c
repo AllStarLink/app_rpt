@@ -438,13 +438,9 @@ static void remrx_count_dec(struct rpt *myrpt, unsigned int *counter, const char
 	*counter = 0;
 }
 
-void rpt_link_remove(struct rpt *myrpt, struct ao2_container *links, struct rpt_link *l)
+void rpt_link_remove(struct ao2_container *links, struct rpt_link *l)
 {
 	ast_assert(l != NULL);
-	/* Drop from remrx aggregates before unlink so a keyed link cannot linger. */
-	if (myrpt) {
-		rpt_link_set_lastrx(myrpt, l, 0);
-	}
 	ao2_unlink(links, l);
 }
 

@@ -75,12 +75,10 @@ void rpt_link_add(struct ao2_container *links, struct rpt_link *l);
 
 /*!
  * \brief Remove an rpt_link from a links container
- * \param myrpt Repeater owning the link (clears lastrx / remrx aggregates first)
  * \param links ao2_container to remove the link from
  * \param l Link to remove from the container
- * \note Caller must hold myrpt->lock when myrpt is non-NULL.
  */
-void rpt_link_remove(struct rpt *myrpt, struct ao2_container *links, struct rpt_link *l);
+void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
 
 /*!
  * \brief Set link RX keyed state and update remrx aggregate counters.

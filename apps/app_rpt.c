@@ -5135,7 +5135,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
-	rpt_link_remove(myrpt, myrpt->links, l); /* clears lastrx aggregates, then unlink */
+	rpt_link_set_lastrx(myrpt, l, 0); /* drop from remrx aggregates before unlink */
+	rpt_link_remove(myrpt->links, l); /* remove from queue */
 	if (!strcmp(myrpt->cmdnode, l->name)) {
 		myrpt->cmdnode[0] = 0;
 	}
