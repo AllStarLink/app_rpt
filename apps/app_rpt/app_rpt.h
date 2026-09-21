@@ -455,8 +455,27 @@ enum patch_call_mode {
 #define DEFAULT_TLB_LINK_MODE LINKMODE_DEMAND
 #define DEFAULT_TLB_LINK_MODE_DYNAMIC 1
 
-/* for DNS resolution of node data */
+/* for DNS resolution of node data
+ * MAX_DNS_* values are DNS presentation/wire protocol limits (RFC 1035), not
+ * arbitrary local buffer choices. The full SRV QNAME (_iax._udp.<node>.<domain>)
+ * must fit in 253 characters (254 when absolute with a trailing root '.').
+ * Domain storage is reduced by the SRV label overhead so we never publish a
+ * domain that cannot form a valid query name.
+ */
 #define DEFAULT_DNS_NODE_DOMAIN "nodes.allstarlink.org"
+#define MAX_DNS_NODE_DOMAIN_LEN 253 /* relative presentation max; absolute may be 254 with root '.' */
+#define MAX_DNS_LABEL_LEN 63		/* RFC 1035 label max */
+/*! ASL node numbers are numeric and at most 10 digits. */
+#define MAX_DNS_NODE_DIGITS (sizeof("1234567890") - 1)
+/*! "_iax._udp." + <node digits> + "." reserved ahead of the configured domain. */
+#define DNS_SRV_LABEL_LEN (sizeof("_iax._udp.") - 1 + MAX_DNS_NODE_DIGITS + sizeof(".") - 1)
+/*! Max configured dns_node_domain length so the full QNAME fits in MAX_DNS_NODE_DOMAIN_LEN. */
+#define MAX_DNS_NODE_DOMAIN_CONFIG_LEN (MAX_DNS_NODE_DOMAIN_LEN - DNS_SRV_LABEL_LEN)
+/*! Full QNAME buffer: absolute presentation max (254) + NUL. */
+#define DNS_SRV_LOOKUP_NAME_BUFSIZE (MAX_DNS_NODE_DOMAIN_LEN + 1 + 1)
+
+/*! \brief Publish the domain used for DNS node lookups */
+void rpt_set_dns_node_domain(const char *dns_name);
 
 #define REMOTE_RIG_FT950 "ft950"
 #define REMOTE_RIG_FT897 "ft897"
