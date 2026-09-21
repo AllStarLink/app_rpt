@@ -218,9 +218,9 @@ struct chan_usbradio_pvt {
 	/* Outbound 8 kHz frames from Asterisk, drained by the audio thread into PmrTx. */
 	struct {
 		AST_LIST_HEAD_NOLOCK(, ast_frame) list;
-		ast_mutex_t lock;
-		unsigned int depth;
-		unsigned int high_water;
+		ast_mutex_t lock;		 /* list mutations */
+		unsigned int depth;		 /* atomic frame count; advisory reads may omit lock */
+		unsigned int high_water; /* atomic peak depth */
 	} txq;
 
 	/* TX workspace: 48 kHz stereo interleaved samples (PortAudio / PmrTx) */
@@ -511,6 +511,52 @@ static int __attribute__((format(printf, 3, 4))) usbradio_log_fault(struct chan_
 		ast_log(LOG_ERROR, "%s", buf);
 	}
 	return 1;
+}
+
+/* txq.depth/high_water: atomic so advisory reads may omit txq.lock; list mutations still take the lock. */
+static unsigned int usbradio_txq_depth_get(const struct chan_usbradio_pvt *o)
+{
+	return __atomic_load_n(&o->txq.depth, __ATOMIC_RELAXED);
+}
+
+static unsigned int usbradio_txq_high_water_get(const struct chan_usbradio_pvt *o)
+{
+	return __atomic_load_n(&o->txq.high_water, __ATOMIC_RELAXED);
+}
+
+static void usbradio_txq_depth_inc(struct chan_usbradio_pvt *o)
+{
+	unsigned int depth;
+	unsigned int high_water;
+
+	depth = __atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
+	high_water = __atomic_load_n(&o->txq.high_water, __ATOMIC_RELAXED);
+	if (depth > high_water) {
+		__atomic_store_n(&o->txq.high_water, depth, __ATOMIC_RELAXED);
+	}
+}
+
+static void usbradio_txq_depth_dec(struct chan_usbradio_pvt *o)
+{
+	unsigned int depth = __atomic_load_n(&o->txq.depth, __ATOMIC_RELAXED);
+
+	if (depth) {
+		__atomic_store_n(&o->txq.depth, depth - 1, __ATOMIC_RELAXED);
+	} else {
+		ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
+		__atomic_store_n(&o->txq.depth, 0, __ATOMIC_RELAXED);
+	}
+}
+
+static void usbradio_txq_counters_clear(struct chan_usbradio_pvt *o)
+{
+	__atomic_store_n(&o->txq.depth, 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&o->txq.high_water, 0, __ATOMIC_RELAXED);
+}
+
+static void usbradio_txq_high_water_clear(struct chan_usbradio_pvt *o)
+{
+	__atomic_store_n(&o->txq.high_water, 0, __ATOMIC_RELAXED);
 }
 
 static void usbradio_device_identity(struct chan_usbradio_pvt *o, char *devstr, size_t devstr_size, char *serial,
@@ -2116,10 +2162,7 @@ static int usbradio_write(struct ast_channel *c, struct ast_frame *f)
 
 	ast_mutex_lock(&o->txq.lock);
 	AST_LIST_INSERT_TAIL(&o->txq.list, f1, frame_list);
-	o->txq.depth++;
-	if (o->txq.depth > o->txq.high_water) {
-		o->txq.high_water = o->txq.depth;
-	}
+	usbradio_txq_depth_inc(o);
 	ast_mutex_unlock(&o->txq.lock);
 
 	return 0;
@@ -2147,8 +2190,7 @@ static void flush_tx_queue(struct chan_usbradio_pvt *o)
 	while ((f = AST_LIST_REMOVE_HEAD(&o->txq.list, frame_list))) {
 		ast_frfree(f);
 	}
-	o->txq.depth = 0;
-	o->txq.high_water = 0;
+	usbradio_txq_counters_clear(o);
 	ast_mutex_unlock(&o->txq.lock);
 }
 
@@ -2180,12 +2222,7 @@ static int usbradio_feed_tx_queue(struct chan_usbradio_pvt *o, int max_frames)
 		ast_mutex_lock(&o->txq.lock);
 		f1 = AST_LIST_REMOVE_HEAD(&o->txq.list, frame_list);
 		if (f1) {
-			if (o->txq.depth) {
-				o->txq.depth--;
-			} else {
-				ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
-				o->txq.depth = 0;
-			}
+			usbradio_txq_depth_dec(o);
 		}
 		ast_mutex_unlock(&o->txq.lock);
 		if (!f1) {
@@ -2349,9 +2386,9 @@ static void *usbradio_audio_thread(void *arg)
 			 * Drain Asterisk TX into XPMR when PortAudio has room. If the device
 			 * claims OK but the hardware TX buffer is not draining, txq backs up
 			 * and MAX_FRAME_DELAY restarts the stream (same idea as simpleusb).
-			 * Depth is a best-effort snapshot; lock only protects enqueue/dequeue.
+			 * Depth is an atomic best-effort snapshot; lock only protects list mutations.
 			 */
-			num_frames = (int) o->txq.depth;
+			num_frames = (int) usbradio_txq_depth_get(o);
 
 			/* One queued frame per available output block */
 			if (tx_write_ready) {
@@ -2363,10 +2400,10 @@ static void *usbradio_audio_thread(void *arg)
 
 			/* Report one threshold crossing and the eventual peak when this queue episode drains. */
 			ast_mutex_lock(&o->txq.lock);
-			txq_depth = o->txq.depth;
-			txq_high_water = o->txq.high_water;
+			txq_depth = usbradio_txq_depth_get(o);
+			txq_high_water = usbradio_txq_high_water_get(o);
 			if (!txq_depth) {
-				o->txq.high_water = 0;
+				usbradio_txq_high_water_clear(o);
 			}
 			ast_mutex_unlock(&o->txq.lock);
 			if (!txq_threshold_logged) {

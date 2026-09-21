@@ -200,8 +200,8 @@ struct chan_simpleusb_pvt {
 	/* queue used to hold packets to transmit */
 	struct {
 		AST_LIST_HEAD_NOLOCK(, ast_frame) list;
-		ast_mutex_t lock;
-		unsigned int depth; /* frames queued; updated under lock */
+		ast_mutex_t lock;	/* list mutations */
+		unsigned int depth; /* atomic frame count; advisory reads may omit lock */
 	} txq;
 
 	char lastrx;
@@ -399,6 +399,34 @@ static int __attribute__((format(printf, 3, 4))) simpleusb_log_fault(struct chan
 		ast_log(LOG_ERROR, "%s", buf);
 	}
 	return 1;
+}
+
+/* txq.depth: atomic so advisory reads may omit txq.lock; list mutations still take the lock. */
+static unsigned int simpleusb_txq_depth_get(const struct chan_simpleusb_pvt *o)
+{
+	return __atomic_load_n(&o->txq.depth, __ATOMIC_RELAXED);
+}
+
+static void simpleusb_txq_depth_inc(struct chan_simpleusb_pvt *o)
+{
+	__atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
+}
+
+static void simpleusb_txq_depth_dec(struct chan_simpleusb_pvt *o)
+{
+	unsigned int depth = __atomic_load_n(&o->txq.depth, __ATOMIC_RELAXED);
+
+	if (depth) {
+		__atomic_store_n(&o->txq.depth, depth - 1, __ATOMIC_RELAXED);
+	} else {
+		ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
+		__atomic_store_n(&o->txq.depth, 0, __ATOMIC_RELAXED);
+	}
+}
+
+static void simpleusb_txq_depth_clear(struct chan_simpleusb_pvt *o)
+{
+	__atomic_store_n(&o->txq.depth, 0, __ATOMIC_RELAXED);
 }
 
 static void simpleusb_device_identity(struct chan_simpleusb_pvt *o, char *devstr, size_t devstr_size, char *serial,
@@ -1351,8 +1379,8 @@ static void *hidthread(void *arg)
 				o->rxhidctcss = ctcssed;
 			}
 
-			/* Best-effort snapshot; lock only protects enqueue/dequeue/depth updates. */
-			txreq = o->txq.depth != 0;
+			/* Atomic best-effort snapshot; lock only protects list mutations. */
+			txreq = simpleusb_txq_depth_get(o) != 0;
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
 			lasttxtmp = o->lasttx;
 
@@ -1919,7 +1947,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 			ast_mutex_lock(&o->txq.lock);
 			AST_LIST_INSERT_TAIL(&o->txq.list, f1, frame_list);
-			o->txq.depth++;
+			simpleusb_txq_depth_inc(o);
 			ast_mutex_unlock(&o->txq.lock);
 		}
 		ast_free(audio);
@@ -2064,7 +2092,7 @@ static int simpleusb_write(struct ast_channel *c, struct ast_frame *f)
 	memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 	ast_mutex_lock(&o->txq.lock);
 	AST_LIST_INSERT_TAIL(&o->txq.list, f1, frame_list);
-	o->txq.depth++;
+	simpleusb_txq_depth_inc(o);
 	ast_mutex_unlock(&o->txq.lock);
 
 	return 0;
@@ -2095,7 +2123,7 @@ static void flush_stream_buffer(struct chan_simpleusb_pvt *o)
 	while ((f = AST_LIST_REMOVE_HEAD(&o->txq.list, frame_list))) {
 		ast_frfree(f);
 	}
-	o->txq.depth = 0;
+	simpleusb_txq_depth_clear(o);
 	ast_mutex_unlock(&o->txq.lock);
 }
 
@@ -2238,7 +2266,7 @@ static void *simpleusb_audio_thread(void *arg)
 					memset(&f1->frame_list, 0, sizeof(f1->frame_list));
 					ast_mutex_lock(&o->txq.lock);
 					AST_LIST_INSERT_TAIL(&o->txq.list, f1, frame_list);
-					o->txq.depth++;
+					simpleusb_txq_depth_inc(o);
 					ast_mutex_unlock(&o->txq.lock);
 					o->echoing = 1;
 				} else {
@@ -2251,8 +2279,8 @@ static void *simpleusb_audio_thread(void *arg)
 			for (;;) {
 				long frames_available;
 
-				/* Best-effort snapshot; lock only protects enqueue/dequeue/depth updates. */
-				num_frames = (int) o->txq.depth;
+				/* Atomic best-effort snapshot; lock only protects list mutations. */
+				num_frames = (int) simpleusb_txq_depth_get(o);
 				if (o->txkeyed) {
 					ast_debug(7, "blocks used %d, Dest Buffer %d", num_frames, o->simpleusb_write_dst);
 				}
@@ -2278,12 +2306,7 @@ static void *simpleusb_audio_thread(void *arg)
 						ast_mutex_lock(&o->txq.lock);
 						f1 = AST_LIST_REMOVE_HEAD(&o->txq.list, frame_list);
 						if (f1) {
-							if (o->txq.depth) {
-								o->txq.depth--;
-							} else {
-								ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
-								o->txq.depth = 0;
-							}
+							simpleusb_txq_depth_dec(o);
 						}
 						ast_mutex_unlock(&o->txq.lock);
 						if (!f1) {
@@ -2478,8 +2501,8 @@ static void *simpleusb_audio_thread(void *arg)
 			 * we are finished.
 			 */
 			if (o->waspager) {
-				/* Best-effort snapshot; lock only protects enqueue/dequeue/depth updates. */
-				num_frames = (int) o->txq.depth;
+				/* Atomic best-effort snapshot; lock only protects list mutations. */
+				num_frames = (int) simpleusb_txq_depth_get(o);
 				if (num_frames < 1) {
 					struct ast_frame wf = {
 						.frametype = AST_FRAME_TEXT,
