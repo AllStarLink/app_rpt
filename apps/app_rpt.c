@@ -4811,32 +4811,18 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	while (ms >= 0) {
 		ms = MSWAIT;
 		n = 0;
-		/*
-		 * Poll l->pchan last. ast_waitfor_nandfds() builds its pollfd array channel by
-		 * channel and lets later channels "override previous winners", so when both
-		 * channels are ready only the last one gets its fd recorded via
-		 * ast_channel_fdno_set(). A channel carrying an fd that only its own reader can
-		 * clear - a timer fd installed by a framehook, say - then has that event
-		 * swallowed whenever the other channel wins the tie, and because such fds are
-		 * level triggered ast_waitfor_n() stops blocking and this loop free-runs at
-		 * 100% CPU. Nothing puts such an fd on l->pchan today (see the altaudio comment
-		 * in struct rpt_link), and this ordering keeps it harmless if anything does.
-		 */
-		if (l->chan) {
-			cs[n++] = l->chan;
-		}
 		if (l->pchan) {
 			cs[n++] = l->pchan;
+		}
+		if (l->chan) {
+			cs[n++] = l->chan;
 		}
 		if (!n) {
 			break;
 		}
+
 		who = ast_waitfor_n(cs, n, &ms);
-		if (!who) {
-			/* No winner: ast_waitfor_n() can return NULL without touching ms
-			 * (e.g. interrupted poll), so do not spin on a stale timeout. */
-			ms = 0;
-		}
+
 		if (periodic_process_link(myrpt, l, rpt_time_elapsed(&looptimestart))) {
 			break;
 		}
@@ -8473,11 +8459,11 @@ static int reload(void)
 	return AST_MODULE_RELOAD_SUCCESS;
 }
 /* clang-format off */
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application", 
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Radio Repeater/Remote Base Application",
 	.support_level = AST_MODULE_SUPPORT_EXTENDED,
-	.load = load_module, 
-	.unload = unload_module, 
-	.reload = reload, 
-	.requires = "res_curl, bridge_softmix, chan_bridge_media", 
+	.load = load_module,
+	.unload = unload_module,
+	.reload = reload,
+	.requires = "res_curl, bridge_softmix, chan_bridge_media",
 );
 /* clang-format on */
