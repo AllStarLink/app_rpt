@@ -4064,6 +4064,10 @@ static inline void mix_altaudio(struct rpt_link *l, struct ast_frame *f)
 /*! Voice-frame FIFO helpers (O(1) depth instead of AST_LIST_TRAVERSE counts). */
 static inline void rpt_framelist_enqueue(rpt_framelist_t *q, unsigned int *depth, struct ast_frame *f)
 {
+	if (!q || !depth || !f) {
+		ast_log(LOG_ERROR, "rpt_framelist_enqueue: NULL q/depth/frame\n");
+		return;
+	}
 	memset(&f->frame_list, 0, sizeof(f->frame_list));
 	AST_LIST_INSERT_TAIL(q, f, frame_list);
 	(*depth)++;
@@ -4071,10 +4075,20 @@ static inline void rpt_framelist_enqueue(rpt_framelist_t *q, unsigned int *depth
 
 static inline struct ast_frame *rpt_framelist_dequeue(rpt_framelist_t *q, unsigned int *depth)
 {
-	struct ast_frame *f = AST_LIST_REMOVE_HEAD(q, frame_list);
+	struct ast_frame *f;
 
-	if (f && *depth) {
-		(*depth)--;
+	if (!q || !depth) {
+		ast_log(LOG_ERROR, "rpt_framelist_dequeue: NULL q/depth\n");
+		return NULL;
+	}
+	f = AST_LIST_REMOVE_HEAD(q, frame_list);
+	if (f) {
+		if (*depth) {
+			(*depth)--;
+		} else {
+			ast_log(LOG_ERROR, "rpt_framelist_dequeue: depth underflow\n");
+			*depth = 0;
+		}
 	}
 	return f;
 }
@@ -4083,6 +4097,10 @@ static inline void rpt_framelist_flush(rpt_framelist_t *q, unsigned int *depth)
 {
 	struct ast_frame *f;
 
+	if (!q || !depth) {
+		ast_log(LOG_ERROR, "rpt_framelist_flush: NULL q/depth\n");
+		return;
+	}
 	while ((f = AST_LIST_REMOVE_HEAD(q, frame_list))) {
 		ast_frfree(f);
 	}
@@ -4096,6 +4114,10 @@ static inline void rpt_framelist_flush(rpt_framelist_t *q, unsigned int *depth)
  */
 static inline int rpt_framelist_pad_silent(rpt_framelist_t *q, unsigned int *depth, struct ast_frame *template, unsigned int target)
 {
+	if (!q || !depth || !template) {
+		ast_log(LOG_ERROR, "rpt_framelist_pad_silent: NULL q/depth/template\n");
+		return -1;
+	}
 	while (*depth < target) {
 		struct ast_frame *f1 = ast_frdup(template);
 
@@ -4114,6 +4136,10 @@ static inline int rpt_framelist_pad_silent(rpt_framelist_t *q, unsigned int *dep
  */
 static inline struct ast_frame *rpt_framelist_take_or_mute(rpt_framelist_t *q, unsigned int *depth, struct ast_frame *f)
 {
+	if (!q || !depth || !f) {
+		ast_log(LOG_ERROR, "rpt_framelist_take_or_mute: NULL q/depth/frame\n");
+		return f;
+	}
 	if (!*depth) {
 		RPT_MUTE_FRAME(f);
 		return f;

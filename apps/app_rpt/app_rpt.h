@@ -553,7 +553,11 @@ struct rpt_frame_queue {
 	struct ast_frame *lastf1, *lastf2;
 };
 
-/*! Voice-frame FIFO used for simplex delay queues (with parallel depth counters). */
+/*!
+ * Voice-frame FIFO used for simplex delay queues (with parallel depth counters).
+ * Typedef keeps the shared enqueue/dequeue helpers readable; other lists (e.g. textq)
+ * that do not need a depth counter keep the expanded AST_LIST_HEAD_NOLOCK form.
+ */
 typedef AST_LIST_HEAD_NOLOCK(, ast_frame) rpt_framelist_t;
 
 enum rpt_link_disconnect {
