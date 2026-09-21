@@ -1351,9 +1351,8 @@ static void *hidthread(void *arg)
 				o->rxhidctcss = ctcssed;
 			}
 
-			ast_mutex_lock(&o->txq.lock);
+			/* Best-effort snapshot; lock only protects enqueue/dequeue/depth updates. */
 			txreq = o->txq.depth != 0;
-			ast_mutex_unlock(&o->txq.lock);
 			txreq = txreq || o->txkeyed || o->txtestkey || o->echoing;
 			lasttxtmp = o->lasttx;
 
@@ -2252,10 +2251,8 @@ static void *simpleusb_audio_thread(void *arg)
 			for (;;) {
 				long frames_available;
 
-				num_frames = 0;
-				ast_mutex_lock(&o->txq.lock);
+				/* Best-effort snapshot; lock only protects enqueue/dequeue/depth updates. */
 				num_frames = (int) o->txq.depth;
-				ast_mutex_unlock(&o->txq.lock);
 				if (o->txkeyed) {
 					ast_debug(7, "blocks used %d, Dest Buffer %d", num_frames, o->simpleusb_write_dst);
 				}
@@ -2481,9 +2478,8 @@ static void *simpleusb_audio_thread(void *arg)
 			 * we are finished.
 			 */
 			if (o->waspager) {
-				ast_mutex_lock(&o->txq.lock);
+				/* Best-effort snapshot; lock only protects enqueue/dequeue/depth updates. */
 				num_frames = (int) o->txq.depth;
-				ast_mutex_unlock(&o->txq.lock);
 				if (num_frames < 1) {
 					struct ast_frame wf = {
 						.frametype = AST_FRAME_TEXT,

@@ -2349,10 +2349,9 @@ static void *usbradio_audio_thread(void *arg)
 			 * Drain Asterisk TX into XPMR when PortAudio has room. If the device
 			 * claims OK but the hardware TX buffer is not draining, txq backs up
 			 * and MAX_FRAME_DELAY restarts the stream (same idea as simpleusb).
+			 * Depth is a best-effort snapshot; lock only protects enqueue/dequeue.
 			 */
-			ast_mutex_lock(&o->txq.lock);
 			num_frames = (int) o->txq.depth;
-			ast_mutex_unlock(&o->txq.lock);
 
 			/* One queued frame per available output block */
 			if (tx_write_ready) {
