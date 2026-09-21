@@ -43,7 +43,7 @@ static struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS };
 AST_MUTEX_DEFINE_STATIC(nodelookuplock);
 AST_MUTEX_DEFINE_STATIC(dns_node_domain_lock);
 
-static char rpt_dns_node_domain[MAX_DNS_NODE_DOMAIN_LEN + 1] = DEFAULT_DNS_NODE_DOMAIN;
+static char rpt_dns_node_domain[MAX_DNS_NODE_DOMAIN_CONFIG_LEN + 1] = DEFAULT_DNS_NODE_DOMAIN;
 
 int retrieve_astcfgint(struct rpt *myrpt, const char *category, const char *name, int min, int max, int defl)
 {
@@ -390,8 +390,8 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 	int res;
 	size_t node_length = strlen(node);
 
-	/* we require at least a node length of 4 digits */
-	if (node_length < 4 || node_length > MAX_DNS_NODE_LABEL_LEN) {
+	/* we require at least 4 digits; upper bound follows configured max_dns_node_length */
+	if (node_length < 4 || node_length > (size_t) rpt_max_dns_node_length) {
 		return -1;
 	}
 
@@ -414,9 +414,8 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 			return -1;
 		}
 		/*
-		 * Relative DNS presentation names are limited to 253 characters.
-		 * Absolute names may be 254 when they end with the root '.'.
-		 * This is not truncation: res == 254 is accepted only with a trailing root dot.
+		 * The completed QNAME (_iax._udp.<node>.<domain>) must fit RFC 1035
+		 * presentation limits: 253 relative, or 254 when absolute with a root '.'.
 		 */
 		if ((size_t) res > MAX_DNS_NODE_DOMAIN_LEN + (domain[res - 1] == '.')) {
 			return -1;
@@ -1452,7 +1451,7 @@ int rpt_is_valid_dns_name(const char *dns_name)
 			}
 			label_length++;
 			/* labels cannot exceed the max label length */
-			if (label_length > MAX_DNS_NODE_LABEL_LEN) {
+			if (label_length > MAX_DNS_LABEL_LEN) {
 				return 0;
 			}
 			label_start = 0;

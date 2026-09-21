@@ -6209,10 +6209,9 @@ static int is_valid_dns_node_domain(const char *dns_name)
 	}
 
 	dns_name_length = strlen(dns_name);
-	/* Relative names max 253; absolute names may be 254 with a trailing root '.' */
+	/* Full QNAME (_iax._udp.<node>.<domain>) max 253; absolute may be 254 with root '.' */
 	max_lookup_length = MAX_DNS_NODE_DOMAIN_LEN + (dns_name[dns_name_length - 1] == '.');
-	/* "_iax._udp." + max node label + "." + configured domain */
-	return sizeof("_iax._udp.") - 1 + MAX_DNS_NODE_LABEL_LEN + sizeof(".") - 1 + dns_name_length <= max_lookup_length;
+	return DNS_SRV_LABEL_LEN + dns_name_length <= max_lookup_length;
 }
 
 static int load_config(int reload)
@@ -6284,8 +6283,8 @@ static int load_config(int reload)
 		if (i < 4) {
 			i = 4;
 		}
-		if (i > 63) {
-			i = 63;
+		if (i > MAX_DNS_NODE_DIGITS) {
+			i = MAX_DNS_NODE_DIGITS;
 		}
 		rpt_max_dns_node_length = i;
 	}
