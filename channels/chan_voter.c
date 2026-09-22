@@ -387,6 +387,12 @@ enum voter_buffer_silence_flags {
 	DO_SILENCE
 };
 
+/*! Bit flags for voter_pvt.sync_inited */
+#define VOTER_SYNC_TXQLOCK (1u << 0)
+#define VOTER_SYNC_PAGERQLOCK (1u << 1)
+#define VOTER_SYNC_XMIT_LOCK (1u << 2)
+#define VOTER_SYNC_XMIT_COND (1u << 3)
+
 /* vdesc and type are used when Asterisk interacts with our module. */
 static const char vdesc[] = "radio Voter channel driver";
 static char type[] = "voter";
@@ -580,6 +586,8 @@ struct voter_pvt {
 	AST_LIST_HEAD_NOLOCK(, ast_frame) pagerq;
 	ast_mutex_t txqlock;
 	ast_mutex_t pagerqlock;
+	/*! Bitmask of successfully initialized sync objects (VOTER_SYNC_*). */
+	unsigned int sync_inited;
 };
 struct voter_pvt *pvts = NULL;
 
@@ -1102,6 +1110,99 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 }
 
 /*!
+ * \brief Free DSP, translator paths, and other media resources that may be only partially initialized.
+ * Call only after any xmit thread has been joined.
+ */
+static void voter_pvt_free_media(struct voter_pvt *p)
+{
+	struct ast_frame *f;
+
+	if (p->dsp) {
+		ast_dsp_free(p->dsp);
+		p->dsp = NULL;
+	}
+	if (p->adpcmin) {
+		ast_translator_free_path(p->adpcmin);
+		p->adpcmin = NULL;
+	}
+	if (p->adpcmout) {
+		ast_translator_free_path(p->adpcmout);
+		p->adpcmout = NULL;
+	}
+	if (p->toast) {
+		ast_translator_free_path(p->toast);
+		p->toast = NULL;
+	}
+	if (p->toast1) {
+		ast_translator_free_path(p->toast1);
+		p->toast1 = NULL;
+	}
+	if (p->fromast) {
+		ast_translator_free_path(p->fromast);
+		p->fromast = NULL;
+	}
+	if (p->pmrChan) {
+		destroyPmrChannel(p->pmrChan);
+		p->pmrChan = NULL;
+	}
+	if (p->adpcmf1) {
+		ast_frfree(p->adpcmf1);
+		p->adpcmf1 = NULL;
+	}
+	if (p->recfp) {
+		fclose(p->recfp);
+		p->recfp = NULL;
+	}
+	if (p->sync_inited & VOTER_SYNC_TXQLOCK) {
+		ast_mutex_lock(&p->txqlock);
+		while ((f = AST_LIST_REMOVE_HEAD(&p->txq, frame_list))) {
+			ast_frfree(f);
+		}
+		ast_mutex_unlock(&p->txqlock);
+	}
+	if (p->sync_inited & VOTER_SYNC_PAGERQLOCK) {
+		ast_mutex_lock(&p->pagerqlock);
+		while ((f = AST_LIST_REMOVE_HEAD(&p->pagerq, frame_list))) {
+			ast_frfree(f);
+		}
+		ast_mutex_unlock(&p->pagerqlock);
+	}
+}
+
+/*!
+ * \brief Destroy dynamically initialized sync objects on a voter_pvt.
+ * Call after any xmit thread has been joined and before ast_free(p).
+ * Only objects that successfully initialized are destroyed.
+ */
+static void voter_pvt_destroy_locks(struct voter_pvt *p)
+{
+	if (p->sync_inited & VOTER_SYNC_TXQLOCK) {
+		ast_mutex_destroy(&p->txqlock);
+	}
+	if (p->sync_inited & VOTER_SYNC_PAGERQLOCK) {
+		ast_mutex_destroy(&p->pagerqlock);
+	}
+	if (p->sync_inited & VOTER_SYNC_XMIT_LOCK) {
+		ast_mutex_destroy(&p->xmit_lock);
+	}
+	if (p->sync_inited & VOTER_SYNC_XMIT_COND) {
+		ast_cond_destroy(&p->xmit_cond);
+	}
+	p->sync_inited = 0;
+}
+
+/*!
+ * \brief Release media resources, sync objects, and free p.
+ * For voter_request failure exits before the pvt is linked / owned by a channel.
+ */
+static void voter_pvt_free(struct voter_pvt *p)
+{
+	voter_pvt_free_media(p);
+	voter_pvt_destroy_locks(p);
+	ast_free(p);
+}
+
+/*!
  * \brief Channel driver hangup callback to core.
  *
  * \param c 			Asterisk channel.
@@ -1110,30 +1211,12 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 static int voter_hangup(struct ast_channel *ast)
 {
 	struct voter_pvt *q, *p = ast_channel_tech_pvt(ast);
+	pthread_t xmit_thread = AST_PTHREADT_NULL;
 
 	ast_debug(1, "Channel %s: Hangup\n", ast_channel_name(ast));
 	if (!p) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
-	}
-	/* Free our resources. */
-	if (p->dsp) {
-		ast_dsp_free(p->dsp);
-	}
-	if (p->adpcmin) {
-		ast_translator_free_path(p->adpcmin);
-	}
-	if (p->adpcmout) {
-		ast_translator_free_path(p->adpcmout);
-	}
-	if (p->toast) {
-		ast_translator_free_path(p->toast);
-	}
-	if (p->toast1) {
-		ast_translator_free_path(p->toast1);
-	}
-	if (p->fromast) {
-		ast_translator_free_path(p->fromast);
 	}
 	ast_mutex_lock(&voter_lock);
 	for (q = pvts; q->next; q = q->next) {
@@ -1148,16 +1231,22 @@ static int voter_hangup(struct ast_channel *ast)
 		pvts = p->next;
 	}
 	if (p->xmit_thread) {
-		p->kill_xmit_thread = 1;
 		ast_mutex_lock(&p->xmit_lock);
+		p->kill_xmit_thread = 1;
 		ast_cond_signal(&p->xmit_cond);
 		ast_mutex_unlock(&p->xmit_lock);
-		pthread_join(p->xmit_thread, NULL);
+		xmit_thread = p->xmit_thread;
+		p->xmit_thread = AST_PTHREADT_NULL;
 	}
 	ast_mutex_unlock(&voter_lock);
+	if (xmit_thread != AST_PTHREADT_NULL) {
+		pthread_join(xmit_thread, NULL);
+	}
 	if (p->u) {
 		ast_module_user_remove(p->u);
 	}
+	voter_pvt_free_media(p);
+	voter_pvt_destroy_locks(p);
 	ast_free(p);
 	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
@@ -3323,9 +3412,17 @@ static void *voter_xmit(void *data)
 	} pingpacket;
 #pragma pack(pop)
 
-	while (run_forever && !ast_shutting_down() && !p->kill_xmit_thread) {
+	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_lock(&p->xmit_lock);
+		if (p->kill_xmit_thread) {
+			ast_mutex_unlock(&p->xmit_lock);
+			break;
+		}
 		ast_cond_wait(&p->xmit_cond, &p->xmit_lock);
+		if (p->kill_xmit_thread) {
+			ast_mutex_unlock(&p->xmit_lock);
+			break;
+		}
 		ast_mutex_unlock(&p->xmit_lock);
 		if (!p->drained_once) {
 			p->drained_once = 1;
@@ -3912,14 +4009,34 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		return NULL;
 	}
 	p->nodenum = strtoul((char *) data, NULL, 0);
-	ast_mutex_init(&p->txqlock);
-	ast_mutex_init(&p->pagerqlock);
-	ast_mutex_init(&p->xmit_lock);
-	ast_cond_init(&p->xmit_cond, NULL);
+	if (ast_mutex_init(&p->txqlock)) {
+		ast_log(LOG_ERROR, "VOTER %i: Failed to initialize txqlock\n", p->nodenum);
+		ast_free(p);
+		return NULL;
+	}
+	p->sync_inited |= VOTER_SYNC_TXQLOCK;
+	if (ast_mutex_init(&p->pagerqlock)) {
+		ast_log(LOG_ERROR, "VOTER %i: Failed to initialize pagerqlock\n", p->nodenum);
+		voter_pvt_free(p);
+		return NULL;
+	}
+	p->sync_inited |= VOTER_SYNC_PAGERQLOCK;
+	if (ast_mutex_init(&p->xmit_lock)) {
+		ast_log(LOG_ERROR, "VOTER %i: Failed to initialize xmit_lock\n", p->nodenum);
+		voter_pvt_free(p);
+		return NULL;
+	}
+	p->sync_inited |= VOTER_SYNC_XMIT_LOCK;
+	if (ast_cond_init(&p->xmit_cond, NULL)) {
+		ast_log(LOG_ERROR, "VOTER %i: Failed to initialize xmit_cond\n", p->nodenum);
+		voter_pvt_free(p);
+		return NULL;
+	}
+	p->sync_inited |= VOTER_SYNC_XMIT_COND;
 	p->dsp = ast_dsp_new();
 	if (!p->dsp) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get DSP!!\n", p->nodenum);
-		ast_free(p);
+		voter_pvt_free(p);
 		return NULL;
 	}
 	ast_dsp_set_features(p->dsp, DSP_FEATURE_DIGIT_DETECT);
@@ -3928,36 +4045,31 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	p->adpcmin = ast_translator_build_path(ast_format_ulaw, ast_format_adpcm);
 	if (!p->adpcmin) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from adpcm to ulaw!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
+		voter_pvt_free(p);
 		return NULL;
 	}
 	p->adpcmout = ast_translator_build_path(ast_format_adpcm, ast_format_ulaw);
 	if (!p->adpcmout) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to adpcm!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
+		voter_pvt_free(p);
 		return NULL;
 	}
 	p->toast = ast_translator_build_path(ast_format_slin, ast_format_ulaw);
 	if (!p->toast) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
+		voter_pvt_free(p);
 		return NULL;
 	}
 	p->toast1 = ast_translator_build_path(ast_format_slin, ast_format_ulaw);
 	if (!p->toast1) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
+		voter_pvt_free(p);
 		return NULL;
 	}
 	p->fromast = ast_translator_build_path(ast_format_ulaw, ast_format_slin);
 	if (!p->fromast) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from slinear to ulaw!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
+		voter_pvt_free(p);
 		return NULL;
 	}
 	/* Allocate a new Asterisk channel for this voter instance and get the assigned pointer. The channel request
@@ -3978,7 +4090,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	chan = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s", (char *) data);
 	if (!chan) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot alloc new Asterisk channel\n", p->nodenum);
-		ast_free(p);
+		voter_pvt_free(p);
 		return NULL;
 	} else {
 		ast_log(LOG_NOTICE, "Asterisk channel created for Voter/%i\n", p->nodenum);
