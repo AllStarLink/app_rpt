@@ -4517,11 +4517,32 @@ static int unload_module(void)
 
 	stoppulser = 1;
 
+	/* Block new channel requests before waiting for existing owners to detach. */
+	ast_channel_unregister(&simpleusb_tech);
+
+	for (o = simpleusb_default.next; o; o = o->next) {
+		if (o->owner) {
+			int wait_ms = 0;
+
+			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
+			while (o->owner && wait_ms < 5000) {
+				usleep(1000);
+				wait_ms++;
+			}
+			if (o->owner) {
+				ast_log(LOG_WARNING, "Channel %s: owner still attached after %d ms during unload; aborting unload\n", o->name, wait_ms);
+				if (ast_channel_register(&simpleusb_tech)) {
+					ast_log(LOG_ERROR, "Unable to re-register channel type 'usb' after aborted unload\n");
+				}
+				return -1;
+			}
+		}
+	}
+
+	ast_cli_unregister_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
+
 	for (o = simpleusb_default.next; o; o = no) {
 		no = o->next; /* Keep track of next object after free */
-		if (o->owner) {
-			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
-		}
 		o->stopaudiothread = 1;
 		o->stophidthread = 1;
 		kickptt(o);
@@ -4539,19 +4560,46 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
+			/* Channels may shallow-copy default gpio strings; free only owned ones. */
+			if (o->gpios[i] && o->gpios[i] != simpleusb_default.gpios[i]) {
 				ast_free(o->gpios[i]);
 			}
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
+			if (o->pps[i] && o->pps[i] != simpleusb_default.pps[i]) {
 				ast_free(o->pps[i]);
 			}
 		}
 		ast_free(o->name);
 		simpleusb_release_device(o);
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->swap_lock);
 		ast_free(o);
 	}
+
+	/* general/default pvt is not on the linked list but still got mutex_init */
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (simpleusb_default.gpios[i]) {
+			ast_free(simpleusb_default.gpios[i]);
+			simpleusb_default.gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(simpleusb_default.pps); i++) {
+		if (simpleusb_default.pps[i]) {
+			ast_free(simpleusb_default.pps[i]);
+			simpleusb_default.pps[i] = NULL;
+		}
+	}
+	ast_mutex_destroy(&simpleusb_default.echolock);
+	ast_mutex_destroy(&simpleusb_default.eepromlock);
+	ast_mutex_destroy(&simpleusb_default.txqlock);
+	ast_mutex_destroy(&simpleusb_default.usblock);
+	ast_mutex_destroy(&simpleusb_default.device_lock);
+	ast_mutex_destroy(&simpleusb_default.swap_lock);
 
 #if DEBUG_CAPTURES == 1
 	if (frxcapraw) {
@@ -4567,8 +4615,6 @@ static int unload_module(void)
 		ftxcapraw = NULL;
 	}
 #endif
-	ast_channel_unregister(&simpleusb_tech);
-	ast_cli_unregister_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
 	ao2_cleanup(simpleusb_tech.capabilities);
 	simpleusb_tech.capabilities = NULL;
 
