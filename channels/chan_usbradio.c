@@ -516,47 +516,43 @@ static int __attribute__((format(printf, 3, 4))) usbradio_log_fault(struct chan_
 /* txq.depth/high_water: atomic so advisory reads may omit txq.lock; list mutations still take the lock. */
 static unsigned int usbradio_txq_depth_get(const struct chan_usbradio_pvt *o)
 {
-	return __atomic_load_n(&o->txq.depth, __ATOMIC_RELAXED);
+	return ast_atomic_fetch_add(&o->txq.depth, 0, __ATOMIC_RELAXED);
 }
 
 static unsigned int usbradio_txq_high_water_get(const struct chan_usbradio_pvt *o)
 {
-	return __atomic_load_n(&o->txq.high_water, __ATOMIC_RELAXED);
+	return ast_atomic_fetch_add(&o->txq.high_water, 0, __ATOMIC_RELAXED);
 }
 
 static void usbradio_txq_depth_inc(struct chan_usbradio_pvt *o)
 {
 	unsigned int depth;
-	unsigned int high_water;
 
-	depth = __atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
-	high_water = __atomic_load_n(&o->txq.high_water, __ATOMIC_RELAXED);
-	if (depth > high_water) {
-		__atomic_store_n(&o->txq.high_water, depth, __ATOMIC_RELAXED);
+	depth = ast_atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
+	if (depth > o->txq.high_water) {
+		o->txq.high_water = depth;
 	}
 }
 
 static void usbradio_txq_depth_dec(struct chan_usbradio_pvt *o)
 {
-	unsigned int depth = __atomic_load_n(&o->txq.depth, __ATOMIC_RELAXED);
+	unsigned int prev = ast_atomic_fetch_sub(&o->txq.depth, 1, __ATOMIC_RELAXED);
 
-	if (depth) {
-		__atomic_store_n(&o->txq.depth, depth - 1, __ATOMIC_RELAXED);
-	} else {
+	if (!prev) {
 		ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
-		__atomic_store_n(&o->txq.depth, 0, __ATOMIC_RELAXED);
+		ast_atomic_and_fetch(&o->txq.depth, 0, __ATOMIC_RELAXED);
 	}
 }
 
 static void usbradio_txq_counters_clear(struct chan_usbradio_pvt *o)
 {
-	__atomic_store_n(&o->txq.depth, 0, __ATOMIC_RELAXED);
-	__atomic_store_n(&o->txq.high_water, 0, __ATOMIC_RELAXED);
+	ast_atomic_and_fetch(&o->txq.depth, 0, __ATOMIC_RELAXED);
+	ast_atomic_and_fetch(&o->txq.high_water, 0, __ATOMIC_RELAXED);
 }
 
 static void usbradio_txq_high_water_clear(struct chan_usbradio_pvt *o)
 {
-	__atomic_store_n(&o->txq.high_water, 0, __ATOMIC_RELAXED);
+	ast_atomic_and_fetch(&o->txq.high_water, 0, __ATOMIC_RELAXED);
 }
 
 static void usbradio_device_identity(struct chan_usbradio_pvt *o, char *devstr, size_t devstr_size, char *serial,

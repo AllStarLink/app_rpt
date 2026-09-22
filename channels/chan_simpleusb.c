@@ -404,29 +404,27 @@ static int __attribute__((format(printf, 3, 4))) simpleusb_log_fault(struct chan
 /* txq.depth: atomic so advisory reads may omit txq.lock; list mutations still take the lock. */
 static unsigned int simpleusb_txq_depth_get(const struct chan_simpleusb_pvt *o)
 {
-	return __atomic_load_n(&o->txq.depth, __ATOMIC_RELAXED);
+	return ast_atomic_fetch_add(&o->txq.depth, 0, __ATOMIC_RELAXED);
 }
 
 static void simpleusb_txq_depth_inc(struct chan_simpleusb_pvt *o)
 {
-	__atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
+	ast_atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
 }
 
 static void simpleusb_txq_depth_dec(struct chan_simpleusb_pvt *o)
 {
-	unsigned int depth = __atomic_load_n(&o->txq.depth, __ATOMIC_RELAXED);
+	unsigned int prev = ast_atomic_fetch_sub(&o->txq.depth, 1, __ATOMIC_RELAXED);
 
-	if (depth) {
-		__atomic_store_n(&o->txq.depth, depth - 1, __ATOMIC_RELAXED);
-	} else {
+	if (!prev) {
 		ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
-		__atomic_store_n(&o->txq.depth, 0, __ATOMIC_RELAXED);
+		ast_atomic_and_fetch(&o->txq.depth, 0, __ATOMIC_RELAXED);
 	}
 }
 
 static void simpleusb_txq_depth_clear(struct chan_simpleusb_pvt *o)
 {
-	__atomic_store_n(&o->txq.depth, 0, __ATOMIC_RELAXED);
+	ast_atomic_and_fetch(&o->txq.depth, 0, __ATOMIC_RELAXED);
 }
 
 static void simpleusb_device_identity(struct chan_simpleusb_pvt *o, char *devstr, size_t devstr_size, char *serial,
