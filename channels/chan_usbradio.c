@@ -2031,13 +2031,13 @@ static int usbradio_hangup(struct ast_channel *c)
 		pthread_join(o->hidthread, NULL);
 		o->hidthread = AST_PTHREADT_NULL;
 	}
-	ast_channel_tech_pvt_set(c, NULL);
-	o->owner = NULL;
-	ast_module_unref(ast_module_info->self);
 	if (o->hookstate) {
 		o->hookstate = 0;
 	}
 	ast_radio_pa_stop(&o->pa);
+	ast_channel_tech_pvt_set(c, NULL);
+	o->owner = NULL;
+	ast_module_unref(ast_module_info->self);
 
 	return 0;
 }
@@ -5915,15 +5915,37 @@ static int load_module(void)
 
 static int unload_module(void)
 {
-	struct chan_usbradio_pvt *o;
+	struct chan_usbradio_pvt *o, *no;
 	int i;
 
 	stoppulser = 1;
 
+	/* Block new channel requests before waiting for existing owners to detach. */
 	ast_channel_unregister(&usbradio_tech);
-	ast_cli_unregister_multiple(cli_usbradio, sizeof(cli_usbradio) / sizeof(struct ast_cli_entry));
 
 	for (o = usbradio_default.next; o; o = o->next) {
+		if (o->owner) {
+			int wait_ms = 0;
+
+			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
+			while (o->owner && wait_ms < 5000) {
+				usleep(1000);
+				wait_ms++;
+			}
+			if (o->owner) {
+				ast_log(LOG_WARNING, "Channel %s: owner still attached after %d ms during unload; aborting unload\n", o->name, wait_ms);
+				if (ast_channel_register(&usbradio_tech)) {
+					ast_log(LOG_ERROR, "Unable to re-register channel type 'usb' after aborted unload\n");
+				}
+				return -1;
+			}
+		}
+	}
+
+	ast_cli_unregister_multiple(cli_usbradio, sizeof(cli_usbradio) / sizeof(struct ast_cli_entry));
+
+	for (o = usbradio_default.next; o; o = no) {
+		no = o->next; /* Keep track of next object after free */
 #if DEBUG_CAPTURES == 1
 		if (frxcapraw) {
 			fclose(frxcapraw);
@@ -5951,9 +5973,7 @@ static int unload_module(void)
 		}
 #endif
 
-		if (o->owner) {
-			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
-		}
+		/* Hangup already joined workers when an owner was present; stop any leftovers. */
 		o->stopaudiothread = 1;
 		o->stophid = 1;
 		kickptt(o);
@@ -5975,16 +5995,45 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
+			/* Channels may shallow-copy default gpio strings; free only owned ones. */
+			if (o->gpios[i] && o->gpios[i] != usbradio_default.gpios[i]) {
 				ast_free(o->gpios[i]);
 			}
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
+			if (o->pps[i] && o->pps[i] != usbradio_default.pps[i]) {
 				ast_free(o->pps[i]);
 			}
 		}
+		ast_free(o->name);
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->swap_lock);
+		ast_free(o);
 	}
+
+	/* general/default pvt is not on the linked list but still got mutex_init */
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (usbradio_default.gpios[i]) {
+			ast_free(usbradio_default.gpios[i]);
+			usbradio_default.gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(usbradio_default.pps); i++) {
+		if (usbradio_default.pps[i]) {
+			ast_free(usbradio_default.pps[i]);
+			usbradio_default.pps[i] = NULL;
+		}
+	}
+	ast_mutex_destroy(&usbradio_default.echolock);
+	ast_mutex_destroy(&usbradio_default.eepromlock);
+	ast_mutex_destroy(&usbradio_default.usblock);
+	ast_mutex_destroy(&usbradio_default.device_lock);
+	ast_mutex_destroy(&usbradio_default.txqlock);
+	ast_mutex_destroy(&usbradio_default.swap_lock);
 
 	ao2_cleanup(usbradio_tech.capabilities);
 	usbradio_tech.capabilities = NULL;
