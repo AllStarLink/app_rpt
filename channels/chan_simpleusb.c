@@ -402,7 +402,7 @@ static int __attribute__((format(printf, 3, 4))) simpleusb_log_fault(struct chan
 }
 
 /* txq.depth: atomic so advisory reads may omit txq.lock; list mutations still take the lock. */
-static unsigned int simpleusb_txq_depth_get(const struct chan_simpleusb_pvt *o)
+static unsigned int simpleusb_txq_depth_get(struct chan_simpleusb_pvt *o)
 {
 	return ast_atomic_fetch_add(&o->txq.depth, 0, __ATOMIC_RELAXED);
 }
