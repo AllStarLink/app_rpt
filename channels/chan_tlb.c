@@ -914,6 +914,7 @@ static void TLB_destroy(struct TLB_pvt *p)
 		ast_free(qptlb);
 	}
 	ast_module_user_remove(p->u);
+	ast_mutex_destroy(&p->lock);
 	ast_free(p);
 }
 
@@ -943,7 +944,11 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 
 	pvt = ast_calloc(1, sizeof(struct TLB_pvt));
 	if (pvt) {
-		ast_mutex_init(&pvt->lock);
+		if (ast_mutex_init(&pvt->lock)) {
+			ast_log(LOG_ERROR, "Unable to initialize TheLinkBox channel lock for %s\n", (char *) data);
+			ast_free(pvt);
+			return NULL;
+		}
 		snprintf(pvt->stream, sizeof(pvt->stream), "%s-%lu", (char *) data, instances[n]->seqno++);
 		pvt->rxqast.qe_forw = &pvt->rxqast;
 		pvt->rxqast.qe_back = &pvt->rxqast;
@@ -1380,9 +1385,13 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 }
 
 /*!
- * \brief Free node.  Empty routine.
+ * \brief Free a TLB_node key previously inserted with tsearch/do_new_call.
+ * Used by tdestroy() during module unload.
  */
-static void free_node(void *nodep) {}
+static void free_node(void *nodep)
+{
+	ast_free(nodep);
+}
 
 /*!
  * \brief Find and delete a node from our internal node list.
@@ -2380,7 +2389,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	const char *val;
 	struct TLB_instance *instp;
 	struct sockaddr_in si_me;
-	pthread_attr_t attr;
 
 	if (ninstances >= TLB_MAX_INSTANCES) {
 		ast_log(LOG_ERROR, "Too many instances specified\n");
@@ -2392,10 +2400,15 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		return -1;
 	}
 
-	ast_mutex_init(&instp->lock);
+	if (ast_mutex_init(&instp->lock)) {
+		ast_log(LOG_ERROR, "Unable to initialize TheLinkBox instance lock for %s\n", ctg);
+		ast_free(instp);
+		return -1;
+	}
 	instp->audio_sock = -1;
 	instp->ctrl_sock = -1;
 	instp->fdr = -1;
+	instp->TLB_reader_thread = AST_PTHREADT_NULL;
 
 	val = ast_variable_retrieve(cfg, ctg, "ipaddr");
 	if (val) {
@@ -2513,9 +2526,24 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
 	fcntl(instp->ctrl_sock, F_SETFL, O_NONBLOCK);
 	ast_copy_string(instp->name, ctg, TLB_NAME_SIZE);
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&instp->TLB_reader_thread, &attr, TLB_reader, (void *) instp);
+	/* Joinable so unload can wait for the reader to exit after sockets close. */
+	if (ast_pthread_create(&instp->TLB_reader_thread, NULL, TLB_reader, (void *) instp)) {
+		ast_log(LOG_ERROR, "Unable to start TheLinkBox reader thread for %s\n", ctg);
+		close(instp->ctrl_sock);
+		instp->ctrl_sock = -1;
+		close(instp->audio_sock);
+		instp->audio_sock = -1;
+		instp->TLB_reader_thread = AST_PTHREADT_NULL;
+		ast_mutex_destroy(&instp->lock);
+		if (instp->ndenylist) {
+			ast_free(instp->denylist[0]);
+		}
+		if (instp->npermitlist) {
+			ast_free(instp->permitlist[0]);
+		}
+		ast_free(instp);
+		return -1;
+	}
 	instances[ninstances++] = instp;
 
 	ast_debug(1, "tlb: tlb/%s listening on %s port %s\n", instp->name, instp->ipaddr, instp->port);
@@ -2528,7 +2556,7 @@ static int unload_module(void)
 	int n;
 
 	run_forever = 0;
-	tdestroy(TLB_node_list, free_node);
+	/* Close sockets first so blocked reader polls wake and exit. */
 	for (n = 0; n < ninstances; n++) {
 		if (instances[n]->audio_sock != -1) {
 			close(instances[n]->audio_sock);
@@ -2543,6 +2571,22 @@ static int unload_module(void)
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&TLB_tech);
 	for (n = 0; n < ninstances; n++) {
+		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
+			pthread_join(instances[n]->TLB_reader_thread, NULL);
+			instances[n]->TLB_reader_thread = AST_PTHREADT_NULL;
+		}
+	}
+	/* Readers are gone; safe to tear down the node tree they walked. */
+	tdestroy(TLB_node_list, free_node);
+	TLB_node_list = NULL;
+	for (n = 0; n < ninstances; n++) {
+		ast_mutex_destroy(&instances[n]->lock);
+		if (instances[n]->ndenylist) {
+			ast_free(instances[n]->denylist[0]);
+		}
+		if (instances[n]->npermitlist) {
+			ast_free(instances[n]->permitlist[0]);
+		}
 		ast_free(instances[n]);
 	}
 
