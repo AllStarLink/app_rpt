@@ -418,7 +418,8 @@ static void simpleusb_txq_depth_dec(struct chan_simpleusb_pvt *o)
 
 	if (!prev) {
 		ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
-		ast_atomic_and_fetch(&o->txq.depth, 0, __ATOMIC_RELAXED);
+		/* Undo the wrapping fetch_sub; do not force 0 (may race with enqueue). */
+		ast_atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
 	}
 }
 

@@ -528,6 +528,7 @@ static void usbradio_txq_depth_inc(struct chan_usbradio_pvt *o)
 {
 	unsigned int depth;
 
+	/* Caller holds txq.lock so depth bump + high_water peak update stay paired. */
 	depth = ast_atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
 	if (depth > o->txq.high_water) {
 		o->txq.high_water = depth;
@@ -540,19 +541,22 @@ static void usbradio_txq_depth_dec(struct chan_usbradio_pvt *o)
 
 	if (!prev) {
 		ast_log(LOG_ERROR, "Channel %s: txq_depth underflow (queue/depth desync)\n", o->name);
-		ast_atomic_and_fetch(&o->txq.depth, 0, __ATOMIC_RELAXED);
+		/* Undo the wrapping fetch_sub; do not force 0 (may race with enqueue). */
+		ast_atomic_add_fetch(&o->txq.depth, 1, __ATOMIC_RELAXED);
 	}
 }
 
 static void usbradio_txq_counters_clear(struct chan_usbradio_pvt *o)
 {
-	ast_atomic_and_fetch(&o->txq.depth, 0, __ATOMIC_RELAXED);
-	ast_atomic_and_fetch(&o->txq.high_water, 0, __ATOMIC_RELAXED);
+	/* Caller holds txq.lock so both counters clear as one critical section. */
+	o->txq.depth = 0;
+	o->txq.high_water = 0;
 }
 
 static void usbradio_txq_high_water_clear(struct chan_usbradio_pvt *o)
 {
-	ast_atomic_and_fetch(&o->txq.high_water, 0, __ATOMIC_RELAXED);
+	/* Caller holds txq.lock. */
+	o->txq.high_water = 0;
 }
 
 static void usbradio_device_identity(struct chan_usbradio_pvt *o, char *devstr, size_t devstr_size, char *serial,
