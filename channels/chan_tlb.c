@@ -363,6 +363,11 @@ int ninstances = 0;
 /* binary search tree in memory, root node */
 static void *TLB_node_list = NULL;
 
+/*! Live TLB_pvt count (alloc/destroy); unload waits while nonzero. */
+static int tlb_live_pvts;
+/*! Set under instance locks; rejects new inbound calls in do_new_call. */
+static int tlb_unloading;
+
 static char *config = "tlb.conf";
 
 static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *cap, const struct ast_assigned_ids *assignedids,
@@ -916,6 +921,7 @@ static void TLB_destroy(struct TLB_pvt *p)
 	ast_module_user_remove(p->u);
 	ast_mutex_destroy(&p->lock);
 	ast_free(p);
+	__atomic_sub_fetch(&tlb_live_pvts, 1, __ATOMIC_RELAXED);
 }
 
 /*!
@@ -964,6 +970,7 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 		pvt->instp->confp = pvt; /* save for conference mode */
 		pvt->rxcodec = instances[n]->pref_rxcodec;
 		pvt->txcodec = instances[n]->pref_txcodec;
+		__atomic_add_fetch(&tlb_live_pvts, 1, __ATOMIC_RELAXED);
 	}
 	return pvt;
 }
@@ -976,38 +983,63 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 static int TLB_hangup(struct ast_channel *ast)
 {
 	struct TLB_pvt *p = ast_channel_tech_pvt(ast);
-	struct TLB_instance *instp = p->instp;
+	struct TLB_instance *instp;
 	int i, n;
 	unsigned char bye[50];
 	struct sockaddr_in sin;
+	char ip[TLB_IP_SIZE + 1];
+	uint16_t port;
+
+	ast_debug(1, "Hanging up (%s)\n", ast_channel_name(ast));
+	if (!p) {
+		return 0;
+	}
+	instp = p->instp;
+
+	/*
+	 * Hangup is entered with the channel locked. Ref/unlock before taking
+	 * instance locks or doing network I/O so we cannot deadlock against the
+	 * reader (instance lock then channel lock for queue_frame).
+	 */
+	ast_channel_ref(ast);
+	ast_channel_unlock(ast);
+
+	ast_copy_string(ip, p->ip, sizeof(ip));
+	port = p->port;
 
 	if (!instp->confmode) {
-		ast_debug(1, "Sent bye to IP address %s\n", p->ip);
+		ast_debug(1, "Sent bye to IP address %s\n", ip);
 
 		ast_mutex_lock(&instp->lock);
-		ast_copy_string(instp->TLB_node_test.ip, p->ip, sizeof(instp->TLB_node_test.ip));
-		instp->TLB_node_test.port = p->port;
+		ast_copy_string(instp->TLB_node_test.ip, ip, sizeof(instp->TLB_node_test.ip));
+		instp->TLB_node_test.port = port;
 		find_delete(&instp->TLB_node_test);
-		ast_softhangup(ast, AST_SOFTHANGUP_DEV);
-		p->hangup = 0;
+		if (instp->confp == p) {
+			instp->confp = NULL;
+		}
 		ast_mutex_unlock(&instp->lock);
 
 		n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 		sin.sin_family = AF_INET;
-		sin.sin_addr.s_addr = inet_addr(p->ip);
-		sin.sin_port = htons(p->port + 1);
+		sin.sin_addr.s_addr = inet_addr(ip);
+		sin.sin_port = htons(port + 1);
 		for (i = 0; i < 20; i++) {
 			sendto(instp->ctrl_sock, bye, n, 0, (struct sockaddr *) &sin, sizeof(sin));
 		}
+	} else {
+		ast_mutex_lock(&instp->lock);
+		if (instp->confp == p) {
+			instp->confp = NULL;
+		}
+		ast_mutex_unlock(&instp->lock);
 	}
-	ast_debug(1, "Hanging up (%s)\n", ast_channel_name(ast));
-	if (!ast_channel_tech_pvt(ast)) {
-		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
-		return 0;
-	}
+
+	ast_channel_lock(ast);
+	p->owner = NULL;
 	TLB_destroy(p);
 	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
+	ast_channel_unref(ast);
 	return 0;
 }
 
@@ -1705,6 +1737,7 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 		ast_channel_rings_set(tmp, 1);
 	}
 	ast_channel_tech_pvt_set(tmp, i);
+	i->owner = tmp;
 	ast_channel_context_set(tmp, instp->context);
 	ast_channel_exten_set(tmp, instp->astnode);
 	ast_channel_language_set(tmp, "");
@@ -1720,7 +1753,16 @@ static struct ast_channel *TLB_new(struct TLB_pvt *i, int state, unsigned int no
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(tmp)) {
 			ast_log(LOG_WARNING, "Unable to start PBX on %s\n", ast_channel_name(tmp));
+			/*
+			 * Detach before hangup so TLB_hangup does not free the pvt;
+			 * callers (TLB_request / do_new_call) still own it.
+			 */
+			ast_channel_lock(tmp);
+			i->owner = NULL;
+			ast_channel_tech_pvt_set(tmp, NULL);
+			ast_channel_unlock(tmp);
 			ast_hangup(tmp);
+			return NULL;
 		}
 	}
 	return tmp;
@@ -1785,6 +1827,11 @@ static struct ast_channel *TLB_request(const char *type, struct ast_format_cap *
 	if (p) {
 		tmp = TLB_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
 		if (!tmp) {
+			ast_mutex_lock(&p->instp->lock);
+			if (p->instp->confp == p) {
+				p->instp->confp = NULL;
+			}
+			ast_mutex_unlock(&p->instp->lock);
 			TLB_destroy(p);
 		}
 	}
@@ -2080,6 +2127,11 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	TLB_node_key->seqnum = 1;
 	TLB_node_key->instp = instp;
 	ast_mutex_lock(&instp->lock);
+	if (tlb_unloading) {
+		ast_mutex_unlock(&instp->lock);
+		ast_free(TLB_node_key);
+		return -1;
+	}
 	if (tsearch(TLB_node_key, &TLB_node_list, compare_ip)) {
 		ast_debug(1, "tlb: new CALL = %s, ip = %s, port = %u\n", TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
 		if (instp->confmode) {
@@ -2102,7 +2154,12 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 				TLB_node_key->p->port = instp->TLB_node_test.port;
 				chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum, NULL, NULL);
 				if (!chan) {
-					TLB_destroy(TLB_node_key->p);
+					tdelete(TLB_node_key, &TLB_node_list, compare_ip);
+					ast_free(TLB_node_key);
+					if (instp->confp == p) {
+						instp->confp = NULL;
+					}
+					TLB_destroy(p);
 					ast_mutex_unlock(&instp->lock);
 					return -1;
 				}
@@ -2551,12 +2608,172 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
-static int unload_module(void)
+/*! Snapshot used while collecting owners under instance locks during unload. */
+static struct {
+	struct ast_channel **owners;
+	int n;
+	int cap;
+} tlb_unload_snap;
+
+/*!
+ * \brief twalk visitor: collect referenced owners from the TLB node tree.
+ */
+static void tlb_collect_owner(const void *nodep, const VISIT which, const int depth)
+{
+	struct TLB_pvt *p;
+	struct ast_channel **tmp;
+
+	if ((which != leaf) && (which != postorder)) {
+		return;
+	}
+	p = (*(struct TLB_node **) nodep)->p;
+	if (!p || !p->owner) {
+		return;
+	}
+	if (tlb_unload_snap.n >= tlb_unload_snap.cap) {
+		int new_cap = tlb_unload_snap.cap ? tlb_unload_snap.cap * 2 : 8;
+
+		tmp = ast_realloc(tlb_unload_snap.owners, new_cap * sizeof(*tmp));
+		if (!tmp) {
+			return;
+		}
+		tlb_unload_snap.owners = tmp;
+		tlb_unload_snap.cap = new_cap;
+	}
+	tlb_unload_snap.owners[tlb_unload_snap.n++] = ast_channel_ref(p->owner);
+}
+
+/*!
+ * \brief Soft-hangup every TLB channel owner (node tree + conference pvts).
+ */
+static void tlb_softhangup_all_owners(void)
+{
+	int i, n;
+	struct ast_channel **tmp;
+
+	memset(&tlb_unload_snap, 0, sizeof(tlb_unload_snap));
+
+	/* Lock instances in index order to serialize against reader/find_delete. */
+	for (n = 0; n < ninstances; n++) {
+		ast_mutex_lock(&instances[n]->lock);
+	}
+	if (TLB_node_list) {
+		twalk(TLB_node_list, tlb_collect_owner);
+	}
+	for (n = 0; n < ninstances; n++) {
+		struct TLB_pvt *p = instances[n]->confp;
+		int found = 0;
+
+		if (!p || !p->owner) {
+			continue;
+		}
+		for (i = 0; i < tlb_unload_snap.n; i++) {
+			if (tlb_unload_snap.owners[i] == p->owner) {
+				found = 1;
+				break;
+			}
+		}
+		if (found) {
+			continue;
+		}
+		if (tlb_unload_snap.n >= tlb_unload_snap.cap) {
+			int new_cap = tlb_unload_snap.cap ? tlb_unload_snap.cap * 2 : 8;
+
+			tmp = ast_realloc(tlb_unload_snap.owners, new_cap * sizeof(*tmp));
+			if (!tmp) {
+				continue;
+			}
+			tlb_unload_snap.owners = tmp;
+			tlb_unload_snap.cap = new_cap;
+		}
+		tlb_unload_snap.owners[tlb_unload_snap.n++] = ast_channel_ref(p->owner);
+	}
+	for (n = ninstances - 1; n >= 0; n--) {
+		ast_mutex_unlock(&instances[n]->lock);
+	}
+
+	for (i = 0; i < tlb_unload_snap.n; i++) {
+		ast_softhangup(tlb_unload_snap.owners[i], AST_SOFTHANGUP_APPUNLOAD);
+		ast_channel_unref(tlb_unload_snap.owners[i]);
+	}
+	ast_free(tlb_unload_snap.owners);
+	memset(&tlb_unload_snap, 0, sizeof(tlb_unload_snap));
+}
+
+/*!
+ * \brief True if any TLB pvt, node, or conference channel is still active.
+ */
+static int tlb_channels_active(void)
+{
+	int n;
+	int active = 0;
+
+	for (n = 0; n < ninstances; n++) {
+		ast_mutex_lock(&instances[n]->lock);
+	}
+	if (__atomic_load_n(&tlb_live_pvts, __ATOMIC_RELAXED) > 0) {
+		active = 1;
+	} else if (TLB_node_list) {
+		active = 1;
+	} else {
+		for (n = 0; n < ninstances; n++) {
+			if (instances[n]->confp && instances[n]->confp->owner) {
+				active = 1;
+				break;
+			}
+		}
+	}
+	for (n = ninstances - 1; n >= 0; n--) {
+		ast_mutex_unlock(&instances[n]->lock);
+	}
+	return active;
+}
+
+/*!
+ * \brief Set or clear module unloading under all instance locks.
+ */
+static void tlb_set_unloading(int unloading)
 {
 	int n;
 
+	for (n = 0; n < ninstances; n++) {
+		ast_mutex_lock(&instances[n]->lock);
+	}
+	tlb_unloading = unloading ? 1 : 0;
+	for (n = ninstances - 1; n >= 0; n--) {
+		ast_mutex_unlock(&instances[n]->lock);
+	}
+}
+
+static int unload_module(void)
+{
+	int n;
+	int wait_ms;
+
+	/* Block new channel requests before waiting for existing owners to detach. */
+	ast_channel_unregister(&TLB_tech);
+
+	tlb_softhangup_all_owners();
+	for (wait_ms = 0; wait_ms < 5000; wait_ms++) {
+		if (!tlb_channels_active()) {
+			break;
+		}
+		tlb_softhangup_all_owners();
+		usleep(1000);
+	}
+	/* Reject inbound do_new_call races before the final idle check. */
+	tlb_set_unloading(1);
+	if (tlb_channels_active()) {
+		ast_log(LOG_WARNING, "TheLinkBox: channel(s) still active after %d ms during unload; aborting unload\n", wait_ms);
+		tlb_set_unloading(0);
+		if (ast_channel_register(&TLB_tech)) {
+			ast_log(LOG_ERROR, "Unable to re-register channel type 'tlb' after aborted unload\n");
+		}
+		return -1;
+	}
+
 	run_forever = 0;
-	/* Close sockets first so blocked reader polls wake and exit. */
+	/* Close sockets so blocked reader polls wake and exit. */
 	for (n = 0; n < ninstances; n++) {
 		if (instances[n]->audio_sock != -1) {
 			close(instances[n]->audio_sock);
@@ -2568,8 +2785,6 @@ static int unload_module(void)
 		}
 	}
 	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
-	/* First, take us out of the channel loop */
-	ast_channel_unregister(&TLB_tech);
 	for (n = 0; n < ninstances; n++) {
 		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
 			pthread_join(instances[n]->TLB_reader_thread, NULL);
@@ -2588,7 +2803,9 @@ static int unload_module(void)
 			ast_free(instances[n]->permitlist[0]);
 		}
 		ast_free(instances[n]);
+		instances[n] = NULL;
 	}
+	ninstances = 0;
 
 	ao2_cleanup(TLB_tech.capabilities);
 	TLB_tech.capabilities = NULL;
