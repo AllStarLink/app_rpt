@@ -209,6 +209,8 @@ struct chan_usbradio_pvt {
 	ast_mutex_t swap_lock;			 /* protects device swap state */
 
 	struct ast_channel *owner;
+	ast_mutex_t ownerlock;	  /* protects owner pointer and unloading */
+	unsigned int unloading:1; /* set during module unload; blocks new claims */
 
 	/* Shared USB radio device lease */
 	struct ast_radio_device *radio_device;
@@ -425,6 +427,99 @@ struct chan_usbradio_pvt {
 
 	ast_mutex_t usblock;
 };
+
+/*!
+ * \brief Publish or clear the channel owner under ownerlock.
+ */
+static void usbradio_owner_store(struct chan_usbradio_pvt *o, struct ast_channel *c)
+{
+	ast_mutex_lock(&o->ownerlock);
+	o->owner = c;
+	ast_mutex_unlock(&o->ownerlock);
+}
+
+/*!
+ * \brief Claim ownership if currently empty and the channel is not unloading.
+ * \retval 0	Claimed successfully.
+ * \retval -1	Another owner is already attached, or unload is in progress.
+ */
+static int usbradio_owner_claim(struct chan_usbradio_pvt *o, struct ast_channel *c)
+{
+	int res = -1;
+
+	ast_mutex_lock(&o->ownerlock);
+	if (!o->owner && !o->unloading) {
+		o->owner = c;
+		res = 0;
+	}
+	ast_mutex_unlock(&o->ownerlock);
+	return res;
+}
+
+/*!
+ * \brief Set or clear the unloading flag under ownerlock.
+ */
+static void usbradio_set_unloading(struct chan_usbradio_pvt *o, int unloading)
+{
+	ast_mutex_lock(&o->ownerlock);
+	o->unloading = unloading ? 1 : 0;
+	ast_mutex_unlock(&o->ownerlock);
+}
+
+/*!
+ * \brief Clear ownership only if c is the current owner.
+ */
+static void usbradio_owner_clear(struct chan_usbradio_pvt *o, struct ast_channel *c)
+{
+	ast_mutex_lock(&o->ownerlock);
+	if (o->owner == c) {
+		o->owner = NULL;
+	}
+	ast_mutex_unlock(&o->ownerlock);
+}
+
+/*!
+ * \brief Return a referenced owner, or NULL if none.
+ * Caller must ast_channel_unref() a non-NULL return.
+ */
+static struct ast_channel *usbradio_owner_ref(struct chan_usbradio_pvt *o)
+{
+	struct ast_channel *c;
+
+	ast_mutex_lock(&o->ownerlock);
+	c = o->owner;
+	if (c) {
+		ast_channel_ref(c);
+	}
+	ast_mutex_unlock(&o->ownerlock);
+	return c;
+}
+
+/*!
+ * \brief True if an owner is currently attached.
+ */
+static int usbradio_owner_present(struct chan_usbradio_pvt *o)
+{
+	int present;
+
+	ast_mutex_lock(&o->ownerlock);
+	present = o->owner != NULL;
+	ast_mutex_unlock(&o->ownerlock);
+	return present;
+}
+
+/*!
+ * \brief Queue a frame to the owner if one is attached.
+ */
+static void usbradio_queue_to_owner(struct chan_usbradio_pvt *o, struct ast_frame *f)
+{
+	struct ast_channel *owner = usbradio_owner_ref(o);
+
+	if (owner) {
+		ast_queue_frame(owner, f);
+		ast_channel_unref(owner);
+	}
+}
 
 /*!
  * \brief Default channel descriptor
@@ -1537,7 +1632,7 @@ static void *hidthread(void *arg)
 						snprintf(buf1, sizeof(buf1), "GPIO%d %d\n", i + 1, (j & (1 << i)) ? 1 : 0);
 						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1);
-						ast_queue_frame(o->owner, &fr);
+						usbradio_queue_to_owner(o, &fr);
 					}
 				}
 				o->had_gpios_in = 1;
@@ -1580,7 +1675,7 @@ static void *hidthread(void *arg)
 							snprintf(buf1, sizeof(buf1), "PP%d %d\n", i, (j & (1 << ppinshift[i])) ? 1 : 0);
 							fr.data.ptr = buf1;
 							fr.datalen = strlen(buf1);
-							ast_queue_frame(o->owner, &fr);
+							usbradio_queue_to_owner(o, &fr);
 						}
 					}
 					o->had_pp_in = 1;
@@ -2020,6 +2115,12 @@ static int usbradio_hangup(struct ast_channel *c)
 {
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(c);
 
+	if (!o) {
+		return 0;
+	}
+
+	/* Drop owner first so workers stop discovering the channel during shutdown. */
+	usbradio_owner_clear(o, c);
 	o->stopaudiothread = 1;
 	o->stophid = 1;
 	kickptt(o);
@@ -2036,7 +2137,6 @@ static int usbradio_hangup(struct ast_channel *c)
 	}
 	ast_radio_pa_stop(&o->pa);
 	ast_channel_tech_pvt_set(c, NULL);
-	o->owner = NULL;
 	ast_module_unref(ast_module_info->self);
 
 	return 0;
@@ -2213,6 +2313,7 @@ static void *usbradio_audio_thread(void *arg)
 	long frames_available;
 	struct chan_usbradio_pvt *o = arg;
 	struct ast_frame *f = &o->read_f, *f1;
+	struct ast_channel *owner;
 	time_t now;
 	struct timeval last_frame_time;
 
@@ -2271,9 +2372,7 @@ static void *usbradio_audio_thread(void *arg)
 
 					o->lastrx = 0;
 					o->rxkeyed = 0;
-					if (o->owner) {
-						ast_queue_frame(o->owner, &wf);
-					}
+					usbradio_queue_to_owner(o, &wf);
 					if (o->duplex3) {
 						usbradio_set_sidetone_switch(o, 0);
 					}
@@ -2646,9 +2745,7 @@ static void *usbradio_audio_thread(void *arg)
 				};
 
 				o->lastrx = 0;
-				if (o->owner) {
-					ast_queue_frame(o->owner, &wf);
-				}
+				usbradio_queue_to_owner(o, &wf);
 				if (o->duplex3) {
 					usbradio_set_sidetone_switch(o, 0);
 				}
@@ -2665,9 +2762,7 @@ static void *usbradio_audio_thread(void *arg)
 					wf.datalen = strlen(o->rxctcssfreq) + 1;
 					ast_debug(7, "Radio Key - CTCSS frequency=%s.\n", o->rxctcssfreq);
 				}
-				if (o->owner) {
-					ast_queue_frame(o->owner, &wf);
-				}
+				usbradio_queue_to_owner(o, &wf);
 				o->count_rssi_update = 1;
 				if (o->duplex3) {
 					usbradio_set_sidetone_switch(o, 1);
@@ -2675,7 +2770,11 @@ static void *usbradio_audio_thread(void *arg)
 			}
 
 			o->readpos = AST_FRIENDLY_OFFSET;
-			if (!o->owner || ast_channel_state(o->owner) != AST_STATE_UP) {
+			owner = usbradio_owner_ref(o);
+			if (!owner || ast_channel_state(owner) != AST_STATE_UP) {
+				if (owner) {
+					ast_channel_unref(owner);
+				}
 				continue;
 			}
 
@@ -2691,12 +2790,13 @@ static void *usbradio_audio_thread(void *arg)
 			}
 
 			if (o->usedtmf && o->dsp) {
-				f1 = ast_dsp_process(o->owner, o->dsp, f);
+				f1 = ast_dsp_process(owner, o->dsp, f);
 				if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
 					if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u')) {
 						f1->frametype = AST_FRAME_NULL;
 						f1->subclass.integer = 0;
-						ast_queue_frame(o->owner, f1);
+						ast_queue_frame(owner, f1);
+						ast_channel_unref(owner);
 						continue;
 					}
 					if (f1->frametype == AST_FRAME_DTMF_END) {
@@ -2715,7 +2815,8 @@ static void *usbradio_audio_thread(void *arg)
 						}
 					}
 					if (f1) {
-						ast_queue_frame(o->owner, f1);
+						ast_queue_frame(owner, f1);
+						ast_channel_unref(owner);
 						continue;
 					}
 				}
@@ -2731,7 +2832,7 @@ static void *usbradio_audio_thread(void *arg)
 				snprintf(msg, sizeof(msg), "cstx=%.26s", o->pmrChan->txctcssfreq);
 				wf.data.ptr = msg;
 				wf.datalen = strlen(msg) + 1;
-				ast_queue_frame(o->owner, &wf);
+				ast_queue_frame(owner, &wf);
 
 				ast_debug(3, "Channel %s: got b.txCtcssReady %s.\n", o->name, o->pmrChan->txctcssfreq);
 				o->pmrChan->b.txCtcssReady = 0;
@@ -2748,14 +2849,15 @@ static void *usbradio_audio_thread(void *arg)
 					snprintf(msg, sizeof(msg), "R %i", ((32767 - o->pmrChan->rxRssi) * 1000) / 32767);
 					wf.data.ptr = msg;
 					wf.datalen = strlen(msg) + 1;
-					ast_queue_frame(o->owner, &wf);
+					ast_queue_frame(owner, &wf);
 
 					o->count_rssi_update = 10;
 					ast_debug(4, "Channel %s: Count_rssi_update %i\n", o->name, ((32767 - o->pmrChan->rxRssi) * 1000 / 32767));
 				}
 			}
 
-			ast_queue_frame(o->owner, f);
+			ast_queue_frame(owner, f);
+			ast_channel_unref(owner);
 		}
 		stream_cleanup(o);
 	}
@@ -2776,7 +2878,7 @@ static int usbradio_fixup(struct ast_channel *oldchan, struct ast_channel *newch
 	struct chan_usbradio_pvt *o = ast_channel_tech_pvt(newchan);
 
 	ast_log(LOG_WARNING, "Channel %s: Fixup received.\n", o->name);
-	o->owner = newchan;
+	usbradio_owner_store(o, newchan);
 	return 0;
 }
 
@@ -2913,21 +3015,34 @@ static struct ast_channel *usbradio_new(struct chan_usbradio_pvt *o, char *ext, 
 	if (c == NULL) {
 		return NULL;
 	}
+
+	/*
+	 * Claim while the channel is still locked and on the default technology.
+	 * A failed claim must hang up without usbradio_tech/tech_pvt installed,
+	 * so hangup never reaches usbradio_hangup with a NULL private pointer.
+	 * Holding the channel lock across claim and tech install also serializes
+	 * against softhangup seeing an owner that is not yet a USBRadio channel.
+	 */
+	if (usbradio_owner_claim(o, c)) {
+		ast_channel_unlock(c);
+		ast_hangup(c);
+		return NULL;
+	}
+
 	ast_channel_tech_set(c, &usbradio_tech);
 	ast_channel_nativeformats_set(c, usbradio_tech.capabilities);
 	ast_channel_set_readformat(c, ast_format_slin);
 	ast_channel_set_writeformat(c, ast_format_slin);
 	ast_channel_tech_pvt_set(c, o);
-	o->owner = c;
-	ast_channel_unlock(c);
 	ast_module_ref(ast_module_info->self);
 	ast_jb_configure(c, &global_jbconf);
+	ast_channel_unlock(c);
+
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(c)) {
 			ast_log(LOG_WARNING, "Channel %s: Unable to start PBX.\n", ast_channel_name(c));
 			ast_hangup(c);
-			o->owner = c = NULL;
-			/* XXX what about the channel itself ? */
+			return NULL;
 		}
 	}
 
@@ -2951,6 +3066,7 @@ static struct ast_channel *usbradio_request(const char *type, struct ast_format_
 	const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *data, int *cause)
 {
 	struct ast_channel *c;
+	struct ast_channel *owner;
 	struct chan_usbradio_pvt *o = find_desc(data);
 
 	if (!o) {
@@ -2965,14 +3081,21 @@ static struct ast_channel *usbradio_request(const char *type, struct ast_format_
 		return NULL;
 	}
 
-	if (o->owner) {
-		ast_log(LOG_NOTICE, "Channel %s: Already have a call (chan %p) on the usb channel\n", o->name, o->owner);
+	if ((owner = usbradio_owner_ref(o))) {
+		ast_log(LOG_NOTICE, "Channel %s: Already have a call (chan %p) on the usb channel\n", o->name, owner);
+		ast_channel_unref(owner);
 		*cause = AST_CAUSE_BUSY;
 		return NULL;
 	}
 	c = usbradio_new(o, NULL, NULL, AST_STATE_DOWN, assignedids, requestor);
 	if (!c) {
-		ast_log(LOG_ERROR, "Channel %s: Unable to create new usb channel\n", o->name);
+		/* Lost a claim race, or channel allocation failed. */
+		if (usbradio_owner_present(o)) {
+			ast_log(LOG_NOTICE, "Channel %s: Already have a call on the usb channel\n", o->name);
+			*cause = AST_CAUSE_BUSY;
+		} else {
+			ast_log(LOG_ERROR, "Channel %s: Unable to create new usb channel\n", o->name);
+		}
 		return NULL;
 	}
 
@@ -5313,6 +5436,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 	ast_mutex_init(&o->device_lock);
 	ast_mutex_init(&o->txqlock);
 	ast_mutex_init(&o->swap_lock);
+	ast_mutex_init(&o->ownerlock);
 	o->echomax = DEFAULT_ECHO_MAX;
 	/* fill other fields from configuration */
 	for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
@@ -5918,30 +6042,43 @@ static int unload_module(void)
 	struct chan_usbradio_pvt *o, *no;
 	int i;
 
-	stoppulser = 1;
-
 	/* Block new channel requests before waiting for existing owners to detach. */
 	ast_channel_unregister(&usbradio_tech);
 
+	/* Reject new claims for every pvt while unload waits or completes. */
 	for (o = usbradio_default.next; o; o = o->next) {
-		if (o->owner) {
+		usbradio_set_unloading(o, 1);
+	}
+
+	for (o = usbradio_default.next; o; o = o->next) {
+		struct ast_channel *owner = usbradio_owner_ref(o);
+
+		if (owner) {
 			int wait_ms = 0;
 
-			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
-			while (o->owner && wait_ms < 5000) {
+			ast_softhangup(owner, AST_SOFTHANGUP_APPUNLOAD);
+			while (usbradio_owner_present(o) && wait_ms < 5000) {
 				usleep(1000);
 				wait_ms++;
 			}
-			if (o->owner) {
+			ast_channel_unref(owner);
+			if (usbradio_owner_present(o)) {
 				ast_log(LOG_WARNING, "Channel %s: owner still attached after %d ms during unload; aborting unload\n", o->name, wait_ms);
 				if (ast_channel_register(&usbradio_tech)) {
 					ast_log(LOG_ERROR, "Unable to re-register channel type 'usb' after aborted unload\n");
 				}
+				/* Resume normal claims: module stays loaded on abort. */
+				for (o = usbradio_default.next; o; o = o->next) {
+					usbradio_set_unloading(o, 0);
+				}
+				/* Leave pulser running: module stays loaded on abort. */
 				return -1;
 			}
 		}
 	}
 
+	/* Stop pulser only after unload is certain to complete. */
+	stoppulser = 1;
 	ast_cli_unregister_multiple(cli_usbradio, sizeof(cli_usbradio) / sizeof(struct ast_cli_entry));
 
 	for (o = usbradio_default.next; o; o = no) {
@@ -6012,6 +6149,7 @@ static int unload_module(void)
 		ast_mutex_destroy(&o->device_lock);
 		ast_mutex_destroy(&o->txqlock);
 		ast_mutex_destroy(&o->swap_lock);
+		ast_mutex_destroy(&o->ownerlock);
 		ast_free(o);
 	}
 
@@ -6034,6 +6172,7 @@ static int unload_module(void)
 	ast_mutex_destroy(&usbradio_default.device_lock);
 	ast_mutex_destroy(&usbradio_default.txqlock);
 	ast_mutex_destroy(&usbradio_default.swap_lock);
+	ast_mutex_destroy(&usbradio_default.ownerlock);
 
 	ao2_cleanup(usbradio_tech.capabilities);
 	usbradio_tech.capabilities = NULL;
