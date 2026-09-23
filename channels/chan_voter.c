@@ -544,7 +544,9 @@ struct voter_pvt {
 	unsigned int usedtmf:1;
 	unsigned int mixminus:1;
 	unsigned int waspager:1;
-	unsigned int kill_xmit_thread:1;
+
+	/*! Plain field (not a bit-field): written under xmit_lock from hangup while xmit may update drained_once/waspager. */
+	unsigned int kill_xmit_thread;
 
 	int testcycle;
 	int testindex;
@@ -1215,22 +1217,20 @@ static int voter_hangup(struct ast_channel *ast)
 
 	ast_debug(1, "Channel %s: Hangup\n", ast_channel_name(ast));
 	if (!p) {
-		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
+
+	/*
+	 * Hangup is entered with the channel locked. Take a ref and unlock before
+	 * voter_lock / pthread_join so we cannot deadlock against the reader
+	 * (voter_lock then channel lock for queue_frame).
+	 */
+	ast_channel_ref(ast);
+	ast_channel_unlock(ast);
+
+	/* Stop the xmit thread first while p remains published and owned. */
 	ast_mutex_lock(&voter_lock);
-	for (q = pvts; q->next; q = q->next) {
-		if (q->next == p) {
-			break;
-		}
-	}
-	if (q->next) {
-		q->next = p->next;
-	}
-	if (pvts == p) {
-		pvts = p->next;
-	}
-	if (p->xmit_thread) {
+	if (p->xmit_thread != AST_PTHREADT_NULL) {
 		ast_mutex_lock(&p->xmit_lock);
 		p->kill_xmit_thread = 1;
 		ast_cond_signal(&p->xmit_cond);
@@ -1239,17 +1239,41 @@ static int voter_hangup(struct ast_channel *ast)
 		p->xmit_thread = AST_PTHREADT_NULL;
 	}
 	ast_mutex_unlock(&voter_lock);
+
 	if (xmit_thread != AST_PTHREADT_NULL) {
 		pthread_join(xmit_thread, NULL);
 	}
+
+	/*
+	 * Drop owner and unlink under voter_lock so the reader cannot queue to
+	 * this channel or observe p after we release the lock and free it.
+	 */
+	ast_mutex_lock(&voter_lock);
+	p->owner = NULL;
+	if (pvts == p) {
+		pvts = p->next;
+	} else if (pvts) {
+		for (q = pvts; q->next; q = q->next) {
+			if (q->next == p) {
+				q->next = p->next;
+				break;
+			}
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+
+	ast_channel_lock(ast);
+
 	if (p->u) {
 		ast_module_user_remove(p->u);
+		p->u = NULL;
 	}
 	voter_pvt_free_media(p);
 	voter_pvt_destroy_locks(p);
-	ast_free(p);
 	ast_channel_tech_pvt_set(ast, NULL);
+	ast_free(p);
 	ast_setstate(ast, AST_STATE_DOWN);
+	ast_channel_unref(ast);
 	return 0;
 }
 
@@ -4092,15 +4116,9 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 		ast_log(LOG_ERROR, "VOTER %i: Cannot alloc new Asterisk channel\n", p->nodenum);
 		voter_pvt_free(p);
 		return NULL;
-	} else {
-		ast_log(LOG_NOTICE, "Asterisk channel created for Voter/%i\n", p->nodenum);
 	}
-	ast_mutex_lock(&voter_lock);
-	if (pvts != NULL) {
-		p->next = pvts;
-	}
-	pvts = p;
-	ast_mutex_unlock(&voter_lock);
+	ast_log(LOG_NOTICE, "Asterisk channel created for Voter/%i\n", p->nodenum);
+
 	ast_channel_tech_set(chan, &voter_tech);
 	ast_channel_set_rawwriteformat(chan, ast_format_slin);
 	ast_channel_set_writeformat(chan, ast_format_slin);
@@ -4108,10 +4126,18 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	ast_channel_set_readformat(chan, ast_format_slin);
 	ast_channel_nativeformats_set(chan, voter_tech.capabilities);
 	ast_channel_tech_pvt_set(chan, p);
-	ast_channel_unlock(chan);
 	ast_channel_language_set(chan, "");
 	p->owner = chan;
+	p->xmit_thread = AST_PTHREADT_NULL;
 	p->u = ast_module_user_add(chan);
+
+	/* Publish on the instance list only after owner/tech_pvt are installed. */
+	ast_mutex_lock(&voter_lock);
+	p->next = pvts;
+	pvts = p;
+	ast_mutex_unlock(&voter_lock);
+	ast_channel_unlock(chan);
+
 	/* Load the configuration for this node. Note that not all variables are loaded here,
 	 * some are loaded in the reload function, which is also executed on initial start.
 	 */
@@ -6728,17 +6754,59 @@ static void *voter_reader(void *data)
  */
 static int unload_module(void)
 {
+	struct voter_pvt *p;
+	struct ast_channel *owners[256];
+	int i, n, wait_ms;
+
+	/* Block new channel requests before waiting for existing owners to detach. */
+	ast_channel_unregister(&voter_tech);
+
+	n = 0;
+	ast_mutex_lock(&voter_lock);
+	for (p = pvts; p && n < (int) ARRAY_LEN(owners); p = p->next) {
+		if (p->owner) {
+			owners[n++] = ast_channel_ref(p->owner);
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+
+	for (i = 0; i < n; i++) {
+		ast_softhangup(owners[i], AST_SOFTHANGUP_APPUNLOAD);
+		ast_channel_unref(owners[i]);
+	}
+
+	for (wait_ms = 0; wait_ms < 5000; wait_ms++) {
+		ast_mutex_lock(&voter_lock);
+		p = pvts;
+		ast_mutex_unlock(&voter_lock);
+		if (!p) {
+			break;
+		}
+		usleep(1000);
+	}
+
+	ast_mutex_lock(&voter_lock);
+	p = pvts;
+	ast_mutex_unlock(&voter_lock);
+	if (p) {
+		ast_log(LOG_WARNING, "VOTER: channel instance(s) still active after %d ms during unload; aborting unload\n", wait_ms);
+		if (ast_channel_register(&voter_tech)) {
+			ast_log(LOG_ERROR, "Unable to re-register channel type 'voter' after aborted unload\n");
+		}
+		return -1;
+	}
+
+	/* Stop reader/timer threads only after all per-channel teardowns finished. */
 	run_forever = 0;
 	ast_cli_unregister_multiple(voter_cli, ARRAY_LEN(voter_cli));
 	ast_manager_unregister("VoterStatus");
 
-	/* First, take us out of the channel loop. */
 	pthread_join(voter_timer_thread, NULL);
 	pthread_join(voter_reader_thread, NULL);
-	ast_channel_unregister(&voter_tech);
 
 	if (nullfd != -1) {
 		close(nullfd);
+		nullfd = -1;
 	}
 	if (voter_thread_timer) {
 		ast_timer_close(voter_thread_timer);
