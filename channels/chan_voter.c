@@ -6750,21 +6750,36 @@ static void *voter_reader(void *data)
 }
 
 /*!
- * \brief Unload the VOTER channel module
+ * \brief Soft-hangup every current Voter channel owner.
+ * Snapshots under voter_lock with a dynamically sized list (no fixed cap).
  */
-static int unload_module(void)
+static void voter_softhangup_all_owners(void)
 {
 	struct voter_pvt *p;
-	struct ast_channel *owners[256];
-	int i, n, wait_ms;
+	struct ast_channel **owners = NULL;
+	int i, n = 0, count = 0;
 
-	/* Block new channel requests before waiting for existing owners to detach. */
-	ast_channel_unregister(&voter_tech);
-
-	n = 0;
 	ast_mutex_lock(&voter_lock);
-	for (p = pvts; p && n < (int) ARRAY_LEN(owners); p = p->next) {
+	for (p = pvts; p; p = p->next) {
 		if (p->owner) {
+			count++;
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+
+	if (!count) {
+		return;
+	}
+
+	owners = ast_calloc(count, sizeof(*owners));
+	if (!owners) {
+		ast_log(LOG_ERROR, "VOTER: Unable to allocate owner snapshot during unload\n");
+		return;
+	}
+
+	ast_mutex_lock(&voter_lock);
+	for (p = pvts; p; p = p->next) {
+		if (p->owner && n < count) {
 			owners[n++] = ast_channel_ref(p->owner);
 		}
 	}
@@ -6774,6 +6789,21 @@ static int unload_module(void)
 		ast_softhangup(owners[i], AST_SOFTHANGUP_APPUNLOAD);
 		ast_channel_unref(owners[i]);
 	}
+	ast_free(owners);
+}
+
+/*!
+ * \brief Unload the VOTER channel module
+ */
+static int unload_module(void)
+{
+	struct voter_pvt *p;
+	int wait_ms;
+
+	/* Block new channel requests before waiting for existing owners to detach. */
+	ast_channel_unregister(&voter_tech);
+
+	voter_softhangup_all_owners();
 
 	for (wait_ms = 0; wait_ms < 5000; wait_ms++) {
 		ast_mutex_lock(&voter_lock);
@@ -6782,6 +6812,8 @@ static int unload_module(void)
 		if (!p) {
 			break;
 		}
+		/* Re-issue softhangups for any owners still present (e.g. late arrivals). */
+		voter_softhangup_all_owners();
 		usleep(1000);
 	}
 
