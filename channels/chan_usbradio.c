@@ -209,8 +209,10 @@ struct chan_usbradio_pvt {
 	ast_mutex_t swap_lock;			 /* protects device swap state */
 
 	struct ast_channel *owner;
-	ast_mutex_t ownerlock;	  /* protects owner pointer and unloading */
-	unsigned int unloading:1; /* set during module unload; blocks new claims */
+	ast_mutex_t ownerlock;		  /* protects owner, unloading, tearing_down, teardown_done */
+	unsigned int unloading:1;	  /* module unload in progress; blocks new claims */
+	unsigned int tearing_down:1;  /* hangup teardown in progress; blocks new claims */
+	unsigned int teardown_done:1; /* hangup finished joins/PortAudio/tech_pvt clear */
 
 	/* Shared USB radio device lease */
 	struct ast_radio_device *radio_device;
@@ -439,17 +441,18 @@ static void usbradio_owner_store(struct chan_usbradio_pvt *o, struct ast_channel
 }
 
 /*!
- * \brief Claim ownership if currently empty and the channel is not unloading.
+ * \brief Claim ownership if currently empty and not blocked by unload/teardown.
  * \retval 0	Claimed successfully.
- * \retval -1	Another owner is already attached, or unload is in progress.
+ * \retval -1	Busy, unloading, or hangup teardown still in progress.
  */
 static int usbradio_owner_claim(struct chan_usbradio_pvt *o, struct ast_channel *c)
 {
 	int res = -1;
 
 	ast_mutex_lock(&o->ownerlock);
-	if (!o->owner && !o->unloading) {
+	if (!o->owner && !o->unloading && !o->tearing_down) {
 		o->owner = c;
+		o->teardown_done = 0;
 		res = 0;
 	}
 	ast_mutex_unlock(&o->ownerlock);
@@ -467,15 +470,41 @@ static void usbradio_set_unloading(struct chan_usbradio_pvt *o, int unloading)
 }
 
 /*!
- * \brief Clear ownership only if c is the current owner.
+ * \brief Begin hangup teardown: drop owner and block new claims until hangup ends.
  */
-static void usbradio_owner_clear(struct chan_usbradio_pvt *o, struct ast_channel *c)
+static void usbradio_hangup_begin(struct chan_usbradio_pvt *o, struct ast_channel *c)
 {
 	ast_mutex_lock(&o->ownerlock);
 	if (o->owner == c) {
 		o->owner = NULL;
 	}
+	o->tearing_down = 1;
+	o->teardown_done = 0;
 	ast_mutex_unlock(&o->ownerlock);
+}
+
+/*!
+ * \brief Mark hangup teardown complete after worker joins and tech_pvt clear.
+ */
+static void usbradio_hangup_end(struct chan_usbradio_pvt *o)
+{
+	ast_mutex_lock(&o->ownerlock);
+	o->tearing_down = 0;
+	o->teardown_done = 1;
+	ast_mutex_unlock(&o->ownerlock);
+}
+
+/*!
+ * \brief True when no owner is attached and hangup teardown is finished (or never started).
+ */
+static int usbradio_pvt_idle(struct chan_usbradio_pvt *o)
+{
+	int idle;
+
+	ast_mutex_lock(&o->ownerlock);
+	idle = !o->owner && !o->tearing_down && o->teardown_done;
+	ast_mutex_unlock(&o->ownerlock);
+	return idle;
 }
 
 /*!
@@ -536,6 +565,7 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.rptnum = 0,
 	.clipledgpio = 0,
 	.rxaudiostats.index = 0,
+	.teardown_done = 1, /* idle until a channel is claimed */
 	/* After the vast majority of existing installs have had a chance to review their
 	   audio settings and the associated old scaling/clipping hacks are no longer in
 	   significant use the following cfg and all related code should be deleted. */
@@ -2119,8 +2149,11 @@ static int usbradio_hangup(struct ast_channel *c)
 		return 0;
 	}
 
-	/* Drop owner first so workers stop discovering the channel during shutdown. */
-	usbradio_owner_clear(o, c);
+	/*
+	 * Drop owner and block claims for the whole teardown so a replacement
+	 * call cannot start workers while we still join them / stop PortAudio.
+	 */
+	usbradio_hangup_begin(o, c);
 	o->stopaudiothread = 1;
 	o->stophid = 1;
 	kickptt(o);
@@ -2137,6 +2170,7 @@ static int usbradio_hangup(struct ast_channel *c)
 	}
 	ast_radio_pa_stop(&o->pa);
 	ast_channel_tech_pvt_set(c, NULL);
+	usbradio_hangup_end(o);
 	ast_module_unref(ast_module_info->self);
 
 	return 0;
@@ -6052,28 +6086,28 @@ static int unload_module(void)
 
 	for (o = usbradio_default.next; o; o = o->next) {
 		struct ast_channel *owner = usbradio_owner_ref(o);
+		int wait_ms = 0;
 
 		if (owner) {
-			int wait_ms = 0;
-
 			ast_softhangup(owner, AST_SOFTHANGUP_APPUNLOAD);
-			while (usbradio_owner_present(o) && wait_ms < 5000) {
-				usleep(1000);
-				wait_ms++;
-			}
 			ast_channel_unref(owner);
-			if (usbradio_owner_present(o)) {
-				ast_log(LOG_WARNING, "Channel %s: owner still attached after %d ms during unload; aborting unload\n", o->name, wait_ms);
-				if (ast_channel_register(&usbradio_tech)) {
-					ast_log(LOG_ERROR, "Unable to re-register channel type 'usb' after aborted unload\n");
-				}
-				/* Resume normal claims: module stays loaded on abort. */
-				for (o = usbradio_default.next; o; o = o->next) {
-					usbradio_set_unloading(o, 0);
-				}
-				/* Leave pulser running: module stays loaded on abort. */
-				return -1;
+		}
+		/* Wait for owner detach and full hangup teardown before freeing o. */
+		while (!usbradio_pvt_idle(o) && wait_ms < 5000) {
+			usleep(1000);
+			wait_ms++;
+		}
+		if (!usbradio_pvt_idle(o)) {
+			ast_log(LOG_WARNING, "Channel %s: owner/teardown still active after %d ms during unload; aborting unload\n", o->name, wait_ms);
+			/* Clear unloading before re-exposing the technology to new requests. */
+			for (o = usbradio_default.next; o; o = o->next) {
+				usbradio_set_unloading(o, 0);
 			}
+			if (ast_channel_register(&usbradio_tech)) {
+				ast_log(LOG_ERROR, "Unable to re-register channel type 'usb' after aborted unload\n");
+			}
+			/* Leave pulser running: module stays loaded on abort. */
+			return -1;
 		}
 	}
 
