@@ -79,6 +79,7 @@
 #define HID_POLL_RATE 50
 #define DEVICE_RETRY 500000 /* Retry time in uS when USB device is missing */
 #define MAX_FRAME_DELAY 200 /* 200ms (.2s) max time to queue audio frames before resetting usb audio */
+#define UNLOAD_TIMEOUT 5000 /* 5 seconds */
 
 #include "asterisk/lock.h"
 #include "asterisk/frame.h"
@@ -1115,6 +1116,7 @@ static void *hidthread(void *arg)
 	char lasttxtmp;
 	int i, j, k;
 	int res;
+	struct ast_channel *chan = NULL;
 	struct libusb_device_handle *usb_handle = NULL;
 	struct chan_simpleusb_pvt *o = arg;
 	struct timeval then;
@@ -1144,11 +1146,19 @@ static void *hidthread(void *arg)
 	while (!o->stophidthread) {
 		ast_debug(5, "hidthread is entering outer loop");
 
+		if (o->owner) {
+			chan = ast_channel_ref(o->owner);
+		} else {
+			usleep(DEVICE_RETRY);
+			continue;
+		}
+
 		/* Acquire a device unless a pending swap retained the existing lease */
 		if (!o->radio_device) {
 			res = init_audio_device(o);
 			if (res < 0) {
 				init_audio_failed = simpleusb_log_fault(o, init_audio_failed, "Channel %s: Failed initialize the audio device\n", o->name);
+				ast_channel_unref(chan);
 				usleep(DEVICE_RETRY);
 				continue;
 			}
@@ -1158,6 +1168,7 @@ static void *hidthread(void *arg)
 		if (!o->radio_device || !o->radio_device->usb_device) {
 			init_hid_failed = simpleusb_log_fault(o, init_hid_failed, "Channel %s: Cannot initialize device %s\n", o->name, assigned_devstr);
 			simpleusb_release_device(o);
+			ast_channel_unref(chan);
 			usleep(DEVICE_RETRY);
 			continue;
 		}
@@ -1166,6 +1177,7 @@ static void *hidthread(void *arg)
 		if (libusb_open(o->radio_device->usb_device, &usb_handle) < 0) {
 			open_device_failed = simpleusb_log_fault(o, open_device_failed, "Channel %s: Cannot open device %s\n", o->name, assigned_devstr);
 			simpleusb_release_device(o);
+			ast_channel_unref(chan);
 			usleep(DEVICE_RETRY);
 			continue;
 		}
@@ -1176,6 +1188,7 @@ static void *hidthread(void *arg)
 				libusb_close(usb_handle);
 				usb_handle = NULL;
 				simpleusb_release_device(o);
+				ast_channel_unref(chan);
 				usleep(DEVICE_RETRY);
 				continue;
 			}
@@ -1184,6 +1197,7 @@ static void *hidthread(void *arg)
 				libusb_close(usb_handle);
 				usb_handle = NULL;
 				simpleusb_release_device(o);
+				ast_channel_unref(chan);
 				usleep(DEVICE_RETRY);
 				continue;
 			}
@@ -1259,6 +1273,7 @@ static void *hidthread(void *arg)
 		 * The timer can be interrupted by writing to
 		 * the pttkick pipe.
 		 */
+
 		while (!o->stophidthread && o->hasusb) {
 			int gpio_write = 0;
 			time_t audio_time_now = 0;
@@ -1423,13 +1438,9 @@ static void *hidthread(void *arg)
 						fr.data.ptr = buf1;
 						fr.datalen = strlen(buf1);
 
-						if (o->owner) {
-							struct ast_channel *owner = o->owner;
-
-							ast_mutex_unlock(&o->usblock);
-							ast_queue_frame(owner, &fr);
-							ast_mutex_lock(&o->usblock);
-						}
+						ast_mutex_unlock(&o->usblock);
+						ast_queue_frame(chan, &fr);
+						ast_mutex_lock(&o->usblock);
 					}
 				}
 				o->had_gpios_in = 1;
@@ -1474,12 +1485,7 @@ static void *hidthread(void *arg)
 							sprintf(buf1, "PP%d %d\n", i, (j & (1 << ppinshift[i])) ? 1 : 0);
 							fr.data.ptr = buf1;
 							fr.datalen = strlen(buf1);
-
-							if (o->owner) {
-								struct ast_channel *owner = o->owner;
-
-								ast_queue_frame(owner, &fr);
-							}
+							ast_queue_frame(chan, &fr);
 						}
 					}
 
@@ -1584,6 +1590,8 @@ static void *hidthread(void *arg)
 
 			ast_radio_time(&o->lasthidtime);
 		}
+
+		ast_channel_unref(chan);
 		o->lasttx = 0;
 		ast_mutex_lock(&o->usblock);
 		o->hid_gpio_val &= ~o->hid_io_ptt;
@@ -1839,6 +1847,7 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 				.frametype = AST_FRAME_TEXT,
 				.src = __PRETTY_FUNCTION__,
 			};
+			struct ast_channel *chan;
 
 			i = 0;
 			ast_mutex_lock(&o->txqlock);
@@ -1852,7 +1861,11 @@ static int simpleusb_text(struct ast_channel *c, const char *text)
 			cmd = (i) ? "PAGES" : "NOPAGES";
 			wf.data.ptr = cmd;
 			wf.datalen = strlen(cmd);
-			ast_queue_frame(o->owner, &wf);
+			if (o->owner) {
+				chan = ast_channel_ref(o->owner);
+				ast_queue_frame(chan, &wf);
+				ast_channel_unref(chan);
+			}
 			return 0;
 		}
 		default:
@@ -2114,6 +2127,7 @@ static void *simpleusb_audio_thread(void *arg)
 	int cd, sd, src, num_frames, ispager, doleft, doright;
 	PaError res;
 	int i;
+	struct ast_channel *chan = NULL;
 	struct chan_simpleusb_pvt *o = arg;
 	struct ast_frame *f = &o->read_f, *f1;
 	time_t now;
@@ -2151,7 +2165,11 @@ static void *simpleusb_audio_thread(void *arg)
 		simpleusb_log_usb_recovered(o);
 		last_frame_time = ast_radio_tvnow();
 
-		while (!o->stopaudiothread && o->hasusb) {
+		if (o->owner) {
+			chan = ast_channel_ref(o->owner);
+		}
+
+		while (!o->stopaudiothread && o->hasusb && chan) {
 			/* check if the hid thread is still processing */
 			if (o->lasthidtime) {
 				ast_radio_time(&now);
@@ -2181,9 +2199,7 @@ static void *simpleusb_audio_thread(void *arg)
 					o->lastrx = 0;
 					o->rxkeyed = 0;
 
-					if (o->owner) {
-						ast_queue_frame(o->owner, &wf);
-					}
+					ast_queue_frame(chan, &wf);
 				}
 
 				continue;
@@ -2380,10 +2396,7 @@ static void *simpleusb_audio_thread(void *arg)
 										.src = __PRETTY_FUNCTION__,
 									};
 
-									if (o->owner) {
-										ast_queue_frame(o->owner, &wf);
-									}
-
+									ast_queue_frame(chan, &wf);
 									o->waspager = ispager;
 									continue;
 								}
@@ -2478,10 +2491,7 @@ static void *simpleusb_audio_thread(void *arg)
 						.src = __PRETTY_FUNCTION__,
 					};
 
-					if (o->owner) {
-						ast_queue_frame(o->owner, &wf);
-					}
-
+					ast_queue_frame(chan, &wf);
 					o->waspager = 0;
 				}
 			}
@@ -2554,10 +2564,7 @@ static void *simpleusb_audio_thread(void *arg)
 				};
 
 				o->lastrx = 0;
-
-				if (o->owner) {
-					ast_queue_frame(o->owner, &wf);
-				}
+				ast_queue_frame(chan, &wf);
 
 				if (o->duplex3) {
 					/* Disable receive sidetone when the receiver unkeys. */
@@ -2571,10 +2578,7 @@ static void *simpleusb_audio_thread(void *arg)
 				};
 
 				o->lastrx = 1;
-
-				if (o->owner) {
-					ast_queue_frame(o->owner, &wf);
-				}
+				ast_queue_frame(chan, &wf);
 
 				if (o->duplex3) {
 					/* Enable receive sidetone while the receiver is keyed. */
@@ -2644,7 +2648,7 @@ static void *simpleusb_audio_thread(void *arg)
 
 			/* reset read pointer for next frame */
 			/* Do not return the frame if the channel is not up */
-			if (ast_channel_state(o->owner) != AST_STATE_UP) {
+			if (ast_channel_state(chan) != AST_STATE_UP) {
 				continue;
 			}
 			/* ok we can build and deliver the frame to the caller */
@@ -2659,16 +2663,12 @@ static void *simpleusb_audio_thread(void *arg)
 			}
 			/* Process the audio to see if contains DTMF */
 			if (o->usedtmf && o->dsp) {
-				f1 = ast_dsp_process(o->owner, o->dsp, f);
+				f1 = ast_dsp_process(chan, o->dsp, f);
 				if ((f1->frametype == AST_FRAME_DTMF_END) || (f1->frametype == AST_FRAME_DTMF_BEGIN)) {
 					if ((f1->subclass.integer == 'm') || (f1->subclass.integer == 'u')) {
 						f1->frametype = AST_FRAME_NULL;
 						f1->subclass.integer = 0;
-
-						if (o->owner) {
-							ast_queue_frame(o->owner, f1);
-						}
-
+						ast_queue_frame(chan, f1);
 						continue;
 					}
 					if (f1->frametype == AST_FRAME_DTMF_END) {
@@ -2686,8 +2686,8 @@ static void *simpleusb_audio_thread(void *arg)
 							o->toneflag = 1;
 						}
 					}
-					if (o->owner && f1) {
-						ast_queue_frame(o->owner, f1);
+					if (f1) {
+						ast_queue_frame(chan, f1);
 					}
 				}
 			}
@@ -2741,12 +2741,10 @@ static void *simpleusb_audio_thread(void *arg)
 				}
 				o->apeak = (int32_t) (o->amax - o->amin) / 2;
 			}
-
-			if (o->owner) {
-				ast_queue_frame(o->owner, f);
-			}
+			ast_queue_frame(chan, f);
 		}
 		stream_cleanup(o);
+		ast_channel_unref(chan);
 	}
 	stream_cleanup(o);
 	ast_debug(2, "Audio Thread has exited");
@@ -2889,16 +2887,17 @@ static struct ast_channel *simpleusb_new(struct chan_simpleusb_pvt *o, char *ext
 	if (c == NULL) {
 		return NULL;
 	}
+
+	o->owner = c;
 	ast_channel_tech_set(c, &simpleusb_tech);
 	ast_channel_nativeformats_set(c, simpleusb_tech.capabilities);
 	ast_channel_set_readformat(c, ast_format_slin);
 	ast_channel_set_writeformat(c, ast_format_slin);
 	ast_channel_tech_pvt_set(c, o);
-	ast_channel_unlock(c);
 
-	o->owner = c;
 	ast_module_ref(ast_module_info->self);
 	ast_jb_configure(c, &global_jbconf);
+	ast_channel_unlock(c);
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(c)) {
 			ast_log(LOG_WARNING, "Channel %s: Unable to start PBX.\n", ast_channel_name(c));
@@ -3380,28 +3379,39 @@ static int susb_tune(int fd, int argc, const char *const *argv)
 static int _send_tx_test_tone(int fd, struct chan_simpleusb_pvt *o, int ms, int intflag)
 {
 	int i, ret;
+	struct ast_channel *chan;
 
-	ast_tonepair_stop(o->owner);
-	if (ast_tonepair_start(o->owner, 1004.0, 0, 99999999, 7200.0)) {
+	if (!o->owner) {
 		if (fd >= 0) {
 			ast_cli(fd, "Error starting test tone on %s!!\n", simpleusb_active);
 		}
 		return -1;
 	}
-	ast_clear_flag(ast_channel_flags(o->owner), AST_FLAG_WRITE_INT);
+
+	chan = ast_channel_ref(o->owner);
+	ast_tonepair_stop(chan);
+	if (ast_tonepair_start(chan, 1004.0, 0, 99999999, 7200.0)) {
+		if (fd >= 0) {
+			ast_cli(fd, "Error starting test tone on %s!!\n", simpleusb_active);
+		}
+		ast_channel_unref(chan);
+		return -1;
+	}
+	ast_clear_flag(ast_channel_flags(chan), AST_FLAG_WRITE_INT);
 	o->txtestkey = 1;
 	i = 0;
 	ret = 0;
-	while (ast_channel_generatordata(o->owner) && (i < ms)) {
+	while (ast_channel_generatordata(chan) && (i < ms)) {
 		if (ast_radio_wait_or_poll(fd, 50, intflag)) {
 			ret = 1;
 			break;
 		}
 		i += 50;
 	}
-	ast_tonepair_stop(o->owner);
-	ast_clear_flag(ast_channel_flags(o->owner), AST_FLAG_WRITE_INT);
+	ast_tonepair_stop(chan);
+	ast_clear_flag(ast_channel_flags(chan), AST_FLAG_WRITE_INT);
 	o->txtestkey = 0;
+	ast_channel_unref(chan);
 	return ret;
 }
 
@@ -4515,12 +4525,18 @@ static int unload_module(void)
 	struct chan_simpleusb_pvt *o, *no;
 	int i;
 
+	ast_channel_unregister(&simpleusb_tech);
+
 	stoppulser = 1;
 
 	for (o = simpleusb_default.next; o; o = no) {
+		struct ast_channel *chan = ast_channel_ref(o->owner);
+		int wait_ms = 0;
+
 		no = o->next; /* Keep track of next object after free */
-		if (o->owner) {
-			ast_softhangup(o->owner, AST_SOFTHANGUP_APPUNLOAD);
+
+		if (chan) {
+			ast_softhangup(chan, AST_SOFTHANGUP_APPUNLOAD);
 		}
 		o->stopaudiothread = 1;
 		o->stophidthread = 1;
@@ -4539,17 +4555,41 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
+			if (o->gpios[i] && o->gpios[i] != simpleusb_default.gpios[i]) {
 				ast_free(o->gpios[i]);
 			}
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
+			if (o->pps[i] && o->pps[i] != simpleusb_default.pps[i]) {
 				ast_free(o->pps[i]);
 			}
 		}
+
+		while (chan && wait_ms < UNLOAD_TIMEOUT) {
+			usleep(1000);
+			wait_ms++;
+		}
+
+		if (chan) {
+			ast_log(LOG_WARNING, "Channel %s: owner still attached after %d ms during unload; aborting unload\n", o->name, wait_ms);
+			if (ast_channel_register(&simpleusb_tech)) {
+				ast_log(LOG_ERROR, "Unable to re-register channel type 'usb' after aborted unload\n");
+			}
+			/* Leave pulser running: module stays loaded on abort. */
+			ast_channel_unref(chan);
+			return -1;
+		}
+
+		ast_channel_unref(chan);
+
 		ast_free(o->name);
 		simpleusb_release_device(o);
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->swap_lock);
 		ast_free(o);
 	}
 
@@ -4567,7 +4607,6 @@ static int unload_module(void)
 		ftxcapraw = NULL;
 	}
 #endif
-	ast_channel_unregister(&simpleusb_tech);
 	ast_cli_unregister_multiple(cli_simpleusb, ARRAY_LEN(cli_simpleusb));
 	ao2_cleanup(simpleusb_tech.capabilities);
 	simpleusb_tech.capabilities = NULL;
