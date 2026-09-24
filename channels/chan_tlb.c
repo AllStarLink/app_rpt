@@ -365,6 +365,8 @@ int ninstances = 0;
 
 /* binary search tree in memory, root node */
 static void *TLB_node_list = NULL;
+/*! Protects TLB_node_list across all instances (tsearch/tfind/tdelete/twalk/tdestroy). */
+AST_MUTEX_DEFINE_STATIC(tlb_node_lock);
 
 /*! All live TLB_pvt structs; protected by tlb_live_lock with owner. */
 AST_MUTEX_DEFINE_STATIC(tlb_live_lock);
@@ -1000,11 +1002,17 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 		return NULL;
 	}
 
+	ast_mutex_lock(&instances[n]->lock);
+	if (tlb_unloading) {
+		ast_mutex_unlock(&instances[n]->lock);
+		return NULL;
+	}
 	pvt = ast_calloc(1, sizeof(struct TLB_pvt));
 	if (pvt) {
 		if (ast_mutex_init(&pvt->lock)) {
 			ast_log(LOG_ERROR, "Unable to initialize TheLinkBox channel lock for %s\n", (char *) data);
 			ast_free(pvt);
+			ast_mutex_unlock(&instances[n]->lock);
 			return NULL;
 		}
 		snprintf(pvt->stream, sizeof(pvt->stream), "%s-%lu", (char *) data, instances[n]->seqno++);
@@ -1024,6 +1032,7 @@ static struct TLB_pvt *TLB_alloc(const char *data)
 		pvt->txcodec = instances[n]->pref_txcodec;
 		tlb_live_link(pvt);
 	}
+	ast_mutex_unlock(&instances[n]->lock);
 	return pvt;
 }
 
@@ -1166,10 +1175,12 @@ static int tlb_send_dtmf(struct ast_channel *ast, char digit)
 	ast_mutex_lock(&p->instp->lock);
 	ast_copy_string(p->instp->TLB_node_test.ip, p->ip, sizeof(p->instp->TLB_node_test.ip));
 	p->instp->TLB_node_test.port = p->port;
+	ast_mutex_lock(&tlb_node_lock);
 	found_key = (struct TLB_node **) tfind(&p->instp->TLB_node_test, &TLB_node_list, compare_ip);
 	if (found_key) {
 		pkt.seqnum = htons((*(struct TLB_node **) found_key)->seqnum++);
 	}
+	ast_mutex_unlock(&tlb_node_lock);
 	ast_mutex_unlock(&p->instp->lock);
 	if (!found_key) {
 		ast_log(LOG_ERROR, "Unable to find node reference for IP addr %s, port %u\n", p->ip, p->port & 0xffff);
@@ -1492,7 +1503,8 @@ static void free_node(void *nodep)
 
 /*!
  * \brief Find and delete a node from our internal node list.
- * \note Must be called locked.
+ * \note Must be called with the caller's instp->lock held.
+ * Takes tlb_node_lock around the tree mutation and free.
  * \param key			Pointer to TLB node struct to delete.
  * \retval 0			If node not found.
  * \retval 1			If node found.
@@ -1502,13 +1514,18 @@ static int find_delete(struct TLB_node *key)
 	int found = 0;
 	struct TLB_node **found_key = NULL;
 
+	ast_mutex_lock(&tlb_node_lock);
 	found_key = (struct TLB_node **) tfind(key, &TLB_node_list, compare_ip);
 	if (found_key) {
-		ast_debug(1, "...removing %s(%s)\n", (*found_key)->call, (*found_key)->ip);
+		struct TLB_node *node = *found_key;
+
+		ast_debug(1, "...removing %s(%s)\n", node->call, node->ip);
 		found = 1;
-		(*found_key)->p->hangup = 1;
+		node->p->hangup = 1;
 		tdelete(key, &TLB_node_list, compare_ip);
+		ast_free(node);
 	}
+	ast_mutex_unlock(&tlb_node_lock);
 	return found;
 }
 
@@ -1690,7 +1707,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 
 			ast_free(qptlb);
 			ast_mutex_lock(&instp->lock);
+			ast_mutex_lock(&tlb_node_lock);
 			twalk(TLB_node_list, send_audio_all_but_one);
+			ast_mutex_unlock(&tlb_node_lock);
 			ast_mutex_unlock(&instp->lock);
 
 			if (instp->fdr >= 0) {
@@ -1716,6 +1735,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 		}
 		if (p->txindex >= tlb_codecs[p->txcodec].blocking_factor) {
 			ast_mutex_lock(&instp->lock);
+			ast_mutex_lock(&tlb_node_lock);
 			if (instp->confmode) {
 				twalk(TLB_node_list, send_audio_all);
 			} else {
@@ -1723,6 +1743,7 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 				instp->TLB_node_test.port = p->port;
 				twalk(TLB_node_list, send_audio_only_one);
 			}
+			ast_mutex_unlock(&tlb_node_lock);
 			ast_mutex_unlock(&instp->lock);
 			p->txindex = 0;
 		}
@@ -1738,7 +1759,9 @@ static int TLB_xwrite(struct ast_channel *ast, struct ast_frame *frame)
 	ast_mutex_lock(&instp->lock);
 	instp->TLB_node_test.ip[0] = '\0';
 	instp->TLB_node_test.port = 0;
+	ast_mutex_lock(&tlb_node_lock);
 	twalk(TLB_node_list, send_heartbeat);
+	ast_mutex_unlock(&tlb_node_lock);
 	if (instp->TLB_node_test.ip[0] != '\0') {
 		if (find_delete(&instp->TLB_node_test)) {
 			bye_length = rtcp_make_bye(bye, sizeof(bye), "rtcp timeout");
@@ -2209,6 +2232,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	TLB_node_key->countdown = instp->rtcptimeout;
 	TLB_node_key->seqnum = 1;
 	TLB_node_key->instp = instp;
+	TLB_node_key->p = NULL;
 	if (tlb_unloading) {
 		ast_free(TLB_node_key);
 		return -1;
@@ -2217,8 +2241,10 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		struct TLB_node **tnode;
 		int key_inserted = 0;
 
+		ast_mutex_lock(&tlb_node_lock);
 		tnode = (struct TLB_node **) tsearch(TLB_node_key, &TLB_node_list, compare_ip);
 		if (!tnode) {
+			ast_mutex_unlock(&tlb_node_lock);
 			ast_log(LOG_ERROR, "tsearch() failed to add CALL = %s,ip = %s,port = %u\n", TLB_node_key->call, TLB_node_key->ip,
 				TLB_node_key->port & 0xffff);
 			ast_free(TLB_node_key);
@@ -2230,12 +2256,14 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		 */
 		key_inserted = (*tnode == TLB_node_key);
 		if (!key_inserted) {
+			ast_mutex_unlock(&tlb_node_lock);
 			ast_free(TLB_node_key);
 			return -1;
 		}
 		ast_debug(1, "tlb: new CALL = %s, ip = %s, port = %u\n", TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
 		if (instp->confmode) {
 			TLB_node_key->p = instp->confp;
+			ast_mutex_unlock(&tlb_node_lock);
 		} else {
 			if (p == NULL) { /* if a new inbound call */
 				struct ast_frame f = {
@@ -2243,12 +2271,18 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 					.subclass.integer = AST_CONTROL_ANSWER,
 					.src = __PRETTY_FUNCTION__,
 				};
+				/*
+				 * Hold tlb_node_lock until p is assigned so lookups/twalk
+				 * cannot observe this node with an uninitialized p.
+				 * TLB_alloc re-takes instp->lock (recursive).
+				 */
 				p = TLB_alloc((void *) instp->name);
 				if (!p) {
 					ast_log(LOG_ERROR, "Cannot alloc TLB channel\n");
 					if (key_inserted) {
 						tdelete(TLB_node_key, &TLB_node_list, compare_ip);
 					}
+					ast_mutex_unlock(&tlb_node_lock);
 					ast_free(TLB_node_key);
 					return -1;
 				}
@@ -2258,10 +2292,13 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 				TLB_node_key->p = p;
 				ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
 				TLB_node_key->p->port = instp->TLB_node_test.port;
+				ast_mutex_unlock(&tlb_node_lock);
 				chan = TLB_new(TLB_node_key->p, AST_STATE_RINGING, TLB_node_key->nodenum, NULL, NULL);
 				if (!chan) {
 					if (key_inserted) {
+						ast_mutex_lock(&tlb_node_lock);
 						tdelete(TLB_node_key, &TLB_node_list, compare_ip);
+						ast_mutex_unlock(&tlb_node_lock);
 					}
 					ast_free(TLB_node_key);
 					if (instp->confp == p) {
@@ -2278,6 +2315,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 				TLB_node_key->p = p;
 				ast_copy_string(TLB_node_key->p->ip, instp->TLB_node_test.ip, TLB_IP_SIZE);
 				TLB_node_key->p->port = instp->TLB_node_test.port;
+				ast_mutex_unlock(&tlb_node_lock);
 			}
 		}
 	}
@@ -2352,11 +2390,14 @@ static void *TLB_reader(void *data)
 						copy_sdes_item(items.item[0].r_text, call, 127);
 					}
 					if (call[0] != '\0') {
+						ast_mutex_lock(&tlb_node_lock);
 						found_key = (struct TLB_node **) tfind(&instp->TLB_node_test, &TLB_node_list, compare_ip);
 						if (found_key) {
 							(*found_key)->countdown = instp->rtcptimeout;
 							(*found_key)->p->firstheard = 1;
+							ast_mutex_unlock(&tlb_node_lock);
 						} else {   /* otherwise its a new request */
+							ast_mutex_unlock(&tlb_node_lock);
 							i = 0; /* default authorized */
 							if (instp->ndenylist) {
 								for (x = 0; x < instp->ndenylist; x++) {
@@ -2415,11 +2456,28 @@ static void *TLB_reader(void *data)
 				ast_copy_string(instp->TLB_node_test.ip, ast_inet_ntoa(sin.sin_addr), TLB_IP_SIZE);
 				instp->TLB_node_test.port = ntohs(sin.sin_port);
 
+				ast_mutex_lock(&tlb_node_lock);
 				found_key = (struct TLB_node **) tfind(&instp->TLB_node_test, &TLB_node_list, compare_ip);
 				if (found_key) {
-					struct TLB_pvt *p = (*found_key)->p;
-					(*found_key)->countdown = instp->rtcptimeout;
+					struct TLB_node *node = *found_key;
+					struct TLB_pvt *p;
+					char nodecall[TLB_CALL_SIZE + 1];
+
+					/*
+					 * Tree is keyed by IP only across instances. Reject other
+					 * instances or still-initializing nodes before retaining p.
+					 * Reader holds instp->lock for the rest of this packet,
+					 * which serializes against hangup/TLB_destroy for this p.
+					 */
+					if (node->instp != instp || !node->p) {
+						ast_mutex_unlock(&tlb_node_lock);
+						continue;
+					}
+					p = node->p;
+					ast_copy_string(nodecall, node->call, sizeof(nodecall));
+					node->countdown = instp->rtcptimeout;
 					p->firstheard = 1;
+					ast_mutex_unlock(&tlb_node_lock);
 					if (recvlen > 12) { /* if at least a header size and some payload */
 						if ((((struct rtpVoice_t *) buf)->version == 2) && (((struct rtpVoice_t *) buf)->payt == 96)) {
 							/* if its a DTMF frame */
@@ -2478,10 +2536,10 @@ static void *TLB_reader(void *data)
 									}
 								}
 								if (!tlb_codecs[i].blocking_factor) {
-									ast_log(LOG_ERROR, "tlb:Payload type %d not recognized on channel %s\n", j, (*found_key)->call);
+									ast_log(LOG_ERROR, "tlb:Payload type %d not recognized on channel %s\n", j, nodecall);
 									continue;
 								}
-								ast_debug(1, "tlb: channel %s switching to codec %s from codec %s\n", (*found_key)->call,
+								ast_debug(1, "tlb: channel %s switching to codec %s from codec %s\n", nodecall,
 									tlb_codecs[i].name, tlb_codecs[p->rxcodec].name);
 								p->rxcodec = i;
 								p->codec_change = 1;
@@ -2511,6 +2569,8 @@ static void *TLB_reader(void *data)
 							}
 						}
 					}
+				} else {
+					ast_mutex_unlock(&tlb_node_lock);
 				}
 			}
 		}
@@ -2829,8 +2889,10 @@ static int unload_module(void)
 		}
 	}
 	/* Readers are gone; safe to tear down the node tree they walked. */
+	ast_mutex_lock(&tlb_node_lock);
 	tdestroy(TLB_node_list, free_node);
 	TLB_node_list = NULL;
+	ast_mutex_unlock(&tlb_node_lock);
 	for (n = 0; n < ninstances; n++) {
 		ast_mutex_destroy(&instances[n]->lock);
 		ast_free(instances[n]->denylist_buf);
