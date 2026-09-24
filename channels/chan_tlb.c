@@ -2262,6 +2262,19 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		}
 		ast_debug(1, "tlb: new CALL = %s, ip = %s, port = %u\n", TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
 		if (instp->confmode) {
+			/*
+			 * After the conference channel hangs up, confp is cleared. Do not
+			 * publish a node with a NULL pvt for control/audio to dereference.
+			 */
+			if (!instp->confp) {
+				if (key_inserted) {
+					tdelete(TLB_node_key, &TLB_node_list, compare_ip);
+				}
+				ast_mutex_unlock(&tlb_node_lock);
+				ast_log(LOG_WARNING, "tlb: conference channel unavailable; rejecting call from %s\n", TLB_node_key->call);
+				ast_free(TLB_node_key);
+				return 1;
+			}
 			TLB_node_key->p = instp->confp;
 			ast_mutex_unlock(&tlb_node_lock);
 		} else {
