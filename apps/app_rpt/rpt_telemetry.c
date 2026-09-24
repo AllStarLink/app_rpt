@@ -903,7 +903,7 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 	const char *ct = NULL;
 	int res;
 
-	if (!strcmp(why, "LINKUNKEY") && myrpt->last_remote_unkey[0] != '\0') {
+	if ((!strcmp(why, "LINKUNKEY") || !strcmp(why, "LOCUNKEY")) && myrpt->last_remote_unkey[0] != '\0') {
 		char remote_ct_key[MAXNODESTR + sizeof("node_") + 1];
 
 		/* Look for a configured CT for a specific node
