@@ -904,12 +904,12 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 	int res;
 
 	if ((!strcmp(why, "LINKUNKEY") || !strcmp(why, "LOCUNKEY")) && myrpt->last_remote_unkey[0] != '\0') {
-		char remote_ct_key[MAXNODESTR + sizeof("node_") + 1];
+		char remote_ct_key[MAXNODESTR + sizeof("linkunkeyct_") + 1];
 
 		/* Look for a configured CT for a specific node
-		 * using the format node_<node_id> when a link has unkeyed
+		 * using the format linkunkeyct_<node_id> when a link has unkeyed
 		 */
-		snprintf(remote_ct_key, sizeof(remote_ct_key), "node_%s", myrpt->last_remote_unkey);
+		snprintf(remote_ct_key, sizeof(remote_ct_key), "linkunkeyct_%s", myrpt->last_remote_unkey);
 		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, remote_ct_key);
 	}
 
