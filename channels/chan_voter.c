@@ -1048,6 +1048,106 @@ static void mkpucked(const struct voter_client *client, VTIME *dst)
 	dst->vtime_sec = htonl((long) (btime / 1000000000LL));
 }
 
+/*
+ * Snapshot for voter_xmit outbound UDP. Built under voter_lock; sendto() runs
+ * after unlock so reader/timer are not blocked on network I/O. Master timing
+ * only tolerates MASTER_TIMEOUT_MS (100ms) without an updated lastheardtime.
+ *
+ * Buffer must fit the largest wire payload we queue: ADPCM audiopacket
+ * (header + rssi + FRAME_SIZE + 3) or ping (header + seqno + 2 * timeval + filler).
+ */
+#define VOTER_XMIT_DEST_AUDIO_LEN (sizeof(VOTER_PACKET_HEADER) + 1 + FRAME_SIZE + 3)
+#define VOTER_XMIT_DEST_PING_LEN (sizeof(VOTER_PACKET_HEADER) + sizeof(unsigned int) + (sizeof(struct timeval) * 2) + 128)
+#define VOTER_XMIT_DEST_DATALEN \
+	((VOTER_XMIT_DEST_AUDIO_LEN > VOTER_XMIT_DEST_PING_LEN) ? VOTER_XMIT_DEST_AUDIO_LEN : VOTER_XMIT_DEST_PING_LEN)
+
+struct voter_xmit_dest {
+	struct sockaddr_in sin;
+	size_t len;
+	uint32_t respdigest;	 /*!< Client digest; used to re-check txlockout before sendto */
+	unsigned int tx_audio:1; /*!< 1 if TX audio subject to txlockout */
+	unsigned char data[VOTER_XMIT_DEST_DATALEN];
+};
+
+/*!
+ * \brief Count configured clients for a node.
+ * \note Call with voter_lock held.
+ * \param nodenum		Node number to match (from voter_pvt).
+ */
+static int voter_client_count_locked(unsigned int nodenum)
+{
+	int n = 0;
+	struct voter_client *c;
+
+	for (c = clients; c; c = c->next) {
+		if (c->nodenum == nodenum) {
+			n++;
+		}
+	}
+	return n;
+}
+
+/*!
+ * \brief Queue a packet for sendto() after voter_lock is released.
+ * \param tx_audio		Non-zero if this is TX audio gated by txlockout.
+ * \param respdigest		client->respdigest for lockout re-check (ignored if !tx_audio).
+ * \retval 0 on success.
+ * \retval -1 if the snapshot is full or the packet is too large.
+ */
+static int voter_xmit_queue_dest(struct voter_xmit_dest *dests, int *ndests, int maxdests, const struct sockaddr_in *sin,
+	const void *data, size_t len, int tx_audio, uint32_t respdigest)
+{
+	if (!dests || *ndests >= maxdests || len > sizeof(dests[0].data)) {
+		return -1;
+	}
+	dests[*ndests].sin = *sin;
+	dests[*ndests].len = len;
+	dests[*ndests].tx_audio = tx_audio ? 1 : 0;
+	dests[*ndests].respdigest = respdigest;
+	memcpy(dests[*ndests].data, data, len);
+	(*ndests)++;
+	return 0;
+}
+
+/*!
+ * \brief sendto() queued packets outside the long voter_lock critical section.
+ * TX audio lockout is re-checked for all queued packets under one voter_lock
+ * hold before any sendto, so voter_do_txlockout cannot report lockout active
+ * while a previously queued TX packet still goes out afterward.
+ */
+static void voter_xmit_send_dests(struct voter_xmit_dest *dests, int ndests)
+{
+	int i;
+	struct voter_client *c;
+
+	if (!dests || ndests <= 0) {
+		return;
+	}
+
+	ast_mutex_lock(&voter_lock);
+	for (i = 0; i < ndests; i++) {
+		if (!dests[i].len || !dests[i].tx_audio) {
+			continue;
+		}
+		for (c = clients; c; c = c->next) {
+			if (c->respdigest == dests[i].respdigest && !memcmp(&c->sin, &dests[i].sin, sizeof(c->sin))) {
+				break;
+			}
+		}
+		if (!c || c->txlockout || !c->totransmit) {
+			dests[i].len = 0;
+		}
+	}
+	ast_mutex_unlock(&voter_lock);
+
+	for (i = 0; i < ndests; i++) {
+		if (!dests[i].len) {
+			continue;
+		}
+		sendto(udp_socket, dests[i].data, dests[i].len, 0, (struct sockaddr *) &dests[i].sin, sizeof(dests[i].sin));
+	}
+}
+
 /*!
  * \brief Increment the drain index for the specified instance.
  *
@@ -3306,6 +3406,9 @@ static void *voter_xmit(void *data)
 	struct ast_frame fr, *f1, *f2, *f3, wf1;
 	struct voter_client *client, *client1;
 	struct timeval currenttime;
+	struct voter_xmit_dest *xmit_dests = NULL;
+	int xmit_ndests = 0;
+	int xmit_maxdests = 0;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -3330,6 +3433,27 @@ static void *voter_xmit(void *data)
 		if (!p->drained_once) {
 			p->drained_once = 1;
 			continue;
+		}
+		/*
+		 * Snapshot destinations under voter_lock; sendto() after unlock so
+		 * reader/timer are not blocked on UDP I/O. Grow buffer across wakes.
+		 * Allow up to 3 queued packets per client per wake (audio + ping + keepalive).
+		 */
+		xmit_ndests = 0;
+		ast_mutex_lock(&voter_lock);
+		i = voter_client_count_locked(p->nodenum) * 3;
+		ast_mutex_unlock(&voter_lock);
+		if (i > xmit_maxdests) {
+			struct voter_xmit_dest *new_dests = ast_calloc(i, sizeof(*new_dests));
+
+			if (!new_dests) {
+				ast_log(LOG_WARNING, "VOTER %i: Failed to allocate xmit UDP snapshot\n", p->nodenum);
+				/* Keep existing xmit_dests / xmit_maxdests so clients remain usable. */
+			} else {
+				ast_free(xmit_dests);
+				xmit_dests = new_dests;
+				xmit_maxdests = i;
+			}
 		}
 		txqueue = txact = 0;
 		f2 = NULL;
@@ -3665,11 +3789,14 @@ static void *voter_xmit(void *data)
 				if (client->totransmit && !client->txlockout) {
 					ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
 						client->respdigest);
-					/* FINALLY, send the ulaw audio packet over the wire to the client for transmitting */
-					sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
-
-					/* Update when this client last sent an audio packet */
-					client->lastsenttime = ast_radio_tvnow();
+					/* Queue for sendto() after voter_lock is released. */
+					if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &audiopacket,
+							sizeof(audiopacket) - 3, 1, client->respdigest)) {
+						ast_log(LOG_WARNING, "VOTER %i: Dropped ulaw TX packet to %s (snapshot full)\n", p->nodenum, client->name);
+					} else {
+						/* Update when this client last sent an audio packet */
+						client->lastsenttime = ast_radio_tvnow();
+					}
 				}
 			}
 			ast_mutex_unlock(&voter_lock);
@@ -3756,11 +3883,13 @@ static void *voter_xmit(void *data)
 					if (client->totransmit && !client->txlockout) {
 						ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, client->respdigest);
-						/* Finally, send the ADPCM audio packet over the wire to the client for transmitting. */
-						sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
-
-						/* Update when this client last sent an audio packet */
-						client->lastsenttime = ast_radio_tvnow();
+						if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &audiopacket,
+								sizeof(audiopacket), 1, client->respdigest)) {
+							ast_log(LOG_WARNING, "VOTER %i: Dropped ADPCM TX packet to %s (snapshot full)\n", p->nodenum, client->name);
+						} else {
+							/* Update when this client last sent an audio packet */
+							client->lastsenttime = ast_radio_tvnow();
+						}
 					}
 #endif
 				}
@@ -3832,8 +3961,12 @@ static void *voter_xmit(void *data)
 				pingpacket.vp.digest = htonl(client->respdigest);
 				pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				/* Send the ping packet on the wire. */
-				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
+				if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &pingpacket, sizeof(pingpacket), 0, 0)) {
+					ast_log(LOG_WARNING, "VOTER %i: Dropped ping packet to %s (snapshot full)\n", p->nodenum, client->name);
+					/* Roll back accounting so we retry next wake. */
+					client->pings_sent--;
+					client->ping_seqno--;
+				}
 			}
 		}
 		/* Process sending keepalive packets for each client, if necessary */
@@ -3862,14 +3995,20 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.digest = htonl(client->respdigest);
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
-
-				/* Update when this client last sent a keepalive packet */
-				client->lastsenttime = ast_radio_tvnow();
+				if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &audiopacket,
+						sizeof(VOTER_PACKET_HEADER), 0, 0)) {
+					ast_log(LOG_WARNING, "VOTER %i: Dropped keepalive to %s (snapshot full)\n", p->nodenum, client->name);
+				} else {
+					/* Update when this client last sent a keepalive packet */
+					client->lastsenttime = ast_radio_tvnow();
+				}
 			}
 		}
 		ast_mutex_unlock(&voter_lock);
+		/* Network I/O outside the long lock; TX audio lockout checked once for the batch. */
+		voter_xmit_send_dests(xmit_dests, xmit_ndests);
 	}
+	ast_free(xmit_dests);
 	pthread_exit(NULL);
 }
 
