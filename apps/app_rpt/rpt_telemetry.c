@@ -3602,10 +3602,6 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			}
 		}
 
-		if (!ast_variable_retrieve(myrpt->cfg, myrpt->name, "linkunkeyct")) {
-			return;
-		}
-
 		break;
 
 	default:
