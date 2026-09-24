@@ -3392,7 +3392,7 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 		l->lastrx1 = 0;
 		/* XXX Note in first usage, rpt_update_links is first,
 		 * but in second, time was first. Don't think it matters though. */
-		ast_copy_string(myrpt->last_remote_unkey, l->name, sizeof(myrpt->last_remote_unkey) - 1);
+		ast_copy_string(myrpt->last_remote_unkey, l->name, sizeof(myrpt->last_remote_unkey));
 		rpt_update_links(myrpt);
 		time(&l->lastunkeytime);
 		if (myrpt->p.duplex)
