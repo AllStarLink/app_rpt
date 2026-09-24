@@ -900,13 +900,25 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, const char 
  */
 static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char *ct_key, const char *why, int delay)
 {
-	const char *ct;
+	const char *ct = NULL;
 	int res;
 
-	ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
+	if (myrpt->last_remote_unkey[0] != '\0') {
+		char remote_ct[MAXNODESTR + sizeof("node_") + 1];
+
+		/* Look for a configured CT for a specific node
+		 * using the format node_<node_id>
+		 */
+		snprintf(remote_ct, sizeof(remote_ct), "node_%s", myrpt->last_remote_unkey);
+		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, remote_ct);
+	}
+
 	if (!ct || ast_strlen_zero(ct)) {
-		donodelog_fmt(myrpt, "TELEMETRY,%s,%s*", myrpt->name, why);
-		return 0;
+		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
+		if (!ct || ast_strlen_zero(ct)) {
+			donodelog_fmt(myrpt, "TELEMETRY,%s,%s*", myrpt->name, why);
+			return 0;
+		}
 	}
 
 	if (delay) {

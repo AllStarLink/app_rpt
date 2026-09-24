@@ -3372,6 +3372,7 @@ static inline void log_unkeyed(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 	donodelog(myrpt, "TXUNKEY,MAIN");
 	rpt_update_boolean(myrpt, "RPT_TXKEYED", 0);
+	myrpt->last_remote_unkey[0] = '\0'; /* Clear last remote unkey */
 	if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
 		if (myrpt->sleepreq) {
 			myrpt->sleeptimer = 0;
@@ -3391,6 +3392,7 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 		l->lastrx1 = 0;
 		/* XXX Note in first usage, rpt_update_links is first,
 		 * but in second, time was first. Don't think it matters though. */
+		ast_copy_string(myrpt->last_remote_unkey, l->name, sizeof(myrpt->last_remote_unkey) - 1);
 		rpt_update_links(myrpt);
 		time(&l->lastunkeytime);
 		if (myrpt->p.duplex)
