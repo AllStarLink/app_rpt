@@ -921,7 +921,7 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 	const char *ct = NULL;
 	int res;
 
-	if (!strcmp(ct_key, "linkunkeyct")) {
+	if (!strcmp(ct_key, "linkunkeyct") || !strcmp(ct_key, "localct")) {
 		/* Look for a configured CT for a specific node
 		 * using the format linkunkeyct_<node_id> when a link has unkeyed
 		 */
