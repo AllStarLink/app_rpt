@@ -3564,7 +3564,11 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 		if (!l->voxtostate)
 			myrx = myrx || l->wasvox;
 	}
-	l->lastrx = myrx;
+	if (l->lastrx != !!myrx) {
+		rpt_mutex_lock(&myrpt->lock);
+		rpt_link_set_lastrx(myrpt, l, myrx);
+		rpt_mutex_unlock(&myrpt->lock);
+	}
 
 	update_timer(&l->linklisttimer, elap, 0);
 
@@ -4788,14 +4792,12 @@ static inline void rxkey_helper(struct rpt *myrpt, struct rpt_link *l)
 void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_channel *who;
-	struct rpt_link *m;
 	int n = 0, ms = MSWAIT, myfirst = 0;
 	struct ast_channel *cs[2];
 	struct ast_frame wf = {
 		.frametype = AST_FRAME_CNG,
 		.src = __PRETTY_FUNCTION__,
 	};
-	struct ao2_iterator l_it;
 	int totx;
 	int remnomute, remrx;
 	struct timeval now;
@@ -4851,15 +4853,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		}
 
 		remrx = 0;
-		/* see if any other links are receiving */
+		/* Any other MONITOR/TRANSCEIVE link receiving? (O(1) via remrx_links_txable) */
 		rpt_mutex_lock(&myrpt->lock);
-		RPT_LIST_TRAVERSE(myrpt->links, m, l_it) {
-			/* if not the link we are currently processing, and not localonly count it */
-			if ((m != l) && (m->lastrx) && (m->mode < 2)) {
-				remrx = 1;
-			}
+		if (myrpt->remrx_links_txable > (unsigned int) (l->lastrx && l->mode < MODE_LOCAL_MONITOR)) {
+			remrx = 1;
 		}
-		ao2_iterator_destroy(&l_it);
 		rpt_mutex_unlock(&myrpt->lock);
 
 		now = rpt_tvnow();
@@ -5177,6 +5175,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
+	rpt_link_set_lastrx(myrpt, l, 0); /* drop from remrx aggregates before unlink */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
 	if (!strcmp(myrpt->cmdnode, l->name)) {
 		myrpt->cmdnode[0] = 0;
@@ -5629,7 +5628,6 @@ static void *rpt(void *this)
 			snprintf(tmpstr, sizeof(tmpstr), "G %s %s %s %s", myrpt->name, lat, lon, elev);
 
 			rpt_mutex_lock(&myrpt->lock);
-			myrpt->voteremrx = 0; /* no voter remotes keyed */
 			if (myrpt->links) {
 				ao2_callback(myrpt->links, OBJ_MULTIPLE | OBJ_NODATA, rpt_sendtext_cb, &tmpstr);
 			}
@@ -5638,18 +5636,8 @@ static void *rpt(void *this)
 		rpt_mutex_lock(&myrpt->lock);
 
 		/* If someone's connected, and they're transmitting from their end to us, set remrx true */
-		myrpt->remrx = 0;
-		RPT_LIST_TRAVERSE(myrpt->links, l, l_it) {
-			if (l->lastrx) {
-				myrpt->remrx = 1;
-				if (l->voterlink)
-					myrpt->voteremrx = 1;
-				if (IS_NODE_EXTEN(l->name)) { /* Ignore '0' nodes */
-					ast_copy_string(myrpt->lastnodewhichkeyedusup, l->name, sizeof(myrpt->lastnodewhichkeyedusup));
-				}
-			}
-		}
-		ao2_iterator_destroy(&l_it);
+		myrpt->remrx = myrpt->remrx_links > 0;
+		myrpt->voteremrx = myrpt->voteremrx_links > 0;
 		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) { /* If sleep mode enabled */
 			if (myrpt->remrx) {							  /* signal coming from net wakes up system */
 				myrpt->sleeptimer = myrpt->p.sleeptime;	  /* reset sleep timer */

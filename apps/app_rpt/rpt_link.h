@@ -90,8 +90,19 @@ void rpt_link_add(struct ao2_container *links, struct rpt_link *l);
  * \param links ao2_container to remove the link from
  * \param l Link to remove from the container
  */
-
 void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
+
+/*!
+ * \brief Set link RX keyed state and update remrx aggregate counters.
+ * \note Caller must hold myrpt->lock. No-op if lastrx already equals rx.
+ */
+void rpt_link_set_lastrx(struct rpt *myrpt, struct rpt_link *l, int rx);
+
+/*!
+ * \brief Adjust remrx_links_txable when link mode changes while lastrx is set.
+ * Updates l->mode. Caller must hold myrpt->lock.
+ */
+void rpt_link_set_mode(struct rpt *myrpt, struct rpt_link *l, enum link_mode mode);
 
 /*!
  * \brief destroy ao2 object
