@@ -143,7 +143,7 @@ int rpt_cleanup_telemetry()
  * \param ct The pointer to the ct variable. NULL if not found.
  */
 
-static const char *rpt_telem_find_linkunkey(struct rpt *myrpt)
+static const char *rpt_telem_find_linkunkey(struct rpt *myrpt, const char *ct_key)
 {
 	char remote_ct_key[MAXNODESTR + sizeof("linkunkeyct_") + 1];
 	const char *ct = NULL;
@@ -151,7 +151,7 @@ static const char *rpt_telem_find_linkunkey(struct rpt *myrpt)
 	snprintf(remote_ct_key, sizeof(remote_ct_key), "linkunkeyct_%s", myrpt->last_remote_unkey);
 	ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, remote_ct_key);
 	if (!ct || ast_strlen_zero(ct)) {
-		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, "linkunkeyct");
+		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
 	}
 	return ct;
 }
@@ -921,11 +921,13 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 	const char *ct = NULL;
 	int res;
 
-	if ((!strcmp(why, "LINKUNKEY") || !strcmp(why, "LOCUNKEY")) && myrpt->last_remote_unkey[0] != '\0') {
+	if (!strcmp(ct_key, "linkunkeyct")) {
 		/* Look for a configured CT for a specific node
 		 * using the format linkunkeyct_<node_id> when a link has unkeyed
 		 */
-		ct = rpt_telem_find_linkunkey(myrpt);
+		ct = rpt_telem_find_linkunkey(myrpt, ct_key);
+	} else {
+		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
 	}
 
 	if (!ct || ast_strlen_zero(ct)) {
@@ -3616,7 +3618,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			}
 		}
 		/* Check if any linkunkeyct keys are present.  If not, don't start a ct telemetry thread */
-		ct = rpt_telem_find_linkunkey(myrpt);
+		ct = rpt_telem_find_linkunkey(myrpt, "linkunkeyct");
 		if (!ct || ast_strlen_zero(ct)) {
 			return;
 		}
