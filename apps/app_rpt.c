@@ -3394,9 +3394,10 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 		 * but in second, time was first. Don't think it matters though. */
 		rpt_update_links(myrpt);
 		time(&l->lastunkeytime);
-		if (myrpt->p.duplex)
+		if (myrpt->p.duplex) {
 			ast_copy_string(myrpt->last_remote_unkey, l->name, sizeof(myrpt->last_remote_unkey));
 			rpt_telemetry(myrpt, LINKUNKEY, l);
+		}
 	}
 }
 
@@ -3609,9 +3610,10 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 			l->rerxtimer = 0;
 			if (l->lastrx1) {
 				donodelog_fmt(myrpt, "RXUNKEY(T),%s", l->name);
-				if (myrpt->p.duplex)
+				if (myrpt->p.duplex) {
 					ast_copy_string(myrpt->last_remote_unkey, l->name, sizeof(myrpt->last_remote_unkey));
 					rpt_telemetry(myrpt, LINKUNKEY, l);
+				}
 				l->lastrx1 = 0;
 				rpt_update_links(myrpt);
 			}
