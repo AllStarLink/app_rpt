@@ -405,6 +405,10 @@ static int nullfd = -1;
 static int reload(void);
 
 AST_MUTEX_DEFINE_STATIC(voter_lock);
+/*! Signaled when voter_xmit_tx_inflight drops to zero (txlockout drain). */
+static ast_cond_t voter_xmit_tx_cond;
+/*! TX audio packets approved for sendto() but not yet finished sending. */
+static int voter_xmit_tx_inflight;
 
 struct ast_timer *voter_thread_timer = NULL;
 
@@ -1055,6 +1059,10 @@ static void mkpucked(const struct voter_client *client, VTIME *dst)
  *
  * Buffer must fit the largest wire payload we queue: ADPCM audiopacket
  * (header + rssi + FRAME_SIZE + 3) or ping (header + seqno + 2 * timeval + filler).
+ *
+ * TX audio: voter_xmit_send_dests re-checks lockout under voter_lock, accounts
+ * packets in voter_xmit_tx_inflight, then sendto()s. voter_do_txlockout waits
+ * for inflight to drain so lockout does not return while queued TX may still send.
  */
 #define VOTER_XMIT_DEST_AUDIO_LEN (sizeof(VOTER_PACKET_HEADER) + 1 + FRAME_SIZE + 3)
 #define VOTER_XMIT_DEST_PING_LEN (sizeof(VOTER_PACKET_HEADER) + sizeof(unsigned int) + (sizeof(struct timeval) * 2) + 128)
@@ -1064,8 +1072,9 @@ static void mkpucked(const struct voter_client *client, VTIME *dst)
 struct voter_xmit_dest {
 	struct sockaddr_in sin;
 	size_t len;
-	uint32_t respdigest;	 /*!< Client digest; used to re-check txlockout before sendto */
-	unsigned int tx_audio:1; /*!< 1 if TX audio subject to txlockout */
+	struct voter_client *client; /*!< Live list pointer at queue; matched under lock before send */
+	unsigned int tx_audio:1;	 /*!< 1 if TX audio subject to txlockout */
+	unsigned int send_ok:1;		 /*!< Set during lockout recheck when still eligible */
 	unsigned char data[VOTER_XMIT_DEST_DATALEN];
 };
 
@@ -1090,20 +1099,24 @@ static int voter_client_count_locked(unsigned int nodenum)
 /*!
  * \brief Queue a packet for sendto() after voter_lock is released.
  * \param tx_audio		Non-zero if this is TX audio gated by txlockout.
- * \param respdigest		client->respdigest for lockout re-check (ignored if !tx_audio).
+ * \param client		Client for TX audio lockout recheck (NULL if !tx_audio).
  * \retval 0 on success.
  * \retval -1 if the snapshot is full or the packet is too large.
  */
 static int voter_xmit_queue_dest(struct voter_xmit_dest *dests, int *ndests, int maxdests, const struct sockaddr_in *sin,
-	const void *data, size_t len, int tx_audio, uint32_t respdigest)
+	const void *data, size_t len, int tx_audio, struct voter_client *client)
 {
 	if (!dests || *ndests >= maxdests || len > sizeof(dests[0].data)) {
+		return -1;
+	}
+	if (tx_audio && !client) {
 		return -1;
 	}
 	dests[*ndests].sin = *sin;
 	dests[*ndests].len = len;
 	dests[*ndests].tx_audio = tx_audio ? 1 : 0;
-	dests[*ndests].respdigest = respdigest;
+	dests[*ndests].send_ok = 0;
+	dests[*ndests].client = tx_audio ? client : NULL;
 	memcpy(dests[*ndests].data, data, len);
 	(*ndests)++;
 	return 0;
@@ -1111,33 +1124,55 @@ static int voter_xmit_queue_dest(struct voter_xmit_dest *dests, int *ndests, int
 
 /*!
  * \brief sendto() queued packets outside the long voter_lock critical section.
- * TX audio lockout is re-checked for all queued packets under one voter_lock
- * hold before any sendto, so voter_do_txlockout cannot report lockout active
- * while a previously queued TX packet still goes out afterward.
+ *
+ * TX audio is revalidated under voter_lock by walking the live client list once
+ * and matching queued destinations by client pointer. Eligible TX packets bump
+ * lastsenttime and voter_xmit_tx_inflight before unlock; voter_do_txlockout waits
+ * for that counter so CLI lockout does not return until those sendto()s finish.
  */
 static void voter_xmit_send_dests(struct voter_xmit_dest *dests, int ndests)
 {
 	int i;
+	int nsend = 0;
+	int unresolved = 0;
 	struct voter_client *c;
+	struct timeval now;
 
 	if (!dests || ndests <= 0) {
 		return;
 	}
 
+	now = ast_radio_tvnow();
 	ast_mutex_lock(&voter_lock);
 	for (i = 0; i < ndests; i++) {
-		if (!dests[i].len || !dests[i].tx_audio) {
+		if (!dests[i].tx_audio || !dests[i].len) {
 			continue;
 		}
-		for (c = clients; c; c = c->next) {
-			if (c->respdigest == dests[i].respdigest && !memcmp(&c->sin, &dests[i].sin, sizeof(c->sin))) {
-				break;
+		dests[i].send_ok = 0;
+		unresolved++;
+	}
+	/* Client-outer walk: pointer match, no per-packet full-list scan. */
+	for (c = clients; c && unresolved > 0; c = c->next) {
+		for (i = 0; i < ndests; i++) {
+			if (!dests[i].tx_audio || !dests[i].len || dests[i].client != c) {
+				continue;
 			}
+			unresolved--;
+			if (c->txlockout || !c->totransmit) {
+				dests[i].len = 0;
+				continue;
+			}
+			dests[i].send_ok = 1;
+			c->lastsenttime = now;
+			nsend++;
 		}
-		if (!c || c->txlockout || !c->totransmit) {
+	}
+	for (i = 0; i < ndests; i++) {
+		if (dests[i].tx_audio && dests[i].len && !dests[i].send_ok) {
 			dests[i].len = 0;
 		}
 	}
+	voter_xmit_tx_inflight += nsend;
 	ast_mutex_unlock(&voter_lock);
 
 	for (i = 0; i < ndests; i++) {
@@ -1145,6 +1180,13 @@ static void voter_xmit_send_dests(struct voter_xmit_dest *dests, int ndests)
 			continue;
 		}
 		sendto(udp_socket, dests[i].data, dests[i].len, 0, (struct sockaddr *) &dests[i].sin, sizeof(dests[i].sin));
+	}
+
+	if (nsend > 0) {
+		ast_mutex_lock(&voter_lock);
+		voter_xmit_tx_inflight -= nsend;
+		ast_cond_broadcast(&voter_xmit_tx_cond);
+		ast_mutex_unlock(&voter_lock);
 	}
 }
 
@@ -2937,6 +2979,7 @@ static char *handle_cli_tone(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 {
 	int i, n, newval, requested_node;
+	int drain_inflight = 0;
 	char str[300], *strs[100];
 	struct voter_pvt *p;
 	struct voter_client *client;
@@ -2969,6 +3012,7 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 				}
 				client->txlockout = 1;
 			}
+			drain_inflight = 1;
 		} else if (!strcasecmp(argv[3], "none")) {
 			for (client = clients; client; client = client->next) {
 				if (client->nodenum != p->nodenum) {
@@ -3000,12 +3044,23 @@ static int voter_do_txlockout(int fd, int argc, const char *const *argv)
 					}
 					ast_cli(fd, "Client %s TX lockout %s\n", strs[i], (newval) ? "Enabled" : "Disabled");
 					client->txlockout = newval;
+					if (newval) {
+						drain_inflight = 1;
+					}
 					break;
 				}
 				if (!client) {
 					ast_cli(fd, "Client %s not found!!\n", strs[i]);
 				}
 			}
+		}
+		/*
+		 * Wait for TX packets already approved for sendto() to finish so
+		 * lockout does not return while those UDP sends may still be in flight.
+		 * ast_cond_wait releases voter_lock while waiting.
+		 */
+		while (drain_inflight && voter_xmit_tx_inflight > 0) {
+			ast_cond_wait(&voter_xmit_tx_cond, &voter_lock);
 		}
 	}
 	ast_cli(fd, "\nFull list of TX locked out clients for VOTER instance %i:\n", requested_node);
@@ -3791,11 +3846,8 @@ static void *voter_xmit(void *data)
 						client->respdigest);
 					/* Queue for sendto() after voter_lock is released. */
 					if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &audiopacket,
-							sizeof(audiopacket) - 3, 1, client->respdigest)) {
+							sizeof(audiopacket) - 3, 1, client)) {
 						ast_log(LOG_WARNING, "VOTER %i: Dropped ulaw TX packet to %s (snapshot full)\n", p->nodenum, client->name);
-					} else {
-						/* Update when this client last sent an audio packet */
-						client->lastsenttime = ast_radio_tvnow();
 					}
 				}
 			}
@@ -3884,11 +3936,8 @@ static void *voter_xmit(void *data)
 						ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, client->respdigest);
 						if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &audiopacket,
-								sizeof(audiopacket), 1, client->respdigest)) {
+								sizeof(audiopacket), 1, client)) {
 							ast_log(LOG_WARNING, "VOTER %i: Dropped ADPCM TX packet to %s (snapshot full)\n", p->nodenum, client->name);
-						} else {
-							/* Update when this client last sent an audio packet */
-							client->lastsenttime = ast_radio_tvnow();
 						}
 					}
 #endif
@@ -3961,7 +4010,7 @@ static void *voter_xmit(void *data)
 				pingpacket.vp.digest = htonl(client->respdigest);
 				pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &pingpacket, sizeof(pingpacket), 0, 0)) {
+				if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &pingpacket, sizeof(pingpacket), 0, NULL)) {
 					ast_log(LOG_WARNING, "VOTER %i: Dropped ping packet to %s (snapshot full)\n", p->nodenum, client->name);
 					/* Roll back accounting so we retry next wake. */
 					client->pings_sent--;
@@ -3996,7 +4045,7 @@ static void *voter_xmit(void *data)
 				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 				ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
 				if (voter_xmit_queue_dest(xmit_dests, &xmit_ndests, xmit_maxdests, &client->sin, &audiopacket,
-						sizeof(VOTER_PACKET_HEADER), 0, 0)) {
+						sizeof(VOTER_PACKET_HEADER), 0, NULL)) {
 					ast_log(LOG_WARNING, "VOTER %i: Dropped keepalive to %s (snapshot full)\n", p->nodenum, client->name);
 				} else {
 					/* Update when this client last sent a keepalive packet */
@@ -4005,7 +4054,7 @@ static void *voter_xmit(void *data)
 			}
 		}
 		ast_mutex_unlock(&voter_lock);
-		/* Network I/O outside the long lock; TX audio lockout checked once for the batch. */
+		/* Network I/O outside the long lock; TX lockout drained via inflight. */
 		voter_xmit_send_dests(xmit_dests, xmit_ndests);
 	}
 	ast_free(xmit_dests);
@@ -6774,6 +6823,7 @@ static int unload_module(void)
 
 	ao2_ref(voter_tech.capabilities, -1);
 	voter_tech.capabilities = NULL;
+	ast_cond_destroy(&voter_xmit_tx_cond);
 	return 0;
 }
 
@@ -6798,6 +6848,9 @@ static int load_module(void)
 	struct ast_flags zeroflag = { 0 };
 
 	run_forever = 1;
+
+	ast_cond_init(&voter_xmit_tx_cond, NULL);
+	voter_xmit_tx_inflight = 0;
 
 	/* Create our host's random challenge string, used for authenticating connections
 	 * with client hardware that wants to connect to us.
