@@ -572,6 +572,16 @@ struct rpt_frame_queue {
 	struct ast_frame *lastf1, *lastf2;
 };
 
+/*!
+ * Counted voice-frame FIFO for simplex delay queues.
+ * Depth lives with the list so helpers always get a matched pair.
+ * Other lists (e.g. textq) that do not need a depth keep AST_LIST_HEAD_NOLOCK.
+ */
+typedef struct rpt_framelist {
+	AST_LIST_HEAD_NOLOCK(, ast_frame) list;
+	unsigned int depth;
+} rpt_framelist_t;
+
 enum rpt_link_disconnect {
 	RPT_LINK_DISCONNECT_NONE = 0,
 	RPT_LINK_DISCONNECT = 1,
@@ -651,7 +661,7 @@ struct rpt_link {
 	int votewinner; /*!< \brief set if node won the rssi competition */
 	time_t lastkeytime;
 	time_t lastunkeytime;
-	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
+	rpt_framelist_t rxq;
 	AST_LIST_HEAD_NOLOCK(, ast_frame) textq;
 };
 
@@ -1135,8 +1145,8 @@ struct rpt {
 #else
 	tone_detect_state_t burst_tone_state;
 #endif
-	AST_LIST_HEAD_NOLOCK(, ast_frame) txq;
-	AST_LIST_HEAD_NOLOCK(, ast_frame) rxq;
+	rpt_framelist_t txq;
+	rpt_framelist_t rxq;
 	char txrealkeyed;
 #ifdef __RPT_NOTCH
 	struct rptfilter {
