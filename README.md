@@ -83,3 +83,4 @@ Install from source instructions can be found in the asl3-asterisk repo: https:/
 ## Automatic Installation
 
 Updated instructions are in the ASL3-Manual repo at https://github.com/AllStarLink/ASL3-Manual/blob/main/docs/user-guide/install.md
+
