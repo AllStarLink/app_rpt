@@ -3392,10 +3392,10 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 		l->lastrx1 = 0;
 		/* XXX Note in first usage, rpt_update_links is first,
 		 * but in second, time was first. Don't think it matters though. */
-		ast_copy_string(myrpt->last_remote_unkey, l->name, sizeof(myrpt->last_remote_unkey));
 		rpt_update_links(myrpt);
 		time(&l->lastunkeytime);
 		if (myrpt->p.duplex)
+			ast_copy_string(myrpt->last_remote_unkey, l->name, sizeof(myrpt->last_remote_unkey));
 			rpt_telemetry(myrpt, LINKUNKEY, l);
 	}
 }
@@ -3610,6 +3610,7 @@ static inline int periodic_process_link(struct rpt *myrpt, struct rpt_link *l, c
 			if (l->lastrx1) {
 				donodelog_fmt(myrpt, "RXUNKEY(T),%s", l->name);
 				if (myrpt->p.duplex)
+					ast_copy_string(myrpt->last_remote_unkey, l->name, sizeof(myrpt->last_remote_unkey));
 					rpt_telemetry(myrpt, LINKUNKEY, l);
 				l->lastrx1 = 0;
 				rpt_update_links(myrpt);
