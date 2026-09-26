@@ -3517,10 +3517,9 @@ static int telem_coalesces(enum rpt_tele_mode queued, enum rpt_tele_mode mode)
 {
 	switch (mode) {
 	case ID:
-	case IDTALKOVER:
-		return queued == ID || queued == IDTALKOVER;
+	case IDTALKOVER: /* Only the same mode: ID and IDTALKOVER play different audio */
 	case TIMEOUT:
-		return queued == TIMEOUT;
+		return queued == mode;
 	default:
 		return 0;
 	}
