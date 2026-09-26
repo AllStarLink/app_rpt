@@ -3491,7 +3491,8 @@ static const char *rpt_tele_mode_str(enum rpt_tele_mode mode)
 /*!
  * \brief Can this telemetry request be dropped when the tele list is full?
  * \retval 0 for requests whose caller has already consumed state (ID timers),
- *         that are priority (TIMEOUT), or whose thread changes rig settings.
+ *         that are priority (TIMEOUT), whose thread changes rig settings, or
+ *         whose thread must reset state the caller set (PARROT).
  */
 static int telem_droppable(enum rpt_tele_mode mode)
 {
@@ -3501,6 +3502,9 @@ static int telem_droppable(enum rpt_tele_mode mode)
 	case TIMEOUT:	 /* Priority, overrides the time out condition */
 	case SETREMOTE:
 	case TUNE: /* Thread performs the rig change, and clears tunerequest */
+	case PARROT:
+		/* Caller set PARROT_STATE_PLAYING, which keys TX until the thread
+		 * resets it. At most one is outstanding. */
 		return 0;
 	default:
 		return 1;
