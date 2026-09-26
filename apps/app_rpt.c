@@ -6097,9 +6097,6 @@ static void *rpt(void *this)
 		}
 		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
-		if (who == NULL) {
-			ms = 0;
-		}
 		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		rpt_mutex_lock(&myrpt->lock);
 		if (update_timers(myrpt, elap, totx)) {
@@ -6112,7 +6109,9 @@ static void *rpt(void *this)
 			 * Test who, not ms: ast_waitfor_n() clamps ms to 0 when a
 			 * channel became ready at or after the timeout, and skipping
 			 * that read lets the channel read queues back up under load.
+			 * Reset ms so a poll error (ms == -1) does not end the loop.
 			 */
+			ms = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			continue;
 		}
