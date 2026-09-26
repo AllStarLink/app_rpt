@@ -494,6 +494,10 @@ void rpt_set_dns_node_domain(const char *dns_name);
 #define IS_XPMR(x) (!strncasecmp(x->rxchanname, "rad", 3))
 
 #define MSWAIT 20
+#define TELEM_QUEUE_MAX 100		   /* Max entries on a node's tele list, new requests are dropped past this */
+#define TELEM_QUEUE_WARN 25		   /* Warn when a node's tele list reaches this depth */
+#define TELEM_WARN_INTERVAL 60	   /* Min seconds between telemetry queue warnings */
+#define TELEM_ACTIVE_WARN_SECS 300 /* Warn when one telemetry item has been active this long */
 #define HANGTIME 5000
 #define SLEEPTIME 900					 /* default # of seconds for of no activity before entering sleep mode */
 #define TOTIME 180000					 /* default timeout time to 180000ms (3 minutes) */
@@ -1089,6 +1093,11 @@ struct rpt {
 	time_t start_time, last_activity_time;
 	char lasttone[32];
 	struct rpt_tele *active_telem;
+	time_t active_telem_start;	/*!< Monotonic time active_telem was set */
+	time_t active_telem_warned; /*!< Monotonic time of the last long-active telemetry warning */
+	time_t telem_queue_warned;	/*!< Monotonic time of the last telemetry queue depth warning */
+	unsigned int telem_count;	/*!< Number of entries on the tele list */
+	unsigned int telem_dropped; /*!< Telemetry requests dropped since the last queue warning */
 	struct rpt_topkey topkey[TOPKEYN];
 	int topkeystate;
 	time_t topkeytime;
