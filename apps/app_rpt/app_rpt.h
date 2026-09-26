@@ -494,10 +494,10 @@ void rpt_set_dns_node_domain(const char *dns_name);
 #define IS_XPMR(x) (!strncasecmp(x->rxchanname, "rad", 3))
 
 #define MSWAIT 20
-#define TELEM_QUEUE_MAX 100			/* Max entries on a node's tele list, new requests are dropped past this */
-#define TELEM_QUEUE_WARN 25			/* Warn when a node's tele list reaches this depth */
-#define TELEM_WARN_INTERVAL 60		/* Min seconds between telemetry queue warnings */
-#define TELEM_ACTIVE_WARN_SECS 300	/* Warn when one telemetry item has been active this long */
+#define TELEM_QUEUE_MAX 100		   /* Max entries on a node's tele list, new requests are dropped past this */
+#define TELEM_QUEUE_WARN 25		   /* Warn when a node's tele list reaches this depth */
+#define TELEM_WARN_INTERVAL 60	   /* Min seconds between telemetry queue warnings */
+#define TELEM_ACTIVE_WARN_SECS 300 /* Warn when one telemetry item has been active this long */
 #define HANGTIME 5000
 #define SLEEPTIME 900					 /* default # of seconds for of no activity before entering sleep mode */
 #define TOTIME 180000					 /* default timeout time to 180000ms (3 minutes) */
