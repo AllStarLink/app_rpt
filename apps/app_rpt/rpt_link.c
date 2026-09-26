@@ -170,17 +170,22 @@ int altlink1(struct rpt *myrpt, struct rpt_link *mylink)
 	if (!mylink->chan) {
 		return 0;
 	}
+	/*
+	 * Walk tele under myrpt->lock: tele_link_add/remove mutate the list while
+	 * holding that lock; process_link_channel calls us unlocked (~every 19 ms).
+	 * An unlocked walk can hit a NULL next and SIGSEGV on tlist->mode (#1244).
+	 */
 	nonlocals = 0;
+	rpt_mutex_lock(&myrpt->lock);
 	tlist = myrpt->tele.next;
 	check_tlink_list(myrpt);
-	if (tlist != &myrpt->tele) {
-		while (tlist != &myrpt->tele) {
-			if ((tlist->mode == PLAYBACK) || (tlist->mode == STATS_GPS_LEGACY) || (tlist->mode == ID1) || (tlist->mode == TEST_TONE)) {
-				nonlocals++;
-			}
-			tlist = tlist->next;
+	while (tlist && tlist != &myrpt->tele) {
+		if ((tlist->mode == PLAYBACK) || (tlist->mode == STATS_GPS_LEGACY) || (tlist->mode == ID1) || (tlist->mode == TEST_TONE)) {
+			nonlocals++;
 		}
+		tlist = tlist->next;
 	}
+	rpt_mutex_unlock(&myrpt->lock);
 	if ((!myrpt->p.duplex && !myrpt->p.linktolink) || (!nonlocals)) {
 		return 0;
 	}
