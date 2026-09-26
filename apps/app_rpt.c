@@ -5740,6 +5740,7 @@ static void *rpt(void *this)
 			}
 			telem = telem->next;
 		}
+		rpt_telem_watchdog(myrpt);
 
 		/* Add in any "other" telemetry, unless specified otherwise */
 		if (!myrpt->p.notelemtx)

@@ -19,6 +19,12 @@ void *rpt_tele_thread(void *this);
 void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data);
 
 /*!
+ * \brief Log a warning if the active telemetry has been running too long
+ * \note myrpt->lock must be held
+ */
+void rpt_telem_watchdog(struct rpt *myrpt);
+
+/*!
  * \brief Register telemetry function
  */
 int rpt_init_telemetry(void);
