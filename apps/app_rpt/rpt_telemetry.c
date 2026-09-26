@@ -3507,6 +3507,25 @@ static int telem_droppable(enum rpt_tele_mode mode)
 	}
 }
 
+/*!
+ * \brief Is a waiting telemetry entry equivalent to a new request, so the request adds nothing?
+ * \note Only for non-droppable modes that wait for the active slot (a waiting
+ *       entry will still play). SETREMOTE starts at once and reads the rig state
+ *       itself, and TUNE is already limited to one by tunerequest.
+ */
+static int telem_coalesces(enum rpt_tele_mode queued, enum rpt_tele_mode mode)
+{
+	switch (mode) {
+	case ID:
+	case IDTALKOVER:
+		return queued == ID || queued == IDTALKOVER;
+	case TIMEOUT:
+		return queued == TIMEOUT;
+	default:
+		return 0;
+	}
+}
+
 void rpt_telem_watchdog(struct rpt *myrpt)
 {
 	time_t now;
@@ -3984,16 +4003,21 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	if (myrpt->telem_count >= TELEM_QUEUE_WARN) {
 		time_t now = rpt_time_monotonic();
 		unsigned int live = 0;
-		int drop;
+		int drop, dup = 0;
 		struct rpt_tele *telem;
 
 		for (telem = myrpt->tele.next; telem != &myrpt->tele; telem = telem->next) {
-			if (!telem->killed) {
-				live++;
+			if (telem->killed) {
+				continue;
+			}
+			live++;
+			if (telem != myrpt->active_telem && telem_coalesces(telem->mode, mode)) {
+				dup = 1;
 			}
 		}
 
-		drop = live >= TELEM_QUEUE_MAX && telem_droppable(mode);
+		/* At the cap, drop announcements, and never-drop requests already waiting in the queue */
+		drop = live >= TELEM_QUEUE_MAX && (telem_droppable(mode) || dup);
 		if (drop) {
 			myrpt->telem_dropped++;
 		}
