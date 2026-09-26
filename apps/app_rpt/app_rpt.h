@@ -1093,11 +1093,11 @@ struct rpt {
 	time_t start_time, last_activity_time;
 	char lasttone[32];
 	struct rpt_tele *active_telem;
-	time_t active_telem_start;	 /*!< Monotonic time active_telem was set */
-	time_t active_telem_warned;	 /*!< Monotonic time of the last long-active telemetry warning */
-	time_t telem_queue_warned;	 /*!< Monotonic time of the last telemetry queue depth warning */
-	unsigned int telem_count;	 /*!< Number of entries on the tele list */
-	unsigned int telem_dropped;	 /*!< Telemetry requests dropped since the last queue warning */
+	time_t active_telem_start;	/*!< Monotonic time active_telem was set */
+	time_t active_telem_warned; /*!< Monotonic time of the last long-active telemetry warning */
+	time_t telem_queue_warned;	/*!< Monotonic time of the last telemetry queue depth warning */
+	unsigned int telem_count;	/*!< Number of entries on the tele list */
+	unsigned int telem_dropped; /*!< Telemetry requests dropped since the last queue warning */
 	struct rpt_topkey topkey[TOPKEYN];
 	int topkeystate;
 	time_t topkeytime;
