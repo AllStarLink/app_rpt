@@ -3958,22 +3958,33 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	/* Each queued item is a thread polling myrpt->lock until its turn. If the
 	 * queue stops draining (active item never finishes), cap it rather than
 	 * letting threads and lock contention grow without bound.
+	 * Only live entries count: flush_telem() marks entries killed but they stay
+	 * on the list until their threads exit, and a priority request queued right
+	 * after a flush (TIMEOUT) must not be dropped because of them.
 	 */
 	if (myrpt->telem_count >= TELEM_QUEUE_WARN) {
 		time_t now = rpt_time_monotonic();
+		unsigned int live = 0;
+		struct rpt_tele *telem;
 
-		if (myrpt->telem_count >= TELEM_QUEUE_MAX) {
+		for (telem = myrpt->tele.next; telem != &myrpt->tele; telem = telem->next) {
+			if (!telem->killed) {
+				live++;
+			}
+		}
+
+		if (live >= TELEM_QUEUE_MAX) {
 			myrpt->telem_dropped++;
 		}
-		if (now - myrpt->telem_queue_warned >= TELEM_WARN_INTERVAL) {
+		if (live >= TELEM_QUEUE_WARN && now - myrpt->telem_queue_warned >= TELEM_WARN_INTERVAL) {
 			myrpt->telem_queue_warned = now;
-			ast_log(LOG_WARNING, "Node %s telemetry queue depth %u (max %d), %u dropped, active %s for %ld seconds\n",
-				myrpt->name, myrpt->telem_count, TELEM_QUEUE_MAX, myrpt->telem_dropped,
+			ast_log(LOG_WARNING, "Node %s telemetry queue depth %u (%u killed, max %d), %u dropped, active %s for %ld seconds\n",
+				myrpt->name, live, myrpt->telem_count - live, TELEM_QUEUE_MAX, myrpt->telem_dropped,
 				myrpt->active_telem ? rpt_tele_mode_str(myrpt->active_telem->mode) : "none",
 				myrpt->active_telem ? (long) (now - myrpt->active_telem_start) : 0L);
 			myrpt->telem_dropped = 0;
 		}
-		if (myrpt->telem_count >= TELEM_QUEUE_MAX) {
+		if (live >= TELEM_QUEUE_MAX) {
 			rpt_mutex_unlock(&myrpt->lock);
 			if ((mode == PAGE) || (mode == MDC1200)) {
 				ast_free(data); /* Normally freed by rpt_tele_thread */
