@@ -3967,8 +3967,8 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		}
 		if (now - myrpt->telem_queue_warned >= TELEM_WARN_INTERVAL) {
 			myrpt->telem_queue_warned = now;
-			ast_log(LOG_WARNING, "Node %s telemetry queue depth %u (max %d), %u dropped, active %s for %ld seconds\n", myrpt->name,
-				myrpt->telem_count, TELEM_QUEUE_MAX, myrpt->telem_dropped,
+			ast_log(LOG_WARNING, "Node %s telemetry queue depth %u (max %d), %u dropped, active %s for %ld seconds\n",
+				myrpt->name, myrpt->telem_count, TELEM_QUEUE_MAX, myrpt->telem_dropped,
 				myrpt->active_telem ? rpt_tele_mode_str(myrpt->active_telem->mode) : "none",
 				myrpt->active_telem ? (long) (now - myrpt->active_telem_start) : 0L);
 			myrpt->telem_dropped = 0;
