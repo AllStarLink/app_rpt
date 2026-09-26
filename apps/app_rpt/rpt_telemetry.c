@@ -3488,6 +3488,25 @@ static const char *rpt_tele_mode_str(enum rpt_tele_mode mode)
 	return ((mode >= 0) && (mode < ARRAY_LEN(mode_str))) ? mode_str[mode] : "???";
 }
 
+/*!
+ * \brief Can this telemetry request be dropped when the tele list is full?
+ * \retval 0 for requests whose caller has already consumed state (ID timers),
+ *         that are priority (TIMEOUT), or whose thread changes rig settings.
+ */
+static int telem_droppable(enum rpt_tele_mode mode)
+{
+	switch (mode) {
+	case ID:
+	case IDTALKOVER: /* queue_id() already cleared mustid and reset idtimer */
+	case TIMEOUT:	 /* Priority, overrides the time out condition */
+	case SETREMOTE:
+	case TUNE: /* Thread performs the rig change, and clears tunerequest */
+		return 0;
+	default:
+		return 1;
+	}
+}
+
 void rpt_telem_watchdog(struct rpt *myrpt)
 {
 	time_t now;
@@ -3965,6 +3984,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 	if (myrpt->telem_count >= TELEM_QUEUE_WARN) {
 		time_t now = rpt_time_monotonic();
 		unsigned int live = 0;
+		int drop;
 		struct rpt_tele *telem;
 
 		for (telem = myrpt->tele.next; telem != &myrpt->tele; telem = telem->next) {
@@ -3973,7 +3993,8 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			}
 		}
 
-		if (live >= TELEM_QUEUE_MAX) {
+		drop = live >= TELEM_QUEUE_MAX && telem_droppable(mode);
+		if (drop) {
 			myrpt->telem_dropped++;
 		}
 		if (live >= TELEM_QUEUE_WARN && now - myrpt->telem_queue_warned >= TELEM_WARN_INTERVAL) {
@@ -3984,7 +4005,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 				myrpt->active_telem ? (long) (now - myrpt->active_telem_start) : 0L);
 			myrpt->telem_dropped = 0;
 		}
-		if (live >= TELEM_QUEUE_MAX) {
+		if (drop) {
 			rpt_mutex_unlock(&myrpt->lock);
 			if ((mode == PAGE) || (mode == MDC1200)) {
 				ast_free(data); /* Normally freed by rpt_tele_thread */
