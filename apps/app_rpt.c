@@ -5731,6 +5731,7 @@ static void *rpt(void *this)
 			}
 			telem = telem->next;
 		}
+		rpt_telem_watchdog(myrpt);
 
 		/* Add in any "other" telemetry, unless specified otherwise */
 		if (!myrpt->p.notelemtx)
@@ -7910,6 +7911,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	myrpt->reload = 0;
 	myrpt->tele.next = &myrpt->tele;
 	myrpt->tele.prev = &myrpt->tele;
+	myrpt->telem_count = 0;
 	myrpt->rpt_newkey = RADIO_KEY_ALLOWED;
 	myrpt->lastitx = !myrpt->lastitx;
 	myrpt->tunerequest = 0;

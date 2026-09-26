@@ -1527,6 +1527,8 @@ void *rpt_tele_thread(void *this)
 
 		if ((!myrpt->active_telem) && (myrpt->tele.prev == mytele)) {
 			myrpt->active_telem = mytele;
+			myrpt->active_telem_start = rpt_time_monotonic();
+			myrpt->active_telem_warned = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		}
@@ -3486,6 +3488,29 @@ static const char *rpt_tele_mode_str(enum rpt_tele_mode mode)
 	return ((mode >= 0) && (mode < ARRAY_LEN(mode_str))) ? mode_str[mode] : "???";
 }
 
+void rpt_telem_watchdog(struct rpt *myrpt)
+{
+	time_t now;
+
+	if (!myrpt->active_telem || myrpt->active_telem->mode == TEST_TONE) {
+		return; /* TEST_TONE runs until stopped */
+	}
+
+	now = rpt_time_monotonic();
+	if (now - myrpt->active_telem_start < TELEM_ACTIVE_WARN_SECS) {
+		return;
+	}
+	if (myrpt->active_telem_warned && now - myrpt->active_telem_warned < TELEM_ACTIVE_WARN_SECS) {
+		return;
+	}
+
+	myrpt->active_telem_warned = now;
+	ast_log(LOG_WARNING, "Node %s telemetry %s has been active for %ld seconds on %s, %u queued behind it\n", myrpt->name,
+		rpt_tele_mode_str(myrpt->active_telem->mode), (long) (now - myrpt->active_telem_start),
+		myrpt->active_telem->chan ? ast_channel_name(myrpt->active_telem->chan) : "(no channel)",
+		myrpt->telem_count ? myrpt->telem_count - 1 : 0);
+}
+
 void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 {
 	struct rpt_tele *tele;
@@ -3928,6 +3953,34 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 	if ((mode == REMXXX) || (mode == PAGE) || (mode == MDC1200)) {
 		tele->submode.p = data;
+	}
+
+	/* Each queued item is a thread polling myrpt->lock until its turn. If the
+	 * queue stops draining (active item never finishes), cap it rather than
+	 * letting threads and lock contention grow without bound.
+	 */
+	if (myrpt->telem_count >= TELEM_QUEUE_WARN) {
+		time_t now = rpt_time_monotonic();
+
+		if (myrpt->telem_count >= TELEM_QUEUE_MAX) {
+			myrpt->telem_dropped++;
+		}
+		if (now - myrpt->telem_queue_warned >= TELEM_WARN_INTERVAL) {
+			myrpt->telem_queue_warned = now;
+			ast_log(LOG_WARNING, "Node %s telemetry queue depth %u (max %d), %u dropped, active %s for %ld seconds\n", myrpt->name,
+				myrpt->telem_count, TELEM_QUEUE_MAX, myrpt->telem_dropped,
+				myrpt->active_telem ? rpt_tele_mode_str(myrpt->active_telem->mode) : "none",
+				myrpt->active_telem ? (long) (now - myrpt->active_telem_start) : 0L);
+			myrpt->telem_dropped = 0;
+		}
+		if (myrpt->telem_count >= TELEM_QUEUE_MAX) {
+			rpt_mutex_unlock(&myrpt->lock);
+			if ((mode == PAGE) || (mode == MDC1200)) {
+				ast_free(data); /* Normally freed by rpt_tele_thread */
+			}
+			ast_free(tele);
+			return;
+		}
 	}
 
 	tele_link_add(myrpt, tele);
