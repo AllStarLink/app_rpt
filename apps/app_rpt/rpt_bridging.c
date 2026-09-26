@@ -119,6 +119,7 @@ static struct ast_channel **rpt_chan_channel(struct rpt *myrpt, struct rpt_link 
 void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 {
 	struct ast_channel **chanptr;
+	struct ast_channel *sink = NULL;
 
 	rpt_mutex_lock(&myrpt->lock);
 	chanptr = rpt_chan_channel(myrpt, NULL, chantype);
@@ -126,6 +127,12 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 		ast_log(LOG_WARNING, "No %s channel to hang up\n", rpt_chan_type_str(chantype));
 		rpt_mutex_unlock(&myrpt->lock);
 		return;
+	}
+
+	/* The ;2 side of a Local txchannel is on autoservice, detach it with the txchannel */
+	if ((chantype == RPT_RXCHAN || chantype == RPT_TXCHAN) && *chanptr == myrpt->txchannel) {
+		sink = myrpt->txchansink;
+		myrpt->txchansink = NULL;
 	}
 
 	/* If RXCHAN == TXCHAN, and we hang up one, also NULL out the other one */
@@ -155,6 +162,11 @@ void rpt_hangup(struct rpt *myrpt, enum rpt_chan_type chantype)
 	ast_hangup(*chanptr);
 	*chanptr = NULL;
 	rpt_mutex_unlock(&myrpt->lock);
+
+	if (sink) {
+		ast_autoservice_stop(sink);
+		ast_channel_unref(sink);
+	}
 }
 
 static const char *rpt_chan_app(enum rpt_chan_type chantype, enum rpt_chan_flags flags)
