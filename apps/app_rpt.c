@@ -5212,23 +5212,27 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		struct ast_unreal_pvt *pvt = ast_channel_tech_pvt(l->pchan);
 
 		if (pvt) {
+			struct ast_channel *chan;
+
 			/* Lock the unreal private structure to safely read the peer channel */
 			ao2_lock(pvt);
-			struct ast_channel *peer = pvt->chan; /* The ;2 side */
+			chan = ast_channel_ref(pvt->chan); /* The ;2 side */
 
-			if (peer) {
+			if (chan) {
+				struct ast_bridge *bridge;
+
 				/* Increase ref count so the channel isn't destroyed out from under us */
-				ast_channel_ref(peer);
 				ao2_unlock(pvt);
 
 				/* 2. Forcibly eject the ;2 side from the core bridge using its own bridge pointer */
-				struct ast_bridge *bridge = ast_channel_get_bridge(peer);
+				bridge = ast_channel_get_bridge(chan);
 				if (bridge) {
-					ast_bridge_remove(bridge, peer);
+					ast_bridge_remove(bridge, chan);
+					ao2_ref(bridge, -1);
 				}
 
 				/* Clean up our reference to the peer channel */
-				ast_channel_unref(peer);
+				ast_channel_unref(chan);
 			} else {
 				ao2_unlock(pvt);
 			}
