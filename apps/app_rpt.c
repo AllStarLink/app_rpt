@@ -5222,7 +5222,9 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				struct ast_bridge *bridge;
 
 				/* Forcibly eject the ;2 side from the core bridge using its own bridge pointer */
+				ast_channel_lock(chan);
 				bridge = ast_channel_get_bridge(chan);
+				ast_channel_unlock(chan);
 				if (bridge) {
 					ast_bridge_remove(bridge, chan);
 					ao2_ref(bridge, -1);
@@ -5233,8 +5235,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			}
 		}
 
-		/* 3. With the bridge loop broken, now execute a synchronous hard hangup on the ;1 side.
-		 *    This safely destroys l->pchan and cleanly winds down the remaining legs. */
+		/* With the bridge loop broken, now execute a synchronous hard hangup on the ;1 side.
+		 * This safely destroys l->pchan and cleanly winds down the remaining legs. */
 		ast_hangup(l->pchan);
 		l->pchan = NULL;
 	}
