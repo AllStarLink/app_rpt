@@ -4844,7 +4844,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 		}
-		if (!ms) {
+		if (!who) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
 			continue;
@@ -5172,9 +5172,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	 * Flush leftover textq (keys, keepalive, !!DISCONNECT!! queued via
 	 * rpt_link_queue_disconnect). remote_hangup_helper usually flushed already.
 	 */
+	ast_debug(1, "Process_link on channel %s is exiting", l->name);
 	if (l->chan) {
 		link_process_textq(myrpt, l);
 	}
+	ast_debug(1, "Process_link on channel %s is removing from the link list", l->name);
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
@@ -5190,6 +5192,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	 * Skip discpgm only for killme (flaky reconnect replace) / Asterisk shutdown.
 	 * RPT_LINK_DISCONNECT already ran discpgm in link_disconnect_finished().
 	 */
+	ast_debug(1, "Process_link on channel %s is doing telemetry", l->name);
+
 	if (l->disced != RPT_LINK_DISCONNECT_SILENT) {
 		if (!l->hasconnected) {
 			rpt_telemetry(myrpt, CONNFAIL, l);
@@ -5197,6 +5201,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			rpt_telemetry(myrpt, REMDISC, l);
 		}
 	}
+
+	ast_debug(1, "Process_link on channel %s is running disconnect routine", l->name);
 	if (l->disced != RPT_LINK_DISCONNECT && !l->killme && !ast_shutting_down()) {
 		if (l->hasconnected) {
 			dodispgm(myrpt, l->name);
@@ -5205,27 +5211,34 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 	rpt_frame_queue_free(&l->frame_queue);
 
+	ast_debug(1, "Process_link on channel %s is hanging up \"chan\"", l->name);
 	/* Hang-up the channels */
 	hangup_link_chan(l);
 	if (l->pchan) {
+		ast_debug(1, "Process_link on channel %s is hanging up \"pchan\"", l->name);
 		ast_hangup(l->pchan);
 		l->pchan = NULL;
 	}
 
 	if (l->hasconnected) {
+		ast_debug(1, "Process_link on channel %s is updating links", l->name);
 		rpt_update_links(myrpt);
 	}
 
 	/* Destroy the altlink mixing buffer */
 	if (l->altaudio_enabled) {
+		ast_debug(1, "Process_link on channel %s is cleaning up slinfactory", l->name);
 		ast_mutex_lock(&l->altaudio_lock);
 		ast_slinfactory_destroy(&l->altaudio);
 		ast_mutex_unlock(&l->altaudio_lock);
 		l->altaudio_enabled = 0;
 	}
 
+	ast_debug(1, "Process_link on channel %s is cleaning up mutex", l->name);
 	ast_mutex_destroy(&l->altaudio_lock);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
+
+	ast_debug(1, "Process_link on channel %s is exiting", l->name);
 	return;
 }
 
@@ -6088,16 +6101,13 @@ static void *rpt(void *this)
 		}
 		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
-		if (who == NULL) {
-			ms = 0;
-		}
 		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		rpt_mutex_lock(&myrpt->lock);
 		if (update_timers(myrpt, elap, totx)) {
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		}
-		if (!ms) {
+		if (!who) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
 			rpt_mutex_unlock(&myrpt->lock);
