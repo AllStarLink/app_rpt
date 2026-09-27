@@ -5208,6 +5208,34 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	/* Hang-up the channels */
 	hangup_link_chan(l);
 	if (l->pchan) {
+		/* 1. Retrieve a locked reference to the underlying unreal private tech */
+		struct ast_unreal_pvt *pvt = ast_channel_tech_pvt(l->pchan);
+
+		if (pvt) {
+			/* Lock the unreal private structure to safely read the peer channel */
+			ao2_lock(pvt);
+			struct ast_channel *peer = pvt->chan; /* The ;2 side */
+
+			if (peer) {
+				/* Increase ref count so the channel isn't destroyed out from under us */
+				ast_channel_ref(peer);
+				ao2_unlock(pvt);
+
+				/* 2. Forcibly eject the ;2 side from the core bridge using its own bridge pointer */
+				struct ast_bridge *bridge = ast_channel_get_bridge(peer);
+				if (bridge) {
+					ast_bridge_remove(bridge, peer);
+				}
+
+				/* Clean up our reference to the peer channel */
+				ast_channel_unref(peer);
+			} else {
+				ao2_unlock(pvt);
+			}
+		}
+
+		/* 3. With the bridge loop broken, now execute a synchronous hard hangup on the ;1 side.
+		 *    This safely destroys l->pchan and cleanly winds down the remaining legs. */
 		ast_hangup(l->pchan);
 		l->pchan = NULL;
 	}
