@@ -4840,9 +4840,8 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 			if (l->pchan) {
 				ast_autoservice_stop(l->pchan);
 			}
-			if (l->chan) {
-				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
-			}
+
+			hangup_link_chan(l);
 		}
 		if (!ms) {
 			/* No channels had activity before the timer expired,
