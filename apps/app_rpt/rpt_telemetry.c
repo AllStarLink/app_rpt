@@ -155,6 +155,9 @@ static const char *rpt_telem_find_linkunkey(struct rpt *myrpt, const char *ct_ke
 		return NULL;
 	} else if (!ct) {
 		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
+		if (ast_strlen_zero(ct)) {
+			return NULL;
+		}
 	}
 	return ct;
 }
@@ -931,9 +934,12 @@ static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char
 		ct = rpt_telem_find_linkunkey(myrpt, ct_key);
 	} else {
 		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
+		if (ast_strlen_zero(ct)) {
+			ct = NULL;
+		}
 	}
 
-	if (!ct || ast_strlen_zero(ct)) {
+	if (!ct) {
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s*", myrpt->name, why);
 		return 0;
 	}
@@ -3625,7 +3631,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 		/* Check if any linkunkeyct keys are present.  If not, don't start a ct telemetry thread */
 		ct = rpt_telem_find_linkunkey(myrpt, "linkunkeyct");
-		if (!ct || ast_strlen_zero(ct)) {
+		if (!ct) {
 			return;
 		}
 
