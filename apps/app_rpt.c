@@ -4638,10 +4638,10 @@ static inline void hangup_link_chan(struct rpt_link *l)
 {
 	if (l->chan) {
 		if (l->outbound) { /* if it's an outbound link, we own the channel. */
-			ast_debug(3, "Hard hanging up channel %s\n", ast_channel_name(l->chan));
+			ast_debug(3, "Outbound link: hanging up channel %s\n", ast_channel_name(l->chan));
 			ast_hangup(l->chan);
 		} else { /* if it's an inbound link, the PBX owns the channel. */
-			ast_debug(3, "Channel %s still has a PBX, requesting hangup for it\n", ast_channel_name(l->chan));
+			ast_debug(3, "Inbound link: Requesting hangup for channel %s\n", ast_channel_name(l->chan));
 			ast_softhangup(l->chan, AST_SOFTHANGUP_EXPLICIT);
 		}
 		l->chan = NULL;
