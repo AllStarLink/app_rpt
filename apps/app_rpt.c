@@ -3415,10 +3415,15 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 	}
 	chan = ast_channel_ref(l->chan);
 	while (chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+		int rv;
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_write(chan, f);
+		rv = ast_write(chan, f);
 		ast_frfree(f);
+		if (rv < 0) {
+			ast_debug(3, "ast_write failed on %s, breaking loop\n", ast_channel_name(chan));
+			break;
+		}
 		rpt_mutex_lock(&myrpt->lock);
 	}
 	if (chan) {
@@ -5232,6 +5237,15 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	ast_mutex_destroy(&l->altaudio_lock);
+	ast_mutex_lock(&myrpt->lock);
+	if (!AST_LIST_EMPTY(&l->textq)) {
+		struct ast_frame *f;
+		/* Free any textq frames that may be left */
+		while ((f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list))) {
+			ast_frfree(f);
+		}
+	}
+	ast_mutex_unlock(&myrpt->lock);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	return;
 }
