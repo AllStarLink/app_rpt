@@ -3409,7 +3409,8 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 	struct ast_channel *chan;
 
 	rpt_mutex_lock(&myrpt->lock);
-	if (AST_LIST_EMPTY(&l->textq)) {
+	if (!l->chan || AST_LIST_EMPTY(&l->textq)) {
+		rpt_mutex_unlock(&myrpt->lock);
 		return;
 	}
 	chan = ast_channel_ref(l->chan);
