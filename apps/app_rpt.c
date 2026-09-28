@@ -3406,17 +3406,18 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_frame *f;
+	struct ast_channel *chan;
 
 	rpt_mutex_lock(&myrpt->lock);
+	chan = ast_channel_ref(l->chan);
 	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
-		struct ast_channel *chan = ast_channel_ref(l->chan);
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_write(chan, f);
 		rpt_mutex_lock(&myrpt->lock);
 		ast_frfree(f);
-		ast_channel_unref(chan);
 	}
+	ast_channel_unref(chan);
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
