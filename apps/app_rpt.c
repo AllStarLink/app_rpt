@@ -4844,7 +4844,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 		}
-		if (!ms) {
+		if (!who) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
 			continue;
@@ -6088,16 +6088,13 @@ static void *rpt(void *this)
 		}
 		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
-		if (who == NULL) {
-			ms = 0;
-		}
 		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		rpt_mutex_lock(&myrpt->lock);
 		if (update_timers(myrpt, elap, totx)) {
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		}
-		if (!ms) {
+		if (!who) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
 			rpt_mutex_unlock(&myrpt->lock);
@@ -8065,7 +8062,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		who = ast_waitfor_n(cs, n, &ms);
 		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		update_timer(&myrpt->macrotimer, elap, 0);
-		if (who == NULL) {
+		if (!who) {
 			/* No channels had activity. Loop again. */
 			continue;
 		}
