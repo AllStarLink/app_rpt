@@ -5175,6 +5175,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		myrpt->cmdnode[0] = 0;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
+	/* hangup the pchan, removing it from the conference. */
+	if (l->pchan) {
+		ast_hangup(l->pchan);
+		l->pchan = NULL;
+	}
 
 	/*
 	 * Flush leftover textq (keys, keepalive, !!DISCONNECT!! queued via
@@ -5208,10 +5213,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 	/* Hang-up the channels */
 	hangup_link_chan(l);
-	if (l->pchan) {
-		ast_hangup(l->pchan);
-		l->pchan = NULL;
-	}
 
 	if (l->hasconnected) {
 		rpt_update_links(myrpt);
