@@ -3409,15 +3409,20 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 	struct ast_channel *chan;
 
 	rpt_mutex_lock(&myrpt->lock);
+	if (AST_LIST_EMPTY(&l->textq)) {
+		return;
+	}
 	chan = ast_channel_ref(l->chan);
-	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+	while (chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		rpt_mutex_unlock(&myrpt->lock);
 		ast_write(chan, f);
-		rpt_mutex_lock(&myrpt->lock);
 		ast_frfree(f);
+		rpt_mutex_lock(&myrpt->lock);
 	}
-	ast_channel_unref(chan);
+	if (chan) {
+		ast_channel_unref(chan);
+	}
 	rpt_mutex_unlock(&myrpt->lock);
 }
 
