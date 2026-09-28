@@ -3596,7 +3596,7 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 		break;
 
 	case LINKUNKEY: {
-		const char *ct = NULL;
+		const char *ct;
 
 		mylink = (struct rpt_link *) data;
 
