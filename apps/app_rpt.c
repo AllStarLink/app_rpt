@@ -4633,25 +4633,17 @@ static inline int localtxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 	return hangup_frame_helper(myrpt->localtxchannel, "localtxchannel", f);
 }
 
-/*! \brief Safely hang up any channel, even if a PBX could be running on it */
-static inline void safe_hangup(struct ast_channel *chan)
-{
-	/* myrpt is locked here, so we can trust this will be an atomic operation,
-	 * since we also lock before setting the pbx to NULL */
-	if (ast_channel_pbx(chan)) {
-		ast_debug(3, "Channel %s still has a PBX, requesting hangup for it\n", ast_channel_name(chan));
-		ast_softhangup(chan, AST_SOFTHANGUP_EXPLICIT);
-	} else {
-		ast_debug(3, "Hard hanging up channel %s\n", ast_channel_name(chan));
-		ast_hangup(chan);
-	}
-}
-
 /*! \note myrpt->lock must not be held when calling */
 static inline void hangup_link_chan(struct rpt_link *l)
 {
 	if (l->chan) {
-		safe_hangup(l->chan);
+		if (l->outbound) { /* if it's an outbound link, we own the channel. */
+			ast_debug(3, "Hard hanging up channel %s\n", ast_channel_name(l->chan));
+			ast_hangup(l->chan);
+		} else { /* if it's an inbound link, the PBX owns the channel. */
+			ast_debug(3, "Channel %s still has a PBX, requesting hangup for it\n", ast_channel_name(l->chan));
+			ast_softhangup(l->chan, AST_SOFTHANGUP_EXPLICIT);
+		}
 		l->chan = NULL;
 	}
 }
