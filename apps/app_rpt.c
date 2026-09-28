@@ -7639,19 +7639,6 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_telemetry(myrpt, CONNECTED, l);
 		}
 
-		/* The way things work here is that other threads in app_rpt service the channel,
-		 * and the PBX thread which initially gave us this channel is going to exit momentarily.
-		 * Originally, we would return AST_PBX_KEEPALIVE to tell the PBX not to hangup
-		 * the channel when terminating the PBX.
-		 * This was removed in Asterisk commit 50a25ac8474d7900ba59a68ed4fd942074082435
-		 *
-		 * The new way things are done does not work for us out of the box, because the PBX
-		 * needs to be told from the get-go not to hangup the channel, and by the time
-		 * dialplan is running, it's already too late.
-		 *
-		 * Instead, we masquerade the channel here to force the old pointer to the channel
-		 * to become invalid. The old channel, now dead, can then get hung up by the
-		 * PBX thread as normal, while the new channel is what we insert into the list. */
 		l->chan = chan; /* Update pointer to the masqueraded channel. The original channel is dead. */
 
 		/* insert at end of queue */
