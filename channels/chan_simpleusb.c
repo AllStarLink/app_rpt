@@ -4539,19 +4539,46 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
+			/* Devices shallow-copy default gpio strings; free only owned ones. */
+			if (o->gpios[i] && o->gpios[i] != simpleusb_default.gpios[i]) {
 				ast_free(o->gpios[i]);
 			}
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
+			if (o->pps[i] && o->pps[i] != simpleusb_default.pps[i]) {
 				ast_free(o->pps[i]);
 			}
 		}
 		ast_free(o->name);
 		simpleusb_release_device(o);
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->swap_lock);
 		ast_free(o);
 	}
+
+	/* general pvt is not on the device list, but store_config still inits it */
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (simpleusb_default.gpios[i]) {
+			ast_free(simpleusb_default.gpios[i]);
+			simpleusb_default.gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(simpleusb_default.pps); i++) {
+		if (simpleusb_default.pps[i]) {
+			ast_free(simpleusb_default.pps[i]);
+			simpleusb_default.pps[i] = NULL;
+		}
+	}
+	ast_mutex_destroy(&simpleusb_default.echolock);
+	ast_mutex_destroy(&simpleusb_default.eepromlock);
+	ast_mutex_destroy(&simpleusb_default.txqlock);
+	ast_mutex_destroy(&simpleusb_default.usblock);
+	ast_mutex_destroy(&simpleusb_default.device_lock);
+	ast_mutex_destroy(&simpleusb_default.swap_lock);
 
 #if DEBUG_CAPTURES == 1
 	if (frxcapraw) {
