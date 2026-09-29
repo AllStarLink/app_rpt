@@ -2275,13 +2275,8 @@ static void *simpleusb_audio_thread(void *arg)
 					if (num_frames && (num_frames > 3 || (!o->txkeyed && !o->txtestkey))) {
 						ast_mutex_lock(&o->txqlock);
 						f1 = AST_LIST_REMOVE_HEAD(&o->txq, frame_list);
-						if (f1 && o->txq_depth) {
-							o->txq_depth--;
-						}
+						o->txq_depth--;
 						ast_mutex_unlock(&o->txqlock);
-						if (!f1) {
-							break;
-						}
 						src = 0; /* read position into f1->data */
 						while (src < f1->datalen) {
 							/* Compute spare room in the buffer */
