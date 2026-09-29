@@ -4741,7 +4741,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 			}
 		}
 		hangup_link_chan(l);
-		return 1;
+		return 0;
 	}
 
 	/* Intentional outbound disconnect: do not redial; announce unless silent. */
