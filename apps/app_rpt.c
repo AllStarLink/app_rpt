@@ -3416,6 +3416,7 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 	chan = ast_channel_ref(l->chan);
 	while (chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
 		int rv;
+
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		rpt_mutex_unlock(&myrpt->lock);
 		rv = ast_write(chan, f);
@@ -5240,6 +5241,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	ast_mutex_lock(&myrpt->lock);
 	if (!AST_LIST_EMPTY(&l->textq)) {
 		struct ast_frame *f;
+
 		/* Free any textq frames that may be left */
 		while ((f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list))) {
 			ast_frfree(f);
