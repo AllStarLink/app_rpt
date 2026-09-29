@@ -273,8 +273,10 @@ struct TLB_instance {
 	char astnode[TLB_NAME_SIZE + 1];
 	char context[TLB_NAME_SIZE + 1];
 	char *denylist[TLB_MAX_CALL_LIST];
+	char *denylist_buf;
 	int ndenylist;
 	char *permitlist[TLB_MAX_CALL_LIST];
+	char *permitlist_buf;
 	int npermitlist;
 	short rtcptimeout; /* missed 10 heartbeats, you're out */
 	char fdr_file[FILENAME_MAX];
@@ -914,6 +916,7 @@ static void TLB_destroy(struct TLB_pvt *p)
 		ast_free(qptlb);
 	}
 	ast_module_user_remove(p->u);
+	ast_mutex_destroy(&p->lock);
 	ast_free(p);
 }
 
@@ -1380,9 +1383,12 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 }
 
 /*!
- * \brief Free node.  Empty routine.
+ * \brief Free a TLB_node key previously inserted with tsearch.
  */
-static void free_node(void *nodep) {}
+static void free_node(void *nodep)
+{
+	ast_free(nodep);
+}
 
 /*!
  * \brief Find and delete a node from our internal node list.
@@ -2380,7 +2386,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	const char *val;
 	struct TLB_instance *instp;
 	struct sockaddr_in si_me;
-	pthread_attr_t attr;
 
 	if (ninstances >= TLB_MAX_INSTANCES) {
 		ast_log(LOG_ERROR, "Too many instances specified\n");
@@ -2396,6 +2401,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	instp->audio_sock = -1;
 	instp->ctrl_sock = -1;
 	instp->fdr = -1;
+	instp->TLB_reader_thread = AST_PTHREADT_NULL;
 
 	val = ast_variable_retrieve(cfg, ctg, "ipaddr");
 	if (val) {
@@ -2450,11 +2456,17 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = ast_variable_retrieve(cfg, ctg, "deny");
 	if (val) {
-		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, ARRAY_LEN(instp->denylist));
+		instp->denylist_buf = ast_strdup(val);
+		if (instp->denylist_buf) {
+			instp->ndenylist = finddelim(instp->denylist_buf, instp->denylist, ARRAY_LEN(instp->denylist));
+		}
 	}
 	val = ast_variable_retrieve(cfg, ctg, "permit");
 	if (val) {
-		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, ARRAY_LEN(instp->permitlist));
+		instp->permitlist_buf = ast_strdup(val);
+		if (instp->permitlist_buf) {
+			instp->npermitlist = finddelim(instp->permitlist_buf, instp->permitlist, ARRAY_LEN(instp->permitlist));
+		}
 	}
 	instp->pref_rxcodec = PREF_RXCODEC;
 	instp->pref_txcodec = PREF_TXCODEC;
@@ -2513,9 +2525,19 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
 	fcntl(instp->ctrl_sock, F_SETFL, O_NONBLOCK);
 	ast_copy_string(instp->name, ctg, TLB_NAME_SIZE);
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&instp->TLB_reader_thread, &attr, TLB_reader, (void *) instp);
+	/* Joinable so unload can wait for the reader to leave before freeing instance state. */
+	if (ast_pthread_create(&instp->TLB_reader_thread, NULL, TLB_reader, instp)) {
+		ast_log(LOG_ERROR, "Unable to start TheLinkBox reader thread for %s\n", ctg);
+		close(instp->ctrl_sock);
+		instp->ctrl_sock = -1;
+		close(instp->audio_sock);
+		instp->audio_sock = -1;
+		ast_mutex_destroy(&instp->lock);
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
+		ast_free(instp);
+		return -1;
+	}
 	instances[ninstances++] = instp;
 
 	ast_debug(1, "tlb: tlb/%s listening on %s port %s\n", instp->name, instp->ipaddr, instp->port);
@@ -2528,7 +2550,6 @@ static int unload_module(void)
 	int n;
 
 	run_forever = 0;
-	tdestroy(TLB_node_list, free_node);
 	for (n = 0; n < ninstances; n++) {
 		if (instances[n]->audio_sock != -1) {
 			close(instances[n]->audio_sock);
@@ -2543,6 +2564,17 @@ static int unload_module(void)
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&TLB_tech);
 	for (n = 0; n < ninstances; n++) {
+		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
+			pthread_join(instances[n]->TLB_reader_thread, NULL);
+			instances[n]->TLB_reader_thread = AST_PTHREADT_NULL;
+		}
+	}
+	tdestroy(TLB_node_list, free_node);
+	TLB_node_list = NULL;
+	for (n = 0; n < ninstances; n++) {
+		ast_mutex_destroy(&instances[n]->lock);
+		ast_free(instances[n]->denylist_buf);
+		ast_free(instances[n]->permitlist_buf);
 		ast_free(instances[n]);
 	}
 
