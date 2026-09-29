@@ -5975,16 +5975,43 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
+			/* Devices shallow-copy default gpio strings; free only owned ones. */
+			if (o->gpios[i] && o->gpios[i] != usbradio_default.gpios[i]) {
 				ast_free(o->gpios[i]);
 			}
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
+			if (o->pps[i] && o->pps[i] != usbradio_default.pps[i]) {
 				ast_free(o->pps[i]);
 			}
 		}
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->swap_lock);
 	}
+
+	/* general pvt is not on the device list, but store_config still inits it */
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (usbradio_default.gpios[i]) {
+			ast_free(usbradio_default.gpios[i]);
+			usbradio_default.gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(usbradio_default.pps); i++) {
+		if (usbradio_default.pps[i]) {
+			ast_free(usbradio_default.pps[i]);
+			usbradio_default.pps[i] = NULL;
+		}
+	}
+	ast_mutex_destroy(&usbradio_default.echolock);
+	ast_mutex_destroy(&usbradio_default.eepromlock);
+	ast_mutex_destroy(&usbradio_default.usblock);
+	ast_mutex_destroy(&usbradio_default.device_lock);
+	ast_mutex_destroy(&usbradio_default.txqlock);
+	ast_mutex_destroy(&usbradio_default.swap_lock);
 
 	ao2_cleanup(usbradio_tech.capabilities);
 	usbradio_tech.capabilities = NULL;
