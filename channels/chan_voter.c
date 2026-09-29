@@ -1133,17 +1133,11 @@ static int voter_hangup(struct ast_channel *ast)
 	if (p->adpcmin) {
 		ast_translator_free_path(p->adpcmin);
 	}
-	if (p->adpcmout) {
-		ast_translator_free_path(p->adpcmout);
-	}
 	if (p->toast) {
 		ast_translator_free_path(p->toast);
 	}
 	if (p->toast1) {
 		ast_translator_free_path(p->toast1);
-	}
-	if (p->fromast) {
-		ast_translator_free_path(p->fromast);
 	}
 	ast_mutex_lock(&voter_lock);
 	for (q = pvts; q->next; q = q->next) {
@@ -1166,6 +1160,12 @@ static int voter_hangup(struct ast_channel *ast)
 	ast_mutex_unlock(&voter_lock);
 	if (p->xmit_thread) {
 		pthread_join(p->xmit_thread, NULL);
+	}
+	if (p->adpcmout) {
+		ast_translator_free_path(p->adpcmout);
+	}
+	if (p->fromast) {
+		ast_translator_free_path(p->fromast);
 	}
 	if (p->u) {
 		ast_module_user_remove(p->u);
