@@ -504,6 +504,7 @@ struct voter_client {
 	short lastaudio[FRAME_SIZE];
 	struct timeval ping_txtime;
 	struct timeval ping_last_rxtime;
+	struct timeval ping_cycle_time; /* currenttime of the last voter_xmit cycle that sent a ping */
 	unsigned int ping_last_seqno;
 	int pings_requested;
 	int pings_sent;
@@ -3300,11 +3301,13 @@ static void *voter_xmit(void *data)
 {
 	struct voter_pvt *p = (struct voter_pvt *) data;
 	int i, txqueue, txact, mixminus_act;
+	int send_ping, send_keepalive;
 	i16 dummybuf1[FRAME_SIZE * 12], xmtbuf1[FRAME_SIZE * 12];
 	i16 xmtbuf[FRAME_SIZE], dummybuf2[FRAME_SIZE], xmtbuf2[FRAME_SIZE];
 	i32 mixaudio;
 	struct ast_frame fr, *f1, *f2, *f3, wf1;
 	struct voter_client *client, *client1;
+	struct sockaddr_in txsin;
 	struct timeval currenttime;
 
 #pragma pack(push)
@@ -3775,100 +3778,199 @@ static void *voter_xmit(void *data)
 		}
 		/* Get the current time for ping and keeplive packet tracking. */
 		currenttime = ast_radio_tvnow();
-		/* Process sending ping packets for each client, if necessary */
-		ast_mutex_lock(&voter_lock);
-		for (client = clients; client; client = client->next) {
-			/* Skip if this client doesn't belong to this instance. */
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			/* Skip clients that aren't authenticated. */
-			if (!client->respdigest) {
-				continue;
-			}
-			/* Skip clients that aren't connected. */
-			if (!client->heardfrom) {
-				continue;
-			}
-			/* If we are pinging a client, see if we're finished yet. If we are, the
-			 * results will be printed, and client->pings_requested is going to be set
-			 * to 0, causing us to continue skipping this client (stop pinging).
+		/*
+		 * Process ping packets one at a time. The client list and all client
+		 * state used to construct the packet are protected by voter_lock, but
+		 * the actual network I/O is deliberately performed after releasing the
+		 * lock. After each send, restart the traversal from clients so that no
+		 * client or next pointer is retained across the unlocked send.
+		 *
+		 * We will loop forever, until we run out of clients to send pings to.
+		 */
+		for (;;) {
+			/* Our flag that we have outstanding pings to send. It will be set true
+			 * below, if we need to send a ping to someone.
 			 */
-			check_ping_done(client);
-			/* Skip clients that we're not pinging (client->pings_requested will be 0). */
-			if (!client->pings_requested) {
-				continue;
+			send_ping = 0;
+			ast_mutex_lock(&voter_lock);
+			/* Traverse the client list to see if we need to process any pings. */
+			for (client = clients; client; client = client->next) {
+				/* Skip if this client doesn't belong to this instance. */
+				if (client->nodenum != p->nodenum) {
+					continue;
+				}
+				/* Skip clients that aren't authenticated. */
+				if (!client->respdigest) {
+					continue;
+				}
+				/* Skip clients that aren't connected. */
+				if (!client->heardfrom) {
+					continue;
+				}
+				/* If we are pinging a client, see if we're finished yet. If we are, the
+				 * results will be printed, and client->pings_requested is going to be set
+				 * to 0, causing us to continue skipping this client (stop pinging).
+				 */
+				check_ping_done(client);
+				/* Skip clients that we're not pinging (client->pings_requested will be 0). */
+				if (!client->pings_requested) {
+					continue;
+				}
+				/* If we've already sent more pings to a client than we need to, skip (we should
+				 * already be done!).
+				 */
+				if (client->pings_sent >= client->pings_requested) {
+					continue;
+				}
+				/* Limit ping sends to once per client per voter_xmit cycle.
+				 *
+				 * ping_cycle_time records that a particular client has already been selected during
+				 * the current voter_xmit cycle. When the loop restarts at clients after the sendto(),
+				 * this client is skipped, while every other client remains eligible. This prevents us
+				 * from accidentally queuing up pings due to delayed I/O and sending a burst, which would
+				 * mess up our ping statistics (all packets in the burst would have the same pingpacket.txtime).
+				 */
+				if (!ast_tvcmp(client->ping_cycle_time, currenttime)) {
+					continue;
+				}
+				/* At this point, we have outstanding pings to send to this client, so do it. */
+				if (voter_tvdiff_ms(currenttime, client->ping_txtime) >= (PING_TIME_MS * client->pings_sent)) {
+					/* Update client->ping_cycle_time. */
+					client->ping_cycle_time = currenttime;
+					/* If we haven't sent any pings to the client yet, let's get started. */
+					if (!client->pings_sent) {
+						/* Timestamp when we sent the first ping (client->ping_txtime). */
+						client->ping_txtime = currenttime;
+						memset(&client->ping_last_rxtime, 0, sizeof(client->ping_last_rxtime));
+					}
+					/* Increment the number of ping packets we've sent to this client. */
+					client->pings_sent++;
+					/* Build the ping packet while the client state is protected. */
+					memset(&pingpacket, 0, sizeof(pingpacket));
+					pingpacket.seqno = ++client->ping_seqno;
+					for (i = 0; i < sizeof(pingpacket.filler); i++) {
+						pingpacket.filler[i] = (pingpacket.seqno & 0xff) + i;
+					}
+					/* Set the time this packet was sent to the current time. */
+					pingpacket.txtime = currenttime;
+					/* Set the start time to when we sent the first packet (from above). */
+					pingpacket.starttime = client->ping_txtime;
+					ast_copy_string((char *) pingpacket.vp.challenge, challenge, sizeof(pingpacket.vp.challenge));
+					pingpacket.vp.payload_type = htons(VOTER_PAYLOAD_PING);
+					pingpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
+					mkpucked(client, &pingpacket.vp.curtime);
+					pingpacket.vp.digest = htonl(client->respdigest);
+					pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					/* Set txsin to the IP address of the client, so we can use it later. */
+					txsin = client->sin;
+					ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+					/* Set our flag that we have an outstanding ping to send. */
+					send_ping = 1;
+					/* We have a client that we need to send a ping, so break out of the
+					 * list traversal so that we can take care of that.
+					 */
+					break;
+				}
 			}
-			/* If we've already sent more pings to a client than we need to, skip (we should
-			 * already be done!).
+			/* Release our lock, as we have captured everything we need if we need to
+			 * send a ping packet. Avoids holding the lock while sending I/O.
 			 */
-			if (client->pings_sent >= client->pings_requested) {
-				continue;
+			ast_mutex_unlock(&voter_lock);
+			/* If we didn't find any clients to send a ping to, or we are done,
+			 * send_ping will be false, so break out of the infinite loop we entered
+			 * above for ping processing.
+			 */
+			if (!send_ping) {
+				break;
 			}
-			/* At this point, we have outstanding pings to send to this client, so do it. */
-			if (voter_tvdiff_ms(currenttime, client->ping_txtime) >= (PING_TIME_MS * client->pings_sent)) {
-				/* If we haven't sent any pings to the client yet, let's get started. */
-				if (!client->pings_sent) {
-					/* Timestamp when we sent the first ping (client->ping_txtime). */
-					client->ping_txtime = currenttime;
-					memset(&client->ping_last_rxtime, 0, sizeof(client->ping_last_rxtime));
-				}
-				/* Increment the number of ping packets we've sent to this client. */
-				client->pings_sent++;
-				/* Build and send the ping packet to the client. */
-				memset(&pingpacket, 0, sizeof(pingpacket));
-				pingpacket.seqno = ++client->ping_seqno;
-				for (i = 0; i < sizeof(pingpacket.filler); i++) {
-					pingpacket.filler[i] = (pingpacket.seqno & 0xff) + i;
-				}
-				/* Set the time this packet was sent to the current time. */
-				pingpacket.txtime = currenttime;
-				/* Set the start time to when we sent the first packet (from above). */
-				pingpacket.starttime = client->ping_txtime;
-				ast_copy_string((char *) pingpacket.vp.challenge, challenge, sizeof(pingpacket.vp.challenge));
-				pingpacket.vp.payload_type = htons(VOTER_PAYLOAD_PING);
-				pingpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				mkpucked(client, &pingpacket.vp.curtime);
-				pingpacket.vp.digest = htonl(client->respdigest);
-				pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				/* Send the ping packet on the wire. */
-				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
-			}
+			/* If we didn't bail out above, send_ping is true, so we have a packet to
+			 * send. We've already released our lock, so we can send the packet over the
+			 * wire, without having to worry about holding voter_lock if the I/O is delayed.
+			 *
+			 * We built the ping packet while locked with the client's details, and copied the
+			 * IP for the client into txsin, so send the packet.
+			 */
+			sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &txsin, sizeof(txsin));
 		}
-		/* Process sending keepalive packets for each client, if necessary */
-		for (client = clients; client; client = client->next) {
-			/* Skip if the client doesn't belong to this instance. */
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			/* Skip if the client isn't authenticated. */
-			if (!client->respdigest) {
-				continue;
-			}
-			/* Skip if we haven't heard from the client recently. */
-			if (!client->heardfrom) {
-				continue;
-			}
-			/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
-			 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
-			 * with this packet.
-			 */
-			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(currenttime, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
-				memset(&audiopacket, 0, sizeof(audiopacket));
-				ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
-				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
-				audiopacket.vp.digest = htonl(client->respdigest);
-				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 
-				/* Update when this client last sent a keepalive packet */
-				client->lastsenttime = ast_radio_tvnow();
+		/*
+		 * Process keepalive packets one at a time. As with ping packets, copy
+		 * all client-dependent state while holding voter_lock, then perform the
+		 * potentially blocking sendto() without the global lock. lastsenttime
+		 * is updated before unlocking so the same client cannot be selected again
+		 * if the traversal is restarted.
+		 *
+		 * Start an infinite loop to process all the keepalives for all clients.
+		 */
+		for (;;) {
+			/* Our flag to tell when we're done sending keepalives to clients, it
+			 * gets set to true below, if there are keepalives that need to be sent.
+			 */
+			send_keepalive = 0;
+			ast_mutex_lock(&voter_lock);
+			/* Traverse the client list, to find clients we need to send keepalive
+			 * packets to.
+			 */
+			for (client = clients; client; client = client->next) {
+				/* Skip if the client doesn't belong to this instance. */
+				if (client->nodenum != p->nodenum) {
+					continue;
+				}
+				/* Skip if the client isn't authenticated. */
+				if (!client->respdigest) {
+					continue;
+				}
+				/* Skip if we haven't heard from the client recently. */
+				if (!client->heardfrom) {
+					continue;
+				}
+				/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
+				 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
+				 * with this packet.
+				 */
+				if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(currenttime, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
+					memset(&audiopacket, 0, sizeof(audiopacket));
+					ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
+					audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
+					audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
+					audiopacket.vp.digest = htonl(client->respdigest);
+					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					/* Set txsin to the IP address of the client, so we can use it later. */
+					txsin = client->sin;
+					ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+
+					/* Reserve this keepalive while protected so the client is not
+					 * selected repeatedly while the socket send occurs unlocked.
+					 */
+					client->lastsenttime = currenttime;
+					/* We have a client that we need to send a keepalive packet to, so
+					 * set our flag and then break out of the client list so we can
+					 * process sending it.
+					 */
+					send_keepalive = 1;
+					break;
+				}
 			}
+			/* Release our lock, as we have captured everything we need if we need to
+			 * send a keepalive packet. Avoids holding the lock while sending I/O.
+			 */
+			ast_mutex_unlock(&voter_lock);
+			/* If we didn't find any clients to send a keepalive to, or we are done,
+			 * send_keepalive will be false, so break out of the infinite loop we entered
+			 * above for keepalive processing.
+			 */
+			if (!send_keepalive) {
+				break;
+			}
+			/* If we didn't bail out above, send_keepalive is true, so we have a packet to
+			 * send. We've already released our lock, so we can send the packet over the
+			 * wire, without having to worry about holding voter_lock if the I/O is delayed.
+			 *
+			 * We built the keepalive packet while locked with the client's details, and copied the
+			 * IP for the client into txsin, so send the packet.
+			 */
+			sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &txsin, sizeof(txsin));
 		}
-		ast_mutex_unlock(&voter_lock);
 	}
 	pthread_exit(NULL);
 }
