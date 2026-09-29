@@ -443,6 +443,41 @@ void rpt_link_remove(struct ao2_container *links, struct rpt_link *l)
 	ao2_unlink(links, l);
 }
 
+void rpt_link_set_lastrx(struct rpt *myrpt, struct rpt_link *l, int rx)
+{
+	int keyed = !!rx;
+
+	if (l->lastrx == keyed) {
+		return;
+	}
+	if (l->lastrx) {
+		if (myrpt->remrx_links) {
+			myrpt->remrx_links--;
+		}
+		if (l->mode < MODE_LOCAL_MONITOR && myrpt->remrx_links_txable) {
+			myrpt->remrx_links_txable--;
+		}
+		if (l->voterlink && myrpt->voteremrx_links) {
+			myrpt->voteremrx_links--;
+		}
+	}
+	l->lastrx = keyed;
+	if (keyed) {
+		myrpt->remrx_links++;
+		if (l->mode < MODE_LOCAL_MONITOR) {
+			myrpt->remrx_links_txable++;
+		}
+		if (l->voterlink) {
+			myrpt->voteremrx_links++;
+		}
+		if (IS_NODE_EXTEN(l->name)) {
+			ast_copy_string(myrpt->lastnodewhichkeyedusup, l->name, sizeof(myrpt->lastnodewhichkeyedusup));
+		}
+	}
+	myrpt->remrx = myrpt->remrx_links > 0;
+	myrpt->voteremrx = myrpt->voteremrx_links > 0;
+}
+
 static int __mklinklist_limit(struct rpt *myrpt, struct ast_str *buf, int bytes, enum __mklinklist_flags flags)
 {
 	int new_len;
@@ -797,9 +832,21 @@ void *rpt_link_connect(void *data)
 			goto cleanup; /* Already linked */
 		}
 		if ((CHAN_TECH(l->chan, "echolink")) || (CHAN_TECH(l->chan, "tlb"))) {
+			int was_txable = l->mode < MODE_LOCAL_MONITOR;
+			int now_txable = connect_data->mode < MODE_LOCAL_MONITOR;
+
 			ast_copy_string(myrpt->lastlinknode, node, sizeof(myrpt->lastlinknode));
-			rpt_mutex_unlock(&myrpt->lock);
+			if (l->lastrx && was_txable != now_txable) {
+				if (was_txable) {
+					if (myrpt->remrx_links_txable) {
+						myrpt->remrx_links_txable--;
+					}
+				} else {
+					myrpt->remrx_links_txable++;
+				}
+			}
 			l->mode = connect_data->mode;
+			rpt_mutex_unlock(&myrpt->lock);
 			ao2_ref(l, -1);
 			goto cleanup;
 		}
