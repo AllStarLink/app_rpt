@@ -3420,11 +3420,11 @@ static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 		rpt_mutex_unlock(&myrpt->lock);
 		rv = ast_write(chan, f);
 		ast_frfree(f);
+		rpt_mutex_lock(&myrpt->lock);
 		if (rv < 0) {
 			ast_debug(3, "ast_write failed on %s, breaking loop\n", ast_channel_name(chan));
 			break;
 		}
-		rpt_mutex_lock(&myrpt->lock);
 	}
 	if (chan) {
 		ast_channel_unref(chan);
