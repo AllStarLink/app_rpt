@@ -538,7 +538,8 @@ struct voter_pvt {
 	unsigned int usedtmf:1;
 	unsigned int mixminus:1;
 	unsigned int waspager:1;
-	unsigned int kill_xmit_thread:1;
+
+	unsigned int kill_xmit_thread; /* written under xmit_lock; not a bit-field */
 
 	int testcycle;
 	int testindex;
@@ -1101,6 +1102,15 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 	return 0;
 }
 
+/* Destroy the sync objects voter_request inits. Call after the xmit thread has exited. */
+static void voter_pvt_destroy_sync(struct voter_pvt *p)
+{
+	ast_mutex_destroy(&p->txqlock);
+	ast_mutex_destroy(&p->pagerqlock);
+	ast_mutex_destroy(&p->xmit_lock);
+	ast_cond_destroy(&p->xmit_cond);
+}
+
 /*!
  * \brief Channel driver hangup callback to core.
  *
@@ -1148,16 +1158,19 @@ static int voter_hangup(struct ast_channel *ast)
 		pvts = p->next;
 	}
 	if (p->xmit_thread) {
-		p->kill_xmit_thread = 1;
 		ast_mutex_lock(&p->xmit_lock);
+		p->kill_xmit_thread = 1;
 		ast_cond_signal(&p->xmit_cond);
 		ast_mutex_unlock(&p->xmit_lock);
-		pthread_join(p->xmit_thread, NULL);
 	}
 	ast_mutex_unlock(&voter_lock);
+	if (p->xmit_thread) {
+		pthread_join(p->xmit_thread, NULL);
+	}
 	if (p->u) {
 		ast_module_user_remove(p->u);
 	}
+	voter_pvt_destroy_sync(p);
 	ast_free(p);
 	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
@@ -3323,9 +3336,17 @@ static void *voter_xmit(void *data)
 	} pingpacket;
 #pragma pack(pop)
 
-	while (run_forever && !ast_shutting_down() && !p->kill_xmit_thread) {
+	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_lock(&p->xmit_lock);
+		if (p->kill_xmit_thread) {
+			ast_mutex_unlock(&p->xmit_lock);
+			break;
+		}
 		ast_cond_wait(&p->xmit_cond, &p->xmit_lock);
+		if (p->kill_xmit_thread) {
+			ast_mutex_unlock(&p->xmit_lock);
+			break;
+		}
 		ast_mutex_unlock(&p->xmit_lock);
 		if (!p->drained_once) {
 			p->drained_once = 1;
@@ -3919,6 +3940,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	p->dsp = ast_dsp_new();
 	if (!p->dsp) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get DSP!!\n", p->nodenum);
+		voter_pvt_destroy_sync(p);
 		ast_free(p);
 		return NULL;
 	}
@@ -3929,6 +3951,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	if (!p->adpcmin) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from adpcm to ulaw!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
+		voter_pvt_destroy_sync(p);
 		ast_free(p);
 		return NULL;
 	}
@@ -3936,6 +3959,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	if (!p->adpcmout) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to adpcm!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
+		voter_pvt_destroy_sync(p);
 		ast_free(p);
 		return NULL;
 	}
@@ -3943,6 +3967,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	if (!p->toast) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
+		voter_pvt_destroy_sync(p);
 		ast_free(p);
 		return NULL;
 	}
@@ -3950,6 +3975,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	if (!p->toast1) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
+		voter_pvt_destroy_sync(p);
 		ast_free(p);
 		return NULL;
 	}
@@ -3957,6 +3983,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	if (!p->fromast) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from slinear to ulaw!!\n", p->nodenum);
 		ast_dsp_free(p->dsp);
+		voter_pvt_destroy_sync(p);
 		ast_free(p);
 		return NULL;
 	}
@@ -3978,6 +4005,7 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	chan = ast_channel_alloc(1, AST_STATE_DOWN, 0, 0, "", (char *) data, context, assignedids, requestor, 0, "voter/%s", (char *) data);
 	if (!chan) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot alloc new Asterisk channel\n", p->nodenum);
+		voter_pvt_destroy_sync(p);
 		ast_free(p);
 		return NULL;
 	} else {
