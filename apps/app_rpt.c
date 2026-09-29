@@ -7639,7 +7639,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 			rpt_telemetry(myrpt, CONNECTED, l);
 		}
 
-		l->chan = chan; /* Update pointer to the masqueraded channel. The original channel is dead. */
+		l->chan = chan;
 
 		/* insert at end of queue */
 		rpt_mutex_lock(&myrpt->lock);
