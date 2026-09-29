@@ -3087,7 +3087,12 @@ static int rpt_setup_channels(struct rpt *myrpt, struct ast_format_cap *cap)
 			return -1;
 		}
 		ast_raw_answer(p->chan);
-		ast_autoservice_start(p->chan);
+		/* Keep a reference so rpt_hangup() can stop autoservice on it. Otherwise the
+		 * hung up ;2 channel stays on the global autoservice list forever and every
+		 * node restart adds another entry for the autoservice thread to walk.
+		 */
+		myrpt->txchansink = ast_channel_ref(p->chan);
+		ast_autoservice_start(myrpt->txchansink);
 	}
 
 	if (!myrpt->localtxchannel) {
@@ -4844,9 +4849,13 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 		}
-		if (!ms) {
+		if (!who) {
 			/* No channels had activity before the timer expired,
-			 * so just continue to the next loop. */
+			 * so just continue to the next loop.
+			 * Test who, not ms: ast_waitfor_n() clamps ms to 0 when a
+			 * channel became ready at or after the timeout. (ms of -1 on
+			 * a poll error still ends the loop.)
+			 */
 			continue;
 		}
 
@@ -6088,18 +6097,21 @@ static void *rpt(void *this)
 		}
 		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
-		if (who == NULL) {
-			ms = 0;
-		}
 		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		rpt_mutex_lock(&myrpt->lock);
 		if (update_timers(myrpt, elap, totx)) {
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		}
-		if (!ms) {
+		if (!who) {
 			/* No channels had activity before the timer expired,
-			 * so just continue to the next loop. */
+			 * so just continue to the next loop.
+			 * Test who, not ms: ast_waitfor_n() clamps ms to 0 when a
+			 * channel became ready at or after the timeout, and skipping
+			 * that read lets the channel read queues back up under load.
+			 * Reset ms so a poll error (ms == -1) does not end the loop.
+			 */
+			ms = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			continue;
 		}

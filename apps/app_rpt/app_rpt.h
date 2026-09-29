@@ -1018,6 +1018,7 @@ struct rpt {
 	struct ast_channel *txpchannel;		/*!< Channel used to receive RX audio into the TXCONF bridge */
 	struct ast_channel *localrxchannel; /*!< Channel used when in remote configuration for rx, may be set equal to pchannel */
 	struct ast_channel *localtxchannel; /*!< Channel used to receive audio from the TXCONF bridge into the txchannel */
+	struct ast_channel *txchansink;		/*!< Referenced ;2 side of a Local txchannel, kept on autoservice to discard audio */
 	struct rpt_frame_queue frame_queue;
 	struct rpt_tele tele;
 	struct timeval lasttv, curtv;
