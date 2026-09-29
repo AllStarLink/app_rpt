@@ -4844,11 +4844,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 		}
-		if (!who) {
-			/* No channels had activity before the timer expired,
-			 * so just continue to the next loop. */
-			continue;
-		}
 
 		remrx = 0;
 		/* see if any other links are receiving */
@@ -4901,6 +4896,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				donodelog_fmt(myrpt, totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
 			}
 			l->lasttx = totx;
+		}
+		if (!who) {
+			/* No channels had activity before the timer expired,
+			 * so just continue to the next loop. */
+			continue;
 		}
 
 		if (who == l->chan) { /* if it was a read from rx */
