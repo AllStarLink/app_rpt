@@ -5635,9 +5635,6 @@ static void *rpt(void *this)
 		}
 		rpt_mutex_lock(&myrpt->lock);
 
-		/* If someone's connected, and they're transmitting from their end to us, set remrx true */
-		myrpt->remrx = myrpt->remrx_links > 0;
-		myrpt->voteremrx = myrpt->voteremrx_links > 0;
 		if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) { /* If sleep mode enabled */
 			if (myrpt->remrx) {							  /* signal coming from net wakes up system */
 				myrpt->sleeptimer = myrpt->p.sleeptime;	  /* reset sleep timer */
