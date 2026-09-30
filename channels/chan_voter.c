@@ -3313,6 +3313,7 @@ static void *voter_xmit(void *data)
 	struct timeval xmit_cycle_time;
 	int tx_client_send;
 	int tx_client_mix;
+	uint32_t tx_client_digest;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -3683,8 +3684,6 @@ static void *voter_xmit(void *data)
 					if (client->totransmit && !client->txlockout) {
 						ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum,
 							client->name, client->respdigest);
-						/* Update when this client was last sent an audio packet */
-						client->lastsenttime = ast_radio_tvnow();
 						/* Update our voter_xmit cycle timestamp so we can keep track
 						 * of if this client was already sent audio when we traverse the
 						 * client list again on re-entry.
@@ -3692,8 +3691,12 @@ static void *voter_xmit(void *data)
 						client->tx_cycle_time = xmit_cycle_time;
 						/* Copy everything needed after releasing voter_lock.
 						 * Never retain a live voter_client pointer across the unlock/send boundary.
+						 *
+						 * Copy the IP address and socket of the client, so we can use it later.
 						 */
 						txsin = client->sin;
+						/* Copy the digest of the current client, so we can use it later. */
+						tx_client_digest = client->respdigest;
 						tx_client_send = 1;
 						/* We have a client we need to send audio to, so break out of
 						 * the current loop, so we can send the audio packet while unlocked.
@@ -3733,7 +3736,22 @@ static void *voter_xmit(void *data)
 					ast_frfree(txf1);
 					txf1 = NULL;
 				}
-
+				/* Translation succeeded and the packet is ready to send.
+				 * Update lastsenttime under voter_lock so failed translation
+				 * attempts do not suppress keepalives.
+				 *
+				 * We use the client digest we copied earlier (tx_client_digest) to
+				 * find the right client to update.
+				 */
+				ast_mutex_lock(&voter_lock);
+				for (client = clients; client; client = client->next) {
+					if ((client->nodenum == p->nodenum) && (client->respdigest == tx_client_digest) &&
+						(client->sin.sin_addr.s_addr == txsin.sin_addr.s_addr) && (client->sin.sin_port == txsin.sin_port)) {
+						client->lastsenttime = ast_radio_tvnow();
+						break;
+					}
+				}
+				ast_mutex_unlock(&voter_lock);
 				/* FINALLY, send the ulaw audio packet outside voter_lock. */
 				sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &txsin, sizeof(txsin));
 			}
@@ -3840,9 +3858,6 @@ static void *voter_xmit(void *data)
 						if (client->totransmit && !client->txlockout) {
 							ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
 								client->name, client->respdigest);
-
-							/* Update when this client was last sent an audio packet */
-							client->lastsenttime = ast_radio_tvnow();
 							/* Update our voter_xmit cycle timestamp so we can keep track
 							 * of if this client was already sent audio when we traverse the
 							 * client list again on re-entry.
@@ -3851,8 +3866,12 @@ static void *voter_xmit(void *data)
 							/* Copy the destination before releasing voter_lock.
 							 * The client pointer must not be dereferenced after
 							 * the unlock because the client can be removed/freed.
+							 *
+							 * Copy the IP address and socket of the client, so we can use it later.
 							 */
 							txsin = client->sin;
+							/* Copy the digest of the current client, so we can use it later. */
+							tx_client_digest = client->respdigest;
 							tx_client_send = 1;
 							/* We have a client we need to send audio to, so break out of
 							 * the current loop, so we can send the audio packet while unlocked.
@@ -3869,6 +3888,24 @@ static void *voter_xmit(void *data)
 					if (!tx_client_send) {
 						break;
 					}
+
+					/* The ADPCM packet is ready to send. Record the audio
+					 * transmission (lastsenttime) under voter_lock, but only
+					 * after packet construction succeeded, so failed translation
+					 * or packet assembly attempts do not suppress keepalives.
+					 *
+					 * We use the client digest we copied earlier (tx_client_digest) to
+					 * find the right client to update.
+					 */
+					ast_mutex_lock(&voter_lock);
+					for (client = clients; client; client = client->next) {
+						if ((client->nodenum == p->nodenum) && (client->respdigest == tx_client_digest) &&
+							(client->sin.sin_addr.s_addr == txsin.sin_addr.s_addr) && (client->sin.sin_port == txsin.sin_port)) {
+							client->lastsenttime = ast_radio_tvnow();
+							break;
+						}
+					}
+					ast_mutex_unlock(&voter_lock);
 
 					/* Send the ADPCM packet outside voter_lock. */
 					sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &txsin, sizeof(txsin));
