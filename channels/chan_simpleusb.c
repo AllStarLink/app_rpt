@@ -4510,6 +4510,39 @@ static int load_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
+/* Drop aliases of s on p. Devices shallow-copy these from the default pvt. */
+static void simpleusb_clear_cfg_string(struct chan_simpleusb_pvt *p, char *s)
+{
+	int i;
+
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (p->gpios[i] == s) {
+			p->gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(p->pps); i++) {
+		if (p->pps[i] == s) {
+			p->pps[i] = NULL;
+		}
+	}
+}
+
+/* Free s once. Reload can leave several devices sharing an old default string. */
+static void simpleusb_free_cfg_string(struct chan_simpleusb_pvt *o, char *s)
+{
+	struct chan_simpleusb_pvt *p;
+
+	if (!s) {
+		return;
+	}
+	simpleusb_clear_cfg_string(&simpleusb_default, s);
+	/* o and anything after it are still linked; earlier devices are already freed. */
+	for (p = o; p; p = p->next) {
+		simpleusb_clear_cfg_string(p, s);
+	}
+	ast_free(s);
+}
+
 static int unload_module(void)
 {
 	struct chan_simpleusb_pvt *o, *no;
@@ -4539,15 +4572,10 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			/* Devices shallow-copy default gpio strings; free only owned ones. */
-			if (o->gpios[i] && o->gpios[i] != simpleusb_default.gpios[i]) {
-				ast_free(o->gpios[i]);
-			}
+			simpleusb_free_cfg_string(o, o->gpios[i]);
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i] && o->pps[i] != simpleusb_default.pps[i]) {
-				ast_free(o->pps[i]);
-			}
+			simpleusb_free_cfg_string(o, o->pps[i]);
 		}
 		ast_free(o->name);
 		simpleusb_release_device(o);
