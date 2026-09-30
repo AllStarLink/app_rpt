@@ -1629,16 +1629,16 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 		return res;
 	}
 
-	ast_mutex_lock(&el_db_lock);
-
 	/* Process the requested query option */
 	switch (option) {
 	case EL_QUERY_IPADDR:
+		ast_mutex_lock(&el_db_lock);
 		foundnode = el_db_find_nodenum(node);
 		if (foundnode) {
 			ast_copy_string(data, foundnode->ipaddr, *datalen);
 			res = 0;
 		}
+		ast_mutex_unlock(&el_db_lock);
 		break;
 	case EL_QUERY_CALLSIGN:
 		/* lookup first in connected table, then echolink database */
@@ -1651,8 +1651,6 @@ static int el_queryoption(struct ast_channel *chan, int option, void *data, int 
 		ast_log(LOG_ERROR, "Option %i is not valid.", option);
 		break;
 	}
-
-	ast_mutex_unlock(&el_db_lock);
 
 	if (res) {
 		ast_debug(2, "Node %s was not found, query failed.", node);
@@ -2410,9 +2408,11 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	int n;
 	int need_key;
 
+	ast_mutex_lock(&p->lock);
 	if (ast_timer_get_event(p->timer) == AST_TIMING_EVENT_EXPIRED) {
 		if ((ast_timer_ack(p->timer, 1) < 0)) {
 			ast_log(LOG_WARNING, "Timer ack failed. \n");
+			ast_mutex_unlock(&p->lock);
 			return NULL;
 		}
 	}
@@ -2435,6 +2435,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	}
 
 	if (n < EL_DELAY && !p->rxkey) { /* we need a bit of buffer to start sending audio */
+		ast_mutex_unlock(&p->lock);
 		return &ast_null_frame;
 	}
 
@@ -4253,6 +4254,7 @@ static void *el_reader(void *data)
 						ao2_ref(p, -1);
 					} else {
 						instp->rx_bad_packets++;
+						ast_mutex_unlock(&el_nodelist_lock);
 					}
 				}
 			}
