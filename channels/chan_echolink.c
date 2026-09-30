@@ -2417,6 +2417,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 		}
 	}
 
+	ast_mutex_lock(&p->lock);
 	for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 		n++;
 		if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
@@ -2433,17 +2434,20 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 			break;
 		}
 	}
+	ast_mutex_unlock(&p->lock);
 
 	if (n < EL_DELAY && !p->rxkey) { /* we need a bit of buffer to start sending audio */
 		return &ast_null_frame;
 	}
 
+	ast_mutex_lock(&p->lock);
 	qpast = (p->rxqast.qe_forw != &p->rxqast) ? p->rxqast.qe_forw : NULL;
 	if (qpast) {
 		remque((struct qelem *) qpast);
 		need_key = !p->rxkey;
 		p->rxkey = MAX_RXKEY_TIME;
 	}
+	ast_mutex_unlock(&p->lock);
 
 	if (!qpast) {
 		/* if no Echolink frames */
