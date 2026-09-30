@@ -2076,6 +2076,19 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	TLB_node_key->countdown = instp->rtcptimeout;
 	TLB_node_key->seqnum = 1;
 	TLB_node_key->instp = instp;
+	if (mycodec[0]) {
+		for (i = 0; tlb_codecs[i].name; i++) {
+			if (!strcasecmp(mycodec, tlb_codecs[i].name)) {
+				break;
+			}
+		}
+		if (!tlb_codecs[i].name) {
+			ast_log(LOG_ERROR, "Unknown codec type %s for call %s\n", mycodec, TLB_node_key->call);
+			ast_free(TLB_node_key);
+			ast_free(p);
+			return -1;
+		}
+	}
 	ast_mutex_lock(&instp->lock);
 	if (tsearch(TLB_node_key, &TLB_node_list, compare_ip)) {
 		ast_debug(1, "tlb: new CALL = %s, ip = %s, port = %u\n", TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
@@ -2118,18 +2131,6 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		return -1;
 	}
 	if (mycodec[0]) {
-		for (i = 0; tlb_codecs[i].name; i++) {
-			if (!strcasecmp(mycodec, tlb_codecs[i].name)) {
-				break;
-			}
-		}
-		if (!tlb_codecs[i].name) {
-			ast_log(LOG_ERROR, "Unknown codec type %s for call %s\n", mycodec, TLB_node_key->call);
-			ast_free(TLB_node_key);
-			ast_free(p);
-			ast_mutex_unlock(&instp->lock);
-			return -1;
-		}
 		p->txcodec = i;
 	}
 	ast_mutex_unlock(&instp->lock);
@@ -2457,16 +2458,25 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	val = ast_variable_retrieve(cfg, ctg, "deny");
 	if (val) {
 		instp->denylist_buf = ast_strdup(val);
-		if (instp->denylist_buf) {
-			instp->ndenylist = finddelim(instp->denylist_buf, instp->denylist, ARRAY_LEN(instp->denylist));
+		if (!instp->denylist_buf) {
+			ast_log(LOG_ERROR, "Cannot allocate deny list for %s\n", ctg);
+			ast_mutex_destroy(&instp->lock);
+			ast_free(instp);
+			return -1;
 		}
+		instp->ndenylist = finddelim(instp->denylist_buf, instp->denylist, ARRAY_LEN(instp->denylist));
 	}
 	val = ast_variable_retrieve(cfg, ctg, "permit");
 	if (val) {
 		instp->permitlist_buf = ast_strdup(val);
-		if (instp->permitlist_buf) {
-			instp->npermitlist = finddelim(instp->permitlist_buf, instp->permitlist, ARRAY_LEN(instp->permitlist));
+		if (!instp->permitlist_buf) {
+			ast_log(LOG_ERROR, "Cannot allocate permit list for %s\n", ctg);
+			ast_mutex_destroy(&instp->lock);
+			ast_free(instp->denylist_buf);
+			ast_free(instp);
+			return -1;
 		}
+		instp->npermitlist = finddelim(instp->permitlist_buf, instp->permitlist, ARRAY_LEN(instp->permitlist));
 	}
 	instp->pref_rxcodec = PREF_RXCODEC;
 	instp->pref_txcodec = PREF_TXCODEC;
@@ -2487,12 +2497,16 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	if ((instp->audio_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		ast_log(LOG_WARNING, "Unable to create new socket for TheLinkBox audio connection\n");
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
 		return -1;
 	}
 	if ((instp->ctrl_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		ast_log(LOG_WARNING, "Unable to create new socket for TheLinkBox control connection\n");
 		close(instp->audio_sock);
 		instp->audio_sock = -1;
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
 		return -1;
 	}
 	memset((char *) &si_me, 0, sizeof(si_me));
@@ -2510,6 +2524,8 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->ctrl_sock = -1;
 		close(instp->audio_sock);
 		instp->audio_sock = -1;
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
 		return -1;
 	}
 	instp->ctrl_port = instp->audio_port + 1;
@@ -2520,6 +2536,8 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->ctrl_sock = -1;
 		close(instp->audio_sock);
 		instp->audio_sock = -1;
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
 		return -1;
 	}
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
