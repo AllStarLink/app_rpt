@@ -864,7 +864,11 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	ast_mutex_lock(&instp->lock);
 	ast_copy_string(instp->TLB_node_test.ip, strs[1], sizeof(instp->TLB_node_test.ip));
 	instp->TLB_node_test.port = strtoul(strs[2], NULL, 0);
-	do_new_call(instp, p, "OUTBOUND", "OUTBOUND", strs[3]);
+	if (do_new_call(instp, p, "OUTBOUND", "OUTBOUND", strs[3])) {
+		ast_mutex_unlock(&instp->lock);
+		ast_free(str);
+		return -1;
+	}
 
 	pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall);
 
@@ -2019,7 +2023,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
 	char *sval, *strs[10], mycodec[20];
-	int i, n;
+	int i = 0, n;
 
 	mycodec[0] = 0;
 	if (codec) {
@@ -2085,7 +2089,6 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		if (!tlb_codecs[i].name) {
 			ast_log(LOG_ERROR, "Unknown codec type %s for call %s\n", mycodec, TLB_node_key->call);
 			ast_free(TLB_node_key);
-			ast_free(p);
 			return -1;
 		}
 	}
