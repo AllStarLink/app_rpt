@@ -2434,13 +2434,12 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 			break;
 		}
 	}
-	ast_mutex_unlock(&p->lock);
 
 	if (n < EL_DELAY && !p->rxkey) { /* we need a bit of buffer to start sending audio */
+		ast_mutex_unlock(&p->lock);
 		return &ast_null_frame;
 	}
 
-	ast_mutex_lock(&p->lock);
 	qpast = (p->rxqast.qe_forw != &p->rxqast) ? p->rxqast.qe_forw : NULL;
 	if (qpast) {
 		remque((struct qelem *) qpast);
