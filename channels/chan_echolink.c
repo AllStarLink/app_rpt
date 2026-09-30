@@ -1774,12 +1774,14 @@ static int el_text(struct ast_channel *chan, const char *text)
 						ast_str_append(&pkt, 0, "Echolink:");
 						j = 1;
 					}
+					ast_mutex_lock(&el_db_lock);
 					lookup_node_by_nodenum(node, &node_result);
 					if (node_result.callsign[0]) {
 						ast_str_append(&pkt, 0, " %s%s", node_result.callsign, mode == 'T' ? "" : "(M)");
 					} else {
 						ast_str_append(&pkt, 0, " %d%s", atoi(node), mode == 'T' ? "" : "(M)");
 					}
+					ast_mutex_unlock(&el_db_lock);
 				}
 			}
 			ast_str_append(&pkt, 0, "\r");
@@ -2748,9 +2750,11 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 		}
 	} else {
 		/* Lookup node data by node number */
+		ast_mutex_lock(&el_db_lock);
 		if (lookup_node_by_nodenum(argv[3], &found_node)) {
 			mynode = &found_node;
 		}
+		ast_mutex_unlock(&el_db_lock);
 	}
 
 	/* Report failure to find node */
