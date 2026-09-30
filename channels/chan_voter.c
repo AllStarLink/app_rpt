@@ -504,6 +504,8 @@ struct voter_client {
 	short lastaudio[FRAME_SIZE];
 	struct timeval ping_txtime;
 	struct timeval ping_last_rxtime;
+	struct timeval ping_cycle_time; /* currenttime of the last voter_xmit cycle that sent a ping */
+	struct timeval tx_cycle_time;	/* currenttime of the last voter_xmit cycle that sent an audio packet */
 	unsigned int ping_last_seqno;
 	int pings_requested;
 	int pings_sent;
@@ -3300,12 +3302,18 @@ static void *voter_xmit(void *data)
 {
 	struct voter_pvt *p = (struct voter_pvt *) data;
 	int i, txqueue, txact, mixminus_act;
+	int send_ping, send_keepalive;
 	i16 dummybuf1[FRAME_SIZE * 12], xmtbuf1[FRAME_SIZE * 12];
 	i16 xmtbuf[FRAME_SIZE], dummybuf2[FRAME_SIZE], xmtbuf2[FRAME_SIZE];
 	i32 mixaudio;
-	struct ast_frame fr, *f1, *f2, *f3, wf1;
+	struct ast_frame fr, *f1, *f2, *f3, *txf1, wf1;
 	struct voter_client *client, *client1;
+	struct sockaddr_in txsin;
 	struct timeval currenttime;
+	struct timeval xmit_cycle_time;
+	int tx_client_send;
+	int tx_client_mix;
+	uint32_t tx_client_digest;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -3539,100 +3547,178 @@ static void *voter_xmit(void *data)
 			/* Timestamp our packet with master time (for voting clients). */
 			audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 			audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
-			/* Loop through all the clients, to figure out if we should send audio
-			 * to each.
+			/* Keep track of the time for this voter_xmit cycle so we can exclude
+			 * clients that already received an audio packet.
 			 */
-			ast_mutex_lock(&voter_lock);
-			for (client = clients; client; client = client->next) {
-				/* Skip if this client doesn't belong to this instance */
-				if (client->nodenum != p->nodenum) {
-					continue;
-				}
-				/* Skip if this client isn't authenticated */
-				if (!client->respdigest) {
-					continue;
-				}
-				/* Skip if we haven't heard from this client in a while */
-				if (!client->heardfrom) {
-					continue;
-				}
-				/* Skip if this client IS set to use ADPCM audio (instead of ulaw) */
-				if (client->doadpcm) {
-					continue;
-				}
-				/* If mixminus is configured for this channel, figure out which
-				 * clients need audio sent to them (the "minus" client won't get
-				 * audio).
+			xmit_cycle_time = ast_radio_tvnow();
+			/*
+			 * Process audio packets one at a time. The client list and all client
+			 * states used to construct the packet are protected by voter_lock, but
+			 * the actual network I/O is deliberately performed after releasing the
+			 * lock. After each send, restart the traversal from clients so that no
+			 * client or next pointer is retained across the unlocked send.
+			 *
+			 * We will loop forever, until we run out of clients to send audio to.
+			 */
+			for (;;) {
+				/* Reset the flags we use to keep track of if we need to send
+				 * audio to a client.
 				 */
-				if (p->mixminus) {
-					memcpy(xmtbuf2, xmtbuf, sizeof(xmtbuf2));
-					i = 0;
-					/* Traverse the client list. */
-					for (client1 = clients; client1; client1 = client1->next) {
-						/* Skip if this is the "mixminus" client that shouldn't
-						 * receive audio.
-						 */
-						if (client1 == client) {
-							continue;
-						}
-						/* Skip if this client doesn't belong to this instance. */
-						if (client1->nodenum != p->nodenum) {
-							continue;
-						}
-						/* Skip if we haven't heard from this client recently. */
-						if (!client1->heardfrom) {
-							continue;
-						}
-						/* Skip if this client isn't authenticated. */
-						if (!client1->respdigest) {
-							continue;
-						}
-						/* Skip if this is a normal voting client (can't do
-						 * mixminus with them)
-						 */
-						if (!client1->mix) {
-							continue;
-						}
-						/* Skip if this is an ADPCM client (mixminus is only
-						 * supported for ulaw clients).
-						 */
-						if (client1->doadpcm) {
-							continue;
-						}
-						/* Skip if the client isn't receiving anything. */
-						if (!client1->lastrssi) {
-							continue;
-						}
-						/* Build the mixed audio for the client. xmtbuf2 initially
-						 * contains the current transmit audio. client1->lastaudio
-						 * contains the last audio frame received from another mix-
-						 * mode client. The received audio is added to the outgoing
-						 * audio so it can be sent to the current client.
-						 *
-						 * The current client is excluded (above), which is the "minus"
-						 * part of mixminus... each client receives the combined audio
-						 * from the other clients, but not its own audio.
-						 */
-						for (i = 0; i < FRAME_SIZE; i++) {
-							mixaudio = xmtbuf2[i] + client1->lastaudio[i];
-							/* Clamp the audio samples to the slin audio range. */
-							if (mixaudio > 32767) {
-								mixaudio = 32767;
-							}
-							if (mixaudio < -32767) {
-								mixaudio = -32767;
-							}
-							/* Put the result back into xmtbuf2 for later transmission. */
-							xmtbuf2[i] = mixaudio;
-						}
-					}
-					/*! \todo VE7FET AI flagged this, see Issue #1215 */
-					if (!txact && !i) {
+				tx_client_send = 0;
+				tx_client_mix = 0;
+				txf1 = NULL;
+
+				ast_mutex_lock(&voter_lock);
+				/* Traverse the client list to find a client to send audio to. */
+				for (client = clients; client; client = client->next) {
+					/* Skip if this client doesn't belong to this instance */
+					if (client->nodenum != p->nodenum) {
 						continue;
 					}
-					/* Take xmtbuf2 (mixminus audio), translate it from slin to ulaw, and
-					 * put it in the audio packet we are building.
+					/* Skip clients already selected during this voter_xmit cycle. */
+					if (!ast_tvcmp(client->tx_cycle_time, xmit_cycle_time)) {
+						continue;
+					}
+					/* Skip if this client isn't authenticated */
+					if (!client->respdigest) {
+						continue;
+					}
+					/* Skip if we haven't heard from this client in a while */
+					if (!client->heardfrom) {
+						continue;
+					}
+					/* Skip if this client IS set to use ADPCM audio (instead of ulaw) */
+					if (client->doadpcm) {
+						continue;
+					}
+					/* If mixminus is configured for this channel, figure out which
+					 * clients need audio sent to them (the "minus" client won't get
+					 * audio).
 					 */
+					if (p->mixminus) {
+						memcpy(xmtbuf2, xmtbuf, sizeof(xmtbuf2));
+						i = 0;
+						/* Traverse the client list. */
+						for (client1 = clients; client1; client1 = client1->next) {
+							/* Skip if this is the "mixminus" client that shouldn't
+							 * receive audio.
+							 */
+							if (client1 == client) {
+								continue;
+							}
+							/* Skip if this client doesn't belong to this instance. */
+							if (client1->nodenum != p->nodenum) {
+								continue;
+							}
+							/* Skip if we haven't heard from this client recently. */
+							if (!client1->heardfrom) {
+								continue;
+							}
+							/* Skip if this client isn't authenticated. */
+							if (!client1->respdigest) {
+								continue;
+							}
+							/* Skip if this is a normal voting client (can't do
+							 * mixminus with them)
+							 */
+							if (!client1->mix) {
+								continue;
+							}
+							/* Skip if this is an ADPCM client (mixminus is only
+							 * supported for ulaw clients).
+							 */
+							if (client1->doadpcm) {
+								continue;
+							}
+							/* Skip if the client isn't receiving anything. */
+							if (!client1->lastrssi) {
+								continue;
+							}
+							/* Build the mixed audio for the client. xmtbuf2 initially
+							 * contains the current transmit audio. client1->lastaudio
+							 * contains the last audio frame received from another mix-
+							 * mode client. The received audio is added to the outgoing
+							 * audio so it can be sent to the current client.
+							 *
+							 * The current client is excluded (above), which is the "minus"
+							 * part of mixminus... each client receives the combined audio
+							 * from the other clients, but not its own audio.
+							 */
+							for (i = 0; i < FRAME_SIZE; i++) {
+								mixaudio = xmtbuf2[i] + client1->lastaudio[i];
+								/* Clamp the audio samples to the slin audio range. */
+								if (mixaudio > 32767) {
+									mixaudio = 32767;
+								}
+								if (mixaudio < -32767) {
+									mixaudio = -32767;
+								}
+								/* Put the result back into xmtbuf2 for later transmission. */
+								xmtbuf2[i] = mixaudio;
+							}
+						}
+						/*! \todo VE7FET AI flagged this, see Issue #1215 */
+						if (!txact && !i) {
+							continue;
+						}
+
+						/*
+						 * The mix-minus source frame is kept in xmtbuf2 until
+						 * after voter_lock is released. Translation is performed
+						 * outside the global client-list lock.
+						 */
+						tx_client_mix = 1;
+					}
+					/* Fudge time for Garmin GPS pucks, if needed. */
+					mkpucked(client, &audiopacket.vp.curtime);
+					audiopacket.vp.digest = htonl(client->respdigest);
+					/*! \todo VE7FET we set vtime_nsec above... which is probably redundant when
+					 * we do it here, this time taking into account the client type. Confirm and remove
+					 * the line above, if necessary.
+					 */
+					/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
+					 * nsec from the master timing source (for voting clients).
+					 */
+					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
+					if (client->totransmit && !client->txlockout) {
+						ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum,
+							client->name, client->respdigest);
+						/* Update our voter_xmit cycle timestamp so we can keep track
+						 * of if this client was already sent audio when we traverse the
+						 * client list again on re-entry.
+						 */
+						client->tx_cycle_time = xmit_cycle_time;
+						/* Copy everything needed after releasing voter_lock.
+						 * Never retain a live voter_client pointer across the unlock/send boundary.
+						 *
+						 * Copy the IP address and socket of the client, so we can use it later.
+						 */
+						txsin = client->sin;
+						/* Copy the digest of the current client, so we can use it later. */
+						tx_client_digest = client->respdigest;
+						tx_client_send = 1;
+						/* We have a client we need to send audio to, so break out of
+						 * the current loop, so we can send the audio packet while unlocked.
+						 */
+						break;
+					}
+				}
+				ast_mutex_unlock(&voter_lock);
+
+				/* If we have no more audio to send, tx_client_send will be false,
+				 * so break out of our infinite loop of audio processing.
+				 */
+				if (!tx_client_send) {
+					break;
+				}
+
+				/*
+				 * Mix-minus translation can be relatively expensive. Do it now, after
+				 * releasing voter_lock so voter_reader() and voter_timer() are
+				 * not blocked by audio codec processing.
+				 */
+				if (tx_client_mix) {
 					memset(&fr, 0, sizeof(fr));
 					fr.frametype = AST_FRAME_VOICE;
 					fr.subclass.format = ast_format_slin;
@@ -3640,39 +3726,35 @@ static void *voter_xmit(void *data)
 					fr.samples = FRAME_SIZE;
 					fr.data.ptr = xmtbuf2;
 					fr.src = __PRETTY_FUNCTION__;
-					if (f1) {
-						ast_frfree(f1);
-					}
-					f1 = ast_translate(p->fromast, &fr, 0);
-					if (!f1) {
+
+					txf1 = ast_translate(p->fromast, &fr, 0);
+					if (!txf1) {
 						ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to receive from Asterisk\n", p->nodenum);
 						continue;
 					}
-					memcpy(audiopacket.audio, f1->data.ptr, FRAME_SIZE);
+					memcpy(audiopacket.audio, txf1->data.ptr, FRAME_SIZE);
+					ast_frfree(txf1);
+					txf1 = NULL;
 				}
-				/* Fudge time for Garmin GPS pucks, if needed. */
-				mkpucked(client, &audiopacket.vp.curtime);
-				audiopacket.vp.digest = htonl(client->respdigest);
-				/*! \todo VE7FET we set vtime_nsec above... which is probably redundant when
-				 * we do it here, this time taking into account the client type. Confirm and remove
-				 * the line above, if necessary.
+				/* Translation succeeded and the packet is ready to send.
+				 * Update lastsenttime under voter_lock so failed translation
+				 * attempts do not suppress keepalives.
+				 *
+				 * We use the client digest we copied earlier (tx_client_digest) to
+				 * find the right client to update.
 				 */
-				/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
-				 * nsec from the master timing source (for voting clients).
-				 */
-				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
-				if (client->totransmit && !client->txlockout) {
-					ast_debug(6, "VOTER %i: Sending ulaw TX audio packet to client %s digest %08x\n", p->nodenum, client->name,
-						client->respdigest);
-					/* FINALLY, send the ulaw audio packet over the wire to the client for transmitting */
-					sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
-
-					/* Update when this client last sent an audio packet */
-					client->lastsenttime = ast_radio_tvnow();
+				ast_mutex_lock(&voter_lock);
+				for (client = clients; client; client = client->next) {
+					if ((client->nodenum == p->nodenum) && (client->respdigest == tx_client_digest) &&
+						(client->sin.sin_addr.s_addr == txsin.sin_addr.s_addr) && (client->sin.sin_port == txsin.sin_port)) {
+						client->lastsenttime = ast_radio_tvnow();
+						break;
+					}
 				}
+				ast_mutex_unlock(&voter_lock);
+				/* FINALLY, send the ulaw audio packet outside voter_lock. */
+				sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &txsin, sizeof(txsin));
 			}
-			ast_mutex_unlock(&voter_lock);
 		}
 		/* This block is used by clients configured to use ADPCM audio to the client transmitter. It
 		 * is entered if there is new activity (txact = 1), OR there is no txact, but p->adpcmf1 is
@@ -3725,46 +3807,109 @@ static void *voter_xmit(void *data)
 				/* Timestamp the packet. */
 				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
 				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
-				ast_mutex_lock(&voter_lock);
-				/* Traverse the client list, and determine which clients to send to. */
-				for (client = clients; client; client = client->next) {
-					/* Skip if this client doesn't belong to this instance */
-					if (client->nodenum != p->nodenum) {
-						continue;
-					}
-					/* Skip if this client isn't authenticated */
-					if (!client->respdigest) {
-						continue;
-					}
-					/* Skip if we haven't heard from this client in a while */
-					if (!client->heardfrom) {
-						continue;
-					}
-					/* Skip if this is NOT an ADPCM client (is configured for ulaw audio) */
-					if (!client->doadpcm) {
-						continue;
-					}
-					/* Fudge time for Garmin GPS pucks, if needed. */
-					mkpucked(client, &audiopacket.vp.curtime);
-					audiopacket.vp.digest = htonl(client->respdigest);
-					/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
-					 * nsec from the master timing source (for voting clients).
-					 */
-					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+				/* Keep track of the time for this voter_xmit cycle so we can exclude
+				 * clients that already received an audio packet.
+				 */
+				xmit_cycle_time = ast_radio_tvnow();
+				/*
+				 * Process audio packets one at a time. The client list and all client
+				 * states used to construct the packet are protected by voter_lock, but
+				 * the actual network I/O is deliberately performed after releasing the
+				 * lock. After each send, restart the traversal from clients so that no
+				 * client or next pointer is retained across the unlocked send.
+				 *
+				 * We will loop forever, until we run out of clients to send audio to.
+				 */
+				for (;;) {
+					/* Reset our flag every time in for whether we need to send an audio packet. */
+					tx_client_send = 0;
+					ast_mutex_lock(&voter_lock);
+					/* Traverse the client list, and determine which clients to send to. */
+					for (client = clients; client; client = client->next) {
+						/* Skip if this client doesn't belong to this instance */
+						if (client->nodenum != p->nodenum) {
+							continue;
+						}
+						/* Skip clients already selected during this voter_xmit cycle. */
+						if (!ast_tvcmp(client->tx_cycle_time, xmit_cycle_time)) {
+							continue;
+						}
+						/* Skip if this client isn't authenticated */
+						if (!client->respdigest) {
+							continue;
+						}
+						/* Skip if we haven't heard from this client in a while */
+						if (!client->heardfrom) {
+							continue;
+						}
+						/* Skip if this is NOT an ADPCM client (is configured for ulaw audio) */
+						if (!client->doadpcm) {
+							continue;
+						}
+						/* Fudge time for Garmin GPS pucks, if needed. */
+						mkpucked(client, &audiopacket.vp.curtime);
+						audiopacket.vp.digest = htonl(client->respdigest);
+						/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
+						 * nsec from the master timing source (for voting clients).
+						 */
+						audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 #ifndef ADPCM_LOOPBACK
-					/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
-					if (client->totransmit && !client->txlockout) {
-						ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
-							client->name, client->respdigest);
-						/* Finally, send the ADPCM audio packet over the wire to the client for transmitting. */
-						sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
-
-						/* Update when this client last sent an audio packet */
-						client->lastsenttime = ast_radio_tvnow();
-					}
+						/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
+						if (client->totransmit && !client->txlockout) {
+							ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
+								client->name, client->respdigest);
+							/* Update our voter_xmit cycle timestamp so we can keep track
+							 * of if this client was already sent audio when we traverse the
+							 * client list again on re-entry.
+							 */
+							client->tx_cycle_time = xmit_cycle_time;
+							/* Copy the destination before releasing voter_lock.
+							 * The client pointer must not be dereferenced after
+							 * the unlock because the client can be removed/freed.
+							 *
+							 * Copy the IP address and socket of the client, so we can use it later.
+							 */
+							txsin = client->sin;
+							/* Copy the digest of the current client, so we can use it later. */
+							tx_client_digest = client->respdigest;
+							tx_client_send = 1;
+							/* We have a client we need to send audio to, so break out of
+							 * the current loop, so we can send the audio packet while unlocked.
+							 */
+							break;
+						}
 #endif
+					}
+					ast_mutex_unlock(&voter_lock);
+
+					/* If we have no more audio to send, tx_client_send will be false,
+					 * so break out of our infinite loop of audio processing.
+					 */
+					if (!tx_client_send) {
+						break;
+					}
+
+					/* The ADPCM packet is ready to send. Record the audio
+					 * transmission (lastsenttime) under voter_lock, but only
+					 * after packet construction succeeded, so failed translation
+					 * or packet assembly attempts do not suppress keepalives.
+					 *
+					 * We use the client digest we copied earlier (tx_client_digest) to
+					 * find the right client to update.
+					 */
+					ast_mutex_lock(&voter_lock);
+					for (client = clients; client; client = client->next) {
+						if ((client->nodenum == p->nodenum) && (client->respdigest == tx_client_digest) &&
+							(client->sin.sin_addr.s_addr == txsin.sin_addr.s_addr) && (client->sin.sin_port == txsin.sin_port)) {
+							client->lastsenttime = ast_radio_tvnow();
+							break;
+						}
+					}
+					ast_mutex_unlock(&voter_lock);
+
+					/* Send the ADPCM packet outside voter_lock. */
+					sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &txsin, sizeof(txsin));
 				}
-				ast_mutex_unlock(&voter_lock);
 				/* Clean up, we're done with the ADPCM audio frame. */
 				ast_frfree(f2);
 			}
@@ -3775,100 +3920,199 @@ static void *voter_xmit(void *data)
 		}
 		/* Get the current time for ping and keeplive packet tracking. */
 		currenttime = ast_radio_tvnow();
-		/* Process sending ping packets for each client, if necessary */
-		ast_mutex_lock(&voter_lock);
-		for (client = clients; client; client = client->next) {
-			/* Skip if this client doesn't belong to this instance. */
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			/* Skip clients that aren't authenticated. */
-			if (!client->respdigest) {
-				continue;
-			}
-			/* Skip clients that aren't connected. */
-			if (!client->heardfrom) {
-				continue;
-			}
-			/* If we are pinging a client, see if we're finished yet. If we are, the
-			 * results will be printed, and client->pings_requested is going to be set
-			 * to 0, causing us to continue skipping this client (stop pinging).
+		/*
+		 * Process ping packets one at a time. The client list and all client
+		 * states used to construct the packet are protected by voter_lock, but
+		 * the actual network I/O is deliberately performed after releasing the
+		 * lock. After each send, restart the traversal from clients so that no
+		 * client or next pointer is retained across the unlocked send.
+		 *
+		 * We will loop forever, until we run out of clients to send pings to.
+		 */
+		for (;;) {
+			/* Our flag that we have outstanding pings to send. It will be set true
+			 * below, if we need to send a ping to someone.
 			 */
-			check_ping_done(client);
-			/* Skip clients that we're not pinging (client->pings_requested will be 0). */
-			if (!client->pings_requested) {
-				continue;
+			send_ping = 0;
+			ast_mutex_lock(&voter_lock);
+			/* Traverse the client list to see if we need to process any pings. */
+			for (client = clients; client; client = client->next) {
+				/* Skip if this client doesn't belong to this instance. */
+				if (client->nodenum != p->nodenum) {
+					continue;
+				}
+				/* Skip clients that aren't authenticated. */
+				if (!client->respdigest) {
+					continue;
+				}
+				/* Skip clients that aren't connected. */
+				if (!client->heardfrom) {
+					continue;
+				}
+				/* If we are pinging a client, see if we're finished yet. If we are, the
+				 * results will be printed, and client->pings_requested is going to be set
+				 * to 0, causing us to continue skipping this client (stop pinging).
+				 */
+				check_ping_done(client);
+				/* Skip clients that we're not pinging (client->pings_requested will be 0). */
+				if (!client->pings_requested) {
+					continue;
+				}
+				/* If we've already sent more pings to a client than we need to, skip (we should
+				 * already be done!).
+				 */
+				if (client->pings_sent >= client->pings_requested) {
+					continue;
+				}
+				/* Limit ping sends to once per client per voter_xmit cycle.
+				 *
+				 * ping_cycle_time records that a particular client has already been selected during
+				 * the current voter_xmit cycle. When the loop restarts at clients after the sendto(),
+				 * this client is skipped, while every other client remains eligible. This prevents us
+				 * from accidentally queuing up pings due to delayed I/O and sending a burst, which would
+				 * mess up our ping statistics (all packets in the burst would have the same pingpacket.txtime).
+				 */
+				if (!ast_tvcmp(client->ping_cycle_time, currenttime)) {
+					continue;
+				}
+				/* At this point, we have outstanding pings to send to this client, so do it. */
+				if (voter_tvdiff_ms(currenttime, client->ping_txtime) >= (PING_TIME_MS * client->pings_sent)) {
+					/* Update client->ping_cycle_time. */
+					client->ping_cycle_time = currenttime;
+					/* If we haven't sent any pings to the client yet, let's get started. */
+					if (!client->pings_sent) {
+						/* Timestamp when we sent the first ping (client->ping_txtime). */
+						client->ping_txtime = currenttime;
+						memset(&client->ping_last_rxtime, 0, sizeof(client->ping_last_rxtime));
+					}
+					/* Increment the number of ping packets we've sent to this client. */
+					client->pings_sent++;
+					/* Build the ping packet while the client state is protected. */
+					memset(&pingpacket, 0, sizeof(pingpacket));
+					pingpacket.seqno = ++client->ping_seqno;
+					for (i = 0; i < sizeof(pingpacket.filler); i++) {
+						pingpacket.filler[i] = (pingpacket.seqno & 0xff) + i;
+					}
+					/* Set the time this packet was sent to the current time. */
+					pingpacket.txtime = currenttime;
+					/* Set the start time to when we sent the first packet (from above). */
+					pingpacket.starttime = client->ping_txtime;
+					ast_copy_string((char *) pingpacket.vp.challenge, challenge, sizeof(pingpacket.vp.challenge));
+					pingpacket.vp.payload_type = htons(VOTER_PAYLOAD_PING);
+					pingpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
+					mkpucked(client, &pingpacket.vp.curtime);
+					pingpacket.vp.digest = htonl(client->respdigest);
+					pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					/* Set txsin to the IP address of the client, so we can use it later. */
+					txsin = client->sin;
+					ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+					/* Set our flag that we have an outstanding ping to send. */
+					send_ping = 1;
+					/* We have a client that we need to send a ping, so break out of the
+					 * list traversal so that we can take care of that.
+					 */
+					break;
+				}
 			}
-			/* If we've already sent more pings to a client than we need to, skip (we should
-			 * already be done!).
+			/* Release our lock, as we have captured everything we need if we need to
+			 * send a ping packet. Avoids holding the lock while sending I/O.
 			 */
-			if (client->pings_sent >= client->pings_requested) {
-				continue;
+			ast_mutex_unlock(&voter_lock);
+			/* If we didn't find any clients to send a ping to, or we are done,
+			 * send_ping will be false, so break out of the infinite loop we entered
+			 * above for ping processing.
+			 */
+			if (!send_ping) {
+				break;
 			}
-			/* At this point, we have outstanding pings to send to this client, so do it. */
-			if (voter_tvdiff_ms(currenttime, client->ping_txtime) >= (PING_TIME_MS * client->pings_sent)) {
-				/* If we haven't sent any pings to the client yet, let's get started. */
-				if (!client->pings_sent) {
-					/* Timestamp when we sent the first ping (client->ping_txtime). */
-					client->ping_txtime = currenttime;
-					memset(&client->ping_last_rxtime, 0, sizeof(client->ping_last_rxtime));
-				}
-				/* Increment the number of ping packets we've sent to this client. */
-				client->pings_sent++;
-				/* Build and send the ping packet to the client. */
-				memset(&pingpacket, 0, sizeof(pingpacket));
-				pingpacket.seqno = ++client->ping_seqno;
-				for (i = 0; i < sizeof(pingpacket.filler); i++) {
-					pingpacket.filler[i] = (pingpacket.seqno & 0xff) + i;
-				}
-				/* Set the time this packet was sent to the current time. */
-				pingpacket.txtime = currenttime;
-				/* Set the start time to when we sent the first packet (from above). */
-				pingpacket.starttime = client->ping_txtime;
-				ast_copy_string((char *) pingpacket.vp.challenge, challenge, sizeof(pingpacket.vp.challenge));
-				pingpacket.vp.payload_type = htons(VOTER_PAYLOAD_PING);
-				pingpacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				mkpucked(client, &pingpacket.vp.curtime);
-				pingpacket.vp.digest = htonl(client->respdigest);
-				pingpacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				ast_debug(2, "VOTER %i: Sending ping packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				/* Send the ping packet on the wire. */
-				sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
-			}
+			/* If we didn't bail out above, send_ping is true, so we have a packet to
+			 * send. We've already released our lock, so we can send the packet over the
+			 * wire, without having to worry about holding voter_lock if the I/O is delayed.
+			 *
+			 * We built the ping packet while locked with the client's details, and copied the
+			 * IP for the client into txsin, so send the packet.
+			 */
+			sendto(udp_socket, &pingpacket, sizeof(pingpacket), 0, (struct sockaddr *) &txsin, sizeof(txsin));
 		}
-		/* Process sending keepalive packets for each client, if necessary */
-		for (client = clients; client; client = client->next) {
-			/* Skip if the client doesn't belong to this instance. */
-			if (client->nodenum != p->nodenum) {
-				continue;
-			}
-			/* Skip if the client isn't authenticated. */
-			if (!client->respdigest) {
-				continue;
-			}
-			/* Skip if we haven't heard from the client recently. */
-			if (!client->heardfrom) {
-				continue;
-			}
-			/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
-			 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
-			 * with this packet.
-			 */
-			if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(currenttime, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
-				memset(&audiopacket, 0, sizeof(audiopacket));
-				ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
-				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
-				audiopacket.vp.digest = htonl(client->respdigest);
-				audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-				ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
-				sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &client->sin, sizeof(client->sin));
 
-				/* Update when this client last sent a keepalive packet */
-				client->lastsenttime = ast_radio_tvnow();
+		/*
+		 * Process keepalive packets one at a time. As with ping packets, copy
+		 * all client-dependent states while holding voter_lock, then perform the
+		 * potentially blocking sendto() without the global lock. lastsenttime
+		 * is updated before unlocking so the same client cannot be selected again
+		 * if the traversal is restarted.
+		 *
+		 * Start an infinite loop to process all the keepalives for all clients.
+		 */
+		for (;;) {
+			/* Our flag to tell when we're done sending keepalives to clients, it
+			 * gets set to true below, if there are keepalives that need to be sent.
+			 */
+			send_keepalive = 0;
+			ast_mutex_lock(&voter_lock);
+			/* Traverse the client list, to find clients we need to send keepalive
+			 * packets to.
+			 */
+			for (client = clients; client; client = client->next) {
+				/* Skip if the client doesn't belong to this instance. */
+				if (client->nodenum != p->nodenum) {
+					continue;
+				}
+				/* Skip if the client isn't authenticated. */
+				if (!client->respdigest) {
+					continue;
+				}
+				/* Skip if we haven't heard from the client recently. */
+				if (!client->heardfrom) {
+					continue;
+				}
+				/* The host doesn't have GPS data to send a client (and there is no point). We use the GPS payload
+				 * (Payload 2) to send a keepalive packet to keep our UDP session alive. The client does nothing
+				 * with this packet.
+				 */
+				if (ast_tvzero(client->lastsenttime) || (voter_tvdiff_ms(currenttime, client->lastsenttime) >= TX_KEEPALIVE_MS)) {
+					memset(&audiopacket, 0, sizeof(audiopacket));
+					ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
+					audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
+					audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_GPS);
+					audiopacket.vp.digest = htonl(client->respdigest);
+					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
+					/* Set txsin to the IP address of the client, so we can use it later. */
+					txsin = client->sin;
+					ast_debug(5, "VOTER %i: Sending keepalive packet to client %s digest %08x\n", p->nodenum, client->name, client->respdigest);
+
+					/* Reserve this keepalive while protected so the client is not
+					 * selected repeatedly while the socket send occurs unlocked.
+					 */
+					client->lastsenttime = currenttime;
+					/* We have a client that we need to send a keepalive packet to, so
+					 * set our flag and then break out of the client list so we can
+					 * process sending it.
+					 */
+					send_keepalive = 1;
+					break;
+				}
 			}
+			/* Release our lock, as we have captured everything we need if we need to
+			 * send a keepalive packet. Avoids holding the lock while sending I/O.
+			 */
+			ast_mutex_unlock(&voter_lock);
+			/* If we didn't find any clients to send a keepalive to, or we are done,
+			 * send_keepalive will be false, so break out of the infinite loop we entered
+			 * above for keepalive processing.
+			 */
+			if (!send_keepalive) {
+				break;
+			}
+			/* If we didn't bail out above, send_keepalive is true, so we have a packet to
+			 * send. We've already released our lock, so we can send the packet over the
+			 * wire, without having to worry about holding voter_lock if the I/O is delayed.
+			 *
+			 * We built the keepalive packet while locked with the client's details, and copied the
+			 * IP for the client into txsin, so send the packet.
+			 */
+			sendto(udp_socket, &audiopacket, sizeof(VOTER_PACKET_HEADER), 0, (struct sockaddr *) &txsin, sizeof(txsin));
 		}
-		ast_mutex_unlock(&voter_lock);
 	}
 	pthread_exit(NULL);
 }
