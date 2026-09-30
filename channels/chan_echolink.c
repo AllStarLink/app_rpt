@@ -2417,6 +2417,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 		}
 	}
 
+	ast_mutex_lock(&p->lock);
 	for (n = 0, qpast = p->rxqast.qe_forw; qpast != &p->rxqast; qpast = qpast->qe_forw) {
 		n++;
 		if (n > QUEUE_OVERLOAD_THRESHOLD_AST) {
@@ -2435,6 +2436,7 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 	}
 
 	if (n < EL_DELAY && !p->rxkey) { /* we need a bit of buffer to start sending audio */
+		ast_mutex_unlock(&p->lock);
 		return &ast_null_frame;
 	}
 
@@ -2444,7 +2446,6 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 		need_key = !p->rxkey;
 		p->rxkey = MAX_RXKEY_TIME;
 	}
-
 	ast_mutex_unlock(&p->lock);
 
 	if (!qpast) {
