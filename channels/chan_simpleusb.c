@@ -4527,19 +4527,32 @@ static void simpleusb_clear_cfg_string(struct chan_simpleusb_pvt *p, char *s)
 	}
 }
 
-/* Free s once. Reload can leave several devices sharing an old default string. */
+/* Free s once the last device that still points at it has joined its HID thread.
+ * Reload can leave several devices sharing an old default string.
+ */
 static void simpleusb_free_cfg_string(struct chan_simpleusb_pvt *o, char *s)
 {
 	struct chan_simpleusb_pvt *p;
+	int i, held;
 
 	if (!s) {
 		return;
 	}
-	simpleusb_clear_cfg_string(&simpleusb_default, s);
-	/* o and anything after it are still linked; earlier devices are already freed. */
-	for (p = o; p; p = p->next) {
-		simpleusb_clear_cfg_string(p, s);
+	held = 0;
+	for (p = o->next; p && !held; p = p->next) {
+		for (i = 0; i < GPIO_PINCOUNT && !held; i++) {
+			held = (p->gpios[i] == s);
+		}
+		for (i = 0; i < ARRAY_LEN(p->pps) && !held; i++) {
+			held = (p->pps[i] == s);
+		}
 	}
+	if (held) {
+		simpleusb_clear_cfg_string(o, s);
+		return;
+	}
+	simpleusb_clear_cfg_string(&simpleusb_default, s);
+	simpleusb_clear_cfg_string(o, s);
 	ast_free(s);
 }
 
