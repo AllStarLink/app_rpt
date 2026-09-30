@@ -746,7 +746,7 @@ static int compare_eldb_callsign(const void *pa, const void *pb)
 
 /*!
  * \brief Find an echolink node from the internal user database by nodenum.
- * \note Must be called locked.
+ * \note Must be called locked (el_db_lock).
  * \param nodenum	Pointer to node number to find.
  * \retval NULL		If the IP address was not found.
  * \return If found returns an eldb struct.
@@ -768,7 +768,7 @@ static struct eldb *el_db_find_nodenum(const char *nodenum)
 
 /*!
  * \brief Find an echolink node from the internal user database by callsign.
- * \note Must be called locked.
+ * \note Must be called locked (el_db_lock).
  * \param callsign	Pointer to callsign to find.
  * \retval NULL		If the callsign was not found.
  * \return If found returns an eldb struct.
@@ -812,7 +812,7 @@ static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 
 /*!
  * \brief Delete a node from the internal echolink users database.
- * \note Must be called locked.
+ * \note Must be called locked (el_db_lock).
  * \param nodenum		Pointer to node to delete.
  */
 static void el_db_delete_entries(struct eldb *node)
@@ -849,7 +849,7 @@ static void el_db_delete_entries(struct eldb *node)
 /*!
  * \brief Add a node to the internal echolink users database.
  * The node is added to the three internal indexes.
- * \note Must be called locked.
+ * \note Must be called locked (el_db_lock).
  * \param nodenum		Buffer to node number.
  * \param ipaddr		Buffer to ip address.
  * \param callsign		Buffer to callsign.
@@ -903,6 +903,7 @@ static struct eldb *el_db_put(const char *nodenum, const char *ipaddr, const cha
 static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
 {
 	struct el_node_lookup_callsign node_lookup = { 0 };
+	int res = 0;
 
 	memset(result, 0, sizeof(*result));
 	ast_copy_string(node_lookup.callsign, callsign, sizeof(node_lookup.callsign));
@@ -915,19 +916,17 @@ static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
 		snprintf(result->nodenum, sizeof(result->nodenum), "%d", node_lookup.nodenum);
 		ast_copy_string(result->callsign, node_lookup.callsign, sizeof(result->callsign));
 		ast_copy_string(result->ipaddr, node_lookup.ipaddr, sizeof(result->ipaddr));
-		return 1;
+		res = 1;
 	} else {
 		struct eldb *found_node;
-		ast_mutex_lock(&el_db_lock);
 		found_node = el_db_find_callsign(callsign);
-		ast_mutex_unlock(&el_db_lock);
 		if (found_node) {
 			memcpy(result, found_node, sizeof(*result));
-			return 1;
+			res = 1;
 		}
 	}
 
-	return 0;
+	return res;
 }
 
 /*!
@@ -942,6 +941,7 @@ static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
 static int lookup_node_by_nodenum(const char *nodenum, struct eldb *result)
 {
 	struct el_node_lookup_callsign node_lookup = { 0 };
+	int res = 0;
 
 	memset(result, 0, sizeof(*result));
 	node_lookup.nodenum = atoi(nodenum);
@@ -954,17 +954,17 @@ static int lookup_node_by_nodenum(const char *nodenum, struct eldb *result)
 		ast_copy_string(result->nodenum, nodenum, sizeof(result->nodenum));
 		ast_copy_string(result->callsign, node_lookup.callsign, sizeof(result->callsign));
 		ast_copy_string(result->ipaddr, node_lookup.ipaddr, sizeof(result->ipaddr));
-		return 1;
+		res = 1;
 	} else {
 		struct eldb *found_node;
 		found_node = el_db_find_nodenum(nodenum);
 		if (found_node) {
 			memcpy(result, found_node, sizeof(*result));
-			return 1;
+			res = 1;
 		}
 	}
 
-	return 0;
+	return res;
 }
 
 /*!
@@ -2737,12 +2737,11 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 		return RESULT_SHOWUSAGE;
 	}
 
+	ast_mutex_lock(&el_db_lock);
 	c = tolower(*argv[2]);
 	if (c == 'i') {
 		/* Lookup node data by IP address */
-		ast_mutex_lock(&el_db_lock);
 		mynode = el_db_find_ipaddr(argv[3]);
-		ast_mutex_unlock(&el_db_lock);
 	} else if (c == 'c') {
 		/* Lookup node data by callsign */
 		if (lookup_node_by_callsign(argv[3], &found_node)) {
@@ -2750,20 +2749,20 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 		}
 	} else {
 		/* Lookup node data by node number */
-		ast_mutex_lock(&el_db_lock);
 		if (lookup_node_by_nodenum(argv[3], &found_node)) {
 			mynode = &found_node;
 		}
-		ast_mutex_unlock(&el_db_lock);
 	}
 
 	/* Report failure to find node */
 	if (!mynode) {
 		ast_cli(fd, "Error: Entry for %s not found!\n", argv[3]);
+		ast_mutex_unlock(&el_db_lock);
 		return RESULT_FAILURE;
 	}
 
 	ast_cli(fd, "%s|%s|%s\n", mynode->nodenum, mynode->callsign, mynode->ipaddr);
+	ast_mutex_unlock(&el_db_lock);
 	return RESULT_SUCCESS;
 }
 
