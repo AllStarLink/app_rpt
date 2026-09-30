@@ -2738,9 +2738,11 @@ static int el_do_dbget(int fd, int argc, const char *const *argv)
 		/* Lookup node data by IP address */
 		ast_mutex_lock(&el_db_lock);
 		mynode = el_db_find_ipaddr(argv[3]);
-		ast_copy_string(found_node.nodenum, mynode->nodenum, sizeof(found_node.nodenum));
-		ast_copy_string(found_node.callsign, mynode->callsign, sizeof(found_node.callsign));
-		ast_copy_string(found_node.ipaddr, mynode->ipaddr, sizeof(found_node.ipaddr));
+		if (mynode) {
+			ast_copy_string(found_node.nodenum, mynode->nodenum, sizeof(found_node.nodenum));
+			ast_copy_string(found_node.callsign, mynode->callsign, sizeof(found_node.callsign));
+			ast_copy_string(found_node.ipaddr, mynode->ipaddr, sizeof(found_node.ipaddr));
+		}
 		ast_mutex_unlock(&el_db_lock);
 		mynode = &found_node;
 	} else if (c == 'c') {
