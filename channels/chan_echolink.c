@@ -2445,8 +2445,6 @@ static struct ast_frame *el_xread(struct ast_channel *chan)
 		p->rxkey = MAX_RXKEY_TIME;
 	}
 
-	ast_mutex_unlock(&p->lock);
-
 	if (!qpast) {
 		/* if no Echolink frames */
 		ast_debug(3, "Channel %s: no frames\n", p->stream);
