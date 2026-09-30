@@ -4844,11 +4844,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				ast_softhangup(l->chan, AST_SOFTHANGUP_DEV);
 			}
 		}
-		if (!ms) {
-			/* No channels had activity before the timer expired,
-			 * so just continue to the next loop. */
-			continue;
-		}
 
 		remrx = 0;
 		/* see if any other links are receiving */
@@ -4901,6 +4896,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 				donodelog_fmt(myrpt, totx ? "TXKEY,%s" : "TXUNKEY,%s", l->name);
 			}
 			l->lasttx = totx;
+		}
+		if (!who) {
+			/* No channels had activity before the timer expired,
+			 * so just continue to the next loop. */
+			continue;
 		}
 
 		if (who == l->chan) { /* if it was a read from rx */
@@ -6088,19 +6088,17 @@ static void *rpt(void *this)
 		}
 		ms = MSWAIT;
 		who = ast_waitfor_n(cs, n, &ms);
-		if (who == NULL) {
-			ms = 0;
-		}
 		elap = rpt_time_elapsed(&looptimestart); /* calculate loop time */
 		rpt_mutex_lock(&myrpt->lock);
 		if (update_timers(myrpt, elap, totx)) {
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		}
-		if (!ms) {
+		if (!who) {
 			/* No channels had activity before the timer expired,
 			 * so just continue to the next loop. */
 			rpt_mutex_unlock(&myrpt->lock);
+			ms = 0;
 			continue;
 		}
 		if (((myrpt->p.parrotmode != PARROT_MODE_OFF) || myrpt->parrotonce) && myrpt->parrotstate == PARROT_STATE_RECORDING &&
