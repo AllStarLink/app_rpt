@@ -2170,6 +2170,11 @@ static void *TLB_reader(void *data)
 		 * poll for activity
 		 */
 		i = ast_poll(fds, 2, 50);
+		/* Stop was requested during the poll. Leave the datagrams unread. */
+		if (!run_forever) {
+			ast_mutex_lock(&instp->lock);
+			break;
+		}
 		if (i == 0) {
 			ast_mutex_lock(&instp->lock);
 			continue;
