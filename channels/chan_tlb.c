@@ -2574,7 +2574,8 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
-static int unload_module(void)
+/* Join readers before their instance state is freed. */
+static void tlb_stop_readers(void)
 {
 	int n;
 
@@ -2589,15 +2590,18 @@ static int unload_module(void)
 			instances[n]->ctrl_sock = -1;
 		}
 	}
-	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
-	/* First, take us out of the channel loop */
-	ast_channel_unregister(&TLB_tech);
 	for (n = 0; n < ninstances; n++) {
 		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
 			pthread_join(instances[n]->TLB_reader_thread, NULL);
 			instances[n]->TLB_reader_thread = AST_PTHREADT_NULL;
 		}
 	}
+}
+
+static void tlb_free_instances(void)
+{
+	int n;
+
 	tdestroy(TLB_node_list, free_node);
 	TLB_node_list = NULL;
 	for (n = 0; n < ninstances; n++) {
@@ -2605,7 +2609,19 @@ static int unload_module(void)
 		ast_free(instances[n]->denylist_buf);
 		ast_free(instances[n]->permitlist_buf);
 		ast_free(instances[n]);
+		instances[n] = NULL;
 	}
+	ninstances = 0;
+	run_forever = 1;
+}
+
+static int unload_module(void)
+{
+	/* First, take us out of the channel loop */
+	ast_channel_unregister(&TLB_tech);
+	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
+	tlb_stop_readers();
+	tlb_free_instances();
 
 	ao2_cleanup(TLB_tech.capabilities);
 	TLB_tech.capabilities = NULL;
@@ -2633,6 +2649,7 @@ static int load_module(void)
 	}
 
 	if (!(TLB_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		ast_config_destroy(cfg);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_format_cap_append(TLB_tech.capabilities, ast_format_gsm, 0);
@@ -2647,6 +2664,11 @@ static int load_module(void)
 			continue;
 		}
 		if (store_config(cfg, ctg) < 0) {
+			ast_config_destroy(cfg);
+			tlb_stop_readers();
+			tlb_free_instances();
+			ao2_cleanup(TLB_tech.capabilities);
+			TLB_tech.capabilities = NULL;
 			return AST_MODULE_LOAD_DECLINE;
 		}
 	}
@@ -2655,6 +2677,8 @@ static int load_module(void)
 	ast_log(LOG_NOTICE, "Total of %d TheLinkBox instances found\n", ninstances);
 	if (ninstances < 1) {
 		ast_log(LOG_ERROR, "Cannot run TheLinkBox with no instances\n");
+		ao2_cleanup(TLB_tech.capabilities);
+		TLB_tech.capabilities = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -2662,6 +2686,11 @@ static int load_module(void)
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&TLB_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
+		tlb_stop_readers();
+		ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
+		tlb_free_instances();
+		ao2_cleanup(TLB_tech.capabilities);
+		TLB_tech.capabilities = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	return 0;
