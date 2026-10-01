@@ -2530,12 +2530,18 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
-/* Join readers before their instance state is freed. */
+/* Join readers before closing sockets they may still be using. */
 static void tlb_stop_readers(void)
 {
 	int n;
 
 	run_forever = 0;
+	for (n = 0; n < ninstances; n++) {
+		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
+			pthread_join(instances[n]->TLB_reader_thread, NULL);
+			instances[n]->TLB_reader_thread = AST_PTHREADT_NULL;
+		}
+	}
 	for (n = 0; n < ninstances; n++) {
 		if (instances[n]->audio_sock != -1) {
 			close(instances[n]->audio_sock);
@@ -2544,12 +2550,6 @@ static void tlb_stop_readers(void)
 		if (instances[n]->ctrl_sock != -1) {
 			close(instances[n]->ctrl_sock);
 			instances[n]->ctrl_sock = -1;
-		}
-	}
-	for (n = 0; n < ninstances; n++) {
-		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
-			pthread_join(instances[n]->TLB_reader_thread, NULL);
-			instances[n]->TLB_reader_thread = AST_PTHREADT_NULL;
 		}
 	}
 }
