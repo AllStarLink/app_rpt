@@ -6236,18 +6236,36 @@ static void *voter_reader(void *data)
 							ast_frfree(f1);
 						}
 					} else if (client->mix) {
-						/* Presumably, the only way to get here is to be a mix mode client AND index < 0
-						 * because buflen < 160 in voter.conf.
-						 * We should never get here now, because when a client sends us flags to indicate it is a
-						 * mix mode client, we check the buflen then block the client from connecting, after throwing
-						 * an error to fix the config file.
-						 */
-						client->rxseqno = 0;
-						client->rxseqno_40ms = 0;
-						client->rxseq40ms = 0;
-						client->drain40ms = 0;
-						ast_log(LOG_ERROR, "VOTER %u: Client %s out of bounds! Please file a bug report with the developers if you see this message!\n",
-							client->nodenum, client->name);
+						if (index <= 0) {
+							/* Mix clients can use the vtime_nsec field as a packet sequence number rather than
+							 * as GPS nanoseconds. The server advances rxseqno on each 20ms timing cycle,
+							 * independently of when UDP packets arrive.
+							 *
+							 * Consequently, a packet delayed sufficiently long, or an older packet delivered
+							 * after a newer packet, can have a sequence number behind rxseqno. Once the packet
+							 * is more than the available receive-buffer margin behind the current sequence, the
+							 * calculated index is <= 0.
+							 *
+							 * This packet is too old to insert safely into the portion of the ring buffer that
+							 * has not yet been consumed. We don't want to wrap the index around the ring buffer,
+							 * because that would place stale audio into a future playback position.
+							 *
+							 * So, discard the stale packet and re-establish the sequence reference from a subsequent
+							 * packet.
+							 */
+							client->rxseqno = 0;
+							client->rxseqno_40ms = 0;
+							client->rxseq40ms = 0;
+							client->drain40ms = 0;
+							ast_debug(3, "VOTER %u: Mix client %s packet sequence is too old (index %d); resynchronizing receive sequence\n",
+								client->nodenum, client->name, index);
+						} else {
+							/* A positive index beyond the upper ring-buffer safety boundary is not explained by an
+							 * ordinary late packet. Throw an error for this unexpected case.
+							 */
+							ast_log(LOG_ERROR, "VOTER %u: Client %s out of bounds! Please file a bug report with the developers if you see this message!\n",
+								client->nodenum, client->name);
+						}
 					}
 					if (client->curmaster) {
 						hasmastered = 0;
