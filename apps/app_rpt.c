@@ -5167,14 +5167,17 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		}
 		continue;
 	}
+
 	/* Link is done: Cleanup channels and link structure */
-	/*
-	 * Flush leftover textq (keys, keepalive, !!DISCONNECT!! queued via
-	 * rpt_link_queue_disconnect). remote_hangup_helper usually flushed already.
-	 */
+
 	if (l->chan) {
+		/*
+		 * Flush leftover textq (keys, keepalive, !!DISCONNECT!! queued via
+		 * rpt_link_queue_disconnect). remote_hangup_helper usually flushed already.
+		 */
 		link_process_textq(myrpt, l);
 	}
+
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
@@ -5182,6 +5185,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		myrpt->cmdnode[0] = 0;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
+	/* hangup the pchan, removing it from the conference. */
+	if (l->pchan) {
+		ast_hangup(l->pchan);
+		l->pchan = NULL;
+	}
 
 	/*
 	 * REMDISC/CONNFAIL only after rpt_link_remove() (haslink guard). Skip telem for
@@ -5207,10 +5215,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 	/* Hang-up the channels */
 	hangup_link_chan(l);
-	if (l->pchan) {
-		ast_hangup(l->pchan);
-		l->pchan = NULL;
-	}
 
 	if (l->hasconnected) {
 		rpt_update_links(myrpt);
