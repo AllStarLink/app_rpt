@@ -991,6 +991,9 @@ struct rpt {
 	rpt_bool remtxfreqok:1;
 	rpt_bool tounkeyed:1;
 	rpt_bool tonotify:1;
+	unsigned int remrx_links;		 /* links with lastrx set */
+	unsigned int remrx_links_txable; /* lastrx links in MONITOR or TRANSCEIVE */
+	unsigned int voteremrx_links;	 /* voter links with lastrx set */
 	char dtmfbuf[MAXDTMF];
 	struct ast_str *macrobuf;
 	char rem_dtmfbuf[MAXDTMF];
