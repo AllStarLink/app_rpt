@@ -4510,6 +4510,52 @@ static int load_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
+/* Drop aliases of s on p. Devices shallow-copy these from the default pvt. */
+static void simpleusb_clear_cfg_string(struct chan_simpleusb_pvt *p, char *s)
+{
+	int i;
+
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (p->gpios[i] == s) {
+			p->gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(p->pps); i++) {
+		if (p->pps[i] == s) {
+			p->pps[i] = NULL;
+		}
+	}
+}
+
+/* Free s once the last device that still points at it has joined its HID thread.
+ * Reload can leave several devices sharing an old default string.
+ */
+static void simpleusb_free_cfg_string(struct chan_simpleusb_pvt *o, char *s)
+{
+	struct chan_simpleusb_pvt *p;
+	int i, held;
+
+	if (!s) {
+		return;
+	}
+	held = 0;
+	for (p = o->next; p && !held; p = p->next) {
+		for (i = 0; i < GPIO_PINCOUNT && !held; i++) {
+			held = (p->gpios[i] == s);
+		}
+		for (i = 0; i < ARRAY_LEN(p->pps) && !held; i++) {
+			held = (p->pps[i] == s);
+		}
+	}
+	if (held) {
+		simpleusb_clear_cfg_string(o, s);
+		return;
+	}
+	simpleusb_clear_cfg_string(&simpleusb_default, s);
+	simpleusb_clear_cfg_string(o, s);
+	ast_free(s);
+}
+
 static int unload_module(void)
 {
 	struct chan_simpleusb_pvt *o, *no;
@@ -4539,19 +4585,41 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
-				ast_free(o->gpios[i]);
-			}
+			simpleusb_free_cfg_string(o, o->gpios[i]);
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
-				ast_free(o->pps[i]);
-			}
+			simpleusb_free_cfg_string(o, o->pps[i]);
 		}
 		ast_free(o->name);
 		simpleusb_release_device(o);
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->swap_lock);
 		ast_free(o);
 	}
+
+	/* general pvt is not on the device list, but store_config still inits it */
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (simpleusb_default.gpios[i]) {
+			ast_free(simpleusb_default.gpios[i]);
+			simpleusb_default.gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(simpleusb_default.pps); i++) {
+		if (simpleusb_default.pps[i]) {
+			ast_free(simpleusb_default.pps[i]);
+			simpleusb_default.pps[i] = NULL;
+		}
+	}
+	ast_mutex_destroy(&simpleusb_default.echolock);
+	ast_mutex_destroy(&simpleusb_default.eepromlock);
+	ast_mutex_destroy(&simpleusb_default.txqlock);
+	ast_mutex_destroy(&simpleusb_default.usblock);
+	ast_mutex_destroy(&simpleusb_default.device_lock);
+	ast_mutex_destroy(&simpleusb_default.swap_lock);
 
 #if DEBUG_CAPTURES == 1
 	if (frxcapraw) {
