@@ -4612,12 +4612,7 @@ static inline int localtxchannel_read(struct rpt *myrpt, char *restrict myfirst)
 			} else {
 				*myfirst = 0;
 			}
-			x = 0;
-			AST_LIST_TRAVERSE(&myrpt->txq, f1, frame_list) {
-				x++;
-			}
-
-			if (!x) {
+			if (AST_LIST_EMPTY(&myrpt->txq)) {
 				RPT_MUTE_FRAME(f);
 			} else {
 				ast_frfree(f);
@@ -4987,12 +4982,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						} else {
 							myfirst = 0;
 						}
-						x = 0;
-						AST_LIST_TRAVERSE(&l->rxq, f1, frame_list) {
-							x++;
-						}
-
-						if (!x) {
+						if (AST_LIST_EMPTY(&l->rxq)) {
 							RPT_MUTE_FRAME(f);
 						} else {
 							ast_frfree(f);
@@ -6794,12 +6784,7 @@ static inline int exec_chan_read(struct rpt *myrpt, struct ast_channel *chan, ch
 				AST_LIST_INSERT_TAIL(&myrpt->rxq, f1, frame_list);
 			} else
 				*myfirst = 0;
-			x = 0;
-			AST_LIST_TRAVERSE(&myrpt->rxq, f1, frame_list) {
-				x++;
-			}
-
-			if (!x) {
+			if (AST_LIST_EMPTY(&myrpt->rxq)) {
 				RPT_MUTE_FRAME(f);
 			} else {
 				ast_frfree(f);
