@@ -1527,6 +1527,8 @@ void *rpt_tele_thread(void *this)
 
 		if ((!myrpt->active_telem) && (myrpt->tele.prev == mytele)) {
 			myrpt->active_telem = mytele;
+			myrpt->active_telem_start = rpt_time_monotonic();
+			myrpt->active_telem_warned = 0;
 			rpt_mutex_unlock(&myrpt->lock);
 			break;
 		}
@@ -3486,6 +3488,70 @@ static const char *rpt_tele_mode_str(enum rpt_tele_mode mode)
 	return ((mode >= 0) && (mode < ARRAY_LEN(mode_str))) ? mode_str[mode] : "???";
 }
 
+/*!
+ * \brief Can this telemetry request be dropped when the tele list is full?
+ * \retval 0 for requests whose caller has already consumed state (ID timers),
+ *         that are priority (TIMEOUT), whose thread changes rig settings, or
+ *         whose thread must reset state the caller set (PARROT).
+ */
+static int telem_droppable(enum rpt_tele_mode mode)
+{
+	switch (mode) {
+	case ID:
+	case IDTALKOVER: /* queue_id() already cleared mustid and reset idtimer */
+	case TIMEOUT:	 /* Priority, overrides the time out condition */
+	case SETREMOTE:
+	case TUNE: /* Thread performs the rig change, and clears tunerequest */
+	case PARROT:
+		/* Caller set PARROT_STATE_PLAYING, which keys TX until the thread
+		 * resets it. At most one is outstanding. */
+		return 0;
+	default:
+		return 1;
+	}
+}
+
+/*!
+ * \brief Is a waiting telemetry entry equivalent to a new request, so the request adds nothing?
+ * \note Only for non-droppable modes that wait for the active slot (a waiting
+ *       entry will still play). SETREMOTE starts at once and reads the rig state
+ *       itself, and TUNE is already limited to one by tunerequest.
+ */
+static int telem_coalesces(enum rpt_tele_mode queued, enum rpt_tele_mode mode)
+{
+	switch (mode) {
+	case ID:
+	case IDTALKOVER: /* Only the same mode: ID and IDTALKOVER play different audio */
+	case TIMEOUT:
+		return queued == mode;
+	default:
+		return 0;
+	}
+}
+
+void rpt_telem_watchdog(struct rpt *myrpt)
+{
+	time_t now;
+
+	if (!myrpt->active_telem || myrpt->active_telem->mode == TEST_TONE) {
+		return; /* TEST_TONE runs until stopped */
+	}
+
+	now = rpt_time_monotonic();
+	if (now - myrpt->active_telem_start < TELEM_ACTIVE_WARN_SECS) {
+		return;
+	}
+	if (myrpt->active_telem_warned && now - myrpt->active_telem_warned < TELEM_ACTIVE_WARN_SECS) {
+		return;
+	}
+
+	myrpt->active_telem_warned = now;
+	ast_log(LOG_WARNING, "Node %s telemetry %s has been active for %ld seconds on %s, %u queued behind it\n", myrpt->name,
+		rpt_tele_mode_str(myrpt->active_telem->mode), (long) (now - myrpt->active_telem_start),
+		myrpt->active_telem->chan ? ast_channel_name(myrpt->active_telem->chan) : "(no channel)",
+		myrpt->telem_count ? myrpt->telem_count - 1 : 0);
+}
+
 void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 {
 	struct rpt_tele *tele;
@@ -3928,6 +3994,52 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 	if ((mode == REMXXX) || (mode == PAGE) || (mode == MDC1200)) {
 		tele->submode.p = data;
+	}
+
+	/* Each queued item is a thread polling myrpt->lock until its turn. If the
+	 * queue stops draining (active item never finishes), cap it rather than
+	 * letting threads and lock contention grow without bound.
+	 * Only live entries count: flush_telem() marks entries killed but they stay
+	 * on the list until their threads exit, and a priority request queued right
+	 * after a flush (TIMEOUT) must not be dropped because of them.
+	 */
+	if (myrpt->telem_count >= TELEM_QUEUE_WARN) {
+		time_t now = rpt_time_monotonic();
+		unsigned int live = 0;
+		int drop, dup = 0;
+		struct rpt_tele *telem;
+
+		for (telem = myrpt->tele.next; telem != &myrpt->tele; telem = telem->next) {
+			if (telem->killed) {
+				continue;
+			}
+			live++;
+			if (telem != myrpt->active_telem && telem_coalesces(telem->mode, mode)) {
+				dup = 1;
+			}
+		}
+
+		/* At the cap, drop announcements, and never-drop requests already waiting in the queue */
+		drop = live >= TELEM_QUEUE_MAX && (telem_droppable(mode) || dup);
+		if (drop) {
+			myrpt->telem_dropped++;
+		}
+		if (live >= TELEM_QUEUE_WARN && now - myrpt->telem_queue_warned >= TELEM_WARN_INTERVAL) {
+			myrpt->telem_queue_warned = now;
+			ast_log(LOG_WARNING, "Node %s telemetry queue depth %u (%u killed, max %d), %u dropped, active %s for %ld seconds\n",
+				myrpt->name, live, myrpt->telem_count - live, TELEM_QUEUE_MAX, myrpt->telem_dropped,
+				myrpt->active_telem ? rpt_tele_mode_str(myrpt->active_telem->mode) : "none",
+				myrpt->active_telem ? (long) (now - myrpt->active_telem_start) : 0L);
+			myrpt->telem_dropped = 0;
+		}
+		if (drop) {
+			rpt_mutex_unlock(&myrpt->lock);
+			if ((mode == PAGE) || (mode == MDC1200)) {
+				ast_free(data); /* Normally freed by rpt_tele_thread */
+			}
+			ast_free(tele);
+			return;
+		}
 	}
 
 	tele_link_add(myrpt, tele);
