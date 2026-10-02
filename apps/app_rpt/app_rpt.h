@@ -994,6 +994,7 @@ struct rpt {
 	char dtmfbuf[MAXDTMF];
 	struct ast_str *macrobuf;
 	char rem_dtmfbuf[MAXDTMF];
+	char last_remote_unkey[MAXNODESTR];
 	char lastdtmfcommand[MAXDTMF];
 	char cmdnode[50];
 	char nowchan;	 /*!< channel now */

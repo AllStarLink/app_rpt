@@ -138,6 +138,30 @@ int rpt_cleanup_telemetry()
 }
 
 /* !
+ * \brief search for any linkunkeyct_* or linkunkey variables in the node context
+ * \param myrpt The repeater structure
+ * \param ct The pointer to the ct variable. NULL if not found.
+ */
+
+static const char *rpt_telem_find_linkunkey(struct rpt *myrpt, const char *ct_key)
+{
+	char remote_ct_key[MAXNODESTR + sizeof("linkunkeyct_") + 1];
+	const char *ct = NULL;
+
+	snprintf(remote_ct_key, sizeof(remote_ct_key), "linkunkeyct_%s", myrpt->last_remote_unkey);
+	ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, remote_ct_key);
+	if (ct && ast_strlen_zero(ct)) {
+		/* A linkunkeyct_* variable was found with no value, indicating no CT for this node. */
+		return NULL;
+	} else if (!ct) {
+		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
+		if (ast_strlen_zero(ct)) {
+			return NULL;
+		}
+	}
+	return ct;
+}
+/* !
  * \brief determine if an extension exists in a primary or alternate context
  * \param chan The channel to check
  * \param primary The primary context to check
@@ -900,11 +924,22 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, const char 
  */
 static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char *ct_key, const char *why, int delay)
 {
-	const char *ct;
+	const char *ct = NULL;
 	int res;
 
-	ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
-	if (!ct || ast_strlen_zero(ct)) {
+	if (!strcmp(ct_key, "linkunkeyct") || !strcmp(ct_key, "localct")) {
+		/* Look for a configured CT for a specific node
+		 * using the format linkunkeyct_<node_id> when a link has unkeyed
+		 */
+		ct = rpt_telem_find_linkunkey(myrpt, ct_key);
+	} else {
+		ct = ast_variable_retrieve(myrpt->cfg, myrpt->name, ct_key);
+		if (ast_strlen_zero(ct)) {
+			ct = NULL;
+		}
+	}
+
+	if (!ct) {
 		donodelog_fmt(myrpt, "TELEMETRY,%s,%s*", myrpt->name, why);
 		return 0;
 	}
@@ -3566,7 +3601,9 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 
 		break;
 
-	case LINKUNKEY:
+	case LINKUNKEY: {
+		const char *ct;
+
 		mylink = (struct rpt_link *) data;
 
 		if (!mylink) {
@@ -3590,12 +3627,16 @@ void rpt_telemetry(struct rpt *myrpt, enum rpt_tele_mode mode, void *data)
 			}
 		}
 
-		if (!ast_variable_retrieve(myrpt->cfg, myrpt->name, "linkunkeyct")) {
+		ast_copy_string(myrpt->last_remote_unkey, mylink->name, sizeof(myrpt->last_remote_unkey));
+
+		/* Check if any linkunkeyct keys are present.  If not, don't start a ct telemetry thread */
+		ct = rpt_telem_find_linkunkey(myrpt, "linkunkeyct");
+		if (!ct) {
 			return;
 		}
 
 		break;
-
+	}
 	default:
 		break;
 	}
