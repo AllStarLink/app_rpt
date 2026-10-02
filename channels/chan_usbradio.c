@@ -5913,6 +5913,52 @@ static int load_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
+/* Drop aliases of s on p. Devices shallow-copy these from the default pvt. */
+static void usbradio_clear_cfg_string(struct chan_usbradio_pvt *p, char *s)
+{
+	int i;
+
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (p->gpios[i] == s) {
+			p->gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(p->pps); i++) {
+		if (p->pps[i] == s) {
+			p->pps[i] = NULL;
+		}
+	}
+}
+
+/* Free s once the last device that still points at it has joined its HID thread.
+ * Reload can leave several devices sharing an old default string.
+ */
+static void usbradio_free_cfg_string(struct chan_usbradio_pvt *o, char *s)
+{
+	struct chan_usbradio_pvt *p;
+	int i, held;
+
+	if (!s) {
+		return;
+	}
+	held = 0;
+	for (p = o->next; p && !held; p = p->next) {
+		for (i = 0; i < GPIO_PINCOUNT && !held; i++) {
+			held = (p->gpios[i] == s);
+		}
+		for (i = 0; i < ARRAY_LEN(p->pps) && !held; i++) {
+			held = (p->pps[i] == s);
+		}
+	}
+	if (held) {
+		usbradio_clear_cfg_string(o, s);
+		return;
+	}
+	usbradio_clear_cfg_string(&usbradio_default, s);
+	usbradio_clear_cfg_string(o, s);
+	ast_free(s);
+}
+
 static int unload_module(void)
 {
 	struct chan_usbradio_pvt *o;
@@ -5975,16 +6021,38 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
-				ast_free(o->gpios[i]);
-			}
+			usbradio_free_cfg_string(o, o->gpios[i]);
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
-				ast_free(o->pps[i]);
-			}
+			usbradio_free_cfg_string(o, o->pps[i]);
+		}
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->swap_lock);
+	}
+
+	/* general pvt is not on the device list, but store_config still inits it */
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (usbradio_default.gpios[i]) {
+			ast_free(usbradio_default.gpios[i]);
+			usbradio_default.gpios[i] = NULL;
 		}
 	}
+	for (i = 0; i < ARRAY_LEN(usbradio_default.pps); i++) {
+		if (usbradio_default.pps[i]) {
+			ast_free(usbradio_default.pps[i]);
+			usbradio_default.pps[i] = NULL;
+		}
+	}
+	ast_mutex_destroy(&usbradio_default.echolock);
+	ast_mutex_destroy(&usbradio_default.eepromlock);
+	ast_mutex_destroy(&usbradio_default.usblock);
+	ast_mutex_destroy(&usbradio_default.device_lock);
+	ast_mutex_destroy(&usbradio_default.txqlock);
+	ast_mutex_destroy(&usbradio_default.swap_lock);
 
 	ao2_cleanup(usbradio_tech.capabilities);
 	usbradio_tech.capabilities = NULL;
