@@ -3591,6 +3591,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	struct ast_channel *chan = NULL;
 	const struct eldb *mynode;
 	char nodestr[30];
+	char callsign[ELDB_CALLSIGNLEN];
 	time_t now;
 
 	el_node_key = ast_calloc(1, sizeof(struct el_node));
@@ -3613,6 +3614,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	}
 
 	ast_copy_string(nodestr, mynode->nodenum, sizeof(nodestr));
+	ast_copy_string(callsign, mynode->callsign, sizeof(callsign));
 	el_node_key->nodenum = atoi(nodestr);
 	el_node_key->heartbeat_countdown = instp->rtcptimeout;
 	el_node_key->seqnum = 1;
@@ -3680,7 +3682,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 		ast_mutex_lock(&instp->lock);
 		time(&now);
 		if (p != NULL) {
-			ast_copy_string(instp->lastcall, mynode->callsign, sizeof(instp->lastcall));
+			ast_copy_string(instp->lastcall, callsign, sizeof(instp->lastcall));
 		}
 		if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 			instp->aprstime = now;
