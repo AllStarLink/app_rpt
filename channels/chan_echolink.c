@@ -3588,9 +3588,10 @@ static void *el_register(void *data)
 static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *call, const char *name, struct el_node *node_lookup)
 {
 	struct el_node *el_node_key;
-	struct ast_channel *chan;
+	struct ast_channel *chan = NULL;
 	const struct eldb *mynode;
 	char nodestr[30];
+	char callsign[ELDB_CALLSIGNLEN];
 	time_t now;
 
 	el_node_key = ast_calloc(1, sizeof(struct el_node));
@@ -3613,6 +3614,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	}
 
 	ast_copy_string(nodestr, mynode->nodenum, sizeof(nodestr));
+	ast_copy_string(callsign, mynode->callsign, sizeof(callsign));
 	el_node_key->nodenum = atoi(nodestr);
 	el_node_key->heartbeat_countdown = instp->rtcptimeout;
 	el_node_key->seqnum = 1;
@@ -3626,12 +3628,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 		if (p == NULL) {
 			/* A new inbound call */
-			struct ast_frame fr = {
-				.frametype = AST_FRAME_CONTROL,
-				.subclass.integer = AST_CONTROL_ANSWER,
-				.src = __PRETTY_FUNCTION__,
-			};
-
 			p = el_alloc(instp->name);
 			if (!p) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
@@ -3652,7 +3648,9 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 				return -1;
 			}
 
-			ast_queue_frame(chan, &fr);
+			/* el_new() gave the alloc ref to the PBX. Hold one until the answer is queued. */
+			ast_channel_ref(chan);
+
 			el_node_key->rx_ctrl_packets++;
 
 			ao2_ref(p, 1);
@@ -3669,10 +3667,22 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 		ast_mutex_unlock(&el_nodelist_lock);
 		ast_mutex_unlock(&el_db_lock);
 
+		/* ast_queue_frame() locks the channel. Do that after el_nodelist_lock (#1309). */
+		if (chan) {
+			struct ast_frame fr = {
+				.frametype = AST_FRAME_CONTROL,
+				.subclass.integer = AST_CONTROL_ANSWER,
+				.src = __PRETTY_FUNCTION__,
+			};
+
+			ast_queue_frame(chan, &fr);
+			ast_channel_unref(chan);
+		}
+
 		ast_mutex_lock(&instp->lock);
 		time(&now);
 		if (p != NULL) {
-			ast_copy_string(instp->lastcall, mynode->callsign, sizeof(instp->lastcall));
+			ast_copy_string(instp->lastcall, callsign, sizeof(instp->lastcall));
 		}
 		if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 			instp->aprstime = now;
@@ -3983,15 +3993,9 @@ static void *el_reader(void *data)
 						if (found_key) {
 							struct el_node *node = *found_key;
 							struct el_pvt *p = node->pvt;
+							struct ast_channel *chan = NULL;
 
 							if (!p->firstheard) {
-								struct ast_frame fr = {
-									.frametype = AST_FRAME_CONTROL,
-									.subclass.integer = AST_CONTROL_ANSWER,
-									.src = __PRETTY_FUNCTION__,
-								};
-								struct ast_channel *chan = NULL;
-
 								ast_mutex_lock(&p->lock);
 								if (p->owner) {
 									chan = ast_channel_ref(p->owner);
@@ -4000,10 +4004,6 @@ static void *el_reader(void *data)
 								p->firstheard = 1;
 								ast_mutex_unlock(&p->lock);
 
-								if (chan) {
-									ast_queue_frame(chan, &fr);
-									ast_channel_unref(chan);
-								}
 								ast_debug(3, "Channel %s: answer\n", p->stream);
 							}
 
@@ -4019,6 +4019,17 @@ static void *el_reader(void *data)
 							}
 							node->rx_ctrl_packets++;
 							ast_mutex_unlock(&el_nodelist_lock);
+							/* ast_queue_frame() locks the channel. Do that after el_nodelist_lock (#1309). */
+							if (chan) {
+								struct ast_frame fr = {
+									.frametype = AST_FRAME_CONTROL,
+									.subclass.integer = AST_CONTROL_ANSWER,
+									.src = __PRETTY_FUNCTION__,
+								};
+
+								ast_queue_frame(chan, &fr);
+								ast_channel_unref(chan);
+							}
 						} else {   /* otherwise its a new request */
 							ast_mutex_unlock(&el_nodelist_lock);
 							i = 0; /* default authorized */
@@ -4148,6 +4159,12 @@ static void *el_reader(void *data)
 						struct el_node *node = *found_key;
 						struct el_pvt *p = node->pvt;
 						struct ast_channel *chan = NULL;
+						struct ast_frame answer_fr = {
+							.frametype = AST_FRAME_CONTROL,
+							.subclass.integer = AST_CONTROL_ANSWER,
+							.src = __PRETTY_FUNCTION__,
+						};
+						int answer = 0;
 
 						ao2_ref(p, +1);
 
@@ -4158,15 +4175,9 @@ static void *el_reader(void *data)
 						ast_mutex_unlock(&p->lock);
 
 						if (!p->firstheard && chan) {
-							struct ast_frame fr = {
-								.frametype = AST_FRAME_CONTROL,
-								.subclass.integer = AST_CONTROL_ANSWER,
-								.src = __PRETTY_FUNCTION__,
-							};
-
 							p->firstheard = 1;
 							ast_debug(3, "Channel %s: answer\n", p->stream);
-							ast_queue_frame(chan, &fr);
+							answer = 1;
 						}
 
 						node->heartbeat_countdown = instp->rtcptimeout;
@@ -4199,6 +4210,9 @@ static void *el_reader(void *data)
 								node->isdoubling = 1;
 								ast_mutex_unlock(&el_nodelist_lock);
 
+								if (answer) {
+									ast_queue_frame(chan, &answer_fr);
+								}
 								if (chan) {
 									ast_channel_unref(chan);
 								}
@@ -4218,6 +4232,9 @@ static void *el_reader(void *data)
 							node->istimedout = 1;
 							ast_mutex_unlock(&el_nodelist_lock);
 
+							if (answer) {
+								ast_queue_frame(chan, &answer_fr);
+							}
 							if (chan) {
 								ast_channel_unref(chan);
 							}
@@ -4228,6 +4245,11 @@ static void *el_reader(void *data)
 						}
 
 						ast_mutex_unlock(&el_nodelist_lock);
+
+						/* ast_queue_frame() locks the channel. Do that after el_nodelist_lock (#1309). */
+						if (answer) {
+							ast_queue_frame(chan, &answer_fr);
+						}
 
 						/* queue the gsm packets */
 						if (recvlen == sizeof(struct gsmVoice_t)) {
