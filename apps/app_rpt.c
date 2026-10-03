@@ -4664,6 +4664,32 @@ static inline void hangup_link_chan(struct rpt_link *l)
 static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 {
 	if (l->chan) {
+		/*
+		 * Dialplan TIMEOUT(absolute) sets AST_SOFTHANGUP_TIMEOUT before we get
+		 * here. ast_write() drops frames while that hangup is pending, so
+		 * !!DISCONNECT!! never reaches the peer and a non-permanent outbound
+		 * link redials (#1308). Cancel the deadline, then queue DISCSTR for the
+		 * flush below.
+		 */
+		if (!l->outbound && l->disced == RPT_LINK_DISCONNECT_NONE && !ast_shutting_down() && !CHAN_TECH(l->chan, "echolink") &&
+			!CHAN_TECH(l->chan, "tlb") && IS_NODE_EXTEN(l->name)) {
+			struct timeval zero = { 0, 0 };
+			int flags;
+
+			ast_channel_lock(l->chan);
+			flags = ast_channel_softhangup_internal_flag(l->chan);
+			if (flags == AST_SOFTHANGUP_TIMEOUT) {
+				ast_channel_whentohangup_set(l->chan, &zero);
+			}
+			ast_channel_unlock(l->chan);
+			if (flags == AST_SOFTHANGUP_TIMEOUT) {
+				ast_channel_clear_softhangup(l->chan, AST_SOFTHANGUP_TIMEOUT);
+				rpt_mutex_lock(&myrpt->lock);
+				rpt_link_queue_disconnect(l);
+				rpt_link_stop_retries(l);
+				rpt_mutex_unlock(&myrpt->lock);
+			}
+		}
 		/* This will be a "long" delay, dump any audio in the l->pchan
 		 * as we are now about to close down the link channel.  If we don't
 		 * autoservice, l->pchan can report long voice queue and add unnecessary delay audio
