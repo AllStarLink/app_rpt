@@ -381,6 +381,8 @@ static int nullfd = -1;
 static int reload(void);
 
 AST_MUTEX_DEFINE_STATIC(voter_lock);
+/* Serializes p->toast and p->toast1. Held only while voter_lock is not. */
+AST_MUTEX_DEFINE_STATIC(voter_toast_lock);
 
 struct ast_timer *voter_thread_timer = NULL;
 
@@ -3035,6 +3037,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	struct voter_client *client;
 	struct ast_channel *held;
 	short silbuf[FRAME_SIZE];
+	uint8_t ulawbuf[FRAME_SIZE];
 
 	haslastaudio = 0;
 	res = 0;
@@ -3050,12 +3053,17 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	fr.subclass.format = ast_format_ulaw;
 	fr.datalen = FRAME_SIZE;
 	fr.samples = FRAME_SIZE;
-	fr.data.ptr = p->buf + AST_FRIENDLY_OFFSET;
-	fr.offset = AST_FRIENDLY_OFFSET;
+	/* voter_reader writes p->buf. Translate a private copy so that write
+	 * cannot change the samples, and do not hold voter_lock across it.
+	 */
+	memcpy(ulawbuf, p->buf + AST_FRIENDLY_OFFSET, sizeof(ulawbuf));
+	fr.data.ptr = ulawbuf;
+	fr.offset = 0;
 	fr.src = __PRETTY_FUNCTION__;
-	/* p->toast is not the client list. Drop voter_lock so the timer can wake transmit. */
 	ast_mutex_unlock(&voter_lock);
+	ast_mutex_lock(&voter_toast_lock);
 	f1 = ast_translate(p->toast, &fr, 0);
+	ast_mutex_unlock(&voter_toast_lock);
 	ast_mutex_lock(&voter_lock);
 	if (maxclient && !voter_client_current(maxclient)) {
 		maxclient = NULL;
@@ -3167,15 +3175,30 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			maxrssi = client->lastrssi;
 			maxclient = client;
 		}
+		memcpy(ulawbuf, p->buf + AST_FRIENDLY_OFFSET, sizeof(ulawbuf));
 		memset(&fr, 0, sizeof(fr));
 		fr.frametype = AST_FRAME_VOICE;
 		fr.subclass.format = ast_format_ulaw;
 		fr.datalen = FRAME_SIZE;
 		fr.samples = FRAME_SIZE;
-		fr.data.ptr = p->buf + AST_FRIENDLY_OFFSET;
+		fr.data.ptr = ulawbuf;
 		fr.src = __PRETTY_FUNCTION__;
-		fr.offset = AST_FRIENDLY_OFFSET;
+		fr.offset = 0;
+		ast_mutex_unlock(&voter_lock);
+		ast_mutex_lock(&voter_toast_lock);
 		f2 = ast_translate(p->toast1, &fr, 0);
+		ast_mutex_unlock(&voter_toast_lock);
+		ast_mutex_lock(&voter_lock);
+		if (!voter_client_current(client)) {
+			if (f2) {
+				ast_frfree(f2);
+			}
+			if (maxclient == client) {
+				maxclient = NULL;
+				maxrssi = 0;
+			}
+			break;
+		}
 		if (!f2) {
 			ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to send to Asterisk\n", p->nodenum);
 			ast_frfree(f1);
@@ -3432,6 +3455,14 @@ static void *voter_xmit(void *data)
 			p->drained_once = 1;
 			continue;
 		}
+		/* A connected master keeps this timestamp until the next master
+		 * packet. Leave queued audio in place and still run ping and keepalive.
+		 */
+		repeat_audio = hasmaster && p->last_audio_valid && (p->last_audio_sec == master_time.vtime_sec) &&
+					   (p->last_audio_nsec == master_time.vtime_nsec);
+		if (repeat_audio) {
+			goto xmit_keepalive;
+		}
 		txqueue = txact = 0;
 		f2 = NULL;
 		/* Count the frames in the transmit queue (p->txq). */
@@ -3616,18 +3647,14 @@ static void *voter_xmit(void *data)
 		/* txact will still be set if we are to generate TX output.
 		 *
 		 * This first "if" will build a packet to send ulaw audio out all regular
-		 * or mixminus clients by default. A connected master keeps the same
-		 * timestamp until the next master packet, so a timer wake must not
-		 * send that audio frame again. Keepalives still run below.
+		 * or mixminus clients by default.
 		 */
-		repeat_audio = hasmaster && p->last_audio_valid && (p->last_audio_sec == master_time.vtime_sec) &&
-					   (p->last_audio_nsec == master_time.vtime_nsec);
-		if (hasmaster && !repeat_audio && (txact || mixminus_act)) {
+		if (hasmaster && (txact || mixminus_act)) {
 			p->last_audio_valid = 1;
 			p->last_audio_sec = master_time.vtime_sec;
 			p->last_audio_nsec = master_time.vtime_nsec;
 		}
-		if (!repeat_audio && (txact || mixminus_act)) {
+		if (txact || mixminus_act) {
 			/* Start by initializing the memory locations we will use for our packet
 			 * with zeros/silence.
 			 */
@@ -3887,6 +3914,7 @@ static void *voter_xmit(void *data)
 		if (f1) {
 			ast_frfree(f1);
 		}
+xmit_keepalive:
 		/* Get the current time for ping and keeplive packet tracking. */
 		currenttime = ast_radio_tvnow();
 		/*
