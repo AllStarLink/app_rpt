@@ -4019,6 +4019,7 @@ static void *el_reader(void *data)
 							}
 							node->rx_ctrl_packets++;
 							ast_mutex_unlock(&el_nodelist_lock);
+
 							/* ast_queue_frame() locks the channel. Do that after el_nodelist_lock (#1309). */
 							if (chan) {
 								struct ast_frame fr = {
