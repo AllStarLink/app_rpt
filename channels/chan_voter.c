@@ -496,6 +496,7 @@ struct voter_pvt {
 	struct ast_channel *owner;
 	unsigned int nodenum; /* Node number associated with this instance */
 	struct voter_pvt *next;
+	struct voter_pvt *dead_next;
 	struct ast_frame fr;
 	uint8_t buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
 	struct ast_module_user *u;
@@ -512,7 +513,10 @@ struct voter_pvt {
 	unsigned int mixminus:1;
 	unsigned int waspager:1;
 	unsigned int kill_xmit_thread:1;
+	unsigned int dead:1;
+	unsigned int unkey_busy:1;
 
+	int busy;
 	int testcycle;
 	int testindex;
 	struct voter_client *lastwon;
@@ -552,6 +556,8 @@ struct voter_pvt {
 	ast_mutex_t pagerqlock;
 };
 struct voter_pvt *pvts = NULL;
+static struct voter_pvt *voter_dead = NULL;
+static int voter_pvt_walk;
 
 FILE *fp;
 
@@ -1065,21 +1071,19 @@ static int voter_call(struct ast_channel *ast, const char *dest, int timeout)
 }
 
 /*!
- * \brief Channel driver hangup callback to core.
+ * \brief Free a voter instance that has already been unlinked.
  *
- * \param c 			Asterisk channel.
- * \return  			Always returns 0.
+ * Joins the transmit thread. Caller must not hold voter_lock.
  */
-static int voter_hangup(struct ast_channel *ast)
+static void voter_pvt_destroy(struct voter_pvt *p)
 {
-	struct voter_pvt *q, *p = ast_channel_tech_pvt(ast);
-
-	ast_debug(1, "Channel %s: Hangup\n", ast_channel_name(ast));
-	if (!p) {
-		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
-		return 0;
+	if (p->xmit_thread) {
+		ast_mutex_lock(&p->xmit_lock);
+		p->kill_xmit_thread = 1;
+		ast_cond_signal(&p->xmit_cond);
+		ast_mutex_unlock(&p->xmit_lock);
+		pthread_join(p->xmit_thread, NULL);
 	}
-	/* Free our resources. */
 	if (p->dsp) {
 		ast_dsp_free(p->dsp);
 	}
@@ -1092,32 +1096,122 @@ static int voter_hangup(struct ast_channel *ast)
 	if (p->fromast) {
 		ast_translator_free_path(p->fromast);
 	}
+	if (p->u) {
+		ast_module_user_remove(p->u);
+	}
+	ast_free(p);
+}
+
+/*!
+ * \brief Free voter instances whose hangup was deferred.
+ *
+ * \note Caller must hold voter_lock. The lock is dropped while a transmit
+ * thread is joined. Instances still in an unlocked reader or mix section stay
+ * queued.
+ */
+static void voter_pvt_reap(void)
+{
+	struct voter_pvt *keep = NULL;
+
+	while (voter_dead && !voter_pvt_walk) {
+		struct voter_pvt *p = voter_dead;
+
+		voter_dead = p->dead_next;
+		if (p->busy) {
+			p->dead_next = keep;
+			keep = p;
+			continue;
+		}
+		ast_mutex_unlock(&voter_lock);
+		voter_pvt_destroy(p);
+		ast_mutex_lock(&voter_lock);
+	}
+	while (keep) {
+		struct voter_pvt *p = keep;
+
+		keep = p->dead_next;
+		p->dead_next = voter_dead;
+		voter_dead = p;
+	}
+}
+
+/*!
+ * \brief Queue one frame without holding voter_lock.
+ *
+ * \note Caller must hold voter_lock. The channel is referenced for the queue,
+ * and p is held so voter_hangup cannot free it until the caller finishes the
+ * current list step under the lock.
+ */
+static void voter_queue_unlocked(struct voter_pvt *p, struct ast_frame *f)
+{
+	struct ast_channel *owner = p->owner;
+
+	if (!owner) {
+		return;
+	}
+	ast_channel_ref(owner);
+	p->busy++;
+	voter_pvt_walk++;
+	ast_mutex_unlock(&voter_lock);
+	ast_queue_frame(owner, f);
+	ast_channel_unref(owner);
 	ast_mutex_lock(&voter_lock);
-	for (q = pvts; q->next; q = q->next) {
+	p->busy--;
+	voter_pvt_walk--;
+}
+
+/*!
+ * \brief Channel driver hangup callback to core.
+ *
+ * \param c 			Asterisk channel.
+ * \return  			Always returns 0.
+ */
+static int voter_hangup(struct ast_channel *ast)
+{
+	struct voter_pvt *q, *p = ast_channel_tech_pvt(ast);
+	int destroy_now = 0;
+
+	ast_debug(1, "Channel %s: Hangup\n", ast_channel_name(ast));
+	if (!p) {
+		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
+		return 0;
+	}
+	ast_mutex_lock(&voter_lock);
+	for (q = pvts; q && q->next; q = q->next) {
 		if (q->next == p) {
 			break;
 		}
 	}
-	if (q->next) {
+	if (q && q->next == p) {
 		q->next = p->next;
 	}
 	if (pvts == p) {
 		pvts = p->next;
 	}
-	if (p->xmit_thread) {
-		p->kill_xmit_thread = 1;
-		ast_mutex_lock(&p->xmit_lock);
-		ast_cond_signal(&p->xmit_cond);
-		ast_mutex_unlock(&p->xmit_lock);
-		pthread_join(p->xmit_thread, NULL);
+	p->owner = NULL;
+	/*
+	 * reader or mix may have dropped voter_lock while still using this pvt,
+	 * or while walking p->next. Leave p allocated until that work finishes.
+	 * p->next stays intact for the in-progress walk. Stop transmit now so it
+	 * does not keep running against a channel that is already gone.
+	 */
+	ast_mutex_lock(&p->xmit_lock);
+	p->kill_xmit_thread = 1;
+	ast_cond_signal(&p->xmit_cond);
+	ast_mutex_unlock(&p->xmit_lock);
+	if (p->busy || voter_pvt_walk) {
+		p->dead = 1;
+		p->dead_next = voter_dead;
+		voter_dead = p;
+	} else {
+		destroy_now = 1;
 	}
 	ast_mutex_unlock(&voter_lock);
-	if (p->u) {
-		ast_module_user_remove(p->u);
-	}
-	ast_free(p);
 	ast_channel_tech_pvt_set(ast, NULL);
 	ast_setstate(ast, AST_STATE_DOWN);
+	if (destroy_now) {
+		voter_pvt_destroy(p);
+	}
 	return 0;
 }
 
@@ -2914,12 +3008,21 @@ static struct ast_cli_entry voter_cli[] = {
  */
 static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclient, int maxrssi)
 {
-	int i, j, dtmfdetect, maxprio, haslastaudio;
+	int i, j, dtmfdetect, maxprio, haslastaudio, res;
 	struct ast_frame fr, *f1, *f2;
 	struct voter_client *client;
+	struct ast_channel *held;
 	short silbuf[FRAME_SIZE];
 
 	haslastaudio = 0;
+	res = 0;
+	held = p->owner;
+	if (held) {
+		ast_channel_ref(held);
+	}
+	/* Keep this instance allocated across the unlocks below. */
+	p->busy++;
+	voter_pvt_walk++;
 	memset(&fr, 0, sizeof(fr));
 	fr.frametype = AST_FRAME_VOICE;
 	fr.subclass.format = ast_format_ulaw;
@@ -2928,11 +3031,14 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	fr.data.ptr = p->buf + AST_FRIENDLY_OFFSET;
 	fr.offset = AST_FRIENDLY_OFFSET;
 	fr.src = __PRETTY_FUNCTION__;
+	/* p->toast is not the client list. Drop voter_lock so the timer can wake transmit. */
+	ast_mutex_unlock(&voter_lock);
 	f1 = ast_translate(p->toast, &fr, 0);
+	ast_mutex_lock(&voter_lock);
 	/* f1 now contains the voted-upon audio in slinear */
 	if (!f1) {
 		ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to send to Asterisk\n", p->nodenum);
-		return 0;
+		goto mix_out;
 	}
 
 	/* Reset the priority value for mix mode clients, so we can see if any of them have
@@ -3047,7 +3153,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		if (!f2) {
 			ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to send to Asterisk\n", p->nodenum);
 			ast_frfree(f1);
-			return 0;
+			goto mix_out;
 		}
 		/* sp1 points to f1, the current accumulated audio in slin PCM. */
 		sp1 = f1->data.ptr;
@@ -3094,10 +3200,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		 * \todo p->owner probably shouldn't be NULL, in which case this should be made an assertion, once this issue is fixed.
 		 * For now, this prevents a crash from queuing a frame to a NULL channel.
 		 */
-		if (!p->owner) {
+		if (!held) {
 			ast_log(LOG_WARNING, "Cannot queue frame, %p has no owner\n", p);
 			ast_frfree(f1);
-			return 0;
+			goto mix_out;
 		}
 
 		memset(silbuf, 0, sizeof(silbuf));
@@ -3117,11 +3223,17 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		 * moving forward, even during silence.
 		 */
 		incr_drainindex(p);
-		/* Queue the silence frame to Asterisk. */
-		ast_queue_frame(p->owner, &fr);
+		/* Queue the silence frame to Asterisk. silbuf is on the stack.
+		 * A timeout unkey owns the next channel transition, so do not queue ahead of it.
+		 */
+		if (!p->unkey_busy) {
+			ast_mutex_unlock(&voter_lock);
+			ast_queue_frame(held, &fr);
+			ast_mutex_lock(&voter_lock);
+		}
 		/* Free the frame, and return 0, indicating no actual client audio was processed. */
 		ast_frfree(f1);
-		return 0;
+		goto mix_out;
 	}
 	/* At this point, maxclient has been set to the strongest mix client, or the voted client
 	 * (maxclient) was sent to us from voter_reader. Update the VOTER instance state to reflect
@@ -3138,10 +3250,19 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 			.src = __PRETTY_FUNCTION__,
 		};
 
-		ast_queue_frame(p->owner, &fr);
+		/* Assert COS before the queue so a parallel timeout scan does not key twice.
+		 * While a timeout unkey is being queued, leave the KEY for that path so it
+		 * is ordered after the UNKEY.
+		 */
+		p->rxkey = 1;
+		if (!p->unkey_busy && held) {
+			ast_mutex_unlock(&voter_lock);
+			ast_queue_frame(held, &fr);
+			ast_mutex_lock(&voter_lock);
+		}
+	} else {
+		p->rxkey = 1;
 	}
-	/* Assert the effective "COS". */
-	p->rxkey = 1;
 	dtmfdetect = 0;
 
 	/* Process any DTMF in the audio. */
@@ -3150,13 +3271,16 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		struct ast_frame *f3 = ast_frdup(f1);
 		if (!f3) {
 			ast_frfree(f1);
-			return 0;
+			goto mix_out;
 		}
 
 		/* Send the audio frame (f3) to Asterisk DSP for DTMF processing. It will also mute the DTMF
 		 * tone from the audio as part of the processing. Return the result into f2.
+		 * p->dsp is only used on this path. Drop the lock for the DSP work.
 		 */
+		ast_mutex_unlock(&voter_lock);
 		f2 = ast_dsp_process(NULL, p->dsp, f3);
+		ast_mutex_lock(&voter_lock);
 		if ((f2->frametype == AST_FRAME_DTMF_END) || (f2->frametype == AST_FRAME_DTMF_BEGIN)) {
 			if ((f2->subclass.integer != 'm') && (f2->subclass.integer != 'u')) {
 				if (f2->frametype == AST_FRAME_DTMF_END) {
@@ -3168,7 +3292,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				f2->subclass.integer = 0;
 			}
 			/* After processing, queue the frame to the Asterisk channel. */
-			ast_queue_frame(p->owner, f2);
+			if (!p->unkey_busy && held) {
+				ast_mutex_unlock(&voter_lock);
+				ast_queue_frame(held, f2);
+				ast_mutex_lock(&voter_lock);
+			}
 			dtmfdetect = 1;
 		}
 
@@ -3180,7 +3308,11 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	 * transmitted.
 	 */
 	if (!dtmfdetect) {
-		ast_queue_frame(p->owner, f1);
+		if (!p->unkey_busy && held) {
+			ast_mutex_unlock(&voter_lock);
+			ast_queue_frame(held, f1);
+			ast_mutex_lock(&voter_lock);
+		}
 	} else {
 		/* Send a silent frame to Asterisk. */
 		memset(silbuf, 0, sizeof(silbuf));
@@ -3191,10 +3323,23 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		fr.samples = FRAME_SIZE;
 		fr.data.ptr = silbuf;
 		fr.src = __PRETTY_FUNCTION__;
-		ast_queue_frame(p->owner, &fr);
+		if (!p->unkey_busy && held) {
+			ast_mutex_unlock(&voter_lock);
+			ast_queue_frame(held, &fr);
+			ast_mutex_lock(&voter_lock);
+		}
 	}
 	ast_frfree(f1);
-	return 1;
+	res = 1;
+mix_out:
+	if (held) {
+		ast_mutex_unlock(&voter_lock);
+		ast_channel_unref(held);
+		ast_mutex_lock(&voter_lock);
+	}
+	p->busy--;
+	voter_pvt_walk--;
+	return res;
 }
 
 /*!
@@ -3245,9 +3390,15 @@ static void *voter_xmit(void *data)
 	} pingpacket;
 #pragma pack(pop)
 
-	while (run_forever && !ast_shutting_down() && !p->kill_xmit_thread) {
+	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_lock(&p->xmit_lock);
-		ast_cond_wait(&p->xmit_cond, &p->xmit_lock);
+		if (!p->kill_xmit_thread) {
+			ast_cond_wait(&p->xmit_cond, &p->xmit_lock);
+		}
+		if (p->kill_xmit_thread) {
+			ast_mutex_unlock(&p->xmit_lock);
+			break;
+		}
 		ast_mutex_unlock(&p->xmit_lock);
 		if (!p->drained_once) {
 			p->drained_once = 1;
@@ -3332,12 +3483,24 @@ static void *voter_xmit(void *data)
 			 * channel and clear p->waspager.
 			 */
 			if (p->waspager && (txqueue < 1)) {
+				struct ast_channel *owner;
+
 				memset(&wf1, 0, sizeof(wf1));
 				wf1.frametype = AST_FRAME_TEXT;
 				wf1.src = __PRETTY_FUNCTION__;
 				wf1.datalen = strlen(ENDPAGE_STR) + 1;
 				wf1.data.ptr = ENDPAGE_STR;
-				ast_queue_frame(p->owner, &wf1);
+				/* Hangup clears p->owner under voter_lock. Sample it there. */
+				ast_mutex_lock(&voter_lock);
+				owner = p->owner;
+				if (owner) {
+					ast_channel_ref(owner);
+				}
+				ast_mutex_unlock(&voter_lock);
+				if (owner) {
+					ast_queue_frame(owner, &wf1);
+					ast_channel_unref(owner);
+				}
 				p->waspager = 0;
 			}
 			/* If there are pager frames to send, take one out of the
@@ -5012,13 +5175,12 @@ static int reload(void)
  *
  * Increments the TX sequence number for each client that has completed authentication, has been heard
  * from recently, and is marked for mixing. Also advances each client's rx sequence number in a
- * format-aware manner. After updating clients, signals the transmit condition on every per-node VOTER
- * instance to wake transmit threads.
+ * format-aware manner. Call with voter_lock held. Does not wake the transmit threads; that is
+ * voter_xmit_signal(), which must run after voter_lock is released.
  */
 static void voter_xmit_master(void)
 {
 	struct voter_client *client;
-	struct voter_pvt *p;
 
 	for (client = clients; client; client = client->next) {
 		if (!client->respdigest) {
@@ -5035,11 +5197,26 @@ static void voter_xmit_master(void)
 			client->rxseqno++;
 		}
 	}
+}
+
+/*!
+ * \brief Wake every per-node transmit thread.
+ *
+ * Takes voter_lock only long enough to walk pvts and signal. The lock is not
+ * held across voter_xmit()'s send, so a worker blocked on voter_lock can run
+ * as soon as this returns. Do not call it while already holding voter_lock.
+ */
+static void voter_xmit_signal(void)
+{
+	struct voter_pvt *p;
+
+	ast_mutex_lock(&voter_lock);
 	for (p = pvts; p; p = p->next) {
 		ast_mutex_lock(&p->xmit_lock);
 		ast_cond_signal(&p->xmit_cond);
 		ast_mutex_unlock(&p->xmit_lock);
 	}
+	ast_mutex_unlock(&voter_lock);
 }
 
 /*!
@@ -5208,7 +5385,16 @@ static void *voter_timer(void *data)
 				}
 			}
 		}
+		voter_pvt_reap();
 		ast_mutex_unlock(&voter_lock);
+		/*
+		 * Wake transmit on every 20ms tick, whether or not a master is connected.
+		 * Sequence numbers were updated above (voter_xmit_master when there is no
+		 * master, or voter_reader when a master packet was just stored). The signal
+		 * itself is after the unlock so voter_xmit() can take voter_lock and send a
+		 * keepalive without waiting for the reader to finish its current packet.
+		 */
+		voter_xmit_signal();
 	}
 	ast_log(LOG_WARNING, "VOTER: Timer thread exited.\n");
 	return NULL;
@@ -5228,6 +5414,20 @@ static void *voter_timer(void *data)
  * \param data 			Always NULL; unused thread argument.
  * \return     			NULL when the thread exits.
  */
+
+/*!
+ * \brief Send one UDP packet without holding voter_lock.
+ *
+ * \note Caller must hold voter_lock. dest is taken by value so the send does
+ * not touch a client after the lock is dropped. The lock is held again on return.
+ */
+static void voter_sendto_unlocked(const void *buf, size_t len, struct sockaddr_in dest)
+{
+	ast_mutex_unlock(&voter_lock);
+	sendto(udp_socket, buf, len, 0, (struct sockaddr *) &dest, sizeof(dest));
+	ast_mutex_lock(&voter_lock);
+}
+
 static void *voter_reader(void *data)
 {
 	uint8_t buf[4096];
@@ -5272,6 +5472,7 @@ static void *voter_reader(void *data)
 		timeout_ms = 50;										  /* 50ms timeout */
 		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL); /* Poll the UDP socket, looking for data */
 		ast_mutex_lock(&voter_lock);
+		voter_pvt_reap();
 		/* Check the returned fd and see if there is a datagram ready to process.
 		 * fd will be positive (and equal to udp_socket) if there is valid activity on the UDP socket.
 		 */
@@ -5292,15 +5493,31 @@ static void *voter_reader(void *data)
 					.subclass.integer = AST_CONTROL_RADIO_UNKEY,
 					.src = __PRETTY_FUNCTION__,
 				};
+				struct ast_frame kf = {
+					.frametype = AST_FRAME_CONTROL,
+					.subclass.integer = AST_CONTROL_RADIO_KEY,
+					.src = __PRETTY_FUNCTION__,
+				};
+
 				ast_debug(3, "A VOTER on %d was receiving but now has stopped (RX_TIMEOUT_MS)!\n", p->nodenum);
-				ast_queue_frame(p->owner, &wf);
-				/* De-assert COS and reset parameters for next time. */
+				/*
+				 * Commit the unkey before the queue. voter_mix_and_send cannot observe
+				 * the old keyed state in that gap. If it has new audio while the UNKEY
+				 * frame is queued, it sets rxkey and leaves the KEY frame for us so the
+				 * key is ordered after this unkey. With no new audio, rxkey stays clear.
+				 */
+				p->unkey_busy = 1;
 				p->rxkey = 0;
 				p->lastwon = NULL;
 				p->winner = NULL;
 				p->threshold = 0;
 				p->threshcount = 0;
 				p->lingercount = 0;
+				voter_queue_unlocked(p, &wf);
+				p->unkey_busy = 0;
+				if (p->rxkey) {
+					voter_queue_unlocked(p, &kf);
+				}
 			}
 		}
 
@@ -5405,7 +5622,7 @@ static void *voter_reader(void *data)
 			ast_debug(2, "Sending initial packet payload %i challenge %s digest %08x password %s to client %s\n",
 				ntohs(authpacket.vp.payload_type), authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
 				((client) ? client->name : "UNKNOWN"));
-			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+			voter_sendto_unlocked(&authpacket, sizeof(authpacket), sin);
 			continue;
 		}
 
@@ -5598,7 +5815,7 @@ static void *voter_reader(void *data)
 			ast_debug(2, "Sending auth/config packet payload %i challenge %s digest %08x password %s to client %s\n",
 				ntohs(authpacket.vp.payload_type), authpacket.vp.challenge, ntohl(authpacket.vp.digest), password,
 				((client) ? client->name : "UNKNOWN"));
-			sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+			voter_sendto_unlocked(&authpacket, sizeof(authpacket), sin);
 			continue;
 		}
 
@@ -5748,7 +5965,7 @@ static void *voter_reader(void *data)
 									.src = __PRETTY_FUNCTION__,
 								};
 
-								ast_queue_frame(p->owner, &wf);
+								voter_queue_unlocked(p, &wf);
 							}
 							/* De-assert COS and reset parameters for next time. */
 							p->lastwon = NULL;
@@ -6294,14 +6511,17 @@ static void *voter_reader(void *data)
 								}
 								/* Update p->lastwon if the current selected maxclient has changed. */
 								if (maxclient != p->lastwon) {
+									char wonname[VOTER_NAME_LEN];
+
 									p->lastwon = maxclient;
 									ast_debug(1, "VOTER client %s selected for node %d\n", maxclient->name, p->nodenum);
+									ast_copy_string(wonname, maxclient->name, sizeof(wonname));
 									memset(&fr, 0, sizeof(fr));
-									fr.datalen = strlen(maxclient->name) + 1;
+									fr.datalen = strlen(wonname) + 1;
 									fr.frametype = AST_FRAME_TEXT;
-									fr.data.ptr = maxclient->name;
+									fr.data.ptr = wonname;
 									fr.src = __PRETTY_FUNCTION__;
-									ast_queue_frame(p->owner, &fr);
+									voter_queue_unlocked(p, &fr);
 								}
 								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
 							}
@@ -6563,9 +6783,10 @@ static void *voter_reader(void *data)
 		authpacket.vp.payload_type = htons(VOTER_PAYLOAD_AUTH);
 		ast_debug(2, "Sending initial packet challenge %s digest %08x password %s to client %s\n", authpacket.vp.challenge,
 			ntohl(authpacket.vp.digest), password, ((client) ? client->name : "UNKNOWN"));
-		sendto(udp_socket, &authpacket, sizeof(authpacket), 0, (struct sockaddr *) &sin, sizeof(sin));
+		voter_sendto_unlocked(&authpacket, sizeof(authpacket), sin);
 		continue;
 	}
+	voter_pvt_reap();
 	ast_mutex_unlock(&voter_lock);
 	ast_log(LOG_WARNING, "VOTER: Read thread exited.\n");
 	return NULL;
