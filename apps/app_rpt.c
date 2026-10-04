@@ -4714,6 +4714,14 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		return 0;
 	}
 	if (l->chan && (CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb"))) {
+		/*
+		 * No AllStar redial. A local link-off already set RPT_LINK_DISCONNECT;
+		 * cleanup skips discpgm unless we finish here. Silent (ilink 6) and a
+		 * remote hangup still run discpgm in cleanup.
+		 */
+		if (l->disced == RPT_LINK_DISCONNECT) {
+			link_disconnect_finished(myrpt, l);
+		}
 		return 0;
 	}
 
