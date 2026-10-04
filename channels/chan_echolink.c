@@ -4210,10 +4210,10 @@ static void *el_reader(void *data)
 								node->isdoubling = 1;
 								ast_mutex_unlock(&el_nodelist_lock);
 
-								if (answer) {
-									ast_queue_frame(chan, &answer_fr);
-								}
 								if (chan) {
+									if (answer) {
+										ast_queue_frame(chan, &answer_fr);
+									}
 									ast_channel_unref(chan);
 								}
 
@@ -4232,10 +4232,10 @@ static void *el_reader(void *data)
 							node->istimedout = 1;
 							ast_mutex_unlock(&el_nodelist_lock);
 
-							if (answer) {
-								ast_queue_frame(chan, &answer_fr);
-							}
 							if (chan) {
+								if (answer) {
+									ast_queue_frame(chan, &answer_fr);
+								}
 								ast_channel_unref(chan);
 							}
 
@@ -4247,8 +4247,10 @@ static void *el_reader(void *data)
 						ast_mutex_unlock(&el_nodelist_lock);
 
 						/* ast_queue_frame() locks the channel. Do that after el_nodelist_lock (#1309). */
-						if (answer) {
-							ast_queue_frame(chan, &answer_fr);
+						if (chan) {
+							if (answer) {
+								ast_queue_frame(chan, &answer_fr);
+							}
 						}
 
 						/* queue the gsm packets */
