@@ -501,6 +501,8 @@ struct voter_pvt {
 	uint8_t buf[FRAME_SIZE + AST_FRIENDLY_OFFSET];
 	struct ast_module_user *u;
 	struct timeval lastrxtime;
+	uint32_t last_audio_sec;
+	uint32_t last_audio_nsec;
 	unsigned char mwp;
 	/* bit fields */
 	unsigned int txkey:1;
@@ -515,6 +517,7 @@ struct voter_pvt {
 	unsigned int kill_xmit_thread:1;
 	unsigned int dead:1;
 	unsigned int unkey_busy:1;
+	unsigned int last_audio_valid:1;
 
 	int busy;
 	int testcycle;
@@ -1100,6 +1103,25 @@ static void voter_pvt_destroy(struct voter_pvt *p)
 		ast_module_user_remove(p->u);
 	}
 	ast_free(p);
+}
+
+/*!
+ * \brief Return whether client is still on the live list.
+ * \note Call with voter_lock held. client is compared by identity only.
+ */
+static int voter_client_current(const struct voter_client *client)
+{
+	const struct voter_client *scan;
+
+	if (!client) {
+		return 0;
+	}
+	for (scan = clients; scan; scan = scan->next) {
+		if (scan == client) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 /*!
@@ -3035,6 +3057,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	ast_mutex_unlock(&voter_lock);
 	f1 = ast_translate(p->toast, &fr, 0);
 	ast_mutex_lock(&voter_lock);
+	if (maxclient && !voter_client_current(maxclient)) {
+		maxclient = NULL;
+		maxrssi = 0;
+	}
 	/* f1 now contains the voted-upon audio in slinear */
 	if (!f1) {
 		ast_log(LOG_ERROR, "VOTER %i: Can not translate frame to send to Asterisk\n", p->nodenum);
@@ -3291,8 +3317,10 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				f2->frametype = AST_FRAME_NULL;
 				f2->subclass.integer = 0;
 			}
-			/* After processing, queue the frame to the Asterisk channel. */
-			if (!p->unkey_busy && held) {
+			/* After processing, queue the frame to the Asterisk channel.
+			 * Drop it if a timeout unkey cleared rxkey while the DSP ran.
+			 */
+			if (!p->unkey_busy && p->rxkey && held) {
 				ast_mutex_unlock(&voter_lock);
 				ast_queue_frame(held, f2);
 				ast_mutex_lock(&voter_lock);
@@ -3308,7 +3336,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 	 * transmitted.
 	 */
 	if (!dtmfdetect) {
-		if (!p->unkey_busy && held) {
+		if (!p->unkey_busy && p->rxkey && held) {
 			ast_mutex_unlock(&voter_lock);
 			ast_queue_frame(held, f1);
 			ast_mutex_lock(&voter_lock);
@@ -3323,7 +3351,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 		fr.samples = FRAME_SIZE;
 		fr.data.ptr = silbuf;
 		fr.src = __PRETTY_FUNCTION__;
-		if (!p->unkey_busy && held) {
+		if (!p->unkey_busy && p->rxkey && held) {
 			ast_mutex_unlock(&voter_lock);
 			ast_queue_frame(held, &fr);
 			ast_mutex_lock(&voter_lock);
@@ -3361,7 +3389,7 @@ static void *voter_xmit(void *data)
 {
 	struct voter_pvt *p = (struct voter_pvt *) data;
 	int i, txqueue, txact, mixminus_act, mixminus_source;
-	int send_ping, send_keepalive;
+	int send_ping, send_keepalive, repeat_audio;
 	i16 dummybuf1[FRAME_SIZE * 12], xmtbuf1[FRAME_SIZE * 12];
 	i16 xmtbuf[FRAME_SIZE], dummybuf2[FRAME_SIZE], xmtbuf2[FRAME_SIZE];
 	i32 mixaudio;
@@ -3588,9 +3616,18 @@ static void *voter_xmit(void *data)
 		/* txact will still be set if we are to generate TX output.
 		 *
 		 * This first "if" will build a packet to send ulaw audio out all regular
-		 * or mixminus clients by default.
+		 * or mixminus clients by default. A connected master keeps the same
+		 * timestamp until the next master packet, so a timer wake must not
+		 * send that audio frame again. Keepalives still run below.
 		 */
-		if (txact || mixminus_act) {
+		repeat_audio = hasmaster && p->last_audio_valid && (p->last_audio_sec == master_time.vtime_sec) &&
+					   (p->last_audio_nsec == master_time.vtime_nsec);
+		if (hasmaster && !repeat_audio && (txact || mixminus_act)) {
+			p->last_audio_valid = 1;
+			p->last_audio_sec = master_time.vtime_sec;
+			p->last_audio_nsec = master_time.vtime_nsec;
+		}
+		if (!repeat_audio && (txact || mixminus_act)) {
 			/* Start by initializing the memory locations we will use for our packet
 			 * with zeros/silence.
 			 */
@@ -4437,6 +4474,9 @@ static void voter_client_free(struct voter_client *client)
 			p->threshold = 0;
 			p->threshcount = 0;
 			p->lingercount = 0;
+		}
+		if (p->winner == client) {
+			p->winner = NULL;
 		}
 	}
 
@@ -6522,8 +6562,14 @@ static void *voter_reader(void *data)
 									fr.data.ptr = wonname;
 									fr.src = __PRETTY_FUNCTION__;
 									voter_queue_unlocked(p, &fr);
+									if (!voter_client_current(maxclient)) {
+										maxclient = NULL;
+										maxrssi = 0;
+									}
 								}
-								ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
+								if (maxclient) {
+									ast_debug(4, "Receiving from client %s RSSI %d\n", maxclient->name, maxrssi);
+								}
 							}
 							/* For the current channel (p), send our current voted client (maxclient),
 							 * and its RSSI (maxrssi) to voter_mix_and_send to be sent to Asterisk.
