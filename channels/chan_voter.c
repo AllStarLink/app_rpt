@@ -280,7 +280,7 @@ static char context[AST_MAX_EXTENSION] = "default";
 /* Buffer definitions
  * FRAME_SIZE 160 --> 160 octets of ulaw audio (20ms @ 8k samples/sec) = 160 audio samples
  *
- * DEFAULT_BUFLEN is in ms when uing ulaw audio:
+ * DEFAULT_BUFLEN is in ms when using ulaw audio:
  * DEFAULT_BUFLEN * 8 = Samples (and is in bytes)
  * Samples / FRAME_SIZE = Frames
  * Frames * 20ms/frame = Delay
@@ -324,8 +324,8 @@ static char context[AST_MAX_EXTENSION] = "default";
 #define VOTER_PAYLOAD_AUTH 0
 #define VOTER_PAYLOAD_ULAW 1
 #define VOTER_PAYLOAD_GPS 2
-#define VOTER_PAYLOAD_FUTURE2 3 /* Reserved for future use */
-#define VOTER_PAYLOAD_FUTURE 4 /* Reserved for future use */
+#define VOTER_PAYLOAD_3 3 /* Reserved for future use (was ADPCM) */
+#define VOTER_PAYLOAD_4 4 /* Reserved for future use */
 #define VOTER_PAYLOAD_PING 5
 
 /* Define voter priority levels. */
