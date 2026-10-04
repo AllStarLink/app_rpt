@@ -48,39 +48,38 @@ Audio:
 
 Before talking about how audio is buffered in the channel driver, we need to talk a bit about audio and frames.
 
-Transport between chan_voter and the client is 8-bit, 8kHz (8k samples/sec) ulaw.
+The transport between chan_voter and the VOTER/RTCM uses ulaw for the CODEC. Internally, chan_voter also uses
+ulaw for its ring buffers. Asterisk channel audio is translated to and from 16-bit signed linear (slin), as needed.
+
+The CODEC used by chan_voter is G.711 ulaw/PCMU, which is 8-bit, 8kHz (8k samples/sec). However, we are not using
+typical RTP packets (G.711/RTP), this implementation uses custom UDP packets for the transport.
 
 A "frame" as defined by FRAME_SIZE is 160 bytes, and contains 20ms of ulaw audio, sampled at 8k samples/s. So,
 a "Payload 1" type packet contains one frame (20ms) of ulaw audio.
 
 It is a convenient (but also confusing) coincidence that for ulaw audio, 160 bytes / 20 ms = 8 bytes/ms.
 
-The channel driver uses ulaw as the internal audio format because the existing recording and streaming paths
-also use ulaw.
-
 
 Buffers:
 
-Each client has a pair of circular buffers, one for audio data, and one for RSSI values. The allocated buffer
+Each client has a pair of circular (ring) buffers, one for audio data, and one for RSSI values. The allocated buffer
 length for all clients is determined by the 'buflen' parameter, which can be specified in the [global] stanza
 in voter.conf to apply to all instances, or optionally in each instance to only apply to the clients associated
 with that instance.
 
-When buflen is read in to the channel driver, it is immediately multiplied by 8, and stored back in the same
-buflen variable (unfortunately). This means buflen in voter.conf is really in "bits", but buflen and the
-resulting assignment into client->buflen in the channel driver is in "bytes". Recall from above that for
-**ulaw** audio, there are 8 bytes/ms, that makes buflen in voter.conf equivalent to time in ms (since the first
-thing we do is buflen * 8 when it is loaded to convert to bytes).
+When buflen is read in to the channel driver from voter.conf, it is immediately multiplied by 8, and stored back
+in the same buflen variable (unfortunately). This means buflen in voter.conf is really in milliseconds, but buflen
+and the resulting assignment into client->buflen in the channel driver is in bytes.
 
 It is also critical to note that the calculations in the channel driver equate in a buflen resolution in
-voter.conf of 40 (so, 40ms when ulaw is used). Values in between are rounded down to the nearest 40(ms) step.
+voter.conf of 40 (so, 40ms). Values in between are rounded down to the nearest 40(ms) step.
 
-With ulaw audio, the absolute minimum buflen in voter.conf is 40(ms), with a recommended minimum of
-120(ms) for voting clients. For mix mode/general purpose clients, the minimum is 160(ms). The default if buflen
-is not specified is defined below as DEFAULT_BUFLEN, and is generally 480(ms).
+The absolute minimum buflen in voter.conf is 40(ms), with a recommended minimum of 120(ms) for voting clients. For
+mix mode/general purpose clients, the minimum is 160(ms). The default if buflen if not specified is defined below
+as DEFAULT_BUFLEN, and is 480(ms).
 
-Every channel instance has an index ("drainindex"), indicating the next position within the physical buffer(s)
-where the audio will be taken from the buffers and presented to the Asterisk channel stream as VOICE frames.
+Every channel instance has an index ("drainindex"), indicating the next position within the physical buffer
+where the audio will be taken from, and presented to the Asterisk channel stream as VOICE frames.
 
 Therefore, there is an abstraction of a "buffer" that exists starting at drainindex and ending (modulo) at
 drainindex - 1, with length of buflen (client->buflen).
@@ -89,10 +88,11 @@ Buflen is selected so that there is enough time (delay) for any straggling packe
 to present the data to the Asterisk channel.
 
 The idea is that the current audio being presented to Asterisk is from some time shortly in the past. Therefore,
-"Now" is the position in the abstracted buffer of 'bufdelay' (generally buflen - 160) (you gotta at least leave room for
-an entire frame) and the data is being presented from the start of the abstracted buffer. As the physical buffer
-moves along, what was once "now" will eventually become far enough in the "past" to be presented to Asterisk (gosh,
-doesn't this sound like a scene from "Spaceballs"??.. I too always drink coffee while watching "Mr. Radar").
+"now" is the position in the abstracted buffer of 'bufdelay' (client->buflen - FRAME_SIZE *2) (you gotta at least
+leave room for an entire frame) and the data is being presented from the start of the abstracted buffer. As the
+physical buffer moves along, what was once "now" will eventually become far enough in the "past" to be presented
+to Asterisk (gosh, doesn't this sound like a scene from "Spaceballs"??.. I too always drink coffee while watching
+"Mr. Radar").
 
 During the processing of an audio frame to be presented to Asterisk, all client's buffers that are associated with
 a channel instance (node) are examined by taking an average of the RSSI value for each sample in the associated
@@ -107,32 +107,32 @@ allows for the true 'connectionless-ness' of this protocol implementation.
 
 "hostdeemp" (app_rpt duplex=3) mode:
 
-As of Voter board firmware 1.19 (7/19/2013), there is a set of options in both the firmware ("Offline Menu item
+As of VOTER board firmware 1.19 (7/19/2013), there is a set of options in both the firmware ("Offline Menu item
 #12, "DUPLEX3 support"), and the "hostdeemp" option (instance-wide) in the voter.conf file on the host.
 
 Duplex mode 3 in app_rpt allows for "in-cabinet" repeat audio (where the actual radio hardware supplies the repeated
 audio directly itself, and app_rpt simply "adds" all of the other audio as appropriate.
 
-The Voter board (RTCM) now has an option to do the same functionality itself, for a case where local repeat audio
-is desired without the "network audio delay" normally associated with Voter board (RTCM) operation, and for a radio
+The VOTER/RTCM board now has an option to do the same functionality itself, for a case where local repeat audio
+is desired without the "network audio delay" normally associated with VOTER/RTCM board operation, and for a radio
 that doesn't have the option of providing "in cabinet" repeat audio (along with externally provided audio) itself.
 
-Because of limitations with the Voter board (RTCM) hardware (being that there is only 1 audio path into the processor,
+Because of limitations with the VOTER/RTCM board hardware (being that there is only 1 audio path into the processor,
 and it either has de-emphasis in its "hardware path" of not), it is necessary if you:
 
 1) Wish to have the "duplex=3" functionality in app_rpt
-2) Have the "DUPLEX3" support enabled in the Voter (RTCM) board
+2) Have the "DUPLEX3" support enabled in the VOTER/RTCM board
 3) Have a transmitter that you are "modulating directly" (with flat audio)
 
 If all of the above is true, then you need to use the "hostdeemp" option in chan voter, which basically "forces" the
-RTCM *NOT* to do de-emphasis in hardware (it will send the non-de-emphasized audio to the host), and have the host
+VOTER/RTCM *NOT* to do de-emphasis in hardware (it will send the non-de-emphasized audio to the host), and have the host
 "do" the de-emphasis (in software) instead.
 
-This will allow the Voter (RTCM) board to be able to "pass" the non-de-emphasized audio back into the "direct modulation
-audio" stream, since that is what will be "presented" to the processor in the Voter (RTCM) board, as the hardware de-emphasis
+This will allow the VOTER/RTCM board to be able to "pass" the non-de-emphasized audio back into the "direct modulation
+audio" stream, since that is what will be "presented" to the processor in the VOTER/RTCM board, as the hardware de-emphasis
 is disabled in this mode.
 
-If you have a transmitter that you are "feeding" line-level (mic) audio, then this mode is not necessary, as the Voter (RTCM)
+If you have a transmitter that you are "feeding" line-level (mic) audio, then this mode is not necessary, as the VOTER/RTCM
 board is fully capable of providing the functionality all by itself.
 
 Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or simulcasted system.
@@ -315,7 +315,7 @@ static char context[AST_MAX_EXTENSION] = "default";
 #define DIVLCM 192000 /* (A common multiple of 512,1200,2400,8000) */
 #define PREAMBLE_BITS 576
 #define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
-/* We have to send "inverted"... probably because of inverting AMP in Voter board. */
+/* We have to send "inverted"... probably because of inverting AMP in VOTER/RTCM board. */
 #define ONEVAL AMPVAL
 #define ZEROVAL -AMPVAL
 #define DIVSAMP (DIVLCM / AST_SAMPLE_RATE)
@@ -969,9 +969,7 @@ static void voter_client_reset_connection(struct voter_client *client)
 	if (client->curmaster) {
 		masterconnected = 0;
 	}
-	/* Clean up the rest of the timers and flags when we reset a client, forcing it to
-	 * re-authenticate.
-	 */
+	/* Clear the connection state when we reset a client, forcing it to re-authenticate. */
 	client->respdigest = 0;
 	client->heardfrom = 0;
 	client->lastheardtime = ast_tv(0, 0);
@@ -3077,7 +3075,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				 */
 				j = sp1[i] + sp2[i];
 			}
-			/* Clamp the audio samples to the slin audio range. */
+			/* Clamp the audio samples to the range used by 16-bit signed linear (slin). */
 			if (j > 32767) {
 				j = 32767;
 			} else if (j < -32767) {
@@ -3571,7 +3569,7 @@ static void *voter_xmit(void *data)
 							 */
 							for (i = 0; i < FRAME_SIZE; i++) {
 								mixaudio = xmtbuf2[i] + client1->lastaudio[i];
-								/* Clamp the audio samples to the slin audio range. */
+								/* Clamp the audio samples to the range used by 16-bit signed linear (slin). */
 								if (mixaudio > 32767) {
 									mixaudio = 32767;
 								}
@@ -3600,12 +3598,13 @@ static void *voter_xmit(void *data)
 					/* Fudge time for Garmin GPS pucks, if needed. */
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
-					/*! \todo VE7FET we set vtime_nsec above... which is probably redundant when
-					 * we do it here, this time taking into account the client type. Confirm and remove
-					 * the line above, if necessary.
-					 */
-					/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
-					 * nsec from the master timing source (for voting clients).
+					/* mkpucked() initializes both timestamp fields when it operates on the timestamp.
+					 *
+					 * The vtime_nsec field in the outbound audio packet is now overridden below,
+					 * depending on the type of client.
+					 *
+					 * Mix mode clients use the field as a sequence number, whereas voting clients use the
+					 * actual nsec from the master timing source.
 					 */
 					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 					/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
@@ -4688,7 +4687,7 @@ static int reload(void)
 		 */
 		val = ast_variable_retrieve(cfg, ctg, "buflen");
 		if (val) {
-			/* Multiply by 8 to convert from frames to bytes. */
+			/* Multiply the configured millisecond value by 8 to convert ulaw time to bytes. */
 			instance_buflen = strtoul(val, NULL, 0) * 8;
 		} else {
 			ast_debug(1, "Per-instance buflen not specified, using global buflen for instance %s\n", ctg);
@@ -5828,8 +5827,19 @@ static void *voter_reader(void *data)
 							continue;
 						}
 					}
+					/* Configure our receive scheduling buffer, depending on if this is a mix mode client, or
+					 * a normal voting client.
+					 *
+					 * BUFDELAY() is the mechanism that provides a receive scheduling window, which allows for
+					 * late arriving packets to be received and put in their proper position in the ring buffer.
+					 */
 					if (client->mix) {
-						/* Zero the buffers for mix mode clients, and configure the initial drain index. */
+						/* Establish the sequence reference and calculate the ring-buffer offset for mix mode.
+						 *
+						 * Start by getting the sequence number from the incoming packet from the client and
+						 * do some sanity checks to ensure the sequence being sent from the client is in synch
+						 * with the host's counters. Otherwise, re-establish the baseline.
+						 */
 						if (ntohl(vph->curtime.vtime_nsec) > client->rxseqno) {
 							client->rxseqno = 0;
 						}
@@ -5840,14 +5850,36 @@ static void *voter_reader(void *data)
 						if (!client->rxseqno) {
 							client->rxseqno = ntohl(vph->curtime.vtime_nsec);
 						}
-						index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno;
-						index *= FRAME_SIZE;	   /* At least with ulaw, since index already started at 0, this is still 0 */
-						index += BUFDELAY(client); /* With ulaw, since index was still 0, this is now just BUFDELAY(client) */
-						/* Recall that FRAME_SIZE is typically 160, so FRAME_SIZE * 4 = 640.
-						 * If the client->buflen is too small at this point (< 160), then index <= 0, which
-						 * will put us "out of bounds" below (for mix mode clients).
+						/* Determine the sequence number difference, measured in frames, between the currently
+						 * received packet, and what we last processed, to see how many frames of audio we are
+						 * processing.
 						 */
-						index -= (FRAME_SIZE * 4); /* With the min buflen = 160 (so client->buflen = 1280), index = 320 here */
+						index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno;
+						/* Convert the sequence delta to a byte offset; one ulaw frame is FRAME_SIZE bytes.
+						 * index is now in BYTES.
+						 */
+						index *= FRAME_SIZE;
+						/* Add the configured buffer delay/receive window buffer, then reserve four frames of
+						 * receive-buffer margin.
+						 *
+						 * The move of 4 frames back is what establishes the minimum buflen of 160ms in voter.conf
+						 * for mix mode clients:
+						 *
+						 * With buflen = 120 --> 960 bytes
+						 * index = 0
+						 * index += 640 <-- BUFDELAY = 960 - 2 * FRAME_SIZE = 960 - 320 = 640
+						 * index -= 640 <-- FRAME_SIZE * 4
+						 * index = 0 <-- out of bounds, index must be >0
+						 *
+						 * With buflen = 160 --> 1280 bytes
+						 * index = 0
+						 * index += 960 <-- BUFDELAY
+						 * index -= 640 <-- FRAME_SIZE * 4
+						 * index = 320 <-- in bounds
+						 */
+						index += BUFDELAY(client);
+						index -= (FRAME_SIZE * 4);
+						/* The resulting index above determines where in the ring buffer the sample will be inserted. */
 						if (DEBUG_ATLEAST(5)) {
 							ast_debug(5, "Mix client drain index = %i\n", index);
 							ast_debug(7, "Mix client %s drain index: %d their seq: %d our seq: %d\n", client->name, index,
@@ -5857,17 +5889,26 @@ static void *voter_reader(void *data)
 						/* Setup the drain index for normal voting clients. */
 						/* btime is the GPS time being sent by the master client, converted to ns since epoch. */
 						btime = ((long long) master_time.vtime_sec * 1000000000LL) + master_time.vtime_nsec;
-						btime += 40000000; /* Add 40ms. Why? Is that a two audio frame buffer factor? */
+						/* Establish the ring buffer scheduling reference, along with BUFDELAY (below). Adds some
+						 * additional cushion to the receive window.
+						 */
+						btime += 40000000;
+						/* This 20ms offset for the current master was introduced in Feb 2012, apparently to
+						 * resolve an audio offset issue, but no firm documentation exists as to the exact
+						 * reason and why it solved. It moves moves the current master's packet one 20ms
+						 * frame further ahead in the ring buffer.
+						 */
 						if (client->curmaster) {
-							btime -= 20000000; /* Subtract 20ms if it is current master. Why? Is that one audio frame? */
+							btime -= 20000000;
 						}
 						/* ptime is the GPS time being sent by the CURRENT client, converted to ns since epoch. */
 						ptime = ((long long) ntohl(vph->curtime.vtime_sec) * 1000000000LL) + ntohl(vph->curtime.vtime_nsec);
-						/* Not sure what we are really doing here, or why? */
+						/* Convert the timestamp difference and configured buffer delay to a sample offset. */
 						difftime = (ptime - btime) + (BUFDELAY(client) * 125000LL);
+						/* Do any Garmin puck adjustment, if necessary. */
 						difftime -= puckoffset(client);
-						/* All the above would seem to make our drain index "elastic", based on the difference in time
-						 * between the master and the current client?
+						/* Establish the actual index now in bytes, by converting from the time delta. The
+						 * index will be used to determine where in the ring buffer to insert the sample.
 						 */
 						index = (int) ((long long) difftime / 125000LL);
 						/* This only prints if we are receiving something (and debug is >= 5). */
@@ -5881,7 +5922,7 @@ static void *voter_reader(void *data)
 							timestuff = (time_t) timetv.tv_sec;
 							strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 							ast_debug(5, "SysTime:    %s.%03d\n", timestr, (int) timetv.tv_usec / 1000);
-							ast_debug(5, "Time diff between master and client: %lld ns\n", btime - ptime);
+							ast_debug(5, "Adjusted master/client time difference: %lld ns\n", btime - ptime);
 							ast_debug(5, "VOTER drain index: %i\n)", index);
 						}
 					}
@@ -5893,7 +5934,11 @@ static void *voter_reader(void *data)
 								buf[sizeof(VOTER_PACKET_HEADER) + i + 1] = ULAW_SILENCE;
 							}
 						}
-						/* Set the ring buffer index (drainindex) to use. */
+						/* Set the ring buffer index (drainindex) to use for packet insertion. Note that the
+						 * index used in this calculation was determine above, based on whether this is a mix
+						 * mode or voting client. It is the packet placement based on the sequence number
+						 * received (mix mode) or the timestamp of the packet received (voting).
+						 */
 						index = (index + client->drainindex) % client->buflen;
 						voter_buffer_process(client->audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, client->rssi,
 							buf[sizeof(VOTER_PACKET_HEADER)], index, client->buflen, FRAME_SIZE, TO_RING, NO_SILENCE);
