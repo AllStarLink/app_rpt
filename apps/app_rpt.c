@@ -5266,7 +5266,7 @@ static inline int monchannel_read(struct rpt *myrpt)
 				continue;
 			}
 			ast_mutex_lock(&myrpt->lock);
-			mode = myrpt->active_telem ? myrpt->active_telem->mode : 0;
+			mode = myrpt->active_telem ? myrpt->active_telem->mode : ZERO;
 			ast_mutex_unlock(&myrpt->lock);
 
 			ast_mutex_lock(&l->altaudio_lock);
