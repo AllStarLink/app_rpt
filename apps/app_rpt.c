@@ -5274,7 +5274,11 @@ static inline int monchannel_read(struct rpt *myrpt)
 					ast_debug(1, "Flushing altlink audio backlog for node %s\n", l->name);
 					ast_slinfactory_flush(&l->altaudio);
 				}
-				ast_slinfactory_feed(&l->altaudio, f);
+				/* Don't repeat audio that is already in the CONF for an alt link */
+				if ((myrpt->active_telem->mode != PLAYBACK) && (myrpt->active_telem->mode != ID1) &&
+					(myrpt->active_telem->mode != STATS_GPS_LEGACY) && myrpt->active_telem->mode != TEST_TONE) {
+					ast_slinfactory_feed(&l->altaudio, f);
+				}
 			}
 			ast_mutex_unlock(&l->altaudio_lock);
 		}
