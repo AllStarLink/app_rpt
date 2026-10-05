@@ -4123,6 +4123,52 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 	ast_mutex_unlock(&o->device_lock);
 }
 
+/* Copy default gpio and pps strings so this device owns what it frees. */
+static int simpleusb_own_cfg_strings(struct chan_simpleusb_pvt *o)
+{
+	int i;
+	char *copy;
+
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (!o->gpios[i]) {
+			continue;
+		}
+		copy = ast_strdup(o->gpios[i]);
+		if (!copy) {
+			o->gpios[i] = NULL;
+			goto fail;
+		}
+		o->gpios[i] = copy;
+	}
+	for (i = 0; i < ARRAY_LEN(o->pps); i++) {
+		if (!o->pps[i]) {
+			continue;
+		}
+		copy = ast_strdup(o->pps[i]);
+		if (!copy) {
+			o->pps[i] = NULL;
+			goto fail;
+		}
+		o->pps[i] = copy;
+	}
+	return 0;
+
+fail:
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (o->gpios[i] && o->gpios[i] != simpleusb_default.gpios[i]) {
+			ast_free(o->gpios[i]);
+		}
+		o->gpios[i] = NULL;
+	}
+	for (i = 0; i < ARRAY_LEN(o->pps); i++) {
+		if (o->pps[i] && o->pps[i] != simpleusb_default.pps[i]) {
+			ast_free(o->pps[i]);
+		}
+		o->pps[i] = NULL;
+	}
+	return -1;
+}
+
 /*!
  * \brief Store configuration.
  *	Initializes chan_simpleusb and loads it with the configuration data.
@@ -4154,6 +4200,11 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 			o->pttkick[1] = -1;
 			o->audiothread = AST_PTHREADT_NULL;
 			o->hidthread = AST_PTHREADT_NULL;
+			if (simpleusb_own_cfg_strings(o)) {
+				ast_free(o->name);
+				ast_free(o);
+				return NULL;
+			}
 			if (!simpleusb_active) {
 				simpleusb_active = o->name;
 			}
@@ -4202,6 +4253,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			sprintf(buf, "gpio%d", i + 1);
 			if (!strcmp(v->name, buf)) {
+				ast_free(o->gpios[i]);
 				o->gpios[i] = ast_strdup(v->value);
 			}
 		}
@@ -4211,6 +4263,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 			}
 			sprintf(buf, "pp%d", i);
 			if (!strcasecmp(v->name, buf)) {
+				ast_free(o->pps[i]);
 				o->pps[i] = ast_strdup(v->value);
 				haspp = 1;
 			}
@@ -4510,52 +4563,6 @@ static int load_module(void)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
-/* Drop aliases of s on p. Devices shallow-copy these from the default pvt. */
-static void simpleusb_clear_cfg_string(struct chan_simpleusb_pvt *p, char *s)
-{
-	int i;
-
-	for (i = 0; i < GPIO_PINCOUNT; i++) {
-		if (p->gpios[i] == s) {
-			p->gpios[i] = NULL;
-		}
-	}
-	for (i = 0; i < ARRAY_LEN(p->pps); i++) {
-		if (p->pps[i] == s) {
-			p->pps[i] = NULL;
-		}
-	}
-}
-
-/* Free s once the last device that still points at it has joined its HID thread.
- * Reload can leave several devices sharing an old default string.
- */
-static void simpleusb_free_cfg_string(struct chan_simpleusb_pvt *o, char *s)
-{
-	struct chan_simpleusb_pvt *p;
-	int i, held;
-
-	if (!s) {
-		return;
-	}
-	held = 0;
-	for (p = o->next; p && !held; p = p->next) {
-		for (i = 0; i < GPIO_PINCOUNT && !held; i++) {
-			held = (p->gpios[i] == s);
-		}
-		for (i = 0; i < ARRAY_LEN(p->pps) && !held; i++) {
-			held = (p->pps[i] == s);
-		}
-	}
-	if (held) {
-		simpleusb_clear_cfg_string(o, s);
-		return;
-	}
-	simpleusb_clear_cfg_string(&simpleusb_default, s);
-	simpleusb_clear_cfg_string(o, s);
-	ast_free(s);
-}
-
 static int unload_module(void)
 {
 	struct chan_simpleusb_pvt *o, *no;
@@ -4585,10 +4592,10 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			simpleusb_free_cfg_string(o, o->gpios[i]);
+			ast_free(o->gpios[i]);
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			simpleusb_free_cfg_string(o, o->pps[i]);
+			ast_free(o->pps[i]);
 		}
 		ast_free(o->name);
 		simpleusb_release_device(o);
