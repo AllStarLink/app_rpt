@@ -48,56 +48,38 @@ Audio:
 
 Before talking about how audio is buffered in the channel driver, we need to talk a bit about audio and frames.
 
-The two audio codecs supported for transport between chan_voter and the client are ulaw and IMA-ADPCM. ulaw is
-8-bit, 8kHz (8k samples/sec), whereas IMA-ADPCM (aka ADPCM in this context) is 4-bit, 8kHz (8k samples/sec).
-Since 8-bit audio has better dynamic range than 4-bit audio... ulaw should typically be used.
+The transport between chan_voter and the VOTER/RTCM uses ulaw for the CODEC. Internally, chan_voter also uses
+ulaw for its ring buffers. Asterisk channel audio is translated to and from 16-bit signed linear (slin), as needed.
+
+The CODEC used by chan_voter is G.711 ulaw/PCMU, which is 8-bit, 8kHz (8k samples/sec). However, we are not using
+typical RTP packets (G.711/RTP), this implementation uses custom UDP packets for the transport.
 
 A "frame" as defined by FRAME_SIZE is 160 bytes, and contains 20ms of ulaw audio, sampled at 8k samples/s. So,
 a "Payload 1" type packet contains one frame (20ms) of ulaw audio.
 
-A "frame" as defined by ADPCM_FRAME_SIZE is 163 bytes, and contains 40ms of IMA-ADPCM audio, sampled at 8k samples/s.
-So, a "Payload 3" type packet contains one frame (40ms) of IMA-ADPCM audio.
-
-The typical (default) configuration of the channel driver uses ulaw for audio encoding to/from the clients. This
-is the preferred encoding, as it has less compression (40ms of audio crammed into 163 bytes is going to be more
-compressed than 20ms of audio in 160 bytes, and 8-bit ulaw audio has better dynamic range than 4-bit IMA-ADPCM).
-
-It is a convenient (but also confusing) coincidence that for ulaw audio, 160 bytes / 20 ms = 8 bytes/ms, and this
-relationship is NOT the same for IMA-ADPCM audio. You will see why shortly.
-
-
-Note from Jim Dixon on ADPCM functionality:
-
-The original intent was to change this driver to use signed linear (slin) audio internally, but after some thought,
-it was determined that it was prudent to continue using ulaw as the "standard" internal audio format (with the
-understanding of the slight degradation in dynamic range when using ADPCM resulting in doing so). This was
-done because existing external entities (such as the recording files and the streaming stuff) use ulaw as their
-transport, and changing all of that to signed linear would be cumbersome, inefficient and undesirable.
+It is a convenient (but also confusing) coincidence that for ulaw audio, 160 bytes / 20 ms = 8 bytes/ms.
 
 
 Buffers:
 
-Each client has a pair of circular buffers, one for audio data, and one for RSSI values. The allocated buffer
+Each client has a pair of circular (ring) buffers, one for audio data, and one for RSSI values. The allocated buffer
 length for all clients is determined by the 'buflen' parameter, which can be specified in the [global] stanza
 in voter.conf to apply to all instances, or optionally in each instance to only apply to the clients associated
 with that instance.
 
-When buflen is read in to the channel driver, it is immediately multiplied by 8, and stored back in the same
-buflen variable (unfortunately). This means buflen in voter.conf is really in "bits", but buflen and the
-resulting assignment into client->buflen in the channel driver is in "bytes". Recall from above that for
-**ulaw** audio, there are 8 bytes/ms, that makes buflen in voter.conf equivalent to time in ms (since the first
-thing we do is buflen * 8 when it is loaded to convert to bytes). This is only true when using ulaw audio!
+When buflen is read in to the channel driver from voter.conf, it is immediately multiplied by 8, and stored back
+in the same buflen variable (unfortunately). This means buflen in voter.conf is really in milliseconds, but buflen
+and the resulting assignment into client->buflen in the channel driver is in bytes.
 
 It is also critical to note that the calculations in the channel driver equate in a buflen resolution in
-voter.conf of 40 (so, 40ms when ulaw is used). Values in between are rounded down to the nearest 40(ms) step.
+voter.conf of 40 (so, 40ms). Values in between are rounded down to the nearest 40(ms) step.
 
-With default ulaw audio, the absolute minimum buflen in voter.conf is 40(ms), with a recommended minimum of
-120(ms) for voting clients. For mix mode/general purpose clients, the minimum is 160(ms). The default if buflen
-is not specified is defined below as DEFAULT_BUFLEN, and is generally 480(ms). These numbers are NOT in ms if
-IMA-ADPCM audio is selected.
+The absolute minimum buflen in voter.conf is 40(ms), with a recommended minimum of 120(ms) for voting clients. For
+mix mode/general purpose clients, the minimum is 160(ms). The default if buflen if not specified is defined below
+as DEFAULT_BUFLEN, and is 480(ms).
 
-Every channel instance has an index ("drainindex"), indicating the next position within the physical buffer(s)
-where the audio will be taken from the buffers and presented to the Asterisk channel stream as VOICE frames.
+Every channel instance has an index ("drainindex"), indicating the next position within the physical buffer
+where the audio will be taken from, and presented to the Asterisk channel stream as VOICE frames.
 
 Therefore, there is an abstraction of a "buffer" that exists starting at drainindex and ending (modulo) at
 drainindex - 1, with length of buflen (client->buflen).
@@ -106,10 +88,11 @@ Buflen is selected so that there is enough time (delay) for any straggling packe
 to present the data to the Asterisk channel.
 
 The idea is that the current audio being presented to Asterisk is from some time shortly in the past. Therefore,
-"Now" is the position in the abstracted buffer of 'bufdelay' (generally buflen - 160) (you gotta at least leave room for
-an entire frame) and the data is being presented from the start of the abstracted buffer. As the physical buffer
-moves along, what was once "now" will eventually become far enough in the "past" to be presented to Asterisk (gosh,
-doesn't this sound like a scene from "Spaceballs"??.. I too always drink coffee while watching "Mr. Radar").
+"now" is the position in the abstracted buffer of 'bufdelay' (client->buflen - FRAME_SIZE *2) (you gotta at least
+leave room for an entire frame) and the data is being presented from the start of the abstracted buffer. As the
+physical buffer moves along, what was once "now" will eventually become far enough in the "past" to be presented
+to Asterisk (gosh, doesn't this sound like a scene from "Spaceballs"??.. I too always drink coffee while watching
+"Mr. Radar").
 
 During the processing of an audio frame to be presented to Asterisk, all client's buffers that are associated with
 a channel instance (node) are examined by taking an average of the RSSI value for each sample in the associated
@@ -124,32 +107,32 @@ allows for the true 'connectionless-ness' of this protocol implementation.
 
 "hostdeemp" (app_rpt duplex=3) mode:
 
-As of Voter board firmware 1.19 (7/19/2013), there is a set of options in both the firmware ("Offline Menu item
+As of VOTER board firmware 1.19 (7/19/2013), there is a set of options in both the firmware ("Offline Menu item
 #12, "DUPLEX3 support"), and the "hostdeemp" option (instance-wide) in the voter.conf file on the host.
 
 Duplex mode 3 in app_rpt allows for "in-cabinet" repeat audio (where the actual radio hardware supplies the repeated
 audio directly itself, and app_rpt simply "adds" all of the other audio as appropriate.
 
-The Voter board (RTCM) now has an option to do the same functionality itself, for a case where local repeat audio
-is desired without the "network audio delay" normally associated with Voter board (RTCM) operation, and for a radio
+The VOTER/RTCM board now has an option to do the same functionality itself, for a case where local repeat audio
+is desired without the "network audio delay" normally associated with VOTER/RTCM board operation, and for a radio
 that doesn't have the option of providing "in cabinet" repeat audio (along with externally provided audio) itself.
 
-Because of limitations with the Voter board (RTCM) hardware (being that there is only 1 audio path into the processor,
+Because of limitations with the VOTER/RTCM board hardware (being that there is only 1 audio path into the processor,
 and it either has de-emphasis in its "hardware path" of not), it is necessary if you:
 
 1) Wish to have the "duplex=3" functionality in app_rpt
-2) Have the "DUPLEX3" support enabled in the Voter (RTCM) board
+2) Have the "DUPLEX3" support enabled in the VOTER/RTCM board
 3) Have a transmitter that you are "modulating directly" (with flat audio)
 
 If all of the above is true, then you need to use the "hostdeemp" option in chan voter, which basically "forces" the
-RTCM *NOT* to do de-emphasis in hardware (it will send the non-de-emphasized audio to the host), and have the host
+VOTER/RTCM *NOT* to do de-emphasis in hardware (it will send the non-de-emphasized audio to the host), and have the host
 "do" the de-emphasis (in software) instead.
 
-This will allow the Voter (RTCM) board to be able to "pass" the non-de-emphasized audio back into the "direct modulation
-audio" stream, since that is what will be "presented" to the processor in the Voter (RTCM) board, as the hardware de-emphasis
+This will allow the VOTER/RTCM board to be able to "pass" the non-de-emphasized audio back into the "direct modulation
+audio" stream, since that is what will be "presented" to the processor in the VOTER/RTCM board, as the hardware de-emphasis
 is disabled in this mode.
 
-If you have a transmitter that you are "feeding" line-level (mic) audio, then this mode is not necessary, as the Voter (RTCM)
+If you have a transmitter that you are "feeding" line-level (mic) audio, then this mode is not necessary, as the VOTER/RTCM
 board is fully capable of providing the functionality all by itself.
 
 Obviously, it is not valid to use *ANY* of the duplex=3 modes in a voted and/or simulcasted system.
@@ -296,19 +279,14 @@ static char context[AST_MAX_EXTENSION] = "default";
 
 /* Buffer definitions
  * FRAME_SIZE 160 --> 160 octets of ulaw audio (20ms @ 8k samples/sec) = 160 audio samples
- * ADPCM_FRAME_SIZE 163 --> 163 octets of IMA-ADPCM audio (40ms @ 8k samples/sec) = 320 audio samples
  *
- * DEFAULT_BUFLEN is in ms when uing ulaw (default) audio ONLY:
+ * DEFAULT_BUFLEN is in ms when using ulaw audio:
  * DEFAULT_BUFLEN * 8 = Samples (and is in bytes)
  * Samples / FRAME_SIZE = Frames
  * Frames * 20ms/frame = Delay
  *
- * Since FRAME_SIZE != ADPCM_FRAME_SIZE, and the ulaw fame rate is 20ms/frame vs
- * ADPCM frame rate of 40ms/frame, buflen in voter.conf will be ~2x ms when using ADPCM
- *
  */
 #define FRAME_SIZE 160
-#define ADPCM_FRAME_SIZE 163
 #define DEFAULT_BUFLEN 480 /* 480ms default buffer length when buflen not specified in voter.conf */
 #define BUFDELAY(p) (p->buflen - (FRAME_SIZE * 2))
 
@@ -337,7 +315,7 @@ static char context[AST_MAX_EXTENSION] = "default";
 #define DIVLCM 192000 /* (A common multiple of 512,1200,2400,8000) */
 #define PREAMBLE_BITS 576
 #define MESSAGE_BITS 544 /* (17 * 32), 1 longword SYNC plus 16 longwords data */
-/* We have to send "inverted"... probably because of inverting AMP in Voter board. */
+/* We have to send "inverted"... probably because of inverting AMP in VOTER/RTCM board. */
 #define ONEVAL AMPVAL
 #define ZEROVAL -AMPVAL
 #define DIVSAMP (DIVLCM / AST_SAMPLE_RATE)
@@ -346,8 +324,8 @@ static char context[AST_MAX_EXTENSION] = "default";
 #define VOTER_PAYLOAD_AUTH 0
 #define VOTER_PAYLOAD_ULAW 1
 #define VOTER_PAYLOAD_GPS 2
-#define VOTER_PAYLOAD_ADPCM 3
-#define VOTER_PAYLOAD_FUTURE 4 /* Reserved for future use */
+#define VOTER_PAYLOAD_3 3 /* Reserved for future use (was ADPCM) */
+#define VOTER_PAYLOAD_4 4 /* Reserved for future use */
 #define VOTER_PAYLOAD_PING 5
 
 /* Define voter priority levels. */
@@ -366,8 +344,6 @@ enum voter_auth_flags {
 	/*! \brief Master timing source (do not delay sending audio packet) (master)
 		(aka Flag 8) */
 	FLAG_MASTERTIMING = (1 << 3),
-	/*! \brief Use ADPCM rather than ulaw (adpcm) (aka Flag 16) */
-	FLAG_ADPCM = (1 << 4),
 	/*! \brief Request "mix" option to host (mixminus) (aka Flag 32) */
 	FLAG_MIX = (1 << 5),
 };
@@ -469,21 +445,17 @@ struct voter_client {
 	uint32_t respdigest;
 	struct sockaddr_in sin;
 	int drainindex;
-	int drainindex_40ms;
 	int buflen;
 	/* bit fields */
 	unsigned int heardfrom:1;
 	unsigned int totransmit:1;
 	unsigned int ismaster:1;
 	unsigned int curmaster:1;
-	unsigned int doadpcm:1;
 	unsigned int mix:1;
 	unsigned int nodeemp:1;
 	unsigned int noplfilter:1;
 	unsigned int txlockout:1;
 	unsigned int reload:1;
-	unsigned int rxseq40ms:1;
-	unsigned int drain40ms:1;
 	unsigned int ping_abort:1;
 
 	struct voter_client *next;
@@ -491,7 +463,6 @@ struct voter_client {
 	int txseqno;
 	int txseqno_rxkeyed;
 	int rxseqno;
-	int rxseqno_40ms;
 	int old_buflen;
 	char *gpsid;
 	int prio;
@@ -559,8 +530,6 @@ struct voter_pvt {
 	uint16_t lingercount;
 	int voter_test;
 	struct ast_dsp *dsp;
-	struct ast_trans_pvt *adpcmin;
-	struct ast_trans_pvt *adpcmout;
 	struct ast_trans_pvt *toast;
 	struct ast_trans_pvt *toast1;
 	struct ast_trans_pvt *fromast;
@@ -570,7 +539,6 @@ struct voter_pvt {
 	int txctcsslevelset;
 	enum usbradio_carrier_type txtoctype;
 	int order; /* The order our channel instance was loaded from voter.conf. */
-	struct ast_frame *adpcmf1;
 	ast_mutex_t xmit_lock;
 	ast_cond_t xmit_cond;
 	pthread_t xmit_thread;
@@ -1001,9 +969,7 @@ static void voter_client_reset_connection(struct voter_client *client)
 	if (client->curmaster) {
 		masterconnected = 0;
 	}
-	/* Clean up the rest of the timers and flags when we reset a client, forcing it to
-	 * re-authenticate.
-	 */
+	/* Clear the connection state when we reset a client, forcing it to re-authenticate. */
 	client->respdigest = 0;
 	client->heardfrom = 0;
 	client->lastheardtime = ast_tv(0, 0);
@@ -1068,15 +1034,10 @@ static void incr_drainindex(const struct voter_pvt *p)
 		if (client->nodenum != p->nodenum) {
 			continue;
 		}
-		if (!client->drain40ms) {
-			client->drainindex_40ms = client->drainindex;
-			client->rxseqno_40ms = client->rxseqno;
-		}
 		client->drainindex += FRAME_SIZE;
 		if (client->drainindex >= client->buflen) {
 			client->drainindex -= client->buflen;
 		}
-		client->drain40ms = !client->drain40ms;
 	}
 }
 
@@ -1121,12 +1082,6 @@ static int voter_hangup(struct ast_channel *ast)
 	/* Free our resources. */
 	if (p->dsp) {
 		ast_dsp_free(p->dsp);
-	}
-	if (p->adpcmin) {
-		ast_translator_free_path(p->adpcmin);
-	}
-	if (p->adpcmout) {
-		ast_translator_free_path(p->adpcmout);
 	}
 	if (p->toast) {
 		ast_translator_free_path(p->toast);
@@ -1512,47 +1467,6 @@ static int voter_write(struct ast_channel *ast, struct ast_frame *frame)
 	ast_mutex_unlock(&p->txqlock);
 
 	return 0;
-}
-/*!
- * \brief Concatenates two Asterisk frames.
- *
- * \param f1 			Pointer to Asterisk frame.
- * \param f2 			Pointer to Asterisk frame.
- * \return   			Concatenated frame, or NULL if there is an error.
- */
-
-static struct ast_frame *ast_frcat(const struct ast_frame *restrict f1, const struct ast_frame *restrict f2)
-{
-	struct ast_frame *f;
-	char *restrict cp;
-	int len;
-
-	/* The two frames must be of the same type. */
-	if ((f1->subclass.integer != f2->subclass.integer) || (f1->frametype != f2->frametype)) {
-		ast_log(LOG_ERROR, "ast_frcat() called with non-matching frame types!!\n");
-		return NULL;
-	}
-	f = ast_calloc(1, sizeof(struct ast_frame));
-	if (!f) {
-		return NULL;
-	}
-	/* Allocate memory for the two data elements. */
-	len = f1->datalen + f2->datalen + AST_FRIENDLY_OFFSET;
-	cp = ast_malloc(len);
-	if (!cp) {
-		return NULL;
-	}
-	memcpy(cp + AST_FRIENDLY_OFFSET, f1->data.ptr, f1->datalen);
-	memcpy(cp + AST_FRIENDLY_OFFSET + f1->datalen, f2->data.ptr, f2->datalen);
-	f->frametype = f1->frametype;
-	f->subclass.integer = f1->subclass.integer;
-	f->datalen = f1->datalen + f2->datalen;
-	f->samples = f1->samples + f2->samples;
-	f->data.ptr = cp + AST_FRIENDLY_OFFSET;
-	f->mallocd = AST_MALLOCD_HDR | AST_MALLOCD_DATA;
-	f->src = "ast_frcat";
-	f->offset = AST_FRIENDLY_OFFSET;
-	return f;
 }
 
 /*!
@@ -3161,7 +3075,7 @@ static int voter_mix_and_send(struct voter_pvt *p, struct voter_client *maxclien
 				 */
 				j = sp1[i] + sp2[i];
 			}
-			/* Clamp the audio samples to the slin audio range. */
+			/* Clamp the audio samples to the range used by 16-bit signed linear (slin). */
 			if (j > 32767) {
 				j = 32767;
 			} else if (j < -32767) {
@@ -3501,10 +3415,6 @@ static void *voter_xmit(void *data)
 				if (!client->mix) {
 					continue;
 				}
-				/* Skip if this client is using ADPCM audio, instead of ulaw */
-				if (client->doadpcm) {
-					continue;
-				}
 				/* If this client received a signal (we calculated its RSSI), set mixminus_act */
 				if (client->lastrssi) {
 					mixminus_act = 1;
@@ -3587,10 +3497,6 @@ static void *voter_xmit(void *data)
 					if (!client->heardfrom) {
 						continue;
 					}
-					/* Skip if this client IS set to use ADPCM audio (instead of ulaw) */
-					if (client->doadpcm) {
-						continue;
-					}
 					/* The final send below is restricted to clients with totransmit set
 					 * and txlockout clear. Check those same destination conditions BEFORE
 					 * constructing mixminus audio, since building it traverses the client
@@ -3643,12 +3549,6 @@ static void *voter_xmit(void *data)
 							if (!client1->mix) {
 								continue;
 							}
-							/* Skip if this is an ADPCM client (mixminus is only
-							 * supported for ulaw clients).
-							 */
-							if (client1->doadpcm) {
-								continue;
-							}
 							/* Skip if the client isn't receiving anything. */
 							if (!client1->lastrssi) {
 								continue;
@@ -3669,7 +3569,7 @@ static void *voter_xmit(void *data)
 							 */
 							for (i = 0; i < FRAME_SIZE; i++) {
 								mixaudio = xmtbuf2[i] + client1->lastaudio[i];
-								/* Clamp the audio samples to the slin audio range. */
+								/* Clamp the audio samples to the range used by 16-bit signed linear (slin). */
 								if (mixaudio > 32767) {
 									mixaudio = 32767;
 								}
@@ -3698,12 +3598,13 @@ static void *voter_xmit(void *data)
 					/* Fudge time for Garmin GPS pucks, if needed. */
 					mkpucked(client, &audiopacket.vp.curtime);
 					audiopacket.vp.digest = htonl(client->respdigest);
-					/*! \todo VE7FET we set vtime_nsec above... which is probably redundant when
-					 * we do it here, this time taking into account the client type. Confirm and remove
-					 * the line above, if necessary.
-					 */
-					/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
-					 * nsec from the master timing source (for voting clients).
+					/* mkpucked() initializes both timestamp fields when it operates on the timestamp.
+					 *
+					 * The vtime_nsec field in the outbound audio packet is now overridden below,
+					 * depending on the type of client.
+					 *
+					 * Mix mode clients use the field as a sequence number, whereas voting clients use the
+					 * actual nsec from the master timing source.
 					 */
 					audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
 					/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
@@ -3780,164 +3681,6 @@ static void *voter_xmit(void *data)
 				ast_mutex_unlock(&voter_lock);
 				/* FINALLY, send the ulaw audio packet outside voter_lock. */
 				sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &txsin, sizeof(txsin));
-			}
-		}
-		/* This block is used by clients configured to use ADPCM audio to the client transmitter. It
-		 * is entered if there is new activity (txact = 1), OR there is no txact, but p->adpcmf1 is
-		 * not null (flushing a buffered frame).
-		 *
-		 * On the first iteration, when txact=1 and p->adpcmf1 is NULL, we store the current frame
-		 * (f1) into p->adpcmf1. f1 should contain ulaw audio from various branches above.
-		 *
-		 * On the next iteration, when p->adpcmf1 is not NULL, we enter the else block, which concatenates
-		 * the next ulaw frame from the buffer (f1), or a silence frame, into f3. We reset p->adpcmf1 = NULL,
-		 * translate the concatenated frame (f3) from ulaw to ADPCM (storing it in f2), stuff it in an audio
-		 * packet, and send it to the ADPCM clients.
-		 *
-		 * If there is no txact, and p->adpcmf1 is NULL (by default), we do nothing and skip.
-		 */
-		if (txact || p->adpcmf1) {
-			/* First time in, we copy the ulaw frame (f1) into p->adpcmf1. */
-			if (p->adpcmf1 == NULL) {
-				p->adpcmf1 = ast_frdup(f1);
-				/* Subsequent entries into this block, p->adpcmf1 != NULL, so we run this else block. */
-			} else {
-				/* Build a silence frame. */
-				memset(xmtbuf, ULAW_SILENCE, sizeof(xmtbuf));
-				memset(&fr, 0, sizeof(fr));
-				fr.frametype = AST_FRAME_VOICE;
-				fr.subclass.format = ast_format_ulaw;
-				fr.datalen = FRAME_SIZE;
-				fr.samples = FRAME_SIZE;
-				fr.data.ptr = xmtbuf;
-				fr.src = __PRETTY_FUNCTION__;
-				/* If txact is still true, we should have another f1 ulaw frame, concatenate it with
-				 * the previous frame already in p->adpcmf1, and store the result in f3 as a full audio
-				 * frame. If txact is no longer true, we fill the other half of the audio frame with
-				 * silence.
-				 */
-				if (txact) {
-					f3 = ast_frcat(p->adpcmf1, f1);
-				} else {
-					f3 = ast_frcat(p->adpcmf1, &fr);
-				}
-				/* Clean up our buffers on the second pass through, since we don't need them anymore. */
-				ast_frfree(p->adpcmf1);
-				p->adpcmf1 = NULL;
-				/* Build the packet to send to the ADPCM client. Start by translating the audio
-				 * in f3 from ulaw to ADPCM, and store it in f2.
-				 */
-				f2 = ast_translate(p->adpcmout, f3, 1);
-				/* Put the translated audio into the packet we're going to send. */
-				memcpy(audiopacket.audio, f2->data.ptr, f2->datalen);
-				/* Timestamp the packet. */
-				audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-				audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
-				/* Keep track of the time for this voter_xmit cycle so we can exclude
-				 * clients that already received an audio packet.
-				 */
-				xmit_cycle_time = ast_radio_tvnow();
-				/*
-				 * Process audio packets one at a time. The client list and all client
-				 * states used to construct the packet are protected by voter_lock, but
-				 * the actual network I/O is deliberately performed after releasing the
-				 * lock. After each send, restart the traversal from clients so that no
-				 * client or next pointer is retained across the unlocked send.
-				 *
-				 * We will loop forever, until we run out of clients to send audio to.
-				 */
-				for (;;) {
-					/* Reset our flag every time in for whether we need to send an audio packet. */
-					tx_client_send = 0;
-					ast_mutex_lock(&voter_lock);
-					/* Traverse the client list, and determine which clients to send to. */
-					for (client = clients; client; client = client->next) {
-						/* Skip if this client doesn't belong to this instance */
-						if (client->nodenum != p->nodenum) {
-							continue;
-						}
-						/* Skip clients already selected during this voter_xmit cycle. */
-						if (!ast_tvcmp(client->tx_cycle_time, xmit_cycle_time)) {
-							continue;
-						}
-						/* Skip if this client isn't authenticated */
-						if (!client->respdigest) {
-							continue;
-						}
-						/* Skip if we haven't heard from this client in a while */
-						if (!client->heardfrom) {
-							continue;
-						}
-						/* Skip if this is NOT an ADPCM client (is configured for ulaw audio) */
-						if (!client->doadpcm) {
-							continue;
-						}
-						/* Fudge time for Garmin GPS pucks, if needed. */
-						mkpucked(client, &audiopacket.vp.curtime);
-						audiopacket.vp.digest = htonl(client->respdigest);
-						/* Set vtime_nsec in the outbound audio packet to a sequence number (for mix clients), or the actual
-						 * nsec from the master timing source (for voting clients).
-						 */
-						audiopacket.vp.curtime.vtime_nsec = client->mix ? htonl(client->txseqno) : htonl(master_time.vtime_nsec);
-#ifndef ADPCM_LOOPBACK
-						/* Check to see if this client is a transmitter (transmit set in voter.conf) AND is NOT locked out from transmitting. */
-						if (client->totransmit && !client->txlockout) {
-							ast_debug(6, "VOTER %i: Sending ADPCM TX audio packet to client %s digest %08x\n", p->nodenum,
-								client->name, client->respdigest);
-							/* Update our voter_xmit cycle timestamp so we can keep track
-							 * of if this client was already sent audio when we traverse the
-							 * client list again on re-entry.
-							 */
-							client->tx_cycle_time = xmit_cycle_time;
-							/* Copy the destination before releasing voter_lock.
-							 * The client pointer must not be dereferenced after
-							 * the unlock because the client can be removed/freed.
-							 *
-							 * Copy the IP address and socket of the client, so we can use it later.
-							 */
-							txsin = client->sin;
-							/* Copy the digest of the current client, so we can use it later. */
-							tx_client_digest = client->respdigest;
-							tx_client_send = 1;
-							/* We have a client we need to send audio to, so break out of
-							 * the current loop, so we can send the audio packet while unlocked.
-							 */
-							break;
-						}
-#endif
-					}
-					ast_mutex_unlock(&voter_lock);
-
-					/* If we have no more audio to send, tx_client_send will be false,
-					 * so break out of our infinite loop of audio processing.
-					 */
-					if (!tx_client_send) {
-						break;
-					}
-
-					/* The ADPCM packet is ready to send. Record the audio
-					 * transmission (lastsenttime) under voter_lock, but only
-					 * after packet construction succeeded, so failed translation
-					 * or packet assembly attempts do not suppress keepalives.
-					 *
-					 * We use the client digest we copied earlier (tx_client_digest) to
-					 * find the right client to update.
-					 */
-					ast_mutex_lock(&voter_lock);
-					for (client = clients; client; client = client->next) {
-						if ((client->nodenum == p->nodenum) && (client->respdigest == tx_client_digest) &&
-							(client->sin.sin_addr.s_addr == txsin.sin_addr.s_addr) && (client->sin.sin_port == txsin.sin_port)) {
-							client->lastsenttime = ast_radio_tvnow();
-							break;
-						}
-					}
-					ast_mutex_unlock(&voter_lock);
-
-					/* Send the ADPCM packet outside voter_lock. */
-					sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &txsin, sizeof(txsin));
-				}
-				/* Clean up, we're done with the ADPCM audio frame. */
-				ast_frfree(f2);
 			}
 		}
 		/* Clean up, as we are done sending audio packets. */
@@ -4195,20 +3938,6 @@ static struct ast_channel *voter_request(const char *type, struct ast_format_cap
 	ast_dsp_set_features(p->dsp, DSP_FEATURE_DIGIT_DETECT);
 	ast_dsp_set_digitmode(p->dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_MUTECONF | DSP_DIGITMODE_RELAXDTMF);
 	p->usedtmf = 1;
-	p->adpcmin = ast_translator_build_path(ast_format_ulaw, ast_format_adpcm);
-	if (!p->adpcmin) {
-		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from adpcm to ulaw!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
-		return NULL;
-	}
-	p->adpcmout = ast_translator_build_path(ast_format_adpcm, ast_format_ulaw);
-	if (!p->adpcmout) {
-		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to adpcm!!\n", p->nodenum);
-		ast_dsp_free(p->dsp);
-		ast_free(p);
-		return NULL;
-	}
 	p->toast = ast_translator_build_path(ast_format_slin, ast_format_ulaw);
 	if (!p->toast) {
 		ast_log(LOG_ERROR, "VOTER %i: Cannot get translator from ulaw to slinear!!\n", p->nodenum);
@@ -4958,7 +4687,7 @@ static int reload(void)
 		 */
 		val = ast_variable_retrieve(cfg, ctg, "buflen");
 		if (val) {
-			/* Multiply by 8 to convert from frames to bytes. */
+			/* Multiply the configured millisecond value by 8 to convert ulaw time to bytes. */
 			instance_buflen = strtoul(val, NULL, 0) * 8;
 		} else {
 			ast_debug(1, "Per-instance buflen not specified, using global buflen for instance %s\n", ctg);
@@ -5006,9 +4735,6 @@ static int reload(void)
 				continue;
 			}
 			if (!strncasecmp(v->name, "master", 6)) {
-				continue;
-			}
-			if (!strncasecmp(v->name, "adpcm", 5)) {
 				continue;
 			}
 			if (!strncasecmp(v->name, "gpsid", 5)) {
@@ -5098,7 +4824,6 @@ static int reload(void)
 			client->nodenum = strtoul(ctg, NULL, 0);
 			/* Reset the per-client variables. */
 			client->totransmit = 0;
-			client->doadpcm = 0;
 			client->nodeemp = 0;
 			client->curmaster = 0;
 			client->ismaster = 0;
@@ -5116,8 +4841,6 @@ static int reload(void)
 					client->ismaster = 1;
 					hasmaster = 1;
 					client->mix = 0; /* Reset the mix flag if the config changed to now be a voting client */
-				} else if (!strcasecmp(strs[i], "adpcm")) {
-					client->doadpcm = 1;
 				} else if (!strcasecmp(strs[i], "nodeemp")) {
 					client->nodeemp = 1;
 				} else if (!strcasecmp(strs[i], "noplfilter")) {
@@ -5309,16 +5032,7 @@ static void voter_xmit_master(void)
 		}
 		client->txseqno++;
 		if (client->rxseqno) {
-			if (!client->doadpcm) {
-				/* Increment rxseqno for ulaw clients */
-				client->rxseqno++;
-			} else {
-				/* Increment rxseqno for ADPCM clients */
-				if (client->rxseq40ms) {
-					client->rxseqno += 2;
-				}
-				client->rxseq40ms = !client->rxseq40ms;
-			}
+			client->rxseqno++;
 		}
 	}
 	for (p = pvts; p; p = p->next) {
@@ -5504,8 +5218,7 @@ static void *voter_timer(void *data)
  * \brief UDP reader thread that processes incoming VOTER protocol packets and updates VOTER state.
  *
  * This thread receives VOTER-format UDP packets, matches them to configured clients,
- * validates/authenticates clients, and handles payloads such as audio (ULAW/ADPCM),
- * GPS, and PING.
+ * validates/authenticates clients, and handles payloads such as ulaw audio, GPS, and PING.
  *
  * It updates timing and master synchronization state, writes received audio and RSSI into per-client
  * circular buffers, performs RSSI-based selection and threshold/linger logic per node, queues
@@ -5537,13 +5250,6 @@ static void *voter_reader(void *data)
 	time_t timestuff, t;
 #pragma pack(push)
 #pragma pack(1)
-#ifdef ADPCM_LOOPBACK
-	struct {
-		VOTER_PACKET_HEADER vp;
-		char rssi;
-		char audio[FRAME_SIZE + 3];
-	} audiopacket;
-#endif
 	struct {
 		VOTER_PACKET_HEADER vp;
 		char flags;
@@ -5836,9 +5542,6 @@ static void *voter_reader(void *data)
 			if (client->ismaster) {
 				authpacket.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
 			}
-			if (client->doadpcm) {
-				authpacket.flags |= FLAG_ADPCM;
-			}
 			if (client->mix) {
 				authpacket.flags |= FLAG_MIX;
 			}
@@ -5868,9 +5571,6 @@ static void *voter_reader(void *data)
 			client->txseqno = 0;
 			client->txseqno_rxkeyed = 0;
 			client->rxseqno = 0;
-			client->rxseqno_40ms = 0;
-			client->rxseq40ms = 0;
-			client->drain40ms = 0;
 
 			/* Mark the client as being heard from */
 			client->heardfrom = 1;
@@ -6092,8 +5792,7 @@ static void *voter_reader(void *data)
 			 * us a valid audio packet, find the corresponding Asterisk channel and send it there.
 			 */
 			if (client && client->heardfrom &&
-				(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))) ||
-					((ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 4))))) {
+				(((ntohs(vph->payload_type) == VOTER_PAYLOAD_ULAW) && (recvlen == (sizeof(VOTER_PACKET_HEADER) + FRAME_SIZE + 1))))) {
 				/* Find the matching Asterisk channel for this client. */
 				for (p = pvts; p; p = p->next) {
 					if (p->nodenum == client->nodenum) {
@@ -6103,7 +5802,7 @@ static void *voter_reader(void *data)
 				/* If we found the matching Asterisk channel. */
 				if (p) {
 					long long btime, ptime, difftime;
-					int index, flen;
+					int index;
 
 					client->lastheardtime = ast_radio_tvnow(); /* Timestamp when we last heard this client */
 					if (client->curmaster) {
@@ -6128,64 +5827,88 @@ static void *voter_reader(void *data)
 							continue;
 						}
 					}
+					/* Configure our receive scheduling buffer, depending on if this is a mix mode client, or
+					 * a normal voting client.
+					 *
+					 * BUFDELAY() is the mechanism that provides a receive scheduling window, which allows for
+					 * late arriving packets to be received and put in their proper position in the ring buffer.
+					 */
 					if (client->mix) {
-						/* Zero the buffers for mix mode clients, and configure the initial drain index. */
+						/* Establish the sequence reference and calculate the ring-buffer offset for mix mode.
+						 *
+						 * Start by getting the sequence number from the incoming packet from the client and
+						 * do some sanity checks to ensure the sequence being sent from the client is in synch
+						 * with the host's counters. Otherwise, re-establish the baseline.
+						 */
 						if (ntohl(vph->curtime.vtime_nsec) > client->rxseqno) {
 							client->rxseqno = 0;
-							client->rxseqno_40ms = 0;
-							client->rxseq40ms = 0;
-							client->drain40ms = 0;
 						}
 						if (client->txseqno > (client->txseqno_rxkeyed + 4)) {
 							client->rxseqno = 0;
-							client->rxseqno_40ms = 0;
-							client->rxseq40ms = 0;
-							client->drain40ms = 0;
 						}
 						client->txseqno_rxkeyed = client->txseqno;
 						if (!client->rxseqno) {
-							client->rxseqno_40ms = client->rxseqno = ntohl(vph->curtime.vtime_nsec);
+							client->rxseqno = ntohl(vph->curtime.vtime_nsec);
 						}
-						/* Figure out whether we are using ADPCM or ulaw, and set the starting drain index.*/
-						if (!client->doadpcm) {
-							/* Using ulaw (typical default) */
-							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno; /* This seems to result in 0? */
-						} else {
-							/* Using ADPCM */
-							index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno_40ms;
-						}
-						index *= FRAME_SIZE;	   /* At least with ulaw, since index already started at 0, this is still 0 */
-						index += BUFDELAY(client); /* With ulaw, since index was still 0, this is now just BUFDELAY(client) */
-						/* Recall that FRAME_SIZE is typically 160, so FRAME_SIZE * 4 = 640.
-						 * If the client->buflen is too small at this point (< 160), then index <= 0, which
-						 * will put us "out of bounds" below (for mix mode clients).
+						/* Determine the sequence number difference, measured in frames, between the currently
+						 * received packet, and what we last processed, to see how many frames of audio we are
+						 * processing.
 						 */
-						index -= (FRAME_SIZE * 4); /* With the min buflen = 160 (so client->buflen = 1280), index = 320 here */
+						index = ntohl(vph->curtime.vtime_nsec) - client->rxseqno;
+						/* Convert the sequence delta to a byte offset; one ulaw frame is FRAME_SIZE bytes.
+						 * index is now in BYTES.
+						 */
+						index *= FRAME_SIZE;
+						/* Add the configured buffer delay/receive window buffer, then reserve four frames of
+						 * receive-buffer margin.
+						 *
+						 * The move of 4 frames back is what establishes the minimum buflen of 160ms in voter.conf
+						 * for mix mode clients:
+						 *
+						 * With buflen = 120 --> 960 bytes
+						 * index = 0
+						 * index += 640 <-- BUFDELAY = 960 - 2 * FRAME_SIZE = 960 - 320 = 640
+						 * index -= 640 <-- FRAME_SIZE * 4
+						 * index = 0 <-- out of bounds, index must be >0
+						 *
+						 * With buflen = 160 --> 1280 bytes
+						 * index = 0
+						 * index += 960 <-- BUFDELAY
+						 * index -= 640 <-- FRAME_SIZE * 4
+						 * index = 320 <-- in bounds
+						 */
+						index += BUFDELAY(client);
+						index -= (FRAME_SIZE * 4);
+						/* The resulting index above determines where in the ring buffer the sample will be inserted. */
 						if (DEBUG_ATLEAST(5)) {
 							ast_debug(5, "Mix client drain index = %i\n", index);
-							if (!client->doadpcm) {
-								ast_debug(7, "Mix client (ulaw) %s drain index: %d their seq: %d our seq: %d\n", client->name,
-									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno);
-							} else {
-								ast_debug(7, "Mix client (ADPCM) %s drain index: %d their seq: %d our seq: %d\n", client->name,
-									index, ntohl(vph->curtime.vtime_nsec), client->rxseqno_40ms);
-							}
+							ast_debug(7, "Mix client %s drain index: %d their seq: %d our seq: %d\n", client->name, index,
+								ntohl(vph->curtime.vtime_nsec), client->rxseqno);
 						}
 					} else {
 						/* Setup the drain index for normal voting clients. */
 						/* btime is the GPS time being sent by the master client, converted to ns since epoch. */
 						btime = ((long long) master_time.vtime_sec * 1000000000LL) + master_time.vtime_nsec;
-						btime += 40000000; /* Add 40ms. Why? Is that a two audio frame buffer factor? */
+						/* Establish the ring buffer scheduling reference, along with BUFDELAY (below). Adds some
+						 * additional cushion to the receive window.
+						 */
+						btime += 40000000;
+						/* This 20ms offset for the current master was introduced in Feb 2012, apparently to
+						 * resolve an audio offset issue, but no firm documentation exists as to the exact
+						 * reason and why it solved. It moves moves the current master's packet one 20ms
+						 * frame further ahead in the ring buffer.
+						 */
 						if (client->curmaster) {
-							btime -= 20000000; /* Subtract 20ms if it is current master. Why? Is that one audio frame? */
+							btime -= 20000000;
 						}
 						/* ptime is the GPS time being sent by the CURRENT client, converted to ns since epoch. */
 						ptime = ((long long) ntohl(vph->curtime.vtime_sec) * 1000000000LL) + ntohl(vph->curtime.vtime_nsec);
-						/* Not sure what we are really doing here, or why? */
+						/* Convert the timestamp difference and configured buffer delay to a sample offset. */
 						difftime = (ptime - btime) + (BUFDELAY(client) * 125000LL);
+						/* Do any Garmin puck adjustment, if necessary. */
 						difftime -= puckoffset(client);
-						/* All the above would seem to make our drain index "elastic", based on the difference in time
-						 * between the master and the current client?
+						/* Establish the actual index now in bytes, by converting from the time delta. The
+						 * index will be used to determine where in the ring buffer to insert the sample.
 						 */
 						index = (int) ((long long) difftime / 125000LL);
 						/* This only prints if we are receiving something (and debug is >= 5). */
@@ -6199,68 +5922,26 @@ static void *voter_reader(void *data)
 							timestuff = (time_t) timetv.tv_sec;
 							strftime(timestr, sizeof(timestr), "%Y %T", localtime(&timestuff));
 							ast_debug(5, "SysTime:    %s.%03d\n", timestr, (int) timetv.tv_usec / 1000);
-							ast_debug(5, "Time diff between master and client: %lld ns\n", btime - ptime);
+							ast_debug(5, "Adjusted master/client time difference: %lld ns\n", btime - ptime);
 							ast_debug(5, "VOTER drain index: %i\n)", index);
 						}
 					}
 					/* If in bounds... index must be positive to be "in bounds" for all clients. */
 					if ((index > 0) && (index < (client->buflen - (FRAME_SIZE * 2)))) {
-						f1 = NULL;
 						if (!buf[sizeof(VOTER_PACKET_HEADER)]) {
 							/* If no RSSI, just make it quiet. */
-
 							for (i = 0; i < FRAME_SIZE; i++) {
 								buf[sizeof(VOTER_PACKET_HEADER) + i + 1] = ULAW_SILENCE;
 							}
-						} else if (ntohs(vph->payload_type) == VOTER_PAYLOAD_ADPCM) {
-							/* If otherwise (RSSI > 0), if ADPCM audio packet, translate it. */
-#ifdef ADPCM_LOOPBACK
-							memset(&audiopacket, 0, sizeof(audiopacket));
-							ast_copy_string((char *) audiopacket.vp.challenge, challenge, sizeof(audiopacket.vp.challenge));
-							audiopacket.vp.payload_type = htons(VOTER_PAYLOAD_ADPCM);
-							audiopacket.rssi = 0;
-							memcpy(audiopacket.audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, FRAME_SIZE + 3);
-							audiopacket.vp.curtime.vtime_sec = htonl(master_time.vtime_sec);
-							audiopacket.vp.curtime.vtime_nsec = htonl(master_time.vtime_nsec);
-							audiopacket.vp.digest = htonl(client->respdigest);
-							sendto(udp_socket, &audiopacket, sizeof(audiopacket), 0, (struct sockaddr *) &client->sin,
-								sizeof(client->sin));
-#endif
-
-							memset(&fr, 0, sizeof(fr));
-							fr.frametype = AST_FRAME_VOICE;
-							fr.subclass.format = ast_format_adpcm;
-							fr.datalen = ADPCM_FRAME_SIZE;
-							fr.samples = FRAME_SIZE * 2;
-							fr.data.ptr = buf + sizeof(VOTER_PACKET_HEADER) + 1;
-							fr.src = __PRETTY_FUNCTION__;
-							f1 = ast_translate(p->adpcmin, &fr, 0);
 						}
-						/* Figure out and set what ring buffer index (drainindex) to use,
-						 * based on whether this is a ulaw or ADPCM client.
+						/* Set the ring buffer index (drainindex) to use for packet insertion. Note that the
+						 * index used in this calculation was determine above, based on whether this is a mix
+						 * mode or voting client. It is the packet placement based on the sequence number
+						 * received (mix mode) or the timestamp of the packet received (voting).
 						 */
-						if (!client->doadpcm) {
-							index = (index + client->drainindex) % client->buflen;
-						} else {
-							index = (index + client->drainindex_40ms) % client->buflen;
-						}
-						/* Set the sample length, based on whether ulaw or ADPCM audio is being used by
-						 * the client. If f1 exists, it contains translated ADPCM audio, so flen becomes the
-						 * length of the ADPCM buffer. If f1 is null, we're using ulaw audio, so flen
-						 * becomes the standard FRAME_SIZE.
-						 */
-						flen = (f1) ? f1->datalen : FRAME_SIZE;
-						/* Read the packets off the wire for each client, and process the audio and RSSI, putting
-						 * the data into the appropriate ring buffers.
-						 */
-						voter_buffer_process(client->audio, ((f1) ? f1->data.ptr : buf + sizeof(VOTER_PACKET_HEADER) + 1),
-							client->rssi, buf[sizeof(VOTER_PACKET_HEADER)], index, client->buflen, flen, TO_RING, NO_SILENCE);
-						/* At this point, for ADPCM audio clients, we've copied the audio packets off the wire
-						 * into the client's ring buffer, so we don't need f1 any longer.
-						 */
-						if (f1) {
-							ast_frfree(f1);
-						}
+						index = (index + client->drainindex) % client->buflen;
+						voter_buffer_process(client->audio, buf + sizeof(VOTER_PACKET_HEADER) + 1, client->rssi,
+							buf[sizeof(VOTER_PACKET_HEADER)], index, client->buflen, FRAME_SIZE, TO_RING, NO_SILENCE);
 					} else if (client->mix) {
 						if (index <= 0) {
 							/* Mix clients can use the vtime_nsec field as a packet sequence number rather than
@@ -6280,9 +5961,6 @@ static void *voter_reader(void *data)
 							 * packet.
 							 */
 							client->rxseqno = 0;
-							client->rxseqno_40ms = 0;
-							client->rxseq40ms = 0;
-							client->drain40ms = 0;
 							ast_debug(3, "VOTER %u: Mix client %s packet sequence is too old (index %d); resynchronizing receive sequence\n",
 								client->nodenum, client->name, index);
 						} else {
@@ -6774,9 +6452,6 @@ static void *voter_reader(void *data)
 			client->txseqno = 0;
 			client->txseqno_rxkeyed = 0;
 			client->rxseqno = 0;
-			client->rxseqno_40ms = 0;
-			client->rxseq40ms = 0;
-			client->drain40ms = 0;
 			ast_log(LOG_NOTICE, "VOTER %u: Client %s connected.\n", client->nodenum, client->name);
 		}
 
@@ -6859,9 +6534,6 @@ static void *voter_reader(void *data)
 				authpacket.flags = 0;
 				if (client->ismaster) {
 					authpacket.flags |= (FLAG_SENDALWAYS | FLAG_MASTERTIMING);
-				}
-				if (client->doadpcm) {
-					authpacket.flags |= FLAG_ADPCM;
 				}
 				if (client->mix) {
 					authpacket.flags |= FLAG_MIX;
