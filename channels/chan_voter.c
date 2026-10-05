@@ -381,6 +381,17 @@ static int nullfd = -1;
 static int reload(void);
 
 AST_MUTEX_DEFINE_STATIC(voter_lock);
+AST_MUTEX_DEFINE_STATIC(master_rx_lock); /* Lock for tracking the master client's connection. */
+
+/* These values let the master watchdog track UDP reception without waiting on voter_lock.
+ *
+ * The receive timestamp will be updated whenever a packet is received from the master,
+ * and is used to determine if the master has timed out.
+ *
+ * The digest identifies the currently selected master.
+ */
+static struct timeval master_rx_time = { 0, 0 };
+static uint32_t master_rx_digest = 0;
 
 struct ast_timer *voter_thread_timer = NULL;
 
@@ -4663,9 +4674,15 @@ static int reload(void)
 			}
 		}
 	}
-	/* Reset the hasmaster and masterconnected flags, so they can be re-evaluated later. */
+	/* Reset the hasmaster and masterconnected flags, and clear the timestamp and
+	 * digest for the current master, so they can be re-evaluated later.
+	 */
 	hasmaster = 0;
 	masterconnected = 0;
+	ast_mutex_lock(&master_rx_lock);
+	master_rx_time = ast_tv(0, 0);
+	master_rx_digest = 0;
+	ast_mutex_unlock(&master_rx_lock);
 
 	/* Passing ast_category_browse a second arg of NULL tells it to start from the
 	 * first category, and pass the current category on subsequent loop iterations.
@@ -5056,7 +5073,8 @@ static void *voter_timer(void *data)
 {
 	struct voter_pvt *p;
 	struct voter_client *client, *client1;
-	struct timeval mix_time;
+	struct timeval mix_time, master_rx_snapshot;
+	const struct timeval *timeout_time;
 	char client_ip[INET_ADDRSTRLEN];
 	char client1_ip[INET_ADDRSTRLEN];
 
@@ -5082,6 +5100,13 @@ static void *voter_timer(void *data)
 		}
 
 		ast_mutex_lock(&voter_lock);
+
+		/* Take a snapshot of the master client's timestamp to use locally, since it
+		 * can be independently modified by the voter_reader thread.
+		 */
+		ast_mutex_lock(&master_rx_lock);
+		master_rx_snapshot = master_rx_time;
+		ast_mutex_unlock(&master_rx_lock);
 
 		/* If we don't have a master client (using mix mode clients), set
 		 * master_time.vtime_sec from the system clock here. Otherwise,
@@ -5120,11 +5145,15 @@ static void *voter_timer(void *data)
 		for (p = pvts; p; p = p->next) {
 			/* Cycle through each client configured for this channel. */
 			for (client = clients; client; client = client->next) {
-				/* See if it has been too long since we heard from the client, master
-				 * client timing is more strict.
+				/* Determine the appropriate timestamp to use, based on the client type. For
+				 * normal clients, we use the lastheardtime from the client list. For master
+				 * clients, we use the more precise master_rx_time (which we snapshotted into
+				 * master_rx_snapshot above).
 				 */
-				if (!ast_tvzero(client->lastheardtime) && (voter_tvdiff_ms(ast_radio_tvnow(), client->lastheardtime) >
-															  ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
+				timeout_time = (client->ismaster && client->curmaster) ? &master_rx_snapshot : &client->lastheardtime;
+				/* See if it has been too long since we heard from the client, master client timing is more strict. */
+				if (!ast_tvzero(*timeout_time) &&
+					(voter_tvdiff_ms(ast_radio_tvnow(), *timeout_time) > ((client->ismaster) ? MASTER_TIMEOUT_MS : CLIENT_TIMEOUT_MS))) {
 					ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
 
 					/* If this was the current master that disconnected, we need to gracefully drop any other
@@ -5237,11 +5266,12 @@ static void *voter_reader(void *data)
 	char list_ip[INET_ADDRSTRLEN];
 	struct sockaddr_in sin;
 	struct voter_pvt *p;
-	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
+	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0,
+													packet_received = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen;
-	struct timeval systemtime, timetv;
+	struct timeval systemtime, timetv, packet_rx_time;
 	FILE *gpsfp;
 	struct voter_client *client = NULL, *client1, *maxclient, *lastmaster;
 	VOTER_PACKET_HEADER *vph;
@@ -5269,14 +5299,51 @@ static void *voter_reader(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		ast_mutex_unlock(&voter_lock);
-		timeout_ms = 50;										  /* 50ms timeout */
-		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL); /* Poll the UDP socket, looking for data */
-		ast_mutex_lock(&voter_lock);
-		/* Check the returned fd and see if there is a datagram ready to process.
-		 * fd will be positive (and equal to udp_socket) if there is valid activity on the UDP socket.
-		 */
 
-		/* First, check all of our Asterisk channels to see if any were receiving and have now stopped (timed out). */
+		/* We're going to get the UDP datagram while NOT locked, so that I/O delays don't
+		 * inadvertently tie up the global lock, leading to processing delays elsewhere.
+		 */
+		/* 50ms timeout for waiting on the socket to become ready. */
+		timeout_ms = 50;
+		/* Poll the UDP socket, looking for data */
+		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL);
+		/* Keep track of whether we actually received a valid packet. */
+		packet_received = 0;
+		if (fd == udp_socket) {
+			fromlen = sizeof(struct sockaddr_in);
+			/* Get the datagram off the wire. */
+			recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
+			/* Check that recvfrom returned without error, or throw an error if it had a problem.
+			 *
+			 * If we got a packet, check to see if it at least contained a properly sized header. If
+			 * it does, grab a timestamp for when we actually received the packet (not processed it),
+			 * put the datagram buffer in vph, and set the flag that we successfully received a packet.
+			 *
+			 * By grabbing the timestamp here, we can more accurately do a timeout check on the master
+			 * client (if used). Normal clients have much more relaxed timing requirements, so aren't
+			 * as critical.
+			 */
+			if (recvlen >= (ssize_t) sizeof(VOTER_PACKET_HEADER)) {
+				packet_rx_time = ast_radio_tvnow();
+				vph = (VOTER_PACKET_HEADER *) buf;
+				packet_received = 1;
+
+				/* If this is a master client, and we have heard from it before, update master_rx_time
+				 * with the current timestamp (by default it will be lastheardtime).
+				 */
+				ast_mutex_lock(&master_rx_lock);
+				if (master_rx_digest && (master_rx_digest == htonl(vph->digest)) && (ntohs(vph->payload_type) != VOTER_PAYLOAD_AUTH)) {
+					master_rx_time = packet_rx_time;
+				}
+				ast_mutex_unlock(&master_rx_lock);
+			} else if (recvlen < 0) {
+				ast_log(LOG_ERROR, "recvfrom() failed: %s\n", strerror(errno));
+			}
+		}
+
+		ast_mutex_lock(&voter_lock);
+
+		/* Check all of our Asterisk channels to see if any were receiving and have now stopped (timed out). */
 		for (p = pvts; p; p = p->next) {
 			/* If the instance is already un-keyed, skip. */
 			if (!p->rxkey) {
@@ -5304,27 +5371,11 @@ static void *voter_reader(void *data)
 			}
 		}
 
-		/* Only process a datagram if the socket is ready with valid data, otherwise skip (continue). */
-		if (fd != udp_socket) {
+		/* If we didn't receive a valid packet above, there is no point in continuing. */
+		if (!packet_received) {
 			continue;
 		}
 
-		/* When we get here, fd is the file descriptor for the UDP socket, with a datagram ready to process.
-		 * We will call recvfrom() to get the datagram, and then process it.
-		 */
-		fromlen = sizeof(struct sockaddr_in);
-		recvlen = recvfrom(udp_socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &sin, &fromlen);
-		/* Handle recvfrom() errors */
-		if (recvlen < 0) {
-			ast_log(LOG_ERROR, "recvfrom() failed: %s\n", strerror(errno));
-			continue;
-		}
-		/* Skip if we got less than a header's worth of data. */
-		if ((size_t) recvlen < sizeof(VOTER_PACKET_HEADER)) {
-			continue;
-		}
-		/* Put the header of the packet into vph. */
-		vph = (VOTER_PACKET_HEADER *) buf;
 		ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
 			ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 		client = NULL;
@@ -5680,6 +5731,29 @@ static void *voter_reader(void *data)
 				/* Exit, once we've set the current active master. */
 				break;
 			}
+
+			/* When we get here, client1 will be the selected current master. We
+			 * copy its digest into our global variable, so we can use it outside
+			 * of being locked to validate if it times out.
+			 *
+			 * While we also set master_rx_time here to lastheardtime, that will
+			 * get updated on the next entry into voter_reader with the actual
+			 * time we received a packet from the master client (more accurate
+			 * than lastheardtime).
+			 *
+			 * If we didn't find a master client (ie in a mix mode system with no
+			 * voting clients), we just clear any values in the master's digest
+			 * and timestamp and carry on.
+			 */
+			ast_mutex_lock(&master_rx_lock);
+			if (client1) {
+				master_rx_digest = client1->digest;
+				master_rx_time = client1->lastheardtime;
+			} else {
+				master_rx_digest = 0;
+				master_rx_time = ast_tv(0, 0);
+			}
+			ast_mutex_unlock(&master_rx_lock);
 
 			/* Go through all the clients, and stop when we find an authenticated
 			 * client (has client->digest set) that matches the digest we received on the
