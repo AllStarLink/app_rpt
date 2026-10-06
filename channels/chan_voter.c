@@ -5288,7 +5288,7 @@ static void *voter_reader(void *data)
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen = 0;
-	struct timeval systemtime, timetv, packet_rx_time, previous_master_rx_time;
+	struct timeval systemtime, timetv;
 	FILE *gpsfp;
 	struct voter_client *client = NULL, *client1, *maxclient, *lastmaster;
 	VOTER_PACKET_HEADER *vph;
@@ -5319,6 +5319,13 @@ static void *voter_reader(void *data)
 		 * whether we have updated master_rx_time.
 		 */
 		int packet_valid = 0, master_rx_updated = 0;
+
+		/* We'll store when we actually received a UDP packet on the wire
+		 * in packet_rx_time, and use previous_master_rx_time to restore
+		 * the master client's timestamp if there ia no Asterisk channel to
+		 * connect to.
+		 */
+		struct timeval packet_rx_time, previous_master_rx_time;
 
 		ast_mutex_unlock(&voter_lock);
 
