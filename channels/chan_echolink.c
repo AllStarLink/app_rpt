@@ -2242,15 +2242,15 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
 		found = 1;
-
-		ast_mutex_lock(&p->lock);
-		if (p->owner) {
-			ast_softhangup(p->owner, AST_SOFTHANGUP_DEV);
+		if (p) {
+			ast_mutex_lock(&p->lock);
+			if (p->owner) {
+				ast_softhangup(p->owner, AST_SOFTHANGUP_DEV);
+			}
+			ast_mutex_unlock(&p->lock);
+			ao2_ref(p, -1);
 		}
-		ast_mutex_unlock(&p->lock);
-
 		tdelete(node, &el_node_list, compare_ip);
-		ao2_ref(p, -1);
 		ast_free(node);
 	}
 
@@ -3618,6 +3618,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	el_node_key->seqnum = 1;
 	el_node_key->instp = instp;
 
+	ast_mutex_unlock(&el_db_lock);
+
 	ast_mutex_lock(&el_nodelist_lock);
 
 	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
@@ -3635,9 +3637,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			p = el_alloc(instp->name);
 			if (!p) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
-				find_delete(el_node_key, instp);
 				ast_mutex_unlock(&el_nodelist_lock);
-				ast_mutex_unlock(&el_db_lock);
+				find_delete(el_node_key, instp);
 				return -1;
 			}
 
@@ -3645,10 +3646,9 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
-				ao2_ref(p, -1);
-				find_delete(el_node_key, instp);
 				ast_mutex_unlock(&el_nodelist_lock);
-				ast_mutex_unlock(&el_db_lock);
+				find_delete(el_node_key, instp);
+				ao2_ref(p, -1);
 				return -1;
 			}
 
@@ -3667,12 +3667,11 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 		}
 
 		ast_mutex_unlock(&el_nodelist_lock);
-		ast_mutex_unlock(&el_db_lock);
 
 		ast_mutex_lock(&instp->lock);
 		time(&now);
 		if (p != NULL) {
-			ast_copy_string(instp->lastcall, mynode->callsign, sizeof(instp->lastcall));
+			ast_copy_string(instp->lastcall, el_node_key->call, sizeof(instp->lastcall));
 		}
 		if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 			instp->aprstime = now;
@@ -3686,7 +3685,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 		el_node_key->name);
 	ast_free(el_node_key);
 	ast_mutex_unlock(&el_nodelist_lock);
-	ast_mutex_unlock(&el_db_lock);
 	return -1;
 }
 
