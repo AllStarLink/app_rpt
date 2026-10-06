@@ -1518,7 +1518,9 @@ static int el_hangup(struct ast_channel *chan)
 
 	ast_debug(1, "Sent bye to IP address %s.\n", p->ip);
 	ast_copy_string(node_lookup.ip, p->ip, sizeof(node_lookup.ip));
+	ast_mutex_lock(&el_nodelist_lock);
 	find_delete(&node_lookup, instp);
+	ast_mutex_unlock(&el_nodelist_lock);
 	n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 
 	memset(&sin, 0, sizeof(sin));
@@ -2211,7 +2213,7 @@ static void send_text_one(struct el_node *node, const char *message)
 static void free_node(void *nodep) {}
 
 /*!
- * \brief Find and delete a node from our internal node list.
+ * \brief Find and delete a node from our internal node list. Must be called with el_nodelist_lock held.
  * \param key			Pointer to Echolink node struct to delete.
  * \param instp 		Pointer to echolink instance (maybe NULL)
  * \retval 0			If node not found.
@@ -2221,8 +2223,6 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 {
 	int found = 0;
 	struct el_node **found_key;
-
-	ast_mutex_lock(&el_nodelist_lock);
 
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
@@ -2254,7 +2254,6 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 		ast_free(node);
 	}
 
-	ast_mutex_unlock(&el_nodelist_lock);
 	return found;
 }
 
@@ -2380,6 +2379,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 			pack_length = rtcp_make_bye(pack, sizeof(pack), "bye");
 			n = 20;
 			ast_copy_string(key.ip, arg1, sizeof(key.ip));
+			ast_mutex_lock(&el_nodelist_lock);
 			if (find_delete(&key, instp)) {
 				for (i = 0; i < n; i++) {
 					sendto(instp->ctrl_sock, pack, pack_length, 0, (struct sockaddr *) &sin, sizeof(sin));
@@ -2388,6 +2388,7 @@ static void process_cmd(char *buf, int buf_len, const char *fromip, struct el_in
 			} else {
 				ast_debug(1, "Did not find IP Address %s to request disconnect.\n", key.ip);
 			}
+			ast_mutex_unlock(&el_nodelist_lock);
 		}
 
 		return;
@@ -3638,8 +3639,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			p = el_alloc(instp->name);
 			if (!p) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
-				ast_mutex_unlock(&el_nodelist_lock);
 				find_delete(el_node_key, instp);
+				ast_mutex_unlock(&el_nodelist_lock);
 				return -1;
 			}
 
@@ -3647,8 +3648,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
-				ast_mutex_unlock(&el_nodelist_lock);
 				find_delete(el_node_key, instp);
+				ast_mutex_unlock(&el_nodelist_lock);
 				ao2_ref(p, -1);
 				return -1;
 			}
@@ -3672,8 +3673,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 		}
 
 		ast_mutex_unlock(&el_nodelist_lock);
-
 		ast_mutex_lock(&instp->lock);
+
 		time(&now);
 		if (p != NULL) {
 			ast_copy_string(instp->lastcall, lastcall, sizeof(instp->lastcall));
@@ -3908,6 +3909,7 @@ static void *el_reader(void *data)
 			/*! \todo Find all dead nodes in one pass and cleanup the process?
 			 */
 			if (node_lookup.ip[0] != '\0') {
+				ast_mutex_lock(&el_nodelist_lock);
 				if (find_delete(&node_lookup, instp)) {
 					int bye_length;
 
@@ -3925,6 +3927,7 @@ static void *el_reader(void *data)
 
 					ast_verb(4, "Callsign %s RTCP timeout, removing connection.\n", node_lookup.call);
 				}
+				ast_mutex_unlock(&el_nodelist_lock);
 			}
 		}
 
@@ -4116,9 +4119,11 @@ static void *el_reader(void *data)
 					}
 				} else {
 					if (is_rtcp_bye((unsigned char *) buf, recvlen)) {
+						ast_mutex_lock(&el_nodelist_lock);
 						if (find_delete(&node_lookup, instp)) {
 							ast_verb(4, "Disconnect from IP address %s, Callsign %s.\n", node_lookup.ip, node_lookup.call);
 						}
+						ast_mutex_unlock(&el_nodelist_lock);
 					} else {
 						instp->rx_bad_packets++;
 					}
