@@ -5376,7 +5376,6 @@ static void *voter_reader(void *data)
 				}
 			} else if (recvlen < 0) {
 				ast_log(LOG_ERROR, "recvfrom() failed: %s\n", strerror(errno));
-				ast_mutex_lock(&voter_lock);
 			}
 		}
 
