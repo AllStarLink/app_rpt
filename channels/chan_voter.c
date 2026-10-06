@@ -5284,8 +5284,7 @@ static void *voter_reader(void *data)
 	char list_ip[INET_ADDRSTRLEN];
 	struct sockaddr_in sin;
 	struct voter_pvt *p;
-	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0,
-													packet_valid = 0, master_rx_updated = 0;
+	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen = 0;
@@ -5316,6 +5315,11 @@ static void *voter_reader(void *data)
 	master_port = 0;
 
 	while (run_forever && !ast_shutting_down()) {
+		/* Keep track of whether we actually received a valid packet and
+		 * whether we have updated master_rx_time.
+		 */
+		int packet_valid = 0, master_rx_updated = 0;
+
 		ast_mutex_unlock(&voter_lock);
 
 		/* We're going to get the UDP datagram while NOT locked, so that I/O delays don't
@@ -5325,10 +5329,6 @@ static void *voter_reader(void *data)
 		timeout_ms = 50;
 		/* Poll the UDP socket, looking for data */
 		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL);
-		/* Keep track of whether we actually received a valid packet. */
-		packet_valid = 0;
-		/* Keep track of if we updated master_rx_time, so we can use it later. */
-		master_rx_updated = 0;
 		if (fd == udp_socket) {
 			fromlen = sizeof(struct sockaddr_in);
 			/* Get the datagram off the wire. */
