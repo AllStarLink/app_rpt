@@ -3591,6 +3591,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	struct ast_channel *chan;
 	const struct eldb *mynode;
 	char nodestr[30];
+	char lastcall[EL_CALL_SIZE];
 	time_t now;
 
 	el_node_key = ast_calloc(1, sizeof(struct el_node));
@@ -3666,12 +3667,16 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			el_node_key->rx_ctrl_packets++;
 		}
 
+		if (p != NULL) {
+			ast_copy_string(lastcall, el_node_key->call, sizeof(lastcall));
+		}
+
 		ast_mutex_unlock(&el_nodelist_lock);
 
 		ast_mutex_lock(&instp->lock);
 		time(&now);
 		if (p != NULL) {
-			ast_copy_string(instp->lastcall, el_node_key->call, sizeof(instp->lastcall));
+			ast_copy_string(instp->lastcall, lastcall, sizeof(instp->lastcall));
 		}
 		if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 			instp->aprstime = now;
