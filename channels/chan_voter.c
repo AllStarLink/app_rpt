@@ -5284,11 +5284,12 @@ static void *voter_reader(void *data)
 	char list_ip[INET_ADDRSTRLEN];
 	struct sockaddr_in sin;
 	struct voter_pvt *p;
-	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
+	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0,
+													packet_valid = 0, master_rx_updated = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen = 0;
-	struct timeval systemtime, timetv, packet_rx_time;
+	struct timeval systemtime, timetv, packet_rx_time, previous_master_rx_time;
 	FILE *gpsfp;
 	struct voter_client *client = NULL, *client1, *maxclient, *lastmaster;
 	VOTER_PACKET_HEADER *vph;
@@ -5325,6 +5326,9 @@ static void *voter_reader(void *data)
 		/* Poll the UDP socket, looking for data */
 		fd = ast_waitfor_n_fd(&udp_socket, 1, &timeout_ms, NULL);
 		/* Keep track of whether we actually received a valid packet. */
+		packet_valid = 0;
+		/* Keep track of if we updated master_rx_time, so we can use it later. */
+		master_rx_updated = 0;
 		if (fd == udp_socket) {
 			fromlen = sizeof(struct sockaddr_in);
 			/* Get the datagram off the wire. */
@@ -5333,7 +5337,7 @@ static void *voter_reader(void *data)
 			 *
 			 * If we got a packet, check to see if it at least contained a properly sized header. If
 			 * it does, grab a timestamp for when we actually received the packet (not processed it),
-			 * and put the datagram buffer in vph.
+			 * put the datagram buffer in vph, and set the flag that we got a good packet.
 			 *
 			 * If recvlen returns less than 0, log the error and skip (continue).
 			 *
@@ -5346,15 +5350,33 @@ static void *voter_reader(void *data)
 			if (recvlen >= (ssize_t) sizeof(VOTER_PACKET_HEADER)) {
 				packet_rx_time = ast_radio_tvnow();
 				vph = (VOTER_PACKET_HEADER *) buf;
+				packet_valid = 1;
 				ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
 					ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
+
+				/* Set our master_rx_time time before acquiring voter_lock so that
+				 * contention on the global lock cannot make a timely master packet
+				 * appear to the watchdog to have arrived late. We will recall the
+				 * update later, if we end up with no Asterisk channel. Setting it
+				 * now potentially resolves a race or delay later, which is the whole
+				 * purpose of tracking the master client's time anyways.
+				 *
+				 * We store the current value of master_rx_time in previous_rx_master_time
+				 * so that we can use it later to restore master_rx_time of there is no
+				 * Asterisk channel to connect to.
+				 */
+				if (!no_ast_channel) {
+					ast_mutex_lock(&master_rx_lock);
+					if (master_rx_digest && master_rx_digest == htonl(vph->digest)) {
+						previous_master_rx_time = master_rx_time;
+						master_rx_time = packet_rx_time;
+						master_rx_updated = 1;
+					}
+					ast_mutex_unlock(&master_rx_lock);
+				}
 			} else if (recvlen < 0) {
 				ast_log(LOG_ERROR, "recvfrom() failed: %s\n", strerror(errno));
 				ast_mutex_lock(&voter_lock);
-				continue;
-			} else {
-				ast_mutex_lock(&voter_lock);
-				continue;
 			}
 		}
 
@@ -5388,8 +5410,10 @@ static void *voter_reader(void *data)
 			}
 		}
 
-		/* If we didn't receive a valid packet above, there is no point in continuing. */
-		if (fd != udp_socket) {
+		/* Invalid or short UDP datagrams still need to pass through the RX timeout
+		 * housekeeping above, but must not fall through into packet processing.
+		 */
+		if (!packet_valid) {
 			continue;
 		}
 
@@ -5529,18 +5553,14 @@ static void *voter_reader(void *data)
 			}
 		}
 
-		/* If this is a master client, and we have heard from it before, update master_rx_time
-		 * with the current timestamp (packet_rx_time) that we established when the packet was
-		 * received.
-		 *
-		 * This is deliberately done after the Asterisk channel lookup above so that if we don't
-		 * have an Asterisk channel, we do not refresh the master watchdog timestamp.
+		/* If we have established that there is no Asterisk channel for the master client, undo
+		 * the early watchdog update before releasing voter_lock. The early update is needed to
+		 * prevent voter_lock contention from causing a false timeout, but a client with no Asterisk
+		 * channel must not refresh the master watchdog.
 		 */
-		if (!no_ast_channel) {
+		if (no_ast_channel && master_rx_updated) {
 			ast_mutex_lock(&master_rx_lock);
-			if (master_rx_digest && master_rx_digest == htonl(vph->digest)) {
-				master_rx_time = packet_rx_time;
-			}
+			master_rx_time = previous_master_rx_time;
 			ast_mutex_unlock(&master_rx_lock);
 		}
 
