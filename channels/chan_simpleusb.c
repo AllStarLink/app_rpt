@@ -4123,48 +4123,64 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 	ast_mutex_unlock(&o->device_lock);
 }
 
-/* Copy default gpio and pps strings so this device owns what it frees. */
-static int simpleusb_own_cfg_strings(struct chan_simpleusb_pvt *o)
+/* Copy src into dst, then give dst its own name, gpio, and pps strings. */
+static int simpleusb_pvt_copy(struct chan_simpleusb_pvt *dst, const struct chan_simpleusb_pvt *src, const char *name)
 {
 	int i;
 	char *copy;
 
-	for (i = 0; i < GPIO_PINCOUNT; i++) {
-		if (!o->gpios[i]) {
-			continue;
-		}
-		copy = ast_strdup(o->gpios[i]);
-		if (!copy) {
-			o->gpios[i] = NULL;
-			goto fail;
-		}
-		o->gpios[i] = copy;
+	*dst = *src;
+	dst->next = NULL;
+	dst->name = ast_strdup(name);
+	if (!dst->name) {
+		return -1;
 	}
-	for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-		if (!o->pps[i]) {
+	dst->pttkick[0] = -1;
+	dst->pttkick[1] = -1;
+	dst->audiothread = AST_PTHREADT_NULL;
+	dst->hidthread = AST_PTHREADT_NULL;
+	dst->radio_device = NULL;
+	dst->owner = NULL;
+	dst->dsp = NULL;
+
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (!dst->gpios[i]) {
 			continue;
 		}
-		copy = ast_strdup(o->pps[i]);
+		copy = ast_strdup(dst->gpios[i]);
 		if (!copy) {
-			o->pps[i] = NULL;
+			dst->gpios[i] = NULL;
 			goto fail;
 		}
-		o->pps[i] = copy;
+		dst->gpios[i] = copy;
+	}
+	for (i = 0; i < ARRAY_LEN(dst->pps); i++) {
+		if (!dst->pps[i]) {
+			continue;
+		}
+		copy = ast_strdup(dst->pps[i]);
+		if (!copy) {
+			dst->pps[i] = NULL;
+			goto fail;
+		}
+		dst->pps[i] = copy;
 	}
 	return 0;
 
 fail:
+	ast_free(dst->name);
+	dst->name = NULL;
 	for (i = 0; i < GPIO_PINCOUNT; i++) {
-		if (o->gpios[i] && o->gpios[i] != simpleusb_default.gpios[i]) {
-			ast_free(o->gpios[i]);
+		if (dst->gpios[i] && dst->gpios[i] != src->gpios[i]) {
+			ast_free(dst->gpios[i]);
 		}
-		o->gpios[i] = NULL;
+		dst->gpios[i] = NULL;
 	}
-	for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-		if (o->pps[i] && o->pps[i] != simpleusb_default.pps[i]) {
-			ast_free(o->pps[i]);
+	for (i = 0; i < ARRAY_LEN(dst->pps); i++) {
+		if (dst->pps[i] && dst->pps[i] != src->pps[i]) {
+			ast_free(dst->pps[i]);
 		}
-		o->pps[i] = NULL;
+		dst->pps[i] = NULL;
 	}
 	return -1;
 }
@@ -4194,14 +4210,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 			if (!(o = ast_calloc(1, sizeof(*o)))) {
 				return NULL;
 			}
-			*o = simpleusb_default;
-			o->name = ast_strdup(ctg);
-			o->pttkick[0] = -1;
-			o->pttkick[1] = -1;
-			o->audiothread = AST_PTHREADT_NULL;
-			o->hidthread = AST_PTHREADT_NULL;
-			if (simpleusb_own_cfg_strings(o)) {
-				ast_free(o->name);
+			if (simpleusb_pvt_copy(o, &simpleusb_default, ctg)) {
 				ast_free(o);
 				return NULL;
 			}
