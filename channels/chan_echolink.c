@@ -3995,6 +3995,7 @@ static void *el_reader(void *data)
 							struct el_pvt *p = node->pvt;
 
 							ao2_ref(node, +1);
+							ao2_ref(p, +1);
 							ast_mutex_unlock(&el_nodelist_lock);
 							if (!p->firstheard) {
 								struct ast_frame fr = {
@@ -4019,6 +4020,7 @@ static void *el_reader(void *data)
 								ast_debug(3, "Channel %s: answer\n", p->stream);
 							}
 
+							ast_mutex_lock(&el_nodelist_lock);
 							node->heartbeat_countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
 							if (strncmp(node->call, call, EL_CALL_SIZE - 1) != 0) {
@@ -4030,7 +4032,9 @@ static void *el_reader(void *data)
 								ast_copy_string(node->name, name, EL_NAME_SIZE);
 							}
 							node->rx_ctrl_packets++;
+							ast_mutex_unlock(&el_nodelist_lock);
 							ao2_ref(node, -1);
+							ao2_ref(p, -1);
 						} else {   /* otherwise its a new request */
 							ast_mutex_unlock(&el_nodelist_lock);
 							i = 0; /* default authorized */
@@ -4206,9 +4210,12 @@ static void *el_reader(void *data)
 						} else {
 							/* see if this is a double - two stations talking at the same time */
 							if (node->nodenum != instp->current_talker->nodenum) {
+								char call[EL_CALL_SIZE];
+
+								ast_copy_string(call, instp->current_talker->call, sizeof(call));
 								ast_mutex_unlock(&instp->lock);
 								if (!node->isdoubling) {
-									ast_debug(3, "Station %s is doubling with %s.\n", node->call, instp->current_talker->call);
+									ast_debug(3, "Station %s is doubling with %s.\n", node->call, call);
 									send_text_one(node, "You are doubling.");
 								}
 								node->isdoubling = 1;
