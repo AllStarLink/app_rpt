@@ -3604,7 +3604,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	char lastcall[EL_CALL_SIZE];
 	time_t now;
 
-	el_node_key = ao2_alloc(sizeof(struct el_node), 0);
+	el_node_key = ao2_alloc(sizeof(struct el_node), NULL);
 	if (!el_node_key) {
 		return -1;
 	}
