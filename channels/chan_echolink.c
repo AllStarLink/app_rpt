@@ -1404,6 +1404,16 @@ static int el_call(struct ast_channel *chan, const char *dest, int timeout)
 }
 
 /*!
+ * \brief Destroy and free an echolink node.
+ * \param obj Pointer to el_node struct to release.
+ */
+static void el_node_destroy(void *obj)
+{
+	struct el_node *node = obj;
+	ast_free(node);
+}
+
+/*!
  * \brief Destroy and free an echolink instance.
  * \param obj Pointer to el_pvt struct to release.
  */
@@ -2257,7 +2267,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 			ast_mutex_unlock(&p->lock);
 			ao2_ref(p, -1);
 		}
-		ast_free(node);
+		ao2_ref(node, -1);
 	} else {
 		ast_mutex_unlock(&el_nodelist_lock);
 	}
@@ -2630,8 +2640,8 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	if (state != AST_STATE_DOWN) {
 		if (ast_pbx_start(chan)) {
 			ast_log(LOG_WARNING, "Unable to start PBX on %s.\n", ast_channel_name(chan));
-			ast_hangup(chan);
 			p->owner = NULL;
+			ast_hangup(chan);
 			return NULL;
 		}
 	}
@@ -3604,7 +3614,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	char lastcall[EL_CALL_SIZE];
 	time_t now;
 
-	el_node_key = ast_calloc(1, sizeof(struct el_node));
+	el_node_key = ao2_alloc(sizeof(struct el_node), el_node_destroy);
 	if (!el_node_key) {
 		return -1;
 	}
@@ -3618,7 +3628,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	mynode = el_db_find_ipaddr(el_node_key->ip);
 	if (!mynode) {
 		ast_log(LOG_ERROR, "Cannot find database entry for IP address %s, Callsign %s.\n", el_node_key->ip, call);
-		ast_free(el_node_key);
+		ao2_ref(el_node_key, -1);
 		ast_mutex_unlock(&el_db_lock);
 		return 1;
 	}
@@ -3633,9 +3643,10 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	ast_mutex_unlock(&el_db_lock);
 
 	ast_mutex_lock(&el_nodelist_lock);
+	ao2_ref(el_node_key, 1); /* hold an "extra" ref until we complete setup */
 	found_node = tsearch(el_node_key, &el_node_list, compare_ip);
 
-	if (*found_node == el_node_key) { /* Successfully inserted new node. */
+	if (found_node && (*found_node == el_node_key)) { /* Successfully inserted new node. */
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
 			el_node_key->nodenum, el_node_key->name);
 
@@ -3652,6 +3663,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
 				ast_mutex_unlock(&el_nodelist_lock);
 				find_delete(el_node_key, instp);
+				ao2_ref(el_node_key, -1);
 				return -1;
 			}
 
@@ -3663,6 +3675,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
 				find_delete(el_node_key, instp);
+				ao2_ref(el_node_key, -1);
 				ao2_ref(p, -1);
 				return -1;
 			}
@@ -3688,13 +3701,13 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			instp->aprstime = now;
 		}
 		ast_mutex_unlock(&instp->lock);
-
+		ao2_ref(el_node_key, -1); /* release the extra reference we held for setup */
 		return 0;
 	}
 
 	ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n", el_node_key->call, el_node_key->ip,
 		el_node_key->name);
-	ast_free(el_node_key);
+	ao2_ref(el_node_key, -2);
 	ast_mutex_unlock(&el_nodelist_lock);
 	return -1;
 }
