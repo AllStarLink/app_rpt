@@ -1521,9 +1521,7 @@ static int el_hangup(struct ast_channel *chan)
 
 	ast_debug(1, "Sent bye to IP address %s.\n", p->ip);
 	ast_copy_string(node_lookup.ip, p->ip, sizeof(node_lookup.ip));
-	ast_mutex_lock(&el_nodelist_lock);
 	find_delete(&node_lookup, instp);
-	ast_mutex_unlock(&el_nodelist_lock);
 	n = rtcp_make_bye(bye, sizeof(bye), "disconnected");
 
 	memset(&sin, 0, sizeof(sin));
@@ -2052,9 +2050,8 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 			p->rxkey = 0;
 		}
 
-		ao2_ref(p, -1);
-
 		ast_mutex_unlock(&p->lock);
+		ao2_ref(p, -1);
 	}
 }
 
@@ -2216,7 +2213,7 @@ static void send_text_one(struct el_node *node, const char *message)
 static void free_node(void *nodep) {}
 
 /*!
- * \brief Find and delete a node from our internal node list. Must be called with el_nodelist_lock held.
+ * \brief Find and delete a node from our internal node list.
  * \param key			Pointer to Echolink node struct to delete.
  * \param instp 		Pointer to echolink instance (maybe NULL)
  * \retval 0			If node not found.
@@ -2232,8 +2229,11 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 	if (found_key) {
 		struct el_node *node = *found_key;
 		struct el_pvt *p = node->pvt;
-
+		ao2_ref(node, +1);
+		tdelete(node, &el_node_list, compare_ip);
+		ast_mutex_unlock(&el_nodelist_lock);
 		if (instp) {
+			ast_mutex_lock(&instp->lock);
 			if (instp->current_talker == node) {
 				ast_debug(3, "Current talker %s is disconnecting, clearing current talker.\n", node->call);
 				instp->current_talker->istimedout = 0;
@@ -2242,12 +2242,10 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 				instp->current_talker_start_time = (struct timeval) { 0 };
 				instp->current_talker_last_time = (struct timeval) { 0 };
 			}
+			ast_mutex_unlock(&instp->lock);
 		}
 
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
-		tdelete(node, &el_node_list, compare_ip);
-		ast_mutex_unlock(&el_nodelist_lock);
-
 		found = 1;
 		if (p) {
 			ast_mutex_lock(&p->lock);
@@ -2257,7 +2255,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 			ast_mutex_unlock(&p->lock);
 			ao2_ref(p, -1);
 		}
-		ao2_ref(node, -1);
+		ao2_ref(node, -2); /* one for internal +1 and one to free */
 	} else {
 		ast_mutex_unlock(&el_nodelist_lock);
 	}
@@ -3666,7 +3664,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			if (!chan) {
 				find_delete(el_node_key, instp);
 				ao2_ref(el_node_key, -1);
-				ao2_ref(p, -1);
 				return -1;
 			}
 
@@ -3997,6 +3994,8 @@ static void *el_reader(void *data)
 							struct el_node *node = *found_key;
 							struct el_pvt *p = node->pvt;
 
+							ao2_ref(node, +1);
+							ast_mutex_unlock(&el_nodelist_lock);
 							if (!p->firstheard) {
 								struct ast_frame fr = {
 									.frametype = AST_FRAME_CONTROL,
@@ -4022,16 +4021,16 @@ static void *el_reader(void *data)
 
 							node->heartbeat_countdown = instp->rtcptimeout;
 							/* different callsigns behind a NAT router, running -L, -R, ... */
-							if (strncmp((*found_key)->call, call, EL_CALL_SIZE - 1) != 0) {
+							if (strncmp(node->call, call, EL_CALL_SIZE - 1) != 0) {
 								ast_verb(4, "Call changed from %s to %s.\n", node->call, call);
 								ast_copy_string(node->call, call, EL_CALL_SIZE);
 							}
 							if (strncmp(node->name, name, EL_NAME_SIZE - 1) != 0) {
-								ast_verb(4, "Name changed from %s to %s.\n", (*found_key)->name, name);
+								ast_verb(4, "Name changed from %s to %s.\n", node->name, name);
 								ast_copy_string(node->name, name, EL_NAME_SIZE);
 							}
 							node->rx_ctrl_packets++;
-							ast_mutex_unlock(&el_nodelist_lock);
+							ao2_ref(node, -1);
 						} else {   /* otherwise its a new request */
 							ast_mutex_unlock(&el_nodelist_lock);
 							i = 0; /* default authorized */
@@ -4154,8 +4153,7 @@ static void *el_reader(void *data)
 				if (buf[0] == 0x6f) {
 					process_cmd(buf, recvlen, node_lookup.ip, instp, &node_lookup);
 				} else {
-					ast_mutex_lock(&el_nodelist_lock);
-
+					ast_mutex_lock(&el_nodelist_lock); /* Lock the node for a lookup */
 					found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
 					if (found_key) {
 						struct el_node *node = *found_key;
@@ -4163,7 +4161,8 @@ static void *el_reader(void *data)
 						struct ast_channel *chan = NULL;
 
 						ao2_ref(p, +1);
-
+						ao2_ref(node, +1);					 /* Get a ref for the found node */
+						ast_mutex_unlock(&el_nodelist_lock); /* Lookup finished */
 						ast_mutex_lock(&p->lock);
 						if (p->owner) {
 							chan = ast_channel_ref(p->owner);
@@ -4176,8 +4175,9 @@ static void *el_reader(void *data)
 								.subclass.integer = AST_CONTROL_ANSWER,
 								.src = __PRETTY_FUNCTION__,
 							};
-
+							ast_mutex_lock(&p->lock);
 							p->firstheard = 1;
+							ast_mutex_unlock(&p->lock);
 							ast_debug(3, "Channel %s: answer\n", p->stream);
 							ast_queue_frame(chan, &fr);
 						}
@@ -4192,34 +4192,37 @@ static void *el_reader(void *data)
 						}
 
 						node->last_packet_time = current_packet_time;
-
 						/*
 						 * see if we have a new talker
 						 */
+						ast_mutex_lock(&instp->lock);
 						if (!instp->current_talker) {
 							instp->current_talker = node;
 							instp->current_talker_start_time = current_packet_time;
 							node->istimedout = 0;
 							node->isdoubling = 0;
 							ast_debug(3, "Station %s started talking.\n", node->call);
+							ast_mutex_unlock(&instp->lock);
 						} else {
 							/* see if this is a double - two stations talking at the same time */
 							if (node->nodenum != instp->current_talker->nodenum) {
+								ast_mutex_unlock(&instp->lock);
 								if (!node->isdoubling) {
 									ast_debug(3, "Station %s is doubling with %s.\n", node->call, instp->current_talker->call);
 									send_text_one(node, "You are doubling.");
 								}
 								node->isdoubling = 1;
-								ast_mutex_unlock(&el_nodelist_lock);
 
 								if (chan) {
 									ast_channel_unref(chan);
 								}
 
 								ao2_ref(p, -1);
+								ao2_ref(node, -1);
 								ast_mutex_lock(&instp->lock);
 								continue;
 							}
+							ast_mutex_unlock(&instp->lock);
 						}
 						instp->current_talker_last_time = current_packet_time;
 						/* see if they have timed out */
@@ -4229,18 +4232,16 @@ static void *el_reader(void *data)
 								send_text_one(node, "You have timed out.");
 							}
 							node->istimedout = 1;
-							ast_mutex_unlock(&el_nodelist_lock);
 
 							if (chan) {
 								ast_channel_unref(chan);
 							}
 
 							ao2_ref(p, -1);
+							ao2_ref(node, -1);
 							ast_mutex_lock(&instp->lock);
 							continue;
 						}
-
-						ast_mutex_unlock(&el_nodelist_lock);
 
 						/* queue the gsm packets */
 						if (recvlen == sizeof(struct gsmVoice_t)) {
@@ -4271,7 +4272,9 @@ static void *el_reader(void *data)
 						}
 
 						ao2_ref(p, -1);
+						ao2_ref(node, -1);
 					} else {
+						ast_mutex_unlock(&el_nodelist_lock);
 						instp->rx_bad_packets++;
 					}
 				}
