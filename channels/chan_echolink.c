@@ -3689,6 +3689,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			ast_copy_string(el_node_key->pvt->ip, node_lookup->ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
 			el_node_key->rx_ctrl_packets++;
+			ast_mutex_unlock(&el_nodelist_lock);
 		}
 
 		ast_mutex_lock(&instp->lock);
