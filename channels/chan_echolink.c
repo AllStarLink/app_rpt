@@ -2186,6 +2186,7 @@ static void send_text(const void *nodep, const VISIT which, void *closure)
 
 /*!
  * \brief Send text message to one node
+ * \note must be called with el_nodelist_lock held
  * \param node		Pointer to el_node struct.
  * \param message	Pointer to message to send.
  */
@@ -2193,6 +2194,7 @@ static void send_text_one(struct el_node *node, const char *message)
 {
 	struct sockaddr_in sin;
 	char text[1024];
+	int audio_sock = node->instp->audio_sock;
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
@@ -2201,10 +2203,12 @@ static void send_text_one(struct el_node *node, const char *message)
 
 	snprintf(text, sizeof(text), "oNDATA%s>%s\r\n", node->instp->mycall, message);
 
-	sendto(node->instp->audio_sock, text, strlen(text), 0, (struct sockaddr *) &sin, sizeof(sin));
-
 	node->instp->tx_audio_packets++;
 	node->tx_audio_packets++;
+
+	ast_mutex_unlock(&el_nodelist_lock);
+	sendto(audio_sock, text, strlen(text), 0, (struct sockaddr *) &sin, sizeof(sin));
+	ast_mutex_lock(&el_nodelist_lock);
 }
 
 /*!
@@ -3668,7 +3672,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 			ao2_ref(p, 1);
 			ast_copy_string(p->ip, node_lookup->ip, EL_IP_SIZE);
-			el_node_key->pvt = p;
 			el_node_key->rx_ctrl_packets++;
 			ast_mutex_unlock(&el_nodelist_lock);
 			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
@@ -3677,6 +3680,10 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 				ao2_ref(el_node_key, -1);
 				return -1;
 			}
+
+			ast_mutex_lock(&el_nodelist_lock);
+			el_node_key->pvt = p; /* Publish private (p) after complete initialization */
+			ast_mutex_unlock(&el_nodelist_lock);
 
 			ast_queue_frame(chan, &fr);
 
@@ -4177,6 +4184,7 @@ static void *el_reader(void *data)
 						struct el_node *node = *found_key;
 						struct el_pvt *p = node->pvt;
 						struct ast_channel *chan = NULL;
+						int clear_node_values = 0;
 
 						ao2_ref(p, +1);
 						ao2_ref(node, +1);					 /* Get a ref for the found node */
@@ -4202,6 +4210,7 @@ static void *el_reader(void *data)
 							ast_mutex_unlock(&p->lock);
 						}
 
+						ast_mutex_lock(&el_nodelist_lock);
 						node->heartbeat_countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
 						/* compute inter-arrival jitter */
@@ -4212,6 +4221,7 @@ static void *el_reader(void *data)
 						}
 
 						node->last_packet_time = current_packet_time;
+						ast_mutex_unlock(&el_nodelist_lock);
 						/*
 						 * see if we have a new talker
 						 */
@@ -4219,22 +4229,26 @@ static void *el_reader(void *data)
 						if (!instp->current_talker) {
 							instp->current_talker = node;
 							instp->current_talker_start_time = current_packet_time;
-							node->istimedout = 0;
-							node->isdoubling = 0;
+							clear_node_values = 1;
 							ast_debug(3, "Station %s started talking.\n", node->call);
 							ast_mutex_unlock(&instp->lock);
 						} else {
 							/* see if this is a double - two stations talking at the same time */
 							if (node->nodenum != instp->current_talker->nodenum) {
 								char call[EL_CALL_SIZE];
+								int isdoubling;
 
 								ast_copy_string(call, instp->current_talker->call, sizeof(call));
 								ast_mutex_unlock(&instp->lock);
-								if (!node->isdoubling) {
+
+								ast_mutex_lock(&el_nodelist_lock);
+								isdoubling = node->isdoubling;
+								node->isdoubling = 1;
+								if (!isdoubling) {
 									ast_debug(3, "Station %s is doubling with %s.\n", node->call, call);
 									send_text_one(node, "You are doubling.");
 								}
-								node->isdoubling = 1;
+								ast_mutex_unlock(&el_nodelist_lock);
 
 								if (chan) {
 									ast_channel_unref(chan);
@@ -4247,17 +4261,31 @@ static void *el_reader(void *data)
 							}
 							ast_mutex_unlock(&instp->lock);
 						}
+
+						if (clear_node_values) {
+							/* Keeping away from nested locks, use clear_node_values */
+							ast_mutex_lock(&el_nodelist_lock);
+							node->istimedout = 0;
+							node->isdoubling = 0;
+							ast_mutex_unlock(&el_nodelist_lock);
+						}
+
 						ast_mutex_lock(&instp->lock);
 						instp->current_talker_last_time = current_packet_time;
 						talker_elapsed = ast_tvdiff_ms(current_packet_time, instp->current_talker_start_time);
 						ast_mutex_unlock(&instp->lock);
 						/* see if they have timed out */
 						if (talker_elapsed > instp->timeout_time) {
-							if (!node->istimedout) {
+							int istimedout;
+
+							ast_mutex_lock(&el_nodelist_lock);
+							istimedout = node->istimedout;
+							node->istimedout = 1;
+							if (!istimedout) {
 								ast_debug(1, "Station %s timed out.\n", node->call);
 								send_text_one(node, "You have timed out.");
 							}
-							node->istimedout = 1;
+							ast_mutex_unlock(&el_nodelist_lock);
 
 							if (chan) {
 								ast_channel_unref(chan);
