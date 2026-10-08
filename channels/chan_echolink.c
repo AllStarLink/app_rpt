@@ -1548,8 +1548,8 @@ static int el_hangup(struct ast_channel *chan)
 	}
 
 	ast_channel_tech_pvt_set(chan, NULL);
-	ao2_ref(p, -1);
 	ast_setstate(chan, AST_STATE_DOWN);
+	ao2_ref(p, -1);
 
 	return 0;
 }
@@ -2566,7 +2566,7 @@ static int el_xwrite(struct ast_channel *chan, struct ast_frame *frame)
 
 /*!
  * \brief Start a new Echolink call.
- * \param p				Pointer to echolink private.
+ * \param p			Pointer to echolink private; its reference is consumed by this function.
  * \param state			State.
  * \param nodenum		Node number to call.
  * \param assignedids	Pointer to unique ID string assigned to the channel.
@@ -2582,6 +2582,15 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	chan = ast_channel_alloc(1, state, 0, 0, "", p->instp->astnode, p->instp->context, assignedids, requestor, 0, "echolink/%s", p->stream);
 	if (!chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel structure.\n");
+		ao2_ref(p, -1);
+		return NULL;
+	}
+
+	p->timer = ast_timer_open();
+	if (!p->timer) {
+		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
+		ast_hangup(chan);
+		ao2_ref(p, -1);
 		return NULL;
 	}
 
@@ -2591,13 +2600,6 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	ast_channel_set_rawwriteformat(chan, ast_format_gsm);
 	ast_channel_set_writeformat(chan, ast_format_gsm);
 	ast_channel_set_readformat(chan, ast_format_gsm);
-
-	p->timer = ast_timer_open();
-	if (!p->timer) {
-		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
-		ast_hangup(chan);
-		return NULL;
-	}
 
 	rate = 1000 / ast_format_get_default_ms(ast_format_gsm);
 	ast_timer_set_rate(p->timer, rate);
@@ -2680,11 +2682,13 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	}
 
 	p = el_alloc(str);
-	if (p) {
-		chan = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
-		if (!chan) {
-			ao2_ref(p, -1);
-		}
+	if (!p) {
+		return NULL;
+	}
+
+	chan = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
+	if (!chan) {
+		return NULL;
 	}
 
 	return chan;
