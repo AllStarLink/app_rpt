@@ -789,13 +789,12 @@ static int rpt_do_restart(int fd, int argc, const char *const *argv)
 		struct ast_channel *rxchannel;
 
 		rpt_mutex_lock(&rpt_vars[i].lock);
-		if (rpt_vars[i].rxchannel) {
-			rxchannel = ast_channel_ref(rpt_vars[i].rxchannel);
-			rpt_mutex_unlock(&rpt_vars[i].lock);
+		rxchannel = rpt_vars[i].rxchannel ? ast_channel_ref(rpt_vars[i].rxchannel) : NULL;
+		rpt_mutex_unlock(&rpt_vars[i].lock);
+
+		if (rxchannel) {
 			ast_softhangup(rxchannel, AST_SOFTHANGUP_DEV);
 			ast_channel_unref(rxchannel);
-		} else {
-			rpt_mutex_unlock(&rpt_vars[i].lock);
 		}
 	}
 
@@ -967,13 +966,13 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 			struct ast_channel *rxchannel;
 
 			rpt_mutex_lock(&myrpt->lock);
-			if (!myrpt->rxchannel) {
-				rpt_mutex_unlock(&myrpt->lock);
+			rxchannel = myrpt->rxchannel ? ast_channel_ref(myrpt->rxchannel) : NULL;
+			rpt_mutex_unlock(&myrpt->lock);
+
+			if (!rxchannel) {
 				break;
 			}
 
-			rxchannel = ast_channel_ref(myrpt->rxchannel);
-			rpt_mutex_unlock(&myrpt->lock);
 			if (!CHAN_TECH(rxchannel, "voter") && !CHAN_TECH(rxchannel, "simpleusb")) {
 				/* ignore channels that cannot accept the paging command */
 				ast_channel_unref(rxchannel);
@@ -1184,16 +1183,17 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 		char *name = ast_strdupa(argv[x]);
 
 		if ((value = strchr(name, '='))) {
+			struct ast_channel *rxchannel;
+
 			*value++ = '\0';
 			rpt_mutex_lock(&rpt_vars[thisRpt].lock);
-			if (rpt_vars[thisRpt].rxchannel) {
-				struct ast_channel *rxchannel = ast_channel_ref(rpt_vars[thisRpt].rxchannel);
+			rxchannel = myrpt->rxchannel ? ast_channel_ref(myrpt->rxchannel) : NULL;
+			rpt_mutex_unlock(&rpt_vars[thisRpt].lock);
 
-				rpt_mutex_unlock(&rpt_vars[thisRpt].lock);
+			if (rxchannel) {
 				pbx_builtin_setvar_helper(rxchannel, name, value);
 				ast_channel_unref(rxchannel);
 			} else {
-				rpt_mutex_unlock(&rpt_vars[thisRpt].lock);
 				ast_log(LOG_WARNING, "Ignoring entry '%s' with no rxchannel\n", name);
 			}
 		} else
