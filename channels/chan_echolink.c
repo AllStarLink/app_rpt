@@ -2245,16 +2245,23 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 		tdelete(node, &el_node_list, compare_ip);
 		ast_mutex_unlock(&el_nodelist_lock);
 		if (instp) {
+			;
 			ast_mutex_lock(&instp->lock);
 			if (instp->current_talker == node) {
 				ast_debug(3, "Current talker %s is disconnecting, clearing current talker.\n", node->call);
-				instp->current_talker->istimedout = 0;
-				instp->current_talker->isdoubling = 0;
 				instp->current_talker = NULL;
 				instp->current_talker_start_time = (struct timeval) { 0 };
 				instp->current_talker_last_time = (struct timeval) { 0 };
+				ast_mutex_unlock(&instp->lock);
+
+				ast_mutex_lock(&el_nodelist_lock);
+				node->istimedout = 0;
+				node->isdoubling = 0;
+				ast_mutex_unlock(&el_nodelist_lock);
+
+			} else {
+				ast_mutex_unlock(&instp->lock);
 			}
-			ast_mutex_unlock(&instp->lock);
 		}
 
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
@@ -4337,14 +4344,25 @@ static void *el_reader(void *data)
 		/* check current talker (see if they have stopped talking) */
 		ast_mutex_lock(&instp->lock);
 		if (instp->current_talker) {
+			struct el_node *node;
+
 			if (ast_tvdiff_ms(ast_tvnow(), instp->current_talker_last_time) > AUDIO_TIMEOUT) {
 				ast_debug(3, "Station %s stopped talking.\n", instp->current_talker->call);
-				instp->current_talker->istimedout = 0;
-				instp->current_talker->isdoubling = 0;
+				ao2_ref(instp->current_talker, +1);
+				node = instp->current_talker;
 				instp->current_talker = NULL;
 				instp->current_talker_start_time = (struct timeval) { 0 };
 				instp->current_talker_last_time = (struct timeval) { 0 };
+				ast_mutex_unlock(&instp->lock);
+
+				ast_mutex_lock(&el_nodelist_lock);
+				node->istimedout = 0;
+				node->isdoubling = 0;
+				ast_mutex_unlock(&el_nodelist_lock);
+				ao2_ref(node, -1);
 			}
+		} else {
+			ast_mutex_unlock(&instp->lock);
 		}
 	}
 
