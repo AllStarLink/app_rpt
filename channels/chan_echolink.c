@@ -365,6 +365,7 @@ struct el_node {
 	float jitter;
 	struct el_instance *instp;
 	struct el_pvt *pvt;
+	int p_ready;
 	struct timeval last_packet_time;
 	uint32_t rx_audio_packets;
 	uint32_t tx_audio_packets;
@@ -1856,10 +1857,6 @@ static void send_audio_only_one(const void *nodep, const VISIT which, void *clos
 	struct sockaddr_in sin;
 	struct el_node *node_lookup = closure;
 
-	if (!p) {
-		return;
-	}
-
 	if ((which == leaf) || (which == postorder)) {
 		if (strncmp(node->ip, node_lookup->ip, EL_IP_SIZE) == 0) {
 			memset(&sin, 0, sizeof(sin));
@@ -2020,10 +2017,6 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 		const struct el_node *node = *(struct el_node **) nodep;
 		struct el_pvt *p = node->pvt;
 
-		if (!p) {
-			return;
-		}
-
 		ast_mutex_lock(&p->lock);
 
 		if (!p->rxkey) {
@@ -2110,7 +2103,7 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_str_append(&pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
-		if (node->pvt && node->pvt->linkstr) {
+		if (node->pvt && node->p_ready && node->pvt->linkstr) {
 			ast_str_append(&pkt, 0, "Systems Linked:\r%s", ast_str_buffer(node->pvt->linkstr));
 		}
 
@@ -2242,7 +2235,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 
 	ast_mutex_lock(&el_nodelist_lock);
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
-	if (found_key && (*found_key)->pvt) {
+	if (found_key && (*found_key)->p_ready) {
 		struct el_node *node = *found_key;
 		struct el_pvt *p = node->pvt;
 		ao2_ref(node, +1);
@@ -3684,6 +3677,8 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			ao2_ref(p, 1);
 			ast_copy_string(p->ip, node_lookup->ip, EL_IP_SIZE);
 			el_node_key->rx_ctrl_packets++;
+			el_node_key->pvt = p; /* Publish private (p) after complete initialization */
+
 			ast_mutex_unlock(&el_nodelist_lock);
 			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
 			if (!chan) {
@@ -3693,7 +3688,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			}
 
 			ast_mutex_lock(&el_nodelist_lock);
-			el_node_key->pvt = p; /* Publish private (p) after complete initialization */
+			el_node_key->p_ready = 1; /* Mark the node as ready to receive audio */
 			ast_mutex_unlock(&el_nodelist_lock);
 
 			ast_queue_frame(chan, &fr);
@@ -3702,6 +3697,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			/* A new outbound call*/
 			ao2_ref(p, 1);
 			el_node_key->pvt = p; /* Assign the passed in reference for an outbound call */
+			el_node_key->p_ready = 1; /* Mark the node as ready to receive audio */
 			ast_copy_string(el_node_key->pvt->ip, node_lookup->ip, EL_IP_SIZE);
 			el_node_key->outbound = 1;
 			el_node_key->rx_ctrl_packets++;
@@ -4020,7 +4016,7 @@ static void *el_reader(void *data)
 						ast_copy_string(node_lookup.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
 
 						found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
-						if (found_key && (*found_key)->pvt) {
+						if (found_key && (*found_key)->p_ready) {
 							struct el_node *node = *found_key;
 							struct el_pvt *p = node->pvt;
 
@@ -4191,7 +4187,7 @@ static void *el_reader(void *data)
 				} else {
 					ast_mutex_lock(&el_nodelist_lock); /* Lock the node for a lookup */
 					found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
-					if (found_key && (*found_key)->pvt) {
+					if (found_key && (*found_key)->p_ready) {
 						struct el_node *node = *found_key;
 						struct el_pvt *p = node->pvt;
 						struct ast_channel *chan = NULL;
