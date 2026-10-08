@@ -788,10 +788,14 @@ static int rpt_do_restart(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		struct ast_channel *rxchannel;
 
+		rpt_mutex_lock(&rpt_vars[i].lock);
 		if (rpt_vars[i].rxchannel) {
 			rxchannel = ast_channel_ref(rpt_vars[i].rxchannel);
+			rpt_mutex_unlock(&rpt_vars[i].lock);
 			ast_softhangup(rxchannel, AST_SOFTHANGUP_DEV);
 			ast_channel_unref(rxchannel);
+		} else {
+			rpt_mutex_unlock(&rpt_vars[i].lock);
 		}
 	}
 
@@ -962,11 +966,14 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 			struct rpt *myrpt = &rpt_vars[i];
 			struct ast_channel *rxchannel;
 
+			rpt_mutex_lock(&myrpt->lock);
 			if (!myrpt->rxchannel) {
+				rpt_mutex_unlock(&myrpt->lock);
 				break;
 			}
 
 			rxchannel = ast_channel_ref(myrpt->rxchannel);
+			rpt_mutex_unlock(&myrpt->lock);
 			if (!CHAN_TECH(rxchannel, "voter") && !CHAN_TECH(rxchannel, "simpleusb")) {
 				/* ignore channels that cannot accept the paging command */
 				ast_channel_unref(rxchannel);
@@ -1178,12 +1185,15 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 
 		if ((value = strchr(name, '='))) {
 			*value++ = '\0';
+			rpt_mutex_lock(&rpt_vars[thisRpt].lock);
 			if (rpt_vars[thisRpt].rxchannel) {
 				struct ast_channel *rxchannel = ast_channel_ref(rpt_vars[thisRpt].rxchannel);
 
+				rpt_mutex_unlock(&rpt_vars[thisRpt].lock);
 				pbx_builtin_setvar_helper(rxchannel, name, value);
 				ast_channel_unref(rxchannel);
 			} else {
+				rpt_mutex_unlock(&rpt_vars[thisRpt].lock);
 				ast_log(LOG_WARNING, "Ignoring entry '%s' with no rxchannel\n", name);
 			}
 		} else
