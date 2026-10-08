@@ -2235,7 +2235,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 
 	ast_mutex_lock(&el_nodelist_lock);
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
-	if (found_key && (*found_key)->p_ready) {
+	if (found_key) {
 		struct el_node *node = *found_key;
 		struct el_pvt *p = node->pvt;
 		ao2_ref(node, +1);
