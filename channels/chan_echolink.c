@@ -1856,6 +1856,10 @@ static void send_audio_only_one(const void *nodep, const VISIT which, void *clos
 	struct sockaddr_in sin;
 	struct el_node *node_lookup = closure;
 
+	if (!p) {
+		return;
+	}
+
 	if ((which == leaf) || (which == postorder)) {
 		if (strncmp(node->ip, node_lookup->ip, EL_IP_SIZE) == 0) {
 			memset(&sin, 0, sizeof(sin));
@@ -2238,7 +2242,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 
 	ast_mutex_lock(&el_nodelist_lock);
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
-	if (found_key) {
+	if (found_key && (*found_key)->pvt) {
 		struct el_node *node = *found_key;
 		struct el_pvt *p = node->pvt;
 		ao2_ref(node, +1);
@@ -4016,7 +4020,7 @@ static void *el_reader(void *data)
 						ast_copy_string(node_lookup.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
 
 						found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
-						if (found_key) {
+						if (found_key && (*found_key)->pvt) {
 							struct el_node *node = *found_key;
 							struct el_pvt *p = node->pvt;
 
@@ -4063,7 +4067,7 @@ static void *el_reader(void *data)
 							ast_mutex_unlock(&el_nodelist_lock);
 							ao2_ref(node, -1);
 							ao2_ref(p, -1);
-						} else {   /* otherwise its a new request */
+						} else { /* otherwise its a new request */
 							ast_mutex_unlock(&el_nodelist_lock);
 							i = 0; /* default authorized */
 							if (instp->ndenylist) {
@@ -4187,7 +4191,7 @@ static void *el_reader(void *data)
 				} else {
 					ast_mutex_lock(&el_nodelist_lock); /* Lock the node for a lookup */
 					found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
-					if (found_key) {
+					if (found_key && (*found_key)->pvt) {
 						struct el_node *node = *found_key;
 						struct el_pvt *p = node->pvt;
 						struct ast_channel *chan = NULL;
@@ -4360,9 +4364,8 @@ static void *el_reader(void *data)
 				node->isdoubling = 0;
 				ast_mutex_unlock(&el_nodelist_lock);
 				ao2_ref(node, -1);
+				ast_mutex_lock(&instp->lock);
 			}
-		} else {
-			ast_mutex_unlock(&instp->lock);
 		}
 	}
 
