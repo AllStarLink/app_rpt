@@ -786,8 +786,12 @@ static int rpt_do_restart(int fd, int argc, const char *const *argv)
 
 	/* hanging up on the rx channel causes the rpt() thread to restart */
 	for (i = 0; i < nrpts; i++) {
+		struct ast_channel *rxchannel;
+
 		if (rpt_vars[i].rxchannel) {
-			ast_softhangup(rpt_vars[i].rxchannel, AST_SOFTHANGUP_DEV);
+			rxchannel = ast_channel_ref(rpt_vars[i].rxchannel);
+			ast_softhangup(rxchannel, AST_SOFTHANGUP_DEV);
+			ast_channel_unref(rxchannel);
 		}
 	}
 
@@ -956,9 +960,16 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
+			struct ast_channel *rxchannel;
 
-			if (!CHAN_TECH(myrpt->rxchannel, "voter") && !CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
+			if (!myrpt->rxchannel) {
+				break;
+			}
+
+			rxchannel = ast_channel_ref(myrpt->rxchannel);
+			if (!CHAN_TECH(rxchannel, "voter") && !CHAN_TECH(rxchannel, "simpleusb")) {
 				/* ignore channels that cannot accept the paging command */
+				ast_channel_unref(rxchannel);
 				return RESULT_SUCCESS;
 			}
 
@@ -974,7 +985,8 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 			}
 
 			gettimeofday(&myrpt->paging, NULL);
-			ast_sendtext(myrpt->rxchannel, str);
+			ast_sendtext(rxchannel, str);
+			ast_channel_unref(rxchannel);
 			break;
 		}
 	}
@@ -1163,9 +1175,17 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 
 	for (x = 4; x < argc; x++) {
 		char *name = ast_strdupa(argv[x]);
+
 		if ((value = strchr(name, '='))) {
 			*value++ = '\0';
-			pbx_builtin_setvar_helper(rpt_vars[thisRpt].rxchannel, name, value);
+			if (rpt_vars[thisRpt].rxchannel) {
+				struct ast_channel *rxchannel = ast_channel_ref(rpt_vars[thisRpt].rxchannel);
+
+				pbx_builtin_setvar_helper(rxchannel, name, value);
+				ast_channel_unref(rxchannel);
+			} else {
+				ast_log(LOG_WARNING, "Ignoring entry '%s' with no rxchannel\n", name);
+			}
 		} else
 			ast_log(LOG_WARNING, "Ignoring entry '%s' with no = \n", name);
 	}
