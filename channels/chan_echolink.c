@@ -2208,9 +2208,17 @@ static void send_text_one(struct el_node *node, const char *message)
 }
 
 /*!
- * \brief Free node.  Empty routine.
+ * \brief Release a node and its private structure.
  */
-static void free_node(void *nodep) {}
+static void free_node(void *nodep)
+{
+	struct el_node *node = nodep;
+
+	if (node->pvt) {
+		ao2_ref(node->pvt, -1);
+	}
+	ao2_ref(node, -1);
+}
 
 /*!
  * \brief Find and delete a node from our internal node list.
@@ -3766,6 +3774,7 @@ static void *el_reader(void *data)
 	struct timeval start_time;
 	int elap;
 	int heartbeat_timer;
+	int talker_elapsed;
 
 	time(&instp->starttime);
 	instp->aprstime = instp->starttime + EL_APRS_START_DELAY;
@@ -4001,6 +4010,7 @@ static void *el_reader(void *data)
 							ao2_ref(node, +1);
 							ao2_ref(p, +1);
 							ast_mutex_unlock(&el_nodelist_lock);
+							ast_mutex_lock(&p->lock);
 							if (!p->firstheard) {
 								struct ast_frame fr = {
 									.frametype = AST_FRAME_CONTROL,
@@ -4009,7 +4019,6 @@ static void *el_reader(void *data)
 								};
 								struct ast_channel *chan = NULL;
 
-								ast_mutex_lock(&p->lock);
 								if (p->owner) {
 									chan = ast_channel_ref(p->owner);
 								}
@@ -4022,6 +4031,8 @@ static void *el_reader(void *data)
 									ast_channel_unref(chan);
 								}
 								ast_debug(3, "Channel %s: answer\n", p->stream);
+							} else {
+								ast_mutex_unlock(&p->lock);
 							}
 
 							ast_mutex_lock(&el_nodelist_lock);
@@ -4177,17 +4188,19 @@ static void *el_reader(void *data)
 						}
 						ast_mutex_unlock(&p->lock);
 
+						ast_mutex_lock(&p->lock);
 						if (!p->firstheard && chan) {
 							struct ast_frame fr = {
 								.frametype = AST_FRAME_CONTROL,
 								.subclass.integer = AST_CONTROL_ANSWER,
 								.src = __PRETTY_FUNCTION__,
 							};
-							ast_mutex_lock(&p->lock);
 							p->firstheard = 1;
 							ast_mutex_unlock(&p->lock);
 							ast_debug(3, "Channel %s: answer\n", p->stream);
 							ast_queue_frame(chan, &fr);
+						} else {
+							ast_mutex_unlock(&p->lock);
 						}
 
 						node->heartbeat_countdown = instp->rtcptimeout;
@@ -4235,9 +4248,12 @@ static void *el_reader(void *data)
 							}
 							ast_mutex_unlock(&instp->lock);
 						}
+						ast_mutex_lock(&instp->lock);
 						instp->current_talker_last_time = current_packet_time;
+						talker_elapsed = ast_tvdiff_ms(current_packet_time, instp->current_talker_start_time);
+						ast_mutex_unlock(&instp->lock);
 						/* see if they have timed out */
-						if (ast_tvdiff_ms(current_packet_time, instp->current_talker_start_time) > instp->timeout_time) {
+						if (talker_elapsed > instp->timeout_time) {
 							if (!node->istimedout) {
 								ast_debug(1, "Station %s timed out.\n", node->call);
 								send_text_one(node, "You have timed out.");
@@ -4660,6 +4676,7 @@ config_error:
 static int unload_module(void)
 {
 	int n;
+	void *node_list;
 
 	run_forever = 0;
 
@@ -4691,10 +4708,12 @@ static int unload_module(void)
 		}
 	}
 
-	if (el_node_list) {
-		ast_mutex_lock(&el_nodelist_lock);
-		tdestroy(el_node_list, free_node);
-		ast_mutex_unlock(&el_nodelist_lock);
+	ast_mutex_lock(&el_nodelist_lock);
+	node_list = el_node_list;
+	el_node_list = NULL;
+	ast_mutex_unlock(&el_nodelist_lock);
+	if (node_list) {
+		tdestroy(node_list, free_node);
 	}
 
 	if (el_db_callsign) {
