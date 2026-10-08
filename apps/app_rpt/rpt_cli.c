@@ -1246,7 +1246,7 @@ static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 {
 	int i, thisRpt = -1;
 	struct ast_var_t *newvariable;
-	struct ast_channel *rxchannel;
+	struct ast_channel *rxchannel = NULL;
 	int nrpts = rpt_num_rpts();
 
 	if (argc != 4) {
@@ -1266,9 +1266,8 @@ static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 	}
 
 	rpt_mutex_lock(&rpt_vars[thisRpt].lock);
-	rxchannel = rpt_vars[thisRpt].rxchannel;
-	if (rxchannel) {
-		rxchannel = ast_channel_ref(rxchannel);
+	if (rpt_vars[thisRpt].rxchannel) {
+		rxchannel = ast_channel_ref(rpt_vars[thisRpt].rxchannel);
 	}
 	rpt_mutex_unlock(&rpt_vars[thisRpt].lock);
 	if (!rxchannel) {
