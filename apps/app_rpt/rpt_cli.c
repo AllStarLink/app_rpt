@@ -787,10 +787,11 @@ static int rpt_do_restart(int fd, int argc, const char *const *argv)
 	/* hanging up on the rx channel causes the rpt() thread to restart */
 	for (i = 0; i < nrpts; i++) {
 		struct ast_channel *rxchannel;
+		struct rpt *myrpt = &rpt_vars[i];
 
-		rpt_mutex_lock(&rpt_vars[i].lock);
-		rxchannel = rpt_vars[i].rxchannel ? ast_channel_ref(rpt_vars[i].rxchannel) : NULL;
-		rpt_mutex_unlock(&rpt_vars[i].lock);
+		rpt_mutex_lock(&myrpt->lock);
+		rxchannel = myrpt->rxchannel ? ast_channel_ref(myrpt->rxchannel) : NULL;
+		rpt_mutex_unlock(&myrpt->lock);
 
 		if (rxchannel) {
 			ast_softhangup(rxchannel, AST_SOFTHANGUP_DEV);
@@ -1184,11 +1185,12 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 
 		if ((value = strchr(name, '='))) {
 			struct ast_channel *rxchannel;
+			struct rpt *myrpt = &rpt_vars[thisRpt];
 
 			*value++ = '\0';
-			rpt_mutex_lock(&rpt_vars[thisRpt].lock);
+			rpt_mutex_lock(&myrpt->lock);
 			rxchannel = myrpt->rxchannel ? ast_channel_ref(myrpt->rxchannel) : NULL;
-			rpt_mutex_unlock(&rpt_vars[thisRpt].lock);
+			rpt_mutex_unlock(&myrpt->lock);
 
 			if (rxchannel) {
 				pbx_builtin_setvar_helper(rxchannel, name, value);
