@@ -2587,17 +2587,16 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	struct ast_channel *chan;
 	int rate;
 
-	chan = ast_channel_alloc(1, state, 0, 0, "", p->instp->astnode, p->instp->context, assignedids, requestor, 0, "echolink/%s", p->stream);
-	if (!chan) {
-		ast_log(LOG_WARNING, "Unable to allocate channel structure.\n");
+	p->timer = ast_timer_open();
+	if (!p->timer) {
+		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
 		ao2_ref(p, -1);
 		return NULL;
 	}
 
-	p->timer = ast_timer_open();
-	if (!p->timer) {
-		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
-		ast_hangup(chan);
+	chan = ast_channel_alloc(1, state, 0, 0, "", p->instp->astnode, p->instp->context, assignedids, requestor, 0, "echolink/%s", p->stream);
+	if (!chan) {
+		ast_log(LOG_WARNING, "Unable to allocate channel structure.\n");
 		ao2_ref(p, -1);
 		return NULL;
 	}
