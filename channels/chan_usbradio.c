@@ -396,6 +396,7 @@ struct chan_usbradio_pvt {
 	unsigned int rxctcssoverride:1; /* indicator if receive ctcss override is enabled */
 	unsigned int rx_cos_active:1;	/* indicator if cos is active - active state after processing */
 	unsigned int rx_ctcss_active:1; /* indicator if ctcss is active - active state after processing */
+	unsigned int txsilence:1;		/* write silence while USB playback is idle */
 	/* Whole-word latch shared by HID/audio paths (not a bit-field). */
 	volatile sig_atomic_t usb_faulted; /* set after USB/audio failure; cleared on recovery log */
 
@@ -440,6 +441,7 @@ static struct chan_usbradio_pvt usbradio_default = {
 	.area = 0,
 	.rptnum = 0,
 	.clipledgpio = 0,
+	.txsilence = 1,
 	.rxaudiostats.index = 0,
 	/* After the vast majority of existing installs have had a chance to review their
 	   audio settings and the associated old scaling/clipping hacks are no longer in
@@ -1735,11 +1737,14 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 	}
 
 	/*
-	 * Always write something so the USB TX buffer does not intentionally
-	 * underrun (same idea as simpleusb #1161). Radio PTT is HID-gated;
-	 * when unkeyed, feed silence instead of the XPMR TX buffer.
+	 * txsilence keeps the USB playback stream open while unkeyed (same idea
+	 * as simpleusb #1161). Radio PTT is HID-gated, so that write is silence
+	 * rather than the XPMR TX buffer. With txsilence off, skip the idle write.
 	 */
 	if (!o->pmrChan->txPttIn && !o->pmrChan->txPttOut) {
+		if (!o->txsilence) {
+			return AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS * (int) sizeof(short);
+		}
 		data = silence_buf;
 	}
 
@@ -2490,9 +2495,9 @@ static void *usbradio_audio_thread(void *arg)
 			}
 
 			/*
-			 * Write one frame when PortAudio has room. When unkeyed,
-			 * soundcard_writeframe() substitutes silence. Do not fill remaining
-			 * PortAudio room; that adds TX delay.
+			 * Write one frame when PortAudio has room. When unkeyed and
+			 * txsilence is set, soundcard_writeframe() substitutes silence.
+			 * Do not fill remaining PortAudio room; that adds TX delay.
 			 */
 			if (tx_write_ready) {
 				if (!soundcard_writeframe(o, o->usbradio_write_buf)) {
@@ -5384,6 +5389,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 		CV_UINT("sendvoter", o->sendvoter);
 		CV_UINT("clipledgpio", o->clipledgpio);
 		CV_BOOL("legacyaudioscaling", o->legacyaudioscaling);
+		CV_BOOL("txsilence", o->txsilence);
 		CV_END;
 
 		for (i = 0; i < GPIO_PINCOUNT; i++) {

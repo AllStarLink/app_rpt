@@ -286,6 +286,7 @@ struct chan_simpleusb_pvt {
 	unsigned int plfilter:1;			   /* indicator if we need a pl filter */
 	unsigned int deemphasis:1;			   /* indicator if we need deemphasis filter */
 	unsigned int preemphasis:1;			   /* indicator if we need preemphasis filter */
+	unsigned int txsilence:1;			   /* write silence while USB playback is idle */
 	unsigned int rx_cos_active:1;		   /* indicator if cos is active - active state after processing */
 	unsigned int rx_ctcss_active:1;		   /* indicator if ctcss is active - active state after processing */
 
@@ -345,6 +346,7 @@ static struct chan_simpleusb_pvt simpleusb_default = {
 	.txoffdelay = 0,
 	.pager = PAGER_NONE,
 	.clipledgpio = 0,
+	.txsilence = 1,
 	.rxaudiostats.index = 0,
 	/* After the vast majority of existing installs have had a chance to review their
 	   audio settings and the associated old scaling/clipping hacks are no longer in
@@ -2403,18 +2405,20 @@ static void *simpleusb_audio_thread(void *arg)
 						}
 						continue;
 					}
-					/* No tx frames to write, write silence to keep the audio channel active */
-					res = soundcard_writeframe(o, silence_buf);
-					if (res != paNoError) {
-						/* audio data not ready */
-						if (res != paOutputUnderflowed) {
-							/* Underflow handled in soundcard_writeframe
-							 * all other errors require restart
-							 */
-							ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
-							o->hasusb = 0;
-							stream_cleanup(o);
-							break;
+					/* No tx frames. txsilence keeps the USB playback stream open. */
+					if (o->txsilence) {
+						res = soundcard_writeframe(o, silence_buf);
+						if (res != paNoError) {
+							/* audio data not ready */
+							if (res != paOutputUnderflowed) {
+								/* Underflow handled in soundcard_writeframe
+								 * all other errors require restart
+								 */
+								ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
+								o->hasusb = 0;
+								stream_cleanup(o);
+								break;
+							}
 						}
 					}
 				}
@@ -4197,6 +4201,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 		CV_UINT("duplex3", o->duplex3);
 		CV_UINT("clipledgpio", o->clipledgpio);
 		CV_BOOL("legacyaudioscaling", o->legacyaudioscaling);
+		CV_BOOL("txsilence", o->txsilence);
 		CV_END;
 
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
