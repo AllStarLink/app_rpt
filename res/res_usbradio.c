@@ -2155,17 +2155,28 @@ PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned l
 	start = pa_now_ms();
 	while (!stop || !(*stop)) {
 		long avail = Pa_GetStreamReadAvailable(ps->stream);
+		int64_t elapsed_ms, remaining_ms;
+		unsigned long missing, estimated_us, sleep_us;
 
 		if (avail < 0) {
 			return (PaError) avail;
 		}
 
-		if ((pa_now_ms() - start) > timeout_ms) {
+		elapsed_ms = pa_now_ms() - start;
+		if (elapsed_ms > timeout_ms) {
 			return paTimedOut;
 		}
 
 		if ((unsigned long) avail < frames) {
-			usleep(500);
+			missing = frames - (unsigned long) avail;
+			remaining_ms = timeout_ms - elapsed_ms;
+
+			/* Time for the missing frames at 48 kHz, rounded up. */
+			estimated_us = (missing * 1000000UL + AST_RADIO_PA_SAMPLE_RATE - 1) / AST_RADIO_PA_SAMPLE_RATE;
+
+			/* Margin covers the 1 ms USB packet granularity; never sleep past the timeout. */
+			sleep_us = MIN(estimated_us + 1000, (remaining_ms + 1) * 1000UL);
+			usleep((useconds_t) sleep_us);
 			continue;
 		}
 
