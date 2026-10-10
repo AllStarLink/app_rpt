@@ -2283,11 +2283,17 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
 		found = 1;
 		if (p) {
+			struct ast_channel *owner = NULL;
+
 			ast_mutex_lock(&p->lock);
 			if (p->owner) {
-				ast_softhangup(p->owner, AST_SOFTHANGUP_DEV);
+				owner = ast_channel_ref(p->owner);
 			}
 			ast_mutex_unlock(&p->lock);
+			if (owner) {
+				ast_softhangup(owner, AST_SOFTHANGUP_DEV);
+				ast_channel_unref(owner);
+			}
 			ao2_ref(p, -1);
 		}
 		ao2_ref(node, -2); /* one for internal +1 and one to free */
@@ -2606,7 +2612,7 @@ static int el_xwrite(struct ast_channel *chan, struct ast_frame *frame)
  * \param nodenum		Node number to call.
  * \param assignedids	Pointer to unique ID string assigned to the channel.
  * \param requestor		Pointer to Asterisk channel.
- * \return 				Asterisk channel.
+ * \return 				Caller-owned Asterisk channel reference, which the caller must release or transfer.
  */
 static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids,
 	const struct ast_channel *requestor)
@@ -2662,10 +2668,13 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	}
 
 	if (state != AST_STATE_DOWN) {
+		/* Preserve a caller-owned reference before the PBX thread takes ownership of the allocation reference */
+		ast_channel_ref(chan);
 		if (ast_pbx_start(chan)) {
 			ast_log(LOG_WARNING, "Unable to start PBX on %s.\n", ast_channel_name(chan));
 			p->owner = NULL;
 			ast_hangup(chan);
+			ast_channel_unref(chan);
 			return NULL;
 		}
 	}
@@ -3712,6 +3721,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			if (!found_node || (*found_node != el_node_key)) {
 				ast_mutex_unlock(&el_nodelist_lock);
 				ast_softhangup(chan, AST_SOFTHANGUP_DEV);
+				ast_channel_unref(chan);
 				ao2_ref(el_node_key, -1);
 				return -1;
 			}
@@ -3719,6 +3729,7 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 			ast_mutex_unlock(&el_nodelist_lock);
 
 			ast_queue_frame(chan, &fr);
+			ast_channel_unref(chan);
 
 		} else {
 			/* A new outbound call*/
